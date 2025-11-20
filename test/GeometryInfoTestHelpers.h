@@ -73,6 +73,7 @@ MATCHER_P(BoundingBoxNear, expectedRaw, description(expectedRaw)) {
 // ____________________________________________________________________________
 MATCHER_P(MetricLengthNear, expectedRaw, description(expectedRaw)) {
   AD_GEOINFO_TEST_OPTIONAL_HELPER(MetricLength);
+  // The metric length may be off by up to 1%
   auto allowedError = expected.value().length() * 0.01;
   return ExplainMatchResult(
       Property(&MetricLength::length,
@@ -84,6 +85,7 @@ MATCHER_P(MetricLengthNear, expectedRaw, description(expectedRaw)) {
 // ____________________________________________________________________________
 MATCHER_P(MetricAreaNear, expectedRaw, description(expectedRaw)) {
   AD_GEOINFO_TEST_OPTIONAL_HELPER(MetricArea);
+  // The metric area may be off by up to 1%
   auto allowedError = expected.value().area() * 0.01;
   return ExplainMatchResult(
       Property(&MetricArea::area,
@@ -98,9 +100,7 @@ MATCHER_P(GeoInfoMatcher, expectedRaw, description(expectedRaw)) {
   auto geoInfo = expected.value();
   auto inner = Optional(AllOf(
       Property(&GeometryInfo::getWktType, Eq(geoInfo.getWktType())),
-      Property(&GeometryInfo::getCentroid,
-               Property(&Centroid::centroid,
-                        GeoPointNear(geoInfo.getCentroid().centroid()))),
+      Property(&GeometryInfo::getCentroid, CentroidNear(geoInfo.getCentroid())),
       Property(&GeometryInfo::getBoundingBox,
                BoundingBoxNear(geoInfo.getBoundingBox())),
       Property(&GeometryInfo::getNumGeometries, Eq(geoInfo.getNumGeometries())),
@@ -108,7 +108,7 @@ MATCHER_P(GeoInfoMatcher, expectedRaw, description(expectedRaw)) {
                MetricLengthNear(geoInfo.getMetricLength())),
       Property(&GeometryInfo::getMetricArea,
                MetricAreaNear(geoInfo.getMetricArea()))));
-  return ::testing::ExplainMatchResult(inner, actual, result_listener);
+  return ExplainMatchResult(inner, actual, result_listener);
 }
 #define EXPECT_GEOMETRYINFO(a, b) EXPECT_THAT(a, GeoInfoMatcher(b))
 

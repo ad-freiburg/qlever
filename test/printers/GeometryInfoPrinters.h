@@ -11,6 +11,8 @@
 
 #include "rdfTypes/GeometryInfo.h"
 
+// Note that the printers must be defined inside the `ad_utility` or `testing`
+// namespace such that argument-dependent lookup can find them within `gtest`.
 namespace ad_utility {
 
 // _____________________________________________________________________________
