@@ -356,7 +356,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
     query2.addParameter(
         SparqlTriple{iri("<config>"), iri("<payload-o>"), V{"?o"}});
     AD_EXPECT_THROW_WITH_MESSAGE(
-        view->makeScanConfig(query2),
+        view->makeScanConfig(query2, placeholderP, placeholderO),
         ::testing::HasSubstr(
             "Each target variable for a payload column may only be "
             "associated with one column"));
@@ -365,7 +365,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
     query3.addParameter(
         SparqlTriple{iri("<config>"), iri("<payload-o>"), V{"?s"}});
     AD_EXPECT_THROW_WITH_MESSAGE(
-        view->makeScanConfig(query3),
+        view->makeScanConfig(query3, placeholderP, placeholderO),
         ::testing::HasSubstr(
             "The variable for the scan column of a materialized "
             "view may not also be used for a payload column"));
@@ -374,7 +374,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
     query4.addParameter(
         SparqlTriple{iri("<config>"), iri("<payload-s>"), V{"?y"}});
     AD_EXPECT_THROW_WITH_MESSAGE(
-        view->makeScanConfig(query4),
+        view->makeScanConfig(query4, placeholderP, placeholderO),
         ::testing::HasSubstr(
             "The scan column of a materialized view may not be requested as "
             "payload"));

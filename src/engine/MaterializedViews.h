@@ -8,6 +8,7 @@
 #define QLEVER_SRC_ENGINE_MATERIALIZEDVIEWS_H_
 
 #include "engine/VariableToColumnMap.h"
+#include "index/DeltaTriples.h"
 #include "index/Permutation.h"
 #include "parser/MaterializedViewQuery.h"
 #include "parser/ParsedQuery.h"
@@ -17,6 +18,7 @@
 // Forward declarations
 class QueryExecutionContext;
 class QueryExecutionTree;
+class IndexScan;
 
 // For the future, materialized views save their version. If we change something
 // about the way materialized views are stored, we can break the existing ones
@@ -80,8 +82,11 @@ class MaterializedView {
   VariableToColumnMap varToColMap_;
   // The true value is read from on-disk metadata in the constructor
   Variable indexedColVariable_{"?dummy"};
+  LocatedTriplesSnapshot locatedTriplesSnapshot_;
 
   using AdditionalScanColumns = SparqlTripleSimple::AdditionalScanColumns;
+
+  LocatedTriplesSnapshot makeEmptyLocatedTriplesSnapshot() const;
 
  public:
   // Load a materialized view from disk given the filename components. The
@@ -110,6 +115,11 @@ class MaterializedView {
   // the first column.
   std::shared_ptr<const Permutation> getPermutation() const;
 
+  // Return a reference to the `LocatedTriplesSnapshot` for the permutation. For
+  // now this is always an empty snapshot but with the correct permutation
+  // metadata.
+  const LocatedTriplesSnapshot& locatedTriplesSnapshot() const;
+
   // Checks if the given name is allowed for a materialized view. Currently only
   // alphanumerics and hyphens are allowed. This is relevant for safe filenames
   // and for correctly splitting the special predicate.
@@ -123,9 +133,13 @@ class MaterializedView {
   // be set to unique variable names.
   SparqlTripleSimple makeScanConfig(
       const parsedQuery::MaterializedViewQuery& viewQuery,
-      Variable placeholderPredicate = Variable{"?_internal_view_variable_p"},
-      Variable placeholderObject = Variable{
-          "?_internal_view_variable_o"}) const;
+      Variable placeholderPredicate, Variable placeholderObject) const;
+
+  //
+  std::shared_ptr<IndexScan> makeIndexScan(
+      QueryExecutionContext* qec,
+      const parsedQuery::MaterializedViewQuery& viewQuery,
+      Variable placeholderPredicate, Variable placeholderObject) const;
 };
 
 // The `MaterializedViewsManager` is part of the `QueryExecutionContext` and is
