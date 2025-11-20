@@ -72,6 +72,7 @@ struct IdTriple {
   QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(IdTriple)
 
   bool operator==(const IdTriple& other) const { return ids() == other.ids(); }
+  bool operator!=(const IdTriple& other) const { return !(*this == other); }
 
   template <typename H>
   friend H AbslHashValue(H h, const IdTriple& c) {

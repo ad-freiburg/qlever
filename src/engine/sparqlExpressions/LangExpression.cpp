@@ -48,6 +48,7 @@ struct GetLanguageTag {
     }
   }
 };
+inline constexpr GetLanguageTag getLanguageTag{};
 
 //______________________________________________________________________________
 using LangExpression = detail::langImpl::LangExpressionImpl<detail::Operation<
