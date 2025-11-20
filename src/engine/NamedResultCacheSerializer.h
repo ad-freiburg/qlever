@@ -1,12 +1,15 @@
-//   Copyright 2025, University of Freiburg,
-//   Chair of Algorithms and Data Structures.
-//   Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2025 The QLever Authors, in particular:
+//
+// 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_NAMEDRESULTCACHESERIALIZER_H
+#define QLEVER_SRC_ENGINE_NAMEDRESULTCACHESERIALIZER_H
+
+#include <boost/math/tools/roots.hpp>
 
 #include "engine/NamedResultCache.h"
-#include "engine/SerializeColumnIndexAndTypeInfo.h"
-#include "rdfTypes/SerializeVariable.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/Serializer/SerializeHashMap.h"
 #include "util/Serializer/SerializeOptional.h"
@@ -26,12 +29,12 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
     // Serialize the LocalVocab first (required for ID remapping)
     ad_utility::detail::serializeLocalVocab(serializer, arg.localVocab_);
 
-    // Serialize the IdTable (uses the serializeIds helper which handles
+    // Serialize the IdTable (uses the `serializeIds` helper which handles
     // LocalVocab IDs)
     serializer << arg.result_->numRows();
     serializer << arg.result_->numColumns();
-    for (size_t col = 0; col < arg.result_->numColumns(); ++col) {
-      ad_utility::detail::serializeIds(serializer, arg.result_->getColumn(col));
+    for (const auto& col : arg.result_->getColumns()) {
+      ad_utility::detail::serializeIds(serializer, col);
     }
 
     // Serialize VariableToColumnMap manually (can't use HashMap serialization
@@ -49,6 +52,9 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
     serializer << arg.cacheKey_;
 
     // Serialize cachedGeoIndex (optional)
+    // Note: We cannot serialize the `optional` directly, because the geo index
+    // has no default constructor for safety reasons.
+    serializer << arg.cachedGeoIndex_.has_value();
     bool hasGeoIndex = arg.cachedGeoIndex_.has_value();
     serializer << hasGeoIndex;
     if (hasGeoIndex) {
@@ -59,24 +65,31 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
     auto [localVocab, mapping] =
         ad_utility::detail::deserializeLocalVocab(serializer);
 
+    std::optional<NamedResultCache::Value::Allocator> dummyAllocator;
+    const auto& allocator = [&]() -> const auto& {
+      if (arg.allocatorForSerialization_.has_value()) {
+        return arg.allocatorForSerialization_.value();
+      } else {
+        dummyAllocator = ad_utility::makeUnlimitedAllocator<Id>();
+        return dummyAllocator.value();
+      }
+    }();
+
     // Deserialize the IdTable with ID mapping applied
     size_t numRows, numColumns;
     serializer >> numRows;
     serializer >> numColumns;
 
-    IdTable idTable{numColumns, ad_utility::makeUnlimitedAllocator<Id>()};
-    for (size_t col = 0; col < numColumns; ++col) {
-      auto ids = ad_utility::detail::deserializeIds(
-          serializer, mapping, []() -> BlankNodeIndex {
+    IdTable idTable{numColumns, allocator};
+    idTable.resize(numRows);
+    for (decltype(auto) col : idTable.getColumns()) {
+      ad_utility::detail::deserializeIds(
+          serializer, mapping,
+          []() -> BlankNodeIndex {
             throw std::runtime_error(
                 "Unexpected blank node in NamedResultCache deserialization");
-          });
-      if (col == 0) {
-        idTable.resize(numRows);
-      }
-      for (size_t row = 0; row < numRows; ++row) {
-        idTable(row, col) = ids[row];
-      }
+          },
+          col);
     }
 
     // Deserialize VariableToColumnMap manually
@@ -115,8 +128,11 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
         std::move(resultSortedOn),
         std::move(localVocab),
         std::move(cacheKey),
-        std::move(cachedGeoIndex)};
+        std::move(cachedGeoIndex),
+        std::nullopt};
   }
 }
 
 }  // namespace ad_utility::serialization
+
+#endif  // QLEVER_SRC_ENGINE_NAMEDRESULTCACHESERIALIZER_H

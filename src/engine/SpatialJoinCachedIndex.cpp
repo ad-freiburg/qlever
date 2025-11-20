@@ -89,10 +89,12 @@ std::string SpatialJoinCachedIndex::serializeShapes() const {
   return std::string{encoder.base(), encoder.length()};
 }
 
+// _____________________________________________________________________________
 std::vector<size_t> SpatialJoinCachedIndex::serializeLineIndices() const {
   return ::ranges::to<std::vector>(pimpl_->lines_ | ranges::views::values);
 }
 
+// _____________________________________________________________________________
 void SpatialJoinCachedIndex::populateFromSerialized(
     std::string_view serializedShapes, std::vector<size_t> lineIndices) {
   pimpl_ = std::make_shared<SpatialJoinCachedIndexImpl>();
@@ -108,6 +110,7 @@ void SpatialJoinCachedIndex::populateFromSerialized(
   shapeIndexToRow_ = pimpl_->populateFromLines();
 }
 
+// _____________________________________________________________________________
 SpatialJoinCachedIndex::SpatialJoinCachedIndex(TagForSerialization)
     : geometryColumn_("?dummyCol"),
       pimpl_(std::make_shared<SpatialJoinCachedIndexImpl>()) {}

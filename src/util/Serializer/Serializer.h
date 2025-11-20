@@ -209,6 +209,8 @@ struct TrivialSerializationHelperTag {};
  * `ad_utility::serialization` because of the argument-dependent lookup rules.
  * If you want to break the dependencies between your types and this header, you
  * can also define the second parameter to be templated.
+ * Note: In addition to the cases described above, all `enum` types are
+ * implicitly trivially serializable.
  *
  * For example, one can equivalently write one of the following two:
  *
@@ -242,8 +244,9 @@ CPP_requires(
 
 template <typename T>
 CPP_concept TriviallySerializable =
-    CPP_requires_ref(triviallySerializableRequires, T) &&
-    std::is_trivially_copyable_v<std::decay_t<T>>;
+    (CPP_requires_ref(triviallySerializableRequires, T) &&
+     std::is_trivially_copyable_v<std::decay_t<T>>) ||
+    std::is_enum_v<std::decay_t<T>>;
 
 /// Serialize function for `TriviallySerializable` types that works by simply
 /// serializing the binary object representation.

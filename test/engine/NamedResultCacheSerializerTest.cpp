@@ -1,6 +1,8 @@
-//  Copyright 2025, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2025 The QLever Authors, in particular:
+//
+// 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -12,13 +14,22 @@
 #include "engine/NamedResultCache.h"
 #include "engine/NamedResultCacheSerializer.h"
 #include "util/Serializer/ByteBufferSerializer.h"
-#include "util/Serializer/FileSerializer.h"
 
 using namespace ad_utility::serialization;
 using ::testing::ElementsAre;
 using ::testing::UnorderedElementsAreArray;
 
 namespace {
+// Serialize and immediately deserialize the value.
+NamedResultCache::Value serializeAndDeserializeValue(
+    const NamedResultCache::Value& value) {
+  ByteBufferWriteSerializer writeSerializer;
+  writeSerializer << value;
+  ByteBufferReadSerializer readSerializer{std::move(writeSerializer).data()};
+  NamedResultCache::Value result;
+  readSerializer >> result;
+  return result;
+}
 
 // Note: VariableToColumnMap serialization is tested as part of Value
 // serialization since Variable is not default-constructible and thus
@@ -27,8 +38,6 @@ namespace {
 // Test serialization of IdTable with LocalVocab via NamedResultCache::Value
 // (IdTable serialization is part of Value serialization)
 TEST(NamedResultCacheSerializer, IdTableSerialization) {
-  std::string tempFile = "/tmp/test_idtable.bin";
-
   // Create an IdTable with some data
   auto table = makeIdTableFromVector({{3, 7}, {9, 11}});
 
@@ -51,17 +60,7 @@ TEST(NamedResultCacheSerializer, IdTableSerialization) {
                                 "test-key",
                                 std::nullopt};
 
-  // Serialize to file
-  {
-    FileWriteSerializer writeSerializer{tempFile.c_str()};
-    writeSerializer << value;
-  }
-
-  // Deserialize
-  FileReadSerializer readSerializer{tempFile.c_str()};
-  NamedResultCache::Value deserializedValue;
-  readSerializer >> deserializedValue;
-
+  auto deserializedValue = serializeAndDeserializeValue(value);
   // Check the IdTable dimensions
   EXPECT_EQ(deserializedValue.result_->numRows(), 2);
   EXPECT_EQ(deserializedValue.result_->numColumns(), 2);
@@ -74,14 +73,10 @@ TEST(NamedResultCacheSerializer, IdTableSerialization) {
   EXPECT_EQ((*deserializedValue.result_)(0, 1), table(0, 1));
   EXPECT_EQ((*deserializedValue.result_)(1, 0), table(1, 0));
   EXPECT_EQ((*deserializedValue.result_)(1, 1), table(1, 1));
-
-  std::filesystem::remove(tempFile);
 }
 
 // Test serialization of a complete NamedResultCache::Value
 TEST(NamedResultCacheSerializer, ValueSerialization) {
-  std::string tempFile = "/tmp/test_value.bin";
-
   // Create a test Value
   auto table = makeIdTableFromVector({{3, 7}, {9, 11}, {13, 17}});
 
@@ -110,17 +105,7 @@ TEST(NamedResultCacheSerializer, ValueSerialization) {
       std::nullopt  // No geo index for this test
   };
 
-  // Serialize to file
-  {
-    FileWriteSerializer writeSerializer{tempFile.c_str()};
-    writeSerializer << value;
-  }
-
-  // Deserialize
-  FileReadSerializer readSerializer{tempFile.c_str()};
-  NamedResultCache::Value deserializedValue;
-  readSerializer >> deserializedValue;
-
+  auto deserializedValue = serializeAndDeserializeValue(value);
   // Check the result
   EXPECT_THAT(*deserializedValue.result_, matchesIdTable(table));
   EXPECT_THAT(deserializedValue.varToColMap_,
@@ -136,8 +121,6 @@ TEST(NamedResultCacheSerializer, ValueSerialization) {
     EXPECT_EQ(origWords[i].toStringRepresentation(),
               deserWords[i].toStringRepresentation());
   }
-
-  std::filesystem::remove(tempFile);
 }
 
 // Test serialization of the entire NamedResultCache
@@ -192,7 +175,7 @@ TEST(NamedResultCacheSerializer, CacheSerialization) {
 
   // Create a new cache and deserialize
   NamedResultCache cache2;
-  cache2.readFromDisk(tempFile);
+  cache2.readFromDisk(tempFile, ad_utility::makeUnlimitedAllocator<Id>());
 
   // Check the deserialized cache
   EXPECT_EQ(cache2.numEntries(), 2);
@@ -210,7 +193,7 @@ TEST(NamedResultCacheSerializer, CacheSerialization) {
   EXPECT_EQ(result2->cacheKey_, "key2");
 
   // Clean up
-  std::filesystem::remove(tempFile);
+  ad_utility::deleteFile(tempFile);
 }
 
 // Test empty cache serialization
@@ -226,7 +209,7 @@ TEST(NamedResultCacheSerializer, EmptyCacheSerialization) {
 
   // Deserialize
   NamedResultCache cache2;
-  cache2.readFromDisk(tempFile);
+  cache2.readFromDisk(tempFile, ad_utility::makeUnlimitedAllocator<Id>());
 
   // Check
   EXPECT_EQ(cache2.numEntries(), 0);

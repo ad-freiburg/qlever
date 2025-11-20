@@ -41,6 +41,13 @@ TEST(SpatialJoinCachedIndex, Basic) {
   auto plan = queryPlannerTestHelpers::parseAndPlan(pinned, qec);
   [[maybe_unused]] auto pinResult = plan.getResult();
 
+  auto& cache = qec->namedResultCache();
+  std::string filename = "spatialJoinCachedIndexTmpFileForTesting.dat";
+  cache.writeToDisk(filename);
+  cache.clear();
+  cache.readFromDisk(filename, ad_utility::makeUnlimitedAllocator<Id>());
+  ad_utility::deleteFile(filename);
+
   // Retrieve and check the result table and geo index from the named cache
   auto cacheEntry = qec->namedResultCache().get("dummy");
 
@@ -106,6 +113,15 @@ TEST(SpatialJoinCachedIndex, UseOfIndexByS2PointPolylineAlgorithm) {
   auto plan = queryPlannerTestHelpers::parseAndPlan(pinQuery, qec);
   const auto pinResultCacheKey = plan.getCacheKey();
   [[maybe_unused]] auto pinResult = plan.getResult();
+
+  // TODO<joka921> Code duplication + test with AND without the serialization to
+  // disk.
+  auto& cache = qec->namedResultCache();
+  std::string filename = "spatialJoinCachedIndexTmpFileForTesting2.dat";
+  cache.writeToDisk(filename);
+  cache.clear();
+  cache.readFromDisk(filename, ad_utility::makeUnlimitedAllocator<Id>());
+  ad_utility::deleteFile(filename);
 
   // Check expected cache size
   const auto cacheEntry = qec->namedResultCache().get("dummy");

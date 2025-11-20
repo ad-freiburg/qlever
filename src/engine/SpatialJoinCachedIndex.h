@@ -34,6 +34,9 @@ class SpatialJoinCachedIndex {
   //  respective `IdTable` from which this `SpatialJoinCachedIndex` was created.
   ad_utility::HashMap<size_t, size_t> shapeIndexToRow_;
 
+  // Serialize the contained shapes, and the corresponding indices in the
+  // `IdTable` from which the index was constructed. This information is enough
+  // to relatively cheaply reconstruct the index.
   std::string serializeShapes() const;
   std::vector<size_t> serializeLineIndices() const;
 
@@ -56,22 +59,29 @@ class SpatialJoinCachedIndex {
     return shapeIndexToRow_.at(shapeIndex);
   }
 
-  // Only for serialization, TODO<joka921> make it tagged.
+  // Construct an empty, not yet valid index, s.t. it later can be filled via
+  // `populateFromSerialized` below.
   struct TagForSerialization {};
   SpatialJoinCachedIndex(TagForSerialization);
+
+  // Fill the index from preserialized shapes and line indices, which have been
+  // obtained via prior calls to `serializeShapes` and `serializeLineIndices`
+  // respectively.
   void populateFromSerialized(std::string_view serializedShapes,
                               std::vector<size_t> lineIndices);
 
+  // Serialize a `SpatialJoinCachedIndex`. When reading from a serializer, then
+  // the target `arg` has to be constructed upfront via the constructor that
+  // takes a `TagForSerialization` (see above).
   AD_SERIALIZE_FRIEND_FUNCTION(SpatialJoinCachedIndex) {
     serializer | arg.geometryColumn_;
     if constexpr (ad_utility::serialization::WriteSerializer<S>) {
       serializer << arg.serializeShapes();
       serializer << arg.serializeLineIndices();
     } else {
-      std::string serializedShapes;
-      // TODO<joka921> Make it impossible to use the wrong types here.
+      decltype(arg.serializeShapes()) serializedShapes;
       serializer >> serializedShapes;
-      std::vector<size_t> lineIndices;
+      decltype(arg.serializeLineIndices()) lineIndices;
       serializer >> lineIndices;
       arg.populateFromSerialized(serializedShapes, lineIndices);
     }

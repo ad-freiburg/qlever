@@ -15,7 +15,8 @@
 std::shared_ptr<ExplicitIdTableOperation> NamedResultCache::getOperation(
     const Key& name, QueryExecutionContext* qec) {
   const auto& result = get(name);
-  const auto& [table, map, sortedOn, localVocab, cacheKey, geoIndex] = *result;
+  const auto& [table, map, sortedOn, localVocab, cacheKey, geoIndex,
+               allocator] = *result;
   auto resultAsOperation = std::make_shared<ExplicitIdTableOperation>(
       qec, table, map, sortedOn, localVocab.clone(), cacheKey);
   return resultAsOperation;
@@ -35,34 +36,19 @@ auto NamedResultCache::get(const Key& name) -> std::shared_ptr<const Value> {
 // _____________________________________________________________________________
 void NamedResultCache::store(const Key& name, Value result) {
   auto cacheLock = cache_.wlock();
-  auto keysLock = keys_.wlock();
 
   // The underlying cache throws on insert if the key is already present. We
   // therefore first call `erase`, which silently ignores keys that are not
   // present to avoid this behavior.
-  bool wasPresent = cacheLock->contains(name);
   cacheLock->erase(name);
   cacheLock->insert(name, std::move(result));
-
-  // Update the keys list
-  if (!wasPresent) {
-    keysLock->push_back(name);
-  }
 }
 
 // _____________________________________________________________________________
-void NamedResultCache::erase(const Key& name) {
-  cache_.wlock()->erase(name);
-  auto keysLock = keys_.wlock();
-  keysLock->erase(std::remove(keysLock->begin(), keysLock->end(), name),
-                  keysLock->end());
-}
+void NamedResultCache::erase(const Key& name) { cache_.wlock()->erase(name); }
 
 // _____________________________________________________________________________
-void NamedResultCache::clear() {
-  cache_.wlock()->clearAll();
-  keys_.wlock()->clear();
-}
+void NamedResultCache::clear() { cache_.wlock()->clearAll(); }
 
 // _____________________________________________________________________________
 size_t NamedResultCache::numEntries() const {
@@ -73,19 +59,11 @@ size_t NamedResultCache::numEntries() const {
 void NamedResultCache::writeToDisk(const std::string& path) const {
   ad_utility::serialization::FileWriteSerializer serializer{path.c_str()};
 
-  auto keysLock = keys_.rlock();
-
-  // Collect entries that exist in the cache
+  auto lock = cache_.wlock();
   std::vector<std::pair<Key, std::shared_ptr<const Value>>> entries;
-  for (const auto& key : *keysLock) {
-    try {
-      // get() acquires its own lock
-      auto value = const_cast<NamedResultCache*>(this)->get(key);
-      entries.emplace_back(key, value);
-    } catch (...) {
-      // Key was evicted from cache, skip it
-      continue;
-    }
+  for (const auto& key : lock->getAllNonpinnedKeys()) {
+    entries.emplace_back(key, (*lock)[key]);
+    AD_CORRECTNESS_CHECK(entries.back().second != nullptr);
   }
 
   // Serialize the number of entries
@@ -99,7 +77,8 @@ void NamedResultCache::writeToDisk(const std::string& path) const {
 }
 
 // _____________________________________________________________________________
-void NamedResultCache::readFromDisk(const std::string& path) {
+void NamedResultCache::readFromDisk(const std::string& path,
+                                    Value::Allocator allocator) {
   ad_utility::serialization::FileReadSerializer serializer{path.c_str()};
 
   // Clear the cache first
@@ -117,7 +96,9 @@ void NamedResultCache::readFromDisk(const std::string& path) {
 
     // Deserialize the value
     Value value;
+    value.allocatorForSerialization_ = allocator;
     serializer >> value;
+    allocator = std::move(value.allocatorForSerialization_.value());
 
     // Use the store method to maintain consistency
     store(key, std::move(value));
