@@ -56,8 +56,8 @@ void MaterializedViewWriter::writeViewToDisk(
 }
 
 // _____________________________________________________________________________
-std::string MaterializedView::getFilenameBase(const std::string& onDiskBase,
-                                              const std::string& name) {
+std::string MaterializedView::getFilenameBase(std::string_view onDiskBase,
+                                              std::string_view name) {
   return absl::StrCat(onDiskBase, ".view.", name);
 }
 
@@ -419,12 +419,12 @@ static constexpr auto validViewName = ctll::fixed_string{R"(^[a-zA-Z0-9\-]+$)"};
 }
 
 // _____________________________________________________________________________
-bool MaterializedView::isValidName(const std::string& name) {
+bool MaterializedView::isValidName(std::string_view name) {
   return ctre::match<string_constants::detail::validViewName>(name);
 }
 
 // _____________________________________________________________________________
-void MaterializedView::throwIfInvalidName(const std::string& name) {
+void MaterializedView::throwIfInvalidName(std::string_view name) {
   if (!MaterializedView::isValidName(name)) {
     throw MaterializedViewConfigException(
         absl::StrCat("'", name,

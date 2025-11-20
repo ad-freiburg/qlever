@@ -118,8 +118,8 @@ class MaterializedView {
 
   // Return the combined filename from the index' `onDiskBase` and the name of
   // the view. Note that this function does not check for validity or existence.
-  static std::string getFilenameBase(const std::string& onDiskBase,
-                                     const std::string& name);
+  static std::string getFilenameBase(std::string_view onDiskBase,
+                                     std::string_view name);
 
   // Return a pointer to the open `Permutation` object for this view. Note that
   // this is always an SPO permutation because materialized views are indexed on
@@ -134,8 +134,8 @@ class MaterializedView {
   // Checks if the given name is allowed for a materialized view. Currently only
   // alphanumerics and hyphens are allowed. This is relevant for safe filenames
   // and for correctly splitting the special predicate.
-  static bool isValidName(const std::string& name);
-  static void throwIfInvalidName(const std::string& name);
+  static bool isValidName(std::string_view name);
+  static void throwIfInvalidName(std::string_view name);
 
   // Given a `MaterializedViewQuery` obtained from a special `SERVICE` or
   // predicate, compute the `SparqlTripleSimple` to be passed to the constructor
