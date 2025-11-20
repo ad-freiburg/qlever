@@ -23,7 +23,7 @@ struct MaterializedViewQuery : MagicServiceQuery {
 
   // The scan column can either be a variable (for a full scan on the view -
   // this column will then get the values from the first column) or a
-  // literal/IRI (for reading only those entires from the view where the first
+  // literal/IRI (for reading only those entries from the view where the first
   // column matches the given literal/IRI)
   std::optional<TripleComponent> scanCol_;
 
