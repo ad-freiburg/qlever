@@ -57,8 +57,8 @@ class IndexScan final : public Operation {
             VarsToKeep varsToKeep = std::nullopt);
 
   // For backward compatibility: construct an `IndexScan` from a
-  // `Permutation::Enum`. The actual permutation is then retrieved from the
-  // `QueryExecutionContext` automatically.
+  // `Permutation::Enum`. The actual `Permutation` and `LocatedTriplesSnapshot`
+  // are then retrieved from the `QueryExecutionContext` automatically.
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutationType,
             const SparqlTripleSimple& triple,
             Graphs graphsToFilter = Graphs::All(),
@@ -191,7 +191,7 @@ class IndexScan final : public Operation {
   // Instead of using the `LocatedTriplesSnapshot` of the `Operation` base
   // class, which accesses the one stored in the `QueryExecutionContext`, use
   // the `LocatedTriplesSnapshot` held in this object. This might be a different
-  // one if a custom permuation is used.
+  // one if a custom permutation is used.
   const LocatedTriplesSnapshot& locatedTriplesSnapshot() const override {
     return locatedTriplesSnapshot_;
   };
