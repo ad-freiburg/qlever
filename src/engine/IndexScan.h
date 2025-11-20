@@ -188,10 +188,7 @@ class IndexScan final : public Operation {
   // class, which accesses the one stored in the `QueryExecutionContext`, use
   // the `LocatedTriplesSnapshot` held in this object. This might be a different
   // one if a custom permutation is used.
-  const LocatedTriplesSnapshot& locatedTriplesSnapshot() const override {
-    AD_CONTRACT_CHECK(locatedTriplesSnapshot_ != nullptr);
-    return *locatedTriplesSnapshot_;
-  };
+  const LocatedTriplesSnapshot& locatedTriplesSnapshot() const override;
 
   // Return the stored triple in the order that corresponds to the
   // `permutation_`. For example if `permutation_ == PSO` then the result is
@@ -210,10 +207,7 @@ class IndexScan final : public Operation {
       const Variable& variable) const override;
 
   // Retrieve the `Permutation` entity for this `IndexScan`.
-  const Permutation& permutation() const {
-    AD_CONTRACT_CHECK(permutation_ != nullptr);
-    return *permutation_;
-  }
+  const Permutation& permutation() const;
 
  private:
   std::unique_ptr<Operation> cloneImpl() const override;

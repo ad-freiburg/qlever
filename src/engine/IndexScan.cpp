@@ -31,11 +31,11 @@ static size_t getNumberOfVariables(const TripleComponent& subject,
 }
 
 // _____________________________________________________________________________
-IndexScan::IndexScan(
-    QueryExecutionContext* qec, IndexScan::PermutationPtr permutation,
-    IndexScan::LocatedTriplesSnapshotPtr locatedTriplesSnapshot,
-    const SparqlTripleSimple& triple, Graphs graphsToFilter,
-    std::optional<ScanSpecAndBlocks> scanSpecAndBlocks, VarsToKeep varsToKeep)
+IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
+                     LocatedTriplesSnapshotPtr locatedTriplesSnapshot,
+                     const SparqlTripleSimple& triple, Graphs graphsToFilter,
+                     std::optional<ScanSpecAndBlocks> scanSpecAndBlocks,
+                     VarsToKeep varsToKeep)
     : Operation(qec),
       permutation_(permutation),
       locatedTriplesSnapshot_(locatedTriplesSnapshot),
@@ -84,14 +84,14 @@ IndexScan::IndexScan(QueryExecutionContext* qec,
                 scanSpecAndBlocks) {}
 
 // _____________________________________________________________________________
-IndexScan::IndexScan(
-    QueryExecutionContext* qec, IndexScan::PermutationPtr permutation,
-    IndexScan::LocatedTriplesSnapshotPtr locatedTriplesSnapshot,
-    const TripleComponent& s, const TripleComponent& p,
-    const TripleComponent& o, std::vector<ColumnIndex> additionalColumns,
-    std::vector<Variable> additionalVariables, Graphs graphsToFilter,
-    ScanSpecAndBlocks scanSpecAndBlocks, bool scanSpecAndBlocksIsPrefiltered,
-    VarsToKeep varsToKeep)
+IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
+                     LocatedTriplesSnapshotPtr locatedTriplesSnapshot,
+                     const TripleComponent& s, const TripleComponent& p,
+                     const TripleComponent& o,
+                     std::vector<ColumnIndex> additionalColumns,
+                     std::vector<Variable> additionalVariables,
+                     Graphs graphsToFilter, ScanSpecAndBlocks scanSpecAndBlocks,
+                     bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep)
     : Operation(qec),
       permutation_(permutation),
       locatedTriplesSnapshot_(locatedTriplesSnapshot),
@@ -292,6 +292,18 @@ Result IndexScan::computeResult(bool requestLaziness) {
     return {chunkedIndexScan(), resultSortedOn()};
   }
   return {materializedIndexScan(), getResultSortedOn(), LocalVocab{}};
+}
+
+// _____________________________________________________________________________
+const Permutation& IndexScan::permutation() const {
+  AD_CONTRACT_CHECK(permutation_ != nullptr);
+  return *permutation_;
+}
+
+// _____________________________________________________________________________
+const LocatedTriplesSnapshot& IndexScan::locatedTriplesSnapshot() const {
+  AD_CONTRACT_CHECK(locatedTriplesSnapshot_ != nullptr);
+  return *locatedTriplesSnapshot_;
 }
 
 // _____________________________________________________________________________
