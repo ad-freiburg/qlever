@@ -31,11 +31,11 @@ static size_t getNumberOfVariables(const TripleComponent& subject,
 }
 
 // _____________________________________________________________________________
-IndexScan::IndexScan(QueryExecutionContext* qec, const Permutation& permutation,
-                     const LocatedTriplesSnapshot& locatedTriplesSnapshot,
-                     const SparqlTripleSimple& triple, Graphs graphsToFilter,
-                     std::optional<ScanSpecAndBlocks> scanSpecAndBlocks,
-                     VarsToKeep varsToKeep)
+IndexScan::IndexScan(
+    QueryExecutionContext* qec, IndexScan::PermutationPtr permutation,
+    IndexScan::LocatedTriplesSnapshotPtr locatedTriplesSnapshot,
+    const SparqlTripleSimple& triple, Graphs graphsToFilter,
+    std::optional<ScanSpecAndBlocks> scanSpecAndBlocks, VarsToKeep varsToKeep)
     : Operation(qec),
       permutation_(permutation),
       locatedTriplesSnapshot_(locatedTriplesSnapshot),
@@ -48,6 +48,9 @@ IndexScan::IndexScan(QueryExecutionContext* qec, const Permutation& permutation,
       scanSpecAndBlocksIsPrefiltered_{scanSpecAndBlocks.has_value()},
       numVariables_(getNumberOfVariables(subject_, predicate_, object_)),
       varsToKeep_(varsToKeep) {
+  AD_CONTRACT_CHECK(permutation_ != nullptr);
+  AD_CONTRACT_CHECK(locatedTriplesSnapshot_ != nullptr);
+
   // We previously had `nullptr`s here in unit tests. This is no longer
   // necessary nor allowed.
   AD_CONTRACT_CHECK(qec != nullptr);
@@ -75,19 +78,20 @@ IndexScan::IndexScan(QueryExecutionContext* qec,
                      Permutation::Enum permutationType,
                      const SparqlTripleSimple& triple, Graphs graphsToFilter,
                      std::optional<ScanSpecAndBlocks> scanSpecAndBlocks)
-    : IndexScan(qec, qec->getIndex().getImpl().getPermutation(permutationType),
-                qec->locatedTriplesSnapshot(), triple, graphsToFilter,
+    : IndexScan(qec,
+                qec->getIndex().getImpl().getPermutationPtr(permutationType),
+                qec->sharedLocatedTriplesSnapshot(), triple, graphsToFilter,
                 scanSpecAndBlocks) {}
 
 // _____________________________________________________________________________
-IndexScan::IndexScan(QueryExecutionContext* qec, const Permutation& permutation,
-                     const LocatedTriplesSnapshot& locatedTriplesSnapshot,
-                     const TripleComponent& s, const TripleComponent& p,
-                     const TripleComponent& o,
-                     std::vector<ColumnIndex> additionalColumns,
-                     std::vector<Variable> additionalVariables,
-                     Graphs graphsToFilter, ScanSpecAndBlocks scanSpecAndBlocks,
-                     bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep)
+IndexScan::IndexScan(
+    QueryExecutionContext* qec, IndexScan::PermutationPtr permutation,
+    IndexScan::LocatedTriplesSnapshotPtr locatedTriplesSnapshot,
+    const TripleComponent& s, const TripleComponent& p,
+    const TripleComponent& o, std::vector<ColumnIndex> additionalColumns,
+    std::vector<Variable> additionalVariables, Graphs graphsToFilter,
+    ScanSpecAndBlocks scanSpecAndBlocks, bool scanSpecAndBlocksIsPrefiltered,
+    VarsToKeep varsToKeep)
     : Operation(qec),
       permutation_(permutation),
       locatedTriplesSnapshot_(locatedTriplesSnapshot),
@@ -101,6 +105,9 @@ IndexScan::IndexScan(QueryExecutionContext* qec, const Permutation& permutation,
       additionalColumns_(std::move(additionalColumns)),
       additionalVariables_(std::move(additionalVariables)),
       varsToKeep_{std::move(varsToKeep)} {
+  AD_CONTRACT_CHECK(qec != nullptr);
+  AD_CONTRACT_CHECK(permutation_ != nullptr);
+  AD_CONTRACT_CHECK(locatedTriplesSnapshot_ != nullptr);
   std::tie(sizeEstimateIsExact_, sizeEstimate_) = computeSizeEstimate();
   determineMultiplicities();
 }
@@ -109,7 +116,7 @@ IndexScan::IndexScan(QueryExecutionContext* qec, const Permutation& permutation,
 string IndexScan::getCacheKeyImpl() const {
   std::ostringstream os;
   // This string only represents the type of permutation, like "SPO".
-  auto permutationString = permutation_.readableName();
+  auto permutationString = permutation().readableName();
 
   if (numVariables_ == 3) {
     os << "SCAN FOR FULL INDEX " << permutationString;
@@ -127,15 +134,18 @@ string IndexScan::getCacheKeyImpl() const {
     }
   }
   // This is important to distinguish special from regular permutations.
-  os << " on index " << permutation_.onDiskBase();
+  os << " on index " << permutation().onDiskBase();
   if (!additionalColumns_.empty()) {
     os << " Additional Columns: ";
     os << absl::StrJoin(additionalColumns(), " ");
   }
+
+  os << " ";
   graphsToFilter_.format(os, &TripleComponent::toRdfLiteral);
 
   if (varsToKeep_.has_value()) {
-    os << "column subset " << absl::StrJoin(getSubsetForStrippedColumns(), ",");
+    os << " column subset "
+       << absl::StrJoin(getSubsetForStrippedColumns(), ",");
   }
   return std::move(os).str();
 }
@@ -147,7 +157,7 @@ bool IndexScan::canResultBeCachedImpl() const {
 
 // _____________________________________________________________________________
 string IndexScan::getDescriptor() const {
-  return absl::StrCat("IndexScan ", permutation_.readableName(), " ",
+  return absl::StrCat("IndexScan ", permutation().readableName(), " ",
                       subject_.toString(), " ", predicate_.toString(), " ",
                       object_.toString());
 }
@@ -265,7 +275,7 @@ Result::LazyResult IndexScan::chunkedIndexScan() const {
 
 // _____________________________________________________________________________
 IdTable IndexScan::materializedIndexScan() const {
-  IdTable idTable = getScanPermutation().scan(
+  IdTable idTable = permutation().scan(
       scanSpecAndBlocks_, additionalColumns(), cancellationHandle_,
       locatedTriplesSnapshot(), getLimitOffset());
   AD_LOG_DEBUG << "IndexScan result computation done.\n";
@@ -285,14 +295,9 @@ Result IndexScan::computeResult(bool requestLaziness) {
 }
 
 // _____________________________________________________________________________
-const Permutation& IndexScan::getScanPermutation() const {
-  return permutation_;
-}
-
-// _____________________________________________________________________________
 std::pair<bool, size_t> IndexScan::computeSizeEstimate() const {
   AD_CORRECTNESS_CHECK(_executionContext);
-  auto [lower, upper] = getScanPermutation().getSizeEstimateForScan(
+  auto [lower, upper] = permutation().getSizeEstimateForScan(
       scanSpecAndBlocks_, locatedTriplesSnapshot());
   return {lower == upper, std::midpoint(lower, upper)};
 }
@@ -300,8 +305,8 @@ std::pair<bool, size_t> IndexScan::computeSizeEstimate() const {
 // _____________________________________________________________________________
 size_t IndexScan::getExactSize() const {
   AD_CORRECTNESS_CHECK(_executionContext);
-  return getScanPermutation().getResultSizeOfScan(scanSpecAndBlocks_,
-                                                  locatedTriplesSnapshot());
+  return permutation().getResultSizeOfScan(scanSpecAndBlocks_,
+                                           locatedTriplesSnapshot());
 }
 
 // _____________________________________________________________________________
@@ -321,12 +326,11 @@ void IndexScan::determineMultiplicities() {
       // There are no duplicate triples in RDF and two elements are fixed.
       return {1.0f};
     } else if (numVariables_ == 2) {
-      // TODO<ullingerc> fix multiplicities
-      return idx.getMultiplicities(*getPermutedTriple()[0], permutation_,
+      return idx.getMultiplicities(*getPermutedTriple()[0], permutation(),
                                    locatedTriplesSnapshot());
     } else {
       AD_CORRECTNESS_CHECK(numVariables_ == 3);
-      return idx.getMultiplicities(permutation_);
+      return idx.getMultiplicities(permutation());
     }
   }();
   multiplicity_.resize(multiplicity_.size() + additionalColumns_.size(), 1.0f);
@@ -348,7 +352,7 @@ std::array<const TripleComponent* const, 3> IndexScan::getPermutedTriple()
                                                      &object_};
   // TODO<joka921> This place has to be changed once we have a permutation
   // that is primarily sorted by G (the graph id).
-  return permutation_.keyOrder().permuteTriple(triple);
+  return permutation().keyOrder().permuteTriple(triple);
 }
 
 // _____________________________________________________________________________
@@ -379,8 +383,8 @@ IndexScan::getSortedVariableAndMetadataColumnIndexForPrefiltering() const {
 
 // ___________________________________________________________________________
 Permutation::ScanSpecAndBlocks IndexScan::getScanSpecAndBlocks() const {
-  return getScanPermutation().getScanSpecAndBlocks(getScanSpecification(),
-                                                   locatedTriplesSnapshot());
+  return permutation().getScanSpecAndBlocks(getScanSpecification(),
+                                            locatedTriplesSnapshot());
 }
 
 // _____________________________________________________________________________
@@ -392,7 +396,7 @@ CompressedRelationReader::IdTableGeneratorInputRange IndexScan::getLazyScan(
   // into the prefiltering (`std::nullopt` means `scan all blocks`).
   auto filteredBlocks =
       getLimitOffset().isUnconstrained() ? std::move(blocks) : std::nullopt;
-  auto lazyScanAllCols = getScanPermutation().lazyScan(
+  auto lazyScanAllCols = permutation().lazyScan(
       scanSpecAndBlocks_, filteredBlocks, additionalColumns(),
       cancellationHandle_, locatedTriplesSnapshot(), getLimitOffset());
 
@@ -407,8 +411,8 @@ CompressedRelationReader::IdTableGeneratorInputRange IndexScan::getLazyScan(
 // _____________________________________________________________________________
 std::optional<Permutation::MetadataAndBlocks> IndexScan::getMetadataForScan()
     const {
-  return getScanPermutation().getMetadataAndBlocks(scanSpecAndBlocks_,
-                                                   locatedTriplesSnapshot());
+  return permutation().getMetadataAndBlocks(scanSpecAndBlocks_,
+                                            locatedTriplesSnapshot());
 };
 
 // _____________________________________________________________________________
