@@ -30,8 +30,12 @@
 
 // _____________________________________________________________________________
 MaterializedViewWriter::MaterializedViewWriter(
-    std::string name, const qlever::Qlever::QueryPlan& queryPlan)
-    : name_{std::move(name)} {
+    std::string name, const qlever::Qlever::QueryPlan& queryPlan,
+    ad_utility::MemorySize memoryLimit,
+    ad_utility::AllocatorWithLimit<Id> allocator)
+    : name_{std::move(name)},
+      memoryLimit_{std::move(memoryLimit)},
+      allocator_{std::move(allocator)} {
   MaterializedView::throwIfInvalidName(name_);
   auto [qet, qec, parsedQuery] = queryPlan;
   AD_CORRECTNESS_CHECK(qet != nullptr);
@@ -39,6 +43,16 @@ MaterializedViewWriter::MaterializedViewWriter(
   qet_ = qet;
   qec_ = qec;
   parsedQuery_ = std::move(parsedQuery);
+}
+
+// _____________________________________________________________________________
+void MaterializedViewWriter::writeViewToDisk(
+    std::string name, const qlever::Qlever::QueryPlan& queryPlan,
+    ad_utility::MemorySize memoryLimit,
+    ad_utility::AllocatorWithLimit<Id> allocator) {
+  MaterializedViewWriter writer{std::move(name), queryPlan,
+                                std::move(memoryLimit), std::move(allocator)};
+  writer.computeResultAndWritePermutation();
 }
 
 // _____________________________________________________________________________
@@ -82,9 +96,7 @@ MaterializedViewWriter::getIdTableColumnNamesAndPermutation() const {
 }
 
 // _____________________________________________________________________________
-void MaterializedViewWriter::writeViewToDisk(
-    ad_utility::MemorySize memoryLimit,
-    ad_utility::AllocatorWithLimit<Id> allocator) const {
+void MaterializedViewWriter::computeResultAndWritePermutation() const {
   // SPO comparator
   using Comparator = SortTriple<0, 1, 2>;
   constexpr size_t numSortedColumns = 3;
@@ -113,8 +125,8 @@ void MaterializedViewWriter::writeViewToDisk(
 
   // Prepare output range and sorter
   IdTableRange sortedBlocksSPO;
-  Sorter spoSorter{filename + ".spo-sorter.dat", numCols, memoryLimit,
-                   allocator};
+  Sorter spoSorter{filename + ".spo-sorter.dat", numCols, memoryLimit_,
+                   allocator_};
 
   auto permuteIdTableAndCheckVocab = [&](IdTable& block,
                                          const LocalVocab& vocab) {
@@ -311,7 +323,7 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
 }
 
 // _____________________________________________________________________________
-std::shared_ptr<const Permutation> MaterializedView::getPermutation() const {
+std::shared_ptr<const Permutation> MaterializedView::permutation() const {
   AD_CORRECTNESS_CHECK(permutation_ != nullptr);
   return permutation_;
 }
@@ -451,6 +463,21 @@ std::shared_ptr<IndexScan> MaterializedView::makeIndexScan(
   auto scanTriple = makeScanConfig(viewQuery, std::move(placeholderPredicate),
                                    std::move(placeholderObject));
   return std::make_shared<IndexScan>(
-      qec, permutation_, locatedTriplesSnapshot_, std::move(scanTriple),
+      qec, *permutation_, locatedTriplesSnapshot_, std::move(scanTriple),
       IndexScan::Graphs::All(), std::nullopt, viewQuery.getVarsToKeep());
+}
+
+// _____________________________________________________________________________
+std::shared_ptr<IndexScan> MaterializedViewsManager::makeIndexScan(
+    QueryExecutionContext* qec,
+    const parsedQuery::MaterializedViewQuery& viewQuery,
+    Variable placeholderPredicate, Variable placeholderObject) const {
+  if (!viewQuery.viewName_.has_value()) {
+    throw MaterializedViewConfigException(
+        "To read from a materialized view its name must be set in the "
+        "query configuration.");
+  }
+  auto view = getView(viewQuery.viewName_.value());
+  return view->makeIndexScan(qec, viewQuery, std::move(placeholderPredicate),
+                             std::move(placeholderObject));
 }

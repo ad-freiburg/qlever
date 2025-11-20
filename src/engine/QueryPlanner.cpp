@@ -3149,20 +3149,9 @@ void QueryPlanner::GraphPatternPlanner::visitPathSearch(
 // _______________________________________________________________
 SubtreePlan QueryPlanner::getMaterializedViewIndexScanPlan(
     const parsedQuery::MaterializedViewQuery& viewQuery) {
-  const auto& viewManager = _qec->materializedViewsManager();
-  if (!viewQuery.viewName_.has_value()) {
-    throw MaterializedViewConfigException(
-        "To read from a materialized view its name must be set in the "
-        "query configuration.");
-  }
-  auto view = viewManager.getView(viewQuery.viewName_.value());
-  auto scanTriple = view->makeScanConfig(viewQuery, generateUniqueVarName(),
-                                         generateUniqueVarName());
-
-  return makeSubtreePlan<IndexScan>(_qec, Permutation::Enum::SPO,
-                                    std::move(scanTriple),
-                                    IndexScan::Graphs::All(), std::nullopt,
-                                    std::move(view), viewQuery.getVarsToKeep());
+  return makeSubtreePlan<IndexScan>(
+      _qec->materializedViewsManager().makeIndexScan(
+          _qec, viewQuery, generateUniqueVarName(), generateUniqueVarName()));
 }
 
 // _______________________________________________________________

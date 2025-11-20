@@ -8,6 +8,7 @@
 #include <optional>
 
 #include "engine/IndexScan.h"
+#include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "engine/NeutralElementOperation.h"
 #include "engine/ValuesForTesting.h"

@@ -41,6 +41,8 @@ class MaterializedViewWriter {
   std::shared_ptr<QueryExecutionTree> qet_;
   std::shared_ptr<QueryExecutionContext> qec_;
   ParsedQuery parsedQuery_;
+  ad_utility::MemorySize memoryLimit_;
+  ad_utility::AllocatorWithLimit<Id> allocator_;
 
  public:
   // Type alias repeated here from `Qlever.h` to avoid cyclic include.
@@ -48,10 +50,13 @@ class MaterializedViewWriter {
       std::tuple<std::shared_ptr<QueryExecutionTree>,
                  std::shared_ptr<QueryExecutionContext>, ParsedQuery>;
 
+ private:
   // Initialize a writer given the base filename of the view and a query plan.
   // The view will be written to files prefixed with the index basename followed
   // by the view name.
-  MaterializedViewWriter(std::string name, const QueryPlan& queryPlan);
+  MaterializedViewWriter(std::string name, const QueryPlan& queryPlan,
+                         ad_utility::MemorySize memoryLimit,
+                         ad_utility::AllocatorWithLimit<Id> allocator);
 
   std::string getFilenameBase() const;
 
@@ -65,10 +70,14 @@ class MaterializedViewWriter {
 
   // Actually computes and externally sorts the query result and writes the view
   // (SPO permutation and metadata) to disk.
-  void writeViewToDisk(
+  void computeResultAndWritePermutation() const;
+
+ public:
+  static void writeViewToDisk(
+      std::string name, const QueryPlan& queryPlan,
       ad_utility::MemorySize memoryLimit = ad_utility::MemorySize::gigabytes(4),
       ad_utility::AllocatorWithLimit<Id> allocator =
-          ad_utility::makeUnlimitedAllocator<Id>()) const;
+          ad_utility::makeUnlimitedAllocator<Id>());
 };
 
 // This class represents a single loaded `MaterializedView`. It can be used for
@@ -86,6 +95,8 @@ class MaterializedView {
 
   using AdditionalScanColumns = SparqlTripleSimple::AdditionalScanColumns;
 
+  // Helper to create an empty `LocatedTriplesSnapshot` for `IndexScan`s as
+  // materialized views do not support updates yet.
   LocatedTriplesSnapshot makeEmptyLocatedTriplesSnapshot() const;
 
  public:
@@ -95,15 +106,15 @@ class MaterializedView {
   MaterializedView(std::string onDiskBase, std::string name);
 
   // Get the name of the view.
-  const std::string& getName() const { return name_; }
+  const std::string& name() const { return name_; }
 
   // Get the variable to column map.
-  const VariableToColumnMap& getVariableToColumnMap() const {
+  const VariableToColumnMap& variableToColumnMap() const {
     return varToColMap_;
   }
 
   // Get the name of the indexed column.
-  const Variable& getIndexedColumn() const { return indexedColVariable_; }
+  const Variable& indexedColumn() const { return indexedColVariable_; }
 
   // Return the combined filename from the index' `onDiskBase` and the name of
   // the view. Note that this function does not check for validity or existence.
@@ -113,7 +124,7 @@ class MaterializedView {
   // Return a pointer to the open `Permutation` object for this view. Note that
   // this is always an SPO permutation because materialized views are indexed on
   // the first column.
-  std::shared_ptr<const Permutation> getPermutation() const;
+  std::shared_ptr<const Permutation> permutation() const;
 
   // Return a reference to the `LocatedTriplesSnapshot` for the permutation. For
   // now this is always an empty snapshot but with the correct permutation
@@ -135,7 +146,9 @@ class MaterializedView {
       const parsedQuery::MaterializedViewQuery& viewQuery,
       Variable placeholderPredicate, Variable placeholderObject) const;
 
-  //
+  // Given a `QueryExecutionContext` and the arguments for `makeScanConfig`
+  // construct an `IndexScan` operation for scanning the requested columns of
+  // this view.
   std::shared_ptr<IndexScan> makeIndexScan(
       QueryExecutionContext* qec,
       const parsedQuery::MaterializedViewQuery& viewQuery,
@@ -169,6 +182,13 @@ class MaterializedViewsManager {
   // Load the given view if it is not already loaded and return it.
   std::shared_ptr<const MaterializedView> getView(
       const std::string& name) const;
+
+  // The same as `MaterializedView::makeIndexScan` above, but load and use the
+  // right view automatically as requested in the `MaterializedViewQuery`.
+  std::shared_ptr<IndexScan> makeIndexScan(
+      QueryExecutionContext* qec,
+      const parsedQuery::MaterializedViewQuery& viewQuery,
+      Variable placeholderPredicate, Variable placeholderObject) const;
 };
 
 #endif  // QLEVER_SRC_ENGINE_MATERIALIZEDVIEWS_H_

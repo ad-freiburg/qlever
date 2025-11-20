@@ -170,8 +170,8 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
         "SELECT ?p ?o (?s AS ?x) ?g { ?s ?p ?o . BIND(3 AS ?g) }";
     qlv().writeMaterializedView("testView3", reorderedQuery);
     MaterializedView view{testIndexBase_, "testView3"};
-    EXPECT_EQ(view.getIndexedColumn(), V{"?p"});
-    const auto& map = view.getVariableToColumnMap();
+    EXPECT_EQ(view.indexedColumn(), V{"?p"});
+    const auto& map = view.variableToColumnMap();
     EXPECT_EQ(map.at(V{"?p"}).columnIndex_, 0);
     EXPECT_EQ(map.at(V{"?o"}).columnIndex_, 1);
     EXPECT_EQ(map.at(V{"?x"}).columnIndex_, 2);
@@ -190,7 +190,7 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
                 ::testing::HasSubstr("Query result rows for materialized view "
                                      "testView4 are already sorted"));
     MaterializedView view{testIndexBase_, "testView4"};
-    EXPECT_EQ(view.getIndexedColumn(), V{"?p"});
+    EXPECT_EQ(view.indexedColumn(), V{"?p"});
     auto res = qlv().query(
         "PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>"
         "SELECT * { <p1> view:testView4:o ?o }",
@@ -225,13 +225,12 @@ TEST_F(MaterializedViewsTest, InvalidInputToWriter) {
 TEST_F(MaterializedViewsTest, ManualConfigurations) {
   auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
 
-  MaterializedViewWriter writer{"testView1", plan};
-  writer.writeViewToDisk();
+  MaterializedViewWriter::writeViewToDisk("testView1", plan);
 
   MaterializedViewsManager manager{testIndexBase_};
   auto view = manager.getView("testView1");
   ASSERT_TRUE(view != nullptr);
-  EXPECT_EQ(view->getName(), "testView1");
+  EXPECT_EQ(view->name(), "testView1");
 
   MaterializedViewsManager managerNoBaseName;
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -318,8 +317,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
     auto qet = std::get<0>(plan);
     auto res = qet->getResult(true);
     EXPECT_TRUE(res->isFullyMaterialized());
-    MaterializedViewWriter writer{"testView4", plan};
-    writer.writeViewToDisk();
+    MaterializedViewWriter::writeViewToDisk("testView4", plan);
   }
 
   // Invalid inputs
