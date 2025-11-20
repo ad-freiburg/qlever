@@ -18,8 +18,18 @@ namespace parsedQuery {
 // read.
 struct MaterializedViewQuery : MagicServiceQuery {
  public:
+  // The name of the view to be queried.
   std::optional<std::string> viewName_;
+
+  // The scan column can either be a variable (for a full scan on the view -
+  // this column will then get the values from the first column) or a
+  // literal/IRI (for reading only those entires from the view where the first
+  // column matches the given literal/IRI)
   std::optional<TripleComponent> scanCol_;
+
+  // The requested variables are a mapping of column names in the view to target
+  // column names in the query result. This can be used for reading any number
+  // of payload columns from the materialized view.
   ad_utility::HashMap<Variable, Variable> requestedVariables_;
 
   // Default constructor. If this is used, add configuration triples one-by-one
