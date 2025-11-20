@@ -175,6 +175,11 @@ constexpr size_t getIndexOfFirstTypeToPassCheck() {
 // libc++, because libc++ strictly enforces the `std::integral` constraint for
 // `std::integer_sequence`, and we also need non-integral types as values, for
 // example `std::array<...>`.
+
+// An `ad_utility::ValueSequenceRef<T, values....>` does exactly the same, but
+// the values are passed in as `const&`. This requires them to be constexpr
+// objects with linkage, but increases the usability in C++17 mode, where
+// objects like `std::array` can't be passed as template arguments by value.
 namespace detail {
 template <typename T, T... values>
 struct ValueSequenceImpl {};
@@ -198,6 +203,8 @@ constexpr auto toIntegerSequenceHelper(std::index_sequence<indexes...>) {
   return ValueSequence<typename decltype(Array)::value_type,
                        std::get<indexes>(Array)...>{};
 }
+
+// Implementation for `toIntegerSequenceRef` below.
 template <const auto& Array, size_t... indexes>
 constexpr auto toIntegerSequenceRefHelper(std::index_sequence<indexes...>) {
   return ValueSequence<typename std::decay_t<decltype(Array)>::value_type,
@@ -215,6 +222,9 @@ auto toIntegerSequence() {
   return detail::toIntegerSequenceHelper<Array>(
       std::make_index_sequence<Array.size()>{});
 }
+
+// Exactly the same as `toIntegerSequence` directly above, but the `Array` is
+// passed as a `const&`, which makes this function usable in C++17 mode.
 template <const auto& Array>
 auto toIntegerSequenceRef() {
   return detail::toIntegerSequenceRefHelper<Array>(
@@ -236,8 +246,11 @@ CPP_template(typename Int, size_t NumIntegers)(
   return res;
 };
 
+// Store the result of `integerToArray` in a `constexpr` variable which has
+// linkage, and can therefore be used in C++17 mode as a `const&` template
+// parameter.
 template <typename Int, size_t NumIntegers, Int value, Int numValues>
-constexpr std::array<Int, NumIntegers> integerToArrayStaticVar =
+constexpr inline std::array<Int, NumIntegers> integerToArrayStaticVar =
     integerToArray<Int, NumIntegers>(value, numValues);
 
 // Return a `std::array<std::array<Int, Num>, pow(Upper, Num)>` (where `Int` is
@@ -256,19 +269,15 @@ CPP_template(auto Upper, size_t Num)(
   return arr;
 }
 
+// Store the result of `cartesianPowerAsArray()` from above in a `constexpr`
+// variable with linkage that can be used as a `const&` template parameter in
+// C++17 mode.
 CPP_template(auto Upper, size_t Num)(
     requires ql::concepts::integral<
-        decltype(Upper)>) constexpr auto cartesianPowerAsArrayVal = []() {
-  using Int = decltype(Upper);
-  constexpr auto numValues = pow(Upper, Num);
-  std::array<std::array<Int, Num>, numValues> arr{};
-  for (Int i = 0; i < numValues; ++i) {
-    arr[i] = integerToArray<Int, Num>(i, Upper);
-  }
-  return arr;
-}();
+        decltype(Upper)>) constexpr auto cartesianPowerAsArrayVal =
+    cartesianPowerAsArray<Upper, Num>();
 
-// Return a `std::integer_sequence<Int,...>` that contains each
+// Return a `ad_utility::ValueSequence<Int,...>` that contains each
 // value from `[0, ..., Upper - 1] X Num` exactly once. `X` denotes the
 // cartesian product of sets. The elements of the `integer_sequence` are
 // of type `std::array<Int, Num>` where `Int` is the type of `Upper`.
@@ -340,11 +349,16 @@ constexpr void forEachTypeInTemplateTypeWithTI(
   detail::forEachTypeInTemplateTypeWithTIImpl<TemplateType>{}(lambda);
 }
 
+// Call the `lambda`, which takes an implicit template parameter of type `T` for
+// each value in the `ValueSequence` that is being passed in as the first
+// argument.
 template <typename T, T... values, typename F>
 constexpr void forEachValueInValueSequence(ValueSequence<T, values...>,
                                            F&& lambda) {
   (lambda.template operator()<values>(), ...);
 }
+
+// Same as above, but for `std::integer_sequence` arguments.
 template <typename T, T... values, typename F>
 constexpr void forEachValueInValueSequence(std::integer_sequence<T, values...>,
                                            F&& lambda) {

@@ -94,8 +94,8 @@ class ValueId {
   /// The smallest double > 0 that will not be rounded to zero by the precision
   /// loss of `FoldedId`. Symmetrically, `-minPositiveDouble` is the largest
   /// double <0 that will not be rounded to zero.
-  /// TODO<joka921> This constant is currently only used in unit tests.
-  /// Find the exact value for CPP17 mode, and static assert it in C++20 mode.
+  /// Note: This constant is currently only used in unit tests, and cannot be
+  /// computed at compile time in C++17.
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   static constexpr double minPositiveDouble =
       absl::bit_cast<double>(1ull << numDatatypeBits);
@@ -195,7 +195,13 @@ class ValueId {
     return ql::compareThreeWay(_bits, other._bits);
   }
   QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(ValueId)
-  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_CONSTEXPR(ValueId, _bits)
+
+  friend constexpr bool operator==(const ValueId& left, const ValueId& right) {
+    return ql::compareThreeWay(left, right) == 0;
+  }
+  friend constexpr bool operator!=(const ValueId& left, const ValueId& right) {
+    return !(left == right);
+  }
 
   // When there are no local vocab entries, then comparison can only be done
   // on the underlying bits, which allows much better code generation (e.g.
