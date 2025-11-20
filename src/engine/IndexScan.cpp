@@ -31,15 +31,12 @@ static size_t getNumberOfVariables(const TripleComponent& subject,
 }
 
 // _____________________________________________________________________________
-IndexScan::IndexScan(QueryExecutionContext* qec,
-                     Permutation::Enum permutationType,
-                     const Permutation& permutation,
+IndexScan::IndexScan(QueryExecutionContext* qec, const Permutation& permutation,
                      const LocatedTriplesSnapshot& locatedTriplesSnapshot,
                      const SparqlTripleSimple& triple, Graphs graphsToFilter,
                      std::optional<ScanSpecAndBlocks> scanSpecAndBlocks,
                      VarsToKeep varsToKeep)
     : Operation(qec),
-      permutationType_(permutationType),
       permutation_(permutation),
       locatedTriplesSnapshot_(locatedTriplesSnapshot),
       subject_(triple.s_),
@@ -78,15 +75,12 @@ IndexScan::IndexScan(QueryExecutionContext* qec,
                      Permutation::Enum permutationType,
                      const SparqlTripleSimple& triple, Graphs graphsToFilter,
                      std::optional<ScanSpecAndBlocks> scanSpecAndBlocks)
-    : IndexScan(qec, permutationType,
-                qec->getIndex().getImpl().getPermutation(permutationType),
+    : IndexScan(qec, qec->getIndex().getImpl().getPermutation(permutationType),
                 qec->locatedTriplesSnapshot(), triple, graphsToFilter,
                 scanSpecAndBlocks) {}
 
 // _____________________________________________________________________________
-IndexScan::IndexScan(QueryExecutionContext* qec,
-                     Permutation::Enum permutationType,
-                     const Permutation& permutation,
+IndexScan::IndexScan(QueryExecutionContext* qec, const Permutation& permutation,
                      const LocatedTriplesSnapshot& locatedTriplesSnapshot,
                      const TripleComponent& s, const TripleComponent& p,
                      const TripleComponent& o,
@@ -95,7 +89,6 @@ IndexScan::IndexScan(QueryExecutionContext* qec,
                      Graphs graphsToFilter, ScanSpecAndBlocks scanSpecAndBlocks,
                      bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep)
     : Operation(qec),
-      permutationType_(permutationType),
       permutation_(permutation),
       locatedTriplesSnapshot_(locatedTriplesSnapshot),
       subject_(s),
@@ -115,7 +108,8 @@ IndexScan::IndexScan(QueryExecutionContext* qec,
 // _____________________________________________________________________________
 string IndexScan::getCacheKeyImpl() const {
   std::ostringstream os;
-  auto permutationString = Permutation::toString(permutationType_);
+  // This string only represents the type of permutation, like "SPO".
+  auto permutationString = permutation_.readableName();
 
   if (numVariables_ == 3) {
     os << "SCAN FOR FULL INDEX " << permutationString;
@@ -132,6 +126,8 @@ string IndexScan::getCacheKeyImpl() const {
       os << ", ";
     }
   }
+  // This is important to distinguish special from regular permutations.
+  os << " on index " << permutation_.onDiskBase();
   if (!additionalColumns_.empty()) {
     os << " Additional Columns: ";
     os << absl::StrJoin(additionalColumns(), " ");
@@ -151,8 +147,8 @@ bool IndexScan::canResultBeCachedImpl() const {
 
 // _____________________________________________________________________________
 string IndexScan::getDescriptor() const {
-  return absl::StrCat("IndexScan ", Permutation::toString(permutationType_),
-                      " ", subject_.toString(), " ", predicate_.toString(), " ",
+  return absl::StrCat("IndexScan ", permutation_.readableName(), " ",
+                      subject_.toString(), " ", predicate_.toString(), " ",
                       object_.toString());
 }
 
@@ -254,10 +250,9 @@ std::shared_ptr<QueryExecutionTree>
 IndexScan::makeCopyWithPrefilteredScanSpecAndBlocks(
     ScanSpecAndBlocks scanSpecAndBlocks) const {
   return ad_utility::makeExecutionTree<IndexScan>(
-      getExecutionContext(), permutationType_, permutation_,
-      locatedTriplesSnapshot_, subject_, predicate_, object_,
-      additionalColumns_, additionalVariables_, graphsToFilter_,
-      std::move(scanSpecAndBlocks), true, varsToKeep_);
+      getExecutionContext(), permutation_, locatedTriplesSnapshot_, subject_,
+      predicate_, object_, additionalColumns_, additionalVariables_,
+      graphsToFilter_, std::move(scanSpecAndBlocks), true, varsToKeep_);
 }
 
 // _____________________________________________________________________________
@@ -327,11 +322,11 @@ void IndexScan::determineMultiplicities() {
       return {1.0f};
     } else if (numVariables_ == 2) {
       // TODO<ullingerc> fix multiplicities
-      return idx.getMultiplicities(*getPermutedTriple()[0], permutationType_,
+      return idx.getMultiplicities(*getPermutedTriple()[0], permutation_,
                                    locatedTriplesSnapshot());
     } else {
       AD_CORRECTNESS_CHECK(numVariables_ == 3);
-      return idx.getMultiplicities(permutationType_);
+      return idx.getMultiplicities(permutation_);
     }
   }();
   multiplicity_.resize(multiplicity_.size() + additionalColumns_.size(), 1.0f);
@@ -353,7 +348,7 @@ std::array<const TripleComponent* const, 3> IndexScan::getPermutedTriple()
                                                      &object_};
   // TODO<joka921> This place has to be changed once we have a permutation
   // that is primarily sorted by G (the graph id).
-  return Permutation::toKeyOrder(permutationType_).permuteTriple(triple);
+  return permutation_.keyOrder().permuteTriple(triple);
 }
 
 // _____________________________________________________________________________
@@ -732,10 +727,10 @@ std::pair<Result::LazyResult, Result::LazyResult> IndexScan::prefilterTables(
 // _____________________________________________________________________________
 std::unique_ptr<Operation> IndexScan::cloneImpl() const {
   return std::make_unique<IndexScan>(
-      _executionContext, permutationType_, permutation_,
-      locatedTriplesSnapshot_, subject_, predicate_, object_,
-      additionalColumns_, additionalVariables_, graphsToFilter_,
-      scanSpecAndBlocks_, scanSpecAndBlocksIsPrefiltered_, varsToKeep_);
+      _executionContext, permutation_, locatedTriplesSnapshot_, subject_,
+      predicate_, object_, additionalColumns_, additionalVariables_,
+      graphsToFilter_, scanSpecAndBlocks_, scanSpecAndBlocksIsPrefiltered_,
+      varsToKeep_);
 }
 
 // _____________________________________________________________________________
@@ -757,10 +752,9 @@ IndexScan::makeTreeWithStrippedColumns(
   }
 
   return ad_utility::makeExecutionTree<IndexScan>(
-      _executionContext, permutationType_, permutation_,
-      locatedTriplesSnapshot_, subject_, predicate_, object_,
-      additionalColumns_, additionalVariables_, graphsToFilter_,
-      scanSpecAndBlocks_, scanSpecAndBlocksIsPrefiltered_,
+      _executionContext, permutation_, locatedTriplesSnapshot_, subject_,
+      predicate_, object_, additionalColumns_, additionalVariables_,
+      graphsToFilter_, scanSpecAndBlocks_, scanSpecAndBlocksIsPrefiltered_,
       VarsToKeep{std::move(newVariables)});
 }
 

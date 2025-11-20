@@ -472,13 +472,13 @@ class IndexImpl {
 
   bool hasAllPermutations() const { return SPO().isLoaded(); }
 
-  // _____________________________________________________________________________
+  // ___________________________________________________________________________
   std::vector<float> getMultiplicities(
-      const TripleComponent& key, Permutation::Enum permutation,
+      const TripleComponent& key, const Permutation& permutation,
       const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
-  // ___________________________________________________________________
-  std::vector<float> getMultiplicities(Permutation::Enum permutation) const;
+  // ___________________________________________________________________________
+  std::vector<float> getMultiplicities(const Permutation& permutation) const;
 
   // _____________________________________________________________________________
   IdTable scan(const ScanSpecificationAsTripleComponent& scanSpecification,

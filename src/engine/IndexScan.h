@@ -21,7 +21,6 @@ class IndexScan final : public Operation {
   using ScanSpecAndBlocks = Permutation::ScanSpecAndBlocks;
 
  private:
-  Permutation::Enum permutationType_;
   const Permutation& permutation_;
   const LocatedTriplesSnapshot& locatedTriplesSnapshot_;
   TripleComponent subject_;
@@ -48,8 +47,7 @@ class IndexScan final : public Operation {
   VarsToKeep varsToKeep_;
 
  public:
-  IndexScan(QueryExecutionContext* qec, Permutation::Enum permutationType,
-            const Permutation& permutation,
+  IndexScan(QueryExecutionContext* qec, const Permutation& permutation,
             const LocatedTriplesSnapshot& locatedTriplesSnapshot,
             const SparqlTripleSimple& triple,
             Graphs graphsToFilter = Graphs::All(),
@@ -65,8 +63,7 @@ class IndexScan final : public Operation {
             std::optional<ScanSpecAndBlocks> scanSpecAndBlocks = std::nullopt);
 
   // Constructor to simplify copy creation of an `IndexScan`.
-  IndexScan(QueryExecutionContext* qec, Permutation::Enum permutationType,
-            const Permutation& permutation,
+  IndexScan(QueryExecutionContext* qec, const Permutation& permutation,
             const LocatedTriplesSnapshot& locatedTriplesSnapshot,
             const TripleComponent& s, const TripleComponent& p,
             const TripleComponent& o,
@@ -183,8 +180,6 @@ class IndexScan final : public Operation {
 
   // An index scan can directly and efficiently support LIMIT and OFFSET
   [[nodiscard]] bool supportsLimitOffset() const override { return true; }
-
-  Permutation::Enum permutationType() const { return permutationType_; }
 
   const Permutation& permutation() const { return permutation_; }
 

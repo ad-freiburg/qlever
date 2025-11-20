@@ -142,9 +142,8 @@ constexpr auto IndexScan =
                                 ? ::testing::A<Permutation::Enum>()
                                 : AnyOfArray(allowedPermutations);
   return RootOperation<::IndexScan>(AllOf(
-      // TODO<ullingerc> Also check `IndexScan::permutation` and
-      // `IndexScan::locatedTriplesSnapshot`.
-      AD_PROPERTY(IndexScan, permutationType, permutationMatcher),
+      AD_PROPERTY(IndexScan, permutation,
+                  AD_PROPERTY(Permutation, permutation, permutationMatcher)),
       AD_PROPERTY(IndexScan, getResultWidth, Eq(numVariables)),
       AD_PROPERTY(IndexScan, subject, Eq(subject)),
       AD_PROPERTY(IndexScan, predicate, Eq(predicate)),
