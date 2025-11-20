@@ -473,12 +473,12 @@ class IndexImpl {
 
   bool hasAllPermutations() const { return SPO().isLoaded(); }
 
-  // _____________________________________________________________________________
+  // ___________________________________________________________________________
   std::vector<float> getMultiplicities(
       const TripleComponent& key, const Permutation& permutation,
       const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
-  // ___________________________________________________________________
+  // ___________________________________________________________________________
   std::vector<float> getMultiplicities(const Permutation& permutation) const;
 
   // _____________________________________________________________________________

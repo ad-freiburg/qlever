@@ -263,8 +263,9 @@ Index::NumNormalAndInternal Index::numDistinctPredicates() const {
 bool Index::hasAllPermutations() const { return pimpl_->hasAllPermutations(); }
 
 // ____________________________________________________________________________
-std::vector<float> Index::getMultiplicities(const Permutation& p) const {
-  return pimpl_->getMultiplicities(p);
+std::vector<float> Index::getMultiplicities(
+    const Permutation& permutation) const {
+  return pimpl_->getMultiplicities(permutation);
 }
 
 // ____________________________________________________________________________

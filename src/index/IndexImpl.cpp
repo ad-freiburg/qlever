@@ -1642,11 +1642,9 @@ std::vector<float> IndexImpl::getMultiplicities(
 // _____________________________________________________________________________
 std::vector<float> IndexImpl::getMultiplicities(
     const Permutation& permutation) const {
-  // We may not use the `numTriples()` of this `IndexImpl` object because the
-  // `Permutation` may belong to a materialized view with a different number of
-  // rows.
-  // TODO<review> Is this correct regarding normal - internal triples?
-  auto numTriples = static_cast<float>(permutation.metaData().totalElements());
+  // TODO<ullingerc> Deal with custom permutations (e.g. from materialized
+  // views)
+  auto numTriples = static_cast<float>(this->numTriples().normal);
   std::array multiplicities{numTriples / numDistinctSubjects().normal,
                             numTriples / numDistinctPredicates().normal,
                             numTriples / numDistinctObjects().normal};
