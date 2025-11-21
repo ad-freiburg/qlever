@@ -202,6 +202,9 @@ class DeltaTriples {
       Permutation::Enum permutation,
       std::shared_ptr<const std::vector<CompressedBlockMetadata>> metadata);
 
+  // Update the block metadata.
+  void updateAugmentedMetadata();
+
   std::pair<std::vector<std::tuple<VocabIndex, std::string_view, Id>>,
             ad_utility::HashMap<Id, Id>>
   materializeLocalVocab() const;
@@ -276,6 +279,7 @@ class DeltaTriplesManager {
   template <typename ReturnType>
   ReturnType modify(const std::function<ReturnType(DeltaTriples&)>& function,
                     bool writeToDiskAfterRequest = true,
+                    bool updateMetadataAfterRequest = true,
                     ad_utility::timer::TimeTracer& tracer =
                         ad_utility::timer::DEFAULT_TIME_TRACER);
 
