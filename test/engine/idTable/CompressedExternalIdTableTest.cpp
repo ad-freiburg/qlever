@@ -4,8 +4,11 @@
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
+#include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+
+#include <sstream>
 
 #include "../../util/AllocatorTestHelpers.h"
 #include "../../util/GTestHelpers.h"
@@ -14,6 +17,7 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "index/ExternalSortFunctors.h"
 #include "util/ConstexprUtils.h"
+#include "util/Log.h"
 
 using ad_utility::source_location;
 using namespace ad_utility::memory_literals;
@@ -201,10 +205,17 @@ TEST(CompressedExternalIdTable, sorterMemoryLimit) {
     writer.push(row);
   }
 
+  // Capture log output
+  std::stringstream logStream;
+  ad_utility::setGlobalLoggingStream(&logStream);
+  absl::Cleanup cleanup{
+      []() { ad_utility::setGlobalLoggingStream(&std::cout); }};
+
   auto generator = [&writer]() { return writer.sortedView(); };
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      (idTableFromRowGenerator<0>(generator(), NUM_COLS)),
-      ::testing::ContainsRegex("Insufficient memory"));
+  (idTableFromRowGenerator<0>(generator(), NUM_COLS));
+
+  // Check that the log contains "Insufficient memory"
+  EXPECT_THAT(logStream.str(), ::testing::HasSubstr("Insufficient memory"));
 }
 
 // Test corner case: pushing exactly blockSize rows leaves currentBlock_ empty.

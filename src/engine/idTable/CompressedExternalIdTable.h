@@ -844,13 +844,23 @@ class CompressedExternalIdTableSorter
       // For unit tests, always yield 5 outputs at once.
       return 5;
     } else {
-      auto throwInsufficientMemory = [numBlocksToMerge]() {
-        throw std::runtime_error{
-            absl::StrCat("Insufficient memory for merging ", numBlocksToMerge,
-                         " blocks. Please increase the memory settings")};
+      auto logInsufficientMemory = [&]() {
+        AD_LOG_INFO << std::endl
+                    << "Insufficient memory for merging"
+                    << "; num blocks to merge: " << numBlocksToMerge
+                    << "; required memory: "
+                    << requiredMemoryForInputBlocks.asString()
+                    << "; total memory: " << this->memory_.asString()
+                    << "; num columns: " << numColumns
+                    << "; blockSizeUncompressed: "
+                    << this->writer_.blockSizeUncompressed().asString()
+                    << "; numBlocksPushed: " << this->numBlocksPushed_
+                    << "; numElementsPushed: " << this->numElementsPushed_
+                    << std::endl;
       };
       if (requiredMemoryForInputBlocks >= this->memory_) {
-        throwInsufficientMemory();
+        logInsufficientMemory();
+        return 10'000;
       }
       using namespace ad_utility::memory_literals;
       // Don't use a too large output size.
@@ -864,7 +874,8 @@ class CompressedExternalIdTableSorter
       // If blocks are smaller than this, the performance will probably be poor
       // because of the coroutine and vector resetting overhead.
       if (blockSizeForOutput <= 10'000) {
-        throwInsufficientMemory();
+        logInsufficientMemory();
+        return 10'000;
       }
       return blockSizeForOutput;
     }
