@@ -162,10 +162,15 @@ Result Service::computeResultImpl(bool requestLaziness) {
               << ", target: " << serviceUrl.target() << ")" << std::endl
               << serviceQuery << std::endl;
 
+  // Send the query to the remote endpoint. Redirects are handled automatically
+  // by the HTTP client up to the limit specified by the runtime parameter
+  // `service-max-redirects`.
+  const size_t maxRedirects =
+      getRuntimeParameter<&RuntimeParameters::serviceMaxRedirects_>();
   HttpOrHttpsResponse response = getResultFunction_(
       serviceUrl, cancellationHandle_, boost::beast::http::verb::post,
       serviceQuery, "application/sparql-query",
-      "application/sparql-results+json");
+      "application/sparql-results+json", maxRedirects);
 
   auto throwErrorWithContext = [this, &response](std::string_view sv) {
     this->throwErrorWithContext(sv, std::move(response).readResponseHead(100));
