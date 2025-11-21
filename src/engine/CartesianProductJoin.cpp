@@ -68,14 +68,14 @@ std::string CartesianProductJoin::getCacheKeyImpl() const {
 // ____________________________________________________________________________
 size_t CartesianProductJoin::getResultWidth() const {
   auto view = childView() | ql::views::transform(&Operation::getResultWidth);
-  return ::ranges::accumulate(view, 0UL, std::plus{});
+  return ::ranges::accumulate(view, 0UL);
 }
 
 // ____________________________________________________________________________
 size_t CartesianProductJoin::getCostEstimate() {
   auto childSizes =
       childView() | ql::views::transform(&Operation::getCostEstimate);
-  return getSizeEstimate() + ::ranges::accumulate(childSizes, 0UL, std::plus{});
+  return getSizeEstimate() + ::ranges::accumulate(childSizes, 0UL);
 }
 
 // ____________________________________________________________________________
