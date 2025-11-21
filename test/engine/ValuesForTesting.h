@@ -136,8 +136,7 @@ class ValuesForTesting : public Operation {
   std::string getCacheKeyImpl() const override {
     std::stringstream str;
     auto numRowsView = tables_ | ql::views::transform(&IdTable::numRows);
-    auto totalNumRows =
-        std::accumulate(numRowsView.begin(), numRowsView.end(), 0);
+    auto totalNumRows = ::ranges::accumulate(numRowsView, 0ULL);
     auto numCols = tables_.empty() ? 0 : tables_.at(0).numColumns();
     str << "Values for testing with " << numCols << " columns and "
         << totalNumRows << " rows. ";
@@ -204,9 +203,9 @@ class ValuesForTesting : public Operation {
             return ql::ranges::any_of(table.getColumn(i),
                                       [](Id id) { return id.isUndefined(); });
           });
+      using enum ColumnIndexAndTypeInfo::UndefStatus;
       m[variables_.at(i).value()] = ColumnIndexAndTypeInfo{
-          i, containsUndef ? ColumnIndexAndTypeInfo::PossiblyUndefined
-                           : ColumnIndexAndTypeInfo::AlwaysDefined};
+          i, containsUndef ? PossiblyUndefined : AlwaysDefined};
     }
     return m;
   }
