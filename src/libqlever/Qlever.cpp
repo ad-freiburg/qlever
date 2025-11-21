@@ -7,6 +7,7 @@
 #include "libqlever/Qlever.h"
 
 #include "engine/ExportQueryExecutionTrees.h"
+#include "engine/MaterializedViews.h"
 #include "index/IndexImpl.h"
 #include "index/TextIndexBuilder.h"
 #include "parser/SparqlParser.h"
@@ -38,6 +39,8 @@ Qlever::Qlever(const EngineConfig& config)
   if (config.loadTextIndex_) {
     index_.addTextFromOnDiskIndex();
   }
+
+  materializedViewsManager_.setOnDiskBase(config.baseName_);
 
   // Estimate the cost of sorting operations (needed for query planning).
   sortPerformanceEstimator_.computeEstimatesExpensively(
@@ -163,7 +166,7 @@ void Qlever::eraseResultWithName(std::string name) {
 Qlever::QueryPlan Qlever::parseAndPlanQuery(std::string query) const {
   auto qecPtr = std::make_shared<QueryExecutionContext>(
       index_, &cache_, allocator_, sortPerformanceEstimator_,
-      &namedResultCache_);
+      &namedResultCache_, &materializedViewsManager_);
   // TODO<joka921> support Dataset clauses.
   auto parsedQuery = SparqlParser::parseQuery(
       &index_.getImpl().encodedIriManager(), std::move(query), {});
@@ -195,6 +198,17 @@ void IndexBuilderConfig::validate() const {
         "text index. If none are given the option to add words from literals "
         "has to be true. For details see --help."));
   }
+}
+
+// ___________________________________________________________________________
+void Qlever::writeMaterializedView(std::string name, std::string query) const {
+  MaterializedViewWriter::writeViewToDisk(std::move(name),
+                                          parseAndPlanQuery(std::move(query)));
+}
+
+// ___________________________________________________________________________
+void Qlever::loadMaterializedView(std::string name) const {
+  materializedViewsManager_.loadView(name);
 }
 
 }  // namespace qlever

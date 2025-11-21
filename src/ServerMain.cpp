@@ -170,6 +170,11 @@ int main(int argc, char** argv) {
       "of the smaller join partner in a spatial join, such that prefiltering "
       "will be employed. To disable prefiltering for non-point geometries, set "
       "this option to 0.");
+  add("materialized-view-writer-memory",
+      optionFactory.getProgramOption<
+          &RuntimeParameters::materializedViewWriterMemory_>(),
+      "Memory limit for sorting rows during the writing of materialized "
+      "views.");
   po::variables_map optionsMap;
 
   try {
