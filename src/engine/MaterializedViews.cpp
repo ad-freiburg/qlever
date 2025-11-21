@@ -9,6 +9,7 @@
 #include <absl/strings/str_cat.h>
 
 #include <filesystem>
+#include <memory>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 
@@ -318,8 +319,7 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
   indexedColVariable_ = Variable{columnNames.at(0)};
 
   // Read permutation
-  permutation_->loadFromDisk(
-      filename, [](Id) { return false; }, false);
+  permutation_->loadFromDisk(filename, [](Id) { return false; }, false);
   AD_CORRECTNESS_CHECK(permutation_->isLoaded());
 }
 
@@ -442,18 +442,20 @@ void MaterializedViewsManager::setOnDiskBase(const std::string& onDiskBase) {
 }
 
 // _____________________________________________________________________________
-const LocatedTriplesSnapshot& MaterializedView::locatedTriplesSnapshot() const {
+std::shared_ptr<const LocatedTriplesSnapshot>
+MaterializedView::locatedTriplesSnapshot() const {
   return locatedTriplesSnapshot_;
 }
+
 // _____________________________________________________________________________
-LocatedTriplesSnapshot MaterializedView::makeEmptyLocatedTriplesSnapshot()
-    const {
+std::shared_ptr<LocatedTriplesSnapshot>
+MaterializedView::makeEmptyLocatedTriplesSnapshot() const {
   LocatedTriplesPerBlockAllPermutations emptyLocatedTriples;
   emptyLocatedTriples[static_cast<size_t>(permutation_->permutation())]
       .setOriginalMetadata(permutation_->metaData().blockDataShared());
   LocalVocab emptyVocab;
-  return LocatedTriplesSnapshot{emptyLocatedTriples,
-                                emptyVocab.getLifetimeExtender(), 0};
+  return std::make_shared<LocatedTriplesSnapshot>(
+      emptyLocatedTriples, emptyVocab.getLifetimeExtender(), 0);
 }
 
 // _____________________________________________________________________________
@@ -464,7 +466,7 @@ std::shared_ptr<IndexScan> MaterializedView::makeIndexScan(
   auto scanTriple = makeScanConfig(viewQuery, std::move(placeholderPredicate),
                                    std::move(placeholderObject));
   return std::make_shared<IndexScan>(
-      qec, *permutation_, locatedTriplesSnapshot_, std::move(scanTriple),
+      qec, permutation_, locatedTriplesSnapshot_, std::move(scanTriple),
       IndexScan::Graphs::All(), std::nullopt, viewQuery.getVarsToKeep());
 }
 
