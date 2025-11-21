@@ -47,7 +47,7 @@ IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
           std::move(scanSpecAndBlocks).value_or(getScanSpecAndBlocks())},
       scanSpecAndBlocksIsPrefiltered_{scanSpecAndBlocks.has_value()},
       numVariables_(getNumberOfVariables(subject_, predicate_, object_)),
-      varsToKeep_(varsToKeep) {
+      varsToKeep_(std::move(varsToKeep)) {
   AD_CONTRACT_CHECK(permutation_ != nullptr);
   AD_CONTRACT_CHECK(locatedTriplesSnapshot_ != nullptr);
 
