@@ -563,6 +563,7 @@ void DeltaTriples::materializeToIndex(
         index_.getPatterns().cloneAndRemap([&insertInfo](const Id& oldId) {
           return remapVocabId(oldId, insertInfo);
         });
+    newIndex.writePatternsToFile();
   }
 
   if (index_.hasAllPermutations()) {
