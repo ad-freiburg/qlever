@@ -435,9 +435,9 @@ bool NQuadParser<T>::statement() {
   }
   this->check(this->template skip<TurtleTokenId::Dot>());
   if (!this->currentTripleIgnoredBecauseOfInvalidLiteral_) {
-    this->triples_.emplace_back(
-        std::move(this->activeSubject_), std::move(this->activePredicate_),
-        std::move(activeObject_), std::move(activeGraphLabel_));
+    this->triples_.push_back(
+        {std::move(this->activeSubject_), std::move(this->activePredicate_),
+         std::move(activeObject_), std::move(activeGraphLabel_)});
   }
   this->currentTripleIgnoredBecauseOfInvalidLiteral_ = false;
   return true;
@@ -769,8 +769,8 @@ bool TurtleParser<T>::parseTerminal() {
 template <class Tokenizer_T>
 void TurtleParser<Tokenizer_T>::emitTriple() {
   if (!currentTripleIgnoredBecauseOfInvalidLiteral_) {
-    triples_.emplace_back(activeSubject_, activePredicate_, lastParseResult_,
-                          defaultGraphIri_);
+    triples_.push_back(
+        {activeSubject_, activePredicate_, lastParseResult_, defaultGraphIri_});
   }
   currentTripleIgnoredBecauseOfInvalidLiteral_ = false;
 }

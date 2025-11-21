@@ -751,6 +751,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
     // Adding no triples does no changed the augmented metadata.
     locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
         Span{}, metadata, keyOrder, true, handle));
+    locatedTriplesPerBlock.updateAugmentedMetadata();
 
     EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
                 testing::ElementsAreArray(expectedAugmentedMetadata));
@@ -758,6 +759,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
     // T1 is before block 0. The beginning of block 0 changes.
     locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
         Span{T1}, metadata, keyOrder, false, handle));
+    locatedTriplesPerBlock.updateAugmentedMetadata();
 
     expectedAugmentedMetadata[0] = CBM(T1.toPermutedTriple(), PT1);
     expectedAugmentedMetadata[0].containsDuplicatesWithDifferentGraphs_ = true;
@@ -768,6 +770,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
     expectedAugmentedMetadata[1].containsDuplicatesWithDifferentGraphs_ = true;
     locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
         Span{T2}, metadata, keyOrder, true, handle));
+    locatedTriplesPerBlock.updateAugmentedMetadata();
 
     EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
                 testing::ElementsAreArray(expectedAugmentedMetadata));
@@ -777,6 +780,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
     expectedAugmentedMetadata[2].containsDuplicatesWithDifferentGraphs_ = true;
     locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
         Span{T3}, metadata, keyOrder, false, handle));
+    locatedTriplesPerBlock.updateAugmentedMetadata();
 
     EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
                 testing::ElementsAreArray(expectedAugmentedMetadata));
@@ -785,6 +789,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
     auto handles =
         locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
             Span{T4}, metadata, keyOrder, true, handle));
+    locatedTriplesPerBlock.updateAugmentedMetadata();
 
     expectedAugmentedMetadata[4] = CBM(T4.toPermutedTriple(), PT8);
     expectedAugmentedMetadata[4].containsDuplicatesWithDifferentGraphs_ = true;
@@ -804,6 +809,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
 
     // Clearing the updates restores the original block borders.
     locatedTriplesPerBlock.clear();
+    locatedTriplesPerBlock.updateAugmentedMetadata();
 
     EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
                 testing::ElementsAreArray(metadata));
@@ -849,6 +855,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
     // Delete the located triples {T1 ... T4}
     locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
         Span{T1, T2, T3, T4}, metadata, keyOrder, false, handle));
+    locatedTriplesPerBlock.updateAugmentedMetadata();
 
     // All the blocks have updates, so their value of `containsDuplicates..` is
     // set to `true`.
@@ -870,6 +877,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
     // Add the located triples {T1 ... T5}
     locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
         Span{T1, T2, T3, T4, T5}, metadata, keyOrder, true, handle));
+    locatedTriplesPerBlock.updateAugmentedMetadata();
 
     expectedAugmentedMetadata[0] =
         CBM(T1.toPermutedTriple(), T2.toPermutedTriple());
@@ -924,6 +932,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
     locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
         ql::span{triples}.subspan(0, numGraphsToMax), metadata, keyOrder, true,
         handle));
+    locatedTriplesPerBlock.updateAugmentedMetadata();
     actualMetadata = locatedTriplesPerBlock.getAugmentedMetadata();
     ASSERT_TRUE(actualMetadata[1].graphInfo_.has_value());
 
@@ -931,6 +940,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
     locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
         ql::span{triples}.subspan(numGraphsToMax, numGraphsToMax + 1), metadata,
         keyOrder, true, handle));
+    locatedTriplesPerBlock.updateAugmentedMetadata();
     actualMetadata = locatedTriplesPerBlock.getAugmentedMetadata();
     ASSERT_FALSE(actualMetadata[1].graphInfo_.has_value());
   }
