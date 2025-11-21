@@ -1012,7 +1012,7 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
   if (usePatterns_) {
     try {
       PatternCreator::readPatternsFromFile(
-          onDiskBase_ + ".index.patterns", avgNumDistinctSubjectsPerPredicate_,
+          getPatternFilename(), avgNumDistinctSubjectsPerPredicate_,
           avgNumDistinctPredicatesPerSubject_,
           numDistinctSubjectPredicatePairs_, patterns_);
     } catch (const std::exception& e) {
@@ -1045,6 +1045,9 @@ const CompactVectorOfStrings<Id>& IndexImpl::getPatterns() const {
   throwExceptionIfNoPatterns();
   return patterns_;
 }
+
+// _____________________________________________________________________________
+CompactVectorOfStrings<Id>& IndexImpl::getPatterns() { return patterns_; }
 
 // _____________________________________________________________________________
 double IndexImpl::getAvgNumDistinctPredicatesPerSubject() const {
@@ -1722,6 +1725,11 @@ void IndexImpl::deleteTemporaryFile(const std::string& path) {
   }
 }
 
+// _____________________________________________________________________________
+std::string IndexImpl::getPatternFilename() const {
+  return onDiskBase_ + ".index.patterns";
+}
+
 namespace {
 
 // Return a lambda that is called repeatedly with triples that are sorted by the
@@ -1802,8 +1810,7 @@ CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
     // For now (especially for testing) We build the new pattern format as well
     // as the old one to see that they match.
     PatternCreator patternCreator{
-        onDiskBase_ + ".index.patterns",
-        idOfHasPatternDuringIndexBuilding_.value(),
+        getPatternFilename(), idOfHasPatternDuringIndexBuilding_.value(),
         memoryLimitIndexBuilding() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME};
     auto pushTripleToPatterns = [&patternCreator](const auto& triple) {
       bool ignoreForPatterns = false;
@@ -1824,7 +1831,6 @@ CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
     writeConfiguration();
     result = std::move(patternCreator).getTripleSorter();
   } else {
-    AD_CORRECTNESS_CHECK(sizeof...(nextSorter) == 1);
     numSubjectsTotal = createPermutationPair(
         numColumns, AD_FWD(sortedTriples), spo_, sop_,
         nextSorter.makePushCallback()..., std::ref(numSubjectCounter));
@@ -1918,9 +1924,23 @@ void IndexImpl::loadConfigFromOldIndex(const std::string& newName,
   setKbName(other.getKbName());
   blocksizePermutationPerColumn() = other.blocksizePermutationPerColumn();
   configurationJson_ = other.configurationJson_;
-  usePatterns_ = other.usePatterns_;
-  idOfHasPatternDuringIndexBuilding_ =
-      qlever::specialIds().at(HAS_PATTERN_PREDICATE);
-  idOfInternalGraphDuringIndexBuilding_ =
-      qlever::specialIds().at(QLEVER_INTERNAL_GRAPH_IRI);
+}
+
+// _____________________________________________________________________________
+void IndexImpl::writePatternsToFile() const {
+  // Write the subjectToPatternMap.
+  ad_utility::serialization::FileWriteSerializer patternWriter{
+      getPatternFilename()};
+
+  // Write the statistics and the patterns.
+  PatternStatistics statistics;
+
+  statistics.numDistinctSubjectPredicatePairs_ =
+      numDistinctSubjectPredicatePairs_;
+  statistics.avgNumDistinctSubjectsPerPredicate_ =
+      avgNumDistinctSubjectsPerPredicate_;
+  statistics.avgNumDistinctPredicatesPerSubject_ =
+      avgNumDistinctPredicatesPerSubject_;
+  patternWriter << statistics;
+  patternWriter << patterns_;
 }

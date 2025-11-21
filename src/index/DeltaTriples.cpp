@@ -496,7 +496,12 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
            &insertInfo](IdTable& idTable) {
             AD_CORRECTNESS_CHECK(idTable.numColumns() == columnIndices.size());
             idTable.setColumnSubset(columnIndices);
-            for (auto col : idTable.getColumns()) {
+            auto allCols = idTable.getColumns();
+            // Extra columns beyond the graph column only contain integers (or
+            // undefined for triples added via UPDATE) and thus don't need to be
+            // remapped.
+            constexpr size_t REGULAR_COLUMNS = 4;
+            for (auto col : allCols | ::ranges::views::take(REGULAR_COLUMNS)) {
               ql::ranges::for_each(
                   col, [&localVocabMapping, &insertInfo](Id& id) {
                     if (id.getDatatype() == Datatype::LocalVocabIndex) {
@@ -506,6 +511,13 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
                     }
                   });
             }
+            AD_EXPENSIVE_CHECK(ql::ranges::all_of(
+                allCols | ::ranges::views::drop(REGULAR_COLUMNS), [](auto col) {
+                  return ql::ranges::all_of(col, [](Id id) {
+                    return id.getDatatype() == Datatype::Int ||
+                           id.isUndefined();
+                  });
+                }));
             return IdTableStatic<0>{std::move(idTable)};
           }}};
 }
@@ -546,8 +558,14 @@ void DeltaTriples::materializeToIndex(
   IndexImpl newIndex{index_.allocator(), false};
   newIndex.loadConfigFromOldIndex("tmp_index", index_);
 
+  if (index_.usePatterns()) {
+    newIndex.getPatterns() =
+        index_.getPatterns().cloneAndRemap([&insertInfo](const Id& oldId) {
+          return remapVocabId(oldId, insertInfo);
+        });
+  }
+
   if (index_.hasAllPermutations()) {
-    // TODO<RobinTF> Figure out how to respect patterns here properly.
     newIndex.createSPOAndSOPPublic(
         4, readIndexAndRemap(index_.getPermutation(Permutation::Enum::SPO),
                              scanSpec, *snapshot, localVocabMapping, insertInfo,

@@ -317,6 +317,8 @@ class IndexImpl {
   Index::Vocab::PrefixRanges prefixRanges(std::string_view prefix) const;
 
   const CompactVectorOfStrings<Id>& getPatterns() const;
+
+  CompactVectorOfStrings<Id>& getPatterns();
   /**
    * @return The multiplicity of the Entities column (0) of the full
    * has-relation relation after unrolling the patterns.
@@ -693,6 +695,8 @@ class IndexImpl {
    */
   void deleteTemporaryFile(const std::string& path);
 
+  std::string getPatternFilename() const;
+
  public:
   // Count the number of "QLever-internal" triples (predicate ql:langtag or
   // predicate starts with @) and all other triples (that were actually part of
@@ -834,6 +838,8 @@ class IndexImpl {
 
   void loadConfigFromOldIndex(const std::string& newName,
                               const IndexImpl& other);
+
+  void writePatternsToFile() const;
 };
 
 #endif  // QLEVER_SRC_INDEX_INDEXIMPL_H
