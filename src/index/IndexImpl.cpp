@@ -962,11 +962,11 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
   };
 
   auto load = [this, &isInternalId, &setMetadata](
-                  Permutation& permutation,
+                  PermutationPtr permutation,
                   bool loadInternalPermutation = false) {
-    permutation.loadFromDisk(onDiskBase_, isInternalId,
-                             loadInternalPermutation);
-    setMetadata(permutation);
+    permutation->loadFromDisk(onDiskBase_, isInternalId,
+                              loadInternalPermutation);
+    setMetadata(*permutation);
   };
 
   load(pso_, true);
@@ -1047,12 +1047,12 @@ bool IndexImpl::isLiteral(std::string_view object) const {
 
 // _____________________________________________________________________________
 void IndexImpl::setKbName(const std::string& name) {
-  pos_.setKbName(name);
-  pso_.setKbName(name);
-  sop_.setKbName(name);
-  spo_.setKbName(name);
-  ops_.setKbName(name);
-  osp_.setKbName(name);
+  pos_->setKbName(name);
+  pso_->setKbName(name);
+  sop_->setKbName(name);
+  spo_->setKbName(name);
+  ops_->setKbName(name);
+  osp_->setKbName(name);
 }
 
 // ____________________________________________________________________________
@@ -1508,7 +1508,7 @@ IndexImpl::NumNormalAndInternal IndexImpl::numTriples() const {
 }
 
 // ____________________________________________________________________________
-Permutation& IndexImpl::getPermutation(Permutation::Enum p) {
+IndexImpl::PermutationPtr IndexImpl::getPermutationPtr(Permutation::Enum p) {
   using enum Permutation::Enum;
   switch (p) {
     case PSO:
@@ -1528,8 +1528,19 @@ Permutation& IndexImpl::getPermutation(Permutation::Enum p) {
 }
 
 // ____________________________________________________________________________
+Permutation& IndexImpl::getPermutation(Permutation::Enum p) {
+  return *getPermutationPtr(p);
+}
+
+// ____________________________________________________________________________
 const Permutation& IndexImpl::getPermutation(Permutation::Enum p) const {
   return const_cast<IndexImpl&>(*this).getPermutation(p);
+}
+
+// ____________________________________________________________________________
+std::shared_ptr<const Permutation> IndexImpl::getPermutationPtr(
+    Permutation::Enum p) const {
+  return const_cast<IndexImpl&>(*this).getPermutationPtr(p);
 }
 
 // __________________________________________________________________________
@@ -1626,11 +1637,10 @@ Index::Vocab::PrefixRanges IndexImpl::prefixRanges(
 
 // _____________________________________________________________________________
 std::vector<float> IndexImpl::getMultiplicities(
-    const TripleComponent& key, Permutation::Enum permutation,
+    const TripleComponent& key, const Permutation& permutation,
     const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
   if (auto keyId = key.toValueId(getVocab(), encodedIriManager())) {
-    auto meta = getPermutation(permutation)
-                    .getMetadata(keyId.value(), locatedTriplesSnapshot);
+    auto meta = permutation.getMetadata(keyId.value(), locatedTriplesSnapshot);
     if (meta.has_value()) {
       return {meta.value().getCol1Multiplicity(),
               meta.value().getCol2Multiplicity()};
@@ -1641,13 +1651,12 @@ std::vector<float> IndexImpl::getMultiplicities(
 
 // _____________________________________________________________________________
 std::vector<float> IndexImpl::getMultiplicities(
-    Permutation::Enum permutation) const {
-  const auto& p = getPermutation(permutation);
+    const Permutation& permutation) const {
   auto numTriples = static_cast<float>(this->numTriples().normal);
   std::array multiplicities{numTriples / numDistinctSubjects().normal,
                             numTriples / numDistinctPredicates().normal,
                             numTriples / numDistinctObjects().normal};
-  auto permuted = p.keyOrder().permuteTriple(multiplicities);
+  auto permuted = permutation.keyOrder().permuteTriple(multiplicities);
   return {permuted.begin(), permuted.end()};
 }
 
@@ -1733,7 +1742,7 @@ CPP_template_def(typename... NextSorter)(requires(
   size_t numPredicatesNormal = 0;
   auto predicateCounter = makeNumDistinctIdsCounter<1>(numPredicatesNormal);
   size_t numPredicatesTotal =
-      createPermutationPair(numColumns, AD_FWD(sortedTriples), pso_, pos_,
+      createPermutationPair(numColumns, AD_FWD(sortedTriples), *pso_, *pos_,
                             nextSorter.makePushCallback()...,
                             std::ref(predicateCounter), countTriplesNormal);
   configurationJson_["num-predicates"] =
@@ -1783,7 +1792,7 @@ CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
       patternCreator.processTriple(tripleArr, ignoreForPatterns);
     };
     numSubjectsTotal = createPermutationPair(
-        numColumns, AD_FWD(sortedTriples), spo_, sop_,
+        numColumns, AD_FWD(sortedTriples), *spo_, *sop_,
         nextSorter.makePushCallback()..., pushTripleToPatterns,
         std::ref(numSubjectCounter));
     patternCreator.finish();
@@ -1795,7 +1804,7 @@ CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
   } else {
     AD_CORRECTNESS_CHECK(sizeof...(nextSorter) == 1);
     numSubjectsTotal = createPermutationPair(
-        numColumns, AD_FWD(sortedTriples), spo_, sop_,
+        numColumns, AD_FWD(sortedTriples), *spo_, *sop_,
         nextSorter.makePushCallback()..., std::ref(numSubjectCounter));
     configurationJson_["num-subjects"] =
         NumNormalAndInternal::fromNormalAndTotal(numSubjectsNormal,
@@ -1818,7 +1827,7 @@ CPP_template_def(typename... NextSorter)(
   size_t numObjectsNormal = 0;
   auto objectCounter = makeNumDistinctIdsCounter<2>(numObjectsNormal);
   size_t numObjectsTotal = createPermutationPair(
-      numColumns, AD_FWD(sortedTriples), osp_, ops_,
+      numColumns, AD_FWD(sortedTriples), *osp_, *ops_,
       nextSorter.makePushCallback()..., std::ref(objectCounter));
   configurationJson_["num-objects"] = NumNormalAndInternal::fromNormalAndTotal(
       numObjectsNormal, numObjectsTotal);
