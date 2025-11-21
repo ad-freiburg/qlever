@@ -2,7 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
 
-#include "./VocabularyInMemory.h"
+#include "index/vocabulary/VocabularyInMemory.h"
 
 using std::string;
 

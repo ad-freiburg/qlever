@@ -2,7 +2,7 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#include "LazyGroupBy.h"
+#include "engine/LazyGroupBy.h"
 
 using groupBy::detail::VectorOfAggregationData;
 

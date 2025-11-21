@@ -2,7 +2,7 @@
 //                 Chair of Algorithms and Data Structures.
 // Author: Julian Mundhahs (mundhahj@informatik.uni-freiburg.de)
 
-#include "./SparqlParser.h"
+#include "parser/SparqlParser.h"
 
 #include "parser/SparqlParserHelpers.h"
 

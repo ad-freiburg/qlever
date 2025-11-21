@@ -4,7 +4,7 @@
 //
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#include "CompressedRelation.h"
+#include "index/CompressedRelation.h"
 
 #include "engine/Engine.h"
 #include "engine/idTable/CompressedExternalIdTable.h"

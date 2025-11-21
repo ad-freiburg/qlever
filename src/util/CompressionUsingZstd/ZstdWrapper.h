@@ -9,7 +9,7 @@
 
 #include <vector>
 
-#include "../Exception.h"
+#include "util/Exception.h"
 
 class ZstdWrapper {
  public:

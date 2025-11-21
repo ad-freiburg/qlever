@@ -3,7 +3,7 @@
 // Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2014 - 2017]
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include "ParsedQuery.h"
+#include "parser/ParsedQuery.h"
 
 #include <absl/strings/str_join.h>
 #include <absl/strings/str_split.h>

@@ -12,8 +12,8 @@
 #include <string>
 #include <vector>
 
-#include "ExecuteUpdate.h"
 #include "engine/Engine.h"
+#include "engine/ExecuteUpdate.h"
 #include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"

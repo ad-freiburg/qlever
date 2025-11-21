@@ -5,7 +5,7 @@
 #ifndef QLEVER_NBITINTEGER_H
 #define QLEVER_NBITINTEGER_H
 
-#include "./BitUtils.h"
+#include "util/BitUtils.h"
 
 namespace ad_utility {
 

@@ -2,7 +2,7 @@
 // Chair of Algorithms and Data Structures
 // Authors: Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 
-#include "ParsedRequestBuilder.h"
+#include "engine/ParsedRequestBuilder.h"
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "engine/HttpError.h"

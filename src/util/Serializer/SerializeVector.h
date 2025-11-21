@@ -9,9 +9,9 @@
 #include <string>
 #include <vector>
 
-#include "../TypeTraits.h"
-#include "./Serializer.h"
 #include "backports/type_traits.h"
+#include "util/Serializer/Serializer.h"
+#include "util/TypeTraits.h"
 
 namespace ad_utility::serialization {
 AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
