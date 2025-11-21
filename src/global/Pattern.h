@@ -116,7 +116,7 @@ class CompactVectorOfStrings {
   /**
    * @brief operator []
    * @param i
-   * @return A std::pair containing a pointer to the data, and the number of
+   * @return A `value_type` containing a pointer to the data, and the number of
    *         elements stored at the pointers target.
    */
   const value_type operator[](size_t i) const {
@@ -126,9 +126,16 @@ class CompactVectorOfStrings {
     return {ptr, size};
   }
 
-  // Forward iterator for a `CompactVectorOfStrings` that reads directly from
-  // disk without buffering the whole `Vector`.
-  static cppcoro::generator<vector_type> diskIterator(std::string filename);
+  template <typename Func>
+  CompactVectorOfStrings cloneAndRemap(Func mappingFunction) const {
+    CompactVectorOfStrings clone;
+    clone.offsets_ = offsets_;
+    clone.data_.reserve(data_.size());
+    for (const data_type& element : data_) {
+      clone.data_.push_back(std::invoke(mappingFunction, element));
+    }
+    return clone;
+  }
 
   using Iterator = ad_utility::IteratorForAccessOperator<
       CompactVectorOfStrings, ad_utility::AccessViaBracketOperator,

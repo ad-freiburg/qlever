@@ -39,7 +39,6 @@
 #include "util/File.h"
 #include "util/Forward.h"
 #include "util/MemorySize/MemorySize.h"
-#include "util/MmapVector.h"
 #include "util/json.h"
 
 template <typename Comparator, size_t I = NumColumnsIndexBuilding>
@@ -196,7 +195,8 @@ class IndexImpl {
   std::optional<DeltaTriplesManager> deltaTriples_;
 
  public:
-  explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator);
+  explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator,
+                     bool registerSingleton = true);
 
   // Forbid copying.
   IndexImpl& operator=(const IndexImpl&) = delete;
@@ -261,6 +261,10 @@ class IndexImpl {
 
   const auto& getScoreData() const { return scoreData_; }
 
+  const ad_utility::AllocatorWithLimit<Id>& allocator() const {
+    return allocator_;
+  };
+
   ad_utility::BlankNodeManager* getBlankNodeManager() const;
 
   DeltaTriplesManager& deltaTriplesManager() { return deltaTriples_.value(); }
@@ -313,6 +317,8 @@ class IndexImpl {
   Index::Vocab::PrefixRanges prefixRanges(std::string_view prefix) const;
 
   const CompactVectorOfStrings<Id>& getPatterns() const;
+
+  CompactVectorOfStrings<Id>& getPatterns();
   /**
    * @return The multiplicity of the Entities column (0) of the full
    * has-relation relation after unrolling the patterns.
@@ -427,6 +433,8 @@ class IndexImpl {
 
   bool& usePatterns();
 
+  bool usePatterns() const;
+
   bool& loadAllPermutations();
 
   void setKeepTempFiles(bool keepTempFiles);
@@ -444,6 +452,10 @@ class IndexImpl {
   }
 
   ad_utility::MemorySize& blocksizePermutationPerColumn() {
+    return blocksizePermutationPerColumn_;
+  }
+
+  const ad_utility::MemorySize& blocksizePermutationPerColumn() const {
     return blocksizePermutationPerColumn_;
   }
 
@@ -557,6 +569,13 @@ class IndexImpl {
                             Permutation::KeyOrder permutation,
                             Callbacks&&... perTripleCallbacks);
 
+ public:
+  void createPermutationPairPublic(
+      size_t numColumns,
+      ad_utility::InputRangeTypeErased<IdTableStatic<0>>&& sortedTriples,
+      const Permutation& p1, const Permutation& p2);
+
+ protected:
   // _______________________________________________________________________
   // Create a pair of permutations. Only works for valid pairs (PSO-POS,
   // OSP-OPS, SPO-SOP).  First creates the permutation and then exchanges the
@@ -676,6 +695,8 @@ class IndexImpl {
    */
   void deleteTemporaryFile(const std::string& path);
 
+  std::string getPatternFilename() const;
+
  public:
   // Count the number of "QLever-internal" triples (predicate ql:langtag or
   // predicate starts with @) and all other triples (that were actually part of
@@ -699,12 +720,17 @@ class IndexImpl {
       std::optional<PatternCreator::TripleSorter> createSPOAndSOP(
           size_t numColumns, BlocksOfTriples sortedTriples,
           NextSorter&&... nextSorter);
+
+  void createSPOAndSOPPublic(size_t numColumns, BlocksOfTriples sortedTriples);
+
   // Create the OSP and OPS permutations. Additionally, count the number of
   // distinct objects and write it to the metadata.
   CPP_template(typename... NextSorter)(requires(
       sizeof...(NextSorter) <=
       1)) void createOSPAndOPS(size_t numColumns, BlocksOfTriples sortedTriples,
                                NextSorter&&... nextSorter);
+
+  void createOSPAndOPSPublic(size_t numColumns, BlocksOfTriples sortedTriples);
 
   // Create the PSO and POS permutations. Additionally, count the number of
   // distinct predicates and the number of actual triples and write them to the
@@ -717,6 +743,9 @@ class IndexImpl {
                                             BlocksOfTriples sortedTriples,
                                             bool doWriteConfiguration,
                                             NextSorter&&... nextSorter);
+
+  void createPSOAndPOSImplPublic(size_t numColumns,
+                                 BlocksOfTriples sortedTriples);
   // Call `createPSOAndPOSImpl` with the given arguments and with
   // `doWriteConfiguration` set to `true` (see above).
   CPP_template(typename... NextSorter)(requires(
@@ -729,6 +758,9 @@ class IndexImpl {
   template <typename InternalTriplePsoSorter>
   std::pair<size_t, size_t> createInternalPSOandPOS(
       InternalTriplePsoSorter&& internalTriplesPsoSorter);
+
+  std::pair<size_t, size_t> createInternalPSOandPOSFromRange(
+      ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedBlocks);
 
   // Set up one of the permutation sorters with the appropriate memory limit.
   // The `permutationName` is used to determine the filename and must be unique
@@ -803,6 +835,11 @@ class IndexImpl {
 
   void storeTextScoringParamsInConfiguration(TextScoringMetric scoringMetric,
                                              float b, float k);
+
+  void loadConfigFromOldIndex(const std::string& newName,
+                              const IndexImpl& other);
+
+  void writePatternsToFile() const;
 };
 
 #endif  // QLEVER_SRC_INDEX_INDEXIMPL_H

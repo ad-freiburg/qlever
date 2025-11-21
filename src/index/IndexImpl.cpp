@@ -43,9 +43,12 @@ using namespace ad_utility::memory_literals;
 static constexpr size_t NUM_EXTERNAL_SORTERS_AT_SAME_TIME = 2u;
 
 // _____________________________________________________________________________
-IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator)
+IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator,
+                     bool registerSingleton)
     : allocator_{std::move(allocator)} {
-  globalSingletonIndex_ = this;
+  if (registerSingleton) {
+    globalSingletonIndex_ = this;
+  }
   deltaTriples_.emplace(*this);
 };
 
@@ -302,10 +305,8 @@ std::pair<size_t, size_t> IndexImpl::createInternalPSOandPOS(
   auto configurationJsonBackup = configurationJson_;
   onDiskBase_.append(QLEVER_INTERNAL_INDEX_INFIX);
 
-  // TODO<joka921> As soon as `uniqueBlockView` is no longer a `generator` the
-  // explicit `BlocksOfTriples` constructor can be removed again.
-  auto internalTriplesUnique = BlocksOfTriples{ad_utility::uniqueBlockView(
-      internalTriplesPsoSorter.template getSortedBlocks<0>())};
+  auto internalTriplesUnique = ad_utility::uniqueBlockView(
+      internalTriplesPsoSorter.template getSortedBlocks<0>());
   createPSOAndPOSImpl(NumColumnsIndexBuilding, std::move(internalTriplesUnique),
                       false);
   onDiskBase_ = std::move(onDiskBaseBackup);
@@ -319,6 +320,23 @@ std::pair<size_t, size_t> IndexImpl::createInternalPSOandPOS(
           .normal;
   configurationJson_ = std::move(configurationJsonBackup);
   return {numTriplesInternal, numPredicatesInternal};
+}
+
+// _____________________________________________________________________________
+namespace {
+struct SortedBlocksWrapper {
+  ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedBlocks_;
+  template <size_t N>
+  ad_utility::InputRangeTypeErased<IdTableStatic<N>> getSortedBlocks() {
+    static_assert(N == 0);
+    return std::move(sortedBlocks_);
+  }
+};
+}  // namespace
+// _____________________________________________________________________________
+std::pair<size_t, size_t> IndexImpl::createInternalPSOandPOSFromRange(
+    ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedBlocks) {
+  return createInternalPSOandPOS(SortedBlocksWrapper{std::move(sortedBlocks)});
 }
 
 // _____________________________________________________________________________
@@ -403,11 +421,8 @@ void IndexImpl::createFromFiles(
         createInternalPSOandPOS(*indexBuilderData.sorter_.internalTriplesPso_);
   };
 
-  // TODO: this will become ad_utility::InputRangeErased so no conversion
-  // will be needed after https://github.com/ad-freiburg/qlever/pull/2208
-  // For the first permutation, perform a unique.
-  auto firstSorterWithUnique{ad_utility::InputRangeTypeErased{
-      ad_utility::uniqueBlockView(firstSorter.getSortedOutput())}};
+  auto firstSorterWithUnique =
+      ad_utility::uniqueBlockView(firstSorter.getSortedOutput());
 
   if (!loadAllPermutations_) {
     createInternalPsoAndPosAndSetMetadata();
@@ -895,6 +910,15 @@ IndexImpl::createPermutations(size_t numColumns, T&& sortedTriples,
 }
 
 // ________________________________________________________________________
+void IndexImpl::createPermutationPairPublic(
+    size_t numColumns,
+    ad_utility::InputRangeTypeErased<IdTableStatic<0>>&& sortedTriples,
+    const Permutation& p1, const Permutation& p2) {
+  [[maybe_unused]] auto value =
+      createPermutationPair(numColumns, AD_FWD(sortedTriples), p1, p2);
+}
+
+// ________________________________________________________________________
 template <typename SortedTriplesType, typename... CallbackTypes>
 size_t IndexImpl::createPermutationPair(size_t numColumns,
                                         SortedTriplesType&& sortedTriples,
@@ -988,7 +1012,7 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
   if (usePatterns_) {
     try {
       PatternCreator::readPatternsFromFile(
-          onDiskBase_ + ".index.patterns", avgNumDistinctSubjectsPerPredicate_,
+          getPatternFilename(), avgNumDistinctSubjectsPerPredicate_,
           avgNumDistinctPredicatesPerSubject_,
           numDistinctSubjectPredicatePairs_, patterns_);
     } catch (const std::exception& e) {
@@ -1021,6 +1045,9 @@ const CompactVectorOfStrings<Id>& IndexImpl::getPatterns() const {
   throwExceptionIfNoPatterns();
   return patterns_;
 }
+
+// _____________________________________________________________________________
+CompactVectorOfStrings<Id>& IndexImpl::getPatterns() { return patterns_; }
 
 // _____________________________________________________________________________
 double IndexImpl::getAvgNumDistinctPredicatesPerSubject() const {
@@ -1067,6 +1094,9 @@ void IndexImpl::setKeepTempFiles(bool keepTempFiles) {
 
 // _____________________________________________________________________________
 bool& IndexImpl::usePatterns() { return usePatterns_; }
+
+// _____________________________________________________________________________
+bool IndexImpl::usePatterns() const { return usePatterns_; }
 
 // _____________________________________________________________________________
 bool& IndexImpl::loadAllPermutations() { return loadAllPermutations_; }
@@ -1695,6 +1725,11 @@ void IndexImpl::deleteTemporaryFile(const std::string& path) {
   }
 }
 
+// _____________________________________________________________________________
+std::string IndexImpl::getPatternFilename() const {
+  return onDiskBase_ + ".index.patterns";
+}
+
 namespace {
 
 // Return a lambda that is called repeatedly with triples that are sorted by the
@@ -1720,9 +1755,7 @@ CPP_template_def(typename... NextSorter)(requires(
     1)) void IndexImpl::createPSOAndPOSImpl(size_t numColumns,
                                             BlocksOfTriples sortedTriples,
                                             bool doWriteConfiguration,
-                                            NextSorter&&... nextSorter)
-
-{
+                                            NextSorter&&... nextSorter) {
   size_t numTriplesNormal = 0;
   size_t numTriplesTotal = 0;
   auto countTriplesNormal = [&numTriplesNormal, &numTriplesTotal](
@@ -1744,7 +1777,13 @@ CPP_template_def(typename... NextSorter)(requires(
   if (doWriteConfiguration) {
     writeConfiguration();
   }
-};
+}
+
+// _____________________________________________________________________________
+void IndexImpl::createPSOAndPOSImplPublic(size_t numColumns,
+                                          BlocksOfTriples sortedTriples) {
+  createPSOAndPOSImpl(numColumns, std::move(sortedTriples), false);
+}
 
 // _____________________________________________________________________________
 CPP_template_def(typename... NextSorter)(
@@ -1771,8 +1810,7 @@ CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
     // For now (especially for testing) We build the new pattern format as well
     // as the old one to see that they match.
     PatternCreator patternCreator{
-        onDiskBase_ + ".index.patterns",
-        idOfHasPatternDuringIndexBuilding_.value(),
+        getPatternFilename(), idOfHasPatternDuringIndexBuilding_.value(),
         memoryLimitIndexBuilding() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME};
     auto pushTripleToPatterns = [&patternCreator](const auto& triple) {
       bool ignoreForPatterns = false;
@@ -1793,7 +1831,6 @@ CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
     writeConfiguration();
     result = std::move(patternCreator).getTripleSorter();
   } else {
-    AD_CORRECTNESS_CHECK(sizeof...(nextSorter) == 1);
     numSubjectsTotal = createPermutationPair(
         numColumns, AD_FWD(sortedTriples), spo_, sop_,
         nextSorter.makePushCallback()..., std::ref(numSubjectCounter));
@@ -1805,7 +1842,13 @@ CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
       numSubjectsNormal, numSubjectsTotal);
   writeConfiguration();
   return result;
-};
+}
+
+// _____________________________________________________________________________
+void IndexImpl::createSPOAndSOPPublic(size_t numColumns,
+                                      BlocksOfTriples sortedTriples) {
+  createSPOAndSOP(numColumns, std::move(sortedTriples));
+}
 
 // _____________________________________________________________________________
 CPP_template_def(typename... NextSorter)(
@@ -1824,7 +1867,13 @@ CPP_template_def(typename... NextSorter)(
       numObjectsNormal, numObjectsTotal);
   configurationJson_["has-all-permutations"] = true;
   writeConfiguration();
-};
+}
+
+// _____________________________________________________________________________
+void IndexImpl::createOSPAndOPSPublic(size_t numColumns,
+                                      BlocksOfTriples sortedTriples) {
+  createOSPAndOPS(numColumns, std::move(sortedTriples));
+}
 
 // _____________________________________________________________________________
 template <typename Comparator, size_t I, bool returnPtr>
@@ -1866,4 +1915,32 @@ void IndexImpl::setPrefixesForEncodedValues(
     std::vector<std::string> prefixesWithoutAngleBrackets) {
   encodedIriManager_ =
       EncodedIriManager{std::move(prefixesWithoutAngleBrackets)};
+}
+
+// _____________________________________________________________________________
+void IndexImpl::loadConfigFromOldIndex(const std::string& newName,
+                                       const IndexImpl& other) {
+  setOnDiskBase(newName);
+  setKbName(other.getKbName());
+  blocksizePermutationPerColumn() = other.blocksizePermutationPerColumn();
+  configurationJson_ = other.configurationJson_;
+}
+
+// _____________________________________________________________________________
+void IndexImpl::writePatternsToFile() const {
+  // Write the subjectToPatternMap.
+  ad_utility::serialization::FileWriteSerializer patternWriter{
+      getPatternFilename()};
+
+  // Write the statistics and the patterns.
+  PatternStatistics statistics;
+
+  statistics.numDistinctSubjectPredicatePairs_ =
+      numDistinctSubjectPredicatePairs_;
+  statistics.avgNumDistinctSubjectsPerPredicate_ =
+      avgNumDistinctSubjectsPerPredicate_;
+  statistics.avgNumDistinctPredicatesPerSubject_ =
+      avgNumDistinctPredicatesPerSubject_;
+  patternWriter << statistics;
+  patternWriter << patterns_;
 }
