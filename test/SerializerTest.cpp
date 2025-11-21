@@ -7,8 +7,11 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "backports/span.h"
+#include "util/MemorySize/MemorySize.h"
 #include "util/Random.h"
 #include "util/Serializer/ByteBufferSerializer.h"
+#include "util/Serializer/CompressedSerializer.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeArrayOrTuple.h"
 #include "util/Serializer/SerializeHashMap.h"
@@ -21,6 +24,8 @@
 using namespace ad_utility;
 using ad_utility::serialization::ByteBufferReadSerializer;
 using ad_utility::serialization::ByteBufferWriteSerializer;
+using ad_utility::serialization::CompressedReadSerializer;
+using ad_utility::serialization::CompressedWriteSerializer;
 using ad_utility::serialization::CopyableFileReadSerializer;
 using ad_utility::serialization::FileReadSerializer;
 using ad_utility::serialization::FileWriteSerializer;
@@ -558,4 +563,261 @@ TEST(Serializer, serializeOptional) {
   reader >> nilExpected;
   EXPECT_THAT(sExpected, ::testing::Optional(std::string("hallo")));
   EXPECT_EQ(nilExpected, std::nullopt);
+}
+
+// _____________________________________________________________________________
+// Tests for CompressedSerializer
+// _____________________________________________________________________________
+
+// Simple identity "compression" for testing (no actual compression)
+auto identityCompress = [](ql::span<const char> data) {
+  return std::vector<char>(data.begin(), data.end());
+};
+auto identityDecompress = [](ql::span<const char> data, size_t) {
+  return std::vector<char>(data.begin(), data.end());
+};
+
+TEST(CompressedSerializer, Concepts) {
+  using Writer = CompressedWriteSerializer<ByteBufferWriteSerializer,
+                                           decltype(identityCompress)>;
+  using Reader = CompressedReadSerializer<ByteBufferReadSerializer,
+                                          decltype(identityDecompress)>;
+  static_assert(WriteSerializer<Writer>);
+  static_assert(!ReadSerializer<Writer>);
+  static_assert(ReadSerializer<Reader>);
+  static_assert(!WriteSerializer<Reader>);
+}
+
+TEST(CompressedSerializer, SimpleRoundtrip) {
+  auto blockSize = ad_utility::MemorySize::bytes(64);
+
+  ByteBufferWriteSerializer bufferWriter;
+  CompressedWriteSerializer writer{std::move(bufferWriter), identityCompress,
+                                   blockSize};
+  int x = 42;
+  double d = 3.14159;
+  std::string s = "hello world";
+  writer << x;
+  writer << d;
+  writer << s;
+  auto buffer = std::move(writer).underlyingSerializer();
+
+  ByteBufferReadSerializer bufferReader{std::move(buffer).data()};
+  CompressedReadSerializer reader{std::move(bufferReader), identityDecompress,
+                                  blockSize};
+  int xRead;
+  double dRead;
+  std::string sRead;
+  reader >> xRead;
+  reader >> dRead;
+  reader >> sRead;
+
+  EXPECT_EQ(x, xRead);
+  EXPECT_DOUBLE_EQ(d, dRead);
+  EXPECT_EQ(s, sRead);
+}
+
+TEST(CompressedSerializer, LargeDataMultipleBlocks) {
+  auto blockSize = ad_utility::MemorySize::bytes(32);
+
+  std::vector<int> original;
+  for (int i = 0; i < 1000; ++i) {
+    original.push_back(i * 17 - 500);
+  }
+
+  ByteBufferWriteSerializer bufferWriter;
+  CompressedWriteSerializer writer{std::move(bufferWriter), identityCompress,
+                                   blockSize};
+  writer << original;
+  auto buffer = std::move(writer).underlyingSerializer();
+
+  ByteBufferReadSerializer bufferReader{std::move(buffer).data()};
+  CompressedReadSerializer reader{std::move(bufferReader), identityDecompress,
+                                  blockSize};
+  std::vector<int> read;
+  reader >> read;
+
+  EXPECT_EQ(original, read);
+}
+
+TEST(CompressedSerializer, WithActualCompression) {
+  // Simple RLE-like compression for testing
+  auto compress = [](ql::span<const char> data) {
+    // Just prepend size and copy (trivial "compression")
+    std::vector<char> result;
+    result.reserve(data.size() + sizeof(size_t));
+    size_t sz = data.size();
+    const char* szPtr = reinterpret_cast<const char*>(&sz);
+    result.insert(result.end(), szPtr, szPtr + sizeof(size_t));
+    result.insert(result.end(), data.begin(), data.end());
+    return result;
+  };
+
+  auto decompress = [](ql::span<const char> data,
+                       size_t expectedSize) -> std::vector<char> {
+    AD_CONTRACT_CHECK(data.size() >= sizeof(size_t));
+    size_t sz;
+    std::memcpy(&sz, data.data(), sizeof(size_t));
+    AD_CONTRACT_CHECK(sz == expectedSize);
+    return std::vector<char>(data.begin() + sizeof(size_t), data.end());
+  };
+
+  auto blockSize = ad_utility::MemorySize::bytes(128);
+
+  std::vector<std::string> original = {"alpha", "beta", "gamma", "delta",
+                                       "epsilon"};
+
+  ByteBufferWriteSerializer bufferWriter;
+  CompressedWriteSerializer writer{std::move(bufferWriter), compress,
+                                   blockSize};
+  writer << original;
+  auto buffer = std::move(writer).underlyingSerializer();
+
+  ByteBufferReadSerializer bufferReader{std::move(buffer).data()};
+  CompressedReadSerializer reader{std::move(bufferReader), decompress,
+                                  blockSize};
+  std::vector<std::string> read;
+  reader >> read;
+
+  EXPECT_EQ(original, read);
+}
+
+TEST(CompressedSerializer, EmptyData) {
+  auto blockSize = ad_utility::MemorySize::bytes(64);
+
+  ByteBufferWriteSerializer bufferWriter;
+  CompressedWriteSerializer writer{std::move(bufferWriter), identityCompress,
+                                   blockSize};
+  std::vector<int> empty;
+  writer << empty;
+  auto buffer = std::move(writer).underlyingSerializer();
+
+  ByteBufferReadSerializer bufferReader{std::move(buffer).data()};
+  CompressedReadSerializer reader{std::move(bufferReader), identityDecompress,
+                                  blockSize};
+  std::vector<int> read;
+  reader >> read;
+
+  EXPECT_TRUE(read.empty());
+}
+
+TEST(CompressedSerializer, ExactBlockSize) {
+  // Exactly 4 ints per block
+  auto blockSize = ad_utility::MemorySize::bytes(sizeof(int) * 4);
+
+  std::vector<int> original = {1, 2, 3, 4, 5, 6, 7, 8};  // Exactly 2 blocks
+
+  ByteBufferWriteSerializer bufferWriter;
+  CompressedWriteSerializer writer{std::move(bufferWriter), identityCompress,
+                                   blockSize};
+  for (int i : original) {
+    writer << i;
+  }
+  auto buffer = std::move(writer).underlyingSerializer();
+
+  ByteBufferReadSerializer bufferReader{std::move(buffer).data()};
+  CompressedReadSerializer reader{std::move(bufferReader), identityDecompress,
+                                  blockSize};
+  std::vector<int> read;
+  for (size_t i = 0; i < original.size(); ++i) {
+    int val;
+    reader >> val;
+    read.push_back(val);
+  }
+
+  EXPECT_EQ(original, read);
+}
+
+TEST(CompressedSerializer, WithFileSerializer) {
+  std::string filename = "CompressedSerializer.WithFileSerializer.dat";
+  auto blockSize = ad_utility::MemorySize::bytes(64);
+
+  std::vector<double> original;
+  for (int i = 0; i < 100; ++i) {
+    original.push_back(i * 1.5);
+  }
+
+  {
+    FileWriteSerializer fileWriter{filename};
+    CompressedWriteSerializer writer{std::move(fileWriter), identityCompress,
+                                     blockSize};
+    writer << original;
+  }
+
+  {
+    FileReadSerializer fileReader{filename};
+    CompressedReadSerializer reader{std::move(fileReader), identityDecompress,
+                                    blockSize};
+    std::vector<double> read;
+    reader >> read;
+    EXPECT_EQ(original, read);
+  }
+
+  ad_utility::deleteFile(filename);
+}
+
+TEST(ZstdSerializer, Concepts) {
+  using Writer =
+      ad_utility::serialization::ZstdWriteSerializer<ByteBufferWriteSerializer>;
+  using Reader =
+      ad_utility::serialization::ZstdReadSerializer<ByteBufferReadSerializer>;
+  static_assert(WriteSerializer<Writer>);
+  static_assert(!ReadSerializer<Writer>);
+  static_assert(ReadSerializer<Reader>);
+  static_assert(!WriteSerializer<Reader>);
+}
+
+TEST(ZstdSerializer, RoundtripWithByteBuffer) {
+  using ad_utility::serialization::ZstdReadSerializer;
+  using ad_utility::serialization::ZstdWriteSerializer;
+
+  auto blockSize =
+      ad_utility::MemorySize::kilobytes(1);  // Small block for testing
+
+  std::vector<int> original;
+  for (int i = 0; i < 10000; ++i) {
+    original.push_back(i * 17 - 500);
+  }
+
+  ByteBufferWriteSerializer bufferWriter;
+  ZstdWriteSerializer writer{std::move(bufferWriter), blockSize};
+  writer << original;
+  auto buffer = std::move(writer).underlyingSerializer();
+
+  ByteBufferReadSerializer bufferReader{std::move(buffer).data()};
+  ZstdReadSerializer reader{std::move(bufferReader), blockSize};
+  std::vector<int> read;
+  reader >> read;
+
+  EXPECT_EQ(original, read);
+}
+
+TEST(ZstdSerializer, RoundtripWithFileSerializer) {
+  using ad_utility::serialization::ZstdReadSerializer;
+  using ad_utility::serialization::ZstdWriteSerializer;
+
+  std::string filename = "ZstdSerializer.RoundtripWithFileSerializer.dat";
+  auto blockSize = ad_utility::MemorySize::kilobytes(1);
+
+  std::vector<std::string> original = {"alpha", "beta", "gamma", "delta",
+                                       "epsilon"};
+  for (int i = 0; i < 100; ++i) {
+    original.push_back("string_number_" + std::to_string(i));
+  }
+
+  {
+    FileWriteSerializer fileWriter{filename};
+    ZstdWriteSerializer writer{std::move(fileWriter), blockSize};
+    writer << original;
+  }
+
+  {
+    FileReadSerializer fileReader{filename};
+    ZstdReadSerializer reader{std::move(fileReader), blockSize};
+    std::vector<std::string> read;
+    reader >> read;
+    EXPECT_EQ(original, read);
+  }
+
+  ad_utility::deleteFile(filename);
 }
