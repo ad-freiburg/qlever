@@ -2,7 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
 
-#include "SetOfIntervals.h"
+#include "engine/sparqlExpressions/SetOfIntervals.h"
 
 #include "backports/algorithm.h"
 
