@@ -100,9 +100,9 @@ TEST(ConstexprUtils, toIntegerSequence) {
                        (toIntegerSequence<std::array{-12}>())));
 }
 
-// now similar tests for `toIntegerSequenceRef`, unfortunately they require
-// quite some cod duplication.
-
+// Similar tests for `toIntegerSequenceRef`. The template parameters have to be
+// declared upfront, s.t. they are objects that have linkage and therefore can
+// be used as `const&` template parameters.
 static constexpr std::array<int, 0> emptyArray{};
 static constexpr std::array<int, 2> threeTwoArray{3, 2};
 static constexpr std::array<int, 2> twoOneArray{2, 1};

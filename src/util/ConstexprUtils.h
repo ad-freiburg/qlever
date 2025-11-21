@@ -176,7 +176,7 @@ constexpr size_t getIndexOfFirstTypeToPassCheck() {
 // `std::integer_sequence`, and we also need non-integral types as values, for
 // example `std::array<...>`.
 
-// An `ad_utility::ValueSequenceRef<T, values....>` does exactly the same, but
+// An `ad_utility::ValueSequenceRef<T, values...>` does exactly the same, but
 // the values are passed in as `const&`. This requires them to be constexpr
 // objects with linkage, but increases the usability in C++17 mode, where
 // objects like `std::array` can't be passed as template arguments by value.
