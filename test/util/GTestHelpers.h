@@ -8,7 +8,6 @@
 
 #include <gmock/gmock.h>
 
-#include <concepts>
 #include <optional>
 
 #include "backports/concepts.h"
@@ -150,12 +149,14 @@ class CopyShield {
   std::shared_ptr<T> pointer_;
 
  public:
-  template <typename... Ts>
-  requires std::constructible_from<T, Ts&&...> explicit CopyShield(Ts&&... args)
+  CPP_variadic_template(typename... Ts)(
+      requires ql::concepts::constructible_from<
+          T, Ts&&...>) explicit CopyShield(Ts&&... args)
       : pointer_{std::make_shared<T>(AD_FWD(args)...)} {}
 
-  template <typename Ts>
-  requires std::constructible_from<T, Ts&&> CopyShield& operator=(Ts&& ts) {
+  CPP_template(typename Ts)(requires ql::concepts::constructible_from<T, Ts&&>)
+      CopyShield&
+      operator=(Ts&& ts) {
     pointer_ = std::make_shared<T>(AD_FWD(ts));
     return *this;
   }
@@ -165,7 +166,8 @@ class CopyShield {
   }
   QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(T)
 
-  bool operator==(const T& other) const requires std::equality_comparable<T> {
+  CPP_member auto operator==(const T& other) const
+      -> CPP_ret(bool)(requires ql::concepts::equality_comparable<T>) {
     return *pointer_ == other;
   }
 
