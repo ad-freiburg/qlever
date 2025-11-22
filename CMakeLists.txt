@@ -112,8 +112,8 @@ FetchContent_Declare(
 # https://json.nlohmann.me/integration/cmake/#fetchcontent
 FetchContent_Declare(
         nlohmann-json
-        URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz
-        URL_HASH SHA3_224=b9237e8e8242e915de5be631aa944369c38a377c5e79aa505ba741a9
+        URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz
+        URL_HASH SHA3_224=0ad805c53f1769489a9c6bdeefd0a36c19f74239785cdb9c4344e8c1
 )
 
 ###############################
