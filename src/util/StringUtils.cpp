@@ -210,11 +210,10 @@ std::string addIndentation(std::string_view str,
 
 // ___________________________________________________________________________
 std::string truncateOperationString(std::string_view operation) {
-  static_assert(MAX_LENGTH_OPERATION_ECHO >= 3);
-  auto prefix = getUTF8Prefix(operation, MAX_LENGTH_OPERATION_ECHO);
-  if (prefix.first < MAX_LENGTH_OPERATION_ECHO) {
+  auto prefix = getUTF8Prefix(operation, MAX_LENGTH_OPERATION_ECHO).second;
+  if (prefix.length() == operation.length()) {
     return std::string{operation};
   }
-  return absl::StrCat(prefix.second, "...");
+  return absl::StrCat(prefix, "...");
 }
 }  // namespace ad_utility

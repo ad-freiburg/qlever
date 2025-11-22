@@ -274,7 +274,7 @@ constexpr std::string_view constexprStrCat() {
 }
 
 // Truncates the operation string. The length is computed in codepoints, not in
-// bytes. Strings with length `MAX_LENGTH_OPERATION_ECHO` or longer are
+// bytes. Strings with a length that exceeds `MAX_LENGTH_OPERATION_ECHO` are
 // truncated to that length and get a "..." suffix appended to it. Shorter
 // strings are returned as-is.
 std::string truncateOperationString(std::string_view operation);

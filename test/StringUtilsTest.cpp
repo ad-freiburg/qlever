@@ -418,7 +418,7 @@ TEST(StringUtils, truncateOperationString) {
   };
   expectTruncate(std::string(MAX_LENGTH_OPERATION_ECHO + 1000, 'f'), true);
   expectTruncate(std::string(MAX_LENGTH_OPERATION_ECHO + 1, 'f'), true);
-  expectTruncate(std::string(MAX_LENGTH_OPERATION_ECHO, 'f'), true);
+  expectTruncate(std::string(MAX_LENGTH_OPERATION_ECHO, 'f'), false);
   expectTruncate(std::string(MAX_LENGTH_OPERATION_ECHO - 1, 'f'), false);
   expectTruncate("SELECT * WHERE { ?s ?p ?o }", false);
 
