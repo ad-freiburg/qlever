@@ -1066,13 +1066,15 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
           return ad_utility::IteratorRange(subr.begin(), subr.end());
         });
 
-    auto endCallback = [&, this, throwIfSafe = ad_utility::ThrowInDestructorIfSafe{}]() {
+    auto endCallback = [&, this,
+                        throwIfSafe = ad_utility::ThrowInDestructorIfSafe{}]() {
       // Reset back to original input.
       begL = fullBlockLeft.get().begin();
       begR = fullBlockRight.get().begin();
       // Use ThrowInDestructorIfSafe to prevent throwing during stack unwinding.
       throwIfSafe([&]() {
-        compatibleRowAction_.setInput(fullBlockLeft.get(), fullBlockRight.get());
+        compatibleRowAction_.setInput(fullBlockLeft.get(),
+                                      fullBlockRight.get());
       });
     };
 
