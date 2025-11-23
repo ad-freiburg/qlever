@@ -3,7 +3,7 @@
 // Author: 2015 - 2017 Björn Buchhold (buchhold@cs.uni-freiburg.de)
 // Author: 2023 -      Johannes Kalmbach (kalmbach@cs.uni-freiburg.de)
 
-#include "./Sort.h"
+#include "engine/Sort.h"
 
 #include <sstream>
 

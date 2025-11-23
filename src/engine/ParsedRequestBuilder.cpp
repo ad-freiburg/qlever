@@ -3,7 +3,7 @@
 // Authors: Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
-#include "ParsedRequestBuilder.h"
+#include "engine/ParsedRequestBuilder.h"
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "engine/HttpError.h"

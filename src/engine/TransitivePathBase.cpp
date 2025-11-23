@@ -5,7 +5,7 @@
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
-#include "TransitivePathBase.h"
+#include "engine/TransitivePathBase.h"
 
 #include <absl/strings/str_cat.h>
 
