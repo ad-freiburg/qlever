@@ -18,10 +18,23 @@ using namespace std::chrono_literals;
 
 // _____________________________________________________________________________
 // Basic flag operations
-TEST(AtomicFlagTest, DefaultConstruction) {
-  ql::backports::atomic_flag flag;
-  // Default constructed flag should be false
-  EXPECT_FALSE(flag.test());
+TEST(AtomicFlagTest, Construction) {
+  using ql::backports::atomic_flag;
+  {
+    atomic_flag flag;
+    // Default constructed flag should be false
+    EXPECT_FALSE(flag.test());
+  }
+  {
+    atomic_flag flag{false};
+    // Default constructed flag should be false
+    EXPECT_FALSE(flag.test());
+  }
+  {
+    atomic_flag flag{true};
+    // Default constructed flag should be false
+    EXPECT_TRUE(flag.test());
+  }
 }
 
 // _____________________________________________________________________________

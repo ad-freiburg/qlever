@@ -131,6 +131,8 @@ addLinkAndDiscoverTest(SparqlParserTest parser engine sparqlExpressions)
 
 addLinkAndDiscoverTest(StringUtilsTest util)
 
+addLinkAndDiscoverTestNoLibs(ConstexprSmallStringTest)
+
 addLinkAndDiscoverTest(CryptographicHashUtilsTest util)
 
 addLinkAndDiscoverTest(CacheTest)
@@ -166,6 +168,8 @@ addLinkAndDiscoverTest(JoinTest engine)
 addLinkAndDiscoverTest(TextLimitOperationTest engine)
 
 addLinkAndDiscoverTestSerial(QueryPlannerTest engine)
+
+addLinkAndDiscoverTestSerial(QueryPlannerSpatialJoinTest engine)
 
 addLinkAndDiscoverTestNoLibs(HashMapTest)
 
@@ -478,3 +482,5 @@ addLinkAndDiscoverTestSerial(HttpErrorTest engine)
 addLinkAndDiscoverTest(TimeTracerTest)
 
 addLinkAndDiscoverTestNoLibs(SourceLocationTest)
+
+addLinkAndDiscoverTest(UnitOfMeasurementTest util)
