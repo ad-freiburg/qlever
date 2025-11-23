@@ -2,7 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#include "./QueryPlanningCostFactors.h"
+#include "engine/QueryPlanningCostFactors.h"
 
 #include <absl/strings/charconv.h>
 #include <absl/strings/str_split.h>

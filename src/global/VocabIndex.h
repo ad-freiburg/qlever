@@ -7,7 +7,7 @@
 
 #include <cstdint>
 
-#include "./TypedIndex.h"
+#include "global/TypedIndex.h"
 
 // TODO<joka921> Rename `VocabIndex` to `RdfVocabIndex` at a point in time where
 // this (very intrusive) renaming doesn't interfere with too many open pull
