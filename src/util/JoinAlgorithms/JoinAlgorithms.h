@@ -16,6 +16,7 @@
 #include "backports/span.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
+#include "util/ExceptionHandling.h"
 #include "util/InputRangeUtils.h"
 #include "util/JoinAlgorithms/FindUndefRanges.h"
 #include "util/JoinAlgorithms/JoinColumnMapping.h"
@@ -1065,11 +1066,14 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
           return ad_utility::IteratorRange(subr.begin(), subr.end());
         });
 
-    auto endCallback = [&, this]() {
+    auto endCallback = [&, this, throwIfSafe = ad_utility::ThrowInDestructorIfSafe{}]() {
       // Reset back to original input.
       begL = fullBlockLeft.get().begin();
       begR = fullBlockRight.get().begin();
-      compatibleRowAction_.setInput(fullBlockLeft.get(), fullBlockRight.get());
+      // Use ThrowInDestructorIfSafe to prevent throwing during stack unwinding.
+      throwIfSafe([&]() {
+        compatibleRowAction_.setInput(fullBlockLeft.get(), fullBlockRight.get());
+      });
     };
 
     // TODO<joka921> improve the `CachingTransformInputRange` to make it movable
