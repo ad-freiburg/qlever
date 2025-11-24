@@ -1652,8 +1652,6 @@ std::vector<float> IndexImpl::getMultiplicities(
 // _____________________________________________________________________________
 std::vector<float> IndexImpl::getMultiplicities(
     const Permutation& permutation) const {
-  // TODO<ullingerc> Deal with custom permutations (e.g. from materialized
-  // views)
   auto numTriples = static_cast<float>(this->numTriples().normal);
   std::array multiplicities{numTriples / numDistinctSubjects().normal,
                             numTriples / numDistinctPredicates().normal,

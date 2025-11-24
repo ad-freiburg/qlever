@@ -331,6 +331,8 @@ size_t IndexScan::getCostEstimate() {
 
 // _____________________________________________________________________________
 void IndexScan::determineMultiplicities() {
+  // TODO<ullingerc> Deal with custom permutations (e.g. from materialized
+  // views)
   multiplicity_ = [this]() -> std::vector<float> {
     const auto& idx = getIndex();
     if (numVariables_ == 0) {
