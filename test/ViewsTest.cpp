@@ -189,6 +189,49 @@ TEST(Views, CallbackOnEndView) {
   // Callback not invoked for the destructor of the moved-from `viewA`.
   EXPECT_EQ(numCalls, 3);
 }
+
+// Add the behavior of `CallbackOnEndView` when the callback is invoked in the
+// constructor and might throw.
+template <typename T>
+class CallbackOnEndViewExceptionsInDestructor : public ::testing::Test {};
+
+using IsNoexceptTypes = ::testing::Types<std::integral_constant<bool, true>,
+                                         std::integral_constant<bool, false>>;
+TYPED_TEST_SUITE(CallbackOnEndViewExceptionsInDestructor, IsNoexceptTypes);
+
+TYPED_TEST(CallbackOnEndViewExceptionsInDestructor, CallbackBehavior) {
+  constexpr bool isNoexcept = TypeParam::value;
+  struct TestException : public std::exception {};
+
+  auto callback = []() noexcept(isNoexcept) {
+    if constexpr (!isNoexcept) {
+      throw TestException{};
+    }
+  };
+
+  auto makeView = [&]() {
+    return ad_utility::CallbackOnEndView{ad_utility::integerRange(10u),
+                                         callback};
+  };
+  using V = decltype(makeView());
+
+  ASSERT_EQ(std::is_nothrow_destructible_v<V>, isNoexcept);
+  auto makeAndDestroy = [&]() {
+    auto v = makeView();
+    // Destructor invoked, callback should not throw.
+  };
+  auto makeAndThrowOtherException = [&]() {
+    auto v = makeView();
+    throw std::runtime_error{"ups"};
+  };
+
+  if constexpr (isNoexcept) {
+    EXPECT_NO_THROW(makeAndDestroy());
+  } else {
+    EXPECT_THROW(makeAndDestroy(), TestException);
+  }
+  EXPECT_THROW(makeAndThrowOtherException(), std::runtime_error);
+}
 // _____________________________________________________________________________
 TEST(Views, RvalueView) {
   // Initial value is `true` and when being moved from it will be `false`.

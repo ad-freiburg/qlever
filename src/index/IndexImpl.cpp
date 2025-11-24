@@ -265,7 +265,7 @@ IndexImpl::buildOspWithPatterns(
   using namespace ad_utility;
   auto blockGenerator = InputRangeTypeErased{
       CallbackOnEndView{InputRangeFromGetCallable{std::move(get)},
-                        [&queue]() { queue.finish(); }}};
+                        [&queue]() noexcept { queue.finish(); }}};
   // Actually create the permutations.
   auto thirdSorter =
       makeSorterPtr<ThirdPermutation, NumColumnsIndexBuilding + 2>("third");

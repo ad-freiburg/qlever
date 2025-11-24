@@ -228,7 +228,7 @@ class CompressedExternalIdTableWriter {
                         return this->template readBlock<NumCols>(blockIdx);
                       });
     ++numActiveGenerators_;
-    auto callback = [this]() { --numActiveGenerators_; };
+    auto callback = [this]() noexcept { --numActiveGenerators_; };
     using namespace ad_utility;
     return InputRangeTypeErased{CallbackOnEndView(
         bufferedAsyncView(std::move(readBlocks), 1), callback)};
@@ -656,7 +656,7 @@ class CompressedExternalIdTableSorter
         CallbackOnEndView{ad_utility::streams::runStreamAsync(
                               sortedBlocks<N>(blocksize),
                               std::max(1, numBufferedOutputBlocks_ - 2)),
-                          [&, this]() {
+                          [&, this]() noexcept {
                             this->isFirstIteration_ = false;
                             mergeIsActive_.store(false);
                           }}};
