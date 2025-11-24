@@ -829,9 +829,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByObjectWithCount() const {
 
   // Compute the result and update the runtime information (we don't actually
   // do the index scan, but something smarter).
-  const auto& permutation =
-      getExecutionContext()->getIndex().getPimpl().getPermutation(
-          indexScan->permutation());
+  const auto& permutation = indexScan->permutation();
   auto result = permutation.getDistinctCol1IdsAndCounts(
       col0Id.value(), cancellationHandle_, locatedTriplesSnapshot(),
       indexScan->getLimitOffset());

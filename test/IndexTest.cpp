@@ -495,15 +495,17 @@ TEST(IndexTest, NumDistinctEntities) {
   // and one triple per subject for the pattern.
   EXPECT_EQ(numTriples.internal, 5);
 
-  auto multiplicities = index.getMultiplicities(Permutation::SPO);
+  auto multiplicities =
+      index.getMultiplicities(index.getPermutation(Permutation::SPO));
   // 7 triples, three distinct numSubjects, 2 distinct numPredicates, 7 distinct
   // objects.
   EXPECT_FLOAT_EQ(multiplicities[0], 7.0 / 3.0);
   EXPECT_FLOAT_EQ(multiplicities[1], 7.0 / 2.0);
   EXPECT_FLOAT_EQ(multiplicities[2], 7.0 / 7.0);
 
-  multiplicities = index.getMultiplicities(iri("<x>"), Permutation::SPO,
-                                           qec.locatedTriplesSnapshot());
+  multiplicities = index.getMultiplicities(
+      iri("<x>"), index.getPermutation(Permutation::SPO),
+      qec.locatedTriplesSnapshot());
   EXPECT_FLOAT_EQ(multiplicities[0], 2.5);
   EXPECT_FLOAT_EQ(multiplicities[1], 1);
 }
