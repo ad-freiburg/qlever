@@ -8,6 +8,7 @@
 #include <memory>
 #include <vector>
 
+#include "backports/atomic_flag.h"
 #include "backports/functional.h"
 #include "util/UniqueCleanup.h"
 #include "util/http/beast.h"
@@ -31,7 +32,7 @@ class QueryToSocketDistributor
   /// their own pace.
   std::vector<std::shared_ptr<const std::string>> data_{};
   /// Flag to indicate if a query ended and won't receive any more updates.
-  std::atomic_flag finished_ = false;
+  ql::atomic_flag finished_;
 
   /// Function to remove this distributor from the `QueryHub` when it is
   /// destructed.

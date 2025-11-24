@@ -175,13 +175,24 @@ constexpr size_t getIndexOfFirstTypeToPassCheck() {
 // libc++, because libc++ strictly enforces the `std::integral` constraint for
 // `std::integer_sequence`, and we also need non-integral types as values, for
 // example `std::array<...>`.
+
+// An `ad_utility::ValueSequenceRef<T, values...>` does exactly the same, but
+// the values are passed in as `const&`. This requires them to be constexpr
+// objects with linkage, but increases the usability in C++17 mode, where
+// objects like `std::array` can't be passed as template arguments by value.
 namespace detail {
 template <typename T, T... values>
 struct ValueSequenceImpl {};
+
+template <typename T, const T&... values>
+struct ValueSequenceRefImpl {};
 };  // namespace detail
 
 template <typename T, T... values>
 using ValueSequence = detail::ValueSequenceImpl<T, values...>;
+
+template <typename T, const T&... values>
+using ValueSequenceRef = detail::ValueSequenceRefImpl<T, values...>;
 
 namespace detail {
 // The implementation for the `toIntegerSequence` function (see below).
@@ -190,6 +201,13 @@ namespace detail {
 template <auto Array, size_t... indexes>
 constexpr auto toIntegerSequenceHelper(std::index_sequence<indexes...>) {
   return ValueSequence<typename decltype(Array)::value_type,
+                       std::get<indexes>(Array)...>{};
+}
+
+// Implementation for `toIntegerSequenceRef` below.
+template <const auto& Array, size_t... indexes>
+constexpr auto toIntegerSequenceRefHelper(std::index_sequence<indexes...>) {
+  return ValueSequence<typename std::decay_t<decltype(Array)>::value_type,
                        std::get<indexes>(Array)...>{};
 }
 }  // namespace detail
@@ -205,6 +223,14 @@ auto toIntegerSequence() {
       std::make_index_sequence<Array.size()>{});
 }
 
+// Exactly the same as `toIntegerSequence` directly above, but the `Array` is
+// passed as a `const&`, which makes this function usable in C++17 mode.
+template <const auto& Array>
+auto toIntegerSequenceRef() {
+  return detail::toIntegerSequenceRefHelper<Array>(
+      std::make_index_sequence<Array.size()>{});
+}
+
 // Map a single integer `value` that is in the range `[0, ..., (maxValue + 1) ^
 // NumIntegers - 1 to an array of `NumIntegers` many integers that are each in
 // the range
@@ -212,13 +238,20 @@ auto toIntegerSequence() {
 CPP_template(typename Int, size_t NumIntegers)(
     requires ql::concepts::integral<Int>) constexpr std::
     array<Int, NumIntegers> integerToArray(Int value, Int numValues) {
-  std::array<Int, NumIntegers> res;
+  std::array<Int, NumIntegers> res{};
   for (auto& el : res | ql::views::reverse) {
     el = value % numValues;
     value /= numValues;
   }
   return res;
 };
+
+// Store the result of `integerToArray` in a `constexpr` variable which has
+// linkage, and can therefore be used in C++17 mode as a `const&` template
+// parameter.
+template <typename Int, size_t NumIntegers, Int value, Int numValues>
+constexpr inline std::array<Int, NumIntegers> integerToArrayStaticVar =
+    integerToArray<Int, NumIntegers>(value, numValues);
 
 // Return a `std::array<std::array<Int, Num>, pow(Upper, Num)>` (where `Int` is
 // the type of `Upper`) that contains each
@@ -229,21 +262,29 @@ CPP_template(auto Upper, size_t Num)(
         decltype(Upper)>) constexpr auto cartesianPowerAsArray() {
   using Int = decltype(Upper);
   constexpr auto numValues = pow(Upper, Num);
-  std::array<std::array<Int, Num>, numValues> arr;
+  std::array<std::array<Int, Num>, numValues> arr{};
   for (Int i = 0; i < numValues; ++i) {
     arr[i] = integerToArray<Int, Num>(i, Upper);
   }
   return arr;
 }
 
-// Return a `std::integer_sequence<Int,...>` that contains each
+// Store the result of `cartesianPowerAsArray()` from above in a `constexpr`
+// variable with linkage that can be used as a `const&` template parameter in
+// C++17 mode.
+CPP_template(auto Upper, size_t Num)(
+    requires ql::concepts::integral<
+        decltype(Upper)>) constexpr auto cartesianPowerAsArrayVal =
+    cartesianPowerAsArray<Upper, Num>();
+
+// Return a `ad_utility::ValueSequence<Int,...>` that contains each
 // value from `[0, ..., Upper - 1] X Num` exactly once. `X` denotes the
 // cartesian product of sets. The elements of the `integer_sequence` are
 // of type `std::array<Int, Num>` where `Int` is the type of `Upper`.
 CPP_template(auto Upper,
              size_t Num)(requires ql::concepts::integral<
                          decltype(Upper)>) auto cartesianPowerAsIntegerArray() {
-  return toIntegerSequence<cartesianPowerAsArray<Upper, Num>()>();
+  return toIntegerSequenceRef<cartesianPowerAsArrayVal<Upper, Num>>();
 }
 
 /*
@@ -308,8 +349,18 @@ constexpr void forEachTypeInTemplateTypeWithTI(
   detail::forEachTypeInTemplateTypeWithTIImpl<TemplateType>{}(lambda);
 }
 
+// Call the `lambda`, which takes an implicit template parameter of type `T` for
+// each value in the `ValueSequence` that is being passed in as the first
+// argument.
 template <typename T, T... values, typename F>
 constexpr void forEachValueInValueSequence(ValueSequence<T, values...>,
+                                           F&& lambda) {
+  (lambda.template operator()<values>(), ...);
+}
+
+// Same as above, but for `std::integer_sequence` arguments.
+template <typename T, T... values, typename F>
+constexpr void forEachValueInValueSequence(std::integer_sequence<T, values...>,
                                            F&& lambda) {
   (lambda.template operator()<values>(), ...);
 }
