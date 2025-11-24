@@ -288,8 +288,10 @@ Result::LazyResult Service::computeResultLazily(
           varsChecked = true;
         }
 
-        CALL_FIXED_SIZE(service->getResultWidth(), &Service::writeJsonResult,
-                        service, vars, partJson, &idTable, &localVocab, rowIdx);
+        ad_utility::callFixedSizeVi(service->getResultWidth(), [&](auto width) {
+          return service->writeJsonResult<width>(vars, partJson, &idTable,
+                                                 &localVocab, rowIdx);
+        });
         resultExists = true;
         if (!singleIdTable) {
           Result::IdTableVocabPair pair{std::move(idTable),

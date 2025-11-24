@@ -32,6 +32,7 @@ CompressedRelationReader::ScanSpecAndBlocks Permutation::getScanSpecAndBlocks(
 void Permutation::loadFromDisk(const std::string& onDiskBase,
                                std::function<bool(Id)> isInternalId,
                                bool loadInternalPermutation) {
+  onDiskBase_ = onDiskBase;
   isInternalId_ = std::move(isInternalId);
   if (loadInternalPermutation) {
     internalPermutation_ =

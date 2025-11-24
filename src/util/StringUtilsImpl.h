@@ -95,11 +95,12 @@ std::string insertThousandSeparator(const std::string_view str,
 
         // Insert the transformed digit sequence, and the string between it
         // and the `parseIterator`, into the stream.
-        ostream << std::string_view(parseIterator, std::begin(digitSequence));
+        ostream << std::string_view(parseIterator,
+                                    std::begin(digitSequence) - parseIterator);
         insertSeparator(digitSequence);
         parseIterator = std::end(digitSequence);
       });
-  ostream << std::string_view(std::move(parseIterator), std::end(str));
+  ostream << std::string_view(parseIterator, std::end(str) - parseIterator);
   return ostream.str();
 }
 
