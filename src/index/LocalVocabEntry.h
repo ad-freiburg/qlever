@@ -28,8 +28,8 @@ class alignas(16) LocalVocabEntry
 
   // Note: The values here actually are `Id`s, but we cannot store the `Id` type
   // directly because of cyclic dependencies.
-  static inline constexpr ad_utility::IndexTag lveIdProxyTag = "LveIdProxy";
-  using IdProxy = ad_utility::TypedIndex<uint64_t, lveIdProxyTag>;
+  static constexpr ad_utility::IndexTag proxyTag = "LveIdProxy";
+  using IdProxy = ad_utility::TypedIndex<uint64_t, proxyTag>;
 
  private:
   // The cache for the position in the vocabulary. As usual, the `lowerBound` is
