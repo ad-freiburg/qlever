@@ -14,6 +14,7 @@
 #include "parser/RdfParser.h"
 #include "parser/SparqlParser.h"
 #include "util/http/HttpUtils.h"
+#include "util/http/ResponseMiddleware.h"
 #include "util/http/UrlParser.h"
 
 // Transform SPARQL Graph Store Protocol requests to their equivalent
@@ -95,6 +96,13 @@ class GraphStoreProtocol {
       Quads::BlankNodeAdder& blankNodeAdder);
   FRIEND_TEST(GraphStoreProtocolTest, convertTriples);
 
+  static ResponseMiddleware makePostNewGraphMiddleware(
+      const ad_utility::triple_component::Iri& newGraph);
+
+  // Generates a random graph IRI. The IRI is generated randomly with an
+  // internal prefix. NOTE: It is not guaranteed that the IRI does not exist.
+  static ad_utility::triple_component::Iri generateGraphIri();
+
   // Transform a SPARQL Graph Store Protocol POST to an equivalent ParsedQuery
   // which is an SPARQL Update.
   CPP_template_2(typename RequestT)(
@@ -102,13 +110,36 @@ class GraphStoreProtocol {
       transformPost(const RequestT& rawRequest, const GraphOrDefault& graph,
                     const Index& index) {
     throwIfRequestBodyEmpty(rawRequest);
+    // For a `POST` when the graph identifies the QLever instance itself then
+    // the data must be stored in a newly generated graph which is returned in
+    // the response.
+    // TODO: test this with jena
+    bool generateNewGraph = [&rawRequest, &graph]() {
+      if (std::holds_alternative<GraphRef>(graph) &&
+          rawRequest.find(boost::beast::http::field::host) !=
+              rawRequest.end()) {
+        return std::get<GraphRef>(graph) ==
+               ad_utility::triple_component::Iri::fromIriref(
+                   "<http://" +
+                   std::string(rawRequest[boost::beast::http::field::host]) +
+                   "/" + GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX + ">");
+      }
+      return false;
+    }();
+    const GraphOrDefault effectiveGraph =
+        generateNewGraph ? generateGraphIri() : graph;
     auto triples =
         parseTriples(rawRequest.body(), extractMediatype(rawRequest));
     Quads::BlankNodeAdder bn{{}, {}, index.getBlankNodeManager()};
     auto convertedTriples = convertTriples(graph, std::move(triples), bn);
     updateClause::GraphUpdate up{std::move(convertedTriples), {}};
     ParsedQuery res;
-    res._clause = parsedQuery::UpdateClause{std::move(up)};
+    parsedQuery::UpdateClause clause{std::move(up)};
+    if (generateNewGraph) {
+      res.responseMiddleware_ = makePostNewGraphMiddleware(
+          std::get<ad_utility::triple_component::Iri>(effectiveGraph));
+    }
+    res._clause = std::move(clause);
     // Graph store protocol POST requests might have a very large body. Limit
     // the length used for the string representation.
     res._originalString = truncatedStringRepresentation("POST", rawRequest);
@@ -136,10 +167,15 @@ class GraphStoreProtocol {
   }
 
   // Transform a SPARQL Graph Store Protocol GET to an equivalent ParsedQuery
-  // which is an SPARQL Query.
+  // which is a SPARQL Query.
   static ParsedQuery transformGet(const GraphOrDefault& graph,
                                   const EncodedIriManager* encodedIriManager);
   FRIEND_TEST(GraphStoreProtocolTest, transformGet);
+
+  // Transform a SPARQL Graph Store Protocol HEAD to an equivalent ParsedQuery.
+  // The response is the same as for GET but without the body.
+  static ParsedQuery transformHead(const GraphOrDefault& graph,
+                                   const EncodedIriManager* encodedIriManager);
 
   // Transform a SPARQL Graph Store Protocol PUT to equivalent ParsedQueries
   // which are SPARQL Updates.
@@ -178,6 +214,23 @@ class GraphStoreProtocol {
     auto convertedTriples = convertTriples(graph, std::move(triples), bn);
     updateClause::GraphUpdate up{std::move(convertedTriples), {}};
     ParsedQuery insertData;
+    // Interpretation of the very vague GSP 5.3:
+    // - 201 Created if a new graph is created
+    // - 200 Ok or 204 No Content if an existing graph is modified
+    // When the drop (first operation) deletes triples then the graph has
+    // existed before in our model of implicit graph existence.
+    drop.responseMiddleware_ =
+        ResponseMiddleware([](ResponseMiddleware::ResponseT&& response,
+                              std::vector<UpdateMetadata> updateMetadata) {
+          AD_CORRECTNESS_CHECK(updateMetadata.size() == 2 &&
+                               updateMetadata.at(0).inUpdate_.has_value());
+          if (updateMetadata.at(0).inUpdate_.value().triplesDeleted_ > 0) {
+            response.result(boost::beast::http::status::ok);
+          } else {
+            response.result(boost::beast::http::status::created);
+          }
+          return response;
+        });
     insertData._clause = parsedQuery::UpdateClause{std::move(up)};
     insertData._originalString = stringRepresentation;
     return {std::move(drop), std::move(insertData)};
@@ -217,7 +270,7 @@ class GraphStoreProtocol {
       // DATA` of the payload.
       return {transformTsop(rawRequest, operation.graph_, index)};
     } else if (method == "HEAD") {
-      throwNotYetImplementedHTTPMethod("HEAD");
+      return {transformHead(operation.graph_, &index.encodedIriManager())};
     } else if (method == "PATCH") {
       throwNotYetImplementedHTTPMethod("PATCH");
     } else {
