@@ -205,6 +205,10 @@ class SubstrImpl {
     // If the starting position is negative, we have to correct the length.
     if (startInt < 0) {
       lengthInt += startInt;
+      startInt = 0;
+    }
+    if (lengthInt < 0) {
+      lengthInt = 0;
     }
     const auto& str = asStringViewUnsafe(s.value().getContent());
     auto substr = ad_utility::getUTF8Substring(str, startInt, lengthInt);
