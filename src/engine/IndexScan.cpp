@@ -80,8 +80,8 @@ IndexScan::IndexScan(QueryExecutionContext* qec,
                      std::optional<ScanSpecAndBlocks> scanSpecAndBlocks)
     : IndexScan(qec,
                 qec->getIndex().getImpl().getPermutationPtr(permutationType),
-                qec->sharedLocatedTriplesSnapshot(), triple, graphsToFilter,
-                scanSpecAndBlocks) {}
+                qec->sharedLocatedTriplesSnapshot(), triple,
+                std::move(graphsToFilter), std::move(scanSpecAndBlocks)) {}
 
 // _____________________________________________________________________________
 IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
