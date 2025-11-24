@@ -48,7 +48,7 @@ struct AllowsSharedLocking<
 /// serializing simple and fast concurrent accesses to an object.
 class SpinLock {
  private:
-  std::atomic_flag lock_ = ATOMIC_FLAG_INIT;
+  std::atomic_flag lock_{false};
 
  public:
   void lock() {

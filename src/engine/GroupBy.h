@@ -25,7 +25,6 @@ class GroupBy : public Operation {
           std::shared_ptr<QueryExecutionTree> subtree);
 
   ~GroupBy() override;
-  // TODO<joka921> Why can't those be noexcept?
   GroupBy(GroupBy&&);
   GroupBy& operator=(GroupBy&&);
 

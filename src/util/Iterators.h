@@ -109,10 +109,6 @@ class IteratorForAccessOperator {
     return index_ != rhs.index_;
   }
 
-  bool operator!=(const IteratorForAccessOperator& rhs) const {
-    return index_ != rhs.index_;
-  }
-
   IteratorForAccessOperator& operator+=(difference_type n) {
     index_ += n;
     return *this;

@@ -660,11 +660,8 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
 }
 
 // _____________________________________________________________________________
-/*
-CPP_template_def(int COLS, typename T)(
-    requires ranges::invocable<T, size_t, size_t>) size_t
-    */
 template <int COLS, typename T>
+QL_CONCEPT_OR_NOTHING(requires ranges::invocable<T, size_t, size_t>)
 size_t GroupByImpl::searchBlockBoundaries(const T& onBlockChange,
                                           const IdTableView<COLS>& idTable,
                                           GroupBlock& currentGroupBlock) const {
