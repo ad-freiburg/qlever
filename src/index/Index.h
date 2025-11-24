@@ -28,7 +28,6 @@ class TextBlockMetaData;
 class IndexImpl;
 struct LocatedTriplesSnapshot;
 class DeltaTriplesManager;
-class MaterializedViewsManager;
 
 class Index {
  private:

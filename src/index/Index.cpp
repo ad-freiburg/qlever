@@ -6,7 +6,6 @@
 
 #include "index/Index.h"
 
-#include "engine/MaterializedViews.h"
 #include "index/IndexImpl.h"
 #include "util/MemorySize/MemorySize.h"
 

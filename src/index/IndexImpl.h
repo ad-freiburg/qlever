@@ -13,7 +13,6 @@
 #include <vector>
 
 #include "backports/algorithm.h"
-#include "engine/MaterializedViews.h"
 #include "engine/Result.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/Pattern.h"
