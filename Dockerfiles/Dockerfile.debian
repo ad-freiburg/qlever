@@ -1,4 +1,4 @@
-# Dockerfile for QLever based on Debian 13 "trixie", stable as of 2025
+# Dockerfile for QLever based on Debian 13 (Trixie), stable as of 08/25
 FROM debian:trixie as base
 LABEL maintainer="Christoph Ullinger <ullingec@cs.uni-freiburg.de>"
 ENV LANG C.UTF-8
@@ -32,4 +32,3 @@ COPY --from=builder /app/build/*Main /app/
 COPY --from=builder /app/e2e/* /app/e2e/
 
 ENTRYPOINT ["bash"]
-
