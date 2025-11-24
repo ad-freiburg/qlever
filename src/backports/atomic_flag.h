@@ -16,16 +16,15 @@
 namespace ql::backports {
 
 // C++17 backport of C++20's `std::atomic_flag` with wait/notify functionality.
-// This implementation uses std::atomic<bool>, std::mutex, and
-// std::condition_variable to provide the same interface as C++20's
+// This implementation uses `std::mutex`, and
+// `std::condition_variable` to provide the same interface as C++20's
 // std::atomic_flag including wait(), notify_one(), and notify_all().
-// Note: Same as `std::atomic_flag`, this implementation is prone to the ABA
-// problem, i.e. if the value of the flag is changed, and then immediately
-// changed back, threads waiting for that change might miss it. This allows to
-// implement many operations without acquiring a lock.
+// Note: This implementation is less efficient than the C++20 implementation,
+// which is implemented using low-level compiler and OS intrinsics, which are
+// more efficient than using a mutex.
 class atomic_flag {
  private:
-  std::atomic<bool> flag_{false};
+  bool flag_{false};
   mutable std::mutex mutex_;
   mutable std::condition_variable cv_;
 
@@ -42,37 +41,41 @@ class atomic_flag {
   atomic_flag& operator=(atomic_flag&&) = delete;
 
   // Clear the flag (set to false)
-  void clear(std::memory_order order = std::memory_order_seq_cst) noexcept {
-    flag_.store(false, order);
+  void clear([[maybe_unused]] std::memory_order order =
+                 std::memory_order_seq_cst) noexcept {
+    {
+      std::lock_guard lock{mutex_};
+      flag_ = false;
+    }
     // Notify waiters that the flag has changed
     notify_all();
   }
 
   // Test and set the flag (returns previous value)
-  bool test_and_set(
-      std::memory_order order = std::memory_order_seq_cst) noexcept {
-    bool result = flag_.exchange(true, order);
-    // Notify waiters that the flag has changed
+  bool test_and_set([[maybe_unused]] std::memory_order order =
+                        std::memory_order_seq_cst) noexcept {
+    bool result = [this]
+
+    {
+      std::lock_guard lock{mutex_};
+      return std::exchange(flag_, true);
+    }();
     notify_all();
     return result;
   }
 
   // Test the flag without modifying it (C++20 feature)
-  bool test(
-      std::memory_order order = std::memory_order_seq_cst) const noexcept {
-    return flag_.load(order);
+  bool test([[maybe_unused]] std::memory_order order =
+                std::memory_order_seq_cst) const noexcept {
+    std::lock_guard lock{mutex_};
+    return flag_;
   }
 
   // Wait for the flag to become different from the given value
-  void wait(bool old, std::memory_order order =
+  void wait(bool old, [[maybe_unused]] std::memory_order order =
                           std::memory_order_seq_cst) const noexcept {
-    // Fast path: check without locking first
-    if (flag_.load(order) != old) {
-      return;
-    }
-    // Slow path: lock and wait
     std::unique_lock<std::mutex> lock(mutex_);
-    cv_.wait(lock, [this, old, order]() { return flag_.load(order) != old; });
+    cv_.wait(lock, [this, old]() { return flag_ != old; });
   }
 
   // Notify one waiting thread

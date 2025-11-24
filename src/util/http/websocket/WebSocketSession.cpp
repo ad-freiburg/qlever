@@ -2,7 +2,7 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#include "WebSocketSession.h"
+#include "util/http/websocket/WebSocketSession.h"
 
 #include <boost/asio/experimental/awaitable_operators.hpp>
 #include <ctre-unicode.hpp>
