@@ -7,10 +7,10 @@
 
 #include <vector>
 
-#include "../Exception.h"
-#include "./Serializer.h"
 #include "backports/algorithm.h"
 #include "backports/type_traits.h"
+#include "util/Exception.h"
+#include "util/Serializer/Serializer.h"
 
 namespace ad_utility::serialization {
 /**

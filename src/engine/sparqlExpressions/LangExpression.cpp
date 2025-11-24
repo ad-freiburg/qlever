@@ -6,9 +6,9 @@
 // Unit tests for the functionality from this file can be
 // found in LanguageExpressionsTest.h
 
-#include "./engine/sparqlExpressions/LiteralExpression.h"
-#include "./engine/sparqlExpressions/NaryExpressionImpl.h"
-#include "./engine/sparqlExpressions/SparqlExpressionTypes.h"
+#include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/NaryExpressionImpl.h"
+#include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 
 namespace sparqlExpression {
 namespace detail::langImpl {

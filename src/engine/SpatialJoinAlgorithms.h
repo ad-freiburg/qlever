@@ -162,7 +162,18 @@ class SpatialJoinAlgorithms {
   // number of geometries added. This function is only `public` for testing
   // purposes and should otherwise not be used outside of this class.
   using IdTableAndJoinColumn = std::pair<const IdTable*, const ColumnIndex>;
-  std::pair<util::geo::I32Box, size_t> libspatialjoinParse(
+  struct LibSpatialJoinParseMetadata {
+    // Aggregated bounding box of all parsed geometries
+    util::geo::I32Box aggBoundingBox_;
+    // Number of geometries that were actually parsed excluding prefiltered ones
+    size_t numGeomsParsed_;
+    // Number of geometries dropped by prefilter
+    size_t numGeomsDropped_;
+    // Actual number of threads used (might be lower than result of
+    // `getNumThreads` for small inputs)
+    size_t numThreadsUsed_;
+  };
+  LibSpatialJoinParseMetadata libspatialjoinParse(
       bool leftOrRightSide, IdTableAndJoinColumn idTableAndCol,
       sj::Sweeper& sweeper, size_t numThreads,
       std::optional<util::geo::I32Box> prefilterBox) const;

@@ -6,6 +6,7 @@
 
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
+#include <unicode/unistr.h>
 
 #include <ranges>
 #include <sstream>
@@ -15,7 +16,6 @@
 #include "../test/util/GTestHelpers.h"
 #include "backports/functional.h"
 #include "global/Constants.h"
-#include "util/ConstexprSmallString.h"
 #include "util/ConstexprUtils.h"
 #include "util/Forward.h"
 #include "util/Generator.h"
@@ -404,14 +404,14 @@ TEST(StringUtils, truncateOperationString) {
     auto tr = generateLocationTrace(l);
     const std::string truncated = ad_utility::truncateOperationString(test);
     if (willTruncate) {
-      EXPECT_THAT(truncated, testing::SizeIs(MAX_LENGTH_OPERATION_ECHO));
+      EXPECT_THAT(truncated, testing::SizeIs(MAX_LENGTH_OPERATION_ECHO + 3));
     } else {
       EXPECT_THAT(truncated, testing::SizeIs(test.size()));
     }
     std::string_view truncated_view = truncated;
     if (willTruncate) {
-      EXPECT_THAT(truncated_view.substr(0, MAX_LENGTH_OPERATION_ECHO - 3),
-                  testing::Eq(test.substr(0, MAX_LENGTH_OPERATION_ECHO - 3)));
+      EXPECT_THAT(truncated_view.substr(0, MAX_LENGTH_OPERATION_ECHO),
+                  testing::Eq(test.substr(0, MAX_LENGTH_OPERATION_ECHO)));
     } else {
       EXPECT_THAT(truncated, testing::Eq(test));
     }
@@ -421,6 +421,33 @@ TEST(StringUtils, truncateOperationString) {
   expectTruncate(std::string(MAX_LENGTH_OPERATION_ECHO, 'f'), false);
   expectTruncate(std::string(MAX_LENGTH_OPERATION_ECHO - 1, 'f'), false);
   expectTruncate("SELECT * WHERE { ?s ?p ?o }", false);
+
+  // Regression tests for https://github.com/ad-freiburg/qlever/issues/2511
+
+  // We can't use the `std::string` constructor to fill the string with n many
+  // codepoints if their UTF-8 encoding needs more than one byte, so we use the
+  // `icu::UnicodeString` constructor instead, which operates on codepoints.
+  std::string shortInput;
+  // Fill U+2E17 1671 times, the regression demonstrated in #2511.
+  icu::UnicodeString(1671, 0x2E17, 1671).toUTF8String(shortInput);
+  EXPECT_EQ(ad_utility::truncateOperationString(shortInput), shortInput);
+
+  std::string input;
+  std::string expected;
+  // Fill the input with `MAX_LENGTH_OPERATION_ECHO + 2` multibyte characters.
+  icu::UnicodeString(MAX_LENGTH_OPERATION_ECHO + 2, 0x2E17,
+                     MAX_LENGTH_OPERATION_ECHO + 2)
+      .toUTF8String(input);
+  icu::UnicodeString(MAX_LENGTH_OPERATION_ECHO + 3, 0x2E17,
+                     MAX_LENGTH_OPERATION_ECHO)
+      .toUTF8String(expected);
+  expected += "...";
+  EXPECT_EQ(ad_utility::truncateOperationString(input), expected);
+  // Sanity check that our expected string actually has the same amount of
+  // codepoints.
+  EXPECT_EQ(
+      ad_utility::getUTF8Prefix(expected, MAX_LENGTH_OPERATION_ECHO + 4).first,
+      MAX_LENGTH_OPERATION_ECHO + 3);
 }
 
 // _____________________________________________________________________________
