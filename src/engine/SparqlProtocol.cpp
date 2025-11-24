@@ -2,6 +2,7 @@
 // Chair of Algorithms and Data Structures
 // Authors: Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include "engine/SparqlProtocol.h"
 
 #include "backports/StartsWithAndEndsWith.h"
@@ -223,3 +224,4 @@ ad_utility::url_parser::ParsedRequest SparqlProtocol::parseHttpRequest(
           "\" not supported (GET, POST, TSOP, PUT and DELETE are supported; "
           "HEAD and PATCH for graph store protocol are not yet supported)"));
 }
+#endif

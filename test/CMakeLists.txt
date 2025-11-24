@@ -319,7 +319,7 @@ addLinkAndDiscoverTestSerial(HttpTest Boost::iostreams http)
 
 addLinkAndDiscoverTestNoLibs(CallFixedSizeTest)
 
-addLinkAndDiscoverTest(ConstexprUtilsTest)
+addLinkAndDiscoverTestNoLibs(ConstexprUtilsTest)
 
 addLinkAndDiscoverTestNoLibs(ResetWhenMovedTest)
 
@@ -482,3 +482,5 @@ addLinkAndDiscoverTestSerial(HttpErrorTest engine)
 addLinkAndDiscoverTest(TimeTracerTest)
 
 addLinkAndDiscoverTestNoLibs(SourceLocationTest)
+
+addLinkAndDiscoverTest(UnitOfMeasurementTest util)

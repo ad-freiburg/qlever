@@ -325,6 +325,6 @@ void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
                      bool doParallelSort);
 }  // namespace ad_utility::vocabulary_merger
 
-#include "VocabularyMergerImpl.h"
+#include "index/VocabularyMergerImpl.h"
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARYMERGER_H
