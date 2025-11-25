@@ -605,19 +605,7 @@ std::optional<std::pair<std::string, const char*>>
 ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
                                              const LocalVocab& localVocab,
                                              EscapeFunction&& escapeFunction) {
-  static constexpr auto Undefined = Datatype::Undefined;
-  static constexpr auto Bool = Datatype::Bool;
-  static constexpr auto Int = Datatype::Int;
-  static constexpr auto Double = Datatype::Double;
-  static constexpr auto VocabIndex = Datatype::VocabIndex;
-  static constexpr auto LocalVocabIndex = Datatype::LocalVocabIndex;
-  static constexpr auto TextRecordIndex = Datatype::TextRecordIndex;
-  static constexpr auto Date = Datatype::Date;
-  static constexpr auto GeoPoint = Datatype::GeoPoint;
-  static constexpr auto WordVocabIndex = Datatype::WordVocabIndex;
-  static constexpr auto BlankNodeIndex = Datatype::BlankNodeIndex;
-  static constexpr auto EncodedVal = Datatype::EncodedVal;
-  static constexpr auto MaxValue = Datatype::MaxValue;
+  using enum Datatype;
   auto datatype = id.getDatatype();
   if constexpr (onlyReturnLiterals) {
     if (!(datatype == VocabIndex || datatype == LocalVocabIndex)) {
@@ -670,19 +658,7 @@ std::optional<ad_utility::triple_component::Literal>
 ExportQueryExecutionTrees::idToLiteral(const Index& index, Id id,
                                        const LocalVocab& localVocab,
                                        bool onlyReturnLiteralsWithXsdString) {
-  static constexpr auto Undefined = Datatype::Undefined;
-  static constexpr auto Bool = Datatype::Bool;
-  static constexpr auto Int = Datatype::Int;
-  static constexpr auto Double = Datatype::Double;
-  static constexpr auto VocabIndex = Datatype::VocabIndex;
-  static constexpr auto LocalVocabIndex = Datatype::LocalVocabIndex;
-  static constexpr auto TextRecordIndex = Datatype::TextRecordIndex;
-  static constexpr auto Date = Datatype::Date;
-  static constexpr auto GeoPoint = Datatype::GeoPoint;
-  static constexpr auto WordVocabIndex = Datatype::WordVocabIndex;
-  static constexpr auto BlankNodeIndex = Datatype::BlankNodeIndex;
-  static constexpr auto EncodedVal = Datatype::EncodedVal;
-  static constexpr auto MaxValue = Datatype::MaxValue;
+  using enum Datatype;
   auto datatype = id.getDatatype();
 
   switch (datatype) {
@@ -751,19 +727,7 @@ std::optional<ad_utility::triple_component::LiteralOrIri>
 ExportQueryExecutionTrees::idToLiteralOrIri(const Index& index, Id id,
                                             const LocalVocab& localVocab,
                                             bool skipEncodedValues) {
-  static constexpr auto Undefined = Datatype::Undefined;
-  static constexpr auto Bool = Datatype::Bool;
-  static constexpr auto Int = Datatype::Int;
-  static constexpr auto Double = Datatype::Double;
-  static constexpr auto VocabIndex = Datatype::VocabIndex;
-  static constexpr auto LocalVocabIndex = Datatype::LocalVocabIndex;
-  static constexpr auto TextRecordIndex = Datatype::TextRecordIndex;
-  static constexpr auto Date = Datatype::Date;
-  static constexpr auto GeoPoint = Datatype::GeoPoint;
-  static constexpr auto WordVocabIndex = Datatype::WordVocabIndex;
-  static constexpr auto BlankNodeIndex = Datatype::BlankNodeIndex;
-  static constexpr auto EncodedVal = Datatype::EncodedVal;
-  static constexpr auto MaxValue = Datatype::MaxValue;
+  using enum Datatype;
   switch (id.getDatatype()) {
     case WordVocabIndex:
       return getLiteralOrIriFromWordVocabIndex(index, id);
@@ -1291,17 +1255,7 @@ ExportQueryExecutionTrees::computeResult(
     }
   }};
 
-  static constexpr auto textPlain = ad_utility::MediaType::textPlain;
-  static constexpr auto json = ad_utility::MediaType::json;
-  static constexpr auto sparqlJson = ad_utility::MediaType::sparqlJson;
-  static constexpr auto sparqlXml = ad_utility::MediaType::sparqlXml;
-  static constexpr auto qleverJson = ad_utility::MediaType::qleverJson;
-  static constexpr auto tsv = ad_utility::MediaType::tsv;
-  static constexpr auto csv = ad_utility::MediaType::csv;
-  static constexpr auto turtle = ad_utility::MediaType::turtle;
-  static constexpr auto ntriples = ad_utility::MediaType::ntriples;
-  static constexpr auto octetStream = ad_utility::MediaType::octetStream;
-
+  using enum ad_utility::MediaType;
   static constexpr std::array supportedTypes{
       csv, tsv, octetStream, turtle, sparqlXml, sparqlJson, qleverJson};
   AD_CORRECTNESS_CHECK(ad_utility::contains(supportedTypes, mediaType));

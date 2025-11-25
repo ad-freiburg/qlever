@@ -69,7 +69,9 @@ class Row {
 
   CPP_template_2(typename = void)(requires(!isDynamic())) explicit Row(
       QL_MAYBE_UNUSED size_t numCols)
-      : Row() {}
+      : Row() {
+    (void)numCols;
+  }
 
   // Access the i-th element.
   T& operator[](size_t i) { return data_[i]; }
