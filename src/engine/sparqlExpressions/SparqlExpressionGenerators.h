@@ -8,10 +8,15 @@
 #ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONGENERATORS_H
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONGENERATORS_H
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include <absl/container/inlined_vector.h>
+#endif
+
 #include <absl/functional/bind_front.h>
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include "backports/functional.h"
+#endif
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/Generator.h"
 
@@ -50,6 +55,8 @@ inline ql::span<const ValueId> getIdsFromVariable(
 /// `SingleExpressionResult`s after applying a `Transformation` to them.
 /// Typically, this transformation is one of the value getters from
 /// `SparqlExpressionValueGetters` with an already bound `EvaluationContext`.
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+// Use range-based implementation for C++17 compatibility
 CPP_template(typename T, typename Transformation = ql::identity)(
     requires SingleExpressionResult<T> CPP_and isConstantResult<T> CPP_and
         ranges::invocable<
@@ -59,6 +66,21 @@ CPP_template(typename T, typename Transformation = ql::identity)(
   // We have to use `range-v3` as `views::repeat` is a C++23 feature.
   return ::ranges::repeat_n_view(transformation(constant), numItems);
 }
+#else
+// Use faster coroutine-based implementation
+CPP_template(typename T, typename Transformation = ql::identity)(
+    requires SingleExpressionResult<T> CPP_and isConstantResult<T> CPP_and
+        ranges::invocable<Transformation, T>)
+    cppcoro::generator<const std::decay_t<std::invoke_result_t<
+        Transformation, T>>> resultGeneratorImpl(T constant, size_t numItems,
+                                                 Transformation transformation =
+                                                     {}) {
+  auto transformed = transformation(constant);
+  for (size_t i = 0; i < numItems; ++i) {
+    co_yield transformed;
+  }
+}
+#endif
 
 CPP_template(typename T, typename Transformation = ql::identity)(
     requires ql::ranges::input_range<
@@ -69,6 +91,8 @@ CPP_template(typename T, typename Transformation = ql::identity)(
          ql::views::transform(std::move(transformation));
 }
 
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+// Use range-based implementation for C++17 compatibility
 template <typename Transformation = ql::identity>
 inline auto resultGeneratorImpl(const ad_utility::SetOfIntervals& set,
                                 size_t targetSize,
@@ -101,7 +125,33 @@ inline auto resultGeneratorImpl(const ad_utility::SetOfIntervals& set,
          }) |
          ::ranges::views::join;
 }
+#else
+// Use faster coroutine-based implementation
+template <typename Transformation = ql::identity>
+inline cppcoro::generator<
+    const std::decay_t<std::invoke_result_t<Transformation, Id>>>
+resultGeneratorImpl(ad_utility::SetOfIntervals set, size_t targetSize,
+                    Transformation transformation = {}) {
+  size_t i = 0;
+  const auto trueTransformed = transformation(Id::makeFromBool(true));
+  const auto falseTransformed = transformation(Id::makeFromBool(false));
+  for (const auto& [begin, end] : set._intervals) {
+    while (i < begin) {
+      co_yield falseTransformed;
+      ++i;
+    }
+    while (i < end) {
+      co_yield trueTransformed;
+      ++i;
+    }
+  }
+  while (i++ < targetSize) {
+    co_yield falseTransformed;
+  }
+}
+#endif
 
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 // The actual `resultGenerator` that uses type erasure (if not specified
 // otherwise) to the `resultGeneratorImpl` to keep the compile times reasonable.
 template <typename S, typename Transformation = ql::identity>
@@ -131,6 +181,15 @@ inline auto resultGenerator(S&& input, size_t targetSize,
                               Cat>{std::move(gen)};
   }
 }
+#else
+// For coroutine-based implementation, just forward to resultGeneratorImpl
+template <typename S, typename Transformation = ql::identity>
+inline auto resultGenerator(S&& input, size_t targetSize,
+                            Transformation transformation = {}) {
+  return resultGeneratorImpl(AD_FWD(input), targetSize,
+                             std::move(transformation));
+}
+#endif
 
 /// Return a generator that yields `numItems` many items for the various
 /// `SingleExpressionResult`
@@ -166,6 +225,8 @@ inline auto valueGetterGenerator =
 /// Do the following `numItems` times: Obtain the next elements e_1, ..., e_n
 /// from the `generators` and yield `function(e_1, ..., e_n)`, also as a
 /// generator.
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+// Use range-based implementation for C++17 compatibility
 inline auto applyFunction =
     [](auto&& function, [[maybe_unused]] size_t numItems, auto... generators) {
       // We have to use `range-v3` as `std::views::zip` is not available in our
@@ -186,6 +247,28 @@ inline auto applyFunction =
                    return R{std::apply(f, AD_MOVE(tuple))};
                  });
     };
+#else
+// Use faster coroutine-based implementation
+inline auto applyFunction = [](auto&& function, size_t numItems,
+                               auto... generators)
+    -> cppcoro::generator<std::invoke_result_t<
+        decltype(function),
+        ql::ranges::range_value_t<decltype(generators)>...>> {
+  // A tuple holding one iterator to each of the generators.
+  std::tuple iterators{generators.begin()...};
+
+  auto functionOnIterators = [&function](auto&&... iterators) {
+    return function(AD_MOVE(*iterators)...);
+  };
+
+  for (size_t i = 0; i < numItems; ++i) {
+    co_yield std::apply(functionOnIterators, iterators);
+
+    // Increase all the iterators.
+    std::apply([](auto&&... its) { (..., ++its); }, iterators);
+  }
+};
+#endif
 
 /// Return a generator that returns the `numElements` many results of the
 /// `Operation` applied to the `operands`
