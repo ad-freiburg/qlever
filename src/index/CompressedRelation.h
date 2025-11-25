@@ -317,7 +317,6 @@ class CompressedRelationWriter {
     CompressedRelationWriter& writer_;
     MetadataCallback callback_;
   };
-  struct NoWriterAndCallback {};
 
   /**
    * @brief Write two permutations that only differ by the order of the col1 and
@@ -339,12 +338,9 @@ class CompressedRelationWriter {
     std::vector<CompressedBlockMetadata> blockMetadata_;
     std::vector<CompressedBlockMetadata> blockMetadataSwitched_;
   };
-  template <typename SecondWriter>
-  requires(ad_utility::SameAsAny<SecondWriter, WriterAndCallback,
-                                 NoWriterAndCallback>)
   static PermutationPairResult createPermutationPair(
       const std::string& basename, WriterAndCallback writerAndCallback1,
-      SecondWriter writerAndCallback2,
+      WriterAndCallback writerAndCallback2,
       ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
       qlever::KeyOrder permutation,
       const std::vector<std::function<void(const IdTableStatic<0>&)>>&
