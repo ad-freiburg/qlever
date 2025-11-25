@@ -175,4 +175,22 @@ class CopyShield {
   }
 };
 
+// Helper that creates a gtest matcher from an existing one. The existing
+// matcher takes type `T`. The new matcher will accept `T`, `std::nullopt_t` and
+// `std::optional<T>`. It will match if actual and expected both have no value
+// and, otherwise, if they both have a value it will apply the given matcher on
+// the contained value.
+template <typename T, typename MakeMatcher>
+auto liftOptionalMatcher(MakeMatcher makeMatcher) {
+  return
+      [makeMatcher](
+          std::optional<T> expected) -> ::testing::Matcher<std::optional<T>> {
+        if (!expected.has_value()) {
+          return ::testing::Eq(std::nullopt);
+        } else {
+          return ::testing::Optional(makeMatcher(expected.value()));
+        }
+      };
+}
+
 #endif  // QLEVER_TEST_UTIL_GTESTHELPERS_H

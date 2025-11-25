@@ -15,102 +15,78 @@
 namespace geoInfoTestHelpers {
 
 using namespace ad_utility;
+using namespace ::testing;
 using Loc = source_location;
 
 // Helpers that check (approx.) equality of two GeometryInfo objects or for
 // instances of the associated helper classes.
-
-// Convert to optional explicitly because arguments to matcher are not
-// strongly typed.
-#define AD_GEOINFO_TEST_OPTIONAL_HELPER(ContainedType) \
-  using namespace ::testing;                           \
-  std::optional<ContainedType> expected = expectedRaw; \
-  std::optional<ContainedType> actual = arg;           \
-  if (!actual.has_value()) {                           \
-    return !expected.has_value();                      \
-  } else if (!expected.has_value()) {                  \
-    return false;                                      \
-  }
+static constexpr double allowedCoordinateError = 0.001;
 
 // ____________________________________________________________________________
-inline std::string description(auto& expected) {
-  return absl::StrCat("Is approximately equal to ",
-                      ::testing::PrintToString(expected));
-}
+inline auto geoPointNear =
+    liftOptionalMatcher<GeoPoint>([](GeoPoint expected) -> Matcher<GeoPoint> {
+      return AllOf(
+          Property(&GeoPoint::getLat,
+                   DoubleNear(expected.getLat(), allowedCoordinateError)),
+          Property(&GeoPoint::getLng,
+                   DoubleNear(expected.getLng(), allowedCoordinateError)));
+    });
+#define EXPECT_GEOPOINT_NEAR(a, b) EXPECT_THAT(a, geoPointNear(b))
 
 // ____________________________________________________________________________
-MATCHER_P(GeoPointNear, expectedRaw, description(expectedRaw)) {
-  AD_GEOINFO_TEST_OPTIONAL_HELPER(GeoPoint);
-  return ExplainMatchResult(
-      AllOf(Property(&GeoPoint::getLat,
-                     DoubleNear(expected.value().getLat(), 0.001)),
-            Property(&GeoPoint::getLng,
-                     DoubleNear(expected.value().getLng(), 0.001))),
-      actual.value(), result_listener);
-}
-#define EXPECT_GEOPOINT_NEAR(a, b) EXPECT_THAT(a, GeoPointNear(b))
+inline auto centroidNear =
+    liftOptionalMatcher<Centroid>([](Centroid expected) -> Matcher<Centroid> {
+      return Property(&Centroid::centroid, geoPointNear(expected.centroid()));
+    });
+#define EXPECT_CENTROID_NEAR(a, b) EXPECT_THAT(a, centroidNear(b))
 
 // ____________________________________________________________________________
-MATCHER_P(CentroidNear, expectedRaw, description(expectedRaw)) {
-  AD_GEOINFO_TEST_OPTIONAL_HELPER(Centroid);
-  return ExplainMatchResult(
-      Property(&Centroid::centroid, GeoPointNear(expected.value().centroid())),
-      actual.value(), result_listener);
-}
-#define EXPECT_CENTROID_NEAR(a, b) EXPECT_THAT(a, CentroidNear(b))
+inline auto boundingBoxNear = liftOptionalMatcher<BoundingBox>(
+    [](BoundingBox expected) -> Matcher<BoundingBox> {
+      auto [lowerLeft, upperRight] = expected.pair();
+      return AllOf(
+          Property(&BoundingBox::lowerLeft, geoPointNear(lowerLeft)),
+          Property(&BoundingBox::upperRight, geoPointNear(upperRight)));
+    });
+#define EXPECT_BOUNDINGBOX_NEAR(a, b) EXPECT_THAT(a, boundingBoxNear(b))
 
 // ____________________________________________________________________________
-MATCHER_P(BoundingBoxNear, expectedRaw, description(expectedRaw)) {
-  AD_GEOINFO_TEST_OPTIONAL_HELPER(BoundingBox);
-  auto [lowerLeft, upperRight] = expected.value().pair();
-  return ExplainMatchResult(
-      AllOf(Property(&BoundingBox::lowerLeft, GeoPointNear(lowerLeft)),
-            Property(&BoundingBox::upperRight, GeoPointNear(upperRight))),
-      actual.value(), result_listener);
-}
-#define EXPECT_BOUNDINGBOX_NEAR(a, b) EXPECT_THAT(a, BoundingBoxNear(b))
+inline auto metricLengthNear = liftOptionalMatcher<MetricLength>(
+    [](MetricLength expected) -> Matcher<MetricLength> {
+      // The metric length may be off by up to 1%
+      auto allowedError = expected.length() * 0.01;
+      return Property(&MetricLength::length,
+                      DoubleNear(expected.length(), allowedError));
+    });
+#define EXPECT_METRICLENGTH_NEAR(a, b) EXPECT_THAT(a, metricLengthNear(b))
 
 // ____________________________________________________________________________
-MATCHER_P(MetricLengthNear, expectedRaw, description(expectedRaw)) {
-  AD_GEOINFO_TEST_OPTIONAL_HELPER(MetricLength);
-  // The metric length may be off by up to 1%
-  auto allowedError = expected.value().length() * 0.01;
-  return ExplainMatchResult(
-      Property(&MetricLength::length,
-               DoubleNear(expected.value().length(), allowedError)),
-      actual.value(), result_listener);
-}
-#define EXPECT_METRICLENGTH_NEAR(a, b) EXPECT_THAT(a, MetricLengthNear(b))
+inline auto metricAreaNear = liftOptionalMatcher<MetricArea>(
+    [](MetricArea expected) -> Matcher<MetricArea> {
+      // The metric area may be off by up to 1%
+      auto allowedError = expected.area() * 0.01;
+      return Property(&MetricArea::area,
+                      DoubleNear(expected.area(), allowedError));
+    });
+#define EXPECT_METRICAREA_NEAR(a, b) EXPECT_THAT(a, metricAreaNear(b))
 
 // ____________________________________________________________________________
-MATCHER_P(MetricAreaNear, expectedRaw, description(expectedRaw)) {
-  AD_GEOINFO_TEST_OPTIONAL_HELPER(MetricArea);
-  // The metric area may be off by up to 1%
-  auto allowedError = expected.value().area() * 0.01;
-  return ExplainMatchResult(
-      Property(&MetricArea::area,
-               DoubleNear(expected.value().area(), allowedError)),
-      actual.value(), result_listener);
-}
-#define EXPECT_METRICAREA_NEAR(a, b) EXPECT_THAT(a, MetricAreaNear(b))
-
-// ____________________________________________________________________________
-MATCHER_P(GeoInfoMatcher, expectedRaw, description(expectedRaw)) {
-  AD_GEOINFO_TEST_OPTIONAL_HELPER(GeometryInfo);
-  auto geoInfo = expected.value();
-  auto inner = Optional(AllOf(
-      Property(&GeometryInfo::getWktType, Eq(geoInfo.getWktType())),
-      Property(&GeometryInfo::getCentroid, CentroidNear(geoInfo.getCentroid())),
-      Property(&GeometryInfo::getBoundingBox,
-               BoundingBoxNear(geoInfo.getBoundingBox())),
-      Property(&GeometryInfo::getNumGeometries, Eq(geoInfo.getNumGeometries())),
-      Property(&GeometryInfo::getMetricLength,
-               MetricLengthNear(geoInfo.getMetricLength())),
-      Property(&GeometryInfo::getMetricArea,
-               MetricAreaNear(geoInfo.getMetricArea()))));
-  return ExplainMatchResult(inner, actual, result_listener);
-}
-#define EXPECT_GEOMETRYINFO(a, b) EXPECT_THAT(a, GeoInfoMatcher(b))
+inline auto geoInfoMatcher = liftOptionalMatcher<GeometryInfo>(
+    [](GeometryInfo expected) -> Matcher<GeometryInfo> {
+      return AllOf(
+          Property(&GeometryInfo::getWktType, Eq(expected.getWktType())),
+          Property(&GeometryInfo::getCentroid,
+                   centroidNear(expected.getCentroid())),
+          Property(&GeometryInfo::getBoundingBox,
+                   boundingBoxNear(expected.getBoundingBox())),
+          Property(&GeometryInfo::getNumGeometries,
+                   Eq(expected.getNumGeometries())),
+          Property(&GeometryInfo::getMetricLength,
+                   metricLengthNear(expected.getMetricLength())),
+          Property(&GeometryInfo::getMetricArea,
+                   metricAreaNear(expected.getMetricArea())));
+    });
+#define EXPECT_GEOMETRYINFO(a, b) EXPECT_THAT(a, geoInfoMatcher(b))
 
 // ____________________________________________________________________________
 inline void checkRequestedInfoForInstance(
