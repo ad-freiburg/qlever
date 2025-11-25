@@ -64,7 +64,7 @@ CPP_variadic_template(typename Int, Int... Is, typename F, typename... Args)(
 };
 
 // An array with `NumValues` entries of type `Int` that has linkage in C++17
-// mopde. It is needed below to deduce a return type.
+// mode. It is needed below to deduce a return type.
 template <typename Int, size_t NumValues>
 static constexpr std::array<Int, NumValues> DummyArray{};
 
