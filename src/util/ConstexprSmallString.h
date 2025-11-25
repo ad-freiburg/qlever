@@ -10,6 +10,8 @@
 #include <string>
 #include <string_view>
 
+#include "backports/algorithm.h"
+
 namespace ad_utility {
 /// A String/character array that can be constructed at compile time. It can
 /// hold at most `MaxSize` characters. The string is null-terminated and the
@@ -63,11 +65,11 @@ struct ConstexprSmallString {
   // TODO<C++20, joka921> implement operator<=> as soon as it works
   // on std::array.
   constexpr bool operator==(const ConstexprSmallString& rhs) const {
-    return _characters == rhs._characters;
+    return ql::ranges::equal(_characters, rhs._characters);
   }
 
   constexpr bool operator<(const ConstexprSmallString& rhs) const {
-    return _characters < rhs._characters;
+    return ql::ranges::lexicographical_compare(_characters, rhs._characters);
   }
 
   /// Implicit conversion to std::string_view
@@ -84,9 +86,10 @@ struct ConstexprSmallString {
 namespace std {
 template <size_t MaxSize>
 struct hash<ad_utility::ConstexprSmallString<MaxSize>> {
-  auto operator()(const ad_utility::ConstexprSmallString<MaxSize>& string) {
+  auto operator()(
+      const ad_utility::ConstexprSmallString<MaxSize>& string) const {
     return std::hash<std::string_view>{}(
-        std::string_view{string._characters, string._size});
+        std::string_view{string._characters.data(), string._size});
   }
 };
 }  // namespace std

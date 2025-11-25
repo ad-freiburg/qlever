@@ -18,6 +18,11 @@
 #include "util/StringUtilsImpl.h"
 
 namespace ad_utility {
+
+namespace detail {
+// CTRE regex pattern for C++17 compatibility
+constexpr ctll::fixed_string langTagRegex = "[a-zA-Z]+(-[a-zA-Z0-9]+)*";
+}  // namespace detail
 // ____________________________________________________________________________
 std::string_view commonPrefix(std::string_view a, const std::string_view b) {
   size_t maxIdx = std::min(a.size(), b.size());
@@ -53,7 +58,7 @@ std::string getUppercase(const std::string& orig) {
 
 // ____________________________________________________________________________
 bool strIsLangTag(const std::string& input) {
-  return ctre::match<"[a-zA-Z]+(-[a-zA-Z0-9]+)*">(input);
+  return ctre::match<detail::langTagRegex>(input);
 }
 
 // ____________________________________________________________________________
@@ -205,12 +210,10 @@ std::string addIndentation(std::string_view str,
 
 // ___________________________________________________________________________
 std::string truncateOperationString(std::string_view operation) {
-  static_assert(MAX_LENGTH_OPERATION_ECHO >= 3);
-  if (operation.length() <= MAX_LENGTH_OPERATION_ECHO) {
+  auto prefix = getUTF8Prefix(operation, MAX_LENGTH_OPERATION_ECHO).second;
+  if (prefix.length() == operation.length()) {
     return std::string{operation};
-  } else {
-    return absl::StrCat(operation.substr(0, MAX_LENGTH_OPERATION_ECHO - 3),
-                        "...");
   }
+  return absl::StrCat(prefix, "...");
 }
 }  // namespace ad_utility

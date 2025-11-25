@@ -12,8 +12,8 @@
 #include <string>
 #include <vector>
 
-#include "ExecuteUpdate.h"
 #include "engine/Engine.h"
+#include "engine/ExecuteUpdate.h"
 #include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
@@ -46,7 +46,7 @@ class Server {
  public:
   explicit Server(unsigned short port, size_t numThreads,
                   ad_utility::MemorySize maxMem, std::string accessToken,
-                  bool usePatternTrick = true);
+                  bool noAccessCheck = false, bool usePatternTrick = true);
 
   virtual ~Server() = default;
 
@@ -80,6 +80,7 @@ class Server {
   const size_t numThreads_;
   unsigned short port_;
   std::string accessToken_;
+  bool noAccessCheck_;
   QueryResultCache cache_;
   NamedResultCache namedResultCache_;
   ad_utility::AllocatorWithLimit<Id> allocator_;
@@ -108,6 +109,7 @@ class Server {
   using TimeLimit = std::chrono::milliseconds;
 
   using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
+  using SharedTimeTracer = std::shared_ptr<ad_utility::timer::TimeTracer>;
 
   CPP_template(typename CancelTimeout)(
       requires ad_utility::isInstantiation<
@@ -180,7 +182,7 @@ class Server {
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> processUpdate(
           std::vector<ParsedQuery>&& updates,
-          const ad_utility::Timer& requestTimer,
+          const ad_utility::Timer& requestTimer, SharedTimeTracer tracer,
           ad_utility::SharedCancellationHandle cancellationHandle,
           QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
           TimeLimit timeLimit, std::optional<PlannedQuery>& plannedUpdate);
@@ -212,10 +214,13 @@ class Server {
 
   // Configure pinned of named results on the `qec`. If `pinResultWithName` is
   // set, then the `qec` is configured such that the query result will be stored
-  // in the named query cache. Throws if named pinning is required, but the
-  // access token is not okay.
+  // in the named result cache. If `pinNamedGeoIndex` is also set, it is
+  // expected to be the variable name of a column (without leading `?`) on which
+  // a geometry index should be built. Throws if named pinning is required, but
+  // the access token is not okay.
   static void configurePinnedResultWithName(
-      const std::optional<std::string>& pinResultWithName, bool accessTokenOk,
+      const std::optional<std::string>& pinResultWithName,
+      const std::optional<std::string>& pinNamedGeoIndex, bool accessTokenOk,
       QueryExecutionContext& qec);
 
   // Plan a parsed query.
@@ -296,6 +301,7 @@ class Server {
   /// formulated towards end users, it can be sent directly as the text of an
   /// HTTP error response.
   bool checkAccessToken(std::optional<std::string_view> accessToken) const;
+  FRIEND_TEST(ServerTest, checkAccessToken);
 
   /// Check if user-provided timeout is authorized with a valid access-token or
   /// lower than the server default. Return an empty optional and send a 403

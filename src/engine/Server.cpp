@@ -17,10 +17,11 @@
 #include <vector>
 
 #include "CompilationInfo.h"
-#include "GraphStoreProtocol.h"
 #include "engine/ExecuteUpdate.h"
 #include "engine/ExportQueryExecutionTrees.h"
+#include "engine/GraphStoreProtocol.h"
 #include "engine/HttpError.h"
+#include "engine/QueryExecutionContext.h"
 #include "engine/QueryPlanner.h"
 #include "engine/SparqlProtocol.h"
 #include "global/RuntimeParameters.h"
@@ -46,10 +47,11 @@ using ad_utility::MediaType;
 // __________________________________________________________________________
 Server::Server(unsigned short port, size_t numThreads,
                ad_utility::MemorySize maxMem, std::string accessToken,
-               bool usePatternTrick)
+               bool noAccessCheck, bool usePatternTrick)
     : numThreads_(numThreads),
       port_(port),
       accessToken_(std::move(accessToken)),
+      noAccessCheck_(noAccessCheck),
       allocator_{ad_utility::makeAllocationMemoryLeftThreadsafeObject(maxMem),
                  [this](ad_utility::MemorySize numMemoryToAllocate) {
                    cache_.makeRoomAsMuchAsPossible(MAKE_ROOM_SLACK_FACTOR *
@@ -91,8 +93,13 @@ void Server::initialize(const std::string& indexBaseName, bool useText,
       allocator_, index_.numTriples().normalAndInternal_() *
                       PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE / 100);
 
-  AD_LOG_INFO << "Access token for restricted API calls is \"" << accessToken_
-              << "\"" << std::endl;
+  if (noAccessCheck_) {
+    AD_LOG_INFO << "No access token required for restricted API calls"
+                << std::endl;
+  } else {
+    AD_LOG_INFO << "Access token for restricted API calls is \"" << accessToken_
+                << "\"" << std::endl;
+  }
 }
 
 // _____________________________________________________________________________
@@ -279,28 +286,37 @@ auto Server::prepareOperation(
   std::optional<std::string> pinResultWithName =
       ad_utility::url_parser::checkParameter(params, "pin-result-with-name",
                                              {});
-  AD_LOG_INFO << "Processing the following " << operationName << ":"
-              << (pinResult ? " [pin result]" : "")
-              << (pinSubtrees ? " [pin subresults]" : "")
-              << (pinResultWithName
-                      ? absl::StrCat(" [pin result with name \"",
-                                     pinResultWithName.value(), "\"]")
-                      : "")
-              << "\n"
-              << ad_utility::truncateOperationString(operationSPARQL)
-              << std::endl;
+  std::optional<std::string> pinNamedGeoIndex =
+      ad_utility::url_parser::checkParameter(params, "pin-geo-index-on-var",
+                                             {});
+  AD_LOG_INFO
+      << "Processing the following " << operationName << ":"
+      << (pinResult ? " [pin result]" : "")
+      << (pinSubtrees ? " [pin subresults]" : "")
+      << (pinResultWithName
+              ? absl::StrCat(
+                    " [pin result with name \"", pinResultWithName.value(),
+                    (pinNamedGeoIndex ? absl::StrCat(" with geo index on ?",
+                                                     pinNamedGeoIndex.value())
+                                      : ""),
+                    "\"]")
+              : "")
+      << "\n"
+      << ad_utility::truncateOperationString(operationSPARQL) << std::endl;
   QueryExecutionContext qec(index_, &cache_, allocator_,
                             sortPerformanceEstimator_, &namedResultCache_,
                             std::ref(messageSender), pinSubtrees, pinResult);
 
-  configurePinnedResultWithName(pinResultWithName, accessTokenOk, qec);
+  configurePinnedResultWithName(pinResultWithName, pinNamedGeoIndex,
+                                accessTokenOk, qec);
   return std::tuple{std::move(qec), std::move(cancellationHandle),
                     std::move(cancelTimeoutOnDestruction)};
 }
 
 // _____________________________________________________________________________
 void Server::configurePinnedResultWithName(
-    const std::optional<std::string>& pinResultWithName, bool accessTokenOk,
+    const std::optional<std::string>& pinResultWithName,
+    const std::optional<std::string>& pinNamedGeoIndex, bool accessTokenOk,
     QueryExecutionContext& qec) {
   if (!pinResultWithName.has_value()) {
     return;
@@ -309,7 +325,14 @@ void Server::configurePinnedResultWithName(
     throw std::runtime_error(
         "Pinning a result with a name requires a valid access token");
   }
-  qec.pinResultWithName() = pinResultWithName.value();
+  auto getGeoCacheVar = [&]() -> std::optional<Variable> {
+    if (!pinNamedGeoIndex.has_value()) {
+      return std::nullopt;
+    }
+    return Variable{absl::StrCat("?", pinNamedGeoIndex.value())};
+  };
+  qec.pinResultWithName() = QueryExecutionContext::PinResultWithName{
+      pinResultWithName.value(), getGeoCacheVar()};
 }
 
 // _____________________________________________________________________________
@@ -482,11 +505,11 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   std::optional<PlannedQuery> plannedQuery;
   auto visitOperation =
       [&checkParameter, &accessTokenOk, &request, &send, &parameters,
-       &requestTimer, &plannedQuery,
-       this](std::vector<ParsedQuery> operations, std::string operationName,
-             const std::string operationString,
-             std::function<bool(const ParsedQuery&)> expectedOperation,
-             const std::string msg) -> Awaitable<void> {
+       &requestTimer, &plannedQuery, this](
+          std::vector<ParsedQuery> operations, std::string operationName,
+          const std::string operationString,
+          std::function<bool(const ParsedQuery&)> expectedOperation,
+          const std::string msg, SharedTimeTracer tracer) -> Awaitable<void> {
     auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
         checkParameter("timeout", std::nullopt), accessTokenOk, request, send);
     if (!timeLimit.has_value()) {
@@ -506,7 +529,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     }
     if (ql::ranges::all_of(operations, &ParsedQuery::hasUpdateClause)) {
       co_return co_await processUpdate(
-          std::move(operations), requestTimer, cancellationHandle, qec,
+          std::move(operations), requestTimer, tracer, cancellationHandle, qec,
           std::move(request), send, timeLimit.value(), plannedQuery);
     } else {
       AD_CORRECTNESS_CHECK(operations.size() == 1);
@@ -523,32 +546,41 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     // needs it.
     auto parsedQuery = SparqlParser::parseQuery(
         &index_.encodedIriManager(), query.query_, query.datasetClauses_);
+    auto dummy = std::make_shared<ad_utility::timer::TimeTracer>("dummy");
     return visitOperation(
         {std::move(parsedQuery)}, "SPARQL Query", std::move(query.query_),
         std::not_fn(&ParsedQuery::hasUpdateClause),
         "SPARQL QUERY was request via the HTTP request, but the "
-        "following update was sent instead of an query: ");
+        "following update was sent instead of an query: ",
+        dummy);
   };
   auto visitUpdate = [this, &visitOperation, &requireValidAccessToken](
                          Update update) -> Awaitable<void> {
     requireValidAccessToken("SPARQL Update");
     // We need to copy the update string because `visitOperation` below also
     // needs it.
+    auto tracer = std::make_shared<ad_utility::timer::TimeTracer>("update");
+    tracer->beginTrace("parsing");
     auto parsedUpdates = SparqlParser::parseUpdate(
         index().getBlankNodeManager(), &index().encodedIriManager(),
         update.update_, update.datasetClauses_);
+    tracer->endTrace("parsing");
     return visitOperation(
         std::move(parsedUpdates), "SPARQL Update", std::move(update.update_),
         &ParsedQuery::hasUpdateClause,
         "SPARQL UPDATE was request via the HTTP request, but the "
-        "following query was sent instead of an update: ");
+        "following query was sent instead of an update: ",
+        tracer);
   };
   auto visitGraphStore =
       [&request, &visitOperation, &requireValidAccessToken,
        this](GraphStoreOperation operation) -> Awaitable<void> {
+    auto tracer = std::make_shared<ad_utility::timer::TimeTracer>("update");
+    tracer->beginTrace("parsing");
     std::vector<ParsedQuery> parsedOperations =
         GraphStoreProtocol::transformGraphStoreProtocol(std::move(operation),
                                                         request, index_);
+    tracer->endTrace("parsing");
 
     if (ql::ranges::any_of(parsedOperations, &ParsedQuery::hasUpdateClause)) {
       AD_CORRECTNESS_CHECK(
@@ -564,7 +596,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         std::move(parsedOperations),
         absl::StrCat("Graph Store (", std::string_view{request.method_string()},
                      ")"),
-        std::move(operationString), trueFunc, "Unused dummy message");
+        std::move(operationString), trueFunc, "Unused dummy message", tracer);
   };
   auto visitNone = [&response, &send, &request](None) -> Awaitable<void> {
     // If there was no "query", but any of the URL parameters processed before
@@ -996,12 +1028,11 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::processUpdate(
         std::vector<ParsedQuery>&& updates,
-        const ad_utility::Timer& requestTimer,
+        const ad_utility::Timer& requestTimer, SharedTimeTracer tracer,
         ad_utility::SharedCancellationHandle cancellationHandle,
         QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
         TimeLimit timeLimit, std::optional<PlannedQuery>& plannedUpdate) {
-  ad_utility::timer::TimeTracer tracer("update");
-  tracer.beginTrace("waitingForUpdateThread");
+  tracer->beginTrace("waitingForUpdateThread");
   AD_CORRECTNESS_CHECK(ql::ranges::all_of(
       updates, [](const ParsedQuery& p) { return p.hasUpdateClause(); }));
 
@@ -1012,8 +1043,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   auto coroutine = computeInNewThread(
       updateThreadPool_,
       [this, &requestTimer, &cancellationHandle, &updates, &qec, &timeLimit,
-       &plannedUpdate, &tracer]() {
-        tracer.endTrace("waitingForUpdateThread");
+       &plannedUpdate, tracer]() {
+        tracer->endTrace("waitingForUpdateThread");
         json results = json::array();
         // TODO<qup42> We currently create a new snapshot after each update in
         // the chain, which is expensive. Instead, the updates could operate
@@ -1024,37 +1055,38 @@ CPP_template_def(typename RequestT, typename ResponseT)(
           // happen that the query planner "knows" that a result is empty, when
           // actually it is not due to a preceding update in the chain. Also,
           // this improves the size estimates and hence the query plan.
-          tracer.beginTrace("snapshot");
+          tracer->beginTrace("snapshot");
           qec.updateLocatedTriplesSnapshot();
-          tracer.endTrace("snapshot");
-          tracer.beginTrace("planning");
+          tracer->endTrace("snapshot");
+          tracer->beginTrace("planning");
           plannedUpdate = planQuery(std::move(update), requestTimer, timeLimit,
                                     qec, cancellationHandle);
-          tracer.endTrace("planning");
-          tracer.beginTrace("execution");
+          tracer->endTrace("planning");
+
           // Update the delta triples.
+          tracer->beginTrace("execution");
           auto updateMetadata =
               index_.deltaTriplesManager().modify<UpdateMetadata>(
                   [this, &cancellationHandle, &plannedUpdate,
-                   &tracer](auto& deltaTriples) {
+                   tracer](auto& deltaTriples) {
                     // Use `this` explicitly to silence false-positive
                     // errors on captured `this` being unused.
-                    tracer.beginTrace("processUpdateImpl");
+                    tracer->beginTrace("processUpdateImpl");
                     auto res = this->processUpdateImpl(plannedUpdate.value(),
                                                        cancellationHandle,
-                                                       deltaTriples, tracer);
-                    tracer.endTrace("processUpdateImpl");
+                                                       deltaTriples, *tracer);
+                    tracer->endTrace("processUpdateImpl");
                     return res;
                   },
-                  true, tracer);
-          tracer.endTrace("execution");
+                  true, true, *tracer);
+          tracer->endTrace("execution");
 
-          tracer.endTrace("update");
+          tracer->endTrace("update");
           results.push_back(createResponseMetadataForUpdate(
               index_, index_.deltaTriplesManager().getCurrentSnapshot(),
               *plannedUpdate, plannedUpdate->queryExecutionTree_,
-              updateMetadata, tracer));
-          tracer.reset();
+              updateMetadata, *tracer));
+          tracer->reset();
 
           AD_LOG_INFO << "Done processing update"
                       << ", total time was " << requestTimer.msecs().count()
@@ -1069,7 +1101,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       },
       cancellationHandle);
   auto responses = co_await std::move(coroutine);
-  tracer.endTrace("update");
+  tracer->endTrace("update");
 
   // SPARQL 1.1 Protocol 2.2.4 Successful Responses: "The responses body of a
   // successful update request is implementation defined."
@@ -1210,6 +1242,10 @@ CPP_template_def(typename Function,
 // _____________________________________________________________________________
 bool Server::checkAccessToken(
     std::optional<std::string_view> accessToken) const {
+  if (noAccessCheck_) {
+    AD_LOG_DEBUG << "Skipping access check" << std::endl;
+    return true;
+  }
   if (!accessToken) {
     return false;
   }

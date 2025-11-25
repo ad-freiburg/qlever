@@ -16,6 +16,7 @@
 #include "engine/Sort.h"
 #include "engine/StripColumns.h"
 #include "global/RuntimeParameters.h"
+#include "util/Algorithm.h"
 
 using std::string;
 
@@ -208,6 +209,12 @@ QueryExecutionTree::makeTreeWithStrippedColumns(
 
   auto& resultTree = optTree.value();
   AD_CORRECTNESS_CHECK(resultTree != nullptr);
+  AD_CORRECTNESS_CHECK(
+      resultTree->getRootOperation()->getLimitOffset().isUnconstrained(),
+      "`LIMIT` and `OFFSET` are applied by "
+      "`QueryExecutionTree::makeTreeWithStrippedColumns` not by the individual "
+      "implementations.");
+  resultTree->applyLimit(rootOperation->getLimitOffset());
   // Only store stripped variables if `hideStrippedColumns` is `False`
   if (hideStrippedColumns == HideStrippedColumns::False) {
     // Calculate the variables that will be stripped (present in the input, but
@@ -215,7 +222,7 @@ QueryExecutionTree::makeTreeWithStrippedColumns(
     ad_utility::HashSet<Variable> strippedVariables;
     const auto& originalVariableColumns = qet->getVariableColumns();
     for (const auto& [var, colInfo] : originalVariableColumns) {
-      if (!variables.contains(var)) {
+      if (!ad_utility::contains(variables, var)) {
         strippedVariables.insert(var);
       }
     }

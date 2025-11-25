@@ -106,58 +106,6 @@ TEST(GeoSparqlHelpers, WktDist) {
 }
 
 // _____________________________________________________________________________
-TEST(GeoSparqlHelpers, KmToUnit) {
-  using namespace ad_utility::detail;
-  using enum UnitOfMeasurement;
-  auto kmToUnit = kilometerToUnit;
-
-  ASSERT_NEAR(kmToUnit(0.0, std::nullopt), 0.0, 0.0001);
-  ASSERT_NEAR(kmToUnit(0.0, KILOMETERS), 0.0, 0.0001);
-  ASSERT_NEAR(kmToUnit(0.0, METERS), 0.0, 0.0001);
-  ASSERT_NEAR(kmToUnit(0.0, MILES), 0.0, 0.0001);
-  ASSERT_NEAR(kmToUnit(-500.0, KILOMETERS), -500.0, 0.0001);
-  ASSERT_NEAR(kmToUnit(-500.0, std::nullopt), -500.0, 0.0001);
-  ASSERT_NEAR(kmToUnit(500.0, METERS), 500000.0, 0.0001);
-  ASSERT_NEAR(kmToUnit(500.0, MILES), 310.685595, 0.0001);
-  ASSERT_NEAR(kmToUnit(1.0, MILES), 0.62137119, 0.0001);
-  AD_EXPECT_THROW_WITH_MESSAGE(kmToUnit(1.0, UNKNOWN),
-                               ::testing::HasSubstr("Unsupported unit"));
-}
-
-// _____________________________________________________________________________
-TEST(GeoSparqlHelpers, UnitToKm) {
-  using namespace ad_utility::detail;
-  using enum UnitOfMeasurement;
-  auto toKm = valueInUnitToKilometer;
-
-  ASSERT_NEAR(toKm(0.0, std::nullopt), 0.0, 0.0001);
-  ASSERT_NEAR(toKm(0.0, KILOMETERS), 0.0, 0.0001);
-  ASSERT_NEAR(toKm(0.0, METERS), 0.0, 0.0001);
-  ASSERT_NEAR(toKm(0.0, MILES), 0.0, 0.0001);
-  ASSERT_NEAR(toKm(-500.0, KILOMETERS), -500.0, 0.0001);
-  ASSERT_NEAR(toKm(-500.0, std::nullopt), -500.0, 0.0001);
-  ASSERT_NEAR(toKm(500000.0, METERS), 500.0, 0.0001);
-  ASSERT_NEAR(toKm(310.685595, MILES), 500.0, 0.0001);
-  ASSERT_NEAR(toKm(0.62137119, MILES), 1.0, 0.0001);
-  AD_EXPECT_THROW_WITH_MESSAGE(toKm(1.0, UNKNOWN),
-                               ::testing::HasSubstr("Unsupported unit"));
-}
-
-// _____________________________________________________________________________
-TEST(GeoSparqlHelpers, IriToUnit) {
-  using namespace ad_utility::detail;
-  using enum UnitOfMeasurement;
-  auto iriToUnit = iriToUnitOfMeasurement;
-
-  ASSERT_EQ(iriToUnit(""), UNKNOWN);
-  ASSERT_EQ(iriToUnit("http://example.com"), UNKNOWN);
-  ASSERT_EQ(iriToUnit("http://qudt.org/vocab/unit/"), UNKNOWN);
-  ASSERT_EQ(iriToUnit("http://qudt.org/vocab/unit/M"), METERS);
-  ASSERT_EQ(iriToUnit("http://qudt.org/vocab/unit/KiloM"), KILOMETERS);
-  ASSERT_EQ(iriToUnit("http://qudt.org/vocab/unit/MI"), MILES);
-}
-
-// _____________________________________________________________________________
 template <SpatialJoinType SJType>
 void checkGeoRelationDummyImpl(
     source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {

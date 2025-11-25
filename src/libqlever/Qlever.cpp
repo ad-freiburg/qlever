@@ -136,11 +136,19 @@ std::string Qlever::query(const QueryPlan& queryPlan,
 }
 
 // _____________________________________________________________________________
-void Qlever::queryAndPinResultWithName(std::string name, std::string query) {
+void Qlever::queryAndPinResultWithName(
+    QueryExecutionContext::PinResultWithName options, std::string query) {
   auto queryPlan = parseAndPlanQuery(std::move(query));
   auto& [qet, qec, parsedQuery] = queryPlan;
-  qec->pinResultWithName() = std::move(name);
+  qec->pinResultWithName() = std::move(options);
   [[maybe_unused]] auto result = this->query(queryPlan);
+}
+
+// _____________________________________________________________________________
+void Qlever::queryAndPinResultWithName(std::string name, std::string query) {
+  queryAndPinResultWithName(
+      QueryExecutionContext::PinResultWithName{std::move(name)},
+      std::move(query));
 }
 
 // _____________________________________________________________________________

@@ -2,20 +2,35 @@
 // Chair of Algorithms and Data Structures.
 // Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_UTIL_GEOMETRYINFOHELPERSIMPL_H
-#define QLEVER_SRC_UTIL_GEOMETRYINFOHELPERSIMPL_H
+#ifndef QLEVER_SRC_RDFTYPES_GEOMETRYINFOHELPERSIMPL_H
+#define QLEVER_SRC_RDFTYPES_GEOMETRYINFOHELPERSIMPL_H
 
+#include <absl/functional/function_ref.h>
+#include <s2/s2earth.h>
+#include <s2/s2latlng.h>
+#include <s2/s2loop.h>
+#include <s2/s2point.h>
+#include <s2/s2polygon.h>
 #include <spatialjoin/BoxIds.h>
 #include <util/geo/Geo.h>
 
 #include <array>
+#include <iostream>
+#include <memory>
+#include <range/v3/numeric/accumulate.hpp>
 #include <string_view>
+#include <type_traits>
+#include <utility>
+#include <vector>
 
+#include "global/Constants.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/Literal.h"
 #include "util/Exception.h"
+#include "util/GeoConverters.h"
 #include "util/Log.h"
+#include "util/TypeTraits.h"
 
 // This file contains functions used for parsing and processing WKT geometries
 // using `pb_util`. To avoid unnecessarily compiling expensive modules, this
@@ -24,18 +39,38 @@
 namespace ad_utility::detail {
 
 using namespace ::util::geo;
-using CoordType = double;
+using namespace geometryConverters;
 using ParsedWkt =
     std::variant<Point<CoordType>, Line<CoordType>, Polygon<CoordType>,
                  MultiPoint<CoordType>, MultiLine<CoordType>,
                  MultiPolygon<CoordType>, Collection<CoordType>>;
 using ParseResult = std::pair<WKTType, std::optional<ParsedWkt>>;
 
+template <typename T>
+CPP_concept WktSingleGeometryType =
+    SameAsAny<T, Point<CoordType>, Line<CoordType>, Polygon<CoordType>>;
+
+template <typename T>
+CPP_concept WktCollectionType =
+    SameAsAny<T, MultiPoint<CoordType>, MultiLine<CoordType>,
+              MultiPolygon<CoordType>, Collection<CoordType>>;
+
+static_assert(!std::is_same_v<Line<CoordType>, MultiPoint<CoordType>>);
+
 // Removes the datatype and quotation marks from a given literal
 inline std::string removeDatatype(const std::string_view& wkt) {
   auto lit = ad_utility::triple_component::Literal::fromStringRepresentation(
       std::string{wkt});
   return std::string{asStringViewUnsafe(lit.getContent())};
+}
+
+// Adds quotation marks and the `geo:wktLiteral` datatype to a given string
+inline std::string addDatatype(const std::string_view wkt) {
+  auto lit = ad_utility::triple_component::Literal::literalWithoutQuotes(wkt);
+  auto dt = ad_utility::triple_component::Iri::fromIrirefWithoutBrackets(
+      GEO_WKT_LITERAL);
+  lit.addDatatype(dt);
+  return std::move(lit.toStringRepresentation());
 }
 
 // Tries to extract the geometry type and parse the geometry given by a WKT
@@ -190,6 +225,177 @@ inline util::geo::DBox projectInt32WebMercToDoubleLatLng(
           projectInt32WebMercToDoubleLatLng(box.getUpperRight())};
 };
 
+// Counts the number of geometries in a geometry collection.
+inline uint32_t countChildGeometries(const ParsedWkt& geom) {
+  return std::visit(
+      [](const auto& g) -> uint32_t {
+        using T = std::decay_t<decltype(g)>;
+        if constexpr (WktCollectionType<T>) {
+          return static_cast<uint32_t>(g.size());
+        } else {
+          static_assert(WktSingleGeometryType<T>);
+          return 1;
+        }
+      },
+      geom);
+}
+
+// Helper enum for readable handling of the geometry type identifiers used by
+// `AnyGeometry`.
+enum class AnyGeometryMember : uint8_t {
+  POINT,
+  LINE,
+  POLYGON,
+  MULTILINE,
+  MULTIPOLYGON,
+  COLLECTION,
+  MULTIPOINT
+};
+
+// Helper to implement the computation of metric length for the different
+// geometry types.
+struct MetricLengthVisitor {
+  double operator()(const Point<CoordType>&) const { return 0.0; }
+
+  double operator()(const Line<CoordType>& geom) const {
+    return latLngLen<CoordType>(geom);
+  }
+
+  // Compute the length of the outer boundary of a polygon.
+  double operator()(const Polygon<CoordType>& geom) const {
+    return latLngLen<CoordType>(geom.getOuter());
+  }
+
+  // Compute the length of a multi-geometry by adding up the lengths of its
+  // members.
+  CPP_template(typename T)(requires ad_utility::SimilarToAny<
+                           T, MultiLine<CoordType>, MultiPolygon<CoordType>,
+                           MultiPoint<CoordType>, Collection<CoordType>>) double
+  operator()(const T& multiGeom) const {
+    // This overload only handles the geometry types implemented by vectors.
+    static_assert(ad_utility::similarToInstantiation<T, std::vector>);
+
+    return ::ranges::accumulate(
+        ::ranges::transform_view(multiGeom, MetricLengthVisitor{}), 0);
+  }
+
+  // Compute the length for the custom container type `AnyGeometry` from
+  // `pb_util`. It can dynamically hold any geometry type.
+  CPP_template(typename T)(
+      requires ad_utility::SimilarTo<T, AnyGeometry<CoordType>>) double
+  operator()(const T& geom) const {
+    using enum AnyGeometryMember;
+    // `AnyGeometry` is a class from `pb_util`. It does not operate on an enum,
+    // this is why we use our own enum here. The correct matching of the integer
+    // identifiers for the geometry types with this enum is tested in
+    // `GeometryInfoTest.cpp`.
+    switch (AnyGeometryMember{geom.getType()}) {
+      case POINT:
+        return MetricLengthVisitor{}(geom.getPoint());
+      case LINE:
+        return MetricLengthVisitor{}(geom.getLine());
+      case POLYGON:
+        return MetricLengthVisitor{}(geom.getPolygon());
+      case MULTILINE:
+        return MetricLengthVisitor{}(geom.getMultiLine());
+      case MULTIPOLYGON:
+        return MetricLengthVisitor{}(geom.getMultiPolygon());
+      case COLLECTION:
+        return MetricLengthVisitor{}(geom.getCollection());
+      case MULTIPOINT:
+        return MetricLengthVisitor{}(geom.getMultiPoint());
+      default:
+        AD_FAIL();
+    }
+  }
+
+  // Compute the length for a parsed WKT geometry.
+  MetricLength operator()(const ParsedWkt& geometry) const {
+    return MetricLength{std::visit(MetricLengthVisitor{}, geometry)};
+  }
+};
+static constexpr MetricLengthVisitor computeMetricLength;
+
+// Extract all (potentially nested) polygons from a geometry collection. This is
+// used to calculate area as points and lines have no area and are therefore
+// neutral to the area of a collection.
+using S2PolygonVec = std::vector<std::unique_ptr<S2Polygon>>;
+inline S2PolygonVec collectionToS2Polygons(
+    const Collection<CoordType>& collection) {
+  S2PolygonVec polygons;
+  for (const auto& anyGeom : collection) {
+    if (anyGeom.getType() == 2) {
+      // Member is single polygon
+      polygons.push_back(makeS2Polygon(anyGeom.getPolygon()));
+    } else if (anyGeom.getType() == 4) {
+      // Member is multipolygon
+      for (const auto& polygon : anyGeom.getMultiPolygon()) {
+        polygons.push_back(makeS2Polygon(polygon));
+      }
+    } else if (anyGeom.getType() == 5) {
+      // Member is a nested collection
+      for (auto& polygon : collectionToS2Polygons(anyGeom.getCollection())) {
+        polygons.push_back(std::move(polygon));
+      }
+    }
+  }
+  return polygons;
+}
+
+// Helper to implement the computation of metric area for the different
+// geometry types.
+struct MetricAreaVisitor {
+  // Given an `S2Polygon` compute the area and convert it to approximated
+  // square meters on earth.
+  double operator()(std::unique_ptr<S2Polygon> polygon) {
+    AD_CORRECTNESS_CHECK(polygon != nullptr);
+    return S2Earth::SteradiansToSquareMeters(polygon->GetArea());
+  }
+
+  double operator()(const Polygon<CoordType>& polygon) const {
+    return MetricAreaVisitor{}(makeS2Polygon(polygon));
+  }
+
+  double operator()(S2PolygonVec polygons) const {
+    return MetricAreaVisitor{}(
+        S2Polygon::DestructiveUnion(std::move(polygons)));
+  }
+
+  double operator()(const MultiPolygon<CoordType>& polygons) const {
+    // Empty multipolygon has empty area
+    if (polygons.empty()) {
+      return 0.0;
+    }
+    // Multipolygon with one member has exactly area of this member
+    if (polygons.size() == 1) {
+      return MetricAreaVisitor{}(polygons.at(0));
+    }
+    // For a multipolygon with multiple members, we need to compute the union of
+    // the polygons to determine their area.
+    return MetricAreaVisitor{}(
+        ::ranges::to_vector(polygons | ql::views::transform(makeS2Polygon)));
+  }
+
+  // Compute the area in square meters of a geometry collection
+  double operator()(const Collection<CoordType>& collection) const {
+    return MetricAreaVisitor{}(collectionToS2Polygons(collection));
+  }
+
+  // The remaining geometry types always return the area zero
+  CPP_template(typename T)(
+      requires SameAsAny<T, Point<CoordType>, MultiPoint<CoordType>,
+                         Line<CoordType>, MultiLine<CoordType>>) double
+  operator()(const T&) const {
+    return 0.0;
+  }
+
+  double operator()(const ParsedWkt& geom) const {
+    return std::visit(MetricAreaVisitor{}, geom);
+  };
+};
+
+static constexpr MetricAreaVisitor computeMetricArea;
+
 }  // namespace ad_utility::detail
 
-#endif  // QLEVER_SRC_UTIL_GEOMETRYINFOHELPERSIMPL_H
+#endif  // QLEVER_SRC_RDFTYPES_GEOMETRYINFOHELPERSIMPL_H
