@@ -114,6 +114,10 @@ class QueryExecutionContext {
     return *sharedLocatedTriplesSnapshot_;
   }
 
+  SharedLocatedTriplesSnapshot sharedLocatedTriplesSnapshot() const {
+    return sharedLocatedTriplesSnapshot_;
+  }
+
   // This function retrieves the most recent `LocatedTriplesSnapshot` and stores
   // it in the `QueryExecutionContext`. The new snapshot will be used for
   // evaluating queries after this call.

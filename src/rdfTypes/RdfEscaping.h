@@ -50,8 +50,10 @@ std::string unescapeNewlinesAndBackslashes(std::string_view literal);
 
 // A strong typedef for a `std::string_view` that stores a normalized RDF
 // literal.
+constexpr inline ad_utility::IndexTag normalizedRDFStringViewTag =
+    "NormalizedRDFString";
 using NormalizedRDFStringView =
-    ad_utility::TypedIndex<std::string_view, "NormalizedRDFString">;
+    ad_utility::TypedIndex<std::string_view, normalizedRDFStringViewTag>;
 
 // A strong typedef for a `std::string` that stores a normalized RDF literal.
 class NormalizedRDFString {

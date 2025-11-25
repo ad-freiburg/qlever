@@ -2,7 +2,7 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
-#include "SparqlExpressionValueGetters.h"
+#include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 
 #include <absl/strings/str_format.h>
 

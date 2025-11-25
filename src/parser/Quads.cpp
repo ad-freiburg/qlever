@@ -2,7 +2,7 @@
 // Chair of Algorithms and Data Structures
 // Author: Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 
-#include "Quads.h"
+#include "parser/Quads.h"
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "parser/UpdateClause.h"

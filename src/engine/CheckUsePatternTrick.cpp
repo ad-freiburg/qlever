@@ -2,7 +2,7 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
-#include "./CheckUsePatternTrick.h"
+#include "engine/CheckUsePatternTrick.h"
 
 #include "backports/algorithm.h"
 #include "backports/type_traits.h"

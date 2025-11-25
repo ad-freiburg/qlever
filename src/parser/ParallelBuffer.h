@@ -13,8 +13,8 @@
 #include <string>
 #include <vector>
 
-#include "../util/File.h"
-#include "../util/UninitializedAllocator.h"
+#include "util/File.h"
+#include "util/UninitializedAllocator.h"
 
 /**
  * @brief Abstract base class for certain input buffers.

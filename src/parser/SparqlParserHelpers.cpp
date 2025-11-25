@@ -2,7 +2,7 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include "SparqlParserHelpers.h"
+#include "parser/SparqlParserHelpers.h"
 
 #include <unicode/unistr.h>
 

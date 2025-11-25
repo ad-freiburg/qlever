@@ -8,8 +8,8 @@
 #include <cmath>
 #include <exception>
 
-#include "./Exception.h"
-#include "./TypeTraits.h"
+#include "util/Exception.h"
+#include "util/TypeTraits.h"
 
 namespace ad_utility {
 // The return value has 1s for the lowest `numBits` bits, and 0 in all the

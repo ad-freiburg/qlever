@@ -223,13 +223,13 @@ class Index {
 
   bool hasAllPermutations() const;
 
-  // _____________________________________________________________________________
+  // ___________________________________________________________________________
   std::vector<float> getMultiplicities(
-      const TripleComponent& key, Permutation::Enum permutation,
+      const TripleComponent& key, const Permutation& permutation,
       const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
-  // ___________________________________________________________________
-  std::vector<float> getMultiplicities(Permutation::Enum p) const;
+  // ___________________________________________________________________________
+  std::vector<float> getMultiplicities(const Permutation& permutation) const;
 
   /**
    * @brief Perform a scan for one or two keys i.e. retrieve all YZ from the XYZ

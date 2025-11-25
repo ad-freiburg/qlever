@@ -7,6 +7,7 @@
 #include <absl/strings/str_cat.h>
 
 #include <cstdlib>
+#include <iomanip>
 
 #include "engine/CallFixedSize.h"
 #include "engine/Engine.h"
@@ -48,7 +49,9 @@ auto SortPerformanceEstimator::measureSortingTime(
   auto randomTable = createRandomIdTable(numRows, numColumns, allocator);
   ad_utility::Timer timer{ad_utility::Timer::Started};
   // Always sort on the first column for simplicity;
-  CALL_FIXED_SIZE(numColumns, &Engine::sort, &randomTable, 0ull);
+  ad_utility::callFixedSizeVi(numColumns, [&](auto numCols) {
+    Engine::sort<numCols>(&randomTable, 0ull);
+  });
   return timer.value();
 }
 
@@ -119,8 +122,10 @@ auto SortPerformanceEstimator::estimatedSortTime(size_t numRows,
 void SortPerformanceEstimator::computeEstimatesExpensively(
     const ad_utility::AllocatorWithLimit<Id>& allocator,
     size_t maxNumberOfElementsToSort) {
+#ifndef QLEVER_CPP_17
   static_assert(isSorted(sampleValuesCols));
   static_assert(isSorted(sampleValuesRows));
+#endif
 
   AD_LOG_INFO << "Sorting random result tables to estimate the sorting "
                  "performance of this machine ..."
