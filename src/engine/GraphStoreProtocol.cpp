@@ -91,7 +91,7 @@ ResponseMiddleware GraphStoreProtocol::makePostNewGraphMiddleware(
   namespace http = boost::beast::http;
   std::string location(asStringViewUnsafe(newGraph.getContent()));
   return ResponseMiddleware(
-      [location](ResponseMiddleware::ResponseT&& response, auto) {
+      [location](ResponseMiddleware::ResponseT response, auto) {
         response.result(http::status::created);
         response.set(http::field::location, location);
         return response;
@@ -100,9 +100,9 @@ ResponseMiddleware GraphStoreProtocol::makePostNewGraphMiddleware(
 
 // ____________________________________________________________________________
 ad_utility::triple_component::Iri GraphStoreProtocol::generateGraphIri() {
-  ad_utility::SlowRandomIntGenerator<uint64_t> randGraphIriSuffix_;
+  ad_utility::SlowRandomIntGenerator<uint64_t> randGraphIriSuffix;
   return ad_utility::triple_component::Iri::fromIriref(
-      QLEVER_NEW_GRAPH_PREFIX + std::to_string(randGraphIriSuffix_()) + ">");
+      QLEVER_NEW_GRAPH_PREFIX + std::to_string(randGraphIriSuffix()) + ">");
 }
 
 // ____________________________________________________________________________
@@ -157,7 +157,7 @@ ParsedQuery GraphStoreProtocol::transformDelete(const GraphOrDefault& graph,
   // With implicit graph existence a graph existed iff triples were actually
   // deleted.
   update.responseMiddleware_ = ResponseMiddleware(
-      [](ResponseMiddleware::ResponseT&& response, auto result) {
+      [](ResponseMiddleware::ResponseT response, auto result) {
         AD_CORRECTNESS_CHECK(result.size() == 1);
         if (result.at(0).inUpdate_->triplesDeleted_ == 0) {
           response.result(boost::beast::http::status::not_found);

@@ -18,8 +18,8 @@
 struct ResponseMiddleware {
   using ResponseT = ad_utility::httpUtils::ResponseT;
   using UpdateMiddleware =
-      std::function<ResponseT(ResponseT&&, std::vector<UpdateMetadata>)>;
-  using QueryMiddleware = std::function<ResponseT(ResponseT&&)>;
+      std::function<ResponseT(ResponseT, std::vector<UpdateMetadata>)>;
+  using QueryMiddleware = std::function<ResponseT(ResponseT)>;
 
  private:
   std::variant<UpdateMiddleware, QueryMiddleware> func_;
@@ -37,17 +37,17 @@ struct ResponseMiddleware {
   // Apply the middleware to a response. The current response is passed in and a
   // new one is returned.
   ResponseT apply(
-      ResponseT&& response,
+      ResponseT response,
       std::optional<std::vector<UpdateMetadata>> metadataOpt) const {
     return std::visit(
         ad_utility::OverloadCallOperator{
-            [&](const UpdateMiddleware& func) {
+            [&metadataOpt, &response](const UpdateMiddleware& func) {
               AD_CONTRACT_CHECK(
                   metadataOpt.has_value(),
                   "Missing `UpdateMetadata` argument for update middleware.");
               return func(std::move(response), std::move(metadataOpt.value()));
             },
-            [&](const QueryMiddleware& func) {
+            [&metadataOpt, &response](const QueryMiddleware& func) {
               AD_CONTRACT_CHECK(
                   !metadataOpt.has_value(),
                   "Got unexpected `UpdateMetadata` for query middleware.");

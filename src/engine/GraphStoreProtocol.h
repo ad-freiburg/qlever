@@ -220,7 +220,7 @@ class GraphStoreProtocol {
     // When the drop (first operation) deletes triples then the graph has
     // existed before in our model of implicit graph existence.
     drop.responseMiddleware_ =
-        ResponseMiddleware([](ResponseMiddleware::ResponseT&& response,
+        ResponseMiddleware([](ResponseMiddleware::ResponseT response,
                               std::vector<UpdateMetadata> updateMetadata) {
           AD_CORRECTNESS_CHECK(updateMetadata.size() == 2 &&
                                updateMetadata.at(0).inUpdate_.has_value());
