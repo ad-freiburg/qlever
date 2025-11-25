@@ -2,7 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Herrmann (johannes.r.herrmann(at)gmail.com)
 
-#include "PathSearch.h"
+#include "engine/PathSearch.h"
 
 #include <optional>
 #include <unordered_map>

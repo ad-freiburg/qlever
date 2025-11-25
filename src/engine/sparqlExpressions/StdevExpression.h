@@ -56,8 +56,7 @@ class DeviationExpression : public SparqlExpression {
 
 // Separate subclass of AggregateOperation, that replaces its child with a
 // DeviationExpression of this child. Everything else is left untouched.
-template <typename AggregateOperation,
-          typename FinalOperation = decltype(identity)>
+template <typename AggregateOperation, typename FinalOperation = Identity>
 class DeviationAggExpression
     : public AggregateExpression<AggregateOperation, FinalOperation> {
  public:

@@ -21,11 +21,10 @@ namespace sparqlExpression {
 // `AggregateExpression` if there is nothing to be done on the final result.
 struct Identity {
   template <typename T>
-  decltype(auto) operator()(T&& result, size_t) const {
+  auto operator()(T&& result, size_t) const {
     return AD_FWD(result);
   }
 };
-inline constexpr Identity identity{};
 
 namespace detail {
 
@@ -55,11 +54,10 @@ inline auto getUniqueElements = [](const EvaluationContext* context,
 // Class for a SPARQL expression that aggregates a given set of values to a
 // single value using `AggregateOperation`, and then applies `FinalOperation`.
 //
-// NOTE: The `FinalOperation` is typically the `identity` from above. One
+// NOTE: The `FinalOperation` is typically the `Identity` from above. One
 // exception is the `AvgExpression`, where the `FinalOperation` divides the
 // aggregated value (sum) by the number of elements.
-template <typename AggregateOperation,
-          typename FinalOperation = decltype(identity)>
+template <typename AggregateOperation, typename FinalOperation = Identity>
 class AggregateExpression : public SparqlExpression {
  public:
   // Create an aggregate expression from the given arguments. For example, for
@@ -118,7 +116,7 @@ template <typename NumericOperation>
 struct NumericExpressionForAggregate {
   template <typename... Args>
   auto operator()(const Args&... args) const -> CPP_ret(NumericValue)(
-      requires(concepts::same_as<std::decay_t<Args>, NumericValue>&&...)) {
+      requires(ad_utility::SimilarTo<Args, NumericValue>&&...)) {
     auto visitor = [](const auto&... t) -> NumericValue {
       if constexpr ((... ||
                      std::is_same_v<NotNumeric, std::decay_t<decltype(t)>>)) {
@@ -163,9 +161,9 @@ class CountExpression : public CountExpressionBase {
 };
 
 // Aggregate expression for SUM.
-inline auto addForSum = makeNumericExpressionForAggregate<std::plus<>>();
-using SumExpressionBase = AGG_EXP<decltype(addForSum), NumericValueGetter>;
-class SumExpression : public AGG_EXP<decltype(addForSum), NumericValueGetter> {
+using AddForSum = NumericExpressionForAggregate<std::plus<>>;
+using SumExpressionBase = AGG_EXP<AddForSum, NumericValueGetter>;
+class SumExpression : public AGG_EXP<AddForSum, NumericValueGetter> {
   using SumExpressionBase::SumExpressionBase;
   ValueId resultForEmptyGroup() const override { return Id::makeFromInt(0); }
 };
@@ -179,8 +177,7 @@ struct AvgFinalOperation {
   }
 };
 using AvgOperation =
-    Operation<2,
-              FunctionAndValueGetters<decltype(addForSum), NumericValueGetter>>;
+    Operation<2, FunctionAndValueGetters<AddForSum, NumericValueGetter>>;
 using AvgExpressionBase = AggregateExpression<AvgOperation, AvgFinalOperation>;
 class AvgExpression : public AvgExpressionBase {
   using AvgExpressionBase::AvgExpressionBase;

@@ -8,7 +8,6 @@
 
 #include "index/ConstantsIndexBuilding.h"
 #include "index/DeltaTriples.h"
-#include "util/GeneratorConverter.h"
 #include "util/StringUtils.h"
 
 // _____________________________________________________________________
@@ -33,6 +32,7 @@ CompressedRelationReader::ScanSpecAndBlocks Permutation::getScanSpecAndBlocks(
 void Permutation::loadFromDisk(const std::string& onDiskBase,
                                std::function<bool(Id)> isInternalId,
                                bool loadInternalPermutation) {
+  onDiskBase_ = onDiskBase;
   isInternalId_ = std::move(isInternalId);
   if (loadInternalPermutation) {
     internalPermutation_ =
@@ -103,25 +103,27 @@ std::pair<size_t, size_t> Permutation::getSizeEstimateForScan(
 // ____________________________________________________________________________
 IdTable Permutation::getDistinctCol1IdsAndCounts(
     Id col0Id, const CancellationHandle& cancellationHandle,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+    const LocatedTriplesSnapshot& locatedTriplesSnapshot,
+    const LimitOffsetClause& limitOffset) const {
   const auto& p = getActualPermutation(col0Id);
   return p.reader().getDistinctCol1IdsAndCounts(
       getScanSpecAndBlocks(
           ScanSpecification{col0Id, std::nullopt, std::nullopt},
           locatedTriplesSnapshot),
       cancellationHandle,
-      p.getLocatedTriplesForPermutation(locatedTriplesSnapshot));
+      p.getLocatedTriplesForPermutation(locatedTriplesSnapshot), limitOffset);
 }
 
 // ____________________________________________________________________________
 IdTable Permutation::getDistinctCol0IdsAndCounts(
     const CancellationHandle& cancellationHandle,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+    const LocatedTriplesSnapshot& locatedTriplesSnapshot,
+    const LimitOffsetClause& limitOffset) const {
   ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
   return reader().getDistinctCol0IdsAndCounts(
       getScanSpecAndBlocks(scanSpec, locatedTriplesSnapshot),
       cancellationHandle,
-      getLocatedTriplesForPermutation(locatedTriplesSnapshot));
+      getLocatedTriplesForPermutation(locatedTriplesSnapshot), limitOffset);
 }
 
 // _____________________________________________________________________
@@ -204,7 +206,7 @@ std::optional<Permutation::MetadataAndBlocks> Permutation::getMetadataAndBlocks(
 }
 
 // _____________________________________________________________________
-Permutation::IdTableGenerator Permutation::lazyScan(
+CompressedRelationReader::IdTableGeneratorInputRange Permutation::lazyScan(
     const ScanSpecAndBlocks& scanSpecAndBlocks,
     std::optional<std::vector<CompressedBlockMetadata>> optBlocks,
     ColumnIndicesRef additionalColumns,

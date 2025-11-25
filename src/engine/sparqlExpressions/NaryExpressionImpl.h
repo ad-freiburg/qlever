@@ -141,7 +141,6 @@ struct AreAllSetOfIntervals {
   }
 };
 
-inline constexpr AreAllSetOfIntervals areAllSetOfIntervals{};
 template <typename F>
 using SET = SpecializedFunction<F, AreAllSetOfIntervals>;
 

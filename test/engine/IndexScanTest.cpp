@@ -16,6 +16,7 @@
 #include "parser/ParsedQuery.h"
 
 using namespace ad_utility::testing;
+using namespace std::chrono_literals;
 using ad_utility::source_location;
 
 namespace {
@@ -38,11 +39,11 @@ constexpr auto encodedIriManager = []() -> const EncodedIriManager* {
 // is specified via the `expectedRows`, for example {{1, 3}, {7, 8}} means that
 // the partialLazyScanResult shall contain the rows number `1, 2, 7` of the full
 // scan (upper bounds are not included).
-void testLazyScan(Permutation::IdTableGenerator partialLazyScanResult,
-                  IndexScan& fullScan,
-                  const std::vector<IndexPair>& expectedRows,
-                  const LimitOffsetClause& limitOffset = {},
-                  source_location l = AD_CURRENT_SOURCE_LOC()) {
+void testLazyScan(
+    CompressedRelationReader::IdTableGeneratorInputRange partialLazyScanResult,
+    IndexScan& fullScan, const std::vector<IndexPair>& expectedRows,
+    const LimitOffsetClause& limitOffset = {},
+    source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   auto alloc = ad_utility::makeUnlimitedAllocator<Id>();
   IdTable lazyScanRes{0, alloc};
@@ -900,34 +901,41 @@ class IndexScanWithLazyJoin : public ::testing::TestWithParam<bool> {
   // with `second`.
   static std::pair<std::vector<Result::IdTableVocabPair>,
                    std::vector<Result::IdTableVocabPair>>
-  consumeSequentially(Result::LazyResult first, Result::LazyResult second) {
+  consumeSequentially(Result::LazyResult first, Result::LazyResult second,
+                      auto postCondition) {
     std::vector<Result::IdTableVocabPair> firstResult;
     std::vector<Result::IdTableVocabPair> secondResult;
 
     for (Result::IdTableVocabPair& element : first) {
       firstResult.push_back(std::move(element));
+      std::invoke(postCondition);
     }
     for (Result::IdTableVocabPair& element : second) {
       secondResult.push_back(std::move(element));
+      std::invoke(postCondition);
     }
     return {std::move(firstResult), std::move(secondResult)};
   }
 
   // Consume the ranges and store the results in vectors using the
   // parameterized strategy.
+  template <typename T = ad_utility::Noop>
   static std::pair<std::vector<Result::IdTableVocabPair>,
                    std::vector<Result::IdTableVocabPair>>
-  consumeRanges(std::pair<Result::LazyResult, Result::LazyResult> rangePair) {
+  consumeRanges(std::pair<Result::LazyResult, Result::LazyResult> rangePair,
+                T postCondition = ad_utility::noop) {
     std::vector<Result::IdTableVocabPair> joinSideResults;
     std::vector<Result::IdTableVocabPair> scanResults;
 
     bool rightFirst = GetParam();
     if (rightFirst) {
       std::tie(scanResults, joinSideResults) = consumeSequentially(
-          std::move(rangePair.second), std::move(rangePair.first));
+          std::move(rangePair.second), std::move(rangePair.first),
+          std::move(postCondition));
     } else {
       std::tie(joinSideResults, scanResults) = consumeSequentially(
-          std::move(rangePair.first), std::move(rangePair.second));
+          std::move(rangePair.first), std::move(rangePair.second),
+          std::move(postCondition));
     }
     return {std::move(joinSideResults), std::move(scanResults)};
   }
@@ -951,8 +959,24 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesFilterCorrectly) {
     co_yield p3;
   };
 
-  auto [joinSideResults, scanResults] =
-      consumeRanges(scan.prefilterTables(LazyResult{makeJoinSide(this)}, 0));
+  auto [joinSideResults, scanResults] = consumeRanges(
+      scan.prefilterTables(LazyResult{makeJoinSide(this)}, 0),
+      [&scan, counter = 0]() mutable {
+        bool rightFirst = GetParam();
+        // If the left side is being consumed first, then we observe the effects
+        // 3 calls later. This is an implementation detail and might change in
+        // the future.
+        int sideOffset = rightFirst ? 0 : 3;
+        const auto& rti = scan.runtimeInfo();
+        if (counter >= sideOffset) {
+          EXPECT_EQ(rti.status_,
+                    RuntimeInformation::Status::lazilyMaterialized);
+        }
+        if (counter >= 2 + sideOffset) {
+          EXPECT_GT(rti.numRows_, 0);
+        }
+        counter++;
+      });
 
   ASSERT_EQ(scanResults.size(), 2);
   ASSERT_EQ(joinSideResults.size(), 3);
@@ -978,6 +1002,15 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesFilterCorrectly) {
 
   EXPECT_EQ(joinSideResults.at(2).idTable_,
             makeIdTable({iri("<c>"), iri("<q>"), iri("<xb>")}));
+
+  const auto& rti = scan.runtimeInfo();
+  EXPECT_EQ(rti.status_, RuntimeInformation::Status::lazilyMaterialized);
+  EXPECT_EQ(rti.numRows_, 4);
+  // Note: In the code the `totalTime_` is also set, but the actual code runs
+  // faster than a single millisecond, so it won't show up in the data.
+  EXPECT_EQ(rti.details_["num-blocks-read"], 2);
+  EXPECT_EQ(rti.details_["num-blocks-all"], 3);
+  EXPECT_EQ(rti.details_["num-elements-read"], 4);
 }
 
 // _____________________________________________________________________________
@@ -1033,6 +1066,13 @@ TEST_P(IndexScanWithLazyJoin,
 
   ASSERT_EQ(scanResults.size(), 0);
   ASSERT_EQ(joinSideResults.size(), 0);
+
+  const auto& rti = scan.runtimeInfo();
+  EXPECT_EQ(rti.status_, RuntimeInformation::Status::lazilyMaterialized);
+  EXPECT_EQ(rti.numRows_, 0);
+  EXPECT_EQ(rti.details_["num-blocks-read"], 0);
+  EXPECT_EQ(rti.details_["num-blocks-all"], 1);
+  EXPECT_EQ(rti.details_["num-elements-read"], 0);
 }
 
 // _____________________________________________________________________________
@@ -1146,6 +1186,13 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesNotFilterOnUndefined) {
   EXPECT_EQ(
       scanResults.at(2).idTable_,
       tableFromTriples({{iri("<c>"), iri("<C>")}, {iri("<c>"), iri("<C2>")}}));
+
+  const auto& rti = scan.runtimeInfo();
+  EXPECT_EQ(rti.status_, RuntimeInformation::Status::lazilyMaterialized);
+  EXPECT_EQ(rti.numRows_, 6);
+  EXPECT_EQ(rti.details_["num-blocks-read"], 3);
+  EXPECT_EQ(rti.details_["num-blocks-all"], 3);
+  EXPECT_EQ(rti.details_["num-elements-read"], 6);
 }
 
 // _____________________________________________________________________________
@@ -1193,6 +1240,13 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesWorksWithSingleEmptyTable) {
       consumeRanges(scan.prefilterTables(LazyResult{makeJoinSide()}, 0));
 
   ASSERT_EQ(scanResults.size(), 0);
+
+  const auto& rti = scan.runtimeInfo();
+  EXPECT_EQ(rti.status_, RuntimeInformation::Status::lazilyMaterialized);
+  EXPECT_EQ(rti.numRows_, 0);
+  EXPECT_EQ(rti.details_["num-blocks-read"], 0);
+  EXPECT_EQ(rti.details_["num-blocks-all"], 3);
+  EXPECT_EQ(rti.details_["num-elements-read"], 0);
 }
 
 // _____________________________________________________________________________
@@ -1465,7 +1519,10 @@ TEST(IndexScanTest, StripColumns) {
     EXPECT_THAT(strippedScanOp.additionalColumns(),
                 ElementsAreArray(baseScan.additionalColumns()));
     EXPECT_EQ(strippedScanOp.numVariables(), baseScan.numVariables());
-    EXPECT_EQ(strippedScanOp.permutation(), baseScan.permutation());
+    EXPECT_EQ(strippedScanOp.permutation().permutation(),
+              baseScan.permutation().permutation());
+    EXPECT_EQ(strippedScanOp.permutation().onDiskBase(),
+              baseScan.permutation().onDiskBase());
 
     // Test size and cost functions
     EXPECT_EQ(strippedScanOp.getExactSize(), baseScan.getExactSize());

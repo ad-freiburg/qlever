@@ -20,6 +20,7 @@
 #include "util/ConstexprSmallString.h"
 #include "util/LruCache.h"
 #include "util/TypeTraits.h"
+#include "util/UnitOfMeasurement.h"
 
 /// Several classes that can be used as the `ValueGetter` template
 /// argument in the SparqlExpression templates in `SparqlExpression.h`

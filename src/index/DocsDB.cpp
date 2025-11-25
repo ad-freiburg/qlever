@@ -2,7 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#include "DocsDB.h"
+#include "index/DocsDB.h"
 
 #include "backports/algorithm.h"
 #include "global/Constants.h"

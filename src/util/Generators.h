@@ -90,7 +90,6 @@ CPP_template(typename T, typename F)(
         F functionWithCallback) {
   class CallbackToRangeAdapter : public InputRangeFromGet<T> {
     F functionWithCallback_;
-    ad_utility::JThread thread_;
     std::mutex mutex_;
     std::condition_variable cv_;
     // Only one of the threads can run at the same time. The semantics are
@@ -106,6 +105,11 @@ CPP_template(typename T, typename F)(
     // further values. `exception_ptr` means that the inner thread has
     // encountered an exception, which is then rethrown by the outer generator.
     std::variant<std::monostate, T, std::exception_ptr> storage_;
+
+    // IMPORTANT NOTE: It is crucial that this `thread_` is the last data member
+    // of this class, as it references several of the above members, and thus
+    // has to be joined/destroyed before these other members are destroyed!!!
+    ad_utility::JThread thread_;
 
    public:
     explicit CallbackToRangeAdapter(F functionWithCallback)
