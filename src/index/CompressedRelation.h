@@ -340,7 +340,7 @@ class CompressedRelationWriter {
   };
   static PermutationPairResult createPermutationPair(
       const std::string& basename, WriterAndCallback writerAndCallback1,
-      WriterAndCallback writerAndCallback2,
+      std::optional<WriterAndCallback> writerAndCallback2,
       ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
       qlever::KeyOrder permutation,
       const std::vector<std::function<void(const IdTableStatic<0>&)>>&
