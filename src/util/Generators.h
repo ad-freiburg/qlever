@@ -84,9 +84,10 @@ CPP_template(typename InputRange, typename AggregatorT,
 // callable that takes a `callback` with signature `void(T)`. The arguments with
 // which this callback is called when running the `functionWithCallback` become
 // the elements that are yielded by the created `generator`.
-template <typename T, typename F>
-InputRangeTypeErased<T> generatorFromActionWithCallback(F functionWithCallback)
-    requires ql::concepts::invocable<F, std::function<void(T)>> {
+CPP_template(typename T, typename F)(
+    requires ql::concepts::invocable<F, std::function<void(T)>>)
+    InputRangeTypeErased<T> generatorFromActionWithCallback(
+        F functionWithCallback) {
   class CallbackToRangeAdapter : public InputRangeFromGet<T> {
     F functionWithCallback_;
     std::mutex mutex_;
@@ -216,4 +217,4 @@ InputRangeTypeErased<T> generatorFromActionWithCallback(F functionWithCallback)
 }
 };  // namespace ad_utility
 
-#endif  // QLEVER_SRC_UTIL_GENERATORS_H
+#endif

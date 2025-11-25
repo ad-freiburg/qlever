@@ -47,7 +47,35 @@ std::tuple<bool, size_t, std::string> Tokenizer::getNextToken(
 // ______________________________________________________________________________________________________
 const RE2& Tokenizer::idToRegex(const TurtleTokenId reg) {
   switch (reg) {
-    using enum TurtleTokenId;
+    static constexpr auto TurtlePrefix = TurtleTokenId::TurtlePrefix;
+    static constexpr auto SparqlPrefix = TurtleTokenId::SparqlPrefix;
+    static constexpr auto TurtleBase = TurtleTokenId::TurtleBase;
+    static constexpr auto SparqlBase = TurtleTokenId::SparqlBase;
+    static constexpr auto Dot = TurtleTokenId::Dot;
+    static constexpr auto Comma = TurtleTokenId::Comma;
+    static constexpr auto Semicolon = TurtleTokenId::Semicolon;
+    static constexpr auto OpenSquared = TurtleTokenId::OpenSquared;
+    static constexpr auto CloseSquared = TurtleTokenId::CloseSquared;
+    static constexpr auto OpenRound = TurtleTokenId::OpenRound;
+    static constexpr auto CloseRound = TurtleTokenId::CloseRound;
+    static constexpr auto A = TurtleTokenId::A;
+    static constexpr auto DoubleCircumflex = TurtleTokenId::DoubleCircumflex;
+    static constexpr auto True = TurtleTokenId::True;
+    static constexpr auto False = TurtleTokenId::False;
+    static constexpr auto Langtag = TurtleTokenId::Langtag;
+    static constexpr auto Integer = TurtleTokenId::Integer;
+    static constexpr auto Decimal = TurtleTokenId::Decimal;
+    static constexpr auto Exponent = TurtleTokenId::Exponent;
+    static constexpr auto Double = TurtleTokenId::Double;
+    static constexpr auto Iriref = TurtleTokenId::Iriref;
+    static constexpr auto IrirefRelaxed = TurtleTokenId::IrirefRelaxed;
+    static constexpr auto PnameNS = TurtleTokenId::PnameNS;
+    static constexpr auto PnameLN = TurtleTokenId::PnameLN;
+    static constexpr auto PnLocal = TurtleTokenId::PnLocal;
+    static constexpr auto BlankNodeLabel = TurtleTokenId::BlankNodeLabel;
+    static constexpr auto WsMultiple = TurtleTokenId::WsMultiple;
+    static constexpr auto Anon = TurtleTokenId::Anon;
+    static constexpr auto Comment = TurtleTokenId::Comment;
     case TurtlePrefix:
       return _tokens.TurtlePrefix;
     case SparqlPrefix:

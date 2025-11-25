@@ -25,7 +25,7 @@ jobs:
           - compiler-version: 11
             use-keep-going: false
             use-ignore-errors: false
-            additional-cmake-options: "-DREDUCED_FEATURE_SET_FOR_CPP17=ON"
+            additional-cmake-options: "-DREDUCED_FEATURE_SET_FOR_CPP17=ON -DUSE_CPP_17_BACKPORTS=ON"
           - compiler-version: 8
             expensive-tests: true
             use-keep-going: true
@@ -34,7 +34,7 @@ jobs:
 
 
     env:
-      warnings:   ""
+      warnings:   "-w -ftemplate-backtrace-limit=0" # disable all warnings for now
       build-type: Release
       expensive-tests: true
       compiler: gcc

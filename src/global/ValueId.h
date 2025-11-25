@@ -162,7 +162,19 @@ class ValueId {
   /// doubles in reversed order. This is a direct consequence of comparing the
   /// bit representation of these values as unsigned integers.
   constexpr auto compareThreeWay(const ValueId& other) const {
-    using enum Datatype;
+    constexpr auto Undefined = Datatype::Undefined;
+    constexpr auto Bool = Datatype::Bool;
+    constexpr auto Int = Datatype::Int;
+    constexpr auto Double = Datatype::Double;
+    constexpr auto VocabIndex = Datatype::VocabIndex;
+    constexpr auto LocalVocabIndex = Datatype::LocalVocabIndex;
+    constexpr auto TextRecordIndex = Datatype::TextRecordIndex;
+    constexpr auto Date = Datatype::Date;
+    constexpr auto GeoPoint = Datatype::GeoPoint;
+    constexpr auto WordVocabIndex = Datatype::WordVocabIndex;
+    constexpr auto BlankNodeIndex = Datatype::BlankNodeIndex;
+    constexpr auto EncodedVal = Datatype::EncodedVal;
+    constexpr auto MaxValue = Datatype::MaxValue;
     auto type = getDatatype();
     auto otherType = other.getDatatype();
     if (type != LocalVocabIndex && otherType != LocalVocabIndex) {

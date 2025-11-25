@@ -8,8 +8,10 @@
 #ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONGENERATORS_H
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONGENERATORS_H
 
+#include <absl/container/inlined_vector.h>
 #include <absl/functional/bind_front.h>
 
+#include "backports/functional.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/Generator.h"
 
@@ -50,47 +52,89 @@ inline ql::span<const ValueId> getIdsFromVariable(
 /// `SparqlExpressionValueGetters` with an already bound `EvaluationContext`.
 CPP_template(typename T, typename Transformation = ql::identity)(
     requires SingleExpressionResult<T> CPP_and isConstantResult<T> CPP_and
-        ranges::invocable<Transformation, T>)
-    cppcoro::generator<const std::decay_t<std::invoke_result_t<
-        Transformation, T>>> resultGenerator(T constant, size_t numItems,
-                                             Transformation transformation =
-                                                 {}) {
-  auto transformed = transformation(constant);
-  for (size_t i = 0; i < numItems; ++i) {
-    co_yield transformed;
-  }
+        ranges::invocable<
+            Transformation,
+            T>) auto resultGeneratorImpl(T constant, size_t numItems,
+                                         Transformation transformation = {}) {
+  // We have to use `range-v3` as `views::repeat` is a C++23 feature.
+  return ::ranges::repeat_n_view(transformation(constant), numItems);
 }
 
 CPP_template(typename T, typename Transformation = ql::identity)(
     requires ql::ranges::input_range<
-        T>) auto resultGenerator(T&& vector, size_t numItems,
-                                 Transformation transformation = {}) {
+        T>) auto resultGeneratorImpl(T&& vector, size_t numItems,
+                                     Transformation transformation = {}) {
   AD_CONTRACT_CHECK(numItems == vector.size());
   return ad_utility::allView(AD_FWD(vector)) |
          ql::views::transform(std::move(transformation));
 }
 
 template <typename Transformation = ql::identity>
-inline cppcoro::generator<
-    const std::decay_t<std::invoke_result_t<Transformation, Id>>>
-resultGenerator(ad_utility::SetOfIntervals set, size_t targetSize,
-                Transformation transformation = {}) {
-  size_t i = 0;
-  const auto trueTransformed = transformation(Id::makeFromBool(true));
-  const auto falseTransformed = transformation(Id::makeFromBool(false));
-  for (const auto& [begin, end] : set._intervals) {
-    while (i < begin) {
-      co_yield falseTransformed;
-      ++i;
+inline auto resultGeneratorImpl(const ad_utility::SetOfIntervals& set,
+                                size_t targetSize,
+                                Transformation transformation = {}) {
+  struct Bounds {
+    size_t num_;
+    bool value_;
+  };
+  absl::InlinedVector<Bounds, 10> bounds;
+  bounds.reserve(set._intervals.size() * 2 + 1);
+  size_t last = 0;
+  for (const auto& [lower, upper] : set._intervals) {
+    AD_CONTRACT_CHECK(upper <= targetSize);
+    if (lower != last) {
+      bounds.push_back(Bounds{lower - last, false});
     }
-    while (i < end) {
-      co_yield trueTransformed;
-      ++i;
+    if (lower != upper) {
+      bounds.push_back(Bounds{upper - lower, true});
     }
+    last = upper;
   }
-  while (i++ < targetSize) {
-    co_yield falseTransformed;
+  if (last < targetSize) {
+    bounds.push_back(Bounds{targetSize - last, false});
   }
+  // We have to use `range-v3` as `views::repeat` is a C++23 feature.
+  return ad_utility::OwningView{std::move(bounds)} |
+         ::ranges::views::transform([transformation](const auto& bound) {
+           return ::ranges::views::repeat_n(
+               transformation(Id::makeFromBool(bound.value_)), bound.num_);
+         }) |
+         ::ranges::views::join;
+}
+
+// The actual `resultGenerator` that uses type erasure (if not specified
+// otherwise) to the `resultGeneratorImpl` to keep the compile times reasonable.
+template <typename S, typename Transformation = ql::identity>
+inline auto resultGenerator(S&& input, size_t targetSize,
+                            Transformation transformation = {}) {
+  auto gen =
+      resultGeneratorImpl(AD_FWD(input), targetSize, std::move(transformation));
+  return ad_utility::InputRangeTypeErased{std::move(gen)};
+  /*
+  // Without type erasure, compiling the `sparqlExpressions` module takes a lot
+  // of time and memory. In the future we can evaluate the performance of
+  // deactivating the type erasure for certain expressions + datatypes (e.g.
+  // addition of IDs) etc.
+  static constexpr auto Cat = ::ranges::category::input;
+  using V = ql::ranges::range_value_t<decltype(gen)>;
+
+  return ::ranges::any_view<ql::ranges::range_reference_t<decltype(gen)>,
+                            Cat>{std::move(gen)};
+                            */
+  /*
+  if constexpr (std::is_trivially_copyable_v<V>) {
+    auto chunked = ::ranges::views::chunk(std::move(gen), 10000);
+    auto toVector = [](const auto& chunk) {
+      absl::InlinedVector<V, 10000> v;
+      ql::ranges::copy(chunk, std::back_inserter(v));
+      return v;
+    };
+    return ad_utility::OwningView{ad_utility::InputRangeTypeErased{
+               std::move(chunked) | ql::views::transform(toVector)}} |
+           ql::views::join;
+  } else {
+  }
+  */
 }
 
 /// Return a generator that yields `numItems` many items for the various
@@ -127,25 +171,26 @@ inline auto valueGetterGenerator =
 /// Do the following `numItems` times: Obtain the next elements e_1, ..., e_n
 /// from the `generators` and yield `function(e_1, ..., e_n)`, also as a
 /// generator.
-inline auto applyFunction = [](auto&& function, size_t numItems,
-                               auto... generators)
-    -> cppcoro::generator<std::invoke_result_t<
-        decltype(function),
-        ql::ranges::range_value_t<decltype(generators)>...>> {
-  // A tuple holding one iterator to each of the generators.
-  std::tuple iterators{generators.begin()...};
-
-  auto functionOnIterators = [&function](auto&&... iterators) {
-    return function(AD_MOVE(*iterators)...);
-  };
-
-  for (size_t i = 0; i < numItems; ++i) {
-    co_yield std::apply(functionOnIterators, iterators);
-
-    // Increase all the iterators.
-    std::apply([](auto&&... its) { (..., ++its); }, iterators);
-  }
-};
+inline auto applyFunction =
+    [](auto&& function, [[maybe_unused]] size_t numItems, auto... generators) {
+      // We have to use `range-v3` as `std::views::zip` is not available in our
+      // toolchains.
+      return ::ranges::views::zip(ad_utility::RvalueView{
+                 ad_utility::OwningView{std::move(generators)}}...) |
+             ::ranges::views::transform(
+                 [&f = function](auto&& tuple) -> decltype(auto) {
+                   // If the transformation would return an rvalue reference,
+                   // return a plain value instead (obtained by moving the
+                   // reference) otherwise we get dangling references, but only
+                   // in Release builds.
+                   // TODO<joka921> I don't fully understand yet WHERE the
+                   // dangling reference comes from.
+                   using T = decltype(std::apply(f, AD_MOVE(tuple)));
+                   using R = std::conditional_t<std::is_rvalue_reference_v<T>,
+                                                std::decay_t<T>, T>;
+                   return R{std::apply(f, AD_MOVE(tuple))};
+                 });
+    };
 
 /// Return a generator that returns the `numElements` many results of the
 /// `Operation` applied to the `operands`
@@ -166,7 +211,6 @@ CPP_template(typename Operation, typename... Operands)(requires(
   // generator for the operation result;
   auto getResultFromGenerators =
       absl::bind_front(applyFunction, Function{}, numElements);
-
   /// The `ValueGetters` are stored in a `std::tuple`, so we have to extract
   /// them via `std::apply`. First set up a lambda that performs the actual
   /// logic on a parameter pack of `ValueGetters`

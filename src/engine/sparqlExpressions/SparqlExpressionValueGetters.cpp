@@ -49,7 +49,12 @@ NumericValue NumericValueGetter::operator()(
 // _____________________________________________________________________________
 auto EffectiveBooleanValueGetter::operator()(
     ValueId id, const EvaluationContext* context) const -> Result {
-  using enum Result;
+  static constexpr auto False =
+      sparqlExpression::detail::EffectiveBooleanValueGetter::Result::False;
+  static constexpr auto True =
+      sparqlExpression::detail::EffectiveBooleanValueGetter::Result::True;
+  static constexpr auto Undef =
+      sparqlExpression::detail::EffectiveBooleanValueGetter::Result::Undef;
   switch (id.getDatatype()) {
     case Datatype::Double: {
       auto d = id.getDouble();
@@ -297,7 +302,19 @@ IntDoubleStr ToNumericValueGetter::operator()(
 // _____________________________________________________________________________
 OptIri DatatypeValueGetter::operator()(ValueId id,
                                        const EvaluationContext* context) const {
-  using enum Datatype;
+  static constexpr auto Undefined = Datatype::Undefined;
+  static constexpr auto Bool = Datatype::Bool;
+  static constexpr auto Int = Datatype::Int;
+  static constexpr auto Double = Datatype::Double;
+  static constexpr auto VocabIndex = Datatype::VocabIndex;
+  static constexpr auto LocalVocabIndex = Datatype::LocalVocabIndex;
+  static constexpr auto TextRecordIndex = Datatype::TextRecordIndex;
+  static constexpr auto Date = Datatype::Date;
+  static constexpr auto GeoPoint = Datatype::GeoPoint;
+  static constexpr auto WordVocabIndex = Datatype::WordVocabIndex;
+  static constexpr auto BlankNodeIndex = Datatype::BlankNodeIndex;
+  static constexpr auto EncodedVal = Datatype::EncodedVal;
+  static constexpr auto MaxValue = Datatype::MaxValue;
   auto datatype = id.getDatatype();
   std::optional<std::string> entity;
   switch (datatype) {
@@ -403,7 +420,19 @@ CPP_template(typename T, typename ValueGetter)(
              concepts::same_as<std::optional<std::string>, T>)) T
     getValue(ValueId id, const sparqlExpression::EvaluationContext* context,
              ValueGetter& valueGetter) {
-  using enum Datatype;
+  static constexpr auto Undefined = Datatype::Undefined;
+  static constexpr auto Bool = Datatype::Bool;
+  static constexpr auto Int = Datatype::Int;
+  static constexpr auto Double = Datatype::Double;
+  static constexpr auto VocabIndex = Datatype::VocabIndex;
+  static constexpr auto LocalVocabIndex = Datatype::LocalVocabIndex;
+  static constexpr auto TextRecordIndex = Datatype::TextRecordIndex;
+  static constexpr auto Date = Datatype::Date;
+  static constexpr auto GeoPoint = Datatype::GeoPoint;
+  static constexpr auto WordVocabIndex = Datatype::WordVocabIndex;
+  static constexpr auto BlankNodeIndex = Datatype::BlankNodeIndex;
+  static constexpr auto EncodedVal = Datatype::EncodedVal;
+  static constexpr auto MaxValue = Datatype::MaxValue;
   switch (id.getDatatype()) {
     case LocalVocabIndex:
     case EncodedVal:
@@ -439,7 +468,19 @@ sparqlExpression::IdOrLiteralOrIri IriOrUriValueGetter::operator()(
 //______________________________________________________________________________
 std::optional<std::string> LanguageTagValueGetter::operator()(
     ValueId id, const EvaluationContext* context) const {
-  using enum Datatype;
+  static constexpr auto Undefined = Datatype::Undefined;
+  static constexpr auto Bool = Datatype::Bool;
+  static constexpr auto Int = Datatype::Int;
+  static constexpr auto Double = Datatype::Double;
+  static constexpr auto VocabIndex = Datatype::VocabIndex;
+  static constexpr auto LocalVocabIndex = Datatype::LocalVocabIndex;
+  static constexpr auto TextRecordIndex = Datatype::TextRecordIndex;
+  static constexpr auto Date = Datatype::Date;
+  static constexpr auto GeoPoint = Datatype::GeoPoint;
+  static constexpr auto WordVocabIndex = Datatype::WordVocabIndex;
+  static constexpr auto BlankNodeIndex = Datatype::BlankNodeIndex;
+  static constexpr auto EncodedVal = Datatype::EncodedVal;
+  static constexpr auto MaxValue = Datatype::MaxValue;
   switch (id.getDatatype()) {
     case Bool:
     case Int:
@@ -493,7 +534,19 @@ CPP_template_out_def(typename RequestedInfo)(
     std::optional<RequestedInfo> GeometryInfoValueGetter<CPP_sfinae_args(
         RequestedInfo)>::operator()(ValueId id,
                                     const EvaluationContext* context) const {
-  using enum Datatype;
+  static constexpr auto Undefined = Datatype::Undefined;
+  static constexpr auto Bool = Datatype::Bool;
+  static constexpr auto Int = Datatype::Int;
+  static constexpr auto Double = Datatype::Double;
+  static constexpr auto VocabIndex = Datatype::VocabIndex;
+  static constexpr auto LocalVocabIndex = Datatype::LocalVocabIndex;
+  static constexpr auto TextRecordIndex = Datatype::TextRecordIndex;
+  static constexpr auto Date = Datatype::Date;
+  static constexpr auto GeoPoint = Datatype::GeoPoint;
+  static constexpr auto WordVocabIndex = Datatype::WordVocabIndex;
+  static constexpr auto BlankNodeIndex = Datatype::BlankNodeIndex;
+  static constexpr auto EncodedVal = Datatype::EncodedVal;
+  static constexpr auto MaxValue = Datatype::MaxValue;
   switch (id.getDatatype()) {
     case EncodedVal:
     case LocalVocabIndex:

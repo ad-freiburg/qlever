@@ -76,8 +76,8 @@ std::vector<std::string> Operation::collectWarnings() const {
       continue;
     }
     auto recursive = child->collectWarnings();
-    res.insert(res.end(), std::make_move_iterator(recursive.begin()),
-               std::make_move_iterator(recursive.end()));
+    res.insert(res.end(), ql::make_move_iterator(recursive.begin()),
+               ql::make_move_iterator(recursive.end()));
   }
 
   return res;

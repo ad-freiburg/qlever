@@ -309,8 +309,8 @@ auto Server::prepareOperation(
 
   configurePinnedResultWithName(pinResultWithName, pinNamedGeoIndex,
                                 accessTokenOk, qec);
-  return std::tuple{std::move(qec), std::move(cancellationHandle),
-                    std::move(cancelTimeoutOnDestruction)};
+  return std::make_tuple(std::move(qec), std::move(cancellationHandle),
+                         std::move(cancelTimeoutOnDestruction));
 }
 
 // _____________________________________________________________________________

@@ -10,6 +10,7 @@
 #include <variant>
 #include <vector>
 
+#include "backports/keywords.h"
 #include "backports/three_way_comparison.h"
 #include "backports/type_traits.h"
 #include "global/Id.h"
@@ -67,7 +68,7 @@ class Row {
   CPP_template_2(typename = void)(requires(!isDynamic())) Row(){};
 
   CPP_template_2(typename = void)(requires(!isDynamic())) explicit Row(
-      [[maybe_unused]] size_t numCols)
+      QL_MAYBE_UNUSED size_t numCols)
       : Row() {}
 
   // Access the i-th element.
@@ -94,7 +95,7 @@ class Row {
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Row, data_)
 
   // Convert from a static `RowReference` to a `std::array` (makes a copy).
-  CPP_template_2(typename = void)(requires(numStaticColumns != 0)) explicit
+  CPP_template_2(typename = void)(requires(NumColumns != 0)) explicit
   operator std::array<T, numStaticColumns>() const {
     std::array<T, numStaticColumns> result;
     ql::ranges::copy(*this, result.begin());
@@ -266,20 +267,38 @@ class RowReferenceImpl {
 
     // Equality comparison. Works between two `RowReference`s, but also between
     // a `RowReference` and a `Row` if the number of columns match.
+    template <typename U>
+    // QCC says "U::numStaticColumns is inaccessible in this context".
+    /*
     CPP_template(typename U)(requires(numStaticColumns ==
                                       U::numStaticColumns)) bool
-    operator==(const U& other) const {
+                                      */
+    bool operator==(const U& other) const {
+      // TODO<joka921> Reinstate
+      /*
       if constexpr (numStaticColumns == 0) {
-        if (numColumns() != other.numColumns()) {
-          return false;
-        }
+      */
+      if (numColumns() != other.numColumns()) {
+        return false;
       }
+      /*
+      }
+      */
       for (size_t i = 0; i < numColumns(); ++i) {
         if ((*this)[i] != other[i]) {
           return false;
         }
       }
       return true;
+    }
+    /*
+    CPP_template(typename U)(requires(numStaticColumns ==
+                                      U::numStaticColumns)) bool
+                                      */
+    // SAME QCC stuff as above.
+    template <typename U>
+    bool operator!=(const U& other) const {
+      return !(*this == other);
     }
 
     // Convert from a `RowReference` to a `Row`.
@@ -410,6 +429,12 @@ class RowReference
     return base() == other;
   }
 
+  CPP_template_2(typename T)(requires(numStaticColumns ==
+                                      T::numStaticColumns)) bool
+  operator!=(const T& other) const {
+    return !(base() == other);
+  }
+
  public:
   // Assignment from a `Row` with the same number of columns.
   RowReference& operator=(const Row<T, numStaticColumns>& other) & {
@@ -434,11 +459,13 @@ class RowReference
     this->assignmentImpl(base(), other);
     return *this;
   }
-
   // No need to copy `RowReference`s, because that is also most likely a bug.
   // Currently none of our functions or of the STL-algorithms require it.
   // If necessary, we can still enable it in the future.
-  RowReference(const RowReference&) = delete;
+
+  // TODO<joka921> Analyze this further, QCC from BMW requires this for concept
+  // checks, can we leave it unimplemented for now for increased safety?
+  RowReference(const RowReference&);
 };
 
 }  // namespace columnBasedIdTable

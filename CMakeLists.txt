@@ -7,7 +7,7 @@ project(QLever C CXX)
 # C/C++ Versions
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
@@ -44,6 +44,10 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         MESSAGE(FATAL_ERROR "G++ versions older than 11.0 are not supported by QLever")
     elseif (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER "11.0.0")
         add_compile_options(-fcoroutines)
+    else()
+      #TODO<joka921> Actually only for GCC 8 is this required...
+      MESSAGE(STATUS "Linking against stdc++fs, as std::filesystem is experimental in GCC 8.3")
+        link_libraries(stdc++fs)
     endif ()
 
 elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
@@ -138,7 +142,7 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/joka921/range-v3
         # This branch removes some differences in the interface between `range-v3` and `std::ranges` s.t.
         # the former can be used as an (almost) drop-in replacement for the latter.
-        GIT_TAG 5ae161451ec1baaac352d7567298d3ac143bccae # branch fork-for-qlever
+        GIT_TAG 3ddfc6a957b0cf8597e39df4511b8073d4bb1736 # movable-any_view + non-void iter_difference + cache1-fix
 )
 
 
@@ -302,7 +306,7 @@ FetchContent_Declare(
 )
 
 
-if (USE_PARALLEL)
+if (USE_PARALLEL AND NOT REDUCED_FEATURE_SET_FOR_CPP17)
     include(FindOpenMP)
     if (OPENMP_FOUND)
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
@@ -461,7 +465,8 @@ add_subdirectory(test)
 
 # Add the library with the constants declared in `CompilationInfo.h` and defined
 # in `CompilationInfo.cpp` created by `CompilationInfo.cmake`.
-add_library(compilationInfo ${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp)
+add_library(compilationInfo ${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp
+        src/backports/iterator.h)
 qlever_target_link_libraries(compilationInfo)
 
 add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp)

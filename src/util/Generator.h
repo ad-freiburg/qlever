@@ -5,6 +5,8 @@
 #ifndef CPPCORO_GENERATOR_HPP_INCLUDED
 #define CPPCORO_GENERATOR_HPP_INCLUDED
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
 #include <coroutine>
 #include <exception>
 #include <utility>
@@ -342,5 +344,10 @@ T getSingleElement(generator<T, Details> g) {
   return t;
 }
 }  // namespace cppcoro
+#else
+namespace cppcoro {
+struct NoDetails {};
+}  // namespace cppcoro
+#endif
 
 #endif

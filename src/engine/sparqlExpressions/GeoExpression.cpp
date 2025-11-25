@@ -213,7 +213,15 @@ std::optional<GeoFunctionCall> getGeoFunctionExpressionParameters(
     const SparqlExpression& expr) {
   // Check against all possible geo relation types
   std::optional<GeoFunctionCall> res;
-  using enum SpatialJoinType;
+  static constexpr auto INTERSECTS = SpatialJoinType::INTERSECTS;
+  static constexpr auto CONTAINS = SpatialJoinType::CONTAINS;
+  static constexpr auto COVERS = SpatialJoinType::COVERS;
+  static constexpr auto CROSSES = SpatialJoinType::CROSSES;
+  static constexpr auto TOUCHES = SpatialJoinType::TOUCHES;
+  static constexpr auto EQUALS = SpatialJoinType::EQUALS;
+  static constexpr auto OVERLAPS = SpatialJoinType::OVERLAPS;
+  static constexpr auto WITHIN = SpatialJoinType::WITHIN;
+  static constexpr auto WITHIN_DIST = SpatialJoinType::WITHIN_DIST;
 
   // TODO<C++26 reflection> get all values of `SpatialJoinType` enum
   if ((res = getGeoRelationExpressionParameters<INTERSECTS>(expr))) {

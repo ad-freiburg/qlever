@@ -630,7 +630,12 @@ template <typename AddedIndexScanFunction>
 void QueryPlanner::indexScanSingleVarCase(
     const SparqlTripleSimple& triple,
     const AddedIndexScanFunction& addIndexScan) const {
-  using enum Permutation::Enum;
+  static constexpr auto PSO = Permutation::Enum::PSO;
+  static constexpr auto POS = Permutation::Enum::POS;
+  static constexpr auto SPO = Permutation::Enum::SPO;
+  static constexpr auto SOP = Permutation::Enum::SOP;
+  static constexpr auto OPS = Permutation::Enum::OPS;
+  static constexpr auto OSP = Permutation::Enum::OSP;
 
   if (triple.s_.isVariable()) {
     addIndexScan(POS);
@@ -646,7 +651,12 @@ template <typename AddedIndexScanFunction, typename AddedFilter>
 void QueryPlanner::indexScanTwoVarsCase(
     const SparqlTripleSimple& triple,
     const AddedIndexScanFunction& addIndexScan, const AddedFilter& addFilter) {
-  using enum Permutation::Enum;
+  static constexpr auto PSO = Permutation::Enum::PSO;
+  static constexpr auto POS = Permutation::Enum::POS;
+  static constexpr auto SPO = Permutation::Enum::SPO;
+  static constexpr auto SOP = Permutation::Enum::SOP;
+  static constexpr auto OPS = Permutation::Enum::OPS;
+  static constexpr auto OSP = Permutation::Enum::OSP;
 
   // Replace the position of the `triple` that is specified by the
   // `rewritePosition` with a new variable, and add a filter, that checks the
@@ -698,7 +708,12 @@ template <typename AddedIndexScanFunction, typename AddedFilter>
 void QueryPlanner::indexScanThreeVarsCase(
     const SparqlTripleSimple& triple,
     const AddedIndexScanFunction& addIndexScan, const AddedFilter& addFilter) {
-  using enum Permutation::Enum;
+  static constexpr auto PSO = Permutation::Enum::PSO;
+  static constexpr auto POS = Permutation::Enum::POS;
+  static constexpr auto SPO = Permutation::Enum::SPO;
+  static constexpr auto SOP = Permutation::Enum::SOP;
+  static constexpr auto OPS = Permutation::Enum::OPS;
+  static constexpr auto OSP = Permutation::Enum::OSP;
   AD_CONTRACT_CHECK(!_qec || _qec->getIndex().hasAllPermutations(),
                     "With only 2 permutations registered (no -a option), "
                     "triples should have at most two variables.");
@@ -817,7 +832,12 @@ auto QueryPlanner::seedWithScansAndText(
       seeds.push_back(std::move(plan));
     };
 
-    using enum Permutation::Enum;
+    static constexpr auto PSO = Permutation::Enum::PSO;
+    static constexpr auto POS = Permutation::Enum::POS;
+    static constexpr auto SPO = Permutation::Enum::SPO;
+    static constexpr auto SOP = Permutation::Enum::SOP;
+    static constexpr auto OPS = Permutation::Enum::OPS;
+    static constexpr auto OSP = Permutation::Enum::OSP;
 
     if (node.isTextNode()) {
       seeds.push_back(getTextLeafPlan(node, textLimits));
@@ -945,7 +965,10 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromPropertyPath(
       },
       [this, &left, &right](const std::vector<PropertyPath>& children,
                             PropertyPath::Modifier modifier) {
-        using enum PropertyPath::Modifier;
+        static constexpr auto SEQUENCE = PropertyPath::Modifier::SEQUENCE;
+        static constexpr auto ALTERNATIVE = PropertyPath::Modifier::ALTERNATIVE;
+        static constexpr auto INVERSE = PropertyPath::Modifier::INVERSE;
+        static constexpr auto NEGATED = PropertyPath::Modifier::NEGATED;
         switch (modifier) {
           case ALTERNATIVE:
             return seedFromAlternative(left, children, right);
@@ -1232,8 +1255,8 @@ std::vector<SubtreePlan> QueryPlanner::merge(
 
   if (isInTestMode()) {
     std::vector<std::pair<std::string, vector<SubtreePlan>>> sortedCandidates{
-        std::make_move_iterator(candidates.begin()),
-        std::make_move_iterator(candidates.end())};
+        ql::make_move_iterator(candidates.begin()),
+        ql::make_move_iterator(candidates.end())};
     std::sort(sortedCandidates.begin(), sortedCandidates.end(),
               [](const auto& a, const auto& b) { return a.first < b.first; });
     pruneCandidates(sortedCandidates);
@@ -2118,7 +2141,7 @@ size_t QueryPlanner::findSmallestExecutionTree(
   AD_CONTRACT_CHECK(!lastRow.empty());
   auto compare = [](const auto& a, const auto& b) {
     auto tie = [](const auto& x) {
-      return std::tuple{x.getSizeEstimate(), x.getSizeEstimate()};
+      return std::make_tuple(x.getSizeEstimate(), x.getSizeEstimate());
     };
     return tie(a) < tie(b);
   };
@@ -2432,7 +2455,7 @@ QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
     if (transitiveCol >= graphColIndex) {
       return std::nullopt;
     }
-    return std::tuple{transitiveCol, otherCol};
+    return std::make_tuple(transitiveCol, otherCol);
   }
 
   // At this point, we know that we have exactly two pairs of join columns,
@@ -2445,14 +2468,14 @@ QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
   size_t otherColB = jcs[1][otherIndex];
   if (transitiveColA < graphColIndex) {
     if (transitiveColB == graphColIndex) {
-      return std::tuple{transitiveColA, otherColA};
+      return std::make_tuple(transitiveColA, otherColA);
     }
     // We currently don't support binding two regular columns at once
     return std::nullopt;
   }
   AD_CORRECTNESS_CHECK(transitiveColB < graphColIndex);
   AD_CORRECTNESS_CHECK(transitiveColA == graphColIndex);
-  return std::tuple{transitiveColB, otherColB};
+  return std::make_tuple(transitiveColB, otherColB);
 #endif
 }
 
@@ -2801,7 +2824,9 @@ qlever::index::GraphFilter<TripleComponent> QueryPlanner::getActiveGraphs()
 template <typename Variables>
 bool QueryPlanner::GraphPatternPlanner::handleUnconnectedMinusOrOptional(
     std::vector<SubtreePlan>& candidates, const Variables& variables) {
-  using enum SubtreePlan::Type;
+  static constexpr auto BASIC = QueryPlanner::SubtreePlan::Type::BASIC;
+  static constexpr auto OPTIONAL = QueryPlanner::SubtreePlan::Type::OPTIONAL;
+  static constexpr auto MINUS = QueryPlanner::SubtreePlan::Type::MINUS;
   bool areVariablesUnconnected = ql::ranges::all_of(
       variables,
       [this](const Variable& var) { return !boundVariables_.contains(var); });
@@ -2894,8 +2919,8 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
         plan.containsFilterSubstitute_ = a.containsFilterSubstitute_;
       }
       nextCandidates.insert(nextCandidates.end(),
-                            std::make_move_iterator(vec.begin()),
-                            std::make_move_iterator(vec.end()));
+                            ql::make_move_iterator(vec.begin()),
+                            ql::make_move_iterator(vec.end()));
     }
   }
 

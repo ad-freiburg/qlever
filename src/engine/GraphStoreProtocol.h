@@ -202,7 +202,40 @@ class GraphStoreProtocol {
           const RequestT& rawRequest, const Index& index) {
     ad_utility::url_parser::ParsedUrl parsedUrl =
         ad_utility::url_parser::parseRequestTarget(rawRequest.target());
-    using enum boost::beast::http::verb;
+    static constexpr auto unknown = boost::beast::http::verb::unknown;
+    static constexpr auto delete_ = boost::beast::http::verb::delete_;
+    static constexpr auto get = boost::beast::http::verb::get;
+    static constexpr auto head = boost::beast::http::verb::head;
+    static constexpr auto post = boost::beast::http::verb::post;
+    static constexpr auto put = boost::beast::http::verb::put;
+    static constexpr auto connect = boost::beast::http::verb::connect;
+    static constexpr auto options = boost::beast::http::verb::options;
+    static constexpr auto trace = boost::beast::http::verb::trace;
+    static constexpr auto copy = boost::beast::http::verb::copy;
+    static constexpr auto lock = boost::beast::http::verb::lock;
+    static constexpr auto mkcol = boost::beast::http::verb::mkcol;
+    static constexpr auto move = boost::beast::http::verb::move;
+    static constexpr auto propfind = boost::beast::http::verb::propfind;
+    static constexpr auto proppatch = boost::beast::http::verb::proppatch;
+    static constexpr auto search = boost::beast::http::verb::search;
+    static constexpr auto unlock = boost::beast::http::verb::unlock;
+    static constexpr auto bind = boost::beast::http::verb::bind;
+    static constexpr auto rebind = boost::beast::http::verb::rebind;
+    static constexpr auto unbind = boost::beast::http::verb::unbind;
+    static constexpr auto acl = boost::beast::http::verb::acl;
+    static constexpr auto report = boost::beast::http::verb::report;
+    static constexpr auto mkactivity = boost::beast::http::verb::mkactivity;
+    static constexpr auto checkout = boost::beast::http::verb::checkout;
+    static constexpr auto merge = boost::beast::http::verb::merge;
+    static constexpr auto msearch = boost::beast::http::verb::msearch;
+    static constexpr auto notify = boost::beast::http::verb::notify;
+    static constexpr auto subscribe = boost::beast::http::verb::subscribe;
+    static constexpr auto unsubscribe = boost::beast::http::verb::unsubscribe;
+    static constexpr auto patch = boost::beast::http::verb::patch;
+    static constexpr auto purge = boost::beast::http::verb::purge;
+    static constexpr auto mkcalendar = boost::beast::http::verb::mkcalendar;
+    static constexpr auto link = boost::beast::http::verb::link;
+    static constexpr auto unlink = boost::beast::http::verb::unlink;
     std::string_view method = rawRequest.method_string();
     if (method == "GET") {
       return {transformGet(operation.graph_, &index.encodedIriManager())};
