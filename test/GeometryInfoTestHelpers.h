@@ -174,47 +174,6 @@ inline util::geo::I32Box boxToWebMerc(const util::geo::DBox& b) {
 }
 
 // ____________________________________________________________________________
-inline void checkGeoPoint(std::optional<GeoPoint> actual,
-                          std::optional<GeoPoint> expected,
-                          Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-  auto l = generateLocationTrace(sourceLocation);
-  ASSERT_EQ(actual.has_value(), expected.has_value());
-  if (!actual.has_value()) {
-    return;
-  }
-  ASSERT_NEAR(actual.value().getLat(), expected.value().getLat(), 0.0001);
-  ASSERT_NEAR(actual.value().getLng(), expected.value().getLng(), 0.0001);
-}
-
-// ____________________________________________________________________________
-inline void checkGeoPointOrWkt(std::optional<GeoPointOrWkt> actual,
-                               std::optional<GeoPointOrWkt> expected,
-                               Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-  auto l = generateLocationTrace(sourceLocation);
-  ASSERT_EQ(actual.has_value(), expected.has_value());
-  if (!actual.has_value()) {
-    return;
-  }
-  std::visit(
-      [](const auto& a, const auto& b) {
-        using Ta = std::decay_t<decltype(a)>;
-        using Tb = std::decay_t<decltype(b)>;
-        if constexpr (std::is_same_v<Ta, GeoPoint> &&
-                      std::is_same_v<Tb, GeoPoint>) {
-          checkGeoPoint(a, b);
-        } else if constexpr (std::is_same_v<Ta, std::string> &&
-                             std::is_same_v<Tb, std::string>) {
-          ASSERT_EQ(a, b);
-        } else {
-          ASSERT_FALSE(true)
-              << "Actual and expected `GeoPointOrWktValueGetter` results have "
-                 "different types";
-        }
-      },
-      actual.value(), expected.value());
-}
-
-// ____________________________________________________________________________
 inline MetricLength getLengthForTesting(std::string_view quotedWktLiteral) {
   auto len = ad_utility::GeometryInfo::getMetricLength(quotedWktLiteral);
   if (!len.has_value()) {
@@ -285,21 +244,20 @@ inline MetricArea getAreaForTesting(const std::string_view wkt) {
 }
 
 // ____________________________________________________________________________
-MATCHER_P(GeoPointOrWktMatcher, expectedRaw, description(expectedRaw)) {
-  AD_GEOINFO_TEST_OPTIONAL_HELPER(GeoPointOrWkt);
-  return ::testing::ExplainMatchResult(
-      std::visit(
-          [&](auto& contained) -> Matcher<std::optional<GeoPointOrWkt>> {
+inline auto geoPointOrWktMatcher = liftOptionalMatcher<GeoPointOrWkt>(
+    [](GeoPointOrWkt expected) -> Matcher<GeoPointOrWkt> {
+      return std::visit(
+          [&](auto& contained) -> Matcher<GeoPointOrWkt> {
             using T = std::decay_t<decltype(contained)>;
             if constexpr (std::is_same_v<T, GeoPoint>) {
-              return Optional(VariantWith<GeoPoint>(GeoPointNear(contained)));
+              return VariantWith<GeoPoint>(
+                  SafeMatcherCast<const GeoPoint&>(geoPointNear(contained)));
             } else {
-              return Optional(VariantWith<std::string>(Eq(contained)));
+              return VariantWith<std::string>(Eq(contained));
             }
           },
-          expected.value()),
-      actual, result_listener);
-}
+          expected);
+    });
 
 };  // namespace geoInfoTestHelpers
 

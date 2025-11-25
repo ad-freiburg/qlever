@@ -313,7 +313,7 @@ inline void checkGeoPointOrWktFromLocalAndNormalVocabAndLiteralForValid(
   // We input `wktInput` twice because we expect the value getter to return the
   // wkt string if it is given a plain wkt string.
   GeoPointOrWktTester{}.checkFromLocalAndNormalVocabAndLiteral(
-      wktInput, GeoPointOrWktMatcher(wktInput));
+      wktInput, geoPointOrWktMatcher(wktInput));
 }
 
 }  // namespace geoInfoVGTestHelpers
