@@ -102,14 +102,42 @@ UnitOfMeasurement iriToUnitOfMeasurement(const std::string_view& iri) {
 
 // ____________________________________________________________________________
 bool isLengthUnit(UnitOfMeasurement unit) {
-  using enum UnitOfMeasurement;
+  static constexpr auto METERS = UnitOfMeasurement::METERS;
+  static constexpr auto KILOMETERS = UnitOfMeasurement::KILOMETERS;
+  static constexpr auto MILES = UnitOfMeasurement::MILES;
+  static constexpr auto FEET = UnitOfMeasurement::FEET;
+  static constexpr auto YARDS = UnitOfMeasurement::YARDS;
+  static constexpr auto SQUARE_METERS = UnitOfMeasurement::SQUARE_METERS;
+  static constexpr auto SQUARE_KILOMETERS =
+      UnitOfMeasurement::SQUARE_KILOMETERS;
+  static constexpr auto SQUARE_MILES = UnitOfMeasurement::SQUARE_MILES;
+  static constexpr auto SQUARE_FEET = UnitOfMeasurement::SQUARE_FEET;
+  static constexpr auto SQUARE_YARDS = UnitOfMeasurement::SQUARE_YARDS;
+  static constexpr auto ACRE = UnitOfMeasurement::ACRE;
+  static constexpr auto ARE = UnitOfMeasurement::ARE;
+  static constexpr auto HECTARE = UnitOfMeasurement::HECTARE;
+  static constexpr auto UNKNOWN = UnitOfMeasurement::UNKNOWN;
   return unit == METERS || unit == KILOMETERS || unit == MILES ||
          unit == FEET || unit == YARDS;
 }
 
 // ____________________________________________________________________________
 bool isAreaUnit(UnitOfMeasurement unit) {
-  using enum UnitOfMeasurement;
+  static constexpr auto METERS = UnitOfMeasurement::METERS;
+  static constexpr auto KILOMETERS = UnitOfMeasurement::KILOMETERS;
+  static constexpr auto MILES = UnitOfMeasurement::MILES;
+  static constexpr auto FEET = UnitOfMeasurement::FEET;
+  static constexpr auto YARDS = UnitOfMeasurement::YARDS;
+  static constexpr auto SQUARE_METERS = UnitOfMeasurement::SQUARE_METERS;
+  static constexpr auto SQUARE_KILOMETERS =
+      UnitOfMeasurement::SQUARE_KILOMETERS;
+  static constexpr auto SQUARE_MILES = UnitOfMeasurement::SQUARE_MILES;
+  static constexpr auto SQUARE_FEET = UnitOfMeasurement::SQUARE_FEET;
+  static constexpr auto SQUARE_YARDS = UnitOfMeasurement::SQUARE_YARDS;
+  static constexpr auto ACRE = UnitOfMeasurement::ACRE;
+  static constexpr auto ARE = UnitOfMeasurement::ARE;
+  static constexpr auto HECTARE = UnitOfMeasurement::HECTARE;
+  static constexpr auto UNKNOWN = UnitOfMeasurement::UNKNOWN;
   return unit == SQUARE_METERS || unit == SQUARE_KILOMETERS ||
          unit == SQUARE_MILES || unit == SQUARE_FEET || unit == SQUARE_YARDS ||
          unit == ACRE || unit == ARE || unit == HECTARE;

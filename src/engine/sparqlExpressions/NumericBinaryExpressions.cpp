@@ -57,12 +57,7 @@ NARY_EXPRESSION(PowExpression, 2, FV<Pow, NumericValueGetter>);
 // _____________________________________________________________________________
 struct OrLambda {
   Id operator()(TernaryBool a, TernaryBool b) const {
-    static constexpr auto False =
-        sparqlExpression::detail::EffectiveBooleanValueGetter::Result::False;
-    static constexpr auto True =
-        sparqlExpression::detail::EffectiveBooleanValueGetter::Result::True;
-    static constexpr auto Undef =
-        sparqlExpression::detail::EffectiveBooleanValueGetter::Result::Undef;
+    using enum TernaryBool;
     if (a == True || b == True) {
       return Id::makeFromBool(true);
     }
@@ -76,12 +71,7 @@ struct OrLambda {
 // _____________________________________________________________________________
 struct AndLambda {
   Id operator()(TernaryBool a, TernaryBool b) const {
-    static constexpr auto False =
-        sparqlExpression::detail::EffectiveBooleanValueGetter::Result::False;
-    static constexpr auto True =
-        sparqlExpression::detail::EffectiveBooleanValueGetter::Result::True;
-    static constexpr auto Undef =
-        sparqlExpression::detail::EffectiveBooleanValueGetter::Result::Undef;
+    using enum TernaryBool;
     if (a == True && b == True) {
       return Id::makeFromBool(true);
     }
@@ -216,8 +206,7 @@ template <BinaryOperator binOp, typename BinaryPrefilterExpr>
 std::vector<PrefilterExprVariablePair> mergeChildrenForBinaryOpExpressionImpl(
     std::vector<PrefilterExprVariablePair>&& leftChild,
     std::vector<PrefilterExprVariablePair>&& rightChild) {
-  static constexpr auto AND = prefilterExpressions::LogicalOperator::AND;
-  static constexpr auto OR = prefilterExpressions::LogicalOperator::OR;
+  using enum BinaryOperator;
   namespace pd = prefilterExpressions::detail;
   pd::checkPropertiesForPrefilterConstruction(leftChild);
   pd::checkPropertiesForPrefilterConstruction(rightChild);

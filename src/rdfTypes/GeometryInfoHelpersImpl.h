@@ -79,14 +79,7 @@ inline ParseResult parseWkt(const std::string_view& wkt) {
   auto wktLiteral = removeDatatype(wkt);
   std::optional<ParsedWkt> parsed = std::nullopt;
   auto type = getWKTType(wktLiteral);
-  static constexpr auto NONE = util::geo::WKTType::NONE;
-  static constexpr auto POINT = util::geo::WKTType::POINT;
-  static constexpr auto LINESTRING = util::geo::WKTType::LINESTRING;
-  static constexpr auto POLYGON = util::geo::WKTType::POLYGON;
-  static constexpr auto MULTIPOINT = util::geo::WKTType::MULTIPOINT;
-  static constexpr auto MULTILINESTRING = util::geo::WKTType::MULTILINESTRING;
-  static constexpr auto MULTIPOLYGON = util::geo::WKTType::MULTIPOLYGON;
-  static constexpr auto COLLECTION = util::geo::WKTType::COLLECTION;
+  using enum WKTType;
   try {
     switch (type) {
       case POINT:
@@ -291,18 +284,7 @@ struct MetricLengthVisitor {
   CPP_template(typename T)(
       requires ad_utility::SimilarTo<T, AnyGeometry<CoordType>>) double
   operator()(const T& geom) const {
-    static constexpr auto POINT = ad_utility::detail::AnyGeometryMember::POINT;
-    static constexpr auto LINE = ad_utility::detail::AnyGeometryMember::LINE;
-    static constexpr auto POLYGON =
-        ad_utility::detail::AnyGeometryMember::POLYGON;
-    static constexpr auto MULTILINE =
-        ad_utility::detail::AnyGeometryMember::MULTILINE;
-    static constexpr auto MULTIPOLYGON =
-        ad_utility::detail::AnyGeometryMember::MULTIPOLYGON;
-    static constexpr auto COLLECTION =
-        ad_utility::detail::AnyGeometryMember::COLLECTION;
-    static constexpr auto MULTIPOINT =
-        ad_utility::detail::AnyGeometryMember::MULTIPOINT;
+    using enum AnyGeometryMember;
     // `AnyGeometry` is a class from `pb_util`. It does not operate on an enum,
     // this is why we use our own enum here. The correct matching of the integer
     // identifiers for the geometry types with this enum is tested in

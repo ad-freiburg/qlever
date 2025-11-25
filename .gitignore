@@ -1,7 +1,8 @@
 # Build directory
 build/
 build-gcc-9/
-cmake-buid*
+build-gcc-8/
+cmake-build*
 
 # End-to-End data
 e2e_data/*

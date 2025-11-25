@@ -630,12 +630,7 @@ template <typename AddedIndexScanFunction>
 void QueryPlanner::indexScanSingleVarCase(
     const SparqlTripleSimple& triple,
     const AddedIndexScanFunction& addIndexScan) const {
-  static constexpr auto PSO = Permutation::Enum::PSO;
-  static constexpr auto POS = Permutation::Enum::POS;
-  static constexpr auto SPO = Permutation::Enum::SPO;
-  static constexpr auto SOP = Permutation::Enum::SOP;
-  static constexpr auto OPS = Permutation::Enum::OPS;
-  static constexpr auto OSP = Permutation::Enum::OSP;
+  using enum Permutation::Enum;
 
   if (triple.s_.isVariable()) {
     addIndexScan(POS);
@@ -651,12 +646,7 @@ template <typename AddedIndexScanFunction, typename AddedFilter>
 void QueryPlanner::indexScanTwoVarsCase(
     const SparqlTripleSimple& triple,
     const AddedIndexScanFunction& addIndexScan, const AddedFilter& addFilter) {
-  static constexpr auto PSO = Permutation::Enum::PSO;
-  static constexpr auto POS = Permutation::Enum::POS;
-  static constexpr auto SPO = Permutation::Enum::SPO;
-  static constexpr auto SOP = Permutation::Enum::SOP;
-  static constexpr auto OPS = Permutation::Enum::OPS;
-  static constexpr auto OSP = Permutation::Enum::OSP;
+  using enum Permutation::Enum;
 
   // Replace the position of the `triple` that is specified by the
   // `rewritePosition` with a new variable, and add a filter, that checks the
@@ -708,12 +698,7 @@ template <typename AddedIndexScanFunction, typename AddedFilter>
 void QueryPlanner::indexScanThreeVarsCase(
     const SparqlTripleSimple& triple,
     const AddedIndexScanFunction& addIndexScan, const AddedFilter& addFilter) {
-  static constexpr auto PSO = Permutation::Enum::PSO;
-  static constexpr auto POS = Permutation::Enum::POS;
-  static constexpr auto SPO = Permutation::Enum::SPO;
-  static constexpr auto SOP = Permutation::Enum::SOP;
-  static constexpr auto OPS = Permutation::Enum::OPS;
-  static constexpr auto OSP = Permutation::Enum::OSP;
+  using enum Permutation::Enum;
   AD_CONTRACT_CHECK(!_qec || _qec->getIndex().hasAllPermutations(),
                     "With only 2 permutations registered (no -a option), "
                     "triples should have at most two variables.");
@@ -832,12 +817,7 @@ auto QueryPlanner::seedWithScansAndText(
       seeds.push_back(std::move(plan));
     };
 
-    static constexpr auto PSO = Permutation::Enum::PSO;
-    static constexpr auto POS = Permutation::Enum::POS;
-    static constexpr auto SPO = Permutation::Enum::SPO;
-    static constexpr auto SOP = Permutation::Enum::SOP;
-    static constexpr auto OPS = Permutation::Enum::OPS;
-    static constexpr auto OSP = Permutation::Enum::OSP;
+    using enum Permutation::Enum;
 
     if (node.isTextNode()) {
       seeds.push_back(getTextLeafPlan(node, textLimits));
@@ -965,10 +945,7 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromPropertyPath(
       },
       [this, &left, &right](const std::vector<PropertyPath>& children,
                             PropertyPath::Modifier modifier) {
-        static constexpr auto SEQUENCE = PropertyPath::Modifier::SEQUENCE;
-        static constexpr auto ALTERNATIVE = PropertyPath::Modifier::ALTERNATIVE;
-        static constexpr auto INVERSE = PropertyPath::Modifier::INVERSE;
-        static constexpr auto NEGATED = PropertyPath::Modifier::NEGATED;
+        using enum PropertyPath::Modifier;
         switch (modifier) {
           case ALTERNATIVE:
             return seedFromAlternative(left, children, right);

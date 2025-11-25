@@ -39,17 +39,7 @@ class RuntimeInformation {
     failedBecauseChildFailed,
     cancelled
   };
-  static constexpr auto notStarted = RuntimeInformation::Status::notStarted;
-  static constexpr auto inProgress = RuntimeInformation::Status::inProgress;
-  static constexpr auto fullyMaterialized =
-      RuntimeInformation::Status::fullyMaterialized;
-  static constexpr auto lazilyMaterialized =
-      RuntimeInformation::Status::lazilyMaterialized;
-  static constexpr auto optimizedOut = RuntimeInformation::Status::optimizedOut;
-  static constexpr auto failed = RuntimeInformation::Status::failed;
-  static constexpr auto failedBecauseChildFailed =
-      RuntimeInformation::Status::failedBecauseChildFailed;
-  static constexpr auto cancelled = RuntimeInformation::Status::cancelled;
+  using enum Status;
 
   // Public members
 

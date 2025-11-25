@@ -56,10 +56,7 @@ VariableToColumnMap Values::computeVariableToColumnMap() const {
   }
   VariableToColumnMap map;
   for (size_t i = 0; i < parsedValues_._variables.size(); i++) {
-    static constexpr auto AlwaysDefined =
-        ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
-    static constexpr auto PossiblyUndefined =
-        ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined;
+    using enum ColumnIndexAndTypeInfo::UndefStatus;
     auto undefStatus = static_cast<bool>(colContainsUndef.at(i))
                            ? PossiblyUndefined
                            : AlwaysDefined;

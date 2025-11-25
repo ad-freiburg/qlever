@@ -1509,12 +1509,7 @@ IndexImpl::NumNormalAndInternal IndexImpl::numTriples() const {
 
 // ____________________________________________________________________________
 IndexImpl::PermutationPtr IndexImpl::getPermutationPtr(Permutation::Enum p) {
-  static constexpr auto PSO = Permutation::Enum::PSO;
-  static constexpr auto POS = Permutation::Enum::POS;
-  static constexpr auto SPO = Permutation::Enum::SPO;
-  static constexpr auto SOP = Permutation::Enum::SOP;
-  static constexpr auto OPS = Permutation::Enum::OPS;
-  static constexpr auto OSP = Permutation::Enum::OSP;
+  using enum Permutation::Enum;
   switch (p) {
     case PSO:
       return pso_;

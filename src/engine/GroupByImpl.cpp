@@ -1194,14 +1194,7 @@ GroupByImpl::findAggregates(sparqlExpression::SparqlExpression* expr) {
 // _____________________________________________________________________________
 std::optional<GroupByImpl::HashMapAggregateTypeWithData>
 GroupByImpl::isSupportedAggregate(sparqlExpression::SparqlExpression* expr) {
-  static constexpr auto AVG = GroupByImpl::HashMapAggregateType::AVG;
-  static constexpr auto COUNT = GroupByImpl::HashMapAggregateType::COUNT;
-  static constexpr auto MIN = GroupByImpl::HashMapAggregateType::MIN;
-  static constexpr auto MAX = GroupByImpl::HashMapAggregateType::MAX;
-  static constexpr auto SUM = GroupByImpl::HashMapAggregateType::SUM;
-  static constexpr auto GROUP_CONCAT =
-      GroupByImpl::HashMapAggregateType::GROUP_CONCAT;
-  static constexpr auto SAMPLE = GroupByImpl::HashMapAggregateType::SAMPLE;
+  using enum HashMapAggregateType;
   using namespace sparqlExpression;
 
   // `expr` is not a distinct aggregate

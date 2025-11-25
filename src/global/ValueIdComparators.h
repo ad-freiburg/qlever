@@ -42,26 +42,20 @@ enum struct ComparisonResult { False, True, Undef };
 // Convert the comparison result to a boolean value, assuming that it is not
 // `Undef`.
 inline bool toBoolNotUndef(ComparisonResult comparisonResult) {
-  static constexpr auto False = valueIdComparators::ComparisonResult::False;
-  static constexpr auto True = valueIdComparators::ComparisonResult::True;
-  static constexpr auto Undef = valueIdComparators::ComparisonResult::Undef;
+  using enum ComparisonResult;
   AD_EXPENSIVE_CHECK(comparisonResult != Undef);
   return comparisonResult == True;
 }
 
 // Convert a bool to a ternary `ComparisonResult`.
 inline ComparisonResult fromBool(bool b) {
-  static constexpr auto False = valueIdComparators::ComparisonResult::False;
-  static constexpr auto True = valueIdComparators::ComparisonResult::True;
-  static constexpr auto Undef = valueIdComparators::ComparisonResult::Undef;
+  using enum ComparisonResult;
   return b ? True : False;
 }
 
 // Convert a `ComparisonResult` to a `ValueId`.
 inline ValueId toValueId(ComparisonResult comparisonResult) {
-  static constexpr auto False = valueIdComparators::ComparisonResult::False;
-  static constexpr auto True = valueIdComparators::ComparisonResult::True;
-  static constexpr auto Undef = valueIdComparators::ComparisonResult::Undef;
+  using enum ComparisonResult;
   switch (comparisonResult) {
     case False:
       return ValueId::makeFromBool(false);
@@ -504,14 +498,9 @@ template <ComparisonForIncompatibleTypes comparisonForIncompatibleTypes =
 ComparisonResult compareIdsImpl(ValueId a, ValueId b, Comparator comparator) {
   Datatype typeA = a.getDatatype();
   Datatype typeB = b.getDatatype();
-  static constexpr auto False = valueIdComparators::ComparisonResult::False;
-  static constexpr auto True = valueIdComparators::ComparisonResult::True;
-  static constexpr auto Undef = valueIdComparators::ComparisonResult::Undef;
+  using enum ComparisonResult;
   if (!areTypesCompatible(typeA, typeB)) {
-    static constexpr auto CompareByType =
-        valueIdComparators::ComparisonForIncompatibleTypes::CompareByType;
-    static constexpr auto AlwaysUndef =
-        valueIdComparators::ComparisonForIncompatibleTypes::AlwaysUndef;
+    using enum ComparisonForIncompatibleTypes;
     if constexpr (comparisonForIncompatibleTypes == CompareByType) {
       return fromBool(comparator(a.getDatatype(), b.getDatatype()));
     } else {
@@ -589,12 +578,7 @@ inline ComparisonResult compareIds(ValueId a, ValueId b,
     }
   };
 
-  static constexpr auto LT = valueIdComparators::Comparison::LT;
-  static constexpr auto LE = valueIdComparators::Comparison::LE;
-  static constexpr auto EQ = valueIdComparators::Comparison::EQ;
-  static constexpr auto NE = valueIdComparators::Comparison::NE;
-  static constexpr auto GE = valueIdComparators::Comparison::GE;
-  static constexpr auto GT = valueIdComparators::Comparison::GT;
+  using enum Comparison;
   switch (comparison) {
     case LT:
       return compare(std::less{});
@@ -636,12 +620,7 @@ inline ComparisonResult compareWithEqualIds(ValueId a, ValueId bBegin,
                a, bBegin, std::greater_equal<>())) &&
            toBoolNotUndef(detail::compareIdsImpl<mode>(a, bEnd, std::less<>()));
   };
-  static constexpr auto LT = valueIdComparators::Comparison::LT;
-  static constexpr auto LE = valueIdComparators::Comparison::LE;
-  static constexpr auto EQ = valueIdComparators::Comparison::EQ;
-  static constexpr auto NE = valueIdComparators::Comparison::NE;
-  static constexpr auto GE = valueIdComparators::Comparison::GE;
-  static constexpr auto GT = valueIdComparators::Comparison::GT;
+  using enum Comparison;
   switch (comparison) {
     case LT:
       return detail::compareIdsImpl<mode>(a, bBegin, std::less<>());
