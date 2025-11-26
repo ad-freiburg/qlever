@@ -44,7 +44,7 @@ std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
                 },
                 &CompressedBlockMetadata::lastTriple_) -
             blockMetadata.begin();
-        out.emplace_back(blockIndex, triple, insertOrDelete);
+        out.push_back({blockIndex, triple, insertOrDelete});
       },
       [&cancellationHandle]() { cancellationHandle->throwIfCancelled(); });
 
@@ -96,25 +96,24 @@ CPP_template(size_t numIndexColumns, bool includeGraphColumn,
 // `numIndexColumns` is `2` and `includeGraphColumn` is `true`, the function
 // returns `std::tie(ids_[1], ids_[2], ids_[3])`, where `ids_` is from
 // `lt->triple_`.
+template <size_t numIndexColumns, bool includeGraphColumn>
+static constexpr auto tieLocatedTriplesIndices = []() {
+  std::array<size_t, numIndexColumns + static_cast<size_t>(includeGraphColumn)>
+      a{};
+  for (size_t i = 0; i < a.size(); ++i) {
+    a[i] = i + (3 - numIndexColumns);
+  }
+  return a;
+}();
 CPP_template(size_t numIndexColumns, bool includeGraphColumn,
              typename T)(requires(numIndexColumns >= 1 &&
                                   numIndexColumns <=
                                       3)) auto tieLocatedTriple(T& lt) {
-  constexpr auto indices = []() {
-    std::array<size_t,
-               numIndexColumns + static_cast<size_t>(includeGraphColumn)>
-        a;
-    for (size_t i = 0; i < numIndexColumns; ++i) {
-      a[i] = 3 - numIndexColumns + i;
-    }
-    if (includeGraphColumn) {
-      // The graph column resides at index `3` of the located triple.
-      a.back() = 3;
-    }
-    return a;
-  }();
   auto& ids = lt->triple_.ids();
-  return tieHelper(ids, ad_utility::toIntegerSequence<indices>());
+  return tieHelper(
+      ids,
+      ad_utility::toIntegerSequenceRef<
+          tieLocatedTriplesIndices<numIndexColumns, includeGraphColumn>>());
 }
 
 // ____________________________________________________________________________
@@ -247,10 +246,6 @@ std::vector<LocatedTriples::iterator> LocatedTriplesPerBlock::add(
   }
 
   tracer.endTrace("adding");
-  tracer.beginTrace("updateMetadata");
-  updateAugmentedMetadata();
-  tracer.endTrace("updateMetadata");
-
   return handles;
 }
 

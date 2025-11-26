@@ -144,7 +144,7 @@ class Operation {
 
   const Index& getIndex() const { return _executionContext->getIndex(); }
 
-  const auto& locatedTriplesSnapshot() const {
+  virtual const LocatedTriplesSnapshot& locatedTriplesSnapshot() const {
     return _executionContext->locatedTriplesSnapshot();
   }
 
@@ -298,6 +298,10 @@ class Operation {
     // If `supportsLimitOffset()` returns `false`, this function has to be
     // no-op.
   }
+
+  // This function is called when the operation's result is requested to be
+  // cached and pinned to a name.
+  void storeToNamedResultCache(const Result& result);
 
  public:
   // Set the value of the `LIMIT`/`OFFSET` clause that will be applied to the

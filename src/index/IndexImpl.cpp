@@ -130,7 +130,7 @@ static auto lazyOptionalJoinOnFirstColumn(T1& leftInput, T2& rightInput,
       std::move(outputTable),
       std::make_shared<ad_utility::CancellationHandle<>>(),
       true,
-      BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP,
+      BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP(),
       resultCallback};
 
   ad_utility::zipperJoinForBlocksWithoutUndef(leftInput, rightInput, comparator,
@@ -156,7 +156,7 @@ static auto fixBlockAfterPatternJoin(T block) {
   // The permutation must be the inverse of the original permutation, which just
   // switches the third column (the object) into the first column (where the
   // join column is expected by the algorithms).
-  static constexpr auto permutation =
+  static QL_CONSTEXPR auto permutation =
       makePermutationFirstThirdSwitched<NumColumnsIndexBuilding + 2>();
   block.value().setColumnSubset(permutation);
   ql::ranges::for_each(
@@ -179,11 +179,26 @@ IndexImpl::buildOspWithPatterns(
   // We need the patterns twice: once for the additional column, and once for
   // the additional permutation.
   hasPatternPredicateSortedByPSO->moveResultOnMerge() = false;
-  // The column with index 1 always is `has-predicate` and is not needed here.
-  // Note that the order of the columns during index building  is always `SPO`,
-  // but the sorting might be different (PSO in this case).
-  auto lazyPatternScan = lazyScanWithPermutedColumns(
-      hasPatternPredicateSortedByPSO, std::array<ColumnIndex, 2>{0, 2});
+
+  // Lambda that creates and returns a generator that reads the `has-pattern`
+  // relation. Only reads columns 0 and 2 (subject and object pattern), since
+  // column 1 is always the `has-pattern` predicate. The relation is sorted by
+  // PSO, so the result is sorted by subject and then object.
+  //
+  // NOTE: We will iterate over the `hasPatternPredicateSortedByPSO` twice. It
+  // is important that the respective generators are not active at the same
+  // time, otherwise the assertion `!mergeIsActive_.load()` in
+  // `CompressedExternalIdTableSorter::getSortedBlocks` will fail. We therefore
+  // scope the lifetime of this generator inside the `joinWithPatternThread`.
+  // That is, when we are done with the join (which we now explicitly wait
+  // for before starting the second generator, see below), the generator is
+  // destroyed.
+  auto getLazyPatternScan = [&]() {
+    return lazyScanWithPermutedColumns(hasPatternPredicateSortedByPSO,
+                                       std::array<ColumnIndex, 2>{0, 2});
+  };
+
+  // Create a producer-consumer queue with space for up to four `IdTable`s.
   ad_utility::data_structures::ThreadSafeQueue<IdTable> queue{4};
 
   // The permutation (2, 1, 0, 3) switches the third column (the object) with
@@ -198,13 +213,14 @@ IndexImpl::buildOspWithPatterns(
   // predicate on a background thread. The result will be pushed to the `queue`
   // so that we can consume it asynchronously.
   ad_utility::JThread joinWithPatternThread{
-      [&queue, &ospAsBlocksTransformed, &lazyPatternScan] {
+      [&queue, &ospAsBlocksTransformed,
+       lazyPatternScan = getLazyPatternScan()]() mutable {
         // Setup the callback for the join that will buffer the results and push
         // them to the queue.
         IdTable outputBufferTable{NumColumnsIndexBuilding + 2,
                                   ad_utility::makeUnlimitedAllocator<Id>()};
         auto pushToQueue = [&, bufferSize =
-                                   BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP.load()](
+                                   BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP().load()](
                                IdTable& table, LocalVocab&) {
           if (table.numRows() >= bufferSize) {
             if (!outputBufferTable.empty()) {
@@ -255,6 +271,7 @@ IndexImpl::buildOspWithPatterns(
       makeSorterPtr<ThirdPermutation, NumColumnsIndexBuilding + 2>("third");
   createSecondPermutationPair(NumColumnsIndexBuilding + 2,
                               std::move(blockGenerator), *thirdSorter);
+  joinWithPatternThread.join();
   secondSorter->clear();
   // Add the `ql:has-pattern` predicate to the sorter such that it will become
   // part of the PSO and POS permutation.
@@ -777,7 +794,7 @@ auto IndexImpl::convertPartialToGlobalIds(
   for (auto& mapping : mappings) {
     auto idMap = std::make_shared<Map>(std::move(mapping));
 
-    const size_t bufferSize = BUFFER_SIZE_PARTIAL_TO_GLOBAL_ID_MAPPINGS;
+    const size_t bufferSize = BUFFER_SIZE_PARTIAL_TO_GLOBAL_ID_MAPPINGS();
     Buffer buffer{ad_utility::makeUnlimitedAllocator<Id>()};
     buffer.reserve(bufferSize);
     auto pushBatch = [&buffer, &idMap, &lookupQueue, &getLookupTask,
@@ -941,15 +958,15 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
           deltaTriples.setOriginalMetadata(p.permutation(),
                                            p.metaData().blockDataShared());
         },
-        false);
+        false, false);
   };
 
   auto load = [this, &isInternalId, &setMetadata](
-                  Permutation& permutation,
+                  PermutationPtr permutation,
                   bool loadInternalPermutation = false) {
-    permutation.loadFromDisk(onDiskBase_, isInternalId,
-                             loadInternalPermutation);
-    setMetadata(permutation);
+    permutation->loadFromDisk(onDiskBase_, isInternalId,
+                              loadInternalPermutation);
+    setMetadata(*permutation);
   };
 
   load(pso_, true);
@@ -1030,12 +1047,12 @@ bool IndexImpl::isLiteral(std::string_view object) const {
 
 // _____________________________________________________________________________
 void IndexImpl::setKbName(const std::string& name) {
-  pos_.setKbName(name);
-  pso_.setKbName(name);
-  sop_.setKbName(name);
-  spo_.setKbName(name);
-  ops_.setKbName(name);
-  osp_.setKbName(name);
+  pos_->setKbName(name);
+  pso_->setKbName(name);
+  sop_->setKbName(name);
+  spo_->setKbName(name);
+  ops_->setKbName(name);
+  osp_->setKbName(name);
 }
 
 // ____________________________________________________________________________
@@ -1491,7 +1508,7 @@ IndexImpl::NumNormalAndInternal IndexImpl::numTriples() const {
 }
 
 // ____________________________________________________________________________
-Permutation& IndexImpl::getPermutation(Permutation::Enum p) {
+IndexImpl::PermutationPtr IndexImpl::getPermutationPtr(Permutation::Enum p) {
   using enum Permutation::Enum;
   switch (p) {
     case PSO:
@@ -1511,8 +1528,19 @@ Permutation& IndexImpl::getPermutation(Permutation::Enum p) {
 }
 
 // ____________________________________________________________________________
+Permutation& IndexImpl::getPermutation(Permutation::Enum p) {
+  return *getPermutationPtr(p);
+}
+
+// ____________________________________________________________________________
 const Permutation& IndexImpl::getPermutation(Permutation::Enum p) const {
   return const_cast<IndexImpl&>(*this).getPermutation(p);
+}
+
+// ____________________________________________________________________________
+std::shared_ptr<const Permutation> IndexImpl::getPermutationPtr(
+    Permutation::Enum p) const {
+  return const_cast<IndexImpl&>(*this).getPermutationPtr(p);
 }
 
 // __________________________________________________________________________
@@ -1609,11 +1637,10 @@ Index::Vocab::PrefixRanges IndexImpl::prefixRanges(
 
 // _____________________________________________________________________________
 std::vector<float> IndexImpl::getMultiplicities(
-    const TripleComponent& key, Permutation::Enum permutation,
+    const TripleComponent& key, const Permutation& permutation,
     const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
   if (auto keyId = key.toValueId(getVocab(), encodedIriManager())) {
-    auto meta = getPermutation(permutation)
-                    .getMetadata(keyId.value(), locatedTriplesSnapshot);
+    auto meta = permutation.getMetadata(keyId.value(), locatedTriplesSnapshot);
     if (meta.has_value()) {
       return {meta.value().getCol1Multiplicity(),
               meta.value().getCol2Multiplicity()};
@@ -1624,13 +1651,12 @@ std::vector<float> IndexImpl::getMultiplicities(
 
 // _____________________________________________________________________________
 std::vector<float> IndexImpl::getMultiplicities(
-    Permutation::Enum permutation) const {
-  const auto& p = getPermutation(permutation);
+    const Permutation& permutation) const {
   auto numTriples = static_cast<float>(this->numTriples().normal);
   std::array multiplicities{numTriples / numDistinctSubjects().normal,
                             numTriples / numDistinctPredicates().normal,
                             numTriples / numDistinctObjects().normal};
-  auto permuted = p.keyOrder().permuteTriple(multiplicities);
+  auto permuted = permutation.keyOrder().permuteTriple(multiplicities);
   return {permuted.begin(), permuted.end()};
 }
 
@@ -1716,7 +1742,7 @@ CPP_template_def(typename... NextSorter)(requires(
   size_t numPredicatesNormal = 0;
   auto predicateCounter = makeNumDistinctIdsCounter<1>(numPredicatesNormal);
   size_t numPredicatesTotal =
-      createPermutationPair(numColumns, AD_FWD(sortedTriples), pso_, pos_,
+      createPermutationPair(numColumns, AD_FWD(sortedTriples), *pso_, *pos_,
                             nextSorter.makePushCallback()...,
                             std::ref(predicateCounter), countTriplesNormal);
   configurationJson_["num-predicates"] =
@@ -1766,7 +1792,7 @@ CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
       patternCreator.processTriple(tripleArr, ignoreForPatterns);
     };
     numSubjectsTotal = createPermutationPair(
-        numColumns, AD_FWD(sortedTriples), spo_, sop_,
+        numColumns, AD_FWD(sortedTriples), *spo_, *sop_,
         nextSorter.makePushCallback()..., pushTripleToPatterns,
         std::ref(numSubjectCounter));
     patternCreator.finish();
@@ -1778,7 +1804,7 @@ CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
   } else {
     AD_CORRECTNESS_CHECK(sizeof...(nextSorter) == 1);
     numSubjectsTotal = createPermutationPair(
-        numColumns, AD_FWD(sortedTriples), spo_, sop_,
+        numColumns, AD_FWD(sortedTriples), *spo_, *sop_,
         nextSorter.makePushCallback()..., std::ref(numSubjectCounter));
     configurationJson_["num-subjects"] =
         NumNormalAndInternal::fromNormalAndTotal(numSubjectsNormal,
@@ -1801,7 +1827,7 @@ CPP_template_def(typename... NextSorter)(
   size_t numObjectsNormal = 0;
   auto objectCounter = makeNumDistinctIdsCounter<2>(numObjectsNormal);
   size_t numObjectsTotal = createPermutationPair(
-      numColumns, AD_FWD(sortedTriples), osp_, ops_,
+      numColumns, AD_FWD(sortedTriples), *osp_, *ops_,
       nextSorter.makePushCallback()..., std::ref(objectCounter));
   configurationJson_["num-objects"] = NumNormalAndInternal::fromNormalAndTotal(
       numObjectsNormal, numObjectsTotal);

@@ -8,6 +8,7 @@
 #define QLEVER_SRC_ENGINE_SPATIALJOINALGORITHMS_H
 
 #include <spatialjoin/Sweeper.h>
+#include <util/geo/Geo.h>
 
 #include <boost/foreach.hpp>
 #include <boost/geometry.hpp>
@@ -74,6 +75,11 @@ using Value = std::pair<Box, RtreeEntry>;
 
 }  // namespace BoostGeometryNamespace
 
+// Forward declaration of s2 classes
+class S2Polyline;
+class S2Point;
+class S2LatLng;
+
 class SpatialJoinAlgorithms {
   using Point = BoostGeometryNamespace::Point;
   using Box = BoostGeometryNamespace::Box;
@@ -88,6 +94,7 @@ class SpatialJoinAlgorithms {
                         std::optional<SpatialJoin*> spatialJoin = std::nullopt);
   Result BaselineAlgorithm();
   Result S2geometryAlgorithm();
+  Result S2PointPolylineAlgorithm();
   Result BoundingBoxAlgorithm();
   Result LibspatialjoinAlgorithm();
 
@@ -155,7 +162,18 @@ class SpatialJoinAlgorithms {
   // number of geometries added. This function is only `public` for testing
   // purposes and should otherwise not be used outside of this class.
   using IdTableAndJoinColumn = std::pair<const IdTable*, const ColumnIndex>;
-  std::pair<util::geo::I32Box, size_t> libspatialjoinParse(
+  struct LibSpatialJoinParseMetadata {
+    // Aggregated bounding box of all parsed geometries
+    util::geo::I32Box aggBoundingBox_;
+    // Number of geometries that were actually parsed excluding prefiltered ones
+    size_t numGeomsParsed_;
+    // Number of geometries dropped by prefilter
+    size_t numGeomsDropped_;
+    // Actual number of threads used (might be lower than result of
+    // `getNumThreads` for small inputs)
+    size_t numThreadsUsed_;
+  };
+  LibSpatialJoinParseMetadata libspatialjoinParse(
       bool leftOrRightSide, IdTableAndJoinColumn idTableAndCol,
       sj::Sweeper& sweeper, size_t numThreads,
       std::optional<util::geo::I32Box> prefilterBox) const;
@@ -173,12 +191,18 @@ class SpatialJoinAlgorithms {
   // `LibspatialjoinAlgorithm`.
   static size_t getNumThreads();
 
- private:
   // Helper function which returns a GeoPoint if the element of the given table
   // represents a GeoPoint
-  std::optional<GeoPoint> getPoint(const IdTable* restable, size_t row,
-                                   ColumnIndex col) const;
+  static std::optional<GeoPoint> getPoint(const IdTable* restable, size_t row,
+                                          ColumnIndex col);
 
+  // Helper function to retrieve and parse a line string from the given cell of
+  // an `IdTable` and convert it to an `S2Polyline`.
+  static std::optional<S2Polyline> getPolyline(const IdTable& restable,
+                                               size_t row, ColumnIndex col,
+                                               const Index& index);
+
+ private:
   // returns everything between the first two quotes. If the string does not
   // contain two quotes, the string is returned as a whole
   std::string_view betweenQuotes(std::string_view extractFrom) const;

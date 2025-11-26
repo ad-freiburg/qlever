@@ -1,6 +1,6 @@
-//   Copyright 2025, University of Freiburg,
-//   Chair of Algorithms and Data Structures.
-//   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
+// Copyright 2025, University of Freiburg,
+// Chair of Algorithms and Data Structures.
+// Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 //
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
@@ -83,32 +83,6 @@ inline std::variant<LazyInputView, MaterializedInputView> resultToView(
   return convertGenerator(result.idTables(), permutation);
 }
 
-// Type alias for the general InputRangeTypeErasedWithDetails with specific
-// types
-using GeneratorWithDetails =
-    InputRangeTypeErasedWithDetails<IdTableAndFirstCol<IdTable>,
-                                    CompressedRelationReader::LazyScanMetadata>;
-
-// Convert a `generator<IdTable` to a `generator<IdTableAndFirstCol>` for more
-// efficient access in the join columns below.
-inline GeneratorWithDetails convertGenerator(
-    Permutation::IdTableGenerator gen) {
-  // Store the generator in a wrapper so we can access its details after moving
-  auto generatorStorage =
-      std::make_shared<Permutation::IdTableGenerator>(std::move(gen));
-
-  // Create the range with a pointer to the generator's details
-  auto range = InputRangeTypeErased<IdTableAndFirstCol<IdTable>>(
-      CachingTransformInputRange(
-          *generatorStorage, [generatorStorage](auto& table) {
-            (void)generatorStorage;  // Only captured for lifetime reasons.
-            // IndexScans don't have a local vocabulary, so we can just use an
-            return IdTableAndFirstCol{std::move(table), LocalVocab{}};
-          }));
-
-  return GeneratorWithDetails{std::move(range), generatorStorage->details()};
-}
-
 // Part of the implementation of `createResult`. This function is called when
 // the result should be yielded lazily.
 // Action is a lambda that itself runs the join operation in a blocking
@@ -119,7 +93,7 @@ inline GeneratorWithDetails convertGenerator(
 CPP_template_2(typename ActionT)(
     requires ad_utility::InvocableWithExactReturnType<
         ActionT, Result::IdTableVocabPair,
-        std::function<void(IdTable&, LocalVocab&)>>) Result::Generator
+        std::function<void(IdTable&, LocalVocab&)>>) Result::LazyResult
     runLazyJoinAndConvertToGenerator(ActionT runLazyJoin,
                                      OptionalPermutation permutation) {
   return generatorFromActionWithCallback<Result::IdTableVocabPair>(

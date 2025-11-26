@@ -173,12 +173,19 @@ class IndexImpl {
   // TODO: make those private and allow only const access
   // instantiations for the six permutations used in QLever.
   // They simplify the creation of permutations in the index class.
-  Permutation pos_{Permutation::Enum::POS, allocator_};
-  Permutation pso_{Permutation::Enum::PSO, allocator_};
-  Permutation sop_{Permutation::Enum::SOP, allocator_};
-  Permutation spo_{Permutation::Enum::SPO, allocator_};
-  Permutation ops_{Permutation::Enum::OPS, allocator_};
-  Permutation osp_{Permutation::Enum::OSP, allocator_};
+  using PermutationPtr = std::shared_ptr<Permutation>;
+  PermutationPtr pos_{
+      std::make_shared<Permutation>(Permutation::Enum::POS, allocator_)};
+  PermutationPtr pso_{
+      std::make_shared<Permutation>(Permutation::Enum::PSO, allocator_)};
+  PermutationPtr sop_{
+      std::make_shared<Permutation>(Permutation::Enum::SOP, allocator_)};
+  PermutationPtr spo_{
+      std::make_shared<Permutation>(Permutation::Enum::SPO, allocator_)};
+  PermutationPtr ops_{
+      std::make_shared<Permutation>(Permutation::Enum::OPS, allocator_)};
+  PermutationPtr osp_{
+      std::make_shared<Permutation>(Permutation::Enum::OSP, allocator_)};
 
   // During the index building, store the IDs of the `ql:has-pattern` predicate
   // and of `ql:default-graph` as they are required to add additional triples
@@ -206,18 +213,18 @@ class IndexImpl {
   IndexImpl& operator=(IndexImpl&&) = delete;
   IndexImpl(IndexImpl&&) = delete;
 
-  const auto& POS() const { return pos_; }
-  auto& POS() { return pos_; }
-  const auto& PSO() const { return pso_; }
-  auto& PSO() { return pso_; }
-  const auto& SPO() const { return spo_; }
-  auto& SPO() { return spo_; }
-  const auto& SOP() const { return sop_; }
-  auto& SOP() { return sop_; }
-  const auto& OPS() const { return ops_; }
-  auto& OPS() { return ops_; }
-  const auto& OSP() const { return osp_; }
-  auto& OSP() { return osp_; }
+  const auto& POS() const { return *pos_; }
+  auto& POS() { return *pos_; }
+  const auto& PSO() const { return *pso_; }
+  auto& PSO() { return *pso_; }
+  const auto& SPO() const { return *spo_; }
+  auto& SPO() { return *spo_; }
+  const auto& SOP() const { return *sop_; }
+  auto& SOP() { return *sop_; }
+  const auto& OPS() const { return *ops_; }
+  auto& OPS() { return *ops_; }
+  const auto& OSP() const { return *osp_; }
+  auto& OSP() { return *osp_; }
 
   static const IndexImpl& staticGlobalSingletonIndex() {
     AD_CORRECTNESS_CHECK(globalSingletonIndex_ != nullptr);
@@ -235,9 +242,12 @@ class IndexImpl {
   }
 
   // For a given `Permutation::Enum` (e.g. `PSO`) return the corresponding
-  // `Permutation` object by reference (`pso_`).
+  // `Permutation` object by reference or shared pointer (`pso_`).
   Permutation& getPermutation(Permutation::Enum p);
   const Permutation& getPermutation(Permutation::Enum p) const;
+  PermutationPtr getPermutationPtr(Permutation::Enum p);
+  std::shared_ptr<const Permutation> getPermutationPtr(
+      Permutation::Enum p) const;
 
   // Creates an index from a given set of input files. Will write vocabulary and
   // on-disk index data.
@@ -456,7 +466,7 @@ class IndexImpl {
   }
 
   const std::string& getTextName() const { return textMeta_.getName(); }
-  const std::string& getKbName() const { return pso_.getKbName(); }
+  const std::string& getKbName() const { return PSO().getKbName(); }
   const std::string& getOnDiskBase() const { return onDiskBase_; }
   const std::string& getIndexId() const { return indexId_; }
   const std::string& getGitShortHash() const { return gitShortHash_; }
@@ -472,13 +482,13 @@ class IndexImpl {
 
   bool hasAllPermutations() const { return SPO().isLoaded(); }
 
-  // _____________________________________________________________________________
+  // ___________________________________________________________________________
   std::vector<float> getMultiplicities(
-      const TripleComponent& key, Permutation::Enum permutation,
+      const TripleComponent& key, const Permutation& permutation,
       const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
-  // ___________________________________________________________________
-  std::vector<float> getMultiplicities(Permutation::Enum permutation) const;
+  // ___________________________________________________________________________
+  std::vector<float> getMultiplicities(const Permutation& permutation) const;
 
   // _____________________________________________________________________________
   IdTable scan(const ScanSpecificationAsTripleComponent& scanSpecification,

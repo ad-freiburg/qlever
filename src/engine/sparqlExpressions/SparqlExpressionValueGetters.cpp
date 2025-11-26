@@ -2,7 +2,7 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
-#include "SparqlExpressionValueGetters.h"
+#include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 
 #include <absl/strings/str_format.h>
 
@@ -195,7 +195,7 @@ std::string ReplacementStringGetter::convertToReplacementString(
 }
 
 // ____________________________________________________________________________
-template <auto isSomethingFunction, auto prefix>
+template <auto isSomethingFunction, const auto& prefix>
 Id IsSomethingValueGetter<isSomethingFunction, prefix>::operator()(
     ValueId id, const EvaluationContext* context) const {
   switch (id.getDatatype()) {
@@ -267,7 +267,7 @@ IntDoubleStr ToNumericValueGetter::operator()(
     case Datatype::Double:
       return id.getDouble();
     case Datatype::Bool:
-      return static_cast<int>(id.getBool());
+      return static_cast<int64_t>(id.getBool());
     case Datatype::GeoPoint:
       return id.getGeoPoint().toStringRepresentation();
     case Datatype::VocabIndex:
@@ -549,4 +549,7 @@ template struct GeometryInfoValueGetter<ad_utility::GeometryInfo>;
 template struct GeometryInfoValueGetter<ad_utility::GeometryType>;
 template struct GeometryInfoValueGetter<ad_utility::Centroid>;
 template struct GeometryInfoValueGetter<ad_utility::BoundingBox>;
+template struct GeometryInfoValueGetter<ad_utility::NumGeometries>;
+template struct GeometryInfoValueGetter<ad_utility::MetricLength>;
+template struct GeometryInfoValueGetter<ad_utility::MetricArea>;
 }  // namespace sparqlExpression::detail
