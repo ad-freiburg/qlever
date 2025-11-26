@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include "GraphManager.h"
 #include "engine/Engine.h"
 #include "engine/ExecuteUpdate.h"
 #include "engine/NamedResultCache.h"
@@ -87,6 +88,7 @@ class Server {
   SortPerformanceEstimator sortPerformanceEstimator_;
   Index index_;
   ad_utility::websocket::QueryRegistry queryRegistry_{};
+  GraphManager graphManager_{0};
 
   bool enablePatternTrick_;
 

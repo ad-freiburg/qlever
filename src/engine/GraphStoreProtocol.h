@@ -8,6 +8,7 @@
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include <gtest/gtest_prod.h>
 
+#include "engine/GraphManager.h"
 #include "engine/HttpError.h"
 #include "parser/ParsedQuery.h"
 #include "parser/Quads.h"
@@ -107,8 +108,8 @@ class GraphStoreProtocol {
   // which is an SPARQL Update.
   CPP_template_2(typename RequestT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>) static ParsedQuery
-      transformPost(const RequestT& rawRequest, const GraphOrDefault& graph,
-                    const Index& index) {
+      transformPost(GraphManager& graphManager, const RequestT& rawRequest,
+                    const GraphOrDefault& graph, const Index& index) {
     throwIfRequestBodyEmpty(rawRequest);
     // For a `POST` when the graph identifies the QLever instance itself then
     // the data must be stored in a newly generated graph which is returned in
@@ -127,11 +128,11 @@ class GraphStoreProtocol {
       return false;
     }();
     const GraphOrDefault effectiveGraph =
-        generateNewGraph ? generateGraphIri() : graph;
+        generateNewGraph ? graphManager.getNewInternalGraph() : graph;
     auto triples =
         parseTriples(rawRequest.body(), extractMediatype(rawRequest));
     Quads::BlankNodeAdder bn{{}, {}, index.getBlankNodeManager()};
-    auto convertedTriples = convertTriples(graph, std::move(triples), bn);
+    auto convertedTriples = convertTriples(effectiveGraph, std::move(triples), bn);
     updateClause::GraphUpdate up{std::move(convertedTriples), {}};
     ParsedQuery res;
     parsedQuery::UpdateClause clause{std::move(up)};
@@ -184,10 +185,6 @@ class GraphStoreProtocol {
       vector<ParsedQuery> transformPut(const RequestT& rawRequest,
                                        const GraphOrDefault& graph,
                                        const Index& index) {
-    // TODO: The response codes are not conform to the specs. "If new RDF graph
-    //  content is created", then the status must be `201 Created`. "If
-    //  existing graph content is modified", then the status must be `200 OK`
-    //  or `204 No Content`.
     std::string stringRepresentation =
         truncatedStringRepresentation("PUT", rawRequest);
 
@@ -252,7 +249,8 @@ class GraphStoreProtocol {
       vector<ParsedQuery> transformGraphStoreProtocol(
           ad_utility::url_parser::sparqlOperation::GraphStoreOperation
               operation,
-          const RequestT& rawRequest, const Index& index) {
+          GraphManager& graphManager, const RequestT& rawRequest,
+          const Index& index) {
     ad_utility::url_parser::ParsedUrl parsedUrl =
         ad_utility::url_parser::parseRequestTarget(rawRequest.target());
     using enum boost::beast::http::verb;
@@ -264,7 +262,7 @@ class GraphStoreProtocol {
     } else if (method == "DELETE") {
       return {transformDelete(operation.graph_, index)};
     } else if (method == "POST") {
-      return {transformPost(rawRequest, operation.graph_, index)};
+      return {transformPost(graphManager, rawRequest, operation.graph_, index)};
     } else if (method == "TSOP") {
       // TSOP (`POST` backwards) does the inverse of `POST`. It does a `DELETE
       // DATA` of the payload.
