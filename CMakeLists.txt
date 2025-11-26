@@ -144,7 +144,7 @@ FetchContent_Declare(
 
         # This branch removes some differences in the interface between `range-v3` and `std::ranges` s.t.
         # the former can be used as an (almost) drop-in replacement for the latter.
-        GIT_TAG 59e85898e6540c233e0ac6e3bb0e20177b13812a # branch fork-for-qlever
+        GIT_TAG 42340ef354f7b4e4660268b788e37008d9cc85aa # branch fork-for-qlever
 )
 
 #################################
