@@ -9,6 +9,7 @@
 
 #include <iterator>
 #include <range/v3/iterator/access.hpp>
+#include <range/v3/iterator/move_iterators.hpp>
 
 #include "backports/concepts.h"
 #include "backports/type_traits.h"
