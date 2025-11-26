@@ -435,8 +435,7 @@ struct AddToVariantImpl<std::variant<Ts...>, T> {
 };
 }  // namespace detail
 
-// Adds an additional type `T` to a variant `V`. Use together with
-// `UniqueVariant` if `T` might already be contained in `V`.
+// Adds an additional type `T` to a variant `V`.
 template <class V, class T>
 using AddToVariant = typename detail::AddToVariantImpl<V, T>::type;
 // Examples:
