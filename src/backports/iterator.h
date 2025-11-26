@@ -15,7 +15,10 @@
 
 // Backport types and traits from the `<iterator>` header s.t. they
 // can be used in C++17 using the `ql` namespace, in particular
-// `default_sentinel`, `move_sentinel` and `iter_reference_t`.
+// `default_sentinel`, `move_iterator`, `move_sentinel` and `iter_reference_t`.
+// NOTE: technically `std::move_iterator` is already present in C++11, but
+// combining `std::move_iterator` with `ql::move_sentinel` led to trouble inside
+// `range-v3` in C++17 mode inside QCC8.
 namespace ql {
 
 using ::ranges::move_iterator;
@@ -104,7 +107,6 @@ CPP_template(typename Sent)(
 
 using ::ranges::iter_reference_t;
 using ::ranges::iter_value_t;
-
 }  // namespace ql
 
 #endif  // QLEVER_SRC_BACKPORTS_ITERATOR_H

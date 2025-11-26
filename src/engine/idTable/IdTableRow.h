@@ -10,7 +10,6 @@
 #include <variant>
 #include <vector>
 
-#include "backports/keywords.h"
 #include "backports/three_way_comparison.h"
 #include "backports/type_traits.h"
 #include "global/Id.h"
@@ -68,7 +67,7 @@ class Row {
   CPP_template_2(typename = void)(requires(!isDynamic())) Row(){};
 
   CPP_template_2(typename = void)(requires(!isDynamic())) explicit Row(
-      QL_MAYBE_UNUSED size_t numCols)
+      size_t numCols)
       : Row() {
     (void)numCols;
   }
@@ -461,13 +460,16 @@ class RowReference
     this->assignmentImpl(base(), other);
     return *this;
   }
-  // No need to copy `RowReference`s, because that is also most likely a bug.
-  // Currently none of our functions or of the STL-algorithms require it.
-  // If necessary, we can still enable it in the future.
 
-  // TODO<joka921> Analyze this further, QCC from BMW requires this for concept
-  // checks, can we leave it unimplemented for now for increased safety?
-  RowReference(const RowReference&);
+  // It is technically a bug to copy a row reference, hence we delete the copy
+  // constructor, at least in C++20 mode. However, on older compilers like QCC8,
+  // range-v3 requires not only a declaration, but a definition of the copy
+  // constructor.
+#ifdef QLEVER_CPP_17
+  RowReference(const RowReference&) = default;
+#else
+  RowReference(const RowReference&) = delete;
+#endif
 };
 
 }  // namespace columnBasedIdTable

@@ -2805,7 +2805,7 @@ qlever::index::GraphFilter<TripleComponent> QueryPlanner::getActiveGraphs()
 template <typename Variables>
 bool QueryPlanner::GraphPatternPlanner::handleUnconnectedMinusOrOptional(
     std::vector<SubtreePlan>& candidates, const Variables& variables) {
-  using enum QueryPlanner::SubtreePlan::Type;
+  using enum SubtreePlan::Type;
   bool areVariablesUnconnected = ql::ranges::all_of(
       variables,
       [this](const Variable& var) { return !boundVariables_.contains(var); });
