@@ -59,43 +59,6 @@ double wktDistImpl(GeoPoint point1, GeoPoint point2) {
 }
 
 // ____________________________________________________________________________
-double kilometerToUnit(double kilometers,
-                       std::optional<UnitOfMeasurement> unit) {
-  double multiplicator = 1;
-  if (unit.has_value()) {
-    if (unit.value() == UnitOfMeasurement::METERS) {
-      multiplicator = 1000;
-    } else if (unit.value() == UnitOfMeasurement::KILOMETERS) {
-      multiplicator = 1;
-    } else if (unit.value() == UnitOfMeasurement::MILES) {
-      multiplicator = detail::kilometerToMile;
-    } else {
-      AD_CORRECTNESS_CHECK(unit.value() == UnitOfMeasurement::UNKNOWN);
-      AD_THROW("Unsupported unit of measurement for distance.");
-    }
-  }
-  return multiplicator * kilometers;
-}
-
-// ____________________________________________________________________________
-double valueInUnitToKilometer(double valueInUnit,
-                              std::optional<UnitOfMeasurement> unit) {
-  return valueInUnit / kilometerToUnit(1.0, unit);
-}
-
-// ____________________________________________________________________________
-UnitOfMeasurement iriToUnitOfMeasurement(const std::string_view& iri) {
-  if (iri == UNIT_METER_IRI) {
-    return UnitOfMeasurement::METERS;
-  } else if (iri == UNIT_KILOMETER_IRI) {
-    return UnitOfMeasurement::KILOMETERS;
-  } else if (iri == UNIT_MILE_IRI) {
-    return UnitOfMeasurement::MILES;
-  }
-  return UnitOfMeasurement::UNKNOWN;
-}
-
-// ____________________________________________________________________________
 std::optional<std::string> wktGetGeometryN(std::string_view wkt, int64_t n) {
   auto [type, parsed] = parseWkt(wkt);
   if (!parsed.has_value()) {
