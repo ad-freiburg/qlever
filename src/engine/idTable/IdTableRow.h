@@ -268,23 +268,16 @@ class RowReferenceImpl {
 
     // Equality comparison. Works between two `RowReference`s, but also between
     // a `RowReference` and a `Row` if the number of columns match.
+    // Note: QCC 8.3 doesn't have access to `U::numStaticColumns`.
     template <typename U>
-    // QCC says "U::numStaticColumns is inaccessible in this context".
-    /*
-    CPP_template(typename U)(requires(numStaticColumns ==
-                                      U::numStaticColumns)) bool
-                                      */
+    QL_CONCEPT_OR_NOTHING(requires(numStaticColumns == U::numStaticColumns))
     bool operator==(const U& other) const {
-      // TODO<joka921> Reinstate
-      /*
+      static_assert(numStaticColumns == U::numStaticColumns);
       if constexpr (numStaticColumns == 0) {
-      */
-      if (numColumns() != other.numColumns()) {
-        return false;
+        if (numColumns() != other.numColumns()) {
+          return false;
+        }
       }
-      /*
-      }
-      */
       for (size_t i = 0; i < numColumns(); ++i) {
         if ((*this)[i] != other[i]) {
           return false;
@@ -292,12 +285,8 @@ class RowReferenceImpl {
       }
       return true;
     }
-    /*
-    CPP_template(typename U)(requires(numStaticColumns ==
-                                      U::numStaticColumns)) bool
-                                      */
-    // SAME QCC stuff as above.
     template <typename U>
+    QL_CONCEPT_OR_NOTHING(requires(numStaticColumns == U::numStaticColumns))
     bool operator!=(const U& other) const {
       return !(*this == other);
     }
