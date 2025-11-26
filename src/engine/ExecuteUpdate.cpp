@@ -169,8 +169,8 @@ ExecuteUpdate::computeGraphUpdateQuads(
         updateTriples.reserve(result.idTable().size() *
                               transformedTripleTemplates.size());
 
-        return std::tuple{std::move(transformedTripleTemplates),
-                          std::move(updateTriples), std::move(localVocab)};
+        return std::make_tuple(std::move(transformedTripleTemplates),
+                               std::move(updateTriples), std::move(localVocab));
       };
 
   auto [toInsertTemplates, toInsert, localVocabInsert] =
@@ -207,6 +207,7 @@ ExecuteUpdate::computeGraphUpdateQuads(
 // _____________________________________________________________________________
 void ExecuteUpdate::sortAndRemoveDuplicates(
     std::vector<IdTriple<>>& container) {
+  // TODO<joka921> why doesn't this work with ql::ranges?
   ql::ranges::sort(container);
   container.erase(std::unique(container.begin(), container.end()),
                   container.end());

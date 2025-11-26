@@ -50,8 +50,8 @@ struct VectorWithElementwiseMove : public std::vector<T> {
     ad_utility::terminateIfThrows(
         [&other, self = this] {
           AD_CORRECTNESS_CHECK(self->empty());
-          self->insert(self->end(), std::make_move_iterator(other.begin()),
-                       std::make_move_iterator(other.end()));
+          self->insert(self->end(), ql::make_move_iterator(other.begin()),
+                       ql::make_move_iterator(other.end()));
         },
         "Error happened during the move construction or move assignment of an "
         "IdTable");

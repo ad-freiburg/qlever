@@ -146,8 +146,8 @@ class CompressedExternalIdTableWriter {
                     offset = file.tell();
                     file.write(compressed.data(), compressed.size());
                   });
-              blockMetadata.emplace_back(compressed.size(),
-                                         thisBlockSizeUncompressed, offset);
+              blockMetadata.push_back(
+                  {compressed.size(), thisBlockSizeUncompressed, offset});
             }
           }));
     }
@@ -280,9 +280,10 @@ CPP_class_template(size_t NumStaticCols,
         BlockTransformation,
         IdTableStatic<NumStaticCols>&>)) class CompressedExternalIdTableBase {
  public:
-  using value_type = IdTableStatic<NumStaticCols>::row_type;
-  using reference = IdTableStatic<NumStaticCols>::row_reference;
-  using const_reference = IdTableStatic<NumStaticCols>::const_row_reference;
+  using value_type = typename IdTableStatic<NumStaticCols>::row_type;
+  using reference = typename IdTableStatic<NumStaticCols>::row_reference;
+  using const_reference =
+      typename IdTableStatic<NumStaticCols>::const_row_reference;
   using MemorySize = ad_utility::MemorySize;
 
  protected:
