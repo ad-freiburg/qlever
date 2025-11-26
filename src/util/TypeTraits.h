@@ -425,6 +425,26 @@ static_assert(
     std::is_same_v<UniqueVariant<int, bool>, std::variant<int, bool>>);
 static_assert(std::is_same_v<UniqueVariant<>, std::variant<>>);
 
+namespace detail {
+template <class V, class T>
+struct AddToVariantImpl;
+
+template <class... Ts, class T>
+struct AddToVariantImpl<std::variant<Ts...>, T> {
+  using type = std::variant<Ts..., T>;
+};
+}  // namespace detail
+
+// Adds an additional type `T` to a variant `V`. Use together with
+// `UniqueVariant` if `T` might already be contained in `V`.
+template <class V, class T>
+using AddToVariant = typename detail::AddToVariantImpl<V, T>::type;
+// Examples:
+static_assert(std::is_same_v<AddToVariant<std::variant<int, bool>, double>,
+                             std::variant<int, bool, double>>);
+static_assert(
+    std::is_same_v<AddToVariant<std::variant<>, int>, std::variant<int>>);
+
 }  // namespace ad_utility
 
 #endif  // QLEVER_SRC_UTIL_TYPETRAITS_H

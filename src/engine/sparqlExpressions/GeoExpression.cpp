@@ -66,10 +66,9 @@ NARY_EXPRESSION(MetricLengthExpression, 1,
                 FV<ad_utility::WktMetricLength,
                    GeometryInfoValueGetter<ad_utility::MetricLength>>);
 
-NARY_EXPRESSION(GeometryNExpression, 2,
-                FV<ad_utility::WktGeometryN,
-                   // TODO use GeoPointOrWktValueGetter
-                   LiteralFromIdGetter, IntValueGetter>);
+NARY_EXPRESSION(
+    GeometryNExpression, 2,
+    FV<ad_utility::WktGeometryN, GeoPointOrWktValueGetter, IntValueGetter>);
 
 template <SpatialJoinType Relation>
 NARY_EXPRESSION(
