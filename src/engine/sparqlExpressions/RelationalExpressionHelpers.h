@@ -33,8 +33,8 @@ using ValueType =
 
 // Concept that requires that `T` logically stores numeric values.
 template <typename T>
-CPP_concept StoresNumeric =
-    concepts::integral<ValueType<T>> || ad_utility::FloatingPoint<ValueType<T>>;
+CPP_concept StoresNumeric = concepts::integral<ValueType<T>> ||
+                            ql::concepts::floating_point<ValueType<T>>;
 
 // Concept that requires that `T` logically stores `std::string`s.
 template <typename T>
@@ -108,7 +108,9 @@ constexpr Comparison getComparisonForSwappedArguments(Comparison comp) {
     case Comparison::GT:
       return Comparison::LT;
   }
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   AD_FAIL();
+#endif
 }
 
 // Return the ID range `[begin, end)` in which the entries of the vocabulary

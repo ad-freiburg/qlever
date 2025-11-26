@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "backports/three_way_comparison.h"
 #include "global/Id.h"
 #include "index/InputFileSpecification.h"
 #include "index/Permutation.h"
@@ -41,8 +42,12 @@ class Index {
   struct NumNormalAndInternal {
     size_t normal{};
     size_t internal{};
+
     size_t normalAndInternal_() const { return normal + internal; }
-    bool operator==(const NumNormalAndInternal&) const = default;
+
+    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(NumNormalAndInternal, normal,
+                                                internal)
+
     static NumNormalAndInternal fromNormalAndTotal(size_t normal,
                                                    size_t total) {
       AD_CONTRACT_CHECK(total >= normal);
@@ -103,6 +108,7 @@ class Index {
 
   using Vocab = RdfsVocabulary;
   const Vocab& getVocab() const;
+  const EncodedIriManager& encodedIriManager() const;
   Vocab& getNonConstVocabForTesting();
 
   using TextVocab = TextVocabulary;
@@ -217,13 +223,13 @@ class Index {
 
   bool hasAllPermutations() const;
 
-  // _____________________________________________________________________________
+  // ___________________________________________________________________________
   std::vector<float> getMultiplicities(
-      const TripleComponent& key, Permutation::Enum permutation,
+      const TripleComponent& key, const Permutation& permutation,
       const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
-  // ___________________________________________________________________
-  std::vector<float> getMultiplicities(Permutation::Enum p) const;
+  // ___________________________________________________________________________
+  std::vector<float> getMultiplicities(const Permutation& permutation) const;
 
   /**
    * @brief Perform a scan for one or two keys i.e. retrieve all YZ from the XYZ

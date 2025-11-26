@@ -7,8 +7,7 @@
 
 #include <absl/strings/str_join.h>
 
-#include <ranges>
-
+#include "backports/StartsWithAndEndsWith.h"
 #include "util/Exception.h"
 #include "util/Log.h"
 #include "util/TransparentFunctors.h"
@@ -62,7 +61,7 @@ void RuntimeInformation::formatDetailValue(std::ostream& out,
   } else {
     out << value;
   }
-  if (key.ends_with("Time")) {
+  if (ql::ends_with(key, "Time")) {
     out << " ms";
   }
 }
@@ -152,8 +151,8 @@ std::chrono::microseconds RuntimeInformation::getOperationTime() const {
         children_ | ql::views::transform(&RuntimeInformation::totalTime_);
     // Prevent "negative" computation times in case totalTime_ was not
     // computed for this yet.
-    return std::max(0us, totalTime_ - std::reduce(timesOfChildren.begin(),
-                                                  timesOfChildren.end(), 0us));
+    return std::max(0us,
+                    totalTime_ - ::ranges::accumulate(timesOfChildren, 0us));
   }
 }
 

@@ -25,8 +25,10 @@
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "engine/sparqlExpressions/StringExpressions.cpp"
 #include "rdfTypes/GeoPoint.h"
+#include "rdfTypes/GeometryInfo.h"
 #include "util/AllocatorTestHelpers.h"
 #include "util/Conversions.h"
+#include "util/GeoSparqlHelpers.h"
 
 namespace {
 
@@ -255,7 +257,7 @@ auto testNaryExpression = [](auto&& makeExpression,
 template <auto makeFunction>
 auto testBinaryExpressionCommutative =
     [](const auto& expected, const auto& op1, const auto& op2,
-       source_location l = source_location::current()) {
+       source_location l = AD_CURRENT_SOURCE_LOC()) {
       CPP_assert(SingleExpressionResult<decltype(expected)> &&
                  SingleExpressionResult<decltype(op1)> &&
                  SingleExpressionResult<decltype(op2)>);
@@ -272,7 +274,7 @@ template <auto makeFunction>
 struct TestNaryExpressionVec {
   template <VectorOrExpressionResult Exp, VectorOrExpressionResult... Ops>
   void operator()(Exp expected, std::tuple<Ops...> ops,
-                  source_location l = source_location::current()) {
+                  source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto t = generateLocationTrace(l, "testBinaryExpressionVec");
 
     std::apply(
@@ -465,7 +467,9 @@ TEST(SparqlExpression, arithmeticOperators) {
   testDivide(undef, divByZeroInputsDouble, D(0));
   testDivide(undef, divByZeroInputsInt, D(0));
 
-  auto cleanup = setRuntimeParameterForTest<"division-by-zero-is-undef">(false);
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::divisionByZeroIsUndef_>(
+          false);
   testDivide(nanAndInf, divByZeroInputsDouble, I(0));
   testDivide(nanAndInf, divByZeroInputsInt, I(0));
   testDivide(nanAndInf, divByZeroInputsDouble, D(0));
@@ -477,7 +481,7 @@ TEST(SparqlExpression, arithmeticOperators) {
 template <auto makeFunction>
 auto testUnaryExpression = [](VectorOrExpressionResult auto const& operand,
                               VectorOrExpressionResult auto const& expected,
-                              source_location l = source_location::current()) {
+                              source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
   testNaryExpression(makeFunction, expected, operand);
 };
@@ -502,7 +506,7 @@ TEST(SparqlExpression, dateOperators) {
                    std::optional<int> expectedHours = std::nullopt,
                    std::optional<int> expectedMinutes = std::nullopt,
                    std::optional<double> expectedSeconds = std::nullopt,
-                   std::source_location l = std::source_location::current()) {
+                   ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
     auto optToIdInt = [](const auto& opt) {
       if (opt.has_value()) {
@@ -635,8 +639,9 @@ TEST(SparqlExpression, stringOperators) {
       Ids{I(3), I(1), I(3), I(0)});
   checkStr(Ids{I(1), I(2), I(3)},
            IdOrLiteralOrIriVec{lit("1"), lit("2"), lit("3")});
-  checkStr(Ids{D(-1.0), D(1.0), D(2.34)},
-           IdOrLiteralOrIriVec{lit("-1"), lit("1"), lit("2.34")});
+  checkStr(Ids{D(-1.0), D(1.0), D(2.34), D(NAN), D(INFINITY), D(-INFINITY)},
+           IdOrLiteralOrIriVec{lit("-1"), lit("1"), lit("2.34"), lit("NaN"),
+                               lit("INF"), lit("-INF")});
   checkStr(Ids{B(true), B(false), Id::makeBoolFromZeroOrOne(true),
                Id::makeBoolFromZeroOrOne(false)},
            IdOrLiteralOrIriVec{lit("true"), lit("false"), lit("true"),
@@ -1404,21 +1409,103 @@ TEST(SparqlExpression, geoSparqlExpressions) {
   auto checkMaxY =
       testUnaryExpression<&makeBoundingCoordinateExpression<MAX_Y>>;
 
-  const IdOrLiteralOrIriVec boundingCoordInputs{
+  const IdOrLiteralOrIriVec exampleGeoms{
       U,
       D(0.0),
       v,  // POINT(24.3, 26.8)
       geoLit("LINESTRING(2 8, 4 6)"),
       geoLit("POLYGON((2 4, 4 4, 4 2, 2 2, 2 4))"),
-      lit("BLABLIBLU(1 1, 2 2)")
-      // TODO<ullingerc> Handle invalid geo literals gracefully. Then add
-      // geoLit("BLABLIBLU(1 1, 2 2)")
+      lit("BLABLIBLU(1 1, 2 2)"),
+      geoLit("BLABLIBLU(1 1, 2 2)"),
+      geoLit("LINESTRING(-5000 0, 1 2)"),
   };
-  using IdVec = std::vector<ValueId>;
-  checkMinX(boundingCoordInputs, IdVec{U, U, D(24.3), D(2), D(2), U});
-  checkMinY(boundingCoordInputs, IdVec{U, U, D(26.8), D(6), D(2), U});
-  checkMaxX(boundingCoordInputs, IdVec{U, U, D(24.3), D(4), D(4), U});
-  checkMaxY(boundingCoordInputs, IdVec{U, U, D(26.8), D(8), D(4), U});
+  checkMinX(exampleGeoms, Ids{U, U, D(24.3), D(2), D(2), U, U, U});
+  checkMinY(exampleGeoms, Ids{U, U, D(26.8), D(6), D(2), U, U, U});
+  checkMaxX(exampleGeoms, Ids{U, U, D(24.3), D(4), D(4), U, U, U});
+  checkMaxY(exampleGeoms, Ids{U, U, D(26.8), D(8), D(4), U, U, U});
+
+  auto checkNumGeometries = testUnaryExpression<&makeNumGeometriesExpression>;
+  checkNumGeometries(exampleGeoms, Ids{U, U, I(1), I(1), I(1), U, U, I(1)});
+  const IdOrLiteralOrIriVec exampleMultiGeoms{
+      geoLit("MULTIPOINT(1 2, 3 4, 5 6, 7 8)"), geoLit("MULTIPOINT(1 2)"),
+      geoLit("MULTILINESTRING((1 2, 3 4),(5 6, 7 8, 9 0))"),
+      geoLit("MULTIPOLYGON(((1 2, 3 4, 1 2)),((1 2, 3 4, 1 2.5)),((5 6, 7 8, 9 "
+             "0, 5 6), (7 6, 5 4, 7 6)))"),
+      geoLit("GEOMETRYCOLLECTION(POINT(1 2), LINESTRING(2 8, 4 6))")};
+  checkNumGeometries(exampleMultiGeoms, Ids{I(4), I(1), I(2), I(3), I(2)});
+
+  // Since our helpers test doubles for (near) equality and precise lengths
+  // depend on the method of calculation, which is not what is tested here, we
+  // derive the expected values using the helper.
+  auto expectedLength = [](std::string_view literal) -> double {
+    auto len = ad_utility::GeometryInfo::getMetricLength(
+        absl::StrCat("\"", literal,
+                     "\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"));
+    if (!len.has_value()) {
+      return -1;
+    }
+    return len.value().length();
+  };
+
+  auto checkLength = std::bind_front(testNaryExpression, &makeLengthExpression);
+  auto checkMetricLength = testUnaryExpression<&makeMetricLengthExpression>;
+  const auto kilometer = lit("http://qudt.org/vocab/unit/KiloM",
+                             "^^<http://www.w3.org/2001/XMLSchema#anyURI>");
+
+  static constexpr std::string_view line =
+      "LINESTRING(7.8412948 47.9977308, 7.8450491 47.9946)";
+  const auto expLine = expectedLength(line);
+  static constexpr std::string_view polygon =
+      "POLYGON((7.8412948 47.9977308, 7.8450491 47.9946, 7.852918 "
+      "47.995562, 7.8412948 47.9977308))";
+  const auto expPolygon = expectedLength(polygon);
+  static constexpr std::string_view collection =
+      "GEOMETRYCOLLECTION(LINESTRING(7.8412948 47.9977308, 7.8450491 "
+      "47.9946), LINESTRING(7.8412948 47.9977308, 7.852918 "
+      "47.995562))";
+  const auto expCollection = expectedLength(collection);
+
+  const IdOrLiteralOrIriVec lengthInputs{U,
+                                         D(5),
+                                         v,
+                                         geoLit(line),
+                                         geoLit(polygon),
+                                         geoLit(collection),
+                                         lit("BLABLIBLU()")};
+  checkLength(Ids{U, U, D(0.0), D(expLine / 1000), D(expPolygon / 1000),
+                  D(expCollection / 1000), U},
+              lengthInputs,
+              IdOrLiteralOrIriVec{kilometer, kilometer, kilometer, kilometer,
+                                  kilometer, kilometer, kilometer});
+  checkMetricLength(lengthInputs, Ids{U, U, D(0.0), D(expLine), D(expPolygon),
+                                      D(expCollection), U});
+
+  auto expectedArea = [](std::string_view literal) -> double {
+    auto area = ad_utility::GeometryInfo::getMetricArea(
+        absl::StrCat("\"", literal,
+                     "\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"));
+    if (!area.has_value() || std::isnan(area.value().area())) {
+      return -1;
+    }
+    return area.value().area();
+  };
+
+  // Geometry area functions
+  auto checkArea = std::bind_front(testNaryExpression, &makeAreaExpression);
+  auto checkMetricArea = testUnaryExpression<&makeMetricAreaExpression>;
+  const auto squareKilometer =
+      lit("http://qudt.org/vocab/unit/KiloM2",
+          "^^<http://www.w3.org/2001/XMLSchema#anyURI>");
+
+  checkArea(
+      Ids{U, U, D(0.0), D(0.0), D(expectedArea(polygon) / 1'000'000), D(0.0),
+          U},
+      lengthInputs,
+      IdOrLiteralOrIriVec{squareKilometer, squareKilometer, squareKilometer,
+                          squareKilometer, squareKilometer, squareKilometer,
+                          squareKilometer});
+  checkMetricArea(lengthInputs, Ids{U, U, D(0.0), D(0.0),
+                                    D(expectedArea(polygon)), D(0.0), U});
 }
 
 // ________________________________________________________________________________________

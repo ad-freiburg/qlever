@@ -6,7 +6,11 @@
 #ifndef QLEVER_SRC_PARSER_PATHQUERY_H
 #define QLEVER_SRC_PARSER_PATHQUERY_H
 
+#include "index/Index.h"
 #include "parser/MagicServiceQuery.h"
+// TODO<joka921> is this the right header where the pathSearchConfiguration
+// should live, or do we need a forward declaration here?
+#include "engine/PathSearch.h"
 
 class SparqlTriple;
 
@@ -41,7 +45,7 @@ struct PathQuery : MagicServiceQuery {
 
   PathQuery() = default;
   PathQuery(PathQuery&& other) noexcept = default;
-  PathQuery(const PathQuery& other) noexcept = default;
+  PathQuery(const PathQuery& other) = default;
   PathQuery& operator=(const PathQuery& other) = default;
   PathQuery& operator=(PathQuery&& a) noexcept = default;
   ~PathQuery() noexcept override = default;
@@ -60,7 +64,8 @@ struct PathQuery : MagicServiceQuery {
    *              The Vocab is only used if the given vector contains IRIs.
    */
   std::variant<Variable, std::vector<Id>> toSearchSide(
-      std::vector<TripleComponent> side, const Index::Vocab& vocab) const;
+      std::vector<TripleComponent> side, const Index::Vocab& vocab,
+      const EncodedIriManager& encodedIriManager) const;
 
   /**
    * @brief Convert this PathQuery into a PathSearchConfiguration object.
@@ -74,7 +79,8 @@ struct PathQuery : MagicServiceQuery {
    * @return A valid PathSearchConfiguration
    */
   PathSearchConfiguration toPathSearchConfiguration(
-      const Index::Vocab& vocab) const;
+      const Index::Vocab& vocab,
+      const EncodedIriManager& encodedIriManager) const;
 };
 
 }  // namespace parsedQuery

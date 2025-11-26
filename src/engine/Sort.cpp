@@ -3,7 +3,7 @@
 // Author: 2015 - 2017 Björn Buchhold (buchhold@cs.uni-freiburg.de)
 // Author: 2023 -      Johannes Kalmbach (kalmbach@cs.uni-freiburg.de)
 
-#include "./Sort.h"
+#include "engine/Sort.h"
 
 #include <sstream>
 
@@ -11,6 +11,7 @@
 #include "engine/Engine.h"
 #include "engine/QueryExecutionTree.h"
 #include "global/RuntimeParameters.h"
+#include "util/Algorithm.h"
 
 // _____________________________________________________________________________
 size_t Sort::getResultWidth() const { return subtree_->getResultWidth(); }
@@ -53,7 +54,7 @@ std::string Sort::getDescriptor() const {
 // _____________________________________________________________________________
 Result Sort::computeResult([[maybe_unused]] bool requestLaziness) {
   using std::endl;
-  LOG(DEBUG) << "Getting sub-result for Sort result computation..." << endl;
+  AD_LOG_DEBUG << "Getting sub-result for Sort result computation..." << endl;
   std::shared_ptr<const Result> subRes = subtree_->getResult();
 
   // TODO<joka921> proper timeout for sorting operations
@@ -61,7 +62,7 @@ Result Sort::computeResult([[maybe_unused]] bool requestLaziness) {
   getExecutionContext()->getSortPerformanceEstimator().throwIfEstimateTooLong(
       subTable.numRows(), subTable.numColumns(), deadline_, "Sort operation");
 
-  LOG(DEBUG) << "Sort result computation..." << endl;
+  AD_LOG_DEBUG << "Sort result computation..." << endl;
   ad_utility::Timer t{ad_utility::timer::Timer::InitialStatus::Started};
   IdTable idTable = subRes->idTable().clone();
   runtimeInfo().addDetail("time-cloning", t.msecs());
@@ -71,7 +72,7 @@ Result Sort::computeResult([[maybe_unused]] bool requestLaziness) {
   cancellationHandle_->resetWatchDogState();
   checkCancellation();
 
-  LOG(DEBUG) << "Sort result computation done." << endl;
+  AD_LOG_DEBUG << "Sort result computation done." << endl;
   return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
 }
 
@@ -102,7 +103,7 @@ Sort::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
   for (const auto& jcl : sortColumnIndices_) {
     const auto& var = subtree_->getVariableAndInfoByColumnIndex(jcl).first;
     sortVars.push_back(var);
-    if (!variables.contains(var)) {
+    if (!ad_utility::contains(variables, var)) {
       if (vars == &variables) {
         newVariables = variables;
       }

@@ -72,11 +72,10 @@ struct EvaluateOnChildOperand {
     auto operands = makeGenerator(AD_FWD(operand), inputSize, context);
 
     // Set up cancellation handling.
-    auto checkCancellation =
-        [context](ad_utility::source_location location =
-                      ad_utility::source_location::current()) {
-          context->cancellationHandle_->throwIfCancelled(location);
-        };
+    auto checkCancellation = [context](ad_utility::source_location location =
+                                           AD_CURRENT_SOURCE_LOC()) {
+      context->cancellationHandle_->throwIfCancelled(location);
+    };
 
     // Helper lambda that computes the aggregate of the given operands. This
     // requires that `inputs` is not empty.
@@ -182,19 +181,18 @@ AggregateExpression<AggregateOperation, FinalOperation>::getVariableForCount()
 }
 
 // Explicit instantiation for the AVG expression.
-template class AggregateExpression<AvgOperation, decltype(avgFinalOperation)>;
+template class AggregateExpression<AvgOperation, AvgFinalOperation>;
 
 // Explicit instantiation for the STDEV expression.
-template class AggregateExpression<AvgOperation, decltype(stdevFinalOperation)>;
-template class DeviationAggExpression<AvgOperation,
-                                      decltype(stdevFinalOperation)>;
+template class AggregateExpression<AvgOperation, StdevFinalOperation>;
+template class DeviationAggExpression<AvgOperation, StdevFinalOperation>;
 
 // Explicit instantiations for the other aggregate expressions.
 #define INSTANTIATE_AGG_EXP(Function, ValueGetter) \
   template class AggregateExpression<              \
       Operation<2, FunctionAndValueGetters<Function, ValueGetter>>>;
-INSTANTIATE_AGG_EXP(decltype(addForSum), NumericValueGetter);
-INSTANTIATE_AGG_EXP(decltype(count), IsValidValueGetter);
-INSTANTIATE_AGG_EXP(decltype(minLambdaForAllTypes), ActualValueGetter);
-INSTANTIATE_AGG_EXP(decltype(maxLambdaForAllTypes), ActualValueGetter);
+INSTANTIATE_AGG_EXP(AddForSum, NumericValueGetter);
+INSTANTIATE_AGG_EXP(Count, IsValidValueGetter);
+INSTANTIATE_AGG_EXP(MinLambdaForAllTypes, ActualValueGetter);
+INSTANTIATE_AGG_EXP(MaxLambdaForAllTypes, ActualValueGetter);
 }  // namespace sparqlExpression::detail

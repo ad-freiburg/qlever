@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "engine/CallFixedSize.h"
+#include "engine/JoinHelpers.h"
 #include "engine/Result.h"
 #include "engine/idTable/IdTable.h"
 #include "util/CancellationHandle.h"
@@ -105,8 +106,8 @@ struct Adder {
   // Scan `missingIndices_` for indices that haven't found a match so far and
   // fill them with undef on the right side.
   void materializeMissing(IdTable& result, IdTableView<0> left) {
-    size_t counter = std::reduce(missingIndices_.begin(), missingIndices_.end(),
-                                 static_cast<size_t>(0));
+    size_t counter =
+        ::ranges::accumulate(missingIndices_, static_cast<size_t>(0));
     size_t originalSize = result.size();
     result.resize(originalSize + counter);
     ColumnIndex resultColIdx = 0;

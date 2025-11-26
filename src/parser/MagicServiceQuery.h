@@ -28,11 +28,12 @@ class MagicServiceException : public std::runtime_error {
 struct MagicServiceQuery {
   MagicServiceQuery() = default;
   MagicServiceQuery(MagicServiceQuery&& other) noexcept = default;
-  MagicServiceQuery(const MagicServiceQuery& other) noexcept = default;
+  MagicServiceQuery(const MagicServiceQuery& other) = default;
   MagicServiceQuery& operator=(const MagicServiceQuery& other) = default;
   MagicServiceQuery& operator=(MagicServiceQuery&& a) noexcept = default;
   virtual ~MagicServiceQuery() = default;
 
+ public:
   // The optional graph pattern inside the SERVICE
   std::optional<GraphPattern> childGraphPattern_;
 
@@ -55,11 +56,13 @@ struct MagicServiceQuery {
   void addBasicPattern(const BasicGraphPattern& pattern);
 
   /**
-   * @brief Add a GraphPatternOperation to the query.
+   * @brief Add a GraphPatternOperation to the query. Can be overridden for
+   * example if the concrete service query doesn't support nested group graph
+   * patterns.
    *
    * @param childGraphPattern
    */
-  void addGraph(const GraphPatternOperation& childGraphPattern);
+  virtual void addGraph(const GraphPatternOperation& childGraphPattern);
 
  protected:
   // Utility functions for variables in the magic service configuration triples

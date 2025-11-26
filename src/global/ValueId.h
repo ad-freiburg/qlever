@@ -9,11 +9,12 @@
 
 #include <absl/strings/str_cat.h>
 
-#include <bit>
 #include <cstdint>
-#include <functional>
 #include <limits>
 
+#include "backports/functional.h"
+#include "backports/keywords.h"
+#include "backports/three_way_comparison.h"
 #include "global/Constants.h"
 #include "global/IndexTypes.h"
 #include "rdfTypes/GeoPoint.h"
@@ -36,7 +37,8 @@ enum struct Datatype {
   GeoPoint,
   WordVocabIndex,
   BlankNodeIndex,
-  MaxValue = BlankNodeIndex
+  EncodedVal,
+  MaxValue = EncodedVal
   // Note: Unfortunately we cannot easily get the size of an enum.
   // If members are added to this enum, then the `MaxValue`
   // alias must always be equal to the last member,
@@ -44,7 +46,7 @@ enum struct Datatype {
 };
 
 /// Convert the `Datatype` enum to the corresponding string
-constexpr std::string_view toString(Datatype type) {
+inline QL_CONSTEXPR std::string_view toString(Datatype type) {
   switch (type) {
     case Datatype::Undefined:
       return "Undefined";
@@ -54,6 +56,8 @@ constexpr std::string_view toString(Datatype type) {
       return "Double";
     case Datatype::Int:
       return "Int";
+    case Datatype::EncodedVal:
+      return "EncodedIri";
     case Datatype::VocabIndex:
       return "VocabIndex";
     case Datatype::LocalVocabIndex:
@@ -90,8 +94,12 @@ class ValueId {
   /// The smallest double > 0 that will not be rounded to zero by the precision
   /// loss of `FoldedId`. Symmetrically, `-minPositiveDouble` is the largest
   /// double <0 that will not be rounded to zero.
+  /// Note: This constant is currently only used in unit tests, and cannot be
+  /// computed at compile time in C++17.
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   static constexpr double minPositiveDouble =
       absl::bit_cast<double>(1ull << numDatatypeBits);
+#endif
 
   // The largest representable integer value.
   static constexpr int64_t maxInt = IntegerType::max();
@@ -123,8 +131,8 @@ class ValueId {
 
    public:
     explicit IndexTooLargeException(
-        T tooBigValue, ad_utility::source_location s =
-                           ad_utility::source_location::current()) {
+        T tooBigValue,
+        ad_utility::source_location s = AD_CURRENT_SOURCE_LOC()) {
       errorMessage_ = absl::StrCat(
           s.file_name(), ", line ", s.line(), ": The given value ", tooBigValue,
           " is bigger than what the maxIndex of ValueId allows.");
@@ -153,43 +161,46 @@ class ValueId {
   /// For doubles it is first the positive doubles in order, then the negative
   /// doubles in reversed order. This is a direct consequence of comparing the
   /// bit representation of these values as unsigned integers.
-  constexpr auto operator<=>(const ValueId& other) const {
+  constexpr auto compareThreeWay(const ValueId& other) const {
     using enum Datatype;
     auto type = getDatatype();
     auto otherType = other.getDatatype();
     if (type != LocalVocabIndex && otherType != LocalVocabIndex) {
-      return _bits <=> other._bits;
+      return ql::compareThreeWay(_bits, other._bits);
     }
     if (type == LocalVocabIndex && otherType == LocalVocabIndex) [[unlikely]] {
-      return *getLocalVocabIndex() <=> *other.getLocalVocabIndex();
-    }
-    auto compareVocabAndLocalVocab =
-        [](::VocabIndex vocabIndex,
-           ::LocalVocabIndex localVocabIndex) -> std::strong_ordering {
-      auto [lowerBound, upperBound] = localVocabIndex->positionInVocab();
-      if (vocabIndex < lowerBound) {
-        return std::strong_ordering::less;
-      } else if (vocabIndex >= upperBound) {
-        return std::strong_ordering::greater;
-      } else {
-        return std::strong_ordering::equal;
-      }
-    };
-    // GCC 11 issues a false positive warning here, so we try to avoid it by
-    // being over-explicit about the branches here.
-    if (type == VocabIndex && otherType == LocalVocabIndex) {
-      return compareVocabAndLocalVocab(getVocabIndex(),
-                                       other.getLocalVocabIndex());
-    } else if (type == LocalVocabIndex && otherType == VocabIndex) {
-      auto inverseOrder = compareVocabAndLocalVocab(other.getVocabIndex(),
-                                                    getLocalVocabIndex());
-      return 0 <=> inverseOrder;
+      return ql::compareThreeWay(*getLocalVocabIndex(),
+                                 *other.getLocalVocabIndex());
     }
 
-    // One of the types is `LocalVocab`, and the other one is a non-string type
-    // like `Integer` or `Undefined. Then the comparison by bits automatically
-    // compares by the datatype.
-    return _bits <=> other._bits;
+    // GCC 11 issues a false positive warning here, so we try to avoid it by
+    // being over-explicit about the branches here.
+    if ((type == VocabIndex || type == EncodedVal) &&
+        otherType == LocalVocabIndex) {
+      return compareVocabAndLocalVocab(
+          LocalVocabEntry::IdProxy::make(getBits()),
+          other.getLocalVocabIndex());
+    } else if (type == LocalVocabIndex &&
+               (otherType == VocabIndex || otherType == EncodedVal)) {
+      auto inverseOrder = compareVocabAndLocalVocab(
+          LocalVocabEntry::IdProxy::make(other.getBits()),
+          getLocalVocabIndex());
+
+      return ql::compareThreeWay(0, inverseOrder);
+    }
+
+    // One of the types is `LocalVocab`, and the other one is a non-string
+    // type like `Integer` or `Undefined. Then the comparison by bits
+    // automatically compares by the datatype.
+    return ql::compareThreeWay(_bits, other._bits);
+  }
+  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(ValueId)
+
+  friend constexpr bool operator==(const ValueId& left, const ValueId& right) {
+    return ql::compareThreeWay(left, right) == 0;
+  }
+  friend constexpr bool operator!=(const ValueId& left, const ValueId& right) {
+    return !(left == right);
   }
 
   // When there are no local vocab entries, then comparison can only be done
@@ -197,13 +208,7 @@ class ValueId {
   // vectorization). In particular, this method should for example be used
   // during index building.
   constexpr auto compareWithoutLocalVocab(const ValueId& other) const {
-    return _bits <=> other._bits;
-  }
-
-  // For some reason which I (joka921) don't understand, we still need
-  // operator== although we already have operator <=>.
-  constexpr bool operator==(const ValueId& other) const {
-    return (*this <=> other) == 0;
+    return ql::compareThreeWay(_bits, other._bits);
   }
 
   /// Get the underlying bit representation, e.g. for compression etc.
@@ -293,6 +298,11 @@ class ValueId {
   static ValueId makeFromVocabIndex(VocabIndex index) {
     return makeFromIndex(index.get(), Datatype::VocabIndex);
   }
+
+  static ValueId makeFromEncodedVal(uint64_t idx) {
+    return makeFromIndex(idx, Datatype::EncodedVal);
+  }
+
   static ValueId makeFromTextRecordIndex(TextRecordIndex index) {
     return makeFromIndex(index.get(), Datatype::TextRecordIndex);
   }
@@ -316,6 +326,11 @@ class ValueId {
   [[nodiscard]] constexpr VocabIndex getVocabIndex() const noexcept {
     return VocabIndex::make(removeDatatypeBits(_bits));
   }
+
+  [[nodiscard]] constexpr uint64_t getEncodedVal() const noexcept {
+    return removeDatatypeBits(_bits);
+  }
+
   [[nodiscard]] constexpr TextRecordIndex getTextRecordIndex() const noexcept {
     return TextRecordIndex::make(removeDatatypeBits(_bits));
   }
@@ -377,7 +392,7 @@ class ValueId {
     }
     auto [lower, upper] = id.getLocalVocabIndex()->positionInVocab();
     if (upper != lower) {
-      return H::combine(std::move(h), makeFromVocabIndex(lower)._bits, 0);
+      return H::combine(std::move(h), lower.get(), 0);
     }
     return H::combine(std::move(h), *id.getLocalVocabIndex(), 1);
   }
@@ -392,9 +407,10 @@ class ValueId {
   /// be callable with all of the possible return types of the `getTYPE`
   /// functions.
   /// TODO<joka921> This currently still has limited functionality because
-  /// VocabIndex, LocalVocabIndex and TextRecordIndex are all of the same type
-  /// `uint64_t` and the visitor cannot distinguish between them. Create strong
-  /// types for these indices and make the `ValueId` class use them.
+  /// VocabIndex, LocalVocabIndex, TextRecordIndex,  and EncodedVal are all of
+  /// the same type `uint64_t` and the visitor cannot distinguish between them.
+  /// Create strong types for these indices and make the `ValueId` class use
+  /// them.
   template <typename Visitor>
   decltype(auto) visit(Visitor&& visitor) const {
     switch (getDatatype()) {
@@ -406,6 +422,8 @@ class ValueId {
         return std::invoke(visitor, getDouble());
       case Datatype::Int:
         return std::invoke(visitor, getInt());
+      case Datatype::EncodedVal:
+        return std::invoke(visitor, getEncodedVal());
       case Datatype::VocabIndex:
         return std::invoke(visitor, getVocabIndex());
       case Datatype::LocalVocabIndex:
@@ -437,8 +455,8 @@ class ValueId {
       if constexpr (ad_utility::isSimilar<T, UndefinedType>) {
         // already handled above
         AD_FAIL();
-      } else if constexpr (ad_utility::isSimilar<T, double> ||
-                           ad_utility::isSimilar<T, int64_t>) {
+      } else if constexpr (ad_utility::SimilarToAny<T, double, int64_t,
+                                                    uint64_t>) {
         ostr << std::to_string(value);
       } else if constexpr (ad_utility::isSimilar<T, bool>) {
         ostr << (value ? "true" : "false");
@@ -459,6 +477,19 @@ class ValueId {
   }
 
  private:
+  // Compares a vocabulary index with a local vocabulary index range.
+  static ql::strong_ordering compareVocabAndLocalVocab(
+      LocalVocabEntry::IdProxy vocabIndex, ::LocalVocabIndex localVocabIndex) {
+    auto [lowerBound, upperBound] = localVocabIndex->positionInVocab();
+    if (vocabIndex < lowerBound) {
+      return ql::strong_ordering::less;
+    } else if (vocabIndex >= upperBound) {
+      return ql::strong_ordering::greater;
+    } else {
+      return ql::strong_ordering::equal;
+    }
+  }
+
   // Private constructor that implicitly converts from the underlying
   // representation. Used in the implementation of the static factory methods
   // `Double()`, `Int()` etc.

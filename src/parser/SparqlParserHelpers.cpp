@@ -2,7 +2,7 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include "SparqlParserHelpers.h"
+#include "parser/SparqlParserHelpers.h"
 
 #include <unicode/unistr.h>
 
@@ -14,24 +14,33 @@
 namespace sparqlParserHelpers {
 using std::string;
 
+namespace detail {
+// CTRE regex pattern for C++17 compatibility
+constexpr ctll::fixed_string unicodeEscapeRegex =
+    R"(\\U[0-9A-Fa-f]{8}|\\u[0-9A-Fa-f]{4})";
+}  // namespace detail
+
 // _____________________________________________________________________________
 ParserAndVisitor::ParserAndVisitor(
-    ad_utility::BlankNodeManager* blankNodeManager, std::string input,
+    ad_utility::BlankNodeManager* blankNodeManager,
+    const EncodedIriManager* encodedIriManager, std::string input,
     std::optional<ParsedQuery::DatasetClauses> datasetClauses,
     SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks)
     : Base{unescapeUnicodeSequences(std::move(input)),
            SparqlQleverVisitor{blankNodeManager,
+                               encodedIriManager,
                                {},
                                std::move(datasetClauses),
                                disableSomeChecks}} {}
 
 // _____________________________________________________________________________
 ParserAndVisitor::ParserAndVisitor(
-    ad_utility::BlankNodeManager* blankNodeManager, std::string input,
+    ad_utility::BlankNodeManager* blankNodeManager,
+    const EncodedIriManager* encodedIriManager, std::string input,
     SparqlQleverVisitor::PrefixMap prefixes,
     std::optional<ParsedQuery::DatasetClauses> datasetClauses,
     SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks)
-    : ParserAndVisitor{blankNodeManager, std::move(input),
+    : ParserAndVisitor{blankNodeManager, encodedIriManager, std::move(input),
                        std::move(datasetClauses), disableSomeChecks} {
   visitor_.setPrefixMapManually(std::move(prefixes));
 }
@@ -51,8 +60,7 @@ std::string ParserAndVisitor::unescapeUnicodeSequences(std::string input) {
     }
   };
 
-  for (const auto& match :
-       ctre::search_all<R"(\\U[0-9A-Fa-f]{8}|\\u[0-9A-Fa-f]{4})">(view)) {
+  for (const auto& match : ctre::search_all<detail::unicodeEscapeRegex>(view)) {
     if (noEscapeSequenceFound) {
       output.reserve(input.size());
       noEscapeSequenceFound = false;

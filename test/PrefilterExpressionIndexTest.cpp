@@ -444,12 +444,12 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   // this necessary wider range of `CompressedBlockMetadata` values (compared to
   // `blocks`) which are relevant for testing the expressions `isIri` and
   // `isLiteral`.
-  auto makeTestIsDatatype(std::unique_ptr<PrefilterExpression> expr,
-                          std::vector<CompressedBlockMetadata>&& expected,
-                          bool testIsIriOrIsLit = false,
-                          std::vector<CompressedBlockMetadata>&& input = {},
-                          ad_utility::source_location loc =
-                              ad_utility::source_location::current()) {
+  auto makeTestIsDatatype(
+      std::unique_ptr<PrefilterExpression> expr,
+      std::vector<CompressedBlockMetadata>&& expected,
+      bool testIsIriOrIsLit = false,
+      std::vector<CompressedBlockMetadata>&& input = {},
+      ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
     auto t = generateLocationTrace(loc);
     // The evaluation implementation of `isLiteral()` and `isIri()` uses two
     // conjuncted relational `PrefilterExpression`s. Thus we have to add all
@@ -1207,8 +1207,10 @@ TEST_F(PrefilterExpressionOnMetadataTest,
       blockRanges));
   ASSERT_TRUE(blockRanges.size() > 1);
   blockRanges.push_back(blockRanges.at(0));
-  EXPECT_ANY_THROW(CompressedRelationReader::ScanSpecAndBlocks(
-      ScanSpecification{VocabId10, DoubleId33, DoubleId33}, blockRanges));
+  if constexpr (ad_utility::areExpensiveChecksEnabled) {
+    EXPECT_ANY_THROW(CompressedRelationReader::ScanSpecAndBlocks(
+        ScanSpecification{VocabId10, DoubleId33, DoubleId33}, blockRanges));
+  }
 }
 
 //______________________________________________________________________________

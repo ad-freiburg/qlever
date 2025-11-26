@@ -6,16 +6,16 @@
 
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
+#include <unicode/unistr.h>
 
-#include <functional>
 #include <ranges>
 #include <sstream>
 #include <string>
 #include <utility>
 
 #include "../test/util/GTestHelpers.h"
+#include "backports/functional.h"
 #include "global/Constants.h"
-#include "util/ConstexprSmallString.h"
 #include "util/ConstexprUtils.h"
 #include "util/Forward.h"
 #include "util/Generator.h"
@@ -118,7 +118,7 @@ TEST(StringUtils, listToString) {
                         multiValueVector, " -> ");
 
   /*
-  `ql::ranges::views` can cause dangling pointers, if a `std::identity` is
+  `ql::ranges::views` can cause dangling pointers, if a `ql::identity` is
   called with one, that returns r-values.
   */
   /*
@@ -130,7 +130,7 @@ TEST(StringUtils, listToString) {
       multiValueVector, [](const int& num) -> int { return num + 10; });
   doTestForAllOverloads("50,51,52,53", plus10View, plus10View, ",");
 
-  auto identityView = ql::views::transform(multiValueVector, std::identity{});
+  auto identityView = ql::views::transform(multiValueVector, ql::identity{});
   doTestForAllOverloads("40,41,42,43", identityView, identityView, ",");
 
   // Test, that uses an actual `ql::ranges::input_range`. That is, a range who
@@ -186,7 +186,7 @@ TEST(StringUtils, insertThousandSeparator) {
   */
   auto doNotExceptionTest = [](auto valueIdentity, const char separatorSymbol,
                                ad_utility::source_location l =
-                                   ad_utility::source_location::current()) {
+                                   AD_CURRENT_SOURCE_LOC()) {
     static constexpr char floatingPointSignifier = valueIdentity.value;
     // For generating better messages, when failing a test.
     auto trace{generateLocationTrace(l, "doNotExceptionTest")};
@@ -205,9 +205,9 @@ TEST(StringUtils, insertThousandSeparator) {
     number 4", "198."}`.
     */
     auto simpleComparisonTest =
-        [&separatorSymbol](const std::vector<std::string>& stringPieces,
-                           ad_utility::source_location l =
-                               ad_utility::source_location::current()) {
+        [&separatorSymbol](
+            const std::vector<std::string>& stringPieces,
+            ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
           // For generating better messages, when failing a test.
           auto trace{generateLocationTrace(l, "simpleComparisonTest")};
           ASSERT_STREQ(
@@ -363,15 +363,27 @@ TEST(StringUtils, strLangTag) {
   ASSERT_TRUE(strIsLangTag("en"));
 }
 
+// Constants for the tests of `constexprStrCat` below. They have to be at
+// namespace scope, because of the compilation on G++-8.
+namespace {
+constexpr std::string_view empty = "";
+constexpr std::string_view single = "single";
+constexpr std::string_view hello = "hello";
+constexpr std::string_view space = " ";
+constexpr std::string_view world = "World!";
+constexpr std::string_view h = "h";
+constexpr std::string_view i = "i";
+}  // namespace
 // _____________________________________________________________________________
 TEST(StringUtils, constexprStrCat) {
   using namespace std::string_view_literals;
   ASSERT_EQ((constexprStrCat<>()), ""sv);
-  ASSERT_EQ((constexprStrCat<"">()), ""sv);
-  ASSERT_EQ((constexprStrCat<"single">()), "single"sv);
-  ASSERT_EQ((constexprStrCat<"", "single", "">()), "single"sv);
-  ASSERT_EQ((constexprStrCat<"hello", " ", "World!">()), "hello World!"sv);
-  static_assert(constexprStrCat<"hello", " ", "World!">() == "hello World!"sv);
+  ASSERT_EQ((constexprStrCat<empty>()), ""sv);
+  ASSERT_EQ((constexprStrCat<single>()), "single"sv);
+  ASSERT_EQ((constexprStrCat<empty, single, empty>()), "single"sv);
+
+  ASSERT_EQ((constexprStrCat<hello, space, world>()), "hello World!"sv);
+  static_assert(constexprStrCat<hello, space, world>() == "hello World!"sv);
 }
 
 // _____________________________________________________________________________
@@ -379,30 +391,27 @@ TEST(StringUtils, constexprStrCatImpl) {
   // The coverage tools don't track the compile time usages of these internal
   // helper functions, so we test them manually.
   using namespace ad_utility::detail::constexpr_str_cat_impl;
-  ASSERT_EQ((constexprStrCatBufferImpl<"h", "i">()),
-            (std::array{'h', 'i', '\0'}));
+  ASSERT_EQ((constexprStrCatBufferImpl<h, i>()), (std::array{'h', 'i', '\0'}));
 
-  using C = ConstexprString;
-  ASSERT_EQ((catImpl<2>(std::array{C{"h"}, C{"i"}})),
-            (std::array{'h', 'i', '\0'}));
+  ASSERT_EQ((catImpl<2>(std::array{&h, &i})), (std::array{'h', 'i', '\0'}));
 }
 
 // _____________________________________________________________________________
 TEST(StringUtils, truncateOperationString) {
   auto expectTruncate = [](std::string_view test, bool willTruncate,
                            ad_utility::source_location l =
-                               ad_utility::source_location::current()) {
+                               AD_CURRENT_SOURCE_LOC()) {
     auto tr = generateLocationTrace(l);
     const std::string truncated = ad_utility::truncateOperationString(test);
     if (willTruncate) {
-      EXPECT_THAT(truncated, testing::SizeIs(MAX_LENGTH_OPERATION_ECHO));
+      EXPECT_THAT(truncated, testing::SizeIs(MAX_LENGTH_OPERATION_ECHO + 3));
     } else {
       EXPECT_THAT(truncated, testing::SizeIs(test.size()));
     }
     std::string_view truncated_view = truncated;
     if (willTruncate) {
-      EXPECT_THAT(truncated_view.substr(0, MAX_LENGTH_OPERATION_ECHO - 3),
-                  testing::Eq(test.substr(0, MAX_LENGTH_OPERATION_ECHO - 3)));
+      EXPECT_THAT(truncated_view.substr(0, MAX_LENGTH_OPERATION_ECHO),
+                  testing::Eq(test.substr(0, MAX_LENGTH_OPERATION_ECHO)));
     } else {
       EXPECT_THAT(truncated, testing::Eq(test));
     }
@@ -412,6 +421,33 @@ TEST(StringUtils, truncateOperationString) {
   expectTruncate(std::string(MAX_LENGTH_OPERATION_ECHO, 'f'), false);
   expectTruncate(std::string(MAX_LENGTH_OPERATION_ECHO - 1, 'f'), false);
   expectTruncate("SELECT * WHERE { ?s ?p ?o }", false);
+
+  // Regression tests for https://github.com/ad-freiburg/qlever/issues/2511
+
+  // We can't use the `std::string` constructor to fill the string with n many
+  // codepoints if their UTF-8 encoding needs more than one byte, so we use the
+  // `icu::UnicodeString` constructor instead, which operates on codepoints.
+  std::string shortInput;
+  // Fill U+2E17 1671 times, the regression demonstrated in #2511.
+  icu::UnicodeString(1671, 0x2E17, 1671).toUTF8String(shortInput);
+  EXPECT_EQ(ad_utility::truncateOperationString(shortInput), shortInput);
+
+  std::string input;
+  std::string expected;
+  // Fill the input with `MAX_LENGTH_OPERATION_ECHO + 2` multibyte characters.
+  icu::UnicodeString(MAX_LENGTH_OPERATION_ECHO + 2, 0x2E17,
+                     MAX_LENGTH_OPERATION_ECHO + 2)
+      .toUTF8String(input);
+  icu::UnicodeString(MAX_LENGTH_OPERATION_ECHO + 3, 0x2E17,
+                     MAX_LENGTH_OPERATION_ECHO)
+      .toUTF8String(expected);
+  expected += "...";
+  EXPECT_EQ(ad_utility::truncateOperationString(input), expected);
+  // Sanity check that our expected string actually has the same amount of
+  // codepoints.
+  EXPECT_EQ(
+      ad_utility::getUTF8Prefix(expected, MAX_LENGTH_OPERATION_ECHO + 4).first,
+      MAX_LENGTH_OPERATION_ECHO + 3);
 }
 
 // _____________________________________________________________________________

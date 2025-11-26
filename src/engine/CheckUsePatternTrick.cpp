@@ -2,12 +2,10 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
-#include "./CheckUsePatternTrick.h"
-
-#include <ranges>
-#include <type_traits>
+#include "engine/CheckUsePatternTrick.h"
 
 #include "backports/algorithm.h"
+#include "backports/type_traits.h"
 #include "parser/GraphPatternOperation.h"
 
 namespace checkUsePatternTrick {
@@ -66,10 +64,16 @@ bool isVariableContainedInGraphPatternOperation(
       return ad_utility::contains(arg._inlineValues._variables, variable);
     } else if constexpr (std::is_same_v<T, p::Service>) {
       return ad_utility::contains(arg.visibleVariables_, variable);
+    } else if constexpr (ad_utility::SameAsAny<T, p::PathQuery, p::SpatialQuery,
+                                               p::TextSearchQuery,
+                                               p::NamedCachedResult>) {
+      // For `MagicServiceQuery`s disable the pattern trick. This might slow
+      // things down more than necessary but is never wrong. In the future this
+      // could potentially be enabled for certain magic service queries.
+      return true;
     } else {
       static_assert(
-          ad_utility::SameAsAny<T, p::TransPath, p::PathQuery, p::Describe,
-                                p::SpatialQuery, p::TextSearchQuery, p::Load>);
+          ad_utility::SameAsAny<T, p::TransPath, p::Describe, p::Load>);
       // The `TransPath` is set up later in the query planning, when this
       // function should not be called anymore.
       AD_FAIL();

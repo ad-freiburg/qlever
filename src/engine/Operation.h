@@ -144,7 +144,7 @@ class Operation {
 
   const Index& getIndex() const { return _executionContext->getIndex(); }
 
-  const auto& locatedTriplesSnapshot() const {
+  virtual const LocatedTriplesSnapshot& locatedTriplesSnapshot() const {
     return _executionContext->locatedTriplesSnapshot();
   }
 
@@ -299,6 +299,10 @@ class Operation {
     // no-op.
   }
 
+  // This function is called when the operation's result is requested to be
+  // cached and pinned to a name.
+  void storeToNamedResultCache(const Result& result);
+
  public:
   // Set the value of the `LIMIT`/`OFFSET` clause that will be applied to the
   // result of this operation. If a `LIMIT`/`OFFSET` was previously set, this
@@ -385,8 +389,7 @@ class Operation {
   // potentially can take a (too) long time. This function is designed to be
   // as lightweight as possible because of that.
   AD_ALWAYS_INLINE void checkCancellation(
-      ad_utility::source_location location =
-          ad_utility::source_location::current()) const {
+      ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) const {
     cancellationHandle_->throwIfCancelled(location,
                                           [this]() { return getDescriptor(); });
   }

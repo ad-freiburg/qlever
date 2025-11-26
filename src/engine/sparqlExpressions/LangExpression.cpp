@@ -6,9 +6,9 @@
 // Unit tests for the functionality from this file can be
 // found in LanguageExpressionsTest.h
 
-#include "./engine/sparqlExpressions/LiteralExpression.h"
-#include "./engine/sparqlExpressions/NaryExpressionImpl.h"
-#include "./engine/sparqlExpressions/SparqlExpressionTypes.h"
+#include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/NaryExpressionImpl.h"
+#include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 
 namespace sparqlExpression {
 namespace detail::langImpl {
@@ -38,19 +38,20 @@ CPP_template(typename NaryOperation)(
 };
 
 //______________________________________________________________________________
-inline auto getLanguageTag = [](OptValue optLangTag) -> IdOrLiteralOrIri {
-  if (!optLangTag.has_value()) {
-    return Id::makeUndefined();
-  } else {
-    return LiteralOrIri{Lit::literalWithNormalizedContent(
-        asNormalizedStringViewUnsafe(std::move(optLangTag.value())))};
+struct GetLanguageTag {
+  IdOrLiteralOrIri operator()(OptValue optLangTag) const {
+    if (!optLangTag.has_value()) {
+      return Id::makeUndefined();
+    } else {
+      return LiteralOrIri{Lit::literalWithNormalizedContent(
+          asNormalizedStringViewUnsafe(std::move(optLangTag.value())))};
+    }
   }
 };
 
 //______________________________________________________________________________
-using LangExpression = detail::langImpl::LangExpressionImpl<
-    detail::Operation<1, detail::FV<decltype(detail::langImpl::getLanguageTag),
-                                    detail::LanguageTagValueGetter>>>;
+using LangExpression = detail::langImpl::LangExpressionImpl<detail::Operation<
+    1, detail::FV<GetLanguageTag, detail::LanguageTagValueGetter>>>;
 
 }  //  namespace detail::langImpl
 

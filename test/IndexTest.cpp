@@ -54,8 +54,7 @@ auto makeTestScanWidthOne = [](const IndexImpl& index,
       [&index, &qec](const TripleComponent& c0, const TripleComponent& c1,
                      Permutation::Enum permutation, const VectorTable& expected,
                      Permutation::ColumnIndices additionalColumns = {},
-                     ad_utility::source_location l =
-                         ad_utility::source_location::current()) {
+                     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
         auto t = generateLocationTrace(l);
         IdTable result =
             index.scan({c0, c1, std::nullopt}, permutation, additionalColumns,
@@ -74,8 +73,7 @@ auto makeTestScanWidthTwo = [](const IndexImpl& index,
   return
       [&index, &qec](const TripleComponent& c0, Permutation::Enum permutation,
                      const VectorTable& expected,
-                     ad_utility::source_location l =
-                         ad_utility::source_location::current()) {
+                     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
         auto t = generateLocationTrace(l);
         IdTable wol =
             index.scan({c0, std::nullopt, std::nullopt}, permutation,
@@ -497,15 +495,17 @@ TEST(IndexTest, NumDistinctEntities) {
   // and one triple per subject for the pattern.
   EXPECT_EQ(numTriples.internal, 5);
 
-  auto multiplicities = index.getMultiplicities(Permutation::SPO);
+  auto multiplicities =
+      index.getMultiplicities(index.getPermutation(Permutation::SPO));
   // 7 triples, three distinct numSubjects, 2 distinct numPredicates, 7 distinct
   // objects.
   EXPECT_FLOAT_EQ(multiplicities[0], 7.0 / 3.0);
   EXPECT_FLOAT_EQ(multiplicities[1], 7.0 / 2.0);
   EXPECT_FLOAT_EQ(multiplicities[2], 7.0 / 7.0);
 
-  multiplicities = index.getMultiplicities(iri("<x>"), Permutation::SPO,
-                                           qec.locatedTriplesSnapshot());
+  multiplicities = index.getMultiplicities(
+      iri("<x>"), index.getPermutation(Permutation::SPO),
+      qec.locatedTriplesSnapshot());
   EXPECT_FLOAT_EQ(multiplicities[0], 2.5);
   EXPECT_FLOAT_EQ(multiplicities[1], 1);
 }
