@@ -11,6 +11,7 @@
 #include "engine/idTable/IdTable.h"
 #include "global/RuntimeParameters.h"
 #include "index/ConstantsIndexBuilding.h"
+#include "index/IndexMetaData.h"
 #include "index/LocatedTriples.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/Iterators.h"
@@ -1751,14 +1752,16 @@ auto CompressedRelationWriter::createPermutationPair(
   DistinctIdCounter distinctCol1Counter;
   auto addBlockForLargeRelation = [&numBlocksCurrentRel, &writer1,
                                    &col0IdCurrentRelation, &relation,
-                                   &twinRelationSorter, &blocksize] {
+                                   &twinRelationSorter, &blocksize, pair] {
     if (relation.empty()) {
       return;
     }
-    auto twinRelation = relation.asStaticView<0>();
-    twinRelation.swapColumns(c1Idx, c2Idx);
-    for (const auto& row : twinRelation) {
-      twinRelationSorter.push(row);
+    if (pair) {
+      auto twinRelation = relation.asStaticView<0>();
+      twinRelation.swapColumns(c1Idx, c2Idx);
+      for (const auto& row : twinRelation) {
+        twinRelationSorter.push(row);
+      }
     }
     writer1->addBlockForLargeRelation(col0IdCurrentRelation.value(),
                                       std::move(relation).toDynamic());
@@ -1798,6 +1801,8 @@ auto CompressedRelationWriter::createPermutationPair(
   };
   if (pair) {
     writer1->smallBlocksCallback_ = addBlockOfSmallRelationsToSwitched;
+  } else {
+    writer1->smallBlocksCallback_ = [](IdTable) {};
   }
 
   auto finishRelation = [&numDistinctCol0, &twinRelationSorter, &writer2,
@@ -1821,7 +1826,6 @@ auto CompressedRelationWriter::createPermutationPair(
         twinRelationSorter.clear();
         writeMetadata(md1, md2);
       } else {
-        twinRelationSorter.clear();
         writeMetadata(md1, std::nullopt);
       }
     } else {
@@ -1940,6 +1944,89 @@ auto CompressedRelationWriter::createPermutationPair(
   return {numDistinctCol0, std::move(*writer1).getFinishedBlocks(),
           pair ? std::move(*writer2).getFinishedBlocks()
                : std::vector<CompressedBlockMetadata>{}};
+}
+
+void CompressedRelationWriter::writePermutationPairAndMetadata(
+    const std::string& basename, size_t numColumns,
+    ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedBlocks,
+    qlever::KeyOrder keyOrder, bool writeTwinRelation) {
+  static constexpr std::array<char, 3> keyOrderUpper{'S', 'P', 'O'};
+  static constexpr std::array<char, 3> keyOrderLower{'s', 'p', 'o'};
+
+  auto keyOrderToString = [](qlever::KeyOrder keyOrder, bool lower = true) {
+    auto indexArray = keyOrder.keys();
+    std::string keyOrderString;
+    for (int i = 0; i < 3; ++i) {
+      AD_CONTRACT_CHECK(indexArray[i] < 3);
+      keyOrderString.push_back(
+          (lower ? keyOrderLower : keyOrderUpper)[indexArray[i]]);
+    }
+    return keyOrderString;
+  };
+
+  auto getTwinKeyOrder = [](qlever::KeyOrder keyOrder) {
+    auto indexArray = keyOrder.keys();
+    return qlever::KeyOrder{indexArray[0], indexArray[2], indexArray[1],
+                            indexArray[3]};
+  };
+
+  std::string filename1 = basename + ".index." + keyOrderToString(keyOrder);
+  auto twinKeyOrder = getTwinKeyOrder(keyOrder);
+  std::string filename2 = basename + ".index." + keyOrderToString(twinKeyOrder);
+
+  CompressedRelationWriter writer1{
+      numColumns, ad_utility::File(filename1, "w"),
+      UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN};
+  CompressedRelationWriter writer2{
+      numColumns, ad_utility::File(filename2, "w"),
+      UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN};
+
+  // Write the metadata for PSO and POS.
+  AD_LOG_DEBUG << "Writing metadata ..." << std::endl;
+  using MetaData = IndexMetaDataMmap;
+  MetaData metaData1, metaData2;
+  metaData1.setup(filename1 + ".meta", ad_utility::CreateTag{});
+  metaData2.setup(filename2 + ".meta", ad_utility::CreateTag{});
+  auto callback1 = [&metaData1](ql::span<const CompressedRelationMetadata> md) {
+    for (const auto& m : md) {
+      metaData1.add(m);
+    }
+  };
+  auto callback2 = [&metaData2](ql::span<const CompressedRelationMetadata> md) {
+    for (const auto& m : md) {
+      metaData2.add(m);
+    }
+  };
+  auto [numDistinctPredicates, blockData1, blockData2] =
+      CompressedRelationWriter::createPermutationPair(
+          filename1 + ".sorter.dat", WriterAndCallback{writer1, callback1},
+          writeTwinRelation
+              ? std::optional<WriterAndCallback>{WriterAndCallback{writer2,
+                                                                   callback2}}
+              : std::nullopt,
+          ad_utility::InputRangeTypeErased{std::move(sortedBlocks)}, keyOrder,
+          {});  // std::vector<std::function<void(const IdTableStatic<0>&)>>{}
+  metaData1.blockData() = std::move(blockData1);
+  metaData1.calculateStatistics(numDistinctPredicates);
+  metaData1.setName(basename);
+  {
+    ad_utility::File file1(filename1, "r+");
+    metaData1.appendToFile(&file1);
+  }
+  if (writeTwinRelation) {
+    metaData2.blockData() = std::move(blockData2);
+    metaData2.calculateStatistics(numDistinctPredicates);
+    metaData2.setName(basename);
+    ad_utility::File file2(filename2, "r+");
+    metaData2.appendToFile(&file2);
+  }
+  AD_LOG_INFO << "Statistics for " << keyOrderToString(keyOrder, false) << ": "
+              << metaData1.statistics() << std::endl;
+  if (writeTwinRelation) {
+    AD_LOG_INFO << "Statistics for POS: "
+                << keyOrderToString(twinKeyOrder, false)
+                << metaData2.statistics() << std::endl;
+  }
 }
 
 // _____________________________________________________________________________
