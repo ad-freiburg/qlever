@@ -2843,6 +2843,25 @@ TEST(QueryPlanner, testDistributiveJoinInUnion) {
 }
 
 // _____________________________________________________________________________
+TEST(QueryPlanner, testDistributiveJoinInUnionDoesntExplode) {
+  // Make sure that this is enabled for this test to actually test something.
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::enableDistributiveUnion_>(
+          true);
+  // This is a regression test to ensure the following query, which joins two
+  // unions doesn't result in an OOM because the possible query plan variations
+  // explode.
+  std::string query = R"(
+PREFIX wdt: <http://www.wikidata.org/prop/direct/>
+SELECT * {
+  ?p wdt:P664 | wdt:P1344 | wdt:P710 | wdt:P98 | wdt:P50 ?o1, ?o2, ?o3, ?o4
+}
+)";
+
+  h::expect(std::move(query), h::_);
+}
+
+// _____________________________________________________________________________
 TEST(QueryPlanner, ensureRegularJoinIsUsedIfTransitivePathIsAlreadyBound) {
   using namespace ::testing;
   auto qp = makeQueryPlanner();

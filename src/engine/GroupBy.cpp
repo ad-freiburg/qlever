@@ -23,7 +23,6 @@ GroupBy::GroupBy(QueryExecutionContext* qec,
 
 // _____________________________________________________________________________
 GroupBy::~GroupBy() = default;
-// TODO<joka921> Why are those not noexcept?
 GroupBy::GroupBy(GroupBy&&) = default;
 GroupBy& GroupBy::operator=(GroupBy&&) = default;
 

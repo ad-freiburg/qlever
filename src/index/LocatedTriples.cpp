@@ -100,12 +100,8 @@ template <size_t numIndexColumns, bool includeGraphColumn>
 static constexpr auto tieLocatedTriplesIndices = []() {
   std::array<size_t, numIndexColumns + static_cast<size_t>(includeGraphColumn)>
       a{};
-  for (size_t i = 0; i < numIndexColumns; ++i) {
-    a[i] = 3 - numIndexColumns + i;
-  }
-  if (includeGraphColumn) {
-    // The graph column resides at index `3` of the located triple.
-    a.back() = 3;
+  for (size_t i = 0; i < a.size(); ++i) {
+    a[i] = i + (3 - numIndexColumns);
   }
   return a;
 }();

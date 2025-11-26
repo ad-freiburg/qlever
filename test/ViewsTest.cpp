@@ -268,12 +268,19 @@ TEST(Views, ForceInputView) {
   EXPECT_ANY_THROW(view.begin());
 }
 
+// The following test is used to debug cases where certain combinations of
+// ranges and views lead to a result that doesn't fulfill the `range` or `view`
+// concept anymore (which might happen only in C++17 mode, because the rules are
+// a bit different for the concepts in the SFINAE-based implementations of
+// `range-v3`s C++17 mode).
 TEST(Views, combinedConcepts) {
   auto it = ad_utility::InputRangeTypeErased<std::optional<int>>{};
   auto v = ad_utility::RvalueView{ad_utility::OwningView{std::move(it)}};
   using V = decltype(v);
-  auto b = ql::ranges::begin(v);
-  auto e = ql::ranges::end(v);
+  // Check that the following two calls compile, and get reasonable compiler
+  // messages if they don't.
+  [[maybe_unused]] auto b = ql::ranges::begin(v);
+  [[maybe_unused]] auto e = ql::ranges::end(v);
   static_assert(ql::ranges::range<V>);
   static_assert(ql::ranges::view<V>);
   static_assert(ql::ranges::input_range<V>);

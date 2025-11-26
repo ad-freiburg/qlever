@@ -63,16 +63,11 @@ CPP_variadic_template(typename Int, Int... Is, typename F, typename... Args)(
   return lambda.template operator()<Is...>(AD_FWD(args)...);
 };
 
-CPP_variadic_template(typename Int, Int... Is, typename F, typename... Args)(
-    requires ql::concepts::integral<
-        Int>) auto applyOnIntegerSequence(ad_utility::ValueSequenceRef<Int,
-                                                                       Is...>,
-                                          F&& lambda, Args&&... args) {
-  return lambda.template operator()<Is...>(AD_FWD(args)...);
-};
-
+// An array with `NumValues` entries of type `Int` that has linkage in C++17
+// mode. It is needed below to deduce a return type.
 template <typename Int, size_t NumValues>
 static constexpr std::array<Int, NumValues> DummyArray{};
+
 // Internal helper functions that calls `lambda.template operator()<I,
 // J,...)(args)` where `I, J, ...` are the elements in the `array`. Requires
 // that each element in the `array` is `<= maxValue`.
@@ -97,13 +92,14 @@ CPP_variadic_template(int maxValue, size_t NumValues, typename Int, typename F,
   using Storage = std::conditional_t<resultIsVoid, int, std::optional<Result>>;
   Storage result;
 
-  // Lambda: If the compile time parameter `I` and the runtime parameter `array`
-  // are equal, then call the `lambda` with `I` as a template parameter and
-  // store the result in `result` (unless it is `void`).
-  // TODO<joka921> Do we need a VI here?
-  auto applyIf2 = [&](auto index) {
+  // Lambda: If the compile time parameter `i` and the runtime parameter `array`
+  // are equal (when the elements of `array` are interpreted as the digits of a
+  // single number), then call the `lambda` with `array` as a template parameter
+  // and store the result in `result` (unless it is `void`).
+  auto applyIf = [&](auto i) {
+    // Get the digits of `i` as a compile-time array.
     constexpr const auto& arrayConst =
-        integerToArrayStaticVar<Int, NumValues, index.value, maxValue + 1>;
+        integerToArrayStaticVar<Int, NumValues, i.value, maxValue + 1>;
     if (array == arrayConst) {
       const auto& seq = toIntegerSequenceRef<arrayConst>();
       if constexpr (resultIsVoid) {
@@ -118,13 +114,13 @@ CPP_variadic_template(int maxValue, size_t NumValues, typename Int, typename F,
   // runtime parameter always is `array`.
   auto f = [&](auto&& valueSequence) {
     forEachValueInValueSequence(AD_FWD(valueSequence),
-                                ApplyAsValueIdentity{AD_FWD(applyIf2)});
+                                ApplyAsValueIdentity{AD_FWD(applyIf)});
   };
 
-  // Call f for all combinations of compileTimeIntegers in `M x NumValues` where
-  // `M` is `[0, ..., maxValue]` and `x` denotes the cartesian product of sets.
-  // Exactly one of these combinations is equal to `array`, and so the lambda
-  // will be executed exactly once.
+  // Call `f` for all integers in `[0, (maxValue + 1) ^ NumValues]`, which makes
+  // `applyIf` see all the different arrays consisting of `NumValues` numbers in
+  // the range
+  // `[0, ... maxValue]`, where exactly one of them is equal to the `array`.
   f(std::make_index_sequence<pow(maxValue + 1, NumValues)>{});
 
   if constexpr (!resultIsVoid) {
@@ -202,26 +198,4 @@ CPP_variadic_template(int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE,
 }
 
 }  // namespace ad_utility
-
-// The definitions of the macro for an easier syntax.
-// The first argument (an array of integers) has to be put in parentheses if
-// it is directly instantiated in the call, for example
-// `CALL_FIXED_SIZE((std::array{1, 2}), &funcThatTakesTwoIntegers, argument);`
-// This is necessary because macros do not correctly parse the curly braces.
-// TODO<joka921, C++23> In C++23 `std::array` and other aggregates can be
-// initialized with parentheses such that we can write
-// `CALL_FIXED_SIZE(std::array(1, 2), ...`. For a single integer you can also
-// simply write `CALL_FIXED_SIZE(1, function, params)`, this is handled by
-// the corresponding overload of `ad_utility::callFixedSize`.
-#define CALL_FIXED_SIZE(integers, func, ...)                                \
-  ad_utility::callFixedSize(                                                \
-      integers,                                                             \
-      ad_utility::ApplyAsValueIdentityTuple{                                \
-          [](auto argsTuple, auto... Is) -> decltype(auto) {                \
-            auto innerLambda = [&](auto&&... innerArgs) -> decltype(auto) { \
-              return func<static_cast<int>(Is)...>(AD_FWD(innerArgs)...);   \
-            };                                                              \
-            return std::apply(innerLambda, std::move(argsTuple));           \
-          }},                                                               \
-      ##__VA_ARGS__)
 #endif  // QLEVER_SRC_ENGINE_CALLFIXEDSIZE_H

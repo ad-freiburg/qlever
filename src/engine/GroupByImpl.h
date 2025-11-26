@@ -121,11 +121,8 @@ class GroupByImpl : public Operation {
   // function returns the starting index of the last block of this `idTable`.
   // The argument `currentGroupBlock` is used to store the values of the group
   // by columns for the current group.
-  /*
-  CPP_template(int COLS,
-               typename T)(requires ranges::invocable<T, size_t, size_t>) size_t
-               */
   template <int COLS, typename T>
+  QL_CONCEPT_OR_NOTHING(requires ranges::invocable<T, size_t, size_t>)
   size_t searchBlockBoundaries(const T& onBlockChange,
                                const IdTableView<COLS>& idTable,
                                GroupBlock& currentGroupBlock) const;

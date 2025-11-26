@@ -177,4 +177,22 @@ class CopyShield {
   }
 };
 
+// Helper that takes an explicit type `T`, and a function `T -> Matcher<T>`
+// (where `T` is the type of the expected value for the matcher), and lifts it
+// to a function `std::optional<T> -> Matcher<std::optional<T>>` , by handling
+// the case of `std::nullopt` as expected (`std::nullopt` matches
+// `std::nullopt`) for both the expected and actual value.
+template <typename T, typename MakeMatcher>
+auto liftOptionalMatcher(MakeMatcher makeMatcher) {
+  return
+      [makeMatcher](
+          std::optional<T> expected) -> ::testing::Matcher<std::optional<T>> {
+        if (!expected.has_value()) {
+          return ::testing::Eq(std::nullopt);
+        } else {
+          return ::testing::Optional(makeMatcher(expected.value()));
+        }
+      };
+}
+
 #endif  // QLEVER_TEST_UTIL_GTESTHELPERS_H
