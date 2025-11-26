@@ -8,6 +8,12 @@
 #ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONGENERATORS_H
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONGENERATORS_H
 
+// We currently have two implementation for the generators in this file, one for
+// the C++20 mode (using generator coroutines), and one for the C++17 mode using
+// ql::ranges + type erasure (the type erasure currently is needed to keep the
+// compile-times reasonable). We currently keep both implementations because the
+// C++17 implementation is slower than the generator-based type erasure for
+// reasons we yet have to explore.
 #ifndef QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17
 #include <absl/container/inlined_vector.h>
 #endif
@@ -154,7 +160,6 @@ resultGeneratorImpl(ad_utility::SetOfIntervals set, size_t targetSize,
 }
 #endif
 
-#ifdef QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17
 // The actual `resultGenerator` that uses type erasure (if not specified
 // otherwise) to the `resultGeneratorImpl` to keep the compile times reasonable.
 template <typename S, typename Transformation = ql::identity>
@@ -162,6 +167,10 @@ inline auto resultGenerator(S&& input, size_t targetSize,
                             Transformation transformation = {}) {
   auto gen =
       resultGeneratorImpl(AD_FWD(input), targetSize, std::move(transformation));
+#ifndef QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17
+  // `gen` is already (at least in many cases) type erased
+  return gen;
+#else
   // Without type erasure, compiling the `sparqlExpressions` module takes a lot
   // of time and memory. In the future we can evaluate the performance of
   // deactivating the type erasure for certain expressions + datatypes (e.g.
@@ -169,31 +178,9 @@ inline auto resultGenerator(S&& input, size_t targetSize,
   static constexpr auto Cat = ::ranges::category::input;
   using V = ql::ranges::range_value_t<decltype(gen)>;
 
-  if constexpr (std::is_trivially_copyable_v<V>) {
-    auto chunked = ::ranges::views::chunk(std::move(gen), 10000);
-    auto toVector = [](const auto& chunk) {
-      absl::InlinedVector<V, 10000> v;
-      ql::ranges::copy(chunk, std::back_inserter(v));
-      return v;
-    };
-    return ad_utility::OwningView{ad_utility::InputRangeTypeErased{
-               std::move(chunked) | ql::views::transform(toVector)}} |
-           ql::views::join;
-  } else {
-    return ::ranges::any_view<ql::ranges::range_reference_t<decltype(gen)>,
-                              Cat>{std::move(gen)};
-  }
-}
-#else
-// For coroutine-based implementation, just forward to resultGeneratorImpl
-template <typename S, typename Transformation = ql::identity>
-inline auto resultGenerator(S&& input, size_t targetSize,
-                            Transformation transformation = {}) {
-  return resultGeneratorImpl(AD_FWD(input), targetSize,
-                             std::move(transformation));
-}
+  return ad_utility::InputRangeTypeErased<V>(std::move(gen));
 #endif
-
+}
 /// Return a generator that yields `numItems` many items for the various
 /// `SingleExpressionResult`
 CPP_template(typename Input, typename Transformation = ql::identity)(
@@ -292,6 +279,7 @@ CPP_template(typename Operation, typename... Operands)(requires(
   // generator for the operation result;
   auto getResultFromGenerators =
       absl::bind_front(applyFunction, Function{}, numElements);
+
   /// The `ValueGetters` are stored in a `std::tuple`, so we have to extract
   /// them via `std::apply`. First set up a lambda that performs the actual
   /// logic on a parameter pack of `ValueGetters`
