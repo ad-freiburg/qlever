@@ -31,7 +31,7 @@ class alignas(16) LocalVocabEntry
 
   // Note: The values here actually are `Id`s, but we cannot store the `Id` type
   // directly because of cyclic dependencies.
-  static constexpr std::string_view proxyTag = "LveIdProxy";
+  static constexpr ad_utility::IndexTag proxyTag = "LveIdProxy";
   using IdProxy = ad_utility::TypedIndex<uint64_t, proxyTag>;
 
   FRIEND_TEST(TripleComponent, toValueId);

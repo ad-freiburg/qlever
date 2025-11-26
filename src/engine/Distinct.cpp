@@ -96,15 +96,19 @@ Result Distinct::computeResult(bool requestLaziness) {
   AD_LOG_DEBUG << "Distinct result computation..." << endl;
   size_t width = subtree_->getResultWidth();
   if (subRes->isFullyMaterialized()) {
-    IdTable idTable = CALL_FIXED_SIZE(width, &Distinct::outOfPlaceDistinct,
-                                      this, subRes->idTable());
+    IdTable idTable =
+        ad_utility::callFixedSizeVi(width, [&, self = this](auto width) {
+          return self->outOfPlaceDistinct<width>(subRes->idTable());
+        });
     AD_LOG_DEBUG << "Distinct result computation done." << endl;
     return {std::move(idTable), resultSortedOn(),
             subRes->getSharedLocalVocab()};
   }
 
-  auto generator = CALL_FIXED_SIZE(width, &Distinct::lazyDistinct, this,
-                                   subRes->idTables(), !requestLaziness);
+  auto generator =
+      ad_utility::callFixedSizeVi(width, [&, self = this](auto width) {
+        return self->lazyDistinct<width>(subRes->idTables(), !requestLaziness);
+      });
   return requestLaziness
              ? Result{std::move(generator), resultSortedOn()}
              : Result{ad_utility::getSingleElement(std::move(generator)),

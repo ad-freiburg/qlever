@@ -8,7 +8,6 @@
 
 #include <gmock/gmock.h>
 
-#include <concepts>
 #include <optional>
 
 #include "backports/concepts.h"
@@ -150,12 +149,14 @@ class CopyShield {
   std::shared_ptr<T> pointer_;
 
  public:
-  template <typename... Ts>
-  requires std::constructible_from<T, Ts&&...> explicit CopyShield(Ts&&... args)
+  CPP_variadic_template(typename... Ts)(
+      requires ql::concepts::constructible_from<
+          T, Ts&&...>) explicit CopyShield(Ts&&... args)
       : pointer_{std::make_shared<T>(AD_FWD(args)...)} {}
 
-  template <typename Ts>
-  requires std::constructible_from<T, Ts&&> CopyShield& operator=(Ts&& ts) {
+  CPP_template(typename Ts)(requires ql::concepts::constructible_from<T, Ts&&>)
+      CopyShield&
+      operator=(Ts&& ts) {
     pointer_ = std::make_shared<T>(AD_FWD(ts));
     return *this;
   }
@@ -165,7 +166,8 @@ class CopyShield {
   }
   QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(T)
 
-  bool operator==(const T& other) const requires std::equality_comparable<T> {
+  CPP_member auto operator==(const T& other) const
+      -> CPP_ret(bool)(requires ql::concepts::equality_comparable<T>) {
     return *pointer_ == other;
   }
 
@@ -174,5 +176,23 @@ class CopyShield {
     return os;
   }
 };
+
+// Helper that takes an explicit type `T`, and a function `T -> Matcher<T>`
+// (where `T` is the type of the expected value for the matcher), and lifts it
+// to a function `std::optional<T> -> Matcher<std::optional<T>>` , by handling
+// the case of `std::nullopt` as expected (`std::nullopt` matches
+// `std::nullopt`) for both the expected and actual value.
+template <typename T, typename MakeMatcher>
+auto liftOptionalMatcher(MakeMatcher makeMatcher) {
+  return
+      [makeMatcher](
+          std::optional<T> expected) -> ::testing::Matcher<std::optional<T>> {
+        if (!expected.has_value()) {
+          return ::testing::Eq(std::nullopt);
+        } else {
+          return ::testing::Optional(makeMatcher(expected.value()));
+        }
+      };
+}
 
 #endif  // QLEVER_TEST_UTIL_GTESTHELPERS_H

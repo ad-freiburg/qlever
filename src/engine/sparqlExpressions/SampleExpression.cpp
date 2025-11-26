@@ -4,7 +4,7 @@
 //
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#include "./SampleExpression.h"
+#include "engine/sparqlExpressions/SampleExpression.h"
 
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 
