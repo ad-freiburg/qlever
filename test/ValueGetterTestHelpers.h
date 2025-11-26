@@ -15,7 +15,6 @@
 #include "engine/LocalVocab.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "global/Constants.h"
-#include "gmock/gmock.h"
 #include "index/LocalVocabEntry.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "parser/LiteralOrIri.h"
