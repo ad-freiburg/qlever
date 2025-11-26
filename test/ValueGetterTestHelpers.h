@@ -20,6 +20,8 @@
 #include "parser/LiteralOrIri.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/Literal.h"
+#include "util/GTestHelpers.h"
+#include "util/TypeTraits.h"
 
 namespace valueGetterTestHelpers {
 
@@ -205,90 +207,112 @@ namespace geoInfoVGTestHelpers {
 using namespace valueGetterTestHelpers;
 using namespace geoInfoTestHelpers;
 
-// Helper that constructs a local vocab, inserts the literal and passes the
-// LocalVocabIndex as a ValueId to the GeometryInfoValueGetter
-inline void checkGeoInfoFromLocalVocab(
-    std::string wktInput, std::optional<ad_utility::GeometryInfo> expected,
-    Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-  auto l = generateLocationTrace(sourceLocation);
-  sparqlExpression::detail::GeometryInfoValueGetter getter;
-  // Not the geoInfoTtl here because the literals should not be contained
-  TestContextWithGivenTTl testContext{ttl};
-  LocalVocab localVocab;
-  auto litOrIri =
-      ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
-          wktInput);
-  auto idx = localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{litOrIri});
-  auto id = ValueId::makeFromLocalVocabIndex(idx);
-  auto res = getter(id, &testContext.context);
-  EXPECT_GEOMETRYINFO(res, expected);
-}
+// Helper class to test different value getters
+template <typename ValueGetter, typename ReturnType>
+class ValueGetterTester {
+ private:
+  // Test knowledge graph that contains all used literals and iris.
+  const std::string testTtl_ =
+      "<x> <y> \"anXsdString\"^^<http://www.w3.org/2001/XMLSchema#string>, "
+      " \"someType\"^^<someType>,"
+      " <https://example.com/test>,"
+      " \"noType\" ,"
+      " \"LINESTRING(2 2, 4 4)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>,"
+      " \"POLYGON((2 4, 4 4, 4 2, 2 2))\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>.";
 
-// Test knowledge graph that contains all used literals and iris.
-const std::string geoInfoTtl =
-    "<x> <y> \"anXsdString\"^^<http://www.w3.org/2001/XMLSchema#string>, "
-    " \"someType\"^^<someType>,"
-    " <https://example.com/test>,"
-    " \"noType\" ,"
-    " \"LINESTRING(2 2, 4 "
-    "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>,"
-    " \"POLYGON(2 4, 4 4, 4 2, 2 "
-    "2)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>.";
+ public:
+  // Helper that constructs a local vocab, inserts the literal and passes the
+  // `LocalVocabIndex` as a `ValueId` to the `ValueGetter`.
+  void checkFromLocalVocab(
+      std::string literal,
+      ::testing::Matcher<std::optional<ReturnType>> expected,
+      Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+    auto l = generateLocationTrace(sourceLocation);
+    ValueGetter getter;
+    // Empty knowledge graph, so everything needs to be in the local vocab.
+    TestContextWithGivenTTl testContext{""};
+    LocalVocab localVocab;
+    auto litOrIri =
+        ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
+            literal);
+    auto idx =
+        localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{litOrIri});
+    auto id = ValueId::makeFromLocalVocabIndex(idx);
+    auto res = getter(id, &testContext.context);
+    EXPECT_THAT(res, expected);
+  }
 
-// Helper that tests the GeometryInfoValueGetter using the ValueId of a
-// VocabIndex for a string in the example knowledge graph.
-inline void checkGeoInfoFromVocab(
-    std::string wktInput, std::optional<ad_utility::GeometryInfo> expected,
-    Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-  auto l = generateLocationTrace(sourceLocation);
-  sparqlExpression::detail::GeometryInfoValueGetter getter;
-  TestContextWithGivenTTl testContext{
-      geoInfoTtl,
-      // Disable vocabulary type fuzzy testing here
-      // TODO<ullingerc> Can be re-enabled after merge of #1983
-      VocabularyType{VocabularyType::Enum::OnDiskCompressed}};
-  VocabIndex idx;
-  ASSERT_TRUE(testContext.qec->getIndex().getVocab().getId(wktInput, &idx));
-  auto id = ValueId::makeFromVocabIndex(idx);
-  auto res = getter(id, &testContext.context);
-  EXPECT_GEOMETRYINFO(res, expected);
-}
+  // Helper that tests the `ValueGetter` using the `ValueId` of a
+  // `VocabIndex` for a given string in the example knowledge graph.
+  void checkFromVocab(std::string literal,
+                      ::testing::Matcher<std::optional<ReturnType>> expected,
+                      Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+    auto l = generateLocationTrace(sourceLocation);
+    ValueGetter getter;
+    TestContextWithGivenTTl testContext{testTtl_};
+    VocabIndex idx;
+    ASSERT_TRUE(testContext.qec->getIndex().getVocab().getId(literal, &idx))
+        << "Given test literal is not contained in test dataset";
+    auto id = ValueId::makeFromVocabIndex(idx);
+    auto res = getter(id, &testContext.context);
+    EXPECT_THAT(res, expected);
+  }
 
-// Helper that tests the GeometryInfoValueGetter using an arbitrary ValueId
-inline void checkGeoInfoFromValueId(
-    ValueId input, std::optional<ad_utility::GeometryInfo> expected,
-    Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-  auto l = generateLocationTrace(sourceLocation);
-  sparqlExpression::detail::GeometryInfoValueGetter getter;
-  TestContextWithGivenTTl testContext{geoInfoTtl};
-  auto res = getter(input, &testContext.context);
-  EXPECT_GEOMETRYINFO(res, expected);
-}
+  // Helper that tests the `ValueGetter` for any custom `ValueId`
+  void checkFromValueId(ValueId input,
+                        ::testing::Matcher<std::optional<ReturnType>> expected,
+                        Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+    auto l = generateLocationTrace(sourceLocation);
+    ValueGetter getter;
+    TestContextWithGivenTTl testContext{testTtl_};
+    auto res = getter(input, &testContext.context);
+    EXPECT_THAT(res, expected);
+  }
 
-// Helper that tests the GeometryInfoValueGetter using a string passed directly
-// as LiteralOrIri, not ValueId
-inline void checkGeoInfoFromLiteral(
-    std::string wktInput, std::optional<ad_utility::GeometryInfo> expected,
-    Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-  auto l = generateLocationTrace(sourceLocation);
-  sparqlExpression::detail::GeometryInfoValueGetter getter;
-  TestContextWithGivenTTl testContext{geoInfoTtl};
-  auto litOrIri =
-      ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
-          wktInput);
-  auto res = getter(litOrIri, &testContext.context);
-  EXPECT_GEOMETRYINFO(res, expected);
-}
+  // Helper that tests the `ValueGetter` for any literal (or IRI) directly
+  // passed to it
+  void checkFromLiteral(std::string literal,
+                        ::testing::Matcher<std::optional<ReturnType>> expected,
+                        Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+    auto l = generateLocationTrace(sourceLocation);
+    ValueGetter getter;
+    TestContextWithGivenTTl testContext{testTtl_};
+    auto litOrIri =
+        ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
+            literal);
+    auto res = getter(litOrIri, &testContext.context);
+    EXPECT_THAT(res, expected);
+  }
 
-// Helper that runs each of the tests for GeometryInfoValueGetter using the same
-// input
-inline void checkGeoInfoFromLocalAndNormalVocabAndLiteral(
-    std::string wktInput, std::optional<ad_utility::GeometryInfo> expected,
-    Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+  // Run the same test case on vocab, local vocab and literal
+  void checkFromLocalAndNormalVocabAndLiteral(
+      std::string wktInput,
+      ::testing::Matcher<std::optional<ReturnType>> expected,
+      Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+    auto l = generateLocationTrace(sourceLocation);
+    checkFromVocab(wktInput, expected);
+    checkFromLocalVocab(wktInput, expected);
+    checkFromLiteral(wktInput, expected);
+  }
+};
+
+using GeoInfoTester = ValueGetterTester<
+    sparqlExpression::detail::GeometryInfoValueGetter<ad_utility::GeometryInfo>,
+    ad_utility::GeometryInfo>;
+using GeoPointOrWktTester =
+    ValueGetterTester<sparqlExpression::detail::GeoPointOrWktValueGetter,
+                      GeoPointOrWkt>;
+
+// _____________________________________________________________________________
+inline void checkGeoPointOrWktFromLocalAndNormalVocabAndLiteralForValid(
+    std::string wktInput, Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
-  checkGeoInfoFromVocab(wktInput, expected);
-  checkGeoInfoFromLocalVocab(wktInput, expected);
-  checkGeoInfoFromLiteral(wktInput, expected);
+  // We input `wktInput` twice because we expect the value getter to return the
+  // wkt string if it is given a plain wkt string.
+  GeoPointOrWktTester{}.checkFromLocalAndNormalVocabAndLiteral(
+      wktInput, geoPointOrWktMatcher(wktInput));
 }
 
 }  // namespace geoInfoVGTestHelpers
