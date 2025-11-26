@@ -40,6 +40,9 @@ std::pair<double, double> parseWktPoint(const std::string_view point);
 // Calculate geographic distance between points in kilometers using s2geometry.
 double wktDistImpl(GeoPoint point1, GeoPoint point2);
 
+// Helper to avoid including `GeometryInfoHelpersImpl.h`
+std::optional<std::string> geometryNAsWkt(GeoPointOrWkt wkt, int64_t n);
+
 const auto wktLiteralIri =
     triple_component::Iri::fromIrirefWithoutBrackets(GEO_WKT_LITERAL);
 
@@ -184,7 +187,21 @@ class WktGeometryN {
  public:
   sparqlExpression::IdOrLiteralOrIri operator()(
       const std::optional<GeoPointOrWkt>& wkt,
-      const std::optional<int64_t>& n) const;
+      const std::optional<int64_t>& n) const {
+    using namespace triple_component;
+    if (!wkt.has_value() || !n.has_value()) {
+      return ValueId::makeUndefined();
+    }
+
+    auto resultWkt = detail::geometryNAsWkt(wkt.value(), n.value());
+
+    if (!resultWkt.has_value()) {
+      return ValueId::makeUndefined();
+    }
+    auto lit = Literal::literalWithoutQuotes(resultWkt.value());
+    lit.addDatatype(detail::wktLiteralIri);
+    return {LiteralOrIri{lit}};
+  }
 };
 
 // A generic operation for all geometric relation functions, like

@@ -58,25 +58,11 @@ double wktDistImpl(GeoPoint point1, GeoPoint point2) {
   return S2Earth::ToKm(S1Angle(p1, p2));
 }
 
-}  // namespace detail
-
 // _____________________________________________________________________________
-sparqlExpression::IdOrLiteralOrIri WktGeometryN::operator()(
-    const std::optional<GeoPointOrWkt>& wkt,
-    const std::optional<int64_t>& n) const {
-  using namespace triple_component;
-  if (!wkt.has_value() || !n.has_value()) {
-    return ValueId::makeUndefined();
-  }
-
-  auto resultWkt = detail::getGeometryNAsWkt(wkt, n.value());
-
-  if (!resultWkt.has_value()) {
-    return ValueId::makeUndefined();
-  }
-  auto lit = Literal::literalWithoutQuotes(resultWkt.value());
-  lit.addDatatype(detail::wktLiteralIri);
-  return {LiteralOrIri{lit}};
+std::optional<std::string> geometryNAsWkt(GeoPointOrWkt wkt, int64_t n) {
+  return getGeometryNAsWkt(wkt, n);
 }
+
+}  // namespace detail
 
 }  // namespace ad_utility
