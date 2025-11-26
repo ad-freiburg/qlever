@@ -58,9 +58,12 @@ TEST(SparqlExpressionGenerators, resultGeneratorSetOfIntervals) {
   }
   {
     ad_utility::SetOfIntervals s{{{3, 11}}};
-    auto getGen = [&]() {
-      return sparqlExpression::detail::resultGenerator(s, 10);
+    auto consumeGen = [&]() {
+      auto gen = sparqlExpression::detail::resultGenerator(s, 10);
+      for (auto&& unused : gen) {
+        (void)unused;
+      }
     };
-    EXPECT_ANY_THROW(getGen());
+    EXPECT_ANY_THROW(consumeGen());
   }
 }

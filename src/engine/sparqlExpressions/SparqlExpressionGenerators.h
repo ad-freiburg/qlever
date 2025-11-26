@@ -8,13 +8,13 @@
 #ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONGENERATORS_H
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONGENERATORS_H
 
-#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+#ifndef QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17
 #include <absl/container/inlined_vector.h>
 #endif
 
 #include <absl/functional/bind_front.h>
 
-#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+#ifndef QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17
 #include "backports/functional.h"
 #endif
 #include "engine/sparqlExpressions/SparqlExpression.h"
@@ -55,7 +55,7 @@ inline ql::span<const ValueId> getIdsFromVariable(
 /// `SingleExpressionResult`s after applying a `Transformation` to them.
 /// Typically, this transformation is one of the value getters from
 /// `SparqlExpressionValueGetters` with an already bound `EvaluationContext`.
-#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+#ifdef QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17
 // Use range-based implementation for C++17 compatibility
 CPP_template(typename T, typename Transformation = ql::identity)(
     requires SingleExpressionResult<T> CPP_and isConstantResult<T> CPP_and
@@ -91,7 +91,7 @@ CPP_template(typename T, typename Transformation = ql::identity)(
          ql::views::transform(std::move(transformation));
 }
 
-#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+#ifdef QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17
 // Use range-based implementation for C++17 compatibility
 template <typename Transformation = ql::identity>
 inline auto resultGeneratorImpl(const ad_utility::SetOfIntervals& set,
@@ -135,6 +135,9 @@ resultGeneratorImpl(ad_utility::SetOfIntervals set, size_t targetSize,
   size_t i = 0;
   const auto trueTransformed = transformation(Id::makeFromBool(true));
   const auto falseTransformed = transformation(Id::makeFromBool(false));
+  if (!set._intervals.empty()) {
+    AD_CONTRACT_CHECK(set._intervals.back().second <= targetSize);
+  }
   for (const auto& [begin, end] : set._intervals) {
     while (i < begin) {
       co_yield falseTransformed;
@@ -151,7 +154,7 @@ resultGeneratorImpl(ad_utility::SetOfIntervals set, size_t targetSize,
 }
 #endif
 
-#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+#ifdef QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17
 // The actual `resultGenerator` that uses type erasure (if not specified
 // otherwise) to the `resultGeneratorImpl` to keep the compile times reasonable.
 template <typename S, typename Transformation = ql::identity>
@@ -225,7 +228,7 @@ inline auto valueGetterGenerator =
 /// Do the following `numItems` times: Obtain the next elements e_1, ..., e_n
 /// from the `generators` and yield `function(e_1, ..., e_n)`, also as a
 /// generator.
-#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+#ifdef QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17
 // Use range-based implementation for C++17 compatibility
 inline auto applyFunction =
     [](auto&& function, [[maybe_unused]] size_t numItems, auto... generators) {
