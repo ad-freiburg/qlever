@@ -194,31 +194,6 @@ IdTable Distinct::outOfPlaceDistinct(const IdTable& dynInput) const {
     // think the this capture is redundant.
     return this->matchesRow(a, b);
   };
-  using Comp = decltype(comp);
-  static_assert(ql::ranges::input_iterator<It>);
-  static_assert(ql::ranges::input_or_output_iterator<It>);
-  static_assert(ql::ranges::indirectly_readable<It>);
-  using namespace ql::ranges;
-  static_assert(CPP_concept_ref(ranges::readable_, uncvref_t<It>));
-  using I = uncvref_t<It>;
-  static_assert(same_as<iter_reference_t<I const>, iter_reference_t<I>>);
-  static_assert(
-      same_as<iter_rvalue_reference_t<I const>, iter_rvalue_reference_t<I>>);
-  static_assert(common_reference_with<iter_reference_t<I>&&, iter_value_t<I>&>);
-  static_assert(common_reference_with<iter_reference_t<I>&&,
-                                      iter_rvalue_reference_t<I>&&>);
-  static_assert(common_reference_with<iter_rvalue_reference_t<I>&&,
-                                      iter_value_t<I> const&>);
-
-  static_assert(
-      CPP_concept_ref(ranges::with_category_, It, std::input_iterator_tag));
-  static_assert(ql::ranges::sentinel_for<Sent, It>);
-  static_assert(ql::ranges::indirect_relation<
-                Comp, ql::ranges::projected<It, ql::ranges::identity>>);
-  static_assert(ql::ranges::weakly_incrementable<Inserter>);
-  static_assert(ql::ranges::indirectly_copyable<It, Inserter>);
-  static_assert(ql::ranges::forward_iterator<It>);
-  static_assert(ql::ranges::indirectly_copyable_storable<It, Inserter>);
   while (begin < end) {
     int64_t allowedOffset = std::min(end - begin, CHUNK_SIZE);
     begin = ql::ranges::unique_copy(begin, begin + allowedOffset,
