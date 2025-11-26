@@ -579,4 +579,24 @@ TEST(GeometryInfoTest, SizeOfAndAlignmentBytes) {
                     sizeof(MetricLength) + sizeof(MetricArea));
 }
 
+// _____________________________________________________________________________
+TEST(GeometryInfoTest, ParseGeoPointOrWktVisitor) {
+  // TODO
+}
+
+// _____________________________________________________________________________
+TEST(GeometryInfoTest, GeometryNVisitor) {
+  // TODO
+}
+
+// _____________________________________________________________________________
+TEST(GeometryInfoTest, UtilGeomToWktVisitor) {
+  // TODO
+}
+
+// _____________________________________________________________________________
+TEST(GeometryInfoTest, GeometryNAsWkt) {
+  // TODO
+}
+
 }  // namespace
