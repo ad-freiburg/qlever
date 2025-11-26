@@ -367,10 +367,12 @@ template <typename Table, ad_utility::IsConst isConstTag>
 class RowReference
     : public RowReferenceImpl::RowReferenceWithRestrictedAccess<Table,
                                                                 isConstTag> {
- private:
+ public:
   using Base =
       RowReferenceImpl::RowReferenceWithRestrictedAccess<Table, isConstTag>;
   using Base::numStaticColumns;
+
+ private:
   using TablePtr = typename Base::TablePtr;
   using T = typename Base::T;
   static constexpr bool isConst = isConstTag == ad_utility::IsConst::True;
