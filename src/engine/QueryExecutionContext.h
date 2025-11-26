@@ -114,6 +114,10 @@ class QueryExecutionContext {
     return *sharedLocatedTriplesSnapshot_;
   }
 
+  LocatedTriplesVersion sharedLocatedTriplesSnapshot() const {
+    return sharedLocatedTriplesSnapshot_;
+  }
+
   // Set the `LocatedTriplesVersion` for evaluating queries. The new version
   // will be used for evaluating queries after this call.
   //

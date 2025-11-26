@@ -1089,8 +1089,8 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromNegated(
       descriptor << " && ";
       appendNotEqualString(descriptor, iri, variable);
     }
-    pattern._filters.emplace_back(SparqlExpressionPimpl{
-        std::move(expression), std::move(descriptor).str()});
+    pattern._filters.push_back({SparqlExpressionPimpl{
+        std::move(expression), std::move(descriptor).str()}});
     return pattern;
   };
   // If only one direction is negated, only return the pattern for that
@@ -1701,7 +1701,7 @@ QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
     // Check if the filter expression is suitable for spatial join optimization
     auto sjConfig = rewriteFilterToSpatialJoinConfig(filterExpression);
     if (!sjConfig.has_value()) {
-      plans.emplace_back(filterExpression, std::nullopt);
+      plans.push_back({filterExpression, std::nullopt});
     } else {
       // Construct spatial join
       auto plan = makeSubtreePlan<SpatialJoin>(
@@ -1709,7 +1709,7 @@ QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
       // Mark that this subtree plan handles (that is, substitutes) the filter
       plan._idsOfIncludedFilters |= 1ULL << i;
       plan.containsFilterSubstitute_ = true;
-      plans.emplace_back(filterExpression, std::move(plan));
+      plans.push_back({filterExpression, std::move(plan)});
     }
   }
   return plans;
@@ -2367,7 +2367,11 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(const SubtreePlan& a,
     auto unionOperation =
         std::dynamic_pointer_cast<Union>(thisPlan._qet->getRootOperation());
 
-    if (!unionOperation) {
+    // Prevent multiplying out two `UNION`s that are joined with each other.
+    // This can create too many possibilities and make the query planner run out
+    // of memory and crash the system.
+    if (!unionOperation ||
+        std::dynamic_pointer_cast<Union>(other._qet->getRootOperation())) {
       return;
     }
 
@@ -3039,9 +3043,9 @@ void QueryPlanner::GraphPatternPlanner::visitBasicGraphPattern(
       auto children = planner_.seedFromPropertyPath(
           triple.s_, std::get<PropertyPath>(triple.p_), triple.o_);
       for (auto& child : children._graphPatterns) {
-        std::visit([self = this](
-                       auto& arg) { self->graphPatternOperationVisitor(arg); },
-                   child);
+        child.visit([self = this](auto& arg) {
+          self->graphPatternOperationVisitor(arg);
+        });
       }
       // Negated property paths can contain filters
       ql::ranges::move(children._filters,
