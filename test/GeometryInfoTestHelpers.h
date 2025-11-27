@@ -12,6 +12,7 @@
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/GTestHelpers.h"
+#include "util/TypeTraits.h"
 
 namespace geoInfoTestHelpers {
 
@@ -281,8 +282,10 @@ inline auto utilMultiLineNear =
 inline auto utilMultiPolygonNear =
     liftMatcherToElementsAreArray<DPolygon, DMultiPolygon>(utilPolygonNear);
 
-// ____________________________________________________________________________
-Matcher<DCollection> utilCollectionNearForwardDecl(DCollection);
+// This helper simply calls is forward `utilCollectionNear(expected)`. It is
+// forward declared here, s.t. `utilAnyGeometryNear` (on which the definition
+// `utilCollectionNear` depends) can use it recursively.
+Matcher<DCollection> utilCollectionNearForwardDecl(DCollection expected);
 
 // ____________________________________________________________________________
 inline auto utilAnyGeometryNear =
@@ -329,6 +332,48 @@ inline Matcher<DCollection> utilCollectionNearForwardDecl(
     DCollection expected) {
   return utilCollectionNear(std::move(expected));
 }
+
+using ParsedWkt = ad_utility::detail::ParsedWkt;
+using ParseResult = ad_utility::detail::ParseResult;
+
+// ____________________________________________________________________________
+inline auto parsedWktNear = liftOptionalMatcher<ParsedWkt>(
+    [](ParsedWkt expected) -> Matcher<ParsedWkt> {
+      return std::visit(
+          [](const auto& contained) -> Matcher<ParsedWkt> {
+            using T = std::decay_t<decltype(contained)>;
+            auto liftVariant = [](const auto& matcher) {
+              return VariantWith<T>(SafeMatcherCast<const T&>(matcher));
+            };
+
+            if constexpr (std::is_same_v<T, DPoint>) {
+              return liftVariant(utilPointNear(contained));
+            } else if constexpr (std::is_same_v<T, DLine>) {
+              return liftVariant(utilLineNear(contained));
+            } else if constexpr (std::is_same_v<T, DPolygon>) {
+              return liftVariant(utilPolygonNear(contained));
+            } else if constexpr (std::is_same_v<T, DMultiPoint>) {
+              return liftVariant(utilMultiPointNear(contained));
+            } else if constexpr (std::is_same_v<T, DMultiLine>) {
+              return liftVariant(utilMultiLineNear(contained));
+            } else if constexpr (std::is_same_v<T, DMultiPolygon>) {
+              return liftVariant(utilMultiPolygonNear(contained));
+            } else if constexpr (std::is_same_v<T, DCollection>) {
+              return liftVariant(utilCollectionNear(contained));
+            } else {
+              static_assert(alwaysFalse<T>);
+            }
+          },
+          std::move(expected));
+    });
+#define EXPECT_PARSED_WKT(a, b) EXPECT_THAT(a, parsedWktNear(b))
+
+// ____________________________________________________________________________
+inline auto parseResultNear = liftOptionalMatcher<ParseResult>(
+    [](ParseResult expected) -> Matcher<ParseResult> {
+      return Pair(Eq(expected.first), parsedWktNear(expected.second));
+    });
+#define EXPECT_WKT_PARSE_RESULT(a, b) EXPECT_THAT(a, parseResultNear(b))
 
 };  // namespace geoInfoTestHelpers
 

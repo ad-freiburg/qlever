@@ -581,14 +581,15 @@ TEST(GeometryInfoTest, SizeOfAndAlignmentBytes) {
 
 // _____________________________________________________________________________
 TEST(GeometryInfoTest, ParseGeoPointOrWktVisitor) {
-  // using namespace ad_utility::detail;
-  // using namespace ::testing;
-  // {
-  //   auto [type, parsed] = parseGeoPointOrWkt(GeoPoint{1, 2});
-  //   EXPECT_EQ(type, WKTType::POINT);
-  //   EXPECT_THAT(parsed, VariantWith<DPoint>(Property(&DPoint::getX,
-  //   DoubleNear())))
-  // }
+  using namespace ad_utility::detail;
+  auto fromSV = [](std::string_view lit) {
+    return GeoPointOrWkt{std::string{lit}};
+  };
+
+  EXPECT_THAT(parseGeoPointOrWkt(GeoPoint{1, 2}),
+              parseResultNear(ParseResult{POINT, DPoint(2, 1)}));
+  EXPECT_THAT(parseGeoPointOrWkt(fromSV(litPoint)),
+              parseResultNear(ParseResult{POINT, DPoint(3, 4)}));
 }
 
 // _____________________________________________________________________________
