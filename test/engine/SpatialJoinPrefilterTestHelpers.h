@@ -185,43 +185,21 @@ inline sj::SweeperCfg makeSweeperCfg(const LibSpatialJoinConfig& libSJConfig,
                                      SweeperResult& results,
                                      SweeperDistResult& resultDists,
                                      double withinDist) {
-  using enum SpatialJoinType;
-  sj::SweeperCfg cfg;
-  cfg.numThreads = 1;
-  cfg.numCacheThreads = 1;
-  cfg.geomCacheMaxSize = 10'000;
-  cfg.sepIsect = std::string{static_cast<char>(INTERSECTS)};
-  cfg.sepContains = std::string{static_cast<char>(CONTAINS)};
-  cfg.sepCovers = std::string{static_cast<char>(COVERS)};
-  cfg.sepTouches = std::string{static_cast<char>(TOUCHES)};
-  cfg.sepEquals = std::string{static_cast<char>(EQUALS)};
-  cfg.sepOverlaps = std::string{static_cast<char>(OVERLAPS)};
-  cfg.sepCrosses = std::string{static_cast<char>(CROSSES)};
-  cfg.useBoxIds = true;
-  cfg.useArea = true;
-  cfg.useOBB = false;
-  cfg.useDiagBox = true;
-  cfg.useFastSweepSkip = true;
-  cfg.useInnerOuter = false;
-  cfg.noGeometryChecks = false;
+  sj::SweeperCfg cfg = SpatialJoinAlgorithms::libspatialjoinSweeperConfig(1);
   cfg.withinDist = withinDist;
-  cfg.computeDE9IM = false;
   auto joinTypeVal = libSJConfig.joinType_;
   cfg.writeRelCb = [&results, &resultDists, joinTypeVal](
                        size_t t, const char* a, size_t, const char* b, size_t,
                        const char* pred, size_t) {
-    if (joinTypeVal == WITHIN_DIST) {
-      results[t].push_back({WITHIN_DIST, std::atoi(a), std::atoi(b)});
+    if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
+      results[t].push_back(
+          {SpatialJoinType::WITHIN_DIST, std::atoi(a), std::atoi(b)});
       resultDists[t].push_back(atof(pred));
     } else {
       results[t].push_back(
           {static_cast<SpatialJoinType>(pred[0]), std::atoi(a), std::atoi(b)});
     }
   };
-  cfg.logCb = {};
-  cfg.statsCb = {};
-  cfg.sweepProgressCb = {};
-  cfg.sweepCancellationCb = {};
   return cfg;
 }
 
