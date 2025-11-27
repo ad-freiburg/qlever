@@ -119,12 +119,12 @@ jobs:
           merge-multiple: true
       - name: Merge amd64 + arm64 images into multi-arch manifest
         working-directory: ${{ runner.temp }}/digests
-        # We need an extra variable so that multiline arguments don't become a problem.
-        run: >
+        # We need an extra variable so that the multiline values don't become a problem.
+        run: |
           ANNOTATIONS="${{ steps.meta.outputs.annotations }}"
-          docker buildx imagetools create
-            -t ${{ env.IMAGE }}:latest
-            -t ${{ env.IMAGE }}:${{ github.ref_name == 'master' && format('pr-{0}', steps.pr.outputs.pr_num) || github.ref_name }}
-            -t ${{ env.IMAGE }}:commit-${{ steps.sha.outputs.sha_short }}
-            $(printf " --annotation %s" $ANNOTATIONS)
+          docker buildx imagetools create \
+            -t ${{ env.IMAGE }}:latest \
+            -t ${{ env.IMAGE }}:${{ github.ref_name == 'master' && format('pr-{0}', steps.pr.outputs.pr_num) || github.ref_name }} \
+            -t ${{ env.IMAGE }}:commit-${{ steps.sha.outputs.sha_short }} \
+            $(printf " --annotation %s" $ANNOTATIONS) \
             $(printf '${{ env.IMAGE }}@sha256:%s ' *)
