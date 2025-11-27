@@ -82,7 +82,6 @@ inline ParseResult parseWkt(const std::string_view& wkt) {
   auto type = getWKTType(wktLiteral);
   using enum WKTType;
   try {
-    // TODO<ullingerc> We need more reliable parsing functions.
     switch (type) {
       case POINT:
         parsed = pointFromWKT<CoordType>(wktLiteral);

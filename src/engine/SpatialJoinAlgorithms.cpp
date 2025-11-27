@@ -393,7 +393,8 @@ sj::SweeperCfg SpatialJoinAlgorithms::libspatialjoinSweeperConfig(
   cfg.numThreads = threads;
   cfg.numCacheThreads = threads;
   // TODO<ullingerc> Determine from query RAM limit?
-  cfg.geomCacheMaxSize = 1'000'000'000;  // Per thread, in bytes
+  cfg.geomCacheMaxSize =
+      (1_GB).getBytes();  // Cache memory per thread, in bytes
   cfg.geomCacheMaxNumElements = 10'000;
   cfg.sepIsect = sep(INTERSECTS);
   cfg.sepContains = sep(CONTAINS);
