@@ -22,10 +22,8 @@ jobs:
         include:
           - platform: linux/amd64
             runner: ubuntu-24.04
-            prefix: amd64
           - platform: linux/arm64
             runner: ubuntu-24.04-arm
-            prefix: arm64
     runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout
@@ -45,22 +43,35 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Build ${{ matrix.platform }}
         uses: docker/build-push-action@v6
+        id: build
         with:
           context: .
           platforms: ${{ matrix.platform }}
-          # Only build, don't run on ARM
-          load: ${{ matrix.platform == 'linux/amd64' }}
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ env.IMAGE }}:${{ matrix.prefix }}-${{ github.sha }}
+          tags: ${{ env.IMAGE }}
+          outputs: type=image,push-by-digest=true,name-canonical=true,push=${{ github.event_name != 'pull_request' }}
           labels: ${{ steps.meta.outputs.labels }}
           annotations: ${{ steps.meta.outputs.annotations }}
-
+      - name: Export digest
+        run: |
+          # Strip forward slash from matrix.platform
+          platform=${{ matrix.platform }}
+          echo "ARTIFACT_NAME=${platform//\//-}" >> $GITHUB_ENV
+          mkdir -p ${{ runner.temp }}/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "${{ runner.temp }}/digests/${digest#sha256:}"
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ env.ARTIFACT_NAME }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
       - name: E2E in Docker
         if: ${{ matrix.platform == 'linux/amd64' }}
         run: |
           sudo mkdir ${{github.workspace}}/e2e_data
           sudo chmod a+rwx ${{github.workspace}}/e2e_data
-          sudo docker run -i --rm -v "${{github.workspace}}/e2e_data:/app/e2e_data/" --entrypoint e2e/e2e.sh ${{ env.IMAGE }}:${{ matrix.prefix }}-${{ github.sha }}
+          sudo docker run -i --rm -v "${{github.workspace}}/e2e_data:/app/e2e_data/" --entrypoint e2e/e2e.sh ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
   docker-merge:
     if: github.event_name != 'pull_request'
     needs: [ build ]
@@ -90,12 +101,18 @@ jobs:
       - name: Get PR number
         id: pr
         run: echo "pr_num=$(git log --format=%s -n 1 | sed -nr 's/.*\(\#([0-9]+)\)/\1/p')" >> $GITHUB_OUTPUT
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-*
+          merge-multiple: true
       - name: Merge amd64 + arm64 images into multi-arch manifest
+        working-directory: ${{ runner.temp }}/digests
         run: >
           docker buildx imagetools create
             -t ${{ env.IMAGE }}:latest
             -t ${{ env.IMAGE }}:${{ github.ref_name == 'master' && format('pr-{0}', steps.pr.outputs.pr_num) || github.ref_name }}
             -t ${{ env.IMAGE }}:commit-${{ steps.sha.outputs.sha_short }}
             $(printf " --annotation %s" "${{ steps.meta.outputs.annotations }}")
-            ${{ env.IMAGE }}:amd64-${{ github.sha }}
-            ${{ env.IMAGE }}:arm64-${{ github.sha }}
+            $(printf '${{ env.IMAGE }}@sha256:%s ' *)
