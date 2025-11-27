@@ -418,7 +418,8 @@ class AddCombinedRowToIdTable {
           if (el != nullptr) {
             tmpVocabs.push_back(std::cref(*el));
           }
-          return tmpVocabs;
+        }
+        return tmpVocabs;
 #endif
       }();
       mergedVocab_.mergeWith(ql::ranges::ref_view{rangeOfNonNullVocabs});
