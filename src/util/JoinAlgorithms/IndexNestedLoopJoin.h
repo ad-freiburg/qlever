@@ -7,7 +7,6 @@
 
 #include <vector>
 
-#include "JoinAlgorithms.h"
 #include "engine/CallFixedSize.h"
 #include "engine/JoinHelpers.h"
 #include "engine/Result.h"
@@ -16,6 +15,7 @@
 #include "util/ChunkedForLoop.h"
 #include "util/CompilerExtensions.h"
 #include "util/Exception.h"
+#include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/JoinAlgorithms/JoinColumnMapping.h"
 
 namespace joinAlgorithms::indexNestedLoop {
