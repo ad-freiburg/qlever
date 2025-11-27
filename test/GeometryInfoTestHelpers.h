@@ -262,21 +262,19 @@ inline auto utilLineNear =
     liftMatcherToElementsAreArray<DPoint, DLine>(utilPointNear);
 
 // ____________________________________________________________________________
-inline auto utilPolygonNear = [](DPolygon expected) -> Matcher<DPolygon> {
-  return AllOf(
-      Property(&DPolygon::getOuter, utilLineNear(expected.getOuter())),
-      Property(&DPolygon::getInners,
-               liftMatcherToElementsAreArray<DLine, std::vector<DLine>>(
-                   utilLineNear)));
-};
-
-// ____________________________________________________________________________
 inline auto utilMultiPointNear =
     liftMatcherToElementsAreArray<DPoint, DMultiPoint>(utilPointNear);
 
 // ____________________________________________________________________________
 inline auto utilMultiLineNear =
     liftMatcherToElementsAreArray<DLine, DMultiLine>(utilLineNear);
+
+// ____________________________________________________________________________
+inline auto utilPolygonNear = [](DPolygon expected) -> Matcher<DPolygon> {
+  return AllOf(
+      Property(&DPolygon::getOuter, utilLineNear(expected.getOuter())),
+      Property(&DPolygon::getInners, utilMultiLineNear(expected.getInners())));
+};
 
 // ____________________________________________________________________________
 inline auto utilMultiPolygonNear =
