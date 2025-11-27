@@ -138,7 +138,8 @@ std::string TextIndexScanForEntity::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "ENTITY INDEX SCAN FOR WORD: "
      << " with word: \"" << config_.word_ << "\" and fixed-entity: \""
-     << (hasFixedEntity() ? fixedEntity() : "no fixed-entity") << " \"";
+     << (hasFixedEntity() ? fixedEntity() : "no fixed-entity")
+     << "\", has variable: " << config_.scoreVar_.has_value();
   return std::move(os).str();
 }
 
