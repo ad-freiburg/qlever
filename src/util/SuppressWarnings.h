@@ -30,14 +30,6 @@
 #define ENABLE_WARNINGS_GCC_13
 #endif
 
-#ifdef __GNUC__
-#define DISABLE_WARNINGS_GCC_TEMPLATE_FRIEND \
-  _Pragma("GCC diagnostic push")             \
-      _Pragma("GCC diagnostic ignored \"-Wnon-template-friend\"")
-
-#define ENABLE_WARNINGS_GCC_TEMPLATE_FRIEND _Pragma("GCC diagnostic pop")
-#endif
-
 #ifndef DISABLE_WARNINGS_GCC_TEMPLATE_FRIEND
 #define DISABLE_WARNINGS_GCC_TEMPLATE_FRIEND
 #define ENABLE_WARNINGS_GCC_TEMPLATE_FRIEND

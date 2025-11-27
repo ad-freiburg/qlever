@@ -295,7 +295,7 @@ static BlockMetadataRanges getRangesMixedDatatypeBlocks(
 //______________________________________________________________________________
 // Return `CompOp`s as string.
 static std::string getRelationalOpStr(const CompOp relOp) {
-  using enum valueIdComparators::Comparison;
+  using enum CompOp;
   switch (relOp) {
     case LT:
       return "LT(<)";
@@ -318,7 +318,7 @@ static std::string getRelationalOpStr(const CompOp relOp) {
 //______________________________________________________________________________
 // Return `Datatype`s (for `isDatatype` pre-filter) as string.
 static std::string getDatatypeIsTypeStr(const IsDatatype isDtype) {
-  using enum prefilterExpressions::IsDatatype;
+  using enum IsDatatype;
   switch (isDtype) {
     case IRI:
       return "Iri";
@@ -336,7 +336,7 @@ static std::string getDatatypeIsTypeStr(const IsDatatype isDtype) {
 //______________________________________________________________________________
 // Return `LogicalOperator`s as string.
 static std::string getLogicalOpStr(const LogicalOperator logOp) {
-  using enum prefilterExpressions::LogicalOperator;
+  using enum LogicalOperator;
   switch (logOp) {
     case AND:
       return "AND(&&)";
@@ -505,7 +505,7 @@ BlockMetadataRanges PrefixRegexExpression::evaluateImpl(
 template <CompOp Comparison>
 std::unique_ptr<PrefilterExpression>
 RelationalExpression<Comparison>::logicalComplement() const {
-  using enum valueIdComparators::Comparison;
+  using enum CompOp;
   using namespace ad_utility;
   using P = ConstexprMapPair<CompOp, CompOp>;
   // The complementation logic implemented with the following mapping
@@ -776,7 +776,7 @@ BlockMetadataRanges IsInExpression::evaluateImpl(
 template <LogicalOperator Operation>
 std::unique_ptr<PrefilterExpression>
 LogicalExpression<Operation>::logicalComplement() const {
-  using enum prefilterExpressions::LogicalOperator;
+  using enum LogicalOperator;
   // Source De-Morgan's laws: De Morgan's laws, Wikipedia.
   // Reference: https://en.wikipedia.org/wiki/De_Morgan%27s_laws
   if constexpr (Operation == OR) {
@@ -796,7 +796,7 @@ template <LogicalOperator Operation>
 BlockMetadataRanges LogicalExpression<Operation>::evaluateImpl(
     const Vocab& vocab, const ValueIdSubrange& idRange,
     BlockMetadataSpan blockRange, bool getTotalComplement) const {
-  using enum prefilterExpressions::LogicalOperator;
+  using enum LogicalOperator;
   if constexpr (Operation == AND) {
     return detail::logicalOps::mergeRelevantBlockItRanges<false>(
         child1_->evaluateImpl(vocab, idRange, blockRange, getTotalComplement),
@@ -935,7 +935,7 @@ std::unique_ptr<PrefilterExpression> makePrefilterExpressionYearImpl(
   const auto getDateId = [](const int adjustedYear) {
     return Id::makeFromDate(DateYearOrDuration(Date(adjustedYear, 0, 0)));
   };
-  using enum valueIdComparators::Comparison;
+  using enum CompOp;
   switch (comparison) {
     case EQ:
       return make<AndExpression>(make<LtExpr>(getDateId(year + 1)),
@@ -1016,7 +1016,7 @@ template <CompOp comparison>
 std::vector<PrefilterExprVariablePair> makePrefilterExpressionVec(
     const IdOrLocalVocabEntry& referenceValue, const Variable& variable,
     bool mirrored, bool prefilterDateByYear) {
-  using enum valueIdComparators::Comparison;
+  using enum CompOp;
   std::vector<PrefilterExprVariablePair> resVec{};
   if (mirrored) {
     using P = ad_utility::ConstexprMapPair<CompOp, CompOp>;
