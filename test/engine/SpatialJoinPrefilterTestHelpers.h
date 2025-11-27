@@ -185,15 +185,15 @@ inline sj::SweeperCfg makeSweeperCfg(const LibSpatialJoinConfig& libSJConfig,
                                      SweeperResult& results,
                                      SweeperDistResult& resultDists,
                                      double withinDist) {
+  using enum SpatialJoinType;
   sj::SweeperCfg cfg = SpatialJoinAlgorithms::libspatialjoinSweeperConfig(1);
   cfg.withinDist = withinDist;
   auto joinTypeVal = libSJConfig.joinType_;
   cfg.writeRelCb = [&results, &resultDists, joinTypeVal](
                        size_t t, const char* a, size_t, const char* b, size_t,
                        const char* pred, size_t) {
-    if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
-      results[t].push_back(
-          {SpatialJoinType::WITHIN_DIST, std::atoi(a), std::atoi(b)});
+    if (joinTypeVal == WITHIN_DIST) {
+      results[t].push_back({WITHIN_DIST, std::atoi(a), std::atoi(b)});
       resultDists[t].push_back(atof(pred));
     } else {
       results[t].push_back(
