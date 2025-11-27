@@ -968,7 +968,15 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
     // TODO<joka921> ql::ranges::lower_bound doesn't work here.
     auto it = std::lower_bound(first.subrange().begin(), first.subrange().end(),
                                currentEl, lessThan_);
-    return std::tuple{std::ref(first.fullBlock()), first.subrange(), it};
+    // 1. Automatic type deduction for `std::tuple{...}` doesn't work on QCC
+    // 2. std::make_tuple has special (undesired in our case) behavior for
+    // `reference_wrapper`....
+    // TODO<joka921> Address this.
+    using RefWrap = decltype(std::ref(first.fullBlock()));
+    using Subr = std::decay_t<decltype(first.subrange())>;
+    using It = decltype(it);
+    return std::tuple<RefWrap, Subr, It>{std::ref(first.fullBlock()),
+                                         first.subrange(), it};
   }
 
   // Check if a side contains undefined values.

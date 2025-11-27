@@ -76,6 +76,8 @@ struct LocalVocabIndexAndSplitVal {
 using ItemAlloc = ql::pmr::polymorphic_allocator<
     std::pair<const std::string_view, LocalVocabIndexAndSplitVal>>;
 
+// static_assert(std::is_nothrow_move_constructible_v<ItemAlloc>);
+
 // The actual hash map type.
 using ItemMap = ad_utility::HashMap<
     std::string_view, LocalVocabIndexAndSplitVal,
@@ -114,8 +116,15 @@ struct ItemMapAndBuffer {
   ItemMap map_;
   MonotonicBuffer buffer_;
 
+  // static_assert(std::is_nothrow_move_constructible_v<ItemMap>);
+  // static_assert(std::is_nothrow_move_constructible_v<MonotonicBuffer>);
+
   explicit ItemMapAndBuffer(ItemAlloc alloc) : map_{alloc} {}
-  ItemMapAndBuffer(ItemMapAndBuffer&&) noexcept = default;
+  // TODO<joka921> make this `=default` as soon as we have a
+  // nothrow-copy-constructible polymorphic_allocator also in older BOOSt
+  // versions used by BMW.
+  ItemMapAndBuffer(ItemMapAndBuffer&& rhs) noexcept
+      : map_{std::move(rhs.map_)}, buffer_{std::move(rhs.buffer_)} {}
   // We have to delete the move-assignment as it would have the wrong semantics
   // (the monotonic buffer wouldn't be moved, this is one of the oddities of the
   // `ql::pmr` types.
