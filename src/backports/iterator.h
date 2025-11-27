@@ -108,7 +108,6 @@ CPP_template(typename Sent)(
 
 using ::ranges::iter_reference_t;
 using ::ranges::iter_value_t;
-
 }  // namespace ql
 
 #endif  // QLEVER_SRC_BACKPORTS_ITERATOR_H
