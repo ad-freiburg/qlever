@@ -195,4 +195,20 @@ auto liftOptionalMatcher(MakeMatcher makeMatcher) {
       };
 }
 
+// Helper that takes an explicit type `T`, and a function `T -> Matcher<T>`. It
+// returns a function `ArrayType -> Matcher<ArrayType>` that applies
+// `MakeMatcher` to each of the expected values in the argument of `ArrayType`
+// and returns an `ElementsAreArray` matcher of these submatchers.
+template <typename T, typename ArrayType, typename MakeMatcher>
+auto liftMatcherToElementsAreArray(MakeMatcher makeMatcher) {
+  return
+      [makeMatcher](ArrayType expectedValues) -> ::testing::Matcher<ArrayType> {
+        std::vector<::testing::Matcher<T>> childMatchers;
+        for (const auto& expected : expectedValues) {
+          childMatchers.push_back(makeMatcher(expected));
+        }
+        return ::testing::ElementsAreArray(childMatchers);
+      };
+}
+
 #endif  // QLEVER_TEST_UTIL_GTESTHELPERS_H

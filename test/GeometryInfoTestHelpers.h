@@ -6,6 +6,7 @@
 #define QLEVER_TEST_GEOMETRYINFOTESTHELPERS_H
 
 #include <gtest/gtest.h>
+#include <util/geo/Geo.h>
 
 #include "./printers/GeometryInfoPrinters.h"
 #include "rdfTypes/GeometryInfo.h"
@@ -241,6 +242,92 @@ inline MetricArea getAreaForTesting(const std::string_view wkt) {
     return MetricArea{std::numeric_limits<double>::quiet_NaN()};
   }
   return area.value();
+}
+
+// In the following there are functions to generate gtest matchers for all of
+// the geometry types supported by `pb_util`.
+using namespace ::util::geo;
+
+// ____________________________________________________________________________
+inline auto utilPointNear = [](DPoint expected) -> Matcher<DPoint> {
+  return AllOf(Property(&DPoint::getX,
+                        DoubleNear(expected.getX(), allowedCoordinateError)),
+               Property(&DPoint::getY,
+                        DoubleNear(expected.getY(), allowedCoordinateError)));
+};
+
+// ____________________________________________________________________________
+inline auto utilLineNear =
+    liftMatcherToElementsAreArray<DPoint, DLine>(utilPointNear);
+
+// ____________________________________________________________________________
+inline auto utilPolygonNear = [](DPolygon expected) -> Matcher<DPolygon> {
+  return AllOf(
+      Property(&DPolygon::getOuter, utilLineNear(expected.getOuter())),
+      Property(&DPolygon::getInners,
+               liftMatcherToElementsAreArray<DLine, std::vector<DLine>>(
+                   utilLineNear)));
+};
+
+// ____________________________________________________________________________
+inline auto utilMultiPointNear =
+    liftMatcherToElementsAreArray<DPoint, DMultiPoint>(utilPointNear);
+
+// ____________________________________________________________________________
+inline auto utilMultiLineNear =
+    liftMatcherToElementsAreArray<DLine, DMultiLine>(utilLineNear);
+
+// ____________________________________________________________________________
+inline auto utilMultiPolygonNear =
+    liftMatcherToElementsAreArray<DPolygon, DMultiPolygon>(utilPolygonNear);
+
+// ____________________________________________________________________________
+Matcher<DCollection> utilCollectionNearForwardDecl(DCollection);
+
+// ____________________________________________________________________________
+inline auto utilAnyGeometryNear =
+    [](DAnyGeometry expected) -> Matcher<DAnyGeometry> {
+  using enum AnyGeometryMember;
+  ::testing::Matcher<DAnyGeometry> geometryMatcher;
+
+  switch (AnyGeometryMember{expected.getType()}) {
+    case POINT:
+      return Property(&DAnyGeometry::getPoint,
+                      utilPointNear(expected.getPoint()));
+    case LINE:
+      return Property(&DAnyGeometry::getLine, utilLineNear(expected.getLine()));
+    case POLYGON:
+      return Property(&DAnyGeometry::getPolygon,
+                      utilPolygonNear(expected.getPolygon()));
+    case MULTILINE:
+      return Property(&DAnyGeometry::getMultiLine,
+                      utilMultiLineNear(expected.getMultiLine()));
+    case MULTIPOLYGON:
+      return Property(&DAnyGeometry::getMultiPolygon,
+                      utilMultiPolygonNear(expected.getMultiPolygon()));
+    case COLLECTION:
+      return Property(&DAnyGeometry::getCollection,
+                      utilCollectionNearForwardDecl(expected.getCollection()));
+    case MULTIPOINT:
+      return Property(&DAnyGeometry::getMultiPoint,
+                      utilMultiPointNear(expected.getMultiPoint()));
+    default:
+      AD_FAIL();
+  }
+
+  return AllOf(Property(&DAnyGeometry::getType, Eq(expected.getType())),
+               geometryMatcher);
+};
+
+// ____________________________________________________________________________
+inline auto utilCollectionNear =
+    liftMatcherToElementsAreArray<DAnyGeometry, DCollection>(
+        utilAnyGeometryNear);
+
+// ____________________________________________________________________________
+inline Matcher<DCollection> utilCollectionNearForwardDecl(
+    DCollection expected) {
+  return utilCollectionNear(std::move(expected));
 }
 
 };  // namespace geoInfoTestHelpers
