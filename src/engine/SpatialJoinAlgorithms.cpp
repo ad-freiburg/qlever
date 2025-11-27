@@ -385,8 +385,9 @@ Result SpatialJoinAlgorithms::BaselineAlgorithm() {
 sj::SweeperCfg SpatialJoinAlgorithms::libspatialjoinSweeperConfig(
     size_t threads) {
   using enum SpatialJoinType;
-  auto sep =
-      [](SpatialJoinType type) { return std::string{static_cast<char>(type)}; }
+  auto sep = [](SpatialJoinType type) {
+    return std::string{static_cast<char>(type)};
+  };
 
   sj::SweeperCfg cfg;
   cfg.numThreads = threads;
