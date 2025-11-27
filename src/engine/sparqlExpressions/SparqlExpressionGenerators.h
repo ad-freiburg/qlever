@@ -8,11 +8,11 @@
 #ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONGENERATORS_H
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONGENERATORS_H
 
-// We currently have two implementation for the generators in this file, one for
-// the C++20 mode (using generator coroutines), and one for the C++17 mode using
-// ql::ranges + type erasure (the type erasure currently is needed to keep the
-// compile-times reasonable). We currently keep both implementations because the
-// C++17 implementation is slower than the generator-based type erasure for
+// We currently have two implementations for the generators in this file, one
+// for the C++20 mode (using generator coroutines), and one for the C++17 mode
+// using ql::ranges + type erasure (the type erasure currently is needed to keep
+// the compile-times reasonable). We currently keep both implementations because
+// the C++17 implementation is slower than the generator-based type erasure for
 // reasons we yet have to explore.
 #ifndef QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17
 #include <absl/container/inlined_vector.h>
