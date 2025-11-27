@@ -21,6 +21,8 @@ jobs:
       - name: Generate image metadata
         id: meta
         uses: docker/metadata-action@v5
+        with:
+          images: adfreiburg/qlever
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Login to Docker Hub
@@ -46,6 +48,8 @@ jobs:
           load: true
           push: ${{ github.event_name != 'pull_request' }}
           tags: adfreiburg/qlever:amd64-${{ github.sha }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
 
       - name: E2E in Docker
         run: |
@@ -60,6 +64,8 @@ jobs:
       - name: Generate image metadata
         id: meta
         uses: docker/metadata-action@v5
+        with:
+          images: adfreiburg/qlever
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Login to Docker Hub
@@ -77,9 +83,11 @@ jobs:
           load: false
           push: ${{ github.event_name != 'pull_request' }}
           tags: adfreiburg/qlever:arm64-${{ github.sha }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
   docker-push:
     if: github.event_name != 'pull_request'
-    needs: [docker-amd64, docker-arm64]
+    needs: [ docker-amd64, docker-arm64 ]
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
@@ -106,25 +114,12 @@ jobs:
       - name: Get PR number
         id: pr
         run: echo "pr_num=$(git log --format=%s -n 1 | sed -nr 's/.*\(\#([0-9]+)\)/\1/p')" >> $GITHUB_OUTPUT
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          push: true
-          platforms: linux/amd64,linux/arm64
-          images: |
+      - name: Merge amd64 + arm64 images into multi-arch manifest
+        run: >
+          docker buildx imagetools create
+            -t adfreiburg/qlever:latest
+            -t adfreiburg/qlever:${{ github.ref_name == 'master' && format('pr-{0}', steps.pr.outputs.pr_num) || github.ref_name }}
+            -t adfreiburg/qlever:commit-${{ steps.sha.outputs.sha_short }}
+            $(printf " --annotation %s" "${{ steps.meta.outputs.annotations }}")
             adfreiburg/qlever:amd64-${{ github.sha }}
             adfreiburg/qlever:arm64-${{ github.sha }}
-
-          # If this is a push on master, publish with short commit sha
-          # else use the ref name, which has to be the tag in this case.
-          # We have to explicitly add the "qlever:latest" tag for it to work correctly,
-          # see e.g. https://stackoverflow.com/questions/27643017/do-i-need-to-manually-tag-latest-when-pushing-to-docker-public-repository
-          tags: >
-            adfreiburg/qlever:latest,
-            adfreiburg/qlever:${{ github.ref_name == 'master' && format('pr-{0}', steps.pr.outputs.pr_num) || github.ref_name }},
-            adfreiburg/qlever:commit-${{ steps.sha.outputs.sha_short }},
-
-          # Set Annotations and Labels that conform to the OpenContainers
-          # Annotations Spec
-          annotations: ${{ steps.meta.outputs.annotations }}
-          labels: ${{ steps.meta.outputs.labels }}
