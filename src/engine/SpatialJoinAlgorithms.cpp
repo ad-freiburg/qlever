@@ -410,18 +410,6 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
     spatialJoin_.value()->runtimeInfo().addDetail("within-dist", withinDist);
   }
 
-  // TEMP copied from libsj
-  auto intFromString = [](const char* s, size_t n) {
-    uint64_t id = 0;
-
-    for (size_t i = n; i > 0; i--) {
-      id |= static_cast<uint64_t>(static_cast<unsigned char>(s[i - 1]))
-            << (8 * (n - 1 - (i - 1)));
-    }
-
-    return id;
-  };
-
   // Configure the sweeper.
   const sj::SweeperCfg sweeperCfg = [&] {
     sj::SweeperCfg cfg;
@@ -446,37 +434,13 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
     cfg.noGeometryChecks = false;
     cfg.withinDist = withinDist;
     cfg.computeDE9IM = false;
-    cfg.writeRelCb = [&results, &resultDists, joinTypeVal, &intFromString](
-                         size_t t, const char* a, size_t an, const char* b,
-                         size_t bn, const char* pred, size_t predn) {
+    cfg.writeRelCb = [&results, &resultDists, joinTypeVal](
+                         size_t t, const char* a, size_t, const char* b, size_t,
+                         const char* pred, size_t) {
       if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
         results[t].push_back({std::atoi(a), std::atoi(b)});
         resultDists[t].push_back(atof(pred));
       } else if (pred[0] == static_cast<char>(joinTypeVal)) {
-        // TEMP copied from libsj
-
-        std::string tmpa, tmpb;
-
-        if (an > 0 && a[0] == 's') {
-          a = &a[1];
-          an--;
-        } else if (an > 0 && a[0] == 'd') {
-          tmpa = std::to_string(intFromString(&a[1], an - 1));
-          a = tmpa.c_str();
-          an = tmpa.size();
-        }
-
-        if (bn > 0 && b[0] == 's') {
-          b = &b[1];
-          bn--;
-        } else if (bn > 0 && b[0] == 'd') {
-          tmpb = std::to_string(intFromString(&b[1], bn - 1));
-          b = tmpb.c_str();
-          bn = tmpb.size();
-        }
-
-        std::cout << a << " " << an << " ; " << b << " " << bn << " ; " << pred
-                  << " " << predn << std::endl;
         results[t].push_back({std::atoi(a), std::atoi(b)});
       }
     };
