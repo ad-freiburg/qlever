@@ -423,10 +423,8 @@ struct UtilGeomToWktVisitor {
     return UtilGeomToWktVisitor{}(opt.value());
   }
 
-  // Visitor for the `ParsedWkt` and `GeometryN` variants
-  CPP_template(typename T)(
-      requires SimilarTo<T, ParsedWkt>) std::optional<std::string>
-  operator()(const T& variant) const {
+  // Visitor for the `ParsedWkt` variant
+  std::optional<std::string> operator()(const ParsedWkt& variant) const {
     return std::visit(UtilGeomToWktVisitor{}, variant);
   }
 
