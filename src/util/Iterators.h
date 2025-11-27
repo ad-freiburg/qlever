@@ -105,6 +105,7 @@ class IteratorForAccessOperator {
   bool operator==(const IteratorForAccessOperator& rhs) const {
     return index_ == rhs.index_;
   }
+
   bool operator!=(const IteratorForAccessOperator& rhs) const {
     return index_ != rhs.index_;
   }
@@ -371,10 +372,6 @@ class InputRangeFromGet
     decltype(auto) operator->() { return std::addressof(operator*()); }
     decltype(auto) operator->() const { return std::addressof(operator*()); }
 
-    /*
-    friend bool operator==(const Iterator& it, const Iterator& it2);
-    friend bool operator!=(const Iterator& it, const Iterator& it2);
-    */
     friend bool operator==(const Iterator& it, Sentinel) {
       return !it.mixin_->storage_.has_value();
     }

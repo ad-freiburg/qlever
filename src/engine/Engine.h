@@ -14,9 +14,8 @@
 
 class Engine {
  public:
-  template <size_t WIDTH_PARAM>
+  template <size_t WIDTH>
   static void sort(IdTable* tab, const size_t keyColumn) {
-    static constexpr size_t WIDTH = static_cast<size_t>(WIDTH_PARAM);
     AD_LOG_DEBUG << "Sorting " << tab->size() << " elements ..." << std::endl;
     IdTableStatic<WIDTH> stab = std::move(*tab).toStatic<WIDTH>();
     if constexpr (USE_PARALLEL_SORT) {

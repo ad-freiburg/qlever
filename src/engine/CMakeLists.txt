@@ -21,8 +21,8 @@ add_library(engine
 qlever_target_link_libraries(engine util index parser global sparqlExpressions SortPerformanceEstimator Boost::iostreams s2 spatialjoin-dev pb_util)
 
 # When `REDUCED_FEATURE_SET_FOR_CPP17` is set, do not link `engine` against the
-# `http` library (which requires C++20). This works because `http` is only used in two operations, `Service` and `Load`,
-# which we disable when
+# `http` library (which requires C++20). This works because `http` is only used
+# in two operations, `Service` and `Load`, which we disable when
 # `REDUCED_FEATURE_SET_FOR_CPP17` is set.
 if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
     target_link_libraries(engine http)
@@ -30,8 +30,3 @@ endif()
 
 add_library(server Server.cpp)
 qlever_target_link_libraries(server engine util index parser global http SortPerformanceEstimator)
-
-add_library(exportQecOnly ExportQueryExecutionTrees.cpp)
-add_library(groupByOnly GroupBy.cpp LazyGroupBy.cpp GroupByImpl.cpp)
-qlever_target_link_libraries(exportQecOnly)
-qlever_target_link_libraries(groupByOnly)

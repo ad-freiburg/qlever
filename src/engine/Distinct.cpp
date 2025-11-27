@@ -186,14 +186,6 @@ IdTable Distinct::outOfPlaceDistinct(const IdTable& dynInput) const {
 
   auto begin = inputView.begin();
   auto end = inputView.end();
-  using It = decltype(begin);
-  using Sent = decltype(end);
-  using Inserter = decltype(std::back_inserter(output));
-  auto comp = [this](const auto& a, const auto& b) {
-    // Without explicit this clang seems to
-    // think the this capture is redundant.
-    return this->matchesRow(a, b);
-  };
   while (begin < end) {
     int64_t allowedOffset = std::min(end - begin, CHUNK_SIZE);
     begin = ql::ranges::unique_copy(begin, begin + allowedOffset,

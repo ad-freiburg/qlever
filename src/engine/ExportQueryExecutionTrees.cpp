@@ -222,7 +222,6 @@ ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
   // the blocks of which some part has to be exported. Consume as few blocks
   // of the result as possible.
   namespace v = ql::views;
-
   return InputRangeTypeErased{
       OwningView{getIdTables(result)} |
       v::transform(tableToState)
@@ -1255,7 +1254,7 @@ ExportQueryExecutionTrees::computeResult(
     }
   }};
 
-  using enum ad_utility::MediaType;
+  using enum MediaType;
   static constexpr std::array supportedTypes{
       csv, tsv, octetStream, turtle, sparqlXml, sparqlJson, qleverJson};
   AD_CORRECTNESS_CHECK(ad_utility::contains(supportedTypes, mediaType));

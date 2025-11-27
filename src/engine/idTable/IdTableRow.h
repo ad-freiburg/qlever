@@ -10,7 +10,6 @@
 #include <variant>
 #include <vector>
 
-#include "backports/keywords.h"
 #include "backports/three_way_comparison.h"
 #include "backports/type_traits.h"
 #include "global/Id.h"
@@ -312,8 +311,7 @@ class RowReferenceImpl {
 
    protected:
     // Internal implementation of the assignment from a `Row` as well as a
-    // `RowReference`. This assignment actually writes to the underlying
-    // table.
+    // `RowReference`. This assignment actually writes to the underlying table.
     template <typename T1, typename T2>
     static This& assignmentImpl(T1&& self, const T2& other) {
       if constexpr (numStaticColumns == 0) {
@@ -455,9 +453,9 @@ class RowReference
   }
 
   // It is technically a bug to copy a row reference, hence we delete the copy
-  // constructor, at least in C++20 mode. However, on older compilers like
-  // QCC8, range-v3 requires not only a declaration, but a definition of the
-  // copy constructor.
+  // constructor, at least in C++20 mode. However, on older compilers like QCC8,
+  // range-v3 requires not only a declaration, but a definition of the copy
+  // constructor.
 #ifdef QLEVER_CPP_17
   RowReference(const RowReference&) = default;
 #else
