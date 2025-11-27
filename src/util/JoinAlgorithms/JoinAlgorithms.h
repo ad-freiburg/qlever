@@ -968,7 +968,9 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
     // TODO<joka921> ql::ranges::lower_bound doesn't work here.
     auto it = std::lower_bound(first.subrange().begin(), first.subrange().end(),
                                currentEl, lessThan_);
-    return std::tuple{std::ref(first.fullBlock()), first.subrange(), it};
+    // Note: `std::make_tuple` will convert the `reference_wrapper` returned by
+    // `std::ref` into a plain reference as the tuple element.
+    return std::make_tuple(std::ref(first.fullBlock()), first.subrange(), it);
   }
 
   // Check if a side contains undefined values.
@@ -1054,10 +1056,10 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
           if constexpr (left) {
             begL = undefBlock.fullBlock().begin();
             compatibleRowAction_.setInput(undefBlock.fullBlock(),
-                                          fullBlockRight.get());
+                                          fullBlockRight);
           } else {
             begR = undefBlock.fullBlock().begin();
-            compatibleRowAction_.setInput(fullBlockLeft.get(),
+            compatibleRowAction_.setInput(fullBlockLeft,
                                           undefBlock.fullBlock());
           }
           const auto& subr = undefBlock.subrange();
@@ -1067,9 +1069,9 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
 
     auto endCallback = [&, this]() {
       // Reset back to original input.
-      begL = fullBlockLeft.get().begin();
-      begR = fullBlockRight.get().begin();
-      compatibleRowAction_.setInput(fullBlockLeft.get(), fullBlockRight.get());
+      begL = fullBlockLeft.begin();
+      begR = fullBlockRight.begin();
+      compatibleRowAction_.setInput(fullBlockLeft, fullBlockRight);
     };
 
     // TODO<joka921> improve the `CachingTransformInputRange` to make it movable
@@ -1115,14 +1117,14 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
                                       RightBlocks& currentBlocksRight,
                                       const ProjectedEl& currentEl) {
     // Get the first blocks.
-    auto [fullBlockLeft, subrangeLeft, currentElItL] =
+    auto&& [fullBlockLeft, subrangeLeft, currentElItL] =
         getFirstBlock(currentBlocksLeft, currentEl);
-    auto [fullBlockRight, subrangeRight, currentElItR] =
+    auto&& [fullBlockRight, subrangeRight, currentElItR] =
         getFirstBlock(currentBlocksRight, currentEl);
 
-    compatibleRowAction_.setInput(fullBlockLeft.get(), fullBlockRight.get());
-    auto begL = fullBlockLeft.get().begin();
-    auto begR = fullBlockRight.get().begin();
+    compatibleRowAction_.setInput(fullBlockLeft, fullBlockRight);
+    auto begL = fullBlockLeft.begin();
+    auto begR = fullBlockRight.begin();
 
     auto addRowIndex = [&begL, &begR, this](auto itFromL, auto itFromR) {
       AD_EXPENSIVE_CHECK(itFromL >= begL);
@@ -1143,7 +1145,7 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
 
     auto addNotFoundRowIndex = [&]() {
       if constexpr (DoOptionalJoinOrMinus) {
-        return [this, begL = fullBlockLeft.get().begin()](auto itFromL) {
+        return [this, begL = fullBlockLeft.begin()](auto itFromL) {
           AD_CORRECTNESS_CHECK(!hasUndef(rightSide_));
           compatibleRowAction_.addOptionalRow(itFromL - begL);
         };
