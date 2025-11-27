@@ -3,7 +3,7 @@
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#include "./SparqlExpressionPimpl.h"
+#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 
 #include "backports/algorithm.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"

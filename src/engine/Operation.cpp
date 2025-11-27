@@ -76,8 +76,8 @@ std::vector<std::string> Operation::collectWarnings() const {
       continue;
     }
     auto recursive = child->collectWarnings();
-    res.insert(res.end(), std::make_move_iterator(recursive.begin()),
-               std::make_move_iterator(recursive.end()));
+    res.insert(res.end(), ql::make_move_iterator(recursive.begin()),
+               ql::make_move_iterator(recursive.end()));
   }
 
   return res;
@@ -530,8 +530,7 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
   // To set it to zero we thus have to set the `totalTime_` to that sum.
   auto timesOfChildren = _runtimeInfo->children_ |
                          ql::views::transform(&RuntimeInformation::totalTime_);
-  _runtimeInfo->totalTime_ =
-      std::reduce(timesOfChildren.begin(), timesOfChildren.end(), 0us);
+  _runtimeInfo->totalTime_ = ::ranges::accumulate(timesOfChildren, 0us);
 
   signalQueryUpdate();
 }

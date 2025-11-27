@@ -7,6 +7,7 @@
 
 #include <gtest/gtest.h>
 
+#include "./printers/GeometryInfoPrinters.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/GTestHelpers.h"
@@ -14,95 +15,78 @@
 namespace geoInfoTestHelpers {
 
 using namespace ad_utility;
+using namespace ::testing;
 using Loc = source_location;
 
-// Helpers that assert (approx.) equality of two GeometryInfo objects or for
+// Helpers that check (approx.) equality of two GeometryInfo objects or for
 // instances of the associated helper classes.
+static constexpr double allowedCoordinateError = 0.001;
 
 // ____________________________________________________________________________
-inline void checkCentroid(std::optional<Centroid> a, std::optional<Centroid> b,
-                          Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-  auto l = generateLocationTrace(sourceLocation);
-  ASSERT_EQ(a.has_value(), b.has_value());
-  if (!a.has_value()) {
-    return;
-  }
-  ASSERT_NEAR(a.value().centroid().getLat(), b.value().centroid().getLat(),
-              0.001);
-  ASSERT_NEAR(a.value().centroid().getLng(), b.value().centroid().getLng(),
-              0.001);
-}
+inline auto geoPointNear =
+    liftOptionalMatcher<GeoPoint>([](GeoPoint expected) -> Matcher<GeoPoint> {
+      return AllOf(
+          Property(&GeoPoint::getLat,
+                   DoubleNear(expected.getLat(), allowedCoordinateError)),
+          Property(&GeoPoint::getLng,
+                   DoubleNear(expected.getLng(), allowedCoordinateError)));
+    });
+#define EXPECT_GEOPOINT_NEAR(a, b) EXPECT_THAT(a, geoPointNear(b))
 
 // ____________________________________________________________________________
-inline void checkBoundingBox(std::optional<BoundingBox> a,
-                             std::optional<BoundingBox> b,
-                             Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-  auto l = generateLocationTrace(sourceLocation);
-  ASSERT_EQ(a.has_value(), b.has_value());
-  if (!a.has_value()) {
-    return;
-  }
-  auto [all, aur] = a.value().pair();
-  auto [bll, bur] = b.value().pair();
-  ASSERT_NEAR(all.getLat(), bll.getLat(), 0.001);
-  ASSERT_NEAR(all.getLng(), bll.getLng(), 0.001);
-  ASSERT_NEAR(aur.getLng(), bur.getLng(), 0.001);
-  ASSERT_NEAR(aur.getLng(), bur.getLng(), 0.001);
-}
+inline auto centroidNear =
+    liftOptionalMatcher<Centroid>([](Centroid expected) -> Matcher<Centroid> {
+      return Property(&Centroid::centroid, geoPointNear(expected.centroid()));
+    });
+#define EXPECT_CENTROID_NEAR(a, b) EXPECT_THAT(a, centroidNear(b))
 
 // ____________________________________________________________________________
-inline void checkMetricLength(std::optional<MetricLength> a,
-                              std::optional<MetricLength> b,
-                              Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-  auto l = generateLocationTrace(sourceLocation);
-  ASSERT_EQ(a.has_value(), b.has_value());
-  if (!a.has_value()) {
-    return;
-  }
-  ASSERT_NEAR(a.value().length(), b.value().length(),
-              // The metric length may be off by up to 1%
-              0.01 * a.value().length());
-}
+inline auto boundingBoxNear = liftOptionalMatcher<BoundingBox>(
+    [](BoundingBox expected) -> Matcher<BoundingBox> {
+      auto [lowerLeft, upperRight] = expected.pair();
+      return AllOf(
+          Property(&BoundingBox::lowerLeft, geoPointNear(lowerLeft)),
+          Property(&BoundingBox::upperRight, geoPointNear(upperRight)));
+    });
+#define EXPECT_BOUNDINGBOX_NEAR(a, b) EXPECT_THAT(a, boundingBoxNear(b))
 
 // ____________________________________________________________________________
-inline void checkMetricArea(std::optional<MetricArea> a,
-                            std::optional<MetricArea> b,
-                            Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-  auto l = generateLocationTrace(sourceLocation);
-  ASSERT_EQ(a.has_value(), b.has_value());
-  if (!a.has_value()) {
-    return;
-  }
-  ASSERT_NEAR(a.value().area(), b.value().area(),
-              // The metric area may be off by up to 1%
-              0.01 * a.value().area());
-}
+inline auto metricLengthNear = liftOptionalMatcher<MetricLength>(
+    [](MetricLength expected) -> Matcher<MetricLength> {
+      // The metric length may be off by up to 1%
+      auto allowedError = expected.length() * 0.01;
+      return Property(&MetricLength::length,
+                      DoubleNear(expected.length(), allowedError));
+    });
+#define EXPECT_METRICLENGTH_NEAR(a, b) EXPECT_THAT(a, metricLengthNear(b))
 
 // ____________________________________________________________________________
-inline void checkGeoInfo(std::optional<GeometryInfo> actual,
-                         std::optional<GeometryInfo> expected,
-                         Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-  auto l = generateLocationTrace(sourceLocation);
-  ASSERT_EQ(actual.has_value(), expected.has_value());
-  if (!actual.has_value() || !expected.has_value()) {
-    return;
-  }
+inline auto metricAreaNear = liftOptionalMatcher<MetricArea>(
+    [](MetricArea expected) -> Matcher<MetricArea> {
+      // The metric area may be off by up to 1%
+      auto allowedError = expected.area() * 0.01;
+      return Property(&MetricArea::area,
+                      DoubleNear(expected.area(), allowedError));
+    });
+#define EXPECT_METRICAREA_NEAR(a, b) EXPECT_THAT(a, metricAreaNear(b))
 
-  auto a = actual.value();
-  auto b = expected.value();
-
-  EXPECT_EQ(a.getWktType(), b.getWktType());
-
-  checkCentroid(a.getCentroid(), b.getCentroid());
-
-  checkBoundingBox(a.getBoundingBox(), b.getBoundingBox());
-
-  EXPECT_EQ(a.getNumGeometries(), b.getNumGeometries());
-
-  checkMetricLength(a.getMetricLength(), b.getMetricLength());
-
-  checkMetricArea(a.getMetricArea(), b.getMetricArea());
-}
+// ____________________________________________________________________________
+inline auto geoInfoMatcher = liftOptionalMatcher<GeometryInfo>(
+    [](GeometryInfo expected) -> Matcher<GeometryInfo> {
+      return AllOf(
+          Property(&GeometryInfo::getWktType, Eq(expected.getWktType())),
+          Property(&GeometryInfo::getCentroid,
+                   centroidNear(expected.getCentroid())),
+          Property(&GeometryInfo::getBoundingBox,
+                   boundingBoxNear(expected.getBoundingBox())),
+          Property(&GeometryInfo::getNumGeometries,
+                   Eq(expected.getNumGeometries())),
+          Property(&GeometryInfo::getMetricLength,
+                   metricLengthNear(expected.getMetricLength())),
+          Property(&GeometryInfo::getMetricArea,
+                   metricAreaNear(expected.getMetricArea())));
+    });
+#define EXPECT_GEOMETRYINFO(a, b) EXPECT_THAT(a, geoInfoMatcher(b))
 
 // ____________________________________________________________________________
 inline void checkRequestedInfoForInstance(
@@ -112,16 +96,16 @@ inline void checkRequestedInfoForInstance(
   auto gi = optGeoInfo.value();
   auto l = generateLocationTrace(sourceLocation);
 
-  checkGeoInfo(gi, gi.getRequestedInfo<GeometryInfo>());
-  checkBoundingBox(gi.getBoundingBox(), gi.getRequestedInfo<BoundingBox>(),
-                   sourceLocation);
-  checkCentroid(gi.getCentroid(), gi.getRequestedInfo<Centroid>(),
-                sourceLocation);
+  EXPECT_GEOMETRYINFO(gi, gi.getRequestedInfo<GeometryInfo>());
+  EXPECT_BOUNDINGBOX_NEAR(gi.getBoundingBox(),
+                          gi.getRequestedInfo<BoundingBox>());
+  EXPECT_CENTROID_NEAR(gi.getCentroid(), gi.getRequestedInfo<Centroid>());
   EXPECT_EQ(std::optional<GeometryType>{gi.getWktType()},
             gi.getRequestedInfo<GeometryType>());
   EXPECT_EQ(gi.getNumGeometries(), gi.getRequestedInfo<NumGeometries>());
-  checkMetricLength(gi.getMetricLength(), gi.getRequestedInfo<MetricLength>());
-  checkMetricArea(gi.getMetricArea(), gi.getRequestedInfo<MetricArea>());
+  EXPECT_METRICLENGTH_NEAR(gi.getMetricLength(),
+                           gi.getRequestedInfo<MetricLength>());
+  EXPECT_METRICAREA_NEAR(gi.getMetricArea(), gi.getRequestedInfo<MetricArea>());
 }
 
 // ____________________________________________________________________________
@@ -131,19 +115,19 @@ inline void checkRequestedInfoForWktLiteral(
   auto optGeoInfo = GeometryInfo::fromWktLiteral(wkt);
   ASSERT_TRUE(optGeoInfo.has_value());
   auto gi = optGeoInfo.value();
-  checkGeoInfo(gi, GeometryInfo::getRequestedInfo<GeometryInfo>(wkt));
-  checkBoundingBox(gi.getBoundingBox(),
-                   GeometryInfo::getRequestedInfo<BoundingBox>(wkt));
-  checkCentroid(gi.getCentroid(),
-                GeometryInfo::getRequestedInfo<Centroid>(wkt));
+  EXPECT_GEOMETRYINFO(gi, GeometryInfo::getRequestedInfo<GeometryInfo>(wkt));
+  EXPECT_BOUNDINGBOX_NEAR(gi.getBoundingBox(),
+                          GeometryInfo::getRequestedInfo<BoundingBox>(wkt));
+  EXPECT_CENTROID_NEAR(gi.getCentroid(),
+                       GeometryInfo::getRequestedInfo<Centroid>(wkt));
   EXPECT_EQ(std::optional<GeometryType>{gi.getWktType()},
             GeometryInfo::getRequestedInfo<GeometryType>(wkt));
   EXPECT_EQ(gi.getNumGeometries(),
             GeometryInfo::getRequestedInfo<NumGeometries>(wkt));
-  checkMetricLength(gi.getMetricLength(),
-                    GeometryInfo::getRequestedInfo<MetricLength>(wkt));
-  checkMetricArea(gi.getMetricArea(),
-                  GeometryInfo::getRequestedInfo<MetricArea>(wkt));
+  EXPECT_METRICLENGTH_NEAR(gi.getMetricLength(),
+                           GeometryInfo::getRequestedInfo<MetricLength>(wkt));
+  EXPECT_METRICAREA_NEAR(gi.getMetricArea(),
+                         GeometryInfo::getRequestedInfo<MetricArea>(wkt));
 }
 
 // ____________________________________________________________________________

@@ -112,8 +112,8 @@ FetchContent_Declare(
 # https://json.nlohmann.me/integration/cmake/#fetchcontent
 FetchContent_Declare(
         nlohmann-json
-        URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz
-        URL_HASH SHA3_224=b9237e8e8242e915de5be631aa944369c38a377c5e79aa505ba741a9
+        URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz
+        URL_HASH SHA3_224=0ad805c53f1769489a9c6bdeefd0a36c19f74239785cdb9c4344e8c1
 )
 
 ###############################
@@ -138,7 +138,7 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/joka921/range-v3
         # This branch removes some differences in the interface between `range-v3` and `std::ranges` s.t.
         # the former can be used as an (almost) drop-in replacement for the latter.
-        GIT_TAG 5ae161451ec1baaac352d7567298d3ac143bccae # branch fork-for-qlever
+        GIT_TAG 42340ef354f7b4e4660268b788e37008d9cc85aa # branch fork-for-qlever
 )
 
 

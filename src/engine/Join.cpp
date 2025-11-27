@@ -21,6 +21,7 @@
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "global/RuntimeParameters.h"
+#include "util/Algorithm.h"
 #include "util/Exception.h"
 #include "util/Generators.h"
 #include "util/HashMap.h"
@@ -533,9 +534,11 @@ void Join::hashJoinImpl(const IdTable& dynA, ColumnIndex jc1,
 // ______________________________________________________________________________
 void Join::hashJoin(const IdTable& dynA, ColumnIndex jc1, const IdTable& dynB,
                     ColumnIndex jc2, IdTable* dynRes) {
-  CALL_FIXED_SIZE(
+  ad_utility::callFixedSizeVi(
       (std::array{dynA.numColumns(), dynB.numColumns(), dynRes->numColumns()}),
-      &Join::hashJoinImpl, dynA, jc1, dynB, jc2, dynRes);
+      [&](auto l, auto r, auto o) {
+        return Join::hashJoinImpl<l, r, o>(dynA, jc1, dynB, jc2, dynRes);
+      });
 }
 
 // ___________________________________________________________________________
@@ -802,7 +805,7 @@ std::optional<std::shared_ptr<QueryExecutionTree>>
 Join::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
   std::set<Variable> newVariables;
   const auto* vars = &variables;
-  if (!variables.contains(_joinVar)) {
+  if (!ad_utility::contains(variables, _joinVar)) {
     newVariables = variables;
     newVariables.insert(_joinVar);
     vars = &newVariables;
@@ -815,5 +818,5 @@ Join::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
   auto rightCol = right->getVariableColumn(_joinVar);
   return ad_utility::makeExecutionTree<Join>(
       getExecutionContext(), std::move(left), std::move(right), leftCol,
-      rightCol, variables.contains(_joinVar));
+      rightCol, ad_utility::contains(variables, _joinVar));
 }

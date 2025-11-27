@@ -1729,8 +1729,8 @@ void testNumberOfThreads(size_t runtimeParamNumThreads,
       spatialJoinOperation->getRootOperation());
   auto res = spatialJoin->computeResult(false);
   auto details = spatialJoin->runtimeInfo().details_;
-  ASSERT_TRUE(details.contains("spatialjoin num threads"));
-  EXPECT_EQ(static_cast<size_t>(details["spatialjoin num threads"]),
+  ASSERT_TRUE(details.contains("num-sweeper-threads"));
+  EXPECT_EQ(static_cast<size_t>(details["num-sweeper-threads"]),
             expectedNumberOfThreads);
 }
 
