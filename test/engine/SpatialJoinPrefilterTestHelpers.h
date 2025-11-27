@@ -428,7 +428,9 @@ inline void checkSweeperTestResult(
     checkValId(valIdRight);
 
     GeoRelationWithIds key{sjType, valIdLeft, valIdRight};
-    ASSERT_TRUE(expectedResultsAndDist.contains(key));
+    ASSERT_TRUE(expectedResultsAndDist.contains(key))
+        << "Unexpected result found " << vMap.at(valIdLeft) << " "
+        << vMap.at(valIdRight) << " of type " << static_cast<size_t>(sjType);
     ASSERT_NEAR(expectedResultsAndDist[key], dist, 0.01);
     ++numActualResults;
   }
