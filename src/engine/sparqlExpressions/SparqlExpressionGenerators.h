@@ -62,7 +62,7 @@ inline ql::span<const ValueId> getIdsFromVariable(
 /// Typically, this transformation is one of the value getters from
 /// `SparqlExpressionValueGetters` with an already bound `EvaluationContext`.
 #ifdef QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17
-// Use range-based implementation for C++17 compatibility
+// Use range-based implementation for C++17 compatibility.
 CPP_template(typename T, typename Transformation = ql::identity)(
     requires SingleExpressionResult<T> CPP_and isConstantResult<T> CPP_and
         ranges::invocable<
@@ -73,7 +73,7 @@ CPP_template(typename T, typename Transformation = ql::identity)(
   return ::ranges::repeat_n_view(transformation(constant), numItems);
 }
 #else
-// Use faster coroutine-based implementation
+// Use faster coroutine-based implementation.
 CPP_template(typename T, typename Transformation = ql::identity)(
     requires SingleExpressionResult<T> CPP_and isConstantResult<T> CPP_and
         ranges::invocable<Transformation, T>)
@@ -98,7 +98,7 @@ CPP_template(typename T, typename Transformation = ql::identity)(
 }
 
 #ifdef QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17
-// Use range-based implementation for C++17 compatibility
+// Use range-based implementation for C++17 compatibility.
 template <typename Transformation = ql::identity>
 inline auto resultGeneratorImpl(const ad_utility::SetOfIntervals& set,
                                 size_t targetSize,
@@ -111,7 +111,9 @@ inline auto resultGeneratorImpl(const ad_utility::SetOfIntervals& set,
   bounds.reserve(set._intervals.size() * 2 + 1);
   size_t last = 0;
   for (const auto& [lower, upper] : set._intervals) {
-    AD_CONTRACT_CHECK(upper <= targetSize);
+    AD_CONTRACT_CHECK(upper <= targetSize,
+                      "The size of a `SetOfIntervals` exceeds the total size "
+                      "of the evaluation context.");
     if (lower != last) {
       bounds.push_back(Bounds{lower - last, false});
     }
@@ -132,7 +134,7 @@ inline auto resultGeneratorImpl(const ad_utility::SetOfIntervals& set,
          ::ranges::views::join;
 }
 #else
-// Use faster coroutine-based implementation
+// Use faster coroutine-based implementation.
 template <typename Transformation = ql::identity>
 inline cppcoro::generator<
     const std::decay_t<std::invoke_result_t<Transformation, Id>>>
@@ -142,7 +144,9 @@ resultGeneratorImpl(ad_utility::SetOfIntervals set, size_t targetSize,
   const auto trueTransformed = transformation(Id::makeFromBool(true));
   const auto falseTransformed = transformation(Id::makeFromBool(false));
   if (!set._intervals.empty()) {
-    AD_CONTRACT_CHECK(set._intervals.back().second <= targetSize);
+    AD_CONTRACT_CHECK(set._intervals.back().second <= targetSize,
+                      "The size of a `SetOfIntervals` exceeds the total size "
+                      "of the evaluation context.");
   }
   for (const auto& [begin, end] : set._intervals) {
     while (i < begin) {
@@ -216,30 +220,30 @@ inline auto valueGetterGenerator =
 /// from the `generators` and yield `function(e_1, ..., e_n)`, also as a
 /// generator.
 #ifdef QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17
-// Use range-based implementation for C++17 compatibility
-inline auto applyFunction =
-    [](auto&& function, [[maybe_unused]] size_t numItems, auto... generators) {
-      // We have to use `range-v3` as `std::views::zip` is not available in our
-      // toolchains.
-      return ::ranges::views::zip(ad_utility::RvalueView{
-                 ad_utility::OwningView{std::move(generators)}}...) |
-             ::ranges::views::transform(
-                 [&f = function](auto&& tuple) -> decltype(auto) {
-                   // If the transformation would return an rvalue reference,
-                   // return a plain value instead (obtained by moving the
-                   // reference) otherwise we get dangling references, but only
-                   // in Release builds.
-                   // TODO<joka921> I don't fully understand yet WHERE the
-                   // dangling reference comes from.
-                   using T = decltype(std::apply(f, AD_MOVE(tuple)));
-                   using R = std::conditional_t<std::is_rvalue_reference_v<T>,
-                                                std::decay_t<T>, T>;
-                   return R{std::apply(f, AD_MOVE(tuple))};
-                 });
-    };
+// Use range-based implementation for C++17 compatibility.
+inline auto applyFunction = [](auto function, [[maybe_unused]] size_t numItems,
+                               auto... generators) {
+  // We have to use `range-v3` as `std::views::zip` is not available in our
+  // toolchains.
+  return ::ranges::views::zip(ad_utility::RvalueView{
+             ad_utility::OwningView{std::move(generators)}}...) |
+         ::ranges::views::transform(
+             [f = std::move(function)](auto&& tuple) -> decltype(auto) {
+               // If the transformation would return an rvalue reference,
+               // return a plain value instead (obtained by moving the
+               // reference) otherwise we get dangling references, but only
+               // in Release builds.
+               // TODO<joka921> I don't fully understand yet WHERE the
+               // dangling reference comes from.
+               using T = decltype(std::apply(f, AD_MOVE(tuple)));
+               using R = std::conditional_t<std::is_rvalue_reference_v<T>,
+                                            std::decay_t<T>, T>;
+               return R{std::apply(f, AD_MOVE(tuple))};
+             });
+};
 #else
-// Use faster coroutine-based implementation
-inline auto applyFunction = [](auto&& function, size_t numItems,
+// Use faster coroutine-based implementation.
+inline auto applyFunction = [](auto function, size_t numItems,
                                auto... generators)
     -> cppcoro::generator<std::invoke_result_t<
         decltype(function),

@@ -6,6 +6,7 @@
 #include <gmock/gmock.h>
 
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
+#include "util/GTestHelpers.h"
 
 using namespace sparqlExpression::detail;
 
@@ -64,6 +65,8 @@ TEST(SparqlExpressionGenerators, resultGeneratorSetOfIntervals) {
         (void)unused;
       }
     };
-    EXPECT_ANY_THROW(consumeGen());
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        consumeGen(),
+        ::testing::HasSubstr("exceeded the size of the evaluation context"));
   }
 }
