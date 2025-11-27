@@ -66,7 +66,7 @@ TEST(SparqlExpressionGenerators, resultGeneratorSetOfIntervals) {
       }
     };
     AD_EXPECT_THROW_WITH_MESSAGE(
-        consumeGen(),
-        ::testing::HasSubstr("exceeded the size of the evaluation context"));
+        consumeGen(), ::testing::HasSubstr(
+                          "exceeds the total size of the evaluation context"));
   }
 }
