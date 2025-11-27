@@ -13,8 +13,17 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  docker-amd64:
-    runs-on: ubuntu-24.04
+  build:
+    strategy:
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-24.04
+            prefix: amd64
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            prefix: arm64
+    runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,63 +40,27 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - name: Build X-86-64
+      - name: Build ${{ matrix.platform }}
         uses: docker/build-push-action@v6
         with:
           context: .
-          # Docker multiplatform images require an entry in their manifests. If this
-          # entry is missing, then the images for each platform are considered seperate.
-          # If this action runs on a single runner (i.e. the attribute `platforms`
-          # contains a list of all platforms) then the manifest is configured automatically.
-          # If the build and push is split over multiple runners, then the action requires an additional `merge`
-          # job, which merges the images for each platform into a single multiplatform image.
-          # References:
-          # https://docs.docker.com/build/ci/github-actions/multi-platform/#distribute-build-across-multiple-runners
-          # https://www.docker.com/blog/multi-arch-build-and-images-the-simple-way/
-          platforms: linux/amd64
-          load: true
+          platforms: ${{ matrix.platform }}
+          # Only build, don't run on ARM
+          load: ${{ matrix.platform == 'linux/amd64' }}
           push: ${{ github.event_name != 'pull_request' }}
-          tags: adfreiburg/qlever:amd64-${{ github.sha }}
+          tags: adfreiburg/qlever:${{ matrix.prefix }}-${{ github.sha }}
           labels: ${{ steps.meta.outputs.labels }}
           annotations: ${{ steps.meta.outputs.annotations }}
 
       - name: E2E in Docker
+        if: ${{ matrix.platform == 'linux/amd64' }}
         run: |
           sudo mkdir ${{github.workspace}}/e2e_data
           sudo chmod a+rwx ${{github.workspace}}/e2e_data
-          sudo docker run -i --rm -v "${{github.workspace}}/e2e_data:/app/e2e_data/" --entrypoint e2e/e2e.sh adfreiburg/qlever:amd64-${{ github.sha }}
-  docker-arm64:
-    runs-on: ubuntu-24.04-arm
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Generate image metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: adfreiburg/qlever
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      - name: Login to Docker Hub
-        if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - name: Build ARM-64
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          platforms: linux/arm64
-          # Only build, don't run.
-          load: false
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: adfreiburg/qlever:arm64-${{ github.sha }}
-          labels: ${{ steps.meta.outputs.labels }}
-          annotations: ${{ steps.meta.outputs.annotations }}
-  docker-push:
+          sudo docker run -i --rm -v "${{github.workspace}}/e2e_data:/app/e2e_data/" --entrypoint e2e/e2e.sh adfreiburg/qlever:${{ matrix.prefix }}-${{ github.sha }}
+  docker-merge:
     if: github.event_name != 'pull_request'
-    needs: [ docker-amd64, docker-arm64 ]
+    needs: [ build ]
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
