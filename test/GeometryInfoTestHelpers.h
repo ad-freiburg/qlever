@@ -243,6 +243,22 @@ inline MetricArea getAreaForTesting(const std::string_view wkt) {
   return area.value();
 }
 
+// ____________________________________________________________________________
+inline auto geoPointOrWktMatcher = liftOptionalMatcher<GeoPointOrWkt>(
+    [](GeoPointOrWkt expected) -> Matcher<GeoPointOrWkt> {
+      return std::visit(
+          [&](auto& contained) -> Matcher<GeoPointOrWkt> {
+            using T = std::decay_t<decltype(contained)>;
+            if constexpr (std::is_same_v<T, GeoPoint>) {
+              return VariantWith<GeoPoint>(
+                  SafeMatcherCast<const GeoPoint&>(geoPointNear(contained)));
+            } else {
+              return VariantWith<std::string>(Eq(contained));
+            }
+          },
+          expected);
+    });
+
 };  // namespace geoInfoTestHelpers
 
 #endif  // QLEVER_TEST_GEOMETRYINFOTESTHELPERS_H
