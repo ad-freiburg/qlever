@@ -168,14 +168,14 @@ inline auto resultGenerator(S&& input, size_t targetSize,
   auto gen =
       resultGeneratorImpl(AD_FWD(input), targetSize, std::move(transformation));
 #ifndef QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17
-  // `gen` is already (at least in many cases) type erased
+  // `gen` is already (at least in many cases) type erased because of the nature
+  // of C++20 coroutines.
   return gen;
 #else
   // Without type erasure, compiling the `sparqlExpressions` module takes a lot
   // of time and memory. In the future we can evaluate the performance of
   // deactivating the type erasure for certain expressions + datatypes (e.g.
   // addition of IDs) etc.
-  static constexpr auto Cat = ::ranges::category::input;
   using V = ql::ranges::range_value_t<decltype(gen)>;
 
   return ad_utility::InputRangeTypeErased<V>(std::move(gen));
