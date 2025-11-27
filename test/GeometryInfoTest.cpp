@@ -581,7 +581,14 @@ TEST(GeometryInfoTest, SizeOfAndAlignmentBytes) {
 
 // _____________________________________________________________________________
 TEST(GeometryInfoTest, ParseGeoPointOrWktVisitor) {
-  // TODO
+  // using namespace ad_utility::detail;
+  // using namespace ::testing;
+  // {
+  //   auto [type, parsed] = parseGeoPointOrWkt(GeoPoint{1, 2});
+  //   EXPECT_EQ(type, WKTType::POINT);
+  //   EXPECT_THAT(parsed, VariantWith<DPoint>(Property(&DPoint::getX,
+  //   DoubleNear())))
+  // }
 }
 
 // _____________________________________________________________________________
