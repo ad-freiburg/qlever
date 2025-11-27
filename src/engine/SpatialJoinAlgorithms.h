@@ -151,6 +151,11 @@ class SpatialJoinAlgorithms {
     return getRtreeEntry(idTable, row, col);
   }
 
+  // Prepare a libspatialjoin `SweeperCfg`. The result doesn't have callbacks
+  // set, in particular `writeRelCb` and `sweepCancellationCb` should be set.
+  // Also `withinDist` should be set if a proximity search is intended.
+  static sj::SweeperCfg libspatialjoinSweeperConfig(size_t threads);
+
   // This helper functions parses WKT geometries from the given `column` in
   // `idTable` and adds them to `sweeper` (which will be used to perform the
   // spatial join). The Boolean `leftOrRightSide` specifies whether these

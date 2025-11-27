@@ -382,6 +382,42 @@ Result SpatialJoinAlgorithms::BaselineAlgorithm() {
 }
 
 // ____________________________________________________________________________
+sj::SweeperCfg SpatialJoinAlgorithms::libspatialjoinSweeperConfig(
+    size_t threads) {
+  using enum SpatialJoinType;
+  auto sep =
+      [](SpatialJoinType type) { return std::string{static_cast<char>(type)}; }
+
+  sj::SweeperCfg cfg;
+  cfg.numThreads = threads;
+  cfg.numCacheThreads = threads;
+  // TODO<ullingerc> Determine from query RAM limit?
+  cfg.geomCacheMaxSize = 1'000'000'000;  // Per thread, in bytes
+  cfg.geomCacheMaxNumElements = 10'000;
+  cfg.sepIsect = sep(INTERSECTS);
+  cfg.sepContains = sep(CONTAINS);
+  cfg.sepCovers = sep(COVERS);
+  cfg.sepTouches = sep(TOUCHES);
+  cfg.sepEquals = sep(EQUALS);
+  cfg.sepOverlaps = sep(OVERLAPS);
+  cfg.sepCrosses = sep(CROSSES);
+  cfg.useBoxIds = true;
+  cfg.useArea = true;
+  cfg.useOBB = false;
+  cfg.useDiagBox = true;
+  cfg.useFastSweepSkip = true;
+  cfg.useInnerOuter = false;
+  cfg.noGeometryChecks = false;
+  cfg.computeDE9IM = false;
+  cfg.writeRelCb = {};
+  cfg.logCb = {};
+  cfg.statsCb = {};
+  cfg.sweepProgressCb = {};
+  cfg.sweepCancellationCb = {};
+  return cfg;
+}
+
+// ____________________________________________________________________________
 Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, rightSelectedCols, numColumns, maxDist, maxResults,
@@ -411,45 +447,19 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
   }
 
   // Configure the sweeper.
-  const sj::SweeperCfg sweeperCfg = [&] {
-    sj::SweeperCfg cfg;
-    cfg.numThreads = NUM_THREADS;
-    cfg.numCacheThreads = NUM_THREADS;
-    // TODO<ullingerc> Determine from query RAM limit?
-    cfg.geomCacheMaxSize = 1'000'000'000;  // Per thread, in bytes
-    cfg.geomCacheMaxNumElements = 10'000;
-    cfg.sepIsect = std::string{static_cast<char>(SpatialJoinType::INTERSECTS)};
-    cfg.sepContains = std::string{static_cast<char>(SpatialJoinType::CONTAINS)};
-    cfg.sepCovers = std::string{static_cast<char>(SpatialJoinType::COVERS)};
-    cfg.sepTouches = std::string{static_cast<char>(SpatialJoinType::TOUCHES)};
-    cfg.sepEquals = std::string{static_cast<char>(SpatialJoinType::EQUALS)};
-    cfg.sepOverlaps = std::string{static_cast<char>(SpatialJoinType::OVERLAPS)};
-    cfg.sepCrosses = std::string{static_cast<char>(SpatialJoinType::CROSSES)};
-    cfg.useBoxIds = true;
-    cfg.useArea = true;
-    cfg.useOBB = false;
-    cfg.useDiagBox = true;
-    cfg.useFastSweepSkip = true;
-    cfg.useInnerOuter = false;
-    cfg.noGeometryChecks = false;
-    cfg.withinDist = withinDist;
-    cfg.computeDE9IM = false;
-    cfg.writeRelCb = [&results, &resultDists, joinTypeVal](
-                         size_t t, const char* a, size_t, const char* b, size_t,
-                         const char* pred, size_t) {
-      if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
-        results[t].push_back({std::atoi(a), std::atoi(b)});
-        resultDists[t].push_back(atof(pred));
-      } else if (pred[0] == static_cast<char>(joinTypeVal)) {
-        results[t].push_back({std::atoi(a), std::atoi(b)});
-      }
-    };
-    cfg.logCb = {};
-    cfg.statsCb = {};
-    cfg.sweepProgressCb = {};
-    cfg.sweepCancellationCb = [this]() { throwIfCancelled(); };
-    return cfg;
-  }();
+  sj::SweeperCfg sweeperCfg = libspatialjoinSweeperConfig(NUM_THREADS);
+  sweeperCfg.withinDist = withinDist;
+  sweeperCfg.writeRelCb = [&results, &resultDists, joinTypeVal](
+                              size_t t, const char* a, size_t, const char* b,
+                              size_t, const char* pred, size_t) {
+    if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
+      results[t].push_back({std::atoi(a), std::atoi(b)});
+      resultDists[t].push_back(atof(pred));
+    } else if (pred[0] == static_cast<char>(joinTypeVal)) {
+      results[t].push_back({std::atoi(a), std::atoi(b)});
+    }
+  };
+  sweeperCfg.sweepCancellationCb = [this]() { throwIfCancelled(); };
 
   std::string sweeperPath = qec_->getIndex().getOnDiskBase() + ".spatialjoin";
   sj::Sweeper sweeper(sweeperCfg, ".", sweeperPath);
