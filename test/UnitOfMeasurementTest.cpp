@@ -26,11 +26,17 @@ TEST(GeoSparqlHelpers, KmToUnit) {
   EXPECT_NEAR(kmToUnit(0.0, KILOMETERS), 0.0, error);
   EXPECT_NEAR(kmToUnit(0.0, METERS), 0.0, error);
   EXPECT_NEAR(kmToUnit(0.0, MILES), 0.0, error);
+  EXPECT_NEAR(kmToUnit(0.0, FEET), 0.0, error);
+  EXPECT_NEAR(kmToUnit(0.0, YARDS), 0.0, error);
   EXPECT_NEAR(kmToUnit(-500.0, KILOMETERS), -500.0, error);
   EXPECT_NEAR(kmToUnit(-500.0, std::nullopt), -500.0, error);
   EXPECT_NEAR(kmToUnit(500.0, METERS), 500000.0, error);
   EXPECT_NEAR(kmToUnit(500.0, MILES), 310.685595, error);
+  EXPECT_NEAR(kmToUnit(500.0, FEET), 1640420.0, error);
+  EXPECT_NEAR(kmToUnit(500.0, YARDS), 546806.5, error);
   EXPECT_NEAR(kmToUnit(1.0, MILES), 0.62137119, error);
+  EXPECT_NEAR(kmToUnit(1.0, FEET), 3280.84, error);
+  EXPECT_NEAR(kmToUnit(1.0, YARDS), 1093.613, error);
 
   auto checkUnsupported = [&](UnitOfMeasurement unit,
                               source_location sourceLocation =
@@ -44,6 +50,11 @@ TEST(GeoSparqlHelpers, KmToUnit) {
   checkUnsupported(SQUARE_METERS);
   checkUnsupported(SQUARE_KILOMETERS);
   checkUnsupported(SQUARE_MILES);
+  checkUnsupported(SQUARE_FEET);
+  checkUnsupported(SQUARE_YARDS);
+  checkUnsupported(ACRE);
+  checkUnsupported(ARE);
+  checkUnsupported(HECTARE);
 }
 
 // _____________________________________________________________________________
@@ -57,6 +68,8 @@ TEST(GeoSparqlHelpers, UnitToKm) {
   EXPECT_NEAR(toKm(0.0, KILOMETERS), 0.0, error);
   EXPECT_NEAR(toKm(0.0, METERS), 0.0, error);
   EXPECT_NEAR(toKm(0.0, MILES), 0.0, error);
+  EXPECT_NEAR(toKm(0.0, FEET), 0.0, error);
+  EXPECT_NEAR(toKm(0.0, YARDS), 0.0, error);
 
   EXPECT_NEAR(toKm(-500.0, KILOMETERS), -500.0, error);
   EXPECT_NEAR(toKm(-500.0, std::nullopt), -500.0, error);
@@ -64,6 +77,8 @@ TEST(GeoSparqlHelpers, UnitToKm) {
   EXPECT_NEAR(toKm(500000.0, METERS), 500.0, error);
   EXPECT_NEAR(toKm(310.685595, MILES), 500.0, error);
   EXPECT_NEAR(toKm(0.62137119, MILES), 1.0, error);
+  EXPECT_NEAR(toKm(1640420.0, FEET), 500.0, error);
+  EXPECT_NEAR(toKm(546806.5, YARDS), 500.0, error);
 
   auto checkUnsupported = [&](UnitOfMeasurement unit,
                               source_location sourceLocation =
@@ -77,6 +92,11 @@ TEST(GeoSparqlHelpers, UnitToKm) {
   checkUnsupported(SQUARE_METERS);
   checkUnsupported(SQUARE_KILOMETERS);
   checkUnsupported(SQUARE_MILES);
+  checkUnsupported(SQUARE_FEET);
+  checkUnsupported(SQUARE_YARDS);
+  checkUnsupported(ACRE);
+  checkUnsupported(ARE);
+  checkUnsupported(HECTARE);
 }
 
 // _____________________________________________________________________________
@@ -90,8 +110,21 @@ TEST(GeoSparqlHelpers, SqMeterToUnit) {
   EXPECT_NEAR(m2ToUnit(0.0, SQUARE_METERS), 0.0, error);
   EXPECT_NEAR(m2ToUnit(0.0, SQUARE_KILOMETERS), 0.0, error);
   EXPECT_NEAR(m2ToUnit(0.0, SQUARE_MILES), 0.0, error);
+  EXPECT_NEAR(m2ToUnit(0.0, SQUARE_FEET), 0.0, error);
+  EXPECT_NEAR(m2ToUnit(0.0, SQUARE_YARDS), 0.0, error);
+  EXPECT_NEAR(m2ToUnit(0.0, ACRE), 0.0, error);
+  EXPECT_NEAR(m2ToUnit(0.0, ARE), 0.0, error);
+  EXPECT_NEAR(m2ToUnit(0.0, HECTARE), 0.0, error);
 
-  // TODO<ullingerc> !!! tests for other values
+  EXPECT_NEAR(m2ToUnit(5000.0, std::nullopt), 5000.0, error);
+  EXPECT_NEAR(m2ToUnit(5000.0, SQUARE_METERS), 5000.0, error);
+  EXPECT_NEAR(m2ToUnit(5000.0, SQUARE_KILOMETERS), 0.005, error);
+  EXPECT_NEAR(m2ToUnit(5000.0, SQUARE_MILES), 0.001930511, error);
+  EXPECT_NEAR(m2ToUnit(5000.0, SQUARE_FEET), 53819.555538, error);
+  EXPECT_NEAR(m2ToUnit(5000.0, SQUARE_YARDS), 5979.9469688, error);
+  EXPECT_NEAR(m2ToUnit(5000.0, ACRE), 1.235527, error);
+  EXPECT_NEAR(m2ToUnit(5000.0, ARE), 50.0, error);
+  EXPECT_NEAR(m2ToUnit(5000.0, HECTARE), 0.5, error);
 
   auto checkUnsupported = [&](UnitOfMeasurement unit,
                               source_location sourceLocation =
@@ -105,6 +138,8 @@ TEST(GeoSparqlHelpers, SqMeterToUnit) {
   checkUnsupported(METERS);
   checkUnsupported(KILOMETERS);
   checkUnsupported(MILES);
+  checkUnsupported(FEET);
+  checkUnsupported(YARDS);
 }
 
 // _____________________________________________________________________________
@@ -115,10 +150,17 @@ TEST(GeoSparqlHelpers, IsLengthUnit) {
   EXPECT_TRUE(isLengthUnit(METERS));
   EXPECT_TRUE(isLengthUnit(KILOMETERS));
   EXPECT_TRUE(isLengthUnit(MILES));
+  EXPECT_TRUE(isLengthUnit(FEET));
+  EXPECT_TRUE(isLengthUnit(YARDS));
 
   EXPECT_FALSE(isLengthUnit(SQUARE_METERS));
   EXPECT_FALSE(isLengthUnit(SQUARE_KILOMETERS));
   EXPECT_FALSE(isLengthUnit(SQUARE_MILES));
+  EXPECT_FALSE(isLengthUnit(SQUARE_FEET));
+  EXPECT_FALSE(isLengthUnit(SQUARE_YARDS));
+  EXPECT_FALSE(isLengthUnit(ACRE));
+  EXPECT_FALSE(isLengthUnit(ARE));
+  EXPECT_FALSE(isLengthUnit(HECTARE));
   EXPECT_FALSE(isLengthUnit(UNKNOWN));
 }
 
@@ -130,10 +172,17 @@ TEST(GeoSparqlHelpers, IsAreaUnit) {
   EXPECT_TRUE(isAreaUnit(SQUARE_METERS));
   EXPECT_TRUE(isAreaUnit(SQUARE_KILOMETERS));
   EXPECT_TRUE(isAreaUnit(SQUARE_MILES));
+  EXPECT_TRUE(isAreaUnit(SQUARE_FEET));
+  EXPECT_TRUE(isAreaUnit(SQUARE_YARDS));
+  EXPECT_TRUE(isAreaUnit(ACRE));
+  EXPECT_TRUE(isAreaUnit(ARE));
+  EXPECT_TRUE(isAreaUnit(HECTARE));
 
   EXPECT_FALSE(isAreaUnit(METERS));
   EXPECT_FALSE(isAreaUnit(KILOMETERS));
   EXPECT_FALSE(isAreaUnit(MILES));
+  EXPECT_FALSE(isAreaUnit(FEET));
+  EXPECT_FALSE(isAreaUnit(YARDS));
   EXPECT_FALSE(isAreaUnit(UNKNOWN));
 }
 
@@ -150,10 +199,17 @@ TEST(GeoSparqlHelpers, IriToUnit) {
   EXPECT_EQ(iriToUnit("http://qudt.org/vocab/unit/M"), METERS);
   EXPECT_EQ(iriToUnit("http://qudt.org/vocab/unit/KiloM"), KILOMETERS);
   EXPECT_EQ(iriToUnit("http://qudt.org/vocab/unit/MI"), MILES);
+  EXPECT_EQ(iriToUnit("http://qudt.org/vocab/unit/FT"), FEET);
+  EXPECT_EQ(iriToUnit("http://qudt.org/vocab/unit/YD"), YARDS);
 
   EXPECT_EQ(iriToUnit("http://qudt.org/vocab/unit/M2"), SQUARE_METERS);
   EXPECT_EQ(iriToUnit("http://qudt.org/vocab/unit/KiloM2"), SQUARE_KILOMETERS);
   EXPECT_EQ(iriToUnit("http://qudt.org/vocab/unit/MI2"), SQUARE_MILES);
+  EXPECT_EQ(iriToUnit("http://qudt.org/vocab/unit/FT2"), SQUARE_FEET);
+  EXPECT_EQ(iriToUnit("http://qudt.org/vocab/unit/YD2"), SQUARE_YARDS);
+  EXPECT_EQ(iriToUnit("http://qudt.org/vocab/unit/AC"), ACRE);
+  EXPECT_EQ(iriToUnit("http://qudt.org/vocab/unit/ARE"), ARE);
+  EXPECT_EQ(iriToUnit("http://qudt.org/vocab/unit/HA"), HECTARE);
 }
 
 }  // namespace

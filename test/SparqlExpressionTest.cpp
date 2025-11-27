@@ -121,8 +121,8 @@ CPP_template(typename T)(
     return IdOrLiteralOrIri{lit(vec)};
   } else {
     return VectorWithMemoryLimit<typename T::value_type>{
-        std::make_move_iterator(vec.begin()),
-        std::make_move_iterator(vec.end()), alloc};
+        ql::make_move_iterator(vec.begin()), ql::make_move_iterator(vec.end()),
+        alloc};
   }
 }
 
