@@ -312,7 +312,7 @@ class Tokenizer : public SkipWhitespaceAndCommentsMixin<Tokenizer> {
 
   template <size_t idx>
   std::tuple<bool, size_t, std::string_view> getNextTokenRecurse() {
-    return std::make_tuple(false, idx, "");
+    return std::make_tuple(false, idx, std::string_view{""});
   }
 
   template <size_t idx, TurtleTokenId fst, TurtleTokenId... ids>

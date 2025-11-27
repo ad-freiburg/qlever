@@ -217,4 +217,4 @@ CPP_template(typename T, typename F)(
 }
 };  // namespace ad_utility
 
-#endif
+#endif  // QLEVER_SRC_UTIL_GENERATORS_H
