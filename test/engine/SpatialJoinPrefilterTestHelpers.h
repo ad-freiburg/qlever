@@ -190,7 +190,6 @@ inline sj::SweeperCfg makeSweeperCfg(const LibSpatialJoinConfig& libSJConfig,
   cfg.numThreads = 1;
   cfg.numCacheThreads = 1;
   cfg.geomCacheMaxSize = 10'000;
-  cfg.pairStart = "";
   cfg.sepIsect = std::string{static_cast<char>(INTERSECTS)};
   cfg.sepContains = std::string{static_cast<char>(CONTAINS)};
   cfg.sepCovers = std::string{static_cast<char>(COVERS)};
@@ -198,7 +197,6 @@ inline sj::SweeperCfg makeSweeperCfg(const LibSpatialJoinConfig& libSJConfig,
   cfg.sepEquals = std::string{static_cast<char>(EQUALS)};
   cfg.sepOverlaps = std::string{static_cast<char>(OVERLAPS)};
   cfg.sepCrosses = std::string{static_cast<char>(CROSSES)};
-  cfg.pairEnd = "";
   cfg.useBoxIds = true;
   cfg.useArea = true;
   cfg.useOBB = false;
@@ -296,7 +294,7 @@ inline void runParsingAndSweeper(
   double withinDist = sjTask.maxDist_.value_or(-1);
   auto sweeperCfg = makeSweeperCfg(sjTask, results, resultDists, withinDist);
   std::string sweeperPath = qec->getIndex().getOnDiskBase() + ".spatialjoin";
-  sj::Sweeper sweeper(sweeperCfg, ".", "", sweeperPath.c_str());
+  sj::Sweeper sweeper(sweeperCfg, ".", sweeperPath);
 
   ASSERT_EQ(sweeper.numElements(), 0);
 

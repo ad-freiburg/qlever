@@ -416,7 +416,6 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
     cfg.numThreads = NUM_THREADS;
     cfg.numCacheThreads = NUM_THREADS;
     cfg.geomCacheMaxSize = 10000;
-    cfg.pairStart = "";
     cfg.sepIsect = std::string{static_cast<char>(SpatialJoinType::INTERSECTS)};
     cfg.sepContains = std::string{static_cast<char>(SpatialJoinType::CONTAINS)};
     cfg.sepCovers = std::string{static_cast<char>(SpatialJoinType::COVERS)};
@@ -424,7 +423,6 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
     cfg.sepEquals = std::string{static_cast<char>(SpatialJoinType::EQUALS)};
     cfg.sepOverlaps = std::string{static_cast<char>(SpatialJoinType::OVERLAPS)};
     cfg.sepCrosses = std::string{static_cast<char>(SpatialJoinType::CROSSES)};
-    cfg.pairEnd = "";
     cfg.useBoxIds = true;
     cfg.useArea = true;
     cfg.useOBB = false;
@@ -452,7 +450,7 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
   }();
 
   std::string sweeperPath = qec_->getIndex().getOnDiskBase() + ".spatialjoin";
-  sj::Sweeper sweeper(sweeperCfg, ".", "", sweeperPath.c_str());
+  sj::Sweeper sweeper(sweeperCfg, ".", sweeperPath);
   ad_utility::Timer tParse{ad_utility::Timer::Started};
 
   // Parse the geometries from the left and right input table, starting with the
