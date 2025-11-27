@@ -66,12 +66,22 @@ jobs:
           path: ${{ runner.temp }}/digests/*
           if-no-files-found: error
           retention-days: 1
+        # Setup image for local use.
+      - name: Setup E2E test image
+        uses: docker/build-push-action@v6
+        if: matrix.platform == 'linux/amd64'
+        with:
+          # The cache should already provide this. So no rebuild should occur.
+          context: .
+          load: true
+          push: false
+          tags: ${{ env.IMAGE }}:tmp-${{ github.sha }}
       - name: E2E in Docker
-        if: ${{ matrix.platform == 'linux/amd64' }}
+        if: matrix.platform == 'linux/amd64'
         run: |
-          sudo mkdir ${{github.workspace}}/e2e_data
-          sudo chmod a+rwx ${{github.workspace}}/e2e_data
-          sudo docker run -i --rm -v "${{github.workspace}}/e2e_data:/app/e2e_data/" --entrypoint e2e/e2e.sh ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          sudo mkdir ${{ github.workspace }}/e2e_data
+          sudo chmod a+rwx ${{ github.workspace }}/e2e_data
+          sudo docker run -i --rm -v "${{ github.workspace }}/e2e_data:/app/e2e_data/" --entrypoint e2e/e2e.sh ${{ env.IMAGE }}:tmp-${{ github.sha }}
   docker-merge:
     if: github.event_name != 'pull_request'
     needs: [ build ]
