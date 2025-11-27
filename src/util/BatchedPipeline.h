@@ -8,6 +8,7 @@
 #include <future>
 #include <utility>
 
+#include "backports/iterator.h"
 #include "util/Exception.h"
 #include "util/Log.h"
 #include "util/Timer.h"

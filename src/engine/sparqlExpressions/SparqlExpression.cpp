@@ -4,6 +4,8 @@
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
 
+#include "backports/iterator.h"
+
 namespace sparqlExpression {
 
 // _____________________________________________________________________________

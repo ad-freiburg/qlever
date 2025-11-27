@@ -68,7 +68,7 @@ class Row {
   CPP_template_2(typename = void)(requires(!isDynamic())) Row(){};
 
   CPP_template_2(typename = void)(requires(!isDynamic())) explicit Row(
-      QL_MAYBE_UNUSED size_t numCols)
+      size_t numCols)
       : Row() {
     (void)numCols;
   }
@@ -269,206 +269,202 @@ class RowReferenceImpl {
 
     // Equality comparison. Works between two `RowReference`s, but also between
     // a `RowReference` and a `Row` if the number of columns match.
+    // Note: QCC 8.3 doesn't have access to `U::numStaticColumns`.
     template <typename U>
-    // QCC says "U::numStaticColumns is inaccessible in this context".
-    /*
-    CPP_template(typename U)(requires(numStaticColumns ==
-                                      U::numStaticColumns)) bool
-                                      */
+    QL_CONCEPT_OR_NOTHING(requires(numStaticColumns == U::numStaticColumns))
     bool operator==(const U& other) const {
-      // TODO<joka921> Reinstate
-      /*
+      static_assert(numStaticColumns == U::numStaticColumns);
       if constexpr (numStaticColumns == 0) {
-      */
-      if (numColumns() != other.numColumns()) {
-        return false;
-      }
-      /*
-      }
-      */
-      for (size_t i = 0; i < numColumns(); ++i) {
-        if ((*this)[i] != other[i]) {
-          return false;
+        * / if (numColumns() != other.numColumns()) { return false; }
+        /*
         }
+        */
+        for (size_t i = 0; i < numColumns(); ++i) {
+          if ((*this)[i] != other[i]) {
+            return false;
+          }
+        }
+        return true;
       }
-      return true;
+      template <typename U>
+      QL_CONCEPT_OR_NOTHING(requires(numStaticColumns == U::numStaticColumns))
+      bool operator!=(const U& other) const {
+        return !(*this == other);
+      }
+
+      // Convert from a `RowReference` to a `Row`.
+      operator Row<T, numStaticColumns>() const {
+        auto numCols = (std::move(*this)).numColumns();
+        Row<T, numStaticColumns> result{numCols};
+        for (size_t i = 0; i < numCols; ++i) {
+          result[i] = std::move(*this)[i];
+        }
+        return result;
+      }
+
+      // Convert from a static `RowReference` to a `std::array` (makes a copy).
+      CPP_template(typename = void)(requires(numStaticColumns != 0)) explicit
+      operator std::array<T, numStaticColumns>() const {
+        std::array<T, numStaticColumns> result;
+        ql::ranges::copy(*this, result.begin());
+        return result;
+      }
+
+     protected:
+      // Internal implementation of the assignment from a `Row` as well as a
+      // `RowReference`. This assignment actually writes to the underlying
+      // table.
+      template <typename T1, typename T2>
+      static This& assignmentImpl(T1 && self, const T2& other) {
+        if constexpr (numStaticColumns == 0) {
+          AD_CONTRACT_CHECK(self.numColumns() == other.numColumns());
+        }
+        for (size_t i = 0; i < self.numColumns(); ++i) {
+          operatorBracketImpl(self, i) = other[i];
+        }
+        return self;
+      }
+
+     public:
+      // Assignment from a `Row` with the same number of columns.
+      This& operator=(const Row<T, numStaticColumns>& other)&& {
+        return assignmentImpl(*this, other);
+      }
+
+      // Assignment from a `RowReference` with the same number of columns.
+      This& operator=(const RowReferenceWithRestrictedAccess& other)&& {
+        return assignmentImpl(*this, other);
+      }
+
+      // Assignment from a `const` RowReference to a `mutable` RowReference
+      CPP_template_2(typename = void)(requires(!isConst)) This& operator=(
+          const RowReferenceWithRestrictedAccess<
+              Table, ad_utility::IsConst::True>& other)&& {
+        return assignmentImpl(*this, other);
+      }
+
+      // This strange overload needs to be declared to make `Row` a
+      // `std::random_access_range` that can be used e.g. with
+      // `ql::ranges::sort`. There is no need to define it, as it is only
+      // needed to fulfill the concept `std::indirectly_writable`. For more
+      // details on this "esoteric" overload see the notes at the end of
+      // `https://en.cppreference.com/w/cpp/iterator/indirectly_writable`
+      This& operator=(const Row<T, numStaticColumns>& other) const&&;
+
+      // No need to copy this internal type, but the implementation of the
+      // `RowReference` class and the `input_range` concept from `range-v3`
+      // require it.
+      RowReferenceWithRestrictedAccess(
+          const RowReferenceWithRestrictedAccess&) = default;
+      RowReferenceWithRestrictedAccess(RowReferenceWithRestrictedAccess&&) =
+          default;
+    };
+  };
+
+  // The actual `RowReference` type that should be used externally when a
+  // reference actually needs to be stored. Most of its implementation is
+  // inherited from or delegated to the `RowReferenceWithRestrictedAccess`
+  // class above, but it also supports mutable access to lvalues.
+  template <typename Table, ad_utility::IsConst isConstTag>
+  class RowReference
+      : public RowReferenceImpl::RowReferenceWithRestrictedAccess<Table,
+                                                                  isConstTag> {
+   public:
+    using Base =
+        RowReferenceImpl::RowReferenceWithRestrictedAccess<Table, isConstTag>;
+    using Base::numStaticColumns;
+
+   private:
+    using TablePtr = typename Base::TablePtr;
+    using T = typename Base::T;
+    static constexpr bool isConst = isConstTag == ad_utility::IsConst::True;
+
+    // Efficient access to the base class subobject to invoke its functions.
+    Base& base() { return static_cast<Base&>(*this); }
+    const Base& base() const { return static_cast<const Base&>(*this); }
+
+   public:
+    // The constructor from the base class is deliberately implicit because we
+    // want the following code to work:
+    // `RowReference r = someFunctionThatReturnsABase();`
+    RowReference(Base b) : Base{std::move(b)} {}
+
+    // Inherit the constructors from the base class.
+    using Base::Base;
+
+    // Access to the `i`-th column of this row.
+    CPP_template_2(typename = void)(requires(!isConst)) T& operator[](
+        size_t i) {
+      return Base::operatorBracketImpl(base(), i);
     }
-    /*
-    CPP_template(typename U)(requires(numStaticColumns ==
-                                      U::numStaticColumns)) bool
-                                      */
-    // SAME QCC stuff as above.
-    template <typename U>
-    bool operator!=(const U& other) const {
-      return !(*this == other);
+    const T& operator[](size_t i) const {
+      return Base::operatorBracketImpl(base(), i);
     }
 
-    // Convert from a `RowReference` to a `Row`.
-    operator Row<T, numStaticColumns>() const {
-      auto numCols = (std::move(*this)).numColumns();
-      Row<T, numStaticColumns> result{numCols};
-      for (size_t i = 0; i < numCols; ++i) {
-        result[i] = std::move(*this)[i];
-      }
-      return result;
+    // The iterators are implemented in the base class and can simply be
+    // forwarded.
+    typename Base::iterator begin() { return Base::beginImpl(); };
+    typename Base::iterator end() { return Base::endImpl(); };
+    typename Base::const_iterator begin() const { return Base::begin(); };
+    typename Base::const_iterator end() const { return Base::end(); };
+    // The `cbegin` and `cend` functions are implicitly inherited from `Base`.
+
+    // __________________________________________________________________________
+    CPP_template_2(typename R)(
+        requires ad_utility::SimilarTo<RowReference, R> CPP_and_2(
+            !isConst)) friend void swap(R&& a, R&& b) {
+      return Base::swapImpl(AD_FWD(a), AD_FWD(b));
     }
 
-    // Convert from a static `RowReference` to a `std::array` (makes a copy).
-    CPP_template(typename = void)(requires(numStaticColumns != 0)) explicit
-    operator std::array<T, numStaticColumns>() const {
-      std::array<T, numStaticColumns> result;
-      ql::ranges::copy(*this, result.begin());
-      return result;
+    // Equality comparison. Works between two `RowReference`s, but also between
+    // a `RowReference` and a `Row` if the number of columns match.
+    CPP_template_2(typename T)(requires(numStaticColumns ==
+                                        T::numStaticColumns)) bool
+    operator==(const T& other) const {
+      return base() == other;
     }
 
-   protected:
-    // Internal implementation of the assignment from a `Row` as well as a
-    // `RowReference`. This assignment actually writes to the underlying table.
-    template <typename T1, typename T2>
-    static This& assignmentImpl(T1&& self, const T2& other) {
-      if constexpr (numStaticColumns == 0) {
-        AD_CONTRACT_CHECK(self.numColumns() == other.numColumns());
-      }
-      for (size_t i = 0; i < self.numColumns(); ++i) {
-        operatorBracketImpl(self, i) = other[i];
-      }
-      return self;
+    CPP_template_2(typename T)(requires(numStaticColumns ==
+                                        T::numStaticColumns)) bool
+    operator!=(const T& other) const {
+      return !(base() == other);
     }
 
    public:
     // Assignment from a `Row` with the same number of columns.
-    This& operator=(const Row<T, numStaticColumns>& other) && {
-      return assignmentImpl(*this, other);
+    RowReference& operator=(const Row<T, numStaticColumns>& other) & {
+      this->assignmentImpl(base(), other);
+      return *this;
     }
+    RowReference& operator=(const Row<T, numStaticColumns>& other) && {
+      this->assignmentImpl(base(), other);
+      return *this;
+    }
+    RowReference& operator=(const Row<T, numStaticColumns>& other) const&&;
 
     // Assignment from a `RowReference` with the same number of columns.
-    This& operator=(const RowReferenceWithRestrictedAccess& other) && {
-      return assignmentImpl(*this, other);
+    RowReference& operator=(const RowReference& other) {
+      this->assignmentImpl(base(), other);
+      return *this;
     }
 
     // Assignment from a `const` RowReference to a `mutable` RowReference
-    CPP_template_2(typename = void)(requires(!isConst)) This& operator=(
-        const RowReferenceWithRestrictedAccess<
-            Table, ad_utility::IsConst::True>& other) && {
-      return assignmentImpl(*this, other);
+    CPP_template_2(typename = void)(requires(!isConst)) RowReference& operator=(
+        const RowReference<Table, ad_utility::IsConst::True>& other) {
+      this->assignmentImpl(base(), other);
+      return *this;
     }
 
-    // This strange overload needs to be declared to make `Row` a
-    // `std::random_access_range` that can be used e.g. with
-    // `ql::ranges::sort`. There is no need to define it, as it is only
-    // needed to fulfill the concept `std::indirectly_writable`. For more
-    // details on this "esoteric" overload see the notes at the end of
-    // `https://en.cppreference.com/w/cpp/iterator/indirectly_writable`
-    This& operator=(const Row<T, numStaticColumns>& other) const&&;
-
-    // No need to copy this internal type, but the implementation of the
-    // `RowReference` class and the `input_range` concept from `range-v3`
-    // require it.
-    RowReferenceWithRestrictedAccess(const RowReferenceWithRestrictedAccess&) =
-        default;
-    RowReferenceWithRestrictedAccess(RowReferenceWithRestrictedAccess&&) =
-        default;
+    // It is technically a bug to copy a row reference, hence we delete the copy
+    // constructor, at least in C++20 mode. However, on older compilers like
+    // QCC8, range-v3 requires not only a declaration, but a definition of the
+    // copy constructor.
+#ifdef QLEVER_CPP_17
+    RowReference(const RowReference&) = default;
+#else
+    RowReference(const RowReference&) = delete;
+#endif
   };
-};
-
-// The actual `RowReference` type that should be used externally when a
-// reference actually needs to be stored. Most of its implementation is
-// inherited from or delegated to the `RowReferenceWithRestrictedAccess`
-// class above, but it also supports mutable access to lvalues.
-template <typename Table, ad_utility::IsConst isConstTag>
-class RowReference
-    : public RowReferenceImpl::RowReferenceWithRestrictedAccess<Table,
-                                                                isConstTag> {
- private:
-  using Base =
-      RowReferenceImpl::RowReferenceWithRestrictedAccess<Table, isConstTag>;
-  using Base::numStaticColumns;
-  using TablePtr = typename Base::TablePtr;
-  using T = typename Base::T;
-  static constexpr bool isConst = isConstTag == ad_utility::IsConst::True;
-
-  // Efficient access to the base class subobject to invoke its functions.
-  Base& base() { return static_cast<Base&>(*this); }
-  const Base& base() const { return static_cast<const Base&>(*this); }
-
- public:
-  // The constructor from the base class is deliberately implicit because we
-  // want the following code to work:
-  // `RowReference r = someFunctionThatReturnsABase();`
-  RowReference(Base b) : Base{std::move(b)} {}
-
-  // Inherit the constructors from the base class.
-  using Base::Base;
-
-  // Access to the `i`-th column of this row.
-  CPP_template_2(typename = void)(requires(!isConst)) T& operator[](size_t i) {
-    return Base::operatorBracketImpl(base(), i);
-  }
-  const T& operator[](size_t i) const {
-    return Base::operatorBracketImpl(base(), i);
-  }
-
-  // The iterators are implemented in the base class and can simply be
-  // forwarded.
-  typename Base::iterator begin() { return Base::beginImpl(); };
-  typename Base::iterator end() { return Base::endImpl(); };
-  typename Base::const_iterator begin() const { return Base::begin(); };
-  typename Base::const_iterator end() const { return Base::end(); };
-  // The `cbegin` and `cend` functions are implicitly inherited from `Base`.
-
-  // __________________________________________________________________________
-  CPP_template_2(typename R)(requires ad_utility::SimilarTo<RowReference, R>
-                                 CPP_and_2(!isConst)) friend void swap(R&& a,
-                                                                       R&& b) {
-    return Base::swapImpl(AD_FWD(a), AD_FWD(b));
-  }
-
-  // Equality comparison. Works between two `RowReference`s, but also between
-  // a `RowReference` and a `Row` if the number of columns match.
-  CPP_template_2(typename T)(requires(numStaticColumns ==
-                                      T::numStaticColumns)) bool
-  operator==(const T& other) const {
-    return base() == other;
-  }
-
-  CPP_template_2(typename T)(requires(numStaticColumns ==
-                                      T::numStaticColumns)) bool
-  operator!=(const T& other) const {
-    return !(base() == other);
-  }
-
- public:
-  // Assignment from a `Row` with the same number of columns.
-  RowReference& operator=(const Row<T, numStaticColumns>& other) & {
-    this->assignmentImpl(base(), other);
-    return *this;
-  }
-  RowReference& operator=(const Row<T, numStaticColumns>& other) && {
-    this->assignmentImpl(base(), other);
-    return *this;
-  }
-  RowReference& operator=(const Row<T, numStaticColumns>& other) const&&;
-
-  // Assignment from a `RowReference` with the same number of columns.
-  RowReference& operator=(const RowReference& other) {
-    this->assignmentImpl(base(), other);
-    return *this;
-  }
-
-  // Assignment from a `const` RowReference to a `mutable` RowReference
-  CPP_template_2(typename = void)(requires(!isConst)) RowReference& operator=(
-      const RowReference<Table, ad_utility::IsConst::True>& other) {
-    this->assignmentImpl(base(), other);
-    return *this;
-  }
-  // No need to copy `RowReference`s, because that is also most likely a bug.
-  // Currently none of our functions or of the STL-algorithms require it.
-  // If necessary, we can still enable it in the future.
-
-  // TODO<joka921> Analyze this further, QCC from BMW requires this for concept
-  // checks, can we leave it unimplemented for now for increased safety?
-  RowReference(const RowReference&);
-};
 
 }  // namespace columnBasedIdTable
 
