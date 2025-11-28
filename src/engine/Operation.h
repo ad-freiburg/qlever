@@ -144,7 +144,7 @@ class Operation {
 
   const Index& getIndex() const { return _executionContext->getIndex(); }
 
-  const auto& locatedTriplesSnapshot() const {
+  virtual const LocatedTriplesSnapshot& locatedTriplesSnapshot() const {
     return _executionContext->locatedTriplesSnapshot();
   }
 

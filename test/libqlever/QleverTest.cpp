@@ -21,7 +21,7 @@ TEST(LibQlever, buildIndexAndRunQuery) {
   }
 
   IndexBuilderConfig c;
-  c.inputFiles_.emplace_back(filename, Filetype::Turtle);
+  c.inputFiles_.push_back({filename, Filetype::Turtle});
   c.baseName_ = "testIndexForLibQlever";
 
   // Test the activation of the memory limit

@@ -22,10 +22,10 @@
 #include <set>
 #include <variant>
 
-#include "./Exception.h"
-#include "./HashMap.h"
-#include "./Log.h"
 #include "backports/algorithm.h"
+#include "util/Exception.h"
+#include "util/HashMap.h"
+#include "util/Log.h"
 
 namespace ad_utility {
 

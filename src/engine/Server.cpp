@@ -17,9 +17,9 @@
 #include <vector>
 
 #include "CompilationInfo.h"
-#include "GraphStoreProtocol.h"
 #include "engine/ExecuteUpdate.h"
 #include "engine/ExportQueryExecutionTrees.h"
+#include "engine/GraphStoreProtocol.h"
 #include "engine/HttpError.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryPlanner.h"
@@ -309,8 +309,8 @@ auto Server::prepareOperation(
 
   configurePinnedResultWithName(pinResultWithName, pinNamedGeoIndex,
                                 accessTokenOk, qec);
-  return std::tuple{std::move(qec), std::move(cancellationHandle),
-                    std::move(cancelTimeoutOnDestruction)};
+  return std::make_tuple(std::move(qec), std::move(cancellationHandle),
+                         std::move(cancelTimeoutOnDestruction));
 }
 
 // _____________________________________________________________________________

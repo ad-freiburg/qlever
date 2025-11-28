@@ -10,6 +10,7 @@
 #include <string>
 #include <thread>
 
+#include "backports/atomic_flag.h"
 #include "util/Cache.h"
 #include "util/ConcurrentCache.h"
 #include "util/DefaultValueSizeGetter.h"
@@ -24,7 +25,7 @@ using namespace ad_utility::memory_literals;
 using ::testing::Pointee;
 
 class ConcurrentSignal {
-  std::atomic_flag flag_;
+  ql::atomic_flag flag_;
 
  public:
   void notify() {
