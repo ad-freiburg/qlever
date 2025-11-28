@@ -1186,6 +1186,10 @@ TEST(ParserTest, Group) {
 
 // _____________________________________________________________________________
 TEST(ParserTest, LanguageFilterPostProcessing) {
+  auto makeTaggedPath = [](std::string_view iriString, std::string langTag) {
+    return PropertyPath::fromIri(ad_utility::convertToLanguageTaggedPredicate(
+        iri(iriString), std::move(langTag)));
+  };
   {
     ParsedQuery q = parseQuery(
         "SELECT * WHERE {?x <label> ?y . FILTER (LANG(?y) = \"en\")}");
@@ -1193,12 +1197,115 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     const auto& triples =
         q._rootGraphPattern._graphPatterns[0].getBasic()._triples;
     ASSERT_EQ(1u, triples.size());
-    ASSERT_EQ((SparqlTriple{Var{"?x"},
-                            PropertyPath::fromIri(
-                                ad_utility::convertToLanguageTaggedPredicate(
-                                    iri("<label>"), "en")),
-                            Var{"?y"}}),
-              triples[0]);
+    ASSERT_EQ(
+        (SparqlTriple{Var{"?x"}, makeTaggedPath("<label>", "en"), Var{"?y"}}),
+        triples[0]);
+  }
+  {
+    // The empty language tag can't be optimized.
+    ParsedQuery q =
+        parseQuery("SELECT * { ?x <label> ?y . FILTER (LANG(?y) = \"\")}");
+    EXPECT_FALSE(q._rootGraphPattern._filters.empty());
+    const auto& triples =
+        q._rootGraphPattern._graphPatterns[0].getBasic()._triples;
+    EXPECT_THAT(triples, ::testing::ElementsAre(SparqlTriple{
+                             Var{"?x"}, PropertyPath::fromIri(iri("<label>")),
+                             Var{"?y"}}));
+  }
+  {
+    ParsedQuery q =
+        parseQuery("SELECT * { ?x <label> ?y . FILTER (LANG(?y) IN (\"en\"))}");
+    EXPECT_TRUE(q._rootGraphPattern._filters.empty());
+    const auto& triples =
+        q._rootGraphPattern._graphPatterns[0].getBasic()._triples;
+    EXPECT_THAT(triples,
+                ::testing::ElementsAre(SparqlTriple{
+                    Var{"?x"}, makeTaggedPath("<label>", "en"), Var{"?y"}}));
+  }
+  {
+    ParsedQuery q = parseQuery(
+        "SELECT * { ?x <label> ?y . FILTER (LANG(?y) IN (\"en\", \"de\"))}");
+    EXPECT_TRUE(q._rootGraphPattern._filters.empty());
+    const auto& triples =
+        q._rootGraphPattern._graphPatterns[0].getBasic()._triples;
+    // The order is arbitrary because of the hash implementation so we have to
+    // account for that.
+    SparqlTriple variantA{
+        Var{"?x"},
+        PropertyPath::makeAlternative(
+            {makeTaggedPath("<label>", "de"), makeTaggedPath("<label>", "en")}),
+        Var{"?y"}};
+    SparqlTriple variantB{
+        Var{"?x"},
+        PropertyPath::makeAlternative(
+            {makeTaggedPath("<label>", "en"), makeTaggedPath("<label>", "de")}),
+        Var{"?y"}};
+    EXPECT_THAT(triples,
+                ::testing::ElementsAre(::testing::AnyOf(variantA, variantB)));
+  }
+  {
+    ParsedQuery q = parseQuery(
+        "SELECT * { ?x <label> ?y . "
+        "FILTER (LANG(?y) = \"en\" || LANG(?y) = \"de\")}");
+    EXPECT_TRUE(q._rootGraphPattern._filters.empty());
+    const auto& triples =
+        q._rootGraphPattern._graphPatterns[0].getBasic()._triples;
+    // The order is arbitrary because of the hash implementation so we have to
+    // account for that.
+    SparqlTriple variantA{
+        Var{"?x"},
+        PropertyPath::makeAlternative(
+            {makeTaggedPath("<label>", "de"), makeTaggedPath("<label>", "en")}),
+        Var{"?y"}};
+    SparqlTriple variantB{
+        Var{"?x"},
+        PropertyPath::makeAlternative(
+            {makeTaggedPath("<label>", "en"), makeTaggedPath("<label>", "de")}),
+        Var{"?y"}};
+    EXPECT_THAT(triples,
+                ::testing::ElementsAre(::testing::AnyOf(variantA, variantB)));
+  }
+  // Test the case when we have no predicate to work with and more than one
+  // language.
+  {
+    ParsedQuery q = parseQuery(
+        "SELECT * { <somebody> ?p ?y . FILTER (LANG(?y) IN (\"en\", \"de\"))}");
+
+    EXPECT_TRUE(q._rootGraphPattern._filters.empty());
+    SparqlTriple tripleA{Var{"?y"},
+                         PropertyPath::fromIri(iri(LANGUAGE_PREDICATE)),
+                         ad_utility::convertLangtagToEntityUri("en")};
+    SparqlTriple tripleB{Var{"?y"},
+                         PropertyPath::fromIri(iri(LANGUAGE_PREDICATE)),
+                         ad_utility::convertLangtagToEntityUri("de")};
+
+    auto hasSingleTriple = [](const SparqlTriple& triple) {
+      return AD_FIELD(
+          parsedQuery::GraphPattern, _graphPatterns,
+          ::testing::ElementsAre(
+              ::testing::VariantWith<parsedQuery::BasicGraphPattern>(
+                  AD_FIELD(parsedQuery::BasicGraphPattern, _triples,
+                           ::testing::ElementsAre(triple)))));
+    };
+    auto makeArbitraryUnionMatcher =
+        [](const ::testing::Matcher<parsedQuery::GraphPattern>& child1,
+           const ::testing::Matcher<parsedQuery::GraphPattern>& child2) {
+          return ::testing::AnyOf(
+              ::testing::AllOf(AD_FIELD(parsedQuery::Union, _child1, child1),
+                               AD_FIELD(parsedQuery::Union, _child2, child2)),
+              ::testing::AllOf(AD_FIELD(parsedQuery::Union, _child1, child2),
+                               AD_FIELD(parsedQuery::Union, _child2, child1)));
+        };
+    EXPECT_THAT(
+        q._rootGraphPattern._graphPatterns,
+        ::testing::ElementsAre(
+            ::testing::VariantWith<parsedQuery::BasicGraphPattern>(AD_FIELD(
+                parsedQuery::BasicGraphPattern, _triples,
+                ::testing::ElementsAre(SparqlTriple{
+                    iri("<somebody>"), Variable{"?p"}, Variable{"?y"}}))),
+            ::testing::VariantWith<parsedQuery::Union>(
+                makeArbitraryUnionMatcher(hasSingleTriple(tripleA),
+                                          hasSingleTriple(tripleB)))));
   }
   {
     ParsedQuery q = parseQuery(
@@ -1216,6 +1323,21 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
                   ad_utility::convertLangtagToEntityUri("en")}),
               triples[1]);
   }
+  {
+    ParsedQuery q = parseQuery(
+        "SELECT * { <somebody> ?p ?y OPTIONAL {} . FILTER (LANG(?y) = "
+        "\"en\")}");
+    ASSERT_TRUE(q._rootGraphPattern._filters.empty());
+    const auto& patterns = q._rootGraphPattern._graphPatterns;
+    ASSERT_EQ(patterns.size(), 3);
+    EXPECT_THAT(patterns[0].getBasic()._triples,
+                ::testing::ElementsAre(
+                    SparqlTriple{iri("<somebody>"), Var{"?p"}, Var{"?y"}}));
+    EXPECT_THAT(patterns[2].getBasic()._triples,
+                ::testing::ElementsAre(SparqlTriple{
+                    Var{"?y"}, PropertyPath::fromIri(iri(LANGUAGE_PREDICATE)),
+                    ad_utility::convertLangtagToEntityUri("en")}));
+  }
 
   // Test that the language filter never changes triples with
   // `ql:contains-entity` etc.
@@ -1227,12 +1349,9 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     const auto& triples =
         q._rootGraphPattern._graphPatterns[0].getBasic()._triples;
     ASSERT_EQ(2u, triples.size());
-    ASSERT_EQ((SparqlTriple{Var{"?x"},
-                            PropertyPath::fromIri(
-                                ad_utility::convertToLanguageTaggedPredicate(
-                                    iri("<label>"), "en")),
-                            Var{"?y"}}),
-              triples[0]);
+    ASSERT_EQ(
+        (SparqlTriple{Var{"?x"}, makeTaggedPath("<label>", "en"), Var{"?y"}}),
+        triples[0]);
     ASSERT_EQ(
         (SparqlTriple{Var{"?text"},
                       PropertyPath::fromIri(iri(CONTAINS_ENTITY_PREDICATE)),
@@ -1273,6 +1392,15 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     ASSERT_EQ(q._rootGraphPattern._filters.size(), 1);
     ASSERT_EQ(q._rootGraphPattern._filters[0].expression_.getDescriptor(),
               "(LANG(?x) = \"en\")");
+  }
+  // Ensure filter is applied regularly if list is empty.
+  {
+    ParsedQuery q =
+        parseQuery("SELECT * { ?x <label> ?y . FILTER (LANG(?x) IN ())}");
+
+    ASSERT_EQ(q._rootGraphPattern._filters.size(), 1);
+    ASSERT_EQ(q._rootGraphPattern._filters[0].expression_.getDescriptor(),
+              "(LANG(?x) IN ())");
   }
   // Verify the filter is not applied as a regular filter if it is used
   // somewhere in a triple

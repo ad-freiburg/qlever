@@ -151,6 +151,12 @@ TEST(TextIndexScanForEntity, CacheKeys) {
                             "sentences"};
   // Same text var, same fixed entity, different words
   ASSERT_NE(s7.getCacheKeyImpl(), s8.getCacheKeyImpl());
+
+  auto copy = s1.getConfig();
+  copy.scoreVar_ = std::nullopt;
+  TextIndexScanForEntity s9{qec, copy};
+  EXPECT_NE(s1.getResultWidth(), s9.getResultWidth());
+  EXPECT_NE(s1.getCacheKeyImpl(), s9.getCacheKeyImpl());
 }
 
 TEST(TextIndexScanForEntity, KnownEmpty) {

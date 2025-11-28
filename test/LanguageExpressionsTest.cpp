@@ -244,12 +244,10 @@ TEST(LangExpression, testLangExpressionOnMixedColumn) {
 TEST(LangExpression, testSimpleMethods) {
   auto langExpr =
       makeLangExpression(std::make_unique<VariableExpression>(Variable{"?x"}));
-  ASSERT_TRUE(langExpr->containsLangExpression());
   auto optVar = getVariableFromLangExpression(langExpr.get());
   ASSERT_TRUE(optVar.has_value());
   ASSERT_EQ(optVar.value().name(), "?x");
   langExpr = makeLangExpression(std::make_unique<IdExpression>(IntId(1)));
-  ASSERT_TRUE(langExpr->containsLangExpression());
   optVar = getVariableFromLangExpression(langExpr.get());
   ASSERT_TRUE(!optVar.has_value());
 }

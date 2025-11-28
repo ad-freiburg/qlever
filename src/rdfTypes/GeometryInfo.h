@@ -154,6 +154,9 @@ CPP_concept RequestedInfoT =
     SameAsAny<T, GeometryInfo, Centroid, BoundingBox, GeometryType,
               NumGeometries, MetricLength, MetricArea>;
 
+// Where the actual geometries are required, this type can be used.
+using GeoPointOrWkt = std::variant<GeoPoint, std::string>;
+
 // The version of the `GeometryInfo`: to ensure correctness when reading disk
 // serialized objects of this class.
 constexpr uint64_t GEOMETRY_INFO_VERSION = 5;

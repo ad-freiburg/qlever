@@ -16,6 +16,7 @@
 #include "util/ChunkedForLoop.h"
 #include "util/CompilerExtensions.h"
 #include "util/Exception.h"
+#include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/JoinAlgorithms/JoinColumnMapping.h"
 
 namespace joinAlgorithms::indexNestedLoop {

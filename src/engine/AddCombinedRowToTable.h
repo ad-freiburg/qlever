@@ -358,9 +358,9 @@ class AddCombinedRowToIdTable {
           // undefined.
           for (const auto& [targetIndex, sourceIndex] : optionalIndexBuffer_) {
             Id id = [&col, isColFromLeft, sourceIndex = sourceIndex]() {
-              // TODO<joka921> The `constexpr` doesn't work on QCC, figure out
-              // what is wrong.
-              if /*constexpr*/ (isColFromLeft) {
+              // Note: `if constexpr` doesn't work here for QCC 8.3 for some
+              // reason which has yet to be analyzed.
+              if QL_CONSTEXPR (isColFromLeft) {
                 return col[sourceIndex];
               } else {
                 (void)col;
@@ -404,22 +404,25 @@ class AddCombinedRowToIdTable {
       // Make sure to reset `mergedVocab_` so it is in a valid state again.
       mergedVocab_ = LocalVocab{};
       // Only merge non-null vocabs.
-
-      absl::InlinedVector<std::reference_wrapper<const LocalVocab>, 2>
-          tmpVocabs;
-      for (const auto& el : currentVocabs_) {
-        if (el != nullptr) {
-          tmpVocabs.push_back(std::cref(*el));
+      // Note: On QCC 8.3, the elegant lazy range pipeline gives us trouble, so
+      // we use an `absl::InlinedVector<reference_wrapper>` instead, which can
+      // be done here as we know that we have at most two local vocabs.
+      auto rangeOfNonNullVocabs = [&]() {
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+        return currentVocabs_ | ql::views::filter(toBool) |
+               ql::views::transform(dereference);
+#else
+        absl::InlinedVector<std::reference_wrapper<const LocalVocab>, 2>
+            tmpVocabs;
+        for (const auto& el : currentVocabs_) {
+          if (el != nullptr) {
+            tmpVocabs.push_back(std::cref(*el));
+          }
         }
-      }
-
-      /*
-      auto filter = ql::views::filter(toBool);
-      auto range = currentVocabs_ | filter |
-                   ql::views::transform(dereference);
-                   */
-      // auto range = tmpVocabs | ql::views::transform(dereference);
-      mergedVocab_.mergeWith(ql::ranges::ref_view{tmpVocabs});
+        return tmpVocabs;
+#endif
+      }();
+      mergedVocab_.mergeWith(ql::ranges::ref_view{rangeOfNonNullVocabs});
     }
   }
   const IdTableView<0>& inputLeft() const {

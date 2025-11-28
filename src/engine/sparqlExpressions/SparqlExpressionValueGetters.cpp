@@ -398,6 +398,44 @@ UnitOfMeasurement UnitOfMeasurementValueGetter::litOrIriToUnit(
 }
 
 //______________________________________________________________________________
+std::optional<ad_utility::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
+    ValueId id, const EvaluationContext* context) const {
+  using enum Datatype;
+  switch (id.getDatatype()) {
+    case GeoPoint:
+      return id.getGeoPoint();
+    case VocabIndex:
+    case LocalVocabIndex: {
+      auto lit = ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
+          context->_qec.getIndex(), id, context->_localVocab);
+      return GeoPointOrWktValueGetter{}(lit, context);
+    }
+    case Bool:
+    case Int:
+    case Double:
+    case Date:
+    case Undefined:
+    case TextRecordIndex:
+    case WordVocabIndex:
+    case BlankNodeIndex:
+    case EncodedVal:
+      return std::nullopt;
+  }
+
+  AD_FAIL();
+}
+
+//______________________________________________________________________________
+std::optional<ad_utility::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
+    const LiteralOrIri& litOrIri, const EvaluationContext*) const {
+  if (litOrIri.isLiteral() && litOrIri.hasDatatype() &&
+      asStringViewUnsafe(litOrIri.getDatatype()) == GEO_WKT_LITERAL) {
+    return litOrIri.toStringRepresentation();
+  }
+  return std::nullopt;
+};
+
+//______________________________________________________________________________
 CPP_template(typename T, typename ValueGetter)(
     requires(concepts::same_as<sparqlExpression::IdOrLiteralOrIri, T> ||
              concepts::same_as<std::optional<std::string>, T>)) T
