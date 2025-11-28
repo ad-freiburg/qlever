@@ -255,7 +255,8 @@ enum class AnyGeometryMember : uint8_t {
 
 // Helper to convert the dynamic container `AnyGeometry` to the `ParsedWkt`
 // variant type
-inline ParsedWkt anyGeometryToParsedWkt(AnyGeometry<double> geom) {
+template <typename Visitor>
+inline auto visitAnyGeometry(Visitor visitor, const DAnyGeometry& geom) {
   using enum AnyGeometryMember;
   // `AnyGeometry` is a class from `pb_util`. It does not operate on an enum,
   // this is why we use our own enum here. The correct matching of the integer
@@ -263,19 +264,19 @@ inline ParsedWkt anyGeometryToParsedWkt(AnyGeometry<double> geom) {
   // `GeometryInfoTest.cpp`.
   switch (AnyGeometryMember{geom.getType()}) {
     case POINT:
-      return std::move(geom.getPoint());
+      return visitor(geom.getPoint());
     case LINE:
-      return std::move(geom.getLine());
+      return visitor(geom.getLine());
     case POLYGON:
-      return std::move(geom.getPolygon());
+      return visitor(geom.getPolygon());
     case MULTILINE:
-      return std::move(geom.getMultiLine());
+      return visitor(geom.getMultiLine());
     case MULTIPOLYGON:
-      return std::move(geom.getMultiPolygon());
+      return visitor(geom.getMultiPolygon());
     case COLLECTION:
-      return std::move(geom.getCollection());
+      return visitor(geom.getCollection());
     case MULTIPOINT:
-      return std::move(geom.getMultiPoint());
+      return visitor(geom.getMultiPoint());
     default:
       AD_FAIL();
   }
@@ -313,7 +314,7 @@ struct MetricLengthVisitor {
   CPP_template(typename T)(
       requires ad_utility::SimilarTo<T, AnyGeometry<CoordType>>) double
   operator()(const T& geom) const {
-    return std::visit(MetricLengthVisitor{}, anyGeometryToParsedWkt(geom));
+    return visitAnyGeometry(MetricLengthVisitor{}, geom);
   }
 
   // Compute the length for a parsed WKT geometry.
@@ -445,7 +446,7 @@ struct UtilGeomToWktVisitor {
   // Visitor for the custom container type `AnyGeometry`.
   std::optional<std::string> operator()(
       const AnyGeometry<CoordType>& geom) const {
-    return std::visit(UtilGeomToWktVisitor{}, anyGeometryToParsedWkt(geom));
+    return visitAnyGeometry(UtilGeomToWktVisitor{}, geom);
   }
 };
 

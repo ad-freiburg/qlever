@@ -22,10 +22,10 @@ using namespace ::testing;
 using Loc = source_location;
 
 using ad_utility::detail::AnyGeometryMember;
-using ad_utility::detail::anyGeometryToParsedWkt;
 using ad_utility::detail::DAnyGeometry;
 using ad_utility::detail::ParsedWkt;
 using ad_utility::detail::ParseResult;
+using ad_utility::detail::visitAnyGeometry;
 
 // Helpers that check (approx.) equality of two GeometryInfo objects or for
 // instances of the associated helper classes.
@@ -304,6 +304,12 @@ inline auto utilMultiPolygonNear =
 struct ParsedWktNearForwardDecl {
   Matcher<std::optional<ParsedWkt>> operator()(
       std::optional<ParsedWkt> expected) const;
+};
+
+// ____________________________________________________________________________
+inline auto anyGeometryToParsedWkt = [](const DAnyGeometry& geom) {
+  return visitAnyGeometry(
+      [](const auto& contained) { return ParsedWkt{contained}; }, geom);
 };
 
 // ____________________________________________________________________________
