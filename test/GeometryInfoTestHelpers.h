@@ -305,35 +305,38 @@ Matcher<DCollection> utilCollectionNearForwardDecl(DCollection expected);
 inline auto utilAnyGeometryNear =
     [](DAnyGeometry expected) -> Matcher<DAnyGeometry> {
   using enum AnyGeometryMember;
-  ::testing::Matcher<DAnyGeometry> geometryMatcher;
 
-  switch (AnyGeometryMember{expected.getType()}) {
-    case POINT:
-      return Property(&DAnyGeometry::getPoint,
-                      utilPointNear(expected.getPoint()));
-    case LINE:
-      return Property(&DAnyGeometry::getLine, utilLineNear(expected.getLine()));
-    case POLYGON:
-      return Property(&DAnyGeometry::getPolygon,
-                      utilPolygonNear(expected.getPolygon()));
-    case MULTILINE:
-      return Property(&DAnyGeometry::getMultiLine,
-                      utilMultiLineNear(expected.getMultiLine()));
-    case MULTIPOLYGON:
-      return Property(&DAnyGeometry::getMultiPolygon,
-                      utilMultiPolygonNear(expected.getMultiPolygon()));
-    case COLLECTION:
-      return Property(&DAnyGeometry::getCollection,
-                      utilCollectionNearForwardDecl(expected.getCollection()));
-    case MULTIPOINT:
-      return Property(&DAnyGeometry::getMultiPoint,
-                      utilMultiPointNear(expected.getMultiPoint()));
-    default:
-      AD_FAIL();
-  }
+  auto geometryMatcher = [&]() -> ::testing::Matcher<DAnyGeometry> {
+    switch (AnyGeometryMember{expected.getType()}) {
+      case POINT:
+        return Property(&DAnyGeometry::getPoint,
+                        utilPointNear(expected.getPoint()));
+      case LINE:
+        return Property(&DAnyGeometry::getLine,
+                        utilLineNear(expected.getLine()));
+      case POLYGON:
+        return Property(&DAnyGeometry::getPolygon,
+                        utilPolygonNear(expected.getPolygon()));
+      case MULTILINE:
+        return Property(&DAnyGeometry::getMultiLine,
+                        utilMultiLineNear(expected.getMultiLine()));
+      case MULTIPOLYGON:
+        return Property(&DAnyGeometry::getMultiPolygon,
+                        utilMultiPolygonNear(expected.getMultiPolygon()));
+      case COLLECTION:
+        return Property(
+            &DAnyGeometry::getCollection,
+            utilCollectionNearForwardDecl(expected.getCollection()));
+      case MULTIPOINT:
+        return Property(&DAnyGeometry::getMultiPoint,
+                        utilMultiPointNear(expected.getMultiPoint()));
+      default:
+        AD_FAIL();
+    }
+  };
 
   return AllOf(Property(&DAnyGeometry::getType, Eq(expected.getType())),
-               geometryMatcher);
+               geometryMatcher());
 };
 
 // ____________________________________________________________________________
