@@ -131,7 +131,7 @@ TEST(BinaryExportHelpers, rewriteVocabIds) {
 
   LocalVocab vocab;
   std::vector<std::string> transmittedStrings = {"<http://example.org/a>",
-                                                  "\"literal\""};
+                                                 "\"literal\""};
 
   // Rewrite vocab IDs starting from index 0
   BinaryExportHelpers::rewriteVocabIds(table, 0, *qec, vocab,
@@ -152,14 +152,13 @@ TEST(BinaryExportHelpers, getPrefixMapping) {
   auto* qec = ad_utility::testing::getQec();
 
   std::vector<std::string> remotePrefixes = {"<http://example.org/",
-                                              "<http://other.org/"};
+                                             "<http://other.org/"};
 
-  auto mapping =
-      BinaryExportHelpers::getPrefixMapping(*qec, remotePrefixes);
+  auto mapping = BinaryExportHelpers::getPrefixMapping(*qec, remotePrefixes);
 
   // The mapping should be empty or contain mappings only for prefixes
   // that exist in the local index
-  EXPECT_TRUE(mapping.empty() || mapping.size() <= remotePrefixes.size());
+  EXPECT_TRUE(mapping.size() <= remotePrefixes.size());
 }
 
 // _____________________________________________________________________________
@@ -171,12 +170,12 @@ TEST(BinaryExportHelpers, toIdImpl) {
   LocalVocab vocab;
   std::vector<std::string> prefixes;
   ad_utility::HashMap<uint8_t, uint8_t> prefixMapping;
+  ad_utility::HashMap<Id::T, Id> blankNodeMapping;
 
-  Id result = BinaryExportHelpers::toIdImpl(*qec, prefixes, prefixMapping,
-                                            vocab, intId.getBits());
+  Id result = BinaryExportHelpers::toIdImpl(
+      *qec, prefixes, prefixMapping, vocab, intId.getBits(), blankNodeMapping);
 
   EXPECT_EQ(result, intId);
-  EXPECT_EQ(result.getDatatype(), Datatype::Int);
 }
 
 // _____________________________________________________________________________

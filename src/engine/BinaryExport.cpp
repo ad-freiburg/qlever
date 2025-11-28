@@ -7,7 +7,7 @@
 
 #include <absl/functional/bind_front.h>
 
-#include "ExportQueryExecutionTrees.h"
+#include "engine/ExportQueryExecutionTrees.h"
 // TODO<joka921> Can we get further type erasure here to not include this
 // detail?
 #include "util/Serializer/ByteBufferSerializer.h"
@@ -62,20 +62,16 @@ bool BinaryExportHelpers::isTrivial(Id id) {
 
 // _____________________________________________________________________________
 std::string StringMapping::flush(const Index& index) {
+  LocalVocab dummy;
   numProcessedRows_ = 0;
   std::vector<std::string> sortedStrings;
   sortedStrings.resize(stringMapping_.size());
   for (auto& [oldId, newId] : stringMapping_) {
-    auto type = oldId.getDatatype();
-    if (type == Datatype::LocalVocabIndex) {
-      sortedStrings[newId] =
-          oldId.getLocalVocabIndex()->toStringRepresentation();
-    } else {
-      // TODO<joka921, RobinTF>, make the list exhaustive.
-      AD_CONTRACT_CHECK(type == Datatype::VocabIndex);
-      // TODO<joka921> Deduplicate on the level of IDs for the string mapping.
-      sortedStrings[newId] = index.indexToString(oldId.getVocabIndex());
-    }
+    auto literalOrIri =
+        ExportQueryExecutionTrees::idToLiteralOrIri(index, oldId, dummy, true);
+    AD_CORRECTNESS_CHECK(literalOrIri.has_value());
+    sortedStrings[newId] =
+        std::move(literalOrIri.value().toStringRepresentation());
   }
   stringMapping_.clear();
 
@@ -92,6 +88,10 @@ std::string StringMapping::flush(const Index& index) {
 
 // _____________________________________________________________________________
 Id StringMapping::remapId(Id id) {
+  static constexpr std::array allowedDatatypes{
+      Datatype::VocabIndex, Datatype::LocalVocabIndex,
+      Datatype::TextRecordIndex, Datatype::WordVocabIndex};
+  AD_EXPENSIVE_CHECK(ad_utility::contains(allowedDatatypes, id.getDatatype()));
   size_t distinctIndex = 0;
   if (stringMapping_.contains(id)) {
     distinctIndex = stringMapping_.at(id);
@@ -107,10 +107,10 @@ Id StringMapping::remapId(Id id) {
 AD_ALWAYS_INLINE Id
 toExportableId(Id originalId, [[maybe_unused]] const LocalVocab& localVocab,
                StringMapping& stringMapping) {
-  if (BinaryExportHelpers::isTrivial(originalId)) {
+  if (BinaryExportHelpers::isTrivial(originalId) ||
+      originalId.getDatatype() == Datatype::BlankNodeIndex) {
     return originalId;
   } else {
-    // TODO<joka921, RobinTF>, make the list exhaustive.
     return stringMapping.remapId(originalId);
   }
 }
@@ -132,8 +132,7 @@ auto readHeader(auto& serializer) {
   // end.
   std::string magicBytes;
   serializer >> magicBytes;
-  AD_CONTRACT_CHECK(std::string_view(magicBytes.data(), magicBytes.size()) ==
-                    "QLEVER.EXPORT");
+  AD_CONTRACT_CHECK(magicBytes == "QLEVER.EXPORT");
 
   uint16_t version;
   serializer >> version;
@@ -227,7 +226,8 @@ struct IteratorReader {
     for (size_t i = 0; i < numBytes; ++i) {
       AD_CORRECTNESS_CHECK(it != end);
       *target = static_cast<char>(*it);
-      ++it, ++target;
+      ++it;
+      ++target;
     }
   }
 };
@@ -235,9 +235,8 @@ struct IteratorReader {
 
 // _____________________________________________________________________________
 void BinaryExportHelpers::rewriteVocabIds(
-    IdTable& result, const size_t dirtyIndex,
-    const QueryExecutionContext& qec, LocalVocab& vocab,
-    const std::vector<std::string>& transmittedStrings) {
+    IdTable& result, const size_t dirtyIndex, const QueryExecutionContext& qec,
+    LocalVocab& vocab, const std::vector<std::string>& transmittedStrings) {
   for (auto col : result.getColumns()) {
     ql::ranges::for_each(
         col.subspan(dirtyIndex), [&qec, &vocab, &transmittedStrings](Id& id) {
@@ -266,10 +265,8 @@ void BinaryExportHelpers::rewriteVocabIds(
 Id BinaryExportHelpers::toIdImpl(
     const QueryExecutionContext& qec, const std::vector<std::string>& prefixes,
     const ad_utility::HashMap<uint8_t, uint8_t>& prefixMapping,
-    LocalVocab& vocab, Id::T bits) {
-  // TODO<RobinTF> check local vocab for id conversion. Also the strings are
-  // transmitted after the ids, so we might need to search `result` for
-  // changes.
+    LocalVocab& vocab, Id::T bits,
+    ad_utility::HashMap<Id::T, Id>& blankNodeMapping) {
   Id id = Id::fromBits(bits);
   if (id.getDatatype() == Datatype::EncodedVal) {
     // TODO<RobinTF> This is basically EncodedIriManager::toString copy
@@ -296,8 +293,17 @@ Id BinaryExportHelpers::toIdImpl(
         .toValueId(qec.getIndex().getVocab(), vocab,
                    qec.getIndex().encodedIriManager());
   }
-  // TODO<RobinTF> Add assertion that type is either trivial or local vocab
-  // index here.
+  if (id.getDatatype() == Datatype::BlankNodeIndex) {
+    auto [it, inserted] = blankNodeMapping.try_emplace(bits, ValueId{});
+
+    if (inserted) {
+      it->second = Id::makeFromBlankNodeIndex(
+          vocab.getBlankNodeIndex(qec.getIndex().getBlankNodeManager()));
+    }
+    return it->second;
+  }
+  AD_EXPENSIVE_CHECK(isTrivial(id) ||
+                     id.getDatatype() == Datatype::LocalVocabIndex);
   return id;
 }
 
@@ -355,10 +361,12 @@ Result importBinaryHttpResponse(bool requestLaziness,
   // TODO<RobinTF> check if variable names do actually match expected names.
 
   LocalVocab vocab;
+  ad_utility::HashMap<Id::T, Id> blankNodeMapping;
 
-  auto toId = [&qec, &prefixes, &vocab, &prefixMapping](Id::T bits) mutable {
+  auto toId = [&qec, &prefixes, &vocab, &prefixMapping,
+               &blankNodeMapping](Id::T bits) mutable {
     return BinaryExportHelpers::toIdImpl(qec, prefixes, prefixMapping, vocab,
-                                         bits);
+                                         bits, blankNodeMapping);
   };
 
   // At which index we need to start converting values.
