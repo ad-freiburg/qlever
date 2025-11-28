@@ -383,18 +383,18 @@ Result SpatialJoinAlgorithms::BaselineAlgorithm() {
 
 // ____________________________________________________________________________
 sj::SweeperCfg SpatialJoinAlgorithms::libspatialjoinSweeperConfig(
-    size_t threads) {
+    size_t threads, ad_utility::MemorySize totalAllowedMemory) {
   using enum SpatialJoinType;
   auto sep = [](SpatialJoinType type) {
     return std::string{static_cast<char>(type)};
   };
+  AD_CORRECTNESS_CHECK(threads > 0);
 
   sj::SweeperCfg cfg;
   cfg.numThreads = threads;
   cfg.numCacheThreads = threads;
-  // TODO<ullingerc> Determine from query RAM limit?
-  cfg.geomCacheMaxSize =
-      (1_GB).getBytes();  // Cache memory per thread, in bytes
+  // Cache memory per thread, in bytes
+  cfg.geomCacheMaxSize = totalAllowedMemory.getBytes() / threads;
   cfg.geomCacheMaxNumElements = 10'000;
   cfg.sepIsect = sep(INTERSECTS);
   cfg.sepContains = sep(CONTAINS);
@@ -449,7 +449,8 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
   }
 
   // Configure the sweeper.
-  sj::SweeperCfg sweeperCfg = libspatialjoinSweeperConfig(NUM_THREADS);
+  sj::SweeperCfg sweeperCfg = libspatialjoinSweeperConfig(
+      NUM_THREADS, qec_->getAllocator().amountMemoryLeft());
   sweeperCfg.withinDist = withinDist;
   sweeperCfg.writeRelCb = [&results, &resultDists, joinTypeVal](
                               size_t t, const char* a, size_t, const char* b,

@@ -186,7 +186,8 @@ inline sj::SweeperCfg makeSweeperCfg(const LibSpatialJoinConfig& libSJConfig,
                                      SweeperDistResult& resultDists,
                                      double withinDist) {
   using enum SpatialJoinType;
-  sj::SweeperCfg cfg = SpatialJoinAlgorithms::libspatialjoinSweeperConfig(1);
+  sj::SweeperCfg cfg =
+      SpatialJoinAlgorithms::libspatialjoinSweeperConfig(1, 1_GB);
   cfg.withinDist = withinDist;
   auto joinTypeVal = libSJConfig.joinType_;
   cfg.writeRelCb = [&results, &resultDists, joinTypeVal](
