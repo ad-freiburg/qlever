@@ -108,6 +108,7 @@ class Log {
 
   template <LogLevel LEVEL>
   static QL_CONSTEVAL std::string_view getLevel() {
+    /*
     using P = ConstexprMapPair<LogLevel, std::string_view>;
     constexpr ConstexprMap map{std::array{
         P(TRACE, "TRACE: "),
@@ -118,7 +119,10 @@ class Log {
         P(ERROR, "ERROR: "),
         P(FATAL, "FATAL: "),
     }};
-    return map.at(LEVEL);
+    */
+    return "INFO: ";
+    // TODO<joka921> Figure out, why this doesn't work.
+    // return map.at(LEVEL);
   }
 };
 }  // namespace ad_utility

@@ -7,6 +7,7 @@
 
 #include <vector>
 
+#include "JoinAlgorithms.h"
 #include "engine/CallFixedSize.h"
 #include "engine/JoinHelpers.h"
 #include "engine/Result.h"
