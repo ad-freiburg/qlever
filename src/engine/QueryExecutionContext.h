@@ -208,8 +208,12 @@ class QueryExecutionContext {
   std::function<void(std::string)> updateCallback_;
 
   // Cache the state of both runtime parameters to reduce the contention of the
-  // mutex.
+  // mutex. `areWebsocketUpdatesEnabled_` is exposed so it can be disabled at a
+  // later point in time.
+ public:
   bool areWebsocketUpdatesEnabled_ = areWebSocketUpdatesEnabled();
+
+ private:
   std::chrono::milliseconds websocketUpdateInterval_ =
       websocketUpdateInterval();
 
