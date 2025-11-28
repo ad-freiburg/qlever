@@ -131,8 +131,9 @@ auto addGraphColumnIfNecessary(std::vector<RelationInput>& inputs) {
 template <typename T>
 std::pair<std::vector<CompressedBlockMetadata>,
           std::vector<CompressedRelationMetadata>>
-compressedRelationTestWriteCompressedRelations(
-    T inputs, std::string filename, ad_utility::MemorySize blocksize) {
+compressedRelationTestWriteCompressedRelations(T inputs, std::string filename,
+                                               ad_utility::MemorySize blocksize,
+                                               bool writeSingle) {
   // First check the invariants of the `inputs`. They must be sorted by the
   // `col0_` and for each of the `inputs` the `col1And2_` must also be sorted.
   AD_CONTRACT_CHECK(ql::ranges::is_sorted(
@@ -185,7 +186,8 @@ compressedRelationTestWriteCompressedRelations(
       }};
 
   auto res = CompressedRelationWriter::createPermutationPair(
-      filename + "sorter-basename", wc1, wc2,
+      filename + "sorter-basename", wc1,
+      writeSingle ? std::nullopt : std::optional{wc2},
       ad_utility::InputRangeTypeErased{generator(5)},
       qlever::KeyOrder{0, 1, 2, 3}, {});
   auto& blocks = res.blockMetadata_;
@@ -261,9 +263,10 @@ makeLocatedTriplesFromPartOfInput(float locatedProbab,
 // that are required to test the `CompressedRelationReader` class.
 auto writeAndOpenRelations(const std::vector<RelationInput>& inputs,
                            std::string filename,
-                           ad_utility::MemorySize blocksize) {
+                           ad_utility::MemorySize blocksize,
+                           bool writeSingle = false) {
   auto [blocks, metaData] = compressedRelationTestWriteCompressedRelations(
-      inputs, filename, blocksize);
+      inputs, filename, blocksize, writeSingle);
   auto reader = [&]() {
     return std::make_unique<CompressedRelationReader>(
         ad_utility::makeUnlimitedAllocator<Id>(),
@@ -280,6 +283,7 @@ auto writeAndOpenRelations(const std::vector<RelationInput>& inputs,
 void testCompressedRelations(const auto& inputsOriginalBeforeCopy,
                              std::string testCaseName,
                              ad_utility::MemorySize blocksize,
+                             bool writeSingle = false,
                              float locatedTriplesProbability = 0.5) {
   using ScanSpecAndBlocks = CompressedRelationReader::ScanSpecAndBlocks;
   auto inputs = inputsOriginalBeforeCopy;
@@ -289,8 +293,8 @@ void testCompressedRelations(const auto& inputsOriginalBeforeCopy,
   DeltaTriples deltaTriples{ad_utility::testing::getQec()->getIndex()};
   auto filename = testCaseName + ".dat";
   auto cleanup = makeCleanup(filename);
-  auto [blocksOriginal, metaData, readerPtr] =
-      writeAndOpenRelations(inputsWithoutLocated, filename, blocksize);
+  auto [blocksOriginal, metaData, readerPtr] = writeAndOpenRelations(
+      inputsWithoutLocated, filename, blocksize, writeSingle);
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
   // deltaTriples.insertTriples(handle, std::move(locatedTriplesInput));
   // auto locatedTriples =
@@ -1244,6 +1248,37 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
                          {{3, 4, 1}, {8, 5, 1}, {9, 4, 1}, {9, 5, 1}}))
         << "Failed with blocksize " << blocksize.getBytes();
   }
+}
+
+// _____________________________________________________________________________
+TEST(CompressedRelationWriter, writeSinglePermutation) {
+  using namespace ::testing;
+  using ScanSpecAndBlocks = CompressedRelationReader::ScanSpecAndBlocks;
+  using GF = ScanSpecification::GraphFilter;
+
+  std::vector<RelationInput> inputs;
+  inputs.push_back(RelationInput{42,
+                                 {
+                                     {3, 4, 0},
+                                     {3, 4, 1},
+                                 }});
+  inputs.push_back(RelationInput{43,
+                                 {
+                                     {5, 4, 1},
+                                     {5, 4, 2},
+                                 }});
+
+  auto blocksize = 64_B;
+  auto [blocks, metadata, reader] =
+      writeAndOpenRelations(inputs, "writeSinglePermutation", blocksize, true);
+
+  ScanSpecification spec{V(42), std::nullopt, std::nullopt, {}, GF::All()};
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+
+  auto res = reader->scan(
+      ScanSpecAndBlocks{spec, getBlockMetadataRangesfromVec(blocks)}, {},
+      handle, emptyLocatedTriples);
+  EXPECT_THAT(res, matchesIdTableFromVector({{3, 4}}));
 }
 
 // _____________________________________________________________________________
