@@ -56,6 +56,8 @@ CPP_concept WktCollectionType =
               MultiPolygon<CoordType>, Collection<CoordType>>;
 
 static_assert(!std::is_same_v<Line<CoordType>, MultiPoint<CoordType>>);
+static_assert(!isVector<Line<CoordType>>);
+static_assert(isVector<Collection<CoordType>>);
 
 // Removes the datatype and quotation marks from a given literal
 inline std::string removeDatatype(const std::string_view& wkt) {
@@ -395,6 +397,124 @@ struct MetricAreaVisitor {
 };
 
 static constexpr MetricAreaVisitor computeMetricArea;
+
+// Helper to convert an instance of the `GeoPointOrWkt` variant to `ParseResult`
+// containing a geometry for `pb_util`.
+struct ParseGeoPointOrWktVisitor {
+  ParseResult operator()(const GeoPoint& point) const {
+    return {WKTType::POINT, geoPointToUtilPoint(point)};
+  }
+
+  ParseResult operator()(const std::string& wkt) const { return parseWkt(wkt); }
+
+  ParseResult operator()(const GeoPointOrWkt& geoPointOrWkt) const {
+    return std::visit(ParseGeoPointOrWktVisitor{}, geoPointOrWkt);
+  }
+};
+
+static constexpr ParseGeoPointOrWktVisitor parseGeoPointOrWkt;
+
+// Helper to extract the n-th geometry from a parsed `pb_util` geometry. Note
+// that this is 1-indexed and non-collection types return themselves at index 1.
+using GeometryN = AddToVariant<ParsedWkt, AnyGeometry<CoordType>>;
+struct GeometryNVisitor {
+  // Visitor for collection types
+  CPP_template(typename T)(
+      requires WktCollectionType<T>) std::optional<GeometryN>
+  operator()(const T& geom, int64_t n) const {
+    // Index range check
+    if (n < 1 || n - 1 >= static_cast<int64_t>(geom.size())) {
+      return std::nullopt;
+    }
+    return geom.at(n - 1);
+  }
+
+  // Visitor for single geometry types
+  CPP_template(typename T)(
+      requires WktSingleGeometryType<T>) std::optional<GeometryN>
+  operator()(const T& geom, int64_t n) const {
+    // For non collection types, only index 1 is defined and returns the
+    // geometry itself.
+    if (n == 1) {
+      return geom;
+    }
+    return std::nullopt;
+  }
+
+  // Visitor for `ParsedWkt` variant
+  std::optional<GeometryN> operator()(const ParsedWkt& geom, int64_t n) const {
+    return std::visit(
+        [n](const auto& contained) { return GeometryNVisitor{}(contained, n); },
+        geom);
+  }
+};
+
+static constexpr GeometryNVisitor getGeometryN;
+
+// Helper to convert a geometry from `pb_util` to a WKT string.
+struct UtilGeomToWktVisitor {
+  // Visitor for `std::optional` inputs
+  template <typename T>
+  std::optional<std::string> operator()(const std::optional<T>& opt) const {
+    if (!opt.has_value()) {
+      return std::nullopt;
+    }
+    return UtilGeomToWktVisitor{}(opt.value());
+  }
+
+  // Visitor for the `ParsedWkt` and `GeometryN` variants
+  CPP_template(typename T)(
+      requires SimilarToAny<T, ParsedWkt, GeometryN>) std::optional<std::string>
+  operator()(const T& variant) const {
+    return std::visit(UtilGeomToWktVisitor{}, variant);
+  }
+
+  // Visitor for each of the `pb_util` geometry types
+  CPP_template(typename T)(
+      requires SimilarToAnyTypeIn<T, ParsedWkt>) std::optional<std::string>
+  operator()(const T& geom) const {
+    return getWKT(geom);
+  }
+
+  // Visitor for the custom container type `AnyGeometry`
+  std::optional<std::string> operator()(
+      const AnyGeometry<CoordType>& geom) const {
+    using enum AnyGeometryMember;
+    switch (AnyGeometryMember{geom.getType()}) {
+      case POINT:
+        return UtilGeomToWktVisitor{}(geom.getPoint());
+      case LINE:
+        return UtilGeomToWktVisitor{}(geom.getLine());
+      case POLYGON:
+        return UtilGeomToWktVisitor{}(geom.getPolygon());
+      case MULTILINE:
+        return UtilGeomToWktVisitor{}(geom.getMultiLine());
+      case MULTIPOLYGON:
+        return UtilGeomToWktVisitor{}(geom.getMultiPolygon());
+      case COLLECTION:
+        return UtilGeomToWktVisitor{}(geom.getCollection());
+      case MULTIPOINT:
+        return UtilGeomToWktVisitor{}(geom.getMultiPoint());
+      default:
+        AD_FAIL();
+    }
+  }
+};
+
+static constexpr UtilGeomToWktVisitor utilGeomToWkt;
+
+// Given a `GeoPointOrWkt` return the n-th geometry (1-indexed) as a WKT string.
+inline std::optional<std::string> getGeometryNAsWkt(
+    std::optional<GeoPointOrWkt> geoPointOrWkt, int64_t n) {
+  if (!geoPointOrWkt.has_value()) {
+    return std::nullopt;
+  }
+  auto [type, parsed] = parseGeoPointOrWkt(geoPointOrWkt.value());
+  if (!parsed.has_value()) {
+    return std::nullopt;
+  }
+  return utilGeomToWkt(getGeometryN(parsed.value(), n));
+}
 
 }  // namespace ad_utility::detail
 

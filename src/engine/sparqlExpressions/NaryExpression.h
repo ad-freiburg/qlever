@@ -75,6 +75,8 @@ SparqlExpression::Ptr makeNumGeometriesExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeLengthExpression(SparqlExpression::Ptr child1,
                                            SparqlExpression::Ptr child2);
 SparqlExpression::Ptr makeMetricLengthExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeGeometryNExpression(SparqlExpression::Ptr child1,
+                                              SparqlExpression::Ptr child2);
 
 template <ad_utility::BoundingCoordinate RequestedCoordinate>
 SparqlExpression::Ptr makeBoundingCoordinateExpression(
