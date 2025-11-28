@@ -47,15 +47,27 @@ CPP_template(typename UnderlyingSerializer, typename CompressionFunction)(
  public:
   using SerializerType = WriteSerializerTag;
 
+ private:
+  std::optional<UnderlyingSerializer> underlyingSerializer_;
+  CompressionFunction compressionFunction_;
+  size_t blocksize_;
+  std::vector<char> buffer_;
+
+ public:
+  // Create from the underlying serialzier, the function used for compression,
+  // the `blocksize` for the compression. Note: We deliberately have no default
+  // value for the `blocksize`, as good values depend on the nature of the
+  // compression function.
   CompressedWriteSerializer(UnderlyingSerializer underlyingSerializer,
                             CompressionFunction compressionFunction,
-                            ad_utility::MemorySize blockSize)
+                            ad_utility::MemorySize blocksize)
       : underlyingSerializer_{std::in_place, std::move(underlyingSerializer)},
         compressionFunction_{std::move(compressionFunction)},
-        blockSize_{blockSize.getBytes()} {
-    buffer_.reserve(blockSize_);
+        blocksize_{blocksize.getBytes()} {
+    buffer_.reserve(blocksize_);
   }
 
+  // This is a move-only class.
   CompressedWriteSerializer(const CompressedWriteSerializer&) = delete;
   CompressedWriteSerializer& operator=(const CompressedWriteSerializer&) =
       delete;
@@ -68,11 +80,22 @@ CPP_template(typename UnderlyingSerializer, typename CompressionFunction)(
         "The closing of a `CompressedWriteSerializer` failed");
   }
 
+  // Main serialization function.
   void serializeBytes(const char* bytePointer, size_t numBytes) {
-    buffer_.insert(buffer_.end(), bytePointer, bytePointer + numBytes);
-    flushBlocks(false);
+    while (numBytes > 0) {
+      size_t capacity = buffer_.capacity() - buffer_.size();
+      size_t bytesToCopy = std::min(capacity, numBytes);
+      buffer_.insert(buffer_.end(), bytePointer, bytePointer + bytesToCopy);
+      if (bytesToCopy < capacity) {
+        return;
+      }
+      flushBlocks(false);
+      numBytes -= bytesToCopy;
+      bytePointer += bytesToCopy;
+    }
   }
 
+  // After a call to `close` no more calls to `serializeBytes` are allowed.
   void close() {
     if (underlyingSerializer_.has_value()) {
       flushBlocks(true);
@@ -80,6 +103,7 @@ CPP_template(typename UnderlyingSerializer, typename CompressionFunction)(
     }
   }
 
+  // Flush the temporary buffer, and then move out the underlying serializer.
   UnderlyingSerializer underlyingSerializer() && {
     AD_CONTRACT_CHECK(underlyingSerializer_.has_value());
     flushBlocks(true);
@@ -92,10 +116,10 @@ CPP_template(typename UnderlyingSerializer, typename CompressionFunction)(
   void flushBlocks(bool flushIncomplete) {
     size_t offset = 0;
     // Flush all complete blocks
-    while (offset + blockSize_ <= buffer_.size()) {
+    while (offset + blocksize_ <= buffer_.size()) {
       flushSingleBlock(
-          ql::span<const char>(buffer_.data() + offset, blockSize_));
-      offset += blockSize_;
+          ql::span<const char>(buffer_.data() + offset, blocksize_));
+      offset += blocksize_;
     }
     // Flush incomplete block at the end if requested
     if (flushIncomplete && offset < buffer_.size()) {
@@ -114,11 +138,6 @@ CPP_template(typename UnderlyingSerializer, typename CompressionFunction)(
     *underlyingSerializer_ << uncompressedSize;
     *underlyingSerializer_ << compressionFunction_(blockData);
   }
-
-  std::optional<UnderlyingSerializer> underlyingSerializer_;
-  CompressionFunction compressionFunction_;
-  size_t blockSize_;
-  std::vector<char> buffer_;
 };
 
 /**
@@ -133,48 +152,55 @@ CPP_template(typename UnderlyingSerializer, typename CompressionFunction)(
  * @tparam DecompressionFunction A callable that takes a span of chars
  * (compressed) and a size_t (uncompressed size) and returns a vector of chars
  */
-template <typename UnderlyingSerializer, typename DecompressionFunction>
-class CompressedReadSerializer {
+CPP_template(typename UnderlyingSerializer, typename DecompressionFunction)(
+    requires ReadSerializer<UnderlyingSerializer> CPP_and
+        ad_utility::InvocableWithConvertibleReturnType<
+            DecompressionFunction, ql::span<const char>, ql::span<const char>,
+            size_t>) class CompressedReadSerializer {
  public:
   using SerializerType = ReadSerializerTag;
 
-  static_assert(ReadSerializer<UnderlyingSerializer>,
-                "UnderlyingSerializer must be a ReadSerializer");
+ private:
+  UnderlyingSerializer underlyingSerializer_;
+  DecompressionFunction decompressionFunction_;
+  std::vector<char> buffer_;
+  std::vector<char> compressedBuffer_;
+  size_t bufferPos_ = 0;
 
+ public:
+  // Compress from the underlying serializer, as well as the decompression
+  // function.
   CompressedReadSerializer(UnderlyingSerializer underlyingSerializer,
-                           DecompressionFunction decompressionFunction,
-                           ad_utility::MemorySize blockSize)
+                           DecompressionFunction decompressionFunction)
       : underlyingSerializer_{std::move(underlyingSerializer)},
-        decompressionFunction_{std::move(decompressionFunction)},
-        blockSize_{blockSize.getBytes()} {}
+        decompressionFunction_{std::move(decompressionFunction)} {}
 
+  // The serializer is move-only.
   CompressedReadSerializer(const CompressedReadSerializer&) = delete;
   CompressedReadSerializer& operator=(const CompressedReadSerializer&) = delete;
   CompressedReadSerializer(CompressedReadSerializer&&) = default;
   CompressedReadSerializer& operator=(CompressedReadSerializer&&) = default;
 
   void serializeBytes(char* bytePointer, size_t numBytes) {
-    size_t bytesRead = 0;
-    while (bytesRead < numBytes) {
+    while (numBytes > 0) {
       // If buffer is empty, read and decompress the next block
       if (bufferPos_ >= buffer_.size()) {
         readNextBlock();
       }
       size_t bytesAvailable = buffer_.size() - bufferPos_;
-      size_t bytesToCopy = std::min(bytesAvailable, numBytes - bytesRead);
+      size_t bytesToCopy = std::min(bytesAvailable, numBytes);
       std::copy(buffer_.begin() + bufferPos_,
-                buffer_.begin() + bufferPos_ + bytesToCopy,
-                bytePointer + bytesRead);
+                buffer_.begin() + bufferPos_ + bytesToCopy, bytePointer);
+      bytePointer += bytesToCopy;
       bufferPos_ += bytesToCopy;
-      bytesRead += bytesToCopy;
+      numBytes -= bytesToCopy;
     }
   }
 
-  UnderlyingSerializer&& underlyingSerializer() && {
-    return std::move(underlyingSerializer_);
-  }
-
  private:
+  // Read the next block of data from the underlying serializer, decompress it
+  // and store it in the `buffer`. The `buffer` will be overwritten, so it is
+  // important, to read in advance.
   void readNextBlock() {
     size_t uncompressedSize;
     underlyingSerializer_ | uncompressedSize;
@@ -183,13 +209,6 @@ class CompressedReadSerializer {
                                      uncompressedSize);
     bufferPos_ = 0;
   }
-
-  UnderlyingSerializer underlyingSerializer_;
-  DecompressionFunction decompressionFunction_;
-  size_t blockSize_;
-  std::vector<char> buffer_;
-  std::vector<char> compressedBuffer_;
-  size_t bufferPos_ = 0;
 };
 
 // Zstd compression/decompression functions for use with CompressedSerializer
@@ -226,14 +245,15 @@ class ZstdWriteSerializer
  public:
   explicit ZstdWriteSerializer(
       UnderlyingSerializer underlyingSerializer,
-      ad_utility::MemorySize blockSize = detail::defaultZstdBlockSize)
+      ad_utility::MemorySize blocksize = detail::defaultZstdBlockSize)
       : Base{std::move(underlyingSerializer), detail::ZstdCompress{},
-             blockSize} {}
+             blocksize} {}
 };
 
 /**
  * A read serializer that decompresses Zstd-compressed data from an underlying
- * serializer.
+ * serializer. The data must have been serialized using the
+ * `ZstdWriteSerializer` above.
  */
 template <typename UnderlyingSerializer>
 class ZstdReadSerializer
@@ -243,11 +263,9 @@ class ZstdReadSerializer
       CompressedReadSerializer<UnderlyingSerializer, detail::ZstdDecompress>;
 
  public:
-  explicit ZstdReadSerializer(
-      UnderlyingSerializer underlyingSerializer,
-      ad_utility::MemorySize blockSize = detail::defaultZstdBlockSize)
-      : Base{std::move(underlyingSerializer), detail::ZstdDecompress{},
-             blockSize} {}
+  // ___________________________________________________________________________
+  explicit ZstdReadSerializer(UnderlyingSerializer underlyingSerializer)
+      : Base{std::move(underlyingSerializer), detail::ZstdDecompress{}} {}
 };
 
 }  // namespace ad_utility::serialization

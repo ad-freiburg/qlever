@@ -569,19 +569,30 @@ TEST(Serializer, serializeOptional) {
 // Tests for CompressedSerializer
 // _____________________________________________________________________________
 
-// Simple identity "compression" for testing (no actual compression)
-auto identityCompress = [](ql::span<const char> data) {
-  return std::vector<char>(data.begin(), data.end());
+// Simple dummy "compression" for testing (modify the data in a way that is
+// simple, and reversed in the below dummy decompression function)
+auto dummyCompress = [](ql::span<const char> data) {
+  auto res = std::vector<char>(data.begin(), data.end());
+  for (auto& c : res) {
+    ++c;
+  }
+  res.push_back('A');
+  return res;
 };
-auto identityDecompress = [](ql::span<const char> data, size_t) {
-  return std::vector<char>(data.begin(), data.end());
+auto dummyDecompress = [](ql::span<const char> data, size_t) {
+  auto res = std::vector<char>(data.begin(), data.end());
+  for (auto& c : res) {
+    --c;
+  }
+  res.pop_back();
+  return res;
 };
 
 TEST(CompressedSerializer, Concepts) {
   using Writer = CompressedWriteSerializer<ByteBufferWriteSerializer,
-                                           decltype(identityCompress)>;
+                                           decltype(dummyCompress)>;
   using Reader = CompressedReadSerializer<ByteBufferReadSerializer,
-                                          decltype(identityDecompress)>;
+                                          decltype(dummyDecompress)>;
   static_assert(WriteSerializer<Writer>);
   static_assert(!ReadSerializer<Writer>);
   static_assert(ReadSerializer<Reader>);
@@ -592,7 +603,7 @@ TEST(CompressedSerializer, SimpleRoundtrip) {
   auto blockSize = ad_utility::MemorySize::bytes(64);
 
   ByteBufferWriteSerializer bufferWriter;
-  CompressedWriteSerializer writer{std::move(bufferWriter), identityCompress,
+  CompressedWriteSerializer writer{std::move(bufferWriter), dummyCompress,
                                    blockSize};
   int x = 42;
   double d = 3.14159;
@@ -603,8 +614,7 @@ TEST(CompressedSerializer, SimpleRoundtrip) {
   auto buffer = std::move(writer).underlyingSerializer();
 
   ByteBufferReadSerializer bufferReader{std::move(buffer).data()};
-  CompressedReadSerializer reader{std::move(bufferReader), identityDecompress,
-                                  blockSize};
+  CompressedReadSerializer reader{std::move(bufferReader), dummyDecompress};
   int xRead;
   double dRead;
   std::string sRead;
@@ -626,14 +636,13 @@ TEST(CompressedSerializer, LargeDataMultipleBlocks) {
   }
 
   ByteBufferWriteSerializer bufferWriter;
-  CompressedWriteSerializer writer{std::move(bufferWriter), identityCompress,
+  CompressedWriteSerializer writer{std::move(bufferWriter), dummyCompress,
                                    blockSize};
   writer << original;
   auto buffer = std::move(writer).underlyingSerializer();
 
   ByteBufferReadSerializer bufferReader{std::move(buffer).data()};
-  CompressedReadSerializer reader{std::move(bufferReader), identityDecompress,
-                                  blockSize};
+  CompressedReadSerializer reader{std::move(bufferReader), dummyDecompress};
   std::vector<int> read;
   reader >> read;
 
@@ -674,8 +683,7 @@ TEST(CompressedSerializer, WithActualCompression) {
   auto buffer = std::move(writer).underlyingSerializer();
 
   ByteBufferReadSerializer bufferReader{std::move(buffer).data()};
-  CompressedReadSerializer reader{std::move(bufferReader), decompress,
-                                  blockSize};
+  CompressedReadSerializer reader{std::move(bufferReader), decompress};
   std::vector<std::string> read;
   reader >> read;
 
@@ -686,15 +694,14 @@ TEST(CompressedSerializer, EmptyData) {
   auto blockSize = ad_utility::MemorySize::bytes(64);
 
   ByteBufferWriteSerializer bufferWriter;
-  CompressedWriteSerializer writer{std::move(bufferWriter), identityCompress,
+  CompressedWriteSerializer writer{std::move(bufferWriter), dummyCompress,
                                    blockSize};
   std::vector<int> empty;
   writer << empty;
   auto buffer = std::move(writer).underlyingSerializer();
 
   ByteBufferReadSerializer bufferReader{std::move(buffer).data()};
-  CompressedReadSerializer reader{std::move(bufferReader), identityDecompress,
-                                  blockSize};
+  CompressedReadSerializer reader{std::move(bufferReader), dummyDecompress};
   std::vector<int> read;
   reader >> read;
 
@@ -708,7 +715,7 @@ TEST(CompressedSerializer, ExactBlockSize) {
   std::vector<int> original = {1, 2, 3, 4, 5, 6, 7, 8};  // Exactly 2 blocks
 
   ByteBufferWriteSerializer bufferWriter;
-  CompressedWriteSerializer writer{std::move(bufferWriter), identityCompress,
+  CompressedWriteSerializer writer{std::move(bufferWriter), dummyCompress,
                                    blockSize};
   for (int i : original) {
     writer << i;
@@ -716,8 +723,7 @@ TEST(CompressedSerializer, ExactBlockSize) {
   auto buffer = std::move(writer).underlyingSerializer();
 
   ByteBufferReadSerializer bufferReader{std::move(buffer).data()};
-  CompressedReadSerializer reader{std::move(bufferReader), identityDecompress,
-                                  blockSize};
+  CompressedReadSerializer reader{std::move(bufferReader), dummyDecompress};
   std::vector<int> read;
   for (size_t i = 0; i < original.size(); ++i) {
     int val;
@@ -739,15 +745,14 @@ TEST(CompressedSerializer, WithFileSerializer) {
 
   {
     FileWriteSerializer fileWriter{filename};
-    CompressedWriteSerializer writer{std::move(fileWriter), identityCompress,
+    CompressedWriteSerializer writer{std::move(fileWriter), dummyCompress,
                                      blockSize};
     writer << original;
   }
 
   {
     FileReadSerializer fileReader{filename};
-    CompressedReadSerializer reader{std::move(fileReader), identityDecompress,
-                                    blockSize};
+    CompressedReadSerializer reader{std::move(fileReader), dummyDecompress};
     std::vector<double> read;
     reader >> read;
     EXPECT_EQ(original, read);
@@ -785,7 +790,7 @@ TEST(ZstdSerializer, RoundtripWithByteBuffer) {
   auto buffer = std::move(writer).underlyingSerializer();
 
   ByteBufferReadSerializer bufferReader{std::move(buffer).data()};
-  ZstdReadSerializer reader{std::move(bufferReader), blockSize};
+  ZstdReadSerializer reader{std::move(bufferReader)};
   std::vector<int> read;
   reader >> read;
 
@@ -813,7 +818,7 @@ TEST(ZstdSerializer, RoundtripWithFileSerializer) {
 
   {
     FileReadSerializer fileReader{filename};
-    ZstdReadSerializer reader{std::move(fileReader), blockSize};
+    ZstdReadSerializer reader{std::move(fileReader)};
     std::vector<std::string> read;
     reader >> read;
     EXPECT_EQ(original, read);
