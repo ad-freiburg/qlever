@@ -1,19 +1,27 @@
-//  Copyright 2025, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2021 - 2025 The QLever Authors, in particular:
+//
+// 2021 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
+// 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 
-#ifndef QLEVER_COMPRESSEDSERIALIZER_H
-#define QLEVER_COMPRESSEDSERIALIZER_H
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
+
+#ifndef QLEVER_SRC_UTIL_SERIALIZER_COMPRESSEDSERIALIZER_H
+#define QLEVER_SRC_UTIL_SERIALIZER_COMPRESSEDSERIALIZER_H
 
 #include <functional>
 #include <optional>
 #include <vector>
 
-#include "./SerializeVector.h"
-#include "./Serializer.h"
 #include "backports/span.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
+#include "util/ExceptionHandling.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/Serializer/SerializeVector.h"
+#include "util/Serializer/Serializer.h"
+#include "util/TypeTraits.h"
 
 namespace ad_utility::serialization {
 
@@ -31,13 +39,13 @@ namespace ad_utility::serialization {
  * @tparam CompressionFunction A callable that takes a span of chars and returns
  * a vector of chars
  */
-template <typename UnderlyingSerializer, typename CompressionFunction>
-class CompressedWriteSerializer {
+CPP_template(typename UnderlyingSerializer, typename CompressionFunction)(
+    requires WriteSerializer<UnderlyingSerializer> CPP_and
+        ad_utility::InvocableWithConvertibleReturnType<
+            CompressionFunction, ql::span<const char>,
+            ql::span<const char>>) class CompressedWriteSerializer {
  public:
   using SerializerType = WriteSerializerTag;
-
-  static_assert(WriteSerializer<UnderlyingSerializer>,
-                "UnderlyingSerializer must be a WriteSerializer");
 
   CompressedWriteSerializer(UnderlyingSerializer underlyingSerializer,
                             CompressionFunction compressionFunction,
@@ -54,7 +62,11 @@ class CompressedWriteSerializer {
   CompressedWriteSerializer(CompressedWriteSerializer&&) = default;
   CompressedWriteSerializer& operator=(CompressedWriteSerializer&&) = default;
 
-  ~CompressedWriteSerializer() { close(); }
+  ~CompressedWriteSerializer() {
+    ad_utility::terminateIfThrows(
+        [this]() { close(); },
+        "The closing of a `CompressedWriteSerializer` failed");
+  }
 
   void serializeBytes(const char* bytePointer, size_t numBytes) {
     buffer_.insert(buffer_.end(), bytePointer, bytePointer + numBytes);
@@ -240,4 +252,4 @@ class ZstdReadSerializer
 
 }  // namespace ad_utility::serialization
 
-#endif  // QLEVER_COMPRESSEDSERIALIZER_H
+#endif  // QLEVER_SRC_UTIL_SERIALIZER_COMPRESSEDSERIALIZER_H
