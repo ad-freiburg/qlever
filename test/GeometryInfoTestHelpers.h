@@ -364,14 +364,12 @@ inline auto parsedWktNear = liftOptionalMatcher<ParsedWkt>(
           },
           std::move(expected));
     });
-#define EXPECT_PARSED_WKT(a, b) EXPECT_THAT(a, parsedWktNear(b))
 
 // ____________________________________________________________________________
 inline auto parseResultNear = liftOptionalMatcher<ParseResult>(
     [](ParseResult expected) -> Matcher<ParseResult> {
       return Pair(Eq(expected.first), parsedWktNear(expected.second));
     });
-#define EXPECT_WKT_PARSE_RESULT(a, b) EXPECT_THAT(a, parseResultNear(b))
 
 };  // namespace geoInfoTestHelpers
 

@@ -27,29 +27,29 @@ constexpr std::string_view litPoint =
     "\"POINT(3 4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 const DPoint expectedPoint{3, 4};
 constexpr std::string_view litLineString =
-    "\"LINESTRING(2 2, 4 4)\""
+    "\"LINESTRING(2 2,4 4)\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 const DLine expectedLine{{2, 2}, {4, 4}};
 constexpr std::string_view litPolygon =
-    "\"POLYGON((2 4, 4 4, 4 2, 2 2))\""
+    "\"POLYGON((2 4,4 4,4 2,2 2,2 4))\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 const DPolygon expectedPolygon{{{2, 4}, {4, 4}, {4, 2}, {2, 2}}};
 constexpr std::string_view litMultiPoint =
-    "\"MULTIPOINT((2 2), (4 4))\""
+    "\"MULTIPOINT(2 2,4 4)\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 const DMultiPoint expectedMultiPoint{{2, 2}, {4, 4}};
 constexpr std::string_view litMultiLineString =
-    "\"MULTILINESTRING((2 2, 4 4), (2 2, 6 8))\""
+    "\"MULTILINESTRING((2 2,4 4),(2 2,6 8))\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 const DMultiLine expectedMultiLineString{{{2, 2}, {4, 4}}, {{2, 2}, {6, 8}}};
 constexpr std::string_view litMultiPolygon =
-    "\"MULTIPOLYGON(((2 4,8 4,8 6,2 6,2 4)), ((2 4, 4 4, 4 2, 2 2)))\""
+    "\"MULTIPOLYGON(((2 4,8 4,8 6,2 6,2 4)),((2 4,4 4,4 2,2 2,2 4)))\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 const DMultiPolygon expectedMultiPolygon{
     DPolygon{{{2, 4}, {8, 4}, {8, 6}, {2, 6}, {2, 4}}},
-    DPolygon{{{2, 4}, {4, 4}, {4, 2}, {2, 2}}}};
+    DPolygon{{{2, 4}, {4, 4}, {4, 2}, {2, 2}, {2, 4}}}};
 constexpr std::string_view litCollection =
-    "\"GEOMETRYCOLLECTION(POLYGON((2 4,8 4,8 6,2 6,2 4)), LINESTRING(2 2, 4 4),"
+    "\"GEOMETRYCOLLECTION(POLYGON((2 4,8 4,8 6,2 6,2 4)),LINESTRING(2 2,4 4),"
     "POINT(3 4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 const DCollection expectedCollection{
     DAnyGeometry{DPolygon{{{2, 4}, {8, 4}, {8, 6}, {2, 6}, {2, 4}}}},
@@ -157,11 +157,14 @@ const auto getAllTestLiterals = []() {
 };
 
 const auto getAllExpectedParseResults = []() {
-  return std::vector<ParsedWkt>{
-      {expectedPoint},           {expectedLine},
-      {expectedPolygon},         {expectedMultiPoint},
-      {expectedMultiLineString}, {expectedMultiPolygon},
-      {expectedCollection}};
+  using enum WKTType;
+  return std::vector<ParseResult>{{POINT, expectedPoint},
+                                  {LINESTRING, expectedLine},
+                                  {POLYGON, expectedPolygon},
+                                  {MULTIPOINT, expectedMultiPoint},
+                                  {MULTILINESTRING, expectedMultiLineString},
+                                  {MULTIPOLYGON, expectedMultiPolygon},
+                                  {COLLECTION, expectedCollection}};
 };
 
 constexpr std::array<uint32_t, 7> allTestLiteralNumGeometries{1, 1, 1, 2,
@@ -605,22 +608,48 @@ TEST(GeometryInfoTest, ParseGeoPointOrWktVisitor) {
     return GeoPointOrWkt{std::string{lit}};
   };
 
+  // Test for `GeoPoint`
   EXPECT_THAT(parseGeoPointOrWkt(GeoPoint{1, 2}),
               parseResultNear(ParseResult{POINT, DPoint(2, 1)}));
+
+  // Tests for other geometry types (WKT strings)
   auto literals = getAllTestLiterals();
   auto geometries = getAllExpectedParseResults();
   ASSERT_EQ(literals.size(), geometries.size());
+
   for (size_t i = 0; i < literals.size(); ++i) {
-    // EXPECT_THAT(parseGeoPointOrWkt(fromSV(litPoint)),
-    //             parseResultNear(ParseResult{POINT, DPoint(3, 4)}));
-    EXPECT_THAT(parseGeoPointOrWkt(fromSV(literals[i])).second,
-                parsedWktNear(geometries[i]));
+    EXPECT_THAT(parseGeoPointOrWkt(fromSV(literals[i])),
+                parseResultNear(geometries[i]));
   }
 }
 
 // _____________________________________________________________________________
 TEST(GeometryInfoTest, UtilGeomToWktVisitor) {
-  // TODO
+  using namespace ad_utility::detail;
+
+  auto literals = getAllTestLiterals();
+  auto geometries = getAllExpectedParseResults();
+  ASSERT_EQ(literals.size(), geometries.size());
+
+  for (size_t i = 0; i < literals.size(); ++i) {
+    auto parsedWkt = geometries[i].second;
+    auto expected = removeDatatype(literals[i]);
+    ASSERT_TRUE(parsedWkt.has_value());
+
+    // Test with `ParsedWKT` input
+    EXPECT_EQ(utilGeomToWkt(parsedWkt.value()), expected);
+
+    // Test with optional input
+    EXPECT_EQ(utilGeomToWkt(parsedWkt), expected);
+
+    // Test with individual geometry type as input
+    std::visit(
+        [&](const auto& geom) -> void {
+          EXPECT_EQ(utilGeomToWkt(geom), expected);
+          EXPECT_EQ(utilGeomToWkt(DAnyGeometry{geom}), expected);
+        },
+        parsedWkt.value());
+  }
 }
 
 }  // namespace
