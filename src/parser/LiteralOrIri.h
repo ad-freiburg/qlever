@@ -53,6 +53,11 @@ class alignas(16) LiteralOrIri {
     return std::visit(impl, data_);
   }
 
+  std::string& toStringRepresentation() {
+    auto impl = [](auto& val) -> auto& { return val.toStringRepresentation(); };
+    return std::visit(impl, data_);
+  }
+
   static LiteralOrIri fromStringRepresentation(std::string internal) {
     char tag = internal.front();
     if (tag == literalPrefixChar) {

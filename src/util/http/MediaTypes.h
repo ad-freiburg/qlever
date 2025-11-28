@@ -30,7 +30,8 @@ enum class MediaType {
   csv,
   turtle,
   ntriples,
-  octetStream
+  octetStream,
+  binaryQleverExport
 };
 
 struct MediaTypeWithQuality {
