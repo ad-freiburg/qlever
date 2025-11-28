@@ -296,8 +296,8 @@ inline auto utilPolygonNear = [](DPolygon expected) -> Matcher<DPolygon> {
 inline auto utilMultiPolygonNear =
     liftMatcherToElementsAreArray<DPolygon, DMultiPolygon>(utilPolygonNear);
 
-// This helper simply calls is forward `utilCollectionNear(expected)`. It is
-// forward declared here, s.t. `utilAnyGeometryNear` (on which the definition
+// This helper simply calls `utilCollectionNear(expected)`. It is forward
+// declared here, s.t. `utilAnyGeometryNear` (on which the definition
 // `utilCollectionNear` depends) can use it recursively.
 Matcher<DCollection> utilCollectionNearForwardDecl(DCollection expected);
 
