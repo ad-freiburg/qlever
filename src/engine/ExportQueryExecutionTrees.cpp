@@ -882,12 +882,10 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream(
          getRowIndices(limitAndOffset, *result, resultSize)) {
       for (uint64_t i : range) {
         for (const auto& columnIndex : selectedColumnIndices) {
-          if (columnIndex.has_value()) {
-            STREAMABLE_YIELD(
-                std::string_view{reinterpret_cast<const char*>(&pair.idTable()(
-                                     i, columnIndex.value().columnIndex_)),
-                                 sizeof(Id)});
-          }
+          STREAMABLE_YIELD(
+              std::string_view{reinterpret_cast<const char*>(&pair.idTable()(
+                                   i, columnIndex.value().columnIndex_)),
+                               sizeof(Id)});
         }
         cancellationHandle->throwIfCancelled();
       }
@@ -1078,8 +1076,6 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
   result->logResultSize();
   AD_LOG_DEBUG << "Converting result IDs to their corresponding strings ..."
                << std::endl;
-  auto selectedColumnIndices =
-      qet.selectedVariablesToColumnIndices(selectClause, false);
 
   auto vars = selectClause.getSelectedVariablesAsStrings();
   ql::ranges::for_each(vars, [](std::string& var) { var = var.substr(1); });
@@ -1139,6 +1135,10 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
     const parsedQuery::SelectClause& selectClause,
     LimitOffsetClause limitAndOffset, CancellationHandle cancellationHandle,
     [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
+  (void)qet;
+  (void)selectClause;
+  (void)limitAndOffset;
+  (void)cancellationHandle;
   throw std::runtime_error(
       "The binary export of QLever results is not yet implemented, please have "
       "a little patience");
