@@ -205,9 +205,8 @@ auto liftMatcherToElementsAreArray(MakeMatcher makeMatcher) {
   return
       [makeMatcher](ArrayType expectedValues) -> ::testing::Matcher<ArrayType> {
         std::vector<::testing::Matcher<T>> childMatchers;
-        for (const auto& expected : expectedValues) {
-          childMatchers.push_back(makeMatcher(expected));
-        }
+        ql::ranges::transform(expectedValues, std::back_inserter(childMatchers),
+                              makeMatcher);
         return ::testing::ElementsAreArray(childMatchers);
       };
 }

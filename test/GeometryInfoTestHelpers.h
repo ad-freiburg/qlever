@@ -12,6 +12,7 @@
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/GTestHelpers.h"
+#include "util/OverloadCallOperator.h"
 #include "util/TypeTraits.h"
 
 namespace geoInfoTestHelpers {
@@ -19,6 +20,12 @@ namespace geoInfoTestHelpers {
 using namespace ad_utility;
 using namespace ::testing;
 using Loc = source_location;
+
+using ad_utility::detail::AnyGeometryMember;
+using ad_utility::detail::anyGeometryToParsedWkt;
+using ad_utility::detail::DAnyGeometry;
+using ad_utility::detail::ParsedWkt;
+using ad_utility::detail::ParseResult;
 
 // Helpers that check (approx.) equality of two GeometryInfo objects or for
 // instances of the associated helper classes.
@@ -184,9 +191,6 @@ inline MetricLength getLengthForTesting(std::string_view quotedWktLiteral) {
   return len.value();
 }
 
-using DAnyGeometry = util::geo::AnyGeometry<double>;
-using ad_utility::detail::AnyGeometryMember;
-
 // ____________________________________________________________________________
 inline void checkAnyGeometryMemberEnum(
     DAnyGeometry geom, AnyGeometryMember enumVal,
@@ -296,47 +300,19 @@ inline auto utilPolygonNear = [](DPolygon expected) -> Matcher<DPolygon> {
 inline auto utilMultiPolygonNear =
     liftMatcherToElementsAreArray<DPolygon, DMultiPolygon>(utilPolygonNear);
 
-// This helper simply calls `utilCollectionNear(expected)`. It is forward
-// declared here, s.t. `utilAnyGeometryNear` (on which the definition
-// `utilCollectionNear` depends) can use it recursively.
-Matcher<DCollection> utilCollectionNearForwardDecl(DCollection expected);
+// Forward declaration for `utilAnyGeometryNear` below.
+struct ParsedWktNearForwardDecl {
+  Matcher<std::optional<ParsedWkt>> operator()(
+      std::optional<ParsedWkt> expected) const;
+};
 
 // ____________________________________________________________________________
 inline auto utilAnyGeometryNear =
     [](DAnyGeometry expected) -> Matcher<DAnyGeometry> {
-  using enum AnyGeometryMember;
-
-  auto geometryMatcher = [&]() -> ::testing::Matcher<DAnyGeometry> {
-    switch (AnyGeometryMember{expected.getType()}) {
-      case POINT:
-        return Property(&DAnyGeometry::getPoint,
-                        utilPointNear(expected.getPoint()));
-      case LINE:
-        return Property(&DAnyGeometry::getLine,
-                        utilLineNear(expected.getLine()));
-      case POLYGON:
-        return Property(&DAnyGeometry::getPolygon,
-                        utilPolygonNear(expected.getPolygon()));
-      case MULTILINE:
-        return Property(&DAnyGeometry::getMultiLine,
-                        utilMultiLineNear(expected.getMultiLine()));
-      case MULTIPOLYGON:
-        return Property(&DAnyGeometry::getMultiPolygon,
-                        utilMultiPolygonNear(expected.getMultiPolygon()));
-      case COLLECTION:
-        return Property(
-            &DAnyGeometry::getCollection,
-            utilCollectionNearForwardDecl(expected.getCollection()));
-      case MULTIPOINT:
-        return Property(&DAnyGeometry::getMultiPoint,
-                        utilMultiPointNear(expected.getMultiPoint()));
-      default:
-        AD_FAIL();
-    }
-  };
-
-  return AllOf(Property(&DAnyGeometry::getType, Eq(expected.getType())),
-               geometryMatcher());
+  return AllOf(
+      Property(&DAnyGeometry::getType, Eq(expected.getType())),
+      ResultOf(anyGeometryToParsedWkt,
+               ParsedWktNearForwardDecl{}(anyGeometryToParsedWkt(expected))));
 };
 
 // ____________________________________________________________________________
@@ -345,13 +321,10 @@ inline auto utilCollectionNear =
         utilAnyGeometryNear);
 
 // ____________________________________________________________________________
-inline Matcher<DCollection> utilCollectionNearForwardDecl(
-    DCollection expected) {
-  return utilCollectionNear(std::move(expected));
-}
-
-using ParsedWkt = ad_utility::detail::ParsedWkt;
-using ParseResult = ad_utility::detail::ParseResult;
+inline auto utilGeometryNear = OverloadCallOperator{
+    utilPointNear,      utilLineNear,      utilPolygonNear,
+    utilMultiPointNear, utilMultiLineNear, utilMultiPolygonNear,
+    utilCollectionNear};
 
 // ____________________________________________________________________________
 inline auto parsedWktNear = liftOptionalMatcher<ParsedWkt>(
@@ -359,30 +332,17 @@ inline auto parsedWktNear = liftOptionalMatcher<ParsedWkt>(
       return std::visit(
           [](const auto& contained) -> Matcher<ParsedWkt> {
             using T = std::decay_t<decltype(contained)>;
-            auto liftVariant = [](const auto& matcher) {
-              return VariantWith<T>(SafeMatcherCast<const T&>(matcher));
-            };
-
-            if constexpr (std::is_same_v<T, DPoint>) {
-              return liftVariant(utilPointNear(contained));
-            } else if constexpr (std::is_same_v<T, DLine>) {
-              return liftVariant(utilLineNear(contained));
-            } else if constexpr (std::is_same_v<T, DPolygon>) {
-              return liftVariant(utilPolygonNear(contained));
-            } else if constexpr (std::is_same_v<T, DMultiPoint>) {
-              return liftVariant(utilMultiPointNear(contained));
-            } else if constexpr (std::is_same_v<T, DMultiLine>) {
-              return liftVariant(utilMultiLineNear(contained));
-            } else if constexpr (std::is_same_v<T, DMultiPolygon>) {
-              return liftVariant(utilMultiPolygonNear(contained));
-            } else if constexpr (std::is_same_v<T, DCollection>) {
-              return liftVariant(utilCollectionNear(contained));
-            } else {
-              static_assert(alwaysFalse<T>);
-            }
+            return VariantWith<T>(
+                SafeMatcherCast<const T&>(utilGeometryNear(contained)));
           },
           std::move(expected));
     });
+
+// ____________________________________________________________________________
+inline Matcher<std::optional<ParsedWkt>> ParsedWktNearForwardDecl::operator()(
+    std::optional<ParsedWkt> expected) const {
+  return parsedWktNear(std::move(expected));
+}
 
 // ____________________________________________________________________________
 inline auto parseResultNear = liftOptionalMatcher<ParseResult>(

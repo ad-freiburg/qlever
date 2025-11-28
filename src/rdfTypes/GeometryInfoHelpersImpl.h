@@ -45,6 +45,7 @@ using ParsedWkt =
                  MultiPoint<CoordType>, MultiLine<CoordType>,
                  MultiPolygon<CoordType>, Collection<CoordType>>;
 using ParseResult = std::pair<WKTType, std::optional<ParsedWkt>>;
+using DAnyGeometry = util::geo::AnyGeometry<CoordType>;
 
 template <typename T>
 CPP_concept WktSingleGeometryType =
@@ -252,6 +253,34 @@ enum class AnyGeometryMember : uint8_t {
   MULTIPOINT
 };
 
+// Helper to convert the dynamic container `AnyGeometry` to the `ParsedWkt`
+// variant type
+inline ParsedWkt anyGeometryToParsedWkt(AnyGeometry<double> geom) {
+  using enum AnyGeometryMember;
+  // `AnyGeometry` is a class from `pb_util`. It does not operate on an enum,
+  // this is why we use our own enum here. The correct matching of the integer
+  // identifiers for the geometry types with this enum is tested in
+  // `GeometryInfoTest.cpp`.
+  switch (AnyGeometryMember{geom.getType()}) {
+    case POINT:
+      return std::move(geom.getPoint());
+    case LINE:
+      return std::move(geom.getLine());
+    case POLYGON:
+      return std::move(geom.getPolygon());
+    case MULTILINE:
+      return std::move(geom.getMultiLine());
+    case MULTIPOLYGON:
+      return std::move(geom.getMultiPolygon());
+    case COLLECTION:
+      return std::move(geom.getCollection());
+    case MULTIPOINT:
+      return std::move(geom.getMultiPoint());
+    default:
+      AD_FAIL();
+  }
+}
+
 // Helper to implement the computation of metric length for the different
 // geometry types.
 struct MetricLengthVisitor {
@@ -284,29 +313,7 @@ struct MetricLengthVisitor {
   CPP_template(typename T)(
       requires ad_utility::SimilarTo<T, AnyGeometry<CoordType>>) double
   operator()(const T& geom) const {
-    using enum AnyGeometryMember;
-    // `AnyGeometry` is a class from `pb_util`. It does not operate on an enum,
-    // this is why we use our own enum here. The correct matching of the integer
-    // identifiers for the geometry types with this enum is tested in
-    // `GeometryInfoTest.cpp`.
-    switch (AnyGeometryMember{geom.getType()}) {
-      case POINT:
-        return MetricLengthVisitor{}(geom.getPoint());
-      case LINE:
-        return MetricLengthVisitor{}(geom.getLine());
-      case POLYGON:
-        return MetricLengthVisitor{}(geom.getPolygon());
-      case MULTILINE:
-        return MetricLengthVisitor{}(geom.getMultiLine());
-      case MULTIPOLYGON:
-        return MetricLengthVisitor{}(geom.getMultiPolygon());
-      case COLLECTION:
-        return MetricLengthVisitor{}(geom.getCollection());
-      case MULTIPOINT:
-        return MetricLengthVisitor{}(geom.getMultiPoint());
-      default:
-        AD_FAIL();
-    }
+    return std::visit(MetricLengthVisitor{}, anyGeometryToParsedWkt(geom));
   }
 
   // Compute the length for a parsed WKT geometry.
@@ -438,25 +445,7 @@ struct UtilGeomToWktVisitor {
   // Visitor for the custom container type `AnyGeometry`.
   std::optional<std::string> operator()(
       const AnyGeometry<CoordType>& geom) const {
-    using enum AnyGeometryMember;
-    switch (AnyGeometryMember{geom.getType()}) {
-      case POINT:
-        return UtilGeomToWktVisitor{}(geom.getPoint());
-      case LINE:
-        return UtilGeomToWktVisitor{}(geom.getLine());
-      case POLYGON:
-        return UtilGeomToWktVisitor{}(geom.getPolygon());
-      case MULTILINE:
-        return UtilGeomToWktVisitor{}(geom.getMultiLine());
-      case MULTIPOLYGON:
-        return UtilGeomToWktVisitor{}(geom.getMultiPolygon());
-      case COLLECTION:
-        return UtilGeomToWktVisitor{}(geom.getCollection());
-      case MULTIPOINT:
-        return UtilGeomToWktVisitor{}(geom.getMultiPoint());
-      default:
-        AD_FAIL();
-    }
+    return std::visit(UtilGeomToWktVisitor{}, anyGeometryToParsedWkt(geom));
   }
 };
 
