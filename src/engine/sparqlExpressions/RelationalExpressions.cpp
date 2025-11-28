@@ -297,7 +297,7 @@ ql::span<SparqlExpression::Ptr> RelationalExpression<Comp>::childrenImpl() {
 template <Comparison Comp>
 std::optional<SparqlExpression::LangFilterData>
 RelationalExpression<Comp>::getLanguageFilterExpression() const {
-  if (Comp != valueIdComparators::Comparison::EQ) {
+  if (Comp != Comparison::EQ) {
     return std::nullopt;
   }
 
@@ -317,7 +317,7 @@ RelationalExpression<Comp>::getLanguageFilterExpression() const {
     // TODO<joka921> Is this even allowed by the grammar?
     return LangFilterData{
         std::move(optVar.value()),
-        std::string{asStringViewUnsafe(langPtr->value().getContent())}};
+        {std::string{asStringViewUnsafe(langPtr->value().getContent())}}};
   };
 
   const auto& child1 = children_[0];
@@ -563,6 +563,27 @@ auto InExpression::getEstimatesForFilterExpression(
     const std::optional<Variable>& firstSortedVariable) const -> Estimates {
   return getEstimatesForFilterExpressionImpl(
       inputSizeEstimate, reductionFactorEquals, children_, firstSortedVariable);
+}
+
+// _____________________________________________________________________________
+std::optional<SparqlExpression::LangFilterData>
+InExpression::getLanguageFilterExpression() const {
+  const auto& left = children_[0];
+  std::optional<Variable> optVar = getVariableFromLangExpression(left.get());
+  if (!optVar.has_value() || children_.size() < 2) {
+    return std::nullopt;
+  }
+  ad_utility::HashSet<std::string> languages;
+  for (const auto& child : children_ | ql::views::drop(1)) {
+    const auto* langPtr =
+        dynamic_cast<const StringLiteralExpression*>(child.get());
+    if (!langPtr) {
+      return std::nullopt;
+    }
+    languages.emplace(asStringViewUnsafe(langPtr->value().getContent()));
+  }
+
+  return LangFilterData{std::move(optVar.value()), std::move(languages)};
 }
 
 // Explicit instantiations
