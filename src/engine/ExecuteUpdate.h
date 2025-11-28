@@ -7,18 +7,11 @@
 
 #include <gtest/gtest_prod.h>
 
+#include "engine/UpdateMetadata.h"
 #include "index/Index.h"
 #include "parser/ParsedQuery.h"
 #include "util/CancellationHandle.h"
 #include "util/TimeTracer.h"
-
-// Metadata of a single update operation: number of inserted and deleted triples
-// before the operation, of the operation, and after the operation.
-struct UpdateMetadata {
-  std::optional<DeltaTriplesCount> countBefore_;
-  std::optional<DeltaTriplesCount> inUpdate_;
-  std::optional<DeltaTriplesCount> countAfter_;
-};
 
 class ExecuteUpdate {
  public:
