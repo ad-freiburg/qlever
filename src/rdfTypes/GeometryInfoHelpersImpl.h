@@ -414,7 +414,7 @@ static constexpr ParseGeoPointOrWktVisitor parseGeoPointOrWkt;
 
 // Helper to convert a geometry from `pb_util` to a WKT string.
 struct UtilGeomToWktVisitor {
-  // Visitor for `std::optional` inputs
+  // Visitor for `std::optional` inputs.
   template <typename T>
   std::optional<std::string> operator()(const std::optional<T>& opt) const {
     if (!opt.has_value()) {
@@ -423,19 +423,19 @@ struct UtilGeomToWktVisitor {
     return UtilGeomToWktVisitor{}(opt.value());
   }
 
-  // Visitor for the `ParsedWkt` variant
+  // Visitor for the `ParsedWkt` variant.
   std::optional<std::string> operator()(const ParsedWkt& variant) const {
     return std::visit(UtilGeomToWktVisitor{}, variant);
   }
 
-  // Visitor for each of the `pb_util` geometry types
+  // Visitor for each of the `pb_util` geometry types.
   CPP_template(typename T)(
       requires SimilarToAnyTypeIn<T, ParsedWkt>) std::optional<std::string>
   operator()(const T& geom) const {
     return getWKT(geom);
   }
 
-  // Visitor for the custom container type `AnyGeometry`
+  // Visitor for the custom container type `AnyGeometry`.
   std::optional<std::string> operator()(
       const AnyGeometry<CoordType>& geom) const {
     using enum AnyGeometryMember;

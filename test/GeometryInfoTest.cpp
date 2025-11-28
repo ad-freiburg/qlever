@@ -608,11 +608,11 @@ TEST(GeometryInfoTest, ParseGeoPointOrWktVisitor) {
     return GeoPointOrWkt{std::string{lit}};
   };
 
-  // Test for `GeoPoint`
+  // Test for `GeoPoint`.
   EXPECT_THAT(parseGeoPointOrWkt(GeoPoint{1, 2}),
               parseResultNear(ParseResult{POINT, DPoint(2, 1)}));
 
-  // Tests for other geometry types (WKT strings)
+  // Tests for other geometry types (WKT strings).
   auto literals = getAllTestLiterals();
   auto geometries = getAllExpectedParseResults();
   ASSERT_EQ(literals.size(), geometries.size());
@@ -636,13 +636,13 @@ TEST(GeometryInfoTest, UtilGeomToWktVisitor) {
     auto expected = removeDatatype(literals[i]);
     ASSERT_TRUE(parsedWkt.has_value());
 
-    // Test with `ParsedWKT` input
+    // Test with `ParsedWKT` input.
     EXPECT_EQ(utilGeomToWkt(parsedWkt.value()), expected);
 
-    // Test with optional input
+    // Test with optional input.
     EXPECT_EQ(utilGeomToWkt(parsedWkt), expected);
 
-    // Test with individual geometry type as input
+    // Test with individual geometry type as input.
     std::visit(
         [&](const auto& geom) -> void {
           EXPECT_EQ(utilGeomToWkt(geom), expected);
