@@ -8,7 +8,6 @@
 
 #include "index/ConstantsIndexBuilding.h"
 #include "index/DeltaTriples.h"
-#include "util/GeneratorConverter.h"
 #include "util/StringUtils.h"
 
 // _____________________________________________________________________
@@ -33,6 +32,7 @@ CompressedRelationReader::ScanSpecAndBlocks Permutation::getScanSpecAndBlocks(
 void Permutation::loadFromDisk(const std::string& onDiskBase,
                                std::function<bool(Id)> isInternalId,
                                bool loadInternalPermutation) {
+  onDiskBase_ = onDiskBase;
   isInternalId_ = std::move(isInternalId);
   if (loadInternalPermutation) {
     internalPermutation_ =
@@ -103,25 +103,27 @@ std::pair<size_t, size_t> Permutation::getSizeEstimateForScan(
 // ____________________________________________________________________________
 IdTable Permutation::getDistinctCol1IdsAndCounts(
     Id col0Id, const CancellationHandle& cancellationHandle,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+    const LocatedTriplesSnapshot& locatedTriplesSnapshot,
+    const LimitOffsetClause& limitOffset) const {
   const auto& p = getActualPermutation(col0Id);
   return p.reader().getDistinctCol1IdsAndCounts(
       getScanSpecAndBlocks(
           ScanSpecification{col0Id, std::nullopt, std::nullopt},
           locatedTriplesSnapshot),
       cancellationHandle,
-      p.getLocatedTriplesForPermutation(locatedTriplesSnapshot));
+      p.getLocatedTriplesForPermutation(locatedTriplesSnapshot), limitOffset);
 }
 
 // ____________________________________________________________________________
 IdTable Permutation::getDistinctCol0IdsAndCounts(
     const CancellationHandle& cancellationHandle,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+    const LocatedTriplesSnapshot& locatedTriplesSnapshot,
+    const LimitOffsetClause& limitOffset) const {
   ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
   return reader().getDistinctCol0IdsAndCounts(
       getScanSpecAndBlocks(scanSpec, locatedTriplesSnapshot),
       cancellationHandle,
-      getLocatedTriplesForPermutation(locatedTriplesSnapshot));
+      getLocatedTriplesForPermutation(locatedTriplesSnapshot), limitOffset);
 }
 
 // _____________________________________________________________________
@@ -183,7 +185,7 @@ std::optional<Permutation::MetadataAndBlocks> Permutation::getMetadataAndBlocks(
     const ScanSpecAndBlocks& scanSpecAndBlocks,
     const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
   const auto& p = getActualPermutation(scanSpecAndBlocks.scanSpec_);
-  auto firstAndLastTriple = p.reader().getFirstAndLastTriple(
+  auto firstAndLastTriple = p.reader().getFirstAndLastTripleIgnoringGraph(
       scanSpecAndBlocks,
       p.getLocatedTriplesForPermutation(locatedTriplesSnapshot));
   if (!firstAndLastTriple.has_value()) {
@@ -194,7 +196,7 @@ std::optional<Permutation::MetadataAndBlocks> Permutation::getMetadataAndBlocks(
 }
 
 // _____________________________________________________________________
-Permutation::IdTableGenerator Permutation::lazyScan(
+CompressedRelationReader::IdTableGeneratorInputRange Permutation::lazyScan(
     const ScanSpecAndBlocks& scanSpecAndBlocks,
     std::optional<std::vector<CompressedBlockMetadata>> optBlocks,
     ColumnIndicesRef additionalColumns,
@@ -207,14 +209,10 @@ Permutation::IdTableGenerator Permutation::lazyScan(
     optBlocks = CompressedRelationReader::convertBlockMetadataRangesToVector(
         scanSpecAndBlocks.blockMetadata_);
   }
-  auto lazyScan{p.reader().lazyScan(
+  return p.reader().lazyScan(
       scanSpecAndBlocks.scanSpec_, std::move(optBlocks.value()),
       std::move(columns), cancellationHandle,
-      p.getLocatedTriplesForPermutation(locatedTriplesSnapshot), limitOffset)};
-
-  return cppcoro::fromInputRange<IdTable,
-                                 CompressedRelationReader::LazyScanMetadata>(
-      std::move(lazyScan));
+      p.getLocatedTriplesForPermutation(locatedTriplesSnapshot), limitOffset);
 }
 
 // ______________________________________________________________________

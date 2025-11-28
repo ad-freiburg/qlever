@@ -9,6 +9,7 @@
 #include <memory>
 #include <string>
 
+#include "backports/three_way_comparison.h"
 #include "engine/QueryPlanningCostFactors.h"
 #include "engine/Result.h"
 #include "engine/RuntimeInformation.h"
@@ -73,7 +74,8 @@ struct QueryCacheKey {
   std::string key_;
   size_t locatedTriplesSnapshotIndex_;
 
-  bool operator==(const QueryCacheKey&) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(QueryCacheKey, key_,
+                                              locatedTriplesSnapshotIndex_)
 
   template <typename H>
   friend H AbslHashValue(H h, const QueryCacheKey& key) {
@@ -110,6 +112,10 @@ class QueryExecutionContext {
   const LocatedTriplesSnapshot& locatedTriplesSnapshot() const {
     AD_CORRECTNESS_CHECK(sharedLocatedTriplesSnapshot_ != nullptr);
     return *sharedLocatedTriplesSnapshot_;
+  }
+
+  SharedLocatedTriplesSnapshot sharedLocatedTriplesSnapshot() const {
+    return sharedLocatedTriplesSnapshot_;
   }
 
   // This function retrieves the most recent `LocatedTriplesSnapshot` and stores
@@ -166,6 +172,17 @@ class QueryExecutionContext {
     return *namedResultCache_;
   }
 
+  // If `pinResultWithName_` is set, then the result of the query that is
+  // executed using this context will be stored in the `namedQueryCache()` using
+  // the string given in `PinResultWithName` as the query name. If
+  // `geoIndexVar_` is also set, a geo index is built and cached in-memory on
+  // the column of this variable. If `pinResultWithName_` is `nullopt`, no
+  // pinning is done.
+  struct PinResultWithName {
+    std::string name_;
+    std::optional<Variable> geoIndexVar_ = std::nullopt;
+  };
+
   // Accessors; see `pinResultWithName_` for an explanation.
   auto& pinResultWithName() { return pinResultWithName_; }
   const auto& pinResultWithName() const { return pinResultWithName_; }
@@ -193,9 +210,10 @@ class QueryExecutionContext {
   // The cache for named results.
   NamedResultCache* namedResultCache_ = nullptr;
 
-  // Name under which the result of the query that is executed using this
-  // context should be cached. When `std::nullopt`, the result is not cached.
-  std::optional<std::string> pinResultWithName_ = std::nullopt;
+  // Name (and optional variable for geometry index) under which the result of
+  // the query that is executed using this context should be cached. When
+  // `std::nullopt`, the result is not cached.
+  std::optional<PinResultWithName> pinResultWithName_ = std::nullopt;
 };
 
 #endif  // QLEVER_SRC_ENGINE_QUERYEXECUTIONCONTEXT_H

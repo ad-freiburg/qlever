@@ -9,6 +9,7 @@
 
 #include "backports/algorithm.h"
 #include "backports/keywords.h"
+#include "backports/three_way_comparison.h"
 #include "global/TypedIndex.h"
 #include "global/VocabIndex.h"
 #include "parser/LiteralOrIri.h"
@@ -27,7 +28,7 @@ class alignas(16) LocalVocabEntry
 
   // Note: The values here actually are `Id`s, but we cannot store the `Id` type
   // directly because of cyclic dependencies.
-  static constexpr std::string_view proxyTag = "LveIdProxy";
+  static constexpr ad_utility::IndexTag proxyTag = "LveIdProxy";
   using IdProxy = ad_utility::TypedIndex<uint64_t, proxyTag>;
 
  private:
@@ -88,9 +89,11 @@ class alignas(16) LocalVocabEntry
   // cached `position` if it has previously been computed for both of the
   // entries, but it is currently questionable whether this gains much
   // performance.
-  auto operator<=>(const LocalVocabEntry& rhs) const {
-    return static_cast<const Base&>(*this) <=> static_cast<const Base&>(rhs);
+  auto compareThreeWay(const LocalVocabEntry& rhs) const {
+    return ql::compareThreeWay(static_cast<const Base&>(*this),
+                               static_cast<const Base&>(rhs));
   }
+  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(LocalVocabEntry)
 
  private:
   // The expensive case of looking up the position in vocab.

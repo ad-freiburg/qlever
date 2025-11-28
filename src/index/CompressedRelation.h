@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "backports/algorithm.h"
+#include "backports/three_way_comparison.h"
 #include "backports/type_traits.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
@@ -59,7 +60,8 @@ struct CompressedBlockMetadataNoBlockIndex {
   struct OffsetAndCompressedSize {
     off_t offsetInFile_;
     size_t compressedSize_;
-    bool operator==(const OffsetAndCompressedSize&) const = default;
+    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(OffsetAndCompressedSize,
+                                                offsetInFile_, compressedSize_)
   };
 
   using GraphInfo = std::optional<std::vector<Id>>;
@@ -87,7 +89,9 @@ struct CompressedBlockMetadataNoBlockIndex {
     Id col1Id_;
     Id col2Id_;
     Id graphId_;
-    auto operator<=>(const PermutedTriple&) const = default;
+
+    QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL(PermutedTriple, col0Id_,
+                                                col1Id_, col2Id_, graphId_)
 
     // Formatted output for debugging.
     friend std::ostream& operator<<(std::ostream& str,
@@ -128,7 +132,10 @@ struct CompressedBlockMetadataNoBlockIndex {
                         size_t columnIndex) const;
 
   // Two of these are equal if all members are equal.
-  bool operator==(const CompressedBlockMetadataNoBlockIndex&) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(
+      CompressedBlockMetadataNoBlockIndex, offsetsAndCompressedSize_, numRows_,
+      firstTriple_, lastTriple_, graphInfo_,
+      containsDuplicatesWithDifferentGraphs_)
 
   // Format CompressedBlockMetadata contents for debugging.
   friend std::ostream& operator<<(
@@ -156,7 +163,8 @@ struct CompressedBlockMetadata : CompressedBlockMetadataNoBlockIndex {
   size_t blockIndex_;
 
   // Two of these are equal if all members are equal.
-  bool operator==(const CompressedBlockMetadata&) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(CompressedBlockMetadata,
+                                              blockIndex_)
 
   // Format CompressedBlockMetadata contents for debugging.
   friend std::ostream& operator<<(
@@ -237,7 +245,10 @@ struct CompressedRelationMetadata {
   bool isFunctional() const { return multiplicityCol1_ == 1.0f; }
 
   // Two of these are equal if all members are equal.
-  bool operator==(const CompressedRelationMetadata&) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(CompressedRelationMetadata,
+                                              col0Id_, numRows_,
+                                              multiplicityCol1_,
+                                              multiplicityCol2_, offsetInBlock_)
 };
 
 // Serialization of the compressed "relation" meta data.
@@ -348,7 +359,7 @@ class CompressedRelationWriter {
     result.reserve(blocks.size());
     // Write the correct block indices
     for (size_t i : ad_utility::integerRange(blocks.size())) {
-      result.emplace_back(std::move(blocks.at(i)), i);
+      result.push_back({std::move(blocks.at(i)), i});
     }
 
     AD_CORRECTNESS_CHECK(
@@ -552,7 +563,7 @@ class CompressedRelationReader {
     //   - `firstFreeColIndex` is the column index up to which we expect
     //      constant values in `columns < firstFreeColIndex` over all blocks.
     static void checkBlockMetadataInvariant(
-        std::span<const CompressedBlockMetadata> blocks,
+        ql::span<const CompressedBlockMetadata> blocks,
         size_t firstFreeColIndex);
 
     // Remove the first `numBlocksToRemove` from the `blockMetadata_`. This can
@@ -734,14 +745,16 @@ class CompressedRelationReader {
   IdTable getDistinctCol1IdsAndCounts(
       const ScanSpecAndBlocks& scanSpecAndBlocks,
       const CancellationHandle& cancellationHandle,
-      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+      const LimitOffsetClause& limitOffset) const;
 
   // For all `col0Ids` determine their counts. This is
   // used for `computeGroupByForFullScan`.
   IdTable getDistinctCol0IdsAndCounts(
       const ScanSpecAndBlocks& scanSpecAndBlocks,
       const CancellationHandle& cancellationHandle,
-      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+      const LimitOffsetClause& limitOffset) const;
 
   std::optional<CompressedRelationMetadata> getMetadataForSmallRelation(
       const ScanSpecAndBlocks& scanSpecAndBlocks, Id col0Id,
@@ -767,12 +780,14 @@ class CompressedRelationReader {
       const BlockMetadataRanges& blockMetadata);
 
   // Get the first and the last triple that the result of a `scan` with the
-  // given arguments would lead to. Return `nullopt` if the scan result would
-  // be empty. This function is used to more efficiently filter the blocks of
-  // index scans between joining them to get better estimates for the beginning
-  // and end of incomplete blocks.
+  // given arguments would lead to, ignoring any graph filters set for
+  // `metadataAndBlocks`. So this always returns the first and last triple we
+  // would get in any graph. Return `nullopt` if the scan result would be empty.
+  // This function is used to more efficiently filter the blocks of index scans
+  // between joining them to get better estimates for the beginning and end of
+  // incomplete blocks.
   std::optional<ScanSpecAndBlocksAndBounds::FirstAndLastTriple>
-  getFirstAndLastTriple(
+  getFirstAndLastTripleIgnoringGraph(
       const ScanSpecAndBlocks& metadataAndBlocks,
       const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
 
@@ -871,7 +886,8 @@ class CompressedRelationReader {
       getDistinctColIdsAndCountsImpl(
           IdGetter idGetter, const ScanSpecAndBlocks& scanSpecAndBlocks,
           const CancellationHandle& cancellationHandle,
-          const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
+          const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+          const LimitOffsetClause& limitOffset) const;
 };
 
 // TODO<joka921>

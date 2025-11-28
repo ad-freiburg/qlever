@@ -12,7 +12,7 @@
 #include <sstream>
 #include <string>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "backports/shift.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
@@ -22,6 +22,11 @@
 namespace RdfEscaping {
 using namespace std::string_literals;
 namespace detail {
+
+// CTRE regex patterns for C++17 compatibility
+constexpr ctll::fixed_string csvSpecialCharsRegex = "[\r\n\",]";
+constexpr ctll::fixed_string tsvSpecialCharsRegex = "[\n\t]";
+constexpr ctll::fixed_string xmlSpecialCharsRegex = "[&\"<>']";
 
 /// Turn a sequence of characters that encode hexadecimal numbers(e.g. "00e4")
 /// into the corresponding UTF-8 string (e.g. "ä").
@@ -174,14 +179,14 @@ static void literalUnescape(std::string_view input, std::string& res) {
 // ____________________________________________________________________________
 static void literalUnescapeWithQuotesRemoved(std::string_view input,
                                              std::string& res) {
-  if (ql::starts_with(input, R"(""")") || input.starts_with(R"(''')")) {
-    AD_CONTRACT_CHECK(input.ends_with(input.substr(0, 3)));
+  if (ql::starts_with(input, R"(""")") || ql::starts_with(input, R"(''')")) {
+    AD_CONTRACT_CHECK(ql::ends_with(input, input.substr(0, 3)));
     input.remove_prefix(3);
     input.remove_suffix(3);
   } else {
     AD_CONTRACT_CHECK(ql::starts_with(input, "\"") ||
                       ql::starts_with(input, "'"));
-    AD_CONTRACT_CHECK(input.ends_with(input[0]));
+    AD_CONTRACT_CHECK(ql::ends_with(input, input[0]));
     input.remove_prefix(1);
     input.remove_suffix(1);
   }
@@ -232,7 +237,7 @@ static void unescapeIriWithoutBrackets(std::string_view input,
 
 // __________________________________________________________________________
 static void unescapeIriWithBrackets(std::string_view input, std::string& res) {
-  AD_CONTRACT_CHECK(ql::starts_with(input, "<") && input.ends_with(">"));
+  AD_CONTRACT_CHECK(ql::starts_with(input, "<") && ql::ends_with(input, ">"));
   input.remove_prefix(1);
   input.remove_suffix(1);
   unescapeIriWithoutBrackets(input, res);
@@ -283,7 +288,7 @@ std::string unescapePrefixedIri(std::string_view literal) {
 
 // __________________________________________________________________________
 std::string escapeForCsv(std::string input) {
-  if (!ctre::search<"[\r\n\",]">(input)) [[likely]] {
+  if (!ctre::search<detail::csvSpecialCharsRegex>(input)) [[likely]] {
     return input;
   }
   return absl::StrCat("\"", absl::StrReplaceAll(input, {{"\"", "\"\""}}), "\"");
@@ -291,7 +296,7 @@ std::string escapeForCsv(std::string input) {
 
 // __________________________________________________________________________
 std::string escapeForTsv(std::string input) {
-  if (ctre::search<"[\n\t]">(input)) [[unlikely]] {
+  if (ctre::search<detail::tsvSpecialCharsRegex>(input)) [[unlikely]] {
     absl::StrReplaceAll({{"\t", " "}, {"\n", "\\n"}}, &input);
   }
   return input;
@@ -299,7 +304,7 @@ std::string escapeForTsv(std::string input) {
 
 // __________________________________________________________________________
 std::string escapeForXml(std::string input) {
-  if (ctre::search<"[&\"<>']">(input)) [[unlikely]] {
+  if (ctre::search<detail::xmlSpecialCharsRegex>(input)) [[unlikely]] {
     absl::StrReplaceAll({{"&", "&amp;"},
                          {"<", "&lt;"},
                          {">", "&gt;"},
@@ -313,7 +318,7 @@ std::string escapeForXml(std::string input) {
 // __________________________________________________________________________
 std::string normalizedContentFromLiteralOrIri(std::string&& input) {
   if (ql::starts_with(input, '<')) {
-    AD_CORRECTNESS_CHECK(input.ends_with('>'));
+    AD_CORRECTNESS_CHECK(ql::ends_with(input, '>'));
     ql::shift_left(input.begin(), input.end(), 1);
     input.resize(input.size() - 2);
   } else if (ql::starts_with(input, '"')) {

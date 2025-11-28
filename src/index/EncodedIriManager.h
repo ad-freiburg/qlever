@@ -5,13 +5,21 @@
 #ifndef QLEVER_SRC_INDEX_ENCODEDVALUES_H
 #define QLEVER_SRC_INDEX_ENCODEDVALUES_H
 
-#include "backports/StartsWith.h"
+#include <absl/numeric/bits.h>
+
+#include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
+#include "backports/three_way_comparison.h"
 #include "global/Id.h"
 #include "util/BitUtils.h"
 #include "util/CtreHelpers.h"
 #include "util/Log.h"
 #include "util/json.h"
+
+namespace detail {
+// CTRE named capture group identifiers for C++17 compatibility
+constexpr ctll::fixed_string digitsCaptureGroup = "digits";
+}  // namespace detail
 
 // This class allows the encoding of IRIs that start with a fixed prefix
 // followed by a sequence of decimal digits directly into an `Id`. For
@@ -146,7 +154,8 @@ class EncodedIriManagerImpl {
     }
 
     // Extract the substring with the digits, and check that it is not too long.
-    const auto& numString = match.template get<"digits">().to_view();
+    const auto& numString =
+        match.template get<detail::digitsCaptureGroup>().to_view();
     if (numString.size() > NumDigits) {
       return std::nullopt;
     }
@@ -196,7 +205,7 @@ class EncodedIriManagerImpl {
   }
 
   // Equality operator for use in `TestIndexConfig`.
-  bool operator==(const EncodedIriManagerImpl&) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(EncodedIriManagerImpl, prefixes_)
 
   // Encode the `numberStr` (which may only consist of digits) into a 64-bit
   // number.
@@ -223,7 +232,7 @@ class EncodedIriManagerImpl {
   // `result` string.
   static void decodeDecimalFrom64Bit(std::string& result, uint64_t encoded) {
     size_t shift = NumBitsEncoding - NibbleSize;
-    auto numTrailingZeros = std::countr_zero(encoded);
+    auto numTrailingZeros = absl::countr_zero(encoded);
     size_t numTrailingZeroNibbles = numTrailingZeros / NibbleSize;
     size_t len = NumDigits - numTrailingZeroNibbles;
     for (size_t i = 0; i < len; ++i) {

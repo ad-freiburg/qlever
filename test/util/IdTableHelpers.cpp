@@ -61,8 +61,10 @@ void compareIdTableWithExpectedContent(
 
 // ____________________________________________________________________________
 void sortIdTableByJoinColumnInPlace(IdTableAndJoinColumn& table) {
-  CALL_FIXED_SIZE((std::array{table.idTable.numColumns()}), &Engine::sort,
-                  &table.idTable, table.joinColumn);
+  ad_utility::callFixedSizeVi(
+      table.idTable.numColumns(), [&table](auto numCols) {
+        Engine::sort<numCols>(&table.idTable, table.joinColumn);
+      });
 }
 
 // ____________________________________________________________________________
@@ -111,7 +113,7 @@ IdTable createRandomlyFilledIdTable(
 
   // Are there no duplicates in the join column numbers?
   std::vector<size_t> sortedJoinColumnNumbers =
-      ad_utility::transform(joinColumnNumberView, std::identity{});
+      ad_utility::transform(joinColumnNumberView, ql::identity{});
   ql::ranges::sort(sortedJoinColumnNumbers);
   AD_CONTRACT_CHECK(std::ranges::unique(sortedJoinColumnNumbers).empty());
 

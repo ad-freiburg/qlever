@@ -13,6 +13,7 @@
 
 #include <boost/optional.hpp>
 
+#include "backports/three_way_comparison.h"
 #include "engine/idTable/IdTable.h"
 #include "global/IdTriple.h"
 #include "index/CompressedRelation.h"
@@ -26,7 +27,9 @@ struct NumAddedAndDeleted {
   size_t numAdded_;
   size_t numDeleted_;
 
-  bool operator<=>(const NumAddedAndDeleted&) const = default;
+  QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL(NumAddedAndDeleted, numAdded_,
+                                              numDeleted_)
+
   friend std::ostream& operator<<(std::ostream& str,
                                   const NumAddedAndDeleted& n) {
     str << "added " << n.numAdded_ << ", deleted " << n.numDeleted_;
@@ -54,7 +57,9 @@ struct LocatedTriple {
       ql::span<const CompressedBlockMetadata> blockMetadata,
       const qlever::KeyOrder& keyOrder, bool insertOrDelete,
       ad_utility::SharedCancellationHandle cancellationHandle);
-  bool operator==(const LocatedTriple&) const = default;
+
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(LocatedTriple, blockIndex_,
+                                              triple_, insertOrDelete_)
 
   // This operator is only for debugging and testing. It returns a
   // human-readable representation.

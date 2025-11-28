@@ -74,8 +74,8 @@ void testJoin(const NestedBlock& a, const NestedBlock& b, JoinResult expected,
   auto compare = [](auto l, auto r) { return l[0] < r[0]; };
   auto adder = makeRowAdder(result);
   if constexpr (DoOptionalJoin) {
-    zipperJoinForBlocksWithoutUndef(a, b, compare, adder, std::identity{},
-                                    std::identity{},
+    zipperJoinForBlocksWithoutUndef(a, b, compare, adder, ql::identity{},
+                                    ql::identity{},
                                     ad_utility::OptionalJoinTag{});
   } else {
     zipperJoinForBlocksWithoutUndef(a, b, compare, adder);
@@ -553,8 +553,7 @@ TEST(JoinAlgorithm, DefaultIsUndefinedFunctionAlwaysReturnsFalse) {
   RowAdderWithUndef adder{};
   std::vector<std::vector<FakeId>> dummyBlocks{};
   auto compare = [](auto l, auto r) { return static_cast<Id>(l) < r; };
-  auto joinSide =
-      ad_utility::detail::makeJoinSide(dummyBlocks, std::identity{});
+  auto joinSide = ad_utility::detail::makeJoinSide(dummyBlocks, ql::identity{});
   ad_utility::detail::BlockZipperJoinImpl impl{joinSide, joinSide, compare,
                                                adder};
   EXPECT_FALSE(impl.isUndefined_("Something"));

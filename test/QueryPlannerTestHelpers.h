@@ -12,7 +12,7 @@
 #include <variant>
 
 #include "./util/GTestHelpers.h"
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"
 #include "engine/CountAvailablePredicates.h"
@@ -141,17 +141,18 @@ constexpr auto IndexScan =
   auto permutationMatcher = allowedPermutations.empty()
                                 ? ::testing::A<Permutation::Enum>()
                                 : AnyOfArray(allowedPermutations);
-  return RootOperation<::IndexScan>(
-      AllOf(AD_PROPERTY(IndexScan, permutation, permutationMatcher),
-            AD_PROPERTY(IndexScan, getResultWidth, Eq(numVariables)),
-            AD_PROPERTY(IndexScan, subject, Eq(subject)),
-            AD_PROPERTY(IndexScan, predicate, Eq(predicate)),
-            AD_PROPERTY(IndexScan, object, Eq(object)),
-            AD_PROPERTY(IndexScan, additionalVariables,
-                        ElementsAreArray(additionalVariables)),
-            AD_PROPERTY(IndexScan, additionalColumns,
-                        ElementsAreArray(additionalColumns)),
-            AD_PROPERTY(IndexScan, graphsToFilter, Eq(graphs))));
+  return RootOperation<::IndexScan>(AllOf(
+      AD_PROPERTY(IndexScan, permutation,
+                  AD_PROPERTY(Permutation, permutation, permutationMatcher)),
+      AD_PROPERTY(IndexScan, getResultWidth, Eq(numVariables)),
+      AD_PROPERTY(IndexScan, subject, Eq(subject)),
+      AD_PROPERTY(IndexScan, predicate, Eq(predicate)),
+      AD_PROPERTY(IndexScan, object, Eq(object)),
+      AD_PROPERTY(IndexScan, additionalVariables,
+                  ElementsAreArray(additionalVariables)),
+      AD_PROPERTY(IndexScan, additionalColumns,
+                  ElementsAreArray(additionalColumns)),
+      AD_PROPERTY(IndexScan, graphsToFilter, Eq(graphs))));
 };
 
 // Match the `NeutralElementOperation`.
@@ -163,7 +164,7 @@ constexpr auto TextIndexScanForWord = [](Variable textRecordVar,
                                          std::string word) -> QetMatcher {
   return RootOperation<::TextIndexScanForWord>(AllOf(
       AD_PROPERTY(::TextIndexScanForWord, getResultWidth,
-                  Eq(2 + word.ends_with('*'))),
+                  Eq(2 + ql::ends_with(word, '*'))),
       AD_PROPERTY(::TextIndexScanForWord, textRecordVar, Eq(textRecordVar)),
       AD_PROPERTY(::TextIndexScanForWord, word, word)));
 };
@@ -235,7 +236,8 @@ inline auto Bind = [](const QetMatcher& childMatcher,
 // Matcher for a `CountAvailablePredicatesMatcher` operation. The case of 0
 // children means that it's a full scan.
 struct CountAvailablePredicatesMatcher {
-  template <QL_CONCEPT_OR_TYPENAME(std::same_as<QetMatcher>)... ChildArgs>
+  template <
+      QL_CONCEPT_OR_TYPENAME(ql::concepts::same_as<QetMatcher>)... ChildArgs>
   auto operator()(size_t subjectColumnIdx, const Variable& predicateVar,
                   const Variable& countVar,
                   const ChildArgs&... childMatchers) const
@@ -349,7 +351,8 @@ inline auto TransitivePathSideMatcher = [](TransitivePathSide side) {
 
 // Match a TransitivePath operation
 struct TransitivePath {
-  template <QL_CONCEPT_OR_TYPENAME(std::same_as<QetMatcher>)... ChildArgs>
+  template <
+      QL_CONCEPT_OR_TYPENAME(ql::concepts::same_as<QetMatcher>)... ChildArgs>
   auto operator()(TransitivePathSide left, TransitivePathSide right,
                   size_t minDist, size_t maxDist,
                   const ChildArgs&... childMatchers) const {
@@ -383,7 +386,8 @@ inline auto PathSearchConfigMatcher = [](PathSearchConfiguration config) {
 
 // Match a PathSearch operation
 struct PathSearch {
-  template <QL_CONCEPT_OR_TYPENAME(std::same_as<QetMatcher>)... ChildArgs>
+  template <
+      QL_CONCEPT_OR_TYPENAME(ql::concepts::same_as<QetMatcher>)... ChildArgs>
   auto operator()(PathSearchConfiguration config, bool sourceBound,
                   bool targetBound, const ChildArgs&... childMatchers) const {
     return RootOperation<::PathSearch>(AllOf(
@@ -403,7 +407,8 @@ inline auto ValuesClause = [](std::string cacheKey) {
 // Match a SpatialJoin operation, set arguments to ignore to -1
 template <bool Substitute = false>
 struct SpatialJoinMatcher {
-  template <QL_CONCEPT_OR_TYPENAME(std::same_as<QetMatcher>)... ChildArgs>
+  template <
+      QL_CONCEPT_OR_TYPENAME(ql::concepts::same_as<QetMatcher>)... ChildArgs>
   auto operator()(double maxDist, size_t maxResults, Variable left,
                   Variable right, std::optional<Variable> distanceVariable,
                   PayloadVariables payloadVariables,

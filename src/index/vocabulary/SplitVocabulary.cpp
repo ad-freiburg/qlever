@@ -8,9 +8,9 @@
 // Explicit template instantiations
 using namespace detail::splitVocabulary;
 template class SplitVocabulary<
-    decltype(geoSplitFunc), decltype(geoFilenameFunc),
+    GeoSplitFunc, GeoFilenameFunc,
     CompressedVocabulary<VocabularyInternalExternal>,
     GeoVocabulary<CompressedVocabulary<VocabularyInternalExternal>>>;
-template class SplitVocabulary<decltype(geoSplitFunc),
-                               decltype(geoFilenameFunc), VocabularyInMemory,
+template class SplitVocabulary<GeoSplitFunc, GeoFilenameFunc,
+                               VocabularyInMemory,
                                GeoVocabulary<VocabularyInMemory>>;

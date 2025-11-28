@@ -12,6 +12,7 @@
 #ifndef QLEVER_SRC_INDEX_DELTATRIPLES_H
 #define QLEVER_SRC_INDEX_DELTATRIPLES_H
 
+#include "backports/three_way_comparison.h"
 #include "engine/LocalVocab.h"
 #include "global/IdTriple.h"
 #include "index/Index.h"
@@ -60,7 +61,8 @@ struct DeltaTriplesCount {
   friend DeltaTriplesCount operator-(const DeltaTriplesCount& lhs,
                                      const DeltaTriplesCount& rhs);
 
-  bool operator==(const DeltaTriplesCount& other) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(DeltaTriplesCount,
+                                              triplesInserted_, triplesDeleted_)
 };
 
 // A class for maintaining triples that are inserted or deleted after index
@@ -200,6 +202,9 @@ class DeltaTriples {
       Permutation::Enum permutation,
       std::shared_ptr<const std::vector<CompressedBlockMetadata>> metadata);
 
+  // Update the block metadata.
+  void updateAugmentedMetadata();
+
  private:
   // Find the position of the given triple in the given permutation and add it
   // to each of the six `LocatedTriplesPerBlock` maps (one per permutation).
@@ -268,6 +273,7 @@ class DeltaTriplesManager {
   template <typename ReturnType>
   ReturnType modify(const std::function<ReturnType(DeltaTriples&)>& function,
                     bool writeToDiskAfterRequest = true,
+                    bool updateMetadataAfterRequest = true,
                     ad_utility::timer::TimeTracer& tracer =
                         ad_utility::timer::DEFAULT_TIME_TRACER);
 

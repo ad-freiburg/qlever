@@ -2,11 +2,11 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
-#include "SparqlExpressionValueGetters.h"
+#include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 
 #include <absl/strings/str_format.h>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "backports/type_traits.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "global/Constants.h"
@@ -195,7 +195,7 @@ std::string ReplacementStringGetter::convertToReplacementString(
 }
 
 // ____________________________________________________________________________
-template <auto isSomethingFunction, auto prefix>
+template <auto isSomethingFunction, const auto& prefix>
 Id IsSomethingValueGetter<isSomethingFunction, prefix>::operator()(
     ValueId id, const EvaluationContext* context) const {
   switch (id.getDatatype()) {
@@ -267,7 +267,7 @@ IntDoubleStr ToNumericValueGetter::operator()(
     case Datatype::Double:
       return id.getDouble();
     case Datatype::Bool:
-      return static_cast<int>(id.getBool());
+      return static_cast<int64_t>(id.getBool());
     case Datatype::GeoPoint:
       return id.getGeoPoint().toStringRepresentation();
     case Datatype::VocabIndex:
@@ -398,6 +398,44 @@ UnitOfMeasurement UnitOfMeasurementValueGetter::litOrIriToUnit(
 }
 
 //______________________________________________________________________________
+std::optional<ad_utility::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
+    ValueId id, const EvaluationContext* context) const {
+  using enum Datatype;
+  switch (id.getDatatype()) {
+    case GeoPoint:
+      return id.getGeoPoint();
+    case VocabIndex:
+    case LocalVocabIndex: {
+      auto lit = ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
+          context->_qec.getIndex(), id, context->_localVocab);
+      return GeoPointOrWktValueGetter{}(lit, context);
+    }
+    case Bool:
+    case Int:
+    case Double:
+    case Date:
+    case Undefined:
+    case TextRecordIndex:
+    case WordVocabIndex:
+    case BlankNodeIndex:
+    case EncodedVal:
+      return std::nullopt;
+  }
+
+  AD_FAIL();
+}
+
+//______________________________________________________________________________
+std::optional<ad_utility::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
+    const LiteralOrIri& litOrIri, const EvaluationContext*) const {
+  if (litOrIri.isLiteral() && litOrIri.hasDatatype() &&
+      asStringViewUnsafe(litOrIri.getDatatype()) == GEO_WKT_LITERAL) {
+    return litOrIri.toStringRepresentation();
+  }
+  return std::nullopt;
+};
+
+//______________________________________________________________________________
 CPP_template(typename T, typename ValueGetter)(
     requires(concepts::same_as<sparqlExpression::IdOrLiteralOrIri, T> ||
              concepts::same_as<std::optional<std::string>, T>)) T
@@ -472,11 +510,12 @@ sparqlExpression::IdOrLiteralOrIri IriOrUriValueGetter::operator()(
 }
 
 //______________________________________________________________________________
-template <typename RequestedInfo>
-requires ad_utility::RequestedInfoT<RequestedInfo>
-std::optional<ad_utility::GeometryInfo>
-GeometryInfoValueGetter<RequestedInfo>::getPrecomputedGeometryInfo(
-    ValueId id, const EvaluationContext* context) {
+CPP_template_out_def(typename RequestedInfo)(
+    requires ad_utility::RequestedInfoT<RequestedInfo>)
+    std::optional<ad_utility::GeometryInfo> GeometryInfoValueGetter<
+        CPP_sfinae_args(RequestedInfo)>::
+        getPrecomputedGeometryInfo(ValueId id,
+                                   const EvaluationContext* context) {
   auto datatype = id.getDatatype();
   if (datatype == Datatype::VocabIndex) {
     // All geometry strings encountered during index build have a precomputed
@@ -487,10 +526,11 @@ GeometryInfoValueGetter<RequestedInfo>::getPrecomputedGeometryInfo(
 }
 
 //______________________________________________________________________________
-template <typename RequestedInfo>
-requires ad_utility::RequestedInfoT<RequestedInfo>
-std::optional<RequestedInfo> GeometryInfoValueGetter<RequestedInfo>::operator()(
-    ValueId id, const EvaluationContext* context) const {
+CPP_template_out_def(typename RequestedInfo)(
+    requires ad_utility::RequestedInfoT<RequestedInfo>)
+    std::optional<RequestedInfo> GeometryInfoValueGetter<CPP_sfinae_args(
+        RequestedInfo)>::operator()(ValueId id,
+                                    const EvaluationContext* context) const {
   using enum Datatype;
   switch (id.getDatatype()) {
     case EncodedVal:
@@ -524,11 +564,12 @@ std::optional<RequestedInfo> GeometryInfoValueGetter<RequestedInfo>::operator()(
 };
 
 //______________________________________________________________________________
-template <typename RequestedInfo>
-requires ad_utility::RequestedInfoT<RequestedInfo>
-std::optional<RequestedInfo> GeometryInfoValueGetter<RequestedInfo>::operator()(
-    const LiteralOrIri& litOrIri,
-    [[maybe_unused]] const EvaluationContext* context) const {
+CPP_template_out_def(typename RequestedInfo)(
+    requires ad_utility::RequestedInfoT<RequestedInfo>)
+    std::optional<RequestedInfo> GeometryInfoValueGetter<CPP_sfinae_args(
+        RequestedInfo)>::operator()(const LiteralOrIri& litOrIri,
+                                    [[maybe_unused]] const EvaluationContext*
+                                        context) const {
   // If we receive only a literal, we have no choice but to parse it and compute
   // the geometry info ad hoc.
   if (litOrIri.isLiteral() && litOrIri.hasDatatype() &&
@@ -546,4 +587,7 @@ template struct GeometryInfoValueGetter<ad_utility::GeometryInfo>;
 template struct GeometryInfoValueGetter<ad_utility::GeometryType>;
 template struct GeometryInfoValueGetter<ad_utility::Centroid>;
 template struct GeometryInfoValueGetter<ad_utility::BoundingBox>;
+template struct GeometryInfoValueGetter<ad_utility::NumGeometries>;
+template struct GeometryInfoValueGetter<ad_utility::MetricLength>;
+template struct GeometryInfoValueGetter<ad_utility::MetricArea>;
 }  // namespace sparqlExpression::detail

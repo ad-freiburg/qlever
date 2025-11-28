@@ -10,7 +10,6 @@
 #include <cmath>
 #include <cstdint>
 #include <optional>
-#include <ranges>
 
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
@@ -27,18 +26,23 @@ namespace ad_utility {
 
 // Some helper concepts.
 
+namespace joinAlgorithms::detail {
+template <typename T, typename U>
+CPP_requires(HasMinus, requires(T&& a, U&& b)(a - b));
+}
+
 // A  function `F` fulfills `UnaryIteratorFunction` if it can be called with a
 // single argument of the `Range`'s iterator type (NOT value type).
 template <typename F, typename Range>
 CPP_concept UnaryIteratorFunction =
-    std::invocable<F, ql::ranges::iterator_t<Range>>;
+    ql::concepts::invocable<F, ql::ranges::iterator_t<Range>>;
 
 // A  function `F` fulfills `BinaryIteratorFunction` if it can be called with
 // two arguments of the `Range`'s iterator type (NOT value type).
 template <typename F, typename Range>
 CPP_concept BinaryIteratorFunction =
-    std::invocable<F, ql::ranges::iterator_t<Range>,
-                   ql::ranges::iterator_t<Range>>;
+    ql::concepts::invocable<F, ql::ranges::iterator_t<Range>,
+                            ql::ranges::iterator_t<Range>>;
 
 // Helper type to indicate the different join modes.
 enum class JoinType { JOIN, OPTIONAL, MINUS };
@@ -486,7 +490,7 @@ CPP_template(typename CompatibleActionT, typename NotFoundActionT,
              typename CancellationFuncT)(
     requires BinaryIteratorFunction<CompatibleActionT, IdTableView<0>> CPP_and UnaryIteratorFunction<
         NotFoundActionT, IdTableView<0>>
-        CPP_and std::invocable<
+        CPP_and ql::concepts::invocable<
             CancellationFuncT>) void specialOptionalJoin(const IdTableView<0>&
                                                              left,
                                                          const IdTableView<0>&
@@ -641,9 +645,10 @@ class BlockAndSubrange {
 
  public:
   // The reference type of the underlying container.
-  using reference = std::iterator_traits<typename Block::iterator>::reference;
+  using reference =
+      typename std::iterator_traits<typename Block::iterator>::reference;
   using const_reference =
-      std::iterator_traits<typename Block::const_iterator>::reference;
+      typename std::iterator_traits<typename Block::const_iterator>::reference;
 
   // Construct from a container object, where the initial subrange will
   // represent the whole container.
@@ -702,7 +707,8 @@ class BlockAndSubrange {
       subrange_.second = end - blockBegin;
     };
     auto& block = fullBlock();
-    if constexpr (requires { begin - block.begin(); }) {
+    if constexpr (CPP_requires_ref(joinAlgorithms::detail::HasMinus,
+                                   decltype(begin), decltype(block.begin()))) {
       impl(block.begin(), block.end());
     } else {
       impl(std::as_const(block).begin(), std::as_const(block).end());
@@ -723,7 +729,7 @@ class BlockAndSubrange {
 template <typename Iterator, typename End, typename Projection>
 struct JoinSide {
   using CurrentBlocks =
-      std::vector<detail::BlockAndSubrange<std::iter_value_t<Iterator>>>;
+      std::vector<detail::BlockAndSubrange<ql::iter_value_t<Iterator>>>;
   Iterator it_;
   [[no_unique_address]] const End end_;
   const Projection& projection_;
@@ -731,7 +737,7 @@ struct JoinSide {
   CurrentBlocks undefBlocks_{};
 
   // Type aliases for a single element from a block from the left/right input.
-  using value_type = ql::ranges::range_value_t<std::iter_value_t<Iterator>>;
+  using value_type = ql::ranges::range_value_t<ql::iter_value_t<Iterator>>;
   // Type alias for the result of the projection.
   using ProjectedEl =
       std::decay_t<std::invoke_result_t<const Projection&, value_type>>;
@@ -853,8 +859,9 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
 
   // Type alias for the result of the projection. Elements from the left and
   // right input must be projected to the same type.
-  using ProjectedEl = LeftSide::ProjectedEl;
-  static_assert(std::same_as<ProjectedEl, typename RightSide::ProjectedEl>);
+  using ProjectedEl = typename LeftSide::ProjectedEl;
+  static_assert(
+      ql::concepts::same_as<ProjectedEl, typename RightSide::ProjectedEl>);
   static constexpr bool potentiallyHasUndef =
       !std::is_same_v<IsUndef, AlwaysFalse>;
 
@@ -961,7 +968,9 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
     // TODO<joka921> ql::ranges::lower_bound doesn't work here.
     auto it = std::lower_bound(first.subrange().begin(), first.subrange().end(),
                                currentEl, lessThan_);
-    return std::tuple{std::ref(first.fullBlock()), first.subrange(), it};
+    // Note: `std::make_tuple` will convert the `reference_wrapper` returned by
+    // `std::ref` into a plain reference as the tuple element.
+    return std::make_tuple(std::ref(first.fullBlock()), first.subrange(), it);
   }
 
   // Check if a side contains undefined values.
@@ -1047,10 +1056,10 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
           if constexpr (left) {
             begL = undefBlock.fullBlock().begin();
             compatibleRowAction_.setInput(undefBlock.fullBlock(),
-                                          fullBlockRight.get());
+                                          fullBlockRight);
           } else {
             begR = undefBlock.fullBlock().begin();
-            compatibleRowAction_.setInput(fullBlockLeft.get(),
+            compatibleRowAction_.setInput(fullBlockLeft,
                                           undefBlock.fullBlock());
           }
           const auto& subr = undefBlock.subrange();
@@ -1060,9 +1069,9 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
 
     auto endCallback = [&, this]() {
       // Reset back to original input.
-      begL = fullBlockLeft.get().begin();
-      begR = fullBlockRight.get().begin();
-      compatibleRowAction_.setInput(fullBlockLeft.get(), fullBlockRight.get());
+      begL = fullBlockLeft.begin();
+      begR = fullBlockRight.begin();
+      compatibleRowAction_.setInput(fullBlockLeft, fullBlockRight);
     };
 
     // TODO<joka921> improve the `CachingTransformInputRange` to make it movable
@@ -1108,14 +1117,14 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
                                       RightBlocks& currentBlocksRight,
                                       const ProjectedEl& currentEl) {
     // Get the first blocks.
-    auto [fullBlockLeft, subrangeLeft, currentElItL] =
+    auto&& [fullBlockLeft, subrangeLeft, currentElItL] =
         getFirstBlock(currentBlocksLeft, currentEl);
-    auto [fullBlockRight, subrangeRight, currentElItR] =
+    auto&& [fullBlockRight, subrangeRight, currentElItR] =
         getFirstBlock(currentBlocksRight, currentEl);
 
-    compatibleRowAction_.setInput(fullBlockLeft.get(), fullBlockRight.get());
-    auto begL = fullBlockLeft.get().begin();
-    auto begR = fullBlockRight.get().begin();
+    compatibleRowAction_.setInput(fullBlockLeft, fullBlockRight);
+    auto begL = fullBlockLeft.begin();
+    auto begR = fullBlockRight.begin();
 
     auto addRowIndex = [&begL, &begR, this](auto itFromL, auto itFromR) {
       AD_EXPENSIVE_CHECK(itFromL >= begL);
@@ -1136,7 +1145,7 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
 
     auto addNotFoundRowIndex = [&]() {
       if constexpr (DoOptionalJoinOrMinus) {
-        return [this, begL = fullBlockLeft.get().begin()](auto itFromL) {
+        return [this, begL = fullBlockLeft.begin()](auto itFromL) {
           AD_CORRECTNESS_CHECK(!hasUndef(rightSide_));
           compatibleRowAction_.addOptionalRow(itFromL - begL);
         };
@@ -1534,8 +1543,8 @@ BlockZipperJoinImpl(LHS&, RHS&, const LessThan&, CompatibleRowAction&, IsUndef)
  * `flush`.
  */
 template <typename LeftBlocks, typename RightBlocks, typename LessThan,
-          typename CompatibleRowAction, typename LeftProjection = std::identity,
-          typename RightProjection = std::identity,
+          typename CompatibleRowAction, typename LeftProjection = ql::identity,
+          typename RightProjection = ql::identity,
           JoinType joinType = JoinType::JOIN>
 void zipperJoinForBlocksWithoutUndef(
     LeftBlocks&& leftBlocks, RightBlocks&& rightBlocks,
@@ -1553,8 +1562,8 @@ void zipperJoinForBlocksWithoutUndef(
 // Similar to `zipperJoinForBlocksWithoutUndef`, but allows for UNDEF values in
 // a single column join scenario.
 template <typename LeftBlocks, typename RightBlocks, typename LessThan,
-          typename CompatibleRowAction, typename LeftProjection = std::identity,
-          typename RightProjection = std::identity,
+          typename CompatibleRowAction, typename LeftProjection = ql::identity,
+          typename RightProjection = ql::identity,
           JoinType joinType = JoinType::JOIN>
 void zipperJoinForBlocksWithPotentialUndef(
     LeftBlocks&& leftBlocks, RightBlocks&& rightBlocks,

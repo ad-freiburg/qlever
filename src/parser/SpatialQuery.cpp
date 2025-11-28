@@ -7,10 +7,17 @@
 
 #include "engine/SpatialJoinConfig.h"
 #include "parser/MagicServiceIriConstants.h"
+#include "parser/NormalizedString.h"
 #include "parser/PayloadVariables.h"
 #include "parser/SparqlTriple.h"
 
 namespace parsedQuery {
+
+namespace detail {
+// CTRE named capture group identifiers for C++17 compatibility
+constexpr ctll::fixed_string distCaptureGroup = "dist";
+constexpr ctll::fixed_string resultsCaptureGroup = "results";
+}  // namespace detail
 
 // ____________________________________________________________________________
 void SpatialQuery::addParameter(const SparqlTriple& triple) {
@@ -25,12 +32,10 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
   } else if (predString == "right") {
     setVariable("right", object, right_);
   } else if (predString == "numNearestNeighbors") {
-    if (!object.isInt()) {
-      throw SpatialSearchException(
-          "The parameter `<numNearestNeighbors>` expects an integer (the "
-          "maximum "
-          "number of nearest neighbors)");
-    }
+    throwIf(!object.isInt(),
+            "The parameter `<numNearestNeighbors>` expects an integer (the "
+            "maximum "
+            "number of nearest neighbors)");
     maxResults_ = object.getInt();
   } else if (predString == "maxDistance") {
     if (object.isInt()) {
@@ -45,15 +50,14 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
   } else if (predString == "bindDistance") {
     setVariable("bindDistance", object, distanceVariable_);
   } else if (predString == "joinType") {
-    if (!object.isIri()) {
-      // This case is already covered in `extractParameterName` below, but we
-      // want to throw a more precise error description
-      throw SpatialSearchException(
-          "The parameter `<joinType>` needs an IRI that selects the algorithm "
-          "to employ. Currently supported are `<intersects>`, `<covers>`, "
-          "`<contains>`, `<touches>`, `<crosses>`, `<overlaps>`, `<equals>`, "
-          "`<within-dist>`");
-    }
+    // This case is already covered in `extractParameterName` below, but we
+    // want to throw a more precise error description
+    throwIf(
+        !object.isIri(),
+        "The parameter `<joinType>` needs an IRI that selects the algorithm "
+        "to employ. Currently supported are `<intersects>`, `<covers>`, "
+        "`<contains>`, `<touches>`, `<crosses>`, `<overlaps>`, `<equals>`, "
+        "`<within-dist>`");
     auto type = extractParameterName(object, SPATIAL_SEARCH_IRI);
     if (type == "intersects") {
       joinType_ = SpatialJoinType::INTERSECTS;
@@ -74,36 +78,22 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
     } else if (type == "within-dist") {
       joinType_ = SpatialJoinType::WITHIN_DIST;
     } else {
-      throw SpatialSearchException(
+      throw SpatialSearchException{
           "The IRI given for the parameter `<joinType>` does not refer to a "
           "supported join type. Currently supported are `<intersects>`, "
           "`<covers>`, `<contains>`, `<touches>`, `<crosses>`, `<overlaps>`, "
-          "`<equals>`, `<within>`, `<within-dist>`");
+          "`<equals>`, `<within>`, `<within-dist>`"};
     }
   } else if (predString == "algorithm") {
-    if (!object.isIri()) {
-      // This case is already covered in `extractParameterName` below, but we
-      // want to throw a more precise error description
-      throw SpatialSearchException(
-          "The parameter `<algorithm>` needs an IRI that selects the algorithm "
-          "to employ. Currently supported are `<baseline>`, `<s2>`, "
-          "`<libspatialjoin>`, or `<boundingBox>`");
-    }
-    auto algo = extractParameterName(object, SPATIAL_SEARCH_IRI);
-    if (algo == "baseline") {
-      algo_ = SpatialJoinAlgorithm::BASELINE;
-    } else if (algo == "s2") {
-      algo_ = SpatialJoinAlgorithm::S2_GEOMETRY;
-    } else if (algo == "boundingBox") {
-      algo_ = SpatialJoinAlgorithm::BOUNDING_BOX;
-    } else if (algo == "libspatialjoin") {
-      algo_ = SpatialJoinAlgorithm::LIBSPATIALJOIN;
-    } else {
-      throw SpatialSearchException(
-          "The IRI given for the parameter `<algorithm>` does not refer to a "
-          "supported spatial search algorithm. Please select either "
-          "`<baseline>`, `<s2>`, `<libspatialjoin>`, or `<boundingBox>`");
-    }
+    // This case is already covered in `extractParameterName` below, but we
+    // want to throw a more precise error description
+    throwIf(
+        !object.isIri(),
+        "The parameter `<algorithm>` needs an IRI that selects the algorithm "
+        "to employ. Currently supported are `<baseline>`, `<s2>`, "
+        "`<libspatialjoin>`, or `<boundingBox>`");
+    algo_ = detail::spatialJoinAlgorithmFromString(
+        extractParameterName(object, SPATIAL_SEARCH_IRI));
   } else if (predString == "payload") {
     if (object.isVariable()) {
       // Single selected variable
@@ -121,6 +111,11 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
           "to be selected or `<all>`");
     }
 
+  } else if (predString == "experimentalRightCacheName") {
+    throwIf(!object.isLiteral(),
+            "The argument to the `<experimentalRightCacheName>` parameter must "
+            "be the name of a pinned cache entry as a string literal.");
+    rightCacheName_ = asStringViewUnsafe(object.getLiteral().getContent());
   } else {
     throw SpatialSearchException(absl::StrCat(
         "Unsupported argument ", predString,
@@ -138,61 +133,68 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
     algo = algo_.value();
   }
 
-  if (!left_.has_value()) {
-    throw SpatialSearchException(
-        "Missing parameter `<left>` in spatial search.");
-  }
+  throwIf(!left_.has_value(), "Missing parameter `<left>` in spatial search.");
 
-  if (algo != SpatialJoinAlgorithm::LIBSPATIALJOIN && !maxDist_.has_value() &&
-      !maxResults_.has_value()) {
-    throw SpatialSearchException(
-        "Neither `<numNearestNeighbors>` nor `<maxDistance>` were provided but "
-        "at least one of them is required for the selected algorithm");
-  }
+  throwIf(
+      algo != SpatialJoinAlgorithm::LIBSPATIALJOIN && !maxDist_.has_value() &&
+          !maxResults_.has_value(),
+      "Neither `<numNearestNeighbors>` nor `<maxDistance>` were provided but "
+      "at least one of them is required for the selected algorithm");
 
-  if (algo == SpatialJoinAlgorithm::LIBSPATIALJOIN && maxResults_.has_value()) {
-    throw SpatialSearchException(
-        "The algorithm `<libspatialjoin>` does not support the option "
-        "`<numNearestNeighbors>`");
-  }
+  throwIf(
+      algo == SpatialJoinAlgorithm::LIBSPATIALJOIN && maxResults_.has_value(),
+      "The algorithm `<libspatialjoin>` does not support the option "
+      "`<numNearestNeighbors>`");
 
-  if (algo == SpatialJoinAlgorithm::LIBSPATIALJOIN &&
-      joinType_ != SpatialJoinType::WITHIN_DIST && maxDist_.has_value()) {
-    throw SpatialSearchException(
-        "The algorithm `<libspatialjoin>` supports the "
-        "`<maxDistance>` option only if `<joinType>` is set to "
-        "`<within-dist>`.");
-  }
+  throwIf(algo == SpatialJoinAlgorithm::LIBSPATIALJOIN &&
+              joinType_ != SpatialJoinType::WITHIN_DIST && maxDist_.has_value(),
+          "The algorithm `<libspatialjoin>` supports the "
+          "`<maxDistance>` option only if `<joinType>` is set to "
+          "`<within-dist>`.");
 
-  if (joinType_.has_value() && algo != SpatialJoinAlgorithm::LIBSPATIALJOIN) {
-    throw SpatialSearchException(
-        "The selected algorithm does not support the `<joinType>` option. Only "
-        "the `<libspatialjoin>` algorithm is suitable for this option.");
-  }
+  throwIf(
+      joinType_.has_value() && algo != SpatialJoinAlgorithm::LIBSPATIALJOIN,
+      "The selected algorithm does not support the `<joinType>` option. Only "
+      "the `<libspatialjoin>` algorithm is suitable for this option.");
 
-  if (!right_.has_value()) {
-    throw SpatialSearchException(
-        "Missing parameter `<right>` in spatial search.");
+  throwIf(!right_.has_value(),
+          "Missing parameter `<right>` in spatial search.");
+
+  throwIf(
+      rightCacheName_.has_value() &&
+          algo != SpatialJoinAlgorithm::S2_POINT_POLYLINE,
+      "The parameter `<experimentalRightCacheName>` is only supported by the "
+      "`<experimentalPointPolyline>` algorithm.");
+
+  if (algo == SpatialJoinAlgorithm::S2_POINT_POLYLINE) {
+    throwIf(!rightCacheName_.has_value(),
+            "The parameter `<experimentalRightCacheName>` is mandatory for the "
+            "`<experimentalPointPolyline>` algorithm.");
+    throwIf(
+        childGraphPattern_.has_value(),
+        "The parameter `<experimentalPointPolyline>` algorithm uses a cached "
+        "query result as its right child. Therefore a group graph pattern "
+        "for the right side may not be specified in the `SERVICE`.");
   }
 
   // Only if the number of results is limited, it is mandatory that the right
   // variable must be selected inside the service. If only the distance is
   // limited, it may be declared inside or outside of the service.
-  if (!ignoreMissingRightChild_ && maxResults_.has_value() &&
-      !childGraphPattern_.has_value()) {
-    throw SpatialSearchException(
-        "A spatial search with a maximum number of results must have its right "
-        "variable declared inside the service using a graph pattern: SERVICE "
-        "spatialSearch: { [Config Triples] { <Something> <ThatSelects> ?right "
-        "} }.");
-  } else if (!ignoreMissingRightChild_ && !childGraphPattern_.has_value() &&
-             !payloadVariables_.isAll() && !payloadVariables_.empty()) {
-    throw SpatialSearchException(
-        "The right variable for the spatial search is declared outside the "
-        "SERVICE, but the <payload> parameter was set. Please move the "
-        "declaration of the right variable into the SERVICE if you wish to use "
-        "`<payload>`");
-  }
+  throwIf(
+      !ignoreMissingRightChild_ && maxResults_.has_value() &&
+          !childGraphPattern_.has_value(),
+      "A spatial search with a maximum number of results must have its right "
+      "variable declared inside the service using a graph pattern: SERVICE "
+      "spatialSearch: { [Config Triples] { <Something> <ThatSelects> ?right "
+      "} }.");
+  throwIf(
+      !ignoreMissingRightChild_ && !childGraphPattern_.has_value() &&
+          !payloadVariables_.isAll() && !payloadVariables_.empty() &&
+          algo != SpatialJoinAlgorithm::S2_POINT_POLYLINE,
+      "The right variable for the spatial search is declared outside the "
+      "SERVICE, but the <payload> parameter was set. Please move the "
+      "declaration of the right variable into the SERVICE if you wish to use "
+      "`<payload>`");
 
   std::optional<SpatialJoinType> joinType = std::nullopt;
   if (algo == SpatialJoinAlgorithm::LIBSPATIALJOIN) {
@@ -224,7 +226,7 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
 
   return SpatialJoinConfiguration{
       task, left_.value(), right_.value(), distanceVariable_,
-      pv,   algo,          joinType};
+      pv,   algo,          joinType,       rightCacheName_};
 }
 
 // ____________________________________________________________________________
@@ -256,11 +258,11 @@ SpatialQuery::SpatialQuery(const SparqlTriple& triple) {
 
   // Check if one of the regexes matches
   if (auto match = ctre::match<MAX_DIST_IN_METERS_REGEX>(input)) {
-    maxDist_ = matchToInt(match.get<"dist">());
+    maxDist_ = matchToInt(match.get<detail::distCaptureGroup>());
     AD_CORRECTNESS_CHECK(maxDist_.has_value());
   } else if (auto match = ctre::search<NEAREST_NEIGHBORS_REGEX>(input)) {
-    maxResults_ = matchToInt(match.get<"results">());
-    maxDist_ = matchToInt(match.get<"dist">());
+    maxResults_ = matchToInt(match.get<detail::resultsCaptureGroup>());
+    maxDist_ = matchToInt(match.get<detail::distCaptureGroup>());
     ignoreMissingRightChild_ = true;
     AD_CORRECTNESS_CHECK(maxResults_.has_value());
   } else {
@@ -270,5 +272,39 @@ SpatialQuery::SpatialQuery(const SparqlTriple& triple) {
                           "`<max-distance-in-meters:50>`"));
   }
 }
+
+// _____________________________________________________________________________
+void SpatialQuery::throwIf(bool throwCondition,
+                           std::string_view message) const {
+  if (throwCondition) {
+    throw SpatialSearchException{std::string(message)};
+  }
+}
+
+namespace detail {
+
+// _____________________________________________________________________________
+SpatialJoinAlgorithm spatialJoinAlgorithmFromString(
+    std::string_view identifier) {
+  using enum SpatialJoinAlgorithm;
+  static const ad_utility::HashMap<std::string, SpatialJoinAlgorithm>
+      nameToAlgorithmMap{
+          {"baseline", BASELINE},
+          {"s2", S2_GEOMETRY},
+          {"boundingBox", BOUNDING_BOX},
+          {"libspatialjoin", LIBSPATIALJOIN},
+          {"experimentalPointPolyline", S2_POINT_POLYLINE},
+      };
+  if (nameToAlgorithmMap.contains(identifier)) {
+    return nameToAlgorithmMap.at(identifier);
+  } else {
+    throw SpatialSearchException(
+        "The IRI given for the parameter `<algorithm>` does not refer to a "
+        "supported spatial search algorithm. Please select either "
+        "`<baseline>`, `<s2>`, `<libspatialjoin>`, "
+        "`<experimentalPointPolyline>` or `<boundingBox>`");
+  }
+}
+}  // namespace detail
 
 }  // namespace parsedQuery

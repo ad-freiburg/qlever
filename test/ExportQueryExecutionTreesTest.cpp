@@ -310,12 +310,13 @@ static const std::string xmlTrailer = "\n</results>\n</sparql>";
 
 // Helper function for easier testing of the `IdTable` generator.
 std::vector<IdTable> convertToVector(
-    cppcoro::generator<ExportQueryExecutionTrees::TableConstRefWithVocab>
+    ad_utility::InputRangeTypeErased<
+        ExportQueryExecutionTrees::TableConstRefWithVocab>
         generator) {
   std::vector<IdTable> result;
   for (const ExportQueryExecutionTrees::TableConstRefWithVocab& pair :
        generator) {
-    result.push_back(pair.idTable_.clone());
+    result.push_back(pair.idTable().clone());
   }
   return result;
 }
@@ -327,10 +328,11 @@ auto matchesIdTables(const Tables&... tables) {
 }
 
 std::vector<IdTable> convertToVector(
-    cppcoro::generator<ExportQueryExecutionTrees::TableWithRange> generator) {
+    ad_utility::InputRangeTypeErased<ExportQueryExecutionTrees::TableWithRange>
+        generator) {
   std::vector<IdTable> result;
   for (const auto& [pair, range] : generator) {
-    const auto& idTable = pair.idTable_;
+    const auto& idTable = pair.idTable();
     result.emplace_back(idTable.numColumns(), idTable.getAllocator());
     result.back().insertAtEnd(idTable, *range.begin(), *(range.end() - 1) + 1);
   }
@@ -1348,8 +1350,6 @@ TEST(ExportQueryExecutionTrees, MultipleVariables) {
 // ____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, LimitOffset) {
   std::string kg = "<a> <b> <c> . <d> <e> <f> . <g> <h> <i> . <j> <k> <l>";
-  std::string objectQuery =
-      "SELECT ?s WHERE { ?s ?p ?o } ORDER BY ?s LIMIT 2 OFFSET 1";
   std::string expectedXml = makeXMLHeader({"s"}) +
                             R"(
   <result>
@@ -1358,38 +1358,46 @@ TEST(ExportQueryExecutionTrees, LimitOffset) {
   <result>
     <binding name="s"><uri>g</uri></binding>
   </result>)" + xmlTrailer;
-  TestCaseSelectQuery testCaseLimitOffset{
-      kg, objectQuery, 2,
-      // TSV
-      "?s\n"
-      "<d>\n"
-      "<g>\n",
-      // CSV
-      "s\n"
-      "d\n"
-      "g\n",
-      []() {
-        nlohmann::json j;
-        j.push_back(std::vector{
-            "<d>"s,
-        });
-        j.push_back(std::vector{
-            "<g>"s,
-        });
-        return j;
-      }(),
-      []() {
-        nlohmann::json j;
-        j["head"]["vars"].push_back("s");
-        auto& bindings = j["results"]["bindings"];
-        bindings.emplace_back();
-        bindings.back()["s"] = makeJSONBinding(std::nullopt, "uri", "d");
-        bindings.emplace_back();
-        bindings.back()["s"] = makeJSONBinding(std::nullopt, "uri", "g");
-        return j;
-      }(),
-      expectedXml};
-  runSelectQueryTestCase(testCaseLimitOffset);
+  // The `OrderBy` operation doesn't support the limit natively.
+  std::string_view objectQuery0 =
+      "SELECT ?s WHERE { ?s ?p ?o } ORDER BY ?s LIMIT 2 OFFSET 1";
+  // The `IndexScan` operation does support the limit natively.
+  std::string_view objectQuery1 =
+      "SELECT ?s WHERE { ?s ?p ?o } INTERNAL SORT BY ?s LIMIT 2 OFFSET 1";
+  for (auto objectQuery : {objectQuery0, objectQuery1}) {
+    TestCaseSelectQuery testCaseLimitOffset{
+        kg, std::string{objectQuery}, 2,
+        // TSV
+        "?s\n"
+        "<d>\n"
+        "<g>\n",
+        // CSV
+        "s\n"
+        "d\n"
+        "g\n",
+        []() {
+          nlohmann::json j;
+          j.push_back(std::vector{
+              "<d>"s,
+          });
+          j.push_back(std::vector{
+              "<g>"s,
+          });
+          return j;
+        }(),
+        []() {
+          nlohmann::json j;
+          j["head"]["vars"].push_back("s");
+          auto& bindings = j["results"]["bindings"];
+          bindings.emplace_back();
+          bindings.back()["s"] = makeJSONBinding(std::nullopt, "uri", "d");
+          bindings.emplace_back();
+          bindings.back()["s"] = makeJSONBinding(std::nullopt, "uri", "g");
+          return j;
+        }(),
+        expectedXml};
+    runSelectQueryTestCase(testCaseLimitOffset);
+  }
 }
 
 // ____________________________________________________________________________
@@ -1767,7 +1775,7 @@ TEST(ExportQueryExecutionTrees, verifyQleverJsonContainsValidMetadata) {
   std::this_thread::sleep_for(1ms);
 
   auto jsonStream = ExportQueryExecutionTrees::computeResultAsQLeverJSON(
-      pq, qet, timer, std::move(cancellationHandle));
+      pq, qet, pq._limitOffset, timer, std::move(cancellationHandle));
 
   std::string aggregateString{};
   for (std::string_view chunk : jsonStream) {
@@ -1833,19 +1841,19 @@ TEST(ExportQueryExecutionTrees, convertGeneratorForChunkedTransfer) {
     return res;
   };
 
-  cppcoro::generator<std::string> res;
+  std::optional<ad_utility::InputRangeTypeErased<std::string>> res;
   using namespace ::testing;
   EXPECT_NO_THROW((
       res = ExportQueryExecutionTrees::convertStreamGeneratorForChunkedTransfer(
           throwLate(true))));
-  EXPECT_THAT(consume(std::move(res)),
+  EXPECT_THAT(consume(std::move(res.value())),
               AllOf(HasSubstr("!!!!>># An error has occurred"),
                     HasSubstr("proper exception")));
 
   EXPECT_NO_THROW((
       res = ExportQueryExecutionTrees::convertStreamGeneratorForChunkedTransfer(
           throwLate(false))));
-  EXPECT_THAT(consume(std::move(res)),
+  EXPECT_THAT(consume(std::move(res.value())),
               AllOf(HasSubstr("!!!!>># An error has occurred"),
                     HasSubstr("A very strange")));
 }

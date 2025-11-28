@@ -7,8 +7,6 @@
 #ifndef QLEVER_SRC_LIBQLEVER_QLEVER_H
 #define QLEVER_SRC_LIBQLEVER_QLEVER_H
 
-#include <util/MemorySize/MemorySize.h>
-
 #include <optional>
 #include <string>
 #include <utility>
@@ -21,6 +19,7 @@
 #include "index/Index.h"
 #include "index/InputFileSpecification.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/MemorySize/MemorySize.h"
 #include "util/http/MediaTypes.h"
 
 namespace qlever {
@@ -221,8 +220,13 @@ class Qlever {
                         ad_utility::MediaType::sparqlJson) const;
 
   // Plan, parse, and execute the given `query` and pin the result to the cache
-  // with the given `name`. This result can then be reused in a query as
-  // follows: `SERVICE ql:cached-result-with-name-<name> {}`.
+  // with the given options (name and possibly request for building a geometry
+  // index). This result can then be reused in a query as follows: `SERVICE
+  // ql:cached-result-with-name-<name> {}`.
+  void queryAndPinResultWithName(
+      QueryExecutionContext::PinResultWithName options, std::string query);
+  // Shorthand using only the name and no geo index for convenience and
+  // compatibility.
   void queryAndPinResultWithName(std::string name, std::string query);
 
   // Clear the result with the given `name` from the cache.

@@ -208,8 +208,8 @@ using all_t = decltype(allView(std::declval<Range>()));
 // view is destroyed, or the iteration reaches `end`, whichever happens first,
 // the given `callback` is invoked.
 CPP_template(typename V, typename F)(
-    requires ql::ranges::input_range<V> CPP_and
-        ql::ranges::view<V>&& std::invocable<F&>) class CallbackOnEndView
+    requires ql::ranges::input_range<V> CPP_and ql::ranges::view<V>&&
+        ql::concepts::invocable<F&>) class CallbackOnEndView
     : public ql::ranges::view_interface<CallbackOnEndView<V, F>> {
  private:
   V base_;
@@ -250,7 +250,12 @@ CPP_template(typename V, typename F)(
 
     void operator++(int) { ++(*this); }
 
-    bool operator==(ql::ranges::sentinel_t<V> s) const { return current_ == s; }
+    using Sent = ranges::sentinel_t<V>;
+    bool operator==(Sent s) const { return current_ == s; }
+    bool operator!=(Sent s) const { return current_ != s; }
+
+    friend bool operator==(Sent s, Iterator i) { return i.current_ == s; }
+    friend bool operator!=(Sent s, Iterator i) { return i.current_ != s; }
   };
 
  public:
@@ -278,7 +283,7 @@ CallbackOnEndView(R&&, F) -> CallbackOnEndView<all_t<R>, F>;
 // A drop-in replacement for `std::views::as_rvalue` from C++23.
 // It yields the same elements as the underlying range, but casts them to
 // rvalue references via `std::move`. It is implemented via
-// `std::make_move_iterator`.
+// `ql::make_move_iterator`.
 CPP_template(typename UnderlyingRange)(
     requires ql::ranges::view<UnderlyingRange> CPP_and
         ql::ranges::input_range<UnderlyingRange>) class RvalueView
@@ -318,11 +323,11 @@ CPP_template(typename UnderlyingRange)(
   // Note: We currently don't implement the const `begin` and `end` functions,
   // but they can be added should they ever become necessary.
   constexpr auto begin() {
-    return std::make_move_iterator(ql::ranges::begin(underlyingRange_));
+    return ql::make_move_iterator(ql::ranges::begin(underlyingRange_));
   }
   constexpr auto end() {
     if constexpr (ql::ranges::common_range<UnderlyingRange>) {
-      return std::move_iterator{ql::ranges::end(underlyingRange_)};
+      return ql::move_iterator{ql::ranges::end(underlyingRange_)};
     } else {
       return ql::move_sentinel(ql::ranges::end(underlyingRange_));
     }
@@ -391,12 +396,14 @@ CPP_template(typename V)(requires ql::ranges::view<V> CPP_and
     DISABLE_WARNINGS_GCC_TEMPLATE_FRIEND
     friend bool operator==(const Iterator& it, const Sentinel& s);
     friend bool operator!=(const Iterator& it, const Sentinel& s);
+    friend bool operator==(const Sentinel& s, const Iterator& it);
+    friend bool operator!=(const Sentinel& s, const Iterator& it);
     GCC_REENABLE_WARNINGS
   };
 
   class Sentinel {
    private:
-    std::ranges::sentinel_t<V> end_;
+    ql::ranges::sentinel_t<V> end_;
 
    public:
     Sentinel() = default;
@@ -408,6 +415,13 @@ CPP_template(typename V)(requires ql::ranges::view<V> CPP_and
 
     friend bool operator!=(const Iterator& it, const Sentinel& s) {
       return !(it == s);
+    }
+
+    friend bool operator==(const Sentinel& s, const Iterator& it) {
+      return it == s;
+    }
+    friend bool operator!=(const Sentinel& s, const Iterator& it) {
+      return it != s;
     }
   };
 
@@ -426,9 +440,9 @@ CPP_template(typename V)(requires ql::ranges::view<V> CPP_and
   Iterator begin() {
     AD_CONTRACT_CHECK(!std::exchange(beginWasCalled_, true),
                       "Begin was called multiple times on an `input_range`");
-    return Iterator{std::ranges::begin(base_)};
+    return Iterator{ql::ranges::begin(base_)};
   }
-  Sentinel end() { return Sentinel{std::ranges::end(base_)}; }
+  Sentinel end() { return Sentinel{ql::ranges::end(base_)}; }
 };
 
 // Deduction guides
@@ -504,10 +518,11 @@ auto bufferedAsyncView(View view, uint64_t blockSize) {
 // `ql::views::iota(0, size_t(INT_MAX) + 1)` leads to undefined behavior
 // because of an integer overflow, but `ad_utility::integerRange(size_t(INT_MAX)
 // + 1)` is perfectly safe and behaves as expected.
-CPP_template(typename Int)(
-    requires std::unsigned_integral<Int>) auto integerRange(Int upperBound) {
+CPP_template(typename Int)(requires ql::concepts::unsigned_integral<
+                           Int>) auto integerRange(Int upperBound) {
   return ql::views::iota(Int{0}, upperBound);
 }
+
 }  // namespace ad_utility
 
 // Enabling of "borrowed" ranges for `OwningView, RvalueView, and

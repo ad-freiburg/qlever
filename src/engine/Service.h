@@ -8,8 +8,7 @@
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
-#include <functional>
-
+#include "backports/functional.h"
 #include "engine/Operation.h"
 #include "engine/VariableToColumnMap.h"
 #include "parser/ParsedQuery.h"
