@@ -371,6 +371,16 @@ struct UnitOfMeasurementValueGetter : Mixin<UnitOfMeasurementValueGetter> {
   static UnitOfMeasurement litOrIriToUnit(const LiteralOrIri& s);
 };
 
+// This value getter retrieves geometries: `GeoPoints` or literals with
+// `geo:wktLiteral` datatype.
+struct GeoPointOrWktValueGetter : Mixin<GeoPointOrWktValueGetter> {
+  using Mixin<GeoPointOrWktValueGetter>::operator();
+  std::optional<ad_utility::GeoPointOrWkt> operator()(
+      ValueId id, const EvaluationContext*) const;
+  std::optional<ad_utility::GeoPointOrWkt> operator()(
+      const LiteralOrIri&, const EvaluationContext*) const;
+};
+
 // `LanguageTagValueGetter` returns an `std::optional<std::string>` object
 // which contains the language tag if previously set w.r.t. given
 // `Id`/`Literal`. This ValueGetter is currently used within

@@ -30,7 +30,8 @@ int main(int argc, char** argv) {
   std::cout << "\x1b[1mBuilding index for input file \"" << inputFile << "\""
             << " with basename \"" << indexBasename << "\x1b[0m" << std::endl;
   qlever::IndexBuilderConfig config;
-  config.inputFiles_.emplace_back(inputFile, qlever::Filetype::Turtle);
+  config.inputFiles_.push_back(
+      {inputFile, qlever::Filetype::Turtle, std::nullopt});
   config.baseName_ = indexBasename;
   try {
     qlever::Qlever::buildIndex(config);

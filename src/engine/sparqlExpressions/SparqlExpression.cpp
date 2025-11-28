@@ -85,13 +85,6 @@ std::optional<::Variable> SparqlExpression::getVariableOrNullopt() const {
 }
 
 // _____________________________________________________________________________
-bool SparqlExpression::containsLangExpression() const {
-  return ql::ranges::any_of(children(), [](const SparqlExpression::Ptr& child) {
-    return child->containsLangExpression();
-  });
-}
-
-// _____________________________________________________________________________
 bool SparqlExpression::isYearExpression() const { return false; }
 
 // _____________________________________________________________________________

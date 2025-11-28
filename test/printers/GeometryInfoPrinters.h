@@ -71,6 +71,24 @@ inline void PrintTo(const GeometryInfo& gi, std::ostream* os) {
   s << ")";
 }
 
+// _____________________________________________________________________________
+inline void PrintTo(const GeoPointOrWkt& g, std::ostream* os) {
+  auto& s = *os;
+  s << "GeoPointOrWkt(";
+  std::visit(
+      [&](auto& contained) {
+        using T = std::decay_t<decltype(contained)>;
+        if constexpr (std::is_same_v<T, GeoPoint>) {
+          s << contained.toStringRepresentation();
+        } else {
+          static_assert(std::is_same_v<T, std::string>);
+          s << contained;
+        }
+      },
+      g);
+  s << ")";
+}
+
 }  // namespace ad_utility
 
 #endif  // QLEVER_TEST_PRINTERS_GEOMETRYINFOPRINTERS_H
