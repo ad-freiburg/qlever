@@ -110,7 +110,7 @@ jobs:
       - name: "Move qlever sources up"
         run: shopt -s dotglob && mv qlever-source/* .
       - name: Install Build Wrapper
-        uses: SonarSource/sonarqube-scan-action/install-build-wrapper@6
+        uses: SonarSource/sonarqube-scan-action/install-build-wrapper@v6
       - name: Install dependencies
         uses: ./.github/workflows/install-dependencies-ubuntu
       - name: Install compiler
