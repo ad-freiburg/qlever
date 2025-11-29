@@ -32,46 +32,23 @@ using valueIdComparators::Comparison;
 // case where `S` is `string` or `vector<string>`. In this case the generator
 // yields `pair<ValueId, ValueId>` (see `makeValueId` and `getRangeFromVocab`
 // above for details).
-
-// First the `idGenerator` for constants (string, int, double). It yields the
-// same ID `targetSize` many times.
-CPP_template(typename S)(
-    requires SingleExpressionResult<S> CPP_and
-        isConstantResult<S>) auto idGenerator(const S& value, size_t targetSize,
-                                              const EvaluationContext* context)
-    -> cppcoro::generator<const decltype(makeValueId(value, context))> {
-  auto id = makeValueId(value, context);
-  for (size_t i = 0; i < targetSize; ++i) {
-    co_yield id;
+CPP_template(typename S)(requires SingleExpressionResult<S>) auto idGenerator(
+    S&& input, size_t targetSize, const EvaluationContext* context) {
+  [[maybe_unused]] auto makeId = [context](const auto& el) {
+    return makeValueId(el, context);
+  };
+  if constexpr (isConstantResult<S>) {
+    return ::ranges::views::repeat_n(makeId(input), targetSize);
+  } else if constexpr (isVectorResult<S>) {
+    AD_CONTRACT_CHECK(targetSize == input.size());
+    return ::ranges::views::transform(ad_utility::allView(AD_FWD(input)),
+                                      makeId);
+  } else {
+    static_assert(
+        ad_utility::SimilarToAny<S, Variable, ad_utility::SetOfIntervals>);
+    return sparqlExpression::detail::makeGenerator(AD_FWD(input), targetSize,
+                                                   context);
   }
-}
-
-// Version of `idGenerator` for vectors. Asserts that the size of the vector is
-// equal to `targetSize` and the yields the corresponding ID for each of the
-// elements in the vector.
-CPP_template(typename S)(
-    requires SingleExpressionResult<S> CPP_and
-        isVectorResult<S>) auto idGenerator(const S& values, size_t targetSize,
-                                            const EvaluationContext* context)
-    -> cppcoro::generator<decltype(makeValueId(values[0], context))> {
-  AD_CONTRACT_CHECK(targetSize == values.size());
-  for (const auto& el : values) {
-    auto id = makeValueId(el, context);
-    co_yield id;
-  }
-}
-
-// For the `Variable` and `SetOfIntervals` class, the generator from the
-// `sparqlExpressions` module already yields the `ValueIds`.
-CPP_template(typename S)(
-    requires ad_utility::SimilarToAny<
-        S, Variable,
-        ad_utility::SetOfIntervals>) auto idGenerator(S input,
-                                                      size_t targetSize,
-                                                      const EvaluationContext*
-                                                          context) {
-  return sparqlExpression::detail::makeGenerator(std::move(input), targetSize,
-                                                 context);
 }
 
 // Return a pair of generators that generate the values from `value1` and
