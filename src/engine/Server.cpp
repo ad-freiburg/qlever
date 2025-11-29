@@ -21,6 +21,7 @@
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/GraphStoreProtocol.h"
 #include "engine/HttpError.h"
+#include "engine/MaterializedViews.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryPlanner.h"
 #include "engine/SparqlProtocol.h"
@@ -28,6 +29,7 @@
 #include "index/IndexImpl.h"
 #include "parser/SparqlParser.h"
 #include "util/AsioHelpers.h"
+#include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseableDuration.h"
 #include "util/TimeTracer.h"
@@ -88,6 +90,8 @@ void Server::initialize(const std::string& indexBaseName, bool useText,
   if (useText) {
     index_.addTextFromOnDiskIndex();
   }
+
+  materializedViewsManager_.setOnDiskBase(indexBaseName);
 
   sortPerformanceEstimator_.computeEstimatesExpensively(
       allocator_, index_.numTriples().normalAndInternal_() *
@@ -305,7 +309,8 @@ auto Server::prepareOperation(
       << ad_utility::truncateOperationString(operationSPARQL) << std::endl;
   QueryExecutionContext qec(index_, &cache_, allocator_,
                             sortPerformanceEstimator_, &namedResultCache_,
-                            std::ref(messageSender), pinSubtrees, pinResult);
+                            &materializedViewsManager_, std::ref(messageSender),
+                            pinSubtrees, pinResult);
 
   configurePinnedResultWithName(pinResultWithName, pinNamedGeoIndex,
                                 accessTokenOk, qec);
@@ -453,6 +458,60 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     for (auto& [key, value] : queryRegistry_.getActiveQueries()) {
       json[nlohmann::json(key)] = std::move(value);
     }
+    response = createJsonResponse(json, request);
+  } else if (auto cmd = checkParameter("cmd", "write-materialized-view")) {
+    requireValidAccessToken("write-materialized-view");
+    logCommand(cmd, "write materialized view");
+
+    auto name = ad_utility::url_parser::getParameterCheckAtMostOnce(
+        parameters, "view-name");
+    AD_CONTRACT_CHECK(name.has_value(),
+                      "Writing a materialized view requires a name to be set "
+                      "via the 'view-name' parameter");
+    AD_CONTRACT_CHECK(name.value() != "",
+                      "The name for the view may not be empty");
+
+    auto cancellationHandle =
+        std::make_shared<ad_utility::CancellationHandle<>>();
+    auto query = std::visit(
+        [](const auto& op) -> Query {
+          using T = std::decay_t<decltype(op)>;
+          if constexpr (std::is_same_v<T, Query>) {
+            return op;
+          } else {
+            static_assert(
+                ad_utility::SameAsAny<T, Update, GraphStoreOperation, None>);
+            throw std::runtime_error(
+                "Action 'write-materialized-view' requires a 'SELECT' query.");
+          }
+        },
+        parsedHttpRequest.operation_);
+    auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
+        checkParameter("timeout", std::nullopt), accessTokenOk, request, send);
+    AD_CONTRACT_CHECK(timeLimit.has_value(), "Missing timeout");
+
+    auto coroutine = computeInNewThread(
+        queryThreadPool_,
+        [name, query, requestTimer, cancellationHandle, timeLimit, this] {
+          writeMaterializedView(name.value(), query, requestTimer,
+                                cancellationHandle, timeLimit.value());
+        },
+        cancellationHandle);
+    co_await std::move(coroutine);
+
+    nlohmann::json json{{"materialized-view-written", name.value()}};
+    response = createJsonResponse(json, request);
+
+    // Prevent regular query processing by removing the query from the request
+    parsedHttpRequest.operation_ = None{};
+  } else if (auto cmd = checkParameter("cmd", "load-materialized-view")) {
+    requireValidAccessToken("load-materialized-view");
+    logCommand(cmd, "explicitly load materialized view");
+    auto name = ad_utility::url_parser::getParameterCheckAtMostOnce(
+        parameters, "view-name");
+    AD_CONTRACT_CHECK(name.has_value());
+    materializedViewsManager_.loadView(name.value());
+    nlohmann::json json{{"materialized-view-loaded", name.value()}};
     response = createJsonResponse(json, request);
   }
 
@@ -1280,3 +1339,51 @@ void Server::adjustParsedQueryLimitOffset(
     exportLimit = std::stoul(sendParameter.value());
   }
 }
+
+// _____________________________________________________________________________
+void Server::writeMaterializedView(
+    const std::string& name, const Query& query,
+    const ad_utility::Timer& requestTimer,
+    ad_utility::SharedCancellationHandle cancellationHandle,
+    TimeLimit timeLimit) {
+  auto parsedQuery = SparqlParser::parseQuery(
+      &index_.encodedIriManager(), query.query_, query.datasetClauses_);
+  auto qec = std::make_shared<QueryExecutionContext>(
+      index_, &cache_, allocator_, sortPerformanceEstimator_,
+      &namedResultCache_, &materializedViewsManager_);
+  auto plan = planQuery(std::move(parsedQuery), requestTimer, timeLimit, *qec,
+                        cancellationHandle);
+  auto qet =
+      std::make_shared<QueryExecutionTree>(std::move(plan.queryExecutionTree_));
+  auto memoryLimit =
+      getRuntimeParameter<&RuntimeParameters::materializedViewWriterMemory_>();
+  MaterializedViewWriter::writeViewToDisk(
+      name, {qet, qec, std::move(plan.parsedQuery_)}, memoryLimit);
+}
+
+// For helper function `Server::onlyForTestingProcess`
+using NonStreamedResponse = http::response<http::string_body>;
+using SimpleRequest = http::request<http::string_body>;
+
+// _____________________________________________________________________________
+// TODO<review> We get obscure compiler errors on some compilers if we use the
+// `CPP_template_def` polyfill here. Why?
+template <typename RequestT, typename ResponseT>
+requires ad_utility::httpUtils::HttpRequest<RequestT>
+Awaitable<ResponseT> Server::onlyForTestingProcess(RequestT& request) {
+  ResponseT res;
+  auto mockSend = [&](auto response) -> Awaitable<void> {
+    using T = std::decay_t<decltype(response)>;
+    // At the moment only non-streamed results are returned
+    if constexpr (std::is_same_v<T, NonStreamedResponse>) {
+      res = std::optional{response};
+    }
+    co_return;
+  };
+  co_await process(request, mockSend);
+  co_return res;
+}
+
+// Explicit template instantiation for unit test helper function
+template Awaitable<std::optional<NonStreamedResponse>>
+Server::onlyForTestingProcess(SimpleRequest&);
