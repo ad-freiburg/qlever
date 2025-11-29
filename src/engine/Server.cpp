@@ -921,6 +921,11 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   MediaType mediaType =
       chooseBestFittingMediaType(mediaTypes, plannedQuery.value().parsedQuery_);
 
+  // Only post updates when we export a qlever json.
+  if (mediaType != MediaType::qleverJson) {
+    qec.areWebsocketUpdatesEnabled_ = false;
+  }
+
   // Update the `PlannedQuery` with the export limit when the response
   // content-type is `application/qlever-results+json` and ensure that the
   // offset is not applied twice when exporting the query.
