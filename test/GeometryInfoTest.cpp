@@ -50,7 +50,7 @@ constexpr std::string_view litInvalidBrackets =
     "\"POLYGON)2 4, 4 4, 4 2, 2 2(\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 constexpr std::string_view litInvalidNumCoords =
-    "\"POINT(1)\""
+    "\"LINESTRING(1)\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 constexpr std::string_view litCoordOutOfRange =
     "\"LINESTRING(2 -500, 4 4)\""

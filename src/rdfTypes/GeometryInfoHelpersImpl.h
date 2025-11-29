@@ -18,6 +18,7 @@
 #include <iostream>
 #include <memory>
 #include <range/v3/numeric/accumulate.hpp>
+#include <stdexcept>
 #include <string_view>
 #include <type_traits>
 #include <utility>
@@ -85,24 +86,54 @@ inline ParseResult parseWkt(const std::string_view& wkt) {
       case POINT:
         parsed = pointFromWKT<CoordType>(wktLiteral);
         break;
-      case LINESTRING:
-        parsed = lineFromWKT<CoordType>(wktLiteral);
+      case LINESTRING: {
+        auto line = lineFromWKT<CoordType>(wktLiteral);
+        if (line.empty()) {
+          throw std::runtime_error("Cannot parse line from WKT");
+        }
+        parsed = line;
         break;
-      case POLYGON:
-        parsed = polygonFromWKT<CoordType>(wktLiteral);
+      }
+      case POLYGON: {
+        auto polygon = polygonFromWKT<CoordType>(wktLiteral);
+        if (polygon.getOuter().empty()) {
+          throw std::runtime_error("Cannot parse polygon from WKT");
+        }
+        parsed = polygon;
         break;
-      case MULTIPOINT:
-        parsed = multiPointFromWKT<CoordType>(wktLiteral);
+      }
+      case MULTIPOINT: {
+        auto multipoint = multiPointFromWKT<CoordType>(wktLiteral);
+        if (multipoint.empty()) {
+          throw std::runtime_error("Cannot parse multipoint from WKT");
+        }
+        parsed = multipoint;
         break;
-      case MULTILINESTRING:
-        parsed = multiLineFromWKT<CoordType>(wktLiteral);
+      }
+      case MULTILINESTRING: {
+        auto multiline = multiLineFromWKT<CoordType>(wktLiteral);
+        if (multiline.empty()) {
+          throw std::runtime_error("Cannot parse multiline from WKT");
+        }
+        parsed = multiline;
         break;
-      case MULTIPOLYGON:
-        parsed = multiPolygonFromWKT<CoordType>(wktLiteral);
+      }
+      case MULTIPOLYGON: {
+        auto multipolygon = multiPolygonFromWKT<CoordType>(wktLiteral);
+        if (multipolygon.empty()) {
+          throw std::runtime_error("Cannot parse multipolygon from WKT");
+        }
+        parsed = multipolygon;
         break;
-      case COLLECTION:
-        parsed = collectionFromWKT<CoordType>(wktLiteral);
+      }
+      case COLLECTION: {
+        auto collection = collectionFromWKT<CoordType>(wktLiteral);
+        if (collection.empty()) {
+          throw std::runtime_error("Cannot parse collection from WKT");
+        }
+        parsed = collection;
         break;
+      }
       case NONE:
       default:
         break;
