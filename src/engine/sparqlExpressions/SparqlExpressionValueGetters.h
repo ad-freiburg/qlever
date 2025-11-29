@@ -20,6 +20,7 @@
 #include "util/ConstexprSmallString.h"
 #include "util/LruCache.h"
 #include "util/TypeTraits.h"
+#include "util/UnitOfMeasurement.h"
 
 /// Several classes that can be used as the `ValueGetter` template
 /// argument in the SparqlExpression templates in `SparqlExpression.h`
@@ -368,6 +369,16 @@ struct UnitOfMeasurementValueGetter : Mixin<UnitOfMeasurementValueGetter> {
   // `EvaluationContext` is available. Currently used for `geof:distance` filter
   // substitution during query planning.
   static UnitOfMeasurement litOrIriToUnit(const LiteralOrIri& s);
+};
+
+// This value getter retrieves geometries: `GeoPoints` or literals with
+// `geo:wktLiteral` datatype.
+struct GeoPointOrWktValueGetter : Mixin<GeoPointOrWktValueGetter> {
+  using Mixin<GeoPointOrWktValueGetter>::operator();
+  std::optional<ad_utility::GeoPointOrWkt> operator()(
+      ValueId id, const EvaluationContext*) const;
+  std::optional<ad_utility::GeoPointOrWkt> operator()(
+      const LiteralOrIri&, const EvaluationContext*) const;
 };
 
 // `LanguageTagValueGetter` returns an `std::optional<std::string>` object

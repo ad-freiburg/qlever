@@ -8,6 +8,7 @@
 #include <future>
 #include <utility>
 
+#include "backports/iterator.h"
 #include "util/Exception.h"
 #include "util/Log.h"
 #include "util/Timer.h"
@@ -308,7 +309,7 @@ class BatchedPipeline {
   template <typename It, typename ResIt, typename TransformerPtr>
   static void moveAndTransform(It beg, It end, ResIt res,
                                TransformerPtr transformer) {
-    std::transform(std::make_move_iterator(beg), std::make_move_iterator(end),
+    std::transform(ql::make_move_iterator(beg), ql::make_move_iterator(end),
                    res,
                    [transformer](typename std::decay_t<decltype(*beg)>&& x) {
                      return (*transformer)(std::move(x));

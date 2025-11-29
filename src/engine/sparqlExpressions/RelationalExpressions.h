@@ -89,6 +89,8 @@ class InExpression : public SparqlExpression {
       uint64_t inputSizeEstimate,
       const std::optional<Variable>& firstSortedVariable) const override;
 
+  std::optional<LangFilterData> getLanguageFilterExpression() const override;
+
  private:
   ql::span<SparqlExpression::Ptr> childrenImpl() override;
 };

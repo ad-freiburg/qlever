@@ -157,6 +157,9 @@ class Permutation {
   const std::string& readableName() const { return readableName_; }
 
   // _______________________________________________________
+  const std::string& onDiskBase() const { return onDiskBase_; }
+
+  // _______________________________________________________
   const std::string& fileSuffix() const { return fileSuffix_; }
 
   // _______________________________________________________
@@ -191,6 +194,8 @@ class Permutation {
   }
 
  private:
+  // The base filename of the permutation without the suffix below
+  std::string onDiskBase_;
   // Readable name for this permutation, e.g., `POS`.
   std::string readableName_;
   // File name suffix for this permutation, e.g., `.pos`.

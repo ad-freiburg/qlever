@@ -1089,8 +1089,8 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromNegated(
       descriptor << " && ";
       appendNotEqualString(descriptor, iri, variable);
     }
-    pattern._filters.emplace_back(SparqlExpressionPimpl{
-        std::move(expression), std::move(descriptor).str()});
+    pattern._filters.push_back({SparqlExpressionPimpl{
+        std::move(expression), std::move(descriptor).str()}});
     return pattern;
   };
   // If only one direction is negated, only return the pattern for that
@@ -1232,8 +1232,8 @@ std::vector<SubtreePlan> QueryPlanner::merge(
 
   if (isInTestMode()) {
     std::vector<std::pair<std::string, vector<SubtreePlan>>> sortedCandidates{
-        std::make_move_iterator(candidates.begin()),
-        std::make_move_iterator(candidates.end())};
+        ql::make_move_iterator(candidates.begin()),
+        ql::make_move_iterator(candidates.end())};
     std::sort(sortedCandidates.begin(), sortedCandidates.end(),
               [](const auto& a, const auto& b) { return a.first < b.first; });
     pruneCandidates(sortedCandidates);
@@ -1701,7 +1701,7 @@ QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
     // Check if the filter expression is suitable for spatial join optimization
     auto sjConfig = rewriteFilterToSpatialJoinConfig(filterExpression);
     if (!sjConfig.has_value()) {
-      plans.emplace_back(filterExpression, std::nullopt);
+      plans.push_back({filterExpression, std::nullopt});
     } else {
       // Construct spatial join
       auto plan = makeSubtreePlan<SpatialJoin>(
@@ -1709,7 +1709,7 @@ QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
       // Mark that this subtree plan handles (that is, substitutes) the filter
       plan._idsOfIncludedFilters |= 1ULL << i;
       plan.containsFilterSubstitute_ = true;
-      plans.emplace_back(filterExpression, std::move(plan));
+      plans.push_back({filterExpression, std::move(plan)});
     }
   }
   return plans;
@@ -2118,7 +2118,7 @@ size_t QueryPlanner::findSmallestExecutionTree(
   AD_CONTRACT_CHECK(!lastRow.empty());
   auto compare = [](const auto& a, const auto& b) {
     auto tie = [](const auto& x) {
-      return std::tuple{x.getSizeEstimate(), x.getSizeEstimate()};
+      return std::make_tuple(x.getSizeEstimate(), x.getSizeEstimate());
     };
     return tie(a) < tie(b);
   };
@@ -2367,7 +2367,11 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(const SubtreePlan& a,
     auto unionOperation =
         std::dynamic_pointer_cast<Union>(thisPlan._qet->getRootOperation());
 
-    if (!unionOperation) {
+    // Prevent multiplying out two `UNION`s that are joined with each other.
+    // This can create too many possibilities and make the query planner run out
+    // of memory and crash the system.
+    if (!unionOperation ||
+        std::dynamic_pointer_cast<Union>(other._qet->getRootOperation())) {
       return;
     }
 
@@ -2432,7 +2436,7 @@ QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
     if (transitiveCol >= graphColIndex) {
       return std::nullopt;
     }
-    return std::tuple{transitiveCol, otherCol};
+    return std::make_tuple(transitiveCol, otherCol);
   }
 
   // At this point, we know that we have exactly two pairs of join columns,
@@ -2445,14 +2449,14 @@ QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
   size_t otherColB = jcs[1][otherIndex];
   if (transitiveColA < graphColIndex) {
     if (transitiveColB == graphColIndex) {
-      return std::tuple{transitiveColA, otherColA};
+      return std::make_tuple(transitiveColA, otherColA);
     }
     // We currently don't support binding two regular columns at once
     return std::nullopt;
   }
   AD_CORRECTNESS_CHECK(transitiveColB < graphColIndex);
   AD_CORRECTNESS_CHECK(transitiveColA == graphColIndex);
-  return std::tuple{transitiveColB, otherColB};
+  return std::make_tuple(transitiveColB, otherColB);
 #endif
 }
 
@@ -2894,8 +2898,8 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
         plan.containsFilterSubstitute_ = a.containsFilterSubstitute_;
       }
       nextCandidates.insert(nextCandidates.end(),
-                            std::make_move_iterator(vec.begin()),
-                            std::make_move_iterator(vec.end()));
+                            ql::make_move_iterator(vec.begin()),
+                            ql::make_move_iterator(vec.end()));
     }
   }
 
@@ -3039,9 +3043,9 @@ void QueryPlanner::GraphPatternPlanner::visitBasicGraphPattern(
       auto children = planner_.seedFromPropertyPath(
           triple.s_, std::get<PropertyPath>(triple.p_), triple.o_);
       for (auto& child : children._graphPatterns) {
-        std::visit([self = this](
-                       auto& arg) { self->graphPatternOperationVisitor(arg); },
-                   child);
+        child.visit([self = this](auto& arg) {
+          self->graphPatternOperationVisitor(arg);
+        });
       }
       // Negated property paths can contain filters
       ql::ranges::move(children._filters,
