@@ -41,10 +41,10 @@ class RuntimeInformation {
   };
   using enum Status;
 
-  // Indicate if a query update is important (query failure, start or
-  // completion) by using `Always`, or of minor importance (which may cause it
-  // to by the message throttler).
-  enum class Send { IfDue, Always };
+  // The priority with which to send updated runtime information. With `IfDue`,
+  // the update is only sent if a certain amount of time has passed since the
+  // last update. With `Always`, the update is always sent.
+  enum class SendPriority { IfDue, Always };
 
   // Public members
 

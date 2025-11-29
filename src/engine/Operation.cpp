@@ -141,7 +141,7 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
   AD_CONTRACT_CHECK(computationMode != ComputationMode::ONLY_IF_CACHED);
   checkCancellation();
   runtimeInfo().status_ = RuntimeInformation::Status::inProgress;
-  signalQueryUpdate(RuntimeInformation::Send::Always);
+  signalQueryUpdate(RuntimeInformation::SendPriority::Always);
   Result result =
       computeResult(computationMode == ComputationMode::LAZY_IF_SUPPORTED);
   AD_CONTRACT_CHECK(computationMode == ComputationMode::LAZY_IF_SUPPORTED ||
@@ -205,13 +205,13 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
                              ", Ø = ", vocabStats.avgSize(),
                              ", max = ", vocabStats.maxSize_));
           }
-          signalQueryUpdate(RuntimeInformation::Send::IfDue);
+          signalQueryUpdate(RuntimeInformation::SendPriority::IfDue);
         },
         [this](bool failed) {
           if (failed) {
             runtimeInfo().status_ = RuntimeInformation::failed;
           }
-          signalQueryUpdate(RuntimeInformation::Send::Always);
+          signalQueryUpdate(RuntimeInformation::SendPriority::Always);
         });
   }
   // Apply LIMIT and OFFSET, but only if the call to `computeResult` did not
@@ -300,7 +300,7 @@ std::shared_ptr<const Result> Operation::getResult(
     _runtimeInfo = std::make_shared<RuntimeInformation>();
     // Start with an estimated runtime info which will be updated as we go.
     createRuntimeInfoFromEstimates(getRuntimeInfoPointer());
-    signalQueryUpdate(RuntimeInformation::Send::Always);
+    signalQueryUpdate(RuntimeInformation::SendPriority::Always);
   }
   auto& cache = _executionContext->getQueryTreeCache();
   const QueryCacheKey cacheKey = {
@@ -500,7 +500,7 @@ void Operation::updateRuntimeInformationOnSuccess(
           child->getRootOperation()->getRuntimeInfoPointer());
     }
   }
-  signalQueryUpdate(RuntimeInformation::Send::Always);
+  signalQueryUpdate(RuntimeInformation::SendPriority::Always);
 }
 
 // _____________________________________________________________________________
@@ -527,7 +527,7 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
                          ql::views::transform(&RuntimeInformation::totalTime_);
   _runtimeInfo->totalTime_ = ::ranges::accumulate(timesOfChildren, 0us);
 
-  signalQueryUpdate(RuntimeInformation::Send::Always);
+  signalQueryUpdate(RuntimeInformation::SendPriority::Always);
 }
 
 // _____________________________________________________________________________
@@ -541,7 +541,7 @@ void Operation::updateRuntimeInformationWhenOptimizedOut() {
   };
   setStatus(*_runtimeInfo, setStatus);
 
-  signalQueryUpdate(RuntimeInformation::Send::Always);
+  signalQueryUpdate(RuntimeInformation::SendPriority::Always);
 }
 
 // _______________________________________________________________________
@@ -554,7 +554,7 @@ void Operation::updateRuntimeInformationOnFailure(Milliseconds duration) {
   _runtimeInfo->totalTime_ = duration;
   _runtimeInfo->status_ = RuntimeInformation::Status::failed;
 
-  signalQueryUpdate(RuntimeInformation::Send::Always);
+  signalQueryUpdate(RuntimeInformation::SendPriority::Always);
 }
 
 // __________________________________________________________________
@@ -684,9 +684,10 @@ const std::vector<ColumnIndex>& Operation::getResultSortedOn() const {
 
 // _____________________________________________________________________________
 
-void Operation::signalQueryUpdate(RuntimeInformation::Send send) const {
+void Operation::signalQueryUpdate(
+    RuntimeInformation::SendPriority sendPriority) const {
   if (_executionContext && _executionContext->areWebsocketUpdatesEnabled()) {
-    _executionContext->signalQueryUpdate(*_rootRuntimeInfo, send);
+    _executionContext->signalQueryUpdate(*_rootRuntimeInfo, sendPriority);
   }
 }
 

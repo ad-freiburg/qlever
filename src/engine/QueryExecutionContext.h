@@ -149,13 +149,12 @@ class QueryExecutionContext {
     return _allocator;
   }
 
-  // Function that serializes the given RuntimeInformation to JSON and calls the
-  // updateCallback with this JSON string. This is used to broadcast updates of
-  // any query to a third party while it's still running. `runtimeInformation`
-  // represents the `RuntimeInformation` to serialize. If `send` is set to
-  // `Send::Always`, this will bypass the message throttle.
+  // Serialize the given `runtimeInformation` to a JSON string and send it
+  // using `updateCallback_`. If `sendPriority` is set to `IfDue`, this only
+  // happens if the last update was sent more than `websocketUpdateInterval_`
+  // ago; if it is set to `Always`, the update is always sent.
   void signalQueryUpdate(const RuntimeInformation& runtimeInformation,
-                         RuntimeInformation::Send send) const;
+                         RuntimeInformation::SendPriority sendPriority) const;
 
   bool _pinSubtrees;
   bool _pinResult;
@@ -211,9 +210,14 @@ class QueryExecutionContext {
   // mutex. `areWebsocketUpdatesEnabled_` is exposed so it can be disabled at a
   // later point in time.
  public:
+  // Store the value of the `websocketUpdatesEnabled` runtime parameter. This
+  // avoid synchronization overhead on each access and allows us to change the
+  // value during query execution.
   bool areWebsocketUpdatesEnabled_ = areWebSocketUpdatesEnabled();
 
  private:
+  // Store the value of the `websocketUpdateInterval` runtime parameter, for
+  // the same reasons as above.
   std::chrono::milliseconds websocketUpdateInterval_ =
       websocketUpdateInterval();
 
@@ -225,8 +229,8 @@ class QueryExecutionContext {
   // `std::nullopt`, the result is not cached.
   std::optional<PinResultWithName> pinResultWithName_ = std::nullopt;
 
-  // Store the last time point when the last websocket update was sent. This is
-  // used for rate-limiting.
+  // The last point in time when a websocket update was sent. This is used for
+  // limiting the update frequency when `sendPriority` is `IfDue`.
   mutable std::chrono::steady_clock::time_point lastWebsocketUpdate_ =
       std::chrono::steady_clock::time_point::min();
 };

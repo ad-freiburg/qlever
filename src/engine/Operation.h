@@ -43,8 +43,9 @@ class Operation {
 
   std::shared_ptr<RuntimeInformation> _runtimeInfo =
       std::make_shared<RuntimeInformation>();
-  /// Pointer to the head of the `RuntimeInformation`.
-  /// Used in `signalQueryUpdate()`, reset in `createRuntimeInfoFromEstimates()`
+
+  // Pointer to the `RuntimeInformation` tree; used in `signalQueryUpdate()`,
+  // and reset in `createRuntimeInfoFromEstimates()`.
   std::shared_ptr<const RuntimeInformation> _rootRuntimeInfo = _runtimeInfo;
   RuntimeInformationWholeQuery _runtimeInfoWholeQuery;
 
@@ -241,10 +242,9 @@ class Operation {
     return _runtimeInfoWholeQuery;
   }
 
-  // Notify the `QueryExecutionContext` of the latest `RuntimeInformation`. If
-  // `send` is set to true, this will ensure the update ends up
-  // being transmitted. Otherwise it might get filtered out by the rate limiter.
-  void signalQueryUpdate(RuntimeInformation::Send send) const;
+  // Notify the `QueryExecutionContext` of the latest `RuntimeInformation` with
+  // the given `sendPriority` (`Always` or `IfDue`).
+  void signalQueryUpdate(RuntimeInformation::SendPriority sendPriority) const;
 
   /**
    * @brief Get the result for the subtree rooted at this element. Use existing

@@ -496,8 +496,9 @@ IndexScan::lazyScanForJoinOfColumnWithScan(
 }
 
 // _____________________________________________________________________________
-void IndexScan::updateRuntimeInfoForLazyScan(const LazyScanMetadata& metadata,
-                                             RuntimeInformation::Send send) {
+void IndexScan::updateRuntimeInfoForLazyScan(
+    const LazyScanMetadata& metadata,
+    RuntimeInformation::SendPriority sendPriority) {
   auto& rti = runtimeInfo();
   rti.status_ = RuntimeInformation::Status::lazilyMaterialized;
   rti.numRows_ = metadata.numElementsYielded_;
@@ -517,7 +518,7 @@ void IndexScan::updateRuntimeInfoForLazyScan(const LazyScanMetadata& metadata,
   updateIfPositive(metadata.numBlocksPostprocessed_,
                    "num-blocks-postprocessed");
   updateIfPositive(metadata.numBlocksWithUpdate_, "num-blocks-with-update");
-  signalQueryUpdate(send);
+  signalQueryUpdate(sendPriority);
 }
 
 // Store a Generator and its corresponding iterator as well as unconsumed values
@@ -667,7 +668,7 @@ Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
     std::shared_ptr<SharedGeneratorState> innerState) {
   using LoopControl = ad_utility::LoopControl<Result::IdTableVocabPair>;
   using namespace std::chrono_literals;
-  using enum RuntimeInformation::Send;
+  using enum RuntimeInformation::SendPriority;
 
   auto range = ad_utility::InputRangeFromLoopControlGet{
       [this, state = std::move(innerState),
