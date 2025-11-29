@@ -403,8 +403,14 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
 // _____________________________________________________________________________
 TEST(ExecuteUpdate, transformTriplesTemplate) {
   // Create an index for testing.
-  const auto qec = ad_utility::testing::getQec("<bar> <bar> \"foo\"");
-  const Index& index = qec->getIndex();
+  EncodedIriManager encodedIriManager({"http://example.org/"});
+  // <http://example.org/123> is an encoded IRI
+  ad_utility::testing::TestIndexConfig indexConfig{
+      "<bar> <bar> \"foo\" . <http://example.org/123> <http://qlever.dev/1> "
+      "\"baz\" ."};
+  indexConfig.encodedIriManager = encodedIriManager;
+  Index index = ad_utility::testing::makeTestIndex(
+      "_ExecuteUppdateTest_transformTriplesTemplate", indexConfig);
   // We need a non-const vocab for the test.
   auto& vocab = const_cast<Index::Vocab&>(index.getVocab());
 
@@ -449,15 +455,17 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
         component);
   };
   auto expectTransformTriplesTemplate =
-      [&vocab, &TripleComponentMatcher](
+      [&vocab, &TripleComponentMatcher, &encodedIriManager](
           const VariableToColumnMap& variableColumns,
           std::vector<SparqlTripleSimpleWithGraph>&& triples,
           const std::vector<std::array<TripleComponentT, 4>>&
-              expectedTransformedTriples) {
+              expectedTransformedTriples,
+          ad_utility::source_location sourceLocation =
+              AD_CURRENT_SOURCE_LOC()) {
+        auto loc = generateLocationTrace(sourceLocation);
         auto [transformedTriples, localVocab] =
-            ExecuteUpdate::transformTriplesTemplate(*encodedIriManager(), vocab,
-                                                    variableColumns,
-                                                    std::move(triples));
+            ExecuteUpdate::transformTriplesTemplate(encodedIriManager, vocab,
+                                                    variableColumns, triples);
         const auto transformedTriplesMatchers = ad_utility::transform(
             expectedTransformedTriples,
             [&localVocab, &TripleComponentMatcher](const auto& expectedTriple) {
@@ -471,13 +479,17 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
                     ElementsAreArray(transformedTriplesMatchers));
       };
   auto expectTransformTriplesTemplateFails =
-      [&vocab](const VariableToColumnMap& variableColumns,
-               std::vector<SparqlTripleSimpleWithGraph>&& triples,
-               const Matcher<const std::string&>& messageMatcher) {
-        AD_EXPECT_THROW_WITH_MESSAGE(ExecuteUpdate::transformTriplesTemplate(
-                                         *encodedIriManager(), vocab,
-                                         variableColumns, std::move(triples)),
-                                     messageMatcher);
+      [&vocab, &encodedIriManager](
+          const VariableToColumnMap& variableColumns,
+          std::vector<SparqlTripleSimpleWithGraph>&& triples,
+          const Matcher<const std::string&>& messageMatcher,
+          ad_utility::source_location sourceLocation =
+              AD_CURRENT_SOURCE_LOC()) {
+        auto loc = generateLocationTrace(sourceLocation);
+        AD_EXPECT_THROW_WITH_MESSAGE(
+            ExecuteUpdate::transformTriplesTemplate(
+                encodedIriManager, vocab, variableColumns, std::move(triples)),
+            messageMatcher);
       };
   // Transforming an empty vector of template results in no `TransformedTriple`s
   // and leaves the `LocalVocab` empty.
@@ -501,7 +513,7 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
       {},
       {SparqlTripleSimpleWithGraph{Literal("\"foo\""), Iri("<bar>"),
                                    Variable("?f"), Graph{}}},
-      HasSubstr("Assertion `variableColumns.contains(component.getVariable())` "
+      HasSubstr("Assertion `variableColumns.contains(tc.getVariable())` "
                 "failed."));
   expectTransformTriplesTemplateFails(
       {},
@@ -519,6 +531,13 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
       {SparqlTripleSimpleWithGraph{Literal("\"foo\""), Iri("<bar>"),
                                    Literal("\"foo\""), Graph{Variable("?f")}}},
       {{Id("\"foo\""), Id("<bar>"), Id("\"foo\""), 0UL}});
+  expectTransformTriplesTemplate(
+      {},
+      {SparqlTripleSimpleWithGraph{Iri("<http://example.org/123>"),
+                                   Iri("<http://qlever.dev/1>"),
+                                   Literal("\"baz\""), Graph{}}},
+      {{encodedIriManager.encode("<http://example.org/123>").value(),
+        Id("<http://qlever.dev/1>"), Id("\"baz\""), defaultGraphId}});
 }
 
 // _____________________________________________________________________________
