@@ -248,7 +248,7 @@ TEST(ServerTest, createResponseMetadata) {
       "ServerTest::createResponseMetadata tracer2");
   tracer2.endTrace("ServerTest::createResponseMetadata tracer2");
   json metadata = Server::createResponseMetadataForUpdate(
-      index, deltaTriples.getSnapshot(), plannedQuery,
+      index, deltaTriples.createVersionSnapshot(), plannedQuery,
       plannedQuery.queryExecutionTree_, updateMetadata, tracer2);
   json deltaTriplesJson{
       {"before", {{"inserted", 0}, {"deleted", 0}, {"total", 0}}},

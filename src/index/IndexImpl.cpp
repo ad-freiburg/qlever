@@ -1589,7 +1589,7 @@ Index::NumNormalAndInternal IndexImpl::numDistinctCol0(
 // ___________________________________________________________________________
 size_t IndexImpl::getCardinality(
     Id id, Permutation::Enum permutation,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+    const LocatedTriplesState& locatedTriplesSnapshot) const {
   if (const auto& meta =
           getPermutation(permutation).getMetadata(id, locatedTriplesSnapshot);
       meta.has_value()) {
@@ -1601,7 +1601,7 @@ size_t IndexImpl::getCardinality(
 // ___________________________________________________________________________
 size_t IndexImpl::getCardinality(
     const TripleComponent& comp, Permutation::Enum permutation,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+    const LocatedTriplesState& locatedTriplesSnapshot) const {
   // TODO<joka921> This special case is only relevant for the `PSO` and `POS`
   // permutations, but this internal predicate should never appear in subjects
   // or objects anyway.
@@ -1638,7 +1638,7 @@ Index::Vocab::PrefixRanges IndexImpl::prefixRanges(
 // _____________________________________________________________________________
 std::vector<float> IndexImpl::getMultiplicities(
     const TripleComponent& key, const Permutation& permutation,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+    const LocatedTriplesState& locatedTriplesSnapshot) const {
   if (auto keyId = key.toValueId(getVocab(), encodedIriManager())) {
     auto meta = permutation.getMetadata(keyId.value(), locatedTriplesSnapshot);
     if (meta.has_value()) {
@@ -1666,7 +1666,7 @@ IdTable IndexImpl::scan(
     const Permutation::Enum& permutation,
     Permutation::ColumnIndicesRef additionalColumns,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot,
+    const LocatedTriplesState& locatedTriplesSnapshot,
     const LimitOffsetClause& limitOffset) const {
   auto scanSpecification = scanSpecificationAsTc.toScanSpecification(*this);
   return scan(scanSpecification, permutation, additionalColumns,
@@ -1677,7 +1677,7 @@ IdTable IndexImpl::scan(
     const ScanSpecification& scanSpecification, Permutation::Enum p,
     Permutation::ColumnIndicesRef additionalColumns,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot,
+    const LocatedTriplesState& locatedTriplesSnapshot,
     const LimitOffsetClause& limitOffset) const {
   const auto& perm = getPermutation(p);
   return perm.scan(
@@ -1690,7 +1690,7 @@ IdTable IndexImpl::scan(
 size_t IndexImpl::getResultSizeOfScan(
     const ScanSpecification& scanSpecification,
     const Permutation::Enum& permutation,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+    const LocatedTriplesState& locatedTriplesSnapshot) const {
   const auto& perm = getPermutation(permutation);
   return perm.getResultSizeOfScan(
       perm.getScanSpecAndBlocks(scanSpecification, locatedTriplesSnapshot),

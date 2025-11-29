@@ -951,7 +951,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 }
 
 nlohmann::ordered_json Server::createResponseMetadataForUpdate(
-    const Index& index, SharedLocatedTriplesSnapshot snapshot,
+    const Index& index, LocatedTriplesVersion snapshot,
     const PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
     const UpdateMetadata& updateMetadata,
     const ad_utility::timer::TimeTracer& tracer) {
@@ -1045,63 +1045,59 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       [this, &requestTimer, &cancellationHandle, &updates, &qec, &timeLimit,
        &plannedUpdate, tracer]() {
         tracer->endTrace("waitingForUpdateThread");
-        json results = json::array();
-        // TODO<qup42> We currently create a new snapshot after each update in
-        // the chain, which is expensive. Instead, the updates could operate
-        // directly on the `DeltaTriples` (we have an exclusive lock on them
-        // anyway).
-        for (ParsedQuery& update : updates) {
-          // Make the snapshot before the query planning. Otherwise, it could
-          // happen that the query planner "knows" that a result is empty, when
-          // actually it is not due to a preceding update in the chain. Also,
-          // this improves the size estimates and hence the query plan.
-          tracer->beginTrace("snapshot");
-          qec.updateLocatedTriplesSnapshot();
-          tracer->endTrace("snapshot");
-          tracer->beginTrace("planning");
-          plannedUpdate = planQuery(std::move(update), requestTimer, timeLimit,
-                                    qec, cancellationHandle);
-          tracer->endTrace("planning");
+        return index_.deltaTriplesManager().modify<json>(
+            [this, &cancellationHandle, &plannedUpdate, tracer, &updates,
+             &requestTimer, &timeLimit, &qec](DeltaTriples& deltaTriples) {
+              qec.setLocatedTriplesForEvaluation(
+                  deltaTriples.getMirroringVersion());
+              json results = json::array();
+              for (size_t i = 0; i < updates.size(); i++) {
+                // The augmented metadata is invalidated by any update. It is
+                // only updated automatically at the end of modify. Updates with
+                // non-empty graph patterns need the augmented metadata. Update
+                // the augmented metadata before executing those updates.
+                if (i != 0 &&
+                    !updates[i]._rootGraphPattern._graphPatterns.empty()) {
+                  deltaTriples.updateAugmentedMetadata();
+                }
+                tracer->beginTrace("planning");
+                plannedUpdate = planQuery(std::move(updates[i]), requestTimer,
+                                          timeLimit, qec, cancellationHandle);
+                tracer->endTrace("planning");
+                tracer->beginTrace("execution");
+                // Update the delta triples.
+                // Use `this` explicitly to silence false-positive
+                // errors on captured `this` being unused.
+                auto updateMetadata = this->processUpdateImpl(
+                    plannedUpdate.value(), cancellationHandle, deltaTriples,
+                    *tracer);
+                tracer->endTrace("execution");
 
-          // Update the delta triples.
-          tracer->beginTrace("execution");
-          auto updateMetadata =
-              index_.deltaTriplesManager().modify<UpdateMetadata>(
-                  [this, &cancellationHandle, &plannedUpdate,
-                   tracer](auto& deltaTriples) {
-                    // Use `this` explicitly to silence false-positive
-                    // errors on captured `this` being unused.
-                    tracer->beginTrace("processUpdateImpl");
-                    auto res = this->processUpdateImpl(plannedUpdate.value(),
-                                                       cancellationHandle,
-                                                       deltaTriples, *tracer);
-                    tracer->endTrace("processUpdateImpl");
-                    return res;
-                  },
-                  true, true, *tracer);
-          tracer->endTrace("execution");
+                tracer->endTrace("update");
+                results.push_back(createResponseMetadataForUpdate(
+                    index_, index_.deltaTriplesManager().getCurrentSnapshot(),
+                    *plannedUpdate, plannedUpdate->queryExecutionTree_,
+                    updateMetadata, *tracer));
+                tracer->reset();
 
-          tracer->endTrace("update");
-          results.push_back(createResponseMetadataForUpdate(
-              index_, index_.deltaTriplesManager().getCurrentSnapshot(),
-              *plannedUpdate, plannedUpdate->queryExecutionTree_,
-              updateMetadata, *tracer));
-          tracer->reset();
-
-          AD_LOG_INFO << "Done processing update"
-                      << ", total time was " << requestTimer.msecs().count()
-                      << " ms" << std::endl;
-          AD_LOG_DEBUG << "Runtime Info:\n"
-                       << plannedUpdate->queryExecutionTree_.getRootOperation()
-                              ->runtimeInfo()
-                              .toString()
-                       << std::endl;
-        }
-        return results;
+                AD_LOG_INFO << "Done processing update, total time was "
+                            << requestTimer.msecs().count() << " ms"
+                            << std::endl;
+                AD_LOG_DEBUG
+                    << "Runtime Info:\n"
+                    << plannedUpdate->queryExecutionTree_.getRootOperation()
+                           ->runtimeInfo()
+                           .toString()
+                    << std::endl;
+              }
+              return results;
+            },
+            true, true, *tracer);
       },
       cancellationHandle);
   auto responses = co_await std::move(coroutine);
   tracer->endTrace("update");
+  responses.push_back(tracer->getJSONShort());
 
   // SPARQL 1.1 Protocol 2.2.4 Successful Responses: "The responses body of a
   // successful update request is implementation defined."
