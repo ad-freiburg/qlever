@@ -101,11 +101,6 @@ SparqlExpressionPimpl::getPrefilterExpressionForMetadata() const {
 }
 
 // _____________________________________________________________________________
-bool SparqlExpressionPimpl::containsLangExpression() const {
-  return _pimpl->containsLangExpression();
-}
-
-// _____________________________________________________________________________
 bool SparqlExpressionPimpl::containsAggregate() const {
   return _pimpl->containsAggregate();
 }

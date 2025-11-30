@@ -314,8 +314,8 @@ auto Server::prepareOperation(
 
   configurePinnedResultWithName(pinResultWithName, pinNamedGeoIndex,
                                 accessTokenOk, qec);
-  return std::tuple{std::move(qec), std::move(cancellationHandle),
-                    std::move(cancelTimeoutOnDestruction)};
+  return std::make_tuple(std::move(qec), std::move(cancellationHandle),
+                         std::move(cancelTimeoutOnDestruction));
 }
 
 // _____________________________________________________________________________
@@ -607,9 +607,9 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         &index_.encodedIriManager(), query.query_, query.datasetClauses_);
     auto dummy = std::make_shared<ad_utility::timer::TimeTracer>("dummy");
     return visitOperation(
-        {std::move(parsedQuery)}, "SPARQL Query", std::move(query.query_),
+        {std::move(parsedQuery)}, "SPARQL query", std::move(query.query_),
         std::not_fn(&ParsedQuery::hasUpdateClause),
-        "SPARQL QUERY was request via the HTTP request, but the "
+        "SPARQL QUERY was requested via the HTTP request, but the "
         "following update was sent instead of an query: ",
         dummy);
   };
@@ -625,9 +625,9 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         update.update_, update.datasetClauses_);
     tracer->endTrace("parsing");
     return visitOperation(
-        std::move(parsedUpdates), "SPARQL Update", std::move(update.update_),
+        std::move(parsedUpdates), "SPARQL update", std::move(update.update_),
         &ParsedQuery::hasUpdateClause,
-        "SPARQL UPDATE was request via the HTTP request, but the "
+        "SPARQL UPDATE was requested via the HTTP request, but the "
         "following query was sent instead of an update: ",
         tracer);
   };
@@ -979,6 +979,11 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 
   MediaType mediaType =
       chooseBestFittingMediaType(mediaTypes, plannedQuery.value().parsedQuery_);
+
+  // Only post updates when we export a qlever json.
+  if (mediaType != MediaType::qleverJson) {
+    qec.areWebsocketUpdatesEnabled_ = false;
+  }
 
   // Update the `PlannedQuery` with the export limit when the response
   // content-type is `application/qlever-results+json` and ensure that the

@@ -33,19 +33,22 @@ namespace detail {
 // example, `COUNT(DISTINCT ?x)` should count the number of distinct values for
 // `?x`.
 inline auto getUniqueElements = [](const EvaluationContext* context,
-                                   size_t inputSize, auto operandGenerator)
-    -> cppcoro::generator<
-        ql::ranges::range_value_t<decltype(operandGenerator)>> {
+                                   size_t inputSize, auto operandGenerator) {
   using OperandGenerator = decltype(operandGenerator);
   ad_utility::HashSetWithMemoryLimit<
       ql::ranges::range_value_t<OperandGenerator>>
       uniqueHashSet(inputSize, context->_allocator);
-  for (auto& operand : operandGenerator) {
-    if (uniqueHashSet.insert(operand).second) {
-      auto elForYielding = std::move(operand);
-      co_yield elForYielding;
-    }
-  }
+  // Note: The `filter` below is technically undefined behavior for
+  // `std::views::filter`, because in a second iteration the values would
+  // all be filtered out, because they are already contained in the hash map.
+  // We mitigate this issue by using the `filter` from range-v3 +
+  // `ForceInputView`, which disallows multiple calls to `begin`.
+  return ad_utility::ForceInputView(
+      ad_utility::OwningView(std::move(operandGenerator)) |
+      ::ranges::views::filter(
+          [set = std::move(uniqueHashSet)](auto& operand) mutable {
+            return set.insert(operand).second;
+          }));
 };
 
 // Class for a SPARQL expression that aggregates a given set of values to a

@@ -109,7 +109,9 @@ IdTable IndexImpl::mergeTextBlockResults(
     return std::move(toSort).toDynamic<>();
   }
   // Filter duplicates
-  auto [newEnd, _] = std::ranges::unique(toSort);
+  // TODO<joka921> `::ranges::unique` currently doesn't work on macos,
+  // investigate.
+  auto newEnd = std::unique(toSort.begin(), toSort.end());
   toSort.erase(newEnd, toSort.end());
   return std::move(toSort).toDynamic<>();
 }

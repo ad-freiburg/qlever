@@ -7,8 +7,16 @@
 
 #include "global/RuntimeParameters.h"
 
+using namespace std::chrono_literals;
+
+// _____________________________________________________________________________
 bool QueryExecutionContext::areWebSocketUpdatesEnabled() {
   return getRuntimeParameter<&RuntimeParameters::websocketUpdatesEnabled_>();
+}
+
+// _____________________________________________________________________________
+std::chrono::milliseconds QueryExecutionContext::websocketUpdateInterval() {
+  return getRuntimeParameter<&RuntimeParameters::websocketUpdateInterval_>();
 }
 
 // _____________________________________________________________________________
@@ -29,3 +37,15 @@ QueryExecutionContext::QueryExecutionContext(
       updateCallback_(std::move(updateCallback)),
       namedResultCache_(namedResultCache),
       materializedViewsManager_(materializedViewsManager) {}
+
+// _____________________________________________________________________________
+void QueryExecutionContext::signalQueryUpdate(
+    const RuntimeInformation& runtimeInformation,
+    RuntimeInformation::SendPriority sendPriority) const {
+  auto now = std::chrono::steady_clock::now();
+  if (sendPriority == RuntimeInformation::SendPriority::Always ||
+      (now - lastWebsocketUpdate_) >= websocketUpdateInterval_) {
+    lastWebsocketUpdate_ = now;
+    updateCallback_(nlohmann::ordered_json(runtimeInformation).dump());
+  }
+}
