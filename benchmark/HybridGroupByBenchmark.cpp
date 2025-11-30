@@ -53,8 +53,75 @@ static std::unordered_map<std::string, std::string> runGroupByCount(
   return timings;
 }
 
+// Generic group mapping: given a row index `i`, a requested (uniform) group count
+// `numGroups` (ignored by skewed distributions), and the total number of rows
+// `numRows`, return the group id.
+using GroupFunc = std::function<int64_t(size_t i, size_t numGroups, size_t numRows)>;
+
+static GroupFunc makeModuloGrouping() {
+  return [](size_t i, size_t numGroups, size_t /*numRows*/) {
+    // Standard uniform grouping by modulo.
+    if (numGroups == 0) return int64_t{0};
+    return static_cast<int64_t>(i % numGroups);
+  };}
+
+// Piecewise-zipf-like buckets: many early rows map to small group ids, then
+// progressively smaller buckets for larger ids. Segment sizes follow
+// N/2, N/4, N/8, ... accumulating boundaries at
+// N/2, 3N/4, 7N/8, 15N/16, ... yielding group ids 0,1,2,3,...
+static GroupFunc makeZipfBucketsGrouping(bool bigAtBeginning) {
+  return [bigAtBeginning](size_t i, size_t /*numGroups*/, size_t numRows) {
+    if (numRows == 0) return int64_t{0};
+    // Mirror index if large groups should appear at the end.
+    size_t idx = bigAtBeginning ? i : (numRows - 1 - i);
+    // Boundaries: N/2, 3N/4, 7N/8, 15N/16, ... i.e. cumulatively adding half of remaining.
+    size_t boundary = numRows / 2; // First boundary after largest group.
+    size_t groupId = 0;
+    while (boundary < numRows && idx >= boundary) {
+      ++groupId;
+      size_t remaining = numRows - boundary;
+      boundary += remaining / 2;
+      if (remaining == 0 || remaining / 2 == 0) {
+        boundary = numRows;
+      }
+    }
+    return static_cast<int64_t>(groupId);
+  };
+}
+
+static GroupFunc makeBestCaseGrouping() {
+  return [](size_t i, size_t /*numGroups*/, size_t numRows) {
+    // Uneven grouping: first half of the rows are 5 groups, in the second half
+    // each row is its own group, except that every 20th row is in group 0,
+    // every 20th+1 row in group 1, ..., every 20th+4 row in group 4.
+    if (i < numRows / 2) {
+      return static_cast<int64_t>((i * 5) / (numRows / 2));
+    } else {
+      size_t idxInSecondHalf = i - numRows / 2;
+      if (idxInSecondHalf % 20 < 5) {
+        return static_cast<int64_t>(idxInSecondHalf % 20);
+      } else {
+        return static_cast<int64_t>(numRows); // each in its own group
+      }
+    }
+  };
+}
+
+static GroupFunc makeWorstCaseGrouping() {
+  // first half of the rows are unique groups, the other half all map to 5 groups
+  // all different from the first half
+  return [](size_t i, size_t /*numGroups*/, size_t numRows) {
+    if (i < numRows / 2) {
+      return static_cast<int64_t>(i);
+    } else {
+      return static_cast<int64_t>((i % 5) + (numRows / 2));
+    }
+  };
+}
+
 std::vector<IdTable> makeBlocks(size_t numRows, size_t blockSize,
-                                size_t numGroups, QueryExecutionContext* qec) {
+                                size_t numGroups, QueryExecutionContext* qec,
+                                const GroupFunc& groupFunc) {
   std::vector<IdTable> blocks;
   blocks.reserve((numRows + blockSize - 1) / blockSize);
   ad_utility::SlowRandomIntGenerator<int64_t> gen{0, 1000};
@@ -68,8 +135,7 @@ std::vector<IdTable> makeBlocks(size_t numRows, size_t blockSize,
     auto c1 = t.getColumn(1);
     for (size_t i = 0; i < nThis; ++i) {
       size_t gIdx = produced + i;
-
-      c0[i] = ValueId::makeFromInt(static_cast<int64_t>(gIdx % numGroups));
+      c0[i] = ValueId::makeFromInt(groupFunc(gIdx, numGroups, numRows));
       c1[i] = ValueId::makeFromInt(gen());
     }
     blocks.push_back(std::move(t));
@@ -79,12 +145,12 @@ std::vector<IdTable> makeBlocks(size_t numRows, size_t blockSize,
 }
 
 std::shared_ptr<QueryExecutionTree> buildSortedSubtree(
-    bool useBlocks, size_t numRows, size_t blockSize, size_t numGroups,
-    QueryExecutionContext* qec) {
+  bool useBlocks, size_t numRows, size_t blockSize, size_t numGroups,
+  QueryExecutionContext* qec, const GroupFunc& groupFunc) {
   std::vector<std::optional<Variable>> vars = {Variable{"?a"}, Variable{"?b"}};
   std::shared_ptr<QueryExecutionTree> valuesTree;
   if (useBlocks) {
-    auto blocks = makeBlocks(numRows, blockSize, numGroups, qec);
+    auto blocks = makeBlocks(numRows, blockSize, numGroups, qec, groupFunc);
     // DON'T advertise sortedColumns - let the explicit Sort do the work
     valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, std::move(blocks), vars, /*mayHaveUnbound=*/false);
@@ -94,7 +160,7 @@ std::shared_ptr<QueryExecutionTree> buildSortedSubtree(
     table.resize(numRows);
     auto col1 = table.getColumn(0);
     for (size_t i = 0; i < col1.size(); ++i) {
-      col1[i] = ValueId::makeFromInt(static_cast<int64_t>(i % numGroups));
+      col1[i] = ValueId::makeFromInt(groupFunc(i, numGroups, numRows));
     }
     auto col2 = table.getColumn(1);
     ad_utility::SlowRandomIntGenerator<int64_t> gen{0, 1000};
@@ -136,20 +202,20 @@ class HybridGroupByBenchmark : public BenchmarkInterface {
     constexpr size_t hugeThreshold = std::numeric_limits<size_t>::max() / 4;
 
     std::vector<Scenario> scenarios = {
-        {"sort-only", /*useHashMap*/ false,
+         {"sort-only", /*useHashMap*/ false,
          "Optimization disabled (sorting path)", /*useBlocks*/ false},
-        {"hash-only", /*useHashMap*/ true,
+         {"hash-only", /*useHashMap*/ true,
          "Hash map enabled, fallback effectively disabled",
          /*useBlocks*/ false},
-        {"hybrid-approach", /*useHashMap*/ true, "Hash map with early fallback",
+         {"hybrid-approach", /*useHashMap*/ true, "Hash map with early fallback",
          /*useBlocks*/ false,
          /*hybrid*/ true},
-        {"sort-only-blocks", /*useHashMap*/ false,
+         {"sort-only-blocks", /*useHashMap*/ false,
          "Optimization disabled (sorting path)",
          /*useBlocks*/ true},
-        {"hash-only-blocks", /*useHashMap*/ true,
+         {"hash-only-blocks", /*useHashMap*/ true,
          "Hash map enabled, fallback effectively disabled", /*useBlocks*/ true},
-        {"hybrid-approach-blocks", /*useHashMap*/ true,
+         {"hybrid-approach-blocks", /*useHashMap*/ true,
          "Hash map with early fallback",
          /*useBlocks*/ true,
          /*hybrid*/ true},
@@ -161,14 +227,25 @@ class HybridGroupByBenchmark : public BenchmarkInterface {
     float blockSizeFactor = 0.08;
     size_t startThreshold = 350'000;
     size_t endThreshold = 350'000;
-    size_t totalNumGroups = 12000000;
-    size_t groupSegments = 30;
+    size_t startNumGroups = 1;
+    size_t totalNumGroups = endNumRows;
+    // size_t groupSegments = 30;
+
+    // Choose whether to use zipf-like grouping or uniform modulo
+    const bool useZipf = true;  // Toggle or derive per scenario
+    // Choose whether big groups appear at the beginning or at the end.
+    const bool bigGroupsAtBeginning = true;
 
     for (const auto& s : scenarios) {
       RuntimeParameters().set<"group-by-hash-map-enabled">(s.useHashMap_);
 
-      size_t numGroups = totalNumGroups / groupSegments;
-      while (numGroups <= totalNumGroups) {
+      // size_t numGroups = totalNumGroups / groupSegments;
+
+      // bool endMeasurement = false;
+      // size_t numGroups = startNumGroups;
+
+      size_t numGroups = std::ceil(std::log2(endNumRows));
+      // while (true) {
         size_t numRows = startNumRows;
         while (numRows <= endNumRows) {
           size_t blockSize = size_t(numRows * blockSizeFactor);
@@ -208,8 +285,12 @@ class HybridGroupByBenchmark : public BenchmarkInterface {
 
               auto& measurement =
                   group.addMeasurement(std::to_string(i), [&]() {
+                    // GroupFunc groupFunc =
+                    //   useZipf ? makeZipfBucketsGrouping(bigGroupsAtBeginning)
+                    //           : makeModuloGrouping();
+                    GroupFunc groupFunc = makeWorstCaseGrouping();
                     auto sortedTree = buildSortedSubtree(
-                        s.useBlocks_, numRows, blockSize, numGroups, qec);
+                        s.useBlocks_, numRows, blockSize, numGroups, qec, groupFunc);
                     timingsForMeasurement = runGroupByCount(qec, sortedTree);
                   });
 
@@ -222,8 +303,16 @@ class HybridGroupByBenchmark : public BenchmarkInterface {
           }
           numRows *= 10;
         }
-        numGroups += totalNumGroups / groupSegments;
-      }
+        // numGroups += totalNumGroups / groupSegments;
+      //   if (endMeasurement) {
+      //     break;
+      //   }
+      //   numGroups = std::ceil(numGroups * 1.5);
+      //   numGroups = std::min(numGroups, totalNumGroups);
+      //   if (numGroups == totalNumGroups) {
+      //     endMeasurement = true;
+      //   }
+      // }
     }
 
     return results;
