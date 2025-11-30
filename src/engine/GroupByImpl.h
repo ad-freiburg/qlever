@@ -740,8 +740,8 @@ class GroupByImpl : public Operation {
       handleRemainderUsingHybridApproach(
           HashMapOptimizationData data,
           HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-      HashMapTimers& timers, BlockIterator blockIt, BlocksEnd blocksEnd,
-      IdTable restTable) const;
+          HashMapTimers& timers, BlockIterator blockIt, BlocksEnd blocksEnd,
+          IdTable restTable) const;
 };
 
 // _____________________________________________________________________________

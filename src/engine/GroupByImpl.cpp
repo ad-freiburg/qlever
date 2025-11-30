@@ -1603,7 +1603,7 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
   auto blocksEnd = ql::ranges::end(subresults);
 
   size_t groupThreshold =
-    RuntimeParameters().get<"group-by-hash-map-group-threshold">();
+      RuntimeParameters().get<"group-by-hash-map-group-threshold">();
   const size_t inWidth = _subtree->getResultWidth();
 
   size_t blocksProcessedBeforeFallback = 0;
@@ -1625,15 +1625,13 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
     // local vocabs, no deduplication is performed.
     localVocab.mergeWith(inputLocalVocab);
     // Load all entries from inputTable into the hash map.
-  auto updateResult =
-    updateHashMapWithTable(inputTable, data, aggregationData, timers);
-
-  // If the size of the hashmap (the number of groups) exceeds the
-  // `groupThreshold`, we switch to a hybrid approach, where we add all
-  // entries with existing groups to the hash map, and then perform a
-  // sort-based grouping on the remaining entries.
-  if (updateResult.thresholdExceeded_ ||
-    aggregationData.numGroups() > groupThreshold) {
+    auto updateResult =
+        updateHashMapWithTable(inputTable, data, aggregationData, timers);
+    // If the size of the hashmap (the number of groups) exceeds the
+    // threshold, we switch to a hybrid approach, where we add all
+    // entries with existing groups to the hash map, and then perform a
+    // sort-based grouping on the remaining entries.
+    if (updateResult.thresholdExceeded_) {
       initialProcessingTimer.stop();
       // Record statistics about the fallback trigger
       runtimeInfo().addDetail("hybridTriggerBlocks",
@@ -1653,9 +1651,7 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
       // Note: nonMatchingRows contains only the unprocessed rows from current
       // table. Copy them before advancing the underlying generator.
       IdTable restTable{inWidth, getExecutionContext()->getAllocator()};
-      if (!updateResult.nonMatchingRows_.empty()) {
-        restTable.insertSubsetAtEnd(inputTable, updateResult.nonMatchingRows_);
-      }
+      restTable.insertSubsetAtEnd(inputTable, updateResult.nonMatchingRows_);
 
       ++blockIt;
       return handleRemainderUsingHybridApproach<NUM_GROUP_COLUMNS>(
@@ -1679,11 +1675,11 @@ CPP_template_def(size_t NUM_GROUP_COLUMNS, typename BlockIterator,
                  typename BlocksEnd)(
     requires std::input_iterator<BlockIterator>&&
         std::sentinel_for<BlocksEnd, BlockIterator>) Result
-  GroupByImpl::handleRemainderUsingHybridApproach(
-    HashMapOptimizationData data,
-    HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-    HashMapTimers& timers, BlockIterator blockIt, BlocksEnd blocksEnd,
-    IdTable restTable) const {
+    GroupByImpl::handleRemainderUsingHybridApproach(
+        HashMapOptimizationData data,
+        HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
+        HashMapTimers& timers, BlockIterator blockIt, BlocksEnd blocksEnd,
+        IdTable restTable) const {
   const size_t inWidth = _subtree->getResultWidth();
   LocalVocab& localVocab = data.localVocabRef_.value();
 
@@ -1728,7 +1724,7 @@ CPP_template_def(size_t NUM_GROUP_COLUMNS, typename BlockIterator,
   restSortTimer.cont();
   Engine::sort(restTable, data.columnIndices_.value());
   restSortTimer.stop();
-  
+
   restGroupByTimer.cont();
   IdTable restResult = CALL_FIXED_SIZE((std::array{inWidth, getResultWidth()}),
                                        &GroupByImpl::doGroupBy, this, restTable,
