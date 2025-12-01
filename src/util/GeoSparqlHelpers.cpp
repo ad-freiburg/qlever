@@ -59,7 +59,7 @@ double wktDistImpl(GeoPoint point1, GeoPoint point2) {
 
 // _____________________________________________________________________________
 std::optional<std::string> geometryNAsWkt(GeoPointOrWkt wkt, int64_t n) {
-  return getGeometryNAsWkt(wkt, n);
+  return utilGeomToWkt(getGeometryN(wkt, n));
 }
 
 }  // namespace detail

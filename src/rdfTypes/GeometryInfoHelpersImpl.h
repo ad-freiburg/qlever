@@ -15,6 +15,7 @@
 #include <util/geo/Geo.h>
 
 #include <array>
+#include <boost/mp11/list.hpp>
 #include <iostream>
 #include <memory>
 #include <range/v3/numeric/accumulate.hpp>
@@ -47,6 +48,7 @@ using ParsedWkt =
                  MultiPolygon<CoordType>, Collection<CoordType>>;
 using ParseResult = std::pair<WKTType, std::optional<ParsedWkt>>;
 using DAnyGeometry = util::geo::AnyGeometry<CoordType>;
+using GeometryN = boost::mp11::mp_push_back<ParsedWkt, DAnyGeometry>;
 
 template <typename T>
 CPP_concept WktSingleGeometryType =
@@ -450,6 +452,14 @@ struct ParseGeoPointOrWktVisitor {
   ParseResult operator()(const GeoPointOrWkt& geoPointOrWkt) const {
     return std::visit(ParseGeoPointOrWktVisitor{}, geoPointOrWkt);
   }
+
+  ParseResult operator()(
+      const std::optional<GeoPointOrWkt>& geoPointOrWkt) const {
+    if (!geoPointOrWkt.has_value()) {
+      return {WKTType::NONE, std::nullopt};
+    }
+    return std::visit(ParseGeoPointOrWktVisitor{}, geoPointOrWkt.value());
+  }
 };
 
 static constexpr ParseGeoPointOrWktVisitor parseGeoPointOrWkt;
@@ -466,7 +476,9 @@ struct UtilGeomToWktVisitor {
   }
 
   // Visitor for the `ParsedWkt` variant.
-  std::optional<std::string> operator()(const ParsedWkt& variant) const {
+  CPP_template(typename T)(
+      requires SimilarToAny<T, ParsedWkt, GeometryN>) std::optional<std::string>
+  operator()(const T& variant) const {
     return std::visit(UtilGeomToWktVisitor{}, variant);
   }
 
@@ -488,7 +500,6 @@ static constexpr UtilGeomToWktVisitor utilGeomToWkt;
 
 // Helper to extract the n-th geometry from a parsed `pb_util` geometry. Note
 // that this is 1-indexed and non-collection types return themselves at index 1.
-using GeometryN = AddToVariant<ParsedWkt, AnyGeometry<CoordType>>;
 struct GeometryNVisitor {
   // Visitor for collection types
   CPP_template(typename T)(
@@ -518,6 +529,23 @@ struct GeometryNVisitor {
     return std::visit(
         [n](const auto& contained) { return GeometryNVisitor{}(contained, n); },
         geom);
+  }
+
+  // Visitor for `std::optional`
+  template <typename T>
+  std::optional<GeometryN> operator()(const std::optional<T>& geom,
+                                      int64_t n) const {
+    if (!geom.has_value()) {
+      return std::nullopt;
+    }
+    return GeometryNVisitor{}(geom.value(), n);
+  }
+
+  // Visitor for `GeoPointOrWkt`
+  std::optional<GeometryN> operator()(const GeoPointOrWkt& geom,
+                                      int64_t n) const {
+    auto [type, parsed] = parseGeoPointOrWkt(geom);
+    return GeometryNVisitor{}(parsed, n);
   }
 };
 
