@@ -31,9 +31,9 @@ constexpr std::string_view litLineString =
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 const DLine expectedLine{{2, 2}, {4, 4}};
 constexpr std::string_view litPolygon =
-    "\"POLYGON((2 4,4 4,4 2,2 2,2 4))\""
+    "\"POLYGON((2 2,4 2,4 4,2 4,2 2))\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
-const DPolygon expectedPolygon{{{2, 4}, {4, 4}, {4, 2}, {2, 2}}};
+const DPolygon expectedPolygon{{{2, 2}, {4, 2}, {4, 4}, {2, 4}}};
 constexpr std::string_view litMultiPoint =
     "\"MULTIPOINT(2 2,4 4)\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
@@ -43,11 +43,11 @@ constexpr std::string_view litMultiLineString =
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 const DMultiLine expectedMultiLineString{{{2, 2}, {4, 4}}, {{2, 2}, {6, 8}}};
 constexpr std::string_view litMultiPolygon =
-    "\"MULTIPOLYGON(((2 4,8 4,8 6,2 6,2 4)),((2 4,4 4,4 2,2 2,2 4)))\""
+    "\"MULTIPOLYGON(((2 4,8 4,8 6,2 6,2 4)),((2 2,4 2,4 4,2 4,2 2)))\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 const DMultiPolygon expectedMultiPolygon{
     DPolygon{{{2, 4}, {8, 4}, {8, 6}, {2, 6}, {2, 4}}},
-    DPolygon{{{2, 4}, {4, 4}, {4, 2}, {2, 2}, {2, 4}}}};
+    DPolygon{{{2, 2}, {4, 2}, {4, 4}, {2, 4}, {2, 2}}}};
 constexpr std::string_view litCollection =
     "\"GEOMETRYCOLLECTION(POLYGON((2 4,8 4,8 6,2 6,2 4)),LINESTRING(2 2,4 4),"
     "POINT(3 4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
