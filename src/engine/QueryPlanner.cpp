@@ -1232,8 +1232,8 @@ std::vector<SubtreePlan> QueryPlanner::merge(
 
   if (isInTestMode()) {
     std::vector<std::pair<std::string, vector<SubtreePlan>>> sortedCandidates{
-        std::make_move_iterator(candidates.begin()),
-        std::make_move_iterator(candidates.end())};
+        ql::make_move_iterator(candidates.begin()),
+        ql::make_move_iterator(candidates.end())};
     std::sort(sortedCandidates.begin(), sortedCandidates.end(),
               [](const auto& a, const auto& b) { return a.first < b.first; });
     pruneCandidates(sortedCandidates);
@@ -2118,7 +2118,7 @@ size_t QueryPlanner::findSmallestExecutionTree(
   AD_CONTRACT_CHECK(!lastRow.empty());
   auto compare = [](const auto& a, const auto& b) {
     auto tie = [](const auto& x) {
-      return std::tuple{x.getSizeEstimate(), x.getSizeEstimate()};
+      return std::make_tuple(x.getSizeEstimate(), x.getSizeEstimate());
     };
     return tie(a) < tie(b);
   };
@@ -2436,7 +2436,7 @@ QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
     if (transitiveCol >= graphColIndex) {
       return std::nullopt;
     }
-    return std::tuple{transitiveCol, otherCol};
+    return std::make_tuple(transitiveCol, otherCol);
   }
 
   // At this point, we know that we have exactly two pairs of join columns,
@@ -2449,14 +2449,14 @@ QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
   size_t otherColB = jcs[1][otherIndex];
   if (transitiveColA < graphColIndex) {
     if (transitiveColB == graphColIndex) {
-      return std::tuple{transitiveColA, otherColA};
+      return std::make_tuple(transitiveColA, otherColA);
     }
     // We currently don't support binding two regular columns at once
     return std::nullopt;
   }
   AD_CORRECTNESS_CHECK(transitiveColB < graphColIndex);
   AD_CORRECTNESS_CHECK(transitiveColA == graphColIndex);
-  return std::tuple{transitiveColB, otherColB};
+  return std::make_tuple(transitiveColB, otherColB);
 #endif
 }
 
@@ -2898,8 +2898,8 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
         plan.containsFilterSubstitute_ = a.containsFilterSubstitute_;
       }
       nextCandidates.insert(nextCandidates.end(),
-                            std::make_move_iterator(vec.begin()),
-                            std::make_move_iterator(vec.end()));
+                            ql::make_move_iterator(vec.begin()),
+                            ql::make_move_iterator(vec.end()));
     }
   }
 

@@ -190,7 +190,7 @@ class IteratorForAccessOperator {
 };
 
 /// If `T` is a type that can safely be moved from (e.g. std::vector<int> or
-/// std::vector<int>&&), then return `std::make_move_iterator(iterator)`. Else
+/// std::vector<int>&&), then return `ql::make_move_iterator(iterator)`. Else
 /// (for example if `T` is `std::vector<int>&` or `const std::vector<int>&` the
 /// iterator is returned unchanged. Typically used in generic code where we need
 /// the semantics of "if `std::forward` would move the container, we can also
@@ -198,7 +198,7 @@ class IteratorForAccessOperator {
 template <typename T, typename It>
 auto makeForwardingIterator(It iterator) {
   if constexpr (std::is_rvalue_reference_v<T&&>) {
-    return std::make_move_iterator(iterator);
+    return ql::make_move_iterator(iterator);
   } else {
     return iterator;
   }

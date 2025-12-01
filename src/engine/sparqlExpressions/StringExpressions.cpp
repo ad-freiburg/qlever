@@ -11,6 +11,7 @@
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/StringExpressionsHelper.h"
 #include "engine/sparqlExpressions/VariadicExpression.h"
+#include "util/StringUtils.h"
 
 namespace sparqlExpression {
 namespace detail::string_expressions {
@@ -31,19 +32,6 @@ struct ToLiteral {
 };
 static constexpr ToLiteral toLiteral{};
 
-// Return `true` if the byte representation of `c` does not start with `10`,
-// meaning that it is not a UTF-8 continuation byte, and therefore the start of
-// a codepoint.
-static constexpr bool isUtf8CodepointStart(char c) {
-  using b = std::byte;
-  return (static_cast<b>(c) & b{0xC0}) != b{0x80};
-}
-// Count UTF-8 characters by skipping continuation bytes (those starting with
-// "10").
-static std::size_t utf8Length(std::string_view s) {
-  return ql::ranges::count_if(s, &isUtf8CodepointStart);
-}
-
 // Initialize or append a Literal. If both literals are valid and initialized,
 // concatenate nextLiteral into literalSoFar. If not initialized yet, set
 // literalSoFar to nextLiteral. If either is UNDEF, set literalSoFar to nullopt
@@ -59,21 +47,6 @@ void concatOrSetLiteral(
   } else {
     literalSoFarOpt.value().concat(nextLiteral.value());
   }
-}
-
-// Convert UTF-8 position to byte offset. If utf8Pos exceeds the
-// string length, the byte offset will be set to the size of the string.
-static std::size_t utf8ToByteOffset(std::string_view str, int64_t utf8Pos) {
-  int64_t charCount = 0;
-  for (auto [byteOffset, c] : ranges::views::enumerate(str)) {
-    if (isUtf8CodepointStart(c)) {
-      if (charCount == utf8Pos) {
-        return byteOffset;
-      }
-      ++charCount;
-    }
-  }
-  return str.size();
 }
 
 // String functions.
@@ -158,7 +131,9 @@ using IriOrUriExpression = NARY<2, FV<ApplyBaseIfPresent, IriOrUriValueGetter>>;
 // STRLEN
 struct Strlen {
   Id operator()(std::string_view s) const {
-    return Id::makeFromInt(utf8Length(s));
+    size_t length =
+        ad_utility::getUTF8Prefix(s, std::numeric_limits<size_t>::max()).first;
+    return Id::makeFromInt(length);
   }
 };
 using StrlenExpression = StringExpressionImpl<1, LiftStringFunction<Strlen>>;
@@ -230,25 +205,15 @@ class SubstrImpl {
     // If the starting position is negative, we have to correct the length.
     if (startInt < 0) {
       lengthInt += startInt;
+      startInt = 0;
+    }
+    if (lengthInt < 0) {
+      lengthInt = 0;
     }
     const auto& str = asStringViewUnsafe(s.value().getContent());
-    std::size_t utf8len = utf8Length(str);
-    // Clamp the number such that it is in `[0, str.size()]`. That way we end up
-    // with valid arguments for the `setSubstr` method below for both
-    // starting position and length since all the other corner cases have been
-    // dealt with above.
-    auto clamp = [utf8len](int64_t n) {
-      return static_cast<size_t>(
-          std::clamp(n, int64_t{0}, static_cast<int64_t>(utf8len)));
-    };
+    auto substr = ad_utility::getUTF8Substring(str, startInt, lengthInt);
 
-    startInt = clamp(startInt);
-    lengthInt = clamp(lengthInt);
-    std::size_t startByteOffset = utf8ToByteOffset(str, startInt);
-    std::size_t endByteOffset = utf8ToByteOffset(str, startInt + lengthInt);
-    std::size_t byteLength = endByteOffset - startByteOffset;
-
-    s.value().setSubstr(startByteOffset, byteLength);
+    s.value().setSubstr(substr.data() - str.data(), substr.size());
     return LiteralOrIri(std::move(s.value()));
   }
 };

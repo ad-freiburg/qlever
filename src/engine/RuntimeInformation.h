@@ -41,6 +41,11 @@ class RuntimeInformation {
   };
   using enum Status;
 
+  // The priority with which to send updated runtime information. With `IfDue`,
+  // the update is only sent if a certain amount of time has passed since the
+  // last update. With `Always`, the update is always sent.
+  enum class SendPriority { IfDue, Always };
+
   // Public members
 
   /// The total time spent computing this operation. This includes the
