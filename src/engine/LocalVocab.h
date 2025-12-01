@@ -131,7 +131,8 @@ class LocalVocab {
     // duplicates, we still manually filter out empty sets, because these
     // typically don't compare equal to each other because of the`shared_ptr`
     // semantics.
-    for (const auto& vocab : vocabs | filter(std::not_fn(&LocalVocab::empty))) {
+    for (const LocalVocab& vocab :
+         vocabs | filter(std::not_fn(&LocalVocab::empty))) {
       // Mark vocab as copied
       vocab.copied_->store(true);
       ql::ranges::for_each(vocab.otherWordSets_, addWordSet);
@@ -183,9 +184,9 @@ class LocalVocab {
   // Wrapper around a bunch of word sets without any access provided to them.
   // This is useful to extend the lifetime of this `LocalVocab` without making
   // this instance read-only by merging and/or cloning.
-  class [[nodiscard(
+  class QL_NODISCARD(
       "The sole purpose of this object is to extend "
-      "lifetimes.")]] LifetimeExtender {
+      "lifetimes.") LifetimeExtender {
     friend LocalVocab;
     std::vector<std::shared_ptr<const Set>> wordSets_;
 

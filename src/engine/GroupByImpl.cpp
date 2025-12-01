@@ -547,8 +547,8 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
   // parse the aggregate aliases
   const auto& varColMap = getInternallyVisibleVariableColumns();
   for (const Alias& alias : _aliases) {
-    aggregates.emplace_back(alias._expression,
-                            varColMap.at(alias._target).columnIndex_);
+    aggregates.push_back(
+        {alias._expression, varColMap.at(alias._target).columnIndex_});
   }
 
   // Check if optimization for explicitly sorted child can be applied
@@ -565,7 +565,7 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
     auto runTimeInfoChildren =
         child->getRootOperation()->getRuntimeInfoPointer();
     _subtree->getRootOperation()->updateRuntimeInformationWhenOptimizedOut(
-        {runTimeInfoChildren}, RuntimeInformation::Status::optimizedOut);
+        {runTimeInfoChildren});
   } else {
     // Always request child operation to provide a lazy result if the aggregate
     // expressions allow to compute the full result in chunks
@@ -626,11 +626,14 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
   if (!subresult->isFullyMaterialized()) {
     AD_CORRECTNESS_CHECK(metadataForUnsequentialData.has_value());
 
-    Result::LazyResult generator = CALL_FIXED_SIZE(
-        (std::array{inWidth, outWidth}), &GroupByImpl::computeResultLazily,
-        this, std::move(subresult), std::move(aggregates),
-        std::move(metadataForUnsequentialData).value().aggregateAliases_,
-        std::move(groupByCols), !requestLaziness);
+    Result::LazyResult generator = ad_utility::callFixedSizeVi(
+        (std::array{inWidth, outWidth}),
+        [&, self = this](auto inWidth, auto outWidth) {
+          return self->computeResultLazily<inWidth, outWidth>(
+              std::move(subresult), std::move(aggregates),
+              std::move(metadataForUnsequentialData).value().aggregateAliases_,
+              std::move(groupByCols), !requestLaziness);
+        });
 
     return requestLaziness
                ? Result{std::move(generator), resultSortedOn()}
@@ -645,28 +648,35 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
 
   auto localVocab = subresult->getCopyOfLocalVocab();
 
-  IdTable idTable = CALL_FIXED_SIZE(
-      (std::array{inWidth, outWidth}), &GroupByImpl::doGroupBy, this,
-      subresult->idTable(), groupByCols, aggregates, &localVocab);
+  IdTable idTable = ad_utility::callFixedSizeVi(
+      (std::array{inWidth, outWidth}),
+      [&, self = this](auto inWidth, auto outWidth) {
+        return self->doGroupBy<inWidth, outWidth>(
+            subresult->idTable(), groupByCols, aggregates, &localVocab);
+      });
 
   AD_LOG_DEBUG << "GroupBy result computation done." << std::endl;
   return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
 }
 
 // _____________________________________________________________________________
-CPP_template_def(int COLS, typename T)(
-    requires ranges::invocable<T, size_t, size_t>) size_t
-    GroupByImpl::searchBlockBoundaries(const T& onBlockChange,
-                                       const IdTableView<COLS>& idTable,
-                                       GroupBlock& currentGroupBlock) const {
+template <int COLS, typename T>
+QL_CONCEPT_OR_NOTHING(requires ranges::invocable<T, size_t, size_t>)
+size_t GroupByImpl::searchBlockBoundaries(const T& onBlockChange,
+                                          const IdTableView<COLS>& idTable,
+                                          GroupBlock& currentGroupBlock) const {
   size_t blockStart = 0;
 
   for (size_t pos = 0; pos < idTable.size(); pos++) {
     checkCancellation();
     bool rowMatchesCurrentBlock =
-        ql::ranges::all_of(currentGroupBlock, [&](const auto& colIdxAndValue) {
-          return idTable(pos, colIdxAndValue.first) == colIdxAndValue.second;
-        });
+        // TODO<joka921> ql::ranges has problems with the local lambda, find out
+        // what's wrong.
+        std::all_of(currentGroupBlock.begin(), currentGroupBlock.end(),
+                    [&](const auto& colIdxAndValue) {
+                      return idTable(pos, colIdxAndValue.first) ==
+                             colIdxAndValue.second;
+                    });
     if (!rowMatchesCurrentBlock) {
       onBlockChange(blockStart, pos);
       // setup for processing the next block
@@ -754,10 +764,11 @@ std::optional<IdTable> GroupByImpl::computeGroupByForSingleIndexScan() const {
   }
 
   // Distinct counts are only supported for triples with three variables without
-  // a GRAPH variable.
+  // a GRAPH variable and if no `LIMIT`/`OFFSET` clauses are present.
   bool countIsDistinct = varAndDistinctness.value().isDistinct_;
   if (countIsDistinct && (indexScan->numVariables() != 3 ||
-                          !indexScan->additionalVariables().empty())) {
+                          !indexScan->additionalVariables().empty() ||
+                          !indexScan->getLimitOffset().isUnconstrained())) {
     return std::nullopt;
   }
 
@@ -775,10 +786,14 @@ std::optional<IdTable> GroupByImpl::computeGroupByForSingleIndexScan() const {
       table(0, 0) = Id::makeFromInt(
           getIndex().getImpl().numDistinctCol0(permutation.value()).normal);
     } else {
-      table(0, 0) = Id::makeFromInt(getIndex().numTriples().normal);
+      const auto& limitOffset = indexScan->getLimitOffset();
+      table(0, 0) = Id::makeFromInt(
+          limitOffset.actualSize(getIndex().numTriples().normal));
     }
   } else {
-    table(0, 0) = Id::makeFromInt(indexScan->getExactSize());
+    const auto& limitOffset = indexScan->getLimitOffset();
+    table(0, 0) =
+        Id::makeFromInt(limitOffset.actualSize(indexScan->getExactSize()));
   }
   return table;
 }
@@ -824,13 +839,12 @@ std::optional<IdTable> GroupByImpl::computeGroupByObjectWithCount() const {
 
   // Compute the result and update the runtime information (we don't actually
   // do the index scan, but something smarter).
-  const auto& permutation =
-      getExecutionContext()->getIndex().getPimpl().getPermutation(
-          indexScan->permutation());
+  const auto& permutation = indexScan->permutation();
   auto result = permutation.getDistinctCol1IdsAndCounts(
-      col0Id.value(), cancellationHandle_, locatedTriplesSnapshot());
-  indexScan->updateRuntimeInformationWhenOptimizedOut(
-      {}, RuntimeInformation::Status::optimizedOut);
+      col0Id.value(), cancellationHandle_, locatedTriplesSnapshot(),
+      indexScan->getLimitOffset());
+
+  indexScan->updateRuntimeInformationWhenOptimizedOut({});
 
   return result;
 }
@@ -879,15 +893,17 @@ std::optional<IdTable> GroupByImpl::computeGroupByForFullIndexScan() const {
         "not supported."};
   }
 
-  _subtree->getRootOperation()->updateRuntimeInformationWhenOptimizedOut({});
+  const auto& indexScan = _subtree->getRootOperation();
+  _subtree->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
 
   const auto& permutation =
       getExecutionContext()->getIndex().getPimpl().getPermutation(
           permutationEnum.value());
   auto table = permutation.getDistinctCol0IdsAndCounts(
-      cancellationHandle_, locatedTriplesSnapshot());
+      cancellationHandle_, locatedTriplesSnapshot(),
+      indexScan->getLimitOffset());
   if (numCounts == 0) {
-    table.setColumnSubset({{0}});
+    table.setColumnSubset(std::array{ColumnIndex{0}});
   } else if (!variableIsBoundInSubtree) {
     // The variable inside the COUNT() is not part of the input, so it is always
     // unbound and has a count of 0 in each group.
@@ -978,7 +994,7 @@ GroupByImpl::checkIfJoinWithFullScan(const Join& join) const {
 // ____________________________________________________________________________
 std::optional<IdTable> GroupByImpl::computeGroupByForJoinWithFullScan() const {
   auto join = std::dynamic_pointer_cast<Join>(_subtree->getRootOperation());
-  if (!join) {
+  if (!join || !join->getLimitOffset().isUnconstrained()) {
     return std::nullopt;
   }
 
@@ -990,8 +1006,8 @@ std::optional<IdTable> GroupByImpl::computeGroupByForJoinWithFullScan() const {
       optimizedAggregateData.value();
 
   auto subresult = subtree.getResult();
-  threeVarSubtree.getRootOperation()->updateRuntimeInformationWhenOptimizedOut(
-      {});
+  threeVarSubtree.getRootOperation()
+      ->updateRuntimeInformationWhenOptimizedOut();
 
   join->updateRuntimeInformationWhenOptimizedOut(
       {subtree.getRootOperation()->getRuntimeInfoPointer(),
@@ -1092,14 +1108,14 @@ GroupByImpl::computeUnsequentialProcessingMetadata(
     // TODO<C++23> use views::enumerate
     size_t i = 0;
     for (const auto& groupedVariable : groupByVariables) {
-      groupedVariables.emplace_back(groupedVariable, i,
-                                    findGroupedVariable(expr, groupedVariable));
+      groupedVariables.push_back(
+          {groupedVariable, i, findGroupedVariable(expr, groupedVariable)});
       ++i;
     }
 
-    aliasesWithAggregateInfo.emplace_back(alias._expression, alias._outCol,
-                                          foundAggregates.value(),
-                                          groupedVariables);
+    aliasesWithAggregateInfo.push_back({alias._expression, alias._outCol,
+                                        foundAggregates.value(),
+                                        groupedVariables});
   }
 
   return HashMapOptimizationData{aliasesWithAggregateInfo};
@@ -1285,8 +1301,8 @@ GroupByImpl::getHashMapAggregationResults(
   auto& aggregateDataVariant =
       aggregationData.getAggregationDataVariant(dataIndex);
 
-  using B =
-      HashMapAggregationData<NUM_GROUP_COLUMNS>::template ArrayOrVector<Id>;
+  using B = typename HashMapAggregationData<
+      NUM_GROUP_COLUMNS>::template ArrayOrVector<Id>;
   for (size_t rowIdx = beginIndex; rowIdx < endIndex; ++rowIdx) {
     size_t vectorIdx;
     // Special case for lazy consumer where the hashmap is not used
@@ -1473,7 +1489,7 @@ void GroupByImpl::substituteAndEvaluate(
   originalChildrenForGroupVariable.reserve(substitutions.size());
   for (const auto& substitution : substitutions) {
     const auto& occurrences =
-        get<std::vector<ParentAndChildIndex>>(substitution.occurrences_);
+        std::get<std::vector<ParentAndChildIndex>>(substitution.occurrences_);
     // Substitute in the values of the grouped variable and store the original
     // expressions.
     originalChildrenForGroupVariable.emplace_back(
@@ -1738,7 +1754,7 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
       auto currentBlockSize = evaluationContext.size();
 
       // Perform HashMap lookup once for all groups in current block
-      using U = HashMapAggregationData<
+      using U = typename HashMapAggregationData<
           NUM_GROUP_COLUMNS>::template ArrayOrVector<ql::span<const Id>>;
       U groupValues;
       resizeIfVector(groupValues, columnIndices.size());

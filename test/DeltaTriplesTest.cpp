@@ -228,7 +228,10 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
           {"<A> <B> <C>", "<B> <C> <D>", "<A> <low> <a>", "<B> <D> <C>"},
           {"<A> <B> <D>", "<A> <B> <F>", "<A> <next> <B>", "<B> <next> <C>"}));
 
-  // Unsorted triples are not allowed.
+  // Unsorted triples are not allowed, but the assertion that checks this is
+  // 1. an `AD_EXPENSIVE_CHECK`.
+  // 2. Only enabled in C++20 mode.
+#ifndef QLEVER_CPP_17
   if constexpr (ad_utility::areExpensiveChecksEnabled) {
     AD_EXPECT_THROW_WITH_MESSAGE(
         deltaTriples.deleteTriples(
@@ -237,6 +240,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
                           {"<C> <prev> <B>", "<B> <prev> <A>"})),
         testing::_);
   }
+#endif
 
   // Deleting triples.
   deltaTriples.deleteTriples(

@@ -151,6 +151,13 @@ class SpatialJoinAlgorithms {
     return getRtreeEntry(idTable, row, col);
   }
 
+  // Prepare a libspatialjoin `SweeperCfg`. The result doesn't have any of its
+  // callbacks set yet. Before feeding the configuration to a `Sweeper` you
+  // usually want to set `writeRelCb` and `sweepCancellationCb`. Also
+  // `withinDist` should be set if a proximity search is intended.
+  static sj::SweeperCfg libspatialjoinSweeperConfig(
+      size_t threads, ad_utility::MemorySize totalAllowedMemory = 8_GB);
+
   // This helper functions parses WKT geometries from the given `column` in
   // `idTable` and adds them to `sweeper` (which will be used to perform the
   // spatial join). The Boolean `leftOrRightSide` specifies whether these
@@ -162,7 +169,18 @@ class SpatialJoinAlgorithms {
   // number of geometries added. This function is only `public` for testing
   // purposes and should otherwise not be used outside of this class.
   using IdTableAndJoinColumn = std::pair<const IdTable*, const ColumnIndex>;
-  std::pair<util::geo::I32Box, size_t> libspatialjoinParse(
+  struct LibSpatialJoinParseMetadata {
+    // Aggregated bounding box of all parsed geometries
+    util::geo::I32Box aggBoundingBox_;
+    // Number of geometries that were actually parsed excluding prefiltered ones
+    size_t numGeomsParsed_;
+    // Number of geometries dropped by prefilter
+    size_t numGeomsDropped_;
+    // Actual number of threads used (might be lower than result of
+    // `getNumThreads` for small inputs)
+    size_t numThreadsUsed_;
+  };
+  LibSpatialJoinParseMetadata libspatialjoinParse(
       bool leftOrRightSide, IdTableAndJoinColumn idTableAndCol,
       sj::Sweeper& sweeper, size_t numThreads,
       std::optional<util::geo::I32Box> prefilterBox) const;

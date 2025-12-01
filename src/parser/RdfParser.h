@@ -370,6 +370,7 @@ class TurtleParser : public RdfParserBase {
   FRIEND_TEST(RdfParserTest, base);
   FRIEND_TEST(RdfParserTest, sparqlBase);
   FRIEND_TEST(RdfParserTest, blankNode);
+  FRIEND_TEST(RdfParserTest, blankNodesUniqueAcrossFiles);
   FRIEND_TEST(RdfParserTest, blankNodePropertyList);
   FRIEND_TEST(RdfParserTest, numericLiteral);
   FRIEND_TEST(RdfParserTest, booleanLiteral);

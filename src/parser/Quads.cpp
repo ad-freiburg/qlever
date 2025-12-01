@@ -2,7 +2,7 @@
 // Chair of Algorithms and Data Structures
 // Author: Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 
-#include "Quads.h"
+#include "parser/Quads.h"
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "parser/UpdateClause.h"
@@ -53,7 +53,7 @@ updateClause::GraphUpdate::Triples Quads::toTriplesWithGraph(
   size_t numTriplesInGraphs = std::accumulate(
       graphTriples_.begin(), graphTriples_.end(), 0,
       [](size_t acc, const GraphBlock& block) {
-        return acc + get<ad_utility::sparql_types::Triples>(block).size();
+        return acc + std::get<ad_utility::sparql_types::Triples>(block).size();
       });
   quads.reserve(numTriplesInGraphs + freeTriples_.size());
   ad_utility::appendVector(
@@ -125,8 +125,8 @@ void Quads::forAllVariables(absl::FunctionRef<void(const Variable&)> f) {
   };
   auto visitGraphBlock = [&visitTriple, &f](const GraphBlock& block) {
     const auto& [graph, triples] = block;
-    if (holds_alternative<Variable>(graph)) {
-      f(get<Variable>(graph));
+    if (std::holds_alternative<Variable>(graph)) {
+      f(std::get<Variable>(graph));
     }
     ql::ranges::for_each(triples, visitTriple);
   };

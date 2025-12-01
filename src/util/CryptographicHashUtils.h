@@ -40,25 +40,25 @@ struct HexFormatter {
 };
 inline constexpr HexFormatter hexFormatter{};
 
-// `hashMd5` takes an argument of type `std::string_view` and provides
+// `HashMd5` takes an argument of type `std::string_view` and provides
 // a Hex value by applying `EVP_md5()` from the openssl library as a result.
-inline constexpr HashImpl<&EVP_md5, MD5_DIGEST_LENGTH> hashMd5{};
+using HashMd5 = HashImpl<&EVP_md5, MD5_DIGEST_LENGTH>;
 
-// `hashSha1` takes an argument of type `std::string_view` and provides
+// `HashSha1` takes an argument of type `std::string_view` and provides
 // a Hex by applying `EVP_sha1()` from the openssl library as a result.
-inline constexpr HashImpl<&EVP_sha1, SHA_DIGEST_LENGTH> hashSha1{};
+using HashSha1 = HashImpl<&EVP_sha1, SHA_DIGEST_LENGTH>;
 
-// `hashSha256` takes an argument of type `std::string_view` and provides
+// `HashSha256` takes an argument of type `std::string_view` and provides
 // a Hex by applying `EVP_sha256()` from the openssl library as a result.
-inline constexpr HashImpl<&EVP_sha256, SHA256_DIGEST_LENGTH> hashSha256{};
+using HashSha256 = HashImpl<&EVP_sha256, SHA256_DIGEST_LENGTH>;
 
-// `hashSha384` takes an argument of type `std::string_view` and provides
+// `HashSha384` takes an argument of type `std::string_view` and provides
 // a Hex by applying `EVP_sha384()` from the openssl library as a result.
-inline constexpr HashImpl<&EVP_sha384, SHA384_DIGEST_LENGTH> hashSha384{};
+using HashSha384 = HashImpl<&EVP_sha384, SHA384_DIGEST_LENGTH>;
 
-// `hashSha512` takes an argument of type `std::string_view` and provides
+// `HashSha512` takes an argument of type `std::string_view` and provides
 // a Hex by applying `EVP_sha512()` from the openssl library as a result.
-inline constexpr HashImpl<&EVP_sha512, SHA512_DIGEST_LENGTH> hashSha512{};
+using HashSha512 = HashImpl<&EVP_sha512, SHA512_DIGEST_LENGTH>;
 
 }  //  namespace ad_utility
 

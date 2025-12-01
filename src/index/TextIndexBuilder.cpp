@@ -443,7 +443,7 @@ void TextIndexBuilder::calculateBlockBoundariesImpl(
     // If we are in a block where one of the fourLetterPrefixes are contained,
     // use those as the block start.
     adjustPrefixSortKey(prefixSortKey, len);
-    return std::tuple{std::move(len), std::move(prefixSortKey)};
+    return std::make_tuple(std::move(len), std::move(prefixSortKey));
   };
   auto [currentLen, prefixSortKey] =
       getLengthAndPrefixSortKey(WordVocabIndex::make(0));

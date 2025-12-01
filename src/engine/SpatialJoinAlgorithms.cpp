@@ -68,7 +68,8 @@ bool SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
 }
 
 // ____________________________________________________________________________
-std::pair<util::geo::I32Box, size_t> SpatialJoinAlgorithms::libspatialjoinParse(
+SpatialJoinAlgorithms::LibSpatialJoinParseMetadata
+SpatialJoinAlgorithms::libspatialjoinParse(
     bool leftOrRightSide, IdTableAndJoinColumn idTableAndCol,
     sj::Sweeper& sweeper, size_t numThreads,
     std::optional<util::geo::I32Box> prefilterBox) const {
@@ -94,6 +95,14 @@ std::pair<util::geo::I32Box, size_t> SpatialJoinAlgorithms::libspatialjoinParse(
         "prefilter-disabled-by-bounding-box-area", true);
   }
 
+  // If the input is smaller than one batch for every thread, reduce the number
+  // of threads accordingly to avoid spawning threads that will never be used.
+  static constexpr auto batchSize =
+      ad_utility::detail::parallel_wkt_parser::WKT_PARSER_BATCH_SIZE;
+  static_assert(batchSize > 0);
+  size_t requiredBatches = (idTable->size() + batchSize - 1ULL) / batchSize;
+  numThreads = std::min(numThreads, requiredBatches);
+
   // Initialize the parser.
   ad_utility::detail::parallel_wkt_parser::WKTParser parser(
       &sweeper, numThreads, usePrefiltering, prefilterLatLngBox,
@@ -113,13 +122,9 @@ std::pair<util::geo::I32Box, size_t> SpatialJoinAlgorithms::libspatialjoinParse(
   // the geometries parsed so far.
   parser.done();
 
-  auto prefilterCounter = parser.getPrefilterCounter();
-  if (spatialJoin_.has_value() && prefilterBox.has_value()) {
-    spatialJoin_.value()->runtimeInfo().addDetail(
-        "num-geoms-dropped-by-prefilter", prefilterCounter);
-  }
-
-  return {parser.getBoundingBox(), idTable->size() - prefilterCounter};
+  auto numGeomsDropped = parser.getPrefilterCounter();
+  auto numGeomsParsed = idTable->size() - numGeomsDropped;
+  return {parser.getBoundingBox(), numGeomsParsed, numGeomsDropped, numThreads};
 }
 
 // ____________________________________________________________________________
@@ -377,6 +382,44 @@ Result SpatialJoinAlgorithms::BaselineAlgorithm() {
 }
 
 // ____________________________________________________________________________
+sj::SweeperCfg SpatialJoinAlgorithms::libspatialjoinSweeperConfig(
+    size_t threads, ad_utility::MemorySize totalAllowedMemory) {
+  using enum SpatialJoinType;
+  auto sep = [](SpatialJoinType type) {
+    return std::string{static_cast<char>(type)};
+  };
+  AD_CORRECTNESS_CHECK(threads > 0);
+
+  sj::SweeperCfg cfg;
+  cfg.numThreads = threads;
+  cfg.numCacheThreads = threads;
+  // Cache memory per thread, in bytes
+  cfg.geomCacheMaxSize = totalAllowedMemory.getBytes() / threads;
+  cfg.geomCacheMaxNumElements = 10'000;
+  cfg.sepIsect = sep(INTERSECTS);
+  cfg.sepContains = sep(CONTAINS);
+  cfg.sepCovers = sep(COVERS);
+  cfg.sepTouches = sep(TOUCHES);
+  cfg.sepEquals = sep(EQUALS);
+  cfg.sepOverlaps = sep(OVERLAPS);
+  cfg.sepCrosses = sep(CROSSES);
+  cfg.useBoxIds = true;
+  cfg.useArea = true;
+  cfg.useOBB = false;
+  cfg.useDiagBox = true;
+  cfg.useFastSweepSkip = true;
+  cfg.useInnerOuter = false;
+  cfg.noGeometryChecks = false;
+  cfg.computeDE9IM = false;
+  cfg.writeRelCb = {};
+  cfg.logCb = {};
+  cfg.statsCb = {};
+  cfg.sweepProgressCb = {};
+  cfg.sweepCancellationCb = {};
+  return cfg;
+}
+
+// ____________________________________________________________________________
 Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, rightSelectedCols, numColumns, maxDist, maxResults,
@@ -394,7 +437,7 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
   }
 
   // Add number of threads to runtime information.
-  spatialJoin_.value()->runtimeInfo().addDetail("spatialjoin num threads",
+  spatialJoin_.value()->runtimeInfo().addDetail("num-sweeper-threads",
                                                 NUM_THREADS);
 
   // Set the distance for the `WITHIN_DIST` join type. This has to be set to
@@ -406,48 +449,23 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
   }
 
   // Configure the sweeper.
-  const sj::SweeperCfg sweeperCfg = [&] {
-    sj::SweeperCfg cfg;
-    cfg.numThreads = NUM_THREADS;
-    cfg.numCacheThreads = NUM_THREADS;
-    cfg.geomCacheMaxSize = 10000;
-    cfg.pairStart = "";
-    cfg.sepIsect = std::string{static_cast<char>(SpatialJoinType::INTERSECTS)};
-    cfg.sepContains = std::string{static_cast<char>(SpatialJoinType::CONTAINS)};
-    cfg.sepCovers = std::string{static_cast<char>(SpatialJoinType::COVERS)};
-    cfg.sepTouches = std::string{static_cast<char>(SpatialJoinType::TOUCHES)};
-    cfg.sepEquals = std::string{static_cast<char>(SpatialJoinType::EQUALS)};
-    cfg.sepOverlaps = std::string{static_cast<char>(SpatialJoinType::OVERLAPS)};
-    cfg.sepCrosses = std::string{static_cast<char>(SpatialJoinType::CROSSES)};
-    cfg.pairEnd = "";
-    cfg.useBoxIds = true;
-    cfg.useArea = true;
-    cfg.useOBB = false;
-    cfg.useCutouts = true;
-    cfg.useDiagBox = true;
-    cfg.useFastSweepSkip = true;
-    cfg.useInnerOuter = false;
-    cfg.noGeometryChecks = false;
-    cfg.withinDist = withinDist;
-    cfg.writeRelCb = [&results, &resultDists, joinTypeVal](
-                         size_t t, const char* a, const char* b,
-                         const char* pred) {
-      if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
-        results[t].push_back({std::atoi(a), std::atoi(b)});
-        resultDists[t].push_back(atof(pred));
-      } else if (pred[0] == static_cast<char>(joinTypeVal)) {
-        results[t].push_back({std::atoi(a), std::atoi(b)});
-      }
-    };
-    cfg.logCb = {};
-    cfg.statsCb = {};
-    cfg.sweepProgressCb = {};
-    cfg.sweepCancellationCb = [this]() { throwIfCancelled(); };
-    return cfg;
-  }();
+  sj::SweeperCfg sweeperCfg = libspatialjoinSweeperConfig(
+      NUM_THREADS, qec_->getAllocator().amountMemoryLeft());
+  sweeperCfg.withinDist = withinDist;
+  sweeperCfg.writeRelCb = [&results, &resultDists, joinTypeVal](
+                              size_t t, const char* a, size_t, const char* b,
+                              size_t, const char* pred, size_t) {
+    if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
+      results[t].push_back({std::atoi(a), std::atoi(b)});
+      resultDists[t].push_back(atof(pred));
+    } else if (pred[0] == static_cast<char>(joinTypeVal)) {
+      results[t].push_back({std::atoi(a), std::atoi(b)});
+    }
+  };
+  sweeperCfg.sweepCancellationCb = [this]() { throwIfCancelled(); };
 
   std::string sweeperPath = qec_->getIndex().getOnDiskBase() + ".spatialjoin";
-  sj::Sweeper sweeper(sweeperCfg, ".", "", sweeperPath.c_str());
+  sj::Sweeper sweeper(sweeperCfg, ".", sweeperPath);
   ad_utility::Timer tParse{ad_utility::Timer::Started};
 
   // Parse the geometries from the left and right input table, starting with the
@@ -457,8 +475,12 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
   auto runParser = [&](IdTableAndJoinColumn smaller,
                        IdTableAndJoinColumn larger, bool smallerIsRight) {
     // Parse and add all geometries of the smaller side
-    auto [boxSmall, countSmall] = libspatialjoinParse(
-        smallerIsRight, smaller, sweeper, NUM_THREADS, std::nullopt);
+    auto [boxSmall, countSmall, droppedSmall, threadsSmall] =
+        libspatialjoinParse(smallerIsRight, smaller, sweeper, NUM_THREADS,
+                            std::nullopt);
+    AD_CORRECTNESS_CHECK(droppedSmall == 0);
+    spatialJoin_.value()->runtimeInfo().addDetail(
+        "num-parser-threads-smaller-side", threadsSmall);
 
     // Filtering by bounding box *after* parsing is only necessary if
     // precomputed bounding boxes for filtering *before* parsing are not
@@ -469,9 +491,16 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
 
     // Parse and add the relevant (intersection with the bounding box)
     // geometries from the larger side
-    auto [boxLarge, countLarge] =
+    auto [boxLarge, countLarge, droppedLarge, threadsLarge] =
         libspatialjoinParse(!smallerIsRight, larger, sweeper, NUM_THREADS,
                             sweeper.getPaddedBoundingBox(boxSmall));
+
+    spatialJoin_.value()->runtimeInfo().addDetail(
+        "num-parser-threads-larger-side", threadsLarge);
+    spatialJoin_.value()->runtimeInfo().addDetail("num-geoms-parsed",
+                                                  countSmall + countLarge);
+    spatialJoin_.value()->runtimeInfo().addDetail(
+        "num-geoms-dropped-by-prefilter", droppedLarge);
 
     // If we have filtered out all geometries or one side is otherwise empty,
     // bail out early.
@@ -489,7 +518,7 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
   // add the time for parsing and processing the geometries to the runtime
   // information.
   sweeper.flush();
-  spatialJoin_.value()->runtimeInfo().addDetail("time for reading geometries",
+  spatialJoin_.value()->runtimeInfo().addDetail("time-for-reading-geometries",
                                                 tParse.msecs().count());
 
   // Now do the sweep, which performs the actual spatial join.
@@ -499,7 +528,7 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
   if (nonEmptyChildren) {
     sweeper.sweep();
   }
-  spatialJoin_.value()->runtimeInfo().addDetail("time for spatialjoin sweep",
+  spatialJoin_.value()->runtimeInfo().addDetail("time-for-spatialjoin-sweep",
                                                 tSweep.msecs().count());
   ad_utility::Timer tCollect{ad_utility::Timer::Started};
 
@@ -524,7 +553,7 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
     }
   }
   spatialJoin_.value()->runtimeInfo().addDetail(
-      "time for collecting results from threads", tCollect.msecs().count());
+      "time-for-collecting-results-from-threads", tCollect.msecs().count());
 
   // Return the result.
   return Result(std::move(result), std::vector<ColumnIndex>{},
