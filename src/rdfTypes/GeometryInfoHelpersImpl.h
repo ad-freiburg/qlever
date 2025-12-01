@@ -554,6 +554,34 @@ DE9IMatrix getDE9IM(const ParsedWkt& left, const ParsedWkt& right) {
 };
 
 template <SpatialJoinType Relation>
+bool DE9IMatrixSatisfies(DE9IMatrix m, bool lineLine = false) {
+  using enum SpatialJoinType;
+  if constexpr (Relation == INTERSECTS) {
+    return m.intersects();
+  } else if constexpr (Relation == CONTAINS) {
+    return m.contains();
+  } else if constexpr (Relation == COVERS) {
+    return m.covers();
+  } else if constexpr (Relation == CROSSES) {
+    return lineLine ? m.overlaps02() : m.II() == D0;
+  } else if constexpr (Relation == TOUCHES) {
+    return m.touches();
+  } else if constexpr (Relation == EQUALS) {
+    return m.equals();
+  } else if constexpr (Relation == OVERLAPS) {
+    return lineLine ? m.overlaps1() : m.overlaps02();
+  } else if constexpr (Relation == WITHIN) {
+    return m.within();
+  } else if constexpr (Relation == WITHIN_DIST) {
+    // Within dist may not be used as input
+    static_assert(false);
+  } else {
+    // There are no further geometric relations
+    static_assert(false);
+  }
+}
+
+template <SpatialJoinType Relation>
 std::optional<bool> georel(const GeoPointOrWkt& left,
                            const GeoPointOrWkt& right) {
   auto [lType, lParsed] = parseGeoPointOrWkt(left);
@@ -562,7 +590,8 @@ std::optional<bool> georel(const GeoPointOrWkt& left,
     return std::nullopt;
   }
   auto de9im = getDE9IM(lParsed.value(), rParsed.value());
-  return de9im.intersects();  // TODO
+  bool lineLine = false;  // TODO
+  return DE9IMatrixSatisfies<Relation>(de9im, lineLine);
 }
 
 }  // namespace ad_utility::detail
