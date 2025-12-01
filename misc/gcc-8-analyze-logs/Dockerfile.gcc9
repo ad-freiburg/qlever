@@ -1,4 +1,5 @@
 # Dockerfile for building QLever with GCC8 for C++17 compatibility testing
+# It contains the GCC-8 toolchain, and all dependencies of QLever.
 FROM ubuntu:22.04
 
 # Prevent interactive prompts during installation

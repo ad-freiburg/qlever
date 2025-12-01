@@ -1,5 +1,7 @@
 #!/bin/bash
-# Script to build the GCC Docker container for QLever C++17 compatibility testing
+# Script to build the GCC Docker containers for QLever C++17 compatibility testing.
+# can be currently used to build containers for GCC versions 8 and 9, where the version
+# (as an integer) has to be passed as an argument to the script.
 
 set -e
 

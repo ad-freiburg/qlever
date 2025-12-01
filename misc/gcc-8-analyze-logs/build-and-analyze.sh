@@ -1,5 +1,10 @@
 #!/bin/bash
-# Script to be run inside the container to build QLever and analyze logs
+# This script compiles QLever using `g++-<version>`, where the version is specified as an argument to the script.
+# The script assumes that all the required toolchains, in particular the compiler and all dependencies of QLever
+# are already installed, so you typically run it inside a docker container.
+# The script compiles in C++17 mode, with all the required macros defined, and doesn't stop on the first error,
+# but continues the compilation to get as much information on the compilation errors as possible. The logs are stored
+# on disk for later analysis and are also directly fed to the `gcc-8-logs-analyzer` script.
 
 set -o pipefail
 

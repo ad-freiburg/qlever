@@ -1,6 +1,9 @@
 #!/bin/bash
 # Script to run GCC C++17 compatibility check for QLever
-# This script mimics the GitHub Actions workflow for local testing
+# It assumes that the docker container for the corresponding GCC version has been built using
+# the `build-gcc8-docker.sh` script. It then starts a docker container, mounting the current working
+# directory into the container to get access to the QLever sourcecode, and then runs the
+# `build-and-analyze.sh` script inside the container.
 
 set -e
 
