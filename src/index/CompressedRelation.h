@@ -17,7 +17,6 @@
 #include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"
 #include "util/File.h"
-#include "util/Generator.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Serializer/SerializeArrayOrTuple.h"
 #include "util/Serializer/SerializeOptional.h"
@@ -623,13 +622,8 @@ class CompressedRelationReader {
     void aggregate(const LazyScanMetadata& newValue);
   };
 
-  // TODO: rename to IdTableGenerator when other modules will migrate to non
-  // coro
   using IdTableGeneratorInputRange =
       ad_utility::InputRangeTypeErased<IdTable, LazyScanMetadata>;
-  // TODO: other modules are using this so, it was left untouched, should be
-  // removed when they migrate to ranges
-  using IdTableGenerator = IdTableGeneratorInputRange;
 
  private:
   // The allocator used to allocate intermediate buffers.
