@@ -453,8 +453,8 @@ struct ParseGeoPointOrWktVisitor {
     return std::visit(ParseGeoPointOrWktVisitor{}, geoPointOrWkt);
   }
 
-  ParseResult operator()(
-      const std::optional<GeoPointOrWkt>& geoPointOrWkt) const {
+  template <typename T>
+  ParseResult operator()(const std::optional<T>& geoPointOrWkt) const {
     if (!geoPointOrWkt.has_value()) {
       return {WKTType::NONE, std::nullopt};
     }
