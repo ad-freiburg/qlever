@@ -1255,6 +1255,7 @@ ExportQueryExecutionTrees::computeResult(
   }};
 
   using enum MediaType;
+
   static constexpr std::array supportedTypes{
       csv, tsv, octetStream, turtle, sparqlXml, sparqlJson, qleverJson};
   AD_CORRECTNESS_CHECK(ad_utility::contains(supportedTypes, mediaType));

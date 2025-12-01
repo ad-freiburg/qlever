@@ -49,7 +49,7 @@ NumericValue NumericValueGetter::operator()(
 // _____________________________________________________________________________
 auto EffectiveBooleanValueGetter::operator()(
     ValueId id, const EvaluationContext* context) const -> Result {
-  using enum sparqlExpression::detail::EffectiveBooleanValueGetter::Result;
+  using enum Result;
   switch (id.getDatatype()) {
     case Datatype::Double: {
       auto d = id.getDouble();
