@@ -9,27 +9,108 @@
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
+#include "index/IndexImpl.h"
 
 namespace sparqlExpression {
 namespace detail::langImpl {
 
 using Lit = ad_utility::triple_component::Literal;
-using OptValue = std::optional<std::string>;
 
 //______________________________________________________________________________
-struct GetLanguageTag {
-  IdOrLiteralOrIri operator()(OptValue optLangTag) const {
+// A value getter that returns the language tag as an ID if optimized, otherwise
+// as a literal
+struct LanguageTagAsIdOrLiteralGetter : Mixin<LanguageTagAsIdOrLiteralGetter> {
+  using Mixin<LanguageTagAsIdOrLiteralGetter>::operator();
+
+  IdOrLiteralOrIri operator()(ValueId id, const EvaluationContext* ctx) const {
+    // For VocabIndex IDs with language tags, try to return the optimized ID
+    if (id.getDatatype() == Datatype::VocabIndex) {
+      uint32_t langTagIndex = id.getLangTagIndex();
+
+      if (langTagIndex != LanguageTagManager::noLanguageTag &&
+          langTagIndex != LanguageTagManager::unknownLanguageTag) {
+        const auto& languageTagManager =
+            ctx->_qec.getIndex().getImpl().languageTagManager();
+        auto optIdBits = languageTagManager.getLanguageTagIdBits(langTagIndex);
+        if (optIdBits.has_value()) {
+          return Id::fromBits(optIdBits.value());
+        }
+      }
+    }
+
+    // Fall back to using the LanguageTagValueGetter to get the string
+    LanguageTagValueGetter stringGetter;
+    auto optLangTag = stringGetter(id, ctx);
+
     if (!optLangTag.has_value()) {
       return Id::makeUndefined();
+    }
+
+    const auto& langTag = optLangTag.value();
+    if (langTag.empty()) {
+      return LiteralOrIri{
+          Lit::literalWithNormalizedContent(asNormalizedStringViewUnsafe(""))};
+    }
+
+    // Check if this is an optimized language
+    const auto& languageTagManager =
+        ctx->_qec.getIndex().getImpl().languageTagManager();
+    uint32_t langTagIndex = languageTagManager.getLanguageTagIndex(langTag);
+
+    if (langTagIndex != LanguageTagManager::unknownLanguageTag &&
+        langTagIndex != LanguageTagManager::noLanguageTag) {
+      auto optIdBits = languageTagManager.getLanguageTagIdBits(langTagIndex);
+      if (optIdBits.has_value()) {
+        return Id::fromBits(optIdBits.value());
+      }
+    }
+
+    // Return the language tag as a literal
+    return LiteralOrIri{Lit::literalWithNormalizedContent(
+        asNormalizedStringViewUnsafe(langTag))};
+  }
+
+  IdOrLiteralOrIri operator()(const LiteralOrIri& litOrIri,
+                              const EvaluationContext* ctx) const {
+    if (litOrIri.isLiteral()) {
+      if (litOrIri.hasLanguageTag()) {
+        auto langTag =
+            std::string(asStringViewUnsafe(litOrIri.getLanguageTag()));
+
+        // Check if this is an optimized language
+        const auto& languageTagManager =
+            ctx->_qec.getIndex().getImpl().languageTagManager();
+        uint32_t langTagIndex = languageTagManager.getLanguageTagIndex(langTag);
+
+        if (langTagIndex != LanguageTagManager::unknownLanguageTag &&
+            langTagIndex != LanguageTagManager::noLanguageTag) {
+          auto optIdBits =
+              languageTagManager.getLanguageTagIdBits(langTagIndex);
+          if (optIdBits.has_value()) {
+            return Id::fromBits(optIdBits.value());
+          }
+        }
+
+        return LiteralOrIri{Lit::literalWithNormalizedContent(
+            asNormalizedStringViewUnsafe(langTag))};
+      }
+      // Literal without language tag returns empty string
+      return LiteralOrIri{
+          Lit::literalWithNormalizedContent(asNormalizedStringViewUnsafe(""))};
     } else {
-      return LiteralOrIri{Lit::literalWithNormalizedContent(
-          asNormalizedStringViewUnsafe(std::move(optLangTag.value())))};
+      return Id::makeUndefined();
     }
   }
 };
 
 //______________________________________________________________________________
-NARY_EXPRESSION(LangExpression, 1, FV<GetLanguageTag, LanguageTagValueGetter>);
+struct IdentityOperation {
+  IdOrLiteralOrIri operator()(IdOrLiteralOrIri value) const { return value; }
+};
+
+//______________________________________________________________________________
+NARY_EXPRESSION(LangExpression, 1,
+                FV<IdentityOperation, LanguageTagAsIdOrLiteralGetter>);
 
 }  //  namespace detail::langImpl
 

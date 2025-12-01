@@ -9,8 +9,10 @@
 
 #include <absl/strings/str_cat.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <limits>
+#include <vector>
 
 #include "backports/functional.h"
 #include "backports/keywords.h"
@@ -23,6 +25,7 @@
 #include "util/NBitInteger.h"
 #include "util/Serializer/Serializer.h"
 #include "util/SourceLocation.h"
+#include "util/json.h"
 
 /// The different Datatypes that a `ValueId` (see below) can encode.
 enum struct Datatype {
@@ -77,6 +80,114 @@ inline QL_CONSTEXPR std::string_view toString(Datatype type) {
   AD_FAIL();
 }
 
+/// Manages the mapping between language tags (as strings) and their compact
+/// integer representations for storage in ValueIds.
+class LanguageTagManager {
+ public:
+  // Constants for special language tag values
+  static constexpr uint32_t numLangTagBits = 20;
+  static constexpr uint32_t maxLangTagIndex = (1u << numLangTagBits) - 1;
+  static constexpr uint32_t noLanguageTag = maxLangTagIndex;  // 2^20 - 1
+  static constexpr uint32_t unknownLanguageTag =
+      maxLangTagIndex - 1;  // 2^20 - 2
+
+  LanguageTagManager() {
+    // Initialize with default common languages
+    optimizedLanguages_ = {"en", "de", "fr"};
+  }
+
+  /// Get the index for a language tag string. Returns noLanguageTag if empty,
+  /// unknownLanguageTag if not in the optimized list, or the index in the list.
+  uint32_t getLanguageTagIndex(std::string_view languageTag) const {
+    if (languageTag.empty()) {
+      return noLanguageTag;
+    }
+
+    auto it = std::find(optimizedLanguages_.begin(), optimizedLanguages_.end(),
+                        languageTag);
+    if (it != optimizedLanguages_.end()) {
+      return static_cast<uint32_t>(
+          std::distance(optimizedLanguages_.begin(), it));
+    }
+
+    return unknownLanguageTag;
+  }
+
+  /// Get the language tag string for a given index. Returns empty string for
+  /// noLanguageTag, throws for unknownLanguageTag, or returns the language
+  /// string.
+  std::string_view getLanguageTag(uint32_t index) const {
+    if (index == noLanguageTag) {
+      return "";
+    }
+    if (index == unknownLanguageTag) {
+      AD_THROW("Cannot retrieve language tag for unknown language index");
+    }
+    AD_CONTRACT_CHECK(index < optimizedLanguages_.size());
+    return optimizedLanguages_[index];
+  }
+
+  /// Get the list of optimized languages
+  const std::vector<std::string>& getOptimizedLanguages() const {
+    return optimizedLanguages_;
+  }
+
+  /// Set the list of optimized languages (for configuration during index
+  /// building)
+  void setOptimizedLanguages(std::vector<std::string> languages) {
+    optimizedLanguages_ = std::move(languages);
+  }
+
+  /// Add a language to the optimized list if not already present
+  void addOptimizedLanguage(std::string language) {
+    if (std::find(optimizedLanguages_.begin(), optimizedLanguages_.end(),
+                  language) == optimizedLanguages_.end()) {
+      optimizedLanguages_.push_back(std::move(language));
+    }
+  }
+
+  /// Get the number of optimized languages
+  size_t numOptimizedLanguages() const { return optimizedLanguages_.size(); }
+
+  /// Set the vocabulary ID (as raw bits) for a language tag index
+  /// This should be called after the index is loaded from disk
+  void setLanguageTagIdBits(uint32_t languageTagIndex, uint64_t vocabIdBits) {
+    if (languageTagToVocabIdBits_.size() <= languageTagIndex) {
+      languageTagToVocabIdBits_.resize(languageTagIndex + 1);
+    }
+    languageTagToVocabIdBits_[languageTagIndex] = vocabIdBits;
+  }
+
+  /// Get the vocabulary ID (as raw bits) for a language tag index
+  /// Returns std::nullopt if the mapping hasn't been set yet
+  std::optional<uint64_t> getLanguageTagIdBits(
+      uint32_t languageTagIndex) const {
+    if (languageTagIndex < languageTagToVocabIdBits_.size()) {
+      return languageTagToVocabIdBits_[languageTagIndex];
+    }
+    return std::nullopt;
+  }
+
+  /// Clear all ID mappings (useful when reloading an index)
+  void clearLanguageTagIds() { languageTagToVocabIdBits_.clear(); }
+
+  // JSON serialization support
+  friend void to_json(nlohmann::json& j, const LanguageTagManager& manager) {
+    j = manager.optimizedLanguages_;
+  }
+
+  friend void from_json(const nlohmann::json& j, LanguageTagManager& manager) {
+    manager.optimizedLanguages_ = j.get<std::vector<std::string>>();
+  }
+
+ private:
+  std::vector<std::string> optimizedLanguages_;
+  // Mapping from language tag index to the vocabulary ID (as raw bits) of the
+  // language string (e.g., index 0 for "en" maps to the ID of the literal "en"
+  // in the vocab)
+  std::vector<std::optional<uint64_t>> languageTagToVocabIdBits_;
+};
+
 /// Encode values of different types (the types from the `Datatype` enum above)
 /// using 4 bits for the datatype and 60 bits for the value.
 class ValueId {
@@ -87,9 +198,19 @@ class ValueId {
 
   using IntegerType = ad_utility::NBitInteger<numDataBits>;
 
+  // Bit layout for VocabIndex with language tags:
+  // [4 bits datatype][40 bits vocab index][20 bits language tag]
+  static constexpr T numVocabIndexBits = 40;
+  static constexpr T numLanguageTagBits = 20;
+  static_assert(numVocabIndexBits + numLanguageTagBits == numDataBits,
+                "VocabIndex and language tag bits must sum to data bits");
+
   /// The maximum value for the unsigned types that are used as indices
   /// (currently VocabIndex, LocalVocabIndex and Text).
   static constexpr T maxIndex = (1ull << numDataBits) - 1;
+
+  /// The maximum value for a vocab index (40 bits)
+  static constexpr T maxVocabIndex = (1ull << numVocabIndexBits) - 1;
 
   /// The smallest double > 0 that will not be rounded to zero by the precision
   /// loss of `FoldedId`. Symmetrically, `-minPositiveDouble` is the largest
@@ -296,7 +417,21 @@ class ValueId {
   /// represent values in the range [0, 2^60]. When `index` is outside of this
   /// range, and `IndexTooLargeException` is thrown.
   static ValueId makeFromVocabIndex(VocabIndex index) {
-    return makeFromIndex(index.get(), Datatype::VocabIndex);
+    return makeFromVocabIndex(index, LanguageTagManager::unknownLanguageTag);
+  }
+
+  /// Create a `ValueId` for a VocabIndex with an associated language tag index.
+  /// The vocab index uses 40 bits and the language tag uses 20 bits.
+  /// The language tag defaults to LanguageTagManager::unknownLanguageTag.
+  static ValueId makeFromVocabIndex(VocabIndex index,
+                                    uint32_t languageTagIndex) {
+    if (index.get() > maxVocabIndex) {
+      throw IndexTooLargeException(index.get());
+    }
+    // Layout: [40 bits vocab index][20 bits language tag]
+    T bits = (static_cast<T>(index.get()) << numLanguageTagBits) |
+             static_cast<T>(languageTagIndex);
+    return addDatatypeBits(bits, Datatype::VocabIndex);
   }
 
   static ValueId makeFromEncodedVal(uint64_t idx) {
@@ -323,8 +458,25 @@ class ValueId {
   /// Obtain the unsigned index that this `ValueId` encodes. If `getDatatype()
   /// != [VocabIndex|TextRecordIndex|LocalVocabIndex]` then the result is
   /// unspecified.
+  /// For VocabIndex, this extracts only the 40-bit vocab index part, ignoring
+  /// the 20-bit language tag.
   [[nodiscard]] constexpr VocabIndex getVocabIndex() const noexcept {
-    return VocabIndex::make(removeDatatypeBits(_bits));
+    T dataBits = removeDatatypeBits(_bits);
+    // Extract the upper 40 bits (vocab index part)
+    T vocabIndexBits = dataBits >> numLanguageTagBits;
+    return VocabIndex::make(vocabIndexBits);
+  }
+
+  /// Get the 20-bit language tag index from a VocabIndex ValueId.
+  /// Returns the language tag index, which may be one of:
+  /// - A valid index into the LanguageTagManager's list of optimized languages
+  /// - LanguageTagManager::noLanguageTag (2^20 - 1) for no language
+  /// - LanguageTagManager::unknownLanguageTag (2^20 - 2) for unknown languages
+  [[nodiscard]] constexpr uint32_t getLangTagIndex() const noexcept {
+    T dataBits = removeDatatypeBits(_bits);
+    // Extract the lower 20 bits (language tag part)
+    T langTagMask = (1ull << numLanguageTagBits) - 1;
+    return static_cast<uint32_t>(dataBits & langTagMask);
   }
 
   [[nodiscard]] constexpr uint64_t getEncodedVal() const noexcept {

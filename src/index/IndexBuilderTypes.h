@@ -158,7 +158,10 @@ struct alignas(256) ItemMapManager {
 
   /// If the key was seen before, return its preassigned ID. Else assign the
   /// next free ID to the string, store and return it.
-  Id getId(const TripleComponentOrId& keyOrId) {
+  /// The languageTagIndex parameter allows associating a language tag with
+  /// the ID (for VocabIndex types only).
+  Id getId(const TripleComponentOrId& keyOrId,
+           uint32_t languageTagIndex = LanguageTagManager::unknownLanguageTag) {
     if (std::holds_alternative<Id>(keyOrId)) {
       auto id = std::get<Id>(keyOrId);
       if (id.getDatatype() != Datatype::Undefined) {
@@ -185,9 +188,10 @@ struct alignas(256) ItemMapManager {
                        res, comparator_->extractAndTransformComparableNonOwning(
                                 repr, TripleComponentComparator::Level::TOTAL,
                                 key.isExternal_, &buffer.charAllocator())});
-      return Id::makeFromVocabIndex(VocabIndex::make(res));
+      return Id::makeFromVocabIndex(VocabIndex::make(res), languageTagIndex);
     } else {
-      return Id::makeFromVocabIndex(VocabIndex::make(it->second.id_));
+      return Id::makeFromVocabIndex(VocabIndex::make(it->second.id_),
+                                    languageTagIndex);
     }
   }
 
@@ -258,6 +262,15 @@ auto getIdMapLambdas(
     // currently fail without it.
     itemArray[j]->getId(TripleComponent{
         ad_utility::triple_component::Iri::fromIriref(LANGUAGE_PREDICATE)});
+
+    // Register all optimized language strings in the vocabulary so they can be
+    // looked up later and stored as IDs
+    for (const auto& lang :
+         indexPtr->languageTagManager().getOptimizedLanguages()) {
+      itemArray[j]->getId(TripleComponent{
+          ad_utility::triple_component::Literal::fromStringRepresentation(
+              "\"" + lang + "\"")});
+    }
   }
   using OptionalIds =
       std::array<std::optional<std::array<Id, NumColumnsIndexBuilding>>, 3>;
@@ -275,8 +288,25 @@ auto getIdMapLambdas(
             indexPtr](QL_CONCEPT_OR_NOTHING(ad_utility::Rvalue) auto&& tr) {
       auto lt = indexPtr->tripleToInternalRepresentation(AD_FWD(tr));
       OptionalIds res;
+
+      // Determine the language tag index for the object
+      uint32_t objectLangTagIndex = LanguageTagManager::unknownLanguageTag;
+      if (!lt.langtag_.empty()) {
+        objectLangTagIndex =
+            indexPtr->languageTagManager().getLanguageTagIndex(lt.langtag_);
+      }
+
       // get Ids for the actual triple and store them in the result.
-      res[0] = map.getId(lt.triple_);
+      // We need to handle each element separately to pass the language tag
+      // for the object
+      std::array<Id, NumColumnsIndexBuilding> tripleIds;
+      tripleIds[0] = map.getId(lt.triple_[0]);  // subject
+      tripleIds[1] = map.getId(lt.triple_[1]);  // predicate
+      tripleIds[2] = map.getId(lt.triple_[2],
+                               objectLangTagIndex);  // object with language tag
+      tripleIds[3] = map.getId(lt.triple_[3]);       // graph
+      res[0] = tripleIds;
+
       if (!lt.langtag_.empty()) {  // the object of the triple was a literal
                                    // with a language tag
         // get the Id for the corresponding langtag Entity
