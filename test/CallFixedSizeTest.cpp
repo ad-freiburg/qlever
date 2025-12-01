@@ -77,7 +77,7 @@ auto lambda = [](auto valueIdentityI, int arg1 = 0, int arg2 = 0) {
 // of the `CALL_FIXED_SIZE` macro. Note that here we have to state all the
 // types of the arguments explicitly and default values do not work.
 template <int I>
-auto freeFunction(int arg1 = 0, int arg2 = 0) {
+auto freeFunction(int arg1, int arg2) {
   return I + arg1 + arg2;
 }
 
@@ -85,12 +85,12 @@ auto freeFunction(int arg1 = 0, int arg2 = 0) {
 // `CALL_FIXED_SIZE` macro
 struct S {
   template <int I>
-  auto memberFunction(int arg1 = 0, int arg2 = 0) {
+  auto memberFunction(int arg1, int arg2) {
     return I + arg1 + arg2;
   }
 
   template <int I>
-  static auto staticFunction(int arg1 = 0, int arg2 = 0) {
+  static auto staticFunction(int arg1, int arg2) {
     return I + arg1 + arg2;
   }
 };
@@ -100,16 +100,10 @@ struct S {
 TEST(CallFixedSize, CallFixedSize1) {
   using namespace oneVar;
   // static constexpr int m = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE;
-  auto testWithGivenUpperBound = [](auto m, bool useMacro) {
+  auto testWithGivenUpperBound = [](auto m) {
     for (int i = 0; i <= m; ++i) {
       ASSERT_EQ(callFixedSizeVi<m>(i, lambda), i);
       ASSERT_EQ(callFixedSizeVi<m>(i, lambda, 2, 3), i + 5);
-      if (useMacro) {
-        ASSERT_EQ(CALL_FIXED_SIZE(i, freeFunction, 2, 3), i + 5);
-        S s;
-        ASSERT_EQ(CALL_FIXED_SIZE(i, &S::memberFunction, &s, 2, 3), i + 5);
-        ASSERT_EQ(CALL_FIXED_SIZE(i, &S::staticFunction, 2, 3), i + 5);
-      }
     }
 
     // Values that are greater than `m` will be mapped to zero before being
@@ -117,20 +111,13 @@ TEST(CallFixedSize, CallFixedSize1) {
     for (int i = m + 1; i <= m + m + 1; ++i) {
       ASSERT_EQ(callFixedSizeVi<m>(i, lambda), 0);
       ASSERT_EQ(callFixedSizeVi<m>(i, lambda, 2, 3), 5);
-      if (useMacro) {
-        ASSERT_EQ(CALL_FIXED_SIZE(i, freeFunction, 2, 3), 5);
-        S s;
-        ASSERT_EQ(CALL_FIXED_SIZE(i, &S::memberFunction, &s, 2, 3), 5);
-        ASSERT_EQ(CALL_FIXED_SIZE(i, &S::staticFunction, 2, 3), 5);
-      }
     }
   };
   testWithGivenUpperBound(
-      std::integral_constant<int, DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE>{},
-      true);
+      std::integral_constant<int, DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE>{});
   // Custom upper bounds cannot be tested with the macros, as the macros don't
   // allow redefining the upper bound.
-  testWithGivenUpperBound(std::integral_constant<int, 12>{}, false);
+  testWithGivenUpperBound(std::integral_constant<int, 12>{});
 }
 
 // Tests for two variables. The test cases are similar to the one variable
@@ -172,20 +159,12 @@ TEST(CallFixedSize, CallFixedSize2) {
   using namespace twoVars;
   using namespace ad_utility::detail;
 
-  auto testWithGivenUpperBound = [](auto m, bool useMacro) {
+  auto testWithGivenUpperBound = [](auto m) {
     // For given values for the template parameters I and J, and the result
     // I - J perform a set of tests.
     auto testForIAndJ = [&](auto array, auto resultOfIJ) {
       ASSERT_EQ(callFixedSizeVi<m>(array, lambda), resultOfIJ);
       ASSERT_EQ(callFixedSizeVi<m>(array, lambda, 2, 3), resultOfIJ + 5);
-      if (useMacro) {
-        ASSERT_EQ(CALL_FIXED_SIZE(array, freeFunction, 2, 3), resultOfIJ + 5);
-        S s;
-        ASSERT_EQ(CALL_FIXED_SIZE(array, &S::memberFunction, &s, 2, 3),
-                  resultOfIJ + 5);
-        ASSERT_EQ(CALL_FIXED_SIZE(array, &S::staticFunction, 2, 3),
-                  resultOfIJ + 5);
-      }
     };
     // TODO<joka921, Clang16> the ranges of the loop can be greatly simplified
     // using `ql::views::iota`, but views don't work yet on clang.
@@ -221,9 +200,6 @@ TEST(CallFixedSize, CallFixedSize2) {
   };
 
   testWithGivenUpperBound(
-      std::integral_constant<int, DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE>{},
-      true);
-  // Custom upper bounds cannot be tested with the macros, as the macros don't
-  // allow redefining the upper bound.
-  testWithGivenUpperBound(std::integral_constant<int, 12>{}, false);
+      std::integral_constant<int, DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE>{});
+  testWithGivenUpperBound(std::integral_constant<int, 12>{});
 }

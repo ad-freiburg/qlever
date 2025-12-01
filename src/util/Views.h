@@ -283,7 +283,7 @@ CallbackOnEndView(R&&, F) -> CallbackOnEndView<all_t<R>, F>;
 // A drop-in replacement for `std::views::as_rvalue` from C++23.
 // It yields the same elements as the underlying range, but casts them to
 // rvalue references via `std::move`. It is implemented via
-// `std::make_move_iterator`.
+// `ql::make_move_iterator`.
 CPP_template(typename UnderlyingRange)(
     requires ql::ranges::view<UnderlyingRange> CPP_and
         ql::ranges::input_range<UnderlyingRange>) class RvalueView
@@ -323,11 +323,11 @@ CPP_template(typename UnderlyingRange)(
   // Note: We currently don't implement the const `begin` and `end` functions,
   // but they can be added should they ever become necessary.
   constexpr auto begin() {
-    return std::make_move_iterator(ql::ranges::begin(underlyingRange_));
+    return ql::make_move_iterator(ql::ranges::begin(underlyingRange_));
   }
   constexpr auto end() {
     if constexpr (ql::ranges::common_range<UnderlyingRange>) {
-      return std::move_iterator{ql::ranges::end(underlyingRange_)};
+      return ql::move_iterator{ql::ranges::end(underlyingRange_)};
     } else {
       return ql::move_sentinel(ql::ranges::end(underlyingRange_));
     }

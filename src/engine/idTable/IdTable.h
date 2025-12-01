@@ -210,8 +210,8 @@ class IdTable {
   CPP_template(typename ColT)(
       requires ql::ranges::forward_range<ColT> CPP_and CPP_NOT(isView))
       IdTable(size_t numColumns, ColT columns)
-      : data_{std::make_move_iterator(columns.begin()),
-              std::make_move_iterator(columns.end())},
+      : data_{ql::make_move_iterator(columns.begin()),
+              ql::make_move_iterator(columns.end())},
         numColumns_{numColumns} {
     if constexpr (!isDynamic) {
       AD_CONTRACT_CHECK(NumColumns == numColumns);
@@ -524,8 +524,8 @@ class IdTable {
           std::vector<ColumnStorage> newColumns,
           Allocator allocator = {}) const {
     AD_CONTRACT_CHECK(newColumns.size() >= numColumns());
-    Data newStorage(std::make_move_iterator(newColumns.begin()),
-                    std::make_move_iterator(newColumns.begin() + numColumns()));
+    Data newStorage(ql::make_move_iterator(newColumns.begin()),
+                    ql::make_move_iterator(newColumns.begin() + numColumns()));
     ql::ranges::for_each(
         ad_utility::integerRange(numColumns()), [this, &newStorage](auto i) {
           newStorage[i].insert(newStorage[i].end(), data()[i].begin(),

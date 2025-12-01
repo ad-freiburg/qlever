@@ -331,9 +331,11 @@ TEST(RdfParserTest, literalAndDatatypeToTripleComponent) {
 
 TEST(RdfParserTest, blankNode) {
   auto runCommonTests = [](const auto& checker) {
-    checker(" _:blank1", "_:u_blank1", 9);
-    checker(" _:blank1 someRemainder", "_:u_blank1", 9);
-    auto p = checker("  _:blank2 someOtherStuff", "_:u_blank2", 10);
+    // Labeled blank nodes include the blankNodePrefix (4) to ensure uniqueness
+    // across different input files.
+    checker(" _:blank1", "_:u_4_blank1", 9);
+    checker(" _:blank1 someRemainder", "_:u_4_blank1", 9);
+    auto p = checker("  _:blank2 someOtherStuff", "_:u_4_blank2", 10);
     ASSERT_EQ(p.numBlankNodes_, 0u);
     // anonymous blank node
     p = checker(" [    \n\t  ]", "_:g_4_0", 11u);
@@ -347,6 +349,22 @@ TEST(RdfParserTest, blankNode) {
   runCommonTests(checkCtre);
   runCommonTests(checkRe2Subject);
   runCommonTests(checkCtreSubject);
+}
+
+// Test that blank nodes with the same label from different parser instances
+// (simulating different input files) are mapped to different blank nodes.
+TEST(RdfParserTest, blankNodesUniqueAcrossFiles) {
+  auto checkRe2Prefix3 = checkParseResult<Re2Parser, &Re2Parser::blankNode, 3>;
+  auto checkRe2Prefix7 = checkParseResult<Re2Parser, &Re2Parser::blankNode, 7>;
+
+  // Same label "_:x" but different parser prefixes should yield different
+  // blank node identifiers.
+  checkRe2Prefix3(" _:x", "_:u_3_x", 4);
+  checkRe2Prefix7(" _:x", "_:u_7_x", 4);
+
+  // Anonymous blank nodes should also be unique across parsers.
+  checkRe2Prefix3(" []", "_:g_3_0", 3);
+  checkRe2Prefix7(" []", "_:g_7_0", 3);
 }
 
 TEST(RdfParserTest, blankNodePropertyList) {
@@ -424,6 +442,7 @@ TEST(RdfParserTest, sparqlBase) {
 
 TEST(RdfParserTest, object) {
   auto runCommonTests = [](auto p) {
+    p.setBlankNodePrefixOnlyForTesting(99);
     auto sub = iri("<sub>");
     auto pred = iri("<pred>");
     p.activeSubject_ = sub;
@@ -443,12 +462,14 @@ TEST(RdfParserTest, object) {
     exp = TurtleTriple{sub, pred, lit(literal)};
     ASSERT_EQ(p.triples_.back(), exp);
 
+    // Blank node labels include the parser prefix (99) for cross-file
+    // uniqueness.
     string blank = "_:someblank";
     p.setInputStream(blank);
     ASSERT_TRUE(p.object());
-    ASSERT_EQ(p.lastParseResult_, "_:u_someblank");
+    ASSERT_EQ(p.lastParseResult_, "_:u_99_someblank");
 
-    exp = TurtleTriple{sub, pred, "_:u_someblank"};
+    exp = TurtleTriple{sub, pred, "_:u_99_someblank"};
     ASSERT_EQ(p.triples_.back(), exp);
   };
   runCommonTests(re2Parser());
@@ -1237,6 +1258,7 @@ TEST(RdfParserTest, stopParsingOnOutsideFailure) {
 // _____________________________________________________________________________
 TEST(RdfParserTest, nQuadParser) {
   auto runTestsForParser = [](auto parser) {
+    parser.setBlankNodePrefixOnlyForTesting(42);
     parser.setInputStream(
         "<x> <y> <z> <g>. <x2> <y2> _:blank . <x2> <y2> \"literal\" _:blank2 "
         ".");
@@ -1247,10 +1269,12 @@ TEST(RdfParserTest, nQuadParser) {
     expected.emplace_back(iri("<x>"), iri("<y>"), iri("<z>"), iri("<g>"));
     auto internalGraphId =
         qlever::specialIds().at(std::string{DEFAULT_GRAPH_IRI});
-    expected.emplace_back(iri("<x2>"), iri("<y2>"), "_:u_blank",
+    // Blank node labels include the parser prefix (42) for cross-file
+    // uniqueness.
+    expected.emplace_back(iri("<x2>"), iri("<y2>"), "_:u_42_blank",
                           internalGraphId);
     expected.emplace_back(iri("<x2>"), iri("<y2>"), lit("literal"),
-                          "_:u_blank2");
+                          "_:u_42_blank2");
     EXPECT_THAT(triples, ::testing::ElementsAreArray(expected));
 
     auto expectParsingFails = [](const std::string& input) {

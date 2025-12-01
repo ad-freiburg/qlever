@@ -214,7 +214,7 @@ class FsstEncoder {
       for (size_t i = 0; i < strings.size(); ++i) {
         stringViews.emplace_back(outputPtrs.at(i), outputLengths.at(i));
       }
-      return std::tuple{std::move(outputPtr), std::move(stringViews),
+      return BulkResult{std::move(outputPtr), std::move(stringViews),
                         FsstDecoder(fsst_decoder(encoder))};
     }
   }

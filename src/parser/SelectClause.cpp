@@ -61,8 +61,8 @@ void SelectClause::addAlias(parsedQuery::SelectClause::VarOrAlias varOrAlias,
 
 // ____________________________________________________________________
 void SelectClause::setSelected(std::vector<Variable> variables) {
-  std::vector<VarOrAlias> v(std::make_move_iterator(variables.begin()),
-                            std::make_move_iterator(variables.end()));
+  std::vector<VarOrAlias> v(ql::make_move_iterator(variables.begin()),
+                            ql::make_move_iterator(variables.end()));
   setSelected(v);
 }
 

@@ -179,7 +179,7 @@ static void literalUnescape(std::string_view input, std::string& res) {
 // ____________________________________________________________________________
 static void literalUnescapeWithQuotesRemoved(std::string_view input,
                                              std::string& res) {
-  if (ql::starts_with(input, R"(""")") || input.starts_with(R"(''')")) {
+  if (ql::starts_with(input, R"(""")") || ql::starts_with(input, R"(''')")) {
     AD_CONTRACT_CHECK(ql::ends_with(input, input.substr(0, 3)));
     input.remove_prefix(3);
     input.remove_suffix(3);

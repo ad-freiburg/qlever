@@ -172,7 +172,11 @@ void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
   tracer.beginTrace("rewriteLocalVocabEntries");
   rewriteLocalVocabEntriesAndBlankNodes(triples);
   tracer.endTrace("rewriteLocalVocabEntries");
+  // TODO<joka921> Once the migration is finished, check whether we can remove
+  // the `ifndef` here again.
+#ifndef QLEVER_CPP_17
   AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(triples));
+#endif
   AD_EXPENSIVE_CHECK(std::unique(triples.begin(), triples.end()) ==
                      triples.end());
   tracer.beginTrace("removeExistingTriples");
@@ -218,8 +222,9 @@ SharedLocatedTriplesSnapshot DeltaTriples::getSnapshot() {
   // copies), hence the explicit `clone`.
   auto snapshotIndex = nextSnapshotIndex_;
   ++nextSnapshotIndex_;
-  return SharedLocatedTriplesSnapshot{std::make_shared<LocatedTriplesSnapshot>(
-      locatedTriples(), localVocab_.getLifetimeExtender(), snapshotIndex)};
+  return SharedLocatedTriplesSnapshot{
+      std::make_shared<LocatedTriplesSnapshot>(LocatedTriplesSnapshot{
+          locatedTriples(), localVocab_.getLifetimeExtender(), snapshotIndex})};
 }
 
 // ____________________________________________________________________________

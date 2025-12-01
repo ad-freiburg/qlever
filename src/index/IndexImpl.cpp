@@ -130,7 +130,7 @@ static auto lazyOptionalJoinOnFirstColumn(T1& leftInput, T2& rightInput,
       std::move(outputTable),
       std::make_shared<ad_utility::CancellationHandle<>>(),
       true,
-      BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP,
+      BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP(),
       resultCallback};
 
   ad_utility::zipperJoinForBlocksWithoutUndef(leftInput, rightInput, comparator,
@@ -156,7 +156,7 @@ static auto fixBlockAfterPatternJoin(T block) {
   // The permutation must be the inverse of the original permutation, which just
   // switches the third column (the object) into the first column (where the
   // join column is expected by the algorithms).
-  static constexpr auto permutation =
+  static QL_CONSTEXPR auto permutation =
       makePermutationFirstThirdSwitched<NumColumnsIndexBuilding + 2>();
   block.value().setColumnSubset(permutation);
   ql::ranges::for_each(
@@ -220,7 +220,7 @@ IndexImpl::buildOspWithPatterns(
         IdTable outputBufferTable{NumColumnsIndexBuilding + 2,
                                   ad_utility::makeUnlimitedAllocator<Id>()};
         auto pushToQueue = [&, bufferSize =
-                                   BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP.load()](
+                                   BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP().load()](
                                IdTable& table, LocalVocab&) {
           if (table.numRows() >= bufferSize) {
             if (!outputBufferTable.empty()) {
@@ -794,7 +794,7 @@ auto IndexImpl::convertPartialToGlobalIds(
   for (auto& mapping : mappings) {
     auto idMap = std::make_shared<Map>(std::move(mapping));
 
-    const size_t bufferSize = BUFFER_SIZE_PARTIAL_TO_GLOBAL_ID_MAPPINGS;
+    const size_t bufferSize = BUFFER_SIZE_PARTIAL_TO_GLOBAL_ID_MAPPINGS();
     Buffer buffer{ad_utility::makeUnlimitedAllocator<Id>()};
     buffer.reserve(bufferSize);
     auto pushBatch = [&buffer, &idMap, &lookupQueue, &getLookupTask,

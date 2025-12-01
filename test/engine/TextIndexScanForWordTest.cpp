@@ -444,6 +444,19 @@ TEST(TextIndexScanForWord, CacheKey) {
   ASSERT_NE(s3.getCacheKeyImpl(), s5.getCacheKeyImpl());
   // Different text variables, same words (both without prefix)
   ASSERT_EQ(s4.getCacheKeyImpl(), s5.getCacheKeyImpl());
+
+  auto copy = s1.getConfig();
+  // Prefix config should be overwritten so this returns the same operation.
+  copy.isPrefix_ = !copy.isPrefix_;
+  TextIndexScanForWord s6{qec, copy};
+  EXPECT_EQ(s1.getResultWidth(), s6.getResultWidth());
+  EXPECT_EQ(s1.getCacheKeyImpl(), s6.getCacheKeyImpl());
+
+  copy = s1.getConfig();
+  copy.scoreVar_ = std::nullopt;
+  TextIndexScanForWord s7{qec, copy};
+  EXPECT_NE(s1.getResultWidth(), s7.getResultWidth());
+  EXPECT_NE(s1.getCacheKeyImpl(), s7.getCacheKeyImpl());
 }
 
 TEST(TextIndexScanForWord, KnownEmpty) {

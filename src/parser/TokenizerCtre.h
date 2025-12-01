@@ -304,7 +304,7 @@ class TokenizerCtre : public SkipWhitespaceAndCommentsMixin<TokenizerCtre> {
   // left, so there's no match.
   template <size_t idx>
   std::tuple<bool, size_t, std::string_view> getNextTokenRecurse() {
-    return std::tuple(false, idx, "");
+    return std::make_tuple(false, idx, std::string_view{""});
   }
 
   /*
@@ -328,8 +328,9 @@ class TokenizerCtre : public SkipWhitespaceAndCommentsMixin<TokenizerCtre> {
     reset(beg, dataSize);
     bool curBetter = currentSuccess && res.size() > content.size();
 
-    return std::tuple(success || currentSuccess, curBetter ? idx : unusedIdx,
-                      curBetter ? res : content);
+    return std::make_tuple(success || currentSuccess,
+                           curBetter ? idx : unusedIdx,
+                           curBetter ? res : content);
   }
 
   /*

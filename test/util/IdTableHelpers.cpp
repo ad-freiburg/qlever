@@ -61,8 +61,10 @@ void compareIdTableWithExpectedContent(
 
 // ____________________________________________________________________________
 void sortIdTableByJoinColumnInPlace(IdTableAndJoinColumn& table) {
-  CALL_FIXED_SIZE((std::array{table.idTable.numColumns()}), &Engine::sort,
-                  &table.idTable, table.joinColumn);
+  ad_utility::callFixedSizeVi(
+      table.idTable.numColumns(), [&table](auto numCols) {
+        Engine::sort<numCols>(&table.idTable, table.joinColumn);
+      });
 }
 
 // ____________________________________________________________________________

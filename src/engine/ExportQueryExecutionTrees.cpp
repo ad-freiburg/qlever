@@ -467,11 +467,19 @@ ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
         }
         double dIntPart;
         // If the fractional part is zero, write number with one decimal place
-        // to make it distinct from integers. Otherwise, use `%g`, which uses
+        // to make it distinct from integers. Otherwise, use `%.13g`, which uses
         // fixed-size or exponential notation, whichever is more compact.
-        std::string out = std::modf(d, &dIntPart) == 0.0
-                              ? absl::StrFormat("%.1f", d)
-                              : absl::StrFormat("%g", d);
+        std::string out;
+        if (std::modf(d, &dIntPart) == 0.0) {
+          out = absl::StrFormat("%.1f", d);
+        } else {
+          out = absl::StrFormat("%.13g", d);
+          // For some values `modf` evaluates to zero, but rounding still leads
+          // to a value without a trailing '.0'.
+          if (out.find_last_of(".e") == std::string::npos) {
+            out += ".0";
+          }
+        }
         return std::pair{std::move(out), XSD_DECIMAL_TYPE};
       }();
     case Bool:

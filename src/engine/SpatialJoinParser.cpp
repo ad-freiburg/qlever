@@ -61,7 +61,8 @@ void WKTParser::processQueue(size_t t) {
         // If we have not filtered out this geometry, read and parse the full
         // string.
         job.wkt = _index.indexToString(job.valueId.getVocabIndex());
-        parseLine(job.wkt.data(), job.wkt.size(), job.line, t, w, job.side);
+        parseLine(job.wkt.data(), job.wkt.size(), job.line, t, w, job.side,
+                  false);
         parseCounter++;
       } else if (dt == Datatype::GeoPoint) {
         const auto& p = job.valueId.getGeoPoint();
@@ -90,7 +91,8 @@ void WKTParser::processQueue(size_t t) {
         const auto& literalOrIri = *job.valueId.getLocalVocabIndex();
         if (literalOrIri.isLiteral()) {
           job.wkt = asStringViewUnsafe(literalOrIri.getLiteral().getContent());
-          parseLine(job.wkt.data(), job.wkt.size(), job.line, t, w, job.side);
+          parseLine(job.wkt.data(), job.wkt.size(), job.line, t, w, job.side,
+                    false);
           parseCounter++;
         }
       }
