@@ -20,6 +20,9 @@
 
 #include <absl/functional/bind_front.h>
 
+#ifndef QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17
+#include "backports/functional.h"
+#endif
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/Generator.h"
 
