@@ -144,30 +144,46 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(
 void DeltaTriples::insertTriples(CancellationHandle cancellationHandle,
                                  Triples triples,
                                  ad_utility::timer::TimeTracer& tracer) {
+  tracer.beginTrace("makeInternalTriples");
   auto internalTriples = makeInternalTriples(triples);
+  tracer.endTrace("makeInternalTriples");
   AD_LOG_DEBUG << "Inserting"
                << " " << triples.size()
-               << " triples (including idempotent triples)." << std::endl;
+               << " triples (including idempotent triples). With "
+               << internalTriples.size() << " additional internal triples."
+               << std::endl;
+  tracer.beginTrace("externalPermutation");
   modifyTriplesImpl(cancellationHandle, std::move(triples), true,
                     triplesInserted_, triplesDeleted_, tracer);
+  tracer.endTrace("externalPermutation");
+  tracer.beginTrace("internalPermutation");
   modifyTriplesImpl(std::move(cancellationHandle), std::move(internalTriples),
                     true, internalTriplesInserted_, internalTriplesDeleted_,
                     tracer);
+  tracer.endTrace("internalPermutation");
 }
 
 // ____________________________________________________________________________
 void DeltaTriples::deleteTriples(CancellationHandle cancellationHandle,
                                  Triples triples,
                                  ad_utility::timer::TimeTracer& tracer) {
+  tracer.beginTrace("makeInternalTriples");
   auto internalTriples = makeInternalTriples(triples);
+  tracer.endTrace("makeInternalTriples");
   AD_LOG_DEBUG << "Deleting"
                << " " << triples.size()
-               << " triples (including idempotent triples)." << std::endl;
+               << " triples (including idempotent triples). With "
+               << internalTriples.size() << " additional internal triples."
+               << std::endl;
+  tracer.beginTrace("externalPermutation");
   modifyTriplesImpl(cancellationHandle, std::move(triples), false,
                     triplesDeleted_, triplesInserted_, tracer);
+  tracer.endTrace("externalPermutation");
+  tracer.beginTrace("internalPermutation");
   modifyTriplesImpl(std::move(cancellationHandle), std::move(internalTriples),
                     false, internalTriplesDeleted_, internalTriplesInserted_,
                     tracer);
+  tracer.endTrace("internalPermutation");
 }
 
 // ____________________________________________________________________________
