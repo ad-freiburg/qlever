@@ -105,7 +105,7 @@ CPP_template(typename UnderlyingSerializer, typename CompressionFunction)(
 
   // Flush the temporary buffer, and then move out the underlying serializer.
   UnderlyingSerializer underlyingSerializer() && {
-    AD_CONTRACT_CHECK(underlyingSerializer_.has_value());
+    AD_CORRECTNESS_CHECK(underlyingSerializer_.has_value());
     flushBlocks(true);
     return std::move(*underlyingSerializer_);
   }
@@ -181,6 +181,9 @@ CPP_template(typename UnderlyingSerializer, typename DecompressionFunction)(
   CompressedReadSerializer(CompressedReadSerializer&&) = default;
   CompressedReadSerializer& operator=(CompressedReadSerializer&&) = default;
 
+  // The main serialization function. If the `buffer_` doesn't contain enough
+  // bytes, then additional blocks are read and decompressed from the underlying
+  // buffer.
   void serializeBytes(char* bytePointer, size_t numBytes) {
     while (numBytes > 0) {
       // If buffer is empty, read and decompress the next block
