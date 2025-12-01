@@ -8,10 +8,18 @@
 #ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONGENERATORS_H
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONGENERATORS_H
 
+// We currently have two implementations for the generators in this file, one
+// for the C++20 mode (using generator coroutines), and one for the C++17 mode
+// using ql::ranges + type erasure (the type erasure currently is needed to keep
+// the compile-times reasonable). We currently keep both implementations because
+// the C++17 implementation is slower than the generator-based type erasure for
+// reasons we yet have to explore.
+#ifndef QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17
 #include <absl/container/inlined_vector.h>
+#endif
+
 #include <absl/functional/bind_front.h>
 
-#include "backports/functional.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/Generator.h"
 
@@ -50,6 +58,8 @@ inline ql::span<const ValueId> getIdsFromVariable(
 /// `SingleExpressionResult`s after applying a `Transformation` to them.
 /// Typically, this transformation is one of the value getters from
 /// `SparqlExpressionValueGetters` with an already bound `EvaluationContext`.
+#ifdef QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17
+// Use range-based implementation for C++17 compatibility.
 CPP_template(typename T, typename Transformation = ql::identity)(
     requires SingleExpressionResult<T> CPP_and isConstantResult<T> CPP_and
         ranges::invocable<
@@ -59,6 +69,21 @@ CPP_template(typename T, typename Transformation = ql::identity)(
   // We have to use `range-v3` as `views::repeat` is a C++23 feature.
   return ::ranges::repeat_n_view(transformation(constant), numItems);
 }
+#else
+// Use faster coroutine-based implementation.
+CPP_template(typename T, typename Transformation = ql::identity)(
+    requires SingleExpressionResult<T> CPP_and isConstantResult<T> CPP_and
+        ranges::invocable<Transformation, T>)
+    cppcoro::generator<const std::decay_t<std::invoke_result_t<
+        Transformation, T>>> resultGeneratorImpl(T constant, size_t numItems,
+                                                 Transformation transformation =
+                                                     {}) {
+  auto transformed = transformation(constant);
+  for (size_t i = 0; i < numItems; ++i) {
+    co_yield transformed;
+  }
+}
+#endif
 
 CPP_template(typename T, typename Transformation = ql::identity)(
     requires ql::ranges::input_range<
@@ -69,6 +94,8 @@ CPP_template(typename T, typename Transformation = ql::identity)(
          ql::views::transform(std::move(transformation));
 }
 
+#ifdef QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17
+// Use range-based implementation for C++17 compatibility.
 template <typename Transformation = ql::identity>
 inline auto resultGeneratorImpl(const ad_utility::SetOfIntervals& set,
                                 size_t targetSize,
@@ -81,7 +108,9 @@ inline auto resultGeneratorImpl(const ad_utility::SetOfIntervals& set,
   bounds.reserve(set._intervals.size() * 2 + 1);
   size_t last = 0;
   for (const auto& [lower, upper] : set._intervals) {
-    AD_CONTRACT_CHECK(upper <= targetSize);
+    AD_CONTRACT_CHECK(upper <= targetSize,
+                      "The size of a `SetOfIntervals` exceeds the total size "
+                      "of the evaluation context.");
     if (lower != last) {
       bounds.push_back(Bounds{lower - last, false});
     }
@@ -101,6 +130,36 @@ inline auto resultGeneratorImpl(const ad_utility::SetOfIntervals& set,
          }) |
          ::ranges::views::join;
 }
+#else
+// Use faster coroutine-based implementation.
+template <typename Transformation = ql::identity>
+inline cppcoro::generator<
+    const std::decay_t<std::invoke_result_t<Transformation, Id>>>
+resultGeneratorImpl(ad_utility::SetOfIntervals set, size_t targetSize,
+                    Transformation transformation = {}) {
+  size_t i = 0;
+  const auto trueTransformed = transformation(Id::makeFromBool(true));
+  const auto falseTransformed = transformation(Id::makeFromBool(false));
+  if (!set._intervals.empty()) {
+    AD_CONTRACT_CHECK(set._intervals.back().second <= targetSize,
+                      "The size of a `SetOfIntervals` exceeds the total size "
+                      "of the evaluation context.");
+  }
+  for (const auto& [begin, end] : set._intervals) {
+    while (i < begin) {
+      co_yield falseTransformed;
+      ++i;
+    }
+    while (i < end) {
+      co_yield trueTransformed;
+      ++i;
+    }
+  }
+  while (i++ < targetSize) {
+    co_yield falseTransformed;
+  }
+}
+#endif
 
 // The actual `resultGenerator` that uses type erasure (if not specified
 // otherwise) to the `resultGeneratorImpl` to keep the compile times reasonable.
@@ -109,34 +168,20 @@ inline auto resultGenerator(S&& input, size_t targetSize,
                             Transformation transformation = {}) {
   auto gen =
       resultGeneratorImpl(AD_FWD(input), targetSize, std::move(transformation));
-  return ad_utility::InputRangeTypeErased{std::move(gen)};
-  /*
+#ifndef QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17
+  // `gen` is already (at least in many cases) type erased because of the nature
+  // of C++20 coroutines.
+  return gen;
+#else
   // Without type erasure, compiling the `sparqlExpressions` module takes a lot
   // of time and memory. In the future we can evaluate the performance of
   // deactivating the type erasure for certain expressions + datatypes (e.g.
   // addition of IDs) etc.
-  static constexpr auto Cat = ::ranges::category::input;
   using V = ql::ranges::range_value_t<decltype(gen)>;
 
-  return ::ranges::any_view<ql::ranges::range_reference_t<decltype(gen)>,
-                            Cat>{std::move(gen)};
-                            */
-  /*
-  if constexpr (std::is_trivially_copyable_v<V>) {
-    auto chunked = ::ranges::views::chunk(std::move(gen), 10000);
-    auto toVector = [](const auto& chunk) {
-      absl::InlinedVector<V, 10000> v;
-      ql::ranges::copy(chunk, std::back_inserter(v));
-      return v;
-    };
-    return ad_utility::OwningView{ad_utility::InputRangeTypeErased{
-               std::move(chunked) | ql::views::transform(toVector)}} |
-           ql::views::join;
-  } else {
-  }
-  */
+  return ad_utility::InputRangeTypeErased<V>(std::move(gen));
+#endif
 }
-
 /// Return a generator that yields `numItems` many items for the various
 /// `SingleExpressionResult`
 CPP_template(typename Input, typename Transformation = ql::identity)(
@@ -171,26 +216,50 @@ inline auto valueGetterGenerator =
 /// Do the following `numItems` times: Obtain the next elements e_1, ..., e_n
 /// from the `generators` and yield `function(e_1, ..., e_n)`, also as a
 /// generator.
-inline auto applyFunction =
-    [](auto&& function, [[maybe_unused]] size_t numItems, auto... generators) {
-      // We have to use `range-v3` as `std::views::zip` is not available in our
-      // toolchains.
-      return ::ranges::views::zip(ad_utility::RvalueView{
-                 ad_utility::OwningView{std::move(generators)}}...) |
-             ::ranges::views::transform(
-                 [&f = function](auto&& tuple) -> decltype(auto) {
-                   // If the transformation would return an rvalue reference,
-                   // return a plain value instead (obtained by moving the
-                   // reference) otherwise we get dangling references, but only
-                   // in Release builds.
-                   // TODO<joka921> I don't fully understand yet WHERE the
-                   // dangling reference comes from.
-                   using T = decltype(std::apply(f, AD_MOVE(tuple)));
-                   using R = std::conditional_t<std::is_rvalue_reference_v<T>,
-                                                std::decay_t<T>, T>;
-                   return R{std::apply(f, AD_MOVE(tuple))};
-                 });
-    };
+#ifdef QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17
+// Use range-based implementation for C++17 compatibility.
+inline auto applyFunction = [](auto function, [[maybe_unused]] size_t numItems,
+                               auto... generators) {
+  // We have to use `range-v3` as `std::views::zip` is not available in our
+  // toolchains.
+  return ::ranges::views::zip(ad_utility::RvalueView{
+             ad_utility::OwningView{std::move(generators)}}...) |
+         ::ranges::views::transform(
+             [f = std::move(function)](auto&& tuple) -> decltype(auto) {
+               // If the transformation would return an rvalue reference,
+               // return a plain value instead (obtained by moving the
+               // reference) otherwise we get dangling references, but only
+               // in Release builds.
+               // TODO<joka921> I don't fully understand yet WHERE the
+               // dangling reference comes from.
+               using T = decltype(std::apply(f, AD_MOVE(tuple)));
+               using R = std::conditional_t<std::is_rvalue_reference_v<T>,
+                                            std::decay_t<T>, T>;
+               return R{std::apply(f, AD_MOVE(tuple))};
+             });
+};
+#else
+// Use faster coroutine-based implementation.
+inline auto applyFunction = [](auto function, size_t numItems,
+                               auto... generators)
+    -> cppcoro::generator<std::invoke_result_t<
+        decltype(function),
+        ql::ranges::range_value_t<decltype(generators)>...>> {
+  // A tuple holding one iterator to each of the generators.
+  std::tuple iterators{generators.begin()...};
+
+  auto functionOnIterators = [&function](auto&&... iterators) {
+    return function(AD_MOVE(*iterators)...);
+  };
+
+  for (size_t i = 0; i < numItems; ++i) {
+    co_yield std::apply(functionOnIterators, iterators);
+
+    // Increase all the iterators.
+    std::apply([](auto&&... its) { (..., ++its); }, iterators);
+  }
+};
+#endif
 
 /// Return a generator that returns the `numElements` many results of the
 /// `Operation` applied to the `operands`
@@ -211,6 +280,7 @@ CPP_template(typename Operation, typename... Operands)(requires(
   // generator for the operation result;
   auto getResultFromGenerators =
       absl::bind_front(applyFunction, Function{}, numElements);
+
   /// The `ValueGetters` are stored in a `std::tuple`, so we have to extract
   /// them via `std::apply`. First set up a lambda that performs the actual
   /// logic on a parameter pack of `ValueGetters`

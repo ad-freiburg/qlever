@@ -6,6 +6,7 @@
 #include <gmock/gmock.h>
 
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
+#include "util/GTestHelpers.h"
 
 using namespace sparqlExpression::detail;
 
@@ -58,9 +59,14 @@ TEST(SparqlExpressionGenerators, resultGeneratorSetOfIntervals) {
   }
   {
     ad_utility::SetOfIntervals s{{{3, 11}}};
-    auto getGen = [&]() {
-      return sparqlExpression::detail::resultGenerator(s, 10);
+    auto consumeGen = [&]() {
+      auto gen = sparqlExpression::detail::resultGenerator(s, 10);
+      for (auto&& unused : gen) {
+        (void)unused;
+      }
     };
-    EXPECT_ANY_THROW(getGen());
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        consumeGen(), ::testing::HasSubstr(
+                          "exceeds the total size of the evaluation context"));
   }
 }
