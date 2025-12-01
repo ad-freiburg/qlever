@@ -23,6 +23,7 @@ class IdTable;
 class LocatedTriplesPerBlock;
 class SharedLocatedTriplesSnapshot;
 struct LocatedTriplesSnapshot;
+class DeltaTriples;
 
 // Helper class to store static properties of the different permutations to
 // avoid code duplication.
@@ -41,6 +42,7 @@ class Permutation {
   static constexpr auto OSP = Enum::OSP;
   static constexpr auto ALL = {Enum::PSO, Enum::POS, Enum::SPO,
                                Enum::SOP, Enum::OPS, Enum::OSP};
+  static constexpr auto INTERNAL = {Enum::PSO, Enum::POS};
 
   using MetaData = IndexMetaDataMmapView;
   using Allocator = ad_utility::AllocatorWithLimit<Id>;
@@ -63,6 +65,10 @@ class Permutation {
   void loadFromDisk(const std::string& onDiskBase,
                     std::function<bool(Id)> isInternalId,
                     bool loadAdditional = false);
+
+  // Set the original metadata for the delta triples. This also sets the
+  // metadata for internal permutation if present.
+  void setOriginalMetadataForDeltaTriples(DeltaTriples& deltaTriples) const;
 
   // For a given ID for the col0, retrieve all IDs of the col1 and col2.
   // If `col1Id` is specified, only the col2 is returned for triples that
@@ -187,6 +193,11 @@ class Permutation {
   const CompressedRelationReader& reader() const { return reader_.value(); }
 
   Enum permutation() const { return permutation_; }
+
+  const Permutation& internalPermutation() const {
+    AD_CONTRACT_CHECK(internalPermutation_ != nullptr);
+    return *internalPermutation_;
+  }
 
  private:
   // The base filename of the permutation without the suffix below
