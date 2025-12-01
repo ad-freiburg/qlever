@@ -255,8 +255,9 @@ enum class AnyGeometryMember : uint8_t {
 
 // Helper to convert the dynamic container `AnyGeometry` to the `ParsedWkt`
 // variant type
-template <typename Visitor>
-inline auto visitAnyGeometry(Visitor visitor, const DAnyGeometry& geom) {
+template <typename Visitor, typename T>
+requires SimilarTo<T, DAnyGeometry>
+inline auto visitAnyGeometry(Visitor visitor, T&& geom) {
   using enum AnyGeometryMember;
   // `AnyGeometry` is a class from `pb_util`. It does not operate on an enum,
   // this is why we use our own enum here. The correct matching of the integer
@@ -264,19 +265,19 @@ inline auto visitAnyGeometry(Visitor visitor, const DAnyGeometry& geom) {
   // `GeometryInfoTest.cpp`.
   switch (AnyGeometryMember{geom.getType()}) {
     case POINT:
-      return visitor(geom.getPoint());
+      return visitor(AD_FWD(geom).getPoint());
     case LINE:
-      return visitor(geom.getLine());
+      return visitor(AD_FWD(geom).getLine());
     case POLYGON:
-      return visitor(geom.getPolygon());
+      return visitor(AD_FWD(geom).getPolygon());
     case MULTILINE:
-      return visitor(geom.getMultiLine());
+      return visitor(AD_FWD(geom).getMultiLine());
     case MULTIPOLYGON:
-      return visitor(geom.getMultiPolygon());
+      return visitor(AD_FWD(geom).getMultiPolygon());
     case COLLECTION:
-      return visitor(geom.getCollection());
+      return visitor(AD_FWD(geom).getCollection());
     case MULTIPOINT:
-      return visitor(geom.getMultiPoint());
+      return visitor(AD_FWD(geom).getMultiPoint());
     default:
       AD_FAIL();
   }
