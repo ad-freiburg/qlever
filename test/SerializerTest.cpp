@@ -10,6 +10,7 @@
 #include "util/Random.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/FileSerializer.h"
+#include "util/Serializer/FromCallableSerializer.h"
 #include "util/Serializer/SerializeArrayOrTuple.h"
 #include "util/Serializer/SerializeHashMap.h"
 #include "util/Serializer/SerializeOptional.h"
@@ -27,6 +28,7 @@ using ad_utility::serialization::FileWriteSerializer;
 using ad_utility::serialization::VectorIncrementalSerializer;
 
 using ad_utility::serialization::ReadSerializer;
+using ad_utility::serialization::ReadViaCallableSerializer;
 using ad_utility::serialization::Serializer;
 using ad_utility::serialization::WriteSerializer;
 
@@ -240,6 +242,20 @@ auto testWithByteBuffer = [](auto testFunction) {
   testFunction(writer, makeReaderFromWriter);
 };
 
+auto testWithCallableSerializer = [](auto testFunction) {
+  ByteBufferWriteSerializer writer;
+  std::vector<char> buffer;
+  auto makeReaderFromWriter = [&writer, &buffer]() {
+    buffer = std::move(writer).data();
+    auto read = [pos = 0ul, &buffer](char* target, size_t numBytes) mutable {
+      std::copy(buffer.begin() + pos, buffer.begin() + pos + numBytes, target);
+      pos += numBytes;
+    };
+    return ReadViaCallableSerializer{read};
+  };
+  testFunction(writer, makeReaderFromWriter);
+};
+
 auto testWithFileSerialization = [](auto testFunction) {
   const std::string filename = "serializationTest.tmp";
   FileWriteSerializer writer{filename};
@@ -254,6 +270,7 @@ auto testWithFileSerialization = [](auto testFunction) {
 auto testWithAllSerializers = [](auto testFunction) {
   testWithByteBuffer(testFunction);
   testWithFileSerialization(testFunction);
+  testWithCallableSerializer(testFunction);
   // TODO<joka921> Register new serializers here to apply all existing tests
   // to them
 };
@@ -478,6 +495,7 @@ TEST(Serializer, CopyAndMove) {
     decltype(reader) reader2{std::move(reader)};
     reader2 | i;
     ASSERT_EQ(i, 2);
+    static_assert(!std::is_const_v<decltype(reader2)>);
     reader = std::move(reader2);
     reader | i;
     ASSERT_EQ(i, 3);
