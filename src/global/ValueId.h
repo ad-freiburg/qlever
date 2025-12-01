@@ -93,7 +93,9 @@ class LanguageTagManager {
 
   LanguageTagManager() {
     // Initialize with default common languages
-    optimizedLanguages_ = {"en", "de", "fr"};
+    optimizedLanguages_ = {"",   "mul", "en", "fi", "fr", "ja",
+                           "cs", "ru",  "es", "sv", "pt", "uk",
+                           "da", "el",  "de", "it", "pl", "no"};
   }
 
   /// Get the index for a language tag string. Returns noLanguageTag if empty,

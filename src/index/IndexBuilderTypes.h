@@ -290,11 +290,12 @@ auto getIdMapLambdas(
       OptionalIds res;
 
       // Determine the language tag index for the object
-      uint32_t objectLangTagIndex = LanguageTagManager::unknownLanguageTag;
-      if (!lt.langtag_.empty()) {
-        objectLangTagIndex =
-            indexPtr->languageTagManager().getLanguageTagIndex(lt.langtag_);
-      }
+      uint32_t objectLangTagIndex =
+          indexPtr->languageTagManager().getLanguageTagIndex(lt.langtag_);
+      // if (!lt.langtag_.empty()) {
+      //   objectLangTagIndex =
+      //       indexPtr->languageTagManager().getLanguageTagIndex(lt.langtag_);
+      // }
 
       // get Ids for the actual triple and store them in the result.
       // We need to handle each element separately to pass the language tag
