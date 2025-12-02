@@ -463,7 +463,9 @@ BlockMetadataRanges PrefixRegexExpression::evaluateImpl(
       vocab.prefixRanges(prefixQuoted).ranges().front();
 
   // Set lower reference.
-  const auto& lowerIdVocab = Id::makeFromVocabIndex(lowerVocabIndex);
+  // Range boundaries for prefix matching - no language tag
+  const auto& lowerIdVocab = Id::makeFromVocabIndex(
+      lowerVocabIndex, LanguageTagManager::noLanguageTag);
   const auto& beginIdIri = getValueIdFromIdOrLocalVocabEntry(
       LVE::fromStringRepresentation("<>"), localVocab);
 
@@ -473,8 +475,10 @@ BlockMetadataRanges PrefixRegexExpression::evaluateImpl(
   if (isNegated_) {
     const auto& upperIdAdjusted =
         upperVocabIndex.get() == 0
-            ? Id::makeFromVocabIndex(upperVocabIndex)
-            : Id::makeFromVocabIndex(upperVocabIndex.decremented());
+            ? Id::makeFromVocabIndex(upperVocabIndex,
+                                     LanguageTagManager::noLanguageTag)
+            : Id::makeFromVocabIndex(upperVocabIndex.decremented(),
+                                     LanguageTagManager::noLanguageTag);
     // Case `!STRSTARTS(?var, "prefix")` or `!REGEX(?var, "^prefix")`.
     // Prefilter ?var >= Id(prev("prefix)) || ?var < Id("prefix).
     return OrExpression(
@@ -488,12 +492,14 @@ BlockMetadataRanges PrefixRegexExpression::evaluateImpl(
   auto lowerRefExpr = lowerVocabIndex.get() == 0
                           ? make<GreaterEqualExpression>(lowerIdVocab)
                           : make<GreaterThanExpression>(Id::makeFromVocabIndex(
-                                lowerVocabIndex.decremented()));
+                                lowerVocabIndex.decremented(),
+                                LanguageTagManager::noLanguageTag));
   // Set expression associated with the upper reference.
   auto upperRefExpr =
       upperVocabIndex.get() == vocab.size()
           ? make<LessThanExpression>(beginIdIri)
-          : make<LessThanExpression>(Id::makeFromVocabIndex(upperVocabIndex));
+          : make<LessThanExpression>(Id::makeFromVocabIndex(
+                upperVocabIndex, LanguageTagManager::noLanguageTag));
   // Case `STRSTARTS(?var, "prefix")` or `REGEX(?var, "^prefix")`.
   // Prefilter ?var > Id(prev("prefix)) && ?var < Id(next("prefix)).
   return AndExpression(std::move(lowerRefExpr), std::move(upperRefExpr))

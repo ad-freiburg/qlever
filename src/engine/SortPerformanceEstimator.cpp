@@ -31,7 +31,9 @@ IdTable createRandomIdTable(
   for (size_t i = 0; i < numRows; ++i) {
     result.emplace_back();
     for (size_t j = 0; j < numColumns; ++j) {
-      result(i, j) = Id::makeFromVocabIndex(VocabIndex::make(generator()));
+      // Random test data - no language tag
+      result(i, j) = Id::makeFromVocabIndex(VocabIndex::make(generator()),
+                                            LanguageTagManager::noLanguageTag);
     }
   }
   return result;

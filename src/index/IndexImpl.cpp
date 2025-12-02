@@ -946,7 +946,9 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
     VocabIndex vocabIndex;
     bool found = vocab_.getId(literalString, &vocabIndex);
     if (found) {
-      Id vocabId = Id::makeFromVocabIndex(vocabIndex);
+      // Language tag strings themselves should not have a language tag
+      Id vocabId =
+          Id::makeFromVocabIndex(vocabIndex, LanguageTagManager::noLanguageTag);
       languageTagManager_.setLanguageTagIdBits(static_cast<uint32_t>(i),
                                                vocabId.getBits());
       AD_LOG_DEBUG << "Mapped language tag '" << lang << "' (index " << i

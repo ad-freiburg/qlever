@@ -193,7 +193,10 @@ void TextIndexBuilder::processEntityCaseDuringInvertedListProcessing(
   if (getVocab().getId(line.word_, &eid)) {
     // Note that `entitiesInContext` is a HashMap, so the `Id`s don't have
     // to be contiguous.
-    entitiesInContext[Id::makeFromVocabIndex(eid)] += line.score_;
+    // Text index entities - these could be literals or IRIs, use no language
+    // tag
+    entitiesInContext[Id::makeFromVocabIndex(
+        eid, LanguageTagManager::noLanguageTag)] += line.score_;
     if (line.isLiteralEntity_) {
       ++nofLiterals;
     }

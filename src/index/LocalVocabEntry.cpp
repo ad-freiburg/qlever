@@ -27,7 +27,10 @@ auto LocalVocabEntry::positionInVocabExpensiveCase() const -> PositionInVocab {
     }
     auto [l, u] = vocab.getPositionOfWord(toStringRepresentation());
     AD_CORRECTNESS_CHECK(u.get() - l.get() <= 1);
-    return std::pair{Id::makeFromVocabIndex(l), Id::makeFromVocabIndex(u)};
+    // Range boundaries for vocab position - no language tag
+    return std::pair{
+        Id::makeFromVocabIndex(l, LanguageTagManager::noLanguageTag),
+        Id::makeFromVocabIndex(u, LanguageTagManager::noLanguageTag)};
   }();
   positionInVocab.lowerBound_ = IdProxy::make(lower.getBits());
   positionInVocab.upperBound_ = IdProxy::make(upper.getBits());

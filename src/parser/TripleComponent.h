@@ -16,6 +16,7 @@
 #include "engine/LocalVocab.h"
 #include "global/Constants.h"
 #include "global/Id.h"
+#include "global/LanguageTagManager.h"
 #include "global/SpecialIds.h"
 #include "index/EncodedIriManager.h"
 #include "parser/LiteralOrIri.h"
@@ -217,9 +218,11 @@ class TripleComponent {
   // Convert the `TripleComponent` to an ID. If the `TripleComponent` is a
   // string, the IDs are resolved using the `vocabulary`. If a string is not
   // found in the vocabulary, `std::nullopt` is returned.
+  // Language tags from literals are preserved in the returned ID.
   template <typename Vocabulary>
   [[nodiscard]] std::optional<Id> toValueId(
-      const Vocabulary& vocabulary, const EncodedIriManager& evManager) const {
+      const Vocabulary& vocabulary, const EncodedIriManager& evManager,
+      const LanguageTagManager* languageTagManager = nullptr) const {
     AD_CONTRACT_CHECK(!isString());
     std::optional<Id> vid = toValueIdIfNotString(&evManager);
     if (vid != std::nullopt) return vid;
@@ -229,7 +232,16 @@ class TripleComponent {
                                      ? getLiteral().toStringRepresentation()
                                      : getIri().toStringRepresentation();
     if (vocabulary.getId(content, &idx)) {
-      return Id::makeFromVocabIndex(idx);
+      // Extract language tag index if this is a literal with a language tag
+      uint32_t langTagIndex = LanguageTagManager::unknownLanguageTag;
+      if (isLiteral() && languageTagManager != nullptr) {
+        const auto& lit = getLiteral();
+        if (lit.hasLanguageTag()) {
+          auto langTag = std::string(asStringViewUnsafe(lit.getLanguageTag()));
+          langTagIndex = languageTagManager->getLanguageTagIndex(langTag);
+        }
+      }
+      return Id::makeFromVocabIndex(idx, langTagIndex);
     }
     return std::nullopt;
   }
@@ -241,10 +253,12 @@ class TripleComponent {
   // created solely to call this method and we want to avoid copying the
   // `std::string` when passing it to the local vocabulary.
   template <typename Vocabulary>
-  [[nodiscard]] Id toValueId(const Vocabulary& vocabulary,
-                             LocalVocab& localVocab,
-                             const EncodedIriManager& encodedIriManager) && {
-    std::optional<Id> id = toValueId(vocabulary, encodedIriManager);
+  [[nodiscard]] Id toValueId(
+      const Vocabulary& vocabulary, LocalVocab& localVocab,
+      const EncodedIriManager& encodedIriManager,
+      const LanguageTagManager* languageTagManager = nullptr) && {
+    std::optional<Id> id =
+        toValueId(vocabulary, encodedIriManager, languageTagManager);
     if (!id) {
       // If `toValueId` could not convert to `Id`, we have a string, which we
       // look up in (and potentially add to) our local vocabulary.

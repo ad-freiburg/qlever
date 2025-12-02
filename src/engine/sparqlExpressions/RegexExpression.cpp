@@ -194,8 +194,10 @@ ExpressionResult PrefixRegexExpression::evaluate(
   for (const auto& prefix : actualPrefixes) {
     const auto& ranges = context->_qec.getIndex().prefixRanges(prefix);
     for (const auto& [begin, end] : ranges.ranges()) {
-      lowerAndUpperIds.emplace_back(Id::makeFromVocabIndex(begin),
-                                    Id::makeFromVocabIndex(end));
+      // Range boundaries for regex matching - no language tag
+      lowerAndUpperIds.emplace_back(
+          Id::makeFromVocabIndex(begin, LanguageTagManager::noLanguageTag),
+          Id::makeFromVocabIndex(end, LanguageTagManager::noLanguageTag));
     }
   }
   checkCancellation(context);

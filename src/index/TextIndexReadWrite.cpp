@@ -30,7 +30,9 @@ IdTable readContextListHelper(
     if (isWordCl) {
       return Id::makeFromWordVocabIndex(WordVocabIndex::make(wordIndex));
     }
-    return Id::makeFromVocabIndex(VocabIndex::make(wordIndex));
+    // Text index word IDs - no language tag
+    return Id::makeFromVocabIndex(VocabIndex::make(wordIndex),
+                                  LanguageTagManager::noLanguageTag);
   };
 
   // Read wordIndexList
