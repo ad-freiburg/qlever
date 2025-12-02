@@ -96,13 +96,7 @@ class alignas(16) LocalVocabEntry
       return {lowerBoundInVocab_.load(std::memory_order_relaxed),
               upperBoundInVocab_.load(std::memory_order_relaxed)};
     }
-    auto positionInVocab = positionInVocabExpensiveCase();
-    lowerBoundInVocab_.store(positionInVocab.lowerBound_,
-                             std::memory_order_relaxed);
-    upperBoundInVocab_.store(positionInVocab.upperBound_,
-                             std::memory_order_relaxed);
-    positionInVocabKnown_.store(true, std::memory_order_release);
-    return positionInVocab;
+    return positionInVocabExpensiveCase();
   }
 
   // It suffices to hash the base class `LiteralOrIri` as the position in the
