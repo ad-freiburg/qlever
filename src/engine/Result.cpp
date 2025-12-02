@@ -104,9 +104,11 @@ Result::Result(IdTableVocabPair pair, std::vector<ColumnIndex> sortedBy)
     : Result{std::move(pair.idTable_), std::move(sortedBy),
              std::move(pair.localVocab_)} {}
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 // _____________________________________________________________________________
 Result::Result(Generator idTables, std::vector<ColumnIndex> sortedBy)
     : Result{LazyResult{std::move(idTables)}, std::move(sortedBy)} {}
+#endif
 
 // _____________________________________________________________________________
 Result::Result(LazyResult idTables, std::vector<ColumnIndex> sortedBy)
