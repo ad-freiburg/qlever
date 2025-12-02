@@ -15,8 +15,22 @@
 
 using ad_utility::CancellationException;
 using ad_utility::CancellationHandle;
-using enum ad_utility::CancellationState;
-using enum ad_utility::detail::CancellationMode;
+[[maybe_unused]] static constexpr auto NOT_CANCELLED =
+    ad_utility::CancellationState::NOT_CANCELLED;
+[[maybe_unused]] static constexpr auto WAITING_FOR_CHECK =
+    ad_utility::CancellationState::WAITING_FOR_CHECK;
+[[maybe_unused]] static constexpr auto CHECK_WINDOW_MISSED =
+    ad_utility::CancellationState::CHECK_WINDOW_MISSED;
+[[maybe_unused]] static constexpr auto MANUAL =
+    ad_utility::CancellationState::MANUAL;
+[[maybe_unused]] static constexpr auto TIMEOUT =
+    ad_utility::CancellationState::TIMEOUT;
+[[maybe_unused]] static constexpr auto ENABLED =
+    ad_utility::detail::CancellationMode::ENABLED;
+[[maybe_unused]] static constexpr auto NO_WATCH_DOG =
+    ad_utility::detail::CancellationMode::NO_WATCH_DOG;
+[[maybe_unused]] static constexpr auto DISABLED =
+    ad_utility::detail::CancellationMode::DISABLED;
 using ::testing::AllOf;
 using ::testing::ContainsRegex;
 using ::testing::HasSubstr;

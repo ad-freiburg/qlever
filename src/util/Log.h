@@ -49,7 +49,13 @@ enum class LogLevel {
 #define AD_LOG_TIMING AD_LOG(LogLevel::TIMING)
 #define AD_LOG_TRACE AD_LOG(LogLevel::TRACE)
 
-using enum LogLevel;
+[[maybe_unused]] static constexpr auto FATAL = LogLevel::FATAL;
+[[maybe_unused]] static constexpr auto ERROR = LogLevel::ERROR;
+[[maybe_unused]] static constexpr auto WARN = LogLevel::WARN;
+[[maybe_unused]] static constexpr auto INFO = LogLevel::INFO;
+[[maybe_unused]] static constexpr auto DEBUG = LogLevel::DEBUG;
+[[maybe_unused]] static constexpr auto TIMING = LogLevel::TIMING;
+[[maybe_unused]] static constexpr auto TRACE = LogLevel::TRACE;
 
 namespace ad_utility {
 // A singleton that holds a pointer to a single `std::ostream`. This enables us
@@ -109,7 +115,7 @@ class Log {
   template <LogLevel LEVEL>
   static QL_CONSTEVAL std::string_view getLevel() {
     using P = ConstexprMapPair<LogLevel, std::string_view>;
-    constexpr ConstexprMap map{std::array{
+    constexpr ConstexprMap map{std::array<P, 7>{
         P(TRACE, "TRACE: "),
         P(TIMING, "TIMING: "),
         P(DEBUG, "DEBUG: "),

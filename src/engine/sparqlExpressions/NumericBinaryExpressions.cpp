@@ -57,7 +57,12 @@ NARY_EXPRESSION(PowExpression, 2, FV<Pow, NumericValueGetter>);
 // _____________________________________________________________________________
 struct OrLambda {
   Id operator()(TernaryBool a, TernaryBool b) const {
-    using enum TernaryBool;
+    [[maybe_unused]] static constexpr auto False =
+        sparqlExpression::detail::EffectiveBooleanValueGetter::Result::False;
+    [[maybe_unused]] static constexpr auto True =
+        sparqlExpression::detail::EffectiveBooleanValueGetter::Result::True;
+    [[maybe_unused]] static constexpr auto Undef =
+        sparqlExpression::detail::EffectiveBooleanValueGetter::Result::Undef;
     if (a == True || b == True) {
       return Id::makeFromBool(true);
     }
@@ -71,7 +76,12 @@ struct OrLambda {
 // _____________________________________________________________________________
 struct AndLambda {
   Id operator()(TernaryBool a, TernaryBool b) const {
-    using enum TernaryBool;
+    [[maybe_unused]] static constexpr auto False =
+        sparqlExpression::detail::EffectiveBooleanValueGetter::Result::False;
+    [[maybe_unused]] static constexpr auto True =
+        sparqlExpression::detail::EffectiveBooleanValueGetter::Result::True;
+    [[maybe_unused]] static constexpr auto Undef =
+        sparqlExpression::detail::EffectiveBooleanValueGetter::Result::Undef;
     if (a == True && b == True) {
       return Id::makeFromBool(true);
     }
@@ -206,7 +216,10 @@ template <BinaryOperator binOp, typename BinaryPrefilterExpr>
 std::vector<PrefilterExprVariablePair> mergeChildrenForBinaryOpExpressionImpl(
     std::vector<PrefilterExprVariablePair>&& leftChild,
     std::vector<PrefilterExprVariablePair>&& rightChild) {
-  using enum BinaryOperator;
+  [[maybe_unused]] static constexpr auto AND =
+      prefilterExpressions::LogicalOperator::AND;
+  [[maybe_unused]] static constexpr auto OR =
+      prefilterExpressions::LogicalOperator::OR;
   namespace pd = prefilterExpressions::detail;
   pd::checkPropertiesForPrefilterConstruction(leftChild);
   pd::checkPropertiesForPrefilterConstruction(rightChild);

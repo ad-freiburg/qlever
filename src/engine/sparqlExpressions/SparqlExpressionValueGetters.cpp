@@ -49,7 +49,12 @@ NumericValue NumericValueGetter::operator()(
 // _____________________________________________________________________________
 auto EffectiveBooleanValueGetter::operator()(
     ValueId id, const EvaluationContext* context) const -> Result {
-  using enum Result;
+  [[maybe_unused]] static constexpr auto False =
+      sparqlExpression::detail::EffectiveBooleanValueGetter::Result::False;
+  [[maybe_unused]] static constexpr auto True =
+      sparqlExpression::detail::EffectiveBooleanValueGetter::Result::True;
+  [[maybe_unused]] static constexpr auto Undef =
+      sparqlExpression::detail::EffectiveBooleanValueGetter::Result::Undef;
   switch (id.getDatatype()) {
     case Datatype::Double: {
       auto d = id.getDouble();
@@ -297,7 +302,23 @@ IntDoubleStr ToNumericValueGetter::operator()(
 // _____________________________________________________________________________
 OptIri DatatypeValueGetter::operator()(ValueId id,
                                        const EvaluationContext* context) const {
-  using enum Datatype;
+  [[maybe_unused]] static constexpr auto Undefined = Datatype::Undefined;
+  [[maybe_unused]] static constexpr auto Bool = Datatype::Bool;
+  [[maybe_unused]] static constexpr auto Int = Datatype::Int;
+  [[maybe_unused]] static constexpr auto Double = Datatype::Double;
+  [[maybe_unused]] static constexpr auto VocabIndex = Datatype::VocabIndex;
+  [[maybe_unused]] static constexpr auto LocalVocabIndex =
+      Datatype::LocalVocabIndex;
+  [[maybe_unused]] static constexpr auto TextRecordIndex =
+      Datatype::TextRecordIndex;
+  [[maybe_unused]] static constexpr auto Date = Datatype::Date;
+  [[maybe_unused]] static constexpr auto GeoPoint = Datatype::GeoPoint;
+  [[maybe_unused]] static constexpr auto WordVocabIndex =
+      Datatype::WordVocabIndex;
+  [[maybe_unused]] static constexpr auto BlankNodeIndex =
+      Datatype::BlankNodeIndex;
+  [[maybe_unused]] static constexpr auto EncodedVal = Datatype::EncodedVal;
+  [[maybe_unused]] static constexpr auto MaxValue = Datatype::MaxValue;
   auto datatype = id.getDatatype();
   std::optional<std::string> entity;
   switch (datatype) {
@@ -400,7 +421,23 @@ UnitOfMeasurement UnitOfMeasurementValueGetter::litOrIriToUnit(
 //______________________________________________________________________________
 std::optional<ad_utility::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
     ValueId id, const EvaluationContext* context) const {
-  using enum Datatype;
+  [[maybe_unused]] static constexpr auto Undefined = Datatype::Undefined;
+  [[maybe_unused]] static constexpr auto Bool = Datatype::Bool;
+  [[maybe_unused]] static constexpr auto Int = Datatype::Int;
+  [[maybe_unused]] static constexpr auto Double = Datatype::Double;
+  [[maybe_unused]] static constexpr auto VocabIndex = Datatype::VocabIndex;
+  [[maybe_unused]] static constexpr auto LocalVocabIndex =
+      Datatype::LocalVocabIndex;
+  [[maybe_unused]] static constexpr auto TextRecordIndex =
+      Datatype::TextRecordIndex;
+  [[maybe_unused]] static constexpr auto Date = Datatype::Date;
+  [[maybe_unused]] static constexpr auto GeoPoint = Datatype::GeoPoint;
+  [[maybe_unused]] static constexpr auto WordVocabIndex =
+      Datatype::WordVocabIndex;
+  [[maybe_unused]] static constexpr auto BlankNodeIndex =
+      Datatype::BlankNodeIndex;
+  [[maybe_unused]] static constexpr auto EncodedVal = Datatype::EncodedVal;
+  [[maybe_unused]] static constexpr auto MaxValue = Datatype::MaxValue;
   switch (id.getDatatype()) {
     case GeoPoint:
       return id.getGeoPoint();
@@ -441,7 +478,23 @@ CPP_template(typename T, typename ValueGetter)(
              concepts::same_as<std::optional<std::string>, T>)) T
     getValue(ValueId id, const sparqlExpression::EvaluationContext* context,
              ValueGetter& valueGetter) {
-  using enum Datatype;
+  [[maybe_unused]] static constexpr auto Undefined = Datatype::Undefined;
+  [[maybe_unused]] static constexpr auto Bool = Datatype::Bool;
+  [[maybe_unused]] static constexpr auto Int = Datatype::Int;
+  [[maybe_unused]] static constexpr auto Double = Datatype::Double;
+  [[maybe_unused]] static constexpr auto VocabIndex = Datatype::VocabIndex;
+  [[maybe_unused]] static constexpr auto LocalVocabIndex =
+      Datatype::LocalVocabIndex;
+  [[maybe_unused]] static constexpr auto TextRecordIndex =
+      Datatype::TextRecordIndex;
+  [[maybe_unused]] static constexpr auto Date = Datatype::Date;
+  [[maybe_unused]] static constexpr auto GeoPoint = Datatype::GeoPoint;
+  [[maybe_unused]] static constexpr auto WordVocabIndex =
+      Datatype::WordVocabIndex;
+  [[maybe_unused]] static constexpr auto BlankNodeIndex =
+      Datatype::BlankNodeIndex;
+  [[maybe_unused]] static constexpr auto EncodedVal = Datatype::EncodedVal;
+  [[maybe_unused]] static constexpr auto MaxValue = Datatype::MaxValue;
   switch (id.getDatatype()) {
     case LocalVocabIndex:
     case EncodedVal:
@@ -477,7 +530,23 @@ sparqlExpression::IdOrLiteralOrIri IriOrUriValueGetter::operator()(
 //______________________________________________________________________________
 std::optional<std::string> LanguageTagValueGetter::operator()(
     ValueId id, const EvaluationContext* context) const {
-  using enum Datatype;
+  [[maybe_unused]] static constexpr auto Undefined = Datatype::Undefined;
+  [[maybe_unused]] static constexpr auto Bool = Datatype::Bool;
+  [[maybe_unused]] static constexpr auto Int = Datatype::Int;
+  [[maybe_unused]] static constexpr auto Double = Datatype::Double;
+  [[maybe_unused]] static constexpr auto VocabIndex = Datatype::VocabIndex;
+  [[maybe_unused]] static constexpr auto LocalVocabIndex =
+      Datatype::LocalVocabIndex;
+  [[maybe_unused]] static constexpr auto TextRecordIndex =
+      Datatype::TextRecordIndex;
+  [[maybe_unused]] static constexpr auto Date = Datatype::Date;
+  [[maybe_unused]] static constexpr auto GeoPoint = Datatype::GeoPoint;
+  [[maybe_unused]] static constexpr auto WordVocabIndex =
+      Datatype::WordVocabIndex;
+  [[maybe_unused]] static constexpr auto BlankNodeIndex =
+      Datatype::BlankNodeIndex;
+  [[maybe_unused]] static constexpr auto EncodedVal = Datatype::EncodedVal;
+  [[maybe_unused]] static constexpr auto MaxValue = Datatype::MaxValue;
   switch (id.getDatatype()) {
     case Bool:
     case Int:
@@ -531,7 +600,23 @@ CPP_template_out_def(typename RequestedInfo)(
     std::optional<RequestedInfo> GeometryInfoValueGetter<CPP_sfinae_args(
         RequestedInfo)>::operator()(ValueId id,
                                     const EvaluationContext* context) const {
-  using enum Datatype;
+  [[maybe_unused]] static constexpr auto Undefined = Datatype::Undefined;
+  [[maybe_unused]] static constexpr auto Bool = Datatype::Bool;
+  [[maybe_unused]] static constexpr auto Int = Datatype::Int;
+  [[maybe_unused]] static constexpr auto Double = Datatype::Double;
+  [[maybe_unused]] static constexpr auto VocabIndex = Datatype::VocabIndex;
+  [[maybe_unused]] static constexpr auto LocalVocabIndex =
+      Datatype::LocalVocabIndex;
+  [[maybe_unused]] static constexpr auto TextRecordIndex =
+      Datatype::TextRecordIndex;
+  [[maybe_unused]] static constexpr auto Date = Datatype::Date;
+  [[maybe_unused]] static constexpr auto GeoPoint = Datatype::GeoPoint;
+  [[maybe_unused]] static constexpr auto WordVocabIndex =
+      Datatype::WordVocabIndex;
+  [[maybe_unused]] static constexpr auto BlankNodeIndex =
+      Datatype::BlankNodeIndex;
+  [[maybe_unused]] static constexpr auto EncodedVal = Datatype::EncodedVal;
+  [[maybe_unused]] static constexpr auto MaxValue = Datatype::MaxValue;
   switch (id.getDatatype()) {
     case EncodedVal:
     case LocalVocabIndex:

@@ -47,7 +47,46 @@ std::tuple<bool, size_t, std::string> Tokenizer::getNextToken(
 // ______________________________________________________________________________________________________
 const RE2& Tokenizer::idToRegex(const TurtleTokenId reg) {
   switch (reg) {
-    using enum TurtleTokenId;
+    [[maybe_unused]] static constexpr auto TurtlePrefix =
+        TurtleTokenId::TurtlePrefix;
+    [[maybe_unused]] static constexpr auto SparqlPrefix =
+        TurtleTokenId::SparqlPrefix;
+    [[maybe_unused]] static constexpr auto TurtleBase =
+        TurtleTokenId::TurtleBase;
+    [[maybe_unused]] static constexpr auto SparqlBase =
+        TurtleTokenId::SparqlBase;
+    [[maybe_unused]] static constexpr auto Dot = TurtleTokenId::Dot;
+    [[maybe_unused]] static constexpr auto Comma = TurtleTokenId::Comma;
+    [[maybe_unused]] static constexpr auto Semicolon = TurtleTokenId::Semicolon;
+    [[maybe_unused]] static constexpr auto OpenSquared =
+        TurtleTokenId::OpenSquared;
+    [[maybe_unused]] static constexpr auto CloseSquared =
+        TurtleTokenId::CloseSquared;
+    [[maybe_unused]] static constexpr auto OpenRound = TurtleTokenId::OpenRound;
+    [[maybe_unused]] static constexpr auto CloseRound =
+        TurtleTokenId::CloseRound;
+    [[maybe_unused]] static constexpr auto A = TurtleTokenId::A;
+    [[maybe_unused]] static constexpr auto DoubleCircumflex =
+        TurtleTokenId::DoubleCircumflex;
+    [[maybe_unused]] static constexpr auto True = TurtleTokenId::True;
+    [[maybe_unused]] static constexpr auto False = TurtleTokenId::False;
+    [[maybe_unused]] static constexpr auto Langtag = TurtleTokenId::Langtag;
+    [[maybe_unused]] static constexpr auto Integer = TurtleTokenId::Integer;
+    [[maybe_unused]] static constexpr auto Decimal = TurtleTokenId::Decimal;
+    [[maybe_unused]] static constexpr auto Exponent = TurtleTokenId::Exponent;
+    [[maybe_unused]] static constexpr auto Double = TurtleTokenId::Double;
+    [[maybe_unused]] static constexpr auto Iriref = TurtleTokenId::Iriref;
+    [[maybe_unused]] static constexpr auto IrirefRelaxed =
+        TurtleTokenId::IrirefRelaxed;
+    [[maybe_unused]] static constexpr auto PnameNS = TurtleTokenId::PnameNS;
+    [[maybe_unused]] static constexpr auto PnameLN = TurtleTokenId::PnameLN;
+    [[maybe_unused]] static constexpr auto PnLocal = TurtleTokenId::PnLocal;
+    [[maybe_unused]] static constexpr auto BlankNodeLabel =
+        TurtleTokenId::BlankNodeLabel;
+    [[maybe_unused]] static constexpr auto WsMultiple =
+        TurtleTokenId::WsMultiple;
+    [[maybe_unused]] static constexpr auto Anon = TurtleTokenId::Anon;
+    [[maybe_unused]] static constexpr auto Comment = TurtleTokenId::Comment;
     case TurtlePrefix:
       return _tokens.TurtlePrefix;
     case SparqlPrefix:

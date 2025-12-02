@@ -91,7 +91,26 @@ TEST(GeoSparqlHelpers, WktDist) {
   // according to the distance measurement of Google Maps).
   GeoPoint eiffeltower = GeoPoint(48.8585, 2.2945);
   GeoPoint frCathedral = GeoPoint(47.9957, 7.8529);
-  using enum UnitOfMeasurement;
+  [[maybe_unused]] static constexpr auto METERS = UnitOfMeasurement::METERS;
+  [[maybe_unused]] static constexpr auto KILOMETERS =
+      UnitOfMeasurement::KILOMETERS;
+  [[maybe_unused]] static constexpr auto MILES = UnitOfMeasurement::MILES;
+  [[maybe_unused]] static constexpr auto FEET = UnitOfMeasurement::FEET;
+  [[maybe_unused]] static constexpr auto YARDS = UnitOfMeasurement::YARDS;
+  [[maybe_unused]] static constexpr auto SQUARE_METERS =
+      UnitOfMeasurement::SQUARE_METERS;
+  [[maybe_unused]] static constexpr auto SQUARE_KILOMETERS =
+      UnitOfMeasurement::SQUARE_KILOMETERS;
+  [[maybe_unused]] static constexpr auto SQUARE_MILES =
+      UnitOfMeasurement::SQUARE_MILES;
+  [[maybe_unused]] static constexpr auto SQUARE_FEET =
+      UnitOfMeasurement::SQUARE_FEET;
+  [[maybe_unused]] static constexpr auto SQUARE_YARDS =
+      UnitOfMeasurement::SQUARE_YARDS;
+  [[maybe_unused]] static constexpr auto ACRE = UnitOfMeasurement::ACRE;
+  [[maybe_unused]] static constexpr auto ARE = UnitOfMeasurement::ARE;
+  [[maybe_unused]] static constexpr auto HECTARE = UnitOfMeasurement::HECTARE;
+  [[maybe_unused]] static constexpr auto UNKNOWN = UnitOfMeasurement::UNKNOWN;
   ASSERT_NEAR(WktDistGeoPoints()(eiffeltower, frCathedral), 421.098, 0.01);
   ASSERT_NEAR(WktDistGeoPoints()(eiffeltower, frCathedral, KILOMETERS), 421.098,
               0.01);
@@ -120,7 +139,17 @@ void checkGeoRelationDummyImpl(
 // _____________________________________________________________________________
 TEST(GeoSparqlHelpers, WktGeometricRelation) {
   // Currently the geometric relation functions are only a dummy implementation
-  using enum SpatialJoinType;
+  [[maybe_unused]] static constexpr auto INTERSECTS =
+      SpatialJoinType::INTERSECTS;
+  [[maybe_unused]] static constexpr auto CONTAINS = SpatialJoinType::CONTAINS;
+  [[maybe_unused]] static constexpr auto COVERS = SpatialJoinType::COVERS;
+  [[maybe_unused]] static constexpr auto CROSSES = SpatialJoinType::CROSSES;
+  [[maybe_unused]] static constexpr auto TOUCHES = SpatialJoinType::TOUCHES;
+  [[maybe_unused]] static constexpr auto EQUALS = SpatialJoinType::EQUALS;
+  [[maybe_unused]] static constexpr auto OVERLAPS = SpatialJoinType::OVERLAPS;
+  [[maybe_unused]] static constexpr auto WITHIN = SpatialJoinType::WITHIN;
+  [[maybe_unused]] static constexpr auto WITHIN_DIST =
+      SpatialJoinType::WITHIN_DIST;
   checkGeoRelationDummyImpl<INTERSECTS>();
   checkGeoRelationDummyImpl<CONTAINS>();
   checkGeoRelationDummyImpl<COVERS>();

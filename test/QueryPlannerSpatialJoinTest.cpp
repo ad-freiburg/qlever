@@ -992,7 +992,16 @@ TEST(QueryPlanner, SpatialJoinS2PointPolylineAndCachedIndex) {
   using V = Variable;
   using PV = PayloadVariables;
   auto scan = h::IndexScanFromStrings;
-  using enum SpatialJoinAlgorithm;
+  [[maybe_unused]] static constexpr auto BASELINE =
+      SpatialJoinAlgorithm::BASELINE;
+  [[maybe_unused]] static constexpr auto S2_GEOMETRY =
+      SpatialJoinAlgorithm::S2_GEOMETRY;
+  [[maybe_unused]] static constexpr auto BOUNDING_BOX =
+      SpatialJoinAlgorithm::BOUNDING_BOX;
+  [[maybe_unused]] static constexpr auto LIBSPATIALJOIN =
+      SpatialJoinAlgorithm::LIBSPATIALJOIN;
+  [[maybe_unused]] static constexpr auto S2_POINT_POLYLINE =
+      SpatialJoinAlgorithm::S2_POINT_POLYLINE;
 
   std::string kb =
       "<s> <p> \"LINESTRING(1.5 2.5, 1.55 2.5)\""
@@ -1413,7 +1422,17 @@ TEST(QueryPlanner, SpatialJoinFromGeofRelationFilter) {
   auto scan = h::IndexScanFromStrings;
   using V = Variable;
   auto algo = SpatialJoinAlgorithm::LIBSPATIALJOIN;
-  using enum SpatialJoinType;
+  [[maybe_unused]] static constexpr auto INTERSECTS =
+      SpatialJoinType::INTERSECTS;
+  [[maybe_unused]] static constexpr auto CONTAINS = SpatialJoinType::CONTAINS;
+  [[maybe_unused]] static constexpr auto COVERS = SpatialJoinType::COVERS;
+  [[maybe_unused]] static constexpr auto CROSSES = SpatialJoinType::CROSSES;
+  [[maybe_unused]] static constexpr auto TOUCHES = SpatialJoinType::TOUCHES;
+  [[maybe_unused]] static constexpr auto EQUALS = SpatialJoinType::EQUALS;
+  [[maybe_unused]] static constexpr auto OVERLAPS = SpatialJoinType::OVERLAPS;
+  [[maybe_unused]] static constexpr auto WITHIN = SpatialJoinType::WITHIN;
+  [[maybe_unused]] static constexpr auto WITHIN_DIST =
+      SpatialJoinType::WITHIN_DIST;
 
   std::vector<std::pair<std::string, SpatialJoinType>>
       geofFunctionNameAndSJType{

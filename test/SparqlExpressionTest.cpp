@@ -1399,7 +1399,14 @@ TEST(SparqlExpression, geoSparqlExpressions) {
                           sfGeoType("Polygon"), U});
 
   // Bounding coordinate expressions
-  using enum ad_utility::BoundingCoordinate;
+  [[maybe_unused]] static constexpr auto MIN_X =
+      ad_utility::BoundingCoordinate::MIN_X;
+  [[maybe_unused]] static constexpr auto MIN_Y =
+      ad_utility::BoundingCoordinate::MIN_Y;
+  [[maybe_unused]] static constexpr auto MAX_X =
+      ad_utility::BoundingCoordinate::MAX_X;
+  [[maybe_unused]] static constexpr auto MAX_Y =
+      ad_utility::BoundingCoordinate::MAX_Y;
   auto checkMinX =
       testUnaryExpression<&makeBoundingCoordinateExpression<MIN_X>>;
   auto checkMinY =
@@ -1834,7 +1841,12 @@ TEST(SparqlExpression, isAggregateAndIsDistinct) {
   using namespace sparqlExpression;
   IdExpression idExpr(ValueId::makeFromInt(42));
 
-  using enum SparqlExpression::AggregateStatus;
+  [[maybe_unused]] static constexpr auto NoAggregate =
+      sparqlExpression::SparqlExpression::AggregateStatus::NoAggregate;
+  [[maybe_unused]] static constexpr auto DistinctAggregate =
+      sparqlExpression::SparqlExpression::AggregateStatus::DistinctAggregate;
+  [[maybe_unused]] static constexpr auto NonDistinctAggregate =
+      sparqlExpression::SparqlExpression::AggregateStatus::NonDistinctAggregate;
 
   ASSERT_EQ(idExpr.isAggregate(), NoAggregate);
   ASSERT_FALSE(idExpr.isInsideAggregate());

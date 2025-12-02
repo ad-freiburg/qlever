@@ -128,7 +128,12 @@ IdTable Permutation::getDistinctCol0IdsAndCounts(
 
 // _____________________________________________________________________
 auto Permutation::toKeyOrder(Permutation::Enum permutation) -> KeyOrder {
-  using enum Permutation::Enum;
+  [[maybe_unused]] static constexpr auto PSO = Permutation::Enum::PSO;
+  [[maybe_unused]] static constexpr auto POS = Permutation::Enum::POS;
+  [[maybe_unused]] static constexpr auto SPO = Permutation::Enum::SPO;
+  [[maybe_unused]] static constexpr auto SOP = Permutation::Enum::SOP;
+  [[maybe_unused]] static constexpr auto OPS = Permutation::Enum::OPS;
+  [[maybe_unused]] static constexpr auto OSP = Permutation::Enum::OSP;
   switch (permutation) {
     case POS:
       return {1, 2, 0, 3};
@@ -148,7 +153,12 @@ auto Permutation::toKeyOrder(Permutation::Enum permutation) -> KeyOrder {
 
 // _____________________________________________________________________
 std::string_view Permutation::toString(Permutation::Enum permutation) {
-  using enum Permutation::Enum;
+  [[maybe_unused]] static constexpr auto PSO = Permutation::Enum::PSO;
+  [[maybe_unused]] static constexpr auto POS = Permutation::Enum::POS;
+  [[maybe_unused]] static constexpr auto SPO = Permutation::Enum::SPO;
+  [[maybe_unused]] static constexpr auto SOP = Permutation::Enum::SOP;
+  [[maybe_unused]] static constexpr auto OPS = Permutation::Enum::OPS;
+  [[maybe_unused]] static constexpr auto OSP = Permutation::Enum::OSP;
   switch (permutation) {
     case POS:
       return "POS";

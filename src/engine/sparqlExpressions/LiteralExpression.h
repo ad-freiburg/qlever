@@ -246,7 +246,23 @@ using IdOrLocalVocabEntry = prefilterExpressions::IdOrLocalVocabEntry;
 inline std::optional<IdOrLocalVocabEntry>
 getIdOrLocalVocabEntryFromLiteralExpression(const SparqlExpression* child,
                                             bool stringAndIriOnly = false) {
-  using enum Datatype;
+  [[maybe_unused]] static constexpr auto Undefined = Datatype::Undefined;
+  [[maybe_unused]] static constexpr auto Bool = Datatype::Bool;
+  [[maybe_unused]] static constexpr auto Int = Datatype::Int;
+  [[maybe_unused]] static constexpr auto Double = Datatype::Double;
+  [[maybe_unused]] static constexpr auto VocabIndex = Datatype::VocabIndex;
+  [[maybe_unused]] static constexpr auto LocalVocabIndex =
+      Datatype::LocalVocabIndex;
+  [[maybe_unused]] static constexpr auto TextRecordIndex =
+      Datatype::TextRecordIndex;
+  [[maybe_unused]] static constexpr auto Date = Datatype::Date;
+  [[maybe_unused]] static constexpr auto GeoPoint = Datatype::GeoPoint;
+  [[maybe_unused]] static constexpr auto WordVocabIndex =
+      Datatype::WordVocabIndex;
+  [[maybe_unused]] static constexpr auto BlankNodeIndex =
+      Datatype::BlankNodeIndex;
+  [[maybe_unused]] static constexpr auto EncodedVal = Datatype::EncodedVal;
+  [[maybe_unused]] static constexpr auto MaxValue = Datatype::MaxValue;
   if (const auto* idExpr = dynamic_cast<const IdExpression*>(child)) {
     auto idType = idExpr->value().getDatatype();
     if (stringAndIriOnly && idType != VocabIndex && idType != LocalVocabIndex) {
@@ -269,7 +285,23 @@ getIdOrLocalVocabEntryFromLiteralExpression(const SparqlExpression* child,
 // `std::nullopt`.
 inline std::optional<TripleComponent::Literal> getLiteralFromLiteralExpression(
     const SparqlExpression* child) {
-  using enum Datatype;
+  [[maybe_unused]] static constexpr auto Undefined = Datatype::Undefined;
+  [[maybe_unused]] static constexpr auto Bool = Datatype::Bool;
+  [[maybe_unused]] static constexpr auto Int = Datatype::Int;
+  [[maybe_unused]] static constexpr auto Double = Datatype::Double;
+  [[maybe_unused]] static constexpr auto VocabIndex = Datatype::VocabIndex;
+  [[maybe_unused]] static constexpr auto LocalVocabIndex =
+      Datatype::LocalVocabIndex;
+  [[maybe_unused]] static constexpr auto TextRecordIndex =
+      Datatype::TextRecordIndex;
+  [[maybe_unused]] static constexpr auto Date = Datatype::Date;
+  [[maybe_unused]] static constexpr auto GeoPoint = Datatype::GeoPoint;
+  [[maybe_unused]] static constexpr auto WordVocabIndex =
+      Datatype::WordVocabIndex;
+  [[maybe_unused]] static constexpr auto BlankNodeIndex =
+      Datatype::BlankNodeIndex;
+  [[maybe_unused]] static constexpr auto EncodedVal = Datatype::EncodedVal;
+  [[maybe_unused]] static constexpr auto MaxValue = Datatype::MaxValue;
   if (const auto* literalExpr =
           dynamic_cast<const StringLiteralExpression*>(child)) {
     return literalExpr->value();

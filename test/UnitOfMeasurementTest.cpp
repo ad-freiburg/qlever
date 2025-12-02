@@ -18,7 +18,26 @@ using ad_utility::source_location;
 // _____________________________________________________________________________
 TEST(GeoSparqlHelpers, KmToUnit) {
   using namespace ad_utility::detail;
-  using enum UnitOfMeasurement;
+  [[maybe_unused]] static constexpr auto METERS = UnitOfMeasurement::METERS;
+  [[maybe_unused]] static constexpr auto KILOMETERS =
+      UnitOfMeasurement::KILOMETERS;
+  [[maybe_unused]] static constexpr auto MILES = UnitOfMeasurement::MILES;
+  [[maybe_unused]] static constexpr auto FEET = UnitOfMeasurement::FEET;
+  [[maybe_unused]] static constexpr auto YARDS = UnitOfMeasurement::YARDS;
+  [[maybe_unused]] static constexpr auto SQUARE_METERS =
+      UnitOfMeasurement::SQUARE_METERS;
+  [[maybe_unused]] static constexpr auto SQUARE_KILOMETERS =
+      UnitOfMeasurement::SQUARE_KILOMETERS;
+  [[maybe_unused]] static constexpr auto SQUARE_MILES =
+      UnitOfMeasurement::SQUARE_MILES;
+  [[maybe_unused]] static constexpr auto SQUARE_FEET =
+      UnitOfMeasurement::SQUARE_FEET;
+  [[maybe_unused]] static constexpr auto SQUARE_YARDS =
+      UnitOfMeasurement::SQUARE_YARDS;
+  [[maybe_unused]] static constexpr auto ACRE = UnitOfMeasurement::ACRE;
+  [[maybe_unused]] static constexpr auto ARE = UnitOfMeasurement::ARE;
+  [[maybe_unused]] static constexpr auto HECTARE = UnitOfMeasurement::HECTARE;
+  [[maybe_unused]] static constexpr auto UNKNOWN = UnitOfMeasurement::UNKNOWN;
   auto kmToUnit = kilometerToUnit;
   const double error = 0.0001;
 
@@ -60,7 +79,26 @@ TEST(GeoSparqlHelpers, KmToUnit) {
 // _____________________________________________________________________________
 TEST(GeoSparqlHelpers, UnitToKm) {
   using namespace ad_utility::detail;
-  using enum UnitOfMeasurement;
+  [[maybe_unused]] static constexpr auto METERS = UnitOfMeasurement::METERS;
+  [[maybe_unused]] static constexpr auto KILOMETERS =
+      UnitOfMeasurement::KILOMETERS;
+  [[maybe_unused]] static constexpr auto MILES = UnitOfMeasurement::MILES;
+  [[maybe_unused]] static constexpr auto FEET = UnitOfMeasurement::FEET;
+  [[maybe_unused]] static constexpr auto YARDS = UnitOfMeasurement::YARDS;
+  [[maybe_unused]] static constexpr auto SQUARE_METERS =
+      UnitOfMeasurement::SQUARE_METERS;
+  [[maybe_unused]] static constexpr auto SQUARE_KILOMETERS =
+      UnitOfMeasurement::SQUARE_KILOMETERS;
+  [[maybe_unused]] static constexpr auto SQUARE_MILES =
+      UnitOfMeasurement::SQUARE_MILES;
+  [[maybe_unused]] static constexpr auto SQUARE_FEET =
+      UnitOfMeasurement::SQUARE_FEET;
+  [[maybe_unused]] static constexpr auto SQUARE_YARDS =
+      UnitOfMeasurement::SQUARE_YARDS;
+  [[maybe_unused]] static constexpr auto ACRE = UnitOfMeasurement::ACRE;
+  [[maybe_unused]] static constexpr auto ARE = UnitOfMeasurement::ARE;
+  [[maybe_unused]] static constexpr auto HECTARE = UnitOfMeasurement::HECTARE;
+  [[maybe_unused]] static constexpr auto UNKNOWN = UnitOfMeasurement::UNKNOWN;
   auto toKm = valueInUnitToKilometer;
   const double error = 0.0001;
 
@@ -102,7 +140,26 @@ TEST(GeoSparqlHelpers, UnitToKm) {
 // _____________________________________________________________________________
 TEST(GeoSparqlHelpers, SqMeterToUnit) {
   using namespace ad_utility::detail;
-  using enum UnitOfMeasurement;
+  [[maybe_unused]] static constexpr auto METERS = UnitOfMeasurement::METERS;
+  [[maybe_unused]] static constexpr auto KILOMETERS =
+      UnitOfMeasurement::KILOMETERS;
+  [[maybe_unused]] static constexpr auto MILES = UnitOfMeasurement::MILES;
+  [[maybe_unused]] static constexpr auto FEET = UnitOfMeasurement::FEET;
+  [[maybe_unused]] static constexpr auto YARDS = UnitOfMeasurement::YARDS;
+  [[maybe_unused]] static constexpr auto SQUARE_METERS =
+      UnitOfMeasurement::SQUARE_METERS;
+  [[maybe_unused]] static constexpr auto SQUARE_KILOMETERS =
+      UnitOfMeasurement::SQUARE_KILOMETERS;
+  [[maybe_unused]] static constexpr auto SQUARE_MILES =
+      UnitOfMeasurement::SQUARE_MILES;
+  [[maybe_unused]] static constexpr auto SQUARE_FEET =
+      UnitOfMeasurement::SQUARE_FEET;
+  [[maybe_unused]] static constexpr auto SQUARE_YARDS =
+      UnitOfMeasurement::SQUARE_YARDS;
+  [[maybe_unused]] static constexpr auto ACRE = UnitOfMeasurement::ACRE;
+  [[maybe_unused]] static constexpr auto ARE = UnitOfMeasurement::ARE;
+  [[maybe_unused]] static constexpr auto HECTARE = UnitOfMeasurement::HECTARE;
+  [[maybe_unused]] static constexpr auto UNKNOWN = UnitOfMeasurement::UNKNOWN;
   auto m2ToUnit = squareMeterToUnit;
   const double error = 0.0001;
 
@@ -145,7 +202,26 @@ TEST(GeoSparqlHelpers, SqMeterToUnit) {
 // _____________________________________________________________________________
 TEST(GeoSparqlHelpers, IsLengthUnit) {
   using namespace ad_utility::detail;
-  using enum UnitOfMeasurement;
+  [[maybe_unused]] static constexpr auto METERS = UnitOfMeasurement::METERS;
+  [[maybe_unused]] static constexpr auto KILOMETERS =
+      UnitOfMeasurement::KILOMETERS;
+  [[maybe_unused]] static constexpr auto MILES = UnitOfMeasurement::MILES;
+  [[maybe_unused]] static constexpr auto FEET = UnitOfMeasurement::FEET;
+  [[maybe_unused]] static constexpr auto YARDS = UnitOfMeasurement::YARDS;
+  [[maybe_unused]] static constexpr auto SQUARE_METERS =
+      UnitOfMeasurement::SQUARE_METERS;
+  [[maybe_unused]] static constexpr auto SQUARE_KILOMETERS =
+      UnitOfMeasurement::SQUARE_KILOMETERS;
+  [[maybe_unused]] static constexpr auto SQUARE_MILES =
+      UnitOfMeasurement::SQUARE_MILES;
+  [[maybe_unused]] static constexpr auto SQUARE_FEET =
+      UnitOfMeasurement::SQUARE_FEET;
+  [[maybe_unused]] static constexpr auto SQUARE_YARDS =
+      UnitOfMeasurement::SQUARE_YARDS;
+  [[maybe_unused]] static constexpr auto ACRE = UnitOfMeasurement::ACRE;
+  [[maybe_unused]] static constexpr auto ARE = UnitOfMeasurement::ARE;
+  [[maybe_unused]] static constexpr auto HECTARE = UnitOfMeasurement::HECTARE;
+  [[maybe_unused]] static constexpr auto UNKNOWN = UnitOfMeasurement::UNKNOWN;
 
   EXPECT_TRUE(isLengthUnit(METERS));
   EXPECT_TRUE(isLengthUnit(KILOMETERS));
@@ -167,7 +243,26 @@ TEST(GeoSparqlHelpers, IsLengthUnit) {
 // _____________________________________________________________________________
 TEST(GeoSparqlHelpers, IsAreaUnit) {
   using namespace ad_utility::detail;
-  using enum UnitOfMeasurement;
+  [[maybe_unused]] static constexpr auto METERS = UnitOfMeasurement::METERS;
+  [[maybe_unused]] static constexpr auto KILOMETERS =
+      UnitOfMeasurement::KILOMETERS;
+  [[maybe_unused]] static constexpr auto MILES = UnitOfMeasurement::MILES;
+  [[maybe_unused]] static constexpr auto FEET = UnitOfMeasurement::FEET;
+  [[maybe_unused]] static constexpr auto YARDS = UnitOfMeasurement::YARDS;
+  [[maybe_unused]] static constexpr auto SQUARE_METERS =
+      UnitOfMeasurement::SQUARE_METERS;
+  [[maybe_unused]] static constexpr auto SQUARE_KILOMETERS =
+      UnitOfMeasurement::SQUARE_KILOMETERS;
+  [[maybe_unused]] static constexpr auto SQUARE_MILES =
+      UnitOfMeasurement::SQUARE_MILES;
+  [[maybe_unused]] static constexpr auto SQUARE_FEET =
+      UnitOfMeasurement::SQUARE_FEET;
+  [[maybe_unused]] static constexpr auto SQUARE_YARDS =
+      UnitOfMeasurement::SQUARE_YARDS;
+  [[maybe_unused]] static constexpr auto ACRE = UnitOfMeasurement::ACRE;
+  [[maybe_unused]] static constexpr auto ARE = UnitOfMeasurement::ARE;
+  [[maybe_unused]] static constexpr auto HECTARE = UnitOfMeasurement::HECTARE;
+  [[maybe_unused]] static constexpr auto UNKNOWN = UnitOfMeasurement::UNKNOWN;
 
   EXPECT_TRUE(isAreaUnit(SQUARE_METERS));
   EXPECT_TRUE(isAreaUnit(SQUARE_KILOMETERS));
@@ -189,7 +284,26 @@ TEST(GeoSparqlHelpers, IsAreaUnit) {
 // _____________________________________________________________________________
 TEST(GeoSparqlHelpers, IriToUnit) {
   using namespace ad_utility::detail;
-  using enum UnitOfMeasurement;
+  [[maybe_unused]] static constexpr auto METERS = UnitOfMeasurement::METERS;
+  [[maybe_unused]] static constexpr auto KILOMETERS =
+      UnitOfMeasurement::KILOMETERS;
+  [[maybe_unused]] static constexpr auto MILES = UnitOfMeasurement::MILES;
+  [[maybe_unused]] static constexpr auto FEET = UnitOfMeasurement::FEET;
+  [[maybe_unused]] static constexpr auto YARDS = UnitOfMeasurement::YARDS;
+  [[maybe_unused]] static constexpr auto SQUARE_METERS =
+      UnitOfMeasurement::SQUARE_METERS;
+  [[maybe_unused]] static constexpr auto SQUARE_KILOMETERS =
+      UnitOfMeasurement::SQUARE_KILOMETERS;
+  [[maybe_unused]] static constexpr auto SQUARE_MILES =
+      UnitOfMeasurement::SQUARE_MILES;
+  [[maybe_unused]] static constexpr auto SQUARE_FEET =
+      UnitOfMeasurement::SQUARE_FEET;
+  [[maybe_unused]] static constexpr auto SQUARE_YARDS =
+      UnitOfMeasurement::SQUARE_YARDS;
+  [[maybe_unused]] static constexpr auto ACRE = UnitOfMeasurement::ACRE;
+  [[maybe_unused]] static constexpr auto ARE = UnitOfMeasurement::ARE;
+  [[maybe_unused]] static constexpr auto HECTARE = UnitOfMeasurement::HECTARE;
+  [[maybe_unused]] static constexpr auto UNKNOWN = UnitOfMeasurement::UNKNOWN;
   auto iriToUnit = iriToUnitOfMeasurement;
 
   EXPECT_EQ(iriToUnit(""), UNKNOWN);

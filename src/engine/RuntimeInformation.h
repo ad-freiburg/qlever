@@ -39,7 +39,22 @@ class RuntimeInformation {
     failedBecauseChildFailed,
     cancelled
   };
-  using enum Status;
+  [[maybe_unused]] static constexpr auto notStarted =
+      RuntimeInformation::Status::notStarted;
+  [[maybe_unused]] static constexpr auto inProgress =
+      RuntimeInformation::Status::inProgress;
+  [[maybe_unused]] static constexpr auto fullyMaterialized =
+      RuntimeInformation::Status::fullyMaterialized;
+  [[maybe_unused]] static constexpr auto lazilyMaterialized =
+      RuntimeInformation::Status::lazilyMaterialized;
+  [[maybe_unused]] static constexpr auto optimizedOut =
+      RuntimeInformation::Status::optimizedOut;
+  [[maybe_unused]] static constexpr auto failed =
+      RuntimeInformation::Status::failed;
+  [[maybe_unused]] static constexpr auto failedBecauseChildFailed =
+      RuntimeInformation::Status::failedBecauseChildFailed;
+  [[maybe_unused]] static constexpr auto cancelled =
+      RuntimeInformation::Status::cancelled;
 
   // The priority with which to send updated runtime information. With `IfDue`,
   // the update is only sent if a certain amount of time has passed since the

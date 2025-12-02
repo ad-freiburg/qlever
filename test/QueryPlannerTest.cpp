@@ -223,7 +223,12 @@ TEST(QueryPlanner, testBFSLeaveOut) {
 
 TEST(QueryPlanner, indexScanZeroVariables) {
   auto scan = h::IndexScanFromStrings;
-  using enum Permutation::Enum;
+  [[maybe_unused]] static constexpr auto PSO = Permutation::Enum::PSO;
+  [[maybe_unused]] static constexpr auto POS = Permutation::Enum::POS;
+  [[maybe_unused]] static constexpr auto SPO = Permutation::Enum::SPO;
+  [[maybe_unused]] static constexpr auto SOP = Permutation::Enum::SOP;
+  [[maybe_unused]] static constexpr auto OPS = Permutation::Enum::OPS;
+  [[maybe_unused]] static constexpr auto OSP = Permutation::Enum::OSP;
   h::expect(
       "SELECT * \n "
       "WHERE \t {<x> <y> <z>}",
@@ -237,7 +242,12 @@ TEST(QueryPlanner, indexScanZeroVariables) {
 
 TEST(QueryPlanner, indexScanOneVariable) {
   auto scan = h::IndexScanFromStrings;
-  using enum Permutation::Enum;
+  [[maybe_unused]] static constexpr auto PSO = Permutation::Enum::PSO;
+  [[maybe_unused]] static constexpr auto POS = Permutation::Enum::POS;
+  [[maybe_unused]] static constexpr auto SPO = Permutation::Enum::SPO;
+  [[maybe_unused]] static constexpr auto SOP = Permutation::Enum::SOP;
+  [[maybe_unused]] static constexpr auto OPS = Permutation::Enum::OPS;
+  [[maybe_unused]] static constexpr auto OSP = Permutation::Enum::OSP;
   h::expect(
       "PREFIX : <http://rdf.myprefix.com/>\n"
       "SELECT ?x \n "
@@ -255,7 +265,12 @@ TEST(QueryPlanner, indexScanOneVariable) {
 
 TEST(QueryPlanner, indexScanTwoVariables) {
   auto scan = h::IndexScanFromStrings;
-  using enum Permutation::Enum;
+  [[maybe_unused]] static constexpr auto PSO = Permutation::Enum::PSO;
+  [[maybe_unused]] static constexpr auto POS = Permutation::Enum::POS;
+  [[maybe_unused]] static constexpr auto SPO = Permutation::Enum::SPO;
+  [[maybe_unused]] static constexpr auto SOP = Permutation::Enum::SOP;
+  [[maybe_unused]] static constexpr auto OPS = Permutation::Enum::OPS;
+  [[maybe_unused]] static constexpr auto OSP = Permutation::Enum::OSP;
 
   h::expect(
       "PREFIX : <http://rdf.myprefix.com/>\n"
@@ -266,7 +281,12 @@ TEST(QueryPlanner, indexScanTwoVariables) {
 
 TEST(QueryPlanner, joinOfTwoScans) {
   auto scan = h::IndexScanFromStrings;
-  using enum Permutation::Enum;
+  [[maybe_unused]] static constexpr auto PSO = Permutation::Enum::PSO;
+  [[maybe_unused]] static constexpr auto POS = Permutation::Enum::POS;
+  [[maybe_unused]] static constexpr auto SPO = Permutation::Enum::SPO;
+  [[maybe_unused]] static constexpr auto SOP = Permutation::Enum::SOP;
+  [[maybe_unused]] static constexpr auto OPS = Permutation::Enum::OPS;
+  [[maybe_unused]] static constexpr auto OSP = Permutation::Enum::OSP;
   h::expect(
       "PREFIX : <pre/>\n"
       "SELECT ?x \n "
@@ -308,7 +328,8 @@ TEST(QueryPlanner, joinOfFullScans) {
 
 TEST(QueryPlanner, testActorsBornInEurope) {
   auto scan = h::IndexScanFromStrings;
-  using enum ::OrderBy::AscOrDesc;
+  [[maybe_unused]] static constexpr auto Asc = OrderBy::AscOrDesc::Asc;
+  [[maybe_unused]] static constexpr auto Desc = OrderBy::AscOrDesc::Desc;
   h::expect(
       "PREFIX : <pre/>\n"
       "SELECT ?a \n "
@@ -372,7 +393,12 @@ TEST(QueryPlanner, testFilterAfterJoin) {
 
 TEST(QueryPlanner, threeVarTriples) {
   auto scan = h::IndexScanFromStrings;
-  using enum Permutation::Enum;
+  [[maybe_unused]] static constexpr auto PSO = Permutation::Enum::PSO;
+  [[maybe_unused]] static constexpr auto POS = Permutation::Enum::POS;
+  [[maybe_unused]] static constexpr auto SPO = Permutation::Enum::SPO;
+  [[maybe_unused]] static constexpr auto SOP = Permutation::Enum::SOP;
+  [[maybe_unused]] static constexpr auto OPS = Permutation::Enum::OPS;
+  [[maybe_unused]] static constexpr auto OSP = Permutation::Enum::OSP;
 
   h::expect(
       "SELECT ?x ?p ?o WHERE {"
@@ -636,7 +662,12 @@ TEST(QueryPlanner, testSimpleOptional) {
 }
 
 TEST(QueryPlanner, SimpleTripleOneVariable) {
-  using enum Permutation::Enum;
+  [[maybe_unused]] static constexpr auto PSO = Permutation::Enum::PSO;
+  [[maybe_unused]] static constexpr auto POS = Permutation::Enum::POS;
+  [[maybe_unused]] static constexpr auto SPO = Permutation::Enum::SPO;
+  [[maybe_unused]] static constexpr auto SOP = Permutation::Enum::SOP;
+  [[maybe_unused]] static constexpr auto OPS = Permutation::Enum::OPS;
+  [[maybe_unused]] static constexpr auto OSP = Permutation::Enum::OSP;
 
   auto scan = h::IndexScanFromStrings;
   // With only one variable, there are always two permutations that will yield
@@ -648,7 +679,12 @@ TEST(QueryPlanner, SimpleTripleOneVariable) {
 }
 
 TEST(QueryPlanner, SimpleTripleTwoVariables) {
-  using enum Permutation::Enum;
+  [[maybe_unused]] static constexpr auto PSO = Permutation::Enum::PSO;
+  [[maybe_unused]] static constexpr auto POS = Permutation::Enum::POS;
+  [[maybe_unused]] static constexpr auto SPO = Permutation::Enum::SPO;
+  [[maybe_unused]] static constexpr auto SOP = Permutation::Enum::SOP;
+  [[maybe_unused]] static constexpr auto OPS = Permutation::Enum::OPS;
+  [[maybe_unused]] static constexpr auto OSP = Permutation::Enum::OSP;
 
   // In the following tests we need the query planner to be aware that the index
   // contains the entities `<s> <p> <o>` that are used below, otherwise it will
@@ -688,7 +724,12 @@ TEST(QueryPlanner, SimpleTripleTwoVariables) {
 }
 
 TEST(QueryPlanner, SimpleTripleThreeVariables) {
-  using enum Permutation::Enum;
+  [[maybe_unused]] static constexpr auto PSO = Permutation::Enum::PSO;
+  [[maybe_unused]] static constexpr auto POS = Permutation::Enum::POS;
+  [[maybe_unused]] static constexpr auto SPO = Permutation::Enum::SPO;
+  [[maybe_unused]] static constexpr auto SOP = Permutation::Enum::SOP;
+  [[maybe_unused]] static constexpr auto OPS = Permutation::Enum::OPS;
+  [[maybe_unused]] static constexpr auto OSP = Permutation::Enum::OSP;
 
   // Fixed predicate.
   // Don't care about the sorting.
@@ -2523,7 +2564,8 @@ TEST(QueryPlanner, graphVariablesWithinPattern) {
 
 // _____________________________________________________________________________
 TEST(QueryPlanner, WarningsOnUnboundVariables) {
-  using enum ::OrderBy::AscOrDesc;
+  [[maybe_unused]] static constexpr auto Asc = OrderBy::AscOrDesc::Asc;
+  [[maybe_unused]] static constexpr auto Desc = OrderBy::AscOrDesc::Desc;
   // Unbound variable in ORDER BY.
   h::expect(
       "SELECT * {} ORDER BY ?x",

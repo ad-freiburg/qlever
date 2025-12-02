@@ -99,7 +99,22 @@ TEST(ServerTest, chooseBestFittingMediaType) {
   auto askQuery = parseQuery("ASK {}");
   auto selectQuery = parseQuery("SELECT * {}");
   auto constructQuery = parseQuery("CONSTRUCT WHERE {}");
-  using enum ad_utility::MediaType;
+  [[maybe_unused]] static constexpr auto textPlain =
+      ad_utility::MediaType::textPlain;
+  [[maybe_unused]] static constexpr auto json = ad_utility::MediaType::json;
+  [[maybe_unused]] static constexpr auto sparqlJson =
+      ad_utility::MediaType::sparqlJson;
+  [[maybe_unused]] static constexpr auto sparqlXml =
+      ad_utility::MediaType::sparqlXml;
+  [[maybe_unused]] static constexpr auto qleverJson =
+      ad_utility::MediaType::qleverJson;
+  [[maybe_unused]] static constexpr auto tsv = ad_utility::MediaType::tsv;
+  [[maybe_unused]] static constexpr auto csv = ad_utility::MediaType::csv;
+  [[maybe_unused]] static constexpr auto turtle = ad_utility::MediaType::turtle;
+  [[maybe_unused]] static constexpr auto ntriples =
+      ad_utility::MediaType::ntriples;
+  [[maybe_unused]] static constexpr auto octetStream =
+      ad_utility::MediaType::octetStream;
 
   auto choose = &Server::chooseBestFittingMediaType;
 
@@ -272,7 +287,22 @@ TEST(ServerTest, createResponseMetadata) {
 }
 
 TEST(ServerTest, adjustParsedQueryLimitOffset) {
-  using enum ad_utility::MediaType;
+  [[maybe_unused]] static constexpr auto textPlain =
+      ad_utility::MediaType::textPlain;
+  [[maybe_unused]] static constexpr auto json = ad_utility::MediaType::json;
+  [[maybe_unused]] static constexpr auto sparqlJson =
+      ad_utility::MediaType::sparqlJson;
+  [[maybe_unused]] static constexpr auto sparqlXml =
+      ad_utility::MediaType::sparqlXml;
+  [[maybe_unused]] static constexpr auto qleverJson =
+      ad_utility::MediaType::qleverJson;
+  [[maybe_unused]] static constexpr auto tsv = ad_utility::MediaType::tsv;
+  [[maybe_unused]] static constexpr auto csv = ad_utility::MediaType::csv;
+  [[maybe_unused]] static constexpr auto turtle = ad_utility::MediaType::turtle;
+  [[maybe_unused]] static constexpr auto ntriples =
+      ad_utility::MediaType::ntriples;
+  [[maybe_unused]] static constexpr auto octetStream =
+      ad_utility::MediaType::octetStream;
   auto makePlannedQuery = [](std::string operation) -> Server::PlannedQuery {
     ParsedQuery parsed = parseQuery(std::move(operation));
     QueryExecutionTree qet =

@@ -140,7 +140,16 @@ TEST(Vocabulary, PrefixFilter) {
 // _____________________________________________________________________________
 TEST(Vocabulary, IsGeoInfoAvailable) {
   using ad_utility::VocabularyType;
-  using enum VocabularyType::Enum;
+  [[maybe_unused]] static constexpr auto InMemoryUncompressed =
+      ad_utility::VocabularyType::Enum::InMemoryUncompressed;
+  [[maybe_unused]] static constexpr auto OnDiskUncompressed =
+      ad_utility::VocabularyType::Enum::OnDiskUncompressed;
+  [[maybe_unused]] static constexpr auto InMemoryCompressed =
+      ad_utility::VocabularyType::Enum::InMemoryCompressed;
+  [[maybe_unused]] static constexpr auto OnDiskCompressed =
+      ad_utility::VocabularyType::Enum::OnDiskCompressed;
+  [[maybe_unused]] static constexpr auto OnDiskCompressedGeoSplit =
+      ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit;
 
   RdfsVocabulary v1;
   v1.resetToType(VocabularyType{OnDiskCompressed});

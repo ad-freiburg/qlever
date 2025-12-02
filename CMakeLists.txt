@@ -7,7 +7,7 @@ project(QLever C CXX)
 # C/C++ Versions
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
@@ -49,6 +49,10 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         MESSAGE(FATAL_ERROR "G++ versions older than 11.0 are not supported by QLever")
     elseif (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER "11.0.0")
         add_compile_options(-fcoroutines)
+    else()
+      #TODO<joka921> Actually only for GCC 8 is this required...
+      MESSAGE(STATUS "Linking against stdc++fs, as std::filesystem is experimental in GCC 8.3")
+        link_libraries(stdc++fs)
     endif ()
 
 elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
@@ -306,7 +310,7 @@ FetchContent_Declare(
 )
 
 
-if (USE_PARALLEL)
+if (USE_PARALLEL AND NOT REDUCED_FEATURE_SET_FOR_CPP17)
     include(FindOpenMP)
     if (OPENMP_FOUND)
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")

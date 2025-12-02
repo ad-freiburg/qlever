@@ -297,7 +297,12 @@ TEST(IndexTest, indexIdAndGitHash) {
 
 TEST(IndexTest, scanTest) {
   auto testWithAndWithoutPrefixCompression = [](bool useCompression) {
-    using enum Permutation::Enum;
+    [[maybe_unused]] static constexpr auto PSO = Permutation::Enum::PSO;
+    [[maybe_unused]] static constexpr auto POS = Permutation::Enum::POS;
+    [[maybe_unused]] static constexpr auto SPO = Permutation::Enum::SPO;
+    [[maybe_unused]] static constexpr auto SOP = Permutation::Enum::SOP;
+    [[maybe_unused]] static constexpr auto OPS = Permutation::Enum::OPS;
+    [[maybe_unused]] static constexpr auto OSP = Permutation::Enum::OSP;
     std::string kb =
         "<a>  <b>  <c>  . \n"
         "<a>  <b>  <c2> . \n"
@@ -531,7 +536,12 @@ TEST(IndexTest, NumDistinctEntitiesCornerCases) {
 }
 
 TEST(IndexTest, getPermutation) {
-  using enum Permutation::Enum;
+  [[maybe_unused]] static constexpr auto PSO = Permutation::Enum::PSO;
+  [[maybe_unused]] static constexpr auto POS = Permutation::Enum::POS;
+  [[maybe_unused]] static constexpr auto SPO = Permutation::Enum::SPO;
+  [[maybe_unused]] static constexpr auto SOP = Permutation::Enum::SOP;
+  [[maybe_unused]] static constexpr auto OPS = Permutation::Enum::OPS;
+  [[maybe_unused]] static constexpr auto OSP = Permutation::Enum::OSP;
   const IndexImpl& index = getQec()->getIndex().getImpl();
   EXPECT_EQ(&index.PSO(), &index.getPermutation(PSO));
   EXPECT_EQ(&index.POS(), &index.getPermutation(POS));
@@ -552,7 +562,8 @@ TEST(IndexTest, trivialGettersAndSetters) {
 }
 
 TEST(IndexTest, updateInputFileSpecificationsAndLog) {
-  using enum qlever::Filetype;
+  [[maybe_unused]] static constexpr auto Turtle = qlever::Filetype::Turtle;
+  [[maybe_unused]] static constexpr auto NQuad = qlever::Filetype::NQuad;
   std::vector<qlever::InputFileSpecification> singleFileSpec = {
       {"singleFile.ttl", Turtle, std::nullopt}};
   std::vector<qlever::InputFileSpecification> twoFilesSpec = {

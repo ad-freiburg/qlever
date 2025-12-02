@@ -362,7 +362,20 @@ class GroupByImpl : public Operation {
         : numOfGroupedColumns_{numOfGroupedColumns},
           alloc_{alloc},
           map_{alloc} {
-      using enum HashMapAggregateType;
+      [[maybe_unused]] static constexpr auto AVG =
+          GroupByImpl::HashMapAggregateType::AVG;
+      [[maybe_unused]] static constexpr auto COUNT =
+          GroupByImpl::HashMapAggregateType::COUNT;
+      [[maybe_unused]] static constexpr auto MIN =
+          GroupByImpl::HashMapAggregateType::MIN;
+      [[maybe_unused]] static constexpr auto MAX =
+          GroupByImpl::HashMapAggregateType::MAX;
+      [[maybe_unused]] static constexpr auto SUM =
+          GroupByImpl::HashMapAggregateType::SUM;
+      [[maybe_unused]] static constexpr auto GROUP_CONCAT =
+          GroupByImpl::HashMapAggregateType::GROUP_CONCAT;
+      [[maybe_unused]] static constexpr auto SAMPLE =
+          GroupByImpl::HashMapAggregateType::SAMPLE;
       for (const auto& alias : aggregateAliases) {
         for (const auto& aggregate : alias.aggregateInfo_) {
           using namespace ad_utility::use_type_identity;

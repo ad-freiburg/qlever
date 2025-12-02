@@ -285,7 +285,14 @@ TEST(GeometryInfoTest, BoundingBoxAsWKT) {
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, BoundingBoxGetBoundingCoordinate) {
-  using enum ad_utility::BoundingCoordinate;
+  [[maybe_unused]] static constexpr auto MIN_X =
+      ad_utility::BoundingCoordinate::MIN_X;
+  [[maybe_unused]] static constexpr auto MIN_Y =
+      ad_utility::BoundingCoordinate::MIN_Y;
+  [[maybe_unused]] static constexpr auto MAX_X =
+      ad_utility::BoundingCoordinate::MAX_X;
+  [[maybe_unused]] static constexpr auto MAX_Y =
+      ad_utility::BoundingCoordinate::MAX_Y;
 
   BoundingBox bb1{{2, 1}, {4, 3}};
   EXPECT_NEAR(bb1.getBoundingCoordinate<MIN_X>(), 1, 0.0001);
@@ -525,7 +532,20 @@ TEST(GeometryInfoTest, AnyGeometryMember) {
   // Test that the enum we define corresponds to the geometry type identifiers
   // used by `libspatialjoin`.
   using namespace util::geo;
-  using enum AnyGeometryMember;
+  [[maybe_unused]] static constexpr auto POINT =
+      ad_utility::detail::AnyGeometryMember::POINT;
+  [[maybe_unused]] static constexpr auto LINE =
+      ad_utility::detail::AnyGeometryMember::LINE;
+  [[maybe_unused]] static constexpr auto POLYGON =
+      ad_utility::detail::AnyGeometryMember::POLYGON;
+  [[maybe_unused]] static constexpr auto MULTILINE =
+      ad_utility::detail::AnyGeometryMember::MULTILINE;
+  [[maybe_unused]] static constexpr auto MULTIPOLYGON =
+      ad_utility::detail::AnyGeometryMember::MULTIPOLYGON;
+  [[maybe_unused]] static constexpr auto COLLECTION =
+      ad_utility::detail::AnyGeometryMember::COLLECTION;
+  [[maybe_unused]] static constexpr auto MULTIPOINT =
+      ad_utility::detail::AnyGeometryMember::MULTIPOINT;
 
   checkAnyGeometryMemberEnum({DPoint{}}, POINT);
   checkAnyGeometryMemberEnum({DLine{}}, LINE);

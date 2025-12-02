@@ -140,7 +140,22 @@ void runSelectQueryTestCase(
     const TestCaseSelectQuery& testCase, bool useTextIndex = false,
     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l, "runSelectQueryTestCase");
-  using enum ad_utility::MediaType;
+  [[maybe_unused]] static constexpr auto textPlain =
+      ad_utility::MediaType::textPlain;
+  [[maybe_unused]] static constexpr auto json = ad_utility::MediaType::json;
+  [[maybe_unused]] static constexpr auto sparqlJson =
+      ad_utility::MediaType::sparqlJson;
+  [[maybe_unused]] static constexpr auto sparqlXml =
+      ad_utility::MediaType::sparqlXml;
+  [[maybe_unused]] static constexpr auto qleverJson =
+      ad_utility::MediaType::qleverJson;
+  [[maybe_unused]] static constexpr auto tsv = ad_utility::MediaType::tsv;
+  [[maybe_unused]] static constexpr auto csv = ad_utility::MediaType::csv;
+  [[maybe_unused]] static constexpr auto turtle = ad_utility::MediaType::turtle;
+  [[maybe_unused]] static constexpr auto ntriples =
+      ad_utility::MediaType::ntriples;
+  [[maybe_unused]] static constexpr auto octetStream =
+      ad_utility::MediaType::octetStream;
   EXPECT_EQ(
       runQueryStreamableResult(testCase.kg, testCase.query, tsv, useTextIndex),
       testCase.resultTsv);
@@ -182,7 +197,22 @@ void runConstructQueryTestCase(
     const TestCaseConstructQuery& testCase,
     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l, "runConstructQueryTestCase");
-  using enum ad_utility::MediaType;
+  [[maybe_unused]] static constexpr auto textPlain =
+      ad_utility::MediaType::textPlain;
+  [[maybe_unused]] static constexpr auto json = ad_utility::MediaType::json;
+  [[maybe_unused]] static constexpr auto sparqlJson =
+      ad_utility::MediaType::sparqlJson;
+  [[maybe_unused]] static constexpr auto sparqlXml =
+      ad_utility::MediaType::sparqlXml;
+  [[maybe_unused]] static constexpr auto qleverJson =
+      ad_utility::MediaType::qleverJson;
+  [[maybe_unused]] static constexpr auto tsv = ad_utility::MediaType::tsv;
+  [[maybe_unused]] static constexpr auto csv = ad_utility::MediaType::csv;
+  [[maybe_unused]] static constexpr auto turtle = ad_utility::MediaType::turtle;
+  [[maybe_unused]] static constexpr auto ntriples =
+      ad_utility::MediaType::ntriples;
+  [[maybe_unused]] static constexpr auto octetStream =
+      ad_utility::MediaType::octetStream;
   EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, tsv),
             testCase.resultTsv);
   EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, csv),
@@ -213,7 +243,22 @@ void runAskQueryTestCase(
     const TestCaseAskQuery& testCase,
     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l, "runAskQueryTestCase");
-  using enum ad_utility::MediaType;
+  [[maybe_unused]] static constexpr auto textPlain =
+      ad_utility::MediaType::textPlain;
+  [[maybe_unused]] static constexpr auto json = ad_utility::MediaType::json;
+  [[maybe_unused]] static constexpr auto sparqlJson =
+      ad_utility::MediaType::sparqlJson;
+  [[maybe_unused]] static constexpr auto sparqlXml =
+      ad_utility::MediaType::sparqlXml;
+  [[maybe_unused]] static constexpr auto qleverJson =
+      ad_utility::MediaType::qleverJson;
+  [[maybe_unused]] static constexpr auto tsv = ad_utility::MediaType::tsv;
+  [[maybe_unused]] static constexpr auto csv = ad_utility::MediaType::csv;
+  [[maybe_unused]] static constexpr auto turtle = ad_utility::MediaType::turtle;
+  [[maybe_unused]] static constexpr auto ntriples =
+      ad_utility::MediaType::ntriples;
+  [[maybe_unused]] static constexpr auto octetStream =
+      ad_utility::MediaType::octetStream;
   // TODO<joka921> match the exception
   EXPECT_ANY_THROW(runQueryStreamableResult(testCase.kg, testCase.query, tsv));
   EXPECT_ANY_THROW(runQueryStreamableResult(testCase.kg, testCase.query, csv));
@@ -1570,7 +1615,22 @@ TEST(ExportQueryExecutionTrees, AskQuery) {
   runAskQueryTestCase(askResultFalse(false));
 }
 
-using enum ad_utility::MediaType;
+[[maybe_unused]] static constexpr auto textPlain =
+    ad_utility::MediaType::textPlain;
+[[maybe_unused]] static constexpr auto json = ad_utility::MediaType::json;
+[[maybe_unused]] static constexpr auto sparqlJson =
+    ad_utility::MediaType::sparqlJson;
+[[maybe_unused]] static constexpr auto sparqlXml =
+    ad_utility::MediaType::sparqlXml;
+[[maybe_unused]] static constexpr auto qleverJson =
+    ad_utility::MediaType::qleverJson;
+[[maybe_unused]] static constexpr auto tsv = ad_utility::MediaType::tsv;
+[[maybe_unused]] static constexpr auto csv = ad_utility::MediaType::csv;
+[[maybe_unused]] static constexpr auto turtle = ad_utility::MediaType::turtle;
+[[maybe_unused]] static constexpr auto ntriples =
+    ad_utility::MediaType::ntriples;
+[[maybe_unused]] static constexpr auto octetStream =
+    ad_utility::MediaType::octetStream;
 
 // ____________________________________________________________________________
 class StreamableMediaTypesFixture
@@ -1916,7 +1976,23 @@ TEST(ExportQueryExecutionTrees, idToLiteralFunctionality) {
       "\"dadudeldu\"^^<http://www.dadudeldu.com/NoSuchDatatype> .";
   auto qec = ad_utility::testing::getQec(kg);
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
-  using enum Datatype;
+  [[maybe_unused]] static constexpr auto Undefined = Datatype::Undefined;
+  [[maybe_unused]] static constexpr auto Bool = Datatype::Bool;
+  [[maybe_unused]] static constexpr auto Int = Datatype::Int;
+  [[maybe_unused]] static constexpr auto Double = Datatype::Double;
+  [[maybe_unused]] static constexpr auto VocabIndex = Datatype::VocabIndex;
+  [[maybe_unused]] static constexpr auto LocalVocabIndex =
+      Datatype::LocalVocabIndex;
+  [[maybe_unused]] static constexpr auto TextRecordIndex =
+      Datatype::TextRecordIndex;
+  [[maybe_unused]] static constexpr auto Date = Datatype::Date;
+  [[maybe_unused]] static constexpr auto GeoPoint = Datatype::GeoPoint;
+  [[maybe_unused]] static constexpr auto WordVocabIndex =
+      Datatype::WordVocabIndex;
+  [[maybe_unused]] static constexpr auto BlankNodeIndex =
+      Datatype::BlankNodeIndex;
+  [[maybe_unused]] static constexpr auto EncodedVal = Datatype::EncodedVal;
+  [[maybe_unused]] static constexpr auto MaxValue = Datatype::MaxValue;
 
   // Helper function that takes an ID and a vector of test cases and checks
   // if the ID is correctly converted. A more detailed explanation of the test

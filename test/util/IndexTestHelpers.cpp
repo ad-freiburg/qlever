@@ -114,12 +114,22 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
       };
 
   auto checkConsistencyForPredicate = [&](Id predicateId) {
-    using enum Permutation::Enum;
+    [[maybe_unused]] constexpr auto PSO = Permutation::Enum::PSO;
+    [[maybe_unused]] constexpr auto POS = Permutation::Enum::POS;
+    [[maybe_unused]] constexpr auto SPO = Permutation::Enum::SPO;
+    [[maybe_unused]] constexpr auto SOP = Permutation::Enum::SOP;
+    [[maybe_unused]] constexpr auto OPS = Permutation::Enum::OPS;
+    [[maybe_unused]] constexpr auto OSP = Permutation::Enum::OSP;
     checkConsistencyForCol0IdAndPermutation(predicateId, PSO, 0, 1);
     checkConsistencyForCol0IdAndPermutation(predicateId, POS, 1, 0);
   };
   auto checkConsistencyForObject = [&](Id objectId) {
-    using enum Permutation::Enum;
+    [[maybe_unused]] constexpr auto PSO = Permutation::Enum::PSO;
+    [[maybe_unused]] constexpr auto POS = Permutation::Enum::POS;
+    [[maybe_unused]] constexpr auto SPO = Permutation::Enum::SPO;
+    [[maybe_unused]] constexpr auto SOP = Permutation::Enum::SOP;
+    [[maybe_unused]] constexpr auto OPS = Permutation::Enum::OPS;
+    [[maybe_unused]] constexpr auto OSP = Permutation::Enum::OSP;
     checkConsistencyForCol0IdAndPermutation(objectId, OPS, 1, col0IdTag);
     checkConsistencyForCol0IdAndPermutation(objectId, OSP, 0, col0IdTag);
   };

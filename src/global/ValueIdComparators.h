@@ -42,20 +42,35 @@ enum struct ComparisonResult { False, True, Undef };
 // Convert the comparison result to a boolean value, assuming that it is not
 // `Undef`.
 inline bool toBoolNotUndef(ComparisonResult comparisonResult) {
-  using enum ComparisonResult;
+  [[maybe_unused]] static constexpr auto False =
+      valueIdComparators::ComparisonResult::False;
+  [[maybe_unused]] static constexpr auto True =
+      valueIdComparators::ComparisonResult::True;
+  [[maybe_unused]] static constexpr auto Undef =
+      valueIdComparators::ComparisonResult::Undef;
   AD_EXPENSIVE_CHECK(comparisonResult != Undef);
   return comparisonResult == True;
 }
 
 // Convert a bool to a ternary `ComparisonResult`.
 inline ComparisonResult fromBool(bool b) {
-  using enum ComparisonResult;
+  [[maybe_unused]] static constexpr auto False =
+      valueIdComparators::ComparisonResult::False;
+  [[maybe_unused]] static constexpr auto True =
+      valueIdComparators::ComparisonResult::True;
+  [[maybe_unused]] static constexpr auto Undef =
+      valueIdComparators::ComparisonResult::Undef;
   return b ? True : False;
 }
 
 // Convert a `ComparisonResult` to a `ValueId`.
 inline ValueId toValueId(ComparisonResult comparisonResult) {
-  using enum ComparisonResult;
+  [[maybe_unused]] static constexpr auto False =
+      valueIdComparators::ComparisonResult::False;
+  [[maybe_unused]] static constexpr auto True =
+      valueIdComparators::ComparisonResult::True;
+  [[maybe_unused]] static constexpr auto Undef =
+      valueIdComparators::ComparisonResult::Undef;
   switch (comparisonResult) {
     case False:
       return ValueId::makeFromBool(false);
@@ -498,9 +513,17 @@ template <ComparisonForIncompatibleTypes comparisonForIncompatibleTypes =
 ComparisonResult compareIdsImpl(ValueId a, ValueId b, Comparator comparator) {
   Datatype typeA = a.getDatatype();
   Datatype typeB = b.getDatatype();
-  using enum ComparisonResult;
+  [[maybe_unused]] static constexpr auto False =
+      valueIdComparators::ComparisonResult::False;
+  [[maybe_unused]] static constexpr auto True =
+      valueIdComparators::ComparisonResult::True;
+  [[maybe_unused]] static constexpr auto Undef =
+      valueIdComparators::ComparisonResult::Undef;
   if (!areTypesCompatible(typeA, typeB)) {
-    using enum ComparisonForIncompatibleTypes;
+    [[maybe_unused]] static constexpr auto CompareByType =
+        valueIdComparators::ComparisonForIncompatibleTypes::CompareByType;
+    [[maybe_unused]] static constexpr auto AlwaysUndef =
+        valueIdComparators::ComparisonForIncompatibleTypes::AlwaysUndef;
     if constexpr (comparisonForIncompatibleTypes == CompareByType) {
       return fromBool(comparator(a.getDatatype(), b.getDatatype()));
     } else {
@@ -578,7 +601,18 @@ inline ComparisonResult compareIds(ValueId a, ValueId b,
     }
   };
 
-  using enum Comparison;
+  [[maybe_unused]] static constexpr auto LT =
+      valueIdComparators::Comparison::LT;
+  [[maybe_unused]] static constexpr auto LE =
+      valueIdComparators::Comparison::LE;
+  [[maybe_unused]] static constexpr auto EQ =
+      valueIdComparators::Comparison::EQ;
+  [[maybe_unused]] static constexpr auto NE =
+      valueIdComparators::Comparison::NE;
+  [[maybe_unused]] static constexpr auto GE =
+      valueIdComparators::Comparison::GE;
+  [[maybe_unused]] static constexpr auto GT =
+      valueIdComparators::Comparison::GT;
   switch (comparison) {
     case LT:
       return compare(std::less{});
@@ -620,7 +654,18 @@ inline ComparisonResult compareWithEqualIds(ValueId a, ValueId bBegin,
                a, bBegin, std::greater_equal<>())) &&
            toBoolNotUndef(detail::compareIdsImpl<mode>(a, bEnd, std::less<>()));
   };
-  using enum Comparison;
+  [[maybe_unused]] static constexpr auto LT =
+      valueIdComparators::Comparison::LT;
+  [[maybe_unused]] static constexpr auto LE =
+      valueIdComparators::Comparison::LE;
+  [[maybe_unused]] static constexpr auto EQ =
+      valueIdComparators::Comparison::EQ;
+  [[maybe_unused]] static constexpr auto NE =
+      valueIdComparators::Comparison::NE;
+  [[maybe_unused]] static constexpr auto GE =
+      valueIdComparators::Comparison::GE;
+  [[maybe_unused]] static constexpr auto GT =
+      valueIdComparators::Comparison::GT;
   switch (comparison) {
     case LT:
       return detail::compareIdsImpl<mode>(a, bBegin, std::less<>());
