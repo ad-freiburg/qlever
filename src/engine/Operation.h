@@ -24,6 +24,7 @@
 
 // forward declaration needed to break dependencies
 class QueryExecutionTree;
+class ExternallySpecifiedValues;
 
 enum class ComputationMode {
   FULLY_MATERIALIZED,
@@ -349,6 +350,11 @@ class Operation {
  public:
   // Create a deep copy of this operation.
   std::unique_ptr<Operation> clone() const;
+
+  // Recursively collect all ExternallySpecifiedValues operations in this
+  // operation tree. This allows external modification of the values.
+  void getExternalValues(
+      std::vector<ExternallySpecifiedValues*>& externalValues);
 
   // Helper function to check hif the result of this operation is
   // already sorted accordigngly.
