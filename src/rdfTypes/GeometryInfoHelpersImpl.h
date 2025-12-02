@@ -24,6 +24,7 @@
 #include <utility>
 #include <vector>
 
+#include "engine/SpatialJoinConfig.h"
 #include "global/Constants.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfo.h"
@@ -32,6 +33,7 @@
 #include "util/GeoConverters.h"
 #include "util/Log.h"
 #include "util/TypeTraits.h"
+#include "util/geo/DE9IMatrix.h"
 
 // This file contains functions used for parsing and processing WKT geometries
 // using `pb_util`. To avoid unnecessarily compiling expensive modules, this
@@ -46,6 +48,7 @@ using ParsedWkt =
                  MultiPoint<CoordType>, MultiLine<CoordType>,
                  MultiPolygon<CoordType>, Collection<CoordType>>;
 using ParseResult = std::pair<WKTType, std::optional<ParsedWkt>>;
+using DAnyGeometry = util::geo::AnyGeometry<CoordType>;
 
 template <typename T>
 CPP_concept WktSingleGeometryType =
@@ -283,6 +286,37 @@ enum class AnyGeometryMember : uint8_t {
   MULTIPOINT
 };
 
+// Helper to convert the dynamic container `AnyGeometry` to the `ParsedWkt`
+// variant type
+CPP_template(typename Visitor, typename T)(
+    requires SimilarTo<
+        T, DAnyGeometry>) inline auto visitAnyGeometry(Visitor visitor,
+                                                       T&& geom) {
+  using enum AnyGeometryMember;
+  // `AnyGeometry` is a class from `pb_util`. It does not operate on an enum,
+  // this is why we use our own enum here. The correct matching of the integer
+  // identifiers for the geometry types with this enum is tested in
+  // `GeometryInfoTest.cpp`.
+  switch (AnyGeometryMember{geom.getType()}) {
+    case POINT:
+      return visitor(AD_FWD(geom).getPoint());
+    case LINE:
+      return visitor(AD_FWD(geom).getLine());
+    case POLYGON:
+      return visitor(AD_FWD(geom).getPolygon());
+    case MULTILINE:
+      return visitor(AD_FWD(geom).getMultiLine());
+    case MULTIPOLYGON:
+      return visitor(AD_FWD(geom).getMultiPolygon());
+    case COLLECTION:
+      return visitor(AD_FWD(geom).getCollection());
+    case MULTIPOINT:
+      return visitor(AD_FWD(geom).getMultiPoint());
+    default:
+      AD_FAIL();
+  }
+}
+
 // Helper to implement the computation of metric length for the different
 // geometry types.
 struct MetricLengthVisitor {
@@ -315,29 +349,7 @@ struct MetricLengthVisitor {
   CPP_template(typename T)(
       requires ad_utility::SimilarTo<T, AnyGeometry<CoordType>>) double
   operator()(const T& geom) const {
-    using enum AnyGeometryMember;
-    // `AnyGeometry` is a class from `pb_util`. It does not operate on an enum,
-    // this is why we use our own enum here. The correct matching of the integer
-    // identifiers for the geometry types with this enum is tested in
-    // `GeometryInfoTest.cpp`.
-    switch (AnyGeometryMember{geom.getType()}) {
-      case POINT:
-        return MetricLengthVisitor{}(geom.getPoint());
-      case LINE:
-        return MetricLengthVisitor{}(geom.getLine());
-      case POLYGON:
-        return MetricLengthVisitor{}(geom.getPolygon());
-      case MULTILINE:
-        return MetricLengthVisitor{}(geom.getMultiLine());
-      case MULTIPOLYGON:
-        return MetricLengthVisitor{}(geom.getMultiPolygon());
-      case COLLECTION:
-        return MetricLengthVisitor{}(geom.getCollection());
-      case MULTIPOINT:
-        return MetricLengthVisitor{}(geom.getMultiPoint());
-      default:
-        AD_FAIL();
-    }
+    return visitAnyGeometry(MetricLengthVisitor{}, geom);
   }
 
   // Compute the length for a parsed WKT geometry.
@@ -426,6 +438,161 @@ struct MetricAreaVisitor {
 };
 
 static constexpr MetricAreaVisitor computeMetricArea;
+
+// Helper to convert an instance of the `GeoPointOrWkt` variant to `ParseResult`
+// containing a geometry for `pb_util`.
+struct ParseGeoPointOrWktVisitor {
+  ParseResult operator()(const GeoPoint& point) const {
+    return {WKTType::POINT, geoPointToUtilPoint(point)};
+  }
+
+  ParseResult operator()(const std::string& wkt) const { return parseWkt(wkt); }
+
+  ParseResult operator()(const GeoPointOrWkt& geoPointOrWkt) const {
+    return std::visit(ParseGeoPointOrWktVisitor{}, geoPointOrWkt);
+  }
+
+  template <typename T>
+  ParseResult operator()(const std::optional<T>& geoPointOrWkt) const {
+    if (!geoPointOrWkt.has_value()) {
+      return {WKTType::NONE, std::nullopt};
+    }
+    return std::visit(ParseGeoPointOrWktVisitor{}, geoPointOrWkt.value());
+  }
+};
+
+static constexpr ParseGeoPointOrWktVisitor parseGeoPointOrWkt;
+
+// Helper to convert a geometry from `pb_util` to a WKT string.
+struct UtilGeomToWktVisitor {
+  // Visitor for `std::optional` inputs.
+  template <typename T>
+  std::optional<std::string> operator()(const std::optional<T>& opt) const {
+    if (!opt.has_value()) {
+      return std::nullopt;
+    }
+    return UtilGeomToWktVisitor{}(opt.value());
+  }
+
+  // Visitor for the `ParsedWkt` variant.
+  std::optional<std::string> operator()(const ParsedWkt& variant) const {
+    return std::visit(UtilGeomToWktVisitor{}, variant);
+  }
+
+  // Visitor for each of the `pb_util` geometry types.
+  CPP_template(typename T)(
+      requires SimilarToAnyTypeIn<T, ParsedWkt>) std::optional<std::string>
+  operator()(const T& geom) const {
+    return getWKT(geom);
+  }
+
+  // Visitor for the custom container type `AnyGeometry`.
+  std::optional<std::string> operator()(
+      const AnyGeometry<CoordType>& geom) const {
+    return visitAnyGeometry(UtilGeomToWktVisitor{}, geom);
+  }
+};
+
+static constexpr UtilGeomToWktVisitor utilGeomToWkt;
+
+using GeomsForDE9IM =
+    std::vector<std::variant<DPoint, DXSortedLine, DXSortedPolygon>>;
+struct UtilGeomForDE9IMVisitor {
+  GeomsForDE9IM operator()(DPoint p) const { return {p}; }
+
+  GeomsForDE9IM operator()(DLine line) const { return {XSortedLine{line}}; }
+
+  GeomsForDE9IM operator()(DPolygon line) const {
+    return {XSortedPolygon{line}};
+  }
+
+  GeomsForDE9IM operator()(DAnyGeometry geom) const {
+    return visitAnyGeometry(UtilGeomForDE9IMVisitor{}, geom);
+  }
+
+  CPP_template(typename T)(requires WktCollectionType<T>) GeomsForDE9IM
+  operator()(const T& geoms) const {
+    GeomsForDE9IM result;
+    for (auto geom : geoms) {
+      for (auto converted : UtilGeomForDE9IMVisitor{}(geom)) {
+        result.push_back(std::move(converted));
+      }
+    }
+    return result;
+  }
+};
+
+static constexpr UtilGeomForDE9IMVisitor utilGeomForDE9IM;
+
+DBox neutralBoundingBox() {
+  static constexpr CoordType dMin = std::numeric_limits<CoordType>::lowest();
+  static constexpr CoordType dMax = std::numeric_limits<CoordType>::max();
+  return DBox{{dMin, dMin}, {dMax, dMax}};
+}
+
+DE9IMatrix getDE9IM(const ParsedWkt& left, const ParsedWkt& right) {
+  auto lSorted = std::visit(utilGeomForDE9IM, left);
+  auto rSorted = std::visit(utilGeomForDE9IM, right);
+  DE9IMatrix m;
+  for (const auto& entryLeft : lSorted) {
+    for (const auto& entryRight : rSorted) {
+      m += std::visit(
+          [](const auto& a, const auto& b) {
+            if constexpr (SimilarTo<decltype(b), DPoint>) {
+              return DE9IM(b, a).transpose();
+            } else if constexpr (SimilarTo<decltype(a), DXSortedLine> &&
+                                 SimilarTo<decltype(b), DXSortedLine>) {
+              return DE9IM(a, b, neutralBoundingBox(), neutralBoundingBox());
+            } else {
+              return DE9IM(a, b);
+            }
+          },
+          entryLeft, entryRight);
+    }
+  }
+  return m;
+};
+
+template <SpatialJoinType Relation>
+bool DE9IMatrixSatisfies(DE9IMatrix m, bool lineLine = false) {
+  using enum SpatialJoinType;
+  if constexpr (Relation == INTERSECTS) {
+    return m.intersects();
+  } else if constexpr (Relation == CONTAINS) {
+    return m.contains();
+  } else if constexpr (Relation == COVERS) {
+    return m.covers();
+  } else if constexpr (Relation == CROSSES) {
+    return lineLine ? m.overlaps02() : m.II() == D0;
+  } else if constexpr (Relation == TOUCHES) {
+    return m.touches();
+  } else if constexpr (Relation == EQUALS) {
+    return m.equals();
+  } else if constexpr (Relation == OVERLAPS) {
+    return lineLine ? m.overlaps1() : m.overlaps02();
+  } else if constexpr (Relation == WITHIN) {
+    return m.within();
+  } else if constexpr (Relation == WITHIN_DIST) {
+    // Within dist may not be used as input
+    static_assert(false);
+  } else {
+    // There are no further geometric relations
+    static_assert(false);
+  }
+}
+
+template <SpatialJoinType Relation>
+std::optional<bool> georel(const GeoPointOrWkt& left,
+                           const GeoPointOrWkt& right) {
+  auto [lType, lParsed] = parseGeoPointOrWkt(left);
+  auto [rType, rParsed] = parseGeoPointOrWkt(right);
+  if (!lParsed.has_value() || !rParsed.has_value()) {
+    return std::nullopt;
+  }
+  auto de9im = getDE9IM(lParsed.value(), rParsed.value());
+  bool lineLine = false;  // TODO
+  return DE9IMatrixSatisfies<Relation>(de9im, lineLine);
+}
 
 }  // namespace ad_utility::detail
 
