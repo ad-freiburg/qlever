@@ -102,6 +102,7 @@ class IteratorForAccessOperator {
   }
 
   QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(IteratorForAccessOperator)
+
   bool operator==(const IteratorForAccessOperator& rhs) const {
     return index_ == rhs.index_;
   }
