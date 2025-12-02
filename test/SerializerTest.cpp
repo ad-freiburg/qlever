@@ -4,6 +4,7 @@
 //
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
+#include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -113,6 +114,25 @@ static constexpr bool isReadSerializable =
 template <typename T>
 static constexpr bool isWriteSerializable =
     requires(ByteBufferWriteSerializer s, T t) { serialize(s, t); };
+
+// Simple dummy "compression" for testing (modify the data in a way that is
+// simple, and reversed in the below dummy decompression function)
+auto dummyCompress = [](ql::span<const char> data, std::vector<char>& res) {
+  res.clear();
+  res.insert(res.end(), data.begin(), data.end());
+  for (auto& c : res) {
+    ++c;
+  }
+  res.push_back('A');
+};
+auto dummyDecompress = [](ql::span<const char> data, ql::span<char> res) {
+  AD_CORRECTNESS_CHECK(res.size() == data.size() - 1);
+  AD_CORRECTNESS_CHECK(data.back() == 'A');
+  std::copy(data.begin(), data.end() - 1, res.begin());
+  for (auto& c : res) {
+    --c;
+  }
+};
 
 TEST(Serializer, Serializability) {
   using testNamespaceA::A;
@@ -232,6 +252,26 @@ TEST(Serializer, Concepts) {
   static_assert(!ReadSerializer<FileWriteSerializer>);
   static_assert(ReadSerializer<CopyableFileReadSerializer>);
   static_assert(!WriteSerializer<CopyableFileReadSerializer>);
+  {
+    using Writer = ad_utility::serialization::ZstdWriteSerializer<
+        ByteBufferWriteSerializer>;
+    using Reader =
+        ad_utility::serialization::ZstdReadSerializer<ByteBufferReadSerializer>;
+    static_assert(WriteSerializer<Writer>);
+    static_assert(!ReadSerializer<Writer>);
+    static_assert(ReadSerializer<Reader>);
+    static_assert(!WriteSerializer<Reader>);
+  }
+  {
+    using Writer = CompressedWriteSerializer<ByteBufferWriteSerializer,
+                                             decltype(dummyCompress)>;
+    using Reader = CompressedReadSerializer<ByteBufferReadSerializer,
+                                            decltype(dummyDecompress)>;
+    static_assert(WriteSerializer<Writer>);
+    static_assert(!ReadSerializer<Writer>);
+    static_assert(ReadSerializer<Reader>);
+    static_assert(!WriteSerializer<Reader>);
+  }
 }
 
 // The following tests are mainly not for documentation but rather stress tests
@@ -569,37 +609,6 @@ TEST(Serializer, serializeOptional) {
 // Tests for CompressedSerializer
 // _____________________________________________________________________________
 
-// Simple dummy "compression" for testing (modify the data in a way that is
-// simple, and reversed in the below dummy decompression function)
-auto dummyCompress = [](ql::span<const char> data) {
-  auto res = std::vector<char>(data.begin(), data.end());
-  for (auto& c : res) {
-    ++c;
-  }
-  res.push_back('A');
-  return res;
-};
-auto dummyDecompress = [](ql::span<const char> data, size_t) {
-  auto res = std::vector<char>(data.begin(), data.end());
-  for (auto& c : res) {
-    --c;
-  }
-  res.pop_back();
-  return res;
-};
-
-// _____________________________________________________________________________
-TEST(CompressedSerializer, Concepts) {
-  using Writer = CompressedWriteSerializer<ByteBufferWriteSerializer,
-                                           decltype(dummyCompress)>;
-  using Reader = CompressedReadSerializer<ByteBufferReadSerializer,
-                                          decltype(dummyDecompress)>;
-  static_assert(WriteSerializer<Writer>);
-  static_assert(!ReadSerializer<Writer>);
-  static_assert(ReadSerializer<Reader>);
-  static_assert(!WriteSerializer<Reader>);
-}
-
 // _____________________________________________________________________________
 TEST(CompressedSerializer, SimpleRoundtrip) {
   auto blockSize = ad_utility::MemorySize::bytes(3);
@@ -682,6 +691,8 @@ TEST(CompressedSerializer, ExactBlockSize) {
 // _____________________________________________________________________________
 TEST(CompressedSerializer, WithFileSerializer) {
   std::string filename = "CompressedSerializer.WithFileSerializer.dat";
+  auto cleanup =
+      absl::Cleanup{[&filename]() { ad_utility::deleteFile(filename); }};
   auto blockSize = ad_utility::MemorySize::bytes(64);
 
   std::vector<double> original;
@@ -703,21 +714,10 @@ TEST(CompressedSerializer, WithFileSerializer) {
     reader >> read;
     EXPECT_EQ(original, read);
   }
-
-  ad_utility::deleteFile(filename);
 }
 
 // _____________________________________________________________________________
-TEST(ZstdSerializer, Concepts) {
-  using Writer =
-      ad_utility::serialization::ZstdWriteSerializer<ByteBufferWriteSerializer>;
-  using Reader =
-      ad_utility::serialization::ZstdReadSerializer<ByteBufferReadSerializer>;
-  static_assert(WriteSerializer<Writer>);
-  static_assert(!ReadSerializer<Writer>);
-  static_assert(ReadSerializer<Reader>);
-  static_assert(!WriteSerializer<Reader>);
-}
+TEST(ZstdSerializer, Concepts) {}
 
 // _____________________________________________________________________________
 TEST(ZstdSerializer, RoundtripWithByteBuffer) {
@@ -751,6 +751,8 @@ TEST(ZstdSerializer, RoundtripWithFileSerializer) {
   using ad_utility::serialization::ZstdWriteSerializer;
 
   std::string filename = "ZstdSerializer.RoundtripWithFileSerializer.dat";
+  auto cleanup =
+      absl::Cleanup{[&filename]() { ad_utility::deleteFile(filename); }};
   auto blockSize = ad_utility::MemorySize::kilobytes(1);
 
   std::vector<std::string> original = {"alpha", "beta", "gamma", "delta",
@@ -772,6 +774,4 @@ TEST(ZstdSerializer, RoundtripWithFileSerializer) {
     reader >> read;
     EXPECT_EQ(original, read);
   }
-
-  ad_utility::deleteFile(filename);
 }

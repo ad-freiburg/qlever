@@ -40,10 +40,9 @@ namespace ad_utility::serialization {
  * a vector of chars
  */
 CPP_template(typename UnderlyingSerializer, typename CompressionFunction)(
-    requires WriteSerializer<UnderlyingSerializer> CPP_and
-        ad_utility::InvocableWithConvertibleReturnType<
-            CompressionFunction, ql::span<const char>,
-            ql::span<const char>>) class CompressedWriteSerializer {
+    requires WriteSerializer<UnderlyingSerializer> CPP_and ql::concepts::
+        invocable<CompressionFunction, ql::span<const char>,
+                  std::vector<char>&>) class CompressedWriteSerializer {
  public:
   using SerializerType = WriteSerializerTag;
 
@@ -51,10 +50,14 @@ CPP_template(typename UnderlyingSerializer, typename CompressionFunction)(
   std::optional<UnderlyingSerializer> underlyingSerializer_;
   CompressionFunction compressionFunction_;
   size_t blocksize_;
+  // A buffer for the uncompressed data.
   std::vector<char> buffer_;
+  // We need to temporarily store a single compressed block before flushing it.
+  // Using a member variable for this purpose avoids reallocations.
+  std::vector<char> compressedBuffer_;
 
  public:
-  // Create from the underlying serialzier, the function used for compression,
+  // Create from the underlying serializer, the function used for compression,
   // the `blocksize` for the compression. Note: We deliberately have no default
   // value for the `blocksize`, as good values depend on the nature of the
   // compression function.
@@ -89,7 +92,7 @@ CPP_template(typename UnderlyingSerializer, typename CompressionFunction)(
       if (bytesToCopy < capacity) {
         return;
       }
-      flushBlocks(false);
+      flushBlock();
       numBytes -= bytesToCopy;
       bytePointer += bytesToCopy;
     }
@@ -98,7 +101,7 @@ CPP_template(typename UnderlyingSerializer, typename CompressionFunction)(
   // After a call to `close` no more calls to `serializeBytes` are allowed.
   void close() {
     if (underlyingSerializer_.has_value()) {
-      flushBlocks(true);
+      flushBlock();
       underlyingSerializer_.reset();
     }
   }
@@ -106,37 +109,25 @@ CPP_template(typename UnderlyingSerializer, typename CompressionFunction)(
   // Flush the temporary buffer, and then move out the underlying serializer.
   UnderlyingSerializer underlyingSerializer() && {
     AD_CORRECTNESS_CHECK(underlyingSerializer_.has_value());
-    flushBlocks(true);
+    flushBlock();
     return std::move(*underlyingSerializer_);
   }
 
  private:
-  // Flush all complete blocks, and if `flushIncomplete` is true, also flush
-  // the last incomplete block.
-  void flushBlocks(bool flushIncomplete) {
-    size_t offset = 0;
-    // Flush all complete blocks
-    while (offset + blocksize_ <= buffer_.size()) {
-      flushSingleBlock(
-          ql::span<const char>(buffer_.data() + offset, blocksize_));
-      offset += blocksize_;
+  // Flush the `buffer_` by compressing it and writing to the
+  // `underlyingSerializer_`.
+  void flushBlock() {
+    if (buffer_.empty()) {
+      return;
     }
-    // Flush incomplete block at the end if requested
-    if (flushIncomplete && offset < buffer_.size()) {
-      flushSingleBlock(ql::span<const char>(buffer_.data() + offset,
-                                            buffer_.size() - offset));
-      offset = buffer_.size();
-    }
-    // Erase all flushed data
-    if (offset > 0) {
-      buffer_.erase(buffer_.begin(), buffer_.begin() + offset);
-    }
-  }
-
-  void flushSingleBlock(ql::span<const char> blockData) {
-    size_t uncompressedSize = blockData.size();
+    // This is enforced by the logic inside `serializeBytes`. Violating this
+    // invariant would lead to unnecessary memory allocations.
+    AD_CORRECTNESS_CHECK(buffer_.size() <= blocksize_);
+    size_t uncompressedSize = buffer_.size();
     *underlyingSerializer_ << uncompressedSize;
-    *underlyingSerializer_ << compressionFunction_(blockData);
+    compressionFunction_(buffer_, compressedBuffer_);
+    *underlyingSerializer_ << compressedBuffer_;
+    buffer_.clear();
   }
 };
 
@@ -149,14 +140,14 @@ CPP_template(typename UnderlyingSerializer, typename CompressionFunction)(
  *
  * @tparam UnderlyingSerializer The underlying serializer type (must be a
  * ReadSerializer)
- * @tparam DecompressionFunction A callable that takes a span of chars
- * (compressed) and a size_t (uncompressed size) and returns a vector of chars
+ * @tparam DecompressionFunction A callable that takes a `span<const char>`
+ * (the compressed input) and a `span<char>` (the target buffer for the
+ * uncompressed data which has been preallocated to have the correct size).
  */
 CPP_template(typename UnderlyingSerializer, typename DecompressionFunction)(
-    requires ReadSerializer<UnderlyingSerializer> CPP_and
-        ad_utility::InvocableWithConvertibleReturnType<
-            DecompressionFunction, ql::span<const char>, ql::span<const char>,
-            size_t>) class CompressedReadSerializer {
+    requires ReadSerializer<UnderlyingSerializer> CPP_and ql::concepts::
+        invocable<DecompressionFunction, ql::span<const char>,
+                  ql::span<char>>) class CompressedReadSerializer {
  public:
   using SerializerType = ReadSerializerTag;
 
@@ -202,14 +193,16 @@ CPP_template(typename UnderlyingSerializer, typename DecompressionFunction)(
 
  private:
   // Read the next block of data from the underlying serializer, decompress it
-  // and store it in the `buffer`. The `buffer` will be overwritten, so it is
-  // important, to read in advance.
+  // and store it in the `buffer_`. The `buffer_` will be overwritten by this
+  // function, so it is important that the contents of the `buffer_` have
+  // previously been fully consumed by the `serializeBytes` function.
   void readNextBlock() {
     size_t uncompressedSize;
     underlyingSerializer_ | uncompressedSize;
     underlyingSerializer_ | compressedBuffer_;
-    buffer_ = decompressionFunction_(ql::span<const char>(compressedBuffer_),
-                                     uncompressedSize);
+    buffer_.resize(uncompressedSize);
+    decompressionFunction_(ql::span<const char>{compressedBuffer_},
+                           ql::span<char>{buffer_});
     bufferPos_ = 0;
   }
 };
@@ -217,16 +210,23 @@ CPP_template(typename UnderlyingSerializer, typename DecompressionFunction)(
 // Zstd compression/decompression functions for use with CompressedSerializer
 namespace detail {
 struct ZstdCompress {
-  std::vector<char> operator()(ql::span<const char> data) const {
-    return ZstdWrapper::compress(data.data(), data.size());
+  void operator()(ql::span<const char> uncompressedInput,
+                  std::vector<char>& target) const {
+    size_t numBytes = uncompressedInput.size();
+    target.resize(ZSTD_compressBound(numBytes));
+    auto compressedSize = ZSTD_compress(target.data(), target.size(),
+                                        uncompressedInput.data(), numBytes, 3);
+    target.resize(compressedSize);
   }
 };
 
 struct ZstdDecompress {
-  std::vector<char> operator()(ql::span<const char> data,
-                               size_t uncompressedSize) const {
-    return ZstdWrapper::decompress<char>(const_cast<char*>(data.data()),
-                                         data.size(), uncompressedSize);
+  void operator()(ql::span<const char> compressedInput,
+                  ql::span<char> target) const {
+    auto uncompressedSize =
+        ZSTD_decompress(target.data(), target.size(), compressedInput.data(),
+                        compressedInput.size());
+    AD_CONTRACT_CHECK(uncompressedSize == target.size());
   }
 };
 
