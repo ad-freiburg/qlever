@@ -289,7 +289,12 @@ TEST(AggregateExpression, CountStar) {
 // _____________________________________________________________________________
 TEST(AggregateExpression, CountStarSimpleMembers) {
   using namespace sparqlExpression;
-  using enum SparqlExpression::AggregateStatus;
+  [[maybe_unused]] static constexpr auto NoAggregate =
+      sparqlExpression::SparqlExpression::AggregateStatus::NoAggregate;
+  [[maybe_unused]] static constexpr auto DistinctAggregate =
+      sparqlExpression::SparqlExpression::AggregateStatus::DistinctAggregate;
+  [[maybe_unused]] static constexpr auto NonDistinctAggregate =
+      sparqlExpression::SparqlExpression::AggregateStatus::NonDistinctAggregate;
   auto m = makeCountStarExpression(false);
   const auto& exp = *m;
   EXPECT_THAT(exp.getCacheKey({}), ::testing::HasSubstr("COUNT *"));
@@ -346,7 +351,12 @@ TEST(AggregateExpression, SampleExpressionSimpleMembers) {
   };
 
   auto sample = makeSample(I(3478));
-  using enum SparqlExpression::AggregateStatus;
+  [[maybe_unused]] static constexpr auto NoAggregate =
+      sparqlExpression::SparqlExpression::AggregateStatus::NoAggregate;
+  [[maybe_unused]] static constexpr auto DistinctAggregate =
+      sparqlExpression::SparqlExpression::AggregateStatus::DistinctAggregate;
+  [[maybe_unused]] static constexpr auto NonDistinctAggregate =
+      sparqlExpression::SparqlExpression::AggregateStatus::NonDistinctAggregate;
   EXPECT_EQ(sample->isAggregate(), NonDistinctAggregate);
   EXPECT_TRUE(sample->getUnaggregatedVariables().empty());
   EXPECT_EQ(sample->children().size(), 1u);

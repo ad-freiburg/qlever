@@ -419,7 +419,16 @@ TEST(ThreadSafeQueue, queueManager) {
     consumerFinishesEarly,
     bothThrowImmediately
   };
-  using enum TestType;
+  [[maybe_unused]] static constexpr auto producerThrows =
+      TestType::producerThrows;
+  [[maybe_unused]] static constexpr auto consumerThrows =
+      TestType::consumerThrows;
+  [[maybe_unused]] static constexpr auto normalExecution =
+      TestType::normalExecution;
+  [[maybe_unused]] static constexpr auto consumerFinishesEarly =
+      TestType::consumerFinishesEarly;
+  [[maybe_unused]] static constexpr auto bothThrowImmediately =
+      TestType::bothThrowImmediately;
   runWithBothQueueTypes(std::bind_front(RunQueueManagerTest{}, consumerThrows));
   runWithBothQueueTypes(std::bind_front(RunQueueManagerTest{}, producerThrows));
   runWithBothQueueTypes(

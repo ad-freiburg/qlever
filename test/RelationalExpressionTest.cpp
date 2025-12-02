@@ -21,7 +21,12 @@ using namespace sparqlExpression;
 using namespace ad_utility::testing;
 using ad_utility::source_location;
 using namespace std::literals;
-using enum valueIdComparators::Comparison;
+[[maybe_unused]] static constexpr auto LT = valueIdComparators::Comparison::LT;
+[[maybe_unused]] static constexpr auto LE = valueIdComparators::Comparison::LE;
+[[maybe_unused]] static constexpr auto EQ = valueIdComparators::Comparison::EQ;
+[[maybe_unused]] static constexpr auto NE = valueIdComparators::Comparison::NE;
+[[maybe_unused]] static constexpr auto GE = valueIdComparators::Comparison::GE;
+[[maybe_unused]] static constexpr auto GT = valueIdComparators::Comparison::GT;
 using valueIdComparators::Comparison;
 
 // First some internal helper functions and constants.

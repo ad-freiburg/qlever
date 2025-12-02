@@ -221,7 +221,14 @@ std::unique_ptr<SparqlExpression> makeStrSparqlExpression(
 template <prefilterExpressions::IsDatatype Datatype>
 std::unique_ptr<SparqlExpression> makeIsDatatypeStartsWithExpression(
     VariantArgs child) {
-  using enum prefilterExpressions::IsDatatype;
+  [[maybe_unused]] static constexpr auto IRI =
+      prefilterExpressions::IsDatatype::IRI;
+  [[maybe_unused]] static constexpr auto BLANK =
+      prefilterExpressions::IsDatatype::BLANK;
+  [[maybe_unused]] static constexpr auto LITERAL =
+      prefilterExpressions::IsDatatype::LITERAL;
+  [[maybe_unused]] static constexpr auto NUMERIC =
+      prefilterExpressions::IsDatatype::NUMERIC;
   auto childExpr = std::visit(getExpr, std::move(child));
   if constexpr (Datatype == IRI) {
     return makeIsIriExpression(std::move(childExpr));

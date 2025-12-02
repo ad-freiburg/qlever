@@ -16,7 +16,18 @@ using namespace valueIdComparators;
 namespace valueIdComparators {
 inline std::ostream& operator<<(std::ostream& str, Comparison c) {
   switch (c) {
-    using enum Comparison;
+    [[maybe_unused]] static constexpr auto LT =
+        valueIdComparators::Comparison::LT;
+    [[maybe_unused]] static constexpr auto LE =
+        valueIdComparators::Comparison::LE;
+    [[maybe_unused]] static constexpr auto EQ =
+        valueIdComparators::Comparison::EQ;
+    [[maybe_unused]] static constexpr auto NE =
+        valueIdComparators::Comparison::NE;
+    [[maybe_unused]] static constexpr auto GE =
+        valueIdComparators::Comparison::GE;
+    [[maybe_unused]] static constexpr auto GT =
+        valueIdComparators::Comparison::GT;
     case LT:
       str << "LT";
       break;
@@ -124,7 +135,12 @@ auto testGetRangesForId(It begin, It end, ValueId id,
       auto y = applyComparator(comparator, a, b);
       return y;
     };
-    using enum ComparisonResult;
+    [[maybe_unused]] constexpr auto False =
+        valueIdComparators::ComparisonResult::False;
+    [[maybe_unused]] constexpr auto True =
+        valueIdComparators::ComparisonResult::True;
+    [[maybe_unused]] constexpr auto Undef =
+        valueIdComparators::ComparisonResult::Undef;
     for (auto [rangeBegin, rangeEnd] : ranges) {
       while (it != rangeBegin) {
         ASSERT_FALSE(isMatching(*it, id))
@@ -229,7 +245,12 @@ auto testGetRangesForEqualIds(It begin, It end, ValueId idBegin, ValueId idEnd,
         idBegin.getDatatype() == Datatype::VocabIndex) {
       EXPECT_TRUE(true);
     }
-    using enum ComparisonResult;
+    [[maybe_unused]] constexpr auto False =
+        valueIdComparators::ComparisonResult::False;
+    [[maybe_unused]] constexpr auto True =
+        valueIdComparators::ComparisonResult::True;
+    [[maybe_unused]] constexpr auto Undef =
+        valueIdComparators::ComparisonResult::Undef;
     auto ranges = getRangesForEqualIds(begin, end, idBegin, idEnd, comparison);
     auto it = begin;
     for (auto [rangeBegin, rangeEnd] : ranges) {
@@ -327,8 +348,16 @@ TEST_F(ValueIdComparators, IndexTypes) {
 // _______________________________________________________________________
 TEST_F(ValueIdComparators, undefinedWithItself) {
   auto u = ValueId::makeUndefined();
-  using enum ComparisonResult;
-  using enum ComparisonForIncompatibleTypes;
+  [[maybe_unused]] static constexpr auto False =
+      valueIdComparators::ComparisonResult::False;
+  [[maybe_unused]] static constexpr auto True =
+      valueIdComparators::ComparisonResult::True;
+  [[maybe_unused]] static constexpr auto Undef =
+      valueIdComparators::ComparisonResult::Undef;
+  [[maybe_unused]] static constexpr auto CompareByType =
+      valueIdComparators::ComparisonForIncompatibleTypes::CompareByType;
+  [[maybe_unused]] static constexpr auto AlwaysUndef =
+      valueIdComparators::ComparisonForIncompatibleTypes::AlwaysUndef;
   ASSERT_EQ(compareIds(u, u, Comparison::LT), Undef);
   ASSERT_EQ(compareIds(u, u, Comparison::LE), Undef);
   ASSERT_EQ(compareIds(u, u, Comparison::EQ), Undef);
