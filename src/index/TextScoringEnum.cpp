@@ -8,7 +8,12 @@ namespace qlever {
 // ____________________________________________________________________________
 std::string getTextScoringMetricAsString(TextScoringMetric textScoringMetric) {
   switch (textScoringMetric) {
-    using enum TextScoringMetric;
+    [[maybe_unused]] static constexpr auto EXPLICIT =
+        qlever::TextScoringMetric::EXPLICIT;
+    [[maybe_unused]] static constexpr auto TFIDF =
+        qlever::TextScoringMetric::TFIDF;
+    [[maybe_unused]] static constexpr auto BM25 =
+        qlever::TextScoringMetric::BM25;
     case EXPLICIT:
       return "explicit";
     case TFIDF:
@@ -23,7 +28,11 @@ std::string getTextScoringMetricAsString(TextScoringMetric textScoringMetric) {
 // ____________________________________________________________________________
 TextScoringMetric getTextScoringMetricFromString(
     const std::string& textScoringMetricString) {
-  using enum TextScoringMetric;
+  [[maybe_unused]] static constexpr auto EXPLICIT =
+      qlever::TextScoringMetric::EXPLICIT;
+  [[maybe_unused]] static constexpr auto TFIDF =
+      qlever::TextScoringMetric::TFIDF;
+  [[maybe_unused]] static constexpr auto BM25 = qlever::TextScoringMetric::BM25;
   if (textScoringMetricString == "tf-idf") {
     return TFIDF;
   }

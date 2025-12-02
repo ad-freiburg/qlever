@@ -13,7 +13,12 @@ namespace detail {
 // Unary negation.
 struct UnaryNegate {
   Id operator()(TernaryBool a) const {
-    using enum TernaryBool;
+    [[maybe_unused]] static constexpr auto False =
+        sparqlExpression::detail::EffectiveBooleanValueGetter::Result::False;
+    [[maybe_unused]] static constexpr auto True =
+        sparqlExpression::detail::EffectiveBooleanValueGetter::Result::True;
+    [[maybe_unused]] static constexpr auto Undef =
+        sparqlExpression::detail::EffectiveBooleanValueGetter::Result::Undef;
     switch (a) {
       case True:
         return Id::makeFromBool(false);

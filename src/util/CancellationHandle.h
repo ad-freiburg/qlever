@@ -41,7 +41,12 @@ enum class CancellationMode { ENABLED, NO_WATCH_DOG, DISABLED };
 
 /// Turn the `QUERY_CANCELLATION_MODE` macro into a constexpr variable.
 constexpr CancellationMode CANCELLATION_MODE = []() {
-  using enum CancellationMode;
+  [[maybe_unused]] constexpr auto ENABLED =
+      ad_utility::detail::CancellationMode::ENABLED;
+  [[maybe_unused]] constexpr auto NO_WATCH_DOG =
+      ad_utility::detail::CancellationMode::NO_WATCH_DOG;
+  [[maybe_unused]] constexpr auto DISABLED =
+      ad_utility::detail::CancellationMode::DISABLED;
 #ifndef QUERY_CANCELLATION_MODE
   return ENABLED;
 #else
@@ -54,7 +59,16 @@ constexpr CancellationMode CANCELLATION_MODE = []() {
 /// efficiency.
 AD_ALWAYS_INLINE constexpr bool isCancelled(
     CancellationState cancellationState) {
-  using enum CancellationState;
+  [[maybe_unused]] constexpr auto NOT_CANCELLED =
+      ad_utility::CancellationState::NOT_CANCELLED;
+  [[maybe_unused]] constexpr auto WAITING_FOR_CHECK =
+      ad_utility::CancellationState::WAITING_FOR_CHECK;
+  [[maybe_unused]] constexpr auto CHECK_WINDOW_MISSED =
+      ad_utility::CancellationState::CHECK_WINDOW_MISSED;
+  [[maybe_unused]] constexpr auto MANUAL =
+      ad_utility::CancellationState::MANUAL;
+  [[maybe_unused]] constexpr auto TIMEOUT =
+      ad_utility::CancellationState::TIMEOUT;
   static_assert(NOT_CANCELLED <= CHECK_WINDOW_MISSED);
   static_assert(WAITING_FOR_CHECK <= CHECK_WINDOW_MISSED);
   static_assert(MANUAL > CHECK_WINDOW_MISSED);

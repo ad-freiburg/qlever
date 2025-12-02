@@ -23,7 +23,16 @@ void CancellationHandle<Mode>::cancel(
 template <CancellationMode Mode>
 CPP_member_def auto CancellationHandle<Mode>::startWatchDogInternal()
     -> CPP_ret(void)(requires WatchDogEnabled) {
-  using enum CancellationState;
+  [[maybe_unused]] static constexpr auto NOT_CANCELLED =
+      ad_utility::CancellationState::NOT_CANCELLED;
+  [[maybe_unused]] static constexpr auto WAITING_FOR_CHECK =
+      ad_utility::CancellationState::WAITING_FOR_CHECK;
+  [[maybe_unused]] static constexpr auto CHECK_WINDOW_MISSED =
+      ad_utility::CancellationState::CHECK_WINDOW_MISSED;
+  [[maybe_unused]] static constexpr auto MANUAL =
+      ad_utility::CancellationState::MANUAL;
+  [[maybe_unused]] static constexpr auto TIMEOUT =
+      ad_utility::CancellationState::TIMEOUT;
   std::unique_lock lock{watchDogState_.mutex_};
   // This function is only supposed to be run once.
   AD_CONTRACT_CHECK(!watchDogState_.running_);

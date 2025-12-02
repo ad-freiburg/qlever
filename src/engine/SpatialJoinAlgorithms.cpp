@@ -384,7 +384,17 @@ Result SpatialJoinAlgorithms::BaselineAlgorithm() {
 // ____________________________________________________________________________
 sj::SweeperCfg SpatialJoinAlgorithms::libspatialjoinSweeperConfig(
     size_t threads, ad_utility::MemorySize totalAllowedMemory) {
-  using enum SpatialJoinType;
+  [[maybe_unused]] static constexpr auto INTERSECTS =
+      SpatialJoinType::INTERSECTS;
+  [[maybe_unused]] static constexpr auto CONTAINS = SpatialJoinType::CONTAINS;
+  [[maybe_unused]] static constexpr auto COVERS = SpatialJoinType::COVERS;
+  [[maybe_unused]] static constexpr auto CROSSES = SpatialJoinType::CROSSES;
+  [[maybe_unused]] static constexpr auto TOUCHES = SpatialJoinType::TOUCHES;
+  [[maybe_unused]] static constexpr auto EQUALS = SpatialJoinType::EQUALS;
+  [[maybe_unused]] static constexpr auto OVERLAPS = SpatialJoinType::OVERLAPS;
+  [[maybe_unused]] static constexpr auto WITHIN = SpatialJoinType::WITHIN;
+  [[maybe_unused]] static constexpr auto WITHIN_DIST =
+      SpatialJoinType::WITHIN_DIST;
   auto sep = [](SpatialJoinType type) {
     return std::string{static_cast<char>(type)};
   };
