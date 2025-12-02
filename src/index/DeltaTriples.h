@@ -205,6 +205,12 @@ class DeltaTriples {
   // Update the block metadata.
   void updateAugmentedMetadata();
 
+  std::pair<std::vector<std::tuple<VocabIndex, std::string_view, Id>>,
+            ad_utility::HashMap<Id, Id>>
+  materializeLocalVocab() const;
+
+  void materializeToIndex(const CancellationHandle& cancellationHandle);
+
  private:
   // Find the position of the given triple in the given permutation and add it
   // to each of the six `LocatedTriplesPerBlock` maps (one per permutation).

@@ -188,6 +188,11 @@ class Permutation {
 
   Enum permutation() const { return permutation_; }
 
+  const Permutation& internalPermutation() const {
+    AD_CONTRACT_CHECK(internalPermutation_ != nullptr);
+    return *internalPermutation_;
+  }
+
  private:
   // The base filename of the permutation without the suffix below
   std::string onDiskBase_;
