@@ -3,8 +3,8 @@
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //  Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#ifndef QLEVER_TEST_ENGINE_VALUESFORTESTING_H
-#define QLEVER_TEST_ENGINE_VALUESFORTESTING_H
+#ifndef QLEVER_SRC_ENGINE_VALUESFORTESTING_H
+#define QLEVER_SRC_ENGINE_VALUESFORTESTING_H
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionContext.h"
@@ -249,4 +249,4 @@ class ValuesForTestingNoKnownEmptyResult : public ValuesForTesting {
   uint64_t getSizeEstimateBeforeLimit() override { return 1; }
 };
 
-#endif  // QLEVER_TEST_ENGINE_VALUESFORTESTING_H
+#endif  // QLEVER_SRC_ENGINE_VALUESFORTESTING_H
