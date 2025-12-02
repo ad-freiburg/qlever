@@ -117,7 +117,8 @@ static constexpr bool isWriteSerializable =
 
 // Simple dummy "compression" for testing (modify the data in a way that is
 // simple, and reversed in the below dummy decompression function)
-auto dummyCompress = [](ql::span<const char> data, std::vector<char>& res) {
+auto dummyCompress = [](ql::span<const char> data,
+                        ad_utility::serialization::UninitializedBuffer& res) {
   res.clear();
   res.insert(res.end(), data.begin(), data.end());
   for (auto& c : res) {
@@ -715,9 +716,6 @@ TEST(CompressedSerializer, WithFileSerializer) {
     EXPECT_EQ(original, read);
   }
 }
-
-// _____________________________________________________________________________
-TEST(ZstdSerializer, Concepts) {}
 
 // _____________________________________________________________________________
 TEST(ZstdSerializer, RoundtripWithByteBuffer) {

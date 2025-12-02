@@ -22,8 +22,14 @@
 #include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
+#include "util/UninitializedAllocator.h"
 
 namespace ad_utility::serialization {
+
+// A `vector<char>` where a `resize` doesn't zero-initialize the new bytes
+// (for efficiency reasons).
+using UninitializedBuffer =
+    std::vector<char, ad_utility::default_init_allocator<char>>;
 
 /**
  * A write serializer that compresses data in blocks before writing to an
@@ -42,7 +48,7 @@ namespace ad_utility::serialization {
 CPP_template(typename UnderlyingSerializer, typename CompressionFunction)(
     requires WriteSerializer<UnderlyingSerializer> CPP_and ql::concepts::
         invocable<CompressionFunction, ql::span<const char>,
-                  std::vector<char>&>) class CompressedWriteSerializer {
+                  UninitializedBuffer&>) class CompressedWriteSerializer {
  public:
   using SerializerType = WriteSerializerTag;
 
@@ -51,10 +57,10 @@ CPP_template(typename UnderlyingSerializer, typename CompressionFunction)(
   CompressionFunction compressionFunction_;
   size_t blocksize_;
   // A buffer for the uncompressed data.
-  std::vector<char> buffer_;
+  UninitializedBuffer buffer_;
   // We need to temporarily store a single compressed block before flushing it.
   // Using a member variable for this purpose avoids reallocations.
-  std::vector<char> compressedBuffer_;
+  UninitializedBuffer compressedBuffer_;
 
  public:
   // Create from the underlying serializer, the function used for compression,
@@ -154,8 +160,8 @@ CPP_template(typename UnderlyingSerializer, typename DecompressionFunction)(
  private:
   UnderlyingSerializer underlyingSerializer_;
   DecompressionFunction decompressionFunction_;
-  std::vector<char> buffer_;
-  std::vector<char> compressedBuffer_;
+  UninitializedBuffer buffer_;
+  UninitializedBuffer compressedBuffer_;
   size_t bufferPos_ = 0;
 
  public:
@@ -211,7 +217,7 @@ CPP_template(typename UnderlyingSerializer, typename DecompressionFunction)(
 namespace detail {
 struct ZstdCompress {
   void operator()(ql::span<const char> uncompressedInput,
-                  std::vector<char>& target) const {
+                  UninitializedBuffer& target) const {
     size_t numBytes = uncompressedInput.size();
     target.resize(ZSTD_compressBound(numBytes));
     auto compressedSize = ZSTD_compress(target.data(), target.size(),
