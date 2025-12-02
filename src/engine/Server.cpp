@@ -860,10 +860,13 @@ ad_utility::MediaType Server::chooseBestFittingMediaType(
         return ad_utility::contains(supportedMediaTypes, mediaType);
       }
       if (parsedQuery.hasSelectClause()) {
-        std::array supportedMediaTypes{
-            MediaType::octetStream, MediaType::csv,
-            MediaType::tsv,         MediaType::qleverJson,
-            MediaType::sparqlXml,   MediaType::sparqlJson};
+        std::array supportedMediaTypes{MediaType::octetStream,
+                                       MediaType::csv,
+                                       MediaType::tsv,
+                                       MediaType::qleverJson,
+                                       MediaType::sparqlXml,
+                                       MediaType::sparqlJson,
+                                       MediaType::binaryQleverExport};
         return ad_utility::contains(supportedMediaTypes, mediaType);
       }
       std::array supportedMediaTypes{MediaType::csv, MediaType::tsv,
