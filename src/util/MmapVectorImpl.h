@@ -323,7 +323,7 @@ void MmapVector<T>::advise(AccessPattern pattern) {
   // systems, in particular they are not present on the `QNX` platform which
   // we target with the `REDUCED_FEATURE_SET` mode. Therefore, we simply disable
   // the following `madvise` calls, as they only are hints to the runtime and
-  // have no directly observable behavior.
+  // do not change the program semantics.
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   switch (pattern) {
     case AccessPattern::Sequential:
