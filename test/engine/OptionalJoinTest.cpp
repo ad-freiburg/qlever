@@ -10,13 +10,13 @@
 #include "../util/IdTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
-#include "./ValuesForTesting.h"
 #include "engine/CallFixedSize.h"
 #include "engine/IndexScan.h"
 #include "engine/JoinHelpers.h"
 #include "engine/NeutralOptional.h"
 #include "engine/OptionalJoin.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/ValuesForTesting.h"
 #include "engine/idTable/IdTable.h"
 
 using ad_utility::testing::makeAllocator;

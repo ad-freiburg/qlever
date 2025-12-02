@@ -6,9 +6,9 @@
 
 #include <absl/strings/str_join.h>
 
-#include "../../test/engine/ValuesForTesting.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
+#include "engine/ValuesForTesting.h"
 
 // _____________________________________________________________________________
 Describe::Describe(QueryExecutionContext* qec,
