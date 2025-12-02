@@ -14,20 +14,27 @@
 #include "util/Serializer/Serializer.h"
 
 namespace ad_utility::serialization {
-// A serializer, that lifts a callable (that will become the `serializeBytes`
-// function, to a fully blown `ReadSerializer`, that can be used within the
-// serialization framework.
-CPP_template(typename F)(requires ql::concepts::invocable<
-                         F, char*, size_t>) class ReadViaCallableSerializer {
+// A serializer that lifts a simple callable (called the `ReadFunction`) to a
+// fully blown `ReadSerializer`. The `ReadFunction` has two arguments, a `char*`
+// (the target), and a `size_t` (the number of bytes to read). The semantics of
+// the `ReadFunction` are "read `numBytes` bytes from the source represented by
+// the `ReadFunction` and store them at the `target`. An example for a
+// `ReadFunction` is a lambda that captures a network stream, and reads from
+// that stream in its `operator()`.
+CPP_template(typename ReadFunction)(
+    requires ql::concepts::invocable<ReadFunction, char*,
+                                     size_t>) class ReadViaCallableSerializer {
  public:
   using SerializerType = ReadSerializerTag;
 
  private:
-  ::ranges::semiregular_box<F> readFunction_;
+  // The `semiregular_box` adds the move-assignment operator in case the
+  // `ReadFunction` is a lambda.
+  ::ranges::semiregular_box<ReadFunction> readFunction_;
 
  public:
-  // Construct from the `readFunction`.
-  explicit ReadViaCallableSerializer(F readFunction)
+  // Construct from the `readFunction` (see above for details).
+  explicit ReadViaCallableSerializer(ReadFunction readFunction)
       : readFunction_{std::move(readFunction)} {};
 
   // The main serialization function, simply delegates to the `readFunction_`.
