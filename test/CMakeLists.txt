@@ -484,3 +484,5 @@ addLinkAndDiscoverTest(TimeTracerTest)
 addLinkAndDiscoverTestNoLibs(SourceLocationTest)
 
 addLinkAndDiscoverTest(UnitOfMeasurementTest util)
+
+addLinkAndDiscoverTestNoLibs(ConstexprMapTest)
