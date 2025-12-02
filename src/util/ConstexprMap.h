@@ -32,6 +32,14 @@ class ConstexprMap {
   using Pair = ConstexprMapPair<Key, Value>;
   using Arr = std::array<Pair, numEntries>;
 
+  // A lambda to obtain the `key_` from a `pair`.
+  // Note: We cannot simply use the pointer-to-membyer `&Pair::key_`, because
+  // then the `ConstexprMap` for some reason is not `constexpr` anymore on
+  // `GCC 8.3`.
+  static constexpr auto getKey = [](const auto& pair) -> const auto& {
+    return pair.key_;
+  };
+
  private:
   // TODO make const
   Arr _values;
@@ -40,7 +48,7 @@ class ConstexprMap {
   // Create from an Array of key-value pairs. The keys have to be unique.
   explicit constexpr ConstexprMap(Arr values) : _values{std::move(values)} {
     ql::ranges::sort(_values, compare);
-    if (::ranges::adjacent_find(_values, std::equal_to<>{}, &Pair::key_) !=
+    if (::ranges::adjacent_find(_values, std::equal_to<>{}, getKey) !=
         _values.end()) {
       throw std::runtime_error{
           "ConstexprMap requires that all the keys are unique"};
@@ -50,7 +58,7 @@ class ConstexprMap {
   // If `key` is in the map, return an iterator to the corresponding `(Key,
   // Value)` pair. Else return `end()`.
   constexpr typename Arr::const_iterator find(const Key& key) const {
-    auto lb = ql::ranges::lower_bound(_values, key, std::less<>{}, &Pair::key_);
+    auto lb = ql::ranges::lower_bound(_values, key, std::less<>{}, getKey);
     if (lb == _values.end() || lb->key_ != key) {
       return _values.end();
     }
