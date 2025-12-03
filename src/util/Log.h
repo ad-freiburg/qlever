@@ -109,7 +109,7 @@ class Log {
   template <LogLevel LEVEL>
   static QL_CONSTEVAL std::string_view getLevel() {
     using P = ConstexprMapPair<LogLevel, std::string_view>;
-    constexpr ConstexprMap map{std::array{
+    constexpr ConstexprMap map{std::array<P, 7>{
         P(TRACE, "TRACE: "),
         P(TIMING, "TIMING: "),
         P(DEBUG, "DEBUG: "),
