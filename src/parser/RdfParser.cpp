@@ -813,9 +813,12 @@ bool TurtleParser<T>::blankNodeLabel() {
     // Add a special prefix to ensure that the manually specified blank nodes
     // never interfere with the automatically generated ones. The `substr`
     // removes the leading `_:` which will be added again by the `BlankNode`
-    // constructor.
+    // constructor. We also add the `blankNodePrefix_` to ensure that blank
+    // nodes with the same label from different files are treated as different.
     lastParseResult_ =
-        BlankNode{false, lastParseResult_.getString().substr(2)}.toSparql();
+        BlankNode{false, absl::StrCat(blankNodePrefix_, "_",
+                                      lastParseResult_.getString().substr(2))}
+            .toSparql();
   }
   return res;
 }

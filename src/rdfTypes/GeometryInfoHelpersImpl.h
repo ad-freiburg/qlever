@@ -290,9 +290,10 @@ enum class AnyGeometryMember : uint8_t {
 
 // Helper to convert the dynamic container `AnyGeometry` to the `ParsedWkt`
 // variant type
-template <typename Visitor, typename T>
-requires SimilarTo<T, DAnyGeometry>
-inline auto visitAnyGeometry(Visitor visitor, T&& geom) {
+CPP_template(typename Visitor, typename T)(
+    requires SimilarTo<
+        T, DAnyGeometry>) inline auto visitAnyGeometry(Visitor visitor,
+                                                       T&& geom) {
   using enum AnyGeometryMember;
   // `AnyGeometry` is a class from `pb_util`. It does not operate on an enum,
   // this is why we use our own enum here. The correct matching of the integer
@@ -475,7 +476,7 @@ struct UtilGeomToWktVisitor {
     return UtilGeomToWktVisitor{}(opt.value());
   }
 
-  // Visitor for the `ParsedWkt` variant.
+  // Visitor for the `ParsedWkt` and `GeometryN` variants.
   CPP_template(typename T)(
       requires SimilarToAny<T, ParsedWkt, GeometryN>) std::optional<std::string>
   operator()(const T& variant) const {
