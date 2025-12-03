@@ -31,19 +31,22 @@ namespace ad_utility::serialization {
 using UninitializedBuffer =
     std::vector<char, ad_utility::default_init_allocator<char>>;
 
-/**
+/*
  * A write serializer that compresses data in blocks before writing to an
  * underlying serializer.
  *
- * Data is buffered until the buffer exceeds the block size, then the full
- * block is compressed and serialized as a vector to the underlying serializer.
- * The last (possibly incomplete) block is written on destruction or when
- * close() is called.
+ * Data is buffered until the buffer reaches the specified block size, then the
+ * full block is compressed into a `vector<char>` which is then being passed to
+ * the underlying serializer. The last (possibly incomplete) block is compressed
+ * and then written on destruction or when close() is called.
+ * Template parameters:
+ * - `UnderlyingSerializer` The underlying serializer type (must fulfill the
+ *    `WriteSerializer` concept).
+ * - `CompressionFunction` A callable that takes a `span<const char>` (the
+ *   uncompressed input), and an `UnitializedBuffer&` (the target for the
+ *   compressed bytes). The `CompressionFunction` may assume that the target is
+ *   empty when being passed to the `CompressionFunction`.
  *
- * @tparam UnderlyingSerializer The underlying serializer type (must be a
- * WriteSerializer)
- * @tparam CompressionFunction A callable that takes a span of chars and returns
- * a vector of chars
  */
 CPP_template(typename UnderlyingSerializer, typename CompressionFunction)(
     requires WriteSerializer<UnderlyingSerializer> CPP_and ql::concepts::
@@ -138,17 +141,17 @@ CPP_template(typename UnderlyingSerializer, typename CompressionFunction)(
 };
 
 /**
- * A read serializer that decompresses data in blocks from an underlying
- * serializer.
+ * A `ReadSerializer` that decompresses data in blocks from an underlying
+ * serializer. The data must have been written using a
+ * `CompressedWriteSerializer` (see above) with the corresponding
+ * `CompressionFunction`.
  *
- * Reads compressed blocks (as vectors) from the underlying serializer,
- * decompresses them, and provides the decompressed data to the caller.
- *
- * @tparam UnderlyingSerializer The underlying serializer type (must be a
- * ReadSerializer)
- * @tparam DecompressionFunction A callable that takes a `span<const char>`
- * (the compressed input) and a `span<char>` (the target buffer for the
- * uncompressed data which has been preallocated to have the correct size).
+ * Template parameters:
+ * - `UnderlyingSerializer` The underlying serializer type (must fulfill the
+ *   `ReadSerializer` concept)
+ * - `DecompressionFunction` A callable that takes a `span<const char>`
+ *   (the compressed input) and a `span<char>` (the target buffer for the
+ *   uncompressed data which has been preallocated to have the correct size).
  */
 CPP_template(typename UnderlyingSerializer, typename DecompressionFunction)(
     requires ReadSerializer<UnderlyingSerializer> CPP_and ql::concepts::
@@ -240,8 +243,8 @@ inline const ad_utility::MemorySize defaultZstdBlockSize =
     ad_utility::MemorySize::megabytes(8);
 }  // namespace detail
 
-/**
- * A write serializer that compresses data using Zstd before writing to an
+/*
+ * A write serializer that compresses data using `Zstd` before writing to an
  * underlying serializer.
  */
 template <typename UnderlyingSerializer>
@@ -259,8 +262,8 @@ class ZstdWriteSerializer
              blocksize} {}
 };
 
-/**
- * A read serializer that decompresses Zstd-compressed data from an underlying
+/*
+ * A read serializer that decompresses `Zstd`-compressed data from an underlying
  * serializer. The data must have been serialized using the
  * `ZstdWriteSerializer` above.
  */
