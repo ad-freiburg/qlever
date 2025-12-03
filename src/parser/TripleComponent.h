@@ -214,10 +214,9 @@ class TripleComponent {
   [[nodiscard]] std::optional<Id> toValueIdIfNotString(
       const EncodedIriManager* encodedIriManager) const;
 
-  // Convert the `TripleComponent` to an ID. If the `TripleComponent` is a
-  // Literal or IRI, the IDs are resolved using the `vocabulary`. If a Literal
-  // or IRI is not found in the vocabulary then its position in the vocabulary
-  // is returned.
+  // Convert the `TripleComponent` to an `Id`. If the `TripleComponent` is a
+  // literal or IRI, resolve using the `vocabulary`. If they are not found in
+  // the vocabulary, return the positions of the two neighboring entries.
   template <typename Vocabulary>
   [[nodiscard]] std::variant<Id, std::pair<VocabIndex, VocabIndex>>
   toValueIdOrBounds(const Vocabulary& vocabulary,
@@ -236,9 +235,7 @@ class TripleComponent {
     return std::pair(lower, upper);
   }
 
-  // Convert the `TripleComponent` to an ID. If the `TripleComponent` is a
-  // Literal or IRI, the IDs are resolved using the `vocabulary`. If a Literal
-  // or IRI is not found in the vocabulary, `std::nullopt` is returned.
+  // Like `toValueIdOrBounds`, but returns `std::nullopt` if not found.
   template <typename Vocabulary>
   [[nodiscard]] std::optional<Id> toValueId(
       const Vocabulary& vocabulary, const EncodedIriManager& evManager) const {
@@ -249,12 +246,15 @@ class TripleComponent {
     return std::nullopt;
   }
 
-  // Same as the above, but also consider the given local vocabulary. If the
-  // Literal or IRI is neither in `vocabulary` nor in `localVocab`, it will be
-  // added to `localVocab`. Therefore, we get a valid `Id` in any case. The
-  // modifier is `&&` because in our uses of this method, the `TripleComponent`
-  // object is created solely to call this method and we want to avoid copying
-  // the Literal or IRI when passing it to the local vocabulary.
+  // Like `toValueIdOrBounds`, but also take the given `LocalVocab` into
+  // account. If this `TripleComponent` is neither found in `vocabulary` nor in
+  // `localVocab`, it will be added to `localVocab`. That way, we always get a
+  // valid `Id`.
+  //
+  // NOTE: The modifier is `&&` because in our uses of this method, the
+  // `TripleComponent` object is created solely to call this method and we want
+  // to avoid copying the literal or IRI when passing it to the local
+  // vocabulary.
   template <typename Vocabulary>
   [[nodiscard]] Id toValueId(const Vocabulary& vocabulary,
                              LocalVocab& localVocab,

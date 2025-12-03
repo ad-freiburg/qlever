@@ -42,52 +42,58 @@ UpdateMetadata ExecuteUpdate::executeUpdate(
 }
 
 // _____________________________________________________________________________
+//
+// TODO: This code currently makes multiple copies of each `TripleComponent`.
+// This does not seem to impact performance significantly because the lookups
+// on disk are the bottleneck (we looked at the flamegraph for a whole update
+// operation). Still, it would be cleaner to avoid these copies.
 std::pair<std::vector<ExecuteUpdate::TransformedTriple>, LocalVocab>
 ExecuteUpdate::transformTriplesTemplate(
     const EncodedIriManager& encodedIriManager, const Index::Vocab& vocab,
     const VariableToColumnMap& variableColumns,
     const std::vector<SparqlTripleSimpleWithGraph>& triples) {
-  // - collect all TripleComponents that live in the Vocabulary (literals and
-  // IRIs)
-  // - deduplicate and sort them according to the order in the Vocabulary
-  // - create a map with the TC and their respective Id
-  // - transform the triples using the map and the variableColumns to
-  // `IdOrVariableIndex`
-  // We do this to access the disk in an optimal pattern. The vocabulary does a
-  // scan with jumps over the disk for lookups instead of random accesses.
+  // We collect all `TripleComponent`s from `triples` in a hash set.
   ad_utility::HashSet<TripleComponent> lookupItems;
-  // Collect the Literals and Iri for the Vocab lookup.
+
+  // Add given `TripleComponent` to `lookupItems` if it needs a vocab lookup.
+  //
+  // NOTE: This make a copy of each `TripleComponent' (for the hash set).
   auto addTCToLookup = [&lookupItems,
                         &encodedIriManager](const TripleComponent& tc) {
+    // IRIs encoded in the `Id` do not need a vocab lookup.
     if (tc.isIri() &&
         encodedIriManager.encode(tc.getIri().toStringRepresentation())
             .has_value()) {
-      // The IRI can be represented as an `EncodedVal` which does not need a
-      // Vocab lookup.
       return;
     }
     if (tc.isLiteral() || tc.isIri()) {
       lookupItems.insert(tc);
     }
   };
+
+  // Add given `Graph` to `lookupItems` if it is an IRI. We ignore the default
+  // graph (`std::monostate`) here because we explicitly add it below.
+  //
+  // NOTE: This make a copy of each graph IRI (for the hash set).
   auto addGraphToLookup =
       [&addTCToLookup](const SparqlTripleSimpleWithGraph::Graph& g) {
-        // Ignore the default graph (`std::monostate`) here, because it is
-        // always added.
         if (const auto* iri = std::get_if<TripleComponent::Iri>(&g)) {
           addTCToLookup(TripleComponent(*iri));
         }
       };
+
+  // Collect all relevant `TripleComponent`s. Then add default graph once (even
+  // if no lookup is needed).
   for (const auto& triple : triples) {
     addTCToLookup(triple.s_);
     addTCToLookup(triple.p_);
     addTCToLookup(triple.o_);
     addGraphToLookup(triple.g_);
   }
-  // Always adding the default graph is no overhead and we need it for
-  // `defaultGraphIri`.
   lookupItems.insert(TripleComponent(
       ad_utility::triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI)));
+
+  // Sort the `TripleComponent`s.
   std::vector lookupVec(std::move_iterator(lookupItems.begin()),
                         std::move_iterator(lookupItems.end()));
   ql::ranges::sort(
@@ -96,21 +102,30 @@ ExecuteUpdate::transformTriplesTemplate(
         return tc.isLiteral() ? tc.getLiteral().toStringRepresentation()
                               : tc.getIri().toStringRepresentation();
       });
-  // This LocalVocab only contains IDs that are related to the
-  // template. Most of the IDs will be added to the DeltaTriples' LocalVocab. An
-  // ID will only not be added if it belongs to a Quad with a variable that has
-  // no solutions.
+
+  // Local vocab for all `TripleComponent`s that are not in the existing vocab.
+  //
+  // NOTE: Not necessarily all of these will be added to the `LocalVocab` of
+  // the `DeltaTriple`. For example, with `<a> <b> ?c` in an `INSERT` template,
+  // `<a>` and `<b>` would not become part of it if `?c` has no solutions.
   LocalVocab localVocab{};
+
+  // Lookup the `TripleComponent`s in sorted order.
+  //
+  // NOTE: We make a copy of each `TripleComponent` here because `toValueId`
+  // takes an rvalue reference; but we need it later for inserting into the
+  // map.
   ad_utility::HashMap<TripleComponent, Id> lookupMap;
   for (auto& tc : lookupVec) {
-    // Explicit copy because `toValueId` is `&&`.
     TripleComponent copy{tc};
     lookupMap.emplace(std::move(tc), std::move(copy).toValueId(
                                          vocab, localVocab, encodedIriManager));
   }
+
+  // Lookup the given `TripleComponent` in `lookupMap`. For a variable, return
+  // the column index.
   auto lookupTc = [&encodedIriManager, &lookupMap, &variableColumns](
                       const TripleComponent& tc) -> IdOrVariableIndex {
-    // Everything except for Literals and Iris can directly be converted to Ids.
     if (tc.isVariable()) {
       AD_CORRECTNESS_CHECK(variableColumns.contains(tc.getVariable()));
       return variableColumns.at(tc.getVariable()).columnIndex_;
@@ -122,12 +137,19 @@ ExecuteUpdate::transformTriplesTemplate(
     AD_CORRECTNESS_CHECK(found != lookupMap.end());
     return found->second;
   };
+
+  // Lookup the default graph IRI once (we typically use it many times).
   Id defaultGraphIri = [&lookupTc] {
     const IdOrVariableIndex defaultGraph = lookupTc(
         ad_utility::triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI));
     AD_CORRECTNESS_CHECK(std::holds_alternative<Id>(defaultGraph));
     return std::get<Id>(defaultGraph);
   }();
+
+  // Lookup the given `Graph`; for the default graph, return the precomputed
+  // `defaultGraphIri`.
+  //
+  // NOTE: When looking up a graph IRI, we make another copy here.
   auto lookupGraph = [&defaultGraphIri, &variableColumns, &lookupTc](
                          const SparqlTripleSimpleWithGraph::Graph& graph) {
     return std::visit(
@@ -144,6 +166,9 @@ ExecuteUpdate::transformTriplesTemplate(
             }},
         graph);
   };
+
+  // Transform the triples (`TripleComponent` -> `IdOrVariableIndex`) and
+  // return them.
   auto transformTriple =
       [&lookupTc, &lookupGraph](const SparqlTripleSimpleWithGraph& triple) {
         return std::array{lookupTc(triple.s_), lookupTc(triple.p_),
