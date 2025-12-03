@@ -230,10 +230,12 @@ struct BenchmarkConfig {
 
 static std::vector<size_t> sampleParameterValues(const ParameterFunc& func) {
   std::vector<size_t> values;
+  size_t idx = 0;
   while (true) {
     ParameterSample sample = func(idx);
-    values.push_back(value);
+    values.push_back(sample.value);
     if (sample.end) break;
+    ++idx;
   }
   return values;
 }
@@ -267,7 +269,7 @@ static std::vector<BenchmarkConfig> buildBenchmarkPlan(
   const auto numGroupSamples = sampleNumGroups(scenario);
   for (size_t numGroups : numGroupSamples) {
     for (size_t numRows : numRowsSamples) {
-      const auto thresholds = computeThresholds(scenario, strategy, numRows);
+      const auto thresholds = computeThresholds(scenario, strategy);
       const size_t blockSize = computeBlockSize(scenario, numRows);
       for (size_t threshold : thresholds) {
         configs.push_back(
@@ -316,8 +318,12 @@ class HybridGroupByBenchmark : public BenchmarkInterface {
             "Optimization disabled (sorting path)",
             /*useBlocks*/ true,
         },
-        {"hash-only-blocks", /*useHashMap*/ true,
-         "Hash map enabled, fallback effectively disabled", /*useBlocks*/ true},
+        {
+            "hash-only-blocks",
+            /*useHashMap*/ true,
+            "Hash map enabled, fallback effectively disabled",
+            /*useBlocks*/ true,
+        },
         {
             "hybrid-approach-blocks",
             /*useHashMap*/ true,
@@ -328,27 +334,51 @@ class HybridGroupByBenchmark : public BenchmarkInterface {
     };
 
     const std::vector<Scenario> scenarios = {
-        {"uniform-1.2-million", makeLinearNumGroupsFunc(1'200'000),
-         makeConstantParameterFunc(1'200'000),
-         makeConstantParameterFunc(350'000), makeModuloGrouping()},
-        {"uniform-12-million", makeLinearNumGroupsFunc(12'000'000),
-         makeConstantParameterFunc(12'000'000),
-         makeConstantParameterFunc(350'000), makeModuloGrouping()},
-        {"logscale-1.2-million", makeExponentialNumGroupsFunc(1'200'000),
-         makeConstantParameterFunc(1'200'000),
-         makeConstantParameterFunc(350'000), makeModuloGrouping()},
-        {"logscale-12-million", makeExponentialNumGroupsFunc(12'000'000),
-         makeConstantParameterFunc(12'000'000),
-         makeConstantParameterFunc(350'000), makeModuloGrouping()},
-        {"best-case-grouping", makeConstantParameterFunc(1),
-         makeConstantParameterFunc(12'000'000),
-         makeConstantParameterFunc(350'000), makeBestCaseGrouping()},
-        {"worst-case-grouping", makeConstantParameterFunc(1),
-         makeConstantParameterFunc(12'000'000),
-         makeConstantParameterFunc(350'000), makeWorstCaseGrouping()},
+        {
+            "uniform-1.2-million",
+            makeLinearNumGroupsFunc(1'200'000),
+            /*numRows*/ makeConstantParameterFunc(1'200'000),
+            /*threshold*/ makeConstantParameterFunc(350'000),
+            makeModuloGrouping(),
+        },
+        {
+            "uniform-12-million",
+            makeLinearNumGroupsFunc(12'000'000),
+            /*numRows*/ makeConstantParameterFunc(12'000'000),
+            /*threshold*/ makeConstantParameterFunc(350'000),
+            makeModuloGrouping(),
+        },
+        {
+            "logscale-1.2-million",
+            makeExponentialNumGroupsFunc(1'200'000),
+            /*numRows*/ makeConstantParameterFunc(1'200'000),
+            /*threshold*/ makeConstantParameterFunc(350'000),
+            makeModuloGrouping(),
+        },
+        {
+            "logscale-12-million",
+            makeExponentialNumGroupsFunc(12'000'000),
+            /*numRows*/ makeConstantParameterFunc(12'000'000),
+            /*threshold*/ makeConstantParameterFunc(350'000),
+            makeModuloGrouping(),
+        },
+        {
+            "best-case-grouping",
+            /*numGroups*/ makeConstantParameterFunc(1),
+            /*numRows*/ makeConstantParameterFunc(12'000'000),
+            /*threshold*/ makeConstantParameterFunc(350'000),
+            makeBestCaseGrouping(),
+        },
+        {
+            "worst-case-grouping",
+            /*numGroups*/ makeConstantParameterFunc(1),
+            /*numRows*/ makeConstantParameterFunc(12'000'000),
+            /*threshold*/ makeConstantParameterFunc(350'000),
+            makeWorstCaseGrouping(),
+        },
     };
 
-    Scenario scenario = scenarios[0];
+    Scenario scenario = scenarios[2];
 
     for (const auto& strategy : strategies) {
       RuntimeParameters().set<"group-by-hash-map-enabled">(
