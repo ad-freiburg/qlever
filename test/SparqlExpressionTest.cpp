@@ -1510,6 +1510,9 @@ TEST(SparqlExpression, geoSparqlExpressions) {
 
   auto checkGeometryN =
       std::bind_front(testNaryExpression, &makeGeometryNExpression);
+  // Non-geometry types
+  checkGeometryN(IdOrLiteralOrIriVec{U, U, U, U}, Ids{D(5), I(3), B(true), U},
+                 Ids{I(1), U, D(5), I(2)});
   // Extract n-th geometry: Single and invalid geometries.
   checkGeometryN(
       IdOrLiteralOrIriVec{
