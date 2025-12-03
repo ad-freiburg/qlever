@@ -31,6 +31,7 @@ using ad_utility::serialization::ReadSerializer;
 using ad_utility::serialization::ReadViaCallableSerializer;
 using ad_utility::serialization::Serializer;
 using ad_utility::serialization::WriteSerializer;
+using ad_utility::serialization::WriteViaCallableSerializer;
 
 // The following tests are also examples for the serialization module and for
 // several pitfalls.
@@ -243,10 +244,13 @@ auto testWithByteBuffer = [](auto testFunction) {
 };
 
 auto testWithCallableSerializer = [](auto testFunction) {
-  ByteBufferWriteSerializer writer;
   std::vector<char> buffer;
-  auto makeReaderFromWriter = [&writer, &buffer]() {
-    buffer = std::move(writer).data();
+  auto write = [&buffer](const char* source, size_t numBytes) {
+    buffer.insert(buffer.end(), source, source + numBytes);
+  };
+
+  WriteViaCallableSerializer writer{write};
+  auto makeReaderFromWriter = [&buffer]() {
     auto read = [pos = 0ul, &buffer](char* target, size_t numBytes) mutable {
       std::copy(buffer.begin() + pos, buffer.begin() + pos + numBytes, target);
       pos += numBytes;
