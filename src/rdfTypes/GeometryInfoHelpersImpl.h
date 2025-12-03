@@ -504,18 +504,27 @@ static constexpr UtilGeomToWktVisitor utilGeomToWkt;
 struct GeometryNVisitor {
   // Visitor for collection types
   CPP_template(typename T)(
-      requires WktCollectionType<T>) std::optional<GeometryN>
+      requires WktCollectionType<T>) std::optional<ParsedWkt>
   operator()(const T& geom, int64_t n) const {
     // Index range check
     if (n < 1 || n - 1 >= static_cast<int64_t>(geom.size())) {
       return std::nullopt;
     }
-    return geom.at(n - 1);
+    // If the geometry type is a collection (thus holds `AnyGeometry`
+    // containers), strip the `AnyGeometry` container and convert it to a
+    // `ParsedWkt` variant.
+    if constexpr (std::is_same_v<T, DCollection>) {
+      return visitAnyGeometry(
+          [](auto& contained) { return ParsedWkt{std::move(contained)}; },
+          geom.at(n - 1));
+    } else {
+      return geom.at(n - 1);
+    }
   }
 
   // Visitor for single geometry types
   CPP_template(typename T)(
-      requires WktSingleGeometryType<T>) std::optional<GeometryN>
+      requires WktSingleGeometryType<T>) std::optional<ParsedWkt>
   operator()(const T& geom, int64_t n) const {
     // For non collection types, only index 1 is defined and returns the
     // geometry itself.
@@ -526,7 +535,7 @@ struct GeometryNVisitor {
   }
 
   // Visitor for `ParsedWkt` variant
-  std::optional<GeometryN> operator()(const ParsedWkt& geom, int64_t n) const {
+  std::optional<ParsedWkt> operator()(const ParsedWkt& geom, int64_t n) const {
     return std::visit(
         [n](const auto& contained) { return GeometryNVisitor{}(contained, n); },
         geom);
@@ -534,7 +543,7 @@ struct GeometryNVisitor {
 
   // Visitor for `std::optional`
   template <typename T>
-  std::optional<GeometryN> operator()(const std::optional<T>& geom,
+  std::optional<ParsedWkt> operator()(const std::optional<T>& geom,
                                       int64_t n) const {
     if (!geom.has_value()) {
       return std::nullopt;
@@ -543,7 +552,7 @@ struct GeometryNVisitor {
   }
 
   // Visitor for `GeoPointOrWkt`
-  std::optional<GeometryN> operator()(const GeoPointOrWkt& geom,
+  std::optional<ParsedWkt> operator()(const GeoPointOrWkt& geom,
                                       int64_t n) const {
     auto [type, parsed] = parseGeoPointOrWkt(geom);
     return GeometryNVisitor{}(parsed, n);
