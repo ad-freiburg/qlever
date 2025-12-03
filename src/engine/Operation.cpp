@@ -7,7 +7,9 @@
 #include <absl/cleanup/cleanup.h>
 #include <absl/container/inlined_vector.h>
 
+#include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/SpatialJoinCachedIndex.h"
 #include "global/RuntimeParameters.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/TransparentFunctors.h"
@@ -74,8 +76,8 @@ std::vector<std::string> Operation::collectWarnings() const {
       continue;
     }
     auto recursive = child->collectWarnings();
-    res.insert(res.end(), std::make_move_iterator(recursive.begin()),
-               std::make_move_iterator(recursive.end()));
+    res.insert(res.end(), ql::make_move_iterator(recursive.begin()),
+               ql::make_move_iterator(recursive.end()));
   }
 
   return res;
@@ -83,7 +85,7 @@ std::vector<std::string> Operation::collectWarnings() const {
 
 // _____________________________________________________________________________
 void Operation::addWarningOrThrow(std::string warning) const {
-  if (RuntimeParameters().get<"throw-on-unbound-variables">()) {
+  if (getRuntimeParameter<&RuntimeParameters::throwOnUnboundVariables_>()) {
     throw InvalidSparqlQueryException(std::move(warning));
   } else {
     addWarning(std::move(warning));
@@ -139,7 +141,7 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
   AD_CONTRACT_CHECK(computationMode != ComputationMode::ONLY_IF_CACHED);
   checkCancellation();
   runtimeInfo().status_ = RuntimeInformation::Status::inProgress;
-  signalQueryUpdate();
+  signalQueryUpdate(RuntimeInformation::SendPriority::Always);
   Result result =
       computeResult(computationMode == ComputationMode::LAZY_IF_SUPPORTED);
   AD_CONTRACT_CHECK(computationMode == ComputationMode::LAZY_IF_SUPPORTED ||
@@ -182,9 +184,9 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
     rti.originalTotalTime_ = rti.totalTime_;
     rti.originalOperationTime_ = rti.getOperationTime();
     result.runOnNewChunkComputed(
-        [this, timeSizeUpdate = 0us, vocabStats = LocalVocabTracking{},
-         ker = knownEmptyResult()](const Result::IdTableVocabPair& pair,
-                                   std::chrono::microseconds duration) mutable {
+        [this, vocabStats = LocalVocabTracking{}, ker = knownEmptyResult()](
+            const Result::IdTableVocabPair& pair,
+            std::chrono::microseconds duration) mutable {
           const IdTable& idTable = pair.idTable_;
           AD_CORRECTNESS_CHECK(idTable.empty() || !ker,
                                "Operation returned non-empty result, but "
@@ -192,8 +194,8 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
           updateRuntimeStats(false, idTable.numRows(), idTable.numColumns(),
                              duration);
           AD_CORRECTNESS_CHECK(idTable.numColumns() == getResultWidth());
-          LOG(DEBUG) << "Computed partial chunk of size " << idTable.numRows()
-                     << " x " << idTable.numColumns() << std::endl;
+          AD_LOG_DEBUG << "Computed partial chunk of size " << idTable.numRows()
+                       << " x " << idTable.numColumns() << std::endl;
           mergeStats(vocabStats, pair.localVocab_);
           if (vocabStats.sizeSum_ > 0) {
             runtimeInfo().addDetail(
@@ -203,17 +205,13 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
                              ", Ø = ", vocabStats.avgSize(),
                              ", max = ", vocabStats.maxSize_));
           }
-          timeSizeUpdate += duration;
-          if (timeSizeUpdate > 50ms) {
-            timeSizeUpdate = 0us;
-            signalQueryUpdate();
-          }
+          signalQueryUpdate(RuntimeInformation::SendPriority::IfDue);
         },
         [this](bool failed) {
           if (failed) {
             runtimeInfo().status_ = RuntimeInformation::failed;
           }
-          signalQueryUpdate();
+          signalQueryUpdate(RuntimeInformation::SendPriority::Always);
         });
   }
   // Apply LIMIT and OFFSET, but only if the call to `computeResult` did not
@@ -248,7 +246,8 @@ CacheValue Operation::runComputationAndPrepareForCache(
   auto result = runComputation(timer, computationMode);
   auto maxSize =
       isRoot ? cache.getMaxSizeSingleEntry()
-             : std::min(RuntimeParameters().get<"cache-max-size-lazy-result">(),
+             : std::min(getRuntimeParameter<
+                            &RuntimeParameters::cacheMaxSizeLazyResult_>(),
                         cache.getMaxSizeSingleEntry());
   if (canResultBeCached() && !result.isFullyMaterialized() &&
       !unlikelyToFitInCache(maxSize)) {
@@ -277,8 +276,8 @@ CacheValue Operation::runComputationAndPrepareForCache(
   if (result.isFullyMaterialized()) {
     auto resultNumRows = result.idTable().size();
     auto resultNumCols = result.idTable().numColumns();
-    LOG(DEBUG) << "Computed result of size " << resultNumRows << " x "
-               << resultNumCols << std::endl;
+    AD_LOG_DEBUG << "Computed result of size " << resultNumRows << " x "
+                 << resultNumCols << std::endl;
   }
 
   return CacheValue{std::move(result), runtimeInfo()};
@@ -301,7 +300,7 @@ std::shared_ptr<const Result> Operation::getResult(
     _runtimeInfo = std::make_shared<RuntimeInformation>();
     // Start with an estimated runtime info which will be updated as we go.
     createRuntimeInfoFromEstimates(getRuntimeInfoPointer());
-    signalQueryUpdate();
+    signalQueryUpdate(RuntimeInformation::SendPriority::Always);
   }
   auto& cache = _executionContext->getQueryTreeCache();
   const QueryCacheKey cacheKey = {
@@ -310,6 +309,13 @@ std::shared_ptr<const Result> Operation::getResult(
       _executionContext->_pinResult && isRoot;
   const bool pinResult =
       _executionContext->_pinSubtrees || pinFinalResultButNotSubtrees;
+
+  const bool pinResultWithName =
+      _executionContext->pinResultWithName().has_value() && isRoot;
+
+  if (pinResultWithName) {
+    computationMode = ComputationMode::FULLY_MATERIALIZED;
+  }
 
   // If pinned there's no point in computing the result lazily.
   if (pinResult && computationMode == ComputationMode::LAZY_IF_SUPPORTED) {
@@ -370,6 +376,11 @@ std::shared_ptr<const Result> Operation::getResult(
       updateRuntimeInformationOnSuccess(result, timer.msecs());
     }
 
+    // Pin result to the named result cache if requested.
+    if (pinResultWithName) {
+      storeToNamedResultCache(result._resultPointer->resultTable());
+    }
+
     return result._resultPointer->resultTablePtr();
   } catch (ad_utility::CancellationException& e) {
     e.setOperation(getDescriptor());
@@ -385,21 +396,21 @@ std::shared_ptr<const Result> Operation::getResult(
     // runtime info) only in the DEBUG log. Note that the exception will be
     // caught by the `processQuery` method, where the error message will be
     // printed *and* included in an error response sent to the client.
-    LOG(ERROR) << "Waited for a result from another thread which then failed"
-               << std::endl;
-    LOG(DEBUG) << getCacheKey();
+    AD_LOG_ERROR << "Waited for a result from another thread which then failed"
+                 << std::endl;
+    AD_LOG_DEBUG << getCacheKey();
     throw ad_utility::AbortException(e);
   } catch (const std::exception& e) {
     // We are in the innermost level of the exception, so print
-    LOG(ERROR) << "Aborted Operation" << std::endl;
-    LOG(DEBUG) << getCacheKey() << std::endl;
+    AD_LOG_ERROR << "Aborted Operation" << std::endl;
+    AD_LOG_DEBUG << getCacheKey() << std::endl;
     // Rethrow as QUERY_ABORTED allowing us to print the Operation
     // only at innermost failure of a recursive call
     throw ad_utility::AbortException(e);
   } catch (...) {
     // We are in the innermost level of the exception, so print
-    LOG(ERROR) << "Aborted Operation" << std::endl;
-    LOG(DEBUG) << getCacheKey() << std::endl;
+    AD_LOG_ERROR << "Aborted Operation" << std::endl;
+    AD_LOG_DEBUG << getCacheKey() << std::endl;
     // Rethrow as QUERY_ABORTED allowing us to print the Operation
     // only at innermost failure of a recursive call
     throw ad_utility::AbortException(
@@ -408,11 +419,50 @@ std::shared_ptr<const Result> Operation::getResult(
 }
 
 // ______________________________________________________________________
-
 std::chrono::milliseconds Operation::remainingTime() const {
   auto interval = deadline_ - std::chrono::steady_clock::now();
   return std::max(
       0ms, std::chrono::duration_cast<std::chrono::milliseconds>(interval));
+}
+
+// _____________________________________________________________________________
+void Operation::storeToNamedResultCache(const Result& result) {
+  // The query result is to be pinned in the named query cache.
+  const auto& [name, geoIndexVar] =
+      _executionContext->pinResultWithName().value();
+  AD_CORRECTNESS_CHECK(result.isFullyMaterialized());
+
+  // If a geo index is to be cached, get the respective column using the
+  // given variable and compute the index.
+  auto geoIndex = [&]() -> std::optional<SpatialJoinCachedIndex> {
+    if (!geoIndexVar.has_value()) {
+      return std::nullopt;
+    }
+    auto colIndex = getExternallyVisibleVariableColumns()
+                        .at(geoIndexVar.value())
+                        .columnIndex_;
+    return SpatialJoinCachedIndex{geoIndexVar.value(), colIndex,
+                                  result.idTable(),
+                                  _executionContext->getIndex()};
+  };
+
+  // TODO<joka921> The explicit `clone` here is unfortunate, but addressing
+  // it would require a major refactoring of the `Result` class.
+  auto valueForNamedResultCache = NamedResultCache::Value{
+      std::make_shared<const IdTable>(result.idTable().clone()),
+      getExternallyVisibleVariableColumns(),
+      result.sortedBy(),
+      result.localVocab().clone(),
+      getCacheKey(),
+      geoIndex()};
+  _executionContext->namedResultCache().store(
+      name, std::move(valueForNamedResultCache));
+
+  runtimeInfo().addDetail("pinned-with-name", name);
+  if (geoIndexVar.has_value()) {
+    runtimeInfo().addDetail("pinned-geo-index-on-var",
+                            geoIndexVar.value().name());
+  }
 }
 
 // _______________________________________________________________________
@@ -450,10 +500,10 @@ void Operation::updateRuntimeInformationOnSuccess(
           child->getRootOperation()->getRuntimeInfoPointer());
     }
   }
-  signalQueryUpdate();
+  signalQueryUpdate(RuntimeInformation::SendPriority::Always);
 }
 
-// ____________________________________________________________________________________________________________________
+// _____________________________________________________________________________
 void Operation::updateRuntimeInformationOnSuccess(
     const QueryResultCache::ResultAndCacheStatus& resultAndCacheStatus,
     Milliseconds duration) {
@@ -466,9 +516,8 @@ void Operation::updateRuntimeInformationOnSuccess(
 
 // _____________________________________________________________________________
 void Operation::updateRuntimeInformationWhenOptimizedOut(
-    std::vector<std::shared_ptr<RuntimeInformation>> children,
-    RuntimeInformation::Status status) {
-  _runtimeInfo->status_ = status;
+    std::vector<std::shared_ptr<RuntimeInformation>> children) {
+  _runtimeInfo->status_ = RuntimeInformation::Status::optimizedOut;
   _runtimeInfo->children_ = std::move(children);
   // This operation was optimized out, so its operation time is zero.
   // The operation time is computed as
@@ -476,18 +525,15 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
   // To set it to zero we thus have to set the `totalTime_` to that sum.
   auto timesOfChildren = _runtimeInfo->children_ |
                          ql::views::transform(&RuntimeInformation::totalTime_);
-  _runtimeInfo->totalTime_ =
-      std::reduce(timesOfChildren.begin(), timesOfChildren.end(), 0us);
+  _runtimeInfo->totalTime_ = ::ranges::accumulate(timesOfChildren, 0us);
 
-  signalQueryUpdate();
+  signalQueryUpdate(RuntimeInformation::SendPriority::Always);
 }
 
 // _____________________________________________________________________________
-void Operation::updateRuntimeInformationWhenOptimizedOut(
-    RuntimeInformation::Status status) {
-  auto setStatus = [&status](RuntimeInformation& rti,
-                             const auto& self) -> void {
-    rti.status_ = status;
+void Operation::updateRuntimeInformationWhenOptimizedOut() {
+  auto setStatus = [](RuntimeInformation& rti, const auto& self) -> void {
+    rti.status_ = RuntimeInformation::Status::optimizedOut;
     rti.totalTime_ = 0ms;
     for (auto& child : rti.children_) {
       self(*child, self);
@@ -495,7 +541,7 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
   };
   setStatus(*_runtimeInfo, setStatus);
 
-  signalQueryUpdate();
+  signalQueryUpdate(RuntimeInformation::SendPriority::Always);
 }
 
 // _______________________________________________________________________
@@ -508,7 +554,7 @@ void Operation::updateRuntimeInformationOnFailure(Milliseconds duration) {
   _runtimeInfo->totalTime_ = duration;
   _runtimeInfo->status_ = RuntimeInformation::Status::failed;
 
-  signalQueryUpdate();
+  signalQueryUpdate(RuntimeInformation::SendPriority::Always);
 }
 
 // __________________________________________________________________
@@ -638,9 +684,10 @@ const std::vector<ColumnIndex>& Operation::getResultSortedOn() const {
 
 // _____________________________________________________________________________
 
-void Operation::signalQueryUpdate() const {
+void Operation::signalQueryUpdate(
+    RuntimeInformation::SendPriority sendPriority) const {
   if (_executionContext && _executionContext->areWebsocketUpdatesEnabled()) {
-    _executionContext->signalQueryUpdate(*_rootRuntimeInfo);
+    _executionContext->signalQueryUpdate(*_rootRuntimeInfo, sendPriority);
   }
 }
 

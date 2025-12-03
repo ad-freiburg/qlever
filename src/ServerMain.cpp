@@ -29,7 +29,7 @@ namespace po = boost::program_options;
 int main(int argc, char** argv) {
   // TODO<joka921> This is a hack, because the unit tests currently don't work
   // with the strip-columns feature.
-  RuntimeParameters().set<"strip-columns">(true);
+  setRuntimeParameter<&RuntimeParameters::stripColumns_>(true);
   // Copy the git hash and datetime of compilation (which require relinking)
   // to make them accessible to other parts of the code
   qlever::version::copyVersionInfo();
@@ -46,18 +46,18 @@ int main(int argc, char** argv) {
 
   std::string indexBasename;
   std::string accessToken;
+  bool noAccessCheck = false;
   bool text = false;
   unsigned short port;
   NonNegative numSimultaneousQueries = 1;
   bool noPatterns;
-  bool noPatternTrick;
   bool onlyPsoAndPosPermutations;
   bool persistUpdates;
 
   ad_utility::MemorySize memoryMaxSize;
 
   ad_utility::ParameterToProgramOptionFactory optionFactory{
-      &RuntimeParameters()};
+      &globalRuntimeParameters};
 
   po::options_description options("Options for ServerMain");
   auto add = [&options](auto&&... args) {
@@ -71,6 +71,10 @@ int main(int argc, char** argv) {
       "The port on which HTTP requests are served (required).");
   add("access-token,a", po::value<std::string>(&accessToken)->default_value(""),
       "Access token for restricted API calls (default: no access).");
+  add("no-access-check,n",
+      po::bool_switch(&noAccessCheck)->default_value(false),
+      "If set to true, no access-token check is performed for restricted API "
+      "calls (default: false).");
   add("num-simultaneous-queries,j",
       po::value<NonNegative>(&numSimultaneousQueries)->default_value(1),
       "The number of queries that can be processed simultaneously.");
@@ -80,21 +84,24 @@ int main(int argc, char** argv) {
       "Limit on the total amount of memory that can be used for "
       "query processing and caching. If exceeded, query will return with "
       "an error, but the engine will not crash.");
-  add("cache-max-size,c", optionFactory.getProgramOption<"cache-max-size">(),
+  add("cache-max-size,c",
+      optionFactory.getProgramOption<&RuntimeParameters::cacheMaxSize_>(),
       "Maximum memory size for all cache entries (pinned and "
       "not pinned). Note that the cache is part of the total memory "
       "limited by --memory-max-size.");
   add("cache-max-size-single-entry,e",
-      optionFactory.getProgramOption<"cache-max-size-single-entry">(),
+      optionFactory
+          .getProgramOption<&RuntimeParameters::cacheMaxSizeSingleEntry_>(),
       "Maximum size for a single cache entry. That is, "
       "results larger than this will not be cached unless pinned.");
   add("cache-max-size-lazy-result,E",
-      optionFactory.getProgramOption<"cache-max-size-lazy-result">(),
+      optionFactory
+          .getProgramOption<&RuntimeParameters::cacheMaxSizeLazyResult_>(),
       "Maximum size up to which lazy results will be cached by aggregating "
       "partial results. Caching does cause significant overhead for this "
       "case.");
   add("cache-max-num-entries,k",
-      optionFactory.getProgramOption<"cache-max-num-entries">(),
+      optionFactory.getProgramOption<&RuntimeParameters::cacheMaxNumEntries_>(),
       "Maximum number of entries in the cache. If exceeded, remove "
       "least-recently used non-pinned entries from the cache. Note that "
       "this condition and the size limit specified via --cache-max-size "
@@ -102,38 +109,37 @@ int main(int argc, char** argv) {
   add("no-patterns,P", po::bool_switch(&noPatterns),
       "Disable the use of patterns. If disabled, the special predicate "
       "`ql:has-predicate` is not available.");
-  add("no-pattern-trick,T", po::bool_switch(&noPatternTrick),
-      "Maximum number of entries in the cache. If exceeded, remove "
-      "least-recently used entries from the cache if possible. Note that "
-      "this condition and the size limit specified via --cache-max-size-gb "
-      "both have to hold (logical AND).");
   add("text,t", po::bool_switch(&text),
       "Also load the text index. The text index must have been built before "
-      "using `IndexBuilderMain` with options `-d` and `-w`.");
+      "using `IndexBuilderMain` with options `-d` and `- w`.");
   add("only-pso-and-pos-permutations,o",
       po::bool_switch(&onlyPsoAndPosPermutations),
       "Only load the PSO and POS permutations. This disables queries with "
       "predicate variables.");
   add("default-query-timeout,s",
-      optionFactory.getProgramOption<"default-query-timeout">(),
+      optionFactory
+          .getProgramOption<&RuntimeParameters::defaultQueryTimeout_>(),
       "Set the default timeout in seconds after which queries are cancelled"
       "automatically.");
   add("service-max-value-rows,S",
-      optionFactory.getProgramOption<"service-max-value-rows">(),
+      optionFactory
+          .getProgramOption<&RuntimeParameters::serviceMaxValueRows_>(),
       "The maximal number of result rows to be passed to a SERVICE operation "
       "as a VALUES clause to optimize its computation.");
   add("throw-on-unbound-variables",
-      optionFactory.getProgramOption<"throw-on-unbound-variables">(),
+      optionFactory
+          .getProgramOption<&RuntimeParameters::throwOnUnboundVariables_>(),
       "If set to true, the queries that use GROUP BY, BIND, or ORDER BY with "
       "variables that are unbound in the query throw an exception. These "
       "queries technically are allowed by the SPARQL standard, but typically "
       "are the result of typos and unintended by the user");
   add("request-body-limit",
-      optionFactory.getProgramOption<"request-body-limit">(),
+      optionFactory.getProgramOption<&RuntimeParameters::requestBodyLimit_>(),
       "Set the maximum size for the body of requests the server will process. "
       "Set to zero to disable the limit.");
   add("cache-service-results",
-      optionFactory.getProgramOption<"cache-service-results">(),
+      optionFactory
+          .getProgramOption<&RuntimeParameters::cacheServiceResults_>(),
       "SERVICE is not cached because we have to assume that any remote "
       "endpoint might change at any point in time. If you control the "
       "endpoints, you can override this setting. This will disable the sibling "
@@ -141,21 +147,25 @@ int main(int argc, char** argv) {
   add("persist-updates", po::bool_switch(&persistUpdates),
       "If set, then SPARQL UPDATES will be persisted on disk. Otherwise they "
       "will be lost when the engine is stopped");
-  add("syntax-test-mode", optionFactory.getProgramOption<"syntax-test-mode">(),
+  add("syntax-test-mode",
+      optionFactory.getProgramOption<&RuntimeParameters::syntaxTestMode_>(),
       "Make several query patterns that are syntactially valid, but otherwise "
       "erroneous silently into empty results (e.g. LOAD or SERVICE requests to "
       "nonexisting endpoints). This mode should only be used for running the "
       "syntax tests from the W3C SPARQL 1.1 test suite.");
   add("enable-prefilter-on-index-scans",
-      optionFactory.getProgramOption<"enable-prefilter-on-index-scans">(),
+      optionFactory
+          .getProgramOption<&RuntimeParameters::enablePrefilterOnIndexScans_>(),
       "If set to false, the prefilter procedures for FILTER expressions are "
       "disabled.");
   add("spatial-join-max-num-threads",
-      optionFactory.getProgramOption<"spatial-join-max-num-threads">(),
+      optionFactory
+          .getProgramOption<&RuntimeParameters::spatialJoinMaxNumThreads_>(),
       "The maximum number of threads to be used for spatial join processing. "
       "If this option is set to `0`, the number of CPU threads will be used.");
   add("spatial-join-prefilter-max-size",
-      optionFactory.getProgramOption<"spatial-join-prefilter-max-size">(),
+      optionFactory
+          .getProgramOption<&RuntimeParameters::spatialJoinPrefilterMaxSize_>(),
       "The maximum size in square coordinates of the aggregated bounding box "
       "of the smaller join partner in a spatial join, such that prefiltering "
       "will be employed. To disable prefiltering for non-point geometries, set "
@@ -187,19 +197,19 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
 
-  LOG(INFO) << EMPH_ON << "QLever Server, compiled on "
-            << qlever::version::DatetimeOfCompilation << " using git hash "
-            << qlever::version::GitShortHash << EMPH_OFF << std::endl;
+  AD_LOG_INFO << EMPH_ON << "QLever Server, compiled on "
+              << qlever::version::DatetimeOfCompilation << " using git hash "
+              << qlever::version::GitShortHash << EMPH_OFF << std::endl;
 
   try {
     Server server(port, numSimultaneousQueries, memoryMaxSize,
-                  std::move(accessToken), !noPatternTrick);
+                  std::move(accessToken), noAccessCheck, !noPatterns);
     server.run(indexBasename, text, !noPatterns, !onlyPsoAndPosPermutations,
                persistUpdates);
   } catch (const std::exception& e) {
     // This code should never be reached as all exceptions should be handled
     // within server.run()
-    LOG(ERROR) << e.what() << std::endl;
+    AD_LOG_ERROR << e.what() << std::endl;
     return 1;
   }
   // This should also never be reached as the server threads are not supposed

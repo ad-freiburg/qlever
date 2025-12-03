@@ -2,11 +2,14 @@
 // Chair of Algorithms and Data Structures
 // Author: Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 
-#include "Quads.h"
+#include "parser/Quads.h"
+
+#include "backports/StartsWithAndEndsWith.h"
+#include "parser/UpdateClause.h"
 
 // ____________________________________________________________________________________
 Id Quads::BlankNodeAdder::getBlankNodeIndex(std::string_view label) {
-  AD_CORRECTNESS_CHECK(label.starts_with("_:"));
+  AD_CORRECTNESS_CHECK(ql::starts_with(label, "_:"));
   auto [it, isNew] = map_.try_emplace(label.substr(2), Id::makeUndefined());
   auto& id = it->second;
   if (isNew) {
@@ -50,7 +53,7 @@ updateClause::GraphUpdate::Triples Quads::toTriplesWithGraph(
   size_t numTriplesInGraphs = std::accumulate(
       graphTriples_.begin(), graphTriples_.end(), 0,
       [](size_t acc, const GraphBlock& block) {
-        return acc + get<ad_utility::sparql_types::Triples>(block).size();
+        return acc + std::get<ad_utility::sparql_types::Triples>(block).size();
       });
   quads.reserve(numTriplesInGraphs + freeTriples_.size());
   ad_utility::appendVector(
@@ -86,9 +89,23 @@ Quads::toGraphPatternOperations() const {
     GraphPattern tripleSubPattern;
     tripleSubPattern._graphPatterns.emplace_back(
         BasicGraphPattern{ad_utility::transform(triples, toSparqlTriple)});
-    operations.emplace_back(
-        GroupGraphPattern{std::move(tripleSubPattern),
-                          expandVariant<GroupGraphPattern::GraphSpec>(graph)});
+    operations.emplace_back(std::visit(
+        [&tripleSubPattern](auto graphValue) mutable {
+          if constexpr (ad_utility::isSimilar<decltype(graphValue), Variable>) {
+            // This creates a group graph pattern with a graph variable like
+            // `GRAPH ?g { ?s ?p ?o }` which normally would exclude the default
+            // graph. But as we have a CLEAR ALL, we need to also consider the
+            // default graph, hence we have to overwrite the
+            // GraphVariableBehavior.
+            return GroupGraphPattern{
+                std::move(tripleSubPattern), std::move(graphValue),
+                GroupGraphPattern::GraphVariableBehaviour::ALL};
+          } else {
+            return GroupGraphPattern{std::move(tripleSubPattern),
+                                     std::move(graphValue)};
+          }
+        },
+        graph));
   }
   return operations;
 }
@@ -108,8 +125,8 @@ void Quads::forAllVariables(absl::FunctionRef<void(const Variable&)> f) {
   };
   auto visitGraphBlock = [&visitTriple, &f](const GraphBlock& block) {
     const auto& [graph, triples] = block;
-    if (holds_alternative<Variable>(graph)) {
-      f(get<Variable>(graph));
+    if (std::holds_alternative<Variable>(graph)) {
+      f(std::get<Variable>(graph));
     }
     ql::ranges::for_each(triples, visitTriple);
   };

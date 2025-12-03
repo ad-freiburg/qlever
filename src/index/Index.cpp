@@ -32,6 +32,11 @@ void Index::addTextFromOnDiskIndex() { pimpl_->addTextFromOnDiskIndex(); }
 auto Index::getVocab() const -> const Vocab& { return pimpl_->getVocab(); }
 
 // ____________________________________________________________________________
+auto Index::encodedIriManager() const -> const EncodedIriManager& {
+  return pimpl_->encodedIriManager();
+}
+
+// ____________________________________________________________________________
 auto Index::getNonConstVocabForTesting() -> Vocab& {
   return pimpl_->getNonConstVocabForTesting();
 }
@@ -257,13 +262,14 @@ Index::NumNormalAndInternal Index::numDistinctPredicates() const {
 bool Index::hasAllPermutations() const { return pimpl_->hasAllPermutations(); }
 
 // ____________________________________________________________________________
-std::vector<float> Index::getMultiplicities(Permutation::Enum p) const {
-  return pimpl_->getMultiplicities(p);
+std::vector<float> Index::getMultiplicities(
+    const Permutation& permutation) const {
+  return pimpl_->getMultiplicities(permutation);
 }
 
 // ____________________________________________________________________________
 std::vector<float> Index::getMultiplicities(
-    const TripleComponent& key, Permutation::Enum p,
+    const TripleComponent& key, const Permutation& p,
     const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
   return pimpl_->getMultiplicities(key, p, locatedTriplesSnapshot);
 }

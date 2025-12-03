@@ -8,12 +8,14 @@
 #include <vector>
 
 #include "engine/CallFixedSize.h"
+#include "engine/JoinHelpers.h"
 #include "engine/Result.h"
 #include "engine/idTable/IdTable.h"
 #include "util/CancellationHandle.h"
 #include "util/ChunkedForLoop.h"
 #include "util/CompilerExtensions.h"
 #include "util/Exception.h"
+#include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/JoinAlgorithms/JoinColumnMapping.h"
 
 namespace joinAlgorithms::indexNestedLoop {
@@ -105,8 +107,8 @@ struct Adder {
   // Scan `missingIndices_` for indices that haven't found a match so far and
   // fill them with undef on the right side.
   void materializeMissing(IdTable& result, IdTableView<0> left) {
-    size_t counter = std::reduce(missingIndices_.begin(), missingIndices_.end(),
-                                 static_cast<size_t>(0));
+    size_t counter =
+        ::ranges::accumulate(missingIndices_, static_cast<size_t>(0));
     size_t originalSize = result.size();
     result.resize(originalSize + counter);
     ColumnIndex resultColIdx = 0;
@@ -267,13 +269,16 @@ class IndexNestedLoopJoin {
     }
     ad_utility::callFixedSizeVi(
         static_cast<int>(joinColumns_.size()),
-        [this, &matchTracker, &leftColumns, &rightColumns](auto JOIN_COLUMNS) {
+        [this, &matchTracker, &leftColumns,
+         &rightColumns](auto JOIN_COLUMNS_PAR) {
+          static constexpr size_t JOIN_COLUMNS =
+              static_cast<size_t>(JOIN_COLUMNS_PAR);
           IdTableView<JOIN_COLUMNS> leftTable =
               leftResult_->idTable()
                   .asColumnSubsetView(leftColumns)
                   .template asStaticView<JOIN_COLUMNS>();
-          auto matchHelper = [&matchTracker, &leftTable, &rightColumns,
-                              &JOIN_COLUMNS](const IdTable& idTable) {
+          auto matchHelper = [&matchTracker, &leftTable,
+                              &rightColumns](const IdTable& idTable) {
             matchLeft(matchTracker, leftTable,
                       idTable.asColumnSubsetView(rightColumns)
                           .template asStaticView<JOIN_COLUMNS>());
@@ -302,7 +307,9 @@ class IndexNestedLoopJoin {
     return ad_utility::callFixedSizeVi(
         static_cast<int>(joinColumns_.size()),
         [this, &matchTracker, yieldOnce, resultWidth, numColsRight,
-         keepJoinColumns](auto JOIN_COLUMNS) -> Result::LazyResult {
+         keepJoinColumns](auto JOIN_COLUMNS_PAR) -> Result::LazyResult {
+          static constexpr auto JOIN_COLUMNS =
+              static_cast<size_t>(JOIN_COLUMNS_PAR);
           const IdTable& leftTable = leftResult_->idTable();
           size_t numColsLeft = leftTable.numColumns();
           ad_utility::JoinColumnMapping joinColumnData{
@@ -310,7 +317,7 @@ class IndexNestedLoopJoin {
           IdTableView<JOIN_COLUMNS> leftTableView =
               leftTable.asColumnSubsetView(joinColumnData.jcsLeft())
                   .template asStaticView<JOIN_COLUMNS>();
-          auto matchHelper = [&matchTracker, &leftTableView, &JOIN_COLUMNS,
+          auto matchHelper = [&matchTracker, &leftTableView,
                               rightColumns = joinColumnData.jcsRight()](
                                  const IdTable& idTable) {
             matchLeft(matchTracker, leftTableView,
@@ -353,7 +360,7 @@ class IndexNestedLoopJoin {
                 leftTable, std::move(rightTables), std::move(matchTracker),
                 resultWidth, std::move(joinColumnData),
                 [leftTableView = std::move(leftTableView),
-                 rightColumns = std::move(rightColumns), JOIN_COLUMNS](
+                 rightColumns = std::move(rightColumns)](
                     detail::Adder& adder, const IdTable& rightTable) {
                   matchLeft(adder, leftTableView,
                             rightTable.asColumnSubsetView(rightColumns)

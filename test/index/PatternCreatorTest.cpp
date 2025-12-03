@@ -124,7 +124,7 @@ auto createExamplePatterns(PatternCreator& creator) {
 // from the `createExamplePatterns` function.
 void assertPatternContents(const std::string& filename,
                            const TripleVec& addedTriples,
-                           source_location l = source_location ::current()) {
+                           source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto tr = generateLocationTrace(l);
   double averageNumSubjectsPerPredicate;
   double averageNumPredicatesPerSubject;
@@ -160,7 +160,7 @@ void assertPatternContents(const std::string& filename,
   expectedTriples.push_back(std::array{V(0), pat, I(0)});
   expectedTriples.push_back(std::array{V(1), pat, I(1)});
   expectedTriples.push_back(std::array{V(3), pat, I(0)});
-  ql::ranges::sort(expectedTriples, SortByPSO{});
+  ql::ranges::sort(expectedTriples, SortByPSONoGraphColumn{});
   EXPECT_THAT(addedTriples, ::testing::ElementsAreArray(expectedTriples));
 }
 

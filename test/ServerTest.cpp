@@ -18,18 +18,31 @@
 
 using nlohmann::json;
 
+namespace {
 using namespace ad_utility::url_parser;
 using namespace ad_utility::url_parser::sparqlOperation;
 using namespace ad_utility::testing;
 
+constexpr auto encodedIriManager = []() -> const EncodedIriManager* {
+  static EncodedIriManager encodedIriManager_;
+  return &encodedIriManager_;
+};
+auto parseQuery(std::string query,
+                const std::vector<DatasetClause>& datasets = {}) {
+  return SparqlParser::parseQuery(encodedIriManager(), std::move(query),
+                                  datasets);
+}
+
+}  // namespace
 TEST(ServerTest, determineResultPinning) {
   EXPECT_THAT(Server::determineResultPinning(
-                  {{"pinsubtrees", {"true"}}, {"pinresult", {"true"}}}),
+                  {{"pin-subresults", {"true"}}, {"pin-result", {"true"}}}),
               testing::Pair(true, true));
-  EXPECT_THAT(Server::determineResultPinning({{"pinresult", {"true"}}}),
+  EXPECT_THAT(Server::determineResultPinning({{"pin-result", {"true"}}}),
               testing::Pair(false, true));
-  EXPECT_THAT(Server::determineResultPinning({{"pinsubtrees", {"otherValue"}}}),
-              testing::Pair(false, false));
+  EXPECT_THAT(
+      Server::determineResultPinning({{"pin-subresults", {"otherValue"}}}),
+      testing::Pair(false, false));
 }
 
 // _____________________________________________________________________________
@@ -83,9 +96,9 @@ TEST(ServerTest, determineMediaType) {
 
 // _____________________________________________________________________________
 TEST(ServerTest, chooseBestFittingMediaType) {
-  auto askQuery = SparqlParser::parseQuery("ASK {}");
-  auto selectQuery = SparqlParser::parseQuery("SELECT * {}");
-  auto constructQuery = SparqlParser::parseQuery("CONSTRUCT WHERE {}");
+  auto askQuery = parseQuery("ASK {}");
+  auto selectQuery = parseQuery("SELECT * {}");
+  auto constructQuery = parseQuery("CONSTRUCT WHERE {}");
   using enum ad_utility::MediaType;
 
   auto choose = &Server::chooseBestFittingMediaType;
@@ -215,7 +228,7 @@ TEST(ServerTest, createResponseMetadata) {
   DeltaTriples deltaTriples{index};
   const std::string update = "INSERT DATA { <b> <c> <d> }";
   ad_utility::BlankNodeManager bnm;
-  auto pqs = SparqlParser::parseUpdate(&bnm, update);
+  auto pqs = SparqlParser::parseUpdate(&bnm, encodedIriManager(), update);
   EXPECT_THAT(pqs, testing::SizeIs(1));
   ParsedQuery pq = std::move(pqs[0]);
   QueryPlanner qp(qec, handle);
@@ -227,13 +240,16 @@ TEST(ServerTest, createResponseMetadata) {
   UpdateMetadata updateMetadata = ExecuteUpdate::executeUpdate(
       index, plannedQuery.parsedQuery_, plannedQuery.queryExecutionTree_,
       deltaTriples, handle);
-  DeltaTriplesCount countAfter = deltaTriples.getCounts();
+  updateMetadata.countBefore_ = countBefore;
+  updateMetadata.countAfter_ = deltaTriples.getCounts();
 
   // Assertions
+  ad_utility::timer::TimeTracer tracer2(
+      "ServerTest::createResponseMetadata tracer2");
+  tracer2.endTrace("ServerTest::createResponseMetadata tracer2");
   json metadata = Server::createResponseMetadataForUpdate(
-      requestTimer, index, deltaTriples, plannedQuery,
-      plannedQuery.queryExecutionTree_, countBefore, updateMetadata,
-      countAfter);
+      index, deltaTriples.getSnapshot(), plannedQuery,
+      plannedQuery.queryExecutionTree_, updateMetadata, tracer2);
   json deltaTriplesJson{
       {"before", {{"inserted", 0}, {"deleted", 0}, {"total", 0}}},
       {"after", {{"inserted", 1}, {"deleted", 0}, {"total", 1}}},
@@ -258,7 +274,7 @@ TEST(ServerTest, createResponseMetadata) {
 TEST(ServerTest, adjustParsedQueryLimitOffset) {
   using enum ad_utility::MediaType;
   auto makePlannedQuery = [](std::string operation) -> Server::PlannedQuery {
-    ParsedQuery parsed = SparqlParser::parseQuery(std::move(operation));
+    ParsedQuery parsed = parseQuery(std::move(operation));
     QueryExecutionTree qet =
         QueryPlanner{ad_utility::testing::getQec(),
                      std::make_shared<ad_utility::CancellationHandle<>>()}
@@ -272,8 +288,7 @@ TEST(ServerTest, adjustParsedQueryLimitOffset) {
               "SELECT * WHERE { <a> <b> ?c } LIMIT 10 OFFSET 15",
           const ad_utility::url_parser::ParamValueMap& parameters = {{"send",
                                                                       {"12"}}},
-          ad_utility::source_location l =
-              ad_utility::source_location::current()) {
+          ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
         auto trace = generateLocationTrace(l);
         auto pq = makePlannedQuery(std::move(operation));
         Server::adjustParsedQueryLimitOffset(pq, mediaType, parameters);
@@ -292,4 +307,54 @@ TEST(ServerTest, adjustParsedQueryLimitOffset) {
   expectExportLimit(csv, std::nullopt);
   expectExportLimit(csv, std::nullopt, complexQuery);
   expectExportLimit(tsv, std::nullopt);
+}
+
+// _____________________________________________________________________________
+TEST(ServerTest, configurePinnedResultWithName) {
+  auto qec = ad_utility::testing::getQec();
+
+  // Test with no pinNamed value - should not modify qec
+  std::optional<std::string> noPinNamed = std::nullopt;
+  Server::configurePinnedResultWithName(noPinNamed, std::nullopt, true, *qec);
+  EXPECT_FALSE(qec->pinResultWithName().has_value());
+
+  // Test with pinNamed and valid access token - should set the pin name
+  std::optional<std::string> pinNamed = "test_query_name";
+  Server::configurePinnedResultWithName(pinNamed, std::nullopt, true, *qec);
+  EXPECT_TRUE(qec->pinResultWithName().has_value());
+  EXPECT_EQ(qec->pinResultWithName().value().name_, "test_query_name");
+
+  // Reset for next test
+  qec->pinResultWithName() = std::nullopt;
+  // Test with pinNamed AND pinned geo Var.
+  Server::configurePinnedResultWithName(pinNamed, "geom_var", true, *qec);
+  ASSERT_TRUE(qec->pinResultWithName().has_value());
+  EXPECT_EQ(qec->pinResultWithName().value().name_, "test_query_name");
+  EXPECT_THAT(qec->pinResultWithName().value().geoIndexVar_,
+              ::testing::Optional(Variable{"?geom_var"}));
+
+  // Reset for next test
+  qec->pinResultWithName() = std::nullopt;
+
+  // Test with pinNamed but invalid access token - should throw exception
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      Server::configurePinnedResultWithName(pinNamed, std::nullopt, false,
+                                            *qec),
+      testing::HasSubstr(
+          "Pinning a result with a name requires a valid access token"));
+
+  // Verify qec was not modified when exception was thrown
+  EXPECT_FALSE(qec->pinResultWithName().has_value());
+}
+
+TEST(ServerTest, checkAccessToken) {
+  Server server{4321, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
+  EXPECT_TRUE(server.checkAccessToken("accessToken"));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      server.checkAccessToken("invalidAccessToken"),
+      testing::HasSubstr("Access token was provided but it was invalid"));
+
+  Server server2{1234, 1, ad_utility::MemorySize::megabytes(1), "", true};
+  EXPECT_TRUE(server2.checkAccessToken(std::nullopt));
 }

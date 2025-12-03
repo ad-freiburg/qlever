@@ -1,7 +1,9 @@
 //  Copyright 2021, University of Freiburg, Chair of Algorithms and Data
 //  Structures. Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
-#include "./ParallelBuffer.h"
+#include "parser/ParallelBuffer.h"
+
+#include "util/StringUtils.h"
 
 // _________________________________________________________________________
 void ParallelFileBuffer::open(const std::string& filename) {

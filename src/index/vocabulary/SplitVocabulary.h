@@ -6,11 +6,12 @@
 #define QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARY_H
 
 #include <cstdint>
-#include <functional>
 #include <memory>
 #include <string_view>
 #include <variant>
 
+#include "backports/StartsWithAndEndsWith.h"
+#include "backports/functional.h"
 #include "global/ValueId.h"
 #include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/VocabularyTypes.h"
@@ -47,9 +48,9 @@ class PolymorphicVocabulary;
 // vocabularies.
 template <typename SplitFunction, typename SplitFilenameFunction,
           typename... UnderlyingVocabularies>
-requires SplitFunctionT<SplitFunction> &&
-         SplitFilenameFunctionT<SplitFilenameFunction,
-                                sizeof...(UnderlyingVocabularies)>
+QL_CONCEPT_OR_NOTHING(
+    requires SplitFunctionT<SplitFunction>&& SplitFilenameFunctionT<
+        SplitFilenameFunction, sizeof...(UnderlyingVocabularies)>)
 class SplitVocabulary {
  public:
   // A SplitVocabulary must have at least two and at most 255 underlying
@@ -293,17 +294,20 @@ namespace detail::splitVocabulary {
 
 // Split function for Well-Known Text Literals: All words are written to
 // vocabulary 0 except WKT literals, which go to vocabulary 1.
-[[maybe_unused]] inline auto geoSplitFunc =
-    [](std::string_view word) -> uint8_t {
-  return word.starts_with("\"") && word.ends_with(GEO_LITERAL_SUFFIX);
+struct GeoSplitFunc {
+  uint8_t operator()(std::string_view word) const {
+    return ql::starts_with(word, "\"") &&
+           ql::ends_with(word, GEO_LITERAL_SUFFIX);
+  }
 };
 
 // Split filename function for Well-Known Text Literals: The vocabulary 0 is
 // saved under the base filename and WKT literals are saved with a suffix
 // ".geometry"
-[[maybe_unused]] inline auto geoFilenameFunc =
-    [](std::string_view base) -> std::array<std::string, 2> {
-  return {std::string(base), absl::StrCat(base, ".geometry")};
+struct GeoFilenameFunc {
+  std::array<std::string, 2> operator()(std::string_view base) const {
+    return {std::string(base), absl::StrCat(base, ".geometry")};
+  }
 };
 
 }  // namespace detail::splitVocabulary
@@ -312,8 +316,8 @@ namespace detail::splitVocabulary {
 // vocabulary. This can be used for precomputations for spatial features.
 template <class UnderlyingVocabulary>
 using SplitGeoVocabulary =
-    SplitVocabulary<decltype(detail::splitVocabulary::geoSplitFunc),
-                    decltype(detail::splitVocabulary::geoFilenameFunc),
+    SplitVocabulary<detail::splitVocabulary::GeoSplitFunc,
+                    detail::splitVocabulary::GeoFilenameFunc,
                     UnderlyingVocabulary, GeoVocabulary<UnderlyingVocabulary>>;
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARY_H

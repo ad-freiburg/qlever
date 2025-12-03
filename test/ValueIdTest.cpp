@@ -1,6 +1,7 @@
 //  Copyright 2022, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <absl/hash/hash_testing.h>
 #include <gtest/gtest.h>
@@ -10,7 +11,10 @@
 #include "./ValueIdTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
+#include "backports/algorithm.h"
 #include "global/ValueId.h"
+#include "index/EncodedIriManager.h"
+#include "index/LocalVocabEntry.h"
 #include "util/HashSet.h"
 #include "util/Random.h"
 #include "util/Serializer/ByteBufferSerializer.h"
@@ -211,7 +215,7 @@ TEST_F(ValueIdTest, DoubleOrdering) {
 
   // The sorting of `double`s is broken as soon as NaNs are present. We remove
   // the NaNs from the `double`s.
-  std::erase_if(doubles, [](double d) { return std::isnan(d); });
+  ql::erase_if(doubles, [](double d) { return std::isnan(d); });
   std::sort(doubles.begin(), doubles.end());
 
   // When sorting ValueIds that hold doubles, the NaN values form a contiguous
@@ -384,4 +388,74 @@ TEST_F(ValueIdTest, InvalidDatatypeEnumValue) {
 
 TEST_F(ValueIdTest, TriviallyCopyable) {
   static_assert(std::is_trivially_copyable_v<ValueId>);
+}
+
+// _____________________________________________________________________________
+TEST_F(ValueIdTest, EncodedIriEqualityWithLocalVocabEntry) {
+  // Test that an ID storing an encoded IRI compares equal to a LocalVocabEntry
+  // with the same IRI value.
+
+  // Create an EncodedIriManager with some test prefixes
+  std::vector<std::string> prefixes = {"http://example.org/",
+                                       "http://test.com/"};
+  EncodedIriManager encodedIriManager{prefixes};
+
+  // Create a test index config with the encoded IRI manager and call getQec
+  // to set up the global index state
+  using namespace ad_utility::testing;
+  TestIndexConfig config;
+  config.encodedIriManager = encodedIriManager;
+  getQec(config);
+
+  // Test case 1: IRI that can be encoded
+  std::string encodableIri = "<http://example.org/123>";
+  auto encodedIdOpt = encodedIriManager.encode(encodableIri);
+  ASSERT_TRUE(encodedIdOpt.has_value())
+      << "Failed to encode IRI: " << encodableIri;
+
+  auto encodedId = *encodedIdOpt;
+  EXPECT_EQ(encodedId.getDatatype(), Datatype::EncodedVal);
+
+  // Create a LocalVocabEntry with the same IRI
+  auto iri = ad_utility::triple_component::Iri::fromIriref(encodableIri);
+  LocalVocabEntry localVocabEntry{iri};
+  auto localVocabId = ValueId::makeFromLocalVocabIndex(&localVocabEntry);
+
+  // The encoded ID should compare equal to the LocalVocabEntry ID
+  EXPECT_EQ(encodedId, localVocabId)
+      << "Encoded ID should equal LocalVocabEntry ID for IRI: " << encodableIri;
+
+  // Test case 2: Another encodable IRI with different prefix
+  std::string encodableIri2 = "<http://test.com/456>";
+  auto encodedIdOpt2 = encodedIriManager.encode(encodableIri2);
+  ASSERT_TRUE(encodedIdOpt2.has_value())
+      << "Failed to encode IRI: " << encodableIri2;
+
+  auto encodedId2 = *encodedIdOpt2;
+  auto iri2 = ad_utility::triple_component::Iri::fromIriref(encodableIri2);
+  LocalVocabEntry localVocabEntry2{iri2};
+  auto localVocabId2 = ValueId::makeFromLocalVocabIndex(&localVocabEntry2);
+
+  EXPECT_EQ(encodedId2, localVocabId2)
+      << "Encoded ID should equal LocalVocabEntry ID for IRI: "
+      << encodableIri2;
+
+  // Test case 3: Encoded IDs should not equal LocalVocabEntries with different
+  // IRIs
+  EXPECT_NE(encodedId, localVocabId2)
+      << "Different encoded IRIs should not be equal";
+  EXPECT_NE(encodedId2, localVocabId)
+      << "Different encoded IRIs should not be equal";
+
+  // Test case 4: Ordering should also work correctly
+
+  auto inconsistentOrderingMessage =
+      "Ordering should be consistent between encoded and local vocab IDs";
+  if (encodableIri < encodableIri2) {
+    EXPECT_LT(encodedId, localVocabId2) << inconsistentOrderingMessage;
+    EXPECT_GT(localVocabId2, encodedId) << inconsistentOrderingMessage;
+  } else {
+    EXPECT_GT(encodedId, localVocabId2) << inconsistentOrderingMessage;
+    EXPECT_LT(localVocabId2, encodedId) << inconsistentOrderingMessage;
+  }
 }

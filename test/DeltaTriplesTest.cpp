@@ -22,7 +22,14 @@
 #include "parser/RdfParser.h"
 #include "parser/Tokenizer.h"
 
+namespace {
 using namespace deltaTriplesTestHelpers;
+
+constexpr auto encodedIriManager = []() -> const EncodedIriManager* {
+  static EncodedIriManager encodedIriManager_;
+  return &encodedIriManager_;
+};
+}  // namespace
 
 // Fixture that sets up a test index.
 class DeltaTriplesTest : public ::testing::Test {
@@ -52,7 +59,7 @@ class DeltaTriplesTest : public ::testing::Test {
   // Make `TurtleTriple` from given Turtle input.
   std::vector<TurtleTriple> makeTurtleTriples(
       const std::vector<std::string>& turtles) {
-    RdfStringParser<TurtleParser<Tokenizer>> parser;
+    RdfStringParser<TurtleParser<Tokenizer>> parser{encodedIriManager()};
     ql::ranges::for_each(turtles, [&parser](const std::string& turtle) {
       parser.parseUtf8String(turtle);
     });
@@ -67,11 +74,14 @@ class DeltaTriplesTest : public ::testing::Test {
       const std::vector<std::string>& turtles) {
     auto toID = [&localVocab, &vocab](TurtleTriple triple) {
       std::array<Id, 4> ids{
-          std::move(triple.subject_).toValueId(vocab, localVocab),
+          std::move(triple.subject_)
+              .toValueId(vocab, localVocab, *encodedIriManager()),
           std::move(TripleComponent(triple.predicate_))
-              .toValueId(vocab, localVocab),
-          std::move(triple.object_).toValueId(vocab, localVocab),
-          std::move(triple.graphIri_).toValueId(vocab, localVocab)};
+              .toValueId(vocab, localVocab, *encodedIriManager()),
+          std::move(triple.object_)
+              .toValueId(vocab, localVocab, *encodedIriManager()),
+          std::move(triple.graphIri_)
+              .toValueId(vocab, localVocab, *encodedIriManager())};
       return IdTriple<0>(ids);
     };
     return ad_utility::transform(
@@ -218,7 +228,10 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
           {"<A> <B> <C>", "<B> <C> <D>", "<A> <low> <a>", "<B> <D> <C>"},
           {"<A> <B> <D>", "<A> <B> <F>", "<A> <next> <B>", "<B> <next> <C>"}));
 
-  // Unsorted triples are not allowed.
+  // Unsorted triples are not allowed, but the assertion that checks this is
+  // 1. an `AD_EXPENSIVE_CHECK`.
+  // 2. Only enabled in C++20 mode.
+#ifndef QLEVER_CPP_17
   if constexpr (ad_utility::areExpensiveChecksEnabled) {
     AD_EXPECT_THROW_WITH_MESSAGE(
         deltaTriples.deleteTriples(
@@ -227,6 +240,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
                           {"<C> <prev> <B>", "<B> <prev> <A>"})),
         testing::_);
   }
+#endif
 
   // Deleting triples.
   deltaTriples.deleteTriples(

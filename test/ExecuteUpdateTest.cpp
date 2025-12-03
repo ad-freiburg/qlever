@@ -8,17 +8,24 @@
 #include "DeltaTriplesTestHelpers.h"
 #include "QueryPlannerTestHelpers.h"
 #include "engine/ExecuteUpdate.h"
+#include "engine/NamedResultCache.h"
 #include "index/IndexImpl.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
 
+namespace {
 using namespace deltaTriplesTestHelpers;
 
 auto V = [](const uint64_t index) {
   return Id::makeFromVocabIndex(VocabIndex::make(index));
 };
+
+const EncodedIriManager* encodedIriManager() {
+  static EncodedIriManager encodedIriManager_;
+  return &encodedIriManager_;
+}
 
 // `ExecuteUpdate::IdOrVariableIndex` extended by `LiteralOrIri` which denotes
 // an entry from the local vocab.
@@ -31,6 +38,7 @@ MATCHER_P(AlwaysFalse, msg, "") {
   *result_listener << msg;
   return false;
 }
+}  // namespace
 
 // Test the `ExecuteUpdate::executeUpdate` method. These tests run on the
 // default dataset defined in `IndexTestHelpers::makeTestIndex`.
@@ -42,7 +50,7 @@ TEST(ExecuteUpdate, executeUpdate) {
             std::make_shared<ad_utility::CancellationHandle<>>();
         const std::vector<DatasetClause> datasets = {};
         ad_utility::BlankNodeManager bnm;
-        auto pqs = SparqlParser::parseUpdate(&bnm, update);
+        auto pqs = SparqlParser::parseUpdate(&bnm, encodedIriManager(), update);
         for (auto& pq : pqs) {
           QueryPlanner qp{&qec, sharedHandle};
           const auto qet = qp.createExecutionTree(pq);
@@ -60,15 +68,17 @@ TEST(ExecuteUpdate, executeUpdate) {
       [&expectExecuteUpdateHelper, &indexConfig](
           const std::string& update,
           const testing::Matcher<const DeltaTriples&>& deltaTriplesMatcher,
-          source_location sourceLocation = source_location::current()) {
+          source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
         auto l = generateLocationTrace(sourceLocation);
         Index index = ad_utility::testing::makeTestIndex(
             "ExecuteUpdate_executeUpdate", indexConfig);
         QueryResultCache cache = QueryResultCache();
+        NamedResultCache namedResultCache;
         QueryExecutionContext qec(index, &cache,
                                   ad_utility::testing::makeAllocator(
                                       ad_utility::MemorySize::megabytes(100)),
-                                  SortPerformanceEstimator{});
+                                  SortPerformanceEstimator{},
+                                  &namedResultCache);
         expectExecuteUpdateHelper(update, qec, index);
         index.deltaTriplesManager().modify<void>(
             [&deltaTriplesMatcher](DeltaTriples& deltaTriples) {
@@ -80,13 +90,15 @@ TEST(ExecuteUpdate, executeUpdate) {
       [&expectExecuteUpdateHelper](
           Index& index, const std::string& update,
           const testing::Matcher<const std::string&>& messageMatcher,
-          source_location sourceLocation = source_location::current()) {
+          source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
         auto l = generateLocationTrace(sourceLocation);
         QueryResultCache cache = QueryResultCache();
+        NamedResultCache namedResultCache;
         QueryExecutionContext qec(index, &cache,
                                   ad_utility::testing::makeAllocator(
                                       ad_utility::MemorySize::megabytes(100)),
-                                  SortPerformanceEstimator{});
+                                  SortPerformanceEstimator{},
+                                  &namedResultCache);
         AD_EXPECT_THROW_WITH_MESSAGE(
             expectExecuteUpdateHelper(update, qec, index), messageMatcher);
       };
@@ -95,7 +107,7 @@ TEST(ExecuteUpdate, executeUpdate) {
         [&expectExecuteUpdateFails_](
             const std::string& update,
             const testing::Matcher<const std::string&>& messageMatcher,
-            source_location sourceLocation = source_location::current()) {
+            source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
           Index index = ad_utility::testing::makeTestIndex(
               "ExecuteUpdate_executeUpdate",
               ad_utility::testing::TestIndexConfig());
@@ -216,7 +228,7 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
     auto& index = qec->getIndex();
     DeltaTriples deltaTriples{index};
     ad_utility::BlankNodeManager bnm;
-    auto pqs = SparqlParser::parseUpdate(&bnm, update);
+    auto pqs = SparqlParser::parseUpdate(&bnm, encodedIriManager(), update);
     std::vector<std::pair<ExecuteUpdate::IdTriplesAndLocalVocab,
                           ExecuteUpdate::IdTriplesAndLocalVocab>>
         results;
@@ -232,6 +244,7 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
     }
     return results;
   };
+
   auto expectComputeGraphUpdateQuads =
       [&executeComputeGraphUpdateQuads](
           const std::string& update,
@@ -239,7 +252,7 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
               toInsertMatchers,
           std::vector<Matcher<const std::vector<::IdTriple<>>&>>
               toDeleteMatchers,
-          source_location sourceLocation = source_location::current()) {
+          source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
         auto l = generateLocationTrace(sourceLocation);
         ASSERT_THAT(toInsertMatchers, testing::SizeIs(toDeleteMatchers.size()));
         auto graphUpdateQuads = executeComputeGraphUpdateQuads(update);
@@ -260,11 +273,12 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
         EXPECT_THAT(graphUpdateQuads,
                     testing::ElementsAreArray(transformedMatchers));
       };
+
   auto expectComputeGraphUpdateQuadsFails =
       [&executeComputeGraphUpdateQuads](
           const std::string& update,
           const Matcher<const std::string&>& messageMatcher,
-          source_location sourceLocation = source_location::current()) {
+          source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
         auto l = generateLocationTrace(sourceLocation);
         AD_EXPECT_THROW_WITH_MESSAGE(executeComputeGraphUpdateQuads(update),
                                      messageMatcher);
@@ -441,7 +455,8 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
           const std::vector<std::array<TripleComponentT, 4>>&
               expectedTransformedTriples) {
         auto [transformedTriples, localVocab] =
-            ExecuteUpdate::transformTriplesTemplate(vocab, variableColumns,
+            ExecuteUpdate::transformTriplesTemplate(*encodedIriManager(), vocab,
+                                                    variableColumns,
                                                     std::move(triples));
         const auto transformedTriplesMatchers = ad_utility::transform(
             expectedTransformedTriples,
@@ -459,10 +474,10 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
       [&vocab](const VariableToColumnMap& variableColumns,
                std::vector<SparqlTripleSimpleWithGraph>&& triples,
                const Matcher<const std::string&>& messageMatcher) {
-        AD_EXPECT_THROW_WITH_MESSAGE(
-            ExecuteUpdate::transformTriplesTemplate(vocab, variableColumns,
-                                                    std::move(triples)),
-            messageMatcher);
+        AD_EXPECT_THROW_WITH_MESSAGE(ExecuteUpdate::transformTriplesTemplate(
+                                         *encodedIriManager(), vocab,
+                                         variableColumns, std::move(triples)),
+                                     messageMatcher);
       };
   // Transforming an empty vector of template results in no `TransformedTriple`s
   // and leaves the `LocalVocab` empty.
@@ -573,7 +588,7 @@ TEST(ExecuteUpdate, computeAndAddQuadsForResultRow) {
 TEST(ExecuteUpdate, sortAndRemoveDuplicates) {
   auto expect = [](std::vector<IdTriple<>> input,
                    const std::vector<IdTriple<>>& expected,
-                   source_location l = source_location::current()) {
+                   source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
     ExecuteUpdate::sortAndRemoveDuplicates(input);
     EXPECT_THAT(input, testing::ElementsAreArray(expected));
@@ -595,7 +610,7 @@ TEST(ExecuteUpdate, sortAndRemoveDuplicates) {
 TEST(ExecuteUpdate, setMinus) {
   auto expect = [](std::vector<IdTriple<>> a, std::vector<IdTriple<>> b,
                    const std::vector<IdTriple<>>& expected,
-                   source_location l = source_location::current()) {
+                   source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
     EXPECT_THAT(ExecuteUpdate::setMinus(a, b),
                 testing::ElementsAreArray(expected));

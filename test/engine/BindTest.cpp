@@ -7,8 +7,8 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
-#include "./ValuesForTesting.h"
 #include "engine/Bind.h"
+#include "engine/ValuesForTesting.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 
 using namespace sparqlExpression;
@@ -28,7 +28,7 @@ Bind makeBindForIdTable(QueryExecutionContext* qec, IdTable idTable) {
 
 void expectBindYieldsIdTable(
     QueryExecutionContext* qec, Bind& bind, const IdTable& expected,
-    ad_utility::source_location loc = ad_utility::source_location::current()) {
+    ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(loc);
 
   {

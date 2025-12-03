@@ -11,6 +11,7 @@
 #include "engine/JoinHelpers.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
+#include "util/Algorithm.h"
 #include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 
@@ -102,7 +103,7 @@ string OptionalJoin::getDescriptor() const {
 
 // _____________________________________________________________________________
 Result OptionalJoin::computeResult(bool requestLaziness) {
-  LOG(DEBUG) << "OptionalJoin result computation..." << endl;
+  AD_LOG_DEBUG << "OptionalJoin result computation..." << endl;
 
   // If the right of the RootOperations is a Service, precompute the result of
   // its sibling.
@@ -127,7 +128,7 @@ Result OptionalJoin::computeResult(bool requestLaziness) {
 
   checkCancellation();
 
-  LOG(DEBUG) << "OptionalJoin subresult computation done." << std::endl;
+  AD_LOG_DEBUG << "OptionalJoin subresult computation done." << std::endl;
 
   if (!leftResult->isFullyMaterialized() ||
       !rightResult->isFullyMaterialized()) {
@@ -135,16 +136,16 @@ Result OptionalJoin::computeResult(bool requestLaziness) {
                             requestLaziness);
   }
 
-  LOG(DEBUG) << "Computing optional join between results of size "
-             << leftResult->idTable().size() << " and "
-             << rightResult->idTable().size() << endl;
+  AD_LOG_DEBUG << "Computing optional join between results of size "
+               << leftResult->idTable().size() << " and "
+               << rightResult->idTable().size() << endl;
 
   optionalJoin(leftResult->idTable(), rightResult->idTable(), _joinColumns,
                &idTable, implementation_);
 
   checkCancellation();
 
-  LOG(DEBUG) << "OptionalJoin result computation done." << endl;
+  AD_LOG_DEBUG << "OptionalJoin result computation done." << endl;
   // If only one of the two operands has a non-empty local vocabulary, share
   // with that one (otherwise, throws an exception).
   return {std::move(idTable), resultSortedOn(),
@@ -475,7 +476,7 @@ Result OptionalJoin::lazyOptionalJoin(std::shared_ptr<const Result> left,
         [&rowAdder](auto& leftBlocks, auto& rightBlocks) {
           ad_utility::zipperJoinForBlocksWithPotentialUndef(
               leftBlocks, rightBlocks, std::less{}, rowAdder, {}, {},
-              std::true_type{});
+              ad_utility::OptionalJoinTag{});
         },
         leftRange, rightRange);
     auto localVocab = std::move(rowAdder.localVocab());
@@ -525,7 +526,7 @@ std::optional<Result> OptionalJoin::tryIndexNestedLoopJoinIfSuitable(
   auto rightRes = computeResultSkipChild(_right->getRootOperation());
 
   LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
-  joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
+  ::joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
       _joinColumns, std::move(leftRes), std::move(rightRes)};
 
   // This algorithm doesn't produce sorted output
@@ -550,7 +551,7 @@ OptionalJoin::makeTreeWithStrippedColumns(
   const auto* vars = &variables;
   for (const auto& [jcl, _] : _joinColumns) {
     const auto& var = _left->getVariableAndInfoByColumnIndex(jcl).first;
-    if (!variables.contains(var)) {
+    if (!ad_utility::contains(variables, var)) {
       if (vars == &variables) {
         newVariables = variables;
       }
@@ -567,7 +568,7 @@ OptionalJoin::makeTreeWithStrippedColumns(
   auto jcls = QueryExecutionTree::getJoinColumns(*_left, *_right);
   bool keepJoinColumns = ql::ranges::any_of(jcls, [&](const auto& jcl) {
     const auto& var = _left->getVariableAndInfoByColumnIndex(jcl[0]).first;
-    return variables.contains(var);
+    return ad_utility::contains(variables, var);
   });
   return ad_utility::makeExecutionTree<OptionalJoin>(
       getExecutionContext(), std::move(left), std::move(right),

@@ -9,10 +9,10 @@
 #include <array>
 #include <filesystem>
 #include <fstream>
-#include <type_traits>
 
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
+#include "backports/type_traits.h"
 #include "engine/LocalVocab.h"
 #include "global/Id.h"
 #include "util/Exception.h"
@@ -53,7 +53,7 @@ CPP_template(typename Serializer)(
 CPP_template(typename Serializer)(
     requires serialization::ReadSerializer<
         Serializer>) void readHeader(Serializer& serializer) {
-  std::decay_t<typeof(magicBytes)> magicByteBuffer{};
+  std::decay_t<decltype(magicBytes)> magicByteBuffer{};
   serializer >> magicByteBuffer;
   AD_CORRECTNESS_CHECK(magicByteBuffer == magicBytes);
   uint16_t version;

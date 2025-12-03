@@ -14,11 +14,18 @@ class SparqlTriple;
 class SparqlTripleSimple;
 
 class IndexScan final : public Operation {
-  using Graphs = ScanSpecificationAsTripleComponent::Graphs;
+ public:
+  using Graphs = ScanSpecificationAsTripleComponent::GraphFilter;
+  using PermutationPtr = std::shared_ptr<const Permutation>;
+  using LocatedTriplesSnapshotPtr =
+      std::shared_ptr<const LocatedTriplesSnapshot>;
+
+ private:
   using ScanSpecAndBlocks = Permutation::ScanSpecAndBlocks;
 
  private:
-  Permutation::Enum permutation_;
+  PermutationPtr permutation_;
+  LocatedTriplesSnapshotPtr locatedTriplesSnapshot_;
   TripleComponent subject_;
   TripleComponent predicate_;
   TripleComponent object_;
@@ -43,13 +50,24 @@ class IndexScan final : public Operation {
   VarsToKeep varsToKeep_;
 
  public:
-  IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
+  IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
+            LocatedTriplesSnapshotPtr locatedTriplesSnapshot,
             const SparqlTripleSimple& triple,
-            Graphs graphsToFilter = std::nullopt,
+            Graphs graphsToFilter = Graphs::All(),
+            std::optional<ScanSpecAndBlocks> scanSpecAndBlocks = std::nullopt,
+            VarsToKeep varsToKeep = std::nullopt);
+
+  // For backward compatibility: construct an `IndexScan` from a
+  // `Permutation::Enum`. The actual `Permutation` and `LocatedTriplesSnapshot`
+  // are then retrieved from the `QueryExecutionContext` automatically.
+  IndexScan(QueryExecutionContext* qec, Permutation::Enum permutationType,
+            const SparqlTripleSimple& triple,
+            Graphs graphsToFilter = Graphs::All(),
             std::optional<ScanSpecAndBlocks> scanSpecAndBlocks = std::nullopt);
 
   // Constructor to simplify copy creation of an `IndexScan`.
-  IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
+  IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
+            LocatedTriplesSnapshotPtr locatedTriplesSnapshot,
             const TripleComponent& s, const TripleComponent& p,
             const TripleComponent& o,
             std::vector<ColumnIndex> additionalColumns,
@@ -94,15 +112,15 @@ class IndexScan final : public Operation {
   // blocks, but only the blocks that can theoretically contain matching rows
   // when performing a join on the first column of the result of `s1` with the
   // first column of the result of `s2`.
-  static std::array<Permutation::IdTableGenerator, 2> lazyScanForJoinOfTwoScans(
-      const IndexScan& s1, const IndexScan& s2);
+  static std::array<CompressedRelationReader::IdTableGeneratorInputRange, 2>
+  lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2);
 
   // Return a generator that lazily yields the result in blocks, but only
   // the blocks that can theoretically contain matching rows when performing a
   // join between the first column of the result with the `joinColumn`.
   // Requires that the `joinColumn` is sorted, else the behavior is undefined.
-  Permutation::IdTableGenerator lazyScanForJoinOfColumnWithScan(
-      ql::span<const Id> joinColumn) const;
+  CompressedRelationReader::IdTableGeneratorInputRange
+  lazyScanForJoinOfColumnWithScan(ql::span<const Id> joinColumn) const;
 
   // Return two generators, the first of which yields exactly the elements of
   // `input` and the second of which yields the matching blocks, skipping the
@@ -110,24 +128,24 @@ class IndexScan final : public Operation {
   // `input` to speed up join algorithms when no undef values are presend. When
   // there are undef values, the second generator represents the full index
   // scan.
-  std::pair<Result::Generator, Result::Generator> prefilterTables(
+  std::pair<Result::LazyResult, Result::LazyResult> prefilterTables(
       Result::LazyResult input, ColumnIndex joinColumn);
 
  private:
-  // Implementation detail that allows to consume a generator from two other
-  // cooperating generators. Needs to be forward declared as it is used by
+  // Implementation detail that allows to consume a lazy range from two other
+  // cooperating ranges. Needs to be forward declared as it is used by
   // several member functions below.
   struct SharedGeneratorState;
 
-  // Helper function that creates a generator that re-yields the generator
+  // Helper function that creates a lazy range that re-yields the input
   // wrapped by `innerState`.
-  static Result::Generator createPrefilteredJoinSide(
+  static Result::LazyResult createPrefilteredJoinSide(
       std::shared_ptr<SharedGeneratorState> innerState);
 
-  // Helper function that creates a generator yielding prefiltered rows of this
-  // index scan according to the block metadata, that match the tables yielded
-  // by the generator wrapped by `innerState`.
-  Result::Generator createPrefilteredIndexScanSide(
+  // Helper function that creates a lazy range yielding prefiltered rows of
+  // this index scan according to the block metadata, that match the tables
+  // yielded by the input wrapped by `innerState`.
+  Result::LazyResult createPrefilteredIndexScanSide(
       std::shared_ptr<SharedGeneratorState> innerState);
 
   // TODO<joka921> Make the `getSizeEstimateBeforeLimit()` function `const` for
@@ -166,7 +184,11 @@ class IndexScan final : public Operation {
   // An index scan can directly and efficiently support LIMIT and OFFSET
   [[nodiscard]] bool supportsLimitOffset() const override { return true; }
 
-  Permutation::Enum permutation() const { return permutation_; }
+  // Instead of using the `LocatedTriplesSnapshot` of the `Operation` base
+  // class, which accesses the one stored in the `QueryExecutionContext`, use
+  // the `LocatedTriplesSnapshot` held in this object. This might be a different
+  // one if a custom permutation is used.
+  const LocatedTriplesSnapshot& locatedTriplesSnapshot() const override;
 
   // Return the stored triple in the order that corresponds to the
   // `permutation_`. For example if `permutation_ == PSO` then the result is
@@ -178,10 +200,14 @@ class IndexScan final : public Operation {
   // Set the runtime info of the `scanTree` when it was lazily executed during a
   // join.
   void updateRuntimeInfoForLazyScan(
-      const CompressedRelationReader::LazyScanMetadata& metadata);
+      const CompressedRelationReader::LazyScanMetadata& metadata,
+      RuntimeInformation::SendPriority sendPriority);
 
   bool columnOriginatesFromGraphOrUndef(
       const Variable& variable) const override;
+
+  // Retrieve the `Permutation` entity for this `IndexScan`.
+  const Permutation& permutation() const;
 
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
@@ -189,10 +215,6 @@ class IndexScan final : public Operation {
   Result computeResult(bool requestLaziness) override;
 
   std::vector<QueryExecutionTree*> getChildren() override { return {}; }
-
-  // Retrieve the `Permutation` entity for the `Permutation::Enum` value of this
-  // `IndexScan`.
-  const Permutation& getScanPermutation() const;
 
   // Compute the size estimate of the index scan, taking delta triples (from
   // the `queryExecutionContext_`) into account. The `bool` is true iff the
@@ -217,7 +239,7 @@ class IndexScan final : public Operation {
       ScanSpecAndBlocks scanSpecAndBlocks) const;
 
   // Return the (lazy) `IdTable` for this `IndexScan` in chunks.
-  Result::Generator chunkedIndexScan() const;
+  Result::LazyResult chunkedIndexScan() const;
   // Get the `IdTable` for this `IndexScan` in one piece.
   IdTable materializedIndexScan() const;
 
@@ -234,7 +256,7 @@ class IndexScan final : public Operation {
 
   // Helper functions for the public `getLazyScanFor...` methods and
   // `chunkedIndexScan` (see above).
-  Permutation::IdTableGenerator getLazyScan(
+  CompressedRelationReader::IdTableGeneratorInputRange getLazyScan(
       std::optional<std::vector<CompressedBlockMetadata>> blocks =
           std::nullopt) const;
   std::optional<Permutation::MetadataAndBlocks> getMetadataForScan() const;

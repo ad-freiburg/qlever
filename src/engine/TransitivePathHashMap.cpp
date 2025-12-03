@@ -4,6 +4,8 @@
 //   2024      Johannes Herrmann <johannes.r.herrmann(at)gmail.com>
 //   2025-     Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
 #include "engine/TransitivePathHashMap.h"
 
 #include <memory>
@@ -70,7 +72,18 @@ HashMapWrapper TransitivePathHashMap::setupEdgesMap(
     const TransitivePathSide& targetSide) const {
   decltype(auto) startCol = sub.getColumn(startSide.subCol_);
   decltype(auto) targetCol = sub.getColumn(targetSide.subCol_);
-  AD_CORRECTNESS_CHECK(!graphVariable_.has_value());
+  if (graphVariable_.has_value()) {
+    decltype(auto) graphCol =
+        sub.getColumn(subtree_->getVariableColumn(graphVariable_.value()));
+    HashMapWrapper::MapOfMaps edgesWithGraph{allocator()};
+    for (size_t i = 0; i < sub.size(); i++) {
+      checkCancellation();
+      auto it1 = edgesWithGraph.try_emplace(graphCol[i], allocator()).first;
+      auto it2 = it1->second.try_emplace(startCol[i], allocator()).first;
+      it2->second.insert(targetCol[i]);
+    }
+    return HashMapWrapper{std::move(edgesWithGraph), allocator()};
+  }
   HashMapWrapper::Map edges{allocator()};
 
   for (size_t i = 0; i < sub.size(); i++) {
@@ -89,3 +102,5 @@ std::unique_ptr<Operation> TransitivePathHashMap::cloneImpl() const {
   copy->rhs_ = rhs_.clone();
   return copy;
 }
+
+#endif

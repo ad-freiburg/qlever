@@ -1,6 +1,8 @@
-//  Copyright 2023, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2023 - 2025 The QLever Authors, in particular:
+//
+// 2023 - 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -47,7 +49,7 @@ auto idTableFromBlockGenerator = [](auto& generator) -> CopyableIdTable<0> {
 // The number of static and dynamic columns has to be specified (see `IdTable.h`
 // for details).
 template <size_t NumStaticColumns>
-auto idTableFromRowGenerator = [](auto& generator, size_t numColumns) {
+auto idTableFromRowGenerator = [](auto&& generator, size_t numColumns) {
   CopyableIdTable<NumStaticColumns> result(
       numColumns, ad_utility::testing::makeAllocator());
   for (const auto& row : generator) {
@@ -62,7 +64,7 @@ TEST(CompressedExternalIdTable, compressedExternalIdTableWriter) {
 
   auto runTestForBlockSize = [](ad_utility::MemorySize memoryToUse,
                                 ad_utility::source_location l =
-                                    source_location::current()) {
+                                    AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
     std::string filename = "idTableCompressedWriter.compressedWriterTest.dat";
     ad_utility::CompressedExternalIdTableWriter writer{
@@ -97,7 +99,7 @@ template <size_t NumStaticColumns>
 void testExternalSorterImpl(size_t numDynamicColumns, size_t numRows,
                             ad_utility::MemorySize memoryToUse,
                             bool mergeMultipleTimes,
-                            source_location l = source_location::current()) {
+                            source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto tr = generateLocationTrace(l);
   std::string filename = "idTableCompressedSorter.testExternalSorter.dat";
   using namespace ad_utility::memory_literals;
@@ -141,15 +143,15 @@ void testExternalSorterImpl(size_t numDynamicColumns, size_t numRows,
         } else {
           return writer.sortedView();
         }
-      }();
+      };
       if (mergeMultipleTimes || k == 0) {
         auto result = idTableFromRowGenerator<NumStaticColumns>(
-            generator, numDynamicColumns);
+            generator(), numDynamicColumns);
         ASSERT_THAT(result, ::testing::ElementsAreArray(randomTable))
             << "k = " << k;
       } else {
         EXPECT_ANY_THROW((idTableFromRowGenerator<NumStaticColumns>(
-            generator, numDynamicColumns)));
+            generator(), numDynamicColumns)));
       }
       // We cannot access or change this value after the first merge.
       EXPECT_ANY_THROW(writer.moveResultOnMerge());
@@ -163,7 +165,7 @@ void testExternalSorterImpl(size_t numDynamicColumns, size_t numRows,
 template <size_t NumStaticColumns>
 void testExternalSorter(size_t numDynamicColumns, size_t numRows,
                         ad_utility::MemorySize memoryToUse,
-                        source_location l = source_location::current()) {
+                        source_location l = AD_CURRENT_SOURCE_LOC()) {
   testExternalSorterImpl<NumStaticColumns>(numDynamicColumns, numRows,
                                            memoryToUse, true, l);
   testExternalSorterImpl<NumStaticColumns>(numDynamicColumns, numRows,
@@ -199,10 +201,38 @@ TEST(CompressedExternalIdTable, sorterMemoryLimit) {
     writer.push(row);
   }
 
-  auto generator = writer.sortedView();
+  auto generator = [&writer]() { return writer.sortedView(); };
   AD_EXPECT_THROW_WITH_MESSAGE(
-      (idTableFromRowGenerator<0>(generator, NUM_COLS)),
+      (idTableFromRowGenerator<0>(generator(), NUM_COLS)),
       ::testing::ContainsRegex("Insufficient memory"));
+}
+
+// Test corner case: pushing exactly blockSize rows leaves currentBlock_ empty.
+TEST(CompressedExternalIdTable, cornerCasesEmptyBlocks) {
+  // Create `CompressedExternalIdTable` with a block size of exactly 10 rows.
+  size_t blockSize = 10;
+  std::string filename = "idTableCompressedSorter.cornerCases.dat";
+  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  size_t blockMemory = blockSize * NUM_COLS * sizeof(Id) * 2;
+  ad_utility::CompressedExternalIdTable<0> writer{
+      filename, NUM_COLS, ad_utility::MemorySize::bytes(blockMemory),
+      ad_utility::testing::makeAllocator()};
+
+  // Push exactly 10 rows. After the 10th row, one full block is written and
+  // `currentBlock_` becomes empty. When `getRows()` is later called, it will
+  // call `pushBlock()` with this empty block, which must be handled correctly
+  // (the empty block is detected and skipped, and a dummy future is created to
+  // maintain invariants). This corner case failed in an earlier version.
+  CopyableIdTable<0> randomTable =
+      createRandomlyFilledIdTable(blockSize, NUM_COLS);
+  for (const auto& row : randomTable) {
+    writer.push(row);
+  }
+
+  // Check that no failure occurs and the result is as expected.
+  auto generator = writer.getRows();
+  auto result = idTableFromRowGenerator<0>(generator, NUM_COLS);
+  EXPECT_EQ(result.size(), randomTable.size());
 }
 
 template <size_t NumStaticColumns>
@@ -264,11 +294,6 @@ TEST(CompressedExternalIdTable, exceptionsWhenWritingWhileIterating) {
   };
   ASSERT_NO_THROW(pushAll());
 
-  // Only creating and then destroying a generator again does not prevent
-  // pushing.
-  { [[maybe_unused]] auto generator = writer.getRows(); }
-  ASSERT_NO_THROW(pushAll());
-
   auto generator = writer.getRows();
   // We have obtained a generator, but have not yet started it, but pushing is
   // already disabled to make the two-phase interface more consistent.
@@ -297,11 +322,11 @@ TEST(CompressedExternalIdTable, WrongNumberOfColsWhenPushing) {
   using namespace ad_utility::memory_literals;
   auto alloc = ad_utility::testing::makeAllocator();
 
-  ad_utility::CompressedExternalIdTableSorter<SortByOSP, 3> writer{filename, 3,
-                                                                   10_B, alloc};
+  ad_utility::CompressedExternalIdTableSorter<SortByOSP, NUM_COLS> writer{
+      filename, NUM_COLS, 10_B, alloc};
   ad_utility::CompressedExternalIdTableSorterTypeErased& erased = writer;
-  IdTableStatic<0> t1{3, alloc};
+  IdTableStatic<0> t1{NUM_COLS, alloc};
   EXPECT_NO_THROW(erased.pushBlock(t1));
-  EXPECT_NO_THROW(t1.setNumColumns(4));
+  EXPECT_NO_THROW(t1.setNumColumns(NUM_COLS + 1));
   EXPECT_ANY_THROW(erased.pushBlock(t1));
 }

@@ -10,7 +10,6 @@
 #include <absl/strings/str_cat.h>
 
 #include <future>
-#include <ranges>
 
 #include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
@@ -39,14 +38,16 @@ using namespace ad_utility::memory_literals;
 // The default size for compressed blocks in the following classes.
 static constexpr ad_utility::MemorySize DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE =
     500_kB;
+
 // A class that stores a sequence of `IdTable`s in a file. Each `IdTable` is
 // compressed blockwise. Typically, the blocksize is much smaller than the size
-// of a single IdTable, such that there are multiple blocks per IdTable. This is
-// an important building block for an external merge sort implementation where
-// we want very large presorted `IdTables` over which we need to incrementally
-// iterate (hence the smaller blocks for compression). These tables all have the
-// same number of columns, so they can be thought of as large blocks of a very
-// large `IdTable` which is formed by the concatenation of the single tables.
+// of a single `IdTable`, such that there are multiple blocks per `IdTable`.
+// This is an important building block for an external merge sort implementation
+// where we want very large pre-sorted `IdTables` over which we need to
+// incrementally iterate (hence the smaller blocks for compression). These
+// tables all have the same number of columns, so they can be thought of as
+// large blocks of a very large `IdTable` which is formed by the concatenation
+// of the single tables.
 class CompressedExternalIdTableWriter {
  private:
   // Metadata for a compressed block of bytes. A block is a contiguous part of a
@@ -145,8 +146,8 @@ class CompressedExternalIdTableWriter {
                     offset = file.tell();
                     file.write(compressed.data(), compressed.size());
                   });
-              blockMetadata.emplace_back(compressed.size(),
-                                         thisBlockSizeUncompressed, offset);
+              blockMetadata.push_back(
+                  {compressed.size(), thisBlockSizeUncompressed, offset});
             }
           }));
     }
@@ -273,13 +274,16 @@ class CompressedExternalIdTableWriter {
 // The common base implementation of `CompressedExternalIdTable` and
 // `CompressedExternalIdTableSorter` (see below). It is implemented as a mixin
 // class.
-template <size_t NumStaticCols, std::invocable<IdTableStatic<NumStaticCols>&>
-                                    BlockTransformation = ad_utility::Noop>
-class CompressedExternalIdTableBase {
+CPP_class_template(size_t NumStaticCols,
+                   typename BlockTransformation = ad_utility::Noop)(requires(
+    ql::concepts::invocable<
+        BlockTransformation,
+        IdTableStatic<NumStaticCols>&>)) class CompressedExternalIdTableBase {
  public:
-  using value_type = IdTableStatic<NumStaticCols>::row_type;
-  using reference = IdTableStatic<NumStaticCols>::row_reference;
-  using const_reference = IdTableStatic<NumStaticCols>::const_row_reference;
+  using value_type = typename IdTableStatic<NumStaticCols>::row_type;
+  using reference = typename IdTableStatic<NumStaticCols>::row_reference;
+  using const_reference =
+      typename IdTableStatic<NumStaticCols>::const_row_reference;
   using MemorySize = ad_utility::MemorySize;
 
  protected:
@@ -303,9 +307,29 @@ class CompressedExternalIdTableBase {
   CompressedExternalIdTableWriter writer_;
   std::future<void> compressAndWriteFuture_;
 
-  // Store whether this table has previously already been iterated over (in
-  // which case this member becomes `false`).
+  // If the `compressAndWriteFuture_` is currently active, wait for its
+  // computation to be completed, else do nothing.
+  void waitForFuture() {
+    if (compressAndWriteFuture_.valid()) {
+      compressAndWriteFuture_.get();
+    }
+  }
+
+  // Store the `future` inside the `compressAndWriteFuture_`. This trivial
+  // wrapper can be used to inject more detailed logging when analyzing the
+  // control flow of this class or when fixing bugs.
+  void setFuture(std::future<void> future) {
+    AD_CORRECTNESS_CHECK(!compressAndWriteFuture_.valid());
+    compressAndWriteFuture_ = std::move(future);
+  }
+
+  // Flag that is `true` if this is the first iteration over the table, and
+  // `false` if there has already been a previous iteration.
   std::atomic<bool> isFirstIteration_ = true;
+
+  // Flag used for correctness checking that `transformAndPushLastBlock` is only
+  // called once.
+  std::atomic<bool> transformAndPushWasCalled_ = false;
 
   [[no_unique_address]] BlockTransformation blockTransformation_{};
 
@@ -351,12 +375,11 @@ class CompressedExternalIdTableBase {
   void clear() {
     resetCurrentBlock(false);
     numElementsPushed_ = 0;
-    if (compressAndWriteFuture_.valid()) {
-      compressAndWriteFuture_.get();
-    }
+    waitForFuture();
     writer_.clear();
     numBlocksPushed_ = 0;
     isFirstIteration_ = true;
+    transformAndPushWasCalled_ = false;
   }
 
  protected:
@@ -372,20 +395,25 @@ class CompressedExternalIdTableBase {
   // Asynchronously compress the `block` and write it to the underlying
   // `writer_`. Before compressing, apply the transformation that is specified
   // by the `Impl` via the `transformBlock` function.
-  template <typename Transformation = std::identity>
+  template <typename Transformation = ql::identity>
   void pushBlock(IdTableStatic<NumStaticCols> block) {
-    if (compressAndWriteFuture_.valid()) {
-      compressAndWriteFuture_.get();
-    }
+    waitForFuture();
     if (block.empty()) {
+      if (numBlocksPushed_ > 0) {
+        // NOTE: In `transformAndPushLastBlock` we assert that if at least one
+        // block has been pushed, then `compressAndWriteFuture_` is valid.
+        // Therefore, we have to set a valid future here, even if it does
+        // nothing.
+        setFuture(std::async(std::launch::deferred, []() {}));
+      }
       return;
     }
     ++numBlocksPushed_;
-    compressAndWriteFuture_ = std::async(
+    setFuture(std::async(
         std::launch::async, [block = std::move(block), this]() mutable {
           blockTransformation_(block);
           this->writer_.writeIdTable(std::move(block).toDynamic());
-        });
+        }));
   }
 
   // If there is less than one complete block (meaning that the number of calls
@@ -397,11 +425,17 @@ class CompressedExternalIdTableBase {
     if (!isFirstIteration_) {
       return numBlocksPushed_ != 0;
     }
+    AD_CORRECTNESS_CHECK(!transformAndPushWasCalled_.exchange(true));
+
     // If we have pushed at least one (complete) block, then the last future
     // from pushing a block is still in flight. If we have never pushed a block,
     // then also the future cannot be valid.
-    AD_CORRECTNESS_CHECK((numBlocksPushed_ == 0) !=
-                         compressAndWriteFuture_.valid());
+    AD_CORRECTNESS_CHECK(
+        (numBlocksPushed_ == 0) != compressAndWriteFuture_.valid(), [this]() {
+          return absl::StrCat(
+              "numBlocksPushed: ", numBlocksPushed_,
+              ", futureIsValid: ", compressAndWriteFuture_.valid());
+        });
     // Optimization for inputs that are smaller than the blocksize, do not use
     // the external file, but simply sort and return the single block.
     if (numBlocksPushed_ == 0) {
@@ -412,19 +446,17 @@ class CompressedExternalIdTableBase {
     }
     pushBlock(std::move(this->currentBlock_));
     resetCurrentBlock(false);
-    if (compressAndWriteFuture_.valid()) {
-      compressAndWriteFuture_.get();
-    }
+    waitForFuture();
     return true;
   }
 };
 
 // This class allows the external and compressed storing of an `IdTable` that is
-// too large to be stored in RAM. `NumStaticCols == 0` means that the IdTable is
-// stored dynamically (see `IdTable.h` and `CallFixedSize.h` for details). The
-// interface is as follows: First there is one call to `push` for each row of
-// the IdTable, and then there is one single call to `getRows` which yields a
-// generator that yields the rows that have previously been pushed.
+// too large to be stored in RAM. `NumStaticCols == 0` means that the `IdTable`
+// is stored dynamically (see `IdTable.h` and `CallFixedSize.h` for details).
+// The interface is as follows: First there is one call to `push` for each row
+// of the `IdTable`, and then there is one single call to `getRows` which yields
+// a generator that yields the rows that have previously been pushed.
 template <size_t NumStaticCols>
 class CompressedExternalIdTable
     : public CompressedExternalIdTableBase<NumStaticCols> {
@@ -476,9 +508,7 @@ class CompressedExternalIdTable
     }
     this->pushBlock(std::move(this->currentBlock_));
     this->resetCurrentBlock(false);
-    if (this->compressAndWriteFuture_.valid()) {
-      this->compressAndWriteFuture_.get();
-    }
+    this->waitForFuture();
     return this->writer_.template getGeneratorForAllRows<NumStaticCols>();
   }
 };
@@ -610,24 +640,27 @@ class CompressedExternalIdTableSorter
   // Similar to `sortedView` (see above), but the elements are yielded in
   // blocks. The size of the blocks is `blocksize` if specified, otherwise it
   // will be automatically determined from the given memory limit.
-  template <size_t N = NumStaticCols>
-  requires(N == NumStaticCols || N == 0)
-  cppcoro::generator<IdTableStatic<N>> getSortedBlocks(
-      std::optional<size_t> blocksize = std::nullopt) {
+  CPP_template(size_t N = NumStaticCols)(requires(N == NumStaticCols || N == 0))
+      ad_utility::InputRangeTypeErased<IdTableStatic<N>> getSortedBlocks(
+          std::optional<size_t> blocksize = std::nullopt) {
     // If we move the result out, there must only be a single merge phase.
     AD_CONTRACT_CHECK(this->isFirstIteration_ || !this->moveResultOnMerge_);
+    AD_CONTRACT_CHECK(!mergeIsActive_.load());
     mergeIsActive_.store(true);
-    // Explanation for the second argument: One block is buffered by this
-    // generator, one block is buffered inside the `sortedBlocks` generator, so
-    // `numBufferedOutputBlocks_ - 2` blocks may be buffered by the async
-    // stream.
-    for (auto& block : ad_utility::streams::runStreamAsync(
-             sortedBlocks<N>(blocksize),
-             std::max(1, numBufferedOutputBlocks_ - 2))) {
-      co_yield block;
-    }
-    this->isFirstIteration_ = false;
-    mergeIsActive_.store(false);
+
+    // Explanation for the second argument of `runStreamAsync`: One block is
+    // buffered by this generator, one block is buffered inside the
+    // `sortedBlocks` generator, so `numBufferedOutputBlocks_ - 2` blocks may be
+    // buffered by the async stream.
+    using namespace ad_utility;
+    return InputRangeTypeErased{
+        CallbackOnEndView{ad_utility::streams::runStreamAsync(
+                              sortedBlocks<N>(blocksize),
+                              std::max(1, numBufferedOutputBlocks_ - 2)),
+                          [&, this]() {
+                            this->isFirstIteration_ = false;
+                            mergeIsActive_.store(false);
+                          }}};
   }
 
   // The implementation of the type-erased interface. Push a complete block at
@@ -722,10 +755,9 @@ class CompressedExternalIdTableSorter
   // Transition from the input phase, where `push()` may be called, to the
   // output phase and return an input range that yields the sorted elements.
   // This function may be called exactly once.
-  template <size_t N = NumStaticCols>
-  requires(N == NumStaticCols || N == 0)
-  ad_utility::InputRangeTypeErased<IdTableStatic<N>> sortedBlocks(
-      std::optional<size_t> blocksize = std::nullopt) {
+  CPP_template(size_t N = NumStaticCols)(requires(N == NumStaticCols || N == 0))
+      ad_utility::InputRangeTypeErased<IdTableStatic<N>> sortedBlocks(
+          std::optional<size_t> blocksize = std::nullopt) {
     if (!this->transformAndPushLastBlock()) {
       // There was only one block, return it. If a blocksize was explicitly
       // requested for the output, and the single block is larger than this
