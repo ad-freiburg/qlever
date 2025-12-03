@@ -204,7 +204,8 @@ void Qlever::writeNamedResultCacheToDisk(const std::string& filename) const {
 
 // _____________________________________________________________________________
 void Qlever::readNamedResultCacheFromDisk(const std::string& filename) {
-  namedResultCache_.readFromDisk(filename, allocator_);
+  namedResultCache_.readFromDisk(filename, allocator_,
+                                 *index_.getBlankNodeManager());
 }
 
 }  // namespace qlever

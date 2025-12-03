@@ -62,8 +62,9 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
     }
   } else {
     // Deserialize the LocalVocab and get the ID mapping
-    auto [localVocab, mapping] =
-        ad_utility::detail::deserializeLocalVocab(serializer);
+    AD_CORRECTNESS_CHECK(arg.blankNodeManagerForSerialization_.has_value());
+    auto [localVocab, mapping] = ad_utility::detail::deserializeLocalVocab(
+        serializer, &arg.blankNodeManagerForSerialization_.value());
 
     std::optional<NamedResultCache::Value::Allocator> dummyAllocator;
     const auto& allocator = [&]() -> const auto& {
@@ -83,13 +84,7 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
     IdTable idTable{numColumns, allocator};
     idTable.resize(numRows);
     for (decltype(auto) col : idTable.getColumns()) {
-      ad_utility::detail::deserializeIds(
-          serializer, mapping,
-          []() -> BlankNodeIndex {
-            throw std::runtime_error(
-                "Unexpected blank node in NamedResultCache deserialization");
-          },
-          col);
+      ad_utility::detail::deserializeIds(serializer, mapping, col);
     }
 
     // Deserialize VariableToColumnMap manually
@@ -128,8 +123,7 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
         std::move(resultSortedOn),
         std::move(localVocab),
         std::move(cacheKey),
-        std::move(cachedGeoIndex),
-        std::nullopt};
+        std::move(cachedGeoIndex)};
   }
 }
 

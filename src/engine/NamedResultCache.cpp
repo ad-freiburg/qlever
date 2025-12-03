@@ -15,8 +15,8 @@
 std::shared_ptr<ExplicitIdTableOperation> NamedResultCache::getOperation(
     const Key& name, QueryExecutionContext* qec) {
   const auto& result = get(name);
-  const auto& [table, map, sortedOn, localVocab, cacheKey, geoIndex,
-               allocator] = *result;
+  const auto& [table, map, sortedOn, localVocab, cacheKey, geoIndex, allocator,
+               blankNodeManager] = *result;
   auto resultAsOperation = std::make_shared<ExplicitIdTableOperation>(
       qec, table, map, sortedOn, localVocab.clone(), cacheKey);
   return resultAsOperation;
@@ -77,8 +77,9 @@ void NamedResultCache::writeToDisk(const std::string& path) const {
 }
 
 // _____________________________________________________________________________
-void NamedResultCache::readFromDisk(const std::string& path,
-                                    Value::Allocator allocator) {
+void NamedResultCache::readFromDisk(
+    const std::string& path, Value::Allocator allocator,
+    ad_utility::BlankNodeManager& blankNodeManager) {
   ad_utility::serialization::FileReadSerializer serializer{path.c_str()};
 
   // Clear the cache first
@@ -97,6 +98,7 @@ void NamedResultCache::readFromDisk(const std::string& path,
     // Deserialize the value
     Value value;
     value.allocatorForSerialization_ = allocator;
+    value.blankNodeManagerForSerialization_ = blankNodeManager;
     serializer >> value;
     allocator = std::move(value.allocatorForSerialization_.value());
 

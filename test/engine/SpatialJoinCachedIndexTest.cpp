@@ -45,7 +45,8 @@ TEST(SpatialJoinCachedIndex, Basic) {
   std::string filename = "spatialJoinCachedIndexTmpFileForTesting.dat";
   cache.writeToDisk(filename);
   cache.clear();
-  cache.readFromDisk(filename, ad_utility::makeUnlimitedAllocator<Id>());
+  cache.readFromDisk(filename, ad_utility::makeUnlimitedAllocator<Id>(),
+                     *qec->getIndex().getBlankNodeManager());
   ad_utility::deleteFile(filename);
 
   // Retrieve and check the result table and geo index from the named cache
@@ -120,7 +121,8 @@ TEST(SpatialJoinCachedIndex, UseOfIndexByS2PointPolylineAlgorithm) {
   std::string filename = "spatialJoinCachedIndexTmpFileForTesting2.dat";
   cache.writeToDisk(filename);
   cache.clear();
-  cache.readFromDisk(filename, ad_utility::makeUnlimitedAllocator<Id>());
+  cache.readFromDisk(filename, ad_utility::makeUnlimitedAllocator<Id>(),
+                     *qec->getIndex().getBlankNodeManager());
   ad_utility::deleteFile(filename);
 
   // Check expected cache size

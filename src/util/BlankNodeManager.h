@@ -103,6 +103,9 @@ class BlankNodeManager {
       }
     }
 
+    std::vector<uint64_t> getReservedBlockIndices() const;
+    void reserveBlocksFromExplicitIndices(const std::vector<uint64_t>& indices);
+
     // Getter for the `blankNodeManager_` pointer required in
     // `LocalVocab::mergeWith`.
     BlankNodeManager* blankNodeManager() const { return blankNodeManager_; }
@@ -134,6 +137,13 @@ class BlankNodeManager {
 
   // Allocate and retrieve a block of new blank node indexes.
   [[nodiscard]] Block allocateBlock();
+
+  // Reserve and return the block with the given `blockIdx`. This function can
+  // only be safely called when no calls to `allocatedBlock()` have been
+  // performed. It can for example be used to restore blocks from previously
+  // serialized cache results or updates when the engine is started, but before
+  // any queries are performed.
+  [[nodiscard]] Block reserveExplicitBlock(uint64_t blockIdx);
 
   // Get the number of currently used blocks
   size_t numBlocksUsed() const { return usedBlocksSet_.rlock()->size(); }

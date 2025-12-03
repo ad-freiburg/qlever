@@ -175,7 +175,9 @@ TEST(NamedResultCacheSerializer, CacheSerialization) {
 
   // Create a new cache and deserialize
   NamedResultCache cache2;
-  cache2.readFromDisk(tempFile, ad_utility::makeUnlimitedAllocator<Id>());
+  auto qec = ad_utility::testing::getQec();
+  cache2.readFromDisk(tempFile, ad_utility::makeUnlimitedAllocator<Id>(),
+                      *qec->getIndex().getBlankNodeManager());
 
   // Check the deserialized cache
   EXPECT_EQ(cache2.numEntries(), 2);
@@ -209,7 +211,9 @@ TEST(NamedResultCacheSerializer, EmptyCacheSerialization) {
 
   // Deserialize
   NamedResultCache cache2;
-  cache2.readFromDisk(tempFile, ad_utility::makeUnlimitedAllocator<Id>());
+  auto qec = ad_utility::testing::getQec();
+  cache2.readFromDisk(tempFile, ad_utility::makeUnlimitedAllocator<Id>(),
+                      *qec->getIndex().getBlankNodeManager());
 
   // Check
   EXPECT_EQ(cache2.numEntries(), 0);
