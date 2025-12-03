@@ -56,8 +56,8 @@ const DPolygon expectedCollectionElement1{
 const DLine expectedCollectionElement2{{2, 2}, {4, 4}};
 const DPoint expectedCollectionElement3{3, 4};
 const DCollection expectedCollection{DAnyGeometry{expectedCollectionElement1},
-                                     AnyGeometry{expectedCollectionElement2},
-                                     AnyGeometry{expectedCollectionElement3}};
+                                     DAnyGeometry{expectedCollectionElement2},
+                                     DAnyGeometry{expectedCollectionElement3}};
 
 constexpr std::string_view litInvalidType =
     "\"BLABLIBLU(xyz)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
