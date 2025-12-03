@@ -3,8 +3,8 @@
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //  Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#ifndef QLEVER_TEST_ENGINE_VALUESFORTESTING_H
-#define QLEVER_TEST_ENGINE_VALUESFORTESTING_H
+#ifndef QLEVER_SRC_ENGINE_VALUESFORTESTING_H
+#define QLEVER_SRC_ENGINE_VALUESFORTESTING_H
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionContext.h"
@@ -136,7 +136,7 @@ class ValuesForTesting : public Operation {
   std::string getCacheKeyImpl() const override {
     std::stringstream str;
     auto numRowsView = tables_ | ql::views::transform(&IdTable::numRows);
-    auto totalNumRows = std::reduce(numRowsView.begin(), numRowsView.end(), 0);
+    auto totalNumRows = ::ranges::accumulate(numRowsView, 0ULL);
     auto numCols = tables_.empty() ? 0 : tables_.at(0).numColumns();
     str << "Values for testing with " << numCols << " columns and "
         << totalNumRows << " rows. ";
@@ -249,4 +249,4 @@ class ValuesForTestingNoKnownEmptyResult : public ValuesForTesting {
   uint64_t getSizeEstimateBeforeLimit() override { return 1; }
 };
 
-#endif  // QLEVER_TEST_ENGINE_VALUESFORTESTING_H
+#endif  // QLEVER_SRC_ENGINE_VALUESFORTESTING_H

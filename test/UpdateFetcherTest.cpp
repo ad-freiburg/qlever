@@ -28,8 +28,6 @@ ASYNC_TEST(UpdateFetcher, checkIndexIncrements) {
 
   auto impl = [&]() -> net::awaitable<void> {
     auto payload = co_await updateFetcher.waitForEvent();
-    EXPECT_THAT(payload, Pointee("1"s));
-    payload = co_await updateFetcher.waitForEvent();
     EXPECT_THAT(payload, Pointee("2"s));
   };
   co_await net::co_spawn(updateFetcher.strand(), impl, net::use_awaitable);

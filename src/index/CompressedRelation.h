@@ -17,7 +17,6 @@
 #include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"
 #include "util/File.h"
-#include "util/Generator.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Serializer/SerializeArrayOrTuple.h"
 #include "util/Serializer/SerializeOptional.h"
@@ -359,7 +358,7 @@ class CompressedRelationWriter {
     result.reserve(blocks.size());
     // Write the correct block indices
     for (size_t i : ad_utility::integerRange(blocks.size())) {
-      result.emplace_back(std::move(blocks.at(i)), i);
+      result.push_back({std::move(blocks.at(i)), i});
     }
 
     AD_CORRECTNESS_CHECK(
@@ -623,12 +622,6 @@ class CompressedRelationReader {
     void aggregate(const LazyScanMetadata& newValue);
   };
 
-  // TODO: other modules are using this so, it was left untouched, should be
-  // removed when they migrate to ranges
-  using IdTableGenerator = cppcoro::generator<IdTable, LazyScanMetadata>;
-
-  // TODO: rename to IdTableGenerator when other modules will migrate to non
-  // coro
   using IdTableGeneratorInputRange =
       ad_utility::InputRangeTypeErased<IdTable, LazyScanMetadata>;
 
@@ -745,14 +738,16 @@ class CompressedRelationReader {
   IdTable getDistinctCol1IdsAndCounts(
       const ScanSpecAndBlocks& scanSpecAndBlocks,
       const CancellationHandle& cancellationHandle,
-      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+      const LimitOffsetClause& limitOffset) const;
 
   // For all `col0Ids` determine their counts. This is
   // used for `computeGroupByForFullScan`.
   IdTable getDistinctCol0IdsAndCounts(
       const ScanSpecAndBlocks& scanSpecAndBlocks,
       const CancellationHandle& cancellationHandle,
-      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+      const LimitOffsetClause& limitOffset) const;
 
   std::optional<CompressedRelationMetadata> getMetadataForSmallRelation(
       const ScanSpecAndBlocks& scanSpecAndBlocks, Id col0Id,
@@ -884,7 +879,8 @@ class CompressedRelationReader {
       getDistinctColIdsAndCountsImpl(
           IdGetter idGetter, const ScanSpecAndBlocks& scanSpecAndBlocks,
           const CancellationHandle& cancellationHandle,
-          const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
+          const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+          const LimitOffsetClause& limitOffset) const;
 };
 
 // TODO<joka921>

@@ -5,6 +5,8 @@
 #ifndef QLEVER_SRC_ENGINE_PARSEDREQUESTBUILDER_H
 #define QLEVER_SRC_ENGINE_PARSEDREQUESTBUILDER_H
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
 #include "util/http/UrlParser.h"
 #include "util/http/beast.h"
 
@@ -89,4 +91,5 @@ struct ParsedRequestBuilder {
       const ad_utility::url_parser::ParamValueMap& params);
 };
 
+#endif
 #endif  // QLEVER_SRC_ENGINE_PARSEDREQUESTBUILDER_H

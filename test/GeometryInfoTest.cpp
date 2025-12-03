@@ -25,24 +25,35 @@ using namespace geoInfoTestHelpers;
 // Example WKT literals for all supported geometry types
 constexpr std::string_view litPoint =
     "\"POINT(3 4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+const DPoint expectedPoint{3, 4};
 constexpr std::string_view litLineString =
-    "\"LINESTRING(2 2, 4 4)\""
+    "\"LINESTRING(2 2,4 4)\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+const DLine expectedLine{{2, 2}, {4, 4}};
 constexpr std::string_view litPolygon =
-    "\"POLYGON((2 4, 4 4, 4 2, 2 2))\""
+    "\"POLYGON((2 2,4 2,4 4,2 4,2 2))\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+const DPolygon expectedPolygon{{{2, 2}, {4, 2}, {4, 4}, {2, 4}}};
 constexpr std::string_view litMultiPoint =
-    "\"MULTIPOINT((2 2), (4 4))\""
+    "\"MULTIPOINT(2 2,4 4)\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+const DMultiPoint expectedMultiPoint{{2, 2}, {4, 4}};
 constexpr std::string_view litMultiLineString =
-    "\"MULTILINESTRING((2 2, 4 4), (2 2, 6 8))\""
+    "\"MULTILINESTRING((2 2,4 4),(2 2,6 8))\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+const DMultiLine expectedMultiLineString{{{2, 2}, {4, 4}}, {{2, 2}, {6, 8}}};
 constexpr std::string_view litMultiPolygon =
-    "\"MULTIPOLYGON(((2 4,8 4,8 6,2 6,2 4)), ((2 4, 4 4, 4 2, 2 2)))\""
+    "\"MULTIPOLYGON(((2 4,8 4,8 6,2 6,2 4)),((2 2,4 2,4 4,2 4,2 2)))\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+const DMultiPolygon expectedMultiPolygon{
+    DPolygon{{{2, 4}, {8, 4}, {8, 6}, {2, 6}, {2, 4}}},
+    DPolygon{{{2, 2}, {4, 2}, {4, 4}, {2, 4}, {2, 2}}}};
 constexpr std::string_view litCollection =
-    "\"GEOMETRYCOLLECTION(POLYGON((2 4,8 4,8 6,2 6,2 4)), LINESTRING(2 2, 4 4),"
+    "\"GEOMETRYCOLLECTION(POLYGON((2 4,8 4,8 6,2 6,2 4)),LINESTRING(2 2,4 4),"
     "POINT(3 4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+const DCollection expectedCollection{
+    DAnyGeometry{DPolygon{{{2, 4}, {8, 4}, {8, 6}, {2, 6}, {2, 4}}}},
+    AnyGeometry{DLine{{2, 2}, {4, 4}}}, AnyGeometry{DPoint{3, 4}}};
 
 constexpr std::string_view litInvalidType =
     "\"BLABLIBLU(xyz)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
@@ -50,7 +61,7 @@ constexpr std::string_view litInvalidBrackets =
     "\"POLYGON)2 4, 4 4, 4 2, 2 2(\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 constexpr std::string_view litInvalidNumCoords =
-    "\"POINT(1)\""
+    "\"LINESTRING(1)\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 constexpr std::string_view litCoordOutOfRange =
     "\"LINESTRING(2 -500, 4 4)\""
@@ -145,6 +156,17 @@ const auto getAllTestLiterals = []() {
       litMultiLineString, litMultiPolygon, litCollection};
 };
 
+const auto getAllExpectedParseResults = []() {
+  using enum WKTType;
+  return std::vector<ParseResult>{{POINT, expectedPoint},
+                                  {LINESTRING, expectedLine},
+                                  {POLYGON, expectedPolygon},
+                                  {MULTIPOINT, expectedMultiPoint},
+                                  {MULTILINESTRING, expectedMultiLineString},
+                                  {MULTIPOLYGON, expectedMultiPolygon},
+                                  {COLLECTION, expectedCollection}};
+};
+
 constexpr std::array<uint32_t, 7> allTestLiteralNumGeometries{1, 1, 1, 2,
                                                               2, 2, 3};
 
@@ -206,40 +228,40 @@ TEST(GeometryInfoTest, FromWktLiteral) {
   auto g = GeometryInfo::fromWktLiteral(litPoint);
   GeometryInfo exp{1,   {{4, 3}, {4, 3}}, {4, 3},
                    {1}, MetricLength{0},  MetricArea{0}};
-  checkGeoInfo(g, exp);
+  EXPECT_GEOMETRYINFO(g, exp);
 
   auto g2 = GeometryInfo::fromWktLiteral(litLineString);
   GeometryInfo exp2{2,   {{2, 2}, {4, 4}},   {3, 3},
                     {1}, len(litLineString), MetricArea{0}};
-  checkGeoInfo(g2, exp2);
+  EXPECT_GEOMETRYINFO(g2, exp2);
 
   auto g3 = GeometryInfo::fromWktLiteral(litPolygon);
   GeometryInfo exp3{3,   {{2, 2}, {4, 4}}, {3, 3},
                     {1}, len(litPolygon),  area(litPolygon)};
-  checkGeoInfo(g3, exp3);
+  EXPECT_GEOMETRYINFO(g3, exp3);
 
   auto g4 = GeometryInfo::fromWktLiteral(litMultiPoint);
   GeometryInfo exp4{4,   {{2, 2}, {4, 4}}, {3, 3},
                     {2}, MetricLength{0},  MetricArea{0}};
-  checkGeoInfo(g4, exp4);
+  EXPECT_GEOMETRYINFO(g4, exp4);
 
   auto g5 = GeometryInfo::fromWktLiteral(litMultiLineString);
   GeometryInfo exp5{5,   {{2, 2}, {8, 6}},        {4.436542, 3.718271},
                     {2}, len(litMultiLineString), MetricArea{0}};
-  checkGeoInfo(g5, exp5);
+  EXPECT_GEOMETRYINFO(g5, exp5);
 
   auto g6 = GeometryInfo::fromWktLiteral(litMultiPolygon);
   GeometryInfo exp6{6,   {{2, 2}, {6, 8}},     {4.5, 4.5},
                     {2}, len(litMultiPolygon), area(litMultiPolygon)};
-  checkGeoInfo(g6, exp6);
+  EXPECT_GEOMETRYINFO(g6, exp6);
 
   auto g7 = GeometryInfo::fromWktLiteral(litCollection);
   GeometryInfo exp7{7,   {{2, 2}, {6, 8}},   {5, 5},
                     {3}, len(litCollection), area(litCollection)};
-  checkGeoInfo(g7, exp7);
+  EXPECT_GEOMETRYINFO(g7, exp7);
 
   auto g8 = GeometryInfo::fromWktLiteral(litInvalidType);
-  checkGeoInfo(g8, std::nullopt);
+  EXPECT_GEOMETRYINFO(g8, std::nullopt);
 }
 
 // ____________________________________________________________________________
@@ -247,13 +269,13 @@ TEST(GeometryInfoTest, FromGeoPoint) {
   GeoPoint p{1.234, 5.678};
   auto g = GeometryInfo::fromGeoPoint(p);
   GeometryInfo exp{1, {p, p}, Centroid{p}, {1}, MetricLength{0}, MetricArea{0}};
-  checkGeoInfo(g, exp);
+  EXPECT_GEOMETRYINFO(g, exp);
 
   GeoPoint p2{0, 0};
   auto g2 = GeometryInfo::fromGeoPoint(p2);
   GeometryInfo exp2{1,   {p2, p2},        Centroid{p2},
                     {1}, MetricLength{0}, MetricArea{0}};
-  checkGeoInfo(g2, exp2);
+  EXPECT_GEOMETRYINFO(g2, exp2);
 }
 
 // ____________________________________________________________________________
@@ -344,11 +366,11 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
 
   auto centroid1 = centroidAsGeoPoint(parsed1);
   Centroid centroidExp1{{4, 3}};
-  checkCentroid(centroid1, centroidExp1);
+  EXPECT_CENTROID_NEAR(centroid1, centroidExp1);
 
   auto bb1 = boundingBoxAsGeoPoints(parsed1);
   BoundingBox bbExp1{{4, 3}, {4, 3}};
-  checkBoundingBox(bb1, bbExp1);
+  EXPECT_BOUNDINGBOX_NEAR(bb1, bbExp1);
 
   auto bb1Wkt =
       boundingBoxAsWkt(bb1.value().lowerLeft(), bb1.value().upperRight());
@@ -558,7 +580,7 @@ TEST(GeometryInfoTest, ComputeMetricLengthCollectionAnyGeom) {
   }
 
   MetricLength result{computeMetricLength(collection)};
-  checkMetricLength(MetricLength{expected}, result);
+  EXPECT_METRICLENGTH_NEAR(MetricLength{expected}, result);
 }
 
 // _____________________________________________________________________________
@@ -577,6 +599,57 @@ TEST(GeometryInfoTest, SizeOfAndAlignmentBytes) {
                     sizeof(EncodedGeometryTypeAndCentroid) +
                     sizeof(EncodedBoundingBox) + sizeof(NumGeometries) +
                     sizeof(MetricLength) + sizeof(MetricArea));
+}
+
+// _____________________________________________________________________________
+TEST(GeometryInfoTest, ParseGeoPointOrWktVisitor) {
+  using namespace ad_utility::detail;
+  auto fromSV = [](std::string_view lit) {
+    return GeoPointOrWkt{std::string{lit}};
+  };
+
+  // Test for `GeoPoint`.
+  EXPECT_THAT(parseGeoPointOrWkt(GeoPoint{1, 2}),
+              parseResultNear(ParseResult{POINT, DPoint(2, 1)}));
+
+  // Tests for other geometry types (WKT strings).
+  auto literals = getAllTestLiterals();
+  auto geometries = getAllExpectedParseResults();
+  ASSERT_EQ(literals.size(), geometries.size());
+
+  for (size_t i = 0; i < literals.size(); ++i) {
+    EXPECT_THAT(parseGeoPointOrWkt(fromSV(literals[i])),
+                parseResultNear(geometries[i]));
+  }
+}
+
+// _____________________________________________________________________________
+TEST(GeometryInfoTest, UtilGeomToWktVisitor) {
+  using namespace ad_utility::detail;
+
+  auto literals = getAllTestLiterals();
+  auto geometries = getAllExpectedParseResults();
+  ASSERT_EQ(literals.size(), geometries.size());
+
+  for (size_t i = 0; i < literals.size(); ++i) {
+    auto parsedWkt = geometries[i].second;
+    auto expected = removeDatatype(literals[i]);
+    ASSERT_TRUE(parsedWkt.has_value());
+
+    // Test with `ParsedWKT` input.
+    EXPECT_EQ(utilGeomToWkt(parsedWkt.value()), expected);
+
+    // Test with optional input.
+    EXPECT_EQ(utilGeomToWkt(parsedWkt), expected);
+
+    // Test with individual geometry type as input.
+    std::visit(
+        [&](const auto& geom) -> void {
+          EXPECT_EQ(utilGeomToWkt(geom), expected);
+          EXPECT_EQ(utilGeomToWkt(DAnyGeometry{geom}), expected);
+        },
+        parsedWkt.value());
+  }
 }
 
 }  // namespace

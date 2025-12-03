@@ -10,10 +10,10 @@
 #include <utility>
 #include <vector>
 
-#include "../global/Pattern.h"
-#include "../parser/ParsedQuery.h"
-#include "./Operation.h"
-#include "./QueryExecutionTree.h"
+#include "engine/Operation.h"
+#include "engine/QueryExecutionTree.h"
+#include "global/Pattern.h"
+#include "parser/ParsedQuery.h"
 
 class HasPredicateScan : public Operation {
  public:

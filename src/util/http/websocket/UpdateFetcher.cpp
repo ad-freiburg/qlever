@@ -12,10 +12,9 @@ net::awaitable<UpdateFetcher::PayloadType> UpdateFetcher::waitForEvent() {
   AD_CORRECTNESS_CHECK(distributor_);
   AD_EXPENSIVE_CHECK(strand().running_in_this_thread());
 
-  auto data = co_await distributor_->waitForNextDataPiece(nextIndex_);
-  if (data) {
-    nextIndex_++;
-  }
+  auto [data, latest] =
+      co_await distributor_->waitForNextDataPiece(currentIndex_);
+  currentIndex_ = latest;
   co_return data;
 }
 }  // namespace ad_utility::websocket

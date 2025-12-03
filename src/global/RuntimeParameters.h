@@ -61,7 +61,12 @@ struct RuntimeParameters {
   // does cause significant overhead for this case.
   MemorySizeParameter cacheMaxSizeLazyResult_{
       ad_utility::MemorySize::megabytes(5), "cache-max-size-lazy-result"};
+
+  // Control if websockets are enable to post live query updates, and if they
+  // are control the throttle of how many request can be sent at once.
   Bool websocketUpdatesEnabled_{true, "websocket-updates-enabled"};
+  Duration<std::chrono::milliseconds> websocketUpdateInterval_{
+      std::chrono::milliseconds(50), "websocket-update-interval"};
   // When the result of an index scan is smaller than a single block, then
   // its size estimate will be the size of the block divided by this
   // value.
