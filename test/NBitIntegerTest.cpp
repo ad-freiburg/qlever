@@ -6,9 +6,9 @@
 
 #include <iostream>
 
-#include "../src/util/Generator.h"
-#include "../src/util/NBitInteger.h"
-#include "../src/util/ValueIdentity.h"
+#include "util/Generator.h"
+#include "util/NBitInteger.h"
+#include "util/ValueIdentity.h"
 
 // Enabling cheaper unit tests when building in Debug mode
 #ifdef QLEVER_RUN_EXPENSIVE_TESTS

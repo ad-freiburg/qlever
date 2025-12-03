@@ -32,6 +32,14 @@ class ConstexprMap {
   using Pair = ConstexprMapPair<Key, Value>;
   using Arr = std::array<Pair, numEntries>;
 
+  // A lambda to obtain the `key_` from a `pair`.
+  // Note: We cannot simply use the pointer-to-member `&Pair::key_`, because
+  // then the `ConstexprMap` for some reason is not `constexpr` anymore on
+  // `GCC 8.3`.
+  static constexpr auto getKey = [](const auto& pair) -> const auto& {
+    return pair.key_;
+  };
+
  private:
   // TODO make const
   Arr _values;
