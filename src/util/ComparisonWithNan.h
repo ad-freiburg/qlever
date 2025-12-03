@@ -28,11 +28,11 @@ namespace ad_utility {
 // see the corresponding tests which contain all relevant corner cases.
 template <typename Comparator>
 inline auto makeComparatorForNans(Comparator comparator) {
-  return [comparator](const auto& a, const auto& b)
-             -> CPP_ret(bool)(
-                 requires std::is_invocable_r_v<bool, Comparator,
-                                                std::decay_t<decltype(a)>,
-                                                std::decay_t<decltype(b)>>) {
+  return [comparator](const auto& a, const auto& b) -> CPP_ret(
+                                                        bool)(requires std::is_invocable_r_v<bool, Comparator,
+                                                   std::decay_t<decltype(a)>,
+                                                   std::decay_t<decltype(b)>>)
+  {
     auto isNan = [](const auto& t) {
       using T = std::decay_t<decltype(t)>;
       if constexpr (std::is_floating_point_v<T>) {

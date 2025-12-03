@@ -387,13 +387,13 @@ void Join::join(const IdTable& a, const IdTable& b, IdTable* result) const {
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename ActionT)(
-    requires ad_utility::InvocableWithExactReturnType<
-        ActionT, Result::IdTableVocabPair,
-        std::function<void(IdTable&, LocalVocab&)>>)
-    Result Join::createResult(
-        bool requestedLaziness, ActionT action,
-        std::optional<std::vector<ColumnIndex>> permutation) const {
+CPP_template_def(
+    typename ActionT)(requires ad_utility::InvocableWithExactReturnType<
+           ActionT, Result::IdTableVocabPair,
+           std::function<void(IdTable&, LocalVocab&)>>)
+Result Join::createResult(
+    bool requestedLaziness, ActionT action,
+    std::optional<std::vector<ColumnIndex>> permutation) const {
   if (requestedLaziness) {
     return {runLazyJoinAndConvertToGenerator(std::move(action),
                                              std::move(permutation)),

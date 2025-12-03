@@ -237,10 +237,10 @@ std::unique_ptr<SparqlExpression> makeIsDatatypeStartsWithExpression(
 }  // namespace
 
 //______________________________________________________________________________
-CPP_template(typename... Args)(
-    requires(ql::concepts::convertible_to<Args, VariantArgs>&&...))
-    std::unique_ptr<SparqlExpression> inSprqlExpr(VariantArgs first,
-                                                  Args&&... argList) {
+CPP_template(
+    typename... Args) (requires(ql::concepts::convertible_to<Args, VariantArgs>&&...))
+std::unique_ptr<SparqlExpression> inSprqlExpr(VariantArgs first,
+                                              Args&&... argList) {
   std::vector<std::unique_ptr<SparqlExpression>> childrenSparql;
   childrenSparql.reserve(sizeof...(argList));
   (childrenSparql.push_back(

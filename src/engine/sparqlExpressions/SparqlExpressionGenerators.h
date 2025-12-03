@@ -63,24 +63,23 @@ inline ql::span<const ValueId> getIdsFromVariable(
 /// `SparqlExpressionValueGetters` with an already bound `EvaluationContext`.
 #ifdef QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17
 // Use range-based implementation for C++17 compatibility.
-CPP_template(typename T, typename Transformation = ql::identity)(
-    requires SingleExpressionResult<T> CPP_and isConstantResult<T> CPP_and
-        ranges::invocable<
-            Transformation,
-            T>) auto resultGeneratorImpl(T constant, size_t numItems,
-                                         Transformation transformation = {}) {
+CPP_template(typename T, typename Transformation = ql::identity) (requires SingleExpressionResult<T> CPP_and isConstantResult<T>
+                CPP_and ranges::invocable<Transformation, T>)
+auto resultGeneratorImpl(T constant, size_t numItems,
+                         Transformation transformation = {}) {
   // We have to use `range-v3` as `views::repeat` is a C++23 feature.
   return ::ranges::repeat_n_view(transformation(constant), numItems);
 }
 #else
 // Use faster coroutine-based implementation.
-CPP_template(typename T, typename Transformation = ql::identity)(
-    requires SingleExpressionResult<T> CPP_and isConstantResult<T> CPP_and
-        ranges::invocable<Transformation, T>)
-    cppcoro::generator<const std::decay_t<std::invoke_result_t<
-        Transformation, T>>> resultGeneratorImpl(T constant, size_t numItems,
-                                                 Transformation transformation =
-                                                     {}) {
+CPP_template(
+    typename T,
+    typename Transformation = ql::
+        identity) (requires SingleExpressionResult<T> CPP_and isConstantResult<T>
+                CPP_and ranges::invocable<Transformation, T>)
+cppcoro::generator<const std::decay_t<std::invoke_result_t<Transformation, T>>>
+resultGeneratorImpl(T constant, size_t numItems,
+                    Transformation transformation = {}) {
   auto transformed = transformation(constant);
   for (size_t i = 0; i < numItems; ++i) {
     co_yield transformed;
@@ -88,10 +87,10 @@ CPP_template(typename T, typename Transformation = ql::identity)(
 }
 #endif
 
-CPP_template(typename T, typename Transformation = ql::identity)(
-    requires ql::ranges::input_range<
-        T>) auto resultGeneratorImpl(T&& vector, size_t numItems,
-                                     Transformation transformation = {}) {
+CPP_template(typename T, typename Transformation =
+                             ql::identity) (requires ql::ranges::input_range<T>)
+auto resultGeneratorImpl(T&& vector, size_t numItems,
+                         Transformation transformation = {}) {
   AD_CONTRACT_CHECK(numItems == vector.size());
   return ad_utility::allView(AD_FWD(vector)) |
          ql::views::transform(std::move(transformation));
@@ -187,11 +186,12 @@ inline auto resultGenerator(S&& input, size_t targetSize,
 }
 /// Return a generator that yields `numItems` many items for the various
 /// `SingleExpressionResult`
-CPP_template(typename Input, typename Transformation = ql::identity)(
-    requires SingleExpressionResult<
-        Input>) auto makeGenerator(Input&& input, size_t numItems,
-                                   const EvaluationContext* context,
-                                   Transformation transformation = {}) {
+CPP_template(typename Input,
+             typename Transformation =
+                 ql::identity) (requires SingleExpressionResult<Input>)
+auto makeGenerator(Input&& input, size_t numItems,
+                   const EvaluationContext* context,
+                   Transformation transformation = {}) {
   if constexpr (ad_utility::isSimilar<::Variable, Input>) {
     return resultGenerator(getIdsFromVariable(AD_FWD(input), context), numItems,
                            transformation);
@@ -266,11 +266,11 @@ inline auto applyFunction = [](auto function, size_t numItems,
 
 /// Return a generator that returns the `numElements` many results of the
 /// `Operation` applied to the `operands`
-CPP_template(typename Operation, typename... Operands)(requires(
-    SingleExpressionResult<
-        Operands>&&...)) auto applyOperation(size_t numElements, Operation&&,
-                                             EvaluationContext* context,
-                                             Operands&&... operands) {
+CPP_template(
+    typename Operation,
+    typename... Operands) (requires(SingleExpressionResult<Operands>&&...))
+auto applyOperation(size_t numElements, Operation&&, EvaluationContext* context,
+                    Operands&&... operands) {
   using ValueGetters = typename std::decay_t<Operation>::ValueGetters;
   using Function = typename std::decay_t<Operation>::Function;
   static_assert(std::tuple_size_v<ValueGetters> == sizeof...(Operands));

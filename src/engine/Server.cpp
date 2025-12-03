@@ -197,12 +197,13 @@ void Server::run(const std::string& indexBaseName, bool useText,
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename RequestT, typename ResponseT)(
-    requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    net::awaitable<std::optional<Server::TimeLimit>> Server::
-        verifyUserSubmittedQueryTimeout(
-            std::optional<std::string_view> userTimeout, bool accessTokenOk,
-            const RequestT& request, ResponseT& send) const {
+CPP_template_def(
+    typename RequestT,
+    typename ResponseT)(requires ad_utility::httpUtils::HttpRequest<RequestT>)
+net::awaitable<std::optional<Server::TimeLimit>>
+Server::verifyUserSubmittedQueryTimeout(
+    std::optional<std::string_view> userTimeout, bool accessTokenOk,
+    const RequestT& request, ResponseT& send) const {
   auto defaultTimeout =
       getRuntimeParameter<&RuntimeParameters::defaultQueryTimeout_>();
   // TODO<GCC12> Use the monadic operations for std::optional
@@ -336,9 +337,10 @@ void Server::configurePinnedResultWithName(
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename RequestT, typename ResponseT)(
-    requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    Awaitable<void> Server::process(RequestT& request, ResponseT&& send) {
+CPP_template_def(
+    typename RequestT,
+    typename ResponseT)(requires ad_utility::httpUtils::HttpRequest<RequestT>)
+Awaitable<void> Server::process(RequestT& request, ResponseT&& send) {
   using namespace ad_utility::httpUtils;
 
   // Log some basic information about the request. Start with an empty line so
@@ -391,8 +393,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   // Execute commands (URL parameter with key "cmd").
   auto logCommand = [](const std::optional<std::string_view>& cmd,
                        std::string_view actionMsg) {
-    AD_LOG_INFO << "Processing command \"" << cmd.value() << "\""
-                << ": " << actionMsg << std::endl;
+    AD_LOG_INFO << "Processing command \"" << cmd.value() << "\"" << ": "
+                << actionMsg << std::endl;
   };
   if (auto cmd = checkParameter("cmd", "stats")) {
     logCommand(cmd, "get index statistics");
@@ -731,10 +733,10 @@ nlohmann::json Server::composeCacheStatsJson() const {
 }
 
 // _____________________________________________
-CPP_template_def(typename RequestT)(
-    requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    ad_utility::websocket::OwningQueryId Server::getQueryId(
-        const RequestT& request, std::string_view query) {
+CPP_template_def(
+    typename RequestT)(requires ad_utility::httpUtils::HttpRequest<RequestT>)
+ad_utility::websocket::OwningQueryId Server::getQueryId(
+    const RequestT& request, std::string_view query) {
   using ad_utility::websocket::OwningQueryId;
   std::string_view queryIdHeader = request.base()["Query-Id"];
   if (queryIdHeader.empty()) {
@@ -749,13 +751,14 @@ CPP_template_def(typename RequestT)(
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename RequestT, typename ResponseT)(
-    requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    Awaitable<void> Server::sendStreamableResponse(
-        const RequestT& request, ResponseT& send, MediaType mediaType,
-        const PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
-        const ad_utility::Timer& requestTimer,
-        SharedCancellationHandle cancellationHandle) const {
+CPP_template_def(
+    typename RequestT,
+    typename ResponseT)(requires ad_utility::httpUtils::HttpRequest<RequestT>)
+Awaitable<void> Server::sendStreamableResponse(
+    const RequestT& request, ResponseT& send, MediaType mediaType,
+    const PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
+    const ad_utility::Timer& requestTimer,
+    SharedCancellationHandle cancellationHandle) const {
   auto responseGenerator = ExportQueryExecutionTrees::computeResult(
       plannedQuery.parsedQuery_, qet, mediaType, requestTimer,
       std::move(cancellationHandle));
@@ -793,11 +796,11 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 }
 
 // ____________________________________________________________________________
-CPP_template_def(typename RequestT)(
-    requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    std::vector<ad_utility::MediaType> Server::determineMediaTypes(
-        const ad_utility::url_parser::ParamValueMap& params,
-        const RequestT& request) {
+CPP_template_def(
+    typename RequestT)(requires ad_utility::httpUtils::HttpRequest<RequestT>)
+std::vector<ad_utility::MediaType> Server::determineMediaTypes(
+    const ad_utility::url_parser::ParamValueMap& params,
+    const RequestT& request) {
   using namespace ad_utility::url_parser;
   // The following code block determines the media type to be used for the
   // result. The media type is either determined by the "Accept:" header of
@@ -835,11 +838,11 @@ CPP_template_def(typename RequestT)(
 }
 
 // ____________________________________________________________________________
-CPP_template_def(typename RequestT)(
-    requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    ad_utility::websocket::MessageSender Server::createMessageSender(
-        const std::weak_ptr<ad_utility::websocket::QueryHub>& queryHub,
-        const RequestT& request, std::string_view operation) {
+CPP_template_def(
+    typename RequestT)(requires ad_utility::httpUtils::HttpRequest<RequestT>)
+ad_utility::websocket::MessageSender Server::createMessageSender(
+    const std::weak_ptr<ad_utility::websocket::QueryHub>& queryHub,
+    const RequestT& request, std::string_view operation) {
   auto queryHubLock = queryHub.lock();
   AD_CORRECTNESS_CHECK(queryHubLock);
   ad_utility::websocket::MessageSender messageSender{
@@ -880,14 +883,15 @@ ad_utility::MediaType Server::chooseBestFittingMediaType(
 }
 
 // ____________________________________________________________________________
-CPP_template_def(typename RequestT, typename ResponseT)(
-    requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    Awaitable<void> Server::processQuery(
-        const ad_utility::url_parser::ParamValueMap& params,
-        ParsedQuery&& query, const ad_utility::Timer& requestTimer,
-        ad_utility::SharedCancellationHandle cancellationHandle,
-        QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
-        TimeLimit timeLimit, std::optional<PlannedQuery>& plannedQuery) {
+CPP_template_def(
+    typename RequestT,
+    typename ResponseT)(requires ad_utility::httpUtils::HttpRequest<RequestT>)
+Awaitable<void> Server::processQuery(
+    const ad_utility::url_parser::ParamValueMap& params, ParsedQuery&& query,
+    const ad_utility::Timer& requestTimer,
+    ad_utility::SharedCancellationHandle cancellationHandle,
+    QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
+    TimeLimit timeLimit, std::optional<PlannedQuery>& plannedQuery) {
   AD_CORRECTNESS_CHECK(!query.hasUpdateClause());
 
   auto mediaTypes = determineMediaTypes(params, request);
@@ -1029,14 +1033,15 @@ UpdateMetadata Server::processUpdateImpl(
 }
 
 // ____________________________________________________________________________
-CPP_template_def(typename RequestT, typename ResponseT)(
-    requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    Awaitable<void> Server::processUpdate(
-        std::vector<ParsedQuery>&& updates,
-        const ad_utility::Timer& requestTimer, SharedTimeTracer tracer,
-        ad_utility::SharedCancellationHandle cancellationHandle,
-        QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
-        TimeLimit timeLimit, std::optional<PlannedQuery>& plannedUpdate) {
+CPP_template_def(
+    typename RequestT,
+    typename ResponseT)(requires ad_utility::httpUtils::HttpRequest<RequestT>)
+Awaitable<void> Server::processUpdate(
+    std::vector<ParsedQuery>&& updates, const ad_utility::Timer& requestTimer,
+    SharedTimeTracer tracer,
+    ad_utility::SharedCancellationHandle cancellationHandle,
+    QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
+    TimeLimit timeLimit, std::optional<PlannedQuery>& plannedUpdate) {
   tracer->beginTrace("waitingForUpdateThread");
   AD_CORRECTNESS_CHECK(ql::ranges::all_of(
       updates, [](const ParsedQuery& p) { return p.hasUpdateClause(); }));
@@ -1093,9 +1098,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
               updateMetadata, *tracer));
           tracer->reset();
 
-          AD_LOG_INFO << "Done processing update"
-                      << ", total time was " << requestTimer.msecs().count()
-                      << " ms" << std::endl;
+          AD_LOG_INFO << "Done processing update" << ", total time was "
+                      << requestTimer.msecs().count() << " ms" << std::endl;
           AD_LOG_DEBUG << "Runtime Info:\n"
                        << plannedUpdate->queryExecutionTree_.getRootOperation()
                               ->runtimeInfo()
@@ -1116,13 +1120,14 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 }
 
 // ____________________________________________________________________________
-CPP_template_def(typename VisitorT, typename RequestT, typename ResponseT)(
-    requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    Awaitable<void> Server::processOperation(
-        ad_utility::url_parser::sparqlOperation::Operation operation,
-        VisitorT visitor, const ad_utility::Timer& requestTimer,
-        const RequestT& request, ResponseT& send,
-        const std::optional<PlannedQuery>& plannedQuery) {
+CPP_template_def(
+    typename VisitorT, typename RequestT,
+    typename ResponseT)(requires ad_utility::httpUtils::HttpRequest<RequestT>)
+Awaitable<void> Server::processOperation(
+    ad_utility::url_parser::sparqlOperation::Operation operation,
+    VisitorT visitor, const ad_utility::Timer& requestTimer,
+    const RequestT& request, ResponseT& send,
+    const std::optional<PlannedQuery>& plannedQuery) {
   // Copy the operation string for the error case before processing the
   // operation, because processing moves it.
   const std::string operationString = [&operation] {
@@ -1217,9 +1222,9 @@ CPP_template_def(typename VisitorT, typename RequestT, typename ResponseT)(
 // _____________________________________________________________________________
 CPP_template_def(typename Function,
                  typename T)(requires ql::concepts::invocable<Function>)
-    Awaitable<T> Server::computeInNewThread(net::static_thread_pool& threadPool,
-                                            Function function,
-                                            SharedCancellationHandle handle) {
+Awaitable<T> Server::computeInNewThread(net::static_thread_pool& threadPool,
+                                        Function function,
+                                        SharedCancellationHandle handle) {
   // `interruptible` will set the shared state of this promise
   // with a function that can be used to cancel the timer.
   std::promise<std::function<void()>> cancelTimerPromise{};

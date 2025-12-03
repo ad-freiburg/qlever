@@ -156,15 +156,13 @@ class CancellationHandle {
   /// in the console that would otherwise be triggered by the watchdog.
   /// NOTE: The parameter state is expected to be one of `CHECK_WINDOW_MISSED`
   /// or `WAITING_FOR_CHECK`, otherwise it will violate the correctness check.
-  CPP_template(typename StateFunc)(
-      requires WatchDogEnabled CPP_and
-          ad_utility::InvocableWithConvertibleReturnType<
-              StateFunc,
-              std::string_view>) void pleaseWatchDog(CancellationState state,
-                                                     ad_utility::source_location
-                                                         location,
-                                                     const StateFunc&
-                                                         stageInvocable) {
+  CPP_template(
+      typename StateFunc) (requires WatchDogEnabled CPP_and
+                  ad_utility::InvocableWithConvertibleReturnType<
+                      StateFunc, std::string_view>)
+  void pleaseWatchDog(CancellationState state,
+                      ad_utility::source_location location,
+                      const StateFunc& stageInvocable) {
     using DurationType =
         std::remove_const_t<decltype(DESIRED_CANCELLATION_CHECK_INTERVAL)>;
     AD_CORRECTNESS_CHECK(!detail::isCancelled(state) &&
@@ -203,14 +201,13 @@ class CancellationHandle {
   /// Internal function that starts the watch dog. It will set this
   /// `CancellationHandle` instance into a state that will log a warning in the
   /// console if `throwIfCancelled` is not called frequently enough.
-  CPP_member auto startWatchDogInternal()
-      -> CPP_ret(void)(requires WatchDogEnabled);
+  CPP_member auto startWatchDogInternal() -> CPP_ret(
+      void)(requires WatchDogEnabled);
 
   /// Helper function that sets the internal state atomically given that it has
   /// not been cancelled yet. Otherwise no-op.
   /// CPP_member auto
-  CPP_member auto setStatePreservingCancel(CancellationState newState)
-      -> CPP_ret(void)(requires CancellationEnabled);
+  CPP_member auto setStatePreservingCancel(CancellationState newState) -> CPP_ret(void)(requires CancellationEnabled);
 
  public:
   /// Sets the cancellation flag so the next call to throwIfCancelled will
@@ -221,12 +218,14 @@ class CancellationHandle {
   /// nothing otherwise. If `WatchDogEnabled` is true, this will log a warning
   /// if this check is not called frequently enough. It will contain the
   /// filename and line of the caller of this method.
-  CPP_template(typename Func = decltype(detail::printNothing))(
-      requires ad_utility::InvocableWithConvertibleReturnType<
-          Func, std::string_view>) AD_ALWAYS_INLINE
-      void throwIfCancelled([[maybe_unused]] ad_utility::source_location
-                                location = AD_CURRENT_SOURCE_LOC(),
-                            const Func& stageInvocable = detail::printNothing) {
+  CPP_template(
+      typename Func =
+          decltype(detail::printNothing)) (requires ad_utility::InvocableWithConvertibleReturnType<
+              Func, std::string_view>)
+  AD_ALWAYS_INLINE void throwIfCancelled(
+      [[maybe_unused]] ad_utility::source_location location =
+          AD_CURRENT_SOURCE_LOC(),
+      const Func& stageInvocable = detail::printNothing) {
     if constexpr (CancellationEnabled) {
       auto state = cancellationState_.load(std::memory_order_relaxed);
       if (state == CancellationState::NOT_CANCELLED) [[likely]] {

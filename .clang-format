@@ -4,10 +4,40 @@ DerivePointerAlignment: false
 PointerAlignment: Left
 LineEnding: LF
 InsertNewlineAtEOF: true
-RequiresClausePosition: SingleLine
-IndentRequiresClause: false
+RequiresClausePosition: OwnLine
+IndentRequiresClause: true
 AttributeMacros: [CPP_member, CPP_auto_member, CPP_fun, CPP_auto_fun]
 # TODO<joka921> Update to Clang-format-17 and then we can have much nicer CPP_... macros.
-#Macros:
-#  - CPP_template_2(x)=template<x> requires
+Macros:
+  - CPP_template(x)=template<x> requires
+  - CPP_template(x, y)=template<x, y> requires
+  - CPP_template(x, y, z)=template<x, y, z> requires
+  - CPP_template(x, y, z, a)=template<x, y, z, a> requires
+  - CPP_template(a, b, c, d, e)=template<a> requires
+  - CPP_template(a, b, c, d, e, f)=template<a> requires
+  #
+  - CPP_template_def(x)=template<x> requires
+  - CPP_template_def(x, y)=template<x, y> requires
+  - CPP_template_def(x, y, z)=template<x, y, z> requires
+  - CPP_template_def(x, y, z, a)=template<x, y, z, a> requires
+  - CPP_template_def(a, b, c, d, e)=template<a> requires
+  - CPP_template_def(a, b, c, d, e, f)=template<a> requires
+  #
+  - CPP_variadic_template(x)=template<x> requires
+  - CPP_variadic_template(x, y)=template<x, y> requires
+  - CPP_variadic_template(x, y, z)=template<x, y, z> requires
+  - CPP_variadic_template(x, y, z, a)=template<x, y, z, a> requires
+  - CPP_variadic_template(a, b, c, d, e)=template<a> requires
+  - CPP_variadic_template(a, b, c, d, e, f)=template<a> requires
+  #- requires=
+  #- CPP_and=and
+  - CPP_template_2(a)=template<a> requires
+  - CPP_template_2(a, b)=template<x> requires
+  - CPP_template_2(a, b, c)=template<x> requires
+  - CPP_template_2(a, b, c)=template<x> requires
+  - CPP_template_2(a, b, c, d)=template<x> requires
+  - CPP_template_2(a, b, c, d, e)=template<x> requires
+  - CPP_template_2(a, b, c, d, e, f)=template<x> requires
+  #
+  - CPP_ret(T)=T requires
 ...

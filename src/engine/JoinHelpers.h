@@ -44,10 +44,10 @@ using LazyInputView = InputRangeTypeErased<IdTableAndFirstCol<IdTable>>;
 // Convert a `generator<IdTableVocab>` to a `generator<IdTableAndFirstCol>` for
 // more efficient access in the join columns below and apply the given
 // permutation to each table.
-CPP_template(typename Input)(
-    requires SameAsAny<Input, Result::Generator, Result::LazyResult>)
-    LazyInputView
-    convertGenerator(Input gen, OptionalPermutation permutation = {}) {
+CPP_template(
+    typename Input) (requires SameAsAny<Input, Result::Generator, Result::LazyResult>)
+LazyInputView convertGenerator(Input gen,
+                               OptionalPermutation permutation = {}) {
   auto transformer = [permutation = std::move(permutation)](auto& element) {
     auto& [table, localVocab] = element;
     applyPermutation(table, permutation);
@@ -90,12 +90,12 @@ inline std::variant<LazyInputView, MaterializedInputView> resultToView(
 // being passed to the `AddCombinedRowToIdTable` so that the partial results
 // can be yielded during execution. This is achieved by spawning a separate
 // thread.
-CPP_template_2(typename ActionT)(
-    requires ad_utility::InvocableWithExactReturnType<
-        ActionT, Result::IdTableVocabPair,
-        std::function<void(IdTable&, LocalVocab&)>>) Result::LazyResult
-    runLazyJoinAndConvertToGenerator(ActionT runLazyJoin,
-                                     OptionalPermutation permutation) {
+CPP_template_2(
+    typename ActionT)(requires ad_utility::InvocableWithExactReturnType<
+           ActionT, Result::IdTableVocabPair,
+           std::function<void(IdTable&, LocalVocab&)>>)
+Result::LazyResult runLazyJoinAndConvertToGenerator(
+    ActionT runLazyJoin, OptionalPermutation permutation) {
   return generatorFromActionWithCallback<Result::IdTableVocabPair>(
       [runLazyJoin = std::move(runLazyJoin),
        permutation = std::move(permutation)](

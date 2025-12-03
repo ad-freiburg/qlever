@@ -92,8 +92,8 @@ CPP_concept Serializer = WriteSerializer<S> || ReadSerializer<S>;
 /// If we try to serialize from a const object or reference, the serializer must
 /// be a `WriteSerializer`. The following type trait can be used to check this
 /// constraint at compile time.
-CPP_template(typename S, typename T)(
-    requires Serializer<S>) static constexpr bool SerializerMatchesConstness =
+CPP_template(typename S, typename T) (requires Serializer<S>)
+static constexpr bool SerializerMatchesConstness =
     WriteSerializer<S> || !std::is_const_v<std::remove_reference_t<T>>;
 
 /**
@@ -178,20 +178,20 @@ CPP_template(typename S, typename T)(
  * instead of
  * `serialize(serializer, t)`
  */
-CPP_template(typename S, typename T)(requires Serializer<S>) void operator|(
-    S& serializer, T&& t) {
+CPP_template(typename S, typename T) (requires Serializer<S>)
+void operator|(S& serializer, T&& t) {
   serialize(serializer, AD_FWD(t));
 }
 
 /// Serialization operator for explicitly writing to a serializer.
-CPP_template(typename S, typename T)(requires WriteSerializer<S>) void
-operator<<(S& serializer, const T& t) {
+CPP_template(typename S, typename T) (requires WriteSerializer<S>)
+void operator<<(S& serializer, const T& t) {
   serializer | t;
 }
 
 /// Serialization operator for explicitly reading from a serializer.
-CPP_template(typename S, typename T)(requires ReadSerializer<S>) void
-operator>>(S& serializer, T&& t) {
+CPP_template(typename S, typename T) (requires ReadSerializer<S>)
+void operator>>(S& serializer, T&& t) {
   serializer | t;
 }
 
@@ -247,9 +247,10 @@ CPP_concept TriviallySerializable =
 
 /// Serialize function for `TriviallySerializable` types that works by simply
 /// serializing the binary object representation.
-CPP_template(typename S, typename T)(
-    requires Serializer<S> CPP_and
-        TriviallySerializable<T>) void serialize(S& serializer, T&& t) {
+CPP_template(
+    typename S,
+    typename T) (requires Serializer<S> CPP_and TriviallySerializable<T>)
+void serialize(S& serializer, T&& t) {
   if constexpr (WriteSerializer<S>) {
     serializer.serializeBytes(reinterpret_cast<const char*>(&t), sizeof(t));
   } else {
@@ -261,8 +262,8 @@ CPP_template(typename S, typename T)(
 /// Arithmetic types (the builtins like int, char, double) can be trivially
 /// serialized.
 CPP_template(typename T,
-             typename U)(requires std::is_arithmetic_v<std::decay_t<T>>)
-    [[maybe_unused]] std::true_type allowTrivialSerialization(T, U) {
+             typename U) (requires std::is_arithmetic_v<std::decay_t<T>>)
+[[maybe_unused]] std::true_type allowTrivialSerialization(T, U) {
   return {};
 }
 

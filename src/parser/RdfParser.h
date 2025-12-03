@@ -410,9 +410,9 @@ class NQuadParser : public TurtleParser<Tokenizer_T> {
  * Parses turtle from std::string. Used to perform unit tests for
  * the different parser rules
  */
-CPP_template(typename Parser)(requires ql::concepts::derived_from<
-                              Parser, RdfParserBase>) class RdfStringParser
-    : public Parser {
+CPP_template(
+    typename Parser) (requires ql::concepts::derived_from<Parser, RdfParserBase>)
+class RdfStringParser : public Parser {
  public:
   using Parser::getLine;
   using Parser::prefixMap_;

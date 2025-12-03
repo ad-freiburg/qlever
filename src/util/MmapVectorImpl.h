@@ -243,7 +243,9 @@ void MmapVector<T>::open(size_t size, std::string filename,
 
   // open the file in case it does not exist yet
   // (data will be overwritten anyway)
-  { auto ofs = ad_utility::makeOfstream(_filename); }
+  {
+    auto ofs = ad_utility::makeOfstream(_filename);
+  }
   auto info = convertArraySizeToFileSize(std::max(size, MinCapacity));
   _bytesize = info._bytesize;
   _capacity = info._capacity;

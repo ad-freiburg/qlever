@@ -80,8 +80,9 @@ class alignas(16) LocalVocabEntry
   // It suffices to hash the base class `LiteralOrIri` as the position in the
   // vocab is redundant for those purposes.
   template <typename H, typename V>
-  friend auto AbslHashValue(H h, const V& entry)
-      -> CPP_ret(H)(requires ranges::same_as<V, LocalVocabEntry>) {
+  friend auto AbslHashValue(H h, const V& entry) -> CPP_ret(
+      H)(requires ranges::same_as<V, LocalVocabEntry>)
+  {
     return H::combine(std::move(h), static_cast<const Base&>(entry));
   }
 

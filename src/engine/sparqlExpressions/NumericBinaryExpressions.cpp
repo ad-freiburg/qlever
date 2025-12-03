@@ -329,9 +329,9 @@ constexpr auto getMergeFunction(bool isNegated) {
 }  // namespace
 
 //______________________________________________________________________________
-CPP_template(typename BinaryPrefilterExpr, typename NaryOperation)(
-    requires isOperation<NaryOperation>) class LogicalBinaryExpressionImpl
-    : public NaryExpression<NaryOperation> {
+CPP_template(typename BinaryPrefilterExpr,
+             typename NaryOperation) (requires isOperation<NaryOperation>)
+class LogicalBinaryExpressionImpl : public NaryExpression<NaryOperation> {
  public:
   using NaryExpression<NaryOperation>::NaryExpression;
 

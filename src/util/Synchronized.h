@@ -99,9 +99,10 @@ class Synchronized {
 
   /// Constructor that is not copy or move, tries to instantiate the underlying
   /// type via perfect forwarding (this includes the default constructor)
-  CPP_template(typename Arg, typename... Args)(requires CPP_NOT(
-      ql::concepts::same_as<ql::remove_cvref_t<Arg>, Synchronized>))
-      QL_EXPLICIT(sizeof...(Args) == 0) Synchronized(Arg&& arg, Args&&... args)
+  CPP_template(typename Arg, typename... Args) (requires CPP_NOT(
+                 ql::concepts::same_as<ql::remove_cvref_t<Arg>, Synchronized>))
+  QL_EXPLICIT(sizeof...(Args) == 0)
+  Synchronized(Arg&& arg, Args&&... args)
       : data_{AD_FWD(arg), AD_FWD(args)...}, m_{} {}
 
   template <typename... Args>
@@ -222,7 +223,7 @@ class Synchronized {
   // Return a `Synchronized` that uses a reference to this `Synchronized`'s
   // `_data` and `mutext_`. The reference is a reference of the Base class U.
   CPP_template_2(typename U)(requires std::is_base_of_v<U, T>)
-      Synchronized<U&, Mutex&> toBaseReference() {
+  Synchronized<U&, Mutex&> toBaseReference() {
     return {ConstructWithMutex{}, mutex(), data_};
   }
 

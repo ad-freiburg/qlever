@@ -49,11 +49,12 @@ CPP_concept ParameterToStringType =
 ///         (representation of a `Type`) and converts it to `Type`.
 /// \tparam ToString A function type, that takes a `Type` and produces
 ///         a std::string representation.
-CPP_template(typename Type, typename FromString, typename ToString)(
-    requires ql::concepts::semiregular<Type> CPP_and
-        ParameterFromStringType<FromString, Type>
-            CPP_and ParameterToStringType<ToString, Type>) struct Parameter
-    : public ParameterBase {
+CPP_template(
+    typename Type, typename FromString,
+    typename ToString) (requires ql::concepts::semiregular<Type> CPP_and
+                ParameterFromStringType<FromString, Type>
+                    CPP_and ParameterToStringType<ToString, Type>)
+struct Parameter : public ParameterBase {
  public:
   using value_type = Type;
 

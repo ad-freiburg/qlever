@@ -32,8 +32,9 @@ using valueIdComparators::Comparison;
 // case where `S` is `string` or `vector<string>`. In this case the generator
 // yields `pair<ValueId, ValueId>` (see `makeValueId` and `getRangeFromVocab`
 // above for details).
-CPP_template(typename S)(requires SingleExpressionResult<S>) auto idGenerator(
-    S&& input, size_t targetSize, const EvaluationContext* context) {
+CPP_template(typename S) (requires SingleExpressionResult<S>)
+auto idGenerator(S&& input, size_t targetSize,
+                 const EvaluationContext* context) {
   [[maybe_unused]] auto makeId = [context](const auto& el) {
     return makeValueId(el, context);
   };
@@ -57,10 +58,10 @@ CPP_template(typename S)(requires SingleExpressionResult<S>) auto idGenerator(
 // `ValueId, vector<ValueId>, Variable`), then `idGenerator`s are returned for
 // both inputs. Else the "plain" generators from `sparqlExpression::detail` are
 // returned. These simply yield the values unchanged.
-CPP_template(typename S1, typename S2)(
-    requires SingleExpressionResult<S1> CPP_and SingleExpressionResult<
-        S2>) auto getGenerators(S1&& value1, S2&& value2, size_t targetSize,
-                                const EvaluationContext* context) {
+CPP_template(typename S1, typename S2) (
+      requires SingleExpressionResult<S1> CPP_and SingleExpressionResult<S2>)
+auto getGenerators(S1&& value1, S2&& value2, size_t targetSize,
+                   const EvaluationContext* context) {
   if constexpr (StoresValueId<S1> || StoresValueId<S2>) {
     return std::pair{idGenerator(AD_FWD(value1), targetSize, context),
                      idGenerator(AD_FWD(value2), targetSize, context)};
@@ -122,11 +123,11 @@ ad_utility::SetOfIntervals evaluateWithBinarySearch(
 // The actual comparison function for the `SingleExpressionResult`'s which are
 // `AreComparable` (see above), which means that the comparison between them is
 // supported and not always false.
-CPP_template(Comparison Comp, typename S1, typename S2)(
-    requires SingleExpressionResult<S1> CPP_and SingleExpressionResult<S2>
-        CPP_and AreComparable<S1, S2>) ExpressionResult
-    evaluateRelationalExpression(S1&& value1, S2&& value2,
-                                 const EvaluationContext* context) {
+CPP_template(Comparison Comp, typename S1, typename S2) (
+      requires SingleExpressionResult<S1> CPP_and SingleExpressionResult<S2>
+          CPP_and AreComparable<S1, S2>)
+ExpressionResult evaluateRelationalExpression(
+    S1&& value1, S2&& value2, const EvaluationContext* context) {
   auto resultSize =
       sparqlExpression::detail::getResultSize(*context, value1, value2);
   constexpr static bool resultIsConstant =
@@ -203,16 +204,16 @@ CPP_template(Comparison Comp, typename S1, typename S2)(
 // The relational comparisons like `less than` are not useful for booleans and
 // thus currently throw an exception.
 CPP_template(Comparison, typename A,
-             typename B)(requires(StoresBoolean<A> || StoresBoolean<B>)) Id
-    evaluateRelationalExpression(const A&, const B&, const EvaluationContext*) {
+             typename B) (requires(StoresBoolean<A> || StoresBoolean<B>))
+Id evaluateRelationalExpression(const A&, const B&, const EvaluationContext*) {
   throw std::runtime_error(
       "Relational expressions like <, >, == are currently not supported for "
       "boolean arguments");
 }
 
 CPP_template(Comparison Comp, typename A,
-             typename B)(requires AreIncomparable<A, B>) Id
-    evaluateRelationalExpression(const A&, const B&, const EvaluationContext*) {
+             typename B) (requires AreIncomparable<A, B>)
+Id evaluateRelationalExpression(const A&, const B&, const EvaluationContext*) {
   // TODO<joka921> We should probably return `undefined` here.
   if constexpr (Comp == Comparison::NE) {
     return Id::makeFromBool(true);
@@ -223,12 +224,13 @@ CPP_template(Comparison Comp, typename A,
 
 // For comparisons where exactly one of the operands is a variable, the variable
 // must come first.
-CPP_template(Comparison Comp, typename A, typename B)(
-    requires SingleExpressionResult<A> CPP_and SingleExpressionResult<B> CPP_and
-        CPP_NOT(AreComparable<A, B>)
-            CPP_and AreComparable<B, A>) ExpressionResult
-    evaluateRelationalExpression(A&& a, B&& b,
-                                 const EvaluationContext* context) {
+CPP_template(
+    Comparison Comp, typename A,
+    typename B) (requires SingleExpressionResult<A> CPP_and SingleExpressionResult<B>
+                CPP_and CPP_NOT(AreComparable<A, B>)
+                    CPP_and AreComparable<B, A>)
+ExpressionResult evaluateRelationalExpression(
+    A&& a, B&& b, const EvaluationContext* context) {
   return evaluateRelationalExpression<getComparisonForSwappedArguments(Comp)>(
       AD_FWD(b), AD_FWD(a), context);
 }

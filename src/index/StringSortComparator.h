@@ -56,8 +56,9 @@ class LocaleManager {
   using U8String = std::basic_string<uint8_t>;
   using U8StringView = std::basic_string_view<uint8_t>;
 
-  CPP_template(typename T)(requires ad_utility::SimilarToAny<
-                           T, U8String, U8StringView>) class SortKeyImpl {
+  CPP_template(
+      typename T) (requires ad_utility::SimilarToAny<T, U8String, U8StringView>)
+  class SortKeyImpl {
    public:
     SortKeyImpl() = default;
     explicit SortKeyImpl(U8StringView sortKey) : sortKey_(sortKey) {}
@@ -185,9 +186,9 @@ class LocaleManager {
   // clang-format off
   CPP_template(typename F)(
     requires ranges::invocable<F, const uint8_t*, size_t>)
-      // clang-format on
-      void getSortKey(std::string_view s, const Level level,
-                      F resultFunction) const {
+  // clang-format on
+  void getSortKey(std::string_view s, const Level level,
+                  F resultFunction) const {
     // TODO<joka921> This function is one of the bottlenecks of the first pass
     // of the IndexBuilder One possible improvement is to reuse the memory
     // allocations for the `sortKeyBuffer`.

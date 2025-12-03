@@ -38,9 +38,8 @@ namespace ad_utility::vocabulary_merger {
 template <typename W, typename C>
 auto mergeVocabulary(const std::string& basename, size_t numFiles, W comparator,
                      C& internalWordCallback,
-                     ad_utility::MemorySize memoryToUse)
-    -> CPP_ret(VocabularyMetaData)(
-        requires WordComparator<W>&& WordCallback<C>) {
+                     ad_utility::MemorySize memoryToUse) -> CPP_ret(VocabularyMetaData)(requires WordComparator<W> && WordCallback<C>)
+{
   VocabularyMerger merger;
   return merger.mergeVocabulary(basename, numFiles, std::move(comparator),
                                 internalWordCallback, memoryToUse);
@@ -52,8 +51,9 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
                                        size_t numFiles, W comparator,
                                        C& wordCallback,
                                        ad_utility::MemorySize memoryToUse)
-    -> CPP_ret(VocabularyMetaData)(
-        requires WordComparator<W>&& WordCallback<C>) {
+    -> CPP_ret(
+        VocabularyMetaData)(requires WordComparator<W> && WordCallback<C>)
+{
   // Return true iff p1 >= p2 according to the lexicographic order of the IRI
   // or literal.
   auto lessThan = [&comparator](const TripleComponentWithIndex& t1,
@@ -149,13 +149,13 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
 }
 
 // ________________________________________________________________________________
-CPP_template_def(typename C, typename L)(
-    requires WordCallback<C> CPP_and_def
-        ranges::predicate<L, TripleComponentWithIndex,
-                          TripleComponentWithIndex>) void VocabularyMerger::
-    writeQueueWordsToIdMap(const std::vector<QueueWord>& buffer,
-                           C& wordCallback, const L& lessThan,
-                           ad_utility::ProgressBar& progressBar) {
+CPP_template_def(
+    typename C,
+    typename L)(requires WordCallback<C> CPP_and_def ranges::predicate<
+           L, TripleComponentWithIndex, TripleComponentWithIndex>)
+void VocabularyMerger::writeQueueWordsToIdMap(
+    const std::vector<QueueWord>& buffer, C& wordCallback, const L& lessThan,
+    ad_utility::ProgressBar& progressBar) {
   AD_LOG_TIMING << "Start writing a batch of merged words\n";
 
   // Smaller grained buffer for the actual inner write.
@@ -332,10 +332,9 @@ inline ItemVec vocabMapsToVector(ItemMapArray& map) {
     futures.push_back(
         std::async(std::launch::async, [&singleMap, &els, &offsets, i] {
           using T = ItemVec::value_type;
-          ql::ranges::transform(singleMap.map_, els.begin() + offsets[i],
-                                [](auto& el) -> T {
-                                  return {el.first, std::move(el.second)};
-                                });
+          ql::ranges::transform(
+              singleMap.map_, els.begin() + offsets[i],
+              [](auto& el) -> T { return {el.first, std::move(el.second)}; });
         }));
     ++i;
   }

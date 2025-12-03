@@ -60,13 +60,10 @@ That is, instead of returning `bool`, it now returns
 
 @param errorMessage Content for `ErrorMessage`.
 */
-CPP_template(typename ValidatorFunc, typename... ValidatorParameterTypes)(
-    requires ValidatorFunction<
-        ValidatorFunc,
-        ValidatorParameterTypes...>) inline auto transformValidatorIntoExceptionValidator(ValidatorFunc
-                                                                                              validatorFunction,
-                                                                                          std::string
-                                                                                              errorMessage) {
+CPP_template(typename ValidatorFunc, typename... ValidatorParameterTypes) (
+      requires ValidatorFunction<ValidatorFunc, ValidatorParameterTypes...>)
+inline auto transformValidatorIntoExceptionValidator(
+    ValidatorFunc validatorFunction, std::string errorMessage) {
   // The whole 'transformation' is simply a wrapper.
   return [validatorFunction = std::move(validatorFunction),
           errorMessage = ErrorMessage{std::move(errorMessage)}](
@@ -130,21 +127,22 @@ class ConfigOptionValidatorManager {
   will be passed to the exception validator function as function arguments,
   after being transformed. Will keep the same order.
   */
-  CPP_template(typename TranslationFunction, typename ExceptionValidatorFunc,
-               typename... ExceptionValidatorParameterTypes)(
-      requires(...&& isInstantiation<ExceptionValidatorParameterTypes,
-                                     ConstConfigOptionProxy>)
-          CPP_and(...&& ql::concepts::invocable<
-                  TranslationFunction, const ExceptionValidatorParameterTypes>)
-              CPP_and ExceptionValidatorFunction<
-                  ExceptionValidatorFunc,
-                  std::invoke_result_t<
-                      TranslationFunction,
-                      const ExceptionValidatorParameterTypes>...>)
-      ConfigOptionValidatorManager(
-          ExceptionValidatorFunc exceptionValidatorFunction,
-          std::string descriptor, TranslationFunction translationFunction,
-          const ExceptionValidatorParameterTypes... configOptionsToBeChecked)
+  CPP_template(
+      typename TranslationFunction, typename ExceptionValidatorFunc,
+      typename... ExceptionValidatorParameterTypes) (requires(...&& isInstantiation<ExceptionValidatorParameterTypes,
+                                             ConstConfigOptionProxy>)
+                  CPP_and(... && ql::concepts::invocable<
+                                     TranslationFunction,
+                                     const ExceptionValidatorParameterTypes>)
+                      CPP_and ExceptionValidatorFunction<
+                          ExceptionValidatorFunc,
+                          std::invoke_result_t<
+                              TranslationFunction,
+                              const ExceptionValidatorParameterTypes>...>)
+  ConfigOptionValidatorManager(
+      ExceptionValidatorFunc exceptionValidatorFunction, std::string descriptor,
+      TranslationFunction translationFunction,
+      const ExceptionValidatorParameterTypes... configOptionsToBeChecked)
       : descriptor_{std::move(descriptor)},
         configOptionsToBeChecked_{
             &configOptionsToBeChecked.getConfigOption()...} {
@@ -197,21 +195,21 @@ class ConfigOptionValidatorManager {
   after being transformed. Will keep the same order.
   */
   CPP_template(typename TranslationFunction, typename ValidatorFunc,
-               typename... ValidatorParameterTypes)(
-      requires(...&& isInstantiation<ValidatorParameterTypes,
-                                     ConstConfigOptionProxy>)
-          CPP_and(... &&
-                  (ql::concepts::invocable<TranslationFunction,
-                                           const ValidatorParameterTypes>))
-              CPP_and(ValidatorFunction<
-                      ValidatorFunc,
-                      std::invoke_result_t<TranslationFunction,
-                                           const ValidatorParameterTypes>...>)
-                  CPP_and(sizeof...(ValidatorParameterTypes) > 0))
-      ConfigOptionValidatorManager(
-          ValidatorFunc validatorFunction, std::string errorMessage,
-          std::string descriptor, TranslationFunction translationFunction,
-          const ValidatorParameterTypes... configOptionsToBeChecked)
+               typename... ValidatorParameterTypes) (
+        requires(...&& isInstantiation<ValidatorParameterTypes,
+                                       ConstConfigOptionProxy>)
+            CPP_and(... &&
+                    (ql::concepts::invocable<TranslationFunction,
+                                             const ValidatorParameterTypes>))
+                CPP_and(ValidatorFunction<
+                        ValidatorFunc,
+                        std::invoke_result_t<TranslationFunction,
+                                             const ValidatorParameterTypes>...>)
+                    CPP_and(sizeof...(ValidatorParameterTypes) > 0))
+  ConfigOptionValidatorManager(
+      ValidatorFunc validatorFunction, std::string errorMessage,
+      std::string descriptor, TranslationFunction translationFunction,
+      const ValidatorParameterTypes... configOptionsToBeChecked)
       : ConfigOptionValidatorManager(
             transformValidatorIntoExceptionValidator<
                 ValidatorFunc,

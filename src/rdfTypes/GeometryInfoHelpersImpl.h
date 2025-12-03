@@ -299,10 +299,10 @@ struct MetricLengthVisitor {
 
   // Compute the length of a multi-geometry by adding up the lengths of its
   // members.
-  CPP_template(typename T)(requires ad_utility::SimilarToAny<
-                           T, MultiLine<CoordType>, MultiPolygon<CoordType>,
-                           MultiPoint<CoordType>, Collection<CoordType>>) double
-  operator()(const T& multiGeom) const {
+  CPP_template(typename T) (requires ad_utility::SimilarToAny<
+              T, MultiLine<CoordType>, MultiPolygon<CoordType>,
+              MultiPoint<CoordType>, Collection<CoordType>>)
+  double operator()(const T& multiGeom) const {
     // This overload only handles the geometry types implemented by vectors.
     static_assert(ad_utility::similarToInstantiation<T, std::vector>);
 
@@ -312,9 +312,9 @@ struct MetricLengthVisitor {
 
   // Compute the length for the custom container type `AnyGeometry` from
   // `pb_util`. It can dynamically hold any geometry type.
-  CPP_template(typename T)(
-      requires ad_utility::SimilarTo<T, AnyGeometry<CoordType>>) double
-  operator()(const T& geom) const {
+  CPP_template(
+      typename T) (requires ad_utility::SimilarTo<T, AnyGeometry<CoordType>>)
+  double operator()(const T& geom) const {
     using enum AnyGeometryMember;
     // `AnyGeometry` is a class from `pb_util`. It does not operate on an enum,
     // this is why we use our own enum here. The correct matching of the integer
@@ -413,10 +413,10 @@ struct MetricAreaVisitor {
   }
 
   // The remaining geometry types always return the area zero
-  CPP_template(typename T)(
-      requires SameAsAny<T, Point<CoordType>, MultiPoint<CoordType>,
-                         Line<CoordType>, MultiLine<CoordType>>) double
-  operator()(const T&) const {
+  CPP_template(
+      typename T) (requires SameAsAny<T, Point<CoordType>, MultiPoint<CoordType>,
+                                 Line<CoordType>, MultiLine<CoordType>>)
+  double operator()(const T&) const {
     return 0.0;
   }
 

@@ -28,10 +28,11 @@ access to the referenced config option.
 @tparam ConfigOptionType The kind of config option, this proxy will reference
 to. Must be `ConfigOption`, or `const ConfigOption`.
 */
-CPP_template(typename T, typename ConfigOptionType)(
-    requires SupportedConfigOptionType<T> CPP_and ad_utility::SameAsAny<
-        ConfigOptionType, ConfigOption,
-        const ConfigOption>) class ConfigOptionProxyImplementation {
+CPP_template(
+    typename T,
+    typename ConfigOptionType) (requires SupportedConfigOptionType<T> CPP_and ad_utility::SameAsAny<
+            ConfigOptionType, ConfigOption, const ConfigOption>)
+class ConfigOptionProxyImplementation {
   ConfigOptionType* option_;
 
  public:

@@ -37,7 +37,9 @@ TEST(QueryId, checkEmptyIdDisallowedByConstruction) {
 // moved out of, but we check for it anyway to provide a reference case
 TEST(QueryId, checkEmptyAfterMove) {
   auto queryId = QueryId::idFromString("53.32794768794578, -2.230040905974742");
-  { auto temporary = std::move(queryId); }
+  {
+    auto temporary = std::move(queryId);
+  }
   EXPECT_TRUE(queryId.empty());
 }
 

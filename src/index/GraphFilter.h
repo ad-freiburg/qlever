@@ -57,9 +57,8 @@ class GraphFilter {
   // Transforms this `GraphFilter` into another one with a different template
   // argument, by using `func` to transform the underlying values from `T` to a
   // new type.
-  CPP_template(typename Func)(requires ql::concepts::invocable<Func, const T&>)
-      GraphFilter<std::invoke_result_t<Func, T>> transform(
-          const Func& func) const {
+  CPP_template(typename Func) (requires ql::concepts::invocable<Func, const T&>)
+  GraphFilter<std::invoke_result_t<Func, T>> transform(const Func& func) const {
     using TransformedT = std::invoke_result_t<Func, T>;
     using ResultT = GraphFilter<TransformedT>;
     return std::visit(ad_utility::OverloadCallOperator{

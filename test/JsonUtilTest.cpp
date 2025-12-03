@@ -14,11 +14,10 @@
 /*
 @brief Do the `fileToJson` test with the wanted json class type.
 */
-CPP_template(typename WantedJsonClassType)(
-    requires OrderedOrUnorderedJson<
-        WantedJsonClassType>) static void doFileToJsonTest(ad_utility::
-                                                               source_location l =
-                                                                   AD_CURRENT_SOURCE_LOC()) {
+CPP_template(
+    typename WantedJsonClassType) (requires OrderedOrUnorderedJson<WantedJsonClassType>)
+static void doFileToJsonTest(
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "doFileToJsonTest")};
 

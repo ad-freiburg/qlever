@@ -32,12 +32,10 @@ namespace ad_benchmark {
 @param functionToMeasure Must be a function, or callable.
 @param measurementSubjectName A description/name of what is being measured.
 */
-CPP_template(typename Function)(requires(
-    ql::concepts::invocable<
-        Function>)) static float measureTimeOfFunction(const Function&
-                                                           functionToMeasure,
-                                                       std::string_view
-                                                           measurementSubjectIdentifier) {
+CPP_template(typename Function) (requires(ql::concepts::invocable<Function>))
+static float measureTimeOfFunction(
+    const Function& functionToMeasure,
+    std::string_view measurementSubjectIdentifier) {
   AD_LOG_INFO << "Running measurement \"" << measurementSubjectIdentifier
               << "\" ..." << std::endl;
 
@@ -95,8 +93,8 @@ class ResultEntry : public BenchmarkMetadataGetter {
   @param functionToMeasure The function, who's execution time will be
   measured and saved.
   */
-  CPP_template(typename F)(requires(ql::concepts::invocable<F>))
-      ResultEntry(const std::string& descriptor, const F& functionToMeasure)
+  CPP_template(typename F) (requires(ql::concepts::invocable<F>))
+  ResultEntry(const std::string& descriptor, const F& functionToMeasure)
       : descriptor_{descriptor},
         measuredTime_{measureTimeOfFunction(functionToMeasure, descriptor)} {}
 
@@ -111,9 +109,9 @@ class ResultEntry : public BenchmarkMetadataGetter {
   @param functionToMeasure The function, who's execution time will be
   measured and saved.
   */
-  CPP_template(typename F)(requires(ql::concepts::invocable<F>))
-      ResultEntry(const std::string& descriptor,
-                  std::string_view descriptorForLog, const F& functionToMeasure)
+  CPP_template(typename F) (requires(ql::concepts::invocable<F>))
+  ResultEntry(const std::string& descriptor, std::string_view descriptorForLog,
+              const F& functionToMeasure)
       : descriptor_{descriptor},
         measuredTime_{
             measureTimeOfFunction(functionToMeasure, descriptorForLog)} {}
@@ -199,11 +197,9 @@ class ResultTable : public BenchmarkMetadataGetter {
    Starts with `(0,0)`.
   @param functionToMeasure The function, which execution time will be measured.
   */
-  CPP_template(typename Function)(requires(
-      ql::concepts::invocable<
-          Function>)) void addMeasurement(const size_t& row,
-                                          const size_t& column,
-                                          const Function& functionToMeasure) {
+  CPP_template(typename Function) (requires(ql::concepts::invocable<Function>))
+  void addMeasurement(const size_t& row, const size_t& column,
+                      const Function& functionToMeasure) {
     AD_CONTRACT_CHECK(row < numRows() && column < numColumns());
     entries_.at(row).at(column) = measureTimeOfFunction(
         functionToMeasure,
@@ -231,8 +227,8 @@ class ResultTable : public BenchmarkMetadataGetter {
 
   @param row, column Which table entry to read. Starts with `(0,0)`.
   */
-  CPP_template(typename T)(requires ad_utility::SameAsAnyTypeIn<T, EntryType>) T
-      getEntry(const size_t row, const size_t column) const {
+  CPP_template(typename T) (requires ad_utility::SameAsAnyTypeIn<T, EntryType>)
+  T getEntry(const size_t row, const size_t column) const {
     AD_CONTRACT_CHECK(row < numRows() && column < numColumns());
     static_assert(!ad_utility::isSimilar<T, std::monostate>);
 
@@ -331,9 +327,9 @@ class ResultGroup : public BenchmarkMetadataGetter {
   @param functionToMeasure The function, who's execution time will be
   measured and saved.
   */
-  CPP_template(typename Function)(requires(ql::concepts::invocable<Function>))
-      ResultEntry& addMeasurement(const std::string& descriptor,
-                                  const Function& functionToMeasure) {
+  CPP_template(typename Function) (requires(ql::concepts::invocable<Function>))
+  ResultEntry& addMeasurement(const std::string& descriptor,
+                              const Function& functionToMeasure) {
     resultEntries_.push_back(ad_utility::make_copyable_unique<ResultEntry>(
         descriptor, absl::StrCat(descriptor, " of group ", descriptor_),
         functionToMeasure));

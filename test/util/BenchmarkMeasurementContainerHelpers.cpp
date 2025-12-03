@@ -11,8 +11,8 @@ using namespace std::string_literals;
 
 // ____________________________________________________________________________
 CPP_template_def(typename Type)(requires ad_utility::SimilarToAnyTypeIn<
-                                Type, ad_benchmark::ResultTable::EntryType>)
-    Type createDummyValueEntryType() {
+           Type, ad_benchmark::ResultTable::EntryType>)
+Type createDummyValueEntryType() {
   if constexpr (ad_utility::isSimilar<Type, float>) {
     return 4.2f;
   } else if constexpr (ad_utility::isSimilar<Type, std::string>) {

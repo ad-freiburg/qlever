@@ -371,20 +371,17 @@ CPP_template(typename Range1, typename Range2, typename LessThan,
  * a proper exception. Typically implementations will just
  * CancellationHandle::throwIfCancelled().
  */
-CPP_template(typename RangeSmaller, typename RangeLarger, typename LessThan,
-             typename Action, typename ElementFromSmallerNotFoundAction = Noop,
-             typename CheckCancellation = Noop)(
-    requires ql::ranges::random_access_range<RangeSmaller> CPP_and
-        ql::ranges::random_access_range<
-            RangeLarger>) void gallopingJoin(const RangeSmaller& smaller,
-                                             const RangeLarger& larger,
-                                             LessThan const& lessThan,
-                                             Action const& action,
-                                             ElementFromSmallerNotFoundAction
-                                                 elementFromSmallerNotFoundAction =
-                                                     {},
-                                             CheckCancellation
-                                                 checkCancellation = {}) {
+CPP_template(
+    typename RangeSmaller, typename RangeLarger, typename LessThan,
+    typename Action, typename ElementFromSmallerNotFoundAction = Noop,
+    typename CheckCancellation =
+        Noop)(requires ql::ranges::random_access_range<RangeSmaller> CPP_and
+               ql::ranges::random_access_range<RangeLarger>)
+void gallopingJoin(
+    const RangeSmaller& smaller, const RangeLarger& larger,
+    LessThan const& lessThan, Action const& action,
+    ElementFromSmallerNotFoundAction elementFromSmallerNotFoundAction = {},
+    CheckCancellation checkCancellation = {}) {
   auto itSmall = std::begin(smaller);
   auto endSmall = std::end(smaller);
   auto itLarge = std::begin(larger);
@@ -486,21 +483,16 @@ CPP_template(typename RangeSmaller, typename RangeLarger, typename LessThan,
  * @param compatibleRowAction Same as in `zipperJoinWithUndef`
  * @param elFromFirstNotFoundAction Same as in `zipperJoinWithUndef`
  */
-CPP_template(typename CompatibleActionT, typename NotFoundActionT,
-             typename CancellationFuncT)(
-    requires BinaryIteratorFunction<CompatibleActionT, IdTableView<0>> CPP_and UnaryIteratorFunction<
-        NotFoundActionT, IdTableView<0>>
-        CPP_and ql::concepts::invocable<
-            CancellationFuncT>) void specialOptionalJoin(const IdTableView<0>&
-                                                             left,
-                                                         const IdTableView<0>&
-                                                             right,
-                                                         const CompatibleActionT&
-                                                             compatibleRowAction,
-                                                         const NotFoundActionT&
-                                                             elFromFirstNotFoundAction,
-                                                         const CancellationFuncT&
-                                                             checkCancellation) {
+CPP_template(
+    typename CompatibleActionT, typename NotFoundActionT,
+    typename CancellationFuncT) (requires BinaryIteratorFunction<CompatibleActionT, IdTableView<0>>
+                CPP_and UnaryIteratorFunction<NotFoundActionT, IdTableView<0>>
+                    CPP_and ql::concepts::invocable<CancellationFuncT>)
+void specialOptionalJoin(const IdTableView<0>& left,
+                         const IdTableView<0>& right,
+                         const CompatibleActionT& compatibleRowAction,
+                         const NotFoundActionT& elFromFirstNotFoundAction,
+                         const CancellationFuncT& checkCancellation) {
   auto it1 = std::begin(left);
   auto end1 = std::end(left);
   auto it2 = std::begin(right);
@@ -832,12 +824,14 @@ static constexpr size_t FETCH_BLOCKS = 3;
 // After adding the Cartesian product we start a new round with a new
 // `currentEl` (5 in this example). New blocks are added to one of the buffers
 // if they become empty at one point in the algorithm.
-CPP_template(typename LeftSide, typename RightSide, typename LessThan,
-             typename CompatibleRowAction, typename IsUndef = AlwaysFalse)(
-    requires IsJoinSide<LeftSide> CPP_and IsJoinSide<RightSide> CPP_and
-        InvocableWithExactReturnType<
-            IsUndef, bool,
-            typename LeftSide::ProjectedEl>) struct BlockZipperJoinImpl {
+CPP_template(
+    typename LeftSide, typename RightSide, typename LessThan,
+    typename CompatibleRowAction,
+    typename IsUndef =
+        AlwaysFalse)(requires IsJoinSide<LeftSide> CPP_and IsJoinSide<RightSide> CPP_and
+               InvocableWithExactReturnType<IsUndef, bool,
+                                            typename LeftSide::ProjectedEl>)
+struct BlockZipperJoinImpl {
   // The left and right inputs of the join
   LeftSide leftSide_;
   RightSide rightSide_;

@@ -195,8 +195,9 @@ VariableToColumnMap CartesianProductJoin::computeVariableToColumnMap() const {
 
 // _____________________________________________________________________________
 CPP_template_def(typename R)(requires ql::ranges::random_access_range<R>)
-    IdTable CartesianProductJoin::writeAllColumns(
-        R idTables, size_t offset, size_t limit, size_t lastTableOffset) const {
+IdTable CartesianProductJoin::writeAllColumns(R idTables, size_t offset,
+                                              size_t limit,
+                                              size_t lastTableOffset) const {
   AD_CORRECTNESS_CHECK(offset >= lastTableOffset);
   IdTable result{getResultWidth(), getExecutionContext()->getAllocator()};
   // TODO<joka921> Find a solution to cheaply handle the case, that only a
@@ -317,11 +318,10 @@ CartesianProductJoin::calculateSubResults(bool requestLaziness) {
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename R)(requires ql::ranges::range<R>) Result::LazyResult
-    CartesianProductJoin::produceTablesLazily(LocalVocab mergedVocab,
-                                              R idTables, size_t offset,
-                                              size_t limit,
-                                              size_t lastTableOffset) const {
+CPP_template_def(typename R)(requires ql::ranges::range<R>)
+Result::LazyResult CartesianProductJoin::produceTablesLazily(
+    LocalVocab mergedVocab, R idTables, size_t offset, size_t limit,
+    size_t lastTableOffset) const {
   using Lc = Result::IdTableLoopControl;
   auto get = [self = this, mergedVocab = std::move(mergedVocab),
               idTables = std::move(idTables), offset, limit,

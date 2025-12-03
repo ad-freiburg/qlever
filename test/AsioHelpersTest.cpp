@@ -20,8 +20,7 @@ TEST(AsioHelpers, runFunctionOnExecutorVoid) {
   net::io_context ctx;
   bool a = false;
   auto workGuard = makeWorkGuard(ctx);
-  runFunctionOnExecutor(
-      ctx.get_executor(), [&]() { a = true; }, net::detached);
+  runFunctionOnExecutor(ctx.get_executor(), [&]() { a = true; }, net::detached);
   EXPECT_FALSE(a);
   ctx.poll();
   EXPECT_TRUE(a);

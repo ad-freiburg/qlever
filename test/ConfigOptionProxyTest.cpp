@@ -52,9 +52,10 @@ struct DoTest {
 @tparam OptionType Exists to define, if the test should be done with
 `ConfigOption`, or `const ConfigOption`.
 */
-CPP_template(template <typename> typename ProxyType, typename OptionType)(
-    requires SameAsAny<OptionType, ConfigOption,
-                       const ConfigOption>) void basicConstructorTest() {
+CPP_template(
+    template <typename> typename ProxyType,
+    typename OptionType) (requires SameAsAny<OptionType, ConfigOption, const ConfigOption>)
+void basicConstructorTest() {
   // Do the test for all possible types.
   doForTypeInConfigOptionValueType(DoTest<ProxyType, OptionType>{});
 }

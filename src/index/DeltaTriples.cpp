@@ -90,8 +90,7 @@ DeltaTriplesCount DeltaTriples::getCounts() const {
 void DeltaTriples::insertTriples(CancellationHandle cancellationHandle,
                                  Triples triples,
                                  ad_utility::timer::TimeTracer& tracer) {
-  AD_LOG_DEBUG << "Inserting"
-               << " " << triples.size()
+  AD_LOG_DEBUG << "Inserting" << " " << triples.size()
                << " triples (including idempotent triples)." << std::endl;
   modifyTriplesImpl(std::move(cancellationHandle), std::move(triples), true,
                     triplesInserted_, triplesDeleted_, tracer);
@@ -101,8 +100,7 @@ void DeltaTriples::insertTriples(CancellationHandle cancellationHandle,
 void DeltaTriples::deleteTriples(CancellationHandle cancellationHandle,
                                  Triples triples,
                                  ad_utility::timer::TimeTracer& tracer) {
-  AD_LOG_DEBUG << "Deleting"
-               << " " << triples.size()
+  AD_LOG_DEBUG << "Deleting" << " " << triples.size()
                << " triples (including idempotent triples)." << std::endl;
   modifyTriplesImpl(std::move(cancellationHandle), std::move(triples), false,
                     triplesDeleted_, triplesInserted_, tracer);

@@ -167,20 +167,24 @@ class IteratorForAccessOperator {
 
   decltype(auto) operator*() const { return accessor_(*vector_, index_); }
 
-  CPP_template(typename = void)(requires(!isConst)) decltype(auto) operator*() {
+  CPP_template(typename = void) (requires(!isConst))
+  decltype(auto) operator*() {
     return accessor_(*vector_, index_);
   }
 
   // Only allowed, if `RandomAccessContainer` yields references and not values
-  CPP_template(typename A = Accessor, typename P = RandomAccessContainerPtr)(
-      requires HasValidAccessor<A, P> CPP_and(!isConst)) auto
-  operator->() {
+  CPP_template(
+      typename A = Accessor,
+      typename P =
+          RandomAccessContainerPtr) (requires HasValidAccessor<A, P> CPP_and(!isConst))
+  auto operator->() {
     return &(*(*this));
   }
 
-  CPP_template(typename A = Accessor, typename P = RandomAccessContainerPtr)(
-      requires HasValidAccessor<A, P>) auto
-  operator->() const {
+  CPP_template(
+      typename A = Accessor,
+      typename P = RandomAccessContainerPtr) (requires HasValidAccessor<A, P>)
+  auto operator->() const {
     return &(*(*this));
   }
 
@@ -296,8 +300,9 @@ class DetailsProvider {
 
   // Allows to store a pointer to external details. Only available if
   // `hasDetails` is true.
-  CPP_member auto setDetailsPointer(Details* pointer)
-      -> CPP_ret(void)(requires hasDetails) {
+  CPP_member auto setDetailsPointer(Details* pointer) -> CPP_ret(
+      void)(requires hasDetails)
+  {
     AD_CONTRACT_CHECK(pointer != nullptr);
     static_cast<Derived*>(this)->getDetails() = pointer;
   }
@@ -404,10 +409,10 @@ class InputRangeFromGet
 
 // A simple helper to define an `InputRangeFromGet` where the `get()` function
 // is a simple callable.
-CPP_template(typename T, typename F)(
-    requires ad_utility::InvocableWithConvertibleReturnType<
-        F, std::optional<T>>) struct InputRangeFromGetCallable
-    : public InputRangeFromGet<T> {
+CPP_template(typename T, typename F) (
+      requires ad_utility::InvocableWithConvertibleReturnType<F,
+                                                              std::optional<T>>)
+struct InputRangeFromGetCallable : public InputRangeFromGet<T> {
  private:
   ::ranges::semiregular_box_t<F> function_;
 
@@ -479,29 +484,29 @@ class InputRangeTypeErased
   using value_type = ValueType;
   // Constructor for ranges that directly inherit from
   // `InputRangeOptionalMixin`.
-  CPP_template(typename Range)(
-      requires std::is_base_of_v<
-          InputRangeFromGet<ValueType, DetailsType>,
-          Range>) explicit InputRangeTypeErased(Range range)
+  CPP_template(
+      typename Range) (requires std::is_base_of_v<
+              InputRangeFromGet<ValueType, DetailsType>, Range>)
+  explicit InputRangeTypeErased(Range range)
       : impl_{std::make_unique<Range>(std::move(range))} {}
 
   // Constructor for ranges that are not movable
-  CPP_template(typename Range)(
-      requires std::is_base_of_v<
-          InputRangeFromGet<ValueType, DetailsType>,
-          Range>) explicit InputRangeTypeErased(std::unique_ptr<Range> range)
+  CPP_template(
+      typename Range) (requires std::is_base_of_v<
+              InputRangeFromGet<ValueType, DetailsType>, Range>)
+  explicit InputRangeTypeErased(std::unique_ptr<Range> range)
       : impl_{std::move(range)} {}
 
   // Constructor for all other ranges. We first pass them through the
   // `InputRangeToOptional` class from above to make it compatible with the base
   // class.
-  CPP_template(typename Range)(
-      requires CPP_NOT(
-          std::is_base_of_v<InputRangeFromGet<ValueType, DetailsType>, Range>)
-          CPP_and ql::ranges::range<Range>
-              CPP_and ql::concepts::same_as<
-                  ql::ranges::range_value_t<Range>,
-                  ValueType>) explicit InputRangeTypeErased(Range range)
+  CPP_template(
+      typename Range) (requires CPP_NOT(
+        std::is_base_of_v<InputRangeFromGet<ValueType, DetailsType>, Range>)
+                  CPP_and ql::ranges::range<Range>
+                      CPP_and ql::concepts::same_as<
+                          ql::ranges::range_value_t<Range>, ValueType>)
+  explicit InputRangeTypeErased(Range range)
       : impl_{std::make_unique<RangeToInputRangeFromGet<Range>>(
             std::move(range))} {}
 
@@ -542,9 +547,11 @@ InputRangeTypeErased(std::unique_ptr<InputRangeFromGet<ValueType, DetailsType>>)
 // `ql::ranges::subrange`, but yields the iterators instead of the values when
 // being iterated over. Currently, the iterators must be random-access and the
 // resulting range thus also is random access.
-CPP_template(typename It, typename End)(
-    requires ql::concepts::random_access_iterator<It> CPP_and
-        ql::concepts::sized_sentinel_for<End, It>) struct IteratorRange
+CPP_template(
+    typename It,
+    typename End) (requires ql::concepts::random_access_iterator<It> CPP_and
+                ql::concepts::sized_sentinel_for<End, It>)
+struct IteratorRange
     : public ql::ranges::view_interface<IteratorRange<It, End>> {
  private:
   It it_;

@@ -59,7 +59,8 @@ CPP_concept ValueAsNumericId =
 // from above) into an `ID`. When `NanOrInfToUndef` is `true` then floating
 // point `NaN` or `+-infinity` values will become `Id::makeUndefined()`.
 CPP_template(bool NanOrInfToUndef = false,
-             typename T)(requires ValueAsNumericId<T>) Id makeNumericId(T t) {
+             typename T) (requires ValueAsNumericId<T>)
+Id makeNumericId(T t) {
   if constexpr (concepts::integral<T>) {
     return Id::makeFromInt(t);
   } else if constexpr (ql::concepts::floating_point<T> && NanOrInfToUndef) {
@@ -309,8 +310,9 @@ struct RegexValueGetter {
   template <typename S>
   auto operator()(S&& input, const EvaluationContext* context) const
       -> CPP_ret(std::shared_ptr<RE2>)(
-          requires SingleExpressionResult<S>&& ranges::invocable<
-              LiteralFromIdGetter, S&&, const EvaluationContext*>) {
+        requires SingleExpressionResult<S> &&
+        ranges::invocable<LiteralFromIdGetter, S &&, const EvaluationContext*>)
+  {
     auto str = LiteralFromIdGetter{}(AD_FWD(input), context);
     if (!str.has_value()) {
       return nullptr;
@@ -423,10 +425,10 @@ struct IriOrUriValueGetter : Mixin<IriOrUriValueGetter> {
 // `RequestedInfo` is computed ad hoc (for example the bounding box is not
 // calculated, when requesting the centroid).
 
-CPP_template(typename RequestedInfo = ad_utility::GeometryInfo)(
-    requires ad_utility::RequestedInfoT<
-        RequestedInfo>) struct GeometryInfoValueGetter
-    : Mixin<GeometryInfoValueGetter<RequestedInfo>> {
+CPP_template(
+    typename RequestedInfo = ad_utility::
+        GeometryInfo) (requires ad_utility::RequestedInfoT<RequestedInfo>)
+struct GeometryInfoValueGetter : Mixin<GeometryInfoValueGetter<RequestedInfo>> {
   using Mixin<GeometryInfoValueGetter<RequestedInfo>>::operator();
   std::optional<RequestedInfo> operator()(
       ValueId id, const EvaluationContext* context) const;

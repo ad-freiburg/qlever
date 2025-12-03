@@ -66,19 +66,18 @@ namespace ad_benchmark {
 @brief Return true, iff, the given value is unchanged, when casting to type
 `Target`
 */
-CPP_template(typename Target, typename Source)(
-    requires ql::concepts::convertible_to<
-        Source,
-        Target>) static constexpr bool isValuePreservingCast(const Source&
-                                                                 source) {
+CPP_template(
+    typename Target,
+    typename Source) (requires ql::concepts::convertible_to<Source, Target>)
+static constexpr bool isValuePreservingCast(const Source& source) {
   return static_cast<Source>(static_cast<Target>(source)) == source;
 }
 
 /*
 @brief Return biggest possible value for the given arithmetic type.
 */
-CPP_template(typename Type)(requires ad_utility::Arithmetic<Type>)
-    QL_CONSTEVAL Type getMaxValue() {
+CPP_template(typename Type) (requires ad_utility::Arithmetic<Type>)
+QL_CONSTEVAL Type getMaxValue() {
   return std::numeric_limits<Type>::max();
 }
 
@@ -371,8 +370,8 @@ enum struct GeneratedTableColumn : unsigned long {
 /*
 Convert the given enum value into the underlying type.
 */
-CPP_template(typename Enum)(requires std::is_enum_v<Enum>) auto toUnderlying(
-    const Enum& e) {
+CPP_template(typename Enum) (requires std::is_enum_v<Enum>)
+auto toUnderlying(const Enum& e) {
   return static_cast<std::underlying_type_t<Enum>>(e);
 }
 
@@ -416,12 +415,9 @@ struct IsGrowthFunction {
 @brief Calculates the smallest whole exponent $n$, so that $base^n$ is equal, or
 bigger, than the `startingPoint`.
 */
-CPP_template(typename T)(
-    requires ql::concepts::convertible_to<
-        T,
-        double>) static double calculateNextWholeExponent(const T& base,
-                                                          const T&
-                                                              startingPoint) {
+CPP_template(typename T) (requires ql::concepts::convertible_to<T, double>)
+static double calculateNextWholeExponent(const T& base,
+                                         const T& startingPoint) {
   // This is a rather simple calculation: We calculate
   // $log_(base)(startingPoint)$ and round up.
   AD_CONTRACT_CHECK(isValuePreservingCast<double>(startingPoint));
@@ -434,11 +430,10 @@ CPP_template(typename T)(
 @brief Generate a sorted, inclusive interval of exponents $base^x$, with $x$
 always a natural number.
 */
-CPP_template(typename T)(
-    requires ad_utility::Arithmetic<T> CPP_and
-        ql::concepts::convertible_to<T, double>) static std::
-    vector<T> generateExponentInterval(T base, T inclusiveLowerBound,
-                                       T inclusiveUpperBound) {
+CPP_template(typename T) (requires ad_utility::Arithmetic<T> CPP_and
+                ql::concepts::convertible_to<T, double>)
+static std::vector<T> generateExponentInterval(T base, T inclusiveLowerBound,
+                                               T inclusiveUpperBound) {
   std::vector<T> elements{};
 
   /*
@@ -467,9 +462,9 @@ CPP_template(typename T)(
 @brief Generate a sorted,inclusive interval of all natural numbers inside
 `[inclusiveLowerBound, inclusiveUpperBound]`.
 */
-CPP_template(typename T)(requires ad_utility::Arithmetic<T>) static std::vector<
-    T> generateNaturalNumberSequenceInterval(T inclusiveLowerBound,
-                                             T inclusiveUpperBound) {
+CPP_template(typename T) (requires ad_utility::Arithmetic<T>)
+static std::vector<T> generateNaturalNumberSequenceInterval(
+    T inclusiveLowerBound, T inclusiveUpperBound) {
   if constexpr (ql::concepts::floating_point<T>) {
     inclusiveLowerBound = std::ceil(inclusiveLowerBound);
     inclusiveUpperBound = std::floor(inclusiveUpperBound);
@@ -486,8 +481,9 @@ CPP_template(typename T)(requires ad_utility::Arithmetic<T>) static std::vector<
 
 // Merge multiple sorted vectors into one sorted vector, where every element is
 // unique.
-CPP_template(typename T)(requires ad_utility::Arithmetic<T>) static std::vector<
-    T> mergeSortedVectors(const std::vector<std::vector<T>>& intervals) {
+CPP_template(typename T) (requires ad_utility::Arithmetic<T>)
+static std::vector<T> mergeSortedVectors(
+    const std::vector<std::vector<T>>& intervals) {
   std::vector<T> mergedVector{};
 
   // Merge.
@@ -1652,10 +1648,10 @@ argument of the function and $x$ being $log_base(startingPoint)$ rounded up.
 CPP_template(typename ReturnType)(requires
     ql::concepts::convertible_to<ReturnType, double>
     CPP_and ql::concepts::convertible_to<double, ReturnType>)
-    // clang-format on
-    auto createDefaultGrowthLambda(const ReturnType& base,
-                                   const ReturnType& startingPoint,
-                                   std::vector<ReturnType> prefixValues = {}) {
+// clang-format on
+auto createDefaultGrowthLambda(const ReturnType& base,
+                               const ReturnType& startingPoint,
+                               std::vector<ReturnType> prefixValues = {}) {
   return [base, prefixValues = std::move(prefixValues),
           startingExponent{calculateNextWholeExponent(base, startingPoint)}](
              const size_t& rowIdx) {
@@ -2202,12 +2198,12 @@ class BmSmallerTableGrowsBiggerTableRemainsSameSize final
   given benchmarking table row?
   @param biggerTableNumRows Number of rows in the bigger table.
   */
-  CPP_template(typename Function)(requires(growthFunction<Function, size_t>))
-      ResultTable& makeSmallerTableGrowsAndBiggerTableSameSizeBenchmarkTable(
-          BenchmarkResults* results, const std::string& tableDescriptor,
-          const bool smallerTableSorted, const bool biggerTableSorted,
-          const Function& smallerTableNumRows,
-          const size_t biggerTableNumRows) const {
+  CPP_template(typename Function) (requires(growthFunction<Function, size_t>))
+  ResultTable& makeSmallerTableGrowsAndBiggerTableSameSizeBenchmarkTable(
+      BenchmarkResults* results, const std::string& tableDescriptor,
+      const bool smallerTableSorted, const bool biggerTableSorted,
+      const Function& smallerTableNumRows,
+      const size_t biggerTableNumRows) const {
     // For creating a new random seed for every new row.
     RandomSeedGenerator seedGenerator{getConfigVariables().randomSeed()};
 

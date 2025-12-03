@@ -38,9 +38,11 @@ CPP_concept RangeCanEmpty = CPP_requires_ref(can_empty_, R);
 // `range-v3`. The implementation is taken from libstdc++-13. The additional
 // optional `supportsConst` argument explicitly disables const iteration for
 // this view when set to false, see `OwningViewNoConst` below for details.
-CPP_template(typename UnderlyingRange, bool supportConst = true)(
-    requires ql::ranges::range<UnderlyingRange> CPP_and
-        ql::concepts::movable<UnderlyingRange>) class OwningView
+CPP_template(typename UnderlyingRange,
+             bool supportConst =
+                 true) (requires ql::ranges::range<UnderlyingRange> CPP_and
+                ql::concepts::movable<UnderlyingRange>)
+class OwningView
     : public ql::ranges::view_interface<OwningView<UnderlyingRange>> {
  private:
   UnderlyingRange underlyingRange_;
@@ -73,39 +75,42 @@ CPP_template(typename UnderlyingRange, bool supportConst = true)(
 
   constexpr auto end() { return ql::ranges::end(underlyingRange_); }
 
-  CPP_auto_member constexpr auto CPP_fun(begin)()(
+  CPP_auto_member constexpr auto CPP_fun(begin) ()(
       const  //
       requires(supportConst&& ql::ranges::range<const UnderlyingRange>)) {
     return ql::ranges::begin(underlyingRange_);
   }
 
-  CPP_auto_member constexpr auto CPP_fun(end)()(
+  CPP_auto_member constexpr auto CPP_fun(end) ()(
       const  //
       requires(supportConst&& ql::ranges::range<const UnderlyingRange>)) {
     return ql::ranges::end(underlyingRange_);
   }
 
-  CPP_member constexpr auto empty() const
-      -> CPP_ret(bool)(requires detail::RangeCanEmpty<const UnderlyingRange>) {
+  CPP_member constexpr auto empty() const -> CPP_ret(
+      bool)(requires detail::RangeCanEmpty<const UnderlyingRange>)
+  {
     return ql::ranges::empty(underlyingRange_);
   }
 
-  CPP_member constexpr auto size()
-      -> CPP_ret(size_t)(requires ql::ranges::sized_range<UnderlyingRange>) {
+  CPP_member constexpr auto size() -> CPP_ret(
+      size_t)(requires ql::ranges::sized_range<UnderlyingRange>)
+  {
     return ql::ranges::size(underlyingRange_);
   }
 
-  CPP_member constexpr auto size() const -> CPP_ret(size_t)(
-      requires ql::ranges::sized_range<const UnderlyingRange>) {
+  CPP_member constexpr auto size() const -> CPP_ret(
+      size_t)(requires ql::ranges::sized_range<const UnderlyingRange>)
+  {
     return ql::ranges::size(underlyingRange_);
   }
 
-  CPP_auto_member constexpr auto CPP_fun(data)()(
-      requires ql::ranges::contiguous_range<UnderlyingRange>) {
+  CPP_auto_member constexpr auto
+      CPP_fun(data) ()(requires ql::ranges::contiguous_range<UnderlyingRange>) {
     return ql::ranges::data(underlyingRange_);
   }
 
-  CPP_auto_member constexpr auto CPP_fun(data)()(
+  CPP_auto_member constexpr auto CPP_fun(data) ()(
       const  //
       requires ql::ranges::contiguous_range<const UnderlyingRange>) {
     return ql::ranges::data(underlyingRange_);
@@ -207,9 +212,11 @@ using all_t = decltype(allView(std::declval<Range>()));
 // This view is an input view that wraps another `view` transparently. When the
 // view is destroyed, or the iteration reaches `end`, whichever happens first,
 // the given `callback` is invoked.
-CPP_template(typename V, typename F)(
-    requires ql::ranges::input_range<V> CPP_and ql::ranges::view<V>&&
-        ql::concepts::invocable<F&>) class CallbackOnEndView
+CPP_template(
+    typename V,
+    typename F) (requires ql::ranges::input_range<V> CPP_and ql::ranges::view<V> &&
+            ql::concepts::invocable<F&>)
+class CallbackOnEndView
     : public ql::ranges::view_interface<CallbackOnEndView<V, F>> {
  private:
   V base_;
@@ -284,9 +291,10 @@ CallbackOnEndView(R&&, F) -> CallbackOnEndView<all_t<R>, F>;
 // It yields the same elements as the underlying range, but casts them to
 // rvalue references via `std::move`. It is implemented via
 // `ql::make_move_iterator`.
-CPP_template(typename UnderlyingRange)(
-    requires ql::ranges::view<UnderlyingRange> CPP_and
-        ql::ranges::input_range<UnderlyingRange>) class RvalueView
+CPP_template(
+    typename UnderlyingRange) (requires ql::ranges::view<UnderlyingRange> CPP_and
+                ql::ranges::input_range<UnderlyingRange>)
+class RvalueView
     : public ql::ranges::view_interface<RvalueView<UnderlyingRange>> {
  private:
   UnderlyingRange underlyingRange_;
@@ -336,13 +344,15 @@ CPP_template(typename UnderlyingRange)(
   // Size function. Note: The member functions `empty` and `data` are present
   // via the inheritance from `view_interface` iff they are supported by the
   // `UnderlyingRange`.
-  CPP_member constexpr auto size()
-      -> CPP_ret(size_t)(requires ql::ranges::sized_range<UnderlyingRange>) {
+  CPP_member constexpr auto size() -> CPP_ret(
+      size_t)(requires ql::ranges::sized_range<UnderlyingRange>)
+  {
     return ql::ranges::size(underlyingRange_);
   }
 
-  CPP_member constexpr auto size() const -> CPP_ret(size_t)(
-      requires ql::ranges::sized_range<const UnderlyingRange>) {
+  CPP_member constexpr auto size() const -> CPP_ret(
+      size_t)(requires ql::ranges::sized_range<const UnderlyingRange>)
+  {
     return ql::ranges::size(underlyingRange_);
   }
 };
@@ -357,9 +367,9 @@ RvalueView(Range&&) -> RvalueView<all_t<Range>>;
 // fulfill the predicate anymore. This is technically undefined behavior, but
 // works in practice if the filter_view is treated as an `input_range`.
 // In C++26 this will become obsolete by `std::views::to_input`.
-CPP_template(typename V)(requires ql::ranges::view<V> CPP_and
-                             ql::ranges::input_range<V>) class ForceInputView
-    : public ql::ranges::view_interface<ForceInputView<V>> {
+CPP_template(
+    typename V) (requires ql::ranges::view<V> CPP_and ql::ranges::input_range<V>)
+class ForceInputView : public ql::ranges::view_interface<ForceInputView<V>> {
  private:
   V base_;
   bool beginWasCalled_ = false;
@@ -446,8 +456,8 @@ CPP_template(typename V)(requires ql::ranges::view<V> CPP_and
 };
 
 // Deduction guides
-CPP_template(typename Range)(requires ql::ranges::input_range<Range>)
-    ForceInputView(Range&&) -> ForceInputView<all_t<Range>>;
+CPP_template(typename Range) (requires ql::ranges::input_range<Range>)
+ForceInputView(Range&&) -> ForceInputView<all_t<Range>>;
 
 namespace detail {
 // The implementation of `bufferedAsyncView` (see below). It yields its result
@@ -518,8 +528,8 @@ auto bufferedAsyncView(View view, uint64_t blockSize) {
 // `ql::views::iota(0, size_t(INT_MAX) + 1)` leads to undefined behavior
 // because of an integer overflow, but `ad_utility::integerRange(size_t(INT_MAX)
 // + 1)` is perfectly safe and behaves as expected.
-CPP_template(typename Int)(requires ql::concepts::unsigned_integral<
-                           Int>) auto integerRange(Int upperBound) {
+CPP_template(typename Int) (requires ql::concepts::unsigned_integral<Int>)
+auto integerRange(Int upperBound) {
   return ql::views::iota(Int{0}, upperBound);
 }
 

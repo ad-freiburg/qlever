@@ -128,25 +128,19 @@ inline http::response<http::string_body> createHttpResponseFromString(
  * @param mediaType The media type of the response.
  * @return A http::response<http::string_body> which is ready to be sent.
  */
-CPP_template(typename RequestType)(
-    requires HttpRequest<
-        RequestType>) auto createHttpResponseFromString(std::string body,
-                                                        http::status status,
-                                                        const RequestType&
-                                                            request,
-                                                        std::optional<MediaType>
-                                                            mediaType) {
+CPP_template(typename RequestType) (requires HttpRequest<RequestType>)
+auto createHttpResponseFromString(std::string body, http::status status,
+                                  const RequestType& request,
+                                  std::optional<MediaType> mediaType) {
   return createHttpResponseFromString(std::move(body), status, mediaType,
                                       request.keep_alive(), request.version());
 }
 
 /// Create a HttpResponse from a string with status 200 OK. Otherwise behaves
 /// the same as createHttpResponseFromString.
-CPP_template(typename RequestType)(
-    requires HttpRequest<
-        RequestType>) static auto createOkResponse(std::string text,
-                                                   const RequestType& request,
-                                                   MediaType mediaType) {
+CPP_template(typename RequestType) (requires HttpRequest<RequestType>)
+static auto createOkResponse(std::string text, const RequestType& request,
+                             MediaType mediaType) {
   return createHttpResponseFromString(std::move(text), http::status::ok,
                                       request, mediaType);
 }
@@ -154,13 +148,10 @@ CPP_template(typename RequestType)(
 /// Assign the generator to the body of the response. If a supported
 /// compression is specified in the request, this method is applied to the
 /// body and the corresponding response headers are set.
-CPP_template(typename RequestType)(
-    requires HttpRequest<
-        RequestType>) static void setBody(http::response<streamable_body>&
-                                              response,
-                                          const RequestType& request,
-                                          cppcoro::generator<std::string>&&
-                                              generator) {
+CPP_template(typename RequestType) (requires HttpRequest<RequestType>)
+static void setBody(http::response<streamable_body>& response,
+                    const RequestType& request,
+                    cppcoro::generator<std::string>&& generator) {
   using ad_utility::content_encoding::CompressionMethod;
 
   CompressionMethod method =
@@ -184,13 +175,9 @@ CPP_template(typename RequestType)(
 }
 
 /// Create a HttpResponse from a generator with status 200 OK.
-CPP_template(typename RequestType)(
-    requires HttpRequest<
-        RequestType>) static auto createOkResponse(cppcoro::
-                                                       generator<std::string>&&
-                                                           generator,
-                                                   const RequestType& request,
-                                                   MediaType mediaType) {
+CPP_template(typename RequestType) (requires HttpRequest<RequestType>)
+static auto createOkResponse(cppcoro::generator<std::string>&& generator,
+                             const RequestType& request, MediaType mediaType) {
   http::response<streamable_body> response{http::status::ok, request.version()};
   response.set(http::field::content_type, toString(mediaType));
   response.keep_alive(request.keep_alive());
@@ -217,44 +204,33 @@ CPP_concept IsJson = SameAsAny<T, nlohmann::json, nlohmann::ordered_json>;
 
 /// Create a HttpResponse from a json object with status 200 OK and mime type
 /// "application/json".
-CPP_template(typename Json)(
-    requires IsJson<
-        Json>) static auto createJsonResponse(const Json& j,
-                                              const auto& request,
-                                              http::status status =
-                                                  http::status::ok) {
+CPP_template(typename Json) (requires IsJson<Json>)
+static auto createJsonResponse(const Json& j, const auto& request,
+                               http::status status = http::status::ok) {
   // Argument `4` leads to a human-readable indentation.
   return createJsonResponse(j.dump(4), request, status);
 }
 
 /// Create a HttpResponse with status 404 Not Found.
-CPP_template(typename RequestType)(
-    requires HttpRequest<
-        RequestType>) static auto createNotFoundResponse(const std::string&
-                                                             errorMsg,
-                                                         const RequestType&
-                                                             request) {
+CPP_template(typename RequestType) (requires HttpRequest<RequestType>)
+static auto createNotFoundResponse(const std::string& errorMsg,
+                                   const RequestType& request) {
   return createHttpResponseFromString(errorMsg, http::status::not_found,
                                       request, MediaType::textPlain);
 }
 
 /// Create a HttpResponse with status 403 Forbidden.
-CPP_template(typename RequestType)(
-    requires HttpRequest<
-        RequestType>) static auto createForbiddenResponse(const std::string&
-                                                              errorMsg,
-                                                          const RequestType&
-                                                              request) {
+CPP_template(typename RequestType) (requires HttpRequest<RequestType>)
+static auto createForbiddenResponse(const std::string& errorMsg,
+                                    const RequestType& request) {
   return createHttpResponseFromString(errorMsg, http::status::forbidden,
                                       request, MediaType::textPlain);
 }
 
 /// Create a HttpResponse with status 400 Bad Request.
-CPP_template(typename RequestType)(
-    requires HttpRequest<
-        RequestType>) static auto createBadRequestResponse(std::string body,
-                                                           const RequestType&
-                                                               request) {
+CPP_template(typename RequestType) (requires HttpRequest<RequestType>)
+static auto createBadRequestResponse(std::string body,
+                                     const RequestType& request) {
   return createHttpResponseFromString(std::move(body),
                                       http::status::bad_request, request,
                                       MediaType::textPlain);

@@ -31,9 +31,10 @@ class NaryExpression : public SparqlExpression {
 
   // Construct from `N` child expressions. Each of the children must have a type
   // `std::unique_ptr<SubclassOfSparqlExpression>`.
-  CPP_template(typename... C)(
-      requires(concepts::convertible_to<C, SparqlExpression::Ptr>&&...)
-          CPP_and(sizeof...(C) == N)) explicit NaryExpression(C... children)
+  CPP_template(
+      typename... C) (requires(concepts::convertible_to<C, SparqlExpression::Ptr>&&...)
+                  CPP_and(sizeof...(C) == N))
+  explicit NaryExpression(C... children)
       : NaryExpression{Children{std::move(children)...}} {}
 
   // __________________________________________________________________________
@@ -48,11 +49,11 @@ class NaryExpression : public SparqlExpression {
   ql::span<SparqlExpression::Ptr> childrenImpl() override;
 
   // Evaluate the `naryOperation` on the `operands` using the `context`.
-  CPP_template(typename... Operands)(
-      requires(SingleExpressionResult<Operands>&&...)) static ExpressionResult
-      evaluateOnChildrenOperands(NaryOperation naryOperation,
-                                 EvaluationContext* context,
-                                 Operands&&... operands) {
+  CPP_template(
+      typename... Operands) (requires(SingleExpressionResult<Operands>&&...))
+  static ExpressionResult evaluateOnChildrenOperands(
+      NaryOperation naryOperation, EvaluationContext* context,
+      Operands&&... operands) {
     // Perform a more efficient calculation if a specialized function exists
     // that matches all operands.
     if (isAnySpecializedFunctionPossible(naryOperation._specializedFunctions,

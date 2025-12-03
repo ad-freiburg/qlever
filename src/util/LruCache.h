@@ -35,10 +35,10 @@ class LRUCache {
   // found. Otherwise, compute the value using `computeFunction` and store it in
   // the cache. If the cache is already at maximum capacity, evict the least
   // recently used element.
-  CPP_template(typename Func)(
-      requires ad_utility::InvocableWithConvertibleReturnType<
-          Func, V, const K&>) const V& getOrCompute(const K& key,
-                                                    Func computeFunction) {
+  CPP_template(
+      typename Func) (requires ad_utility::InvocableWithConvertibleReturnType<Func, V,
+                                                                      const K&>)
+  const V& getOrCompute(const K& key, Func computeFunction) {
     auto it = cache_.find(key);
     if (it != cache_.end()) {
       const auto& [value, listIterator] = it->second;

@@ -178,8 +178,8 @@ struct VocabularyMetaData {
 template <typename W, typename C>
 auto mergeVocabulary(const std::string& basename, size_t numFiles, W comparator,
                      C& wordCallback, ad_utility::MemorySize memoryToUse)
-    -> CPP_ret(VocabularyMetaData)(
-        requires WordComparator<W>&& WordCallback<C>);
+    -> CPP_ret(
+        VocabularyMetaData)(requires WordComparator<W> && WordCallback<C>);
 
 // A helper class that implements the `mergeVocabulary` function (see
 // above). Everything in this class is private and only the
@@ -201,8 +201,8 @@ class VocabularyMerger {
   friend auto mergeVocabulary(const std::string& basename, size_t numFiles,
                               W comparator, C& wordCallback,
                               ad_utility::MemorySize memoryToUse)
-      -> CPP_ret(VocabularyMetaData)(
-          requires WordComparator<W>&& WordCallback<C>);
+      -> CPP_ret(
+          VocabularyMetaData)(requires WordComparator<W> && WordCallback<C>);
   VocabularyMerger() = default;
 
   // _______________________________________________________________
@@ -211,9 +211,7 @@ class VocabularyMerger {
   template <typename W, typename C>
   auto mergeVocabulary(const std::string& basename, size_t numFiles,
                        W comparator, C& wordCallback,
-                       ad_utility::MemorySize memoryToUse)
-      -> CPP_ret(VocabularyMetaData)(
-          requires WordComparator<W>&& WordCallback<C>);
+                       ad_utility::MemorySize memoryToUse) -> CPP_ret(VocabularyMetaData)(requires WordComparator<W> && WordCallback<C>);
 
   // Helper `struct` for a word from a partial vocabulary.
   struct QueueWord {
@@ -249,10 +247,10 @@ class VocabularyMerger {
     CPP_template(typename C, typename L)(
       requires WordCallback<C> CPP_and ranges::predicate<
           L, TripleComponentWithIndex, TripleComponentWithIndex>)
-      // clang-format on
-      void writeQueueWordsToIdMap(const std::vector<QueueWord>& buffer,
-                                  C& wordCallback, const L& lessThan,
-                                  ad_utility::ProgressBar& progressBar);
+  // clang-format on
+  void writeQueueWordsToIdMap(const std::vector<QueueWord>& buffer,
+                              C& wordCallback, const L& lessThan,
+                              ad_utility::ProgressBar& progressBar);
 
   // Close all associated files and file-based vectors and reset all internal
   // variables.

@@ -32,12 +32,12 @@ antlr error message are included as exception cause.
 For an example of a valid `GrammarParseException` see
 `InvalidSparqlQueryException`.
 */
-CPP_template(typename GrammarParseException)(
-    requires ql::concepts::derived_from<GrammarParseException, ParseException>
-        CPP_and ql::concepts::constructible_from<
-            GrammarParseException, std::string_view,
-            std::optional<ExceptionMetadata>>) struct ThrowingErrorListener
-    : public antlr4::BaseErrorListener {
+CPP_template(typename GrammarParseException) (
+      requires ql::concepts::derived_from<GrammarParseException, ParseException>
+          CPP_and ql::concepts::constructible_from<
+              GrammarParseException, std::string_view,
+              std::optional<ExceptionMetadata>>)
+struct ThrowingErrorListener : public antlr4::BaseErrorListener {
   void syntaxError(antlr4::Recognizer* recognizer,
                    antlr4::Token* offendingSymbol, size_t line,
                    size_t charPositionInLine, const std::string& msg,

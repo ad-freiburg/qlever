@@ -142,16 +142,15 @@ class PropertyPath {
   // Process the path with the given functions. The functions are called
   // depending on which internal representation this instance has.
   CPP_template(typename T, typename IriFunc, typename ModifiedPathFunc,
-               typename MinMaxPathFunc)(
-      requires ad_utility::InvocableWithConvertibleReturnType<
-          IriFunc, T, const ad_utility::triple_component::Iri&>
-          CPP_and ad_utility::InvocableWithConvertibleReturnType<
-              ModifiedPathFunc, T, const std::vector<PropertyPath>&, Modifier>
-              CPP_and ad_utility::InvocableWithConvertibleReturnType<
-                  MinMaxPathFunc, T, const PropertyPath&, size_t, size_t>) T
-      handlePath(const IriFunc& iriFunc,
-                 const ModifiedPathFunc& modifiedPathFunc,
-                 const MinMaxPathFunc& minMaxPathFunc) const {
+               typename MinMaxPathFunc) (
+        requires ad_utility::InvocableWithConvertibleReturnType<
+            IriFunc, T, const ad_utility::triple_component::Iri&>
+            CPP_and ad_utility::InvocableWithConvertibleReturnType<
+                ModifiedPathFunc, T, const std::vector<PropertyPath>&, Modifier>
+                CPP_and ad_utility::InvocableWithConvertibleReturnType<
+                    MinMaxPathFunc, T, const PropertyPath&, size_t, size_t>)
+  T handlePath(const IriFunc& iriFunc, const ModifiedPathFunc& modifiedPathFunc,
+               const MinMaxPathFunc& minMaxPathFunc) const {
     return std::visit(
         ad_utility::OverloadCallOperator{
             iriFunc,

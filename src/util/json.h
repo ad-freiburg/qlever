@@ -49,8 +49,8 @@ CPP_concept OrderedOrUnorderedJson =
 @param jsonFileName Name of the file, or path to the file. Must describe a
 `.json` file.
 */
-CPP_template(typename Json)(requires OrderedOrUnorderedJson<Json>) Json
-    fileToJson(std::string_view jsonFileName) {
+CPP_template(typename Json) (requires OrderedOrUnorderedJson<Json>)
+Json fileToJson(std::string_view jsonFileName) {
   // Check, if the filename/-path ends with ".json". Checking, if it's a valid
   // file, is done by `ad_utility::makeIfstream`.
   if (!ql::ends_with(jsonFileName, ".json")) {
@@ -72,8 +72,8 @@ CPP_template(typename Json)(requires OrderedOrUnorderedJson<Json>) Json
 @brief Returns the string representation of the type of the given
 `nlohmann::json`. Only supports official json types.
 */
-CPP_template(typename T)(requires OrderedOrUnorderedJson<T>) inline std::string
-    jsonToTypeString(const T& j) {
+CPP_template(typename T) (requires OrderedOrUnorderedJson<T>)
+inline std::string jsonToTypeString(const T& j) {
   if (j.is_array()) {
     return "array";
   } else if (j.is_boolean()) {
@@ -107,9 +107,8 @@ in such cases will always return a `std::optional`, that contains no value.
 namespace nlohmann {
 template <typename T>
 struct adl_serializer<std::optional<T>> {
-  CPP_template(typename S)(
-      requires OrderedOrUnorderedJson<
-          S>) static void to_json(S& j, const std::optional<T>& opt) {
+  CPP_template(typename S) (requires OrderedOrUnorderedJson<S>)
+  static void to_json(S& j, const std::optional<T>& opt) {
     if (opt.has_value()) {
       j = opt.value();
     } else {
@@ -117,9 +116,8 @@ struct adl_serializer<std::optional<T>> {
     }
   }
 
-  CPP_template(typename S)(requires OrderedOrUnorderedJson<
-                           S>) static void from_json(const S& j,
-                                                     std::optional<T>& opt) {
+  CPP_template(typename S) (requires OrderedOrUnorderedJson<S>)
+  static void from_json(const S& j, std::optional<T>& opt) {
     if (j.is_null()) {
       opt = std::nullopt;
     } else {
@@ -134,16 +132,14 @@ struct adl_serializer<std::optional<T>> {
 namespace nlohmann {
 template <>
 struct adl_serializer<std::monostate> {
-  CPP_template(typename S)(requires OrderedOrUnorderedJson<
-                           S>) static void to_json(S& j,
-                                                   const std::monostate&) {
+  CPP_template(typename S) (requires OrderedOrUnorderedJson<S>)
+  static void to_json(S& j, const std::monostate&) {
     // Monostate is just an empty placeholder value.
     j = nullptr;
   }
 
-  CPP_template(typename S)(requires OrderedOrUnorderedJson<
-                           S>) static void from_json(const S& j,
-                                                     const std::monostate&) {
+  CPP_template(typename S) (requires OrderedOrUnorderedJson<S>)
+  static void from_json(const S& j, const std::monostate&) {
     /*
     Monostate holds no values, so the given monostate is already identical to
     the serialized one.
@@ -174,9 +170,8 @@ Example: The serialized format for a `std::variant<int, float>` containing a
 namespace nlohmann {
 template <typename... Types>
 struct adl_serializer<std::variant<Types...>> {
-  CPP_template(typename S)(
-      requires OrderedOrUnorderedJson<
-          S>) static void to_json(S& j, const std::variant<Types...>& var) {
+  CPP_template(typename S) (requires OrderedOrUnorderedJson<S>)
+  static void to_json(S& j, const std::variant<Types...>& var) {
     // We need to save, which of the types the std::variant actually
     // uses.
     j["index"] = var.index();
@@ -189,9 +184,8 @@ struct adl_serializer<std::variant<Types...>> {
     std::visit([&j](const auto& value) { j["value"] = value; }, var);
   }
 
-  CPP_template(typename S)(
-      requires OrderedOrUnorderedJson<
-          S>) static void from_json(const S& j, std::variant<Types...>& var) {
+  CPP_template(typename S) (requires OrderedOrUnorderedJson<S>)
+  static void from_json(const S& j, std::variant<Types...>& var) {
     // Which of the `sizeof...(Types)` possible value types, was the
     // serialized std::variant using?
     size_t index = j["index"].template get<size_t>();
@@ -227,9 +221,8 @@ namespace nlohmann {
 template <typename T>
 struct adl_serializer<std::unique_ptr<T>,
                       std::enable_if_t<std::is_copy_constructible_v<T>>> {
-  CPP_template(typename S)(
-      requires OrderedOrUnorderedJson<
-          S>) static void to_json(S& j, const std::unique_ptr<T>& ptr) {
+  CPP_template(typename S) (requires OrderedOrUnorderedJson<S>)
+  static void to_json(S& j, const std::unique_ptr<T>& ptr) {
     // Does the `unique_ptr` hold anything? If yes, save the dereferenced
     // object, if no, save a `nullptr`.
     if (ptr) {
@@ -239,9 +232,8 @@ struct adl_serializer<std::unique_ptr<T>,
     }
   }
 
-  CPP_template(typename S)(requires OrderedOrUnorderedJson<
-                           S>) static void from_json(const S& j,
-                                                     std::unique_ptr<T>& ptr) {
+  CPP_template(typename S) (requires OrderedOrUnorderedJson<S>)
+  static void from_json(const S& j, std::unique_ptr<T>& ptr) {
     if (j.is_null()) {
       // If `json` is null, we just delete the content of ptr, because it
       // should be an empty `unique_ptr`.

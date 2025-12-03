@@ -258,9 +258,8 @@ namespace {
 // `CachingTransformInputRange` with a trivial transformation. This enables the
 // usage of the `Range` with the additional interface and caching properties of
 // the `CachingInputRange`.
-CPP_template(typename Range)(
-    requires ad_utility::Rvalue<
-        Range&&>) auto moveToCachingInputRange(Range&& range) {
+CPP_template(typename Range) (requires ad_utility::Rvalue<Range &&>)
+auto moveToCachingInputRange(Range&& range) {
   return ad_utility::CachingTransformInputRange(
       AD_FWD(range), [](auto& input) { return std::move(input); });
 }

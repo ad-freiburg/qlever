@@ -56,10 +56,10 @@ namespace detail {
 
 // Call the `lambda` when the correct compile-time `Int`s are given as a
 // `std::integer_sequence`.
-CPP_variadic_template(typename Int, Int... Is, typename F, typename... Args)(
-    requires ql::concepts::integral<
-        Int>) auto applyOnIntegerSequence(ad_utility::ValueSequence<Int, Is...>,
-                                          F&& lambda, Args&&... args) {
+CPP_variadic_template(typename Int, Int... Is, typename F,
+                      typename... Args)(requires ql::concepts::integral<Int>)
+auto applyOnIntegerSequence(ad_utility::ValueSequence<Int, Is...>, F&& lambda,
+                            Args&&... args) {
   return lambda.template operator()<Is...>(AD_FWD(args)...);
 };
 
@@ -72,10 +72,9 @@ static constexpr std::array<Int, NumValues> DummyArray{};
 // J,...)(args)` where `I, J, ...` are the elements in the `array`. Requires
 // that each element in the `array` is `<= maxValue`.
 CPP_variadic_template(int maxValue, size_t NumValues, typename Int, typename F,
-                      typename... Args)(
-    requires(ql::concepts::integral<
-             Int>)) auto callLambdaForIntArray(std::array<Int, NumValues> array,
-                                               F&& lambda, Args&&... args) {
+                      typename... Args)(requires(ql::concepts::integral<Int>))
+auto callLambdaForIntArray(std::array<Int, NumValues> array, F&& lambda,
+                           Args&&... args) {
   AD_CONTRACT_CHECK(
       ql::ranges::all_of(array, [](auto el) { return el <= maxValue; }));
   auto apply = [&](auto integerSequence) {
@@ -130,9 +129,8 @@ CPP_variadic_template(int maxValue, size_t NumValues, typename Int, typename F,
 
 // Overload for a single int.
 CPP_variadic_template(int maxValue, typename Int, typename F,
-                      typename... Args)(requires(
-    ql::concepts::integral<Int>)) auto callLambdaForIntArray(Int i, F&& lambda,
-                                                             Args&&... args) {
+                      typename... Args)(requires(ql::concepts::integral<Int>))
+auto callLambdaForIntArray(Int i, F&& lambda, Args&&... args) {
   return callLambdaForIntArray<maxValue>(std::array{i}, AD_FWD(lambda),
                                          AD_FWD(args)...);
 }
@@ -149,10 +147,9 @@ constexpr int mapToZeroIfTooLarge(int x, int maxValue) {
 // `mapToZeroIfTooLarge`.
 CPP_variadic_template(int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE,
                       size_t NumIntegers, typename Int, typename F,
-                      typename... Args)(
-    requires std::is_integral_v<Int>) decltype(auto)
-    callFixedSize(std::array<Int, NumIntegers> ints, F&& functor,
-                  Args&&... args) {
+                      typename... Args)(requires std::is_integral_v<Int>)
+decltype(auto) callFixedSize(std::array<Int, NumIntegers> ints, F&& functor,
+                             Args&&... args) {
   static_assert(NumIntegers > 0);
   // TODO<joka921, C++23> Use `std::bind_back`
   auto p = [](int i) { return detail::mapToZeroIfTooLarge(i, MaxValue); };
@@ -168,9 +165,9 @@ CPP_variadic_template(int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE,
 
 // Overload for a single integer.
 CPP_variadic_template(int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE,
-                      typename Int, typename F, typename... Args)(
-    requires std::is_integral_v<Int>) decltype(auto)
-    callFixedSize(Int i, F&& functor, Args&&... args) {
+                      typename Int, typename F,
+                      typename... Args)(requires std::is_integral_v<Int>)
+decltype(auto) callFixedSize(Int i, F&& functor, Args&&... args) {
   return callFixedSize<MaxValue>(std::array{i}, AD_FWD(functor),
                                  AD_FWD(args)...);
 }
@@ -180,19 +177,18 @@ CPP_variadic_template(int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE,
 // as ValueIdentity objects to the functor rather than as template parameters.
 CPP_variadic_template(int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE,
                       size_t NumIntegers, typename Int, typename F,
-                      typename... Args)(
-    requires std::is_integral_v<Int>) decltype(auto)
-    callFixedSizeVi(std::array<Int, NumIntegers> ints, F&& functor,
-                    Args&&... args) {
+                      typename... Args)(requires std::is_integral_v<Int>)
+decltype(auto) callFixedSizeVi(std::array<Int, NumIntegers> ints, F&& functor,
+                               Args&&... args) {
   return callFixedSize<MaxValue>(ints, ApplyAsValueIdentity{AD_FWD(functor)},
                                  AD_FWD(args)...);
 }
 
 // Overload for a single integer.
 CPP_variadic_template(int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE,
-                      typename Int, typename F, typename... Args)(
-    requires std::is_integral_v<Int>) decltype(auto)
-    callFixedSizeVi(Int i, F&& functor, Args&&... args) {
+                      typename Int, typename F,
+                      typename... Args)(requires std::is_integral_v<Int>)
+decltype(auto) callFixedSizeVi(Int i, F&& functor, Args&&... args) {
   return callFixedSizeVi<MaxValue>(std::array{i}, AD_FWD(functor),
                                    AD_FWD(args)...);
 }

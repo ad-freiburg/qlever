@@ -66,10 +66,10 @@ class KeyOrder {
   }
 
   // The internal implementation of `permute` above.
-  CPP_variadic_template(typename T, size_t N, size_t... Indexes)(requires(
-      sizeof...(Indexes) ==
-      N)) auto permuteImpl(const std::array<T, N>& input,
-                           std::integer_sequence<size_t, Indexes...>) const
+  CPP_variadic_template(typename T, size_t N,
+                        size_t... Indexes)(requires(sizeof...(Indexes) == N))
+  auto permuteImpl(const std::array<T, N>& input,
+                   std::integer_sequence<size_t, Indexes...>) const
       -> std::array<T, N> {
     return {input[std::get<Indexes>(keys_)]...};
   }

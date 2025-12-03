@@ -21,9 +21,9 @@ sparqlExpression::GroupConcatExpression::GroupConcatExpression(
 sparqlExpression::ExpressionResult
 sparqlExpression::GroupConcatExpression::evaluate(
     EvaluationContext* context) const {
-  auto impl = [this, context](auto&& el)
-      -> CPP_ret(ExpressionResult)(
-          requires SingleExpressionResult<decltype(el)>) {
+  auto impl = [this, context](auto&& el) -> CPP_ret(
+                                             ExpressionResult)(requires SingleExpressionResult<decltype(el)>)
+  {
     bool undefined = false;
     std::string result;
     std::optional<std::string> langTag;

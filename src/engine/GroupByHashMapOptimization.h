@@ -18,10 +18,8 @@
 // set error flag.
 static constexpr auto valueAdder = []() {
   auto numericValueAdder = [](auto value, double& sum,
-                              [[maybe_unused]] const bool& error)
-      -> CPP_ret(void)(requires std::is_arithmetic_v<decltype(value)>) {
-    sum += static_cast<double>(value);
-  };
+                              [[maybe_unused]] const bool& error) -> CPP_ret(void)(requires std::is_arithmetic_v<decltype(value)>)
+  { sum += static_cast<double>(value); };
   auto nonNumericValueAdder = [](sparqlExpression::detail::NotNumeric,
                                  [[maybe_unused]] const double& sum,
                                  bool& error) { error = true; };

@@ -104,12 +104,12 @@ class Join : public Operation {
   // `action` is a lambda that can be used to send partial chunks to a consumer
   // in addition to returning the remaining result. If laziness is not required
   // it is a no-op.
-  CPP_template(typename ActionT)(
-      requires ad_utility::InvocableWithExactReturnType<
-          ActionT, Result::IdTableVocabPair,
-          std::function<void(IdTable&, LocalVocab&)>>) Result
-      createResult(bool requestedLaziness, ActionT action,
-                   OptionalPermutation permutation = {}) const;
+  CPP_template(
+      typename ActionT) (requires ad_utility::InvocableWithExactReturnType<
+              ActionT, Result::IdTableVocabPair,
+              std::function<void(IdTable&, LocalVocab&)>>)
+  Result createResult(bool requestedLaziness, ActionT action,
+                      OptionalPermutation permutation = {}) const;
 
   // Fallback implementation of a join that is used when at least one of the two
   // inputs is not fully materialized. This represents the general case where we

@@ -19,10 +19,10 @@ namespace ad_utility::serialization {
 
 // Allow trivial serialization for `std::array` if the `value_type` is already
 // `TriviallySerializable`.
-CPP_template(typename T, typename U)(
-    requires ad_utility::SimilarToArray<T> CPP_and
-        TriviallySerializable<typename T::value_type>) std::true_type
-    allowTrivialSerialization(T, U);
+CPP_template(typename T,
+             typename U) (requires ad_utility::SimilarToArray<T> CPP_and
+                TriviallySerializable<typename T::value_type>)
+std::true_type allowTrivialSerialization(T, U);
 
 // A helper function to figure out whether all types contained in a tuple are
 // trivially seraizliable.

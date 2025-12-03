@@ -926,9 +926,9 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream(
           const auto& val = selectedColumnIndices[j].value();
           Id id = pair.idTable()(i, val.columnIndex_);
           auto optionalStringAndType =
-              idToStringAndType<format == MediaType::csv>(
-                  qet.getQec()->getIndex(), id, pair.localVocab(),
-                  escapeFunction);
+              idToStringAndType < format ==
+              MediaType::csv > (qet.getQec()->getIndex(), id, pair.localVocab(),
+                                escapeFunction);
           if (optionalStringAndType.has_value()) [[likely]] {
             STREAMABLE_YIELD(optionalStringAndType.value().first);
           }

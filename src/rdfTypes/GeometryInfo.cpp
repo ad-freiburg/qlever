@@ -247,7 +247,7 @@ std::optional<NumGeometries> GeometryInfo::getNumGeometries(
 
 // ____________________________________________________________________________
 CPP_template_def(typename RequestedInfo)(requires RequestedInfoT<RequestedInfo>)
-    RequestedInfo GeometryInfo::getRequestedInfo() const {
+RequestedInfo GeometryInfo::getRequestedInfo() const {
   if constexpr (std::is_same_v<RequestedInfo, GeometryInfo>) {
     return *this;
   } else if constexpr (std::is_same_v<RequestedInfo, Centroid>) {
@@ -278,8 +278,8 @@ template MetricArea GeometryInfo::getRequestedInfo<MetricArea>() const;
 
 // ____________________________________________________________________________
 CPP_template_def(typename RequestedInfo)(requires RequestedInfoT<RequestedInfo>)
-    std::optional<RequestedInfo> GeometryInfo::getRequestedInfo(
-        std::string_view wkt) {
+std::optional<RequestedInfo> GeometryInfo::getRequestedInfo(
+    std::string_view wkt) {
   if constexpr (std::is_same_v<RequestedInfo, GeometryInfo>) {
     return GeometryInfo::fromWktLiteral(wkt);
   } else if constexpr (std::is_same_v<RequestedInfo, Centroid>) {

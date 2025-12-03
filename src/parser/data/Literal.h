@@ -17,9 +17,8 @@
 class Literal {
   std::string _stringRepresentation;
 
-  CPP_template_2(typename T)(
-      requires ad_utility::Streamable<T>) static std::string
-      toString(const T& t) {
+  CPP_template_2(typename T)(requires ad_utility::Streamable<T>)
+  static std::string toString(const T& t) {
     std::ostringstream stream;
     stream << t;
     return std::move(stream).str();
@@ -31,8 +30,9 @@ class Literal {
 
  public:
   CPP_template_2(typename T)(
-      requires CPP_NOT(ql::concepts::same_as<ql::remove_cvref_t<T>, Literal>)
-          CPP_and_2 ad_utility::Streamable<T>) explicit Literal(T&& t)
+        requires CPP_NOT(ql::concepts::same_as<ql::remove_cvref_t<T>, Literal>)
+            CPP_and_2 ad_utility::Streamable<T>)
+  explicit Literal(T&& t)
       : _stringRepresentation(toString(std::forward<T>(t))) {}
 
   explicit Literal(std::variant<int64_t, double> t) {

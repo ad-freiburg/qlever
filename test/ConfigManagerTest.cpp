@@ -1204,7 +1204,8 @@ struct AddValidatorToConfigManager {
   template <typename... Ts>
   void operator()(size_t variant, ConfigManager& m,
                   ConstConfigOptionProxy<Ts>... validatorArguments) const
-      requires(sizeof...(Ts) == sizeof...(validatorArguments)) {
+    requires(sizeof...(Ts) == sizeof...(validatorArguments))
+  {
     // Add the new validator
     addValidatorFunction(
         AdjustVariantArgument{}.template operator()<Ts...>(variant),
@@ -1237,9 +1238,8 @@ struct TestGeneratedValidatorsOfConfigManager {
       const nlohmann::json& defaultValues,
       const QL_CONCEPT_OR_NOTHING(
           ql::concepts::same_as<
-              nlohmann::json::json_pointer>) auto&... configOptionPaths)
-      -> CPP_ret(void)(requires(sizeof...(Ts) ==
-                                sizeof...(configOptionPaths))) {
+              nlohmann::json::json_pointer>) auto&... configOptionPaths) -> CPP_ret(void)(requires(sizeof...(Ts) == sizeof...(configOptionPaths)))
+  {
     // Using the invariant of our function generator, to create valid
     // and none valid values for all added validators.
     for (size_t validatorNumber = variantStart; validatorNumber < variantEnd;
@@ -1301,7 +1301,8 @@ struct DoTestNoValidatorInSubManager {
       ConfigManager& m, const nlohmann::json& defaultValues,
       const std::pair<nlohmann::json::json_pointer,
                       ConstConfigOptionProxy<Ts>>&... validatorArguments) const
-      requires(sizeof...(Ts) == sizeof...(validatorArguments)) {
+    requires(sizeof...(Ts) == sizeof...(validatorArguments))
+  {
     // How many validators are to be added?
     constexpr size_t NUMBER_OF_VALIDATORS{5};
 
@@ -1350,7 +1351,8 @@ struct DoTestAlwaysValidatorInSubManager {
       const nlohmann::json& defaultValues,
       const std::pair<nlohmann::json::json_pointer,
                       ConstConfigOptionProxy<Ts>>&... validatorArguments) const
-      requires(sizeof...(Ts) == sizeof...(validatorArguments)) {
+    requires(sizeof...(Ts) == sizeof...(validatorArguments))
+  {
     // How many validators are to be added to each of the managers?
     constexpr size_t NUMBER_OF_VALIDATORS{5};
 
@@ -2311,7 +2313,7 @@ struct ConfigOptionsAndValidatorsOrder {
 
   // Appends the content of an different `ConfigOptionsAndValidatorsOrder`.
   template <typename T>
-  requires isSimilar<T, ConfigOptionsAndValidatorsOrder>
+    requires isSimilar<T, ConfigOptionsAndValidatorsOrder>
   void append(T&& order) {
     appendVector(configOptions_, AD_FWD(order).configOptions_);
     appendVector(validators_, AD_FWD(order).validators_);

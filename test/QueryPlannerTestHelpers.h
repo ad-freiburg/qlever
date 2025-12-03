@@ -77,11 +77,10 @@ QetMatcher RootOperation(M matcher) {
 }
 
 // Match the `getChildren` method of an `Operation`.
-CPP_template(typename... ChildArgs)(
-    requires(...&& ql::concepts::same_as<QetMatcher,
-                                         ChildArgs>))  //
-    inline Matcher<const ::Operation&> children(
-        const ChildArgs&... childMatchers) {
+CPP_template(
+    typename... ChildArgs) (requires(...&& ql::concepts::same_as<QetMatcher,
+                                                 ChildArgs>))  //
+inline Matcher<const ::Operation&> children(const ChildArgs&... childMatchers) {
   return Property("getChildren", &Operation::getChildren,
                   ElementsAre(Pointee(childMatchers)...));
 }
@@ -91,9 +90,9 @@ CPP_template(typename... ChildArgs)(
 // `childMatcher`s. Note that the child matchers are not ordered.
 template <typename OperationType>
 struct MatchTypeAndUnorderedChildrenImpl {
-  CPP_template(typename... ChildArgs)(
-      requires(...&& ql::concepts::same_as<QetMatcher, ChildArgs>)) auto
-  operator()(const ChildArgs&... childMatchers) const {
+  CPP_template(
+      typename... ChildArgs) (requires(...&& ql::concepts::same_as<QetMatcher, ChildArgs>))
+  auto operator()(const ChildArgs&... childMatchers) const {
     return RootOperation<OperationType>(
         AllOf(Property("getChildren", &Operation::getChildren,
                        UnorderedElementsAre(Pointee(childMatchers)...))));
@@ -108,9 +107,9 @@ auto MatchTypeAndUnorderedChildren =
 // appear in exact the correct order.
 template <typename OperationType>
 struct MatchTypeAndOrderedChildrenImpl {
-  CPP_template(typename... ChildArgs)(
-      requires(...&& ql::concepts::same_as<QetMatcher, ChildArgs>)) auto
-  operator()(const ChildArgs&... childMatchers) const {
+  CPP_template(
+      typename... ChildArgs) (requires(...&& ql::concepts::same_as<QetMatcher, ChildArgs>))
+  auto operator()(const ChildArgs&... childMatchers) const {
     return RootOperation<OperationType>(AllOf(children(childMatchers...)));
   }
 };

@@ -23,9 +23,9 @@ namespace detail {
 // unsigned character types. Note that this is one of the few cases where a
 // `reinterpret_cast` is safe.
 struct CastToUnsignedPtr {
-  CPP_template(typename T)(
-      requires ad_utility::SameAsAny<T, char*, const char*>) auto
-  operator()(T ptr) const {
+  CPP_template(
+      typename T) (requires ad_utility::SameAsAny<T, char*, const char*>)
+  auto operator()(T ptr) const {
     using Res = std::conditional_t<ql::concepts::same_as<T, const char*>,
                                    const unsigned char*, unsigned char*>;
     return reinterpret_cast<Res>(ptr);
@@ -64,9 +64,9 @@ class FsstDecoder {
     return output;
   }
   // Allow this type to be trivially serializable,
-  CPP_template(typename T, typename U)(
-      requires ql::concepts::same_as<T, FsstDecoder>) friend std::true_type
-      allowTrivialSerialization(T, U&&) {
+  CPP_template(typename T,
+               typename U) (requires ql::concepts::same_as<T, FsstDecoder>)
+  friend std::true_type allowTrivialSerialization(T, U&&) {
     return {};
   }
 };
@@ -106,9 +106,10 @@ class FsstRepeatedDecoder {
     return result;
   }
   // Allow this type to be trivially serializable,
-  CPP_template_2(typename T, typename U)(
-      requires ql::concepts::same_as<T, FsstRepeatedDecoder>)
-      [[maybe_unused]] friend std::true_type allowTrivialSerialization(T, U) {
+  CPP_template_2(
+      typename T,
+      typename U)(requires ql::concepts::same_as<T, FsstRepeatedDecoder>)
+  [[maybe_unused]] friend std::true_type allowTrivialSerialization(T, U) {
     return {};
   }
 };

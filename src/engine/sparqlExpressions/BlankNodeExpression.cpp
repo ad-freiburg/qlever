@@ -85,12 +85,13 @@ class BlankNodeExpression : public SparqlExpression {
 
   // Perform the actual evaluation of the expression. This creates a blank node
   // based on the result of `getNextLabel`.
-  CPP_template(typename Printable, typename Func)(
-      requires ad_utility::InvocableWithConvertibleReturnType<
-          Func, std::optional<Printable>>
-          CPP_and std::is_constructible_v<absl::AlphaNum, Printable>)
-      ExpressionResult
-      evaluateImpl(EvaluationContext* context, Func getNextLabel) const {
+  CPP_template(
+      typename Printable,
+      typename Func) (requires ad_utility::InvocableWithConvertibleReturnType<
+              Func, std::optional<Printable>>
+                  CPP_and std::is_constructible_v<absl::AlphaNum, Printable>)
+  ExpressionResult evaluateImpl(EvaluationContext* context,
+                                Func getNextLabel) const {
     std::string_view blankNodePrefix = "un";
 
     VectorWithMemoryLimit<IdOrLiteralOrIri> result{context->_allocator};

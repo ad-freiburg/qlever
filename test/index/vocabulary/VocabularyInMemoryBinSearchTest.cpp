@@ -63,7 +63,9 @@ class VocabularyCreator {
   auto createVocabularyFromDiskImpl(
       const std::vector<std::string>& words,
       std::optional<std::vector<uint64_t>> ids = std::nullopt) {
-    { createVocabularyImpl(words, std::move(ids)); }
+    {
+      createVocabularyImpl(words, std::move(ids));
+    }
     VocabularyInMemoryBinSearch vocabulary;
     vocabulary.open(vocabFilename_);
     return vocabulary;

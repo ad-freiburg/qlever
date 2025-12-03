@@ -189,11 +189,12 @@ struct VariadicExpressionFactory {
 // `make...` functions for n-ary expressions that have a compile-time known
 // number of children. This makes the testing easier, as we then can use the
 // same test helpers for all expressions.
-CPP_template(auto function)(
-    requires std::is_invocable_r_v<
-        SparqlExpression::Ptr, decltype(function),
-        std::vector<
-            SparqlExpression::Ptr> >) constexpr auto variadicExpressionFactory =
+CPP_template(
+    auto
+        function) (requires std::is_invocable_r_v<SparqlExpression::Ptr,
+                                           decltype(function),
+                                           std::vector<SparqlExpression::Ptr> >)
+constexpr auto variadicExpressionFactory =
     detail::VariadicExpressionFactory<function>{};
 
 SparqlExpression::Ptr makeCoalesceExpression(

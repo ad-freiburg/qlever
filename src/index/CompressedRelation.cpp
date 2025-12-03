@@ -960,14 +960,14 @@ size_t CompressedRelationReader::getResultSizeOfScan(
 }
 
 // ____________________________________________________________________________
-CPP_template_def(typename IdGetter)(
-    requires ad_utility::InvocableWithConvertibleReturnType<
-        IdGetter, Id, const CompressedBlockMetadata::PermutedTriple&>) IdTable
-    CompressedRelationReader::getDistinctColIdsAndCountsImpl(
-        IdGetter idGetter, const ScanSpecAndBlocks& scanSpecAndBlocks,
-        const CancellationHandle& cancellationHandle,
-        const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-        const LimitOffsetClause& limitOffset) const {
+CPP_template_def(
+    typename IdGetter)(requires ad_utility::InvocableWithConvertibleReturnType<
+           IdGetter, Id, const CompressedBlockMetadata::PermutedTriple&>)
+IdTable CompressedRelationReader::getDistinctColIdsAndCountsImpl(
+    IdGetter idGetter, const ScanSpecAndBlocks& scanSpecAndBlocks,
+    const CancellationHandle& cancellationHandle,
+    const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+    const LimitOffsetClause& limitOffset) const {
   // The result has two columns: one for the distinct `Id`s and one for their
   // counts.
   IdTableStatic<2> table(allocator_);
@@ -1548,9 +1548,10 @@ namespace {
 // Collect elements of type `T` in batches of size 100'000 and apply the
 // `Function` to each batch. For the last batch (which might be smaller)  the
 // function is applied in the destructor.
-CPP_template(typename T, typename Function)(
-    requires ad_utility::InvocableWithExactReturnType<
-        Function, void, std::vector<T>&&>) struct Batcher {
+CPP_template(typename T, typename Function) (
+      requires ad_utility::InvocableWithExactReturnType<Function, void,
+                                                        std::vector<T> &&>)
+struct Batcher {
   Function function_;
   size_t blocksize_;
   std::vector<T> vec_;
@@ -2020,20 +2021,17 @@ auto createErrorMessage = [](const auto& b1, const auto& b2,
 // _____________________________________________________________________________
 // Check if the provided `Range` holds less than two `CompressedBlockMetadata`
 // values.
-CPP_template(typename Range)(
-    requires ql::ranges::input_range<
-        Range>) static bool checkBlockRangeSizeLessThanTwo(const Range&
-                                                               blockMetadataRange) {
+CPP_template(typename Range) (requires ql::ranges::input_range<Range>)
+static bool checkBlockRangeSizeLessThanTwo(const Range& blockMetadataRange) {
   auto begin = ql::ranges::begin(blockMetadataRange);
   auto end = ql::ranges::end(blockMetadataRange);
   return begin == end || ql::ranges::next(begin) == end;
 };
 
 // _____________________________________________________________________________
-CPP_template(typename Range)(
-    requires ql::ranges::input_range<
-        Range>) static void checkBlockMetadataInvariantOrderAndUniquenessImpl(const Range&
-                                                                                  blockMetadataRange) {
+CPP_template(typename Range) (requires ql::ranges::input_range<Range>)
+static void checkBlockMetadataInvariantOrderAndUniquenessImpl(
+    const Range& blockMetadataRange) {
   if (checkBlockRangeSizeLessThanTwo(blockMetadataRange)) {
     return;
   }
@@ -2059,7 +2057,8 @@ CPP_template(typename Range)(
 }
 
 // ____________________________________________________________________________
-CPP_template(typename Range)(requires ql::ranges::input_range<Range>) static void checkBlockMetadataInvariantBlockConsistencyImpl(
+CPP_template(typename Range) (requires ql::ranges::input_range<Range>)
+static void checkBlockMetadataInvariantBlockConsistencyImpl(
     const Range& blockMetadataRange, size_t firstFreeColIndex) {
   if (checkBlockRangeSizeLessThanTwo(blockMetadataRange)) {
     return;

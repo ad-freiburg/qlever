@@ -50,11 +50,12 @@ ad_utility::MemorySize getRequestBodyLimit();
  * a `net::awaitable<void>`. It is only called if the request is a valid
  * websocket upgrade request and the URL represents a valid path.
  */
-CPP_template(typename HttpHandler, typename WebSocketHandler)(
-    requires ad_utility::InvocableWithExactReturnType<
-        WebSocketHandler, net::awaitable<void>,
-        const http::request<http::string_body>&,
-        tcp::socket>) class HttpServer {
+CPP_template(
+    typename HttpHandler,
+    typename WebSocketHandler) (requires ad_utility::InvocableWithExactReturnType<
+            WebSocketHandler, net::awaitable<void>,
+            const http::request<http::string_body>&, tcp::socket>)
+class HttpServer {
  private:
   HttpHandler httpHandler_;
   int numServerThreads_;
@@ -81,17 +82,12 @@ CPP_template(typename HttpHandler, typename WebSocketHandler)(
   static constexpr bool isSupplier =
       ad_utility::InvocableWithConvertibleReturnType<
           HandlerSupplier, WebSocketHandler, net::io_context&>;
-  CPP_template_2(typename HandlerSupplier)(
-      requires isSupplier<
-          HandlerSupplier>) explicit HttpServer(unsigned short port,
-                                                std::string_view ipAddress =
-                                                    "0.0.0.0",
-                                                int numServerThreads = 1,
-                                                HttpHandler handler =
-                                                    HttpHandler{},
-                                                HandlerSupplier
-                                                    webSocketHandlerSupplier =
-                                                        {})
+  CPP_template_2(typename HandlerSupplier)(requires isSupplier<HandlerSupplier>)
+  explicit HttpServer(unsigned short port,
+                      std::string_view ipAddress = "0.0.0.0",
+                      int numServerThreads = 1,
+                      HttpHandler handler = HttpHandler{},
+                      HandlerSupplier webSocketHandlerSupplier = {})
       : httpHandler_{std::move(handler)},
         // We need at least two threads to avoid blocking.
         // TODO<joka921> why is that?

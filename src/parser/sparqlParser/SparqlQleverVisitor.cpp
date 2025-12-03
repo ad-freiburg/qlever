@@ -3046,20 +3046,18 @@ GraphTerm Visitor::visit(Parser::BlankNodeContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-CPP_template_def(typename Ctx)(
-    requires Visitor::voidWhenVisited<Visitor, Ctx>) void Visitor::
-    visitVector(const std::vector<Ctx*>& childContexts) {
+CPP_template_def(typename Ctx)(requires Visitor::voidWhenVisited<Visitor, Ctx>)
+void Visitor::visitVector(const std::vector<Ctx*>& childContexts) {
   for (const auto& child : childContexts) {
     visit(child);
   }
 }
 
 // ____________________________________________________________________________________
-CPP_template_def(typename Ctx)(
-    requires CPP_NOT(Visitor::voidWhenVisited<Visitor, Ctx>))
-    [[nodiscard]] auto Visitor::visitVector(
-        const std::vector<Ctx*>& childContexts)
-        -> std::vector<decltype(visit(childContexts[0]))> {
+CPP_template_def(
+    typename Ctx)(requires CPP_NOT(Visitor::voidWhenVisited<Visitor, Ctx>))
+[[nodiscard]] auto Visitor::visitVector(const std::vector<Ctx*>& childContexts)
+    -> std::vector<decltype(visit(childContexts[0]))> {
   std::vector<decltype(visit(childContexts[0]))> children;
   for (const auto& child : childContexts) {
     children.emplace_back(visit(child));
@@ -3102,8 +3100,8 @@ void Visitor::visitIf(Target* target, Ctx* ctx) {
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename Ctx)(requires Visitor::voidWhenVisited<
-                               Visitor, Ctx>) void Visitor::visitIf(Ctx* ctx) {
+CPP_template_def(typename Ctx)(requires Visitor::voidWhenVisited<Visitor, Ctx>)
+void Visitor::visitIf(Ctx* ctx) {
   if (ctx) {
     visit(ctx);
   }

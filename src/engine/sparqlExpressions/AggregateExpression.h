@@ -115,8 +115,9 @@ using AGG_EXP = AggregateExpression<
 template <typename NumericOperation>
 struct NumericExpressionForAggregate {
   template <typename... Args>
-  auto operator()(const Args&... args) const -> CPP_ret(NumericValue)(
-      requires(ad_utility::SimilarTo<Args, NumericValue>&&...)) {
+  auto operator()(const Args&... args) const -> CPP_ret(
+      NumericValue)(requires(ad_utility::SimilarTo<Args, NumericValue>&&...))
+  {
     auto visitor = [](const auto&... t) -> NumericValue {
       if constexpr ((... ||
                      std::is_same_v<NotNumeric, std::decay_t<decltype(t)>>)) {
@@ -204,7 +205,8 @@ template <valueIdComparators::Comparison comparison>
 struct MinMaxLambdaForAllTypes {
   template <typename T>
   auto operator()(const T& a, const T& b, const EvaluationContext* ctx) const
-      -> CPP_ret(T)(requires SingleExpressionResult<T>) {
+      -> CPP_ret(T)(requires SingleExpressionResult<T>)
+  {
     auto actualImpl = [ctx](const auto& x, const auto& y) {
       return compareIdsOrStrings<comparison>(x, y, ctx);
     };

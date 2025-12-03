@@ -26,7 +26,7 @@ template <typename Func>
 concept TestableFunction = std::is_invocable_r_v<void, Func, net::io_context&>;
 
 template <typename Func>
-requires(TestableCoroutine<Func> || TestableFunction<Func>)
+  requires(TestableCoroutine<Func> || TestableFunction<Func>)
 void runAsyncTest(Func innerRun, size_t numThreads) {
   auto ioContext = std::make_shared<net::io_context>();
   auto future = [&]() {

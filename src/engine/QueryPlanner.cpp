@@ -612,9 +612,9 @@ constexpr auto rewriteSingle = CPP_template_lambda()(typename T)(
 constexpr auto handleRepeatedVariablesImpl =
     [](const auto& triple, auto& addIndexScan,
        const auto& generateUniqueVarName, const auto& addFilter,
-       ql::span<const Permutation::Enum> permutations, auto... rewritePositions)
-    -> CPP_ret(void)(
-        requires(TriplePosition<decltype(rewritePositions)>&&...)) {
+       ql::span<const Permutation::Enum> permutations,
+       auto... rewritePositions) -> CPP_ret(void)(requires(TriplePosition<decltype(rewritePositions)>&&...))
+{
   auto scanTriple = triple;
   (..., rewriteSingle(rewritePositions, scanTriple, addFilter,
                       generateUniqueVarName));
@@ -656,9 +656,8 @@ void QueryPlanner::indexScanTwoVarsCase(
   auto handleRepeatedVariables =
       [&triple, &addIndexScan, &addFilter, &generate](
           ql::span<const Permutation::Enum> permutations,
-          auto... rewritePositions)
-      -> CPP_ret(void)(
-          requires(TriplePosition<decltype(rewritePositions)>&&...)) {
+          auto... rewritePositions) -> CPP_ret(void)(requires(TriplePosition<decltype(rewritePositions)>&&...))
+  {
     return handleRepeatedVariablesImpl(triple, addIndexScan, generate,
                                        addFilter, permutations,
                                        rewritePositions...);
@@ -711,9 +710,8 @@ void QueryPlanner::indexScanThreeVarsCase(
   auto handleRepeatedVariables =
       [&triple, &addIndexScan, &addFilter, &generate](
           ql::span<const Permutation::Enum> permutations,
-          auto... rewritePositions)
-      -> CPP_ret(void)(
-          requires(TriplePosition<decltype(rewritePositions)>&&...)) {
+          auto... rewritePositions) -> CPP_ret(void)(requires(TriplePosition<decltype(rewritePositions)>&&...))
+  {
     return handleRepeatedVariablesImpl(triple, addIndexScan, generate,
                                        addFilter, permutations,
                                        rewritePositions...);

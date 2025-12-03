@@ -99,13 +99,13 @@ CPP_concept CanStrCat = CPP_requires_ref(is_str_catable_, S);
 // * A type that can be passed to `absl::StrCat` (e.g. `string`, `string_views`,
 // builtin numeric types) [first overload]
 // * A callbable that takes no arguments and returns a string [second overload]
-CPP_template(typename S)(requires CanStrCat<S>) std::string
-    getMessageImpl(S&& s) {
+CPP_template(typename S) (requires CanStrCat<S>)
+std::string getMessageImpl(S&& s) {
   return absl::StrCat(AD_FWD(s));
 }
-CPP_template(typename T)(
-    requires ad_utility::InvocableWithConvertibleReturnType<T, std::string>)
-    std::string getMessageImpl(T&& f) {
+CPP_template(typename T) (
+      requires ad_utility::InvocableWithConvertibleReturnType<T, std::string>)
+std::string getMessageImpl(T&& f) {
   return std::invoke(f);
 }
 

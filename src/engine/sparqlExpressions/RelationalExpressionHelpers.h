@@ -143,8 +143,8 @@ CPP_concept StoresStringOrId =
 // `getRangeFromVocab` above for details). This function also takes `ValueId`s
 // and `pair<ValuedId, ValueId>` which are simply returned unchanged. This makes
 // the usage of this function easier.
-CPP_template(typename S)(requires StoresStringOrId<S>) auto makeValueId(
-    const S& value, const EvaluationContext* context) {
+CPP_template(typename S) (requires StoresStringOrId<S>)
+auto makeValueId(const S& value, const EvaluationContext* context) {
   if constexpr (ad_utility::SimilarToAny<S, ValueId, std::pair<Id, Id>>) {
     return value;
   } else if constexpr (ad_utility::isSimilar<S, IdOrLiteralOrIri>) {
@@ -168,10 +168,11 @@ template <valueIdComparators::Comparison Comp,
           valueIdComparators::ComparisonForIncompatibleTypes
               comparisonForIncompatibleTypes>
 inline const auto compareIdsOrStrings =
-    [](const auto& a, const auto& b, const EvaluationContext* ctx)
-    -> CPP_ret(valueIdComparators::ComparisonResult)(
-        requires StoresStringOrId<std::decay_t<decltype(a)>>&&
-            StoresStringOrId<std::decay_t<decltype(a)>>) {
+    [](const auto& a, const auto& b,
+       const EvaluationContext* ctx) -> CPP_ret(valueIdComparators::
+                                                    ComparisonResult)(requires StoresStringOrId<std::decay_t<decltype(a)>> &&
+           StoresStringOrId<std::decay_t<decltype(a)>>)
+{
   using T = std::decay_t<decltype(a)>;
   using U = std::decay_t<decltype(b)>;
   if constexpr (ad_utility::isSimilar<LocalVocabEntry, T> &&

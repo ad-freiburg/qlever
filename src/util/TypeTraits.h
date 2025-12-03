@@ -209,10 +209,9 @@ constexpr static bool alwaysFalse = false;
 /// From the type Tuple (std::tuple<A, B, C....>) creates the type
 /// std::tuple<TypeLifter<A>, TypeLifter<B>,...>
 CPP_template(typename Tuple,
-             template <typename>
-             typename TypeLifter)(requires isTuple<Tuple>) using LiftedTuple =
-    typename detail::LiftInnerTypes<
-        std::tuple, TypeLifter>::template TypeToLift<Tuple>::LiftedType;
+             template <typename> typename TypeLifter) (requires isTuple<Tuple>)
+using LiftedTuple = typename detail::LiftInnerTypes<
+    std::tuple, TypeLifter>::template TypeToLift<Tuple>::LiftedType;
 // Examples:
 static_assert(
     std::is_same_v<LiftedTuple<std::tuple<int, bool, char>, std::optional>,
@@ -221,10 +220,11 @@ static_assert(
 
 /// From the type Variant (std::variant<A, B, C....>) creates the type
 /// std::variant<TypeLifter<A>, TypeLifter<B>,...>
-CPP_template(typename Variant, template <typename> typename TypeLifter)(
-    requires isVariant<Variant>) using LiftedVariant =
-    typename detail::LiftInnerTypes<
-        std::variant, TypeLifter>::template TypeToLift<Variant>::LiftedType;
+CPP_template(typename Variant,
+             template <typename>
+             typename TypeLifter) (requires isVariant<Variant>)
+using LiftedVariant = typename detail::LiftInnerTypes<
+    std::variant, TypeLifter>::template TypeToLift<Variant>::LiftedType;
 // Examples:
 static_assert(
     std::is_same_v<LiftedVariant<std::variant<int, bool, char>, std::optional>,
@@ -232,8 +232,8 @@ static_assert(
                                 std::optional<char>>>);
 
 /// From the type std::tuple<A, B, ...> makes the type std::variant<A, B, ...>
-CPP_template(typename Tuple)(requires isTuple<Tuple>) using TupleToVariant =
-    typename detail::TupleToVariantImpl<Tuple>::type;
+CPP_template(typename Tuple) (requires isTuple<Tuple>)
+using TupleToVariant = typename detail::TupleToVariantImpl<Tuple>::type;
 // Examples:
 static_assert(std::is_same_v<TupleToVariant<std::tuple<int, bool, char>>,
                              std::variant<int, bool, char>>);

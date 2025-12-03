@@ -9,8 +9,8 @@
 
 // ____________________________________________________________________________
 CPP_template_def(typename Type)(requires ad_utility::SameAsAnyTypeIn<
-                                Type, ad_utility::ConfigOption::AvailableTypes>)
-    Type createDummyValueForValidator(size_t variant) {
+           Type, ad_utility::ConfigOption::AvailableTypes>)
+Type createDummyValueForValidator(size_t variant) {
   if constexpr (std::is_same_v<Type, bool>) {
     return variant % 2;
   } else if constexpr (std::is_same_v<Type, std::string>) {
@@ -50,7 +50,7 @@ template float createDummyValueForValidator<float>(size_t);
 template std::vector<bool> createDummyValueForValidator<std::vector<bool>>(
     size_t);
 template std::vector<std::string>
-    createDummyValueForValidator<std::vector<std::string>>(size_t);
+createDummyValueForValidator<std::vector<std::string>>(size_t);
 template std::vector<int> createDummyValueForValidator<std::vector<int>>(
     size_t);
 template std::vector<size_t> createDummyValueForValidator<std::vector<size_t>>(

@@ -30,12 +30,13 @@ provided translation function for the vector entries.
 @tparam TranslationFunction Has to be a function, that takes `VectorType`
 and returns a `nlohmann:json` object.
 */
-CPP_template(typename VectorType, typename TranslationFunction)(
-    requires ad_utility::InvocableWithExactReturnType<
-        TranslationFunction, nlohmann::ordered_json,
-        VectorType>) static nlohmann::json
-    transformIntoJsonArray(const std::vector<VectorType>& vec,
-                           TranslationFunction translationFunction) {
+CPP_template(
+    typename VectorType,
+    typename TranslationFunction) (requires ad_utility::InvocableWithExactReturnType<
+            TranslationFunction, nlohmann::ordered_json, VectorType>)
+static nlohmann::json transformIntoJsonArray(
+    const std::vector<VectorType>& vec,
+    TranslationFunction translationFunction) {
   /*
   Without explicit instantiation, `nlohmann::nlohmann::ordered_json` is not
   guaranteed, to always interpret a `push_back` correctly. For instance,

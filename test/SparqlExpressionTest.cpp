@@ -112,8 +112,8 @@ concept VectorOrExpressionResult =
 
 // Convert a `VectorOrExpressionResult` (see above) to a type that is supported
 // by the expression module.
-CPP_template(typename T)(
-    requires VectorOrExpressionResult<T>) auto toExpressionResult(T vec) {
+CPP_template(typename T) (requires VectorOrExpressionResult<T>)
+auto toExpressionResult(T vec) {
   if constexpr (SingleExpressionResult<T>) {
     return vec;
   } else if constexpr (ranges::convertible_to<T, std::string_view>) {
@@ -150,7 +150,8 @@ CPP_template(typename T)(
 // If it is an ID (possibly contained in the `IdOrLiteralOrIri` variant), then
 // the `matchId` matcher from above is used, else we test for equality.
 template <typename T>
-requires(!isVectorResult<T>) auto nonVectorResultMatcher(const T& expected) {
+  requires(!isVectorResult<T>)
+auto nonVectorResultMatcher(const T& expected) {
   if constexpr (std::is_same_v<T, Id>) {
     return matchId(expected);
   } else if constexpr (std::is_same_v<T, IdOrLiteralOrIri>) {

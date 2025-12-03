@@ -107,8 +107,8 @@ class stream_generator_promise {
 
   // Overload so we can also pass char values, template such that all types that
   // implicitly convert to char are not accepted.
-  CPP_template(typename CharT)(requires SimilarTo<CharT, char>)
-      suspend_sometimes yield_value(CharT value) {
+  CPP_template(typename CharT) (requires SimilarTo<CharT, char>)
+  suspend_sometimes yield_value(CharT value) {
     std::string_view singleView{&value, 1};
     // This is only safe to do if we can write into the buffer immediately.
     AD_CORRECTNESS_CHECK(isBufferLargeEnough(singleView));

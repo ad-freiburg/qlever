@@ -35,7 +35,9 @@ ASYNC_TEST(MessageSender, destructorCallsSignalEnd) {
 
   // Create and immediately destroy a `MessageSender` s.t. we can test the side
   // effects of the destructor.
-  { MessageSender dummy{std::move(queryId), queryHub}; }
+  {
+    MessageSender dummy{std::move(queryId), queryHub};
+  }
 
   auto impl = [&]() -> net::awaitable<void> {
     net::steady_timer timer{ioContext, 2s};

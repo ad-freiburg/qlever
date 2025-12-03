@@ -540,8 +540,7 @@ TEST(ConcurrentCache, computeButDontStore) {
   // the cache.
   auto alwaysSuitable = [](auto&&) { return true; };
   // Store the element in the cache.
-  cache.computeOnce(
-      42, []() { return "42"; }, false, alwaysSuitable);
+  cache.computeOnce(42, []() { return "42"; }, false, alwaysSuitable);
 
   // The result is read from the cache, so we get "42", not "blubb".
   auto res = cache.computeButDontStore(

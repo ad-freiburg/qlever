@@ -28,17 +28,16 @@ struct SizeOfSizeGetter {
   than you will have to define custom move/copy constructor and assignment
   operators.
   */
-  CPP_template(typename T)(requires std::is_trivially_copyable_v<T>)
-      ad_utility::MemorySize
-      operator()(const T& obj) const {
+  CPP_template(typename T) (requires std::is_trivially_copyable_v<T>)
+  ad_utility::MemorySize operator()(const T& obj) const {
     return ad_utility::MemorySize::bytes(sizeof(obj));
   }
 };
 
 // `ValueSizeGetter` for instances of `std::basic_string`.
-CPP_template(typename StringType)(
-    requires ad_utility::isInstantiation<
-        StringType, std::basic_string>) struct StringSizeGetter {
+CPP_template(
+    typename StringType) (requires ad_utility::isInstantiation<StringType, std::basic_string>)
+struct StringSizeGetter {
   ad_utility::MemorySize operator()(const StringType& str) const {
     return ad_utility::MemorySize::bytes(
         str.size() * sizeof(typename StringType::value_type));

@@ -155,10 +155,9 @@ class AddCombinedRowToIdTable {
   // Same as calling `addRow` for each element in the Cartesian product of
   // `rowIndicesA` and `rowIndicesB` with an optimization for the special case
   // that the `resultTable` has zero columns.
-  CPP_template(typename R1, typename R2)(
-      requires sizedRangeOfUnsigned<R1> CPP_and
-          sizedRangeOfUnsigned<R2>) void addRows(const R1& rowIndicesA,
-                                                 const R2& rowIndicesB) {
+  CPP_template(typename R1, typename R2) (
+        requires sizedRangeOfUnsigned<R1> CPP_and sizedRangeOfUnsigned<R2>)
+  void addRows(const R1& rowIndicesA, const R2& rowIndicesB) {
     size_t total =
         ql::ranges::size(rowIndicesA) * ql::ranges::size(rowIndicesB);
     if (resultTable_.numColumns() == 0) {

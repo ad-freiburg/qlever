@@ -30,10 +30,11 @@ elements will not be ignored.
 @param setToCalculateFor The container to calculate all sub-sets for. Will only
 be read.
 */
-CPP_template(typename R,
-             typename E = std::iter_value_t<ql::ranges::iterator_t<R>>)(
-    requires ql::ranges::forward_range<R>)
-    std::vector<std::vector<E>> calculateAllSubSets(R&& setToCalculateFor) {
+CPP_template(
+    typename R,
+    typename E = std::iter_value_t<
+        ql::ranges::iterator_t<R>>) (requires ql::ranges::forward_range<R>)
+std::vector<std::vector<E>> calculateAllSubSets(R&& setToCalculateFor) {
   // Getting rid of duplicated elements.
 
   std::vector<std::vector<E>> calculatedSubSets;

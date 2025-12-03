@@ -28,9 +28,9 @@ numbers for the same seed.
 @param randomNumberGeneratorFactory An invocable object, that should return a
 random number generator, using the given seed.
 */
-CPP_template(typename T)(requires std::invocable<T, RandomSeed>) void testSeed(
-    T randomNumberGeneratorFactory,
-    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+CPP_template(typename T) (requires std::invocable<T, RandomSeed>)
+void testSeed(T randomNumberGeneratorFactory,
+              ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "testSeed")};
 
@@ -103,15 +103,14 @@ random number generator, using the given range and seed. Functionparameters
 should be `RangeNumberType rangeMin, RangeNumberType rangeMax, Seed seed`.
 @param ranges The ranges, that should be used.
 */
-CPP_template(typename RangeNumberType, typename GeneratorFactory)(
-    requires std::invocable<
-        GeneratorFactory, RangeNumberType, RangeNumberType,
-        RandomSeed>) void testSeedWithRange(GeneratorFactory
-                                                randomNumberGeneratorFactory,
-                                            const std::vector<NumericalRange<
-                                                RangeNumberType>>& ranges,
-                                            ad_utility::source_location l =
-                                                AD_CURRENT_SOURCE_LOC()) {
+CPP_template(
+    typename RangeNumberType,
+    typename GeneratorFactory) (requires std::invocable<GeneratorFactory, RangeNumberType,
+                                    RangeNumberType, RandomSeed>)
+void testSeedWithRange(
+    GeneratorFactory randomNumberGeneratorFactory,
+    const std::vector<NumericalRange<RangeNumberType>>& ranges,
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "testSeedWithRange")};
 
@@ -133,16 +132,13 @@ of the range.
 
 @param ranges The ranges, for which should be tested for.
 */
-CPP_template(typename Generator, typename RangeNumberType)(
-    requires std::constructible_from<Generator, RangeNumberType,
-                                     RangeNumberType>&&
-        ql::concepts::invocable<Generator>&& ad_utility::isSimilar<
-            std::invoke_result_t<Generator>,
-            RangeNumberType>) void testRange(const std::
-                                                 vector<NumericalRange<
-                                                     RangeNumberType>>& ranges,
-                                             ad_utility::source_location l =
-                                                 AD_CURRENT_SOURCE_LOC()) {
+CPP_template(typename Generator, typename RangeNumberType) (
+      requires std::constructible_from<Generator, RangeNumberType,
+                                       RangeNumberType> &&
+      ql::concepts::invocable<Generator> &&
+      ad_utility::isSimilar<std::invoke_result_t<Generator>, RangeNumberType>)
+void testRange(const std::vector<NumericalRange<RangeNumberType>>& ranges,
+               ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "testRange")};
 

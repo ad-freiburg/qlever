@@ -13,8 +13,11 @@ namespace ad_utility::unique_cleanup {
 
 /// Wrapper class that allows to call a function
 /// just before the wrapper value T is destroyed.
-CPP_template(typename T, typename Func = std::function<void(T&&)>)(
-    requires ql::concepts::move_constructible<T>) class UniqueCleanup {
+CPP_template(
+    typename T,
+    typename Func =
+        std::function<void(T&&)>) (requires ql::concepts::move_constructible<T>)
+class UniqueCleanup {
   /// Boolean indicating if object was not moved out of
   ResetWhenMoved<bool, false> active_ = true;
   /// Wrapped value

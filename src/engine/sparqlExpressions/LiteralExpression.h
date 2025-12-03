@@ -43,11 +43,11 @@ class LiteralExpression : public SparqlExpression {
   // Evaluating just returns the constant/literal value.
   ExpressionResult evaluate(EvaluationContext* context) const override {
     // Common code for the `Literal` and `Iri` case.
-    auto getIdOrString = [this, &context](const auto& s)
-        -> CPP_ret(ExpressionResult)(
-            requires ad_utility::SameAsAny<std::decay_t<decltype(s)>,
-                                           TripleComponent::Literal,
-                                           TripleComponent::Iri>) {
+    auto getIdOrString = [this, &context](const auto& s) -> CPP_ret(
+                                                             ExpressionResult)(requires ad_utility::SameAsAny<std::decay_t<decltype(s)>,
+                                              TripleComponent::Literal,
+                                              TripleComponent::Iri>)
+    {
       if (auto ptr = cachedResult_.load(std::memory_order_relaxed)) {
         return *ptr;
       }

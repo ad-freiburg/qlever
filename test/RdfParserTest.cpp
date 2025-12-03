@@ -1436,7 +1436,7 @@ TEST(RdfParserTest, EncodedIriManagerUsage) {
 
   // Test lambda that reduces boilerplate
   auto testIriAtPosition = [&](auto parserFactory, const std::string& tripleStr,
-                               TripleComponent TurtleTriple::*position,
+                               TripleComponent TurtleTriple::* position,
                                bool shouldEncode,
                                const std::string& expectedValue) {
     auto parser = parserFactory();
@@ -1502,7 +1502,7 @@ TEST(RdfParserTest, EncodedIriManagerPrefixedNames) {
 
   // Meta-matcher that creates matchers for encoded IRIs at any position in a
   // triple
-  auto makeTripleMatcher = [&](TripleComponent TurtleTriple::*memberPtr) {
+  auto makeTripleMatcher = [&](TripleComponent TurtleTriple::* memberPtr) {
     return [&, memberPtr](const std::string& expectedDecodedIri) {
       return ::testing::Field(
           memberPtr,

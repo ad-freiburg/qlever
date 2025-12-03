@@ -28,10 +28,11 @@ namespace ql {
 // Otherwise, for every integer i in [0, last - first - n), moves the element
 // at position first + n + i to position first + i.
 ///
-CPP_template(typename ForwardIt)(
-    requires ql::concepts::forward_iterator<ForwardIt>) constexpr ForwardIt
-    shift_left(ForwardIt first, ForwardIt last,
-               typename std::iterator_traits<ForwardIt>::difference_type n) {
+CPP_template(
+    typename ForwardIt) (requires ql::concepts::forward_iterator<ForwardIt>)
+constexpr ForwardIt shift_left(
+    ForwardIt first, ForwardIt last,
+    typename std::iterator_traits<ForwardIt>::difference_type n) {
   assert(n >= 0);
   if (n == 0) {
     return first;
@@ -52,10 +53,11 @@ CPP_template(typename ForwardIt)(
 // Otherwise, for every integer i in [0, last - first - n), moves the element
 // at position first + i to position first + n + i.
 ///
-CPP_template(typename ForwardIt)(
-    requires ql::concepts::forward_iterator<ForwardIt>) constexpr ForwardIt
-    shift_right(ForwardIt first, ForwardIt last,
-                typename std::iterator_traits<ForwardIt>::difference_type n) {
+CPP_template(
+    typename ForwardIt) (requires ql::concepts::forward_iterator<ForwardIt>)
+constexpr ForwardIt shift_right(
+    ForwardIt first, ForwardIt last,
+    typename std::iterator_traits<ForwardIt>::difference_type n) {
   assert(n >= 0);
   if (n == 0 || n >= std::distance(first, last)) {
     return last;

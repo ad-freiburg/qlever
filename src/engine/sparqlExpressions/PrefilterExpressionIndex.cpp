@@ -839,8 +839,8 @@ std::string LogicalExpression<Operation>::asString(size_t depth) const {
   std::stringstream stream;
   stream << "Prefilter LogicalExpression<" << getLogicalOpStr(Operation)
          << ">\n"
-         << "child1 {" << child1Info << "}"
-         << "child2 {" << child2Info << "}" << std::endl;
+         << "child1 {" << child1Info << "}" << "child2 {" << child2Info << "}"
+         << std::endl;
   return stream.str();
 }
 

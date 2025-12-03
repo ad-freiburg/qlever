@@ -194,7 +194,8 @@ TEST(ConstexprUtils, RuntimeValueToCompileTimeValue) {
 
 // A helper struct for the following test.
 struct F1 {
-  CPP_template(int i)(requires(i == 0 || i == 1)) int operator()() const {
+  CPP_template(int i) (requires(i == 0 || i == 1))
+  int operator()() const {
     return i + 1;
   }
 };

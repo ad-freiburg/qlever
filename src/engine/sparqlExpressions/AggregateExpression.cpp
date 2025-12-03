@@ -22,7 +22,8 @@ struct EvaluateOnChildOperand {
                   ValueId resultForEmptyGroup,
                   const FinalOperation& finalOperation,
                   EvaluationContext* context, bool distinct, O&& operand) const
-      -> CPP_ret(ExpressionResult)(requires SingleExpressionResult<O>) {
+      -> CPP_ret(ExpressionResult)(requires SingleExpressionResult<O>)
+  {
     // Perform the more efficient calculation on `SetOfInterval`s if it is
     // possible.
     //

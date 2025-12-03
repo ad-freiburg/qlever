@@ -102,18 +102,17 @@ streams.
 @param separator Will be put between each of the string representations
 of the range elements.
 */
-CPP_template(typename Range)(
-    requires ql::ranges::input_range<Range> CPP_and
-        ad_utility::Streamable<ql::iter_reference_t<ql::ranges::iterator_t<
-            Range>>>) void lazyStrJoin(std::ostream* stream, Range&& r,
-                                       std::string_view separator);
+CPP_template(typename Range) (
+      requires ql::ranges::input_range<Range> CPP_and ad_utility::Streamable<
+          ql::iter_reference_t<ql::ranges::iterator_t<Range>>>)
+void lazyStrJoin(std::ostream* stream, Range&& r, std::string_view separator);
 
 // Similar to the overload of `lazyStrJoin` above, but the result is returned as
 // a string.
-CPP_template(typename Range)(
-    requires ql::ranges::input_range<Range> CPP_and ad_utility::Streamable<
-        ql::iter_reference_t<ql::ranges::iterator_t<Range>>>) std::string
-    lazyStrJoin(Range&& r, std::string_view separator);
+CPP_template(typename Range) (
+      requires ql::ranges::input_range<Range> CPP_and ad_utility::Streamable<
+          ql::iter_reference_t<ql::ranges::iterator_t<Range>>>)
+std::string lazyStrJoin(Range&& r, std::string_view separator);
 
 /*
 @brief Adds indentation before the given string and directly after new line
@@ -188,11 +187,10 @@ inline QL_CONSTEXPR bool constantTimeEquals(std::string_view view1,
 }
 
 // _________________________________________________________________________
-CPP_template_def(typename Range)(
-    requires ql::ranges::input_range<Range> CPP_and_def
-        ad_utility::Streamable<ql::iter_reference_t<ql::ranges::iterator_t<
-            Range>>>) void lazyStrJoin(std::ostream* stream, Range&& r,
-                                       std::string_view separator) {
+CPP_template_def(
+    typename Range)(requires ql::ranges::input_range<Range> CPP_and_def ad_utility::
+               Streamable<ql::iter_reference_t<ql::ranges::iterator_t<Range>>>)
+void lazyStrJoin(std::ostream* stream, Range&& r, std::string_view separator) {
   auto begin = std::begin(r);
   auto end = std::end(r);
 
@@ -214,10 +212,10 @@ CPP_template_def(typename Range)(
 }
 
 // _________________________________________________________________________
-CPP_template_def(typename Range)(
-    requires ql::ranges::input_range<Range> CPP_and_def ad_utility::Streamable<
-        ql::iter_reference_t<ql::ranges::iterator_t<Range>>>) std::string
-    lazyStrJoin(Range&& r, std::string_view separator) {
+CPP_template_def(
+    typename Range)(requires ql::ranges::input_range<Range> CPP_and_def ad_utility::
+               Streamable<ql::iter_reference_t<ql::ranges::iterator_t<Range>>>)
+std::string lazyStrJoin(Range&& r, std::string_view separator) {
   std::ostringstream stream;
   lazyStrJoin(&stream, AD_FWD(r), separator);
   return std::move(stream).str();

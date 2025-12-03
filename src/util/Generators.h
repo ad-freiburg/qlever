@@ -22,16 +22,15 @@ namespace ad_utility {
 // returns false. If the `aggregator` returns false, the cached value is
 // discarded. If the cached value is still present once the generator is fully
 // consumed, `onFullyCached` is called with the cached value.
-CPP_template(typename InputRange, typename AggregatorT,
-             typename T = ql::ranges::range_value_t<InputRange>,
-             typename FullyCachedFuncT = int)(
-    requires InvocableWithExactReturnType<AggregatorT, bool, std::optional<T>&,
-                                          const T&>
-        CPP_and InvocableWithExactReturnType<
-            FullyCachedFuncT, void,
-            T>) auto wrapGeneratorWithCache(InputRange generator,
-                                            AggregatorT aggregator,
-                                            FullyCachedFuncT onFullyCached) {
+CPP_template(
+    typename InputRange, typename AggregatorT,
+    typename T = ql::ranges::range_value_t<InputRange>,
+    typename FullyCachedFuncT =
+        int) (requires InvocableWithExactReturnType<AggregatorT, bool,
+                                                  std::optional<T>&, const T&>
+                CPP_and InvocableWithExactReturnType<FullyCachedFuncT, void, T>)
+auto wrapGeneratorWithCache(InputRange generator, AggregatorT aggregator,
+                            FullyCachedFuncT onFullyCached) {
   struct CachingWrapper : public InputRangeFromGet<T> {
     InputRange generator_;
     AggregatorT aggregator_;
@@ -84,10 +83,11 @@ CPP_template(typename InputRange, typename AggregatorT,
 // callable that takes a `callback` with signature `void(T)`. The arguments with
 // which this callback is called when running the `functionWithCallback` become
 // the elements that are yielded by the created `generator`.
-CPP_template(typename T, typename F)(
-    requires ql::concepts::invocable<F, std::function<void(T)>>)
-    InputRangeTypeErased<T> generatorFromActionWithCallback(
-        F functionWithCallback) {
+CPP_template(
+    typename T,
+    typename F) (requires ql::concepts::invocable<F, std::function<void(T)>>)
+InputRangeTypeErased<T> generatorFromActionWithCallback(
+    F functionWithCallback) {
   class CallbackToRangeAdapter : public InputRangeFromGet<T> {
     F functionWithCallback_;
     std::mutex mutex_;

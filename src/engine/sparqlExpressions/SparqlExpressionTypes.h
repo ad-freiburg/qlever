@@ -51,14 +51,13 @@ class VectorWithMemoryLimit
   // * the last argument must be `AllocatorWithMemoryLimit` (all constructors to
   // `vector` take the allocator as a last parameter)
   // * there must be a constructor of `Base` for the given arguments.
-  CPP_template(typename... Args)(
-      requires(sizeof...(Args) > 0) CPP_and CPP_NOT(
-          concepts::derived_from<ql::remove_cvref_t<ad_utility::First<Args...>>,
-                                 Base>)
-          CPP_and concepts::convertible_to<ad_utility::Last<Args...>, Allocator>
-              CPP_and concepts::constructible_from<Base, Args&&...>)
-      QL_EXPLICIT(sizeof...(Args) == 1) VectorWithMemoryLimit(Args&&... args)
-      : Base{AD_FWD(args)...} {}
+  CPP_template(typename... Args) (requires(sizeof...(Args) > 0) CPP_and CPP_NOT(
+        concepts::derived_from<ql::remove_cvref_t<ad_utility::First<Args...>>,
+                               Base>) CPP_and
+                  concepts::convertible_to<ad_utility::Last<Args...>, Allocator>
+                      CPP_and concepts::constructible_from<Base, Args && ...>)
+  QL_EXPLICIT(sizeof...(Args) == 1)
+  VectorWithMemoryLimit(Args&&... args) : Base{AD_FWD(args)...} {}
 
   // We have to explicitly forward the `initializer_list` constructor because it
   // for some reason is not covered by the above generic mechanism.
@@ -129,12 +128,12 @@ CPP_concept SingleExpressionResult =
     ad_utility::SimilarToAnyTypeIn<T, ExpressionResult>;
 
 // Copy an expression result.
-CPP_template(typename ResultT)(
-    requires ad_utility::SimilarTo<ResultT, ExpressionResult>) ExpressionResult
-    copyExpressionResult(ResultT&& result) {
-  auto copyIfCopyable = [](const auto& x)
-      -> CPP_ret(ExpressionResult)(
-          requires SingleExpressionResult<std::decay_t<decltype(x)>>) {
+CPP_template(
+    typename ResultT) (requires ad_utility::SimilarTo<ResultT, ExpressionResult>)
+ExpressionResult copyExpressionResult(ResultT&& result) {
+  auto copyIfCopyable = [](const auto& x) -> CPP_ret(
+                                              ExpressionResult)(requires SingleExpressionResult<std::decay_t<decltype(x)>>)
+  {
     using R = std::decay_t<decltype(x)>;
     if constexpr (ql::concepts::copyable<R>) {
       return x;
@@ -238,10 +237,11 @@ struct EvaluationContext {
 
 namespace detail {
 /// Get Id of constant result of type T.
-CPP_template(typename T, typename LocalVocabT)(
-    requires SingleExpressionResult<T> CPP_and isConstantResult<T> CPP_and
-        std::is_rvalue_reference_v<T&&>) Id
-    constantExpressionResultToId(T&& result, LocalVocabT& localVocab) {
+CPP_template(
+    typename T,
+    typename LocalVocabT) (requires SingleExpressionResult<T> CPP_and isConstantResult<T>
+                CPP_and std::is_rvalue_reference_v<T &&>)
+Id constantExpressionResultToId(T&& result, LocalVocabT& localVocab) {
   if constexpr (ad_utility::isSimilar<T, Id>) {
     return result;
   } else if constexpr (ad_utility::isSimilar<T, IdOrLiteralOrIri>) {
@@ -384,8 +384,8 @@ constexpr bool isOperation<Operation<NumOperations, Ts...>> = true;
 // Return the common logical size of the `SingleExpressionResults`.
 // This is either 1 (in case all the `inputs` are constants) or the
 // size of the `context`.
-CPP_template(typename... Inputs)(requires(SingleExpressionResult<Inputs>&&...))
-    size_t getResultSize(const EvaluationContext& context, const Inputs&...) {
+CPP_template(typename... Inputs) (requires(SingleExpressionResult<Inputs>&&...))
+size_t getResultSize(const EvaluationContext& context, const Inputs&...) {
   return (... && isConstantResult<Inputs>) ? 1ul : context.size();
 }
 

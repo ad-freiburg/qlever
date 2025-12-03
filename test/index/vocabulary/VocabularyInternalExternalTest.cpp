@@ -57,7 +57,9 @@ class VocabularyCreator {
   // Like `createVocabularyImpl` above, but the resulting vocabulary will be
   // destroyed and re-initialized from disk before it is returned.
   auto createVocabularyFromDiskImpl(const std::vector<std::string>& words) {
-    { createVocabularyImpl(words); }
+    {
+      createVocabularyImpl(words);
+    }
     VocabularyInternalExternal vocabulary;
     vocabulary.open(vocabFilename_);
     return vocabulary;

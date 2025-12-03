@@ -70,7 +70,9 @@ TEST(VocabularyInMemory, WordWriterDestructorBehavior) {
     writer("alpha", false);
   }
   v.open(filename);
-  { auto writerPtr = v.makeDiskWriterPtr(filename); };
+  {
+    auto writerPtr = v.makeDiskWriterPtr(filename);
+  };
   {
     VocabularyInMemory vocab;
     {

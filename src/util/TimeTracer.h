@@ -63,7 +63,7 @@ class TimeTracer {
  public:
   explicit TimeTracer(const std::string& name)
       : rootTrace_{name, std::chrono::milliseconds::zero()},
-        activeTraces_({rootTrace_}){};
+        activeTraces_({rootTrace_}) {};
   virtual ~TimeTracer() = default;
 
   virtual void beginTrace(const std::string& name) {

@@ -239,10 +239,11 @@ namespace detail {
 // queue. If the producer returns `nullopt`, `numThreads` is decremented,
 // and the queue is finished if `numThreads <= 0`. All exceptions that
 // happen during the execution of `producer` are propagated to the queue.
-CPP_template(typename Queue, typename Producer)(
-    requires IsThreadsafeQueue<Queue> CPP_and ql::concepts::invocable<
-        Producer>) auto makeQueueTask(Queue& queue, Producer producer,
-                                      std::atomic<int64_t>& numThreads) {
+CPP_template(typename Queue,
+             typename Producer) (requires IsThreadsafeQueue<Queue> CPP_and
+                ql::concepts::invocable<Producer>)
+auto makeQueueTask(Queue& queue, Producer producer,
+                   std::atomic<int64_t>& numThreads) {
   return [&queue, producer = std::move(producer), &numThreads] {
     try {
       while (auto opt = producer()) {

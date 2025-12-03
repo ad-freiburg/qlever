@@ -70,11 +70,11 @@ class TripleComponent {
   TripleComponent() = default;
   /// Construct from anything that is able to construct the underlying
   /// `Variant`.
-  CPP_template(typename FirstArg, typename... Args)(
-      requires CPP_NOT(ql::concepts::same_as<ql::remove_cvref_t<FirstArg>,
-                                             TripleComponent>) &&
-      std::is_constructible_v<Variant, FirstArg&&, Args&&...>)
-      TripleComponent(FirstArg&& firstArg, Args&&... args)
+  CPP_template(typename FirstArg, typename... Args) (
+        requires CPP_NOT(ql::concepts::same_as<ql::remove_cvref_t<FirstArg>,
+                                               TripleComponent>) &&
+        std::is_constructible_v<Variant, FirstArg &&, Args && ...>)
+  TripleComponent(FirstArg&& firstArg, Args&&... args)
       : _variant(AD_FWD(firstArg), AD_FWD(args)...) {
     if (isString()) {
       // Storing variables and literals as strings is deprecated. The following
@@ -98,9 +98,8 @@ class TripleComponent {
 
   /// Assignment for types that can be directly assigned to the underlying
   /// variant.
-  CPP_template(typename T)(requires std::is_assignable_v<Variant, T&&>)
-      TripleComponent&
-      operator=(T&& value) {
+  CPP_template(typename T) (requires std::is_assignable_v<Variant, T &&>)
+  TripleComponent& operator=(T&& value) {
     _variant = AD_FWD(value);
     checkThatStringIsValid();
     return *this;
@@ -118,9 +117,8 @@ class TripleComponent {
   TripleComponent& operator=(TripleComponent&&) = default;
 
   /// Make a `TripleComponent` directly comparable to the underlying types.
-  CPP_template(typename T)(
-      requires ad_utility::SameAsAnyTypeIn<T, Variant>) bool
-  operator==(const T& other) const {
+  CPP_template(typename T) (requires ad_utility::SameAsAnyTypeIn<T, Variant>)
+  bool operator==(const T& other) const {
     auto ptr = std::get_if<T>(&_variant);
     return ptr && *ptr == other;
   }
@@ -133,9 +131,10 @@ class TripleComponent {
   /// this overload would also be eligible for the contained types that are
   /// implicitly convertible to `TripleComponent` which would lead to strange
   /// bugs.
-  CPP_template(typename H, typename TC)(
-      requires ql::concepts::same_as<TC, TripleComponent>) friend H
-      AbslHashValue(H h, const TC& tc) {
+  CPP_template(
+      typename H,
+      typename TC) (requires ql::concepts::same_as<TC, TripleComponent>)
+  friend H AbslHashValue(H h, const TC& tc) {
     return H::combine(std::move(h), tc._variant);
   }
 

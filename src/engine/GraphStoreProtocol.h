@@ -21,9 +21,9 @@
 class GraphStoreProtocol {
  private:
   // Extract the mediatype from a request.
-  CPP_template_2(typename RequestT)(requires ad_utility::httpUtils::HttpRequest<
-                                    RequestT>) static ad_utility::MediaType
-      extractMediatype(const RequestT& rawRequest) {
+  CPP_template_2(
+      typename RequestT)(requires ad_utility::httpUtils::HttpRequest<RequestT>)
+  static ad_utility::MediaType extractMediatype(const RequestT& rawRequest) {
     using namespace boost::beast::http;
 
     std::string_view contentTypeString;
@@ -97,10 +97,11 @@ class GraphStoreProtocol {
 
   // Transform a SPARQL Graph Store Protocol POST to an equivalent ParsedQuery
   // which is an SPARQL Update.
-  CPP_template_2(typename RequestT)(
-      requires ad_utility::httpUtils::HttpRequest<RequestT>) static ParsedQuery
-      transformPost(const RequestT& rawRequest, const GraphOrDefault& graph,
-                    const Index& index) {
+  CPP_template_2(
+      typename RequestT)(requires ad_utility::httpUtils::HttpRequest<RequestT>)
+  static ParsedQuery transformPost(const RequestT& rawRequest,
+                                   const GraphOrDefault& graph,
+                                   const Index& index) {
     throwIfRequestBodyEmpty(rawRequest);
     auto triples =
         parseTriples(rawRequest.body(), extractMediatype(rawRequest));
@@ -119,10 +120,11 @@ class GraphStoreProtocol {
 
   // `TSOP` (`POST` backwards) does a `DELETE DATA` of the payload. It is an
   // extension to the Graph Store Protocol.
-  CPP_template_2(typename RequestT)(
-      requires ad_utility::httpUtils::HttpRequest<RequestT>) static ParsedQuery
-      transformTsop(const RequestT& rawRequest, const GraphOrDefault& graph,
-                    const Index& index) {
+  CPP_template_2(
+      typename RequestT)(requires ad_utility::httpUtils::HttpRequest<RequestT>)
+  static ParsedQuery transformTsop(const RequestT& rawRequest,
+                                   const GraphOrDefault& graph,
+                                   const Index& index) {
     throwIfRequestBodyEmpty(rawRequest);
     auto triples =
         parseTriples(rawRequest.body(), extractMediatype(rawRequest));
@@ -143,11 +145,11 @@ class GraphStoreProtocol {
 
   // Transform a SPARQL Graph Store Protocol PUT to equivalent ParsedQueries
   // which are SPARQL Updates.
-  CPP_template_2(typename RequestT)(
-      requires ad_utility::httpUtils::HttpRequest<RequestT>) static std::
-      vector<ParsedQuery> transformPut(const RequestT& rawRequest,
-                                       const GraphOrDefault& graph,
-                                       const Index& index) {
+  CPP_template_2(
+      typename RequestT)(requires ad_utility::httpUtils::HttpRequest<RequestT>)
+  static std::vector<ParsedQuery> transformPut(const RequestT& rawRequest,
+                                               const GraphOrDefault& graph,
+                                               const Index& index) {
     // TODO: The response codes are not conform to the specs. "If new RDF graph
     //  content is created", then the status must be `201 Created`. "If
     //  existing graph content is modified", then the status must be `200 OK`
@@ -194,12 +196,11 @@ class GraphStoreProtocol {
   // Every Graph Store Protocol request has equivalent SPARQL Query or Update.
   // Transform the Graph Store Protocol request into it's equivalent Query or
   // Update.
-  CPP_template_2(typename RequestT)(
-      requires ad_utility::httpUtils::HttpRequest<RequestT>) static std::
-      vector<ParsedQuery> transformGraphStoreProtocol(
-          ad_utility::url_parser::sparqlOperation::GraphStoreOperation
-              operation,
-          const RequestT& rawRequest, const Index& index) {
+  CPP_template_2(
+      typename RequestT)(requires ad_utility::httpUtils::HttpRequest<RequestT>)
+  static std::vector<ParsedQuery> transformGraphStoreProtocol(
+      ad_utility::url_parser::sparqlOperation::GraphStoreOperation operation,
+      const RequestT& rawRequest, const Index& index) {
     ad_utility::url_parser::ParsedUrl parsedUrl =
         ad_utility::url_parser::parseRequestTarget(rawRequest.target());
     using enum boost::beast::http::verb;

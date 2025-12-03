@@ -49,8 +49,7 @@ int main(int argc, char** argv) {
   std::cout << std::endl;
 
   // Execute query.
-  std::cout << "\x1b[1mExecuting test query"
-            << "\x1b[0m" << std::endl;
+  std::cout << "\x1b[1mExecuting test query" << "\x1b[0m" << std::endl;
   std::string queryResult;
   ad_utility::Timer timer{ad_utility::Timer::Started};
   try {

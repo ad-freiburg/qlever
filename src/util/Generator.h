@@ -85,9 +85,9 @@ class generator_promise {
   }
 
   // Don't allow any use of 'co_await' inside the generator coroutine.
-  CPP_template_2(typename U)(
-      requires CPP_NOT(ad_utility::SimilarTo<GetDetails, U>)) std::suspend_never
-      await_transform(U&& value) = delete;
+  CPP_template_2(
+      typename U)(requires CPP_NOT(ad_utility::SimilarTo<GetDetails, U>))
+  std::suspend_never await_transform(U&& value) = delete;
 
   void rethrow_if_exception() const {
     if (m_exception) {
@@ -104,9 +104,9 @@ class generator_promise {
     Details& await_resume() noexcept { return promise_.details(); }
   };
 
-  CPP_template(typename DetailT)(
-      requires ad_utility::SimilarTo<GetDetails, DetailT>) DetailAwaiter
-      await_transform([[maybe_unused]] DetailT&& detail) {
+  CPP_template(
+      typename DetailT) (requires ad_utility::SimilarTo<GetDetails, DetailT>)
+  DetailAwaiter await_transform([[maybe_unused]] DetailT&& detail) {
     return {*this};
   }
 
@@ -136,26 +136,34 @@ class generator_promise {
 
   static constexpr bool hasDetails = !std::is_same_v<Details, NoDetails>;
   SetDetailsPointerAwaiter await_transform(SetDetailsPointer<Details> details)
-      requires hasDetails {
+    requires hasDetails
+  {
     return {*this, details};
   }
   SetDetailsAwaiter await_transform(SetDetails<Details> details)
-      requires hasDetails {
+    requires hasDetails
+  {
     return {*this, details};
   }
 
-  Details& details() requires hasDetails {
+  Details& details()
+    requires hasDetails
+  {
     return std::holds_alternative<Details>(m_details)
                ? std::get<Details>(m_details)
                : *std::get<Details*>(m_details);
   }
 
-  void setDetailsPointer(Details* pointer) requires hasDetails {
+  void setDetailsPointer(Details* pointer)
+    requires hasDetails
+  {
     AD_CONTRACT_CHECK(pointer != nullptr);
     m_details = pointer;
   }
 
-  void setDetails(Details details) requires hasDetails {
+  void setDetails(Details details)
+    requires hasDetails
+  {
     m_details = std::move(details);
   }
 
