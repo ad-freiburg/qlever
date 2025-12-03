@@ -591,3 +591,33 @@ template struct GeometryInfoValueGetter<ad_utility::NumGeometries>;
 template struct GeometryInfoValueGetter<ad_utility::MetricLength>;
 template struct GeometryInfoValueGetter<ad_utility::MetricArea>;
 }  // namespace sparqlExpression::detail
+
+//______________________________________________________________________________
+std::optional<int64_t> IntValueGetter::operator()(
+    const LiteralOrIri& litOrIri, const EvaluationContext*) const {
+  if (litOrIri.isLiteral()) {
+    if (litOrIri.hasDatatype() &&
+        (asStringViewUnsafe(litOrIri.getDatatype()) == XSD_INT_TYPE ||
+         asStringViewUnsafe(litOrIri.getDatatype()) == XSD_INTEGER_TYPE)) {
+      int64_t value;
+      if (absl::SimpleAtoi(asStringViewUnsafe(litOrIri.getContent()), &value)) {
+        return value;
+      }
+    }
+  }
+  return std::nullopt;
+}
+
+//______________________________________________________________________________
+std::optional<int64_t> IntValueGetter::operator()(
+    ValueId id, const EvaluationContext* context) const {
+  if (id.getDatatype() == Datatype::Int) {
+    return id.getInt();
+  } else if (id.getDatatype() == Datatype::LocalVocabIndex) {
+    return IntValueGetter{}(
+        ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
+            context->_qec.getIndex(), id, context->_localVocab),
+        context);
+  }
+  return std::nullopt;
+};

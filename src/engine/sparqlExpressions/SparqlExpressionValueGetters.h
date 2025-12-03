@@ -464,20 +464,13 @@ struct StringOrDateGetter : Mixin<StringOrDateGetter> {
 };
 
 // Value getter that returns only integer values (unlike `NumericValueGetter`
-// which returns double or int)
+// which returns double or int).
 struct IntValueGetter : Mixin<IntValueGetter> {
   using Mixin<IntValueGetter>::operator();
-  std::optional<int64_t> operator()(const LiteralOrIri&,
-                                    const EvaluationContext*) const {
-    return std::nullopt;
-  }
-  std::optional<int64_t> operator()(ValueId id,
-                                    const EvaluationContext*) const {
-    if (id.getDatatype() == Datatype::Int) {
-      return id.getInt();
-    }
-    return std::nullopt;
-  };
+  std::optional<int64_t> operator()(const LiteralOrIri& litOrIri,
+                                    const EvaluationContext*) const;
+
+  std::optional<int64_t> operator()(ValueId id, const EvaluationContext*) const;
 };
 
 }  // namespace sparqlExpression::detail

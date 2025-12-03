@@ -285,6 +285,16 @@ TEST(IntValueGetterTest, OperatorWithLit) {
       "\"anXsdString\"^^<http://www.w3.org/2001/XMLSchema#string>", noInt);
   t.checkFromLocalAndNormalVocabAndLiteral("\"noType\"", noInt);
   t.checkFromLocalAndNormalVocabAndLiteral("<https://example.com/test>", noInt);
+
+  std::string xsdIntegerLit =
+      "\"42\"^^<http://www.w3.org/2001/XMLSchema#integer>";
+  std::string xsdIntLit = "\"-500\"^^<http://www.w3.org/2001/XMLSchema#int>";
+
+  t.checkFromLocalVocab(xsdIntegerLit, Eq(42));
+  t.checkFromLocalVocab(xsdIntLit, Eq(-500));
+
+  t.checkFromLiteral(xsdIntegerLit, Eq(42));
+  t.checkFromLiteral(xsdIntLit, Eq(-500));
 }
 
 };  // namespace

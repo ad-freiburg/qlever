@@ -498,11 +498,11 @@ static constexpr UtilGeomToWktVisitor utilGeomToWkt;
 // Helper to extract the n-th geometry from a parsed `pb_util` geometry. Note
 // that this is 1-indexed and non-collection types return themselves at index 1.
 struct GeometryNVisitor {
-  // Visitor for collection types
+  // Visitor for collection types.
   CPP_template(typename T)(
       requires WktCollectionType<T>) std::optional<ParsedWkt>
   operator()(const T& geom, int64_t n) const {
-    // Index range check
+    // Index range check.
     if (n < 1 || n - 1 >= static_cast<int64_t>(geom.size())) {
       return std::nullopt;
     }
@@ -518,7 +518,7 @@ struct GeometryNVisitor {
     }
   }
 
-  // Visitor for single geometry types
+  // Visitor for single geometry types.
   CPP_template(typename T)(
       requires WktSingleGeometryType<T>) std::optional<ParsedWkt>
   operator()(const T& geom, int64_t n) const {
@@ -530,14 +530,14 @@ struct GeometryNVisitor {
     return std::nullopt;
   }
 
-  // Visitor for `ParsedWkt` variant
+  // Visitor for `ParsedWkt` variant.
   std::optional<ParsedWkt> operator()(const ParsedWkt& geom, int64_t n) const {
     return std::visit(
         [n](const auto& contained) { return GeometryNVisitor{}(contained, n); },
         geom);
   }
 
-  // Visitor for `std::optional`
+  // Visitor for `std::optional`.
   template <typename T>
   std::optional<ParsedWkt> operator()(const std::optional<T>& geom,
                                       int64_t n) const {
@@ -547,7 +547,7 @@ struct GeometryNVisitor {
     return GeometryNVisitor{}(geom.value(), n);
   }
 
-  // Visitor for `GeoPointOrWkt`
+  // Visitor for `GeoPointOrWkt`.
   std::optional<ParsedWkt> operator()(const GeoPointOrWkt& geom,
                                       int64_t n) const {
     auto [type, parsed] = parseGeoPointOrWkt(geom);
