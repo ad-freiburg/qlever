@@ -409,7 +409,7 @@ std::optional<ad_utility::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
     case VocabIndex:
     case LocalVocabIndex: {
       auto lit = ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
-          context->_qec.getIndex(), id, context->_localVocab);
+          context->_qec.getIndex().getImpl(), id, context->_localVocab);
       return GeoPointOrWktValueGetter{}(lit, context);
     }
     case Bool:
