@@ -15,7 +15,6 @@
 #include <util/geo/Geo.h>
 
 #include <array>
-#include <boost/mp11/list.hpp>
 #include <iostream>
 #include <memory>
 #include <range/v3/numeric/accumulate.hpp>
@@ -48,7 +47,6 @@ using ParsedWkt =
                  MultiPolygon<CoordType>, Collection<CoordType>>;
 using ParseResult = std::pair<WKTType, std::optional<ParsedWkt>>;
 using DAnyGeometry = util::geo::AnyGeometry<CoordType>;
-using GeometryN = boost::mp11::mp_push_back<ParsedWkt, DAnyGeometry>;
 
 template <typename T>
 CPP_concept WktSingleGeometryType =
@@ -476,10 +474,8 @@ struct UtilGeomToWktVisitor {
     return UtilGeomToWktVisitor{}(opt.value());
   }
 
-  // Visitor for the `ParsedWkt` and `GeometryN` variants.
-  CPP_template(typename T)(
-      requires SimilarToAny<T, ParsedWkt, GeometryN>) std::optional<std::string>
-  operator()(const T& variant) const {
+  // Visitor for the `ParsedWkt` variant.
+  std::optional<std::string> operator()(const ParsedWkt& variant) const {
     return std::visit(UtilGeomToWktVisitor{}, variant);
   }
 
