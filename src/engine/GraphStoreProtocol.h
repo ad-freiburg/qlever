@@ -132,7 +132,8 @@ class GraphStoreProtocol {
     auto triples =
         parseTriples(rawRequest.body(), extractMediatype(rawRequest));
     Quads::BlankNodeAdder bn{{}, {}, index.getBlankNodeManager()};
-    auto convertedTriples = convertTriples(effectiveGraph, std::move(triples), bn);
+    auto convertedTriples =
+        convertTriples(effectiveGraph, std::move(triples), bn);
     updateClause::GraphUpdate up{std::move(convertedTriples), {}};
     ParsedQuery res;
     parsedQuery::UpdateClause clause{std::move(up)};
