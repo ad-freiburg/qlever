@@ -88,7 +88,7 @@ class Server {
   SortPerformanceEstimator sortPerformanceEstimator_;
   Index index_;
   ad_utility::websocket::QueryRegistry queryRegistry_{};
-  GraphManager graphManager_{0};
+  GraphManager graphManager_;
 
   bool enablePatternTrick_;
 

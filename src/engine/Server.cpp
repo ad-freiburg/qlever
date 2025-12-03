@@ -93,6 +93,11 @@ void Server::initialize(const std::string& indexBaseName, bool useText,
       allocator_, index_.numTriples().normalAndInternal_() *
                       PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE / 100);
 
+  graphManager_.initializeFromIndex(
+      &index_.encodedIriManager(),
+      QueryExecutionContext(index_, &cache_, allocator_,
+                            sortPerformanceEstimator_, &namedResultCache_));
+
   if (noAccessCheck_) {
     AD_LOG_INFO << "No access token required for restricted API calls"
                 << std::endl;
