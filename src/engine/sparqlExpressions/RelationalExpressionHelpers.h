@@ -123,12 +123,15 @@ inline std::pair<ValueId, ValueId> getRangeFromVocab(
     const EvaluationContext* context) {
   auto level = TripleComponentComparator::Level::QUARTERNARY;
   // TODO<joka921> This should be `Vocab::equal_range`
+  // Range boundaries for vocabulary lookup - no language tag
   const ValueId lower =
       Id::makeFromVocabIndex(context->_qec.getIndex().getVocab().lower_bound(
-          s.toStringRepresentation(), level));
+                                 s.toStringRepresentation(), level),
+                             LanguageTagManager::noLanguageTag);
   const ValueId upper =
       Id::makeFromVocabIndex(context->_qec.getIndex().getVocab().upper_bound(
-          s.toStringRepresentation(), level));
+                                 s.toStringRepresentation(), level),
+                             LanguageTagManager::noLanguageTag);
   return {lower, upper};
 }
 

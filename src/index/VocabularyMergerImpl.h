@@ -200,10 +200,20 @@ CPP_template_def(typename C, typename L)(
       external = external || top.isExternal();
     }
     const auto& word = lastTripleComponent_.value();
+
+    // Extract language tag bits from the partial ID to preserve them in the
+    // global ID. The partial ID already contains language tag information in
+    // its lower 20 bits (for VocabIndex types).
+    Id partialId = Id::fromBits(top.id());
+    uint32_t langTagBits = (partialId.getDatatype() == Datatype::VocabIndex)
+                               ? partialId.getLangTagIndex()
+                               : LanguageTagManager::unknownLanguageTag;
+
     Id targetId =
         word.isBlankNode()
             ? Id::makeFromBlankNodeIndex(BlankNodeIndex::make(word.index_))
-            : Id::makeFromVocabIndex(VocabIndex::make(word.index_));
+            : Id::makeFromVocabIndex(VocabIndex::make(word.index_),
+                                     langTagBits);
     // Write pair of local and global ID to buffer.
     writeBuffer.emplace_back(top.partialFileId_, std::pair{top.id(), targetId});
 
@@ -233,8 +243,10 @@ CPP_template_def(typename C, typename L)(
 inline void VocabularyMerger::doActualWrite(
     const std::vector<std::pair<size_t, std::pair<size_t, Id>>>& buffer) {
   for (const auto& [id, value] : buffer) {
-    idMaps_[id].push_back(
-        {Id::makeFromVocabIndex(VocabIndex::make(value.first)), value.second});
+    // value.first contains the raw bits of the partial ID (including language
+    // tag bits), value.second is the target ID (which already has language tag
+    // bits from the previous step)
+    idMaps_[id].push_back({Id::fromBits(value.first), value.second});
   }
 }
 

@@ -123,6 +123,7 @@ class IndexImpl {
   Index::Vocab vocab_;
   Index::TextVocab textVocab_;
   EncodedIriManager encodedIriManager_;
+  LanguageTagManager languageTagManager_;
   ScoreData scoreData_;
 
   TextMetaData textMeta_;
@@ -279,6 +280,15 @@ class IndexImpl {
   }
 
   const auto& encodedIriManager() const { return encodedIriManager_; }
+
+  // Get const access to the LanguageTagManager
+  const LanguageTagManager& languageTagManager() const {
+    return languageTagManager_;
+  }
+
+  // Get mutable access to the LanguageTagManager (for configuration during
+  // index building)
+  LanguageTagManager& languageTagManager() { return languageTagManager_; }
 
   // Set the prefixes of the IRIs that will be encoded directly into
   // the `Id`; see `EncodedIriManager` for details.

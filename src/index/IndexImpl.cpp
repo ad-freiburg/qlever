@@ -375,6 +375,7 @@ void IndexImpl::createFromFiles(
   }
 
   configurationJson_["encoded-iri-prefixes"] = encodedIriManager();
+  configurationJson_["optimized-languages"] = languageTagManager();
 
   vocab_.resetToType(vocabularyTypeForIndexBuilding_);
 
@@ -701,8 +702,14 @@ auto IndexImpl::convertPartialToGlobalIds(
         AD_CORRECTNESS_CHECK(id.getDatatype() != Datatype::Undefined);
         continue;
       }
+
+      // Look up the mapping using the full ID (which includes the language tag)
+      // The map stores full IDs with language tags
       auto iterator = idMap.find(id);
       AD_CORRECTNESS_CHECK(iterator != idMap.end());
+
+      // The mapped ID already contains the correct language tag from when
+      // it was created, so we can use it directly
       id = iterator->second;
     }
   };
@@ -930,6 +937,29 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
 
   AD_LOG_DEBUG << "Number of words in internal and external vocabulary: "
                << vocab_.size() << std::endl;
+
+  // Populate the language tag ID mappings by looking up each optimized language
+  // in the vocabulary
+  for (size_t i = 0; i < languageTagManager_.numOptimizedLanguages(); ++i) {
+    const auto& lang = languageTagManager_.getOptimizedLanguages()[i];
+    auto literalString = "\"" + lang + "\"";
+    VocabIndex vocabIndex;
+    bool found = vocab_.getId(literalString, &vocabIndex);
+    if (found) {
+      // Language tag strings themselves should not have a language tag
+      Id vocabId =
+          Id::makeFromVocabIndex(vocabIndex, LanguageTagManager::noLanguageTag);
+      languageTagManager_.setLanguageTagIdBits(static_cast<uint32_t>(i),
+                                               vocabId.getBits());
+      AD_LOG_DEBUG << "Mapped language tag '" << lang << "' (index " << i
+                   << ") to vocabulary ID " << vocabId << std::endl;
+    } else {
+      AD_LOG_WARN << "Optimized language '" << lang
+                  << "' not found in vocabulary. This language will not be "
+                     "optimized in LANG() expressions."
+                  << std::endl;
+    }
+  }
 
   auto range1 =
       vocab_.prefixRanges(QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET);
@@ -1218,6 +1248,15 @@ void IndexImpl::readConfiguration() {
 
   loadDataMember("encoded-iri-prefixes", encodedIriManager_,
                  EncodedIriManager{});
+
+  // Load language tag manager configuration
+  if (configurationJson_.find("optimized-languages") !=
+      configurationJson_.end()) {
+    std::vector<std::string> languages =
+        configurationJson_["optimized-languages"]
+            .get<std::vector<std::string>>();
+    languageTagManager_.setOptimizedLanguages(std::move(languages));
+  }
 
   // Compute unique ID for this index.
   //

@@ -86,10 +86,12 @@ struct VocabularyMetaData {
         return false;
       }
       if (!beginWasSeen_) {
-        begin_ = Id::makeFromVocabIndex(VocabIndex::make(wordIndex));
+        begin_ = Id::makeFromVocabIndex(VocabIndex::make(wordIndex),
+                                        LanguageTagManager::noLanguageTag);
         beginWasSeen_ = true;
       }
-      end_ = Id::makeFromVocabIndex(VocabIndex::make(wordIndex + 1));
+      end_ = Id::makeFromVocabIndex(VocabIndex::make(wordIndex + 1),
+                                    LanguageTagManager::noLanguageTag);
       return true;
     }
 
@@ -118,8 +120,8 @@ struct VocabularyMetaData {
     }
     if (internalEntities_.addIfWordMatches(word, wordIndex)) {
       if (globalSpecialIds_->contains(word)) {
-        specialIdMapping_[std::string{word}] =
-            Id::makeFromVocabIndex(VocabIndex::make(wordIndex));
+        specialIdMapping_[std::string{word}] = Id::makeFromVocabIndex(
+            VocabIndex::make(wordIndex), LanguageTagManager::noLanguageTag);
       }
     }
   }

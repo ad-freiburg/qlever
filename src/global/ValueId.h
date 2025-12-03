@@ -9,14 +9,17 @@
 
 #include <absl/strings/str_cat.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <limits>
+#include <vector>
 
 #include "backports/functional.h"
 #include "backports/keywords.h"
 #include "backports/three_way_comparison.h"
 #include "global/Constants.h"
 #include "global/IndexTypes.h"
+#include "global/LanguageTagManager.h"
 #include "rdfTypes/GeoPoint.h"
 #include "util/BitUtils.h"
 #include "util/DateYearDuration.h"
@@ -87,9 +90,19 @@ class ValueId {
 
   using IntegerType = ad_utility::NBitInteger<numDataBits>;
 
+  // Bit layout for VocabIndex with language tags:
+  // [4 bits datatype][40 bits vocab index][20 bits language tag]
+  static constexpr T numVocabIndexBits = 40;
+  static constexpr T numLanguageTagBits = 20;
+  static_assert(numVocabIndexBits + numLanguageTagBits == numDataBits,
+                "VocabIndex and language tag bits must sum to data bits");
+
   /// The maximum value for the unsigned types that are used as indices
   /// (currently VocabIndex, LocalVocabIndex and Text).
   static constexpr T maxIndex = (1ull << numDataBits) - 1;
+
+  /// The maximum value for a vocab index (40 bits)
+  static constexpr T maxVocabIndex = (1ull << numVocabIndexBits) - 1;
 
   /// The smallest double > 0 that will not be rounded to zero by the precision
   /// loss of `FoldedId`. Symmetrically, `-minPositiveDouble` is the largest
@@ -296,7 +309,21 @@ class ValueId {
   /// represent values in the range [0, 2^60]. When `index` is outside of this
   /// range, and `IndexTooLargeException` is thrown.
   static ValueId makeFromVocabIndex(VocabIndex index) {
-    return makeFromIndex(index.get(), Datatype::VocabIndex);
+    return makeFromVocabIndex(index, LanguageTagManager::unknownLanguageTag);
+  }
+
+  /// Create a `ValueId` for a VocabIndex with an associated language tag index.
+  /// The vocab index uses 40 bits and the language tag uses 20 bits.
+  /// The language tag defaults to LanguageTagManager::unknownLanguageTag.
+  static ValueId makeFromVocabIndex(VocabIndex index,
+                                    uint32_t languageTagIndex) {
+    if (index.get() > maxVocabIndex) {
+      throw IndexTooLargeException(index.get());
+    }
+    // Layout: [40 bits vocab index][20 bits language tag]
+    T bits = (static_cast<T>(index.get()) << numLanguageTagBits) |
+             static_cast<T>(languageTagIndex);
+    return addDatatypeBits(bits, Datatype::VocabIndex);
   }
 
   static ValueId makeFromEncodedVal(uint64_t idx) {
@@ -323,8 +350,25 @@ class ValueId {
   /// Obtain the unsigned index that this `ValueId` encodes. If `getDatatype()
   /// != [VocabIndex|TextRecordIndex|LocalVocabIndex]` then the result is
   /// unspecified.
+  /// For VocabIndex, this extracts only the 40-bit vocab index part, ignoring
+  /// the 20-bit language tag.
   [[nodiscard]] constexpr VocabIndex getVocabIndex() const noexcept {
-    return VocabIndex::make(removeDatatypeBits(_bits));
+    T dataBits = removeDatatypeBits(_bits);
+    // Extract the upper 40 bits (vocab index part)
+    T vocabIndexBits = dataBits >> numLanguageTagBits;
+    return VocabIndex::make(vocabIndexBits);
+  }
+
+  /// Get the 20-bit language tag index from a VocabIndex ValueId.
+  /// Returns the language tag index, which may be one of:
+  /// - A valid index into the LanguageTagManager's list of optimized languages
+  /// - LanguageTagManager::noLanguageTag (2^20 - 1) for no language
+  /// - LanguageTagManager::unknownLanguageTag (2^20 - 2) for unknown languages
+  [[nodiscard]] constexpr uint32_t getLangTagIndex() const noexcept {
+    T dataBits = removeDatatypeBits(_bits);
+    // Extract the lower 20 bits (language tag part)
+    T langTagMask = (1ull << numLanguageTagBits) - 1;
+    return static_cast<uint32_t>(dataBits & langTagMask);
   }
 
   [[nodiscard]] constexpr uint64_t getEncodedVal() const noexcept {
