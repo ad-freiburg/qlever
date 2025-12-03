@@ -184,6 +184,14 @@ class DeltaTriples {
   }
   DeltaTriplesCount getCounts() const;
 
+  // The number of internal delta triples added and subtracted.
+  int64_t numInternalInserted() const {
+    return static_cast<int64_t>(internalTriplesInserted_.size());
+  }
+  int64_t numInternalDeleted() const {
+    return static_cast<int64_t>(internalTriplesDeleted_.size());
+  }
+
   // Insert triples.
   void insertTriples(CancellationHandle cancellationHandle, Triples triples,
                      ad_utility::timer::TimeTracer& tracer =
@@ -193,6 +201,20 @@ class DeltaTriples {
   void deleteTriples(CancellationHandle cancellationHandle, Triples triples,
                      ad_utility::timer::TimeTracer& tracer =
                          ad_utility::timer::DEFAULT_TIME_TRACER);
+
+  // Insert internal delta triples for efficient language filters and patterns.
+  // Currently only used by test code.
+  void insertInternalTriples(CancellationHandle cancellationHandle,
+                             Triples triples,
+                             ad_utility::timer::TimeTracer& tracer =
+                                 ad_utility::timer::DEFAULT_TIME_TRACER);
+
+  // Delete triplesdelta triples for efficient language filters and patterns.
+  // Currently only used by test code.
+  void deleteInternalTriples(CancellationHandle cancellationHandle,
+                             Triples triples,
+                             ad_utility::timer::TimeTracer& tracer =
+                                 ad_utility::timer::DEFAULT_TIME_TRACER);
 
   // If the `filename` is set, then `writeToDisk()` will write these
   // `DeltaTriples` to `filename.value()`. If `filename` is `nullopt`, then

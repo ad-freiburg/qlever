@@ -132,6 +132,30 @@ void DeltaTriples::deleteTriples(CancellationHandle cancellationHandle,
 }
 
 // ____________________________________________________________________________
+void DeltaTriples::insertInternalTriples(
+    CancellationHandle cancellationHandle, Triples triples,
+    ad_utility::timer::TimeTracer& tracer) {
+  AD_LOG_DEBUG << "Inserting"
+               << " " << triples.size()
+               << " internal triples (including idempotent triples)."
+               << std::endl;
+  modifyTriplesImpl(std::move(cancellationHandle), std::move(triples), true,
+                    internalTriplesInserted_, internalTriplesDeleted_, tracer);
+}
+
+// ____________________________________________________________________________
+void DeltaTriples::deleteInternalTriples(
+    CancellationHandle cancellationHandle, Triples triples,
+    ad_utility::timer::TimeTracer& tracer) {
+  AD_LOG_DEBUG << "Deleting"
+               << " " << triples.size()
+               << " internal triples (including idempotent triples)."
+               << std::endl;
+  modifyTriplesImpl(std::move(cancellationHandle), std::move(triples), false,
+                    internalTriplesDeleted_, internalTriplesInserted_, tracer);
+}
+
+// ____________________________________________________________________________
 void DeltaTriples::rewriteLocalVocabEntriesAndBlankNodes(Triples& triples) {
   // Remember which original blank node (from the parsing of an insert
   // operation) is mapped to which blank node managed by the `localVocab_` of
