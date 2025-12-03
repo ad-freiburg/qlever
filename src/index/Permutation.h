@@ -194,6 +194,8 @@ class Permutation {
 
   Enum permutation() const { return permutation_; }
 
+  // Provide const access to a linked internal permutation. If no internal
+  // permutation is available, this function throws an exception.
   const Permutation& internalPermutation() const {
     AD_CONTRACT_CHECK(internalPermutation_ != nullptr);
     return *internalPermutation_;
