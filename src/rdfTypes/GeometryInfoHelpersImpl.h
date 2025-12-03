@@ -58,6 +58,7 @@ CPP_concept WktCollectionType =
               MultiPolygon<CoordType>, Collection<CoordType>>;
 
 static_assert(!std::is_same_v<Line<CoordType>, MultiPoint<CoordType>>);
+static_assert(!isVector<Line<CoordType>>);
 
 // Removes the datatype and quotation marks from a given literal
 inline std::string removeDatatype(const std::string_view& wkt) {
@@ -492,6 +493,157 @@ struct UtilGeomToWktVisitor {
 };
 
 static constexpr UtilGeomToWktVisitor utilGeomToWkt;
+
+// Implements the web mercator projection for points. Use together via
+// `ProjectionVisitor<WebMercatorProjection>` for other geometry types.
+struct WebMercatorProjection {
+  DPoint operator()(const DPoint& p) const { return latLngToWebMerc(p); }
+};
+
+// Helper to translate the coordinates of a given geometry to another projection
+// (the projection is applied to each coordinate pair).
+template <typename Projection>
+struct UtilGeomProjectionVisitor : Projection {
+  using ThisProjection = UtilGeomProjectionVisitor<Projection>;
+
+  // Inherit the transformation of points.
+  using Projection::operator();
+
+  // Transform collections (might be called recursively, for example for points
+  // in a `MultiLine`).
+  CPP_template(typename T)(requires(isVector<T> || SimilarTo<T, DLine>)) T
+  operator()(const T& multi) const {
+    T result;
+    ql::ranges::transform(multi, std::back_inserter(result), ThisProjection{});
+    return result;
+  };
+
+  // Polygons require special treatment for inner (~ a line) and outer
+  // boundaries (~ a multi line).
+  DPolygon operator()(const DPolygon& poly) const {
+    return {ThisProjection{}(poly.getOuter()),
+            ThisProjection{}(poly.getInners())};
+  }
+
+  // Unwrap dynamic `AnyGeometry` container type.
+  DAnyGeometry operator()(const DAnyGeometry& anyGeom) const {
+    return visitAnyGeometry(
+        [](const auto& contained) {
+          return DAnyGeometry{ThisProjection{}(contained)};
+        },
+        anyGeom);
+  }
+
+  // Handle `ParsedWkt` variant.
+  ParsedWkt operator()(const ParsedWkt& geom) const {
+    return std::visit(
+        [](const auto& contained) {
+          return ParsedWkt{ThisProjection{}(contained)};
+        },
+        geom);
+  }
+
+  // Handle values contained in `std::optional`.
+  CPP_template(typename T)(
+      requires(!SimilarTo<T, GeoPointOrWkt>)) std::optional<T>
+  operator()(const std::optional<T>& opt) const {
+    if (!opt.has_value()) {
+      return std::nullopt;
+    }
+    return ThisProjection{}(opt.value());
+  }
+
+  // Handle `GeoPointOrWkt` (raw unparsed geometry).
+  ParseResult operator()(
+      const std::optional<GeoPointOrWkt>& geoPointOrWkt) const {
+    auto [type, parsed] = ParseGeoPointOrWktVisitor{}(geoPointOrWkt);
+    return {type, ThisProjection{}(parsed)};
+  }
+};
+
+// Instantiation for projection to web mercator of the various supported
+// geometry types.
+static constexpr UtilGeomProjectionVisitor<WebMercatorProjection>
+    projectWebMerc;
+
+// Visitor to compute the distance in meters given a geometry that has been
+// converted to web mercator projection.
+struct MetricDistanceVisitor {
+  // Handle `ParsedWkt` variant.
+  double operator()(const ParsedWkt& a, const ParsedWkt& b) const {
+    return std::visit(
+        [](const auto& a, const auto& b) {
+          return MetricDistanceVisitor{}(a, b);
+        },
+        a, b);
+  }
+
+  // Delegate the actual distance computation to `pb_util` for the geometry type
+  // combinations it supports.
+  CPP_template(typename T, typename U)(
+      requires(!WktCollectionType<T> CPP_and !WktCollectionType<U> CPP_and !(
+          std::is_same_v<T, DPolygon> CPP_and
+              std::is_same_v<U, DPoint>))) double
+  operator()(const T& a, const U& b) const {
+    return util::geo::webMercMeterDist<T, U>(a, b);
+  }
+
+  // Special treatment for polygon and point. Distance is commutative, so
+  // switching arguments is allowed.
+  double operator()(const DPolygon& poly, const DPoint& point) const {
+    return MetricDistanceVisitor{}(point, poly);
+  }
+
+  // Case of a collection on the left and a collection or non-collection on the
+  // right.
+  CPP_template(typename T, typename U)(requires WktCollectionType<T>) double
+  operator()(const T& collection, const U& other) const {
+    double distance = std::numeric_limits<double>::max();
+    for (const auto& geom : collection) {
+      distance = std::min(distance, MetricDistanceVisitor{}(geom, other));
+    }
+    return distance;
+  }
+
+  // Case of a non-collection on the left and collection on the right. Using
+  // commutativity, this is delegated to the case above.
+  CPP_template(typename T, typename U)(
+      requires(!WktCollectionType<T> CPP_and WktCollectionType<U>)) double
+  operator()(const T& other, const U& collection) const {
+    return MetricDistanceVisitor{}(collection, other);
+  }
+
+  // Visit the contained value of the custom `AnyGeometry` container type. Case
+  // of the `AnyGeometry` on the left.
+  template <typename T>
+  double operator()(const DAnyGeometry& anyGeom, const T& other) const {
+    return visitAnyGeometry(
+        [&other](const auto& contained) {
+          return MetricDistanceVisitor{}(contained, other);
+        },
+        anyGeom);
+  }
+
+  // Same as above, but `AnyGeometry` is on the right. Use commutativity.
+  CPP_template(typename T)(requires(!std::is_same_v<T, DAnyGeometry>)) double
+  operator()(const T& other, const DAnyGeometry& anyGeom) const {
+    return MetricDistanceVisitor{}(anyGeom, other);
+  }
+
+  // Handle optional geometries that may be contained in a `ParseResult`.
+  std::optional<double> operator()(const ParseResult& a,
+                                   const ParseResult& b) const {
+    if (!a.second.has_value() || !b.second.has_value()) {
+      return std::nullopt;
+    }
+    return MetricDistanceVisitor{}(a.second.value(), b.second.value());
+  }
+};
+
+// Compute the metric distance between any combination of supported geometry
+// types. Note that the coordinate pairs of the geometry must first be projected
+// to web mercator, e.g. using `projectWebMerc` above.
+constexpr MetricDistanceVisitor computeMetricDistance;
 
 }  // namespace ad_utility::detail
 
