@@ -33,8 +33,20 @@ sparqlExpression::GroupConcatExpression::evaluate(
       result.reserve(20000);
       bool firstIteration = true;
       for (auto& inp : generator) {
-        auto literal = detail::LiteralValueGetterWithoutStrFunction{}(
-            std::move(inp), context);
+        // For GROUP_CONCAT, we need to:
+        // 1. Convert IRIs to string literals (implicit STR() behavior)
+        // 2. Preserve language tags on literals (for mergeLanguageTags)
+        //
+        // LiteralValueGetterWithoutStrFunction preserves language tags but
+        // returns nullopt for IRIs. LiteralValueGetterWithStrFunction handles
+        // IRIs but strips language tags. We try WithoutStr first, and only
+        // fall back to WithStr for IRIs (when WithoutStr returns nullopt).
+        auto literal =
+            detail::LiteralValueGetterWithoutStrFunction{}(inp, context);
+        if (!literal.has_value()) {
+          // This is an IRI (or other non-literal). Use WithStr to convert it.
+          literal = detail::LiteralValueGetterWithStrFunction{}(inp, context);
+        }
         if (firstIteration) {
           firstIteration = false;
           detail::pushLanguageTag(langTag, literal);
