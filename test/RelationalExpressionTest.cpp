@@ -948,6 +948,149 @@ TEST(RelationalExpression, FilterEstimates) {
   testImpl(TI<NotEqualExpression>, 200'000);
 }
 
+// _____________________________________________________________________________
+TEST(RelationalExpression, getLanguageFilterExpression) {
+  using LFD = SparqlExpression::LangFilterData;
+  using namespace ::testing;
+  // Regular case
+  {
+    auto sle = std::make_unique<StringLiteralExpression>(
+        tripleComponentLiteral("\"en\""));
+    auto le = makeLangExpression(
+        std::make_unique<VariableExpression>(Variable{"?x"}));
+    EqualExpression ee{{std::move(sle), std::move(le)}};
+    EXPECT_THAT(ee.getLanguageFilterExpression(),
+                Optional(AllOf(AD_FIELD(LFD, variable_, Eq(Variable{"?x"})),
+                               AD_FIELD(LFD, languages_,
+                                        UnorderedElementsAre(Eq("en"))))));
+  }
+  // Commutative case
+  {
+    auto le = makeLangExpression(
+        std::make_unique<VariableExpression>(Variable{"?x"}));
+    auto sle = std::make_unique<StringLiteralExpression>(
+        tripleComponentLiteral("\"en\""));
+    EqualExpression ee{{std::move(le), std::move(sle)}};
+    EXPECT_THAT(ee.getLanguageFilterExpression(),
+                Optional(AllOf(AD_FIELD(LFD, variable_, Eq(Variable{"?x"})),
+                               AD_FIELD(LFD, languages_,
+                                        UnorderedElementsAre(Eq("en"))))));
+  }
+  // Not equality
+  {
+    auto sle = std::make_unique<StringLiteralExpression>(
+        tripleComponentLiteral("\"en\""));
+    auto le = makeLangExpression(
+        std::make_unique<VariableExpression>(Variable{"?x"}));
+    NotEqualExpression nee{{std::move(sle), std::move(le)}};
+    EXPECT_EQ(nee.getLanguageFilterExpression(), std::nullopt);
+  }
+  // No String Literal
+  {
+    auto ve = std::make_unique<VariableExpression>(Variable{"?y"});
+    auto le = makeLangExpression(
+        std::make_unique<VariableExpression>(Variable{"?x"}));
+    EqualExpression ee{{std::move(ve), std::move(le)}};
+    EXPECT_EQ(ee.getLanguageFilterExpression(), std::nullopt);
+  }
+  // No LANG function
+  {
+    auto sle = std::make_unique<StringLiteralExpression>(
+        tripleComponentLiteral("\"en\""));
+    auto ve = std::make_unique<VariableExpression>(Variable{"?x"});
+    EqualExpression ee{{std::move(sle), std::move(ve)}};
+    EXPECT_EQ(ee.getLanguageFilterExpression(), std::nullopt);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(InExpression, getLanguageFilterExpression) {
+  using LFD = SparqlExpression::LangFilterData;
+  using namespace ::testing;
+  std::vector<SparqlExpression::Ptr> children;
+  // Regular case
+  {
+    auto le = makeLangExpression(
+        std::make_unique<VariableExpression>(Variable{"?x"}));
+    auto sle = std::make_unique<StringLiteralExpression>(
+        tripleComponentLiteral("\"en\""));
+    children.push_back(std::move(sle));
+    InExpression ie{std::move(le), std::move(children)};
+    EXPECT_THAT(ie.getLanguageFilterExpression(),
+                Optional(AllOf(AD_FIELD(LFD, variable_, Eq(Variable{"?x"})),
+                               AD_FIELD(LFD, languages_,
+                                        UnorderedElementsAre(Eq("en"))))));
+  }
+  // Empty case
+  {
+    auto le = makeLangExpression(
+        std::make_unique<VariableExpression>(Variable{"?x"}));
+    InExpression ie{std::move(le), {}};
+    EXPECT_EQ(ie.getLanguageFilterExpression(), std::nullopt);
+  }
+  // Multiple values
+  {
+    auto le = makeLangExpression(
+        std::make_unique<VariableExpression>(Variable{"?x"}));
+    auto sle1 = std::make_unique<StringLiteralExpression>(
+        tripleComponentLiteral("\"\""));
+    auto sle2 = std::make_unique<StringLiteralExpression>(
+        tripleComponentLiteral("\"mul\""));
+    auto sle3 = std::make_unique<StringLiteralExpression>(
+        tripleComponentLiteral("\"en\""));
+    children.push_back(std::move(sle1));
+    children.push_back(std::move(sle2));
+    children.push_back(std::move(sle3));
+    InExpression ie{std::move(le), std::move(children)};
+    EXPECT_THAT(ie.getLanguageFilterExpression(),
+                Optional(AllOf(AD_FIELD(LFD, variable_, Eq(Variable{"?x"})),
+                               AD_FIELD(LFD, languages_,
+                                        UnorderedElementsAre(Eq(""), Eq("mul"),
+                                                             Eq("en"))))));
+  }
+  // Duplicate values are deduplicated
+  {
+    auto le = makeLangExpression(
+        std::make_unique<VariableExpression>(Variable{"?x"}));
+    auto sle1 = std::make_unique<StringLiteralExpression>(
+        tripleComponentLiteral("\"en\""));
+    auto sle2 = std::make_unique<StringLiteralExpression>(
+        tripleComponentLiteral("\"mul\""));
+    auto sle3 = std::make_unique<StringLiteralExpression>(
+        tripleComponentLiteral("\"en\""));
+    children.push_back(std::move(sle1));
+    children.push_back(std::move(sle2));
+    children.push_back(std::move(sle3));
+    InExpression ie{std::move(le), std::move(children)};
+    EXPECT_THAT(
+        ie.getLanguageFilterExpression(),
+        Optional(AllOf(AD_FIELD(LFD, variable_, Eq(Variable{"?x"})),
+                       AD_FIELD(LFD, languages_,
+                                UnorderedElementsAre(Eq("en"), Eq("mul"))))));
+  }
+  // Some values are not literals
+  {
+    auto le = makeLangExpression(
+        std::make_unique<VariableExpression>(Variable{"?x"}));
+    auto sle = std::make_unique<StringLiteralExpression>(
+        tripleComponentLiteral("\"\""));
+    auto ve = std::make_unique<VariableExpression>(Variable{"?y"});
+    children.push_back(std::move(sle));
+    children.push_back(std::move(ve));
+    InExpression ie{std::move(le), std::move(children)};
+    EXPECT_EQ(ie.getLanguageFilterExpression(), std::nullopt);
+  }
+  // No LANG function
+  {
+    auto ve = std::make_unique<VariableExpression>(Variable{"?x"});
+    auto sle = std::make_unique<StringLiteralExpression>(
+        tripleComponentLiteral("\"en\""));
+    children.push_back(std::move(sle));
+    InExpression ie{std::move(ve), std::move(children)};
+    EXPECT_EQ(ie.getLanguageFilterExpression(), std::nullopt);
+  }
+}
+
 // TODO<joka921> We currently do not have tests for the `LocalVocab` case,
 // because the relational expressions do not work properly with the current
 // limited implementation of the local vocabularies. Add those tests, as soon as

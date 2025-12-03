@@ -4,7 +4,7 @@
 
 #include <gtest/gtest.h>
 
-#include "../src/util/CompressionUsingZstd/ZstdWrapper.h"
+#include "util/CompressionUsingZstd/ZstdWrapper.h"
 
 // _____________________________________________________________________________
 TEST(CompressionTest, Basic) {

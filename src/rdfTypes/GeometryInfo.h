@@ -95,7 +95,9 @@ struct NumGeometries {
 
   uint32_t numGeometries() const { return numGeometries_; }
 
-  constexpr bool operator==(const NumGeometries& other) const = default;
+  constexpr bool operator==(const NumGeometries& other) const {
+    return numGeometries_ == other.numGeometries_;
+  };
 };
 
 // Represents the length of the geometry in meters.
@@ -105,6 +107,10 @@ struct MetricLength {
 
  public:
   explicit MetricLength(double length);
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  // Required for `bit_cast`.
+  MetricLength() = default;
+#endif
 
   double length() const { return length_; }
 };
@@ -120,6 +126,10 @@ struct MetricArea {
 
  public:
   explicit MetricArea(double area);
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  // Required for `bit_cast`.
+  MetricArea() = default;
+#endif
 
   double area() const { return area_; };
 
@@ -143,6 +153,9 @@ template <typename T>
 CPP_concept RequestedInfoT =
     SameAsAny<T, GeometryInfo, Centroid, BoundingBox, GeometryType,
               NumGeometries, MetricLength, MetricArea>;
+
+// Where the actual geometries are required, this type can be used.
+using GeoPointOrWkt = std::variant<GeoPoint, std::string>;
 
 // The version of the `GeometryInfo`: to ensure correctness when reading disk
 // serialized objects of this class.
@@ -177,6 +190,10 @@ class GeometryInfo {
   GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
                Centroid centroid, NumGeometries numGeometries,
                MetricLength metricLength, MetricArea metricArea);
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  // Required for `bit_cast`.
+  GeometryInfo() = default;
+#endif
 
   GeometryInfo(const GeometryInfo& other) = default;
 

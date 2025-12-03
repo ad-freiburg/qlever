@@ -219,8 +219,8 @@ ExecuteUpdate::computeGraphUpdateQuads(
         updateTriples.reserve(result.idTable().size() *
                               transformedTripleTemplates.size());
 
-        return std::tuple{std::move(transformedTripleTemplates),
-                          std::move(updateTriples), std::move(localVocab)};
+        return std::make_tuple(std::move(transformedTripleTemplates),
+                               std::move(updateTriples), std::move(localVocab));
       };
 
   tracer.beginTrace("transforming");
