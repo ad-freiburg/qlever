@@ -35,7 +35,12 @@ option(COMPILER_VERSION_CHECK_DEACTIVATED "Disable compiler version check" OFF)
 
 option(REDUCED_FEATURE_SET_FOR_CPP17 "Exclude some features like `SERVICE`, `LOAD`, and transitive property paths, that haven't been migrated to C++17 yet" OFF)
 if (REDUCED_FEATURE_SET_FOR_CPP17)
-    add_compile_definitions(QLEVER_REDUCED_FEATURE_SET_FOR_CPP17)
+    add_compile_definitions(QLEVER_REDUCED_FEATURE_SET_FOR_CPP17 QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17)
+endif()
+
+option(EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17 "Use the C++17 backports inside `SparqlExpressionGenerators.h`. They are currently less efficient than the C++20 implementations. This option is implicitly activated by the `REDUCED_FEATURE_SET_FOR_CPP17` option, but can be activated separately to run the unit tests for the backports of the `ExpressionGenerators`" OFF)
+if (EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17)
+    add_compile_definitions(QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17)
 endif()
 
 set(RANGE_V3_REQUIRED_BY_COMPILER OFF)
@@ -141,14 +146,13 @@ FetchContent_Declare(
         GIT_TAG 42340ef354f7b4e4660268b788e37008d9cc85aa # branch fork-for-qlever
 )
 
-
 #################################
 # libspatialjoin
 ################################
 FetchContent_Declare(
         spatialjoin
         GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
-        GIT_TAG 7f5c9007090cd1b902ad1873beb064820caebf39
+        GIT_TAG 26fcfeb831bae912cfe2c4d8e14f5f7ce8a2fe30
 )
 # disable bzip2 and zlib support in spatialjoin, we don't need it
 add_compile_definitions(SPATIALJOIN_NO_BZIP2=True SPATIALJOIN_NO_ZLIB=True)

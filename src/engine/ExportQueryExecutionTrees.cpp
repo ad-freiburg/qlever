@@ -468,11 +468,19 @@ ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
         }
         double dIntPart;
         // If the fractional part is zero, write number with one decimal place
-        // to make it distinct from integers. Otherwise, use `%g`, which uses
+        // to make it distinct from integers. Otherwise, use `%.13g`, which uses
         // fixed-size or exponential notation, whichever is more compact.
-        std::string out = std::modf(d, &dIntPart) == 0.0
-                              ? absl::StrFormat("%.1f", d)
-                              : absl::StrFormat("%g", d);
+        std::string out;
+        if (std::modf(d, &dIntPart) == 0.0) {
+          out = absl::StrFormat("%.1f", d);
+        } else {
+          out = absl::StrFormat("%.13g", d);
+          // For some values `modf` evaluates to zero, but rounding still leads
+          // to a value without a trailing '.0'.
+          if (out.find_last_of(".e") == std::string::npos) {
+            out += ".0";
+          }
+        }
         return std::pair{std::move(out), XSD_DECIMAL_TYPE};
       }();
     case Bool:
@@ -883,12 +891,10 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream(
          getRowIndices(limitAndOffset, *result, resultSize)) {
       for (uint64_t i : range) {
         for (const auto& columnIndex : selectedColumnIndices) {
-          if (columnIndex.has_value()) {
-            STREAMABLE_YIELD(
-                std::string_view{reinterpret_cast<const char*>(&pair.idTable()(
-                                     i, columnIndex.value().columnIndex_)),
-                                 sizeof(Id)});
-          }
+          STREAMABLE_YIELD(
+              std::string_view{reinterpret_cast<const char*>(&pair.idTable()(
+                                   i, columnIndex.value().columnIndex_)),
+                               sizeof(Id)});
         }
         cancellationHandle->throwIfCancelled();
       }
@@ -1079,8 +1085,6 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
   result->logResultSize();
   AD_LOG_DEBUG << "Converting result IDs to their corresponding strings ..."
                << std::endl;
-  auto selectedColumnIndices =
-      qet.selectedVariablesToColumnIndices(selectClause, false);
 
   auto vars = selectClause.getSelectedVariablesAsStrings();
   ql::ranges::for_each(vars, [](std::string& var) { var = var.substr(1); });

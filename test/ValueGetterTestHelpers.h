@@ -218,9 +218,9 @@ class ValueGetterTester {
       " <https://example.com/test>,"
       " \"noType\" ,"
       " \"LINESTRING(2 2, 4 4)\""
-      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>,"
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>,\n"
       " \"POLYGON((2 4, 4 4, 4 2, 2 2))\""
-      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>.";
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>.\n";
 
  public:
   // Helper that constructs a local vocab, inserts the literal and passes the
