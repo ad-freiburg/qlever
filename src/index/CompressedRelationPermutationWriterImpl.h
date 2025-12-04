@@ -89,6 +89,17 @@ struct CompressedRelationWriter::PermutationWriter {
   ad_utility::ProgressBar progressBar_{numTriplesProcessed_,
                                        "Triples sorted: "};
 
+  // Wrapper around private method `compressAndWriteBlock` for
+  // `AddBlockOfSmallRelationsToSwitched`.
+  struct Writer2CompressAndWriteBlock {
+    CompressedRelationWriter& writer_;
+    void operator()(Id firstCol0Id, Id lastCol0Id, IdTable block,
+                    bool invokeCallback) const {
+      writer_.compressAndWriteBlock(firstCol0Id, lastCol0Id, std::move(block),
+                                    invokeCallback);
+    }
+  };
+
   // ___________________________________________________________________________
   PermutationWriter(const std::string& basename,
                     WriterAndCallback writerAndCallback1,
@@ -116,10 +127,7 @@ struct CompressedRelationWriter::PermutationWriter {
     AD_CORRECTNESS_CHECK(numColumns_ == writer2_.numColumns());
 
     writer1_.smallBlocksCallback_ = AddBlockOfSmallRelationsToSwitched{
-        [&](Id firstCol0Id, Id lastCol0Id, IdTable block, bool invokeCallback) {
-          writer2_.compressAndWriteBlock(firstCol0Id, lastCol0Id,
-                                         std::move(block), invokeCallback);
-        }};
+        Writer2CompressAndWriteBlock{writer2_}};
   };
 
   // Write a block of a large relation with `writer1` and also push the block
