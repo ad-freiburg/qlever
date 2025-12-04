@@ -14,18 +14,19 @@
 #include "util/ProgressBar.h"
 
 // Set up the handling of small relations for the twin permutation.
-// A complete block of them is handed from `writer1` to
-// `AddBlockOfSmallRelationsToSwitched`. It swaps columns 1 and 2 and resorts.
-// The resulting block is fed to a lambda which writes it using `writer2`.
+// `AddBlockOfSmallRelationsToSwitched` receives a block of small relations from
+// `writer1`, swaps columns 1 and 2, sorts the block by the resulting
+// permutation and feeds the block to `WriterCallback` which writes it using
+// `writer2`.
 template <typename WriterCallback>
 struct AddBlockOfSmallRelationsToSwitched {
   WriterCallback writerCb_;
-  void operator()(IdTable relation) const {
+  void operator()(IdTable blockOfSmallRelations) const {
     using namespace compressedRelationHelpers;
 
     // We don't use the parallel twinRelationSorter to create the twin
     // relation as its overhead is far too high for small relations.
-    relation.swapColumns(c1Idx, c2Idx);
+    blockOfSmallRelations.swapColumns(c1Idx, c2Idx);
 
     // We only need to sort by the columns of the triple + the graph
     // column, not the additional payload. Note: We could also use
@@ -35,15 +36,53 @@ struct AddBlockOfSmallRelationsToSwitched {
       return std::tie(a[0], a[1], a[2], a[3]) <
              std::tie(b[0], b[1], b[2], b[3]);
     };
-    ql::ranges::sort(relation, compare);
-    AD_CORRECTNESS_CHECK(!relation.empty());
+    ql::ranges::sort(blockOfSmallRelations, compare);
+    AD_CORRECTNESS_CHECK(!blockOfSmallRelations.empty());
     // Note: it is important that we store these two IDs before moving the
     // `relation`, because the evaluation order of function arguments is
     // unspecified.
-    auto firstCol0 = relation.at(0, 0);
-    auto lastCol0 = relation.at(relation.numRows() - 1, 0);
-    writerCb_(firstCol0, lastCol0, std::move(relation), false);
+    auto firstCol0 = blockOfSmallRelations.at(0, 0);
+    auto lastCol0 =
+        blockOfSmallRelations.at(blockOfSmallRelations.numRows() - 1, 0);
+    writerCb_(firstCol0, lastCol0, std::move(blockOfSmallRelations), false);
   };
+};
+
+using PerBlockCallbacks =
+    std::vector<std::function<void(const IdTableStatic<0>&)>>;
+
+// Helper that handles the queue of callbacks to be called for every block
+// written.
+struct BlockCallbackManager {
+  const PerBlockCallbacks perBlockCallbacks_;
+
+  // A queue for the callbacks that have to be applied for each triple.
+  // The second argument is the number of threads. It is crucial that this
+  // queue is single threaded.
+  ad_utility::TaskQueue<false> blockCallbackQueue_{
+      3, 1, "Additional callbacks during permutation building"};
+  ad_utility::Timer blockCallbackTimer_{ad_utility::Timer::Stopped};
+
+  // Enqueue a call to each of the `perBlockCallbacks` for the current block.
+  void passToBlockCallbacks(IdTable block) {
+    blockCallbackTimer_.cont();
+    blockCallbackQueue_.push(
+        [block =
+             std::make_shared<std::decay_t<decltype(block)>>(std::move(block)),
+         this]() {
+          for (auto& callback : perBlockCallbacks_) {
+            callback(*block);
+          }
+        });
+    blockCallbackTimer_.stop();
+  }
+
+  // Wait for the enqueued block callbacks to finish.
+  void finishBlockCallbackQueue() {
+    blockCallbackTimer_.cont();
+    blockCallbackQueue_.finish();
+    blockCallbackTimer_.stop();
+  }
 };
 
 // __________________________________________________________________________
@@ -57,15 +96,8 @@ struct CompressedRelationWriter::PermutationWriter {
   const size_t numColumns_;
   size_t numDistinctCol0_ = 0;
 
-  // A queue for the callbacks that have to be applied for each triple.
-  // The second argument is the number of threads. It is crucial that this
-  // queue is single threaded.
-  ad_utility::TaskQueue<false> blockCallbackQueue_{
-      3, 1, "Additional callbacks during permutation building"};
-
   ad_utility::Timer inputWaitTimer_{ad_utility::Timer::Stopped};
   ad_utility::Timer largeTwinRelationTimer_{ad_utility::Timer::Stopped};
-  ad_utility::Timer blockCallbackTimer_{ad_utility::Timer::Stopped};
 
   std::optional<Id> col0IdCurrentRelation_;
   ad_utility::AllocatorWithLimit<ValueId> alloc_{
@@ -80,10 +112,7 @@ struct CompressedRelationWriter::PermutationWriter {
       twinRelationSorter_;
 
   compressedRelationHelpers::DistinctIdCounter distinctCol1Counter_;
-
-  using PerBlockCallbacks =
-      std::vector<std::function<void(const IdTableStatic<0>&)>>;
-  const PerBlockCallbacks perBlockCallbacks_;
+  BlockCallbackManager blockCallbackManager_;
 
   size_t numTriplesProcessed_ = 0;
   ad_utility::ProgressBar progressBar_{numTriplesProcessed_,
@@ -117,7 +146,7 @@ struct CompressedRelationWriter::PermutationWriter {
         relation_{numColumns_, alloc_},
         twinRelationSorter_{basename + ".twin-twinRelationSorter", numColumns_,
                             4_GB, alloc_},
-        perBlockCallbacks_{std::move(perBlockCallbacks)} {
+        blockCallbackManager_{std::move(perBlockCallbacks)} {
     auto [c0, c1, c2, c3] = permutation.keys();
     // This logic only works for permutations that have the graph as the fourth
     // column.
@@ -199,8 +228,9 @@ struct CompressedRelationWriter::PermutationWriter {
                   << "s" << std::endl;
     AD_LOG_TIMING
         << "Time spent waiting for triple callbacks (e.g. the next sorter) "
-        << ad_utility::Timer::toSeconds(blockCallbackTimer_.msecs()) << "s"
-        << std::endl;
+        << ad_utility::Timer::toSeconds(
+               blockCallbackManager_.blockCallbackTimer_.msecs())
+        << "s" << std::endl;
   }
 
   // Check if we need to create a new block before adding the current
@@ -227,27 +257,6 @@ struct CompressedRelationWriter::PermutationWriter {
     if (progressBar_.update()) {
       AD_LOG_INFO << progressBar_.getProgressString() << std::flush;
     }
-  }
-
-  // Enqueue a call to each of the `perBlockCallbacks` for the current block.
-  void passToBlockCallbacks(IdTable block) {
-    blockCallbackTimer_.cont();
-    blockCallbackQueue_.push(
-        [block =
-             std::make_shared<std::decay_t<decltype(block)>>(std::move(block)),
-         this]() {
-          for (auto& callback : perBlockCallbacks_) {
-            callback(*block);
-          }
-        });
-    blockCallbackTimer_.stop();
-  }
-
-  // Wait for the enqueued block callbacks to finish.
-  void finishBlockCallbackQueue() {
-    blockCallbackTimer_.cont();
-    blockCallbackQueue_.finish();
-    blockCallbackTimer_.stop();
   }
 
   // Get the indices of all columns in the order in which they have to be added
@@ -301,7 +310,7 @@ struct CompressedRelationWriter::PermutationWriter {
 
         increaseTripleCounter();
       }
-      passToBlockCallbacks(std::move(block));
+      blockCallbackManager_.passToBlockCallbacks(std::move(block));
       inputWaitTimer_.cont();
     }
     AD_LOG_INFO << progressBar_.getFinalProgressString() << std::flush;
@@ -312,7 +321,7 @@ struct CompressedRelationWriter::PermutationWriter {
 
     writer1_.finish();
     writer2_.finish();
-    finishBlockCallbackQueue();
+    blockCallbackManager_.finishBlockCallbackQueue();
     logTimers();
     return {numDistinctCol0_, std::move(writer1_).getFinishedBlocks(),
             std::move(writer2_).getFinishedBlocks()};
