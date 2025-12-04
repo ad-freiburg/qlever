@@ -46,15 +46,17 @@ class alignas(16) LiteralOrIri {
   // Create a new LiteralOrIri based on an Iri object
   explicit LiteralOrIri(Iri iri);
 
-  const std::string& toStringRepresentation() const {
+  const std::string& toStringRepresentation() const& {
     auto impl = [](const auto& val) -> decltype(auto) {
       return val.toStringRepresentation();
     };
     return std::visit(impl, data_);
   }
 
-  std::string& toStringRepresentation() {
-    auto impl = [](auto& val) -> auto& { return val.toStringRepresentation(); };
+  std::string toStringRepresentation() && {
+    auto impl = [](auto& val) {
+      return std::move(val).toStringRepresentation();
+    };
     return std::visit(impl, data_);
   }
 
