@@ -11,37 +11,38 @@ namespace ad_utility {
 // _____________________________________________________________________________
 BlankNodeManager::BlankNodeManager(uint64_t minIndex)
     : minIndex_(minIndex),
-      randBlockIndex_(
-          SlowRandomIntGenerator<uint64_t>(0, totalAvailableBlocks_ - 1)) {}
+      state_{SlowRandomIntGenerator<uint64_t>(0, totalAvailableBlocks_ - 1)} {}
 
 // _____________________________________________________________________________
 BlankNodeManager::Block BlankNodeManager::allocateBlock() {
   // The Random-Generation Algorithm's performance is reduced once the number of
   // used blocks exceeds a limit.
-  auto numBlocks = usedBlocksSet_.rlock()->size();
+  auto stateLock = state_.wlock();
+  auto numBlocks = stateLock->usedBlocksSet_.size();
   AD_CORRECTNESS_CHECK(
       numBlocks < totalAvailableBlocks_ / 256,
       absl::StrCat("Critical high number of blank node blocks in use: ",
                    numBlocks, " blocks"));
 
-  auto usedBlocksSetPtr = usedBlocksSet_.wlock();
+  auto& usedBlocksSetPtr = stateLock->usedBlocksSet_;
   while (true) {
-    auto blockIdx = randBlockIndex_();
-    if (!usedBlocksSetPtr->contains(blockIdx)) {
-      usedBlocksSetPtr->insert(blockIdx);
+    auto blockIdx = stateLock->randBlockIndex_();
+    if (!usedBlocksSetPtr.contains(blockIdx)) {
+      usedBlocksSetPtr.insert(blockIdx);
       return Block(blockIdx, minIndex_ + blockIdx * blockSize_);
     }
   }
 }
 
 // ______________________________________________________________________________
-[[nodiscard]] auto BlankNodeManager::reserveExplicitBlock(uint64_t blockIdx)
+[[nodiscard]] auto BlankNodeManager::allocateExplicitBlock(uint64_t blockIdx)
     -> Block {
-  auto usedBlocksSetPtr = usedBlocksSet_.wlock();
-  AD_CONTRACT_CHECK(!usedBlocksSetPtr->contains(blockIdx),
+  auto lock = state_.wlock();
+  auto& usedBlocksSet = lock->usedBlocksSet_;
+  AD_CONTRACT_CHECK(!usedBlocksSet.contains(blockIdx),
                     "Trying to explicitly allocate a block of blank nodes that "
                     "has previously already been allocated.");
-  usedBlocksSetPtr->insert(blockIdx);
+  usedBlocksSet.insert(blockIdx);
   return Block(blockIdx, minIndex_ + blockIdx * blockSize_);
 }
 
@@ -56,11 +57,12 @@ BlankNodeManager::LocalBlankNodeManager::LocalBlankNodeManager(
 
 // _____________________________________________________________________________
 uint64_t BlankNodeManager::LocalBlankNodeManager::getId() {
-  if (blocks_->empty() || blocks_->back().nextIdx_ == idxAfterCurrentBlock_) {
-    blocks_->emplace_back(blankNodeManager_->allocateBlock());
-    idxAfterCurrentBlock_ = blocks_->back().nextIdx_ + blockSize_;
+  auto& blocks = blocks_->blocks_;
+  if (blocks.empty() || blocks.back().nextIdx_ == idxAfterCurrentBlock_) {
+    blocks.emplace_back(blankNodeManager_->allocateBlock());
+    idxAfterCurrentBlock_ = blocks.back().nextIdx_ + blockSize_;
   }
-  return blocks_->back().nextIdx_++;
+  return blocks.back().nextIdx_++;
 }
 
 // _____________________________________________________________________________
@@ -70,45 +72,83 @@ bool BlankNodeManager::LocalBlankNodeManager::containsBlankNodeIndex(
     return index >= block.startIdx_ && index < block.nextIdx_;
   };
 
-  return ql::ranges::any_of(*blocks_, containsIndex) ||
+  return ql::ranges::any_of(blocks_->blocks_, containsIndex) ||
          ql::ranges::any_of(
-             otherBlocks_,
-             [&](const std::shared_ptr<const std::vector<Block>>& blocks) {
-               return ql::ranges::any_of(*blocks, containsIndex);
+             otherBlocks_, [&](const std::shared_ptr<const Blocks>& blocks) {
+               return ql::ranges::any_of(blocks->blocks_, containsIndex);
              });
 }
 
 // _____________________________________________________________________________
-std::vector<uint64_t>
-BlankNodeManager::LocalBlankNodeManager::getReservedBlockIndices() const {
-  std::vector<uint64_t> indices;
-  // TODO<joka921> Use nicer algorithms for this.
-  for (const auto& block : *blocks_) {
-    indices.push_back(block.blockIdx_);
-  }
-  for (const auto& set : otherBlocks_) {
-    for (const auto& block : *set) {
-      indices.push_back(block.blockIdx_);
+auto BlankNodeManager::LocalBlankNodeManager::getOwnedBlockIndices() const
+    -> std::vector<OwnedBlocksEntry> {
+  std::vector<OwnedBlocksEntry> indices;
+  auto resultFromSingleSet = [](const auto& set) {
+    OwnedBlocksEntry res;
+    res.uuid_ = set->uuid_;
+    for (const auto& block : set->blocks_) {
+      res.blockIndices_.push_back(block.blockIdx_);
     }
+    return res;
+  };
+  indices.reserve(blocks_->blocks_.size() + otherBlocks_.size());
+  indices.push_back(resultFromSingleSet(blocks_));
+  for (const auto& set : otherBlocks_) {
+    indices.push_back(resultFromSingleSet(set));
   }
   return indices;
 }
 
 // _____________________________________________________________________________
-void BlankNodeManager::LocalBlankNodeManager::reserveBlocksFromExplicitIndices(
-    const std::vector<uint64_t>& indices) {
-  AD_CONTRACT_CHECK(blocks_->empty() && otherBlocks_.empty(),
+void BlankNodeManager::LocalBlankNodeManager::allocateBlocksFromExplicitIndices(
+    const std::vector<OwnedBlocksEntry>& indices) {
+  AD_CONTRACT_CHECK(blocks_->blocks_.empty() && otherBlocks_.empty(),
                     "Explicit reserving of blank node blocks is only allowed "
                     "for empty `LocalBlankNodeManager`s");
-  for (const auto& idx : indices) {
-    blocks_->emplace_back(blankNodeManager_->reserveExplicitBlock(idx));
+
+  auto allocateSingleSet = [this](const OwnedBlocksEntry& entry) {
+    auto [blocks, isNew] =
+        blankNodeManager_->registerBlocksWithExplicitUuid(entry.uuid_);
+    if (isNew) {
+      for (const auto& idx : entry.blockIndices_) {
+        blocks->blocks_.emplace_back(
+            blankNodeManager_->allocateExplicitBlock(idx));
+      }
+    }
+    return blocks;
+  };
+  AD_CONTRACT_CHECK(!indices.empty());
+  blocks_ = allocateSingleSet(indices.at(0));
+  otherBlocks_.reserve(indices.size() - 1);
+  for (const auto& entry : indices | ql::views::drop(1)) {
+    otherBlocks_.push_back(allocateSingleSet(entry));
   }
 
   // The following code ensures that the next call to `getId` allocates a new
   // block. This is necessary, because we don't have access to the information
   // which IDs in the allocated blocks actually are in use.
-  if (!blocks_->empty()) {
-    idxAfterCurrentBlock_ = blocks_->back().nextIdx_;
+  if (!blocks_->blocks_.empty()) {
+    idxAfterCurrentBlock_ = blocks_->blocks_.back().nextIdx_;
+  }
+}
+
+auto BlankNodeManager::createBlockSet() -> std::shared_ptr<Blocks> {
+  auto res = std::make_shared<Blocks>(this);
+  // TODO<joka921> Check that uuid is not present?
+  state_.wlock()->managedBlockSets_[res->uuid_] = res;
+  return res;
+}
+
+void BlankNodeManager::freeBlockSet(Blocks& blocks) {
+  // TODO<joka921> we have to put EVERYTHING inside the `BlankNodeManager`
+  // into a `synchronized.
+  auto lock = state_.wlock();
+  auto it = lock->managedBlockSets_.find(blocks.uuid_);
+  AD_CORRECTNESS_CHECK(it != lock->managedBlockSets_.end());
+  auto& usedBlockSet = lock->usedBlocksSet_;
+  for (const auto& block : blocks.blocks_) {
+    AD_CONTRACT_CHECK(usedBlockSet.contains(block.blockIdx_));
+    usedBlockSet.erase(block.blockIdx_);
   }
 }
 

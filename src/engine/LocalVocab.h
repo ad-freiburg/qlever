@@ -179,7 +179,7 @@ class LocalVocab {
     if (!localBlankNodeManager_) {
       return {};
     }
-    return localBlankNodeManager_->getReservedBlockIndices();
+    return localBlankNodeManager_->getOwnedBlockIndices();
   }
 
   void reserveBlankNodeBlocksFromExplicitIndices(
@@ -189,7 +189,7 @@ class LocalVocab {
     localBlankNodeManager_ =
         std::make_shared<ad_utility::BlankNodeManager::LocalBlankNodeManager>(
             blankNodeManager);
-    localBlankNodeManager_->reserveBlocksFromExplicitIndices(indices);
+    localBlankNodeManager_->allocateBlocksFromExplicitIndices(indices);
   }
 
   // Get a new BlankNodeIndex using the LocalBlankNodeManager.
