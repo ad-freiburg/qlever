@@ -155,8 +155,9 @@ struct CompressedRelationWriter::PermutationWriter {
     AD_CORRECTNESS_CHECK(blocksize_ == writer2_.blocksize());
     AD_CORRECTNESS_CHECK(numColumns_ == writer2_.numColumns());
 
-    writer1_.smallBlocksCallback_ = AddBlockOfSmallRelationsToSwitched{
-        Writer2CompressAndWriteBlock{writer2_}};
+    writer1_.smallBlocksCallback_ =
+        AddBlockOfSmallRelationsToSwitched<Writer2CompressAndWriteBlock>{
+            Writer2CompressAndWriteBlock{writer2_}};
   };
 
   // Write a block of a large relation with `writer1` and also push the block
