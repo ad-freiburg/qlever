@@ -55,8 +55,8 @@ class alignas(16) LiteralOrIri {
     return std::visit(toStringRepresentationImpl, data_);
   }
 
-  std::string&& toStringRepresentation() && {
-    return std::move(std::visit(toStringRepresentationImpl, data_));
+  std::string toStringRepresentation() && {
+    return std::visit(toStringRepresentationImpl, data_);
   }
 
   static LiteralOrIri fromStringRepresentation(std::string internal) {
