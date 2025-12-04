@@ -41,11 +41,13 @@ CPP_template(typename T, typename Function)(
   size_t blocksize_;
   std::vector<T> vec_;
 
+  // ___________________________________________________________________________
   Batcher(Function function, size_t blocksize)
       : function_{std::move(function)}, blocksize_{blocksize} {
     vec_.reserve(blocksize_);
   }
 
+  // ___________________________________________________________________________
   void operator()(T t) {
     vec_.push_back(std::move(t));
     if (vec_.size() >= blocksize_) {
@@ -55,6 +57,7 @@ CPP_template(typename T, typename Function)(
     }
   }
 
+  // ___________________________________________________________________________
   ~Batcher() {
     ad_utility::terminateIfThrows(
         [&]() {
@@ -84,10 +87,13 @@ class MetadataWriter {
   B batcher2_;
 
  public:
+  // ___________________________________________________________________________
   MetadataWriter(MetadataCallback callback1, MetadataCallback callback2,
                  size_t blocksize)
       : batcher1_{std::move(callback1), blocksize},
         batcher2_{std::move(callback2), blocksize} {}
+
+  // ___________________________________________________________________________
   void operator()(CompressedRelationMetadata md1,
                   CompressedRelationMetadata md2) {
     md1.multiplicityCol2_ = md2.multiplicityCol1_;
@@ -103,10 +109,13 @@ class DistinctIdCounter {
   size_t count_ = 0;
 
  public:
+  // ___________________________________________________________________________
   void operator()(Id id) {
     count_ += static_cast<size_t>(id != lastSeen_);
     lastSeen_ = id;
   }
+
+  // ___________________________________________________________________________
   size_t getAndReset() {
     lastSeen_ = std::numeric_limits<Id>::max();
     return std::exchange(count_, 0);
