@@ -8,40 +8,17 @@
 #include <absl/functional/bind_front.h>
 
 #include "ExportQueryExecutionTrees.h"
-// TODO<joka921> Can we get further type erasure here to not include this
-// detail?
+#include "engine/StringMapping.h"
 #include "util/Serializer/ByteBufferSerializer.h"
+#include "util/Serializer/FromCallableSerializer.h"
 #include "util/Serializer/SerializeOptional.h"
 #include "util/Serializer/SerializeString.h"
 #include "util/Serializer/SerializeVector.h"
+// TODO<joka921> Can we get further type erasure here to not include the
+// `HttpClient`.
 #include "util/http/HttpClient.h"
 
 using CancellationHandle = ad_utility::SharedCancellationHandle;
-namespace ad_utility::serialization {
-// TODO<joka921> Move this to a global file.
-template <typename F>
-class ReadViaCallableSerializer {
- public:
-  using SerializerType = ReadSerializerTag;
-
- private:
-  F readFunction_;
-
- public:
-  explicit ReadViaCallableSerializer(F readFunction)
-      : readFunction_{std::move(readFunction)} {};
-  void serializeBytes(char* bytePointer, size_t numBytes) {
-    readFunction_(bytePointer, numBytes);
-  }
-
-  ReadViaCallableSerializer(const ReadViaCallableSerializer&) noexcept = delete;
-  ReadViaCallableSerializer& operator=(const ReadViaCallableSerializer&) =
-      delete;
-  ReadViaCallableSerializer(ReadViaCallableSerializer&&) noexcept = default;
-  ReadViaCallableSerializer& operator=(ReadViaCallableSerializer&&) noexcept =
-      default;
-};
-}  // namespace ad_utility::serialization
 namespace {
 // Return a `std::string_view` wrapping the passed value.
 std::string_view raw(const std::integral auto& value) {
@@ -52,62 +29,10 @@ std::string_view raw(const std::integral auto& value) {
 namespace qlever::binary_export {
 
 // _____________________________________________________________________________
-bool BinaryExportHelpers::isTrivial(Id id) {
-  auto datatype = id.getDatatype();
-  return datatype == Datatype::Undefined || datatype == Datatype::Bool ||
-         datatype == Datatype::Int || datatype == Datatype::Double ||
-         datatype == Datatype::Date || datatype == Datatype::GeoPoint ||
-         datatype == Datatype::EncodedVal;
-}
-
-// _____________________________________________________________________________
-std::string StringMapping::flush(const Index& index) {
-  numProcessedRows_ = 0;
-  std::vector<std::string> sortedStrings;
-  sortedStrings.resize(stringMapping_.size());
-  for (auto& [oldId, newId] : stringMapping_) {
-    auto type = oldId.getDatatype();
-    if (type == Datatype::LocalVocabIndex) {
-      sortedStrings[newId] =
-          oldId.getLocalVocabIndex()->toStringRepresentation();
-    } else {
-      // TODO<joka921, RobinTF>, make the list exhaustive.
-      AD_CONTRACT_CHECK(type == Datatype::VocabIndex);
-      // TODO<joka921> Deduplicate on the level of IDs for the string mapping.
-      sortedStrings[newId] = index.indexToString(oldId.getVocabIndex());
-    }
-  }
-  stringMapping_.clear();
-
-  std::string result;
-  // Rough estimate
-  result.reserve(sortedStrings.size() * 100);
-
-  for (const std::string& string : sortedStrings) {
-    absl::StrAppend(&result, raw(string.size()), string);
-  }
-
-  return result;
-}
-
-// _____________________________________________________________________________
-Id StringMapping::remapId(Id id) {
-  size_t distinctIndex = 0;
-  if (stringMapping_.contains(id)) {
-    distinctIndex = stringMapping_.at(id);
-  } else {
-    distinctIndex = stringMapping_[id] = stringMapping_.size();
-  }
-  // The shift is required to imitate the unused bits of a pointer.
-  return Id::makeFromLocalVocabIndex(
-      reinterpret_cast<LocalVocabIndex>(distinctIndex << Id::numDatatypeBits));
-}
-
-// _____________________________________________________________________________
 AD_ALWAYS_INLINE Id
 toExportableId(Id originalId, [[maybe_unused]] const LocalVocab& localVocab,
                StringMapping& stringMapping) {
-  if (BinaryExportHelpers::isTrivial(originalId)) {
+  if (originalId.isTrivial()) {
     return originalId;
   } else {
     // TODO<joka921, RobinTF>, make the list exhaustive.
@@ -115,42 +40,39 @@ toExportableId(Id originalId, [[maybe_unused]] const LocalVocab& localVocab,
   }
 }
 
-void writeHeader(auto& serializer, const auto& qet, const auto& columns) {
-  // Magic bytes
-  serializer << "QLEVER.EXPORT"sv;
-  // Export format version.
-  serializer << uint16_t{0};
+template <typename Serializer, ad_utility::SimilarTo<QueryExecutionTree::ColumnIndicesAndTypes> Columns>
+void serializeHeader(Serializer&& serializer, Columns&& cols, auto&& prefixes) {
+  static_assert(ad_utility::serialization::Serializer<std::decay_t<Serializer>>);
+  static constexpr bool isReader = ad_utility::serialization::ReadSerializer<Serializer>;
+  std::string magicBytes = "QLEVER.EXPORT";
+  serializer | magicBytes;
+  if constexpr(isReader) {
+    AD_CONTRACT_CHECK(magicBytes == "QLEVER.EXPORT");
+  }
+  uint16_t version = 0;
+  serializer | version;
+  if constexpr(isReader) {
+    // We only support version 0.
+    AD_CONTRACT_CHECK(version == 0);
+  }
+  serializer | prefixes;
+  serializer | cols;
+}
 
-  // Export encoded values.
+
+void writeHeader(auto& serializer, const auto& qet, const auto& columns) {
   const auto& prefixes = qet.getQec()->getIndex().encodedIriManager().prefixes_;
-  serializer << prefixes;
-  serializer << columns;
+  serializeHeader(serializer, columns, prefixes);
 }
 
 auto readHeader(auto& serializer) {
-  // If we don't get the magic bytes this is not a QLever instance on the other
-  // end.
-  std::string magicBytes;
-  serializer >> magicBytes;
-  AD_CONTRACT_CHECK(std::string_view(magicBytes.data(), magicBytes.size()) ==
-                    "QLEVER.EXPORT");
-
-  uint16_t version;
-  serializer >> version;
-  // We only support version 0.
-  AD_CONTRACT_CHECK(version == 0);
-
   std::vector<std::string> prefixes;
-  serializer >> prefixes;
-
   QueryExecutionTree::ColumnIndicesAndTypes columns;
-  serializer >> columns;
-  // TODO<joka921> only serialize the variable names when exporting.
+  serializeHeader(serializer, columns, prefixes);
   std::vector<std::string> variableNames;
   for (auto& opt : columns) {
     variableNames.push_back(std::move(opt.value().variable_));
   }
-
   return std::pair{std::move(prefixes), std::move(variableNames)};
 }
 
@@ -167,19 +89,19 @@ ad_utility::streams::stream_generator exportAsQLeverBinary(
   result->logResultSize();
   AD_LOG_DEBUG << "Starting binary export..." << std::endl;
 
-  ad_utility::serialization::ByteBufferWriteSerializer serializer{};
-
   using namespace std::string_view_literals;
   // Get all columns with defined variables.
   QueryExecutionTree::ColumnIndicesAndTypes columns =
       qet.selectedVariablesToColumnIndices(selectClause, false);
   std::erase(columns, std::nullopt);
 
-  writeHeader(serializer, qet, columns);
-
-  // TODO<joka921> Use serialization for additional stuff.
-  co_yield std::string_view{serializer.data().data(), serializer.data().size()};
-  serializer.clear();
+  {
+    ad_utility::serialization::ByteBufferWriteSerializer serializer{};
+    writeHeader(serializer, qet, columns);
+    // TODO<joka921> Use serialization for additional stuff.
+    co_yield std::string_view{serializer.data().data(),
+                              serializer.data().size()};
+  }
 
   // Maps strings to reusable ids.
   StringMapping stringMapping;
@@ -196,19 +118,19 @@ ad_utility::streams::stream_generator exportAsQLeverBinary(
       }
       if (stringMapping.needsFlush()) {
         co_yield raw(vocabMarker);
-        co_yield stringMapping.flush(qet.getQec()->getIndex());
-        co_yield raw(static_cast<size_t>(0));
+        co_yield BinaryExportHelpers::writeVectorOfStrings(
+            stringMapping.flush(qet.getQec()->getIndex()));
       }
       cancellationHandle->throwIfCancelled();
       stringMapping.nextRow();
     }
   }
 
-  std::string trailingVocab = stringMapping.flush(qet.getQec()->getIndex());
+  std::string trailingVocab = BinaryExportHelpers::writeVectorOfStrings(
+      stringMapping.flush(qet.getQec()->getIndex()));
   if (!trailingVocab.empty()) {
     co_yield raw(vocabMarker);
     co_yield trailingVocab;
-    co_yield raw(static_cast<size_t>(0));
   }
 
   // If there are no variables, just export the total number of rows.
@@ -217,27 +139,10 @@ ad_utility::streams::stream_generator exportAsQLeverBinary(
   }
 }
 
-namespace {
-template <typename It, typename End>
-struct IteratorReader {
-  It it;
-  End end;
-
-  void operator()(char* target, size_t numBytes) {
-    for (size_t i = 0; i < numBytes; ++i) {
-      AD_CORRECTNESS_CHECK(it != end);
-      *target = static_cast<char>(*it);
-      ++it, ++target;
-    }
-  }
-};
-}  // namespace
-
 // _____________________________________________________________________________
 void BinaryExportHelpers::rewriteVocabIds(
-    IdTable& result, const size_t dirtyIndex,
-    const QueryExecutionContext& qec, LocalVocab& vocab,
-    const std::vector<std::string>& transmittedStrings) {
+    IdTable& result, const size_t dirtyIndex, const QueryExecutionContext& qec,
+    LocalVocab& vocab, const std::vector<std::string>& transmittedStrings) {
   for (auto col : result.getColumns()) {
     ql::ranges::for_each(
         col.subspan(dirtyIndex), [&qec, &vocab, &transmittedStrings](Id& id) {
@@ -272,24 +177,14 @@ Id BinaryExportHelpers::toIdImpl(
   // changes.
   Id id = Id::fromBits(bits);
   if (id.getDatatype() == Datatype::EncodedVal) {
-    // TODO<RobinTF> This is basically EncodedIriManager::toString copy
-    // pasted.
-    static constexpr auto mask =
-        ad_utility::bitMaskForLowerBits(EncodedIriManager::NumBitsEncoding);
-    auto digitEncoding = id.getEncodedVal() & mask;
-    // Get the index of the prefix.
-    auto prefixIdx = id.getEncodedVal() >> EncodedIriManager::NumBitsEncoding;
+    auto [prefixIdx, digitEncoding] =
+        EncodedIriManager::splitIntoPrefixIdxAndPayload(id);
     if (prefixMapping.contains(prefixIdx)) {
-      return Id::makeFromEncodedVal(
-          digitEncoding | (static_cast<uint64_t>(prefixMapping.at(prefixIdx))
-                           << EncodedIriManager::NumBitsEncoding));
+      return EncodedIriManager::makeIdFromPrefixIdxAndPayload(
+          prefixMapping.at(prefixIdx), digitEncoding);
     }
-    std::string result;
-    const auto& prefix = prefixes.at(prefixIdx);
-    result.reserve(prefix.size() + EncodedIriManager::NumDigits + 1);
-    result = prefix;
-    EncodedIriManager::decodeDecimalFrom64Bit(result, digitEncoding);
-    result.push_back('>');
+    std::string result = EncodedIriManager::toStringWithGivenPrefix(
+        digitEncoding, prefixes.at(prefixIdx));
     return TripleComponent{
         ad_utility::triple_component::Iri::fromStringRepresentation(
             std::move(result))}
@@ -329,7 +224,8 @@ Result importBinaryHttpResponse(bool requestLaziness,
   auto it = ql::ranges::begin(bytes);
   auto end = ql::ranges::end(bytes);
 
-  IteratorReader<decltype(it), decltype(end)> itReader{it, end};
+  BinaryExportHelpers::IteratorReader<decltype(it), decltype(end)> itReader{
+      it, end};
   ad_utility::serialization::ReadViaCallableSerializer serializer{
       std::ref(itReader)};
 

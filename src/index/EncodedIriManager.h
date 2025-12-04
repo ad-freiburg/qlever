@@ -162,8 +162,12 @@ class EncodedIriManagerImpl {
 
     // Get the index of the used prefix, and run the actual encoding.
     auto prefixIndex = static_cast<size_t>(it - prefixes_.begin());
-    return Id::makeFromEncodedVal(encodeDecimalToNBit(numString) |
-                                  (prefixIndex << NumBitsEncoding));
+    return makeIdFromPrefixIdxAndPayload(prefixIndex, encodeDecimalToNBit(numString));
+  }
+
+  static Id makeIdFromPrefixIdxAndPayload(uint64_t prefixIdx,
+                                          uint64_t payload) {
+    return Id::makeFromEncodedVal(payload | (prefixIdx << NumBitsEncoding));
   }
 
   // Convert an `Id` that was encoded using this encoder back to a string.
@@ -171,18 +175,28 @@ class EncodedIriManagerImpl {
   std::string toString(Id id) const {
     AD_CORRECTNESS_CHECK(id.getDatatype() == Datatype::EncodedVal);
     // Get only the rightmost bits that represent the digits.
-    static constexpr auto mask =
-        ad_utility::bitMaskForLowerBits(NumBitsEncoding);
-    auto digitEncoding = id.getEncodedVal() & mask;
-    // Get the index of the prefix.
-    auto prefixIdx = id.getEncodedVal() >> NumBitsEncoding;
+    auto [prefixIdx, digitEncoding] = splitIntoPrefixIdxAndPayload(id);
+    return toStringWithGivenPrefix(digitEncoding, prefixes_.at(prefixIdx));
+  }
+
+  static std::string toStringWithGivenPrefix(uint64_t digitEncoding, std::string_view prefix) {
     std::string result;
-    const auto& prefix = prefixes_.at(prefixIdx);
     result.reserve(prefix.size() + NumDigits + 1);
     result = prefix;
     decodeDecimalFrom64Bit(result, digitEncoding);
     result.push_back('>');
     return result;
+
+  }
+
+  static std::pair<uint64_t, uint64_t> splitIntoPrefixIdxAndPayload(Id id) {
+    AD_CONTRACT_CHECK(id.getDatatype() == Datatype::EncodedVal);
+    static constexpr auto mask =
+        ad_utility::bitMaskForLowerBits(NumBitsEncoding);
+    auto digitEncoding = id.getEncodedVal() & mask;
+    // Get the index of the prefix.
+    auto prefixIdx = id.getEncodedVal() >> NumBitsEncoding;
+    return std::make_pair(prefixIdx, digitEncoding);
   }
 
   // Conversion to and from JSON.
