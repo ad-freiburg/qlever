@@ -7,9 +7,9 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
+#include "./ValuesForTesting.h"
 #include "engine/NeutralOptional.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/ValuesForTesting.h"
 
 // _____________________________________________________________________________
 TEST(NeutralOptional, getChildren) {
