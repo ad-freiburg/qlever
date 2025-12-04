@@ -48,8 +48,8 @@ enum class ChunkOverlapScenario {
 // Force fallback by setting a tiny distinct-ratio threshold
 static void forceFallback() {
   // Enable hash-map grouping but disable skip-guard sampling
-  RuntimeParameters().set<"group-by-hash-map-enabled">(true);
-  RuntimeParameters().set<"group-by-hash-map-group-threshold">(0);
+  setRuntimeParameter<&RuntimeParameters::groupByHashMapEnabled_>(true);
+  setRuntimeParameter<&RuntimeParameters::groupByHashMapGroupThreshold_>(0);
 }
 
 // Empty input should yield empty result
@@ -135,8 +135,9 @@ TEST_F(GroupByFallbackTest,
 // used and results are correct.
 TEST_F(GroupByFallbackTest, NoFallbackWithLargeThreshold_Count) {
   // Enable optimization, set huge threshold
-  RuntimeParameters().set<"group-by-hash-map-enabled">(true);
-  RuntimeParameters().set<"group-by-hash-map-group-threshold">(1'000'000);
+  setRuntimeParameter<&RuntimeParameters::groupByHashMapEnabled_>(true);
+  setRuntimeParameter<&RuntimeParameters::groupByHashMapGroupThreshold_>(
+      1'000'000);
 
   std::vector<VectorTable> chunks{VectorTable({{1, 10}, {1, 11}, {2, 12}}),
                                   VectorTable({{2, 13}, {3, 14}})};

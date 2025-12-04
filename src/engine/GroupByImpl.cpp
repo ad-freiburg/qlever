@@ -1765,7 +1765,7 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
   auto blocksEnd = ql::ranges::end(subresults);
 
   size_t groupThreshold =
-      RuntimeParameters().get<"group-by-hash-map-group-threshold">();
+      getRuntimeParameter<&RuntimeParameters::groupByHashMapGroupThreshold_>();
   const size_t inWidth = _subtree->getResultWidth();
 
   size_t blocksProcessedBeforeFallback = 0;
@@ -1888,10 +1888,13 @@ CPP_template_def(size_t NUM_GROUP_COLUMNS, typename BlockIterator,
   restSortTimer.stop();
 
   restGroupByTimer.cont();
-  IdTable restResult = CALL_FIXED_SIZE((std::array{inWidth, getResultWidth()}),
-                                       &GroupByImpl::doGroupBy, this, restTable,
-                                       data.columnIndices_.value(),
-                                       data.aggregates_.value(), &localVocab);
+  IdTable restResult = ad_utility::callFixedSizeVi(
+      (std::array{inWidth, getResultWidth()}),
+      [&, self = this](auto inWidthValue, auto outWidthValue) {
+        return self->doGroupBy<inWidthValue, outWidthValue>(
+            restTable, data.columnIndices_.value(), data.aggregates_.value(),
+            &localVocab);
+      });
   restGroupByTimer.stop();
 
   hashResultTimer.cont();
@@ -1966,7 +1969,7 @@ GroupByImpl::updateHashMapWithTable(
   // `GROUP_BY_HASH_MAP_BLOCK_SIZE` rows at a time.
   std::vector<size_t> nonMatchingRows;
   size_t groupThreshold =
-      RuntimeParameters().get<"group-by-hash-map-group-threshold">();
+      getRuntimeParameter<&RuntimeParameters::groupByHashMapGroupThreshold_>();
   bool thresholdExceededDuringThisTable = false;
 
   for (size_t i = 0; i < table.size(); i += GROUP_BY_HASH_MAP_BLOCK_SIZE) {

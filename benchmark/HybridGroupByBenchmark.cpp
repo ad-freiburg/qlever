@@ -14,13 +14,13 @@
 
 #include "../benchmark/infrastructure/Benchmark.h"
 #include "../test/engine/GroupByStrategyHelpers.h"
-#include "../test/engine/ValuesForTesting.h"
 #include "../test/util/IdTableHelpers.h"
 #include "../test/util/IndexTestHelpers.h"
 #include "absl/strings/str_cat.h"
 #include "engine/GroupBy.h"
 #include "engine/Sort.h"
 #include "engine/Values.h"
+#include "engine/ValuesForTesting.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "global/RuntimeParameters.h"
 #include "util/Log.h"
@@ -381,12 +381,12 @@ class HybridGroupByBenchmark : public BenchmarkInterface {
     Scenario scenario = scenarios[2];
 
     for (const auto& strategy : strategies) {
-      RuntimeParameters().set<"group-by-hash-map-enabled">(
+      setRuntimeParameter<&RuntimeParameters::groupByHashMapEnabled_>(
           strategy.useHashMap_);
 
       const auto plan = buildBenchmarkPlan(scenario, strategy);
       for (const auto& config : plan) {
-        RuntimeParameters().set<"group-by-hash-map-group-threshold">(
+        setRuntimeParameter<&RuntimeParameters::groupByHashMapGroupThreshold_>(
             config.threshold);
         const std::string subName = absl::StrCat(
             strategy.name_, "|rows=", config.numRows,
