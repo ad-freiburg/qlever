@@ -52,7 +52,7 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT((ad_utility::SimilarToSpan<T>)) {
   if constexpr (ReadSerializer<S>) {
     if (arg.size() != size) {
       // The size does not match, we consume the complete `span` into the void
-      // and then throw an exeption.
+      // and then throw an exception.
       [[maybe_unused]] V dummyForSerializationOnSizeError;
       for ([[maybe_unused]] auto i : ad_utility::integerRange(size)) {
         serializer | dummyForSerializationOnSizeError;
