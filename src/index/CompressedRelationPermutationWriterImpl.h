@@ -13,17 +13,48 @@
 #include "index/CompressedRelationHelpersImpl.h"
 #include "util/ProgressBar.h"
 
+// Set up the handling of small relations for the twin permutation.
+// A complete block of them is handed from `writer1` to
+// `AddBlockOfSmallRelationsToSwitched`. It swaps columns 1 and 2 and resorts.
+// The resulting block is fed to a lambda which writes it using `writer2`.
+template <typename WriterCallback>
+struct AddBlockOfSmallRelationsToSwitched {
+  WriterCallback writerCb_;
+  void operator()(IdTable relation) const {
+    using namespace compressedRelationHelpers;
+
+    // We don't use the parallel twinRelationSorter to create the twin
+    // relation as its overhead is far too high for small relations.
+    relation.swapColumns(c1Idx, c2Idx);
+
+    // We only need to sort by the columns of the triple + the graph
+    // column, not the additional payload. Note: We could also use
+    // `compareWithoutLocalVocab` to compare the IDs cheaper, but this
+    // sort is far from being a performance bottleneck.
+    auto compare = [](const auto& a, const auto& b) {
+      return std::tie(a[0], a[1], a[2], a[3]) <
+             std::tie(b[0], b[1], b[2], b[3]);
+    };
+    ql::ranges::sort(relation, compare);
+    AD_CORRECTNESS_CHECK(!relation.empty());
+    // Note: it is important that we store these two IDs before moving the
+    // `relation`, because the evaluation order of function arguments is
+    // unspecified.
+    auto firstCol0 = relation.at(0, 0);
+    auto lastCol0 = relation.at(relation.numRows() - 1, 0);
+    writerCb_(firstCol0, lastCol0, std::move(relation), false);
+  };
+};
+
 // __________________________________________________________________________
 struct CompressedRelationWriter::PermutationWriter {
   qlever::KeyOrder permutation_;
   CompressedRelationWriter& writer1_;
   CompressedRelationWriter& writer2_;
-  MetadataWriter writeMetadata_;
+  compressedRelationHelpers::MetadataWriter writeMetadata_;
 
   const size_t blocksize_;
   const size_t numColumns_;
-  static constexpr size_t c1Idx_ = 1;
-  static constexpr size_t c2Idx_ = 2;
   size_t numDistinctCol0_ = 0;
 
   // A queue for the callbacks that have to be applied for each triple.
@@ -44,53 +75,19 @@ struct CompressedRelationWriter::PermutationWriter {
   IdTableStatic<0> relation_;
   size_t numBlocksCurrentRel_ = 0;
 
-  // ___________________________________________________________________________
-  struct TwinComparator {
-    bool operator()(const auto& a, const auto& b) const {
-      return std::tie(a[c1Idx_], a[c2Idx_], a[ADDITIONAL_COLUMN_GRAPH_ID]) <
-             std::tie(b[c1Idx_], b[c2Idx_], b[ADDITIONAL_COLUMN_GRAPH_ID]);
-    }
-  };
-
-  ad_utility::CompressedExternalIdTableSorter<TwinComparator, 0>
+  ad_utility::CompressedExternalIdTableSorter<
+      compressedRelationHelpers::ComparatorForConstCol0, 0>
       twinRelationSorter_;
 
-  DistinctIdCounter distinctCol1Counter_;
+  compressedRelationHelpers::DistinctIdCounter distinctCol1Counter_;
 
   using PerBlockCallbacks =
       std::vector<std::function<void(const IdTableStatic<0>&)>>;
   const PerBlockCallbacks perBlockCallbacks_;
 
-  // Set up the handling of small relations for the twin permutation.
-  // A complete block of them is handed from `writer1` to the following lambda
-  // (via the `smallBlocksCallback_` mechanism. The lambda the resorts the
-  // block and feeds it to `writer2`.)
-  struct AddBlockOfSmallRelationsToSwitched {
-    CompressedRelationWriter& writer_;
-    void operator()(IdTable relation) const {
-      // We don't use the parallel twinRelationSorter to create the twin
-      // relation as its overhead is far too high for small relations.
-      relation.swapColumns(c1Idx_, c2Idx_);
-
-      // We only need to sort by the columns of the triple + the graph
-      // column, not the additional payload. Note: We could also use
-      // `compareWithoutLocalVocab` to compare the IDs cheaper, but this
-      // sort is far from being a performance bottleneck.
-      auto compare = [](const auto& a, const auto& b) {
-        return std::tie(a[0], a[1], a[2], a[3]) <
-               std::tie(b[0], b[1], b[2], b[3]);
-      };
-      ql::ranges::sort(relation, compare);
-      AD_CORRECTNESS_CHECK(!relation.empty());
-      // Note: it is important that we store these two IDs before moving the
-      // `relation`, because the evaluation order of function arguments is
-      // unspecified.
-      auto firstCol0 = relation.at(0, 0);
-      auto lastCol0 = relation.at(relation.numRows() - 1, 0);
-      writer_.compressAndWriteBlock(firstCol0, lastCol0, std::move(relation),
-                                    false);
-    };
-  };
+  size_t numTriplesProcessed_ = 0;
+  ad_utility::ProgressBar progressBar_{numTriplesProcessed_,
+                                       "Triples sorted: "};
 
   // ___________________________________________________________________________
   PermutationWriter(const std::string& basename,
@@ -107,12 +104,8 @@ struct CompressedRelationWriter::PermutationWriter {
         blocksize_{writerAndCallback1.writer_.blocksize()},
         numColumns_{writerAndCallback1.writer_.numColumns()},
         relation_{numColumns_, alloc_},
-        twinRelationSorter_{basename + ".twin-twinRelationSorter",
-                            numColumns_,
-                            4_GB,
-                            alloc_,
-                            ad_utility::DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
-                            TwinComparator{}},
+        twinRelationSorter_{basename + ".twin-twinRelationSorter", numColumns_,
+                            4_GB, alloc_},
         perBlockCallbacks_{std::move(perBlockCallbacks)} {
     auto [c0, c1, c2, c3] = permutation.keys();
     // This logic only works for permutations that have the graph as the fourth
@@ -122,17 +115,22 @@ struct CompressedRelationWriter::PermutationWriter {
     AD_CORRECTNESS_CHECK(blocksize_ == writer2_.blocksize());
     AD_CORRECTNESS_CHECK(numColumns_ == writer2_.numColumns());
 
-    writer1_.smallBlocksCallback_ =
-        AddBlockOfSmallRelationsToSwitched{writer2_};
+    writer1_.smallBlocksCallback_ = AddBlockOfSmallRelationsToSwitched{
+        [&](Id firstCol0Id, Id lastCol0Id, IdTable block, bool invokeCallback) {
+          writer2_.compressAndWriteBlock(firstCol0Id, lastCol0Id,
+                                         std::move(block), invokeCallback);
+        }};
   };
 
-  // ___________________________________________________________________________
+  // Write a block of a large relation with `writer1` and also push the block
+  // into the twin sorter for `writer2`.
   void addBlockForLargeRelation() {
+    using namespace compressedRelationHelpers;
     if (relation_.empty()) {
       return;
     }
     auto twinRelation = relation_.asStaticView<0>();
-    twinRelation.swapColumns(c1Idx_, c2Idx_);
+    twinRelation.swapColumns(c1Idx, c2Idx);
     for (const auto& row : twinRelation) {
       twinRelationSorter_.push(row);
     }
@@ -143,7 +141,9 @@ struct CompressedRelationWriter::PermutationWriter {
     ++numBlocksCurrentRel_;
   };
 
-  // ___________________________________________________________________________
+  // We have encountered the last occurrence of the current relation (value for
+  // column 0). Thus we need to write the remaining buffered rows and metadata.
+  // This also resets counters and buffers for writing the next relation.
   void finishRelation() {
     ++numDistinctCol0_;
     if (numBlocksCurrentRel_ > 0 || static_cast<double>(relation_.numRows()) >
@@ -195,20 +195,75 @@ struct CompressedRelationWriter::PermutationWriter {
         << std::endl;
   }
 
+  // Check if we need to create a new block before adding the current
+  // triple. We create a new block if:
+  // 1. The relation buffer is at the block size limit, AND
+  // 2. The current triple has different first three columns than the last
+  //    triple in the buffer (to ensure equal triples stay in same block)
+  bool isEndOfBlockForLargeRelation(const auto& curRemainingCols) {
+    AD_CORRECTNESS_CHECK(blocksize_ > 0);
+    if (relation_.size() < blocksize_) {
+      return false;
+    }
+
+    // Compare first three columns of current triple with last buffered
+    // triple
+    const auto& lastBufferedRow = relation_.back();
+    return compressedRelationHelpers::tieFirstThreeColumns(curRemainingCols) !=
+           compressedRelationHelpers::tieFirstThreeColumns(lastBufferedRow);
+  }
+
   // ___________________________________________________________________________
-  PermutationPairResult writePermutation(
-      ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples) {
-    // All columns n the order in which they have to be added to
-    // the relation.
+  void increaseTripleCounter() {
+    ++numTriplesProcessed_;
+    if (progressBar_.update()) {
+      AD_LOG_INFO << progressBar_.getProgressString() << std::flush;
+    }
+  }
+
+  // Enqueue a call to each of the `perBlockCallbacks` for the current block.
+  void passToBlockCallbacks(IdTable block) {
+    blockCallbackTimer_.cont();
+    blockCallbackQueue_.push(
+        [block =
+             std::make_shared<std::decay_t<decltype(block)>>(std::move(block)),
+         this]() {
+          for (auto& callback : perBlockCallbacks_) {
+            callback(*block);
+          }
+        });
+    blockCallbackTimer_.stop();
+  }
+
+  // Wait for the enqueued block callbacks to finish.
+  void finishBlockCallbackQueue() {
+    blockCallbackTimer_.cont();
+    blockCallbackQueue_.finish();
+    blockCallbackTimer_.stop();
+  }
+
+  // Get the indices of all columns in the order in which they have to be added
+  // to the relation.
+  std::vector<ColumnIndex> getPermutedColIndices() {
     auto [c0, c1, c2, c3] = permutation_.keys();
     std::vector<ColumnIndex> permutedColIndices{c0, c1, c2};
     for (size_t colIdx = 3; colIdx < numColumns_; ++colIdx) {
       permutedColIndices.push_back(colIdx);
     }
+    return permutedColIndices;
+  }
+
+  // This function actually writes the permutation using the blocks of rows from
+  // the input range `sortedTriples`. This should only be called once on a
+  // `PermutationWriter` object.
+  PermutationPairResult writePermutation(
+      ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples) {
+    using namespace compressedRelationHelpers;
+
     inputWaitTimer_.cont();
-    size_t numTriplesProcessed = 0;
-    ad_utility::ProgressBar progressBar{numTriplesProcessed,
-                                        "Triples sorted: "};
+
+    auto col0 = permutation_.keys().at(0);
+
     for (auto& block : AD_FWD(sortedTriples)) {
       AD_CORRECTNESS_CHECK(block.numColumns() == numColumns_);
       inputWaitTimer_.stop();
@@ -216,59 +271,32 @@ struct CompressedRelationWriter::PermutationWriter {
       if (block.empty()) {
         continue;
       }
-      auto firstCol = block.getColumn(c0);
-      auto permutedCols = block.asColumnSubsetView(permutedColIndices);
+      auto firstCol = block.getColumn(col0);
+      auto permutedCols = block.asColumnSubsetView(getPermutedColIndices());
       if (!col0IdCurrentRelation_.has_value()) {
         col0IdCurrentRelation_ = firstCol[0];
       }
-      // TODO<C++23> Use `views::zip`
-      for (size_t idx : ad_utility::integerRange(block.numRows())) {
-        Id col0Id = firstCol[idx];
-        decltype(auto) curRemainingCols = permutedCols[idx];
 
+      for (const auto& [col0Id, curRemainingCols] :
+           ::ranges::views::zip(firstCol, permutedCols)) {
         if (col0Id != col0IdCurrentRelation_) {
           finishRelation();
           col0IdCurrentRelation_ = col0Id;
         }
 
-        // Check if we need to create a new block before adding the current
-        // triple. We create a new block if:
-        // 1. The relation buffer is at the block size limit, AND
-        // 2. The current triple has different first three columns than the last
-        //    triple in the buffer (to ensure equal triples stay in same block)
-        AD_CORRECTNESS_CHECK(blocksize_ > 0);
-        if (relation_.size() >= blocksize_) {
-          // Compare first three columns of current triple with last buffered
-          // triple
-          const auto& lastBufferedRow = relation_.back();
-          if (tieFirstThreeColumns(curRemainingCols) !=
-              tieFirstThreeColumns(lastBufferedRow)) {
-            addBlockForLargeRelation();
-          }
+        if (isEndOfBlockForLargeRelation(curRemainingCols)) {
+          addBlockForLargeRelation();
         }
 
-        distinctCol1Counter_(curRemainingCols[c1Idx_]);
+        distinctCol1Counter_(curRemainingCols[c1Idx]);
         relation_.push_back(curRemainingCols);
 
-        ++numTriplesProcessed;
-        if (progressBar.update()) {
-          AD_LOG_INFO << progressBar.getProgressString() << std::flush;
-        }
+        increaseTripleCounter();
       }
-      // Call each of the `perBlockCallbacks` for the current block.
-      blockCallbackTimer_.cont();
-      blockCallbackQueue_.push(
-          [block = std::make_shared<std::decay_t<decltype(block)>>(
-               std::move(block)),
-           this]() {
-            for (auto& callback : perBlockCallbacks_) {
-              callback(*block);
-            }
-          });
-      blockCallbackTimer_.stop();
+      passToBlockCallbacks(std::move(block));
       inputWaitTimer_.cont();
     }
-    AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
+    AD_LOG_INFO << progressBar_.getFinalProgressString() << std::flush;
     inputWaitTimer_.stop();
     if (!relation_.empty() || numBlocksCurrentRel_ > 0) {
       finishRelation();
@@ -276,9 +304,7 @@ struct CompressedRelationWriter::PermutationWriter {
 
     writer1_.finish();
     writer2_.finish();
-    blockCallbackTimer_.cont();
-    blockCallbackQueue_.finish();
-    blockCallbackTimer_.stop();
+    finishBlockCallbackQueue();
     logTimers();
     return {numDistinctCol0_, std::move(writer1_).getFinishedBlocks(),
             std::move(writer2_).getFinishedBlocks()};

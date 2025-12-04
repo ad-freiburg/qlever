@@ -1542,6 +1542,7 @@ void CompressedRelationWriter::addBlockForLargeRelation(Id col0Id,
 template <typename T>
 CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
     Id col0Id, T&& sortedBlocks) {
+  using namespace compressedRelationHelpers;
   DistinctIdCounter distinctCol1Counter;
 
   // Buffer used to ensure the invariant that equal triples (when disregarding

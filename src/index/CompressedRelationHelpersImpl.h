@@ -6,9 +6,24 @@
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #include "index/CompressedRelation.h"
+#include "util/ExceptionHandling.h"
 
 #ifndef QLEVER_SRC_INDEX_COMPRESSEDRELATIONHELPERSIMPL_H_
 #define QLEVER_SRC_INDEX_COMPRESSEDRELATIONHELPERSIMPL_H_
+
+namespace compressedRelationHelpers {
+
+static constexpr size_t c1Idx = 1;
+static constexpr size_t c2Idx = 2;
+
+// Compares two rows based on the second, third and fourth column only (it
+// ignores the first column as well as any payload columns).
+struct ComparatorForConstCol0 {
+  bool operator()(const auto& a, const auto& b) const {
+    return std::tie(a[c1Idx], a[c2Idx], a[ADDITIONAL_COLUMN_GRAPH_ID]) <
+           std::tie(b[c1Idx], b[c2Idx], b[ADDITIONAL_COLUMN_GRAPH_ID]);
+  }
+};
 
 // Helper function to make a row from `IdTable` easier to compare. This ties
 // the cells of the given row with the indices 0, 1 and 2.
@@ -27,20 +42,30 @@ CPP_template(typename T, typename Function)(
   std::vector<T> vec_;
 
   Batcher(Function function, size_t blocksize)
-      : function_{std::move(function)}, blocksize_{blocksize} {}
+      : function_{std::move(function)}, blocksize_{blocksize} {
+    vec_.reserve(blocksize_);
+  }
+
   void operator()(T t) {
     vec_.push_back(std::move(t));
-    if (vec_.size() > blocksize_) {
+    if (vec_.size() >= blocksize_) {
       function_(std::move(vec_));
       vec_.clear();
       vec_.reserve(blocksize_);
     }
   }
+
   ~Batcher() {
-    if (!vec_.empty()) {
-      function_(std::move(vec_));
-    }
+    ad_utility::terminateIfThrows(
+        [&]() {
+          if (!vec_.empty()) {
+            function_(std::move(vec_));
+          }
+        },
+        "Batcher function threw an exception while processing the final "
+        "(possibly incomplete) block.");
   }
+
   // No copy or move operations (neither needed nor easy to get right).
   Batcher(const Batcher&) = delete;
   Batcher& operator=(const Batcher&) = delete;
@@ -83,11 +108,11 @@ class DistinctIdCounter {
     lastSeen_ = id;
   }
   size_t getAndReset() {
-    size_t count = count_;
     lastSeen_ = std::numeric_limits<Id>::max();
-    count_ = 0;
-    return count;
+    return std::exchange(count_, 0);
   }
 };
+
+}  // namespace compressedRelationHelpers
 
 #endif  // QLEVER_SRC_INDEX_COMPRESSEDRELATIONHELPERSIMPL_H_
