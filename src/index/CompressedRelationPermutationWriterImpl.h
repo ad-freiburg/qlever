@@ -294,8 +294,12 @@ struct CompressedRelationWriter::PermutationWriter {
         col0IdCurrentRelation_ = firstCol[0];
       }
 
-      for (const auto& [col0Id, curRemainingCols] :
-           ::ranges::views::zip(firstCol, permutedCols)) {
+      // TODO<C++23> Use `views::zip` (some compilers currently have trouble
+      // with `::ranges::views::zip`).
+      for (size_t idx : ad_utility::integerRange(block.numRows())) {
+        Id col0Id = firstCol[idx];
+        decltype(auto) curRemainingCols = permutedCols[idx];
+
         if (col0Id != col0IdCurrentRelation_) {
           finishRelation();
           col0IdCurrentRelation_ = col0Id;
