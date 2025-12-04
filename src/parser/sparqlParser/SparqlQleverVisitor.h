@@ -335,6 +335,9 @@ class SparqlQleverVisitor {
   parsedQuery::GraphPatternOperation visitTextSearchQuery(
       Parser::ServiceGraphPatternContext* ctx);
 
+  parsedQuery::GraphPatternOperation visitProxyQuery(
+      Parser::ServiceGraphPatternContext* ctx);
+
   GraphPatternOperation visitNamedCachedResult(
       const TripleComponent::Iri& target,
       Parser::ServiceGraphPatternContext* ctx);

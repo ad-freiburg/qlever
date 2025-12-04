@@ -40,6 +40,7 @@
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/MagicServiceQuery.h"
 #include "parser/NamedCachedResult.h"
+#include "parser/ProxyQuery.h"
 #include "parser/Quads.h"
 #include "parser/RdfParser.h"
 #include "parser/SparqlParser.h"
@@ -1279,6 +1280,22 @@ GraphPatternOperation Visitor::visitTextSearchQuery(
   return textSearchQuery;
 }
 
+// _____________________________________________________________________________
+GraphPatternOperation Visitor::visitProxyQuery(
+    Parser::ServiceGraphPatternContext* ctx) {
+  parsedQuery::ProxyQuery proxyQuery;
+  parseBodyOfMagicServiceQuery(proxyQuery, ctx, "qlproxy");
+
+  try {
+    // Validate configuration early to report errors with highlighting.
+    [[maybe_unused]] auto&& _ = proxyQuery.toConfiguration();
+  } catch (const std::exception& ex) {
+    reportError(ctx, ex.what());
+  }
+
+  return proxyQuery;
+}
+
 // Parsing for the `serviceGraphPattern` rule.
 GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
   // Get the IRI and if a variable is specified, report that we do not support
@@ -1308,6 +1325,8 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
     return visitSpatialQuery(ctx);
   } else if (serviceIri.toStringRepresentation() == TEXT_SEARCH_IRI) {
     return visitTextSearchQuery(ctx);
+  } else if (serviceIri.toStringRepresentation() == QLPROXY_IRI) {
+    return visitProxyQuery(ctx);
   } else if (ql::starts_with(asStringViewUnsafe(serviceIri.getContent()),
                              CACHED_RESULT_WITH_NAME_PREFIX)) {
     return visitNamedCachedResult(serviceIri, ctx);

@@ -450,6 +450,16 @@ class QueryPlanner {
                                                       const SubtreePlan& b,
                                                       const JoinColumns& jcs);
 
+  // Helper that returns `true` for each of the subtree plans `a` and `b` iff
+  // the subtree plan is a proxy operation and it is not yet fully constructed.
+  static std::pair<bool, bool> checkProxyOperation(const SubtreePlan& a,
+                                                   const SubtreePlan& b);
+
+  // If one of the inputs is a proxy operation which needs payload variables
+  // from the other input, add that other input as a child to the proxy.
+  static std::optional<SubtreePlan> createProxyOperation(
+      const SubtreePlan& a, const SubtreePlan& b, const JoinColumns& jcs);
+
   vector<SubtreePlan> getOrderByRow(
       const ParsedQuery& pq,
       const std::vector<std::vector<SubtreePlan>>& dpTab) const;
@@ -663,6 +673,7 @@ class QueryPlanner {
     void visitBind(const parsedQuery::Bind& bind);
     void visitTransitivePath(parsedQuery::TransPath& transitivePath);
     void visitPathSearch(parsedQuery::PathQuery& config);
+    void visitProxy(parsedQuery::ProxyQuery& config);
     void visitSpatialSearch(parsedQuery::SpatialQuery& config);
     void visitTextSearch(const parsedQuery::TextSearchQuery& config);
     void visitNamedCachedResult(const parsedQuery::NamedCachedResult& config);
