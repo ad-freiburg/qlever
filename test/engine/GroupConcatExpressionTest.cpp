@@ -131,6 +131,50 @@ TEST(GroupConcatExpression, concatenationWithLanguageTags) {
 }
 
 // _____________________________________________________________________________
+// Test that IRIs are converted to strings (like implicit STR() application).
+// This tests vocabulary IRIs, local vocab IRIs, and literals mixed together.
+TEST(GroupConcatExpression, concatenationWithIris) {
+  auto* qec = ad_utility::testing::getQec();
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+
+  auto iri = [](std::string_view s) {
+    return tc::LiteralOrIri{tc::Iri::fromIriref(s)};
+  };
+
+  LocalVocab localVocab;
+  IdTable input{1, ad_utility::makeUnlimitedAllocator<Id>()};
+
+  // 1. Add a vocabulary IRI.
+  Id xId = getId("<x>");
+  input.push_back({xId});
+  expectIdsAreConcatenatedTo(false, input,
+                             IdOrLiteralOrIri{LocalVocabEntry{lit("\"x\"")}});
+
+  // 2. Add a local vocab IRI.
+  auto localIriIdx = localVocab.getIndexAndAddIfNotContained(
+      LocalVocabEntry{iri("<http://example.org/foo>")});
+  input.push_back({Id::makeFromLocalVocabIndex(localIriIdx)});
+  expectIdsAreConcatenatedTo(
+      false, input,
+      IdOrLiteralOrIri{LocalVocabEntry{lit("\"x;http://example.org/foo\"")}});
+
+  // 3. Add a local vocab literal.
+  auto literalIdx =
+      localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{lit("\"bar\"")});
+  input.push_back({Id::makeFromLocalVocabIndex(literalIdx)});
+  expectIdsAreConcatenatedTo(false, input,
+                             IdOrLiteralOrIri{LocalVocabEntry{
+                                 lit("\"x;http://example.org/foo;bar\"")}});
+
+  // 4. Add another vocabulary IRI.
+  Id labelId = getId("<label>");
+  input.push_back({labelId});
+  expectIdsAreConcatenatedTo(false, input,
+                             IdOrLiteralOrIri{LocalVocabEntry{lit(
+                                 "\"x;http://example.org/foo;bar;label\"")}});
+}
+
+// _____________________________________________________________________________
 TEST(GroupConcatExpression, getCacheKey) {
   Variable var{"?x"};
   VariableToColumnMap map{
