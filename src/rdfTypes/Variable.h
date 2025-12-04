@@ -11,8 +11,8 @@
 #include <variant>
 
 #include "backports/three_way_comparison.h"
-#include "util/Serializer/Serializer.h"
 #include "util/Serializer/SerializeString.h"
+#include "util/Serializer/Serializer.h"
 
 // Forward declaration because of cyclic dependencies
 // TODO<joka921> The coupling of the `Variable` with its `evaluate` methods

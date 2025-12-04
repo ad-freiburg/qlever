@@ -658,7 +658,6 @@ TEST(Serializer, serializeSpan) {
     EXPECT_NO_THROW(reader | stringsWithWrongSize);
     EXPECT_THAT(stringsWithWrongSize, ::testing::ElementsAre("drei", "vier"));
   }
-
 }
 
 // _____________________________________________________________________________
@@ -680,8 +679,8 @@ TEST(Serializer, serializeOptional) {
 // _____________________________________________________________________________
 TEST(Serializer, serializeEnum) {
   // Enums are implicitly serializable without any additional code.
-  enum E {a, b, c};
-  enum struct F {d, e, f};
+  enum E { a, b, c };
+  enum struct F { d, e, f };
 
   ByteBufferWriteSerializer writer;
   writer << b;

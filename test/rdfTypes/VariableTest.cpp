@@ -119,7 +119,8 @@ TEST(Variable, Serialization) {
   Variable v{"?x"};
   ad_utility::serialization::ByteBufferWriteSerializer writer;
   writer << v;
-  ad_utility::serialization::ByteBufferReadSerializer reader(std::move(writer).data());
+  ad_utility::serialization::ByteBufferReadSerializer reader(
+      std::move(writer).data());
   Variable v2{"?somethingElse"};
   reader | v2;
   EXPECT_EQ(v2.name(), "?x");

@@ -5,9 +5,9 @@
 #include "./printers/VariablePrinters.h"
 #include "./printers/VariableToColumnMapPrinters.h"
 #include "engine/VariableToColumnMap.h"
-#include "util/Serializer/ByteBufferSerializer.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
+#include "util/Serializer/ByteBufferSerializer.h"
 
 class VariableToColumnMapTest : public ::testing::TestWithParam<bool> {};
 

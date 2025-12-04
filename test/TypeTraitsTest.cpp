@@ -431,10 +431,3 @@ TEST(TypeTraits, getInvokeResultImpl) {
       (std::is_same_v<typename decltype(tp2)::type,
                       InvalidInvokeResult<decltype(lambda), const char*>>));
 }
-
-// `static_assert` tests for `isSpan`
-static_assert (isSpan<ql::span<int>>);
-static_assert (isSpan<ql::span<std::string, 37>>);
-static_assert(!isSpan<std::array<int, 3>>);
-static_assert(!isSpan<ql::span<int>&>);
-static_assert(SimilarToSpan<ql::span<int>&>);

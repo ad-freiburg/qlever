@@ -158,6 +158,13 @@ constexpr static bool isSpan<ql::span<T, N>> = true;
 template <typename T>
 CPP_concept SimilarToSpan = isSpan<std::decay_t<T>>;
 
+// `static_assert` tests for `isSpan` and `SimilarToSpan`.
+static_assert(isSpan<ql::span<int>>);
+static_assert(isSpan<ql::span<std::string, 37>>);
+static_assert(!isSpan<std::array<int, 3>>);
+static_assert(!isSpan<ql::span<int>&>);
+static_assert(SimilarToSpan<ql::span<int>&>);
+
 /// Two types are similar, if they are the same when we remove all cv (const or
 /// volatile) qualifiers and all references
 template <typename T, typename U>

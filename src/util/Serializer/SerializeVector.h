@@ -9,9 +9,9 @@
 #include <string>
 #include <vector>
 
-#include "util/TypeTraits.h"
 #include "backports/span.h"
 #include "util/Serializer/Serializer.h"
+#include "util/TypeTraits.h"
 #include "util/Views.h"
 
 namespace ad_utility::serialization {
@@ -51,14 +51,18 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT((ad_utility::SimilarToSpan<T>)) {
 
   if constexpr (ReadSerializer<S>) {
     if (arg.size() != size) {
-      V v;
+      // The size does not match, we consume the complete `span` into the void
+      // and then throw an exeption.
+      [[maybe_unused]] V dummyForSerializationOnSizeError;
       for ([[maybe_unused]] auto i : ad_utility::integerRange(size)) {
-        serializer | v;
+        serializer | dummyForSerializationOnSizeError;
       }
-    throw std::runtime_error{
-        "To serialize into a span, the span must be properly sized in advance. Note: "
-        "the span with the non-matching size has been consumed from the serializer, "
-        "and can no longer be retrieved."};
+      throw std::runtime_error{
+          "To serialize into a span, the span must be properly sized in "
+          "advance. Note: "
+          "the span with the non-matching size has been consumed from the "
+          "serializer, "
+          "and can no longer be retrieved."};
     }
   }
   if constexpr (TriviallySerializable<V>) {
