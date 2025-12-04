@@ -10,6 +10,7 @@
 #include "backports/three_way_comparison.h"
 #include "rdfTypes/Iri.h"
 #include "rdfTypes/Literal.h"
+#include "util/Forward.h"
 
 namespace ad_utility::triple_component {
 static constexpr char literalPrefixChar = '"';
@@ -48,7 +49,9 @@ class alignas(16) LiteralOrIri {
 
  private:
   static constexpr auto toStringRepresentationImpl =
-      [](auto&& val) -> decltype(auto) { return val.toStringRepresentation(); };
+      [](auto&& val) -> decltype(auto) {
+    return AD_FWD(val).toStringRepresentation();
+  };
 
  public:
   const std::string& toStringRepresentation() const& {
@@ -56,7 +59,7 @@ class alignas(16) LiteralOrIri {
   }
 
   std::string toStringRepresentation() && {
-    return std::visit(toStringRepresentationImpl, data_);
+    return std::visit(toStringRepresentationImpl, std::move(data_));
   }
 
   static LiteralOrIri fromStringRepresentation(std::string internal) {
