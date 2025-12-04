@@ -4,6 +4,7 @@
 //          Robin Textor-Falconi <textorr@cs.uni-freiburg.de>
 
 #include "engine/StringMapping.h"
+#include "engine/ExportQueryExecutionTrees.h"
 
 #include "index/Index.h"
 
@@ -11,20 +12,16 @@ namespace qlever::binary_export {
 
 // _____________________________________________________________________________
 std::vector<std::string> StringMapping::flush(const Index& index) {
+  LocalVocab dummy;
   numProcessedRows_ = 0;
   std::vector<std::string> sortedStrings;
   sortedStrings.resize(stringMapping_.size());
   for (auto& [oldId, newId] : stringMapping_) {
-    auto type = oldId.getDatatype();
-    if (type == Datatype::LocalVocabIndex) {
-      sortedStrings[newId] =
-          oldId.getLocalVocabIndex()->toStringRepresentation();
-    } else {
-      // TODO<joka921, RobinTF>, make the list exhaustive.
-      AD_CONTRACT_CHECK(type == Datatype::VocabIndex);
-      // TODO<joka921> Deduplicate on the level of IDs for the string mapping.
-      sortedStrings[newId] = index.indexToString(oldId.getVocabIndex());
-    }
+    auto literalOrIri =
+        ExportQueryExecutionTrees::idToLiteralOrIri(index, oldId, dummy, true);
+    AD_CORRECTNESS_CHECK(literalOrIri.has_value());
+    sortedStrings[newId] =
+        std::move(literalOrIri.value().toStringRepresentation());
   }
   stringMapping_.clear();
   return sortedStrings;
@@ -32,6 +29,10 @@ std::vector<std::string> StringMapping::flush(const Index& index) {
 
 // _____________________________________________________________________________
 Id StringMapping::remapId(Id id) {
+  static constexpr std::array allowedDatatypes{
+    Datatype::VocabIndex, Datatype::LocalVocabIndex,
+    Datatype::TextRecordIndex, Datatype::WordVocabIndex};
+  AD_EXPENSIVE_CHECK(ad_utility::contains(allowedDatatypes, id.getDatatype()));
   size_t distinctIndex = 0;
   if (stringMapping_.contains(id)) {
     distinctIndex = stringMapping_.at(id);
