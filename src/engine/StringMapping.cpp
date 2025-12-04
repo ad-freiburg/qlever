@@ -20,7 +20,7 @@ std::vector<std::string> StringMapping::flush(const Index& index) {
         ExportQueryExecutionTrees::idToLiteralOrIri(index, oldId, dummy, true);
     AD_CORRECTNESS_CHECK(literalOrIri.has_value());
     sortedStrings[newId] =
-        std::move(literalOrIri.value().toStringRepresentation());
+        std::move(literalOrIri.value()).toStringRepresentation();
   }
   stringMapping_.clear();
   return sortedStrings;
