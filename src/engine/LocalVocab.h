@@ -9,6 +9,7 @@
 #include <absl/container/flat_hash_set.h>
 #include <absl/container/node_hash_set.h>
 
+#include <boost/asio/local/detail/endpoint.hpp>
 #include <cstdlib>
 #include <memory>
 #include <string>
@@ -172,6 +173,24 @@ class LocalVocab {
   std::vector<LocalVocabEntry> getAllWordsForTesting() const;
 
   const Set& primaryWordSet() const { return *primaryWordSet_; }
+  const auto& otherSets() const { return otherWordSets_; }
+
+  std::vector<uint64_t> getIndicesOfBlankNodeBlocks() const {
+    if (!localBlankNodeManager_) {
+      return {};
+    }
+    return localBlankNodeManager_->getReservedBlockIndices();
+  }
+
+  void reserveBlankNodeBlocksFromExplicitIndices(
+      const std::vector<uint64_t>& indices,
+      ad_utility::BlankNodeManager* blankNodeManager) {
+    AD_CONTRACT_CHECK(!localBlankNodeManager_);
+    localBlankNodeManager_ =
+        std::make_shared<ad_utility::BlankNodeManager::LocalBlankNodeManager>(
+            blankNodeManager);
+    localBlankNodeManager_->reserveBlocksFromExplicitIndices(indices);
+  }
 
   // Get a new BlankNodeIndex using the LocalBlankNodeManager.
   [[nodiscard]] BlankNodeIndex getBlankNodeIndex(

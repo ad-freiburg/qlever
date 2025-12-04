@@ -34,6 +34,17 @@ BlankNodeManager::Block BlankNodeManager::allocateBlock() {
   }
 }
 
+// ______________________________________________________________________________
+[[nodiscard]] auto BlankNodeManager::reserveExplicitBlock(uint64_t blockIdx)
+    -> Block {
+  auto usedBlocksSetPtr = usedBlocksSet_.wlock();
+  AD_CONTRACT_CHECK(!usedBlocksSetPtr->contains(blockIdx),
+                    "Trying to explicitly allocate a block of blank nodes that "
+                    "has previously already been allocated.");
+  usedBlocksSetPtr->insert(blockIdx);
+  return Block(blockIdx, minIndex_ + blockIdx * blockSize_);
+}
+
 // _____________________________________________________________________________
 BlankNodeManager::Block::Block(uint64_t blockIndex, uint64_t startIndex)
     : blockIdx_(blockIndex), startIdx_(startIndex), nextIdx_(startIndex) {}
@@ -65,6 +76,40 @@ bool BlankNodeManager::LocalBlankNodeManager::containsBlankNodeIndex(
              [&](const std::shared_ptr<const std::vector<Block>>& blocks) {
                return ql::ranges::any_of(*blocks, containsIndex);
              });
+}
+
+// _____________________________________________________________________________
+std::vector<uint64_t>
+BlankNodeManager::LocalBlankNodeManager::getReservedBlockIndices() const {
+  std::vector<uint64_t> indices;
+  // TODO<joka921> Use nicer algorithms for this.
+  for (const auto& block : *blocks_) {
+    indices.push_back(block.blockIdx_);
+  }
+  for (const auto& set : otherBlocks_) {
+    for (const auto& block : *set) {
+      indices.push_back(block.blockIdx_);
+    }
+  }
+  return indices;
+}
+
+// _____________________________________________________________________________
+void BlankNodeManager::LocalBlankNodeManager::reserveBlocksFromExplicitIndices(
+    const std::vector<uint64_t>& indices) {
+  AD_CONTRACT_CHECK(blocks_->empty() && otherBlocks_.empty(),
+                    "Explicit reserving of blank node blocks is only allowed "
+                    "for empty `LocalBlankNodeManager`s");
+  for (const auto& idx : indices) {
+    blocks_->emplace_back(blankNodeManager_->reserveExplicitBlock(idx));
+  }
+
+  // The following code ensures that the next call to `getId` allocates a new
+  // block. This is necessary, because we don't have access to the information
+  // which IDs in the allocated blocks actually are in use.
+  if (!blocks_->empty()) {
+    idxAfterCurrentBlock_ = blocks_->back().nextIdx_;
+  }
 }
 
 }  // namespace ad_utility
