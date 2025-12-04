@@ -67,6 +67,8 @@ struct IndexBuilderConfig : CommonConfig {
   // `src/engine/LibQleverExample.cpp` for an example use.
   std::vector<InputFileSpecification> inputFiles_;
 
+  bool getTurtleFilesViaServer_ = false;
+
   // QLever's parses the input in chunks of this size. The chunk size must be
   // large enough, so that every statement from the input data (triple, quad,
   // or subject with predicate-object list in Turtle) fits into a single chunk.
