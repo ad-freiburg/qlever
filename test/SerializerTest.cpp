@@ -647,6 +647,10 @@ TEST(Serializer, serializeSpan) {
   }
 
   std::vector<std::string> stringsWithWrongSize;
+  // Deserialize into a `span` that doesn't have the correct size. This throws
+  // an exception and skips the span.
+  AD_EXPECT_THROW_WITH_MESSAGE(reader | ql::span{stringsWithWrongSize},
+                               ::testing::HasSubstr("must be properly sized"));
   {
     // The writing was done via a `span`, but we now read into a `vector`.
     // This works even if the vector is not resized in advance, because the
@@ -655,12 +659,6 @@ TEST(Serializer, serializeSpan) {
     EXPECT_THAT(stringsWithWrongSize, ::testing::ElementsAre("drei", "vier"));
   }
 
-    stringsWithWrongSize.clear();
-  // Deserialize into a `span` that doesn't have the correct size. This throws
-  // an exception and renders the serialization stream unusable (that's why we
-  // have this test last).
-  AD_EXPECT_THROW_WITH_MESSAGE(reader | ql::span{stringsWithWrongSize},
-                               ::testing::HasSubstr("must be properly sized"));
 }
 
 // _____________________________________________________________________________

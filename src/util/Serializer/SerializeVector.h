@@ -9,12 +9,10 @@
 #include <string>
 #include <vector>
 
-#include "../TypeTraits.h"
-#include "./Serializer.h"
-#include "backports/span.h"
-#include "backports/type_traits.h"
-#include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
+#include "backports/span.h"
+#include "util/Serializer/Serializer.h"
+#include "util/Views.h"
 
 namespace ad_utility::serialization {
 AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
@@ -39,25 +37,37 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
 }
 
 // Serialization for `ql::span`. When writing to a `span` from a serializer, the
-// span has to have the correct size, else an `AD_CONTRACT_CHECK` will fail.
+// span has to have the correct size, else an exception will be thrown.
+// Note 1: In that case, the serializer behaves as if the span was read, so the
+// contents of the span are lost, but elements following the `span` can still be
+// deserialized.
+// Note 2: To mitigate this issue, it is much safer to deserialize to
+// a `std::vector`, as serializing from a `span` but deserializing to
+// a `vector` works because those types share the same serialization format.
 AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT((ad_utility::SimilarToSpan<T>)) {
   using V = typename std::decay_t<T>::value_type;
   auto size = arg.size();  // The value is ignored for `ReadSerializer`s.
   serializer | size;
 
   if constexpr (ReadSerializer<S>) {
-    AD_CONTRACT_CHECK(
-        arg.size() == size,
+    if (arg.size() != size) {
+      V v;
+      for ([[maybe_unused]] auto i : ad_utility::integerRange(size)) {
+        serializer | v;
+      }
+    throw std::runtime_error{
         "To serialize into a span, the span must be properly sized in advance. Note: "
-        "this invalidates all further serialization from this stream");
+        "the span with the non-matching size has been consumed from the serializer, "
+        "and can no longer be retrieved."};
+    }
   }
   if constexpr (TriviallySerializable<V>) {
     using CharPtr = std::conditional_t<ReadSerializer<S>, char*, const char*>;
     serializer.serializeBytes(reinterpret_cast<CharPtr>(arg.data()),
                               arg.size() * sizeof(V));
   } else {
-    for (size_t i = 0; i < size; ++i) {
-      serializer | arg[i];
+    for (auto& el : arg) {
+      serializer | el;
     }
   }
 }
