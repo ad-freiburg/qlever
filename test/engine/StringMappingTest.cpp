@@ -55,4 +55,39 @@ TEST(StringMapping, remapId) {
               ::testing::UnorderedElementsAre(
                   ::testing::Pair(id1, 0), ::testing::Pair(id2, 1),
                   ::testing::Pair(id3, 2), ::testing::Pair(id4, 3)));
+
+  EXPECT_EQ(mapping.size(), 4);
+}
+
+// _____________________________________________________________________________
+TEST(StringMapping, flush) {
+  ad_utility::testing::TestIndexConfig config;
+  config.turtleInput =
+      "<a> <b> \"The quick brown fox jumps over the lazy dog\" .";
+  config.createTextIndex = true;
+  auto* qec = ad_utility::testing::getQec(std::move(config));
+  StringMapping mapping;
+
+  LocalVocabEntry testWord{
+      ad_utility::triple_component::Literal::fromStringRepresentation(
+          "\"abc\"")};
+  Id id0 = Id::makeFromVocabIndex(VocabIndex::make(1));
+  Id id1 = Id::makeFromVocabIndex(VocabIndex::make(2));
+  Id id2 = Id::makeFromLocalVocabIndex(&testWord);
+  Id id3 = Id::makeFromTextRecordIndex(TextRecordIndex::make(0));
+  Id id4 = Id::makeFromWordVocabIndex(WordVocabIndex::make(0));
+
+  EXPECT_EQ(mapping.remapId(id0).getDatatype(), Datatype::LocalVocabIndex);
+  EXPECT_EQ(mapping.remapId(id1).getDatatype(), Datatype::LocalVocabIndex);
+  // Ensure repetitions don't mess stuff up.
+  EXPECT_EQ(mapping.remapId(id0).getDatatype(), Datatype::LocalVocabIndex);
+  EXPECT_EQ(mapping.remapId(id2).getDatatype(), Datatype::LocalVocabIndex);
+  EXPECT_EQ(mapping.remapId(id3).getDatatype(), Datatype::LocalVocabIndex);
+  EXPECT_EQ(mapping.remapId(id4).getDatatype(), Datatype::LocalVocabIndex);
+  // Another repetition.
+  EXPECT_EQ(mapping.remapId(id0).getDatatype(), Datatype::LocalVocabIndex);
+
+  EXPECT_THAT(
+      mapping.flush(qec->getIndex()),
+      ::testing::ElementsAre("<a>", "<b>", "\"abc\"", "\"\"", "\"brown\""));
 }
