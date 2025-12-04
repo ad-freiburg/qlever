@@ -131,7 +131,7 @@ TEST(BinaryExportHelpers, rewriteVocabIds) {
 
   LocalVocab vocab;
   std::vector<std::string> transmittedStrings = {"<http://example.org/a>",
-                                                  "\"literal\""};
+                                                 "\"literal\""};
 
   // Rewrite vocab IDs starting from index 0
   BinaryExportHelpers::rewriteVocabIds(table, 0, *qec, vocab,
@@ -152,14 +152,13 @@ TEST(BinaryExportHelpers, getPrefixMapping) {
   auto* qec = ad_utility::testing::getQec();
 
   std::vector<std::string> remotePrefixes = {"<http://example.org/",
-                                              "<http://other.org/"};
+                                             "<http://other.org/"};
 
-  auto mapping =
-      BinaryExportHelpers::getPrefixMapping(*qec, remotePrefixes);
+  auto mapping = BinaryExportHelpers::getPrefixMapping(*qec, remotePrefixes);
 
   // The mapping should be empty or contain mappings only for prefixes
   // that exist in the local index
-  EXPECT_TRUE(mapping.empty() || mapping.size() <= remotePrefixes.size());
+  EXPECT_TRUE(mapping.size() <= remotePrefixes.size());
 }
 
 // _____________________________________________________________________________
@@ -171,12 +170,12 @@ TEST(BinaryExportHelpers, toIdImpl) {
   LocalVocab vocab;
   std::vector<std::string> prefixes;
   ad_utility::HashMap<uint8_t, uint8_t> prefixMapping;
+  ad_utility::HashMap<Id::T, Id> blankNodeMapping;
 
-  Id result = BinaryExportHelpers::toIdImpl(*qec, prefixes, prefixMapping,
-                                            vocab, intId.getBits());
+  Id result = BinaryExportHelpers::toIdImpl(
+      *qec, prefixes, prefixMapping, vocab, intId.getBits(), blankNodeMapping);
 
   EXPECT_EQ(result, intId);
-  EXPECT_EQ(result.getDatatype(), Datatype::Int);
 }
 
 // _____________________________________________________________________________
@@ -193,23 +192,44 @@ TEST(BinaryExport, toExportableIdTrivial) {
 
 // _____________________________________________________________________________
 TEST(StringMapping, remapId) {
+  // This is important so we have a working comparator.
+  ad_utility::testing::getQec("<a> <b> <c> .");
+  auto toMappedId = [](size_t count) {
+    return Id::makeFromLocalVocabIndex(
+        reinterpret_cast<LocalVocabIndex>(count << ValueId::numDatatypeBits));
+  };
+
+  auto binaryEq = [](Id a, Id b,
+                     ad_utility::source_location loc =
+                         AD_CURRENT_SOURCE_LOC()) {
+    auto g = generateLocationTrace(loc);
+    EXPECT_EQ(a.getBits(), b.getBits());
+  };
+
+  LocalVocabEntry testWord{
+      ad_utility::triple_component::Literal::fromStringRepresentation(
+          "\"abc\"")};
+  LocalVocabEntry duplicateWord{
+      ad_utility::triple_component::Iri::fromStringRepresentation("<b>")};
   StringMapping mapping;
-  // Use Vocab IDs for testing the remapping logic
-  Id id1 = Id::makeFromInt(100);
-  Id id2 = Id::makeFromInt(200);
+  Id id1 = Id::makeFromVocabIndex(VocabIndex::make(1));
+  Id id2 = Id::makeFromLocalVocabIndex(&testWord);
+  Id id3 = Id::makeFromTextRecordIndex(TextRecordIndex::make(42));
+  Id id4 = Id::makeFromWordVocabIndex(WordVocabIndex::make(1010));
+  Id id5 = Id::makeFromLocalVocabIndex(&duplicateWord);
 
-  // Manually insert into the mapping to test basic functionality
-  mapping.stringMapping_[id1] = 0;
-  mapping.stringMapping_[id2] = 1;
+  // Mapped ids start counting from zero.
+  binaryEq(mapping.remapId(id1), toMappedId(0));
+  binaryEq(mapping.remapId(id2), toMappedId(1));
+  binaryEq(mapping.remapId(id3), toMappedId(2));
+  binaryEq(mapping.remapId(id4), toMappedId(3));
+  binaryEq(mapping.remapId(id1), toMappedId(0));
+  binaryEq(mapping.remapId(id5), toMappedId(0));
 
-  // Check mapping contains 2 entries
-  EXPECT_EQ(mapping.stringMapping_.size(), 2u);
-
-  // Test remapId with new ID
-  Id id3 = Id::makeFromInt(300);
-  Id remapped3 = mapping.remapId(id3);
-  EXPECT_EQ(remapped3.getDatatype(), Datatype::LocalVocabIndex);
-  EXPECT_EQ(mapping.stringMapping_.size(), 3u);
+  EXPECT_THAT(mapping.stringMapping_,
+              ::testing::UnorderedElementsAre(
+                  ::testing::Pair(id1, 0), ::testing::Pair(id2, 1),
+                  ::testing::Pair(id3, 2), ::testing::Pair(id4, 3)));
 }
 
 // _____________________________________________________________________________

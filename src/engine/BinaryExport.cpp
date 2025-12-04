@@ -7,7 +7,7 @@
 
 #include <absl/functional/bind_front.h>
 
-#include "ExportQueryExecutionTrees.h"
+#include "engine/ExportQueryExecutionTrees.h"
 #include "engine/StringMapping.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/FromCallableSerializer.h"
@@ -27,15 +27,57 @@ std::string_view raw(const std::integral auto& value) {
 }  // namespace
 
 namespace qlever::binary_export {
+// _____________________________________________________________________________
+std::string StringMapping::flush(const Index& index) {
+  LocalVocab dummy;
+  numProcessedRows_ = 0;
+  std::vector<std::string> sortedStrings;
+  sortedStrings.resize(stringMapping_.size());
+  for (auto& [oldId, newId] : stringMapping_) {
+    auto literalOrIri =
+        ExportQueryExecutionTrees::idToLiteralOrIri(index, oldId, dummy, true);
+    AD_CORRECTNESS_CHECK(literalOrIri.has_value());
+    sortedStrings[newId] =
+        std::move(literalOrIri.value().toStringRepresentation());
+  }
+  stringMapping_.clear();
+
+  std::string result;
+  // Rough estimate
+  result.reserve(sortedStrings.size() * 100);
+
+  for (const std::string& string : sortedStrings) {
+    absl::StrAppend(&result, raw(string.size()), string);
+  }
+
+  return result;
+}
+
+// _____________________________________________________________________________
+Id StringMapping::remapId(Id id) {
+  static constexpr std::array allowedDatatypes{
+      Datatype::VocabIndex, Datatype::LocalVocabIndex,
+      Datatype::TextRecordIndex, Datatype::WordVocabIndex};
+  AD_EXPENSIVE_CHECK(ad_utility::contains(allowedDatatypes, id.getDatatype()));
+  size_t distinctIndex = 0;
+  if (stringMapping_.contains(id)) {
+    distinctIndex = stringMapping_.at(id);
+  } else {
+    distinctIndex = stringMapping_[id] = stringMapping_.size();
+  }
+  // The shift is required to imitate the unused bits of a pointer.
+  return Id::makeFromLocalVocabIndex(
+      reinterpret_cast<LocalVocabIndex>(distinctIndex << Id::numDatatypeBits));
+}
 
 // _____________________________________________________________________________
 AD_ALWAYS_INLINE Id
 toExportableId(Id originalId, [[maybe_unused]] const LocalVocab& localVocab,
                StringMapping& stringMapping) {
-  if (originalId.isTrivial()) {
+  if (originalId.isTrivial() ||
+      originalId.getDatatype() == Datatype::BlankNodeIndex) {
     return originalId;
   } else {
-    // TODO<joka921, RobinTF>, make the list exhaustive.
     return stringMapping.remapId(originalId);
   }
 }
@@ -171,10 +213,8 @@ void BinaryExportHelpers::rewriteVocabIds(
 Id BinaryExportHelpers::toIdImpl(
     const QueryExecutionContext& qec, const std::vector<std::string>& prefixes,
     const ad_utility::HashMap<uint8_t, uint8_t>& prefixMapping,
-    LocalVocab& vocab, Id::T bits) {
-  // TODO<RobinTF> check local vocab for id conversion. Also the strings are
-  // transmitted after the ids, so we might need to search `result` for
-  // changes.
+    LocalVocab& vocab, Id::T bits,
+    ad_utility::HashMap<Id::T, Id>& blankNodeMapping) {
   Id id = Id::fromBits(bits);
   if (id.getDatatype() == Datatype::EncodedVal) {
     auto [prefixIdx, digitEncoding] =
@@ -191,8 +231,17 @@ Id BinaryExportHelpers::toIdImpl(
         .toValueId(qec.getIndex().getVocab(), vocab,
                    qec.getIndex().encodedIriManager());
   }
-  // TODO<RobinTF> Add assertion that type is either trivial or local vocab
-  // index here.
+  if (id.getDatatype() == Datatype::BlankNodeIndex) {
+    auto [it, inserted] = blankNodeMapping.try_emplace(bits, ValueId{});
+
+    if (inserted) {
+      it->second = Id::makeFromBlankNodeIndex(
+          vocab.getBlankNodeIndex(qec.getIndex().getBlankNodeManager()));
+    }
+    return it->second;
+  }
+  AD_EXPENSIVE_CHECK(isTrivial(id) ||
+                     id.getDatatype() == Datatype::LocalVocabIndex);
   return id;
 }
 
@@ -251,10 +300,12 @@ Result importBinaryHttpResponse(bool requestLaziness,
   // TODO<RobinTF> check if variable names do actually match expected names.
 
   LocalVocab vocab;
+  ad_utility::HashMap<Id::T, Id> blankNodeMapping;
 
-  auto toId = [&qec, &prefixes, &vocab, &prefixMapping](Id::T bits) mutable {
+  auto toId = [&qec, &prefixes, &vocab, &prefixMapping,
+               &blankNodeMapping](Id::T bits) mutable {
     return BinaryExportHelpers::toIdImpl(qec, prefixes, prefixMapping, vocab,
-                                         bits);
+                                         bits, blankNodeMapping);
   };
 
   // At which index we need to start converting values.
