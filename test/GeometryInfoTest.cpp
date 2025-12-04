@@ -652,4 +652,21 @@ TEST(GeometryInfoTest, UtilGeomToWktVisitor) {
   }
 }
 
+// _____________________________________________________________________________
+TEST(GeometryInfoTest, ProjectionVisitor) {
+  using namespace ad_utility::detail;
+  // TODO
+}
+
+// _____________________________________________________________________________
+TEST(GeometryInfoTest, MetricDistanceVisitor) {
+  using namespace ad_utility::detail;
+  // TODO
+  std::cout << computeMetricDistance(
+                   projectWebMerc(GeoPointOrWkt{GeoPoint{47.997731, 7.841295}}),
+                   projectWebMerc(GeoPointOrWkt{GeoPoint{47.995562, 7.852918}}))
+                   .value()
+            << std::endl;
+}
+
 }  // namespace
