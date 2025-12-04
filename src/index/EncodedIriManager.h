@@ -162,9 +162,12 @@ class EncodedIriManagerImpl {
 
     // Get the index of the used prefix, and run the actual encoding.
     auto prefixIndex = static_cast<size_t>(it - prefixes_.begin());
-    return makeIdFromPrefixIdxAndPayload(prefixIndex, encodeDecimalToNBit(numString));
+    return makeIdFromPrefixIdxAndPayload(prefixIndex,
+                                         encodeDecimalToNBit(numString));
   }
 
+  // combine the integer representation of the prefix and of the payload into a
+  // single `Id` with datatype `EncodedValue`.
   static Id makeIdFromPrefixIdxAndPayload(uint64_t prefixIdx,
                                           uint64_t payload) {
     return Id::makeFromEncodedVal(payload | (prefixIdx << NumBitsEncoding));
@@ -179,18 +182,27 @@ class EncodedIriManagerImpl {
     return toStringWithGivenPrefix(digitEncoding, prefixes_.at(prefixIdx));
   }
 
-  static std::string toStringWithGivenPrefix(uint64_t digitEncoding, std::string_view prefix) {
+  // The second half of `toString` above: combine the integer encoding of the
+  // payload and the prefix string into a result string that represents an IRI.
+  // Note: This function expects, that the prefix starts with `<`.
+  static std::string toStringWithGivenPrefix(uint64_t digitEncoding,
+                                             std::string_view prefix) {
+    AD_EXPENSIVE_CHECK(ql::starts_with(prefix, '<'));
     std::string result;
     result.reserve(prefix.size() + NumDigits + 1);
     result = prefix;
     decodeDecimalFrom64Bit(result, digitEncoding);
     result.push_back('>');
     return result;
-
   }
 
+  // From the `Id` (which is expected to be of type `EncodedVal`, else an
+  // `AD_CONTRACT_CHECK` fails), extract the integer encoding of the prefix and
+  // of the payload.
   static std::pair<uint64_t, uint64_t> splitIntoPrefixIdxAndPayload(Id id) {
-    AD_CONTRACT_CHECK(id.getDatatype() == Datatype::EncodedVal);
+    AD_CONTRACT_CHECK(
+        id.getDatatype() == Datatype::EncodedVal,
+        "datatype must be `EncodedVal` for `splitIntoPrefixIdxAndPayload`");
     static constexpr auto mask =
         ad_utility::bitMaskForLowerBits(NumBitsEncoding);
     auto digitEncoding = id.getEncodedVal() & mask;

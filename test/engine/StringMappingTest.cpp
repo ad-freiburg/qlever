@@ -10,23 +10,10 @@
 
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
-#include "engine/BinaryExport.h"
 #include "engine/StringMapping.h"
 #include "global/Id.h"
 
 using namespace qlever::binary_export;
-
-// _____________________________________________________________________________
-TEST(BinaryExport, toExportableIdTrivial) {
-  Id intId = Id::makeFromInt(42);
-  LocalVocab localVocab;
-  StringMapping mapping;
-
-  Id result = toExportableId(intId, localVocab, mapping);
-
-  EXPECT_EQ(result, intId);
-  EXPECT_TRUE(mapping.stringMapping_.empty());
-}
 
 // _____________________________________________________________________________
 TEST(StringMapping, remapId) {
@@ -64,32 +51,8 @@ TEST(StringMapping, remapId) {
   binaryEq(mapping.remapId(id1), toMappedId(0));
   binaryEq(mapping.remapId(id5), toMappedId(0));
 
-  EXPECT_THAT(mapping.stringMapping_,
+  EXPECT_THAT(mapping.stringMappingForTesting(),
               ::testing::UnorderedElementsAre(
                   ::testing::Pair(id1, 0), ::testing::Pair(id2, 1),
                   ::testing::Pair(id3, 2), ::testing::Pair(id4, 3)));
-}
-
-// _____________________________________________________________________________
-TEST(StringMapping, needsFlush) {
-  StringMapping mapping;
-
-  // Initially should not need flush
-  EXPECT_FALSE(mapping.needsFlush());
-
-  // Add enough rows to trigger flush (needs at least one mapping entry)
-  mapping.stringMapping_[Id::makeFromInt(1)] = 0;
-  for (size_t i = 0; i < 100'000; ++i) {
-    mapping.nextRow();
-  }
-
-  EXPECT_TRUE(mapping.needsFlush());
-
-  // Test size-based flush
-  StringMapping mapping2;
-  for (size_t i = 0; i < 10'000; ++i) {
-    mapping2.stringMapping_[Id::makeFromInt(i)] = i;
-  }
-
-  EXPECT_TRUE(mapping2.needsFlush());
 }

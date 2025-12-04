@@ -18,6 +18,7 @@
 #include "global/Constants.h"
 #include "global/IndexTypes.h"
 #include "rdfTypes/GeoPoint.h"
+#include "util/Algorithm.h"
 #include "util/BitUtils.h"
 #include "util/DateYearDuration.h"
 #include "util/NBitInteger.h"
@@ -41,18 +42,22 @@ enum struct Datatype {
   BlankNodeIndex,
   EncodedVal,
   MaxValue = EncodedVal
-  // Note: Unfortunately we cannot easily get the size of an enum.
+  // Note: Unfortunately, we cannot easily get the size of an enum.
   // If members are added to this enum, then the `MaxValue`
   // alias must always be equal to the last member,
   // else other code breaks with out-of-bounds accesses.
 };
 
+// Return true iff the `datatype` is a trivial datatype. This means that IDs
+// with this datatype directly encode the value they represent and do not point
+// to an external resource. Note: `BlankNodeIndex` is deliberately NOT
+// considiered trivial, as blank nodes depend on the context, in particular they
+// have to be remapped when results from different  RDF sources are merged.
 constexpr bool isDatatypeTrivial(Datatype datatype) {
-  return datatype == Datatype::Undefined || datatype == Datatype::Bool ||
-         datatype == Datatype::Int || datatype == Datatype::Double ||
-         datatype == Datatype::Date || datatype == Datatype::GeoPoint ||
-         datatype == Datatype::EncodedVal;
-
+  using enum Datatype;
+  constexpr std::array trivialDatatypes{Undefined, Bool,     Int,       Double,
+                                        Date,      GeoPoint, EncodedVal};
+  return ad_utility::contains(trivialDatatypes, datatype);
 }
 
 /// Convert the `Datatype` enum to the corresponding string
@@ -379,9 +384,9 @@ class ValueId {
     return GeoPoint::fromBitRepresentation(bits);
   }
 
-  constexpr bool isTrivial() {
-    return isDatatypeTrivial(getDatatype());
-  }
+  // An ID is considered trivial, if its datatype is trivial (see
+  // `isDatatypeTrivial` above).
+  constexpr bool isTrivial() { return isDatatypeTrivial(getDatatype()); }
 
   /// Return the smallest and largest possible `ValueId` wrt the underlying
   /// representation
