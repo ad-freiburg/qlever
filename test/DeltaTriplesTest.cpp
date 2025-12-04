@@ -151,12 +151,12 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
                                  [](const auto& item) { return item.first; });
   };
   auto UnorderedTriplesAre = [&mapKeys, this, &vocab, &localVocab](
-                                 auto t,
+                                 auto isInternal,
                                  const std::vector<std::string>& triples)
       -> testing::Matcher<const ad_utility::HashMap<
           IdTriple<0>,
-          DeltaTriples::LocatedTripleHandles<decltype(t)::value>>&> {
-    (void)t;
+          DeltaTriples::LocatedTripleHandles<decltype(isInternal)::value>>&> {
+    (void)isInternal;
     return testing::ResultOf(
         "mapKeys(...)", [&mapKeys](const auto map) { return mapKeys(map); },
         testing::UnorderedElementsAreArray(
@@ -686,7 +686,9 @@ TEST_F(DeltaTriplesTest, storeAndRestoreData) {
 
     EXPECT_EQ(deltaTriples.numDeleted(), 1);
     EXPECT_EQ(deltaTriples.numInserted(), 1);
-    // Currently we don't store internal triples externally.
+    // Currently we don't store internal delta triples in this format. In the
+    // future we might regenerate them from the regular delta triples, or change
+    // the format so they are also stored on disk.
     EXPECT_EQ(deltaTriples.numInternalDeleted(), 0);
     EXPECT_EQ(deltaTriples.numInternalInserted(), 0);
 
