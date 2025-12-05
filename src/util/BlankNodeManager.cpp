@@ -135,18 +135,16 @@ auto BlankNodeManager::createBlockSet() -> std::shared_ptr<Blocks> {
   auto uuid = lock->uuidGenerator_();
   auto [it, isNew] =
       lock->managedBlockSets_.try_emplace(uuid, std::shared_ptr<Blocks>());
-  if (isNew) {
-    auto res = std::make_shared<Blocks>(this, uuid);
-    it->second = res;
-    return res;
-  } else {
-    // We unfortunately cannot make this an `AD_CORRECTNESS_CHECK`, because then
-    // we might have a deadlock wrt the `Blocks` destructor.
-    throw std::runtime_error{
-        "You encountered a UUID collision inside "
-        "`BlankNodeManager::createBlockSet()`. Consider "
-        "yourself to be very (un)lucky!"};
-  }
+  // Note: the (very unlikely) exception thrown by the following check is safe,
+  // as all the destructors of the variables above are trivial, and we haven't
+  // actually modified the `managedBlockSets_` in the case `isNew` is false.
+  AD_CORRECTNESS_CHECK(isNew,
+                       "You encountered a UUID collision inside "
+                       "`BlankNodeManager::createBlockSet()`. Consider "
+                       "yourself to be very (un)lucky!");
+  auto res = std::make_shared<Blocks>(this, uuid);
+  it->second = res;
+  return res;
 }
 
 // _____________________________________________________________________________
@@ -157,7 +155,11 @@ void BlankNodeManager::freeBlockSet(const Blocks& blocks) {
     // First unregister the UUID.
     auto it = state.managedBlockSets_.find(blocks.uuid_);
     if (it == state.managedBlockSets_.end()) {
-      // Note: it is very hard to manually trigger this condition in unit tests.
+      // Note: it is very hard to manually trigger this condition in unit tests,
+      // because it depends on very subtle race conditions, and the reusing of
+      // explicit `UUUID`s which in my understanding can currently never happen.
+      // We nevertheless still return silently here to make the code more
+      // robust.
       return;
     }
     // This `if` check guards against a very rare condition where timings AND
@@ -190,10 +192,13 @@ BlankNodeManager::registerAndAllocateBlockSet(
   auto [it, isNew] = lock->managedBlockSets_.try_emplace(
       entry.uuid_, std::shared_ptr<Blocks>(nullptr));
 
-  // The `expired()` might happen in a very rare condition, where deleting of a
-  // `UUID` and its reinsertion race against each other.
-  auto ptr = isNew ? std::shared_ptr<Blocks>() : it->second.lock();
-  if (isNew || ptr == nullptr) {
+  // Note: the following `nullptr` check might become true for two reasons:
+  // 1. We have newly inserted the UUID (likely), or 2. We have found an expired
+  // `weak_ptr` from a previous usage of the same UUID, where we are currently
+  // racing against its deletion (very unlikely). Note, that 2., even if it
+  // happens never causes a problem, as the `freeBlockSet` function also
+  // gracefully handles this case.
+  if (auto ptr = it->second.lock(); ptr == nullptr) {
     auto blocks = std::make_shared<Blocks>(this, entry.uuid_);
     // At the end of this scope is a return. But in the case of an exception
     // (e.g. if the `AD_CONTRACT_CHECK` below fires, we have to unlock, before

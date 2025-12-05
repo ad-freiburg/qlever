@@ -237,11 +237,12 @@ class BlankNodeManager {
 
   // If the `uuid` of the `entry` is not yet registered with this
   // `BlankNodeManager`, register and return a new `Blocks` struct with the
-  // explicit `uuid`, and explicitly allocate all blocks represented by the
-  // `entry` and store them in the result. If the `uuid` is already registered,
-  // then return a `shared_ptr` to the `Blocks` associated with this `uuid`.
-  // This functionality is used to reinstate sets of registered blocks when
-  // loading SPARQL UPDATEs or serialized cache results when QLever is started.
+  // explicit UUID of the `entry`, and explicitly allocate all blocks
+  // represented by the `entry` and store them in the result. If the `uuid` is
+  // already registered, then return a `shared_ptr` to the `Blocks` associated
+  // with this `uuid`. This functionality is used to reinstate sets of
+  // registered blocks when loading SPARQL UPDATEs or serialized cache results
+  // when QLever is started.
   std::shared_ptr<Blocks> registerAndAllocateBlockSet(
       const LocalBlankNodeManager::OwnedBlocksEntry& entry);
 
