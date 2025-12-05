@@ -9,7 +9,6 @@
 #include <absl/container/flat_hash_set.h>
 #include <absl/container/node_hash_set.h>
 
-#include <boost/asio/local/detail/endpoint.hpp>
 #include <cstdlib>
 #include <memory>
 #include <string>

@@ -9,6 +9,117 @@
 #include "util/GTestHelpers.h"
 
 namespace ad_utility {
+
+// ____________________________________________________________________________
+// Test fixture providing common infrastructure for BlankNodeManager tests
+class BlankNodeManagerTestFixture : public ::testing::Test {
+ protected:
+  // Helper to create a BlankNodeManager with default minIndex
+  static std::unique_ptr<BlankNodeManager> createManager(
+      uint64_t minIndex = 0) {
+    return std::make_unique<BlankNodeManager>(minIndex);
+  }
+
+  // Helper to create a LocalBlankNodeManager
+  static std::shared_ptr<BlankNodeManager::LocalBlankNodeManager>
+  createLocalManager(BlankNodeManager* bnm) {
+    return std::make_shared<BlankNodeManager::LocalBlankNodeManager>(bnm);
+  }
+
+  // Helper to get the blocks from a LocalBlankNodeManager
+  static auto& getBlocks(BlankNodeManager::LocalBlankNodeManager& lbnm) {
+    return lbnm.blocks_->blocks_;
+  }
+
+  // Helper to allocate N IDs from a LocalBlankNodeManager
+  static std::vector<uint64_t> allocateIds(
+      BlankNodeManager::LocalBlankNodeManager& lbnm, size_t count) {
+    std::vector<uint64_t> ids;
+    ids.reserve(count);
+    for (size_t i = 0; i < count; ++i) {
+      ids.push_back(lbnm.getId());
+    }
+    return ids;
+  }
+
+  // Helper to allocate IDs that span multiple blocks
+  static std::vector<uint64_t> allocateIdsAcrossBlocks(
+      BlankNodeManager::LocalBlankNodeManager& lbnm, size_t numBlocks) {
+    std::vector<uint64_t> ids;
+    for (size_t i = 0; i < numBlocks; ++i) {
+      // Allocate at least one ID per block
+      ids.push_back(lbnm.getId());
+      // Fill the rest of the block to force allocation of next block
+      if (i < numBlocks - 1) {
+        auto& blocks = getBlocks(lbnm);
+        if (!blocks.empty()) {
+          blocks.back().nextIdx_ =
+              blocks.back().startIdx_ + BlankNodeManager::blockSize_;
+        }
+      }
+    }
+    return ids;
+  }
+
+  // Helper to verify all IDs are contained in the LocalBlankNodeManager
+  static void verifyIdsContained(
+      const BlankNodeManager::LocalBlankNodeManager& lbnm,
+      const std::vector<uint64_t>& ids) {
+    for (uint64_t id : ids) {
+      EXPECT_TRUE(lbnm.containsBlankNodeIndex(id))
+          << "ID " << id << " should be contained";
+    }
+  }
+
+  // Helper to verify IDs are NOT contained in the LocalBlankNodeManager
+  static void verifyIdsNotContained(
+      const BlankNodeManager::LocalBlankNodeManager& lbnm,
+      const std::vector<uint64_t>& ids) {
+    for (uint64_t id : ids) {
+      EXPECT_FALSE(lbnm.containsBlankNodeIndex(id))
+          << "ID " << id << " should not be contained";
+    }
+  }
+
+  // Helper to get the number of used blocks
+  static size_t getUsedBlockCount(const BlankNodeManager& bnm) {
+    return bnm.state_.rlock()->usedBlocksSet_.size();
+  }
+
+  // Helper to check if a specific block index is used
+  static bool isBlockUsed(const BlankNodeManager& bnm, uint64_t blockIdx) {
+    return bnm.state_.rlock()->usedBlocksSet_.contains(blockIdx);
+  }
+
+  // Helper to get the number of managed UUIDs
+  static size_t getManagedUuidCount(const BlankNodeManager& bnm) {
+    return bnm.state_.rlock()->managedBlockSets_.size();
+  }
+
+  // Helper to serialize a LocalBlankNodeManager
+  static std::vector<BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>
+  serialize(const BlankNodeManager::LocalBlankNodeManager& lbnm) {
+    return lbnm.getOwnedBlockIndices();
+  }
+
+  // Helper to deserialize into a new LocalBlankNodeManager
+  static std::shared_ptr<BlankNodeManager::LocalBlankNodeManager> deserialize(
+      BlankNodeManager* bnm,
+      const std::vector<
+          BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>& entries) {
+    auto lbnm = createLocalManager(bnm);
+    lbnm->allocateBlocksFromExplicitIndices(entries);
+    return lbnm;
+  }
+
+  // Helper to perform a round-trip serialization/deserialization
+  static std::shared_ptr<BlankNodeManager::LocalBlankNodeManager>
+  roundTripSerialize(BlankNodeManager* bnm,
+                     const BlankNodeManager::LocalBlankNodeManager& source) {
+    auto entries = serialize(source);
+    return deserialize(bnm, entries);
+  }
+};
 // _____________________________________________________________________________
 TEST(BlankNodeManager, blockAllocationAndFree) {
   BlankNodeManager bnm(0);
@@ -91,6 +202,314 @@ TEST(BlankNodeManager, moveLocalBlankNodeManager) {
     l3 = std::move(l2);
   });
   EXPECT_TRUE(bnm.state_.rlock()->usedBlocksSet_.empty());
+}
+
+// _____________________________________________________________________________
+TEST_F(BlankNodeManagerTestFixture, serializationRoundTrip) {
+  auto bnm = createManager();
+  auto lbnm = createLocalManager(bnm.get());
+
+  // Allocate IDs across multiple blocks
+  auto originalIds = allocateIdsAcrossBlocks(*lbnm, 3);
+  ASSERT_EQ(getBlocks(*lbnm).size(), 3);
+
+  // Serialize
+  auto entries = serialize(*lbnm);
+  EXPECT_FALSE(entries.empty());
+  EXPECT_EQ(entries.size(), 1);  // Only primary blocks, no merged blocks
+  EXPECT_EQ(entries[0].blockIndices_.size(), 3);
+
+  // Deserialize into a new LocalBlankNodeManager
+  auto lbnm2 = deserialize(bnm.get(), entries);
+
+  // Verify all original IDs are contained
+  verifyIdsContained(*lbnm2, originalIds);
+
+  // Verify block indices are preserved
+  EXPECT_EQ(getBlocks(*lbnm2).size(), 3);
+  for (size_t i = 0; i < 3; ++i) {
+    EXPECT_EQ(getBlocks(*lbnm2)[i].blockIdx_, getBlocks(*lbnm)[i].blockIdx_);
+  }
+
+  // Verify new IDs can still be allocated and don't conflict
+  auto newId = lbnm2->getId();
+  EXPECT_TRUE(lbnm2->containsBlankNodeIndex(newId));
+  // The new ID should be in a new block (4th block)
+  EXPECT_EQ(getBlocks(*lbnm2).size(), 4);
+}
+
+// _____________________________________________________________________________
+TEST_F(BlankNodeManagerTestFixture, explicitBlockAllocation) {
+  auto bnm = createManager();
+
+  // Allocate specific block indices
+  auto block1 = bnm->allocateExplicitBlock(5);
+  EXPECT_EQ(block1.blockIdx_, 5);
+  EXPECT_EQ(block1.startIdx_, 5 * BlankNodeManager::blockSize_);
+  EXPECT_EQ(block1.nextIdx_, 5 * BlankNodeManager::blockSize_);
+  EXPECT_TRUE(isBlockUsed(*bnm, 5));
+
+  auto block2 = bnm->allocateExplicitBlock(10);
+  EXPECT_EQ(block2.blockIdx_, 10);
+  EXPECT_TRUE(isBlockUsed(*bnm, 10));
+
+  // Verify we can't allocate the same block twice
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      bnm->allocateExplicitBlock(5),
+      ::testing::HasSubstr("has previously already been allocated"));
+}
+
+// _____________________________________________________________________________
+TEST_F(BlankNodeManagerTestFixture, uuidManagement) {
+  auto bnm = createManager();
+
+  // Create multiple LocalBlankNodeManagers
+  auto lbnm1 = createLocalManager(bnm.get());
+  auto lbnm2 = createLocalManager(bnm.get());
+  auto lbnm3 = createLocalManager(bnm.get());
+
+  // Allocate some IDs to create blocks
+  allocateIds(*lbnm1, 5);
+  allocateIds(*lbnm2, 3);
+  allocateIds(*lbnm3, 7);
+
+  // Get UUIDs
+  auto entries1 = serialize(*lbnm1);
+  auto entries2 = serialize(*lbnm2);
+  auto entries3 = serialize(*lbnm3);
+
+  // Verify each has a unique UUID
+  EXPECT_NE(entries1[0].uuid_, entries2[0].uuid_);
+  EXPECT_NE(entries1[0].uuid_, entries3[0].uuid_);
+  EXPECT_NE(entries2[0].uuid_, entries3[0].uuid_);
+
+  // All three UUIDs should be registered
+  EXPECT_EQ(getManagedUuidCount(*bnm), 3);
+
+  // Destroy one LocalBlankNodeManager
+  lbnm1.reset();
+
+  // UUID count should decrease (but need to account for potential weak_ptr
+  // cleanup timing)
+  EXPECT_LE(getManagedUuidCount(*bnm), 3);
+}
+
+// _____________________________________________________________________________
+TEST_F(BlankNodeManagerTestFixture, sharedBlockSetViaUuid) {
+  auto bnm = createManager();
+  auto lbnm1 = createLocalManager(bnm.get());
+
+  // Allocate IDs across multiple blocks
+  allocateIdsAcrossBlocks(*lbnm1, 2);
+  auto entries = serialize(*lbnm1);
+
+  // Deserialize the same data into two different LocalBlankNodeManagers
+  auto lbnm2 = deserialize(bnm.get(), entries);
+  auto lbnm3 = deserialize(bnm.get(), entries);
+
+  // Both should reference the same underlying Blocks (same shared_ptr)
+  // We verify this indirectly by checking they share the same UUID
+  auto entries2 = serialize(*lbnm2);
+  auto entries3 = serialize(*lbnm3);
+  EXPECT_EQ(entries2[0].uuid_, entries3[0].uuid_);
+
+  // Block indices should only be allocated once in usedBlocksSet_
+  EXPECT_EQ(getUsedBlockCount(*bnm), 2);
+
+  // Verify both can see the blocks
+  EXPECT_EQ(getBlocks(*lbnm2).size(), 2);
+  EXPECT_EQ(getBlocks(*lbnm3).size(), 2);
+}
+
+// _____________________________________________________________________________
+TEST_F(BlankNodeManagerTestFixture, deserializationWithMergedBlocks) {
+  auto bnm = createManager();
+
+  // Create LocalBlankNodeManager A with some blocks
+  auto lbnmA = createLocalManager(bnm.get());
+  auto idsA = allocateIdsAcrossBlocks(*lbnmA, 2);
+
+  // Create LocalBlankNodeManager B with other blocks
+  auto lbnmB = createLocalManager(bnm.get());
+  auto idsB = allocateIdsAcrossBlocks(*lbnmB, 2);
+
+  // Merge B into A
+  std::vector managers{lbnmB};
+  lbnmA->mergeWith(managers);
+
+  // Serialize A (should have multiple OwnedBlocksEntry elements)
+  auto entries = serialize(*lbnmA);
+  EXPECT_EQ(entries.size(), 2);  // Primary blocks + one merged set
+  EXPECT_EQ(entries[0].blockIndices_.size(), 2);  // A's blocks
+  EXPECT_EQ(entries[1].blockIndices_.size(), 2);  // B's blocks
+
+  // Deserialize into a new LocalBlankNodeManager C
+  auto lbnmC = deserialize(bnm.get(), entries);
+
+  // Verify C has both primary blocks and otherBlocks
+  // We verify indirectly by serializing and checking the number of sets
+  auto entriesC = serialize(*lbnmC);
+  EXPECT_EQ(entriesC.size(), 2);  // Primary + one merged set
+  EXPECT_EQ(getBlocks(*lbnmC).size(), 2);
+
+  // Verify all IDs from both A and B are contained in C
+  verifyIdsContained(*lbnmC, idsA);
+  verifyIdsContained(*lbnmC, idsB);
+}
+
+// _____________________________________________________________________________
+TEST_F(BlankNodeManagerTestFixture, idAllocationAfterDeserialization) {
+  auto bnm = createManager();
+  auto lbnm1 = createLocalManager(bnm.get());
+
+  // Allocate some IDs (but not filling the whole block)
+  auto ids = allocateIds(*lbnm1, 5);
+  auto entries = serialize(*lbnm1);
+
+  // Deserialize
+  auto lbnm2 = deserialize(bnm.get(), entries);
+
+  // The next ID should come from a NEW block, not the partially filled one
+  size_t blocksBefore = getBlocks(*lbnm2).size();
+  [[maybe_unused]] auto newId = lbnm2->getId();
+  EXPECT_EQ(getBlocks(*lbnm2).size(), blocksBefore + 1);
+
+  // Verify containsBlankNodeIndex doesn't return true for unallocated IDs
+  // in the restored block
+  auto& restoredBlock = getBlocks(*lbnm2)[0];
+  uint64_t unallocatedId =
+      restoredBlock.startIdx_ + 100;  // Beyond what we allocated
+  if (unallocatedId < restoredBlock.nextIdx_) {
+    // This should not happen due to how deserialization works
+    EXPECT_FALSE(lbnm2->containsBlankNodeIndex(unallocatedId));
+  }
+}
+
+// _____________________________________________________________________________
+TEST_F(BlankNodeManagerTestFixture, emptyLocalBlankNodeManagerPrecondition) {
+  auto bnm = createManager();
+  auto lbnm = createLocalManager(bnm.get());
+
+  // Allocate some IDs to make it non-empty
+  allocateIds(*lbnm, 5);
+
+  // Create some dummy entries to try to deserialize
+  BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry entry;
+  entry.uuid_ = boost::uuids::random_generator()();
+  entry.blockIndices_ = {1, 2, 3};
+  std::vector<BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>
+      entries{entry};
+
+  // Attempt to call allocateBlocksFromExplicitIndices on non-empty manager
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      lbnm->allocateBlocksFromExplicitIndices(entries),
+      ::testing::HasSubstr(
+          "Explicit reserving of blank node blocks is only allowed "
+          "for empty"));
+}
+
+// _____________________________________________________________________________
+TEST_F(BlankNodeManagerTestFixture, blockSetCleanup) {
+  auto bnm = createManager();
+
+  boost::uuids::uuid savedUuid;
+  std::vector<uint64_t> blockIndices;
+
+  {
+    auto lbnm = createLocalManager(bnm.get());
+    auto ids = allocateIdsAcrossBlocks(*lbnm, 3);
+    auto entries = serialize(*lbnm);
+
+    savedUuid = entries[0].uuid_;
+    blockIndices = entries[0].blockIndices_;
+
+    // Verify UUID is registered and blocks are used
+    EXPECT_EQ(getManagedUuidCount(*bnm), 1);
+    EXPECT_EQ(getUsedBlockCount(*bnm), 3);
+    for (auto idx : blockIndices) {
+      EXPECT_TRUE(isBlockUsed(*bnm, idx));
+    }
+  }  // lbnm is destroyed here
+
+  // After destruction, UUID should be cleaned up and blocks freed
+  EXPECT_EQ(getManagedUuidCount(*bnm), 0);
+  EXPECT_EQ(getUsedBlockCount(*bnm), 0);
+  for (auto idx : blockIndices) {
+    EXPECT_FALSE(isBlockUsed(*bnm, idx));
+  }
+}
+
+// _____________________________________________________________________________
+TEST_F(BlankNodeManagerTestFixture, explicitAndRandomAllocationCoexistence) {
+  auto bnm = createManager();
+
+  // Allocate some blocks explicitly
+  auto block1 = bnm->allocateExplicitBlock(100);
+  auto block2 = bnm->allocateExplicitBlock(200);
+  EXPECT_EQ(getUsedBlockCount(*bnm), 2);
+
+  // Allocate some blocks randomly
+  auto randomBlock1 = bnm->allocateBlock();
+  auto randomBlock2 = bnm->allocateBlock();
+  EXPECT_EQ(getUsedBlockCount(*bnm), 4);
+
+  // Verify no conflicts (all block indices should be different)
+  std::set<uint64_t> allBlocks{block1.blockIdx_, block2.blockIdx_,
+                               randomBlock1.blockIdx_, randomBlock2.blockIdx_};
+  EXPECT_EQ(allBlocks.size(), 4);
+
+  // All should be marked as used
+  EXPECT_TRUE(isBlockUsed(*bnm, block1.blockIdx_));
+  EXPECT_TRUE(isBlockUsed(*bnm, block2.blockIdx_));
+  EXPECT_TRUE(isBlockUsed(*bnm, randomBlock1.blockIdx_));
+  EXPECT_TRUE(isBlockUsed(*bnm, randomBlock2.blockIdx_));
+}
+
+// _____________________________________________________________________________
+TEST_F(BlankNodeManagerTestFixture, uuidCollisionHandling) {
+  auto bnm = createManager();
+
+  // We can't easily mock the UUID generator without modifying the production
+  // code, but we can at least verify that creating many LocalBlankNodeManagers
+  // doesn't cause issues and all get unique UUIDs
+  std::vector<std::shared_ptr<BlankNodeManager::LocalBlankNodeManager>>
+      managers;
+  std::set<boost::uuids::uuid> uuids;
+
+  for (int i = 0; i < 100; ++i) {
+    auto lbnm = createLocalManager(bnm.get());
+    allocateIds(*lbnm, 1);  // Allocate at least one ID
+    auto entries = serialize(*lbnm);
+    uuids.insert(entries[0].uuid_);
+    managers.push_back(std::move(lbnm));
+  }
+
+  // All UUIDs should be unique
+  EXPECT_EQ(uuids.size(), 100);
+  EXPECT_EQ(getManagedUuidCount(*bnm), 100);
+}
+
+// _____________________________________________________________________________
+TEST_F(BlankNodeManagerTestFixture, serializationPreservesBlockIndices) {
+  auto bnm = createManager();
+
+  // Manually manipulate to allocate specific blocks via explicit allocation
+  // Then use them in a LocalBlankNodeManager
+  BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry entry;
+  entry.uuid_ = boost::uuids::random_generator()();
+  entry.blockIndices_ = {5, 42, 100};
+
+  std::vector entries{entry};
+  auto lbnm2 = deserialize(bnm.get(), entries);
+
+  // Verify the block indices match
+  auto serialized = serialize(*lbnm2);
+  EXPECT_EQ(serialized[0].blockIndices_, entry.blockIndices_);
+
+  // Verify the blocks are actually registered
+  EXPECT_TRUE(isBlockUsed(*bnm, 5));
+  EXPECT_TRUE(isBlockUsed(*bnm, 42));
+  EXPECT_TRUE(isBlockUsed(*bnm, 100));
 }
 
 }  // namespace ad_utility

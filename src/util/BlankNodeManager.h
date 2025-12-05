@@ -18,8 +18,9 @@
 #include <boost/uuid/uuid_generators.hpp>
 #include <vector>
 
-#include "HashMap.h"
 #include "global/ValueId.h"
+#include "util/ExceptionHandling.h"
+#include "util/HashMap.h"
 #include "util/HashSet.h"
 #include "util/Random.h"
 #include "util/Synchronized.h"
@@ -37,7 +38,9 @@ namespace ad_utility {
 class BlankNodeManager {
  public:
   // The minimal `BlankNodeIndex` that this manager can assign. All indices `<
-  // minIndex_` are already contained in the index.
+  // minIndex_` are already contained in the original `Index` of QLever (without
+  // considering UPDATEs or blank nodes from local query), These blank nodes are
+  // not managed by this `BlankNodeManager`.
   const uint64_t minIndex_;
 
   // Number of indices that make up a single block.
@@ -48,15 +51,8 @@ class BlankNodeManager {
       (ValueId::maxIndex - minIndex_ + 1) / blockSize_;
 
  private:
-  // A necessary forward declaration.
+  // Forward declaration because of cyclic dependency.
   struct Blocks;
-
-  // We identify sets of blocks by UUIDs, and therefore need to hash UUIDs`.
-  struct UuidHash {
-    std::size_t operator()(const boost::uuids::uuid& uuid) const {
-      return boost::hash<boost::uuids::uuid>()(uuid);
-    }
-  };
 
   // All the data members of this `BlankNodeManager`, wrapped into a struct,
   // s.t. we can synchronize the access and make the `BlankNodeManager`
@@ -65,7 +61,7 @@ class BlankNodeManager {
     // Random generator for block indices.
     SlowRandomIntGenerator<uint64_t> randBlockIndex_;
 
-    // A random generator for UUIDS.
+    // A random generator for UUIDs.
     boost::uuids::random_generator uuidGenerator_;
 
     // Hash set the stores the indices of all the blank node blocks that are
@@ -77,7 +73,8 @@ class BlankNodeManager {
     // is assigned a UUID. This map keeps track of the currently active sets,
     // but does not participate in their (shared) ownership, hence the
     // `weak_ptr`.
-    std::unordered_map<boost::uuids::uuid, std::weak_ptr<Blocks>, UuidHash>
+    ad_utility::HashMap<boost::uuids::uuid, std::weak_ptr<Blocks>,
+                        boost::hash<boost::uuids::uuid>>
         managedBlockSets_;
 
     // Constructor, all members except for the block index generator can be
@@ -114,13 +111,23 @@ class BlankNodeManager {
   // `BlankNodeManager` from which the `Blocks` were obtained.
   struct Blocks {
     BlankNodeManager* manager_;
-    boost::uuids::uuid uuid_{manager_->state_.wlock()->uuidGenerator_()};
+    boost::uuids::uuid uuid_;
     std::vector<Block> blocks_;
+    ad_utility::ThrowInDestructorIfSafe throwIfSafe_;
 
-    explicit Blocks(BlankNodeManager* manager) : manager_(manager) {
+    explicit Blocks(BlankNodeManager* manager, boost::uuids::uuid uuid)
+        : manager_(manager), uuid_(std::move(uuid)) {
       AD_CORRECTNESS_CHECK(manager_ != nullptr);
     }
-    ~Blocks() { manager_->freeBlockSet(*this); }
+    ~Blocks() noexcept(false) {
+      throwIfSafe_([this]() { manager_->freeBlockSet(*this); },
+                   "In `freeBlockSet` called from the destructor of a "
+                   "`BlankNodeManager::Blocks` object");
+    }
+    // We never want to copy or move `Blocks`, they are only ever to be managed
+    // by `shared_ptr`s.
+    Blocks(const Blocks&) = delete;
+    Block& operator=(const Blocks&) = delete;
   };
 
  public:
@@ -134,19 +141,9 @@ class BlankNodeManager {
   // blocks, but is registered (via the UUID) in the `BlankNodeManager`.
   std::shared_ptr<Blocks> createBlockSet();
 
-  // If the `uuid` is not yet registered with this `BlankNodeManager`, register
-  // and return a new empty `Blocks` struct (like `createBlockSet()` above, but
-  // with the explicit `uuid`. If the `uuid` is already registered, then return
-  // a `shared_ptr` to the `Blocks` associated with this `uuid`. The `bool` is
-  // true iff the UUID was new, and therefore the `Blocks` are empty. This
-  // functionality is used to reinstate sets of registered blocks when loading
-  // SPARQL UPDATEs or serialized cache results when QLever is started.
-  std::pair<std::shared_ptr<Blocks>, bool> registerBlocksWithExplicitUuid(
-      boost::uuids::uuid uuid);
-
   // Free all the blocks currently contained in the `blocks` and unregister the
   // associated UUID. This function is called by the `Blocks` destructor.
-  void freeBlockSet(Blocks& blocks);
+  void freeBlockSet(const Blocks& blocks);
 
   // Manages the blank nodes for a single local vocab.
   class LocalBlankNodeManager {
@@ -224,6 +221,7 @@ class BlankNodeManager {
     std::vector<std::shared_ptr<const Blocks>> otherBlocks_;
 
     FRIEND_TEST(BlankNodeManager, LocalBlankNodeManagerGetID);
+    friend class BlankNodeManagerTestFixture;
   };
 
   // Allocate and retrieve a block of new blank node indexes.
@@ -236,11 +234,22 @@ class BlankNodeManager {
   // any queries are performed.
   [[nodiscard]] Block allocateExplicitBlock(uint64_t blockIdx);
 
+  // If the `uuid` of the `entry` is not yet registered with this
+  // `BlankNodeManager`, register and return a new `Blocks` struct with the
+  // explicit `uuid`, and explicitly allocate all blocks represented by the
+  // `entry` and store them in the result. If the `uuid` is already registered,
+  // then return a `shared_ptr` to the `Blocks` associated with this `uuid`.
+  // This functionality is used to reinstate sets of registered blocks when
+  // loading SPARQL UPDATEs or serialized cache results when QLever is started.
+  std::shared_ptr<Blocks> registerAndAllocateBlockSet(
+      const LocalBlankNodeManager::OwnedBlocksEntry& entry);
+
   // Get the number of currently used blocks
   size_t numBlocksUsed() const { return state_.rlock()->usedBlocksSet_.size(); }
 
   FRIEND_TEST(BlankNodeManager, blockAllocationAndFree);
   FRIEND_TEST(BlankNodeManager, moveLocalBlankNodeManager);
+  friend class BlankNodeManagerTestFixture;
 };
 
 }  // namespace ad_utility
