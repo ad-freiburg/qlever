@@ -27,7 +27,8 @@
 
 // The different Datatypes that a `ValueId` (see below) can encode.
 // Note: If you add a datatype, make sure to update the `MaxValue` if necessary,
-// and check whether you have to add it to the `isTrivial` function.
+// and check whether you have to add it to the `isDatatypeTrivial` function
+// directlly below.
 enum struct Datatype {
   Undefined = 0,
   Bool,
@@ -50,13 +51,16 @@ enum struct Datatype {
 
 // Return true iff the `datatype` is a trivial datatype. This means that IDs
 // with this datatype directly encode the value they represent and do not point
-// to an external resource. Note: `BlankNodeIndex` is deliberately NOT
-// considiered trivial, as blank nodes depend on the context, in particular they
-// have to be remapped when results from different  RDF sources are merged.
+// to an external resource. In other words: These IDs can safely be shared
+// across different QLever indices without having to rewrite them. Note:
+// `BlankNodeIndex` is deliberately NOT considiered trivial, as blank nodes
+// depend on the context, in particular they have to be remapped when results
+// from different  RDF sources are merged. Same goes for `EncodedVal` which
+// depends on the (configurable!) prefixes for the encoding.
 constexpr bool isDatatypeTrivial(Datatype datatype) {
   using enum Datatype;
-  constexpr std::array trivialDatatypes{Undefined, Bool,     Int,       Double,
-                                        Date,      GeoPoint, EncodedVal};
+  constexpr std::array trivialDatatypes{Undefined, Bool, Int,
+                                        Double,    Date, GeoPoint};
   return ad_utility::contains(trivialDatatypes, datatype);
 }
 
@@ -386,7 +390,7 @@ class ValueId {
 
   // An ID is considered trivial, if its datatype is trivial (see
   // `isDatatypeTrivial` above).
-  constexpr bool isTrivial() { return isDatatypeTrivial(getDatatype()); }
+  constexpr bool isTrivial() const { return isDatatypeTrivial(getDatatype()); }
 
   /// Return the smallest and largest possible `ValueId` wrt the underlying
   /// representation

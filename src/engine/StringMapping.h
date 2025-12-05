@@ -54,7 +54,7 @@ class StringMapping {
   // since the last call to `flush()`.
   size_t size() const { return stringMapping_.size(); }
 
-  // Access to the
+  // Const access to the string mapping.
   const auto& stringMappingForTesting() const { return stringMapping_; }
 };
 }  // namespace qlever::binary_export

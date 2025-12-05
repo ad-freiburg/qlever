@@ -15,7 +15,7 @@ std::vector<std::string> StringMapping::flush(const Index& index) {
   LocalVocab dummy;
   std::vector<std::string> sortedStrings;
   sortedStrings.resize(stringMapping_.size());
-  for (auto& [oldId, newId] : stringMapping_) {
+  for (const auto& [oldId, newId] : stringMapping_) {
     auto literalOrIri =
         ExportQueryExecutionTrees::idToLiteralOrIri(index, oldId, dummy, true);
     AD_CORRECTNESS_CHECK(literalOrIri.has_value());
@@ -43,7 +43,8 @@ Id StringMapping::remapId(Id id) {
   static constexpr auto checkDatatypes = []() {
     auto checkType = [](Datatype datatype) {
       return ad_utility::contains(allowedDatatypes, datatype) ||
-             isDatatypeTrivial(datatype) || datatype == BlankNodeIndex;
+             isDatatypeTrivial(datatype) || datatype == BlankNodeIndex ||
+             datatype == EncodedVal;
     };
     for (size_t i = 0; i <= static_cast<size_t>(MaxValue); ++i) {
       if (!checkType(static_cast<Datatype>(i))) {
