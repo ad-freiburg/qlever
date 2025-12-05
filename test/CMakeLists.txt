@@ -230,7 +230,7 @@ addAndLinkTest(SortPerformanceEstimatorTest SortPerformanceEstimator)
 # cases are run in parallel. This should be fixed by using distinct filenames
 # for each test case.
 # TODO<qup42, joka921> fix this
-addLinkAndDiscoverTestSerial(SerializerTest)
+addLinkAndDiscoverTestNoLibs(SerializerTest)
 
 addLinkAndDiscoverTestNoLibs(ParametersTest)
 
@@ -486,3 +486,5 @@ addLinkAndDiscoverTestNoLibs(SourceLocationTest)
 addLinkAndDiscoverTest(UnitOfMeasurementTest util)
 
 addLinkAndDiscoverTest(MaterializedViewsTest qlever engine server)
+
+addLinkAndDiscoverTestNoLibs(ConstexprMapTest)
