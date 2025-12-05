@@ -339,11 +339,16 @@ class CompressedRelationWriter {
   };
   static PermutationPairResult createPermutationPair(
       const std::string& basename, WriterAndCallback writerAndCallback1,
-      WriterAndCallback writerAndCallback2,
+      std::optional<WriterAndCallback> writerAndCallback2,
       ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
       qlever::KeyOrder permutation,
       const std::vector<std::function<void(const IdTableStatic<0>&)>>&
           perBlockCallbacks);
+
+  static void writePermutationPairAndMetadata(
+      const std::string& basename, size_t numColumns,
+      ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
+      qlever::KeyOrder permutation, bool writeTwinRelation);
 
   /// Get all the CompressedBlockMetaData that were created by the calls to
   /// addRelation. This also closes the writer. The typical workflow is:

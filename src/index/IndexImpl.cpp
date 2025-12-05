@@ -861,7 +861,9 @@ IndexImpl::createPermutationPairImpl(size_t numColumns,
 
   auto [numDistinctCol0, blockData1, blockData2] =
       CompressedRelationWriter::createPermutationPair(
-          fileName1, {writer1, callback1}, {writer2, callback2},
+          fileName1,
+          CompressedRelationWriter::WriterAndCallback{writer1, callback1},
+          CompressedRelationWriter::WriterAndCallback{writer2, callback2},
           AD_FWD(sortedTriples), permutation, perBlockCallbacks);
   metaData1.blockData() = std::move(blockData1);
   metaData2.blockData() = std::move(blockData2);
