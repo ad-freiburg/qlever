@@ -265,4 +265,26 @@ TEST(GeoPointOrWktValueGetterTest, OperatorWithLit) {
                                            noGeoInfoOrWkt);
 }
 
+// _____________________________________________________________________________
+TEST(IntValueGetterTest, OperatorWithId) {
+  IntValueGetterTester t;
+  t.checkFromValueId(ValueId::makeFromInt(42), Eq(42));
+  t.checkFromValueId(ValueId::makeFromInt(-500), Eq(-500));
+  t.checkFromValueId(ValueId::makeFromBool(true), Eq(std::nullopt));
+  t.checkFromValueId(ValueId::makeUndefined(), Eq(std::nullopt));
+  t.checkFromValueId(ValueId::makeFromDouble(4.5), Eq(std::nullopt));
+  t.checkFromValueId(ValueId::makeFromGeoPoint({3, 4}), Eq(std::nullopt));
+}
+
+// _____________________________________________________________________________
+TEST(IntValueGetterTest, OperatorWithLit) {
+  IntValueGetterTester t;
+  auto noInt = Eq(std::nullopt);
+  t.checkFromLocalAndNormalVocabAndLiteral("\"someType\"^^<someType>", noInt);
+  t.checkFromLocalAndNormalVocabAndLiteral(
+      "\"anXsdString\"^^<http://www.w3.org/2001/XMLSchema#string>", noInt);
+  t.checkFromLocalAndNormalVocabAndLiteral("\"noType\"", noInt);
+  t.checkFromLocalAndNormalVocabAndLiteral("<https://example.com/test>", noInt);
+}
+
 };  // namespace

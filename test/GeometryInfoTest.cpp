@@ -51,9 +51,13 @@ const DMultiPolygon expectedMultiPolygon{
 constexpr std::string_view litCollection =
     "\"GEOMETRYCOLLECTION(POLYGON((2 4,8 4,8 6,2 6,2 4)),LINESTRING(2 2,4 4),"
     "POINT(3 4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
-const DCollection expectedCollection{
-    DAnyGeometry{DPolygon{{{2, 4}, {8, 4}, {8, 6}, {2, 6}, {2, 4}}}},
-    AnyGeometry{DLine{{2, 2}, {4, 4}}}, AnyGeometry{DPoint{3, 4}}};
+const DPolygon expectedCollectionElement1{
+    {{2, 4}, {8, 4}, {8, 6}, {2, 6}, {2, 4}}};
+const DLine expectedCollectionElement2{{2, 2}, {4, 4}};
+const DPoint expectedCollectionElement3{3, 4};
+const DCollection expectedCollection{DAnyGeometry{expectedCollectionElement1},
+                                     DAnyGeometry{expectedCollectionElement2},
+                                     DAnyGeometry{expectedCollectionElement3}};
 
 constexpr std::string_view litInvalidType =
     "\"BLABLIBLU(xyz)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
@@ -649,6 +653,55 @@ TEST(GeometryInfoTest, UtilGeomToWktVisitor) {
           EXPECT_EQ(utilGeomToWkt(DAnyGeometry{geom}), expected);
         },
         parsedWkt.value());
+  }
+}
+
+// _____________________________________________________________________________
+TEST(GeometryInfoTest, GeometryN) {
+  using namespace ad_utility::detail;
+
+  using s = std::string;
+  std::vector<ExpectedGeometryN> expected{
+      // Single geometries, valid index.
+      {1, s{litPoint}, {expectedPoint}},
+      {1, s{litLineString}, {expectedLine}},
+      {1, s{litPolygon}, {expectedPolygon}},
+      // Single geometries, invalid index.
+      {2, s{litPoint}, std::nullopt},
+      {2, s{litLineString}, std::nullopt},
+      {2, s{litPolygon}, std::nullopt},
+      // Collection geometries, valid index.
+      {1, s{litMultiPoint}, {expectedMultiPoint.at(0)}},
+      {1, s{litMultiLineString}, {expectedMultiLineString.at(0)}},
+      {1, s{litMultiPolygon}, {expectedMultiPolygon.at(0)}},
+      {1, s{litCollection}, {expectedCollectionElement1}},
+      {2, s{litMultiPoint}, {expectedMultiPoint.at(1)}},
+      {2, s{litMultiLineString}, {expectedMultiLineString.at(1)}},
+      {2, s{litMultiPolygon}, {expectedMultiPolygon.at(1)}},
+      {2, s{litCollection}, {expectedCollectionElement2}},
+      {3, s{litCollection}, {expectedCollectionElement3}},
+      // Collection geometries, invalid index.
+      {3, s{litMultiPoint}, std::nullopt},
+      {3, s{litMultiLineString}, std::nullopt},
+      {3, s{litMultiPolygon}, std::nullopt},
+      {4, s{litCollection}, std::nullopt},
+  };
+
+  auto noGeom = parsedWktNear(std::nullopt);
+  EXPECT_THAT(getGeometryN(std::optional<ParsedWkt>{}, 1), noGeom);
+
+  for (const auto& [n, wkt, expectedGeom] : expected) {
+    // Test with `GeoPointOrWkt` (not parsed).
+    EXPECT_THAT(getGeometryN(GeoPointOrWkt{wkt}, n),
+                parsedWktNear(expectedGeom));
+
+    // Test with already parsed geometry.
+    auto [type, parsed] = parseWkt(wkt);
+    EXPECT_THAT(getGeometryN(parsed, n), parsedWktNear(expectedGeom));
+
+    // Invalid indexes.
+    EXPECT_THAT(getGeometryN(parsed, 0), noGeom);
+    EXPECT_THAT(getGeometryN(parsed, 10'000), noGeom);
   }
 }
 
