@@ -114,22 +114,14 @@ void BlankNodeManager::LocalBlankNodeManager::allocateBlocksFromExplicitIndices(
                     "Explicit reserving of blank node blocks is only allowed "
                     "for empty `LocalBlankNodeManager`s");
 
-  // The semantics of the argument is (as enforced by the `getOwnedBlockIndices`
-  // function): The first element is the `blocks_` primarily owned by this
-  // `LocalBlankNodeManager`, The remaining elements are the `otherBlocks_`.
-  AD_CONTRACT_CHECK(!indices.empty());
-  blocks_ = blankNodeManager_->registerAndAllocateBlockSet(indices.at(0));
-  otherBlocks_.reserve(indices.size() - 1);
-  for (const auto& entry : indices | ql::views::drop(1)) {
+  // We read all the previously allocated blocks into the `otherBlocks_`, s.t.
+  // the primary `blocks_` vector statys empty. That way, we are completely
+  // decoupled from other `LocalBlankNodeManager`s which might reuse the same
+  // blocks as `*this`.
+  otherBlocks_.reserve(indices.size());
+  for (const auto& entry : indices) {
     otherBlocks_.push_back(
         blankNodeManager_->registerAndAllocateBlockSet(entry));
-  }
-
-  // The following code ensures that the next call to `getId` allocates a new
-  // block. This is necessary, because we don't have access to the information
-  // which IDs in the allocated blocks actually are in use.
-  if (!blocks_->blocks_.empty()) {
-    idxAfterCurrentBlock_ = blocks_->blocks_.back().nextIdx_;
   }
 }
 

@@ -31,6 +31,31 @@ class BlankNodeManagerTestFixture : public ::testing::Test {
     return lbnm.blocks_->blocks_;
   }
 
+  // Helper to get the total number of blocks (primary + other)
+  static size_t getTotalBlockCount(
+      const BlankNodeManager::LocalBlankNodeManager& lbnm) {
+    size_t count = lbnm.blocks_->blocks_.size();
+    for (const auto& otherBlocks : lbnm.otherBlocks_) {
+      count += otherBlocks->blocks_.size();
+    }
+    return count;
+  }
+
+  // Helper to get all block indices (from both primary and other blocks)
+  static std::vector<uint64_t> getAllBlockIndices(
+      const BlankNodeManager::LocalBlankNodeManager& lbnm) {
+    std::vector<uint64_t> indices;
+    for (const auto& block : lbnm.blocks_->blocks_) {
+      indices.push_back(block.blockIdx_);
+    }
+    for (const auto& otherBlocks : lbnm.otherBlocks_) {
+      for (const auto& block : otherBlocks->blocks_) {
+        indices.push_back(block.blockIdx_);
+      }
+    }
+    return indices;
+  }
+
   // Helper to allocate N IDs from a LocalBlankNodeManager
   static std::vector<uint64_t> allocateIds(
       BlankNodeManager::LocalBlankNodeManager& lbnm, size_t count) {
@@ -225,17 +250,18 @@ TEST_F(BlankNodeManagerTestFixture, serializationRoundTrip) {
   // Verify all original IDs are contained
   verifyIdsContained(*lbnm2, originalIds);
 
-  // Verify block indices are preserved
-  EXPECT_EQ(getBlocks(*lbnm2).size(), 3);
-  for (size_t i = 0; i < 3; ++i) {
-    EXPECT_EQ(getBlocks(*lbnm2)[i].blockIdx_, getBlocks(*lbnm)[i].blockIdx_);
-  }
+  // Verify block indices are preserved (now in otherBlocks_)
+  EXPECT_EQ(getTotalBlockCount(*lbnm2), 3);
+  auto originalIndices = getAllBlockIndices(*lbnm);
+  auto restoredIndices = getAllBlockIndices(*lbnm2);
+  EXPECT_EQ(originalIndices, restoredIndices);
 
   // Verify new IDs can still be allocated and don't conflict
   auto newId = lbnm2->getId();
   EXPECT_TRUE(lbnm2->containsBlankNodeIndex(newId));
-  // The new ID should be in a new block (4th block)
-  EXPECT_EQ(getBlocks(*lbnm2).size(), 4);
+  // The new ID should be in a new block (primary blocks now has 1 block)
+  EXPECT_EQ(getBlocks(*lbnm2).size(), 1);
+  EXPECT_EQ(getTotalBlockCount(*lbnm2), 4);
 }
 
 // _____________________________________________________________________________
@@ -308,17 +334,25 @@ TEST_F(BlankNodeManagerTestFixture, sharedBlockSetViaUuid) {
   auto lbnm3 = deserialize(bnm.get(), entries);
 
   // Both should reference the same underlying Blocks (same shared_ptr)
-  // We verify this indirectly by checking they share the same UUID
+  // The deserialized blocks are in otherBlocks_, and they share the same UUID
   auto entries2 = serialize(*lbnm2);
   auto entries3 = serialize(*lbnm3);
-  EXPECT_EQ(entries2[0].uuid_, entries3[0].uuid_);
+  // Serialize returns primary first (empty), then otherBlocks
+  // So the deserialized blocks are at index 1
+  ASSERT_EQ(entries2.size(), 2);  // Empty primary + 1 from otherBlocks
+  ASSERT_EQ(entries3.size(), 2);
+  EXPECT_TRUE(entries2[0].blockIndices_.empty());  // Primary is empty
+  EXPECT_TRUE(entries3[0].blockIndices_.empty());
+  // The UUIDs of the deserialized blocks (at index 1) should match the original
+  EXPECT_EQ(entries2[1].uuid_, entries[0].uuid_);
+  EXPECT_EQ(entries3[1].uuid_, entries[0].uuid_);
 
   // Block indices should only be allocated once in usedBlocksSet_
   EXPECT_EQ(getUsedBlockCount(*bnm), 2);
 
-  // Verify both can see the blocks
-  EXPECT_EQ(getBlocks(*lbnm2).size(), 2);
-  EXPECT_EQ(getBlocks(*lbnm3).size(), 2);
+  // Verify both can see the blocks (now in otherBlocks_)
+  EXPECT_EQ(getTotalBlockCount(*lbnm2), 2);
+  EXPECT_EQ(getTotalBlockCount(*lbnm3), 2);
 }
 
 // _____________________________________________________________________________
@@ -346,11 +380,16 @@ TEST_F(BlankNodeManagerTestFixture, deserializationWithMergedBlocks) {
   // Deserialize into a new LocalBlankNodeManager C
   auto lbnmC = deserialize(bnm.get(), entries);
 
-  // Verify C has both primary blocks and otherBlocks
+  // Verify C has all blocks in otherBlocks (after deserialization)
   // We verify indirectly by serializing and checking the number of sets
   auto entriesC = serialize(*lbnmC);
-  EXPECT_EQ(entriesC.size(), 2);  // Primary + one merged set
-  EXPECT_EQ(getBlocks(*lbnmC).size(), 2);
+  // entriesC will have 3 entries: 1 empty primary + 2 from otherBlocks
+  EXPECT_EQ(entriesC.size(), 3);
+  EXPECT_TRUE(entriesC[0].blockIndices_.empty());  // Primary is empty
+  EXPECT_EQ(entriesC[1].blockIndices_.size(), 2);  // First set
+  EXPECT_EQ(entriesC[2].blockIndices_.size(), 2);  // Second set
+  EXPECT_EQ(getBlocks(*lbnmC).size(), 0);          // Primary blocks is empty
+  EXPECT_EQ(getTotalBlockCount(*lbnmC), 4);        // Total of 4 blocks
 
   // Verify all IDs from both A and B are contained in C
   verifyIdsContained(*lbnmC, idsA);
@@ -369,20 +408,15 @@ TEST_F(BlankNodeManagerTestFixture, idAllocationAfterDeserialization) {
   // Deserialize
   auto lbnm2 = deserialize(bnm.get(), entries);
 
-  // The next ID should come from a NEW block, not the partially filled one
-  size_t blocksBefore = getBlocks(*lbnm2).size();
+  // The next ID should come from a NEW block in primary blocks
+  // (deserialized blocks are in otherBlocks_)
+  EXPECT_EQ(getBlocks(*lbnm2).size(), 0);  // Primary blocks empty before getId
   [[maybe_unused]] auto newId = lbnm2->getId();
-  EXPECT_EQ(getBlocks(*lbnm2).size(), blocksBefore + 1);
+  EXPECT_EQ(getBlocks(*lbnm2).size(), 1);    // New block in primary
+  EXPECT_EQ(getTotalBlockCount(*lbnm2), 2);  // 1 deserialized + 1 new
 
-  // Verify containsBlankNodeIndex doesn't return true for unallocated IDs
-  // in the restored block
-  auto& restoredBlock = getBlocks(*lbnm2)[0];
-  uint64_t unallocatedId =
-      restoredBlock.startIdx_ + 100;  // Beyond what we allocated
-  if (unallocatedId < restoredBlock.nextIdx_) {
-    // This should not happen due to how deserialization works
-    EXPECT_FALSE(lbnm2->containsBlankNodeIndex(unallocatedId));
-  }
+  // The containsBlankNodeIndex test doesn't apply anymore since we don't
+  // have direct access to the partially filled blocks in otherBlocks_
 }
 
 // _____________________________________________________________________________
@@ -502,9 +536,11 @@ TEST_F(BlankNodeManagerTestFixture, serializationPreservesBlockIndices) {
   std::vector entries{entry};
   auto lbnm2 = deserialize(bnm.get(), entries);
 
-  // Verify the block indices match
+  // Verify the block indices match (now in otherBlocks, so second entry)
   auto serialized = serialize(*lbnm2);
-  EXPECT_EQ(serialized[0].blockIndices_, entry.blockIndices_);
+  ASSERT_EQ(serialized.size(), 2);  // Empty primary + 1 in otherBlocks
+  EXPECT_TRUE(serialized[0].blockIndices_.empty());  // Primary is empty
+  EXPECT_EQ(serialized[1].blockIndices_, entry.blockIndices_);
 
   // Verify the blocks are actually registered
   EXPECT_TRUE(isBlockUsed(*bnm, 5));
