@@ -28,7 +28,7 @@
 // The different Datatypes that a `ValueId` (see below) can encode.
 // Note: If you add a datatype, make sure to update the `MaxValue` if necessary,
 // and check whether you have to add it to the `isDatatypeTrivial` function
-// directlly below.
+// directly below.
 enum struct Datatype {
   Undefined = 0,
   Bool,

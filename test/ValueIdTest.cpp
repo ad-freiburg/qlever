@@ -460,11 +460,12 @@ TEST_F(ValueIdTest, EncodedIriEqualityWithLocalVocabEntry) {
   }
 }
 
-// Note:: the `isTrivial` functionality is also tested using `static_assert`s
+// Note: the `isTrivial` functionality is also tested using `static_assert`s
 // across the codebase, hence we don't test it exhaustively here, but only
 // please the coverage tool.
 TEST(ValueId, isTrivial) {
   EXPECT_TRUE(Id::makeUndefined().isTrivial());
   EXPECT_FALSE(
       Id::makeFromBlankNodeIndex(BlankNodeIndex::make(17)).isTrivial());
+  EXPECT_FALSE(Id::makeFromEncodedVal(738).isTrivial());
 }
