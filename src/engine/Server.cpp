@@ -93,6 +93,11 @@ void Server::initialize(const std::string& indexBaseName, bool useText,
       allocator_, index_.numTriples().normalAndInternal_() *
                       PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE / 100);
 
+  graphManager_.initializeFromIndex(
+      &index_.encodedIriManager(),
+      QueryExecutionContext(index_, &cache_, allocator_,
+                            sortPerformanceEstimator_, &namedResultCache_));
+
   if (noAccessCheck_) {
     AD_LOG_INFO << "No access token required for restricted API calls"
                 << std::endl;
@@ -386,7 +391,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   //
   // Some parameters require that "access-token" is set correctly. If not, that
   // parameter is ignored.
-  std::optional<http::response<http::string_body>> response;
+  std::optional<http::response<streamable_body>> response;
 
   // Execute commands (URL parameter with key "cmd").
   auto logCommand = [](const std::optional<std::string_view>& cmd,
@@ -578,8 +583,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     auto tracer = std::make_shared<ad_utility::timer::TimeTracer>("update");
     tracer->beginTrace("parsing");
     std::vector<ParsedQuery> parsedOperations =
-        GraphStoreProtocol::transformGraphStoreProtocol(std::move(operation),
-                                                        request, index_);
+        GraphStoreProtocol::transformGraphStoreProtocol(
+            std::move(operation), graphManager_, request, index_);
     tracer->endTrace("parsing");
 
     if (ql::ranges::any_of(parsedOperations, &ParsedQuery::hasUpdateClause)) {
@@ -762,6 +767,10 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 
   auto response = ad_utility::httpUtils::createOkResponse(
       std::move(responseGenerator), request, mediaType);
+  if (plannedQuery.parsedQuery_.responseMiddleware_.has_value()) {
+    response = plannedQuery.parsedQuery_.responseMiddleware_.value().apply(
+        std::move(response), std::nullopt);
+  }
   try {
     co_await send(std::move(response));
   } catch (const boost::system::system_error& e) {
@@ -1044,6 +1053,15 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   AD_CORRECTNESS_CHECK(ql::ranges::all_of(
       updates, [](const ParsedQuery& p) { return p.hasUpdateClause(); }));
 
+  std::vector<ResponseMiddleware> responseMiddlewares;
+  for (auto& update : updates) {
+    if (update.responseMiddleware_.has_value()) {
+      responseMiddlewares.push_back(
+          std::move(update.responseMiddleware_.value()));
+    }
+  }
+  std::vector<UpdateMetadata> metadatas;
+
   // If multiple updates are part of a single request, those have to run
   // atomically. This is ensured, because the updates below are run on the
   // `updateThreadPool_`, which only has a single thread.
@@ -1051,7 +1069,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   auto coroutine = computeInNewThread(
       updateThreadPool_,
       [this, &requestTimer, &cancellationHandle, &updates, &qec, &timeLimit,
-       &plannedUpdate, tracer]() {
+       &plannedUpdate, tracer, &metadatas]() {
         tracer->endTrace("waitingForUpdateThread");
         json results = json::array();
         // TODO<qup42> We currently create a new snapshot after each update in
@@ -1094,6 +1112,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
               index_, index_.deltaTriplesManager().getCurrentSnapshot(),
               *plannedUpdate, plannedUpdate->queryExecutionTree_,
               updateMetadata, *tracer));
+          metadatas.push_back(std::move(updateMetadata));
           tracer->reset();
 
           AD_LOG_INFO << "Done processing update"
@@ -1113,8 +1132,14 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 
   // SPARQL 1.1 Protocol 2.2.4 Successful Responses: "The responses body of a
   // successful update request is implementation defined."
-  co_await send(
-      ad_utility::httpUtils::createJsonResponse(std::move(responses), request));
+  auto response =
+      ad_utility::httpUtils::createJsonResponse(std::move(responses), request);
+  if (!responseMiddlewares.empty()) {
+    for (auto& middleware : responseMiddlewares) {
+      response = middleware.apply(std::move(response), std::move(metadatas));
+    }
+  }
+  co_await send(std::move(response));
   co_return;
 }
 

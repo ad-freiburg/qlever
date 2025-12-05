@@ -93,6 +93,63 @@ static constexpr bool isHttpRequest<http::request<Body, Fields>> = true;
 template <typename T>
 CPP_concept HttpRequest = detail::isHttpRequest<T>;
 
+// The response type used for almost all cases. Only when there is an error
+// parsing the request, then another response type is used.
+using ResponseT = http::response<streamable_body>;
+
+/// Assign the generator to the body of the response. If a supported
+/// compression is specified in the request, this method is applied to the
+/// body and the corresponding response headers are set.
+CPP_template(typename RequestType)(
+    requires HttpRequest<
+        RequestType>) static void setBody(ResponseT& response,
+                                          const RequestType& request,
+                                          cppcoro::generator<std::string>&&
+                                              generator) {
+  using ad_utility::content_encoding::CompressionMethod;
+
+  CompressionMethod method =
+      ad_utility::content_encoding::getCompressionMethodForRequest(request);
+
+  auto asyncGenerator = streams::runStreamAsync(std::move(generator), 100);
+  auto coroAsyncGenerator = [](auto range) -> cppcoro::generator<std::string> {
+    for (auto& value : range) {
+      co_yield value;
+    }
+  }(std::move(asyncGenerator));
+
+  if (method != CompressionMethod::NONE) {
+    response.body() =
+        streams::compressStream(std::move(coroAsyncGenerator), method);
+    ad_utility::content_encoding::setContentEncodingHeaderForCompressionMethod(
+        method, response);
+  } else {
+    response.body() = std::move(coroAsyncGenerator);
+  }
+}
+
+CPP_template(typename RequestType)(requires HttpRequest<RequestType>) ResponseT
+    createHttpResponseFromGenerator(cppcoro::generator<std::string>&& body,
+                                    http::status status,
+                                    const RequestType& request,
+                                    std::optional<MediaType> mediaType) {
+  ResponseT response{status, request.version()};
+  if (mediaType.has_value()) {
+    response.set(http::field::content_type, toString(mediaType.value()));
+  }
+  setBody(response, request, std::move(body));
+  response.keep_alive(request.keep_alive());
+  // Set Content-Length and Transfer-Encoding.
+  response.prepare_payload();
+  return response;
+}
+
+namespace detail {
+static cppcoro::generator<std::string> toGenerator(std::string str) {
+  co_yield std::move(str);
+}
+}  // namespace detail
+
 /**
  * @brief Create a http::response from a string, which will become the body
  * @param body The body of the response
@@ -136,8 +193,8 @@ CPP_template(typename RequestType)(
                                                             request,
                                                         std::optional<MediaType>
                                                             mediaType) {
-  return createHttpResponseFromString(std::move(body), status, mediaType,
-                                      request.keep_alive(), request.version());
+  return createHttpResponseFromGenerator(detail::toGenerator(std::move(body)),
+                                         status, request, mediaType);
 }
 
 /// Create a HttpResponse from a string with status 200 OK. Otherwise behaves
@@ -151,38 +208,6 @@ CPP_template(typename RequestType)(
                                       request, mediaType);
 }
 
-/// Assign the generator to the body of the response. If a supported
-/// compression is specified in the request, this method is applied to the
-/// body and the corresponding response headers are set.
-CPP_template(typename RequestType)(
-    requires HttpRequest<
-        RequestType>) static void setBody(http::response<streamable_body>&
-                                              response,
-                                          const RequestType& request,
-                                          cppcoro::generator<std::string>&&
-                                              generator) {
-  using ad_utility::content_encoding::CompressionMethod;
-
-  CompressionMethod method =
-      ad_utility::content_encoding::getCompressionMethodForRequest(request);
-
-  auto asyncGenerator = streams::runStreamAsync(std::move(generator), 100);
-  auto coroAsyncGenerator = [](auto range) -> cppcoro::generator<std::string> {
-    for (auto& value : range) {
-      co_yield value;
-    }
-  }(std::move(asyncGenerator));
-
-  if (method != CompressionMethod::NONE) {
-    response.body() =
-        streams::compressStream(std::move(coroAsyncGenerator), method);
-    ad_utility::content_encoding::setContentEncodingHeaderForCompressionMethod(
-        method, response);
-  } else {
-    response.body() = std::move(coroAsyncGenerator);
-  }
-}
-
 /// Create a HttpResponse from a generator with status 200 OK.
 CPP_template(typename RequestType)(
     requires HttpRequest<
@@ -191,16 +216,8 @@ CPP_template(typename RequestType)(
                                                            generator,
                                                    const RequestType& request,
                                                    MediaType mediaType) {
-  http::response<streamable_body> response{http::status::ok, request.version()};
-  response.set(http::field::content_type, toString(mediaType));
-  response.keep_alive(request.keep_alive());
-  setBody(response, request, std::move(generator));
-  // Set Content-Length and Transfer-Encoding.
-  // Because ad_utility::httpUtils::httpStreams::streamable_body::size
-  // is not defined, Content-Length will be cleared and Transfer-Encoding
-  // will be set to chunked
-  response.prepare_payload();
-  return response;
+  return createHttpResponseFromGenerator(std::move(generator), http::status::ok,
+                                         request, mediaType);
 }
 
 /// Create a HttpResponse from a string with status 200 OK and mime type
@@ -208,8 +225,8 @@ CPP_template(typename RequestType)(
 /// createHttpResponseFromString.
 static auto createJsonResponse(std::string text, const auto& request,
                                http::status status = http::status::ok) {
-  return createHttpResponseFromString(std::move(text), status, request,
-                                      MediaType::json);
+  return createHttpResponseFromGenerator(detail::toGenerator(std::move(text)),
+                                         status, request, MediaType::json);
 }
 
 template <typename T>

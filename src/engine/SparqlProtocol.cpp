@@ -214,7 +214,8 @@ ad_utility::url_parser::ParsedRequest SparqlProtocol::parseHttpRequest(
   // Graph Store Protocol with indirect graph identification
   std::string_view methodStr = request.method_string();
   if (request.method() == http::verb::put ||
-      request.method() == http::verb::delete_ || methodStr == "TSOP") {
+      request.method() == http::verb::delete_ ||
+      request.method() == http::verb::head || methodStr == "TSOP") {
     return parseGraphStoreProtocolIndirect(request);
   }
   throw HttpError(
