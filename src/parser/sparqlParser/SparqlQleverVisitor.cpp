@@ -1467,10 +1467,10 @@ std::string Visitor::visit(Parser::IrirefContext* ctx) const {
   }
   // TODO<RobinTF> Avoid unnecessary string copies because of conversion.
   // Handle IRIs with base IRI.
-  return std::move(
-      ad_utility::triple_component::Iri::fromIrirefConsiderBase(
-          ctx->getText(), baseIri_.getBaseIri(false), baseIri_.getBaseIri(true))
-          .toStringRepresentation());
+  return ad_utility::triple_component::Iri::fromIrirefConsiderBase(
+             ctx->getText(), baseIri_.getBaseIri(false),
+             baseIri_.getBaseIri(true))
+      .toStringRepresentation();
 }
 
 // ____________________________________________________________________________________
@@ -2966,7 +2966,7 @@ std::string Visitor::visit(Parser::RdfLiteralContext* ctx) {
     ret += ctx->LANGTAG()->getText();
   } else if (ctx->iri()) {
     // TODO<joka921> Also unify the two Literal classes...
-    ret += ("^^" + std::string{visit(ctx->iri()).toStringRepresentation()});
+    ret += "^^" + visit(ctx->iri()).toStringRepresentation();
   }
   return ret;
 }
