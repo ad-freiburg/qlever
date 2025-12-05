@@ -1611,10 +1611,10 @@ auto CompressedRelationWriter::createPermutationPair(
     qlever::KeyOrder permutation,
     const std::vector<std::function<void(const IdTableStatic<0>&)>>&
         perBlockCallbacks) -> PermutationPairResult {
-  PermutationWriter permutationWriter_{
+  PermutationWriter permutationWriter{
       basename, std::move(writerAndCallback1), std::move(writerAndCallback2),
       std::move(permutation), perBlockCallbacks};
-  return permutationWriter_.writePermutation(std::move(sortedTriples));
+  return permutationWriter.writePermutation(std::move(sortedTriples));
 }
 
 // _____________________________________________________________________________

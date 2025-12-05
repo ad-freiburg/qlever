@@ -60,7 +60,7 @@ CPP_template(typename T, typename Function)(
   // ___________________________________________________________________________
   ~Batcher() {
     ad_utility::terminateIfThrows(
-        [&]() {
+        [this]() {
           if (!vec_.empty()) {
             function_(std::move(vec_));
           }
