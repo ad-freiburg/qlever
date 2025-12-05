@@ -174,20 +174,23 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
                      const std::vector<std::string>& internalInserted,
                      const std::vector<std::string>& internalDeleted)
       -> testing::Matcher<const DeltaTriples&> {
+    using ::testing::AllOf;
+    using ES = DeltaTriples::State<false>;
+    using IS = DeltaTriples::State<true>;
     return AllOf(
         NumTriples(numInserted, numDeleted, numTriplesInAllPermutations,
                    numInternalInserted, numInternalDeleted),
         AD_FIELD(
             DeltaTriples, state_,
-            AllOf(AD_FIELD(DeltaTriples::State<false>, triplesInserted_,
+            AllOf(AD_FIELD(ES, triplesInserted_,
                            UnorderedTriplesAre(std::false_type{}, inserted)),
-                  AD_FIELD(DeltaTriples::State<false>, triplesDeleted_,
+                  AD_FIELD(ES, triplesDeleted_,
                            UnorderedTriplesAre(std::false_type{}, deleted)))),
         AD_FIELD(DeltaTriples, internalState_,
-                 AllOf(AD_FIELD(DeltaTriples::State<true>, triplesInserted_,
+                 AllOf(AD_FIELD(IS, triplesInserted_,
                                 UnorderedTriplesAre(std::true_type{},
                                                     internalInserted)),
-                       AD_FIELD(DeltaTriples::State<true>, triplesDeleted_,
+                       AD_FIELD(IS, triplesDeleted_,
                                 UnorderedTriplesAre(std::true_type{},
                                                     internalDeleted)))));
   };
