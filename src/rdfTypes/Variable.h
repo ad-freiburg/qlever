@@ -11,6 +11,8 @@
 #include <variant>
 
 #include "backports/three_way_comparison.h"
+#include "util/Serializer/SerializeString.h"
+#include "util/Serializer/Serializer.h"
 
 // Forward declaration because of cyclic dependencies
 // TODO<joka921> The coupling of the `Variable` with its `evaluate` methods
@@ -103,6 +105,9 @@ class Variable {
   // The method escapes all special chars in word to "_ASCIICODE_" and appends
   // it at the end of target.
   static void appendEscapedWord(std::string_view word, std::string& target);
+
+  // Serialization for `Variable`s - just serialize the name.
+  AD_SERIALIZE_FRIEND_FUNCTION(Variable) { serializer | arg._name; }
 };
 
 #endif  // QLEVER_SRC_PARSER_DATA_VARIABLE_H
