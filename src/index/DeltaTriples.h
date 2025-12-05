@@ -118,6 +118,8 @@ class DeltaTriples {
   static_assert(static_cast<int>(Permutation::Enum::OSP) == 5);
   static_assert(Permutation::ALL.size() == 6);
 
+  // Generic state wrapper to avoid code duplication for internal and regular
+  // triples.
   template <bool isInternal>
   struct State {
     // The located triples for all the permutations.
@@ -155,8 +157,6 @@ class DeltaTriples {
   // Get the common `LocalVocab` of the delta triples.
  private:
   LocalVocab& localVocab() { return localVocab_; }
-  auto& locatedTriples() { return state_.locatedTriples_; }
-  const auto& locatedTriples() const { return state_.locatedTriples_; }
 
  public:
   const LocalVocab& localVocab() const { return localVocab_; }
@@ -239,6 +239,11 @@ class DeltaTriples {
   void updateAugmentedMetadata();
 
  private:
+  // The the proper state according to the template parameter. This will either
+  // return a reference to `internalState_` or `state_`.
+  template <bool isInternal>
+  State<isInternal>& getState();
+
   // Helper function to get the correct located triple (either internal or
   // external), depending on the `internal` template parameter.
   template <bool isInternal>
@@ -262,13 +267,10 @@ class DeltaTriples {
   // triples. When `insertOrDelete` is `false`, the triples are deleted, and it
   // is the other way around:. This is used to resolve insertions or deletions
   // that are idempotent or cancel each other out.
-  template <bool isInternal>
-  void modifyTriplesImpl(
-      CancellationHandle cancellationHandle, Triples triples, bool shouldExist,
-      typename State<isInternal>::TriplesToHandlesMap& targetMap,
-      typename State<isInternal>::TriplesToHandlesMap& inverseMap,
-      ad_utility::timer::TimeTracer& tracer =
-          ad_utility::timer::DEFAULT_TIME_TRACER);
+  template <bool isInternal, bool insertOrDelete>
+  void modifyTriplesImpl(CancellationHandle cancellationHandle, Triples triples,
+                         ad_utility::timer::TimeTracer& tracer =
+                             ad_utility::timer::DEFAULT_TIME_TRACER);
 
   // Rewrite each triple in `triples` such that all local vocab entries and all
   // local blank nodes are managed by the `localVocab_` of this class.
