@@ -151,7 +151,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
                                  [](const auto& item) { return item.first; });
   };
   auto UnorderedTriplesAre = [&mapKeys, this, &vocab, &localVocab](
-                                 auto isInternal,
+                                 [[maybe_unused]] auto isInternal,
                                  const std::vector<std::string>& triples)
       -> testing::Matcher<const ad_utility::HashMap<
           IdTriple<0>,
