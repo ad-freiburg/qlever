@@ -73,6 +73,8 @@ class EncodedIriManagerImpl {
   // The prefixes of the IRIs that will be encoded.
   std::vector<std::string> prefixes_;
 
+  static constexpr auto maxNumPrefixes_ = 1ULL << NumBitsTags;
+
   // By default, `prefixes_` is empty, so no IRI will be encoded.
   EncodedIriManagerImpl() = default;
 
@@ -95,13 +97,12 @@ class EncodedIriManagerImpl {
     prefixesWithoutAngleBrackets.erase(
         ::ranges::unique(prefixesWithoutAngleBrackets),
         prefixesWithoutAngleBrackets.end());
-    static constexpr auto maxNumPrefixes = 1ULL << NumBitsTags;
 
-    if (prefixesWithoutAngleBrackets.size() > maxNumPrefixes) {
+    if (prefixesWithoutAngleBrackets.size() > maxNumPrefixes_) {
       throw std::runtime_error(absl::StrCat(
           "Number of prefixes specified with `--encode-as-id` is ",
           prefixesWithoutAngleBrackets.size(), ", which is too many; ",
-          "the maximum is ", maxNumPrefixes));
+          "the maximum is ", maxNumPrefixes_));
     }
 
     // TODO<C++23> use `std::views::adjacent`.
@@ -161,8 +162,12 @@ class EncodedIriManagerImpl {
 
     // Get the index of the used prefix, and run the actual encoding.
     auto prefixIndex = static_cast<size_t>(it - prefixes_.begin());
-    return Id::makeFromEncodedVal(encodeDecimalToNBit(numString) |
-                                  (prefixIndex << NumBitsEncoding));
+    return makeIdFromPrefixIdxAndPayload(prefixIndex, encodeDecimalToNBit(numString));
+  }
+
+  static Id makeIdFromPrefixIdxAndPayload(uint64_t prefixIdx,
+                                          uint64_t payload) {
+    return Id::makeFromEncodedVal(payload | (prefixIdx << NumBitsEncoding));
   }
 
   // Convert an `Id` that was encoded using this encoder back to a string.
@@ -170,18 +175,28 @@ class EncodedIriManagerImpl {
   std::string toString(Id id) const {
     AD_CORRECTNESS_CHECK(id.getDatatype() == Datatype::EncodedVal);
     // Get only the rightmost bits that represent the digits.
-    static constexpr auto mask =
-        ad_utility::bitMaskForLowerBits(NumBitsEncoding);
-    auto digitEncoding = id.getEncodedVal() & mask;
-    // Get the index of the prefix.
-    auto prefixIdx = id.getEncodedVal() >> NumBitsEncoding;
+    auto [prefixIdx, digitEncoding] = splitIntoPrefixIdxAndPayload(id);
+    return toStringWithGivenPrefix(digitEncoding, prefixes_.at(prefixIdx));
+  }
+
+  static std::string toStringWithGivenPrefix(uint64_t digitEncoding, std::string_view prefix) {
     std::string result;
-    const auto& prefix = prefixes_.at(prefixIdx);
     result.reserve(prefix.size() + NumDigits + 1);
     result = prefix;
     decodeDecimalFrom64Bit(result, digitEncoding);
     result.push_back('>');
     return result;
+
+  }
+
+  static std::pair<uint64_t, uint64_t> splitIntoPrefixIdxAndPayload(Id id) {
+    AD_CONTRACT_CHECK(id.getDatatype() == Datatype::EncodedVal);
+    static constexpr auto mask =
+        ad_utility::bitMaskForLowerBits(NumBitsEncoding);
+    auto digitEncoding = id.getEncodedVal() & mask;
+    // Get the index of the prefix.
+    auto prefixIdx = id.getEncodedVal() >> NumBitsEncoding;
+    return std::make_pair(prefixIdx, digitEncoding);
   }
 
   // Conversion to and from JSON.
@@ -206,7 +221,6 @@ class EncodedIriManagerImpl {
   // Equality operator for use in `TestIndexConfig`.
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(EncodedIriManagerImpl, prefixes_)
 
- private:
   // Encode the `numberStr` (which may only consist of digits) into a 64-bit
   // number.
   static constexpr uint64_t encodeDecimalToNBit(std::string_view numberStr) {

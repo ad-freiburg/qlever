@@ -24,7 +24,9 @@
 #include "util/Serializer/Serializer.h"
 #include "util/SourceLocation.h"
 
-/// The different Datatypes that a `ValueId` (see below) can encode.
+// The different Datatypes that a `ValueId` (see below) can encode.
+// Note: If you add a datatype, make sure to update the `MaxValue` if necessary,
+// and check whether you have to add it to the `isTrivial` function.
 enum struct Datatype {
   Undefined = 0,
   Bool,
@@ -44,6 +46,14 @@ enum struct Datatype {
   // alias must always be equal to the last member,
   // else other code breaks with out-of-bounds accesses.
 };
+
+constexpr bool isDatatypeTrivial(Datatype datatype) {
+  return datatype == Datatype::Undefined || datatype == Datatype::Bool ||
+         datatype == Datatype::Int || datatype == Datatype::Double ||
+         datatype == Datatype::Date || datatype == Datatype::GeoPoint ||
+         datatype == Datatype::EncodedVal;
+
+}
 
 /// Convert the `Datatype` enum to the corresponding string
 inline QL_CONSTEXPR std::string_view toString(Datatype type) {
@@ -367,6 +377,10 @@ class ValueId {
   GeoPoint getGeoPoint() const {
     T bits = removeDatatypeBits(_bits);
     return GeoPoint::fromBitRepresentation(bits);
+  }
+
+  constexpr bool isTrivial() {
+    return isDatatypeTrivial(getDatatype());
   }
 
   /// Return the smallest and largest possible `ValueId` wrt the underlying
