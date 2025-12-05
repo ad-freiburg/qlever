@@ -154,9 +154,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
                                  auto isInternal,
                                  const std::vector<std::string>& triples)
       -> testing::Matcher<const ad_utility::HashMap<
-          IdTriple<0>,
-          DeltaTriples::LocatedTripleHandles<decltype(isInternal)::value>>&> {
-    (void)isInternal;
+          IdTriple<0>, DeltaTriples::LocatedTripleHandles<isInternal>>&> {
     return testing::ResultOf(
         "mapKeys(...)", [&mapKeys](const auto map) { return mapKeys(map); },
         testing::UnorderedElementsAreArray(

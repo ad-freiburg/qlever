@@ -127,17 +127,18 @@ class DeltaTriples {
 
   // Each delta triple needs to know where it is stored in each of the six
   // `LocatedTriplesPerBlock` above.
-  template <bool internal>
+  template <bool isInternal>
   struct LocatedTripleHandles {
     using It = LocatedTriples::iterator;
-    std::array<It, (internal ? Permutation::INTERNAL : Permutation::ALL).size()>
+    std::array<It,
+               (isInternal ? Permutation::INTERNAL : Permutation::ALL).size()>
         handles_;
 
     LocatedTriples::iterator& forPermutation(Permutation::Enum permutation);
   };
-  template <bool internal>
+  template <bool isInternal>
   using TriplesToHandlesMap =
-      ad_utility::HashMap<IdTriple<0>, LocatedTripleHandles<internal>>;
+      ad_utility::HashMap<IdTriple<0>, LocatedTripleHandles<isInternal>>;
 
   // The sets of triples added to and subtracted from the original index. Any
   // triple can be at most in one of the sets. The information whether a triple
@@ -246,7 +247,7 @@ class DeltaTriples {
  private:
   // Helper function to get the correct located triple (either internal or
   // external), depending on the `internal` template parameter.
-  template <bool internal>
+  template <bool isInternal>
   auto& getLocatedTriple();
 
   // Find the position of the given triple in the given permutation and add it
@@ -254,8 +255,8 @@ class DeltaTriples {
   // When `insertOrDelete` is `true`, the triples are inserted, otherwise
   // deleted. Return the iterators of where it was added (so that we can easily
   // delete it again from these maps later).
-  template <bool internal>
-  std::vector<LocatedTripleHandles<internal>> locateAndAddTriples(
+  template <bool isInternal>
+  std::vector<LocatedTripleHandles<isInternal>> locateAndAddTriples(
       CancellationHandle cancellationHandle,
       ql::span<const IdTriple<0>> triples, bool insertOrDelete,
       ad_utility::timer::TimeTracer& tracer =
@@ -267,11 +268,11 @@ class DeltaTriples {
   // triples. When `insertOrDelete` is `false`, the triples are deleted, and it
   // is the other way around:. This is used to resolve insertions or deletions
   // that are idempotent or cancel each other out.
-  template <bool internal>
+  template <bool isInternal>
   void modifyTriplesImpl(CancellationHandle cancellationHandle, Triples triples,
                          bool shouldExist,
-                         TriplesToHandlesMap<internal>& targetMap,
-                         TriplesToHandlesMap<internal>& inverseMap,
+                         TriplesToHandlesMap<isInternal>& targetMap,
+                         TriplesToHandlesMap<isInternal>& inverseMap,
                          ad_utility::timer::TimeTracer& tracer =
                              ad_utility::timer::DEFAULT_TIME_TRACER);
 
@@ -292,8 +293,8 @@ class DeltaTriples {
   // NOTE: The iterators are invalid afterward. That is OK, as long as we also
   // delete the respective entry in `triplesInserted_` or `triplesDeleted_`,
   // which stores these iterators.
-  template <bool internal>
-  void eraseTripleInAllPermutations(LocatedTripleHandles<internal>& handles);
+  template <bool isInternal>
+  void eraseTripleInAllPermutations(LocatedTripleHandles<isInternal>& handles);
 
   friend class DeltaTriplesManager;
 };

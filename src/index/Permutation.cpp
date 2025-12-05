@@ -269,3 +269,9 @@ BlockMetadataRanges Permutation::getAugmentedMetadataForPermutation(
           .getAugmentedMetadata());
   return {{blocks.begin(), blocks.end()}};
 }
+
+// ______________________________________________________________________
+const Permutation& Permutation::internalPermutation() const {
+  AD_CONTRACT_CHECK(internalPermutation_ != nullptr);
+  return *internalPermutation_;
+}
