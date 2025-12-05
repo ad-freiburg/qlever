@@ -8,7 +8,7 @@
 #include <stdexcept>
 #include <vector>
 
-#include "../src/util/MmapVector.h"
+#include "util/MmapVector.h"
 
 using ad_utility::MmapVector;
 using ad_utility::MmapVectorView;
