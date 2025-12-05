@@ -40,7 +40,7 @@
 #include "engine/OptionalJoin.h"
 #include "engine/OrderBy.h"
 #include "engine/PathSearch.h"
-#include "engine/ProxyOperation.h"
+#include "engine/Proxy.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryRewriteUtils.h"
 #include "engine/Service.h"
@@ -2182,11 +2182,13 @@ std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
   }
 
   // Similar to SpatialJoin: if one of the inputs is an incomplete
-  // ProxyOperation, add the other as its child to provide payload variables.
+  // Proxy, add the other as its child to provide payload variables.
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   if (auto opt = createProxyOperation(a, b, jcs)) {
     candidates.push_back(std::move(opt.value()));
     return candidates;
   }
+#endif
 
   if (a.type == SubtreePlan::MINUS) {
     AD_THROW(
@@ -2313,12 +2315,13 @@ auto QueryPlanner::createSpatialJoin(const SubtreePlan& a, const SubtreePlan& b,
   return plan;
 }
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 // _____________________________________________________________________________
 std::pair<bool, bool> QueryPlanner::checkProxyOperation(const SubtreePlan& a,
                                                         const SubtreePlan& b) {
   auto isIncompleteProxy = [](const SubtreePlan& plan) {
-    auto proxyCasted = std::dynamic_pointer_cast<const ProxyOperation>(
-        plan._qet->getRootOperation());
+    auto proxyCasted =
+        std::dynamic_pointer_cast<const Proxy>(plan._qet->getRootOperation());
     return proxyCasted != nullptr && !proxyCasted->isConstructed();
   };
   return {isIncompleteProxy(a), isIncompleteProxy(b)};
@@ -2331,7 +2334,7 @@ auto QueryPlanner::createProxyOperation(const SubtreePlan& a,
     -> std::optional<SubtreePlan> {
   auto [aIs, bIs] = checkProxyOperation(a, b);
 
-  // Exactly one of the inputs must be a ProxyOperation.
+  // Exactly one of the inputs must be a Proxy.
   if (aIs == bIs) {
     return std::nullopt;
   }
@@ -2340,7 +2343,7 @@ auto QueryPlanner::createProxyOperation(const SubtreePlan& a,
   const SubtreePlan& otherSubtreePlan = aIs ? b : a;
 
   std::shared_ptr<Operation> op = proxySubtreePlan._qet->getRootOperation();
-  auto proxyOp = static_cast<ProxyOperation*>(op.get());
+  auto proxyOp = static_cast<Proxy*>(op.get());
 
   if (proxyOp->isConstructed()) {
     return std::nullopt;
@@ -2349,10 +2352,11 @@ auto QueryPlanner::createProxyOperation(const SubtreePlan& a,
   // The other subtree provides the payload variables for the proxy.
   auto newProxyOp = proxyOp->addChild(otherSubtreePlan._qet);
 
-  SubtreePlan plan = makeSubtreePlan<ProxyOperation>(std::move(newProxyOp));
+  SubtreePlan plan = makeSubtreePlan<Proxy>(std::move(newProxyOp));
   mergeSubtreePlanIds(plan, a, b);
   return plan;
 }
+#endif
 
 // _____________________________________________________________________________________________________________________
 
@@ -3054,7 +3058,13 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
   } else if constexpr (std::is_same_v<T, p::Describe>) {
     visitDescribe(arg);
   } else if constexpr (std::is_same_v<T, p::ProxyQuery>) {
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
     visitProxy(arg);
+#else
+    (void)arg;
+    throw std::runtime_error(
+        "qlproxy SERVICE is not supported in reduced feature set builds");
+#endif
   } else if constexpr (std::is_same_v<T, p::SpatialQuery>) {
     visitSpatialSearch(arg);
   } else if constexpr (std::is_same_v<T, p::TextSearchQuery>) {
@@ -3236,18 +3246,20 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
   visitGroupOptionalOrMinus(std::move(candidatesOut));
 }
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitProxy(
     parsedQuery::ProxyQuery& proxyQuery) {
   auto config = proxyQuery.toConfiguration();
 
-  // Create the ProxyOperation without a child. The query planner will add
+  // Create the Proxy without a child. The query planner will add
   // the child when joining with sibling operations that provide the payload
   // variables.
-  auto proxyOp = std::make_shared<ProxyOperation>(qec_, config);
-  auto plan = makeSubtreePlan<ProxyOperation>(std::move(proxyOp));
+  auto proxyOp = std::make_shared<Proxy>(qec_, config);
+  auto plan = makeSubtreePlan<Proxy>(std::move(proxyOp));
   visitGroupOptionalOrMinus({std::move(plan)});
 }
+#endif
 
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitTextSearch(

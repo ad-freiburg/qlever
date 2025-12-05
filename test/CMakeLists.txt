@@ -206,7 +206,7 @@ addLinkAndDiscoverTest(TransitivePathTest engine)
 
 addLinkAndDiscoverTest(PathSearchTest engine)
 
-addLinkAndDiscoverTestSerial(ProxyOperationTest engine)
+addLinkAndDiscoverTestSerial(ProxyTest engine)
 
 addLinkAndDiscoverTest(BatchedPipelineTest)
 

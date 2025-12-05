@@ -7,8 +7,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_ENGINE_PROXYOPERATION_H
-#define QLEVER_SRC_ENGINE_PROXYOPERATION_H
+#ifndef QLEVER_SRC_ENGINE_PROXY_H
+#define QLEVER_SRC_ENGINE_PROXY_H
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
@@ -35,7 +35,7 @@
 // The payload variables come from the enclosing graph pattern (sibling
 // operations), which is added as a child of this operation by the query
 // planner.
-class ProxyOperation : public Operation {
+class Proxy : public Operation {
  private:
   // The configuration from the parsed query.
   parsedQuery::ProxyConfiguration config_;
@@ -55,15 +55,14 @@ class ProxyOperation : public Operation {
   // Construct from configuration. The child operation is optional and will be
   // added by the query planner when joining with sibling operations that
   // provide the payload variables.
-  ProxyOperation(QueryExecutionContext* qec,
-                 parsedQuery::ProxyConfiguration config,
-                 std::optional<std::shared_ptr<QueryExecutionTree>>
-                     childOperation = std::nullopt,
-                 SendRequestType sendRequestFunction = sendHttpOrHttpsRequest);
+  Proxy(QueryExecutionContext* qec, parsedQuery::ProxyConfiguration config,
+        std::optional<std::shared_ptr<QueryExecutionTree>> childOperation =
+            std::nullopt,
+        SendRequestType sendRequestFunction = sendHttpOrHttpsRequest);
 
   // Add a child operation that provides the payload variable bindings.
-  // Returns a new `ProxyOperation` with the child added.
-  std::shared_ptr<ProxyOperation> addChild(
+  // Returns a new `Proxy` with the child added.
+  std::shared_ptr<Proxy> addChild(
       std::shared_ptr<QueryExecutionTree> child) const;
 
   // Check if the proxy is fully constructed (has a child, or doesn't need one).
@@ -96,4 +95,4 @@ class ProxyOperation : public Operation {
 
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
-#endif  // QLEVER_SRC_ENGINE_PROXYOPERATION_H
+#endif  // QLEVER_SRC_ENGINE_PROXY_H

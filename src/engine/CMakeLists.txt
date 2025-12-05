@@ -13,7 +13,7 @@ add_library(engine
         VariableToColumnMap.cpp ExportQueryExecutionTrees.cpp
         CartesianProductJoin.cpp TextIndexScanForWord.cpp TextIndexScanForEntity.cpp
         TextLimit.cpp LazyGroupBy.cpp GroupByHashMapOptimization.cpp SpatialJoin.cpp
-        CountConnectedSubgraphs.cpp SpatialJoinAlgorithms.cpp PathSearch.cpp ProxyOperation.cpp ExecuteUpdate.cpp
+        CountConnectedSubgraphs.cpp SpatialJoinAlgorithms.cpp PathSearch.cpp Proxy.cpp ExecuteUpdate.cpp
         Describe.cpp GraphStoreProtocol.cpp SpatialJoinParser.cpp SpatialJoinCachedIndex.cpp
         QueryExecutionContext.cpp ExistsJoin.cpp SparqlProtocol.cpp ParsedRequestBuilder.cpp
         NeutralOptional.cpp Load.cpp StripColumns.cpp NamedResultCache.cpp ExplicitIdTableOperation.cpp)
@@ -22,7 +22,7 @@ qlever_target_link_libraries(engine util index parser global sparqlExpressions S
 
 # When `REDUCED_FEATURE_SET_FOR_CPP17` is set, do not link `engine` against the
 # `http` library (which requires C++20). This works because `http` is only used
-# in three operations, `Service`, `Load`, and `ProxyOperation`, which we disable
+# in three operations, `Service`, `Load`, and `Proxy`, which we disable
 # when `REDUCED_FEATURE_SET_FOR_CPP17` is set.
 if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
     target_link_libraries(engine http)

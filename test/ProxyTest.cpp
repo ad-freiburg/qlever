@@ -10,7 +10,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include "engine/ProxyOperation.h"
+#include "engine/Proxy.h"
 #include "global/RuntimeParameters.h"
 #include "parser/GraphPatternOperation.h"
 #include "util/AllocatorWithLimit.h"
@@ -24,8 +24,8 @@
 #include "util/http/HttpUtils.h"
 
 // Fixture that sets up a test index and a factory for producing mocks for the
-// `sendRequestFunction` needed by the `ProxyOperation`.
-class ProxyOperationTest : public ::testing::Test {
+// `sendRequestFunction` needed by the `Proxy`.
+class ProxyTest : public ::testing::Test {
  protected:
   QueryExecutionContext* testQec = ad_utility::testing::getQec();
   ad_utility::AllocatorWithLimit<Id> testAllocator =
@@ -33,7 +33,8 @@ class ProxyOperationTest : public ::testing::Test {
 
   // Factory for generating mocks of the `sendHttpOrHttpsRequest` function.
   static auto constexpr getResultFunctionFactory =
-      [](std::string_view expectedUrl, std::string_view expectedPayload,
+      [](std::string_view expectedUrl,
+         [[maybe_unused]] std::string_view expectedPayload,
          std::string predefinedResult,
          boost::beast::http::status status = boost::beast::http::status::ok,
          std::string contentType = "application/sparql-results+json",
@@ -68,8 +69,8 @@ class ProxyOperationTest : public ::testing::Test {
   }
 };
 
-// Test basic methods of class `ProxyOperation`.
-TEST_F(ProxyOperationTest, basicMethods) {
+// Test basic methods of class `Proxy`.
+TEST_F(ProxyTest, basicMethods) {
   // Construct a ProxyConfiguration by hand.
   parsedQuery::ProxyConfiguration config;
   config.endpoint_ = "http://example.org/api";
@@ -78,7 +79,7 @@ TEST_F(ProxyOperationTest, basicMethods) {
   config.parameters_ = {};
 
   // Create an operation from this (no child operation).
-  ProxyOperation proxyOp{testQec, config, std::nullopt};
+  Proxy proxyOp{testQec, config, std::nullopt};
 
   // Test the basic methods.
   ASSERT_EQ(proxyOp.getDescriptor(), "Proxy to http://example.org/api");
@@ -99,7 +100,7 @@ TEST_F(ProxyOperationTest, basicMethods) {
 }
 
 // Test that multiple result variables are mapped correctly.
-TEST_F(ProxyOperationTest, multipleResultVariables) {
+TEST_F(ProxyTest, multipleResultVariables) {
   parsedQuery::ProxyConfiguration config;
   config.endpoint_ = "http://example.org/api";
   config.resultVariables_ = {
@@ -107,7 +108,7 @@ TEST_F(ProxyOperationTest, multipleResultVariables) {
   config.payloadVariables_ = {};
   config.parameters_ = {};
 
-  ProxyOperation proxyOp{testQec, config, std::nullopt};
+  Proxy proxyOp{testQec, config, std::nullopt};
 
   ASSERT_EQ(proxyOp.getResultWidth(), 3);
   using V = Variable;
@@ -119,7 +120,7 @@ TEST_F(ProxyOperationTest, multipleResultVariables) {
 }
 
 // Test `computeResult` with a simple response.
-TEST_F(ProxyOperationTest, computeResult) {
+TEST_F(ProxyTest, computeResult) {
   parsedQuery::ProxyConfiguration config;
   config.endpoint_ = "http://example.org/api";
   config.resultVariables_ = {{"x", Variable{"?x"}}, {"y", Variable{"?y"}}};
@@ -131,8 +132,8 @@ TEST_F(ProxyOperationTest, computeResult) {
       {"x", "y"}, {{"http://example.org/1", "http://example.org/a"},
                    {"http://example.org/2", "http://example.org/b"}});
 
-  ProxyOperation proxyOp{testQec, config, std::nullopt,
-                         getResultFunctionFactory(expectedUrl, "", jsonResult)};
+  Proxy proxyOp{testQec, config, std::nullopt,
+                getResultFunctionFactory(expectedUrl, "", jsonResult)};
 
   auto result = proxyOp.computeResultOnlyForTesting();
   ASSERT_EQ(result.idTable().size(), 2);
@@ -140,7 +141,7 @@ TEST_F(ProxyOperationTest, computeResult) {
 }
 
 // Test `computeResult` with URL parameters.
-TEST_F(ProxyOperationTest, computeResultWithParams) {
+TEST_F(ProxyTest, computeResultWithParams) {
   parsedQuery::ProxyConfiguration config;
   config.endpoint_ = "http://example.org/api";
   config.resultVariables_ = {{"result", Variable{"?result"}}};
@@ -152,8 +153,8 @@ TEST_F(ProxyOperationTest, computeResultWithParams) {
   std::string jsonResult =
       genJsonResult({"result"}, {{"http://example.org/42"}});
 
-  ProxyOperation proxyOp{testQec, config, std::nullopt,
-                         getResultFunctionFactory(expectedUrl, "", jsonResult)};
+  Proxy proxyOp{testQec, config, std::nullopt,
+                getResultFunctionFactory(expectedUrl, "", jsonResult)};
 
   auto result = proxyOp.computeResultOnlyForTesting();
   ASSERT_EQ(result.idTable().size(), 1);
@@ -161,7 +162,7 @@ TEST_F(ProxyOperationTest, computeResultWithParams) {
 }
 
 // Test error handling when HTTP request fails.
-TEST_F(ProxyOperationTest, httpErrorStatus) {
+TEST_F(ProxyTest, httpErrorStatus) {
   parsedQuery::ProxyConfiguration config;
   config.endpoint_ = "http://example.org/api";
   config.resultVariables_ = {{"result", Variable{"?result"}}};
@@ -170,17 +171,16 @@ TEST_F(ProxyOperationTest, httpErrorStatus) {
 
   std::string_view expectedUrl = "http://example.org:80/api";
 
-  ProxyOperation proxyOp{
-      testQec, config, std::nullopt,
-      getResultFunctionFactory(
-          expectedUrl, "", "Error",
-          boost::beast::http::status::internal_server_error)};
+  Proxy proxyOp{testQec, config, std::nullopt,
+                getResultFunctionFactory(
+                    expectedUrl, "", "Error",
+                    boost::beast::http::status::internal_server_error)};
 
   ASSERT_THROW(proxyOp.computeResultOnlyForTesting(), std::runtime_error);
 }
 
 // Test error handling when content type is wrong.
-TEST_F(ProxyOperationTest, wrongContentType) {
+TEST_F(ProxyTest, wrongContentType) {
   parsedQuery::ProxyConfiguration config;
   config.endpoint_ = "http://example.org/api";
   config.resultVariables_ = {{"result", Variable{"?result"}}};
@@ -189,7 +189,7 @@ TEST_F(ProxyOperationTest, wrongContentType) {
 
   std::string_view expectedUrl = "http://example.org:80/api";
 
-  ProxyOperation proxyOp{
+  Proxy proxyOp{
       testQec, config, std::nullopt,
       getResultFunctionFactory(expectedUrl, "", "<html>Error</html>",
                                boost::beast::http::status::ok, "text/html")};

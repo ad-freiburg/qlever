@@ -8,7 +8,7 @@
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
-#include "engine/ProxyOperation.h"
+#include "engine/Proxy.h"
 
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
@@ -25,40 +25,37 @@
 #include "util/json.h"
 
 // ____________________________________________________________________________
-ProxyOperation::ProxyOperation(
-    QueryExecutionContext* qec, parsedQuery::ProxyConfiguration config,
-    std::optional<std::shared_ptr<QueryExecutionTree>> childOperation,
-    SendRequestType sendRequestFunction)
+Proxy::Proxy(QueryExecutionContext* qec, parsedQuery::ProxyConfiguration config,
+             std::optional<std::shared_ptr<QueryExecutionTree>> childOperation,
+             SendRequestType sendRequestFunction)
     : Operation{qec},
       config_{std::move(config)},
       childOperation_{std::move(childOperation)},
       sendRequestFunction_{std::move(sendRequestFunction)} {}
 
 // ____________________________________________________________________________
-std::shared_ptr<ProxyOperation> ProxyOperation::addChild(
+std::shared_ptr<Proxy> Proxy::addChild(
     std::shared_ptr<QueryExecutionTree> child) const {
-  return std::make_shared<ProxyOperation>(
-      getExecutionContext(), config_, std::move(child), sendRequestFunction_);
+  return std::make_shared<Proxy>(getExecutionContext(), config_,
+                                 std::move(child), sendRequestFunction_);
 }
 
 // ____________________________________________________________________________
-std::string ProxyOperation::getCacheKeyImpl() const {
+std::string Proxy::getCacheKeyImpl() const {
   // Don't cache proxy results as they depend on external state.
   return absl::StrCat("PROXY ", cacheBreaker_);
 }
 
 // ____________________________________________________________________________
-std::string ProxyOperation::getDescriptor() const {
+std::string Proxy::getDescriptor() const {
   return absl::StrCat("Proxy to ", config_.endpoint_);
 }
 
 // ____________________________________________________________________________
-size_t ProxyOperation::getResultWidth() const {
-  return config_.resultVariables_.size();
-}
+size_t Proxy::getResultWidth() const { return config_.resultVariables_.size(); }
 
 // ____________________________________________________________________________
-VariableToColumnMap ProxyOperation::computeVariableToColumnMap() const {
+VariableToColumnMap Proxy::computeVariableToColumnMap() const {
   VariableToColumnMap map;
 
   if (!childOperation_.has_value() && !config_.payloadVariables_.empty()) {
@@ -80,23 +77,19 @@ VariableToColumnMap ProxyOperation::computeVariableToColumnMap() const {
 }
 
 // ____________________________________________________________________________
-float ProxyOperation::getMultiplicity([[maybe_unused]] size_t col) {
-  return 1.0f;
-}
+float Proxy::getMultiplicity([[maybe_unused]] size_t col) { return 1.0f; }
 
 // ____________________________________________________________________________
-uint64_t ProxyOperation::getSizeEstimateBeforeLimit() {
+uint64_t Proxy::getSizeEstimateBeforeLimit() {
   // We don't know the result size, use a conservative estimate.
   return 100'000;
 }
 
 // ____________________________________________________________________________
-size_t ProxyOperation::getCostEstimate() {
-  return 10 * getSizeEstimateBeforeLimit();
-}
+size_t Proxy::getCostEstimate() { return 10 * getSizeEstimateBeforeLimit(); }
 
 // ____________________________________________________________________________
-std::vector<QueryExecutionTree*> ProxyOperation::getChildren() {
+std::vector<QueryExecutionTree*> Proxy::getChildren() {
   if (childOperation_.has_value()) {
     return {childOperation_.value().get()};
   }
@@ -104,13 +97,13 @@ std::vector<QueryExecutionTree*> ProxyOperation::getChildren() {
 }
 
 // ____________________________________________________________________________
-std::unique_ptr<Operation> ProxyOperation::cloneImpl() const {
-  return std::make_unique<ProxyOperation>(
-      getExecutionContext(), config_, childOperation_, sendRequestFunction_);
+std::unique_ptr<Operation> Proxy::cloneImpl() const {
+  return std::make_unique<Proxy>(getExecutionContext(), config_,
+                                 childOperation_, sendRequestFunction_);
 }
 
 // ____________________________________________________________________________
-std::string ProxyOperation::buildUrlWithParams() const {
+std::string Proxy::buildUrlWithParams() const {
   std::string url = config_.endpoint_;
   if (!config_.parameters_.empty()) {
     url += "?";
@@ -129,8 +122,7 @@ std::string ProxyOperation::buildUrlWithParams() const {
 }
 
 // ____________________________________________________________________________
-std::string ProxyOperation::serializePayloadAsJson(
-    const Result& childResult) const {
+std::string Proxy::serializePayloadAsJson(const Result& childResult) const {
   nlohmann::json result;
 
   // Build the "head" section with variable names.
@@ -232,7 +224,7 @@ std::string ProxyOperation::serializePayloadAsJson(
 }
 
 // ____________________________________________________________________________
-Result ProxyOperation::computeResult([[maybe_unused]] bool requestLaziness) {
+Result Proxy::computeResult([[maybe_unused]] bool requestLaziness) {
   // First, compute the child result to get payload bindings.
   std::shared_ptr<const Result> childResult;
   if (childOperation_.has_value()) {
