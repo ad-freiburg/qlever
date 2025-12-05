@@ -1,7 +1,12 @@
-// Copyright 2024, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Moritz Dom (domm@informatik.uni-freiburg.de)
+// Copyright 2024 - 2025 The QLever Authors, in particular:
+//
+// 2024 Moritz Dom <domm@informatik.uni-freiburg.de>, UFR
+// 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 #include "util/BlankNodeManager.h"
 
 #include "util/Exception.h"
@@ -83,14 +88,18 @@ bool BlankNodeManager::LocalBlankNodeManager::containsBlankNodeIndex(
 auto BlankNodeManager::LocalBlankNodeManager::getOwnedBlockIndices() const
     -> std::vector<OwnedBlocksEntry> {
   std::vector<OwnedBlocksEntry> indices;
+  // Lambda that turns a single `Blocks` object into an `OwnedBlocksEntry`.
   auto resultFromSingleSet = [](const auto& set) {
     OwnedBlocksEntry res;
     res.uuid_ = set->uuid_;
+    // TODO<joka921> use ::ranges::transform/to_vector.
     for (const auto& block : set->blocks_) {
       res.blockIndices_.push_back(block.blockIdx_);
     }
     return res;
   };
+
+  // First serialize the primary blocks set, and then the other block sets.
   indices.reserve(blocks_->blocks_.size() + otherBlocks_.size());
   indices.push_back(resultFromSingleSet(blocks_));
   for (const auto& set : otherBlocks_) {
@@ -106,9 +115,17 @@ void BlankNodeManager::LocalBlankNodeManager::allocateBlocksFromExplicitIndices(
                     "Explicit reserving of blank node blocks is only allowed "
                     "for empty `LocalBlankNodeManager`s");
 
+  // Lambda that does the registering for a single `Blocks` object.
   auto allocateSingleSet = [this](const OwnedBlocksEntry& entry) {
     auto [blocks, isNew] =
         blankNodeManager_->registerBlocksWithExplicitUuid(entry.uuid_);
+    // If the block is not new, then the `Blocks` with the given UUID have
+    // already been reserved by another `LocalBlankNodeManager` that owns the
+    // same set. If it is new, we are the first, and have to also allocate the
+    // blocks.
+    // TODO<joka921> It is ugly to not have this under a single lock and sublte,
+    // maybe this complete lambda should be a member function of the
+    // `BlankNodeManager` under a single lock.
     if (isNew) {
       for (const auto& idx : entry.blockIndices_) {
         blocks->blocks_.emplace_back(
@@ -117,6 +134,10 @@ void BlankNodeManager::LocalBlankNodeManager::allocateBlocksFromExplicitIndices(
     }
     return blocks;
   };
+
+  // The semantics of the argument is (as enforced by the `getOwnedBlockIndices`
+  // function): The first element is the `blocks_` primarily owned by this
+  // `LocalBlankNodeManager`, The remaining elements are the `otherBlocks_`.
   AD_CONTRACT_CHECK(!indices.empty());
   blocks_ = allocateSingleSet(indices.at(0));
   otherBlocks_.reserve(indices.size() - 1);
@@ -132,23 +153,65 @@ void BlankNodeManager::LocalBlankNodeManager::allocateBlocksFromExplicitIndices(
   }
 }
 
+// _____________________________________________________________________________
 auto BlankNodeManager::createBlockSet() -> std::shared_ptr<Blocks> {
   auto res = std::make_shared<Blocks>(this);
-  // TODO<joka921> Check that uuid is not present?
-  state_.wlock()->managedBlockSets_[res->uuid_] = res;
-  return res;
+  // Guard against the (very very unlikely) case of UUID collision
+  auto lock = state_.wlock();
+  while (true) {
+    auto [it, isNew] = lock->managedBlockSets_.try_emplace(res->uuid_, res);
+    if (isNew) {
+      return res;
+    }
+    // Note: the only realistic way to cover this is by tampering with the UUID
+    // generator.
+    res->uuid_ = lock->uuidGenerator_();
+  }
 }
 
+// _____________________________________________________________________________
 void BlankNodeManager::freeBlockSet(Blocks& blocks) {
-  // TODO<joka921> we have to put EVERYTHING inside the `BlankNodeManager`
-  // into a `synchronized.
+  // We keep the lock the whole time to not make any inconsistent state visible
+  // to the outside world.
   auto lock = state_.wlock();
+  // First unregister the UUID.
   auto it = lock->managedBlockSets_.find(blocks.uuid_);
   AD_CORRECTNESS_CHECK(it != lock->managedBlockSets_.end());
+  // This `if` check guards against a very rare condition where timings AND
+  // UUIDs have to collide. In particular, we expect the value to be expired,
+  // because this function is only called in the destructor of the object that
+  // the `weak_ptr` points to, so after there are no more `shared_ptr`s to this
+  // object.
+  if (it->second.expired()) {
+    lock->managedBlockSets_.erase(it);
+  }
   auto& usedBlockSet = lock->usedBlocksSet_;
   for (const auto& block : blocks.blocks_) {
     AD_CONTRACT_CHECK(usedBlockSet.contains(block.blockIdx_));
     usedBlockSet.erase(block.blockIdx_);
+  }
+}
+
+// _____________________________________________________________________________
+std::pair<std::shared_ptr<BlankNodeManager::Blocks>, bool>
+BlankNodeManager::registerBlocksWithExplicitUuid(boost::uuids::uuid uuid) {
+  auto lock = state_.wlock();
+  // Try to insert a new `nullptr` at the given UUID. If  the insertion
+  // succeeds, we will later emplace a useful value.
+  auto [it, isNew] = lock->managedBlockSets_.try_emplace(
+      uuid, std::shared_ptr<Blocks>(nullptr));
+
+  // The `expired()` might happen in a very rare condition, where deleting of a
+  // `UUID` and its reinsertion race against each other. (I doubt that it can be
+  // observed in correct code outside of unit tests).
+  if (isNew || it->second.expired()) {
+    auto blocks = std::make_shared<Blocks>(this);
+    it->second = blocks;
+    return std::make_pair(std::move(blocks), true);
+  } else {
+    // We have found a preexisting, nonexpired `Blocks` object with the
+    // requested UUID, just return a shared_ptr to the stored `Blocks` object.
+    return std::make_pair(it->second.lock(), true);
   }
 }
 

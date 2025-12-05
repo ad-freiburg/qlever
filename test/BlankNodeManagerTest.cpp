@@ -12,25 +12,25 @@ namespace ad_utility {
 // _____________________________________________________________________________
 TEST(BlankNodeManager, blockAllocationAndFree) {
   BlankNodeManager bnm(0);
-  EXPECT_TRUE(bnm.usedBlocksSet_.rlock()->empty());
+  EXPECT_TRUE(bnm.state_.rlock()->usedBlocksSet_.empty());
 
   {
     // LocalBlankNodeManager allocates a new block
     BlankNodeManager::LocalBlankNodeManager lbnm(&bnm);
     [[maybe_unused]] uint64_t id = lbnm.getId();
-    EXPECT_EQ(bnm.usedBlocksSet_.rlock()->size(), 1);
+    EXPECT_EQ(bnm.state_.rlock()->usedBlocksSet_.size(), 1);
   }
 
   // Once the LocalBlankNodeManager is destroyed, all Blocks allocated through
   // it are freed/removed from the BlankNodeManager's set.
-  EXPECT_TRUE(bnm.usedBlocksSet_.rlock()->empty());
+  EXPECT_TRUE(bnm.state_.rlock()->usedBlocksSet_.empty());
 
   // Mock randomIntGenerator to let the block index generation collide.
-  bnm.randBlockIndex_ = SlowRandomIntGenerator<uint64_t>(0, 1);
+  bnm.state_.wlock()->randBlockIndex_ = SlowRandomIntGenerator<uint64_t>(0, 1);
   [[maybe_unused]] auto _ = bnm.allocateBlock();
   for (int i = 0; i < 30; ++i) {
     auto block = bnm.allocateBlock();
-    bnm.usedBlocksSet_.wlock()->erase(block.blockIdx_);
+    bnm.state_.wlock()->usedBlocksSet_.erase(block.blockIdx_);
   }
 }
 
@@ -39,22 +39,24 @@ TEST(BlankNodeManager, LocalBlankNodeManagerGetID) {
   BlankNodeManager bnm(0);
   auto l = std::make_shared<BlankNodeManager::LocalBlankNodeManager>(&bnm);
 
+  // Getter for the contained blocks.
+  auto blocks = [&l]() -> auto& { return l->blocks_->blocks_; };
   // initially the LocalBlankNodeManager doesn't have any blocks
-  EXPECT_EQ(l->blocks_->size(), 0);
+  EXPECT_EQ(blocks().size(), 0);
 
   // A new Block is allocated, if
   // no blocks are allocated yet
   uint64_t id = l->getId();
-  EXPECT_EQ(l->blocks_->size(), 1);
+  EXPECT_EQ(blocks().size(), 1);
   EXPECT_TRUE(l->containsBlankNodeIndex(id));
   EXPECT_FALSE(l->containsBlankNodeIndex(id + 1));
   EXPECT_FALSE(l->containsBlankNodeIndex(id - 1));
 
   // or the ids of the last block are all used
-  l->blocks_->back().nextIdx_ = id + BlankNodeManager::blockSize_;
+  blocks().back().nextIdx_ = id + BlankNodeManager::blockSize_;
   id = l->getId();
   EXPECT_TRUE(l->containsBlankNodeIndex(id));
-  EXPECT_EQ(l->blocks_->size(), 2);
+  EXPECT_EQ(blocks().size(), 2);
 
   // The `LocalBlankNodeManager` still works when recursively merged.
   std::vector itSelf{l};
@@ -88,7 +90,7 @@ TEST(BlankNodeManager, moveLocalBlankNodeManager) {
     BlankNodeManager::LocalBlankNodeManager l3(&bnm);
     l3 = std::move(l2);
   });
-  EXPECT_TRUE(bnm.usedBlocksSet_.rlock()->empty());
+  EXPECT_TRUE(bnm.state_.rlock()->usedBlocksSet_.empty());
 }
 
 }  // namespace ad_utility

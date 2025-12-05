@@ -1,6 +1,12 @@
-// Copyright 2024, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Moritz Dom (domm@informatik.uni-freiburg.de)
+// Copyright 2024 - 2025 The QLever Authors, in particular:
+//
+// 2024 Moritz Dom <domm@informatik.uni-freiburg.de>, UFR
+// 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_UTIL_BLANKNODEMANAGER_H
 #define QLEVER_SRC_UTIL_BLANKNODEMANAGER_H
@@ -30,7 +36,8 @@ namespace ad_utility {
  */
 class BlankNodeManager {
  public:
-  // Minimum blank node index.
+  // The minimal `BlankNodeIndex` that this manager can assign. All indices `<
+  // minIndex_` are already contained in the index.
   const uint64_t minIndex_;
 
   // Number of indices that make up a single block.
@@ -41,34 +48,52 @@ class BlankNodeManager {
       (ValueId::maxIndex - minIndex_ + 1) / blockSize_;
 
  private:
-  class Blocks;
+  // A necessary forward declaration.
+  struct Blocks;
+
+  // We identify sets of blocks by UUIDs, and therefore need to hash UUIDs`.
   struct UuidHash {
     std::size_t operator()(const boost::uuids::uuid& uuid) const {
       return boost::hash<boost::uuids::uuid>()(uuid);
     }
   };
 
+  // All the data members of this `BlankNodeManager`, wrapped into a struct,
+  // s.t. we can synchronize the access and make the `BlankNodeManager`
+  // threadsafe.
   struct State {
-    // Int Generator yielding random block indices.
+    // Random generator for block indices.
     SlowRandomIntGenerator<uint64_t> randBlockIndex_;
 
-    // A generator for UUIDS of the associated blank node managers
+    // A random generator for UUIDS.
     boost::uuids::random_generator uuidGenerator_;
 
-    // Tracks blocks currently used by instances of `LocalBlankNodeManager`.
+    // Hash set the stores the indices of all the blank node blocks that are
+    // currently reserved by any of the `LocalBlankNodeManager` that are
+    // currently alive.
     HashSet<uint64_t> usedBlocksSet_;
 
+    // Each set of blocks that is currently managed by a `LocalBlankNodeManager`
+    // is assigned a UUID. This map keeps track of the currently active sets,
+    // but does not participate in their (shared) ownership, hence the
+    // `weak_ptr`.
     std::unordered_map<boost::uuids::uuid, std::weak_ptr<Blocks>, UuidHash>
         managedBlockSets_;
 
+    // Constructor, all members except for the block index generator can be
+    // default-constructed.
     explicit State(SlowRandomIntGenerator<uint64_t> randBlockIndex)
         : randBlockIndex_{std::move(randBlockIndex)} {}
   };
+
+  // The actual state variable, wrapped in a `Synchronized` to enforce
+  // threadsafe access.
   Synchronized<State> state_;
-  // A BlankNodeIndex Block of size `blockSize_`.
+
+  // A block of blank node indices.
   class Block {
     // Intentional private constructor, allowing only the BlankNodeManager to
-    // create Blocks (for a `LocalBlankNodeManager`).
+    // create Blocks (which are then passed to a `LocalBlankNodeManager`).
     explicit Block(uint64_t blockIndex, uint64_t startIndex);
     friend class BlankNodeManager;
 
@@ -83,16 +108,20 @@ class BlankNodeManager {
     // The next free index within this block.
     uint64_t nextIdx_;
   };
+
+  // A set of allocated blocks, that is associated with a UUID. On destruction,
+  // all the blocks, as well as the UUID are deallocated in the
+  // `BlankNodeManager` from which the `Blocks` were obtained.
   struct Blocks {
     BlankNodeManager* manager_;
     boost::uuids::uuid uuid_{manager_->state_.wlock()->uuidGenerator_()};
     std::vector<Block> blocks_;
 
-    explicit Blocks(BlankNodeManager* manager) : manager_(manager) {}
+    explicit Blocks(BlankNodeManager* manager) : manager_(manager) {
+      AD_CORRECTNESS_CHECK(manager_ != nullptr);
+    }
     ~Blocks() { manager_->freeBlockSet(*this); }
   };
-
-  // TODO<joka921> make this `ad_utility::HashSet`.
 
  public:
   // Constructor, where `minIndex` is the minimum index such that all managed
@@ -101,10 +130,22 @@ class BlankNodeManager {
   explicit BlankNodeManager(uint64_t minIndex = 0);
   ~BlankNodeManager() = default;
 
+  // Create a new set of blocks with a random UUID that initially contains no
+  // blocks, but is registered (via the UUID) in the `BlankNodeManager`.
   std::shared_ptr<Blocks> createBlockSet();
-  // TODO<joka921> Implement this.
-  std::shared_ptr<Blocks> registerBlocksWithExplicitUuid(
+
+  // If the `uuid` is not yet registered with this `BlankNodeManager`, register
+  // and return a new empty `Blocks` struct (like `createBlockSet()` above, but
+  // with the explicit `uuid`. If the `uuid` is already registered, then return
+  // a `shared_ptr` to the `Blocks` associated with this `uuid`. The `bool` is
+  // true iff the UUID was new, and therefore the `Blocks` are empty. This
+  // functionality is used to reinstate sets of registered blocks when loading
+  // SPARQL UPDATEs or serialized cache results when QLever is started.
+  std::pair<std::shared_ptr<Blocks>, bool> registerBlocksWithExplicitUuid(
       boost::uuids::uuid uuid);
+
+  // Free all the blocks currently contained in the `blocks` and unregister the
+  // associated UUID. This function is called by the `Blocks` destructor.
   void freeBlockSet(Blocks& blocks);
 
   // Manages the blank nodes for a single local vocab.
@@ -141,6 +182,13 @@ class BlankNodeManager {
       }
     }
 
+    // The information required to serialize and deserialize a
+    // `LocalBlankNodeManager`, containing of the `uuid_` and the
+    // `blockIndices_`. Note: We do not store the status of the blocks (how many
+    // of the indices in the block were already assigned), but on
+    // deserialization always behave as if they are completely filled. This
+    // wastes at most one block per `LocalBlankNodeManager` and therefore should
+    // definitely be affordable.
     struct OwnedBlocksEntry {
       boost::uuids::uuid uuid_;
       std::vector<uint64_t> blockIndices_;
@@ -151,9 +199,10 @@ class BlankNodeManager {
     // intermediate results or SPARQL UPDATEs that contain blank nodes on disk.
     std::vector<OwnedBlocksEntry> getOwnedBlockIndices() const;
 
-    // Explicitly allocate the blank node blocks with the given `indices`.
-    // Will throw an exception if any of the requested blocks is already
-    // allocated. For usages see `LocalVocab.h` and `TripleSerializer.h`.
+    // Reinstate the blank node block sets by allocating and registering all the
+    // UUIDs and block indices contained in `indices`. This has to be called on
+    // an empty `LocalBlankNodeManager` with the result of
+    // `getOwnedBlockIndices()`.
     void allocateBlocksFromExplicitIndices(
         const std::vector<OwnedBlocksEntry>& indices);
 
