@@ -280,8 +280,11 @@ TEST_F(BlankNodeManagerTestFixture, explicitBlockAllocation) {
   EXPECT_TRUE(isBlockUsed(*bnm, 10));
 
   // Verify we can't allocate the same block twice
+  auto allocateExplicitly = [&]() {
+    [[maybe_unused]] auto blocks = bnm->allocateExplicitBlock(5);
+  };
   AD_EXPECT_THROW_WITH_MESSAGE(
-      bnm->allocateExplicitBlock(5),
+      allocateExplicitly(),
       ::testing::HasSubstr("has previously already been allocated"));
 }
 

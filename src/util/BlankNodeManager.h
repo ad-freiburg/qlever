@@ -120,9 +120,10 @@ class BlankNodeManager {
       AD_CORRECTNESS_CHECK(manager_ != nullptr);
     }
     ~Blocks() noexcept(false) {
-      throwIfSafe_([this]() { manager_->freeBlockSet(*this); },
-                   "In `freeBlockSet` called from the destructor of a "
-                   "`BlankNodeManager::Blocks` object");
+      throwIfSafe_(
+          [this]() { manager_->freeBlockSet(*this); },
+          std::string_view{"In `freeBlockSet` called from the destructor of a "
+                           "`BlankNodeManager::Blocks` object"});
     }
     // We never want to copy or move `Blocks`, they are only ever to be managed
     // by `shared_ptr`s.
