@@ -235,6 +235,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
       {"metricDistance", &makeMetricDistExpression},
       {"length", &makeLengthExpression},
       {"area", &makeAreaExpression},
+      {"geometryN", &makeGeometryNExpression},
       // Geometric relation functions
       {"sfIntersects", &makeGeoRelationExpression<INTERSECTS>},
       {"sfContains", &makeGeoRelationExpression<CONTAINS>},
