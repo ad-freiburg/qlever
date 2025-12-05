@@ -190,7 +190,7 @@ BlankNodeManager::registerAndAllocateBlockSet(
 
   // The `expired()` might happen in a very rare condition, where deleting of a
   // `UUID` and its reinsertion race against each other.
-  auto ptr = isNew ? it->second.lock() : std::shared_ptr<Blocks>();
+  auto ptr = isNew ? std::shared_ptr<Blocks>() : it->second.lock();
   if (isNew || ptr == nullptr) {
     auto blocks = std::make_shared<Blocks>(this, entry.uuid_);
     it->second = blocks;
