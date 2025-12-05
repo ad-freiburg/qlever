@@ -44,6 +44,15 @@ class Permutation {
                                Enum::SOP, Enum::OPS, Enum::OSP};
   static constexpr auto INTERNAL = {Enum::PSO, Enum::POS};
 
+  template <bool isInternal>
+  static constexpr const auto& all() {
+    if constexpr (isInternal) {
+      return INTERNAL;
+    } else {
+      return ALL;
+    }
+  }
+
   using MetaData = IndexMetaDataMmapView;
   using Allocator = ad_utility::AllocatorWithLimit<Id>;
   using ColumnIndicesRef = CompressedRelationReader::ColumnIndicesRef;
