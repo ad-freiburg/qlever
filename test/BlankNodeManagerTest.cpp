@@ -1,6 +1,12 @@
-// Copyright 2024, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Moritz Dom (domm@informatik.uni-freiburg.de)
+// Copyright 2024 - 2025 The QLever Authors, in particular:
+//
+// 2024 Moritz Dom <domm@informatik.uni-freiburg.de>, UFR
+// 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <gtest/gtest.h>
 
@@ -26,8 +32,8 @@ class BlankNodeManagerTestFixture : public ::testing::Test {
     return std::make_shared<BlankNodeManager::LocalBlankNodeManager>(bnm);
   }
 
-  // Helper to get the blocks from a LocalBlankNodeManager
-  static auto& getBlocks(BlankNodeManager::LocalBlankNodeManager& lbnm) {
+  // Helper to get the primary blocks from a LocalBlankNodeManager
+  static auto& getPrimaryBlocks(BlankNodeManager::LocalBlankNodeManager& lbnm) {
     return lbnm.blocks_->blocks_;
   }
 
@@ -76,7 +82,7 @@ class BlankNodeManagerTestFixture : public ::testing::Test {
       ids.push_back(lbnm.getId());
       // Fill the rest of the block to force allocation of next block
       if (i < numBlocks - 1) {
-        auto& blocks = getBlocks(lbnm);
+        auto& blocks = getPrimaryBlocks(lbnm);
         if (!blocks.empty()) {
           blocks.back().nextIdx_ =
               blocks.back().startIdx_ + BlankNodeManager::blockSize_;
@@ -236,11 +242,10 @@ TEST_F(BlankNodeManagerTestFixture, serializationRoundTrip) {
 
   // Allocate IDs across multiple blocks
   auto originalIds = allocateIdsAcrossBlocks(*lbnm, 3);
-  ASSERT_EQ(getBlocks(*lbnm).size(), 3);
+  ASSERT_EQ(getPrimaryBlocks(*lbnm).size(), 3);
 
   // Serialize
   auto entries = serialize(*lbnm);
-  EXPECT_FALSE(entries.empty());
   EXPECT_EQ(entries.size(), 1);  // Only primary blocks, no merged blocks
   EXPECT_EQ(entries[0].blockIndices_.size(), 3);
 
@@ -260,7 +265,7 @@ TEST_F(BlankNodeManagerTestFixture, serializationRoundTrip) {
   auto newId = lbnm2->getId();
   EXPECT_TRUE(lbnm2->containsBlankNodeIndex(newId));
   // The new ID should be in a new block (primary blocks now has 1 block)
-  EXPECT_EQ(getBlocks(*lbnm2).size(), 1);
+  EXPECT_EQ(getPrimaryBlocks(*lbnm2).size(), 1);
   EXPECT_EQ(getTotalBlockCount(*lbnm2), 4);
 }
 
@@ -318,9 +323,9 @@ TEST_F(BlankNodeManagerTestFixture, uuidManagement) {
   // Destroy one LocalBlankNodeManager
   lbnm1.reset();
 
-  // UUID count should decrease (but need to account for potential weak_ptr
-  // cleanup timing)
-  EXPECT_LE(getManagedUuidCount(*bnm), 3);
+  // UUID count should decrease (the destructor of the `Blocks` struct blocks
+  // until it has been deleted).
+  EXPECT_EQ(getManagedUuidCount(*bnm), 2);
 }
 
 // _____________________________________________________________________________
@@ -391,7 +396,7 @@ TEST_F(BlankNodeManagerTestFixture, deserializationWithMergedBlocks) {
   EXPECT_TRUE(entriesC[0].blockIndices_.empty());  // Primary is empty
   EXPECT_EQ(entriesC[1].blockIndices_.size(), 2);  // First set
   EXPECT_EQ(entriesC[2].blockIndices_.size(), 2);  // Second set
-  EXPECT_EQ(getBlocks(*lbnmC).size(), 0);          // Primary blocks is empty
+  EXPECT_EQ(getPrimaryBlocks(*lbnmC).size(), 0);   // Primary blocks is empty
   EXPECT_EQ(getTotalBlockCount(*lbnmC), 4);        // Total of 4 blocks
 
   // Verify all IDs from both A and B are contained in C
@@ -413,10 +418,11 @@ TEST_F(BlankNodeManagerTestFixture, idAllocationAfterDeserialization) {
 
   // The next ID should come from a NEW block in primary blocks
   // (deserialized blocks are in otherBlocks_)
-  EXPECT_EQ(getBlocks(*lbnm2).size(), 0);  // Primary blocks empty before getId
+  EXPECT_EQ(getPrimaryBlocks(*lbnm2).size(),
+            0);  // Primary blocks empty before getId
   [[maybe_unused]] auto newId = lbnm2->getId();
-  EXPECT_EQ(getBlocks(*lbnm2).size(), 1);    // New block in primary
-  EXPECT_EQ(getTotalBlockCount(*lbnm2), 2);  // 1 deserialized + 1 new
+  EXPECT_EQ(getPrimaryBlocks(*lbnm2).size(), 1);  // New block in primary
+  EXPECT_EQ(getTotalBlockCount(*lbnm2), 2);       // 1 deserialized + 1 new
 
   // The containsBlankNodeIndex test doesn't apply anymore since we don't
   // have direct access to the partially filled blocks in otherBlocks_

@@ -9,6 +9,8 @@
 // which can be found in the `LICENSE` file at the root of the QLever project.
 #include "util/BlankNodeManager.h"
 
+#include <absl/cleanup/cleanup.h>
+
 #include "util/Exception.h"
 
 namespace ad_utility {
@@ -128,16 +130,23 @@ void BlankNodeManager::LocalBlankNodeManager::allocateBlocksFromExplicitIndices(
 // _____________________________________________________________________________
 auto BlankNodeManager::createBlockSet() -> std::shared_ptr<Blocks> {
   // Guard against the (very very unlikely) case of UUID collision
-  auto lock = state_.wlock();
+  auto lockOpt = std::optional{state_.wlock()};
+  auto& lock = lockOpt.value();
   auto uuid = lock->uuidGenerator_();
-  auto res = std::make_shared<Blocks>(this, std::move(uuid));
-  auto [it, isNew] = lock->managedBlockSets_.try_emplace(uuid, res);
-  AD_CORRECTNESS_CHECK(isNew,
-                       "You encountered a UUID collision inside "
-                       "`BlankNodeManager::createBlockSet()`. Consider "
-                       "yourself to be very (un)lucky!");
-  it->second = res;
-  return res;
+  auto [it, isNew] =
+      lock->managedBlockSets_.try_emplace(uuid, std::shared_ptr<Blocks>());
+  if (isNew) {
+    auto res = std::make_shared<Blocks>(this, uuid);
+    it->second = res;
+    return res;
+  } else {
+    // We unfortunately cannot make this an `AD_CORRECTNESS_CHECK`, because then
+    // we might have a deadlock wrt the `Blocks` destructor.
+    throw std::runtime_error{
+        "You encountered a UUID collision inside "
+        "`BlankNodeManager::createBlockSet()`. Consider "
+        "yourself to be very (un)lucky!"};
+  }
 }
 
 // _____________________________________________________________________________
@@ -173,7 +182,8 @@ BlankNodeManager::registerAndAllocateBlockSet(
     const LocalBlankNodeManager::OwnedBlocksEntry& entry) {
   // We keep the lock the whole time to avoid race conditions between
   // registering the UUID and allocating the blocks.
-  auto lock = state_.wlock();
+  auto lockOpt = std::optional{state_.wlock()};
+  auto& lock = lockOpt.value();
 
   // Try to insert a new `nullptr` at the given UUID. If the insertion
   // succeeds, we will later emplace a useful value.
@@ -185,6 +195,10 @@ BlankNodeManager::registerAndAllocateBlockSet(
   auto ptr = isNew ? std::shared_ptr<Blocks>() : it->second.lock();
   if (isNew || ptr == nullptr) {
     auto blocks = std::make_shared<Blocks>(this, entry.uuid_);
+    // At the end of this scope is a return. But in the case of an exception
+    // (e.g. if the `AD_CONTRACT_CHECK` below fires, we have to unlock, before
+    // the destructor of the `blocks` runs, otherwise we are in a deadlock.
+    auto cleanup = absl::Cleanup{[&lockOpt]() { lockOpt.reset(); }};
     it->second = blocks;
     // If the block is new, we need to allocate all the specified block indices.
     for (const auto& idx : entry.blockIndices_) {
