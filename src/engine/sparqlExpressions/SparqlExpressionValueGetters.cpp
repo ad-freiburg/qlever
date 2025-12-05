@@ -591,3 +591,18 @@ template struct GeometryInfoValueGetter<ad_utility::NumGeometries>;
 template struct GeometryInfoValueGetter<ad_utility::MetricLength>;
 template struct GeometryInfoValueGetter<ad_utility::MetricArea>;
 }  // namespace sparqlExpression::detail
+
+//______________________________________________________________________________
+std::optional<int64_t> IntValueGetter::operator()(
+    const LiteralOrIri&, const EvaluationContext*) const {
+  return std::nullopt;
+}
+
+//______________________________________________________________________________
+std::optional<int64_t> IntValueGetter::operator()(
+    ValueId id, const EvaluationContext*) const {
+  if (id.getDatatype() == Datatype::Int) {
+    return id.getInt();
+  }
+  return std::nullopt;
+};

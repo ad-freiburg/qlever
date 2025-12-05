@@ -58,6 +58,8 @@ CPP_concept WktCollectionType =
               MultiPolygon<CoordType>, Collection<CoordType>>;
 
 static_assert(!std::is_same_v<Line<CoordType>, MultiPoint<CoordType>>);
+static_assert(!isVector<Line<CoordType>>);
+static_assert(isVector<Collection<CoordType>>);
 
 // Removes the datatype and quotation marks from a given literal
 inline std::string removeDatatype(const std::string_view& wkt) {
@@ -492,6 +494,68 @@ struct UtilGeomToWktVisitor {
 };
 
 static constexpr UtilGeomToWktVisitor utilGeomToWkt;
+
+// Helper to extract the n-th geometry from a parsed `pb_util` geometry. Note
+// that this is 1-indexed and non-collection types return themselves at index 1.
+struct GeometryNVisitor {
+  // Visitor for collection types.
+  CPP_template(typename T)(
+      requires WktCollectionType<T>) std::optional<ParsedWkt>
+  operator()(const T& geom, int64_t n) const {
+    // Index range check.
+    if (n < 1 || n - 1 >= static_cast<int64_t>(geom.size())) {
+      return std::nullopt;
+    }
+    // If the geometry type is a collection (thus holds `AnyGeometry`
+    // containers), strip the `AnyGeometry` container and convert it to a
+    // `ParsedWkt` variant.
+    if constexpr (std::is_same_v<T, DCollection>) {
+      return visitAnyGeometry(
+          [](auto& contained) { return ParsedWkt{std::move(contained)}; },
+          geom.at(n - 1));
+    } else {
+      return geom.at(n - 1);
+    }
+  }
+
+  // Visitor for single geometry types.
+  CPP_template(typename T)(
+      requires WktSingleGeometryType<T>) std::optional<ParsedWkt>
+  operator()(const T& geom, int64_t n) const {
+    // For non collection types, only index 1 is defined and returns the
+    // geometry itself.
+    if (n == 1) {
+      return geom;
+    }
+    return std::nullopt;
+  }
+
+  // Visitor for `ParsedWkt` variant.
+  std::optional<ParsedWkt> operator()(const ParsedWkt& geom, int64_t n) const {
+    return std::visit(
+        [n](const auto& contained) { return GeometryNVisitor{}(contained, n); },
+        geom);
+  }
+
+  // Visitor for `std::optional`.
+  template <typename T>
+  std::optional<ParsedWkt> operator()(const std::optional<T>& geom,
+                                      int64_t n) const {
+    if (!geom.has_value()) {
+      return std::nullopt;
+    }
+    return GeometryNVisitor{}(geom.value(), n);
+  }
+
+  // Visitor for `GeoPointOrWkt`.
+  std::optional<ParsedWkt> operator()(const GeoPointOrWkt& geom,
+                                      int64_t n) const {
+    auto [type, parsed] = parseGeoPointOrWkt(geom);
+    return GeometryNVisitor{}(parsed, n);
+  }
+};
+
+static constexpr GeometryNVisitor getGeometryN;
 
 }  // namespace ad_utility::detail
 
