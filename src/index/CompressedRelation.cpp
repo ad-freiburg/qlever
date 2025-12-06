@@ -10,6 +10,8 @@
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "engine/idTable/IdTable.h"
 #include "global/RuntimeParameters.h"
+#include "index/CompressedRelationHelpersImpl.h"
+#include "index/CompressedRelationPermutationWriterImpl.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/LocatedTriples.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
@@ -29,14 +31,6 @@ template <typename T>
 static auto getBeginAndEnd(T& range) {
   return std::pair{ql::ranges::begin(range), ql::ranges::end(range)};
 }
-
-namespace {
-// Helper function to make a row from `IdTable` easier to compare. This ties
-// the cells of the given row with the indices 0, 1 and 2.
-auto tieFirstThreeColumns = [](const auto& row) {
-  return std::tie(row[0], row[1], row[2]);
-};
-}  // namespace
 
 // TODO @realHannes:
 // Create a separate header file CompressedRelationMetadata for all the
@@ -1544,86 +1538,11 @@ void CompressedRelationWriter::addBlockForLargeRelation(Id col0Id,
                         false);
 }
 
-namespace {
-// Collect elements of type `T` in batches of size 100'000 and apply the
-// `Function` to each batch. For the last batch (which might be smaller)  the
-// function is applied in the destructor.
-CPP_template(typename T, typename Function)(
-    requires ad_utility::InvocableWithExactReturnType<
-        Function, void, std::vector<T>&&>) struct Batcher {
-  Function function_;
-  size_t blocksize_;
-  std::vector<T> vec_;
-
-  Batcher(Function function, size_t blocksize)
-      : function_{std::move(function)}, blocksize_{blocksize} {}
-  void operator()(T t) {
-    vec_.push_back(std::move(t));
-    if (vec_.size() > blocksize_) {
-      function_(std::move(vec_));
-      vec_.clear();
-      vec_.reserve(blocksize_);
-    }
-  }
-  ~Batcher() {
-    if (!vec_.empty()) {
-      function_(std::move(vec_));
-    }
-  }
-  // No copy or move operations (neither needed nor easy to get right).
-  Batcher(const Batcher&) = delete;
-  Batcher& operator=(const Batcher&) = delete;
-};
-
-using MetadataCallback = CompressedRelationWriter::MetadataCallback;
-
-// A class that is called for all pairs of `CompressedRelationMetadata` for
-// the same `col0Id` and the "twin permutations" (e.g. PSO and POS). The
-// multiplicity of the last column is exchanged and then the metadata are
-// passed on to the respective `MetadataCallback`.
-class MetadataWriter {
- private:
-  using B = Batcher<CompressedRelationMetadata, MetadataCallback>;
-  B batcher1_;
-  B batcher2_;
-
- public:
-  MetadataWriter(MetadataCallback callback1, MetadataCallback callback2,
-                 size_t blocksize)
-      : batcher1_{std::move(callback1), blocksize},
-        batcher2_{std::move(callback2), blocksize} {}
-  void operator()(CompressedRelationMetadata md1,
-                  CompressedRelationMetadata md2) {
-    md1.multiplicityCol2_ = md2.multiplicityCol1_;
-    md2.multiplicityCol2_ = md1.multiplicityCol1_;
-    batcher1_(md1);
-    batcher2_(md2);
-  }
-};
-
-// A simple class to count distinct IDs in a sorted sequence.
-class DistinctIdCounter {
-  Id lastSeen_ = std::numeric_limits<Id>::max();
-  size_t count_ = 0;
-
- public:
-  void operator()(Id id) {
-    count_ += static_cast<size_t>(id != lastSeen_);
-    lastSeen_ = id;
-  }
-  size_t getAndReset() {
-    size_t count = count_;
-    lastSeen_ = std::numeric_limits<Id>::max();
-    count_ = 0;
-    return count;
-  }
-};
-}  // namespace
-
 // __________________________________________________________________________
 template <typename T>
 CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
     Id col0Id, T&& sortedBlocks) {
+  using namespace compressedRelationHelpers;
   DistinctIdCounter distinctCol1Counter;
 
   // Buffer used to ensure the invariant that equal triples (when disregarding
@@ -1692,230 +1611,10 @@ auto CompressedRelationWriter::createPermutationPair(
     qlever::KeyOrder permutation,
     const std::vector<std::function<void(const IdTableStatic<0>&)>>&
         perBlockCallbacks) -> PermutationPairResult {
-  auto [c0, c1, c2, c3] = permutation.keys();
-  // This logic only works for permutations that have the graph as the fourth
-  // column.
-  AD_CORRECTNESS_CHECK(c3 == 3);
-  size_t numDistinctCol0 = 0;
-  auto& writer1 = writerAndCallback1.writer_;
-  auto& writer2 = writerAndCallback2.writer_;
-  const size_t blocksize = writer1.blocksize();
-  AD_CORRECTNESS_CHECK(writer2.blocksize() == writer1.blocksize());
-  const size_t numColumns = writer1.numColumns();
-  AD_CORRECTNESS_CHECK(writer1.numColumns() == writer2.numColumns());
-  MetadataWriter writeMetadata{std::move(writerAndCallback1.callback_),
-                               std::move(writerAndCallback2.callback_),
-                               writer1.blocksize()};
-
-  static constexpr size_t c1Idx = 1;
-  static constexpr size_t c2Idx = 2;
-
-  // A queue for the callbacks that have to be applied for each triple.
-  // The second argument is the number of threads. It is crucial that this
-  // queue is single threaded.
-  ad_utility::TaskQueue blockCallbackQueue{
-      3, 1, "Additional callbacks during permutation building"};
-
-  ad_utility::Timer inputWaitTimer{ad_utility::Timer::Stopped};
-  ad_utility::Timer largeTwinRelationTimer{ad_utility::Timer::Stopped};
-  ad_utility::Timer blockCallbackTimer{ad_utility::Timer::Stopped};
-
-  // Iterate over the vector and identify relation boundaries, where a
-  // relation is the sequence of sortedTriples with equal first component. For
-  // PSO and POS, this is a predicate (of which "relation" is a synonym).
-  std::optional<Id> col0IdCurrentRelation;
-  auto alloc = ad_utility::makeUnlimitedAllocator<Id>();
-  // TODO<joka921> Use call_fixed_size if there is benefit to it.
-  IdTableStatic<0> relation{numColumns, alloc};
-  size_t numBlocksCurrentRel = 0;
-  auto compare = [](const auto& a, const auto& b) {
-    return std::tie(a[c1Idx], a[c2Idx], a[ADDITIONAL_COLUMN_GRAPH_ID]) <
-           std::tie(b[c1Idx], b[c2Idx], b[ADDITIONAL_COLUMN_GRAPH_ID]);
-  };
-  // TODO<joka921> Use `CALL_FIXED_SIZE`.
-  ad_utility::CompressedExternalIdTableSorter<decltype(compare), 0>
-      twinRelationSorter(
-          basename + ".twin-twinRelationSorter", numColumns, 4_GB, alloc,
-          ad_utility::DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE, compare);
-
-  DistinctIdCounter distinctCol1Counter;
-  auto addBlockForLargeRelation = [&numBlocksCurrentRel, &writer1,
-                                   &col0IdCurrentRelation, &relation,
-                                   &twinRelationSorter, &blocksize] {
-    if (relation.empty()) {
-      return;
-    }
-    auto twinRelation = relation.asStaticView<0>();
-    twinRelation.swapColumns(c1Idx, c2Idx);
-    for (const auto& row : twinRelation) {
-      twinRelationSorter.push(row);
-    }
-    writer1.addBlockForLargeRelation(col0IdCurrentRelation.value(),
-                                     std::move(relation).toDynamic());
-    relation.clear();
-    relation.reserve(blocksize);
-    ++numBlocksCurrentRel;
-  };
-
-  // Set up the handling of small relations for the twin permutation.
-  // A complete block of them is handed from `writer1` to the following lambda
-  // (via the `smallBlocksCallback_` mechanism. The lambda the resorts the
-  // block and feeds it to `writer2`.)
-  auto addBlockOfSmallRelationsToSwitched = [&writer2](IdTable relation) {
-    // We don't use the parallel twinRelationSorter to create the twin
-    // relation as its overhead is far too high for small relations.
-    relation.swapColumns(c1Idx, c2Idx);
-
-    // We only need to sort by the columns of the triple + the graph
-    // column, not the additional payload. Note: We could also use
-    // `compareWithoutLocalVocab` to compare the IDs cheaper, but this
-    // sort is far from being a performance bottleneck.
-    auto compare = [](const auto& a, const auto& b) {
-      return std::tie(a[0], a[1], a[2], a[3]) <
-             std::tie(b[0], b[1], b[2], b[3]);
-    };
-    ql::ranges::sort(relation, compare);
-    AD_CORRECTNESS_CHECK(!relation.empty());
-    // Note: it is important that we store these two IDs before moving the
-    // `relation`, because the evaluation order of function arguments is
-    // unspecified.
-    auto firstCol0 = relation.at(0, 0);
-    auto lastCol0 = relation.at(relation.numRows() - 1, 0);
-    writer2.compressAndWriteBlock(firstCol0, lastCol0, std::move(relation),
-                                  false);
-  };
-
-  writer1.smallBlocksCallback_ = addBlockOfSmallRelationsToSwitched;
-
-  auto finishRelation = [&numDistinctCol0, &twinRelationSorter, &writer2,
-                         &writer1, &numBlocksCurrentRel, &col0IdCurrentRelation,
-                         &relation, &distinctCol1Counter,
-                         &addBlockForLargeRelation, &blocksize, &writeMetadata,
-                         &largeTwinRelationTimer]() {
-    ++numDistinctCol0;
-    if (numBlocksCurrentRel > 0 || static_cast<double>(relation.numRows()) >
-                                       0.8 * static_cast<double>(blocksize)) {
-      // The relation is large;
-      addBlockForLargeRelation();
-      auto md1 = writer1.finishLargeRelation(distinctCol1Counter.getAndReset());
-      largeTwinRelationTimer.cont();
-      auto md2 = writer2.addCompleteLargeRelation(
-          col0IdCurrentRelation.value(),
-          twinRelationSorter.getSortedBlocks(blocksize));
-      largeTwinRelationTimer.stop();
-      twinRelationSorter.clear();
-      writeMetadata(md1, md2);
-    } else {
-      // Small relations are written in one go.
-      [[maybe_unused]] auto md1 = writer1.addSmallRelation(
-          col0IdCurrentRelation.value(), distinctCol1Counter.getAndReset(),
-          relation.asStaticView<0>());
-      // We don't need to do anything for the twin permutation and writer2,
-      // because we have set up `writer1.smallBlocksCallback_` to do that work
-      // for us (see above).
-    }
-    relation.clear();
-    numBlocksCurrentRel = 0;
-  };
-  // All columns n the order in which they have to be added to
-  // the relation.
-  std::vector<ColumnIndex> permutedColIndices{c0, c1, c2};
-  for (size_t colIdx = 3; colIdx < numColumns; ++colIdx) {
-    permutedColIndices.push_back(colIdx);
-  }
-  inputWaitTimer.cont();
-  size_t numTriplesProcessed = 0;
-  ad_utility::ProgressBar progressBar{numTriplesProcessed, "Triples sorted: "};
-  for (auto& block : AD_FWD(sortedTriples)) {
-    AD_CORRECTNESS_CHECK(block.numColumns() == numColumns);
-    inputWaitTimer.stop();
-    // This only happens when the index is completely empty.
-    if (block.empty()) {
-      continue;
-    }
-    auto firstCol = block.getColumn(c0);
-    auto permutedCols = block.asColumnSubsetView(permutedColIndices);
-    if (!col0IdCurrentRelation.has_value()) {
-      col0IdCurrentRelation = firstCol[0];
-    }
-    // TODO<C++23> Use `views::zip`
-    for (size_t idx : ad_utility::integerRange(block.numRows())) {
-      Id col0Id = firstCol[idx];
-      decltype(auto) curRemainingCols = permutedCols[idx];
-
-      if (col0Id != col0IdCurrentRelation) {
-        finishRelation();
-        col0IdCurrentRelation = col0Id;
-      }
-
-      // Check if we need to create a new block before adding the current
-      // triple. We create a new block if:
-      // 1. The relation buffer is at the block size limit, AND
-      // 2. The current triple has different first three columns than the last
-      //    triple in the buffer (to ensure equal triples stay in same block)
-      AD_CORRECTNESS_CHECK(blocksize > 0);
-      if (relation.size() >= blocksize) {
-        // Compare first three columns of current triple with last buffered
-        // triple
-        const auto& lastBufferedRow = relation.back();
-        if (tieFirstThreeColumns(curRemainingCols) !=
-            tieFirstThreeColumns(lastBufferedRow)) {
-          addBlockForLargeRelation();
-        }
-      }
-
-      distinctCol1Counter(curRemainingCols[c1Idx]);
-      relation.push_back(curRemainingCols);
-
-      ++numTriplesProcessed;
-      if (progressBar.update()) {
-        AD_LOG_INFO << progressBar.getProgressString() << std::flush;
-      }
-    }
-    // Call each of the `perBlockCallbacks` for the current block.
-    blockCallbackTimer.cont();
-    blockCallbackQueue.push(
-        [block =
-             std::make_shared<std::decay_t<decltype(block)>>(std::move(block)),
-         &perBlockCallbacks]() {
-          for (auto& callback : perBlockCallbacks) {
-            callback(*block);
-          }
-        });
-    blockCallbackTimer.stop();
-    inputWaitTimer.cont();
-  }
-  AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
-  inputWaitTimer.stop();
-  if (!relation.empty() || numBlocksCurrentRel > 0) {
-    finishRelation();
-  }
-
-  writer1.finish();
-  writer2.finish();
-  blockCallbackTimer.cont();
-  blockCallbackQueue.finish();
-  blockCallbackTimer.stop();
-  AD_LOG_TIMING << "Time spent waiting for the input "
-                << ad_utility::Timer::toSeconds(inputWaitTimer.msecs()) << "s"
-                << std::endl;
-  AD_LOG_TIMING << "Time spent waiting for writer1's queue "
-                << ad_utility::Timer::toSeconds(
-                       writer1.blockWriteQueueTimer_.msecs())
-                << "s" << std::endl;
-  AD_LOG_TIMING << "Time spent waiting for writer2's queue "
-                << ad_utility::Timer::toSeconds(
-                       writer2.blockWriteQueueTimer_.msecs())
-                << "s" << std::endl;
-  AD_LOG_TIMING << "Time spent waiting for large twin relations "
-                << ad_utility::Timer::toSeconds(largeTwinRelationTimer.msecs())
-                << "s" << std::endl;
-  AD_LOG_TIMING
-      << "Time spent waiting for triple callbacks (e.g. the next sorter) "
-      << ad_utility::Timer::toSeconds(blockCallbackTimer.msecs()) << "s"
-      << std::endl;
-  return {numDistinctCol0, std::move(writer1).getFinishedBlocks(),
-          std::move(writer2).getFinishedBlocks()};
+  PermutationWriter permutationWriter{
+      basename, std::move(writerAndCallback1), std::move(writerAndCallback2),
+      std::move(permutation), perBlockCallbacks};
+  return permutationWriter.writePermutation(std::move(sortedTriples));
 }
 
 // _____________________________________________________________________________

@@ -40,6 +40,11 @@ struct ColumnIndexAndTypeInfo {
   // Equality comparison, mostly used for testing.
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(ColumnIndexAndTypeInfo,
                                               columnIndex_, mightContainUndef_)
+  // Serialization for ColumnIndexAndTypeInfo.
+  AD_SERIALIZE_FRIEND_FUNCTION(ColumnIndexAndTypeInfo) {
+    serializer | arg.columnIndex_;
+    serializer | arg.mightContainUndef_;
+  }
 };
 
 // Return a `ColumnIndexAndType` info with the given `columnIndex` that is

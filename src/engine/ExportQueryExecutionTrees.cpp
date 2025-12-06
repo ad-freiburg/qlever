@@ -547,7 +547,7 @@ ExportQueryExecutionTrees::handleIriOrLiteral(
     }
     return ad_utility::triple_component::Literal::fromStringRepresentation(
         replaceAnglesByQuotes(
-            std::move(word.getIri().toStringRepresentation())));
+            std::move(word.getIri()).toStringRepresentation()));
   }
   AD_CORRECTNESS_CHECK(word.isLiteral());
   if (onlyReturnLiteralsWithXsdString) {
