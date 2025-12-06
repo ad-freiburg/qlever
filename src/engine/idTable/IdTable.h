@@ -773,6 +773,29 @@ class IdTable {
         });
   }
 
+  template <typename Table>
+  void insertSubsetAtEnd(const Table& table,
+                         const std::vector<size_t>& indices) {
+    AD_CORRECTNESS_CHECK(table.numColumns() == numColumns());
+    const size_t numInserted = indices.size();
+    if (numInserted == 0) return;
+
+    const size_t srcSize = table.size();
+    AD_EXPENSIVE_CHECK(ql::ranges::all_of(
+        indices, [srcSize](size_t idx) { return idx < srcSize; }));
+    const size_t oldSize = size();
+    resize(numRows() + numInserted);
+    // For each column, copy the requested rows into the reserved tail.
+    for (size_t col = 0; col < numColumns(); ++col) {
+      auto destination = getColumn(col);
+      auto source = table.getColumn(col);
+
+      for (size_t k = 0; k < numInserted; ++k) {
+        destination[oldSize + k] = source[indices[k]];
+      }
+    }
+  }
+
   // Check whether two `IdTables` have the same content. Mostly used for unit
   // testing.
   CPP_template(typename = void)(requires(!isView)) bool operator==(

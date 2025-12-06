@@ -56,6 +56,17 @@ class CopyableIdTable : public TableImpl<N> {
 using IntOrId = std::variant<int64_t, Id>;
 using VectorTable = std::vector<std::vector<IntOrId>>;
 
+// Helper: construct a single-column VectorTable containing the inclusive
+// integer range [a, b]. If a > b, returns an empty table.
+static inline VectorTable makeRangeVectorTable(size_t a, size_t b) {
+  VectorTable vt;
+  if (a > b) return vt;
+  for (size_t i = a; i <= b; ++i) {
+    vt.push_back({IntOrId(static_cast<int64_t>(i))});
+  }
+  return vt;
+}
+
 /*
  * Return an 'IdTable' with the given `content` by applying the
  * `transformation` to each of them. All rows of `content` must have the
@@ -79,6 +90,18 @@ IdTable makeIdTableFromVector(const VectorTable& content,
     }
   }
   return result;
+}
+
+// Create IdTables from a vector of VectorTables, where each VectorTable
+// represents a block
+inline std::vector<IdTable> createLazyIdTables(
+    const std::vector<VectorTable>& blocks) {
+  std::vector<IdTable> tables;
+  tables.reserve(blocks.size());
+  for (const auto& block : blocks) {
+    tables.push_back(makeIdTableFromVector(block, ad_utility::testing::IntId));
+  }
+  return tables;
 }
 
 // Similar to `makeIdTableFromVector` (see above), but returns a GMock
