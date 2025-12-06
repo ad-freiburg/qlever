@@ -212,9 +212,10 @@ struct alignas(256) ItemMapManager {
 struct LangtagAndTriple {
   std::string langtag_;
   Triple triple_;
-  // Words extracted from the literal object (if any). Each word will generate
-  // an additional triple `<literal> ql:has-word "word"`.
-  std::vector<std::string> words_;
+  // Words extracted from the literal object (if any) with their term
+  // frequencies. Each word will generate an additional triple
+  // `<literal> ql:has-word "word"` with the term frequency as the graph ID.
+  ad_utility::HashMap<std::string, size_t> wordFrequencies_;
 };
 
 /**
@@ -290,7 +291,7 @@ auto getIdMapLambdas(
       auto lt = indexPtr->tripleToInternalRepresentation(AD_FWD(tr));
       // Reserve space: 1 original + 2 language tag triples + word triples.
       OptionalIds res;
-      res.reserve(3 + lt.words_.size());
+      res.reserve(3 + lt.wordFrequencies_.size());
       // get Ids for the actual triple and store them in the result.
       res.push_back(map.getId(lt.triple_));
       static_assert(NumColumnsIndexBuilding == 4,
@@ -329,24 +330,24 @@ auto getIdMapLambdas(
       // Add ql:has-word triples for each word in the literal.
       // The subject of these triples is the literal (object of the original
       // triple), not the subject of the original triple.
-      // The graph ID is the 1-indexed position of the word in the literal.
-      if (!lt.words_.empty()) {
+      // The graph ID is the term frequency of the word in the literal.
+      if (!lt.wordFrequencies_.empty()) {
         auto hasWordPredId = map.getId(TripleComponent{
             ad_utility::triple_component::Iri::fromIriref(HAS_WORD_PREDICATE)});
-        for (size_t i = 0; i < lt.words_.size(); ++i) {
-          const auto& word = lt.words_[i];
+        for (const auto& [word, termFrequency] : lt.wordFrequencies_) {
           // Create triple: <literal> ql:has-word "word"
-          // The graph ID is the 1-indexed position of the word in the literal.
+          // The graph ID is the term frequency of the word in the literal.
           auto wordId = map.getId(TripleComponent{
               ad_utility::triple_component::Literal::fromEscapedRdfLiteral(
                   absl::StrCat("\"", word, "\""))});
-          auto wordPosition = Id::makeFromInt(static_cast<int64_t>(i + 1));
+          auto termFrequencyId =
+              Id::makeFromInt(static_cast<int64_t>(termFrequency));
           res.push_back(
-              IdTriple{spoIds[2], hasWordPredId, wordId, wordPosition});
+              IdTriple{spoIds[2], hasWordPredId, wordId, termFrequencyId});
         }
         // Update the counter for the number of ql:has-word triples.
         if (numHasWordTriples != nullptr) {
-          numHasWordTriples->fetch_add(lt.words_.size(),
+          numHasWordTriples->fetch_add(lt.wordFrequencies_.size(),
                                        std::memory_order_relaxed);
         }
       }

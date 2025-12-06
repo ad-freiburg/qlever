@@ -1249,12 +1249,13 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
     if (lit.hasLanguageTag()) {
       result.langtag_ = std::string(asStringViewUnsafe(lit.getLanguageTag()));
     }
-    // Extract words from the literal content for ql:has-word triples.
+    // Extract words from the literal content for ql:has-word triples and
+    // count their term frequencies.
     if (addHasWordTriples_) {
       std::string_view content = asStringViewUnsafe(lit.getContent());
       for (auto&& word :
            tokenizeAndNormalizeText(content, vocab_.getLocaleManager())) {
-        result.words_.push_back(std::move(word));
+        ++result.wordFrequencies_[std::move(word)];
       }
     }
   }
