@@ -263,8 +263,10 @@ auto getIdMapLambdas(
     // currently fail without it.
     itemArray[j]->getId(TripleComponent{
         ad_utility::triple_component::Iri::fromIriref(LANGUAGE_PREDICATE)});
-    itemArray[j]->getId(TripleComponent{
-        ad_utility::triple_component::Iri::fromIriref(HAS_WORD_PREDICATE)});
+    if (indexPtr->addHasWordTriples()) {
+      itemArray[j]->getId(TripleComponent{
+          ad_utility::triple_component::Iri::fromIriref(HAS_WORD_PREDICATE)});
+    }
   }
   using IdTriple = std::array<Id, NumColumnsIndexBuilding>;
   using OptionalIds = std::vector<std::optional<IdTriple>>;
