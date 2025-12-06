@@ -7,6 +7,7 @@
 
 #include <absl/strings/str_join.h>
 
+#include <atomic>
 #include <cstdio>
 #include <future>
 #include <numeric>
@@ -514,6 +515,8 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
 
   ad_utility::CachingMemoryResource cachingMemoryResource;
   ItemAlloc itemAlloc(&cachingMemoryResource);
+  // Counter for the number of ql:has-word triples created.
+  std::atomic<size_t> numHasWordTriples = 0;
   while (!parserExhausted) {
     size_t actualCurrentPartialSize = 0;
 
@@ -534,9 +537,9 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
           // get the Ids for the original triple and the possibly added language
           // Tag triples using the provided HashMaps via itemArray. See
           // documentation of the function for more details
-          getIdMapLambdas<NUM_PARALLEL_ITEM_MAPS>(&itemArray, linesPerPartial,
-                                                  &(vocab_.getCaseComparator()),
-                                                  this, itemAlloc));
+          getIdMapLambdas<NUM_PARALLEL_ITEM_MAPS>(
+              &itemArray, linesPerPartial, &(vocab_.getCaseComparator()), this,
+              itemAlloc, addHasWordTriples_ ? &numHasWordTriples : nullptr));
 
       while (auto opt = p.getNextValue()) {
         numTriplesParsedTimer.cont();
@@ -602,6 +605,10 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
   AD_LOG_INFO << "Number of triples created (including QLever-internal ones): "
               << (*idTriples.wlock())->size() << " [may contain duplicates]"
               << std::endl;
+  if (addHasWordTriples_) {
+    AD_LOG_INFO << "Number of `ql:has-word` triples created: "
+                << numHasWordTriples.load() << std::endl;
+  }
   AD_LOG_INFO << "Number of partial vocabularies created: " << numFiles
               << std::endl;
 

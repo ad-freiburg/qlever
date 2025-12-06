@@ -9,6 +9,8 @@
 
 #include <absl/strings/str_cat.h>
 
+#include <atomic>
+
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/memory_resource.h"
 #include "global/Constants.h"
@@ -204,13 +206,14 @@ struct alignas(256) ItemMapManager {
   const TripleComponentComparator* comparator_ = nullptr;
 };
 
-/// Combines a triple (three strings) together with the (possibly empty)
-/// language tag of its object and words extracted from literal objects.
+// A triple together with the language tag of its object (if any), and, if the
+// object is a literal, the individual words and how often each of them occurs
+// in the literal.
 struct LangtagAndTriple {
   std::string langtag_;
   Triple triple_;
   // Words extracted from the literal object (if any). Each word will generate
-  // an additional triple: <subject> ql:has-word "word".
+  // an additional triple `<literal> ql:has-word "word"`.
   std::vector<std::string> words_;
 };
 
@@ -246,7 +249,8 @@ template <size_t NumThreads, typename IndexPtr>
 auto getIdMapLambdas(
     std::array<std::optional<ItemMapManager>, NumThreads>* itemArrayPtr,
     size_t maxNumberOfTriples, const TripleComponentComparator* comp,
-    IndexPtr* indexPtr, ItemAlloc alloc) {
+    IndexPtr* indexPtr, ItemAlloc alloc,
+    std::atomic<size_t>* numHasWordTriples = nullptr) {
   // that way the different ids won't interfere
   auto& itemArray = *itemArrayPtr;
   for (size_t j = 0; j < NumThreads; ++j) {
@@ -279,9 +283,10 @@ auto getIdMapLambdas(
    *   and ql:has-word triples for words in the literal object.
    * - All Ids are assigned according to itemArray[idx]
    */
-  const auto itemMapLamdaCreator = [&itemArray, indexPtr](const size_t idx) {
-    return [&map = *itemArray[idx],
-            indexPtr](QL_CONCEPT_OR_NOTHING(ad_utility::Rvalue) auto&& tr) {
+  const auto itemMapLamdaCreator = [&itemArray, indexPtr,
+                                    numHasWordTriples](const size_t idx) {
+    return [&map = *itemArray[idx], indexPtr, numHasWordTriples](
+               QL_CONCEPT_OR_NOTHING(ad_utility::Rvalue) auto&& tr) {
       auto lt = indexPtr->tripleToInternalRepresentation(AD_FWD(tr));
       // Reserve space: 1 original + 2 language tag triples + word triples.
       OptionalIds res;
@@ -324,16 +329,25 @@ auto getIdMapLambdas(
       // Add ql:has-word triples for each word in the literal.
       // The subject of these triples is the literal (object of the original
       // triple), not the subject of the original triple.
+      // The graph ID is the 1-indexed position of the word in the literal.
       if (!lt.words_.empty()) {
         auto hasWordPredId = map.getId(TripleComponent{
             ad_utility::triple_component::Iri::fromIriref(HAS_WORD_PREDICATE)});
-        for (const auto& word : lt.words_) {
+        for (size_t i = 0; i < lt.words_.size(); ++i) {
+          const auto& word = lt.words_[i];
           // Create triple: <literal> ql:has-word "word"
+          // The graph ID is the 1-indexed position of the word in the literal.
           auto wordId = map.getId(TripleComponent{
               ad_utility::triple_component::Literal::fromEscapedRdfLiteral(
                   absl::StrCat("\"", word, "\""))});
+          auto wordPosition = Id::makeFromInt(static_cast<int64_t>(i + 1));
           res.push_back(
-              IdTriple{spoIds[2], hasWordPredId, wordId, tripleGraphId});
+              IdTriple{spoIds[2], hasWordPredId, wordId, wordPosition});
+        }
+        // Update the counter for the number of ql:has-word triples.
+        if (numHasWordTriples != nullptr) {
+          numHasWordTriples->fetch_add(lt.words_.size(),
+                                       std::memory_order_relaxed);
         }
       }
 
