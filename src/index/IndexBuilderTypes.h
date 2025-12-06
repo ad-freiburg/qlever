@@ -320,16 +320,18 @@ auto getIdMapLambdas(
       }
 
       // Add ql:has-word triples for each word in the literal.
+      // The subject of these triples is the literal (object of the original
+      // triple), not the subject of the original triple.
       if (!lt.words_.empty()) {
         auto hasWordPredId = map.getId(TripleComponent{
             ad_utility::triple_component::Iri::fromIriref(HAS_WORD_PREDICATE)});
         for (const auto& word : lt.words_) {
-          // Create triple: <subject> ql:has-word "word"
+          // Create triple: <literal> ql:has-word "word"
           auto wordId = map.getId(TripleComponent{
               ad_utility::triple_component::Literal::fromEscapedRdfLiteral(
                   absl::StrCat("\"", word, "\""))});
           res.push_back(
-              IdTriple{spoIds[0], hasWordPredId, wordId, tripleGraphId});
+              IdTriple{spoIds[2], hasWordPredId, wordId, tripleGraphId});
         }
       }
 
