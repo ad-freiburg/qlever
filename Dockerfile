@@ -30,8 +30,8 @@ COPY .git /qlever/.git/
 COPY CMakeLists.txt /qlever/
 COPY CompilationInfo.cmake /qlever/
 
-# Don't build and run tests if built with `ARGS`RUN_TESTS=false`, or on ARM64
-# (which currently takes too long on `GitHub Actions`).
+# Don't compile and run tests if built with `--build-arg RUN_TESTS=false`, or
+# on ARM64 (which currently takes too long on GitHub Actions).
 ARG RUN_TESTS
 WORKDIR /qlever/build/
 RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_PARALLEL=true -D_NO_TIMING_TESTS=ON -GNinja ..
