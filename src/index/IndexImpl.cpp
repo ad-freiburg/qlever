@@ -20,6 +20,7 @@
 #include "index/IndexFormatVersion.h"
 #include "index/VocabularyMerger.h"
 #include "parser/ParallelParseBuffer.h"
+#include "parser/WordsAndDocsFileParser.h"
 #include "util/BatchedPipeline.h"
 #include "util/CachingMemoryResource.h"
 #include "util/Generator.h"
@@ -1231,12 +1232,18 @@ void IndexImpl::readConfiguration() {
 // ___________________________________________________________________________
 LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
     TurtleTriple&& triple) const {
-  LangtagAndTriple result{"", {}};
+  LangtagAndTriple result{"", {}, {}};
   auto& resultTriple = result.triple_;
   if (triple.object_.isLiteral()) {
     const auto& lit = triple.object_.getLiteral();
     if (lit.hasLanguageTag()) {
       result.langtag_ = std::string(asStringViewUnsafe(lit.getLanguageTag()));
+    }
+    // Extract words from the literal content for ql:has-word triples.
+    std::string_view content = asStringViewUnsafe(lit.getContent());
+    for (auto&& word :
+         tokenizeAndNormalizeText(content, vocab_.getLocaleManager())) {
+      result.words_.push_back(std::move(word));
     }
   }
 

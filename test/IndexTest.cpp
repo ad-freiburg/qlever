@@ -477,10 +477,10 @@ TEST(IndexTest, NumDistinctEntities) {
 
   auto numPredicates = index.numDistinctPredicates();
   EXPECT_EQ(numPredicates.normal, 2);
-  // The added numPredicates are `ql:has-pattern`, `ql:langtag`, and one added
-  // predicate for each combination of predicate+language that is actually used
-  // (e.g. `@en@label`).
-  EXPECT_EQ(numPredicates.internal, 3);
+  // The added numPredicates are `ql:has-pattern`, `ql:langtag`, `ql:has-word`,
+  // and one added predicate for each combination of predicate+language that is
+  // actually used (e.g. `@en@label`).
+  EXPECT_EQ(numPredicates.internal, 4);
   EXPECT_EQ(numPredicates, index.numDistinctCol0(Permutation::PSO));
   EXPECT_EQ(numPredicates, index.numDistinctCol0(Permutation::POS));
 
@@ -491,9 +491,10 @@ TEST(IndexTest, NumDistinctEntities) {
 
   auto numTriples = index.numTriples();
   EXPECT_EQ(numTriples.normal, 7);
-  // Two added triples for each triple that has an object with a language tag
-  // and one triple per subject for the pattern.
-  EXPECT_EQ(numTriples.internal, 5);
+  // Two added triples for each triple that has an object with a language tag,
+  // one triple per subject for the pattern, and one ql:has-word triple per
+  // word in the literals (5 literals with 1 word each = 5 word triples).
+  EXPECT_EQ(numTriples.internal, 10);
 
   auto multiplicities =
       index.getMultiplicities(index.getPermutation(Permutation::SPO));
