@@ -30,16 +30,15 @@ COPY .git /qlever/.git/
 COPY CMakeLists.txt /qlever/
 COPY CompilationInfo.cmake /qlever/
 
-# Don't compile and run tests if built with `--build-arg RUN_TESTS=false`, or
-# on ARM64 (which currently takes too long on GitHub Actions).
-ARG RUN_TESTS
+# Build and compile. By default, also compile and run all tests. In order not
+# to, build the image with `--build-arg RUN_TESTS=false`.
+ARG RUN_TESTS=true
 WORKDIR /qlever/build/
 RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_PARALLEL=true -D_NO_TIMING_TESTS=ON -GNinja ..
-RUN RUN_TESTS=${RUN_TESTS:-$( [ "$TARGETPLATFORM" != "linux/arm64" ] && echo true || echo false )}; \
-    if [ "$RUN_TESTS" = "false" ]; then \
-      cmake --build . --target IndexBuilderMain ServerMain && echo "Skipping tests"; \
-    else \
+RUN if [ "$RUN_TESTS" = "true" ]; then \
       cmake --build . && ctest --rerun-failed --output-on-failure; \
+    else \
+      cmake --build . --target IndexBuilderMain ServerMain && echo "Skipping tests"; \
     fi
 
 # Install the packages needed for the final image.
