@@ -140,6 +140,9 @@ class IndexImpl {
   double avgNumDistinctSubjectsPerPredicate_;
   uint64_t numDistinctSubjectPredicatePairs_;
 
+  // If true, add `ql:has-word` triples for each word in each literal.
+  bool addHasWordTriples_ = true;
+
   size_t parserBatchSize_ = PARSER_BATCH_SIZE;
   size_t numTriplesPerBatch_ = NUM_TRIPLES_PER_PARTIAL_VOCAB;
 
@@ -438,6 +441,8 @@ class IndexImpl {
   bool& usePatterns();
 
   bool& loadAllPermutations();
+
+  bool& addHasWordTriples();
 
   void setKeepTempFiles(bool keepTempFiles);
 

@@ -72,6 +72,7 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   index.setKeepTempFiles(config.keepTemporaryFiles_);
   index.setSettingsFile(config.settingsFile_);
   index.loadAllPermutations() = !config.onlyPsoAndPos_;
+  index.addHasWordTriples() = config.addHasWordTriples_;
   index.getImpl().setVocabularyTypeForIndexBuilding(config.vocabType_);
   index.getImpl().setPrefixesForEncodedValues(config.prefixesForIdEncodedIris_);
 

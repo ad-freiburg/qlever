@@ -1072,6 +1072,9 @@ bool& IndexImpl::usePatterns() { return usePatterns_; }
 // _____________________________________________________________________________
 bool& IndexImpl::loadAllPermutations() { return loadAllPermutations_; }
 
+// _____________________________________________________________________________
+bool& IndexImpl::addHasWordTriples() { return addHasWordTriples_; }
+
 // ____________________________________________________________________________
 void IndexImpl::setSettingsFile(const std::string& filename) {
   settingsFileName_ = filename;
@@ -1240,10 +1243,12 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
       result.langtag_ = std::string(asStringViewUnsafe(lit.getLanguageTag()));
     }
     // Extract words from the literal content for ql:has-word triples.
-    std::string_view content = asStringViewUnsafe(lit.getContent());
-    for (auto&& word :
-         tokenizeAndNormalizeText(content, vocab_.getLocaleManager())) {
-      result.words_.push_back(std::move(word));
+    if (addHasWordTriples_) {
+      std::string_view content = asStringViewUnsafe(lit.getContent());
+      for (auto&& word :
+           tokenizeAndNormalizeText(content, vocab_.getLocaleManager())) {
+        result.words_.push_back(std::move(word));
+      }
     }
   }
 
