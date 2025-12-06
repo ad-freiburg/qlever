@@ -218,9 +218,9 @@ class ValueGetterTester {
       " <https://example.com/test>,"
       " \"noType\" ,"
       " \"LINESTRING(2 2, 4 4)\""
-      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>,"
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>,\n"
       " \"POLYGON((2 4, 4 4, 4 2, 2 2))\""
-      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>.";
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>.\n";
 
  public:
   // Helper that constructs a local vocab, inserts the literal and passes the
@@ -304,7 +304,8 @@ using GeoInfoTester = ValueGetterTester<
 using GeoPointOrWktTester =
     ValueGetterTester<sparqlExpression::detail::GeoPointOrWktValueGetter,
                       GeoPointOrWkt>;
-
+using IntValueGetterTester =
+    ValueGetterTester<sparqlExpression::detail::IntValueGetter, int64_t>;
 // _____________________________________________________________________________
 inline void checkGeoPointOrWktFromLocalAndNormalVocabAndLiteralForValid(
     std::string wktInput, Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {

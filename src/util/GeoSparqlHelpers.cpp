@@ -14,9 +14,11 @@
 #include <ctre-unicode.hpp>
 #include <limits>
 #include <string_view>
+#include <type_traits>
 
 #include "global/Constants.h"
 #include "rdfTypes/GeoPoint.h"
+#include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/Exception.h"
 
 namespace ad_utility {
@@ -53,6 +55,11 @@ double wktDistImpl(GeoPoint point1, GeoPoint point2) {
   auto p1 = S2Point{S2LatLng::FromDegrees(point1.getLat(), point1.getLng())};
   auto p2 = S2Point{S2LatLng::FromDegrees(point2.getLat(), point2.getLng())};
   return S2Earth::ToKm(S1Angle(p1, p2));
+}
+
+// _____________________________________________________________________________
+std::optional<std::string> geometryNAsWkt(GeoPointOrWkt wkt, int64_t n) {
+  return utilGeomToWkt(getGeometryN(wkt, n));
 }
 
 }  // namespace detail

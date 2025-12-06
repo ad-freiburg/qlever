@@ -145,7 +145,7 @@ class QueryExecutionContext {
     return _costFactors.getCostFactor(key);
   };
 
-  const ad_utility::AllocatorWithLimit<Id>& getAllocator() {
+  const ad_utility::AllocatorWithLimit<Id>& getAllocator() const {
     return _allocator;
   }
 
