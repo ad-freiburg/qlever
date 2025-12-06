@@ -15,7 +15,11 @@
 #include "rdfTypes/Literal.h"
 #include "util/HashSet.h"
 
+namespace {
+
 using namespace ad_utility::triple_component;
+using Iri = ad_utility::triple_component::Iri;
+using Literal = ad_utility::triple_component::Literal;
 
 TEST(IriTest, IriCreation) {
   Iri iri = Iri::fromIriref("<http://www.wikidata.org/entity/Q3138>");
@@ -470,3 +474,5 @@ TEST(LiteralOrIri, toStringRepresentation) {
     EXPECT_TRUE(lit.toStringRepresentation().empty());
   }
 }
+
+}  // namespace
