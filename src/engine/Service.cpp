@@ -15,11 +15,10 @@
 #include "engine/Sort.h"
 #include "engine/VariableToColumnMap.h"
 #include "global/RuntimeParameters.h"
-#include "parser/RdfParser.h"
-#include "parser/TokenizerCtre.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
 #include "util/HashSet.h"
+#include "util/SparqlJsonBindingUtils.h"
 #include "util/StringUtils.h"
 #include "util/http/HttpUtils.h"
 
@@ -226,8 +225,9 @@ void Service::writeJsonResult(const std::vector<std::string>& vars,
       for (size_t colIdx = 0; colIdx < vars.size(); ++colIdx) {
         TripleComponent tc =
             binding.contains(vars[colIdx])
-                ? bindingToTripleComponent(binding[vars[colIdx]], blankNodeMap,
-                                           localVocab)
+                ? sparqlJsonBindingUtils::bindingToTripleComponent(
+                      binding[vars[colIdx]], getIndex(), blankNodeMap,
+                      localVocab, getIndex().getBlankNodeManager())
                 : TripleComponent::UNDEF();
 
         Id id = std::move(tc).toValueId(getIndex().getVocab(), *localVocab,
@@ -393,59 +393,6 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
   }
 
   return "VALUES " + vars + values + "} . ";
-}
-
-// ____________________________________________________________________________
-TripleComponent Service::bindingToTripleComponent(
-    const nlohmann::json& binding,
-    ad_utility::HashMap<std::string, Id>& blankNodeMap,
-    LocalVocab* localVocab) const {
-  if (!binding.contains("type") || !binding.contains("value")) {
-    throw std::runtime_error(absl::StrCat(
-        "Missing type or value field in binding. The binding is: '",
-        binding.dump(), "'"));
-  }
-
-  const auto type = binding["type"].get<std::string_view>();
-  const auto value = binding["value"].get<std::string_view>();
-  auto blankNodeManagerPtr =
-      getExecutionContext()->getIndex().getBlankNodeManager();
-
-  TripleComponent tc;
-  // NOTE: The type `typed-literal` is not part of the official SPARQL 1.1
-  // standard, but was mentioned in a pre SPARQL 1.1 WG note and used by
-  // Virtuoso until the summer of 2025. It is therefore still produced by
-  // some SPARQL endpoints, and we therefore support parsing it.
-  if (type == "literal" || type == "typed-literal") {
-    if (binding.contains("datatype")) {
-      tc = TurtleParser<TokenizerCtre>::literalAndDatatypeToTripleComponent(
-          value,
-          TripleComponent::Iri::fromIrirefWithoutBrackets(
-              binding["datatype"].get<std::string_view>()),
-          getIndex().encodedIriManager());
-    } else if (binding.contains("xml:lang")) {
-      tc = TripleComponent::Literal::literalWithNormalizedContent(
-          asNormalizedStringViewUnsafe(value),
-          binding["xml:lang"].get<std::string>());
-    } else {
-      tc = TripleComponent::Literal::literalWithNormalizedContent(
-          asNormalizedStringViewUnsafe(value));
-    }
-  } else if (type == "uri") {
-    tc = TripleComponent::Iri::fromIrirefWithoutBrackets(value);
-  } else if (type == "bnode") {
-    auto [it, wasNew] = blankNodeMap.try_emplace(value, Id());
-    if (wasNew) {
-      it->second = Id::makeFromBlankNodeIndex(
-          localVocab->getBlankNodeIndex(blankNodeManagerPtr));
-    }
-    tc = it->second;
-  } else {
-    throw std::runtime_error(absl::StrCat("Type ", type,
-                                          " is undefined. The binding is: '",
-                                          binding.dump(), "'"));
-  }
-  return tc;
 }
 
 // ____________________________________________________________________________
