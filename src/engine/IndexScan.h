@@ -18,7 +18,7 @@ class IndexScan final : public Operation {
   using Graphs = ScanSpecificationAsTripleComponent::GraphFilter;
   using PermutationPtr = std::shared_ptr<const Permutation>;
   using LocatedTriplesSnapshotPtr =
-      std::shared_ptr<const LocatedTriplesSnapshot>;
+      std::shared_ptr<const LocatedTriplesState>;
 
  private:
   using ScanSpecAndBlocks = Permutation::ScanSpecAndBlocks;
@@ -188,7 +188,7 @@ class IndexScan final : public Operation {
   // class, which accesses the one stored in the `QueryExecutionContext`, use
   // the `LocatedTriplesSnapshot` held in this object. This might be a different
   // one if a custom permutation is used.
-  const LocatedTriplesSnapshot& locatedTriplesSnapshot() const override;
+  const LocatedTriplesState& locatedTriplesSnapshot() const override;
 
   // Return the stored triple in the order that corresponds to the
   // `permutation_`. For example if `permutation_ == PSO` then the result is

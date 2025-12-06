@@ -301,7 +301,7 @@ const Permutation& IndexScan::permutation() const {
 }
 
 // _____________________________________________________________________________
-const LocatedTriplesSnapshot& IndexScan::locatedTriplesSnapshot() const {
+const LocatedTriplesState& IndexScan::locatedTriplesSnapshot() const {
   AD_CONTRACT_CHECK(locatedTriplesSnapshot_ != nullptr);
   return *locatedTriplesSnapshot_;
 }

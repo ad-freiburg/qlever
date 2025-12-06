@@ -54,14 +54,14 @@ ad_utility::BlankNodeManager* Index::getBlankNodeManager() const {
 // ____________________________________________________________________________
 size_t Index::getCardinality(
     const TripleComponent& comp, Permutation::Enum p,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+    const LocatedTriplesState& locatedTriplesSnapshot) const {
   return pimpl_->getCardinality(comp, p, locatedTriplesSnapshot);
 }
 
 // ____________________________________________________________________________
 size_t Index::getCardinality(
     Id id, Permutation::Enum p,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+    const LocatedTriplesState& locatedTriplesSnapshot) const {
   return pimpl_->getCardinality(id, p, locatedTriplesSnapshot);
 }
 
@@ -270,7 +270,7 @@ std::vector<float> Index::getMultiplicities(
 // ____________________________________________________________________________
 std::vector<float> Index::getMultiplicities(
     const TripleComponent& key, const Permutation& p,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+    const LocatedTriplesState& locatedTriplesSnapshot) const {
   return pimpl_->getMultiplicities(key, p, locatedTriplesSnapshot);
 }
 
@@ -279,7 +279,7 @@ IdTable Index::scan(
     const ScanSpecificationAsTripleComponent& scanSpecification,
     Permutation::Enum p, Permutation::ColumnIndicesRef additionalColumns,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot,
+    const LocatedTriplesState& locatedTriplesSnapshot,
     const LimitOffsetClause& limitOffset) const {
   return pimpl_->scan(scanSpecification, p, additionalColumns,
                       cancellationHandle, locatedTriplesSnapshot, limitOffset);
@@ -290,7 +290,7 @@ IdTable Index::scan(
     const ScanSpecification& scanSpecification, Permutation::Enum p,
     Permutation::ColumnIndicesRef additionalColumns,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot,
+    const LocatedTriplesState& locatedTriplesSnapshot,
     const LimitOffsetClause& limitOffset) const {
   return pimpl_->scan(scanSpecification, p, additionalColumns,
                       cancellationHandle, locatedTriplesSnapshot, limitOffset);
@@ -300,7 +300,7 @@ IdTable Index::scan(
 size_t Index::getResultSizeOfScan(
     const ScanSpecification& scanSpecification,
     const Permutation::Enum& permutation,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+    const LocatedTriplesState& locatedTriplesSnapshot) const {
   return pimpl_->getResultSizeOfScan(scanSpecification, permutation,
                                      locatedTriplesSnapshot);
 }
