@@ -535,3 +535,109 @@ TEST(LocalVocab, modificationIsNotBlockedAfterAcquiringHolder) {
   EXPECT_EQ(*encodedTest, literal);
   EXPECT_EQ(*encodedOther, otherLiteral);
 }
+
+// _____________________________________________________________________________
+TEST(LocalVocab, getOwnedLocalBlankNodeBlocks_EmptyCase) {
+  LocalVocab vocab;
+  auto blocks = vocab.getOwnedLocalBlankNodeBlocks();
+  EXPECT_TRUE(blocks.empty());
+}
+
+// _____________________________________________________________________________
+TEST(LocalVocab, getOwnedLocalBlankNodeBlocks_WithBlankNodes) {
+  ad_utility::BlankNodeManager bnm;
+  LocalVocab vocab;
+
+  // Allocate some blank node IDs.
+  auto id1 = vocab.getBlankNodeIndex(&bnm);
+  auto id2 = vocab.getBlankNodeIndex(&bnm);
+  auto id3 = vocab.getBlankNodeIndex(&bnm);
+
+  // Get the owned blocks.
+  auto blocks = vocab.getOwnedLocalBlankNodeBlocks();
+
+  // Should have exactly one entry (primary blocks).
+  EXPECT_FALSE(blocks.empty());
+  EXPECT_EQ(blocks.size(), 1);
+
+  // Verify the structure contains block indices.
+  EXPECT_FALSE(blocks[0].blockIndices_.empty());
+
+  // Verify the blank node IDs are still valid.
+  EXPECT_TRUE(vocab.isBlankNodeIndexContained(id1));
+  EXPECT_TRUE(vocab.isBlankNodeIndexContained(id2));
+  EXPECT_TRUE(vocab.isBlankNodeIndexContained(id3));
+}
+
+// _____________________________________________________________________________
+TEST(LocalVocab, reserveBlankNodeBlocksFromExplicitIndices_EmptyIndices) {
+  ad_utility::BlankNodeManager bnm;
+  LocalVocab vocab;
+
+  // Call with empty vector - should not crash and should do nothing.
+  std::vector<
+      ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>
+      emptyIndices;
+  EXPECT_NO_THROW(
+      vocab.reserveBlankNodeBlocksFromExplicitIndices(emptyIndices, &bnm));
+
+  // Verify still no blank node manager.
+  auto blocks = vocab.getOwnedLocalBlankNodeBlocks();
+  EXPECT_TRUE(blocks.empty());
+}
+
+// _____________________________________________________________________________
+TEST(LocalVocab, reserveBlankNodeBlocksFromExplicitIndices_RestoresBlocks) {
+  ad_utility::BlankNodeManager bnm;
+
+  // Step 1: Create original vocab with blank nodes.
+  LocalVocab originalVocab;
+  auto id1 = originalVocab.getBlankNodeIndex(&bnm);
+  auto id2 = originalVocab.getBlankNodeIndex(&bnm);
+  auto id3 = originalVocab.getBlankNodeIndex(&bnm);
+
+  // Step 2: Serialize the blank node blocks.
+  auto serializedBlocks = originalVocab.getOwnedLocalBlankNodeBlocks();
+  ASSERT_FALSE(serializedBlocks.empty());
+
+  // Step 3: Create new vocab and restore from serialized data.
+  LocalVocab restoredVocab;
+  restoredVocab.reserveBlankNodeBlocksFromExplicitIndices(serializedBlocks,
+                                                          &bnm);
+
+  // Step 4: Verify the restored vocab contains the same blank node indices.
+  EXPECT_TRUE(restoredVocab.isBlankNodeIndexContained(id1));
+  EXPECT_TRUE(restoredVocab.isBlankNodeIndexContained(id2));
+  EXPECT_TRUE(restoredVocab.isBlankNodeIndexContained(id3));
+
+  // Step 5: Verify we can still allocate new blank nodes in the restored vocab.
+  auto newId = restoredVocab.getBlankNodeIndex(&bnm);
+  EXPECT_TRUE(restoredVocab.isBlankNodeIndexContained(newId));
+
+  // The new ID should be different from the old ones.
+  EXPECT_NE(newId, id1);
+  EXPECT_NE(newId, id2);
+  EXPECT_NE(newId, id3);
+}
+
+// _____________________________________________________________________________
+TEST(LocalVocab, reserveBlankNodeBlocksFromExplicitIndices_PreconditionCheck) {
+  ad_utility::BlankNodeManager bnm;
+  LocalVocab vocab;
+
+  // Allocate a blank node, which creates the localBlankNodeManager_.
+  [[maybe_unused]] auto id = vocab.getBlankNodeIndex(&bnm);
+
+  // Try to reserve blocks when localBlankNodeManager_ already exists.
+  // This should violate the AD_CONTRACT_CHECK.
+  ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry entry;
+  entry.uuid_ = boost::uuids::random_generator()();
+  entry.blockIndices_ = {1, 2, 3};
+  std::vector<
+      ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>
+      indices{entry};
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      vocab.reserveBlankNodeBlocksFromExplicitIndices(indices, &bnm),
+      ::testing::HasSubstr("Assertion"));
+}
