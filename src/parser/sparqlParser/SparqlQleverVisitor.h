@@ -339,6 +339,9 @@ class SparqlQleverVisitor {
       const TripleComponent::Iri& target,
       Parser::ServiceGraphPatternContext* ctx);
 
+  GraphPatternOperation visitMaterializedViewQuery(
+      Parser::ServiceGraphPatternContext* ctx);
+
   // Parse the body of a `MagicServiceQuery`, in particular call
   // `addBasicGraphPattern` and `addGraph` for the contents of the body, and
   // throw an exception if an unsupported element is encountered. This function
