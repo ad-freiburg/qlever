@@ -7,6 +7,7 @@
 #include <absl/cleanup/cleanup.h>
 #include <absl/container/inlined_vector.h>
 
+#include "engine/ExternallySpecifiedValues.h"
 #include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoinCachedIndex.h"
@@ -751,6 +752,22 @@ std::unique_ptr<Operation> Operation::clone() const {
   AD_EXPENSIVE_CHECK(!canResultBeCached() ||
                      getCacheKey() == result->getCacheKey());
   return result;
+}
+
+// _____________________________________________________________________________
+void Operation::getExternalValues(
+    std::vector<ExternallySpecifiedValues*>& externalValues) {
+  // Check if this operation itself is an ExternallySpecifiedValues
+  if (auto* externalValuesOp = dynamic_cast<ExternallySpecifiedValues*>(this)) {
+    externalValues.push_back(externalValuesOp);
+  }
+
+  // Recursively process all children
+  for (auto* child : getChildren()) {
+    if (child != nullptr) {
+      child->getOperation()->getExternalValues(externalValues);
+    }
+  }
 }
 
 // _____________________________________________________________________________

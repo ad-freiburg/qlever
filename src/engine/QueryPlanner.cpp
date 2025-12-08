@@ -51,6 +51,7 @@
 #include "engine/TransitivePathBase.h"
 #include "engine/Union.h"
 #include "engine/Values.h"
+#include "engine/ExternallySpecifiedValues.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
@@ -3008,6 +3009,8 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     visitSpatialSearch(arg);
   } else if constexpr (std::is_same_v<T, p::TextSearchQuery>) {
     visitTextSearch(arg);
+  } else if constexpr (std::is_same_v<T, p::ExternalValuesQuery>) {
+    visitExternalValues(arg);
   } else if constexpr (std::is_same_v<T, p::NamedCachedResult>) {
     visitNamedCachedResult(arg);
   } else {
@@ -3201,6 +3204,29 @@ void QueryPlanner::GraphPatternPlanner::visitTextSearch(
   for (auto config : textSearchQuery.toConfigs(qec_)) {
     candidatePlans_.push_back(std::vector{std::visit(visitor, config)});
   }
+}
+
+// _______________________________________________________________
+void QueryPlanner::GraphPatternPlanner::visitExternalValues(
+    const parsedQuery::ExternalValuesQuery& externalValuesQuery) {
+  // Check that all variables are unique
+  ad_utility::HashSet<Variable> uniqueVars(externalValuesQuery.variables_.begin(),
+                                            externalValuesQuery.variables_.end());
+  AD_CONTRACT_CHECK(uniqueVars.size() == externalValuesQuery.variables_.size(),
+                    "Variables in external values query must be unique");
+
+  // Create an ExternallySpecifiedValues operation with empty values initially
+  parsedQuery::SparqlValues emptyValues;
+  emptyValues._variables = externalValuesQuery.variables_;
+  // Start with empty values - they will be filled externally
+  emptyValues._values = {};
+
+  auto externalValues = std::make_shared<ExternallySpecifiedValues>(
+      qec_, std::move(emptyValues), externalValuesQuery.identifier_);
+
+  auto candidate = makeSubtreePlan<ExternallySpecifiedValues>(
+      std::move(externalValues));
+  visitGroupOptionalOrMinus(std::vector{std::move(candidate)});
 }
 
 // _____________________________________________________________________________

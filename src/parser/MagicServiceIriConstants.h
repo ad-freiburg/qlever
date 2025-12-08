@@ -22,6 +22,9 @@ constexpr inline std::string_view SPATIAL_SEARCH_IRI =
 constexpr inline std::string_view TEXT_SEARCH_IRI =
     "<https://qlever.cs.uni-freiburg.de/textSearch/>";
 
+constexpr inline std::string_view EXTERNAL_VALUES_IRI_PREFIX =
+    "<https://qlever.cs.uni-freiburg.de/external-values-";
+
 // For backward compatibility: invocation of SpatialJoin via special predicates.
 static const std::string MAX_DIST_IN_METERS = "<max-distance-in-meters:";
 static const std::string NEAREST_NEIGHBORS = "<nearest-neighbors:";

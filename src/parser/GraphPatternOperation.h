@@ -15,6 +15,7 @@
 #include "engine/PathSearch.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/DatasetClauses.h"
+#include "parser/ExternalValuesQuery.h"
 #include "parser/GraphPattern.h"
 #include "parser/NamedCachedResult.h"
 #include "parser/PathQuery.h"
@@ -211,7 +212,8 @@ struct Bind {
 using GraphPatternOperationVariant =
     std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern,
                  Values, Service, PathQuery, SpatialQuery, TextSearchQuery,
-                 Minus, GroupGraphPattern, Describe, Load, NamedCachedResult>;
+                 ExternalValuesQuery, Minus, GroupGraphPattern, Describe, Load,
+                 NamedCachedResult>;
 struct GraphPatternOperation
     : public GraphPatternOperationVariant,
       public VisitMixin<GraphPatternOperation, GraphPatternOperationVariant> {
