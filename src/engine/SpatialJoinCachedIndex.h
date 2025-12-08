@@ -32,13 +32,14 @@ class SpatialJoinCachedIndex {
   // As `S2MutableShapeInex` doesn't support additional payloads, the
   //  `shapeIndexToRow_` associates s2's `shape ids` with row indices in the
   //  respective `IdTable` from which this `SpatialJoinCachedIndex` was created.
-  ad_utility::HashMap<size_t, size_t> shapeIndexToRow_;
+  using ShapeIndexToRow = ad_utility::HashMap<size_t, size_t>;
+  ShapeIndexToRow shapeIndexToRow_;
 
   // Serialize the contained shapes, and the corresponding indices in the
   // `IdTable` from which the index was constructed. This information is enough
   // to relatively cheaply reconstruct the index.
   std::string serializeShapes() const;
-  std::vector<size_t> serializeLineIndices() const;
+  const ShapeIndexToRow& serializeLineIndices() const;
 
  public:
   // Constructor that builds an index from the geometries in the given column in
@@ -68,7 +69,7 @@ class SpatialJoinCachedIndex {
   // obtained via prior calls to `serializeShapes` and `serializeLineIndices`
   // respectively.
   void populateFromSerialized(std::string_view serializedShapes,
-                              std::vector<size_t> lineIndices);
+                              ShapeIndexToRow shapeIndexToRow);
 
   // Serialize a `SpatialJoinCachedIndex`. When reading from a serializer, then
   // the target `arg` has to be constructed upfront via the constructor that
@@ -81,9 +82,9 @@ class SpatialJoinCachedIndex {
     } else {
       decltype(arg.serializeShapes()) serializedShapes;
       serializer >> serializedShapes;
-      decltype(arg.serializeLineIndices()) lineIndices;
+      std::decay_t<decltype(arg.serializeLineIndices())> lineIndices;
       serializer >> lineIndices;
-      arg.populateFromSerialized(serializedShapes, lineIndices);
+      arg.populateFromSerialized(serializedShapes, std::move(lineIndices));
     }
   }
 };

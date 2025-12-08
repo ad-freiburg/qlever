@@ -7,6 +7,7 @@
 #include <s2/mutable_s2shape_index.h>
 #include <s2/s2polyline.h>
 
+#include "../../cmake-build-gcc-13-relwithdebinfo/_deps/s2-src/src/s2/s2shapeutil_coding.h"
 #include "engine/SpatialJoinAlgorithms.h"
 
 // An instance of this type erased class holds the actual data for each
@@ -18,43 +19,23 @@
 class SpatialJoinCachedIndexImpl {
  public:
   MutableS2ShapeIndex s2index_;
-  std::vector<std::pair<S2Polyline, size_t>> lines_;
 
   // Construct the index, and return the mapping from shape indices to rows.
   ad_utility::HashMap<size_t, size_t> populate(ColumnIndex col,
                                                const IdTable& restable,
                                                const Index& index) {
-    AD_CORRECTNESS_CHECK(lines_.empty());
+    ad_utility::HashMap<size_t, size_t> shapeIndexToRow;
     AD_CORRECTNESS_CHECK(s2index_.num_shape_ids() == 0);
     // Populate the index from the given `IdTable`
-    lines_.reserve(restable.size());
     for (size_t row = 0; row < restable.size(); row++) {
       auto p = SpatialJoinAlgorithms::getPolyline(restable, row, col, index);
       if (p.has_value()) {
-        // We need to store the geometries ourselves because the index takes a
-        // pointer to them.
-        lines_.emplace_back(std::move(p.value()), row);
+        auto shapeIndex =
+            s2index_.Add(std::make_unique<S2Polyline::OwningShape>(
+                std::make_unique<S2Polyline>(std::move(p.value()))));
+        shapeIndexToRow[shapeIndex] = row;
       }
     }
-    lines_.shrink_to_fit();
-    return populateFromLines();
-  }
-
-  ad_utility::HashMap<size_t, size_t> populateFromLines() {
-    ad_utility::HashMap<size_t, size_t> shapeIndexToRow;
-    for (const auto& [line, row] : lines_) {
-      auto shapeIndex =
-          s2index_.Add(std::make_unique<S2Polyline::Shape>(&line));
-      shapeIndexToRow[shapeIndex] = row;
-    }
-
-    // S2 adds geometries to its index data structure lazily and only updates
-    // the data structure as soon as a lookup is performed. This is intended to
-    // make many subsequent updates fast by not updating the data structure in
-    // every step. However since we build the index only once and then use it
-    // without making changes, we force the updating of its internal data
-    // structure here to ensure good performance also for the first query.
-    s2index_.ForceBuild();
     return shapeIndexToRow;
   }
 };
@@ -83,31 +64,30 @@ std::shared_ptr<const MutableS2ShapeIndex> SpatialJoinCachedIndex::getIndex()
 // ____________________________________________________________________________
 std::string SpatialJoinCachedIndex::serializeShapes() const {
   Encoder encoder;
-  for (const auto& [line, row] : pimpl_->lines_) {
-    line.Encode(&encoder);
-  }
+  s2shapeutil::CompactEncodeTaggedShapes(pimpl_->s2index_, &encoder);
+  pimpl_->s2index_.Encode(&encoder);
   return std::string{encoder.base(), encoder.length()};
 }
 
 // _____________________________________________________________________________
-std::vector<size_t> SpatialJoinCachedIndex::serializeLineIndices() const {
-  return ::ranges::to<std::vector>(pimpl_->lines_ | ranges::views::values);
+const SpatialJoinCachedIndex::ShapeIndexToRow&
+SpatialJoinCachedIndex::serializeLineIndices() const {
+  return shapeIndexToRow_;
 }
 
 // _____________________________________________________________________________
 void SpatialJoinCachedIndex::populateFromSerialized(
-    std::string_view serializedShapes, std::vector<size_t> lineIndices) {
+    std::string_view serializedShapes, ShapeIndexToRow shapeIndexToRow) {
+  shapeIndexToRow_ = std::move(shapeIndexToRow);
   pimpl_ = std::make_shared<SpatialJoinCachedIndexImpl>();
-  pimpl_->lines_.reserve(lineIndices.size());
   Decoder decoder(serializedShapes.data(), serializedShapes.size());
-  for (size_t i = 0; i < lineIndices.size(); ++i) {
-    pimpl_->lines_.emplace_back(S2Polyline{}, lineIndices[i]);
-    bool success = pimpl_->lines_.back().first.Decode(&decoder);
-    if (!success) {
-      throw std::runtime_error("Could not decode serialized geometry.");
-    }
+  if (!pimpl_->s2index_.Init(&decoder,
+                             s2shapeutil::FullDecodeShapeFactory(&decoder))) {
+    throw std::runtime_error("Could not decode the serialized S2 index");
   }
-  shapeIndexToRow_ = pimpl_->populateFromLines();
+  // To my understanding, the following call should be a noop, as the built
+  // index remembers its structure when being decoded.
+  pimpl_->s2index_.ForceBuild();
 }
 
 // _____________________________________________________________________________
