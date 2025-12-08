@@ -10,6 +10,7 @@
 
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/NormalizedString.h"
+#include "parser/SparqlTriple.h"
 #include "util/Exception.h"
 
 namespace parsedQuery {
