@@ -13,6 +13,8 @@
 #include "index/CompressedRelationHelpersImpl.h"
 #include "util/ProgressBar.h"
 
+// TODO
+
 // Set up the handling of small relations for the twin permutation.
 // `AddBlockOfSmallRelationsToSwitched` receives a block of small relations from
 // `writer1`, swaps columns 1 and 2, sorts the block by the resulting
