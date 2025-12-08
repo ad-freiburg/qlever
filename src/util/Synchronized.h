@@ -261,9 +261,9 @@ class LockPtr {
                   !isSharedLock);  // if we only have a shared lock, we may only
                                    // perform const operations
     if constexpr (isSharedLock) {
-      s()->mutex().lock_shared();
+      s().mutex().lock_shared();
     } else {
-      s()->mutex().lock();
+      s().mutex().lock();
     }
   }
 
@@ -272,9 +272,9 @@ class LockPtr {
   ~LockPtr() {
     if (!s_) return;
     if constexpr (isSharedLock) {
-      s()->mutex().unlock_shared();
+      s().mutex().unlock_shared();
     } else {
-      s()->mutex().unlock();
+      s().mutex().unlock();
     }
   }
 
@@ -282,21 +282,21 @@ class LockPtr {
   /// locks that are not const.
   template <bool isConstLocal = isConst>
   std::enable_if_t<!isConstLocal, value_type&> operator*() {
-    return s()->data_;
+    return s().data_;
   }
 
   /// Access to underlying data.
-  const value_type& operator*() const { return s()->data_; }
+  const value_type& operator*() const { return s().data_; }
 
   /// Access to underlying data. Non const access is only allowed for exclusive
   /// locks that are not const.
   template <bool isConstLocal = isConst>
   std::enable_if_t<!isConstLocal, value_type*> operator->() {
-    return &s()->data_;
+    return &s().data_;
   }
 
   /// Access to underlying data.
-  const value_type* operator->() const { return &s()->data_; }
+  const value_type* operator->() const { return &s().data_; }
 
   LockPtr(const LockPtr&) = delete;
   LockPtr& operator=(const LockPtr&) = delete;
@@ -307,9 +307,14 @@ class LockPtr {
   LockPtr& operator=(LockPtr&&) = default;
 
  private:
-  ptr_type s() const {
+  // Accessor functions for the `Synchronized` object that is managed.
+  const auto& s() const {
     AD_CORRECTNESS_CHECK(s_ != nullptr);
-    return s_;
+    return *s_;
+  }
+  auto& s() {
+    AD_CORRECTNESS_CHECK(s_ != nullptr);
+    return *s_;
   }
   ad_utility::ResetWhenMoved<ptr_type, nullptr> s_;
 };

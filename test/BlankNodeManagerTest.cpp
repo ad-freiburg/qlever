@@ -164,9 +164,8 @@ TEST(BlankNodeManager, blockAllocationAndFree) {
   {
     // LocalBlankNodeManager allocates a new block.
     BlankNodeManager::LocalBlankNodeManager lbnm(&bnm);
-    //[[maybe_unused]] uint64_t id = lbnm.getId();
-    // EXPECT_EQ(bnm.state_.rlock()->usedBlocksSet_.size(), 1);
-    EXPECT_EQ(bnm.state_.rlock()->usedBlocksSet_.size(), 0);
+    [[maybe_unused]] uint64_t id = lbnm.getId();
+    EXPECT_EQ(bnm.state_.rlock()->usedBlocksSet_.size(), 1);
   }
 
   // Once the LocalBlankNodeManager is destroyed, all Blocks allocated through.
