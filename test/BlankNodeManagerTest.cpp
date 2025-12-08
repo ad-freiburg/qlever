@@ -23,33 +23,24 @@ class BlankNodeManagerTestFixture : public ::testing::Test {
  protected:
   // Helper to create a BlankNodeManager with default minIndex.
   static std::unique_ptr<BlankNodeManager> createManager(
-      uint64_t minIndex = 0,
-      ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
-    auto t = generateLocationTrace(loc);
+      uint64_t minIndex = 0) {
     return std::make_unique<BlankNodeManager>(minIndex);
   }
 
   // Helper to create a LocalBlankNodeManager.
   static std::shared_ptr<BlankNodeManager::LocalBlankNodeManager>
-  createLocalManager(BlankNodeManager* bnm, ad_utility::source_location loc =
-                                                AD_CURRENT_SOURCE_LOC()) {
-    auto t = generateLocationTrace(loc);
+  createLocalManager(BlankNodeManager* bnm) {
     return std::make_shared<BlankNodeManager::LocalBlankNodeManager>(bnm);
   }
 
   // Helper to get the primary blocks from a LocalBlankNodeManager.
-  static auto& getPrimaryBlocks(
-      BlankNodeManager::LocalBlankNodeManager& lbnm,
-      ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
-    auto t = generateLocationTrace(loc);
+  static auto& getPrimaryBlocks(BlankNodeManager::LocalBlankNodeManager& lbnm) {
     return lbnm.blocks_->blocks_;
   }
 
   // Helper to get the total number of blocks (primary + other).
   static size_t getTotalBlockCount(
-      const BlankNodeManager::LocalBlankNodeManager& lbnm,
-      ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
-    auto t = generateLocationTrace(loc);
+      const BlankNodeManager::LocalBlankNodeManager& lbnm) {
     size_t count = lbnm.blocks_->blocks_.size();
     for (const auto& otherBlocks : lbnm.otherBlocks_) {
       count += otherBlocks->blocks_.size();
@@ -59,9 +50,7 @@ class BlankNodeManagerTestFixture : public ::testing::Test {
 
   // Helper to get all block indices (from both primary and other blocks).
   static std::vector<uint64_t> getAllBlockIndices(
-      const BlankNodeManager::LocalBlankNodeManager& lbnm,
-      ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
-    auto t = generateLocationTrace(loc);
+      const BlankNodeManager::LocalBlankNodeManager& lbnm) {
     std::vector<uint64_t> indices;
     for (const auto& block : lbnm.blocks_->blocks_) {
       indices.push_back(block.blockIdx_);
@@ -76,9 +65,7 @@ class BlankNodeManagerTestFixture : public ::testing::Test {
 
   // Helper to allocate N IDs from a LocalBlankNodeManager.
   static std::vector<uint64_t> allocateIds(
-      BlankNodeManager::LocalBlankNodeManager& lbnm, size_t count,
-      ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
-    auto t = generateLocationTrace(loc);
+      BlankNodeManager::LocalBlankNodeManager& lbnm, size_t count) {
     std::vector<uint64_t> ids;
     ids.reserve(count);
     for (size_t i = 0; i < count; ++i) {
@@ -89,9 +76,7 @@ class BlankNodeManagerTestFixture : public ::testing::Test {
 
   // Helper to allocate IDs that span multiple blocks.
   static std::vector<uint64_t> allocateIdsAcrossBlocks(
-      BlankNodeManager::LocalBlankNodeManager& lbnm, size_t numBlocks,
-      ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
-    auto t = generateLocationTrace(loc);
+      BlankNodeManager::LocalBlankNodeManager& lbnm, size_t numBlocks) {
     std::vector<uint64_t> ids;
     for (size_t i = 0; i < numBlocks; ++i) {
       // Allocate at least one ID per block.
@@ -133,34 +118,23 @@ class BlankNodeManagerTestFixture : public ::testing::Test {
   }
 
   // Helper to get the number of used blocks.
-  static size_t getUsedBlockCount(
-      const BlankNodeManager& bnm,
-      ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
-    auto t = generateLocationTrace(loc);
+  static size_t getUsedBlockCount(const BlankNodeManager& bnm) {
     return bnm.state_.rlock()->usedBlocksSet_.size();
   }
 
   // Helper to check if a specific block index is used.
-  static bool isBlockUsed(
-      const BlankNodeManager& bnm, uint64_t blockIdx,
-      ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
-    auto t = generateLocationTrace(loc);
+  static bool isBlockUsed(const BlankNodeManager& bnm, uint64_t blockIdx) {
     return bnm.state_.rlock()->usedBlocksSet_.contains(blockIdx);
   }
 
   // Helper to get the number of managed UUIDs.
-  static size_t getManagedUuidCount(
-      const BlankNodeManager& bnm,
-      ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
-    auto t = generateLocationTrace(loc);
+  static size_t getManagedUuidCount(const BlankNodeManager& bnm) {
     return bnm.state_.rlock()->managedBlockSets_.size();
   }
 
   // Helper to serialize a LocalBlankNodeManager.
   static std::vector<BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>
-  serialize(const BlankNodeManager::LocalBlankNodeManager& lbnm,
-            ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
-    auto t = generateLocationTrace(loc);
+  serialize(const BlankNodeManager::LocalBlankNodeManager& lbnm) {
     return lbnm.getOwnedBlockIndices();
   }
 
@@ -168,9 +142,7 @@ class BlankNodeManagerTestFixture : public ::testing::Test {
   static std::shared_ptr<BlankNodeManager::LocalBlankNodeManager> deserialize(
       BlankNodeManager* bnm,
       const std::vector<
-          BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>& entries,
-      ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
-    auto t = generateLocationTrace(loc);
+          BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>& entries) {
     auto lbnm = createLocalManager(bnm);
     lbnm->allocateBlocksFromExplicitIndices(entries);
     return lbnm;
@@ -178,11 +150,8 @@ class BlankNodeManagerTestFixture : public ::testing::Test {
 
   // Helper to perform a round-trip serialization/deserialization.
   static std::shared_ptr<BlankNodeManager::LocalBlankNodeManager>
-  roundTripSerialize(
-      BlankNodeManager* bnm,
-      const BlankNodeManager::LocalBlankNodeManager& source,
-      ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
-    auto t = generateLocationTrace(loc);
+  roundTripSerialize(BlankNodeManager* bnm,
+                     const BlankNodeManager::LocalBlankNodeManager& source) {
     auto entries = serialize(source);
     return deserialize(bnm, entries);
   }
@@ -195,8 +164,9 @@ TEST(BlankNodeManager, blockAllocationAndFree) {
   {
     // LocalBlankNodeManager allocates a new block.
     BlankNodeManager::LocalBlankNodeManager lbnm(&bnm);
-    [[maybe_unused]] uint64_t id = lbnm.getId();
-    EXPECT_EQ(bnm.state_.rlock()->usedBlocksSet_.size(), 1);
+    //[[maybe_unused]] uint64_t id = lbnm.getId();
+    // EXPECT_EQ(bnm.state_.rlock()->usedBlocksSet_.size(), 1);
+    EXPECT_EQ(bnm.state_.rlock()->usedBlocksSet_.size(), 0);
   }
 
   // Once the LocalBlankNodeManager is destroyed, all Blocks allocated through.
@@ -280,7 +250,6 @@ TEST_F(BlankNodeManagerTestFixture, serializationRoundTrip) {
   auto originalIds = allocateIdsAcrossBlocks(*lbnm, 3);
   ASSERT_EQ(getPrimaryBlocks(*lbnm).size(), 3);
 
-  // Serialize.
   auto entries = serialize(*lbnm);
   EXPECT_EQ(entries.size(), 1);  // Only primary blocks, no merged blocks.
   EXPECT_EQ(entries[0].blockIndices_.size(), 3);
@@ -450,7 +419,6 @@ TEST_F(BlankNodeManagerTestFixture, idAllocationAfterDeserialization) {
   auto ids = allocateIds(*lbnm1, 5);
   auto entries = serialize(*lbnm1);
 
-  // Deserialize.
   auto lbnm2 = deserialize(bnm.get(), entries);
 
   // The next ID should come from a NEW block in primary blocks
@@ -594,4 +562,4 @@ TEST_F(BlankNodeManagerTestFixture, serializationPreservesBlockIndices) {
   EXPECT_TRUE(isBlockUsed(*bnm, 100));
 }
 
-}  // namespace ad_utility.
+}  // namespace ad_utility

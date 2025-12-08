@@ -129,7 +129,7 @@ void BlankNodeManager::LocalBlankNodeManager::allocateBlocksFromExplicitIndices(
 
 // _____________________________________________________________________________
 auto BlankNodeManager::createBlockSet() -> std::shared_ptr<Blocks> {
-  // Guard against the (very very unlikely) case of UUID collision
+  // Guard against the (very very unlikely) case of UUID collision.
   auto lockOpt = std::optional{state_.wlock()};
   auto& lock = lockOpt.value();
   auto uuid = lock->uuidGenerator_();
