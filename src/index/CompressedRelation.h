@@ -317,11 +317,21 @@ class CompressedRelationWriter {
     MetadataCallback callback_;
   };
 
- private:
-  // Internal helpers for `createPermutationPair` below. They are forward
-  // declared here and defined in `CompressedRelationPermutationWriterImpl.h`.
-  struct AddBlockOfSmallRelationsToSwitched;
+  // The `PermutationWriter` can be used to write single or pair permutations.
+  // It is defined in `CompressedRelationPermutationWriterImpl.h`.
+  template <bool WritePair>
   struct PermutationWriter;
+
+  // Helper struct for single results of `PermutationWriter`.
+  struct PermutationSingleResult {
+    size_t numDistinctCol0_;
+    std::vector<CompressedBlockMetadata> blockMetadata_;
+  };
+
+ private:
+  // Internal helper for `PermutationWriter<true>` (that is, in pair mode).
+  // Defined in `CompressedRelationPermutationWriterImpl.h`.
+  struct AddBlockOfSmallRelationsToSwitched;
 
  public:
   /**
