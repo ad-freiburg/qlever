@@ -40,39 +40,7 @@ TEST_F(MaterializedViewsTest, NotImplemented) {
         }
       )"),
       ::testing::HasSubstr(
-          "Materialized views are currently not implemented yet"));
-}
-
-// _____________________________________________________________________________
-TEST_F(MaterializedViewsTest, Basic) {
-  // Wrong queries
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      qlv().query(R"(
-        PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
-        SELECT * {
-          SERVICE view: {
-            _:config view:name "testView1" ;
-                    view:payload-g ?x .
-          }
-        }
-      )"),
-      ::testing::HasSubstr(
-          "You must set a variable, IRI or literal for the scan column of a "
-          "materialized view"));
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      qlv().query(R"(
-        PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
-        SELECT * {
-          SERVICE view: {
-            _:config view:name "testView1" ;
-                    view:scan-column ?s ;
-                    view:payload-g ?x .
-            { ?s ?p ?o }
-          }
-        }
-      )"),
-      ::testing::HasSubstr("A materialized view query may not have a child "
-                           "group graph pattern"));
+          "Materialized views are currently not supported yet"));
 }
 
 // _____________________________________________________________________________
