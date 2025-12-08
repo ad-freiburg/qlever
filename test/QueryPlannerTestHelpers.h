@@ -635,7 +635,12 @@ void expectWithGivenBudget(std::string query, auto matcher,
   }};
   auto trace = generateLocationTrace(
       l, absl::StrCat("expect with budget ", queryPlanningBudget));
-  QueryExecutionContext* qec = optQec.value_or(ad_utility::testing::getQec());
+  // Note: we cannot use `value_or` here, because it eagerly evaluates `getQec`
+  // which overwrites the global singleton index. The index is used to check
+  // invariants which require the correct index to be set.
+  // TODO<joka921>: revert to `value_or` with #2476
+  QueryExecutionContext* qec =
+      optQec.has_value() ? *optQec : ad_utility::testing::getQec();
   auto qet = parseAndPlan<QueryPlannerClass>(std::move(query), qec);
   qet.getRootOperation()->createRuntimeInfoFromEstimates(
       qet.getRootOperation()->getRuntimeInfoPointer());
