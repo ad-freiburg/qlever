@@ -13,16 +13,13 @@
 #include "index/CompressedRelationHelpersImpl.h"
 #include "util/ProgressBar.h"
 
-// TODO
-
 // Set up the handling of small relations for the twin permutation.
 // `AddBlockOfSmallRelationsToSwitched` receives a block of small relations from
 // `writer1`, swaps columns 1 and 2, sorts the block by the resulting
-// permutation and feeds the block to `WriterCallback` which writes it using
-// `writer2`.
-template <typename WriterCallback>
-struct AddBlockOfSmallRelationsToSwitched {
-  WriterCallback writerCb_;
+// permutation and feeds the block to `writer2`.
+struct CompressedRelationWriter::AddBlockOfSmallRelationsToSwitched {
+  CompressedRelationWriter& writer_;
+
   void operator()(IdTable blockOfSmallRelations) const {
     using namespace compressedRelationHelpers;
 
@@ -46,7 +43,8 @@ struct AddBlockOfSmallRelationsToSwitched {
     auto firstCol0 = blockOfSmallRelations.at(0, 0);
     auto lastCol0 =
         blockOfSmallRelations.at(blockOfSmallRelations.numRows() - 1, 0);
-    writerCb_(firstCol0, lastCol0, std::move(blockOfSmallRelations), false);
+    writer_.compressAndWriteBlock(firstCol0, lastCol0,
+                                  std::move(blockOfSmallRelations), false);
   };
 };
 
@@ -120,17 +118,6 @@ struct CompressedRelationWriter::PermutationWriter {
   ad_utility::ProgressBar progressBar_{numTriplesProcessed_,
                                        "Triples sorted: "};
 
-  // Wrapper around private method `compressAndWriteBlock` for
-  // `AddBlockOfSmallRelationsToSwitched`.
-  struct Writer2CompressAndWriteBlock {
-    CompressedRelationWriter& writer_;
-    void operator()(Id firstCol0Id, Id lastCol0Id, IdTable block,
-                    bool invokeCallback) const {
-      writer_.compressAndWriteBlock(firstCol0Id, lastCol0Id, std::move(block),
-                                    invokeCallback);
-    }
-  };
-
   // ___________________________________________________________________________
   PermutationWriter(const std::string& basename,
                     WriterAndCallback writerAndCallback1,
@@ -157,8 +144,7 @@ struct CompressedRelationWriter::PermutationWriter {
     AD_CORRECTNESS_CHECK(numColumns_ == writer2_.numColumns());
 
     writer1_.smallBlocksCallback_ =
-        AddBlockOfSmallRelationsToSwitched<Writer2CompressAndWriteBlock>{
-            Writer2CompressAndWriteBlock{writer2_}};
+        AddBlockOfSmallRelationsToSwitched{writer2_};
   };
 
   // Write a block of a large relation with `writer1` and also push the block

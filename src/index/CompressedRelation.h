@@ -317,6 +317,13 @@ class CompressedRelationWriter {
     MetadataCallback callback_;
   };
 
+ private:
+  // Internal helpers for `createPermutationPair` below. They are forward
+  // declared here and defined in `CompressedRelationPermutationWriterImpl.h`.
+  struct AddBlockOfSmallRelationsToSwitched;
+  struct PermutationWriter;
+
+ public:
   /**
    * @brief Write two permutations that only differ by the order of the col1 and
    * col2 (e.g. POS and PSO).
@@ -337,7 +344,6 @@ class CompressedRelationWriter {
     std::vector<CompressedBlockMetadata> blockMetadata_;
     std::vector<CompressedBlockMetadata> blockMetadataSwitched_;
   };
-  struct PermutationWriter;
   static PermutationPairResult createPermutationPair(
       const std::string& basename, WriterAndCallback writerAndCallback1,
       WriterAndCallback writerAndCallback2,
