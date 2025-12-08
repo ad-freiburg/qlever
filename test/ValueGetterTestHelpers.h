@@ -304,7 +304,8 @@ using GeoInfoTester = ValueGetterTester<
 using GeoPointOrWktTester =
     ValueGetterTester<sparqlExpression::detail::GeoPointOrWktValueGetter,
                       GeoPointOrWkt>;
-
+using IntValueGetterTester =
+    ValueGetterTester<sparqlExpression::detail::IntValueGetter, int64_t>;
 // _____________________________________________________________________________
 inline void checkGeoPointOrWktFromLocalAndNormalVocabAndLiteralForValid(
     std::string wktInput, Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
