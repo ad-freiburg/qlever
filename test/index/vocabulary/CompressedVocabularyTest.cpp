@@ -138,4 +138,36 @@ TYPED_TEST(CompressedVocabularyF, EmptyVocabulary) {
   testEmptyVocabulary(this->createCompressedVocabulary("accessOperatorFsst"));
 }
 
+// _______________________________________________________
+TYPED_TEST(CompressedVocabularyF, WriteAndReadFromBlob) {
+  const std::vector<std::string> words{"alpha", "delta", "beta", "42",
+                                       "31",    "0",     "al"};
+
+  // Create vocabulary with small block size (4 words per block).
+  // Use VocabularyInMemory as the underlying vocabulary since VocabularyOnDisk
+  // does not implement blob serialization.
+  CompressedVocabulary<VocabularyInMemory, TypeParam, 4> vocab;
+  const std::string filename = "compressedVocabBlobTest";
+  auto writerPtr = vocab.makeDiskWriterPtr(filename);
+  auto& writer = *writerPtr;
+  for (const auto& word : words) {
+    writer(word, false);
+  }
+  writer.finish();
+  vocab.open(filename);
+
+  // Write to blob.
+  std::vector<char> blob;
+  vocab.writeToBlob(blob);
+  ASSERT_FALSE(blob.empty());
+
+  // Read from blob into a different vocabulary.
+  CompressedVocabulary<VocabularyInMemory, TypeParam, 4> readVocab;
+  readVocab.openFromBinaryBlob(ql::span<const char>(blob.data(), blob.size()));
+  assertThatRangesAreEqual(vocab, readVocab);
+
+  // Cleanup files.
+  ad_utility::deleteFile(filename);
+}
+
 }  // namespace

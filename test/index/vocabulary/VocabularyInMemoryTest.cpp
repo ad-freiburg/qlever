@@ -56,6 +56,22 @@ TEST(VocabularyInMemory, ReadAndWriteFromFile) {
   ad_utility::deleteFile(vocabularyFilename);
 }
 
+TEST(VocabularyInMemory, WriteAndReadFromBlob) {
+  const std::vector<std::string> words{"alpha", "delta", "beta", "42",
+                                       "31",    "0",     "al"};
+  const auto vocab = createVocabulary(words);
+
+  // Write to blob.
+  std::vector<char> blob;
+  vocab.writeToBlob(blob);
+  ASSERT_FALSE(blob.empty());
+
+  // Read from blob into a different vocabulary.
+  Vocab readVocab;
+  readVocab.openFromBinaryBlob(ql::span<const char>(blob.data(), blob.size()));
+  assertThatRangesAreEqual(vocab, readVocab);
+}
+
 TEST(VocabularyInMemory, EmptyVocabulary) {
   testEmptyVocabulary(createVocabulary);
 }

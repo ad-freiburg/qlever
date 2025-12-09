@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "backports/algorithm.h"
+#include "backports/span.h"
 #include "backports/type_traits.h"
 #include "util/Exception.h"
 #include "util/Serializer/Serializer.h"
@@ -67,6 +68,60 @@ class ByteBufferReadSerializer {
  private:
   Storage _data;
   Storage::const_iterator _iterator{_data.begin()};
+};
+
+/**
+ * Serializer that reads from a span of bytes (non-owning).
+ */
+class ReadFromSpanSerializer {
+ public:
+  using SerializerType = ReadSerializerTag;
+
+  explicit ReadFromSpanSerializer(ql::span<const char> data)
+      : _data{data}, _position{0} {}
+
+  void serializeBytes(char* bytePointer, size_t numBytes) {
+    AD_CONTRACT_CHECK(_position + numBytes <= _data.size());
+    std::copy(_data.begin() + _position, _data.begin() + _position + numBytes,
+              bytePointer);
+    _position += numBytes;
+  }
+
+  ReadFromSpanSerializer(const ReadFromSpanSerializer&) = delete;
+  ReadFromSpanSerializer& operator=(const ReadFromSpanSerializer&) = delete;
+  ReadFromSpanSerializer(ReadFromSpanSerializer&&) noexcept = default;
+  ReadFromSpanSerializer& operator=(ReadFromSpanSerializer&&) noexcept =
+      default;
+
+ private:
+  ql::span<const char> _data;
+  size_t _position;
+};
+
+/**
+ * Serializer that appends to an external vector (non-owning).
+ */
+class AppendToVectorSerializer {
+ public:
+  using SerializerType = WriteSerializerTag;
+
+  explicit AppendToVectorSerializer(std::vector<char>* target)
+      : _target{target} {
+    AD_CONTRACT_CHECK(_target != nullptr);
+  }
+
+  void serializeBytes(const char* bytePointer, size_t numBytes) {
+    _target->insert(_target->end(), bytePointer, bytePointer + numBytes);
+  }
+
+  AppendToVectorSerializer(const AppendToVectorSerializer&) = delete;
+  AppendToVectorSerializer& operator=(const AppendToVectorSerializer&) = delete;
+  AppendToVectorSerializer(AppendToVectorSerializer&&) noexcept = default;
+  AppendToVectorSerializer& operator=(AppendToVectorSerializer&&) noexcept =
+      default;
+
+ private:
+  std::vector<char>* _target;
 };
 
 }  // namespace ad_utility::serialization

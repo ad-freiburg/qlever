@@ -347,12 +347,11 @@ CPP_template(typename UnderlyingVocabulary, typename CompressionWrapper,
   std::memcpy(&decodersSize, blob.data(), sizeof(size_t));
   size_t offset = sizeof(size_t);
 
-  // Read the decoders from the blob.
+  // Read the decoders from the blob using ReadFromSpanSerializer (no copy).
   AD_CONTRACT_CHECK(blob.size() >= offset + decodersSize);
   ql::span<const char> decodersBlob(blob.data() + offset, decodersSize);
-  std::vector<char> decodersVec(decodersBlob.begin(), decodersBlob.end());
-  ad_utility::serialization::ByteBufferReadSerializer decodersBuffer(
-      std::move(decodersVec));
+  ad_utility::serialization::ReadFromSpanSerializer decodersBuffer(
+      decodersBlob);
   ad_utility::serialization::ZstdReadSerializer decodersSerializer(
       std::move(decodersBuffer));
   std::vector<typename CompressionWrapper::Decoder> decoders;
@@ -360,7 +359,7 @@ CPP_template(typename UnderlyingVocabulary, typename CompressionWrapper,
   compressionWrapper_ = CompressionWrapper{{std::move(decoders)}};
   offset += decodersSize;
 
-  // Pass the remaining blob to the underlying vocabulary.
+  // Pass the remaining blob to the underlying vocabulary (no copy).
   ql::span<const char> underlyingBlob(blob.data() + offset,
                                       blob.size() - offset);
   underlyingVocabulary_.openFromBinaryBlob(underlyingBlob);
@@ -380,13 +379,13 @@ CPP_template(typename UnderlyingVocabulary, typename CompressionWrapper,
   // First serialize the decoders to a separate vector.
   std::vector<char> decodersBlob;
   {
-    ad_utility::serialization::ByteBufferWriteSerializer decodersBuffer;
+    ad_utility::serialization::AppendToVectorSerializer decodersBuffer(
+        &decodersBlob);
     ad_utility::serialization::ZstdWriteSerializer decodersSerializer(
         std::move(decodersBuffer));
     const auto& decoders = compressionWrapper_.getDecoders();
     decodersSerializer << decoders;
     decodersSerializer.close();
-    decodersBlob = std::move(decodersSerializer).underlyingSerializer().data();
   }
 
   // Append the size of the decoders blob to the output.
@@ -398,7 +397,7 @@ CPP_template(typename UnderlyingVocabulary, typename CompressionWrapper,
   // Append the decoders blob to the output.
   output.insert(output.end(), decodersBlob.begin(), decodersBlob.end());
 
-  // Append the underlying vocabulary to the output.
+  // Append the underlying vocabulary to the output (directly, no copy).
   underlyingVocabulary_.writeToBlob(output);
 }
 
