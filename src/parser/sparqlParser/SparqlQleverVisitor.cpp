@@ -39,11 +39,14 @@
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/MagicServiceQuery.h"
+#include "parser/MaterializedViewQuery.h"
 #include "parser/NamedCachedResult.h"
+#include "parser/PathQuery.h"
 #include "parser/Quads.h"
 #include "parser/RdfParser.h"
 #include "parser/SparqlParser.h"
 #include "parser/SpatialQuery.h"
+#include "parser/TextSearchQuery.h"
 #include "parser/TokenizerCtre.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/Variable.h"
@@ -1209,84 +1212,58 @@ GraphPatternOperation Visitor::visit(Parser::OptionalGraphPatternContext* ctx) {
 // _____________________________________________________________________________
 void Visitor::parseBodyOfMagicServiceQuery(
     parsedQuery::MagicServiceQuery& target,
-    Parser::ServiceGraphPatternContext* ctx, std::string_view operationName) {
-  auto parseGraphPattern = [operationName](
-                               parsedQuery::MagicServiceQuery& pathQuery,
-                               const parsedQuery::GraphPatternOperation& op) {
-    if (std::holds_alternative<parsedQuery::BasicGraphPattern>(op)) {
-      pathQuery.addBasicPattern(std::get<parsedQuery::BasicGraphPattern>(op));
-    } else if (std::holds_alternative<parsedQuery::GroupGraphPattern>(op)) {
-      pathQuery.addGraph(op);
-    } else {
-      throw std::runtime_error{absl::StrCat(
-          "Unsupported element in a magic service query of type `",
-          operationName,
-          "`. Only triples and `{ group graph patterns }` are allowed ")};
-    }
-  };
+    Parser::ServiceGraphPatternContext* ctx) {
+  auto parseGraphPattern =
+      [&target](const parsedQuery::GraphPatternOperation& op) {
+        if (std::holds_alternative<parsedQuery::BasicGraphPattern>(op)) {
+          target.addBasicPattern(std::get<parsedQuery::BasicGraphPattern>(op));
+        } else if (std::holds_alternative<parsedQuery::GroupGraphPattern>(op)) {
+          target.addGraph(op);
+        } else {
+          throw std::runtime_error{absl::StrCat(
+              "Unsupported element in a magic service query of type `",
+              target.name(),
+              "`. Only triples and `{ group graph patterns }` are allowed ")};
+        }
+      };
 
   parsedQuery::GraphPattern graphPattern = visit(ctx->groupGraphPattern());
   try {
     for (const auto& op : graphPattern._graphPatterns) {
-      parseGraphPattern(target, op);
+      parseGraphPattern(op);
     }
   } catch (const std::exception& e) {
     // Annotate the occurring exceptions with the correct position inside the
     // query.
     reportError(ctx->groupGraphPattern(), e.what());
   }
+
+  // Check that the configuration is valid and report an error otherwise.
+  try {
+    target.validate();
+  } catch (const std::exception& ex) {
+    reportError(ctx, ex.what());
+  }
 }
 
 // _____________________________________________________________________________
-GraphPatternOperation Visitor::visitPathQuery(
+template <typename T>
+GraphPatternOperation Visitor::visitMagicServiceQuery(
     Parser::ServiceGraphPatternContext* ctx) {
-  parsedQuery::PathQuery pathQuery;
-  parseBodyOfMagicServiceQuery(pathQuery, ctx, "path search");
-  return pathQuery;
+  T query;
+  parseBodyOfMagicServiceQuery(query, ctx);
+  return query;
 }
 
 // _____________________________________________________________________________
 GraphPatternOperation Visitor::visitNamedCachedResult(
     const TripleComponent::Iri& target,
     Parser::ServiceGraphPatternContext* ctx) {
+  // For `NamedCachedResult` we cannot use `visitMagicServiceQuery` because it
+  // needs the `IRI` it is called with as a constructor argument.
   parsedQuery::NamedCachedResult namedQuery{target};
-  parseBodyOfMagicServiceQuery(namedQuery, ctx, "named cached query");
+  parseBodyOfMagicServiceQuery(namedQuery, ctx);
   return namedQuery;
-}
-
-// _____________________________________________________________________________
-GraphPatternOperation Visitor::visitSpatialQuery(
-    Parser::ServiceGraphPatternContext* ctx) {
-  parsedQuery::SpatialQuery spatialQuery;
-  parseBodyOfMagicServiceQuery(spatialQuery, ctx, "spatial join");
-
-  try {
-    // We convert the spatial query to a spatial join configuration and discard
-    // its result here to detect errors early and report them to the user with
-    // highlighting. It's only a small struct so not much is wasted.
-    [[maybe_unused]] auto&& _ = spatialQuery.toSpatialJoinConfiguration();
-  } catch (const std::exception& ex) {
-    reportError(ctx, ex.what());
-  }
-
-  return spatialQuery;
-}
-
-// _____________________________________________________________________________
-GraphPatternOperation Visitor::visitMaterializedViewQuery(
-    Parser::ServiceGraphPatternContext* ctx) {
-  parsedQuery::MaterializedViewQuery viewQuery;
-  parseBodyOfMagicServiceQuery(viewQuery, ctx, "materialized view query");
-  return viewQuery;
-}
-
-// _____________________________________________________________________________
-GraphPatternOperation Visitor::visitTextSearchQuery(
-    Parser::ServiceGraphPatternContext* ctx) {
-  parsedQuery::TextSearchQuery textSearchQuery;
-  parseBodyOfMagicServiceQuery(textSearchQuery, ctx, "full text search");
-
-  return textSearchQuery;
 }
 
 // Parsing for the `serviceGraphPattern` rule.
@@ -1313,16 +1290,16 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
                  varOrIri);
 
   if (serviceIri.toStringRepresentation() == PATH_SEARCH_IRI) {
-    return visitPathQuery(ctx);
+    return visitMagicServiceQuery<parsedQuery::PathQuery>(ctx);
   } else if (serviceIri.toStringRepresentation() == SPATIAL_SEARCH_IRI) {
-    return visitSpatialQuery(ctx);
+    return visitMagicServiceQuery<parsedQuery::SpatialQuery>(ctx);
   } else if (serviceIri.toStringRepresentation() == TEXT_SEARCH_IRI) {
-    return visitTextSearchQuery(ctx);
+    return visitMagicServiceQuery<parsedQuery::TextSearchQuery>(ctx);
   } else if (ql::starts_with(asStringViewUnsafe(serviceIri.getContent()),
                              CACHED_RESULT_WITH_NAME_PREFIX)) {
     return visitNamedCachedResult(serviceIri, ctx);
   } else if (serviceIri.toStringRepresentation() == MATERIALIZED_VIEW_IRI) {
-    return visitMaterializedViewQuery(ctx);
+    return visitMagicServiceQuery<parsedQuery::MaterializedViewQuery>(ctx);
   }
   // Parse the body of the SERVICE query. Add the visible variables from the
   // SERVICE clause to the visible variables so far, but also remember them

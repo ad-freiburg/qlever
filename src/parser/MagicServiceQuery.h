@@ -64,6 +64,13 @@ struct MagicServiceQuery {
    */
   virtual void addGraph(const GraphPatternOperation& childGraphPattern);
 
+  // Helper that throws if the current configuration values of this
+  // `MagicServiceQuery` is invalid.
+  virtual void validate() const {};
+
+  // Helper that returns a readable name for the type of `MagicServiceQuery`.
+  virtual constexpr std::string_view name() const = 0;
+
  protected:
   // Utility functions for variables in the magic service configuration triples
   Variable getVariable(std::string_view parameter,

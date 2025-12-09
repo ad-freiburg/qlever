@@ -326,30 +326,21 @@ class SparqlQleverVisitor {
 
   // Visitor functions for special builtin features that are triggered via
   // `SERVICE` requests with "magic" IRIs.
-  parsedQuery::GraphPatternOperation visitPathQuery(
-      Parser::ServiceGraphPatternContext* ctx);
-
-  GraphPatternOperation visitSpatialQuery(
-      Parser::ServiceGraphPatternContext* ctx);
-
-  parsedQuery::GraphPatternOperation visitTextSearchQuery(
+  template <typename T>
+  parsedQuery::GraphPatternOperation visitMagicServiceQuery(
       Parser::ServiceGraphPatternContext* ctx);
 
   GraphPatternOperation visitNamedCachedResult(
       const TripleComponent::Iri& target,
       Parser::ServiceGraphPatternContext* ctx);
 
-  GraphPatternOperation visitMaterializedViewQuery(
-      Parser::ServiceGraphPatternContext* ctx);
-
   // Parse the body of a `MagicServiceQuery`, in particular call
   // `addBasicGraphPattern` and `addGraph` for the contents of the body, and
   // throw an exception if an unsupported element is encountered. This function
   // implements common functionality of `visitNamedCachedResult`,
-  // `visitTextQuery`, ... above.
+  // and `visitMagicServiceQuery`.
   void parseBodyOfMagicServiceQuery(parsedQuery::MagicServiceQuery& target,
-                                    Parser::ServiceGraphPatternContext* ctx,
-                                    std::string_view operationName);
+                                    Parser::ServiceGraphPatternContext* ctx);
 
   parsedQuery::GraphPatternOperation visit(Parser::BindContext* ctx);
 
