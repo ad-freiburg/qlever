@@ -5,26 +5,17 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARYMERGERIMPL_H
 #define QLEVER_SRC_INDEX_VOCABULARYMERGERIMPL_H
 
-#include <fstream>
 #include <future>
-#include <iostream>
-#include <queue>
 #include <string>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
 #include "backports/algorithm.h"
 #include "index/ConstantsIndexBuilding.h"
-#include "index/Vocabulary.h"
 #include "index/VocabularyMerger.h"
-#include "parser/TripleComponent.h"
-#include "rdfTypes/RdfEscaping.h"
-#include "util/Conversions.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
 #include "util/InputRangeUtils.h"
-#include "util/Iterators.h"
 #include "util/Log.h"
 #include "util/ParallelMultiwayMerge.h"
 #include "util/ProgressBar.h"
@@ -239,10 +230,8 @@ inline void VocabularyMerger::doActualWrite(
 }
 
 // ____________________________________________________________________________________________________________
-inline ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(
-    ItemVec* elsPtr) {
-  auto& els = *elsPtr;
-  ad_utility::HashMap<uint64_t, uint64_t> res;
+inline HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els) {
+  HashMap<uint64_t, uint64_t> res;
   res.reserve(2 * els.size());
   bool first = true;
   std::string_view lastWord;
