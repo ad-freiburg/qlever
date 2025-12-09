@@ -261,10 +261,11 @@ CPP_template(typename S, typename T)(
   }
 }
 
-/// Arithmetic types (the builtins like int, char, double) can be trivially
-/// serialized.
+/// Arithmetic types (the builtins like int, char, double), as well as enums can
+/// be trivially serialized.
 CPP_template(typename T,
-             typename U)(requires std::is_arithmetic_v<std::decay_t<T>>)
+             typename U)(requires(std::is_arithmetic_v<std::decay_t<T>> ||
+                                  std::is_enum_v<std::decay_t<T>>))
     [[maybe_unused]] std::true_type allowTrivialSerialization(T, U) {
   return {};
 }

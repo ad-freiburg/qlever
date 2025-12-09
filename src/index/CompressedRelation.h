@@ -337,6 +337,7 @@ class CompressedRelationWriter {
     std::vector<CompressedBlockMetadata> blockMetadata_;
     std::vector<CompressedBlockMetadata> blockMetadataSwitched_;
   };
+  struct PermutationWriter;
   static PermutationPairResult createPermutationPair(
       const std::string& basename, WriterAndCallback writerAndCallback1,
       WriterAndCallback writerAndCallback2,

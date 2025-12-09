@@ -8,6 +8,7 @@
 #include "../util/GTestHelpers.h"
 #include "rdfTypes/Variable.h"
 #include "util/HashSet.h"
+#include "util/Serializer/ByteBufferSerializer.h"
 
 // _____________________________________________________________________________
 TEST(Variable, legalAndIllegalNames) {
@@ -111,4 +112,16 @@ TEST(Variable, ScoreAndMatchUnicodeExhaustive) {
     }
   }
   EXPECT_EQ(numErrors, 0) << numErrors << ' ' << numSuccesful;
+}
+
+// _____________________________________________________________________________
+TEST(Variable, Serialization) {
+  Variable v{"?x"};
+  ad_utility::serialization::ByteBufferWriteSerializer writer;
+  writer << v;
+  ad_utility::serialization::ByteBufferReadSerializer reader(
+      std::move(writer).data());
+  Variable v2{"?somethingElse"};
+  reader | v2;
+  EXPECT_EQ(v2.name(), "?x");
 }

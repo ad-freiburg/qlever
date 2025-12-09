@@ -10,6 +10,7 @@
 #include <string>
 
 #include "./SparqlExpressionTestHelpers.h"
+#include "./printers/LocalVocabEntryPrinters.h"
 #include "./util/GTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
@@ -1506,6 +1507,46 @@ TEST(SparqlExpression, geoSparqlExpressions) {
                           squareKilometer});
   checkMetricArea(lengthInputs, Ids{U, U, D(0.0), D(0.0),
                                     D(expectedArea(polygon)), D(0.0), U});
+
+  auto checkGeometryN =
+      std::bind_front(testNaryExpression, &makeGeometryNExpression);
+  // Non-geometry types
+  checkGeometryN(IdOrLiteralOrIriVec{U, U, U, U}, Ids{D(5), I(3), B(true), U},
+                 Ids{I(1), U, D(5), I(2)});
+  // Extract n-th geometry: Single and invalid geometries.
+  checkGeometryN(
+      IdOrLiteralOrIriVec{
+          U,
+          U,
+          geoLit("POINT(24.3 26.8)"),
+          geoLit("LINESTRING(2 8,4 6)"),
+          geoLit("POLYGON((2 2,4 2,4 4,2 4,2 2))"),
+          U,
+          U,
+          geoLit("LINESTRING(-5000 0,1 2)"),
+      },
+      exampleGeoms, Ids{I(1), I(1), I(1), I(1), I(1), I(1), I(1), I(1)});
+  checkGeometryN(IdOrLiteralOrIriVec{U, U, U, U, U, U, U, U}, exampleGeoms,
+                 Ids{I(0), I(0), I(0), I(0), I(0), I(0), I(0), I(0)});
+  // Extract n-th geometry: Collection types.
+  checkGeometryN(
+      IdOrLiteralOrIriVec{
+          geoLit("POINT(1 2)"),
+          geoLit("POINT(1 2)"),
+          geoLit("LINESTRING(1 2,3 4)"),
+          geoLit("POLYGON((1 2,3 4,1 2))"),
+          geoLit("POINT(1 2)"),
+      },
+      exampleMultiGeoms, Ids{I(1), I(1), I(1), I(1), I(1)});
+  checkGeometryN(
+      IdOrLiteralOrIriVec{
+          geoLit("POINT(3 4)"),
+          U,
+          geoLit("LINESTRING(5 6,7 8,9 0)"),
+          geoLit("POLYGON((1 2,3 4,1 2.5,1 2))"),
+          geoLit("LINESTRING(2 8,4 6)"),
+      },
+      exampleMultiGeoms, Ids{I(2), I(2), I(2), I(2), I(2)});
 }
 
 // ________________________________________________________________________________________

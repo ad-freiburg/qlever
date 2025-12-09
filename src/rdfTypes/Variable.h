@@ -11,6 +11,7 @@
 #include <variant>
 
 #include "backports/three_way_comparison.h"
+#include "util/Serializer/SerializeString.h"
 #include "util/Serializer/Serializer.h"
 
 // Forward declaration because of cyclic dependencies
@@ -105,7 +106,7 @@ class Variable {
   // it at the end of target.
   static void appendEscapedWord(std::string_view word, std::string& target);
 
-  // Serialization for Variable - just serialize the name
+  // Serialization for `Variable`s - just serialize the name.
   AD_SERIALIZE_FRIEND_FUNCTION(Variable) { serializer | arg._name; }
 };
 

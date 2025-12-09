@@ -66,6 +66,10 @@ NARY_EXPRESSION(MetricLengthExpression, 1,
                 FV<ad_utility::WktMetricLength,
                    GeometryInfoValueGetter<ad_utility::MetricLength>>);
 
+NARY_EXPRESSION(
+    GeometryNExpression, 2,
+    FV<ad_utility::WktGeometryN, GeoPointOrWktValueGetter, IntValueGetter>);
+
 template <SpatialJoinType Relation>
 NARY_EXPRESSION(
     GeoRelationExpression, 2,
@@ -157,6 +161,13 @@ SparqlExpression::Ptr makeLengthExpression(SparqlExpression::Ptr child1,
 // _____________________________________________________________________________
 SparqlExpression::Ptr makeMetricLengthExpression(SparqlExpression::Ptr child1) {
   return std::make_unique<MetricLengthExpression>(std::move(child1));
+}
+
+// _____________________________________________________________________________
+SparqlExpression::Ptr makeGeometryNExpression(SparqlExpression::Ptr child1,
+                                              SparqlExpression::Ptr child2) {
+  return std::make_unique<GeometryNExpression>(std::move(child1),
+                                               std::move(child2));
 }
 
 // _____________________________________________________________________________
