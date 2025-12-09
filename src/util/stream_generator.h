@@ -313,11 +313,7 @@ using stream_generator = basic_stream_generator<1000>;
 // NOTE: A `string_view` that is pushed via `operator()` might and often will be
 // split up between two callback invocations. The callback for the final batch
 // is invoked either in the destructor or via an explicit call to `finish()`.
-<<<<<<< HEAD
 template <size_t BATCH_SIZE = 1'000>
-=======
-template <size_t BATCH_SIZE = 1000>
->>>>>>> a99ccca4 (change batch size of stream_generator for QNX)
 class StringBatcher {
   using CallbackForBatches = std::function<void(std::string_view)>;
   CallbackForBatches callbackForBatches_;
