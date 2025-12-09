@@ -100,8 +100,8 @@ struct CompressedRelationWriter::PermutationWriter {
              compressedRelationHelpers::SingleMetadataWriter>;
   MetadataWriter writeMetadata_;
 
-  const size_t blocksize_;
-  const size_t numColumns_;
+  const size_t blocksize_{writer1_.blocksize()};
+  const size_t numColumns_{writer1_.numColumns()};
   size_t numDistinctCol0_ = 0;
 
   ad_utility::Timer inputWaitTimer_{ad_utility::Timer::Stopped};
@@ -112,7 +112,7 @@ struct CompressedRelationWriter::PermutationWriter {
       ad_utility::makeUnlimitedAllocator<Id>()};
 
   // TODO<joka921> Use call_fixed_size if there is benefit to it.
-  IdTableStatic<0> relation_;
+  IdTableStatic<0> relation_{numColumns_, alloc_};
   size_t numBlocksCurrentRel_ = 0;
 
   using TwinRelationSorter = ad_utility::CompressedExternalIdTableSorter<
@@ -127,24 +127,24 @@ struct CompressedRelationWriter::PermutationWriter {
                                        "Triples sorted: "};
 
   // Constructor for a `PermutationWriter` which writes pair of permutations.
-  PermutationWriter(const std::string& basename,
-                    WriterAndCallback writerAndCallback1,
-                    WriterAndCallback writerAndCallback2,
-                    qlever::KeyOrder permutation,
-                    PerBlockCallbacks perBlockCallbacks) requires WritePair
+  // TODO<C++20> Use `PermutationWriter(...) requires WritePair` here.
+  CPP_template(bool doWritePair = WritePair)(requires doWritePair)
+      PermutationWriter(const std::string& basename,
+                        WriterAndCallback writerAndCallback1,
+                        WriterAndCallback writerAndCallback2,
+                        qlever::KeyOrder permutation,
+                        PerBlockCallbacks perBlockCallbacks)
       : permutation_{std::move(permutation)},
         writer1_{writerAndCallback1.writer_},
         writer2_{writerAndCallback2.writer_},
         writeMetadata_{std::move(writerAndCallback1.callback_),
                        std::move(writerAndCallback2.callback_),
                        writerAndCallback1.writer_.blocksize()},
-        blocksize_{writerAndCallback1.writer_.blocksize()},
-        numColumns_{writerAndCallback1.writer_.numColumns()},
         largeTwinRelationTimer_{ad_utility::Timer::Stopped},
-        relation_{numColumns_, alloc_},
         twinRelationSorter_{basename + ".twin-twinRelationSorter", numColumns_,
                             4_GB, alloc_},
         blockCallbackManager_{std::move(perBlockCallbacks)} {
+    static_assert(WritePair);
     // This logic only works for permutations that have the graph as the fourth
     // column.
     AD_CORRECTNESS_CHECK(permutation_.keys().at(3) == 3);
@@ -157,17 +157,17 @@ struct CompressedRelationWriter::PermutationWriter {
   };
 
   // Constructor for a `PermutationWriter` which writes a single permutation.
-  PermutationWriter(WriterAndCallback writerAndCallback1,
-                    qlever::KeyOrder permutation,
-                    PerBlockCallbacks perBlockCallbacks) requires(!WritePair)
+  // TODO<C++20> Use `PermutationWriter(...) requires (!WritePair)` here.
+  CPP_template(bool doWritePair = WritePair)(requires(!doWritePair))
+      PermutationWriter(WriterAndCallback writerAndCallback1,
+                        qlever::KeyOrder permutation,
+                        PerBlockCallbacks perBlockCallbacks)
       : permutation_{std::move(permutation)},
         writer1_{writerAndCallback1.writer_},
         writeMetadata_{std::move(writerAndCallback1.callback_),
                        writerAndCallback1.writer_.blocksize()},
-        blocksize_{writerAndCallback1.writer_.blocksize()},
-        numColumns_{writerAndCallback1.writer_.numColumns()},
-        relation_{numColumns_, alloc_},
         blockCallbackManager_{std::move(perBlockCallbacks)} {
+    static_assert(!WritePair);
     // This logic only works for permutations that have the graph as the fourth
     // column.
     AD_CORRECTNESS_CHECK(permutation_.keys().at(3) == 3);
