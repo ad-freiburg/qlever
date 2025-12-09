@@ -532,11 +532,11 @@ struct EncodeForUriImpl {
       return toLiteral(
           boost::urls::encode(value, boost::urls::unreserved_chars));
     }
-  }
 #else
     throw std::runtime_error(
         "EncodeForUri is not available in reduced feature set for C++17");
 #endif
+  }
 };
 using EncodeForUriExpression = StringExpressionImpl<1, EncodeForUriImpl>;
 
