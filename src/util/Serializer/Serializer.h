@@ -209,6 +209,8 @@ struct TrivialSerializationHelperTag {};
  * `ad_utility::serialization` because of the argument-dependent lookup rules.
  * If you want to break the dependencies between your types and this header, you
  * can also define the second parameter to be templated.
+ * Note: In addition to the cases described above, all `enum` types are
+ * implicitly trivially serializable.
  *
  * For example, one can equivalently write one of the following two:
  *
@@ -258,10 +260,11 @@ CPP_template(typename S, typename T)(
   }
 }
 
-/// Arithmetic types (the builtins like int, char, double) can be trivially
-/// serialized.
+/// Arithmetic types (the builtins like int, char, double), as well as enums can
+/// be trivially serialized.
 CPP_template(typename T,
-             typename U)(requires std::is_arithmetic_v<std::decay_t<T>>)
+             typename U)(requires(std::is_arithmetic_v<std::decay_t<T>> ||
+                                  std::is_enum_v<std::decay_t<T>>))
     [[maybe_unused]] std::true_type allowTrivialSerialization(T, U) {
   return {};
 }
