@@ -1031,14 +1031,15 @@ void IndexImpl::throwExceptionIfNoPatterns() const {
 }
 
 // _____________________________________________________________________________
-void IndexImpl::throwExceptionIfPermutationNotLoaded(
+const Permutation& IndexImpl::getPermutationImpl(
     const PermutationPtr& permutation, std::string_view permutationName) const {
   AD_CONTRACT_CHECK(
       permutation != nullptr,
       absl::StrCat("The requested operation requires the ", permutationName,
                    " permutation to be loaded, but it was not loaded. This "
                    "typically happens when the index was loaded with the "
-                   "dontLoadPermutations option set to true."));
+                   "`dontLoadPermutations` option set to true."));
+  return *permutation;
 }
 
 // _____________________________________________________________________________
@@ -1555,7 +1556,7 @@ IndexImpl::PermutationPtr IndexImpl::getPermutationPtr(Permutation::Enum p) {
 // ____________________________________________________________________________
 Permutation& IndexImpl::getPermutation(Permutation::Enum p) {
   auto ptr = getPermutationPtr(p);
-  throwExceptionIfPermutationNotLoaded(ptr, Permutation::toString(p));
+  getPermutationImpl(ptr, Permutation::toString(p));
   return *ptr;
 }
 

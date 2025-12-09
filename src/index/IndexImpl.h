@@ -218,54 +218,12 @@ class IndexImpl {
   IndexImpl& operator=(IndexImpl&&) = delete;
   IndexImpl(IndexImpl&&) = delete;
 
-  const auto& POS() const {
-    throwExceptionIfPermutationNotLoaded(pos_, "POS");
-    return *pos_;
-  }
-  auto& POS() {
-    throwExceptionIfPermutationNotLoaded(pos_, "POS");
-    return *pos_;
-  }
-  const auto& PSO() const {
-    throwExceptionIfPermutationNotLoaded(pso_, "PSO");
-    return *pso_;
-  }
-  auto& PSO() {
-    throwExceptionIfPermutationNotLoaded(pso_, "PSO");
-    return *pso_;
-  }
-  const auto& SPO() const {
-    throwExceptionIfPermutationNotLoaded(spo_, "SPO");
-    return *spo_;
-  }
-  auto& SPO() {
-    throwExceptionIfPermutationNotLoaded(spo_, "SPO");
-    return *spo_;
-  }
-  const auto& SOP() const {
-    throwExceptionIfPermutationNotLoaded(sop_, "SOP");
-    return *sop_;
-  }
-  auto& SOP() {
-    throwExceptionIfPermutationNotLoaded(sop_, "SOP");
-    return *sop_;
-  }
-  const auto& OPS() const {
-    throwExceptionIfPermutationNotLoaded(ops_, "OPS");
-    return *ops_;
-  }
-  auto& OPS() {
-    throwExceptionIfPermutationNotLoaded(ops_, "OPS");
-    return *ops_;
-  }
-  const auto& OSP() const {
-    throwExceptionIfPermutationNotLoaded(osp_, "OSP");
-    return *osp_;
-  }
-  auto& OSP() {
-    throwExceptionIfPermutationNotLoaded(osp_, "OSP");
-    return *osp_;
-  }
+  const auto& POS() const { return getPermutationImpl(pos_, "POS"); }
+  const auto& PSO() const { return getPermutationImpl(pso_, "PSO"); }
+  const auto& SPO() const { return getPermutationImpl(spo_, "SPO"); }
+  const auto& SOP() const { return getPermutationImpl(sop_, "SOP"); }
+  const auto& OPS() const { return getPermutationImpl(ops_, "OPS"); }
+  const auto& OSP() const { return getPermutationImpl(osp_, "OSP"); }
 
   static const IndexImpl& staticGlobalSingletonIndex() {
     AD_CORRECTNESS_CHECK(globalSingletonIndex_ != nullptr);
@@ -717,14 +675,10 @@ class IndexImpl {
    */
   void throwExceptionIfNoPatterns() const;
 
-  /**
-   * @brief Throws an exception if the given permutation pointer is nullptr.
-   *        Should be called whenever accessing a permutation that might not be
-   *        loaded.
-   */
-  void throwExceptionIfPermutationNotLoaded(
-      const PermutationPtr& permutation,
-      std::string_view permutationName) const;
+  // Dereference the `permutationPtr` and throw an exception if it is `nullptr`.
+  // The `permutationName` is used to enrich the error message.
+  const Permutation& getPermutationImpl(const PermutationPtr& permutationPtr,
+                                        std::string_view permutationName) const;
 
   void writeConfiguration() const;
   void readConfiguration();
