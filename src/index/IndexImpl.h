@@ -193,6 +193,11 @@ class IndexImpl {
   std::optional<Id> idOfHasPatternDuringIndexBuilding_;
   std::optional<Id> idOfInternalGraphDuringIndexBuilding_;
 
+  // If true, the permutations will not be loaded from disk when calling
+  // createFromOnDiskIndex. This is useful when only queries that don't require
+  // the permutations need to be executed.
+  bool dontLoadPermutations_ = false;
+
   // The vocabulary type that is used (only relevant during index building).
   ad_utility::VocabularyType vocabularyTypeForIndexBuilding_{
       ad_utility::VocabularyType::Enum::OnDiskCompressed};
@@ -213,18 +218,54 @@ class IndexImpl {
   IndexImpl& operator=(IndexImpl&&) = delete;
   IndexImpl(IndexImpl&&) = delete;
 
-  const auto& POS() const { return *pos_; }
-  auto& POS() { return *pos_; }
-  const auto& PSO() const { return *pso_; }
-  auto& PSO() { return *pso_; }
-  const auto& SPO() const { return *spo_; }
-  auto& SPO() { return *spo_; }
-  const auto& SOP() const { return *sop_; }
-  auto& SOP() { return *sop_; }
-  const auto& OPS() const { return *ops_; }
-  auto& OPS() { return *ops_; }
-  const auto& OSP() const { return *osp_; }
-  auto& OSP() { return *osp_; }
+  const auto& POS() const {
+    throwExceptionIfPermutationNotLoaded(pos_, "POS");
+    return *pos_;
+  }
+  auto& POS() {
+    throwExceptionIfPermutationNotLoaded(pos_, "POS");
+    return *pos_;
+  }
+  const auto& PSO() const {
+    throwExceptionIfPermutationNotLoaded(pso_, "PSO");
+    return *pso_;
+  }
+  auto& PSO() {
+    throwExceptionIfPermutationNotLoaded(pso_, "PSO");
+    return *pso_;
+  }
+  const auto& SPO() const {
+    throwExceptionIfPermutationNotLoaded(spo_, "SPO");
+    return *spo_;
+  }
+  auto& SPO() {
+    throwExceptionIfPermutationNotLoaded(spo_, "SPO");
+    return *spo_;
+  }
+  const auto& SOP() const {
+    throwExceptionIfPermutationNotLoaded(sop_, "SOP");
+    return *sop_;
+  }
+  auto& SOP() {
+    throwExceptionIfPermutationNotLoaded(sop_, "SOP");
+    return *sop_;
+  }
+  const auto& OPS() const {
+    throwExceptionIfPermutationNotLoaded(ops_, "OPS");
+    return *ops_;
+  }
+  auto& OPS() {
+    throwExceptionIfPermutationNotLoaded(ops_, "OPS");
+    return *ops_;
+  }
+  const auto& OSP() const {
+    throwExceptionIfPermutationNotLoaded(osp_, "OSP");
+    return *osp_;
+  }
+  auto& OSP() {
+    throwExceptionIfPermutationNotLoaded(osp_, "OSP");
+    return *osp_;
+  }
 
   static const IndexImpl& staticGlobalSingletonIndex() {
     AD_CORRECTNESS_CHECK(globalSingletonIndex_ != nullptr);
@@ -438,6 +479,8 @@ class IndexImpl {
   bool& usePatterns();
 
   bool& loadAllPermutations();
+
+  bool& dontLoadPermutations();
 
   void setKeepTempFiles(bool keepTempFiles);
 
@@ -673,6 +716,15 @@ class IndexImpl {
    *        file.
    */
   void throwExceptionIfNoPatterns() const;
+
+  /**
+   * @brief Throws an exception if the given permutation pointer is nullptr.
+   *        Should be called whenever accessing a permutation that might not be
+   *        loaded.
+   */
+  void throwExceptionIfPermutationNotLoaded(
+      const PermutationPtr& permutation,
+      std::string_view permutationName) const;
 
   void writeConfiguration() const;
   void readConfiguration();
