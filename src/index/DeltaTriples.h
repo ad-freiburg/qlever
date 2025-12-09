@@ -140,11 +140,11 @@ class DeltaTriples {
     TriplesToHandlesMap triplesDeleted_;
   };
 
-  TriplesToHandles<false> state_;
-  TriplesToHandles<true> internalState_;
+  TriplesToHandles<false> triplesToHandlesNormal_;
+  TriplesToHandles<true> triplesToHandlesInternal_;
   // The located triples for all the permutations.
-  LocatedTriplesPerBlockAllPermutations<false> locatedTriples_;
-  LocatedTriplesPerBlockAllPermutations<true> internalLocatedTriples_;
+  LocatedTriplesPerBlockAllPermutations<false> locatedTriplesNormal_;
+  LocatedTriplesPerBlockAllPermutations<true> locatedTriplesInternal_;
 
  public:
   // Construct for given index.
@@ -164,7 +164,7 @@ class DeltaTriples {
 
   const LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
       Permutation::Enum permutation) const {
-    return locatedTriples_.at(static_cast<size_t>(permutation));
+    return locatedTriplesNormal_.at(static_cast<size_t>(permutation));
   }
 
   // Clear `triplesAdded_` and `triplesSubtracted_` and all associated data
@@ -173,19 +173,22 @@ class DeltaTriples {
 
   // The number of delta triples added and subtracted.
   int64_t numInserted() const {
-    return static_cast<int64_t>(state_.triplesInserted_.size());
+    return static_cast<int64_t>(
+        triplesToHandlesNormal_.triplesInserted_.size());
   }
   int64_t numDeleted() const {
-    return static_cast<int64_t>(state_.triplesDeleted_.size());
+    return static_cast<int64_t>(triplesToHandlesNormal_.triplesDeleted_.size());
   }
   DeltaTriplesCount getCounts() const;
 
   // The number of internal delta triples added and subtracted.
   int64_t numInternalInserted() const {
-    return static_cast<int64_t>(internalState_.triplesInserted_.size());
+    return static_cast<int64_t>(
+        triplesToHandlesInternal_.triplesInserted_.size());
   }
   int64_t numInternalDeleted() const {
-    return static_cast<int64_t>(internalState_.triplesDeleted_.size());
+    return static_cast<int64_t>(
+        triplesToHandlesInternal_.triplesDeleted_.size());
   }
 
   // Insert triples.
@@ -241,7 +244,8 @@ class DeltaTriples {
 
  private:
   // The the proper state according to the template parameter. This will either
-  // return a reference to `internalState_` or `state_`.
+  // return a reference to `triplesToHandlesInternal_` or
+  // `triplesToHandlesNormal_`.
   template <bool isInternal>
   TriplesToHandles<isInternal>& getState();
 

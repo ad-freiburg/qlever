@@ -35,17 +35,17 @@ void DeltaTriples::clear() {
     state.triplesDeleted_.clear();
     ql::ranges::for_each(locatedTriples, &LocatedTriplesPerBlock::clear);
   };
-  clearImpl(state_, locatedTriples_);
-  clearImpl(internalState_, internalLocatedTriples_);
+  clearImpl(triplesToHandlesNormal_, locatedTriplesNormal_);
+  clearImpl(triplesToHandlesInternal_, locatedTriplesInternal_);
 }
 
 // ____________________________________________________________________________
 template <bool isInternal>
 DeltaTriples::TriplesToHandles<isInternal>& DeltaTriples::getState() {
   if constexpr (isInternal) {
-    return internalState_;
+    return triplesToHandlesInternal_;
   } else {
-    return state_;
+    return triplesToHandlesNormal_;
   }
 }
 
@@ -53,9 +53,9 @@ DeltaTriples::TriplesToHandles<isInternal>& DeltaTriples::getState() {
 template <bool isInternal>
 auto& DeltaTriples::getLocatedTriple() {
   if constexpr (isInternal) {
-    return internalLocatedTriples_;
+    return locatedTriplesInternal_;
   } else {
-    return locatedTriples_;
+    return locatedTriplesNormal_;
   }
 }
 
@@ -285,7 +285,7 @@ SharedLocatedTriplesSnapshot DeltaTriples::getSnapshot() {
   ++nextSnapshotIndex_;
   return SharedLocatedTriplesSnapshot{
       std::make_shared<LocatedTriplesSnapshot>(LocatedTriplesSnapshot{
-          locatedTriples_, internalLocatedTriples_,
+          locatedTriplesNormal_, locatedTriplesInternal_,
           localVocab_.getLifetimeExtender(), snapshotIndex})};
 }
 
@@ -394,8 +394,8 @@ void DeltaTriples::setOriginalMetadata(
     bool setInternalMetadata) {
   auto& locatedTriplesPerBlock =
       setInternalMetadata
-          ? internalLocatedTriples_.at(static_cast<size_t>(permutation))
-          : locatedTriples_.at(static_cast<size_t>(permutation));
+          ? locatedTriplesInternal_.at(static_cast<size_t>(permutation))
+          : locatedTriplesNormal_.at(static_cast<size_t>(permutation));
   locatedTriplesPerBlock.setOriginalMetadata(std::move(metadata));
 }
 
@@ -404,8 +404,8 @@ void DeltaTriples::updateAugmentedMetadata() {
   auto update = [](auto& lt) {
     ql::ranges::for_each(lt, &LocatedTriplesPerBlock::updateAugmentedMetadata);
   };
-  update(locatedTriples_);
-  update(internalLocatedTriples_);
+  update(locatedTriplesNormal_);
+  update(locatedTriplesInternal_);
 }
 
 // _____________________________________________________________________________
@@ -427,9 +427,10 @@ void DeltaTriples::writeToDisk() const {
   };
   std::filesystem::path tempPath = filenameForPersisting_.value();
   tempPath += ".tmp";
-  ad_utility::serializeIds(tempPath, localVocab_,
-                           std::array{toRange(state_.triplesDeleted_),
-                                      toRange(state_.triplesInserted_)});
+  ad_utility::serializeIds(
+      tempPath, localVocab_,
+      std::array{toRange(triplesToHandlesNormal_.triplesDeleted_),
+                 toRange(triplesToHandlesNormal_.triplesInserted_)});
   std::filesystem::rename(tempPath, filenameForPersisting_.value());
 }
 
