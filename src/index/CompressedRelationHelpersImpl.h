@@ -76,6 +76,9 @@ CPP_template(typename T, typename Function)(
 
 using MetadataCallback = CompressedRelationWriter::MetadataCallback;
 
+// The `CompressedRelationMetadata` for a single permutation can be directly
+// input blockwise to the `MetadataCallback` (collecting the blocks uses the
+// `Batcher` helper from above).
 using SingleMetadataWriter =
     Batcher<CompressedRelationMetadata, MetadataCallback>;
 

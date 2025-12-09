@@ -85,9 +85,15 @@ struct BlockCallbackManager {
   }
 };
 
-// __________________________________________________________________________
+// `PermutationWriter` contains the actual logic for writing a single
+// permutation or a pair of twin permutations (the twin is a permutation where
+// column 1 and 2 have been switched).
 template <bool WritePair>
 struct CompressedRelationWriter::PermutationWriter {
+  // The `IfPair` alias is used below to switch the attributes of the
+  // `PermutationWriter` between writing a single permutation or a pair of
+  // permutations. `std::monostate` is used for attributes which are not needed
+  // in single permutation mode.
   template <typename TypeIfPair, typename TypeIfSingle = std::monostate>
   using IfPair = std::conditional_t<WritePair, TypeIfPair, TypeIfSingle>;
 
