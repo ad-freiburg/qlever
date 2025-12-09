@@ -48,13 +48,10 @@ struct CompressedRelationWriter::AddBlockOfSmallRelationsToSwitched {
   };
 };
 
-using PerBlockCallbacks =
-    std::vector<std::function<void(const IdTableStatic<0>&)>>;
-
 // Helper that handles the queue of callbacks to be called for every block
 // written.
 struct BlockCallbackManager {
-  const PerBlockCallbacks perBlockCallbacks_;
+  const CompressedRelationWriter::PerBlockCallbacks perBlockCallbacks_;
 
   // A queue for the callbacks that have to be applied for each triple.
   // The second argument is the number of threads. It is crucial that this
