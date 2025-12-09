@@ -88,6 +88,43 @@ TEST(IdTableHelpersHelpersTest, calculateAllSubSets) {
                            {4uL, 2uL}});
 }
 
+// _____________________________________________________________________________
+// Tests for makeRangeVectorTable.
+
+TEST(IdTableHelpersTest, makeRangeVectorTableBasicRanges) {
+  // Empty range when a == b.
+  {
+    auto table = makeRangeVectorTable(0, 0);
+    EXPECT_TRUE(table.empty());
+  }
+  // Simple small range [0, 3).
+  {
+    auto table = makeRangeVectorTable(0, 3);
+    ASSERT_EQ(table.size(), 3u);
+    for (size_t i = 0; i < 3; ++i) {
+      ASSERT_EQ(table[i].size(), 1u);
+      ASSERT_TRUE(std::holds_alternative<int64_t>(table[i][0]));
+      EXPECT_EQ(std::get<int64_t>(table[i][0]), static_cast<int64_t>(i));
+    }
+  }
+  // Non-zero start: [2, 5) -> 2, 3, 4.
+  {
+    auto table = makeRangeVectorTable(2, 5);
+    ASSERT_EQ(table.size(), 3u);
+    for (size_t row = 0; row < table.size(); ++row) {
+      ASSERT_EQ(table[row].size(), 1u);
+      ASSERT_TRUE(std::holds_alternative<int64_t>(table[row][0]));
+      EXPECT_EQ(std::get<int64_t>(table[row][0]),
+                static_cast<int64_t>(row + 2));
+    }
+  }
+  // a > b should yield an empty table.
+  {
+    auto table = makeRangeVectorTable(5, 2);
+    EXPECT_TRUE(table.empty());
+  }
+}
+
 // Checks, if the given `IdTable` fulfills all wanted criteria.
 void generalIdTableCheck(const IdTable& table,
                          const size_t& expectedNumberOfRows,
@@ -287,6 +324,67 @@ TEST(IdTableHelpersTest, createRandomlyFilledIdTableWithGenerators) {
   compareColumnsWithVectors(result, 0, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9});
   compareColumnsWithVectors(result, 1,
                             {42, 42, 42, 42, 42, 42, 42, 42, 42, 42});
+}
+
+// _____________________________________________________________________________
+// Tests for createLazyIdTables.
+
+TEST(IdTableHelpersTest, createLazyIdTablesSingleBlock) {
+  // One block with a couple of rows; all entries are ints, so IntId is used.
+  VectorTable block;
+  block.push_back({IntOrId{int64_t{0}}, IntOrId{int64_t{1}}});
+  block.push_back({IntOrId{int64_t{2}}, IntOrId{int64_t{3}}});
+
+  std::vector<VectorTable> blocks;
+  blocks.push_back(block);
+
+  auto idTables = createLazyIdTables(blocks);
+  ASSERT_EQ(idTables.size(), 1u);
+
+  const auto& t = idTables[0];
+  ASSERT_EQ(t.numRows(), 2u);
+  ASSERT_EQ(t.numColumns(), 2u);
+
+  // Each integer is transformed via IntId; compare via MatchesIdTableFromVector
+  // using the same IntId transformation as in createLazyIdTables.
+  VectorTable expected = block;
+  EXPECT_THAT(t,
+              matchesIdTableFromVector(expected, ad_utility::testing::IntId));
+}
+
+TEST(IdTableHelpersTest, createLazyIdTablesMultipleBlocks) {
+  // Two blocks, with different shapes.
+  VectorTable block1;
+  block1.push_back({IntOrId{int64_t{0}}});
+  block1.push_back({IntOrId{int64_t{1}}});
+
+  VectorTable block2;
+  block2.push_back({IntOrId{int64_t{10}}, IntOrId{int64_t{11}}});
+
+  std::vector<VectorTable> blocks;
+  blocks.push_back(block1);
+  blocks.push_back(block2);
+
+  auto idTables = createLazyIdTables(blocks);
+  ASSERT_EQ(idTables.size(), 2u);
+
+  // First block.
+  {
+    const auto& t1 = idTables[0];
+    ASSERT_EQ(t1.numRows(), 2u);
+    ASSERT_EQ(t1.numColumns(), 1u);
+    EXPECT_THAT(t1,
+                matchesIdTableFromVector(block1, ad_utility::testing::IntId));
+  }
+
+  // Second block.
+  {
+    const auto& t2 = idTables[1];
+    ASSERT_EQ(t2.numRows(), 1u);
+    ASSERT_EQ(t2.numColumns(), 2u);
+    EXPECT_THAT(t2,
+                matchesIdTableFromVector(block2, ad_utility::testing::IntId));
+  }
 }
 
 TEST(IdTableHelpersTest, generateIdTable) {

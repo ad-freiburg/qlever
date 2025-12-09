@@ -9,7 +9,6 @@
 #include <cassert>
 #include <cstdlib>
 #include <initializer_list>
-#include <ranges>
 #include <variant>
 #include <vector>
 
@@ -776,7 +775,7 @@ class IdTable {
 
   // Add the rows with the specified `indices` from the `table` at the end of
   // this IdTable. The order of the inserted rows is the same as in `indices`.
-  // The input must be some kind of `IdTable`.
+  // The `table` must be some kind of `IdTable`.
   template <typename Table>
   void insertSubsetAtEnd(const Table& table,
                          const std::vector<size_t>& indices) {
@@ -791,11 +790,10 @@ class IdTable {
     resize(numRows() + numInserted);
     // For each column, copy the requested rows into the reserved tail.
     for (auto&& [destination, source] :
-         ranges::views::zip(ad_utility::allView(getColumns()),
-                            ad_utility::allView(table.getColumns()))) {
-      ql::ranges::transform(
-          indices, destination.begin() + oldSize,
-          [&source = source](size_t idx) { return source[idx]; });
+         ::ranges::views::zip(ad_utility::allView(getColumns()),
+                              ad_utility::allView(table.getColumns()))) {
+      ql::ranges::transform(indices, destination.begin() + oldSize,
+                            [&source](size_t idx) { return source[idx]; });
     }
   }
 

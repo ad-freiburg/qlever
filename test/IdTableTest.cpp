@@ -395,6 +395,7 @@ TEST(IdTable, insertSubsetAtEnd) {
     // expected rows: original dst row, then src row 2, then src row 0
     ASSERT_EQ(dst.size(), 3u);
     EXPECT_EQ(dst[0][0], make(1));
+    EXPECT_EQ(dst[0][1], make(2));
     EXPECT_EQ(dst[1][0], make(30));
     EXPECT_EQ(dst[2][0], make(10));
     EXPECT_EQ(dst[1][1], make(31));

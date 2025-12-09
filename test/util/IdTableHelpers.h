@@ -17,6 +17,7 @@
 #include "./AllocatorTestHelpers.h"
 #include "./GTestHelpers.h"
 #include "./IdTestHelpers.h"
+#include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
 #include "engine/Engine.h"
 #include "engine/QueryExecutionTree.h"
@@ -56,12 +57,12 @@ class CopyableIdTable : public TableImpl<N> {
 using IntOrId = std::variant<int64_t, Id>;
 using VectorTable = std::vector<std::vector<IntOrId>>;
 
-// Helper: construct a single-column VectorTable containing the inclusive
-// integer range [a, b]. If a > b, returns an empty table.
+// Helper: construct a single-column VectorTable containing the exclusive
+// integer range [a, b). If a >= b, returns an empty table.
 static inline VectorTable makeRangeVectorTable(size_t a, size_t b) {
   VectorTable vt;
-  if (a > b) return vt;
-  for (size_t i = a; i <= b; ++i) {
+  if (a >= b) return vt;
+  for (size_t i = a; i < b; ++i) {
     vt.push_back({IntOrId(static_cast<int64_t>(i))});
   }
   return vt;
@@ -96,12 +97,10 @@ IdTable makeIdTableFromVector(const VectorTable& content,
 // represents a block
 inline std::vector<IdTable> createLazyIdTables(
     const std::vector<VectorTable>& blocks) {
-  std::vector<IdTable> tables;
-  tables.reserve(blocks.size());
-  for (const auto& block : blocks) {
-    tables.push_back(makeIdTableFromVector(block, ad_utility::testing::IntId));
-  }
-  return tables;
+  return ::ranges::to<std::vector>(
+      blocks | ql::views::transform([](const auto& block) {
+        return makeIdTableFromVector(block, ad_utility::testing::IntId);
+      }));
 }
 
 // Similar to `makeIdTableFromVector` (see above), but returns a GMock
