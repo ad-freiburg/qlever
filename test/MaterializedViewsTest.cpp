@@ -28,7 +28,8 @@ using V = Variable;
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, NotImplemented) {
   // TODO<ullingerc> Remove this test when materialized views implementation is
-  // added
+  // added. These are valid queries - the error means that they were completely
+  // parsed (and the implementation is still missing).
   AD_EXPECT_THROW_WITH_MESSAGE(
       qlv().parseAndPlanQuery(R"(
         PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
@@ -113,7 +114,8 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
     AD_EXPECT_THROW_WITH_MESSAGE(
         query.addParameter(
             SparqlTriple{iri("<config>"), iri("<payload-x>"), iri("<abc>")}),
-        ::testing::HasSubstr("Payload columns can not be filtered"));
+        ::testing::HasSubstr(
+            "Payload columns must be specified with a variable"));
 
     AD_EXPECT_THROW_WITH_MESSAGE(
         ViewQuery(SparqlTriple{V{"?s"},

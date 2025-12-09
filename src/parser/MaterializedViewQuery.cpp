@@ -59,7 +59,8 @@ void MaterializedViewQuery::setScanCol(const TripleComponent& object) {
         "Parameter <scan-column> may not be undef.");
   }
   AD_CORRECTNESS_CHECK(!scanCol_.has_value(),
-                       "Only one scan column may be set.");
+                       "Only one value may be set for the scan column. This "
+                       "can be a literal, IRI or variable.");
   scanCol_ = object;
 }
 
@@ -68,8 +69,8 @@ void MaterializedViewQuery::addPayloadVariable(const Variable& column,
                                                const TripleComponent& object) {
   if (!object.isVariable()) {
     throw MaterializedViewConfigException(
-        "Payload columns can not be filtered, they can only be read into "
-        "columns. Therefore they must be specified with a variable.");
+        "Payload columns must be specified with a variable since they can only "
+        "be read into columns. They can not be filtered by literals or IRIs.");
   }
   if (requestedVariables_.contains(column)) {
     throw MaterializedViewConfigException(
