@@ -334,12 +334,12 @@ CPP_template(typename UnderlyingVocabulary,
 
 // Implementation of blob serialization methods.
 // Format: [decoders_size][decoders_data][underlying_vocabulary_data]
-CPP_template(typename UnderlyingVocabulary, typename CompressionWrapper,
-             size_t NumWordsPerBlock)(
+CPP_template_out_def(typename UnderlyingVocabulary, typename CompressionWrapper,
+                     size_t NumWordsPerBlock)(
     requires ad_utility::vocabulary::CompressionWrapper<
-        CompressionWrapper>) void CompressedVocabulary<UnderlyingVocabulary,
-                                                       CompressionWrapper,
-                                                       NumWordsPerBlock>::
+        CompressionWrapper>) void CompressedVocabulary<CPP_sfinae_args(UnderlyingVocabulary,
+                                                                       CompressionWrapper,
+                                                                       NumWordsPerBlock)>::
     openFromBinaryBlob(ql::span<const char> blob) {
   // First read the size of the decoders serialization.
   AD_CONTRACT_CHECK(blob.size() >= sizeof(size_t));
@@ -369,12 +369,12 @@ CPP_template(typename UnderlyingVocabulary, typename CompressionWrapper,
 }
 
 // Serialize the codebooks and then the underlying vocabulary.
-CPP_template(typename UnderlyingVocabulary, typename CompressionWrapper,
-             size_t NumWordsPerBlock)(
+CPP_template_out_def(typename UnderlyingVocabulary, typename CompressionWrapper,
+                     size_t NumWordsPerBlock)(
     requires ad_utility::vocabulary::CompressionWrapper<
-        CompressionWrapper>) void CompressedVocabulary<UnderlyingVocabulary,
-                                                       CompressionWrapper,
-                                                       NumWordsPerBlock>::
+        CompressionWrapper>) void CompressedVocabulary<CPP_sfinae_args(UnderlyingVocabulary,
+                                                                       CompressionWrapper,
+                                                                       NumWordsPerBlock)>::
     writeToBlob(std::vector<char>& output) const {
   // First serialize the decoders to a separate vector.
   std::vector<char> decodersBlob;
