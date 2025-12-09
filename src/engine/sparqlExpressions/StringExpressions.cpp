@@ -4,7 +4,9 @@
 //
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include <boost/url.hpp>
+#endif
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
@@ -521,6 +523,7 @@ class ConcatExpression : public detail::VariadicExpression {
 // ENCODE_FOR_URI
 struct EncodeForUriImpl {
   IdOrLiteralOrIri operator()(std::optional<std::string> input) const {
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
     if (!input.has_value()) {
       return Id::makeUndefined();
     } else {
@@ -530,6 +533,10 @@ struct EncodeForUriImpl {
           boost::urls::encode(value, boost::urls::unreserved_chars));
     }
   }
+#else
+    throw std::runtime_error(
+        "EncodeForUri is not available in reduced feature set for C++17");
+#endif
 };
 using EncodeForUriExpression = StringExpressionImpl<1, EncodeForUriImpl>;
 
