@@ -70,6 +70,12 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   /// this file, for example via `buildFromVector` or `buildFromTextFile`.
   void open(const std::string& filename);
 
+  /// Read the vocabulary from a binary blob.
+  void openFromBinaryBlob(ql::span<const char> blob);
+
+  /// Append the serialization to the given buffer.
+  void writeToBlob(std::vector<char>& output) const;
+
   // Return the word that is stored at the index. Throw an exception if `idx >=
   // size`.
   std::string operator[](uint64_t idx) const;

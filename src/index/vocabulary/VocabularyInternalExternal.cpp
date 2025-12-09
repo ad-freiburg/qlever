@@ -4,6 +4,8 @@
 
 #include "index/vocabulary/VocabularyInternalExternal.h"
 
+#include "backports/span.h"
+
 // _____________________________________________________________________________
 std::string VocabularyInternalExternal::operator[](uint64_t i) const {
   auto fromInternal = internalVocab_[i];
@@ -57,4 +59,18 @@ void VocabularyInternalExternal::open(const std::string& filename) {
   AD_LOG_INFO << "Number of words in internal vocabulary (these are also part "
                  "of the external vocabulary): "
               << internalVocab_.size() << std::endl;
+}
+
+// _____________________________________________________________________________
+void VocabularyInternalExternal::openFromBinaryBlob(ql::span<const char> blob) {
+  (void)blob;
+  throw std::runtime_error(
+      "openFromBinaryBlob is not implemented for VocabularyInternalExternal.");
+}
+
+// _____________________________________________________________________________
+void VocabularyInternalExternal::writeToBlob(std::vector<char>& output) const {
+  (void)output;
+  throw std::runtime_error(
+      "writeToBlob is not implemented for VocabularyInternalExternal.");
 }

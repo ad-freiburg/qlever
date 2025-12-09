@@ -44,8 +44,14 @@ class VocabularyInMemory
   /// to `writeToFile` or using a `WordWriter`.
   void open(const std::string& fileName);
 
+  /// Read the vocabulary from a binary blob.
+  void openFromBinaryBlob(ql::span<const char> blob);
+
   /// Write the vocabulary to a file.
   void writeToFile(const std::string& fileName) const;
+
+  /// Append the serialization to the given buffer.
+  void writeToBlob(std::vector<char>& output) const;
 
   /// Return the total number of words
   [[nodiscard]] size_t size() const { return _words.size(); }

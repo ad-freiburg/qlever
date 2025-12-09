@@ -97,6 +97,12 @@ class GeoVocabulary {
   // ___________________________________________________________________________
   void open(const std::string& filename);
 
+  // ___________________________________________________________________________
+  void openFromBinaryBlob(ql::span<const char> blob);
+
+  // ___________________________________________________________________________
+  void writeToBlob(std::vector<char>& output) const;
+
   // Custom word writer, which precomputes and writes geometry info along with
   // the words.
   class WordWriter : public WordWriterBase {

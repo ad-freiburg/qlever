@@ -250,6 +250,12 @@ class SplitVocabulary {
   // result of SplitFilenameFunction for the given base filename.
   void open(const std::string& filename);
 
+  // Read the vocabulary from a binary blob.
+  void openFromBinaryBlob(ql::span<const char> blob);
+
+  // Append the serialization to the given buffer.
+  void writeToBlob(std::vector<char>& output) const;
+
   // This word writer writes words to different vocabularies depending on the
   // result of SplitFunction.
   class WordWriter : public WordWriterBase {

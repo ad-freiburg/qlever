@@ -42,6 +42,12 @@ class VocabularyInternalExternal {
   // `WordWriter`.
   void open(const std::string& filename);
 
+  // Read the vocabulary from a binary blob.
+  void openFromBinaryBlob(ql::span<const char> blob);
+
+  // Append the serialization to the given buffer.
+  void writeToBlob(std::vector<char>& output) const;
+
   // Return the total number of words
   [[nodiscard]] size_t size() const { return externalVocab_.size(); }
 

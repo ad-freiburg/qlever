@@ -112,6 +112,16 @@ class UnicodeVocabulary {
     _underlyingVocabulary.open(filename);
   }
 
+  /// Read the vocabulary from a binary blob.
+  void openFromBinaryBlob(ql::span<const char> blob) {
+    _underlyingVocabulary.openFromBinaryBlob(blob);
+  }
+
+  /// Append the serialization to the given buffer.
+  void writeToBlob(std::vector<char>& output) const {
+    _underlyingVocabulary.writeToBlob(output);
+  }
+
   UnderlyingVocabulary& getUnderlyingVocabulary() {
     return _underlyingVocabulary;
   }

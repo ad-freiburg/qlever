@@ -6,6 +6,7 @@
 
 #include <stdexcept>
 
+#include "backports/span.h"
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
@@ -130,6 +131,21 @@ std::optional<GeometryInfo> GeoVocabulary<V>::getGeoInfo(uint64_t index) const {
 
   // Interpret the buffer as a `GeometryInfo` object
   return absl::bit_cast<GeometryInfo>(buffer);
+}
+
+// ____________________________________________________________________________
+template <typename V>
+void GeoVocabulary<V>::openFromBinaryBlob(ql::span<const char> blob) {
+  (void)blob;
+  throw std::runtime_error(
+      "openFromBinaryBlob is not implemented for GeoVocabulary.");
+}
+
+// ____________________________________________________________________________
+template <typename V>
+void GeoVocabulary<V>::writeToBlob(std::vector<char>& output) const {
+  (void)output;
+  throw std::runtime_error("writeToBlob is not implemented for GeoVocabulary.");
 }
 
 // Explicit template instantiations
