@@ -121,9 +121,7 @@ class DeltaTriples {
   // Generic state wrapper to avoid code duplication for internal and regular
   // triples.
   template <bool isInternal>
-  struct State {
-    // The located triples for all the permutations.
-    LocatedTriplesPerBlockAllPermutations<isInternal> locatedTriples_;
+  struct TriplesToHandles {
     // Each delta triple needs to know where it is stored in each of the six
     // `LocatedTriplesPerBlock` above.
     struct LocatedTripleHandles {
@@ -142,8 +140,11 @@ class DeltaTriples {
     TriplesToHandlesMap triplesDeleted_;
   };
 
-  State<false> state_;
-  State<true> internalState_;
+  TriplesToHandles<false> state_;
+  TriplesToHandles<true> internalState_;
+  // The located triples for all the permutations.
+  LocatedTriplesPerBlockAllPermutations<false> locatedTriples_;
+  LocatedTriplesPerBlockAllPermutations<true> internalLocatedTriples_;
 
  public:
   // Construct for given index.
@@ -163,7 +164,7 @@ class DeltaTriples {
 
   const LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
       Permutation::Enum permutation) const {
-    return state_.locatedTriples_.at(static_cast<size_t>(permutation));
+    return locatedTriples_.at(static_cast<size_t>(permutation));
   }
 
   // Clear `triplesAdded_` and `triplesSubtracted_` and all associated data
@@ -204,7 +205,7 @@ class DeltaTriples {
                              ad_utility::timer::TimeTracer& tracer =
                                  ad_utility::timer::DEFAULT_TIME_TRACER);
 
-  // Delete triplesdelta triples for efficient language filters and patterns.
+  // Delete internal delta triples for efficient language filters and patterns.
   // Currently only used by test code.
   void deleteInternalTriples(CancellationHandle cancellationHandle,
                              Triples triples,
@@ -242,7 +243,7 @@ class DeltaTriples {
   // The the proper state according to the template parameter. This will either
   // return a reference to `internalState_` or `state_`.
   template <bool isInternal>
-  State<isInternal>& getState();
+  TriplesToHandles<isInternal>& getState();
 
   // Helper function to get the correct located triple (either internal or
   // external), depending on the `internal` template parameter.
@@ -255,7 +256,7 @@ class DeltaTriples {
   // deleted. Return the iterators of where it was added (so that we can easily
   // delete it again from these maps later).
   template <bool isInternal>
-  std::vector<typename State<isInternal>::LocatedTripleHandles>
+  std::vector<typename TriplesToHandles<isInternal>::LocatedTripleHandles>
   locateAndAddTriples(CancellationHandle cancellationHandle,
                       ql::span<const IdTriple<0>> triples, bool insertOrDelete,
                       ad_utility::timer::TimeTracer& tracer =
@@ -291,7 +292,7 @@ class DeltaTriples {
   // which stores these iterators.
   template <bool isInternal>
   void eraseTripleInAllPermutations(
-      typename State<isInternal>::LocatedTripleHandles& handles);
+      typename TriplesToHandles<isInternal>::LocatedTripleHandles& handles);
 
   friend class DeltaTriplesManager;
 };
