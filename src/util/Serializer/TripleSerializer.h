@@ -19,6 +19,7 @@
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeArrayOrTuple.h"
 #include "util/Serializer/SerializeString.h"
+#include "util/TransparentFunctors.h"
 #include "util/TypeTraits.h"
 #include "util/Views.h"
 
@@ -102,13 +103,19 @@ CPP_template(typename Serializer)(
 CPP_template(typename Range, typename Serializer)(
     requires ql::ranges::range<Range>) void serializeIds(Serializer& serializer,
                                                          Range&& range) {
-  ad_utility::serialization::VectorIncrementalSerializer<Id, Serializer>
-      vectorSerializer{std::move(serializer)};
-  for (const Id& value : range) {
-    vectorSerializer.push(value);
+  if constexpr (ql::ranges::contiguous_range<std::decay_t<Range>>) {
+    serializer
+        << ql::span<const ql::ranges::range_value_t<std::decay_t<Range>>>{
+               range};
+  } else {
+    ad_utility::serialization::VectorIncrementalSerializer<Id, Serializer>
+        vectorSerializer{std::move(serializer)};
+    for (const Id& value : range) {
+      vectorSerializer.push(value);
+    }
+    vectorSerializer.finish();
+    serializer = std::move(vectorSerializer).serializer();
   }
-  vectorSerializer.finish();
-  serializer = std::move(vectorSerializer).serializer();
 }
 
 // Deserialize a range of Ids from the input stream. If an Id is of type
