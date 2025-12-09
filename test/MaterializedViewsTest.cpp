@@ -10,6 +10,7 @@
 #include "./MaterializedViewsTestHelpers.h"
 #include "./util/HttpRequestHelpers.h"
 #include "engine/Server.h"
+#include "gmock/gmock.h"
 #include "parser/MaterializedViewQuery.h"
 #include "rdfTypes/Iri.h"
 #include "rdfTypes/Literal.h"
@@ -37,6 +38,15 @@ TEST_F(MaterializedViewsTest, NotImplemented) {
                      view:scan-column ?s ;
                      view:payload-g ?x .
           }
+        }
+      )"),
+      ::testing::HasSubstr(
+          "Materialized views are currently not supported yet"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      qlv().parseAndPlanQuery(R"(
+        PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+        SELECT * {
+          ?s view:testView1:g ?x .
         }
       )"),
       ::testing::HasSubstr(
@@ -101,11 +111,27 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
         ::testing::HasSubstr("Each payload column may only be requested once"));
 
     AD_EXPECT_THROW_WITH_MESSAGE(
+        query.addParameter(
+            SparqlTriple{iri("<config>"), iri("<payload-x>"), iri("<abc>")}),
+        ::testing::HasSubstr("Payload columns can not be filtered"));
+
+    AD_EXPECT_THROW_WITH_MESSAGE(
         ViewQuery(SparqlTriple{V{"?s"},
                                iri("<https://qlever.cs.uni-freiburg.de/"
                                    "materializedView/testView1>"),
                                V{"?o"}}),
         ::testing::HasSubstr("Special triple for materialized view has an "
                              "invalid predicate"));
+  }
+
+  // Test column stripping helper.
+  {
+    ViewQuery query{SparqlTriple{V{"?s"},
+                                 iri("<https://qlever.cs.uni-freiburg.de/"
+                                     "materializedView/testView1:o>"),
+                                 V{"?o"}}};
+    EXPECT_THAT(query.getVarsToKeep(),
+                ::testing::UnorderedElementsAre(::testing::Eq(V{"?s"}),
+                                                ::testing::Eq(V{"?o"})));
   }
 }
