@@ -23,6 +23,8 @@
 #include "util/HashMap.h"
 #include "util/HashSet.h"
 #include "util/Random.h"
+#include "util/Serializer/SerializeVector.h"
+#include "util/Serializer/Serializer.h"
 #include "util/Synchronized.h"
 
 namespace ad_utility {
@@ -190,6 +192,10 @@ class BlankNodeManager {
     struct OwnedBlocksEntry {
       boost::uuids::uuid uuid_;
       std::vector<uint64_t> blockIndices_;
+      AD_SERIALIZE_FRIEND_FUNCTION(OwnedBlocksEntry) {
+        triviallySerialize(serializer, arg.uuid_);
+        serializer | arg.blockIndices_;
+      }
     };
 
     // Return the indices of all the blank node blocks that are currently being

@@ -196,5 +196,4 @@ void IndexBuilderConfig::validate() const {
         "has to be true. For details see --help."));
   }
 }
-
 }  // namespace qlever
