@@ -56,11 +56,19 @@ struct BoundingBoxVisitor : public boost::static_visitor<Box> {
 struct ClosestPointVisitor : public boost::static_visitor<double> {
   template <typename Geometry1, typename Geometry2>
   double operator()(const Geometry1& geo1, const Geometry2& geo2) const {
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+    throw std::runtime_error(
+        "ClosestPointVisitor not implemented for C++17, please use a different "
+        "spatial join implementation");
+    (void)geo1;
+    (void)geo2;
+#else
     Segment seg;
     bg::closest_points(geo1, geo2, seg);
     GeoPoint closestPoint1(bg::get<0, 1>(seg), bg::get<0, 0>(seg));
     GeoPoint closestPoint2(bg::get<1, 1>(seg), bg::get<1, 0>(seg));
     return ad_utility::detail::wktDistImpl(closestPoint1, closestPoint2);
+#endif
   }
 };
 
