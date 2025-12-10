@@ -7,6 +7,7 @@
 #include "./VocabularyTestHelpers.h"
 #include "backports/algorithm.h"
 #include "index/vocabulary/VocabularyInMemory.h"
+#include "util/Serializer/ByteBufferSerializer.h"
 using Vocab = VocabularyInMemory;
 
 namespace {
@@ -56,19 +57,21 @@ TEST(VocabularyInMemory, ReadAndWriteFromFile) {
   ad_utility::deleteFile(vocabularyFilename);
 }
 
-TEST(VocabularyInMemory, WriteAndReadFromBlob) {
+TEST(VocabularyInMemory, WriteAndReadWithSerializer) {
   const std::vector<std::string> words{"alpha", "delta", "beta", "42",
                                        "31",    "0",     "al"};
   const auto vocab = createVocabulary(words);
 
-  // Write to blob.
-  std::vector<char> blob;
-  vocab.writeToBlob(blob);
+  // Write using serializer.
+  ad_utility::serialization::ByteBufferWriteSerializer writeSerializer;
+  writeSerializer | vocab;
+  const auto& blob = writeSerializer.data();
   ASSERT_FALSE(blob.empty());
 
-  // Read from blob into a different vocabulary.
+  // Read using serializer into a different vocabulary.
   Vocab readVocab;
-  readVocab.openFromBinaryBlob(ql::span<const char>(blob.data(), blob.size()));
+  ad_utility::serialization::ByteBufferReadSerializer readSerializer{blob};
+  readSerializer | readVocab;
   assertThatRangesAreEqual(vocab, readVocab);
 }
 

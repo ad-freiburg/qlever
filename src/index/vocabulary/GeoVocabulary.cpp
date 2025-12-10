@@ -133,21 +133,6 @@ std::optional<GeometryInfo> GeoVocabulary<V>::getGeoInfo(uint64_t index) const {
   return absl::bit_cast<GeometryInfo>(buffer);
 }
 
-// ____________________________________________________________________________
-template <typename V>
-void GeoVocabulary<V>::openFromBinaryBlob(ql::span<const char> blob) {
-  (void)blob;
-  throw std::runtime_error(
-      "openFromBinaryBlob is not implemented for GeoVocabulary.");
-}
-
-// ____________________________________________________________________________
-template <typename V>
-void GeoVocabulary<V>::writeToBlob(std::vector<char>& output) const {
-  (void)output;
-  throw std::runtime_error("writeToBlob is not implemented for GeoVocabulary.");
-}
-
 // Explicit template instantiations
 template class GeoVocabulary<CompressedVocabulary<VocabularyInternalExternal>>;
 template class GeoVocabulary<VocabularyInMemory>;

@@ -73,13 +73,3 @@ void PolymorphicVocabulary::resetToType(VocabularyType type) {
       AD_FAIL();
   }
 }
-
-// _____________________________________________________________________________
-void PolymorphicVocabulary::openFromBinaryBlob(ql::span<const char> blob) {
-  std::visit([&blob](auto& vocab) { vocab.openFromBinaryBlob(blob); }, vocab_);
-}
-
-// _____________________________________________________________________________
-void PolymorphicVocabulary::writeToBlob(std::vector<char>& output) const {
-  std::visit([&output](auto& vocab) { vocab.writeToBlob(output); }, vocab_);
-}

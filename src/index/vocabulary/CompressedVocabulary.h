@@ -120,12 +120,6 @@ CPP_template(typename UnderlyingVocabulary,
                                            compressionWrapper_.numDecoders()));
   }
 
-  /// Read the vocabulary from a binary blob.
-  void openFromBinaryBlob(ql::span<const char> blob);
-
-  /// Append the serialization to the given buffer.
-  void writeToBlob(std::vector<char>& output) const;
-
   /// Allows the incremental writing of the words to disk. Uses `WordWriter` of
   /// the underlying vocabulary.
   class DiskWriterFromUncompressedWords : public WordWriterBase {
@@ -282,6 +276,25 @@ CPP_template(typename UnderlyingVocabulary,
 
   void close() { underlyingVocabulary_.close(); }
 
+  // Generic serialization support.
+  template <typename S, typename U>
+  requires ad_utility::serialization::Serializer<S> &&
+           ad_utility::SimilarTo<U, CompressedVocabulary> &&
+           ad_utility::serialization::SerializerMatchesConstness<S, U>
+  friend void serialize(S& serializer, U&& arg) {
+    serializer | arg.underlyingVocabulary_;
+    if constexpr (ad_utility::serialization::WriteSerializer<S>) {
+      // Serialize the decoders.
+      const auto& decoders = arg.compressionWrapper_.getDecoders();
+      serializer | decoders;
+    } else {
+      // Deserialize the decoders.
+      std::vector<typename CompressionWrapper::Decoder> decoders;
+      serializer | decoders;
+      arg.compressionWrapper_ = CompressionWrapper{{std::move(decoders)}};
+    }
+  }
+
  private:
   // Get the correct decoder for the given `idx`.
   size_t getDecoderIdx(size_t idx) const { return idx / NumWordsPerBlock; }
@@ -331,74 +344,5 @@ CPP_template(typename UnderlyingVocabulary,
     return {std::move(decompressedWord), wordAndIndex.index()};
   }
 };
-
-// Implementation of blob serialization methods.
-// Format: [decoders_size][decoders_data][underlying_vocabulary_data]
-CPP_template_out_def(typename UnderlyingVocabulary, typename CompressionWrapper,
-                     size_t NumWordsPerBlock)(
-    requires ad_utility::vocabulary::CompressionWrapper<
-        CompressionWrapper>) void CompressedVocabulary<CPP_sfinae_args(UnderlyingVocabulary,
-                                                                       CompressionWrapper,
-                                                                       NumWordsPerBlock)>::
-    openFromBinaryBlob(ql::span<const char> blob) {
-  // First read the size of the decoders serialization.
-  AD_CONTRACT_CHECK(blob.size() >= sizeof(size_t));
-  size_t decodersSize;
-  std::memcpy(&decodersSize, blob.data(), sizeof(size_t));
-  size_t offset = sizeof(size_t);
-
-  // Read the decoders from the blob using ReadFromSpanSerializer (no copy).
-  AD_CONTRACT_CHECK(blob.size() >= offset + decodersSize);
-  ql::span<const char> decodersBlob(blob.data() + offset, decodersSize);
-  ad_utility::serialization::ReadFromSpanSerializer decodersBuffer(
-      decodersBlob);
-  ad_utility::serialization::ZstdReadSerializer decodersSerializer(
-      std::move(decodersBuffer));
-  std::vector<typename CompressionWrapper::Decoder> decoders;
-  decodersSerializer >> decoders;
-  compressionWrapper_ = CompressionWrapper{{std::move(decoders)}};
-  offset += decodersSize;
-
-  // Pass the remaining blob to the underlying vocabulary (no copy).
-  ql::span<const char> underlyingBlob(blob.data() + offset,
-                                      blob.size() - offset);
-  underlyingVocabulary_.openFromBinaryBlob(underlyingBlob);
-
-  AD_CORRECTNESS_CHECK((size() == 0) || (getDecoderIdx(size()) <=
-                                         compressionWrapper_.numDecoders()));
-}
-
-// Serialize the codebooks and then the underlying vocabulary.
-CPP_template_out_def(typename UnderlyingVocabulary, typename CompressionWrapper,
-                     size_t NumWordsPerBlock)(
-    requires ad_utility::vocabulary::CompressionWrapper<
-        CompressionWrapper>) void CompressedVocabulary<CPP_sfinae_args(UnderlyingVocabulary,
-                                                                       CompressionWrapper,
-                                                                       NumWordsPerBlock)>::
-    writeToBlob(std::vector<char>& output) const {
-  // First serialize the decoders to a separate vector.
-  std::vector<char> decodersBlob;
-  {
-    ad_utility::serialization::AppendToVectorSerializer decodersBuffer(
-        &decodersBlob);
-    ad_utility::serialization::ZstdWriteSerializer decodersSerializer(
-        std::move(decodersBuffer));
-    const auto& decoders = compressionWrapper_.getDecoders();
-    decodersSerializer << decoders;
-    decodersSerializer.close();
-  }
-
-  // Append the size of the decoders blob to the output.
-  size_t decodersSize = decodersBlob.size();
-  size_t oldSize = output.size();
-  output.resize(oldSize + sizeof(size_t));
-  std::memcpy(output.data() + oldSize, &decodersSize, sizeof(size_t));
-
-  // Append the decoders blob to the output.
-  output.insert(output.end(), decodersBlob.begin(), decodersBlob.end());
-
-  // Append the underlying vocabulary to the output (directly, no copy).
-  underlyingVocabulary_.writeToBlob(output);
-}
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_COMPRESSEDVOCABULARY_H

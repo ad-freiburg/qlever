@@ -250,12 +250,6 @@ class SplitVocabulary {
   // result of SplitFilenameFunction for the given base filename.
   void open(const std::string& filename);
 
-  // Read the vocabulary from a binary blob.
-  void openFromBinaryBlob(ql::span<const char> blob);
-
-  // Append the serialization to the given buffer.
-  void writeToBlob(std::vector<char>& output) const;
-
   // This word writer writes words to different vocabularies depending on the
   // result of SplitFunction.
   class WordWriter : public WordWriterBase {
@@ -293,6 +287,18 @@ class SplitVocabulary {
 
   // Checks if any of the underlying vocabularies is a `GeoVocabulary`.
   static bool isGeoInfoAvailable();
+
+  // Generic serialization support.
+  template <typename S, typename U>
+  requires ad_utility::serialization::Serializer<S> &&
+           ad_utility::SimilarTo<U, SplitVocabulary> &&
+           ad_utility::serialization::SerializerMatchesConstness<S, U>
+  friend void serialize(S& serializer, U&& arg) {
+    (void)serializer;
+    (void)arg;
+    throw std::runtime_error(
+        "Generic serialization is not implemented for SplitVocabulary.");
+  }
 };
 
 // Concrete implementations of split function and split filename function

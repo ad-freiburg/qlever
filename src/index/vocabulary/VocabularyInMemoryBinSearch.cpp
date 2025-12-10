@@ -73,18 +73,3 @@ void VocabularyInMemoryBinSearch::WordWriter::finish() {
   writer_.finish();
   offsetWriter_.finish();
 }
-
-// _____________________________________________________________________________
-void VocabularyInMemoryBinSearch::openFromBinaryBlob(
-    ql::span<const char> blob) {
-  (void)blob;
-  throw std::runtime_error(
-      "openFromBinaryBlob is not implemented for VocabularyInMemoryBinSearch.");
-}
-
-// _____________________________________________________________________________
-void VocabularyInMemoryBinSearch::writeToBlob(std::vector<char>& output) const {
-  (void)output;
-  throw std::runtime_error(
-      "writeToBlob is not implemented for VocabularyInMemoryBinSearch.");
-}

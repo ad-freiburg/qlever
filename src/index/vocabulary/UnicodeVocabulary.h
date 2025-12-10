@@ -112,16 +112,6 @@ class UnicodeVocabulary {
     _underlyingVocabulary.open(filename);
   }
 
-  /// Read the vocabulary from a binary blob.
-  void openFromBinaryBlob(ql::span<const char> blob) {
-    _underlyingVocabulary.openFromBinaryBlob(blob);
-  }
-
-  /// Append the serialization to the given buffer.
-  void writeToBlob(std::vector<char>& output) const {
-    _underlyingVocabulary.writeToBlob(output);
-  }
-
   UnderlyingVocabulary& getUnderlyingVocabulary() {
     return _underlyingVocabulary;
   }
@@ -133,6 +123,12 @@ class UnicodeVocabulary {
   const UnicodeComparator& getComparator() const { return _comparator; }
 
   void close() { _underlyingVocabulary.close(); }
+
+  // Generic serialization support - delegates to underlying vocabulary.
+  AD_SERIALIZE_FRIEND_FUNCTION(UnicodeVocabulary) {
+    serializer | arg._underlyingVocabulary;
+    // Note: _comparator is not serialized as it's stateless or reconstructed.
+  }
 };
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_UNICODEVOCABULARY_H

@@ -28,23 +28,3 @@ void VocabularyInMemory::writeToFile(const string& fileName) const {
   file << _words;
   AD_LOG_INFO << "Done, number of words: " << _words.size() << std::endl;
 }
-
-// _____________________________________________________________________________
-void VocabularyInMemory::openFromBinaryBlob(ql::span<const char> blob) {
-  AD_LOG_INFO << "Reading vocabulary from binary blob ..." << std::endl;
-  _words.clear();
-  ad_utility::serialization::ReadFromSpanSerializer buffer(blob);
-  ad_utility::serialization::ZstdReadSerializer serializer(std::move(buffer));
-  serializer >> _words;
-  AD_LOG_INFO << "Done, number of words: " << size() << std::endl;
-}
-
-// _____________________________________________________________________________
-void VocabularyInMemory::writeToBlob(std::vector<char>& output) const {
-  AD_LOG_INFO << "Writing vocabulary to binary blob ..." << std::endl;
-  ad_utility::serialization::AppendToVectorSerializer buffer(&output);
-  ad_utility::serialization::ZstdWriteSerializer serializer(std::move(buffer));
-  serializer << _words;
-  serializer.close();
-  AD_LOG_INFO << "Done, number of words: " << _words.size() << std::endl;
-}

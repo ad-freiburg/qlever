@@ -97,12 +97,6 @@ class GeoVocabulary {
   // ___________________________________________________________________________
   void open(const std::string& filename);
 
-  // ___________________________________________________________________________
-  void openFromBinaryBlob(ql::span<const char> blob);
-
-  // ___________________________________________________________________________
-  void writeToBlob(std::vector<char>& output) const;
-
   // Custom word writer, which precomputes and writes geometry info along with
   // the words.
   class WordWriter : public WordWriterBase {
@@ -138,6 +132,18 @@ class GeoVocabulary {
 
   // ___________________________________________________________________________
   void close();
+
+  // Generic serialization support.
+  template <typename S, typename U>
+  requires ad_utility::serialization::Serializer<S> &&
+           ad_utility::SimilarTo<U, GeoVocabulary> &&
+           ad_utility::serialization::SerializerMatchesConstness<S, U>
+  friend void serialize(S& serializer, U&& arg) {
+    (void)serializer;
+    (void)arg;
+    throw std::runtime_error(
+        "Generic serialization is not implemented for GeoVocabulary.");
+  }
 };
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_GEOVOCABULARY_H

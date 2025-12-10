@@ -101,17 +101,3 @@ void VocabularyOnDisk::open(const std::string& filename) {
   AD_CORRECTNESS_CHECK(offsets_.size() > 0);
   size_ = offsets_.size() - 1;
 }
-
-// _____________________________________________________________________________
-void VocabularyOnDisk::openFromBinaryBlob(ql::span<const char> blob) {
-  (void)blob;
-  throw std::runtime_error(
-      "openFromBinaryBlob is not implemented for VocabularyOnDisk.");
-}
-
-// _____________________________________________________________________________
-void VocabularyOnDisk::writeToBlob(std::vector<char>& output) const {
-  (void)output;
-  throw std::runtime_error(
-      "writeToBlob is not implemented for VocabularyOnDisk.");
-}

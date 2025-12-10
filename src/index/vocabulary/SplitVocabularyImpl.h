@@ -164,26 +164,4 @@ bool SplitVocabulary<SF, SFN, S...>::isGeoInfoAvailable() {
   }
 }
 
-// _____________________________________________________________________________
-template <typename SF, typename SFN, typename... S>
-QL_CONCEPT_OR_NOTHING(
-    requires SplitFunctionT<SF>&& SplitFilenameFunctionT<SFN, sizeof...(S)>)
-void SplitVocabulary<SF, SFN, S...>::openFromBinaryBlob(
-    ql::span<const char> blob) {
-  (void)blob;
-  throw std::runtime_error(
-      "openFromBinaryBlob is not implemented for SplitVocabulary.");
-}
-
-// _____________________________________________________________________________
-template <typename SF, typename SFN, typename... S>
-QL_CONCEPT_OR_NOTHING(
-    requires SplitFunctionT<SF>&& SplitFilenameFunctionT<SFN, sizeof...(S)>)
-void SplitVocabulary<SF, SFN, S...>::writeToBlob(
-    std::vector<char>& output) const {
-  (void)output;
-  throw std::runtime_error(
-      "writeToBlob is not implemented for SplitVocabulary.");
-}
-
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARYIMPL_H

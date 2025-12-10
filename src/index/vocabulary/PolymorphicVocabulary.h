@@ -18,6 +18,7 @@
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
 #include "index/vocabulary/VocabularyType.h"
+#include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
 #include "util/json.h"
 
@@ -62,12 +63,6 @@ class PolymorphicVocabulary {
   // Same as the overload of `open` above, but expects that the correct
   // `VocabularyType` has already been set via `resetToType` above.
   void open(const std::string& filename);
-
-  // Read the vocabulary from a binary blob.
-  void openFromBinaryBlob(ql::span<const char> blob);
-
-  // Append the serialization to the given buffer.
-  void writeToBlob(std::vector<char>& output) const;
 
   // Close the vocabulary s.t. it consumes no more RAM.
   void close();
@@ -173,6 +168,11 @@ class PolymorphicVocabulary {
   // `this`.
   std::unique_ptr<WordWriterBase> makeDiskWriterPtr(
       const std::string& filename) const;
+
+  // Generic serialization support - delegates to the active variant.
+  AD_SERIALIZE_FRIEND_FUNCTION(PolymorphicVocabulary) {
+    std::visit([&serializer](auto& vocab) { serializer | vocab; }, arg.vocab_);
+  }
 };
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_POLYMORPHICVOCABULARY_H

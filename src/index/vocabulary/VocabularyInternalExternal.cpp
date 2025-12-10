@@ -60,17 +60,3 @@ void VocabularyInternalExternal::open(const std::string& filename) {
                  "of the external vocabulary): "
               << internalVocab_.size() << std::endl;
 }
-
-// _____________________________________________________________________________
-void VocabularyInternalExternal::openFromBinaryBlob(ql::span<const char> blob) {
-  (void)blob;
-  throw std::runtime_error(
-      "openFromBinaryBlob is not implemented for VocabularyInternalExternal.");
-}
-
-// _____________________________________________________________________________
-void VocabularyInternalExternal::writeToBlob(std::vector<char>& output) const {
-  (void)output;
-  throw std::runtime_error(
-      "writeToBlob is not implemented for VocabularyInternalExternal.");
-}
