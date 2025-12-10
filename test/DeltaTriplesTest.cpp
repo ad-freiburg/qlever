@@ -155,7 +155,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
                                  const std::vector<std::string>& triples)
       -> testing::Matcher<const ad_utility::HashMap<
           IdTriple<0>,
-          typename DeltaTriples::State<
+          typename DeltaTriples::TriplesToHandles<
               decltype(isInternal)::value>::LocatedTripleHandles>&> {
     return testing::ResultOf(
         "mapKeys(...)", [&mapKeys](const auto map) { return mapKeys(map); },
@@ -176,22 +176,22 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
                      const std::vector<std::string>& internalDeleted)
       -> testing::Matcher<const DeltaTriples&> {
     using ::testing::AllOf;
-    using ES = DeltaTriples::State<false>;
-    using IS = DeltaTriples::State<true>;
+    using TriplesNormal = DeltaTriples::TriplesToHandles<false>;
+    using TriplesInternal = DeltaTriples::TriplesToHandles<true>;
     return AllOf(
         NumTriples(numInserted, numDeleted, numTriplesInAllPermutations,
                    numInternalInserted, numInternalDeleted),
         AD_FIELD(
-            DeltaTriples, state_,
-            AllOf(AD_FIELD(ES, triplesInserted_,
+            DeltaTriples, triplesToHandlesNormal_,
+            AllOf(AD_FIELD(TriplesNormal, triplesInserted_,
                            UnorderedTriplesAre(std::false_type{}, inserted)),
-                  AD_FIELD(ES, triplesDeleted_,
+                  AD_FIELD(TriplesNormal, triplesDeleted_,
                            UnorderedTriplesAre(std::false_type{}, deleted)))),
-        AD_FIELD(DeltaTriples, internalState_,
-                 AllOf(AD_FIELD(IS, triplesInserted_,
+        AD_FIELD(DeltaTriples, triplesToHandlesInternal_,
+                 AllOf(AD_FIELD(TriplesInternal, triplesInserted_,
                                 UnorderedTriplesAre(std::true_type{},
                                                     internalInserted)),
-                       AD_FIELD(IS, triplesDeleted_,
+                       AD_FIELD(TriplesInternal, triplesDeleted_,
                                 UnorderedTriplesAre(std::true_type{},
                                                     internalDeleted)))));
   };
@@ -708,8 +708,9 @@ TEST_F(DeltaTriplesTest, storeAndRestoreData) {
                                 ::testing::Eq("<other>"))));
 
     std::vector<IdTriple<>> insertedTriples;
-    ql::ranges::copy(deltaTriples.state_.triplesInserted_ | ql::views::keys,
-                     std::back_inserter(insertedTriples));
+    ql::ranges::copy(
+        deltaTriples.triplesToHandlesNormal_.triplesInserted_ | ql::views::keys,
+        std::back_inserter(insertedTriples));
     EXPECT_THAT(
         insertedTriples,
         ::testing::ElementsAre(::testing::Eq(IdTriple<>{
@@ -721,8 +722,9 @@ TEST_F(DeltaTriplesTest, storeAndRestoreData) {
                      .value()),
              Id::makeFromBool(true)}})));
     std::vector<IdTriple<>> deletedTriples;
-    ql::ranges::copy(deltaTriples.state_.triplesDeleted_ | ql::views::keys,
-                     std::back_inserter(deletedTriples));
+    ql::ranges::copy(
+        deltaTriples.triplesToHandlesNormal_.triplesDeleted_ | ql::views::keys,
+        std::back_inserter(deletedTriples));
     EXPECT_THAT(
         deletedTriples,
         ::testing::ElementsAre(::testing::Eq(IdTriple<>{
