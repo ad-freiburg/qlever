@@ -44,6 +44,15 @@ class Permutation {
                                Enum::SOP, Enum::OPS, Enum::OSP};
   static constexpr auto INTERNAL = {Enum::PSO, Enum::POS};
 
+  template <bool isInternal>
+  static constexpr const auto& all() {
+    if constexpr (isInternal) {
+      return INTERNAL;
+    } else {
+      return ALL;
+    }
+  }
+
   using MetaData = IndexMetaDataMmapView;
   using Allocator = ad_utility::AllocatorWithLimit<Id>;
   using ColumnIndicesRef = CompressedRelationReader::ColumnIndicesRef;
@@ -194,10 +203,9 @@ class Permutation {
 
   Enum permutation() const { return permutation_; }
 
-  const Permutation& internalPermutation() const {
-    AD_CONTRACT_CHECK(internalPermutation_ != nullptr);
-    return *internalPermutation_;
-  }
+  // Provide const access to a linked internal permutation. If no internal
+  // permutation is available, this function throws an exception.
+  const Permutation& internalPermutation() const;
 
  private:
   // The base filename of the permutation without the suffix below
