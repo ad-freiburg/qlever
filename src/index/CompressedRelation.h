@@ -334,20 +334,22 @@ class CompressedRelationWriter {
     std::vector<CompressedBlockMetadata> blockMetadata_;
   };
 
-  /**
-   * @brief Write a single permutation. It is required for example for
-   * materialized views. This function should not be used for regular index
-   * building (when writing twin permutations, like POS and PSO, the function
-   * `createPermutationPair` below is more efficient than calling this function
-   * twice).
-   * @param writerAndCallback A writer for the permutation together with
-   * a callback that is called for each of the created metadata.
-   * @param sortedTriples The inputs as blocks of triples (plus possibly
-   * additional columns). The first three columns must be sorted according to
-   * the `permutation` (which corresponds to the `writerAndCallback`).
-   * @param permutation The permutation to be built (as a permutation of the
-   * array `[0, 1, 2]`). The `sortedTriples` must be sorted by this permutation.
-   */
+  // Write a single permutation. It is required for example for materialized
+  // views. This function should not be used for regular index building (when
+  // writing twin permutations, like POS and PSO, the function
+  // `createPermutationPair` below is more efficient than calling this function
+  // twice).
+  //
+  // The `writerAndCallback` is a writer for the permutation together with
+  // a callback that is called for each of the created metadata.
+  //
+  // `sortedTriples` are the input blocks of triples (plus possibly additional
+  // columns). The first three columns must be sorted according to
+  // the `permutation` (which corresponds to the `writerAndCallback`).
+  //
+  // The `permutation` contains the column indices indicating the permutation to
+  // be built (as an array, for example `[0, 1, 2]`). The `sortedTriples` must
+  // be sorted by this permutation.
   static PermutationSingleResult createPermutation(
       WriterAndCallback writerAndCallback,
       ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
@@ -366,22 +368,25 @@ class CompressedRelationWriter {
     std::vector<CompressedBlockMetadata> blockMetadataSwitched_;
   };
 
-  /**
-   * @brief Write two permutations that only differ by the order of the col1 and
-   * col2 (e.g. POS and PSO). Prefer this function over `createPermutation` when
-   * both twins are needed.
-   * @param basename filename/path that will be used as a prefix for names of
-   * temporary files for external sorting of the twin permutation.
-   * @param writerAndCallback1 A writer for the first permutation together with
-   * a callback that is called for each of the created metadata.
-   * @param writerAndCallback2  The same as `writerAndCallback1`, but for the
-   * other permutation.
-   * @param sortedTriples The inputs as blocks of triples (plus possibly
-   * additional columns). The first three columns must be sorted according to
-   * the `permutation` (which corresponds to the `writerAndCallback1`).
-   * @param permutation The permutation to be built (as a permutation of the
-   * array `[0, 1, 2]`). The `sortedTriples` must be sorted by this permutation.
-   */
+  // Write two permutations that only differ by the order of the col1 and
+  // col2 (e.g. POS and PSO). Prefer this function over `createPermutation` when
+  // both twins are needed.
+  //
+  // The `basename` filename/path will be used as a prefix for names of
+  // temporary files for external sorting of the twin permutation.
+  //
+  // `writerAndCallback1`: A writer for the first permutation together with
+  // a callback that is called for each of the created metadata.
+  //
+  // `writerAndCallback2`: The same as `writerAndCallback1`, but for the
+  // other permutation.
+  //
+  // `sortedTriples`: The inputs as blocks of triples (plus possibly
+  // additional columns). The first three columns must be sorted according to
+  // the `permutation` (which corresponds to the `writerAndCallback1`).
+  //
+  // `permutation`: The permutation to be built (as a permutation of the
+  // array `[0, 1, 2]`). The `sortedTriples` must be sorted by this permutation.
   static PermutationPairResult createPermutationPair(
       const std::string& basename, WriterAndCallback writerAndCallback1,
       WriterAndCallback writerAndCallback2,

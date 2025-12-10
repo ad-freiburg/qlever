@@ -130,7 +130,6 @@ struct CompressedRelationWriter::PermutationWriter {
                                        "Triples sorted: "};
 
   // Constructor for a `PermutationWriter` which writes pair of permutations.
-  // TODO<C++20> Use `PermutationWriter(...) requires WritePair` here.
   CPP_template(bool doWritePair = WritePair)(requires doWritePair)
       PermutationWriter(const std::string& basename,
                         WriterAndCallback writerAndCallback1,
@@ -160,7 +159,6 @@ struct CompressedRelationWriter::PermutationWriter {
   };
 
   // Constructor for a `PermutationWriter` which writes a single permutation.
-  // TODO<C++20> Use `PermutationWriter(...) requires (!WritePair)` here.
   CPP_template(bool doWritePair = WritePair)(requires(!doWritePair))
       PermutationWriter(WriterAndCallback writerAndCallback1,
                         qlever::KeyOrder permutation,
