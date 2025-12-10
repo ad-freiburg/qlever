@@ -17,8 +17,7 @@ class IndexScan final : public Operation {
  public:
   using Graphs = ScanSpecificationAsTripleComponent::GraphFilter;
   using PermutationPtr = std::shared_ptr<const Permutation>;
-  using LocatedTriplesSnapshotPtr =
-      std::shared_ptr<const LocatedTriplesState>;
+  using LocatedTriplesSnapshotPtr = std::shared_ptr<const LocatedTriplesState>;
 
  private:
   using ScanSpecAndBlocks = Permutation::ScanSpecAndBlocks;
