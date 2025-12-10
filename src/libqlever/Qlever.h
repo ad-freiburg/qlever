@@ -251,6 +251,14 @@ class Qlever {
     namedResultCache_.readFromSerializer(serializer, allocator_,
                                          *index_.getBlankNodeManager());
   }
+
+  // Serialize the vocabulary, metadata JSON, and named result cache to a blob.
+  // The blob is returned as a vector of bytes.
+  std::vector<char> serializeToBlob() const;
+
+  // Deserialize the vocabulary, metadata JSON, and named result cache from a
+  // blob. This initializes the index without loading permutations.
+  void deserializeFromBlob(const std::vector<char>& blob);
 };
 }  // namespace qlever
 

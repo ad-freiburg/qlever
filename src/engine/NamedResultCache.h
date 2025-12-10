@@ -130,7 +130,6 @@ class NamedResultCache {
       value.allocatorForSerialization_ = allocator;
       value.blankNodeManagerForSerialization_ = blankNodeManager;
       serializer >> value;
-      allocator = std::move(value.allocatorForSerialization_.value());
 
       // Use the store method to maintain consistency
       store(key, std::move(value));

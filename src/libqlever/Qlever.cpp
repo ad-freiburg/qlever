@@ -6,10 +6,15 @@
 
 #include "libqlever/Qlever.h"
 
+#include <absl/strings/str_cat.h>
+
 #include "engine/ExportQueryExecutionTrees.h"
 #include "index/IndexImpl.h"
 #include "index/TextIndexBuilder.h"
 #include "parser/SparqlParser.h"
+#include "util/Serializer/ByteBufferSerializer.h"
+#include "util/Serializer/CompressedSerializer.h"
+#include "util/Serializer/SerializeString.h"
 
 namespace qlever {
 
@@ -196,5 +201,84 @@ void IndexBuilderConfig::validate() const {
         "text index. If none are given the option to add words from literals "
         "has to be true. For details see --help."));
   }
+}
+
+// ___________________________________________________________________________
+std::vector<char> Qlever::serializeToBlob() const {
+  using ad_utility::serialization::ByteBufferWriteSerializer;
+  using ad_utility::serialization::ZstdWriteSerializer;
+
+  // Magic header for blob format validation.
+  const std::string MAGIC_HEADER = "QLVBLOB";
+  constexpr uint32_t BLOB_VERSION = 1;
+
+  // First, write to an uncompressed buffer.
+  ByteBufferWriteSerializer bufferSerializer;
+
+  // Write magic header.
+  bufferSerializer | MAGIC_HEADER;
+
+  // Write version.
+  bufferSerializer | BLOB_VERSION;
+
+  // Now compress the rest of the data.
+  ZstdWriteSerializer compressedSerializer{std::move(bufferSerializer)};
+
+  // Serialize metadata JSON.
+  std::string metadataJsonString = index_.getImpl().configurationJson().dump();
+  compressedSerializer | metadataJsonString;
+
+  // Serialize vocabulary.
+  index_.getImpl().getVocab().writeToSerializer(compressedSerializer);
+
+  // Serialize named result cache.
+  namedResultCache_.writeToSerializer(compressedSerializer);
+
+  // Close the compressed serializer to flush the last block.
+  // TODO<joka921> The close function deletes the underlying serializer, which
+  // might be undesried, if we want to get data out.
+  return std::move(compressedSerializer).underlyingSerializer().data();
+}
+
+// ___________________________________________________________________________
+void Qlever::deserializeFromBlob(const std::vector<char>& blob) {
+  using ad_utility::serialization::ByteBufferReadSerializer;
+  using ad_utility::serialization::ZstdReadSerializer;
+
+  ByteBufferReadSerializer bufferSerializer{blob};
+
+  // Validate magic header.
+  constexpr std::string_view MAGIC_HEADER = "QLVBLOB";
+  constexpr uint32_t BLOB_VERSION = 1;
+
+  std::string headerIn;
+  bufferSerializer | headerIn;
+  if (headerIn != MAGIC_HEADER) {
+    throw std::runtime_error(
+        "Invalid blob format: magic header mismatch. Expected a QLever blob "
+        "file.");
+  }
+
+  // Validate version.
+  uint32_t version;
+  bufferSerializer | version;
+  if (version != BLOB_VERSION) {
+    throw std::runtime_error(absl::StrCat(
+        "Incompatible blob version. Expected version ", BLOB_VERSION,
+        " but found version ", version,
+        ". Please regenerate the blob with the current version of QLever."));
+  }
+
+  // The rest of the data is compressed.
+  ZstdReadSerializer compressedSerializer{std::move(bufferSerializer)};
+
+  // The rest is handled by IndexImpl::createFromBlobData.
+  // It will deserialize: metadata JSON, vocabulary, and we'll handle the cache
+  // separately.
+  index_.getImpl().createFromBlobData(compressedSerializer, false);
+
+  // Deserialize named result cache.
+  namedResultCache_.readFromSerializer(compressedSerializer, allocator_,
+                                       *index_.getBlankNodeManager());
 }
 }  // namespace qlever

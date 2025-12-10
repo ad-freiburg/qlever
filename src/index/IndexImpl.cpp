@@ -1116,6 +1116,12 @@ void IndexImpl::writeConfiguration() const {
 void IndexImpl::readConfiguration() {
   auto f = ad_utility::makeIfstream(onDiskBase_ + CONFIGURATION_FILE);
   f >> configurationJson_;
+  applyConfiguration(configurationJson_);
+}
+
+// _____________________________________________________________________________
+void IndexImpl::applyConfiguration(const nlohmann::json& configJson) {
+  configurationJson_ = configJson;
   if (configurationJson_.find("git-hash") != configurationJson_.end()) {
     AD_LOG_INFO << "The git hash used to build this index was "
                 << configurationJson_["git-hash"] << std::endl;
