@@ -9,6 +9,7 @@
 #include "../util/IndexTestHelpers.h"
 #include "./SpatialJoinTestHelpers.h"
 #include "engine/NamedResultCache.h"
+#include "engine/NamedResultCacheSerializer.h"
 #include "engine/SpatialJoinCachedIndex.h"
 #include "engine/SpatialJoinConfig.h"
 #include "global/ValueId.h"
@@ -43,10 +44,15 @@ TEST(SpatialJoinCachedIndex, Basic) {
 
   auto& cache = qec->namedResultCache();
   std::string filename = "spatialJoinCachedIndexTmpFileForTesting.dat";
-  cache.writeToDisk(filename);
-  cache.clear();
-  cache.readFromDisk(filename, ad_utility::makeUnlimitedAllocator<Id>(),
-                     *qec->getIndex().getBlankNodeManager());
+  {
+    using namespace ad_utility::serialization;
+    ByteBufferWriteSerializer writer;
+    cache.writeToSerializer(writer);
+    cache.clear();
+    ByteBufferReadSerializer reader{std::move(writer).data()};
+    cache.readFromSerializer(reader, ad_utility::makeUnlimitedAllocator<Id>(),
+                             *qec->getIndex().getBlankNodeManager());
+  }
   ad_utility::deleteFile(filename);
 
   // Retrieve and check the result table and geo index from the named cache
@@ -119,10 +125,15 @@ TEST(SpatialJoinCachedIndex, UseOfIndexByS2PointPolylineAlgorithm) {
   // disk.
   auto& cache = qec->namedResultCache();
   std::string filename = "spatialJoinCachedIndexTmpFileForTesting2.dat";
-  cache.writeToDisk(filename);
-  cache.clear();
-  cache.readFromDisk(filename, ad_utility::makeUnlimitedAllocator<Id>(),
-                     *qec->getIndex().getBlankNodeManager());
+  {
+    using namespace ad_utility::serialization;
+    ByteBufferWriteSerializer writer;
+    cache.writeToSerializer(writer);
+    cache.clear();
+    ByteBufferReadSerializer reader{std::move(writer).data()};
+    cache.readFromSerializer(reader, ad_utility::makeUnlimitedAllocator<Id>(),
+                             *qec->getIndex().getBlankNodeManager());
+  }
   ad_utility::deleteFile(filename);
 
   // Check expected cache size

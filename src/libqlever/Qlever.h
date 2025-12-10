@@ -236,8 +236,16 @@ class Qlever {
 
   // Serialize the contents of the `NamedResultCache` to or from a file
   // specified by the `filename`.
-  void writeNamedResultCacheToDisk(const std::string& filename) const;
-  void readNamedResultCacheFromDisk(const std::string& filename);
+  template <typename Serializer>
+  void writeNamedResultCacheToSerializer(Serializer& serializer) const {
+    namedResultCache_.writeToSerializer(serializer);
+  }
+
+  template <typename Serializer>
+  void readNamedResultCacheFromDisk(Serializer& serializer) {
+    namedResultCache_.readFromSerializer(serializer, allocator_,
+                                         *index_.getBlankNodeManager());
+  }
 };
 }  // namespace qlever
 

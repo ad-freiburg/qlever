@@ -170,14 +170,17 @@ TEST(NamedResultCacheSerializer, CacheSerialization) {
 
   EXPECT_EQ(cache.numEntries(), 2);
 
-  // Serialize to disk
-  cache.writeToDisk(tempFile);
-
-  // Create a new cache and deserialize
-  NamedResultCache cache2;
   auto qec = ad_utility::testing::getQec();
-  cache2.readFromDisk(tempFile, ad_utility::makeUnlimitedAllocator<Id>(),
-                      *qec->getIndex().getBlankNodeManager());
+  auto cache2 = [&qec, &cache] {
+    using namespace ad_utility::serialization;
+    ByteBufferWriteSerializer writer;
+    cache.writeToSerializer(writer);
+    NamedResultCache cache2;
+    ByteBufferReadSerializer reader{std::move(writer).data()};
+    cache2.readFromSerializer(reader, ad_utility::makeUnlimitedAllocator<Id>(),
+                              *qec->getIndex().getBlankNodeManager());
+    return cache2;
+  }();
 
   // Check the deserialized cache
   EXPECT_EQ(cache2.numEntries(), 2);
@@ -206,14 +209,17 @@ TEST(NamedResultCacheSerializer, EmptyCacheSerialization) {
   NamedResultCache cache;
   EXPECT_EQ(cache.numEntries(), 0);
 
-  // Serialize to disk
-  cache.writeToDisk(tempFile);
-
-  // Deserialize
-  NamedResultCache cache2;
   auto qec = ad_utility::testing::getQec();
-  cache2.readFromDisk(tempFile, ad_utility::makeUnlimitedAllocator<Id>(),
-                      *qec->getIndex().getBlankNodeManager());
+  auto cache2 = [&qec, &cache] {
+    using namespace ad_utility::serialization;
+    ByteBufferWriteSerializer writer;
+    cache.writeToSerializer(writer);
+    NamedResultCache cache2;
+    ByteBufferReadSerializer reader{std::move(writer).data()};
+    cache2.readFromSerializer(reader, ad_utility::makeUnlimitedAllocator<Id>(),
+                              *qec->getIndex().getBlankNodeManager());
+    return cache2;
+  }();
 
   // Check
   EXPECT_EQ(cache2.numEntries(), 0);

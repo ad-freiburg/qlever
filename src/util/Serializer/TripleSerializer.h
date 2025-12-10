@@ -18,8 +18,8 @@
 #include "util/Exception.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeArrayOrTuple.h"
-#include "util/TransparentFunctors.h"
 #include "util/Serializer/SerializeString.h"
+#include "util/TransparentFunctors.h"
 #include "util/TypeTraits.h"
 #include "util/Views.h"
 
@@ -68,7 +68,7 @@ CPP_template(typename Serializer)(
     requires serialization::WriteSerializer<
         Serializer>) void serializeLocalVocab(Serializer& serializer,
                                               const LocalVocab& vocab) {
-  serializer << vocab.getIndicesOfBlankNodeBlocks();
+  serializer << vocab.getOwnedLocalBlankNodeBlocks();
   uint64_t numWords = vocab.primaryWordSet().size() +
                       ::ranges::accumulate(vocab.otherSets(), 0ULL,
                                            [](auto acc, const auto& set) {
@@ -94,7 +94,10 @@ CPP_template(typename Serializer)(
         Serializer& serializer, BlankNodeManager* blankNodeManager) {
   LocalVocab vocab;
   vocab.reserveBlankNodeBlocksFromExplicitIndices(
-      readValue<std::vector<uint64_t>>(serializer), blankNodeManager);
+      readValue<std::vector<
+          BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>>(
+          serializer),
+      blankNodeManager);
   auto size = readValue<uint64_t>(serializer);
   // Note:: It might happen that the `size` is zero because the local vocab was
   // empty.

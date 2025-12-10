@@ -251,14 +251,20 @@ CPP_concept TriviallySerializable =
 /// Serialize function for `TriviallySerializable` types that works by simply
 /// serializing the binary object representation.
 CPP_template(typename S, typename T)(
-    requires Serializer<S> CPP_and
-        TriviallySerializable<T>) void serialize(S& serializer, T&& t) {
+    requires Serializer<S> CPP_and std::is_trivially_copyable_v<
+        std::decay_t<T>>) void triviallySerialize(S& serializer, T&& t) {
   if constexpr (WriteSerializer<S>) {
     serializer.serializeBytes(reinterpret_cast<const char*>(&t), sizeof(t));
   } else {
     static_assert(ReadSerializer<S>);
     serializer.serializeBytes(reinterpret_cast<char*>(&t), sizeof(t));
   }
+}
+
+CPP_template(typename S, typename T)(
+    requires Serializer<S> CPP_and
+        TriviallySerializable<T>) void serialize(S& serializer, T&& t) {
+  triviallySerialize(serializer, AD_FWD(t));
 }
 
 /// Arithmetic types (the builtins like int, char, double), as well as enums can
@@ -269,6 +275,9 @@ CPP_template(typename T,
     [[maybe_unused]] std::true_type allowTrivialSerialization(T, U) {
   return {};
 }
+
+// An explicit helper function to serialize trivially serializable types, that
+// don't have the explicit serialization enabled.
 
 }  // namespace ad_utility::serialization
 
