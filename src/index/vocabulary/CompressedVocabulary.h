@@ -13,10 +13,9 @@
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/FsstCompressor.h"
 #include "util/OverloadCallOperator.h"
-#include "util/Serializer/ByteBufferSerializer.h"
-#include "util/Serializer/CompressedSerializer.h"
 #include "util/Serializer/FileSerializer.h"
-#include "util/Serializer/SerializePair.h"
+#include "util/Serializer/SerializeVector.h"
+#include "util/Serializer/Serializer.h"
 #include "util/TaskQueue.h"
 
 namespace detail {
@@ -277,11 +276,7 @@ CPP_template(typename UnderlyingVocabulary,
   void close() { underlyingVocabulary_.close(); }
 
   // Generic serialization support.
-  template <typename S, typename U>
-  requires ad_utility::serialization::Serializer<S> &&
-           ad_utility::SimilarTo<U, CompressedVocabulary> &&
-           ad_utility::serialization::SerializerMatchesConstness<S, U>
-  friend void serialize(S& serializer, U&& arg) {
+  AD_SERIALIZE_FRIEND_FUNCTION(CompressedVocabulary) {
     serializer | arg.underlyingVocabulary_;
     if constexpr (ad_utility::serialization::WriteSerializer<S>) {
       // Serialize the decoders.

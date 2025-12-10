@@ -6,7 +6,6 @@
 
 #include <fstream>
 
-#include "backports/span.h"
 #include "util/Generator.h"
 #include "util/StringUtils.h"
 

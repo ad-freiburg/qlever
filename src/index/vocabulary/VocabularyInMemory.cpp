@@ -4,10 +4,6 @@
 
 #include "index/vocabulary/VocabularyInMemory.h"
 
-#include "backports/span.h"
-#include "util/Serializer/ByteBufferSerializer.h"
-#include "util/Serializer/CompressedSerializer.h"
-
 using std::string;
 
 // _____________________________________________________________________________

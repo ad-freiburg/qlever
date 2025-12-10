@@ -4,8 +4,6 @@
 
 #include "index/vocabulary/VocabularyInternalExternal.h"
 
-#include "backports/span.h"
-
 // _____________________________________________________________________________
 std::string VocabularyInternalExternal::operator[](uint64_t i) const {
   auto fromInternal = internalVocab_[i];

@@ -13,6 +13,7 @@
 #include "rdfTypes/GeometryInfo.h"
 #include "util/ExceptionHandling.h"
 #include "util/File.h"
+#include "util/Serializer/Serializer.h"
 
 // A `GeoVocabulary` holds Well-Known Text (WKT) literals. In contrast to the
 // regular vocabulary classes it does not only store the strings. Instead it
@@ -134,11 +135,7 @@ class GeoVocabulary {
   void close();
 
   // Generic serialization support.
-  template <typename S, typename U>
-  requires ad_utility::serialization::Serializer<S> &&
-           ad_utility::SimilarTo<U, GeoVocabulary> &&
-           ad_utility::serialization::SerializerMatchesConstness<S, U>
-  friend void serialize(S& serializer, U&& arg) {
+  AD_SERIALIZE_FRIEND_FUNCTION(GeoVocabulary) {
     (void)serializer;
     (void)arg;
     throw std::runtime_error(

@@ -4,7 +4,6 @@
 
 #include "index/vocabulary/PolymorphicVocabulary.h"
 
-#include "backports/span.h"
 #include "engine/CallFixedSize.h"
 
 // _____________________________________________________________________________

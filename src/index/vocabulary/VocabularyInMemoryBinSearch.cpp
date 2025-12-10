@@ -4,8 +4,6 @@
 
 #include "index/vocabulary/VocabularyInMemoryBinSearch.h"
 
-#include "backports/span.h"
-
 using std::string;
 
 // _____________________________________________________________________________
