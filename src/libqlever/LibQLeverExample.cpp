@@ -30,7 +30,8 @@ int main(int argc, char** argv) {
   std::cout << "\x1b[1mBuilding index for input file \"" << inputFile << "\""
             << " with basename \"" << indexBasename << "\x1b[0m" << std::endl;
   qlever::IndexBuilderConfig config;
-  config.inputFiles_.emplace_back(inputFile, qlever::Filetype::Turtle);
+  config.inputFiles_.push_back(
+      {inputFile, qlever::Filetype::Turtle, std::nullopt});
   config.baseName_ = indexBasename;
   try {
     qlever::Qlever::buildIndex(config);
@@ -58,7 +59,6 @@ int main(int argc, char** argv) {
     std::cerr << "Executing the query failed: " << e.what() << std::endl;
     return 1;
   }
-  std::cout.imbue(std::locale(""));
   std::cout << "Query executed in " << timer.msecs().count() << "ms"
             << std::endl;
   std::cout << std::endl;

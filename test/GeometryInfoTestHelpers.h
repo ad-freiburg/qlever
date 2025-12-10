@@ -6,17 +6,26 @@
 #define QLEVER_TEST_GEOMETRYINFOTESTHELPERS_H
 
 #include <gtest/gtest.h>
+#include <util/geo/Geo.h>
 
 #include "./printers/GeometryInfoPrinters.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/GTestHelpers.h"
+#include "util/OverloadCallOperator.h"
+#include "util/TypeTraits.h"
 
 namespace geoInfoTestHelpers {
 
 using namespace ad_utility;
 using namespace ::testing;
 using Loc = source_location;
+
+using ad_utility::detail::AnyGeometryMember;
+using ad_utility::detail::DAnyGeometry;
+using ad_utility::detail::ParsedWkt;
+using ad_utility::detail::ParseResult;
+using ad_utility::detail::visitAnyGeometry;
 
 // Helpers that check (approx.) equality of two GeometryInfo objects or for
 // instances of the associated helper classes.
@@ -182,9 +191,6 @@ inline MetricLength getLengthForTesting(std::string_view quotedWktLiteral) {
   return len.value();
 }
 
-using DAnyGeometry = util::geo::AnyGeometry<double>;
-using ad_utility::detail::AnyGeometryMember;
-
 // ____________________________________________________________________________
 inline void checkAnyGeometryMemberEnum(
     DAnyGeometry geom, AnyGeometryMember enumVal,
@@ -242,6 +248,120 @@ inline MetricArea getAreaForTesting(const std::string_view wkt) {
   }
   return area.value();
 }
+
+// ____________________________________________________________________________
+inline auto geoPointOrWktMatcher = liftOptionalMatcher<GeoPointOrWkt>(
+    [](GeoPointOrWkt expected) -> Matcher<GeoPointOrWkt> {
+      return std::visit(
+          [&](auto& contained) -> Matcher<GeoPointOrWkt> {
+            using T = std::decay_t<decltype(contained)>;
+            if constexpr (std::is_same_v<T, GeoPoint>) {
+              return VariantWith<GeoPoint>(
+                  SafeMatcherCast<const GeoPoint&>(geoPointNear(contained)));
+            } else {
+              return VariantWith<std::string>(Eq(contained));
+            }
+          },
+          expected);
+    });
+
+// In the following there are functions to generate gtest matchers for all of
+// the geometry types supported by `pb_util`.
+using namespace ::util::geo;
+
+// ____________________________________________________________________________
+inline auto utilPointNear = [](DPoint expected) -> Matcher<DPoint> {
+  return AllOf(Property(&DPoint::getX,
+                        DoubleNear(expected.getX(), allowedCoordinateError)),
+               Property(&DPoint::getY,
+                        DoubleNear(expected.getY(), allowedCoordinateError)));
+};
+
+// ____________________________________________________________________________
+inline auto utilLineNear =
+    liftMatcherToElementsAreArray<DPoint, DLine>(utilPointNear);
+
+// ____________________________________________________________________________
+inline auto utilMultiPointNear =
+    liftMatcherToElementsAreArray<DPoint, DMultiPoint>(utilPointNear);
+
+// ____________________________________________________________________________
+inline auto utilMultiLineNear =
+    liftMatcherToElementsAreArray<DLine, DMultiLine>(utilLineNear);
+
+// ____________________________________________________________________________
+inline auto utilPolygonNear = [](DPolygon expected) -> Matcher<DPolygon> {
+  return AllOf(
+      Property(&DPolygon::getOuter, utilLineNear(expected.getOuter())),
+      Property(&DPolygon::getInners, utilMultiLineNear(expected.getInners())));
+};
+
+// ____________________________________________________________________________
+inline auto utilMultiPolygonNear =
+    liftMatcherToElementsAreArray<DPolygon, DMultiPolygon>(utilPolygonNear);
+
+// Forward declaration for `utilAnyGeometryNear` below.
+struct ParsedWktNearForwardDecl {
+  Matcher<std::optional<ParsedWkt>> operator()(
+      std::optional<ParsedWkt> expected) const;
+};
+
+// ____________________________________________________________________________
+inline auto anyGeometryToParsedWkt = [](const DAnyGeometry& geom) {
+  return visitAnyGeometry(
+      [](const auto& contained) { return ParsedWkt{contained}; }, geom);
+};
+
+// ____________________________________________________________________________
+inline auto utilAnyGeometryNear =
+    [](DAnyGeometry expected) -> Matcher<DAnyGeometry> {
+  return AllOf(
+      Property(&DAnyGeometry::getType, Eq(expected.getType())),
+      ResultOf(anyGeometryToParsedWkt,
+               ParsedWktNearForwardDecl{}(anyGeometryToParsedWkt(expected))));
+};
+
+// ____________________________________________________________________________
+inline auto utilCollectionNear =
+    liftMatcherToElementsAreArray<DAnyGeometry, DCollection>(
+        utilAnyGeometryNear);
+
+// ____________________________________________________________________________
+inline auto utilGeometryNear = OverloadCallOperator{
+    utilPointNear,      utilLineNear,      utilPolygonNear,
+    utilMultiPointNear, utilMultiLineNear, utilMultiPolygonNear,
+    utilCollectionNear};
+
+// ____________________________________________________________________________
+inline auto parsedWktNear = liftOptionalMatcher<ParsedWkt>(
+    [](ParsedWkt expected) -> Matcher<ParsedWkt> {
+      return std::visit(
+          [](const auto& contained) -> Matcher<ParsedWkt> {
+            using T = std::decay_t<decltype(contained)>;
+            return VariantWith<T>(
+                SafeMatcherCast<const T&>(utilGeometryNear(contained)));
+          },
+          std::move(expected));
+    });
+
+// ____________________________________________________________________________
+inline Matcher<std::optional<ParsedWkt>> ParsedWktNearForwardDecl::operator()(
+    std::optional<ParsedWkt> expected) const {
+  return parsedWktNear(std::move(expected));
+}
+
+// ____________________________________________________________________________
+inline auto parseResultNear = liftOptionalMatcher<ParseResult>(
+    [](ParseResult expected) -> Matcher<ParseResult> {
+      return Pair(Eq(expected.first), parsedWktNear(expected.second));
+    });
+
+// ____________________________________________________________________________
+struct ExpectedGeometryN {
+  size_t n_;
+  std::string wkt_;
+  std::optional<ParsedWkt> expected_;
+};
 
 };  // namespace geoInfoTestHelpers
 

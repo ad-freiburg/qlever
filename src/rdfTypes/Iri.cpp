@@ -117,9 +117,9 @@ Iri Iri::fromStringRepresentation(std::string s) {
 }
 
 // ____________________________________________________________________________
-const std::string& Iri::toStringRepresentation() const { return iri_; }
+const std::string& Iri::toStringRepresentation() const& { return iri_; }
 
 // ____________________________________________________________________________
-std::string& Iri::toStringRepresentation() { return iri_; }
+std::string Iri::toStringRepresentation() && { return std::move(iri_); }
 
 }  // namespace ad_utility::triple_component
