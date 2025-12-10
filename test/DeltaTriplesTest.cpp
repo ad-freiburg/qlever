@@ -176,22 +176,22 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
                      const std::vector<std::string>& internalDeleted)
       -> testing::Matcher<const DeltaTriples&> {
     using ::testing::AllOf;
-    using ETTH = DeltaTriples::TriplesToHandles<false>;
-    using ITTH = DeltaTriples::TriplesToHandles<true>;
+    using TriplesNormal = DeltaTriples::TriplesToHandles<false>;
+    using TriplesInternal = DeltaTriples::TriplesToHandles<true>;
     return AllOf(
         NumTriples(numInserted, numDeleted, numTriplesInAllPermutations,
                    numInternalInserted, numInternalDeleted),
         AD_FIELD(
             DeltaTriples, triplesToHandlesNormal_,
-            AllOf(AD_FIELD(ETTH, triplesInserted_,
+            AllOf(AD_FIELD(TriplesNormal, triplesInserted_,
                            UnorderedTriplesAre(std::false_type{}, inserted)),
-                  AD_FIELD(ETTH, triplesDeleted_,
+                  AD_FIELD(TriplesNormal, triplesDeleted_,
                            UnorderedTriplesAre(std::false_type{}, deleted)))),
         AD_FIELD(DeltaTriples, triplesToHandlesInternal_,
-                 AllOf(AD_FIELD(ITTH, triplesInserted_,
+                 AllOf(AD_FIELD(TriplesInternal, triplesInserted_,
                                 UnorderedTriplesAre(std::true_type{},
                                                     internalInserted)),
-                       AD_FIELD(ITTH, triplesDeleted_,
+                       AD_FIELD(TriplesInternal, triplesDeleted_,
                                 UnorderedTriplesAre(std::true_type{},
                                                     internalDeleted)))));
   };
