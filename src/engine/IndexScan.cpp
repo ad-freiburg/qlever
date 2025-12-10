@@ -277,7 +277,7 @@ Result::LazyResult IndexScan::chunkedIndexScan() const {
 IdTable IndexScan::materializedIndexScan() const {
   IdTable idTable = permutation().scan(
       scanSpecAndBlocks_, additionalColumns(), cancellationHandle_,
-      locatedTriplesState(), getLimitOffset());
+                                       locatedTriplesState(), getLimitOffset());
   AD_LOG_DEBUG << "IndexScan result computation done.\n";
   checkCancellation();
   idTable = makeApplyColumnSubset()(std::move(idTable));

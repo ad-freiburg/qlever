@@ -1675,8 +1675,7 @@ IdTable IndexImpl::scan(
   const auto& perm = getPermutation(p);
   return perm.scan(
       perm.getScanSpecAndBlocks(scanSpecification, locatedTriplesState),
-      additionalColumns, cancellationHandle, locatedTriplesState,
-      limitOffset);
+      additionalColumns, cancellationHandle, locatedTriplesState, limitOffset);
 }
 
 // _____________________________________________________________________________

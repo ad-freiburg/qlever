@@ -900,8 +900,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByForFullIndexScan() const {
       getExecutionContext()->getIndex().getPimpl().getPermutation(
           permutationEnum.value());
   auto table = permutation.getDistinctCol0IdsAndCounts(
-      cancellationHandle_, locatedTriplesState(),
-      indexScan->getLimitOffset());
+      cancellationHandle_, locatedTriplesState(), indexScan->getLimitOffset());
   if (numCounts == 0) {
     table.setColumnSubset(std::array{ColumnIndex{0}});
   } else if (!variableIsBoundInSubtree) {
