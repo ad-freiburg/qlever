@@ -6,11 +6,17 @@
 
 #include "engine/NamedResultCache.h"
 
+#include <algorithm>
+
+#include "engine/NamedResultCacheSerializer.h"
+#include "util/Serializer/FileSerializer.h"
+
 // _____________________________________________________________________________
 std::shared_ptr<ExplicitIdTableOperation> NamedResultCache::getOperation(
     const Key& name, QueryExecutionContext* qec) {
   const auto& result = get(name);
-  const auto& [table, map, sortedOn, localVocab, cacheKey, geoIndex] = *result;
+  const auto& [table, map, sortedOn, localVocab, cacheKey, geoIndex, allocator,
+               blankNodeManager] = *result;
   auto resultAsOperation = std::make_shared<ExplicitIdTableOperation>(
       qec, table, map, sortedOn, localVocab.clone(), cacheKey);
   return resultAsOperation;
@@ -29,12 +35,13 @@ auto NamedResultCache::get(const Key& name) -> std::shared_ptr<const Value> {
 
 // _____________________________________________________________________________
 void NamedResultCache::store(const Key& name, Value result) {
-  auto lock = cache_.wlock();
+  auto cacheLock = cache_.wlock();
+
   // The underlying cache throws on insert if the key is already present. We
   // therefore first call `erase`, which silently ignores keys that are not
   // present to avoid this behavior.
-  lock->erase(name);
-  lock->insert(name, std::move(result));
+  cacheLock->erase(name);
+  cacheLock->insert(name, std::move(result));
 }
 
 // _____________________________________________________________________________

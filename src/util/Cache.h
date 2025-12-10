@@ -377,6 +377,12 @@ CPP_template(template <typename Sc, typename Val, typename Comp>
     return true;
   }
 
+  // Get all the keys of entries that are currently stored (but not pinned) in
+  // the cache.
+  std::vector<Key> getAllNonpinnedKeys() const {
+    return ::ranges::to<std::vector>(_accessMap | ql::views::keys);
+  }
+
  private:
   // Removes the entry with the smallest score from the cache.
   // Precondition: The cache must not be empty.

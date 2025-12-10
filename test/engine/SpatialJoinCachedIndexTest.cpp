@@ -9,6 +9,7 @@
 #include "../util/IndexTestHelpers.h"
 #include "./SpatialJoinTestHelpers.h"
 #include "engine/NamedResultCache.h"
+#include "engine/NamedResultCacheSerializer.h"
 #include "engine/SpatialJoinCachedIndex.h"
 #include "engine/SpatialJoinConfig.h"
 #include "global/ValueId.h"
@@ -40,6 +41,19 @@ TEST(SpatialJoinCachedIndex, Basic) {
   qec->pinResultWithName() = {"dummy", Variable{"?o"}};
   auto plan = queryPlannerTestHelpers::parseAndPlan(pinned, qec);
   [[maybe_unused]] auto pinResult = plan.getResult();
+
+  auto& cache = qec->namedResultCache();
+  std::string filename = "spatialJoinCachedIndexTmpFileForTesting.dat";
+  {
+    using namespace ad_utility::serialization;
+    ByteBufferWriteSerializer writer;
+    cache.writeToSerializer(writer);
+    cache.clear();
+    ByteBufferReadSerializer reader{std::move(writer).data()};
+    cache.readFromSerializer(reader, ad_utility::makeUnlimitedAllocator<Id>(),
+                             *qec->getIndex().getBlankNodeManager());
+  }
+  ad_utility::deleteFile(filename);
 
   // Retrieve and check the result table and geo index from the named cache
   auto cacheEntry = qec->namedResultCache().get("dummy");
@@ -106,6 +120,21 @@ TEST(SpatialJoinCachedIndex, UseOfIndexByS2PointPolylineAlgorithm) {
   auto plan = queryPlannerTestHelpers::parseAndPlan(pinQuery, qec);
   const auto pinResultCacheKey = plan.getCacheKey();
   [[maybe_unused]] auto pinResult = plan.getResult();
+
+  // TODO<joka921> Code duplication + test with AND without the serialization to
+  // disk.
+  auto& cache = qec->namedResultCache();
+  std::string filename = "spatialJoinCachedIndexTmpFileForTesting2.dat";
+  {
+    using namespace ad_utility::serialization;
+    ByteBufferWriteSerializer writer;
+    cache.writeToSerializer(writer);
+    cache.clear();
+    ByteBufferReadSerializer reader{std::move(writer).data()};
+    cache.readFromSerializer(reader, ad_utility::makeUnlimitedAllocator<Id>(),
+                             *qec->getIndex().getBlankNodeManager());
+  }
+  ad_utility::deleteFile(filename);
 
   // Check expected cache size
   const auto cacheEntry = qec->namedResultCache().get("dummy");

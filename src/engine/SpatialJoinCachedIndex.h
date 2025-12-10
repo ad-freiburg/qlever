@@ -10,6 +10,7 @@
 #include "engine/idTable/IdTable.h"
 #include "index/Index.h"
 #include "rdfTypes/Variable.h"
+#include "util/Serializer/Serializer.h"
 
 // Forward declarations
 class MutableS2ShapeIndex;
@@ -31,7 +32,14 @@ class SpatialJoinCachedIndex {
   // As `S2MutableShapeInex` doesn't support additional payloads, the
   //  `shapeIndexToRow_` associates s2's `shape ids` with row indices in the
   //  respective `IdTable` from which this `SpatialJoinCachedIndex` was created.
-  ad_utility::HashMap<size_t, size_t> shapeIndexToRow_;
+  using ShapeIndexToRow = ad_utility::HashMap<size_t, size_t>;
+  ShapeIndexToRow shapeIndexToRow_;
+
+  // Serialize the contained shapes, and the corresponding indices in the
+  // `IdTable` from which the index was constructed. This information is enough
+  // to relatively cheaply reconstruct the index.
+  std::string serializeShapes() const;
+  const ShapeIndexToRow& serializeLineIndices() const;
 
  public:
   // Constructor that builds an index from the geometries in the given column in
@@ -50,6 +58,34 @@ class SpatialJoinCachedIndex {
   // this function is inlined.
   size_t getRow(size_t shapeIndex) const {
     return shapeIndexToRow_.at(shapeIndex);
+  }
+
+  // Construct an empty, not yet valid index, s.t. it later can be filled via
+  // `populateFromSerialized` below.
+  struct TagForSerialization {};
+  SpatialJoinCachedIndex(TagForSerialization);
+
+  // Fill the index from preserialized shapes and line indices, which have been
+  // obtained via prior calls to `serializeShapes` and `serializeLineIndices`
+  // respectively.
+  void populateFromSerialized(std::string_view serializedShapes,
+                              ShapeIndexToRow shapeIndexToRow);
+
+  // Serialize a `SpatialJoinCachedIndex`. When reading from a serializer, then
+  // the target `arg` has to be constructed upfront via the constructor that
+  // takes a `TagForSerialization` (see above).
+  AD_SERIALIZE_FRIEND_FUNCTION(SpatialJoinCachedIndex) {
+    serializer | arg.geometryColumn_;
+    if constexpr (ad_utility::serialization::WriteSerializer<S>) {
+      serializer << arg.serializeShapes();
+      serializer << arg.serializeLineIndices();
+    } else {
+      decltype(arg.serializeShapes()) serializedShapes;
+      serializer >> serializedShapes;
+      std::decay_t<decltype(arg.serializeLineIndices())> lineIndices;
+      serializer >> lineIndices;
+      arg.populateFromSerialized(serializedShapes, std::move(lineIndices));
+    }
   }
 };
 
