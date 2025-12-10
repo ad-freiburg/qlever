@@ -931,19 +931,6 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
   AD_LOG_DEBUG << "Number of words in internal and external vocabulary: "
                << vocab_.size() << std::endl;
 
-  auto range1 =
-      vocab_.prefixRanges(QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET);
-  auto range2 = vocab_.prefixRanges("@");
-  auto isInternalId = [range1, range2](Id id) {
-    // TODO<joka921> What about internal vocab stuff for update queries? this
-    // has to be added also to the external permutation.
-    if (id.getDatatype() != Datatype::VocabIndex) {
-      return false;
-    }
-    return range1.contain(id.getVocabIndex()) ||
-           range2.contain(id.getVocabIndex());
-  };
-
   // Load the permutations and register the original metadata for the delta
   // triples.
   // The setting of the metadata doesn't affect the contents of the delta
@@ -957,11 +944,9 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
         false, false);
   };
 
-  auto load = [this, &isInternalId, &setMetadata](
-                  PermutationPtr permutation,
-                  bool loadInternalPermutation = false) {
-    permutation->loadFromDisk(onDiskBase_, isInternalId,
-                              loadInternalPermutation);
+  auto load = [this, &setMetadata](PermutationPtr permutation,
+                                   bool loadInternalPermutation = false) {
+    permutation->loadFromDisk(onDiskBase_, loadInternalPermutation);
     setMetadata(*permutation);
   };
 

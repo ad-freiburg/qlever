@@ -58,6 +58,7 @@
 #include "global/Id.h"
 #include "global/RuntimeParameters.h"
 #include "global/ValueId.h"
+#include "index/IndexImpl.h"
 #include "parser/Alias.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceIriConstants.h"
@@ -766,6 +767,31 @@ void QueryPlanner::seedFromOrdinaryTriple(
   }
 }
 
+namespace {
+
+// Return true if the string representation of the `iri` starts with '@' or
+// `QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET` and is thus considered
+// to be internal.
+bool hasInternalPrefix(const ad_utility::triple_component::Iri& iri) {
+  const auto& string = iri.toStringRepresentation();
+  return string.starts_with('@') ||
+         string.starts_with(QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET);
+}
+
+// Return true if the passed `tripleComponent` represents an IRI and it has an
+// internal prefix.
+bool isInternalComponent(const TripleComponent& tripleComponent) {
+  return tripleComponent.isIri() && hasInternalPrefix(tripleComponent.getIri());
+}
+
+// Return true if one of the 3 triple components of `triple` contains an
+// internal IRI.
+bool containsInternalIri(const SparqlTripleSimple& triple) {
+  return isInternalComponent(triple.s_) || isInternalComponent(triple.p_) ||
+         isInternalComponent(triple.o_);
+}
+}  // namespace
+
 // _____________________________________________________________________________
 auto QueryPlanner::seedWithScansAndText(
     const QueryPlanner::TripleGraph& tg,
@@ -914,8 +940,19 @@ auto QueryPlanner::seedWithScansAndText(
                                        std::move(internalVariable));
       }
 
-      pushPlan(makeSubtreePlan<IndexScan>(_qec, permutation, std::move(triple),
-                                          relevantGraphs));
+      auto actualPermutation =
+          _qec->getIndex().getImpl().getPermutationPtr(permutation);
+
+      if (containsInternalIri(triple)) {
+        // Create alias shared pointer of internal permutation.
+        actualPermutation = std::shared_ptr<const Permutation>{
+            std::move(actualPermutation),
+            &actualPermutation->internalPermutation()};
+      }
+
+      pushPlan(makeSubtreePlan<IndexScan>(_qec, actualPermutation,
+                                          _qec->sharedLocatedTriplesSnapshot(),
+                                          std::move(triple), relevantGraphs));
     };
     seedFromOrdinaryTriple(node, addIndexScan, addFilter);
   }
