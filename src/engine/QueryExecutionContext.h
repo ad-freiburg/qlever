@@ -9,6 +9,7 @@
 #include <chrono>
 #include <memory>
 #include <string>
+#include <utility>
 
 #include "backports/three_way_comparison.h"
 #include "engine/QueryPlanningCostFactors.h"
@@ -110,13 +111,13 @@ class QueryExecutionContext {
 
   [[nodiscard]] const Index& getIndex() const { return _index; }
 
-  const LocatedTriplesState& locatedTriplesSnapshot() const {
-    AD_CORRECTNESS_CHECK(sharedLocatedTriplesSnapshot_ != nullptr);
-    return *sharedLocatedTriplesSnapshot_;
+  const LocatedTriplesState& locatedTriplesState() const {
+    AD_CORRECTNESS_CHECK(locatedTriplesVersion_ != nullptr);
+    return *locatedTriplesVersion_;
   }
 
-  LocatedTriplesVersion sharedLocatedTriplesSnapshot() const {
-    return sharedLocatedTriplesSnapshot_;
+  LocatedTriplesVersion locatedTriplesVersion() const {
+    return locatedTriplesVersion_;
   }
 
   // Set the `LocatedTriplesVersion` for evaluating queries. The new version
@@ -128,8 +129,9 @@ class QueryExecutionContext {
   // This function is only needed for chained updates, which have to see the
   // effect of previous updates but use the same execution context. Chained
   // updates are processed strictly sequentially, so this use case works.
-  void setLocatedTriplesForEvaluation(LocatedTriplesVersion snapshot) {
-    sharedLocatedTriplesSnapshot_ = snapshot;
+  void setLocatedTriplesForEvaluation(
+      LocatedTriplesVersion locatedTriplesVersion) {
+    locatedTriplesVersion_ = std::move(locatedTriplesVersion);
   }
 
   void clearCacheUnpinnedOnly() { getQueryTreeCache().clearUnpinnedOnly(); }
@@ -195,7 +197,7 @@ class QueryExecutionContext {
   // snapshot of the current (located) delta triples. These can then be used
   // by the respective query without interfering with further incoming
   // update operations.
-  LocatedTriplesVersion sharedLocatedTriplesSnapshot_{
+  LocatedTriplesVersion locatedTriplesVersion_{
       _index.deltaTriplesManager().getCurrentSnapshot()};
   QueryResultCache* const _subtreeCache;
   // allocators are copied but hold shared state

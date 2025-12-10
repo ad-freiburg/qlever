@@ -54,15 +54,15 @@ ad_utility::BlankNodeManager* Index::getBlankNodeManager() const {
 // ____________________________________________________________________________
 size_t Index::getCardinality(
     const TripleComponent& comp, Permutation::Enum p,
-    const LocatedTriplesState& locatedTriplesSnapshot) const {
-  return pimpl_->getCardinality(comp, p, locatedTriplesSnapshot);
+    const LocatedTriplesState& locatedTriplesState) const {
+  return pimpl_->getCardinality(comp, p, locatedTriplesState);
 }
 
 // ____________________________________________________________________________
 size_t Index::getCardinality(
     Id id, Permutation::Enum p,
-    const LocatedTriplesState& locatedTriplesSnapshot) const {
-  return pimpl_->getCardinality(id, p, locatedTriplesSnapshot);
+    const LocatedTriplesState& locatedTriplesState) const {
+  return pimpl_->getCardinality(id, p, locatedTriplesState);
 }
 
 // ____________________________________________________________________________
@@ -270,8 +270,8 @@ std::vector<float> Index::getMultiplicities(
 // ____________________________________________________________________________
 std::vector<float> Index::getMultiplicities(
     const TripleComponent& key, const Permutation& p,
-    const LocatedTriplesState& locatedTriplesSnapshot) const {
-  return pimpl_->getMultiplicities(key, p, locatedTriplesSnapshot);
+    const LocatedTriplesState& locatedTriplesState) const {
+  return pimpl_->getMultiplicities(key, p, locatedTriplesState);
 }
 
 // ____________________________________________________________________________
@@ -279,10 +279,10 @@ IdTable Index::scan(
     const ScanSpecificationAsTripleComponent& scanSpecification,
     Permutation::Enum p, Permutation::ColumnIndicesRef additionalColumns,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
-    const LocatedTriplesState& locatedTriplesSnapshot,
+    const LocatedTriplesState& locatedTriplesState,
     const LimitOffsetClause& limitOffset) const {
   return pimpl_->scan(scanSpecification, p, additionalColumns,
-                      cancellationHandle, locatedTriplesSnapshot, limitOffset);
+                      cancellationHandle, locatedTriplesState, limitOffset);
 }
 
 // ____________________________________________________________________________
@@ -290,19 +290,19 @@ IdTable Index::scan(
     const ScanSpecification& scanSpecification, Permutation::Enum p,
     Permutation::ColumnIndicesRef additionalColumns,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
-    const LocatedTriplesState& locatedTriplesSnapshot,
+    const LocatedTriplesState& locatedTriplesState,
     const LimitOffsetClause& limitOffset) const {
   return pimpl_->scan(scanSpecification, p, additionalColumns,
-                      cancellationHandle, locatedTriplesSnapshot, limitOffset);
+                      cancellationHandle, locatedTriplesState, limitOffset);
 }
 
 // ____________________________________________________________________________
 size_t Index::getResultSizeOfScan(
     const ScanSpecification& scanSpecification,
     const Permutation::Enum& permutation,
-    const LocatedTriplesState& locatedTriplesSnapshot) const {
+    const LocatedTriplesState& locatedTriplesState) const {
   return pimpl_->getResultSizeOfScan(scanSpecification, permutation,
-                                     locatedTriplesSnapshot);
+                                     locatedTriplesState);
 }
 
 // ____________________________________________________________________________

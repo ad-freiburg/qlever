@@ -959,7 +959,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 }
 
 nlohmann::ordered_json Server::createResponseMetadataForUpdate(
-    const Index& index, LocatedTriplesVersion snapshot,
+    const Index& index, LocatedTriplesVersion locatedTriples,
     const PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
     const UpdateMetadata& updateMetadata,
     const ad_utility::timer::TimeTracer& tracer) {
@@ -991,9 +991,10 @@ nlohmann::ordered_json Server::createResponseMetadataForUpdate(
       json(updateMetadata.inUpdate_.value());
   response["time"] = tracer.getJSONShort()["update"];
   for (auto permutation : Permutation::ALL) {
-    response["located-triples"][Permutation::toString(
-        permutation)]["blocks-affected"] =
-        snapshot->getLocatedTriplesForPermutation(permutation).numBlocks();
+    response["located-triples"][Permutation::toString(permutation)]
+            ["blocks-affected"] =
+                locatedTriples->getLocatedTriplesForPermutation(permutation)
+                    .numBlocks();
     auto numBlocks = index.getPimpl()
                          .getPermutation(permutation)
                          .metaData()
@@ -1083,9 +1084,9 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 
                 tracer->endTrace("update");
                 results.push_back(createResponseMetadataForUpdate(
-                    index_, index_.deltaTriplesManager().getCurrentSnapshot(),
-                    *plannedUpdate, plannedUpdate->queryExecutionTree_,
-                    updateMetadata, *tracer));
+                    index_, deltaTriples.getMirroringVersion(), *plannedUpdate,
+                    plannedUpdate->queryExecutionTree_, updateMetadata,
+                    *tracer));
                 tracer->reset();
 
                 AD_LOG_INFO << "Done processing update, total time was "
