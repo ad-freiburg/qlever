@@ -131,8 +131,7 @@ IdTable Permutation::getDistinctCol0IdsAndCounts(
     const LimitOffsetClause& limitOffset) const {
   ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
   return reader().getDistinctCol0IdsAndCounts(
-      getScanSpecAndBlocks(scanSpec, locatedTriplesState),
-      cancellationHandle,
+      getScanSpecAndBlocks(scanSpec, locatedTriplesState), cancellationHandle,
       getLocatedTriplesForPermutation(locatedTriplesState), limitOffset);
 }
 
@@ -264,9 +263,8 @@ const LocatedTriplesPerBlock& Permutation::getLocatedTriplesForPermutation(
 // ______________________________________________________________________
 BlockMetadataRanges Permutation::getAugmentedMetadataForPermutation(
     const LocatedTriplesState& locatedTriplesState) const {
-  BlockMetadataSpan blocks(
-      getLocatedTriplesForPermutation(locatedTriplesState)
-          .getAugmentedMetadata());
+  BlockMetadataSpan blocks(getLocatedTriplesForPermutation(locatedTriplesState)
+                               .getAugmentedMetadata());
   return {{blocks.begin(), blocks.end()}};
 }
 

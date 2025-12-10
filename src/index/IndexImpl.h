@@ -308,9 +308,9 @@ class IndexImpl {
                         const LocatedTriplesState&) const;
 
   // ___________________________________________________________________________
-  size_t getCardinality(
-      const TripleComponent& comp, Permutation::Enum permutation,
-      const LocatedTriplesState& locatedTriplesState) const;
+  size_t getCardinality(const TripleComponent& comp,
+                        Permutation::Enum permutation,
+                        const LocatedTriplesState& locatedTriplesState) const;
 
   // ___________________________________________________________________________
   RdfsVocabulary::AccessReturnType indexToString(VocabIndex id) const;

@@ -80,8 +80,8 @@ IndexScan::IndexScan(QueryExecutionContext* qec,
                      std::optional<ScanSpecAndBlocks> scanSpecAndBlocks)
     : IndexScan(qec,
                 qec->getIndex().getImpl().getPermutationPtr(permutationType),
-                qec->locatedTriplesVersion(), triple,
-                std::move(graphsToFilter), std::move(scanSpecAndBlocks)) {}
+                qec->locatedTriplesVersion(), triple, std::move(graphsToFilter),
+                std::move(scanSpecAndBlocks)) {}
 
 // _____________________________________________________________________________
 IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
@@ -275,9 +275,9 @@ Result::LazyResult IndexScan::chunkedIndexScan() const {
 
 // _____________________________________________________________________________
 IdTable IndexScan::materializedIndexScan() const {
-  IdTable idTable = permutation().scan(
-      scanSpecAndBlocks_, additionalColumns(), cancellationHandle_,
-      locatedTriplesState(), getLimitOffset());
+  IdTable idTable = permutation().scan(scanSpecAndBlocks_, additionalColumns(),
+                                       cancellationHandle_,
+                                       locatedTriplesState(), getLimitOffset());
   AD_LOG_DEBUG << "IndexScan result computation done.\n";
   checkCancellation();
   idTable = makeApplyColumnSubset()(std::move(idTable));
