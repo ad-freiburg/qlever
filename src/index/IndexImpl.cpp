@@ -1639,32 +1639,6 @@ std::vector<float> IndexImpl::getMultiplicities(
 }
 
 // _____________________________________________________________________________
-IdTable IndexImpl::scan(
-    const ScanSpecificationAsTripleComponent& scanSpecificationAsTc,
-    const Permutation::Enum& permutation,
-    Permutation::ColumnIndicesRef additionalColumns,
-    const ad_utility::SharedCancellationHandle& cancellationHandle,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot,
-    const LimitOffsetClause& limitOffset) const {
-  auto scanSpecification = scanSpecificationAsTc.toScanSpecification(*this);
-  return scan(scanSpecification, permutation, additionalColumns,
-              cancellationHandle, locatedTriplesSnapshot, limitOffset);
-}
-// _____________________________________________________________________________
-IdTable IndexImpl::scan(
-    const ScanSpecification& scanSpecification, Permutation::Enum p,
-    Permutation::ColumnIndicesRef additionalColumns,
-    const ad_utility::SharedCancellationHandle& cancellationHandle,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot,
-    const LimitOffsetClause& limitOffset) const {
-  const auto& perm = getPermutation(p);
-  return perm.scan(
-      perm.getScanSpecAndBlocks(scanSpecification, locatedTriplesSnapshot),
-      additionalColumns, cancellationHandle, locatedTriplesSnapshot,
-      limitOffset);
-}
-
-// _____________________________________________________________________________
 size_t IndexImpl::getResultSizeOfScan(
     const ScanSpecification& scanSpecification,
     const Permutation::Enum& permutation,

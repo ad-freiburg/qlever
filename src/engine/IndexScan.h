@@ -292,6 +292,12 @@ class IndexScan final : public Operation {
   std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithStrippedColumns(
       const std::set<Variable>& variables) const override;
+
+  // Return a shared pointer to the correct permutation in `index` based on the
+  // `permutation` enum and the values in `triple`.
+  static std::shared_ptr<const Permutation> getPermutationForTriple(
+      Permutation::Enum permutation, const Index& index,
+      const SparqlTripleSimple& triple);
 };
 
 #endif  // QLEVER_SRC_ENGINE_INDEXSCAN_H
