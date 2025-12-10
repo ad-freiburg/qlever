@@ -965,18 +965,32 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
     setMetadata(*permutation);
   };
 
-  load(pso_, true);
-  load(pos_, true);
-  if (loadAllPermutations_) {
-    load(ops_);
-    load(osp_);
-    load(spo_);
-    load(sop_);
+  if (dontLoadPermutations_) {
+    // Set all permutations to nullptr to indicate they are not loaded.
+    pso_ = nullptr;
+    pos_ = nullptr;
+    ops_ = nullptr;
+    osp_ = nullptr;
+    spo_ = nullptr;
+    sop_ = nullptr;
+    AD_LOG_INFO << "No permutations were loaded due to dontLoadPermutations "
+                   "being set to true. Only queries that don't require "
+                   "accessing the permutations can be executed."
+                << std::endl;
   } else {
-    AD_LOG_INFO
-        << "Only the PSO and POS permutation were loaded, SPARQL queries "
-           "with predicate variables will therefore not work"
-        << std::endl;
+    load(pso_, true);
+    load(pos_, true);
+    if (loadAllPermutations_) {
+      load(ops_);
+      load(osp_);
+      load(spo_);
+      load(sop_);
+    } else {
+      AD_LOG_INFO
+          << "Only the PSO and POS permutation were loaded, SPARQL queries "
+             "with predicate variables will therefore not work"
+          << std::endl;
+    }
   }
 
   // We have to load the patterns first to figure out if the patterns were built
@@ -1013,6 +1027,18 @@ void IndexImpl::throwExceptionIfNoPatterns() const {
 }
 
 // _____________________________________________________________________________
+const Permutation& IndexImpl::getPermutationImpl(
+    const PermutationPtr& permutation, std::string_view permutationName) const {
+  AD_CONTRACT_CHECK(
+      permutation != nullptr,
+      absl::StrCat("The requested operation requires the ", permutationName,
+                   " permutation to be loaded, but it was not loaded. This "
+                   "typically happens when the index was loaded with the "
+                   "`dontLoadPermutations` option set to true."));
+  return *permutation;
+}
+
+// _____________________________________________________________________________
 const CompactVectorOfStrings<Id>& IndexImpl::getPatterns() const {
   throwExceptionIfNoPatterns();
   return patterns_;
@@ -1043,12 +1069,12 @@ bool IndexImpl::isLiteral(std::string_view object) const {
 
 // _____________________________________________________________________________
 void IndexImpl::setKbName(const std::string& name) {
-  pos_->setKbName(name);
-  pso_->setKbName(name);
-  sop_->setKbName(name);
-  spo_->setKbName(name);
-  ops_->setKbName(name);
-  osp_->setKbName(name);
+  if (pos_) pos_->setKbName(name);
+  if (pso_) pso_->setKbName(name);
+  if (sop_) sop_->setKbName(name);
+  if (spo_) spo_->setKbName(name);
+  if (ops_) ops_->setKbName(name);
+  if (osp_) osp_->setKbName(name);
 }
 
 // ____________________________________________________________________________
@@ -1066,6 +1092,9 @@ bool& IndexImpl::usePatterns() { return usePatterns_; }
 
 // _____________________________________________________________________________
 bool& IndexImpl::loadAllPermutations() { return loadAllPermutations_; }
+
+// _____________________________________________________________________________
+bool& IndexImpl::dontLoadPermutations() { return dontLoadPermutations_; }
 
 // ____________________________________________________________________________
 void IndexImpl::setSettingsFile(const std::string& filename) {
@@ -1522,7 +1551,9 @@ IndexImpl::PermutationPtr IndexImpl::getPermutationPtr(Permutation::Enum p) {
 
 // ____________________________________________________________________________
 Permutation& IndexImpl::getPermutation(Permutation::Enum p) {
-  return *getPermutationPtr(p);
+  auto ptr = getPermutationPtr(p);
+  getPermutationImpl(ptr, Permutation::toString(p));
+  return *ptr;
 }
 
 // ____________________________________________________________________________
