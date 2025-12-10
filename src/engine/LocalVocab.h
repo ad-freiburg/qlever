@@ -9,7 +9,6 @@
 #include <absl/container/flat_hash_set.h>
 #include <absl/container/node_hash_set.h>
 
-#include <boost/asio/local/detail/endpoint.hpp>
 #include <cstdlib>
 #include <memory>
 #include <string>
@@ -44,6 +43,9 @@ class LocalVocab {
   using Set = absl::node_hash_set<LocalVocabEntry>;
   std::shared_ptr<Set> primaryWordSet_ = std::make_shared<Set>();
 
+  using LocalBlankNodeManager =
+      ad_utility::BlankNodeManager::LocalBlankNodeManager;
+
   // The other sets of `LocalVocabEntry`s, which are static.
   absl::flat_hash_set<std::shared_ptr<const Set>> otherWordSets_;
 
@@ -52,8 +54,7 @@ class LocalVocab {
 
   // Each `LocalVocab` has its own `LocalBlankNodeManager` to generate blank
   // nodes when needed (e.g., when parsing the result of a SERVICE query).
-  std::shared_ptr<ad_utility::BlankNodeManager::LocalBlankNodeManager>
-      localBlankNodeManager_;
+  std::shared_ptr<LocalBlankNodeManager> localBlankNodeManager_;
 
   // Flag to prevent modification after copy.
   std::unique_ptr<std::atomic_bool> copied_ =
@@ -175,22 +176,19 @@ class LocalVocab {
   const Set& primaryWordSet() const { return *primaryWordSet_; }
   const auto& otherSets() const { return otherWordSets_; }
 
-  std::vector<uint64_t> getIndicesOfBlankNodeBlocks() const {
-    if (!localBlankNodeManager_) {
-      return {};
-    }
-    return localBlankNodeManager_->getReservedBlockIndices();
-  }
+  // This function returns the required data structure to restore the
+  // `LocalBlankNodeManager`, e.g. when UPDATEs or cached queries are serialized
+  // to disk and the engine is restarted.
+  std::vector<LocalBlankNodeManager::OwnedBlocksEntry>
+  getOwnedLocalBlankNodeBlocks() const;
 
+  // Restore the state of the `LocalBlankNodeManager` from the serialized data
+  // structure obtained from `getOwnedLocalBlankNodeBlocks` above. This must be
+  // called at the engine start before any queries that might create new local
+  // blank nodes are run (see `BlankNodeManager.h` for details).
   void reserveBlankNodeBlocksFromExplicitIndices(
-      const std::vector<uint64_t>& indices,
-      ad_utility::BlankNodeManager* blankNodeManager) {
-    AD_CONTRACT_CHECK(!localBlankNodeManager_);
-    localBlankNodeManager_ =
-        std::make_shared<ad_utility::BlankNodeManager::LocalBlankNodeManager>(
-            blankNodeManager);
-    localBlankNodeManager_->reserveBlocksFromExplicitIndices(indices);
-  }
+      const std::vector<LocalBlankNodeManager::OwnedBlocksEntry>& indices,
+      ad_utility::BlankNodeManager* blankNodeManager);
 
   // Get a new BlankNodeIndex using the LocalBlankNodeManager.
   [[nodiscard]] BlankNodeIndex getBlankNodeIndex(
