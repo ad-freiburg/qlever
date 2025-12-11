@@ -17,6 +17,9 @@
 #include "util/SourceLocation.h"
 #include "util/TypeTraits.h"
 
+// Fixes an issue when compiling with Emscripten where a specific header is not found.
+#define __STRING(x) "x"
+
 // -------------------------------------------
 // Exception class code
 // -------------------------------------------

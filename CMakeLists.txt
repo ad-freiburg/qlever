@@ -152,7 +152,7 @@ FetchContent_Declare(
 FetchContent_Declare(
         spatialjoin
         GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
-        GIT_TAG 26fcfeb831bae912cfe2c4d8e14f5f7ce8a2fe30
+        GIT_TAG 2dc77f84b92d8c54b4608f1fb109b51240943a49
 )
 # disable bzip2 and zlib support in spatialjoin, we don't need it
 add_compile_definitions(SPATIALJOIN_NO_BZIP2=True SPATIALJOIN_NO_ZLIB=True)
@@ -468,13 +468,17 @@ add_subdirectory(test)
 add_library(compilationInfo ${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp)
 qlever_target_link_libraries(compilationInfo)
 
-add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp)
-qlever_target_link_libraries(IndexBuilderMain qlever index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
+OPTION(_DISABLE_EMSCRIPTEN_TARGETS "Don't build some targets when building with Emscripten." OFF)
 
-add_executable(ServerMain src/ServerMain.cpp)
-qlever_target_link_libraries(ServerMain engine server ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
-if (USE_PRECOMPILED_HEADERS)
-target_precompile_headers(ServerMain REUSE_FROM engine)
+if (NOT _DISABLE_EMSCRIPTEN_TARGETS)
+    add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp)
+    qlever_target_link_libraries(IndexBuilderMain qlever index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
+
+    add_executable(ServerMain src/ServerMain.cpp)
+    qlever_target_link_libraries(ServerMain engine server ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
+    if (USE_PRECOMPILED_HEADERS)
+    target_precompile_headers(ServerMain REUSE_FROM engine)
+    endif()
 endif()
 
 add_executable(LibQLeverExample src/libqlever/LibQLeverExample.cpp)

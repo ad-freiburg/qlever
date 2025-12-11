@@ -100,7 +100,7 @@ TEST(AllocatorWithLimit, unlikelyExceptionsDuringCopyingAndMoving) {
   };
   // The move operations call the copy operations which throw, but are declared
   // `noexcept`, so the program dies when they are called.
-  ASSERT_DEATH(move(), "The move constructor of `AllocatorWithLimit`");
-  ASSERT_DEATH(moveAssign(),
+  ASSERT_DEATH_IF_SUPPORTED(move(), "The move constructor of `AllocatorWithLimit`");
+  ASSERT_DEATH_IF_SUPPORTED(moveAssign(),
                "The move assignment operator of `AllocatorWithLimit`");
 }
