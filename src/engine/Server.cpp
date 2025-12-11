@@ -1349,6 +1349,12 @@ void Server::adjustParsedQueryLimitOffset(
 }
 
 // _____________________________________________________________________________
+template ad_utility::websocket::MessageSender
+Server::createMessageSender<http::request<http::string_body>>(
+    const std::weak_ptr<ad_utility::websocket::QueryHub>&,
+    const http::request<http::string_body>&, std::string_view);
+
+// _____________________________________________________________________________
 void Server::writeMaterializedView(
     const std::string& name, const Query& query,
     const ad_utility::Timer& requestTimer,
