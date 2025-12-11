@@ -15,6 +15,7 @@
 #include "util/Exception.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeVector.h"
+#include "util/Serializer/Serializer.h"
 
 // A vocabulary that stores all words in memory. The vocabulary supports
 // "holes", meaning that the indices of the contained words don't have to be
@@ -87,6 +88,15 @@ class VocabularyInMemoryBinSearch
   // Const access to the underlying words.
   auto begin() const { return words_.begin(); }
   auto end() const { return words_.end(); }
+
+  // Generic serialization support.
+  AD_SERIALIZE_FRIEND_FUNCTION(VocabularyInMemoryBinSearch) {
+    (void)serializer;
+    (void)arg;
+    throw std::runtime_error(
+        "Generic serialization is not implemented for "
+        "VocabularyInMemoryBinSearch.");
+  }
 };
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORYBINSEARCH_H

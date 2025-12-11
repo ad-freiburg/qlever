@@ -13,6 +13,7 @@
 #include "index/vocabulary/VocabularyBinarySearchMixin.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/Exception.h"
+#include "util/Serializer/Serializer.h"
 
 //! A vocabulary. Wraps a `CompactVectorOfStrings<char>`
 //! and provides additional methods for reading and writing to/from file,
@@ -102,6 +103,9 @@ class VocabularyInMemory
   // Const access to the underlying words.
   auto begin() const { return _words.begin(); }
   auto end() const { return _words.end(); }
+
+  // Generic serialization support.
+  AD_SERIALIZE_FRIEND_FUNCTION(VocabularyInMemory) { serializer | arg._words; }
 };
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORY_H

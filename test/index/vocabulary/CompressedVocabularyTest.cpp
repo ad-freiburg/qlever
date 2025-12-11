@@ -10,6 +10,7 @@
 #include "index/vocabulary/PrefixCompressor.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyOnDisk.h"
+#include "util/Serializer/ByteBufferSerializer.h"
 
 namespace {
 
@@ -136,6 +137,39 @@ TYPED_TEST(CompressedVocabularyF, AccessOperator) {
 // _______________________________________________________
 TYPED_TEST(CompressedVocabularyF, EmptyVocabulary) {
   testEmptyVocabulary(this->createCompressedVocabulary("accessOperatorFsst"));
+}
+
+// _______________________________________________________
+TYPED_TEST(CompressedVocabularyF, WriteAndReadWithSerializer) {
+  const std::vector<std::string> words{"alpha", "delta", "beta", "42",
+                                       "31",    "0",     "al"};
+
+  // Create vocabulary with small block size (4 words per block).
+  // Use VocabularyInMemory as the underlying vocabulary.
+  CompressedVocabulary<VocabularyInMemory, TypeParam, 4> vocab;
+  const std::string filename = "compressedVocabSerializerTest";
+  auto writerPtr = vocab.makeDiskWriterPtr(filename);
+  auto& writer = *writerPtr;
+  for (const auto& word : words) {
+    writer(word, false);
+  }
+  writer.finish();
+  vocab.open(filename);
+
+  // Write using serializer.
+  ad_utility::serialization::ByteBufferWriteSerializer writeSerializer;
+  writeSerializer | vocab;
+  const auto& blob = writeSerializer.data();
+  ASSERT_FALSE(blob.empty());
+
+  // Read using serializer into a different vocabulary.
+  CompressedVocabulary<VocabularyInMemory, TypeParam, 4> readVocab;
+  ad_utility::serialization::ByteBufferReadSerializer readSerializer{blob};
+  readSerializer | readVocab;
+  assertThatRangesAreEqual(vocab, readVocab);
+
+  // Cleanup files.
+  ad_utility::deleteFile(filename);
 }
 
 }  // namespace
