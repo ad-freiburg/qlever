@@ -490,7 +490,7 @@ qlever_target_link_libraries(PrintIndexVersionMain util)
 install(TARGETS
     ServerMain
     IndexBuilderMain
-    RUNTIME DESTINATION bin 
+    RUNTIME DESTINATION bin
 )
 
 ###############################################################
