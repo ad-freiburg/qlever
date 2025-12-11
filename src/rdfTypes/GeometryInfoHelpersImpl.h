@@ -563,12 +563,18 @@ struct WebMercatorProjection {
   DPoint operator()(const DPoint& p) const { return latLngToWebMerc(p); }
 };
 
+// Concept to generically model a projection function (that is, point to point
+// mapping). Used for the `UtilGeomProjectionVisitor` below.
+template <typename T>
+CPP_concept IsProjectionFunction =
+    InvocableWithExactReturnType<T, DPoint, const DPoint&>;
+static_assert(IsProjectionFunction<WebMercatorProjection>);
+
 // Helper to translate the coordinates of a given geometry to another projection
 // (the projection is applied to each coordinate pair).
-template <typename Projection>
-struct UtilGeomProjectionVisitor : Projection {
-  using ThisProjection = UtilGeomProjectionVisitor<Projection>;
-
+CPP_template(typename Projection)(
+    requires IsProjectionFunction<Projection>) struct UtilGeomProjectionVisitor
+    : Projection {
   // Inherit the transformation of points.
   using Projection::operator();
 
@@ -577,22 +583,22 @@ struct UtilGeomProjectionVisitor : Projection {
   CPP_template(typename T)(requires(isVector<T> || SimilarTo<T, DLine>)) T
   operator()(const T& multi) const {
     T result;
-    ql::ranges::transform(multi, std::back_inserter(result), ThisProjection{});
+    result.reserve(multi.size());
+    ql::ranges::transform(multi, std::back_inserter(result), *this);
     return result;
   };
 
   // Polygons require special treatment for inner (~ a line) and outer
   // boundaries (~ a multi line).
   DPolygon operator()(const DPolygon& poly) const {
-    return {ThisProjection{}(poly.getOuter()),
-            ThisProjection{}(poly.getInners())};
+    return {(*this)(poly.getOuter()), (*this)(poly.getInners())};
   }
 
   // Unwrap dynamic `AnyGeometry` container type.
   DAnyGeometry operator()(const DAnyGeometry& anyGeom) const {
     return visitAnyGeometry(
-        [](const auto& contained) {
-          return DAnyGeometry{ThisProjection{}(contained)};
+        [this](const auto& contained) {
+          return DAnyGeometry{(*this)(contained)};
         },
         anyGeom);
   }
@@ -600,9 +606,7 @@ struct UtilGeomProjectionVisitor : Projection {
   // Handle `ParsedWkt` variant.
   ParsedWkt operator()(const ParsedWkt& geom) const {
     return std::visit(
-        [](const auto& contained) {
-          return ParsedWkt{ThisProjection{}(contained)};
-        },
+        [this](const auto& contained) { return ParsedWkt{(*this)(contained)}; },
         geom);
   }
 
@@ -613,14 +617,14 @@ struct UtilGeomProjectionVisitor : Projection {
     if (!opt.has_value()) {
       return std::nullopt;
     }
-    return ThisProjection{}(opt.value());
+    return (*this)(opt.value());
   }
 
   // Handle `GeoPointOrWkt` (raw unparsed geometry).
   ParseResult operator()(
       const std::optional<GeoPointOrWkt>& geoPointOrWkt) const {
     auto [type, parsed] = ParseGeoPointOrWktVisitor{}(geoPointOrWkt);
-    return {type, ThisProjection{}(parsed)};
+    return {type, (*this)(parsed)};
   }
 };
 
