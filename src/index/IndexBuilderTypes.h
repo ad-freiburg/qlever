@@ -7,6 +7,10 @@
 #ifndef QLEVER_SRC_INDEX_INDEXBUILDERTYPES_H
 #define QLEVER_SRC_INDEX_INDEXBUILDERTYPES_H
 
+#include <absl/strings/str_cat.h>
+
+#include <atomic>
+
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/memory_resource.h"
 #include "global/Constants.h"
@@ -202,11 +206,16 @@ struct alignas(256) ItemMapManager {
   const TripleComponentComparator* comparator_ = nullptr;
 };
 
-/// Combines a triple (three strings) together with the (possibly empty)
-/// language tag of its object.
+// A triple together with the language tag of its object (if any), and, if the
+// object is a literal, the individual words and how often each of them occurs
+// in the literal.
 struct LangtagAndTriple {
   std::string langtag_;
   Triple triple_;
+  // Words extracted from the literal object (if any) with their term
+  // frequencies. Each word will generate an additional triple
+  // `<literal> ql:has-word "word"` with the term frequency as the graph ID.
+  ad_utility::HashMap<std::string, size_t> wordFrequencies_;
 };
 
 /**
@@ -241,7 +250,8 @@ template <size_t NumThreads, typename IndexPtr>
 auto getIdMapLambdas(
     std::array<std::optional<ItemMapManager>, NumThreads>* itemArrayPtr,
     size_t maxNumberOfTriples, const TripleComponentComparator* comp,
-    IndexPtr* indexPtr, ItemAlloc alloc) {
+    IndexPtr* indexPtr, ItemAlloc alloc,
+    std::atomic<size_t>* numHasWordTriples = nullptr) {
   // that way the different ids won't interfere
   auto& itemArray = *itemArrayPtr;
   for (size_t j = 0; j < NumThreads; ++j) {
@@ -258,25 +268,38 @@ auto getIdMapLambdas(
     // currently fail without it.
     itemArray[j]->getId(TripleComponent{
         ad_utility::triple_component::Iri::fromIriref(LANGUAGE_PREDICATE)});
+    if (indexPtr->addHasWordTriples()) {
+      itemArray[j]->getId(TripleComponent{
+          ad_utility::triple_component::Iri::fromIriref(HAS_WORD_PREDICATE)});
+    }
   }
-  using OptionalIds =
-      std::array<std::optional<std::array<Id, NumColumnsIndexBuilding>>, 3>;
+  using IdTriple = std::array<Id, NumColumnsIndexBuilding>;
+  using OptionalIds = std::vector<std::optional<IdTriple>>;
 
   /* given an index idx, returns a lambda that
    * - Takes a triple and a language tag
    * - Returns OptionalIds where the first entry are the Ids for the triple,
-   *   the second and third entry are the Ids of the extra triples for the
-   *   language filter implementation (or std::nullopt if there was no language
-   * tag)
+   *   the following entries are the Ids of extra triples for the language
+   *   filter implementation (or std::nullopt if there was no language tag)
+   *   and ql:has-word triples for words in the literal object.
    * - All Ids are assigned according to itemArray[idx]
    */
-  const auto itemMapLamdaCreator = [&itemArray, indexPtr](const size_t idx) {
-    return [&map = *itemArray[idx],
-            indexPtr](QL_CONCEPT_OR_NOTHING(ad_utility::Rvalue) auto&& tr) {
+  const auto itemMapLamdaCreator = [&itemArray, indexPtr,
+                                    numHasWordTriples](const size_t idx) {
+    return [&map = *itemArray[idx], indexPtr, numHasWordTriples](
+               QL_CONCEPT_OR_NOTHING(ad_utility::Rvalue) auto&& tr) {
       auto lt = indexPtr->tripleToInternalRepresentation(AD_FWD(tr));
+      // Reserve space: 1 original + 2 language tag triples + word triples.
       OptionalIds res;
+      res.reserve(3 + lt.wordFrequencies_.size());
       // get Ids for the actual triple and store them in the result.
-      res[0] = map.getId(lt.triple_);
+      res.push_back(map.getId(lt.triple_));
+      static_assert(NumColumnsIndexBuilding == 4,
+                    " The following lines probably have to be changed when "
+                    "the number of payload columns changes");
+      auto& spoIds = *res[0];  // ids of original triple
+      auto tripleGraphId = spoIds[ADDITIONAL_COLUMN_GRAPH_ID];
+
       if (!lt.langtag_.empty()) {  // the object of the triple was a literal
                                    // with a language tag
         // get the Id for the corresponding langtag Entity
@@ -288,28 +311,47 @@ auto getIdMapLambdas(
                 .iriOrLiteral_.getIri();
         auto langTaggedPredId = map.getId(TripleComponent{
             ad_utility::convertToLanguageTaggedPredicate(iri, lt.langtag_)});
-        auto& spoIds = *res[0];  // ids of original triple
-        // TODO replace the std::array by an explicit IdTriple class,
-        //  then the emplace calls don't need the explicit type.
-        using Arr = std::array<Id, NumColumnsIndexBuilding>;
-        static_assert(NumColumnsIndexBuilding == 4,
-                      " The following lines probably have to be changed when "
-                      "the number of payload columns changes");
         // extra triple <subject> @language@<predicate> <object>
         // The additional triples have the same graph ID as the original triple.
         // This makes optimizations such as language filters also work with
         // named graphs. Note that we have a different mechanism in place to
         // distinguish between normal and internal triples.
-        auto tripleGraphId = res[0].value()[ADDITIONAL_COLUMN_GRAPH_ID];
-        res[1].emplace(
-            Arr{spoIds[0], langTaggedPredId, spoIds[2], tripleGraphId});
+        res.push_back(
+            IdTriple{spoIds[0], langTaggedPredId, spoIds[2], tripleGraphId});
         // extra triple <object> ql:language-tag <@language>
-        res[2].emplace(Arr{spoIds[2],
-                           map.getId(TripleComponent{
-                               ad_utility::triple_component::Iri::fromIriref(
-                                   LANGUAGE_PREDICATE)}),
-                           langTagId, tripleGraphId});
+        res.push_back(IdTriple{
+            spoIds[2],
+            map.getId(
+                TripleComponent{ad_utility::triple_component::Iri::fromIriref(
+                    LANGUAGE_PREDICATE)}),
+            langTagId, tripleGraphId});
       }
+
+      // Add ql:has-word triples for each word in the literal.
+      // The subject of these triples is the literal (object of the original
+      // triple), not the subject of the original triple.
+      // The graph ID is the term frequency of the word in the literal.
+      if (!lt.wordFrequencies_.empty()) {
+        auto hasWordPredId = map.getId(TripleComponent{
+            ad_utility::triple_component::Iri::fromIriref(HAS_WORD_PREDICATE)});
+        for (const auto& [word, termFrequency] : lt.wordFrequencies_) {
+          // Create triple: <literal> ql:has-word "word"
+          // The graph ID is the term frequency of the word in the literal.
+          auto wordId = map.getId(TripleComponent{
+              ad_utility::triple_component::Literal::fromEscapedRdfLiteral(
+                  absl::StrCat("\"", word, "\""))});
+          auto termFrequencyId =
+              Id::makeFromInt(static_cast<int64_t>(termFrequency));
+          res.push_back(
+              IdTriple{spoIds[2], hasWordPredId, wordId, termFrequencyId});
+        }
+        // Update the counter for the number of ql:has-word triples.
+        if (numHasWordTriples != nullptr) {
+          numHasWordTriples->fetch_add(lt.wordFrequencies_.size(),
+                                       std::memory_order_relaxed);
+        }
+      }
+
       return res;
     };
   };
