@@ -1058,7 +1058,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
             [this, &cancellationHandle, &plannedUpdate, tracer, &updates,
              &requestTimer, &timeLimit, &qec](DeltaTriples& deltaTriples) {
               qec.setLocatedTriplesForEvaluation(
-                  deltaTriples.getMirroringVersion());
+                  deltaTriples.getLocatedTriplesVersionReference());
               json results = json::array();
               for (size_t i = 0; i < updates.size(); i++) {
                 // The augmented metadata is invalidated by any update. It is
@@ -1084,7 +1084,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 
                 tracer->endTrace("update");
                 results.push_back(createResponseMetadataForUpdate(
-                    index_, deltaTriples.getMirroringVersion(), *plannedUpdate,
+                    index_, deltaTriples.getLocatedTriplesVersionReference(), *plannedUpdate,
                     plannedUpdate->queryExecutionTree_, updateMetadata,
                     *tracer));
                 tracer->reset();

@@ -70,7 +70,7 @@ namespace {
 void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
     const Index& index) {
   const DeltaTriplesManager& deltaTriplesManager{index.deltaTriplesManager()};
-  auto sharedLocatedTriplesSnapshot = deltaTriplesManager.getCurrentSnapshot();
+  auto sharedLocatedTriplesSnapshot = deltaTriplesManager.getCurrentLocatedTriplesVersion();
   const auto& locatedTriplesSnapshot = *sharedLocatedTriplesSnapshot;
   static constexpr size_t col0IdTag = 43;
   auto cancellationDummy = std::make_shared<ad_utility::CancellationHandle<>>();

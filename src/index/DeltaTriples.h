@@ -243,13 +243,13 @@ class DeltaTriples {
   // Return a deep copy of the `LocatedTriples` and the corresponding
   // `LocalVocab` which form an unchanging snapshot of the current state of
   // this `DeltaTriples` object.
-  LocatedTriplesVersion createVersionSnapshot();
+  LocatedTriplesVersion getLocatedTriplesVersionCopy() const;
 
   // Return a cheap shallow copy of the `LocatedTriples` which directly mirrors
   // the state of this `DeltaTriples` object. NOTE: only use this when the
   // DeltaTriples are not changed while the version is being used for
   // evaluation.
-  LocatedTriplesVersion getMirroringVersion() const;
+  LocatedTriplesVersion getLocatedTriplesVersionReference() const;
 
   // Register the original `metadata` for the given `permutation`. This has to
   // be called before any updates are processed. If `setInternalMetadata` is
@@ -326,7 +326,7 @@ class DeltaTriples {
 class DeltaTriplesManager {
   ad_utility::Synchronized<DeltaTriples> deltaTriples_;
   ad_utility::Synchronized<LocatedTriplesVersion, std::shared_mutex>
-      currentLocatedTriplesSnapshot_;
+      currentLocatedTriplesVersion_;
 
  public:
   using CancellationHandle = DeltaTriples::CancellationHandle;
@@ -356,7 +356,7 @@ class DeltaTriplesManager {
   // Return a shared pointer to a deep copy of the current version snapshot.
   // This can be safely used to execute a query without interfering with future
   // updates.
-  LocatedTriplesVersion getCurrentSnapshot() const;
+  LocatedTriplesVersion getCurrentLocatedTriplesVersion() const;
 };
 
 #endif  // QLEVER_SRC_INDEX_DELTATRIPLES_H

@@ -477,7 +477,7 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
   auto insertAndDelete = [&](size_t threadIdx) {
     LocalVocab localVocab;
     LocatedTriplesVersion beforeUpdate =
-        deltaTriplesManager.getCurrentSnapshot();
+        deltaTriplesManager.getCurrentLocatedTriplesVersion();
     for (size_t i = 0; i < numIterations; ++i) {
       // The first triple in both vectors is the same for all threads, the
       // others are exclusive to this thread via the `threadIdx`.
@@ -495,7 +495,7 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
       });
       // We should have successfully completed an update, so the snapshot
       // pointer should have changed.
-      EXPECT_NE(beforeUpdate, deltaTriplesManager.getCurrentSnapshot());
+      EXPECT_NE(beforeUpdate, deltaTriplesManager.getCurrentLocatedTriplesVersion());
       // Delete the `triplesToDelete`.
       deltaTriplesManager.modify<void>([&](DeltaTriples& deltaTriples) {
         deltaTriples.deleteTriples(cancellationHandle, triplesToDelete);
@@ -525,7 +525,7 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
           // Check for several of the thread-exclusive triples that they are
           // properly contained in the current snapshot.
           //
-          auto p = deltaTriplesManager.getCurrentSnapshot();
+          auto p = deltaTriplesManager.getCurrentLocatedTriplesVersion();
           const auto& locatedSPO =
               p->getLocatedTriplesForPermutation(Permutation::SPO);
           EXPECT_TRUE(locatedSPO.isLocatedTriple(triplesToInsert.at(1), true));
@@ -548,8 +548,8 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
   threads.clear();
 
   // Check that without updates, the snapshot pointer does not change.
-  auto p1 = deltaTriplesManager.getCurrentSnapshot();
-  auto p2 = deltaTriplesManager.getCurrentSnapshot();
+  auto p1 = deltaTriplesManager.getCurrentLocatedTriplesVersion();
+  auto p2 = deltaTriplesManager.getCurrentLocatedTriplesVersion();
   EXPECT_EQ(p1, p2);
 
   // Each of the threads above inserts one thread-exclusive triple, deletes one
@@ -581,11 +581,11 @@ TEST_F(DeltaTriplesTest, LocatedTriplesVersion) {
 
   // Do one transparent and two copied snapshots.
   LocatedTriplesVersion transparentSnapshotBeforeUpdate =
-      deltaTriples.getMirroringVersion();
+      deltaTriples.getLocatedTriplesVersionReference();
   LocatedTriplesVersion copiedSnapshotBeforeUpdate =
-      deltaTriples.createVersionSnapshot();
+      deltaTriples.getLocatedTriplesVersionCopy();
   LocatedTriplesVersion copiedSnapshotBeforeUpdate2 =
-      deltaTriples.createVersionSnapshot();
+      deltaTriples.getLocatedTriplesVersionCopy();
 
   // All snapshots have the same index and triples.
   EXPECT_THAT(transparentSnapshotBeforeUpdate, Snapshot(0, 0));
@@ -599,9 +599,9 @@ TEST_F(DeltaTriplesTest, LocatedTriplesVersion) {
 
   // Another transparent and copied snapshot.
   LocatedTriplesVersion transparentSnapshotAfterUpdate =
-      deltaTriples.getMirroringVersion();
+      deltaTriples.getLocatedTriplesVersionReference();
   LocatedTriplesVersion copiedSnapshotAfterUpdate =
-      deltaTriples.createVersionSnapshot();
+      deltaTriples.getLocatedTriplesVersionCopy();
 
   // The two new snapshots are identical and up-to-date.
   EXPECT_THAT(transparentSnapshotAfterUpdate, Snapshot(1, 1));

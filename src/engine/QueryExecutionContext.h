@@ -9,7 +9,6 @@
 #include <chrono>
 #include <memory>
 #include <string>
-#include <utility>
 
 #include "backports/three_way_comparison.h"
 #include "engine/QueryPlanningCostFactors.h"
@@ -198,7 +197,7 @@ class QueryExecutionContext {
   // by the respective query without interfering with further incoming
   // update operations.
   LocatedTriplesVersion locatedTriplesVersion_{
-      _index.deltaTriplesManager().getCurrentSnapshot()};
+      _index.deltaTriplesManager().getCurrentLocatedTriplesVersion()};
   QueryResultCache* const _subtreeCache;
   // allocators are copied but hold shared state
   ad_utility::AllocatorWithLimit<Id> _allocator;
