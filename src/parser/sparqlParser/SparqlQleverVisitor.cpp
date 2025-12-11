@@ -1211,9 +1211,11 @@ GraphPatternOperation Visitor::visit(Parser::OptionalGraphPatternContext* ctx) {
 }
 
 // _____________________________________________________________________________
-void Visitor::parseBodyOfMagicServiceQuery(
-    parsedQuery::MagicServiceQuery& target,
-    Parser::ServiceGraphPatternContext* ctx) {
+CPP_variadic_template(typename T, typename... Args)(
+    requires std::is_constructible_v<T, Args...>)
+    parsedQuery::GraphPatternOperation Visitor::visitMagicServiceQuery(
+        Parser::ServiceGraphPatternContext* ctx, Args&&... args) {
+  T target{AD_FWD(args)...};
   auto parseGraphPattern =
       [&target](const parsedQuery::GraphPatternOperation& op) {
         if (std::holds_alternative<parsedQuery::BasicGraphPattern>(op)) {
@@ -1245,16 +1247,8 @@ void Visitor::parseBodyOfMagicServiceQuery(
   } catch (const std::exception& ex) {
     reportError(ctx, ex.what());
   }
-}
 
-// _____________________________________________________________________________
-CPP_variadic_template(typename T, typename... Args)(
-    requires std::is_constructible_v<T, Args...>)
-    parsedQuery::GraphPatternOperation Visitor::visitMagicServiceQuery(
-        Parser::ServiceGraphPatternContext* ctx, Args&&... args) {
-  T query{AD_FWD(args)...};
-  parseBodyOfMagicServiceQuery(query, ctx);
-  return query;
+  return target;
 }
 
 // Parsing for the `serviceGraphPattern` rule.

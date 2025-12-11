@@ -334,14 +334,6 @@ class SparqlQleverVisitor {
       visitMagicServiceQuery(Parser::ServiceGraphPatternContext* ctx,
                              Args&&... args);
 
-  // Parse the body of a `MagicServiceQuery`, in particular call
-  // `addBasicGraphPattern` and `addGraph` for the contents of the body, and
-  // throw an exception if an unsupported element is encountered. This function
-  // implements common functionality of `visitNamedCachedResult`,
-  // and `visitMagicServiceQuery`.
-  void parseBodyOfMagicServiceQuery(parsedQuery::MagicServiceQuery& target,
-                                    Parser::ServiceGraphPatternContext* ctx);
-
   parsedQuery::GraphPatternOperation visit(Parser::BindContext* ctx);
 
   parsedQuery::GraphPatternOperation visit(Parser::InlineDataContext* ctx);
