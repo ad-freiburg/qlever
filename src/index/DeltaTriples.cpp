@@ -298,11 +298,10 @@ LocatedTriplesState::getInternalLocatedTriplesForPermutation(
 LocatedTriplesVersion DeltaTriples::getLocatedTriplesVersionCopy() const {
   // Create a copy of the `LocatedTriplesVersion` for use as a constant
   // snapshot.
-  return LocatedTriplesVersion{
-      std::make_shared<LocatedTriplesState>(LocatedTriplesState{
-          locatedTriples_->locatedTriplesPerBlock_,
-          locatedTriples_->internalLocatedTriplesPerBlock_,
-          localVocab_.getLifetimeExtender(), locatedTriples_->index_})};
+  return LocatedTriplesVersion{std::make_shared<LocatedTriplesState>(
+      locatedTriples_->locatedTriplesPerBlock_,
+      locatedTriples_->internalLocatedTriplesPerBlock_,
+      localVocab_.getLifetimeExtender(), locatedTriples_->index_)};
 }
 
 // ____________________________________________________________________________
@@ -411,7 +410,8 @@ template nlohmann::json DeltaTriplesManager::modify<nlohmann::json>(
 void DeltaTriplesManager::clear() { modify<void>(&DeltaTriples::clear); }
 
 // _____________________________________________________________________________
-LocatedTriplesVersion DeltaTriplesManager::getCurrentLocatedTriplesVersion() const {
+LocatedTriplesVersion DeltaTriplesManager::getCurrentLocatedTriplesVersion()
+    const {
   return *currentLocatedTriplesVersion_.rlock();
 }
 
