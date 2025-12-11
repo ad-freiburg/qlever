@@ -242,6 +242,12 @@ class DeltaTriples {
   // Update the block metadata.
   void updateAugmentedMetadata();
 
+  std::pair<std::vector<std::tuple<VocabIndex, std::string_view, Id>>,
+            ad_utility::HashMap<Id, Id>>
+  materializeLocalVocab() const;
+
+  void materializeToIndex(const CancellationHandle& cancellationHandle);
+
  private:
   // The the proper state according to the template parameter. This will either
   // return a reference to `triplesToHandlesInternal_` or
