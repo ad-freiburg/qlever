@@ -39,6 +39,7 @@
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/MagicServiceQuery.h"
+#include "parser/MaterializedViewQuery.h"
 #include "parser/NamedCachedResult.h"
 #include "parser/Quads.h"
 #include "parser/RdfParser.h"
@@ -1272,6 +1273,15 @@ GraphPatternOperation Visitor::visitSpatialQuery(
   return spatialQuery;
 }
 
+// _____________________________________________________________________________
+GraphPatternOperation Visitor::visitMaterializedViewQuery(
+    Parser::ServiceGraphPatternContext* ctx) {
+  parsedQuery::MaterializedViewQuery viewQuery;
+  parseBodyOfMagicServiceQuery(viewQuery, ctx, "materialized view query");
+  return viewQuery;
+}
+
+// _____________________________________________________________________________
 GraphPatternOperation Visitor::visitTextSearchQuery(
     Parser::ServiceGraphPatternContext* ctx) {
   parsedQuery::TextSearchQuery textSearchQuery;
@@ -1312,6 +1322,8 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
   } else if (ql::starts_with(asStringViewUnsafe(serviceIri.getContent()),
                              CACHED_RESULT_WITH_NAME_PREFIX)) {
     return visitNamedCachedResult(serviceIri, ctx);
+  } else if (serviceIri.toStringRepresentation() == MATERIALIZED_VIEW_IRI) {
+    return visitMaterializedViewQuery(ctx);
   }
   // Parse the body of the SERVICE query. Add the visible variables from the
   // SERVICE clause to the visible variables so far, but also remember them
