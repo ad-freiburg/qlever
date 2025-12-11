@@ -153,6 +153,7 @@ FetchContent_Declare(
         spatialjoin
         GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
         GIT_TAG 26fcfeb831bae912cfe2c4d8e14f5f7ce8a2fe30
+        EXCLUDE_FROM_ALL
 )
 # disable bzip2 and zlib support in spatialjoin, we don't need it
 add_compile_definitions(SPATIALJOIN_NO_BZIP2=True SPATIALJOIN_NO_ZLIB=True)
@@ -485,3 +486,32 @@ qlever_target_link_libraries(VocabularyMergerMain index parser ${CMAKE_THREAD_LI
 
 add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
 qlever_target_link_libraries(PrintIndexVersionMain util)
+
+install(TARGETS
+    ServerMain
+    IndexBuilderMain
+    RUNTIME DESTINATION bin 
+)
+
+###############################################################
+# CPack packaging
+###############################################################
+
+set(CPACK_PACKAGE_NAME "qlever")
+set(CPACK_PACKAGE_VERSION "0.5.35")
+set(CPACK_PACKAGE_CONTACT "bast@cs.uni-freiburg.de")
+
+set(CPACK_OUTPUT_FILE_PREFIX "${CMAKE_BINARY_DIR}/packages")
+set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+
+set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
+
+# 3. Handle FetchContent (Important!)
+# Prevent CPack from packaging files installed by your dependencies (like GoogleTest or Abseil)
+# unless you explicitly want them.
+set(CPACK_VERBATIM_VARIABLES YES)
+
+set(CPACK_PACKAGE_DESCRIPTION "The QLever SPARQL engine")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "QLever High-performance SPARQL Engine")
+
+include(CPack)
