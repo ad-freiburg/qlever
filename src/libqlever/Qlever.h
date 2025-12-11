@@ -160,6 +160,11 @@ struct EngineConfig : CommonConfig {
   // after a restart). To revert to the state of the index without updates,
   // simply delete this file.
   bool persistUpdates_ = true;
+
+  // If set to true, no permutations will be loaded from disk. This is useful
+  // when only queries that don't require accessing the permutations need to be
+  // executed (e.g., queries that only compute constant expressions).
+  bool dontLoadPermutations_ = false;
 };
 
 // Class to use QLever as an embedded database, without the HTTP server. See
