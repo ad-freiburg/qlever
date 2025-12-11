@@ -720,6 +720,12 @@ TEST(GeometryInfoTest, MetricDistanceVisitor) {
                    projectWebMerc(GeoPointOrWkt{GeoPoint{47.995562, 7.852918}}))
                    .value()
             << std::endl;
+  std::cout << computeMetricDistance(
+                   projectWebMerc(GeoPointOrWkt{
+                       std::string{litRealWorldMultiPolygonNonIntersecting}}),
+                   projectWebMerc(GeoPointOrWkt{GeoPoint{47.995562, 7.852918}}))
+                   .value()
+            << std::endl;
 }
 
 }  // namespace
