@@ -641,8 +641,7 @@ struct MetricDistanceVisitor {
         a, b);
   }
 
-  // Delegate the actual distance computation to `pb_util` for the geometry type
-  // combinations it supports.
+  // Delegate the actual distance computation to `pb_util`.
   CPP_template(typename T, typename U)(
       requires(SimilarToAnyTypeIn<T, ParsedWkt> CPP_and
                    SimilarToAnyTypeIn<U, ParsedWkt>)) double
