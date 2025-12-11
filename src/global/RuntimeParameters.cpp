@@ -30,6 +30,7 @@ RuntimeParameters::RuntimeParameters() {
   add(lazyIndexScanMaxSizeMaterialization_);
   add(useBinsearchTransitivePath_);
   add(groupByHashMapEnabled_);
+  add(groupByHashMapGroupThreshold_);
   add(groupByDisableIndexScanOptimizations_);
   add(serviceMaxValueRows_);
   add(queryPlanningBudget_);
