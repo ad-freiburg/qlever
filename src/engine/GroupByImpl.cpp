@@ -1407,10 +1407,10 @@ template <size_t NUM_GROUP_COLUMNS>
 GroupByImpl::GroupLookupResult
 GroupByImpl::HashMapAggregationData<NUM_GROUP_COLUMNS>::getHashEntries(
     const ArrayOrVector<ql::span<const Id>>& groupByCols,
-    bool onlyInsertPreexistingKeys, size_t nonMatchingRowsOffset) {
+    bool onlyUsePreexistingGroups) {
   AD_CONTRACT_CHECK(groupByCols.size() > 0);
 
-  std::vector<RowToGroup> matchedRowsToGroups;
+  std::vector<GroupLookupResult::RowToGroup> matchedRowsToGroups;
   std::vector<size_t> nonMatchingRows;
   size_t numberOfEntries = groupByCols.at(0).size();
   matchedRowsToGroups.reserve(numberOfEntries);
@@ -1420,14 +1420,13 @@ GroupByImpl::HashMapAggregationData<NUM_GROUP_COLUMNS>::getHashEntries(
   //       the data into a row-wise format before passing it?
   for (size_t i = 0; i < numberOfEntries; ++i) {
     auto key = makeKeyForHashMap(groupByCols, i);
-    if (onlyInsertPreexistingKeys && map_.find(key) == map_.end()) {
+    if (onlyUsePreexistingGroups && map_.find(key) == map_.end()) {
       // If the row's key is not found, we add it to the non-matching list.
-      // The offset is used to map the row index back to the original
-      // IdTable.
-      nonMatchingRows.push_back(nonMatchingRowsOffset + i);
+      nonMatchingRows.push_back(i);
     } else {
       auto [iterator, wasAdded] = map_.try_emplace(key, numGroups());
-      matchedRowsToGroups.push_back(RowToGroup{i, iterator->second});
+      matchedRowsToGroups.push_back(
+          GroupLookupResult::RowToGroup{i, iterator->second});
     }
   }
 
@@ -1715,9 +1714,9 @@ static constexpr auto makeProcessGroupsVisitor =
         const auto& matches = groupLookupResult.matchedRowsToGroups_;
         // Ensure matches are sorted by rowIndex, as we will iterate
         // through the generator in ascending order of rowIndex
-        AD_EXPENSIVE_CHECK(
-            ql::ranges::is_sorted(matches.begin(), matches.end(), {},
-                                  &GroupByImpl::RowToGroup::rowIndex_));
+        AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(
+            matches.begin(), matches.end(), {},
+            &GroupByImpl::GroupLookupResult::RowToGroup::rowIndex_));
 
         // Process each matching row
         // TODO<Benke> Potentially a waste of resources!
@@ -1848,13 +1847,9 @@ CPP_template_def(size_t NUM_GROUP_COLUMNS, typename BlockIterator,
   // Detailed timing for hybrid fallback steps
   using ad_utility::Timer;
   ad_utility::Timer remainderProcessingTimer{Timer::Started},
-      vocabMergeTimer{Timer::Stopped}, bufferingTimer{Timer::Stopped},
-      restSortTimer{Timer::Stopped}, restGroupByTimer{Timer::Stopped},
-      hashResultTimer{Timer::Stopped}, finalMergeTimer{Timer::Stopped},
-      finalSortTimer{Timer::Stopped};
-
-  size_t totalRowsProcessed = 0;
-  size_t totalNonMatchingRows = restTable.numRows();
+      bufferingTimer{Timer::Stopped}, restSortTimer{Timer::Stopped},
+      restGroupByTimer{Timer::Stopped}, hashResultTimer{Timer::Stopped},
+      finalMergeTimer{Timer::Stopped}, finalSortTimer{Timer::Stopped};
 
   // Batch existing-group rows and buffer new-group rows
   for (; blockIt != blocksEnd; ++blockIt) {
@@ -1862,19 +1857,13 @@ CPP_template_def(size_t NUM_GROUP_COLUMNS, typename BlockIterator,
     const IdTable& inputTable = inputTableRef;
     const LocalVocab& inputLocalVocab = inputLocalVocabRef;
 
-    totalRowsProcessed += inputTable.numRows();
-
     // Merge the local vocab of each input block.
-    vocabMergeTimer.cont();
     localVocab.mergeWith(inputLocalVocab);
-    vocabMergeTimer.stop();
 
     // Process only existing groups and collect non-matching rows
     auto updateResult =
         updateHashMapWithTable(inputTable, data, aggregationData, timers, true);
     const auto& nonMatchingRows = updateResult.nonMatchingRows_;
-
-    totalNonMatchingRows += nonMatchingRows.size();
 
     // Copy the non-matching rows to the restTable
     bufferingTimer.cont();
@@ -1897,11 +1886,12 @@ CPP_template_def(size_t NUM_GROUP_COLUMNS, typename BlockIterator,
       });
   restGroupByTimer.stop();
 
-  hashResultTimer.cont();
   IdTable hashResult = createResultFromHashMap(
       aggregationData, data.aggregateAliases_, &localVocab);
-  hashResultTimer.stop();
 
+  // =================================================================
+  // TODO: Because both tables are sorted on the grouping columns,
+  // a merge join would be possible here instead of a full sort again.
   finalMergeTimer.cont();
   hashResult.insertAtEnd(restResult);
   finalMergeTimer.stop();
@@ -1909,25 +1899,18 @@ CPP_template_def(size_t NUM_GROUP_COLUMNS, typename BlockIterator,
   finalSortTimer.cont();
   Engine::sort(hashResult, resultSortedOn());
   finalSortTimer.stop();
+  // =================================================================
 
   remainderProcessingTimer.stop();
 
   // Record all the detailed timings
   runtimeInfo().addDetail("hybridRemainderTotal",
                           remainderProcessingTimer.msecs());
-  runtimeInfo().addDetail("hybridVocabMerge", vocabMergeTimer.msecs());
   runtimeInfo().addDetail("hybridBuffering", bufferingTimer.msecs());
   runtimeInfo().addDetail("hybridRestSort", restSortTimer.msecs());
   runtimeInfo().addDetail("hybridRestGroupBy", restGroupByTimer.msecs());
-  runtimeInfo().addDetail("hybridHashResult", hashResultTimer.msecs());
   runtimeInfo().addDetail("hybridFinalMerge", finalMergeTimer.msecs());
   runtimeInfo().addDetail("hybridFinalSort", finalSortTimer.msecs());
-  runtimeInfo().addDetail("hybridRowsProcessed", totalRowsProcessed);
-  runtimeInfo().addDetail("hybridNonMatchingRows", totalNonMatchingRows);
-  runtimeInfo().addDetail(
-      "hybridFallback",
-      absl::StrCat("hash groups=", hashResult.numRows(),
-                   ", sorted tail groups=", restResult.numRows()));
 
   return Result{std::move(hashResult), resultSortedOn(), std::move(localVocab)};
 }
@@ -1955,7 +1938,7 @@ typename GroupByImpl::UpdateResult<NUM_GROUP_COLUMNS>
 GroupByImpl::updateHashMapWithTable(
     const IdTable& table, const HashMapOptimizationData& data,
     HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-    HashMapTimers& timers, bool onlyInsertPreexistingKeys) const {
+    HashMapTimers& timers, bool onlyUsePreexistingGroups) const {
   // Setup the `EvaluationContext` for this block.
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), _subtree->getVariableColumns(), table,
@@ -1983,17 +1966,17 @@ GroupByImpl::updateHashMapWithTable(
     auto groupValues = makeGroupValueSpans<NUM_GROUP_COLUMNS>(
         table, evaluationContext._beginIndex, evaluationContext.size(),
         data.columnIndices_.value());
-
-    auto offset = thresholdExceededDuringThisTable ? i : 0;
     timers.lookupTimer_.cont();
-    auto lookupResult = aggregationData.getHashEntries(
-        groupValues, onlyInsertPreexistingKeys, offset);
+    auto lookupResult =
+        aggregationData.getHashEntries(groupValues, onlyUsePreexistingGroups);
     timers.lookupTimer_.stop();
 
-    if (onlyInsertPreexistingKeys) {
-      nonMatchingRows.insert(nonMatchingRows.end(),
-                             lookupResult.nonMatchingRows_.begin(),
-                             lookupResult.nonMatchingRows_.end());
+    if (onlyUsePreexistingGroups) {
+      ql::ranges::transform(
+          lookupResult.nonMatchingRows_, std::back_inserter(nonMatchingRows),
+          [offset = evaluationContext._beginIndex](size_t rowIndex) {
+            return offset + rowIndex;
+          });
     }
 
     timers.aggregationTimer_.cont();
@@ -2002,11 +1985,11 @@ GroupByImpl::updateHashMapWithTable(
     timers.aggregationTimer_.stop();
 
     // Check if we've exceeded the group threshold after processing this block
-    if (!onlyInsertPreexistingKeys &&
+    if (!onlyUsePreexistingGroups &&
         aggregationData.numGroups() > groupThreshold) {
       // If we exceeded the threshold, we switch to only inserting pre-existing
       // keys for the remaining blocks of this table.
-      onlyInsertPreexistingKeys = true;
+      onlyUsePreexistingGroups = true;
       thresholdExceededDuringThisTable = true;
     }
   }

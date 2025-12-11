@@ -364,26 +364,34 @@ class GroupByImpl : public Operation {
           aggregates_(std::move(aggs)) {}
   };
 
+  // Create result IdTable by using a HashMap mapping groups to aggregation data
+  // and subsequently calling `createResultFromHashMap`.
   template <size_t NUM_GROUP_COLUMNS, typename SubResults>
   Result computeGroupByForHashMapOptimization(HashMapOptimizationData data,
                                               SubResults&& subresults) const;
 
-  struct RowToGroup {
-    size_t rowIndex_;
-    size_t groupIndex_;
-
-    bool operator==(const RowToGroup&) const = default;
-  };
-
-  // Type returned by `getHashEntries(groupByCols, onlyInsertPreexistingKeys)`.
-  // If `onlyInsertPreexistingKeys` is true, nonMatchingRows_ will only contain
+  // Type returned by `getHashEntries(groupByCols, onlyUsePreexistingGroups)`.
+  // If `onlyUsePreexistingGroups` is true, nonMatchingRows_ will only contain
   // rows that would create new groups.
-  // If `onlyInsertPreexistingKeys` is false, nonMatchingRows_ will be empty as
+  // If `onlyUsePreexistingGroups` is false, nonMatchingRows_ will be empty as
   // new groups are created for these rows.
   struct GroupLookupResult {
+    // Describes the association between a single input row and the index of
+    // the group that it belongs to in the hash map. Instances are created by
+    // `getHashEntries` for every row whose group key already exists in the
+    // map and are later iterated in ascending `rowIndex_` order to route the
+    // evaluated aggregate values to the correct `groupIndex_` in the
+    // aggregation data vectors.
+    struct RowToGroup {
+      size_t rowIndex_;
+      size_t groupIndex_;
+
+      bool operator==(const RowToGroup&) const = default;
+    };
+
     // For each processed input row that matched an existing group (in order),
-    // stores a RowToGroup mapping containing both the row's index in the input
-    // and the index of its matching group in the hash map.
+    // stores a `RowToGroup` mapping containing both the row's index in the
+    // input and the index of its matching group in the hash map.
     std::vector<RowToGroup> matchedRowsToGroups_;
     // Indices of input rows for which no existing group was found.
     std::vector<size_t> nonMatchingRows_;
@@ -446,11 +454,15 @@ class GroupByImpl : public Operation {
     }
 
     // Returns the mapping of input rows (described by `groupByCols`) to
-    // offsets in the internal hash map. The function will insert missing
-    // entries unless `onlyInsertPreexistingKeys` is set to `true`.
+    // offsets in the internal hash map. If `onlyUsePreexistingGroups` is
+    // `true`, rows whose key is not yet present in the map are not inserted
+    // but their row indices are added to the `nonMatchingRows_` ("missing
+    // indices") of the returned `GroupLookupResult`. If
+    // `onlyUsePreexistingGroups` is `false`, such keys are inserted into the
+    // hash map and no missing indices are reported for them.
     GroupLookupResult getHashEntries(
         const ArrayOrVector<ql::span<const Id>>& groupByCols,
-        bool onlyInsertPreexistingKeys, size_t nonMatchingRowsOffset = 0);
+        bool onlyUsePreexistingGroups);
 
     // Helper to build a single key vector from column-wise spans.
     ArrayOrVector<Id> makeKeyForHashMap(
@@ -722,7 +734,7 @@ class GroupByImpl : public Operation {
   UpdateResult<NUM_GROUP_COLUMNS> updateHashMapWithTable(
       const IdTable& table, const HashMapOptimizationData& data,
       HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-      HashMapTimers& timers, bool onlyInsertPreexistingKeys = false) const;
+      HashMapTimers& timers, bool onlyUsePreexistingGroups = false) const;
 
   // Build spans for the group values in the given columns of the given table,
   // starting at `beginIdx` and spanning `blockSize` rows.
