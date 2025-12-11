@@ -81,6 +81,8 @@ struct PathQuery : MagicServiceQuery {
   PathSearchConfiguration toPathSearchConfiguration(
       const Index::Vocab& vocab,
       const EncodedIriManager& encodedIriManager) const;
+
+  constexpr std::string_view name() const override { return "path search"; };
 };
 
 }  // namespace parsedQuery

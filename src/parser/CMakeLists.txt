@@ -28,5 +28,6 @@ add_library(parser
         TextSearchQuery.cpp
         Quads.cpp
         UpdateTriples.cpp
+        MaterializedViewQuery.cpp
 )
 qlever_target_link_libraries(parser sparqlParser parserData sparqlExpressions rdfEscaping global re2::re2 util engine index rdfTypes)
