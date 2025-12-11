@@ -643,60 +643,12 @@ struct MetricDistanceVisitor {
 
   // Delegate the actual distance computation to `pb_util` for the geometry type
   // combinations it supports.
-  // CPP_template(typename T, typename U)(
-  //     requires(!WktCollectionType<T> CPP_and !WktCollectionType<U> CPP_and !(
-  //         std::is_same_v<T, DPolygon> CPP_and
-  //             std::is_same_v<U, DPoint>)))
   CPP_template(typename T, typename U)(
       requires(SimilarToAnyTypeIn<T, ParsedWkt> CPP_and
                    SimilarToAnyTypeIn<U, ParsedWkt>)) double
   operator()(const T& a, const U& b) const {
     return util::geo::webMercMeterDist<T, U>(a, b);
   }
-
-  // // Special treatment for polygon and point. Distance is commutative, so
-  // // switching arguments is allowed.
-  // double operator()(const DPolygon& poly, const DPoint& point) const {
-  //   return MetricDistanceVisitor{}(point, poly);
-  // }
-
-  // // Case of a collection on the left and a collection or non-collection on
-  // the
-  // // right.
-  // CPP_template(typename T, typename U)(requires WktCollectionType<T>) double
-  // operator()(const T& collection, const U& other) const {
-  //   double distance = std::numeric_limits<double>::max();
-  //   for (const auto& geom : collection) {
-  //     distance = std::min(distance, MetricDistanceVisitor{}(geom, other));
-  //   }
-  //   return distance;
-  // }
-
-  // // Case of a non-collection on the left and collection on the right. Using
-  // // commutativity, this is delegated to the case above.
-  // CPP_template(typename T, typename U)(
-  //     requires(!WktCollectionType<T> CPP_and WktCollectionType<U>)) double
-  // operator()(const T& other, const U& collection) const {
-  //   return MetricDistanceVisitor{}(collection, other);
-  // }
-
-  // // Visit the contained value of the custom `AnyGeometry` container type.
-  // Case
-  // // of the `AnyGeometry` on the left.
-  // template <typename T>
-  // double operator()(const DAnyGeometry& anyGeom, const T& other) const {
-  //   return visitAnyGeometry(
-  //       [&other](const auto& contained) {
-  //         return MetricDistanceVisitor{}(contained, other);
-  //       },
-  //       anyGeom);
-  // }
-
-  // // Same as above, but `AnyGeometry` is on the right. Use commutativity.
-  // CPP_template(typename T)(requires(!std::is_same_v<T, DAnyGeometry>)) double
-  // operator()(const T& other, const DAnyGeometry& anyGeom) const {
-  //   return MetricDistanceVisitor{}(anyGeom, other);
-  // }
 
   // Handle optional geometries that may be contained in a `ParseResult`.
   std::optional<double> operator()(const ParseResult& a,
