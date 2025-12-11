@@ -34,10 +34,9 @@ TEST_F(MaterializedViewsTest, NotImplemented) {
       qlv().parseAndPlanQuery(R"(
         PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
         SELECT * {
-          SERVICE view: {
-            _:config view:name "testView1" ;
-                     view:scan-column ?s ;
-                     view:payload-g ?x .
+          SERVICE view:testView1 {
+            _:config view:column-s ?s ;
+                     view:column-g ?x .
           }
         }
       )"),
@@ -47,7 +46,7 @@ TEST_F(MaterializedViewsTest, NotImplemented) {
       qlv().parseAndPlanQuery(R"(
         PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
         SELECT * {
-          ?s view:testView1:g ?x .
+          ?s view:testView1-g ?x .
         }
       )"),
       ::testing::HasSubstr(
@@ -63,23 +62,16 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
   auto iri = [](const std::string& ref) {
     return ad_utility::triple_component::Iri::fromIriref(ref);
   };
-  auto lit = [](const std::string& literal) {
-    return ad_utility::triple_component::Literal::fromStringRepresentation(
-        literal);
-  };
 
   V placeholderP{"?placeholder_p"};
   V placeholderO{"?placeholder_o"};
 
   // Request for reading an extra payload column
   {
-    ViewQuery query;
+    ViewQuery query{
+        iri("<https://qlever.cs.uni-freiburg.de/materializedView/testView1>")};
     query.addParameter(
-        SparqlTriple{iri("<config>"), iri("<name>"), lit("\"testView1\"")});
-    query.addParameter(
-        SparqlTriple{iri("<config>"), iri("<scan-column>"), V{"?s"}});
-    query.addParameter(
-        SparqlTriple{iri("<config>"), iri("<payload-g>"), V{"?o"}});
+        SparqlTriple{iri("<config>"), iri("<column-g>"), V{"?o"}});
     AD_EXPECT_THROW_WITH_MESSAGE(
         query.addParameter(
             SparqlTriple{iri("<config>"), iri("<blabliblu>"), V{"?o"}}),
@@ -88,34 +80,20 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
 
   // Invalid inputs
   {
-    ViewQuery query;
+    ViewQuery query{
+        iri("<https://qlever.cs.uni-freiburg.de/materializedView/testView1>")};
     AD_EXPECT_THROW_WITH_MESSAGE(
         query.addParameter(
             SparqlTriple{iri("<config>"), iri("<blabliblu>"), V{"?o"}}),
         ::testing::HasSubstr("Unknown parameter"));
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        query.addParameter(
-            SparqlTriple{iri("<config>"), iri("<name>"), V{"?o"}}),
-        ::testing::HasSubstr("Parameter <name> to materialized view query "
-                             "needs to be a literal"));
 
     query.addParameter(
-        SparqlTriple{iri("<config>"), iri("<payload-g>"), V{"?o"}});
-    query.addParameter(
-        SparqlTriple{iri("<config>"), iri("<name>"), lit("\"testView1\"")});
-    query.addParameter(
-        SparqlTriple{iri("<config>"), iri("<scan-column>"), V{"?s"}});
+        SparqlTriple{iri("<config>"), iri("<column-g>"), V{"?o"}});
 
     AD_EXPECT_THROW_WITH_MESSAGE(
         query.addParameter(
-            SparqlTriple{iri("<config>"), iri("<payload-g>"), V{"?o"}}),
-        ::testing::HasSubstr("Each payload column may only be requested once"));
-
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        query.addParameter(
-            SparqlTriple{iri("<config>"), iri("<payload-x>"), iri("<abc>")}),
-        ::testing::HasSubstr(
-            "Payload columns must be specified with a variable"));
+            SparqlTriple{iri("<config>"), iri("<column-g>"), V{"?o"}}),
+        ::testing::HasSubstr("Each column may only be requested once"));
 
     AD_EXPECT_THROW_WITH_MESSAGE(
         ViewQuery(SparqlTriple{V{"?s"},
@@ -130,7 +108,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
   {
     ViewQuery query{SparqlTriple{V{"?s"},
                                  iri("<https://qlever.cs.uni-freiburg.de/"
-                                     "materializedView/testView1:o>"),
+                                     "materializedView/testView1-o>"),
                                  V{"?o"}}};
     EXPECT_THAT(query.getVarsToKeep(),
                 ::testing::UnorderedElementsAre(::testing::Eq(V{"?s"}),
