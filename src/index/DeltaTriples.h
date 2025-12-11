@@ -191,6 +191,11 @@ class DeltaTriples {
         triplesToHandlesInternal_.triplesDeleted_.size());
   }
 
+  // From the triples that are explicitly being added to the index, compute a
+  // bunch of triples to be inserted into the internal permutation to make
+  // things like efficient language filters work.
+  Triples makeInternalTriples(const Triples& triples);
+
   // Insert triples.
   void insertTriples(CancellationHandle cancellationHandle, Triples triples,
                      ad_utility::timer::TimeTracer& tracer =

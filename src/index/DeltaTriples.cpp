@@ -16,6 +16,7 @@
 
 #include "backports/algorithm.h"
 #include "engine/ExecuteUpdate.h"
+#include "engine/ExportQueryExecutionTrees.h"
 #include "index/Index.h"
 #include "index/IndexImpl.h"
 #include "index/LocatedTriples.h"
@@ -118,20 +119,68 @@ DeltaTriplesCount DeltaTriples::getCounts() const {
   return {numInserted(), numDeleted()};
 }
 
+// _____________________________________________________________________________
+DeltaTriples::Triples DeltaTriples::makeInternalTriples(
+    const Triples& triples) {
+  Triples internalTriples;
+  for (const auto& triple : triples) {
+    const auto& ids = triple.ids();
+    Id objectId = ids.at(2);
+    auto optionalLiteralOrIri = ExportQueryExecutionTrees::idToLiteralOrIri(
+        index_, objectId, localVocab_);
+    if (!optionalLiteralOrIri.has_value() ||
+        !optionalLiteralOrIri.value().isLiteral() ||
+        !optionalLiteralOrIri.value().hasLanguageTag()) {
+      continue;
+    }
+    Id predicateId = ids.at(1);
+    auto predicate = ExportQueryExecutionTrees::idToLiteralOrIri(
+        index_, predicateId, localVocab_);
+    AD_CORRECTNESS_CHECK(predicate.has_value() && predicate.value().isIri());
+    auto specialPredicate = ad_utility::convertToLanguageTaggedPredicate(
+        predicate.value().getIri(),
+        std::string{
+            asStringViewUnsafe(optionalLiteralOrIri.value().getLanguageTag())});
+    Id specialId = TripleComponent{std::move(specialPredicate)}.toValueId(
+        index_.getVocab(), localVocab_, index_.encodedIriManager());
+    internalTriples.push_back(
+        IdTriple<0>{std::array{ids.at(0), specialId, ids.at(2), ids.at(3)}});
+  }
+  return internalTriples;
+}
+
 // ____________________________________________________________________________
 void DeltaTriples::insertTriples(CancellationHandle cancellationHandle,
                                  Triples triples,
                                  ad_utility::timer::TimeTracer& tracer) {
-  modifyTriplesImpl<false, true>(std::move(cancellationHandle),
-                                 std::move(triples), tracer);
+  tracer.beginTrace("makeInternalTriples");
+  auto internalTriples = makeInternalTriples(triples);
+  tracer.endTrace("makeInternalTriples");
+  tracer.beginTrace("externalPermutation");
+  modifyTriplesImpl<false, true>(cancellationHandle, std::move(triples),
+                                 tracer);
+  tracer.endTrace("externalPermutation");
+  tracer.beginTrace("internalPermutation");
+  modifyTriplesImpl<true, true>(std::move(cancellationHandle),
+                                std::move(internalTriples), tracer);
+  tracer.endTrace("internalPermutation");
 }
 
 // ____________________________________________________________________________
 void DeltaTriples::deleteTriples(CancellationHandle cancellationHandle,
                                  Triples triples,
                                  ad_utility::timer::TimeTracer& tracer) {
-  modifyTriplesImpl<false, false>(std::move(cancellationHandle),
-                                  std::move(triples), tracer);
+  tracer.beginTrace("makeInternalTriples");
+  auto internalTriples = makeInternalTriples(triples);
+  tracer.endTrace("makeInternalTriples");
+  tracer.beginTrace("externalPermutation");
+  modifyTriplesImpl<false, false>(cancellationHandle, std::move(triples),
+                                  tracer);
+  tracer.endTrace("externalPermutation");
+  tracer.beginTrace("internalPermutation");
+  modifyTriplesImpl<true, false>(std::move(cancellationHandle),
+                                 std::move(internalTriples), tracer);
+  tracer.endTrace("internalPermutation");
 }
 
 // ____________________________________________________________________________

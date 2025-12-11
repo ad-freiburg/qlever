@@ -71,9 +71,7 @@ class Permutation {
   explicit Permutation(Enum permutation, Allocator allocator);
 
   // everything that has to be done when reading an index from disk
-  void loadFromDisk(const std::string& onDiskBase,
-                    std::function<bool(Id)> isInternalId,
-                    bool loadAdditional = false);
+  void loadFromDisk(const std::string& onDiskBase, bool loadAdditional = false);
 
   // Set the original metadata for the delta triples. This also sets the
   // metadata for internal permutation if present.
@@ -186,10 +184,6 @@ class Permutation {
   // _______________________________________________________
   const MetaData& metaData() const { return meta_; }
 
-  // _______________________________________________________
-  const Permutation& getActualPermutation(const ScanSpecification& spec) const;
-  const Permutation& getActualPermutation(Id id) const;
-
   // From the given snapshot, get the located triples for this permutation.
   const LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
       const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
@@ -229,8 +223,6 @@ class Permutation {
 
   Enum permutation_;
   std::unique_ptr<Permutation> internalPermutation_ = nullptr;
-
-  std::function<bool(Id)> isInternalId_;
 
   bool isInternalPermutation_ = false;
 };
