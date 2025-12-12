@@ -581,50 +581,50 @@ CPP_template(typename Projection)(
   // Transform collections (might be called recursively, for example for points
   // in a `MultiLine`).
   CPP_template(typename T)(requires(isVector<T> || SimilarTo<T, DLine>)) T
-  operator()(const T& multi) const {
-    T result;
-    result.reserve(multi.size());
-    ql::ranges::transform(multi, std::back_inserter(result), *this);
-    return result;
+  operator()(T multi) const {
+    ql::ranges::transform(multi, multi.begin(), *this);
+    return multi;
   };
 
   // Polygons require special treatment for inner (~ a line) and outer
   // boundaries (~ a multi line).
-  DPolygon operator()(const DPolygon& poly) const {
-    return {(*this)(poly.getOuter()), (*this)(poly.getInners())};
+  DPolygon operator()(DPolygon poly) const {
+    return {(*this)(std::move(poly.getOuter())),
+            (*this)(std::move(poly.getInners()))};
   }
 
   // Unwrap dynamic `AnyGeometry` container type.
-  DAnyGeometry operator()(const DAnyGeometry& anyGeom) const {
+  DAnyGeometry operator()(DAnyGeometry anyGeom) const {
     return visitAnyGeometry(
         [this](const auto& contained) {
           return DAnyGeometry{(*this)(contained)};
         },
-        anyGeom);
+        std::move(anyGeom));
   }
 
   // Handle `ParsedWkt` variant.
-  ParsedWkt operator()(const ParsedWkt& geom) const {
+  ParsedWkt operator()(ParsedWkt geom) const {
     return std::visit(
-        [this](const auto& contained) { return ParsedWkt{(*this)(contained)}; },
-        geom);
+        [this](const auto& contained) {
+          return ParsedWkt{(*this)(std::move(contained))};
+        },
+        std::move(geom));
   }
 
   // Handle values contained in `std::optional`.
   CPP_template(typename T)(
       requires(!SimilarTo<T, GeoPointOrWkt>)) std::optional<T>
-  operator()(const std::optional<T>& opt) const {
+  operator()(std::optional<T> opt) const {
     if (!opt.has_value()) {
       return std::nullopt;
     }
-    return (*this)(opt.value());
+    return (*this)(std::move(opt.value()));
   }
 
   // Handle `GeoPointOrWkt` (raw unparsed geometry).
-  ParseResult operator()(
-      const std::optional<GeoPointOrWkt>& geoPointOrWkt) const {
+  ParseResult operator()(std::optional<GeoPointOrWkt> geoPointOrWkt) const {
     auto [type, parsed] = ParseGeoPointOrWktVisitor{}(geoPointOrWkt);
-    return {type, (*this)(parsed)};
+    return {type, (*this)(std::move(parsed))};
   }
 };
 
