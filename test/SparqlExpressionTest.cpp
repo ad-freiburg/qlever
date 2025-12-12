@@ -10,6 +10,7 @@
 #include <string>
 
 #include "./SparqlExpressionTestHelpers.h"
+#include "./printers/LocalVocabEntryPrinters.h"
 #include "./util/GTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
@@ -19,11 +20,11 @@
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
-#include "engine/sparqlExpressions/StringExpressions.cpp"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "util/AllocatorTestHelpers.h"
@@ -121,8 +122,8 @@ CPP_template(typename T)(
     return IdOrLiteralOrIri{lit(vec)};
   } else {
     return VectorWithMemoryLimit<typename T::value_type>{
-        std::make_move_iterator(vec.begin()),
-        std::make_move_iterator(vec.end()), alloc};
+        ql::make_move_iterator(vec.begin()), ql::make_move_iterator(vec.end()),
+        alloc};
   }
 }
 
@@ -1506,6 +1507,46 @@ TEST(SparqlExpression, geoSparqlExpressions) {
                           squareKilometer});
   checkMetricArea(lengthInputs, Ids{U, U, D(0.0), D(0.0),
                                     D(expectedArea(polygon)), D(0.0), U});
+
+  auto checkGeometryN =
+      std::bind_front(testNaryExpression, &makeGeometryNExpression);
+  // Non-geometry types
+  checkGeometryN(IdOrLiteralOrIriVec{U, U, U, U}, Ids{D(5), I(3), B(true), U},
+                 Ids{I(1), U, D(5), I(2)});
+  // Extract n-th geometry: Single and invalid geometries.
+  checkGeometryN(
+      IdOrLiteralOrIriVec{
+          U,
+          U,
+          geoLit("POINT(24.3 26.8)"),
+          geoLit("LINESTRING(2 8,4 6)"),
+          geoLit("POLYGON((2 2,4 2,4 4,2 4,2 2))"),
+          U,
+          U,
+          geoLit("LINESTRING(-5000 0,1 2)"),
+      },
+      exampleGeoms, Ids{I(1), I(1), I(1), I(1), I(1), I(1), I(1), I(1)});
+  checkGeometryN(IdOrLiteralOrIriVec{U, U, U, U, U, U, U, U}, exampleGeoms,
+                 Ids{I(0), I(0), I(0), I(0), I(0), I(0), I(0), I(0)});
+  // Extract n-th geometry: Collection types.
+  checkGeometryN(
+      IdOrLiteralOrIriVec{
+          geoLit("POINT(1 2)"),
+          geoLit("POINT(1 2)"),
+          geoLit("LINESTRING(1 2,3 4)"),
+          geoLit("POLYGON((1 2,3 4,1 2))"),
+          geoLit("POINT(1 2)"),
+      },
+      exampleMultiGeoms, Ids{I(1), I(1), I(1), I(1), I(1)});
+  checkGeometryN(
+      IdOrLiteralOrIriVec{
+          geoLit("POINT(3 4)"),
+          U,
+          geoLit("LINESTRING(5 6,7 8,9 0)"),
+          geoLit("POLYGON((1 2,3 4,1 2.5,1 2))"),
+          geoLit("LINESTRING(2 8,4 6)"),
+      },
+      exampleMultiGeoms, Ids{I(2), I(2), I(2), I(2), I(2)});
 }
 
 // ________________________________________________________________________________________
@@ -1922,4 +1963,102 @@ TEST(ExistsExpression, basicFunctionality) {
               HasSubstr("ExistsExpression col# 437"));
   EXPECT_THAT(exists.containedVariables(),
               ElementsAre(Pointee(Eq(Variable{"?testVar42"}))));
+}
+
+// _____________________________________________________________________________
+TEST(OrExpression, getLanguageFilterExpression) {
+  using LFD = SparqlExpression::LangFilterData;
+  using namespace ::testing;
+  auto lit = ad_utility::testing::tripleComponentLiteral;
+
+  auto makeSimpleLangFilter = [&](std::string_view language,
+                                  Variable variable) {
+    auto sle = std::make_unique<StringLiteralExpression>(lit(language));
+    auto le = makeLangExpression(
+        std::make_unique<VariableExpression>(std::move(variable)));
+    return std::make_unique<EqualExpression>(
+        std::array<SparqlExpression::Ptr, 2>{std::move(sle), std::move(le)});
+  };
+  // Simple case
+  {
+    auto oe = makeOrExpression(makeSimpleLangFilter("\"en\"", Variable{"?x"}),
+                               makeSimpleLangFilter("\"de\"", Variable{"?x"}));
+    EXPECT_THAT(
+        oe->getLanguageFilterExpression(),
+        Optional(AllOf(AD_FIELD(LFD, variable_, Eq(Variable{"?x"})),
+                       AD_FIELD(LFD, languages_,
+                                UnorderedElementsAre(Eq("en"), Eq("de"))))));
+  }
+  // Simple case with deduplication
+  {
+    auto sle1 = std::make_unique<StringLiteralExpression>(lit("\"en\""));
+    auto le1 = makeLangExpression(
+        std::make_unique<VariableExpression>(Variable{"?x"}));
+    auto sle2 = std::make_unique<StringLiteralExpression>(lit("\"en\""));
+    auto le2 = makeLangExpression(
+        std::make_unique<VariableExpression>(Variable{"?x"}));
+    auto oe = makeOrExpression(makeSimpleLangFilter("\"en\"", Variable{"?x"}),
+                               makeSimpleLangFilter("\"en\"", Variable{"?x"}));
+    EXPECT_THAT(oe->getLanguageFilterExpression(),
+                Optional(AllOf(AD_FIELD(LFD, variable_, Eq(Variable{"?x"})),
+                               AD_FIELD(LFD, languages_,
+                                        UnorderedElementsAre(Eq("en"))))));
+  }
+  // Complicated case with deduplication and IN
+  {
+    auto makeMultiLangFilter =
+        [&](const std::vector<std::string_view>& languages, Variable variable) {
+          std::vector<SparqlExpression::Ptr> children;
+          for (std::string_view language : languages) {
+            children.push_back(
+                std::make_unique<StringLiteralExpression>(lit(language)));
+          }
+          auto le = makeLangExpression(
+              std::make_unique<VariableExpression>(std::move(variable)));
+          return std::make_unique<InExpression>(std::move(le),
+                                                std::move(children));
+        };
+    auto oe = makeOrExpression(
+        makeMultiLangFilter({"\"\"", "\"mul\"", "\"en\""}, Variable{"?x"}),
+        makeOrExpression(
+            makeSimpleLangFilter("\"en\"", Variable{"?x"}),
+            makeOrExpression(
+                makeSimpleLangFilter("\"\"", Variable{"?x"}),
+                makeMultiLangFilter({"\"de\"", "\"en\""}, Variable{"?x"}))));
+    EXPECT_THAT(
+        oe->getLanguageFilterExpression(),
+        Optional(AllOf(AD_FIELD(LFD, variable_, Eq(Variable{"?x"})),
+                       AD_FIELD(LFD, languages_,
+                                UnorderedElementsAre(Eq(""), Eq("mul"),
+                                                     Eq("en"), Eq("de"))))));
+  }
+
+  // Non-matching variables
+  {
+    auto oe = makeOrExpression(makeSimpleLangFilter("\"en\"", Variable{"?x"}),
+                               makeSimpleLangFilter("\"de\"", Variable{"?y"}));
+    EXPECT_EQ(oe->getLanguageFilterExpression(), std::nullopt);
+  }
+
+  // Left side no language filter
+  {
+    auto ie = std::make_unique<IdExpression>(Id::makeFromBool(true));
+    auto oe = makeOrExpression(std::move(ie),
+                               makeSimpleLangFilter("\"de\"", Variable{"?x"}));
+    EXPECT_EQ(oe->getLanguageFilterExpression(), std::nullopt);
+  }
+
+  // Right side no language filter
+  {
+    auto ie = std::make_unique<IdExpression>(Id::makeFromBool(true));
+    auto oe = makeOrExpression(makeSimpleLangFilter("\"de\"", Variable{"?x"}),
+                               std::move(ie));
+    EXPECT_EQ(oe->getLanguageFilterExpression(), std::nullopt);
+  }
+  // Should not apply to AND
+  {
+    auto ae = makeAndExpression(makeSimpleLangFilter("\"en\"", Variable{"?x"}),
+                                makeSimpleLangFilter("\"de\"", Variable{"?x"}));
+    EXPECT_EQ(ae->getLanguageFilterExpression(), std::nullopt);
+  }
 }

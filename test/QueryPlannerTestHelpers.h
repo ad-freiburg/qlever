@@ -141,17 +141,18 @@ constexpr auto IndexScan =
   auto permutationMatcher = allowedPermutations.empty()
                                 ? ::testing::A<Permutation::Enum>()
                                 : AnyOfArray(allowedPermutations);
-  return RootOperation<::IndexScan>(
-      AllOf(AD_PROPERTY(IndexScan, permutation, permutationMatcher),
-            AD_PROPERTY(IndexScan, getResultWidth, Eq(numVariables)),
-            AD_PROPERTY(IndexScan, subject, Eq(subject)),
-            AD_PROPERTY(IndexScan, predicate, Eq(predicate)),
-            AD_PROPERTY(IndexScan, object, Eq(object)),
-            AD_PROPERTY(IndexScan, additionalVariables,
-                        ElementsAreArray(additionalVariables)),
-            AD_PROPERTY(IndexScan, additionalColumns,
-                        ElementsAreArray(additionalColumns)),
-            AD_PROPERTY(IndexScan, graphsToFilter, Eq(graphs))));
+  return RootOperation<::IndexScan>(AllOf(
+      AD_PROPERTY(IndexScan, permutation,
+                  AD_PROPERTY(Permutation, permutation, permutationMatcher)),
+      AD_PROPERTY(IndexScan, getResultWidth, Eq(numVariables)),
+      AD_PROPERTY(IndexScan, subject, Eq(subject)),
+      AD_PROPERTY(IndexScan, predicate, Eq(predicate)),
+      AD_PROPERTY(IndexScan, object, Eq(object)),
+      AD_PROPERTY(IndexScan, additionalVariables,
+                  ElementsAreArray(additionalVariables)),
+      AD_PROPERTY(IndexScan, additionalColumns,
+                  ElementsAreArray(additionalColumns)),
+      AD_PROPERTY(IndexScan, graphsToFilter, Eq(graphs))));
 };
 
 // Match the `NeutralElementOperation`.
@@ -634,7 +635,12 @@ void expectWithGivenBudget(std::string query, auto matcher,
   }};
   auto trace = generateLocationTrace(
       l, absl::StrCat("expect with budget ", queryPlanningBudget));
-  QueryExecutionContext* qec = optQec.value_or(ad_utility::testing::getQec());
+  // Note: we cannot use `value_or` here, because it eagerly evaluates `getQec`
+  // which overwrites the global singleton index. The index is used to check
+  // invariants which require the correct index to be set.
+  // TODO<joka921>: revert to `value_or` with #2476
+  QueryExecutionContext* qec =
+      optQec.has_value() ? *optQec : ad_utility::testing::getQec();
   auto qet = parseAndPlan<QueryPlannerClass>(std::move(query), qec);
   qet.getRootOperation()->createRuntimeInfoFromEstimates(
       qet.getRootOperation()->getRuntimeInfoPointer());

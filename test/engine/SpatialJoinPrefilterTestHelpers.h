@@ -186,32 +186,13 @@ inline sj::SweeperCfg makeSweeperCfg(const LibSpatialJoinConfig& libSJConfig,
                                      SweeperDistResult& resultDists,
                                      double withinDist) {
   using enum SpatialJoinType;
-  sj::SweeperCfg cfg;
-  cfg.numThreads = 1;
-  cfg.numCacheThreads = 1;
-  cfg.geomCacheMaxSize = 10'000;
-  cfg.pairStart = "";
-  cfg.sepIsect = std::string{static_cast<char>(INTERSECTS)};
-  cfg.sepContains = std::string{static_cast<char>(CONTAINS)};
-  cfg.sepCovers = std::string{static_cast<char>(COVERS)};
-  cfg.sepTouches = std::string{static_cast<char>(TOUCHES)};
-  cfg.sepEquals = std::string{static_cast<char>(EQUALS)};
-  cfg.sepOverlaps = std::string{static_cast<char>(OVERLAPS)};
-  cfg.sepCrosses = std::string{static_cast<char>(CROSSES)};
-  cfg.pairEnd = "";
-  cfg.useBoxIds = true;
-  cfg.useArea = true;
-  cfg.useOBB = false;
-  cfg.useCutouts = true;
-  cfg.useDiagBox = true;
-  cfg.useFastSweepSkip = true;
-  cfg.useInnerOuter = false;
-  cfg.noGeometryChecks = false;
+  sj::SweeperCfg cfg =
+      SpatialJoinAlgorithms::libspatialjoinSweeperConfig(1, 1_GB);
   cfg.withinDist = withinDist;
   auto joinTypeVal = libSJConfig.joinType_;
   cfg.writeRelCb = [&results, &resultDists, joinTypeVal](
-                       size_t t, const char* a, const char* b,
-                       const char* pred) {
+                       size_t t, const char* a, size_t, const char* b, size_t,
+                       const char* pred, size_t) {
     if (joinTypeVal == WITHIN_DIST) {
       results[t].push_back({WITHIN_DIST, std::atoi(a), std::atoi(b)});
       resultDists[t].push_back(atof(pred));
@@ -220,10 +201,6 @@ inline sj::SweeperCfg makeSweeperCfg(const LibSpatialJoinConfig& libSJConfig,
           {static_cast<SpatialJoinType>(pred[0]), std::atoi(a), std::atoi(b)});
     }
   };
-  cfg.logCb = {};
-  cfg.statsCb = {};
-  cfg.sweepProgressCb = {};
-  cfg.sweepCancellationCb = {};
   return cfg;
 }
 
@@ -296,14 +273,16 @@ inline void runParsingAndSweeper(
   double withinDist = sjTask.maxDist_.value_or(-1);
   auto sweeperCfg = makeSweeperCfg(sjTask, results, resultDists, withinDist);
   std::string sweeperPath = qec->getIndex().getOnDiskBase() + ".spatialjoin";
-  sj::Sweeper sweeper(sweeperCfg, ".", "", sweeperPath.c_str());
+  sj::Sweeper sweeper(sweeperCfg, ".", sweeperPath);
 
   ASSERT_EQ(sweeper.numElements(), 0);
 
   // Run first parsing step (left side)
-  auto [aggBoundingBoxLeft, numGeomAddedLeft] = sjAlgo.libspatialjoinParse(
-      false, {prepared.idTableLeft_, prepared.leftJoinCol_}, sweeper, 1,
-      std::nullopt);
+  auto [aggBoundingBoxLeft, numGeomAddedLeft, numGeomDroppedLeft,
+        numThreadsLeft] =
+      sjAlgo.libspatialjoinParse(false,
+                                 {prepared.idTableLeft_, prepared.leftJoinCol_},
+                                 sweeper, 1, std::nullopt);
   // Due to problems in `Sweeper` when a side is empty, we don't use
   // `sweeper.setFilterBox(box);` here.
 
@@ -312,21 +291,16 @@ inline void runParsingAndSweeper(
   if (usePrefilter) {
     prefilterBox = sweeper.getPaddedBoundingBox(aggBoundingBoxLeft);
   }
-  auto [aggBoundingBoxRight, numGeomAddedRight] = sjAlgo.libspatialjoinParse(
-      true, {prepared.idTableRight_, prepared.rightJoinCol_}, sweeper, 1,
-      prefilterBox);
+  auto [aggBoundingBoxRight, numGeomAddedRight, numGeomDroppedRight,
+        numThreadsRight] =
+      sjAlgo.libspatialjoinParse(
+          true, {prepared.idTableRight_, prepared.rightJoinCol_}, sweeper, 1,
+          prefilterBox);
 
   sweeper.flush();
 
   // Check counters
-  size_t numSkipped = 0;
-  ASSERT_EQ(spatialJoin->runtimeInfo().details_.contains(
-                "num-geoms-dropped-by-prefilter"),
-            usePrefilter);
-  if (usePrefilter) {
-    numSkipped = static_cast<size_t>(
-        spatialJoin->runtimeInfo().details_["num-geoms-dropped-by-prefilter"]);
-  }
+  size_t numSkipped = numGeomDroppedLeft + numGeomDroppedRight;
 
   size_t numEl = sweeper.numElements();
   if (numGeomAddedLeft && numGeomAddedRight) {
@@ -433,7 +407,9 @@ inline void checkSweeperTestResult(
     checkValId(valIdRight);
 
     GeoRelationWithIds key{sjType, valIdLeft, valIdRight};
-    ASSERT_TRUE(expectedResultsAndDist.contains(key));
+    ASSERT_TRUE(expectedResultsAndDist.contains(key))
+        << "Unexpected result found " << vMap.at(valIdLeft) << " "
+        << vMap.at(valIdRight) << " of type " << static_cast<size_t>(sjType);
     ASSERT_NEAR(expectedResultsAndDist[key], dist, 0.01);
     ++numActualResults;
   }

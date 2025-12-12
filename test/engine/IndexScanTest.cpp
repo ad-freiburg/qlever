@@ -1519,7 +1519,10 @@ TEST(IndexScanTest, StripColumns) {
     EXPECT_THAT(strippedScanOp.additionalColumns(),
                 ElementsAreArray(baseScan.additionalColumns()));
     EXPECT_EQ(strippedScanOp.numVariables(), baseScan.numVariables());
-    EXPECT_EQ(strippedScanOp.permutation(), baseScan.permutation());
+    EXPECT_EQ(strippedScanOp.permutation().permutation(),
+              baseScan.permutation().permutation());
+    EXPECT_EQ(strippedScanOp.permutation().onDiskBase(),
+              baseScan.permutation().onDiskBase());
 
     // Test size and cost functions
     EXPECT_EQ(strippedScanOp.getExactSize(), baseScan.getExactSize());

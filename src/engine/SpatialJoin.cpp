@@ -315,7 +315,8 @@ size_t SpatialJoin::getCostEstimate() {
       // for each item do a lookup on the index for the right table in O(log m).
       // Together we have O(n log(m) + m log(m)), because in general we can't
       // draw conclusions about the relation between the sizes of n and m.
-      auto logm = static_cast<size_t>(std::log(static_cast<double>(m)));
+      auto logm = m > 0 ? static_cast<size_t>(std::log(static_cast<double>(m)))
+                        : size_t{1};
       return (n * logm) + (m * logm);
     }
   }();

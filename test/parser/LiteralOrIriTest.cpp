@@ -440,3 +440,33 @@ TEST(LiteralTest, spaceshipOperatorLangtagLiteral) {
   EXPECT_THAT(ql::compareThreeWay(l1, l2),
               testing::Not(testing::Eq(ql::strong_ordering::equal)));
 }
+
+TEST(LiteralOrIri, toStringRepresentation) {
+  {
+    auto iri = LiteralOrIri::iriref("<bladibladibludiblu>");
+    std::string expected = "<bladibladibludiblu>";
+
+    auto res = iri.toStringRepresentation();
+    EXPECT_EQ(res, expected);
+    // The previous call did not move;
+    EXPECT_EQ(iri.toStringRepresentation(), expected);
+
+    res = std::move(iri).toStringRepresentation();
+    EXPECT_EQ(res, expected);
+    EXPECT_TRUE(iri.toStringRepresentation().empty());
+  }
+  // Similar tests, but for a literal:
+  {
+    auto lit = LiteralOrIri::literalWithoutQuotes("bladibladibludiblu");
+    std::string expected = "\"bladibladibludiblu\"";
+
+    auto res = lit.toStringRepresentation();
+    EXPECT_EQ(res, expected);
+    // The previous call did not move;
+    EXPECT_EQ(lit.toStringRepresentation(), expected);
+
+    res = std::move(lit).toStringRepresentation();
+    EXPECT_EQ(res, expected);
+    EXPECT_TRUE(lit.toStringRepresentation().empty());
+  }
+}

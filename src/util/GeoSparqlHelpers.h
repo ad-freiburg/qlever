@@ -22,6 +22,7 @@
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/Iri.h"
 #include "rdfTypes/Literal.h"
+#include "util/UnitOfMeasurement.h"
 
 namespace ad_utility {
 
@@ -29,10 +30,6 @@ namespace detail {
 
 static constexpr double invalidCoordinate =
     std::numeric_limits<double>::quiet_NaN();
-
-static constexpr double kilometerToMile = 0.62137119;
-static constexpr double squareMeterToSquareMile =
-    (kilometerToMile / 1000) * (kilometerToMile / 1000);
 
 // TODO: Make the SPARQL expressions work for function pointers or
 // std::function.
@@ -43,29 +40,8 @@ std::pair<double, double> parseWktPoint(const std::string_view point);
 // Calculate geographic distance between points in kilometers using s2geometry.
 double wktDistImpl(GeoPoint point1, GeoPoint point2);
 
-// Convert kilometers to other supported units. If `unit` is `std::nullopt` it
-// is treated as kilometers.
-double kilometerToUnit(double kilometers,
-                       std::optional<UnitOfMeasurement> unit);
-
-// Convert value from any supported unit to kilometers. If `unit` is
-// `std::nullopt` it is treated as kilometers.
-double valueInUnitToKilometer(double valueInUnit,
-                              std::optional<UnitOfMeasurement> unit);
-
-// Convert square meters to another supported area unit. If `unit` is
-// `std::nullopt` it is treated as square meters (value is returned unchanged).
-double squareMeterToUnit(double squareMeters,
-                         std::optional<UnitOfMeasurement> unit);
-
-// Returns `true` iff `unit` is a unit for measuring length / distance.
-bool isLengthUnit(UnitOfMeasurement unit);
-
-// Returns `true` iff `unit` is a unit for measuring area.
-bool isAreaUnit(UnitOfMeasurement unit);
-
-// Convert a unit IRI string (without quotes or brackets) to unit.
-UnitOfMeasurement iriToUnitOfMeasurement(const std::string_view& uri);
+// Helper to avoid including `GeometryInfoHelpersImpl.h`
+std::optional<std::string> geometryNAsWkt(GeoPointOrWkt wkt, int64_t n);
 
 const auto wktLiteralIri =
     triple_component::Iri::fromIrirefWithoutBrackets(GEO_WKT_LITERAL);
@@ -202,6 +178,28 @@ class WktGeometryType {
     using namespace triple_component;
     auto lit = Literal::literalWithoutQuotes(typeIri.value());
     lit.addDatatype(Iri::fromIrirefWithoutBrackets(XSD_ANYURI_TYPE));
+    return {LiteralOrIri{lit}};
+  }
+};
+
+// Get the WKT for the n-th element (1-indexed) of the given WKT.
+class WktGeometryN {
+ public:
+  sparqlExpression::IdOrLiteralOrIri operator()(
+      const std::optional<GeoPointOrWkt>& wkt,
+      const std::optional<int64_t>& n) const {
+    using namespace triple_component;
+    if (!wkt.has_value() || !n.has_value()) {
+      return ValueId::makeUndefined();
+    }
+
+    auto resultWkt = detail::geometryNAsWkt(wkt.value(), n.value());
+
+    if (!resultWkt.has_value()) {
+      return ValueId::makeUndefined();
+    }
+    auto lit = Literal::literalWithoutQuotes(resultWkt.value());
+    lit.addDatatype(detail::wktLiteralIri);
     return {LiteralOrIri{lit}};
   }
 };

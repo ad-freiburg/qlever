@@ -15,11 +15,13 @@
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "global/Constants.h"
 #include "global/Id.h"
+#include "global/ValueId.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "util/ConstexprSmallString.h"
 #include "util/LruCache.h"
 #include "util/TypeTraits.h"
+#include "util/UnitOfMeasurement.h"
 
 /// Several classes that can be used as the `ValueGetter` template
 /// argument in the SparqlExpression templates in `SparqlExpression.h`
@@ -207,7 +209,7 @@ struct IsNumericValueGetter : Mixin<IsNumericValueGetter> {
 };
 
 // Boolean value getters for `isIRI`, `isBlank`, and `isLiteral`.
-template <auto isSomethingFunction, auto isLiteralOrIriSomethingFunction>
+template <auto isSomethingFunction, const auto& isLiteralOrIriSomethingFunction>
 struct IsSomethingValueGetter
     : Mixin<IsSomethingValueGetter<isSomethingFunction,
                                    isLiteralOrIriSomethingFunction>> {
@@ -221,8 +223,8 @@ struct IsSomethingValueGetter
                                             isLiteralOrIriSomethingFunction));
   }
 };
-static constexpr auto isIriPrefix = ad_utility::ConstexprSmallString<2>{"<"};
-static constexpr auto isLiteralPrefix =
+inline constexpr auto isIriPrefix = ad_utility::ConstexprSmallString<2>{"<"};
+inline constexpr auto isLiteralPrefix =
     ad_utility::ConstexprSmallString<2>{"\""};
 using IsIriValueGetter =
     IsSomethingValueGetter<&Index::Vocab::isIri, isIriPrefix>;
@@ -370,6 +372,16 @@ struct UnitOfMeasurementValueGetter : Mixin<UnitOfMeasurementValueGetter> {
   static UnitOfMeasurement litOrIriToUnit(const LiteralOrIri& s);
 };
 
+// This value getter retrieves geometries: `GeoPoints` or literals with
+// `geo:wktLiteral` datatype.
+struct GeoPointOrWktValueGetter : Mixin<GeoPointOrWktValueGetter> {
+  using Mixin<GeoPointOrWktValueGetter>::operator();
+  std::optional<ad_utility::GeoPointOrWkt> operator()(
+      ValueId id, const EvaluationContext*) const;
+  std::optional<ad_utility::GeoPointOrWkt> operator()(
+      const LiteralOrIri&, const EvaluationContext*) const;
+};
+
 // `LanguageTagValueGetter` returns an `std::optional<std::string>` object
 // which contains the language tag if previously set w.r.t. given
 // `Id`/`Literal`. This ValueGetter is currently used within
@@ -449,6 +461,16 @@ struct StringOrDateGetter : Mixin<StringOrDateGetter> {
                              const EvaluationContext* context) const {
     return LiteralFromIdGetter{}(litOrIri, context);
   }
+};
+
+// Value getter that returns only integer values (unlike `NumericValueGetter`
+// which returns double or int).
+struct IntValueGetter : Mixin<IntValueGetter> {
+  using Mixin<IntValueGetter>::operator();
+  std::optional<int64_t> operator()(const LiteralOrIri& litOrIri,
+                                    const EvaluationContext*) const;
+
+  std::optional<int64_t> operator()(ValueId id, const EvaluationContext*) const;
 };
 
 }  // namespace sparqlExpression::detail

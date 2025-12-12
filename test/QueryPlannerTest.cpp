@@ -2843,6 +2843,25 @@ TEST(QueryPlanner, testDistributiveJoinInUnion) {
 }
 
 // _____________________________________________________________________________
+TEST(QueryPlanner, testDistributiveJoinInUnionDoesntExplode) {
+  // Make sure that this is enabled for this test to actually test something.
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::enableDistributiveUnion_>(
+          true);
+  // This is a regression test to ensure the following query, which joins two
+  // unions doesn't result in an OOM because the possible query plan variations
+  // explode.
+  std::string query = R"(
+PREFIX wdt: <http://www.wikidata.org/prop/direct/>
+SELECT * {
+  ?p wdt:P664 | wdt:P1344 | wdt:P710 | wdt:P98 | wdt:P50 ?o1, ?o2, ?o3, ?o4
+}
+)";
+
+  h::expect(std::move(query), h::_);
+}
+
+// _____________________________________________________________________________
 TEST(QueryPlanner, ensureRegularJoinIsUsedIfTransitivePathIsAlreadyBound) {
   using namespace ::testing;
   auto qp = makeQueryPlanner();
@@ -3911,4 +3930,35 @@ TEST(QueryPlanner, NamedCachedResult) {
   // more detailed tests in `NamedResultCacheTest.cpp` check the correct
   // contents etc. of cached queries.
   h::expect(query, h::ExplicitIdTableOperation(3), qec);
+}
+
+// Regression tests for https://github.com/ad-freiburg/qlever/issues/2483
+TEST(QueryPlanner, PatternTrickWithMagicServiceQueries) {
+  h::expect(R"(
+PREFIX textSearch: <https://qlever.cs.uni-freiburg.de/textSearch/>
+SELECT ?p (COUNT(DISTINCT ?s) AS ?cnt) WHERE {
+  ?s ?p ?e
+  SERVICE textSearch: {
+    ?t textSearch:contains [ textSearch:word "olympic" ] .
+    ?t textSearch:contains [ textSearch:entity ?e ] .
+  }
+}
+GROUP BY ?p
+)",
+            h::_);
+
+  h::expect(R"(
+PREFIX qlss: <https://qlever.cs.uni-freiburg.de/spatialSearch/>
+SELECT ?p (COUNT(DISTINCT ?s) AS ?cnt) WHERE {
+  ?s ?p ?e .
+  ?x ?y ?z
+  SERVICE qlss: {
+    _:config qlss:left ?e ;
+             qlss:right ?z ;
+             qlss:maxDistance 500 .
+  }
+}
+GROUP BY ?p
+)",
+            h::_);
 }

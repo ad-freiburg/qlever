@@ -165,58 +165,126 @@ TEST(UnitOfMeasurementValueGetter, OperatorWithLiteralOrIri) {
 
 // _____________________________________________________________________________
 TEST(GeometryInfoValueGetterTest, OperatorWithVocabIdOrLiteral) {
+  GeoInfoTester t;
+  auto noGeoInfo = geoInfoMatcher(std::nullopt);
   static constexpr std::string_view line =
       "\"LINESTRING(2 2, 4 4)\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
-  checkGeoInfoFromLocalAndNormalVocabAndLiteral(
-      std::string{line}, ad_utility::GeometryInfo{2,
-                                                  {{2, 2}, {4, 4}},
-                                                  {3, 3},
-                                                  {1},
-                                                  getLengthForTesting(line),
-                                                  MetricArea{0}});
+  t.checkFromLocalAndNormalVocabAndLiteral(
+      std::string{line},
+      geoInfoMatcher(ad_utility::GeometryInfo{2,
+                                              {{2, 2}, {4, 4}},
+                                              {3, 3},
+                                              {1},
+                                              getLengthForTesting(line),
+                                              MetricArea{0}}));
   static constexpr std::string_view polygon =
-      "\"POLYGON(2 4, 4 4, 4 2, 2 2)\""
+      "\"POLYGON((2 4, 4 4, 4 2, 2 2))\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
-  checkGeoInfoFromLocalAndNormalVocabAndLiteral(
+  t.checkFromLocalAndNormalVocabAndLiteral(
       std::string{polygon},
-      ad_utility::GeometryInfo{3,
-                               {{2, 2}, {4, 4}},
-                               {3, 3},
-                               {1},
-                               getLengthForTesting(polygon),
-                               getAreaForTesting(polygon)});
-  checkGeoInfoFromLocalAndNormalVocabAndLiteral("\"someType\"^^<someType>",
-                                                std::nullopt);
-  checkGeoInfoFromLocalAndNormalVocabAndLiteral(
-      "\"anXsdString\"^^<http://www.w3.org/2001/XMLSchema#string>",
-      std::nullopt);
-  checkGeoInfoFromLocalAndNormalVocabAndLiteral("\"noType\"", std::nullopt);
-  checkGeoInfoFromLocalAndNormalVocabAndLiteral("<https://example.com/test>",
-                                                std::nullopt);
+      geoInfoMatcher(ad_utility::GeometryInfo{3,
+                                              {{2, 2}, {4, 4}},
+                                              {3, 3},
+                                              {1},
+                                              getLengthForTesting(polygon),
+                                              getAreaForTesting(polygon)}));
+  t.checkFromLocalAndNormalVocabAndLiteral("\"someType\"^^<someType>",
+                                           noGeoInfo);
+  t.checkFromLocalAndNormalVocabAndLiteral(
+      "\"anXsdString\"^^<http://www.w3.org/2001/XMLSchema#string>", noGeoInfo);
+  t.checkFromLocalAndNormalVocabAndLiteral("\"noType\"", noGeoInfo);
+  t.checkFromLocalAndNormalVocabAndLiteral("<https://example.com/test>",
+                                           noGeoInfo);
 }
 
 // _____________________________________________________________________________
 TEST(GeometryInfoValueGetterTest, OperatorWithIdGeoPoint) {
-  checkGeoInfoFromValueId(ValueId::makeFromGeoPoint({3, 2}),
-                          GeometryInfo{1,
-                                       {{3, 2}, {3, 2}},
-                                       {3, 2},
-                                       {1},
-                                       ad_utility::MetricLength{0},
-                                       MetricArea{0}});
-  checkGeoInfoFromValueId(ValueId::makeUndefined(), std::nullopt);
-  checkGeoInfoFromValueId(ValueId::makeFromBool(true), std::nullopt);
-  checkGeoInfoFromValueId(ValueId::makeFromInt(42), std::nullopt);
-  checkGeoInfoFromValueId(ValueId::makeFromDouble(42.01), std::nullopt);
+  GeoInfoTester t;
+  auto noGeoInfo = geoInfoMatcher(std::nullopt);
+  t.checkFromValueId(ValueId::makeFromGeoPoint({3, 2}),
+                     geoInfoMatcher(GeometryInfo{1,
+                                                 {{3, 2}, {3, 2}},
+                                                 {3, 2},
+                                                 {1},
+                                                 ad_utility::MetricLength{0},
+                                                 MetricArea{0}}));
+  t.checkFromValueId(ValueId::makeUndefined(), noGeoInfo);
+  t.checkFromValueId(ValueId::makeFromBool(true), noGeoInfo);
+  t.checkFromValueId(ValueId::makeFromInt(42), noGeoInfo);
+  t.checkFromValueId(ValueId::makeFromDouble(42.01), noGeoInfo);
 }
 
 // _____________________________________________________________________________
 TEST(GeometryInfoValueGetterTest, OperatorWithUnrelatedId) {
-  checkGeoInfoFromValueId(ValueId::makeUndefined(), std::nullopt);
-  checkGeoInfoFromValueId(ValueId::makeFromBool(true), std::nullopt);
-  checkGeoInfoFromValueId(ValueId::makeFromInt(42), std::nullopt);
-  checkGeoInfoFromValueId(ValueId::makeFromDouble(42.01), std::nullopt);
+  GeoInfoTester t;
+  auto noGeoInfo = geoInfoMatcher(std::nullopt);
+  t.checkFromValueId(ValueId::makeUndefined(), noGeoInfo);
+  t.checkFromValueId(ValueId::makeFromBool(true), noGeoInfo);
+  t.checkFromValueId(ValueId::makeFromInt(42), noGeoInfo);
+  t.checkFromValueId(ValueId::makeFromDouble(42.01), noGeoInfo);
+}
+
+// _____________________________________________________________________________
+TEST(GeoPointOrWktValueGetterTest, OperatorWithIdGeoPoint) {
+  GeoPointOrWktTester t;
+
+  GeoPoint p1{20, 30};
+  auto p1id = ValueId::makeFromGeoPoint(p1);
+  t.checkFromValueId(p1id, geoPointOrWktMatcher(p1));
+
+  GeoPoint p2{0, 0};
+  auto p2id = ValueId::makeFromGeoPoint(p2);
+  t.checkFromValueId(p2id, geoPointOrWktMatcher(p2));
+
+  auto noGeoInfoOrWkt = geoPointOrWktMatcher(std::nullopt);
+  t.checkFromValueId(ValueId::makeUndefined(), noGeoInfoOrWkt);
+  t.checkFromValueId(ValueId::makeFromBool(true), noGeoInfoOrWkt);
+  t.checkFromValueId(ValueId::makeFromInt(42), noGeoInfoOrWkt);
+  t.checkFromValueId(ValueId::makeFromDouble(42.01), noGeoInfoOrWkt);
+}
+
+// _____________________________________________________________________________
+TEST(GeoPointOrWktValueGetterTest, OperatorWithLit) {
+  checkGeoPointOrWktFromLocalAndNormalVocabAndLiteralForValid(
+      "\"LINESTRING(2 2, 4 4)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
+  checkGeoPointOrWktFromLocalAndNormalVocabAndLiteralForValid(
+      "\"POLYGON((2 4, 4 4, 4 2, 2 2))\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
+
+  GeoPointOrWktTester t;
+  auto noGeoInfoOrWkt = geoPointOrWktMatcher(std::nullopt);
+  t.checkFromLocalAndNormalVocabAndLiteral("\"someType\"^^<someType>",
+                                           noGeoInfoOrWkt);
+  t.checkFromLocalAndNormalVocabAndLiteral(
+      "\"anXsdString\"^^<http://www.w3.org/2001/XMLSchema#string>",
+      noGeoInfoOrWkt);
+  t.checkFromLocalAndNormalVocabAndLiteral("\"noType\"", noGeoInfoOrWkt);
+  t.checkFromLocalAndNormalVocabAndLiteral("<https://example.com/test>",
+                                           noGeoInfoOrWkt);
+}
+
+// _____________________________________________________________________________
+TEST(IntValueGetterTest, OperatorWithId) {
+  IntValueGetterTester t;
+  t.checkFromValueId(ValueId::makeFromInt(42), Eq(42));
+  t.checkFromValueId(ValueId::makeFromInt(-500), Eq(-500));
+  t.checkFromValueId(ValueId::makeFromBool(true), Eq(std::nullopt));
+  t.checkFromValueId(ValueId::makeUndefined(), Eq(std::nullopt));
+  t.checkFromValueId(ValueId::makeFromDouble(4.5), Eq(std::nullopt));
+  t.checkFromValueId(ValueId::makeFromGeoPoint({3, 4}), Eq(std::nullopt));
+}
+
+// _____________________________________________________________________________
+TEST(IntValueGetterTest, OperatorWithLit) {
+  IntValueGetterTester t;
+  auto noInt = Eq(std::nullopt);
+  t.checkFromLocalAndNormalVocabAndLiteral("\"someType\"^^<someType>", noInt);
+  t.checkFromLocalAndNormalVocabAndLiteral(
+      "\"anXsdString\"^^<http://www.w3.org/2001/XMLSchema#string>", noInt);
+  t.checkFromLocalAndNormalVocabAndLiteral("\"noType\"", noInt);
+  t.checkFromLocalAndNormalVocabAndLiteral("<https://example.com/test>", noInt);
 }
 
 };  // namespace
