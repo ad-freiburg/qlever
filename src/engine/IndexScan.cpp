@@ -35,7 +35,8 @@ IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
                      LocatedTriplesSnapshotPtr locatedTriplesSnapshot,
                      const SparqlTripleSimple& triple, Graphs graphsToFilter,
                      std::optional<ScanSpecAndBlocks> scanSpecAndBlocks,
-                     VarsToKeep varsToKeep)
+                     VarsToKeep varsToKeep,
+                     std::optional<size_t> precomputedSizeEstimate)
     : Operation(qec),
       permutation_(permutation),
       locatedTriplesSnapshot_(locatedTriplesSnapshot),
@@ -58,7 +59,12 @@ IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
     additionalColumns_.push_back(idx);
     additionalVariables_.push_back(variable);
   }
-  std::tie(sizeEstimateIsExact_, sizeEstimate_) = computeSizeEstimate();
+  if (precomputedSizeEstimate.has_value()) {
+    sizeEstimate_ = precomputedSizeEstimate.value();
+    sizeEstimateIsExact_ = true;
+  } else {
+    std::tie(sizeEstimateIsExact_, sizeEstimate_) = computeSizeEstimate();
+  }
 
   // Check the following invariant: All the variables must be at the end of the
   // permuted triple. For example in the PSO permutation, either only the O, or
@@ -77,11 +83,13 @@ IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
 IndexScan::IndexScan(QueryExecutionContext* qec,
                      Permutation::Enum permutationType,
                      const SparqlTripleSimple& triple, Graphs graphsToFilter,
-                     std::optional<ScanSpecAndBlocks> scanSpecAndBlocks)
+                     std::optional<ScanSpecAndBlocks> scanSpecAndBlocks,
+                     std::optional<size_t> precomputedSizeEstimate)
     : IndexScan(qec,
                 qec->getIndex().getImpl().getPermutationPtr(permutationType),
                 qec->sharedLocatedTriplesSnapshot(), triple,
-                std::move(graphsToFilter), std::move(scanSpecAndBlocks)) {}
+                std::move(graphsToFilter), std::move(scanSpecAndBlocks),
+                std::nullopt, precomputedSizeEstimate) {}
 
 // _____________________________________________________________________________
 IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
@@ -91,7 +99,8 @@ IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
                      std::vector<ColumnIndex> additionalColumns,
                      std::vector<Variable> additionalVariables,
                      Graphs graphsToFilter, ScanSpecAndBlocks scanSpecAndBlocks,
-                     bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep)
+                     bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep,
+                     std::optional<size_t> precomputedSizeEstimate)
     : Operation(qec),
       permutation_(permutation),
       locatedTriplesSnapshot_(locatedTriplesSnapshot),
@@ -105,10 +114,15 @@ IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
       additionalColumns_(std::move(additionalColumns)),
       additionalVariables_(std::move(additionalVariables)),
       varsToKeep_{std::move(varsToKeep)} {
-  AD_CONTRACT_CHECK(qec != nullptr);
-  AD_CONTRACT_CHECK(permutation_ != nullptr);
-  AD_CONTRACT_CHECK(locatedTriplesSnapshot_ != nullptr);
-  std::tie(sizeEstimateIsExact_, sizeEstimate_) = computeSizeEstimate();
+  if (precomputedSizeEstimate.has_value()) {
+    sizeEstimate_ = precomputedSizeEstimate.value();
+    sizeEstimateIsExact_ = true;
+  } else {
+    AD_CONTRACT_CHECK(qec != nullptr);
+    AD_CONTRACT_CHECK(permutation_ != nullptr);
+    AD_CONTRACT_CHECK(locatedTriplesSnapshot_ != nullptr);
+    std::tie(sizeEstimateIsExact_, sizeEstimate_) = computeSizeEstimate();
+  }
   determineMultiplicities();
 }
 
@@ -774,7 +788,7 @@ IndexScan::makeTreeWithStrippedColumns(
       _executionContext, permutation_, locatedTriplesSnapshot_, subject_,
       predicate_, object_, additionalColumns_, additionalVariables_,
       graphsToFilter_, scanSpecAndBlocks_, scanSpecAndBlocksIsPrefiltered_,
-      VarsToKeep{std::move(newVariables)});
+      VarsToKeep{std::move(newVariables)}, sizeEstimate_);
 }
 
 // _____________________________________________________________________________

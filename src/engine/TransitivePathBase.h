@@ -272,7 +272,8 @@ class TransitivePathBase : public Operation {
   // use `activeGraphs` and the optional `graphVariable`.
   static std::array<std::shared_ptr<QueryExecutionTree>, 2> makeIndexScanPair(
       QueryExecutionContext* qec, Graphs activeGraphs, const Variable& variable,
-      const std::optional<Variable>& graphVariable);
+      const std::optional<Variable>& graphVariable,
+      std::optional<size_t> precomputedSizeEstimate = std::nullopt);
 
   // Return an execution tree, that "joins" the given `tripleComponent` with all
   // the subjects or objects in the knowledge graph, so if the graph does not
@@ -280,7 +281,7 @@ class TransitivePathBase : public Operation {
   static std::shared_ptr<QueryExecutionTree> joinWithIndexScan(
       QueryExecutionContext* qec, Graphs activeGraphs,
       const std::optional<Variable>& graphVariable,
-      const TripleComponent& tripleComponent);
+      const TripleComponent& tripleComponent, size_t sizeEstimate);
 
   // Return an execution tree that represents one side of an empty path. This is
   // used as a starting point for evaluating the empty path and returns a single
