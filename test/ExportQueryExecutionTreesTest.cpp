@@ -18,6 +18,7 @@
 #include "util/IdTestHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/ParseableDuration.h"
+#include "util/RuntimeParametersTestHelpers.h"
 
 using namespace std::string_literals;
 using namespace std::chrono_literals;
@@ -139,6 +140,8 @@ struct TestCaseConstructQuery {
 void runSelectQueryTestCase(
     const TestCaseSelectQuery& testCase, bool useTextIndex = false,
     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::sparqlResultsJsonWithTime_>(false);
   auto trace = generateLocationTrace(l, "runSelectQueryTestCase");
   using enum ad_utility::MediaType;
   EXPECT_EQ(
@@ -181,6 +184,8 @@ void runSelectQueryTestCase(
 void runConstructQueryTestCase(
     const TestCaseConstructQuery& testCase,
     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::sparqlResultsJsonWithTime_>(false);
   auto trace = generateLocationTrace(l, "runConstructQueryTestCase");
   using enum ad_utility::MediaType;
   EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, tsv),
@@ -2239,4 +2244,30 @@ TEST(ExportQueryExecutionTrees, GetLiteralOrIriFromVocabIndexWithEncodedIris) {
     // Should successfully return some IRI or literal from vocabulary
     EXPECT_FALSE(vocabResult.toStringRepresentation().empty());
   }
+}
+
+// Test that a `sparql-results+json` export includes a `meta` field when the
+// respective runtime parameter is enabled.
+TEST(ExportQueryExecutionTrees, SparqlJsonWithMetaField) {
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::sparqlResultsJsonWithTime_>(true);
+
+  std::string kg = "<x> <y> <z>";
+  std::string query = "SELECT ?s ?p ?o WHERE {?s ?p ?o}";
+
+  auto result = runJSONQuery(kg, query, ad_utility::MediaType::sparqlJson);
+
+  // Verify the standard fields exist.
+  ASSERT_TRUE(result.contains("head"));
+  ASSERT_TRUE(result.contains("results"));
+  ASSERT_TRUE(result["head"].contains("vars"));
+
+  // Verify the `meta` field exists and the `query-time-ms` subfield exists and
+  // has a non-negative numeric value.
+  ASSERT_TRUE(result.contains("meta"));
+  ASSERT_TRUE(result["meta"].contains("query-time-ms"));
+  EXPECT_TRUE(result["meta"]["query-time-ms"].is_number());
+  EXPECT_GE(result["meta"]["query-time-ms"].get<int64_t>(), 0);
+  EXPECT_TRUE(result["meta"]["result-num-rows"].is_number());
+  EXPECT_EQ(result["meta"]["result-num-rows"].get<int64_t>(), 1);
 }

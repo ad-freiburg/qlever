@@ -242,7 +242,7 @@ class ExportQueryExecutionTrees {
       const QueryExecutionTree& qet,
       const parsedQuery::SelectClause& selectClause,
       LimitOffsetClause limitAndOffset, CancellationHandle cancellationHandle,
-      STREAMABLE_YIELDER_ARG_DECL);
+      const ad_utility::Timer& requestTimer, STREAMABLE_YIELDER_ARG_DECL);
 
   // Public for testing.
  public:
