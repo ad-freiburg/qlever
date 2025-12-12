@@ -570,6 +570,10 @@ CPP_concept IsProjectionFunction =
     InvocableWithExactReturnType<T, DPoint, const DPoint&>;
 static_assert(IsProjectionFunction<WebMercatorProjection>);
 
+// Helper for `UtilGeomProjectionVisitor`.
+template <typename T>
+CPP_concept VectorBasedGeometry = isVector<T> || SimilarTo<T, DLine>;
+
 // Helper to translate the coordinates of a given geometry to another projection
 // (the projection is applied to each coordinate pair).
 CPP_template(typename Projection)(
@@ -580,8 +584,8 @@ CPP_template(typename Projection)(
 
   // Transform collections (might be called recursively, for example for points
   // in a `MultiLine`).
-  CPP_template(typename T)(requires(isVector<T> || SimilarTo<T, DLine>)) T
-  operator()(T multi) const {
+  CPP_template(typename T)(requires VectorBasedGeometry<T>) T operator()(
+      T multi) const {
     ql::ranges::transform(multi, multi.begin(), *this);
     return multi;
   };
