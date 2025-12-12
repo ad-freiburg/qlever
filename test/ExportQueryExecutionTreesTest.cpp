@@ -27,25 +27,6 @@ using ::testing::EndsWith;
 using ::testing::Eq;
 using ::testing::HasSubstr;
 
-// Test environment to set the `sparql-results-json-with-time` parameter
-// to `false` for all tests in this file by default.
-class ExportTestEnvironment : public ::testing::Environment {
- public:
-  void SetUp() override {
-    // Disable the meta field in SPARQL JSON results for these tests
-    setRuntimeParameter<&RuntimeParameters::sparqlResultsJsonWithTime_>(false);
-  }
-
-  void TearDown() override {
-    // Restore the default value
-    setRuntimeParameter<&RuntimeParameters::sparqlResultsJsonWithTime_>(true);
-  }
-};
-
-// Register the test environment
-[[maybe_unused]] static ::testing::Environment* const exportTestEnv =
-    ::testing::AddGlobalTestEnvironment(new ExportTestEnvironment);
-
 namespace {
 auto parseQuery(std::string query,
                 const std::vector<DatasetClause>& datasets = {}) {
@@ -159,6 +140,8 @@ struct TestCaseConstructQuery {
 void runSelectQueryTestCase(
     const TestCaseSelectQuery& testCase, bool useTextIndex = false,
     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::sparqlResultsJsonWithTime_>(false);
   auto trace = generateLocationTrace(l, "runSelectQueryTestCase");
   using enum ad_utility::MediaType;
   EXPECT_EQ(
@@ -201,6 +184,8 @@ void runSelectQueryTestCase(
 void runConstructQueryTestCase(
     const TestCaseConstructQuery& testCase,
     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::sparqlResultsJsonWithTime_>(false);
   auto trace = generateLocationTrace(l, "runConstructQueryTestCase");
   using enum ad_utility::MediaType;
   EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, tsv),
@@ -2283,4 +2268,6 @@ TEST(ExportQueryExecutionTrees, SparqlJsonWithMetaField) {
   ASSERT_TRUE(result["meta"].contains("query-time-ms"));
   EXPECT_TRUE(result["meta"]["query-time-ms"].is_number());
   EXPECT_GE(result["meta"]["query-time-ms"].get<int64_t>(), 0);
+  EXPECT_TRUE(result["meta"]["result-num-rows"].is_number());
+  EXPECT_EQ(result["meta"]["result-num-rows"].get<int64_t>(), 1);
 }
