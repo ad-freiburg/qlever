@@ -601,7 +601,7 @@ CPP_template(typename Projection)(
   DAnyGeometry operator()(DAnyGeometry anyGeom) const {
     return visitAnyGeometry(
         [this](const auto& contained) {
-          return DAnyGeometry{(*this)(contained)};
+          return DAnyGeometry{(*this)(std::move(contained))};
         },
         std::move(anyGeom));
   }
