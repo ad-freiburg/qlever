@@ -637,6 +637,11 @@ CPP_template(typename Projection)(
 static constexpr UtilGeomProjectionVisitor<WebMercatorProjection>
     projectWebMerc;
 
+// Helper for `MetricDistanceVisitor`.
+template <typename T, typename U>
+CPP_concept IsPairOfUtilGeoms =
+    SimilarToAnyTypeIn<T, ParsedWkt> && SimilarToAnyTypeIn<U, ParsedWkt>;
+
 // Visitor to compute the distance in meters given a geometry that has been
 // converted to web mercator projection.
 struct MetricDistanceVisitor {
@@ -646,9 +651,7 @@ struct MetricDistanceVisitor {
   }
 
   // Delegate the actual distance computation to `pb_util`.
-  CPP_template(typename T, typename U)(
-      requires(SimilarToAnyTypeIn<T, ParsedWkt> CPP_and
-                   SimilarToAnyTypeIn<U, ParsedWkt>)) double
+  CPP_template(typename T, typename U)(requires IsPairOfUtilGeoms<T, U>) double
   operator()(const T& a, const U& b) const {
     return util::geo::webMercMeterDist<T, U>(a, b);
   }
