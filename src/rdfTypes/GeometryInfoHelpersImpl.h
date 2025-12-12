@@ -600,7 +600,10 @@ CPP_template(typename Projection)(
   // Unwrap dynamic `AnyGeometry` container type.
   DAnyGeometry operator()(DAnyGeometry anyGeom) const {
     return visitAnyGeometry(
-        [this](auto contained) {
+        [this](auto&& contained) {
+          // TODO<ullingerc> `AnyGeometry` should allow moving out its contained
+          // value. Then this can be:
+          // `static_assert(std::is_rvalue_reference_v<decltype(contained)>);`
           return DAnyGeometry{(*this)(std::move(contained))};
         },
         std::move(anyGeom));
@@ -609,7 +612,8 @@ CPP_template(typename Projection)(
   // Handle `ParsedWkt` variant.
   ParsedWkt operator()(ParsedWkt geom) const {
     return std::visit(
-        [this](auto contained) {
+        [this](auto&& contained) {
+          static_assert(std::is_rvalue_reference_v<decltype(contained)>);
           return ParsedWkt{(*this)(std::move(contained))};
         },
         std::move(geom));
