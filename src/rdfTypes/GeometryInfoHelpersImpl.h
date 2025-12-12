@@ -642,11 +642,7 @@ static constexpr UtilGeomProjectionVisitor<WebMercatorProjection>
 struct MetricDistanceVisitor {
   // Handle `ParsedWkt` variant.
   double operator()(const ParsedWkt& a, const ParsedWkt& b) const {
-    return std::visit(
-        [](const auto& a, const auto& b) {
-          return MetricDistanceVisitor{}(a, b);
-        },
-        a, b);
+    return std::visit(MetricDistanceVisitor{}, a, b);
   }
 
   // Delegate the actual distance computation to `pb_util`.
