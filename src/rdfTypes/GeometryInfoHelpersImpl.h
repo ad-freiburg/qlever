@@ -584,7 +584,7 @@ CPP_template(typename Projection)(
 
   // Transform collections (might be called recursively, for example for points
   // in a `MultiLine`).
-  CPP_template(typename T)(requires VectorBasedGeometry<T>) T operator()(
+  CPP_template_2(typename T)(requires VectorBasedGeometry<T>) T operator()(
       T multi) const {
     ql::ranges::transform(multi, multi.begin(), *this);
     return multi;
@@ -616,7 +616,7 @@ CPP_template(typename Projection)(
   }
 
   // Handle values contained in `std::optional`.
-  CPP_template(typename T)(
+  CPP_template_2(typename T)(
       requires(!SimilarTo<T, GeoPointOrWkt>)) std::optional<T>
   operator()(std::optional<T> opt) const {
     if (!opt.has_value()) {
