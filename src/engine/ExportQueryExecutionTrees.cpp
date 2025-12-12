@@ -1140,7 +1140,8 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
   // Optionally add field `meta` with timing information.
   if (getRuntimeParameter<&RuntimeParameters::sparqlResultsJsonWithTime_>()) {
     auto timeMs = requestTimer.msecs().count();
-    STREAMABLE_YIELD(absl::StrCat(R"(,"meta":{"query-time-ms":)", timeMs, "}"));
+    STREAMABLE_YIELD(absl::StrCat(R"(,"meta":{"query-time-ms":)", timeMs,
+                                  R"(,"result-num-rows":)", resultSize, "}"));
   }
 
   STREAMABLE_YIELD("}");
@@ -1154,7 +1155,7 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
     const QueryExecutionTree& qet,
     const parsedQuery::SelectClause& selectClause,
     LimitOffsetClause limitAndOffset, CancellationHandle cancellationHandle,
-    [[maybe_unused]] const ad_utility::Timer& requestTimer,
+    const ad_utility::Timer& requestTimer,
     [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
   (void)qet;
   (void)selectClause;
