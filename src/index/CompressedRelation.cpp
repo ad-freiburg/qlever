@@ -1608,12 +1608,22 @@ auto CompressedRelationWriter::createPermutationPair(
     const std::string& basename, WriterAndCallback writerAndCallback1,
     WriterAndCallback writerAndCallback2,
     ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
-    qlever::KeyOrder permutation,
-    const std::vector<std::function<void(const IdTableStatic<0>&)>>&
-        perBlockCallbacks) -> PermutationPairResult {
-  PermutationWriter permutationWriter{
+    qlever::KeyOrder permutation, const PerBlockCallbacks& perBlockCallbacks)
+    -> PermutationPairResult {
+  PermutationWriter<true> permutationWriter{
       basename, std::move(writerAndCallback1), std::move(writerAndCallback2),
       std::move(permutation), perBlockCallbacks};
+  return permutationWriter.writePermutation(std::move(sortedTriples));
+}
+
+// _____________________________________________________________________________
+auto CompressedRelationWriter::createPermutation(
+    WriterAndCallback writerAndCallback,
+    ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
+    qlever::KeyOrder permutation, const PerBlockCallbacks& perBlockCallbacks)
+    -> PermutationSingleResult {
+  PermutationWriter<false> permutationWriter{
+      std::move(writerAndCallback), std::move(permutation), perBlockCallbacks};
   return permutationWriter.writePermutation(std::move(sortedTriples));
 }
 
