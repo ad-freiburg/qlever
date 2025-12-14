@@ -2264,11 +2264,11 @@ TEST(ExportQueryExecutionTrees, SparqlJsonWithMetaField) {
     ASSERT_TRUE(result["head"].contains("vars"));
     ASSERT_TRUE(result.contains("meta"));
     ASSERT_TRUE(result["meta"].contains("query-time-ms"));
-    ASSERT_TRUE(result["meta"].contains("result-num-rows"));
+    ASSERT_TRUE(result["meta"].contains("result-size-total"));
     ASSERT_TRUE(result["meta"]["query-time-ms"].is_number());
-    ASSERT_TRUE(result["meta"]["result-num-rows"].is_number());
+    ASSERT_TRUE(result["meta"]["result-size-total"].is_number());
     EXPECT_GE(result["meta"]["query-time-ms"].get<int64_t>(), 0);
-    EXPECT_EQ(result["meta"]["result-num-rows"].get<int64_t>(), 1);
+    EXPECT_EQ(result["meta"]["result-size-total"].get<int64_t>(), 1);
   }
 
   // Case 2: Runtime parameter disabled.

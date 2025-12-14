@@ -1141,7 +1141,7 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
   if (getRuntimeParameter<&RuntimeParameters::sparqlResultsJsonWithTime_>()) {
     auto timeMs = requestTimer.msecs().count();
     STREAMABLE_YIELD(absl::StrCat(R"(,"meta":{"query-time-ms":)", timeMs,
-                                  R"(,"result-num-rows":)", resultSize, "}"));
+                                  R"(,"result-size-total":)", resultSize, "}"));
   }
 
   STREAMABLE_YIELD("}");
