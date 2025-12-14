@@ -123,7 +123,7 @@ struct RuntimeParameters {
                                       "treat-default-graph-as-named-graph"};
 
   // If set, each `sparql-results+json` results will include a top-level "meta"
-  // field with timing information in "time-ms".
+  // field with information about query execution time and result size.
   Bool sparqlResultsJsonWithTime_{true, "sparql-results-json-with-time"};
 
   // ___________________________________________________________________________

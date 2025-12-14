@@ -67,7 +67,8 @@ std::string runQueryStreamableResult(
 // as JSON. `mediaType` must be `sparqlJSON` or `qleverJSON`.
 nlohmann::json runJSONQuery(const std::string& kg, const std::string& query,
                             ad_utility::MediaType mediaType,
-                            bool useTextIndex = false) {
+                            bool useTextIndex = false,
+                            std::optional<size_t> exportLimit = std::nullopt) {
   ad_utility::testing::TestIndexConfig config{kg};
   config.createTextIndex = useTextIndex;
   auto qec = ad_utility::testing::getQec(std::move(config));
@@ -78,6 +79,7 @@ nlohmann::json runJSONQuery(const std::string& kg, const std::string& query,
       std::make_shared<ad_utility::CancellationHandle<>>();
   QueryPlanner qp{qec, cancellationHandle};
   auto pq = parseQuery(query);
+  pq._limitOffset.exportLimit_ = exportLimit;
   auto qet = qp.createExecutionTree(pq);
   ad_utility::Timer timer{ad_utility::Timer::Started};
   std::string resStr;
@@ -2246,28 +2248,37 @@ TEST(ExportQueryExecutionTrees, GetLiteralOrIriFromVocabIndexWithEncodedIris) {
   }
 }
 
-// Test that a `sparql-results+json` export includes a `meta` field when the
-// respective runtime parameter is enabled.
+// Test that a `sparql-results+json` export includes a `meta` field if and
+// only if the respective runtime parameter is enabled.
 TEST(ExportQueryExecutionTrees, SparqlJsonWithMetaField) {
-  auto cleanup = setRuntimeParameterForTest<
-      &RuntimeParameters::sparqlResultsJsonWithTime_>(true);
-
   std::string kg = "<x> <y> <z>";
   std::string query = "SELECT ?s ?p ?o WHERE {?s ?p ?o}";
 
-  auto result = runJSONQuery(kg, query, ad_utility::MediaType::sparqlJson);
+  // Case 1: Runtime parameter enabled (default).
+  {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::sparqlResultsJsonWithTime_>(true);
+    auto result = runJSONQuery(kg, query, ad_utility::MediaType::sparqlJson);
+    ASSERT_TRUE(result.contains("head"));
+    ASSERT_TRUE(result.contains("results"));
+    ASSERT_TRUE(result["head"].contains("vars"));
+    ASSERT_TRUE(result.contains("meta"));
+    ASSERT_TRUE(result["meta"].contains("query-time-ms"));
+    ASSERT_TRUE(result["meta"].contains("result-num-rows"));
+    ASSERT_TRUE(result["meta"]["query-time-ms"].is_number());
+    ASSERT_TRUE(result["meta"]["result-num-rows"].is_number());
+    EXPECT_GE(result["meta"]["query-time-ms"].get<int64_t>(), 0);
+    EXPECT_EQ(result["meta"]["result-num-rows"].get<int64_t>(), 1);
+  }
 
-  // Verify the standard fields exist.
-  ASSERT_TRUE(result.contains("head"));
-  ASSERT_TRUE(result.contains("results"));
-  ASSERT_TRUE(result["head"].contains("vars"));
-
-  // Verify the `meta` field exists and the `query-time-ms` subfield exists and
-  // has a non-negative numeric value.
-  ASSERT_TRUE(result.contains("meta"));
-  ASSERT_TRUE(result["meta"].contains("query-time-ms"));
-  EXPECT_TRUE(result["meta"]["query-time-ms"].is_number());
-  EXPECT_GE(result["meta"]["query-time-ms"].get<int64_t>(), 0);
-  EXPECT_TRUE(result["meta"]["result-num-rows"].is_number());
-  EXPECT_EQ(result["meta"]["result-num-rows"].get<int64_t>(), 1);
+  // Case 2: Runtime parameter disabled.
+  {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::sparqlResultsJsonWithTime_>(false);
+    auto result = runJSONQuery(kg, query, ad_utility::MediaType::sparqlJson);
+    ASSERT_TRUE(result.contains("head"));
+    ASSERT_TRUE(result.contains("results"));
+    ASSERT_TRUE(result["head"].contains("vars"));
+    ASSERT_FALSE(result.contains("meta"));
+  }
 }
