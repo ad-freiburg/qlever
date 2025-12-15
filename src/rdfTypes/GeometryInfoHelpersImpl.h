@@ -604,7 +604,7 @@ CPP_template(typename Projection)(
           // TODO<ullingerc> `AnyGeometry` should allow moving out its contained
           // value. Then this can be:
           // `static_assert(std::is_rvalue_reference_v<decltype(contained)>);`
-          return DAnyGeometry{(*this)(std::move(contained))};
+          return DAnyGeometry{(*this)(AD_FWD(contained))};
         },
         std::move(anyGeom));
   }
@@ -614,7 +614,7 @@ CPP_template(typename Projection)(
     return std::visit(
         [this](auto&& contained) {
           static_assert(std::is_rvalue_reference_v<decltype(contained)>);
-          return ParsedWkt{(*this)(std::move(contained))};
+          return ParsedWkt{(*this)(AD_FWD(contained))};
         },
         std::move(geom));
   }
