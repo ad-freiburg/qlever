@@ -305,7 +305,8 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
                                                  Variable{columnNames.at(2)}};
 
   // Read permutation
-  permutation_->loadFromDisk(filename, [](Id) { return false; }, false);
+  permutation_->loadFromDisk(
+      filename, [](Id) { return false; }, false);
   AD_CORRECTNESS_CHECK(permutation_->isLoaded());
 }
 
