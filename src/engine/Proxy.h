@@ -16,23 +16,29 @@
 #include "parser/ProxyQuery.h"
 #include "util/http/HttpClient.h"
 
-// The operation for the magic `SERVICE qlproxy:`. Sends payload bindings
-// to a remote endpoint and receives result bindings back. For example,
+// The operation for the magic `SERVICE qlproxy:`. Sends input bindings
+// to a remote endpoint and receives output bindings back. For example,
 //
 //   SERVICE qlproxy: {
 //     _:config qlproxy:endpoint <https://example.org/api> ;
-//              qlproxy:payload_first ?num1 ;
-//              qlproxy:payload_second ?num2 ;
-//              qlproxy:result_res ?result ;
-//              qlproxy:param_operation "add" .
+//              qlproxy:input-first ?num1 ;
+//              qlproxy:input-second ?num2 ;
+//              qlproxy:output-result ?result ;
+//              qlproxy:output-row ?row ;
+//              qlproxy:param-operation "add" .
 //   }
 //
 // This sends bindings for `?num1` as "first" and `?num2` as "second" to the
-// given endpoint. The `qlproxy:param_...` values are sent as URL parameters,
-// e.g., here `operation=add`. The service expects bindings for "res" in the
+// given endpoint. The `qlproxy:param-...` values are sent as URL parameters,
+// e.g., here `operation=add`. The service expects bindings for "result" in the
 // response, which are mapped to `?result`.
 //
-// The payload variables come from the enclosing graph pattern (sibling
+// The `output-row` variable is used to join the response with the input rows.
+// The input bindings include a 1-based row index (named after the row
+// variable), and the endpoint must return this index in each output binding to
+// specify which input row the output corresponds to.
+//
+// The input variables come from the enclosing graph pattern (sibling
 // operations), which is added as a child of this operation by the query
 // planner.
 class Proxy : public Operation {
@@ -40,7 +46,7 @@ class Proxy : public Operation {
   // The configuration from the parsed query.
   parsedQuery::ProxyConfiguration config_;
 
-  // The child operation that provides the payload variable bindings.
+  // The child operation that provides the input variable bindings.
   // This is set by the query planner when joining with sibling operations.
   std::optional<std::shared_ptr<QueryExecutionTree>> childOperation_;
 
@@ -54,20 +60,20 @@ class Proxy : public Operation {
  public:
   // Construct from configuration. The child operation is optional and will be
   // added by the query planner when joining with sibling operations that
-  // provide the payload variables.
+  // provide the input variables.
   Proxy(QueryExecutionContext* qec, parsedQuery::ProxyConfiguration config,
         std::optional<std::shared_ptr<QueryExecutionTree>> childOperation =
             std::nullopt,
         SendRequestType sendRequestFunction = sendHttpOrHttpsRequest);
 
-  // Add a child operation that provides the payload variable bindings.
+  // Add a child operation that provides the input variable bindings.
   // Returns a new `Proxy` with the child added.
   std::shared_ptr<Proxy> addChild(
       std::shared_ptr<QueryExecutionTree> child) const;
 
   // Check if the proxy is fully constructed (has a child, or doesn't need one).
   bool isConstructed() const {
-    return childOperation_.has_value() || config_.payloadVariables_.empty();
+    return childOperation_.has_value() || config_.inputVariables_.empty();
   }
 
   // Methods inherited from Operation.
@@ -86,11 +92,19 @@ class Proxy : public Operation {
   std::string getCacheKeyImpl() const override;
   Result computeResult(bool requestLaziness) override;
 
-  // Serialize payload bindings from the child result as SPARQL Results JSON.
-  std::string serializePayloadAsJson(const Result& childResult) const;
+  // Serialize input bindings from the child result as SPARQL Results JSON.
+  // Includes row indices for joining.
+  std::string serializeInputAsJson(const Result& childResult) const;
 
   // Build the URL with query parameters.
   std::string buildUrlWithParams() const;
+
+  // Join the proxy response with the child result based on the row variable.
+  IdTable joinResponseWithChild(const IdTable& responseTable,
+                                ColumnIndex responseRowCol,
+                                const IdTable& childTable,
+                                const LocalVocab& childLocalVocab,
+                                LocalVocab& resultLocalVocab) const;
 };
 
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17

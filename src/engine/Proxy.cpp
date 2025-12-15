@@ -52,26 +52,55 @@ std::string Proxy::getDescriptor() const {
 }
 
 // ____________________________________________________________________________
-size_t Proxy::getResultWidth() const { return config_.resultVariables_.size(); }
+size_t Proxy::getResultWidth() const {
+  if (!childOperation_.has_value() && !config_.inputVariables_.empty()) {
+    // Before construction and we need input variables: advertise them for
+    // joining.
+    return config_.inputVariables_.size();
+  } else if (!childOperation_.has_value()) {
+    // No child and no input variables: output variables + row variable.
+    return config_.outputVariables_.size() + 1;
+  }
+  // After construction: child columns + output columns + row variable.
+  return childOperation_.value()->getResultWidth() +
+         config_.outputVariables_.size() + 1;
+}
 
 // ____________________________________________________________________________
 VariableToColumnMap Proxy::computeVariableToColumnMap() const {
   VariableToColumnMap map;
 
-  if (!childOperation_.has_value() && !config_.payloadVariables_.empty()) {
-    // When not yet constructed and we need payload variables, advertise them
+  if (!childOperation_.has_value() && !config_.inputVariables_.empty()) {
+    // When not yet constructed and we need input variables, advertise them
     // so the query planner knows what to join with.
-    for (size_t i = 0; i < config_.payloadVariables_.size(); ++i) {
-      const auto& [name, var] = config_.payloadVariables_[i];
+    for (size_t i = 0; i < config_.inputVariables_.size(); ++i) {
+      const auto& [name, var] = config_.inputVariables_[i];
       map[var] = makePossiblyUndefinedColumn(i);
     }
+  } else if (childOperation_.has_value()) {
+    // When constructed, return child variables + output variables + row
+    // variable.
+    const auto& childVarColMap = childOperation_.value()->getVariableColumns();
+    for (const auto& [var, colInfo] : childVarColMap) {
+      map[var] = colInfo;
+    }
+    // Output variables come after child columns.
+    size_t childWidth = childOperation_.value()->getResultWidth();
+    for (size_t i = 0; i < config_.outputVariables_.size(); ++i) {
+      const auto& [name, var] = config_.outputVariables_[i];
+      map[var] = makePossiblyUndefinedColumn(childWidth + i);
+    }
+    // Row variable comes last.
+    map[config_.rowVariable_.second] = makePossiblyUndefinedColumn(
+        childWidth + config_.outputVariables_.size());
   } else {
-    // When constructed (or no payload variables needed), return result
-    // variables.
-    for (size_t i = 0; i < config_.resultVariables_.size(); ++i) {
-      const auto& [name, var] = config_.resultVariables_[i];
+    // No input variables and no child: just output variables + row variable.
+    for (size_t i = 0; i < config_.outputVariables_.size(); ++i) {
+      const auto& [name, var] = config_.outputVariables_[i];
       map[var] = makePossiblyUndefinedColumn(i);
     }
+    map[config_.rowVariable_.second] =
+        makePossiblyUndefinedColumn(config_.outputVariables_.size());
   }
   return map;
 }
@@ -122,31 +151,32 @@ std::string Proxy::buildUrlWithParams() const {
 }
 
 // ____________________________________________________________________________
-std::string Proxy::serializePayloadAsJson(const Result& childResult) const {
+std::string Proxy::serializeInputAsJson(const Result& childResult) const {
   nlohmann::json result;
 
-  // Build the "head" section with variable names.
+  // Build the "head" section with variable names, including the row variable.
   std::vector<std::string> varNames;
-  for (const auto& [name, var] : config_.payloadVariables_) {
+  varNames.push_back(config_.rowVariable_.first);  // Row variable first
+  for (const auto& [name, var] : config_.inputVariables_) {
     varNames.push_back(name);
   }
   result["head"]["vars"] = varNames;
 
-  // Get the column indices for payload variables from the child result.
+  // Get the column indices for input variables from the child result.
   const auto& childVarColMap = childOperation_.value()->getVariableColumns();
-  std::vector<std::pair<std::string, ColumnIndex>> payloadColumns;
-  for (const auto& [name, var] : config_.payloadVariables_) {
+  std::vector<std::pair<std::string, ColumnIndex>> inputColumns;
+  for (const auto& [name, var] : config_.inputVariables_) {
     auto it = childVarColMap.find(var);
     if (it == childVarColMap.end()) {
       throw std::runtime_error(
-          absl::StrCat("Payload variable ", var.name(),
+          absl::StrCat("Input variable ", var.name(),
                        " not found in input. Available variables: ",
                        absl::StrJoin(childVarColMap, ", ",
                                      [](std::string* out, const auto& p) {
                                        absl::StrAppend(out, p.first.name());
                                      })));
     }
-    payloadColumns.emplace_back(name, it->second.columnIndex_);
+    inputColumns.emplace_back(name, it->second.columnIndex_);
   }
 
   // Build the "results.bindings" array.
@@ -156,7 +186,14 @@ std::string Proxy::serializePayloadAsJson(const Result& childResult) const {
 
   for (size_t row = 0; row < idTable.size(); ++row) {
     nlohmann::json binding;
-    for (const auto& [name, colIdx] : payloadColumns) {
+
+    // Add the row index as an integer literal (1-based for user visibility).
+    binding[config_.rowVariable_.first] = {
+        {"type", "literal"},
+        {"value", std::to_string(row + 1)},
+        {"datatype", "http://www.w3.org/2001/XMLSchema#integer"}};
+
+    for (const auto& [name, colIdx] : inputColumns) {
       Id id = idTable(row, colIdx);
       if (id.isUndefined()) {
         // Skip undefined values (they won't appear in the binding).
@@ -224,8 +261,68 @@ std::string Proxy::serializePayloadAsJson(const Result& childResult) const {
 }
 
 // ____________________________________________________________________________
+IdTable Proxy::joinResponseWithChild(const IdTable& responseTable,
+                                     ColumnIndex responseRowCol,
+                                     const IdTable& childTable,
+                                     const LocalVocab& childLocalVocab,
+                                     LocalVocab& resultLocalVocab) const {
+  // Result width: child columns + output columns + row variable.
+  size_t childWidth = childTable.numColumns();
+  size_t outputWidth = config_.outputVariables_.size();
+  IdTable result{childWidth + outputWidth + 1,
+                 getExecutionContext()->getAllocator()};
+
+  // Merge local vocabs.
+  resultLocalVocab.mergeWith(std::span{&childLocalVocab, 1});
+
+  // For each response row, look up the child row by the row index and combine.
+  for (size_t respRow = 0; respRow < responseTable.size(); ++respRow) {
+    checkCancellation();
+
+    // Get the row index from the response (1-based).
+    Id rowId = responseTable(respRow, responseRowCol);
+    if (rowId.getDatatype() != Datatype::Int) {
+      throw std::runtime_error(
+          "qlproxy endpoint returned non-integer row index");
+    }
+    int64_t rowIdx1Based = rowId.getInt();
+    if (rowIdx1Based < 1 ||
+        static_cast<size_t>(rowIdx1Based) > childTable.size()) {
+      throw std::runtime_error(absl::StrCat(
+          "qlproxy endpoint returned invalid row index: ", rowIdx1Based,
+          " (expected 1 to ", childTable.size(), ")"));
+    }
+    size_t rowIdx = static_cast<size_t>(rowIdx1Based - 1);
+
+    // Add a new row to the result.
+    result.emplace_back();
+    size_t resultRow = result.size() - 1;
+
+    // Copy child columns.
+    for (size_t col = 0; col < childWidth; ++col) {
+      result(resultRow, col) = childTable(rowIdx, col);
+    }
+
+    // Copy output columns (skip the row column in response).
+    size_t outputCol = 0;
+    for (size_t col = 0; col < responseTable.numColumns(); ++col) {
+      if (col == responseRowCol) {
+        continue;  // Skip the row variable column.
+      }
+      result(resultRow, childWidth + outputCol) = responseTable(respRow, col);
+      ++outputCol;
+    }
+
+    // Row variable comes last.
+    result(resultRow, childWidth + outputWidth) = rowId;
+  }
+
+  return result;
+}
+
+// ____________________________________________________________________________
 Result Proxy::computeResult([[maybe_unused]] bool requestLaziness) {
-  // First, compute the child result to get payload bindings.
+  // First, compute the child result to get input bindings.
   std::shared_ptr<const Result> childResult;
   if (childOperation_.has_value()) {
     childResult = childOperation_.value()->getResult();
@@ -235,15 +332,16 @@ Result Proxy::computeResult([[maybe_unused]] bool requestLaziness) {
   std::string urlStr = buildUrlWithParams();
   ad_utility::httpUtils::Url url{urlStr};
 
-  // Serialize payload as SPARQL Results JSON.
+  // Serialize input as SPARQL Results JSON (includes row indices).
   std::string payload;
-  if (childResult && !config_.payloadVariables_.empty()) {
-    payload = serializePayloadAsJson(*childResult);
+  if (childResult) {
+    payload = serializeInputAsJson(*childResult);
   } else {
-    // Empty payload - still send valid JSON structure.
+    // Empty payload - still send valid JSON structure with row variable.
     nlohmann::json emptyResult;
     std::vector<std::string> varNames;
-    for (const auto& [name, var] : config_.payloadVariables_) {
+    varNames.push_back(config_.rowVariable_.first);
+    for (const auto& [name, var] : config_.inputVariables_) {
       varNames.push_back(name);
     }
     emptyResult["head"]["vars"] = varNames;
@@ -283,15 +381,19 @@ Result Proxy::computeResult([[maybe_unused]] bool requestLaziness) {
   auto body = ad_utility::LazyJsonParser::parse(std::move(response.body_),
                                                 {"results", "bindings"});
 
-  // Build the result variable names (without ? prefix).
-  std::vector<std::string> resultVarNames;
-  for (const auto& [name, var] : config_.resultVariables_) {
-    resultVarNames.push_back(name);
+  // Build the response variable names: row variable first, then output vars.
+  const std::string& rowVarName = config_.rowVariable_.first;
+  std::vector<std::string> responseVarNames;
+  responseVarNames.push_back(rowVarName);
+  for (const auto& [name, var] : config_.outputVariables_) {
+    responseVarNames.push_back(name);
   }
 
-  // Create the result table.
-  IdTable idTable{getResultWidth(), getExecutionContext()->getAllocator()};
-  LocalVocab localVocab;
+  // Create a temporary table for the response (row var + output vars).
+  // The row variable is at column 0.
+  size_t responseWidth = responseVarNames.size();
+  IdTable responseTable{responseWidth, getExecutionContext()->getAllocator()};
+  LocalVocab responseLocalVocab;
   ad_utility::HashMap<std::string, Id> blankNodeMap;
 
   for (const nlohmann::json& partJson : body) {
@@ -304,28 +406,64 @@ Result Proxy::computeResult([[maybe_unused]] bool requestLaziness) {
     }
 
     for (const auto& binding : partJson["results"]["bindings"]) {
-      idTable.emplace_back();
-      size_t rowIdx = idTable.size() - 1;
+      // Check that the row variable is present.
+      if (!binding.contains(rowVarName)) {
+        throw std::runtime_error(absl::StrCat(
+            "qlproxy endpoint response missing required row variable '",
+            rowVarName, "'"));
+      }
 
-      for (size_t colIdx = 0; colIdx < resultVarNames.size(); ++colIdx) {
-        const std::string& varName = resultVarNames[colIdx];
+      responseTable.emplace_back();
+      size_t rowIdx = responseTable.size() - 1;
+
+      for (size_t colIdx = 0; colIdx < responseVarNames.size(); ++colIdx) {
+        const std::string& varName = responseVarNames[colIdx];
         TripleComponent tc;
         if (binding.contains(varName)) {
           tc = sparqlJsonBindingUtils::bindingToTripleComponent(
-              binding[varName], getIndex(), blankNodeMap, &localVocab,
+              binding[varName], getIndex(), blankNodeMap, &responseLocalVocab,
               getIndex().getBlankNodeManager());
         } else {
           tc = TripleComponent::UNDEF();
         }
-        Id id = std::move(tc).toValueId(getIndex().getVocab(), localVocab,
-                                        getIndex().encodedIriManager());
-        idTable(rowIdx, colIdx) = id;
+        Id id =
+            std::move(tc).toValueId(getIndex().getVocab(), responseLocalVocab,
+                                    getIndex().encodedIriManager());
+        responseTable(rowIdx, colIdx) = id;
       }
       checkCancellation();
     }
   }
 
-  return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
+  // If there's no child (no input variables), return output columns + row
+  // variable.
+  if (!childResult) {
+    // Reorder: output columns first, then row variable (which is at col 0 in
+    // response).
+    IdTable outputWithRow{config_.outputVariables_.size() + 1,
+                          getExecutionContext()->getAllocator()};
+    for (size_t row = 0; row < responseTable.size(); ++row) {
+      outputWithRow.emplace_back();
+      // Output columns (cols 1..n in response).
+      for (size_t col = 1; col < responseTable.numColumns(); ++col) {
+        outputWithRow(row, col - 1) = responseTable(row, col);
+      }
+      // Row variable last.
+      outputWithRow(row, config_.outputVariables_.size()) =
+          responseTable(row, 0);
+    }
+    return {std::move(outputWithRow), resultSortedOn(),
+            std::move(responseLocalVocab)};
+  }
+
+  // Join the response with the child result based on the row variable.
+  LocalVocab resultLocalVocab = std::move(responseLocalVocab);
+  IdTable resultTable =
+      joinResponseWithChild(responseTable, 0, childResult->idTable(),
+                            childResult->localVocab(), resultLocalVocab);
+
+  return {std::move(resultTable), resultSortedOn(),
+          std::move(resultLocalVocab)};
 }
 
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17

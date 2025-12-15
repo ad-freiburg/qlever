@@ -3,23 +3,28 @@
 """
 Simple qlproxy endpoint server for testing the qlproxy MagicServiceQuery.
 
-This server receives SPARQL Results JSON with payload variables, performs
+This server receives SPARQL Results JSON with input variables, performs
 arithmetic operations, and returns results in SPARQL Results JSON format.
 
 Example usage:
     python3 qlproxy_server.py --port 8080
 
 Example SPARQL query that uses this endpoint:
-    SELECT ?sum WHERE {
-      VALUES (?num1 ?num2) { (1 2) (3 4) }
+    SELECT ?x1 ?x2 ?result WHERE {
+      VALUES (?x1 ?x2) { (1 3) (2 2) (3 1) }
       SERVICE qlproxy: {
         _:config qlproxy:endpoint <http://localhost:8080/compute> ;
-                 qlproxy:payload_first ?num1 ;
-                 qlproxy:payload_second ?num2 ;
-                 qlproxy:result_result ?sum ;
-                 qlproxy:param_op "add" .
+                 qlproxy:input-first ?x1 ;
+                 qlproxy:input-second ?x2 ;
+                 qlproxy:output-result ?result ;
+                 qlproxy:output-row ?row ;
+                 qlproxy:param-op "add" .
       }
     }
+
+The server expects a "row" variable in each input binding (specifying the
+1-based row index) and echoes it back in each output binding for joining with
+the input.
 """
 
 import argparse
@@ -43,8 +48,9 @@ class QlProxyHandler(BaseHTTPRequestHandler):
         parsed_url = urlparse(self.path)
         query_params = parse_qs(parsed_url.query)
 
-        # Get the operation from query parameters
+        # Get the operation and row variable name from query parameters
         op = query_params.get("op", ["add"])[0]
+        row_var = query_params.get("rowvar", ["row"])[0]
 
         # Read and parse the request body
         content_length = int(self.headers.get("Content-Length", 0))
@@ -70,16 +76,16 @@ class QlProxyHandler(BaseHTTPRequestHandler):
         result_bindings = []
         for binding in payload["results"]["bindings"]:
             try:
-                result_binding = self.process_binding(binding, op)
+                result_binding = self.process_binding(binding, op, row_var)
                 if result_binding is not None:
                     result_bindings.append(result_binding)
             except Exception as e:
                 print(f"Error processing binding {binding}: {e}", file=sys.stderr)
                 continue
 
-        # Build the response
+        # Build the response with the row variable in the vars list
         response = {
-            "head": {"vars": ["res"]},
+            "head": {"vars": [row_var, "result"]},
             "results": {"bindings": result_bindings}
         }
 
@@ -96,14 +102,21 @@ class QlProxyHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(response_body)
 
-    def process_binding(self, binding, op):
+    def process_binding(self, binding, op, row_var):
         """Process a single binding and return the result binding."""
+        # Extract the row variable (required for joining)
+        row_binding = binding.get(row_var)
+        if row_binding is None:
+            if self.verbose:
+                print(f"[qlproxy] Skipping binding: missing row variable '{row_var}'")
+            return None
+
         # Extract the values from the binding
         first_binding = binding.get("first")
         second_binding = binding.get("second")
 
         if self.verbose:
-            print(f"[qlproxy] Processing binding: first={first_binding}, second={second_binding}")
+            print(f"[qlproxy] Processing binding: {row_var}={row_binding}, first={first_binding}, second={second_binding}")
 
         first_val = self.extract_number(first_binding)
         second_val = self.extract_number(second_binding)
@@ -137,12 +150,13 @@ class QlProxyHandler(BaseHTTPRequestHandler):
             print(f"Unknown operation: {op}", file=sys.stderr)
             return None
 
-        # Return the result as a literal
+        # Return the result as a literal, including the row variable for joining
         if isinstance(result, float) and result.is_integer():
             result = int(result)
 
         return {
-            "res": {
+            row_var: row_binding,  # Echo back the row variable
+            "result": {
                 "type": "literal",
                 "value": str(result),
                 "datatype": "http://www.w3.org/2001/XMLSchema#decimal"

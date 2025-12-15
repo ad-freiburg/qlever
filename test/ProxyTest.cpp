@@ -69,14 +69,25 @@ class ProxyTest : public ::testing::Test {
   }
 };
 
+// Helper to create a ProxyConfiguration for tests.
+auto makeConfig(
+    std::string endpoint,
+    std::vector<std::pair<std::string, Variable>> inputVariables,
+    std::vector<std::pair<std::string, Variable>> outputVariables,
+    std::pair<std::string, Variable> rowVariable,
+    std::vector<std::pair<std::string, std::string>> parameters = {}) {
+  return parsedQuery::ProxyConfiguration{
+      std::move(endpoint), std::move(inputVariables),
+      std::move(outputVariables), std::move(rowVariable),
+      std::move(parameters)};
+}
+
 // Test basic methods of class `Proxy`.
 TEST_F(ProxyTest, basicMethods) {
-  // Construct a ProxyConfiguration by hand.
-  parsedQuery::ProxyConfiguration config;
-  config.endpoint_ = "http://example.org/api";
-  config.resultVariables_ = {{"result", Variable{"?result"}}};
-  config.payloadVariables_ = {};
-  config.parameters_ = {};
+  // Construct a ProxyConfiguration with no input variables.
+  auto config =
+      makeConfig("http://example.org/api", {},
+                 {{"result", Variable{"?result"}}}, {"row", Variable{"?row"}});
 
   // Create an operation from this (no child operation).
   Proxy proxyOp{testQec, config, std::nullopt};
@@ -85,89 +96,115 @@ TEST_F(ProxyTest, basicMethods) {
   ASSERT_EQ(proxyOp.getDescriptor(), "Proxy to http://example.org/api");
   ASSERT_TRUE(ql::starts_with(proxyOp.getCacheKey(), "PROXY "))
       << proxyOp.getCacheKey();
-  ASSERT_EQ(proxyOp.getResultWidth(), 1);
+  // No input variables and no child: result width is output variables + row.
+  ASSERT_EQ(proxyOp.getResultWidth(), 2);
   ASSERT_EQ(proxyOp.getMultiplicity(0), 1.0f);
   ASSERT_EQ(proxyOp.getSizeEstimateBeforeLimit(), 100'000);
   ASSERT_EQ(proxyOp.getCostEstimate(), 1'000'000);
   using V = Variable;
   ASSERT_THAT(proxyOp.computeVariableToColumnMap(),
               ::testing::UnorderedElementsAreArray(VariableToColumnMap{
-                  {V{"?result"}, makePossiblyUndefinedColumn(0)}}));
+                  {V{"?result"}, makePossiblyUndefinedColumn(0)},
+                  {V{"?row"}, makePossiblyUndefinedColumn(1)}}));
   ASSERT_FALSE(proxyOp.knownEmptyResult());
 
   // No child operation means empty children.
   ASSERT_TRUE(proxyOp.getChildren().empty());
 }
 
-// Test that multiple result variables are mapped correctly.
-TEST_F(ProxyTest, multipleResultVariables) {
-  parsedQuery::ProxyConfiguration config;
-  config.endpoint_ = "http://example.org/api";
-  config.resultVariables_ = {
-      {"a", Variable{"?x"}}, {"b", Variable{"?y"}}, {"c", Variable{"?z"}}};
-  config.payloadVariables_ = {};
-  config.parameters_ = {};
+// Test that multiple output variables are mapped correctly.
+TEST_F(ProxyTest, multipleOutputVariables) {
+  auto config = makeConfig(
+      "http://example.org/api", {},
+      {{"a", Variable{"?x"}}, {"b", Variable{"?y"}}, {"c", Variable{"?z"}}},
+      {"row", Variable{"?row"}});
 
   Proxy proxyOp{testQec, config, std::nullopt};
 
-  ASSERT_EQ(proxyOp.getResultWidth(), 3);
+  // 3 output variables + 1 row variable.
+  ASSERT_EQ(proxyOp.getResultWidth(), 4);
   using V = Variable;
   ASSERT_THAT(proxyOp.computeVariableToColumnMap(),
               ::testing::UnorderedElementsAreArray(VariableToColumnMap{
                   {V{"?x"}, makePossiblyUndefinedColumn(0)},
                   {V{"?y"}, makePossiblyUndefinedColumn(1)},
-                  {V{"?z"}, makePossiblyUndefinedColumn(2)}}));
+                  {V{"?z"}, makePossiblyUndefinedColumn(2)},
+                  {V{"?row"}, makePossiblyUndefinedColumn(3)}}));
 }
 
-// Test `computeResult` with a simple response.
-TEST_F(ProxyTest, computeResult) {
-  parsedQuery::ProxyConfiguration config;
-  config.endpoint_ = "http://example.org/api";
-  config.resultVariables_ = {{"x", Variable{"?x"}}, {"y", Variable{"?y"}}};
-  config.payloadVariables_ = {};
-  config.parameters_ = {};
+// Helper to generate JSON result with row variable (1-based indices).
+static std::string genJsonResultWithRow(
+    std::string_view rowVar, std::vector<std::string_view> vars,
+    std::vector<std::pair<size_t, std::vector<std::string_view>>> rows) {
+  nlohmann::json res;
+  std::vector<std::string> allVars;
+  allVars.push_back(std::string(rowVar));
+  for (const auto& v : vars) {
+    allVars.push_back(std::string(v));
+  }
+  res["head"]["vars"] = allVars;
+  res["results"]["bindings"] = nlohmann::json::array();
+
+  for (const auto& [rowIdx1Based, values] : rows) {
+    nlohmann::json binding;
+    binding[rowVar] = {
+        {"type", "literal"},
+        {"value", std::to_string(rowIdx1Based)},
+        {"datatype", "http://www.w3.org/2001/XMLSchema#integer"}};
+    for (size_t j = 0; j < std::min(values.size(), vars.size()); ++j) {
+      binding[vars[j]] = {{"type", "uri"}, {"value", values[j]}};
+    }
+    res["results"]["bindings"].push_back(binding);
+  }
+  return res.dump();
+}
+
+// Test `computeResult` with a simple response (no child).
+TEST_F(ProxyTest, computeResultNoChild) {
+  auto config = makeConfig("http://example.org/api", {},
+                           {{"x", Variable{"?x"}}, {"y", Variable{"?y"}}},
+                           {"row", Variable{"?row"}});
 
   std::string_view expectedUrl = "http://example.org:80/api";
-  std::string jsonResult = genJsonResult(
-      {"x", "y"}, {{"http://example.org/1", "http://example.org/a"},
-                   {"http://example.org/2", "http://example.org/b"}});
+  std::string jsonResult = genJsonResultWithRow(
+      "row", {"x", "y"},
+      {{1, {"http://example.org/1", "http://example.org/a"}},
+       {2, {"http://example.org/2", "http://example.org/b"}}});
 
   Proxy proxyOp{testQec, config, std::nullopt,
                 getResultFunctionFactory(expectedUrl, "", jsonResult)};
 
   auto result = proxyOp.computeResultOnlyForTesting();
   ASSERT_EQ(result.idTable().size(), 2);
-  ASSERT_EQ(result.idTable().numColumns(), 2);
+  // Output variables + row variable.
+  ASSERT_EQ(result.idTable().numColumns(), 3);
 }
 
 // Test `computeResult` with URL parameters.
 TEST_F(ProxyTest, computeResultWithParams) {
-  parsedQuery::ProxyConfiguration config;
-  config.endpoint_ = "http://example.org/api";
-  config.resultVariables_ = {{"result", Variable{"?result"}}};
-  config.payloadVariables_ = {};
-  config.parameters_ = {{"op", "add"}, {"version", "1"}};
+  auto config = makeConfig(
+      "http://example.org/api", {}, {{"result", Variable{"?result"}}},
+      {"row", Variable{"?row"}}, {{"op", "add"}, {"version", "1"}});
 
   // Expected URL should include the parameters.
   std::string_view expectedUrl = "http://example.org:80/api?op=add&version=1";
   std::string jsonResult =
-      genJsonResult({"result"}, {{"http://example.org/42"}});
+      genJsonResultWithRow("row", {"result"}, {{1, {"http://example.org/42"}}});
 
   Proxy proxyOp{testQec, config, std::nullopt,
                 getResultFunctionFactory(expectedUrl, "", jsonResult)};
 
   auto result = proxyOp.computeResultOnlyForTesting();
   ASSERT_EQ(result.idTable().size(), 1);
-  ASSERT_EQ(result.idTable().numColumns(), 1);
+  // 1 output variable + 1 row variable.
+  ASSERT_EQ(result.idTable().numColumns(), 2);
 }
 
 // Test error handling when HTTP request fails.
 TEST_F(ProxyTest, httpErrorStatus) {
-  parsedQuery::ProxyConfiguration config;
-  config.endpoint_ = "http://example.org/api";
-  config.resultVariables_ = {{"result", Variable{"?result"}}};
-  config.payloadVariables_ = {};
-  config.parameters_ = {};
+  auto config =
+      makeConfig("http://example.org/api", {},
+                 {{"result", Variable{"?result"}}}, {"row", Variable{"?row"}});
 
   std::string_view expectedUrl = "http://example.org:80/api";
 
@@ -181,11 +218,9 @@ TEST_F(ProxyTest, httpErrorStatus) {
 
 // Test error handling when content type is wrong.
 TEST_F(ProxyTest, wrongContentType) {
-  parsedQuery::ProxyConfiguration config;
-  config.endpoint_ = "http://example.org/api";
-  config.resultVariables_ = {{"result", Variable{"?result"}}};
-  config.payloadVariables_ = {};
-  config.parameters_ = {};
+  auto config =
+      makeConfig("http://example.org/api", {},
+                 {{"result", Variable{"?result"}}}, {"row", Variable{"?row"}});
 
   std::string_view expectedUrl = "http://example.org:80/api";
 
@@ -193,6 +228,23 @@ TEST_F(ProxyTest, wrongContentType) {
       testQec, config, std::nullopt,
       getResultFunctionFactory(expectedUrl, "", "<html>Error</html>",
                                boost::beast::http::status::ok, "text/html")};
+
+  ASSERT_THROW(proxyOp.computeResultOnlyForTesting(), std::runtime_error);
+}
+
+// Test error when response is missing the row variable.
+TEST_F(ProxyTest, missingRowVariable) {
+  auto config =
+      makeConfig("http://example.org/api", {},
+                 {{"result", Variable{"?result"}}}, {"row", Variable{"?row"}});
+
+  std::string_view expectedUrl = "http://example.org:80/api";
+  // Response without the row variable.
+  std::string jsonResult =
+      genJsonResult({"result"}, {{"http://example.org/1"}});
+
+  Proxy proxyOp{testQec, config, std::nullopt,
+                getResultFunctionFactory(expectedUrl, "", jsonResult)};
 
   ASSERT_THROW(proxyOp.computeResultOnlyForTesting(), std::runtime_error);
 }
