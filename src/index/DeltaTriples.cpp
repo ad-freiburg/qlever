@@ -140,8 +140,8 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(
         predicateCache.getOrCompute(ids.at(1).getBits(), [this](Id::T bits) {
           auto optionalPredicate = ExportQueryExecutionTrees::idToLiteralOrIri(
               index_, Id::fromBits(bits), localVocab_);
-          AD_CORRECTNESS_CHECK(optionalPredicate.has_value() &&
-                               optionalPredicate.value().isIri());
+          AD_CORRECTNESS_CHECK(optionalPredicate.has_value());
+          AD_CORRECTNESS_CHECK(optionalPredicate.value().isIri());
           return std::move(optionalPredicate.value().getIri());
         });
     auto specialPredicate = ad_utility::convertToLanguageTaggedPredicate(
@@ -190,7 +190,7 @@ void DeltaTriples::deleteTriples(CancellationHandle cancellationHandle,
 }
 
 // ____________________________________________________________________________
-void DeltaTriples::insertInternalTriples(
+void DeltaTriples::insertInternalTriplesForTesting(
     CancellationHandle cancellationHandle, Triples triples,
     ad_utility::timer::TimeTracer& tracer) {
   modifyTriplesImpl<true, true>(std::move(cancellationHandle),
@@ -198,7 +198,7 @@ void DeltaTriples::insertInternalTriples(
 }
 
 // ____________________________________________________________________________
-void DeltaTriples::deleteInternalTriples(
+void DeltaTriples::deleteInternalTriplesForTesting(
     CancellationHandle cancellationHandle, Triples triples,
     ad_utility::timer::TimeTracer& tracer) {
   modifyTriplesImpl<true, false>(std::move(cancellationHandle),

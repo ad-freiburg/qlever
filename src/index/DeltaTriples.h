@@ -208,19 +208,17 @@ class DeltaTriples {
                      ad_utility::timer::TimeTracer& tracer =
                          ad_utility::timer::DEFAULT_TIME_TRACER);
 
-  // Insert internal delta triples for efficient language filters and patterns.
-  // Currently only used by test code.
-  void insertInternalTriples(CancellationHandle cancellationHandle,
-                             Triples triples,
-                             ad_utility::timer::TimeTracer& tracer =
-                                 ad_utility::timer::DEFAULT_TIME_TRACER);
+  // Insert internal delta triples for test code.
+  void insertInternalTriplesForTesting(
+      CancellationHandle cancellationHandle, Triples triples,
+      ad_utility::timer::TimeTracer& tracer =
+          ad_utility::timer::DEFAULT_TIME_TRACER);
 
-  // Delete internal delta triples for efficient language filters and patterns.
-  // Currently only used by test code.
-  void deleteInternalTriples(CancellationHandle cancellationHandle,
-                             Triples triples,
-                             ad_utility::timer::TimeTracer& tracer =
-                                 ad_utility::timer::DEFAULT_TIME_TRACER);
+  // Delete internal delta triples for test code.
+  void deleteInternalTriplesForTesting(
+      CancellationHandle cancellationHandle, Triples triples,
+      ad_utility::timer::TimeTracer& tracer =
+          ad_utility::timer::DEFAULT_TIME_TRACER);
 
   // If the `filename` is set, then `writeToDisk()` will write these
   // `DeltaTriples` to `filename.value()`. If `filename` is `nullopt`, then
