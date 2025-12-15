@@ -980,7 +980,8 @@ TEST(CompressedRelationReader, getResultSizeImpl) {
     dt.insertTriples(handle, {IdTriple{{V(0), V(1), V(2), V(3)}},
                               IdTriple{{V(0), V(4), V(5), V(3)}}});
   });
-  auto sharedLocatedTriplesSnapshot = deltaTriplesManager.getCurrentLocatedTriplesVersion();
+  auto sharedLocatedTriplesSnapshot =
+      deltaTriplesManager.getCurrentLocatedTriplesVersion();
   const auto& locatedTriplesSnapshot = *sharedLocatedTriplesSnapshot;
   auto& impl = index.getImpl();
   auto expectResultSizes = [&impl, &locatedTriplesSnapshot](
@@ -1043,7 +1044,8 @@ TEST(CompressedRelationReader, getFirstAndLastTripleIgnoringGraph) {
       "<a> <b> <d> <g1> . <a> <b> <g> <g2> . <a> <b> <k> <g3> .";
   auto index = ad_utility::testing::makeTestIndex(
       "getFirstAndLastTripleIgnoringGraph", std::move(testIndexConfig));
-  auto currentSnapshot = index.deltaTriplesManager().getCurrentLocatedTriplesVersion();
+  auto currentSnapshot =
+      index.deltaTriplesManager().getCurrentLocatedTriplesVersion();
   auto permutationEnum = Permutation::Enum::SPO;
   const auto& permutation = index.getImpl().getPermutation(permutationEnum);
   const auto& locatedTriplesPerBlock =

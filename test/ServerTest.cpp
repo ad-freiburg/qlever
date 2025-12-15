@@ -253,8 +253,8 @@ TEST(ServerTest, createResponseMetadata) {
           plannedQuery.queryExecutionTree_, UpdateMetadata{}, tracer2),
       testing::HasSubstr("updateMetadata.countBefore_.has_value()"));
   json metadata = Server::createResponseMetadataForUpdate(
-          index, deltaTriples.getLocatedTriplesVersionReference(), plannedQuery,
-          plannedQuery.queryExecutionTree_, updateMetadata, tracer2);
+      index, deltaTriples.getLocatedTriplesVersionReference(), plannedQuery,
+      plannedQuery.queryExecutionTree_, updateMetadata, tracer2);
   json deltaTriplesJson{
       {"before", {{"inserted", 0}, {"deleted", 0}, {"total", 0}}},
       {"after", {{"inserted", 1}, {"deleted", 0}, {"total", 1}}},
