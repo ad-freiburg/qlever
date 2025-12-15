@@ -435,16 +435,10 @@ MaterializedView::locatedTriplesSnapshot() const {
 // _____________________________________________________________________________
 std::shared_ptr<LocatedTriplesSnapshot>
 MaterializedView::makeEmptyLocatedTriplesSnapshot() const {
-  auto setLocatedTriplesMetadata = [this](auto& locatedTriples) {
-    // TODO<ullingerc/review> Is this right for internal?
-    locatedTriples[static_cast<size_t>(permutation_->permutation())]
-        .setOriginalMetadata(permutation_->metaData().blockDataShared());
-  };
-
   LocatedTriplesPerBlockAllPermutations<false> emptyLocatedTriples;
-  setLocatedTriplesMetadata(emptyLocatedTriples);
+  emptyLocatedTriples[static_cast<size_t>(permutation_->permutation())]
+      .setOriginalMetadata(permutation_->metaData().blockDataShared());
   LocatedTriplesPerBlockAllPermutations<true> emptyInternalLocatedTriples;
-  setLocatedTriplesMetadata(emptyInternalLocatedTriples);
   LocalVocab emptyVocab;
 
   return std::make_shared<LocatedTriplesSnapshot>(
