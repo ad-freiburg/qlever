@@ -122,6 +122,10 @@ struct RuntimeParameters {
   Bool treatDefaultGraphAsNamedGraph_{false,
                                       "treat-default-graph-as-named-graph"};
 
+  // If set, each `sparql-results+json` results will include a top-level "meta"
+  // field with information about query execution time and result size.
+  Bool sparqlResultsJsonWithTime_{true, "sparql-results-json-with-time"};
+
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE
   // CONSTRUCTOR, S.T. THEY CAN ALSO BE ACCESSED VIA THE RUNTIME INTERFACE.
