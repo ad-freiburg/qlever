@@ -12,6 +12,7 @@
 #include "engine/Server.h"
 #include "gmock/gmock.h"
 #include "parser/MaterializedViewQuery.h"
+#include "parser/TripleComponent.h"
 #include "rdfTypes/Iri.h"
 #include "rdfTypes/Literal.h"
 #include "util/CancellationHandle.h"
@@ -110,7 +111,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
                              "invalid predicate"));
 
     AD_EXPECT_THROW_WITH_MESSAGE(
-        ViewQuery(SparqlTriple{ValueId::makeUndefined(),
+        ViewQuery(SparqlTriple{TripleComponent::UNDEF(),
                                iri("<https://qlever.cs.uni-freiburg.de/"
                                    "materializedView/testView1-o>"),
                                V{"?o"}}),
