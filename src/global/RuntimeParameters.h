@@ -122,6 +122,10 @@ struct RuntimeParameters {
   Bool treatDefaultGraphAsNamedGraph_{false,
                                       "treat-default-graph-as-named-graph"};
 
+  // If set, each `sparql-results+json` results will include a top-level "meta"
+  // field with information about query execution time and result size.
+  Bool sparqlResultsJsonWithTime_{true, "sparql-results-json-with-time"};
+
   // Memory limit for sorting rows during the writing of materialized views.
   MemorySizeParameter materializedViewWriterMemory_{
       ad_utility::MemorySize::gigabytes(4), "materialized-view-writer-memory"};

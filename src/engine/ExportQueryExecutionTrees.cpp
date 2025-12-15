@@ -17,6 +17,7 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
+#include "global/RuntimeParameters.h"
 #include "index/EncodedIriManager.h"
 #include "index/IndexImpl.h"
 #include "rdfTypes/RdfEscaping.h"
@@ -863,6 +864,7 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream(
     const QueryExecutionTree& qet,
     const parsedQuery::SelectClause& selectClause,
     LimitOffsetClause limitAndOffset, CancellationHandle cancellationHandle,
+    [[maybe_unused]] const ad_utility::Timer& requestTimer,
     [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
   static_assert(format == MediaType::octetStream || format == MediaType::csv ||
                 format == MediaType::tsv || format == MediaType::turtle ||
@@ -1022,6 +1024,7 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
     const QueryExecutionTree& qet,
     const parsedQuery::SelectClause& selectClause,
     LimitOffsetClause limitAndOffset, CancellationHandle cancellationHandle,
+    [[maybe_unused]] const ad_utility::Timer& requestTimer,
     [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
   using namespace std::string_view_literals;
   STREAMABLE_YIELD(
@@ -1077,6 +1080,7 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
     const QueryExecutionTree& qet,
     const parsedQuery::SelectClause& selectClause,
     LimitOffsetClause limitAndOffset, CancellationHandle cancellationHandle,
+    const ad_utility::Timer& requestTimer,
     [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
   // This call triggers the possibly expensive computation of the query result
   // unless the result is already cached.
@@ -1131,7 +1135,16 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
     }
   }
 
-  STREAMABLE_YIELD("]}}");
+  STREAMABLE_YIELD("]}");
+
+  // Optionally add field `meta` with timing information.
+  if (getRuntimeParameter<&RuntimeParameters::sparqlResultsJsonWithTime_>()) {
+    auto timeMs = requestTimer.msecs().count();
+    STREAMABLE_YIELD(absl::StrCat(R"(,"meta":{"query-time-ms":)", timeMs,
+                                  R"(,"result-size-total":)", resultSize, "}"));
+  }
+
+  STREAMABLE_YIELD("}");
   STREAMABLE_RETURN;
 }
 
@@ -1139,14 +1152,12 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
 template <>
 STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
     ad_utility::MediaType::binaryQleverExport>(
-    const QueryExecutionTree& qet,
-    const parsedQuery::SelectClause& selectClause,
-    LimitOffsetClause limitAndOffset, CancellationHandle cancellationHandle,
+    [[maybe_unused]] const QueryExecutionTree& qet,
+    [[maybe_unused]] const parsedQuery::SelectClause& selectClause,
+    [[maybe_unused]] LimitOffsetClause limitAndOffset,
+    [[maybe_unused]] CancellationHandle cancellationHandle,
+    [[maybe_unused]] const ad_utility::Timer& requestTimer,
     [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
-  (void)qet;
-  (void)selectClause;
-  (void)limitAndOffset;
-  (void)cancellationHandle;
   throw std::runtime_error(
       "The binary export of QLever results is not yet implemented, please have "
       "a little patience");
@@ -1270,7 +1281,8 @@ ExportQueryExecutionTrees::computeResult(
       return parsedQuery.hasSelectClause()
                  ? selectQueryResultToStream<format>(
                        qet, parsedQuery.selectClause(), limit,
-                       std::move(cancellationHandle), streamableYielder)
+                       std::move(cancellationHandle), requestTimer,
+                       streamableYielder)
                  : constructQueryResultToStream<format>(
                        qet, parsedQuery.constructClause().triples_, limit,
                        qet.getResult(true), std::move(cancellationHandle),
