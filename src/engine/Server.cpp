@@ -958,37 +958,36 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   co_return;
 }
 
-nlohmann::ordered_json Server::createResponseMetadataForUpdate(
+nlohmann::ordered_json createResponseMetadataForUpdateImpl(
     const Index& index, LocatedTriplesVersion locatedTriples,
-    const PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
-    const UpdateMetadata& updateMetadata,
+    std::string_view operationString, std::vector<std::string> warnings,
+    const RuntimeInformationWholeQuery& runtimeInfoWhole,
+    const RuntimeInformation& runtimeInfo, UpdateMetadata updateMetadata,
     const ad_utility::timer::TimeTracer& tracer) {
   nlohmann::ordered_json response;
-  response["update"] = ad_utility::truncateOperationString(
-      plannedQuery.parsedQuery_._originalString);
+  response["update"] = ad_utility::truncateOperationString(operationString);
   response["status"] = "OK";
-  auto warnings = qet.collectWarnings();
-  warnings.emplace(warnings.begin(),
-                   "SPARQL 1.1 Update for QLever is experimental.");
   response["warnings"] = warnings;
-  RuntimeInformationWholeQuery& runtimeInfoWholeOp =
-      qet.getRootOperation()->getRuntimeInfoWholeQuery();
-  RuntimeInformation& runtimeInfo = qet.getRootOperation()->runtimeInfo();
   response["runtimeInformation"]["meta"] =
-      nlohmann::ordered_json(runtimeInfoWholeOp);
+      nlohmann::ordered_json(runtimeInfoWhole);
   response["runtimeInformation"]["query_execution_tree"] =
       nlohmann::ordered_json(runtimeInfo);
-  AD_CORRECTNESS_CHECK(updateMetadata.countBefore_.has_value());
-  AD_CORRECTNESS_CHECK(updateMetadata.inUpdate_.has_value());
-  AD_CORRECTNESS_CHECK(updateMetadata.countAfter_.has_value());
-  auto countBefore = updateMetadata.countBefore_.value();
-  auto countAfter = updateMetadata.countAfter_.value();
-  response["delta-triples"]["before"] = nlohmann::json(countBefore);
-  response["delta-triples"]["after"] = nlohmann::json(countAfter);
-  response["delta-triples"]["difference"] =
-      nlohmann::json(countAfter - countBefore);
-  response["delta-triples"]["operation"] =
-      json(updateMetadata.inUpdate_.value());
+  auto setIfHasValue = [&response, &updateMetadata](
+                           auto field, const std::string& fieldName) {
+    const auto& countOpt = std::invoke(field, updateMetadata);
+    if (countOpt.has_value()) {
+      response["delta-triples"][fieldName] = nlohmann::json(countOpt.value());
+    }
+  };
+  setIfHasValue(&UpdateMetadata::countBefore_, "before");
+  setIfHasValue(&UpdateMetadata::countAfter_, "after");
+  setIfHasValue(&UpdateMetadata::inUpdate_, "operation");
+  if (updateMetadata.countAfter_.has_value() &&
+      updateMetadata.countBefore_.has_value()) {
+    response["delta-triples"]["difference"] =
+        nlohmann::json(updateMetadata.countAfter_.value() -
+                       updateMetadata.countBefore_.value());
+  }
   response["time"] = tracer.getJSONShort()["update"];
   for (auto permutation : Permutation::ALL) {
     response["located-triples"][Permutation::toString(permutation)]
@@ -1004,6 +1003,31 @@ nlohmann::ordered_json Server::createResponseMetadataForUpdate(
             ["blocks-total"] = numBlocks;
   }
   return response;
+}
+
+nlohmann::ordered_json Server::createDummyResponseMetadataForUpdate(
+    const Index& index, LocatedTriplesVersion locatedTriples,
+    const ad_utility::timer::TimeTracer& tracer) {
+  return createResponseMetadataForUpdateImpl(
+      index, locatedTriples, "Dummy Operation for timing purposes", {}, {}, {},
+      UpdateMetadata{std::nullopt, DeltaTriplesCount{}, std::nullopt}, tracer);
+}
+
+nlohmann::ordered_json Server::createResponseMetadataForUpdate(
+    const Index& index, LocatedTriplesVersion locatedTriples,
+    const PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
+    const UpdateMetadata& updateMetadata,
+    const ad_utility::timer::TimeTracer& tracer) {
+  AD_CORRECTNESS_CHECK(updateMetadata.countBefore_.has_value());
+  AD_CORRECTNESS_CHECK(updateMetadata.inUpdate_.has_value());
+  AD_CORRECTNESS_CHECK(updateMetadata.countAfter_.has_value());
+  auto warnings = qet.collectWarnings();
+  warnings.emplace(warnings.begin(),
+                   "SPARQL 1.1 Update for QLever is experimental.");
+  return createResponseMetadataForUpdateImpl(
+      index, locatedTriples, plannedQuery.parsedQuery_._originalString,
+      warnings, qet.getRootOperation()->getRuntimeInfoWholeQuery(),
+      qet.getRootOperation()->runtimeInfo(), updateMetadata, tracer);
 }
 
 // ____________________________________________________________________________
@@ -1084,9 +1108,9 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 
                 tracer->endTrace("update");
                 results.push_back(createResponseMetadataForUpdate(
-                    index_, deltaTriples.getLocatedTriplesVersionReference(), *plannedUpdate,
-                    plannedUpdate->queryExecutionTree_, updateMetadata,
-                    *tracer));
+                    index_, deltaTriples.getLocatedTriplesVersionReference(),
+                    *plannedUpdate, plannedUpdate->queryExecutionTree_,
+                    updateMetadata, *tracer));
                 tracer->reset();
 
                 AD_LOG_INFO << "Done processing update, total time was "
@@ -1106,7 +1130,9 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       cancellationHandle);
   auto responses = co_await std::move(coroutine);
   tracer->endTrace("update");
-  responses.push_back(tracer->getJSONShort());
+  responses.push_back(createDummyResponseMetadataForUpdate(
+      index_, index_.deltaTriplesManager().getCurrentLocatedTriplesVersion(),
+      *tracer));
 
   // SPARQL 1.1 Protocol 2.2.4 Successful Responses: "The responses body of a
   // successful update request is implementation defined."
