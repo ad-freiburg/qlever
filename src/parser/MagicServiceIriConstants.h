@@ -24,13 +24,17 @@ constexpr inline std::string_view SPATIAL_SEARCH_IRI =
 constexpr inline std::string_view TEXT_SEARCH_IRI =
     "<https://qlever.cs.uni-freiburg.de/textSearch/>";
 
-constexpr inline std::string_view
-    MATERIALIZED_VIEW_IRI_WITHOUT_CLOSING_BRACKET =
-        "<https://qlever.cs.uni-freiburg.de/materializedView/";
 namespace string_constants::detail {
+constexpr inline std::string_view OPENING_BRACKET = "<";
 constexpr inline std::string_view CLOSING_BRACKET = ">";
 }  // namespace string_constants::detail
 
+constexpr inline std::string_view MATERIALIZED_VIEW_IRI_WITHOUT_BRACKETS =
+    "https://qlever.cs.uni-freiburg.de/materializedView/";
+constexpr inline std::string_view
+    MATERIALIZED_VIEW_IRI_WITHOUT_CLOSING_BRACKET =
+        ad_utility::constexprStrCat<string_constants::detail::OPENING_BRACKET,
+                                    MATERIALIZED_VIEW_IRI_WITHOUT_BRACKETS>();
 constexpr inline std::string_view MATERIALIZED_VIEW_IRI =
     ad_utility::constexprStrCat<MATERIALIZED_VIEW_IRI_WITHOUT_CLOSING_BRACKET,
                                 string_constants::detail::CLOSING_BRACKET>();

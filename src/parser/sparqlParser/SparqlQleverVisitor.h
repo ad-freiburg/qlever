@@ -10,6 +10,8 @@
 #include <antlr4-runtime.h>
 #include <gtest/gtest_prod.h>
 
+#include <type_traits>
+
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
@@ -324,32 +326,13 @@ class SparqlQleverVisitor {
   parsedQuery::GraphPatternOperation visit(
       Parser::ServiceGraphPatternContext* ctx);
 
-  // Visitor functions for special builtin features that are triggered via
+  // Visitor function for special builtin features that are triggered via
   // `SERVICE` requests with "magic" IRIs.
-  parsedQuery::GraphPatternOperation visitPathQuery(
-      Parser::ServiceGraphPatternContext* ctx);
-
-  GraphPatternOperation visitSpatialQuery(
-      Parser::ServiceGraphPatternContext* ctx);
-
-  parsedQuery::GraphPatternOperation visitTextSearchQuery(
-      Parser::ServiceGraphPatternContext* ctx);
-
-  GraphPatternOperation visitNamedCachedResult(
-      const TripleComponent::Iri& target,
-      Parser::ServiceGraphPatternContext* ctx);
-
-  GraphPatternOperation visitMaterializedViewQuery(
-      Parser::ServiceGraphPatternContext* ctx);
-
-  // Parse the body of a `MagicServiceQuery`, in particular call
-  // `addBasicGraphPattern` and `addGraph` for the contents of the body, and
-  // throw an exception if an unsupported element is encountered. This function
-  // implements common functionality of `visitNamedCachedResult`,
-  // `visitTextQuery`, ... above.
-  void parseBodyOfMagicServiceQuery(parsedQuery::MagicServiceQuery& target,
-                                    Parser::ServiceGraphPatternContext* ctx,
-                                    std::string_view operationName);
+  CPP_variadic_template(typename T, typename... Args)(
+      requires std::is_constructible_v<T, Args...>)
+      parsedQuery::GraphPatternOperation
+      visitMagicServiceQuery(Parser::ServiceGraphPatternContext* ctx,
+                             Args&&... args);
 
   parsedQuery::GraphPatternOperation visit(Parser::BindContext* ctx);
 
