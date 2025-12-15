@@ -223,27 +223,14 @@ void MaterializedViewWriter::computeResultAndWritePermutation() const {
         }
       };
 
-  // TODO<ullingerc> Remove and write single permutation
-  std::string sopFilename = filename + ".index.sop";
-  CompressedRelationWriter sopWriter{
-      numCols,
-      ad_utility::File{sopFilename, "w"},
-      UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN,
-  };
-  auto sopCallback = [](ql::span<const CompressedRelationMetadata>) {
-    // TODO<ullingerc> This callback is unused and should be removed once we can
-    // write single permutations
-  };
-
-  auto [numDistinctPredicates, blockData1, blockData2] =
-      CompressedRelationWriter::createPermutationPair(
-          spoFilename + ".sorter", {spoWriter, spoCallback},
-          {sopWriter, sopCallback},
+  auto [numDistinctPredicates, blockData] =
+      CompressedRelationWriter::createPermutation(
+          {spoWriter, spoCallback},
           ad_utility::InputRangeTypeErased{std::move(sortedBlocksSPO)},
           spoKeyOrder, {});
 
   AD_LOG_DEBUG << "Writing metadata ..." << std::endl;
-  spoMetaData.blockData() = std::move(blockData1);
+  spoMetaData.blockData() = std::move(blockData);
   spoMetaData.calculateStatistics(numDistinctPredicates);
   spoMetaData.setName(filename);
   {
@@ -265,9 +252,6 @@ void MaterializedViewWriter::computeResultAndWritePermutation() const {
 
   AD_LOG_INFO << "Statistics for view " << name_ << ": "
               << spoMetaData.statistics() << std::endl;
-  // TODO<ullingerc> This removes the unnecessary permutation which should not
-  // be built in the first place
-  std::filesystem::remove(sopFilename);
   AD_LOG_INFO << "Materialized view " << name_ << " written to disk."
               << std::endl;
 }
@@ -319,8 +303,7 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
   indexedColVariable_ = Variable{columnNames.at(0)};
 
   // Read permutation
-  permutation_->loadFromDisk(
-      filename, [](Id) { return false; }, false);
+  permutation_->loadFromDisk(filename, [](Id) { return false; }, false);
   AD_CORRECTNESS_CHECK(permutation_->isLoaded());
 }
 
@@ -451,12 +434,21 @@ MaterializedView::locatedTriplesSnapshot() const {
 // _____________________________________________________________________________
 std::shared_ptr<LocatedTriplesSnapshot>
 MaterializedView::makeEmptyLocatedTriplesSnapshot() const {
-  LocatedTriplesPerBlockAllPermutations emptyLocatedTriples;
-  emptyLocatedTriples[static_cast<size_t>(permutation_->permutation())]
-      .setOriginalMetadata(permutation_->metaData().blockDataShared());
+  auto setLocatedTriplesMetadata = [this](auto& locatedTriples) {
+    // TODO<ullingerc/review> Is this right for internal?
+    locatedTriples[static_cast<size_t>(permutation_->permutation())]
+        .setOriginalMetadata(permutation_->metaData().blockDataShared());
+  };
+
+  LocatedTriplesPerBlockAllPermutations<false> emptyLocatedTriples;
+  setLocatedTriplesMetadata(emptyLocatedTriples);
+  LocatedTriplesPerBlockAllPermutations<true> emptyInternalLocatedTriples;
+  setLocatedTriplesMetadata(emptyInternalLocatedTriples);
   LocalVocab emptyVocab;
+
   return std::make_shared<LocatedTriplesSnapshot>(
-      emptyLocatedTriples, emptyVocab.getLifetimeExtender(), 0);
+      emptyLocatedTriples, emptyInternalLocatedTriples,
+      emptyVocab.getLifetimeExtender(), 0);
 }
 
 // _____________________________________________________________________________
