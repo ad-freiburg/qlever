@@ -1,4 +1,4 @@
-// Copyright 2024, University of Freiburg
+// Copyright 2024 - 2025, University of Freiburg
 // Chair of Algorithms and Data Structures
 // Authors: Johannes Herrmann <johannes.r.herrmann(at)gmail.com>
 //          Christoph Ullinger <ullingec@informatik.uni-freiburg.de>

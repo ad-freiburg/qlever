@@ -76,10 +76,16 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
         query.addParameter(
             SparqlTriple{iri("<config>"), iri("<blabliblu>"), V{"?o"}}),
         ::testing::HasSubstr("Unknown parameter"));
+    EXPECT_EQ(query.name(), "materialized view query");
   }
 
   // Invalid inputs
   {
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        ViewQuery(iri("<https://qlever.cs.uni-freiburg.de/materializedView/>")),
+        ::testing::HasSubstr("The IRI for the materialized view SERVICE should "
+                             "specify the view name"));
+
     ViewQuery query{
         iri("<https://qlever.cs.uni-freiburg.de/materializedView/testView1>")};
     AD_EXPECT_THROW_WITH_MESSAGE(
@@ -102,6 +108,14 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
                                V{"?o"}}),
         ::testing::HasSubstr("Special triple for materialized view has an "
                              "invalid predicate"));
+
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        ViewQuery(SparqlTriple{ValueId::makeUndefined(),
+                               iri("<https://qlever.cs.uni-freiburg.de/"
+                                   "materializedView/testView1-o>"),
+                               V{"?o"}}),
+        ::testing::HasSubstr("The subject of the magic predicate for reading "
+                             "from a materialized view may not be undef"));
   }
 
   // Test column stripping helper.
