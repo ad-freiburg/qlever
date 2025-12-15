@@ -157,7 +157,67 @@ TEST_F(MaterializedViewsTest, Basic) {
       )"),
       ::testing::HasSubstr("A materialized view query may not have a child "
                            "group graph pattern"));
-  // TODO<ullingerc>!! test other checks
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      qlv().query(R"(
+        PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+        SELECT * {
+          SERVICE view:testView1 {
+            _:config view:column-s ?s ;
+                     view:column-g ?s .
+          }
+        }
+      )"),
+      ::testing::HasSubstr(
+          "Each target variable for a reading from a materialized "
+          "view may only be associated with one column. However '?s' was "
+          "requested multiple times"));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      qlv().query(R"(
+        PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+        SELECT * {
+          SERVICE view:testView1 {
+            _:config view:column-s ?s ;
+                     view:column-g <http://example.com/> .
+          }
+        }
+      )"),
+      ::testing::HasSubstr(
+          "Currently only the first three columns of a materialized view may "
+          "be restricted to fixed values. All other columns must be variables, "
+          "but column '?g' was fixed to '<http://example.com/>'."));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      qlv().query(R"(
+        PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+        SELECT * {
+          SERVICE view:testView1 {
+            _:config view:column-s ?s ;
+                     view:column-p <http://example.com/> ;
+                     view:column-g ?x .
+          }
+        }
+      )"),
+      ::testing::HasSubstr(
+          "When setting the second column of a materialized view to a fixed "
+          "value, the first column must also be fixed."));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      qlv().query(R"(
+        PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+        SELECT * {
+          SERVICE view:testView1 {
+            _:config view:column-s <http://example.com/s> ;
+                     view:column-p ?p ;
+                     view:column-o <http://example.com/> ;
+                     view:column-g ?x .
+          }
+        }
+      )"),
+      ::testing::HasSubstr(
+          "When setting the third column of a materialized view to a fixed "
+          "value, the first two columns must also be fixed."));
 }
 
 // _____________________________________________________________________________
@@ -353,6 +413,19 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
                                V{"?o"}}),
         ::testing::HasSubstr("The subject of the magic predicate for reading "
                              "from a materialized view may not be undef"));
+  }
+  {
+    ViewQuery query{SparqlTriple{
+        V{"?s"},
+        iri("<https://qlever.cs.uni-freiburg.de/materializedView/testView1-o>"),
+        V{"?o"}}};
+    query.addParameter(
+        SparqlTriple{iri("<config>"), iri("<column-s>"), V{"?x"}});
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        view->makeScanConfig(query, placeholderP, placeholderO),
+        ::testing::HasSubstr(
+            "The first column of a materialized view may not be requested "
+            "twice, but '?x' violated this requirement."));
   }
 
   // Test column stripping helper.

@@ -363,10 +363,10 @@ SparqlTripleSimple MaterializedView::makeScanConfig(
     }
 
     if (target.isVariable() && uniqueTargetVar.contains(target.getVariable())) {
-      throw MaterializedViewConfigException(absl::StrCat(
-          "Each target variable for a reading from a materialized "
-          "view may only be associated with one column. However  '",
-          target.toString(), "' was requested multiple times."));
+      throw MaterializedViewConfigException(
+          absl::StrCat("Each target variable for a reading from a materialized "
+                       "view may only be associated with one column. However '",
+                       target.toString(), "' was requested multiple times."));
     }
 
     auto colIdx = varToColMap_.at(viewVar).columnIndex_;
