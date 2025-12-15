@@ -435,52 +435,54 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
 
   deltaTriples.insertTriples(
       cancellationHandle,
-      makeIdTriples(vocab, localVocab,
-                    {"<a> a \"abc\"", "<a> a \"abc\"@en", "<a> a \"abc\"@de",
-                     "<a> a \"abc\"^^<http://example.com/datatype>",
-                     "<a> a <abc>", "<a> a 1", "<a> <other> \"def\"@es"}));
+      makeIdTriples(
+          vocab, localVocab,
+          {"<a> a 1", "<a> a \"abc\"", "<a> a \"abc\"@de", "<a> a \"abc\"@en",
+           "<a> a \"abc\"^^<http://example.com/datatype>", "<a> a <abc>",
+           "<a> <other> \"def\"@es"}));
   auto a = iri("<a>");
   auto type = iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>");
   EXPECT_THAT(
       deltaTriples,
       TriplesAre(
-          {{a, type, lit("\"abc\"")},
-           {a, type, lit("\"abc\"@en")},
+          {{a, type, TripleComponent{1}},
+           {a, type, lit("\"abc\"")},
            {a, type, lit("\"abc\"@de")},
+           {a, type, lit("\"abc\"@en")},
            {a, type, lit("\"abc\"^^<http://example.com/datatype>")},
            {a, type, iri("<abc>")},
-           {a, type, TripleComponent{1}},
            {a, iri("<other>"), lit("\"def\"@es")}},
           {},
-          {{a, iri("@en@<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"),
-            lit("\"abc\"@en")},
-           {a, iri("@de@<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"),
+          {{a, iri("@de@<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"),
             lit("\"abc\"@de")},
+           {a, iri("@en@<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"),
+            lit("\"abc\"@en")},
            {a, iri("@es@<other>"), lit("\"def\"@es")}},
           {}));
 
   deltaTriples.deleteTriples(
       cancellationHandle,
-      makeIdTriples(vocab, localVocab,
-                    {"<a> a \"abc\"", "<a> a \"abc\"@en", "<a> a \"abc\"@de",
-                     "<a> a \"abc\"^^<http://example.com/datatype>",
-                     "<a> a <abc>", "<a> a 1", "<a> <other> \"def\"@es"}));
+      makeIdTriples(
+          vocab, localVocab,
+          {"<a> a 1", "<a> a \"abc\"", "<a> a \"abc\"@de", "<a> a \"abc\"@en",
+           "<a> a \"abc\"^^<http://example.com/datatype>", "<a> a <abc>",
+           "<a> <other> \"def\"@es"}));
   EXPECT_THAT(
       deltaTriples,
       TriplesAre(
           {},
-          {{a, type, lit("\"abc\"")},
-           {a, type, lit("\"abc\"@en")},
+          {{a, type, TripleComponent{1}},
+           {a, type, lit("\"abc\"")},
            {a, type, lit("\"abc\"@de")},
+           {a, type, lit("\"abc\"@en")},
            {a, type, lit("\"abc\"^^<http://example.com/datatype>")},
            {a, type, iri("<abc>")},
-           {a, type, TripleComponent{1}},
            {a, iri("<other>"), lit("\"def\"@es")}},
           {},
-          {{a, iri("@en@<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"),
-            lit("\"abc\"@en")},
-           {a, iri("@de@<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"),
+          {{a, iri("@de@<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"),
             lit("\"abc\"@de")},
+           {a, iri("@en@<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"),
+            lit("\"abc\"@en")},
            {a, iri("@es@<other>"), lit("\"def\"@es")}}));
 }
 

@@ -152,6 +152,8 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(
     internalTriples.push_back(
         IdTriple<0>{std::array{ids.at(0), specialId, ids.at(2), ids.at(3)}});
   }
+  // Because of the special predicates, we need to re-sort the triples.
+  ql::ranges::sort(internalTriples);
   return internalTriples;
 }
 
