@@ -700,18 +700,17 @@ ExportQueryExecutionTrees::getLiteralOrNullopt(
 // _____________________________________________________________________________
 std::optional<LiteralOrIri>
 ExportQueryExecutionTrees::idToLiteralOrIriForEncodedValue(Id id) {
-  auto idLiteralAndType = idToStringAndTypeForEncodedValue(id);
-  if (idLiteralAndType.has_value() &&
-      idLiteralAndType.value().second != nullptr) {
-    auto lit = ad_utility::triple_component::Literal::literalWithoutQuotes(
-        idLiteralAndType.value().first);
+  auto [literal, type] = idToStringAndTypeForEncodedValue(id).value_or(
+      std::make_pair(std::string{}, nullptr));
+  if (type != nullptr) {
+    auto lit =
+        ad_utility::triple_component::Literal::literalWithoutQuotes(literal);
     lit.addDatatype(
-        ad_utility::triple_component::Iri::fromIrirefWithoutBrackets(
-            idLiteralAndType.value().second));
-    return LiteralOrIri{lit};
+        ad_utility::triple_component::Iri::fromIrirefWithoutBrackets(type));
+    return LiteralOrIri{std::move(lit)};
   }
   return std::nullopt;
-};
+}
 
 // _____________________________________________________________________________
 std::optional<LiteralOrIri>

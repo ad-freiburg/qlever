@@ -20,6 +20,7 @@
 #include "index/Index.h"
 #include "index/IndexImpl.h"
 #include "index/LocatedTriples.h"
+#include "util/LruCache.h"
 #include "util/Serializer/TripleSerializer.h"
 
 // ____________________________________________________________________________
@@ -123,6 +124,8 @@ DeltaTriplesCount DeltaTriples::getCounts() const {
 DeltaTriples::Triples DeltaTriples::makeInternalTriples(
     const Triples& triples) {
   Triples internalTriples;
+  ad_utility::util::LRUCache<Id::T, ad_utility::triple_component::Iri>
+      predicateCache{10};
   for (const auto& triple : triples) {
     const auto& ids = triple.ids();
     Id objectId = ids.at(2);
@@ -133,14 +136,17 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(
         !optionalLiteralOrIri.value().hasLanguageTag()) {
       continue;
     }
-    Id predicateId = ids.at(1);
-    auto predicate = ExportQueryExecutionTrees::idToLiteralOrIri(
-        index_, predicateId, localVocab_);
-    AD_CORRECTNESS_CHECK(predicate.has_value() && predicate.value().isIri());
+    const auto& predicate =
+        predicateCache.getOrCompute(ids.at(1).getBits(), [this](Id::T bits) {
+          auto optionalPredicate = ExportQueryExecutionTrees::idToLiteralOrIri(
+              index_, Id::fromBits(bits), localVocab_);
+          AD_CORRECTNESS_CHECK(optionalPredicate.has_value() &&
+                               optionalPredicate.value().isIri());
+          return std::move(optionalPredicate.value().getIri());
+        });
     auto specialPredicate = ad_utility::convertToLanguageTaggedPredicate(
-        predicate.value().getIri(),
-        std::string{
-            asStringViewUnsafe(optionalLiteralOrIri.value().getLanguageTag())});
+        predicate,
+        asStringViewUnsafe(optionalLiteralOrIri.value().getLanguageTag()));
     Id specialId = TripleComponent{std::move(specialPredicate)}.toValueId(
         index_.getVocab(), localVocab_, index_.encodedIriManager());
     internalTriples.push_back(

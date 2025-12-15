@@ -193,7 +193,9 @@ class DeltaTriples {
 
   // From the triples that are explicitly being added to the index, compute a
   // bunch of triples to be inserted into the internal permutation to make
-  // things like efficient language filters work.
+  // things like efficient language filters work. This currently performs a
+  // lookup from disk to check the language tag, but in the future this may be
+  // implemented more efficiently.
   Triples makeInternalTriples(const Triples& triples);
 
   // Insert triples.
