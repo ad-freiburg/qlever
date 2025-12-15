@@ -74,7 +74,7 @@ inline std::string addDatatype(const std::string_view wkt) {
   auto dt = ad_utility::triple_component::Iri::fromIrirefWithoutBrackets(
       GEO_WKT_LITERAL);
   lit.addDatatype(dt);
-  return std::move(lit.toStringRepresentation());
+  return std::move(lit).toStringRepresentation();
 }
 
 // Tries to extract the geometry type and parse the geometry given by a WKT
