@@ -130,7 +130,7 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(
     const auto& ids = triple.ids();
     Id objectId = ids.at(2);
     auto optionalLiteralOrIri = ExportQueryExecutionTrees::idToLiteralOrIri(
-        index_, objectId, localVocab_);
+        index_, objectId, localVocab_, true);
     if (!optionalLiteralOrIri.has_value() ||
         !optionalLiteralOrIri.value().isLiteral() ||
         !optionalLiteralOrIri.value().hasLanguageTag()) {
@@ -139,7 +139,7 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(
     const auto& predicate =
         predicateCache.getOrCompute(ids.at(1).getBits(), [this](Id::T bits) {
           auto optionalPredicate = ExportQueryExecutionTrees::idToLiteralOrIri(
-              index_, Id::fromBits(bits), localVocab_);
+              index_, Id::fromBits(bits), localVocab_, true);
           AD_CORRECTNESS_CHECK(optionalPredicate.has_value());
           AD_CORRECTNESS_CHECK(optionalPredicate.value().isIri());
           return std::move(optionalPredicate.value().getIri());
