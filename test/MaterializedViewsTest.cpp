@@ -30,7 +30,7 @@ using V = Variable;
 TEST_F(MaterializedViewsTest, NotImplemented) {
   // TODO<ullingerc> Remove this test when materialized views implementation is
   // added. These are valid queries - the error means that they were completely
-  // parsed (and the implementation is still missing).
+  // parsed and the implementation is still missing.
   AD_EXPECT_THROW_WITH_MESSAGE(
       qlv().parseAndPlanQuery(R"(
         PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
