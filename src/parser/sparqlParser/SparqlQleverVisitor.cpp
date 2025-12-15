@@ -1211,7 +1211,7 @@ GraphPatternOperation Visitor::visit(Parser::OptionalGraphPatternContext* ctx) {
 }
 
 // _____________________________________________________________________________
-CPP_variadic_template(typename T, typename... Args)(
+CPP_variadic_template_def(typename T, typename... Args)(
     requires std::is_constructible_v<T, Args...>)
     parsedQuery::GraphPatternOperation Visitor::visitMagicServiceQuery(
         Parser::ServiceGraphPatternContext* ctx, Args&&... args) {
