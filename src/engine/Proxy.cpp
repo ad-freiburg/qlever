@@ -18,6 +18,7 @@
 #include "backports/StartsWithAndEndsWith.h"
 #include "engine/CallFixedSize.h"
 #include "engine/ExportQueryExecutionTrees.h"
+#include "global/RuntimeParameters.h"
 #include "util/Exception.h"
 #include "util/LazyJsonParser.h"
 #include "util/SparqlJsonBindingUtils.h"
@@ -42,6 +43,28 @@ std::shared_ptr<Proxy> Proxy::addChild(
 
 // ____________________________________________________________________________
 std::string Proxy::getCacheKeyImpl() const {
+  if (getRuntimeParameter<&RuntimeParameters::cacheServiceResults_>()) {
+    // Build a cache key from the configuration.
+    std::string key = absl::StrCat("PROXY ", config_.endpoint_);
+    for (const auto& [name, var] : config_.inputVariables_) {
+      absl::StrAppend(&key, " INPUT:", name, "=", var.name());
+    }
+    for (const auto& [name, var] : config_.outputVariables_) {
+      absl::StrAppend(&key, " OUTPUT:", name, "=", var.name());
+    }
+    absl::StrAppend(&key, " ROW:", config_.rowVariable_.first, "=",
+                    config_.rowVariable_.second.name());
+    for (const auto& [name, value] : config_.parameters_) {
+      absl::StrAppend(&key, " PARAM:", name, "=", value);
+    }
+    // Include the child's cache key since the input bindings depend on it.
+    if (childOperation_.has_value()) {
+      absl::StrAppend(
+          &key, " CHILD:{",
+          childOperation_.value()->getRootOperation()->getCacheKey(), "}");
+    }
+    return key;
+  }
   // Don't cache proxy results as they depend on external state.
   return absl::StrCat("PROXY ", cacheBreaker_);
 }
