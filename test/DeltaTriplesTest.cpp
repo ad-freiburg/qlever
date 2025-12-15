@@ -437,53 +437,51 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
       cancellationHandle,
       makeIdTriples(
           vocab, localVocab,
-          {"<a> a 1", "<a> a \"abc\"", "<a> a \"abc\"@de", "<a> a \"abc\"@en",
-           "<a> a \"abc\"^^<http://example.com/datatype>", "<a> a <abc>",
-           "<a> <other> \"def\"@es"}));
+          {"<a> <b> 1", "<a> <b> \"abc\"", "<a> <b> \"abc\"@de",
+           "<a> <b> \"abc\"@en",
+           "<a> <b> \"abc\"^^<http://example.com/datatype>", "<a> <b> <abc>",
+           "<a> <other> \"def\"@de", "<a> <other> \"def\"@es"}));
   auto a = iri("<a>");
-  auto type = iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>");
-  EXPECT_THAT(
-      deltaTriples,
-      TriplesAre(
-          {{a, type, TripleComponent{1}},
-           {a, type, lit("\"abc\"")},
-           {a, type, lit("\"abc\"@de")},
-           {a, type, lit("\"abc\"@en")},
-           {a, type, lit("\"abc\"^^<http://example.com/datatype>")},
-           {a, type, iri("<abc>")},
-           {a, iri("<other>"), lit("\"def\"@es")}},
-          {},
-          {{a, iri("@de@<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"),
-            lit("\"abc\"@de")},
-           {a, iri("@en@<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"),
-            lit("\"abc\"@en")},
-           {a, iri("@es@<other>"), lit("\"def\"@es")}},
-          {}));
+  auto b = iri("<b>");
+  EXPECT_THAT(deltaTriples,
+              TriplesAre({{a, b, TripleComponent{1}},
+                          {a, b, lit("\"abc\"")},
+                          {a, b, lit("\"abc\"@de")},
+                          {a, b, lit("\"abc\"@en")},
+                          {a, b, lit("\"abc\"^^<http://example.com/datatype>")},
+                          {a, b, iri("<abc>")},
+                          {a, iri("<other>"), lit("\"def\"@de")},
+                          {a, iri("<other>"), lit("\"def\"@es")}},
+                         {},
+                         {{a, iri("@de@<b>"), lit("\"abc\"@de")},
+                          {a, iri("@en@<b>"), lit("\"abc\"@en")},
+                          {a, iri("@de@<other>"), lit("\"def\"@de")},
+                          {a, iri("@es@<other>"), lit("\"def\"@es")}},
+                         {}));
 
   deltaTriples.deleteTriples(
       cancellationHandle,
       makeIdTriples(
           vocab, localVocab,
-          {"<a> a 1", "<a> a \"abc\"", "<a> a \"abc\"@de", "<a> a \"abc\"@en",
-           "<a> a \"abc\"^^<http://example.com/datatype>", "<a> a <abc>",
-           "<a> <other> \"def\"@es"}));
-  EXPECT_THAT(
-      deltaTriples,
-      TriplesAre(
-          {},
-          {{a, type, TripleComponent{1}},
-           {a, type, lit("\"abc\"")},
-           {a, type, lit("\"abc\"@de")},
-           {a, type, lit("\"abc\"@en")},
-           {a, type, lit("\"abc\"^^<http://example.com/datatype>")},
-           {a, type, iri("<abc>")},
-           {a, iri("<other>"), lit("\"def\"@es")}},
-          {},
-          {{a, iri("@de@<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"),
-            lit("\"abc\"@de")},
-           {a, iri("@en@<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"),
-            lit("\"abc\"@en")},
-           {a, iri("@es@<other>"), lit("\"def\"@es")}}));
+          {"<a> <b> 1", "<a> <b> \"abc\"", "<a> <b> \"abc\"@de",
+           "<a> <b> \"abc\"@en",
+           "<a> <b> \"abc\"^^<http://example.com/datatype>", "<a> <b> <abc>",
+           "<a> <other> \"def\"@de", "<a> <other> \"def\"@es"}));
+  EXPECT_THAT(deltaTriples,
+              TriplesAre({},
+                         {{a, b, TripleComponent{1}},
+                          {a, b, lit("\"abc\"")},
+                          {a, b, lit("\"abc\"@de")},
+                          {a, b, lit("\"abc\"@en")},
+                          {a, b, lit("\"abc\"^^<http://example.com/datatype>")},
+                          {a, b, iri("<abc>")},
+                          {a, iri("<other>"), lit("\"def\"@de")},
+                          {a, iri("<other>"), lit("\"def\"@es")}},
+                         {},
+                         {{a, iri("@de@<b>"), lit("\"abc\"@de")},
+                          {a, iri("@en@<b>"), lit("\"abc\"@en")},
+                          {a, iri("@de@<other>"), lit("\"def\"@de")},
+                          {a, iri("@es@<other>"), lit("\"def\"@es")}}));
 }
 
 // Test the rewriting of local vocab entries and blank nodes.
