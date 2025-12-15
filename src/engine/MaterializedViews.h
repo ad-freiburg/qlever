@@ -25,13 +25,6 @@ class IndexScan;
 // cleanly without breaking the entire index format.
 static constexpr size_t MATERIALIZED_VIEWS_VERSION = 1;
 
-// A custom exception that will be thrown for all configuration errors while
-// reading or writing materialized views.
-class MaterializedViewConfigException : public std::runtime_error {
-  // Constructors have to be explicitly inherited
-  using std::runtime_error::runtime_error;
-};
-
 // The `MaterializedViewWriter` can be used to write a new materialized view to
 // disk, given an already planned query. The query will be executed lazily and
 // the results will be written to the view.
@@ -89,8 +82,10 @@ class MaterializedView {
   std::shared_ptr<Permutation> permutation_{std::make_shared<Permutation>(
       Permutation::Enum::SPO, ad_utility::makeUnlimitedAllocator<Id>())};
   VariableToColumnMap varToColMap_;
-  // The true value is read from on-disk metadata in the constructor
-  Variable indexedColVariable_{"?dummy"};
+  // `?s`, `?p`, `?o` are placeholders: the true value is read from on-disk
+  // metadata in the constructor
+  std::array<Variable, 3> indexedColVariables_{Variable{"?s"}, Variable{"?p"},
+                                               Variable{"?o"}};
   std::shared_ptr<LocatedTriplesSnapshot> locatedTriplesSnapshot_;
 
   using AdditionalScanColumns = SparqlTripleSimple::AdditionalScanColumns;
@@ -114,8 +109,10 @@ class MaterializedView {
     return varToColMap_;
   }
 
-  // Get the name of the indexed column.
-  const Variable& indexedColumn() const { return indexedColVariable_; }
+  // Get the name of the indexed columns in the order on which they are sorted.
+  const std::array<Variable, 3>& indexedColumns() const {
+    return indexedColVariables_;
+  }
 
   // Return the combined filename from the index' `onDiskBase` and the name of
   // the view. Note that this function does not check for validity or existence.

@@ -300,11 +300,12 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
                          {static_cast<ColumnIndex>(index),
                           ColumnIndexAndTypeInfo::PossiblyUndefined}});
   }
-  indexedColVariable_ = Variable{columnNames.at(0)};
+  indexedColVariables_ = std::array<Variable, 3>{Variable{columnNames.at(0)},
+                                                 Variable{columnNames.at(1)},
+                                                 Variable{columnNames.at(2)}};
 
   // Read permutation
-  permutation_->loadFromDisk(
-      filename, [](Id) { return false; }, false);
+  permutation_->loadFromDisk(filename, [](Id) { return false; }, false);
   AD_CORRECTNESS_CHECK(permutation_->isLoaded());
 }
 
@@ -340,64 +341,92 @@ SparqlTripleSimple MaterializedView::makeScanConfig(
         "A materialized view query may not have a child group graph pattern.");
   }
 
-  if (!viewQuery.scanCol_.has_value()) {
-    throw MaterializedViewConfigException(
-        "You must set a variable, IRI or literal for the scan column of a "
-        "materialized view.");
-  }
-
-  auto s = viewQuery.scanCol_.value();
-  std::optional<Variable> scanColVar =
-      s.isVariable() ? std::optional{s.getVariable()} : std::nullopt;
   AD_CORRECTNESS_CHECK(
       placeholderPredicate != placeholderObject,
       "Placeholders for predicate and object must not be the same variable");
+
+  // If `scanCol_` is set (when using the magic predicate), fix the subject to
+  // this. Otherwise the subject is determined from `requestedColumns_` below.
+  std::optional<TripleComponent> s = viewQuery.scanCol_;
   TripleComponent p{std::move(placeholderPredicate)};
   TripleComponent o{std::move(placeholderObject)};
   AdditionalScanColumns additionalCols;
 
   // Assemble which columns should be bound to which variables
   ad_utility::HashSet<Variable> uniqueTargetVar;
-  for (const auto& [viewVar, targetVar] : viewQuery.requestedVariables_) {
+  for (const auto& [viewVar, target] : viewQuery.requestedColumns_) {
     if (!varToColMap_.contains(viewVar)) {
       throw MaterializedViewConfigException(absl::StrCat(
           "The column '", viewVar.name(),
           "' does not exist in the materialized view '", name_, "'."));
     }
-    if (uniqueTargetVar.contains(targetVar)) {
-      throw MaterializedViewConfigException(
-          absl::StrCat("Each target variable for a payload column may only be "
-                       "associated with one column. However  '",
-                       targetVar.name(), "' was requested multiple times."));
-    }
-    if (scanColVar.has_value() && scanColVar.value() == targetVar) {
+
+    if (target.isVariable() && uniqueTargetVar.contains(target.getVariable())) {
       throw MaterializedViewConfigException(absl::StrCat(
-          "The variable for the scan column of a materialized "
-          "view may not also be used for a payload column, but '",
-          scanColVar.value().name(), "' violated this requirement."));
+          "Each target variable for a reading from a materialized "
+          "view may only be associated with one column. However  '",
+          target.toString(), "' was requested multiple times."));
     }
+
     auto colIdx = varToColMap_.at(viewVar).columnIndex_;
     if (colIdx == 0) {
-      throw MaterializedViewConfigException(absl::StrCat(
-          "The scan column of a materialized view may not be requested as "
-          "payload, but '",
-          scanColVar.value().name(), "' violated this requirement."));
+      if (s.has_value()) {
+        throw MaterializedViewConfigException(absl::StrCat(
+            "The first column of a materialized view may not be requested "
+            "twice, but '",
+            target.toString(), "' violated this requirement."));
+      }
+      s = target;
     } else if (colIdx == 1) {
-      p = targetVar;
+      p = target;
     } else if (colIdx == 2) {
-      o = targetVar;
+      o = target;
     } else {
+      if (!target.isVariable()) {
+        throw MaterializedViewConfigException(absl::StrCat(
+            "Currently only the first three columns of a materialized view may "
+            "be restricted to fixed values. All other columns must be "
+            "variables, but column '",
+            viewVar.name(), "' was fixed to '", target.toString(), "'."));
+      }
       AD_CORRECTNESS_CHECK(colIdx > 2);
-      additionalCols.emplace_back(colIdx, targetVar);
+      additionalCols.emplace_back(colIdx, target.getVariable());
     }
-    uniqueTargetVar.insert(targetVar);
+
+    if (target.isVariable()) {
+      uniqueTargetVar.insert(target.getVariable());
+    }
+  }
+
+  // The scan column must be set.
+  if (!s.has_value()) {
+    throw MaterializedViewConfigException(
+        "The first column of a materialized view must always be read to a "
+        "variable or restricted to a fixed value.");
+  }
+
+  // Not all versions of scan specifications are allowed because a view only has
+  // one permutation: fixed values are only allowed in these arrangements:
+  // subject, subject + predicate, subject + predicate + object.
+  auto sIsVar = s.value().isVariable();
+  auto pIsVar = p.isVariable();
+  auto oIsVar = o.isVariable();
+  if (!pIsVar && sIsVar) {
+    throw MaterializedViewConfigException(
+        "When setting the second column of a materialized view to a fixed "
+        "value, the first column must also be fixed.");
+  }
+  if (!oIsVar && (pIsVar || sIsVar)) {
+    throw MaterializedViewConfigException(
+        "When setting the third column of a materialized view to a fixed "
+        "value, the first two columns must also be fixed.");
   }
 
   // Additional columns must be sorted (required by internals of `IndexScan`)
   std::sort(additionalCols.begin(), additionalCols.end(),
             [](const auto& a, const auto& b) { return a.first < b.first; });
 
-  return {s, p, o, additionalCols};
+  return {s.value(), p, o, additionalCols};
 }
 
 namespace string_constants::detail {

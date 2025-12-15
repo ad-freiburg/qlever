@@ -11,6 +11,7 @@
 #include "./util/HttpRequestHelpers.h"
 #include "engine/MaterializedViews.h"
 #include "engine/Server.h"
+#include "parser/TripleComponent.h"
 #include "rdfTypes/Iri.h"
 #include "rdfTypes/Literal.h"
 #include "util/CancellationHandle.h"
@@ -40,16 +41,15 @@ TEST_F(MaterializedViewsTest, Basic) {
       R"(
       PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
       SELECT * {
-        ?s view:testView1:g ?x .
+        ?s view:testView1-g ?x .
       }
     )",
       R"(
       PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
       SELECT * {
-        SERVICE view: {
-          _:config view:name "testView1" ;
-                   view:scan-column ?s ;
-                   view:payload-g ?x .
+        SERVICE view:testView1 {
+          _:config view:column-s ?s ;
+                   view:column-g ?x .
         }
       }
     )",
@@ -58,7 +58,7 @@ TEST_F(MaterializedViewsTest, Basic) {
       PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
       SELECT * {
         SELECT * {
-          ?s view:testView1:g ?x .
+          ?s view:testView1-g ?x .
         }
       }
     )",
@@ -69,6 +69,8 @@ TEST_F(MaterializedViewsTest, Basic) {
 
     EXPECT_THAT(qet->getRootOperation()->getCacheKey(),
                 ::testing::HasSubstr("testView1"));
+
+    // TODO<ullingerc> Add permutation name to index scan runtime info.
     // const auto& rtDetails =
     //     qet->getRootOperation()->getRuntimeInfoPointer()->details_;
     // ASSERT_TRUE(rtDetails.contains("scan-on-materialized-view"));
@@ -83,7 +85,7 @@ TEST_F(MaterializedViewsTest, Basic) {
     }
   }
 
-  // Join between index scan on view and regular index scan
+  // Join between index scan on view and regular index scan.
   qlv().writeMaterializedView(
       "testView2", "SELECT * { ?s <p1> ?o . BIND(42 AS ?g) . BIND(3 AS ?x) }");
   qlv().loadMaterializedView("testView2");
@@ -91,7 +93,7 @@ TEST_F(MaterializedViewsTest, Basic) {
     auto [qet, qec, parsed] = qlv().parseAndPlanQuery(R"(
       PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
       SELECT * {
-        ?s view:testView2:o ?x .
+        ?s view:testView2-o ?x .
         ?s <p2> ?y .
       }
     )");
@@ -104,7 +106,7 @@ TEST_F(MaterializedViewsTest, Basic) {
       qlv().query(R"(
         PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
         SELECT * {
-          ?s view:testView1:blabliblu ?x .
+          ?s view:testView1-blabliblu ?x .
         }
       )"),
       ::testing::HasSubstr("The column '?blabliblu' does not exist in the "
@@ -113,7 +115,7 @@ TEST_F(MaterializedViewsTest, Basic) {
       qlv().query(R"(
         PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
         SELECT * {
-          ?s view:testViewXYZ:g ?x .
+          ?s view:testViewXYZ-g ?x .
         }
       )"),
       ::testing::HasSubstr(
@@ -122,42 +124,40 @@ TEST_F(MaterializedViewsTest, Basic) {
       qlv().query(R"(
         PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
         SELECT * {
-          SERVICE view: {
-            _:config view:name "testView1" ;
-                    view:payload-g ?x .
+          SERVICE view:testView1 {
+            _:config view:column-g ?x .
           }
         }
       )"),
       ::testing::HasSubstr(
-          "You must set a variable, IRI or literal for the scan column of a "
-          "materialized view"));
+          "The first column of a materialized view must always be read to a "
+          "variable or restricted to a fixed value"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       qlv().query(R"(
         PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
         SELECT * {
           SERVICE view: {
-            _:config view:scan-column ?s ;
-                    view:payload-g ?x .
+            _:config view:column-s ?s ;
+                     view:column-g ?x .
           }
         }
       )"),
-      ::testing::HasSubstr(
-          "To read from a materialized view its name must be set in the "
-          "query configuration"));
+      ::testing::HasSubstr("The IRI for the materialized view SERVICE should "
+                           "specify the view name"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       qlv().query(R"(
         PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
         SELECT * {
-          SERVICE view: {
-            _:config view:name "testView1" ;
-                    view:scan-column ?s ;
-                    view:payload-g ?x .
+          SERVICE view:testView1 {
+            _:config view:column-s ?s ;
+                     view:column-g ?x .
             { ?s ?p ?o }
           }
         }
       )"),
       ::testing::HasSubstr("A materialized view query may not have a child "
                            "group graph pattern"));
+  // TODO<ullingerc>!! test other checks
 }
 
 // _____________________________________________________________________________
@@ -170,7 +170,7 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
         "SELECT ?p ?o (?s AS ?x) ?g { ?s ?p ?o . BIND(3 AS ?g) }";
     qlv().writeMaterializedView("testView3", reorderedQuery);
     MaterializedView view{testIndexBase_, "testView3"};
-    EXPECT_EQ(view.indexedColumn(), V{"?p"});
+    EXPECT_EQ(view.indexedColumns().at(0), V{"?p"});
     const auto& map = view.variableToColumnMap();
     EXPECT_EQ(map.at(V{"?p"}).columnIndex_, 0);
     EXPECT_EQ(map.at(V{"?o"}).columnIndex_, 1);
@@ -190,10 +190,10 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
                 ::testing::HasSubstr("Query result rows for materialized view "
                                      "testView4 are already sorted"));
     MaterializedView view{testIndexBase_, "testView4"};
-    EXPECT_EQ(view.indexedColumn(), V{"?p"});
+    EXPECT_EQ(view.indexedColumns().at(0), V{"?p"});
     auto res = qlv().query(
         "PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>"
-        "SELECT * { <p1> view:testView4:o ?o }",
+        "SELECT * { <p1> view:testView4-o ?o }",
         ad_utility::MediaType::tsv);
     EXPECT_EQ(res, "?o\n\"abc\"\n\"xyz\"\n");
   }
@@ -243,10 +243,6 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
   auto iri = [](const std::string& ref) {
     return ad_utility::triple_component::Iri::fromIriref(ref);
   };
-  auto lit = [](const std::string& literal) {
-    return ad_utility::triple_component::Literal::fromStringRepresentation(
-        literal);
-  };
 
   V placeholderP{"?placeholder_p"};
   V placeholderO{"?placeholder_o"};
@@ -255,7 +251,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
   {
     ViewQuery query{SparqlTriple{
         V{"?s"},
-        iri("<https://qlever.cs.uni-freiburg.de/materializedView/testView1:g>"),
+        iri("<https://qlever.cs.uni-freiburg.de/materializedView/testView1-g>"),
         V{"?o"}}};
 
     auto t = view->makeScanConfig(query, placeholderP, placeholderO);
@@ -263,17 +259,17 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
     EXPECT_EQ(t, expected);
   }
   {
-    ViewQuery query;
+    ViewQuery query{
+        iri("<https://qlever.cs.uni-freiburg.de/materializedView/testView1>")};
     query.addParameter(
-        SparqlTriple{iri("<config>"), iri("<name>"), lit("\"testView1\"")});
+        SparqlTriple{iri("<config>"), iri("<column-s>"), V{"?s"}});
     query.addParameter(
-        SparqlTriple{iri("<config>"), iri("<scan-column>"), V{"?s"}});
-    query.addParameter(
-        SparqlTriple{iri("<config>"), iri("<payload-g>"), V{"?o"}});
+        SparqlTriple{iri("<config>"), iri("<column-g>"), V{"?o"}});
     AD_EXPECT_THROW_WITH_MESSAGE(
         query.addParameter(
             SparqlTriple{iri("<config>"), iri("<blabliblu>"), V{"?o"}}),
         ::testing::HasSubstr("Unknown parameter"));
+    EXPECT_EQ(query.name(), "materialized view query");
 
     auto t = view->makeScanConfig(query, placeholderP, placeholderO);
     Triple expected{V{"?s"}, placeholderP, placeholderO, {{3, V{"?o"}}}};
@@ -285,7 +281,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
   {
     ViewQuery query{SparqlTriple{
         V{"?s"},
-        iri("<https://qlever.cs.uni-freiburg.de/materializedView/testView1:o>"),
+        iri("<https://qlever.cs.uni-freiburg.de/materializedView/testView1-o>"),
         V{"?o"}}};
 
     auto t = view->makeScanConfig(query, placeholderP, placeholderO);
@@ -300,7 +296,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
   {
     ViewQuery query{SparqlTriple{
         iri("<s1>"),
-        iri("<https://qlever.cs.uni-freiburg.de/materializedView/testView1:p>"),
+        iri("<https://qlever.cs.uni-freiburg.de/materializedView/testView1-p>"),
         V{"?p"}}};
     auto t = view->makeScanConfig(query, placeholderP, placeholderO);
     Triple expected{iri("<s1>"), V{"?p"}, placeholderO};
@@ -322,65 +318,25 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
 
   // Invalid inputs
   {
-    ViewQuery query;
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        ViewQuery(iri("<https://qlever.cs.uni-freiburg.de/materializedView/>")),
+        ::testing::HasSubstr("The IRI for the materialized view SERVICE should "
+                             "specify the view name"));
+
+    ViewQuery query{
+        iri("<https://qlever.cs.uni-freiburg.de/materializedView/testView1>")};
     AD_EXPECT_THROW_WITH_MESSAGE(
         query.addParameter(
             SparqlTriple{iri("<config>"), iri("<blabliblu>"), V{"?o"}}),
         ::testing::HasSubstr("Unknown parameter"));
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        query.addParameter(
-            SparqlTriple{iri("<config>"), iri("<name>"), V{"?o"}}),
-        ::testing::HasSubstr("Parameter <name> to materialized view query "
-                             "needs to be a literal"));
 
     query.addParameter(
-        SparqlTriple{iri("<config>"), iri("<payload-g>"), V{"?o"}});
-    query.addParameter(
-        SparqlTriple{iri("<config>"), iri("<name>"), lit("\"testView1\"")});
-    query.addParameter(
-        SparqlTriple{iri("<config>"), iri("<scan-column>"), V{"?s"}});
-
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        view->makeScanConfig(query, V{"?a"}, V{"?a"}),
-        ::testing::HasSubstr("Placeholders for predicate and object must not "
-                             "be the same variable"));
+        SparqlTriple{iri("<config>"), iri("<column-g>"), V{"?o"}});
 
     AD_EXPECT_THROW_WITH_MESSAGE(
         query.addParameter(
-            SparqlTriple{iri("<config>"), iri("<payload-g>"), V{"?o"}}),
-        ::testing::HasSubstr("Each payload column may only be requested once"));
-
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        query.addParameter(
-            SparqlTriple{iri("<config>"), iri("<payload-x>"), iri("<abc>")}),
-        ::testing::HasSubstr("Payload columns can not be filtered"));
-
-    auto query2 = query;
-    query2.addParameter(
-        SparqlTriple{iri("<config>"), iri("<payload-o>"), V{"?o"}});
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        view->makeScanConfig(query2, placeholderP, placeholderO),
-        ::testing::HasSubstr(
-            "Each target variable for a payload column may only be "
-            "associated with one column"));
-
-    auto query3 = query;
-    query3.addParameter(
-        SparqlTriple{iri("<config>"), iri("<payload-o>"), V{"?s"}});
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        view->makeScanConfig(query3, placeholderP, placeholderO),
-        ::testing::HasSubstr(
-            "The variable for the scan column of a materialized "
-            "view may not also be used for a payload column"));
-
-    auto query4 = query;
-    query4.addParameter(
-        SparqlTriple{iri("<config>"), iri("<payload-s>"), V{"?y"}});
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        view->makeScanConfig(query4, placeholderP, placeholderO),
-        ::testing::HasSubstr(
-            "The scan column of a materialized view may not be requested as "
-            "payload"));
+            SparqlTriple{iri("<config>"), iri("<column-g>"), V{"?o"}}),
+        ::testing::HasSubstr("Each column may only be requested once"));
 
     AD_EXPECT_THROW_WITH_MESSAGE(
         ViewQuery(SparqlTriple{V{"?s"},
@@ -389,13 +345,21 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
                                V{"?o"}}),
         ::testing::HasSubstr("Special triple for materialized view has an "
                              "invalid predicate"));
+
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        ViewQuery(SparqlTriple{TripleComponent::UNDEF(),
+                               iri("<https://qlever.cs.uni-freiburg.de/"
+                                   "materializedView/testView1-o>"),
+                               V{"?o"}}),
+        ::testing::HasSubstr("The subject of the magic predicate for reading "
+                             "from a materialized view may not be undef"));
   }
 
   // Test column stripping helper.
   {
     ViewQuery query{SparqlTriple{V{"?s"},
                                  iri("<https://qlever.cs.uni-freiburg.de/"
-                                     "materializedView/testView1:o>"),
+                                     "materializedView/testView1-o>"),
                                  V{"?o"}}};
     EXPECT_THAT(query.getVarsToKeep(),
                 ::testing::UnorderedElementsAre(::testing::Eq(V{"?s"}),
@@ -428,7 +392,7 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
     auto [qet, qec, parsed] = qlv().parseAndPlanQuery(
         "SELECT * { ?s "
         "<https://qlever.cs.uni-freiburg.de/materializedView/"
-        "testViewFromServer:o> ?o }");
+        "testViewFromServer-o> ?o }");
     auto res = qet->getResult(false);
     ASSERT_TRUE(res->isFullyMaterialized());
     EXPECT_EQ(res->idTable().numColumns(), 2);
@@ -592,7 +556,7 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
     auto [qet, qec, parsed] = qlv().parseAndPlanQuery(
         "SELECT * { ?s "
         "<https://qlever.cs.uni-freiburg.de/materializedView/"
-        "testView1:o> ?o }");
+        "testView1-o> ?o }");
 
     auto res = qet->getResult(true);
     size_t numRows = 0;
@@ -613,6 +577,7 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
 
     EXPECT_THAT(qet->getRootOperation()->getCacheKey(),
                 ::testing::HasSubstr("testView1"));
+    // TODO<ullingerc> Runtime info.
     // const auto& rtDetails =
     //     qet->getRootOperation()->getRuntimeInfoPointer()->details_;
     // ASSERT_TRUE(rtDetails.contains("scan-on-materialized-view"));
@@ -624,7 +589,7 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
     auto [qet, qec, parsed] = qlv().parseAndPlanQuery(
         "SELECT (COUNT(*) AS ?cnt) { ?s "
         "<https://qlever.cs.uni-freiburg.de/materializedView/"
-        "testView1:o> ?o }");
+        "testView1-o> ?o }");
     auto res = qet->getResult();
     ASSERT_TRUE(res->isFullyMaterialized());
     auto col = qet->getVariableColumn(Variable{"?cnt"});
