@@ -30,8 +30,9 @@ void MaterializedViewQuery::addParameter(const SparqlTriple& triple) {
   } else {
     throw MaterializedViewConfigException(
         absl::StrCat("Unknown parameter <", parameter,
-                     ">. Supported parameters are <scan-column> and "
-                     "<payload-COLNAME>."));
+                     ">. Expected parameter of the form "
+                     "<",
+                     prefixColumnParam, "-COLNAME>."));
   }
 }
 
@@ -66,7 +67,9 @@ MaterializedViewQuery::MaterializedViewQuery(
   if (viewName_.value().empty()) {
     throw MaterializedViewConfigException(
         "The IRI for the materialized view SERVICE should specify the view "
-        "name.");
+        "name, like `SERVICE "
+        "<https://qlever.cs.uni-freiburg.de/materializedView/VIEWNAME> "
+        "{...}`.");
   }
 }
 
