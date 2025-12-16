@@ -10,6 +10,7 @@
 #include "engine/MaterializedViews.h"
 #include "index/IndexImpl.h"
 #include "index/TextIndexBuilder.h"
+#include "libqlever/QleverTypes.h"
 #include "parser/SparqlParser.h"
 
 namespace qlever {

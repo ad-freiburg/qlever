@@ -10,6 +10,7 @@
 #include "engine/VariableToColumnMap.h"
 #include "index/DeltaTriples.h"
 #include "index/Permutation.h"
+#include "libqlever/QleverTypes.h"
 #include "parser/MaterializedViewQuery.h"
 #include "parser/ParsedQuery.h"
 #include "parser/SparqlTriple.h"
@@ -38,10 +39,7 @@ class MaterializedViewWriter {
   ad_utility::AllocatorWithLimit<Id> allocator_;
 
  public:
-  // Type alias repeated here from `Qlever.h` to avoid cyclic include.
-  using QueryPlan =
-      std::tuple<std::shared_ptr<QueryExecutionTree>,
-                 std::shared_ptr<QueryExecutionContext>, ParsedQuery>;
+  using QueryPlan = qlever::QueryPlan;
 
  private:
   // Initialize a writer given the base filename of the view and a query plan.
