@@ -136,9 +136,6 @@ class MaterializedView {
   static bool isValidName(std::string_view name);
   static void throwIfInvalidName(std::string_view name);
 
-  // TODO<ullingerc> Function to validate and split a `MaterializedViewQuery`
-  // with new syntax
-
   // Given a `MaterializedViewQuery` obtained from a special `SERVICE` or
   // predicate, compute the `SparqlTripleSimple` to be passed to the constructor
   // of `IndexScan` such that the columns requested by the user are returned. If
