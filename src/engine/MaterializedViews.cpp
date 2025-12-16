@@ -241,14 +241,8 @@ void MaterializedViewWriter::computeResultAndWritePermutation() const {
   // Export column names to view info JSON file
   nlohmann::json viewInfo = {{"version", MATERIALIZED_VIEWS_VERSION},
                              {"columns", std::move(columns)}};
-  {
-    std::ofstream viewInfoFile(filename + ".viewinfo.json");
-    if (!viewInfoFile) {
-      throw std::runtime_error(
-          absl::StrCat("Cannot write ", filename, ".viewinfo.json"));
-    }
-    viewInfoFile << viewInfo.dump() << std::endl;
-  }
+  ad_utility::makeOfstream(filename + ".viewinfo.json")
+      << viewInfo.dump() << std::endl;
 
   AD_LOG_INFO << "Statistics for view " << name_ << ": "
               << spoMetaData.statistics() << std::endl;
@@ -276,14 +270,7 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
 
   // Read metadata from JSON
   nlohmann::json viewInfoJson;
-  {
-    std::ifstream viewInfoFile{metadataFilename};
-    if (!viewInfoFile) {
-      throw std::runtime_error(
-          absl::StrCat("Error reading ", filename, ".viewinfo.json"));
-    }
-    viewInfoFile >> viewInfoJson;
-  }
+  ad_utility::makeIfstream(metadataFilename) >> viewInfoJson;
 
   // Check version of view and restore column names
   auto version = viewInfoJson.at("version").get<size_t>();
@@ -305,8 +292,7 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
                                                  Variable{columnNames.at(2)}};
 
   // Read permutation
-  permutation_->loadFromDisk(
-      filename, [](Id) { return false; }, false);
+  permutation_->loadFromDisk(filename, [](Id) { return false; }, false);
   AD_CORRECTNESS_CHECK(permutation_->isLoaded());
 }
 
