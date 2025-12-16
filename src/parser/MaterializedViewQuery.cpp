@@ -65,11 +65,10 @@ MaterializedViewQuery::MaterializedViewQuery(
     const ad_utility::triple_component::Iri& iri) {
   viewName_ = extractParameterName(iri, MATERIALIZED_VIEW_IRI);
   if (viewName_.value().empty()) {
-    throw MaterializedViewConfigException(
+    throw MaterializedViewConfigException(absl::StrCat(
         "The IRI for the materialized view SERVICE should specify the view "
-        "name, like `SERVICE "
-        "<https://qlever.cs.uni-freiburg.de/materializedView/VIEWNAME> "
-        "{...}`.");
+        "name, like `SERVICE ",
+        MATERIALIZED_VIEW_IRI_WITHOUT_CLOSING_BRACKET, "VIEWNAME> {...}`."));
   }
 }
 
@@ -82,9 +81,8 @@ MaterializedViewQuery::MaterializedViewQuery(const SparqlTriple& triple) {
   if (sep == std::string::npos) {
     throw MaterializedViewConfigException(absl::StrCat(
         "Special triple for materialized view has an invalid predicate '",
-        predicate,
-        "'. Expected <https://qlever.cs.uni-freiburg.de/materializedView/"
-        "VIEWNAME-COLNAME>."));
+        predicate, "'. Expected ",
+        MATERIALIZED_VIEW_IRI_WITHOUT_CLOSING_BRACKET, "VIEWNAME-COLNAME>."));
   }
 
   Variable requestedColumn{absl::StrCat("?", predicate.substr(sep + 1))};

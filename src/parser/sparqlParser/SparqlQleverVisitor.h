@@ -326,8 +326,13 @@ class SparqlQleverVisitor {
   parsedQuery::GraphPatternOperation visit(
       Parser::ServiceGraphPatternContext* ctx);
 
-  // Visitor function for special builtin features that are triggered via
-  // `SERVICE` requests with "magic" IRIs.
+  // Generic visitor function for all the special builtin features that are
+  // triggered via `SERVICE` requests with "magic" IRIs.
+  //
+  // The type of the `MagicServiceQuery` is given as `T`. If the constructor of
+  // this particular magic service requires arguments (for example the IRI of
+  // the service), they can be given via the `args` parameters. Most magic
+  // services do not need `args`. For them this can be left out.
   CPP_variadic_template(typename T, typename... Args)(
       requires std::is_constructible_v<T, Args...>)
       parsedQuery::GraphPatternOperation
