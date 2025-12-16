@@ -138,9 +138,12 @@ class MaterializedView {
 
   // Given a `MaterializedViewQuery` obtained from a special `SERVICE` or
   // predicate, compute the `SparqlTripleSimple` to be passed to the constructor
-  // of `IndexScan` such that the columns requested by the user are returned. If
-  // the `viewQuery` does not request columns 1 and 2, the placeholders should
-  // be set to unique variable names.
+  // of `IndexScan` such that the columns requested by the user are returned.
+  //
+  // The caller has to pass to variables that  are not used anywhere else in
+  // the query as dummy placeholders. These are  used in case the `viewQuery`
+  // does not request columns 1 and 2 because `IndexScan` always reads the first
+  // three columns.
   SparqlTripleSimple makeScanConfig(
       const parsedQuery::MaterializedViewQuery& viewQuery,
       Variable placeholderPredicate, Variable placeholderObject) const;
