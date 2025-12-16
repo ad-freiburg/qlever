@@ -82,10 +82,6 @@ class MaterializedView {
   std::shared_ptr<Permutation> permutation_{std::make_shared<Permutation>(
       Permutation::Enum::SPO, ad_utility::makeUnlimitedAllocator<Id>())};
   VariableToColumnMap varToColMap_;
-  // `?s`, `?p`, `?o` are placeholders: the true value is read from on-disk
-  // metadata in the constructor
-  std::array<Variable, 3> indexedColVariables_{Variable{"?s"}, Variable{"?p"},
-                                               Variable{"?o"}};
   std::shared_ptr<LocatedTriplesSnapshot> locatedTriplesSnapshot_;
 
   using AdditionalScanColumns = SparqlTripleSimple::AdditionalScanColumns;
@@ -107,11 +103,6 @@ class MaterializedView {
   // Get the variable to column map.
   const VariableToColumnMap& variableToColumnMap() const {
     return varToColMap_;
-  }
-
-  // Get the name of the indexed columns in the order on which they are sorted.
-  const std::array<Variable, 3>& indexedColumns() const {
-    return indexedColVariables_;
   }
 
   // Return the combined filename from the index' `onDiskBase` and the name of

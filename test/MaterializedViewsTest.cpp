@@ -222,6 +222,18 @@ TEST_F(MaterializedViewsTest, Basic) {
 
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, ColumnPermutation) {
+  // Helper to get all column names from a view via its `VariableToColumnMap`.
+  auto columnNames = [](const MaterializedView& view) {
+    const auto& varToCol = view.variableToColumnMap();
+    std::vector<Variable> vars =
+        varToCol | ql::views::keys | ::ranges::to<std::vector>();
+    ql::ranges::sort(
+        vars.begin(), vars.end(), [&](const auto& a, const auto& b) {
+          return varToCol.at(a).columnIndex_ < varToCol.at(b).columnIndex_;
+        });
+    return vars;
+  };
+
   // Test that the names and ordering of the columns in a newly written view
   // matches the names (including aliases) and ordering requested by the
   // `SELECT` statement
@@ -230,7 +242,7 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
         "SELECT ?p ?o (?s AS ?x) ?g { ?s ?p ?o . BIND(3 AS ?g) }";
     qlv().writeMaterializedView("testView3", reorderedQuery);
     MaterializedView view{testIndexBase_, "testView3"};
-    EXPECT_EQ(view.indexedColumns().at(0), V{"?p"});
+    EXPECT_EQ(columnNames(view).at(0), V{"?p"});
     const auto& map = view.variableToColumnMap();
     EXPECT_EQ(map.at(V{"?p"}).columnIndex_, 0);
     EXPECT_EQ(map.at(V{"?o"}).columnIndex_, 1);
@@ -250,7 +262,7 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
                 ::testing::HasSubstr("Query result rows for materialized view "
                                      "testView4 are already sorted"));
     MaterializedView view{testIndexBase_, "testView4"};
-    EXPECT_EQ(view.indexedColumns().at(0), V{"?p"});
+    EXPECT_EQ(columnNames(view).at(0), V{"?p"});
     auto res = qlv().query(
         "PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>"
         "SELECT * { <p1> view:testView4-o ?o }",
