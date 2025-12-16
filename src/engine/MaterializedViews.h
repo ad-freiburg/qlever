@@ -65,6 +65,13 @@ class MaterializedViewWriter {
   void computeResultAndWritePermutation() const;
 
  public:
+  // Write a `MaterializedView` given the index' `onDiskBase`, a valid `name`
+  // (consting only of alphanumerics and hyphens) and a `queryPlan` to be
+  // executed. The query's result is written to the view.
+  //
+  // The `memoryLimit` and `allocator` are used only for sorting the
+  // permutation if the query result is not correctly sorted already. The
+  // `queryPlan` is executed with the normal query memory limit.
   static void writeViewToDisk(
       std::string onDiskBase, std::string name, const QueryPlan& queryPlan,
       ad_utility::MemorySize memoryLimit = ad_utility::MemorySize::gigabytes(4),
