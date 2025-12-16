@@ -12,7 +12,6 @@
 #include <utility>
 #include <vector>
 
-#include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryPlanner.h"
@@ -174,7 +173,6 @@ class Qlever {
   SortPerformanceEstimator sortPerformanceEstimator_;
   Index index_;
   mutable NamedResultCache namedResultCache_;
-  mutable MaterializedViewsManager materializedViewsManager_;
   bool enablePatternTrick_;
 
  public:
@@ -233,14 +231,6 @@ class Qlever {
   // Clear the result with the given `name` from the cache.
   void eraseResultWithName(std::string name);
   void clearNamedResultCache();
-
-  // Write a new materialized view with `name` to disk and store the result of
-  // `query`.
-  void writeMaterializedView(std::string name, std::string query) const;
-
-  // Preload a materialized view s.t. the first query to the view does not have
-  // to load the view.
-  void loadMaterializedView(std::string name) const;
 };
 }  // namespace qlever
 
