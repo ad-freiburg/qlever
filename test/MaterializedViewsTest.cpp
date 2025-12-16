@@ -9,8 +9,8 @@
 
 #include "./MaterializedViewsTestHelpers.h"
 #include "./util/HttpRequestHelpers.h"
+#include "engine/MaterializedViews.h"
 #include "engine/Server.h"
-#include "gmock/gmock.h"
 #include "parser/MaterializedViewQuery.h"
 #include "parser/TripleComponent.h"
 #include "rdfTypes/Iri.h"
