@@ -8,8 +8,11 @@
 #define QLEVER_SRC_ENGINE_MATERIALIZEDVIEWS_H_
 
 #include "engine/VariableToColumnMap.h"
+#include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/DeltaTriples.h"
+#include "index/ExternalSortFunctors.h"
 #include "index/Permutation.h"
+#include "libqlever/QleverTypes.h"
 #include "parser/MaterializedViewQuery.h"
 #include "parser/ParsedQuery.h"
 #include "parser/SparqlTriple.h"
@@ -30,44 +33,107 @@ static constexpr size_t MATERIALIZED_VIEWS_VERSION = 1;
 // the results will be written to the view.
 class MaterializedViewWriter {
  private:
+  // Filename components for writing the view to disk.
+  std::string onDiskBase_;
   std::string name_;
+
+  // Query plan to retrieve the view's rows.
   std::shared_ptr<QueryExecutionTree> qet_;
   std::shared_ptr<QueryExecutionContext> qec_;
   ParsedQuery parsedQuery_;
+
+  // Memory limit and allocator for `CompressedExternalIdTableSorter`, which is
+  // used if the query result is not correctly sorted.
   ad_utility::MemorySize memoryLimit_;
   ad_utility::AllocatorWithLimit<Id> allocator_;
 
+  // The correctly ordered column names of the view.
+  std::vector<std::string> columnNames_;
+
+  // The permutation that needs to be applied to the result columns of the query
+  // to obtain correct `IdTable`s.
+  std::vector<size_t> columnPermutation_;
+
+  using IdTableRange = ad_utility::InputRangeTypeErased<IdTableStatic<0>>;
+  // SPO comparator
+  using Comparator = SortTriple<0, 1, 2>;
+  // Sorter for SPO permutation with a dynamic number of columns (template
+  // argument `NumStaticCols == 0`)
+  using Sorter = ad_utility::CompressedExternalIdTableSorter<Comparator, 0>;
+
  public:
-  // Type alias repeated here from `Qlever.h` to avoid cyclic include.
-  using QueryPlan =
-      std::tuple<std::shared_ptr<QueryExecutionTree>,
-                 std::shared_ptr<QueryExecutionContext>, ParsedQuery>;
+  using QueryPlan = qlever::QueryPlan;
 
  private:
   // Initialize a writer given the base filename of the view and a query plan.
   // The view will be written to files prefixed with the index basename followed
   // by the view name.
-  MaterializedViewWriter(std::string name, const QueryPlan& queryPlan,
+  MaterializedViewWriter(std::string onDiskBase, std::string name,
+                         const QueryPlan& queryPlan,
                          ad_utility::MemorySize memoryLimit,
                          ad_utility::AllocatorWithLimit<Id> allocator);
 
+  // Get the base filename for the view's permutation and metadata files. This
+  // name is the result of concatenating `onDiskBase` and `name`.
   std::string getFilenameBase() const;
 
-  // Computes the column ordering how the `IdTable`s from executing the
-  // `QueryExecutionTree` must be permuted to match the requested target columns
-  // and column ordering.
-  using ColumnPermutation = std::vector<ColumnIndex>;
-  using ColumnNames = std::vector<std::string>;
-  using ColumnNamesAndPermutation = std::pair<ColumnNames, ColumnPermutation>;
+  // Helper that computes the column ordering how the `IdTable`s from executing
+  // the `QueryExecutionTree` must be permuted to match the requested target
+  // columns and column ordering. This is called in the constructor to populate
+  // `columnNamesAndPermutation_`.
+  using ColumnNameAndIndex = std::pair<std::string, size_t>;
+  using ColumnNamesAndPermutation = std::vector<ColumnNameAndIndex>;
   ColumnNamesAndPermutation getIdTableColumnNamesAndPermutation() const;
 
-  // Actually computes and externally sorts the query result and writes the view
-  // (SPO permutation and metadata) to disk.
+  // The number of columns of the view.
+  size_t numCols() const { return columnPermutation_.size(); }
+
+  // Helper to permute an `IdTable` according to `columnPermutation_` and verify
+  // that the `LocalVocab` is empty.
+  void permuteIdTableAndCheckVocab(IdTable& block,
+                                   const LocalVocab& vocab) const;
+
+  // Helper for `computeResultAndWritePermutation`: If the query given by the
+  // user is already sorted correctly, this function can be used to obtain the
+  // permuted blocks.
+  IdTableRange getBlocksForAlreadySortedResult(
+      std::shared_ptr<const Result> result) const;
+
+  // Helper for `computeResultAndWritePermutation`: If the query given by the
+  // user is not sorted correctly, this function can be used to invoke the
+  // external sorted and obtain sorted and correctly permuted blocks.
+  IdTableRange getBlocksForUnsortedResult(
+      Sorter& spoSorter, std::shared_ptr<const Result> result) const;
+
+  // Helper for `computeResultAndWritePermutation`: Checks if the result is
+  // correctly sorted and invokes `getBlocksForAlreadySortedResult` or
+  // `getBlocksForUnsortedResult` accordingly.
+  IdTableRange getSortedBlocks(Sorter& spoSorter,
+                               std::shared_ptr<const Result> result) const;
+
+  // Helper for `computeResultAndWritePermutation`: given sorted and permuted
+  // blocks from `getSortedBlocks`, write the `Permutation` to disk using
+  // `CompressedRelationWriter`. Returns the permutation metadata.
+  IndexMetaDataMmap writePermutation(IdTableRange sortedBlocksSPO) const;
+
+  // Helper for `computeResultAndWritePermutation`: Writes the metadata JSON
+  // files with column names and ordering to disk.
+  void writeViewMetadata() const;
+
+  // Actually computes, permutes and if needed externally sorts the query result
+  // and writes the view (SPO permutation and metadata) to disk.
   void computeResultAndWritePermutation() const;
 
  public:
+  // Write a `MaterializedView` given the index' `onDiskBase`, a valid `name`
+  // (consting only of alphanumerics and hyphens) and a `queryPlan` to be
+  // executed. The query's result is written to the view.
+  //
+  // The `memoryLimit` and `allocator` are used only for sorting the
+  // permutation if the query result is not correctly sorted already. The
+  // `queryPlan` is executed with the normal query memory limit.
   static void writeViewToDisk(
-      std::string name, const QueryPlan& queryPlan,
+      std::string onDiskBase, std::string name, const QueryPlan& queryPlan,
       ad_utility::MemorySize memoryLimit = ad_utility::MemorySize::gigabytes(4),
       ad_utility::AllocatorWithLimit<Id> allocator =
           ad_utility::makeUnlimitedAllocator<Id>());
@@ -82,10 +148,6 @@ class MaterializedView {
   std::shared_ptr<Permutation> permutation_{std::make_shared<Permutation>(
       Permutation::Enum::SPO, ad_utility::makeUnlimitedAllocator<Id>())};
   VariableToColumnMap varToColMap_;
-  // `?s`, `?p`, `?o` are placeholders: the true value is read from on-disk
-  // metadata in the constructor
-  std::array<Variable, 3> indexedColVariables_{Variable{"?s"}, Variable{"?p"},
-                                               Variable{"?o"}};
   std::shared_ptr<LocatedTriplesSnapshot> locatedTriplesSnapshot_;
 
   using AdditionalScanColumns = SparqlTripleSimple::AdditionalScanColumns;
@@ -107,11 +169,6 @@ class MaterializedView {
   // Get the variable to column map.
   const VariableToColumnMap& variableToColumnMap() const {
     return varToColMap_;
-  }
-
-  // Get the name of the indexed columns in the order on which they are sorted.
-  const std::array<Variable, 3>& indexedColumns() const {
-    return indexedColVariables_;
   }
 
   // Return the combined filename from the index' `onDiskBase` and the name of
@@ -138,16 +195,35 @@ class MaterializedView {
 
   // Given a `MaterializedViewQuery` obtained from a special `SERVICE` or
   // predicate, compute the `SparqlTripleSimple` to be passed to the constructor
-  // of `IndexScan` such that the columns requested by the user are returned. If
-  // the `viewQuery` does not request columns 1 and 2, the placeholders should
-  // be set to unique variable names.
+  // of `IndexScan` such that the columns requested by the user are returned.
+  //
+  // The caller has to pass to variables that  are not used anywhere else in
+  // the query as dummy placeholders. These are  used in case the `viewQuery`
+  // does not request columns 1 and 2 because `IndexScan` always reads the first
+  // three columns.
   SparqlTripleSimple makeScanConfig(
       const parsedQuery::MaterializedViewQuery& viewQuery,
       Variable placeholderPredicate, Variable placeholderObject) const;
 
+  // Helpers for checking metadata-dependent invariants of
+  // `MaterializedViewQuery` in `makeScanConfig`.
+  void throwIfScanColumnMissing(const std::optional<TripleComponent>& s) const;
+  void throwIfColumnsHaveIllegalFixedValues(
+      const std::optional<TripleComponent>& s, const TripleComponent& p,
+      const TripleComponent& o) const;
+  void throwIfColumnNotInView(const Variable& column) const;
+  void throwIfAdditionalColumnIsNotVariable(const Variable& column,
+                                            const TripleComponent& value) const;
+  void throwIfScanColumnIsSetTwice(const std::optional<TripleComponent>& s,
+                                   const TripleComponent& value) const;
+  void throwIfVariableUsedTwice(
+      const ad_utility::HashSet<Variable>& variablesSeen,
+      const TripleComponent& target) const;
+
   // Given a `QueryExecutionContext` and the arguments for `makeScanConfig`
-  // construct an `IndexScan` operation for scanning the requested columns of
-  // this view. The result of this function is guaranteed to never be `nullptr`.
+  // construct an `IndexScan` operation for scanning the requested columns
+  // of this view. The result of this function is guaranteed to never be
+  // `nullptr`.
   std::shared_ptr<IndexScan> makeIndexScan(
       QueryExecutionContext* qec,
       const parsedQuery::MaterializedViewQuery& viewQuery,

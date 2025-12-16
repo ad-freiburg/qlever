@@ -31,10 +31,12 @@
 
 // _____________________________________________________________________________
 MaterializedViewWriter::MaterializedViewWriter(
-    std::string name, const qlever::Qlever::QueryPlan& queryPlan,
+    std::string onDiskBase, std::string name,
+    const qlever::Qlever::QueryPlan& queryPlan,
     ad_utility::MemorySize memoryLimit,
     ad_utility::AllocatorWithLimit<Id> allocator)
-    : name_{std::move(name)},
+    : onDiskBase_{std::move(onDiskBase)},
+      name_{std::move(name)},
       memoryLimit_{std::move(memoryLimit)},
       allocator_{std::move(allocator)} {
   MaterializedView::throwIfInvalidName(name_);
@@ -44,15 +46,22 @@ MaterializedViewWriter::MaterializedViewWriter(
   qet_ = qet;
   qec_ = qec;
   parsedQuery_ = std::move(parsedQuery);
+  auto columnNamesAndPermutation = getIdTableColumnNamesAndPermutation();
+  columnNames_ = ::ranges::to<std::vector<std::string>>(
+      columnNamesAndPermutation | ql::views::keys);
+  columnPermutation_ = ::ranges::to<std::vector<size_t>>(
+      columnNamesAndPermutation | ql::views::values);
 }
 
 // _____________________________________________________________________________
 void MaterializedViewWriter::writeViewToDisk(
-    std::string name, const qlever::Qlever::QueryPlan& queryPlan,
+    std::string onDiskBase, std::string name,
+    const qlever::Qlever::QueryPlan& queryPlan,
     ad_utility::MemorySize memoryLimit,
     ad_utility::AllocatorWithLimit<Id> allocator) {
-  MaterializedViewWriter writer{std::move(name), queryPlan,
-                                std::move(memoryLimit), std::move(allocator)};
+  MaterializedViewWriter writer{std::move(onDiskBase), std::move(name),
+                                queryPlan, std::move(memoryLimit),
+                                std::move(allocator)};
   writer.computeResultAndWritePermutation();
 }
 
@@ -64,8 +73,7 @@ std::string MaterializedView::getFilenameBase(std::string_view onDiskBase,
 
 // _____________________________________________________________________________
 std::string MaterializedViewWriter::getFilenameBase() const {
-  return MaterializedView::getFilenameBase(qec_->getIndex().getOnDiskBase(),
-                                           name_);
+  return MaterializedView::getFilenameBase(onDiskBase_, name_);
 }
 
 // _____________________________________________________________________________
@@ -78,143 +86,133 @@ MaterializedViewWriter::getIdTableColumnNamesAndPermutation() const {
 
   auto targetVarsAndCols =
       qet_->selectedVariablesToColumnIndices(parsedQuery_.selectClause());
-  auto numCols = targetVarsAndCols.size();
-  AD_CONTRACT_CHECK(numCols >= 4,
+  AD_CONTRACT_CHECK(targetVarsAndCols.size() >= 4,
                     "Currently the query used to write a materialized view "
                     "needs to have at least four columns.");
 
-  std::vector<std::string> targetVars;
-  targetVars.reserve(numCols);
-  std::vector<ColumnIndex> columnPermutation;
-  columnPermutation.reserve(numCols);
-
-  for (const auto& varAndColIndex : targetVarsAndCols) {
-    AD_CONTRACT_CHECK(varAndColIndex.has_value());
-    targetVars.push_back(varAndColIndex.value().variable_);
-    columnPermutation.push_back(varAndColIndex.value().columnIndex_);
-  }
-  return {targetVars, columnPermutation};
+  return ::ranges::to<ColumnNamesAndPermutation>(
+      targetVarsAndCols | ql::views::transform([](const auto& opt) {
+        AD_CONTRACT_CHECK(opt.has_value());
+        return ColumnNameAndIndex{opt.value().variable_,
+                                  opt.value().columnIndex_};
+      }));
 }
 
 // _____________________________________________________________________________
-void MaterializedViewWriter::computeResultAndWritePermutation() const {
-  // SPO comparator
-  using Comparator = SortTriple<0, 1, 2>;
-  constexpr size_t numSortedColumns = 3;
-  // Sorter with a dynamic number of columns (template argument `NumStaticCols
-  // == 0`)
-  using Sorter = ad_utility::CompressedExternalIdTableSorter<Comparator, 0>;
-  using MetaData = IndexMetaDataMmap;
-  using IdTableRange = ad_utility::InputRangeTypeErased<IdTableStatic<0>>;
+void MaterializedViewWriter::permuteIdTableAndCheckVocab(
+    IdTable& block, const LocalVocab& vocab) const {
+  AD_CORRECTNESS_CHECK(vocab.empty(),
+                       "Materialized views cannot contain entries from a "
+                       "local vocabulary currently.");
+  // The `IdTable` may have a different column ordering from the
+  // `SELECT` statement, thus we must permute this to the column
+  // ordering we want to have in our materialized view. In
+  // particular, the indexed column should be the first.
+  block.setColumnSubset(columnPermutation_);
+}
 
-  const auto [columns, columnPermutation] =
-      getIdTableColumnNamesAndPermutation();
-  const size_t numCols = columnPermutation.size();
-  const auto filename = getFilenameBase();
+// _____________________________________________________________________________
+MaterializedViewWriter::IdTableRange
+MaterializedViewWriter::getBlocksForAlreadySortedResult(
+    std::shared_ptr<const Result> result) const {
+  // Results are already sorted correctly: we do not need to invoke the
+  // external sorter, but we still need to permute the `IdTable`s to the
+  // desired column ordering and construct a range for the
+  // `CompressedRelationWriter` from them.
+  AD_LOG_INFO << "Query result rows for materialized view " << name_
+              << " are already sorted." << std::endl;
 
-  // Run query
-  AD_LOG_INFO << "Computing result for materialized view query " << name_
-              << "..." << std::endl;
-  auto result = qet_->getResult(true);
+  if (result->isFullyMaterialized()) {
+    // If we have a fully materialized result, we need to copy it for the
+    // necessary modifications (permuting columns).
+    IdTable idTableCopyForPermutation = result->idTable().clone();
+    permuteIdTableAndCheckVocab(idTableCopyForPermutation,
+                                result->localVocab());
+    std::vector<IdTableStatic<0>> singleIdTable;
+    singleIdTable.push_back(std::move(idTableCopyForPermutation));
+    return IdTableRange{std::move(singleIdTable)};
+  } else {
+    // Transform the lazy result (permute columns)
+    return IdTableRange{
+        ad_utility::OwningView{result->idTables()} |
+        ql::views::transform(
+            [&](auto& idTableAndLocalVocab) -> IdTableStatic<0> {
+              auto& [block, vocab] = idTableAndLocalVocab;
+              permuteIdTableAndCheckVocab(block, vocab);
+              return std::move(block);
+            })};
+  }
+}
 
+// _____________________________________________________________________________
+MaterializedViewWriter::IdTableRange
+MaterializedViewWriter::getBlocksForUnsortedResult(
+    Sorter& spoSorter, std::shared_ptr<const Result> result) const {
+  // Results are not yet sorted by the required columns. Sort results
+  // externally.
+  AD_LOG_INFO << "Sorting query result rows for materialized view " << name_
+              << " ..." << std::endl;
+  size_t totalTriples = 0;
+  ad_utility::ProgressBar progressBar{totalTriples, "Triples sorted: "};
+
+  auto processBlock = [&](IdTable& block, const LocalVocab& vocab) {
+    permuteIdTableAndCheckVocab(block, vocab);
+    totalTriples += block.numRows();
+    spoSorter.pushBlock(block);
+    if (progressBar.update()) {
+      AD_LOG_INFO << progressBar.getProgressString() << std::flush;
+    }
+  };
+
+  if (result->isFullyMaterialized()) {
+    // If we have a fully materialized result, this is const, so we need to
+    // copy it for the necessary modifications (permuting columns).
+    IdTable idTableCopyForPermutation = result->idTable().clone();
+    processBlock(idTableCopyForPermutation, result->localVocab());
+  } else {
+    // Process lazy result blockwise
+    auto generator = result->idTables();
+    for (auto& [block, vocab] : generator) {
+      processBlock(block, vocab);
+    }
+  }
+
+  AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
+  return spoSorter.template getSortedBlocks<0>();
+}
+
+// _____________________________________________________________________________
+MaterializedViewWriter::IdTableRange MaterializedViewWriter::getSortedBlocks(
+    Sorter& spoSorter, std::shared_ptr<const Result> result) const {
   // Check if the query result is already sorted by SPO considering the target
   // column ordering
+  constexpr size_t numSortedColumns = 3;
   const auto& resultSortedBy = result->sortedBy();
   bool isAlreadySorted =
       ql::ranges::equal(resultSortedBy | ql::views::take(numSortedColumns),
-                        columnPermutation | ql::views::take(numSortedColumns));
+                        columnPermutation_ | ql::views::take(numSortedColumns));
 
-  // Prepare output range and sorter
-  IdTableRange sortedBlocksSPO;
-  Sorter spoSorter{filename + ".spo-sorter.dat", numCols, memoryLimit_,
-                   allocator_};
-
-  auto permuteIdTableAndCheckVocab = [&](IdTable& block,
-                                         const LocalVocab& vocab) {
-    AD_CORRECTNESS_CHECK(vocab.empty(),
-                         "Materialized views cannot contain entries from a "
-                         "local vocabulary currently.");
-    // The `IdTable` may have a different column ordering from the
-    // `SELECT` statement, thus we must permute this to the column
-    // ordering we want to have in our materialized view. In
-    // particular, the indexed column should be the first.
-    block.setColumnSubset(columnPermutation);
-  };
-
+  // Either call the version that only permutes the correctly sorted blocks or
+  // the version that sorts them.
   if (isAlreadySorted) {
-    // Results are already sorted correctly: we do not need to invoke the
-    // external sorter, but we still need to permute the `IdTable`s to the
-    // desired column ordering and construct a range for the
-    // `CompressedRelationWriter` from them.
-    AD_LOG_INFO << "Query result rows for materialized view " << name_
-                << " are already sorted." << std::endl;
-
-    if (result->isFullyMaterialized()) {
-      // If we have a fully materialized result, we need to copy it for the
-      // necessary modifications (permuting columns).
-      IdTable idTableCopyForPermutation = result->idTable().clone();
-      permuteIdTableAndCheckVocab(idTableCopyForPermutation,
-                                  result->localVocab());
-      std::vector<IdTableStatic<0>> singleIdTable;
-      singleIdTable.push_back(std::move(idTableCopyForPermutation));
-      sortedBlocksSPO = IdTableRange{std::move(singleIdTable)};
-    } else {
-      // Transform the lazy result (permute columns)
-      sortedBlocksSPO =
-          IdTableRange{ad_utility::OwningView{result->idTables()} |
-                       ql::views::transform(
-                           [&](auto& idTableAndLocalVocab) -> IdTableStatic<0> {
-                             auto& [block, vocab] = idTableAndLocalVocab;
-                             permuteIdTableAndCheckVocab(block, vocab);
-                             return std::move(block);
-                           })};
-    }
+    return getBlocksForAlreadySortedResult(result);
   } else {
-    // Results are not yet sorted by the required columns. Sort results
-    // externally.
-    AD_LOG_INFO << "Sorting query result rows for materialized view " << name_
-                << " ..." << std::endl;
-    size_t totalTriples = 0;
-    ad_utility::ProgressBar progressBar{totalTriples, "Triples sorted: "};
-
-    auto processBlock = [&](IdTable& block, const LocalVocab& vocab) {
-      permuteIdTableAndCheckVocab(block, vocab);
-      totalTriples += block.numRows();
-      spoSorter.pushBlock(block);
-      if (progressBar.update()) {
-        AD_LOG_INFO << progressBar.getProgressString() << std::flush;
-      }
-    };
-
-    if (result->isFullyMaterialized()) {
-      // If we have a fully materialized result, this is const, so we need to
-      // copy it for the necessary modifications (permuting columns).
-      IdTable idTableCopyForPermutation = result->idTable().clone();
-      processBlock(idTableCopyForPermutation, result->localVocab());
-    } else {
-      // Process lazy result blockwise
-      auto generator = result->idTables();
-      for (auto& [block, vocab] : generator) {
-        processBlock(block, vocab);
-      }
-    }
-
-    AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
-    sortedBlocksSPO = spoSorter.template getSortedBlocks<0>();
+    return getBlocksForUnsortedResult(spoSorter, result);
   }
+}
 
-  // Write compressed relation to disk
-  AD_LOG_INFO << "Writing materialized view " << name_ << " to disk ..."
-              << std::endl;
-  std::string spoFilename = filename + ".index.spo";
+// _____________________________________________________________________________
+IndexMetaDataMmap MaterializedViewWriter::writePermutation(
+    IdTableRange sortedBlocksSPO) const {
+  std::string spoFilename = getFilenameBase() + ".index.spo";
   CompressedRelationWriter spoWriter{
-      numCols,
+      numCols(),
       ad_utility::File{spoFilename, "w"},
       UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN,
   };
 
   qlever::KeyOrder spoKeyOrder{0, 1, 2, 3};
-  MetaData spoMetaData;
+  IndexMetaDataMmap spoMetaData;
   spoMetaData.setup(spoFilename + ".meta", ad_utility::CreateTag{});
   auto spoCallback =
       [&spoMetaData](ql::span<const CompressedRelationMetadata> md) {
@@ -232,23 +230,40 @@ void MaterializedViewWriter::computeResultAndWritePermutation() const {
   AD_LOG_DEBUG << "Writing metadata ..." << std::endl;
   spoMetaData.blockData() = std::move(blockData);
   spoMetaData.calculateStatistics(numDistinctPredicates);
-  spoMetaData.setName(filename);
+  spoMetaData.setName(getFilenameBase());
   {
     ad_utility::File spoFile(spoFilename, "r+");
     spoMetaData.appendToFile(&spoFile);
   }
 
+  return spoMetaData;
+}
+
+// _____________________________________________________________________________
+void MaterializedViewWriter::writeViewMetadata() const {
   // Export column names to view info JSON file
   nlohmann::json viewInfo = {{"version", MATERIALIZED_VIEWS_VERSION},
-                             {"columns", std::move(columns)}};
-  {
-    std::ofstream viewInfoFile(filename + ".viewinfo.json");
-    if (!viewInfoFile) {
-      throw std::runtime_error(
-          absl::StrCat("Cannot write ", filename, ".viewinfo.json"));
-    }
-    viewInfoFile << viewInfo.dump() << std::endl;
-  }
+                             {"columns", columnNames_}};
+  ad_utility::makeOfstream(getFilenameBase() + ".viewinfo.json")
+      << viewInfo.dump() << std::endl;
+}
+
+// _____________________________________________________________________________
+void MaterializedViewWriter::computeResultAndWritePermutation() const {
+  // Run query and sort the result externally (only if necessary)
+  AD_LOG_INFO << "Computing result for materialized view query " << name_
+              << "..." << std::endl;
+  auto result = qet_->getResult(true);
+
+  Sorter spoSorter{getFilenameBase() + ".spo-sorter.dat", numCols(),
+                   memoryLimit_, allocator_};
+  IdTableRange sortedBlocksSPO = getSortedBlocks(spoSorter, result);
+
+  // Write compressed relation to disk
+  AD_LOG_INFO << "Writing materialized view " << name_ << " to disk ..."
+              << std::endl;
+  auto spoMetaData = writePermutation(std::move(sortedBlocksSPO));
+  writeViewMetadata();
 
   AD_LOG_INFO << "Statistics for view " << name_ << ": "
               << spoMetaData.statistics() << std::endl;
@@ -276,14 +291,7 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
 
   // Read metadata from JSON
   nlohmann::json viewInfoJson;
-  {
-    std::ifstream viewInfoFile{metadataFilename};
-    if (!viewInfoFile) {
-      throw std::runtime_error(
-          absl::StrCat("Error reading ", filename, ".viewinfo.json"));
-    }
-    viewInfoFile >> viewInfoJson;
-  }
+  ad_utility::makeIfstream(metadataFilename) >> viewInfoJson;
 
   // Check version of view and restore column names
   auto version = viewInfoJson.at("version").get<size_t>();
@@ -300,13 +308,16 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
                          {static_cast<ColumnIndex>(index),
                           ColumnIndexAndTypeInfo::PossiblyUndefined}});
   }
-  indexedColVariables_ = std::array<Variable, 3>{Variable{columnNames.at(0)},
-                                                 Variable{columnNames.at(1)},
-                                                 Variable{columnNames.at(2)}};
 
   // Read permutation
   permutation_->loadFromDisk(
-      filename, [](Id) { return false; }, false);
+      filename,
+      [](Id) {
+        // Materialized views do not have an internal permutation. Therefore
+        // this always returns `false`.
+        return false;
+      },
+      false);
   AD_CORRECTNESS_CHECK(permutation_->isLoaded());
 }
 
@@ -333,79 +344,20 @@ std::shared_ptr<const MaterializedView> MaterializedViewsManager::getView(
 }
 
 // _____________________________________________________________________________
-SparqlTripleSimple MaterializedView::makeScanConfig(
-    const parsedQuery::MaterializedViewQuery& viewQuery,
-    Variable placeholderPredicate, Variable placeholderObject) const {
-  AD_CORRECTNESS_CHECK(viewQuery.viewName_ == name_);
-  if (viewQuery.childGraphPattern_.has_value()) {
-    throw MaterializedViewConfigException(
-        "A materialized view query may not have a child group graph pattern.");
-  }
-
-  AD_CORRECTNESS_CHECK(
-      placeholderPredicate != placeholderObject,
-      "Placeholders for predicate and object must not be the same variable");
-
-  // If `scanCol_` is set (when using the magic predicate), fix the subject to
-  // this. Otherwise the subject is determined from `requestedColumns_` below.
-  std::optional<TripleComponent> s = viewQuery.scanCol_;
-  TripleComponent p{std::move(placeholderPredicate)};
-  TripleComponent o{std::move(placeholderObject)};
-  AdditionalScanColumns additionalCols;
-
-  // Assemble which columns should be bound to which variables
-  ad_utility::HashSet<Variable> uniqueTargetVar;
-  for (const auto& [viewVar, target] : viewQuery.requestedColumns_) {
-    if (!varToColMap_.contains(viewVar)) {
-      throw MaterializedViewConfigException(absl::StrCat(
-          "The column '", viewVar.name(),
-          "' does not exist in the materialized view '", name_, "'."));
-    }
-
-    if (target.isVariable() && uniqueTargetVar.contains(target.getVariable())) {
-      throw MaterializedViewConfigException(
-          absl::StrCat("Each target variable for a reading from a materialized "
-                       "view may only be associated with one column. However '",
-                       target.toString(), "' was requested multiple times."));
-    }
-
-    auto colIdx = varToColMap_.at(viewVar).columnIndex_;
-    if (colIdx == 0) {
-      if (s.has_value()) {
-        throw MaterializedViewConfigException(absl::StrCat(
-            "The first column of a materialized view may not be requested "
-            "twice, but '",
-            target.toString(), "' violated this requirement."));
-      }
-      s = target;
-    } else if (colIdx == 1) {
-      p = target;
-    } else if (colIdx == 2) {
-      o = target;
-    } else {
-      if (!target.isVariable()) {
-        throw MaterializedViewConfigException(absl::StrCat(
-            "Currently only the first three columns of a materialized view may "
-            "be restricted to fixed values. All other columns must be "
-            "variables, but column '",
-            viewVar.name(), "' was fixed to '", target.toString(), "'."));
-      }
-      AD_CORRECTNESS_CHECK(colIdx > 2);
-      additionalCols.emplace_back(colIdx, target.getVariable());
-    }
-
-    if (target.isVariable()) {
-      uniqueTargetVar.insert(target.getVariable());
-    }
-  }
-
+void MaterializedView::throwIfScanColumnMissing(
+    const std::optional<TripleComponent>& s) const {
   // The scan column must be set.
   if (!s.has_value()) {
     throw MaterializedViewConfigException(
         "The first column of a materialized view must always be read to a "
         "variable or restricted to a fixed value.");
   }
+}
 
+// _____________________________________________________________________________
+void MaterializedView::throwIfColumnsHaveIllegalFixedValues(
+    const std::optional<TripleComponent>& s, const TripleComponent& p,
+    const TripleComponent& o) const {
   // Not all versions of scan specifications are allowed because a view only has
   // one permutation: fixed values are only allowed in these arrangements:
   // subject, subject + predicate, subject + predicate + object.
@@ -422,6 +374,101 @@ SparqlTripleSimple MaterializedView::makeScanConfig(
         "When setting the third column of a materialized view to a fixed "
         "value, the first two columns must also be fixed.");
   }
+}
+
+// _____________________________________________________________________________
+void MaterializedView::throwIfColumnNotInView(const Variable& column) const {
+  if (!varToColMap_.contains(column)) {
+    throw MaterializedViewConfigException(absl::StrCat(
+        "The column '", column.name(),
+        "' does not exist in the materialized view '", name_, "'."));
+  }
+}
+
+// _____________________________________________________________________________
+void MaterializedView::throwIfAdditionalColumnIsNotVariable(
+    const Variable& column, const TripleComponent& value) const {
+  if (!value.isVariable()) {
+    throw MaterializedViewConfigException(absl::StrCat(
+        "Currently only the first three columns of a materialized view may "
+        "be restricted to fixed values. All other columns must be "
+        "variables, but column '",
+        column.name(), "' was fixed to '", value.toString(), "'."));
+  }
+}
+
+// _____________________________________________________________________________
+void MaterializedView::throwIfScanColumnIsSetTwice(
+    const std::optional<TripleComponent>& s,
+    const TripleComponent& value) const {
+  if (s.has_value()) {
+    throw MaterializedViewConfigException(absl::StrCat(
+        "The first column of a materialized view may not be requested "
+        "twice, but '",
+        value.toString(), "' violated this requirement."));
+  }
+}
+
+// _____________________________________________________________________________
+void MaterializedView::throwIfVariableUsedTwice(
+    const ad_utility::HashSet<Variable>& variablesSeen,
+    const TripleComponent& target) const {
+  if (target.isVariable() && variablesSeen.contains(target.getVariable())) {
+    throw MaterializedViewConfigException(
+        absl::StrCat("Each target variable for a reading from a materialized "
+                     "view may only be associated with one column. However '",
+                     target.toString(), "' was requested multiple times."));
+  }
+}
+
+// _____________________________________________________________________________
+SparqlTripleSimple MaterializedView::makeScanConfig(
+    const parsedQuery::MaterializedViewQuery& viewQuery, Variable placeholder1,
+    Variable placeholder2) const {
+  AD_CORRECTNESS_CHECK(viewQuery.viewName_ == name_);
+  if (viewQuery.childGraphPattern_.has_value()) {
+    throw MaterializedViewConfigException(
+        "A materialized view query may not have a child group graph pattern.");
+  }
+  AD_CORRECTNESS_CHECK(
+      placeholder1 != placeholder2,
+      "Placeholders for predicate and object must not be the same variable");
+
+  // If `scanCol_` is set (when using the magic predicate), fix the subject to
+  // this. Otherwise the subject is determined from `requestedColumns_` below.
+  std::optional<TripleComponent> s = viewQuery.scanCol_;
+  TripleComponent p{std::move(placeholder1)};
+  TripleComponent o{std::move(placeholder2)};
+  AdditionalScanColumns additionalCols;
+
+  // Assemble which columns should be bound to which variables
+  ad_utility::HashSet<Variable> variablesSeen;
+  for (const auto& [viewVar, target] : viewQuery.requestedColumns_) {
+    throwIfColumnNotInView(viewVar);
+
+    throwIfVariableUsedTwice(variablesSeen, target);
+
+    auto colIdx = varToColMap_.at(viewVar).columnIndex_;
+    if (colIdx == 0) {
+      throwIfScanColumnIsSetTwice(s, target);
+      s = target;
+    } else if (colIdx == 1) {
+      p = target;
+    } else if (colIdx == 2) {
+      o = target;
+    } else {
+      AD_CORRECTNESS_CHECK(colIdx > 2);
+      throwIfAdditionalColumnIsNotVariable(viewVar, target);
+      additionalCols.emplace_back(colIdx, target.getVariable());
+    }
+
+    if (target.isVariable()) {
+      variablesSeen.insert(target.getVariable());
+    }
+  }
+
+  throwIfScanColumnMissing(s);
+  throwIfColumnsHaveIllegalFixedValues(s, p, o);
 
   // Additional columns must be sorted (required by internals of `IndexScan`)
   std::sort(additionalCols.begin(), additionalCols.end(),

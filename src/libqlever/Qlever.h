@@ -12,12 +12,14 @@
 #include <utility>
 #include <vector>
 
+#include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryPlanner.h"
 #include "global/RuntimeParameters.h"
 #include "index/Index.h"
 #include "index/InputFileSpecification.h"
+#include "libqlever/QleverTypes.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/http/MediaTypes.h"
@@ -172,6 +174,7 @@ class Qlever {
   SortPerformanceEstimator sortPerformanceEstimator_;
   Index index_;
   mutable NamedResultCache namedResultCache_;
+  mutable MaterializedViewsManager materializedViewsManager_;
   bool enablePatternTrick_;
 
  public:
@@ -194,9 +197,7 @@ class Qlever {
   //
   // 3. It enables an inspection or even modification of the query plan before
   // executing it (this requires some expertise).
-  using QueryPlan =
-      std::tuple<std::shared_ptr<QueryExecutionTree>,
-                 std::shared_ptr<QueryExecutionContext>, ParsedQuery>;
+  using QueryPlan = qlever::QueryPlan;
   QueryPlan parseAndPlanQuery(std::string query) const;
 
   // Run the given parsed and planned query. The result is returned as a
@@ -232,6 +233,14 @@ class Qlever {
   // Clear the result with the given `name` from the cache.
   void eraseResultWithName(std::string name);
   void clearNamedResultCache();
+
+  // Write a new materialized view with `name` to disk and store the result of
+  // `query`.
+  void writeMaterializedView(std::string name, std::string query) const;
+
+  // Preload a materialized view s.t. the first query to the view does not have
+  // to load the view.
+  void loadMaterializedView(std::string name) const;
 };
 }  // namespace qlever
 
