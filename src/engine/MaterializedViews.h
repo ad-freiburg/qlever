@@ -56,9 +56,8 @@ class MaterializedViewWriter {
   // Computes the column ordering how the `IdTable`s from executing the
   // `QueryExecutionTree` must be permuted to match the requested target columns
   // and column ordering.
-  using ColumnPermutation = std::vector<ColumnIndex>;
-  using ColumnNames = std::vector<std::string>;
-  using ColumnNamesAndPermutation = std::pair<ColumnNames, ColumnPermutation>;
+  using ColumnNameAndIndex = std::pair<std::string, size_t>;
+  using ColumnNamesAndPermutation = std::vector<ColumnNameAndIndex>;
   ColumnNamesAndPermutation getIdTableColumnNamesAndPermutation() const;
 
   // Actually computes and externally sorts the query result and writes the view

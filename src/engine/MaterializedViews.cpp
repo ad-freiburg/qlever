@@ -81,22 +81,16 @@ MaterializedViewWriter::getIdTableColumnNamesAndPermutation() const {
 
   auto targetVarsAndCols =
       qet_->selectedVariablesToColumnIndices(parsedQuery_.selectClause());
-  auto numCols = targetVarsAndCols.size();
-  AD_CONTRACT_CHECK(numCols >= 4,
+  AD_CONTRACT_CHECK(targetVarsAndCols.size() >= 4,
                     "Currently the query used to write a materialized view "
                     "needs to have at least four columns.");
 
-  std::vector<std::string> targetVars;
-  targetVars.reserve(numCols);
-  std::vector<ColumnIndex> columnPermutation;
-  columnPermutation.reserve(numCols);
-
-  for (const auto& varAndColIndex : targetVarsAndCols) {
-    AD_CONTRACT_CHECK(varAndColIndex.has_value());
-    targetVars.push_back(varAndColIndex.value().variable_);
-    columnPermutation.push_back(varAndColIndex.value().columnIndex_);
-  }
-  return {targetVars, columnPermutation};
+  return ::ranges::to<ColumnNamesAndPermutation>(
+      targetVarsAndCols | ql::views::transform([](const auto& opt) {
+        AD_CONTRACT_CHECK(opt.has_value());
+        return ColumnNameAndIndex{opt.value().variable_,
+                                  opt.value().columnIndex_};
+      }));
 }
 
 // _____________________________________________________________________________
@@ -110,11 +104,12 @@ void MaterializedViewWriter::computeResultAndWritePermutation() const {
   using MetaData = IndexMetaDataMmap;
   using IdTableRange = ad_utility::InputRangeTypeErased<IdTableStatic<0>>;
 
-  const auto [columns, columnPermutation] =
-      getIdTableColumnNamesAndPermutation();
-  AD_CORRECTNESS_CHECK(columns.size() == columnPermutation.size());
-  const size_t numCols = columnPermutation.size();
+  const auto columnNamesAndPermutation = getIdTableColumnNamesAndPermutation();
+  const size_t numCols = columnNamesAndPermutation.size();
   const auto filename = getFilenameBase();
+
+  const auto columnPermutation = ::ranges::to<std::vector<size_t>>(
+      columnNamesAndPermutation | ql::views::values);
 
   // Run query
   AD_LOG_INFO << "Computing result for materialized view query " << name_
@@ -243,8 +238,10 @@ void MaterializedViewWriter::computeResultAndWritePermutation() const {
   }
 
   // Export column names to view info JSON file
-  nlohmann::json viewInfo = {{"version", MATERIALIZED_VIEWS_VERSION},
-                             {"columns", std::move(columns)}};
+  nlohmann::json viewInfo = {
+      {"version", MATERIALIZED_VIEWS_VERSION},
+      {"columns", ::ranges::to<std::vector<std::string>>(
+                      columnNamesAndPermutation | ql::views::keys)}};
   ad_utility::makeOfstream(filename + ".viewinfo.json")
       << viewInfo.dump() << std::endl;
 
