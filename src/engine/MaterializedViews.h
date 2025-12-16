@@ -126,7 +126,7 @@ class MaterializedViewWriter {
 
  public:
   // Write a `MaterializedView` given the index' `onDiskBase`, a valid `name`
-  // (consting only of alphanumerics and hyphens) and a `queryPlan` to be
+  // (consisting only of alphanumerics and hyphens) and a `queryPlan` to be
   // executed. The query's result is written to the view.
   //
   // The `memoryLimit` and `allocator` are used only for sorting the
