@@ -71,6 +71,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
       ::testing::HasSubstr("index base filename was not set"));
 
   using ViewQuery = parsedQuery::MaterializedViewQuery;
+  using Triple = SparqlTripleSimple;
   using V = Variable;
   auto iri = [](const std::string& ref) {
     return ad_utility::triple_component::Iri::fromIriref(ref);
