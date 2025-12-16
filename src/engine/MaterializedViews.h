@@ -51,6 +51,8 @@ class MaterializedViewWriter {
                          ad_utility::MemorySize memoryLimit,
                          ad_utility::AllocatorWithLimit<Id> allocator);
 
+  // Get the base filename for the view's permutation and metadata files. This
+  // name is the result of concatenating `onDiskBase` and `name`.
   std::string getFilenameBase() const;
 
   // Computes the column ordering how the `IdTable`s from executing the
