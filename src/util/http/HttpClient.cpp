@@ -133,6 +133,8 @@ HttpOrHttpsResponse HttpClientImpl<StreamType>::sendRequest(
   const auto status = responseParser->get().result();
   const std::string contentType =
       responseParser->get()[boost::beast::http::field::content_type];
+  const std::string location =
+      responseParser->get()[boost::beast::http::field::location];
 
   auto getBody = [](std::unique_ptr<HttpClientImpl<StreamType>> client,
                     std::unique_ptr<http::response_parser<http::buffer_body>>
@@ -158,6 +160,7 @@ HttpOrHttpsResponse HttpClientImpl<StreamType>::sendRequest(
 
   return {.status_ = status,
           .contentType_ = contentType,
+          .location_ = location,
           .body_ = getBody(std::move(client), std::move(responseParser),
                            std::move(buffer), std::move(handle))};
 }
@@ -204,20 +207,60 @@ HttpOrHttpsResponse sendHttpOrHttpsRequest(
     const ad_utility::httpUtils::Url& url,
     ad_utility::SharedCancellationHandle handle,
     const boost::beast::http::verb& method, std::string_view requestData,
-    std::string_view contentTypeHeader, std::string_view acceptHeader) {
-  auto sendRequest = [&](auto ti) -> HttpOrHttpsResponse {
+    std::string_view contentTypeHeader, std::string_view acceptHeader,
+    size_t maxRedirects) {
+  auto sendRequest = [&](const Url& currentUrl,
+                         auto ti) -> HttpOrHttpsResponse {
     using Client = typename decltype(ti)::type;
-    auto client = std::make_unique<Client>(url.host(), url.port());
-    return Client::sendRequest(std::move(client), method, url.host(),
-                               url.target(), std::move(handle), requestData,
+    auto client =
+        std::make_unique<Client>(currentUrl.host(), currentUrl.port());
+    return Client::sendRequest(std::move(client), method, currentUrl.host(),
+                               currentUrl.target(), handle, requestData,
                                contentTypeHeader, acceptHeader);
   };
+
   using namespace ad_utility::use_type_identity;
-  if (url.protocol() == Url::Protocol::HTTP) {
-    return sendRequest(ti<HttpClient>);
-  } else {
-    AD_CORRECTNESS_CHECK(url.protocol() == Url::Protocol::HTTPS);
-    return sendRequest(ti<HttpsClient>);
+
+  // Follow redirects up to the limit specified by maxRedirects.
+  Url currentUrl = url;
+  size_t redirectCount = 0;
+  while (redirectCount <= maxRedirects) {
+    HttpOrHttpsResponse response;
+    if (currentUrl.protocol() == Url::Protocol::HTTP) {
+      response = sendRequest(currentUrl, ti<HttpClient>);
+    } else {
+      AD_CORRECTNESS_CHECK(currentUrl.protocol() == Url::Protocol::HTTPS);
+      response = sendRequest(currentUrl, ti<HttpsClient>);
+    }
+
+    // Check if the response is a redirect (301, 302, 307, 308).
+    bool isRedirect = (response.status_ == http::status::moved_permanently ||
+                       response.status_ == http::status::found ||
+                       response.status_ == http::status::temporary_redirect ||
+                       response.status_ == http::status::permanent_redirect);
+    if (!isRedirect) {
+      return response;
+    }
+
+    // If it is a redirect, but there is no `Location` header, we cannot
+    // proceed and throw an error.
+    if (response.location_.empty()) {
+      throw std::runtime_error(
+          absl::StrCat("HTTP request to <", currentUrl.asString(),
+                       "> responded with redirect status code: ",
+                       static_cast<int>(response.status_),
+                       " but no Location header was provided"));
+    }
+
+    // Follow the redirect.
+    currentUrl = Url{response.location_};
+    redirectCount++;
   }
+
+  // If the loop exited because we exceeded the maximum number of redirects,
+  // throw a corresponding error.
+  throw std::runtime_error(absl::StrCat("HTTP request to <", url.asString(),
+                                        "> exceeded maximum redirect limit of ",
+                                        maxRedirects));
 }
 #endif
