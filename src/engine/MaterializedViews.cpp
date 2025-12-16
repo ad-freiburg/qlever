@@ -109,6 +109,7 @@ void MaterializedViewWriter::computeResultAndWritePermutation() const {
 
   const auto [columns, columnPermutation] =
       getIdTableColumnNamesAndPermutation();
+  AD_CORRECTNESS_CHECK(columns.size() == columnPermutation.size());
   const size_t numCols = columnPermutation.size();
   const auto filename = getFilenameBase();
 
@@ -319,79 +320,20 @@ std::shared_ptr<const MaterializedView> MaterializedViewsManager::getView(
 }
 
 // _____________________________________________________________________________
-SparqlTripleSimple MaterializedView::makeScanConfig(
-    const parsedQuery::MaterializedViewQuery& viewQuery,
-    Variable placeholderPredicate, Variable placeholderObject) const {
-  AD_CORRECTNESS_CHECK(viewQuery.viewName_ == name_);
-  if (viewQuery.childGraphPattern_.has_value()) {
-    throw MaterializedViewConfigException(
-        "A materialized view query may not have a child group graph pattern.");
-  }
-
-  AD_CORRECTNESS_CHECK(
-      placeholderPredicate != placeholderObject,
-      "Placeholders for predicate and object must not be the same variable");
-
-  // If `scanCol_` is set (when using the magic predicate), fix the subject to
-  // this. Otherwise the subject is determined from `requestedColumns_` below.
-  std::optional<TripleComponent> s = viewQuery.scanCol_;
-  TripleComponent p{std::move(placeholderPredicate)};
-  TripleComponent o{std::move(placeholderObject)};
-  AdditionalScanColumns additionalCols;
-
-  // Assemble which columns should be bound to which variables
-  ad_utility::HashSet<Variable> uniqueTargetVar;
-  for (const auto& [viewVar, target] : viewQuery.requestedColumns_) {
-    if (!varToColMap_.contains(viewVar)) {
-      throw MaterializedViewConfigException(absl::StrCat(
-          "The column '", viewVar.name(),
-          "' does not exist in the materialized view '", name_, "'."));
-    }
-
-    if (target.isVariable() && uniqueTargetVar.contains(target.getVariable())) {
-      throw MaterializedViewConfigException(
-          absl::StrCat("Each target variable for a reading from a materialized "
-                       "view may only be associated with one column. However '",
-                       target.toString(), "' was requested multiple times."));
-    }
-
-    auto colIdx = varToColMap_.at(viewVar).columnIndex_;
-    if (colIdx == 0) {
-      if (s.has_value()) {
-        throw MaterializedViewConfigException(absl::StrCat(
-            "The first column of a materialized view may not be requested "
-            "twice, but '",
-            target.toString(), "' violated this requirement."));
-      }
-      s = target;
-    } else if (colIdx == 1) {
-      p = target;
-    } else if (colIdx == 2) {
-      o = target;
-    } else {
-      if (!target.isVariable()) {
-        throw MaterializedViewConfigException(absl::StrCat(
-            "Currently only the first three columns of a materialized view may "
-            "be restricted to fixed values. All other columns must be "
-            "variables, but column '",
-            viewVar.name(), "' was fixed to '", target.toString(), "'."));
-      }
-      AD_CORRECTNESS_CHECK(colIdx > 2);
-      additionalCols.emplace_back(colIdx, target.getVariable());
-    }
-
-    if (target.isVariable()) {
-      uniqueTargetVar.insert(target.getVariable());
-    }
-  }
-
+void MaterializedView::throwIfScanColumnMissing(
+    const std::optional<TripleComponent>& s) const {
   // The scan column must be set.
   if (!s.has_value()) {
     throw MaterializedViewConfigException(
         "The first column of a materialized view must always be read to a "
         "variable or restricted to a fixed value.");
   }
+}
 
+// _____________________________________________________________________________
+void MaterializedView::throwIfColumnsHaveIllegalFixedValues(
+    const std::optional<TripleComponent>& s, const TripleComponent& p,
+    const TripleComponent& o) const {
   // Not all versions of scan specifications are allowed because a view only has
   // one permutation: fixed values are only allowed in these arrangements:
   // subject, subject + predicate, subject + predicate + object.
@@ -408,6 +350,101 @@ SparqlTripleSimple MaterializedView::makeScanConfig(
         "When setting the third column of a materialized view to a fixed "
         "value, the first two columns must also be fixed.");
   }
+}
+
+// _____________________________________________________________________________
+void MaterializedView::throwIfColumnNotInView(const Variable& column) const {
+  if (!varToColMap_.contains(column)) {
+    throw MaterializedViewConfigException(absl::StrCat(
+        "The column '", column.name(),
+        "' does not exist in the materialized view '", name_, "'."));
+  }
+}
+
+// _____________________________________________________________________________
+void MaterializedView::throwIfAdditionalColumnIsNotVariable(
+    const Variable& column, const TripleComponent& value) const {
+  if (!value.isVariable()) {
+    throw MaterializedViewConfigException(absl::StrCat(
+        "Currently only the first three columns of a materialized view may "
+        "be restricted to fixed values. All other columns must be "
+        "variables, but column '",
+        column.name(), "' was fixed to '", value.toString(), "'."));
+  }
+}
+
+// _____________________________________________________________________________
+void MaterializedView::throwIfScanColumnIsSetTwice(
+    const std::optional<TripleComponent>& s,
+    const TripleComponent& value) const {
+  if (s.has_value()) {
+    throw MaterializedViewConfigException(absl::StrCat(
+        "The first column of a materialized view may not be requested "
+        "twice, but '",
+        value.toString(), "' violated this requirement."));
+  }
+}
+
+// _____________________________________________________________________________
+void MaterializedView::throwIfVariableUsedTwice(
+    const ad_utility::HashSet<Variable>& variablesSeen,
+    const TripleComponent& target) const {
+  if (target.isVariable() && variablesSeen.contains(target.getVariable())) {
+    throw MaterializedViewConfigException(
+        absl::StrCat("Each target variable for a reading from a materialized "
+                     "view may only be associated with one column. However '",
+                     target.toString(), "' was requested multiple times."));
+  }
+}
+
+// _____________________________________________________________________________
+SparqlTripleSimple MaterializedView::makeScanConfig(
+    const parsedQuery::MaterializedViewQuery& viewQuery, Variable placeholder1,
+    Variable placeholder2) const {
+  AD_CORRECTNESS_CHECK(viewQuery.viewName_ == name_);
+  if (viewQuery.childGraphPattern_.has_value()) {
+    throw MaterializedViewConfigException(
+        "A materialized view query may not have a child group graph pattern.");
+  }
+  AD_CORRECTNESS_CHECK(
+      placeholder1 != placeholder2,
+      "Placeholders for predicate and object must not be the same variable");
+
+  // If `scanCol_` is set (when using the magic predicate), fix the subject to
+  // this. Otherwise the subject is determined from `requestedColumns_` below.
+  std::optional<TripleComponent> s = viewQuery.scanCol_;
+  TripleComponent p{std::move(placeholder1)};
+  TripleComponent o{std::move(placeholder2)};
+  AdditionalScanColumns additionalCols;
+
+  // Assemble which columns should be bound to which variables
+  ad_utility::HashSet<Variable> variablesSeen;
+  for (const auto& [viewVar, target] : viewQuery.requestedColumns_) {
+    throwIfColumnNotInView(viewVar);
+
+    throwIfVariableUsedTwice(variablesSeen, target);
+
+    auto colIdx = varToColMap_.at(viewVar).columnIndex_;
+    if (colIdx == 0) {
+      throwIfScanColumnIsSetTwice(s, target);
+      s = target;
+    } else if (colIdx == 1) {
+      p = target;
+    } else if (colIdx == 2) {
+      o = target;
+    } else {
+      AD_CORRECTNESS_CHECK(colIdx > 2);
+      throwIfAdditionalColumnIsNotVariable(viewVar, target);
+      additionalCols.emplace_back(colIdx, target.getVariable());
+    }
+
+    if (target.isVariable()) {
+      variablesSeen.insert(target.getVariable());
+    }
+  }
+
+  throwIfScanColumnMissing(s);
+  throwIfColumnsHaveIllegalFixedValues(s, p, o);
 
   // Additional columns must be sorted (required by internals of `IndexScan`)
   std::sort(additionalCols.begin(), additionalCols.end(),

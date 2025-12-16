@@ -143,9 +143,25 @@ class MaterializedView {
       const parsedQuery::MaterializedViewQuery& viewQuery,
       Variable placeholderPredicate, Variable placeholderObject) const;
 
+  // Helpers for checking metadata-dependent invariants of
+  // `MaterializedViewQuery` in `makeScanConfig`.
+  void throwIfScanColumnMissing(const std::optional<TripleComponent>& s) const;
+  void throwIfColumnsHaveIllegalFixedValues(
+      const std::optional<TripleComponent>& s, const TripleComponent& p,
+      const TripleComponent& o) const;
+  void throwIfColumnNotInView(const Variable& column) const;
+  void throwIfAdditionalColumnIsNotVariable(const Variable& column,
+                                            const TripleComponent& value) const;
+  void throwIfScanColumnIsSetTwice(const std::optional<TripleComponent>& s,
+                                   const TripleComponent& value) const;
+  void throwIfVariableUsedTwice(
+      const ad_utility::HashSet<Variable>& variablesSeen,
+      const TripleComponent& target) const;
+
   // Given a `QueryExecutionContext` and the arguments for `makeScanConfig`
-  // construct an `IndexScan` operation for scanning the requested columns of
-  // this view. The result of this function is guaranteed to never be `nullptr`.
+  // construct an `IndexScan` operation for scanning the requested columns
+  // of this view. The result of this function is guaranteed to never be
+  // `nullptr`.
   std::shared_ptr<IndexScan> makeIndexScan(
       QueryExecutionContext* qec,
       const parsedQuery::MaterializedViewQuery& viewQuery,
