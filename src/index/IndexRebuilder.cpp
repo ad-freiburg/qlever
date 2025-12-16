@@ -28,23 +28,23 @@ using CancellationHandle = ad_utility::SharedCancellationHandle;
 // _____________________________________________________________________________
 std::pair<std::vector<std::tuple<VocabIndex, std::string_view, Id>>,
           ad_utility::HashMap<Id, Id>>
-materializeLocalVocab(
-    const std::vector<std::pair<LocalVocabEntry, LocalVocabIndex>>& entries,
-    const Index::Vocab& vocab, const std::string& newIndexName) {
+materializeLocalVocab(const std::vector<LocalVocabIndex>& entries,
+                      const Index::Vocab& vocab,
+                      const std::string& newIndexName) {
   size_t newWordCount = 0;
   std::vector<std::tuple<VocabIndex, std::string_view, Id>> insertInfo;
   insertInfo.reserve(entries.size());
 
   ad_utility::HashMap<Id, Id> localVocabMapping;
 
-  for (const auto& [entry, originalIndex] : entries) {
-    const auto& [lower, upper] = entry.positionInVocab();
+  for (auto* entry : entries) {
+    const auto& [lower, upper] = entry->positionInVocab();
     AD_CORRECTNESS_CHECK(lower == upper);
     Id id = Id::fromBits(upper.get());
     AD_CORRECTNESS_CHECK(id.getDatatype() == Datatype::VocabIndex);
     insertInfo.emplace_back(id.getVocabIndex(),
-                            entry.asLiteralOrIri().toStringRepresentation(),
-                            Id::makeFromLocalVocabIndex(originalIndex));
+                            entry->asLiteralOrIri().toStringRepresentation(),
+                            Id::makeFromLocalVocabIndex(entry));
   }
   ql::ranges::sort(insertInfo, [](const auto& tupleA, const auto& tupleB) {
     return std::tie(std::get<VocabIndex>(tupleA).get(), std::get<Id>(tupleA)) <
@@ -171,11 +171,10 @@ size_t getNumColumns(const BlockMetadataRanges& blockMetadataRanges) {
 
 // _____________________________________________________________________________
 namespace qlever {
-void materializeToIndex(
-    const IndexImpl& index, const std::string& newIndexName,
-    const std::vector<std::pair<LocalVocabEntry, LocalVocabIndex>>& entries,
-    const SharedLocatedTriplesSnapshot& snapshot,
-    const CancellationHandle& cancellationHandle) {
+void materializeToIndex(const IndexImpl& index, const std::string& newIndexName,
+                        const std::vector<LocalVocabIndex>& entries,
+                        const SharedLocatedTriplesSnapshot& snapshot,
+                        const CancellationHandle& cancellationHandle) {
   const auto& [insertInfo, localVocabMapping] =
       materializeLocalVocab(entries, index.getVocab(), newIndexName);
 

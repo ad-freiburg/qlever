@@ -388,12 +388,11 @@ SharedLocatedTriplesSnapshot DeltaTriplesManager::getCurrentSnapshot() const {
 }
 
 // _____________________________________________________________________________
-std::pair<SharedLocatedTriplesSnapshot,
-          std::vector<std::pair<LocalVocabEntry, LocalVocabIndex>>>
+std::pair<SharedLocatedTriplesSnapshot, std::vector<LocalVocabIndex>>
 DeltaTriplesManager::getCurrentSnapshotWithVocab() const {
   return deltaTriples_.withReadLock([this](const DeltaTriples& deltaTriples) {
     return std::make_pair(*currentLocatedTriplesSnapshot_.rlock(),
-                          deltaTriples.deepCloneLocalVocab());
+                          deltaTriples.copyLocalVocab());
   });
 }
 
@@ -493,17 +492,14 @@ void DeltaTriplesManager::setFilenameForPersistentUpdatesAndReadFromDisk(
 }
 
 // _____________________________________________________________________________
-std::vector<std::pair<LocalVocabEntry, LocalVocabIndex>>
-DeltaTriples::deepCloneLocalVocab() const {
-  std::vector<std::pair<LocalVocabEntry, LocalVocabIndex>> entries;
+std::vector<LocalVocabIndex> DeltaTriples::copyLocalVocab() const {
+  std::vector<LocalVocabIndex> entries;
   entries.reserve(localVocab_.size());
 
   ad_utility::HashMap<Id, Id> localVocabMapping;
 
-  // TODO<RobinTF> it is probably sufficient to just hand out the pointers + a
-  // lifetime extender.
   for (const LocalVocabEntry& entry : localVocab_.primaryWordSet()) {
-    entries.push_back(std::make_pair(entry, &entry));
+    entries.push_back(&entry);
   }
   return entries;
 }

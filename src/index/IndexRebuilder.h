@@ -16,7 +16,7 @@ namespace qlever {
 // Build a new index based on this data.
 void materializeToIndex(
     const IndexImpl& index, const std::string& newIndexName,
-    const std::vector<std::pair<LocalVocabEntry, LocalVocabIndex>>& entries,
+    const std::vector<LocalVocabIndex>& entries,
     const SharedLocatedTriplesSnapshot& snapshot,
     const ad_utility::SharedCancellationHandle& cancellationHandle);
 
