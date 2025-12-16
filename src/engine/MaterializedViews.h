@@ -31,6 +31,7 @@ static constexpr size_t MATERIALIZED_VIEWS_VERSION = 1;
 // the results will be written to the view.
 class MaterializedViewWriter {
  private:
+  std::string onDiskBase_;
   std::string name_;
   std::shared_ptr<QueryExecutionTree> qet_;
   std::shared_ptr<QueryExecutionContext> qec_;
@@ -45,7 +46,8 @@ class MaterializedViewWriter {
   // Initialize a writer given the base filename of the view and a query plan.
   // The view will be written to files prefixed with the index basename followed
   // by the view name.
-  MaterializedViewWriter(std::string name, const QueryPlan& queryPlan,
+  MaterializedViewWriter(std::string onDiskBase, std::string name,
+                         const QueryPlan& queryPlan,
                          ad_utility::MemorySize memoryLimit,
                          ad_utility::AllocatorWithLimit<Id> allocator);
 
@@ -65,7 +67,7 @@ class MaterializedViewWriter {
 
  public:
   static void writeViewToDisk(
-      std::string name, const QueryPlan& queryPlan,
+      std::string onDiskBase, std::string name, const QueryPlan& queryPlan,
       ad_utility::MemorySize memoryLimit = ad_utility::MemorySize::gigabytes(4),
       ad_utility::AllocatorWithLimit<Id> allocator =
           ad_utility::makeUnlimitedAllocator<Id>());

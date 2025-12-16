@@ -285,7 +285,7 @@ TEST_F(MaterializedViewsTest, InvalidInputToWriter) {
 TEST_F(MaterializedViewsTest, ManualConfigurations) {
   auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
 
-  MaterializedViewWriter::writeViewToDisk("testView1", plan);
+  MaterializedViewWriter::writeViewToDisk(testIndexBase_, "testView1", plan);
 
   MaterializedViewsManager manager{testIndexBase_};
   auto view = manager.getView("testView1");
@@ -373,7 +373,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
     auto qet = std::get<0>(plan);
     auto res = qet->getResult(true);
     EXPECT_TRUE(res->isFullyMaterialized());
-    MaterializedViewWriter::writeViewToDisk("testView4", plan);
+    MaterializedViewWriter::writeViewToDisk(testIndexBase_, "testView4", plan);
   }
 
   // Invalid inputs

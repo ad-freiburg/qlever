@@ -1378,7 +1378,8 @@ void Server::writeMaterializedView(
   auto memoryLimit =
       getRuntimeParameter<&RuntimeParameters::materializedViewWriterMemory_>();
   MaterializedViewWriter::writeViewToDisk(
-      name, {qet, qec, std::move(plan.parsedQuery_)}, memoryLimit);
+      qec->getIndex().getOnDiskBase(), name,
+      {qet, qec, std::move(plan.parsedQuery_)}, memoryLimit);
 }
 
 // For helper function `Server::onlyForTestingProcess`

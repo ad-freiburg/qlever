@@ -31,10 +31,12 @@
 
 // _____________________________________________________________________________
 MaterializedViewWriter::MaterializedViewWriter(
-    std::string name, const qlever::Qlever::QueryPlan& queryPlan,
+    std::string onDiskBase, std::string name,
+    const qlever::Qlever::QueryPlan& queryPlan,
     ad_utility::MemorySize memoryLimit,
     ad_utility::AllocatorWithLimit<Id> allocator)
-    : name_{std::move(name)},
+    : onDiskBase_{std::move(onDiskBase)},
+      name_{std::move(name)},
       memoryLimit_{std::move(memoryLimit)},
       allocator_{std::move(allocator)} {
   MaterializedView::throwIfInvalidName(name_);
@@ -48,11 +50,13 @@ MaterializedViewWriter::MaterializedViewWriter(
 
 // _____________________________________________________________________________
 void MaterializedViewWriter::writeViewToDisk(
-    std::string name, const qlever::Qlever::QueryPlan& queryPlan,
+    std::string onDiskBase, std::string name,
+    const qlever::Qlever::QueryPlan& queryPlan,
     ad_utility::MemorySize memoryLimit,
     ad_utility::AllocatorWithLimit<Id> allocator) {
-  MaterializedViewWriter writer{std::move(name), queryPlan,
-                                std::move(memoryLimit), std::move(allocator)};
+  MaterializedViewWriter writer{std::move(onDiskBase), std::move(name),
+                                queryPlan, std::move(memoryLimit),
+                                std::move(allocator)};
   writer.computeResultAndWritePermutation();
 }
 
@@ -64,8 +68,7 @@ std::string MaterializedView::getFilenameBase(std::string_view onDiskBase,
 
 // _____________________________________________________________________________
 std::string MaterializedViewWriter::getFilenameBase() const {
-  return MaterializedView::getFilenameBase(qec_->getIndex().getOnDiskBase(),
-                                           name_);
+  return MaterializedView::getFilenameBase(onDiskBase_, name_);
 }
 
 // _____________________________________________________________________________

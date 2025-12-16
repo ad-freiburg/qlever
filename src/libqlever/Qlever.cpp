@@ -203,7 +203,8 @@ void IndexBuilderConfig::validate() const {
 
 // ___________________________________________________________________________
 void Qlever::writeMaterializedView(std::string name, std::string query) const {
-  MaterializedViewWriter::writeViewToDisk(std::move(name),
+  MaterializedViewWriter::writeViewToDisk(index_.getOnDiskBase(),
+                                          std::move(name),
                                           parseAndPlanQuery(std::move(query)));
 }
 

@@ -237,7 +237,6 @@ class Qlever {
   // Write a new materialized view with `name` to disk and store the result of
   // `query`.
   void writeMaterializedView(std::string name, std::string query) const;
-  static_assert(std::is_same_v<MaterializedViewWriter::QueryPlan, QueryPlan>);
 
   // Preload a materialized view s.t. the first query to the view does not have
   // to load the view.
