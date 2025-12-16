@@ -58,6 +58,18 @@ TEST_F(MaterializedViewsTest, NotImplemented) {
 TEST_F(MaterializedViewsTest, ManualConfigurations) {
   auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
 
+  MaterializedViewWriter::writeViewToDisk("testView1", plan);
+
+  MaterializedViewsManager manager{testIndexBase_};
+  auto view = manager.getView("testView1");
+  ASSERT_TRUE(view != nullptr);
+  EXPECT_EQ(view->name(), "testView1");
+
+  MaterializedViewsManager managerNoBaseName;
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      managerNoBaseName.getView("testView1"),
+      ::testing::HasSubstr("index base filename was not set"));
+
   using ViewQuery = parsedQuery::MaterializedViewQuery;
   using V = Variable;
   auto iri = [](const std::string& ref) {
@@ -69,8 +81,20 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
 
   // Request for reading an extra payload column
   {
+    ViewQuery query{SparqlTriple{
+        V{"?s"},
+        iri("<https://qlever.cs.uni-freiburg.de/materializedView/testView1-g>"),
+        V{"?o"}}};
+
+    auto t = view->makeScanConfig(query, placeholderP, placeholderO);
+    Triple expected{V{"?s"}, placeholderP, placeholderO, {{3, V{"?o"}}}};
+    EXPECT_EQ(t, expected);
+  }
+  {
     ViewQuery query{
         iri("<https://qlever.cs.uni-freiburg.de/materializedView/testView1>")};
+    query.addParameter(
+        SparqlTriple{iri("<config>"), iri("<column-s>"), V{"?s"}});
     query.addParameter(
         SparqlTriple{iri("<config>"), iri("<column-g>"), V{"?o"}});
     AD_EXPECT_THROW_WITH_MESSAGE(
@@ -78,6 +102,34 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
             SparqlTriple{iri("<config>"), iri("<blabliblu>"), V{"?o"}}),
         ::testing::HasSubstr("Unknown parameter"));
     EXPECT_EQ(query.name(), "materialized view query");
+
+    auto t = view->makeScanConfig(query, placeholderP, placeholderO);
+    Triple expected{V{"?s"}, placeholderP, placeholderO, {{3, V{"?o"}}}};
+    EXPECT_EQ(t, expected);
+  }
+
+  // Request for reading from a view with a fixed value for the scan column
+  {
+    ViewQuery query{SparqlTriple{
+        iri("<s1>"),
+        iri("<https://qlever.cs.uni-freiburg.de/materializedView/testView1-p>"),
+        V{"?p"}}};
+    auto t = view->makeScanConfig(query, placeholderP, placeholderO);
+    Triple expected{iri("<s1>"), V{"?p"}, placeholderO};
+    EXPECT_EQ(t, expected);
+    std::vector<Variable> expectedVars{V{"?p"}};
+    EXPECT_THAT(query.getVarsToKeep(),
+                ::testing::UnorderedElementsAreArray(expectedVars));
+  }
+
+  // Test that we can write a view from a fully materialized result
+  {
+    auto plan = qlv().parseAndPlanQuery(
+        "SELECT * { BIND(1 AS ?s) BIND(2 AS ?p) BIND(3 AS ?o) BIND(4 AS ?g) }");
+    auto qet = std::get<0>(plan);
+    auto res = qet->getResult(true);
+    EXPECT_TRUE(res->isFullyMaterialized());
+    MaterializedViewWriter::writeViewToDisk("testView4", plan);
   }
 
   // Invalid inputs
@@ -117,6 +169,19 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
                                V{"?o"}}),
         ::testing::HasSubstr("The subject of the magic predicate for reading "
                              "from a materialized view may not be undef"));
+  }
+  {
+    ViewQuery query{SparqlTriple{
+        V{"?s"},
+        iri("<https://qlever.cs.uni-freiburg.de/materializedView/testView1-o>"),
+        V{"?o"}}};
+    query.addParameter(
+        SparqlTriple{iri("<config>"), iri("<column-s>"), V{"?x"}});
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        view->makeScanConfig(query, placeholderP, placeholderO),
+        ::testing::HasSubstr(
+            "The first column of a materialized view may not be requested "
+            "twice, but '?x' violated this requirement."));
   }
 
   // Test column stripping helper.
