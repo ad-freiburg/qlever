@@ -100,6 +100,12 @@ struct ProxyQuery : MagicServiceQuery {
   // Throws `ProxyException` if required parameters are missing.
   ProxyConfiguration toConfiguration() const;
 
+  // See `MagicServiceQuery`.
+  void validate() const override { toConfiguration(); }
+
+  // See `MagicServiceQuery`.
+  constexpr std::string_view name() const override { return "qlproxy"; }
+
  private:
   void throwIf(bool condition, std::string_view message) const;
 };
