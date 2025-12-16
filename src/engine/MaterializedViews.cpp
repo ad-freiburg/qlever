@@ -49,7 +49,7 @@ MaterializedViewWriter::MaterializedViewWriter(
   auto columnNamesAndPermutation = getIdTableColumnNamesAndPermutation();
   columnNames_ = ::ranges::to<std::vector<std::string>>(
       columnNamesAndPermutation | ql::views::keys);
-  columnPermutation_ = ::ranges::to<std::vector<size_t>>(
+  columnPermutation_ = ::ranges::to<std::vector<ColumnIndex>>(
       columnNamesAndPermutation | ql::views::values);
 }
 

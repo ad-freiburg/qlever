@@ -52,7 +52,7 @@ class MaterializedViewWriter {
 
   // The permutation that needs to be applied to the result columns of the query
   // to obtain correct `IdTable`s.
-  std::vector<size_t> columnPermutation_;
+  std::vector<ColumnIndex> columnPermutation_;
 
   using IdTableRange = ad_utility::InputRangeTypeErased<IdTableStatic<0>>;
   // SPO comparator
