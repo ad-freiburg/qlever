@@ -8,7 +8,9 @@
 #define QLEVER_SRC_ENGINE_MATERIALIZEDVIEWS_H_
 
 #include "engine/VariableToColumnMap.h"
+#include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/DeltaTriples.h"
+#include "index/ExternalSortFunctors.h"
 #include "index/Permutation.h"
 #include "libqlever/QleverTypes.h"
 #include "parser/MaterializedViewQuery.h"
@@ -31,13 +33,33 @@ static constexpr size_t MATERIALIZED_VIEWS_VERSION = 1;
 // the results will be written to the view.
 class MaterializedViewWriter {
  private:
+  // Filename components for writing the view to disk.
   std::string onDiskBase_;
   std::string name_;
+
+  // Query plan to retrieve the view's rows.
   std::shared_ptr<QueryExecutionTree> qet_;
   std::shared_ptr<QueryExecutionContext> qec_;
   ParsedQuery parsedQuery_;
+
+  // Memory limit and allocator for `CompressedExternalIdTableSorter`, which is
+  // used if the query result is not correctly sorted.
   ad_utility::MemorySize memoryLimit_;
   ad_utility::AllocatorWithLimit<Id> allocator_;
+
+  // The correctly ordered column names of the view.
+  std::vector<std::string> columnNames_;
+
+  // The permutation that needs to be applied to the result columns of the query
+  // to obtain correct `IdTable`s.
+  std::vector<size_t> columnPermutation_;
+
+  using IdTableRange = ad_utility::InputRangeTypeErased<IdTableStatic<0>>;
+  // SPO comparator
+  using Comparator = SortTriple<0, 1, 2>;
+  // Sorter for SPO permutation with a dynamic number of columns (template
+  // argument `NumStaticCols == 0`)
+  using Sorter = ad_utility::CompressedExternalIdTableSorter<Comparator, 0>;
 
  public:
   using QueryPlan = qlever::QueryPlan;
@@ -55,15 +77,51 @@ class MaterializedViewWriter {
   // name is the result of concatenating `onDiskBase` and `name`.
   std::string getFilenameBase() const;
 
-  // Computes the column ordering how the `IdTable`s from executing the
-  // `QueryExecutionTree` must be permuted to match the requested target columns
-  // and column ordering.
+  // Helper that computes the column ordering how the `IdTable`s from executing
+  // the `QueryExecutionTree` must be permuted to match the requested target
+  // columns and column ordering. This is called in the constructor to populate
+  // `columnNamesAndPermutation_`.
   using ColumnNameAndIndex = std::pair<std::string, size_t>;
   using ColumnNamesAndPermutation = std::vector<ColumnNameAndIndex>;
   ColumnNamesAndPermutation getIdTableColumnNamesAndPermutation() const;
 
-  // Actually computes and externally sorts the query result and writes the view
-  // (SPO permutation and metadata) to disk.
+  // The number of columns of the view.
+  size_t numCols() const { return columnPermutation_.size(); }
+
+  // Helper to permute an `IdTable` according to `columnPermutation_` and verify
+  // that the `LocalVocab` is empty.
+  void permuteIdTableAndCheckVocab(IdTable& block,
+                                   const LocalVocab& vocab) const;
+
+  // Helper for `computeResultAndWritePermutation`: If the query given by the
+  // user is already sorted correctly, this function can be used to obtain the
+  // permuted blocks.
+  IdTableRange getBlocksForAlreadySortedResult(
+      std::shared_ptr<const Result> result) const;
+
+  // Helper for `computeResultAndWritePermutation`: If the query given by the
+  // user is not sorted correctly, this function can be used to invoke the
+  // external sorted and obtain sorted and correctly permuted blocks.
+  IdTableRange getBlocksForUnsortedResult(
+      Sorter& spoSorter, std::shared_ptr<const Result> result) const;
+
+  // Helper for `computeResultAndWritePermutation`: Checks if the result is
+  // correctly sorted and invokes `getBlocksForAlreadySortedResult` or
+  // `getBlocksForUnsortedResult` accordingly.
+  IdTableRange getSortedBlocks(Sorter& spoSorter,
+                               std::shared_ptr<const Result> result) const;
+
+  // Helper for `computeResultAndWritePermutation`: given sorted and permuted
+  // blocks from `getSortedBlocks`, write the `Permutation` to disk using
+  // `CompressedRelationWriter`. Returns the permutation metadata.
+  IndexMetaDataMmap writePermutation(IdTableRange sortedBlocksSPO) const;
+
+  // Helper for `computeResultAndWritePermutation`: Writes the metadata JSON
+  // files with column names and ordering to disk.
+  void writeViewMetadata() const;
+
+  // Actually computes, permutes and if needed externally sorts the query result
+  // and writes the view (SPO permutation and metadata) to disk.
   void computeResultAndWritePermutation() const;
 
  public:
