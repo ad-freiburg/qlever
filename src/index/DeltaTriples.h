@@ -242,11 +242,10 @@ class DeltaTriples {
   // Update the block metadata.
   void updateAugmentedMetadata();
 
-  std::pair<std::vector<std::tuple<VocabIndex, std::string_view, Id>>,
-            ad_utility::HashMap<Id, Id>>
-  materializeLocalVocab() const;
-
-  void materializeToIndex(const CancellationHandle& cancellationHandle);
+  // Create a deep clone of the local vocab such that it can be processed
+  // without holding the lock.
+  std::vector<std::pair<LocalVocabEntry, LocalVocabIndex>> deepCloneLocalVocab()
+      const;
 
  private:
   // The the proper state according to the template parameter. This will either
@@ -342,6 +341,10 @@ class DeltaTriplesManager {
   // Return a shared pointer to a deep copy of the current snapshot. This can
   // be safely used to execute a query without interfering with future updates.
   SharedLocatedTriplesSnapshot getCurrentSnapshot() const;
+
+  std::pair<SharedLocatedTriplesSnapshot,
+            std::vector<std::pair<LocalVocabEntry, LocalVocabIndex>>>
+  getCurrentSnapshotWithVocab() const;
 };
 
 #endif  // QLEVER_SRC_INDEX_DELTATRIPLES_H

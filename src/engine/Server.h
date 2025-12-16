@@ -103,6 +103,10 @@ class Server {
   /// Executor with a single thread that is used to run timers asynchronously.
   boost::asio::static_thread_pool timerExecutor_{1};
 
+  // Indicates if an index rebuild is currently in progress so that we prevent
+  // triggering this twice.
+  std::atomic_bool rebuildInProgress_{false};
+
   template <typename T>
   using Awaitable = boost::asio::awaitable<T>;
 
