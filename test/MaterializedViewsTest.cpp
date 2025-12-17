@@ -349,17 +349,21 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, InvalidInputToWriter) {
   AD_EXPECT_THROW_WITH_MESSAGE(
-      qlv().writeMaterializedView("testView1", "SELECT * { ?s ?p ?o }"),
+      MaterializedViewWriter::writeViewToDisk(
+          testIndexBase_, "testView1",
+          qlv().parseAndPlanQuery("SELECT * { ?s ?p ?o }")),
       ::testing::HasSubstr("Currently the query used to write a materialized "
                            "view needs to have at least four columns"));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      qlv().writeMaterializedView("Something Out!of~the.ordinary",
-                                  simpleWriteQuery_),
+      MaterializedViewWriter::writeViewToDisk(
+          testIndexBase_, "Something Out!of~the.ordinary",
+          qlv().parseAndPlanQuery(simpleWriteQuery_)),
       ::testing::HasSubstr("not a valid name for a materialized view"));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      qlv().writeMaterializedView(
-          "testView2",
-          "SELECT * { ?s ?p ?o . BIND(\"localVocabString\" AS ?g) }"),
+      MaterializedViewWriter::writeViewToDisk(
+          testIndexBase_, "testView2",
+          qlv().parseAndPlanQuery(
+              "SELECT * { ?s ?p ?o . BIND(\"localVocabString\" AS ?g) }")),
       ::testing::HasSubstr("Materialized views cannot contain entries from a "
                            "local vocabulary currently."));
 }
