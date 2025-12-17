@@ -1420,14 +1420,24 @@ GroupByImpl::HashMapAggregationData<NUM_GROUP_COLUMNS>::getHashEntries(
   //       the data into a row-wise format before passing it?
   for (size_t i = 0; i < numberOfEntries; ++i) {
     auto key = makeKeyForHashMap(groupByCols, i);
-    if (onlyUsePreexistingGroups && map_.find(key) == map_.end()) {
-      // If the row's key is not found, we add it to the non-matching list.
-      nonMatchingRows.push_back(i);
+    size_t groupIndex;
+
+    if (onlyUsePreexistingGroups) {
+      auto it = map_.find(key);
+      if (it == map_.end()) {
+        // Key not found: remember row as non-matching (would create new group).
+        nonMatchingRows.push_back(i);
+        continue;
+      } else {
+        // `it` has the form (key, value) where value is the group index
+        groupIndex = it->second;
+      }
     } else {
-      auto [iterator, wasAdded] = map_.try_emplace(key, numGroups());
-      matchedRowsToGroups.push_back(
-          GroupLookupResult::RowToGroup{i, iterator->second});
+      auto [it, wasAdded] = map_.try_emplace(std::move(key), numGroups());
+      groupIndex = it->second;
     }
+
+    matchedRowsToGroups.push_back(GroupLookupResult::RowToGroup{i, groupIndex});
   }
 
   // CPP_template_lambda(capture)(typenames...)(arg)(requires ...)`
@@ -1698,43 +1708,42 @@ IdTable GroupByImpl::createResultFromHashMap(
 // Visitor function to extract values from the result of an evaluation of
 // the child expression of an aggregate, and subsequently processing the
 // values by calling the `addValue` function of the corresponding aggregate.
-static constexpr auto makeProcessGroupsVisitor =
-    [](size_t blockSize,
-       const sparqlExpression::EvaluationContext* evaluationContext,
-       const GroupByImpl::GroupLookupResult& groupLookupResult) {
-      return CPP_template_lambda(blockSize, evaluationContext,
-                                 &groupLookupResult)(typename T, typename A)(
-          T && singleResult, A & aggregationDataVector)(
-          requires sparqlExpression::SingleExpressionResult<T> &&
-          VectorOfAggregationData<A>) {
-        // Create pairs of [value, rowIndex] from generator
-        auto generator = sparqlExpression::detail::makeGenerator(
-            std::forward<T>(singleResult), blockSize, evaluationContext);
+constexpr auto GroupByImpl::makeProcessGroupsVisitor(
+    size_t blockSize,
+    const sparqlExpression::EvaluationContext* evaluationContext,
+    const GroupLookupResult& groupLookupResult) {
+  return CPP_template_lambda(blockSize, evaluationContext, &groupLookupResult)(
+      typename T, typename A)(T && singleResult, A & aggregationDataVector)(
+      requires sparqlExpression::SingleExpressionResult<T> &&
+      VectorOfAggregationData<A>) {
+    // Create pairs of [value, rowIndex] from generator
+    auto generator = sparqlExpression::detail::makeGenerator(
+        std::forward<T>(singleResult), blockSize, evaluationContext);
 
-        const auto& matches = groupLookupResult.matchedRowsToGroups_;
-        // Ensure matches are sorted by rowIndex, as we will iterate
-        // through the generator in ascending order of rowIndex
-        AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(
-            matches.begin(), matches.end(), {},
-            &GroupByImpl::GroupLookupResult::RowToGroup::rowIndex_));
+    const auto& matches = groupLookupResult.matchedRowsToGroups_;
+    // Ensure matches are sorted by rowIndex, as we will iterate
+    // through the generator in ascending order of rowIndex
+    AD_EXPENSIVE_CHECK(
+        ql::ranges::is_sorted(matches.begin(), matches.end(), {},
+                              &GroupLookupResult::RowToGroup::rowIndex_));
 
-        // Process each matching row
-        // TODO<Benke> Potentially a waste of resources!
-        //   The code evaluates the sub-expressions for the non-matching rows
-        //   twice, because here they are evaluated then discarded, and later on
-        //   they are evaluated again from the materialized and sorted result.
-        auto matchIt = matches.begin();
-        size_t currentRow = 0;
-        for (const auto& value : generator) {
-          if (matchIt != matches.end() && currentRow == matchIt->rowIndex_) {
-            aggregationDataVector.at(matchIt->groupIndex_)
-                .addValue(value, evaluationContext);
-            ++matchIt;
-          }
-          ++currentRow;
-        }
-      };
-    };
+    // Process each matching row
+    // TODO<Benke> Potentially a waste of resources!
+    //   The code evaluates the sub-expressions for the non-matching rows
+    //   twice, because here they are evaluated then discarded, and later on
+    //   they are evaluated again from the materialized and sorted result.
+    auto matchIt = matches.begin();
+    size_t currentRow = 0;
+    for (const auto& value : generator) {
+      if (matchIt != matches.end() && currentRow == matchIt->rowIndex_) {
+        aggregationDataVector.at(matchIt->groupIndex_)
+            .addValue(value, evaluationContext);
+        ++matchIt;
+      }
+      ++currentRow;
+    }
+  };
+}
 
 // _____________________________________________________________________________
 template <size_t NUM_GROUP_COLUMNS, typename SubResults>
@@ -1815,7 +1824,8 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
       restTable.insertSubsetAtEnd(inputTable, updateResult.nonMatchingRows_);
 
       ++blockIt;
-      return handleRemainderUsingHybridApproach<NUM_GROUP_COLUMNS>(
+      return handleRemainderUsingHybridApproach<
+          NUM_GROUP_COLUMNS, decltype(blockIt), decltype(blocksEnd)>(
           std::move(data), aggregationData, timers, blockIt, blocksEnd,
           std::move(restTable));
     }
@@ -1834,8 +1844,8 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
 // _____________________________________________________________________________
 CPP_template_def(size_t NUM_GROUP_COLUMNS, typename BlockIterator,
                  typename BlocksEnd)(
-    requires std::input_iterator<BlockIterator>&&
-        std::sentinel_for<BlocksEnd, BlockIterator>) Result
+    requires ql::concepts::input_iterator<BlockIterator>&&
+        ql::concepts::sentinel_for<BlocksEnd, BlockIterator>) Result
     GroupByImpl::handleRemainderUsingHybridApproach(
         HashMapOptimizationData data,
         HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
@@ -1934,8 +1944,7 @@ GroupByImpl::makeGroupValueSpans(const IdTable& table, size_t beginIdx,
 
 // _____________________________________________________________________________
 template <size_t NUM_GROUP_COLUMNS>
-typename GroupByImpl::UpdateResult<NUM_GROUP_COLUMNS>
-GroupByImpl::updateHashMapWithTable(
+typename GroupByImpl::UpdateResult GroupByImpl::updateHashMapWithTable(
     const IdTable& table, const HashMapOptimizationData& data,
     HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
     HashMapTimers& timers, bool onlyUsePreexistingGroups) const {
@@ -1993,8 +2002,8 @@ GroupByImpl::updateHashMapWithTable(
       thresholdExceededDuringThisTable = true;
     }
   }
-  return UpdateResult<NUM_GROUP_COLUMNS>{std::move(nonMatchingRows),
-                                         thresholdExceededDuringThisTable};
+  return UpdateResult{std::move(nonMatchingRows),
+                      thresholdExceededDuringThisTable};
 }
 
 // _____________________________________________________________________________
@@ -2112,8 +2121,3 @@ template
         const typename HashMapAggregationData<2>::template ArrayOrVector<
             ql::span<const Id>>&,
         size_t) const;
-
-// Explicit instantiation of `updateHashMapWithTable` used by unit tests.
-template GroupByImpl::UpdateResult<1> GroupByImpl::updateHashMapWithTable<1>(
-    const IdTable&, const HashMapOptimizationData&, HashMapAggregationData<1>&,
-    HashMapTimers&, bool) const;

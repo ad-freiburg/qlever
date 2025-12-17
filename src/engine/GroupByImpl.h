@@ -386,7 +386,9 @@ class GroupByImpl : public Operation {
       size_t rowIndex_;
       size_t groupIndex_;
 
-      bool operator==(const RowToGroup&) const = default;
+      bool operator==(const RowToGroup& other) const {
+        return rowIndex_ == other.rowIndex_ && groupIndex_ == other.groupIndex_;
+      }
     };
 
     // For each processed input row that matched an existing group (in order),
@@ -573,6 +575,15 @@ class GroupByImpl : public Operation {
       HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
       sparqlExpression::EvaluationContext& evaluationContext);
 
+  // Helper that creates the visitor used in
+  // `processAggregateAliasesForBlock` to route values from the evaluation
+  // of an aggregate's child expression into the corresponding aggregation
+  // data structures.
+  static constexpr auto makeProcessGroupsVisitor(
+      size_t blockSize,
+      const sparqlExpression::EvaluationContext* evaluationContext,
+      const GroupLookupResult& groupLookupResult);
+
   // Sort the HashMap by key and create result table.
   template <size_t NUM_GROUP_COLUMNS>
   IdTable createResultFromHashMap(
@@ -721,7 +732,6 @@ class GroupByImpl : public Operation {
   };
 
   // Result struct for updateHashMapWithTable
-  template <size_t NUM_GROUP_COLUMNS>
   struct UpdateResult {
     std::vector<size_t> nonMatchingRows_;
     bool thresholdExceeded_ = false;
@@ -731,7 +741,7 @@ class GroupByImpl : public Operation {
   // matching rows. Returns both non-matching rows and whether threshold was
   // exceeded.
   template <size_t NUM_GROUP_COLUMNS>
-  UpdateResult<NUM_GROUP_COLUMNS> updateHashMapWithTable(
+  UpdateResult updateHashMapWithTable(
       const IdTable& table, const HashMapOptimizationData& data,
       HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
       HashMapTimers& timers, bool onlyUsePreexistingGroups = false) const;
@@ -778,8 +788,8 @@ class GroupByImpl : public Operation {
    */
   CPP_template_def(size_t NUM_GROUP_COLUMNS, typename BlockIterator,
                    typename BlocksEnd)(
-      requires std::input_iterator<BlockIterator>&&
-          std::sentinel_for<BlocksEnd, BlockIterator>) Result
+      requires ql::concepts::input_iterator<BlockIterator>&&
+          ql::concepts::sentinel_for<BlocksEnd, BlockIterator>) Result
       handleRemainderUsingHybridApproach(
           HashMapOptimizationData data,
           HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
