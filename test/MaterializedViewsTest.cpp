@@ -11,6 +11,7 @@
 #include "./util/HttpRequestHelpers.h"
 #include "engine/IndexScan.h"
 #include "engine/MaterializedViews.h"
+#include "engine/QueryExecutionContext.h"
 #include "engine/Server.h"
 #include "index/EncodedIriManager.h"
 #include "parser/MaterializedViewQuery.h"
@@ -184,9 +185,9 @@ TEST_F(MaterializedViewsTest, MetadataDependentConfigChecks) {
         });
 
     // Run `makeIndexScan` and check the error message.
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        manager.makeIndexScan(std::get<1>(plan).get(), viewQuery),
-        ::testing::HasSubstr(expectedError));
+    QueryExecutionContext qec{*std::get<1>(plan)};
+    AD_EXPECT_THROW_WITH_MESSAGE(manager.makeIndexScan(&qec, viewQuery),
+                                 ::testing::HasSubstr(expectedError));
   };
 
   expectMakeIndexScanError(
@@ -390,8 +391,8 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
     return ad_utility::triple_component::Iri::fromIriref(ref);
   };
 
-  V placeholderP{"?placeholder_p"};
-  V placeholderO{"?placeholder_o"};
+  const V placeholderP{"?_ql_materialized_view_p"};
+  const V placeholderO{"?_ql_materialized_view_o"};
 
   // Request for reading an extra payload column
   {
@@ -400,7 +401,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
         iri("<https://qlever.cs.uni-freiburg.de/materializedView/testView1-g>"),
         V{"?o"}}};
 
-    auto t = view->makeScanConfig(query, placeholderP, placeholderO);
+    auto t = view->makeScanConfig(query);
     Triple expected{V{"?s"}, placeholderP, placeholderO, {{3, V{"?o"}}}};
     EXPECT_EQ(t, expected);
   }
@@ -417,7 +418,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
         ::testing::HasSubstr("Unknown parameter"));
     EXPECT_EQ(query.name(), "materialized view query");
 
-    auto t = view->makeScanConfig(query, placeholderP, placeholderO);
+    auto t = view->makeScanConfig(query);
     Triple expected{V{"?s"}, placeholderP, placeholderO, {{3, V{"?o"}}}};
     EXPECT_EQ(t, expected);
   }
@@ -430,7 +431,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
         iri("<https://qlever.cs.uni-freiburg.de/materializedView/testView1-o>"),
         V{"?o"}}};
 
-    auto t = view->makeScanConfig(query, placeholderP, placeholderO);
+    auto t = view->makeScanConfig(query);
     Triple expected{V{"?s"}, placeholderP, V{"?o"}};
     EXPECT_EQ(t, expected);
     std::vector<Variable> expectedVars{V{"?s"}, V{"?o"}};
@@ -444,7 +445,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
         iri("<s1>"),
         iri("<https://qlever.cs.uni-freiburg.de/materializedView/testView1-p>"),
         V{"?p"}}};
-    auto t = view->makeScanConfig(query, placeholderP, placeholderO);
+    auto t = view->makeScanConfig(query);
     Triple expected{iri("<s1>"), V{"?p"}, placeholderO};
     EXPECT_EQ(t, expected);
     std::vector<Variable> expectedVars{V{"?p"}};
@@ -508,7 +509,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
     query.addParameter(
         SparqlTriple{iri("<config>"), iri("<column-s>"), V{"?x"}});
     AD_EXPECT_THROW_WITH_MESSAGE(
-        view->makeScanConfig(query, placeholderP, placeholderO),
+        view->makeScanConfig(query),
         ::testing::HasSubstr(
             "The first column of a materialized view may not be requested "
             "twice, but '?x' violated this requirement."));
@@ -721,7 +722,8 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
                                      "<https://qlever.cs.uni-freiburg.de/"
                                      "materializedView/testView1-o>"),
                                  Variable{"?o"}}};
-    auto scan = manager.makeIndexScan(std::get<1>(writePlan).get(), query);
+    QueryExecutionContext qec{*std::get<1>(writePlan)};
+    auto scan = manager.makeIndexScan(&qec, query);
     auto res = scan->getResult(true, ComputationMode::LAZY_IF_SUPPORTED);
     size_t numRows = 0;
     size_t numBlocks = 0;
