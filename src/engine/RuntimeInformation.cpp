@@ -172,6 +172,8 @@ std::string_view RuntimeInformation::toString(Status status) {
       return "fully materialized";
     case lazilyMaterialized:
       return "lazily materialized";
+    case fullyLazilyMaterialized:
+      return "fully lazily materialized";
     case inProgress:
       return "in progress";
     case notStarted:

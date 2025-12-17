@@ -468,7 +468,7 @@ TEST(Operation, verifyRuntimeInformationIsUpdatedForLazyOperations) {
                    "2 / 2, Ø = 1, max = 1");
        }});
 
-  EXPECT_EQ(rti.status_, Status::lazilyMaterialized);
+  EXPECT_EQ(rti.status_, Status::fullyLazilyMaterialized);
   expectRtiHasDimensions(rti, 2, 2);
   ASSERT_TRUE(rti.details_.contains("non-empty-local-vocabs"));
   EXPECT_EQ(rti.details_["non-empty-local-vocabs"], "2 / 2, Ø = 1, max = 1");

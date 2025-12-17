@@ -208,9 +208,9 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
           signalQueryUpdate(RuntimeInformation::SendPriority::IfDue);
         },
         [this](bool failed) {
-          if (failed) {
-            runtimeInfo().status_ = RuntimeInformation::failed;
-          }
+          runtimeInfo().status_ =
+              failed ? RuntimeInformation::failed
+                     : RuntimeInformation::fullyLazilyMaterialized;
           signalQueryUpdate(RuntimeInformation::SendPriority::Always);
         });
   }

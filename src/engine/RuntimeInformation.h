@@ -34,6 +34,7 @@ class RuntimeInformation {
     inProgress,
     fullyMaterialized,
     lazilyMaterialized,
+    fullyLazilyMaterialized,
     optimizedOut,
     failed,
     failedBecauseChildFailed,
