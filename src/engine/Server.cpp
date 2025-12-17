@@ -465,16 +465,18 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     } else {
       absl::Cleanup cleanup{[this]() { rebuildInProgress_.store(false); }};
       logCommand(cmd, "rebuilding index");
+      auto fileName =
+          checkParameter("index-name", std::nullopt).value_or("new_index");
       // There is no mechanism to actually cancel the handle.
       auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
       // We don't directly `co_await` because of lifetime issues (bugs) in the
       // Conan setup.
       auto coroutine = computeInNewThread(
           queryThreadPool_,
-          [this, &handle] {
+          [this, &handle, fileName = std::move(fileName)] {
             auto [currentSnapshot, localVocabCopy] =
                 index_.deltaTriplesManager().getCurrentSnapshotWithVocab();
-            qlever::materializeToIndex(index_.getImpl(), "tmp_index",
+            qlever::materializeToIndex(index_.getImpl(), fileName,
                                        localVocabCopy, currentSnapshot, handle);
           },
           handle);
