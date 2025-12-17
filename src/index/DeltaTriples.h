@@ -52,7 +52,15 @@ struct LocatedTriplesSnapshot {
 // A shared pointer to a constant `LocatedTriplesSnapshot`, but as an explicit
 // class, such that it can be forward-declared.
 class SharedLocatedTriplesSnapshot
-    : public std::shared_ptr<const LocatedTriplesSnapshot> {};
+    : public std::shared_ptr<const LocatedTriplesSnapshot> {
+ public:
+  std::shared_ptr<const LocatedTriplesPerBlock> getLocatedTriplesForPermutation(
+      Permutation::Enum permutation) const {
+    return {*this, &this->get()->getLocatedTriplesForPermutation(permutation)};
+  }
+  std::shared_ptr<const LocatedTriplesPerBlock>
+  getInternalLocatedTriplesForPermutation(Permutation::Enum permutation) const;
+};
 
 // A class for keeping track of the number of triples of the `DeltaTriples`.
 struct DeltaTriplesCount {

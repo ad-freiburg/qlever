@@ -84,7 +84,7 @@ class Permutation {
   IdTable scan(const ScanSpecAndBlocks& scanSpecAndBlocks,
                ColumnIndicesRef additionalColumns,
                const CancellationHandle& cancellationHandle,
-               const LocatedTriplesSnapshot& locatedTriplesSnapshot,
+               const LocatedTriplesPerBlock& locatedTriples,
                const LimitOffsetClause& limitOffset = {}) const;
 
   // For a given relation, determine the `col1Id`s and their counts. This is
@@ -92,12 +92,12 @@ class Permutation {
   // in `meta_`.
   IdTable getDistinctCol1IdsAndCounts(
       Id col0Id, const CancellationHandle& cancellationHandle,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot,
+      const LocatedTriplesPerBlock& locatedTriples,
       const LimitOffsetClause& limitOffset) const;
 
   IdTable getDistinctCol0IdsAndCounts(
       const CancellationHandle& cancellationHandle,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot,
+      const LocatedTriplesPerBlock& locatedTriples,
       const LimitOffsetClause& limitOffset) const;
 
   // Typedef to propagate the `MetadataAndblocks` and `IdTableGenerator` type.
@@ -126,17 +126,17 @@ class Permutation {
       std::optional<std::vector<CompressedBlockMetadata>> optBlocks,
       ColumnIndicesRef additionalColumns,
       const CancellationHandle& cancellationHandle,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot,
+      const LocatedTriplesPerBlock& locatedTriples,
       const LimitOffsetClause& limitOffset = {}) const;
 
   // Returns the corresponding `CompressedRelationReader::ScanSpecAndBlocks`
   // with relevant `BlockMetadataRanges`.
   ScanSpecAndBlocks getScanSpecAndBlocks(
       const ScanSpecification& scanSpec,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+      const LocatedTriplesPerBlock& locatedTriples) const;
 
   std::optional<CompressedRelationMetadata> getMetadata(
-      Id col0Id, const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+      Id col0Id, const LocatedTriplesPerBlock& locatedTriples) const;
 
   // Return the metadata for the scan specified by the `scanSpecification`
   // along with the metadata for all the blocks that are relevant for this
@@ -144,21 +144,21 @@ class Permutation {
   // be empty) return `nullopt`.
   std::optional<MetadataAndBlocks> getMetadataAndBlocks(
       const ScanSpecAndBlocks& scanSpecAndBlocks,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+      const LocatedTriplesPerBlock& locatedTriples) const;
 
   // Get the exact size of the result of a scan, taking into account the
   // given located triples. This requires an exact location of the delta
   // triples within the respective blocks.
   size_t getResultSizeOfScan(
       const ScanSpecAndBlocks& scanSpecAndBlocks,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+      const LocatedTriplesPerBlock& locatedTriples) const;
 
   // Get a lower and upper bound for the size of the result of a scan, taking
   // into account the given `deltaTriples`. For this call, it is enough that
   // each delta triple know to which block it belongs.
   std::pair<size_t, size_t> getSizeEstimateForScan(
       const ScanSpecAndBlocks& scanSpecAndBlocks,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+      const LocatedTriplesPerBlock& locatedTriples) const;
 
   // _______________________________________________________
   void setKbName(const std::string& name) { meta_.setName(name); }
@@ -188,10 +188,9 @@ class Permutation {
   const LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
       const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
-  // From the given snapshot, get the augmented block metadata for this
-  // permutation.
+  // From the given `LocatedTriplesPerBlock`, get the augmented block metadata.
   BlockMetadataRanges getAugmentedMetadataForPermutation(
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+      const LocatedTriplesPerBlock& locatedTriples) const;
 
   const CompressedRelationReader& reader() const { return reader_.value(); }
 
