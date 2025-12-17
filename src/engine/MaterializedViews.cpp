@@ -47,8 +47,8 @@ MaterializedViewWriter::MaterializedViewWriter(
   qec_ = qec;
   parsedQuery_ = std::move(parsedQuery);
   auto columnNamesAndPermutation = getIdTableColumnNamesAndPermutation();
-  columnNames_ = ::ranges::to<std::vector<std::string>>(
-      columnNamesAndPermutation | ql::views::keys);
+  columnNames_ = ::ranges::to<std::vector<Variable>>(columnNamesAndPermutation |
+                                                     ql::views::keys);
   columnPermutation_ = ::ranges::to<std::vector<ColumnIndex>>(
       columnNamesAndPermutation | ql::views::values);
 }
@@ -112,7 +112,7 @@ void MaterializedViewWriter::permuteIdTableAndCheckVocab(
 }
 
 // _____________________________________________________________________________
-MaterializedViewWriter::IdTableRange
+MaterializedViewWriter::RangeOfIdTables
 MaterializedViewWriter::getBlocksForAlreadySortedResult(
     std::shared_ptr<const Result> result) const {
   // Results are already sorted correctly: we do not need to invoke the
@@ -130,10 +130,10 @@ MaterializedViewWriter::getBlocksForAlreadySortedResult(
                                 result->localVocab());
     std::vector<IdTableStatic<0>> singleIdTable;
     singleIdTable.push_back(std::move(idTableCopyForPermutation));
-    return IdTableRange{std::move(singleIdTable)};
+    return RangeOfIdTables{std::move(singleIdTable)};
   } else {
     // Transform the lazy result (permute columns)
-    return IdTableRange{
+    return RangeOfIdTables{
         ad_utility::OwningView{result->idTables()} |
         ql::views::transform(
             [&](auto& idTableAndLocalVocab) -> IdTableStatic<0> {
@@ -145,7 +145,7 @@ MaterializedViewWriter::getBlocksForAlreadySortedResult(
 }
 
 // _____________________________________________________________________________
-MaterializedViewWriter::IdTableRange
+MaterializedViewWriter::RangeOfIdTables
 MaterializedViewWriter::getBlocksForUnsortedResult(
     Sorter& spoSorter, std::shared_ptr<const Result> result) const {
   // Results are not yet sorted by the required columns. Sort results
@@ -182,7 +182,7 @@ MaterializedViewWriter::getBlocksForUnsortedResult(
 }
 
 // _____________________________________________________________________________
-MaterializedViewWriter::IdTableRange MaterializedViewWriter::getSortedBlocks(
+MaterializedViewWriter::RangeOfIdTables MaterializedViewWriter::getSortedBlocks(
     Sorter& spoSorter, std::shared_ptr<const Result> result) const {
   // Check if the query result is already sorted by SPO considering the target
   // column ordering
@@ -203,7 +203,7 @@ MaterializedViewWriter::IdTableRange MaterializedViewWriter::getSortedBlocks(
 
 // _____________________________________________________________________________
 IndexMetaDataMmap MaterializedViewWriter::writePermutation(
-    IdTableRange sortedBlocksSPO) const {
+    RangeOfIdTables sortedBlocksSPO) const {
   std::string spoFilename = getFilenameBase() + ".index.spo";
   CompressedRelationWriter spoWriter{
       numCols(),
@@ -242,8 +242,12 @@ IndexMetaDataMmap MaterializedViewWriter::writePermutation(
 // _____________________________________________________________________________
 void MaterializedViewWriter::writeViewMetadata() const {
   // Export column names to view info JSON file
-  nlohmann::json viewInfo = {{"version", MATERIALIZED_VIEWS_VERSION},
-                             {"columns", columnNames_}};
+  nlohmann::json viewInfo = {
+      {"version", MATERIALIZED_VIEWS_VERSION},
+      {"columns", (columnNames_ | ql::views::transform([](const Variable& v) {
+                     return v.name();
+                   }) |
+                   ::ranges::to<std::vector<std::string>>())}};
   ad_utility::makeOfstream(getFilenameBase() + ".viewinfo.json")
       << viewInfo.dump() << std::endl;
 }
@@ -257,7 +261,7 @@ void MaterializedViewWriter::computeResultAndWritePermutation() const {
 
   Sorter spoSorter{getFilenameBase() + ".spo-sorter.dat", numCols(),
                    memoryLimit_, allocator_};
-  IdTableRange sortedBlocksSPO = getSortedBlocks(spoSorter, result);
+  RangeOfIdTables sortedBlocksSPO = getSortedBlocks(spoSorter, result);
 
   // Write compressed relation to disk
   AD_LOG_INFO << "Writing materialized view " << name_ << " to disk ..."
