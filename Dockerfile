@@ -69,7 +69,7 @@ RUN cp $QLEVER_PROFILE /qlever/.bashrc
 # sourced. The `PATH` is set again to avoid a warning from `pipx`.
 USER qlever
 ENV PATH=/qlever:/qlever/.local/bin:$PATH
-RUN pipx install qlever
+RUN pipx install qlever==0.5.35
 ENV QLEVER_ARGCOMPLETE_ENABLED=1
 ENV QLEVER_IS_RUNNING_IN_CONTAINER=1
 

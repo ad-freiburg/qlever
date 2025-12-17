@@ -14,25 +14,19 @@
 
 # Help message that is printed if the container is not startes as recommended.
 HELP_MESSAGE='
-The recommended way to run a container with this image is as follows. Run in a fresh directory. Add `-p <outside port>:<inside port>` if you want to expose ports. Inside the container, the `qlever` command-line tool is available, as well as the QLever binaries (which you need not call directly, they are called by the various `qlever` commands).
+The recommended way to use is this image is with the `qlever` command-line tool, which can be installed with `pip install qlever`, `pipx install qlever`, or `uv tool install qlever`. Commands like `qlever index` or `qlever start` use the QLever Docker image by default (and will pull the right image if necessary).
 
-In batch mode (user `qlever` inside the container, with the same UID and GID as outside):
+Alternatively, the `qlever` command-line tool is also available inside of the container. For example, you can run (with user `qlever` inside the container, with the same UID and GID as the calling user):
 
-\x1b[34mdocker run -it --rm -e UID=$(id -u) -e GID=$(id -g) -v $(pwd):/data -w /data qlever -c "qlever setup-config olympics && qlever get-data && qlever index"\x1b[0m
+\x1b[34mdocker run -it --rm -e UID=$(id -u) -e GID=$(id -g) -v $(pwd):/data -w /data adfreiburg/qlever -c "qlever setup-config olympics && qlever get-data && qlever index"\x1b[0m
 
-The same, but in interactive mode:
+The same, but opening an interactive shell inside of the container:
 
-\x1b[34mdocker run -it --rm -e UID=$(id -u) -e GID=$(id -g) -v $(pwd):/data -w /data qlever\x1b[0m
+\x1b[34mdocker run -it --rm -e UID=$(id -u) -e GID=$(id -g) -v $(pwd):/data -w /data adfreiburg/qlever\x1b[0m
 
-It also works with  `-u $(id -u):$(id -g)` (but then the user inside the container has no proper name):
+If you do not care about the user inside of the container, you can also use `-u $(id -u):$(id -g)` instead of `-e UID=... -e GID=...` (then the use inside of the container has no proper name) or omit this part (then the user inside of the container is `root`).
 
-\x1b[34mdocker run -it --rm -u $(id -u):$(id -g) -v $(pwd):/data -w /data qlever\x1b[0m
-\x1b[34mdocker run -it --rm -u $(id -u):$(id -g) -v $(pwd):/data -w /data qlever -c "..."\x1b[0m
-
-With podman you should use `-u $(id -u):$(id -g)` together with `--userns=keep-id`:
-
-\x1b[34mpodman run -it --rm -u $(id -u):$(id -g) --userns=keep-id -v $(pwd):/data -w /data qlever\x1b[0m
-\x1b[34mpodman run -it --rm -u $(id -u):$(id -g) --userns=keep-id -v $(pwd):/data -w /data qlever -c "..."\x1b[0m
+With podman you should use `-u $(id -u):$(id -g)` together with `--userns=keep-id`.
 '
 
 # If the container is run without `-v ...:/data -w /data` (in particular, without
