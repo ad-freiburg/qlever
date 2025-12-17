@@ -57,7 +57,7 @@ class GraphTerm : public GraphTermBase,
       if constexpr (std::is_same_v<T, Variable>) {
         return element;
       } else if constexpr (std::is_same_v<T, Literal>) {
-        return ad_utility::triple_component::Literal::fromStringRepresentation(
+        return RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
             element.toSparql());
       } else if constexpr (std::is_same_v<T, Iri>) {
         return ad_utility::triple_component::Iri::fromStringRepresentation(
