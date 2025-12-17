@@ -742,7 +742,7 @@ Result Join::computeResultForIndexScanAndLazyOperation(
                              joinColMap.permutationRight()),
             std::less{}, rowAdder);
         scan->runtimeInfo().status_ =
-            RuntimeInformation::fullyLazilyMaterialized;
+            RuntimeInformation::Status::fullyLazilyMaterialized;
 
         auto localVocab = std::move(rowAdder.localVocab());
         return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
