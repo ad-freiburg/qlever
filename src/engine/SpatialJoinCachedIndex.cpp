@@ -6,8 +6,8 @@
 
 #include <s2/mutable_s2shape_index.h>
 #include <s2/s2polyline.h>
+#include <s2/s2shapeutil_coding.h>
 
-#include "../../cmake-build-gcc-13-relwithdebinfo/_deps/s2-src/src/s2/s2shapeutil_coding.h"
 #include "engine/SpatialJoinAlgorithms.h"
 
 // An instance of this type erased class holds the actual data for each
