@@ -640,8 +640,8 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
   {
     auto [qet, qec, parsed] = qlv().parseAndPlanQuery(
         "SELECT * { ?s "
-        "<https://qlever.cs.uni-freiburg.de/materializedView/"
-        "testView1-o> ?o }");
+        "<https://qlever.cs.uni-freiburg.de/materializedView/testView1-o> ?o "
+        "}");
 
     auto res = qet->getResult(true);
     size_t numRows = 0;
@@ -673,8 +673,8 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
   {
     auto [qet, qec, parsed] = qlv().parseAndPlanQuery(
         "SELECT (COUNT(*) AS ?cnt) { ?s "
-        "<https://qlever.cs.uni-freiburg.de/materializedView/"
-        "testView1-o> ?o }");
+        "<https://qlever.cs.uni-freiburg.de/materializedView/testView1-o> ?o "
+        "}");
     auto res = qet->getResult();
     ASSERT_TRUE(res->isFullyMaterialized());
     auto col = qet->getVariableColumn(Variable{"?cnt"});
