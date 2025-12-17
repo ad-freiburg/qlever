@@ -185,8 +185,7 @@ TEST_F(MaterializedViewsTest, MetadataDependentConfigChecks) {
 
     // Run `makeIndexScan` and check the error message.
     AD_EXPECT_THROW_WITH_MESSAGE(
-        manager.makeIndexScan(std::get<1>(plan).get(), viewQuery,
-                              Variable{"?p1"}, Variable{"?p2"}),
+        manager.makeIndexScan(std::get<1>(plan).get(), viewQuery),
         ::testing::HasSubstr(expectedError));
   };
 
@@ -722,8 +721,7 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
                                      "<https://qlever.cs.uni-freiburg.de/"
                                      "materializedView/testView1-o>"),
                                  Variable{"?o"}}};
-    auto scan = manager.makeIndexScan(std::get<1>(writePlan).get(), query,
-                                      Variable{"?p1"}, Variable{"?p2"});
+    auto scan = manager.makeIndexScan(std::get<1>(writePlan).get(), query);
     auto res = scan->getResult(true, ComputationMode::LAZY_IF_SUPPORTED);
     size_t numRows = 0;
     size_t numBlocks = 0;

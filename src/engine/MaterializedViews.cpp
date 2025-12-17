@@ -427,22 +427,21 @@ void MaterializedView::throwIfVariableUsedTwice(
 
 // _____________________________________________________________________________
 SparqlTripleSimple MaterializedView::makeScanConfig(
-    const parsedQuery::MaterializedViewQuery& viewQuery, Variable placeholder1,
-    Variable placeholder2) const {
+    const parsedQuery::MaterializedViewQuery& viewQuery) const {
   AD_CORRECTNESS_CHECK(viewQuery.viewName_ == name_);
   if (viewQuery.childGraphPattern_.has_value()) {
     throw MaterializedViewConfigException(
         "A materialized view query may not have a child group graph pattern.");
   }
-  AD_CORRECTNESS_CHECK(
-      placeholder1 != placeholder2,
-      "Placeholders for predicate and object must not be the same variable");
 
   // If `scanCol_` is set (when using the magic predicate), fix the subject to
   // this. Otherwise the subject is determined from `requestedColumns_` below.
   std::optional<TripleComponent> s = viewQuery.scanCol_;
-  TripleComponent p{std::move(placeholder1)};
-  TripleComponent o{std::move(placeholder2)};
+  // The placeholders are immediately removed from the result by column
+  // stripping. Therefore their names are not a concern when a single query
+  // contains multiple instances of `MaterializedViewQuery`.
+  TripleComponent p{Variable{"?_ql_materialized_view_p"}};
+  TripleComponent o{Variable{"?_ql_materialized_view_o"}};
   AdditionalScanColumns additionalCols;
 
   // Assemble which columns should be bound to which variables
@@ -530,10 +529,8 @@ MaterializedView::makeEmptyLocatedTriplesSnapshot() const {
 // _____________________________________________________________________________
 std::shared_ptr<IndexScan> MaterializedView::makeIndexScan(
     QueryExecutionContext* qec,
-    const parsedQuery::MaterializedViewQuery& viewQuery,
-    Variable placeholderPredicate, Variable placeholderObject) const {
-  auto scanTriple = makeScanConfig(viewQuery, std::move(placeholderPredicate),
-                                   std::move(placeholderObject));
+    const parsedQuery::MaterializedViewQuery& viewQuery) const {
+  auto scanTriple = makeScanConfig(viewQuery);
   return std::make_shared<IndexScan>(
       qec, permutation_, locatedTriplesSnapshot_, std::move(scanTriple),
       IndexScan::Graphs::All(), std::nullopt, viewQuery.getVarsToKeep());
@@ -542,14 +539,12 @@ std::shared_ptr<IndexScan> MaterializedView::makeIndexScan(
 // _____________________________________________________________________________
 std::shared_ptr<IndexScan> MaterializedViewsManager::makeIndexScan(
     QueryExecutionContext* qec,
-    const parsedQuery::MaterializedViewQuery& viewQuery,
-    Variable placeholderPredicate, Variable placeholderObject) const {
+    const parsedQuery::MaterializedViewQuery& viewQuery) const {
   if (!viewQuery.viewName_.has_value()) {
     throw MaterializedViewConfigException(
         "To read from a materialized view its name must be set in the "
         "query configuration.");
   }
   auto view = getView(viewQuery.viewName_.value());
-  return view->makeIndexScan(qec, viewQuery, std::move(placeholderPredicate),
-                             std::move(placeholderObject));
+  return view->makeIndexScan(qec, viewQuery);
 }

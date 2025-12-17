@@ -197,14 +197,8 @@ class MaterializedView {
   // Given a `MaterializedViewQuery` obtained from a special `SERVICE` or
   // predicate, compute the `SparqlTripleSimple` to be passed to the constructor
   // of `IndexScan` such that the columns requested by the user are returned.
-  //
-  // The caller has to pass to variables that  are not used anywhere else in
-  // the query as dummy placeholders. These are  used in case the `viewQuery`
-  // does not request columns 1 and 2 because `IndexScan` always reads the first
-  // three columns.
   SparqlTripleSimple makeScanConfig(
-      const parsedQuery::MaterializedViewQuery& viewQuery,
-      Variable placeholderPredicate, Variable placeholderObject) const;
+      const parsedQuery::MaterializedViewQuery& viewQuery) const;
 
   // Helpers for checking metadata-dependent invariants of
   // `MaterializedViewQuery` in `makeScanConfig`.
@@ -227,8 +221,7 @@ class MaterializedView {
   // `nullptr`.
   std::shared_ptr<IndexScan> makeIndexScan(
       QueryExecutionContext* qec,
-      const parsedQuery::MaterializedViewQuery& viewQuery,
-      Variable placeholderPredicate, Variable placeholderObject) const;
+      const parsedQuery::MaterializedViewQuery& viewQuery) const;
 };
 
 // The `MaterializedViewsManager` is part of the `QueryExecutionContext` and is
@@ -265,8 +258,7 @@ class MaterializedViewsManager {
   // right view automatically as requested in the `MaterializedViewQuery`.
   std::shared_ptr<IndexScan> makeIndexScan(
       QueryExecutionContext* qec,
-      const parsedQuery::MaterializedViewQuery& viewQuery,
-      Variable placeholderPredicate, Variable placeholderObject) const;
+      const parsedQuery::MaterializedViewQuery& viewQuery) const;
 };
 
 #endif  // QLEVER_SRC_ENGINE_MATERIALIZEDVIEWS_H_

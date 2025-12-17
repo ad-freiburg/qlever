@@ -3154,8 +3154,7 @@ void QueryPlanner::GraphPatternPlanner::visitPathSearch(
 SubtreePlan QueryPlanner::getMaterializedViewIndexScanPlan(
     const parsedQuery::MaterializedViewQuery& viewQuery) {
   return makeSubtreePlan<IndexScan>(
-      _qec->materializedViewsManager().makeIndexScan(
-          _qec, viewQuery, generateUniqueVarName(), generateUniqueVarName()));
+      _qec->materializedViewsManager().makeIndexScan(_qec, viewQuery));
 }
 
 // _______________________________________________________________
