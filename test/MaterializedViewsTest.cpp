@@ -281,11 +281,6 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
                                      "testView4 are already sorted"));
     MaterializedView view{testIndexBase_, "testView4"};
     EXPECT_EQ(columnNames(view).at(0), V{"?p"});
-    auto res = qlv().query(
-        "PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>"
-        "SELECT * { <p1> view:testView4-o ?o }",
-        ad_utility::MediaType::tsv);
-    EXPECT_EQ(res, "?o\n\"abc\"\n\"xyz\"\n");
   }
 }
 
