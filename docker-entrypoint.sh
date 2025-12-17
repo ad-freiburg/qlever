@@ -14,7 +14,7 @@
 
 # Help message that is printed if the container is not startes as recommended.
 HELP_MESSAGE='
-The recommended way to use is this image is with the `qlever` command-line tool, which can be installed with `pip install qlever`, `pipx install qlever`, or `uv tool install qlever`. Commands like `qlever index` or `qlever start` use the QLever Docker image by default (and will pull the right image if necessary).
+The recommended way to use this image is with the `qlever` command-line tool, which can be installed with `pip install qlever`, `pipx install qlever`, or `uv tool install qlever`. Commands like `qlever index` or `qlever start` use the QLever Docker image by default (and will pull the right image if necessary).
 
 Alternatively, the `qlever` command-line tool is also available inside of the container. For example, you can run (with user `qlever` inside the container, with the same UID and GID as the calling user):
 
@@ -24,7 +24,7 @@ The same, but opening an interactive shell inside of the container:
 
 \x1b[34mdocker run -it --rm -e UID=$(id -u) -e GID=$(id -g) -v $(pwd):/data -w /data adfreiburg/qlever\x1b[0m
 
-If you do not care about the user inside of the container, you can also use `-u $(id -u):$(id -g)` instead of `-e UID=... -e GID=...` (then the use inside of the container has no proper name) or omit this part (then the user inside of the container is `root`).
+If you do not care about the user inside of the container, you can also use `-u $(id -u):$(id -g)` instead of `-e UID=... -e GID=...` (then the user inside of the container has no proper name) or omit this part (then the user inside of the container is `root`).
 
 With podman you should use `-u $(id -u):$(id -g)` together with `--userns=keep-id`.
 '
