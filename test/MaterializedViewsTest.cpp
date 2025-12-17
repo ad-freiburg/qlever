@@ -9,6 +9,7 @@
 
 #include "./MaterializedViewsTestHelpers.h"
 #include "./util/HttpRequestHelpers.h"
+#include "engine/IndexScan.h"
 #include "engine/MaterializedViews.h"
 #include "engine/Server.h"
 #include "parser/MaterializedViewQuery.h"
@@ -450,5 +451,48 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
     EXPECT_THAT(query.getVarsToKeep(),
                 ::testing::UnorderedElementsAre(::testing::Eq(V{"?s"}),
                                                 ::testing::Eq(V{"?o"})));
+  }
+}
+
+// _____________________________________________________________________________
+TEST_F(MaterializedViewsTestLarge, LazyScan) {
+  // Write a simple view, inflated 10x using cartesian product with a values
+  // clause
+  auto writePlan = qlv().parseAndPlanQuery(
+      "SELECT * { ?s ?p ?o ."
+      " VALUES ?g { 1 2 3 4 5 6 7 8 9 10 } }");
+  MaterializedViewWriter::writeViewToDisk(testIndexBase_, "testView1",
+                                          writePlan);
+  MaterializedViewsManager manager{testIndexBase_};
+  auto view = manager.getView("testView1");
+  using ViewQuery = parsedQuery::MaterializedViewQuery;
+
+  // Run a simple query and consume its result lazily
+  {
+    ViewQuery query{SparqlTriple{Variable{"?s"},
+                                 ad_utility::triple_component::Iri::fromIriref(
+                                     "<https://qlever.cs.uni-freiburg.de/"
+                                     "materializedView/testView1-o>"),
+                                 Variable{"?o"}}};
+    auto scan = manager.makeIndexScan(std::get<1>(writePlan).get(), query,
+                                      Variable{"?p1"}, Variable{"?p2"});
+    auto res = scan->getResult(true, ComputationMode::LAZY_IF_SUPPORTED);
+    size_t numRows = 0;
+    size_t numBlocks = 0;
+
+    ASSERT_FALSE(res->isFullyMaterialized());
+
+    for (const auto& [idTable, localVocab] : res->idTables()) {
+      EXPECT_TRUE(localVocab.empty());
+      EXPECT_EQ(idTable.numColumns(), 2);
+      numRows += idTable.numRows();
+      ++numBlocks;
+    }
+
+    EXPECT_EQ(numRows, 2 * numFakeSubjects_);
+    AD_LOG_INFO << "Lazy scan had " << numRows << " rows from " << numBlocks
+                << " block(s)" << std::endl;
+
+    EXPECT_THAT(scan->getCacheKey(), ::testing::HasSubstr("testView1"));
   }
 }
