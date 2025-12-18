@@ -112,7 +112,7 @@ void MaterializedViewWriter::permuteIdTableAndCheckNoLocalVocabEntries(
   // now.
   bool hasLocalVocab =
       ql::ranges::any_of(block.getColumns(), [](const auto& col) {
-        return ql::ranges::any_of(col, [](const auto& id) {
+        return ql::ranges::any_of(col, [](ValueId id) {
           return id.getDatatype() == Datatype::LocalVocabIndex;
         });
       });
