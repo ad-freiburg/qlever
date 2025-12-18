@@ -80,13 +80,12 @@ IndexScan::IndexScan(QueryExecutionContext* qec,
                      std::optional<ScanSpecAndBlocks> scanSpecAndBlocks)
     : IndexScan(
           qec, qec->getIndex().getImpl().getPermutationPtr(permutationType),
-          // TODO<qup42> this is ugly, but this constructor is only used in
-          // tests
-          qec->getIndex()
-              .getImpl()
-              .getPermutationPtr(permutationType)
-              ->getLocatedTriplesForPermutation(
-                  qec->sharedLocatedTriplesSnapshot()),
+          // TODO<qup42> this constructor is only used in tests, can it be
+          // removed?
+          std::shared_ptr<const LocatedTriplesPerBlock>{
+              qec->sharedLocatedTriplesSnapshot(),
+              &qec->sharedLocatedTriplesSnapshot()
+                   ->getLocatedTriplesForPermutation(permutationType)},
           triple, std::move(graphsToFilter), std::move(scanSpecAndBlocks)) {}
 
 // _____________________________________________________________________________
@@ -804,4 +803,18 @@ std::vector<ColumnIndex> IndexScan::getSubsetForStrippedColumns() const {
     ++idx;
   }
   return result;
+}
+
+// _____________________________________________________________________________
+std::shared_ptr<const LocatedTriplesPerBlock>
+IndexScan::getLocatedTriplesPerBlockForTriple(
+    Permutation::Enum permutation, LocatedTriplesSnapshotPtr snapshot,
+    const SparqlTripleSimple& triple) {
+  // Create alias shared pointer of internal the right `LocatedTriplesPerBlock`.
+  const auto& locatedTriples =
+      containsInternalIri(triple)
+          ? snapshot->getInternalLocatedTriplesForPermutation(permutation)
+          : snapshot->getLocatedTriplesForPermutation(permutation);
+  return std::shared_ptr<const LocatedTriplesPerBlock>{std::move(snapshot),
+                                                       &locatedTriples};
 }
