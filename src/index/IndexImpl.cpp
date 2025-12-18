@@ -1975,8 +1975,10 @@ void countDistinct(std::optional<Id>& lastId, size_t& counter,
 nlohmann::json IndexImpl::recomputeStatistics(
     const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
   size_t numTriples = 0;
+  size_t numTriplesInternal = 0;
   size_t numSubjects = 0;
   size_t numPredicates = 0;
+  size_t numPredicatesInternal = 0;
   size_t numObjects = 0;
   uint64_t nextBlankNode = 0;
   {
@@ -2004,6 +2006,21 @@ nlohmann::json IndexImpl::recomputeStatistics(
               }
             }
             countDistinct(lastPredicate, numPredicates, table);
+          }
+        }});
+
+    tasks.push_back(ad_utility::JThread{
+        [this, &numTriplesInternal, &numPredicatesInternal, &scanSpec,
+         &locatedTriplesSnapshot, &cancellationHandle]() {
+          auto tables = pso_->internalPermutation().lazyScan(
+              pso_->internalPermutation().getScanSpecAndBlocks(
+                  scanSpec, locatedTriplesSnapshot),
+              std::nullopt, CompressedRelationReader::ColumnIndicesRef{},
+              cancellationHandle, locatedTriplesSnapshot);
+          std::optional<Id> lastPredicate = std::nullopt;
+          for (const auto& table : tables) {
+            numTriplesInternal += table.numRows();
+            countDistinct(lastPredicate, numPredicatesInternal, table);
           }
         }});
 
@@ -2035,17 +2052,17 @@ nlohmann::json IndexImpl::recomputeStatistics(
           }});
     }
   }
-  // TODO<RobinTF> find out what the internal counts do
   auto configuration = configurationJson_;
   configuration["num-triples"] =
-      NumNormalAndInternal{numTriples, numTriples_.internal};
+      NumNormalAndInternal{numTriples, numTriplesInternal};
   configuration["num-predicates"] =
-      NumNormalAndInternal{numPredicates, numPredicates_.internal};
+      NumNormalAndInternal{numPredicates, numPredicatesInternal};
   if (hasAllPermutations()) {
-    configuration["num-subjects"] =
-        NumNormalAndInternal{numSubjects, numSubjects_.internal};
-    configuration["num-objects"] =
-        NumNormalAndInternal{numObjects, numObjects_.internal};
+    // These are unused.
+    AD_CORRECTNESS_CHECK(numSubjects_.internal == 0);
+    AD_CORRECTNESS_CHECK(numObjects_.internal == 0);
+    configuration["num-subjects"] = NumNormalAndInternal{numSubjects, 0};
+    configuration["num-objects"] = NumNormalAndInternal{numObjects, 0};
   }
   configuration["num-blank-nodes-total"] = nextBlankNode;
   return configuration;
