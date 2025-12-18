@@ -111,6 +111,7 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
       ad_utility::CachingTransformInputRange{
           std::move(fullScan),
           [&localVocabMapping, &insertInfo](IdTable& idTable) {
+            // TODO<RobinTF> process columns in parallel.
             auto allCols = idTable.getColumns();
             // Extra columns beyond the graph column only contain integers (or
             // undefined for triples added via UPDATE) and thus don't need to be
@@ -174,35 +175,49 @@ void materializeToIndex(const IndexImpl& index, const std::string& newIndexName,
   ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
   IndexImpl newIndex{index.allocator(), false};
   newIndex.loadConfigFromOldIndex(newIndexName, index, newStats);
+  // TODO<RobinTF> Make sure any exceptions are properly handled and propagated.
+  std::vector<ad_utility::JThread> tasks;
 
   if (index.usePatterns()) {
-    newIndex.getPatterns() =
-        index.getPatterns().cloneAndRemap([&insertInfo](const Id& oldId) {
-          return remapVocabId(oldId, insertInfo);
-        });
-    newIndex.writePatternsToFile();
+    tasks.push_back(ad_utility::JThread{[&newIndex, &index, &insertInfo]() {
+      newIndex.getPatterns() =
+          index.getPatterns().cloneAndRemap([&insertInfo](const Id& oldId) {
+            return remapVocabId(oldId, insertInfo);
+          });
+      newIndex.writePatternsToFile();
+    }});
   }
 
   if (index.hasAllPermutations()) {
     using enum Permutation::Enum;
     for (auto permutation : {SPO, SOP, OPS, OSP}) {
       const auto& actualPermutation = index.getPermutation(permutation);
-      newIndex.createPermutation(
-          4,
-          readIndexAndRemap(actualPermutation, scanSpec, *snapshot,
-                            localVocabMapping, insertInfo, cancellationHandle),
-          actualPermutation);
+      tasks.push_back(ad_utility::JThread{
+          [&newIndex, &actualPermutation, &scanSpec, &snapshot,
+           &localVocabMapping, &insertInfo, &cancellationHandle]() {
+            newIndex.createPermutation(
+                4,
+                readIndexAndRemap(actualPermutation, scanSpec, *snapshot,
+                                  localVocabMapping, insertInfo,
+                                  cancellationHandle),
+                actualPermutation);
+          }});
     }
   }
 
   for (auto permutation : Permutation::INTERNAL) {
     const auto& actualPermutation = index.getPermutation(permutation);
     const auto& internalPermutation = actualPermutation.internalPermutation();
-    newIndex.createPermutation(
-        4,
-        readIndexAndRemap(internalPermutation, scanSpec, *snapshot,
-                          localVocabMapping, insertInfo, cancellationHandle),
-        internalPermutation, true);
+    tasks.push_back(ad_utility::JThread{
+        [&newIndex, &internalPermutation, &scanSpec, &snapshot,
+         &localVocabMapping, &insertInfo, &cancellationHandle]() {
+          newIndex.createPermutation(
+              4,
+              readIndexAndRemap(internalPermutation, scanSpec, *snapshot,
+                                localVocabMapping, insertInfo,
+                                cancellationHandle),
+              internalPermutation, true);
+        }});
 
     auto blockMetadataRanges =
         actualPermutation.getAugmentedMetadataForPermutation(*snapshot);
@@ -217,12 +232,19 @@ void materializeToIndex(const IndexImpl& index, const std::string& newIndexName,
       additionalColumns.push_back(col);
     }
     AD_CORRECTNESS_CHECK(additionalColumns.size() == numColumns - 3);
-    newIndex.createPermutation(
-        numColumns,
-        readIndexAndRemap(actualPermutation, scanSpec, blockMetadataRanges,
-                          *snapshot, localVocabMapping, insertInfo,
-                          cancellationHandle, additionalColumns),
-        actualPermutation);
+    tasks.push_back(ad_utility::JThread{
+        [&newIndex, &actualPermutation, &scanSpec, &snapshot,
+         &localVocabMapping, &insertInfo, &cancellationHandle, numColumns,
+         blockMetadataRanges = std::move(blockMetadataRanges),
+         additionalColumns = std::move(additionalColumns)]() {
+          newIndex.createPermutation(
+              numColumns,
+              readIndexAndRemap(actualPermutation, scanSpec,
+                                blockMetadataRanges, *snapshot,
+                                localVocabMapping, insertInfo,
+                                cancellationHandle, additionalColumns),
+              actualPermutation);
+        }});
   }
 }
 

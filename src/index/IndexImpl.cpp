@@ -1986,6 +1986,8 @@ void countDistinct(std::optional<Id>& lastId, size_t& counter,
 // _____________________________________________________________________________
 nlohmann::json IndexImpl::recomputeStatistics(
     const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+  // TODO<RobinTF> Wrap threads in try statements to avoid termination on
+  // exception and propagate it.
   size_t numTriples = 0;
   size_t numTriplesInternal = 0;
   size_t numSubjects = 0;
