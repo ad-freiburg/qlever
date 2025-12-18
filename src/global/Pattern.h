@@ -126,6 +126,8 @@ class CompactVectorOfStrings {
     return {ptr, size};
   }
 
+  // Copy this class and apply the transformation `mappingFunction` to its
+  // elements.
   template <typename Func>
   CompactVectorOfStrings cloneAndRemap(Func mappingFunction) const {
     CompactVectorOfStrings clone;

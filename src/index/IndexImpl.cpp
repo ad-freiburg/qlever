@@ -1839,10 +1839,8 @@ CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
     configurationJson_["num-subjects"] =
         NumNormalAndInternal::fromNormalAndTotal(numSubjectsNormal,
                                                  numSubjectsTotal);
+    writeConfiguration();
   }
-  configurationJson_["num-subjects"] = NumNormalAndInternal::fromNormalAndTotal(
-      numSubjectsNormal, numSubjectsTotal);
-  writeConfiguration();
   return result;
 }
 
@@ -1921,11 +1919,17 @@ void IndexImpl::setPrefixesForEncodedValues(
 
 // _____________________________________________________________________________
 void IndexImpl::loadConfigFromOldIndex(const std::string& newName,
-                                       const IndexImpl& other) {
+                                       const IndexImpl& other,
+                                       const nlohmann::json& newStats) {
   setOnDiskBase(newName);
   setKbName(other.getKbName());
   blocksizePermutationPerColumn() = other.blocksizePermutationPerColumn();
-  configurationJson_ = other.configurationJson_;
+  configurationJson_ = newStats;
+  numTriples_ = static_cast<NumNormalAndInternal>(newStats["num-triples"]);
+  numPredicates_ =
+      static_cast<NumNormalAndInternal>(newStats["num-predicates"]);
+  numSubjects_ = static_cast<NumNormalAndInternal>(newStats["num-subjects"]);
+  numObjects_ = static_cast<NumNormalAndInternal>(newStats["num-objects"]);
 }
 
 // _____________________________________________________________________________
@@ -1945,4 +1949,104 @@ void IndexImpl::writePatternsToFile() const {
       avgNumDistinctPredicatesPerSubject_;
   patternWriter << statistics;
   patternWriter << patterns_;
+}
+
+namespace {
+void countDistinct(std::optional<Id>& lastId, size_t& counter,
+                   const IdTable& table) {
+  if (!table.empty()) {
+    auto col = table.getColumn(0);
+    counter +=
+        ql::ranges::distance(col | ::ranges::views::unique([](Id a, Id b) {
+                               return a.getBits() == b.getBits();
+                             }));
+    if (lastId != col.at(0)) {
+      lastId = col.at(0);
+    } else {
+      // Avoid double counting in case the last id of the previous block is the
+      // same as the first id of this block.
+      counter--;
+    }
+  }
+}
+}  // namespace
+
+// _____________________________________________________________________________
+nlohmann::json IndexImpl::recomputeStatistics(
+    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+  size_t numTriples = 0;
+  size_t numSubjects = 0;
+  size_t numPredicates = 0;
+  size_t numObjects = 0;
+  uint64_t nextBlankNode = 0;
+  {
+    auto cancellationHandle =
+        std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+    ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
+    std::vector<ad_utility::JThread> tasks;
+
+    tasks.push_back(ad_utility::JThread{
+        [this, &numTriples, &numPredicates, &nextBlankNode, &scanSpec,
+         &locatedTriplesSnapshot, &cancellationHandle]() {
+          auto tables = pso_->lazyScan(
+              pso_->getScanSpecAndBlocks(scanSpec, locatedTriplesSnapshot),
+              std::nullopt, CompressedRelationReader::ColumnIndicesRef{},
+              cancellationHandle, locatedTriplesSnapshot);
+          std::optional<Id> lastPredicate = std::nullopt;
+          for (const auto& table : tables) {
+            numTriples += table.numRows();
+            for (auto col : table.getColumns()) {
+              for (auto id : col) {
+                if (id.getDatatype() == Datatype::BlankNodeIndex) {
+                  nextBlankNode =
+                      std::max(nextBlankNode, id.getBlankNodeIndex().get() + 1);
+                }
+              }
+            }
+            countDistinct(lastPredicate, numPredicates, table);
+          }
+        }});
+
+    if (hasAllPermutations()) {
+      tasks.push_back(
+          ad_utility::JThread{[this, &numSubjects, &scanSpec,
+                               &locatedTriplesSnapshot, &cancellationHandle]() {
+            auto tables = spo_->lazyScan(
+                spo_->getScanSpecAndBlocks(scanSpec, locatedTriplesSnapshot),
+                std::nullopt, CompressedRelationReader::ColumnIndicesRef{},
+                cancellationHandle, locatedTriplesSnapshot);
+            std::optional<Id> lastSubject = std::nullopt;
+            for (const auto& table : tables) {
+              countDistinct(lastSubject, numSubjects, table);
+            }
+          }});
+
+      tasks.push_back(
+          ad_utility::JThread{[this, &numObjects, &scanSpec,
+                               &locatedTriplesSnapshot, &cancellationHandle]() {
+            auto tables = osp_->lazyScan(
+                osp_->getScanSpecAndBlocks(scanSpec, locatedTriplesSnapshot),
+                std::nullopt, CompressedRelationReader::ColumnIndicesRef{},
+                cancellationHandle, locatedTriplesSnapshot);
+            std::optional<Id> lastObject = std::nullopt;
+            for (const auto& table : tables) {
+              countDistinct(lastObject, numObjects, table);
+            }
+          }});
+    }
+  }
+  // TODO<RobinTF> find out what the internal counts do
+  auto configuration = configurationJson_;
+  configuration["num-triples"] =
+      NumNormalAndInternal{numTriples, numTriples_.internal};
+  configuration["num-predicates"] =
+      NumNormalAndInternal{numPredicates, numPredicates_.internal};
+  if (hasAllPermutations()) {
+    configuration["num-subjects"] =
+        NumNormalAndInternal{numSubjects, numSubjects_.internal};
+    configuration["num-objects"] =
+        NumNormalAndInternal{numObjects, numObjects_.internal};
+  }
+  configuration["num-blank-nodes-total"] = nextBlankNode;
+  return configuration;
 }

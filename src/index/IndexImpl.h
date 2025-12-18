@@ -847,9 +847,15 @@ class IndexImpl {
                                              float b, float k);
 
   void loadConfigFromOldIndex(const std::string& newName,
-                              const IndexImpl& other);
+                              const IndexImpl& other,
+                              const nlohmann::json& newStats);
 
+  // Write the stored in-memory patterns to a pattern file.
   void writePatternsToFile() const;
+
+  // Recompute the statistics about the index based on the passed snapshot.
+  nlohmann::json recomputeStatistics(
+      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 };
 
 #endif  // QLEVER_SRC_INDEX_INDEXIMPL_H

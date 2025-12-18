@@ -177,10 +177,11 @@ void materializeToIndex(const IndexImpl& index, const std::string& newIndexName,
                         const CancellationHandle& cancellationHandle) {
   const auto& [insertInfo, localVocabMapping] =
       materializeLocalVocab(entries, index.getVocab(), newIndexName);
+  auto newStats = index.recomputeStatistics(*snapshot);
 
   ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
   IndexImpl newIndex{index.allocator(), false};
-  newIndex.loadConfigFromOldIndex(newIndexName, index);
+  newIndex.loadConfigFromOldIndex(newIndexName, index, newStats);
 
   if (index.usePatterns()) {
     newIndex.getPatterns() =
@@ -231,10 +232,6 @@ void materializeToIndex(const IndexImpl& index, const std::string& newIndexName,
                         *snapshot, localVocabMapping, insertInfo,
                         cancellationHandle, additionalColumns));
 
-  // TODO<RobinTF> explicitly set these two
-  // newIndex.configurationJson_["has-all-permutations"] =
-  // index_.hasAllPermutations();
-  // newIndex.configurationJson_["num-blank-nodes-total"] = TBD;
   newIndex.addInternalStatisticsToConfiguration(numTriplesInternal,
                                                 numPredicatesInternal);
 }
