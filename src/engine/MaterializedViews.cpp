@@ -99,16 +99,29 @@ MaterializedViewWriter::getIdTableColumnNamesAndPermutation() const {
 }
 
 // _____________________________________________________________________________
-void MaterializedViewWriter::permuteIdTableAndCheckVocab(
-    IdTable& block, const LocalVocab& vocab) const {
-  AD_CORRECTNESS_CHECK(vocab.empty(),
-                       "Materialized views cannot contain entries from a "
-                       "local vocabulary currently.");
+void MaterializedViewWriter::permuteIdTableAndCheckNoLocalVocabEntries(
+    IdTable& block) const {
   // The `IdTable` may have a different column ordering from the
   // `SELECT` statement, thus we must permute this to the column
   // ordering we want to have in our materialized view. In
   // particular, the indexed column should be the first.
   block.setColumnSubset(columnPermutation_);
+
+  // Check that there are no values of type `LocalVocabIndex` in the selected
+  // columns of the `IdTable` as materialized views do not support them as of
+  // now.
+  for (size_t col = 0; col < block.numColumns(); ++col) {
+    for (size_t row = 0; row < block.numRows(); ++row) {
+      if (block.at(row, col).getDatatype() == Datatype::LocalVocabIndex) {
+        throw std::runtime_error{
+            "The query to write a materialized view returned a string not "
+            "contained in the index (local vocabulary entry). This could be "
+            "the result of a string-related function in your query or the "
+            "presence of SPARQL UPDATEs in this instance of Qlever. Both are "
+            "currently not supported in materialized views."};
+      }
+    }
+  }
 }
 
 // _____________________________________________________________________________
@@ -126,8 +139,7 @@ MaterializedViewWriter::getBlocksForAlreadySortedResult(
     // If we have a fully materialized result, we need to copy it for the
     // necessary modifications (permuting columns).
     IdTable idTableCopyForPermutation = result->idTable().clone();
-    permuteIdTableAndCheckVocab(idTableCopyForPermutation,
-                                result->localVocab());
+    permuteIdTableAndCheckNoLocalVocabEntries(idTableCopyForPermutation);
     std::vector<IdTableStatic<0>> singleIdTable;
     singleIdTable.push_back(std::move(idTableCopyForPermutation));
     return RangeOfIdTables{std::move(singleIdTable)};
@@ -138,7 +150,7 @@ MaterializedViewWriter::getBlocksForAlreadySortedResult(
         ql::views::transform(
             [&](auto& idTableAndLocalVocab) -> IdTableStatic<0> {
               auto& [block, vocab] = idTableAndLocalVocab;
-              permuteIdTableAndCheckVocab(block, vocab);
+              permuteIdTableAndCheckNoLocalVocabEntries(block);
               return std::move(block);
             })};
   }
@@ -155,8 +167,8 @@ MaterializedViewWriter::getBlocksForUnsortedResult(
   size_t totalTriples = 0;
   ad_utility::ProgressBar progressBar{totalTriples, "Triples sorted: "};
 
-  auto processBlock = [&](IdTable& block, const LocalVocab& vocab) {
-    permuteIdTableAndCheckVocab(block, vocab);
+  auto processBlock = [&](IdTable& block) {
+    permuteIdTableAndCheckNoLocalVocabEntries(block);
     totalTriples += block.numRows();
     spoSorter.pushBlock(block);
     if (progressBar.update()) {
@@ -167,13 +179,16 @@ MaterializedViewWriter::getBlocksForUnsortedResult(
   if (result->isFullyMaterialized()) {
     // If we have a fully materialized result, this is const, so we need to
     // copy it for the necessary modifications (permuting columns).
+    // TODO<ullingerc> This could be avoided if
+    // `CompressedExternalIdTableSorter::pushBlock` would also accept
+    // `IdTableView`.
     IdTable idTableCopyForPermutation = result->idTable().clone();
-    processBlock(idTableCopyForPermutation, result->localVocab());
+    processBlock(idTableCopyForPermutation);
   } else {
     // Process lazy result blockwise
     auto generator = result->idTables();
     for (auto& [block, vocab] : generator) {
-      processBlock(block, vocab);
+      processBlock(block);
     }
   }
 
