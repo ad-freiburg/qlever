@@ -90,9 +90,8 @@ class MaterializedViewWriter {
   size_t numCols() const { return columnPermutation_.size(); }
 
   // Helper to permute an `IdTable` according to `columnPermutation_` and verify
-  // that the `LocalVocab` is empty.
-  void permuteIdTableAndCheckVocab(IdTable& block,
-                                   const LocalVocab& vocab) const;
+  // that there are no `LocalVocabEntry` values in any of the selected columns.
+  void permuteIdTableAndCheckNoLocalVocabEntries(IdTable& block) const;
 
   // Helper for `computeResultAndWritePermutation`: If the query given by the
   // user is already sorted correctly, this function can be used to obtain the

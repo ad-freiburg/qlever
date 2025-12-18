@@ -364,8 +364,9 @@ TEST_F(MaterializedViewsTest, InvalidInputToWriter) {
           testIndexBase_, "testView2",
           qlv().parseAndPlanQuery(
               "SELECT * { ?s ?p ?o . BIND(\"localVocabString\" AS ?g) }")),
-      ::testing::HasSubstr("Materialized views cannot contain entries from a "
-                           "local vocabulary currently."));
+      ::testing::HasSubstr(
+          "The query to write a materialized view returned a string not "
+          "contained in the index (local vocabulary entry)"));
 }
 
 // _____________________________________________________________________________
@@ -378,11 +379,14 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
   ASSERT_TRUE(view != nullptr);
   EXPECT_EQ(view->name(), "testView1");
   EXPECT_EQ(view->permutation()->permutation(), Permutation::Enum::SPO);
+  EXPECT_NE(view->locatedTriplesSnapshot(), nullptr);
 
   MaterializedViewsManager managerNoBaseName;
   AD_EXPECT_THROW_WITH_MESSAGE(
       managerNoBaseName.getView("testView1"),
       ::testing::HasSubstr("index base filename was not set"));
+  managerNoBaseName.setOnDiskBase(testIndexBase_);
+  EXPECT_NE(managerNoBaseName.getView("testView1"), nullptr);
 
   using ViewQuery = parsedQuery::MaterializedViewQuery;
   using Triple = SparqlTripleSimple;
