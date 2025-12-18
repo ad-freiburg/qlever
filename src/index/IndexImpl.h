@@ -579,11 +579,10 @@ class IndexImpl {
                             Permutation::KeyOrder permutation,
                             Callbacks&&... perTripleCallbacks);
 
- public:
-  void createPermutationPairPublic(
-      size_t numColumns,
-      ad_utility::InputRangeTypeErased<IdTableStatic<0>>&& sortedTriples,
-      const Permutation& p1, const Permutation& p2);
+  std::tuple<size_t, IndexMetaDataMmapDispatcher::WriteType>
+  createPermutationImpl(
+      size_t numColumns, const std::string& fileName,
+      ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples);
 
  protected:
   // _______________________________________________________________________
@@ -622,6 +621,13 @@ class IndexImpl {
                      const Permutation& p1, const Permutation& p2,
                      Callbacks&&... perTripleCallbacks);
 
+ public:
+  size_t createPermutation(
+      size_t numColumns,
+      ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
+      const Permutation& permutation, bool internal = false);
+
+ protected:
   void openTextFileHandle();
 
   // Get the metadata for the block from the text index that contains the
@@ -731,16 +737,12 @@ class IndexImpl {
           size_t numColumns, BlocksOfTriples sortedTriples,
           NextSorter&&... nextSorter);
 
-  void createSPOAndSOPPublic(size_t numColumns, BlocksOfTriples sortedTriples);
-
   // Create the OSP and OPS permutations. Additionally, count the number of
   // distinct objects and write it to the metadata.
   CPP_template(typename... NextSorter)(requires(
       sizeof...(NextSorter) <=
       1)) void createOSPAndOPS(size_t numColumns, BlocksOfTriples sortedTriples,
                                NextSorter&&... nextSorter);
-
-  void createOSPAndOPSPublic(size_t numColumns, BlocksOfTriples sortedTriples);
 
   // Create the PSO and POS permutations. Additionally, count the number of
   // distinct predicates and the number of actual triples and write them to the
@@ -754,8 +756,6 @@ class IndexImpl {
                                             bool doWriteConfiguration,
                                             NextSorter&&... nextSorter);
 
-  void createPSOAndPOSImplPublic(size_t numColumns,
-                                 BlocksOfTriples sortedTriples);
   // Call `createPSOAndPOSImpl` with the given arguments and with
   // `doWriteConfiguration` set to `true` (see above).
   CPP_template(typename... NextSorter)(requires(
@@ -768,9 +768,6 @@ class IndexImpl {
   template <typename InternalTriplePsoSorter>
   std::pair<size_t, size_t> createInternalPSOandPOS(
       InternalTriplePsoSorter&& internalTriplesPsoSorter);
-
-  std::pair<size_t, size_t> createInternalPSOandPOSFromRange(
-      ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedBlocks);
 
   // Set up one of the permutation sorters with the appropriate memory limit.
   // The `permutationName` is used to determine the filename and must be unique

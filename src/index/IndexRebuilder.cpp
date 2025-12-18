@@ -106,19 +106,11 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
   auto fullScan =
       permutation.lazyScan(scanSpecAndBlocks, std::nullopt, additionalColumns,
                            cancellationHandle, snapshot, LimitOffsetClause{});
-  auto keyOrder = Permutation::toKeyOrder(permutation.permutation());
-  std::vector<ColumnIndex> columnIndices{keyOrder.keys().begin(),
-                                         keyOrder.keys().end()};
-  while (columnIndices.size() < additionalColumns.size() + 3) {
-    columnIndices.emplace_back(columnIndices.size());
-  }
+
   return ad_utility::InputRangeTypeErased{
       ad_utility::CachingTransformInputRange{
           std::move(fullScan),
-          [columnIndices = std::move(columnIndices), &localVocabMapping,
-           &insertInfo](IdTable& idTable) {
-            AD_CORRECTNESS_CHECK(idTable.numColumns() == columnIndices.size());
-            idTable.setColumnSubset(columnIndices);
+          [&localVocabMapping, &insertInfo](IdTable& idTable) {
             auto allCols = idTable.getColumns();
             // Extra columns beyond the graph column only contain integers (or
             // undefined for triples added via UPDATE) and thus don't need to be
@@ -192,48 +184,46 @@ void materializeToIndex(const IndexImpl& index, const std::string& newIndexName,
   }
 
   if (index.hasAllPermutations()) {
-    newIndex.createSPOAndSOPPublic(
-        4, readIndexAndRemap(index.getPermutation(Permutation::Enum::SPO),
-                             scanSpec, *snapshot, localVocabMapping, insertInfo,
-                             cancellationHandle));
-    // TODO<RobinTF> Find out why we can't use createOSPAndOPSPublic here.
-    newIndex.createPermutationPairPublic(
-        4,
-        readIndexAndRemap(index.getPermutation(Permutation::Enum::OPS),
-                          scanSpec, *snapshot, localVocabMapping, insertInfo,
-                          cancellationHandle),
-        newIndex.getPermutation(Permutation::Enum::OPS),
-        newIndex.getPermutation(Permutation::Enum::OSP));
-  }
-
-  auto [numTriplesInternal, numPredicatesInternal] =
-      newIndex.createInternalPSOandPOSFromRange(readIndexAndRemap(
-          index.getPermutation(Permutation::Enum::PSO).internalPermutation(),
-          scanSpec, *snapshot, localVocabMapping, insertInfo,
-          cancellationHandle));
-
-  const auto& psoPermutation = index.getPermutation(Permutation::Enum::PSO);
-  auto blockMetadataRanges =
-      psoPermutation.getAugmentedMetadataForPermutation(*snapshot);
-  size_t numColumns = getNumColumns(blockMetadataRanges);
-  std::vector<ColumnIndex> additionalColumns;
-  additionalColumns.push_back(ADDITIONAL_COLUMN_GRAPH_ID);
-  for (ColumnIndex col : {ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN,
-                          ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN}) {
-    if (additionalColumns.size() >= numColumns - 3) {
-      break;
+    using enum Permutation::Enum;
+    for (auto permutation : {SPO, SOP, OPS, OSP}) {
+      const auto& actualPermutation = index.getPermutation(permutation);
+      newIndex.createPermutation(
+          4,
+          readIndexAndRemap(actualPermutation, scanSpec, *snapshot,
+                            localVocabMapping, insertInfo, cancellationHandle),
+          actualPermutation);
     }
-    additionalColumns.push_back(col);
   }
-  AD_CORRECTNESS_CHECK(additionalColumns.size() == numColumns - 3);
-  newIndex.createPSOAndPOSImplPublic(
-      numColumns,
-      readIndexAndRemap(psoPermutation, scanSpec, blockMetadataRanges,
-                        *snapshot, localVocabMapping, insertInfo,
-                        cancellationHandle, additionalColumns));
 
-  newIndex.addInternalStatisticsToConfiguration(numTriplesInternal,
-                                                numPredicatesInternal);
+  for (auto permutation : Permutation::INTERNAL) {
+    const auto& actualPermutation = index.getPermutation(permutation);
+    const auto& internalPermutation = actualPermutation.internalPermutation();
+    newIndex.createPermutation(
+        4,
+        readIndexAndRemap(internalPermutation, scanSpec, *snapshot,
+                          localVocabMapping, insertInfo, cancellationHandle),
+        internalPermutation, true);
+
+    auto blockMetadataRanges =
+        actualPermutation.getAugmentedMetadataForPermutation(*snapshot);
+    size_t numColumns = getNumColumns(blockMetadataRanges);
+    std::vector<ColumnIndex> additionalColumns;
+    additionalColumns.push_back(ADDITIONAL_COLUMN_GRAPH_ID);
+    for (ColumnIndex col : {ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN,
+                            ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN}) {
+      if (additionalColumns.size() >= numColumns - 3) {
+        break;
+      }
+      additionalColumns.push_back(col);
+    }
+    AD_CORRECTNESS_CHECK(additionalColumns.size() == numColumns - 3);
+    newIndex.createPermutation(
+        numColumns,
+        readIndexAndRemap(actualPermutation, scanSpec, blockMetadataRanges,
+                          *snapshot, localVocabMapping, insertInfo,
+                          cancellationHandle, additionalColumns),
+        actualPermutation);
+  }
 }
 
 }  // namespace qlever

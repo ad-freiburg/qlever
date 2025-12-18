@@ -323,23 +323,6 @@ std::pair<size_t, size_t> IndexImpl::createInternalPSOandPOS(
 }
 
 // _____________________________________________________________________________
-namespace {
-struct SortedBlocksWrapper {
-  ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedBlocks_;
-  template <size_t N>
-  ad_utility::InputRangeTypeErased<IdTableStatic<N>> getSortedBlocks() {
-    static_assert(N == 0);
-    return std::move(sortedBlocks_);
-  }
-};
-}  // namespace
-// _____________________________________________________________________________
-std::pair<size_t, size_t> IndexImpl::createInternalPSOandPOSFromRange(
-    ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedBlocks) {
-  return createInternalPSOandPOS(SortedBlocksWrapper{std::move(sortedBlocks)});
-}
-
-// _____________________________________________________________________________
 void IndexImpl::updateInputFileSpecificationsAndLog(
     std::vector<Index::InputFileSpecification>& spec,
     std::optional<bool> parallelParsingSpecifiedViaJson) {
@@ -839,6 +822,18 @@ auto IndexImpl::convertPartialToGlobalIds(
 }
 
 // _____________________________________________________________________________
+
+namespace {
+// Lift a callback that works on single elements to a callback that works on
+// blocks.
+auto liftCallback(auto callback) {
+  return [callback](const auto& block) mutable {
+    ql::ranges::for_each(block, callback);
+  };
+}
+}  // namespace
+
+// _____________________________________________________________________________
 template <typename T, typename... Callbacks>
 std::tuple<size_t, IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
            IndexImpl::IndexMetaDataMmapDispatcher::WriteType>
@@ -859,13 +854,6 @@ IndexImpl::createPermutationPairImpl(size_t numColumns,
   CompressedRelationWriter writer2{numColumns, ad_utility::File(fileName2, "w"),
                                    blocksizePermutationPerColumn_};
 
-  // Lift a callback that works on single elements to a callback that works on
-  // blocks.
-  auto liftCallback = [](auto callback) {
-    return [callback](const auto& block) mutable {
-      ql::ranges::for_each(block, callback);
-    };
-  };
   auto callback1 =
       liftCallback([&metaData1](const auto& md) { metaData1.add(md); });
   auto callback2 =
@@ -882,6 +870,32 @@ IndexImpl::createPermutationPairImpl(size_t numColumns,
   metaData2.blockData() = std::move(blockData2);
 
   return {numDistinctCol0, std::move(metaData1), std::move(metaData2)};
+}
+
+// _____________________________________________________________________________
+std::tuple<size_t, IndexImpl::IndexMetaDataMmapDispatcher::WriteType>
+IndexImpl::createPermutationImpl(
+    size_t numColumns, const std::string& fileName,
+    ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples) {
+  using MetaData = IndexMetaDataMmapDispatcher::WriteType;
+  MetaData metaData;
+  static_assert(MetaData::isMmapBased_);
+  metaData.setup(fileName + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
+
+  CompressedRelationWriter writer{numColumns, ad_utility::File(fileName, "w"),
+                                  blocksizePermutationPerColumn_};
+
+  auto callback =
+      liftCallback([&metaData](const auto& md) { metaData.add(md); });
+
+  // We can always supply the tables with the correct permutation. No need to
+  // re-order everything.
+  auto [numDistinctCol0, blockData] =
+      CompressedRelationWriter::createPermutation(
+          {writer, callback}, std::move(sortedTriples), {0, 1, 2, 3}, {});
+  metaData.blockData() = std::move(blockData);
+
+  return {numDistinctCol0, std::move(metaData)};
 }
 
 // ________________________________________________________________________
@@ -910,12 +924,27 @@ IndexImpl::createPermutations(size_t numColumns, T&& sortedTriples,
 }
 
 // ________________________________________________________________________
-void IndexImpl::createPermutationPairPublic(
+size_t IndexImpl::createPermutation(
     size_t numColumns,
-    ad_utility::InputRangeTypeErased<IdTableStatic<0>>&& sortedTriples,
-    const Permutation& p1, const Permutation& p2) {
-  [[maybe_unused]] auto value =
-      createPermutationPair(numColumns, AD_FWD(sortedTriples), p1, p2);
+    ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
+    const Permutation& permutation, bool internal) {
+  AD_LOG_INFO << "Creating permutation " << permutation.readableName() << " ..."
+              << std::endl;
+  std::string fileName =
+      absl::StrCat(onDiskBase_, internal ? QLEVER_INTERNAL_INDEX_INFIX : "",
+                   ".index", permutation.fileSuffix());
+  auto metaData =
+      createPermutationImpl(numColumns, fileName, std::move(sortedTriples));
+
+  auto& [numDistinctCol0, meta] = metaData;
+  meta.calculateStatistics(numDistinctCol0);
+  AD_LOG_INFO << "Statistics for " << permutation.readableName() << ": "
+              << meta.statistics() << std::endl;
+
+  meta.setName(getKbName());
+  ad_utility::File f{fileName, "r+"};
+  meta.appendToFile(&f);
+  return numDistinctCol0;
 }
 
 // ________________________________________________________________________
@@ -1782,12 +1811,6 @@ CPP_template_def(typename... NextSorter)(requires(
 }
 
 // _____________________________________________________________________________
-void IndexImpl::createPSOAndPOSImplPublic(size_t numColumns,
-                                          BlocksOfTriples sortedTriples) {
-  createPSOAndPOSImpl(numColumns, std::move(sortedTriples), false);
-}
-
-// _____________________________________________________________________________
 CPP_template_def(typename... NextSorter)(
     requires(sizeof...(NextSorter) <=
              1)) void IndexImpl::createPSOAndPOS(size_t numColumns,
@@ -1845,12 +1868,6 @@ CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
 }
 
 // _____________________________________________________________________________
-void IndexImpl::createSPOAndSOPPublic(size_t numColumns,
-                                      BlocksOfTriples sortedTriples) {
-  createSPOAndSOP(numColumns, std::move(sortedTriples));
-}
-
-// _____________________________________________________________________________
 CPP_template_def(typename... NextSorter)(
     requires(sizeof...(NextSorter) <=
              1)) void IndexImpl::createOSPAndOPS(size_t numColumns,
@@ -1867,12 +1884,6 @@ CPP_template_def(typename... NextSorter)(
       numObjectsNormal, numObjectsTotal);
   configurationJson_["has-all-permutations"] = true;
   writeConfiguration();
-}
-
-// _____________________________________________________________________________
-void IndexImpl::createOSPAndOPSPublic(size_t numColumns,
-                                      BlocksOfTriples sortedTriples) {
-  createOSPAndOPS(numColumns, std::move(sortedTriples));
 }
 
 // _____________________________________________________________________________
@@ -1930,6 +1941,7 @@ void IndexImpl::loadConfigFromOldIndex(const std::string& newName,
       static_cast<NumNormalAndInternal>(newStats["num-predicates"]);
   numSubjects_ = static_cast<NumNormalAndInternal>(newStats["num-subjects"]);
   numObjects_ = static_cast<NumNormalAndInternal>(newStats["num-objects"]);
+  writeConfiguration();
 }
 
 // _____________________________________________________________________________
