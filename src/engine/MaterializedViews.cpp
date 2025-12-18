@@ -110,17 +110,19 @@ void MaterializedViewWriter::permuteIdTableAndCheckNoLocalVocabEntries(
   // Check that there are no values of type `LocalVocabIndex` in the selected
   // columns of the `IdTable` as materialized views do not support them as of
   // now.
-  for (size_t col = 0; col < block.numColumns(); ++col) {
-    for (size_t row = 0; row < block.numRows(); ++row) {
-      if (block.at(row, col).getDatatype() == Datatype::LocalVocabIndex) {
-        throw std::runtime_error{
-            "The query to write a materialized view returned a string not "
-            "contained in the index (local vocabulary entry). This could be "
-            "the result of a string-related function in your query or the "
-            "presence of SPARQL UPDATEs in this instance of Qlever. Both are "
-            "currently not supported in materialized views."};
-      }
-    }
+  bool hasLocalVocab =
+      ql::ranges::any_of(block.getColumns(), [](const auto& col) {
+        return ql::ranges::any_of(col, [](const auto& id) {
+          return id.getDatatype() == Datatype::LocalVocabIndex;
+        });
+      });
+  if (hasLocalVocab) {
+    throw std::runtime_error{
+        "The query to write a materialized view returned a string not "
+        "contained in the index (local vocabulary entry). This could be "
+        "the result of a string-related function in your query or the "
+        "presence of SPARQL UPDATEs in this instance of Qlever. Both are "
+        "currently not supported in materialized views."};
   }
 }
 
@@ -545,6 +547,14 @@ MaterializedView::makeEmptyLocatedTriplesSnapshot() const {
 std::shared_ptr<IndexScan> MaterializedView::makeIndexScan(
     QueryExecutionContext* qec,
     const parsedQuery::MaterializedViewQuery& viewQuery) const {
+  // The `scanTriple` might contain placeholder variables if column 1 or column
+  // 2 of the view is not requested by `viewQuery`. This is due to triple
+  // semantics in `IndexScan`. Note that these placeholder variables are
+  // automatically stripped from the result of the `IndexScan` since
+  // `viewQuery.getVarsToKeep()` returns only the variables explicitly requested
+  // by the user. Therefore despite using hard-coded placeholder variable names,
+  // no join occurs if multiple materialized views are requested in a single
+  // query.
   auto scanTriple = makeScanConfig(viewQuery);
   return std::make_shared<IndexScan>(
       qec, permutation_, locatedTriplesSnapshot_, std::move(scanTriple),
