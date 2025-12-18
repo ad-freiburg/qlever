@@ -140,18 +140,17 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
     checkConsistencyForCol0IdAndPermutation(
         objectId, indexImpl.getPermutation(OSP), 0, col0IdTag);
   };
-
-  auto predicates = index.getImpl().PSO().getDistinctCol0IdsAndCounts(
+  const auto& pso = index.getImpl().PSO();
+  auto predicates = pso.getDistinctCol0IdsAndCounts(
       cancellationDummy,
-      locatedTriplesSnapshot.getLocatedTriplesForPermutation(Permutation::PSO),
-      {});
+      pso.getLocatedTriplesForPermutation(locatedTriplesSnapshot), {});
   for (const auto& predicate : predicates.getColumn(0)) {
     checkConsistencyForPredicate(predicate);
   }
-  auto objects = index.getImpl().OSP().getDistinctCol0IdsAndCounts(
+  const auto& osp = index.getImpl().OSP();
+  auto objects = osp.getDistinctCol0IdsAndCounts(
       cancellationDummy,
-      locatedTriplesSnapshot.getLocatedTriplesForPermutation(Permutation::OSP),
-      {});
+      osp.getLocatedTriplesForPermutation(locatedTriplesSnapshot), {});
   for (const auto& object : objects.getColumn(0)) {
     checkConsistencyForObject(object);
   }

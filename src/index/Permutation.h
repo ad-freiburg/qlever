@@ -187,6 +187,7 @@ class Permutation {
   // From the given snapshot, get the located triples for this permutation.
   const LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
       const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+  // TODO: comment
   std::shared_ptr<const LocatedTriplesPerBlock> getLocatedTriplesForPermutation(
       SharedLocatedTriplesSnapshot locatedTriplesSnapshot) const;
 

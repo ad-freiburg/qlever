@@ -80,8 +80,13 @@ IndexScan::IndexScan(QueryExecutionContext* qec,
                      std::optional<ScanSpecAndBlocks> scanSpecAndBlocks)
     : IndexScan(
           qec, qec->getIndex().getImpl().getPermutationPtr(permutationType),
-          qec->sharedLocatedTriplesSnapshot().getLocatedTriplesForPermutation(
-              permutationType),
+          // TODO<qup42> this is ugly, but this constructor is only used in
+          // tests
+          qec->getIndex()
+              .getImpl()
+              .getPermutationPtr(permutationType)
+              ->getLocatedTriplesForPermutation(
+                  qec->sharedLocatedTriplesSnapshot()),
           triple, std::move(graphsToFilter), std::move(scanSpecAndBlocks)) {}
 
 // _____________________________________________________________________________
