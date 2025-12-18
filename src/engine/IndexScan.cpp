@@ -32,13 +32,13 @@ static size_t getNumberOfVariables(const TripleComponent& subject,
 
 // _____________________________________________________________________________
 IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
-                     LocatedTriplesPerBlockPtr locatedTriplesSnapshot,
+                     LocatedTriplesPerBlockPtr locatedTriplesPerBlock,
                      const SparqlTripleSimple& triple, Graphs graphsToFilter,
                      std::optional<ScanSpecAndBlocks> scanSpecAndBlocks,
                      VarsToKeep varsToKeep)
     : Operation(qec),
       permutation_(permutation),
-      locatedTriplesSnapshot_(locatedTriplesSnapshot),
+      locatedTriplesPerBlock_(locatedTriplesPerBlock),
       subject_(triple.s_),
       predicate_(triple.p_),
       object_(triple.o_),
@@ -49,7 +49,7 @@ IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
       numVariables_(getNumberOfVariables(subject_, predicate_, object_)),
       varsToKeep_(std::move(varsToKeep)) {
   AD_CONTRACT_CHECK(permutation_ != nullptr);
-  AD_CONTRACT_CHECK(locatedTriplesSnapshot_ != nullptr);
+  AD_CONTRACT_CHECK(locatedTriplesPerBlock_ != nullptr);
 
   // We previously had `nullptr`s here in unit tests. This is no longer
   // necessary nor allowed.
@@ -90,7 +90,7 @@ IndexScan::IndexScan(QueryExecutionContext* qec,
 
 // _____________________________________________________________________________
 IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
-                     LocatedTriplesPerBlockPtr locatedTriplesSnapshot,
+                     LocatedTriplesPerBlockPtr locatedTriplesPerBlock,
                      const TripleComponent& s, const TripleComponent& p,
                      const TripleComponent& o,
                      std::vector<ColumnIndex> additionalColumns,
@@ -99,7 +99,7 @@ IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
                      bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep)
     : Operation(qec),
       permutation_(permutation),
-      locatedTriplesSnapshot_(locatedTriplesSnapshot),
+      locatedTriplesPerBlock_(locatedTriplesPerBlock),
       subject_(s),
       predicate_(p),
       object_(o),
@@ -112,7 +112,7 @@ IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
       varsToKeep_{std::move(varsToKeep)} {
   AD_CONTRACT_CHECK(qec != nullptr);
   AD_CONTRACT_CHECK(permutation_ != nullptr);
-  AD_CONTRACT_CHECK(locatedTriplesSnapshot_ != nullptr);
+  AD_CONTRACT_CHECK(locatedTriplesPerBlock_ != nullptr);
   std::tie(sizeEstimateIsExact_, sizeEstimate_) = computeSizeEstimate();
   determineMultiplicities();
 }
@@ -265,7 +265,7 @@ std::shared_ptr<QueryExecutionTree>
 IndexScan::makeCopyWithPrefilteredScanSpecAndBlocks(
     ScanSpecAndBlocks scanSpecAndBlocks) const {
   return ad_utility::makeExecutionTree<IndexScan>(
-      getExecutionContext(), permutation_, locatedTriplesSnapshot_, subject_,
+      getExecutionContext(), permutation_, locatedTriplesPerBlock_, subject_,
       predicate_, object_, additionalColumns_, additionalVariables_,
       graphsToFilter_, std::move(scanSpecAndBlocks), true, varsToKeep_);
 }
@@ -307,8 +307,8 @@ const Permutation& IndexScan::permutation() const {
 
 // _____________________________________________________________________________
 const LocatedTriplesPerBlock& IndexScan::locatedTriplesPerBlock() const {
-  AD_CONTRACT_CHECK(locatedTriplesSnapshot_ != nullptr);
-  return *locatedTriplesSnapshot_;
+  AD_CONTRACT_CHECK(locatedTriplesPerBlock_ != nullptr);
+  return *locatedTriplesPerBlock_;
 }
 
 // _____________________________________________________________________________
@@ -751,7 +751,7 @@ std::pair<Result::LazyResult, Result::LazyResult> IndexScan::prefilterTables(
 // _____________________________________________________________________________
 std::unique_ptr<Operation> IndexScan::cloneImpl() const {
   return std::make_unique<IndexScan>(
-      _executionContext, permutation_, locatedTriplesSnapshot_, subject_,
+      _executionContext, permutation_, locatedTriplesPerBlock_, subject_,
       predicate_, object_, additionalColumns_, additionalVariables_,
       graphsToFilter_, scanSpecAndBlocks_, scanSpecAndBlocksIsPrefiltered_,
       varsToKeep_);
@@ -776,7 +776,7 @@ IndexScan::makeTreeWithStrippedColumns(
   }
 
   return ad_utility::makeExecutionTree<IndexScan>(
-      _executionContext, permutation_, locatedTriplesSnapshot_, subject_,
+      _executionContext, permutation_, locatedTriplesPerBlock_, subject_,
       predicate_, object_, additionalColumns_, additionalVariables_,
       graphsToFilter_, scanSpecAndBlocks_, scanSpecAndBlocksIsPrefiltered_,
       VarsToKeep{std::move(newVariables)});

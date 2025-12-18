@@ -189,7 +189,7 @@ class Permutation {
       const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
   // From the given `LocatedTriplesPerBlock`, get the augmented block metadata.
-  BlockMetadataRanges getAugmentedMetadataForPermutation(
+  BlockMetadataRanges getAugmentedMetadata(
       const LocatedTriplesPerBlock& locatedTriples) const;
 
   const CompressedRelationReader& reader() const { return reader_.value(); }

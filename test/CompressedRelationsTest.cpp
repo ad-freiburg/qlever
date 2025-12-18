@@ -981,7 +981,7 @@ TEST(CompressedRelationReader, getResultSizeImpl) {
     auto loc = generateLocationTrace(sourceLocation);
     auto& perm = impl.getPermutation(p);
     auto& reader = perm.reader();
-    auto augmentedBlocks = perm.getAugmentedMetadataForPermutation(
+    auto augmentedBlocks = perm.getAugmentedMetadata(
         perm.getLocatedTriplesForPermutation(locatedTriplesSnapshot));
     auto& ltpb = locatedTriplesSnapshot.getLocatedTriplesForPermutation(
         perm.permutation());
@@ -1066,7 +1066,7 @@ TEST(CompressedRelationReader, getFirstAndLastTripleIgnoringGraph) {
                             : ScanSpecification::GraphFilter::All()};
     CompressedRelationReader::ScanSpecAndBlocks metadataAndBlocks{
         std::move(scanSpecification),
-        permutation.getAugmentedMetadataForPermutation(
+        permutation.getAugmentedMetadata(
             permutation.getLocatedTriplesForPermutation(*currentSnapshot))};
     const auto& reader =
         index.getImpl().getPermutation(permutationEnum).reader();

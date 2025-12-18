@@ -27,7 +27,7 @@ class IndexScan final : public Operation {
 
  private:
   PermutationPtr permutation_;
-  LocatedTriplesPerBlockPtr locatedTriplesSnapshot_;
+  LocatedTriplesPerBlockPtr locatedTriplesPerBlock_;
   TripleComponent subject_;
   TripleComponent predicate_;
   TripleComponent object_;
@@ -53,7 +53,7 @@ class IndexScan final : public Operation {
 
  public:
   IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
-            LocatedTriplesPerBlockPtr locatedTriplesSnapshot,
+            LocatedTriplesPerBlockPtr locatedTriplesPerBlock,
             const SparqlTripleSimple& triple,
             Graphs graphsToFilter = Graphs::All(),
             std::optional<ScanSpecAndBlocks> scanSpecAndBlocks = std::nullopt,
@@ -69,7 +69,7 @@ class IndexScan final : public Operation {
 
   // Constructor to simplify copy creation of an `IndexScan`.
   IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
-            LocatedTriplesPerBlockPtr locatedTriplesSnapshot,
+            LocatedTriplesPerBlockPtr locatedTriplesPerBlock,
             const TripleComponent& s, const TripleComponent& p,
             const TripleComponent& o,
             std::vector<ColumnIndex> additionalColumns,
