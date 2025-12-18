@@ -1972,8 +1972,8 @@ void countDistinct(std::optional<Id>& lastId, size_t& counter,
         ql::ranges::distance(col | ::ranges::views::unique([](Id a, Id b) {
                                return a.getBits() == b.getBits();
                              }));
-    if (lastId != col.at(0)) {
-      lastId = col.at(0);
+    if (lastId != col[0]) {
+      lastId = col[0];
     } else {
       // Avoid double counting in case the last id of the previous block is the
       // same as the first id of this block.
