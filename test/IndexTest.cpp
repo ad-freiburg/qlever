@@ -57,14 +57,15 @@ auto makeTestScanWidthOne = [](const IndexImpl& index,
              ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto t = generateLocationTrace(l);
     const auto& actualPermutation = index.getPermutation(permutation);
-    auto locatedTriplesSnapshot = qec.locatedTriplesSnapshot();
+    auto locatedTriples = actualPermutation.getLocatedTriplesForPermutation(
+        qec.locatedTriplesSnapshot());
     IdTable result = actualPermutation.scan(
         actualPermutation.getScanSpecAndBlocks(
             ScanSpecificationAsTripleComponent{c0, c1, std::nullopt}
                 .toScanSpecification(index),
-            locatedTriplesSnapshot),
+            locatedTriples),
         additionalColumns, std::make_shared<ad_utility::CancellationHandle<>>(),
-        locatedTriplesSnapshot);
+        locatedTriples);
     ASSERT_EQ(result.numColumns(), 1 + additionalColumns.size());
     ASSERT_EQ(result, makeIdTableFromVector(expected));
   };
@@ -81,15 +82,15 @@ auto makeTestScanWidthTwo = [](const IndexImpl& index,
              ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto t = generateLocationTrace(l);
     const auto& actualPermutation = index.getPermutation(permutation);
-    auto locatedTriplesSnapshot = qec.locatedTriplesSnapshot();
+    auto locatedTriples = actualPermutation.getLocatedTriplesForPermutation(
+        qec.locatedTriplesSnapshot());
     IdTable wol = actualPermutation.scan(
         actualPermutation.getScanSpecAndBlocks(
             ScanSpecificationAsTripleComponent{c0, std::nullopt, std::nullopt}
                 .toScanSpecification(index),
-            locatedTriplesSnapshot),
+            locatedTriples),
         Permutation::ColumnIndicesRef{},
-        std::make_shared<ad_utility::CancellationHandle<>>(),
-        locatedTriplesSnapshot);
+        std::make_shared<ad_utility::CancellationHandle<>>(), locatedTriples);
     ASSERT_EQ(wol, makeIdTableFromVector(expected));
   };
 };

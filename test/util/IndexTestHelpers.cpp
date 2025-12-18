@@ -82,13 +82,15 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
                              &indexImpl](size_t patternIdx, Id id) {
     const auto& permutation =
         indexImpl.getPermutation(Permutation::Enum::PSO).internalPermutation();
+    const auto& locatedTriples =
+        permutation.getLocatedTriplesForPermutation(locatedTriplesSnapshot);
     auto scanResultHasPattern =
         permutation.scan(permutation.getScanSpecAndBlocks(
                              ScanSpecificationAsTripleComponent{
                                  iriOfHasPattern, id, std::nullopt}
                                  .toScanSpecification(indexImpl),
-                             locatedTriplesSnapshot),
-                         {}, cancellationDummy, locatedTriplesSnapshot);
+                             locatedTriples),
+                         {}, cancellationDummy, locatedTriples);
     // Each ID has at most one pattern, it can have none if it doesn't
     // appear as a subject in the knowledge graph.
     AD_CORRECTNESS_CHECK(scanResultHasPattern.numRows() <= 1);
@@ -104,13 +106,15 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
   auto checkConsistencyForCol0IdAndPermutation =
       [&](Id col0Id, const Permutation& permutation, size_t subjectColIdx,
           size_t objectColIdx) {
+        const auto& locatedTriples =
+            permutation.getLocatedTriplesForPermutation(locatedTriplesSnapshot);
         auto scanResult = permutation.scan(
             permutation.getScanSpecAndBlocks(
                 ScanSpecification{col0Id, std::nullopt, std::nullopt},
-                locatedTriplesSnapshot),
+                locatedTriples),
             std::array{ColumnIndex{ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN},
                        ColumnIndex{ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN}},
-            cancellationDummy, locatedTriplesSnapshot);
+            cancellationDummy, locatedTriples);
         ASSERT_EQ(scanResult.numColumns(), 4u);
         for (const auto& row : scanResult) {
           auto patternIdx = row[2].getInt();

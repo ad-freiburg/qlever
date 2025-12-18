@@ -1570,8 +1570,7 @@ size_t IndexImpl::getCardinality(
     const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
   const auto& perm = getPermutation(permutation);
   if (const auto& meta = perm.getMetadata(
-          id, perm.getActualPermutation(id).getLocatedTriplesForPermutation(
-                  locatedTriplesSnapshot));
+          id, perm.getLocatedTriplesForPermutation(locatedTriplesSnapshot));
       meta.has_value()) {
     return meta.value().numRows_;
   }
@@ -1622,8 +1621,7 @@ std::vector<float> IndexImpl::getMultiplicities(
   if (auto keyId = key.toValueId(getVocab(), encodedIriManager())) {
     auto meta = permutation.getMetadata(
         keyId.value(),
-        permutation.getActualPermutation(keyId.value())
-            .getLocatedTriplesForPermutation(locatedTriplesSnapshot));
+        permutation.getLocatedTriplesForPermutation(locatedTriplesSnapshot));
     if (meta.has_value()) {
       return {meta.value().getCol1Multiplicity(),
               meta.value().getCol2Multiplicity()};
@@ -1650,8 +1648,7 @@ size_t IndexImpl::getResultSizeOfScan(
     const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
   const auto& perm = getPermutation(permutation);
   const auto& locatedTriples =
-      perm.getActualPermutation(scanSpecification)
-          .getLocatedTriplesForPermutation(locatedTriplesSnapshot);
+      perm.getLocatedTriplesForPermutation(locatedTriplesSnapshot);
   return perm.getResultSizeOfScan(
       perm.getScanSpecAndBlocks(scanSpecification, locatedTriples),
       locatedTriples);

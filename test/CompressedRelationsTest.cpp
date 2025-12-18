@@ -982,8 +982,7 @@ TEST(CompressedRelationReader, getResultSizeImpl) {
     auto& perm = impl.getPermutation(p);
     auto& reader = perm.reader();
     auto augmentedBlocks = perm.getAugmentedMetadataForPermutation(
-        perm.getActualPermutation(scanSpec).getLocatedTriplesForPermutation(
-            locatedTriplesSnapshot));
+        perm.getLocatedTriplesForPermutation(locatedTriplesSnapshot));
     auto& ltpb = locatedTriplesSnapshot.getLocatedTriplesForPermutation(
         perm.permutation());
     auto [actual_lower, actual_upper] = reader.getSizeEstimateForScan(
@@ -1068,8 +1067,7 @@ TEST(CompressedRelationReader, getFirstAndLastTripleIgnoringGraph) {
     CompressedRelationReader::ScanSpecAndBlocks metadataAndBlocks{
         std::move(scanSpecification),
         permutation.getAugmentedMetadataForPermutation(
-            permutation.getActualPermutation(scanSpecification)
-                .getLocatedTriplesForPermutation(*currentSnapshot))};
+            permutation.getLocatedTriplesForPermutation(*currentSnapshot))};
     const auto& reader =
         index.getImpl().getPermutation(permutationEnum).reader();
     return reader.getFirstAndLastTripleIgnoringGraph(metadataAndBlocks,
