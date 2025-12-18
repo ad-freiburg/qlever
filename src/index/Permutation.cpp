@@ -215,6 +215,17 @@ const LocatedTriplesPerBlock& Permutation::getLocatedTriplesForPermutation(
 }
 
 // ______________________________________________________________________
+std::shared_ptr<const LocatedTriplesPerBlock>
+Permutation::getLocatedTriplesForPermutation(
+    SharedLocatedTriplesSnapshot locatedTriplesSnapshot) const {
+  return isInternalPermutation_
+             ? locatedTriplesSnapshot.getInternalLocatedTriplesForPermutation(
+                   permutation_)
+             : locatedTriplesSnapshot.getLocatedTriplesForPermutation(
+                   permutation_);
+}
+
+// ______________________________________________________________________
 BlockMetadataRanges Permutation::getAugmentedMetadataForPermutation(
     const LocatedTriplesPerBlock& locatedTriples) const {
   BlockMetadataSpan blocks(locatedTriples.getAugmentedMetadata());

@@ -59,7 +59,10 @@ class SharedLocatedTriplesSnapshot
     return {*this, &this->get()->getLocatedTriplesForPermutation(permutation)};
   }
   std::shared_ptr<const LocatedTriplesPerBlock>
-  getInternalLocatedTriplesForPermutation(Permutation::Enum permutation) const;
+  getInternalLocatedTriplesForPermutation(Permutation::Enum permutation) const {
+    return {*this,
+            &this->get()->getInternalLocatedTriplesForPermutation(permutation)};
+  }
 };
 
 // A class for keeping track of the number of triples of the `DeltaTriples`.

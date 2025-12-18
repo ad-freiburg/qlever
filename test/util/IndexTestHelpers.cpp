@@ -138,12 +138,16 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
   };
 
   auto predicates = index.getImpl().PSO().getDistinctCol0IdsAndCounts(
-      cancellationDummy, locatedTriplesSnapshot, {});
+      cancellationDummy,
+      locatedTriplesSnapshot.getLocatedTriplesForPermutation(Permutation::PSO),
+      {});
   for (const auto& predicate : predicates.getColumn(0)) {
     checkConsistencyForPredicate(predicate);
   }
   auto objects = index.getImpl().OSP().getDistinctCol0IdsAndCounts(
-      cancellationDummy, locatedTriplesSnapshot, {});
+      cancellationDummy,
+      locatedTriplesSnapshot.getLocatedTriplesForPermutation(Permutation::OSP),
+      {});
   for (const auto& object : objects.getColumn(0)) {
     checkConsistencyForObject(object);
   }
