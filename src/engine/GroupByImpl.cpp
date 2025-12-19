@@ -1751,7 +1751,7 @@ constexpr auto GroupByImpl::makeProcessGroupsVisitor(
 template <size_t NUM_GROUP_COLUMNS, typename SubResults>
 Result GroupByImpl::computeGroupByForHashMapOptimization(
     HashMapOptimizationData data, SubResults&& subresults) const {
-  // Check number of grouping columns (treat missing optional as zero)
+  // Check number of grouping columns
   AD_CONTRACT_CHECK(data.columnIndices_.has_value());
   AD_CONTRACT_CHECK(data.aggregates_.has_value());
 
