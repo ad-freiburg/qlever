@@ -233,13 +233,8 @@ TEST_F(HasPredicateScanTest, patternTrickAllEntities) {
    *   ?x ?predicate ?o
    * } GROUP BY ?predicate
    */
-  auto triple =
-      SparqlTripleSimple{V{"?x"}, iri(HAS_PATTERN_PREDICATE), V{"?predicate"}};
-  auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
-      qec,
-      qlever::getPermutationForTriple(Permutation::Enum::PSO, qec->getIndex(),
-                                      triple),
-      qec->sharedLocatedTriplesSnapshot(), triple);
+  auto indexScan = HasPredicateScan::makePatternScan(
+      qec, TripleComponent{V{"?x"}}, V{"?predicate"});
   auto patternTrick =
       CountAvailablePredicates(qec, indexScan, 0, V{"?predicate"}, V{"?count"});
 

@@ -33,15 +33,8 @@ static constexpr auto makeJoin =
     -> HasPredicateScan::SubtreeAndColumnIndex {
   const auto& subtreeVar =
       subtree->getVariableAndInfoByColumnIndex(subtreeColIndex).first;
-  SparqlTripleSimple triple{
-      subtreeVar,
-      ad_utility::triple_component::Iri::fromIriref(HAS_PATTERN_PREDICATE),
-      objectVariable};
-  auto hasPatternScan = ad_utility::makeExecutionTree<IndexScan>(
-      qec,
-      qlever::getPermutationForTriple(Permutation::Enum::PSO, qec->getIndex(),
-                                      triple),
-      qec->sharedLocatedTriplesSnapshot(), triple);
+  auto hasPatternScan = HasPredicateScan::makePatternScan(
+      qec, TripleComponent{subtreeVar}, objectVariable);
   auto joinedSubtree = ad_utility::makeExecutionTree<Join>(
       qec, std::move(subtree), std::move(hasPatternScan), subtreeColIndex, 0);
   auto column =
@@ -266,17 +259,19 @@ Result HasPredicateScan::computeResult([[maybe_unused]] bool requestLaziness) {
   idTable.setNumColumns(getResultWidth());
 
   const CompactVectorOfStrings<Id>& patterns = getIndex().getPatterns();
-  const auto& index = getExecutionContext()->getIndex().getImpl();
-  auto scanSpec =
-      ScanSpecificationAsTripleComponent{
-          TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE), std::nullopt,
-          std::nullopt}
-          .toScanSpecification(index);
-  const auto& perm = permutation();
-  const auto& locatedTriple = locatedTriplesSnapshot();
+
+  auto scan = makePatternScan(getExecutionContext(),
+                              TripleComponent{Variable{"?s"}}, Variable{"?o"});
+  auto result = scan->getResult(true);
   auto hasPattern =
-      perm.lazyScan(perm.getScanSpecAndBlocks(scanSpec, locatedTriple),
-                    std::nullopt, {}, cancellationHandle_, locatedTriple);
+      result->isFullyMaterialized()
+          ? ad_utility::InputRangeTypeErased{ql::span{&result->idTable(), 1}}
+          : ad_utility::InputRangeTypeErased{
+                ad_utility::OwningView{result->idTables()} |
+                ql::views::transform(
+                    [](Result::IdTableVocabPair& pair) -> const auto& {
+                      return pair.idTable_;
+                    })};
 
   auto getId = [this](const TripleComponent tc) {
     std::optional<Id> id =
@@ -294,7 +289,7 @@ Result HasPredicateScan::computeResult([[maybe_unused]] bool requestLaziness) {
       return {std::move(idTable), resultSortedOn(), LocalVocab{}};
     };
     case ScanType::FREE_O: {
-      HasPredicateScan::computeFreeO(&idTable, getId(subject_), patterns);
+      HasPredicateScan::computeFreeO(&idTable, subject_, patterns);
       return {std::move(idTable), resultSortedOn(), LocalVocab{}};
     };
     case ScanType::FULL_SCAN:
@@ -340,19 +335,12 @@ void HasPredicateScan::computeFreeS(
 
 // ___________________________________________________________________________
 void HasPredicateScan::computeFreeO(
-    IdTable* resultTable, Id subjectAsId,
+    IdTable* resultTable, TripleComponent subject,
     const CompactVectorOfStrings<Id>& patterns) const {
-  const auto& index = getExecutionContext()->getIndex().getImpl();
-  auto scanSpec =
-      ScanSpecificationAsTripleComponent{
-          TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE), subjectAsId,
-          std::nullopt}
-          .toScanSpecification(index);
-  const auto& perm = permutation();
-  const auto& locatedTriple = locatedTriplesSnapshot();
-  auto hasPattern =
-      perm.scan(perm.getScanSpecAndBlocks(scanSpec, locatedTriple), {},
-                cancellationHandle_, locatedTriple);
+  auto scan = makePatternScan(getExecutionContext(), std::move(subject),
+                              Variable{"?o"});
+  auto result = scan->getResult(false);
+  const auto& hasPattern = result->idTable();
   AD_CORRECTNESS_CHECK(hasPattern.numRows() <= 1);
   for (Id patternId : hasPattern.getColumn(0)) {
     const auto& pattern = patterns[patternId.getInt()];
@@ -415,9 +403,15 @@ std::unique_ptr<Operation> HasPredicateScan::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
-const Permutation& HasPredicateScan::permutation() const {
-  return getIndex()
-      .getImpl()
-      .getPermutation(Permutation::Enum::PSO)
-      .internalPermutation();
+std::shared_ptr<QueryExecutionTree> HasPredicateScan::makePatternScan(
+    QueryExecutionContext* qec, TripleComponent subject, Variable object) {
+  SparqlTripleSimple triple{
+      std::move(subject),
+      ad_utility::triple_component::Iri::fromIriref(HAS_PATTERN_PREDICATE),
+      TripleComponent{std::move(object)}};
+  return ad_utility::makeExecutionTree<IndexScan>(
+      qec,
+      qlever::getPermutationForTriple(Permutation::Enum::PSO, qec->getIndex(),
+                                      triple),
+      qec->sharedLocatedTriplesSnapshot(), triple);
 }

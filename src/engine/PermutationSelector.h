@@ -17,7 +17,9 @@ namespace qlever {
 // `permutation` enum and the values in `triple`. In particular return the
 // associated internal permutation if the passed `triple` contains an internal
 // IRI at any position. If no internal permutation is available for the passed
-// `permutation` enum, throw instead.
+// `permutation` enum, throw instead.Internal IRIs include language-tagged IRIs.
+// like `@en@rdfs:label` for example, or ones that start with
+// `<http://qlever.cs.uni-freiburg.de/builtin-functions/`.
 std::shared_ptr<const Permutation> getPermutationForTriple(
     Permutation::Enum permutation, const Index& index,
     const SparqlTripleSimple& triple);
