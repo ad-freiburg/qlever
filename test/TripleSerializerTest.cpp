@@ -56,30 +56,44 @@ TEST(TripleSerializer, localVocabIsRemapped) {
   }
 }
 
-// TODO<joka921> 1. The name of this test case is a misnomer currently.
-// 2. We also have to test that the serialization correctly keeps the blank node
-// blocks alive etc.
-TEST(TripleSerializer, blankNodesAreRemapped) {
+TEST(TripleSerializer, blankNodesRemapper) {
   ad_utility::testing::getQec();
   LocalVocab localVocab;
+  ad_utility::BlankNodeManager bm;
   std::vector<std::vector<Id>> ids;
 
-  ids.emplace_back(std::vector{BN(1337), BN(1338), BN(1337)});
+  auto bn = [&]() {
+    return Id::makeFromBlankNodeIndex(localVocab.getBlankNodeIndex(&bm));
+  };
+
+  ids.emplace_back(std::vector{bn(), bn(), bn()});
   std::string filename = "tripleSerializerTestBlankNodesAreRemapped.dat";
   ad_utility::serializeIds(filename, localVocab, ids);
 
-  ad_utility::BlankNodeManager bm;
-  auto [localVocabOut, idsOut] = ad_utility::deserializeIds(filename, &bm);
-  ASSERT_THAT(
-      idsOut,
-      ::testing::ElementsAre(::testing::Each(AD_PROPERTY(
-          ValueId, getDatatype, ::testing::Eq(Datatype::BlankNodeIndex)))));
-  EXPECT_EQ(ids.at(0).size(), idsOut.at(0).size());
+  ad_utility::BlankNodeManager bm2;
+  auto [localVocabOut, idsOut] = ad_utility::deserializeIds(filename, &bm2);
   // Blank nodes are now preserved (not remapped).
   EXPECT_EQ(ids, idsOut);
-  EXPECT_EQ(idsOut.at(0).at(0), idsOut.at(0).at(2));
-  EXPECT_NE(idsOut.at(0).at(0), idsOut.at(0).at(1));
-  EXPECT_NE(idsOut.at(0).at(1), idsOut.at(0).at(2));
+
+  // The deserialized blank node blocks are equal to the original blank node
+  // blocks (same block indices + same uuid), but with an empty block (for new
+  // blank node indices) prepended, such that we can safely add new indices,
+  // without interfering with other local vocabs that share the same blocks.
+  auto blankNodeBlocksOriginal = localVocab.getOwnedLocalBlankNodeBlocks();
+  auto blankNodeBlocksDeserialized =
+      localVocabOut.getOwnedLocalBlankNodeBlocks();
+
+  ASSERT_EQ(blankNodeBlocksDeserialized.size(),
+            blankNodeBlocksOriginal.size() + 1);
+  EXPECT_TRUE(blankNodeBlocksDeserialized.at(0).blockIndices_.empty());
+  for (size_t i = 0; i < blankNodeBlocksOriginal.size(); ++i) {
+    EXPECT_EQ(blankNodeBlocksOriginal[i].uuid_,
+              blankNodeBlocksDeserialized[i + 1].uuid_)
+        << i;
+    EXPECT_EQ(blankNodeBlocksOriginal[i].blockIndices_,
+              blankNodeBlocksDeserialized[i + 1].blockIndices_)
+        << i;
+  }
 }
 
 // _____________________________________________________________________________
@@ -89,7 +103,7 @@ TEST(TripleSerializer, headerFormatIsCorrect) {
 
   EXPECT_THAT(serializer.data(),
               ::testing::ElementsAre('Q', 'L', 'E', 'V', 'E', 'R', '.', 'U',
-                                     'P', 'D', 'A', 'T', 'E', 0, 0));
+                                     'P', 'D', 'A', 'T', 'E', 1, 0));
 }
 
 // _____________________________________________________________________________
@@ -97,7 +111,7 @@ TEST(TripleSerializer, errorOnWrongHeaderFormat) {
   // Wrong magic bytes
   {
     ad_utility::serialization::ByteBufferReadSerializer serializer{
-        {'q', 'L', 'E', 'V', 'E', 'R', '.', 'U', 'P', 'D', 'A', 'T', 'E', 0,
+        {'q', 'L', 'E', 'V', 'E', 'R', '.', 'U', 'P', 'D', 'A', 'T', 'E', 1,
          0}};
     EXPECT_THROW(ad_utility::detail::readHeader(serializer),
                  ad_utility::Exception);
@@ -116,10 +130,10 @@ TEST(TripleSerializer, errorOnWrongHeaderFormat) {
     EXPECT_THROW(ad_utility::detail::readHeader(serializer),
                  ad_utility::Exception);
   }
-  // Non zero version
+  // Wrong version
   {
     ad_utility::serialization::ByteBufferReadSerializer serializer{
-        {'Q', 'L', 'E', 'V', 'E', 'R', '.', 'U', 'P', 'D', 'A', 'T', 'E', 1,
+        {'Q', 'L', 'E', 'V', 'E', 'R', '.', 'U', 'P', 'D', 'A', 'T', 'E', 0,
          0}};
     EXPECT_THROW(ad_utility::detail::readHeader(serializer),
                  ad_utility::Exception);
@@ -134,7 +148,7 @@ TEST(TripleSerializer, errorOnWrongHeaderFormat) {
 }
 
 // _____________________________________________________________________________
-TEST(TripleSerializer, onlySingleWordSetSupportedForLocalVocab) {
+TEST(TripleSerializer, multipleWordSetsInASerializedLocalVocab) {
   ad_utility::testing::getQec();
   LocalVocab localVocab;
   auto LV = [&localVocab](std::string value) {
