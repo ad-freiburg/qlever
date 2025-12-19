@@ -208,13 +208,17 @@ class DeltaTriples {
                      ad_utility::timer::TimeTracer& tracer =
                          ad_utility::timer::DEFAULT_TIME_TRACER);
 
-  // Insert internal delta triples for test code.
+  // Insert internal delta triples for test code. In practice these are inferred
+  // from regular triples, so `insertTriples` and `deleteTriples` will insert
+  // them on their own.
   void insertInternalTriplesForTesting(
       CancellationHandle cancellationHandle, Triples triples,
       ad_utility::timer::TimeTracer& tracer =
           ad_utility::timer::DEFAULT_TIME_TRACER);
 
-  // Delete internal delta triples for test code.
+  // Delete internal delta triples for test code. In practice these are inferred
+  // from regular triples, so `insertTriples` and `deleteTriples` will insert
+  // them on their own.
   void deleteInternalTriplesForTesting(
       CancellationHandle cancellationHandle, Triples triples,
       ad_utility::timer::TimeTracer& tracer =

@@ -124,8 +124,9 @@ DeltaTriplesCount DeltaTriples::getCounts() const {
 DeltaTriples::Triples DeltaTriples::makeInternalTriples(
     const Triples& triples) {
   Triples internalTriples;
+  constexpr size_t predicateCacheSize = 10;
   ad_utility::util::LRUCache<Id::T, ad_utility::triple_component::Iri>
-      predicateCache{10};
+      predicateCache{predicateCacheSize};
   for (const auto& triple : triples) {
     const auto& ids = triple.ids();
     Id objectId = ids.at(2);
