@@ -12,7 +12,6 @@
 namespace {
 auto I = ad_utility::testing::IntId;
 auto V = ad_utility::testing::VocabId;
-auto BN = ad_utility::testing::BlankNodeId;
 TEST(TripleSerializer, simpleExample) {
   LocalVocab localVocab;
   std::vector<std::vector<Id>> ids;
@@ -58,8 +57,8 @@ TEST(TripleSerializer, localVocabIsRemapped) {
 
 TEST(TripleSerializer, blankNodesRemapper) {
   ad_utility::testing::getQec();
-  LocalVocab localVocab;
   ad_utility::BlankNodeManager bm;
+  LocalVocab localVocab;
   std::vector<std::vector<Id>> ids;
 
   auto bn = [&]() {
