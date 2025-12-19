@@ -125,6 +125,15 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
     IdTable idTable{numColumns, arg.allocatorForSerialization_.value()};
     idTable.resize(numRows);
     for (decltype(auto) col : idTable.getColumns()) {
+      // TODO<joka921> Discuss and fix the semantics of local vocabs when
+      // serializing IDs to an from the serializer.
+      AD_CORRECTNESS_CHECK(
+          ql::ranges::find(col, Datatype::LocalVocabIndex, &Id::getDatatype) ==
+              col.end(),
+          "Named result cache entries that contain local vocab entries "
+          "currently cannot be serialized. Note that local vocab entries can "
+          "also occur if SPARQL UPDATE operations have been performed on the "
+          "index before creating the named cached result.");
       ad_utility::detail::deserializeIds(serializer, mapping, col);
     }
 
