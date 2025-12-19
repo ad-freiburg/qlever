@@ -416,7 +416,7 @@ TEST_F(GroupByHashMapOptimizationTest, GetHashEntries_InsertAndOnlyMatching) {
   spansA[1] = table_A.getColumn(1).subspan(0, table_A.size());
   auto [entriesA, nonmatchA] = aggrData.getHashEntries(spansA, false);
   ASSERT_TRUE(nonmatchA.empty());
-  std::vector<GroupByImpl::RowToGroup> expectedA{
+  std::vector<GroupByImpl::GroupLookupResult::RowToGroup> expectedA{
       {0, 0}, {1, 1}, {2, 0}, {3, 2}};
   ASSERT_EQ(entriesA, expectedA);
   EXPECT_EQ(aggrData.numGroups(), 3u);
@@ -429,7 +429,8 @@ TEST_F(GroupByHashMapOptimizationTest, GetHashEntries_InsertAndOnlyMatching) {
   auto [entriesB, nonmatchB] = aggrData.getHashEntries(spansB, true);
   // Expect two matches at positions 0 -> key (1,1) and 2 -> key (2,2)
   // Their indices correspond to the ones assigned before: (1,1)->0, (2,2)->2
-  std::vector<GroupByImpl::RowToGroup> expectedEntriesB{{0, 0}, {2, 2}};
+  std::vector<GroupByImpl::GroupLookupResult::RowToGroup> expectedEntriesB{
+      {0, 0}, {2, 2}};
   ASSERT_EQ(entriesB, expectedEntriesB);
   std::vector<size_t> expectedNonmatchB{1, 3};
   ASSERT_EQ(nonmatchB, expectedNonmatchB);
