@@ -56,7 +56,9 @@ TEST(TripleSerializer, localVocabIsRemapped) {
   }
 }
 
-// _____________________________________________________________________________
+// TODO<joka921> 1. The name of this test case is a misnomer currently.
+// 2. We also have to test that the serialization correctly keeps the blank node
+// blocks alive etc.
 TEST(TripleSerializer, blankNodesAreRemapped) {
   ad_utility::testing::getQec();
   LocalVocab localVocab;
@@ -73,7 +75,8 @@ TEST(TripleSerializer, blankNodesAreRemapped) {
       ::testing::ElementsAre(::testing::Each(AD_PROPERTY(
           ValueId, getDatatype, ::testing::Eq(Datatype::BlankNodeIndex)))));
   EXPECT_EQ(ids.at(0).size(), idsOut.at(0).size());
-  EXPECT_NE(ids, idsOut);
+  // Blank nodes are now preserved (not remapped).
+  EXPECT_EQ(ids, idsOut);
   EXPECT_EQ(idsOut.at(0).at(0), idsOut.at(0).at(2));
   EXPECT_NE(idsOut.at(0).at(0), idsOut.at(0).at(1));
   EXPECT_NE(idsOut.at(0).at(1), idsOut.at(0).at(2));
@@ -132,15 +135,52 @@ TEST(TripleSerializer, errorOnWrongHeaderFormat) {
 
 // _____________________________________________________________________________
 TEST(TripleSerializer, onlySingleWordSetSupportedForLocalVocab) {
-  ad_utility::serialization::ByteBufferWriteSerializer serializer;
+  ad_utility::testing::getQec();
   LocalVocab localVocab;
-  localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
-      ad_utility::triple_component::Literal::literalWithoutQuotes("abc")});
-  // Move entry to otherWordSet
-  localVocab = localVocab.clone();
+  auto LV = [&localVocab](std::string value) {
+    return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
+        ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
+            std::move(value))));
+  };
+  std::vector<std::vector<Id>> ids;
 
-  EXPECT_THROW(ad_utility::detail::serializeLocalVocab(serializer, localVocab),
-               ad_utility::Exception);
+  ids.emplace_back(std::vector{LV("abc"), LV("def"), LV("ghi")});
+  // Move entries to otherWordSet.
+  localVocab = localVocab.clone();
+  ids.emplace_back(std::vector{LV("xyz"), LV("123"), LV("456")});
+
+  ad_utility::serialization::ByteBufferWriteSerializer writer;
+  ad_utility::detail::serializeLocalVocab(writer, localVocab);
+
+  ad_utility::serialization::ByteBufferReadSerializer reader{
+      std::move(writer).data()};
+
+  ad_utility::BlankNodeManager bm;
+  auto [localVocabOut, mapping] =
+      ad_utility::detail::deserializeLocalVocab(reader, &bm);
+  auto fromMapping = [&]() {
+    return ::ranges::to<std::vector>(
+        mapping | ql::views::values |
+        ql::views::transform([](Id id) { return *id.getLocalVocabIndex(); }));
+  };
+  auto fromMappingOrigin = [&]() {
+    return ::ranges::to<std::vector>(
+        mapping | ql::views::keys | ql::views::transform([](Id::T id) {
+          return *Id::fromBits(id).getLocalVocabIndex();
+        }));
+  };
+  EXPECT_EQ(localVocabOut.size(), localVocab.size());
+  auto allWords = localVocab.getAllWordsForTesting();
+  EXPECT_THAT(allWords, ::testing::UnorderedElementsAreArray(
+                            localVocabOut.getAllWordsForTesting()));
+  EXPECT_THAT(allWords, ::testing::UnorderedElementsAreArray(fromMapping()));
+  EXPECT_THAT(allWords,
+              ::testing::UnorderedElementsAreArray(fromMappingOrigin()));
+  // Clear the original local vocab, then ensure that the target side of the
+  // mapping is still valid, which means that it's being kept alive by the
+  // new local vocab.
+  localVocab = LocalVocab{};
+  EXPECT_THAT(allWords, ::testing::UnorderedElementsAreArray(fromMapping()));
 }
 
 // _____________________________________________________________________________
