@@ -41,11 +41,11 @@ class SpatialJoinCachedIndexImpl {
 };
 
 // ____________________________________________________________________________
-SpatialJoinCachedIndex::SpatialJoinCachedIndex(const Variable& geometryColumn,
+SpatialJoinCachedIndex::SpatialJoinCachedIndex(Variable geometryColumn,
                                                ColumnIndex col,
                                                const IdTable& restable,
                                                const Index& index)
-    : geometryColumn_{geometryColumn},
+    : geometryColumn_{std::move(geometryColumn)},
       pimpl_{std::make_shared<SpatialJoinCachedIndexImpl>()} {
   shapeIndexToRow_ = pimpl_->populate(col, restable, index);
 }
@@ -62,7 +62,7 @@ std::shared_ptr<const MutableS2ShapeIndex> SpatialJoinCachedIndex::getIndex()
 }
 
 // ____________________________________________________________________________
-std::string SpatialJoinCachedIndex::serializeShapes() const {
+std::string SpatialJoinCachedIndex::serializeS2Index() const {
   Encoder encoder;
   s2shapeutil::CompactEncodeTaggedShapes(pimpl_->s2index_, &encoder);
   pimpl_->s2index_.Encode(&encoder);
@@ -70,16 +70,9 @@ std::string SpatialJoinCachedIndex::serializeShapes() const {
 }
 
 // _____________________________________________________________________________
-const SpatialJoinCachedIndex::ShapeIndexToRow&
-SpatialJoinCachedIndex::serializeLineIndices() const {
-  return shapeIndexToRow_;
-}
-
-// _____________________________________________________________________________
 void SpatialJoinCachedIndex::populateFromSerialized(
-    std::string_view serializedShapes, ShapeIndexToRow shapeIndexToRow) {
-  shapeIndexToRow_ = std::move(shapeIndexToRow);
-  pimpl_ = std::make_shared<SpatialJoinCachedIndexImpl>();
+    std::string_view serializedShapes) {
+  AD_CORRECTNESS_CHECK(pimpl_ != nullptr);
   Decoder decoder(serializedShapes.data(), serializedShapes.size());
   if (!pimpl_->s2index_.Init(&decoder,
                              s2shapeutil::FullDecodeShapeFactory(&decoder))) {

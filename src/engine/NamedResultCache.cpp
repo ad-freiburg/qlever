@@ -23,7 +23,11 @@ std::shared_ptr<ExplicitIdTableOperation> NamedResultCache::getOperation(
 }
 
 // _____________________________________________________________________________
-auto NamedResultCache::get(const Key& name) -> std::shared_ptr<const Value> {
+auto NamedResultCache::get(const Key& name) const
+    -> std::shared_ptr<const Value> {
+  // Note the `wlock` on a `mutable` cache inside a `const` member function here
+  // is benign as we don't modify the contents of the cache (only the LRU
+  // structures).
   auto lock = cache_.wlock();
   if (!lock->contains(name)) {
     throw std::runtime_error{
@@ -35,13 +39,12 @@ auto NamedResultCache::get(const Key& name) -> std::shared_ptr<const Value> {
 
 // _____________________________________________________________________________
 void NamedResultCache::store(const Key& name, Value result) {
-  auto cacheLock = cache_.wlock();
-
+  auto lock = cache_.wlock();
   // The underlying cache throws on insert if the key is already present. We
   // therefore first call `erase`, which silently ignores keys that are not
   // present to avoid this behavior.
-  cacheLock->erase(name);
-  cacheLock->insert(name, std::move(result));
+  lock->erase(name);
+  lock->insert(name, std::move(result));
 }
 
 // _____________________________________________________________________________

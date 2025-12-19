@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "engine/NamedResultCache.h"
+#include "engine/NamedResultCacheSerializer.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryPlanner.h"
 #include "global/RuntimeParameters.h"

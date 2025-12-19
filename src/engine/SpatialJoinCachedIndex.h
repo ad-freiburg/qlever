@@ -35,17 +35,11 @@ class SpatialJoinCachedIndex {
   using ShapeIndexToRow = ad_utility::HashMap<size_t, size_t>;
   ShapeIndexToRow shapeIndexToRow_;
 
-  // Serialize the contained shapes, and the corresponding indices in the
-  // `IdTable` from which the index was constructed. This information is enough
-  // to relatively cheaply reconstruct the index.
-  std::string serializeShapes() const;
-  const ShapeIndexToRow& serializeLineIndices() const;
-
  public:
   // Constructor that builds an index from the geometries in the given column in
   // the `IdTable`. Currently only line strings are supported for the
   // experimental S2 point polyline algorithm.
-  SpatialJoinCachedIndex(const Variable& geometryColumn, ColumnIndex col,
+  SpatialJoinCachedIndex(Variable geometryColumn, ColumnIndex col,
                          const IdTable& restable, const Index& index);
 
   // Getters
@@ -65,28 +59,31 @@ class SpatialJoinCachedIndex {
   struct TagForSerialization {};
   SpatialJoinCachedIndex(TagForSerialization);
 
-  // Fill the index from preserialized shapes and line indices, which have been
-  // obtained via prior calls to `serializeShapes` and `serializeLineIndices`
-  // respectively.
-  void populateFromSerialized(std::string_view serializedShapes,
-                              ShapeIndexToRow shapeIndexToRow);
-
   // Serialize a `SpatialJoinCachedIndex`. When reading from a serializer, then
   // the target `arg` has to be constructed upfront via the constructor that
   // takes a `TagForSerialization` (see above).
   AD_SERIALIZE_FRIEND_FUNCTION(SpatialJoinCachedIndex) {
     serializer | arg.geometryColumn_;
     if constexpr (ad_utility::serialization::WriteSerializer<S>) {
-      serializer << arg.serializeShapes();
-      serializer << arg.serializeLineIndices();
+      serializer << arg.serializeS2Index();
+      serializer << arg.shapeIndexToRow_;
     } else {
       decltype(arg.serializeShapes()) serializedShapes;
       serializer >> serializedShapes;
-      std::decay_t<decltype(arg.serializeLineIndices())> lineIndices;
-      serializer >> lineIndices;
-      arg.populateFromSerialized(serializedShapes, std::move(lineIndices));
+      serializer >> arg.shapeIndexToRow_;
+      arg.populateFromSerialized(serializedShapes);
     }
   }
+
+ private:
+  // Serialize the `MutableS2ShapeIndex` as well as the contained shapes. This
+  // is used by the serialization function above.
+  std::string serializeS2Index() const;
+
+  // Fill the contained `MutableS2ShapeIndex` from a string that has been
+  // obtained via `serializeS2Index` previously. This function is only used by
+  // the serialization function above.
+  void populateFromSerialized(std::string_view serializedS2Index);
 };
 
 #endif  // QLEVER_SRC_ENGINE_SPATIALJOINCACHEDINDEX_H
