@@ -414,11 +414,12 @@ TEST_F(GroupByHashMapOptimizationTest, GetHashEntries_InsertAndOnlyMatching) {
   AggrDataTwoCol::ArrayOrVector<ql::span<const Id>> spansA;
   spansA[0] = table_A.getColumn(0).subspan(0, table_A.size());
   spansA[1] = table_A.getColumn(1).subspan(0, table_A.size());
-  auto [entriesA, nonmatchA] = aggrData.getHashEntries(spansA, false);
-  ASSERT_TRUE(nonmatchA.empty());
-  std::vector<GroupByImpl::GroupLookupResult::RowToGroup> expectedA{
-      {0, 0}, {1, 1}, {2, 0}, {3, 2}};
-  ASSERT_EQ(entriesA, expectedA);
+  auto lookupA = aggrData.getHashEntries(spansA, false);
+  ASSERT_TRUE(lookupA.nonMatchingRows_.empty());
+  std::vector<size_t> expectedRowsA{0, 1, 2, 3};
+  std::vector<size_t> expectedGroupsA{0, 1, 0, 2};
+  ASSERT_EQ(lookupA.matchedRows_, expectedRowsA);
+  ASSERT_EQ(lookupA.groupIndexes_, expectedGroupsA);
   EXPECT_EQ(aggrData.numGroups(), 3u);
 
   // Second block, onlyMatching: new keys should be reported as non-matching
@@ -426,14 +427,15 @@ TEST_F(GroupByHashMapOptimizationTest, GetHashEntries_InsertAndOnlyMatching) {
   AggrDataTwoCol::ArrayOrVector<ql::span<const Id>> spansB;
   spansB[0] = table_B.getColumn(0).subspan(0, table_B.size());
   spansB[1] = table_B.getColumn(1).subspan(0, table_B.size());
-  auto [entriesB, nonmatchB] = aggrData.getHashEntries(spansB, true);
+  auto lookupB = aggrData.getHashEntries(spansB, true);
   // Expect two matches at positions 0 -> key (1,1) and 2 -> key (2,2)
   // Their indices correspond to the ones assigned before: (1,1)->0, (2,2)->2
-  std::vector<GroupByImpl::GroupLookupResult::RowToGroup> expectedEntriesB{
-      {0, 0}, {2, 2}};
-  ASSERT_EQ(entriesB, expectedEntriesB);
+  std::vector<size_t> expectedRowsB{0, 2};
+  std::vector<size_t> expectedGroupsB{0, 2};
+  ASSERT_EQ(lookupB.matchedRows_, expectedRowsB);
+  ASSERT_EQ(lookupB.groupIndexes_, expectedGroupsB);
   std::vector<size_t> expectedNonmatchB{1, 3};
-  ASSERT_EQ(nonmatchB, expectedNonmatchB);
+  ASSERT_EQ(lookupB.nonMatchingRows_, expectedNonmatchB);
 
   // Verify getSortedGroupColumns returns sorted unique pairs
   auto sortedCols = aggrData.getSortedGroupColumns();

@@ -1410,10 +1410,12 @@ GroupByImpl::HashMapAggregationData<NUM_GROUP_COLUMNS>::getHashEntries(
     bool onlyUsePreexistingGroups) {
   AD_CONTRACT_CHECK(groupByCols.size() > 0);
 
-  std::vector<GroupLookupResult::RowToGroup> matchedRowsToGroups;
+  std::vector<size_t> matchedRows;
+  std::vector<size_t> groupIndexes;
   std::vector<size_t> nonMatchingRows;
   size_t numberOfEntries = groupByCols.at(0).size();
-  matchedRowsToGroups.reserve(numberOfEntries);
+  matchedRows.reserve(numberOfEntries);
+  groupIndexes.reserve(numberOfEntries);
 
   // TODO: We pass the `Id`s column-wise into this function, and then handle
   //       them row-wise. Is there any advantage to this, or should we transform
@@ -1437,7 +1439,8 @@ GroupByImpl::HashMapAggregationData<NUM_GROUP_COLUMNS>::getHashEntries(
       groupIndex = it->second;
     }
 
-    matchedRowsToGroups.push_back(GroupLookupResult::RowToGroup{i, groupIndex});
+    matchedRows.push_back(i);
+    groupIndexes.push_back(groupIndex);
   }
 
   // CPP_template_lambda(capture)(typenames...)(arg)(requires ...)`
@@ -1468,7 +1471,7 @@ GroupByImpl::HashMapAggregationData<NUM_GROUP_COLUMNS>::getHashEntries(
     ++idx;
   }
 
-  return GroupLookupResult{std::move(matchedRowsToGroups),
+  return GroupLookupResult{std::move(matchedRows), std::move(groupIndexes),
                            std::move(nonMatchingRows)};
 }
 
@@ -1716,34 +1719,30 @@ constexpr auto GroupByImpl::makeProcessGroupsVisitor(
       typename T, typename A)(T && singleResult, A & aggregationDataVector)(
       requires sparqlExpression::SingleExpressionResult<T> &&
       VectorOfAggregationData<A>) {
-    const auto& matches = groupLookupResult.matchedRowsToGroups_;
-    // Ensure matches are sorted by rowIndex, as we will iterate
-    // through the generator in ascending order of rowIndex
-    AD_EXPENSIVE_CHECK(
-        ql::ranges::is_sorted(matches.begin(), matches.end(), {},
-                              &GroupLookupResult::RowToGroup::rowIndex_));
+    const auto& matchedRows = groupLookupResult.matchedRows_;
+    const auto& groupIndexes = groupLookupResult.groupIndexes_;
+    AD_CORRECTNESS_CHECK(matchedRows.size() == groupIndexes.size());
+    // Ensure matched row indices are sorted, as we will iterate through the
+    // generator in ascending order of row index.
+    AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(matchedRows));
 
-    if (matches.empty()) {
+    if (matchedRows.empty()) {
       return;
     }
 
     // Create a generator that only yields values for the matching row
     // indices, skipping evaluation for non-matching rows where possible.
-    auto indices = matches | ql::views::transform(
-                                 [](const GroupLookupResult::RowToGroup& r) {
-                                   return r.rowIndex_;
-                                 });
+    auto indices = matchedRows;
 
     auto generator = sparqlExpression::detail::makeGeneratorSparse(
         std::forward<T>(singleResult), blockSize, evaluationContext,
         std::move(indices));
 
-    auto matchIt = matches.begin();
+    auto groupIt = groupIndexes.begin();
     for (const auto& value : generator) {
-      AD_CORRECTNESS_CHECK(matchIt != matches.end());
-      aggregationDataVector.at(matchIt->groupIndex_)
-          .addValue(value, evaluationContext);
-      ++matchIt;
+      AD_CORRECTNESS_CHECK(groupIt != groupIndexes.end());
+      aggregationDataVector.at(*groupIt).addValue(value, evaluationContext);
+      ++groupIt;
     }
   };
 }

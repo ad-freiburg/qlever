@@ -376,25 +376,13 @@ class GroupByImpl : public Operation {
   // If `onlyUsePreexistingGroups` is false, nonMatchingRows_ will be empty as
   // new groups are created for these rows.
   struct GroupLookupResult {
-    // Describes the association between a single input row and the index of
-    // the group that it belongs to in the hash map. Instances are created by
-    // `getHashEntries` for every row whose group key already exists in the
-    // map and are later iterated in ascending `rowIndex_` order to route the
-    // evaluated aggregate values to the correct `groupIndex_` in the
-    // aggregation data vectors.
-    struct RowToGroup {
-      size_t rowIndex_;
-      size_t groupIndex_;
-
-      bool operator==(const RowToGroup& other) const {
-        return rowIndex_ == other.rowIndex_ && groupIndex_ == other.groupIndex_;
-      }
-    };
-
     // For each processed input row that matched an existing group (in order),
-    // stores a `RowToGroup` mapping containing both the row's index in the
-    // input and the index of its matching group in the hash map.
-    std::vector<RowToGroup> matchedRowsToGroups_;
+    // `matchedRows_` stores the row index in the current block and
+    // `groupIndexes_` stores the corresponding group index in the hash map.
+    // Both vectors always have the same size and form a parallel mapping
+    // (matchedRows_[i] -> groupIndexes_[i]).
+    std::vector<size_t> matchedRows_;
+    std::vector<size_t> groupIndexes_;
     // Indices of input rows for which no existing group was found.
     std::vector<size_t> nonMatchingRows_;
   };
