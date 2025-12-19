@@ -633,9 +633,9 @@ Result Join::computeResultForTwoIndexScans(bool requestLaziness) const {
         ad_utility::zipperJoinForBlocksWithoutUndef(leftBlocks, rightBlocks,
                                                     std::less{}, rowAdder);
         leftScan->runtimeInfo().status_ =
-            RuntimeInformation::Status::fullyLazilyMaterialized;
+            RuntimeInformation::Status::lazilyMaterializedCompleted;
         rightScan->runtimeInfo().status_ =
-            RuntimeInformation::Status::fullyLazilyMaterialized;
+            RuntimeInformation::Status::lazilyMaterializedCompleted;
 
         auto localVocab = std::move(rowAdder.localVocab());
         return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
@@ -705,7 +705,7 @@ Result Join::computeResultForIndexScanAndIdTable(
           doJoin(blockForIdTable, rightBlocks);
         }
         scan->runtimeInfo().status_ =
-            RuntimeInformation::Status::fullyLazilyMaterialized;
+            RuntimeInformation::Status::lazilyMaterializedCompleted;
 
         auto localVocab = std::move(rowAdder.localVocab());
         return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
@@ -742,7 +742,7 @@ Result Join::computeResultForIndexScanAndLazyOperation(
                              joinColMap.permutationRight()),
             std::less{}, rowAdder);
         scan->runtimeInfo().status_ =
-            RuntimeInformation::Status::fullyLazilyMaterialized;
+            RuntimeInformation::Status::lazilyMaterializedCompleted;
 
         auto localVocab = std::move(rowAdder.localVocab());
         return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
