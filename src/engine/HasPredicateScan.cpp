@@ -265,7 +265,8 @@ Result HasPredicateScan::computeResult([[maybe_unused]] bool requestLaziness) {
   auto result = scan->getResult(true);
   auto hasPattern =
       result->isFullyMaterialized()
-          ? ad_utility::InputRangeTypeErased{ql::span{&result->idTable(), 1}}
+          ? ad_utility::InputRangeTypeErased{::ranges::span{&result->idTable(),
+                                                            1}}
           : ad_utility::InputRangeTypeErased{
                 ad_utility::OwningView{result->idTables()} |
                 ql::views::transform(
