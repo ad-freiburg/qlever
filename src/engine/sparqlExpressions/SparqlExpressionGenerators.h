@@ -20,6 +20,8 @@
 
 #include <absl/functional/bind_front.h>
 
+#include <iterator>
+
 #ifndef QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17
 #include "backports/functional.h"
 #endif
@@ -198,6 +200,166 @@ CPP_template(typename Input, typename Transformation = ql::identity)(
   } else {
     return resultGenerator(AD_FWD(input), numItems, transformation);
   }
+}
+
+// A wrapper range that takes an underlying generator/range of values for all
+// rows in a block and a sorted range of row indices and yields only the
+// values at those indices. The underlying generator is advanced without
+// dereferencing for the skipped indices.
+template <typename GeneratorRange, typename IndicesRange>
+class SparseGeneratorRange {
+ private:
+  GeneratorRange generator_;
+  IndicesRange indices_;
+  size_t totalSize_;
+
+ public:
+  using value_type = ql::ranges::range_value_t<GeneratorRange>;
+
+  SparseGeneratorRange(GeneratorRange generator, IndicesRange indices,
+                       size_t totalSize)
+      : generator_{std::move(generator)},
+        indices_{std::move(indices)},
+        totalSize_{totalSize} {}
+
+  class iterator {
+   private:
+    using GenRange = GeneratorRange;
+    using IdxRange = IndicesRange;
+
+    GenRange* generator_ = nullptr;
+    IdxRange* indices_ = nullptr;
+    ql::ranges::iterator_t<GenRange> genIt_{};
+    ql::ranges::sentinel_t<GenRange> genEnd_{};
+    ql::ranges::iterator_t<IdxRange> idxIt_{};
+    ql::ranges::sentinel_t<IdxRange> idxEnd_{};
+    size_t currentIndex_ = 0;
+    size_t totalSize_ = 0;
+
+    void skipToCurrentTarget() {
+      if (!generator_ || !indices_ || idxIt_ == idxEnd_) {
+        return;
+      }
+      auto target = *idxIt_;
+      AD_CONTRACT_CHECK(target < totalSize_);
+      while (currentIndex_ < target && genIt_ != genEnd_) {
+        ++genIt_;
+        ++currentIndex_;
+      }
+    }
+
+   public:
+    using iterator_category = std::input_iterator_tag;
+    using value_type = ql::ranges::range_value_t<GenRange>;
+    using difference_type = std::ptrdiff_t;
+    using reference = decltype(*genIt_);
+
+    iterator() = default;
+
+    iterator(GenRange* generator, IdxRange* indices, size_t totalSize)
+        : generator_{generator},
+          indices_{indices},
+          currentIndex_{0},
+          totalSize_{totalSize} {
+      if (generator_ && indices_) {
+        genIt_ = ql::ranges::begin(*generator_);
+        genEnd_ = ql::ranges::end(*generator_);
+        idxIt_ = ql::ranges::begin(*indices_);
+        idxEnd_ = ql::ranges::end(*indices_);
+        skipToCurrentTarget();
+      }
+    }
+
+    reference operator*() const { return *genIt_; }
+
+    iterator& operator++() {
+      if (!generator_ || idxIt_ == idxEnd_) {
+        return *this;
+      }
+      ++idxIt_;
+      if (idxIt_ == idxEnd_) {
+        return *this;
+      }
+      auto nextTarget = *idxIt_;
+      AD_CONTRACT_CHECK(nextTarget >= currentIndex_);
+      AD_CONTRACT_CHECK(nextTarget < totalSize_);
+      while (currentIndex_ < nextTarget && genIt_ != genEnd_) {
+        ++genIt_;
+        ++currentIndex_;
+      }
+      return *this;
+    }
+
+    void operator++(int) { (void)++(*this); }
+
+    friend bool operator==(const iterator& it, std::default_sentinel_t) {
+      return !it.generator_ || it.genIt_ == it.genEnd_ ||
+             it.idxIt_ == it.idxEnd_;
+    }
+
+    friend bool operator!=(const iterator& it, std::default_sentinel_t s) {
+      return !(it == s);
+    }
+  };
+
+  iterator begin() { return iterator{&generator_, &indices_, totalSize_}; }
+
+  std::default_sentinel_t end() { return {}; }
+};
+
+/// Return a generator that yields values only for the rows whose indices are
+/// contained in `indices`. The indices must be sorted in ascending order and
+/// must be strictly smaller than `numItems`.
+///
+/// Note on efficiency:
+/// * In C++17 the underlying `makeGenerator` implementation is based on
+///   range-v3 views. The heavy work of a transformation typically happens in
+///   `operator*` of the view. `SparseGeneratorRange` advances the underlying
+///   iterator with `operator++` without dereferencing it for skipped rows, so
+///   the transformation is never executed for those rows. This really avoids
+///   evaluation work for indices that are not in `indices`.
+/// * In C++20 the underlying `makeGenerator` implementation is usually a
+///   coroutine. For coroutine generators the work is performed when
+///   `operator++` is called (the coroutine is resumed), not when
+///   `operator*` is called. This means that, even though
+///   `SparseGeneratorRange` still only exposes the selected rows, the
+///   coroutine body may already have computed values for skipped rows.
+///   Consequently, the sparse wrapper mainly reduces the number of values we
+///   materialize/forward, but it cannot skip the cost of evaluating all rows in
+///   C++20.
+CPP_template(typename Input, typename Indices,
+             typename Transformation = ql::identity)(
+    requires SingleExpressionResult<Input> CPP_and ql::ranges::input_range<
+        Indices>
+        CPP_and ql::concepts::same_as<
+            ql::ranges::range_value_t<Indices>,
+            size_t>) auto makeGeneratorSparse(Input&& input, size_t numItems,
+                                              const EvaluationContext* context,
+                                              Indices indices,
+                                              Transformation transformation =
+                                                  {}) {
+  auto denseGenerator = makeGenerator(AD_FWD(input), numItems, context,
+                                      std::move(transformation));
+
+  using GeneratorRange = decltype(denseGenerator);
+  using IndicesRange = std::decay_t<Indices>;
+  SparseGeneratorRange<GeneratorRange, IndicesRange> sparseRange{
+      std::move(denseGenerator), std::move(indices), numItems};
+
+#ifndef QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17
+  // In C++20 the underlying generator is typically a coroutine, which is
+  // already type erased by the language. We therefore return the
+  // `SparseGeneratorRange` directly without adding another layer of
+  // type erasure.
+  return sparseRange;
+#else
+  // In C++17 the implementation is based on range-v3 views, which are
+  // heavily templated. We wrap the sparse range in `InputRangeTypeErased`
+  // to keep compile times and binary size manageable.
+  using V = ql::ranges::range_value_t<
+      SparseGeneratorRange<GeneratorRange, IndicesRange>>;
+  return ad_utility::InputRangeTypeErased<V>(std::move(sparseRange));
+#endif
 }
 
 /// Generate `numItems` many values from the `input` and apply the

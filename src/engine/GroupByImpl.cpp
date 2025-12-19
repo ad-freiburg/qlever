@@ -1716,10 +1716,6 @@ constexpr auto GroupByImpl::makeProcessGroupsVisitor(
       typename T, typename A)(T && singleResult, A & aggregationDataVector)(
       requires sparqlExpression::SingleExpressionResult<T> &&
       VectorOfAggregationData<A>) {
-    // Create pairs of [value, rowIndex] from generator
-    auto generator = sparqlExpression::detail::makeGenerator(
-        std::forward<T>(singleResult), blockSize, evaluationContext);
-
     const auto& matches = groupLookupResult.matchedRowsToGroups_;
     // Ensure matches are sorted by rowIndex, as we will iterate
     // through the generator in ascending order of rowIndex
@@ -1727,20 +1723,27 @@ constexpr auto GroupByImpl::makeProcessGroupsVisitor(
         ql::ranges::is_sorted(matches.begin(), matches.end(), {},
                               &GroupLookupResult::RowToGroup::rowIndex_));
 
-    // Process each matching row
-    // TODO<Benke> Potentially a waste of resources!
-    //   The code evaluates the sub-expressions for the non-matching rows
-    //   twice, because here they are evaluated then discarded, and later on
-    //   they are evaluated again from the materialized and sorted result.
+    if (matches.empty()) {
+      return;
+    }
+
+    // Create a generator that only yields values for the matching row
+    // indices, skipping evaluation for non-matching rows where possible.
+    auto indices = matches | ql::views::transform(
+                                 [](const GroupLookupResult::RowToGroup& r) {
+                                   return r.rowIndex_;
+                                 });
+
+    auto generator = sparqlExpression::detail::makeGeneratorSparse(
+        std::forward<T>(singleResult), blockSize, evaluationContext,
+        std::move(indices));
+
     auto matchIt = matches.begin();
-    size_t currentRow = 0;
     for (const auto& value : generator) {
-      if (matchIt != matches.end() && currentRow == matchIt->rowIndex_) {
-        aggregationDataVector.at(matchIt->groupIndex_)
-            .addValue(value, evaluationContext);
-        ++matchIt;
-      }
-      ++currentRow;
+      AD_CORRECTNESS_CHECK(matchIt != matches.end());
+      aggregationDataVector.at(matchIt->groupIndex_)
+          .addValue(value, evaluationContext);
+      ++matchIt;
     }
   };
 }
