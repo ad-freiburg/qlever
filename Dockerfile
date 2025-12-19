@@ -30,11 +30,11 @@ COPY CMakeLists.txt /qlever/
 COPY CompilationInfo.cmake /qlever/
 
 # Build and compile. By default, also compile and run all tests. In order not
-# to, build the image with `--build-arg RUN_TESTS=false`.
+# to, build the image with `--build-arg RUN_TESTS=false`. Explicitly set
+# `ARCH_FLAGS` depending on the architecture we are building for, for reasons
+# explained in https://github.com/ad-freiburg/qlever/issues/2595 .
 ARG RUN_TESTS=true
 WORKDIR /qlever/build/
-# Handle `TARGETARCH` explicitly so that the generated binaries are work across
-# all CPUs of the given architecture.
 ARG TARGETARCH
 RUN case "${TARGETARCH}" in \
         "arm64") ARCH_FLAGS="-march=armv8-a" ;; \
