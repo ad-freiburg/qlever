@@ -119,8 +119,8 @@ std::optional<std::string> StringValueGetter::operator()(
 std::optional<ad_utility::triple_component::Literal>
 LiteralValueGetterWithStrFunction::operator()(
     Id id, const EvaluationContext* context) const {
-  return ExportQueryExecutionTrees::idToLiteral(context->_qec.getIndex(), id,
-                                                context->_localVocab);
+  return ExportQueryExecutionTrees::idToLiteral(
+      context->_qec.getIndex().getImpl(), id, context->_localVocab);
 }
 
 // ____________________________________________________________________________
@@ -134,8 +134,8 @@ LiteralValueGetterWithStrFunction::operator()(const LiteralOrIri& s,
 std::optional<ad_utility::triple_component::Literal>
 LiteralValueGetterWithoutStrFunction::operator()(
     Id id, const EvaluationContext* context) const {
-  return ExportQueryExecutionTrees::idToLiteral(context->_qec.getIndex(), id,
-                                                context->_localVocab, true);
+  return ExportQueryExecutionTrees::idToLiteral(
+      context->_qec.getIndex().getImpl(), id, context->_localVocab, true);
 }
 
 // ____________________________________________________________________________
@@ -317,9 +317,10 @@ OptIri DatatypeValueGetter::operator()(ValueId id,
     case EncodedVal:
     case LocalVocabIndex:
     case VocabIndex:
-      return (*this)(ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
-                         context->_qec.getIndex(), id, context->_localVocab),
-                     context);
+      return (*this)(
+          ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
+              context->_qec.getIndex().getImpl(), id, context->_localVocab),
+          context);
     case Undefined:
     case BlankNodeIndex:
     case TextRecordIndex:
@@ -367,7 +368,8 @@ UnitOfMeasurement UnitOfMeasurementValueGetter::operator()(
       id, [&context](const ValueId& value) -> UnitOfMeasurement {
         // Get string content of ValueId
         auto str = ExportQueryExecutionTrees::idToLiteralOrIri(
-            context->_qec.getIndex(), value, context->_localVocab, true);
+            context->_qec.getIndex().getImpl(), value, context->_localVocab,
+            true);
         // Use LiteralOrIri overload for actual computation
         if (str.has_value()) {
           return UnitOfMeasurementValueGetter{}(str.value(), context);
@@ -407,7 +409,7 @@ std::optional<ad_utility::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
     case VocabIndex:
     case LocalVocabIndex: {
       auto lit = ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
-          context->_qec.getIndex(), id, context->_localVocab);
+          context->_qec.getIndex().getImpl(), id, context->_localVocab);
       return GeoPointOrWktValueGetter{}(lit, context);
     }
     case Bool:
@@ -448,7 +450,7 @@ CPP_template(typename T, typename ValueGetter)(
     case VocabIndex:
       return valueGetter(
           ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
-              context->_qec.getIndex(), id, context->_localVocab),
+              context->_qec.getIndex().getImpl(), id, context->_localVocab),
           context);
     case TextRecordIndex:
     case WordVocabIndex:
@@ -543,7 +545,7 @@ CPP_template_out_def(typename RequestedInfo)(
         // No precomputed geometry info available: we have to fetch and parse
         // the string.
         auto lit = ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
-            context->_qec.getIndex(), id, context->_localVocab);
+            context->_qec.getIndex().getImpl(), id, context->_localVocab);
         return GeometryInfoValueGetter{}(lit, context);
       }
     }
