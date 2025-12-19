@@ -272,9 +272,6 @@ class Index {
   IndexImpl& getImpl() { return *pimpl_; }
   [[nodiscard]] const IndexImpl& getImpl() const { return *pimpl_; }
 
-  // Allow implicit conversions to `IndexImpl&`.
-  operator IndexImpl&() { return getImpl(); }
-
   // Allow implicit conversions to `const IndexImpl&`.
   operator const IndexImpl&() const { return getImpl(); }
 };
