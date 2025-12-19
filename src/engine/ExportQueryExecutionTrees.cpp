@@ -700,6 +700,13 @@ ExportQueryExecutionTrees::getLiteralOrNullopt(
 // _____________________________________________________________________________
 std::optional<LiteralOrIri>
 ExportQueryExecutionTrees::idToLiteralOrIriForEncodedValue(Id id) {
+  // TODO<RobinTF> This returns a `nullptr` for the datatype when the `id`
+  // represents a `BlankNode` or an `EncodedVal`. The latter case is typically
+  // no problem, because the only caller of this function already properly
+  // handles this case. The former case is also fine, because `BlankNode`s are
+  // neither IRIs nor literals, so returning `std::nullopt` is the correct
+  // behavior. However, this is somewhat fragile and should be kept in mind if
+  // this function is used in other contexts.
   auto [literal, type] = idToStringAndTypeForEncodedValue(id).value_or(
       std::make_pair(std::string{}, nullptr));
   if (type == nullptr) {
