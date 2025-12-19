@@ -263,16 +263,18 @@ Result HasPredicateScan::computeResult([[maybe_unused]] bool requestLaziness) {
   auto scan = makePatternScan(getExecutionContext(),
                               TripleComponent{Variable{"?s"}}, Variable{"?o"});
   auto result = scan->getResult(true);
-  auto hasPattern =
-      result->isFullyMaterialized()
-          ? ad_utility::InputRangeTypeErased{::ranges::span{&result->idTable(),
-                                                            1}}
-          : ad_utility::InputRangeTypeErased{
-                ad_utility::OwningView{result->idTables()} |
-                ql::views::transform(
-                    [](Result::IdTableVocabPair& pair) -> const auto& {
-                      return pair.idTable_;
-                    })};
+  auto runOnResult = [&result](auto callback) {
+    if (result->isFullyMaterialized()) {
+      return std::invoke(callback, ql::span{&result->idTable(), 1});
+    }
+    auto idTables = result->idTables();
+    return std::invoke(
+        callback,
+        idTables | ql::views::transform(
+                       [](Result::IdTableVocabPair& pair) -> const auto& {
+                         return pair.idTable_;
+                       }));
+  };
 
   auto getId = [this](const TripleComponent tc) {
     std::optional<Id> id =
@@ -285,18 +287,20 @@ Result HasPredicateScan::computeResult([[maybe_unused]] bool requestLaziness) {
   };
   switch (type_) {
     case ScanType::FREE_S: {
-      HasPredicateScan::computeFreeS(&idTable, getId(object_), hasPattern,
-                                     patterns);
+      runOnResult([this, &idTable, &getId, &patterns](auto hasPattern) {
+        computeFreeS(&idTable, getId(object_), hasPattern, patterns);
+      });
       return {std::move(idTable), resultSortedOn(), LocalVocab{}};
     };
     case ScanType::FREE_O: {
-      HasPredicateScan::computeFreeO(&idTable, subject_, patterns);
+      computeFreeO(&idTable, subject_, patterns);
       return {std::move(idTable), resultSortedOn(), LocalVocab{}};
     };
     case ScanType::FULL_SCAN:
-      HasPredicateScan::computeFullScan(
-          &idTable, hasPattern, patterns,
-          getIndex().getNumDistinctSubjectPredicatePairs());
+      runOnResult([this, &idTable, &patterns](auto hasPattern) {
+        computeFullScan(&idTable, hasPattern, patterns,
+                        getIndex().getNumDistinctSubjectPredicatePairs());
+      });
       return {std::move(idTable), resultSortedOn(), LocalVocab{}};
     case ScanType::SUBQUERY_S:
 
