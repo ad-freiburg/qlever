@@ -453,6 +453,8 @@ addLinkAndDiscoverTest(BlankNodeManagerTest)
 
 addLinkAndDiscoverTest(SparqlExpressionGeneratorsTest engine)
 
+addLinkAndDiscoverTest(SparqlExpressionGeneratorSparseTest engine)
+
 addLinkAndDiscoverTest(UrlParserTest)
 
 addLinkAndDiscoverTest(ServerTest engine server)

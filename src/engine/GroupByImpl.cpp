@@ -24,6 +24,7 @@
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "engine/sparqlExpressions/SparqlExpressionGeneratorSparse.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "global/RuntimeParameters.h"
@@ -1417,15 +1418,12 @@ GroupByImpl::HashMapAggregationData<NUM_GROUP_COLUMNS>::getHashEntries(
   matchedRows.reserve(numberOfEntries);
   groupIndexes.reserve(numberOfEntries);
 
-  auto getGroupIndexForRow = [this, onlyUsePreexistingGroups, &nonMatchingRows](
-                                 auto key,
-                                 size_t rowIndex) -> std::optional<size_t> {
+  auto getGroupIndexForRow = [this, onlyUsePreexistingGroups](
+                                 auto key) -> std::optional<size_t> {
     if (onlyUsePreexistingGroups) {
       auto it = map_.find(key);
       if (it == map_.end()) {
-        // Key not found: remember row as non-matching (would create new
-        // group in the non-restricted variant).
-        nonMatchingRows.push_back(rowIndex);
+        // Key not found and we do not create a new group.
         return std::nullopt;
       }
       // `it` has the form (key, value) where value is the group index.
@@ -1441,10 +1439,17 @@ GroupByImpl::HashMapAggregationData<NUM_GROUP_COLUMNS>::getHashEntries(
   //       the data into a row-wise format before passing it?
   for (size_t i = 0; i < numberOfEntries; ++i) {
     auto key = makeKeyForHashMap(groupByCols, i);
-    auto groupIndex = getGroupIndexForRow(std::move(key), i);
+    auto groupIndex = getGroupIndexForRow(std::move(key));
+
+    // If the key is already in the map or we just created a new group for it,
+    // we store the row index as matching along with the group index.
+    // Otherwise (if we did not find the key and are not allowed to create a new
+    // group), we store the row index as non-matching.
     if (groupIndex.has_value()) {
       matchedRows.push_back(i);
-      groupIndexes.push_back(*groupIndex);
+      groupIndexes.push_back(groupIndex.value());
+    } else {
+      nonMatchingRows.push_back(i);
     }
   }
 
