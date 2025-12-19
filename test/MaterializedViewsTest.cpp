@@ -34,7 +34,7 @@ using V = Variable;
 
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, Basic) {
-  // Write a simple view
+  // Write a simple view.
   clearLog();
   qlv().writeMaterializedView("testView1", simpleWriteQuery_);
   EXPECT_THAT(log_.str(), ::testing::HasSubstr(
@@ -43,7 +43,7 @@ TEST_F(MaterializedViewsTest, Basic) {
   EXPECT_THAT(log_.str(), ::testing::HasSubstr(
                               "Loading materialized view testView1 from disk"));
 
-  // Test index scan on materialized view
+  // Test index scan on materialized view.
   std::vector<std::string> equivalentQueries{
       R"(
       PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
@@ -60,7 +60,7 @@ TEST_F(MaterializedViewsTest, Basic) {
         }
       }
     )",
-      // Regression test (subquery)
+      // Regression test (subquery).
       R"(
       PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
       SELECT * {
@@ -76,12 +76,6 @@ TEST_F(MaterializedViewsTest, Basic) {
 
     EXPECT_THAT(qet->getRootOperation()->getCacheKey(),
                 ::testing::HasSubstr("testView1"));
-
-    // TODO<ullingerc> Add permutation name to index scan runtime info again.
-    // const auto& rtDetails =
-    //     qet->getRootOperation()->getRuntimeInfoPointer()->details_;
-    // ASSERT_TRUE(rtDetails.contains("scan-on-materialized-view"));
-    // EXPECT_EQ(rtDetails["scan-on-materialized-view"], "testView1");
 
     EXPECT_EQ(res->idTable().numRows(), 4);
     auto col = qet->getVariableColumn(Variable{"?x"});
@@ -309,7 +303,7 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
 
   // Test that the names and ordering of the columns in a newly written view
   // matches the names (including aliases) and ordering requested by the
-  // `SELECT` statement
+  // `SELECT` statement.
   {
     const std::string reorderedQuery =
         "SELECT ?p ?o (?s AS ?x) ?g { ?s ?p ?o . BIND(3 AS ?g) }";
@@ -325,7 +319,7 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
   }
 
   // Test that presorted results are not sorted again and that the presorting
-  // check considers the correct columns
+  // check considers the correct columns.
   {
     clearLog();
     const std::string presortedQuery =
@@ -398,7 +392,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
   const V placeholderP{"?_ql_materialized_view_p"};
   const V placeholderO{"?_ql_materialized_view_o"};
 
-  // Request for reading an extra payload column
+  // Request for reading an extra payload column.
   {
     ViewQuery query{SparqlTriple{
         V{"?s"},
@@ -428,7 +422,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
   }
 
   // Request for reading a payload column from the first three columns of the
-  // view
+  // view.
   {
     ViewQuery query{SparqlTriple{
         V{"?s"},
@@ -443,7 +437,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
                 ::testing::UnorderedElementsAreArray(expectedVars));
   }
 
-  // Request for reading from a view with a fixed value for the scan column
+  // Request for reading from a view with a fixed value for the scan column.
   {
     ViewQuery query{SparqlTriple{
         iri("<s1>"),
@@ -457,7 +451,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
                 ::testing::UnorderedElementsAreArray(expectedVars));
   }
 
-  // Test that we can write a view from a fully materialized result
+  // Test that we can write a view from a fully materialized result.
   {
     auto plan = qlv().parseAndPlanQuery(
         "SELECT * { BIND(1 AS ?s) BIND(2 AS ?p) BIND(3 AS ?o) BIND(4 AS ?g) }");
@@ -467,7 +461,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
     MaterializedViewWriter::writeViewToDisk(testIndexBase_, "testView4", plan);
   }
 
-  // Invalid inputs
+  // Invalid inputs.
   {
     AD_EXPECT_THROW_WITH_MESSAGE(
         ViewQuery(iri("<https://qlever.cs.uni-freiburg.de/materializedView/>")),
@@ -534,9 +528,9 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, serverIntegration) {
   // Write a new materialized view using the `writeMaterializedView` method of
-  // the `Server` class
+  // the `Server` class.
   {
-    // Initialize but do not start a `Server` instance on our test index
+    // Initialize but do not start a `Server` instance on our test index.
     Server server{4321, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
     server.initialize(testIndexBase_, false);
 
@@ -550,7 +544,7 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
                                  cancellationHandle, timeLimit);
   }
 
-  // Try loading the new view
+  // Try loading the new view.
   {
     qlv().loadMaterializedView("testViewFromServer");
     auto [qet, qec, parsed] = qlv().parseAndPlanQuery(
@@ -576,12 +570,12 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
     std::future<ResT> fut = co_spawn(
         io,
         [](auto request, auto indexName) -> boost::asio::awaitable<ResT> {
-          // Initialize but do not start a `Server` instance on our test index
+          // Initialize but do not start a `Server` instance on our test index.
           Server server{4321, 1, ad_utility::MemorySize::megabytes(1),
                         "accessToken"};
           server.initialize(indexName, false);
 
-          // Simulate receiving the HTTP request
+          // Simulate receiving the HTTP request.
           auto result =
               co_await server
                   .template onlyForTestingProcess<decltype(request), ResT>(
@@ -606,13 +600,13 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
         "application/sparql-query", simpleWriteQuery_);
     auto response = simulateHttpRequest(request);
 
-    // Check HTTP response
+    // Check HTTP response.
     ASSERT_TRUE(response.has_value());
     ASSERT_TRUE(response.value().contains("materialized-view-written"));
     EXPECT_EQ(response.value()["materialized-view-written"],
               "testViewFromHTTP");
 
-    // Check correct logging
+    // Check correct logging.
     EXPECT_THAT(log_.str(),
                 ::testing::HasSubstr(
                     "Materialized view testViewFromHTTP written to disk"));
@@ -628,13 +622,13 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
         "20AS%20%3Fg)%20%7D");
     auto response = simulateHttpRequest(request);
 
-    // Check HTTP response
+    // Check HTTP response.
     ASSERT_TRUE(response.has_value());
     ASSERT_TRUE(response.value().contains("materialized-view-written"));
     EXPECT_EQ(response.value()["materialized-view-written"],
               "testViewFromHTTP2");
 
-    // Check correct logging
+    // Check correct logging.
     EXPECT_THAT(log_.str(),
                 ::testing::HasSubstr(
                     "Materialized view testViewFromHTTP2 written to disk"));
@@ -648,19 +642,19 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
         "&access-token=accessToken");
     auto response = simulateHttpRequest(request);
 
-    // Check HTTP response
+    // Check HTTP response.
     ASSERT_TRUE(response.has_value());
     ASSERT_TRUE(response.value().contains("materialized-view-loaded"));
     EXPECT_EQ(response.value()["materialized-view-loaded"],
               "testViewFromHTTP2");
 
-    // Check correct logging
+    // Check correct logging.
     EXPECT_THAT(log_.str(),
                 ::testing::HasSubstr(
                     "Loading materialized view testViewFromHTTP2 from disk"));
   }
 
-  // Test error message for wrong query type
+  // Test error message for wrong query type.
   {
     auto request = makePostRequest(
         "/?cmd=write-materialized-view&view-name=testViewFromHTTP3&"
@@ -672,7 +666,7 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
             "Action 'write-materialized-view' requires a 'SELECT' query"));
   }
 
-  // Test access token check
+  // Test access token check.
   {
     auto request = makePostRequest(
         "/?cmd=write-materialized-view&view-name=testViewFromHTTP3",
@@ -683,7 +677,7 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
                              "token but no access token was provided"));
   }
 
-  // Test check for name of the view (missing)
+  // Test check for name of the view (missing).
   {
     auto request = makePostRequest(
         "/?cmd=write-materialized-view&access-token=accessToken",
@@ -695,7 +689,7 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
             "via the 'view-name' parameter"));
   }
 
-  // Test check for name of the view (empty)
+  // Test check for name of the view (empty).
   {
     auto request = makePostRequest(
         "/?cmd=write-materialized-view&view-name=&access-token=accessToken",
@@ -709,7 +703,7 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTestLarge, LazyScan) {
   // Write a simple view, inflated 10x using cartesian product with a values
-  // clause
+  // clause.
   auto writePlan = qlv().parseAndPlanQuery(
       "SELECT * { ?s ?p ?o ."
       " VALUES ?g { 1 2 3 4 5 6 7 8 9 10 } }");
@@ -719,7 +713,7 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
   auto view = manager.getView("testView1");
   using ViewQuery = parsedQuery::MaterializedViewQuery;
 
-  // Run a simple query and consume its result lazily
+  // Run a simple query and consume its result lazily.
   {
     ViewQuery query{SparqlTriple{Variable{"?s"},
                                  ad_utility::triple_component::Iri::fromIriref(
@@ -746,14 +740,9 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
                 << " block(s)" << std::endl;
 
     EXPECT_THAT(scan->getCacheKey(), ::testing::HasSubstr("testView1"));
-    // TODO<ullingerc> Runtime info.
-    // const auto& rtDetails =
-    //     qet->getRootOperation()->getRuntimeInfoPointer()->details_;
-    // ASSERT_TRUE(rtDetails.contains("scan-on-materialized-view"));
-    // EXPECT_EQ(rtDetails["scan-on-materialized-view"], "testView1");
   }
 
-  // Regression test for `COUNT(*)`
+  // Regression test for `COUNT(*)`.
   {
     auto [qet, qec, parsed] = qlv().parseAndPlanQuery(
         "SELECT (COUNT(*) AS ?cnt) { ?s "
