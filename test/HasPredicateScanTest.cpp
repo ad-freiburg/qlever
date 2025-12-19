@@ -14,6 +14,7 @@
 #include "engine/CountAvailablePredicates.h"
 #include "engine/HasPredicateScan.h"
 #include "engine/IndexScan.h"
+#include "engine/PermutationSelector.h"
 #include "engine/ValuesForTesting.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
@@ -235,7 +236,10 @@ TEST_F(HasPredicateScanTest, patternTrickAllEntities) {
   auto triple =
       SparqlTripleSimple{V{"?x"}, iri(HAS_PATTERN_PREDICATE), V{"?predicate"}};
   auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
-      qec, Permutation::Enum::PSO, triple);
+      qec,
+      qlever::getPermutationForTriple(Permutation::Enum::PSO, qec->getIndex(),
+                                      triple),
+      qec->sharedLocatedTriplesSnapshot(), triple);
   auto patternTrick =
       CountAvailablePredicates(qec, indexScan, 0, V{"?predicate"}, V{"?count"});
 

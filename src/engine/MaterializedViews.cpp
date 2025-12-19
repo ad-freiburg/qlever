@@ -331,14 +331,7 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
   }
 
   // Read permutation
-  permutation_->loadFromDisk(
-      filename,
-      [](Id) {
-        // Materialized views do not have an internal permutation. Therefore
-        // this always returns `false`.
-        return false;
-      },
-      false);
+  permutation_->loadFromDisk(filename, false);
   AD_CORRECTNESS_CHECK(permutation_->isLoaded());
 }
 

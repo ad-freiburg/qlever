@@ -118,6 +118,10 @@ class HasPredicateScan : public Operation {
   Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;
+
+  // Return the permutation this class uses. This is always an internal `PSO`
+  // permutation.
+  const Permutation& permutation() const;
 };
 
 #endif  // QLEVER_SRC_ENGINE_HASPREDICATESCAN_H
