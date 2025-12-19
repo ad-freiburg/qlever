@@ -380,7 +380,10 @@ class GroupByImpl : public Operation {
     // `matchedRows_` stores the row index in the current block and
     // `groupIndexes_` stores the corresponding group index in the hash map.
     // Both vectors always have the same size and form a parallel mapping
-    // (matchedRows_[i] -> groupIndexes_[i]).
+    // (matchedRows_[i] -> groupIndexes_[i]). It is more efficient to store two
+    // parallel vectors instead of a single
+    // `std::vector<std::pair<size_t, size_t>>` because these two vectors are
+    // processed separately later in `makeProcessGroupsVisitor`.
     std::vector<size_t> matchedRows_;
     std::vector<size_t> groupIndexes_;
     // Indices of input rows for which no existing group was found.
@@ -774,8 +777,8 @@ class GroupByImpl : public Operation {
    * up to `blocksEnd` and returns the final `Result` consisting of the
    * hash-map entries and the grouped fallback rows.
    */
-  CPP_template_def(size_t NUM_GROUP_COLUMNS, typename BlockIterator,
-                   typename BlocksEnd)(
+  CPP_template(size_t NUM_GROUP_COLUMNS, typename BlockIterator,
+               typename BlocksEnd)(
       requires ql::concepts::input_iterator<BlockIterator>&&
           ql::concepts::sentinel_for<BlocksEnd, BlockIterator>) Result
       handleRemainderUsingHybridApproach(

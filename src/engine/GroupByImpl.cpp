@@ -1417,30 +1417,35 @@ GroupByImpl::HashMapAggregationData<NUM_GROUP_COLUMNS>::getHashEntries(
   matchedRows.reserve(numberOfEntries);
   groupIndexes.reserve(numberOfEntries);
 
+  auto getGroupIndexForRow = [this, onlyUsePreexistingGroups, &nonMatchingRows](
+                                 auto key,
+                                 size_t rowIndex) -> std::optional<size_t> {
+    if (onlyUsePreexistingGroups) {
+      auto it = map_.find(key);
+      if (it == map_.end()) {
+        // Key not found: remember row as non-matching (would create new
+        // group in the non-restricted variant).
+        nonMatchingRows.push_back(rowIndex);
+        return std::nullopt;
+      }
+      // `it` has the form (key, value) where value is the group index.
+      return it->second;
+    }
+
+    auto [it, wasAdded] = map_.try_emplace(std::move(key), numGroups());
+    return it->second;
+  };
+
   // TODO: We pass the `Id`s column-wise into this function, and then handle
   //       them row-wise. Is there any advantage to this, or should we transform
   //       the data into a row-wise format before passing it?
   for (size_t i = 0; i < numberOfEntries; ++i) {
     auto key = makeKeyForHashMap(groupByCols, i);
-    size_t groupIndex;
-
-    if (onlyUsePreexistingGroups) {
-      auto it = map_.find(key);
-      if (it == map_.end()) {
-        // Key not found: remember row as non-matching (would create new group).
-        nonMatchingRows.push_back(i);
-        continue;
-      } else {
-        // `it` has the form (key, value) where value is the group index
-        groupIndex = it->second;
-      }
-    } else {
-      auto [it, wasAdded] = map_.try_emplace(std::move(key), numGroups());
-      groupIndex = it->second;
+    auto groupIndex = getGroupIndexForRow(std::move(key), i);
+    if (groupIndex.has_value()) {
+      matchedRows.push_back(i);
+      groupIndexes.push_back(*groupIndex);
     }
-
-    matchedRows.push_back(i);
-    groupIndexes.push_back(groupIndex);
   }
 
   // CPP_template_lambda(capture)(typenames...)(arg)(requires ...)`
@@ -1738,11 +1743,9 @@ constexpr auto GroupByImpl::makeProcessGroupsVisitor(
         std::forward<T>(singleResult), blockSize, evaluationContext,
         std::move(indices));
 
-    auto groupIt = groupIndexes.begin();
-    for (const auto& value : generator) {
-      AD_CORRECTNESS_CHECK(groupIt != groupIndexes.end());
-      aggregationDataVector.at(*groupIt).addValue(value, evaluationContext);
-      ++groupIt;
+    for (const auto& [value, groupIndex] :
+         ::ranges::views::zip(generator, groupIndexes)) {
+      aggregationDataVector.at(groupIndex).addValue(value, evaluationContext);
     }
   };
 }
