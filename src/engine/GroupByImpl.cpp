@@ -1418,8 +1418,8 @@ GroupByImpl::HashMapAggregationData<NUM_GROUP_COLUMNS>::getHashEntries(
   matchedRows.reserve(numberOfEntries);
   groupIndexes.reserve(numberOfEntries);
 
-  auto getGroupIndexForRow = [this, onlyUsePreexistingGroups](
-                                 auto key) -> std::optional<size_t> {
+  auto getGroupIndexForRow =
+      [this, onlyUsePreexistingGroups](auto key) -> std::optional<size_t> {
     if (onlyUsePreexistingGroups) {
       auto it = map_.find(key);
       if (it == map_.end()) {

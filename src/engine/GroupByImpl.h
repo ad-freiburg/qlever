@@ -345,7 +345,7 @@ class GroupByImpl : public Operation {
     // > `localVocabRef` is a non-owning reference to the LocalVocab used during
     // hash-map processing. It's initialized in
     // `computeGroupByForHashMapOptimization`.
-    std::optional<std::vector<size_t>> columnIndices_;
+    std::optional<std::vector<ColumnIndex>> columnIndices_;
     std::optional<std::vector<Aggregate>> aggregates_;
     boost::optional<LocalVocab&> localVocabRef_;
 
@@ -355,13 +355,14 @@ class GroupByImpl : public Operation {
     explicit HashMapOptimizationData(
         std::vector<HashMapAliasInformation> aliases)
         : aggregateAliases_(std::move(aliases)) {}
-    // Build with aliases, columns, and aggregates
+    // Build with aliases, columns, and aggregates. The column indices are
+    // stored as `ColumnIndex` to match the rest of the engine API.
     HashMapOptimizationData(std::vector<HashMapAliasInformation> aliases,
                             std::vector<size_t> cols,
                             std::vector<Aggregate> aggs)
-        : aggregateAliases_(std::move(aliases)),
-          columnIndices_(std::move(cols)),
-          aggregates_(std::move(aggs)) {}
+        : aggregateAliases_(std::move(aliases)), aggregates_(std::move(aggs)) {
+      columnIndices_ = std::vector<ColumnIndex>(cols.begin(), cols.end());
+    }
   };
 
   // Create result IdTable by using a HashMap mapping groups to aggregation data
