@@ -141,9 +141,10 @@ static ParameterFunc makeConstantParameterFunc(size_t value) {
   };
 }
 
+template <typename GroupFuncT>
 std::vector<IdTable> makeBlocks(size_t numRows, size_t blockSize,
                                 size_t numGroups, QueryExecutionContext* qec,
-                                const GroupFunc& groupFunc) {
+                                const GroupFuncT& groupFunc) {
   std::vector<IdTable> blocks;
   blocks.reserve((numRows + blockSize - 1) / blockSize);
   ad_utility::SlowRandomIntGenerator<int64_t> gen{0, 1000};
@@ -166,9 +167,10 @@ std::vector<IdTable> makeBlocks(size_t numRows, size_t blockSize,
   return blocks;
 }
 
+template <typename GroupFuncT>
 std::shared_ptr<QueryExecutionTree> buildSortedSubtree(
     bool useBlocks, size_t numRows, size_t blockSize, size_t numGroups,
-    QueryExecutionContext* qec, const GroupFunc& groupFunc) {
+    QueryExecutionContext* qec, const GroupFuncT& groupFunc) {
   std::vector<std::optional<Variable>> vars = {Variable{"?a"}, Variable{"?b"}};
   std::shared_ptr<QueryExecutionTree> valuesTree;
   if (useBlocks) {
@@ -228,7 +230,8 @@ struct BenchmarkConfig {
   size_t blockSize;
 };
 
-static std::vector<size_t> sampleParameterValues(const ParameterFunc& func) {
+template <typename ParameterFuncT>
+static std::vector<size_t> sampleParameterValues(const ParameterFuncT& func) {
   std::vector<size_t> values;
   size_t idx = 0;
   while (true) {
@@ -254,7 +257,6 @@ static std::vector<size_t> computeThresholds(const Scenario& scenario,
     return {std::numeric_limits<size_t>::max()};
   }
   return sampleParameterValues(scenario.thresholdFunc_);
-  std::vector<size_t> thresholds;
 }
 
 static size_t computeBlockSize(const Scenario& scenario, size_t numRows) {
@@ -287,6 +289,55 @@ class HybridGroupByBenchmark : public BenchmarkInterface {
     return "Hybrid fallback for GROUP BY";
   }
 
+ private:
+  Strategy currentStrategy_{};
+  BenchmarkConfig currentConfig_{};
+  Scenario currentScenario_{{}, {}, {}, {}, makeModuloGrouping()};
+  QueryExecutionContext* currentQec_ = nullptr;
+
+  std::unordered_map<std::string, std::string> runSingleMeasurement() const {
+    auto sortedTree =
+        buildSortedSubtree(currentStrategy_.useBlocks_, currentConfig_.numRows,
+                           currentConfig_.blockSize, currentConfig_.numGroups,
+                           currentQec_, currentScenario_.groupFunc_);
+    return runGroupByCount(currentQec_, sortedTree);
+  }
+
+  void runBenchmarkForCurrentConfig(BenchmarkResults& results) {
+    setRuntimeParameter<&RuntimeParameters::groupByHashMapGroupThreshold_>(
+        currentConfig_.threshold);
+    const std::string subName =
+        absl::StrCat(currentStrategy_.name_, "|rows=", currentConfig_.numRows,
+                     "|block=", currentConfig_.blockSize,
+                     "|thresh=", currentConfig_.threshold,
+                     "|groups=", currentConfig_.numGroups);
+    auto& group = results.addGroup(subName);
+    group.metadata().addKeyValuePair("ParentGroup", currentStrategy_.name_);
+    group.metadata().addKeyValuePair("Scenario", currentScenario_.name_);
+    group.metadata().addKeyValuePair("Sorted", false);
+    group.metadata().addKeyValuePair("HashMapEnabled",
+                                     currentStrategy_.useHashMap_);
+    group.metadata().addKeyValuePair("Threshold", currentConfig_.threshold);
+    group.metadata().addKeyValuePair("Note", currentStrategy_.note_);
+    group.metadata().addKeyValuePair("Rows", currentConfig_.numRows);
+    group.metadata().addKeyValuePair("BlockSize", currentConfig_.blockSize);
+    group.metadata().addKeyValuePair("Groups", currentConfig_.numGroups);
+
+    for (size_t i = 0; i < currentScenario_.numMeasurements_; ++i) {
+      std::unordered_map<std::string, std::string> timingsForMeasurement;
+
+      auto& measurement = group.addMeasurement(
+          std::to_string(i), [this, &timingsForMeasurement]() {
+            timingsForMeasurement = runSingleMeasurement();
+          });
+
+      for (const auto& [key, value] : timingsForMeasurement) {
+        measurement.metadata().addKeyValuePair(key, value);
+      }
+    }
+  }
+
+ public:
   BenchmarkResults runAllBenchmarks() final {
     BenchmarkResults results{};
 
@@ -378,49 +429,20 @@ class HybridGroupByBenchmark : public BenchmarkInterface {
         },
     };
 
-    Scenario scenario = scenarios[2];
+    currentScenario_ = scenarios[2];
+    currentQec_ = qec;
 
     for (const auto& strategy : strategies) {
       setRuntimeParameter<&RuntimeParameters::groupByHashMapEnabled_>(
           strategy.useHashMap_);
+      currentStrategy_ = strategy;
 
-      const auto plan = buildBenchmarkPlan(scenario, strategy);
+      const auto plan = buildBenchmarkPlan(currentScenario_, strategy);
       for (const auto& config : plan) {
-        setRuntimeParameter<&RuntimeParameters::groupByHashMapGroupThreshold_>(
-            config.threshold);
-        const std::string subName = absl::StrCat(
-            strategy.name_, "|rows=", config.numRows,
-            "|block=", config.blockSize, "|thresh=", config.threshold,
-            "|groups=", config.numGroups);
-        auto& group = results.addGroup(subName);
-        group.metadata().addKeyValuePair("ParentGroup", strategy.name_);
-        group.metadata().addKeyValuePair("Scenario", scenario.name_);
-        group.metadata().addKeyValuePair("Sorted", false);
-        group.metadata().addKeyValuePair("HashMapEnabled",
-                                         strategy.useHashMap_);
-        group.metadata().addKeyValuePair("Threshold", config.threshold);
-        group.metadata().addKeyValuePair("Note", strategy.note_);
-        group.metadata().addKeyValuePair("Rows", config.numRows);
-        group.metadata().addKeyValuePair("BlockSize", config.blockSize);
-        group.metadata().addKeyValuePair("Groups", config.numGroups);
-
-        for (size_t i = 0; i < scenario.numMeasurements_; ++i) {
-          std::unordered_map<std::string, std::string> timingsForMeasurement;
-
-          auto& measurement = group.addMeasurement(std::to_string(i), [&]() {
-            auto sortedTree = buildSortedSubtree(
-                strategy.useBlocks_, config.numRows, config.blockSize,
-                config.numGroups, qec, scenario.groupFunc_);
-            timingsForMeasurement = runGroupByCount(qec, sortedTree);
-          });
-
-          for (const auto& [key, value] : timingsForMeasurement) {
-            measurement.metadata().addKeyValuePair(key, value);
-          }
-        }
+        currentConfig_ = config;
+        runBenchmarkForCurrentConfig(results);
       }
     }
-
     return results;
   }
 };

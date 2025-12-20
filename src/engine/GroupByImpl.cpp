@@ -632,7 +632,9 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
 
     Result::LazyResult generator = ad_utility::callFixedSizeVi(
         (std::array{inWidth, outWidth}),
-        [&, self = this](auto inWidth, auto outWidth) {
+        [self = this, requestLaziness, &subresult, &aggregates,
+         &metadataForUnsequentialData,
+         &groupByCols](auto inWidth, auto outWidth) {
           return self->computeResultLazily<inWidth, outWidth>(
               std::move(subresult), std::move(aggregates),
               std::move(metadataForUnsequentialData).value().aggregateAliases_,
@@ -654,7 +656,8 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
 
   IdTable idTable = ad_utility::callFixedSizeVi(
       (std::array{inWidth, outWidth}),
-      [&, self = this](auto inWidth, auto outWidth) {
+      [self = this, &subresult, &groupByCols, &aggregates, &localVocab](
+          auto inWidth, auto outWidth) {
         return self->doGroupBy<inWidth, outWidth>(
             subresult->idTable(), groupByCols, aggregates, &localVocab);
       });
@@ -1902,7 +1905,8 @@ CPP_template_def(size_t NUM_GROUP_COLUMNS, typename BlockIterator,
       std::vector<size_t>(columnIndices.begin(), columnIndices.end());
   IdTable restResult = ad_utility::callFixedSizeVi(
       (std::array{inWidth, getResultWidth()}),
-      [&, self = this](auto inWidthValue, auto outWidthValue) {
+      [self = this, &restTable, &groupByCols, &data, &localVocab](
+          auto inWidthValue, auto outWidthValue) {
         return self->doGroupBy<inWidthValue, outWidthValue>(
             restTable, groupByCols, data.aggregates_.value(), &localVocab);
       });
