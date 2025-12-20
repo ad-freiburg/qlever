@@ -1897,12 +1897,14 @@ CPP_template_def(size_t NUM_GROUP_COLUMNS, typename BlockIterator,
   restSortTimer.stop();
 
   restGroupByTimer.cont();
+  const auto& columnIndices = data.columnIndices_.value();
+  auto groupByCols =
+      std::vector<size_t>(columnIndices.begin(), columnIndices.end());
   IdTable restResult = ad_utility::callFixedSizeVi(
       (std::array{inWidth, getResultWidth()}),
       [&, self = this](auto inWidthValue, auto outWidthValue) {
         return self->doGroupBy<inWidthValue, outWidthValue>(
-            restTable, data.columnIndices_.value(), data.aggregates_.value(),
-            &localVocab);
+            restTable, groupByCols, data.aggregates_.value(), &localVocab);
       });
   restGroupByTimer.stop();
 
