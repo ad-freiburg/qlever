@@ -41,8 +41,8 @@ bool getResultForAsk(const std::shared_ptr<const Result>& result) {
   }
 }
 
-LiteralOrIri encodedIdToLiteralOrIri(Id id, const Index& index) {
-  const auto& mgr = index.getImpl().encodedIriManager();
+LiteralOrIri encodedIdToLiteralOrIri(Id id, const IndexImpl& index) {
+  const auto& mgr = index.encodedIriManager();
   return LiteralOrIri::fromStringRepresentation(mgr.toString(id));
 }
 
@@ -568,7 +568,7 @@ ExportQueryExecutionTrees::handleIriOrLiteral(
 
 // _____________________________________________________________________________
 LiteralOrIri ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
-    const Index& index, Id id, const LocalVocab& localVocab) {
+    const IndexImpl& index, Id id, const LocalVocab& localVocab) {
   switch (id.getDatatype()) {
     case Datatype::LocalVocabIndex:
       return localVocab.getWord(id.getLocalVocabIndex()).asLiteralOrIri();
@@ -649,9 +649,9 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
     case VocabIndex:
     case LocalVocabIndex:
       return handleIriOrLiteral(
-          getLiteralOrIriFromVocabIndex(index, id, localVocab));
+          getLiteralOrIriFromVocabIndex(index.getImpl(), id, localVocab));
     case EncodedVal:
-      return handleIriOrLiteral(encodedIdToLiteralOrIri(id, index));
+      return handleIriOrLiteral(encodedIdToLiteralOrIri(id, index.getImpl()));
     case TextRecordIndex:
       return std::pair{
           escapeFunction(index.getTextExcerpt(id.getTextRecordIndex())),
@@ -663,7 +663,7 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
 
 // _____________________________________________________________________________
 std::optional<ad_utility::triple_component::Literal>
-ExportQueryExecutionTrees::idToLiteral(const Index& index, Id id,
+ExportQueryExecutionTrees::idToLiteral(const IndexImpl& index, Id id,
                                        const LocalVocab& localVocab,
                                        bool onlyReturnLiteralsWithXsdString) {
   using enum Datatype;
@@ -700,22 +700,29 @@ ExportQueryExecutionTrees::getLiteralOrNullopt(
 // _____________________________________________________________________________
 std::optional<LiteralOrIri>
 ExportQueryExecutionTrees::idToLiteralOrIriForEncodedValue(Id id) {
-  auto idLiteralAndType = idToStringAndTypeForEncodedValue(id);
-  if (idLiteralAndType.has_value()) {
-    auto lit = ad_utility::triple_component::Literal::literalWithoutQuotes(
-        idLiteralAndType.value().first);
-    lit.addDatatype(
-        ad_utility::triple_component::Iri::fromIrirefWithoutBrackets(
-            idLiteralAndType.value().second));
-    return LiteralOrIri{lit};
+  // TODO<RobinTF> This returns a `nullptr` for the datatype when the `id`
+  // represents a `BlankNode` or an `EncodedVal`. The latter case is typically
+  // no problem, because the only caller of this function already properly
+  // handles this case. The former case is also fine, because `BlankNode`s are
+  // neither IRIs nor literals, so returning `std::nullopt` is the correct
+  // behavior. However, this is somewhat fragile and should be kept in mind if
+  // this function is used in other contexts.
+  auto [literal, type] = idToStringAndTypeForEncodedValue(id).value_or(
+      std::make_pair(std::string{}, nullptr));
+  if (type == nullptr) {
+    return std::nullopt;
   }
-  return std::nullopt;
-};
+  auto lit =
+      ad_utility::triple_component::Literal::literalWithoutQuotes(literal);
+  lit.addDatatype(
+      ad_utility::triple_component::Iri::fromIrirefWithoutBrackets(type));
+  return LiteralOrIri{std::move(lit)};
+}
 
 // _____________________________________________________________________________
 std::optional<LiteralOrIri>
-ExportQueryExecutionTrees::getLiteralOrIriFromWordVocabIndex(const Index& index,
-                                                             Id id) {
+ExportQueryExecutionTrees::getLiteralOrIriFromWordVocabIndex(
+    const IndexImpl& index, Id id) {
   return LiteralOrIri{
       ad_utility::triple_component::Literal::literalWithoutQuotes(
           index.indexToString(id.getWordVocabIndex()))};
@@ -724,7 +731,7 @@ ExportQueryExecutionTrees::getLiteralOrIriFromWordVocabIndex(const Index& index,
 // _____________________________________________________________________________
 std::optional<LiteralOrIri>
 ExportQueryExecutionTrees::getLiteralOrIriFromTextRecordIndex(
-    const Index& index, Id id) {
+    const IndexImpl& index, Id id) {
   return LiteralOrIri{
       ad_utility::triple_component::Literal::literalWithoutQuotes(
           index.getTextExcerpt(id.getTextRecordIndex()))};
@@ -732,7 +739,7 @@ ExportQueryExecutionTrees::getLiteralOrIriFromTextRecordIndex(
 
 // _____________________________________________________________________________
 std::optional<ad_utility::triple_component::LiteralOrIri>
-ExportQueryExecutionTrees::idToLiteralOrIri(const Index& index, Id id,
+ExportQueryExecutionTrees::idToLiteralOrIri(const IndexImpl& index, Id id,
                                             const LocalVocab& localVocab,
                                             bool skipEncodedValues) {
   using enum Datatype;
