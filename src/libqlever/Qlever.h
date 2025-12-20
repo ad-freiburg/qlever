@@ -18,6 +18,7 @@
 #include "global/RuntimeParameters.h"
 #include "index/Index.h"
 #include "index/InputFileSpecification.h"
+#include "libqlever/QleverTypes.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/http/MediaTypes.h"
@@ -194,9 +195,7 @@ class Qlever {
   //
   // 3. It enables an inspection or even modification of the query plan before
   // executing it (this requires some expertise).
-  using QueryPlan =
-      std::tuple<std::shared_ptr<QueryExecutionTree>,
-                 std::shared_ptr<QueryExecutionContext>, ParsedQuery>;
+  using QueryPlan = qlever::QueryPlan;
   QueryPlan parseAndPlanQuery(std::string query) const;
 
   // Run the given parsed and planned query. The result is returned as a
