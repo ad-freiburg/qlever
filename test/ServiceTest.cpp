@@ -25,6 +25,7 @@
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
+#include "util/SparqlJsonBindingUtils.h"
 #include "util/TripleComponentTestHelpers.h"
 #include "util/http/HttpUtils.h"
 
@@ -619,18 +620,13 @@ TEST_F(ServiceTest, getCacheKeyWithCaching) {
 // Test that bindingToTripleComponent behaves as expected.
 TEST_F(ServiceTest, bindingToTripleComponent) {
   ad_utility::HashMap<std::string, Id> blankNodeMap;
-  parsedQuery::Service parsedServiceClause{
-      {Variable{"?x"}, Variable{"?y"}},
-      TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
-      "PREFIX doof: <http://doof.org>",
-      "{ }",
-      false};
-  Service service{testQec, parsedServiceClause};
   LocalVocab localVocab{};
 
-  auto bTTC = [&service, &blankNodeMap,
+  auto bTTC = [this, &blankNodeMap,
                &localVocab](const nlohmann::json& binding) -> TripleComponent {
-    return service.bindingToTripleComponent(binding, blankNodeMap, &localVocab);
+    return sparqlJsonBindingUtils::bindingToTripleComponent(
+        binding, testQec->getIndex(), blankNodeMap, &localVocab,
+        testQec->getIndex().getBlankNodeManager());
   };
 
   // Missing type or value.

@@ -450,6 +450,18 @@ class QueryPlanner {
                                                       const SubtreePlan& b,
                                                       const JoinColumns& jcs);
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  // Helper that returns `true` for each of the subtree plans `a` and `b` iff
+  // the subtree plan is a `Proxy` and it is not yet fully constructed.
+  static std::pair<bool, bool> checkProxyOperation(const SubtreePlan& a,
+                                                   const SubtreePlan& b);
+
+  // If one of the inputs is a `Proxy` which needs payload variables from the
+  // other input, add that other input as a child to the proxy.
+  static std::optional<SubtreePlan> createProxyOperation(
+      const SubtreePlan& a, const SubtreePlan& b, const JoinColumns& jcs);
+#endif
+
   vector<SubtreePlan> getOrderByRow(
       const ParsedQuery& pq,
       const std::vector<std::vector<SubtreePlan>>& dpTab) const;
@@ -668,6 +680,9 @@ class QueryPlanner {
     void visitBind(const parsedQuery::Bind& bind);
     void visitTransitivePath(parsedQuery::TransPath& transitivePath);
     void visitPathSearch(parsedQuery::PathQuery& config);
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+    void visitProxy(parsedQuery::ProxyQuery& config);
+#endif
     void visitSpatialSearch(parsedQuery::SpatialQuery& config);
     void visitTextSearch(const parsedQuery::TextSearchQuery& config);
     void visitNamedCachedResult(const parsedQuery::NamedCachedResult& config);

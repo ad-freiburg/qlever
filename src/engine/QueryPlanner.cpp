@@ -40,6 +40,7 @@
 #include "engine/OptionalJoin.h"
 #include "engine/OrderBy.h"
 #include "engine/PathSearch.h"
+#include "engine/Proxy.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryRewriteUtils.h"
 #include "engine/Service.h"
@@ -2187,6 +2188,15 @@ std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
     return candidates;
   }
 
+  // Similar to SpatialJoin: if one of the inputs is an incomplete
+  // Proxy, add the other as its child to provide payload variables.
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  if (auto opt = createProxyOperation(a, b, jcs)) {
+    candidates.push_back(std::move(opt.value()));
+    return candidates;
+  }
+#endif
+
   if (a.type == SubtreePlan::MINUS) {
     AD_THROW(
         "MINUS can only appear after"
@@ -2311,6 +2321,49 @@ auto QueryPlanner::createSpatialJoin(const SubtreePlan& a, const SubtreePlan& b,
   mergeSubtreePlanIds(plan, a, b);
   return plan;
 }
+
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+// _____________________________________________________________________________
+std::pair<bool, bool> QueryPlanner::checkProxyOperation(const SubtreePlan& a,
+                                                        const SubtreePlan& b) {
+  auto isIncompleteProxy = [](const SubtreePlan& plan) {
+    auto proxyCasted =
+        std::dynamic_pointer_cast<const Proxy>(plan._qet->getRootOperation());
+    return proxyCasted != nullptr && !proxyCasted->isConstructed();
+  };
+  return {isIncompleteProxy(a), isIncompleteProxy(b)};
+}
+
+// _____________________________________________________________________________
+auto QueryPlanner::createProxyOperation(const SubtreePlan& a,
+                                        const SubtreePlan& b,
+                                        [[maybe_unused]] const JoinColumns& jcs)
+    -> std::optional<SubtreePlan> {
+  auto [aIs, bIs] = checkProxyOperation(a, b);
+
+  // Exactly one of the inputs must be a Proxy.
+  if (aIs == bIs) {
+    return std::nullopt;
+  }
+
+  const SubtreePlan& proxySubtreePlan = aIs ? a : b;
+  const SubtreePlan& otherSubtreePlan = aIs ? b : a;
+
+  std::shared_ptr<Operation> op = proxySubtreePlan._qet->getRootOperation();
+  auto proxyOp = static_cast<Proxy*>(op.get());
+
+  if (proxyOp->isConstructed()) {
+    return std::nullopt;
+  }
+
+  // The other subtree provides the payload variables for the proxy.
+  auto newProxyOp = proxyOp->addChild(otherSubtreePlan._qet);
+
+  SubtreePlan plan = makeSubtreePlan<Proxy>(std::move(newProxyOp));
+  mergeSubtreePlanIds(plan, a, b);
+  return plan;
+}
+#endif
 
 // _____________________________________________________________________________________________________________________
 
@@ -3011,6 +3064,14 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     visitPathSearch(arg);
   } else if constexpr (std::is_same_v<T, p::Describe>) {
     visitDescribe(arg);
+  } else if constexpr (std::is_same_v<T, p::ProxyQuery>) {
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+    visitProxy(arg);
+#else
+    (void)arg;
+    throw std::runtime_error(
+        "qlproxy SERVICE is not supported in reduced feature set builds");
+#endif
   } else if constexpr (std::is_same_v<T, p::SpatialQuery>) {
     visitSpatialSearch(arg);
   } else if constexpr (std::is_same_v<T, p::TextSearchQuery>) {
@@ -3207,6 +3268,21 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
   }
   visitGroupOptionalOrMinus(std::move(candidatesOut));
 }
+
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+// _______________________________________________________________
+void QueryPlanner::GraphPatternPlanner::visitProxy(
+    parsedQuery::ProxyQuery& proxyQuery) {
+  auto config = proxyQuery.toConfiguration();
+
+  // Create the Proxy without a child. The query planner will add
+  // the child when joining with sibling operations that provide the payload
+  // variables.
+  auto proxyOp = std::make_shared<Proxy>(qec_, config);
+  auto plan = makeSubtreePlan<Proxy>(std::move(proxyOp));
+  visitGroupOptionalOrMinus({std::move(plan)});
+}
+#endif
 
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitTextSearch(

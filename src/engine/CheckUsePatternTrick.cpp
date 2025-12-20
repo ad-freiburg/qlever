@@ -64,10 +64,10 @@ bool isVariableContainedInGraphPatternOperation(
       return ad_utility::contains(arg._inlineValues._variables, variable);
     } else if constexpr (std::is_same_v<T, p::Service>) {
       return ad_utility::contains(arg.visibleVariables_, variable);
-    } else if constexpr (ad_utility::SameAsAny<T, p::PathQuery, p::SpatialQuery,
-                                               p::TextSearchQuery,
-                                               p::NamedCachedResult,
-                                               p::MaterializedViewQuery>) {
+    } else if constexpr (ad_utility::SameAsAny<
+                             T, p::PathQuery, p::ProxyQuery, p::SpatialQuery,
+                             p::TextSearchQuery, p::NamedCachedResult,
+                             p::MaterializedViewQuery>) {
       // For `MagicServiceQuery`s disable the pattern trick. This might slow
       // things down more than necessary but is never wrong. In the future this
       // could potentially be enabled for certain magic service queries.
