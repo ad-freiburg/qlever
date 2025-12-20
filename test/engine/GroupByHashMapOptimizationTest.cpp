@@ -103,7 +103,7 @@ class GroupByHashMapOptimizationTest : public ::testing::Test {
     AliasInfo alias{
         std::move(pimpl2), 1, std::vector<AggInfo>{std::move(aggInfo)}, {}};
     OptData data{std::vector<AliasInfo>{std::move(alias)}};
-    data.columnIndices_ = std::vector<size_t>{0};
+    data.columnIndices_ = std::vector<ColumnIndex>{0};
 
     LocalVocab localVocab;
     data.localVocabRef_ = localVocab;
