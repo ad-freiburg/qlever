@@ -959,7 +959,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 }
 
 nlohmann::ordered_json createResponseMetadataForUpdateImpl(
-    const Index& index, LocatedTriplesVersion locatedTriples,
+    const Index& index, const LocatedTriplesState& locatedTriples,
     std::string_view operationString, std::vector<std::string> warnings,
     const RuntimeInformationWholeQuery& runtimeInfoWhole,
     const RuntimeInformation& runtimeInfo, UpdateMetadata updateMetadata,
@@ -990,10 +990,9 @@ nlohmann::ordered_json createResponseMetadataForUpdateImpl(
   }
   response["time"] = tracer.getJSONShort()["update"];
   for (auto permutation : Permutation::ALL) {
-    response["located-triples"][Permutation::toString(permutation)]
-            ["blocks-affected"] =
-                locatedTriples->getLocatedTriplesForPermutation(permutation)
-                    .numBlocks();
+    response["located-triples"][Permutation::toString(
+        permutation)]["blocks-affected"] =
+        locatedTriples.getLocatedTriplesForPermutation(permutation).numBlocks();
     auto numBlocks = index.getPimpl()
                          .getPermutation(permutation)
                          .metaData()
@@ -1006,7 +1005,7 @@ nlohmann::ordered_json createResponseMetadataForUpdateImpl(
 }
 
 nlohmann::ordered_json Server::createDummyResponseMetadataForUpdate(
-    const Index& index, LocatedTriplesVersion locatedTriples,
+    const Index& index, const LocatedTriplesState& locatedTriples,
     const ad_utility::timer::TimeTracer& tracer) {
   return createResponseMetadataForUpdateImpl(
       index, locatedTriples, "Dummy Operation for timing purposes", {}, {}, {},
@@ -1014,7 +1013,7 @@ nlohmann::ordered_json Server::createDummyResponseMetadataForUpdate(
 }
 
 nlohmann::ordered_json Server::createResponseMetadataForUpdate(
-    const Index& index, LocatedTriplesVersion locatedTriples,
+    const Index& index, const LocatedTriplesState& locatedTriples,
     const PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
     const UpdateMetadata& updateMetadata,
     const ad_utility::timer::TimeTracer& tracer) {
@@ -1082,19 +1081,19 @@ CPP_template_def(typename RequestT, typename ResponseT)(
             [this, &cancellationHandle, &plannedUpdate, tracer, &updates,
              &requestTimer, &timeLimit, &qec](DeltaTriples& deltaTriples) {
               qec.setLocatedTriplesForEvaluation(
-                  deltaTriples.getLocatedTriplesVersionReference());
+                  deltaTriples.getLocatedTriplesSharedStateReference());
               json results = json::array();
-              for (size_t i = 0; i < updates.size(); i++) {
+              for (auto&& [i, update] : ranges::views::enumerate(updates)) {
                 // The augmented metadata is invalidated by any update. It is
                 // only updated automatically at the end of modify. Updates with
                 // non-empty graph patterns need the augmented metadata. Update
                 // the augmented metadata before executing those updates.
                 if (i != 0 &&
-                    !updates[i]._rootGraphPattern._graphPatterns.empty()) {
+                    !update._rootGraphPattern._graphPatterns.empty()) {
                   deltaTriples.updateAugmentedMetadata();
                 }
                 tracer->beginTrace("planning");
-                plannedUpdate = planQuery(std::move(updates[i]), requestTimer,
+                plannedUpdate = planQuery(std::move(update), requestTimer,
                                           timeLimit, qec, cancellationHandle);
                 tracer->endTrace("planning");
                 tracer->beginTrace("execution");
@@ -1108,7 +1107,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 
                 tracer->endTrace("update");
                 results.push_back(createResponseMetadataForUpdate(
-                    index_, deltaTriples.getLocatedTriplesVersionReference(),
+                    index_, *deltaTriples.getLocatedTriplesSharedStateReference(),
                     *plannedUpdate, plannedUpdate->queryExecutionTree_,
                     updateMetadata, *tracer));
                 tracer->reset();
@@ -1131,7 +1130,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   auto responses = co_await std::move(coroutine);
   tracer->endTrace("update");
   responses.push_back(createDummyResponseMetadataForUpdate(
-      index_, index_.deltaTriplesManager().getCurrentLocatedTriplesVersion(),
+      index_, *index_.deltaTriplesManager().getCurrentLocatedTriplesSharedState(),
       *tracer));
 
   // SPARQL 1.1 Protocol 2.2.4 Successful Responses: "The responses body of a

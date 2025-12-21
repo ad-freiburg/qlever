@@ -172,12 +172,12 @@ class Server {
   // For an executed update create a json with some stats on the update (timing,
   // number of changed triples, etc.).
   static nlohmann::ordered_json createResponseMetadataForUpdate(
-      const Index& index, LocatedTriplesVersion locatedTriples,
+      const Index& index, const LocatedTriplesState& locatedTriples,
       const PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
       const UpdateMetadata& updateMetadata,
       const ad_utility::timer::TimeTracer& tracer);
   static nlohmann::ordered_json createDummyResponseMetadataForUpdate(
-      const Index& index, LocatedTriplesVersion locatedTriples,
+      const Index& index, const LocatedTriplesState& locatedTriples,
       const ad_utility::timer::TimeTracer& tracer);
   FRIEND_TEST(ServerTest, createResponseMetadata);
   // Do the actual execution of an update.

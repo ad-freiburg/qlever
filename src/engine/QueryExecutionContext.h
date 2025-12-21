@@ -111,15 +111,15 @@ class QueryExecutionContext {
   [[nodiscard]] const Index& getIndex() const { return _index; }
 
   const LocatedTriplesState& locatedTriplesState() const {
-    AD_CORRECTNESS_CHECK(locatedTriplesVersion_ != nullptr);
-    return *locatedTriplesVersion_;
+    AD_CORRECTNESS_CHECK(locatedTriplesSharedState_ != nullptr);
+    return *locatedTriplesSharedState_;
   }
 
-  LocatedTriplesVersion locatedTriplesVersion() const {
-    return locatedTriplesVersion_;
+  LocatedTriplesSharedState locatedTriplesSharedState() const {
+    return locatedTriplesSharedState_;
   }
 
-  // Set the `LocatedTriplesVersion` for evaluating queries. The new version
+  // Set the `LocatedTriplesSharesdState` for evaluating queries. The new version
   // will be used for evaluating queries after this call.
   //
   // NOTE: This is a dangerous function. It may only be called if no query with
@@ -129,8 +129,8 @@ class QueryExecutionContext {
   // effect of previous updates but use the same execution context. Chained
   // updates are processed strictly sequentially, so this use case works.
   void setLocatedTriplesForEvaluation(
-      LocatedTriplesVersion locatedTriplesVersion) {
-    locatedTriplesVersion_ = std::move(locatedTriplesVersion);
+      LocatedTriplesSharedState locatedTriplesSharedState) {
+    locatedTriplesSharedState_ = std::move(locatedTriplesSharedState);
   }
 
   void clearCacheUnpinnedOnly() { getQueryTreeCache().clearUnpinnedOnly(); }
@@ -196,8 +196,8 @@ class QueryExecutionContext {
   // snapshot of the current (located) delta triples. These can then be used
   // by the respective query without interfering with further incoming
   // update operations.
-  LocatedTriplesVersion locatedTriplesVersion_{
-      _index.deltaTriplesManager().getCurrentLocatedTriplesVersion()};
+  LocatedTriplesSharedState locatedTriplesSharedState_{
+      _index.deltaTriplesManager().getCurrentLocatedTriplesSharedState()};
   QueryResultCache* const _subtreeCache;
   // allocators are copied but hold shared state
   ad_utility::AllocatorWithLimit<Id> _allocator;

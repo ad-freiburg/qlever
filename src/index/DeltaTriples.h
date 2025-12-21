@@ -61,7 +61,7 @@ struct LocatedTriplesState {
 // A shared pointer to a `LocatedTriplesState`, but as an explicit class, such
 // that it can be forward-declared. The actual content of the
 // `LocatedTriplesState` can change in some cases.
-class LocatedTriplesVersion
+class LocatedTriplesSharedState
     : public std::shared_ptr<const LocatedTriplesState> {};
 
 // A class for keeping track of the number of triples of the `DeltaTriples`.
@@ -243,13 +243,13 @@ class DeltaTriples {
   // Return a deep copy of the `LocatedTriples` and the corresponding
   // `LocalVocab` which form an unchanging snapshot of the current state of
   // this `DeltaTriples` object.
-  LocatedTriplesVersion getLocatedTriplesVersionCopy() const;
+  LocatedTriplesSharedState getLocatedTriplesSharedStateCopy() const;
 
   // Return a cheap shallow copy of the `LocatedTriples` which directly mirrors
   // the state of this `DeltaTriples` object. NOTE: only use this when the
   // DeltaTriples are not changed while the version is being used for
   // evaluation.
-  LocatedTriplesVersion getLocatedTriplesVersionReference() const;
+  LocatedTriplesSharedState getLocatedTriplesSharedStateReference() const;
 
   // Register the original `metadata` for the given `permutation`. This has to
   // be called before any updates are processed. If `setInternalMetadata` is
@@ -272,7 +272,7 @@ class DeltaTriples {
   // Helper function to get the correct located triple (either internal or
   // external), depending on the `internal` template parameter.
   template <bool isInternal>
-  auto& getLocatedTriple();
+  LocatedTriplesPerBlockAllPermutations<isInternal>& getLocatedTriple();
 
   // Find the position of the given triple in the given permutation and add it
   // to each of the six `LocatedTriplesPerBlock` maps (one per permutation).
@@ -325,8 +325,8 @@ class DeltaTriples {
 // race conditions between concurrent updates and queries.
 class DeltaTriplesManager {
   ad_utility::Synchronized<DeltaTriples> deltaTriples_;
-  ad_utility::Synchronized<LocatedTriplesVersion, std::shared_mutex>
-      currentLocatedTriplesVersion_;
+  ad_utility::Synchronized<LocatedTriplesSharedState, std::shared_mutex>
+      currentLocatedTriplesSharedState_;
 
  public:
   using CancellationHandle = DeltaTriples::CancellationHandle;
@@ -356,7 +356,7 @@ class DeltaTriplesManager {
   // Return a shared pointer to a deep copy of the current version snapshot.
   // This can be safely used to execute a query without interfering with future
   // updates.
-  LocatedTriplesVersion getCurrentLocatedTriplesVersion() const;
+  LocatedTriplesSharedState getCurrentLocatedTriplesSharedState() const;
 };
 
 #endif  // QLEVER_SRC_INDEX_DELTATRIPLES_H

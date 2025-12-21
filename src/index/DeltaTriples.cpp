@@ -35,9 +35,8 @@ void DeltaTriples::clear() {
     state.triplesDeleted_.clear();
     ql::ranges::for_each(locatedTriples, &LocatedTriplesPerBlock::clear);
   };
-  clearImpl(triplesToHandlesNormal_, locatedTriples_->locatedTriplesPerBlock_);
-  clearImpl(triplesToHandlesInternal_,
-            locatedTriples_->internalLocatedTriplesPerBlock_);
+  clearImpl(triplesToHandlesNormal_, getLocatedTriple<false>());
+  clearImpl(triplesToHandlesInternal_, getLocatedTriple<true>());
 }
 
 // ____________________________________________________________________________
@@ -52,7 +51,7 @@ DeltaTriples::TriplesToHandles<isInternal>& DeltaTriples::getState() {
 
 // ____________________________________________________________________________
 template <bool isInternal>
-auto& DeltaTriples::getLocatedTriple() {
+LocatedTriplesPerBlockAllPermutations<isInternal>& DeltaTriples::getLocatedTriple() {
   if constexpr (isInternal) {
     return locatedTriples_->internalLocatedTriplesPerBlock_;
   } else {
@@ -282,7 +281,7 @@ LocatedTriplesState::getInternalLocatedTriplesForPermutation(
     Permutation::Enum permutation) const {
   AD_CONTRACT_CHECK(permutation == Permutation::PSO ||
                     permutation == Permutation::POS);
-  return internalLocatedTriplesPerBlock_[static_cast<int>(permutation)];
+  return internalLocatedTriplesPerBlock_.at(static_cast<int>(permutation));
 }
 
 // ____________________________________________________________________________
@@ -291,24 +290,24 @@ LocatedTriplesState::getInternalLocatedTriplesForPermutation(
     Permutation::Enum permutation) {
   AD_CONTRACT_CHECK(permutation == Permutation::PSO ||
                     permutation == Permutation::POS);
-  return internalLocatedTriplesPerBlock_[static_cast<int>(permutation)];
+  return internalLocatedTriplesPerBlock_.at(static_cast<int>(permutation));
 }
 
 // ____________________________________________________________________________
-LocatedTriplesVersion DeltaTriples::getLocatedTriplesVersionCopy() const {
-  // Create a copy of the `LocatedTriplesVersion` for use as a constant
+LocatedTriplesSharedState DeltaTriples::getLocatedTriplesSharedStateCopy() const {
+  // Create a copy of the `LocatedTriplesState` for use as a constant
   // snapshot.
-  return LocatedTriplesVersion{std::make_shared<LocatedTriplesState>(
+  return LocatedTriplesSharedState{std::make_shared<LocatedTriplesState>(
       locatedTriples_->locatedTriplesPerBlock_,
       locatedTriples_->internalLocatedTriplesPerBlock_,
       localVocab_.getLifetimeExtender(), locatedTriples_->index_)};
 }
 
 // ____________________________________________________________________________
-LocatedTriplesVersion DeltaTriples::getLocatedTriplesVersionReference() const {
-  // Creating a `shared_ptr<const LocatedTriplesVersion>` from a
-  // `shared_ptr<LocatedTriplesVersion>` is cheap.
-  return LocatedTriplesVersion{locatedTriples_};
+LocatedTriplesSharedState DeltaTriples::getLocatedTriplesSharedStateReference() const {
+  // Creating a `shared_ptr<const LocatedTriplesState>` from a
+  // `shared_ptr<LocatedTriplesState>` is cheap.
+  return LocatedTriplesSharedState{locatedTriples_};
 }
 
 // ____________________________________________________________________________
@@ -332,8 +331,8 @@ DeltaTriples::DeltaTriples(const Index& index)
 // ____________________________________________________________________________
 DeltaTriplesManager::DeltaTriplesManager(const IndexImpl& index)
     : deltaTriples_{index},
-      currentLocatedTriplesVersion_{
-          deltaTriples_.wlock()->getLocatedTriplesVersionCopy()} {}
+      currentLocatedTriplesSharedState_{
+          deltaTriples_.wlock()->getLocatedTriplesSharedStateCopy()} {}
 
 // _____________________________________________________________________________
 template <typename ReturnType>
@@ -350,8 +349,8 @@ ReturnType DeltaTriplesManager::modify(
                                       updateMetadataAfterRequest,
                                       &tracer](DeltaTriples& deltaTriples) {
     auto updateSnapshot = [this, &deltaTriples] {
-      auto newSnapshot = deltaTriples.getLocatedTriplesVersionCopy();
-      currentLocatedTriplesVersion_.withWriteLock(
+      auto newSnapshot = deltaTriples.getLocatedTriplesSharedStateCopy();
+      currentLocatedTriplesSharedState_.withWriteLock(
           [&newSnapshot](auto& currentSnapshot) {
             currentSnapshot = std::move(newSnapshot);
           });
@@ -410,9 +409,9 @@ template nlohmann::json DeltaTriplesManager::modify<nlohmann::json>(
 void DeltaTriplesManager::clear() { modify<void>(&DeltaTriples::clear); }
 
 // _____________________________________________________________________________
-LocatedTriplesVersion DeltaTriplesManager::getCurrentLocatedTriplesVersion()
+LocatedTriplesSharedState DeltaTriplesManager::getCurrentLocatedTriplesSharedState()
     const {
-  return *currentLocatedTriplesVersion_.rlock();
+  return *currentLocatedTriplesSharedState_.rlock();
 }
 
 // _____________________________________________________________________________
@@ -433,8 +432,8 @@ void DeltaTriples::updateAugmentedMetadata() {
   auto update = [](auto& lt) {
     ql::ranges::for_each(lt, &LocatedTriplesPerBlock::updateAugmentedMetadata);
   };
-  update(locatedTriples_->locatedTriplesPerBlock_);
-  update(locatedTriples_->internalLocatedTriplesPerBlock_);
+  update(getLocatedTriple<false>());
+  update(getLocatedTriple<true>());
 }
 
 // _____________________________________________________________________________

@@ -476,8 +476,8 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
   // middle of these updates is as expected.
   auto insertAndDelete = [&](size_t threadIdx) {
     LocalVocab localVocab;
-    LocatedTriplesVersion beforeUpdate =
-        deltaTriplesManager.getCurrentLocatedTriplesVersion();
+    LocatedTriplesSharedState beforeUpdate =
+        deltaTriplesManager.getCurrentLocatedTriplesSharedState();
     for (size_t i = 0; i < numIterations; ++i) {
       // The first triple in both vectors is the same for all threads, the
       // others are exclusive to this thread via the `threadIdx`.
@@ -496,7 +496,7 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
       // We should have successfully completed an update, so the snapshot
       // pointer should have changed.
       EXPECT_NE(beforeUpdate,
-                deltaTriplesManager.getCurrentLocatedTriplesVersion());
+                deltaTriplesManager.getCurrentLocatedTriplesSharedState());
       // Delete the `triplesToDelete`.
       deltaTriplesManager.modify<void>([&](DeltaTriples& deltaTriples) {
         deltaTriples.deleteTriples(cancellationHandle, triplesToDelete);
@@ -526,7 +526,7 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
           // Check for several of the thread-exclusive triples that they are
           // properly contained in the current snapshot.
           //
-          auto p = deltaTriplesManager.getCurrentLocatedTriplesVersion();
+          auto p = deltaTriplesManager.getCurrentLocatedTriplesSharedState();
           const auto& locatedSPO =
               p->getLocatedTriplesForPermutation(Permutation::SPO);
           EXPECT_TRUE(locatedSPO.isLocatedTriple(triplesToInsert.at(1), true));
@@ -549,8 +549,8 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
   threads.clear();
 
   // Check that without updates, the snapshot pointer does not change.
-  auto p1 = deltaTriplesManager.getCurrentLocatedTriplesVersion();
-  auto p2 = deltaTriplesManager.getCurrentLocatedTriplesVersion();
+  auto p1 = deltaTriplesManager.getCurrentLocatedTriplesSharedState();
+  auto p2 = deltaTriplesManager.getCurrentLocatedTriplesSharedState();
   EXPECT_EQ(p1, p2);
 
   // Each of the threads above inserts one thread-exclusive triple, deletes one
@@ -565,10 +565,10 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
 }
 
 // _____________________________________________________________________________
-TEST_F(DeltaTriplesTest, LocatedTriplesVersion) {
+TEST_F(DeltaTriplesTest, LocatedTriplesSharedState) {
   auto Snapshot =
       [](size_t index,
-         size_t numTriples) -> testing::Matcher<const LocatedTriplesVersion> {
+         size_t numTriples) -> testing::Matcher<const LocatedTriplesSharedState> {
     auto m = AD_PROPERTY(LocatedTriplesPerBlock, numTriples, numTriples);
     return testing::Pointee(testing::AllOf(
         AD_FIELD(LocatedTriplesState, index_, testing::Eq(index)),
@@ -581,12 +581,12 @@ TEST_F(DeltaTriplesTest, LocatedTriplesVersion) {
       std::make_shared<ad_utility::CancellationHandle<>>();
 
   // Do one transparent and two copied snapshots.
-  LocatedTriplesVersion transparentSnapshotBeforeUpdate =
-      deltaTriples.getLocatedTriplesVersionReference();
-  LocatedTriplesVersion copiedSnapshotBeforeUpdate =
-      deltaTriples.getLocatedTriplesVersionCopy();
-  LocatedTriplesVersion copiedSnapshotBeforeUpdate2 =
-      deltaTriples.getLocatedTriplesVersionCopy();
+  LocatedTriplesSharedState transparentSnapshotBeforeUpdate =
+      deltaTriples.getLocatedTriplesSharedStateReference();
+  LocatedTriplesSharedState copiedSnapshotBeforeUpdate =
+      deltaTriples.getLocatedTriplesSharedStateCopy();
+  LocatedTriplesSharedState copiedSnapshotBeforeUpdate2 =
+      deltaTriples.getLocatedTriplesSharedStateCopy();
 
   // All snapshots have the same index and triples.
   EXPECT_THAT(transparentSnapshotBeforeUpdate, Snapshot(0, 0));
@@ -599,10 +599,10 @@ TEST_F(DeltaTriplesTest, LocatedTriplesVersion) {
   deltaTriples.insertTriples(cancellationHandle, std::move(triplesToInsert));
 
   // Another transparent and copied snapshot.
-  LocatedTriplesVersion transparentSnapshotAfterUpdate =
-      deltaTriples.getLocatedTriplesVersionReference();
-  LocatedTriplesVersion copiedSnapshotAfterUpdate =
-      deltaTriples.getLocatedTriplesVersionCopy();
+  LocatedTriplesSharedState transparentSnapshotAfterUpdate =
+      deltaTriples.getLocatedTriplesSharedStateReference();
+  LocatedTriplesSharedState copiedSnapshotAfterUpdate =
+      deltaTriples.getLocatedTriplesSharedStateCopy();
 
   // The two new snapshots are identical and up-to-date.
   EXPECT_THAT(transparentSnapshotAfterUpdate, Snapshot(1, 1));

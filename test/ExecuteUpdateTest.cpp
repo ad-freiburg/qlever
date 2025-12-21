@@ -54,7 +54,7 @@ TEST(ExecuteUpdate, executeUpdate) {
         index.deltaTriplesManager().modify<void>(
             [&index, &sharedHandle, &pqs, &qec](DeltaTriples& deltaTriples) {
               qec.setLocatedTriplesForEvaluation(
-                  deltaTriples.getLocatedTriplesVersionReference());
+                  deltaTriples.getLocatedTriplesSharedStateReference());
               for (auto& pq : pqs) {
                 // Not needed for the first update, but also doesn't break
                 // anything.

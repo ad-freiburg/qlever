@@ -17,14 +17,14 @@ class IndexScan final : public Operation {
  public:
   using Graphs = ScanSpecificationAsTripleComponent::GraphFilter;
   using PermutationPtr = std::shared_ptr<const Permutation>;
-  using LocatedTriplesVersion = std::shared_ptr<const LocatedTriplesState>;
+  using LocatedTriplesSharedState = std::shared_ptr<const LocatedTriplesState>;
 
  private:
   using ScanSpecAndBlocks = Permutation::ScanSpecAndBlocks;
 
  private:
   PermutationPtr permutation_;
-  LocatedTriplesVersion locatedTriplesVersion_;
+  LocatedTriplesSharedState locatedTriplesSharedState_;
   TripleComponent subject_;
   TripleComponent predicate_;
   TripleComponent object_;
@@ -50,7 +50,7 @@ class IndexScan final : public Operation {
 
  public:
   IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
-            LocatedTriplesVersion locatedTriplesVersion,
+            LocatedTriplesSharedState locatedTriplesSharedState,
             const SparqlTripleSimple& triple,
             Graphs graphsToFilter = Graphs::All(),
             std::optional<ScanSpecAndBlocks> scanSpecAndBlocks = std::nullopt,
@@ -66,7 +66,7 @@ class IndexScan final : public Operation {
 
   // Constructor to simplify copy creation of an `IndexScan`.
   IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
-            LocatedTriplesVersion locatedTriplesVersion,
+            LocatedTriplesSharedState locatedTriplesSharedState,
             const TripleComponent& s, const TripleComponent& p,
             const TripleComponent& o,
             std::vector<ColumnIndex> additionalColumns,
