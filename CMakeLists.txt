@@ -417,11 +417,27 @@ else ()
             COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/CompilationInfo.cmake)
 endif ()
 
-# Generate ProjectVersion.h from git describe
-add_custom_target(project_version_header ALL
-  COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/ProjectVersion.cmake
-  BYPRODUCTS ${CMAKE_CURRENT_SOURCE_DIR}/ProjectVersion.h
-  COMMENT "Generating ProjectVersion.h"
+# # Generate ProjectVersion.h from git describe
+# add_custom_target(project_version_header ALL
+#   COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/ProjectVersion.cmake
+# #   BYPRODUCTS ${CMAKE_CURRENT_SOURCE_DIR}/ProjectVersion.h
+#   COMMENT "Generating ProjectVersion.h"
+# )
+
+execute_process(
+    COMMAND git describe --tags --dirty
+    OUTPUT_VARIABLE PROJECT_VERSION
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+
+if(PROJECT_VERSION STREQUAL "")
+    set(PROJECT_VERSION "0.0.0-unknown")
+endif()
+
+configure_file(
+    ${CMAKE_SOURCE_DIR}/src/ProjectVersion.h.in
+    ${CMAKE_CURRENT_BINARY_DIR}/ProjectVersion.h
+    @ONLY
 )
 
 set(LOG_LEVEL_FATAL FATAL)
@@ -494,8 +510,11 @@ qlever_target_link_libraries(VocabularyMergerMain index parser ${CMAKE_THREAD_LI
 add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
 qlever_target_link_libraries(PrintIndexVersionMain util)
 
-add_dependencies(ServerMain project_version_header)
-add_dependencies(IndexBuilderMain project_version_header)
+target_include_directories(IndexBuilderMain PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+target_include_directories(ServerMain PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+
+# add_dependencies(ServerMain project_version_header)
+# add_dependencies(IndexBuilderMain project_version_header)
 
 install(TARGETS
     ServerMain
@@ -508,10 +527,10 @@ install(TARGETS
 ###############################################################
 
 set(CPACK_PACKAGE_NAME "qlever")
-# set(CPACK_PACKAGE_VERSION "0.5.35")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
 set(CPACK_PACKAGE_CONTACT "bast@cs.uni-freiburg.de")
 
-set(CPACK_OUTPUT_FILE_PREFIX "${CMAKE_BINARY_DIR}/packages")
+set(CPACK_OUTPUT_FILE_PREFIX "${CMAKE_CURRENT_BINARY_DIR}/packages")
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
 
 set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
