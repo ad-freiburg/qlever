@@ -148,7 +148,7 @@ class MaterializedView {
   std::shared_ptr<Permutation> permutation_{std::make_shared<Permutation>(
       Permutation::Enum::SPO, ad_utility::makeUnlimitedAllocator<Id>())};
   VariableToColumnMap varToColMap_;
-  std::shared_ptr<LocatedTriplesState> locatedTriplesSnapshot_;
+  std::shared_ptr<LocatedTriplesState> locatedTriplesState_;
 
   using AdditionalScanColumns = SparqlTripleSimple::AdditionalScanColumns;
 

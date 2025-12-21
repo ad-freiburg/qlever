@@ -296,7 +296,7 @@ void MaterializedViewWriter::computeResultAndWritePermutation() const {
 MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
     : onDiskBase_{std::move(onDiskBase)},
       name_{std::move(name)},
-      locatedTriplesSnapshot_{makeEmptyLocatedTriplesState()} {
+      locatedTriplesState_{makeEmptyLocatedTriplesState()} {
   AD_CORRECTNESS_CHECK(onDiskBase_ != "",
                        "The index base filename was not set.");
   throwIfInvalidName(name_);
@@ -525,7 +525,7 @@ void MaterializedViewsManager::setOnDiskBase(const std::string& onDiskBase) {
 
 // _____________________________________________________________________________
 LocatedTriplesSharedState MaterializedView::locatedTriplesState() const {
-  return {locatedTriplesSnapshot_};
+  return {locatedTriplesState_};
 }
 
 // _____________________________________________________________________________
@@ -556,7 +556,7 @@ std::shared_ptr<IndexScan> MaterializedView::makeIndexScan(
   // query.
   auto scanTriple = makeScanConfig(viewQuery);
   return std::make_shared<IndexScan>(
-      qec, permutation_, LocatedTriplesSharedState{locatedTriplesSnapshot_},
+      qec, permutation_, LocatedTriplesSharedState{locatedTriplesState_},
       std::move(scanTriple), IndexScan::Graphs::All(), std::nullopt,
       viewQuery.getVarsToKeep());
 }
