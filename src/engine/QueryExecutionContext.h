@@ -119,8 +119,8 @@ class QueryExecutionContext {
     return locatedTriplesSharedState_;
   }
 
-  // Set the `LocatedTriplesSharesdState` for evaluating queries. The new version
-  // will be used for evaluating queries after this call.
+  // Set the `LocatedTriplesSharesdState` for evaluating queries. The new
+  // state will be used for evaluating queries after this call.
   //
   // NOTE: This is a dangerous function. It may only be called if no query with
   // the context is currently running.

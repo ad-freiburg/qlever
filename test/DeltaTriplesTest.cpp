@@ -566,9 +566,8 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
 
 // _____________________________________________________________________________
 TEST_F(DeltaTriplesTest, LocatedTriplesSharedState) {
-  auto Snapshot =
-      [](size_t index,
-         size_t numTriples) -> testing::Matcher<const LocatedTriplesSharedState> {
+  auto Snapshot = [](size_t index, size_t numTriples)
+      -> testing::Matcher<const LocatedTriplesSharedState> {
     auto m = AD_PROPERTY(LocatedTriplesPerBlock, numTriples, numTriples);
     return testing::Pointee(testing::AllOf(
         AD_FIELD(LocatedTriplesState, index_, testing::Eq(index)),

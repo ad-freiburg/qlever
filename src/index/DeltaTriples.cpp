@@ -51,7 +51,8 @@ DeltaTriples::TriplesToHandles<isInternal>& DeltaTriples::getState() {
 
 // ____________________________________________________________________________
 template <bool isInternal>
-LocatedTriplesPerBlockAllPermutations<isInternal>& DeltaTriples::getLocatedTriple() {
+LocatedTriplesPerBlockAllPermutations<isInternal>&
+DeltaTriples::getLocatedTriple() {
   if constexpr (isInternal) {
     return locatedTriples_->internalLocatedTriplesPerBlock_;
   } else {
@@ -294,7 +295,8 @@ LocatedTriplesState::getInternalLocatedTriplesForPermutation(
 }
 
 // ____________________________________________________________________________
-LocatedTriplesSharedState DeltaTriples::getLocatedTriplesSharedStateCopy() const {
+LocatedTriplesSharedState DeltaTriples::getLocatedTriplesSharedStateCopy()
+    const {
   // Create a copy of the `LocatedTriplesState` for use as a constant
   // snapshot.
   return LocatedTriplesSharedState{std::make_shared<LocatedTriplesState>(
@@ -304,7 +306,8 @@ LocatedTriplesSharedState DeltaTriples::getLocatedTriplesSharedStateCopy() const
 }
 
 // ____________________________________________________________________________
-LocatedTriplesSharedState DeltaTriples::getLocatedTriplesSharedStateReference() const {
+LocatedTriplesSharedState DeltaTriples::getLocatedTriplesSharedStateReference()
+    const {
   // Creating a `shared_ptr<const LocatedTriplesState>` from a
   // `shared_ptr<LocatedTriplesState>` is cheap.
   return LocatedTriplesSharedState{locatedTriples_};
@@ -409,8 +412,8 @@ template nlohmann::json DeltaTriplesManager::modify<nlohmann::json>(
 void DeltaTriplesManager::clear() { modify<void>(&DeltaTriples::clear); }
 
 // _____________________________________________________________________________
-LocatedTriplesSharedState DeltaTriplesManager::getCurrentLocatedTriplesSharedState()
-    const {
+LocatedTriplesSharedState
+DeltaTriplesManager::getCurrentLocatedTriplesSharedState() const {
   return *currentLocatedTriplesSharedState_.rlock();
 }
 

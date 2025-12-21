@@ -39,7 +39,8 @@ IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
                      VarsToKeep varsToKeep)
     : Operation(qec),
       permutation_(std::move(permutation)),
-      locatedTriplesSharedState_(std::move(std::move(locatedTriplesSharedState))),
+      locatedTriplesSharedState_(
+          std::move(std::move(locatedTriplesSharedState))),
       subject_(triple.s_),
       predicate_(triple.p_),
       object_(triple.o_),
@@ -81,8 +82,8 @@ IndexScan::IndexScan(QueryExecutionContext* qec,
                      std::optional<ScanSpecAndBlocks> scanSpecAndBlocks)
     : IndexScan(qec,
                 qec->getIndex().getImpl().getPermutationPtr(permutationType),
-                qec->locatedTriplesSharedState(), triple, std::move(graphsToFilter),
-                std::move(scanSpecAndBlocks)) {}
+                qec->locatedTriplesSharedState(), triple,
+                std::move(graphsToFilter), std::move(scanSpecAndBlocks)) {}
 
 // _____________________________________________________________________________
 IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,

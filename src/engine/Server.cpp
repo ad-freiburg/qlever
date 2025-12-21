@@ -1107,7 +1107,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 
                 tracer->endTrace("update");
                 results.push_back(createResponseMetadataForUpdate(
-                    index_, *deltaTriples.getLocatedTriplesSharedStateReference(),
+                    index_,
+                    *deltaTriples.getLocatedTriplesSharedStateReference(),
                     *plannedUpdate, plannedUpdate->queryExecutionTree_,
                     updateMetadata, *tracer));
                 tracer->reset();
@@ -1130,7 +1131,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   auto responses = co_await std::move(coroutine);
   tracer->endTrace("update");
   responses.push_back(createDummyResponseMetadataForUpdate(
-      index_, *index_.deltaTriplesManager().getCurrentLocatedTriplesSharedState(),
+      index_,
+      *index_.deltaTriplesManager().getCurrentLocatedTriplesSharedState(),
       *tracer));
 
   // SPARQL 1.1 Protocol 2.2.4 Successful Responses: "The responses body of a

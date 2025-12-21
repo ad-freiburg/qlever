@@ -249,12 +249,13 @@ TEST(ServerTest, createResponseMetadata) {
   tracer2.endTrace("ServerTest::createResponseMetadata tracer2");
   AD_EXPECT_THROW_WITH_MESSAGE(
       Server::createResponseMetadataForUpdate(
-          index, deltaTriples.getLocatedTriplesSharedStateReference(), plannedQuery,
-          plannedQuery.queryExecutionTree_, UpdateMetadata{}, tracer2),
+          index, *deltaTriples.getLocatedTriplesSharedStateReference(),
+          plannedQuery, plannedQuery.queryExecutionTree_, UpdateMetadata{},
+          tracer2),
       testing::HasSubstr("updateMetadata.countBefore_.has_value()"));
   json metadata = Server::createResponseMetadataForUpdate(
-      index, deltaTriples.getLocatedTriplesSharedStateReference(), plannedQuery,
-      plannedQuery.queryExecutionTree_, updateMetadata, tracer2);
+      index, *deltaTriples.getLocatedTriplesSharedStateReference(),
+      plannedQuery, plannedQuery.queryExecutionTree_, updateMetadata, tracer2);
   json deltaTriplesJson{
       {"before", {{"inserted", 0}, {"deleted", 0}, {"total", 0}}},
       {"after", {{"inserted", 1}, {"deleted", 0}, {"total", 1}}},
@@ -276,7 +277,8 @@ TEST(ServerTest, createResponseMetadata) {
   EXPECT_THAT(metadata["located-triples"], testing::Eq(locatedTriplesJson));
   EXPECT_THAT(
       Server::createDummyResponseMetadataForUpdate(
-          index, deltaTriples.getLocatedTriplesSharedStateReference(), tracer2),
+          index, *deltaTriples.getLocatedTriplesSharedStateReference(),
+          tracer2),
       testing::AllOf(
           HasKeyMatching("update",
                          testing::StrEq("Dummy Operation for timing purposes")),
