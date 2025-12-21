@@ -31,7 +31,7 @@ class FilterByIndicesView {
         indices_{std::move(indices)},
         numItems_{numItems} {}
 
-  class iterator {
+  class Iterator {
    private:
     ql::ranges::iterator_t<GeneratorRange> genIt_{};
     ql::ranges::sentinel_t<GeneratorRange> genEnd_{};
@@ -49,9 +49,9 @@ class FilterByIndicesView {
     using difference_type = std::ptrdiff_t;
     using reference = decltype(*genIt_);
 
-    iterator() = default;
+    Iterator() = default;
 
-    iterator(GeneratorRange* generator, IndicesRange* indices, size_t) {
+    Iterator(GeneratorRange* generator, IndicesRange* indices, size_t) {
       genIt_ = ql::ranges::begin(*generator);
       genEnd_ = ql::ranges::end(*generator);
       idxIt_ = ql::ranges::begin(*indices);
@@ -65,7 +65,7 @@ class FilterByIndicesView {
 
     reference operator*() const { return *genIt_; }
 
-    iterator& operator++() {
+    Iterator& operator++() {
       auto previousTarget = *idxIt_;
       ++idxIt_;
       if (idxIt_ == idxEnd_) {
@@ -78,18 +78,14 @@ class FilterByIndicesView {
 
     void operator++(int) { (void)++(*this); }
 
-    friend bool operator==(const iterator& it, ql::default_sentinel_t) {
+    friend bool operator==(const Iterator& it, ql::default_sentinel_t) {
       return it.genIt_ == it.genEnd_ || it.idxIt_ == it.idxEnd_;
-    }
-
-    friend bool operator!=(const iterator& it, ql::default_sentinel_t s) {
-      return !(it == s);
     }
   };
 
-  iterator begin() { return iterator{&generator_, &indices_, numItems_}; }
+  Iterator begin() { return Iterator{&generator_, &indices_, numItems_}; }
 
-  ql::default_sentinel_t end() { return {}; }
+  ql::default_sentinel_t end() const { return {}; }
 };
 
 }  // namespace ad_utility

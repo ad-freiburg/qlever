@@ -1856,10 +1856,13 @@ CPP_template_def(size_t NUM_GROUP_COLUMNS, typename BlockIterator,
 
   // Detailed timing for hybrid fallback steps
   using ad_utility::Timer;
-  ad_utility::Timer remainderProcessingTimer{Timer::Started},
-      bufferingTimer{Timer::Stopped}, restSortTimer{Timer::Stopped},
-      restGroupByTimer{Timer::Stopped}, hashResultTimer{Timer::Stopped},
-      finalMergeTimer{Timer::Stopped}, finalSortTimer{Timer::Stopped};
+  ad_utility::Timer remainderProcessingTimer{Timer::Started};
+  ad_utility::Timer bufferingTimer{Timer::Stopped};
+  ad_utility::Timer restSortTimer{Timer::Stopped};
+  ad_utility::Timer restGroupByTimer{Timer::Stopped};
+  ad_utility::Timer hashResultTimer{Timer::Stopped};
+  ad_utility::Timer finalMergeTimer{Timer::Stopped};
+  ad_utility::Timer finalSortTimer{Timer::Stopped};
 
   // Batch existing-group rows and buffer new-group rows
   for (; blockIt != blocksEnd; ++blockIt) {
