@@ -8,6 +8,7 @@
 #include <string>
 
 #include "engine/Operation.h"
+#include "index/DeltaTriples.h"
 #include "util/HashMap.h"
 
 class SparqlTriple;
@@ -17,7 +18,6 @@ class IndexScan final : public Operation {
  public:
   using Graphs = ScanSpecificationAsTripleComponent::GraphFilter;
   using PermutationPtr = std::shared_ptr<const Permutation>;
-  using LocatedTriplesSharedState = std::shared_ptr<const LocatedTriplesState>;
 
  private:
   using ScanSpecAndBlocks = Permutation::ScanSpecAndBlocks;

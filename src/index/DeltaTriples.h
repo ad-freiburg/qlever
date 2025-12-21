@@ -46,23 +46,37 @@ struct LocatedTriplesState {
   // than another, then the version that has been modified last has a higher
   // index. The index is used in the query cache.
   size_t index_;
-  // Get `LocatedTriplesPerBlock` objects for given permutation.
+  // Get `LocatedTriplesPerBlock` objects for the given permutation.
+  template <bool isInternal>
   const LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
-      Permutation::Enum permutation) const;
+      Permutation::Enum permutation) const {
+    if constexpr (isInternal) {
+      AD_CONTRACT_CHECK(permutation == Permutation::PSO ||
+                        permutation == Permutation::POS);
+      return internalLocatedTriplesPerBlock_.at(static_cast<int>(permutation));
+
+    } else {
+      return locatedTriplesPerBlock_.at(static_cast<int>(permutation));
+    }
+  }
+
+  template <bool isInternal>
   LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
-      Permutation::Enum permutation);
-  // Get `TripleWithPosition` objects for given internal permutation.
-  const LocatedTriplesPerBlock& getInternalLocatedTriplesForPermutation(
-      Permutation::Enum permutation) const;
-  LocatedTriplesPerBlock& getInternalLocatedTriplesForPermutation(
-      Permutation::Enum permutation);
+      Permutation::Enum permutation) {
+    if constexpr (isInternal) {
+      AD_CONTRACT_CHECK(permutation == Permutation::PSO ||
+                        permutation == Permutation::POS);
+      return internalLocatedTriplesPerBlock_.at(static_cast<int>(permutation));
+    } else {
+      return locatedTriplesPerBlock_.at(static_cast<int>(permutation));
+    }
+  }
 };
 
 // A shared pointer to a `LocatedTriplesState`, but as an explicit class, such
 // that it can be forward-declared. The actual content of the
 // `LocatedTriplesState` can change in some cases.
-class LocatedTriplesSharedState
-    : public std::shared_ptr<const LocatedTriplesState> {};
+using LocatedTriplesSharedState = std::shared_ptr<const LocatedTriplesState>;
 
 // A class for keeping track of the number of triples of the `DeltaTriples`.
 struct DeltaTriplesCount {
@@ -178,7 +192,7 @@ class DeltaTriples {
 
   const LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
       Permutation::Enum permutation) const {
-    return locatedTriples_->getLocatedTriplesForPermutation(permutation);
+    return locatedTriples_->getLocatedTriplesForPermutation<false>(permutation);
   }
 
   // Clear `triplesAdded_` and `triplesSubtracted_` and all associated data

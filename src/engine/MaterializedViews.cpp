@@ -524,9 +524,8 @@ void MaterializedViewsManager::setOnDiskBase(const std::string& onDiskBase) {
 }
 
 // _____________________________________________________________________________
-std::shared_ptr<const LocatedTriplesState>
-MaterializedView::locatedTriplesState() const {
-  return locatedTriplesSnapshot_;
+LocatedTriplesSharedState MaterializedView::locatedTriplesState() const {
+  return {locatedTriplesSnapshot_};
 }
 
 // _____________________________________________________________________________
@@ -557,8 +556,9 @@ std::shared_ptr<IndexScan> MaterializedView::makeIndexScan(
   // query.
   auto scanTriple = makeScanConfig(viewQuery);
   return std::make_shared<IndexScan>(
-      qec, permutation_, locatedTriplesSnapshot_, std::move(scanTriple),
-      IndexScan::Graphs::All(), std::nullopt, viewQuery.getVarsToKeep());
+      qec, permutation_, LocatedTriplesSharedState{locatedTriplesSnapshot_},
+      std::move(scanTriple), IndexScan::Graphs::All(), std::nullopt,
+      viewQuery.getVarsToKeep());
 }
 
 // _____________________________________________________________________________

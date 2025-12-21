@@ -511,7 +511,8 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
           // Boolean argument specifies whether the triple was inserted (`true`)
           // or deleted (`false`).
           const auto& locatedSPO =
-              beforeUpdate->getLocatedTriplesForPermutation(Permutation::SPO);
+              beforeUpdate->getLocatedTriplesForPermutation<false>(
+                  Permutation::SPO);
           EXPECT_FALSE(locatedSPO.isLocatedTriple(triplesToInsert.at(1), true));
           EXPECT_FALSE(
               locatedSPO.isLocatedTriple(triplesToInsert.at(1), false));
@@ -528,7 +529,7 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
           //
           auto p = deltaTriplesManager.getCurrentLocatedTriplesSharedState();
           const auto& locatedSPO =
-              p->getLocatedTriplesForPermutation(Permutation::SPO);
+              p->getLocatedTriplesForPermutation<false>(Permutation::SPO);
           EXPECT_TRUE(locatedSPO.isLocatedTriple(triplesToInsert.at(1), true));
           // This triple is exclusive to the thread and is inserted and then
           // immediately deleted again. The `DeltaTriples` thus only store it

@@ -960,6 +960,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   co_return;
 }
 
+// ____________________________________________________________________________
 nlohmann::ordered_json createResponseMetadataForUpdateImpl(
     const Index& index, const LocatedTriplesState& locatedTriples,
     std::string_view operationString, std::vector<std::string> warnings,
@@ -994,7 +995,8 @@ nlohmann::ordered_json createResponseMetadataForUpdateImpl(
   for (auto permutation : Permutation::ALL) {
     response["located-triples"][Permutation::toString(
         permutation)]["blocks-affected"] =
-        locatedTriples.getLocatedTriplesForPermutation(permutation).numBlocks();
+        locatedTriples.getLocatedTriplesForPermutation<false>(permutation)
+            .numBlocks();
     auto numBlocks = index.getPimpl()
                          .getPermutation(permutation)
                          .metaData()
@@ -1006,6 +1008,7 @@ nlohmann::ordered_json createResponseMetadataForUpdateImpl(
   return response;
 }
 
+// ____________________________________________________________________________
 nlohmann::ordered_json Server::createDummyResponseMetadataForUpdate(
     const Index& index, const LocatedTriplesState& locatedTriples,
     const ad_utility::timer::TimeTracer& tracer) {
@@ -1014,6 +1017,7 @@ nlohmann::ordered_json Server::createDummyResponseMetadataForUpdate(
       UpdateMetadata{std::nullopt, DeltaTriplesCount{}, std::nullopt}, tracer);
 }
 
+// ____________________________________________________________________________
 nlohmann::ordered_json Server::createResponseMetadataForUpdate(
     const Index& index, const LocatedTriplesState& locatedTriples,
     const PlannedQuery& plannedQuery, const QueryExecutionTree& qet,

@@ -154,8 +154,7 @@ class MaterializedView {
 
   // Helper to create an empty `LocatedTriplesState` for `IndexScan`s as
   // materialized views do not support updates yet.
-  std::shared_ptr<LocatedTriplesState> makeEmptyLocatedTriplesState()
-      const;
+  std::shared_ptr<LocatedTriplesState> makeEmptyLocatedTriplesState() const;
 
  public:
   // Load a materialized view from disk given the filename components. The
@@ -185,7 +184,7 @@ class MaterializedView {
   // Return a reference to the `LocatedTriplesSnapshot` for the permutation. For
   // now this is always an empty snapshot but with the correct permutation
   // metadata.
-  std::shared_ptr<const LocatedTriplesState> locatedTriplesState() const;
+  LocatedTriplesSharedState locatedTriplesState() const;
 
   // Checks if the given name is allowed for a materialized view. Currently only
   // alphanumerics and hyphens are allowed. This is relevant for safe filenames

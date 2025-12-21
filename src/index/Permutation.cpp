@@ -254,9 +254,9 @@ const Permutation& Permutation::getActualPermutation(Id id) const {
 const LocatedTriplesPerBlock& Permutation::getLocatedTriplesForPermutation(
     const LocatedTriplesState& locatedTriplesState) const {
   return isInternalPermutation_
-             ? locatedTriplesState.getInternalLocatedTriplesForPermutation(
+             ? locatedTriplesState.getLocatedTriplesForPermutation<true>(
                    permutation_)
-             : locatedTriplesState.getLocatedTriplesForPermutation(
+             : locatedTriplesState.getLocatedTriplesForPermutation<false>(
                    permutation_);
 }
 

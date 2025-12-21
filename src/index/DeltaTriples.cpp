@@ -264,37 +264,6 @@ void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
 }
 
 // ____________________________________________________________________________
-const LocatedTriplesPerBlock&
-LocatedTriplesState::getLocatedTriplesForPermutation(
-    Permutation::Enum permutation) const {
-  return locatedTriplesPerBlock_.at(static_cast<int>(permutation));
-}
-
-// ____________________________________________________________________________
-LocatedTriplesPerBlock& LocatedTriplesState::getLocatedTriplesForPermutation(
-    Permutation::Enum permutation) {
-  return locatedTriplesPerBlock_.at(static_cast<int>(permutation));
-}
-
-// ____________________________________________________________________________
-const LocatedTriplesPerBlock&
-LocatedTriplesState::getInternalLocatedTriplesForPermutation(
-    Permutation::Enum permutation) const {
-  AD_CONTRACT_CHECK(permutation == Permutation::PSO ||
-                    permutation == Permutation::POS);
-  return internalLocatedTriplesPerBlock_.at(static_cast<int>(permutation));
-}
-
-// ____________________________________________________________________________
-LocatedTriplesPerBlock&
-LocatedTriplesState::getInternalLocatedTriplesForPermutation(
-    Permutation::Enum permutation) {
-  AD_CONTRACT_CHECK(permutation == Permutation::PSO ||
-                    permutation == Permutation::POS);
-  return internalLocatedTriplesPerBlock_.at(static_cast<int>(permutation));
-}
-
-// ____________________________________________________________________________
 LocatedTriplesSharedState DeltaTriples::getLocatedTriplesSharedStateCopy()
     const {
   // Create a copy of the `LocatedTriplesState` for use as a constant
@@ -424,9 +393,9 @@ void DeltaTriples::setOriginalMetadata(
     bool setInternalMetadata) {
   auto& locatedTriplesPerBlock =
       setInternalMetadata
-          ? locatedTriples_->getInternalLocatedTriplesForPermutation(
-                permutation)
-          : locatedTriples_->getLocatedTriplesForPermutation(permutation);
+          ? locatedTriples_->getLocatedTriplesForPermutation<true>(permutation)
+          : locatedTriples_->getLocatedTriplesForPermutation<false>(
+                permutation);
   locatedTriplesPerBlock.setOriginalMetadata(std::move(metadata));
 }
 
