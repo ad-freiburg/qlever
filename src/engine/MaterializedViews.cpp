@@ -296,7 +296,7 @@ void MaterializedViewWriter::computeResultAndWritePermutation() const {
 MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
     : onDiskBase_{std::move(onDiskBase)},
       name_{std::move(name)},
-      locatedTriplesSnapshot_{makeEmptyLocatedTriplesSnapshot()} {
+      locatedTriplesSnapshot_{makeEmptyLocatedTriplesState()} {
   AD_CORRECTNESS_CHECK(onDiskBase_ != "",
                        "The index base filename was not set.");
   throwIfInvalidName(name_);
@@ -524,21 +524,21 @@ void MaterializedViewsManager::setOnDiskBase(const std::string& onDiskBase) {
 }
 
 // _____________________________________________________________________________
-std::shared_ptr<const LocatedTriplesSnapshot>
-MaterializedView::locatedTriplesSnapshot() const {
+std::shared_ptr<const LocatedTriplesState>
+MaterializedView::locatedTriplesState() const {
   return locatedTriplesSnapshot_;
 }
 
 // _____________________________________________________________________________
-std::shared_ptr<LocatedTriplesSnapshot>
-MaterializedView::makeEmptyLocatedTriplesSnapshot() const {
+std::shared_ptr<LocatedTriplesState>
+MaterializedView::makeEmptyLocatedTriplesState() const {
   LocatedTriplesPerBlockAllPermutations<false> emptyLocatedTriples;
-  emptyLocatedTriples[static_cast<size_t>(permutation_->permutation())]
+  emptyLocatedTriples.at(static_cast<size_t>(permutation_->permutation()))
       .setOriginalMetadata(permutation_->metaData().blockDataShared());
   LocatedTriplesPerBlockAllPermutations<true> emptyInternalLocatedTriples;
   LocalVocab emptyVocab;
 
-  return std::make_shared<LocatedTriplesSnapshot>(
+  return std::make_shared<LocatedTriplesState>(
       emptyLocatedTriples, emptyInternalLocatedTriples,
       emptyVocab.getLifetimeExtender(), 0);
 }
