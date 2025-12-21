@@ -15,6 +15,7 @@
 #include <string>
 
 #include "CompilationInfo.h"
+#include "ProjectVersion.h"
 #include "global/Constants.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "libqlever/Qlever.h"
@@ -166,6 +167,7 @@ int main(int argc, char** argv) {
     boostOptions.add_options()(AD_FWD(args)...);
   };
   add("help,h", "Produce this help message.");
+  add("version,v", "Print version information.");
   add("index-basename,i", po::value(&config.baseName_)->required(),
       "The basename of the output files (required).");
   add("kg-input-file,f", po::value(&inputFile),
@@ -258,6 +260,10 @@ int main(int argc, char** argv) {
     po::store(po::parse_command_line(argc, argv, boostOptions), optionsMap);
     if (optionsMap.count("help")) {
       std::cout << boostOptions << '\n';
+      return EXIT_SUCCESS;
+    }
+    if (optionsMap.count("version")) {
+      std::cout << QLEVER_SRC_PROJECTVERSION << '\n';
       return EXIT_SUCCESS;
     }
     po::notify(optionsMap);

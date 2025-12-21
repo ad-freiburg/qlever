@@ -417,6 +417,13 @@ else ()
             COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/CompilationInfo.cmake)
 endif ()
 
+# Generate ProjectVersion.h from git describe
+add_custom_target(project_version_header ALL
+  COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/ProjectVersion.cmake
+  BYPRODUCTS ${CMAKE_CURRENT_SOURCE_DIR}/ProjectVersion.h
+  COMMENT "Generating ProjectVersion.h"
+)
+
 set(LOG_LEVEL_FATAL FATAL)
 set(LOG_LEVEL_ERROR ERROR)
 set(LOG_LEVEL_WARN WARN)
@@ -487,6 +494,9 @@ qlever_target_link_libraries(VocabularyMergerMain index parser ${CMAKE_THREAD_LI
 add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
 qlever_target_link_libraries(PrintIndexVersionMain util)
 
+add_dependencies(ServerMain project_version_header)
+add_dependencies(IndexBuilderMain project_version_header)
+
 install(TARGETS
     ServerMain
     IndexBuilderMain
@@ -498,7 +508,7 @@ install(TARGETS
 ###############################################################
 
 set(CPACK_PACKAGE_NAME "qlever")
-set(CPACK_PACKAGE_VERSION "0.5.35")
+# set(CPACK_PACKAGE_VERSION "0.5.35")
 set(CPACK_PACKAGE_CONTACT "bast@cs.uni-freiburg.de")
 
 set(CPACK_OUTPUT_FILE_PREFIX "${CMAKE_BINARY_DIR}/packages")

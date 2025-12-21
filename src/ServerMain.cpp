@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "CompilationInfo.h"
+#include "ProjectVersion.h"
 #include "engine/Server.h"
 #include "global/Constants.h"
 #include "global/RuntimeParameters.h"
@@ -64,6 +65,7 @@ int main(int argc, char** argv) {
     options.add_options()(AD_FWD(args)...);
   };
   add("help,h", "Produce this help message.");
+  add("version,v", "Print version information.");
   // TODO<joka921> Can we output the "required" automatically?
   add("index-basename,i", po::value<std::string>(&indexBasename)->required(),
       "The basename of the index files (required).");
@@ -177,6 +179,10 @@ int main(int argc, char** argv) {
     if (optionsMap.count("help")) {
       std::cout << options << '\n';
       return EXIT_SUCCESS;
+    }
+    if (optionsMap.count("version")) {
+        std::cout << QLEVER_SRC_PROJECTVERSION << '\n';
+        return EXIT_SUCCESS;
     }
     po::notify(optionsMap);
   } catch (const std::exception& e) {
