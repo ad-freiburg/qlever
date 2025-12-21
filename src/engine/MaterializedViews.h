@@ -148,14 +148,13 @@ class MaterializedView {
   std::shared_ptr<Permutation> permutation_{std::make_shared<Permutation>(
       Permutation::Enum::SPO, ad_utility::makeUnlimitedAllocator<Id>())};
   VariableToColumnMap varToColMap_;
-  std::shared_ptr<LocatedTriplesState> locatedTriplesSnapshot_;
+  std::shared_ptr<LocatedTriplesState> locatedTriplesState_;
 
   using AdditionalScanColumns = SparqlTripleSimple::AdditionalScanColumns;
 
   // Helper to create an empty `LocatedTriplesState` for `IndexScan`s as
   // materialized views do not support updates yet.
-  std::shared_ptr<LocatedTriplesState> makeEmptyLocatedTriplesState()
-      const;
+  std::shared_ptr<LocatedTriplesState> makeEmptyLocatedTriplesState() const;
 
  public:
   // Load a materialized view from disk given the filename components. The
