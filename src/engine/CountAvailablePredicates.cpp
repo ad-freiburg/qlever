@@ -132,7 +132,7 @@ Result CountAvailablePredicates::computeResult(
 
   if (isPatternTrickForAllEntities) {
     subtree_->getRootOperation()->runtimeInfo().status_ =
-        RuntimeInformation::Status::lazilyMaterialized;
+        RuntimeInformation::Status::lazilyMaterializedInProgress;
     signalQueryUpdate(RuntimeInformation::SendPriority::Always);
     // Compute the predicates for all entities
     CountAvailablePredicates::computePatternTrickAllEntities(&idTable,

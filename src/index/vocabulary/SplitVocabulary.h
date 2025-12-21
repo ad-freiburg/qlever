@@ -18,6 +18,7 @@
 #include "util/BitUtils.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
+#include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
 
 // The signature of the SplitFunction for a SplitVocabulary. For each literal or
@@ -287,6 +288,14 @@ class SplitVocabulary {
 
   // Checks if any of the underlying vocabularies is a `GeoVocabulary`.
   static bool isGeoInfoAvailable();
+
+  // Generic serialization support.
+  AD_SERIALIZE_FRIEND_FUNCTION(SplitVocabulary) {
+    (void)serializer;
+    (void)arg;
+    throw std::runtime_error(
+        "Generic serialization is not implemented for SplitVocabulary.");
+  }
 };
 
 // Concrete implementations of split function and split filename function

@@ -271,6 +271,9 @@ class Index {
   // requires including the rather expensive `IndexImpl.h` header
   IndexImpl& getImpl() { return *pimpl_; }
   [[nodiscard]] const IndexImpl& getImpl() const { return *pimpl_; }
+
+  // Allow implicit conversions to `const IndexImpl&`.
+  operator const IndexImpl&() const { return getImpl(); }
 };
 
 #endif  // QLEVER_SRC_INDEX_INDEX_H
