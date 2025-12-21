@@ -49,7 +49,7 @@ class LazyGroupByRange
   std::shared_ptr<const Result> subresult_;
   std::vector<GroupByImpl::Aggregate> aggregates_;
   std::vector<GroupByImpl::HashMapAliasInformation> aggregateAliases_;
-  std::vector<size_t> groupByCols_;
+  std::vector<ColumnIndex> groupByCols_;
   bool singleIdTable_{false};
   // runtime state
   size_t inWidth_;
@@ -69,7 +69,7 @@ class LazyGroupByRange
       const GroupByImpl* parent, std::shared_ptr<const Result> subresult,
       std::vector<GroupByImpl::Aggregate> aggregates,
       std::vector<GroupByImpl::HashMapAliasInformation> aggregateAliases,
-      std::vector<size_t> groupByCols, bool singleIdTable,
+      std::vector<ColumnIndex> groupByCols, bool singleIdTable,
       size_t subTreeResultWidth)
       : parent_(parent),
         subresult_(std::move(subresult)),
@@ -150,7 +150,7 @@ class LazyGroupByRange
     storedLocalVocabs_.emplace_back(std::move(pair.localVocab_));
 
     if (currentGroupBlock_.empty()) {
-      for (size_t col : groupByCols_) {
+      for (ColumnIndex col : groupByCols_) {
         currentGroupBlock_.emplace_back(col, idTable(0, col));
       }
     }
@@ -461,7 +461,7 @@ void GroupByImpl::processGroup(
 // _____________________________________________________________________________
 template <size_t IN_WIDTH, size_t OUT_WIDTH>
 IdTable GroupByImpl::doGroupBy(const IdTable& inTable,
-                               const vector<size_t>& groupByCols,
+                               const vector<ColumnIndex>& groupByCols,
                                const vector<Aggregate>& aggregates,
                                LocalVocab* outLocalVocab) const {
   AD_LOG_DEBUG << "Group by input size " << inTable.size() << std::endl;
@@ -496,7 +496,7 @@ IdTable GroupByImpl::doGroupBy(const IdTable& inTable,
   // This stores the values of the group by numColumns for the current block. A
   // block ends when one of these values changes.
   GroupBlock currentGroupBlock;
-  for (size_t col : groupByCols) {
+  for (ColumnIndex col : groupByCols) {
     currentGroupBlock.push_back(std::pair<size_t, Id>(col, input(0, col)));
   }
   size_t lastBlockStart =
@@ -577,21 +577,8 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
   }
 
   AD_LOG_DEBUG << "GroupBy subresult computation done" << std::endl;
-
-  std::vector<size_t> groupByColumns;
-
-  // parse the group by columns
   const auto& subtreeVarCols = _subtree->getVariableColumns();
-  for (const auto& var : _groupByVariables) {
-    auto it = subtreeVarCols.find(var);
-    if (it == subtreeVarCols.end()) {
-      AD_THROW("GroupBy variable " + var.name() + " is not groupable");
-    }
-
-    groupByColumns.push_back(it->second.columnIndex_);
-  }
-
-  std::vector<size_t> groupByCols;
+  std::vector<ColumnIndex> groupByCols;
   groupByCols.reserve(_groupByVariables.size());
   for (const auto& var : _groupByVariables) {
     groupByCols.push_back(subtreeVarCols.at(var).columnIndex_);
@@ -740,7 +727,7 @@ template <size_t IN_WIDTH, size_t OUT_WIDTH>
 Result::LazyResult GroupByImpl::computeResultLazily(
     std::shared_ptr<const Result> subresult, std::vector<Aggregate> aggregates,
     std::vector<HashMapAliasInformation> aggregateAliases,
-    std::vector<size_t> groupByCols, bool singleIdTable) const {
+    std::vector<ColumnIndex> groupByCols, bool singleIdTable) const {
   return Result::LazyResult(
       groupBy::detail::LazyGroupByRange<IN_WIDTH, OUT_WIDTH>(
           this, std::move(subresult), std::move(aggregates),
@@ -1761,7 +1748,7 @@ constexpr auto GroupByImpl::makeProcessGroupsVisitor(
 // _____________________________________________________________________________
 template <size_t NUM_GROUP_COLUMNS, typename SubResults>
 Result GroupByImpl::computeGroupByForHashMapOptimization(
-    HashMapOptimizationData data, SubResults&& subresults) const {
+    HashMapOptimizationData data, SubResults subresults) const {
   // Check number of grouping columns
   AD_CONTRACT_CHECK(data.columnIndices_.has_value());
   AD_CONTRACT_CHECK(data.aggregates_.has_value());
@@ -1900,9 +1887,7 @@ CPP_template_def(size_t NUM_GROUP_COLUMNS, typename BlockIterator,
   restSortTimer.stop();
 
   restGroupByTimer.cont();
-  const auto& columnIndices = data.columnIndices_.value();
-  auto groupByCols =
-      std::vector<size_t>(columnIndices.begin(), columnIndices.end());
+  const auto& groupByCols = data.columnIndices_.value();
   IdTable restResult = ad_utility::callFixedSizeVi(
       (std::array{inWidth, getResultWidth()}),
       [self = this, &restTable, &groupByCols, &data, &localVocab](

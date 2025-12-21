@@ -135,7 +135,7 @@ class GroupByImpl : public Operation {
                     const std::vector<Aggregate>& aggregates,
                     sparqlExpression::EvaluationContext& evaluationContext,
                     size_t blockStart, size_t blockEnd, LocalVocab* localVocab,
-                    const vector<size_t>& groupByCols) const;
+                    const vector<ColumnIndex>& groupByCols) const;
 
   // Handle queries like `SELECT (COUNT(?x) AS ?c) WHERE {...}` with conditions
   // that result in an empty result set with implicit GROUP BY where we have to
@@ -155,7 +155,7 @@ class GroupByImpl : public Operation {
       std::shared_ptr<const Result> subresult,
       std::vector<Aggregate> aggregates,
       std::vector<HashMapAliasInformation> aggregateAliases,
-      std::vector<size_t> groupByCols, bool singleIdTable) const;
+      std::vector<ColumnIndex> groupByCols, bool singleIdTable) const;
 
   template <size_t OUT_WIDTH>
   void processGroup(const Aggregate& expression,
@@ -165,7 +165,8 @@ class GroupByImpl : public Operation {
                     size_t resultColumn, LocalVocab* localVocab) const;
 
   template <size_t IN_WIDTH, size_t OUT_WIDTH>
-  IdTable doGroupBy(const IdTable& inTable, const vector<size_t>& groupByCols,
+  IdTable doGroupBy(const IdTable& inTable,
+                    const vector<ColumnIndex>& groupByCols,
                     const vector<Aggregate>& aggregates,
                     LocalVocab* outLocalVocab) const;
 
@@ -358,18 +359,18 @@ class GroupByImpl : public Operation {
     // Build with aliases, columns, and aggregates. The column indices are
     // stored as `ColumnIndex` to match the rest of the engine API.
     HashMapOptimizationData(std::vector<HashMapAliasInformation> aliases,
-                            std::vector<size_t> cols,
+                            std::vector<ColumnIndex> cols,
                             std::vector<Aggregate> aggs)
-        : aggregateAliases_(std::move(aliases)), aggregates_(std::move(aggs)) {
-      columnIndices_ = std::vector<ColumnIndex>(cols.begin(), cols.end());
-    }
+        : aggregateAliases_(std::move(aliases)),
+          columnIndices_(std::move(cols)),
+          aggregates_(std::move(aggs)) {}
   };
 
   // Create result IdTable by using a HashMap mapping groups to aggregation data
   // and subsequently calling `createResultFromHashMap`.
   template <size_t NUM_GROUP_COLUMNS, typename SubResults>
   Result computeGroupByForHashMapOptimization(HashMapOptimizationData data,
-                                              SubResults&& subresults) const;
+                                              SubResults subresults) const;
 
   // Type returned by `getHashEntries(groupByCols, onlyUsePreexistingGroups)`.
   // If `onlyUsePreexistingGroups` is true, nonMatchingRows_ will only contain
