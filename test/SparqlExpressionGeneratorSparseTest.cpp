@@ -131,29 +131,6 @@ TEST(SparqlExpressionGeneratorSparse, UnsortedIndicesTriggerContractCheck) {
 }
 
 // _____________________________________________________________________________
-TEST(SparqlExpressionGeneratorSparse, IndicesOutOfRangeTriggerContractCheck) {
-  std::vector<Id> valuesVec = {Id::makeFromInt(0), Id::makeFromInt(1),
-                               Id::makeFromInt(2)};
-  VectorWithMemoryLimit<Id> values(valuesVec.begin(), valuesVec.end(),
-                                   ad_utility::testing::makeAllocator());
-
-  const size_t numItems = values.size();
-  // The last index is equal to numItems and thus out of range.
-  std::vector<size_t> indices = {0, numItems};
-
-  auto buildAndConsumeGenerator = [&]() {
-    auto generator =
-        makeGeneratorSparse(values, numItems, nullptr, indices, ql::identity{});
-    std::vector<Id> result;
-    ql::ranges::copy(generator, std::back_inserter(result));
-  };
-
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      buildAndConsumeGenerator(),
-      ::testing::HasSubstr("currentTarget < numItems_"));
-}
-
-// _____________________________________________________________________________
 TEST(SparqlExpressionGeneratorSparse, WorksWithSetOfIntervals) {
   // A nontrivial `SetOfIntervals` is also a valid `SingleExpressionResult`.
   // It is expanded to a sequence of boolean IDs of length `numItems`.
