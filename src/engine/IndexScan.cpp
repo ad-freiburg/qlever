@@ -500,7 +500,7 @@ void IndexScan::updateRuntimeInfoForLazyScan(
     const LazyScanMetadata& metadata,
     RuntimeInformation::SendPriority sendPriority) {
   auto& rti = runtimeInfo();
-  rti.status_ = RuntimeInformation::Status::lazilyMaterialized;
+  rti.status_ = RuntimeInformation::Status::lazilyMaterializedInProgress;
   rti.numRows_ = metadata.numElementsYielded_;
   rti.totalTime_ = metadata.blockingTime_;
   rti.addDetail("num-blocks-read", metadata.numBlocksRead_);
