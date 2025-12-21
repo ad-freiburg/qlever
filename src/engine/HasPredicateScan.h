@@ -120,8 +120,8 @@ class HasPredicateScan : public Operation {
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;
 
  public:
-  // Creates an `IndexScan` for this operation, setup with the correct
-  // permutation and everything. The parameters `subject` and `object` are
+  // Create an `IndexScan` for the internal `ql:has-pattern` predicate, using
+  // the internal `PSO` permutation. The parameters `subject` and `object` are
   // the placeholders for the `IndexScan` triple.
   static std::shared_ptr<QueryExecutionTree> makePatternScan(
       QueryExecutionContext* qec, TripleComponent subject, Variable object);

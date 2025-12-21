@@ -260,9 +260,14 @@ Result HasPredicateScan::computeResult([[maybe_unused]] bool requestLaziness) {
 
   const CompactVectorOfStrings<Id>& patterns = getIndex().getPatterns();
 
-  auto scan = makePatternScan(getExecutionContext(),
-                              TripleComponent{Variable{"?s"}}, Variable{"?o"});
+  // Note: The variable names don't matter because we directly process the
+  // result here.
+  auto scan = makePatternScan(
+      getExecutionContext(), TripleComponent{Variable{"?_s"}}, Variable{"?_o"});
   auto result = scan->getResult(true);
+  // The `callback` is invoked with a single-value span of the `idTable` if the
+  // result is fully materialized, because it expects a range of `IdTable`s.
+  // Because of caching we can potentially get a fully materialized result here.
   auto runOnResult = [&result](auto callback) {
     if (result->isFullyMaterialized()) {
       return std::invoke(callback, ql::span{&result->idTable(), 1});
@@ -286,16 +291,15 @@ Result HasPredicateScan::computeResult([[maybe_unused]] bool requestLaziness) {
     return id.value();
   };
   switch (type_) {
-    case ScanType::FREE_S: {
+    case ScanType::FREE_S:
       runOnResult([this, &idTable, &getId, &patterns](auto hasPattern) {
         computeFreeS(&idTable, getId(object_), hasPattern, patterns);
       });
       return {std::move(idTable), resultSortedOn(), LocalVocab{}};
-    };
-    case ScanType::FREE_O: {
+    case ScanType::FREE_O:
       computeFreeO(&idTable, subject_, patterns);
       return {std::move(idTable), resultSortedOn(), LocalVocab{}};
-    };
+
     case ScanType::FULL_SCAN:
       runOnResult([this, &idTable, &patterns](auto hasPattern) {
         computeFullScan(&idTable, hasPattern, patterns,
@@ -342,8 +346,10 @@ void HasPredicateScan::computeFreeS(
 void HasPredicateScan::computeFreeO(
     IdTable* resultTable, TripleComponent subject,
     const CompactVectorOfStrings<Id>& patterns) const {
+  // Note: The variable name doesn't matter because we directly process the
+  // result here.
   auto scan = makePatternScan(getExecutionContext(), std::move(subject),
-                              Variable{"?o"});
+                              Variable{"?_o"});
   auto result = scan->getResult(false);
   const auto& hasPattern = result->idTable();
   AD_CORRECTNESS_CHECK(hasPattern.numRows() <= 1);
