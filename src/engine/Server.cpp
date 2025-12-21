@@ -924,8 +924,10 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   MediaType mediaType =
       chooseBestFittingMediaType(mediaTypes, plannedQuery.value().parsedQuery_);
 
-  // Only post updates when we export a qlever json.
-  if (mediaType != MediaType::qleverJson) {
+  // Only post updates when we export `qlever-results+json` or
+  // 'sparql-results+json`.
+  if (mediaType != MediaType::qleverJson &&
+      mediaType != MediaType::sparqlJson) {
     qec.areWebsocketUpdatesEnabled_ = false;
   }
 

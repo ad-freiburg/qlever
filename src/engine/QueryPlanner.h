@@ -610,6 +610,11 @@ class QueryPlanner {
   SubtreePlan getTextLeafPlan(const TripleGraph::Node& node,
                               TextLimitMap& textLimits) const;
 
+  // Given a `MaterializedViewQuery` construct a `SubtreePlan` for an
+  // `IndexScan` operation on the requested materialized view.
+  SubtreePlan getMaterializedViewIndexScanPlan(
+      const parsedQuery::MaterializedViewQuery& viewQuery);
+
   // An internal helper class that encapsulates the functionality to optimize
   // a single graph pattern. It tightly interacts with the outer `QueryPlanner`
   // for example when optimizing a Subquery.
@@ -666,6 +671,8 @@ class QueryPlanner {
     void visitSpatialSearch(parsedQuery::SpatialQuery& config);
     void visitTextSearch(const parsedQuery::TextSearchQuery& config);
     void visitNamedCachedResult(const parsedQuery::NamedCachedResult& config);
+    void visitMaterializedViewQuery(
+        const parsedQuery::MaterializedViewQuery& viewQuery);
     void visitUnion(parsedQuery::Union& un);
     void visitSubquery(parsedQuery::Subquery& subquery);
     void visitDescribe(parsedQuery::Describe& describe);
