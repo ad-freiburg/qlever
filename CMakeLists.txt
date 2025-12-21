@@ -425,7 +425,7 @@ endif ()
 # )
 
 execute_process(
-    COMMAND git describe --tags --dirty
+    COMMAND git describe --tags --always
     OUTPUT_VARIABLE PROJECT_VERSION
     OUTPUT_STRIP_TRAILING_WHITESPACE
 )
@@ -527,7 +527,35 @@ install(TARGETS
 ###############################################################
 
 set(CPACK_PACKAGE_NAME "qlever")
-set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+
+# Set CPACK_PACKAGE_VERSION according to Debian packaging naming rules
+# If git describe output begins with v + semver: parse it.
+if (PROJECT_VERSION MATCHES "^v([0-9]+\\.[0-9]+\\.[0-9]+)(-[0-9]+)?(-g[0-9a-f]+)?$")
+  # Extract `major.minor.patch`
+  string(REGEX REPLACE "^v([0-9]+\\.[0-9]+\\.[0-9]+).*$" "\\1" TAG_VERSION "${PROJECT_VERSION}")
+
+  # Extract commit ahead count if any
+  string(REGEX MATCH "^v[0-9.]+-([0-9]+)" _ "${PROJECT_VERSION}")
+
+  if (CMAKE_MATCH_1)
+    # tag + commits: revision exists
+    set(CPACK_PACKAGE_VERSION "${TAG_VERSION}-${CMAKE_MATCH_1}")
+  else()
+    # exact tag only
+    set(CPACK_PACKAGE_VERSION "${TAG_VERSION}")
+  endif()
+
+else()
+  # All other tags OR no tag: 0.0.0-<commit_hash>
+  if (PROJECT_VERSION MATCHES "-g([0-9a-f]+)$")
+    set(HASH "${CMAKE_MATCH_1}")
+  else()
+    set(HASH "${PROJECT_VERSION}")
+  endif()
+
+  set(CPACK_PACKAGE_VERSION "0.0.0-${HASH}")
+endif()
+
 set(CPACK_PACKAGE_CONTACT "bast@cs.uni-freiburg.de")
 
 set(CPACK_OUTPUT_FILE_PREFIX "${CMAKE_CURRENT_BINARY_DIR}/packages")
