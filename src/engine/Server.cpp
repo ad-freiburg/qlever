@@ -474,13 +474,19 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                       "The name for the view may not be empty");
 
     // Extract query body.
-    ad_utility::url_parser::sparqlOperation::Query query;
-    if (std::holds_alternative<Query>(parsedHttpRequest.operation_)) {
-      query = std::get<Query>(parsedHttpRequest.operation_);
-    } else {
-      throw std::runtime_error(
-          "Action 'write-materialized-view' requires a 'SELECT' query.");
-    }
+    auto query = std::visit(
+        [](const auto& op) -> Query {
+          using T = std::decay_t<decltype(op)>;
+          if constexpr (std::is_same_v<T, Query>) {
+            return op;
+          } else {
+            static_assert(
+                ad_utility::SameAsAny<T, Update, GraphStoreOperation, None>);
+            throw std::runtime_error(
+                "Action 'write-materialized-view' requires a 'SELECT' query.");
+          }
+        },
+        parsedHttpRequest.operation_);
 
     // Extract time limit.
     auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
