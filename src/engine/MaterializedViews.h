@@ -152,9 +152,8 @@ class MaterializedView {
 
   using AdditionalScanColumns = SparqlTripleSimple::AdditionalScanColumns;
 
-  // Helper to create an empty `LocatedTriplesSnapshot` for `IndexScan`s as
+  // Helper to create an empty `LocatedTriplesPerBlock` for `IndexScan`s as
   // materialized views do not support updates yet.
-  // TODO: is trivial now -> inline?
   std::shared_ptr<LocatedTriplesPerBlock> makeEmptyLocatedTriplesPerBlock()
       const;
 
@@ -183,7 +182,7 @@ class MaterializedView {
   // `nullptr`.
   std::shared_ptr<const Permutation> permutation() const;
 
-  // Return a reference to the `LocatedTriplesSnapshot` for the permutation. For
+  // Return a reference to the `LocatedTriplesPerBlock` for the permutation. For
   // now this is always an empty snapshot but with the correct permutation
   // metadata.
   std::shared_ptr<const LocatedTriplesPerBlock> locatedTriplesPerBlock() const;
