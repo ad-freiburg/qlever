@@ -41,6 +41,7 @@
 #include "engine/OptionalJoin.h"
 #include "engine/OrderBy.h"
 #include "engine/PathSearch.h"
+#include "engine/PermutationSelector.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryRewriteUtils.h"
 #include "engine/Service.h"
@@ -922,8 +923,12 @@ auto QueryPlanner::seedWithScansAndText(
                                        std::move(internalVariable));
       }
 
-      pushPlan(makeSubtreePlan<IndexScan>(_qec, permutation, std::move(triple),
-                                          relevantGraphs));
+      auto actualPermutation = qlever::getPermutationForTriple(
+          permutation, _qec->getIndex(), triple);
+
+      pushPlan(makeSubtreePlan<IndexScan>(_qec, std::move(actualPermutation),
+                                          _qec->sharedLocatedTriplesSnapshot(),
+                                          std::move(triple), relevantGraphs));
     };
     seedFromOrdinaryTriple(node, addIndexScan, addFilter);
   }
