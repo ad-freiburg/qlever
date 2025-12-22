@@ -106,15 +106,15 @@ class MaterializedViewsTest : public ::testing::Test {
       throw std::runtime_error(
           "Only IdTables for SELECT can be exported so far.");
     }
-    auto columns =
-        qet->selectedVariablesToColumnIndices(parsed.selectClause()) |
-        ql::views::transform([](const auto& colIdxAndType) {
+    auto selectColOrdering =
+        qet->selectedVariablesToColumnIndices(parsed.selectClause());
+    auto columns = ::ranges::to<std::vector<ColumnIndex>>(
+        ql::views::transform(selectColOrdering, [](const auto& colIdxAndType) {
           if (!colIdxAndType.has_value()) {
             throw std::runtime_error("Binds in SELECT clause not allowed.");
           }
           return colIdxAndType.value().columnIndex_;
-        }) |
-        ::ranges::to<std::vector<ColumnIndex>>();
+        }));
 
     // Compute the result and permute the `IdTable` as expected.
     auto res = qet->getResult(false);
