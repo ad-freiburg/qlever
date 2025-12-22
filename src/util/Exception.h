@@ -18,7 +18,7 @@
 #include "util/TypeTraits.h"
 
 // Fixes an issue when compiling with Emscripten where a specific header is not found.
-#define __STRING(x) "x"
+#define AD_STRINGIFY(x) #x
 
 // -------------------------------------------
 // Exception class code
@@ -150,7 +150,7 @@ std::string concatMessages(Args&&... messages) {
 // if the error message is expensive to construct because the callables are only
 // invoked if the assertion fails. For examples see `ExceptionTest.cpp`.
 #define AD_CONTRACT_CHECK(condition, ...)       \
-  AD_CHECK_IMPL(condition, __STRING(condition), \
+  AD_CHECK_IMPL(condition, AD_STRINGIFY(condition), \
                 AD_CURRENT_SOURCE_LOC() __VA_OPT__(, ) __VA_ARGS__)
 
 // Custom assert which does not abort but throws an exception. Use this for
@@ -170,7 +170,7 @@ inline void adCorrectnessCheckImpl(bool condition, std::string_view message,
 }  // namespace ad_utility::detail
 #define AD_CORRECTNESS_CHECK(condition, ...)             \
   ad_utility::detail::adCorrectnessCheckImpl(            \
-      static_cast<bool>(condition), __STRING(condition), \
+      static_cast<bool>(condition), AD_STRINGIFY(condition), \
       AD_CURRENT_SOURCE_LOC() __VA_OPT__(, ) __VA_ARGS__)
 
 // This check is similar to `AD_CORRECTNESS_CHECK` (see above), but the check is
