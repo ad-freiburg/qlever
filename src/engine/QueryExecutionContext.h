@@ -168,14 +168,10 @@ class QueryExecutionContext {
   }
 
   // Access the cache for explicitly named query.
-  NamedResultCache& namedResultCache() {
-    AD_CORRECTNESS_CHECK(namedResultCache_ != nullptr);
-    return *namedResultCache_;
-  }
+  NamedResultCache& namedResultCache() { return *namedResultCache_; }
 
   // Get a reference to the `MaterializedViewsManager`.
   const MaterializedViewsManager& materializedViewsManager() const {
-    AD_CORRECTNESS_CHECK(materializedViewsManager_ != nullptr);
     return *materializedViewsManager_;
   };
 
@@ -230,14 +226,14 @@ class QueryExecutionContext {
       websocketUpdateInterval();
 
   // The cache for named results.
-  NamedResultCache* namedResultCache_ = nullptr;
+  NamedResultCache* namedResultCache_;
 
   // Name (and optional variable for geometry index) under which the result of
   // the query that is executed using this context should be cached. When
   // `std::nullopt`, the result is not cached.
   std::optional<PinResultWithName> pinResultWithName_ = std::nullopt;
 
-  MaterializedViewsManager* materializedViewsManager_ = nullptr;
+  MaterializedViewsManager* materializedViewsManager_;
 
   // The last point in time when a websocket update was sent. This is used for
   // limiting the update frequency when `sendPriority` is `IfDue`.

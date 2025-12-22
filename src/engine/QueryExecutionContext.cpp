@@ -6,6 +6,7 @@
 #include "engine/QueryExecutionContext.h"
 
 #include "global/RuntimeParameters.h"
+#include "util/Exception.h"
 
 using namespace std::chrono_literals;
 
@@ -36,7 +37,11 @@ QueryExecutionContext::QueryExecutionContext(
       _sortPerformanceEstimator(sortPerformanceEstimator),
       updateCallback_(std::move(updateCallback)),
       namedResultCache_(namedResultCache),
-      materializedViewsManager_(materializedViewsManager) {}
+      materializedViewsManager_(materializedViewsManager) {
+  AD_CORRECTNESS_CHECK(cache != nullptr);
+  AD_CORRECTNESS_CHECK(namedResultCache != nullptr);
+  AD_CORRECTNESS_CHECK(materializedViewsManager != nullptr);
+}
 
 // _____________________________________________________________________________
 void QueryExecutionContext::signalQueryUpdate(
