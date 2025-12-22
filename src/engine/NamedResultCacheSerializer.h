@@ -17,7 +17,7 @@
 #include "util/Serializer/TripleSerializer.h"
 
 // _____________________________________________________________________________
-CPP_template(typename Serializer)(
+CPP_template_def(typename Serializer)(
     requires ad_utility::serialization::WriteSerializer<
         Serializer>) void NamedResultCache::writeToSerializer(Serializer&
                                                                   serializer)
@@ -40,7 +40,7 @@ CPP_template(typename Serializer)(
 }
 
 // _____________________________________________________________________________
-CPP_template(typename Serializer)(
+CPP_template_def(typename Serializer)(
     requires ad_utility::serialization::ReadSerializer<
         Serializer>) void NamedResultCache::
     readFromSerializer(Serializer& serializer, Value::Allocator allocator,
