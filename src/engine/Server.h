@@ -36,6 +36,11 @@ CPP_concept QueryOrUpdate =
                           ad_utility::url_parser::sparqlOperation::Query,
                           ad_utility::url_parser::sparqlOperation::Update>;
 
+// Forward declaration for testing.
+namespace serverTestHelpers {
+struct SimulateHttpRequest;
+}
+
 //! The HTTP Server used.
 class Server {
   using json = nlohmann::json;
@@ -43,6 +48,7 @@ class Server {
   FRIEND_TEST(ServerTest, createMessageSender);
   FRIEND_TEST(ServerTest, adjustParsedQueryLimitOffset);
   FRIEND_TEST(ServerTest, configurePinnedResultWithName);
+  friend serverTestHelpers::SimulateHttpRequest;
 
  public:
   explicit Server(unsigned short port, size_t numThreads,

@@ -8,6 +8,7 @@
 #include <gmock/gmock.h>
 
 #include "./MaterializedViewsTestHelpers.h"
+#include "./ServerTestHelpers.h"
 #include "./util/HttpRequestHelpers.h"
 #include "engine/IndexScan.h"
 #include "engine/MaterializedViews.h"
@@ -527,6 +528,9 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
 
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, serverIntegration) {
+  using namespace serverTestHelpers;
+  SimulateHttpRequest simulateHttpRequest{testIndexBase_};
+
   // Write a new materialized view using the `writeMaterializedView` method of
   // the `Server` class.
   {
@@ -556,40 +560,6 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
     EXPECT_EQ(res->idTable().numColumns(), 2);
     EXPECT_EQ(res->idTable().numRows(), 4);
   }
-
-  // Test the HTTP request processing of the `Server` class regarding writing
-  // and loading materialized views.
-  using ReqT = http::request<http::string_body>;
-  using ResT = std::optional<http::response<http::string_body>>;
-  auto simulateHttpRequest =
-      [&](const ReqT& request,
-          ad_utility::source_location location =
-              AD_CURRENT_SOURCE_LOC()) -> std::optional<nlohmann::json> {
-    auto l = generateLocationTrace(location);
-    boost::asio::io_context io;
-    std::future<ResT> fut = co_spawn(
-        io,
-        [](auto request, auto indexName) -> boost::asio::awaitable<ResT> {
-          // Initialize but do not start a `Server` instance on our test index.
-          Server server{4321, 1, ad_utility::MemorySize::megabytes(1),
-                        "accessToken"};
-          server.initialize(indexName, false);
-
-          // Simulate receiving the HTTP request.
-          auto result =
-              co_await server
-                  .template onlyForTestingProcess<decltype(request), ResT>(
-                      request);
-          co_return result;
-        }(request, testIndexBase_),
-        boost::asio::use_future);
-    io.run();
-    auto response = fut.get();
-    if (!response.has_value()) {
-      return std::nullopt;
-    }
-    return std::optional{nlohmann::json::parse(response.value().body())};
-  };
 
   // Write a materialized view through a simulated HTTP POST request.
   {
