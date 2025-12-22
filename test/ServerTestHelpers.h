@@ -22,6 +22,9 @@ using ResT = std::optional<http::response<http::string_body>>;
 struct SimulateHttpRequest {
   std::string indexBaseName_;
 
+  // Given an HTTP request, apply the `Server::process` method on this request
+  // and if the response is a non-streamed JSON, parse and return it. Otherwise
+  // `std::nullopt` is returned.
   std::optional<nlohmann::json> operator()(const ReqT& request) const {
     boost::asio::io_context io;
     std::future<ResT> fut = co_spawn(
@@ -45,6 +48,18 @@ struct SimulateHttpRequest {
     if (!response.has_value()) {
       return std::nullopt;
     }
+
+    // Check `Content-type`: currently only `application/json` is supported.
+    auto it = response.value().find(http::field::content_type);
+    if (it != response.value().end()) {
+      // We check `starts_with` instead of `==` because a `charset=utf-8` could
+      // follow.
+      if (!it->value().starts_with("application/json")) {
+        return std::nullopt;
+      }
+    }
+
+    // Parse the JSON body.
     return std::optional{nlohmann::json::parse(response.value().body())};
   };
 };
