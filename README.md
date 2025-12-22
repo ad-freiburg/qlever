@@ -95,8 +95,3 @@ this repository. The documents in that folder are not well maintained and may
 be outdated. We are currently working on an own `qlever-docs` repository that
 will provide extensive documentation and tutorials. However, for the RDF/SPARQL
 specialist, the self-documenting `qlever` CLI should be sufficient.
-
-# Release
-
-Testing manual Github release for QLever on this fork. The version number used
-is v0.5.35 to match version number of Qlever-control.
