@@ -24,6 +24,7 @@
 #include "rdfTypes/Literal.h"
 #include "util/CancellationHandle.h"
 #include "util/GTestHelpers.h"
+#include "util/IdTableHelpers.h"
 
 namespace {
 
@@ -71,20 +72,20 @@ TEST_F(MaterializedViewsTest, Basic) {
       }
     )",
   };
+
+  // Query with the equivalent result to the expected result, but without
+  // materialized views.
+  auto expectedResult =
+      getQueryResultAsIdTable("SELECT ?s ?x { ?s ?p ?o . BIND(1 AS ?x) }");
+
   for (const auto& query : equivalentQueries) {
     auto [qet, qec, parsed] = qlv().parseAndPlanQuery(query);
     auto res = qet->getResult(false);
 
     EXPECT_THAT(qet->getRootOperation()->getCacheKey(),
                 ::testing::HasSubstr("testView1"));
-
-    EXPECT_EQ(res->idTable().numRows(), 4);
-    auto col = qet->getVariableColumn(Variable{"?x"});
-    for (size_t i = 0; i < res->idTable().numRows(); ++i) {
-      auto id = res->idTable().at(i, col);
-      EXPECT_EQ(id.getDatatype(), Datatype::Int);
-      EXPECT_EQ(id.getInt(), 1);
-    }
+    ASSERT_TRUE(res->isFullyMaterialized());
+    EXPECT_THAT(res->idTable(), matchesIdTable(expectedResult));
   }
 
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -555,10 +556,11 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
         "SELECT * { ?s "
         "<https://qlever.cs.uni-freiburg.de/materializedView/"
         "testViewFromServer-o> ?o }");
+    auto expectedIdTable = getQueryResultAsIdTable(
+        "SELECT ?s ?o { ?s ?p ?o } INTERNAL SORT BY ?s ?p ?o");
     auto res = qet->getResult(false);
     ASSERT_TRUE(res->isFullyMaterialized());
-    EXPECT_EQ(res->idTable().numColumns(), 2);
-    EXPECT_EQ(res->idTable().numRows(), 4);
+    EXPECT_THAT(res->idTable(), matchesIdTable(expectedIdTable));
   }
 
   // Write a materialized view through a simulated HTTP POST request.
