@@ -20,76 +20,46 @@ using ::testing::ElementsAre;
 using ::testing::UnorderedElementsAreArray;
 
 namespace {
-// Serialize and immediately deserialize the value.
+// Global blank node manager and allocators that can be used as arguments to the
+// `serializeAndDeserializeValue` function below when we don't really care about
+// blank nodes and allocation details.
+ad_utility::BlankNodeManager blankNodeManager;
+ad_utility::AllocatorWithLimit<Id> alloc{
+    ad_utility::makeUnlimitedAllocator<Id>()};
+
+// Serialize and immediately deserialize and return the `value`.
 NamedResultCache::Value serializeAndDeserializeValue(
-    const NamedResultCache::Value& value) {
+    const NamedResultCache::Value& value,
+    ad_utility::BlankNodeManager& bm = blankNodeManager,
+    ad_utility::AllocatorWithLimit<Id> allocator = alloc) {
   ByteBufferWriteSerializer writeSerializer;
   writeSerializer << value;
   ByteBufferReadSerializer readSerializer{std::move(writeSerializer).data()};
   NamedResultCache::Value result;
+  result.allocatorForSerialization_ = std::move(allocator);
+  result.blankNodeManagerForSerialization_.emplace(bm);
   readSerializer >> result;
   return result;
 }
 
-// Note: VariableToColumnMap serialization is tested as part of Value
-// serialization since Variable is not default-constructible and thus
-// can't be used with the generic HashMap serialization.
-
-// Test serialization of IdTable with LocalVocab via NamedResultCache::Value
-// (IdTable serialization is part of Value serialization)
-TEST(NamedResultCacheSerializer, IdTableSerialization) {
-  // Create an IdTable with some data
-  auto table = makeIdTableFromVector({{3, 7}, {9, 11}});
-
-  // Create a LocalVocab with some entries
-  LocalVocab localVocab;
-  auto localEntry = ad_utility::triple_component::LiteralOrIri::iriref(
-      "<http://example.org/test>");
-  auto localVocabIndex =
-      localVocab.getIndexAndAddIfNotContained(std::move(localEntry));
-  auto localId = Id::makeFromLocalVocabIndex(localVocabIndex);
-
-  // Add the local vocab ID to the table
-  table(0, 0) = localId;
-
-  // Create a simple Value to test IdTable serialization
-  NamedResultCache::Value value{std::make_shared<const IdTable>(table.clone()),
-                                VariableToColumnMap{},
-                                {},
-                                std::move(localVocab),
-                                "test-key",
-                                std::nullopt};
-
-  auto deserializedValue = serializeAndDeserializeValue(value);
-  // Check the IdTable dimensions
-  EXPECT_EQ(deserializedValue.result_->numRows(), 2);
-  EXPECT_EQ(deserializedValue.result_->numColumns(), 2);
-
-  // Check the local vocab entry
-  EXPECT_EQ((*deserializedValue.result_)(0, 0).getDatatype(),
-            Datatype::LocalVocabIndex);
-
-  // Check other entries (without using matchesIdTable which needs index setup)
-  EXPECT_EQ((*deserializedValue.result_)(0, 1), table(0, 1));
-  EXPECT_EQ((*deserializedValue.result_)(1, 0), table(1, 0));
-  EXPECT_EQ((*deserializedValue.result_)(1, 1), table(1, 1));
-}
-
 // Test serialization of a complete NamedResultCache::Value
 TEST(NamedResultCacheSerializer, ValueSerialization) {
+  // we need to setup a dummy index somewhere, because otherwise the comparison
+  // of `IdTable`s won't work;
+  [[maybe_unused]] auto qec = ad_utility::testing::getQec();
   // Create a test Value
-  auto table = makeIdTableFromVector({{3, 7}, {9, 11}, {13, 17}});
+  LocalVocab localVocab;
+  auto local =
+      Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
+          ad_utility::triple_component::LiteralOrIri::iriref(
+              "<http://example.org/test>")));
+  auto table = makeIdTableFromVector({{local, 7}, {9, 11}, {13, 17}});
 
   VariableToColumnMap varColMap;
   varColMap[Variable{"?x"}] = makeAlwaysDefinedColumn(0);
   varColMap[Variable{"?y"}] = makePossiblyUndefinedColumn(1);
 
   std::vector<ColumnIndex> sortedOn = {0, 1};
-
-  LocalVocab localVocab;
-  localVocab.getIndexAndAddIfNotContained(
-      ad_utility::triple_component::LiteralOrIri::iriref(
-          "<http://example.org/test>"));
 
   std::string cacheKey = "test-cache-key";
 
@@ -106,6 +76,24 @@ TEST(NamedResultCacheSerializer, ValueSerialization) {
   };
 
   auto deserializedValue = serializeAndDeserializeValue(value);
+
+  // Check the local vocab.
+  auto deserWords = deserializedValue.localVocab_.getAllWordsForTesting();
+  EXPECT_EQ(origWords.size(), deserWords.size());
+  for (size_t i = 0; i < origWords.size(); ++i) {
+    EXPECT_EQ(origWords[i].toStringRepresentation(),
+              deserWords[i].toStringRepresentation());
+  }
+  // The local vocab entry should be kept alive by the new local vocab, so we
+  // delete the old one.
+  localVocab = LocalVocab{};
+  auto newLocalVocabId = (*deserializedValue.result_)(0, 0);
+  EXPECT_EQ(newLocalVocabId.getLocalVocabIndex()->toStringRepresentation(),
+            "<http://example.org/test>");
+
+  // The local vocab ID has been rewritten, so we have to update the expected
+  // result.
+  table(0, 0) = newLocalVocabId;
   // Check the result
   EXPECT_THAT(*deserializedValue.result_, matchesIdTable(table));
   EXPECT_THAT(deserializedValue.varToColMap_,
@@ -113,14 +101,6 @@ TEST(NamedResultCacheSerializer, ValueSerialization) {
   EXPECT_THAT(deserializedValue.resultSortedOn_, ElementsAre(0, 1));
   EXPECT_EQ(deserializedValue.cacheKey_, cacheKey);
   EXPECT_FALSE(deserializedValue.cachedGeoIndex_.has_value());
-
-  // Check LocalVocab
-  auto deserWords = deserializedValue.localVocab_.getAllWordsForTesting();
-  EXPECT_EQ(origWords.size(), deserWords.size());
-  for (size_t i = 0; i < origWords.size(); ++i) {
-    EXPECT_EQ(origWords[i].toStringRepresentation(),
-              deserWords[i].toStringRepresentation());
-  }
 }
 
 // Test serialization of the entire NamedResultCache
@@ -225,7 +205,7 @@ TEST(NamedResultCacheSerializer, EmptyCacheSerialization) {
   EXPECT_EQ(cache2.numEntries(), 0);
 
   // Clean up
-  std::filesystem::remove(tempFile);
+  ad_utility::deleteFile(tempFile);
 }
 
 }  // namespace

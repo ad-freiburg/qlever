@@ -68,7 +68,7 @@ class SpatialJoinCachedIndex {
       serializer << arg.serializeS2Index();
       serializer << arg.shapeIndexToRow_;
     } else {
-      decltype(arg.serializeShapes()) serializedShapes;
+      decltype(arg.serializeS2Index()) serializedShapes;
       serializer >> serializedShapes;
       serializer >> arg.shapeIndexToRow_;
       arg.populateFromSerialized(serializedShapes);

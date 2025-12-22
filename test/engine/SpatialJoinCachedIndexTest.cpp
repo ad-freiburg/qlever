@@ -19,6 +19,17 @@ namespace {
 
 using namespace SpatialJoinTestHelpers;
 
+void serializeAndDeserializeCache(NamedResultCache& cache,
+                                  QueryExecutionContext* qec) {
+  using namespace ad_utility::serialization;
+  ByteBufferWriteSerializer writer;
+  cache.writeToSerializer(writer);
+  cache.clear();
+  ByteBufferReadSerializer reader{std::move(writer).data()};
+  cache.readFromSerializer(reader, ad_utility::makeUnlimitedAllocator<Id>(),
+                           *qec->getIndex().getBlankNodeManager());
+}
+
 // _____________________________________________________________________________
 TEST(SpatialJoinCachedIndex, Basic) {
   // Sample data and query
@@ -43,17 +54,7 @@ TEST(SpatialJoinCachedIndex, Basic) {
   [[maybe_unused]] auto pinResult = plan.getResult();
 
   auto& cache = qec->namedResultCache();
-  std::string filename = "spatialJoinCachedIndexTmpFileForTesting.dat";
-  {
-    using namespace ad_utility::serialization;
-    ByteBufferWriteSerializer writer;
-    cache.writeToSerializer(writer);
-    cache.clear();
-    ByteBufferReadSerializer reader{std::move(writer).data()};
-    cache.readFromSerializer(reader, ad_utility::makeUnlimitedAllocator<Id>(),
-                             *qec->getIndex().getBlankNodeManager());
-  }
-  ad_utility::deleteFile(filename);
+  serializeAndDeserializeCache(cache, qec);
 
   // Retrieve and check the result table and geo index from the named cache
   auto cacheEntry = qec->namedResultCache().get("dummy");
@@ -121,20 +122,8 @@ TEST(SpatialJoinCachedIndex, UseOfIndexByS2PointPolylineAlgorithm) {
   const auto pinResultCacheKey = plan.getCacheKey();
   [[maybe_unused]] auto pinResult = plan.getResult();
 
-  // TODO<joka921> Code duplication + test with AND without the serialization to
-  // disk.
   auto& cache = qec->namedResultCache();
-  std::string filename = "spatialJoinCachedIndexTmpFileForTesting2.dat";
-  {
-    using namespace ad_utility::serialization;
-    ByteBufferWriteSerializer writer;
-    cache.writeToSerializer(writer);
-    cache.clear();
-    ByteBufferReadSerializer reader{std::move(writer).data()};
-    cache.readFromSerializer(reader, ad_utility::makeUnlimitedAllocator<Id>(),
-                             *qec->getIndex().getBlankNodeManager());
-  }
-  ad_utility::deleteFile(filename);
+  serializeAndDeserializeCache(cache, qec);
 
   // Check expected cache size
   const auto cacheEntry = qec->namedResultCache().get("dummy");
