@@ -430,7 +430,7 @@ void GroupByImpl::processGroup(
   evaluationContext._previousResultsFromSameGroup.at(resultColumn) =
       sparqlExpression::copyExpressionResult(expressionResult);
 
-  auto visitor = CPP_template_lambda_mut (&)(typename T)(T && singleResult)(
+  auto visitor = CPP_template_lambda_mut(&)(typename T)(T && singleResult)(
       requires sparqlExpression::SingleExpressionResult<T>) {
     constexpr static bool isStrongId = std::is_same_v<T, Id>;
     if constexpr (isStrongId) {
