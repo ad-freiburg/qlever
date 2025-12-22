@@ -181,8 +181,8 @@ int main(int argc, char** argv) {
       return EXIT_SUCCESS;
     }
     if (optionsMap.count("version")) {
-        std::cout << "QLever ServerMain " << QLEVER_SRC_PROJECTVERSION << '\n';
-        return EXIT_SUCCESS;
+      std::cout << "QLever ServerMain " << QLEVER_SRC_PROJECTVERSION << '\n';
+      return EXIT_SUCCESS;
     }
     po::notify(optionsMap);
   } catch (const std::exception& e) {
