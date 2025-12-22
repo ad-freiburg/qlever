@@ -14,6 +14,7 @@
 
 #include <sstream>
 #include <string>
+#include <variant>
 #include <vector>
 
 #include "CompilationInfo.h"
@@ -463,6 +464,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     requireValidAccessToken("write-materialized-view");
     logCommand(cmd, "write materialized view");
 
+    // Extract name parameter for materialized view.
     auto name = ad_utility::url_parser::getParameterCheckAtMostOnce(
         parameters, "view-name");
     AD_CONTRACT_CHECK(name.has_value(),
@@ -471,25 +473,25 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     AD_CONTRACT_CHECK(name.value() != "",
                       "The name for the view may not be empty");
 
-    auto cancellationHandle =
-        std::make_shared<ad_utility::CancellationHandle<>>();
-    auto query = std::visit(
-        [](const auto& op) -> Query {
-          using T = std::decay_t<decltype(op)>;
-          if constexpr (std::is_same_v<T, Query>) {
-            return op;
-          } else {
-            static_assert(
-                ad_utility::SameAsAny<T, Update, GraphStoreOperation, None>);
-            throw std::runtime_error(
-                "Action 'write-materialized-view' requires a 'SELECT' query.");
-          }
-        },
-        parsedHttpRequest.operation_);
+    // Extract query body.
+    ad_utility::url_parser::sparqlOperation::Query query;
+    if (std::holds_alternative<Query>(parsedHttpRequest.operation_)) {
+      query = std::get<Query>(parsedHttpRequest.operation_);
+    } else {
+      throw std::runtime_error(
+          "Action 'write-materialized-view' requires a 'SELECT' query.");
+    }
+
+    // Extract time limit.
     auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
         checkParameter("timeout", std::nullopt), accessTokenOk, request, send);
     AD_CONTRACT_CHECK(timeLimit.has_value(), "Missing timeout");
 
+    // Call `Server::writeMaterializedView` with the extracted parameters. Note
+    // that storing the coroutine in a variable first and then awaiting it is
+    // required due to lifetime issues on certain compilers.
+    auto cancellationHandle =
+        std::make_shared<ad_utility::CancellationHandle<>>();
     auto coroutine = computeInNewThread(
         queryThreadPool_,
         [name, query, requestTimer, cancellationHandle, timeLimit, this] {
@@ -499,18 +501,24 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         cancellationHandle);
     co_await std::move(coroutine);
 
+    // Construct simple response JSON.
     nlohmann::json json{{"materialized-view-written", name.value()}};
     response = createJsonResponse(json, request);
 
-    // Prevent regular query processing by removing the query from the request
+    // Prevent regular query processing by removing the query from the request.
     parsedHttpRequest.operation_ = None{};
   } else if (auto cmd = checkParameter("cmd", "load-materialized-view")) {
     requireValidAccessToken("load-materialized-view");
     logCommand(cmd, "explicitly load materialized view");
+
+    // Extract materialized view name parameter.
     auto name = ad_utility::url_parser::getParameterCheckAtMostOnce(
         parameters, "view-name");
     AD_CONTRACT_CHECK(name.has_value());
+
     materializedViewsManager_.loadView(name.value());
+
+    // Construct simple response JSON.
     nlohmann::json json{{"materialized-view-loaded", name.value()}};
     response = createJsonResponse(json, request);
   }
