@@ -804,17 +804,3 @@ std::vector<ColumnIndex> IndexScan::getSubsetForStrippedColumns() const {
   }
   return result;
 }
-
-// _____________________________________________________________________________
-std::shared_ptr<const LocatedTriplesPerBlock>
-IndexScan::getLocatedTriplesPerBlockForTriple(
-    Permutation::Enum permutation, LocatedTriplesSnapshotPtr snapshot,
-    const SparqlTripleSimple& triple) {
-  // Create alias shared pointer of internal the right `LocatedTriplesPerBlock`.
-  const auto& locatedTriples =
-      containsInternalIri(triple)
-          ? snapshot->getInternalLocatedTriplesForPermutation(permutation)
-          : snapshot->getLocatedTriplesForPermutation(permutation);
-  return std::shared_ptr<const LocatedTriplesPerBlock>{std::move(snapshot),
-                                                       &locatedTriples};
-}

@@ -295,11 +295,6 @@ class IndexScan final : public Operation {
   std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithStrippedColumns(
       const std::set<Variable>& variables) const override;
-
-  static std::shared_ptr<const LocatedTriplesPerBlock>
-  getLocatedTriplesPerBlockForTriple(Permutation::Enum permutation,
-                                     LocatedTriplesSnapshotPtr snapshot,
-                                     const SparqlTripleSimple& triple);
 };
 
 #endif  // QLEVER_SRC_ENGINE_INDEXSCAN_H

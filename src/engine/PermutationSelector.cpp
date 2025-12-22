@@ -47,4 +47,18 @@ std::shared_ptr<const Permutation> getPermutationForTriple(
   }
   return actualPermutation;
 }
+
+// _____________________________________________________________________________
+std::shared_ptr<const LocatedTriplesPerBlock>
+getLocatedTriplesPerBlockForTriple(Permutation::Enum permutation,
+                                   LocatedTriplesSnapshotPtr snapshot,
+                                   const SparqlTripleSimple& triple) {
+  // Create alias shared pointer of internal the right `LocatedTriplesPerBlock`.
+  const auto& locatedTriples =
+      containsInternalIri(triple)
+          ? snapshot->getInternalLocatedTriplesForPermutation(permutation)
+          : snapshot->getLocatedTriplesForPermutation(permutation);
+  return std::shared_ptr<const LocatedTriplesPerBlock>{std::move(snapshot),
+                                                       &locatedTriples};
+}
 }  // namespace qlever

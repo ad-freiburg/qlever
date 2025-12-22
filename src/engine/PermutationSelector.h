@@ -23,6 +23,13 @@ namespace qlever {
 std::shared_ptr<const Permutation> getPermutationForTriple(
     Permutation::Enum permutation, const Index& index,
     const SparqlTripleSimple& triple);
+
+// TODO: is this good here or should it go somewhere else?
+using LocatedTriplesSnapshotPtr = std::shared_ptr<const LocatedTriplesSnapshot>;
+std::shared_ptr<const LocatedTriplesPerBlock>
+getLocatedTriplesPerBlockForTriple(Permutation::Enum permutation,
+                                   LocatedTriplesSnapshotPtr snapshot,
+                                   const SparqlTripleSimple& triple);
 }  // namespace qlever
 
 #endif  // QLEVER_SRC_ENGINE_PERMUTATIONSELECTOR_H
