@@ -89,8 +89,7 @@ size_t Permutation::getResultSizeOfScan(
     const ScanSpecAndBlocks& scanSpecAndBlocks,
     const LocatedTriplesState& locatedTriplesState) const {
   return reader().getResultSizeOfScan(
-      scanSpecAndBlocks,
-      getLocatedTriplesForPermutation(locatedTriplesState));
+      scanSpecAndBlocks, getLocatedTriplesForPermutation(locatedTriplesState));
 }
 
 // _____________________________________________________________________
@@ -98,8 +97,7 @@ std::pair<size_t, size_t> Permutation::getSizeEstimateForScan(
     const ScanSpecAndBlocks& scanSpecAndBlocks,
     const LocatedTriplesState& locatedTriplesState) const {
   return reader().getSizeEstimateForScan(
-      scanSpecAndBlocks,
-      getLocatedTriplesForPermutation(locatedTriplesState));
+      scanSpecAndBlocks, getLocatedTriplesForPermutation(locatedTriplesState));
 }
 
 // ____________________________________________________________________________
@@ -111,8 +109,8 @@ IdTable Permutation::getDistinctCol1IdsAndCounts(
       getScanSpecAndBlocks(
           ScanSpecification{col0Id, std::nullopt, std::nullopt},
           locatedTriplesState),
-      cancellationHandle,
-      getLocatedTriplesForPermutation(locatedTriplesState), limitOffset);
+      cancellationHandle, getLocatedTriplesForPermutation(locatedTriplesState),
+      limitOffset);
 }
 
 // ____________________________________________________________________________
@@ -184,8 +182,7 @@ std::optional<Permutation::MetadataAndBlocks> Permutation::getMetadataAndBlocks(
     const ScanSpecAndBlocks& scanSpecAndBlocks,
     const LocatedTriplesState& locatedTriplesState) const {
   auto firstAndLastTriple = reader().getFirstAndLastTripleIgnoringGraph(
-      scanSpecAndBlocks,
-      getLocatedTriplesForPermutation(locatedTriplesState));
+      scanSpecAndBlocks, getLocatedTriplesForPermutation(locatedTriplesState));
   if (!firstAndLastTriple.has_value()) {
     return std::nullopt;
   }
