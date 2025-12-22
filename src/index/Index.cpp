@@ -275,28 +275,6 @@ std::vector<float> Index::getMultiplicities(
 }
 
 // ____________________________________________________________________________
-IdTable Index::scan(
-    const ScanSpecificationAsTripleComponent& scanSpecification,
-    Permutation::Enum p, Permutation::ColumnIndicesRef additionalColumns,
-    const ad_utility::SharedCancellationHandle& cancellationHandle,
-    const LocatedTriplesState& locatedTriplesState,
-    const LimitOffsetClause& limitOffset) const {
-  return pimpl_->scan(scanSpecification, p, additionalColumns,
-                      cancellationHandle, locatedTriplesState, limitOffset);
-}
-
-// ____________________________________________________________________________
-IdTable Index::scan(
-    const ScanSpecification& scanSpecification, Permutation::Enum p,
-    Permutation::ColumnIndicesRef additionalColumns,
-    const ad_utility::SharedCancellationHandle& cancellationHandle,
-    const LocatedTriplesState& locatedTriplesState,
-    const LimitOffsetClause& limitOffset) const {
-  return pimpl_->scan(scanSpecification, p, additionalColumns,
-                      cancellationHandle, locatedTriplesState, limitOffset);
-}
-
-// ____________________________________________________________________________
 size_t Index::getResultSizeOfScan(
     const ScanSpecification& scanSpecification,
     const Permutation::Enum& permutation,
