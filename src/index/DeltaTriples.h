@@ -49,28 +49,18 @@ struct LocatedTriplesState {
   // Get `LocatedTriplesPerBlock` objects for the given permutation.
   template <bool isInternal>
   const LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
-      Permutation::Enum permutation) const {
-    if constexpr (isInternal) {
-      AD_CONTRACT_CHECK(permutation == Permutation::PSO ||
-                        permutation == Permutation::POS);
-      return internalLocatedTriplesPerBlock_.at(static_cast<int>(permutation));
-
-    } else {
-      return locatedTriplesPerBlock_.at(static_cast<int>(permutation));
-    }
-  }
-
+      Permutation::Enum permutation) const;
   template <bool isInternal>
   LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
-      Permutation::Enum permutation) {
-    if constexpr (isInternal) {
-      AD_CONTRACT_CHECK(permutation == Permutation::PSO ||
-                        permutation == Permutation::POS);
-      return internalLocatedTriplesPerBlock_.at(static_cast<int>(permutation));
-    } else {
-      return locatedTriplesPerBlock_.at(static_cast<int>(permutation));
-    }
-  }
+      Permutation::Enum permutation);
+
+  // Helper functions to get the correct located triple (either internal or
+  // external), depending on the `internal` template parameter.
+  template <bool isInternal>
+  const LocatedTriplesPerBlockAllPermutations<isInternal>& getLocatedTriples()
+      const;
+  template <bool isInternal>
+  LocatedTriplesPerBlockAllPermutations<isInternal>& getLocatedTriples();
 };
 
 // A shared pointer to a `LocatedTriplesState`, but as an explicit class, such
@@ -277,16 +267,11 @@ class DeltaTriples {
   void updateAugmentedMetadata();
 
  private:
-  // The the proper state according to the template parameter. This will either
+  // The proper state according to the template parameter. This will either
   // return a reference to `triplesToHandlesInternal_` or
   // `triplesToHandlesNormal_`.
   template <bool isInternal>
   TriplesToHandles<isInternal>& getState();
-
-  // Helper function to get the correct located triple (either internal or
-  // external), depending on the `internal` template parameter.
-  template <bool isInternal>
-  LocatedTriplesPerBlockAllPermutations<isInternal>& getLocatedTriple();
 
   // Find the position of the given triple in the given permutation and add it
   // to each of the six `LocatedTriplesPerBlock` maps (one per permutation).
