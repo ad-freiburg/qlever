@@ -417,13 +417,7 @@ else ()
             COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/CompilationInfo.cmake)
 endif ()
 
-# # Generate ProjectVersion.h from git describe
-# add_custom_target(project_version_header ALL
-#   COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/ProjectVersion.cmake
-# #   BYPRODUCTS ${CMAKE_CURRENT_SOURCE_DIR}/ProjectVersion.h
-#   COMMENT "Generating ProjectVersion.h"
-# )
-
+# Use git describe to get the github tag-based project version
 execute_process(
     COMMAND git describe --tags --always
     OUTPUT_VARIABLE PROJECT_VERSION
@@ -513,9 +507,6 @@ qlever_target_link_libraries(PrintIndexVersionMain util)
 target_include_directories(IndexBuilderMain PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 target_include_directories(ServerMain PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 
-# add_dependencies(ServerMain project_version_header)
-# add_dependencies(IndexBuilderMain project_version_header)
-
 install(TARGETS
     ServerMain
     IndexBuilderMain
@@ -529,31 +520,28 @@ install(TARGETS
 set(CPACK_PACKAGE_NAME "qlever")
 
 # Set CPACK_PACKAGE_VERSION according to Debian packaging naming rules
-# If git describe output begins with v + semver: parse it.
+# If git describe output begins with v + semver:
 if (PROJECT_VERSION MATCHES "^v([0-9]+\\.[0-9]+\\.[0-9]+)(-[0-9]+)?(-g[0-9a-f]+)?$")
-  # Extract `major.minor.patch`
-  string(REGEX REPLACE "^v([0-9]+\\.[0-9]+\\.[0-9]+).*$" "\\1" TAG_VERSION "${PROJECT_VERSION}")
-
-  # Extract commit ahead count if any
-  string(REGEX MATCH "^v[0-9.]+-([0-9]+)" _ "${PROJECT_VERSION}")
-
-  if (CMAKE_MATCH_1)
-    # tag + commits: revision exists
-    set(CPACK_PACKAGE_VERSION "${TAG_VERSION}-${CMAKE_MATCH_1}")
-  else()
-    # exact tag only
-    set(CPACK_PACKAGE_VERSION "${TAG_VERSION}")
-  endif()
+    
+    # CMAKE_MATCH_1 is "major.minor.patch"
+    set(TAG_VERSION "${CMAKE_MATCH_1}")
+    
+    # CMAKE_MATCH_2 is "-commits_ahead" (or empty)
+    if (CMAKE_MATCH_2)
+        string(SUBSTRING "${CMAKE_MATCH_2}" 1 -1 COMMITS_AHEAD)
+        set(CPACK_PACKAGE_VERSION "${TAG_VERSION}-${COMMITS_AHEAD}")
+    else()
+        set(CPACK_PACKAGE_VERSION "${TAG_VERSION}")
+    endif()
 
 else()
-  # All other tags OR no tag: 0.0.0-<commit_hash>
-  if (PROJECT_VERSION MATCHES "-g([0-9a-f]+)$")
-    set(HASH "${CMAKE_MATCH_1}")
-  else()
-    set(HASH "${PROJECT_VERSION}")
-  endif()
-
-  set(CPACK_PACKAGE_VERSION "0.0.0-${HASH}")
+    # Fallback for non-tagged builds: Use commit hash
+    if (PROJECT_VERSION MATCHES "-g([0-9a-f]+)$")
+        set(HASH "${CMAKE_MATCH_1}")
+    else()
+        set(HASH "${PROJECT_VERSION}")
+    endif()
+    set(CPACK_PACKAGE_VERSION "0.0.0-${HASH}")
 endif()
 
 set(CPACK_PACKAGE_CONTACT "bast@cs.uni-freiburg.de")
@@ -563,12 +551,11 @@ set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
 
 set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
 
-# 3. Handle FetchContent (Important!)
-# Prevent CPack from packaging files installed by your dependencies (like GoogleTest or Abseil)
-# unless you explicitly want them.
+# Handle FetchContent (Important!)
+# Prevent CPack from packaging files installed by dependencies (like GoogleTest or Abseil)
 set(CPACK_VERBATIM_VARIABLES YES)
 
-set(CPACK_PACKAGE_DESCRIPTION "The QLever SPARQL engine")
-set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "QLever High-performance SPARQL Engine")
+set(CPACK_PACKAGE_DESCRIPTION "QLever Graph Database")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "QLever Graph Database implementing the RDF and SPARQL standards.")
 
 include(CPack)
