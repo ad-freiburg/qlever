@@ -22,81 +22,39 @@ TEST(PermutationSelectorTest, internalPrefixIsCorrectlyChosen) {
 
   for (auto permutation : Permutation::ALL) {
     const auto* permutationPtr = &index.getImpl().getPermutation(permutation);
-    EXPECT_EQ(qlever::getPermutationForTriple(
-                  permutation, index,
-                  SparqlTripleSimple{regularIri, regularIri, regularIri})
-                  .get(),
-              permutationPtr);
-    EXPECT_EQ(
-        qlever::getPermutationForTriple(
-            permutation, index,
-            SparqlTripleSimple{regularLiteral, regularLiteral, regularLiteral})
-            .get(),
-        permutationPtr);
-    EXPECT_EQ(
-        qlever::getPermutationForTriple(
-            permutation, index,
-            SparqlTripleSimple{regularLiteral, regularIri, regularLiteral})
-            .get(),
-        permutationPtr);
+    for (const auto& triple :
+         {SparqlTripleSimple{regularIri, regularIri, regularIri},
+          SparqlTripleSimple{regularLiteral, regularLiteral, regularLiteral},
+          SparqlTripleSimple{regularLiteral, regularIri, regularLiteral}}) {
+      EXPECT_EQ(
+          qlever::getPermutationForTriple(permutation, index, triple).get(),
+          permutationPtr);
+    }
   }
 
   for (auto permutation : Permutation::INTERNAL) {
     const auto* permutationPtr =
         &index.getImpl().getPermutation(permutation).internalPermutation();
-    EXPECT_EQ(qlever::getPermutationForTriple(
-                  permutation, index,
-                  SparqlTripleSimple{internalIri, regularIri, regularIri})
-                  .get(),
-              permutationPtr);
-    EXPECT_EQ(qlever::getPermutationForTriple(
-                  permutation, index,
-                  SparqlTripleSimple{regularIri, internalIri, regularIri})
-                  .get(),
-              permutationPtr);
-    EXPECT_EQ(qlever::getPermutationForTriple(
-                  permutation, index,
-                  SparqlTripleSimple{regularIri, regularIri, internalIri})
-                  .get(),
-              permutationPtr);
-
-    EXPECT_EQ(qlever::getPermutationForTriple(
-                  permutation, index,
-                  SparqlTripleSimple{languageTaggedIri, regularIri, regularIri})
-                  .get(),
-              permutationPtr);
-    EXPECT_EQ(qlever::getPermutationForTriple(
-                  permutation, index,
-                  SparqlTripleSimple{regularIri, languageTaggedIri, regularIri})
-                  .get(),
-              permutationPtr);
-    EXPECT_EQ(qlever::getPermutationForTriple(
-                  permutation, index,
-                  SparqlTripleSimple{regularIri, regularIri, languageTaggedIri})
-                  .get(),
-              permutationPtr);
+    for (const auto& triple :
+         {SparqlTripleSimple{internalIri, regularIri, regularIri},
+          SparqlTripleSimple{regularIri, internalIri, regularIri},
+          SparqlTripleSimple{regularIri, regularIri, internalIri},
+          SparqlTripleSimple{languageTaggedIri, regularIri, regularIri},
+          SparqlTripleSimple{regularIri, languageTaggedIri, regularIri},
+          SparqlTripleSimple{regularIri, regularIri, languageTaggedIri}}) {
+      EXPECT_EQ(
+          qlever::getPermutationForTriple(permutation, index, triple).get(),
+          permutationPtr);
+    }
   }
 
   using enum Permutation::Enum;
   // Unsupported configurations.
-  EXPECT_THROW(qlever::getPermutationForTriple(
-                   OPS, index,
-                   SparqlTripleSimple{languageTaggedIri, internalIri,
-                                      languageTaggedIri}),
-               ad_utility::Exception);
-  EXPECT_THROW(qlever::getPermutationForTriple(
-                   OSP, index,
-                   SparqlTripleSimple{languageTaggedIri, internalIri,
-                                      languageTaggedIri}),
-               ad_utility::Exception);
-  EXPECT_THROW(qlever::getPermutationForTriple(
-                   SOP, index,
-                   SparqlTripleSimple{languageTaggedIri, internalIri,
-                                      languageTaggedIri}),
-               ad_utility::Exception);
-  EXPECT_THROW(qlever::getPermutationForTriple(
-                   SPO, index,
-                   SparqlTripleSimple{languageTaggedIri, internalIri,
-                                      languageTaggedIri}),
-               ad_utility::Exception);
+  for (auto permutation : {OPS, OSP, SOP, SPO}) {
+    EXPECT_THROW(qlever::getPermutationForTriple(
+                     permutation, index,
+                     SparqlTripleSimple{languageTaggedIri, internalIri,
+                                        languageTaggedIri}),
+                 ad_utility::Exception);
+  }
 }
