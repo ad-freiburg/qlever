@@ -689,7 +689,7 @@ void GroupByImpl::processBlock(
     IdTableStatic<OUT_WIDTH>& output, const std::vector<Aggregate>& aggregates,
     sparqlExpression::EvaluationContext& evaluationContext, size_t blockStart,
     size_t blockEnd, LocalVocab* localVocab,
-    const vector<size_t>& groupByCols) const {
+    const vector<ColumnIndex>& groupByCols) const {
   output.emplace_back();
   size_t rowIdx = output.size() - 1;
   for (size_t i = 0; i < groupByCols.size(); ++i) {
