@@ -36,6 +36,9 @@ class SpatialJoinCachedIndexImpl {
         shapeIndexToRow[shapeIndex] = row;
       }
     }
+    // By default, the S2 indices are constructed lazily on the first query,
+    // which then is slow. The following call avoids this.
+    s2index_.ForceBuild();
     return shapeIndexToRow;
   }
 };
