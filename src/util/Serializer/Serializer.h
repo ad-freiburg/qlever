@@ -245,8 +245,7 @@ CPP_requires(
 template <typename T>
 CPP_concept TriviallySerializable =
     (CPP_requires_ref(triviallySerializableRequires, T) &&
-     std::is_trivially_copyable_v<std::decay_t<T>>) ||
-    std::is_enum_v<std::decay_t<T>>;
+     std::is_trivially_copyable_v<std::decay_t<T>>);
 
 // An explicit helper function to serialize trivially copyable types, that
 // don't have the explicit serialization enabled. It simply serializes the
