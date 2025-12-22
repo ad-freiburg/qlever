@@ -123,6 +123,10 @@ DeltaTriplesCount DeltaTriples::getCounts() const {
 // _____________________________________________________________________________
 DeltaTriples::Triples DeltaTriples::makeInternalTriples(
     const Triples& triples) {
+  // NOTE: If this logic is ever changed, you need to also change the code
+  // in `IndexBuilderTypes.h`, the function `getIdMapLambdas` specifically,
+  // which adds the same extra triples for language tags to the internal triples
+  // on the initial index build.
   Triples internalTriples;
   constexpr size_t predicateCacheSize = 50;
   ad_utility::util::LRUCache<Id::T, ad_utility::triple_component::Iri>
@@ -150,6 +154,14 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(
         asStringViewUnsafe(optionalLiteralOrIri.value().getLanguageTag()));
     Id specialId = TripleComponent{std::move(specialPredicate)}.toValueId(
         index_.getVocab(), localVocab_, index_.encodedIriManager());
+    // NOTE: We currently only add one of the language triples, specifically
+    // `<subject> @language@<predicate> "object"@language` because it is
+    // directly tied to a regular triple, so insertion and removal work exactly
+    // the same. `<object> ql:langtag <@language>` on the other hand needs
+    // either some sort of reference counting or we have to keep it
+    // indefinitely, even if the object is removed. This means that some queries
+    // will return no results for entries with language tags that were inserted
+    // via an UPDATE operation.
     internalTriples.push_back(
         IdTriple<0>{std::array{ids.at(0), specialId, ids.at(2), ids.at(3)}});
   }
