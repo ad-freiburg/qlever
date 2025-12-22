@@ -122,7 +122,7 @@ TEST(VocabularyInMemory, WordWriterDestructorBehavior) {
   };
 
   auto f = []() { WordWriter w{}; };
-  EXPECT_DEATH(f(), "");
+  EXPECT_DEATH_IF_SUPPORTED(f(), "");
 }
 
 }  // namespace
