@@ -587,7 +587,7 @@ TEST_F(DeltaTriplesTest, storeAndRestoreFromEmptySet) {
   EXPECT_NO_THROW(deltaTriples.writeToDisk());
 
   // Check if file contents match
-  std::array<char, 47> expectedContent{
+  std::array<char, 55> expectedContent{
       // Magic bytes
       'Q',
       'L',
@@ -603,6 +603,15 @@ TEST_F(DeltaTriplesTest, storeAndRestoreFromEmptySet) {
       'T',
       'E',
       // Version
+      1,
+      0,
+      // Size of `BlankNodeBlocks`.
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
       0,
       0,
       // LocalVocab size
@@ -643,7 +652,7 @@ TEST_F(DeltaTriplesTest, storeAndRestoreFromEmptySet) {
       0,
   };
 
-  std::array<char, 47> actualContent{};
+  std::array<char, expectedContent.size()> actualContent{};
 
   std::ifstream tmpFileStream{tmpFile, std::ios::binary};
   tmpFileStream.read(actualContent.data(), actualContent.size());

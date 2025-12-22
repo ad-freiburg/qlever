@@ -1562,3 +1562,40 @@ TEST(RdfParserTest, EncodedIriManagerPrefixedNames) {
   testPrefixedNameEncoding(re2ParserWithEncoding);
   testPrefixedNameEncoding(ctreParserWithEncoding);
 }
+
+TEST(RdfParserTest, parseTriplesObject) {
+  using Parser = RdfStringParser<TurtleParser<TokenizerCtre>>;
+  using namespace testing;
+  auto Iri = ad_utility::triple_component::Iri::fromIriref;
+  auto Literal =
+      ad_utility::triple_component::Literal::fromStringRepresentation;
+  auto isTC = [](auto e) -> Matcher<const TripleComponent> {
+    return Eq(TripleComponent(e));
+  };
+  auto expectParse =
+      [](std::string_view input, const Matcher<const TripleComponent>& expected,
+         ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
+        auto t = generateLocationTrace(loc);
+        EXPECT_THAT(Parser::parseTripleObject(input), expected);
+      };
+  expectParse("1337", isTC(1337));
+  expectParse("42.1", isTC(42.1));
+  expectParse("1e3", isTC(1000.0));
+  expectParse("true", isTC(true));
+  expectParse("<http://example.com/abc>",
+              isTC(Iri("<http://example.com/abc>")));
+  // Unregistered prefix
+  EXPECT_ANY_THROW(Parser::parseTripleObject("a:b"));
+  expectParse(R"("foo")", isTC(Literal(R"("foo")")));
+  expectParse(R"('bar')", isTC(Literal(R"("bar")")));
+  expectParse(R"("""bar"""@en)", isTC(Literal(R"("bar"@en)")));
+  expectParse(R"('''bar'''^^<foo>)", isTC(Literal(R"("bar"^^<foo>)")));
+  expectParse("()",
+              isTC(Iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>")));
+  // Not a single object
+  EXPECT_ANY_THROW(Parser::parseTripleObject("( <a> )"));
+  expectParse("[ ]", AD_PROPERTY(TripleComponent, isString, IsTrue()));
+  expectParse("_:bar", AD_PROPERTY(TripleComponent, isString, IsTrue()));
+  // Not a single object
+  EXPECT_ANY_THROW(Parser::parseTripleObject("[ a <bar> ]"));
+}
