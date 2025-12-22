@@ -128,22 +128,30 @@ add_subdirectory(libqlever)
 OPTION(_DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS "Disable some tests that cause undefined symbol errors when building with Emscripten." OFF)
 
 if (NOT _DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS)
+    addLinkAndDiscoverTest(ExceptionHandlingTest)
+
     addLinkAndDiscoverTest(BenchmarkMeasurementContainerTest benchmark testUtil)
-
-    addLinkAndDiscoverTest(CompressorStreamTest engine)
-
-    addLinkAndDiscoverTestSerial(HttpTest Boost::iostreams http)
-
-    addLinkAndDiscoverTest(QueryHubTest http)
-
-    addLinkAndDiscoverTest(QueryToSocketDistributorTest http)
 
     addLinkAndDiscoverTest(ResultTableColumnOperationsTest benchmark testUtil)
 
     addLinkAndDiscoverTest(ServerTest engine server)
-
+    
     addLinkAndDiscoverTest(SparqlProtocolTest engine)
-endif()
+
+    addLinkAndDiscoverTest(UrlParserTest)
+
+    addLinkAndDiscoverTest(GraphStoreProtocolTest engine)
+
+    addLinkAndDiscoverTest(ParsedRequestBuilderTest engine)
+endif ()
+
+addLinkAndDiscoverTest(CompressorStreamTest engine)
+
+addLinkAndDiscoverTestSerial(HttpTest Boost::iostreams http)
+
+addLinkAndDiscoverTest(QueryHubTest http)
+
+addLinkAndDiscoverTest(QueryToSocketDistributorTest http)
 
 addLinkAndDiscoverTest(ValueIdComparatorsTest util)
 
@@ -368,8 +376,6 @@ addLinkAndDiscoverTestSerial(AggregateExpressionTest parser sparqlExpressions in
 
 addLinkAndDiscoverTest(OnDestructionDontThrowDuringStackUnwindingTest)
 
-addLinkAndDiscoverTest(ExceptionHandlingTest)
-
 addLinkAndDiscoverTest(SparqlExpressionTypesTest sparqlExpressions util)
 
 addLinkAndDiscoverTest(LimitOffsetClauseTest)
@@ -460,15 +466,9 @@ addLinkAndDiscoverTest(BlankNodeManagerTest)
 
 addLinkAndDiscoverTest(SparqlExpressionGeneratorsTest engine)
 
-addLinkAndDiscoverTest(UrlParserTest)
-
 addLinkAndDiscoverTest(ExecuteUpdateTest engine)
 
 addLinkAndDiscoverTest(ValueGetterTest engine)
-
-addLinkAndDiscoverTest(GraphStoreProtocolTest engine)
-
-addLinkAndDiscoverTest(ParsedRequestBuilderTest engine)
 
 addLinkAndDiscoverTest(LruCacheTest)
 
