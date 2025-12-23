@@ -513,6 +513,22 @@ TEST_F(BlankNodeManagerTestFixture, explicitAndRandomAllocationCoexistence) {
 }
 
 // _____________________________________________________________________________
+TEST_F(BlankNodeManagerTestFixture,
+       explicitAllocationAfterRandomAllocationFails) {
+  auto bnm = createManager();
+
+  // Allocate a random block. We need to bind it to a variable because of a
+  // `[[nodiscard]]` annotation.
+  [[maybe_unused]] auto randomBlock1 = bnm->allocateBlock();
+  // Allocate some blocks explicitly.
+  auto doAllocate = [&]() {
+    [[maybe_unused]] auto block = bnm->allocateExplicitBlock(100);
+  };
+  AD_EXPECT_THROW_WITH_MESSAGE(doAllocate(),
+                               testing::HasSubstr("has to happen before"));
+}
+
+// _____________________________________________________________________________
 TEST_F(BlankNodeManagerTestFixture, uuidCollisionHandling) {
   auto bnm = createManager();
 
