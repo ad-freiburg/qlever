@@ -104,8 +104,11 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
       ad_utility::detail::serializeIds(serializer, col);
     }
 
-    // Serialize VariableToColumnMap manually (can't use HashMap serialization
-    // because Variable is not default-constructible).
+    // Serialize VariableToColumnMap manually (`Variable` is not
+    // default-constructible, so we cannot automatically read the hash map from
+    // a serializer, and therefore for consistency we also manually handling the
+    // writing to the serializer, s.t. we do not depend on the internals of
+    // HashMap serialization.
     serializer << arg.varToColMap_.size();
     for (const auto& [var, colInfo] : arg.varToColMap_) {
       serializer << var;
@@ -118,9 +121,9 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
     // Serialize cacheKey (string).
     serializer << arg.cacheKey_;
 
-    // Serialize cachedGeoIndex (optional)
-    // Note: We cannot serialize the `optional` directly, because the geo index
-    // has no default constructor for safety reasons.
+    // Serialize the `cachedGeoIndex_`. Note: The `cachedGeoIndex_` is not
+    // default-constructible, so we use manual serialization (see the comment
+    // above for the manual serialization of the `varToColMap_` for details).
     bool hasGeoIndex = arg.cachedGeoIndex_.has_value();
     serializer << hasGeoIndex;
     if (hasGeoIndex) {

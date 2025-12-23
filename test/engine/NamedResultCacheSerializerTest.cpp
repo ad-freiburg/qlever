@@ -17,6 +17,7 @@
 
 using namespace ad_utility::serialization;
 using ::testing::ElementsAre;
+using ::testing::Pointee;
 using ::testing::UnorderedElementsAreArray;
 
 namespace {
@@ -90,6 +91,7 @@ TEST_F(NamedResultCacheSerializerTest, ValueSerialization) {
   };
 
   auto deserializedValue = serializeAndDeserializeValue(value);
+  ASSERT_NE(deserializedValue, nullptr);
 
   // Check the result pointer is valid.
   ASSERT_NE(deserializedValue.result_, nullptr);
@@ -102,7 +104,7 @@ TEST_F(NamedResultCacheSerializerTest, ValueSerialization) {
               deserWords[i].toStringRepresentation());
   }
   // Check the result
-  EXPECT_THAT(*deserializedValue.result_, matchesIdTable(table));
+  EXPECT_THAT(deserializedValue.result_, Pointee(matchesIdTable(table)));
   EXPECT_THAT(deserializedValue.varToColMap_,
               UnorderedElementsAreArray(varColMap));
   EXPECT_THAT(deserializedValue.resultSortedOn_, ElementsAre(0, 1));
@@ -171,13 +173,15 @@ TEST_F(NamedResultCacheSerializerTest, CacheSerialization) {
   EXPECT_EQ(cache2.numEntries(), 2);
 
   auto result1 = cache2.get("query-1");
-  EXPECT_THAT(*result1->result_, matchesIdTable(table1));
+  ASSERT_NE(result1, nullptr);
+  EXPECT_THAT(result1->result_, Pointee(matchesIdTable(table1)));
   EXPECT_THAT(result1->varToColMap_, UnorderedElementsAreArray(varColMap1));
   EXPECT_THAT(result1->resultSortedOn_, ElementsAre(0));
   EXPECT_EQ(result1->cacheKey_, "key1");
 
   auto result2 = cache2.get("query-2");
-  EXPECT_THAT(*result2->result_, matchesIdTable(table2));
+  ASSERT_NE(result2, nullptr);
+  EXPECT_THAT(result2->result_, Pointee(matchesIdTable(table2)));
   EXPECT_THAT(result2->varToColMap_, UnorderedElementsAreArray(varColMap2));
   EXPECT_THAT(result2->resultSortedOn_, ElementsAre(1, 0));
   EXPECT_EQ(result2->cacheKey_, "key2");

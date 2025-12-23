@@ -84,7 +84,7 @@ void SpatialJoinCachedIndex::populateFromSerialized(
                        "failed, probably the input data is corrupt");
   // We call `ForceBuild` when initializing the index, and the serialization
   // preserves the index structure, so the following assertion holds, which
-  // insures that the index is ready for (cheap) usage by queries after
+  // ensures that the index is ready for (cheap) usage by queries after
   // deserializing it.
   AD_CORRECTNESS_CHECK(pimpl_->s2index_.is_fresh());
 }
