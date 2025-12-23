@@ -32,7 +32,10 @@ class SpatialJoinCachedIndex {
   // As `S2MutableShapeInex` doesn't support additional payloads, the
   //  `shapeIndexToRow_` associates s2's `shape ids` with row indices in the
   //  respective `IdTable` from which this `SpatialJoinCachedIndex` was created.
+ public:
   using ShapeIndexToRow = ad_utility::HashMap<size_t, size_t>;
+
+ private:
   ShapeIndexToRow shapeIndexToRow_;
 
  public:

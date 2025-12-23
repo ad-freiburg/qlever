@@ -29,10 +29,10 @@ CPP_template_def(typename Serializer)(
     AD_CORRECTNESS_CHECK(entries.back().second != nullptr);
   }
 
-  // Serialize the number of entries
+  // Serialize the number of entries.
   serializer << entries.size();
 
-  // Serialize each entry
+  // Serialize each entry.
   for (const auto& [key, value] : entries) {
     serializer << key;
     serializer << *value;
@@ -45,26 +45,26 @@ CPP_template_def(typename Serializer)(
         Serializer>) void NamedResultCache::
     readFromSerializer(Serializer& serializer, Value::Allocator allocator,
                        ad_utility::BlankNodeManager& blankNodeManager) {
-  // Clear the cache first
+  // Clear the cache first.
   clear();
 
-  // Deserialize the number of entries
+  // Deserialize the number of entries.
   size_t numEntries;
   serializer >> numEntries;
 
-  // Deserialize each entry and add to the cache
+  // Deserialize each entry and add to the cache.
   for (size_t i = 0; i < numEntries; ++i) {
     // Deserialize the key
     Key key;
     serializer >> key;
 
-    // Deserialize the value
+    // Deserialize the value.
     Value value;
     value.allocatorForSerialization_ = allocator;
     value.blankNodeManagerForSerialization_ = blankNodeManager;
     serializer >> value;
 
-    // Use the store method to maintain consistency
+    // Use the store method to maintain consistency.
     store(key, std::move(value));
   }
 }
@@ -77,16 +77,23 @@ namespace ad_utility::serialization {
 AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
     (ad_utility::SimilarTo<T, NamedResultCache::Value>)) {
   if constexpr (WriteSerializer<S>) {
-    // Serialize the LocalVocab first (required for ID remapping)
+    // Serialize the LocalVocab first (required for ID remapping).
     ad_utility::detail::serializeLocalVocab(serializer, arg.localVocab_);
 
     // Serialize the IdTable (uses the `serializeIds` helper which handles
-    // LocalVocab IDs)
+    // LocalVocab IDs).
     serializer << arg.result_->numRows();
     serializer << arg.result_->numColumns();
     for (const auto& col : arg.result_->getColumns()) {
-      // TODO<joka921> Discuss and fix the semantics of local vocabs when
-      // serializing IDs to an from the serializer.
+      // NOTE: Although the code for serialization of a local vocab above is
+      // already incorporated, we currently still let local vocab entries throw
+      // an exception, because there are some caveats in the serialization that
+      // don't work yet, and will only be mitigated in the future. NOTE2: Even
+      // though we disallow the local vocab, it is crucial to serialize the
+      // local vocab because of possible added blank node indices, which we do
+      // handle correctly, and which also rely on the local vocab.
+      // TODO<joka921> Mitigate the inconsistencies in the serializer, and then
+      // allow local vocab entries here.
       AD_CORRECTNESS_CHECK(
           ql::ranges::find(col, Datatype::LocalVocabIndex, &Id::getDatatype) ==
               col.end(),
@@ -98,17 +105,17 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
     }
 
     // Serialize VariableToColumnMap manually (can't use HashMap serialization
-    // because Variable is not default-constructible)
+    // because Variable is not default-constructible).
     serializer << arg.varToColMap_.size();
     for (const auto& [var, colInfo] : arg.varToColMap_) {
       serializer << var;
       serializer << colInfo;
     }
 
-    // Serialize resultSortedOn (vector of ColumnIndex)
+    // Serialize resultSortedOn (vector of ColumnIndex).
     serializer << arg.resultSortedOn_;
 
-    // Serialize cacheKey (string)
+    // Serialize cacheKey (string).
     serializer << arg.cacheKey_;
 
     // Serialize cachedGeoIndex (optional)
@@ -120,12 +127,12 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
       serializer << arg.cachedGeoIndex_.value();
     }
   } else {
-    // Deserialize the LocalVocab and get the ID mapping
+    // Deserialize the LocalVocab and get the ID mapping.
     AD_CORRECTNESS_CHECK(arg.blankNodeManagerForSerialization_.has_value());
     auto [localVocab, mapping] = ad_utility::detail::deserializeLocalVocab(
         serializer, &arg.blankNodeManagerForSerialization_.value());
 
-    // Deserialize the IdTable with ID mapping applied
+    // Deserialize the IdTable with ID mapping applied.
     size_t numRows, numColumns;
     serializer >> numRows;
     serializer >> numColumns;
@@ -133,20 +140,11 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
     AD_CORRECTNESS_CHECK(arg.allocatorForSerialization_.has_value());
     IdTable idTable{numColumns, arg.allocatorForSerialization_.value()};
     idTable.resize(numRows);
-    for (decltype(auto) col : idTable.getColumns()) {
-      // TODO<joka921> Discuss and fix the semantics of local vocabs when
-      // serializing IDs to an from the serializer.
-      AD_CORRECTNESS_CHECK(
-          ql::ranges::find(col, Datatype::LocalVocabIndex, &Id::getDatatype) ==
-              col.end(),
-          "Named result cache entries that contain local vocab entries "
-          "currently cannot be serialized. Note that local vocab entries can "
-          "also occur if SPARQL UPDATE operations have been performed on the "
-          "index before creating the named cached result.");
+    for (auto&& col : idTable.getColumns()) {
       ad_utility::detail::deserializeIds(serializer, mapping, col);
     }
 
-    // Deserialize VariableToColumnMap manually
+    // Deserialize VariableToColumnMap manually.
     size_t mapSize;
     serializer >> mapSize;
     VariableToColumnMap varToColMap;
@@ -158,15 +156,15 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
       varToColMap[std::move(var)] = colInfo;
     }
 
-    // Deserialize resultSortedOn
+    // Deserialize `resultSortedOn`.
     std::vector<ColumnIndex> resultSortedOn;
     serializer >> resultSortedOn;
 
-    // Deserialize cacheKey
+    // Deserialize `cacheKey`.
     std::string cacheKey;
     serializer >> cacheKey;
 
-    // Deserialize cachedGeoIndex
+    // Deserialize `cachedGeoIndex`.
     bool hasGeoIndex;
     serializer >> hasGeoIndex;
     std::optional<SpatialJoinCachedIndex> cachedGeoIndex;
@@ -175,7 +173,7 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
       serializer >> cachedGeoIndex.value();
     }
 
-    // Construct the Value
+    // Construct the `Value`.
     arg = NamedResultCache::Value{
         std::make_shared<const IdTable>(std::move(idTable)),
         std::move(varToColMap),

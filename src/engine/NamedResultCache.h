@@ -7,6 +7,8 @@
 #ifndef QLEVER_SRC_ENGINE_NAMEDRESULTCACHE_H
 #define QLEVER_SRC_ENGINE_NAMEDRESULTCACHE_H
 
+#include <boost/optional.hpp>
+
 #include "engine/ExplicitIdTableOperation.h"
 #include "engine/LocalVocab.h"
 #include "engine/SpatialJoinCachedIndex.h"
@@ -61,7 +63,7 @@ class NamedResultCache {
   // The `cache_` has a non-const `operator[]` which is non-const because it has
   // to update data structures for the `LRU` mechanism. That's why we
   // unfortunately have to use `mutable` here. We get threadsafety via the
-  // `Synchronnized` wrapper, and manually have to make sure that we logically
+  // `Synchronized` wrapper, and manually have to make sure that we logically
   // don't violate the constness.
   mutable ad_utility::Synchronized<Cache> cache_;
 
@@ -102,7 +104,9 @@ class NamedResultCache {
   // Read the contents of the result cache from the `serializer`.
   // NOTE: This function has to be called after the index has been loaded, but
   // before any queries are executed, because of the deserialization of possible
-  // blank nodes in the cache entries.
+  // blank nodes in the cache entries. In particular, if the serialized cache
+  // contains a local blank node, and the `blankNodeManager` already has handed
+  // out randomly allocated blank nodes, an `AD_CORRECTNESS_CHECK` will fail.
   CPP_template(typename Serializer)(
       requires ad_utility::serialization::ReadSerializer<
           Serializer>) void readFromSerializer(Serializer& serializer,

@@ -20,40 +20,48 @@ using ::testing::ElementsAre;
 using ::testing::UnorderedElementsAreArray;
 
 namespace {
-// Global blank node manager and allocators that can be used as arguments to the
-// `serializeAndDeserializeValue` function below when we don't really care about
-// blank nodes and allocation details.
-ad_utility::BlankNodeManager blankNodeManager;
-ad_utility::AllocatorWithLimit<Id> alloc{
-    ad_utility::makeUnlimitedAllocator<Id>()};
 
-// Serialize and immediately deserialize and return the `value`.
-NamedResultCache::Value serializeAndDeserializeValue(
-    const NamedResultCache::Value& value,
-    ad_utility::BlankNodeManager& bm = blankNodeManager,
-    ad_utility::AllocatorWithLimit<Id> allocator = alloc) {
-  ByteBufferWriteSerializer writeSerializer;
-  writeSerializer << value;
-  ByteBufferReadSerializer readSerializer{std::move(writeSerializer).data()};
-  NamedResultCache::Value result;
-  result.allocatorForSerialization_ = std::move(allocator);
-  result.blankNodeManagerForSerialization_.emplace(bm);
-  readSerializer >> result;
-  return result;
-}
+// Test fixture for NamedResultCacheSerializer tests.
+class NamedResultCacheSerializerTest : public ::testing::Test {
+ protected:
+  // Blank node manager and allocator that can be used when we don't really
+  // care about blank nodes and allocation details.
+  ad_utility::BlankNodeManager blankNodeManager_;
+  ad_utility::AllocatorWithLimit<Id> alloc_{
+      ad_utility::makeUnlimitedAllocator<Id>()};
 
-// Test serialization of a complete NamedResultCache::Value
-TEST(NamedResultCacheSerializer, ValueSerialization) {
+  // Serialize and immediately deserialize and return the `value`.
+  NamedResultCache::Value serializeAndDeserializeValue(
+      const NamedResultCache::Value& value, ad_utility::BlankNodeManager& bm,
+      ad_utility::AllocatorWithLimit<Id> allocator) const {
+    ByteBufferWriteSerializer writeSerializer;
+    writeSerializer << value;
+    ByteBufferReadSerializer readSerializer{std::move(writeSerializer).data()};
+    NamedResultCache::Value result;
+    result.allocatorForSerialization_ = std::move(allocator);
+    result.blankNodeManagerForSerialization_.emplace(bm);
+    readSerializer >> result;
+    return result;
+  }
+
+  // Overload that uses the default member variables, cannot be const, because
+  // the calls might modify the `BlankNodeManager` or the `LocalVocab`.
+  NamedResultCache::Value serializeAndDeserializeValue(
+      const NamedResultCache::Value& value) {
+    return serializeAndDeserializeValue(value, blankNodeManager_, alloc_);
+  }
+};
+
+// Test serialization of a complete `NamedResultCache::Value`.
+TEST_F(NamedResultCacheSerializerTest, ValueSerialization) {
   // we need to setup a dummy index somewhere, because otherwise the comparison
   // of `IdTable`s won't work;
   [[maybe_unused]] auto qec = ad_utility::testing::getQec();
   // Create a test Value
   LocalVocab localVocab;
-  [[maybe_unused]] auto local =
-
-      Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
-          ad_utility::triple_component::LiteralOrIri::iriref(
-              "<http://example.org/test>")));
+  [[maybe_unused]] auto local = localVocab.getIndexAndAddIfNotContained(
+      ad_utility::triple_component::LiteralOrIri::iriref(
+          "<http://example.org/test>"));
 
   // Note: Currently the serialization throws if we pass a `LocalVocabIndex`
   // inside the `IdTable` As soon as we have improved the serialization of local
@@ -83,6 +91,9 @@ TEST(NamedResultCacheSerializer, ValueSerialization) {
 
   auto deserializedValue = serializeAndDeserializeValue(value);
 
+  // Check the result pointer is valid.
+  ASSERT_NE(deserializedValue.result_, nullptr);
+
   // Check the local vocab.
   auto deserWords = deserializedValue.localVocab_.getAllWordsForTesting();
   EXPECT_EQ(origWords.size(), deserWords.size());
@@ -99,10 +110,8 @@ TEST(NamedResultCacheSerializer, ValueSerialization) {
   EXPECT_FALSE(deserializedValue.cachedGeoIndex_.has_value());
 }
 
-// Test serialization of the entire NamedResultCache
-TEST(NamedResultCacheSerializer, CacheSerialization) {
-  std::string tempFile = "/tmp/test_named_result_cache.bin";
-
+// Test serialization of the entire NamedResultCache.
+TEST_F(NamedResultCacheSerializerTest, CacheSerialization) {
   // Create a cache and add some entries
   NamedResultCache cache;
 
@@ -172,15 +181,10 @@ TEST(NamedResultCacheSerializer, CacheSerialization) {
   EXPECT_THAT(result2->varToColMap_, UnorderedElementsAreArray(varColMap2));
   EXPECT_THAT(result2->resultSortedOn_, ElementsAre(1, 0));
   EXPECT_EQ(result2->cacheKey_, "key2");
-
-  // Clean up
-  ad_utility::deleteFile(tempFile);
 }
 
-// Test empty cache serialization
-TEST(NamedResultCacheSerializer, EmptyCacheSerialization) {
-  std::string tempFile = "/tmp/test_empty_cache.bin";
-
+// Test empty cache serialization.
+TEST_F(NamedResultCacheSerializerTest, EmptyCacheSerialization) {
   // Create an empty cache
   NamedResultCache cache;
   EXPECT_EQ(cache.numEntries(), 0);
@@ -196,12 +200,7 @@ TEST(NamedResultCacheSerializer, EmptyCacheSerialization) {
                               *qec->getIndex().getBlankNodeManager());
     return cache2;
   }();
-
-  // Check
   EXPECT_EQ(cache2.numEntries(), 0);
-
-  // Clean up
-  ad_utility::deleteFile(tempFile);
 }
 
 }  // namespace
