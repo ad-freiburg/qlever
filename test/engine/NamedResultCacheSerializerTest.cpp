@@ -91,7 +91,6 @@ TEST_F(NamedResultCacheSerializerTest, ValueSerialization) {
   };
 
   auto deserializedValue = serializeAndDeserializeValue(value);
-  ASSERT_NE(deserializedValue, nullptr);
 
   // Check the result pointer is valid.
   ASSERT_NE(deserializedValue.result_, nullptr);
