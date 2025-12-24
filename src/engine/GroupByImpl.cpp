@@ -1749,7 +1749,7 @@ constexpr auto GroupByImpl::makeProcessGroupsVisitor(
 template <size_t NUM_GROUP_COLUMNS, typename SubResults>
 Result GroupByImpl::computeGroupByForHashMapOptimization(
     HashMapOptimizationData data, SubResults subresults) const {
-  // Check number of grouping columns
+  // Check number of grouping columns.
   AD_CONTRACT_CHECK(data.columnIndices_.has_value());
   AD_CONTRACT_CHECK(data.aggregates_.has_value());
 
@@ -1757,7 +1757,7 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
   AD_CORRECTNESS_CHECK(numColumns == NUM_GROUP_COLUMNS ||
                        NUM_GROUP_COLUMNS == 0);
   LocalVocab localVocab;
-  // Store reference to localVocab in optimization data
+  // Store reference to localVocab in optimization data.
   data.localVocabRef_ = localVocab;
 
   // Initialize the data for the aggregates of the GROUP BY operation.
@@ -1765,7 +1765,7 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
       getExecutionContext()->getAllocator(), data.aggregateAliases_,
       numColumns);
 
-  // Timers for hash-map lookup, aggregation and for detailed measurements
+  // Timers for hash-map lookup, aggregation and for detailed measurements.
   HashMapTimers timers{ad_utility::Timer::Stopped, ad_utility::Timer::Stopped};
   ad_utility::Timer initialProcessingTimer{ad_utility::Timer::Started};
 
