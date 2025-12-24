@@ -50,7 +50,9 @@ struct RuntimeParameters {
   SizeT lazyIndexScanMaxSizeMaterialization_{
       1'000'000, "lazy-index-scan-max-size-materialization"};
   Bool useBinsearchTransitivePath_{true, "use-binsearch-transitive-path"};
-  Bool groupByHashMapEnabled_{false, "group-by-hash-map-enabled"};
+  Bool groupByHashMapEnabled_{true, "group-by-hash-map-enabled"};
+  SizeT groupByHashMapGroupThreshold_{350'000,
+                                      "group-by-hash-map-group-threshold"};
   Bool groupByDisableIndexScanOptimizations_{
       false, "group-by-disable-index-scan-optimizations"};
   SizeT serviceMaxValueRows_{10'000, "service-max-value-rows"};

@@ -170,6 +170,20 @@ int main(int argc, char** argv) {
       "of the smaller join partner in a spatial join, such that prefiltering "
       "will be employed. To disable prefiltering for non-point geometries, set "
       "this option to 0.");
+  add("group-by-hash-map-enabled",
+      optionFactory
+          .getProgramOption<&RuntimeParameters::groupByHashMapEnabled_>(),
+      "If set, then the GROUP BY operation will use a hash map to store "
+      "intermediate results. This is faster for small groups, but uses more "
+      "memory. If not set, the GROUP BY operation will use a sort-based "
+      "algorithm.");
+  add("group-by-hash-map-group-threshold",
+      optionFactory.getProgramOption<
+          &RuntimeParameters::groupByHashMapGroupThreshold_>(),
+      "The maximum number of groups for which the hash map should be used. "
+      "If the number of groups exceeds this threshold, a hybrid approach "
+      "will be used instead, that sorts entries that don't belong to the hash "
+      "map.");
   po::variables_map optionsMap;
 
   try {

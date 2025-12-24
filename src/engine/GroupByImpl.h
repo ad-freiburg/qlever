@@ -10,6 +10,8 @@
 
 #include <gtest/gtest_prod.h>
 
+#include <boost/optional.hpp>
+#include <iterator>
 #include <memory>
 #include <string>
 #include <utility>
@@ -133,7 +135,7 @@ class GroupByImpl : public Operation {
                     const std::vector<Aggregate>& aggregates,
                     sparqlExpression::EvaluationContext& evaluationContext,
                     size_t blockStart, size_t blockEnd, LocalVocab* localVocab,
-                    const vector<size_t>& groupByCols) const;
+                    const vector<ColumnIndex>& groupByCols) const;
 
   // Handle queries like `SELECT (COUNT(?x) AS ?c) WHERE {...}` with conditions
   // that result in an empty result set with implicit GROUP BY where we have to
@@ -153,7 +155,7 @@ class GroupByImpl : public Operation {
       std::shared_ptr<const Result> subresult,
       std::vector<Aggregate> aggregates,
       std::vector<HashMapAliasInformation> aggregateAliases,
-      std::vector<size_t> groupByCols, bool singleIdTable) const;
+      std::vector<ColumnIndex> groupByCols, bool singleIdTable) const;
 
   template <size_t OUT_WIDTH>
   void processGroup(const Aggregate& expression,
@@ -163,7 +165,8 @@ class GroupByImpl : public Operation {
                     size_t resultColumn, LocalVocab* localVocab) const;
 
   template <size_t IN_WIDTH, size_t OUT_WIDTH>
-  IdTable doGroupBy(const IdTable& inTable, const vector<size_t>& groupByCols,
+  IdTable doGroupBy(const IdTable& inTable,
+                    const vector<ColumnIndex>& groupByCols,
                     const vector<Aggregate>& aggregates,
                     LocalVocab* outLocalVocab) const;
 
@@ -171,6 +174,15 @@ class GroupByImpl : public Operation {
   friend class groupBy::detail::LazyGroupByRange;
 
   FRIEND_TEST(GroupByTest, doGroupBy);
+  // Friend tests for internals used in hash-map optimization.
+  FRIEND_TEST(GroupByHashMapOptimizationTest,
+              MakeGroupValueSpans_SelectColumns);
+  FRIEND_TEST(GroupByHashMapOptimizationTest,
+              UpdateHashMapWithTable_CountSingleBlock);
+  FRIEND_TEST(GroupByHashMapOptimizationTest,
+              UpdateHashMapWithTable_CountTwoBlocksOverlap);
+  FRIEND_TEST(GroupByHashMapOptimizationTest,
+              UpdateHashMapWithTable_OnlyMatchingNonmatchingList);
 
  public:
   // TODO<joka921> use `FRIEND_TEST` here once we have converged on the set
@@ -327,14 +339,58 @@ class GroupByImpl : public Operation {
   struct HashMapOptimizationData {
     // All aliases and the aggregates they contain.
     std::vector<HashMapAliasInformation> aggregateAliases_;
+
+    // OPTIONAL PARAMETERS, only required for hybrid fallback.
+    // They are used to bundle the parameters, so that we do not have to pass
+    // them around separately.
+    // > `localVocabRef` is a non-owning reference to the LocalVocab used during
+    // hash-map processing. It's initialized in
+    // `computeGroupByForHashMapOptimization`.
+    std::optional<std::vector<ColumnIndex>> columnIndices_;
+    std::optional<std::vector<Aggregate>> aggregates_;
+    boost::optional<LocalVocab&> localVocabRef_;
+
+    // Default ctor: no columns or aggregates set
+    HashMapOptimizationData() = default;
+    // Build with just aliases
+    explicit HashMapOptimizationData(
+        std::vector<HashMapAliasInformation> aliases)
+        : aggregateAliases_(std::move(aliases)) {}
+    // Build with aliases, columns, and aggregates. The column indices are
+    // stored as `ColumnIndex` to match the rest of the engine API.
+    HashMapOptimizationData(std::vector<HashMapAliasInformation> aliases,
+                            std::vector<ColumnIndex> cols,
+                            std::vector<Aggregate> aggs)
+        : aggregateAliases_(std::move(aliases)),
+          columnIndices_(std::move(cols)),
+          aggregates_(std::move(aggs)) {}
   };
 
   // Create result IdTable by using a HashMap mapping groups to aggregation data
   // and subsequently calling `createResultFromHashMap`.
   template <size_t NUM_GROUP_COLUMNS, typename SubResults>
-  Result computeGroupByForHashMapOptimization(
-      std::vector<HashMapAliasInformation>& aggregateAliases,
-      SubResults subresults, const std::vector<size_t>& columnIndices) const;
+  Result computeGroupByForHashMapOptimization(HashMapOptimizationData data,
+                                              SubResults subresults) const;
+
+  // Type returned by `getHashEntries(groupByCols, onlyUsePreexistingGroups)`.
+  // If `onlyUsePreexistingGroups` is true, nonMatchingRows_ will only contain
+  // rows that would create new groups.
+  // If `onlyUsePreexistingGroups` is false, nonMatchingRows_ will be empty as
+  // new groups are created for these rows.
+  struct GroupLookupResult {
+    // For each processed input row that matched an existing group (in order),
+    // `matchedRows_` stores the row index in the current block and
+    // `groupIndexes_` stores the corresponding group index in the hash map.
+    // Both vectors always have the same size and form a parallel mapping
+    // (matchedRows_[i] -> groupIndexes_[i]). It is more efficient to store two
+    // parallel vectors instead of a single
+    // `std::vector<std::pair<size_t, size_t>>` because these two vectors are
+    // processed separately later in `makeProcessGroupsVisitor`.
+    std::vector<size_t> matchedRows_;
+    std::vector<size_t> groupIndexes_;
+    // Indices of input rows for which no existing group was found.
+    std::vector<size_t> nonMatchingRows_;
+  };
 
   using AggregationData =
       std::variant<AvgAggregationData, CountAggregationData, MinAggregationData,
@@ -392,10 +448,20 @@ class GroupByImpl : public Operation {
       }
     }
 
-    // Returns a vector containing the offsets for all ids of `groupByCols`,
-    // inserting entries if necessary.
-    std::vector<size_t> getHashEntries(
-        const ArrayOrVector<ql::span<const Id>>& groupByCols);
+    // Returns the mapping of input rows (described by `groupByCols`) to
+    // offsets in the internal hash map. If `onlyUsePreexistingGroups` is
+    // `true`, rows whose key is not yet present in the map are not inserted
+    // but their row indices are added to the `nonMatchingRows_` ("missing
+    // indices") of the returned `GroupLookupResult`. If
+    // `onlyUsePreexistingGroups` is `false`, such keys are inserted into the
+    // hash map and no missing indices are reported for them.
+    GroupLookupResult getHashEntries(
+        const ArrayOrVector<ql::span<const Id>>& groupByCols,
+        bool onlyUsePreexistingGroups);
+
+    // Helper to build a single key vector from column-wise spans.
+    ArrayOrVector<Id> makeKeyForHashMap(
+        const ArrayOrVector<ql::span<const Id>>& spans, size_t row) const;
 
     // Return the index of `id`.
     [[nodiscard]] size_t getIndex(const ArrayOrVector<Id>& ids) const {
@@ -419,7 +485,7 @@ class GroupByImpl : public Operation {
     [[nodiscard]] ArrayOrVector<std::vector<Id>> getSortedGroupColumns() const;
 
     // Returns the number of groups.
-    [[nodiscard]] size_t getNumberOfGroups() const { return map_.size(); }
+    [[nodiscard]] size_t numGroups() const { return map_.size(); }
 
     // How many columns we are grouping by, important in case
     // `NUM_GROUP_COLUMNS` == 0.
@@ -485,6 +551,31 @@ class GroupByImpl : public Operation {
   evaluateChildExpressionOfAggregateFunction(
       const HashMapAggregateInformation& aggregate,
       sparqlExpression::EvaluationContext& evaluationContext);
+
+  /**
+   * @brief Processes all aggregate aliases for a single block of rows.
+   *
+   * For each alias and each aggregate inside that alias:
+   * - evaluate the aggregate's inner expression on the rows in this block
+   *   using the given `evaluationContext`, and
+   * - send the resulting values into the matching aggregation data
+   *   structures via `makeProcessGroupsVisitor`.
+   */
+  template <size_t NUM_GROUP_COLUMNS>
+  static void processAggregateAliasesForBlock(
+      const GroupLookupResult& lookupResult,
+      const HashMapOptimizationData& data,
+      HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
+      sparqlExpression::EvaluationContext& evaluationContext);
+
+  // Helper that creates the visitor used in
+  // `processAggregateAliasesForBlock` to route values from the evaluation
+  // of an aggregate's child expression into the corresponding aggregation
+  // data structures.
+  static constexpr auto makeProcessGroupsVisitor(
+      size_t blockSize,
+      const sparqlExpression::EvaluationContext* evaluationContext,
+      const GroupLookupResult& groupLookupResult);
 
   // Sort the HashMap by key and create result table.
   template <size_t NUM_GROUP_COLUMNS>
@@ -626,6 +717,77 @@ class GroupByImpl : public Operation {
 
   // TODO<joka921> Also inform the query planner (via the cost estimate)
   // that the optimization can be done.
+
+ private:
+  struct HashMapTimers {
+    ad_utility::Timer lookupTimer_;
+    ad_utility::Timer aggregationTimer_;
+  };
+
+  // Result struct for updateHashMapWithTable
+  struct UpdateResult {
+    std::vector<size_t> nonMatchingRows_;
+    bool thresholdExceeded_ = false;
+  };
+
+  // Load entries from the given table into the hash map, optionally only
+  // matching rows. Returns both non-matching rows and whether threshold was
+  // exceeded.
+  template <size_t NUM_GROUP_COLUMNS>
+  UpdateResult updateHashMapWithTable(
+      const IdTable& table, const HashMapOptimizationData& data,
+      HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
+      HashMapTimers& timers, bool onlyUsePreexistingGroups = false) const;
+
+  // Build spans for the group values in the given columns of the given table,
+  // starting at `beginIdx` and spanning `blockSize` rows.
+  template <size_t NUM_GROUP_COLUMNS>
+  typename HashMapAggregationData<NUM_GROUP_COLUMNS>::template ArrayOrVector<
+      ql::span<const Id>>
+  makeGroupValueSpans(const IdTable& table, size_t beginIdx, size_t blockSize,
+                      const std::vector<ColumnIndex>& cols) const;
+
+  /** Helper function to handle the remainder of the input after the hash map
+   * threshold has been exceeded.
+   *
+   * Hybrid approach summary:
+   * - While processing input blocks we insert all rows into a hash map and
+   *   maintain aggregation state for groups already present in the map.
+   * - If the number of groups exceeds a runtime-configured threshold we
+   *   switch to a hybrid fallback: we keep the hash map results for groups
+   *   already discovered, and buffer the remaining rows (those that would
+   *   create new groups) into a temporary table. The buffered rows are then
+   *   processed using a sort-based grouping and merged with the hash-map
+   *   results.
+   *
+   * @tparam NUM_GROUP_COLUMNS: number of grouping columns used by the HashMap
+   *   aggregation data (compile-time constant; may be 0).
+   * @tparam BlockIterator: an input iterator type that points into the range of
+   *   subresults (each element is expected to be a pair/reference of the
+   *   form (IdTable, LocalVocab)). This iterator is advanced from the
+   *   current position to the end.
+   * @tparam BlocksEnd: the corresponding end/sentinel type for the input range.
+   * In many cases this is the same type as BlockIterator, but it may be a
+   *   distinct sentinel type for ranges that use sentinels.
+   * @param restTable A partially filled table that already contains the rows
+   *   from the current block that would have created new groups in the hash
+   *   map. Additional rows collected from subsequent blocks will be appended
+   *   to this table inside the function before the sort-based fallback is
+   *   executed.
+   *
+   * The function consumes the remaining input starting at `blockIt`
+   * up to `blocksEnd` and returns the final `Result` consisting of the
+   * hash-map entries and the grouped fallback rows.
+   */
+  CPP_template(size_t NUM_GROUP_COLUMNS, typename BlockIterator,
+               typename BlocksEnd)(
+      requires ql::concepts::input_iterator<BlockIterator>&&
+          ql::concepts::sentinel_for<BlocksEnd, BlockIterator>) Result
+      handleRemainderUsingHybridApproach(
+          HashMapOptimizationData data,
+          HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
+          HashMapTimers& timers, BlockIterator blockIt, BlocksEnd blocksEnd,
+          IdTable restTable) const;
 };
 
 // _____________________________________________________________________________
