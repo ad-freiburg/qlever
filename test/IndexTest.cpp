@@ -50,19 +50,24 @@ auto lit = ad_utility::testing::tripleComponentLiteral;
 // scan matches `expected`.
 auto makeTestScanWidthOne = [](const IndexImpl& index,
                                const QueryExecutionContext& qec) {
-  return
-      [&index, &qec](const TripleComponent& c0, const TripleComponent& c1,
-                     Permutation::Enum permutation, const VectorTable& expected,
-                     Permutation::ColumnIndices additionalColumns = {},
-                     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
-        auto t = generateLocationTrace(l);
-        IdTable result =
-            index.scan({c0, c1, std::nullopt}, permutation, additionalColumns,
-                       std::make_shared<ad_utility::CancellationHandle<>>(),
-                       qec.locatedTriplesSnapshot());
-        ASSERT_EQ(result.numColumns(), 1 + additionalColumns.size());
-        ASSERT_EQ(result, makeIdTableFromVector(expected));
-      };
+  return [&index, &qec](
+             const TripleComponent& c0, const TripleComponent& c1,
+             Permutation::Enum permutation, const VectorTable& expected,
+             Permutation::ColumnIndices additionalColumns = {},
+             ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto t = generateLocationTrace(l);
+    const auto& actualPermutation = index.getPermutation(permutation);
+    auto locatedTriplesSnapshot = qec.locatedTriplesSnapshot();
+    IdTable result = actualPermutation.scan(
+        actualPermutation.getScanSpecAndBlocks(
+            ScanSpecificationAsTripleComponent{c0, c1, std::nullopt}
+                .toScanSpecification(index),
+            locatedTriplesSnapshot),
+        additionalColumns, std::make_shared<ad_utility::CancellationHandle<>>(),
+        locatedTriplesSnapshot);
+    ASSERT_EQ(result.numColumns(), 1 + additionalColumns.size());
+    ASSERT_EQ(result, makeIdTableFromVector(expected));
+  };
 };
 // Return a lambda that runs a scan for a fixed element `c0`
 // on the `permutation` (e.g. a fixed P in the PSO permutation)
@@ -70,18 +75,23 @@ auto makeTestScanWidthOne = [](const IndexImpl& index,
 // scan matches `expected`.
 auto makeTestScanWidthTwo = [](const IndexImpl& index,
                                const QueryExecutionContext& qec) {
-  return
-      [&index, &qec](const TripleComponent& c0, Permutation::Enum permutation,
-                     const VectorTable& expected,
-                     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
-        auto t = generateLocationTrace(l);
-        IdTable wol =
-            index.scan({c0, std::nullopt, std::nullopt}, permutation,
-                       Permutation::ColumnIndicesRef{},
-                       std::make_shared<ad_utility::CancellationHandle<>>(),
-                       qec.locatedTriplesSnapshot());
-        ASSERT_EQ(wol, makeIdTableFromVector(expected));
-      };
+  return [&index, &qec](
+             const TripleComponent& c0, Permutation::Enum permutation,
+             const VectorTable& expected,
+             ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto t = generateLocationTrace(l);
+    const auto& actualPermutation = index.getPermutation(permutation);
+    auto locatedTriplesSnapshot = qec.locatedTriplesSnapshot();
+    IdTable wol = actualPermutation.scan(
+        actualPermutation.getScanSpecAndBlocks(
+            ScanSpecificationAsTripleComponent{c0, std::nullopt, std::nullopt}
+                .toScanSpecification(index),
+            locatedTriplesSnapshot),
+        Permutation::ColumnIndicesRef{},
+        std::make_shared<ad_utility::CancellationHandle<>>(),
+        locatedTriplesSnapshot);
+    ASSERT_EQ(wol, makeIdTableFromVector(expected));
+  };
 };
 }  // namespace
 
@@ -416,19 +426,18 @@ auto IsPossiblyExternalString = [](TripleComponent content, bool isExternal) {
                                 ::testing::Eq(isExternal))));
 };
 
-TEST(IndexTest, TripleToInternalRepresentation) {
+TEST(IndexTest, processTriple) {
   {
     IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
     TurtleTriple turtleTriple{iri("<subject>"), iri("<predicate>"),
                               lit("\"literal\"")};
-    LangtagAndTriple res =
-        index.tripleToInternalRepresentation(std::move(turtleTriple));
-    EXPECT_TRUE(res.langtag_.empty());
-    EXPECT_THAT(res.triple_[0],
+    ProcessedTriple result = index.processTriple(std::move(turtleTriple));
+    EXPECT_TRUE(result.langtag_.empty());
+    EXPECT_THAT(result.triple_[0],
                 IsPossiblyExternalString(iri("<subject>"), true));
-    EXPECT_THAT(res.triple_[1],
+    EXPECT_THAT(result.triple_[1],
                 IsPossiblyExternalString(iri("<predicate>"), true));
-    EXPECT_THAT(res.triple_[2],
+    EXPECT_THAT(result.triple_[2],
                 IsPossiblyExternalString(lit("\"literal\""), true));
   }
   {
@@ -437,23 +446,21 @@ TEST(IndexTest, TripleToInternalRepresentation) {
         std::vector{"<subj"s});
     TurtleTriple turtleTriple{iri("<subject>"), iri("<predicate>"),
                               lit("\"literal\"", "@fr")};
-    LangtagAndTriple res =
-        index.tripleToInternalRepresentation(std::move(turtleTriple));
-    EXPECT_EQ(res.langtag_, "fr");
-    EXPECT_THAT(res.triple_[0],
+    ProcessedTriple result = index.processTriple(std::move(turtleTriple));
+    EXPECT_EQ(result.langtag_, "fr");
+    EXPECT_THAT(result.triple_[0],
                 IsPossiblyExternalString(iri("<subject>"), true));
-    EXPECT_THAT(res.triple_[1],
+    EXPECT_THAT(result.triple_[1],
                 IsPossiblyExternalString(iri("<predicate>"), false));
     // By default all languages other than English are externalized.
-    EXPECT_THAT(res.triple_[2],
+    EXPECT_THAT(result.triple_[2],
                 IsPossiblyExternalString(lit("\"literal\"", "@fr"), true));
   }
   {
     IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
     TurtleTriple turtleTriple{iri("<subject>"), iri("<predicate>"), 42.0};
-    LangtagAndTriple res =
-        index.tripleToInternalRepresentation(std::move(turtleTriple));
-    EXPECT_EQ(Id::makeFromDouble(42.0), std::get<Id>(res.triple_[2]));
+    ProcessedTriple result = index.processTriple(std::move(turtleTriple));
+    EXPECT_EQ(Id::makeFromDouble(42.0), std::get<Id>(result.triple_[2]));
   }
 }
 

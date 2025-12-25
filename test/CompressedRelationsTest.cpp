@@ -26,6 +26,8 @@ Id V(int64_t index) {
   return Id::makeFromVocabIndex(VocabIndex::make(index));
 }
 
+auto I = &Id::makeFromInt;
+
 // Retrieve the corresponding `BlockMetadataRanges` value for the
 // given`CompressedBlockMetadata` vector
 auto getBlockMetadataRangesfromVec =
@@ -174,19 +176,8 @@ compressedRelationTestWriteCompressedRelations(
         metaData.insert(metaData.end(), metadata.begin(), metadata.end());
       }};
 
-  CompressedRelationWriter twinWriter{
-      numColumns, ad_utility::File{filename + ".twinPermutation", "w"},
-      blocksize};
-  std::vector<CompressedRelationMetadata> twinMetaData;
-  CompressedRelationWriter::WriterAndCallback wc2{
-      twinWriter, [&](ql::span<const CompressedRelationMetadata> metadata) {
-        twinMetaData.insert(twinMetaData.end(), metadata.begin(),
-                            metadata.end());
-      }};
-
-  auto res = CompressedRelationWriter::createPermutationPair(
-      filename + "sorter-basename", wc1, wc2,
-      ad_utility::InputRangeTypeErased{generator(5)},
+  auto res = CompressedRelationWriter::createPermutation(
+      wc1, ad_utility::InputRangeTypeErased{generator(5)},
       qlever::KeyOrder{0, 1, 2, 3}, {});
   auto& blocks = res.blockMetadata_;
   // Test the serialization of the blocks and the metaData.
@@ -977,8 +968,8 @@ TEST(CompressedRelationReader, getResultSizeImpl) {
   DeltaTriplesManager& deltaTriplesManager = index.deltaTriplesManager();
   deltaTriplesManager.modify<void>([](DeltaTriples& dt) {
     auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
-    dt.insertTriples(handle, {IdTriple{{V(0), V(1), V(2), V(3)}},
-                              IdTriple{{V(0), V(4), V(5), V(3)}}});
+    dt.insertTriples(handle, {IdTriple{{I(0), I(1), I(2), I(3)}},
+                              IdTriple{{I(0), I(4), I(5), I(3)}}});
   });
   auto sharedLocatedTriplesSnapshot = deltaTriplesManager.getCurrentSnapshot();
   const auto& locatedTriplesSnapshot = *sharedLocatedTriplesSnapshot;
@@ -1009,13 +1000,13 @@ TEST(CompressedRelationReader, getResultSizeImpl) {
     expectResultSizes(perm, {std::nullopt, std::nullopt, std::nullopt}, 0, 2,
                       2);
   }
-  expectResultSizes(Permutation::SPO, {V(0), std::nullopt, std::nullopt}, 0, 2,
+  expectResultSizes(Permutation::SPO, {I(0), std::nullopt, std::nullopt}, 0, 2,
                     2);
   // Not all triples of the block are requested. The size estimate is truncated
   // by a factor which is a RuntimeParameter.
-  expectResultSizes(Permutation::PSO, {V(1), std::nullopt, std::nullopt}, 0, 1,
+  expectResultSizes(Permutation::PSO, {I(1), std::nullopt, std::nullopt}, 0, 1,
                     1);
-  expectResultSizes(Permutation::PSO, {V(1), V(5), std::nullopt}, 0, 1, 0);
+  expectResultSizes(Permutation::PSO, {I(1), I(5), std::nullopt}, 0, 1, 0);
 }
 
 namespace {

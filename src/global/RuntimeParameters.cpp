@@ -47,6 +47,8 @@ RuntimeParameters::RuntimeParameters() {
   add(spatialJoinPrefilterMaxSize_);
   add(enableDistributiveUnion_);
   add(treatDefaultGraphAsNamedGraph_);
+  add(sparqlResultsJsonWithTime_);
+  add(materializedViewWriterMemory_);
   add(defaultQueryTimeout_);
 
   defaultQueryTimeout_.setParameterConstraint(

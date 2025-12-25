@@ -496,21 +496,6 @@ class IndexImpl {
   std::vector<float> getMultiplicities(const Permutation& permutation) const;
 
   // _____________________________________________________________________________
-  IdTable scan(const ScanSpecificationAsTripleComponent& scanSpecification,
-               const Permutation::Enum& permutation,
-               Permutation::ColumnIndicesRef additionalColumns,
-               const ad_utility::SharedCancellationHandle& cancellationHandle,
-               const LocatedTriplesSnapshot& locatedTriplesSnapshot,
-               const LimitOffsetClause& limitOffset = {}) const;
-
-  // _____________________________________________________________________________
-  IdTable scan(const ScanSpecification& scanSpecification, Permutation::Enum p,
-               Permutation::ColumnIndicesRef additionalColumns,
-               const ad_utility::SharedCancellationHandle& cancellationHandle,
-               const LocatedTriplesSnapshot& locatedTriplesSnapshot,
-               const LimitOffsetClause& limitOffset = {}) const;
-
-  // _____________________________________________________________________________
   size_t getResultSizeOfScan(
       const ScanSpecification& scanSpecification,
       const Permutation::Enum& permutation,
@@ -669,7 +654,13 @@ class IndexImpl {
   bool isLiteral(std::string_view object) const;
 
  public:
-  LangtagAndTriple tripleToInternalRepresentation(TurtleTriple&& triple) const;
+  // Process the given parsed triple in a number of ways:
+  //
+  // 1. If the object has a language tag, extract and store it
+  // 2. If the object is a literal, store the distinct words contained in it
+  //    together with their term frequencies
+  // 3. If the IRI or literal can be encoded directly into an `Id`, do so
+  ProcessedTriple processTriple(TurtleTriple&& triple) const;
 
  protected:
   /**

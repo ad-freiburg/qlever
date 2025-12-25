@@ -939,41 +939,22 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
   AD_LOG_DEBUG << "Number of words in internal and external vocabulary: "
                << vocab_.size() << std::endl;
 
-  auto range1 =
-      vocab_.prefixRanges(QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET);
-  auto range2 = vocab_.prefixRanges("@");
-  auto isInternalId = [range1, range2](Id id) {
-    // TODO<joka921> What about internal vocab stuff for update queries? this
-    // has to be added also to the external permutation.
-    if (id.getDatatype() != Datatype::VocabIndex) {
-      return false;
-    }
-    return range1.contain(id.getVocabIndex()) ||
-           range2.contain(id.getVocabIndex());
-  };
-
   // Load the permutations and register the original metadata for the delta
   // triples.
-  // TODO<joka921> We could delegate the setting of the metadata to the
-  // `Permutation`class, but we first have to deal with The delta triples for
-  // the additional permutations.
   // The setting of the metadata doesn't affect the contents of the delta
   // triples, so we don't need to call `writeToDisk`, therefore the second
   // argument to `modify` is `false`.
-  auto setMetadata = [this](const Permutation& p) {
+  auto setMetadata = [this](const Permutation& permutation) {
     deltaTriplesManager().modify<void>(
-        [&p](DeltaTriples& deltaTriples) {
-          deltaTriples.setOriginalMetadata(p.permutation(),
-                                           p.metaData().blockDataShared());
+        [&permutation](DeltaTriples& deltaTriples) {
+          permutation.setOriginalMetadataForDeltaTriples(deltaTriples);
         },
         false, false);
   };
 
-  auto load = [this, &isInternalId, &setMetadata](
-                  PermutationPtr permutation,
-                  bool loadInternalPermutation = false) {
-    permutation->loadFromDisk(onDiskBase_, isInternalId,
-                              loadInternalPermutation);
+  auto load = [this, &setMetadata](PermutationPtr permutation,
+                                   bool loadInternalPermutation = false) {
+    permutation->loadFromDisk(onDiskBase_, loadInternalPermutation);
     setMetadata(*permutation);
   };
 
@@ -1240,9 +1221,8 @@ void IndexImpl::readConfiguration() {
 }
 
 // ___________________________________________________________________________
-LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
-    TurtleTriple&& triple) const {
-  LangtagAndTriple result{"", {}, {}};
+ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
+  ProcessedTriple result{{}, "", {}};
   auto& resultTriple = result.triple_;
   if (triple.object_.isLiteral()) {
     const auto& lit = triple.object_.getLiteral();
@@ -1261,7 +1241,7 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
   }
 
   // The following lambda deals with triple elements that might be strings
-  // (literals or IRIs) as well as values that can be decoded into the IRI
+  // (literals or IRIs) as well as values that can be encoded into the IRI
   // directly. These currently are the object and the graph ID of the triple.
   // The `index` is the index of the element within the triple. For example if
   // the `getter` is `subject_` then the index has to be `0`.
@@ -1675,32 +1655,6 @@ std::vector<float> IndexImpl::getMultiplicities(
                             numTriples / numDistinctObjects().normal};
   auto permuted = permutation.keyOrder().permuteTriple(multiplicities);
   return {permuted.begin(), permuted.end()};
-}
-
-// _____________________________________________________________________________
-IdTable IndexImpl::scan(
-    const ScanSpecificationAsTripleComponent& scanSpecificationAsTc,
-    const Permutation::Enum& permutation,
-    Permutation::ColumnIndicesRef additionalColumns,
-    const ad_utility::SharedCancellationHandle& cancellationHandle,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot,
-    const LimitOffsetClause& limitOffset) const {
-  auto scanSpecification = scanSpecificationAsTc.toScanSpecification(*this);
-  return scan(scanSpecification, permutation, additionalColumns,
-              cancellationHandle, locatedTriplesSnapshot, limitOffset);
-}
-// _____________________________________________________________________________
-IdTable IndexImpl::scan(
-    const ScanSpecification& scanSpecification, Permutation::Enum p,
-    Permutation::ColumnIndicesRef additionalColumns,
-    const ad_utility::SharedCancellationHandle& cancellationHandle,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot,
-    const LimitOffsetClause& limitOffset) const {
-  const auto& perm = getPermutation(p);
-  return perm.scan(
-      perm.getScanSpecAndBlocks(scanSpecification, locatedTriplesSnapshot),
-      additionalColumns, cancellationHandle, locatedTriplesSnapshot,
-      limitOffset);
 }
 
 // _____________________________________________________________________________

@@ -214,7 +214,7 @@ addLinkAndDiscoverTestNoLibs(StringSortComparatorTest)
 
 addLinkAndDiscoverTest(PriorityQueueTest)
 
-addLinkAndDiscoverTest(SynchronizedTest)
+addLinkAndDiscoverTestNoLibs(SynchronizedTest)
 
 addLinkAndDiscoverTest(AllocatorWithLimitTest)
 
@@ -484,5 +484,7 @@ addLinkAndDiscoverTest(TimeTracerTest)
 addLinkAndDiscoverTestNoLibs(SourceLocationTest)
 
 addLinkAndDiscoverTest(UnitOfMeasurementTest util)
+
+addLinkAndDiscoverTest(MaterializedViewsTest qlever engine server)
 
 addLinkAndDiscoverTestNoLibs(ConstexprMapTest)

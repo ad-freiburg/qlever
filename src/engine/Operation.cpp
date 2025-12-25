@@ -140,7 +140,8 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
                                  ComputationMode computationMode) {
   AD_CONTRACT_CHECK(computationMode != ComputationMode::ONLY_IF_CACHED);
   checkCancellation();
-  runtimeInfo().status_ = RuntimeInformation::Status::inProgress;
+  runtimeInfo().status_ =
+      RuntimeInformation::Status::fullyMaterializedInProgress;
   signalQueryUpdate(RuntimeInformation::SendPriority::Always);
   Result result =
       computeResult(computationMode == ComputationMode::LAZY_IF_SUPPORTED);
@@ -179,7 +180,7 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
         });
   } else {
     auto& rti = runtimeInfo();
-    rti.status_ = RuntimeInformation::lazilyMaterialized;
+    rti.status_ = RuntimeInformation::lazilyMaterializedInProgress;
     rti.totalTime_ = timer.msecs();
     rti.originalTotalTime_ = rti.totalTime_;
     rti.originalOperationTime_ = rti.getOperationTime();
@@ -208,9 +209,10 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
           signalQueryUpdate(RuntimeInformation::SendPriority::IfDue);
         },
         [this](bool failed) {
-          if (failed) {
-            runtimeInfo().status_ = RuntimeInformation::failed;
-          }
+          // TODO<RobinTF> Distinguish between failed and cancelled.
+          runtimeInfo().status_ =
+              failed ? RuntimeInformation::failed
+                     : RuntimeInformation::lazilyMaterializedCompleted;
           signalQueryUpdate(RuntimeInformation::SendPriority::Always);
         });
   }
@@ -266,7 +268,7 @@ CacheValue Operation::runComputationAndPrepareForCache(
         [runtimeInfo = getRuntimeInfoPointer(), &cache,
          cacheKey](Result aggregatedResult) {
           auto copy = *runtimeInfo;
-          copy.status_ = RuntimeInformation::Status::fullyMaterialized;
+          copy.status_ = RuntimeInformation::Status::fullyMaterializedCompleted;
           cache.tryInsertIfNotPresent(
               false, cacheKey,
               std::make_shared<CacheValue>(std::move(aggregatedResult),
@@ -473,7 +475,8 @@ void Operation::updateRuntimeInformationOnSuccess(
   _runtimeInfo->numRows_ = numRows;
   _runtimeInfo->cacheStatus_ = cacheStatus;
 
-  _runtimeInfo->status_ = RuntimeInformation::Status::fullyMaterialized;
+  _runtimeInfo->status_ =
+      RuntimeInformation::Status::fullyMaterializedCompleted;
 
   bool wasCached = cacheStatus != ad_utility::CacheStatus::computed;
   // If the result was read from the cache, then we need the additional

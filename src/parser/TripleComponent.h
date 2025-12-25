@@ -36,11 +36,11 @@ CPP_concept MoveAssignableWith =
 
 }  // namespace ad_utility::detail
 
-/// A wrapper around a `std::variant` that can hold the different types that the
-/// subject, predicate, or object of a triple can have in the Turtle Parser.
-/// Those currently are `double` (xsd:double and xsd:decimal), `int64_t`
-/// (xsd:int and xsd:integer) and `std::string` (variables, IRIs, and literals
-/// of any other type).
+// A wrapper around a `std::variant` that can hold the different types that the
+// subject, predicate, or object of a triple can have in the Turtle Parser.
+// Those currently are `double` (xsd:double and xsd:decimal), `int64_t`
+// (xsd:int and xsd:integer) and `std::string` (variables, IRIs, and literals
+// of any other type).
 class TripleComponent {
  public:
   using Literal = ad_utility::triple_component::Literal;
