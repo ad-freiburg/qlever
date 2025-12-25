@@ -92,6 +92,7 @@ using QueryResultCache = ad_utility::ConcurrentCache<
 
 // Forward declaration because of cyclic dependency
 class NamedResultCache;
+class MaterializedViewsManager;
 
 // Execution context for queries.
 // Holds references to index and engine, implements caching.
@@ -102,6 +103,7 @@ class QueryExecutionContext {
       ad_utility::AllocatorWithLimit<Id> allocator,
       SortPerformanceEstimator sortPerformanceEstimator,
       NamedResultCache* namedResultCache,
+      MaterializedViewsManager* materializedViewsManager,
       std::function<void(std::string)> updateCallback =
           [](std::string) { /* No-op by default for testing */ },
       bool pinSubtrees = false, bool pinResult = false);
@@ -166,10 +168,12 @@ class QueryExecutionContext {
   }
 
   // Access the cache for explicitly named query.
-  NamedResultCache& namedResultCache() {
-    AD_CORRECTNESS_CHECK(namedResultCache_ != nullptr);
-    return *namedResultCache_;
-  }
+  NamedResultCache& namedResultCache() { return *namedResultCache_; }
+
+  // Get a reference to the `MaterializedViewsManager`.
+  const MaterializedViewsManager& materializedViewsManager() const {
+    return *materializedViewsManager_;
+  };
 
   // If `pinResultWithName_` is set, then the result of the query that is
   // executed using this context will be stored in the `namedQueryCache()` using
@@ -222,12 +226,14 @@ class QueryExecutionContext {
       websocketUpdateInterval();
 
   // The cache for named results.
-  NamedResultCache* namedResultCache_ = nullptr;
+  NamedResultCache* namedResultCache_;
 
   // Name (and optional variable for geometry index) under which the result of
   // the query that is executed using this context should be cached. When
   // `std::nullopt`, the result is not cached.
   std::optional<PinResultWithName> pinResultWithName_ = std::nullopt;
+
+  MaterializedViewsManager* materializedViewsManager_;
 
   // The last point in time when a websocket update was sent. This is used for
   // limiting the update frequency when `sendPriority` is `IfDue`.
