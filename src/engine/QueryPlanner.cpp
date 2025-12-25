@@ -922,14 +922,13 @@ auto QueryPlanner::seedWithScansAndText(
                                        std::move(internalVariable));
       }
 
-      auto actualPermutation = qlever::getPermutationForTriple(
-          permutation, _qec->getIndex(), triple);
-      const auto& locatedTriples = qlever::getLocatedTriplesPerBlockForTriple(
-          permutation, _qec->sharedLocatedTriplesSnapshot(), triple);
-
-      pushPlan(makeSubtreePlan<IndexScan>(_qec, actualPermutation,
-                                          locatedTriples, std::move(triple),
-                                          relevantGraphs));
+      auto [actualPermutation, locatedTriples] =
+          qlever::getPermutationAndLocatedTriplesPerBlockForTriple(
+              permutation, _qec->getIndex(),
+              _qec->sharedLocatedTriplesSnapshot(), triple);
+      pushPlan(makeSubtreePlan<IndexScan>(_qec, std::move(actualPermutation),
+                                          std::move(locatedTriples),
+                                          std::move(triple), relevantGraphs));
     };
     seedFromOrdinaryTriple(node, addIndexScan, addFilter);
   }

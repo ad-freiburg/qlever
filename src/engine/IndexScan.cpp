@@ -401,8 +401,8 @@ IndexScan::getSortedVariableAndMetadataColumnIndexForPrefiltering() const {
 
 // ___________________________________________________________________________
 Permutation::ScanSpecAndBlocks IndexScan::getScanSpecAndBlocks() const {
-  return permutation().getScanSpecAndBlocks(getScanSpecification(),
-                                            locatedTriplesPerBlock());
+  return CompressedRelationReader::ScanSpecAndBlocks::withUpdates(
+      getScanSpecification(), locatedTriplesPerBlock());
 }
 
 // _____________________________________________________________________________

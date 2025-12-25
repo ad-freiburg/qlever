@@ -981,16 +981,15 @@ TEST(CompressedRelationReader, getResultSizeImpl) {
     auto loc = generateLocationTrace(sourceLocation);
     auto& perm = impl.getPermutation(p);
     auto& reader = perm.reader();
-    auto augmentedBlocks = perm.getAugmentedMetadata(
-        perm.getLocatedTriplesForPermutation(locatedTriplesSnapshot));
+    auto scanSpecAndBlocks = ScanSpecAndBlocks::withUpdates(
+        scanSpec, perm.getLocatedTriplesForPermutation(locatedTriplesSnapshot));
     auto& ltpb = locatedTriplesSnapshot.getLocatedTriplesForPermutation(
         perm.permutation());
-    auto [actual_lower, actual_upper] = reader.getSizeEstimateForScan(
-        ScanSpecAndBlocks{scanSpec, augmentedBlocks}, ltpb);
+    auto [actual_lower, actual_upper] =
+        reader.getSizeEstimateForScan(scanSpecAndBlocks, ltpb);
     EXPECT_THAT(actual_lower, testing::Eq(lower));
     EXPECT_THAT(actual_upper, testing::Eq(upper));
-    auto actual_exact = reader.getResultSizeOfScan(
-        ScanSpecAndBlocks{scanSpec, augmentedBlocks}, ltpb);
+    auto actual_exact = reader.getResultSizeOfScan(scanSpecAndBlocks, ltpb);
     EXPECT_THAT(actual_exact, testing::Eq(exact));
   };
   // The Scans request all triples of the one and only block.
@@ -1064,10 +1063,10 @@ TEST(CompressedRelationReader, getFirstAndLastTripleIgnoringGraph) {
         graphId.has_value() ? ScanSpecification::GraphFilter::Whitelist(
                                   {std::move(graphId).value()})
                             : ScanSpecification::GraphFilter::All()};
-    CompressedRelationReader::ScanSpecAndBlocks metadataAndBlocks{
-        std::move(scanSpecification),
-        permutation.getAugmentedMetadata(
-            permutation.getLocatedTriplesForPermutation(*currentSnapshot))};
+    CompressedRelationReader::ScanSpecAndBlocks metadataAndBlocks =
+        CompressedRelationReader::ScanSpecAndBlocks::withUpdates(
+            std::move(scanSpecification),
+            permutation.getLocatedTriplesForPermutation(*currentSnapshot));
     const auto& reader =
         index.getImpl().getPermutation(permutationEnum).reader();
     return reader.getFirstAndLastTripleIgnoringGraph(metadataAndBlocks,

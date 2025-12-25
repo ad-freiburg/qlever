@@ -57,10 +57,11 @@ auto makeTestScanWidthOne = [](const IndexImpl& index,
              ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto t = generateLocationTrace(l);
     const auto& actualPermutation = index.getPermutation(permutation);
-    auto locatedTriples = actualPermutation.getLocatedTriplesForPermutation(
-        qec.locatedTriplesSnapshot());
+    const auto& locatedTriples =
+        actualPermutation.getLocatedTriplesForPermutation(
+            qec.locatedTriplesSnapshot());
     IdTable result = actualPermutation.scan(
-        actualPermutation.getScanSpecAndBlocks(
+        CompressedRelationReader::ScanSpecAndBlocks::withUpdates(
             ScanSpecificationAsTripleComponent{c0, c1, std::nullopt}
                 .toScanSpecification(index),
             locatedTriples),
@@ -82,10 +83,11 @@ auto makeTestScanWidthTwo = [](const IndexImpl& index,
              ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto t = generateLocationTrace(l);
     const auto& actualPermutation = index.getPermutation(permutation);
-    auto locatedTriples = actualPermutation.getLocatedTriplesForPermutation(
-        qec.locatedTriplesSnapshot());
+    const auto& locatedTriples =
+        actualPermutation.getLocatedTriplesForPermutation(
+            qec.locatedTriplesSnapshot());
     IdTable wol = actualPermutation.scan(
-        actualPermutation.getScanSpecAndBlocks(
+        CompressedRelationReader::ScanSpecAndBlocks::withUpdates(
             ScanSpecificationAsTripleComponent{c0, std::nullopt, std::nullopt}
                 .toScanSpecification(index),
             locatedTriples),

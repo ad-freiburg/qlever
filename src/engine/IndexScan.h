@@ -16,6 +16,7 @@ class SparqlTripleSimple;
 class IndexScan final : public Operation {
  public:
   using Graphs = ScanSpecificationAsTripleComponent::GraphFilter;
+  // TODO: get rid of them, especially the dubling with `PermutationSelector`
   using PermutationPtr = std::shared_ptr<const Permutation>;
   using LocatedTriplesSnapshotPtr =
       std::shared_ptr<const LocatedTriplesSnapshot>;
@@ -186,11 +187,11 @@ class IndexScan final : public Operation {
   // An index scan can directly and efficiently support LIMIT and OFFSET
   [[nodiscard]] bool supportsLimitOffset() const override { return true; }
 
-  // TODO: rewrite comment
   // Instead of using the `LocatedTriplesSnapshot` of the `Operation` base
   // class, which accesses the one stored in the `QueryExecutionContext`, use
-  // the `LocatedTriplesSnapshot` held in this object. This might be a different
-  // one if a custom permutation is used.
+  // the `LocatedTriplesPerBlock` held in this object. This already is exactly
+  // the located triples for the permutation of the index scan and should be
+  // used wherever possible.
   const LocatedTriplesPerBlock& locatedTriplesPerBlock() const;
 
   // Return the stored triple in the order that corresponds to the

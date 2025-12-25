@@ -84,13 +84,13 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
         indexImpl.getPermutation(Permutation::Enum::PSO).internalPermutation();
     const auto& locatedTriples =
         permutation.getLocatedTriplesForPermutation(locatedTriplesSnapshot);
-    auto scanResultHasPattern =
-        permutation.scan(permutation.getScanSpecAndBlocks(
-                             ScanSpecificationAsTripleComponent{
-                                 iriOfHasPattern, id, std::nullopt}
-                                 .toScanSpecification(indexImpl),
-                             locatedTriples),
-                         {}, cancellationDummy, locatedTriples);
+    auto scanResultHasPattern = permutation.scan(
+        CompressedRelationReader::ScanSpecAndBlocks::withUpdates(
+            ScanSpecificationAsTripleComponent{iriOfHasPattern, id,
+                                               std::nullopt}
+                .toScanSpecification(indexImpl),
+            locatedTriples),
+        {}, cancellationDummy, locatedTriples);
     // Each ID has at most one pattern, it can have none if it doesn't
     // appear as a subject in the knowledge graph.
     AD_CORRECTNESS_CHECK(scanResultHasPattern.numRows() <= 1);
@@ -109,7 +109,7 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
         const auto& locatedTriples =
             permutation.getLocatedTriplesForPermutation(locatedTriplesSnapshot);
         auto scanResult = permutation.scan(
-            permutation.getScanSpecAndBlocks(
+            CompressedRelationReader::ScanSpecAndBlocks::withUpdates(
                 ScanSpecification{col0Id, std::nullopt, std::nullopt},
                 locatedTriples),
             std::array{ColumnIndex{ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN},

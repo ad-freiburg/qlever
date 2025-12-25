@@ -1650,7 +1650,8 @@ size_t IndexImpl::getResultSizeOfScan(
   const auto& locatedTriples =
       perm.getLocatedTriplesForPermutation(locatedTriplesSnapshot);
   return perm.getResultSizeOfScan(
-      perm.getScanSpecAndBlocks(scanSpecification, locatedTriples),
+      CompressedRelationReader::ScanSpecAndBlocks::withUpdates(
+          scanSpecification, locatedTriples),
       locatedTriples);
 }
 

@@ -4,6 +4,8 @@
 
 #include "engine/PermutationSelector.h"
 
+#include <utility>
+
 #include "index/IndexImpl.h"
 
 namespace {
@@ -34,9 +36,9 @@ bool containsInternalIri(const SparqlTripleSimple& triple) {
 
 namespace qlever {
 // _____________________________________________________________________________
-std::shared_ptr<const Permutation> getPermutationForTriple(
-    Permutation::Enum permutation, const Index& index,
-    const SparqlTripleSimple& triple) {
+PermutationPtr getPermutationForTriple(Permutation::Enum permutation,
+                                       const Index& index,
+                                       const SparqlTripleSimple& triple) {
   auto actualPermutation = index.getImpl().getPermutationPtr(permutation);
 
   if (containsInternalIri(triple)) {
@@ -49,16 +51,24 @@ std::shared_ptr<const Permutation> getPermutationForTriple(
 }
 
 // _____________________________________________________________________________
-std::shared_ptr<const LocatedTriplesPerBlock>
-getLocatedTriplesPerBlockForTriple(Permutation::Enum permutation,
-                                   LocatedTriplesSnapshotPtr snapshot,
-                                   const SparqlTripleSimple& triple) {
+LocatedTriplesPerBlockPtr getLocatedTriplesPerBlockForTriple(
+    Permutation::Enum permutation, LocatedTriplesSnapshotPtr snapshot,
+    const SparqlTripleSimple& triple) {
   // Create alias shared pointer of internal the right `LocatedTriplesPerBlock`.
   const auto& locatedTriples =
       containsInternalIri(triple)
           ? snapshot->getInternalLocatedTriplesForPermutation(permutation)
           : snapshot->getLocatedTriplesForPermutation(permutation);
-  return std::shared_ptr<const LocatedTriplesPerBlock>{std::move(snapshot),
-                                                       &locatedTriples};
+  return LocatedTriplesPerBlockPtr{std::move(snapshot), &locatedTriples};
+}
+
+// _____________________________________________________________________________
+std::pair<PermutationPtr, LocatedTriplesPerBlockPtr>
+getPermutationAndLocatedTriplesPerBlockForTriple(
+    Permutation::Enum permutation, const Index& index,
+    LocatedTriplesSnapshotPtr snapshot, const SparqlTripleSimple& triple) {
+  return {getPermutationForTriple(permutation, index, triple),
+          getLocatedTriplesPerBlockForTriple(permutation, std::move(snapshot),
+                                             triple)};
 }
 }  // namespace qlever

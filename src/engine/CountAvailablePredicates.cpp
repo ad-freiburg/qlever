@@ -172,7 +172,8 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
   const auto& locatedTriple =
       perm.getLocatedTriplesForPermutation(locatedTriplesSnapshot());
   auto fullHasPattern =
-      perm.lazyScan(perm.getScanSpecAndBlocks(scanSpec, locatedTriple),
+      perm.lazyScan(CompressedRelationReader::ScanSpecAndBlocks::withUpdates(
+                        scanSpec, locatedTriple),
                     std::nullopt, {}, cancellationHandle_, locatedTriple);
   for (const auto& idTable : fullHasPattern) {
     for (const auto& patternId : idTable.getColumn(1)) {

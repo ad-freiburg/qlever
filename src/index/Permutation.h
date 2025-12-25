@@ -19,9 +19,9 @@
 
 // Forward declaration of `IdTable`
 class IdTable;
-// Forward declaration of `LocatedTriplesPerBlock`
+// TODO: get rid of them
+// Forward declaration of `LocatedTriplesPerBlock` and `LocatedTriplesSnapshot`
 class LocatedTriplesPerBlock;
-class SharedLocatedTriplesSnapshot;
 struct LocatedTriplesSnapshot;
 class DeltaTriples;
 
@@ -129,12 +129,6 @@ class Permutation {
       const LocatedTriplesPerBlock& locatedTriples,
       const LimitOffsetClause& limitOffset = {}) const;
 
-  // Returns the corresponding `CompressedRelationReader::ScanSpecAndBlocks`
-  // with relevant `BlockMetadataRanges`.
-  ScanSpecAndBlocks getScanSpecAndBlocks(
-      const ScanSpecification& scanSpec,
-      const LocatedTriplesPerBlock& locatedTriples) const;
-
   std::optional<CompressedRelationMetadata> getMetadata(
       Id col0Id, const LocatedTriplesPerBlock& locatedTriples) const;
 
@@ -187,10 +181,6 @@ class Permutation {
   // From the given snapshot, get the located triples for this permutation.
   const LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
       const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
-
-  // From the given `LocatedTriplesPerBlock`, get the augmented block metadata.
-  BlockMetadataRanges getAugmentedMetadata(
-      const LocatedTriplesPerBlock& locatedTriples) const;
 
   const CompressedRelationReader& reader() const { return reader_.value(); }
 
