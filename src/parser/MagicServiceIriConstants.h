@@ -9,6 +9,8 @@
 #include <string>
 #include <string_view>
 
+#include "util/StringUtils.h"
+
 // Constants for the various magic services - they are invoked using these
 // federated querying IRIs but actually never contact these and activate special
 // query features locally
