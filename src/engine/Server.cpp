@@ -1033,42 +1033,43 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   co_return;
 }
 
-nlohmann::ordered_json Server::createResponseMetadataForUpdate(
-    const Index& index, SharedLocatedTriplesSnapshot snapshot,
-    const PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
-    const UpdateMetadata& updateMetadata,
+// ____________________________________________________________________________
+nlohmann::ordered_json createResponseMetadataForUpdateImpl(
+    const Index& index, const LocatedTriplesState& locatedTriples,
+    std::string_view operationString, std::vector<std::string> warnings,
+    const RuntimeInformationWholeQuery& runtimeInfoWhole,
+    const RuntimeInformation& runtimeInfo, UpdateMetadata updateMetadata,
     const ad_utility::timer::TimeTracer& tracer) {
   nlohmann::ordered_json response;
-  response["update"] = ad_utility::truncateOperationString(
-      plannedQuery.parsedQuery_._originalString);
+  response["update"] = ad_utility::truncateOperationString(operationString);
   response["status"] = "OK";
-  auto warnings = qet.collectWarnings();
-  warnings.emplace(warnings.begin(),
-                   "SPARQL 1.1 Update for QLever is experimental.");
   response["warnings"] = warnings;
-  RuntimeInformationWholeQuery& runtimeInfoWholeOp =
-      qet.getRootOperation()->getRuntimeInfoWholeQuery();
-  RuntimeInformation& runtimeInfo = qet.getRootOperation()->runtimeInfo();
   response["runtimeInformation"]["meta"] =
-      nlohmann::ordered_json(runtimeInfoWholeOp);
+      nlohmann::ordered_json(runtimeInfoWhole);
   response["runtimeInformation"]["query_execution_tree"] =
       nlohmann::ordered_json(runtimeInfo);
-  AD_CORRECTNESS_CHECK(updateMetadata.countBefore_.has_value());
-  AD_CORRECTNESS_CHECK(updateMetadata.inUpdate_.has_value());
-  AD_CORRECTNESS_CHECK(updateMetadata.countAfter_.has_value());
-  auto countBefore = updateMetadata.countBefore_.value();
-  auto countAfter = updateMetadata.countAfter_.value();
-  response["delta-triples"]["before"] = nlohmann::json(countBefore);
-  response["delta-triples"]["after"] = nlohmann::json(countAfter);
-  response["delta-triples"]["difference"] =
-      nlohmann::json(countAfter - countBefore);
-  response["delta-triples"]["operation"] =
-      json(updateMetadata.inUpdate_.value());
+  auto setIfHasValue = [&response, &updateMetadata](
+                           auto field, const std::string& fieldName) {
+    const auto& countOpt = std::invoke(field, updateMetadata);
+    if (countOpt.has_value()) {
+      response["delta-triples"][fieldName] = nlohmann::json(countOpt.value());
+    }
+  };
+  setIfHasValue(&UpdateMetadata::countBefore_, "before");
+  setIfHasValue(&UpdateMetadata::countAfter_, "after");
+  setIfHasValue(&UpdateMetadata::inUpdate_, "operation");
+  if (updateMetadata.countAfter_.has_value() &&
+      updateMetadata.countBefore_.has_value()) {
+    response["delta-triples"]["difference"] =
+        nlohmann::json(updateMetadata.countAfter_.value() -
+                       updateMetadata.countBefore_.value());
+  }
   response["time"] = tracer.getJSONShort()["update"];
   for (auto permutation : Permutation::ALL) {
     response["located-triples"][Permutation::toString(
         permutation)]["blocks-affected"] =
-        snapshot->getLocatedTriplesForPermutation(permutation).numBlocks();
+        locatedTriples.getLocatedTriplesForPermutation<false>(permutation)
+            .numBlocks();
     auto numBlocks = index.getPimpl()
                          .getPermutation(permutation)
                          .metaData()
@@ -1078,6 +1079,33 @@ nlohmann::ordered_json Server::createResponseMetadataForUpdate(
             ["blocks-total"] = numBlocks;
   }
   return response;
+}
+
+// ____________________________________________________________________________
+nlohmann::ordered_json Server::createDummyResponseMetadataForUpdate(
+    const Index& index, const LocatedTriplesState& locatedTriples,
+    const ad_utility::timer::TimeTracer& tracer) {
+  return createResponseMetadataForUpdateImpl(
+      index, locatedTriples, "Dummy Operation for timing purposes", {}, {}, {},
+      UpdateMetadata{std::nullopt, DeltaTriplesCount{}, std::nullopt}, tracer);
+}
+
+// ____________________________________________________________________________
+nlohmann::ordered_json Server::createResponseMetadataForUpdate(
+    const Index& index, const LocatedTriplesState& locatedTriples,
+    const PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
+    const UpdateMetadata& updateMetadata,
+    const ad_utility::timer::TimeTracer& tracer) {
+  AD_CORRECTNESS_CHECK(updateMetadata.countBefore_.has_value());
+  AD_CORRECTNESS_CHECK(updateMetadata.inUpdate_.has_value());
+  AD_CORRECTNESS_CHECK(updateMetadata.countAfter_.has_value());
+  auto warnings = qet.collectWarnings();
+  warnings.emplace(warnings.begin(),
+                   "SPARQL 1.1 Update for QLever is experimental.");
+  return createResponseMetadataForUpdateImpl(
+      index, locatedTriples, plannedQuery.parsedQuery_._originalString,
+      warnings, qet.getRootOperation()->getRuntimeInfoWholeQuery(),
+      qet.getRootOperation()->runtimeInfo(), updateMetadata, tracer);
 }
 
 // ____________________________________________________________________________
@@ -1128,63 +1156,63 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       [this, &requestTimer, &cancellationHandle, &updates, &qec, &timeLimit,
        &plannedUpdate, tracer]() {
         tracer->endTrace("waitingForUpdateThread");
-        json results = json::array();
-        // TODO<qup42> We currently create a new snapshot after each update in
-        // the chain, which is expensive. Instead, the updates could operate
-        // directly on the `DeltaTriples` (we have an exclusive lock on them
-        // anyway).
-        for (ParsedQuery& update : updates) {
-          // Make the snapshot before the query planning. Otherwise, it could
-          // happen that the query planner "knows" that a result is empty, when
-          // actually it is not due to a preceding update in the chain. Also,
-          // this improves the size estimates and hence the query plan.
-          tracer->beginTrace("snapshot");
-          qec.updateLocatedTriplesSnapshot();
-          tracer->endTrace("snapshot");
-          tracer->beginTrace("planning");
-          plannedUpdate = planQuery(std::move(update), requestTimer, timeLimit,
-                                    qec, cancellationHandle);
-          tracer->endTrace("planning");
+        return index_.deltaTriplesManager().modify<json>(
+            [this, &cancellationHandle, &plannedUpdate, tracer, &updates,
+             &requestTimer, &timeLimit, &qec](DeltaTriples& deltaTriples) {
+              qec.setLocatedTriplesForEvaluation(
+                  deltaTriples.getLocatedTriplesSharedStateReference());
+              json results = json::array();
+              for (auto&& [i, update] : ranges::views::enumerate(updates)) {
+                // The augmented metadata is invalidated by any update. It is
+                // only updated automatically at the end of modify. Updates with
+                // non-empty graph patterns need the augmented metadata. Update
+                // the augmented metadata before executing those updates.
+                if (i != 0 &&
+                    !update._rootGraphPattern._graphPatterns.empty()) {
+                  deltaTriples.updateAugmentedMetadata();
+                }
+                tracer->beginTrace("planning");
+                plannedUpdate = planQuery(std::move(update), requestTimer,
+                                          timeLimit, qec, cancellationHandle);
+                tracer->endTrace("planning");
+                tracer->beginTrace("execution");
+                // Update the delta triples.
+                // Use `this` explicitly to silence false-positive
+                // errors on captured `this` being unused.
+                auto updateMetadata = this->processUpdateImpl(
+                    plannedUpdate.value(), cancellationHandle, deltaTriples,
+                    *tracer);
+                tracer->endTrace("execution");
 
-          // Update the delta triples.
-          tracer->beginTrace("execution");
-          auto updateMetadata =
-              index_.deltaTriplesManager().modify<UpdateMetadata>(
-                  [this, &cancellationHandle, &plannedUpdate,
-                   tracer](auto& deltaTriples) {
-                    // Use `this` explicitly to silence false-positive
-                    // errors on captured `this` being unused.
-                    tracer->beginTrace("processUpdateImpl");
-                    auto res = this->processUpdateImpl(plannedUpdate.value(),
-                                                       cancellationHandle,
-                                                       deltaTriples, *tracer);
-                    tracer->endTrace("processUpdateImpl");
-                    return res;
-                  },
-                  true, true, *tracer);
-          tracer->endTrace("execution");
+                tracer->endTrace("update");
+                results.push_back(createResponseMetadataForUpdate(
+                    index_,
+                    *deltaTriples.getLocatedTriplesSharedStateReference(),
+                    *plannedUpdate, plannedUpdate->queryExecutionTree_,
+                    updateMetadata, *tracer));
+                tracer->reset();
 
-          tracer->endTrace("update");
-          results.push_back(createResponseMetadataForUpdate(
-              index_, index_.deltaTriplesManager().getCurrentSnapshot(),
-              *plannedUpdate, plannedUpdate->queryExecutionTree_,
-              updateMetadata, *tracer));
-          tracer->reset();
-
-          AD_LOG_INFO << "Done processing update"
-                      << ", total time was " << requestTimer.msecs().count()
-                      << " ms" << std::endl;
-          AD_LOG_DEBUG << "Runtime Info:\n"
-                       << plannedUpdate->queryExecutionTree_.getRootOperation()
-                              ->runtimeInfo()
-                              .toString()
-                       << std::endl;
-        }
-        return results;
+                AD_LOG_INFO << "Done processing update, total time was "
+                            << requestTimer.msecs().count() << " ms"
+                            << std::endl;
+                AD_LOG_DEBUG
+                    << "Runtime Info:\n"
+                    << plannedUpdate->queryExecutionTree_.getRootOperation()
+                           ->runtimeInfo()
+                           .toString()
+                    << std::endl;
+              }
+              return results;
+            },
+            true, true, *tracer);
       },
       cancellationHandle);
   auto responses = co_await std::move(coroutine);
   tracer->endTrace("update");
+  responses.push_back(createDummyResponseMetadataForUpdate(
+      index_,
+      *index_.deltaTriplesManager().getCurrentLocatedTriplesSharedState(),
+      *tracer));
 
   // SPARQL 1.1 Protocol 2.2.4 Successful Responses: "The responses body of a
   // successful update request is implementation defined."

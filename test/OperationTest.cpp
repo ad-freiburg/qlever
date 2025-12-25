@@ -808,7 +808,7 @@ TEST(OperationTest, disableCaching) {
       qec, std::move(idTablesVector), {Variable{"?x"}, Variable{"?y"}}, true};
 
   QueryCacheKey cacheKey{valuesForTesting.getCacheKey(),
-                         qec->locatedTriplesSnapshot().index_};
+                         qec->locatedTriplesState().index_};
 
   // By default, the result of `valuesForTesting` is cached because it is
   // sufficiently small, no matter if it was computed lazily or fully

@@ -57,7 +57,7 @@ auto makeTestScanWidthOne = [](const IndexImpl& index,
              ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto t = generateLocationTrace(l);
     const auto& actualPermutation = index.getPermutation(permutation);
-    auto locatedTriplesSnapshot = qec.locatedTriplesSnapshot();
+    auto locatedTriplesSnapshot = qec.locatedTriplesState();
     IdTable result = actualPermutation.scan(
         actualPermutation.getScanSpecAndBlocks(
             ScanSpecificationAsTripleComponent{c0, c1, std::nullopt}
@@ -81,7 +81,7 @@ auto makeTestScanWidthTwo = [](const IndexImpl& index,
              ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto t = generateLocationTrace(l);
     const auto& actualPermutation = index.getPermutation(permutation);
-    auto locatedTriplesSnapshot = qec.locatedTriplesSnapshot();
+    auto locatedTriplesSnapshot = qec.locatedTriplesState();
     IdTable wol = actualPermutation.scan(
         actualPermutation.getScanSpecAndBlocks(
             ScanSpecificationAsTripleComponent{c0, std::nullopt, std::nullopt}
@@ -118,7 +118,7 @@ TEST(IndexTest, createFromTurtleTest) {
         return;
       }
       const auto& [index, qec] = getIndex();
-      const auto& locatedTriplesSnapshot = qec.locatedTriplesSnapshot();
+      const auto& locatedTriplesSnapshot = qec.locatedTriplesState();
 
       auto getId = makeGetId(getQec(kb)->getIndex());
       Id a = getId("<a>");
@@ -209,7 +209,7 @@ TEST(IndexTest, createFromTurtleTest) {
 
       const auto& qec = *getQec(kb);
       const IndexImpl& index = qec.getIndex().getImpl();
-      const auto& deltaTriples = qec.locatedTriplesSnapshot();
+      const auto& deltaTriples = qec.locatedTriplesState();
 
       auto getId = makeGetId(getQec(kb)->getIndex());
       Id zero = getId("<0>");
@@ -266,7 +266,7 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
       "<a2> <b2> <c2> .";
   const auto& qec = *getQec(kb);
   const IndexImpl& index = qec.getIndex().getImpl();
-  const auto& deltaTriples = qec.locatedTriplesSnapshot();
+  const auto& deltaTriples = qec.locatedTriplesState();
 
   auto getId = makeGetId(getQec(kb)->getIndex());
   Id b = getId("<b>");
@@ -515,7 +515,7 @@ TEST(IndexTest, NumDistinctEntities) {
 
   multiplicities = index.getMultiplicities(
       iri("<x>"), index.getPermutation(Permutation::SPO),
-      qec.locatedTriplesSnapshot());
+      qec.locatedTriplesState());
   EXPECT_FLOAT_EQ(multiplicities[0], 2.5);
   EXPECT_FLOAT_EQ(multiplicities[1], 1);
 }

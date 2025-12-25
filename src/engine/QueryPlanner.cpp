@@ -927,7 +927,7 @@ auto QueryPlanner::seedWithScansAndText(
           permutation, _qec->getIndex(), triple);
 
       pushPlan(makeSubtreePlan<IndexScan>(_qec, std::move(actualPermutation),
-                                          _qec->sharedLocatedTriplesSnapshot(),
+                                          _qec->locatedTriplesSharedState(),
                                           std::move(triple), relevantGraphs));
     };
     seedFromOrdinaryTriple(node, addIndexScan, addFilter);

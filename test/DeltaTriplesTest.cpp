@@ -576,8 +576,8 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
   // middle of these updates is as expected.
   auto insertAndDelete = [&](size_t threadIdx) {
     LocalVocab localVocab;
-    SharedLocatedTriplesSnapshot beforeUpdate =
-        deltaTriplesManager.getCurrentSnapshot();
+    LocatedTriplesSharedState beforeUpdate =
+        deltaTriplesManager.getCurrentLocatedTriplesSharedState();
     for (size_t i = 0; i < numIterations; ++i) {
       // The first triple in both vectors is the same for all threads, the
       // others are exclusive to this thread via the `threadIdx`.
@@ -595,7 +595,8 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
       });
       // We should have successfully completed an update, so the snapshot
       // pointer should have changed.
-      EXPECT_NE(beforeUpdate, deltaTriplesManager.getCurrentSnapshot());
+      EXPECT_NE(beforeUpdate,
+                deltaTriplesManager.getCurrentLocatedTriplesSharedState());
       // Delete the `triplesToDelete`.
       deltaTriplesManager.modify<void>([&](DeltaTriples& deltaTriples) {
         deltaTriples.deleteTriples(cancellationHandle, triplesToDelete);
@@ -610,7 +611,8 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
           // Boolean argument specifies whether the triple was inserted (`true`)
           // or deleted (`false`).
           const auto& locatedSPO =
-              beforeUpdate->getLocatedTriplesForPermutation(Permutation::SPO);
+              beforeUpdate->getLocatedTriplesForPermutation<false>(
+                  Permutation::SPO);
           EXPECT_FALSE(locatedSPO.isLocatedTriple(triplesToInsert.at(1), true));
           EXPECT_FALSE(
               locatedSPO.isLocatedTriple(triplesToInsert.at(1), false));
@@ -625,9 +627,9 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
           // Check for several of the thread-exclusive triples that they are
           // properly contained in the current snapshot.
           //
-          auto p = deltaTriplesManager.getCurrentSnapshot();
+          auto p = deltaTriplesManager.getCurrentLocatedTriplesSharedState();
           const auto& locatedSPO =
-              p->getLocatedTriplesForPermutation(Permutation::SPO);
+              p->getLocatedTriplesForPermutation<false>(Permutation::SPO);
           EXPECT_TRUE(locatedSPO.isLocatedTriple(triplesToInsert.at(1), true));
           // This triple is exclusive to the thread and is inserted and then
           // immediately deleted again. The `DeltaTriples` thus only store it
@@ -648,11 +650,11 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
   threads.clear();
 
   // Check that without updates, the snapshot pointer does not change.
-  auto p1 = deltaTriplesManager.getCurrentSnapshot();
-  auto p2 = deltaTriplesManager.getCurrentSnapshot();
+  auto p1 = deltaTriplesManager.getCurrentLocatedTriplesSharedState();
+  auto p2 = deltaTriplesManager.getCurrentLocatedTriplesSharedState();
   EXPECT_EQ(p1, p2);
 
-  // Each of the threads above inserts on thread-exclusive triple, deletes one
+  // Each of the threads above inserts one thread-exclusive triple, deletes one
   // thread-exclusive triple and inserts one thread-exclusive triple that is
   // deleted right after (This triple is stored as deleted in the `DeltaTriples`
   // because it might be contained in the original input). Additionally, there
@@ -661,6 +663,56 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
   auto deltaImpl = deltaTriplesManager.deltaTriples_.rlock();
   EXPECT_THAT(*deltaImpl, NumTriples(numThreads + 1, 2 * numThreads + 1,
                                      3 * numThreads + 2));
+}
+
+// _____________________________________________________________________________
+TEST_F(DeltaTriplesTest, LocatedTriplesSharedState) {
+  auto Snapshot = [](size_t index, size_t numTriples)
+      -> testing::Matcher<const LocatedTriplesSharedState> {
+    auto m = AD_PROPERTY(LocatedTriplesPerBlock, numTriples, numTriples);
+    return testing::Pointee(testing::AllOf(
+        AD_FIELD(LocatedTriplesState, index_, testing::Eq(index)),
+        AD_FIELD(LocatedTriplesState, locatedTriplesPerBlock_,
+                 testing::ElementsAre(m, m, m, m, m, m))));
+  };
+  DeltaTriples deltaTriples(testQec->getIndex());
+  auto& vocab = testQec->getIndex().getVocab();
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+
+  // Do one transparent and two copied snapshots.
+  LocatedTriplesSharedState transparentSnapshotBeforeUpdate =
+      deltaTriples.getLocatedTriplesSharedStateReference();
+  LocatedTriplesSharedState copiedSnapshotBeforeUpdate =
+      deltaTriples.getLocatedTriplesSharedStateCopy();
+  LocatedTriplesSharedState copiedSnapshotBeforeUpdate2 =
+      deltaTriples.getLocatedTriplesSharedStateCopy();
+
+  // All snapshots have the same index and triples.
+  EXPECT_THAT(transparentSnapshotBeforeUpdate, Snapshot(0, 0));
+  EXPECT_THAT(copiedSnapshotBeforeUpdate, Snapshot(0, 0));
+  EXPECT_THAT(copiedSnapshotBeforeUpdate2, Snapshot(0, 0));
+
+  // Modifying the delta triples increases the index_.
+  LocalVocab localVocab;
+  auto triplesToInsert = makeIdTriples(vocab, localVocab, {"<A> <B> <C>"});
+  deltaTriples.insertTriples(cancellationHandle, std::move(triplesToInsert));
+
+  // Another transparent and copied snapshot.
+  LocatedTriplesSharedState transparentSnapshotAfterUpdate =
+      deltaTriples.getLocatedTriplesSharedStateReference();
+  LocatedTriplesSharedState copiedSnapshotAfterUpdate =
+      deltaTriples.getLocatedTriplesSharedStateCopy();
+
+  // The two new snapshots are identical and up-to-date.
+  EXPECT_THAT(transparentSnapshotAfterUpdate, Snapshot(1, 1));
+  EXPECT_THAT(copiedSnapshotAfterUpdate, Snapshot(1, 1));
+  // The transparent snapshot mirrors the underlying state of the
+  // `DeltaTriples`, so the transparent snapshots from before the update now has
+  // the state after the update.
+  EXPECT_THAT(transparentSnapshotBeforeUpdate, Snapshot(1, 1));
+  // The copied snapshot before the update is unchanged.
+  EXPECT_THAT(copiedSnapshotBeforeUpdate, Snapshot(0, 0));
 }
 
 // _____________________________________________________________________________
