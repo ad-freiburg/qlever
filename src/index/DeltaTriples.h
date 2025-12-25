@@ -191,6 +191,13 @@ class DeltaTriples {
         triplesToHandlesInternal_.triplesDeleted_.size());
   }
 
+  // From the triples that are explicitly being added to the index, compute a
+  // bunch of triples to be inserted into the internal permutation to make
+  // things like efficient language filters work. This currently performs a
+  // lookup from disk to check the language tag, but in the future this may be
+  // implemented more efficiently.
+  Triples makeInternalTriples(const Triples& triples);
+
   // Insert triples.
   void insertTriples(CancellationHandle cancellationHandle, Triples triples,
                      ad_utility::timer::TimeTracer& tracer =
@@ -201,19 +208,21 @@ class DeltaTriples {
                      ad_utility::timer::TimeTracer& tracer =
                          ad_utility::timer::DEFAULT_TIME_TRACER);
 
-  // Insert internal delta triples for efficient language filters and patterns.
-  // Currently only used by test code.
-  void insertInternalTriples(CancellationHandle cancellationHandle,
-                             Triples triples,
-                             ad_utility::timer::TimeTracer& tracer =
-                                 ad_utility::timer::DEFAULT_TIME_TRACER);
+  // Insert internal delta triples for test code. In practice these are inferred
+  // from regular triples, so `insertTriples` and `deleteTriples` will insert
+  // them on their own.
+  void insertInternalTriplesForTesting(
+      CancellationHandle cancellationHandle, Triples triples,
+      ad_utility::timer::TimeTracer& tracer =
+          ad_utility::timer::DEFAULT_TIME_TRACER);
 
-  // Delete internal delta triples for efficient language filters and patterns.
-  // Currently only used by test code.
-  void deleteInternalTriples(CancellationHandle cancellationHandle,
-                             Triples triples,
-                             ad_utility::timer::TimeTracer& tracer =
-                                 ad_utility::timer::DEFAULT_TIME_TRACER);
+  // Delete internal delta triples for test code. In practice these are inferred
+  // from regular triples, so `insertTriples` and `deleteTriples` will insert
+  // them on their own.
+  void deleteInternalTriplesForTesting(
+      CancellationHandle cancellationHandle, Triples triples,
+      ad_utility::timer::TimeTracer& tracer =
+          ad_utility::timer::DEFAULT_TIME_TRACER);
 
   // If the `filename` is set, then `writeToDisk()` will write these
   // `DeltaTriples` to `filename.value()`. If `filename` is `nullopt`, then

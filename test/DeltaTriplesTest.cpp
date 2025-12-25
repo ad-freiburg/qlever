@@ -29,6 +29,14 @@ constexpr auto encodedIriManager = []() -> const EncodedIriManager* {
   static EncodedIriManager encodedIriManager_;
   return &encodedIriManager_;
 };
+
+constexpr auto iri = [](std::string_view s) -> TripleComponent {
+  return TripleComponent{TripleComponent::Iri::fromIriref(s)};
+};
+
+constexpr auto lit = [](std::string s) -> TripleComponent {
+  return TripleComponent{TripleComponent::Literal::fromStringRepresentation(s)};
+};
 }  // namespace
 
 // Fixture that sets up a test index.
@@ -104,7 +112,7 @@ TEST_F(DeltaTriplesTest, clear) {
   // Insert then clear.
   deltaTriples.insertTriples(
       cancellationHandle, makeIdTriples(vocab, localVocab, {"<a> <UPP> <A>"}));
-  deltaTriples.insertInternalTriples(
+  deltaTriples.insertInternalTriplesForTesting(
       cancellationHandle,
       makeIdTriples(vocab, localVocab,
                     {"<internal-a> <internal-UPP> <internal-A>"}));
@@ -118,7 +126,7 @@ TEST_F(DeltaTriplesTest, clear) {
   // Delete, insert and then clear.
   deltaTriples.deleteTriples(
       cancellationHandle, makeIdTriples(vocab, localVocab, {"<A> <low> <a>"}));
-  deltaTriples.deleteInternalTriples(
+  deltaTriples.deleteInternalTriplesForTesting(
       cancellationHandle,
       makeIdTriples(vocab, localVocab,
                     {"<internal-A> <internal-low> <internal-a>"}));
@@ -126,7 +134,7 @@ TEST_F(DeltaTriplesTest, clear) {
 
   deltaTriples.insertTriples(
       cancellationHandle, makeIdTriples(vocab, localVocab, {"<a> <UPP> <A>"}));
-  deltaTriples.insertInternalTriples(
+  deltaTriples.insertInternalTriplesForTesting(
       cancellationHandle,
       makeIdTriples(vocab, localVocab,
                     {"<internal-a> <internal-UPP> <internal-A>"}));
@@ -313,7 +321,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
                       {}, {}));
 
   // Insert new internal triple.
-  deltaTriples.insertInternalTriples(
+  deltaTriples.insertInternalTriplesForTesting(
       cancellationHandle,
       makeIdTriples(vocab, localVocab,
                     {"<internal-A> <internal-B> <internal-F>"}));
@@ -326,7 +334,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
                       {"<internal-A> <internal-B> <internal-F>"}, {}));
 
   // Remove "existing" internal triple.
-  deltaTriples.deleteInternalTriples(
+  deltaTriples.deleteInternalTriplesForTesting(
       cancellationHandle,
       makeIdTriples(vocab, localVocab,
                     {"<internal-C> <internal-D> <internal-E>"}));
@@ -340,7 +348,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
                       {"<internal-C> <internal-D> <internal-E>"}));
 
   // Remove previously inserted internal triple.
-  deltaTriples.deleteInternalTriples(
+  deltaTriples.deleteInternalTriplesForTesting(
       cancellationHandle,
       makeIdTriples(vocab, localVocab,
                     {"<internal-A> <internal-B> <internal-F>"}));
@@ -355,7 +363,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
                        "<internal-C> <internal-D> <internal-E>"}));
 
   // Remove previously removes internal triple again.
-  deltaTriples.deleteInternalTriples(
+  deltaTriples.deleteInternalTriplesForTesting(
       cancellationHandle,
       makeIdTriples(vocab, localVocab,
                     {"<internal-C> <internal-D> <internal-E>"}));
@@ -370,7 +378,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
                        "<internal-C> <internal-D> <internal-E>"}));
 
   // Inserting previously deleted internal triple.
-  deltaTriples.insertInternalTriples(
+  deltaTriples.insertInternalTriplesForTesting(
       cancellationHandle,
       makeIdTriples(vocab, localVocab,
                     {"<internal-C> <internal-D> <internal-E>"}));
@@ -382,6 +390,98 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
                        "<C> <prev> <B>", "<B> <prev> <A>"},
                       {"<internal-C> <internal-D> <internal-E>"},
                       {"<internal-A> <internal-B> <internal-F>"}));
+
+  deltaTriples.clear();
+  // Test internal language filter triples are inserted correctly.
+  auto toId = [this, &vocab, &localVocab](TripleComponent& component) {
+    return std::move(component).toValueId(
+        vocab, localVocab, testQec->getIndex().encodedIriManager());
+  };
+
+  Id graphId = qlever::specialIds().at(DEFAULT_GRAPH_IRI);
+  auto keysMatch =
+      [&toId,
+       graphId](std::vector<std::array<TripleComponent, 3>> tripleComponents) {
+        std::vector<::testing::internal::KeyMatcher<
+            ::testing::internal::EqMatcher<IdTriple<0>>>>
+            keys;
+        for (auto& [subject, predicate, object] : tripleComponents) {
+          keys.push_back(::testing::Key(::testing::Eq(IdTriple<0>{
+              {toId(subject), toId(predicate), toId(object), graphId}})));
+        }
+        return ::testing::UnorderedElementsAreArray(keys);
+      };
+  auto TriplesAre =
+      [&keysMatch](std::vector<std::array<TripleComponent, 3>> inserted,
+                   std::vector<std::array<TripleComponent, 3>> deleted,
+                   std::vector<std::array<TripleComponent, 3>> internalInserted,
+                   std::vector<std::array<TripleComponent, 3>> internalDeleted)
+      -> testing::Matcher<const DeltaTriples&> {
+    using ::testing::AllOf;
+    using TriplesNormal = DeltaTriples::TriplesToHandles<false>;
+    using TriplesInternal = DeltaTriples::TriplesToHandles<true>;
+    return AllOf(
+        AD_FIELD(DeltaTriples, triplesToHandlesNormal_,
+                 AllOf(AD_FIELD(TriplesNormal, triplesInserted_,
+                                keysMatch(std::move(inserted))),
+                       AD_FIELD(TriplesNormal, triplesDeleted_,
+                                keysMatch(std::move(deleted))))),
+        AD_FIELD(DeltaTriples, triplesToHandlesInternal_,
+                 AllOf(AD_FIELD(TriplesInternal, triplesInserted_,
+                                keysMatch(std::move(internalInserted))),
+                       AD_FIELD(TriplesInternal, triplesDeleted_,
+                                keysMatch(std::move(internalDeleted))))));
+  };
+
+  deltaTriples.insertTriples(
+      cancellationHandle,
+      makeIdTriples(
+          vocab, localVocab,
+          {"<a> <b> 1", "<a> <b> \"abc\"", "<a> <b> \"abc\"@de",
+           "<a> <b> \"abc\"@en",
+           "<a> <b> \"abc\"^^<http://example.com/datatype>", "<a> <b> <abc>",
+           "<a> <other> \"def\"@de", "<a> <other> \"def\"@es"}));
+  auto a = iri("<a>");
+  auto b = iri("<b>");
+  EXPECT_THAT(deltaTriples,
+              TriplesAre({{a, b, TripleComponent{1}},
+                          {a, b, lit("\"abc\"")},
+                          {a, b, lit("\"abc\"@de")},
+                          {a, b, lit("\"abc\"@en")},
+                          {a, b, lit("\"abc\"^^<http://example.com/datatype>")},
+                          {a, b, iri("<abc>")},
+                          {a, iri("<other>"), lit("\"def\"@de")},
+                          {a, iri("<other>"), lit("\"def\"@es")}},
+                         {},
+                         {{a, iri("@de@<b>"), lit("\"abc\"@de")},
+                          {a, iri("@en@<b>"), lit("\"abc\"@en")},
+                          {a, iri("@de@<other>"), lit("\"def\"@de")},
+                          {a, iri("@es@<other>"), lit("\"def\"@es")}},
+                         {}));
+
+  deltaTriples.deleteTriples(
+      cancellationHandle,
+      makeIdTriples(
+          vocab, localVocab,
+          {"<a> <b> 1", "<a> <b> \"abc\"", "<a> <b> \"abc\"@de",
+           "<a> <b> \"abc\"@en",
+           "<a> <b> \"abc\"^^<http://example.com/datatype>", "<a> <b> <abc>",
+           "<a> <other> \"def\"@de", "<a> <other> \"def\"@es"}));
+  EXPECT_THAT(deltaTriples,
+              TriplesAre({},
+                         {{a, b, TripleComponent{1}},
+                          {a, b, lit("\"abc\"")},
+                          {a, b, lit("\"abc\"@de")},
+                          {a, b, lit("\"abc\"@en")},
+                          {a, b, lit("\"abc\"^^<http://example.com/datatype>")},
+                          {a, b, iri("<abc>")},
+                          {a, iri("<other>"), lit("\"def\"@de")},
+                          {a, iri("<other>"), lit("\"def\"@es")}},
+                         {},
+                         {{a, iri("@de@<b>"), lit("\"abc\"@de")},
+                          {a, iri("@en@<b>"), lit("\"abc\"@en")},
+                          {a, iri("@de@<other>"), lit("\"def\"@de")},
+                          {a, iri("@es@<other>"), lit("\"def\"@es")}}));
 }
 
 // Test the rewriting of local vocab entries and blank nodes.
