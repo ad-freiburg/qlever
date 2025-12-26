@@ -420,9 +420,11 @@ std::shared_ptr<QueryExecutionTree> HasPredicateScan::makePatternScan(
       std::move(subject),
       ad_utility::triple_component::Iri::fromIriref(HAS_PATTERN_PREDICATE),
       TripleComponent{std::move(object)}};
-  return ad_utility::makeExecutionTree<IndexScan>(
-      qec,
-      qlever::getPermutationForTriple(Permutation::Enum::PSO, qec->getIndex(),
-                                      triple),
-      qec->sharedLocatedTriplesSnapshot(), triple);
+  auto [permutation, locatedTriples] =
+      qlever::getPermutationAndLocatedTriplesPerBlockForTriple(
+          Permutation::Enum::PSO, qec->getIndex(),
+          qec->sharedLocatedTriplesSnapshot(), triple);
+  return ad_utility::makeExecutionTree<IndexScan>(qec, std::move(permutation),
+                                                  std::move(locatedTriples),
+                                                  std::move(triple));
 }

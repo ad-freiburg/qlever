@@ -16,16 +16,19 @@ class SparqlTripleSimple;
 class IndexScan final : public Operation {
  public:
   using Graphs = ScanSpecificationAsTripleComponent::GraphFilter;
+  // TODO: get rid of them, especially the dubling with `PermutationSelector`
   using PermutationPtr = std::shared_ptr<const Permutation>;
   using LocatedTriplesSnapshotPtr =
       std::shared_ptr<const LocatedTriplesSnapshot>;
+  using LocatedTriplesPerBlockPtr =
+      std::shared_ptr<const LocatedTriplesPerBlock>;
 
  private:
   using ScanSpecAndBlocks = Permutation::ScanSpecAndBlocks;
 
  private:
   PermutationPtr permutation_;
-  LocatedTriplesSnapshotPtr locatedTriplesSnapshot_;
+  LocatedTriplesPerBlockPtr locatedTriplesPerBlock_;
   TripleComponent subject_;
   TripleComponent predicate_;
   TripleComponent object_;
@@ -51,7 +54,7 @@ class IndexScan final : public Operation {
 
  public:
   IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
-            LocatedTriplesSnapshotPtr locatedTriplesSnapshot,
+            LocatedTriplesPerBlockPtr locatedTriplesPerBlock,
             const SparqlTripleSimple& triple,
             Graphs graphsToFilter = Graphs::All(),
             std::optional<ScanSpecAndBlocks> scanSpecAndBlocks = std::nullopt,
@@ -67,7 +70,7 @@ class IndexScan final : public Operation {
 
   // Constructor to simplify copy creation of an `IndexScan`.
   IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
-            LocatedTriplesSnapshotPtr locatedTriplesSnapshot,
+            LocatedTriplesPerBlockPtr locatedTriplesPerBlock,
             const TripleComponent& s, const TripleComponent& p,
             const TripleComponent& o,
             std::vector<ColumnIndex> additionalColumns,
@@ -186,9 +189,10 @@ class IndexScan final : public Operation {
 
   // Instead of using the `LocatedTriplesSnapshot` of the `Operation` base
   // class, which accesses the one stored in the `QueryExecutionContext`, use
-  // the `LocatedTriplesSnapshot` held in this object. This might be a different
-  // one if a custom permutation is used.
-  const LocatedTriplesSnapshot& locatedTriplesSnapshot() const override;
+  // the `LocatedTriplesPerBlock` held in this object. This already is exactly
+  // the located triples for the permutation of the index scan and should be
+  // used wherever possible.
+  const LocatedTriplesPerBlock& locatedTriplesPerBlock() const;
 
   // Return the stored triple in the order that corresponds to the
   // `permutation_`. For example if `permutation_ == PSO` then the result is

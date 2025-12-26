@@ -83,13 +83,15 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
                              &indexImpl](size_t patternIdx, Id id) {
     const auto& permutation =
         indexImpl.getPermutation(Permutation::Enum::PSO).internalPermutation();
-    auto scanResultHasPattern =
-        permutation.scan(permutation.getScanSpecAndBlocks(
-                             ScanSpecificationAsTripleComponent{
-                                 iriOfHasPattern, id, std::nullopt}
-                                 .toScanSpecification(indexImpl),
-                             locatedTriplesSnapshot),
-                         {}, cancellationDummy, locatedTriplesSnapshot);
+    const auto& locatedTriples =
+        permutation.getLocatedTriplesForPermutation(locatedTriplesSnapshot);
+    auto scanResultHasPattern = permutation.scan(
+        CompressedRelationReader::ScanSpecAndBlocks::withUpdates(
+            ScanSpecificationAsTripleComponent{iriOfHasPattern, id,
+                                               std::nullopt}
+                .toScanSpecification(indexImpl),
+            locatedTriples),
+        {}, cancellationDummy, locatedTriples);
     // Each ID has at most one pattern, it can have none if it doesn't
     // appear as a subject in the knowledge graph.
     AD_CORRECTNESS_CHECK(scanResultHasPattern.numRows() <= 1);
@@ -105,13 +107,15 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
   auto checkConsistencyForCol0IdAndPermutation =
       [&](Id col0Id, const Permutation& permutation, size_t subjectColIdx,
           size_t objectColIdx) {
+        const auto& locatedTriples =
+            permutation.getLocatedTriplesForPermutation(locatedTriplesSnapshot);
         auto scanResult = permutation.scan(
-            permutation.getScanSpecAndBlocks(
+            CompressedRelationReader::ScanSpecAndBlocks::withUpdates(
                 ScanSpecification{col0Id, std::nullopt, std::nullopt},
-                locatedTriplesSnapshot),
+                locatedTriples),
             std::array{ColumnIndex{ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN},
                        ColumnIndex{ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN}},
-            cancellationDummy, locatedTriplesSnapshot);
+            cancellationDummy, locatedTriples);
         ASSERT_EQ(scanResult.numColumns(), 4u);
         for (const auto& row : scanResult) {
           auto patternIdx = row[2].getInt();
@@ -137,14 +141,17 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
     checkConsistencyForCol0IdAndPermutation(
         objectId, indexImpl.getPermutation(OSP), 0, col0IdTag);
   };
-
-  auto predicates = index.getImpl().PSO().getDistinctCol0IdsAndCounts(
-      cancellationDummy, locatedTriplesSnapshot, {});
+  const auto& pso = index.getImpl().PSO();
+  auto predicates = pso.getDistinctCol0IdsAndCounts(
+      cancellationDummy,
+      pso.getLocatedTriplesForPermutation(locatedTriplesSnapshot), {});
   for (const auto& predicate : predicates.getColumn(0)) {
     checkConsistencyForPredicate(predicate);
   }
-  auto objects = index.getImpl().OSP().getDistinctCol0IdsAndCounts(
-      cancellationDummy, locatedTriplesSnapshot, {});
+  const auto& osp = index.getImpl().OSP();
+  auto objects = osp.getDistinctCol0IdsAndCounts(
+      cancellationDummy,
+      osp.getLocatedTriplesForPermutation(locatedTriplesSnapshot), {});
   for (const auto& object : objects.getColumn(0)) {
     checkConsistencyForObject(object);
   }
