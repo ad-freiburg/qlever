@@ -80,8 +80,6 @@ IndexScan::IndexScan(QueryExecutionContext* qec,
                      std::optional<ScanSpecAndBlocks> scanSpecAndBlocks)
     : IndexScan(
           qec, qec->getIndex().getImpl().getPermutationPtr(permutationType),
-          // TODO<qup42> this constructor is only used in tests, can it be
-          // removed?
           std::shared_ptr<const LocatedTriplesPerBlock>{
               qec->sharedLocatedTriplesSnapshot(),
               &qec->sharedLocatedTriplesSnapshot()
