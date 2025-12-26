@@ -251,8 +251,13 @@ class DeltaTriples {
   // Update the block metadata.
   void updateAugmentedMetadata();
 
+  // Create a copy of the local vocab such that it can be processed
+  // without holding the lock. You have to make sure separately that the
+  // pointers are still valid.
+  std::vector<LocalVocabIndex> copyLocalVocab() const;
+
  private:
-  // The the proper state according to the template parameter. This will either
+  // The proper state according to the template parameter. This will either
   // return a reference to `triplesToHandlesInternal_` or
   // `triplesToHandlesNormal_`.
   template <bool isInternal>
@@ -345,6 +350,11 @@ class DeltaTriplesManager {
   // Return a shared pointer to a deep copy of the current snapshot. This can
   // be safely used to execute a query without interfering with future updates.
   SharedLocatedTriplesSnapshot getCurrentSnapshot() const;
+
+  // In addition to a simple snapshot, also acquire a copy of the local vocab
+  // indices.
+  std::pair<SharedLocatedTriplesSnapshot, std::vector<LocalVocabIndex>>
+  getCurrentSnapshotWithVocab() const;
 };
 
 #endif  // QLEVER_SRC_INDEX_DELTATRIPLES_H

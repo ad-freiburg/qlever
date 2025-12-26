@@ -39,7 +39,6 @@
 #include "util/File.h"
 #include "util/Forward.h"
 #include "util/MemorySize/MemorySize.h"
-#include "util/MmapVector.h"
 #include "util/json.h"
 
 template <typename Comparator, size_t I = NumColumnsIndexBuilding>
@@ -203,7 +202,8 @@ class IndexImpl {
   std::optional<DeltaTriplesManager> deltaTriples_;
 
  public:
-  explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator);
+  explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator,
+                     bool registerSingleton = true);
 
   // Forbid copying.
   IndexImpl& operator=(const IndexImpl&) = delete;
@@ -271,6 +271,10 @@ class IndexImpl {
 
   const auto& getScoreData() const { return scoreData_; }
 
+  const ad_utility::AllocatorWithLimit<Id>& allocator() const {
+    return allocator_;
+  };
+
   ad_utility::BlankNodeManager* getBlankNodeManager() const;
 
   DeltaTriplesManager& deltaTriplesManager() { return deltaTriples_.value(); }
@@ -323,6 +327,8 @@ class IndexImpl {
   Index::Vocab::PrefixRanges prefixRanges(std::string_view prefix) const;
 
   const CompactVectorOfStrings<Id>& getPatterns() const;
+
+  CompactVectorOfStrings<Id>& getPatterns();
   /**
    * @return The multiplicity of the Entities column (0) of the full
    * has-relation relation after unrolling the patterns.
@@ -437,6 +443,8 @@ class IndexImpl {
 
   bool& usePatterns();
 
+  bool usePatterns() const;
+
   bool& loadAllPermutations();
 
   void setKeepTempFiles(bool keepTempFiles);
@@ -454,6 +462,10 @@ class IndexImpl {
   }
 
   ad_utility::MemorySize& blocksizePermutationPerColumn() {
+    return blocksizePermutationPerColumn_;
+  }
+
+  const ad_utility::MemorySize& blocksizePermutationPerColumn() const {
     return blocksizePermutationPerColumn_;
   }
 
@@ -552,6 +564,12 @@ class IndexImpl {
                             Permutation::KeyOrder permutation,
                             Callbacks&&... perTripleCallbacks);
 
+  std::tuple<size_t, IndexMetaDataMmapDispatcher::WriteType>
+  createPermutationImpl(
+      size_t numColumns, const std::string& fileName,
+      ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples);
+
+ protected:
   // _______________________________________________________________________
   // Create a pair of permutations. Only works for valid pairs (PSO-POS,
   // OSP-OPS, SPO-SOP).  First creates the permutation and then exchanges the
@@ -588,6 +606,13 @@ class IndexImpl {
                      const Permutation& p1, const Permutation& p2,
                      Callbacks&&... perTripleCallbacks);
 
+ public:
+  size_t createPermutation(
+      size_t numColumns,
+      ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
+      const Permutation& permutation, bool internal = false);
+
+ protected:
   void openTextFileHandle();
 
   // Get the metadata for the block from the text index that contains the
@@ -671,6 +696,8 @@ class IndexImpl {
    */
   void deleteTemporaryFile(const std::string& path);
 
+  std::string getPatternFilename() const;
+
  public:
   // Count the number of "QLever-internal" triples (predicate ql:langtag or
   // predicate starts with @) and all other triples (that were actually part of
@@ -694,6 +721,7 @@ class IndexImpl {
       std::optional<PatternCreator::TripleSorter> createSPOAndSOP(
           size_t numColumns, BlocksOfTriples sortedTriples,
           NextSorter&&... nextSorter);
+
   // Create the OSP and OPS permutations. Additionally, count the number of
   // distinct objects and write it to the metadata.
   CPP_template(typename... NextSorter)(requires(
@@ -712,6 +740,7 @@ class IndexImpl {
                                             BlocksOfTriples sortedTriples,
                                             bool doWriteConfiguration,
                                             NextSorter&&... nextSorter);
+
   // Call `createPSOAndPOSImpl` with the given arguments and with
   // `doWriteConfiguration` set to `true` (see above).
   CPP_template(typename... NextSorter)(requires(
@@ -798,6 +827,17 @@ class IndexImpl {
 
   void storeTextScoringParamsInConfiguration(TextScoringMetric scoringMetric,
                                              float b, float k);
+
+  void loadConfigFromOldIndex(const std::string& newName,
+                              const IndexImpl& other,
+                              const nlohmann::json& newStats);
+
+  // Write the stored in-memory patterns to a pattern file.
+  void writePatternsToFile() const;
+
+  // Recompute the statistics about the index based on the passed snapshot.
+  nlohmann::json recomputeStatistics(
+      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 };
 
 #endif  // QLEVER_SRC_INDEX_INDEXIMPL_H
