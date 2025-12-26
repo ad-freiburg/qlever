@@ -6,6 +6,8 @@
 
 #include <array>
 #include <cstdint>
+#include <fstream>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -21,6 +23,7 @@
 #include "util/Exception.h"
 #include "util/HashMap.h"
 #include "util/InputRangeUtils.h"
+#include "util/Log.h"
 
 namespace {
 using CancellationHandle = ad_utility::SharedCancellationHandle;
@@ -167,14 +170,37 @@ namespace qlever {
 void materializeToIndex(const IndexImpl& index, const std::string& newIndexName,
                         const std::vector<LocalVocabIndex>& entries,
                         const SharedLocatedTriplesSnapshot& snapshot,
-                        const CancellationHandle& cancellationHandle) {
+                        const CancellationHandle& cancellationHandle,
+                        const std::string& logFileName) {
+  AD_CONTRACT_CHECK(!logFileName.empty(), "Log file name must not be empty");
+
+  // Set up logging to file
+  auto logFile = std::make_unique<std::ofstream>(logFileName);
+  AD_CORRECTNESS_CHECK(logFile->is_open(),
+                       "Failed to open log file: " + logFileName);
+
+  // Macro for rebuild-specific logging with the same syntax as AD_LOG_INFO
+#define REBUILD_LOG_INFO \
+  *logFile << ad_utility::Log::getTimeStamp() << " - INFO: "
+
+  REBUILD_LOG_INFO << "Rebuilding index from current data (including updates)"
+                   << std::endl;
+
+  REBUILD_LOG_INFO << "Writing new vocabulary ..." << std::endl;
+
   const auto& [insertInfo, localVocabMapping] =
       materializeLocalVocab(entries, index.getVocab(), newIndexName);
+
+  REBUILD_LOG_INFO << "Recomputing statistics ..." << std::endl;
+
   auto newStats = index.recomputeStatistics(*snapshot);
 
   ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
   IndexImpl newIndex{index.allocator(), false};
   newIndex.loadConfigFromOldIndex(newIndexName, index, newStats);
+
+  REBUILD_LOG_INFO << "Writing new permutations ..." << std::endl;
+
   // TODO<RobinTF> Make sure any exceptions are properly handled and propagated.
   std::vector<ad_utility::JThread> tasks;
 
@@ -246,6 +272,13 @@ void materializeToIndex(const IndexImpl& index, const std::string& newIndexName,
               actualPermutation);
         }});
   }
+
+  // Explicitly wait for all threads to complete before logging completion
+  tasks.clear();
+
+  REBUILD_LOG_INFO << "Index rebuild completed" << std::endl;
+
+#undef REBUILD_LOG_INFO
 }
 
 }  // namespace qlever

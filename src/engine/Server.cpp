@@ -480,10 +480,12 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       auto coroutine = computeInNewThread(
           queryThreadPool_,
           [this, &handle, fileName = std::move(fileName)] {
+            auto logFileName = fileName + ".rebuild-index-log.txt";
             auto [currentSnapshot, localVocabCopy] =
                 index_.deltaTriplesManager().getCurrentSnapshotWithVocab();
             qlever::materializeToIndex(index_.getImpl(), fileName,
-                                       localVocabCopy, currentSnapshot, handle);
+                                       localVocabCopy, currentSnapshot, handle,
+                                       logFileName);
           },
           handle);
       co_await std::move(coroutine);

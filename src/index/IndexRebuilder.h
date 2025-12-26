@@ -18,7 +18,8 @@ void materializeToIndex(
     const IndexImpl& index, const std::string& newIndexName,
     const std::vector<LocalVocabIndex>& entries,
     const SharedLocatedTriplesSnapshot& snapshot,
-    const ad_utility::SharedCancellationHandle& cancellationHandle);
+    const ad_utility::SharedCancellationHandle& cancellationHandle,
+    const std::string& logFileName);
 
 }  // namespace qlever
 
