@@ -77,6 +77,11 @@ class Sort : public Operation {
 
   virtual Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
+  // Helper methods for computeResult.
+  Result computeResultInMemory(std::shared_ptr<const Result> subRes);
+  Result computeResultExternalSort(std::shared_ptr<const Result> subRes,
+                                   bool requestLaziness);
+
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap()
       const override {
     return subtree_->getVariableColumns();

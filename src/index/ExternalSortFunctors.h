@@ -7,6 +7,7 @@
 
 #include <array>
 #include <tuple>
+#include <vector>
 
 #include "global/Id.h"
 
@@ -62,6 +63,28 @@ struct SortText {
         a, b, [](const Id& x, const Id& y) {
           return x.compareWithoutLocalVocab(y) < 0;
         });
+  }
+};
+
+// A comparator that sorts rows by a runtime-specified list of column indices.
+// Uses simple `<` comparison on Ids (internal order).
+struct SortByColumns {
+  std::vector<ColumnIndex> sortColumns_;
+
+  explicit SortByColumns(std::vector<ColumnIndex> sortColumns)
+      : sortColumns_{std::move(sortColumns)} {}
+
+  // Default constructor for template requirements.
+  SortByColumns() = default;
+
+  template <typename T1, typename T2>
+  bool operator()(const T1& a, const T2& b) const {
+    for (auto col : sortColumns_) {
+      if (a[col] != b[col]) {
+        return a[col] < b[col];
+      }
+    }
+    return false;
   }
 };
 
