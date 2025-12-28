@@ -315,6 +315,57 @@ TEST(Sort, externalSortLazyInput) {
   }
 }
 
+// Test external sorting with fully materialized input (lines 138-140 in
+// Sort.cpp).
+TEST(Sort, externalSortMaterializedInput) {
+  auto qec = ad_utility::testing::getQec();
+
+  // Clear cache to avoid hits from previous tests.
+  qec->getQueryTreeCache().clearAll();
+
+  // Create input table.
+  VectorTable input;
+  for (int64_t i = 0; i < 80; ++i) {
+    input.push_back({i % 13, i % 11, i + 2000});
+  }
+  auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
+
+  std::vector<std::optional<Variable>> vars = {Variable{"?0"}, Variable{"?1"},
+                                               Variable{"?2"}};
+
+  // Create a ValuesForTesting with forceFullyMaterialized = true to ensure
+  // the subtree returns a fully materialized result even when lazy is
+  // requested.
+  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(inputTable), vars,
+      /*supportsLimit=*/false,
+      /*sortedColumns=*/std::vector<ColumnIndex>{},
+      /*localVocab=*/LocalVocab{},
+      /*multiplicity=*/std::nullopt,
+      /*forceFullyMaterialized=*/true);
+
+  // Enable external sort.
+  auto cleanup1 =
+      setRuntimeParameterForTest<&RuntimeParameters::sortExternal_>(true);
+  auto cleanup2 = setRuntimeParameterForTest<
+      &RuntimeParameters::materializedViewWriterMemory_>(
+      ad_utility::MemorySize::megabytes(10));
+
+  // Create Sort and get the result.
+  Sort externalSort{qec, subtree, {0, 1, 2}};
+  auto result = externalSort.getResult();
+
+  // Verify the result is sorted correctly.
+  const auto& table = result->idTable();
+  EXPECT_EQ(80u, table.numRows());
+  for (size_t i = 1; i < table.numRows(); ++i) {
+    bool isLessOrEqual =
+        std::tie(table(i - 1, 0), table(i - 1, 1), table(i - 1, 2)) <=
+        std::tie(table(i, 0), table(i, 1), table(i, 2));
+    EXPECT_TRUE(isLessOrEqual) << "Row " << i << " is not in order";
+  }
+}
+
 // Test external sorting with lazy output.
 TEST(Sort, externalSortLazyOutput) {
   auto qec = ad_utility::testing::getQec();
