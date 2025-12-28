@@ -247,10 +247,11 @@ TEST(Sort, externalSort) {
   }
   auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
 
-  // Compute result with in-memory sort.
+  // Compute result with in-memory sort. Sort by all 3 columns to get a
+  // deterministic order (no ties).
   auto cleanup1 =
       setRuntimeParameterForTest<&RuntimeParameters::sortExternal_>(false);
-  Sort inMemorySort = makeSort(inputTable.clone(), {0, 1});
+  Sort inMemorySort = makeSort(inputTable.clone(), {0, 1, 2});
   auto inMemoryResult = inMemorySort.getResult();
 
   // Clear cache to ensure external sort is actually computed.
@@ -263,7 +264,7 @@ TEST(Sort, externalSort) {
   auto cleanup3 = setRuntimeParameterForTest<
       &RuntimeParameters::materializedViewWriterMemory_>(
       ad_utility::MemorySize::megabytes(10));
-  Sort externalSort = makeSort(inputTable.clone(), {0, 1});
+  Sort externalSort = makeSort(inputTable.clone(), {0, 1, 2});
   auto externalResult = externalSort.getResult();
 
   // Results should be identical.
