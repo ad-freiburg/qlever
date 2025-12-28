@@ -238,6 +238,8 @@ TEST(Sort, clone) {
 
 // Test that external sorting produces the same results as in-memory sorting.
 TEST(Sort, externalSort) {
+  auto qec = ad_utility::testing::getQec();
+
   // Create a table with some rows.
   VectorTable input;
   for (int64_t i = 0; i < 100; ++i) {
@@ -251,9 +253,16 @@ TEST(Sort, externalSort) {
   Sort inMemorySort = makeSort(inputTable.clone(), {0, 1});
   auto inMemoryResult = inMemorySort.getResult();
 
-  // Compute with external sort.
+  // Clear cache to ensure external sort is actually computed.
+  qec->getQueryTreeCache().clearAll();
+
+  // Compute with external sort. Use a small memory limit that fits within the
+  // test allocator's budget.
   auto cleanup2 =
       setRuntimeParameterForTest<&RuntimeParameters::sortExternal_>(true);
+  auto cleanup3 = setRuntimeParameterForTest<
+      &RuntimeParameters::materializedViewWriterMemory_>(
+      ad_utility::MemorySize::megabytes(10));
   Sort externalSort = makeSort(inputTable.clone(), {0, 1});
   auto externalResult = externalSort.getResult();
 
