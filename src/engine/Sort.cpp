@@ -146,9 +146,12 @@ Result Sort::computeResultExternalSort(std::shared_ptr<const Result> subRes,
     }
   }
 
-  // If laziness is not requested, materialize the result.
+  // If laziness is not requested, materialize the result. The `sorter` the
+  // size of the result, so we can reserve exactly the right amount of space
+  // in advance.
   if (!requestLaziness) {
     IdTable result{numColumns, allocator()};
+    result.reserve(sorter->size());
     for (auto& block : sorter->getSortedBlocks<0>()) {
       checkCancellation();
       result.insertAtEnd(block);
@@ -158,25 +161,20 @@ Result Sort::computeResultExternalSort(std::shared_ptr<const Result> subRes,
     return {std::move(result), resultSortedOn(), std::move(*mergedLocalVocab)};
   }
 
-  // Otherwise, return a lazy result that yields sorted blocks. The first block
-  // gets the merged local vocab, subsequent blocks get empty local vocabs.
+  // Otherwise, return a lazy result that yields sorted blocks. Each block gets
+  // a clone of the merged local vocab because consumers may read only a subset
+  // of blocks (e.g., for join prefiltering).
   auto sortedBlocks = sorter->getSortedBlocks<0>();
-  bool isFirst = true;
   return {Result::LazyResult{
               ad_utility::OwningView{ad_utility::CachingTransformInputRange{
                   std::move(sortedBlocks),
-                  [sorter, mergedLocalVocab, isFirst,
+                  [sorter, mergedLocalVocab,
                    this](IdTableStatic<0>& block) mutable {
                     checkCancellation();
                     IdTable table = std::move(block).toDynamic();
-                    LocalVocab localVocab =
-                        isFirst ? std::move(*mergedLocalVocab) : LocalVocab{};
-                    isFirst = false;
                     return Result::IdTableVocabPair{std::move(table),
-                                                    std::move(localVocab)};
-                  }}} |
-              ql::views::filter(
-                  [](const auto& pair) { return !pair.idTable_.empty(); })},
+                                                    mergedLocalVocab->clone()};
+                  }}}},
           resultSortedOn()};
 }
 

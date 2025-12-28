@@ -75,7 +75,7 @@ class Sort : public Operation {
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
-  virtual Result computeResult([[maybe_unused]] bool requestLaziness) override;
+  virtual Result computeResult(bool requestLaziness) override;
 
   // Helper methods for computeResult.
   Result computeResultInMemory(std::shared_ptr<const Result> subRes);

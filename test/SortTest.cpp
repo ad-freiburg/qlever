@@ -288,7 +288,7 @@ TEST(Sort, externalSortLazyInput) {
     tables.push_back(makeIdTableFromVector(batchInput, &Id::makeFromInt));
   }
 
-  // Create a ValuesForTesting that produces lazy output (multiple tables).
+  // Create a `ValuesForTesting` that produces lazy output (multiple tables).
   auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, std::move(tables), vars);
 
@@ -299,8 +299,8 @@ TEST(Sort, externalSortLazyInput) {
       &RuntimeParameters::materializedViewWriterMemory_>(
       ad_utility::MemorySize::megabytes(10));
 
-  // Create Sort and get the result (requesting lazy output triggers lazy input
-  // consumption in computeResultExternalSort).
+  // Create `Sort` operation and get the result (requesting lazy output triggers
+  // lazy input consumption in computeResultExternalSort).
   Sort externalSort{qec, subtree, {0, 1, 2}};
   auto result = externalSort.getResult();
 
@@ -333,16 +333,12 @@ TEST(Sort, externalSortMaterializedInput) {
   std::vector<std::optional<Variable>> vars = {Variable{"?0"}, Variable{"?1"},
                                                Variable{"?2"}};
 
-  // Create a ValuesForTesting with forceFullyMaterialized = true to ensure
-  // the subtree returns a fully materialized result even when lazy is
-  // requested.
+  // Create `ValuesForTesting` with `forceFullyMaterialized = true` (the last
+  // argument) to ensure the subtree returns a fully materialized result even
+  // when lazy is requested.
   auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, std::move(inputTable), vars,
-      /*supportsLimit=*/false,
-      /*sortedColumns=*/std::vector<ColumnIndex>{},
-      /*localVocab=*/LocalVocab{},
-      /*multiplicity=*/std::nullopt,
-      /*forceFullyMaterialized=*/true);
+      qec, std::move(inputTable), vars, false, std::vector<ColumnIndex>{},
+      LocalVocab{}, std::nullopt, true);
 
   // Enable external sort.
   auto cleanup1 =
@@ -351,7 +347,7 @@ TEST(Sort, externalSortMaterializedInput) {
       &RuntimeParameters::materializedViewWriterMemory_>(
       ad_utility::MemorySize::megabytes(10));
 
-  // Create Sort and get the result.
+  // Create `Sort` operation and get the result.
   Sort externalSort{qec, subtree, {0, 1, 2}};
   auto result = externalSort.getResult();
 
@@ -396,8 +392,8 @@ TEST(Sort, externalSortLazyOutput) {
       &RuntimeParameters::materializedViewWriterMemory_>(
       ad_utility::MemorySize::megabytes(10));
 
+  // Create `Sort` operation and get the result lazily.
   Sort externalSort = makeSort(inputTable.clone(), {0, 1, 2});
-  // Request lazy result using LAZY_IF_SUPPORTED computation mode.
   auto lazyResult =
       externalSort.getResult(false, ComputationMode::LAZY_IF_SUPPORTED);
 
