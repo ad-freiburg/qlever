@@ -62,50 +62,49 @@ Result Sort::computeResult(bool requestLaziness) {
   bool useExternalSort =
       getRuntimeParameter<&RuntimeParameters::sortExternal_>();
 
-  // Request lazy results only for external sorting.
-  AD_LOG_DEBUG << "Getting sub-result for Sort result computation..." << endl;
+  // Get the input lazily if we want to do external sorting, and materialized
+  // otherwise.
   std::shared_ptr<const Result> subRes = subtree_->getResult(useExternalSort);
 
+  // Do the sorting, either external or in-memory.
   if (useExternalSort) {
     return computeResultExternalSort(subRes, requestLaziness);
+  } else {
+    const auto& subTable = subRes->idTable();
+    getExecutionContext()->getSortPerformanceEstimator().throwIfEstimateTooLong(
+        subTable.numRows(), subTable.numColumns(), deadline_, "Sort operation");
+    return computeResultInMemory(subRes);
   }
-
-  // In-memory sorting: requires fully materialized input.
-  // TODO<joka921> proper timeout for sorting operations
-  const auto& subTable = subRes->idTable();
-  getExecutionContext()->getSortPerformanceEstimator().throwIfEstimateTooLong(
-      subTable.numRows(), subTable.numColumns(), deadline_, "Sort operation");
-
-  return computeResultInMemory(subRes);
 }
 
 // _____________________________________________________________________________
 Result Sort::computeResultInMemory(std::shared_ptr<const Result> subRes) {
-  using std::endl;
-  AD_LOG_DEBUG << "Sort result computation (in-memory)..." << endl;
   runtimeInfo().addDetail("is-external", "false");
+
+  // First clone the input table, then sort it in place.
   ad_utility::Timer t{ad_utility::timer::Timer::InitialStatus::Started};
   IdTable idTable = subRes->idTable().clone();
   runtimeInfo().addDetail("time-cloning", t.msecs());
   Engine::sort(idTable, sortColumnIndices_);
 
-  // Don't report missed timeout check because sort is not cancellable
+  // Don't report missed timeout check because the in-memory sort is currently
+  // not cancellable.
+  //
+  // TODO: make the in-memory sort cancellable.
   cancellationHandle_->resetWatchDogState();
   checkCancellation();
 
-  AD_LOG_DEBUG << "Sort result computation done." << endl;
+  // Return the sorted result.
   return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
 }
 
 // _____________________________________________________________________________
 Result Sort::computeResultExternalSort(std::shared_ptr<const Result> subRes,
                                        bool requestLaziness) {
-  using std::endl;
-  AD_LOG_DEBUG << "Sort result computation (external)..." << endl;
   runtimeInfo().addDetail("is-external", "true");
 
   // Create a unique temporary filename for the external sorter in the index
-  // directory (same as materialized views).
+  // directory.
   const std::string& onDiskBase =
       getExecutionContext()->getIndex().getOnDiskBase();
   std::ostringstream oss;
@@ -113,16 +112,19 @@ Result Sort::computeResultExternalSort(std::shared_ptr<const Result> subRes,
       << std::this_thread::get_id() << ".dat";
   std::string tempFilename = oss.str();
 
-  // Get memory limit from runtime parameters (same as materialized views).
+  // Get memory limit from the same runtime parameters that we use for the
+  // materialized view writer.
+  //
+  // TODO: Give this runime parameter a more general name.
   ad_utility::MemorySize memoryLimit =
       getRuntimeParameter<&RuntimeParameters::materializedViewWriterMemory_>();
 
-  // Get the number of columns from the subtree (works for both lazy and
+  // Get the number of columns from the subtree (this works for both lazy and
   // materialized results).
   size_t numColumns = subtree_->getResultWidth();
 
-  // Create the external sorter with our dynamic column comparator.
-  // We use a shared_ptr so the sorter survives when the lambda captures it.
+  // Create the external sorter with our dynamic column comparator. We use a
+  // shared pointer so the sorter survives when the lambda below captures it.
   using Sorter = ad_utility::CompressedExternalIdTableSorter<SortByColumns, 0>;
   auto sorter = std::make_shared<Sorter>(
       tempFilename, numColumns, memoryLimit, allocator(),
@@ -130,15 +132,13 @@ Result Sort::computeResultExternalSort(std::shared_ptr<const Result> subRes,
       SortByColumns{sortColumnIndices_});
 
   // Push all rows into the sorter, handling both lazy and materialized results.
-  // We also merge all local vocabs.
+  // For materialized results, we copy the local vocab, for lazy results we
+  // merge the local vocabs from the individual blocks.
   auto mergedLocalVocab = std::make_shared<LocalVocab>();
   if (subRes->isFullyMaterialized()) {
-    AD_LOG_DEBUG << "Pushing " << subRes->idTable().numRows()
-                 << " rows into external sorter..." << endl;
     sorter->pushBlock(subRes->idTable());
     *mergedLocalVocab = subRes->getCopyOfLocalVocab();
   } else {
-    AD_LOG_DEBUG << "Pushing rows lazily into external sorter..." << endl;
     for (Result::IdTableVocabPair& pair : subRes->idTables()) {
       checkCancellation();
       sorter->pushBlock(pair.idTable_);
@@ -146,26 +146,20 @@ Result Sort::computeResultExternalSort(std::shared_ptr<const Result> subRes,
     }
   }
 
-  AD_LOG_DEBUG << "Merging sorted blocks..." << endl;
-
-  // If laziness was not requested, materialize the result.
+  // If laziness is not requested, materialize the result.
   if (!requestLaziness) {
     IdTable result{numColumns, allocator()};
     for (auto& block : sorter->getSortedBlocks<0>()) {
       checkCancellation();
-      for (const auto& row : block) {
-        result.push_back(row);
-      }
+      result.insertAtEnd(block);
     }
     cancellationHandle_->resetWatchDogState();
     checkCancellation();
-    AD_LOG_DEBUG << "Sort result computation done." << endl;
     return {std::move(result), resultSortedOn(), std::move(*mergedLocalVocab)};
   }
 
-  // Return a lazy result that yields sorted blocks.
-  // The first block gets the merged local vocab, subsequent blocks get empty
-  // local vocabs.
+  // Otherwise, return a lazy result that yields sorted blocks. The first block
+  // gets the merged local vocab, subsequent blocks get empty local vocabs.
   auto sortedBlocks = sorter->getSortedBlocks<0>();
   bool isFirst = true;
   return {Result::LazyResult{
@@ -174,10 +168,7 @@ Result Sort::computeResultExternalSort(std::shared_ptr<const Result> subRes,
                   [sorter, mergedLocalVocab, isFirst,
                    this](IdTableStatic<0>& block) mutable {
                     checkCancellation();
-                    // Convert to dynamic IdTable.
                     IdTable table = std::move(block).toDynamic();
-                    // The first block carries the merged
-                    // local vocab.
                     LocalVocab localVocab =
                         isFirst ? std::move(*mergedLocalVocab) : LocalVocab{};
                     isFirst = false;

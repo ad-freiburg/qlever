@@ -6,6 +6,7 @@
 #include <gtest/gtest.h>
 
 #include "./util/IdTableHelpers.h"
+#include "./util/RuntimeParametersTestHelpers.h"
 #include "engine/Sort.h"
 #include "engine/ValuesForTesting.h"
 #include "global/RuntimeParameters.h"
@@ -235,12 +236,8 @@ TEST(Sort, clone) {
   EXPECT_EQ(clone->getDescriptor(), sort.getDescriptor());
 }
 
-// _____________________________________________________________________________
 // Test that external sorting produces the same results as in-memory sorting.
 TEST(Sort, externalSort) {
-  // Save the original parameter value to restore after the test.
-  auto originalValue = getRuntimeParameter<&RuntimeParameters::sortExternal_>();
-
   // Create a table with some rows.
   VectorTable input;
   for (int64_t i = 0; i < 100; ++i) {
@@ -248,19 +245,18 @@ TEST(Sort, externalSort) {
   }
   auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
 
-  // First, compute result with in-memory sort.
-  setRuntimeParameter<&RuntimeParameters::sortExternal_>(false);
+  // Compute result with in-memory sort.
+  auto cleanup1 =
+      setRuntimeParameterForTest<&RuntimeParameters::sortExternal_>(false);
   Sort inMemorySort = makeSort(inputTable.clone(), {0, 1});
   auto inMemoryResult = inMemorySort.getResult();
 
-  // Now compute with external sort.
-  setRuntimeParameter<&RuntimeParameters::sortExternal_>(true);
+  // Compute with external sort.
+  auto cleanup2 =
+      setRuntimeParameterForTest<&RuntimeParameters::sortExternal_>(true);
   Sort externalSort = makeSort(inputTable.clone(), {0, 1});
   auto externalResult = externalSort.getResult();
 
   // Results should be identical.
   EXPECT_EQ(inMemoryResult->idTable(), externalResult->idTable());
-
-  // Restore original parameter value.
-  setRuntimeParameter<&RuntimeParameters::sortExternal_>(originalValue);
 }
