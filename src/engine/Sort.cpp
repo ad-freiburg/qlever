@@ -168,23 +168,24 @@ Result Sort::computeResultExternalSort(std::shared_ptr<const Result> subRes,
   // local vocabs.
   auto sortedBlocks = sorter->getSortedBlocks<0>();
   bool isFirst = true;
-  return {Result::LazyResult{ad_utility::OwningView{
-              ad_utility::CachingTransformInputRange(
+  return {Result::LazyResult{
+              ad_utility::OwningView{ad_utility::CachingTransformInputRange{
                   std::move(sortedBlocks),
                   [sorter, mergedLocalVocab, isFirst,
                    this](IdTableStatic<0>& block) mutable {
                     checkCancellation();
                     // Convert to dynamic IdTable.
                     IdTable table = std::move(block).toDynamic();
-                    // The first block carries the merged local vocab.
+                    // The first block carries the merged
+                    // local vocab.
                     LocalVocab localVocab =
                         isFirst ? std::move(*mergedLocalVocab) : LocalVocab{};
                     isFirst = false;
                     return Result::IdTableVocabPair{std::move(table),
                                                     std::move(localVocab)};
-                  }) |
+                  }}} |
               ql::views::filter(
-                  [](const auto& pair) { return !pair.idTable_.empty(); })}},
+                  [](const auto& pair) { return !pair.idTable_.empty(); })},
           resultSortedOn()};
 }
 
