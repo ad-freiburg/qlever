@@ -78,9 +78,9 @@ class Sort : public Operation {
   virtual Result computeResult(bool requestLaziness) override;
 
   // Helper methods for computeResult.
-  Result computeResultInMemory(std::shared_ptr<const Result> subRes);
-  Result computeResultExternalSort(std::shared_ptr<const Result> subRes,
-                                   bool requestLaziness);
+  Result computeResultInMemory(std::shared_ptr<const Result> subRes) const;
+  Result computeResultExternal(std::shared_ptr<const Result> subRes,
+                               bool requestLaziness) const;
 
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap()
       const override {
