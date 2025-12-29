@@ -135,9 +135,9 @@ Result Sort::computeResultExternal(std::shared_ptr<const Result> subRes,
     sorter->pushBlock(subRes->idTable());
     mergedLocalVocab = subRes->getCopyOfLocalVocab();
   } else {
-    for (const Result::IdTableVocabPair& pair : subRes->idTables()) {
+    for (Result::IdTableVocabPair& pair : subRes->idTables()) {
       checkCancellation();
-      sorter->pushBlock(pair.idTable_);
+      sorter->pushBlock(std::move(pair.idTable_));
       mergedLocalVocab.mergeWith(pair.localVocab_);
     }
   }
