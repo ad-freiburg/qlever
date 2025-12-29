@@ -119,9 +119,10 @@ Result Sort::computeResultExternal(std::shared_ptr<const Result> subRes,
   size_t numColumns = subtree_->getResultWidth();
 
   // Create the external sorter with our dynamic column comparator. We use a
-  // shared_ptr because the Sorter is not moveable (contains std::atomic).
+  // unique_ptr because the Sorter is not moveable (contains std::atomic), but
+  // unique_ptr itself can be moved into the lambda.
   using Sorter = ad_utility::CompressedExternalIdTableSorter<SortByColumns, 0>;
-  auto sorter = std::make_shared<Sorter>(
+  auto sorter = std::make_unique<Sorter>(
       tempFilename, numColumns, memoryLimit, allocator(),
       ad_utility::DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
       SortByColumns{sortColumnIndices_});
@@ -160,16 +161,16 @@ Result Sort::computeResultExternal(std::shared_ptr<const Result> subRes,
   // a clone of the merged local vocab because consumers may read only a subset
   // of blocks (e.g., for join prefiltering).
   auto sortedBlocks = sorter->getSortedBlocks<0>();
-  return {Result::LazyResult{
-              ad_utility::OwningView{ad_utility::CachingTransformInputRange{
-                  std::move(sortedBlocks),
-                  [sorter, mergedLocalVocab = std::move(mergedLocalVocab),
-                   this](IdTableStatic<0>& block) mutable {
-                    checkCancellation();
-                    IdTable table = std::move(block).toDynamic();
-                    return Result::IdTableVocabPair{std::move(table),
-                                                    mergedLocalVocab.clone()};
-                  }}}},
+  return {Result::LazyResult{ad_utility::CachingTransformInputRange{
+              std::move(sortedBlocks),
+              [sorter = std::move(sorter),
+               mergedLocalVocab = std::move(mergedLocalVocab),
+               this](IdTableStatic<0>& block) {
+                checkCancellation();
+                IdTable table = std::move(block).toDynamic();
+                return Result::IdTableVocabPair{std::move(table),
+                                                mergedLocalVocab.clone()};
+              }}},
           resultSortedOn()};
 }
 
