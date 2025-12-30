@@ -1,16 +1,20 @@
-// Copyright 2015, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: 2015 - 2017 Björn Buchhold (buchhold@cs.uni-freiburg.de)
-// Author: 2023 -      Johannes Kalmbach (kalmbach@cs.uni-freiburg.de)
+// Copyright 2015 - 2025 The QLever Authors, in particular:
+//
+// 2015 - 2017 Björn Buchhold <buchhold@cs.uni-freiburg.de>, UFR
+// 2023 - 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2025        Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "engine/Sort.h"
 
 #include "engine/CallFixedSize.h"
 #include "engine/Engine.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/RuntimeParameters.h"
-#include "index/ExternalSortFunctors.h"
 #include "util/Algorithm.h"
 #include "util/Random.h"
 
@@ -54,112 +58,139 @@ std::string Sort::getDescriptor() const {
 
 // _____________________________________________________________________________
 Result Sort::computeResult(bool requestLaziness) {
-  // Check if we should use external sorting.
-  bool useExternalSort =
-      getRuntimeParameter<&RuntimeParameters::sortExternal_>();
+  size_t numColumns = subtree_->getResultWidth();
+  // Maximum number of rows that can be sorted in memory.
+  size_t maxNumRowsToBeSortedInMemory =
+      getRuntimeParameter<&RuntimeParameters::sortInMemoryThreshold_>()
+          .getBytes() /
+      (numColumns * sizeof(Id));
 
-  // Get the input lazily if we want to do external sorting, and materialized
-  // otherwise.
-  std::shared_ptr<const Result> subRes = subtree_->getResult(useExternalSort);
+  // Always request lazy input to avoid premature materialization.
+  std::shared_ptr<const Result> subRes = subtree_->getResult(true);
 
-  // Do the sorting, either external or in-memory.
-  if (useExternalSort) {
-    return computeResultExternal(subRes, requestLaziness);
-  } else {
-    const auto& subTable = subRes->idTable();
-    getExecutionContext()->getSortPerformanceEstimator().throwIfEstimateTooLong(
-        subTable.numRows(), subTable.numColumns(), deadline_, "Sort operation");
-    return computeResultInMemory(subRes);
+  // For fully materialized input, we know the size upfront.
+  if (subRes->isFullyMaterialized()) {
+    const IdTable& table = subRes->idTable();
+    if (table.numRows() <= maxNumRowsToBeSortedInMemory) {
+      return computeResultInMemory(table.clone(),
+                                   subRes->getSharedLocalVocab());
+    } else {
+      std::vector<IdTable> blocks;
+      blocks.push_back(table.clone());
+      std::vector<Result::IdTableVocabPair> noRemainingBlocks;
+      return computeResultExternal(
+          std::move(blocks), subRes->getCopyOfLocalVocab(),
+          noRemainingBlocks.begin(), noRemainingBlocks.end(), requestLaziness);
+    }
   }
+
+  // For lazy input, collect blocks until we exceed the threshold. Note that we
+  // may exceed the threshold by the size of one block.
+  std::vector<IdTable> collectedBlocks;
+  LocalVocab mergedLocalVocab;
+  size_t totalRows = 0;
+  auto idTables = subRes->idTables();
+  auto it = idTables.begin();
+  while (it != idTables.end() && totalRows <= maxNumRowsToBeSortedInMemory) {
+    checkCancellation();
+    auto& idTableAndLocalVocab = *it;
+    totalRows += idTableAndLocalVocab.idTable_.numRows();
+    collectedBlocks.push_back(std::move(idTableAndLocalVocab.idTable_));
+    mergedLocalVocab.mergeWith(idTableAndLocalVocab.localVocab_);
+    ++it;
+  }
+
+  // If we exceeded the threshold (by one block), use external sort.
+  if (totalRows > maxNumRowsToBeSortedInMemory) {
+    return computeResultExternal(std::move(collectedBlocks),
+                                 std::move(mergedLocalVocab), std::move(it),
+                                 idTables.end(), requestLaziness);
+  }
+
+  // Stayed under threshold: concatenate and sort in-memory.
+  IdTable combined{numColumns, allocator()};
+  combined.reserve(totalRows);
+  for (auto& block : collectedBlocks) {
+    combined.insertAtEnd(std::move(block));
+  }
+  return computeResultInMemory(std::move(combined),
+                               std::move(mergedLocalVocab));
 }
 
 // _____________________________________________________________________________
-Result Sort::computeResultInMemory(std::shared_ptr<const Result> subRes) const {
+template <typename LocalVocabT>
+Result Sort::computeResultInMemory(IdTable idTable,
+                                   LocalVocabT localVocab) const {
   runtimeInfo().addDetail("is-external", "false");
 
-  // First clone the input table, then sort it in place.
-  ad_utility::Timer t{ad_utility::timer::Timer::InitialStatus::Started};
-  IdTable idTable = subRes->idTable().clone();
-  runtimeInfo().addDetail("time-cloning", t.msecs());
+  getExecutionContext()->getSortPerformanceEstimator().throwIfEstimateTooLong(
+      idTable.numRows(), idTable.numColumns(), deadline_, "Sort operation");
+
   Engine::sort(idTable, sortColumnIndices_);
 
   // Don't report missed timeout check because the in-memory sort is currently
   // not cancellable.
-  //
-  // TODO: make the in-memory sort cancellable.
   cancellationHandle_->resetWatchDogState();
   checkCancellation();
 
-  // Return the sorted result.
-  return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
+  return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
 }
 
 // _____________________________________________________________________________
-Result Sort::computeResultExternal(std::shared_ptr<const Result> subRes,
-                                   bool requestLaziness) const {
+template <typename Iterator, typename Sentinel>
+Result Sort::computeResultExternal(std::vector<IdTable> collectedBlocks,
+                                   LocalVocab mergedLocalVocab, Iterator it,
+                                   Sentinel end, bool requestLaziness) const {
   runtimeInfo().addDetail("is-external", "true");
 
-  // Create a unique temporary filename for the external sorter in the index
-  // directory.
+  // Create a unique temporary filename in the index directory.
   const std::string& onDiskBase =
       getExecutionContext()->getIndex().getOnDiskBase();
   ad_utility::UuidGenerator uuidGen;
   std::string tempFilename =
       absl::StrCat(onDiskBase, ".sort.", uuidGen(), ".dat");
 
-  // Get memory limit from the same runtime parameters that we use for the
-  // materialized view writer.
-  //
-  // TODO: Give this runime parameter a more general name.
   ad_utility::MemorySize memoryLimit =
-      getRuntimeParameter<&RuntimeParameters::materializedViewWriterMemory_>();
-
-  // Get the number of columns from the subtree (this works for both lazy and
-  // materialized results).
+      getRuntimeParameter<&RuntimeParameters::sortInMemoryThreshold_>();
   size_t numColumns = subtree_->getResultWidth();
 
-  // Create the external sorter with our dynamic column comparator. We use a
-  // unique_ptr because the Sorter is not moveable (contains std::atomic), but
-  // unique_ptr itself can be moved into the lambda.
-  using Sorter = ad_utility::CompressedExternalIdTableSorter<SortByColumns, 0>;
+  // We use a `unique_ptr` because the `Sorter` is not moveable (contains
+  // `std::atomic`), but the `unique_ptr` can be moved into the lambda below.
   auto sorter = std::make_unique<Sorter>(
       tempFilename, numColumns, memoryLimit, allocator(),
       ad_utility::DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
       SortByColumns{sortColumnIndices_});
 
-  // Push all rows into the sorter, handling both lazy and materialized results.
-  // For materialized results, we copy the local vocab, for lazy results we
-  // merge the local vocabs from the individual blocks.
-  LocalVocab mergedLocalVocab;
-  if (subRes->isFullyMaterialized()) {
-    sorter->pushBlock(subRes->idTable());
-    mergedLocalVocab = subRes->getCopyOfLocalVocab();
-  } else {
-    for (Result::IdTableVocabPair& pair : subRes->idTables()) {
-      checkCancellation();
-      sorter->pushBlock(std::move(pair.idTable_));
-      mergedLocalVocab.mergeWith(pair.localVocab_);
-    }
+  // Push already collected blocks.
+  for (auto& block : collectedBlocks) {
+    sorter->pushBlock(std::move(block));
   }
 
-  // If laziness is not requested, materialize the result. The `sorter` the
-  // size of the result, so we can reserve exactly the right amount of space
-  // in advance.
+  // Process remaining blocks.
+  while (it != end) {
+    checkCancellation();
+    auto& idTableAndLocalVocab = *it;
+    sorter->pushBlock(std::move(idTableAndLocalVocab.idTable_));
+    mergedLocalVocab.mergeWith(idTableAndLocalVocab.localVocab_);
+    ++it;
+  }
+
+  // If laziness is not requested, materialize the result. The sorter knows the
+  // size of the result, so we can reserve exactly the right amount of space.
   if (!requestLaziness) {
     IdTable result{numColumns, allocator()};
     result.reserve(sorter->size());
-    for (const auto& block : sorter->getSortedBlocks<0>()) {
+    for (auto& block : sorter->getSortedBlocks<0>()) {
       checkCancellation();
-      result.insertAtEnd(block);
+      result.insertAtEnd(std::move(block));
     }
     cancellationHandle_->resetWatchDogState();
     checkCancellation();
     return {std::move(result), resultSortedOn(), std::move(mergedLocalVocab)};
   }
 
-  // Otherwise, return a lazy result that yields sorted blocks. Each block gets
-  // a clone of the merged local vocab because consumers may read only a subset
-  // of blocks (e.g., for join prefiltering).
+  // Return a lazy result that yields sorted blocks. Each block gets a clone of
+  // the merged local vocab because consumers may read only a subset of blocks.
   auto sortedBlocks = sorter->getSortedBlocks<0>();
   return {Result::LazyResult{ad_utility::CachingTransformInputRange{
               std::move(sortedBlocks),
@@ -167,8 +198,8 @@ Result Sort::computeResultExternal(std::shared_ptr<const Result> subRes,
                mergedLocalVocab = std::move(mergedLocalVocab),
                this](IdTableStatic<0>& block) {
                 checkCancellation();
-                IdTable table = std::move(block).toDynamic();
-                return Result::IdTableVocabPair{std::move(table),
+                IdTable idTable = std::move(block).toDynamic();
+                return Result::IdTableVocabPair{std::move(idTable),
                                                 mergedLocalVocab.clone()};
               }}},
           resultSortedOn()};

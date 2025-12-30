@@ -1,13 +1,22 @@
-// Copyright 2015, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: 2015 - 2017 Björn Buchhold (buchhold@cs.uni-freiburg.de)
-// Author: 2023 -      Johannes Kalmbach (kalmbach@cs.uni-freiburg.de)
+// Copyright 2015 - 2025 The QLever Authors, in particular:
+//
+// 2015 - 2017 Björn Buchhold <buchhold@cs.uni-freiburg.de>, UFR
+// 2023 - 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2025        Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_ENGINE_SORT_H
 #define QLEVER_SRC_ENGINE_SORT_H
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/Result.h"
+#include "engine/idTable/CompressedExternalIdTable.h"
+#include "index/ExternalSortFunctors.h"
 
 // This operation sorts an `IdTable` by the `internal` order of the IDs. This
 // order is cheap to compute (just a bitwise compare of integers), but is
@@ -78,9 +87,20 @@ class Sort : public Operation {
   virtual Result computeResult(bool requestLaziness) override;
 
   // Helper methods for computeResult.
-  Result computeResultInMemory(std::shared_ptr<const Result> subRes) const;
-  Result computeResultExternal(std::shared_ptr<const Result> subRes,
-                               bool requestLaziness) const;
+  template <typename LocalVocabT>
+  Result computeResultInMemory(IdTable idTable, LocalVocabT localVocab) const;
+
+  // Type alias for the external sorter.
+  using Sorter = ad_utility::CompressedExternalIdTableSorter<SortByColumns, 0>;
+
+  // External sort: push collectedBlocks first, then consume remaining blocks.
+  //
+  // NOTE: `Iterator` and `Sentinel` are separate template types because C++20
+  // ranges (like `InputRangeFromGet`) use different types for begin and end.
+  template <typename Iterator, typename Sentinel>
+  Result computeResultExternal(std::vector<IdTable> collectedBlocks,
+                               LocalVocab mergedLocalVocab, Iterator it,
+                               Sentinel end, bool requestLaziness) const;
 
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap()
       const override {

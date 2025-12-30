@@ -1,6 +1,12 @@
-//  Copyright 2023, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2023 - 2025 The QLever Authors, in particular:
+//
+// 2023 - 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2025        Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -236,53 +242,21 @@ TEST(Sort, clone) {
   EXPECT_EQ(clone->getDescriptor(), sort.getDescriptor());
 }
 
-// Test that external sorting produces the same results as in-memory sorting.
-TEST(Sort, externalSort) {
-  auto qec = ad_utility::testing::getQec();
-
-  // Create a table with some rows.
-  VectorTable input;
-  for (int64_t i = 0; i < 100; ++i) {
-    input.push_back({i % 10, i % 7, i});
-  }
-  auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
-
-  // Compute result with in-memory sort. Sort by all 3 columns to get a
-  // deterministic order (no ties).
-  auto cleanup1 =
-      setRuntimeParameterForTest<&RuntimeParameters::sortExternal_>(false);
-  Sort inMemorySort = makeSort(inputTable.clone(), {0, 1, 2});
-  auto inMemoryResult = inMemorySort.getResult();
-
-  // Clear cache to ensure external sort is actually computed.
-  qec->getQueryTreeCache().clearAll();
-
-  // Compute with external sort. Use a small memory limit that fits within the
-  // test allocator's budget.
-  auto cleanup2 =
-      setRuntimeParameterForTest<&RuntimeParameters::sortExternal_>(true);
-  auto cleanup3 = setRuntimeParameterForTest<
-      &RuntimeParameters::materializedViewWriterMemory_>(
-      ad_utility::MemorySize::megabytes(10));
-  Sort externalSort = makeSort(inputTable.clone(), {0, 1, 2});
-  auto externalResult = externalSort.getResult();
-
-  // Results should be identical.
-  EXPECT_EQ(inMemoryResult->idTable(), externalResult->idTable());
-}
-
-// Test external sorting with lazy input (multiple IdTable blocks).
+// Test external sorting with lazy input (multiple IdTable blocks). The test
+// uses 4 blocks where block 3 exceeds the threshold, so block 4 exercises the
+// "remaining blocks" loop in `computeResultExternal`.
 TEST(Sort, externalSortLazyInput) {
   auto qec = ad_utility::testing::getQec();
 
-  // Create multiple tables to simulate lazy input.
+  // Create multiple tables to simulate lazy input. Total size needs to exceed
+  // the threshold. 4 batches × 2000 rows × 3 cols × 8 bytes = 192 KB.
   std::vector<IdTable> tables;
   std::vector<std::optional<Variable>> vars = {Variable{"?0"}, Variable{"?1"},
                                                Variable{"?2"}};
-  for (int64_t batch = 0; batch < 3; ++batch) {
+  for (int64_t batch = 0; batch < 4; ++batch) {
     VectorTable batchInput;
-    for (int64_t i = 0; i < 30; ++i) {
-      int64_t val = batch * 30 + i;
+    for (int64_t i = 0; i < 2000; ++i) {
+      int64_t val = batch * 2000 + i;
       batchInput.push_back({val % 10, val % 7, val});
     }
     tables.push_back(makeIdTableFromVector(batchInput, &Id::makeFromInt));
@@ -292,21 +266,20 @@ TEST(Sort, externalSortLazyInput) {
   auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, std::move(tables), vars);
 
-  // Enable external sort.
-  auto cleanup1 =
-      setRuntimeParameterForTest<&RuntimeParameters::sortExternal_>(true);
-  auto cleanup2 = setRuntimeParameterForTest<
-      &RuntimeParameters::materializedViewWriterMemory_>(
-      ad_utility::MemorySize::megabytes(10));
+  // Set threshold to 100 KB so that the 192 KB input triggers external sort.
+  // The threshold is exceeded after block 3 (144 KB > 100 KB), so block 4 is
+  // processed by the "remaining blocks" loop.
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::sortInMemoryThreshold_>(
+          ad_utility::MemorySize::kilobytes(100));
 
-  // Create `Sort` operation and get the result (requesting lazy output triggers
-  // lazy input consumption in computeResultExternalSort).
+  // Create `Sort` operation and get the result.
   Sort externalSort{qec, subtree, {0, 1, 2}};
   auto result = externalSort.getResult();
 
   // Verify the result is sorted correctly.
   const auto& table = result->idTable();
-  EXPECT_EQ(90u, table.numRows());
+  EXPECT_EQ(8000u, table.numRows());
   for (size_t i = 1; i < table.numRows(); ++i) {
     bool isLessOrEqual =
         std::tie(table(i - 1, 0), table(i - 1, 1), table(i - 1, 2)) <=
@@ -315,37 +288,35 @@ TEST(Sort, externalSortLazyInput) {
   }
 }
 
-// Test external sorting with fully materialized input (lines 138-140 in
-// Sort.cpp).
+// Test external sorting with fully materialized input.
 TEST(Sort, externalSortMaterializedInput) {
   auto qec = ad_utility::testing::getQec();
 
   // Clear cache to avoid hits from previous tests.
   qec->getQueryTreeCache().clearAll();
 
-  // Create input table.
+  // Set in-memory threshold to 100 KB, and create input table large enough to
+  // exceed that threshold: 5000 rows × 3 cols × 8 bytes = 120 KB.
+  //
+  // NOTE: `int64_t` is needed here and in the following tests because
+  // `VectorTable` expects `int64_t` values.
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::sortInMemoryThreshold_>(
+          ad_utility::MemorySize::kilobytes(100));
   VectorTable input;
-  for (int64_t i = 0; i < 80; ++i) {
+  for (int64_t i = 0; i < 5000; ++i) {
     input.push_back({i % 13, i % 11, i + 2000});
   }
   auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
 
-  std::vector<std::optional<Variable>> vars = {Variable{"?0"}, Variable{"?1"},
-                                               Variable{"?2"}};
-
   // Create `ValuesForTesting` with `forceFullyMaterialized = true` (the last
   // argument) to ensure the subtree returns a fully materialized result even
   // when lazy is requested.
+  std::vector<std::optional<Variable>> vars = {Variable{"?0"}, Variable{"?1"},
+                                               Variable{"?2"}};
   auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, std::move(inputTable), vars, false, std::vector<ColumnIndex>{},
       LocalVocab{}, std::nullopt, true);
-
-  // Enable external sort.
-  auto cleanup1 =
-      setRuntimeParameterForTest<&RuntimeParameters::sortExternal_>(true);
-  auto cleanup2 = setRuntimeParameterForTest<
-      &RuntimeParameters::materializedViewWriterMemory_>(
-      ad_utility::MemorySize::megabytes(10));
 
   // Create `Sort` operation and get the result.
   Sort externalSort{qec, subtree, {0, 1, 2}};
@@ -353,7 +324,7 @@ TEST(Sort, externalSortMaterializedInput) {
 
   // Verify the result is sorted correctly.
   const auto& table = result->idTable();
-  EXPECT_EQ(80u, table.numRows());
+  EXPECT_EQ(5000u, table.numRows());
   for (size_t i = 1; i < table.numRows(); ++i) {
     bool isLessOrEqual =
         std::tie(table(i - 1, 0), table(i - 1, 1), table(i - 1, 2)) <=
@@ -369,43 +340,87 @@ TEST(Sort, externalSortLazyOutput) {
   // Clear cache at start to avoid hits from previous tests.
   qec->getQueryTreeCache().clearAll();
 
-  // Create input table with different values than other tests.
+  // Create input table large enough to exceed the second threshold of 100 KB
+  // below: 5000 rows × 3 cols × 8 bytes = 120 KB.
   VectorTable input;
-  for (int64_t i = 0; i < 100; ++i) {
+  for (int64_t i = 0; i < 5000; ++i) {
     input.push_back({i % 11, i % 9, i + 1000});
   }
   auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
 
-  // First compute the expected result using in-memory sort.
+  // First compute the expected result using in-memory sort (large threshold).
   auto cleanup1 =
-      setRuntimeParameterForTest<&RuntimeParameters::sortExternal_>(false);
+      setRuntimeParameterForTest<&RuntimeParameters::sortInMemoryThreshold_>(
+          ad_utility::MemorySize::megabytes(10));
   Sort inMemorySort = makeSort(inputTable.clone(), {0, 1, 2});
   auto inMemoryResult = inMemorySort.getResult();
+  EXPECT_EQ(inMemorySort.runtimeInfo().details_["is-external"], "false");
 
   // Clear cache again before external sort.
   qec->getQueryTreeCache().clearAll();
 
-  // Enable external sort and request lazy output.
+  // Set threshold to 100 KB so that the 120 KB input triggers external sort.
   auto cleanup2 =
-      setRuntimeParameterForTest<&RuntimeParameters::sortExternal_>(true);
-  auto cleanup3 = setRuntimeParameterForTest<
-      &RuntimeParameters::materializedViewWriterMemory_>(
-      ad_utility::MemorySize::megabytes(10));
+      setRuntimeParameterForTest<&RuntimeParameters::sortInMemoryThreshold_>(
+          ad_utility::MemorySize::kilobytes(100));
 
   // Create `Sort` operation and get the result lazily.
   Sort externalSort = makeSort(inputTable.clone(), {0, 1, 2});
   auto lazyResult =
       externalSort.getResult(false, ComputationMode::LAZY_IF_SUPPORTED);
+  EXPECT_EQ(externalSort.runtimeInfo().details_["is-external"], "true");
 
   // Lazy results are not fully materialized.
   EXPECT_FALSE(lazyResult->isFullyMaterialized());
 
   // Consume the lazy result and collect all rows.
-  IdTable collectedTable{3, qec->getAllocator()};
-  for (auto& pair : lazyResult->idTables()) {
-    collectedTable.insertAtEnd(pair.idTable_);
+  IdTable externalResultIdTable{3, qec->getAllocator()};
+  for (auto& idTableAndLocalVocab : lazyResult->idTables()) {
+    externalResultIdTable.insertAtEnd(idTableAndLocalVocab.idTable_);
   }
 
   // Compare with in-memory result.
-  EXPECT_EQ(inMemoryResult->idTable(), collectedTable);
+  EXPECT_EQ(inMemoryResult->idTable(), externalResultIdTable);
+}
+
+// Test in-memory sorting with fully materialized input (exercises the code path
+// where the subtree returns a materialized result that fits in memory).
+TEST(Sort, inMemorySortMaterializedInput) {
+  auto qec = ad_utility::testing::getQec();
+
+  // Clear cache to avoid hits from previous tests.
+  qec->getQueryTreeCache().clearAll();
+
+  // Set threshold to 100 KB, and create input table small enough to stay under
+  // that threshold: 100 rows × 3 cols × 8 bytes = 2.4 KB.
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::sortInMemoryThreshold_>(
+          ad_utility::MemorySize::kilobytes(100));
+  VectorTable input;
+  for (int64_t i = 0; i < 100; ++i) {
+    input.push_back({i % 7, i % 5, i});
+  }
+  auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
+
+  // Create `ValuesForTesting` with `forceFullyMaterialized = true` (the last
+  // argument) to ensure the subtree returns a fully materialized result.
+  std::vector<std::optional<Variable>> vars = {Variable{"?0"}, Variable{"?1"},
+                                               Variable{"?2"}};
+  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(inputTable), vars, false, std::vector<ColumnIndex>{},
+      LocalVocab{}, std::nullopt, true);
+
+  // Create `Sort` operation and get the result.
+  Sort inMemorySort{qec, subtree, {0, 1, 2}};
+  auto result = inMemorySort.getResult();
+
+  // Verify the result is sorted correctly.
+  const auto& table = result->idTable();
+  EXPECT_EQ(100u, table.numRows());
+  for (size_t i = 1; i < table.numRows(); ++i) {
+    bool isLessOrEqual =
+        std::tie(table(i - 1, 0), table(i - 1, 1), table(i - 1, 2)) <=
+        std::tie(table(i, 0), table(i, 1), table(i, 2));
+    EXPECT_TRUE(isLessOrEqual) << "Row " << i << " is not in order";
+  }
 }

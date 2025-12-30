@@ -130,9 +130,10 @@ struct RuntimeParameters {
   MemorySizeParameter materializedViewWriterMemory_{
       ad_utility::MemorySize::gigabytes(4), "materialized-view-writer-memory"};
 
-  // If true, use external sorting (which writes intermediate results to disk)
-  // instead of in-memory sorting for the Sort operation.
-  Bool sortExternal_{false, "sort-external"};
+  // Memory threshold for switching from in-memory to external sort.
+  // If the input size exceeds this threshold, external sort is used.
+  MemorySizeParameter sortInMemoryThreshold_{
+      ad_utility::MemorySize::gigabytes(5), "sort-in-memory-threshold"};
 
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE
