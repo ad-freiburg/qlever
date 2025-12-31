@@ -46,6 +46,7 @@ LiteralOrIri encodedIdToLiteralOrIri(Id id, const IndexImpl& index) {
   return LiteralOrIri::fromStringRepresentation(mgr.toString(id));
 }
 
+
 // _____________________________________________________________________________
 STREAMABLE_GENERATOR_TYPE computeResultForAsk(
     [[maybe_unused]] const ParsedQuery& parsedQuery,
@@ -280,14 +281,18 @@ auto evaluateTripleForConstruct =
 auto ExportQueryExecutionTrees::constructQueryResultToTriples(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples,
-    LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
-    uint64_t& resultSize, CancellationHandle cancellationHandle) {
+    LimitOffsetClause limitAndOffset,
+    std::shared_ptr<const Result> result,
+    uint64_t& resultSize,
+    CancellationHandle cancellationHandle
+    ) {
   // The `resultSizeMultiplicator`(last argument of `getRowIndices`) is
   // explained by the following: For each result from the WHERE clause, we
   // produce up to `constructTriples.size()` triples. We do not account for
   // triples that are filtered out because one of the components is UNDEF (it
   // would require materializing the whole result)
-  auto rowIndices = getRowIndices(limitAndOffset, *result, resultSize,
+  ad_utility::InputRangeTypeErased<ExportQueryExecutionTrees::TableWithRange>
+      rowIndices = getRowIndices(limitAndOffset, *result, resultSize,
                                   constructTriples.size());
   return ad_utility::InputRangeTypeErased(
       ad_utility::OwningView{std::move(rowIndices)} |
@@ -295,13 +300,15 @@ auto ExportQueryExecutionTrees::constructQueryResultToTriples(
           [&qet, &constructTriples, result = std::move(result),
            cancellationHandle = std::move(cancellationHandle),
            rowOffset = size_t{0}](const auto& tableWithView) mutable {
+
             // NOTE: This reference is captured in the following lambda.
             // Normally it would be dangling, but as the `idTable` is not owned
             // by the `tableWithView`, but backed by the outermost range, This
             // is fine.
-            auto& idTable = tableWithView.tableWithVocab_.idTable();
-            auto currentRowOffset = rowOffset;
+            const IdTable& idTable = tableWithView.tableWithVocab_.idTable();
+            size_t currentRowOffset = rowOffset;
             rowOffset += idTable.size();
+
             return ql::ranges::transform_view(
                 tableWithView.view_, [&, currentRowOffset](uint64_t i) {
                   auto& localVocab = tableWithView.tableWithVocab_.localVocab();
@@ -695,7 +702,7 @@ ExportQueryExecutionTrees::getLiteralOrNullopt(
     return std::move(litOrIri.value().getLiteral());
   }
   return std::nullopt;
-};
+}
 
 // _____________________________________________________________________________
 std::optional<LiteralOrIri>
@@ -1176,9 +1183,11 @@ STREAMABLE_GENERATOR_TYPE
 ExportQueryExecutionTrees::constructQueryResultToStream(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples,
-    LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
+    LimitOffsetClause limitAndOffset,
+    std::shared_ptr<const Result> result,
     CancellationHandle cancellationHandle,
-    [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
+    [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder
+    ) {
   static_assert(format == MediaType::octetStream || format == MediaType::csv ||
                 format == MediaType::tsv || format == MediaType::sparqlXml ||
                 format == MediaType::sparqlJson ||
