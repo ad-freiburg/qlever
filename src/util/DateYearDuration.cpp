@@ -341,3 +341,106 @@ std::optional<DateYearOrDuration> DateYearOrDuration::convertToXsdDate(
   return DateYearOrDuration(
       Date(date.getYear(), date.getMonth(), date.getDay()));
 }
+
+// _____________________________________________________________________________
+DateYearOrDuration DateYearOrDuration::operator-(
+    const DateYearOrDuration& rhs) {
+  // TODO: also support hours, minutes and seconds
+  if (isDate() && rhs.isDate()) {
+    // Date - Date = Duration | getting time between the two Dates
+
+    // First Attempt
+    const Date& ownDate = getDateUnchecked();
+    const Date& otherDate = rhs.getDateUnchecked();
+    int yearsPassed = ownDate.getYear() - otherDate.getYear();
+    int monthsPassed = ownDate.getMonth() - otherDate.getMonth();
+    int daysPassed = ownDate.getDay() - otherDate.getDay();
+    // TODO What happens in Schaltjahren?
+    daysPassed = daysPassed + (monthsPassed * 31) + (yearsPassed * 365);
+
+    // Second Attempt
+    // Getting the dates
+    int ownYear = ownDate.getYear();
+    int otherYear = otherDate.getYear();
+    int ownMonth = ownDate.getMonth();
+    int otherMonth = otherDate.getMonth();
+    int ownDay = ownDate.getDay();
+    int otherDay = otherDate.getDay();
+
+    // Counting the days passed.
+    daysPassed = 0;
+    while (!((ownYear == otherYear) && (ownMonth == otherMonth) &&
+             (ownDay == otherDay))) {
+      daysPassed++;
+      // TODO: store this in a separate function
+      // TODO: handle Schaltjahre
+      if ((otherMonth == 12) && (otherDay == 31)) {
+        // jump to Jan 1 of next year
+        otherYear++;
+        otherMonth = 1;
+        otherDay = 1;
+        continue;
+      }
+
+      if ((otherMonth == 2) && (otherDay == 28)) {
+        // special case: february month jump
+        otherMonth++;
+        otherDay = 1;
+        continue;
+      }
+
+      if (otherDay == 30 + 1 * (((otherMonth <= 7) && (otherMonth % 2 == 1)) ||
+                                ((otherMonth >= 8) && otherMonth % 2 == 0))) {
+        // normal month jump
+        otherMonth++;
+        otherDay = 1;
+        continue;
+      }
+    }
+    return DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Positive, daysPassed));
+  }
+
+  if (isDayTimeDuration() && rhs.isDayTimeDuration()) {
+    // Duration - Duration = Duration | getting new duration that is
+    // rhs.duration-time smaller return;
+  }
+
+  if (isDate() && rhs.isDayTimeDuration()) {
+    // Date - Duration = Date | getting new Date from rhs.duration-time earlier
+    // return;
+  }
+
+  if (isDayTimeDuration() && rhs.isDate()) {
+    // Duration - Date |  not implemented
+    // return;
+  }
+
+  // no viable subtraction
+  throw std::invalid_argument("No Subtraction possible!");
+
+  /*
+  if (getType() != rhs.getType()) {
+    // No possible Subtraction.
+    throw std::invalid_argument("To subtract the two objects, they need to have
+  the same type.");
+  }
+  // switch case actually on type of both objects
+  switch (getType()) {
+    case Type::DateTime: {
+      break;
+    }
+    case Type::Date: {
+      const Date& date1 = getDate();
+      const Date& date2 = rhs.getDate();
+      break;
+    }
+    case Type::YearMonth: {
+      break;
+    }
+    case Type::Year: {
+      break;
+    }
+  }
+  */
+}
