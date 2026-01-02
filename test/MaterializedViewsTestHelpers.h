@@ -13,6 +13,7 @@
 #include <fstream>
 
 #include "./util/GTestHelpers.h"
+#include "engine/MaterializedViews.h"
 #include "libqlever/Qlever.h"
 #include "util/Exception.h"
 
@@ -64,10 +65,12 @@ class MaterializedViewsTest : public ::testing::Test {
   const std::string simpleWriteQuery_ = "SELECT * { ?s ?p ?o . BIND(1 AS ?g) }";
   std::stringstream log_;
 
+  // ___________________________________________________________________________
   virtual std::string getDummyTurtle() const {
     return std::string{dummyTurtle};
   }
 
+  // ___________________________________________________________________________
   void SetUp() override {
     ad_utility::setGlobalLoggingStream(&log_);
     makeTestIndex(testIndexBase_, getDummyTurtle());
@@ -76,18 +79,49 @@ class MaterializedViewsTest : public ::testing::Test {
     qlv_ = std::make_shared<qlever::Qlever>(config);
   }
 
+  // ___________________________________________________________________________
   void TearDown() override {
     qlv_ = nullptr;
     removeTestIndex(testIndexBase_);
     ad_utility::setGlobalLoggingStream(&std::cout);
   }
 
+  // ___________________________________________________________________________
   qlever::Qlever& qlv() {
     AD_CORRECTNESS_CHECK(qlv_ != nullptr);
     return *qlv_;
   }
 
+  // ___________________________________________________________________________
   void clearLog() { log_.str(""); }
+
+  // Helper that evaluates a query on the test index and returns its result as
+  // an `IdTable` with the same column ordering as the columns in the `SELECT`
+  // statement.
+  IdTable getQueryResultAsIdTable(std::string query) {
+    auto [qet, qec, parsed] = qlv().parseAndPlanQuery(std::move(query));
+
+    // Get the visible variables' column indices in the correct order.
+    if (!parsed.hasSelectClause()) {
+      throw std::runtime_error(
+          "Only IdTables for SELECT can be exported so far.");
+    }
+    auto selectColOrdering =
+        qet->selectedVariablesToColumnIndices(parsed.selectClause());
+    auto columns = ::ranges::to<std::vector<ColumnIndex>>(
+        ql::views::transform(selectColOrdering, [](const auto& colIdxAndType) {
+          if (!colIdxAndType.has_value()) {
+            throw std::runtime_error("Binds in SELECT clause not allowed.");
+          }
+          return colIdxAndType.value().columnIndex_;
+        }));
+
+    // Compute the result and permute the `IdTable` as expected.
+    auto res = qet->getResult(false);
+    auto idTable = res->idTable().clone();
+    idTable.setColumnSubset(columns);
+    return idTable;
+  }
 };
 
 // _____________________________________________________________________________

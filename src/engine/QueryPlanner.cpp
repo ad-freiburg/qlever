@@ -32,6 +32,7 @@
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/Load.h"
+#include "engine/MaterializedViews.h"
 #include "engine/Minus.h"
 #include "engine/MultiColumnJoin.h"
 #include "engine/NamedResultCache.h"
@@ -3156,9 +3157,9 @@ void QueryPlanner::GraphPatternPlanner::visitPathSearch(
 
 // _______________________________________________________________
 SubtreePlan QueryPlanner::getMaterializedViewIndexScanPlan(
-    const parsedQuery::MaterializedViewQuery&) {
-  throw std::runtime_error(
-      "Materialized views are currently not supported yet.");
+    const parsedQuery::MaterializedViewQuery& viewQuery) {
+  return makeSubtreePlan<IndexScan>(
+      _qec->materializedViewsManager().makeIndexScan(_qec, viewQuery));
 }
 
 // _______________________________________________________________
