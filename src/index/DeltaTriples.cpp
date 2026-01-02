@@ -231,6 +231,8 @@ void DeltaTriples::insertTriples(CancellationHandle cancellationHandle,
   modifyTriplesImpl<true, true>(std::move(cancellationHandle),
                                 std::move(internalTriples), tracer);
   tracer.endTrace("internalPermutation");
+  // Update the index of the located triples to mark that they have changed.
+  locatedTriples_->index_++;
 }
 
 // ____________________________________________________________________________
@@ -248,6 +250,8 @@ void DeltaTriples::deleteTriples(CancellationHandle cancellationHandle,
   modifyTriplesImpl<true, false>(std::move(cancellationHandle),
                                  std::move(internalTriples), tracer);
   tracer.endTrace("internalPermutation");
+  // Update the index of the located triples to mark that they have changed.
+  locatedTriples_->index_++;
 }
 
 // ____________________________________________________________________________
@@ -374,8 +378,6 @@ void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
     targetMap.insert({triples[i], handles[i]});
   }
   tracer.endTrace("markTriples");
-  // Update the index of the located triples to mark that they have changed.
-  locatedTriples_->index_++;
 }
 
 // ____________________________________________________________________________
