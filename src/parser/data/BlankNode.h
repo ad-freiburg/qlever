@@ -10,6 +10,7 @@
 #include "backports/three_way_comparison.h"
 #include "parser/data/ConstructQueryExportContext.h"
 
+//TODO<ms2144> what even is a BlankNode???
 class BlankNode {
   bool _generated;
   std::string _label;
