@@ -26,15 +26,25 @@ class ConstructQueryCache{
 
   // cache statistics (for debugging/optimization)
   class CacheStats {
-    size_t variableHits{0};
-    size_t variableMisses{0};
-    size_t iriHits{0};
-    size_t iriMisses{0};
-    size_t literalHits{0};
-    size_t literalMisses{0};
+   private:
+    size_t variableHits_{0};
+    size_t variableMisses_{0};
+    size_t iriHits_{0};
+    size_t iriMisses_{0};
+    size_t literalHits_{0};
+    size_t literalMisses_{0};
 
-    float variableHitRate() {
-      return variableHits / (variableMisses + variableHits);
+   public:
+    float variableHitRate() const {
+      return variableHits_ / (variableMisses_ + variableHits_);
+    }
+
+    size_t variableHits() const {
+      return variableHits_;
+    }
+
+    size_t variableMisses() const {
+      return variableHits_;
     }
   };
 
