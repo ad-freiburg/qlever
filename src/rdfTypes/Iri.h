@@ -11,8 +11,7 @@
 #include "backports/concepts.h"
 #include "backports/three_way_comparison.h"
 #include "parser/NormalizedString.h"
-
-namespace ad_utility::triple_component {
+ namespace ad_utility::triple_component {
 
 // A class to hold IRIs.
 class Iri {
