@@ -321,8 +321,8 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
   auto stats = cache.getStats();
   AD_LOG_DEBUG << "Construct cache stats: variable hit rate = "
                << (stats.variableHitRate() * 100) << "% "
-               << "(hits=" << stats.variableHits
-               << ", misses=" << stats.variableMisses << ")" << std::endl;
+               << "(hits=" << stats.variableHits()
+               << ", misses=" << stats.variableMisses() << ")" << std::endl;
 
   // For each result from the WHERE clause, we produce up to
   // `constructTriples.size()` triples. We do not account for triples that are
