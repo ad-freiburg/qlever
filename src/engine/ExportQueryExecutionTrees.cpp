@@ -6,6 +6,7 @@
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "engine/ExportQueryExecutionTrees.h"
+#include "engine/ConstructQueryCache.h"
 
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
@@ -264,23 +265,28 @@ ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
 cppcoro::generator<QueryExecutionTree::StringTriple>
 ExportQueryExecutionTrees::constructQueryResultToTriples(
     const QueryExecutionTree& qet,
-    const ad_utility::sparql_types::Triples& constructTriples,
-    LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
-    uint64_t& resultSize, CancellationHandle cancellationHandle)
+    const ad_utility::sparql_types::Triples& constructTriples, //Note<ms2144>: these are the triples of the CONSTRUCT-clause
+    LimitOffsetClause limitAndOffset,
+    std::shared_ptr<const Result> result,
+    uint64_t& resultSize,
+    CancellationHandle cancellationHandle)
 {
 
   size_t rowOffset = 0;
 
   InputRangeTypeErased<TableWithRange> rowindices = getRowIndices(limitAndOffset, *result, resultSize);
 
+  // create cache instance
+  ConstructQueryCache cache;
+
   for (const auto& [pair, range] : rowindices) {
 
     std::reference_wrapper<const IdTable> idTable = pair.idTable_;
 
-    for (uint64_t i : range) {
+    for (uint64_t rowIndexOfResultTable : range) {
 
       ConstructQueryExportContext context{
-          i, // Current row index
+          rowIndexOfResultTable, // Current row index (row of the result table of the WHERE-clause)
           idTable, // Result data table
           pair.localVocab_, // string vocabulary
           qet.getVariableColumns(), // Map: variable name -> column index
@@ -289,12 +295,14 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
 
       using enum PositionInTriple;
 
-      // the triple patterns from the where clause are now evaluated.
-      for (const std::array<GraphTerm, 3>& triple : constructTriples) {
+      cache.startNewRow(rowIndexOfResultTable);
 
-        std::optional<std::string> subject = triple[0].evaluate(context, SUBJECT);
-        std::optional<std::string> predicate = triple[1].evaluate(context, PREDICATE);
-        std::optional<std::string> object = triple[2].evaluate(context, OBJECT);
+      // loop over all triple patterns in the CONSTRUCT template.
+      for (const std::array<GraphTerm, 3>& triple : constructTriples) {
+        // use cache for evaluation
+        std::optional<std::string> subject = cache.evaluateWithCache(triple[0], context, SUBJECT);
+        std::optional<std::string> predicate = cache.evaluateWithCache(triple[1], context, PREDICATE);
+        std::optional<std::string> object = cache.evaluateWithCache(triple[2], context, OBJECT);
 
         // skip any triple where either the subject, predicate, or object is undefined
         if (!subject.has_value() || !predicate.has_value() || !object.has_value()) {
@@ -309,6 +317,13 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
 
     rowOffset += idTable.get().size(); // progress tracking
   }
+
+  auto stats = cache.getStats();
+  AD_LOG_DEBUG << "Construct cache stats: variable hit rate = "
+               << (stats.variableHitRate() * 100) << "% "
+               << "(hits=" << stats.variableHits
+               << ", misses=" << stats.variableMisses << ")" << std::endl;
+
   // For each result from the WHERE clause, we produce up to
   // `constructTriples.size()` triples. We do not account for triples that are
   // filtered out because one of the components is UNDEF (it would require

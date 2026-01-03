@@ -471,7 +471,9 @@ qlever_target_link_libraries(compilationInfo)
 add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp)
 qlever_target_link_libraries(IndexBuilderMain qlever index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
 
-add_executable(ServerMain src/ServerMain.cpp)
+add_executable(ServerMain src/ServerMain.cpp
+        src/engine/ConstructQueryCache.h
+        src/engine/ConstructQueryCache.cpp)
 qlever_target_link_libraries(ServerMain engine server ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
 if (USE_PRECOMPILED_HEADERS)
 target_precompile_headers(ServerMain REUSE_FROM engine)
