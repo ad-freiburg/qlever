@@ -17,6 +17,7 @@
 // Forward declaration because of cyclic dependencies
 // TODO<joka921> The coupling of the `Variable` with its `evaluate` methods
 // is not very clean and should be refactored.
+// TODO<ms2144> address this comment
 struct ConstructQueryExportContext;
 enum struct PositionInTriple : int;
 
@@ -33,6 +34,7 @@ class Variable {
 
   // TODO<joka921> There are several similar variants of this function across
   // the codebase. Unify them!
+  // TODO<ms2144> address this comment.
 
   // The `evaluate` method, which is required for the export of CONSTRUCT query
   // results depends on a lot of other code (in particular the complete
@@ -67,7 +69,7 @@ class Variable {
   // `?ql_someTextVar_score_var_someEntityVar`.
   // Converts `?someTextVar` and `someFixedEntity` into
   // `?ql_someTextVar_fixedEntity_someFixedEntity`.
-  // Note that if the the fixed entity contains non ascii characters they are
+  // Note that if the fixed entity contains non ascii characters they are
   // converted to numbers and escaped.
   Variable getEntityScoreVariable(
       const std::variant<Variable, std::string>& varOrEntity) const;

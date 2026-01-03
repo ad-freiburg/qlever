@@ -241,8 +241,11 @@ ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
       // `take_while` above seems redundant, but it might be that no IdTable is
       // yielded at all.
       | ad_utility::views::takeUntilInclusive([](const State& state) {
-          auto ptr = std::get_if<Export>(&state);
-          return ptr && ptr->isLast_;
+          const Export* ptr = std::get_if<Export>(&state);
+          if (ptr != nullptr) {
+           return ptr->isLast_ ;
+          }
+          return false;
         })
       // At this stage we only see `Export` or `OnlyCountForExport`. For the
       // latter we don't have to do anything, because the `transformToState`
@@ -257,75 +260,61 @@ ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
         })};
 }
 
-namespace {
-// Evaluate a `ConstructTriple` on the `context`. If the evaluation fails (e.g.
-// because an entry of the triple would be invalid), return an empty
-// `StringTriple`.
-auto evaluateTripleForConstruct =
-    [](const auto& triple, const ConstructQueryExportContext& context) {
-      using enum PositionInTriple;
-      auto subject = triple[0].evaluate(context, SUBJECT);
-      auto predicate = triple[1].evaluate(context, PREDICATE);
-      auto object = triple[2].evaluate(context, OBJECT);
-      if (!subject.has_value() || !predicate.has_value() ||
-          !object.has_value()) {
-        return QueryExecutionTree::StringTriple();
-      }
-      return QueryExecutionTree::StringTriple(std::move(subject.value()),
-                                              std::move(predicate.value()),
-                                              std::move(object.value()));
-    };
-
-}  // namespace
 // _____________________________________________________________________________
-auto ExportQueryExecutionTrees::constructQueryResultToTriples(
+cppcoro::generator<QueryExecutionTree::StringTriple>
+ExportQueryExecutionTrees::constructQueryResultToTriples(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples,
-    LimitOffsetClause limitAndOffset,
-    std::shared_ptr<const Result> result,
-    uint64_t& resultSize,
-    CancellationHandle cancellationHandle
-    ) {
-  // The `resultSizeMultiplicator`(last argument of `getRowIndices`) is
-  // explained by the following: For each result from the WHERE clause, we
-  // produce up to `constructTriples.size()` triples. We do not account for
-  // triples that are filtered out because one of the components is UNDEF (it
-  // would require materializing the whole result)
-  ad_utility::InputRangeTypeErased<ExportQueryExecutionTrees::TableWithRange>
-      rowIndices = getRowIndices(limitAndOffset, *result, resultSize,
-                                  constructTriples.size());
-  return ad_utility::InputRangeTypeErased(
-      ad_utility::OwningView{std::move(rowIndices)} |
-      ql::views::transform(
-          [&qet, &constructTriples, result = std::move(result),
-           cancellationHandle = std::move(cancellationHandle),
-           rowOffset = size_t{0}](const auto& tableWithView) mutable {
+    LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
+    uint64_t& resultSize, CancellationHandle cancellationHandle)
+{
 
-            // NOTE: This reference is captured in the following lambda.
-            // Normally it would be dangling, but as the `idTable` is not owned
-            // by the `tableWithView`, but backed by the outermost range, This
-            // is fine.
-            const IdTable& idTable = tableWithView.tableWithVocab_.idTable();
-            size_t currentRowOffset = rowOffset;
-            rowOffset += idTable.size();
+  size_t rowOffset = 0;
 
-            return ql::ranges::transform_view(
-                tableWithView.view_, [&, currentRowOffset](uint64_t i) {
-                  auto& localVocab = tableWithView.tableWithVocab_.localVocab();
-                  return ql::ranges::transform_view(
-                      constructTriples,
-                      [&cancellationHandle,
-                       context = ConstructQueryExportContext{
-                           i, idTable, localVocab, qet.getVariableColumns(),
-                           qet.getQec()->getIndex(),
-                           currentRowOffset}](const auto& triple) mutable {
-                        cancellationHandle->throwIfCancelled();
-                        return evaluateTripleForConstruct(triple, context);
-                      });
-                });
-          }) |
-      ql::views::join | ql::views::join |
-      ql::views::filter([](const auto& triple) { return !triple.isEmpty(); }));
+  InputRangeTypeErased<TableWithRange> rowindices = getRowIndices(limitAndOffset, *result, resultSize);
+
+  for (const auto& [pair, range] : rowindices) {
+
+    std::reference_wrapper<const IdTable> idTable = pair.idTable_;
+
+    for (uint64_t i : range) {
+
+      ConstructQueryExportContext context{
+          i, // Current row index
+          idTable, // Result data table
+          pair.localVocab_, // string vocabulary
+          qet.getVariableColumns(), // Map: variable name -> column index
+          qet.getQec()->getIndex(), // database index for IRIs
+          rowOffset}; // Total rows processed so far
+
+      using enum PositionInTriple;
+
+      // the triple patterns from the where clause are now evaluated.
+      for (const std::array<GraphTerm, 3>& triple : constructTriples) {
+
+        std::optional<std::string> subject = triple[0].evaluate(context, SUBJECT);
+        std::optional<std::string> predicate = triple[1].evaluate(context, PREDICATE);
+        std::optional<std::string> object = triple[2].evaluate(context, OBJECT);
+
+        // skip any triple where either the subject, predicate, or object is undefined
+        if (!subject.has_value() || !predicate.has_value() || !object.has_value()) {
+          continue;
+        }
+
+        co_yield {std::move(subject.value()), std::move(predicate.value()),std::move(object.value())};
+
+        cancellationHandle->throwIfCancelled();
+      }
+    }
+
+    rowOffset += idTable.get().size(); // progress tracking
+  }
+  // For each result from the WHERE clause, we produce up to
+  // `constructTriples.size()` triples. We do not account for triples that are
+  // filtered out because one of the components is UNDEF (it would require
+  // materializing the whole result).
+  // TODO: I don't get it, why would that require materializing the whole result.
+  resultSize *= constructTriples.size();
 }
 
 // _____________________________________________________________________________
@@ -421,9 +410,11 @@ nlohmann::json idTableToQLeverJSONRow(
 
 // _____________________________________________________________________________
 auto ExportQueryExecutionTrees::idTableToQLeverJSONBindings(
-    const QueryExecutionTree& qet, LimitOffsetClause limitAndOffset,
+    const QueryExecutionTree& qet,
+    const LimitOffsetClause limitAndOffset,
     QueryExecutionTree::ColumnIndicesAndTypes columns,
-    std::shared_ptr<const Result> result, uint64_t& resultSize,
+    std::shared_ptr<const Result> result,
+    uint64_t& resultSize,
     CancellationHandle cancellationHandle) {
   AD_CORRECTNESS_CHECK(result != nullptr);
 
@@ -1071,9 +1062,9 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
        getRowIndices(limitAndOffset, *result, resultSize)) {
     for (uint64_t i : range) {
       STREAMABLE_YIELD("\n  <result>");
-      for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
-        if (selectedColumnIndices[j].has_value()) {
-          const auto& val = selectedColumnIndices[j].value();
+      for (auto & selectedColumnIndice : selectedColumnIndices) {
+        if (selectedColumnIndice.has_value()) {
+          const auto& val = selectedColumnIndice.value();
           Id id = pair.idTable()(i, val.columnIndex_);
           STREAMABLE_YIELD(idToXMLBinding(
               val.variable_, id, qet.getQec()->getIndex(), pair.localVocab()));
@@ -1235,7 +1226,7 @@ ExportQueryExecutionTrees::convertStreamGeneratorForChunkedTransfer(
   // Note: `begin` advances until the first block.
   auto it = streamGenerator.begin();
   return InputRangeTypeErased(InputRangeFromLoopControlGet(
-      [it = std::move(it), streamGenerator = std::move(streamGenerator),
+      [it = it, streamGenerator = std::move(streamGenerator),
        exceptionMessage = std::optional<std::string>(std::nullopt)]() mutable {
         // TODO<joka921, RobinTF> Think of a better way to propagate and log
         // those errors. We can additionally send them via the
