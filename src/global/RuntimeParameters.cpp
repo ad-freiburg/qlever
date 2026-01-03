@@ -48,6 +48,7 @@ RuntimeParameters::RuntimeParameters() {
   add(enableDistributiveUnion_);
   add(treatDefaultGraphAsNamedGraph_);
   add(sparqlResultsJsonWithTime_);
+  add(materializedViewWriterMemory_);
   add(defaultQueryTimeout_);
 
   defaultQueryTimeout_.setParameterConstraint(
