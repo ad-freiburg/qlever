@@ -26,7 +26,7 @@ class ConstructQueryCache{
 
   // cache statistics (for debugging/optimization)
   class CacheStats {
-   private:
+   public:
     size_t variableHits_{0};
     size_t variableMisses_{0};
     size_t iriHits_{0};
@@ -35,17 +35,34 @@ class ConstructQueryCache{
     size_t literalMisses_{0};
 
    public:
-    float variableHitRate() const {
-      return variableHits_ / (variableMisses_ + variableHits_);
+    [[nodiscard]] double variableHitRate() const {
+      return double(variableHits_) / (double(variableMisses_) + double(variableHits_));
     }
 
-    size_t variableHits() const {
+    [[nodiscard]] size_t variableHits() const {
       return variableHits_;
     }
 
-    size_t variableMisses() const {
+    [[nodiscard]] size_t variableMisses() const {
       return variableHits_;
     }
+
+    [[nodiscard]] size_t iriHits() const {
+      return iriHits_;
+    }
+
+    [[nodiscard]] size_t iriMisses() const {
+      return iriMisses_;
+    }
+
+    [[nodiscard]] size_t literalHits() const {
+      return literalHits_;
+    }
+
+    [[nodiscard]] size_t literalMisses() const {
+      return literalMisses_;
+    }
+
   };
 
   CacheStats getStats() const { return stats_; }
@@ -72,7 +89,7 @@ class ConstructQueryCache{
   // cache for row-specific variables
   struct VariableKey {
     Variable variable_;
-    uint64_t rowIndex_;
+    uint64_t rowIndex_{};
 
     bool operator==(const VariableKey& other) const {
       return variable_ == other.variable_ &&
@@ -133,7 +150,7 @@ std::optional<std::string> ConstructQueryCache::evaluateWithCacheImpl(
     const T& term,
     const ConstructQueryExportContext& context,
     PositionInTriple posInTriple) {
-  return std::optional<std::string>();
+  return {};
 }
 
 #endif

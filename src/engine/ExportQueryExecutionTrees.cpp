@@ -314,9 +314,17 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
         cancellationHandle->throwIfCancelled();
       }
     }
-
     rowOffset += idTable.get().size(); // progress tracking
-  }
+
+    auto stats = cache.getStats();
+    AD_LOG_DEBUG << "Construct Query Cache stats: \n"
+                 << "var eval cache hits: " << stats.variableHits()
+                 << "var eval cache misses: " << stats.variableMisses()
+                 << "literal eval cache hits: " << stats.literalHits()
+                 << "literal eval cache misses: " << stats.literalMisses()
+                << "iri eval cache hits: " << stats.iriHits()
+                << "iri eval cache misses: " << stats.iriMisses()
+  };
 
   // For each result from the WHERE clause, we produce up to
   // `constructTriples.size()` triples. We do not account for triples that are
