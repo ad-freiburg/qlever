@@ -34,6 +34,8 @@ class ConstructQueryCache{
     size_t iriMisses_{0};
     size_t literalHits_{0};
     size_t literalMisses_{0};
+    size_t blankNodeHits_{0};
+    size_t blankNodeMisses_{0};
 
    public:
     [[nodiscard]] double variableHitRate() const {
@@ -62,6 +64,14 @@ class ConstructQueryCache{
 
     [[nodiscard]] size_t literalMisses() const {
       return literalMisses_;
+    }
+
+    [[nodiscard]] size_t blankNodeHits() const {
+      return blankNodeHits_;
+    }
+
+    [[nodiscard]] size_t blankNodeMisses() const {
+      return blankNodeMisses_;
     }
 
   };
@@ -140,6 +150,24 @@ class ConstructQueryCache{
 
   // maps (LiteralKey, LiteralName) -> LiteralKeyHash
   std::unordered_map<LiteralKey, std::optional<std::string>, LiteralKeyHash> literalCache_;
+
+  // Cache for blank nodes (global for CONSTRUCT-clause )
+  struct BlankNodeKey{
+    BlankNode blankNode_;
+    std::reference_wrapper<const ConstructQueryExportContext> context_;
+
+    bool operator==(const BlankNodeKey& other) const {
+      return blankNode_ == other.blankNode_&&
+             &context_.get() == &other.context_.get();
+    }
+  };
+
+  struct BlankNodeKeyHash {
+    size_t operator()(const BlankNodeKey& key) const;
+  };
+
+  // maps (BlankNodeKey, BlankNodeName) -> BlankNodeKeyHash
+  std::unordered_map<BlankNodeKey, std::optional<std::string>, BlankNodeKeyHash> blankNodeCache_;
 
   CacheStats stats_;
   // current row (for clearing variable cache)
