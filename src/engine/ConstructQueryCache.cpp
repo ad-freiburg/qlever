@@ -32,18 +32,18 @@ template<>
 opt<string> ConstructQueryCache::evaluateWithCacheImpl<Variable>(
     const Variable& term,
     const ConstructQueryExportContext& context,
-    PositionInTriple position){
+    PositionInTriple posInTriple){
 
   VariableKey key{term, context._row};
 
   auto it = variableCache_.find(key);
   if (it != variableCache_.end()) {
-    ++stats_.variableHits;
+    ++stats_.variableHits_;
     return it->second;
   }
 
-  ++stats_.variableMisses;
-  opt<string> result = term.evaluate(context, position);
+  ++stats_.variableMisses_;
+  opt<string> result = term.evaluate(context, posInTriple);
   variableCache_[key] = result;
 
   return result;
@@ -57,18 +57,18 @@ template<>
 opt<string> ConstructQueryCache::evaluateWithCacheImpl<Iri>(
     const Iri& term,
     const ConstructQueryExportContext& context,
-    PositionInTriple position){
+    PositionInTriple posInTriple){
 
   IriKey key{term, std::cref(context)};
 
   auto it = iriCache_.find(key);
   if (it != iriCache_.end()) {
-    ++stats_.iriHits;
+    ++stats_.iriHits_;
     return it->second;
   }
 
-  ++stats_.iriMisses;
-  opt<string> result = term.evaluate(context, position);
+  ++stats_.iriMisses_;
+  opt<string> result = term.evaluate(context, posInTriple);
   iriCache_[key] = result;
   return result;
 }
@@ -86,12 +86,12 @@ opt<string> ConstructQueryCache::evaluateWithCacheImpl<Literal>(
   auto it = literalCache_.find(key);
   // cache hit
   if (it != literalCache_.end()) {
-    ++stats_.literalHits;
+    ++stats_.literalHits_;
     return it->second;
   }
 
   // cache miss
-  ++stats_.literalMisses;
+  ++stats_.literalMisses_;
   opt<string> result = literal.evaluate(context, posInTriple);
   literalCache_[key] = result;
   return result;
@@ -124,8 +124,3 @@ void ConstructQueryCache::clearAll() {
   currentRow_ = 0;
   resetStats();
 }
-
-
-
-
-
