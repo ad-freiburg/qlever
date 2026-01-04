@@ -26,6 +26,11 @@ size_t ConstructQueryCache::LiteralKeyHash::operator()(const LiteralKey& key) co
   (std::hash<const ConstructQueryExportContext*>{}(&key.context_.get()) << 1);
 }
 
+size_t ConstructQueryCache::BlankNodeKeyHash::operator()(const BlankNodeKey& key) const {
+  return std::hash<std::string>{}(key.blankNode_.label()) ^
+         (std::hash<const ConstructQueryExportContext*>{}(&key.context_.get()) << 1);
+}
+
 //______________________________________________________________________________
 
 // methods for interacting with the cache ______________________________________
@@ -98,20 +103,35 @@ opt<string> ConstructQueryCache::evaluateWithCacheImpl<Literal>(
   return result;
 }
 
-// dont use caching for BlankNodes, because their value is CONSTRUCT-clause row-dependent
 template<>
 opt<string> ConstructQueryCache::evaluateWithCacheImpl<BlankNode>(
     const BlankNode& term,
     const ConstructQueryExportContext& context,
     PositionInTriple posInTriple)
 {
-  return term.evaluate(context, posInTriple);
+  const BlankNode& blankNode = term;
+
+  BlankNodeKey key{blankNode, std::cref(context)};
+
+  auto it = blankNodeCache_.find(key);
+  // cache hit
+  if (it != blankNodeCache_.end()) {
+    ++stats_.blankNodeHits_;
+    return it->second;
+  }
+
+  // cache miss
+  ++stats_.blankNodeMisses_;
+  opt<string> result = blankNode.evaluate(context, posInTriple);
+  blankNodeCache_[key] = result;
+  return result;
 }
 //______________________________________________________________________________
 
 void ConstructQueryCache::startNewRow(uint64_t row) {
   if (currentRow_ != row) {
     variableCache_.clear();
+    blankNodeCache_.clear();
     currentRow_ = row;
   }
 }
