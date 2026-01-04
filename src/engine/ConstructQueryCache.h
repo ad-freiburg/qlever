@@ -9,6 +9,7 @@
 #include "rdfTypes/Variable.h"
 #include "parser/data/Iri.h"
 #include "parser/data/Literal.h"
+#include "parser/data/BlankNode.h"
 
 // Class for caching the bindings to Graptherms of rows of triples in the CONSTRUCT-clause
 // of a CONSTRUCT query.

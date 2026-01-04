@@ -318,12 +318,12 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
 
     auto stats = cache.getStats();
     AD_LOG_DEBUG << "Construct Query Cache stats: \n"
-                 << "var eval cache hits: " << stats.variableHits()
-                 << "var eval cache misses: " << stats.variableMisses()
-                 << "literal eval cache hits: " << stats.literalHits()
-                 << "literal eval cache misses: " << stats.literalMisses()
-                << "iri eval cache hits: " << stats.iriHits()
-                << "iri eval cache misses: " << stats.iriMisses()
+                 << "var eval cache hits: " << stats.variableHits() << "\n"
+                 << "var eval cache misses: " << stats.variableMisses() << "\n"
+                 << "literal eval cache hits: " << stats.literalHits() << "\n"
+                 << "literal eval cache misses: " << stats.literalMisses() << "\n"
+                << "iri eval cache hits: " << stats.iriHits() << "\n"
+                << "iri eval cache misses: " << stats.iriMisses();
   };
 
   // For each result from the WHERE clause, we produce up to

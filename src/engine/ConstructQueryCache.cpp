@@ -1,5 +1,6 @@
 #include "ConstructQueryCache.h"
 #include "rdfTypes/Iri.h"
+#include "parser/data/BlankNode.h"
 
 // using statements ____________________________________________________________
 using string = std::string;
@@ -95,6 +96,16 @@ opt<string> ConstructQueryCache::evaluateWithCacheImpl<Literal>(
   opt<string> result = literal.evaluate(context, posInTriple);
   literalCache_[key] = result;
   return result;
+}
+
+// dont use caching for BlankNodes, because their value is CONSTRUCT-clause row-dependent
+template<>
+opt<string> ConstructQueryCache::evaluateWithCacheImpl<BlankNode>(
+    const BlankNode& term,
+    const ConstructQueryExportContext& context,
+    PositionInTriple posInTriple)
+{
+  return term.evaluate(context, posInTriple);
 }
 //______________________________________________________________________________
 
