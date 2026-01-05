@@ -290,15 +290,20 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
                    << ", misses: " << stats.iriMisses() << ")\n"
                    << "Total blankNode eval: " << stats.blankNodeHits() + stats.blankNodeMisses()
                    << " (hits: " << stats.blankNodeHits()
-                   << ", misses: " << stats.blankNodeMisses() << ")";
+                   << ", misses: " << stats.blankNodeMisses() << ")"
+                   << std::endl;
     }
 
     void logPeriodic(size_t rowsProcessed) {
       auto stats = cache_.getStats();
-      AD_LOG_INFO << "Processed " << rowsProcessed << " rows. Cache stats: "
-                   << "var hit rate: " << (stats.variableHits() * 100.0 / (stats.variableHits() + stats.variableMisses() + 1)) << "%, "
-                   << "iri hit rate: " << (stats.iriHits() * 100.0 / (stats.iriHits() + stats.iriMisses() + 1)) << "%";
-    }
+      AD_LOG_INFO << "Processed " << rowsProcessed << " rows. Cache stats:\n"
+                    << "total var cache hits: " << stats.variableHits()  << "\n"
+                    << "total var cache misses: " << stats.variableMisses()  << "\n"
+                    << "total iri cache hits: " << stats.iriHits()  << "\n"
+                    << "total iri cache misses: " << stats.iriMisses()  << "\n"
+                    << "total literal cache hits: " << stats.literalHits()  << "\n"
+                    << "total literal cache misses: " << stats.literalMisses()  << std::endl;
+    };
 
    private:
     ConstructQueryCache& cache_;
@@ -307,8 +312,7 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
 
 
   size_t rowOffset = 0;
-  size_t totalRowsProcessed = 0;
-  const size_t LOG_INTERVAL = 1000; // Log every 1000 rows
+  const size_t LOG_INTERVAL = 10000; // Log every 10000 rows
 
   InputRangeTypeErased<TableWithRange> rowindices = getRowIndices(limitAndOffset, *result, resultSize);
 
@@ -323,12 +327,6 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
     // loop over rows of result table
     for (uint64_t rowIndexOfResultTable : range) {
       ++totalRowsProcessed;
-
-      // Log periodically
-      if (totalRowsProcessed % LOG_INTERVAL == 0) {
-        statsLogger.logPeriodic(totalRowsProcessed);
-        cancellationHandle->throwIfCancelled();
-      }
 
       ConstructQueryExportContext context{
           rowIndexOfResultTable, // Current row index (row of the result table of the WHERE-clause)
@@ -363,9 +361,6 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
     }
     rowOffset += idTable.get().size(); // progress tracking
   };
-
-  // log final stats
-  statsLogger.logPeriodic(totalRowsProcessed);
 
   // For each result from the WHERE clause, we produce up to
   // `constructTriples.size()` triples. We do not account for triples that are
