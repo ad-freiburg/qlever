@@ -31,7 +31,7 @@ std::optional<std::string> BlankNode::evaluate(
   stream << "_:";
   // generated or user-defined
   stream << (_generated ? 'g' : 'u');
-  stream << context._rowOffset + context._row << '_';
+  stream << context._rowOffset + context._resultTableRow << '_';
   stream << _label;
   return stream.str();
 }

@@ -271,19 +271,64 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
     uint64_t& resultSize,
     CancellationHandle cancellationHandle)
 {
+  // helper ____________________________________________________________________
+  // helper to log stats on destruction (even if generator exits early)
+  class StatsLogger {
+   public:
+    explicit StatsLogger(ConstructQueryCache& cache) : cache_(cache) {}
+    ~StatsLogger() {
+      auto stats = cache_.getStats();
+      AD_LOG_DEBUG << "Construct Query Cache stats at exit: \n"
+                   << "Total var eval: " << stats.variableHits() + stats.variableMisses()
+                   << " (hits: " << stats.variableHits()
+                   << ", misses: " << stats.variableMisses() << ")\n"
+                   << "Total literal eval: " << stats.literalHits() + stats.literalMisses()
+                   << " (hits: " << stats.literalHits()
+                   << ", misses: " << stats.literalMisses() << ")\n"
+                   << "Total iri eval: " << stats.iriHits() + stats.iriMisses()
+                   << " (hits: " << stats.iriHits()
+                   << ", misses: " << stats.iriMisses() << ")\n"
+                   << "Total blankNode eval: " << stats.blankNodeHits() + stats.blankNodeMisses()
+                   << " (hits: " << stats.blankNodeHits()
+                   << ", misses: " << stats.blankNodeMisses() << ")";
+    }
+
+    void logPeriodic(size_t rowsProcessed) {
+      auto stats = cache_.getStats();
+      AD_LOG_DEBUG << "Processed " << rowsProcessed << " rows. Cache stats: "
+                   << "var hit rate: " << (stats.variableHits() * 100.0 / (stats.variableHits() + stats.variableMisses() + 1)) << "%, "
+                   << "iri hit rate: " << (stats.iriHits() * 100.0 / (stats.iriHits() + stats.iriMisses() + 1)) << "%";
+    }
+
+   private:
+    ConstructQueryCache& cache_;
+  };
+  // ___________________________________________________________________________
+
 
   size_t rowOffset = 0;
+  size_t totalRowsProcessed = 0;
+  const size_t LOG_INTERVAL = 1000; // Log every 1000 rows
 
   InputRangeTypeErased<TableWithRange> rowindices = getRowIndices(limitAndOffset, *result, resultSize);
 
-  // create cache instance
+  // create cache instance, initialize cache logger
   ConstructQueryCache cache;
+  StatsLogger statsLogger(cache);
 
   for (const auto& [pair, range] : rowindices) {
 
     std::reference_wrapper<const IdTable> idTable = pair.idTable_;
 
+    // loop over rows of result table
     for (uint64_t rowIndexOfResultTable : range) {
+      ++totalRowsProcessed;
+
+      // Log periodically
+      if (totalRowsProcessed % LOG_INTERVAL == 0) {
+        statsLogger.logPeriodic(totalRowsProcessed);
+        cancellationHandle->throwIfCancelled();
+      }
 
       ConstructQueryExportContext context{
           rowIndexOfResultTable, // Current row index (row of the result table of the WHERE-clause)
@@ -295,6 +340,8 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
 
       using enum PositionInTriple;
 
+      // tell cache that we are now at a new row of the WHERE-clause result-table, and
+      // thus need to clear the VariableCache, BlankNodeCache etc.
       cache.startNewRow(rowIndexOfResultTable);
 
       // loop over all triple patterns in the CONSTRUCT template.
@@ -315,19 +362,10 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
       }
     }
     rowOffset += idTable.get().size(); // progress tracking
-
   };
-  // Only compute and log stats when debug logging is enabled
-  auto stats = cache.getStats();
-  AD_LOG_INFO << "Construct Query Cache stats: \n"
-             << "var eval cache hits: " << stats.variableHits() << "\n"
-             << "var eval cache misses: " << stats.variableMisses() << "\n"
-             << "literal eval cache hits: " << stats.literalHits() << "\n"
-             << "literal eval cache misses: " << stats.literalMisses() << "\n"
-             << "iri eval cache hits: " << stats.iriHits() << "\n"
-             << "iri eval cache misses: " << stats.iriMisses() << "\n"
-             << "blankNode eval cache hits: " << stats.iriHits() << "\n"
-             << "blankNode eval cache misses: " << stats.iriMisses() << std::endl;
+
+  // log final stats
+  statsLogger.logPeriodic(totalRowsProcessed);
 
   // For each result from the WHERE clause, we produce up to
   // `constructTriples.size()` triples. We do not account for triples that are
@@ -1448,7 +1486,7 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
 [[nodiscard]] static std::optional<std::string> evaluateVariableForConstruct(
     const Variable& var, const ConstructQueryExportContext& context,
     [[maybe_unused]] PositionInTriple positionInTriple) {
-  size_t row = context._row;
+  size_t row = context._resultTableRow;
   const auto& variableColumns = context._variableColumns;
   const Index& qecIndex = context._qecIndex;
   const auto& idTable = context.idTable_;
@@ -1484,3 +1522,4 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
   Variable::decoupledEvaluateFuncPtr() = &evaluateVariableForConstruct;
   return 42;
 }();
+
