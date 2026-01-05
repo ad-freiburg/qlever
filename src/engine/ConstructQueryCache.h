@@ -47,7 +47,7 @@ class ConstructQueryCache{
     }
 
     [[nodiscard]] size_t variableMisses() const {
-      return variableHits_;
+      return variableMisses_;
     }
 
     [[nodiscard]] size_t iriHits() const {
