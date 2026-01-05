@@ -278,7 +278,7 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
     explicit StatsLogger(ConstructQueryCache& cache) : cache_(cache) {}
     ~StatsLogger() {
       auto stats = cache_.getStats();
-      AD_LOG_DEBUG << "Construct Query Cache stats at exit: \n"
+      AD_LOG_INFO << "Construct Query Cache stats at exit: \n"
                    << "Total var eval: " << stats.variableHits() + stats.variableMisses()
                    << " (hits: " << stats.variableHits()
                    << ", misses: " << stats.variableMisses() << ")\n"
@@ -295,7 +295,7 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
 
     void logPeriodic(size_t rowsProcessed) {
       auto stats = cache_.getStats();
-      AD_LOG_DEBUG << "Processed " << rowsProcessed << " rows. Cache stats: "
+      AD_LOG_INFO << "Processed " << rowsProcessed << " rows. Cache stats: "
                    << "var hit rate: " << (stats.variableHits() * 100.0 / (stats.variableHits() + stats.variableMisses() + 1)) << "%, "
                    << "iri hit rate: " << (stats.iriHits() * 100.0 / (stats.iriHits() + stats.iriMisses() + 1)) << "%";
     }
