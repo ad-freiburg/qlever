@@ -17,7 +17,8 @@
 #include "util/SourceLocation.h"
 #include "util/TypeTraits.h"
 
-// Fixes an issue when compiling with Emscripten where a specific header is not found.
+// Fixes an issue when compiling with Emscripten where
+// a specific header is not found.
 #define AD_STRINGIFY(x) #x
 
 // -------------------------------------------
@@ -149,7 +150,7 @@ std::string concatMessages(Args&&... messages) {
 // types) or a callable that produce a `std::string`. The latter case is useful
 // if the error message is expensive to construct because the callables are only
 // invoked if the assertion fails. For examples see `ExceptionTest.cpp`.
-#define AD_CONTRACT_CHECK(condition, ...)       \
+#define AD_CONTRACT_CHECK(condition, ...)           \
   AD_CHECK_IMPL(condition, AD_STRINGIFY(condition), \
                 AD_CURRENT_SOURCE_LOC() __VA_OPT__(, ) __VA_ARGS__)
 
@@ -168,8 +169,8 @@ inline void adCorrectnessCheckImpl(bool condition, std::string_view message,
   AD_CHECK_IMPL(condition, message, location, additionalMessages...);
 }
 }  // namespace ad_utility::detail
-#define AD_CORRECTNESS_CHECK(condition, ...)             \
-  ad_utility::detail::adCorrectnessCheckImpl(            \
+#define AD_CORRECTNESS_CHECK(condition, ...)                 \
+  ad_utility::detail::adCorrectnessCheckImpl(                \
       static_cast<bool>(condition), AD_STRINGIFY(condition), \
       AD_CURRENT_SOURCE_LOC() __VA_OPT__(, ) __VA_ARGS__)
 

@@ -128,14 +128,12 @@ add_subdirectory(libqlever)
 OPTION(_DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS "Disable some tests that cause undefined symbol errors when building with Emscripten." OFF)
 
 if (NOT _DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS)
-    addLinkAndDiscoverTest(ExceptionHandlingTest)
-
     addLinkAndDiscoverTest(BenchmarkMeasurementContainerTest benchmark testUtil)
 
     addLinkAndDiscoverTest(ResultTableColumnOperationsTest benchmark testUtil)
 
     addLinkAndDiscoverTest(ServerTest engine server)
-    
+
     addLinkAndDiscoverTest(SparqlProtocolTest engine)
 
     addLinkAndDiscoverTest(UrlParserTest)
@@ -144,6 +142,8 @@ if (NOT _DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS)
 
     addLinkAndDiscoverTest(ParsedRequestBuilderTest engine)
 endif ()
+
+addLinkAndDiscoverTest(ExceptionHandlingTest)
 
 addLinkAndDiscoverTest(CompressorStreamTest engine)
 
