@@ -317,9 +317,9 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
     rowOffset += idTable.get().size(); // progress tracking
 
     // Only compute and log stats when debug logging is enabled
-    if constexpr (LOGLEVEL >= DEBUG) {
+    if constexpr (LOGLEVEL >= INFO) {
       auto stats = cache.getStats();
-      AD_LOG_DEBUG << "Construct Query Cache stats: \n"
+      AD_LOG_INFO<< "Construct Query Cache stats: \n"
                    << "var eval cache hits: " << stats.variableHits() << "\n"
                    << "var eval cache misses: " << stats.variableMisses() << "\n"
                    << "literal eval cache hits: " << stats.literalHits() << "\n"
