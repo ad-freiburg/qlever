@@ -326,7 +326,6 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
 
     // loop over rows of result table
     for (uint64_t rowIndexOfResultTable : range) {
-      ++totalRowsProcessed;
 
       ConstructQueryExportContext context{
           rowIndexOfResultTable, // Current row index (row of the result table of the WHERE-clause)
