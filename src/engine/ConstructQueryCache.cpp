@@ -40,7 +40,7 @@ opt<string> ConstructQueryCache::evaluateWithCacheImpl<Variable>(
     const ConstructQueryExportContext& context,
     PositionInTriple posInTriple){
 
-  VariableKey key{term, context._row};
+  VariableKey key{term, context._resultTableRow};
 
   auto it = variableCache_.find(key);
   if (it != variableCache_.end()) {
