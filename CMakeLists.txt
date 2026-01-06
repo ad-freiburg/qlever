@@ -108,6 +108,7 @@ FetchContent_Declare(
         googletest
         GIT_REPOSITORY https://github.com/google/googletest.git
         GIT_TAG 7917641ff965959afae189afb5f052524395525c # main branch on 2025/09/11
+        EXCLUDE_FROM_ALL
 )
 
 ################################
@@ -119,6 +120,7 @@ FetchContent_Declare(
         nlohmann-json
         URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz
         URL_HASH SHA3_224=0ad805c53f1769489a9c6bdeefd0a36c19f74239785cdb9c4344e8c1
+        EXCLUDE_FROM_ALL
 )
 
 ###############################
@@ -131,6 +133,7 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/antlr/antlr4.git
         GIT_TAG cc82115a4e7f53d71d9d905caa2c2dfa4da58899 # 4.13.12
         SOURCE_SUBDIR runtime/Cpp
+        EXCLUDE_FROM_ALL
 )
 
 #################################
@@ -144,6 +147,7 @@ FetchContent_Declare(
         # This branch removes some differences in the interface between `range-v3` and `std::ranges` s.t.
         # the former can be used as an (almost) drop-in replacement for the latter.
         GIT_TAG 42340ef354f7b4e4660268b788e37008d9cc85aa # branch fork-for-qlever
+        EXCLUDE_FROM_ALL
 )
 
 #################################
@@ -153,6 +157,7 @@ FetchContent_Declare(
         spatialjoin
         GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
         GIT_TAG c358e479ebb5f40df99522e69a0b52d73416020b
+        EXCLUDE_FROM_ALL
 )
 # disable bzip2 and zlib support in spatialjoin, we don't need it
 add_compile_definitions(SPATIALJOIN_NO_BZIP2=True SPATIALJOIN_NO_ZLIB=True)
@@ -280,6 +285,7 @@ FetchContent_Declare(
         ctre
         GIT_REPOSITORY https://github.com/hanickadot/compile-time-regular-expressions.git
         GIT_TAG e34c26ba149b9fd9c34aa0f678e39739641a0d1e # v3.10.0
+        EXCLUDE_FROM_ALL
 )
 
 ################################
@@ -292,6 +298,7 @@ FetchContent_Declare(
         abseil
         GIT_REPOSITORY https://github.com/abseil/abseil-cpp.git
         GIT_TAG 93ac3a4f9ee7792af399cebd873ee99ce15aed08  # 2024-05-16
+        EXCLUDE_FROM_ALL
 )
 
 ################################
@@ -303,6 +310,7 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/google/s2geometry.git
         GIT_TAG 5b5eccd54a08ae03b4467e79ffbb076d0b5f221e  #version 0.11.1
         SYSTEM
+        EXCLUDE_FROM_ALL
 )
 
 
@@ -351,6 +359,7 @@ FetchContent_Declare(
         fsst
         GIT_REPOSITORY https://github.com/cwida/fsst.git
         GIT_TAG b228af6356196095eaf9f8f5654b0635f969661e # main branch from 27th May 2025
+        EXCLUDE_FROM_ALL
 )
 
 
@@ -364,6 +373,7 @@ FetchContent_Declare(
         GIT_TAG bc0faab533e2b27b85b8ad312abf061e33ed6b5d # v.2023-11-01
         GIT_SHALLOW TRUE
         OVERRIDE_FIND_PACKAGE
+        EXCLUDE_FROM_ALL
 )
 
 ################################
@@ -416,7 +426,7 @@ else ()
             COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/CompilationInfo.cmake)
 endif ()
 
-# For the most recent tag return `{tag}-{how many commits back the tag is}-{hash of last commit}`
+# For the latest commit return `{most recent tag}-{how many commits back the tag is}-{hash of latest commit}`
 execute_process(
     COMMAND git describe --tags --always
     OUTPUT_VARIABLE PROJECT_VERSION
@@ -503,14 +513,17 @@ qlever_target_link_libraries(VocabularyMergerMain index parser ${CMAKE_THREAD_LI
 add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
 qlever_target_link_libraries(PrintIndexVersionMain util)
 
+# For IndexBuilderMain and ServerMain to find generated ProjectVersion.h
 target_include_directories(IndexBuilderMain PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 target_include_directories(ServerMain PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+
+# set_target_properties(IndexBuilderMain PROPERTIES OUTPUT_NAME "qlever-index-builder")
+# set_target_properties(ServerMain PROPERTIES OUTPUT_NAME "qlever-server")
 
 install(TARGETS
     ServerMain
     IndexBuilderMain
     RUNTIME DESTINATION bin
-    COMPONENT QLeverPackaging
 )
 
 ###############################################################
@@ -518,7 +531,6 @@ install(TARGETS
 ###############################################################
 
 set(CPACK_PACKAGE_NAME "qlever")
-set(CPACK_COMPONENTS_ALL QLeverPackaging)
 
 # Set CPACK_PACKAGE_VERSION according to Debian packaging naming rules
 # If git describe output begins with v + semver:
