@@ -19,6 +19,8 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "index/EncodedIriManager.h"
 #include "index/InputFileSpecification.h"
+// TODO<joka921> Only extract the typedefs.
+#include "index/InputFileServer.h"
 #include "parser/ParallelBuffer.h"
 #include "parser/TripleComponent.h"
 #include "parser/TurtleTokenId.h"
@@ -724,6 +726,10 @@ class RdfMultifileParser : public RdfParserBase {
       const EncodedIriManager* encodedIriManager,
       ad_utility::MemorySize bufferSize = DEFAULT_PARSER_BUFFER_SIZE);
 
+  // Construct the parser from a generator of turtle file contents.
+  RdfMultifileParser(InputFileServer::FileRange turtleFileContents,
+                     const EncodedIriManager* encodedIriManager);
+
   // This function is needed for the interface, but always throws an exception.
   // `getBatch` (below) has to be used instead.
   bool getLineImpl(TurtleTriple* triple) override;
@@ -764,6 +770,7 @@ class RdfMultifileParser : public RdfParserBase {
   // The number of parsers that have started, but not yet finished. This is
   // needed to detect the complete parsing.
   std::atomic<size_t> numActiveParsers_ = 0;
+  std::atomic<bool> lastFileWasPushed_ = 0;
 };
 
 #endif  // QLEVER_SRC_PARSER_RDFPARSER_H

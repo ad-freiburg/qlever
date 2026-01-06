@@ -468,7 +468,9 @@ add_subdirectory(test)
 add_library(compilationInfo ${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp)
 qlever_target_link_libraries(compilationInfo)
 
-add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp)
+add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp
+        src/index/InputFileServer.cpp
+        src/index/InputFileServer.h)
 qlever_target_link_libraries(IndexBuilderMain qlever index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
 
 add_executable(ServerMain src/ServerMain.cpp)
