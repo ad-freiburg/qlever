@@ -153,7 +153,6 @@ FetchContent_Declare(
         spatialjoin
         GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
         GIT_TAG c358e479ebb5f40df99522e69a0b52d73416020b
-        EXCLUDE_FROM_ALL
 )
 # disable bzip2 and zlib support in spatialjoin, we don't need it
 add_compile_definitions(SPATIALJOIN_NO_BZIP2=True SPATIALJOIN_NO_ZLIB=True)
@@ -417,7 +416,7 @@ else ()
             COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/CompilationInfo.cmake)
 endif ()
 
-# Use git describe to get the github tag-based project version
+# For the most recent tag return `{tag}-{how many commits back the tag is}-{hash of last commit}`
 execute_process(
     COMMAND git describe --tags --always
     OUTPUT_VARIABLE PROJECT_VERSION
@@ -511,6 +510,7 @@ install(TARGETS
     ServerMain
     IndexBuilderMain
     RUNTIME DESTINATION bin
+    COMPONENT QLeverPackaging
 )
 
 ###############################################################
@@ -518,6 +518,7 @@ install(TARGETS
 ###############################################################
 
 set(CPACK_PACKAGE_NAME "qlever")
+set(CPACK_COMPONENTS_ALL QLeverPackaging)
 
 # Set CPACK_PACKAGE_VERSION according to Debian packaging naming rules
 # If git describe output begins with v + semver:
@@ -545,14 +546,13 @@ else()
 endif()
 
 set(CPACK_PACKAGE_CONTACT "bast@cs.uni-freiburg.de")
+set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/ad-freiburg/qlever")
 
 set(CPACK_OUTPUT_FILE_PREFIX "${CMAKE_CURRENT_BINARY_DIR}/packages")
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
 
 set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
 
-# Handle FetchContent (Important!)
-# Prevent CPack from packaging files installed by dependencies (like GoogleTest or Abseil)
 set(CPACK_VERBATIM_VARIABLES YES)
 
 set(CPACK_PACKAGE_DESCRIPTION "QLever Graph Database")
