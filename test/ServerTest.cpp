@@ -276,24 +276,6 @@ TEST(ServerTest, createResponseMetadata) {
                   "SPARQL 1.1 Update for QLever is experimental."}));
   EXPECT_THAT(metadata["delta-triples"], testing::Eq(deltaTriplesJson));
   EXPECT_THAT(metadata["located-triples"], testing::Eq(locatedTriplesJson));
-  EXPECT_THAT(
-      Server::createDummyResponseMetadataForUpdate(
-          index, *deltaTriples.getLocatedTriplesSharedStateReference(),
-          tracer2),
-      testing::AllOf(
-          HasKeyMatching("update",
-                         testing::StrEq("Dummy Operation for timing purposes")),
-          HasKeyMatching("status", testing::StrEq("OK")),
-          HasKeyMatching(
-              "runtimeInformation",
-              testing::AllOf(HasKey("meta"), HasKey("query_execution_tre"
-                                                    "e"))),
-          HasKeyMatching("delta-triples",
-                         testing::AllOf(HasKey("operation"),
-                                        testing::Not(HasKey("before")),
-                                        testing::Not(HasKey("after")),
-                                        testing::Not(HasKey("difference")))),
-          HasKey("located-triples")));
 }
 
 TEST(ServerTest, adjustParsedQueryLimitOffset) {

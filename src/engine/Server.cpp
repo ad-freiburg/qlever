@@ -1034,20 +1034,26 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 }
 
 // ____________________________________________________________________________
-nlohmann::ordered_json createResponseMetadataForUpdateImpl(
+nlohmann::ordered_json Server::createResponseMetadataForUpdate(
     const Index& index, const LocatedTriplesState& locatedTriples,
-    std::string_view operationString, std::vector<std::string> warnings,
-    const RuntimeInformationWholeQuery& runtimeInfoWhole,
-    const RuntimeInformation& runtimeInfo, UpdateMetadata updateMetadata,
+    const PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
+    const UpdateMetadata& updateMetadata,
     const ad_utility::timer::TimeTracer& tracer) {
+  AD_CORRECTNESS_CHECK(updateMetadata.countBefore_.has_value());
+  AD_CORRECTNESS_CHECK(updateMetadata.inUpdate_.has_value());
+  AD_CORRECTNESS_CHECK(updateMetadata.countAfter_.has_value());
+  auto warnings = qet.collectWarnings();
+  warnings.emplace(warnings.begin(),
+                   "SPARQL 1.1 Update for QLever is experimental.");
   nlohmann::ordered_json response;
-  response["update"] = ad_utility::truncateOperationString(operationString);
+  response["update"] = ad_utility::truncateOperationString(
+      plannedQuery.parsedQuery_._originalString);
   response["status"] = "OK";
   response["warnings"] = warnings;
-  response["runtimeInformation"]["meta"] =
-      nlohmann::ordered_json(runtimeInfoWhole);
+  response["runtimeInformation"]["meta"] = nlohmann::ordered_json(
+      qet.getRootOperation()->getRuntimeInfoWholeQuery());
   response["runtimeInformation"]["query_execution_tree"] =
-      nlohmann::ordered_json(runtimeInfo);
+      nlohmann::ordered_json(qet.getRootOperation()->runtimeInfo());
   auto setIfHasValue = [&response, &updateMetadata](
                            auto field, const std::string& fieldName) {
     const auto& countOpt = std::invoke(field, updateMetadata);
@@ -1082,33 +1088,6 @@ nlohmann::ordered_json createResponseMetadataForUpdateImpl(
 }
 
 // ____________________________________________________________________________
-nlohmann::ordered_json Server::createDummyResponseMetadataForUpdate(
-    const Index& index, const LocatedTriplesState& locatedTriples,
-    const ad_utility::timer::TimeTracer& tracer) {
-  return createResponseMetadataForUpdateImpl(
-      index, locatedTriples, "Dummy Operation for timing purposes", {}, {}, {},
-      UpdateMetadata{std::nullopt, DeltaTriplesCount{}, std::nullopt}, tracer);
-}
-
-// ____________________________________________________________________________
-nlohmann::ordered_json Server::createResponseMetadataForUpdate(
-    const Index& index, const LocatedTriplesState& locatedTriples,
-    const PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
-    const UpdateMetadata& updateMetadata,
-    const ad_utility::timer::TimeTracer& tracer) {
-  AD_CORRECTNESS_CHECK(updateMetadata.countBefore_.has_value());
-  AD_CORRECTNESS_CHECK(updateMetadata.inUpdate_.has_value());
-  AD_CORRECTNESS_CHECK(updateMetadata.countAfter_.has_value());
-  auto warnings = qet.collectWarnings();
-  warnings.emplace(warnings.begin(),
-                   "SPARQL 1.1 Update for QLever is experimental.");
-  return createResponseMetadataForUpdateImpl(
-      index, locatedTriples, plannedQuery.parsedQuery_._originalString,
-      warnings, qet.getRootOperation()->getRuntimeInfoWholeQuery(),
-      qet.getRootOperation()->runtimeInfo(), updateMetadata, tracer);
-}
-
-// ____________________________________________________________________________
 UpdateMetadata Server::processUpdateImpl(
     const PlannedQuery& plannedUpdate,
     ad_utility::SharedCancellationHandle cancellationHandle,
@@ -1139,11 +1118,11 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::processUpdate(
         std::vector<ParsedQuery>&& updates,
-        const ad_utility::Timer& requestTimer, SharedTimeTracer tracer,
+        const ad_utility::Timer& requestTimer, SharedTimeTracer outerTracer,
         ad_utility::SharedCancellationHandle cancellationHandle,
         QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
         TimeLimit timeLimit, std::optional<PlannedQuery>& plannedUpdate) {
-  tracer->beginTrace("waitingForUpdateThread");
+  outerTracer->beginTrace("waitingForUpdateThread");
   AD_CORRECTNESS_CHECK(ql::ranges::all_of(
       updates, [](const ParsedQuery& p) { return p.hasUpdateClause(); }));
 
@@ -1154,15 +1133,16 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   auto coroutine = computeInNewThread(
       updateThreadPool_,
       [this, &requestTimer, &cancellationHandle, &updates, &qec, &timeLimit,
-       &plannedUpdate, tracer]() {
-        tracer->endTrace("waitingForUpdateThread");
+       &plannedUpdate, outerTracer]() {
+        outerTracer->endTrace("waitingForUpdateThread");
         return index_.deltaTriplesManager().modify<json>(
-            [this, &cancellationHandle, &plannedUpdate, tracer, &updates,
-             &requestTimer, &timeLimit, &qec](DeltaTriples& deltaTriples) {
+            [this, &cancellationHandle, &plannedUpdate, &updates, &requestTimer,
+             &timeLimit, &qec](DeltaTriples& deltaTriples) {
               qec.setLocatedTriplesForEvaluation(
                   deltaTriples.getLocatedTriplesSharedStateReference());
               json results = json::array();
               for (auto&& [i, update] : ranges::views::enumerate(updates)) {
+                auto tracer = ad_utility::timer::TimeTracer("update");
                 // The augmented metadata is invalidated by any update. It is
                 // only updated automatically at the end of modify. Updates with
                 // non-empty graph patterns need the augmented metadata. Update
@@ -1171,26 +1151,25 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                     !update._rootGraphPattern._graphPatterns.empty()) {
                   deltaTriples.updateAugmentedMetadata();
                 }
-                tracer->beginTrace("planning");
+                tracer.beginTrace("planning");
                 plannedUpdate = planQuery(std::move(update), requestTimer,
                                           timeLimit, qec, cancellationHandle);
-                tracer->endTrace("planning");
-                tracer->beginTrace("execution");
+                tracer.endTrace("planning");
+                tracer.beginTrace("execution");
                 // Update the delta triples.
                 // Use `this` explicitly to silence false-positive
                 // errors on captured `this` being unused.
                 auto updateMetadata = this->processUpdateImpl(
                     plannedUpdate.value(), cancellationHandle, deltaTriples,
-                    *tracer);
-                tracer->endTrace("execution");
+                    tracer);
+                tracer.endTrace("execution");
 
-                tracer->endTrace("update");
+                tracer.endTrace("update");
                 results.push_back(createResponseMetadataForUpdate(
                     index_,
                     *deltaTriples.getLocatedTriplesSharedStateReference(),
                     *plannedUpdate, plannedUpdate->queryExecutionTree_,
-                    updateMetadata, *tracer));
-                tracer->reset();
+                    updateMetadata, tracer));
 
                 AD_LOG_INFO << "Done processing update, total time was "
                             << requestTimer.msecs().count() << " ms"
@@ -1204,20 +1183,19 @@ CPP_template_def(typename RequestT, typename ResponseT)(
               }
               return results;
             },
-            true, true, *tracer);
+            true, true, *outerTracer);
       },
       cancellationHandle);
-  auto responses = co_await std::move(coroutine);
-  tracer->endTrace("update");
-  responses.push_back(createDummyResponseMetadataForUpdate(
-      index_,
-      *index_.deltaTriplesManager().getCurrentLocatedTriplesSharedState(),
-      *tracer));
+  auto operations = co_await std::move(coroutine);
+  auto response = nlohmann::ordered_json();
+  response["operations"] = operations;
+  outerTracer->endTrace("update");
+  response["time"] = outerTracer->getJSONShort()["update"];
 
   // SPARQL 1.1 Protocol 2.2.4 Successful Responses: "The responses body of a
   // successful update request is implementation defined."
   co_await send(
-      ad_utility::httpUtils::createJsonResponse(std::move(responses), request));
+      ad_utility::httpUtils::createJsonResponse(std::move(response), request));
   co_return;
 }
 

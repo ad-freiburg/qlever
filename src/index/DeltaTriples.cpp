@@ -466,11 +466,15 @@ ReturnType DeltaTriplesManager::modify(
 
     tracer.endTrace("acquiringDeltaTriplesWriteLock");
     if constexpr (std::is_void_v<ReturnType>) {
+      tracer.beginTrace("innerFunction");
       function(deltaTriples);
+      tracer.endTrace("innerFunction");
       updateMetadata();
       writeAndUpdateSnapshot();
     } else {
+      tracer.beginTrace("innerFunction");
       ReturnType returnValue = function(deltaTriples);
+      tracer.endTrace("innerFunction");
       updateMetadata();
       writeAndUpdateSnapshot();
       return returnValue;

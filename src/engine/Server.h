@@ -190,11 +190,6 @@ class Server {
       const PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
       const UpdateMetadata& updateMetadata,
       const ad_utility::timer::TimeTracer& tracer);
-  // A minimal update response JSON that only contains timing infos and the
-  // current numbers of updated triples.
-  static nlohmann::ordered_json createDummyResponseMetadataForUpdate(
-      const Index& index, const LocatedTriplesState& locatedTriples,
-      const ad_utility::timer::TimeTracer& tracer);
   FRIEND_TEST(ServerTest, createResponseMetadata);
   // Do the actual execution of an update.
   CPP_template(typename RequestT, typename ResponseT)(
