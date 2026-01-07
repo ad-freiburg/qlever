@@ -458,23 +458,23 @@ ReturnType DeltaTriplesManager::modify(
     auto updateMetadata = [&tracer, &deltaTriples,
                            updateMetadataAfterRequest]() {
       if (updateMetadataAfterRequest) {
-        tracer.beginTrace("updateMetadata");
+        tracer.beginTrace("metadataUpdateForSnapshot");
         deltaTriples.updateAugmentedMetadata();
-        tracer.endTrace("updateMetadata");
+        tracer.endTrace("metadataUpdateForSnapshot");
       }
     };
 
     tracer.endTrace("acquiringDeltaTriplesWriteLock");
     if constexpr (std::is_void_v<ReturnType>) {
-      tracer.beginTrace("innerFunction");
+      tracer.beginTrace("operations");
       function(deltaTriples);
-      tracer.endTrace("innerFunction");
+      tracer.endTrace("operations");
       updateMetadata();
       writeAndUpdateSnapshot();
     } else {
-      tracer.beginTrace("innerFunction");
+      tracer.beginTrace("operations");
       ReturnType returnValue = function(deltaTriples);
-      tracer.endTrace("innerFunction");
+      tracer.endTrace("operations");
       updateMetadata();
       writeAndUpdateSnapshot();
       return returnValue;
