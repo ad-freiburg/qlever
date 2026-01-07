@@ -347,7 +347,7 @@ void LocatedTriplesPerBlock::updateAugmentedMetadata() {
     O emptyBlock{0, 0};
 
     // Note: This code assumes that a single permutation will never contain more
-    // than 6 columns. Downstream code removes these unecessary columns again.
+    // than 6 columns. Downstream code removes these unnecessary columns again.
     CompressedBlockMetadataNoBlockIndex lastBlockN{
         std::vector<O>(6, emptyBlock),
         0,
