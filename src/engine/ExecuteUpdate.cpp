@@ -15,9 +15,9 @@ UpdateMetadata ExecuteUpdate::executeUpdate(
   // Fully materialize the result for now. This makes it easier to execute the
   // update. We have to keep the local vocab alive until the triples are
   // inserted using `deleteTriples`/`insertTriples` to keep LocalVocabIds valid.
-  tracer.beginTrace("materializeResult");
+  tracer.beginTrace("evaluateWhere");
   auto result = qet.getResult(false);
-  tracer.endTrace("materializeResult");
+  tracer.endTrace("evaluateWhere");
   auto [toInsert, toDelete] =
       computeGraphUpdateQuads(index, query, *result, qet.getVariableColumns(),
                               cancellationHandle, metadata, tracer);
