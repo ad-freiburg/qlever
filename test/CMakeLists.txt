@@ -143,16 +143,6 @@ if (NOT _DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS)
     addLinkAndDiscoverTest(ParsedRequestBuilderTest engine)
 endif ()
 
-addLinkAndDiscoverTest(ExceptionHandlingTest)
-
-addLinkAndDiscoverTest(CompressorStreamTest engine)
-
-addLinkAndDiscoverTestSerial(HttpTest Boost::iostreams http)
-
-addLinkAndDiscoverTest(QueryHubTest http)
-
-addLinkAndDiscoverTest(QueryToSocketDistributorTest http)
-
 addLinkAndDiscoverTest(ValueIdComparatorsTest util)
 
 addLinkAndDiscoverTest(SparqlParserTest parser engine sparqlExpressions)
@@ -298,6 +288,8 @@ addLinkAndDiscoverTestNoLibs(TakeUntilInclusiveViewTest)
 
 addLinkAndDiscoverTest(ForwardTest)
 
+addLinkAndDiscoverTest(CompressorStreamTest engine)
+
 addLinkAndDiscoverTestNoLibs(AsyncStreamTest)
 
 addLinkAndDiscoverTest(BitUtilsTest)
@@ -340,6 +332,8 @@ addLinkAndDiscoverTestSerial(ServiceTest engine)
 
 addLinkAndDiscoverTestSerial(LoadTest engine)
 
+addLinkAndDiscoverTestSerial(HttpTest Boost::iostreams http)
+
 addLinkAndDiscoverTestNoLibs(CallFixedSizeTest)
 
 addLinkAndDiscoverTestNoLibs(ConstexprUtilsTest)
@@ -375,6 +369,8 @@ addLinkAndDiscoverTestSerial(ExportQueryExecutionTreesTest index engine parser)
 addLinkAndDiscoverTestSerial(AggregateExpressionTest parser sparqlExpressions index engine)
 
 addLinkAndDiscoverTest(OnDestructionDontThrowDuringStackUnwindingTest)
+
+addLinkAndDiscoverTest(ExceptionHandlingTest)
 
 addLinkAndDiscoverTest(SparqlExpressionTypesTest sparqlExpressions util)
 
@@ -429,6 +425,10 @@ addLinkAndDiscoverTest(UniqueCleanupTest)
 addLinkAndDiscoverTest(WebSocketSessionTest http)
 
 addLinkAndDiscoverTest(QueryIdTest)
+
+addLinkAndDiscoverTest(QueryHubTest http)
+
+addLinkAndDiscoverTest(QueryToSocketDistributorTest http)
 
 addLinkAndDiscoverTest(UpdateFetcherTest http)
 
