@@ -4,6 +4,13 @@ if (POLICY CMP0167)
 endif ()
 project(QLever C CXX)
 
+if (APPLE)
+    # Add Homebrew paths for M-series
+    list(APPEND CMAKE_PREFIX_PATH "/opt/homebrew")
+    link_directories(/opt/homebrew/lib)
+    include_directories(/opt/homebrew/include)
+endif ()
+
 # C/C++ Versions
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -51,7 +58,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         add_compile_options(-fcoroutines)
     endif ()
 
-elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang" )
     if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.0.0" AND NOT COMPILER_VERSION_CHECK_DEACTIVATED)
         MESSAGE(FATAL_ERROR "Clang++ versions older than 16.0 are not supported by QLever")
     endif ()
@@ -569,5 +576,12 @@ set(CPACK_VERBATIM_VARIABLES YES)
 
 set(CPACK_PACKAGE_DESCRIPTION "QLever Graph Database")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "QLever Graph Database implementing the RDF and SPARQL standards.")
+
+if(APPLE)
+  set(CPACK_GENERATOR "DragNDrop")
+  set(CPACK_DMG_VOLUME_NAME "QLever")
+  set(CPACK_PACKAGE_FILE_NAME
+      "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-macos")
+endif()
 
 include(CPack)
