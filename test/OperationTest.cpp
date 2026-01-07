@@ -509,6 +509,39 @@ TEST(Operation, ensureFailedStatusIsSetWhenGeneratorThrowsException) {
 }
 
 // _____________________________________________________________________________
+TEST(Operation, ensureFailedStatusIsSetWhenGeneratorIsCancelled) {
+  bool signaledUpdate = false;
+  const Index& index = ad_utility::testing::getQec()->getIndex();
+  QueryResultCache cache{};
+  NamedResultCache namedCache{};
+  MaterializedViewsManager materializedViewsManager;
+  QueryExecutionContext context{
+      index,
+      &cache,
+      makeAllocator(ad_utility::MemorySize::megabytes(100)),
+      SortPerformanceEstimator{},
+      &namedCache,
+      &materializedViewsManager,
+      [&](std::string) { signaledUpdate = true; }};
+  CustomGeneratorOperation operation{
+      &context, []() -> Result::Generator {
+        throw CancellationException{"Operation was cancelled"};
+        co_return;
+      }()};
+  ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
+  auto result =
+      operation.runComputation(timer, ComputationMode::LAZY_IF_SUPPORTED);
+
+  EXPECT_EQ(operation.runtimeInfo().status_,
+            Status::lazilyMaterializedInProgress);
+
+  EXPECT_THROW(result.idTables().begin(), ad_utility::CancellationException);
+
+  EXPECT_EQ(operation.runtimeInfo().status_, Status::cancelled);
+  EXPECT_TRUE(signaledUpdate);
+}
+
+// _____________________________________________________________________________
 TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
 #ifdef _QLEVER_NO_TIMING_TESTS
   GTEST_SKIP_("because _QLEVER_NO_TIMING_TESTS defined");
