@@ -224,8 +224,7 @@ ExecuteUpdate::computeGraphUpdateQuads(
   const auto& graphUpdate = updateClause.op_;
 
   // Start the timer once the where clause has been evaluated.
-  tracer.beginTrace("preparation");
-  ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
+  tracer.beginTrace("computeIds");
   const auto& vocab = index.getVocab();
   const auto& encodedIriManager = index.encodedIriManager();
 
@@ -246,12 +245,12 @@ ExecuteUpdate::computeGraphUpdateQuads(
                                std::move(updateTriples), std::move(localVocab));
       };
 
-  tracer.beginTrace("transforming");
+  tracer.beginTrace("vocabLookup");
   auto [toInsertTemplates, toInsert, localVocabInsert] =
       prepareTemplateAndResultContainer(graphUpdate.toInsert_.triples_);
   auto [toDeleteTemplates, toDelete, localVocabDelete] =
       prepareTemplateAndResultContainer(graphUpdate.toDelete_.triples_);
-  tracer.endTrace("transforming");
+  tracer.endTrace("vocabLookup");
 
   tracer.beginTrace("resultInterpolation");
   uint64_t resultSize = 0;
@@ -274,7 +273,7 @@ ExecuteUpdate::computeGraphUpdateQuads(
                                          static_cast<int64_t>(toDelete.size())};
   toDelete = setMinus(toDelete, toInsert);
   tracer.endTrace("deduplication");
-  tracer.endTrace("preparation");
+  tracer.endTrace("computeIds");
 
   return {
       IdTriplesAndLocalVocab{std::move(toInsert), std::move(localVocabInsert)},
