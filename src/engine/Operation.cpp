@@ -208,11 +208,17 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
           }
           signalQueryUpdate(RuntimeInformation::SendPriority::IfDue);
         },
-        [this](bool failed) {
-          // TODO<RobinTF> Distinguish between failed and cancelled.
-          runtimeInfo().status_ =
-              failed ? RuntimeInformation::failed
-                     : RuntimeInformation::lazilyMaterializedCompleted;
+        [this](Result::GeneratorState state) {
+          runtimeInfo().status_ = [state]() {
+            switch (state) {
+              case Result::GeneratorState::FINISHED:
+                return RuntimeInformation::lazilyMaterializedCompleted;
+              case Result::GeneratorState::CANCELLED:
+                return RuntimeInformation::cancelled;
+              case Result::GeneratorState::FAILED:
+                return RuntimeInformation::failed;
+            }
+          }();
           signalQueryUpdate(RuntimeInformation::SendPriority::Always);
         });
   }

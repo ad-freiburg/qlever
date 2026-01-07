@@ -270,7 +270,7 @@ void Result::checkDefinedness(const VariableToColumnMap& varColMap) {
 void Result::runOnNewChunkComputed(
     std::function<void(const IdTableVocabPair&, std::chrono::microseconds)>
         onNewChunk,
-    std::function<void(bool)> onGeneratorFinished) {
+    std::function<void(GeneratorState)> onGeneratorFinished) {
   AD_CONTRACT_CHECK(!isFullyMaterialized());
   auto inputAsGet = ad_utility::CachingTransformInputRange(
       idTables(), [](auto& input) { return std::move(input); });
@@ -281,24 +281,29 @@ void Result::runOnNewChunkComputed(
       std::move(onGeneratorFinished));
 
   // The main lambda that when being called processes the next chunk.
-  auto get =
-      [inputAsGet = std::move(inputAsGet), sharedFinish,
-       cleanup = absl::Cleanup{[&finish = *sharedFinish]() { finish(false); }},
-       onNewChunk =
-           std::move(onNewChunk)]() mutable -> std::optional<IdTableVocabPair> {
+  auto get = [inputAsGet = std::move(inputAsGet), sharedFinish,
+              cleanup = absl::Cleanup{[&finish = *sharedFinish]() {
+                finish(GeneratorState::FINISHED);
+              }},
+              onNewChunk = std::move(
+                  onNewChunk)]() mutable -> std::optional<IdTableVocabPair> {
     try {
       Timer timer{Timer::Started};
       auto input = inputAsGet.get();
       if (!input.has_value()) {
         std::move(cleanup).Cancel();
-        (*sharedFinish)(false);
+        (*sharedFinish)(GeneratorState::FINISHED);
         return std::nullopt;
       }
       onNewChunk(input.value(), timer.value());
       return input;
+    } catch (const ad_utility::CancellationException&) {
+      std::move(cleanup).Cancel();
+      (*sharedFinish)(GeneratorState::CANCELLED);
+      throw;
     } catch (...) {
       std::move(cleanup).Cancel();
-      (*sharedFinish)(true);
+      (*sharedFinish)(GeneratorState::FAILED);
       throw;
     }
   };

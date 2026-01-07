@@ -163,7 +163,7 @@ TEST(Result, verifyRunOnNewChunkComputedThrowsWithFullyMaterializedResult) {
 
   EXPECT_THROW(result.runOnNewChunkComputed(
                    [](const IdTableVocabPair&, std::chrono::microseconds) {},
-                   [](bool) {}),
+                   [](Result::GeneratorState) {}),
                ad_utility::Exception);
 }
 
@@ -208,8 +208,8 @@ TEST(Result, verifyRunOnNewChunkComputedFiresCorrectly) {
           EXPECT_GE(duration, 5ms);
         }
       },
-      [&](bool error) {
-        EXPECT_FALSE(error);
+      [&](Result::GeneratorState state) {
+        EXPECT_EQ(state, Result::GeneratorState::FINISHED);
         finishedConsuming = true;
       });
 
@@ -234,14 +234,43 @@ TEST(Result, verifyRunOnNewChunkCallsFinishOnError) {
       [&](const IdTableVocabPair&, std::chrono::microseconds) {
         ++callCounterGenerator;
       },
-      [&](bool error) {
-        EXPECT_TRUE(error);
+      [&](Result::GeneratorState state) {
+        EXPECT_EQ(state, Result::GeneratorState::FAILED);
         ++callCounterFinished;
       });
 
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       consumeGenerator(result.idTables()),
       HasSubstr("verifyRunOnNewChunkCallsFinishOnError"), std::runtime_error);
+
+  EXPECT_EQ(callCounterGenerator, 0);
+  EXPECT_EQ(callCounterFinished, 1);
+}
+
+// _____________________________________________________________________________
+TEST(Result, verifyRunOnNewChunkCallsFinishOnCancellation) {
+  Result result{[]() -> Result::Generator {
+                  throw ad_utility::CancellationException{
+                      "verifyRunOnNewChunkCallsFinishOnCancellation"};
+                  co_return;
+                }(),
+                {}};
+  uint32_t callCounterGenerator = 0;
+  uint32_t callCounterFinished = 0;
+
+  result.runOnNewChunkComputed(
+      [&](const IdTableVocabPair&, std::chrono::microseconds) {
+        ++callCounterGenerator;
+      },
+      [&](Result::GeneratorState state) {
+        EXPECT_EQ(state, Result::GeneratorState::CANCELLED);
+        ++callCounterFinished;
+      });
+
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      consumeGenerator(result.idTables()),
+      HasSubstr("verifyRunOnNewChunkCallsFinishOnCancellation"),
+      ad_utility::CancellationException);
 
   EXPECT_EQ(callCounterGenerator, 0);
   EXPECT_EQ(callCounterFinished, 1);
@@ -262,8 +291,8 @@ TEST(Result, verifyRunOnNewChunkCallsFinishOnPartialConsumption) {
         [&](const IdTableVocabPair&, std::chrono::microseconds) {
           ++callCounterGenerator;
         },
-        [&](bool error) {
-          EXPECT_FALSE(error);
+        [&](Result::GeneratorState state) {
+          EXPECT_EQ(state, Result::GeneratorState::FINISHED);
           ++callCounterFinished;
         });
 
