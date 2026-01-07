@@ -346,10 +346,10 @@ void LocatedTriplesPerBlock::updateAugmentedMetadata() {
     using O = CompressedBlockMetadata::OffsetAndCompressedSize;
     O emptyBlock{0, 0};
 
-    // TODO<joka921> We need the appropriate number of columns here, or we need
-    // to make the reading code work regardless of the number of columns.
+    // Note: This code assumes that a single permutation will never contain more
+    // than 6 columns. Downstream code removes these unecessary columns again.
     CompressedBlockMetadataNoBlockIndex lastBlockN{
-        std::vector<O>(4, emptyBlock),
+        std::vector<O>(6, emptyBlock),
         0,
         firstTriple,
         lastTriple,
