@@ -10,7 +10,6 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Install the packages needed for building the binaries (this is a separate
 # stage to keep the final image small).
 FROM base AS builder
-ARG TARGETPLATFORM
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y wget
 RUN wget https://apt.kitware.com/kitware-archive.sh && chmod +x kitware-archive.sh && ./kitware-archive.sh
@@ -31,10 +30,19 @@ COPY CMakeLists.txt /qlever/
 COPY CompilationInfo.cmake /qlever/
 
 # Build and compile. By default, also compile and run all tests. In order not
-# to, build the image with `--build-arg RUN_TESTS=false`.
+# to, build the image with `--build-arg RUN_TESTS=false`. Explicitly set
+# `ARCH_FLAGS` depending on the architecture we are building for, for reasons
+# explained in https://github.com/ad-freiburg/qlever/issues/2595 .
 ARG RUN_TESTS=true
 WORKDIR /qlever/build/
-RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_PARALLEL=true -D_NO_TIMING_TESTS=ON -GNinja ..
+ARG TARGETARCH
+RUN case "${TARGETARCH}" in \
+        "arm64") ARCH_FLAGS="-march=armv8-a" ;; \
+        "amd64") ARCH_FLAGS="-march=x86-64" ;; \
+        *)       ARCH_FLAGS="" ;; \
+      esac && \
+    cmake -DCMAKE_CXX_FLAGS="${ARCH_FLAGS}" -DCMAKE_C_FLAGS="${ARCH_FLAGS}" \
+          -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_PARALLEL=true -D_NO_TIMING_TESTS=ON -GNinja ..
 RUN if [ "$RUN_TESTS" = "true" ]; then \
       cmake --build . && ctest --rerun-failed --output-on-failure; \
     else \

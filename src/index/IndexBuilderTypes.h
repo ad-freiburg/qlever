@@ -277,6 +277,10 @@ auto getIdMapLambdas(
       OptionalIds res;
       // get Ids for the actual triple and store them in the result.
       res[0] = map.getId(lt.triple_);
+      // NOTE: If this logic is ever changed, you need to also change the code
+      // in `DeltaTriples::makeInternalTriples`, which adds the same extra
+      // triples for language tags to the internal triples on every update
+      // operation.
       if (!lt.langtag_.empty()) {  // the object of the triple was a literal
                                    // with a language tag
         // get the Id for the corresponding langtag Entity
@@ -303,7 +307,7 @@ auto getIdMapLambdas(
         auto tripleGraphId = res[0].value()[ADDITIONAL_COLUMN_GRAPH_ID];
         res[1].emplace(
             Arr{spoIds[0], langTaggedPredId, spoIds[2], tripleGraphId});
-        // extra triple <object> ql:language-tag <@language>
+        // extra triple <object> ql:langtag <@language>
         res[2].emplace(Arr{spoIds[2],
                            map.getId(TripleComponent{
                                ad_utility::triple_component::Iri::fromIriref(
