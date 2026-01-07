@@ -8,7 +8,7 @@
 #include "../../util/GTestHelpers.h"
 #include "index/vocabulary/VocabularyTypes.h"
 
-// A class that executes a passed function in its constuctor.
+// A class that executes a passed function in its constructor.
 class Caller {
  public:
   explicit Caller(absl::FunctionRef<void()> f) { std::invoke(f); }
