@@ -215,7 +215,8 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
                 return RuntimeInformation::lazilyMaterializedCompleted;
               case Result::GeneratorState::CANCELLED:
                 return RuntimeInformation::cancelled;
-              case Result::GeneratorState::FAILED:
+              default:
+                AD_CORRECTNESS_CHECK(state == Result::GeneratorState::FAILED);
                 return RuntimeInformation::failed;
             }
           }();

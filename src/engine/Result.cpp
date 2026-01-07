@@ -10,6 +10,7 @@
 #include <absl/cleanup/cleanup.h>
 
 #include "backports/shift.h"
+#include "util/CancellationHandle.h"
 #include "util/Exception.h"
 #include "util/Generators.h"
 #include "util/InputRangeUtils.h"
