@@ -8,6 +8,7 @@
 #include "../../util/GTestHelpers.h"
 #include "index/vocabulary/VocabularyTypes.h"
 
+namespace {
 // A class that executes a passed function in its constructor.
 class Caller {
  public:
@@ -34,6 +35,7 @@ class WordWriterNoFinish : public WordWriterBase {
   uint64_t operator()(std::string_view, bool) override { return 0; }
   void finishImpl() override {}
 };
+}  // namespace
 
 // _____________________________________________________________________________
 TEST(VocabularyTypes, verifyWordWriterBaseDestructorBehavesAsExpected) {
