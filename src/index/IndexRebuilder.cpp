@@ -7,7 +7,6 @@
 #include <array>
 #include <cstdint>
 #include <fstream>
-#include <memory>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -175,13 +174,13 @@ void materializeToIndex(const IndexImpl& index, const std::string& newIndexName,
   AD_CONTRACT_CHECK(!logFileName.empty(), "Log file name must not be empty");
 
   // Set up logging to file
-  auto logFile = std::make_unique<std::ofstream>(logFileName);
-  AD_CORRECTNESS_CHECK(logFile->is_open(),
+  std::ofstream logFile{logFileName};
+  AD_CORRECTNESS_CHECK(logFile.is_open(),
                        "Failed to open log file: " + logFileName);
 
   // Macro for rebuild-specific logging with the same syntax as AD_LOG_INFO
 #define REBUILD_LOG_INFO \
-  *logFile << ad_utility::Log::getTimeStamp() << " - INFO: "
+  logFile << ad_utility::Log::getTimeStamp() << " - INFO: "
 
   REBUILD_LOG_INFO << "Rebuilding index from current data (including updates)"
                    << std::endl;
