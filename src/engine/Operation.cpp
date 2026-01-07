@@ -210,13 +210,14 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
         },
         [this](Result::GeneratorState state) {
           runtimeInfo().status_ = [state]() {
+            using enum Result::GeneratorState;
             switch (state) {
-              case Result::GeneratorState::FINISHED:
+              case FINISHED:
                 return RuntimeInformation::lazilyMaterializedCompleted;
-              case Result::GeneratorState::CANCELLED:
+              case CANCELLED:
                 return RuntimeInformation::cancelled;
               default:
-                AD_CORRECTNESS_CHECK(state == Result::GeneratorState::FAILED);
+                AD_CORRECTNESS_CHECK(state == FAILED);
                 return RuntimeInformation::failed;
             }
           }();
