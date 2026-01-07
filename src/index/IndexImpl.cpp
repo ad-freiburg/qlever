@@ -1656,25 +1656,6 @@ void IndexImpl::deleteTemporaryFile(const std::string& path) {
   }
 }
 
-namespace {
-
-// Return a lambda that is called repeatedly with triples that are sorted by the
-// `idx`-th column and counts the number of distinct entities that occur in a
-// triple. This is used to count the number of distinct subjects, objects,
-// and predicates during the index building.
-template <size_t idx>
-constexpr auto makeNumDistinctIdsCounter = [](size_t& numDistinctIds) {
-  return [lastId = std::optional<Id>{},
-          &numDistinctIds](const auto& triple) mutable {
-    const auto& id = triple[idx];
-    if (id != lastId) {
-      numDistinctIds++;
-      lastId = id;
-    }
-  };
-};
-}  // namespace
-
 // _____________________________________________________________________________
 CPP_template_def(typename... NextSorter)(requires(
     sizeof...(NextSorter) <=
@@ -1684,24 +1665,15 @@ CPP_template_def(typename... NextSorter)(requires(
                                             NextSorter&&... nextSorter)
 
 {
-  size_t numTriplesNormal = 0;
-  size_t numTriplesTotal = 0;
-  auto countTriplesNormal = [&numTriplesNormal, &numTriplesTotal](
-                                [[maybe_unused]] const auto& triple) mutable {
-    ++numTriplesTotal;
-    ++numTriplesNormal;
-  };
-  size_t numPredicatesNormal = 0;
-  auto predicateCounter = makeNumDistinctIdsCounter<1>(numPredicatesNormal);
-  size_t numPredicatesTotal =
+  size_t numTriples = 0;
+  auto countTriples = [&numTriples](const auto&) mutable { ++numTriples; };
+  size_t numPredicates =
       createPermutationPair(numColumns, AD_FWD(sortedTriples), *pso_, *pos_,
-                            nextSorter.makePushCallback()...,
-                            std::ref(predicateCounter), countTriplesNormal);
+                            nextSorter.makePushCallback()..., countTriples);
   configurationJson_["num-predicates"] =
-      NumNormalAndInternal::fromNormalAndTotal(numPredicatesNormal,
-                                               numPredicatesTotal);
-  configurationJson_["num-triples"] = NumNormalAndInternal::fromNormalAndTotal(
-      numTriplesNormal, numTriplesTotal);
+      NumNormalAndInternal::fromNormal(numPredicates);
+  configurationJson_["num-triples"] =
+      NumNormalAndInternal::fromNormal(numTriples);
   if (doWriteConfiguration) {
     writeConfiguration();
   }
@@ -1722,9 +1694,6 @@ CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
     std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
         size_t numColumns, BlocksOfTriples sortedTriples,
         NextSorter&&... nextSorter) {
-  size_t numSubjectsNormal = 0;
-  size_t numSubjectsTotal = 0;
-  auto numSubjectCounter = makeNumDistinctIdsCounter<0>(numSubjectsNormal);
   std::optional<PatternCreator::TripleSorter> result;
   if (usePatterns_) {
     // We will return the next sorter.
@@ -1743,27 +1712,22 @@ CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
       auto tripleArr = std::array{triple[0], triple[1], triple[2], triple[3]};
       patternCreator.processTriple(tripleArr, ignoreForPatterns);
     };
-    numSubjectsTotal = createPermutationPair(
+    size_t numSubjects = createPermutationPair(
         numColumns, AD_FWD(sortedTriples), *spo_, *sop_,
-        nextSorter.makePushCallback()..., pushTripleToPatterns,
-        std::ref(numSubjectCounter));
+        nextSorter.makePushCallback()..., pushTripleToPatterns);
     patternCreator.finish();
     configurationJson_["num-subjects"] =
-        NumNormalAndInternal::fromNormalAndTotal(numSubjectsNormal,
-                                                 numSubjectsTotal);
+        NumNormalAndInternal::fromNormal(numSubjects);
     writeConfiguration();
     result = std::move(patternCreator).getTripleSorter();
   } else {
     AD_CORRECTNESS_CHECK(sizeof...(nextSorter) == 1);
-    numSubjectsTotal = createPermutationPair(
-        numColumns, AD_FWD(sortedTriples), *spo_, *sop_,
-        nextSorter.makePushCallback()..., std::ref(numSubjectCounter));
+    size_t numSubjects =
+        createPermutationPair(numColumns, AD_FWD(sortedTriples), *spo_, *sop_,
+                              nextSorter.makePushCallback()...);
     configurationJson_["num-subjects"] =
-        NumNormalAndInternal::fromNormalAndTotal(numSubjectsNormal,
-                                                 numSubjectsTotal);
+        NumNormalAndInternal::fromNormal(numSubjects);
   }
-  configurationJson_["num-subjects"] = NumNormalAndInternal::fromNormalAndTotal(
-      numSubjectsNormal, numSubjectsTotal);
   writeConfiguration();
   return result;
 };
@@ -1776,13 +1740,11 @@ CPP_template_def(typename... NextSorter)(
                                                  NextSorter&&... nextSorter) {
   // For the last pair of permutations we don't need a next sorter, so we
   // have no fourth argument.
-  size_t numObjectsNormal = 0;
-  auto objectCounter = makeNumDistinctIdsCounter<2>(numObjectsNormal);
-  size_t numObjectsTotal = createPermutationPair(
-      numColumns, AD_FWD(sortedTriples), *osp_, *ops_,
-      nextSorter.makePushCallback()..., std::ref(objectCounter));
-  configurationJson_["num-objects"] = NumNormalAndInternal::fromNormalAndTotal(
-      numObjectsNormal, numObjectsTotal);
+  size_t numObjects =
+      createPermutationPair(numColumns, AD_FWD(sortedTriples), *osp_, *ops_,
+                            nextSorter.makePushCallback()...);
+  configurationJson_["num-objects"] =
+      NumNormalAndInternal::fromNormal(numObjects);
   configurationJson_["has-all-permutations"] = true;
   writeConfiguration();
 };
