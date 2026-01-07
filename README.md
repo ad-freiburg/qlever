@@ -61,7 +61,7 @@ setup-config <config-name>`. To write a `Qleverfile` for your own data, pick
 one of these configurations as a starting point and edit the `Qleverfile` as
 you see fit. Every option from the `Qleverfile` can also be set (and
 overridden) via a command-line option with the same name, see `qlever <command>
---help`.
+--help`. A detailed explanation of all `Qleverfile` options may also be found at <https://docs.qlever.dev/qleverfile/>. 
 
 
 # Using QLever without the `qlever` CLI
@@ -84,14 +84,11 @@ client-server setup but running it in-process inside your own C++ program.
 See https://github.com/ad-freiburg/qlever/pull/2100 for details and a link to a
 small example program.
 
-# Wiki and older documentation
+# Documentation
 
-The [Qlever Wiki](https://github.com/ad-freiburg/qlever/wiki) provides
-high-level descriptions of how Qlever works, as well as performance evaluations,
+QLever's main documentation can be browsed at [docs.qlever.dev](https://docs.qlever.dev/) ([GitHub repository](https://github.com/qlever-dev/qlever-docs)). In particular, it explains the set up of QLever as well as its advanced features. 
+However, for the RDF/SPARQL specialist not interested in additional features, the self-documenting `qlever` CLI should be sufficient already.
+
+Furthermore, the [Qlever Wiki](https://github.com/ad-freiburg/qlever/wiki) provides
+high-level descriptions of how Qlever works internally, as well as performance evaluations,
 experiences with some concrete datasets, and further details.
-
-There is quite a bit of additional documentation in the [docs](docs) folder of
-this repository. The documents in that folder are not well maintained and may
-be outdated. We are currently working on an own `qlever-docs` repository that
-will provide extensive documentation and tutorials. However, for the RDF/SPARQL
-specialist, the self-documenting `qlever` CLI should be sufficient.
