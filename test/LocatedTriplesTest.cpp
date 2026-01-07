@@ -895,7 +895,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
     // The automatically added metadata for the last block also has the correct
     // block index and number of columns, so we have to properly initialize it.
     expectedAugmentedMetadata.back().blockIndex_ = 2;
-    expectedAugmentedMetadata.back().offsetsAndCompressedSize_.resize(4,
+    expectedAugmentedMetadata.back().offsetsAndCompressedSize_.resize(6,
                                                                       {0, 0});
 
     // All the blocks have updates, so their value of `containsDuplicates..` is
