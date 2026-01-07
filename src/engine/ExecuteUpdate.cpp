@@ -24,7 +24,6 @@ UpdateMetadata ExecuteUpdate::executeUpdate(
 
   // "The deletion of the triples happens before the insertion." (SPARQL 1.1
   // Update 3.1.3)
-  ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
   tracer.beginTrace("deleteTriples");
   if (!toDelete.idTriples_.empty()) {
     deltaTriples.deleteTriples(cancellationHandle,
@@ -32,7 +31,6 @@ UpdateMetadata ExecuteUpdate::executeUpdate(
   }
   tracer.endTrace("deleteTriples");
   tracer.beginTrace("insertTriples");
-  timer.start();
   if (!toInsert.idTriples_.empty()) {
     deltaTriples.insertTriples(cancellationHandle,
                                std::move(toInsert.idTriples_), tracer);

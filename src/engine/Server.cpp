@@ -1147,10 +1147,12 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                 // only updated automatically at the end of modify. Updates with
                 // non-empty graph patterns need the augmented metadata. Update
                 // the augmented metadata before executing those updates.
+                tracer.beginTrace("updateMetadata");
                 if (i != 0 &&
                     !update._rootGraphPattern._graphPatterns.empty()) {
                   deltaTriples.updateAugmentedMetadata();
                 }
+                tracer.endTrace("updateMetadata");
                 tracer.beginTrace("planning");
                 plannedUpdate = planQuery(std::move(update), requestTimer,
                                           timeLimit, qec, cancellationHandle);
