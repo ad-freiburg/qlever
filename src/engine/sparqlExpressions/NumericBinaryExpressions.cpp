@@ -40,8 +40,43 @@ NARY_EXPRESSION(DivideExpressionByZeroIsNan, 2,
 using Add = MakeNumericExpression<std::plus<>>;
 NARY_EXPRESSION(AddExpression, 2, FV<Add, NumericValueGetter>);
 
-using Subtract = MakeNumericExpression<std::minus<>>;
-NARY_EXPRESSION(SubtractExpression, 2, FV<Subtract, NumericValueGetter>);
+// using Subtract = MakeNumericExpression<std::minus<>>;
+// NARY_EXPRESSION(SubtractExpression, 2, FV<Subtract, NumericValueGetter>);
+// _____________________________________________________________________________
+// Subtract.
+struct SubtractImpl {
+  template <typename L, typename R>
+  NumericOrDate operator()(L lhs, R rhs) const {
+    using T1 = std::decay_t<decltype(lhs)>;
+    using T2 = std::decay_t<decltype(rhs)>;
+
+    if constexpr (std::is_same_v<T1, double>) {
+      if constexpr (std::is_same_v<T2, double>) {
+        return NumericOrDate{lhs - rhs};
+      } else if constexpr (std::is_same_v<T2, int64_t>) {
+        return NumericOrDate{lhs - static_cast<double>(rhs)};
+      }
+    } else if constexpr (std::is_same_v<T1, int64_t>) {
+      if constexpr (std::is_same_v<T2, double>) {
+        return NumericOrDate{static_cast<double>(lhs) - rhs};
+      } else if constexpr (std::is_same_v<T2, int64_t>) {
+        return NumericOrDate{lhs - rhs};
+      }
+    } else if constexpr (std::is_same_v<T1, DateYearOrDuration> &&
+                         std::is_same_v<T2, DateYearOrDuration>) {
+      // Using - operator implementation in DateYearOrDuration.
+      return NumericOrDate{lhs - rhs};
+    }
+    // For all other operations returning notNumeric
+    return NumericOrDate{NotNumeric{}};
+    // TODO: NotNumeric ??
+    // It is not allowed to use subtractionn between Date and NumericValue
+    // assert(std::is_same<T1, T2>::value, "Unsupported Operation");
+  }
+};
+// TODO: MakeNumericOrDateExpression
+using Subtract = MakeNumericOrDateExpression<SubtractImpl>;
+NARY_EXPRESSION(SubtractExpression, 2, FV<Subtract, NumericOrDateGetter>);
 
 // _____________________________________________________________________________
 // Power.
