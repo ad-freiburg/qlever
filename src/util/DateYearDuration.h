@@ -210,7 +210,8 @@ class DateYearOrDuration {
   //____________________________________________________________________________
   // Subtraction of two DateYearOrDuration Objects.
   // Result should be used (nodiscard).
-  [[nodiscard]] DateYearOrDuration operator-(const DateYearOrDuration& rhs);
+  [[nodiscard]] DateYearOrDuration operator-(
+      const DateYearOrDuration& rhs) const;
 };
 #ifdef QLEVER_CPP_17
 static_assert(std::is_default_constructible_v<DateYearOrDuration>);

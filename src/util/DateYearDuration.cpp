@@ -344,7 +344,7 @@ std::optional<DateYearOrDuration> DateYearOrDuration::convertToXsdDate(
 
 // _____________________________________________________________________________
 DateYearOrDuration DateYearOrDuration::operator-(
-    const DateYearOrDuration& rhs) {
+    const DateYearOrDuration& rhs) const {
   // TODO: also support hours, minutes and seconds
   if (isDate() && rhs.isDate()) {
     // Date - Date = Duration | getting time between the two Dates
@@ -417,7 +417,9 @@ DateYearOrDuration DateYearOrDuration::operator-(
   }
 
   // no viable subtraction
-  throw std::invalid_argument("No Subtraction possible!");
+  else {
+    throw std::invalid_argument("No Subtraction possible!");
+  }
 
   /*
   if (getType() != rhs.getType()) {
