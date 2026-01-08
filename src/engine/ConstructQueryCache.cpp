@@ -10,23 +10,33 @@ using opt = std::optional<T>;
 // _____________________________________________________________________________
 
 // cache implementations _______________________________________________________
-//TODO<ms2144>: I dont quite understand what happens in the method body here.
+
+// use Variable name (variable names are unique in the CONSTRUCT-clause),
+// and row index of the WHERE-query-result, since the variable
+// value changes per row of the result-table.
+// NOTE: ^ = XOR, << = left bitshift
 size_t ConstructQueryCache::VariableKeyHash::operator()(const ConstructQueryCache::VariableKey& key) const {
-  return std::hash<std::string>{}(key.variable_.name()) ^
-         (std::hash<uint64_t>{}(key.rowIndex_) << 1);
+  return std::hash<std::string>{}(key.variable_.name()) ^ (std::hash<uint64_t>{}(key.rowIndex_) << 1);
 }
 
 
+// use Iri string repr (iri string repr names are unique in the CONSTRUCT-clause),
+// and reference to execution context object. Constants shouldn't vary per row,
+// but context might affect evaluation. (TODO<ms2144): do we really need the context here?)
+// NOTE: ^ = XOR, << = left bitshift
 size_t ConstructQueryCache::IriKeyHash::operator()(const IriKey& key) const {
-  return std::hash<std::string>{}(key.iri_.iri()) ^
-         (std::hash<const ConstructQueryExportContext*>{}(&key.context_.get()) << 1);
+  return std::hash<std::string>{}(key.iri_.iri());
 }
 
+// use Literalstring repr,
+// and reference to execution context object. Constants shouldn't vary per row,
+// but context might affect evaluation. (TODO<ms2144): do we really need the context here?)
+// NOTE: ^ = XOR, << = left bitshift
 size_t ConstructQueryCache::LiteralKeyHash::operator()(const LiteralKey& key) const {
-  return std::hash<std::string>{}(key.literal_.literal()) ^
-  (std::hash<const ConstructQueryExportContext*>{}(&key.context_.get()) << 1);
+  return std::hash<std::string>{}(key.literal_.literal());
 }
 
+// NOTE: ^ = XOR, << = left bitshift
 size_t ConstructQueryCache::BlankNodeKeyHash::operator()(const BlankNodeKey& key) const {
   return std::hash<std::string>{}(key.blankNode_.label()) ^
          (std::hash<const ConstructQueryExportContext*>{}(&key.context_.get()) << 1);
