@@ -9,11 +9,11 @@
 #include <string_view>
 
 #include "global/Pattern.h"
-#include "index/CompressedString.h"
 #include "index/StringSortComparator.h"
 #include "index/vocabulary/VocabularyBinarySearchMixin.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/Exception.h"
+#include "util/Serializer/Serializer.h"
 
 //! A vocabulary. Wraps a `CompactVectorOfStrings<char>`
 //! and provides additional methods for reading and writing to/from file,
@@ -43,10 +43,10 @@ class VocabularyInMemory
 
   /// Read the vocabulary from a file. The file must have been created by a call
   /// to `writeToFile` or using a `WordWriter`.
-  void open(const string& fileName);
+  void open(const std::string& fileName);
 
   /// Write the vocabulary to a file.
-  void writeToFile(const string& fileName) const;
+  void writeToFile(const std::string& fileName) const;
 
   /// Return the total number of words
   [[nodiscard]] size_t size() const { return _words.size(); }
@@ -103,6 +103,9 @@ class VocabularyInMemory
   // Const access to the underlying words.
   auto begin() const { return _words.begin(); }
   auto end() const { return _words.end(); }
+
+  // Generic serialization support.
+  AD_SERIALIZE_FRIEND_FUNCTION(VocabularyInMemory) { serializer | arg._words; }
 };
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORY_H

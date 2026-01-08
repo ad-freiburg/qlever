@@ -6,8 +6,9 @@
 
 #include <absl/strings/str_split.h>
 
+#include "backports/StartsWithAndEndsWith.h"
 #include "parser/MagicServiceIriConstants.h"
-#include "util/http/HttpParser/AcceptHeaderQleverVisitor.h"
+#include "parser/SparqlTriple.h"
 
 // ____________________________________________________________________________
 std::ostream& operator<<(std::ostream& os,
@@ -217,6 +218,14 @@ void TextSearchQuery::addParameter(const SparqlTriple& triple) {
 }
 
 // ____________________________________________________________________________
+void TextSearchQuery::addGraph(
+    [[maybe_unused]] const GraphPatternOperation& childGraphPattern) {
+  throw TextSearchException{
+      "nested group graph patterns are not supported in the body of a `text "
+      "search query`, only plain triples that specify the configuration"};
+}
+
+// ____________________________________________________________________________
 std::vector<std::variant<TextIndexScanForWordConfiguration,
                          TextIndexScanForEntityConfiguration>>
 TextSearchQuery::toConfigs(const QueryExecutionContext* qec) const {
@@ -224,8 +233,9 @@ TextSearchQuery::toConfigs(const QueryExecutionContext* qec) const {
                            TextIndexScanForEntityConfiguration>>
       output;
   // First pass to get all word searches
-  ad_utility::HashMap<Variable, vector<string>> potentialTermsForTextVar;
-  ad_utility::HashMap<Variable, string> optTermForTextVar;
+  ad_utility::HashMap<Variable, std::vector<std::string>>
+      potentialTermsForTextVar;
+  ad_utility::HashMap<Variable, std::string> optTermForTextVar;
   for (const auto& [var, conf] : configVarToConfigs_) {
     if (!conf.isWordSearch_.has_value()) {
       throw TextSearchException(absl::StrCat(
@@ -261,7 +271,8 @@ TextSearchQuery::toConfigs(const QueryExecutionContext* qec) const {
           "The config variable was: ", var.name()));
     }
     if (conf.isWordSearch_.value()) {
-      if (conf.matchVar_.has_value() && !conf.word_.value().ends_with("*")) {
+      if (conf.matchVar_.has_value() &&
+          !ql::ends_with(conf.word_.value(), "*")) {
         throw TextSearchException(
             absl::StrCat("The text search config shouldn't define a variable "
                          "for the prefix match column if the word isn't a "

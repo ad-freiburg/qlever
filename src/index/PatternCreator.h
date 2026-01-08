@@ -130,7 +130,7 @@ class PatternCreator {
 
  public:
   // The patterns will be written to files starting with `basename`.
-  explicit PatternCreator(const string& basename, Id idOfHasPattern,
+  explicit PatternCreator(const std::string& basename, Id idOfHasPattern,
                           ad_utility::MemorySize memoryLimit)
       : filename_{basename},
         patternSerializer_{{basename}},
@@ -143,7 +143,7 @@ class PatternCreator {
                 basename + ".second-sorter.dat", memoryLimit / 2,
                 ad_utility::makeUnlimitedAllocator<Id>())},
         idOfHasPattern_{idOfHasPattern} {
-    LOG(DEBUG) << "Computing predicate patterns ..." << std::endl;
+    AD_LOG_DEBUG << "Computing predicate patterns ..." << std::endl;
   }
 
   // This function has to be called for all the triples in the SPO permutation

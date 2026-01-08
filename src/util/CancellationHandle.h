@@ -12,8 +12,8 @@
 #include <condition_variable>
 #include <exception>
 #include <mutex>
-#include <type_traits>
 
+#include "backports/type_traits.h"
 #include "global/Constants.h"
 #include "util/CompilerExtensions.h"
 #include "util/Exception.h"
@@ -178,18 +178,18 @@ class CancellationHandle {
               state, CancellationState::NOT_CANCELLED,
               std::memory_order_relaxed)) {
         if (windowMissed) {
-          LOG(WARN) << "No timeout check has been performed for at least "
-                    << ParseableDuration{duration_cast<DurationType>(
-                                             steady_clock::now() -
-                                             startTimeoutWindow_.load()) +
-                                         DESIRED_CANCELLATION_CHECK_INTERVAL}
-                    << ", should be at most "
-                    << ParseableDuration{DESIRED_CANCELLATION_CHECK_INTERVAL}
-                    << ". Checked at " << trimFileName(location.file_name())
-                    << ":" << location.line()
-                    << detail::printAdditionalDetails(
-                           std::invoke(stageInvocable))
-                    << std::endl;
+          AD_LOG_WARN
+              << "No timeout check has been performed for at least "
+              << ParseableDuration{std::chrono::duration_cast<DurationType>(
+                                       steady_clock::now() -
+                                       startTimeoutWindow_.load()) +
+                                   DESIRED_CANCELLATION_CHECK_INTERVAL}
+              << ", should be at most "
+              << ParseableDuration{DESIRED_CANCELLATION_CHECK_INTERVAL}
+              << ". Checked at " << trimFileName(location.file_name()) << ":"
+              << location.line()
+              << detail::printAdditionalDetails(std::invoke(stageInvocable))
+              << std::endl;
         }
         break;
       }
@@ -222,12 +222,11 @@ class CancellationHandle {
   /// if this check is not called frequently enough. It will contain the
   /// filename and line of the caller of this method.
   CPP_template(typename Func = decltype(detail::printNothing))(
-      requires ad_utility::InvocableWithConvertibleReturnType<Func,
-                                                              std::string_view>)
-      AD_ALWAYS_INLINE void throwIfCancelled(
-          [[maybe_unused]] ad_utility::source_location location =
-              ad_utility::source_location::current(),
-          const Func& stageInvocable = detail::printNothing) {
+      requires ad_utility::InvocableWithConvertibleReturnType<
+          Func, std::string_view>) AD_ALWAYS_INLINE
+      void throwIfCancelled([[maybe_unused]] ad_utility::source_location
+                                location = AD_CURRENT_SOURCE_LOC(),
+                            const Func& stageInvocable = detail::printNothing) {
     if constexpr (CancellationEnabled) {
       auto state = cancellationState_.load(std::memory_order_relaxed);
       if (state == CancellationState::NOT_CANCELLED) [[likely]] {
@@ -248,9 +247,8 @@ class CancellationHandle {
   /// value with relaxed memory ordering, as this may lead to out-of-thin-air
   /// values. If the watchdog is enabled, this will please it and print
   /// a warning with the filename and line of the caller.
-  AD_ALWAYS_INLINE bool isCancelled(
-      [[maybe_unused]] ad_utility::source_location location =
-          ad_utility::source_location::current()) {
+  AD_ALWAYS_INLINE bool isCancelled([[maybe_unused]] ad_utility::source_location
+                                        location = AD_CURRENT_SOURCE_LOC()) {
     if constexpr (CancellationEnabled) {
       auto state = cancellationState_.load(std::memory_order_relaxed);
       bool isCancelled = detail::isCancelled(state);

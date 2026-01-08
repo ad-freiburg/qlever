@@ -1,38 +1,28 @@
-// Copyright 2011 - 2024
+// Copyright 2011 - 2025
 // University of Freiburg
 // Chair of Algorithms and Data Structures
 //
 // Authors: Björn Buchhold <buchhold@gmail.com>
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_H
 
 #include <cassert>
-#include <fstream>
-#include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
 
-#include "backports/algorithm.h"
-#include "global/Constants.h"
-#include "global/Id.h"
-#include "global/Pattern.h"
+#include "backports/three_way_comparison.h"
 #include "index/StringSortComparator.h"
-#include "index/vocabulary/CompressedVocabulary.h"
-#include "index/vocabulary/PolymorphicVocabulary.h"
 #include "index/vocabulary/UnicodeVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
+#include "rdfTypes/GeometryInfo.h"
 #include "util/Exception.h"
-#include "util/HashMap.h"
 #include "util/HashSet.h"
-#include "util/Log.h"
-
-using std::string;
-using std::vector;
 
 template <typename IndexT = WordVocabIndex>
 class IdRange {
@@ -80,8 +70,9 @@ class Vocabulary {
     PrefixRanges() = default;
     explicit PrefixRanges(const Ranges& ranges);
     const Ranges& ranges() const { return ranges_; }
-    bool operator==(const PrefixRanges& ranges) const = default;
     bool contain(IndexT index) const;
+
+    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(PrefixRanges, ranges_)
   };
 
  private:
@@ -94,8 +85,8 @@ class Vocabulary {
   //
   // NOTE: Qlever-internal prefixes are currently always internalized, no matter
   // how `internalizedLangs_` and `externalizedPrefixes_` are set.
-  vector<std::string> internalizedLangs_;
-  vector<std::string> externalizedPrefixes_{""};
+  std::vector<std::string> internalizedLangs_;
+  std::vector<std::string> externalizedPrefixes_{""};
 
   using VocabularyWithUnicodeComparator =
       UnicodeVocabulary<UnderlyingVocabulary, ComparatorType>;
@@ -122,7 +113,7 @@ class Vocabulary {
   virtual ~Vocabulary() = default;
 
   //! Read the vocabulary from file.
-  void readFromFile(const string& fileName);
+  void readFromFile(const std::string& filename);
 
   // Get the word with the given `idx`. Throw if the `idx` is not contained
   // in the vocabulary.
@@ -131,9 +122,27 @@ class Vocabulary {
   //! Get the number of words in the vocabulary.
   [[nodiscard]] size_t size() const { return vocabulary_.size(); }
 
-  //! Get an Id from the vocabulary for some "normal" word.
-  //! Return value signals if something was found at all.
+  // Get an Id from the vocabulary for some full word (not prefix of a word).
+  // Return a boolean value that signals if the word was found. If the word was
+  // not found, the lower bound for the word is stored in idx, otherwise the
+  // index of the word.
   bool getId(std::string_view word, IndexType* idx) const;
+
+  // Retrieves a precomputed `GeometryInfo` object from the (possibly)
+  // underlying `GeoVocabulary`. This function returns a `GeometryInfo` object
+  // if and only if a `GeoVocabulary` is used and the given index points to a
+  // valid geometry in this `GeoVocabulary`. In all other cases, `std::nullopt`
+  // is returned.
+  std::optional<ad_utility::GeometryInfo> getGeoInfo(IndexType idx) const;
+
+  // This function determines if precomputed `GeometryInfo` is available for
+  // this vocabulary. More specifically, `isGeoInfoAvailable` returns `true` if
+  // there is an underlying `GeoVocabulary` such that `getGeoInfo` will return a
+  // `GeometryInfo` object for all indices pointing to valid geometries in the
+  // `GeoVocabulary`. If this function returns `false`, `getGeoInfo` will return
+  // `std::nullopt` for any input, because no precomputed `GeometryInfo` is
+  // available.
+  bool isGeoInfoAvailable() const;
 
   // Get the index range for the given prefix or `std::nullopt` if no word with
   // the given prefix exists in the vocabulary.
@@ -146,7 +155,7 @@ class Vocabulary {
   // which is OK because for the text index, the external vocabulary is always
   // empty.
   std::optional<IdRange<IndexType>> getIdRangeForFullTextPrefix(
-      const string& word) const;
+      const std::string& word) const;
 
   // only used during Index building, not needed for compressed vocabulary
   void createFromSet(const ad_utility::HashSet<std::string>& set,
@@ -165,7 +174,7 @@ class Vocabulary {
 
   bool shouldLiteralBeExternalized(std::string_view word) const;
 
-  static string_view getLanguage(std::string_view literal);
+  static std::string_view getLanguage(std::string_view literal);
 
   // set the list of prefixes for words which will become part of the
   // externalized vocabulary. Good for entity names that normally don't appear
@@ -206,8 +215,14 @@ class Vocabulary {
                         const SortLevel level = SortLevel::QUARTERNARY) const;
 
   // _______________________________________________________________
-  IndexType upper_bound(const string& word,
+  IndexType upper_bound(const std::string& word,
                         SortLevel level = SortLevel::QUARTERNARY) const;
+
+  // The position where a word is stored or would be stored if it does not
+  // exist. Unlike `lower_bound` and `upper_bound`, this function works with
+  // full words, not prefixes. Currently used for `LocalVocabEntry`.
+  std::pair<IndexType, IndexType> getPositionOfWord(
+      std::string_view word) const;
 
   // Get a writer for the vocab that has an `operator()` method to
   // which the single words + the information whether they shall be cached in

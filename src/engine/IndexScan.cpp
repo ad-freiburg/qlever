@@ -9,16 +9,20 @@
 
 #include <sstream>
 #include <string>
+#include <utility>
 
+#include "engine/QueryExecutionTree.h"
 #include "index/IndexImpl.h"
 #include "parser/ParsedQuery.h"
+#include "util/InputRangeUtils.h"
+#include "util/Iterators.h"
 
 using std::string;
 using LazyScanMetadata = CompressedRelationReader::LazyScanMetadata;
 
 // _____________________________________________________________________________
 // Return the number of `Variables` given the `TripleComponent` values for
-// `subject_`, `prediate` and `object`.
+// `subject_`, `predicate` and `object`.
 static size_t getNumberOfVariables(const TripleComponent& subject,
                                    const TripleComponent& predicate,
                                    const TripleComponent& object) {
@@ -28,17 +32,26 @@ static size_t getNumberOfVariables(const TripleComponent& subject,
 }
 
 // _____________________________________________________________________________
-IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
+IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
+                     LocatedTriplesSharedState locatedTriplesSharedState,
                      const SparqlTripleSimple& triple, Graphs graphsToFilter,
-                     PrefilterIndexPair prefilter)
+                     std::optional<ScanSpecAndBlocks> scanSpecAndBlocks,
+                     VarsToKeep varsToKeep)
     : Operation(qec),
-      permutation_(permutation),
+      permutation_(std::move(permutation)),
+      locatedTriplesSharedState_(std::move(locatedTriplesSharedState)),
       subject_(triple.s_),
       predicate_(triple.p_),
       object_(triple.o_),
       graphsToFilter_{std::move(graphsToFilter)},
-      prefilter_{std::move(prefilter)},
-      numVariables_(getNumberOfVariables(subject_, predicate_, object_)) {
+      scanSpecAndBlocks_{
+          std::move(scanSpecAndBlocks).value_or(getScanSpecAndBlocks())},
+      scanSpecAndBlocksIsPrefiltered_{scanSpecAndBlocks.has_value()},
+      numVariables_(getNumberOfVariables(subject_, predicate_, object_)),
+      varsToKeep_(std::move(varsToKeep)) {
+  AD_CONTRACT_CHECK(permutation_ != nullptr);
+  AD_CONTRACT_CHECK(locatedTriplesSharedState_ != nullptr);
+
   // We previously had `nullptr`s here in unit tests. This is no longer
   // necessary nor allowed.
   AD_CONTRACT_CHECK(qec != nullptr);
@@ -62,22 +75,40 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
 }
 
 // _____________________________________________________________________________
-IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
+IndexScan::IndexScan(QueryExecutionContext* qec,
+                     Permutation::Enum permutationType,
+                     const SparqlTripleSimple& triple, Graphs graphsToFilter,
+                     std::optional<ScanSpecAndBlocks> scanSpecAndBlocks)
+    : IndexScan(qec,
+                qec->getIndex().getImpl().getPermutationPtr(permutationType),
+                qec->locatedTriplesSharedState(), triple,
+                std::move(graphsToFilter), std::move(scanSpecAndBlocks)) {}
+
+// _____________________________________________________________________________
+IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
+                     LocatedTriplesSharedState locatedTriplesSharedState,
                      const TripleComponent& s, const TripleComponent& p,
                      const TripleComponent& o,
                      std::vector<ColumnIndex> additionalColumns,
                      std::vector<Variable> additionalVariables,
-                     Graphs graphsToFilter, PrefilterIndexPair prefilter)
+                     Graphs graphsToFilter, ScanSpecAndBlocks scanSpecAndBlocks,
+                     bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep)
     : Operation(qec),
-      permutation_(permutation),
+      permutation_(std::move(permutation)),
+      locatedTriplesSharedState_(std::move(locatedTriplesSharedState)),
       subject_(s),
       predicate_(p),
       object_(o),
       graphsToFilter_(std::move(graphsToFilter)),
-      prefilter_(std::move(prefilter)),
+      scanSpecAndBlocks_(std::move(scanSpecAndBlocks)),
+      scanSpecAndBlocksIsPrefiltered_(scanSpecAndBlocksIsPrefiltered),
       numVariables_(getNumberOfVariables(subject_, predicate_, object_)),
       additionalColumns_(std::move(additionalColumns)),
-      additionalVariables_(std::move(additionalVariables)) {
+      additionalVariables_(std::move(additionalVariables)),
+      varsToKeep_{std::move(varsToKeep)} {
+  AD_CONTRACT_CHECK(qec != nullptr);
+  AD_CONTRACT_CHECK(permutation_ != nullptr);
+  AD_CONTRACT_CHECK(locatedTriplesSharedState_ != nullptr);
   std::tie(sizeEstimateIsExact_, sizeEstimate_) = computeSizeEstimate();
   determineMultiplicities();
 }
@@ -85,7 +116,8 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
 // _____________________________________________________________________________
 string IndexScan::getCacheKeyImpl() const {
   std::ostringstream os;
-  auto permutationString = Permutation::toString(permutation_);
+  // This string only represents the type of permutation, like "SPO".
+  auto permutationString = permutation().readableName();
 
   if (numVariables_ == 3) {
     os << "SCAN FOR FULL INDEX " << permutationString;
@@ -102,42 +134,45 @@ string IndexScan::getCacheKeyImpl() const {
       os << ", ";
     }
   }
+  // This is important to distinguish special from regular permutations.
+  os << " on index " << permutation().onDiskBase();
   if (!additionalColumns_.empty()) {
     os << " Additional Columns: ";
     os << absl::StrJoin(additionalColumns(), " ");
   }
-  if (graphsToFilter_.has_value()) {
-    // The graphs are stored as a hash set, but we need a deterministic order.
-    std::vector<std::string> graphIdVec;
-    ql::ranges::transform(graphsToFilter_.value(),
-                          std::back_inserter(graphIdVec),
-                          &TripleComponent::toRdfLiteral);
-    ql::ranges::sort(graphIdVec);
-    os << "\nFiltered by Graphs:";
-    os << absl::StrJoin(graphIdVec, " ");
-  }
-  if (prefilter_.has_value()) {
-    auto& [prefilterExpr, columnIdx] = prefilter_.value();
-    os << "Added PrefiterExpression: \n";
-    os << *prefilterExpr;
-    os << "\nApplied on column: " << columnIdx << ".";
+
+  os << " ";
+  graphsToFilter_.format(os, &TripleComponent::toRdfLiteral);
+
+  if (varsToKeep_.has_value()) {
+    os << " column subset "
+       << absl::StrJoin(getSubsetForStrippedColumns(), ",");
   }
   return std::move(os).str();
 }
 
 // _____________________________________________________________________________
+bool IndexScan::canResultBeCachedImpl() const {
+  return !scanSpecAndBlocksIsPrefiltered_;
+};
+
+// _____________________________________________________________________________
 string IndexScan::getDescriptor() const {
-  return "IndexScan " + subject_.toString() + " " + predicate_.toString() +
-         " " + object_.toString();
+  return absl::StrCat("IndexScan ", permutation().readableName(), " ",
+                      subject_.toString(), " ", predicate_.toString(), " ",
+                      object_.toString());
 }
 
 // _____________________________________________________________________________
 size_t IndexScan::getResultWidth() const {
+  if (varsToKeep_.has_value()) {
+    return varsToKeep_.value().size();
+  }
   return numVariables_ + additionalVariables_.size();
 }
 
 // _____________________________________________________________________________
-vector<ColumnIndex> IndexScan::resultSortedOn() const {
+std::vector<ColumnIndex> IndexScan::resultSortedOn() const {
   std::vector<ColumnIndex> result;
   for (auto i : ad_utility::integerRange(ColumnIndex{numVariables_})) {
     result.push_back(i);
@@ -147,6 +182,16 @@ vector<ColumnIndex> IndexScan::resultSortedOn() const {
       result.push_back(numVariables_ + i);
     }
   }
+
+  if (varsToKeep_.has_value()) {
+    auto permutation = getSubsetForStrippedColumns();
+    for (auto it = result.begin(); it != result.end(); ++it) {
+      if (!ad_utility::contains(permutation, *it)) {
+        result.erase(it, result.end());
+        return result;
+      }
+    }
+  }
   return result;
 }
 
@@ -154,17 +199,34 @@ vector<ColumnIndex> IndexScan::resultSortedOn() const {
 std::optional<std::shared_ptr<QueryExecutionTree>>
 IndexScan::setPrefilterGetUpdatedQueryExecutionTree(
     const std::vector<PrefilterVariablePair>& prefilterVariablePairs) const {
+  if (!getLimitOffset().isUnconstrained() ||
+      scanSpecAndBlocks_.sizeBlockMetadata_ == 0) {
+    return std::nullopt;
+  }
+
   auto optSortedVarColIdxPair =
       getSortedVariableAndMetadataColumnIndexForPrefiltering();
   if (!optSortedVarColIdxPair.has_value()) {
     return std::nullopt;
   }
+
   const auto& [sortedVar, colIdx] = optSortedVarColIdxPair.value();
   auto it =
       ql::ranges::find(prefilterVariablePairs, sortedVar, ad_utility::second);
   if (it != prefilterVariablePairs.end()) {
-    return makeCopyWithAddedPrefilters(
-        std::make_pair(it->first->clone(), colIdx));
+    const auto& vocab = getIndex().getVocab();
+    // If the `BlockMetadataRanges` were previously prefiltered, AND-merge
+    // the previous `BlockMetadataRanges` with the `BlockMetadataRanges`
+    // retrieved via the newly passed prefilter. This corresponds logically to a
+    // conjunction over the prefilters applied for this `IndexScan`.
+    const auto& blockMetadataRanges =
+        prefilterExpressions::detail::logicalOps::getIntersectionOfBlockRanges(
+            it->first->evaluate(
+                vocab, getScanSpecAndBlocks().getBlockMetadataSpan(), colIdx),
+            scanSpecAndBlocks_.blockMetadata_);
+
+    return makeCopyWithPrefilteredScanSpecAndBlocks(
+        {scanSpecAndBlocks_.scanSpec_, blockMetadataRanges});
   }
   return std::nullopt;
 }
@@ -172,8 +234,14 @@ IndexScan::setPrefilterGetUpdatedQueryExecutionTree(
 // _____________________________________________________________________________
 VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
   VariableToColumnMap variableToColumnMap;
-  auto addCol = [&variableToColumnMap,
+  auto isContained = [&](const Variable& var) {
+    return !varsToKeep_.has_value() || varsToKeep_.value().contains(var);
+  };
+  auto addCol = [&isContained, &variableToColumnMap,
                  nextColIdx = ColumnIndex{0}](const Variable& var) mutable {
+    if (!isContained(var)) {
+      return;
+    }
     // All the columns of an index scan only contain defined values.
     variableToColumnMap[var] = makeAlwaysDefinedColumn(nextColIdx);
     ++nextColIdx;
@@ -189,44 +257,38 @@ VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
 }
 
 //______________________________________________________________________________
-std::shared_ptr<QueryExecutionTree> IndexScan::makeCopyWithAddedPrefilters(
-    PrefilterIndexPair prefilter) const {
+std::shared_ptr<QueryExecutionTree>
+IndexScan::makeCopyWithPrefilteredScanSpecAndBlocks(
+    ScanSpecAndBlocks scanSpecAndBlocks) const {
   return ad_utility::makeExecutionTree<IndexScan>(
-      getExecutionContext(), permutation_, subject_, predicate_, object_,
-      additionalColumns_, additionalVariables_, graphsToFilter_,
-      std::move(prefilter));
+      getExecutionContext(), permutation_, locatedTriplesSharedState_, subject_,
+      predicate_, object_, additionalColumns_, additionalVariables_,
+      graphsToFilter_, std::move(scanSpecAndBlocks), true, varsToKeep_);
 }
 
 // _____________________________________________________________________________
-Result::Generator IndexScan::chunkedIndexScan() const {
-  auto optBlockMetadata = getBlockMetadata();
-  if (!optBlockMetadata.has_value()) {
-    co_return;
-  }
-  const auto& blockMetadata = optBlockMetadata.value();
-  // Note: Given a `PrefilterIndexPair` is available, the corresponding
-  // prefiltering will be applied in `getLazyScan`.
-  for (IdTable& idTable :
-       getLazyScan({blockMetadata.begin(), blockMetadata.end()})) {
-    co_yield {std::move(idTable), LocalVocab{}};
-  }
+Result::LazyResult IndexScan::chunkedIndexScan() const {
+  return Result::LazyResult{
+      ad_utility::CachingTransformInputRange(getLazyScan(), [](auto& table) {
+        return Result::IdTableVocabPair{std::move(table), LocalVocab{}};
+      })};
 }
 
 // _____________________________________________________________________________
 IdTable IndexScan::materializedIndexScan() const {
-  IdTable idTable = getScanPermutation().scan(
-      getScanSpecification(), additionalColumns(), cancellationHandle_,
-      locatedTriplesSnapshot(), getLimitOffset(),
-      getBlockMetadataOptionallyPrefiltered());
-  AD_CORRECTNESS_CHECK(idTable.numColumns() == getResultWidth());
-  LOG(DEBUG) << "IndexScan result computation done.\n";
+  IdTable idTable = permutation().scan(scanSpecAndBlocks_, additionalColumns(),
+                                       cancellationHandle_,
+                                       locatedTriplesState(), getLimitOffset());
+  AD_LOG_DEBUG << "IndexScan result computation done.\n";
   checkCancellation();
+  idTable = makeApplyColumnSubset()(std::move(idTable));
+  AD_CORRECTNESS_CHECK(idTable.numColumns() == getResultWidth());
   return idTable;
 }
 
 // _____________________________________________________________________________
 Result IndexScan::computeResult(bool requestLaziness) {
-  LOG(DEBUG) << "IndexScan result computation...\n";
+  AD_LOG_DEBUG << "IndexScan result computation...\n";
   if (requestLaziness) {
     return {chunkedIndexScan(), resultSortedOn()};
   }
@@ -234,25 +296,31 @@ Result IndexScan::computeResult(bool requestLaziness) {
 }
 
 // _____________________________________________________________________________
-const Permutation& IndexScan::getScanPermutation() const {
-  return getIndex().getImpl().getPermutation(permutation_);
+const Permutation& IndexScan::permutation() const {
+  AD_CONTRACT_CHECK(permutation_ != nullptr);
+  return *permutation_;
+}
+
+// _____________________________________________________________________________
+const LocatedTriplesState& IndexScan::locatedTriplesState() const {
+  AD_CONTRACT_CHECK(locatedTriplesSharedState_ != nullptr);
+  return *locatedTriplesSharedState_;
 }
 
 // _____________________________________________________________________________
 std::pair<bool, size_t> IndexScan::computeSizeEstimate() const {
   AD_CORRECTNESS_CHECK(_executionContext);
-  auto [lower, upper] = getScanPermutation().getSizeEstimateForScan(
-      getScanSpecification(), locatedTriplesSnapshot(),
-      getBlockMetadataOptionallyPrefiltered());
-  return {lower == upper, std::midpoint(lower, upper)};
+  auto [lower, upper] = permutation().getSizeEstimateForScan(
+      scanSpecAndBlocks_, locatedTriplesState());
+  // NOTE: Starting from C++20 we could use `std::midpoint` here
+  return {lower == upper, lower + (upper - lower) / 2};
 }
 
 // _____________________________________________________________________________
 size_t IndexScan::getExactSize() const {
   AD_CORRECTNESS_CHECK(_executionContext);
-  return getScanPermutation().getResultSizeOfScan(
-      getScanSpecification(), locatedTriplesSnapshot(),
-      getBlockMetadataOptionallyPrefiltered());
+  return permutation().getResultSizeOfScan(scanSpecAndBlocks_,
+                                           locatedTriplesState());
 }
 
 // _____________________________________________________________________________
@@ -272,16 +340,21 @@ void IndexScan::determineMultiplicities() {
       // There are no duplicate triples in RDF and two elements are fixed.
       return {1.0f};
     } else if (numVariables_ == 2) {
-      return idx.getMultiplicities(*getPermutedTriple()[0], permutation_,
-                                   locatedTriplesSnapshot());
+      return idx.getMultiplicities(*getPermutedTriple()[0], permutation(),
+                                   locatedTriplesState());
     } else {
       AD_CORRECTNESS_CHECK(numVariables_ == 3);
-      return idx.getMultiplicities(permutation_);
+      return idx.getMultiplicities(permutation());
     }
   }();
-  for ([[maybe_unused]] size_t i :
-       ql::views::iota(multiplicity_.size(), getResultWidth())) {
-    multiplicity_.emplace_back(1);
+  multiplicity_.resize(multiplicity_.size() + additionalColumns_.size(), 1.0f);
+
+  if (varsToKeep_.has_value()) {
+    std::vector<float> actualMultiplicites;
+    for (size_t column : getSubsetForStrippedColumns()) {
+      actualMultiplicites.push_back(multiplicity_.at(column));
+    }
+    multiplicity_ = std::move(actualMultiplicites);
   }
   AD_CONTRACT_CHECK(multiplicity_.size() == getResultWidth());
 }
@@ -293,7 +366,7 @@ std::array<const TripleComponent* const, 3> IndexScan::getPermutedTriple()
                                                      &object_};
   // TODO<joka921> This place has to be changed once we have a permutation
   // that is primarily sorted by G (the graph id).
-  return Permutation::toKeyOrder(permutation_).permuteTriple(triple);
+  return permutation().keyOrder().permuteTriple(triple);
 }
 
 // _____________________________________________________________________________
@@ -322,73 +395,42 @@ IndexScan::getSortedVariableAndMetadataColumnIndexForPrefiltering() const {
   return std::make_pair(tripleComp->getVariable(), colIdx);
 }
 
-// _____________________________________________________________________________
-std::optional<ql::span<const CompressedBlockMetadata>>
-IndexScan::getBlockMetadata() const {
-  const auto& metadata = getMetadataForScan();
-  if (metadata.has_value()) {
-    return metadata.value().getBlockMetadataSpan();
-  }
-  return std::nullopt;
+// ___________________________________________________________________________
+Permutation::ScanSpecAndBlocks IndexScan::getScanSpecAndBlocks() const {
+  return permutation().getScanSpecAndBlocks(getScanSpecification(),
+                                            locatedTriplesState());
 }
 
 // _____________________________________________________________________________
-std::optional<std::vector<CompressedBlockMetadata>>
-IndexScan::getBlockMetadataOptionallyPrefiltered() const {
-  // The code after this is expensive because it always copies the complete
-  // block metadata, so we do an early return of `nullopt` (which means "use all
-  // the blocks") if no prefilter is specified.
-  if (!prefilter_.has_value()) {
-    return std::nullopt;
-  }
-  auto optBlockSpan = getBlockMetadata();
-  if (!optBlockSpan.has_value()) {
-    return std::nullopt;
-  }
-  return applyPrefilter(optBlockSpan.value());
-}
-
-// _____________________________________________________________________________
-std::vector<CompressedBlockMetadata> IndexScan::applyPrefilter(
-    ql::span<const CompressedBlockMetadata> blocks) const {
-  AD_CORRECTNESS_CHECK(prefilter_.has_value() &&
-                       getLimitOffset().isUnconstrained());
-  // Apply the prefilter on given blocks.
-  auto& [prefilterExpr, columnIndex] = prefilter_.value();
-  return prefilterExpr->evaluate(getIndex().getVocab(), blocks, columnIndex);
-}
-
-// _____________________________________________________________________________
-Permutation::IdTableGenerator IndexScan::getLazyScan(
-    std::vector<CompressedBlockMetadata> blocks) const {
+CompressedRelationReader::IdTableGeneratorInputRange IndexScan::getLazyScan(
+    std::optional<std::vector<CompressedBlockMetadata>> blocks) const {
   // If there is a LIMIT or OFFSET clause that constrains the scan
   // (which can happen with an explicit subquery), we cannot use the prefiltered
   // blocks, as we currently have no mechanism to include limits and offsets
   // into the prefiltering (`std::nullopt` means `scan all blocks`).
-  auto filteredBlocks = getLimitOffset().isUnconstrained()
-                            ? std::optional(std::move(blocks))
-                            : std::nullopt;
-  if (filteredBlocks.has_value() && prefilter_.has_value()) {
-    // Note: The prefilter expression applied with applyPrefilterIfPossible()
-    // is not related to the prefilter procedure mentioned in the comment above.
-    // If this IndexScan owns a <PrefilterExpression, ColumnIdx> pair, it can
-    // be applied.
-    filteredBlocks = applyPrefilter(filteredBlocks.value());
-  }
-  return getScanPermutation().lazyScan(
-      getScanSpecification(), filteredBlocks, additionalColumns(),
-      cancellationHandle_, locatedTriplesSnapshot(), getLimitOffset());
+  auto filteredBlocks =
+      getLimitOffset().isUnconstrained() ? std::move(blocks) : std::nullopt;
+  auto lazyScanAllCols = permutation().lazyScan(
+      scanSpecAndBlocks_, filteredBlocks, additionalColumns(),
+      cancellationHandle_, locatedTriplesState(), getLimitOffset());
+
+  return CompressedRelationReader::IdTableGeneratorInputRange{
+      ad_utility::CachingTransformInputRange<
+          ad_utility::OwningView<
+              CompressedRelationReader::IdTableGeneratorInputRange>,
+          decltype(makeApplyColumnSubset()), LazyScanMetadata>{
+          std::move(lazyScanAllCols), makeApplyColumnSubset()}};
 };
 
 // _____________________________________________________________________________
 std::optional<Permutation::MetadataAndBlocks> IndexScan::getMetadataForScan()
     const {
-  return getScanPermutation().getMetadataAndBlocks(getScanSpecification(),
-                                                   locatedTriplesSnapshot());
+  return permutation().getMetadataAndBlocks(scanSpecAndBlocks_,
+                                            locatedTriplesState());
 };
 
 // _____________________________________________________________________________
-std::array<Permutation::IdTableGenerator, 2>
+std::array<CompressedRelationReader::IdTableGeneratorInputRange, 2>
 IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
   AD_CONTRACT_CHECK(s1.numVariables_ <= 3 && s2.numVariables_ <= 3);
   AD_CONTRACT_CHECK(s1.numVariables_ >= 1 && s2.numVariables_ >= 1);
@@ -436,7 +478,8 @@ IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
 }
 
 // _____________________________________________________________________________
-Permutation::IdTableGenerator IndexScan::lazyScanForJoinOfColumnWithScan(
+CompressedRelationReader::IdTableGeneratorInputRange
+IndexScan::lazyScanForJoinOfColumnWithScan(
     ql::span<const Id> joinColumn) const {
   AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(joinColumn));
   AD_CORRECTNESS_CHECK(numVariables_ <= 3 && numVariables_ > 0);
@@ -448,16 +491,17 @@ Permutation::IdTableGenerator IndexScan::lazyScanForJoinOfColumnWithScan(
   }
   auto blocks = CompressedRelationReader::getBlocksForJoin(joinColumn,
                                                            metaBlocks.value());
-  auto result = getLazyScan(blocks);
+  auto result = getLazyScan(std::move(blocks.matchingBlocks_));
   result.details().numBlocksAll_ = metaBlocks.value().sizeBlockMetadata_;
   return result;
 }
 
 // _____________________________________________________________________________
-void IndexScan::updateRuntimeInfoForLazyScan(const LazyScanMetadata& metadata) {
-  updateRuntimeInformationWhenOptimizedOut(
-      RuntimeInformation::Status::lazilyMaterialized);
+void IndexScan::updateRuntimeInfoForLazyScan(
+    const LazyScanMetadata& metadata,
+    RuntimeInformation::SendPriority sendPriority) {
   auto& rti = runtimeInfo();
+  rti.status_ = RuntimeInformation::Status::lazilyMaterializedInProgress;
   rti.numRows_ = metadata.numElementsYielded_;
   rti.totalTime_ = metadata.blockingTime_;
   rti.addDetail("num-blocks-read", metadata.numBlocksRead_);
@@ -475,6 +519,7 @@ void IndexScan::updateRuntimeInfoForLazyScan(const LazyScanMetadata& metadata) {
   updateIfPositive(metadata.numBlocksPostprocessed_,
                    "num-blocks-postprocessed");
   updateIfPositive(metadata.numBlocksWithUpdate_, "num-blocks-with-update");
+  signalQueryUpdate(sendPriority);
 }
 
 // Store a Generator and its corresponding iterator as well as unconsumed values
@@ -495,8 +540,8 @@ struct IndexScan::SharedGeneratorState {
   PrefetchStorage prefetchedValues_{};
   // Metadata of blocks that still need to be read.
   std::vector<CompressedBlockMetadata> pendingBlocks_{};
-  // The index of the last matching block that was found using the join column.
-  std::optional<size_t> lastBlockIndex_ = std::nullopt;
+  // The join column entry in the last block that has already been fetched.
+  std::optional<Id> lastEntryInBlocks_ = std::nullopt;
   // Indicates if the generator has yielded any undefined values.
   bool hasUndef_ = false;
   // Indicates if the generator has been fully consumed.
@@ -513,10 +558,7 @@ struct IndexScan::SharedGeneratorState {
       iterator_ = generator_.begin();
     }
     auto& iterator = iterator_.value();
-    while (iterator != generator_.end()) {
-      if (!iterator->idTable_.empty()) {
-        break;
-      }
+    while (iterator != generator_.end() && iterator->idTable_.empty()) {
       ++iterator;
     }
     doneFetching_ = iterator_ == generator_.end();
@@ -546,24 +588,31 @@ struct IndexScan::SharedGeneratorState {
         return;
       }
       AD_CORRECTNESS_CHECK(!joinColumn[0].isUndefined());
-      auto newBlocks =
+      auto [newBlocks, numBlocksCompletelyHandled] =
           CompressedRelationReader::getBlocksForJoin(joinColumn, metaBlocks_);
-      if (newBlocks.empty()) {
-        // The current input table matches no blocks, so we don't have to yield
-        // it.
+      // The first `numBlocksCompletelyHandled` are either contained in
+      // `newBlocks` or can never match any entry that is larger than the
+      // entries in `joinColumn` and thus can be ignored from now on.
+      metaBlocks_.removePrefix(numBlocksCompletelyHandled);
+      if (!newBlocks.empty()) {
+        lastEntryInBlocks_ = CompressedRelationReader::getRelevantIdFromTriple(
+            newBlocks.back().lastTriple_, metaBlocks_);
+      } else if (joinColumn[0] >
+                 lastEntryInBlocks_.value_or(Id::makeUndefined())) {
+        if (metaBlocks_.blockMetadata_.empty()) {
+          // We have seen entries in the join column that are larger than the
+          // largest block in the index scan, which means that there will be no
+          // more matches.
+          doneFetching_ = true;
+          return;
+        }
+        // The current `joinColumn` has no matching block in the index, we can
+        // safely skip appending it to `prefetchedValues_`, but future values
+        // might require later blocks from the index.
         continue;
       }
       prefetchedValues_.push_back(std::move(*iterator_.value()));
-      // Find first value that differs from the last one that was used to find
-      // matching blocks.
-      auto startIterator =
-          lastBlockIndex_.has_value()
-              ? ql::ranges::upper_bound(newBlocks, lastBlockIndex_.value(), {},
-                                        &CompressedBlockMetadata::blockIndex_)
-              : newBlocks.begin();
-      lastBlockIndex_ = newBlocks.back().blockIndex_;
-      ql::ranges::move(startIterator, newBlocks.end(),
-                       std::back_inserter(pendingBlocks_));
+      ql::ranges::move(newBlocks, std::back_inserter(pendingBlocks_));
     }
   }
 
@@ -578,92 +627,130 @@ struct IndexScan::SharedGeneratorState {
 };
 
 // _____________________________________________________________________________
-Result::Generator IndexScan::createPrefilteredJoinSide(
+Result::LazyResult IndexScan::createPrefilteredJoinSide(
     std::shared_ptr<SharedGeneratorState> innerState) {
-  if (innerState->hasUndef()) {
-    AD_CORRECTNESS_CHECK(innerState->prefetchedValues_.empty());
-    for (auto& value : ql::ranges::subrange{innerState->iterator_.value(),
-                                            innerState->generator_.end()}) {
-      co_yield value;
-    }
-    co_return;
-  }
-  auto& prefetchedValues = innerState->prefetchedValues_;
-  while (true) {
-    if (prefetchedValues.empty()) {
-      if (innerState->doneFetching_) {
-        co_return;
-      }
-      innerState->fetch();
-      AD_CORRECTNESS_CHECK(!prefetchedValues.empty() ||
-                           innerState->doneFetching_);
-    }
-    // Make a defensive copy of the values to avoid modification during
-    // iteration when yielding.
-    auto copy = std::move(prefetchedValues);
-    // Moving out does not necessarily clear the values, so we do it explicitly.
-    prefetchedValues.clear();
-    for (auto& value : copy) {
-      co_yield value;
-    }
-  }
+  using LoopControl = ad_utility::LoopControl<Result::IdTableVocabPair>;
+
+  auto range = ad_utility::InputRangeFromLoopControlGet{
+      [state = std::move(innerState)]() mutable {
+        // Handle UNDEF case: pass through remaining input
+        if (state->hasUndef()) {
+          if (!state->iterator_.has_value()) {
+            state->iterator_ = state->generator_.begin();
+          }
+          return LoopControl::breakWithYieldAll(ql::ranges::subrange(
+              state->iterator_.value(), state->generator_.end()));
+        }
+
+        auto& prefetched = state->prefetchedValues_;
+
+        if (prefetched.empty() && !state->doneFetching_) {
+          state->fetch();
+        }
+
+        if (prefetched.empty()) {
+          AD_CORRECTNESS_CHECK(state->doneFetching_);
+          return LoopControl::makeBreak();
+        }
+
+        // Make a defensive copy of the values to avoid modification during
+        // iteration when yielding.
+        auto copy = std::move(prefetched);
+        prefetched.clear();
+
+        // Yield all the newly found values
+        return LoopControl::yieldAll(std::move(copy));
+      }};
+  return Result::LazyResult{std::move(range)};
 }
 
 // _____________________________________________________________________________
-Result::Generator IndexScan::createPrefilteredIndexScanSide(
+Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
     std::shared_ptr<SharedGeneratorState> innerState) {
-  if (innerState->hasUndef()) {
-    for (auto& pair : chunkedIndexScan()) {
-      co_yield pair;
-    }
-    co_return;
-  }
-  LazyScanMetadata metadata;
-  auto& pendingBlocks = innerState->pendingBlocks_;
-  while (true) {
-    if (pendingBlocks.empty()) {
-      if (innerState->doneFetching_) {
-        metadata.numBlocksAll_ = innerState->metaBlocks_.sizeBlockMetadata_;
-        updateRuntimeInfoForLazyScan(metadata);
-        co_return;
-      }
-      innerState->fetch();
-    }
-    auto scan = getLazyScan(std::move(pendingBlocks));
-    AD_CORRECTNESS_CHECK(pendingBlocks.empty());
-    for (IdTable& idTable : scan) {
-      co_yield {std::move(idTable), LocalVocab{}};
-    }
-    metadata.aggregate(scan.details());
-  }
+  using LoopControl = ad_utility::LoopControl<Result::IdTableVocabPair>;
+  using namespace std::chrono_literals;
+  using enum RuntimeInformation::SendPriority;
+
+  auto range = ad_utility::InputRangeFromLoopControlGet{
+      [this, state = std::move(innerState),
+       metadata = LazyScanMetadata{}]() mutable {
+        // Handle UNDEF case using LoopControl pattern
+        if (state->hasUndef()) {
+          auto scan = std::make_shared<
+              CompressedRelationReader::IdTableGeneratorInputRange>(
+              getLazyScan());
+          scan->details().numBlocksAll_ =
+              getMetadataForScan().value().sizeBlockMetadata_;
+          updateRuntimeInfoForLazyScan(scan->details(), Always);
+          return LoopControl::breakWithYieldAll(
+              ad_utility::CachingTransformInputRange(
+                  *scan, [this, scan](auto& table) mutable {
+                    updateRuntimeInfoForLazyScan(scan->details(), IfDue);
+                    return Result::IdTableVocabPair{std::move(table),
+                                                    LocalVocab{}};
+                  }));
+        }
+
+        auto& pendingBlocks = state->pendingBlocks_;
+
+        while (pendingBlocks.empty()) {
+          if (state->doneFetching_) {
+            metadata.numBlocksAll_ = state->metaBlocks_.sizeBlockMetadata_;
+            updateRuntimeInfoForLazyScan(metadata, Always);
+            return LoopControl::makeBreak();
+          }
+          state->fetch();
+        }
+        metadata.numBlocksAll_ = state->metaBlocks_.sizeBlockMetadata_;
+        updateRuntimeInfoForLazyScan(metadata, IfDue);
+
+        // We now have non-empty pending blocks
+        auto scan = getLazyScan(std::move(pendingBlocks));
+        AD_CORRECTNESS_CHECK(pendingBlocks.empty());
+
+        // Capture scan details by reference so we get the updated values
+        const auto& scanDetails = scan.details();
+
+        // Transform the scan to Result::IdTableVocabPair and yield all
+        auto transformedScan = ad_utility::CachingTransformInputRange(
+            std::move(scan),
+            [&metadata, &scanDetails,
+             originalMetadata = metadata](auto& table) mutable {
+              // Make sure we don't add everything more than once.
+              metadata = originalMetadata;
+              metadata.aggregate(scanDetails);
+              return Result::IdTableVocabPair{std::move(table), LocalVocab{}};
+            });
+
+        return LoopControl::yieldAll(std::move(transformedScan));
+      }};
+  return Result::LazyResult{std::move(range)};
 }
 
 // _____________________________________________________________________________
-std::pair<Result::Generator, Result::Generator> IndexScan::prefilterTables(
+std::pair<Result::LazyResult, Result::LazyResult> IndexScan::prefilterTables(
     Result::LazyResult input, ColumnIndex joinColumn) {
   AD_CORRECTNESS_CHECK(numVariables_ <= 3 && numVariables_ > 0);
   auto metaBlocks = getMetadataForScan();
 
   if (!metaBlocks.has_value()) {
-    return {Result::Generator{}, Result::Generator{}};
+    // Return empty results
+    return {Result::LazyResult{}, Result::LazyResult{}};
   }
-  auto state = std::make_shared<SharedGeneratorState>(
-      std::move(input), joinColumn, std::move(metaBlocks.value()));
+
+  auto state = std::make_shared<SharedGeneratorState>(SharedGeneratorState{
+      std::move(input), joinColumn, std::move(metaBlocks.value())});
   return {createPrefilteredJoinSide(state),
           createPrefilteredIndexScanSide(state)};
 }
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> IndexScan::cloneImpl() const {
-  auto prefilter =
-      prefilter_.has_value()
-          ? std::optional{std::pair{prefilter_.value().first->clone(),
-                                    prefilter_.value().second}}
-          : std::nullopt;
-  return std::make_unique<IndexScan>(_executionContext, permutation_, subject_,
-                                     predicate_, object_, additionalColumns_,
-                                     additionalVariables_, graphsToFilter_,
-                                     std::move(prefilter));
+  return std::make_unique<IndexScan>(
+      _executionContext, permutation_, locatedTriplesSharedState_, subject_,
+      predicate_, object_, additionalColumns_, additionalVariables_,
+      graphsToFilter_, scanSpecAndBlocks_, scanSpecAndBlocksIsPrefiltered_,
+      varsToKeep_);
 }
 
 // _____________________________________________________________________________
@@ -671,4 +758,45 @@ bool IndexScan::columnOriginatesFromGraphOrUndef(
     const Variable& variable) const {
   AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
   return variable == subject_ || variable == predicate_ || variable == object_;
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+IndexScan::makeTreeWithStrippedColumns(
+    const std::set<Variable>& variables) const {
+  ad_utility::HashSet<Variable> newVariables;
+  for (const auto& [var, _] : getExternallyVisibleVariableColumns()) {
+    if (ad_utility::contains(variables, var)) {
+      newVariables.insert(var);
+    }
+  }
+
+  return ad_utility::makeExecutionTree<IndexScan>(
+      _executionContext, permutation_, locatedTriplesSharedState_, subject_,
+      predicate_, object_, additionalColumns_, additionalVariables_,
+      graphsToFilter_, scanSpecAndBlocks_, scanSpecAndBlocksIsPrefiltered_,
+      VarsToKeep{std::move(newVariables)});
+}
+
+// _____________________________________________________________________________
+std::vector<ColumnIndex> IndexScan::getSubsetForStrippedColumns() const {
+  AD_CORRECTNESS_CHECK(varsToKeep_.has_value());
+  const auto& v = varsToKeep_.value();
+  std::vector<ColumnIndex> result;
+  size_t idx = 0;
+  for (const auto& el : getPermutedTriple()) {
+    if (el->isVariable()) {
+      if (v.contains(el->getVariable())) {
+        result.push_back(idx);
+      }
+      ++idx;
+    }
+  }
+  for (const auto& var : additionalVariables_) {
+    if (v.contains(var)) {
+      result.push_back(idx);
+    }
+    ++idx;
+  }
+  return result;
 }

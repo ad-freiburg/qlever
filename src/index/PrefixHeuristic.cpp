@@ -2,27 +2,21 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
 
-#include "./PrefixHeuristic.h"
+#include "index/PrefixHeuristic.h"
 
-#include <fstream>
-
-#include "../parser/RdfEscaping.h"
-#include "../parser/Tokenizer.h"
-#include "../util/Exception.h"
-#include "../util/File.h"
-#include "../util/Log.h"
-#include "../util/StringUtils.h"
-#include "backports/algorithm.h"
+#include "backports/StartsWithAndEndsWith.h"
+#include "util/Exception.h"
+#include "util/StringUtils.h"
 
 using std::string;
 
 namespace ad_utility {
 
 // ______________________________________________________________________
-TreeNode* Tree::insert(string_view value) { return _root->insert(value); }
+TreeNode* Tree::insert(std::string_view value) { return _root->insert(value); }
 
 // ______________________________________________________________________
-TreeNode* Tree::insert(string_view value, TreeNode* startPoint) {
+TreeNode* Tree::insert(std::string_view value, TreeNode* startPoint) {
   if (!startPoint) {
     startPoint = _root.get();
   }
@@ -30,7 +24,7 @@ TreeNode* Tree::insert(string_view value, TreeNode* startPoint) {
 }
 
 // ______________________________________________________________
-TreeNode* TreeNode::insertAfter(string_view value) {
+TreeNode* TreeNode::insertAfter(std::string_view value) {
   // exact match of the  value
   if (value == _value) {
     _ownCount++;
@@ -40,7 +34,7 @@ TreeNode* TreeNode::insertAfter(string_view value) {
   // we now know that _value is a real prefix of value
   // check if one of the children also is a prefix of value
   for (auto& c : _children) {
-    if (value.starts_with(c->_value)) {
+    if (ql::starts_with(value, c->_value)) {
       return c->insertAfter(value);
     }
   }
@@ -53,7 +47,7 @@ TreeNode* TreeNode::insertAfter(string_view value) {
 
   // find children of current node which have to become children of the new node
   auto pred = [&value](const NodePtr& s) {
-    return s->_value.starts_with(value);
+    return ql::starts_with(s->_value, value);
   };
   auto itChildren = std::remove_if(_children.begin(), _children.end(), pred);
 
@@ -71,8 +65,8 @@ TreeNode* TreeNode::insertAfter(string_view value) {
 }
 
 // ______________________________________________________________________
-TreeNode* TreeNode::insert(string_view value) {
-  if (value.starts_with(_value)) {
+TreeNode* TreeNode::insert(std::string_view value) {
+  if (ql::starts_with(value, _value)) {
     // this node is a prefix of value, insert in subtree
     return insertAfter(value);
   }
@@ -162,24 +156,20 @@ void TreeNode::penaltize() {
 
 // ______________________________________________________________________________________
 std::vector<string> calculatePrefixes(const std::vector<string>& vocabulary,
-                                      size_t numPrefixes, size_t codelength,
-                                      bool alwaysAddCode) {
-  // same function, just for vector of strings
-  size_t minPrefixLength = alwaysAddCode ? 1 : codelength + 1;
-  size_t actualCodeLength = alwaysAddCode ? 0 : codelength;
+                                      size_t numPrefixes) {
   if (vocabulary.empty()) {
     return {};
   }
   ad_utility::Tree t;
-  ad_utility::TreeNode* lastPos(nullptr);
+  ad_utility::TreeNode* lastPos = nullptr;
 
+  size_t minPrefixLength = 1;
   const string* lastWord = &(vocabulary[0]);
   for (size_t i = 1; i < vocabulary.size(); ++i) {
     auto pref = ad_utility::commonPrefix(*lastWord, vocabulary[i]);
     if (pref.size() >= minPrefixLength) {
       lastPos = t.insert(pref, lastPos);
     } else {
-      // lastPos.reset(nullptr);
       lastPos = nullptr;
     }
     lastWord = &(vocabulary[i]);
@@ -187,7 +177,7 @@ std::vector<string> calculatePrefixes(const std::vector<string>& vocabulary,
   std::vector<string> res;
   res.reserve(numPrefixes);
   for (size_t i = 0; i < numPrefixes; ++i) {
-    res.push_back(t.getAndDeleteMaximum(actualCodeLength).second);
+    res.push_back(t.getAndDeleteMaximum(0).second);
   }
   return res;
 }

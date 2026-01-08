@@ -11,7 +11,6 @@
 
 #include <cstdlib>
 #include <memory>
-#include <ranges>
 #include <string>
 #include <vector>
 
@@ -44,6 +43,9 @@ class LocalVocab {
   using Set = absl::node_hash_set<LocalVocabEntry>;
   std::shared_ptr<Set> primaryWordSet_ = std::make_shared<Set>();
 
+  using LocalBlankNodeManager =
+      ad_utility::BlankNodeManager::LocalBlankNodeManager;
+
   // The other sets of `LocalVocabEntry`s, which are static.
   absl::flat_hash_set<std::shared_ptr<const Set>> otherWordSets_;
 
@@ -52,8 +54,7 @@ class LocalVocab {
 
   // Each `LocalVocab` has its own `LocalBlankNodeManager` to generate blank
   // nodes when needed (e.g., when parsing the result of a SERVICE query).
-  std::shared_ptr<ad_utility::BlankNodeManager::LocalBlankNodeManager>
-      localBlankNodeManager_;
+  std::shared_ptr<LocalBlankNodeManager> localBlankNodeManager_;
 
   // Flag to prevent modification after copy.
   std::unique_ptr<std::atomic_bool> copied_ =
@@ -132,7 +133,8 @@ class LocalVocab {
     // duplicates, we still manually filter out empty sets, because these
     // typically don't compare equal to each other because of the`shared_ptr`
     // semantics.
-    for (const auto& vocab : vocabs | filter(std::not_fn(&LocalVocab::empty))) {
+    for (const LocalVocab& vocab :
+         vocabs | filter(std::not_fn(&LocalVocab::empty))) {
       // Mark vocab as copied
       vocab.copied_->store(true);
       ql::ranges::for_each(vocab.otherWordSets_, addWordSet);
@@ -172,6 +174,21 @@ class LocalVocab {
   std::vector<LocalVocabEntry> getAllWordsForTesting() const;
 
   const Set& primaryWordSet() const { return *primaryWordSet_; }
+  const auto& otherSets() const { return otherWordSets_; }
+
+  // This function returns the required data structure to restore the
+  // `LocalBlankNodeManager`, e.g. when UPDATEs or cached queries are serialized
+  // to disk and the engine is restarted.
+  std::vector<LocalBlankNodeManager::OwnedBlocksEntry>
+  getOwnedLocalBlankNodeBlocks() const;
+
+  // Restore the state of the `LocalBlankNodeManager` from the serialized data
+  // structure obtained from `getOwnedLocalBlankNodeBlocks` above. This must be
+  // called at the engine start before any queries that might create new local
+  // blank nodes are run (see `BlankNodeManager.h` for details).
+  void reserveBlankNodeBlocksFromExplicitIndices(
+      const std::vector<LocalBlankNodeManager::OwnedBlocksEntry>& indices,
+      ad_utility::BlankNodeManager* blankNodeManager);
 
   // Get a new BlankNodeIndex using the LocalBlankNodeManager.
   [[nodiscard]] BlankNodeIndex getBlankNodeIndex(
@@ -184,9 +201,9 @@ class LocalVocab {
   // Wrapper around a bunch of word sets without any access provided to them.
   // This is useful to extend the lifetime of this `LocalVocab` without making
   // this instance read-only by merging and/or cloning.
-  class [[nodiscard(
+  class QL_NODISCARD(
       "The sole purpose of this object is to extend "
-      "lifetimes.")]] LifetimeExtender {
+      "lifetimes.") LifetimeExtender {
     friend LocalVocab;
     std::vector<std::shared_ptr<const Set>> wordSets_;
 

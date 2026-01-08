@@ -2,7 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach<joka921> (kalmbach@cs.uni-freiburg.de)
 
-#include "./VocabularyInternalExternal.h"
+#include "index/vocabulary/VocabularyInternalExternal.h"
 
 // _____________________________________________________________________________
 std::string VocabularyInternalExternal::operator[](uint64_t i) const {
@@ -48,7 +48,7 @@ VocabularyInternalExternal::WordWriter::~WordWriter() {
 }
 
 // _____________________________________________________________________________
-void VocabularyInternalExternal::open(const string& filename) {
+void VocabularyInternalExternal::open(const std::string& filename) {
   AD_LOG_INFO << "Reading vocabulary from file " << filename << " ..."
               << std::endl;
   internalVocab_.open(filename + ".internal");

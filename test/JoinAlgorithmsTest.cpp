@@ -38,6 +38,14 @@ struct RowAdder {
     AD_CONTRACT_CHECK(x1 == y1);
     target_->push_back(std::array{x1, x2, y2});
   }
+  template <typename R1, typename R2>
+  void addRows(const R1& left, const R2& right) {
+    for (auto a : left) {
+      for (auto b : right) {
+        addRow(a, b);
+      }
+    }
+  }
 
   void addOptionalRow(size_t leftIndex) {
     auto [x1, x2] = (*left_)[leftIndex];
@@ -60,14 +68,15 @@ using ad_utility::source_location;
 // more test cases automatically.
 template <bool DoOptionalJoin = false>
 void testJoin(const NestedBlock& a, const NestedBlock& b, JoinResult expected,
-              source_location l = source_location::current()) {
+              source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
   JoinResult result;
   auto compare = [](auto l, auto r) { return l[0] < r[0]; };
   auto adder = makeRowAdder(result);
   if constexpr (DoOptionalJoin) {
-    zipperJoinForBlocksWithoutUndef(a, b, compare, adder, std::identity{},
-                                    std::identity{}, std::true_type{});
+    zipperJoinForBlocksWithoutUndef(a, b, compare, adder, ql::identity{},
+                                    ql::identity{},
+                                    ad_utility::OptionalJoinTag{});
   } else {
     zipperJoinForBlocksWithoutUndef(a, b, compare, adder);
   }
@@ -95,7 +104,7 @@ void testJoin(const NestedBlock& a, const NestedBlock& b, JoinResult expected,
 }
 void testOptionalJoin(const NestedBlock& a, const NestedBlock& b,
                       JoinResult expected,
-                      source_location l = source_location::current()) {
+                      source_location l = AD_CURRENT_SOURCE_LOC()) {
   testJoin<true>(a, b, std::move(expected), l);
 }
 }  // namespace
@@ -310,6 +319,15 @@ struct RowAdderWithUndef {
     output_.push_back({id1, id2});
   }
 
+  template <typename R1, typename R2>
+  void addRows(const R1& left, const R2& right) {
+    for (auto a : left) {
+      for (auto b : right) {
+        addRow(a, b);
+      }
+    }
+  }
+
   void addOptionalRow(size_t leftIndex) {
     auto id = (*left_)[leftIndex];
     output_.push_back({id, FakeId{Id::makeUndefined(), "OPTIONAL"}});
@@ -328,7 +346,7 @@ struct RowAdderWithUndef {
 void testDynamicJoinWithUndef(const std::vector<std::vector<FakeId>>& a,
                               const std::vector<std::vector<FakeId>>& b,
                               std::vector<std::array<FakeId, 2>> expected,
-                              source_location l = source_location::current()) {
+                              source_location l = AD_CURRENT_SOURCE_LOC()) {
   using namespace std::placeholders;
   using namespace std::ranges;
   auto trace = generateLocationTrace(l);
@@ -535,8 +553,7 @@ TEST(JoinAlgorithm, DefaultIsUndefinedFunctionAlwaysReturnsFalse) {
   RowAdderWithUndef adder{};
   std::vector<std::vector<FakeId>> dummyBlocks{};
   auto compare = [](auto l, auto r) { return static_cast<Id>(l) < r; };
-  auto joinSide =
-      ad_utility::detail::makeJoinSide(dummyBlocks, std::identity{});
+  auto joinSide = ad_utility::detail::makeJoinSide(dummyBlocks, ql::identity{});
   ad_utility::detail::BlockZipperJoinImpl impl{joinSide, joinSide, compare,
                                                adder};
   EXPECT_FALSE(impl.isUndefined_("Something"));

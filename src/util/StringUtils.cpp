@@ -10,6 +10,7 @@
 #include <unicode/bytestream.h>
 #include <unicode/casemap.h>
 
+#include "backports/StartsWithAndEndsWith.h"
 #include "global/Constants.h"
 #include "util/Algorithm.h"
 #include "util/Exception.h"
@@ -17,8 +18,13 @@
 #include "util/StringUtilsImpl.h"
 
 namespace ad_utility {
+
+namespace detail {
+// CTRE regex pattern for C++17 compatibility
+constexpr ctll::fixed_string langTagRegex = "[a-zA-Z]+(-[a-zA-Z0-9]+)*";
+}  // namespace detail
 // ____________________________________________________________________________
-string_view commonPrefix(string_view a, const string_view b) {
+std::string_view commonPrefix(std::string_view a, const std::string_view b) {
   size_t maxIdx = std::min(a.size(), b.size());
   size_t i = 0;
   while (i < maxIdx) {
@@ -31,8 +37,8 @@ string_view commonPrefix(string_view a, const string_view b) {
 }
 
 // ____________________________________________________________________________
-string getLowercase(const string& orig) {
-  string retVal;
+std::string getLowercase(const std::string& orig) {
+  std::string retVal;
   retVal.reserve(orig.size());
   for (size_t i = 0; i < orig.size(); ++i) {
     retVal += tolower(orig[i]);
@@ -41,8 +47,8 @@ string getLowercase(const string& orig) {
 }
 
 // ____________________________________________________________________________
-string getUppercase(const string& orig) {
-  string retVal;
+std::string getUppercase(const std::string& orig) {
+  std::string retVal;
   retVal.reserve(orig.size());
   for (size_t i = 0; i < orig.size(); ++i) {
     retVal += toupper(orig[i]);
@@ -51,16 +57,16 @@ string getUppercase(const string& orig) {
 }
 
 // ____________________________________________________________________________
-bool strIsLangTag(const string& input) {
-  return ctre::match<"[a-zA-Z]+(-[a-zA-Z0-9]+)*">(input);
+bool strIsLangTag(const std::string& input) {
+  return ctre::match<detail::langTagRegex>(input);
 }
 
 // ____________________________________________________________________________
-bool isLanguageMatch(string& languageTag, string& languageRange) {
+bool isLanguageMatch(std::string& languageTag, std::string& languageRange) {
   if (languageRange.empty() || languageTag.empty()) {
     return false;
   } else {
-    if (languageRange.ends_with("*")) {
+    if (ql::ends_with(languageRange, "*")) {
       languageRange.pop_back();
     }
     ql::ranges::transform(languageTag, std::begin(languageTag),
@@ -124,8 +130,8 @@ std::string utf8ToUpper(std::string_view s) {
 }
 
 // ____________________________________________________________________________
-string_view getUTF8Substring(const std::string_view str, size_t start,
-                             size_t size) {
+std::string_view getUTF8Substring(const std::string_view str, size_t start,
+                                  size_t size) {
   // To generate a substring we have to "cut off" part of the string at the
   // start and end. The end can be removed with `getUTF8Prefix`.
   auto strWithEndRemoved = getUTF8Prefix(str, start + size).second;
@@ -136,14 +142,14 @@ string_view getUTF8Substring(const std::string_view str, size_t start,
 }
 
 // ____________________________________________________________________________
-string_view getUTF8Substring(const std::string_view str, size_t start) {
+std::string_view getUTF8Substring(const std::string_view str, size_t start) {
   // `str.size()` is >= the number of codepoints because each codepoint has at
   // least one byte in UTF-8
   return getUTF8Substring(str, start, str.size());
 }
 
 // ____________________________________________________________________________
-string getLastPartOfString(const string& text, const char separator) {
+std::string getLastPartOfString(const std::string& text, const char separator) {
   size_t pos = text.rfind(separator);
   if (pos != text.npos) {
     return text.substr(pos + 1);
@@ -158,7 +164,7 @@ size_t findLiteralEnd(const std::string_view input,
   // keep track of the last position where the literalEnd was found unescaped
   auto lastFoundPos = size_t(-1);
   auto endPos = input.find(literalEnd, 0);
-  while (endPos != string::npos) {
+  while (endPos != std::string::npos) {
     if (endPos > 0 && input[endPos - 1] == '\\') {
       size_t numBackslash = 1;
       auto slashPos = endPos - 2;
@@ -204,12 +210,10 @@ std::string addIndentation(std::string_view str,
 
 // ___________________________________________________________________________
 std::string truncateOperationString(std::string_view operation) {
-  static_assert(MAX_LENGTH_OPERATION_ECHO >= 3);
-  if (operation.length() <= MAX_LENGTH_OPERATION_ECHO) {
+  auto prefix = getUTF8Prefix(operation, MAX_LENGTH_OPERATION_ECHO).second;
+  if (prefix.length() == operation.length()) {
     return std::string{operation};
-  } else {
-    return absl::StrCat(operation.substr(0, MAX_LENGTH_OPERATION_ECHO - 3),
-                        "...");
   }
+  return absl::StrCat(prefix, "...");
 }
 }  // namespace ad_utility

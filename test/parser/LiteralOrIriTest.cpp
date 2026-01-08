@@ -9,13 +9,17 @@
 #include "../util/GTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "index/IndexImpl.h"
-#include "parser/Iri.h"
-#include "parser/Literal.h"
 #include "parser/LiteralOrIri.h"
 #include "parser/NormalizedString.h"
+#include "rdfTypes/Iri.h"
+#include "rdfTypes/Literal.h"
 #include "util/HashSet.h"
 
+namespace {
+
 using namespace ad_utility::triple_component;
+using Iri = ad_utility::triple_component::Iri;
+using Literal = ad_utility::triple_component::Literal;
 
 TEST(IriTest, IriCreation) {
   Iri iri = Iri::fromIriref("<http://www.wikidata.org/entity/Q3138>");
@@ -437,6 +441,38 @@ TEST(LiteralTest, spaceshipOperatorLangtagLiteral) {
   getQec(TestIndexConfig{});
   ASSERT_NO_THROW(IndexImpl::staticGlobalSingletonComparator());
   EXPECT_THAT(l1, testing::Not(testing::Eq(l2)));
-  EXPECT_THAT(l1 <=> l2,
-              testing::Not(testing::Eq(std::strong_ordering::equal)));
+  EXPECT_THAT(ql::compareThreeWay(l1, l2),
+              testing::Not(testing::Eq(ql::strong_ordering::equal)));
 }
+
+TEST(LiteralOrIri, toStringRepresentation) {
+  {
+    auto iri = LiteralOrIri::iriref("<bladibladibludiblu>");
+    std::string expected = "<bladibladibludiblu>";
+
+    auto res = iri.toStringRepresentation();
+    EXPECT_EQ(res, expected);
+    // The previous call did not move;
+    EXPECT_EQ(iri.toStringRepresentation(), expected);
+
+    res = std::move(iri).toStringRepresentation();
+    EXPECT_EQ(res, expected);
+    EXPECT_TRUE(iri.toStringRepresentation().empty());
+  }
+  // Similar tests, but for a literal:
+  {
+    auto lit = LiteralOrIri::literalWithoutQuotes("bladibladibludiblu");
+    std::string expected = "\"bladibladibludiblu\"";
+
+    auto res = lit.toStringRepresentation();
+    EXPECT_EQ(res, expected);
+    // The previous call did not move;
+    EXPECT_EQ(lit.toStringRepresentation(), expected);
+
+    res = std::move(lit).toStringRepresentation();
+    EXPECT_EQ(res, expected);
+    EXPECT_TRUE(lit.toStringRepresentation().empty());
+  }
+}
+
+}  // namespace

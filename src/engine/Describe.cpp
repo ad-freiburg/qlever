@@ -6,7 +6,7 @@
 
 #include <absl/strings/str_join.h>
 
-#include "../../test/engine/ValuesForTesting.h"
+#include "engine/ExplicitIdTableOperation.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 
@@ -28,7 +28,7 @@ std::vector<QueryExecutionTree*> Describe::getChildren() {
 }
 
 // _____________________________________________________________________________
-string Describe::getCacheKeyImpl() const {
+std::string Describe::getCacheKeyImpl() const {
   // The cache key must represent the `resources_` (the variables and IRIs of
   // the DESCRIBE clause) and the `subtree_` (the WHERE clause).
   std::string result = absl::StrCat("DESCRIBE ", subtree_->getCacheKey(), " ");
@@ -65,7 +65,7 @@ string Describe::getCacheKeyImpl() const {
 }
 
 // _____________________________________________________________________________
-string Describe::getDescriptor() const { return "DESCRIBE"; }
+std::string Describe::getDescriptor() const { return "DESCRIBE"; }
 
 // _____________________________________________________________________________
 size_t Describe::getResultWidth() const { return 3; }
@@ -81,7 +81,7 @@ bool Describe::knownEmptyResult() { return false; }
 
 // The result cannot easily be sorted, as it involves recursive expanding of
 // graphs.
-vector<ColumnIndex> Describe::resultSortedOn() const { return {}; }
+std::vector<ColumnIndex> Describe::resultSortedOn() const { return {}; }
 
 // The result always has three variables `?subject`, `?predicate`, `?object`.
 //
@@ -151,6 +151,8 @@ void Describe::recursivelyAddBlankNodes(
 // _____________________________________________________________________________
 IdTable Describe::makeAndExecuteJoinWithFullIndex(
     IdTable input, LocalVocab& localVocab) const {
+  // Counter to provide collision-free unique ids.
+  static std::atomic_long uniqueCounter = 0;
   AD_CORRECTNESS_CHECK(input.numColumns() == 1);
 
   // Create a `Join` operation that joins `input` (with column `?subject`) with
@@ -158,13 +160,20 @@ IdTable Describe::makeAndExecuteJoinWithFullIndex(
   // `?subject` column.
   using V = Variable;
   auto subjectVar = V{"?subject"};
-  auto valuesOp = ad_utility::makeExecutionTree<ValuesForTesting>(
-      getExecutionContext(), std::move(input),
-      std::vector<std::optional<Variable>>{subjectVar});
+  auto valuesOp = ad_utility::makeExecutionTree<ExplicitIdTableOperation>(
+      getExecutionContext(), std::make_shared<IdTable>(std::move(input)),
+      VariableToColumnMap{
+          {subjectVar,
+           ColumnIndexAndTypeInfo{0, ColumnIndexAndTypeInfo::AlwaysDefined}}},
+      std::vector<ColumnIndex>{}, LocalVocab{},
+      absl::StrCat("INTERNAL DESCRIBE ", uniqueCounter++));
   SparqlTripleSimple triple{subjectVar, V{"?predicate"}, V{"?object"}};
+  auto activeGraphs = describe_.datasetClauses_.activeDefaultGraphs();
   auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
       getExecutionContext(), Permutation::SPO, triple,
-      describe_.datasetClauses_.activeDefaultGraphs());
+      activeGraphs.has_value()
+          ? IndexScan::Graphs::Whitelist(std::move(activeGraphs).value())
+          : IndexScan::Graphs::All());
   auto joinColValues = valuesOp->getVariableColumn(subjectVar);
   auto joinColScan = indexScan->getVariableColumn(subjectVar);
   auto join = ad_utility::makeExecutionTree<Join>(
@@ -202,7 +211,7 @@ IdTable Describe::getIdsToDescribe(const Result& result,
       // For an IRI, add the corresponding ID to `idsToDescribe`.
       idsToDescribe.insert(
           TripleComponent{std::get<TripleComponent::Iri>(resource)}.toValueId(
-              vocab, localVocab));
+              vocab, localVocab, getIndex().encodedIriManager()));
     } else {
       // For a variable, add all IDs that match the variable in the `result` of
       // the WHERE clause to `idsToDescribe`.

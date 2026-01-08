@@ -6,16 +6,20 @@
 #define QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARY_H
 
 #include <cstdint>
-#include <functional>
 #include <memory>
 #include <string_view>
 #include <variant>
 
+#include "backports/StartsWithAndEndsWith.h"
+#include "backports/functional.h"
 #include "global/ValueId.h"
+#include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/BitUtils.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
+#include "util/Serializer/Serializer.h"
+#include "util/TypeTraits.h"
 
 // The signature of the SplitFunction for a SplitVocabulary. For each literal or
 // IRI, it should return a marker index which of the underlying vocabularies of
@@ -35,6 +39,9 @@ CPP_concept SplitFilenameFunctionT =
     ad_utility::InvocableWithExactReturnType<T, std::array<std::string, N>,
                                              std::string_view>;
 
+// Forward declaration of `PolymorphicVocabulary` for static assertion.
+class PolymorphicVocabulary;
+
 // A SplitVocabulary is a vocabulary layer that divides words into different
 // underlying vocabularies. It is templated on the UnderlyingVocabularies as
 // well as a SplitFunction that decides which underlying vocabulary is used for
@@ -42,9 +49,9 @@ CPP_concept SplitFilenameFunctionT =
 // vocabularies.
 template <typename SplitFunction, typename SplitFilenameFunction,
           typename... UnderlyingVocabularies>
-requires SplitFunctionT<SplitFunction> &&
-         SplitFilenameFunctionT<SplitFilenameFunction,
-                                sizeof...(UnderlyingVocabularies)>
+QL_CONCEPT_OR_NOTHING(
+    requires SplitFunctionT<SplitFunction>&& SplitFilenameFunctionT<
+        SplitFilenameFunction, sizeof...(UnderlyingVocabularies)>)
 class SplitVocabulary {
  public:
   // A SplitVocabulary must have at least two and at most 255 underlying
@@ -55,6 +62,14 @@ class SplitVocabulary {
                 sizeof...(UnderlyingVocabularies) <= 255);
   static constexpr uint8_t numberOfVocabs =
       static_cast<uint8_t>(sizeof...(UnderlyingVocabularies));
+
+  // Because of the marker bits, a `SplitVocabulary` should not hold another
+  // `SplitVocabulary` or a `PolymorphicVocabulary`, where it cannot be
+  // guaranteed that it does not hold an underlying `SplitVocabulary`.
+  static_assert(!ad_utility::anyIsInstantiationOf<SplitVocabulary,
+                                                  UnderlyingVocabularies...>);
+  static_assert(
+      !ad_utility::SameAsAny<PolymorphicVocabulary, UnderlyingVocabularies...>);
 
   // Assuming we only make use of methods that all UnderlyingVocabularies
   // provide, we simplify this class by using an array over a variant instead of
@@ -84,7 +99,7 @@ class SplitVocabulary {
 
  private:
   // Array that holds all underlying vocabularies.
-  UnderlyingVocabsArray underlying_;
+  UnderlyingVocabsArray underlying_{UnderlyingVocabularies{}...};
 
  public:
   // Check validity of vocabIndex and marker, then return a new 64 bit index
@@ -156,7 +171,8 @@ class SplitVocabulary {
   [[nodiscard]] uint64_t size() const {
     uint64_t total = 0;
     for (auto& vocab : underlying_) {
-      total += std::visit([](auto& v) { return v.size(); }, vocab);
+      total += std::visit(
+          [](auto& v) { return static_cast<uint64_t>(v.size()); }, vocab);
     }
     return total;
   }
@@ -169,8 +185,8 @@ class SplitVocabulary {
   WordAndIndex boundImpl(const InternalStringType& word, Comparator comparator,
                          uint8_t marker = 0) const {
     AD_CORRECTNESS_CHECK(marker < numberOfVocabs);
-    WordAndIndex subResult = std::visit(
-        [&](auto& v) {
+    auto subResult = std::visit(
+        [&](auto& v) -> WordAndIndex {
           if constexpr (getUpperBound) {
             return v.upper_bound(word, comparator);
           } else {
@@ -196,6 +212,23 @@ class SplitVocabulary {
                            Comparator comparator, uint8_t marker = 0) const {
     return boundImpl<InternalStringType, Comparator, true>(word, comparator,
                                                            marker);
+  }
+
+  template <typename InternalStringType, typename Comparator>
+  std::pair<uint64_t, uint64_t> getPositionOfWord(
+      const InternalStringType& word, Comparator comparator) const {
+    auto marker = getMarkerForWord(word);
+    auto pos = boundImpl<InternalStringType, Comparator, false>(
+                   word, comparator, marker)
+                   .positionOfWord(word);
+    if (!pos.has_value()) {
+      auto end =
+          addMarker(std::visit([](auto& v) -> uint64_t { return v.size(); },
+                               underlying_[marker]),
+                    marker);
+      return {end, end};
+    }
+    return pos.value();
   }
 
   // Shortcut to retrieve the first underlying vocabulary
@@ -236,6 +269,8 @@ class SplitVocabulary {
     // Finish the writing on all underlying word writers. After this no more
     // calls to `operator()` are allowed.
     void finishImpl() override;
+
+    ~WordWriter() override;
   };
 
   // Construct a SplitVocabulary::WordWriter that creates WordWriters on all
@@ -245,6 +280,22 @@ class SplitVocabulary {
       const std::string& filename) const {
     return std::make_unique<WordWriter>(underlying_, filename);
   }
+
+  // Retrieve GeometryInfo from an underlying vocabulary, if it is a
+  // GeoVocabulary.
+  std::optional<ad_utility::GeometryInfo> getGeoInfo(
+      uint64_t indexWithMarker) const;
+
+  // Checks if any of the underlying vocabularies is a `GeoVocabulary`.
+  static bool isGeoInfoAvailable();
+
+  // Generic serialization support.
+  AD_SERIALIZE_FRIEND_FUNCTION(SplitVocabulary) {
+    (void)serializer;
+    (void)arg;
+    throw std::runtime_error(
+        "Generic serialization is not implemented for SplitVocabulary.");
+  }
 };
 
 // Concrete implementations of split function and split filename function
@@ -252,29 +303,30 @@ namespace detail::splitVocabulary {
 
 // Split function for Well-Known Text Literals: All words are written to
 // vocabulary 0 except WKT literals, which go to vocabulary 1.
-[[maybe_unused]] inline auto geoSplitFunc =
-    [](std::string_view word) -> uint8_t {
-  return word.starts_with("\"") && word.ends_with(GEO_LITERAL_SUFFIX);
+struct GeoSplitFunc {
+  uint8_t operator()(std::string_view word) const {
+    return ql::starts_with(word, "\"") &&
+           ql::ends_with(word, GEO_LITERAL_SUFFIX);
+  }
 };
 
 // Split filename function for Well-Known Text Literals: The vocabulary 0 is
 // saved under the base filename and WKT literals are saved with a suffix
 // ".geometry"
-[[maybe_unused]] inline auto geoFilenameFunc =
-    [](std::string_view base) -> std::array<std::string, 2> {
-  return {std::string(base), absl::StrCat(base, ".geometry")};
+struct GeoFilenameFunc {
+  std::array<std::string, 2> operator()(std::string_view base) const {
+    return {std::string(base), absl::StrCat(base, ".geometry")};
+  }
 };
 
 }  // namespace detail::splitVocabulary
 
 // A SplitGeoVocabulary splits only Well-Known Text literals to their own
 // vocabulary. This can be used for precomputations for spatial features.
-// TODO<ullingerc>: Switch 2nd Vocab to GeoVocabulary<UnderlyingVocabulary>
-// after merge of #1951
 template <class UnderlyingVocabulary>
 using SplitGeoVocabulary =
-    SplitVocabulary<decltype(detail::splitVocabulary::geoSplitFunc),
-                    decltype(detail::splitVocabulary::geoFilenameFunc),
-                    UnderlyingVocabulary, UnderlyingVocabulary>;
+    SplitVocabulary<detail::splitVocabulary::GeoSplitFunc,
+                    detail::splitVocabulary::GeoFilenameFunc,
+                    UnderlyingVocabulary, GeoVocabulary<UnderlyingVocabulary>>;
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARY_H

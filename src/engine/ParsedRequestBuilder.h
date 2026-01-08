@@ -5,6 +5,8 @@
 #ifndef QLEVER_SRC_ENGINE_PARSEDREQUESTBUILDER_H
 #define QLEVER_SRC_ENGINE_PARSEDREQUESTBUILDER_H
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
 #include "util/http/UrlParser.h"
 #include "util/http/beast.h"
 
@@ -21,6 +23,10 @@ struct ParsedRequestBuilder {
       boost::beast::http::request<boost::beast::http::string_body>;
 
   ad_utility::url_parser::ParsedRequest parsedRequest_;
+
+  // Graph Store Protocol direct graph identification needs the host to be able
+  // to determine the graph IRI.
+  std::optional<std::string> host_ = std::nullopt;
 
   // Initialize a `ParsedRequestBuilder`, parsing the request target into the
   // `ParsedRequest`.
@@ -40,13 +46,15 @@ struct ParsedRequestBuilder {
   // is already set is an error. Note: processed parameters are removed from the
   // parameter map.
   template <typename Operation>
-  void extractOperationIfSpecified(string_view paramName);
+  void extractOperationIfSpecified(std::string_view paramName);
 
   // Returns whether the request is a Graph Store operation.
-  bool isGraphStoreOperation() const;
+  bool isGraphStoreOperationIndirect() const;
+  bool isGraphStoreOperationDirect() const;
 
   // Set the operation to the parsed Graph Store operation.
-  void extractGraphStoreOperation();
+  void extractGraphStoreOperationIndirect();
+  void extractGraphStoreOperationDirect();
 
   // Returns whether the parameters contain a parameter with the given key.
   bool parametersContain(std::string_view param) const;
@@ -83,4 +91,5 @@ struct ParsedRequestBuilder {
       const ad_utility::url_parser::ParamValueMap& params);
 };
 
+#endif
 #endif  // QLEVER_SRC_ENGINE_PARSEDREQUESTBUILDER_H

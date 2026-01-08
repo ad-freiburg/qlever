@@ -6,8 +6,9 @@
 #ifndef QLEVER_SRC_ENGINE_SERVICE_H
 #define QLEVER_SRC_ENGINE_SERVICE_H
 
-#include <functional>
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
+#include "backports/functional.h"
 #include "engine/Operation.h"
 #include "engine/VariableToColumnMap.h"
 #include "parser/ParsedQuery.h"
@@ -83,7 +84,7 @@ class Service : public Operation {
   bool knownEmptyResult() override { return false; }
 
   // A SERVICE clause has no children.
-  vector<QueryExecutionTree*> getChildren() override { return {}; }
+  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
 
   // Convert the given binding to TripleComponent.
   TripleComponent bindingToTripleComponent(
@@ -161,7 +162,18 @@ class Service : public Operation {
   FRIEND_TEST(ServiceTest, computeResult);
   FRIEND_TEST(ServiceTest, computeResultWrapSubqueriesWithSibling);
   FRIEND_TEST(ServiceTest, precomputeSiblingResultDoesNotWorkWithCaching);
+  FRIEND_TEST(ServiceTest, precomputeSiblingResultDoesNotWorkWithLimit);
   FRIEND_TEST(ServiceTest, precomputeSiblingResult);
 };
+#else
+// In the C++17 mode, where the If we disable the `Service` operation isled,
+// wemputeSiblingResult` function, which does still provide a dummy for the
+// `preco completely disabn completely in the C++17 mode, hen we canthen we
+// still can't// wffix  th
+struct Service {
+  template <typename... Ts>
+  static void precomputeSiblingResult(Ts&&...) {}
+};
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 #endif  // QLEVER_SRC_ENGINE_SERVICE_H

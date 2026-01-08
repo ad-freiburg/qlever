@@ -2,6 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Felix Meisen (fesemeisen@outlook.de)
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #ifndef QLEVER_SRC_INDEX_TEXTINDEXBUILDER_H
 #define QLEVER_SRC_INDEX_TEXTINDEXBUILDER_H
 
@@ -30,13 +31,13 @@ class TextIndexBuilder : public IndexImpl {
       std::pair<float, float> bAndKForBM25 = {0.75f, 1.75f});
 
   // Build docsDB file from given file (one text record per line).
-  void buildDocsDB(const string& docsFile) const;
+  void buildDocsDB(const std::string& docsFile) const;
 
  private:
-  size_t processWordsForVocabulary(const string& contextFile,
+  size_t processWordsForVocabulary(const std::string& contextFile,
                                    bool addWordsFromLiterals);
 
-  void processWordsForInvertedLists(const string& contextFile,
+  void processWordsForInvertedLists(const std::string& contextFile,
                                     bool addWordsFromLiterals, TextVec& vec);
 
   // Generator that returns all words in the given context file (if not empty)
@@ -58,14 +59,14 @@ class TextIndexBuilder : public IndexImpl {
       ad_utility::HashMap<WordIndex, Score>& wordsInContext,
       ScoreData& scoreData) const;
 
-  static void logEntityNotFound(const string& word,
+  static void logEntityNotFound(const std::string& word,
                                 size_t& entityNotFoundErrorMsgCount);
 
   void addContextToVector(TextVec& vec, TextRecordIndex context,
                           const ad_utility::HashMap<WordIndex, Score>& words,
                           const ad_utility::HashMap<Id, Score>& entities) const;
 
-  void createTextIndex(const string& filename, TextVec& vec);
+  void createTextIndex(const std::string& filename, TextVec& vec);
 
   /// Calculate the block boundaries for the text index. The boundary of a
   /// block is the index in the `textVocab_` of the last word that belongs
@@ -83,4 +84,5 @@ class TextIndexBuilder : public IndexImpl {
   void calculateBlockBoundaries();
 };
 
+#endif
 #endif  // QLEVER_SRC_INDEX_TEXTINDEXBUILDER_H

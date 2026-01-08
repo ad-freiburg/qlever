@@ -11,6 +11,7 @@
 #include <string>
 #include <string_view>
 
+#include "backports/three_way_comparison.h"
 #include "util/AsyncStream.h"
 #include "util/CompressorStream.h"
 #include "util/StringUtils.h"
@@ -74,7 +75,8 @@ class Url {
     return absl::StrCat(protocolAsString(), "://", host_, ":", port_, target_);
   }
 
-  bool operator==(const Url&) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Url, protocol_, host_, port_,
+                                              target_)
 };
 
 // A concept for `http::request`
@@ -102,10 +104,12 @@ CPP_concept HttpRequest = detail::isHttpRequest<T>;
  * @return A http::response<http::string_body> which is ready to be sent.
  */
 inline http::response<http::string_body> createHttpResponseFromString(
-    std::string body, http::status status, MediaType mediaType,
+    std::string body, http::status status, std::optional<MediaType> mediaType,
     std::optional<bool> keepAlive, unsigned version) {
   http::response<http::string_body> response{status, version};
-  response.set(http::field::content_type, toString(mediaType));
+  if (mediaType.has_value()) {
+    response.set(http::field::content_type, toString(mediaType.value()));
+  }
   response.body() = std::move(body);
   if (keepAlive.has_value()) {
     response.keep_alive(keepAlive.value());
@@ -130,7 +134,8 @@ CPP_template(typename RequestType)(
                                                         http::status status,
                                                         const RequestType&
                                                             request,
-                                                        MediaType mediaType) {
+                                                        std::optional<MediaType>
+                                                            mediaType) {
   return createHttpResponseFromString(std::move(body), status, mediaType,
                                       request.keep_alive(), request.version());
 }
@@ -160,14 +165,21 @@ CPP_template(typename RequestType)(
 
   CompressionMethod method =
       ad_utility::content_encoding::getCompressionMethodForRequest(request);
+
   auto asyncGenerator = streams::runStreamAsync(std::move(generator), 100);
+  auto coroAsyncGenerator = [](auto range) -> cppcoro::generator<std::string> {
+    for (auto& value : range) {
+      co_yield value;
+    }
+  }(std::move(asyncGenerator));
+
   if (method != CompressionMethod::NONE) {
     response.body() =
-        streams::compressStream(std::move(asyncGenerator), method);
+        streams::compressStream(std::move(coroAsyncGenerator), method);
     ad_utility::content_encoding::setContentEncodingHeaderForCompressionMethod(
         method, response);
   } else {
-    response.body() = std::move(asyncGenerator);
+    response.body() = std::move(coroAsyncGenerator);
   }
 }
 
@@ -200,10 +212,17 @@ static auto createJsonResponse(std::string text, const auto& request,
                                       MediaType::json);
 }
 
+template <typename T>
+CPP_concept IsJson = SameAsAny<T, nlohmann::json, nlohmann::ordered_json>;
+
 /// Create a HttpResponse from a json object with status 200 OK and mime type
 /// "application/json".
-static auto createJsonResponse(const nlohmann::json& j, const auto& request,
-                               http::status status = http::status::ok) {
+CPP_template(typename Json)(
+    requires IsJson<
+        Json>) static auto createJsonResponse(const Json& j,
+                                              const auto& request,
+                                              http::status status =
+                                                  http::status::ok) {
   // Argument `4` leads to a human-readable indentation.
   return createJsonResponse(j.dump(4), request, status);
 }

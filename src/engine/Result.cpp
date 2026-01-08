@@ -17,7 +17,7 @@
 #include "util/Timer.h"
 
 // _____________________________________________________________________________
-string Result::asDebugString() const {
+std::string Result::asDebugString() const {
   std::ostringstream os;
   os << "First (up to) 5 rows of result with size:\n";
   for (size_t i = 0; i < std::min<size_t>(5, idTable().size()); ++i) {
@@ -78,6 +78,22 @@ Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
 }
 
 // _____________________________________________________________________________
+Result::Result(IdTablePtr idTablePtr, std::vector<ColumnIndex> sortedBy,
+               LocalVocab&& localVocab)
+    : data_{IdTableSharedLocalVocabPair{
+          std::move(idTablePtr),
+          std::make_shared<const LocalVocab>(std::move(localVocab))}},
+      sortedBy_{std::move(sortedBy)} {
+  const auto& materializedResult = std::get<IdTableSharedLocalVocabPair>(data_);
+  AD_CONTRACT_CHECK(std::get<IdTablePtr>(materializedResult.idTableOrPtr_) !=
+                    nullptr);
+  // Note: This second check can never throw because of how we initialize the
+  // pointer above, but it still increases confidence.
+  AD_CORRECTNESS_CHECK(materializedResult.localVocab_ != nullptr);
+  assertSortOrderIsRespected(this->idTable(), sortedBy_);
+}
+
+// _____________________________________________________________________________
 Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
                LocalVocab&& localVocab)
     : Result{std::move(idTable), std::move(sortedBy),
@@ -88,9 +104,11 @@ Result::Result(IdTableVocabPair pair, std::vector<ColumnIndex> sortedBy)
     : Result{std::move(pair.idTable_), std::move(sortedBy),
              std::move(pair.localVocab_)} {}
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 // _____________________________________________________________________________
 Result::Result(Generator idTables, std::vector<ColumnIndex> sortedBy)
     : Result{LazyResult{std::move(idTables)}, std::move(sortedBy)} {}
+#endif
 
 // _____________________________________________________________________________
 Result::Result(LazyResult idTables, std::vector<ColumnIndex> sortedBy)
@@ -111,6 +129,7 @@ Result::Result(LazyResult idTables, std::vector<ColumnIndex> sortedBy)
           })}},
       sortedBy_{std::move(sortedBy)} {}
 
+namespace {
 // _____________________________________________________________________________
 // Apply `LimitOffsetClause` to given `IdTable`.
 void resizeIdTable(IdTable& idTable, const LimitOffsetClause& limitOffset) {
@@ -128,6 +147,18 @@ void resizeIdTable(IdTable& idTable, const LimitOffsetClause& limitOffset) {
   idTable.shrinkToFit();
 }
 
+// Apply the `LimitOffsetClause` to the `idTable`, return the result as a deep
+// copy of the table.
+IdTable makeResizedClone(const IdTable& idTable,
+                         const LimitOffsetClause& limitOffset) {
+  IdTable result{idTable.getAllocator()};
+  result.setNumColumns(idTable.numColumns());
+  result.insertAtEnd(idTable, limitOffset.actualOffset(idTable.numRows()),
+                     limitOffset.upperBound(idTable.numRows()));
+  return result;
+}
+}  // namespace
+
 // _____________________________________________________________________________
 void Result::applyLimitOffset(
     const LimitOffsetClause& limitOffset,
@@ -142,8 +173,19 @@ void Result::applyLimitOffset(
   }
   if (isFullyMaterialized()) {
     ad_utility::timer::Timer limitTimer{ad_utility::timer::Timer::Started};
-    resizeIdTable(std::get<IdTableSharedLocalVocabPair>(data_).idTable_,
-                  limitOffset);
+    auto& tableOrPtr =
+        std::get<IdTableSharedLocalVocabPair>(data_).idTableOrPtr_;
+    std::visit(
+        [&limitOffset](auto& arg) {
+          if constexpr (ad_utility::isSimilar<decltype(arg), IdTable>) {
+            resizeIdTable(arg, limitOffset);
+          } else {
+            static_assert(ad_utility::isSimilar<decltype(arg), IdTablePtr>);
+            arg = std::make_shared<const IdTable>(
+                makeResizedClone(*arg, limitOffset));
+          }
+        },
+        tableOrPtr);
     limitTimeCallback(limitTimer.msecs(), idTable());
   } else {
     ad_utility::CachingContinuableTransformInputRange generator{
@@ -196,7 +238,7 @@ void Result::assertThatLimitWasRespected(const LimitOffsetClause& limitOffset) {
 
 // _____________________________________________________________________________
 void Result::checkDefinedness(const VariableToColumnMap& varColMap) {
-  auto performCheck = [](const auto& map, IdTable& idTable) {
+  auto performCheck = [](const auto& map, const IdTable& idTable) {
     return ql::ranges::all_of(map, [&](const auto& varAndCol) {
       const auto& [columnIndex, mightContainUndef] = varAndCol.second;
       if (mightContainUndef == ColumnIndexAndTypeInfo::AlwaysDefined) {
@@ -208,8 +250,7 @@ void Result::checkDefinedness(const VariableToColumnMap& varColMap) {
     });
   };
   if (isFullyMaterialized()) {
-    AD_EXPENSIVE_CHECK(performCheck(
-        varColMap, std::get<IdTableSharedLocalVocabPair>(data_).idTable_));
+    AD_EXPENSIVE_CHECK(performCheck(varColMap, idTable()));
   } else {
     ad_utility::CachingTransformInputRange generator{
         idTables(),
@@ -268,7 +309,17 @@ void Result::runOnNewChunkComputed(
 // _____________________________________________________________________________
 const IdTable& Result::idTable() const {
   AD_CONTRACT_CHECK(isFullyMaterialized());
-  return std::get<IdTableSharedLocalVocabPair>(data_).idTable_;
+  return std::visit(
+      [](const auto& arg) -> const IdTable& {
+        using T = std::decay_t<decltype(arg)>;
+        if constexpr (std::is_same_v<T, IdTable>) {
+          return arg;
+        } else {
+          static_assert(std::is_same_v<T, IdTablePtr>);
+          return *arg;
+        }
+      },
+      std::get<IdTableSharedLocalVocabPair>(data_).idTableOrPtr_);
 }
 
 // _____________________________________________________________________________
@@ -327,9 +378,9 @@ void Result::cacheDuringConsumption(
 // _____________________________________________________________________________
 void Result::logResultSize() const {
   if (isFullyMaterialized()) {
-    LOG(INFO) << "Result has size " << idTable().size() << " x "
-              << idTable().numColumns() << std::endl;
+    AD_LOG_INFO << "Result has size " << idTable().size() << " x "
+                << idTable().numColumns() << std::endl;
   } else {
-    LOG(INFO) << "Result has unknown size (not computed yet)" << std::endl;
+    AD_LOG_INFO << "Result has unknown size (not computed yet)" << std::endl;
   }
 }

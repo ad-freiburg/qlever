@@ -9,6 +9,7 @@
 #include "engine/CallFixedSize.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
+#include "engine/PermutationSelector.h"
 #include "index/IndexImpl.h"
 #include "util/JoinAlgorithms/JoinColumnMapping.h"
 
@@ -32,12 +33,8 @@ static constexpr auto makeJoin =
     -> HasPredicateScan::SubtreeAndColumnIndex {
   const auto& subtreeVar =
       subtree->getVariableAndInfoByColumnIndex(subtreeColIndex).first;
-  auto hasPatternScan = ad_utility::makeExecutionTree<IndexScan>(
-      qec, Permutation::Enum::PSO,
-      SparqlTripleSimple{
-          subtreeVar,
-          ad_utility::triple_component::Iri::fromIriref(HAS_PATTERN_PREDICATE),
-          objectVariable});
+  auto hasPatternScan = HasPredicateScan::makePatternScan(
+      qec, TripleComponent{subtreeVar}, objectVariable);
   auto joinedSubtree = ad_utility::makeExecutionTree<Join>(
       qec, std::move(subtree), std::move(hasPatternScan), subtreeColIndex, 0);
   auto column =
@@ -87,7 +84,7 @@ HasPredicateScan::HasPredicateScan(QueryExecutionContext* qec,
       object_{triple.o_} {}
 
 // ___________________________________________________________________________
-string HasPredicateScan::getCacheKeyImpl() const {
+std::string HasPredicateScan::getCacheKeyImpl() const {
   std::ostringstream os;
   checkType(type_);
   switch (type_) {
@@ -108,7 +105,7 @@ string HasPredicateScan::getCacheKeyImpl() const {
 }
 
 // ___________________________________________________________________________
-string HasPredicateScan::getDescriptor() const {
+std::string HasPredicateScan::getDescriptor() const {
   checkType(type_);
   switch (type_) {
     case ScanType::FREE_S:
@@ -141,7 +138,7 @@ size_t HasPredicateScan::getResultWidth() const {
 }
 
 // ___________________________________________________________________________
-vector<ColumnIndex> HasPredicateScan::resultSortedOn() const {
+std::vector<ColumnIndex> HasPredicateScan::resultSortedOn() const {
   checkType(type_);
   switch (type_) {
     case ScanType::FREE_S:
@@ -262,19 +259,31 @@ Result HasPredicateScan::computeResult([[maybe_unused]] bool requestLaziness) {
   idTable.setNumColumns(getResultWidth());
 
   const CompactVectorOfStrings<Id>& patterns = getIndex().getPatterns();
-  const auto& index = getExecutionContext()->getIndex().getImpl();
-  auto scanSpec =
-      ScanSpecificationAsTripleComponent{
-          TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE), std::nullopt,
-          std::nullopt}
-          .toScanSpecification(index);
-  auto hasPattern =
-      index.getPermutation(Permutation::Enum::PSO)
-          .lazyScan(scanSpec, std::nullopt, {}, cancellationHandle_,
-                    locatedTriplesSnapshot());
+
+  // Note: The variable names don't matter because we directly process the
+  // result here.
+  auto scan = makePatternScan(
+      getExecutionContext(), TripleComponent{Variable{"?_s"}}, Variable{"?_o"});
+  auto result = scan->getResult(true);
+  // The `callback` is invoked with a single-value span of the `idTable` if the
+  // result is fully materialized, because it expects a range of `IdTable`s.
+  // Because of caching we can potentially get a fully materialized result here.
+  auto runOnResult = [&result](auto callback) {
+    if (result->isFullyMaterialized()) {
+      return std::invoke(callback, ql::span{&result->idTable(), 1});
+    }
+    auto idTables = result->idTables();
+    return std::invoke(
+        callback,
+        idTables | ql::views::transform(
+                       [](Result::IdTableVocabPair& pair) -> const auto& {
+                         return pair.idTable_;
+                       }));
+  };
 
   auto getId = [this](const TripleComponent tc) {
-    std::optional<Id> id = tc.toValueId(getIndex().getVocab());
+    std::optional<Id> id =
+        tc.toValueId(getIndex().getVocab(), getIndex().encodedIriManager());
     if (!id.has_value()) {
       AD_THROW("The entity '" + tc.toRdfLiteral() +
                "' required by `ql:has-predicate` is not in the vocabulary.");
@@ -282,19 +291,20 @@ Result HasPredicateScan::computeResult([[maybe_unused]] bool requestLaziness) {
     return id.value();
   };
   switch (type_) {
-    case ScanType::FREE_S: {
-      HasPredicateScan::computeFreeS(&idTable, getId(object_), hasPattern,
-                                     patterns);
+    case ScanType::FREE_S:
+      runOnResult([this, &idTable, &getId, &patterns](auto hasPattern) {
+        computeFreeS(&idTable, getId(object_), hasPattern, patterns);
+      });
       return {std::move(idTable), resultSortedOn(), LocalVocab{}};
-    };
-    case ScanType::FREE_O: {
-      HasPredicateScan::computeFreeO(&idTable, getId(subject_), patterns);
+    case ScanType::FREE_O:
+      computeFreeO(&idTable, subject_, patterns);
       return {std::move(idTable), resultSortedOn(), LocalVocab{}};
-    };
+
     case ScanType::FULL_SCAN:
-      HasPredicateScan::computeFullScan(
-          &idTable, hasPattern, patterns,
-          getIndex().getNumDistinctSubjectPredicatePairs());
+      runOnResult([this, &idTable, &patterns](auto hasPattern) {
+        computeFullScan(&idTable, hasPattern, patterns,
+                        getIndex().getNumDistinctSubjectPredicatePairs());
+      });
       return {std::move(idTable), resultSortedOn(), LocalVocab{}};
     case ScanType::SUBQUERY_S:
 
@@ -334,17 +344,14 @@ void HasPredicateScan::computeFreeS(
 
 // ___________________________________________________________________________
 void HasPredicateScan::computeFreeO(
-    IdTable* resultTable, Id subjectAsId,
+    IdTable* resultTable, TripleComponent subject,
     const CompactVectorOfStrings<Id>& patterns) const {
-  const auto& index = getExecutionContext()->getIndex().getImpl();
-  auto scanSpec =
-      ScanSpecificationAsTripleComponent{
-          TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE), subjectAsId,
-          std::nullopt}
-          .toScanSpecification(index);
-  auto hasPattern = index.getPermutation(Permutation::Enum::PSO)
-                        .scan(std::move(scanSpec), {}, cancellationHandle_,
-                              locatedTriplesSnapshot());
+  // Note: The variable name doesn't matter because we directly process the
+  // result here.
+  auto scan = makePatternScan(getExecutionContext(), std::move(subject),
+                              Variable{"?_o"});
+  auto result = scan->getResult(false);
+  const auto& hasPattern = result->idTable();
   AD_CORRECTNESS_CHECK(hasPattern.numRows() <= 1);
   for (Id patternId : hasPattern.getColumn(0)) {
     const auto& pattern = patterns[patternId.getInt()];
@@ -404,4 +411,18 @@ std::unique_ptr<Operation> HasPredicateScan::cloneImpl() const {
     copy->subtree_.value().subtree_ = subtree().clone();
   }
   return copy;
+}
+
+// _____________________________________________________________________________
+std::shared_ptr<QueryExecutionTree> HasPredicateScan::makePatternScan(
+    QueryExecutionContext* qec, TripleComponent subject, Variable object) {
+  SparqlTripleSimple triple{
+      std::move(subject),
+      ad_utility::triple_component::Iri::fromIriref(HAS_PATTERN_PREDICATE),
+      TripleComponent{std::move(object)}};
+  return ad_utility::makeExecutionTree<IndexScan>(
+      qec,
+      qlever::getPermutationForTriple(Permutation::Enum::PSO, qec->getIndex(),
+                                      triple),
+      qec->locatedTriplesSharedState(), triple);
 }

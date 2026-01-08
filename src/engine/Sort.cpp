@@ -3,7 +3,7 @@
 // Author: 2015 - 2017 Björn Buchhold (buchhold@cs.uni-freiburg.de)
 // Author: 2023 -      Johannes Kalmbach (kalmbach@cs.uni-freiburg.de)
 
-#include "./Sort.h"
+#include "engine/Sort.h"
 
 #include <sstream>
 
@@ -11,6 +11,7 @@
 #include "engine/Engine.h"
 #include "engine/QueryExecutionTree.h"
 #include "global/RuntimeParameters.h"
+#include "util/Algorithm.h"
 
 // _____________________________________________________________________________
 size_t Sort::getResultWidth() const { return subtree_->getResultWidth(); }
@@ -53,7 +54,7 @@ std::string Sort::getDescriptor() const {
 // _____________________________________________________________________________
 Result Sort::computeResult([[maybe_unused]] bool requestLaziness) {
   using std::endl;
-  LOG(DEBUG) << "Getting sub-result for Sort result computation..." << endl;
+  AD_LOG_DEBUG << "Getting sub-result for Sort result computation..." << endl;
   std::shared_ptr<const Result> subRes = subtree_->getResult();
 
   // TODO<joka921> proper timeout for sorting operations
@@ -61,7 +62,7 @@ Result Sort::computeResult([[maybe_unused]] bool requestLaziness) {
   getExecutionContext()->getSortPerformanceEstimator().throwIfEstimateTooLong(
       subTable.numRows(), subTable.numColumns(), deadline_, "Sort operation");
 
-  LOG(DEBUG) << "Sort result computation..." << endl;
+  AD_LOG_DEBUG << "Sort result computation..." << endl;
   ad_utility::Timer t{ad_utility::timer::Timer::InitialStatus::Started};
   IdTable idTable = subRes->idTable().clone();
   runtimeInfo().addDetail("time-cloning", t.msecs());
@@ -71,13 +72,13 @@ Result Sort::computeResult([[maybe_unused]] bool requestLaziness) {
   cancellationHandle_->resetWatchDogState();
   checkCancellation();
 
-  LOG(DEBUG) << "Sort result computation done." << endl;
+  AD_LOG_DEBUG << "Sort result computation done." << endl;
   return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
 }
 
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>> Sort::makeSortedTree(
-    const vector<ColumnIndex>& sortColumns) const {
+    const std::vector<ColumnIndex>& sortColumns) const {
   AD_CONTRACT_CHECK(!isSortedBy(sortColumns));
   AD_LOG_DEBUG
       << "Tried to re-sort a subtree that is already sorted by `Sort` with a "
@@ -91,4 +92,34 @@ std::optional<std::shared_ptr<QueryExecutionTree>> Sort::makeSortedTree(
 std::unique_ptr<Operation> Sort::cloneImpl() const {
   return std::make_unique<Sort>(_executionContext, subtree_->clone(),
                                 sortColumnIndices_);
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Sort::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
+  std::set<Variable> newVariables;
+  std::vector<Variable> sortVars;
+  const auto* vars = &variables;
+  for (const auto& jcl : sortColumnIndices_) {
+    const auto& var = subtree_->getVariableAndInfoByColumnIndex(jcl).first;
+    sortVars.push_back(var);
+    if (!ad_utility::contains(variables, var)) {
+      if (vars == &variables) {
+        newVariables = variables;
+      }
+      newVariables.insert(var);
+      vars = &newVariables;
+    }
+  }
+
+  // TODO<joka921> Code duplication including a former copy-paste bug.
+  auto subtree =
+      QueryExecutionTree::makeTreeWithStrippedColumns(subtree_, *vars);
+  std::vector<ColumnIndex> sortColumnIndices;
+  for (const auto& var : sortVars) {
+    sortColumnIndices.push_back(subtree->getVariableColumn(var));
+  }
+
+  return ad_utility::makeExecutionTree<Sort>(
+      getExecutionContext(), std::move(subtree), sortColumnIndices);
 }

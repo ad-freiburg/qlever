@@ -7,6 +7,8 @@
 
 #include <string>
 
+#include "backports/three_way_comparison.h"
+#include "engine/QueryExecutionContext.h"
 #include "parser/MagicServiceQuery.h"
 #include "util/HashMap.h"
 
@@ -77,8 +79,7 @@ struct VarOrFixedEntity {
     return std::holds_alternative<FixedEntity>(entity_);
   }
 
-  friend bool operator==(const VarOrFixedEntity&,
-                         const VarOrFixedEntity&) = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR(VarOrFixedEntity, entity_)
 };
 
 /**
@@ -152,7 +153,7 @@ struct TextIndexScanForEntityConfiguration {
  */
 struct TextIndexScanForWordConfiguration {
   Variable varToBindText_;
-  string word_;
+  std::string word_;
   std::optional<Variable> matchVar_ = std::nullopt;
   std::optional<Variable> scoreVar_ = std::nullopt;
   bool isPrefix_ = false;
@@ -186,6 +187,10 @@ struct TextSearchQuery : MagicServiceQuery {
   // For details of which triples make sense look at details of
   // TextSearchConfig.
   void addParameter(const SparqlTriple& triple) override;
+
+  // Override `addGraph` to throw an exception, because only triples are
+  // supported in the configuration of a `TextSearchQuery`.
+  void addGraph(const GraphPatternOperation& childGraphPattern) override;
 
   // Convert each config of configVarToConfigs_ to either word search config
   // or entity search config. Check all query mistakes that can only be checked
@@ -235,6 +240,10 @@ struct TextSearchQuery : MagicServiceQuery {
   // Throws exception if scoreVar_ was previously set for this key.
   void predStringBindScore(const Variable& configVar,
                            const Variable& objectVar);
+
+  constexpr std::string_view name() const override {
+    return "full text search";
+  };
 };
 
 }  // namespace parsedQuery

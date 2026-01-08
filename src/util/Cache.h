@@ -8,12 +8,11 @@
 #define QLEVER_SRC_UTIL_CACHE_H
 
 #include <cassert>
-#include <concepts>
 #include <limits>
 #include <memory>
-#include <type_traits>
 #include <utility>
 
+#include "backports/type_traits.h"
 #include "util/HashMap.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/PriorityQueue.h"
@@ -22,7 +21,6 @@
 
 namespace ad_utility {
 
-using std::shared_ptr;
 using namespace ad_utility::memory_literals;
 
 static constexpr auto size_t_max = std::numeric_limits<size_t>::max();
@@ -70,7 +68,7 @@ CPP_template(template <typename Sc, typename Val, typename Comp>
   template <typename K, typename V>
   using MapType = ad_utility::HashMap<K, V>;
 
-  using ValuePtr = shared_ptr<const Value>;
+  using ValuePtr = std::shared_ptr<const Value>;
 
   class Entry {
     Key mKey;
@@ -90,7 +88,7 @@ CPP_template(template <typename Sc, typename Val, typename Comp>
     ValuePtr& value() { return mValue; }
   };
 
-  using EmplacedValue = shared_ptr<Value>;
+  using EmplacedValue = std::shared_ptr<Value>;
   using EntryList = PriorityQueue<Score, Entry, ScoreComparator>;
 
   using AccessMap = MapType<Key, typename EntryList::Handle>;
@@ -127,7 +125,7 @@ CPP_template(template <typename Sc, typename Val, typename Comp>
     if (mapIt == _accessMap.end()) {
       // Returning a null pointer allows to easily check if the entry
       // existed and crash misuses.
-      return shared_ptr<Value>(nullptr);
+      return std::shared_ptr<Value>(nullptr);
     }
 
     // Move it to the front.
@@ -154,7 +152,7 @@ CPP_template(template <typename Sc, typename Val, typename Comp>
   /// Insert a key-value pair to the cache. Throws an exception if the key is
   /// already present. Overload for shared_ptr of value. If the value is too big
   /// for the cache, nothing happens.
-  ValuePtr insert(const Key& key, shared_ptr<Value> valPtr) {
+  ValuePtr insert(const Key& key, std::shared_ptr<Value> valPtr) {
     if (contains(key)) {
       throw std::runtime_error(
           "Trying to insert a cache key which was already present");
@@ -183,7 +181,7 @@ CPP_template(template <typename Sc, typename Val, typename Comp>
   /// Insert a pinned key-value pair to the cache. Throws an exception if the
   /// key is already present. Overload for shared_ptr<Value>. If the value is
   /// too big for the cache, an exception is thrown.
-  ValuePtr insertPinned(const Key& key, shared_ptr<Value> valPtr) {
+  ValuePtr insertPinned(const Key& key, std::shared_ptr<Value> valPtr) {
     if (contains(key)) {
       throw std::runtime_error(
           "Trying to insert a cache key which was already present");
@@ -278,7 +276,7 @@ CPP_template(template <typename Sc, typename Val, typename Comp>
       return;
     }
     // the entry exists in the non-pinned part of the cache, erase it.
-    _totalSizeNonPinned -= _valueSizeGetter(*mapIt->second);
+    _totalSizeNonPinned -= _valueSizeGetter(*mapIt->second.value().value());
     _entries.erase(std::move(mapIt->second));
     _accessMap.erase(mapIt);
   }

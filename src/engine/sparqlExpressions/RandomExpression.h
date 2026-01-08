@@ -42,7 +42,7 @@ class RandomExpression : public SparqlExpression {
   }
 
   // Get a unique identifier for this expression, used as cache key.
-  string getCacheKey(
+  std::string getCacheKey(
       [[maybe_unused]] const VariableToColumnMap& varColMap) const override {
     return "RAND " + std::to_string(randId);
   }

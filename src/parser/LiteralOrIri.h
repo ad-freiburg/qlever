@@ -7,8 +7,10 @@
 
 #include <variant>
 
-#include "parser/Iri.h"
-#include "parser/Literal.h"
+#include "backports/three_way_comparison.h"
+#include "rdfTypes/Iri.h"
+#include "rdfTypes/Literal.h"
+#include "util/Forward.h"
 
 namespace ad_utility::triple_component {
 static constexpr char literalPrefixChar = '"';
@@ -45,11 +47,19 @@ class alignas(16) LiteralOrIri {
   // Create a new LiteralOrIri based on an Iri object
   explicit LiteralOrIri(Iri iri);
 
-  const std::string& toStringRepresentation() const {
-    auto impl = [](const auto& val) -> decltype(auto) {
-      return val.toStringRepresentation();
-    };
-    return std::visit(impl, data_);
+ private:
+  static constexpr auto toStringRepresentationImpl =
+      [](auto&& val) -> decltype(auto) {
+    return AD_FWD(val).toStringRepresentation();
+  };
+
+ public:
+  const std::string& toStringRepresentation() const& {
+    return std::visit(toStringRepresentationImpl, data_);
+  }
+
+  std::string toStringRepresentation() && {
+    return std::visit(toStringRepresentationImpl, std::move(data_));
   }
 
   static LiteralOrIri fromStringRepresentation(std::string internal) {
@@ -61,14 +71,16 @@ class alignas(16) LiteralOrIri {
       return LiteralOrIri{Iri::fromStringRepresentation(std::move(internal))};
     }
   }
-  CPP_template(typename H,
-               typename L)(requires std::same_as<L, LiteralOrIri>) friend H
+  CPP_template(typename H, typename L)(
+      requires ql::concepts::same_as<L, LiteralOrIri>) friend H
       AbslHashValue(H h, const L& literalOrIri) {
     return H::combine(std::move(h), literalOrIri.data_);
   }
-  bool operator==(const LiteralOrIri&) const = default;
 
-  std::strong_ordering operator<=>(const LiteralOrIri& rhs) const;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(LiteralOrIri, data_)
+
+  ql::strong_ordering compareThreeWay(const LiteralOrIri& rhs) const;
+  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(LiteralOrIri)
 
   // Return true if object contains an Iri object
   bool isIri() const;

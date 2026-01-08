@@ -4,12 +4,13 @@
 //
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#include "RelationalExpressions.h"
+#include "engine/sparqlExpressions/RelationalExpressions.h"
 
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
+#include "util/GeoSparqlHelpers.h"
 #include "util/LambdaHelpers.h"
 #include "util/TypeTraits.h"
 
@@ -31,46 +32,23 @@ using valueIdComparators::Comparison;
 // case where `S` is `string` or `vector<string>`. In this case the generator
 // yields `pair<ValueId, ValueId>` (see `makeValueId` and `getRangeFromVocab`
 // above for details).
-
-// First the `idGenerator` for constants (string, int, double). It yields the
-// same ID `targetSize` many times.
-CPP_template(typename S)(
-    requires SingleExpressionResult<S> CPP_and
-        isConstantResult<S>) auto idGenerator(const S& value, size_t targetSize,
-                                              const EvaluationContext* context)
-    -> cppcoro::generator<const decltype(makeValueId(value, context))> {
-  auto id = makeValueId(value, context);
-  for (size_t i = 0; i < targetSize; ++i) {
-    co_yield id;
+CPP_template(typename S)(requires SingleExpressionResult<S>) auto idGenerator(
+    S&& input, size_t targetSize, const EvaluationContext* context) {
+  [[maybe_unused]] auto makeId = [context](const auto& el) {
+    return makeValueId(el, context);
+  };
+  if constexpr (isConstantResult<S>) {
+    return ::ranges::views::repeat_n(makeId(input), targetSize);
+  } else if constexpr (isVectorResult<S>) {
+    AD_CONTRACT_CHECK(targetSize == input.size());
+    return ::ranges::views::transform(ad_utility::allView(AD_FWD(input)),
+                                      makeId);
+  } else {
+    static_assert(
+        ad_utility::SimilarToAny<S, Variable, ad_utility::SetOfIntervals>);
+    return sparqlExpression::detail::makeGenerator(AD_FWD(input), targetSize,
+                                                   context);
   }
-}
-
-// Version of `idGenerator` for vectors. Asserts that the size of the vector is
-// equal to `targetSize` and the yields the corresponding ID for each of the
-// elements in the vector.
-CPP_template(typename S)(
-    requires SingleExpressionResult<S> CPP_and
-        isVectorResult<S>) auto idGenerator(const S& values, size_t targetSize,
-                                            const EvaluationContext* context)
-    -> cppcoro::generator<decltype(makeValueId(values[0], context))> {
-  AD_CONTRACT_CHECK(targetSize == values.size());
-  for (const auto& el : values) {
-    auto id = makeValueId(el, context);
-    co_yield id;
-  }
-}
-
-// For the `Variable` and `SetOfIntervals` class, the generator from the
-// `sparqlExpressions` module already yields the `ValueIds`.
-CPP_template(typename S)(
-    requires ad_utility::SimilarToAny<
-        S, Variable,
-        ad_utility::SetOfIntervals>) auto idGenerator(S input,
-                                                      size_t targetSize,
-                                                      const EvaluationContext*
-                                                          context) {
-  return sparqlExpression::detail::makeGenerator(std::move(input), targetSize,
-                                                 context);
 }
 
 // Return a pair of generators that generate the values from `value1` and
@@ -278,7 +256,7 @@ ExpressionResult RelationalExpression<Comp>::evaluate(
 
 // _____________________________________________________________________________
 template <Comparison Comp>
-string RelationalExpression<Comp>::getCacheKey(
+std::string RelationalExpression<Comp>::getCacheKey(
     const VariableToColumnMap& varColMap) const {
   static_assert(std::tuple_size_v<decltype(children_)> == 2);
   return absl::StrCat(typeid(*this).name(),
@@ -296,7 +274,7 @@ ql::span<SparqlExpression::Ptr> RelationalExpression<Comp>::childrenImpl() {
 template <Comparison Comp>
 std::optional<SparqlExpression::LangFilterData>
 RelationalExpression<Comp>::getLanguageFilterExpression() const {
-  if (Comp != valueIdComparators::Comparison::EQ) {
+  if (Comp != Comparison::EQ) {
     return std::nullopt;
   }
 
@@ -316,7 +294,7 @@ RelationalExpression<Comp>::getLanguageFilterExpression() const {
     // TODO<joka921> Is this even allowed by the grammar?
     return LangFilterData{
         std::move(optVar.value()),
-        std::string{asStringViewUnsafe(langPtr->value().getContent())}};
+        {std::string{asStringViewUnsafe(langPtr->value().getContent())}}};
   };
 
   const auto& child1 = children_[0];
@@ -507,7 +485,8 @@ ql::span<SparqlExpression::Ptr> InExpression::childrenImpl() {
 }
 
 // _____________________________________________________________________________
-string InExpression::getCacheKey(const VariableToColumnMap& varColMap) const {
+std::string InExpression::getCacheKey(
+    const VariableToColumnMap& varColMap) const {
   std::stringstream result;
   result << "IN Expression with (";
   for (const auto& child : children_) {
@@ -563,6 +542,27 @@ auto InExpression::getEstimatesForFilterExpression(
       inputSizeEstimate, reductionFactorEquals, children_, firstSortedVariable);
 }
 
+// _____________________________________________________________________________
+std::optional<SparqlExpression::LangFilterData>
+InExpression::getLanguageFilterExpression() const {
+  const auto& left = children_[0];
+  std::optional<Variable> optVar = getVariableFromLangExpression(left.get());
+  if (!optVar.has_value() || children_.size() < 2) {
+    return std::nullopt;
+  }
+  ad_utility::HashSet<std::string> languages;
+  for (const auto& child : children_ | ql::views::drop(1)) {
+    const auto* langPtr =
+        dynamic_cast<const StringLiteralExpression*>(child.get());
+    if (!langPtr) {
+      return std::nullopt;
+    }
+    languages.emplace(asStringViewUnsafe(langPtr->value().getContent()));
+  }
+
+  return LangFilterData{std::move(optVar.value()), std::move(languages)};
+}
+
 // Explicit instantiations
 template class RelationalExpression<Comparison::LT>;
 template class RelationalExpression<Comparison::LE>;
@@ -571,3 +571,60 @@ template class RelationalExpression<Comparison::NE>;
 template class RelationalExpression<Comparison::GT>;
 template class RelationalExpression<Comparison::GE>;
 }  // namespace sparqlExpression::relational
+
+namespace sparqlExpression {
+
+// _____________________________________________________________________________
+std::optional<std::pair<sparqlExpression::GeoFunctionCall, double>>
+getGeoDistanceFilter(const SparqlExpression& expr) {
+  // TODO<ullingerc> Add support for more optimizable filters:
+  // * `geof:distance() < constant`
+  // * `constant > geof:distance()`
+  // * `constant >= geof:distance()`
+  // The supported patterns are documented in the header declaration of this
+  // function.
+
+  // Supported comparison operator
+  auto compareExpr = dynamic_cast<const LessEqualExpression*>(&expr);
+  if (compareExpr == nullptr) {
+    return std::nullopt;
+  }
+
+  // Left child must be distance function
+  auto children = compareExpr->children();
+  const auto& leftChild = *children[0];
+
+  // Right child must be constant
+  auto rightChild = children[1].get();
+  auto literalExpr =
+      dynamic_cast<detail::LiteralExpression<ValueId>*>(rightChild);
+  if (literalExpr == nullptr) {
+    return std::nullopt;
+  }
+  ValueId constant = literalExpr->value();
+  // Extract distance. Here we don't know the unit of this number yet. It is
+  // extracted from the function call in the next step.
+  double maxDistAnyUnit = 0;
+  if (constant.getDatatype() == Datatype::Double) {
+    maxDistAnyUnit = constant.getDouble();
+  } else if (constant.getDatatype() == Datatype::Int) {
+    maxDistAnyUnit = static_cast<double>(constant.getInt());
+  } else {
+    return std::nullopt;
+  }
+
+  // Extract variables and distance unit from function call
+  auto geoFuncCall = getGeoDistanceExpressionParameters(leftChild);
+  if (!geoFuncCall.has_value()) {
+    return std::nullopt;
+  }
+
+  // Convert unit to meters
+  double maxDist = ad_utility::detail::valueInUnitToKilometer(
+                       maxDistAnyUnit, geoFuncCall.value().unit_) *
+                   1000;
+
+  return std::pair<GeoFunctionCall, double>{geoFuncCall.value(), maxDist};
+}
+
+}  // namespace sparqlExpression

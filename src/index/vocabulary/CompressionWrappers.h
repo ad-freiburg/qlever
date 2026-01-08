@@ -9,6 +9,7 @@
 #include "backports/concepts.h"
 #include "index/PrefixHeuristic.h"
 #include "index/vocabulary/PrefixCompressor.h"
+#include "util/CompilerWarnings.h"
 #include "util/FsstCompressor.h"
 
 namespace ad_utility::vocabulary {
@@ -75,9 +76,12 @@ struct DecoderMultiplexer {
       : decoders_{std::move(decoders)} {}
   std::string decompress(std::string_view compressed,
                          size_t decoderIndex) const {
+    DISABLE_CLANG_UNUSED_RESULT_WARNING
     return decoders_.at(decoderIndex).decompress(compressed);
+    ENABLE_CLANG_WARNINGS
   }
   size_t numDecoders() const { return decoders_.size(); }
+  const Decoders& getDecoders() const { return decoders_; }
 };
 }  // namespace detail
 
@@ -119,8 +123,7 @@ struct PrefixCompressionWrapper : detail::DecoderMultiplexer<PrefixCompressor> {
     PrefixCompressor compressor;
     auto stringsCopy = strings;
     ql::ranges::sort(stringsCopy);
-    auto prefixes =
-        calculatePrefixes(stringsCopy, NUM_COMPRESSION_PREFIXES, 1, true);
+    auto prefixes = calculatePrefixes(stringsCopy, NUM_COMPRESSION_PREFIXES);
     compressor.buildCodebook(prefixes);
     Strings compressedStrings;
     for (const auto& string : strings) {

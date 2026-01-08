@@ -16,8 +16,8 @@
 namespace {
 TextLimit makeTextLimit(IdTable input, const size_t& n,
                         const ColumnIndex& textRecordColumn,
-                        const vector<ColumnIndex>& entityColumns,
-                        const vector<ColumnIndex>& scoreColumns) {
+                        const std::vector<ColumnIndex>& entityColumns,
+                        const std::vector<ColumnIndex>& scoreColumns) {
   auto qec = ad_utility::testing::getQec();
   std::vector<std::optional<Variable>> vars;
   for (size_t i = 0; i < input.numColumns(); ++i) {

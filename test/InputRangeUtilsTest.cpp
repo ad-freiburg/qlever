@@ -62,6 +62,29 @@ void testTransformView(const TransformViewTestHelpers<T>& inAndOutputs,
   }
 }
 
+// Tests for ad_utility::lazySingleValueRange
+TEST(lazySingleValueRange, ReturnLazySingleValueRange) {
+  int variable = 0;
+  auto transformation = [&variable]() {
+    variable++;
+    return variable + 1;
+  };
+
+  auto range = ad_utility::lazySingleValueRange(std::move(transformation));
+  // initial variable should be unchanged
+  EXPECT_EQ(variable, 0);
+  std::optional<int> element = range.get();
+
+  // The first call to `get()` should return a value.
+  EXPECT_TRUE(element.has_value());
+  EXPECT_EQ(element.value(), 2);
+  EXPECT_EQ(variable, 1);
+
+  // No more values after the first.
+  EXPECT_FALSE(range.get().has_value());
+  EXPECT_EQ(variable, 1);
+}
+
 // Tests for ad_utility::CachingTransformInputRange
 TEST(CachingTransformInputRange, BasicTests) {
   // This function will move the `vec` if possible (i.e. if it is not const)
@@ -97,6 +120,35 @@ TEST(CachingTransformInputRange, IteratePastEnd) {
   EXPECT_FALSE(range.get().has_value());
   EXPECT_FALSE(range.get().has_value());
   EXPECT_FALSE(range.get().has_value());
+}
+
+// Test for the combination of `CachingTransformInputRagne` with the associated
+// `Details`.
+TEST(CachingTransformInputRange, Details) {
+  struct Details {
+    int value = 42;
+  };
+
+  struct Gen : public ad_utility::InputRangeFromGet<int, Details> {
+    int i = 0;
+    std::optional<int> get() override {
+      auto v = i++;
+      if (v >= 5) {
+        return std::nullopt;
+      }
+      details().value = v * 2;
+      return v;
+    }
+  };
+
+  auto timesTwo = [](auto el) { return el * 2; };
+  auto r = ad_utility::CachingTransformInputRange<ad_utility::OwningView<Gen>,
+                                                  decltype(timesTwo), Details>(
+      Gen{}, timesTwo);
+  for (auto [a, i] : ::ranges::views::enumerate(r)) {
+    EXPECT_EQ(i, r.details().value);
+    EXPECT_EQ(i, a * 2);
+  }
 }
 
 // Tests for the generator with additional control flow.
@@ -291,5 +343,34 @@ TEST(InputRangeFromLoopControlGet, BasicTests) {
   };
   EXPECT_THAT(toVec(InputRangeFromLoopControlGet(f2)),
               ElementsAre(0, 42, 123, 13, 18, 9));
+}
+
+// ________________________________________________________________
+TEST(InputRangeFromLoopControlGet, BreakWithYieldAll) {
+  using namespace ad_utility;
+  using namespace testing;
+  using L = LoopControl<int>;
+
+  // Test BreakWithYieldAll: should yield all values from range and then break
+  auto f = [i = 0]() mutable -> L {
+    auto val = i++;
+    if (val == 0) {
+      return L::yieldValue(10);
+    }
+    if (val == 1) {
+      return L::yieldValue(20);
+    }
+    if (val == 2) {
+      // This should yield all values from the array and then break
+      // without calling the function again
+      return L::breakWithYieldAll(std::array{100, 200, 300});
+    }
+    // This should never be reached because BreakWithYieldAll should
+    // prevent further function calls
+    return L::yieldValue(999);
+  };
+
+  EXPECT_THAT(toVec(InputRangeFromLoopControlGet(f)),
+              ElementsAre(10, 20, 100, 200, 300));
 }
 }  // namespace

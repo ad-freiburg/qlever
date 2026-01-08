@@ -4,7 +4,7 @@
 
 #include <gtest/gtest.h>
 
-#include "SparqlAntlrParserTestHelpers.h"
+#include "./parser/SparqlAntlrParserTestHelpers.h"
 #include "parser/SparqlParser.h"
 #include "util/ParseException.h"
 #include "util/SourceLocation.h"
@@ -31,11 +31,12 @@ TEST(ParseException, illegalConstructorArguments) {
 
 // _____________________________________________________________________________
 void expectParseExceptionWithMetadata(
-    const string& input, const std::optional<ExceptionMetadata>& metadata,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
+    const std::string& input, const std::optional<ExceptionMetadata>& metadata,
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
   try {
-    SparqlParser::parseQuery(input);
+    static EncodedIriManager ev;
+    SparqlParser::parseQuery(&ev, input);
     FAIL();  // Should be unreachable.
   } catch (const ParseException& e) {
     // The constructor has to be bracketed because EXPECT_EQ is a macro.

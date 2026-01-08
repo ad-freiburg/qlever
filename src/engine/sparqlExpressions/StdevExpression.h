@@ -6,10 +6,10 @@
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_STDEVEXPRESSION_H
 
 #include <cmath>
-#include <functional>
 #include <memory>
 #include <variant>
 
+#include "backports/functional.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
@@ -42,7 +42,7 @@ class DeviationExpression : public SparqlExpression {
   }
 
   // __________________________________________________________________________
-  [[nodiscard]] string getCacheKey(
+  [[nodiscard]] std::string getCacheKey(
       const VariableToColumnMap& varColMap) const override {
     return absl::StrCat("[ SQ.DEVIATION ]", child_->getCacheKey(varColMap));
   }
@@ -56,8 +56,7 @@ class DeviationExpression : public SparqlExpression {
 
 // Separate subclass of AggregateOperation, that replaces its child with a
 // DeviationExpression of this child. Everything else is left untouched.
-template <typename AggregateOperation,
-          typename FinalOperation = decltype(identity)>
+template <typename AggregateOperation, typename FinalOperation = Identity>
 class DeviationAggExpression
     : public AggregateExpression<AggregateOperation, FinalOperation> {
  public:
@@ -66,29 +65,34 @@ class DeviationAggExpression
                          AggregateOperation aggregateOp = AggregateOperation{})
       : AggregateExpression<AggregateOperation, FinalOperation>(
             distinct, std::make_unique<DeviationExpression>(std::move(child)),
-            aggregateOp){};
+            aggregateOp) {}
 };
 
 // The final operation for dividing by degrees of freedom and calculation square
 // root after summing up the squared deviation
-inline auto stdevFinalOperation = [](const NumericValue& aggregation,
-                                     size_t numElements) {
-  auto divAndRoot = [](double value, double degreesOfFreedom) {
+struct DivAndRoot {
+  double operator()(double value, double degreesOfFreedom) const {
     if (degreesOfFreedom <= 0) {
       return 0.0;
     } else {
       return std::sqrt(value / degreesOfFreedom);
     }
-  };
-  return makeNumericExpressionForAggregate<decltype(divAndRoot)>()(
-      aggregation, NumericValue{static_cast<double>(numElements) - 1});
+  }
+};
+
+struct StdevFinalOperation {
+  NumericValue operator()(const NumericValue& aggregation,
+                          size_t numElements) const {
+    return makeNumericExpressionForAggregate<DivAndRoot>()(
+        aggregation, NumericValue{static_cast<double>(numElements) - 1});
+  }
 };
 
 // The actual Standard Deviation Expression
 // Mind the explicit instantiation of StdevExpressionBase in
 // AggregateExpression.cpp
 using StdevExpressionBase =
-    DeviationAggExpression<AvgOperation, decltype(stdevFinalOperation)>;
+    DeviationAggExpression<AvgOperation, StdevFinalOperation>;
 class StdevExpression : public StdevExpressionBase {
   using StdevExpressionBase::StdevExpressionBase;
   ValueId resultForEmptyGroup() const override { return Id::makeFromDouble(0); }

@@ -8,7 +8,7 @@
 #define QLEVER_SRC_ENGINE_SPATIALJOINALGORITHMS_H
 
 #include <spatialjoin/Sweeper.h>
-#include <spatialjoin/WKTParse.h>
+#include <util/geo/Geo.h>
 
 #include <boost/foreach.hpp>
 #include <boost/geometry.hpp>
@@ -56,11 +56,19 @@ struct BoundingBoxVisitor : public boost::static_visitor<Box> {
 struct ClosestPointVisitor : public boost::static_visitor<double> {
   template <typename Geometry1, typename Geometry2>
   double operator()(const Geometry1& geo1, const Geometry2& geo2) const {
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+    throw std::runtime_error(
+        "ClosestPointVisitor not implemented for C++17, please use a different "
+        "spatial join implementation");
+    (void)geo1;
+    (void)geo2;
+#else
     Segment seg;
     bg::closest_points(geo1, geo2, seg);
     GeoPoint closestPoint1(bg::get<0, 1>(seg), bg::get<0, 0>(seg));
     GeoPoint closestPoint2(bg::get<1, 1>(seg), bg::get<1, 0>(seg));
     return ad_utility::detail::wktDistS2Impl(closestPoint1, closestPoint2);
+#endif
   }
 };
 
@@ -74,6 +82,11 @@ struct RtreeEntry {
 using Value = std::pair<Box, RtreeEntry>;
 
 }  // namespace BoostGeometryNamespace
+
+// Forward declaration of s2 classes
+class S2Polyline;
+class S2Point;
+class S2LatLng;
 
 class SpatialJoinAlgorithms {
   using Point = BoostGeometryNamespace::Point;
@@ -89,6 +102,7 @@ class SpatialJoinAlgorithms {
                         std::optional<SpatialJoin*> spatialJoin = std::nullopt);
   Result BaselineAlgorithm();
   Result S2geometryAlgorithm();
+  Result S2PointPolylineAlgorithm();
   Result BoundingBoxAlgorithm();
   Result LibspatialjoinAlgorithm();
 
@@ -145,12 +159,65 @@ class SpatialJoinAlgorithms {
     return getRtreeEntry(idTable, row, col);
   }
 
- private:
+  // Prepare a libspatialjoin `SweeperCfg`. The result doesn't have any of its
+  // callbacks set yet. Before feeding the configuration to a `Sweeper` you
+  // usually want to set `writeRelCb` and `sweepCancellationCb`. Also
+  // `withinDist` should be set if a proximity search is intended.
+  static sj::SweeperCfg libspatialjoinSweeperConfig(
+      size_t threads, ad_utility::MemorySize totalAllowedMemory = 8_GB);
+
+  // This helper functions parses WKT geometries from the given `column` in
+  // `idTable` and adds them to `sweeper` (which will be used to perform the
+  // spatial join). The Boolean `leftOrRightSide` specifies whether these
+  // geometries are from the left or right side of the spatial join. The parsing
+  // is multithreaded, using up to `numThreads` threads. If a `prefilterBox` is
+  // given, geometries not intersecting this box will neither be parsed nor
+  // added to `sweeper`. The function returns the aggregated bounding box of all
+  // added geometries, which may be used as a prefilter at next call and the
+  // number of geometries added. This function is only `public` for testing
+  // purposes and should otherwise not be used outside of this class.
+  using IdTableAndJoinColumn = std::pair<const IdTable*, const ColumnIndex>;
+  struct LibSpatialJoinParseMetadata {
+    // Aggregated bounding box of all parsed geometries
+    util::geo::I32Box aggBoundingBox_;
+    // Number of geometries that were actually parsed excluding prefiltered ones
+    size_t numGeomsParsed_;
+    // Number of geometries dropped by prefilter
+    size_t numGeomsDropped_;
+    // Actual number of threads used (might be lower than result of
+    // `getNumThreads` for small inputs)
+    size_t numThreadsUsed_;
+  };
+  LibSpatialJoinParseMetadata libspatialjoinParse(
+      bool leftOrRightSide, IdTableAndJoinColumn idTableAndCol,
+      sj::Sweeper& sweeper, size_t numThreads,
+      std::optional<util::geo::I32Box> prefilterBox) const;
+
+  // Helper for `libspatialjoinParse` to check the bounding box (only if
+  // available from a `GeoVocabulary`) of a given vocabulary entry against the
+  // `prefilterLatLngBox`. Returns `true` if the geometry can be discarded just
+  // by the bounding box. Should only be applied if the index is known to be
+  // built on a `GeoVocabulary`.
+  static bool prefilterGeoByBoundingBox(
+      const std::optional<util::geo::DBox>& prefilterLatLngBox,
+      const Index& index, VocabIndex vocabIndex);
+
+  // Retrieve the number of threads to be used for `libspatialjoinParse` and
+  // `LibspatialjoinAlgorithm`.
+  static size_t getNumThreads();
+
   // Helper function which returns a GeoPoint if the element of the given table
   // represents a GeoPoint
-  std::optional<GeoPoint> getPoint(const IdTable* restable, size_t row,
-                                   ColumnIndex col) const;
+  static std::optional<GeoPoint> getPoint(const IdTable* restable, size_t row,
+                                          ColumnIndex col);
 
+  // Helper function to retrieve and parse a line string from the given cell of
+  // an `IdTable` and convert it to an `S2Polyline`.
+  static std::optional<S2Polyline> getPolyline(const IdTable& restable,
+                                               size_t row, ColumnIndex col,
+                                               const Index& index);
+
+ private:
   // returns everything between the first two quotes. If the string does not
   // contain two quotes, the string is returned as a whole
   std::string_view betweenQuotes(std::string_view extractFrom) const;
@@ -201,17 +268,6 @@ class SpatialJoinAlgorithms {
   // If there is more than one box, the boxes are disjoint.
   std::vector<Box> getQueryBox(const std::optional<RtreeEntry>& entry) const;
 
-  // This helper functions parses WKT geometries from the given `column` in
-  // `idTable` and adds them to `sweeper` (which will be used to perform the
-  // spatial join). The Boolean `leftOrRightSide` specifies whether these
-  // geometries are from the left or right side of the spatial join. The parsing
-  // is multithreaded, using up to `numThreads` threads.
-  util::geo::I32Box libspatialjoinParse(bool leftOrRightSide,
-                                        const IdTable* idTable,
-                                        ColumnIndex column,
-                                        sj::Sweeper& sweeper,
-                                        size_t numThreads) const;
-
   // Calls the `cancellationWrapper` which throws if the query has been
   // cancelled.
   void throwIfCancelled() const;
@@ -220,6 +276,11 @@ class SpatialJoinAlgorithms {
   PreparedSpatialJoinParams params_;
   SpatialJoinConfiguration config_;
   std::optional<SpatialJoin*> spatialJoin_;
+
+  // Maximum area of bounding box in square coordinates for prefiltering
+  // libspatialjoin input by bounding box. If exceeded, prefiltering is
+  // disabled. See `libspatialjoinParse`.
+  static double maxAreaPrefilterBox();
 
   // if the distance calculation should be approximated, by the midpoint of
   // the area
@@ -250,6 +311,10 @@ class SpatialJoinAlgorithms {
   // this vector stores the geometries, which have already been parsed
   std::vector<AnyGeometry, ad_utility::AllocatorWithLimit<AnyGeometry>>
       geometries_;
+
+  // After adding the given amount of rows to the WKT parser, it will be checked
+  // if the user has cancelled their query.
+  static constexpr size_t wktParserChunkSizeForCancellationCheck = 10'000;
 };
 
 #endif  // QLEVER_SRC_ENGINE_SPATIALJOINALGORITHMS_H

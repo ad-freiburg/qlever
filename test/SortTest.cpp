@@ -36,7 +36,7 @@ Sort makeSort(IdTable input, const std::vector<ColumnIndex>& sortColumns) {
 // permutations of the sort columns by also permuting `input` and `expected`
 // accordingly.
 void testSort(IdTable input, const IdTable& expected,
-              source_location l = source_location::current()) {
+              source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
   auto qec = ad_utility::testing::getQec();
 

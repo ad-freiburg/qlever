@@ -8,9 +8,10 @@
 
 #include <re2/re2.h>
 
-#include "NaryExpressionImpl.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "engine/sparqlExpressions/StringExpressionsHelper.h"
@@ -66,21 +67,22 @@ void ensureIsValidFlagIfConstant(const SparqlExpression& expression) {
 }
 
 // _____________________________________________________________________________
-[[maybe_unused]] auto regexImpl = [](const std::optional<std::string>& input,
-                                     const std::shared_ptr<RE2>& pattern) {
-  if (!input.has_value() || !pattern) {
-    return Id::makeUndefined();
+struct RegexImpl {
+  Id operator()(const std::optional<std::string>& input,
+                const std::shared_ptr<RE2>& pattern) const {
+    if (!input.has_value() || !pattern) {
+      return Id::makeUndefined();
+    }
+    // Check for invalid regexes.
+    if (!pattern->ok()) {
+      return Id::makeUndefined();
+    }
+    return Id::makeFromBool(RE2::PartialMatch(input.value(), *pattern));
   }
-  // Check for invalid regexes.
-  if (!pattern->ok()) {
-    return Id::makeUndefined();
-  }
-  return Id::makeFromBool(RE2::PartialMatch(input.value(), *pattern));
 };
 
 using RegexExpression =
-    string_expressions::StringExpressionImpl<2, decltype(regexImpl),
-                                             RegexValueGetter>;
+    string_expressions::StringExpressionImpl<2, RegexImpl, RegexValueGetter>;
 
 }  // namespace sparqlExpression::detail
 
@@ -89,7 +91,7 @@ namespace sparqlExpression {
 // _____________________________________________________________________________
 std::optional<std::string> PrefixRegexExpression::getPrefixRegex(
     std::string regex) {
-  if (!regex.starts_with('^')) {
+  if (!ql::starts_with(regex, '^')) {
     return std::nullopt;
   }
   // Check if we can use the more efficient prefix filter instead
@@ -111,8 +113,8 @@ std::optional<std::string> PrefixRegexExpression::getPrefixRegex(
       continue;
     }
     char c = regex[i];
-    const static string regexSpecialChars = "[]^$.|?*+()";
-    bool isControlChar = regexSpecialChars.find(c) != string::npos;
+    constexpr std::string_view regexSpecialChars = "[]^$.|?*+()";
+    bool isControlChar = regexSpecialChars.find(c) != std::string_view::npos;
     if (!escaped && isControlChar) {
       return std::nullopt;
     } else if (escaped && !isControlChar) {
@@ -153,7 +155,7 @@ PrefixRegexExpression::PrefixRegexExpression(Ptr child, std::string prefixRegex,
 }
 
 // _____________________________________________________________________________
-string PrefixRegexExpression::getCacheKey(
+std::string PrefixRegexExpression::getCacheKey(
     const VariableToColumnMap& varColMap) const {
   return absl::StrCat("Prefix REGEX expression: ", prefixRegex_,
                       " child:", child_->getCacheKey(varColMap),
@@ -234,9 +236,9 @@ ExpressionResult PrefixRegexExpression::evaluate(
       }
       checkCancellation(context);
     }
-    return std::reduce(resultSetOfIntervals.begin(), resultSetOfIntervals.end(),
-                       ad_utility::SetOfIntervals{},
-                       ad_utility::SetOfIntervals::Union{});
+    return ::ranges::accumulate(resultSetOfIntervals,
+                                ad_utility::SetOfIntervals{},
+                                ad_utility::SetOfIntervals::Union{});
   }
 
   // If the input is not sorted by the variable, we have to check each row

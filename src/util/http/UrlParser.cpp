@@ -4,13 +4,13 @@
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 //          Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 
-#include "UrlParser.h"
+#include "util/http/UrlParser.h"
 
 using namespace ad_utility::url_parser;
 
 // _____________________________________________________________________________
 std::optional<std::string> ad_utility::url_parser::getParameterCheckAtMostOnce(
-    const ParamValueMap& map, string_view key) {
+    const ParamValueMap& map, std::string_view key) {
   if (!map.contains(key)) {
     return std::nullopt;
   }

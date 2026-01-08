@@ -10,15 +10,18 @@
 
 #include <re2/re2.h>
 
+#include "backports/StartsWithAndEndsWith.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "global/Constants.h"
 #include "global/Id.h"
-#include "parser/GeoPoint.h"
+#include "global/ValueId.h"
+#include "rdfTypes/GeoPoint.h"
+#include "rdfTypes/GeometryInfo.h"
 #include "util/ConstexprSmallString.h"
-#include "util/GeometryInfo.h"
 #include "util/LruCache.h"
 #include "util/TypeTraits.h"
+#include "util/UnitOfMeasurement.h"
 
 /// Several classes that can be used as the `ValueGetter` template
 /// argument in the SparqlExpression templates in `SparqlExpression.h`
@@ -50,7 +53,7 @@ using IntDoubleStr = std::variant<std::monostate, int64_t, double, std::string>;
 // Ensures that the T value is convertible to a numeric Id.
 template <typename T>
 CPP_concept ValueAsNumericId =
-    concepts::integral<T> || ad_utility::FloatingPoint<T> ||
+    concepts::integral<T> || ql::concepts::floating_point<T> ||
     ad_utility::SimilarToAny<T, Id, NotNumeric, NumericValue>;
 
 // Convert a numeric value (either a plain number, or the `NumericValue` variant
@@ -60,9 +63,9 @@ CPP_template(bool NanOrInfToUndef = false,
              typename T)(requires ValueAsNumericId<T>) Id makeNumericId(T t) {
   if constexpr (concepts::integral<T>) {
     return Id::makeFromInt(t);
-  } else if constexpr (ad_utility::FloatingPoint<T> && NanOrInfToUndef) {
+  } else if constexpr (ql::concepts::floating_point<T> && NanOrInfToUndef) {
     return std::isfinite(t) ? Id::makeFromDouble(t) : Id::makeUndefined();
-  } else if constexpr (ad_utility::FloatingPoint<T> && !NanOrInfToUndef) {
+  } else if constexpr (ql::concepts::floating_point<T> && !NanOrInfToUndef) {
     return Id::makeFromDouble(t);
   } else if constexpr (concepts::same_as<NotNumeric, T>) {
     return Id::makeUndefined();
@@ -139,12 +142,13 @@ struct EffectiveBooleanValueGetter : Mixin<EffectiveBooleanValueGetter> {
 // templates. It produces a string value.
 struct StringValueGetter : Mixin<StringValueGetter> {
   using Mixin<StringValueGetter>::operator();
-  std::optional<string> operator()(ValueId, const EvaluationContext*) const;
+  std::optional<std::string> operator()(ValueId,
+                                        const EvaluationContext*) const;
 
   // TODO<joka921> probably we should return a reference or a view here.
   // TODO<joka921> use a `NormalizedStringView` inside the expressions.
-  std::optional<string> operator()(const LiteralOrIri& s,
-                                   const EvaluationContext*) const {
+  std::optional<std::string> operator()(const LiteralOrIri& s,
+                                        const EvaluationContext*) const {
     return std::string(asStringViewUnsafe(s.getContent()));
   }
 };
@@ -205,7 +209,7 @@ struct IsNumericValueGetter : Mixin<IsNumericValueGetter> {
 };
 
 // Boolean value getters for `isIRI`, `isBlank`, and `isLiteral`.
-template <auto isSomethingFunction, auto isLiteralOrIriSomethingFunction>
+template <auto isSomethingFunction, const auto& isLiteralOrIriSomethingFunction>
 struct IsSomethingValueGetter
     : Mixin<IsSomethingValueGetter<isSomethingFunction,
                                    isLiteralOrIriSomethingFunction>> {
@@ -215,12 +219,12 @@ struct IsSomethingValueGetter
   Id operator()(const LiteralOrIri& s, const EvaluationContext*) const {
     // TODO<joka921> Use the `isLiteral` etc. functions directly as soon as the
     // local vocabulary also stores `LiteralOrIri`.
-    return Id::makeFromBool(s.toStringRepresentation().starts_with(
-        isLiteralOrIriSomethingFunction));
+    return Id::makeFromBool(ql::starts_with(s.toStringRepresentation(),
+                                            isLiteralOrIriSomethingFunction));
   }
 };
-static constexpr auto isIriPrefix = ad_utility::ConstexprSmallString<2>{"<"};
-static constexpr auto isLiteralPrefix =
+inline constexpr auto isIriPrefix = ad_utility::ConstexprSmallString<2>{"<"};
+inline constexpr auto isLiteralPrefix =
     ad_utility::ConstexprSmallString<2>{"\""};
 using IsIriValueGetter =
     IsSomethingValueGetter<&Index::Vocab::isIri, isIriPrefix>;
@@ -281,10 +285,10 @@ struct GeoPointOrWktValueGetter : Mixin<GeoPointOrWktValueGetter> {
 // the input of which the `STR()` function was not used in a query.
 struct LiteralFromIdGetter : Mixin<LiteralFromIdGetter> {
   using Mixin<LiteralFromIdGetter>::operator();
-  std::optional<string> operator()(ValueId id,
-                                   const EvaluationContext* context) const;
-  std::optional<string> operator()(const LiteralOrIri& s,
-                                   const EvaluationContext*) const {
+  std::optional<std::string> operator()(ValueId id,
+                                        const EvaluationContext* context) const;
+  std::optional<std::string> operator()(const LiteralOrIri& s,
+                                        const EvaluationContext*) const {
     if (s.isIri()) {
       return std::nullopt;
     }
@@ -363,11 +367,29 @@ struct IriValueGetter : Mixin<IriValueGetter> {
 
 // `UnitOfMeasurementValueGetter` returns a `UnitOfMeasurement`.
 struct UnitOfMeasurementValueGetter : Mixin<UnitOfMeasurementValueGetter> {
-  mutable ad_utility::util::LRUCache<ValueId, UnitOfMeasurement> cache_{5};
+  // Set the size of this cache to at least the number of supported units.
+  mutable ad_utility::util::LRUCache<ValueId, UnitOfMeasurement> cache_{10};
   using Mixin<UnitOfMeasurementValueGetter>::operator();
   UnitOfMeasurement operator()(ValueId id, const EvaluationContext*) const;
   UnitOfMeasurement operator()(const LiteralOrIri& s,
                                const EvaluationContext*) const;
+
+  // The actual implementation for a given `LiteralOrIri` which is guaranteed
+  // not to use the `EvaluationContext`. This method can be used to convert
+  // `LiteralOrIri` objects holding a unit of measurement, even when no
+  // `EvaluationContext` is available. Currently used for `geof:distance` filter
+  // substitution during query planning.
+  static UnitOfMeasurement litOrIriToUnit(const LiteralOrIri& s);
+};
+
+// This value getter retrieves geometries: `GeoPoints` or literals with
+// `geo:wktLiteral` datatype.
+struct GeoPointOrWktValueGetter : Mixin<GeoPointOrWktValueGetter> {
+  using Mixin<GeoPointOrWktValueGetter>::operator();
+  std::optional<ad_utility::GeoPointOrWkt> operator()(
+      ValueId id, const EvaluationContext*) const;
+  std::optional<ad_utility::GeoPointOrWkt> operator()(
+      const LiteralOrIri&, const EvaluationContext*) const;
 };
 
 // `LanguageTagValueGetter` returns an `std::optional<std::string>` object
@@ -411,9 +433,11 @@ struct IriOrUriValueGetter : Mixin<IriOrUriValueGetter> {
 // `GeometryInfo` is available, the WKT literal is parsed and only the
 // `RequestedInfo` is computed ad hoc (for example the bounding box is not
 // calculated, when requesting the centroid).
-template <typename RequestedInfo = ad_utility::GeometryInfo>
-requires ad_utility::RequestedInfoT<RequestedInfo>
-struct GeometryInfoValueGetter : Mixin<GeometryInfoValueGetter<RequestedInfo>> {
+
+CPP_template(typename RequestedInfo = ad_utility::GeometryInfo)(
+    requires ad_utility::RequestedInfoT<
+        RequestedInfo>) struct GeometryInfoValueGetter
+    : Mixin<GeometryInfoValueGetter<RequestedInfo>> {
   using Mixin<GeometryInfoValueGetter<RequestedInfo>>::operator();
   std::optional<RequestedInfo> operator()(
       ValueId id, const EvaluationContext* context) const;
@@ -447,6 +471,16 @@ struct StringOrDateGetter : Mixin<StringOrDateGetter> {
                              const EvaluationContext* context) const {
     return LiteralFromIdGetter{}(litOrIri, context);
   }
+};
+
+// Value getter that returns only integer values (unlike `NumericValueGetter`
+// which returns double or int).
+struct IntValueGetter : Mixin<IntValueGetter> {
+  using Mixin<IntValueGetter>::operator();
+  std::optional<int64_t> operator()(const LiteralOrIri& litOrIri,
+                                    const EvaluationContext*) const;
+
+  std::optional<int64_t> operator()(ValueId id, const EvaluationContext*) const;
 };
 
 }  // namespace sparqlExpression::detail

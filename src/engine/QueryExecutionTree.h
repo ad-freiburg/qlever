@@ -15,7 +15,13 @@
 #include "engine/QueryExecutionContext.h"
 #include "parser/ParsedQuery.h"
 #include "parser/data/Types.h"
-#include "util/stream_generator.h"
+#include "util/HashSet.h"
+
+// Strongly typed enum for controlling whether stripped variables are explicitly
+// stored as stripped in this class, or completely hidden. (this is used to
+// distinguish between subqueries and "ordinary" operations that just strip
+// columns for efficiency reasons.
+enum class HideStrippedColumns { False, True };
 
 // A query execution tree. Processed bottom up, which gives an ordering to the
 // operations needed to solve a query.
@@ -74,6 +80,10 @@ class QueryExecutionTree {
   struct VariableAndColumnIndex {
     std::string variable_;
     size_t columnIndex_;
+    AD_SERIALIZE_FRIEND_FUNCTION(VariableAndColumnIndex) {
+      serializer | arg.variable_;
+      serializer | arg.columnIndex_;
+    }
   };
 
   using ColumnIndicesAndTypes =
@@ -193,6 +203,15 @@ class QueryExecutionTree {
       std::shared_ptr<QueryExecutionTree> qetA,
       std::shared_ptr<QueryExecutionTree> qetB);
 
+  // Return a clone/ deep copy of `qet` that only returns the specified
+  // `variables` in its result. The variables that are stripped are stored in
+  // the `strippedVariables_` of the result unless `hideStrippedColumns` is
+  // `True`.
+  static std::shared_ptr<QueryExecutionTree> makeTreeWithStrippedColumns(
+      std::shared_ptr<QueryExecutionTree> qet,
+      const std::set<Variable>& variables,
+      HideStrippedColumns hideStrippedColumns = HideStrippedColumns::False);
+
   // Return the column pairs where the two `QueryExecutionTree`s have the
   // same variable. The result is sorted by the column indices, so that it is
   // deterministic when called repeatedly. This is important to find a
@@ -206,6 +225,13 @@ class QueryExecutionTree {
   // return nullopt.
   std::optional<Variable> getPrimarySortKeyVariable() const {
     return getRootOperation()->getPrimarySortKeyVariable();
+  }
+
+  // Get the set of variables that were stripped from this tree when created
+  // via `makeTreeWithStrippedColumns`. These are variables that were present
+  // before stripping but are gone afterwards.
+  const ad_utility::HashSet<Variable>& getStrippedVariables() const {
+    return strippedVariables_;
   }
 
   // _____________________________________________________________
@@ -240,6 +266,10 @@ class QueryExecutionTree {
 
   std::shared_ptr<const Result> cachedResult_ = nullptr;
 
+  // The variables that this tree semantically could expose, but has stripped
+  // away for performance reasons.
+  ad_utility::HashSet<Variable> strippedVariables_;
+
  public:
   // Helper class to avoid bug in g++ that leads to memory corruption when
   // used inside of coroutines when using srd::array<std::string, 3> instead
@@ -253,6 +283,11 @@ class QueryExecutionTree {
         : subject_{std::move(subject)},
           predicate_{std::move(predicate)},
           object_{std::move(object)} {}
+    StringTriple() = default;
+
+    bool isEmpty() const {
+      return subject_.empty() && predicate_.empty() && object_.empty();
+    }
   };
 
   std::shared_ptr<QueryExecutionTree> clone() const {

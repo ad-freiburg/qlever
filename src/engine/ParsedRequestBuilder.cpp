@@ -2,7 +2,12 @@
 // Chair of Algorithms and Data Structures
 // Authors: Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 
-#include "ParsedRequestBuilder.h"
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+#include "engine/ParsedRequestBuilder.h"
+
+#include "backports/StartsWithAndEndsWith.h"
+#include "engine/HttpError.h"
+#include "util/Algorithm.h"
 
 using namespace ad_utility::url_parser::sparqlOperation;
 
@@ -12,8 +17,22 @@ ParsedRequestBuilder::ParsedRequestBuilder(const RequestType& request) {
   // For an HTTP request, `request.target()` yields the HTTP Request-URI.
   // This is a concatenation of the URL path and the query strings.
   auto parsedUrl = ad_utility::url_parser::parseRequestTarget(request.target());
+  if (request.find(boost::beast::http::field::host) != request.end()) {
+    host_ = request[boost::beast::http::field::host];
+  }
   parsedRequest_ = {std::move(parsedUrl.path_), std::nullopt,
                     std::move(parsedUrl.parameters_), None{}};
+}
+
+// ____________________________________________________________________________
+bool ParsedRequestBuilder::isGraphStoreOperationDirect() const {
+  auto result = boost::urls::parse_path(parsedRequest_.path_);
+  // The path being parsed is the path we got from parsing the request target,
+  // so it should be valid.
+  AD_CORRECTNESS_CHECK(!result.has_error());
+  auto segments = result.value();
+  return !segments.empty() &&
+         segments.front() == GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX;
 }
 
 // ____________________________________________________________________________
@@ -39,26 +58,46 @@ bool ParsedRequestBuilder::parameterIsContainedExactlyOnce(
 }
 
 // ____________________________________________________________________________
-bool ParsedRequestBuilder::isGraphStoreOperation() const {
+bool ParsedRequestBuilder::isGraphStoreOperationIndirect() const {
   return parameterIsContainedExactlyOnce("graph") ||
          parameterIsContainedExactlyOnce("default");
 }
 
 // ____________________________________________________________________________
-void ParsedRequestBuilder::extractGraphStoreOperation() {
+void ParsedRequestBuilder::extractGraphStoreOperationIndirect() {
   // SPARQL Graph Store HTTP Protocol with indirect graph identification
+  AD_CORRECTNESS_CHECK(isGraphStoreOperationIndirect());
   if (parameterIsContainedExactlyOnce("graph") &&
       parameterIsContainedExactlyOnce("default")) {
     throw std::runtime_error(
         R"(Parameters "graph" and "default" must not be set at the same time.)");
   }
   AD_CORRECTNESS_CHECK(std::holds_alternative<None>(parsedRequest_.operation_));
-  // We only support passing the target graph as a query parameter
-  // (`Indirect Graph Identification`). `Direct Graph Identification` (the
-  // URL is the graph) is not supported. See also
+  // We support passing the target graph as a query parameter (`Indirect Graph
+  // Identification`). `Direct Graph Identification` (the URL is the graph) is
+  // only supported on the fixed sub path
+  // `GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX`. See also
   // https://www.w3.org/TR/2013/REC-sparql11-http-rdf-update-20130321/#graph-identification.
   parsedRequest_.operation_ =
       GraphStoreOperation{extractTargetGraph(parsedRequest_.parameters_)};
+}
+
+// ____________________________________________________________________________
+void ParsedRequestBuilder::extractGraphStoreOperationDirect() {
+  AD_CORRECTNESS_CHECK(isGraphStoreOperationDirect());
+  // SPARQL Graph Store HTTP Protocol with direct graph identification. We
+  // cannot deduce the used protocol (http/https) from the raw HTTP request. We
+  // default to `http` for the constructed IRIs.
+  AD_CORRECTNESS_CHECK(std::holds_alternative<None>(parsedRequest_.operation_));
+  if (!host_.has_value()) {
+    throw HttpError(
+        boost::beast::http::status::bad_request,
+        "Request for Graph Store Protocol with direct graph identification "
+        "requires the `host` header to be set.");
+  }
+  parsedRequest_.operation_ =
+      GraphStoreOperation{GraphRef::fromIrirefWithoutBrackets(
+          absl::StrCat("http://", host_.value(), parsedRequest_.path_))};
 }
 
 // ____________________________________________________________________________
@@ -74,7 +113,7 @@ ad_utility::url_parser::ParsedRequest ParsedRequestBuilder::build() && {
 // ____________________________________________________________________________
 void ParsedRequestBuilder::reportUnsupportedContentTypeIfGraphStore(
     std::string_view contentType) const {
-  if (isGraphStoreOperation()) {
+  if (isGraphStoreOperationIndirect()) {
     throw std::runtime_error(absl::StrCat("Unsupported Content type \"",
                                           contentType,
                                           "\" for Graph Store protocol."));
@@ -94,7 +133,8 @@ void ParsedRequestBuilder::extractDatasetClauseIfOperationIs(
 
 // ____________________________________________________________________________
 template <typename Operation>
-void ParsedRequestBuilder::extractOperationIfSpecified(string_view paramName) {
+void ParsedRequestBuilder::extractOperationIfSpecified(
+    std::string_view paramName) {
   auto operation = ad_utility::url_parser::getParameterCheckAtMostOnce(
       parsedRequest_.parameters_, paramName);
   if (operation.has_value()) {
@@ -106,9 +146,9 @@ void ParsedRequestBuilder::extractOperationIfSpecified(string_view paramName) {
 }
 
 template void ParsedRequestBuilder::extractOperationIfSpecified<Query>(
-    string_view paramName);
+    std::string_view paramName);
 template void ParsedRequestBuilder::extractOperationIfSpecified<Update>(
-    string_view paramName);
+    std::string_view paramName);
 
 // ____________________________________________________________________________
 GraphOrDefault ParsedRequestBuilder::extractTargetGraph(
@@ -137,9 +177,9 @@ std::optional<std::string> ParsedRequestBuilder::determineAccessToken(
   std::optional<std::string> tokenFromAuthorizationHeader;
   std::optional<std::string> tokenFromParameter;
   if (request.find(http::field::authorization) != request.end()) {
-    string_view authorization = request[http::field::authorization];
+    std::string_view authorization = request[http::field::authorization];
     const std::string prefix = "Bearer ";
-    if (!authorization.starts_with(prefix)) {
+    if (!ql::starts_with(authorization, prefix)) {
       throw std::runtime_error(absl::StrCat(
           "Authorization header doesn't start with \"", prefix, "\"."));
     }
@@ -161,3 +201,4 @@ std::optional<std::string> ParsedRequestBuilder::determineAccessToken(
   return tokenFromAuthorizationHeader ? std::move(tokenFromAuthorizationHeader)
                                       : std::move(tokenFromParameter);
 }
+#endif

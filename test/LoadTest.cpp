@@ -37,6 +37,7 @@ class LoadTest : public ::testing::Test {
   QueryExecutionContext* testQec = ad_utility::testing::getQec();
   ad_utility::AllocatorWithLimit<Id> testAllocator =
       ad_utility::testing::makeAllocator();
+  ad_utility::BlankNodeManager blankNodeManager_;
 
   // Factory for generating mocks of the `sendHttpOrHttpsRequest` that returns a
   // predefined response for testing.
@@ -46,7 +47,7 @@ class LoadTest : public ::testing::Test {
          std::string contentType = "text/turtle",
          std::exception_ptr mockException = nullptr,
          ad_utility::source_location loc =
-             ad_utility::source_location::current()) -> SendRequestType {
+             AD_CURRENT_SOURCE_LOC()) -> SendRequestType {
     httpClientTestHelpers::RequestMatchers matchers{
         .method_ = testing::Eq(boost::beast::http::verb::get),
         .postData_ = testing::Eq(""),
@@ -81,11 +82,48 @@ TEST_F(LoadTest, basicMethods) {
 }
 
 TEST_F(LoadTest, computeResult) {
+  auto testSilentBehavior = [this](parsedQuery::Load pq,
+                                   SendRequestType sendFunc,
+                                   ad_utility::source_location loc =
+                                       AD_CURRENT_SOURCE_LOC()) {
+    auto impl = [this, &pq, &sendFunc](ad_utility::source_location loc =
+                                           AD_CURRENT_SOURCE_LOC()) {
+      auto tr = generateLocationTrace(loc);
+      Load load{testQec, pq, sendFunc};
+      auto res = load.computeResultOnlyForTesting();
+      EXPECT_THAT(res.idTable(), testing::IsEmpty());
+      EXPECT_THAT(res.localVocab(), testing::IsEmpty());
+    };
+
+    auto tr = generateLocationTrace(loc);
+    // Not silent, but syntax test mode is activated.
+    pq.silent_ = false;
+    {
+      auto cleanup =
+          setRuntimeParameterForTest<&RuntimeParameters::syntaxTestMode_>(true);
+      impl();
+    }
+    // Silent, but syntax test mode is deactivated.
+    pq.silent_ = true;
+    impl();
+  };
+
   auto expectThrowOnlyIfNotSilent =
+      [this, testSilentBehavior](
+          parsedQuery::Load pq, SendRequestType sendFunc,
+          const testing::Matcher<std::string>& expectedError,
+          ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
+        auto g = generateLocationTrace(loc);
+        Load load{testQec, pq, sendFunc};
+
+        AD_EXPECT_THROW_WITH_MESSAGE(load.computeResultOnlyForTesting(),
+                                     expectedError);
+        testSilentBehavior(pq, sendFunc);
+      };
+  auto expectThrowAlways =
       [this](parsedQuery::Load pq, SendRequestType sendFunc,
-             const testing::Matcher<string>& expectedError,
-             ad_utility::source_location loc =
-                 ad_utility::source_location::current()) {
+             const testing::Matcher<std::string>& expectedError,
+             ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
         auto g = generateLocationTrace(loc);
         Load load{testQec, pq, sendFunc};
 
@@ -93,28 +131,13 @@ TEST_F(LoadTest, computeResult) {
                                      expectedError);
         pq.silent_ = true;
         Load silentLoad{testQec, pq, sendFunc};
-        EXPECT_NO_THROW(silentLoad.computeResultOnlyForTesting());
+        AD_EXPECT_THROW_WITH_MESSAGE(silentLoad.computeResultOnlyForTesting(),
+                                     expectedError);
       };
-  auto expectThrowAlways = [this](parsedQuery::Load pq,
-                                  SendRequestType sendFunc,
-                                  const testing::Matcher<string>& expectedError,
-                                  ad_utility::source_location loc =
-                                      ad_utility::source_location::current()) {
-    auto g = generateLocationTrace(loc);
-    Load load{testQec, pq, sendFunc};
-
-    AD_EXPECT_THROW_WITH_MESSAGE(load.computeResultOnlyForTesting(),
-                                 expectedError);
-    pq.silent_ = true;
-    Load silentLoad{testQec, pq, sendFunc};
-    AD_EXPECT_THROW_WITH_MESSAGE(silentLoad.computeResultOnlyForTesting(),
-                                 expectedError);
-  };
   auto expectLoad =
       [this](std::string responseBody, std::string contentType,
              std::vector<std::array<TripleComponent, 3>> expectedIdTable,
-             ad_utility::source_location loc =
-                 ad_utility::source_location::current()) {
+             ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
         auto g = generateLocationTrace(loc);
 
         Load load{
@@ -130,7 +153,9 @@ TEST_F(LoadTest, computeResult) {
         for (const auto& row : expectedIdTable) {
           auto& idVecRow = idVector.emplace_back();
           for (auto& field : row) {
-            auto idOpt = field.toValueId(testQec->getIndex().getVocab());
+            const auto& idx = testQec->getIndex();
+            auto idOpt =
+                field.toValueId(idx.getVocab(), idx.encodedIriManager());
             if (!idOpt) {
               ASSERT_THAT(field.isLiteral() || field.isIri(),
                           testing::IsTrue());
@@ -215,7 +240,8 @@ TEST_F(LoadTest, computeResult) {
 
 TEST_F(LoadTest, getCacheKey) {
   {
-    auto cleanup = setRuntimeParameterForTest<"cache-load-results">(true);
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::cacheLoadResults_>(true);
 
     Load load1{testQec, pqLoad("https://mundhahs.dev")};
     Load load2{testQec, pqLoad("https://mundhahs.dev")};
@@ -232,7 +258,9 @@ TEST_F(LoadTest, getCacheKey) {
                 testing::Eq("LOAD <https://mundhahs.dev> SILENT"));
   }
   {
-    auto cleanup = setRuntimeParameterForTest<"cache-load-results">(false);
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::cacheLoadResults_>(
+            false);
 
     Load load1{testQec, pqLoad("https://mundhahs.dev")};
     Load load2{testQec, pqLoad("https://mundhahs.dev")};
@@ -252,7 +280,9 @@ TEST_F(LoadTest, clone) {
   // When the results are not cached, cloning should create a decoupled object.
   // The cache breaker will be different.
   {
-    auto cleanup = setRuntimeParameterForTest<"cache-load-results">(false);
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::cacheLoadResults_>(
+            false);
     auto clone = load.clone();
     ASSERT_THAT(clone, testing::Not(testing::Eq(nullptr)));
     EXPECT_THAT(clone->getDescriptor(), testing::Eq(load.getDescriptor()));
@@ -261,7 +291,8 @@ TEST_F(LoadTest, clone) {
   }
   // When the results are cached, we get decoupled object that is the same.
   {
-    auto cleanup = setRuntimeParameterForTest<"cache-load-results">(true);
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::cacheLoadResults_>(true);
     auto clone = load.clone();
     ASSERT_THAT(clone, testing::Not(testing::Eq(nullptr)));
     EXPECT_THAT(clone->getDescriptor(), testing::Eq(load.getDescriptor()));
@@ -270,7 +301,9 @@ TEST_F(LoadTest, clone) {
 }
 
 TEST_F(LoadTest, Integration) {
-  auto parsedUpdate = SparqlParser::parseUpdate("LOAD <https://mundhahs.dev>");
+  auto parsedUpdate = SparqlParser::parseUpdate(
+      &blankNodeManager_, &testQec->getIndex().encodedIriManager(),
+      "LOAD <https://mundhahs.dev>");
   ASSERT_THAT(parsedUpdate, testing::SizeIs(1));
   auto qec =
       ad_utility::testing::getQec(ad_utility::testing::TestIndexConfig{});

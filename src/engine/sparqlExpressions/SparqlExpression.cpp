@@ -4,6 +4,8 @@
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
 
+#include "backports/iterator.h"
+
 namespace sparqlExpression {
 
 // _____________________________________________________________________________
@@ -36,8 +38,8 @@ std::vector<Variable> SparqlExpression::getUnaggregatedVariables() const {
   std::vector<Variable> result;
   for (const auto& child : children()) {
     auto childResult = child->getUnaggregatedVariables();
-    result.insert(result.end(), std::make_move_iterator(childResult.begin()),
-                  std::make_move_iterator(childResult.end()));
+    result.insert(result.end(), ql::make_move_iterator(childResult.begin()),
+                  ql::make_move_iterator(childResult.end()));
   }
   return result;
 }
@@ -66,10 +68,10 @@ std::unique_ptr<SparqlExpression> SparqlExpression::replaceChild(
 }
 
 // _____________________________________________________________________________
-const string& SparqlExpression::descriptor() const { return _descriptor; }
+const std::string& SparqlExpression::descriptor() const { return _descriptor; }
 
 // _____________________________________________________________________________
-string& SparqlExpression::descriptor() { return _descriptor; }
+std::string& SparqlExpression::descriptor() { return _descriptor; }
 
 // _____________________________________________________________________________
 std::optional<SparqlExpressionPimpl::VariableAndDistinctness>
@@ -80,13 +82,6 @@ SparqlExpression::getVariableForCount() const {
 // _____________________________________________________________________________
 std::optional<::Variable> SparqlExpression::getVariableOrNullopt() const {
   return std::nullopt;
-}
-
-// _____________________________________________________________________________
-bool SparqlExpression::containsLangExpression() const {
-  return ql::ranges::any_of(children(), [](const SparqlExpression::Ptr& child) {
-    return child->containsLangExpression();
-  });
 }
 
 // _____________________________________________________________________________
@@ -139,8 +134,8 @@ ql::span<const SparqlExpression::Ptr> SparqlExpression::childrenForTesting()
 // _____________________________________________________________________________
 std::vector<SparqlExpression::Ptr> SparqlExpression::moveChildrenOut() && {
   auto span = children();
-  return {std::make_move_iterator(span.begin()),
-          std::make_move_iterator(span.end())};
+  return {ql::make_move_iterator(span.begin()),
+          ql::make_move_iterator(span.end())};
 }
 
 // _____________________________________________________________________________

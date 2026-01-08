@@ -8,17 +8,25 @@
 #include "DeltaTriplesTestHelpers.h"
 #include "QueryPlannerTestHelpers.h"
 #include "engine/ExecuteUpdate.h"
+#include "engine/MaterializedViews.h"
+#include "engine/NamedResultCache.h"
 #include "index/IndexImpl.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
 
+namespace {
 using namespace deltaTriplesTestHelpers;
 
 auto V = [](const uint64_t index) {
   return Id::makeFromVocabIndex(VocabIndex::make(index));
 };
+
+const EncodedIriManager* encodedIriManager() {
+  static EncodedIriManager encodedIriManager_;
+  return &encodedIriManager_;
+}
 
 // `ExecuteUpdate::IdOrVariableIndex` extended by `LiteralOrIri` which denotes
 // an entry from the local vocab.
@@ -31,6 +39,7 @@ MATCHER_P(AlwaysFalse, msg, "") {
   *result_listener << msg;
   return false;
 }
+}  // namespace
 
 // Test the `ExecuteUpdate::executeUpdate` method. These tests run on the
 // default dataset defined in `IndexTestHelpers::makeTestIndex`.
@@ -41,17 +50,22 @@ TEST(ExecuteUpdate, executeUpdate) {
         const auto sharedHandle =
             std::make_shared<ad_utility::CancellationHandle<>>();
         const std::vector<DatasetClause> datasets = {};
-        auto pqs = SparqlParser::parseUpdate(update);
-        for (auto& pq : pqs) {
-          QueryPlanner qp{&qec, sharedHandle};
-          const auto qet = qp.createExecutionTree(pq);
-          index.deltaTriplesManager().modify<void>(
-              [&index, &pq, &qet, &sharedHandle](DeltaTriples& deltaTriples) {
+        ad_utility::BlankNodeManager bnm;
+        auto pqs = SparqlParser::parseUpdate(&bnm, encodedIriManager(), update);
+        index.deltaTriplesManager().modify<void>(
+            [&index, &sharedHandle, &pqs, &qec](DeltaTriples& deltaTriples) {
+              qec.setLocatedTriplesForEvaluation(
+                  deltaTriples.getLocatedTriplesSharedStateReference());
+              for (auto& pq : pqs) {
+                // Not needed for the first update, but also doesn't break
+                // anything.
+                deltaTriples.updateAugmentedMetadata();
+                QueryPlanner qp{&qec, sharedHandle};
+                const auto qet = qp.createExecutionTree(pq);
                 ExecuteUpdate::executeUpdate(index, pq, qet, deltaTriples,
                                              sharedHandle);
-              });
-          qec.updateLocatedTriplesSnapshot();
-        }
+              }
+            });
       };
   ad_utility::testing::TestIndexConfig indexConfig{};
   // Execute the given `update` and check that the delta triples are correct.
@@ -59,15 +73,18 @@ TEST(ExecuteUpdate, executeUpdate) {
       [&expectExecuteUpdateHelper, &indexConfig](
           const std::string& update,
           const testing::Matcher<const DeltaTriples&>& deltaTriplesMatcher,
-          source_location sourceLocation = source_location::current()) {
+          source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
         auto l = generateLocationTrace(sourceLocation);
         Index index = ad_utility::testing::makeTestIndex(
             "ExecuteUpdate_executeUpdate", indexConfig);
         QueryResultCache cache = QueryResultCache();
+        NamedResultCache namedResultCache;
+        MaterializedViewsManager materializedViewsManager;
         QueryExecutionContext qec(index, &cache,
                                   ad_utility::testing::makeAllocator(
                                       ad_utility::MemorySize::megabytes(100)),
-                                  SortPerformanceEstimator{});
+                                  SortPerformanceEstimator{}, &namedResultCache,
+                                  &materializedViewsManager);
         expectExecuteUpdateHelper(update, qec, index);
         index.deltaTriplesManager().modify<void>(
             [&deltaTriplesMatcher](DeltaTriples& deltaTriples) {
@@ -79,13 +96,16 @@ TEST(ExecuteUpdate, executeUpdate) {
       [&expectExecuteUpdateHelper](
           Index& index, const std::string& update,
           const testing::Matcher<const std::string&>& messageMatcher,
-          source_location sourceLocation = source_location::current()) {
+          source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
         auto l = generateLocationTrace(sourceLocation);
         QueryResultCache cache = QueryResultCache();
+        NamedResultCache namedResultCache;
+        MaterializedViewsManager materializedViewsManager;
         QueryExecutionContext qec(index, &cache,
                                   ad_utility::testing::makeAllocator(
                                       ad_utility::MemorySize::megabytes(100)),
-                                  SortPerformanceEstimator{});
+                                  SortPerformanceEstimator{}, &namedResultCache,
+                                  &materializedViewsManager);
         AD_EXPECT_THROW_WITH_MESSAGE(
             expectExecuteUpdateHelper(update, qec, index), messageMatcher);
       };
@@ -94,7 +114,7 @@ TEST(ExecuteUpdate, executeUpdate) {
         [&expectExecuteUpdateFails_](
             const std::string& update,
             const testing::Matcher<const std::string&>& messageMatcher,
-            source_location sourceLocation = source_location::current()) {
+            source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
           Index index = ad_utility::testing::makeTestIndex(
               "ExecuteUpdate_executeUpdate",
               ad_utility::testing::TestIndexConfig());
@@ -104,7 +124,7 @@ TEST(ExecuteUpdate, executeUpdate) {
     // Now the actual tests.
     expectExecuteUpdate("INSERT DATA { <s> <p> <o> . }", NumTriples(1, 0, 1));
     expectExecuteUpdate("DELETE DATA { <z> <label> \"zz\"@en }",
-                        NumTriples(0, 1, 1));
+                        NumTriples(0, 1, 1, 0, 1));
     expectExecuteUpdate(
         "DELETE { ?s <is-a> ?o } INSERT { <a> <b> <c> } WHERE { ?s <is-a> ?o }",
         NumTriples(1, 2, 3));
@@ -115,7 +135,7 @@ TEST(ExecuteUpdate, executeUpdate) {
         "DELETE { ?s <is-a> ?o } INSERT { ?s <is-a> ?o } WHERE { ?s <is-a> ?o "
         "}",
         NumTriples(2, 0, 2));
-    expectExecuteUpdate("DELETE WHERE { ?s ?p ?o }", NumTriples(0, 8, 8));
+    expectExecuteUpdate("DELETE WHERE { ?s ?p ?o }", NumTriples(0, 8, 8, 0, 1));
     expectExecuteUpdateFails(
         "SELECT * WHERE { ?s ?p ?o }",
         testing::HasSubstr(
@@ -131,26 +151,27 @@ TEST(ExecuteUpdate, executeUpdate) {
         NumTriples(0, 1, 1));
     expectExecuteUpdate(
         "INSERT DATA { <a> <b> <c> }; DELETE WHERE { ?s ?p ?o }",
-        NumTriples(0, 9, 9));
+        NumTriples(0, 9, 9, 0, 1));
     expectExecuteUpdate("CLEAR SILENT GRAPH <x>", NumTriples(0, 0, 0));
-    expectExecuteUpdate("CLEAR DEFAULT", NumTriples(0, 8, 8));
+    expectExecuteUpdate("CLEAR DEFAULT", NumTriples(0, 8, 8, 0, 1));
     expectExecuteUpdate("CLEAR SILENT NAMED", NumTriples(0, 0, 0));
-    expectExecuteUpdate("CLEAR ALL", NumTriples(0, 8, 8));
+    expectExecuteUpdate("CLEAR ALL", NumTriples(0, 8, 8, 0, 1));
     expectExecuteUpdate("DROP GRAPH <x>", NumTriples(0, 0, 0));
-    expectExecuteUpdate("DROP SILENT DEFAULT", NumTriples(0, 8, 8));
+    expectExecuteUpdate("DROP SILENT DEFAULT", NumTriples(0, 8, 8, 0, 1));
     expectExecuteUpdate("DROP NAMED", NumTriples(0, 0, 0));
-    expectExecuteUpdate("DROP SILENT ALL", NumTriples(0, 8, 8));
+    expectExecuteUpdate("DROP SILENT ALL", NumTriples(0, 8, 8, 0, 1));
     expectExecuteUpdate("ADD <x> TO <x>", NumTriples(0, 0, 0));
     expectExecuteUpdate("ADD SILENT <x> TO DEFAULT", NumTriples(0, 0, 0));
-    expectExecuteUpdate("ADD DEFAULT TO <x>", NumTriples(8, 0, 8));
+    expectExecuteUpdate("ADD DEFAULT TO <x>", NumTriples(8, 0, 8, 1, 0));
     expectExecuteUpdate("ADD SILENT DEFAULT TO DEFAULT", NumTriples(0, 0, 0));
     expectExecuteUpdate("MOVE SILENT DEFAULT TO DEFAULT", NumTriples(0, 0, 0));
     expectExecuteUpdate("MOVE GRAPH <x> TO <x>", NumTriples(0, 0, 0));
-    expectExecuteUpdate("MOVE <x> TO DEFAULT", NumTriples(0, 8, 8));
-    expectExecuteUpdate("MOVE DEFAULT TO GRAPH <x>", NumTriples(8, 8, 16));
-    expectExecuteUpdate("COPY DEFAULT TO <x>", NumTriples(8, 0, 8));
+    expectExecuteUpdate("MOVE <x> TO DEFAULT", NumTriples(0, 8, 8, 0, 1));
+    expectExecuteUpdate("MOVE DEFAULT TO GRAPH <x>",
+                        NumTriples(8, 8, 16, 1, 1));
+    expectExecuteUpdate("COPY DEFAULT TO <x>", NumTriples(8, 0, 8, 1, 0));
     expectExecuteUpdate("COPY DEFAULT TO DEFAULT", NumTriples(0, 0, 0));
-    expectExecuteUpdate("COPY <x> TO DEFAULT", NumTriples(0, 8, 8));
+    expectExecuteUpdate("COPY <x> TO DEFAULT", NumTriples(0, 8, 8, 0, 1));
     expectExecuteUpdate("CREATE SILENT GRAPH <x>", NumTriples(0, 0, 0));
     expectExecuteUpdate("CREATE GRAPH <y>", NumTriples(0, 0, 0));
   }
@@ -165,29 +186,29 @@ TEST(ExecuteUpdate, executeUpdate) {
         "<u> <blub> <blah> <s> .";
     indexConfig.indexType = qlever::Filetype::NQuad;
     // That the DEFAULT graph is the union graph again causes some problems.
-    expectExecuteUpdate("CLEAR SILENT GRAPH <q>", NumTriples(0, 3, 3));
+    expectExecuteUpdate("CLEAR SILENT GRAPH <q>", NumTriples(0, 3, 3, 0, 2));
     expectExecuteUpdate("CLEAR GRAPH <a>", NumTriples(0, 0, 0));
     expectExecuteUpdate("CLEAR DEFAULT", NumTriples(0, 1, 1));
-    expectExecuteUpdate("CLEAR SILENT NAMED", NumTriples(0, 6, 6));
-    expectExecuteUpdate("CLEAR ALL", NumTriples(0, 7, 7));
-    expectExecuteUpdate("DROP GRAPH <q>", NumTriples(0, 3, 3));
+    expectExecuteUpdate("CLEAR SILENT NAMED", NumTriples(0, 6, 6, 0, 3));
+    expectExecuteUpdate("CLEAR ALL", NumTriples(0, 7, 7, 0, 3));
+    expectExecuteUpdate("DROP GRAPH <q>", NumTriples(0, 3, 3, 0, 2));
     expectExecuteUpdate("DROP SILENT GRAPH <a>", NumTriples(0, 0, 0));
     expectExecuteUpdate("DROP SILENT DEFAULT", NumTriples(0, 1, 1));
-    expectExecuteUpdate("DROP NAMED", NumTriples(0, 6, 6));
-    expectExecuteUpdate("DROP SILENT ALL", NumTriples(0, 7, 7));
+    expectExecuteUpdate("DROP NAMED", NumTriples(0, 6, 6, 0, 3));
+    expectExecuteUpdate("DROP SILENT ALL", NumTriples(0, 7, 7, 0, 3));
     expectExecuteUpdate("ADD <q> TO <q>", NumTriples(0, 0, 0));
     expectExecuteUpdate("ADD <a> TO <q>", NumTriples(0, 0, 0));
-    expectExecuteUpdate("ADD SILENT <q> TO DEFAULT", NumTriples(3, 0, 3));
+    expectExecuteUpdate("ADD SILENT <q> TO DEFAULT", NumTriples(3, 0, 3, 2, 0));
     expectExecuteUpdate("ADD DEFAULT TO <q>", NumTriples(1, 0, 1));
     expectExecuteUpdate("ADD SILENT DEFAULT TO DEFAULT", NumTriples(0, 0, 0));
     expectExecuteUpdate("MOVE SILENT DEFAULT TO DEFAULT", NumTriples(0, 0, 0));
-    expectExecuteUpdate("MOVE GRAPH <q> TO <t>", NumTriples(3, 3, 6));
-    expectExecuteUpdate("MOVE <q> TO DEFAULT", NumTriples(3, 4, 7));
+    expectExecuteUpdate("MOVE GRAPH <q> TO <t>", NumTriples(3, 3, 6, 2, 2));
+    expectExecuteUpdate("MOVE <q> TO DEFAULT", NumTriples(3, 4, 7, 2, 2));
     expectExecuteUpdate("MOVE DEFAULT TO GRAPH <t>", NumTriples(1, 1, 2));
-    expectExecuteUpdate("MOVE DEFAULT TO GRAPH <q>", NumTriples(1, 4, 5));
-    expectExecuteUpdate("COPY DEFAULT TO <q>", NumTriples(1, 3, 4));
+    expectExecuteUpdate("MOVE DEFAULT TO GRAPH <q>", NumTriples(1, 4, 5, 0, 2));
+    expectExecuteUpdate("COPY DEFAULT TO <q>", NumTriples(1, 3, 4, 0, 2));
     expectExecuteUpdate("COPY DEFAULT TO DEFAULT", NumTriples(0, 0, 0));
-    expectExecuteUpdate("COPY <q> TO DEFAULT", NumTriples(3, 1, 4));
+    expectExecuteUpdate("COPY <q> TO DEFAULT", NumTriples(3, 1, 4, 2, 0));
     expectExecuteUpdate("CREATE SILENT GRAPH <x>", NumTriples(0, 0, 0));
     expectExecuteUpdate("CREATE GRAPH <y>", NumTriples(0, 0, 0));
   }
@@ -214,7 +235,8 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
     const std::vector<DatasetClause> datasets = {};
     auto& index = qec->getIndex();
     DeltaTriples deltaTriples{index};
-    auto pqs = SparqlParser::parseUpdate(update);
+    ad_utility::BlankNodeManager bnm;
+    auto pqs = SparqlParser::parseUpdate(&bnm, encodedIriManager(), update);
     std::vector<std::pair<ExecuteUpdate::IdTriplesAndLocalVocab,
                           ExecuteUpdate::IdTriplesAndLocalVocab>>
         results;
@@ -230,6 +252,7 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
     }
     return results;
   };
+
   auto expectComputeGraphUpdateQuads =
       [&executeComputeGraphUpdateQuads](
           const std::string& update,
@@ -237,13 +260,13 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
               toInsertMatchers,
           std::vector<Matcher<const std::vector<::IdTriple<>>&>>
               toDeleteMatchers,
-          source_location sourceLocation = source_location::current()) {
+          source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
         auto l = generateLocationTrace(sourceLocation);
         ASSERT_THAT(toInsertMatchers, testing::SizeIs(toDeleteMatchers.size()));
         auto graphUpdateQuads = executeComputeGraphUpdateQuads(update);
         ASSERT_THAT(graphUpdateQuads, testing::SizeIs(toInsertMatchers.size()));
-        std::vector<Matcher<pair<ExecuteUpdate::IdTriplesAndLocalVocab,
-                                 ExecuteUpdate::IdTriplesAndLocalVocab>>>
+        std::vector<Matcher<std::pair<ExecuteUpdate::IdTriplesAndLocalVocab,
+                                      ExecuteUpdate::IdTriplesAndLocalVocab>>>
             transformedMatchers;
         ql::ranges::transform(
             toInsertMatchers, toDeleteMatchers,
@@ -258,11 +281,12 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
         EXPECT_THAT(graphUpdateQuads,
                     testing::ElementsAreArray(transformedMatchers));
       };
+
   auto expectComputeGraphUpdateQuadsFails =
       [&executeComputeGraphUpdateQuads](
           const std::string& update,
           const Matcher<const std::string&>& messageMatcher,
-          source_location sourceLocation = source_location::current()) {
+          source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
         auto l = generateLocationTrace(sourceLocation);
         AD_EXPECT_THROW_WITH_MESSAGE(executeComputeGraphUpdateQuads(update),
                                      messageMatcher);
@@ -387,8 +411,14 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
 // _____________________________________________________________________________
 TEST(ExecuteUpdate, transformTriplesTemplate) {
   // Create an index for testing.
-  const auto qec = ad_utility::testing::getQec("<bar> <bar> \"foo\"");
-  const Index& index = qec->getIndex();
+  EncodedIriManager encodedIriManager({"http://example.org/"});
+  // <http://example.org/123> is an encoded IRI
+  ad_utility::testing::TestIndexConfig indexConfig{
+      "<bar> <bar> \"foo\" . <http://example.org/123> <http://qlever.dev/1> "
+      "\"baz\" ."};
+  indexConfig.encodedIriManager = encodedIriManager;
+  Index index = ad_utility::testing::makeTestIndex(
+      "_ExecuteUppdateTest_transformTriplesTemplate", indexConfig);
   // We need a non-const vocab for the test.
   auto& vocab = const_cast<Index::Vocab&>(index.getVocab());
 
@@ -433,14 +463,17 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
         component);
   };
   auto expectTransformTriplesTemplate =
-      [&vocab, &TripleComponentMatcher](
+      [&vocab, &TripleComponentMatcher, &encodedIriManager](
           const VariableToColumnMap& variableColumns,
           std::vector<SparqlTripleSimpleWithGraph>&& triples,
           const std::vector<std::array<TripleComponentT, 4>>&
-              expectedTransformedTriples) {
+              expectedTransformedTriples,
+          ad_utility::source_location sourceLocation =
+              AD_CURRENT_SOURCE_LOC()) {
+        auto loc = generateLocationTrace(sourceLocation);
         auto [transformedTriples, localVocab] =
-            ExecuteUpdate::transformTriplesTemplate(vocab, variableColumns,
-                                                    std::move(triples));
+            ExecuteUpdate::transformTriplesTemplate(encodedIriManager, vocab,
+                                                    variableColumns, triples);
         const auto transformedTriplesMatchers = ad_utility::transform(
             expectedTransformedTriples,
             [&localVocab, &TripleComponentMatcher](const auto& expectedTriple) {
@@ -454,12 +487,16 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
                     ElementsAreArray(transformedTriplesMatchers));
       };
   auto expectTransformTriplesTemplateFails =
-      [&vocab](const VariableToColumnMap& variableColumns,
-               std::vector<SparqlTripleSimpleWithGraph>&& triples,
-               const Matcher<const std::string&>& messageMatcher) {
+      [&vocab, &encodedIriManager](
+          const VariableToColumnMap& variableColumns,
+          std::vector<SparqlTripleSimpleWithGraph>&& triples,
+          const Matcher<const std::string&>& messageMatcher,
+          ad_utility::source_location sourceLocation =
+              AD_CURRENT_SOURCE_LOC()) {
+        auto loc = generateLocationTrace(sourceLocation);
         AD_EXPECT_THROW_WITH_MESSAGE(
-            ExecuteUpdate::transformTriplesTemplate(vocab, variableColumns,
-                                                    std::move(triples)),
+            ExecuteUpdate::transformTriplesTemplate(
+                encodedIriManager, vocab, variableColumns, std::move(triples)),
             messageMatcher);
       };
   // Transforming an empty vector of template results in no `TransformedTriple`s
@@ -484,7 +521,7 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
       {},
       {SparqlTripleSimpleWithGraph{Literal("\"foo\""), Iri("<bar>"),
                                    Variable("?f"), Graph{}}},
-      HasSubstr("Assertion `variableColumns.contains(component.getVariable())` "
+      HasSubstr("Assertion `variableColumns.contains(tc.getVariable())` "
                 "failed."));
   expectTransformTriplesTemplateFails(
       {},
@@ -502,6 +539,13 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
       {SparqlTripleSimpleWithGraph{Literal("\"foo\""), Iri("<bar>"),
                                    Literal("\"foo\""), Graph{Variable("?f")}}},
       {{Id("\"foo\""), Id("<bar>"), Id("\"foo\""), 0UL}});
+  expectTransformTriplesTemplate(
+      {},
+      {SparqlTripleSimpleWithGraph{Iri("<http://example.org/123>"),
+                                   Iri("<http://qlever.dev/1>"),
+                                   Literal("\"baz\""), Graph{}}},
+      {{encodedIriManager.encode("<http://example.org/123>").value(),
+        Id("<http://qlever.dev/1>"), Id("\"baz\""), defaultGraphId}});
 }
 
 // _____________________________________________________________________________
@@ -571,7 +615,7 @@ TEST(ExecuteUpdate, computeAndAddQuadsForResultRow) {
 TEST(ExecuteUpdate, sortAndRemoveDuplicates) {
   auto expect = [](std::vector<IdTriple<>> input,
                    const std::vector<IdTriple<>>& expected,
-                   source_location l = source_location::current()) {
+                   source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
     ExecuteUpdate::sortAndRemoveDuplicates(input);
     EXPECT_THAT(input, testing::ElementsAreArray(expected));
@@ -593,7 +637,7 @@ TEST(ExecuteUpdate, sortAndRemoveDuplicates) {
 TEST(ExecuteUpdate, setMinus) {
   auto expect = [](std::vector<IdTriple<>> a, std::vector<IdTriple<>> b,
                    const std::vector<IdTriple<>>& expected,
-                   source_location l = source_location::current()) {
+                   source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
     EXPECT_THAT(ExecuteUpdate::setMinus(a, b),
                 testing::ElementsAreArray(expected));

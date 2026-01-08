@@ -4,37 +4,21 @@
 
 #include "util/Conversions.h"
 
-#include <assert.h>
-#include <errno.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <unistd.h>
+#include <absl/strings/str_cat.h>
 
-#include <ctre-unicode.hpp>
-
-#include "../global/Constants.h"
-#include "../parser/TokenizerCtre.h"
-#include "./Exception.h"
-#include "./StringUtils.h"
+#include "global/Constants.h"
+#include "parser/NormalizedString.h"
 
 namespace ad_utility {
 
 // _________________________________________________________
-triple_component::Iri convertLangtagToEntityUri(const string& tag) {
+triple_component::Iri convertLangtagToEntityUri(std::string_view tag) {
   return triple_component::Iri::fromIriref(makeQleverInternalIri("@", tag));
 }
 
 // _________________________________________________________
-std::string convertToLanguageTaggedPredicate(const string& pred,
-                                             const string& langtag) {
-  return absl::StrCat("@", langtag, "@", pred);
-}
-
-// _________________________________________________________
 triple_component::Iri convertToLanguageTaggedPredicate(
-    const triple_component::Iri& pred, const std::string& langtag) {
+    const triple_component::Iri& pred, std::string_view langtag) {
   return triple_component::Iri::fromIriref(absl::StrCat(
       "@", langtag, "@<", asStringViewUnsafe(pred.getContent()), ">"));
 }

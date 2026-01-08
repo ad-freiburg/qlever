@@ -4,21 +4,24 @@
 
 #include "engine/TextIndexScanForWord.h"
 
+#include "backports/StartsWithAndEndsWith.h"
+
 // _____________________________________________________________________________
 TextIndexScanForWord::TextIndexScanForWord(
     QueryExecutionContext* qec, TextIndexScanForWordConfiguration config)
     : Operation(qec), config_(std::move(config)) {
-  config_.isPrefix_ = config_.word_.ends_with('*');
+  config_.isPrefix_ = ql::ends_with(config_.word_, '*');
   setVariableToColumnMap();
 }
 
 // _____________________________________________________________________________
 TextIndexScanForWord::TextIndexScanForWord(QueryExecutionContext* qec,
-                                           Variable textRecordVar, string word)
+                                           Variable textRecordVar,
+                                           std::string word)
     : Operation(qec),
       config_(TextIndexScanForWordConfiguration{std::move(textRecordVar),
                                                 std::move(word)}) {
-  config_.isPrefix_ = config_.word_.ends_with('*');
+  config_.isPrefix_ = ql::ends_with(config_.word_, '*');
   config_.scoreVar_ = config_.varToBindText_.getWordScoreVariable(
       config_.word_, config_.isPrefix_);
   setVariableToColumnMap();
@@ -88,32 +91,33 @@ size_t TextIndexScanForWord::getResultWidth() const {
 
 // _____________________________________________________________________________
 size_t TextIndexScanForWord::getCostEstimate() {
-  return getExecutionContext()->getIndex().getSizeOfTextBlockForWord(
-      config_.word_);
+  return getExecutionContext()->getIndex().getSizeOfTextBlocksSum(
+      config_.word_, TextScanMode::WordScan);
 }
 
 // _____________________________________________________________________________
 uint64_t TextIndexScanForWord::getSizeEstimateBeforeLimit() {
-  return getExecutionContext()->getIndex().getSizeOfTextBlockForWord(
-      config_.word_);
+  return getExecutionContext()->getIndex().getSizeOfTextBlocksSum(
+      config_.word_, TextScanMode::WordScan);
 }
 
 // _____________________________________________________________________________
-vector<ColumnIndex> TextIndexScanForWord::resultSortedOn() const {
+std::vector<ColumnIndex> TextIndexScanForWord::resultSortedOn() const {
   return {ColumnIndex(0)};
 }
 
 // _____________________________________________________________________________
-string TextIndexScanForWord::getDescriptor() const {
+std::string TextIndexScanForWord::getDescriptor() const {
   return absl::StrCat("TextIndexScanForWord on ",
                       config_.varToBindText_.name());
 }
 
 // _____________________________________________________________________________
-string TextIndexScanForWord::getCacheKeyImpl() const {
+std::string TextIndexScanForWord::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "WORD INDEX SCAN: "
-     << " with word: \"" << config_.word_ << "\"";
+     << " with word: \"" << config_.word_
+     << "\", has variable: " << config_.scoreVar_.has_value();
   return std::move(os).str();
 }
 

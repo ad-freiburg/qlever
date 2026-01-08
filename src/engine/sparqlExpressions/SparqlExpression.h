@@ -11,7 +11,7 @@
 #include "backports/span.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
-#include "parser/data/Variable.h"
+#include "rdfTypes/Variable.h"
 
 namespace sparqlExpression {
 
@@ -62,11 +62,12 @@ class SparqlExpression {
       size_t childIndex, std::unique_ptr<SparqlExpression> newExpression);
 
   // Get a unique identifier for this expression, used as cache key.
-  virtual string getCacheKey(const VariableToColumnMap& varColMap) const = 0;
+  virtual std::string getCacheKey(
+      const VariableToColumnMap& varColMap) const = 0;
 
   // Get a short, human-readable identifier for this expression.
-  virtual const string& descriptor() const final;
-  virtual string& descriptor() final;
+  virtual const std::string& descriptor() const final;
+  virtual std::string& descriptor() final;
 
   // For the pattern trick we need to know, whether this expression
   // is a non-distinct count of a single variable. In this case we return
@@ -78,13 +79,6 @@ class SparqlExpression {
   // expression is a single variable, return the name of this variable.
   // Otherwise, return std::nullopt.
   virtual std::optional<::Variable> getVariableOrNullopt() const;
-
-  // For the following three functions (`containsLangExpression`,
-  // `getLanguageFilterExpression`, and `getEstimatesForFilterExpression`, see
-  // the documentation of the functions of the same names in
-  // `SparqlExpressionPimpl.h`. Each of them has a default implementation that
-  // is correct for most of the expressions.
-  virtual bool containsLangExpression() const;
 
   // Helper to identify if this is represents a `YEAR` expression.
   virtual bool isYearExpression() const;

@@ -7,9 +7,9 @@
 
 #include <variant>
 
-#include "../../engine/sparqlExpressions/SparqlExpressionPimpl.h"
-#include "../Alias.h"
-#include "Variable.h"
+#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
+#include "parser/Alias.h"
+#include "rdfTypes/Variable.h"
 
 using GroupKey =
     std::variant<sparqlExpression::SparqlExpressionPimpl, Alias, Variable>;

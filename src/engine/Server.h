@@ -12,8 +12,10 @@
 #include <string>
 #include <vector>
 
-#include "ExecuteUpdate.h"
 #include "engine/Engine.h"
+#include "engine/ExecuteUpdate.h"
+#include "engine/MaterializedViews.h"
+#include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SortPerformanceEstimator.h"
@@ -28,40 +30,45 @@
 #include "util/http/websocket/QueryHub.h"
 #include "util/json.h"
 
-using nlohmann::json;
-using std::string;
-using std::vector;
-
 template <typename Operation>
 CPP_concept QueryOrUpdate =
     ad_utility::SameAsAny<Operation,
                           ad_utility::url_parser::sparqlOperation::Query,
                           ad_utility::url_parser::sparqlOperation::Update>;
 
+// Forward declaration for testing.
+namespace serverTestHelpers {
+struct SimulateHttpRequest;
+}
+
 //! The HTTP Server used.
 class Server {
+  using json = nlohmann::json;
   FRIEND_TEST(ServerTest, getQueryId);
   FRIEND_TEST(ServerTest, createMessageSender);
   FRIEND_TEST(ServerTest, adjustParsedQueryLimitOffset);
+  FRIEND_TEST(ServerTest, configurePinnedResultWithName);
+  friend serverTestHelpers::SimulateHttpRequest;
 
  public:
   explicit Server(unsigned short port, size_t numThreads,
                   ad_utility::MemorySize maxMem, std::string accessToken,
-                  bool usePatternTrick = true);
+                  bool noAccessCheck = false, bool usePatternTrick = true);
 
   virtual ~Server() = default;
 
  private:
   //! Initialize the server.
-  void initialize(const string& indexBaseName, bool useText,
+  void initialize(const std::string& indexBaseName, bool useText,
                   bool usePatterns = true, bool loadAllPermutations = true,
                   bool persistUpdates = false);
 
  public:
   // First initialize the server. Then loop, wait for requests and trigger
   // processing. This method never returns except when throwing an exception.
-  void run(const string& indexBaseName, bool useText, bool usePatterns = true,
-           bool loadAllPermutations = true, bool persistUpdates = false);
+  void run(const std::string& indexBaseName, bool useText,
+           bool usePatterns = true, bool loadAllPermutations = true,
+           bool persistUpdates = false);
 
   Index& index() { return index_; }
   const Index& index() const { return index_; }
@@ -80,7 +87,10 @@ class Server {
   const size_t numThreads_;
   unsigned short port_;
   std::string accessToken_;
+  bool noAccessCheck_;
   QueryResultCache cache_;
+  NamedResultCache namedResultCache_;
+  MaterializedViewsManager materializedViewsManager_;
   ad_utility::AllocatorWithLimit<Id> allocator_;
   SortPerformanceEstimator sortPerformanceEstimator_;
   Index index_;
@@ -107,6 +117,7 @@ class Server {
   using TimeLimit = std::chrono::milliseconds;
 
   using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
+  using SharedTimeTracer = std::shared_ptr<ad_utility::timer::TimeTracer>;
 
   CPP_template(typename CancelTimeout)(
       requires ad_utility::isInstantiation<
@@ -137,7 +148,13 @@ class Server {
   ///             `HttpServer.h` for documentation).
   CPP_template(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
-      Awaitable<void> process(const RequestT& request, ResponseT&& send);
+      Awaitable<void> process(RequestT& request, ResponseT&& send);
+
+  // Helper function for unit tests, calls `process` with the given request and
+  // returns the response that would have been sent.
+  CPP_template(typename RequestT, typename ResponseT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>)
+      Awaitable<ResponseT> onlyForTestingProcess(RequestT& request);
 
   // Wraps the error handling around the processing of operations. Calls the
   // visitor on the given operation.
@@ -166,21 +183,20 @@ class Server {
           ad_utility::SharedCancellationHandle cancellationHandle,
           QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
           TimeLimit timeLimit, std::optional<PlannedQuery>& plannedQuery);
-  // For an executed update create a json with some stats on the update (timing,
+  // For an executed update create a JSON with some stats on the update (timing,
   // number of changed triples, etc.).
-  static json createResponseMetadataForUpdate(
-      const ad_utility::Timer& requestTimer, const Index& index,
-      const DeltaTriples& deltaTriples, const PlannedQuery& plannedQuery,
-      const QueryExecutionTree& qet, const DeltaTriplesCount& countBefore,
+  static nlohmann::ordered_json createResponseMetadataForUpdate(
+      const Index& index, const LocatedTriplesState& locatedTriples,
+      const PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
       const UpdateMetadata& updateMetadata,
-      const DeltaTriplesCount& countAfter);
+      const ad_utility::timer::TimeTracer& tracer);
   FRIEND_TEST(ServerTest, createResponseMetadata);
   // Do the actual execution of an update.
   CPP_template(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> processUpdate(
           std::vector<ParsedQuery>&& updates,
-          const ad_utility::Timer& requestTimer,
+          const ad_utility::Timer& requestTimer, SharedTimeTracer tracer,
           ad_utility::SharedCancellationHandle cancellationHandle,
           QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
           TimeLimit timeLimit, std::optional<PlannedQuery>& plannedUpdate);
@@ -204,11 +220,22 @@ class Server {
                         std::string_view operationSPARQL,
                         ad_utility::websocket::MessageSender& messageSender,
                         const ad_utility::url_parser::ParamValueMap& params,
-                        TimeLimit timeLimit);
+                        TimeLimit timeLimit, bool accessTokenOk);
   // Sets the export limit (`send` parameter) and offset on the ParsedQuery;
   static void adjustParsedQueryLimitOffset(
       PlannedQuery& plannedQuery, const ad_utility::MediaType& mediaType,
       const ad_utility::url_parser::ParamValueMap& parameters);
+
+  // Configure pinned of named results on the `qec`. If `pinResultWithName` is
+  // set, then the `qec` is configured such that the query result will be stored
+  // in the named result cache. If `pinNamedGeoIndex` is also set, it is
+  // expected to be the variable name of a column (without leading `?`) on which
+  // a geometry index should be built. Throws if named pinning is required, but
+  // the access token is not okay.
+  static void configurePinnedResultWithName(
+      const std::optional<std::string>& pinResultWithName,
+      const std::optional<std::string>& pinNamedGeoIndex, bool accessTokenOk,
+      QueryExecutionContext& qec);
 
   // Plan a parsed query.
   PlannedQuery planQuery(ParsedQuery&& operation,
@@ -223,23 +250,25 @@ class Server {
           const RequestT& request, std::string_view operation);
   // Execute an update operation. The function must have exclusive access to the
   // DeltaTriples object.
-  json processUpdateImpl(
-      const PlannedQuery& plannedUpdate, const ad_utility::Timer& requestTimer,
+  UpdateMetadata processUpdateImpl(
+      const PlannedQuery& plannedUpdate,
       ad_utility::SharedCancellationHandle cancellationHandle,
-      DeltaTriples& deltaTriples);
+      DeltaTriples& deltaTriples,
+      ad_utility::timer::TimeTracer& tracer =
+          ad_utility::timer::DEFAULT_TIME_TRACER);
 
   static json composeErrorResponseJson(
-      const string& query, const std::string& errorMsg,
+      const std::string& query, const std::string& errorMsg,
       const ad_utility::Timer& requestTimer,
       const std::optional<ExceptionMetadata>& metadata = std::nullopt);
 
   /// Invoke `function` on `threadPool_`, and return an awaitable to wait for
   /// its completion, wrapping the result.
-  template <std::invocable Function,
-            typename T = std::invoke_result_t<Function>>
-  Awaitable<T> computeInNewThread(boost::asio::static_thread_pool& threadPool,
-                                  Function function,
-                                  SharedCancellationHandle handle);
+  CPP_template(typename Function, typename T = std::invoke_result_t<Function>)(
+      requires ql::concepts::invocable<Function>)
+      Awaitable<T> computeInNewThread(
+          boost::asio::static_thread_pool& threadPool, Function function,
+          SharedCancellationHandle handle);
 
   /// This method extracts a client-defined query id from the passed HTTP
   /// request if it is present. If it is not present or empty, a new
@@ -286,6 +315,7 @@ class Server {
   /// formulated towards end users, it can be sent directly as the text of an
   /// HTTP error response.
   bool checkAccessToken(std::optional<std::string_view> accessToken) const;
+  FRIEND_TEST(ServerTest, checkAccessToken);
 
   /// Check if user-provided timeout is authorized with a valid access-token or
   /// lower than the server default. Return an empty optional and send a 403
@@ -306,6 +336,17 @@ class Server {
           ad_utility::MediaType mediaType, const PlannedQuery& plannedQuery,
           const QueryExecutionTree& qet, const ad_utility::Timer& requestTimer,
           SharedCancellationHandle cancellationHandle) const;
+
+  // Given a name and query, compute the query result and write a new
+  // materialized view of this result to disk. This assumes that the access
+  // token has already been checked.
+  void writeMaterializedView(
+      const std::string& name,
+      const ad_utility::url_parser::sparqlOperation::Query& query,
+      const ad_utility::Timer& requestTimer,
+      ad_utility::SharedCancellationHandle cancellationHandle,
+      TimeLimit timeLimit);
+  FRIEND_TEST(MaterializedViewsTest, serverIntegration);
 };
 
 #endif  // QLEVER_SRC_ENGINE_SERVER_H

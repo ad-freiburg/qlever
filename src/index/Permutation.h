@@ -21,8 +21,8 @@
 class IdTable;
 // Forward declaration of `LocatedTriplesPerBlock`
 class LocatedTriplesPerBlock;
-class SharedLocatedTriplesSnapshot;
-struct LocatedTriplesSnapshot;
+struct LocatedTriplesState;
+class DeltaTriples;
 
 // Helper class to store static properties of the different permutations to
 // avoid code duplication.
@@ -41,12 +41,23 @@ class Permutation {
   static constexpr auto OSP = Enum::OSP;
   static constexpr auto ALL = {Enum::PSO, Enum::POS, Enum::SPO,
                                Enum::SOP, Enum::OPS, Enum::OSP};
+  static constexpr auto INTERNAL = {Enum::PSO, Enum::POS};
+
+  template <bool isInternal>
+  static constexpr const auto& all() {
+    if constexpr (isInternal) {
+      return INTERNAL;
+    } else {
+      return ALL;
+    }
+  }
 
   using MetaData = IndexMetaDataMmapView;
   using Allocator = ad_utility::AllocatorWithLimit<Id>;
   using ColumnIndicesRef = CompressedRelationReader::ColumnIndicesRef;
   using ColumnIndices = CompressedRelationReader::ColumnIndices;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
+  using ScanSpecAndBlocks = CompressedRelationReader::ScanSpecAndBlocks;
 
   // Convert a permutation to the corresponding string, etc. `PSO` is converted
   // to "PSO".
@@ -59,102 +70,106 @@ class Permutation {
   explicit Permutation(Enum permutation, Allocator allocator);
 
   // everything that has to be done when reading an index from disk
-  void loadFromDisk(const std::string& onDiskBase,
-                    std::function<bool(Id)> isInternalId,
-                    bool loadAdditional = false);
+  void loadFromDisk(const std::string& onDiskBase, bool loadAdditional = false);
+
+  // Set the original metadata for the delta triples. This also sets the
+  // metadata for internal permutation if present.
+  void setOriginalMetadataForDeltaTriples(DeltaTriples& deltaTriples) const;
 
   // For a given ID for the col0, retrieve all IDs of the col1 and col2.
   // If `col1Id` is specified, only the col2 is returned for triples that
   // additionally have the specified col1. .This is just a thin wrapper around
   // `CompressedRelationMetaData::scan`.
-  IdTable scan(const ScanSpecification& scanSpec,
+  IdTable scan(const ScanSpecAndBlocks& scanSpecAndBlocks,
                ColumnIndicesRef additionalColumns,
                const CancellationHandle& cancellationHandle,
-               const LocatedTriplesSnapshot& locatedTriplesSnapshot,
-               const LimitOffsetClause& limitOffset = {},
-               std::optional<std::vector<CompressedBlockMetadata>> optBlocks =
-                   std::nullopt) const;
+               const LocatedTriplesState& locatedTriplesState,
+               const LimitOffsetClause& limitOffset = {}) const;
+
   // For a given relation, determine the `col1Id`s and their counts. This is
   // used for `computeGroupByObjectWithCount`. The `col0Id` must have metadata
   // in `meta_`.
   IdTable getDistinctCol1IdsAndCounts(
       Id col0Id, const CancellationHandle& cancellationHandle,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+      const LocatedTriplesState& locatedTriplesState,
+      const LimitOffsetClause& limitOffset) const;
 
   IdTable getDistinctCol0IdsAndCounts(
       const CancellationHandle& cancellationHandle,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+      const LocatedTriplesState& locatedTriplesState,
+      const LimitOffsetClause& limitOffset) const;
 
   // Typedef to propagate the `MetadataAndblocks` and `IdTableGenerator` type.
   using MetadataAndBlocks =
       CompressedRelationReader::ScanSpecAndBlocksAndBounds;
 
-  using IdTableGenerator = CompressedRelationReader::IdTableGenerator;
-
   // The function `lazyScan` is similar to `scan` (see above) with
   // the following differences:
   // - The result is returned as a lazy generator of blocks.
-  // - The block metadata must be given manually. It can be obtained via the
-  // `getMetadataAndBlocks` function below
+  // - The join-specific prefiltered block metadata must be given manually. It
+  //   can be obtained via the `getMetadataAndBlocks` function below
   //   and then be prefiltered. The blocks must be given in ascending order
   //   and must only contain blocks that contain the given `col0Id` (combined
   //   with the `col1Id` if specified), else the behavior is
   //   undefined.
+  // - In all other cases, the block metadata (optionally generally prefiltered
+  //   via `PrefilterExpression`) is already contained as `BlockMetadataRanges`
+  //   in `ScanSpecAndBlocks`. The `BlockMetadatRanges` of the
+  //   `ScanSpecAndBlocks` are ignored for scanning if `optBlocks` contains the
+  //   join-specific prefiltered block metadata.
   // TODO<joka921> We should only communicate this interface via the
   // `ScanSpecAndBlocksAndBounds` class and make this a strong class that always
   // maintains its invariants.
-  IdTableGenerator lazyScan(
-      const ScanSpecification& scanSpec,
+  CompressedRelationReader::IdTableGeneratorInputRange lazyScan(
+      const ScanSpecAndBlocks& scanSpecAndBlocks,
       std::optional<std::vector<CompressedBlockMetadata>> optBlocks,
-      ColumnIndicesRef additionalColumns, CancellationHandle cancellationHandle,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot,
+      ColumnIndicesRef additionalColumns,
+      const CancellationHandle& cancellationHandle,
+      const LocatedTriplesState& locatedTriplesState,
       const LimitOffsetClause& limitOffset = {}) const;
 
   // Returns the corresponding `CompressedRelationReader::ScanSpecAndBlocks`
   // with relevant `BlockMetadataRanges`.
-  CompressedRelationReader::ScanSpecAndBlocks getScanSpecAndBlocks(
-      const Permutation& perm, const ScanSpecification& scanSpec,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot,
-      const std::optional<std::vector<CompressedBlockMetadata>>& optBlocks)
-      const;
+  ScanSpecAndBlocks getScanSpecAndBlocks(
+      const ScanSpecification& scanSpec,
+      const LocatedTriplesState& locatedTriplesState) const;
 
   std::optional<CompressedRelationMetadata> getMetadata(
-      Id col0Id, const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+      Id col0Id, const LocatedTriplesState& locatedTriplesState) const;
 
   // Return the metadata for the scan specified by the `scanSpecification`
-  // along with the metadata for all the blocks that are relevant for this scan.
-  // If there are no matching blocks (meaning that the scan result will be
-  // empty) return `nullopt`.
+  // along with the metadata for all the blocks that are relevant for this
+  // scan. If there are no matching blocks (meaning that the scan result will
+  // be empty) return `nullopt`.
   std::optional<MetadataAndBlocks> getMetadataAndBlocks(
-      const ScanSpecification& scanSpec,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+      const ScanSpecAndBlocks& scanSpecAndBlocks,
+      const LocatedTriplesState& locatedTriplesState) const;
 
   // Get the exact size of the result of a scan, taking into account the
-  // given located triples. This requires an exact location of the delta triples
-  // within the respective blocks.
+  // given located triples. This requires an exact location of the delta
+  // triples within the respective blocks.
   size_t getResultSizeOfScan(
-      const ScanSpecification& scanSpec,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot,
-      std::optional<std::vector<CompressedBlockMetadata>> blocks =
-          std::nullopt) const;
+      const ScanSpecAndBlocks& scanSpecAndBlocks,
+      const LocatedTriplesState& locatedTriplesState) const;
 
   // Get a lower and upper bound for the size of the result of a scan, taking
   // into account the given `deltaTriples`. For this call, it is enough that
   // each delta triple know to which block it belongs.
   std::pair<size_t, size_t> getSizeEstimateForScan(
-      const ScanSpecification& scanSpec,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot,
-      std::optional<std::vector<CompressedBlockMetadata>> blocks =
-          std::nullopt) const;
+      const ScanSpecAndBlocks& scanSpecAndBlocks,
+      const LocatedTriplesState& locatedTriplesState) const;
 
   // _______________________________________________________
-  void setKbName(const string& name) { meta_.setName(name); }
+  void setKbName(const std::string& name) { meta_.setName(name); }
 
   // _______________________________________________________
   const std::string& getKbName() const { return meta_.getName(); }
 
   // _______________________________________________________
   const std::string& readableName() const { return readableName_; }
+
+  // _______________________________________________________
+  const std::string& onDiskBase() const { return onDiskBase_; }
 
   // _______________________________________________________
   const std::string& fileSuffix() const { return fileSuffix_; }
@@ -168,24 +183,26 @@ class Permutation {
   // _______________________________________________________
   const MetaData& metaData() const { return meta_; }
 
-  // _______________________________________________________
-  const Permutation& getActualPermutation(const ScanSpecification& spec) const;
-  const Permutation& getActualPermutation(Id id) const;
-
   // From the given snapshot, get the located triples for this permutation.
   const LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+      const LocatedTriplesState& locatedTriplesState) const;
 
   // From the given snapshot, get the augmented block metadata for this
   // permutation.
   BlockMetadataRanges getAugmentedMetadataForPermutation(
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+      const LocatedTriplesState& locatedTriplesState) const;
 
   const CompressedRelationReader& reader() const { return reader_.value(); }
 
   Enum permutation() const { return permutation_; }
 
+  // Provide const access to a linked internal permutation. If no internal
+  // permutation is available, this function throws an exception.
+  const Permutation& internalPermutation() const;
+
  private:
+  // The base filename of the permutation without the suffix below
+  std::string onDiskBase_;
   // Readable name for this permutation, e.g., `POS`.
   std::string readableName_;
   // File name suffix for this permutation, e.g., `.pos`.
@@ -196,8 +213,8 @@ class Permutation {
   // The metadata for this permutation.
   MetaData meta_;
 
-  // This member is `optional` because we initialize it in a deferred way in the
-  // `loadFromDisk` method.
+  // This member is `optional` because we initialize it in a deferred way in
+  // the `loadFromDisk` method.
   std::optional<CompressedRelationReader> reader_;
   Allocator allocator_;
 
@@ -205,8 +222,6 @@ class Permutation {
 
   Enum permutation_;
   std::unique_ptr<Permutation> internalPermutation_ = nullptr;
-
-  std::function<bool(Id)> isInternalId_;
 
   bool isInternalPermutation_ = false;
 };

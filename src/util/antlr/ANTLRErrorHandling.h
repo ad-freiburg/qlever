@@ -12,7 +12,6 @@
 #include <Token.h>
 #include <absl/strings/str_cat.h>
 
-#include <concepts>
 #include <string>
 
 #include "backports/concepts.h"
@@ -34,8 +33,8 @@ For an example of a valid `GrammarParseException` see
 `InvalidSparqlQueryException`.
 */
 CPP_template(typename GrammarParseException)(
-    requires std::derived_from<GrammarParseException, ParseException> CPP_and
-        std::constructible_from<
+    requires ql::concepts::derived_from<GrammarParseException, ParseException>
+        CPP_and ql::concepts::constructible_from<
             GrammarParseException, std::string_view,
             std::optional<ExceptionMetadata>>) struct ThrowingErrorListener
     : public antlr4::BaseErrorListener {

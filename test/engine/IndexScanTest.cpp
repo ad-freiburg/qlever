@@ -16,6 +16,7 @@
 #include "parser/ParsedQuery.h"
 
 using namespace ad_utility::testing;
+using namespace std::chrono_literals;
 using ad_utility::source_location;
 
 namespace {
@@ -25,6 +26,11 @@ using LazyResult = Result::LazyResult;
 
 using IndexPair = std::pair<size_t, size_t>;
 
+constexpr auto encodedIriManager = []() -> const EncodedIriManager* {
+  static EncodedIriManager encodedIriManager_;
+  return &encodedIriManager_;
+};
+
 // NOTE: All the following helper functions always use the `PSO` permutation to
 // set up index scans unless explicitly stated otherwise.
 
@@ -33,11 +39,11 @@ using IndexPair = std::pair<size_t, size_t>;
 // is specified via the `expectedRows`, for example {{1, 3}, {7, 8}} means that
 // the partialLazyScanResult shall contain the rows number `1, 2, 7` of the full
 // scan (upper bounds are not included).
-void testLazyScan(Permutation::IdTableGenerator partialLazyScanResult,
-                  IndexScan& fullScan,
-                  const std::vector<IndexPair>& expectedRows,
-                  const LimitOffsetClause& limitOffset = {},
-                  source_location l = source_location::current()) {
+void testLazyScan(
+    CompressedRelationReader::IdTableGeneratorInputRange partialLazyScanResult,
+    IndexScan& fullScan, const std::vector<IndexPair>& expectedRows,
+    const LimitOffsetClause& limitOffset = {},
+    source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   auto alloc = ad_utility::makeUnlimitedAllocator<Id>();
   IdTable lazyScanRes{0, alloc};
@@ -98,7 +104,7 @@ void testLazyScanForJoinOfTwoScans(
     const std::vector<IndexPair>& leftRows,
     const std::vector<IndexPair>& rightRows,
     ad_utility::MemorySize blocksizePermutations = 16_B,
-    source_location l = source_location::current()) {
+    source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   // As soon as there is a LIMIT clause present, we cannot use the prefiltered
   // blocks.
@@ -129,7 +135,7 @@ void testLazyScanForJoinOfTwoScans(
 void testLazyScanThrows(const std::string& kg,
                         const SparqlTripleSimple& tripleLeft,
                         const SparqlTripleSimple& tripleRight,
-                        source_location l = source_location::current()) {
+                        source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   auto qec = getQec(kg);
   IndexScan s1{qec, Permutation::PSO, tripleLeft};
@@ -144,13 +150,15 @@ void testLazyScanForJoinWithColumn(
     const std::string& kg, const SparqlTripleSimple& scanTriple,
     std::vector<TripleComponent> columnEntries,
     const std::vector<IndexPair>& expectedRows,
-    source_location l = source_location::current()) {
+    source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   auto qec = getQec(kg);
   IndexScan scan{qec, Permutation::PSO, scanTriple};
   std::vector<Id> column;
   for (const auto& entry : columnEntries) {
-    column.push_back(entry.toValueId(qec->getIndex().getVocab()).value());
+    column.push_back(
+        entry.toValueId(qec->getIndex().getVocab(), *encodedIriManager())
+            .value());
   }
 
   auto lazyScan = scan.lazyScanForJoinOfColumnWithScan(column);
@@ -162,13 +170,15 @@ void testLazyScanForJoinWithColumn(
 void testLazyScanWithColumnThrows(
     const std::string& kg, const SparqlTripleSimple& scanTriple,
     const std::vector<TripleComponent>& columnEntries,
-    source_location l = source_location::current()) {
+    source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   auto qec = getQec(kg);
   IndexScan s1{qec, Permutation::PSO, scanTriple};
   std::vector<Id> column;
   for (const auto& entry : columnEntries) {
-    column.push_back(entry.toValueId(qec->getIndex().getVocab()).value());
+    column.push_back(
+        entry.toValueId(qec->getIndex().getVocab(), *encodedIriManager())
+            .value());
   }
 
   // We need this to suppress the warning about a [[nodiscard]] return value
@@ -181,20 +191,37 @@ void testLazyScanWithColumnThrows(
 
 //______________________________________________________________________________
 // Check that the `IndexScan` computes correct prefiltered `IdTable`s w.r.t.
-// the applied `PrefilterExpression` given a <PrefilterExpression, Variable>
-// pair was successfully set. For convenience we assert this for the IdTable
-// column on which the `PrefilterExpression` was applied.
+// the applied `PrefilterExpression` given a `<PrefilterExpression, Variable>`
+// pair was successfully set. In addition, if
+// `std::optional<IndexScan::PrefilterVariablePair> pr2` contains a value, its
+// additional `PrefilterExpression` is also applied (if possible). This
+// corresponds logically to a conjunction over two `PrefilterExpression`s
+// applied. For convenience we assert this for the IdTable column on which the
+// `PrefilterExpression` was applied.
 const auto testSetAndMakeScanWithPrefilterExpr =
     [](const std::string& kg, const SparqlTripleSimple& triple,
-       const Permutation::Enum permutation, IndexScan::PrefilterVariablePair pr,
+       const Permutation::Enum permutation,
+       IndexScan::PrefilterVariablePair pr1,
        const std::vector<ValueId>& expectedIdsOnFilterColumn,
-       bool prefilterCanBeSet = true,
-       source_location l = source_location::current()) {
+       bool prefilterCanBeSet,
+       std::optional<IndexScan::PrefilterVariablePair> pr2 = std::nullopt,
+       source_location l = AD_CURRENT_SOURCE_LOC()) {
       auto t = generateLocationTrace(l);
       IndexScan scan{getQec(kg), permutation, triple};
-      auto variable = pr.second;
+      auto variable = pr1.second;
       auto optUpdatedQet = scan.setPrefilterGetUpdatedQueryExecutionTree(
-          makeFilterExpression::filterHelper::makePrefilterVec(std::move(pr)));
+          makeFilterExpression::filterHelper::makePrefilterVec(std::move(pr1)));
+      if (pr2.has_value() && optUpdatedQet.has_value()) {
+        // Testing with a second `PrefilterExpression`s only makes sense if the
+        // first `PrefilterExpression` was successfully applied.
+        ASSERT_TRUE(optUpdatedQet.has_value());
+        optUpdatedQet =
+            optUpdatedQet.value()
+                ->setPrefilterGetUpdatedQueryExecutionTree(
+                    makeFilterExpression::filterHelper::makePrefilterVec(
+                        std::move(pr2.value())))
+                .value_or(optUpdatedQet.value());
+      }
       if (optUpdatedQet.has_value()) {
         auto updatedQet = optUpdatedQet.value();
         ASSERT_TRUE(prefilterCanBeSet);
@@ -439,19 +466,35 @@ TEST(IndexScan, namedGraphs) {
   ad_utility::HashSet<TripleComponent> graphs{
       TripleComponent::Iri::fromIriref("<graph1>"),
       TripleComponent::Iri::fromIriref("<graph2>")};
-  auto scan = IndexScan{qec, Permutation::PSO, triple, graphs};
+  auto scan = IndexScan{qec, Permutation::PSO, triple,
+                        IndexScan::Graphs::Whitelist(graphs)};
   using namespace testing;
-  EXPECT_THAT(scan.graphsToFilter(), Optional(graphs));
+  EXPECT_EQ(scan.graphsToFilter(), IndexScan::Graphs::Whitelist(graphs));
+  // HashSet order is non-deterministic.
   EXPECT_THAT(scan.getCacheKey(),
-              HasSubstr("Filtered by Graphs:<graph1> <graph2>"));
-  EXPECT_THAT(scan.getScanSpecificationTc().graphsToFilter(), Optional(graphs));
+              AnyOf(HasSubstr("GRAPHS: Whitelist <graph1> <graph2>"),
+                    HasSubstr("GRAPHS: Whitelist <graph2> <graph1>")));
+  EXPECT_THAT(scan.getScanSpecificationTc().graphFilter(),
+              Eq(IndexScan::Graphs::Whitelist(graphs)));
 
   auto scanNoGraphs = IndexScan{qec, Permutation::PSO, triple};
-  EXPECT_EQ(scanNoGraphs.graphsToFilter(), std::nullopt);
-  EXPECT_THAT(scanNoGraphs.getCacheKey(),
-              Not(HasSubstr("Filtered by Graphs:")));
-  EXPECT_THAT(scanNoGraphs.getScanSpecificationTc().graphsToFilter(),
-              Eq(std::nullopt));
+  EXPECT_EQ(scanNoGraphs.graphsToFilter(), IndexScan::Graphs::All());
+  EXPECT_THAT(scanNoGraphs.getCacheKey(), HasSubstr("GRAPHS: ALL"));
+  EXPECT_THAT(scanNoGraphs.getScanSpecificationTc().graphFilter(),
+              Eq(IndexScan::Graphs::All()));
+
+  TripleComponent defaultGraph{iri(DEFAULT_GRAPH_IRI)};
+
+  auto scanNamedGraphs = IndexScan{qec, Permutation::PSO, triple,
+                                   IndexScan::Graphs::Blacklist(defaultGraph)};
+  EXPECT_EQ(scanNamedGraphs.graphsToFilter(),
+            IndexScan::Graphs::Blacklist(defaultGraph));
+  EXPECT_THAT(scanNamedGraphs.getCacheKey(),
+              HasSubstr("GRAPHS: Blacklist "
+                        "<http://qlever.cs.uni-freiburg.de/builtin-functions/"
+                        "default-graph>"));
+  EXPECT_THAT(scanNamedGraphs.getScanSpecificationTc().graphFilter(),
+              Eq(IndexScan::Graphs::Blacklist(defaultGraph)));
 }
 
 TEST(IndexScan, getResultSizeOfScan) {
@@ -583,7 +626,7 @@ TEST(IndexScan, unlikelyToFitInCacheCalculatesSizeCorrectly) {
   auto expectMaximumCacheableSize = [&](const IndexScan& scan, size_t numRows,
                                         size_t numCols,
                                         source_location l =
-                                            source_location::current()) {
+                                            AD_CURRENT_SOURCE_LOC()) {
     auto locationTrace = generateLocationTrace(l);
 
     EXPECT_TRUE(scan.unlikelyToFitInCache(MemorySize::bytes(0)));
@@ -671,7 +714,7 @@ TEST(IndexScan, getSizeEstimateAndExactSizeWithAppliedPrefilter) {
 }
 
 // _____________________________________________________________________________
-TEST(IndexScan, SetPrefilterVariablePairAndCheckCacheKey) {
+TEST(IndexScan, verifyThatPrefilteredIndexScanResultIsNotCacheable) {
   using namespace makeFilterExpression;
   using namespace filterHelper;
   using V = Variable;
@@ -681,30 +724,33 @@ TEST(IndexScan, SetPrefilterVariablePairAndCheckCacheKey) {
   auto prefilterPairs =
       makePrefilterVec(pr(lt(IntId(10)), V{"?a"}), pr(gt(IntId(5)), V{"?b"}),
                        pr(lt(IntId(5)), V{"?x"}));
+  auto qet =
+      ad_utility::makeExecutionTree<IndexScan>(qec, Permutation::PSO, triple);
+  EXPECT_TRUE(qet->getRootOperation()->canResultBeCached());
   auto updatedQet =
-      scan.setPrefilterGetUpdatedQueryExecutionTree(std::move(prefilterPairs));
-  // We have a corresponding column for ?x (ColumnIndex 1), which is also the
-  // first sorted variable column. Thus, we expect that PrefilterExpression (<
-  // 5, ?x) will be set as a prefilter for this IndexScan.
-  auto setPrefilterExpr = lt(IntId(5));
-  ColumnIndex columnIdx = 1;
-  std::stringstream os;
-  os << "Added PrefiterExpression: \n";
-  os << *setPrefilterExpr;
-  os << "\nApplied on column: " << columnIdx << ".";
-  EXPECT_THAT(updatedQet.value()->getRootOperation()->getCacheKey(),
-              ::testing::HasSubstr(os.str()));
+      qet->setPrefilterGetUpdatedQueryExecutionTree(std::move(prefilterPairs));
+  // We have a corresponding column for ?x (at ColumnIndex 1), which is also the
+  // first sorted variable column. Thus, we expect that the PrefilterExpression
+  // (< 5, ?x) is applied for this `IndexScan`, resulting in prefiltered
+  // `BlockMetadataRanges`. For `IndexScan`s containing prefiltered
+  // `BlockMetadataRanges`, we expect that its result is not cacheable.
+  EXPECT_TRUE(updatedQet.has_value());
+  EXPECT_FALSE(updatedQet.value()->getRootOperation()->canResultBeCached());
 
   // Assert that we don't set a <PrefilterExpression, ColumnIndex> pair for the
   // second Variable.
   prefilterPairs = makePrefilterVec(pr(lt(IntId(10)), V{"?a"}),
                                     pr(gt(DoubleId(22)), V{"?z"}),
                                     pr(gt(IntId(10)), V{"?b"}));
+  EXPECT_TRUE(qet->getRootOperation()->canResultBeCached());
   updatedQet =
-      scan.setPrefilterGetUpdatedQueryExecutionTree(std::move(prefilterPairs));
-  // No PrefilterExpression should be set for this IndexScan, we don't expect a
-  // updated QueryExecutionTree.
+      qet->setPrefilterGetUpdatedQueryExecutionTree(std::move(prefilterPairs));
+  // No `PrefilterExpression` should be applied for this `IndexScan`, we don't
+  // expect an updated QueryExecutionTree. The `IndexScan` should remain
+  // unchanged, containing no prefiltered `BlockMetadataRanges`. Thus, it should
+  // be still cacheable.
   EXPECT_TRUE(!updatedQet.has_value());
+  EXPECT_TRUE(qet->getRootOperation()->canResultBeCached());
 }
 
 // _____________________________________________________________________________
@@ -725,15 +771,41 @@ TEST(IndexScan, checkEvaluationWithPrefiltering) {
   testSetAndMakeScanWithPrefilterExpr(kg, triple, Permutation::POS,
                                       pr(ge(IntId(10)), Variable{"?price"}),
                                       {I(10), I(12), I(18), I(22), I(25),
-                                       I(147), I(174), I(174), I(189), I(194)});
+                                       I(147), I(174), I(174), I(189), I(194)},
+                                      true);
   testSetAndMakeScanWithPrefilterExpr(
       kg, triple, Permutation::POS,
       pr(lt(DoubleId(147.32)), Variable{"?price"}),
-      {I(10), I(12), I(18), I(22), I(25), I(147)});
+      {I(10), I(12), I(18), I(22), I(25), I(147)}, true);
   testSetAndMakeScanWithPrefilterExpr(
       kg, triple, Permutation::POS,
       pr(andExpr(gt(DoubleId(12.00)), le(IntId(174))), Variable{"?price"}),
-      {I(18), I(22), I(25), I(147), I(174), I(174)});
+      {I(18), I(22), I(25), I(147), I(174), I(174)}, true);
+  testSetAndMakeScanWithPrefilterExpr(
+      kg, triple, Permutation::POS,
+      pr(andExpr(gt(DoubleId(12.00)), le(IntId(174))), Variable{"?price"}),
+      {I(18), I(22), I(25), I(147)}, true,
+      pr(lt(IntId(174)), Variable{"?price"}));
+  testSetAndMakeScanWithPrefilterExpr(
+      kg, triple, Permutation::POS,
+      pr(andExpr(gt(DoubleId(12.00)), lt(IntId(174))), Variable{"?price"}), {},
+      true, pr(eq(IntId(174)), Variable{"?price"}));
+  testSetAndMakeScanWithPrefilterExpr(
+      kg, triple, Permutation::POS,
+      pr(andExpr(gt(DoubleId(12.00)), le(IntId(174))), Variable{"?price"}),
+      {I(174), I(174)}, true, pr(eq(IntId(174)), Variable{"?price"}));
+  testSetAndMakeScanWithPrefilterExpr(
+      kg, triple, Permutation::POS,
+      pr(andExpr(gt(DoubleId(12.00)), le(IntId(174))), Variable{"?price"}),
+      {I(25), I(147)}, true,
+      pr(andExpr(gt(IntId(22)), lt(IntId(174))), Variable{"?price"}));
+  // The second `PrefilterExpression` is not applicable, since its variable
+  // `?some_var` doesn't match the sorted `IndexScan` columns.
+  testSetAndMakeScanWithPrefilterExpr(
+      kg, triple, Permutation::POS,
+      pr(andExpr(gt(DoubleId(12.00)), le(IntId(174))), Variable{"?price"}),
+      {I(18), I(22), I(25), I(147), I(174), I(174)}, true,
+      pr(andExpr(gt(IntId(22)), lt(IntId(174))), Variable{"?some_var"}));
 
   // For the following test, the Variable value doesn't match any of the scan
   // triple Variable values. We expect that the prefilter is not applicable (=>
@@ -767,11 +839,11 @@ TEST(IndexScan, checkEvaluationWithPrefiltering) {
   testSetAndMakeScanWithPrefilterExpr(
       kgFirstAndLastIncomplete, triple, Permutation::POS,
       pr(orExpr(gt(IntId(100)), le(IntId(10))), Variable{"?price"}),
-      {I(10), I(12), I(25), I(147), I(189), I(194)});
+      {I(10), I(12), I(25), I(147), I(189), I(194)}, true);
   testSetAndMakeScanWithPrefilterExpr(
       kgFirstAndLastIncomplete, triple, Permutation::POS,
       pr(andExpr(gt(IntId(10)), lt(IntId(194))), Variable{"?price"}),
-      {I(10), I(12), I(18), I(22), I(25), I(147), I(189), I(194)});
+      {I(10), I(12), I(18), I(22), I(25), I(147), I(189), I(194)}, true);
 }
 
 class IndexScanWithLazyJoin : public ::testing::TestWithParam<bool> {
@@ -789,7 +861,8 @@ class IndexScanWithLazyJoin : public ::testing::TestWithParam<bool> {
 
   // Convert a TripleComponent to a ValueId.
   Id toValueId(const TripleComponent& tc) const {
-    return tc.toValueId(qec_->getIndex().getVocab()).value();
+    return tc.toValueId(qec_->getIndex().getVocab(), *encodedIriManager())
+        .value();
   }
 
   // Create an id table with a single column from a vector of
@@ -824,39 +897,45 @@ class IndexScanWithLazyJoin : public ::testing::TestWithParam<bool> {
     return IndexScan{qec_, Permutation::PSO, xpy};
   }
 
-  // Consume generator `first` first and store it in a vector, then do the same
+  // Consume range `first` first and store it in a vector, then do the same
   // with `second`.
   static std::pair<std::vector<Result::IdTableVocabPair>,
                    std::vector<Result::IdTableVocabPair>>
-  consumeSequentially(Result::Generator first, Result::Generator second) {
+  consumeSequentially(Result::LazyResult first, Result::LazyResult second,
+                      auto postCondition) {
     std::vector<Result::IdTableVocabPair> firstResult;
     std::vector<Result::IdTableVocabPair> secondResult;
 
     for (Result::IdTableVocabPair& element : first) {
       firstResult.push_back(std::move(element));
+      std::invoke(postCondition);
     }
     for (Result::IdTableVocabPair& element : second) {
       secondResult.push_back(std::move(element));
+      std::invoke(postCondition);
     }
     return {std::move(firstResult), std::move(secondResult)};
   }
 
-  // Consume the generators and store the results in vectors using the
+  // Consume the ranges and store the results in vectors using the
   // parameterized strategy.
+  template <typename T = ad_utility::Noop>
   static std::pair<std::vector<Result::IdTableVocabPair>,
                    std::vector<Result::IdTableVocabPair>>
-  consumeGenerators(
-      std::pair<Result::Generator, Result::Generator> generatorPair) {
+  consumeRanges(std::pair<Result::LazyResult, Result::LazyResult> rangePair,
+                T postCondition = ad_utility::noop) {
     std::vector<Result::IdTableVocabPair> joinSideResults;
     std::vector<Result::IdTableVocabPair> scanResults;
 
     bool rightFirst = GetParam();
     if (rightFirst) {
       std::tie(scanResults, joinSideResults) = consumeSequentially(
-          std::move(generatorPair.second), std::move(generatorPair.first));
+          std::move(rangePair.second), std::move(rangePair.first),
+          std::move(postCondition));
     } else {
       std::tie(joinSideResults, scanResults) = consumeSequentially(
-          std::move(generatorPair.first), std::move(generatorPair.second));
+          std::move(rangePair.first), std::move(rangePair.second),
+          std::move(postCondition));
     }
     return {std::move(joinSideResults), std::move(scanResults)};
   }
@@ -880,8 +959,24 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesFilterCorrectly) {
     co_yield p3;
   };
 
-  auto [joinSideResults, scanResults] = consumeGenerators(
-      scan.prefilterTables(LazyResult{makeJoinSide(this)}, 0));
+  auto [joinSideResults, scanResults] = consumeRanges(
+      scan.prefilterTables(LazyResult{makeJoinSide(this)}, 0),
+      [&scan, counter = 0]() mutable {
+        bool rightFirst = GetParam();
+        // If the left side is being consumed first, then we observe the effects
+        // 3 calls later. This is an implementation detail and might change in
+        // the future.
+        int sideOffset = rightFirst ? 0 : 3;
+        const auto& rti = scan.runtimeInfo();
+        if (counter >= sideOffset) {
+          EXPECT_EQ(rti.status_,
+                    RuntimeInformation::Status::lazilyMaterializedInProgress);
+        }
+        if (counter >= 2 + sideOffset) {
+          EXPECT_GT(rti.numRows_, 0);
+        }
+        counter++;
+      });
 
   ASSERT_EQ(scanResults.size(), 2);
   ASSERT_EQ(joinSideResults.size(), 3);
@@ -907,6 +1002,16 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesFilterCorrectly) {
 
   EXPECT_EQ(joinSideResults.at(2).idTable_,
             makeIdTable({iri("<c>"), iri("<q>"), iri("<xb>")}));
+
+  const auto& rti = scan.runtimeInfo();
+  EXPECT_EQ(rti.status_,
+            RuntimeInformation::Status::lazilyMaterializedInProgress);
+  EXPECT_EQ(rti.numRows_, 4);
+  // Note: In the code the `totalTime_` is also set, but the actual code runs
+  // faster than a single millisecond, so it won't show up in the data.
+  EXPECT_EQ(rti.details_["num-blocks-read"], 2);
+  EXPECT_EQ(rti.details_["num-blocks-all"], 3);
+  EXPECT_EQ(rti.details_["num-elements-read"], 4);
 }
 
 // _____________________________________________________________________________
@@ -924,8 +1029,8 @@ TEST_P(IndexScanWithLazyJoin,
     co_yield p2;
   };
 
-  auto [joinSideResults, scanResults] = consumeGenerators(
-      scan.prefilterTables(LazyResult{makeJoinSide(this)}, 0));
+  auto [joinSideResults, scanResults] =
+      consumeRanges(scan.prefilterTables(LazyResult{makeJoinSide(this)}, 0));
 
   ASSERT_EQ(scanResults.size(), 1);
   ASSERT_EQ(joinSideResults.size(), 2);
@@ -958,10 +1063,87 @@ TEST_P(IndexScanWithLazyJoin,
   };
 
   auto [joinSideResults, scanResults] =
-      consumeGenerators(scan.prefilterTables(LazyResult{makeJoinSide()}, 0));
+      consumeRanges(scan.prefilterTables(LazyResult{makeJoinSide()}, 0));
 
   ASSERT_EQ(scanResults.size(), 0);
   ASSERT_EQ(joinSideResults.size(), 0);
+
+  const auto& rti = scan.runtimeInfo();
+  EXPECT_EQ(rti.status_,
+            RuntimeInformation::Status::lazilyMaterializedInProgress);
+  EXPECT_EQ(rti.numRows_, 0);
+  EXPECT_EQ(rti.details_["num-blocks-read"], 0);
+  EXPECT_EQ(rti.details_["num-blocks-all"], 1);
+  EXPECT_EQ(rti.details_["num-elements-read"], 0);
+}
+
+// _____________________________________________________________________________
+TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesNotSkipOnRepeatingBlock) {
+  TestIndexConfig config;
+  // a and b are supposed to share one block and c and d.
+  config.turtleInput =
+      "<a> <p> <A> . <b> <p> <B> . <c> <p> <C> . <d> <p> <D> . ";
+  config.blocksizePermutations = 16_B;
+  qec_ = getQec(std::move(config));
+  IndexScan scan = makeScan();
+
+  // This is a regression test for an issue introduced in
+  // https://github.com/ad-freiburg/qlever/pull/2252
+  using P = Result::IdTableVocabPair;
+  std::array pairs{P{makeIdTable({iri("<a>")}), LocalVocab{}},
+                   P{makeIdTable({iri("<b>")}), LocalVocab{}},
+                   P{makeIdTable({iri("<c>")}), LocalVocab{}}};
+
+  auto [joinSideResults, scanResults] =
+      consumeRanges(scan.prefilterTables(LazyResult{std::move(pairs)}, 0));
+
+  ASSERT_EQ(scanResults.size(), 2);
+  ASSERT_EQ(joinSideResults.size(), 3);
+}
+
+// _____________________________________________________________________________
+TEST_P(IndexScanWithLazyJoin,
+       prefilterTablesSkipsRemainingTablesIfIndexIsExhausted) {
+  TestIndexConfig config;
+  // a and b are supposed to share one block and c and d.
+  config.turtleInput =
+      "<a> <p> <A> . <b> <p> <B> . <c> <p> <C> . <d> <p> <D> . ";
+  config.blocksizePermutations = 16_B;
+  qec_ = getQec(std::move(config));
+  IndexScan scan = makeScan();
+  LocalVocab extraVocab;
+  auto indexE =
+      extraVocab.getIndexAndAddIfNotContained(LocalVocabEntry{iri("<e>")});
+  auto indexG =
+      extraVocab.getIndexAndAddIfNotContained(LocalVocabEntry{iri("<g>")});
+
+  using P = Result::IdTableVocabPair;
+  std::array pairs{
+      P{makeIdTable({iri("<a>")}), LocalVocab{}},
+      P{makeIdTable({iri("<c>")}), LocalVocab{}},
+      P{makeIdTable({Id::makeFromLocalVocabIndex(indexE)}), extraVocab.clone()},
+      P{makeIdTable({Id::makeFromLocalVocabIndex(indexG)}),
+        extraVocab.clone()}};
+
+  size_t counter = 0;
+
+  auto [joinSideResults, scanResults] = consumeRanges(
+      scan.prefilterTables(LazyResult{ad_utility::CachingTransformInputRange{
+                               std::move(pairs),
+                               [&counter, &indexG](auto& pair) mutable {
+                                 counter++;
+                                 // No need to consume the last table.
+                                 EXPECT_NE(pair.idTable_.at(0, 0),
+                                           Id::makeFromLocalVocabIndex(indexG));
+                                 return std::move(pair);
+                               }}},
+                           0));
+
+  EXPECT_EQ(counter, 3) << "Exactly 3 elements should be consumed from the "
+                           "range. No need to evaluate the rest when it is "
+                           "known that any future elements won't match.";
+  ASSERT_EQ(scanResults.size(), 2);
+  ASSERT_EQ(joinSideResults.size(), 2);
 }
 
 // _____________________________________________________________________________
@@ -987,8 +1169,8 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesNotFilterOnUndefined) {
     co_yield p7;
   };
 
-  auto [_, scanResults] = consumeGenerators(
-      scan.prefilterTables(LazyResult{makeJoinSide(this)}, 0));
+  auto [_, scanResults] =
+      consumeRanges(scan.prefilterTables(LazyResult{makeJoinSide(this)}, 0));
 
   ASSERT_EQ(scanResults.size(), 3);
   EXPECT_TRUE(scanResults.at(0).localVocab_.empty());
@@ -1006,6 +1188,14 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesNotFilterOnUndefined) {
   EXPECT_EQ(
       scanResults.at(2).idTable_,
       tableFromTriples({{iri("<c>"), iri("<C>")}, {iri("<c>"), iri("<C2>")}}));
+
+  const auto& rti = scan.runtimeInfo();
+  EXPECT_EQ(rti.status_,
+            RuntimeInformation::Status::lazilyMaterializedInProgress);
+  EXPECT_EQ(rti.numRows_, 6);
+  EXPECT_EQ(rti.details_["num-blocks-read"], 3);
+  EXPECT_EQ(rti.details_["num-blocks-all"], 3);
+  EXPECT_EQ(rti.details_["num-elements-read"], 6);
 }
 
 // _____________________________________________________________________________
@@ -1019,7 +1209,7 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesNotFilterWithSingleUndefined) {
   };
 
   auto [_, scanResults] =
-      consumeGenerators(scan.prefilterTables(LazyResult{makeJoinSide()}, 0));
+      consumeRanges(scan.prefilterTables(LazyResult{makeJoinSide()}, 0));
 
   ASSERT_EQ(scanResults.size(), 3);
   EXPECT_TRUE(scanResults.at(0).localVocab_.empty());
@@ -1050,9 +1240,17 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesWorksWithSingleEmptyTable) {
   };
 
   auto [_, scanResults] =
-      consumeGenerators(scan.prefilterTables(LazyResult{makeJoinSide()}, 0));
+      consumeRanges(scan.prefilterTables(LazyResult{makeJoinSide()}, 0));
 
   ASSERT_EQ(scanResults.size(), 0);
+
+  const auto& rti = scan.runtimeInfo();
+  EXPECT_EQ(rti.status_,
+            RuntimeInformation::Status::lazilyMaterializedInProgress);
+  EXPECT_EQ(rti.numRows_, 0);
+  EXPECT_EQ(rti.details_["num-blocks-read"], 0);
+  EXPECT_EQ(rti.details_["num-blocks-all"], 3);
+  EXPECT_EQ(rti.details_["num-elements-read"], 0);
 }
 
 // _____________________________________________________________________________
@@ -1062,7 +1260,7 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesWorksWithEmptyGenerator) {
   auto makeJoinSide = []() -> Result::Generator { co_return; };
 
   auto [_, scanResults] =
-      consumeGenerators(scan.prefilterTables(LazyResult{makeJoinSide()}, 0));
+      consumeRanges(scan.prefilterTables(LazyResult{makeJoinSide()}, 0));
 
   ASSERT_EQ(scanResults.size(), 0);
 }
@@ -1096,7 +1294,7 @@ TEST(IndexScan, prefilterTablesWithEmptyIndexScanReturnsEmptyGenerators) {
 }
 // _____________________________________________________________________________
 TEST(IndexScan, clone) {
-  auto* qec = getQec();
+  auto qec = getQec("<x> <price_tag> 10.");
   {
     SparqlTripleSimple xpy{Tc{Var{"?x"}}, iri("<not_p>"), Tc{Var{"?y"}}};
     IndexScan scan{qec, Permutation::PSO, xpy};
@@ -1109,19 +1307,32 @@ TEST(IndexScan, clone) {
   }
   {
     using namespace makeFilterExpression;
-    SparqlTripleSimple xpy{Tc{Var{"?x"}}, iri("<not_p>"), Tc{Var{"?y"}}};
-    IndexScan scan{
-        qec,
-        Permutation::PSO,
-        xpy,
-        std::nullopt,
-        {{filterHelper::pr(ge(IntId(10)), Variable{"?price"}).first, 0}}};
-
-    auto clone = scan.clone();
+    using namespace filterHelper;
+    SparqlTripleSimple triple{Tc{Variable{"?x"}}, iri("<price_tag>"),
+                              Tc{Variable{"?price"}}};
+    auto qet =
+        ad_utility::makeExecutionTree<IndexScan>(qec, Permutation::POS, triple);
+    ASSERT_TRUE(qet->getRootOperation()->canResultBeCached());
+    auto clone = qet->clone();
     ASSERT_TRUE(clone);
     const auto& cloneReference = *clone;
-    EXPECT_EQ(typeid(scan), typeid(cloneReference));
-    EXPECT_EQ(cloneReference.getDescriptor(), scan.getDescriptor());
+    ASSERT_TRUE(cloneReference.getRootOperation()->canResultBeCached());
+    auto prefilterPairs =
+        makePrefilterVec(pr(eq(IntId(10)), Variable{"?price"}));
+    auto optUpdatedQet = qet->setPrefilterGetUpdatedQueryExecutionTree(
+        std::move(prefilterPairs));
+    ASSERT_TRUE(optUpdatedQet.has_value());
+    const auto& updatedQet = optUpdatedQet.value();
+    ASSERT_FALSE(updatedQet->getRootOperation()->canResultBeCached());
+    auto clonedQet = updatedQet->clone();
+    ASSERT_TRUE(clonedQet);
+    const auto& clonedQetReference = *clonedQet;
+    ASSERT_EQ(typeid(clonedQetReference), typeid(*updatedQet));
+    // If the `ScanSpecAndBlocks` of the prefiltered `IndexScan` operation is
+    // not copied properly while cloning, the following test fails. This is
+    // because the `ScanSpecAndBlocks` added by default via its constructor is
+    // not prefiltered, and subsequently would allow us to cache the result.
+    ASSERT_FALSE(clonedQetReference.getRootOperation()->canResultBeCached());
   }
 }
 
@@ -1154,4 +1365,461 @@ TEST(IndexScan, columnOriginatesFromGraphOrUndef) {
   EXPECT_TRUE(scan3.columnOriginatesFromGraphOrUndef(Var{"?y"}));
   EXPECT_THROW(scan3.columnOriginatesFromGraphOrUndef(Var{"?z"}),
                ad_utility::Exception);
+}
+
+namespace {
+// For each of the `varsToKeep` return a pair of `[variable, columnIndex]` where
+// the column indices are obtained from the `underlyingScan`. The result is
+// sorted by the column indices.
+constexpr auto getVarsAndColumnIndices = [](const auto& varsToKeep,
+                                            const IndexScan& underlyingScan) {
+  std::vector<std::pair<Variable, ColumnIndex>> varColPairs;
+  for (const auto& var : varsToKeep) {
+    auto colIdxInBaseScan = underlyingScan.getExternallyVisibleVariableColumns()
+                                .at(var)
+                                .columnIndex_;
+    varColPairs.emplace_back(var, colIdxInBaseScan);
+  }
+  ql::ranges::sort(varColPairs, {}, ad_utility::second);
+  return varColPairs;
+};
+}  // namespace
+
+// Tests for the stripping of columns directly inside the `IndexScan` class.
+TEST(IndexScanTest, StripColumns) {
+  // Generic setup
+  TestIndexConfig config;
+  using namespace ad_utility::memory_literals;
+  // Each triple will be in a separate block.
+  config.blocksizePermutations = 8_B;
+  config.turtleInput = "<s> <p> <o>. <s2> <p> <o>. <s2> <p2> <o2>";
+  auto qec = ad_utility::testing::getQec(config);
+
+  auto def = makeAlwaysDefinedColumn;
+
+  // We create various scans that all should have unique cache keys, this hash
+  // set helps us test that invariant.
+  ad_utility::HashSet<std::string> cacheKeys;
+
+  // Generic lambda to test stripping with any number of columns for any
+  // IndexScan. Parameters:
+  // `baseScan` : an arbitrary `IndexScan`.
+  // `baseScanDifferentVars` : the same index scan, but the first variable must
+  // be the same, and all other variables must be different. This tests the
+  // block prefiltering for joins, which currently only works on a single
+  // variable.
+  auto testStrippedColumns = [&](IndexScan& baseScan,
+                                 IndexScan& baseScanDifferentVars,
+                                 const std::vector<Variable>& varsToKeep,
+                                 const std::vector<ColumnIndex>& sortedOn,
+                                 ad_utility::source_location l =
+                                     AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    IdTable baseResult =
+        baseScan.computeResultOnlyForTesting(false).idTable().clone();
+    qec->clearCacheUnpinnedOnly();
+    // Create set with variables to keep, plus non-existent variables to test
+    // filtering
+    std::set<Variable> varsWithNonExistent(varsToKeep.begin(),
+                                           varsToKeep.end());
+    varsWithNonExistent.insert(Var{"?notFound"});
+
+    auto subsetScan =
+        baseScan.makeTreeWithStrippedColumns(varsWithNonExistent).value();
+    EXPECT_EQ(subsetScan->getResultWidth(), varsToKeep.size());
+
+    auto [_, wasNew] = cacheKeys.insert(subsetScan->getCacheKey());
+    EXPECT_TRUE(wasNew);
+
+    using namespace ::testing;
+
+    // Create pairs of (variable, original_column_index) and sort by original
+    // index
+    std::vector<std::pair<Variable, ColumnIndex>> columnOrigins =
+        getVarsAndColumnIndices(varsToKeep, baseScan);
+    // Build expected variable to column mapping with dense, ordered column
+    // indices
+    VariableToColumnMap expected;
+    std::vector<ColumnIndex> originalColumnIndices;
+    for (size_t i = 0; i < columnOrigins.size(); ++i) {
+      expected[columnOrigins[i].first] = def(i);
+      originalColumnIndices.push_back(columnOrigins[i].second);
+    }
+
+    EXPECT_THAT(subsetScan->getVariableColumns(),
+                UnorderedElementsAreArray(expected));
+
+    // Test multiplicity preservation
+    for (const auto& [v, colIdxAndInfo] : subsetScan->getVariableColumns()) {
+      auto colIdxInBaseScan =
+          baseScan.getExternallyVisibleVariableColumns().at(v).columnIndex_;
+      EXPECT_FLOAT_EQ(subsetScan->getMultiplicity(colIdxAndInfo.columnIndex_),
+                      baseScan.getMultiplicity(colIdxInBaseScan));
+    }
+
+    // Create expected result by selecting the right columns
+    auto expectedResult =
+        baseResult.asColumnSubsetView(originalColumnIndices).clone();
+
+    // Test fully materialized evaluation.
+    EXPECT_THAT(subsetScan->resultSortedOn(), ElementsAreArray(sortedOn));
+    EXPECT_THAT(subsetScan->getResult(false)->idTable(),
+                matchesIdTable(expectedResult.clone()));
+
+    // Test lazy evaluation.
+    qec->clearCacheUnpinnedOnly();
+    auto res = subsetScan->getResult(true);
+    auto lazyResToTable = [&subsetScan, &qec](auto&& gen) {
+      IdTable resultTable(subsetScan->getResultWidth(), qec->getAllocator());
+      for (auto&& table : gen) {
+        resultTable.insertAtEnd(table);
+      }
+      return resultTable;
+    };
+    EXPECT_THAT(lazyResToTable(
+                    ad_utility::OwningView{res->idTables()} |
+                    ql::views::transform(&Result::IdTableVocabPair::idTable_)),
+                matchesIdTable(expectedResult.clone()));
+
+    // Test lazy scan functionality only for single-column results that are
+    // sorted.
+    // Note: We currently test the join between an index scan and itself. This
+    // makes the testing easier, because then the block prefiltering actually
+    // doesn't filter out any blocks. We are not interested in the block
+    // prefiltering here (which is tested further above), but only in the
+    // stripping of the columns.
+    if (varsToKeep.size() == 1 && !sortedOn.empty()) {
+      const auto& scanOp1 =
+          dynamic_cast<const IndexScan&>(*subsetScan->getRootOperation());
+      auto subsetScan2 =
+          baseScanDifferentVars.makeTreeWithStrippedColumns({varsToKeep[0]})
+              .value();
+      const auto& scanOp2 =
+          dynamic_cast<const IndexScan&>(*subsetScan2->getRootOperation());
+      auto [s1, s2] = IndexScan::lazyScanForJoinOfTwoScans(scanOp1, scanOp2);
+      EXPECT_THAT(lazyResToTable(s1), matchesIdTable(expectedResult.clone()));
+      EXPECT_THAT(lazyResToTable(s2), matchesIdTable(expectedResult.clone()));
+
+      auto s3 =
+          scanOp1.lazyScanForJoinOfColumnWithScan(expectedResult.getColumn(0));
+      EXPECT_THAT(lazyResToTable(s3), matchesIdTable(expectedResult.clone()));
+    }
+
+    // Test functions whose results don't depend on column stripping
+    // These should return the same values for both base and stripped scan
+    auto& strippedScanOp =
+        dynamic_cast<IndexScan&>(*subsetScan->getRootOperation());
+
+    // Test accessor functions
+    EXPECT_EQ(strippedScanOp.getDescriptor(), baseScan.getDescriptor());
+    EXPECT_EQ(strippedScanOp.subject().toString(),
+              baseScan.subject().toString());
+    EXPECT_EQ(strippedScanOp.predicate().toString(),
+              baseScan.predicate().toString());
+    EXPECT_EQ(strippedScanOp.object().toString(), baseScan.object().toString());
+    EXPECT_EQ(strippedScanOp.graphsToFilter(), baseScan.graphsToFilter());
+    EXPECT_THAT(strippedScanOp.additionalVariables(),
+                ElementsAreArray(baseScan.additionalVariables()));
+    EXPECT_THAT(strippedScanOp.additionalColumns(),
+                ElementsAreArray(baseScan.additionalColumns()));
+    EXPECT_EQ(strippedScanOp.numVariables(), baseScan.numVariables());
+    EXPECT_EQ(strippedScanOp.permutation().permutation(),
+              baseScan.permutation().permutation());
+    EXPECT_EQ(strippedScanOp.permutation().onDiskBase(),
+              baseScan.permutation().onDiskBase());
+
+    // Test size and cost functions
+    EXPECT_EQ(strippedScanOp.getExactSize(), baseScan.getExactSize());
+    EXPECT_EQ(strippedScanOp.getCostEstimate(), baseScan.getCostEstimate());
+    EXPECT_EQ(strippedScanOp.getSizeEstimate(), baseScan.getSizeEstimate());
+    EXPECT_EQ(strippedScanOp.knownEmptyResult(), baseScan.knownEmptyResult());
+    EXPECT_EQ(strippedScanOp.isIndexScanWithNumVariables(0),
+              baseScan.isIndexScanWithNumVariables(0));
+    EXPECT_EQ(strippedScanOp.isIndexScanWithNumVariables(1),
+              baseScan.isIndexScanWithNumVariables(1));
+    EXPECT_EQ(strippedScanOp.isIndexScanWithNumVariables(2),
+              baseScan.isIndexScanWithNumVariables(2));
+    EXPECT_EQ(strippedScanOp.isIndexScanWithNumVariables(3),
+              baseScan.isIndexScanWithNumVariables(3));
+
+    // Test optimization functions
+    EXPECT_EQ(strippedScanOp.supportsLimitOffset(),
+              baseScan.supportsLimitOffset());
+
+    // Test specification functions
+    EXPECT_EQ(strippedScanOp.getScanSpecification().col0Id(),
+              baseScan.getScanSpecification().col0Id());
+    EXPECT_EQ(strippedScanOp.getScanSpecification().col1Id(),
+              baseScan.getScanSpecification().col1Id());
+    EXPECT_EQ(strippedScanOp.getScanSpecification().col2Id(),
+              baseScan.getScanSpecification().col2Id());
+    auto strippedTriple = strippedScanOp.getPermutedTriple();
+    auto baseTriple = baseScan.getPermutedTriple();
+    for (size_t i = 0; i < 3; ++i) {
+      EXPECT_EQ(*strippedTriple[i], *baseTriple[i]);
+    }
+
+    // Test column origin function for variables that exist in both scans
+    for (const auto& var : varsToKeep) {
+      EXPECT_EQ(strippedScanOp.columnOriginatesFromGraphOrUndef(var),
+                baseScan.columnOriginatesFromGraphOrUndef(var));
+    }
+  };
+
+  // Same as above, but bind the first two arguments by reference.
+  auto testStrippedBindFront = [&](IndexScan& baseScan,
+                                   IndexScan& baseScanDifferentVars) {
+    return [&](const std::vector<Variable>& varsToKeep,
+               const std::vector<ColumnIndex>& sortedOn,
+               ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+      return testStrippedColumns(baseScan, baseScanDifferentVars, varsToKeep,
+                                 sortedOn, l);
+    };
+  };
+
+  // Test group 1: Full scan with three variables (?x ?y ?z)
+  {
+    IndexScan fullScan{qec, Permutation::SPO,
+                       SparqlTripleSimple{Var{"?x"}, Var{"?y"}, Var{"?z"}}};
+    IndexScan fullScanDifferentVars{
+        qec, Permutation::SPO,
+        SparqlTripleSimple{Var{"?x"}, Var{"?a"}, Var{"?b"}}};
+    auto testFullScanStrippedColumns =
+        testStrippedBindFront(fullScan, fullScanDifferentVars);
+
+    // Test all combinations for full scan
+    testFullScanStrippedColumns({}, {});            // zero columns
+    testFullScanStrippedColumns({Var{"?x"}}, {0});  // single column (sorted)
+    testFullScanStrippedColumns({Var{"?y"}}, {});  // single column (not sorted)
+    testFullScanStrippedColumns({Var{"?z"}}, {});  // single column (not sorted)
+    testFullScanStrippedColumns({Var{"?x"}, Var{"?y"}},
+                                {0, 1});  // two columns (sorted)
+    testFullScanStrippedColumns({Var{"?x"}, Var{"?z"}},
+                                {0});  // two columns (sorted)
+    testFullScanStrippedColumns({Var{"?y"}, Var{"?z"}},
+                                {});  // two columns (not sorted)
+    testFullScanStrippedColumns({Var{"?x"}, Var{"?y"}, Var{"?z"}},
+                                {0, 1, 2});  // all columns
+  }
+
+  // Test group 2: Two-variable scan with fixed predicate using PSO permutation
+  {
+    using I = TripleComponent::Iri;
+    IndexScan twoVarScan{
+        qec, Permutation::PSO,
+        SparqlTripleSimple{Var{"?x"}, I::fromIriref("<p>"), Var{"?y"}}};
+    IndexScan twoVarScanDifferentVars{
+        qec, Permutation::PSO,
+        SparqlTripleSimple{Var{"?x"}, I::fromIriref("<p>"), Var{"?b"}}};
+
+    auto testTwoVarScanStrippedColumns =
+        testStrippedBindFront(twoVarScan, twoVarScanDifferentVars);
+
+    // Test all combinations for two-variable scan
+    testTwoVarScanStrippedColumns({}, {});            // zero columns
+    testTwoVarScanStrippedColumns({Var{"?x"}}, {0});  // single column (sorted)
+    testTwoVarScanStrippedColumns({Var{"?y"}},
+                                  {});  // single column (not sorted)
+    testTwoVarScanStrippedColumns({Var{"?x"}, Var{"?y"}},
+                                  {0, 1});  // both columns
+  }
+
+  // Test group 3: One-variable scan with two fixed entries
+  {
+    using I = TripleComponent::Iri;
+    IndexScan oneVarScan{qec, Permutation::SPO,
+                         SparqlTripleSimple{I::fromIriref("<s>"),
+                                            I::fromIriref("<p>"), Var{"?x"}}};
+    IndexScan oneVarScanDifferentVars{
+        qec, Permutation::SPO,
+        SparqlTripleSimple{I::fromIriref("<s>"), I::fromIriref("<p>"),
+                           Var{"?x"}}};
+    auto testOneVarScanStrippedColumns =
+        testStrippedBindFront(oneVarScan, oneVarScanDifferentVars);
+
+    // Test all combinations for one-variable scan
+    testOneVarScanStrippedColumns({}, {});            // zero columns
+    testOneVarScanStrippedColumns({Var{"?x"}}, {0});  // single column (sorted)
+  }
+
+  // Test group 4: Zero-variable scan with three fixed entries
+  {
+    using I = TripleComponent::Iri;
+    IndexScan zeroVarScan{
+        qec, Permutation::SPO,
+        SparqlTripleSimple{I::fromIriref("<s>"), I::fromIriref("<p>"),
+                           I::fromIriref("<o>")}};
+    IndexScan zeroVarScanDifferentVars{
+        qec, Permutation::SPO,
+        SparqlTripleSimple{I::fromIriref("<s>"), I::fromIriref("<p>"),
+                           I::fromIriref("<o>")}};
+    auto testZeroVarScanStrippedColumns =
+        testStrippedBindFront(zeroVarScan, zeroVarScanDifferentVars);
+
+    // Test the only combination for zero-variable scan
+    testZeroVarScanStrippedColumns({},
+                                   {});  // zero columns (only possible case)
+  }
+
+  // Test group 5: Scan with additional variables
+  {
+    SparqlTripleSimple tripleWithAdditionalVar{Var{"?x"}, Var{"?y"}, Var{"?z"}};
+    tripleWithAdditionalVar.additionalScanColumns_.emplace_back(
+        3, Var{"?additional"});
+    IndexScan scanWithAdditional{qec, Permutation::SPO,
+                                 tripleWithAdditionalVar};
+
+    SparqlTripleSimple tripleWithAdditionalVarDifferent{Var{"?x"}, Var{"?b"},
+                                                        Var{"?c"}};
+    tripleWithAdditionalVarDifferent.additionalScanColumns_.emplace_back(
+        3, Var{"?additional2"});
+    IndexScan scanWithAdditionalDifferentVars{qec, Permutation::SPO,
+                                              tripleWithAdditionalVarDifferent};
+
+    auto testScanWithAdditionalStrippedColumns = testStrippedBindFront(
+        scanWithAdditional, scanWithAdditionalDifferentVars);
+
+    // Test all combinations for scan with additional variables
+    testScanWithAdditionalStrippedColumns({}, {});  // zero columns
+    testScanWithAdditionalStrippedColumns({Var{"?x"}},
+                                          {0});  // single regular (sorted)
+    testScanWithAdditionalStrippedColumns({Var{"?y"}},
+                                          {});  // single regular (not sorted)
+    testScanWithAdditionalStrippedColumns({Var{"?z"}},
+                                          {});  // single regular (not sorted)
+    testScanWithAdditionalStrippedColumns(
+        {Var{"?additional"}}, {});  // single additional (not sorted)
+    testScanWithAdditionalStrippedColumns({Var{"?x"}, Var{"?y"}},
+                                          {0, 1});  // two regular
+    testScanWithAdditionalStrippedColumns({Var{"?x"}, Var{"?additional"}},
+                                          {0});  // regular + additional
+    testScanWithAdditionalStrippedColumns(
+        {Var{"?y"}, Var{"?additional"}},
+        {});  // regular + additional (not sorted)
+    testScanWithAdditionalStrippedColumns({Var{"?x"}, Var{"?y"}, Var{"?z"}},
+                                          {0, 1, 2});  // all regular
+    testScanWithAdditionalStrippedColumns(
+        {Var{"?x"}, Var{"?y"}, Var{"?additional"}},
+        {0, 1});  // regular + additional
+    testScanWithAdditionalStrippedColumns(
+        {Var{"?x"}, Var{"?y"}, Var{"?z"}, Var{"?additional"}},
+        {0, 1, 2, 3});  // all columns
+  }
+}
+
+// _____________________________________________________________________________
+TEST(IndexScanTest, StripColumnsWithPrefiltering) {
+  TestIndexConfig config;
+  using namespace ad_utility::memory_literals;
+  config.blocksizePermutations = 8_B;
+  config.turtleInput = "<s> <p> <o>. <s2> <p> <o>. <s2> <p2> <o2>";
+  auto qec = ad_utility::testing::getQec(config);
+
+  using namespace makeFilterExpression;
+  using namespace filterHelper;
+
+  // Create base scan with three free variables (?x ?y ?z) using SPO
+  // permutation where subject is bound to ?x (first column)
+
+  auto makeBaseScan = [&qec]() {
+    return ad_utility::makeExecutionTree<IndexScan>(
+        qec, Permutation::SPO,
+        SparqlTripleSimple{Var{"?x"}, Var{"?y"}, Var{"?z"}});
+  };
+  auto baseScanTree = makeBaseScan();
+  IndexScan& baseScanForPrefilter =
+      dynamic_cast<IndexScan&>(*baseScanTree->getRootOperation());
+
+  // Create prefilter condition: ?x < <s2>
+  auto prefilterPairs = []() {
+    return makePrefilterVec(pr(lt(LocalVocabEntry::iriref("<s2>")), Var{"?x"}));
+  };
+
+  // Test with different variable combinations
+  std::vector<std::vector<Variable>> testCases = {
+      {Var{"?x"}},                       // single column (sorted)
+      {Var{"?y"}},                       // single column (not sorted)
+      {Var{"?x"}, Var{"?y"}},            // two columns
+      {Var{"?x"}, Var{"?y"}, Var{"?z"}}  // all columns
+  };
+
+  for (const auto& varsToKeep : testCases) {
+    // Approach 1: First apply prefilter, then strip columns
+    auto prefilteredThenStripped = [&]() {
+      auto prefilteredQet =
+          makeBaseScan()
+              ->setPrefilterGetUpdatedQueryExecutionTree(prefilterPairs())
+              .value_or(makeBaseScan());
+      std::set<Variable> varsSet(varsToKeep.begin(), varsToKeep.end());
+      return QueryExecutionTree::makeTreeWithStrippedColumns(
+          std::move(prefilteredQet), varsSet);
+    }();
+
+    auto strippedThenPrefiltered = [&]() {
+      // Approach 2: First strip columns, then apply prefilter
+      std::set<Variable> varsSet(varsToKeep.begin(), varsToKeep.end());
+      auto strippedFirst = QueryExecutionTree::makeTreeWithStrippedColumns(
+          makeBaseScan(), varsSet);
+      return strippedFirst
+          ->setPrefilterGetUpdatedQueryExecutionTree(prefilterPairs())
+          .value_or(strippedFirst);
+    }();
+
+    // Both approaches should yield the same cache key (indicating equivalent
+    // operations)
+    EXPECT_EQ(prefilteredThenStripped->getCacheKey(),
+              strippedThenPrefiltered->getCacheKey())
+        << "Cache keys should be equal for varsToKeep with "
+        << varsToKeep.size() << " variables";
+
+    // Both approaches should yield the same result width
+    EXPECT_EQ(prefilteredThenStripped->getResultWidth(),
+              strippedThenPrefiltered->getResultWidth())
+        << "Result widths should be equal for varsToKeep with "
+        << varsToKeep.size() << " variables";
+
+    // Both approaches should yield the same variable columns
+    EXPECT_EQ(prefilteredThenStripped->getVariableColumns(),
+              strippedThenPrefiltered->getVariableColumns())
+        << "Variable columns should be equal for varsToKeep with "
+        << varsToKeep.size() << " variables";
+
+    // Both approaches should yield the same actual results
+    // First get the full prefiltered result (without column stripping)
+    auto fullPrefilteredQet =
+        makeBaseScan()
+            ->setPrefilterGetUpdatedQueryExecutionTree(prefilterPairs())
+            .value_or(makeBaseScan());
+
+    qec->clearCacheUnpinnedOnly();
+    IdTable fullResult =
+        fullPrefilteredQet->getResult(false)->idTable().clone();
+
+    // Create expected result by applying column subset (same logic as
+    // infrastructure lambda)
+    std::vector<std::pair<Variable, ColumnIndex>> columnOrigins =
+        getVarsAndColumnIndices(varsToKeep, baseScanForPrefilter);
+
+    std::vector<ColumnIndex> originalColumnIndices;
+    for (const auto& [var, colIdx] : columnOrigins) {
+      originalColumnIndices.push_back(colIdx);
+    }
+
+    IdTable expectedResult =
+        fullResult.asColumnSubsetView(originalColumnIndices).clone();
+
+    // Now compare both approaches against the expected result
+    qec->clearCacheUnpinnedOnly();
+    IdTable result1 =
+        prefilteredThenStripped->getResult(false)->idTable().clone();
+    qec->clearCacheUnpinnedOnly();
+    IdTable result2 =
+        strippedThenPrefiltered->getResult(false)->idTable().clone();
+    EXPECT_THAT(result1, matchesIdTable(expectedResult.clone()))
+        << "Approach 1 (prefilter-then-strip) should match expected result for "
+        << varsToKeep.size() << " variables";
+    EXPECT_THAT(result2, matchesIdTable(expectedResult.clone()))
+        << "Approach 2 (strip-then-prefilter) should match expected result for "
+        << varsToKeep.size() << " variables";
+  }
 }

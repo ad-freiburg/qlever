@@ -1,6 +1,7 @@
 //  Copyright 2025, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//  Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//           Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_POLYMORPHICVOCABULARY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_POLYMORPHICVOCABULARY_H
@@ -10,11 +11,15 @@
 
 #include <variant>
 
+#include "backports/type_traits.h"
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/SplitVocabulary.h"
+#include "index/vocabulary/VocabularyConstraints.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
 #include "index/vocabulary/VocabularyType.h"
+#include "util/Serializer/Serializer.h"
+#include "util/TypeTraits.h"
 #include "util/json.h"
 
 // A vocabulary that can at runtime choose between different vocabulary
@@ -68,6 +73,11 @@ class PolymorphicVocabulary {
   // Return the `i`-th word, throw if `i` is out of bounds.
   std::string operator[](uint64_t i) const;
 
+  // Return a reference to currently underlying vocabulary, as a variant of the
+  // possible types.
+  Variant& getUnderlyingVocabulary() { return vocab_; }
+  const Variant& getUnderlyingVocabulary() const { return vocab_; }
+
   // Same as `std::lower_bound`, return the smallest entry >= `word`.
   template <typename String, typename Comp>
   WordAndIndex lower_bound(const String& word, Comp comp) const {
@@ -87,6 +97,68 @@ class PolymorphicVocabulary {
         },
         vocab_);
   }
+
+  // Analogous to `lower_bound`, but since `word` is guaranteed to be a full
+  // word, not a prefix, this function can respect the split of an underlying
+  // `SplitVocabulary`.
+  template <typename String, typename Comp>
+  std::pair<uint64_t, uint64_t> getPositionOfWord(const String& word,
+                                                  Comp comp) const {
+    return std::visit(
+        [&word, &comp, this](auto& vocab) {
+          using T = std::decay_t<decltype(vocab)>;
+          if constexpr (HasSpecialGetPositionOfWord<T>) {
+            return vocab.getPositionOfWord(word, std::move(comp));
+          } else {
+            // If a vocabulary does not require a special implementation for
+            // `getPositionOfWord`, we can compute the result using
+            // `lower_bound`. When adding new vocabulary types, ensure the
+            // correct semantics here by deciding between adding the class to
+            // `HasSpecialGetPositionOfWord` or `HasDefaultGetPositionOfWord`.
+            static_assert(HasDefaultGetPositionOfWord<T>);
+            return vocab.lower_bound(word, comp)
+                .positionOfWord(word)
+                .value_or(std::pair<uint64_t, uint64_t>{size(), size()});
+          }
+        },
+        vocab_);
+  }
+
+  // Retrieve `GeometryInfo` from an underlying vocabulary, if it is a
+  // `GeoVocabulary`.
+  std::optional<ad_utility::GeometryInfo> getGeoInfo(uint64_t index) const {
+    return std::visit(
+        [&](const auto& vocab) -> std::optional<ad_utility::GeometryInfo> {
+          using T = std::decay_t<decltype(vocab)>;
+          // For more details, please see the definition of these concepts
+          // in `VocabularyConstraints.h`.
+          if constexpr (MaybeProvidesGeometryInfo<T>) {
+            return vocab.getGeoInfo(index);
+          } else {
+            static_assert(NeverProvidesGeometryInfo<T>);
+            return std::nullopt;
+          }
+        },
+        vocab_);
+  };
+
+  // Checks if any of the underlying vocabularies is a `GeoVocabulary`.
+  bool isGeoInfoAvailable() const {
+    return std::visit(
+        [](const auto& vocab) {
+          using T = std::decay_t<decltype(vocab)>;
+          // For more details, please see the definition of these concepts
+          // in `VocabularyConstraints.h`.
+          if constexpr (MaybeProvidesGeometryInfo<T>) {
+            return vocab.isGeoInfoAvailable();
+          } else {
+            static_assert(NeverProvidesGeometryInfo<T>);
+            return false;
+          }
+        },
+        vocab_);
+  }
+
   // Create a `WordWriter` that will create a vocabulary with the given `type`
   // at the given `filename`.
   static std::unique_ptr<WordWriterBase> makeDiskWriterPtr(
@@ -96,6 +168,11 @@ class PolymorphicVocabulary {
   // `this`.
   std::unique_ptr<WordWriterBase> makeDiskWriterPtr(
       const std::string& filename) const;
+
+  // Generic serialization support - delegates to the active variant.
+  AD_SERIALIZE_FRIEND_FUNCTION(PolymorphicVocabulary) {
+    std::visit([&serializer](auto& vocab) { serializer | vocab; }, arg.vocab_);
+  }
 };
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_POLYMORPHICVOCABULARY_H

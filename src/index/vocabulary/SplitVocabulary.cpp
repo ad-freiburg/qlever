@@ -2,14 +2,15 @@
 // Chair of Algorithms and Data Structures
 // Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
+#include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/SplitVocabularyImpl.h"
 
 // Explicit template instantiations
 using namespace detail::splitVocabulary;
 template class SplitVocabulary<
-    decltype(geoSplitFunc), decltype(geoFilenameFunc),
+    GeoSplitFunc, GeoFilenameFunc,
     CompressedVocabulary<VocabularyInternalExternal>,
-    CompressedVocabulary<VocabularyInternalExternal>>;
-template class SplitVocabulary<decltype(geoSplitFunc),
-                               decltype(geoFilenameFunc), VocabularyInMemory,
-                               VocabularyInMemory>;
+    GeoVocabulary<CompressedVocabulary<VocabularyInternalExternal>>>;
+template class SplitVocabulary<GeoSplitFunc, GeoFilenameFunc,
+                               VocabularyInMemory,
+                               GeoVocabulary<VocabularyInMemory>>;

@@ -11,18 +11,20 @@
 #include <memory>
 #include <vector>
 
+#include "backports/concepts.h"
 #include "engine/PathSearch.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/DatasetClauses.h"
 #include "parser/GraphPattern.h"
+#include "parser/MaterializedViewQuery.h"
+#include "parser/NamedCachedResult.h"
 #include "parser/PathQuery.h"
 #include "parser/SpatialQuery.h"
 #include "parser/TextSearchQuery.h"
 #include "parser/TripleComponent.h"
-#include "parser/data/Variable.h"
+#include "rdfTypes/Variable.h"
 #include "util/TransparentFunctors.h"
 #include "util/VisitMixin.h"
-#include "util/http/HttpUtils.h"
 
 // First some forward declarations.
 // TODO<joka921> More stuff should consistently be in the `parsedQuery`
@@ -92,11 +94,25 @@ struct Values {
 /// `GraphPattern`.
 struct GroupGraphPattern {
   GraphPattern _child;
+
+  // Flag to indicate if a graph variable should match `ALL` graphs (including
+  // the implicit default graph), or only `NAMED` graphs (excluding the implicit
+  // default graph).
+  enum class GraphVariableBehaviour { ALL, NAMED };
   // If not `monostate`, then this group is a `GRAPH` clause, either with a
   // fixed graph IRI, or with a variable.
-  using GraphSpec =
-      std::variant<std::monostate, TripleComponent::Iri, Variable>;
+  using GraphSpec = std::variant<std::monostate, TripleComponent::Iri,
+                                 std::pair<Variable, GraphVariableBehaviour>>;
   GraphSpec graphSpec_ = std::monostate{};
+
+  // Constructors for all legal constellations.
+  explicit GroupGraphPattern(GraphPattern child) : _child{std::move(child)} {}
+  GroupGraphPattern(GraphPattern child, TripleComponent::Iri graphIri)
+      : _child{std::move(child)}, graphSpec_{std::move(graphIri)} {}
+  GroupGraphPattern(GraphPattern child, Variable graphVariable,
+                    GraphVariableBehaviour behaviour)
+      : _child{std::move(child)},
+        graphSpec_{std::pair{std::move(graphVariable), behaviour}} {}
 };
 
 /// An `OPTIONAL` clause.
@@ -188,7 +204,7 @@ struct Bind {
            ql::views::transform(ad_utility::dereference);
   }
 
-  [[nodiscard]] string getDescriptor() const;
+  [[nodiscard]] std::string getDescriptor() const;
 };
 
 // TODO<joka921> Further refactor this, s.t. the whole `GraphPatternOperation`
@@ -196,7 +212,8 @@ struct Bind {
 using GraphPatternOperationVariant =
     std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern,
                  Values, Service, PathQuery, SpatialQuery, TextSearchQuery,
-                 Minus, GroupGraphPattern, Describe, Load>;
+                 Minus, GroupGraphPattern, Describe, Load, NamedCachedResult,
+                 MaterializedViewQuery>;
 struct GraphPatternOperation
     : public GraphPatternOperationVariant,
       public VisitMixin<GraphPatternOperation, GraphPatternOperationVariant> {

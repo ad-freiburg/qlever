@@ -2,15 +2,16 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#include "./QueryPlanningCostFactors.h"
+#include "engine/QueryPlanningCostFactors.h"
 
 #include <absl/strings/charconv.h>
 #include <absl/strings/str_split.h>
 
 #include <fstream>
 
-#include "../util/Exception.h"
-#include "../util/Log.h"
+#include "util/Exception.h"
+#include "util/Log.h"
+#include "util/StringUtils.h"
 
 // _____________________________________________________________________________
 QueryPlanningCostFactors::QueryPlanningCostFactors() : _factors() {
@@ -40,20 +41,20 @@ float toFloat(std::string_view view) {
 }
 
 // _____________________________________________________________________________
-void QueryPlanningCostFactors::readFromFile(const string& fileName) {
+void QueryPlanningCostFactors::readFromFile(const std::string& fileName) {
   std::ifstream in(fileName);
-  string line;
+  std::string line;
   while (std::getline(in, line)) {
     std::vector<std::string_view> v = absl::StrSplit(line, '\t');
     AD_CONTRACT_CHECK(v.size() == 2);
     float factor = toFloat(v[1]);
-    LOG(INFO) << "Setting cost factor: " << v[0] << " from " << _factors[v[0]]
-              << " to " << factor << std::endl;
+    AD_LOG_INFO << "Setting cost factor: " << v[0] << " from " << _factors[v[0]]
+                << " to " << factor << std::endl;
     _factors[v[0]] = factor;
   }
 }
 
 // _____________________________________________________________________________
-double QueryPlanningCostFactors::getCostFactor(const string& key) const {
+double QueryPlanningCostFactors::getCostFactor(const std::string& key) const {
   return _factors.find(key)->second;
 }

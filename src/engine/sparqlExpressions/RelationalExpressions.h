@@ -5,6 +5,8 @@
 #ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_RELATIONALEXPRESSIONS_H
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_RELATIONALEXPRESSIONS_H
 
+#include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "global/ValueIdComparators.h"
 
@@ -32,7 +34,7 @@ class RelationalExpression : public SparqlExpression {
 
   ExpressionResult evaluate(EvaluationContext* context) const override;
 
-  [[nodiscard]] string getCacheKey(
+  [[nodiscard]] std::string getCacheKey(
       const VariableToColumnMap& varColMap) const override;
 
   // Check if this expression has the form `LANG(?var) = "literal"` and return
@@ -75,7 +77,7 @@ class InExpression : public SparqlExpression {
 
   ExpressionResult evaluate(EvaluationContext* context) const override;
 
-  [[nodiscard]] string getCacheKey(
+  [[nodiscard]] std::string getCacheKey(
       const VariableToColumnMap& varColMap) const override;
 
   std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
@@ -86,6 +88,8 @@ class InExpression : public SparqlExpression {
   Estimates getEstimatesForFilterExpression(
       uint64_t inputSizeEstimate,
       const std::optional<Variable>& firstSortedVariable) const override;
+
+  std::optional<LangFilterData> getLanguageFilterExpression() const override;
 
  private:
   ql::span<SparqlExpression::Ptr> childrenImpl() override;
@@ -109,6 +113,16 @@ using GreaterEqualExpression =
     relational::RelationalExpression<valueIdComparators::Comparison::GE>;
 
 using InExpression = relational::InExpression;
+
+// This function is a helper for the query planner. It allows unpacking a
+// `SparqlExpression` of any of these forms
+// * `geof:distance(?variable1, ?variable2) <= constant`
+// * `geof:distance(?variable1, ?variable2, unit-constant) <= constant`
+// * `geof:metricDistance(?variable1, ?variable2) <= constant`
+// for rewriting filters to spatial joins.
+std::optional<std::pair<sparqlExpression::GeoFunctionCall, double>>
+getGeoDistanceFilter(const SparqlExpression& expr);
+
 }  // namespace sparqlExpression
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_RELATIONALEXPRESSIONS_H

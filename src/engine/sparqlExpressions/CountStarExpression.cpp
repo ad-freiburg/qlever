@@ -6,6 +6,7 @@
 
 #include <absl/strings/str_cat.h>
 
+#include "backports/StartsWithAndEndsWith.h"
 #include "engine/CallFixedSize.h"
 #include "engine/Engine.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
@@ -38,8 +39,8 @@ ExpressionResult CountStarExpression::evaluate(
 
   auto varToColNoInternalVariables =
       ctx->_variableToColumnMap | ql::views::filter([](const auto& varAndIdx) {
-        return !varAndIdx.first.name().starts_with(
-            QLEVER_INTERNAL_VARIABLE_PREFIX);
+        return !ql::starts_with(varAndIdx.first.name(),
+                                QLEVER_INTERNAL_VARIABLE_PREFIX);
       });
   table.setNumColumns(ql::ranges::distance(varToColNoInternalVariables));
   table.resize(ctx->size());
@@ -73,7 +74,7 @@ SparqlExpression::AggregateStatus CountStarExpression::isAggregate() const {
 }
 
 // _____________________________________________________________________________
-string CountStarExpression::getCacheKey(
+std::string CountStarExpression::getCacheKey(
     [[maybe_unused]] const VariableToColumnMap& varColMap) const {
   return absl::StrCat("COUNT * with DISTINCT = ", distinct_);
 }
