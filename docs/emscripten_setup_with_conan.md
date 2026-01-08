@@ -21,10 +21,9 @@ Also copy the `conanfile.txt` to `qlever` dir.
 
 ## Build commands
 
-#### in qlever dir:
-run `conan install . -pr:b default -pr:h emscripten.profile -s build_type=Release -b missing -of build`
-
-#### in build dir:
-run `cmake -S .. -B . -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_PARALLEL=true -D_NO_TIMING_TESTS=ON -D_DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS=ON -D_DISABLE_EMSCRIPTEN_TARGETS=ON -GNinja`
-
-and finally, run: `cmake --build .`
+```bash
+conan install . -pr:b default -pr:h emscripten.profile -s build_type=Release -b missing -of build
+cd build
+cmake -S .. -B . -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_PARALLEL=true -D_NO_TIMING_TESTS=ON -D_DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS=ON -D_DISABLE_EMSCRIPTEN_TARGETS=ON -GNinja
+cmake --build .
+```
