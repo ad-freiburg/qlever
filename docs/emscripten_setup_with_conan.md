@@ -20,7 +20,8 @@ The --recursive is important because the QLever repository uses a few submodules
 
 Because we are cross-compiling with Emscripten, we need 2 conan profiles: a build profile and a host profile.
 The host profile is `emscripten.profile` in the folder `conanprofiles`. Copy it to the profiles folder of your conan installation ( [CONAN_HOME]/profiles ).
-To get a build profile, run `conan profile detect`. This will give you a default build profile based on your OS.
+Now we need a build profile. If you are new to conan and don't have your own build profile(s) already, you can simply get one by running `conan profile detect`.
+This will give you a default build profile based on your OS.
 It's only an estimation of an appropriate build profile and can be customized later on, but it is sufficient for our purposes.
 For more information see [conan profiles](https://docs.conan.io/2/reference/config_files/profiles.html).
 
