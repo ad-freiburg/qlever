@@ -145,7 +145,7 @@ ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
 
   // An `IdTable` of which a certain subrange becomes part of the result,
   // together with a bool that indicates whether this is the last `IdTable` (to
-  // stop the computation of possibly expensive results as soon as possible.
+  // stop the computation of possibly expensive results as soon as possible.)
   struct Export {
     TableWithRange tableWithRange_;
     bool isLast_;
