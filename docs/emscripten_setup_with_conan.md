@@ -1,4 +1,4 @@
-# Compiling the qlever code to WebAssembly using Emscripten and the Conan package manager.
+# Compiling the qlever code to WebAssembly using Emscripten and the Conan package manager
 
 ## Installments
 
