@@ -371,10 +371,10 @@ class DeltaTriplesManager {
   // updates.
   LocatedTriplesSharedState getCurrentLocatedTriplesSharedState() const;
 
-  // In addition to a simple snapshot, also acquire a copy of the local vocab
-  // indices.
-  std::pair<SharedLocatedTriplesSnapshot, std::vector<LocalVocabIndex>>
-  getCurrentSnapshotWithVocab() const;
+  // In addition to the located triples shared state, also acquire a copy of the
+  // local vocab indices.
+  std::pair<LocatedTriplesSharedState, std::vector<LocalVocabIndex>>
+  getCurrentLocatedTriplesSharedStateWithVocab() const;
 };
 
 #endif  // QLEVER_SRC_INDEX_DELTATRIPLES_H

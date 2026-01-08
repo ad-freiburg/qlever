@@ -98,7 +98,7 @@ Id remapVocabId(Id original,
 ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
     const Permutation& permutation, ScanSpecification scanSpec,
     const BlockMetadataRanges& blockMetadataRanges,
-    const LocatedTriplesSnapshot& snapshot,
+    const LocatedTriplesSharedState& locatedTriplesSharedState,
     const ad_utility::HashMap<Id, Id>& localVocabMapping,
     const std::vector<std::tuple<VocabIndex, std::string_view, Id>>& insertInfo,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
@@ -107,7 +107,8 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
                                                    blockMetadataRanges};
   auto fullScan =
       permutation.lazyScan(scanSpecAndBlocks, std::nullopt, additionalColumns,
-                           cancellationHandle, snapshot, LimitOffsetClause{});
+                           cancellationHandle, *locatedTriplesSharedState,
+                           LimitOffsetClause{});
 
   return ad_utility::InputRangeTypeErased{
       ad_utility::CachingTransformInputRange{
@@ -142,14 +143,15 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
 
 ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
     const Permutation& permutation, ScanSpecification scanSpec,
-    const LocatedTriplesSnapshot& snapshot,
+    const LocatedTriplesSharedState& locatedTriplesSharedState,
     const ad_utility::HashMap<Id, Id>& localVocabMapping,
     const std::vector<std::tuple<VocabIndex, std::string_view, Id>>& insertInfo,
     const ad_utility::SharedCancellationHandle& cancellationHandle) {
   return readIndexAndRemap(
       permutation, std::move(scanSpec),
-      permutation.getAugmentedMetadataForPermutation(snapshot), snapshot,
-      localVocabMapping, insertInfo, cancellationHandle,
+      permutation.getAugmentedMetadataForPermutation(*locatedTriplesSharedState),
+      locatedTriplesSharedState, localVocabMapping, insertInfo,
+      cancellationHandle,
       std::array{static_cast<ColumnIndex>(ADDITIONAL_COLUMN_GRAPH_ID)});
 }
 
@@ -168,7 +170,7 @@ size_t getNumColumns(const BlockMetadataRanges& blockMetadataRanges) {
 namespace qlever {
 void materializeToIndex(const IndexImpl& index, const std::string& newIndexName,
                         const std::vector<LocalVocabIndex>& entries,
-                        const SharedLocatedTriplesSnapshot& snapshot,
+                        const LocatedTriplesSharedState& locatedTriplesSharedState,
                         const CancellationHandle& cancellationHandle,
                         const std::string& logFileName) {
   AD_CONTRACT_CHECK(!logFileName.empty(), "Log file name must not be empty");
@@ -192,7 +194,7 @@ void materializeToIndex(const IndexImpl& index, const std::string& newIndexName,
 
   REBUILD_LOG_INFO << "Recomputing statistics ..." << std::endl;
 
-  auto newStats = index.recomputeStatistics(*snapshot);
+  auto newStats = index.recomputeStatistics(locatedTriplesSharedState);
 
   ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
   IndexImpl newIndex{index.allocator(), false};
@@ -218,13 +220,13 @@ void materializeToIndex(const IndexImpl& index, const std::string& newIndexName,
     for (auto permutation : {SPO, SOP, OPS, OSP}) {
       const auto& actualPermutation = index.getPermutation(permutation);
       tasks.push_back(ad_utility::JThread{
-          [&newIndex, &actualPermutation, &scanSpec, &snapshot,
+          [&newIndex, &actualPermutation, &scanSpec, &locatedTriplesSharedState,
            &localVocabMapping, &insertInfo, &cancellationHandle]() {
             newIndex.createPermutation(
                 4,
-                readIndexAndRemap(actualPermutation, scanSpec, *snapshot,
-                                  localVocabMapping, insertInfo,
-                                  cancellationHandle),
+                readIndexAndRemap(actualPermutation, scanSpec,
+                                  locatedTriplesSharedState, localVocabMapping,
+                                  insertInfo, cancellationHandle),
                 actualPermutation);
           }});
     }
@@ -234,18 +236,19 @@ void materializeToIndex(const IndexImpl& index, const std::string& newIndexName,
     const auto& actualPermutation = index.getPermutation(permutation);
     const auto& internalPermutation = actualPermutation.internalPermutation();
     tasks.push_back(ad_utility::JThread{
-        [&newIndex, &internalPermutation, &scanSpec, &snapshot,
+        [&newIndex, &internalPermutation, &scanSpec, &locatedTriplesSharedState,
          &localVocabMapping, &insertInfo, &cancellationHandle]() {
           newIndex.createPermutation(
               4,
-              readIndexAndRemap(internalPermutation, scanSpec, *snapshot,
-                                localVocabMapping, insertInfo,
-                                cancellationHandle),
+              readIndexAndRemap(internalPermutation, scanSpec,
+                                locatedTriplesSharedState, localVocabMapping,
+                                insertInfo, cancellationHandle),
               internalPermutation, true);
         }});
 
     auto blockMetadataRanges =
-        actualPermutation.getAugmentedMetadataForPermutation(*snapshot);
+        actualPermutation.getAugmentedMetadataForPermutation(
+            *locatedTriplesSharedState);
     size_t numColumns = getNumColumns(blockMetadataRanges);
     std::vector<ColumnIndex> additionalColumns;
     additionalColumns.push_back(ADDITIONAL_COLUMN_GRAPH_ID);
@@ -258,14 +261,14 @@ void materializeToIndex(const IndexImpl& index, const std::string& newIndexName,
     }
     AD_CORRECTNESS_CHECK(additionalColumns.size() == numColumns - 3);
     tasks.push_back(ad_utility::JThread{
-        [&newIndex, &actualPermutation, &scanSpec, &snapshot,
+        [&newIndex, &actualPermutation, &scanSpec, &locatedTriplesSharedState,
          &localVocabMapping, &insertInfo, &cancellationHandle, numColumns,
          blockMetadataRanges = std::move(blockMetadataRanges),
          additionalColumns = std::move(additionalColumns)]() {
           newIndex.createPermutation(
               numColumns,
               readIndexAndRemap(actualPermutation, scanSpec,
-                                blockMetadataRanges, *snapshot,
+                                blockMetadataRanges, locatedTriplesSharedState,
                                 localVocabMapping, insertInfo,
                                 cancellationHandle, additionalColumns),
               actualPermutation);

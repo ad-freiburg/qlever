@@ -508,10 +508,10 @@ DeltaTriplesManager::getCurrentLocatedTriplesSharedState() const {
 }
 
 // _____________________________________________________________________________
-std::pair<SharedLocatedTriplesSnapshot, std::vector<LocalVocabIndex>>
-DeltaTriplesManager::getCurrentSnapshotWithVocab() const {
+std::pair<LocatedTriplesSharedState, std::vector<LocalVocabIndex>>
+DeltaTriplesManager::getCurrentLocatedTriplesSharedStateWithVocab() const {
   return deltaTriples_.withReadLock([this](const DeltaTriples& deltaTriples) {
-    return std::make_pair(*currentLocatedTriplesSnapshot_.rlock(),
+    return std::make_pair(*currentLocatedTriplesSharedState_.rlock(),
                           deltaTriples.copyLocalVocab());
   });
 }

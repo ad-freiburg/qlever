@@ -1944,7 +1944,7 @@ void countDistinct(std::optional<Id>& lastId, size_t& counter,
 
 // _____________________________________________________________________________
 nlohmann::json IndexImpl::recomputeStatistics(
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+    const LocatedTriplesSharedState& locatedTriplesSharedState) const {
   // TODO<RobinTF> Wrap threads in try statements to avoid termination on
   // exception and propagate it.
   size_t numTriples = 0;
@@ -1962,11 +1962,11 @@ nlohmann::json IndexImpl::recomputeStatistics(
 
     tasks.push_back(ad_utility::JThread{
         [this, &numTriples, &numPredicates, &nextBlankNode, &scanSpec,
-         &locatedTriplesSnapshot, &cancellationHandle]() {
+         &locatedTriplesSharedState, &cancellationHandle]() {
           auto tables = pso_->lazyScan(
-              pso_->getScanSpecAndBlocks(scanSpec, locatedTriplesSnapshot),
+              pso_->getScanSpecAndBlocks(scanSpec, *locatedTriplesSharedState),
               std::nullopt, CompressedRelationReader::ColumnIndicesRef{},
-              cancellationHandle, locatedTriplesSnapshot);
+              cancellationHandle, *locatedTriplesSharedState);
           std::optional<Id> lastPredicate = std::nullopt;
           for (const auto& table : tables) {
             numTriples += table.numRows();
@@ -1984,12 +1984,12 @@ nlohmann::json IndexImpl::recomputeStatistics(
 
     tasks.push_back(ad_utility::JThread{
         [this, &numTriplesInternal, &numPredicatesInternal, &scanSpec,
-         &locatedTriplesSnapshot, &cancellationHandle]() {
+         &locatedTriplesSharedState, &cancellationHandle]() {
           auto tables = pso_->internalPermutation().lazyScan(
               pso_->internalPermutation().getScanSpecAndBlocks(
-                  scanSpec, locatedTriplesSnapshot),
+                  scanSpec, *locatedTriplesSharedState),
               std::nullopt, CompressedRelationReader::ColumnIndicesRef{},
-              cancellationHandle, locatedTriplesSnapshot);
+              cancellationHandle, *locatedTriplesSharedState);
           std::optional<Id> lastPredicate = std::nullopt;
           for (const auto& table : tables) {
             numTriplesInternal += table.numRows();
@@ -2000,11 +2000,11 @@ nlohmann::json IndexImpl::recomputeStatistics(
     if (hasAllPermutations()) {
       tasks.push_back(
           ad_utility::JThread{[this, &numSubjects, &scanSpec,
-                               &locatedTriplesSnapshot, &cancellationHandle]() {
+                               &locatedTriplesSharedState, &cancellationHandle]() {
             auto tables = spo_->lazyScan(
-                spo_->getScanSpecAndBlocks(scanSpec, locatedTriplesSnapshot),
+                spo_->getScanSpecAndBlocks(scanSpec, *locatedTriplesSharedState),
                 std::nullopt, CompressedRelationReader::ColumnIndicesRef{},
-                cancellationHandle, locatedTriplesSnapshot);
+                cancellationHandle, *locatedTriplesSharedState);
             std::optional<Id> lastSubject = std::nullopt;
             for (const auto& table : tables) {
               countDistinct(lastSubject, numSubjects, table);
@@ -2013,11 +2013,11 @@ nlohmann::json IndexImpl::recomputeStatistics(
 
       tasks.push_back(
           ad_utility::JThread{[this, &numObjects, &scanSpec,
-                               &locatedTriplesSnapshot, &cancellationHandle]() {
+                               &locatedTriplesSharedState, &cancellationHandle]() {
             auto tables = osp_->lazyScan(
-                osp_->getScanSpecAndBlocks(scanSpec, locatedTriplesSnapshot),
+                osp_->getScanSpecAndBlocks(scanSpec, *locatedTriplesSharedState),
                 std::nullopt, CompressedRelationReader::ColumnIndicesRef{},
-                cancellationHandle, locatedTriplesSnapshot);
+                cancellationHandle, *locatedTriplesSharedState);
             std::optional<Id> lastObject = std::nullopt;
             for (const auto& table : tables) {
               countDistinct(lastObject, numObjects, table);

@@ -835,9 +835,10 @@ class IndexImpl {
   // Write the stored in-memory patterns to a pattern file.
   void writePatternsToFile() const;
 
-  // Recompute the statistics about the index based on the passed snapshot.
+  // Recompute the statistics about the index based on the passed located
+  // triples shared state.
   nlohmann::json recomputeStatistics(
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+      const LocatedTriplesSharedState& locatedTriplesSharedState) const;
 };
 
 #endif  // QLEVER_SRC_INDEX_INDEXIMPL_H

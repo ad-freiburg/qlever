@@ -482,7 +482,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
           [this, &handle, fileName = std::move(fileName)] {
             auto logFileName = fileName + ".rebuild-index-log.txt";
             auto [currentSnapshot, localVocabCopy] =
-                index_.deltaTriplesManager().getCurrentSnapshotWithVocab();
+                index_.deltaTriplesManager()
+                    .getCurrentLocatedTriplesSharedStateWithVocab();
             qlever::materializeToIndex(index_.getImpl(), fileName,
                                        localVocabCopy, currentSnapshot, handle,
                                        logFileName);
