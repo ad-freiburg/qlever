@@ -931,41 +931,22 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
   AD_LOG_DEBUG << "Number of words in internal and external vocabulary: "
                << vocab_.size() << std::endl;
 
-  auto range1 =
-      vocab_.prefixRanges(QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET);
-  auto range2 = vocab_.prefixRanges("@");
-  auto isInternalId = [range1, range2](Id id) {
-    // TODO<joka921> What about internal vocab stuff for update queries? this
-    // has to be added also to the external permutation.
-    if (id.getDatatype() != Datatype::VocabIndex) {
-      return false;
-    }
-    return range1.contain(id.getVocabIndex()) ||
-           range2.contain(id.getVocabIndex());
-  };
-
   // Load the permutations and register the original metadata for the delta
   // triples.
-  // TODO<joka921> We could delegate the setting of the metadata to the
-  // `Permutation`class, but we first have to deal with The delta triples for
-  // the additional permutations.
   // The setting of the metadata doesn't affect the contents of the delta
   // triples, so we don't need to call `writeToDisk`, therefore the second
   // argument to `modify` is `false`.
-  auto setMetadata = [this](const Permutation& p) {
+  auto setMetadata = [this](const Permutation& permutation) {
     deltaTriplesManager().modify<void>(
-        [&p](DeltaTriples& deltaTriples) {
-          deltaTriples.setOriginalMetadata(p.permutation(),
-                                           p.metaData().blockDataShared());
+        [&permutation](DeltaTriples& deltaTriples) {
+          permutation.setOriginalMetadataForDeltaTriples(deltaTriples);
         },
         false, false);
   };
 
-  auto load = [this, &isInternalId, &setMetadata](
-                  PermutationPtr permutation,
-                  bool loadInternalPermutation = false) {
-    permutation->loadFromDisk(onDiskBase_, isInternalId,
-                              loadInternalPermutation);
+  auto load = [this, &setMetadata](PermutationPtr permutation,
+                                   bool loadInternalPermutation = false) {
+    permutation->loadFromDisk(onDiskBase_, loadInternalPermutation);
     setMetadata(*permutation);
   };
 
@@ -1586,9 +1567,9 @@ Index::NumNormalAndInternal IndexImpl::numDistinctCol0(
 // ___________________________________________________________________________
 size_t IndexImpl::getCardinality(
     Id id, Permutation::Enum permutation,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+    const LocatedTriplesState& locatedTriplesState) const {
   if (const auto& meta =
-          getPermutation(permutation).getMetadata(id, locatedTriplesSnapshot);
+          getPermutation(permutation).getMetadata(id, locatedTriplesState);
       meta.has_value()) {
     return meta.value().numRows_;
   }
@@ -1598,7 +1579,7 @@ size_t IndexImpl::getCardinality(
 // ___________________________________________________________________________
 size_t IndexImpl::getCardinality(
     const TripleComponent& comp, Permutation::Enum permutation,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+    const LocatedTriplesState& locatedTriplesState) const {
   // TODO<joka921> This special case is only relevant for the `PSO` and `POS`
   // permutations, but this internal predicate should never appear in subjects
   // or objects anyway.
@@ -1609,7 +1590,7 @@ size_t IndexImpl::getCardinality(
   }
   if (std::optional<Id> relId =
           comp.toValueId(getVocab(), encodedIriManager())) {
-    return getCardinality(relId.value(), permutation, locatedTriplesSnapshot);
+    return getCardinality(relId.value(), permutation, locatedTriplesState);
   }
   return 0;
 }
@@ -1635,9 +1616,9 @@ Index::Vocab::PrefixRanges IndexImpl::prefixRanges(
 // _____________________________________________________________________________
 std::vector<float> IndexImpl::getMultiplicities(
     const TripleComponent& key, const Permutation& permutation,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+    const LocatedTriplesState& locatedTriplesState) const {
   if (auto keyId = key.toValueId(getVocab(), encodedIriManager())) {
-    auto meta = permutation.getMetadata(keyId.value(), locatedTriplesSnapshot);
+    auto meta = permutation.getMetadata(keyId.value(), locatedTriplesState);
     if (meta.has_value()) {
       return {meta.value().getCol1Multiplicity(),
               meta.value().getCol2Multiplicity()};
@@ -1658,40 +1639,14 @@ std::vector<float> IndexImpl::getMultiplicities(
 }
 
 // _____________________________________________________________________________
-IdTable IndexImpl::scan(
-    const ScanSpecificationAsTripleComponent& scanSpecificationAsTc,
-    const Permutation::Enum& permutation,
-    Permutation::ColumnIndicesRef additionalColumns,
-    const ad_utility::SharedCancellationHandle& cancellationHandle,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot,
-    const LimitOffsetClause& limitOffset) const {
-  auto scanSpecification = scanSpecificationAsTc.toScanSpecification(*this);
-  return scan(scanSpecification, permutation, additionalColumns,
-              cancellationHandle, locatedTriplesSnapshot, limitOffset);
-}
-// _____________________________________________________________________________
-IdTable IndexImpl::scan(
-    const ScanSpecification& scanSpecification, Permutation::Enum p,
-    Permutation::ColumnIndicesRef additionalColumns,
-    const ad_utility::SharedCancellationHandle& cancellationHandle,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot,
-    const LimitOffsetClause& limitOffset) const {
-  const auto& perm = getPermutation(p);
-  return perm.scan(
-      perm.getScanSpecAndBlocks(scanSpecification, locatedTriplesSnapshot),
-      additionalColumns, cancellationHandle, locatedTriplesSnapshot,
-      limitOffset);
-}
-
-// _____________________________________________________________________________
 size_t IndexImpl::getResultSizeOfScan(
     const ScanSpecification& scanSpecification,
     const Permutation::Enum& permutation,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+    const LocatedTriplesState& locatedTriplesState) const {
   const auto& perm = getPermutation(permutation);
   return perm.getResultSizeOfScan(
-      perm.getScanSpecAndBlocks(scanSpecification, locatedTriplesSnapshot),
-      locatedTriplesSnapshot);
+      perm.getScanSpecAndBlocks(scanSpecification, locatedTriplesState),
+      locatedTriplesState);
 }
 
 // _____________________________________________________________________________

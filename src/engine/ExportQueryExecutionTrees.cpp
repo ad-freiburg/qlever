@@ -17,6 +17,7 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
+#include "global/RuntimeParameters.h"
 #include "index/EncodedIriManager.h"
 #include "index/IndexImpl.h"
 #include "rdfTypes/RdfEscaping.h"
@@ -40,8 +41,8 @@ bool getResultForAsk(const std::shared_ptr<const Result>& result) {
   }
 }
 
-LiteralOrIri encodedIdToLiteralOrIri(Id id, const Index& index) {
-  const auto& mgr = index.getImpl().encodedIriManager();
+LiteralOrIri encodedIdToLiteralOrIri(Id id, const IndexImpl& index) {
+  const auto& mgr = index.encodedIriManager();
   return LiteralOrIri::fromStringRepresentation(mgr.toString(id));
 }
 
@@ -567,7 +568,7 @@ ExportQueryExecutionTrees::handleIriOrLiteral(
 
 // _____________________________________________________________________________
 LiteralOrIri ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
-    const Index& index, Id id, const LocalVocab& localVocab) {
+    const IndexImpl& index, Id id, const LocalVocab& localVocab) {
   switch (id.getDatatype()) {
     case Datatype::LocalVocabIndex:
       return localVocab.getWord(id.getLocalVocabIndex()).asLiteralOrIri();
@@ -648,9 +649,9 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
     case VocabIndex:
     case LocalVocabIndex:
       return handleIriOrLiteral(
-          getLiteralOrIriFromVocabIndex(index, id, localVocab));
+          getLiteralOrIriFromVocabIndex(index.getImpl(), id, localVocab));
     case EncodedVal:
-      return handleIriOrLiteral(encodedIdToLiteralOrIri(id, index));
+      return handleIriOrLiteral(encodedIdToLiteralOrIri(id, index.getImpl()));
     case TextRecordIndex:
       return std::pair{
           escapeFunction(index.getTextExcerpt(id.getTextRecordIndex())),
@@ -662,7 +663,7 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
 
 // _____________________________________________________________________________
 std::optional<ad_utility::triple_component::Literal>
-ExportQueryExecutionTrees::idToLiteral(const Index& index, Id id,
+ExportQueryExecutionTrees::idToLiteral(const IndexImpl& index, Id id,
                                        const LocalVocab& localVocab,
                                        bool onlyReturnLiteralsWithXsdString) {
   using enum Datatype;
@@ -699,22 +700,29 @@ ExportQueryExecutionTrees::getLiteralOrNullopt(
 // _____________________________________________________________________________
 std::optional<LiteralOrIri>
 ExportQueryExecutionTrees::idToLiteralOrIriForEncodedValue(Id id) {
-  auto idLiteralAndType = idToStringAndTypeForEncodedValue(id);
-  if (idLiteralAndType.has_value()) {
-    auto lit = ad_utility::triple_component::Literal::literalWithoutQuotes(
-        idLiteralAndType.value().first);
-    lit.addDatatype(
-        ad_utility::triple_component::Iri::fromIrirefWithoutBrackets(
-            idLiteralAndType.value().second));
-    return LiteralOrIri{lit};
+  // TODO<RobinTF> This returns a `nullptr` for the datatype when the `id`
+  // represents a `BlankNode` or an `EncodedVal`. The latter case is typically
+  // no problem, because the only caller of this function already properly
+  // handles this case. The former case is also fine, because `BlankNode`s are
+  // neither IRIs nor literals, so returning `std::nullopt` is the correct
+  // behavior. However, this is somewhat fragile and should be kept in mind if
+  // this function is used in other contexts.
+  auto [literal, type] = idToStringAndTypeForEncodedValue(id).value_or(
+      std::make_pair(std::string{}, nullptr));
+  if (type == nullptr) {
+    return std::nullopt;
   }
-  return std::nullopt;
-};
+  auto lit =
+      ad_utility::triple_component::Literal::literalWithoutQuotes(literal);
+  lit.addDatatype(
+      ad_utility::triple_component::Iri::fromIrirefWithoutBrackets(type));
+  return LiteralOrIri{std::move(lit)};
+}
 
 // _____________________________________________________________________________
 std::optional<LiteralOrIri>
-ExportQueryExecutionTrees::getLiteralOrIriFromWordVocabIndex(const Index& index,
-                                                             Id id) {
+ExportQueryExecutionTrees::getLiteralOrIriFromWordVocabIndex(
+    const IndexImpl& index, Id id) {
   return LiteralOrIri{
       ad_utility::triple_component::Literal::literalWithoutQuotes(
           index.indexToString(id.getWordVocabIndex()))};
@@ -723,7 +731,7 @@ ExportQueryExecutionTrees::getLiteralOrIriFromWordVocabIndex(const Index& index,
 // _____________________________________________________________________________
 std::optional<LiteralOrIri>
 ExportQueryExecutionTrees::getLiteralOrIriFromTextRecordIndex(
-    const Index& index, Id id) {
+    const IndexImpl& index, Id id) {
   return LiteralOrIri{
       ad_utility::triple_component::Literal::literalWithoutQuotes(
           index.getTextExcerpt(id.getTextRecordIndex()))};
@@ -731,7 +739,7 @@ ExportQueryExecutionTrees::getLiteralOrIriFromTextRecordIndex(
 
 // _____________________________________________________________________________
 std::optional<ad_utility::triple_component::LiteralOrIri>
-ExportQueryExecutionTrees::idToLiteralOrIri(const Index& index, Id id,
+ExportQueryExecutionTrees::idToLiteralOrIri(const IndexImpl& index, Id id,
                                             const LocalVocab& localVocab,
                                             bool skipEncodedValues) {
   using enum Datatype;
@@ -863,6 +871,7 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream(
     const QueryExecutionTree& qet,
     const parsedQuery::SelectClause& selectClause,
     LimitOffsetClause limitAndOffset, CancellationHandle cancellationHandle,
+    [[maybe_unused]] const ad_utility::Timer& requestTimer,
     [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
   static_assert(format == MediaType::octetStream || format == MediaType::csv ||
                 format == MediaType::tsv || format == MediaType::turtle ||
@@ -1022,6 +1031,7 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
     const QueryExecutionTree& qet,
     const parsedQuery::SelectClause& selectClause,
     LimitOffsetClause limitAndOffset, CancellationHandle cancellationHandle,
+    [[maybe_unused]] const ad_utility::Timer& requestTimer,
     [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
   using namespace std::string_view_literals;
   STREAMABLE_YIELD(
@@ -1077,6 +1087,7 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
     const QueryExecutionTree& qet,
     const parsedQuery::SelectClause& selectClause,
     LimitOffsetClause limitAndOffset, CancellationHandle cancellationHandle,
+    const ad_utility::Timer& requestTimer,
     [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
   // This call triggers the possibly expensive computation of the query result
   // unless the result is already cached.
@@ -1131,7 +1142,16 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
     }
   }
 
-  STREAMABLE_YIELD("]}}");
+  STREAMABLE_YIELD("]}");
+
+  // Optionally add field `meta` with timing information.
+  if (getRuntimeParameter<&RuntimeParameters::sparqlResultsJsonWithTime_>()) {
+    auto timeMs = requestTimer.msecs().count();
+    STREAMABLE_YIELD(absl::StrCat(R"(,"meta":{"query-time-ms":)", timeMs,
+                                  R"(,"result-size-total":)", resultSize, "}"));
+  }
+
+  STREAMABLE_YIELD("}");
   STREAMABLE_RETURN;
 }
 
@@ -1139,14 +1159,12 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
 template <>
 STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
     ad_utility::MediaType::binaryQleverExport>(
-    const QueryExecutionTree& qet,
-    const parsedQuery::SelectClause& selectClause,
-    LimitOffsetClause limitAndOffset, CancellationHandle cancellationHandle,
+    [[maybe_unused]] const QueryExecutionTree& qet,
+    [[maybe_unused]] const parsedQuery::SelectClause& selectClause,
+    [[maybe_unused]] LimitOffsetClause limitAndOffset,
+    [[maybe_unused]] CancellationHandle cancellationHandle,
+    [[maybe_unused]] const ad_utility::Timer& requestTimer,
     [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
-  (void)qet;
-  (void)selectClause;
-  (void)limitAndOffset;
-  (void)cancellationHandle;
   throw std::runtime_error(
       "The binary export of QLever results is not yet implemented, please have "
       "a little patience");
@@ -1270,7 +1288,8 @@ ExportQueryExecutionTrees::computeResult(
       return parsedQuery.hasSelectClause()
                  ? selectQueryResultToStream<format>(
                        qet, parsedQuery.selectClause(), limit,
-                       std::move(cancellationHandle), streamableYielder)
+                       std::move(cancellationHandle), requestTimer,
+                       streamableYielder)
                  : constructQueryResultToStream<format>(
                        qet, parsedQuery.constructClause().triples_, limit,
                        qet.getResult(true), std::move(cancellationHandle),

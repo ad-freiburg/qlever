@@ -281,6 +281,14 @@ void SpatialQuery::throwIf(bool throwCondition,
   }
 }
 
+// _____________________________________________________________________________
+void SpatialQuery::validate() const {
+  // We convert the spatial query to a spatial join configuration and discard
+  // its result here to detect errors early and report them to the user with
+  // highlighting. It's only a small struct so not much is wasted.
+  [[maybe_unused]] auto&& _ = toSpatialJoinConfiguration();
+}
+
 namespace detail {
 
 // _____________________________________________________________________________

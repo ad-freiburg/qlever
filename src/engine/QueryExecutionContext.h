@@ -92,6 +92,7 @@ using QueryResultCache = ad_utility::ConcurrentCache<
 
 // Forward declaration because of cyclic dependency
 class NamedResultCache;
+class MaterializedViewsManager;
 
 // Execution context for queries.
 // Holds references to index and engine, implements caching.
@@ -102,6 +103,7 @@ class QueryExecutionContext {
       ad_utility::AllocatorWithLimit<Id> allocator,
       SortPerformanceEstimator sortPerformanceEstimator,
       NamedResultCache* namedResultCache,
+      MaterializedViewsManager* materializedViewsManager,
       std::function<void(std::string)> updateCallback =
           [](std::string) { /* No-op by default for testing */ },
       bool pinSubtrees = false, bool pinResult = false);
@@ -110,18 +112,17 @@ class QueryExecutionContext {
 
   [[nodiscard]] const Index& getIndex() const { return _index; }
 
-  const LocatedTriplesSnapshot& locatedTriplesSnapshot() const {
-    AD_CORRECTNESS_CHECK(sharedLocatedTriplesSnapshot_ != nullptr);
-    return *sharedLocatedTriplesSnapshot_;
+  const LocatedTriplesState& locatedTriplesState() const {
+    AD_CORRECTNESS_CHECK(locatedTriplesSharedState_ != nullptr);
+    return *locatedTriplesSharedState_;
   }
 
-  SharedLocatedTriplesSnapshot sharedLocatedTriplesSnapshot() const {
-    return sharedLocatedTriplesSnapshot_;
+  LocatedTriplesSharedState locatedTriplesSharedState() const {
+    return locatedTriplesSharedState_;
   }
 
-  // This function retrieves the most recent `LocatedTriplesSnapshot` and stores
-  // it in the `QueryExecutionContext`. The new snapshot will be used for
-  // evaluating queries after this call.
+  // Set the `LocatedTriplesSharesdState` for evaluating queries. The new
+  // state will be used for evaluating queries after this call.
   //
   // NOTE: This is a dangerous function. It may only be called if no query with
   // the context is currently running.
@@ -129,9 +130,9 @@ class QueryExecutionContext {
   // This function is only needed for chained updates, which have to see the
   // effect of previous updates but use the same execution context. Chained
   // updates are processed strictly sequentially, so this use case works.
-  void updateLocatedTriplesSnapshot() {
-    sharedLocatedTriplesSnapshot_ =
-        _index.deltaTriplesManager().getCurrentSnapshot();
+  void setLocatedTriplesForEvaluation(
+      LocatedTriplesSharedState locatedTriplesSharedState) {
+    locatedTriplesSharedState_ = std::move(locatedTriplesSharedState);
   }
 
   void clearCacheUnpinnedOnly() { getQueryTreeCache().clearUnpinnedOnly(); }
@@ -166,10 +167,12 @@ class QueryExecutionContext {
   }
 
   // Access the cache for explicitly named query.
-  NamedResultCache& namedResultCache() {
-    AD_CORRECTNESS_CHECK(namedResultCache_ != nullptr);
-    return *namedResultCache_;
-  }
+  NamedResultCache& namedResultCache() { return *namedResultCache_; }
+
+  // Get a reference to the `MaterializedViewsManager`.
+  const MaterializedViewsManager& materializedViewsManager() const {
+    return *materializedViewsManager_;
+  };
 
   // If `pinResultWithName_` is set, then the result of the query that is
   // executed using this context will be stored in the `namedQueryCache()` using
@@ -197,8 +200,8 @@ class QueryExecutionContext {
   // snapshot of the current (located) delta triples. These can then be used
   // by the respective query without interfering with further incoming
   // update operations.
-  SharedLocatedTriplesSnapshot sharedLocatedTriplesSnapshot_{
-      _index.deltaTriplesManager().getCurrentSnapshot()};
+  LocatedTriplesSharedState locatedTriplesSharedState_{
+      _index.deltaTriplesManager().getCurrentLocatedTriplesSharedState()};
   QueryResultCache* const _subtreeCache;
   // allocators are copied but hold shared state
   ad_utility::AllocatorWithLimit<Id> _allocator;
@@ -222,12 +225,14 @@ class QueryExecutionContext {
       websocketUpdateInterval();
 
   // The cache for named results.
-  NamedResultCache* namedResultCache_ = nullptr;
+  NamedResultCache* namedResultCache_;
 
   // Name (and optional variable for geometry index) under which the result of
   // the query that is executed using this context should be cached. When
   // `std::nullopt`, the result is not cached.
   std::optional<PinResultWithName> pinResultWithName_ = std::nullopt;
+
+  MaterializedViewsManager* materializedViewsManager_;
 
   // The last point in time when a websocket update was sent. This is used for
   // limiting the update frequency when `sendPriority` is `IfDue`.

@@ -240,6 +240,10 @@ struct TextSearchQuery : MagicServiceQuery {
   // Throws exception if scoreVar_ was previously set for this key.
   void predStringBindScore(const Variable& configVar,
                            const Variable& objectVar);
+
+  constexpr std::string_view name() const override {
+    return "full text search";
+  };
 };
 
 }  // namespace parsedQuery
