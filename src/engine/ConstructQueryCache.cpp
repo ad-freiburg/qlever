@@ -1,3 +1,4 @@
+#include "ConstructQueryEvaluator.h"
 #include "ConstructQueryCache.h"
 #include "rdfTypes/Iri.h"
 #include "parser/data/BlankNode.h"
@@ -49,7 +50,7 @@ opt<string> ConstructQueryCache::evaluateWithCacheImpl<Variable>(
   }
 
   ++stats_.variableMisses_;
-  opt<string> result = term.evaluate(context, posInTriple);
+  opt<string> result = ConstructQueryEvaluator::evaluate(term, context);
   variableCache_[key] = result;
 
   return result;
@@ -141,11 +142,28 @@ opt<string> ConstructQueryCache::evaluateWithCache(
     const ConstructQueryExportContext& context,
     PositionInTriple posInTriple) {
 
-  return std::visit(
-      [this, &context, posInTriple](const auto& concreteTerm) -> opt<string> {
-        return evaluateWithCacheImpl(concreteTerm, context, posInTriple);
-      },
-      term);
+  if (std::holds_alternative<Variable>(term)) {
+    const auto& var = std::get<Variable>(term);
+    return evaluateWithCacheImpl<Variable>(var, context, posInTriple);
+  }
+
+  if (std::holds_alternative<Literal>(term)) {
+    const auto& literal = std::get<Literal>(term);
+    return evaluateWithCacheImpl<Literal>(literal, context, posInTriple);
+  }
+
+  if (std::holds_alternative<BlankNode>(term)) {
+    const auto& blankNode = std::get<BlankNode>(term);
+    return evaluateWithCacheImpl<BlankNode>(blankNode, context, posInTriple);
+  }
+
+  if (std::holds_alternative<Iri>(term)) {
+    const Iri& iri = std::get<Iri>(term);
+    return evaluateWithCacheImpl<Iri>(iri, context, posInTriple);
+  }
+
+  // fail if none of the variants was present.
+  AD_FAIL();
 }
 
 void ConstructQueryCache::clearAll() {
