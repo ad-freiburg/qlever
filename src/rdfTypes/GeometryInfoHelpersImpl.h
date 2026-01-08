@@ -24,6 +24,7 @@
 #include <utility>
 #include <vector>
 
+#include "engine/SpatialJoinConfig.h"
 #include "global/Constants.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfo.h"
@@ -32,6 +33,7 @@
 #include "util/GeoConverters.h"
 #include "util/Log.h"
 #include "util/TypeTraits.h"
+#include "util/geo/DE9IMatrix.h"
 
 // This file contains functions used for parsing and processing WKT geometries
 // using `pb_util`. To avoid unnecessarily compiling expensive modules, this
@@ -556,6 +558,107 @@ struct GeometryNVisitor {
 };
 
 static constexpr GeometryNVisitor getGeometryN;
+
+using GeomsForDE9IM =
+    std::vector<std::variant<DPoint, DXSortedLine, DXSortedPolygon>>;
+struct UtilGeomForDE9IMVisitor {
+  GeomsForDE9IM operator()(DPoint p) const { return {p}; }
+
+  GeomsForDE9IM operator()(DLine line) const { return {XSortedLine{line}}; }
+
+  GeomsForDE9IM operator()(DPolygon line) const {
+    return {XSortedPolygon{line}};
+  }
+
+  GeomsForDE9IM operator()(DAnyGeometry geom) const {
+    return visitAnyGeometry(UtilGeomForDE9IMVisitor{}, geom);
+  }
+
+  CPP_template(typename T)(requires WktCollectionType<T>) GeomsForDE9IM
+  operator()(const T& geoms) const {
+    GeomsForDE9IM result;
+    for (auto geom : geoms) {
+      for (auto converted : UtilGeomForDE9IMVisitor{}(geom)) {
+        result.push_back(std::move(converted));
+      }
+    }
+    return result;
+  }
+};
+
+static constexpr UtilGeomForDE9IMVisitor utilGeomForDE9IM;
+
+inline DBox neutralBoundingBox() {
+  static constexpr CoordType dMin = std::numeric_limits<CoordType>::lowest();
+  static constexpr CoordType dMax = std::numeric_limits<CoordType>::max();
+  return DBox{{dMin, dMin}, {dMax, dMax}};
+}
+
+inline DE9IMatrix getDE9IM(const ParsedWkt& left, const ParsedWkt& right) {
+  auto lSorted = std::visit(utilGeomForDE9IM, left);
+  auto rSorted = std::visit(utilGeomForDE9IM, right);
+  DE9IMatrix m;
+  for (const auto& entryLeft : lSorted) {
+    for (const auto& entryRight : rSorted) {
+      m += std::visit(
+          [](const auto& a, const auto& b) {
+            if constexpr (SimilarTo<decltype(b), DPoint>) {
+              return DE9IM(b, a).transpose();
+            } else if constexpr (SimilarTo<decltype(a), DXSortedLine> &&
+                                 SimilarTo<decltype(b), DXSortedLine>) {
+              return DE9IM(a, b, neutralBoundingBox(), neutralBoundingBox());
+            } else {
+              return DE9IM(a, b);
+            }
+          },
+          entryLeft, entryRight);
+    }
+  }
+  return m;
+};
+
+template <SpatialJoinType Relation>
+inline bool DE9IMatrixSatisfies(DE9IMatrix m, bool lineLine = false) {
+  using enum SpatialJoinType;
+  if constexpr (Relation == INTERSECTS) {
+    return m.intersects();
+  } else if constexpr (Relation == CONTAINS) {
+    return m.contains();
+  } else if constexpr (Relation == COVERS) {
+    return m.covers();
+  } else if constexpr (Relation == CROSSES) {
+    return lineLine ? m.overlaps02() : m.II() == D0;
+  } else if constexpr (Relation == TOUCHES) {
+    return m.touches();
+  } else if constexpr (Relation == EQUALS) {
+    return m.equals();
+  } else if constexpr (Relation == OVERLAPS) {
+    return lineLine ? m.overlaps1() : m.overlaps02();
+  } else if constexpr (Relation == WITHIN) {
+    return m.within();
+  } else if constexpr (Relation == WITHIN_DIST) {
+    // Within dist may not be used as input
+    //   static_assert(false);
+    AD_FAIL();
+  } else {
+    // There are no further geometric relations
+    // static_assert(false);
+    AD_FAIL();
+  }
+}
+
+template <SpatialJoinType Relation>
+inline std::optional<bool> georel(const GeoPointOrWkt& left,
+                                  const GeoPointOrWkt& right) {
+  auto [lType, lParsed] = parseGeoPointOrWkt(left);
+  auto [rType, rParsed] = parseGeoPointOrWkt(right);
+  if (!lParsed.has_value() || !rParsed.has_value()) {
+    return std::nullopt;
+  }
+  auto de9im = getDE9IM(lParsed.value(), rParsed.value());
+  bool lineLine = false;  // TODO
+  return DE9IMatrixSatisfies<Relation>(de9im, lineLine);
+}
 
 }  // namespace ad_utility::detail
 
