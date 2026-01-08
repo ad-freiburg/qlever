@@ -588,13 +588,13 @@ struct UtilGeomForDE9IMVisitor {
 
 static constexpr UtilGeomForDE9IMVisitor utilGeomForDE9IM;
 
-DBox neutralBoundingBox() {
+inline DBox neutralBoundingBox() {
   static constexpr CoordType dMin = std::numeric_limits<CoordType>::lowest();
   static constexpr CoordType dMax = std::numeric_limits<CoordType>::max();
   return DBox{{dMin, dMin}, {dMax, dMax}};
 }
 
-DE9IMatrix getDE9IM(const ParsedWkt& left, const ParsedWkt& right) {
+inline DE9IMatrix getDE9IM(const ParsedWkt& left, const ParsedWkt& right) {
   auto lSorted = std::visit(utilGeomForDE9IM, left);
   auto rSorted = std::visit(utilGeomForDE9IM, right);
   DE9IMatrix m;
@@ -618,7 +618,7 @@ DE9IMatrix getDE9IM(const ParsedWkt& left, const ParsedWkt& right) {
 };
 
 template <SpatialJoinType Relation>
-bool DE9IMatrixSatisfies(DE9IMatrix m, bool lineLine = false) {
+inline bool DE9IMatrixSatisfies(DE9IMatrix m, bool lineLine = false) {
   using enum SpatialJoinType;
   if constexpr (Relation == INTERSECTS) {
     return m.intersects();
@@ -638,16 +638,18 @@ bool DE9IMatrixSatisfies(DE9IMatrix m, bool lineLine = false) {
     return m.within();
   } else if constexpr (Relation == WITHIN_DIST) {
     // Within dist may not be used as input
-    static_assert(false);
+    //   static_assert(false);
+    AD_FAIL();
   } else {
     // There are no further geometric relations
-    static_assert(false);
+    // static_assert(false);
+    AD_FAIL();
   }
 }
 
 template <SpatialJoinType Relation>
-std::optional<bool> georel(const GeoPointOrWkt& left,
-                           const GeoPointOrWkt& right) {
+inline std::optional<bool> georel(const GeoPointOrWkt& left,
+                                  const GeoPointOrWkt& right) {
   auto [lType, lParsed] = parseGeoPointOrWkt(left);
   auto [rType, rParsed] = parseGeoPointOrWkt(right);
   if (!lParsed.has_value() || !rParsed.has_value()) {
