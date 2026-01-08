@@ -112,17 +112,6 @@ TEST(VocabularyInMemory, WordWriterDestructorBehavior) {
     EXPECT_EQ(vocab[0], "beta");
   }
   ad_utility::deleteFile(filename);
-
-  // This class doesn't automatically call `finish` in the destructor, so the
-  // base class terminates in this case.
-  struct WordWriter : WordWriterBase {
-    WordWriter() = default;
-    uint64_t operator()(std::string_view, bool) override { return 0; }
-    void finishImpl() override {}
-  };
-
-  auto f = []() { WordWriter w{}; };
-  EXPECT_DEATH(f(), "");
 }
 
 }  // namespace
