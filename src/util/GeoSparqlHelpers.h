@@ -40,6 +40,10 @@ std::pair<double, double> parseWktPoint(const std::string_view point);
 // Calculate geographic distance between points in kilometers using s2geometry.
 double wktDistS2Impl(GeoPoint point1, GeoPoint point2);
 
+// Calculate geographic distance between geometries in meters using `pb_util`.
+std::optional<double> wktDistLibSpatialJoinImpl(const GeoPointOrWkt& a,
+                                                const GeoPointOrWkt& b);
+
 // Helper to avoid including `GeometryInfoHelpersImpl.h`
 std::optional<std::string> geometryNAsWkt(GeoPointOrWkt wkt, int64_t n);
 
@@ -120,7 +124,7 @@ class WktMetricLength {
   }
 };
 
-// Compute the distance between two WKT points.
+// Compute the distance between two WKT geometries.
 class WktDist {
  public:
   double operator()(
@@ -131,8 +135,11 @@ class WktDist {
       return std::numeric_limits<double>::quiet_NaN();
     }
 
-    return detail::kilometerToUnit(
-        detail::wktDistLibSpatialJoinImpl(geom1.value(), geom2.value()), unit);
+    auto dist = detail::wktDistLibSpatialJoinImpl(geom1.value(), geom2.value());
+    if (!dist.has_value()) {
+      return std::numeric_limits<double>::quiet_NaN();
+    }
+    return detail::kilometerToUnit(dist.value(), unit);
   }
 };
 

@@ -269,16 +269,6 @@ struct GeoPointValueGetter : Mixin<GeoPointValueGetter> {
   }
 };
 
-// This value getter retrieves geometries: `GeoPoints` or literals with
-// `geo:wktLiteral` datatype.
-struct GeoPointOrWktValueGetter : Mixin<GeoPointOrWktValueGetter> {
-  using Mixin<GeoPointOrWktValueGetter>::operator();
-  std::optional<ad_utility::GeoPointOrWkt> operator()(
-      ValueId id, const EvaluationContext*) const;
-  std::optional<ad_utility::GeoPointOrWkt> operator()(
-      const LiteralOrIri&, const EvaluationContext*) const;
-};
-
 // If the `id` points to a literal, return the contents of that literal (without
 // the quotation marks). For all other types (IRIs, numbers, etc.) return
 // `std::nullopt`. This is used for expressions that work on strings, but for

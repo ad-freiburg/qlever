@@ -58,6 +58,12 @@ double wktDistS2Impl(GeoPoint point1, GeoPoint point2) {
 }
 
 // _____________________________________________________________________________
+std::optional<double> wktDistLibSpatialJoinImpl(const GeoPointOrWkt& a,
+                                                const GeoPointOrWkt& b) {
+  return computeMetricDistance(projectWebMerc(a), projectWebMerc(b));
+}
+
+// _____________________________________________________________________________
 std::optional<std::string> geometryNAsWkt(GeoPointOrWkt wkt, int64_t n) {
   return utilGeomToWkt(getGeometryN(wkt, n));
 }
