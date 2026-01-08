@@ -343,18 +343,8 @@ void LocatedTriplesPerBlock::updateAugmentedMetadata() {
     auto firstTriple = blockUpdates.begin()->triple_.toPermutedTriple();
     auto lastTriple = blockUpdates.rbegin()->triple_.toPermutedTriple();
 
-    using O = CompressedBlockMetadata::OffsetAndCompressedSize;
-    O emptyBlock{0, 0};
-
-    // Note: This code assumes that a single permutation will never contain more
-    // than 6 columns. Downstream code removes these unnecessary columns again.
     CompressedBlockMetadataNoBlockIndex lastBlockN{
-        std::vector<O>(6, emptyBlock),
-        0,
-        firstTriple,
-        lastTriple,
-        std::nullopt,
-        true};
+        std::nullopt, 0, firstTriple, lastTriple, std::nullopt, true};
     lastBlockN.graphInfo_.emplace();
     CompressedBlockMetadata lastBlock{lastBlockN, blockIndex};
     updateGraphMetadata(lastBlock, blockUpdates);
