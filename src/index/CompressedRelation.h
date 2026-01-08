@@ -65,8 +65,10 @@ struct CompressedBlockMetadataNoBlockIndex {
 
   using GraphInfo = std::optional<std::vector<Id>>;
 
-  // `std::nullopt` for the dummy block used for updates only. Otherwise a
-  // vector with the size equal to the amount of columns in the permutation.
+  // For each column, the offset and compressed size of the column in the
+  // underlying file. `std::nullopt` is currently used for the last block which
+  // purely consists of `LocatedTriples`, and thus is not stored at all in the
+  // underlying file.
   std::optional<std::vector<OffsetAndCompressedSize>> offsetsAndCompressedSize_;
   size_t numRows_;
 
