@@ -1,5 +1,11 @@
 name: "Native build to WebAssembly using Conan and Emscripten"
 
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
 jobs:
   build:
 
@@ -50,5 +56,6 @@ jobs:
       run: >
         source ${{github.workspace}}/build/conanrun.sh;
         ${{github.workspace}}/e2e/e2e.sh -d build
+
 
 
