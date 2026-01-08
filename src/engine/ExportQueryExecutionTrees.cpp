@@ -293,6 +293,16 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
                    << ", misses: " << stats.blankNodeMisses() << ")"
                    << std::endl;
     }
+
+    void logPeriodic(size_t rowsProcessed) {
+      auto stats = cache_.getStats();
+      AD_LOG_INFO << "Processed " << rowsProcessed << " rows. Cache stats:\n"
+                    << "total var cache hits: " << stats.variableHits()  << "\n"
+                    << "total var cache misses: " << stats.variableMisses()  << "\n"
+                    << "total iri cache hits: " << stats.iriHits()  << "\n"
+                    << "total iri cache misses: " << stats.iriMisses()  << "\n"
+                    << "total literal cache hits: " << stats.literalHits()  << "\n"
+                    << "total literal cache misses: " << stats.literalMisses()  << std::endl;
     };
 
    private:
@@ -302,6 +312,7 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
 
 
   size_t rowOffset = 0;
+  const size_t LOG_INTERVAL = 10000; // Log every 10000 rows
 
   InputRangeTypeErased<TableWithRange> rowindices = getRowIndices(limitAndOffset, *result, resultSize);
 
