@@ -2,22 +2,27 @@
 
 ## Installation
 
-First, install the packages needed for building the binaries listed in the Dockerfile.
+Install the packages needed for building the binaries listed in the Dockerfile.
 
 Then, follow the instructions on how to install Conan respectively.
-(We don't need to install Emscripten/emsdk because we are using the one from Conan.)
+We don't need to install Emscripten/emsdk because we are using the one from Conan.
+
+## Repository
+
+Checkout the repository with
+
+```bash
+git clone --recursive https://github.com/ad-freiburg/qlever
+```
+The --recursive is important because the QLever repository uses a few submodules.
 
 ## Conan profiles
 
-For Conan, we need 2 conan profiles: a build profile and a host profile.
+Because we are cross-compiling with Emscripten, we need 2 conan profiles: a build profile and a host profile.
 The host profile is `emscripten.profile` in the folder `conanprofiles`. Copy it to the profiles folder of your conan installation ( [CONAN_HOME]/profiles ).
-To get a build profile, run `conan profile detect`.
-
-## Directories
-
-Now, create a `qlever` directory where we store and build the files.
-Copy: `src`, `test`, `e2e`, `benchmark`, `.git`, `CMakelists.txt` and `CompilationInfo.cmake` from qlever
-Also copy the `conanfile.txt` to `qlever` dir. 
+To get a build profile, run `conan profile detect`. This will give you a default build profile based on your OS.
+It's only an estimation of an appropriate build profile and can be customized later on, but it is sufficient for our purposes.
+For more information see [conan profiles](https://docs.conan.io/2/reference/config_files/profiles.html).
 
 ## Build commands
 
