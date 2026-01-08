@@ -1080,7 +1080,7 @@ void testBoundingBox(const size_t& maxDistInMeters, const Point& startPoint) {
     if (!within) {
       GeoPoint geo1{point1.get<1>(), point1.get<0>()};
       GeoPoint geo2{startPoint.get<1>(), startPoint.get<0>()};
-      double dist = ad_utility::detail::wktDistS2Impl(geo1, geo2) * 1000;
+      double dist = ad_utility::detail::wktDistImpl(geo1, geo2) * 1000;
       ASSERT_GT(static_cast<long long>(dist), maxDistInMeters);
     }
   };

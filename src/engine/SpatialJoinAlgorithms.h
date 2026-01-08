@@ -67,7 +67,7 @@ struct ClosestPointVisitor : public boost::static_visitor<double> {
     bg::closest_points(geo1, geo2, seg);
     GeoPoint closestPoint1(bg::get<0, 1>(seg), bg::get<0, 0>(seg));
     GeoPoint closestPoint2(bg::get<1, 1>(seg), bg::get<1, 0>(seg));
-    return ad_utility::detail::wktDistS2Impl(closestPoint1, closestPoint2);
+    return ad_utility::detail::wktDistImpl(closestPoint1, closestPoint2);
 #endif
   }
 };
