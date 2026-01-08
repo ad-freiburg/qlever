@@ -8,6 +8,7 @@
 #include <string>
 
 #include "engine/Operation.h"
+#include "index/DeltaTriples.h"
 #include "util/HashMap.h"
 
 class SparqlTriple;
@@ -17,15 +18,13 @@ class IndexScan final : public Operation {
  public:
   using Graphs = ScanSpecificationAsTripleComponent::GraphFilter;
   using PermutationPtr = std::shared_ptr<const Permutation>;
-  using LocatedTriplesSnapshotPtr =
-      std::shared_ptr<const LocatedTriplesSnapshot>;
 
  private:
   using ScanSpecAndBlocks = Permutation::ScanSpecAndBlocks;
 
  private:
   PermutationPtr permutation_;
-  LocatedTriplesSnapshotPtr locatedTriplesSnapshot_;
+  LocatedTriplesSharedState locatedTriplesSharedState_;
   TripleComponent subject_;
   TripleComponent predicate_;
   TripleComponent object_;
@@ -51,7 +50,7 @@ class IndexScan final : public Operation {
 
  public:
   IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
-            LocatedTriplesSnapshotPtr locatedTriplesSnapshot,
+            LocatedTriplesSharedState locatedTriplesSharedState,
             const SparqlTripleSimple& triple,
             Graphs graphsToFilter = Graphs::All(),
             std::optional<ScanSpecAndBlocks> scanSpecAndBlocks = std::nullopt,
@@ -67,7 +66,7 @@ class IndexScan final : public Operation {
 
   // Constructor to simplify copy creation of an `IndexScan`.
   IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
-            LocatedTriplesSnapshotPtr locatedTriplesSnapshot,
+            LocatedTriplesSharedState locatedTriplesSharedState,
             const TripleComponent& s, const TripleComponent& p,
             const TripleComponent& o,
             std::vector<ColumnIndex> additionalColumns,
@@ -188,7 +187,7 @@ class IndexScan final : public Operation {
   // class, which accesses the one stored in the `QueryExecutionContext`, use
   // the `LocatedTriplesSnapshot` held in this object. This might be a different
   // one if a custom permutation is used.
-  const LocatedTriplesSnapshot& locatedTriplesSnapshot() const override;
+  const LocatedTriplesState& locatedTriplesState() const override;
 
   // Return the stored triple in the order that corresponds to the
   // `permutation_`. For example if `permutation_ == PSO` then the result is
