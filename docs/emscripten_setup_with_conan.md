@@ -2,7 +2,7 @@
 
 ## Installation
 
-First of all install the packages needed for building the binaries listed in the Dockerfile.
+First, install the packages needed for building the binaries listed in the Dockerfile.
 
 Then, follow the instructions on how to install Conan respectively.
 (We don't need to install Emscripten/emsdk because we are using the one from Conan.)
