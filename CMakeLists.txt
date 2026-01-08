@@ -468,9 +468,9 @@ add_subdirectory(test)
 add_library(compilationInfo ${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp)
 qlever_target_link_libraries(compilationInfo)
 
-OPTION(_DISABLE_EMSCRIPTEN_TARGETS "Don't build some targets when building with Emscripten." OFF)
+OPTION(_EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER "Don't build some targets when compiling with Emscripten." OFF)
 
-if (NOT _DISABLE_EMSCRIPTEN_TARGETS)
+if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
     add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp)
     qlever_target_link_libraries(IndexBuilderMain qlever index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
 
