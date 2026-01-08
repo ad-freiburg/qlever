@@ -4,6 +4,7 @@ build_type=Release
 compiler=emcc
 compiler.cppstd=20
 compiler.libcxx=libc++
+# emsdk 3.1.73 is the latest version provided by the Conan package manager.
 compiler.version=3.1.73
 os=Emscripten
 compiler.threads=posix
