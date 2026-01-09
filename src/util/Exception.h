@@ -17,8 +17,8 @@
 #include "util/SourceLocation.h"
 #include "util/TypeTraits.h"
 
-// Fixes an issue when compiling with Emscripten where
-// a specific header is not found.
+// Helper macro that is required if "x" itself is another macro.
+// It expands "x" before it turns it into a string.
 #define AD_STRINGIFY(x) #x
 
 // -------------------------------------------
