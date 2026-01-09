@@ -28,7 +28,7 @@ class ExportQueryExecutionTrees {
   using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
   using Literal = ad_utility::triple_component::Literal;
 
-  template<class T>
+  template <class T>
   using InputRangeTypeErased = ad_utility::InputRangeTypeErased<T>;
 
   // Compute the result of the given `parsedQuery` (created by the
@@ -49,12 +49,9 @@ class ExportQueryExecutionTrees {
       void;
 #endif
   static ComputeResultReturnType computeResult(
-      const ParsedQuery& parsedQuery,
-      const QueryExecutionTree& qet,
-      MediaType mediaType,
-      const ad_utility::Timer& requestTimer,
-      CancellationHandle cancellationHandle,
-      STREAMABLE_YIELDER_ARG_DECL);
+      const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
+      MediaType mediaType, const ad_utility::Timer& requestTimer,
+      CancellationHandle cancellationHandle, STREAMABLE_YIELDER_ARG_DECL);
 
   // Return the corresponding blank node string representation for the export if
   // this iri is a blank node iri. Otherwise, return std::nullopt.
@@ -220,23 +217,26 @@ class ExportQueryExecutionTrees {
   // Helper function that generates the individual bindings for the
   // `application/ qlever+json` format.
   static auto idTableToQLeverJSONBindings(
-      const QueryExecutionTree& qet,
-      LimitOffsetClause limitAndOffset,
+      const QueryExecutionTree& qet, LimitOffsetClause limitAndOffset,
       QueryExecutionTree::ColumnIndicesAndTypes columns,
-      std::shared_ptr<const Result> result,
-      uint64_t& resultSize,
+      std::shared_ptr<const Result> result, uint64_t& resultSize,
       CancellationHandle cancellationHandle);
 
   // Helper function that generates the result of a CONSTRUCT query as
   // `StringTriple`s.
-  static cppcoro::generator<QueryExecutionTree::StringTriple>
-  constructQueryResultToTriples(
+  static auto constructQueryResultToTriples(
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructTriples,
-      LimitOffsetClause limitAndOffset,
-      std::shared_ptr<const Result> result,
-      uint64_t& resultSize,
-      CancellationHandle cancellationHandle);
+      LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
+      uint64_t& resultSize, CancellationHandle cancellationHandle);
+
+  // Helper function that generates the construct clause result triples for a
+  // single WHERE-result-table-row.
+  std::
+      vector<QueryExecutionTree::StringTriple> static createConstructTriplesForRow(
+          const ad_utility::sparql_types::Triples& constructTriples,
+          CancellationHandle cancellationHandle,
+          ConstructQueryExportContext context);
 
   // Helper function that generates the result of a CONSTRUCT query as a
   // CSV or TSV stream.
@@ -263,11 +263,13 @@ class ExportQueryExecutionTrees {
 
     [[nodiscard]] const IdTable& idTable() const { return idTable_.get(); }
 
-    [[nodiscard]] const LocalVocab& localVocab() const { return localVocab_.get(); }
+    [[nodiscard]] const LocalVocab& localVocab() const {
+      return localVocab_.get();
+    }
   };
   // Helper type that contains an `IdTable` and a view with related indices to
   // access the `IdTable` with.
-  struct TableWithRange { // NOLINT(*-pro-type-member-init)
+  struct TableWithRange {  // NOLINT(*-pro-type-member-init)
     TableConstRefWithVocab tableWithVocab_;
     ql::ranges::iota_view<uint64_t, uint64_t> view_;
   };
@@ -275,6 +277,9 @@ class ExportQueryExecutionTrees {
   using TableWithRange = ExportQueryExecutionTrees::TableWithRange;
 
  private:
+  // given a row of the WHERE-clause result,
+  // generate the triples of the CONSTRUCT-clause for that row.
+
   // Yield all `IdTables` provided by the given `result`.
   static ad_utility::InputRangeTypeErased<TableConstRefWithVocab> getIdTables(
       const Result& result);

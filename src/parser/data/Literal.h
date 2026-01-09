@@ -50,16 +50,6 @@ class Literal {
   }
 
   // ___________________________________________________________________________
-  [[nodiscard]] std::optional<std::string> evaluate(
-      [[maybe_unused]] const ConstructQueryExportContext& context,
-      PositionInTriple role) const {
-    if (role == PositionInTriple::OBJECT) {
-      return _stringRepresentation;
-    }
-    return std::nullopt;
-  }
-
-  // ___________________________________________________________________________
   [[nodiscard]] std::string toSparql() const { return _stringRepresentation; }
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Literal, _stringRepresentation)
