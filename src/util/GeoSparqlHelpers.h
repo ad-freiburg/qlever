@@ -46,6 +46,10 @@ std::optional<std::string> geometryNAsWkt(GeoPointOrWkt wkt, int64_t n);
 const auto wktLiteralIri =
     triple_component::Iri::fromIrirefWithoutBrackets(GEO_WKT_LITERAL);
 
+// Calculate geographic distance between geometries in meters using `pb_util`.
+std::optional<double> wktDistLibSpatialJoinImpl(const GeoPointOrWkt& a,
+                                                const GeoPointOrWkt& b);
+
 }  // namespace detail
 
 // Return the longitude coordinate from a WKT point.
@@ -70,28 +74,31 @@ class WktLatitude {
   }
 };
 
-// Compute the distance between two WKT points.
-class WktDistGeoPoints {
+// Compute the distance between two WKT geometries.
+class WktDist {
  public:
   double operator()(
-      const std::optional<GeoPoint>& point1,
-      const std::optional<GeoPoint>& point2,
+      const std::optional<GeoPointOrWkt>& geom1,
+      const std::optional<GeoPointOrWkt>& geom2,
       const std::optional<UnitOfMeasurement>& unit = std::nullopt) const {
-    if (!point1.has_value() || !point2.has_value()) {
+    if (!geom1.has_value() || !geom2.has_value()) {
       return std::numeric_limits<double>::quiet_NaN();
     }
 
-    return detail::kilometerToUnit(
-        detail::wktDistImpl(point1.value(), point2.value()), unit);
+    auto dist = detail::wktDistLibSpatialJoinImpl(geom1.value(), geom2.value());
+    if (!dist.has_value()) {
+      return std::numeric_limits<double>::quiet_NaN();
+    }
+    return detail::kilometerToUnit(dist.value() / 1000.0, unit);
   }
 };
 
 // Compute the distance between two WKT points in meters.
-class WktMetricDistGeoPoints {
+class WktMetricDist {
  public:
-  double operator()(const std::optional<GeoPoint>& point1,
-                    const std::optional<GeoPoint>& point2) const {
-    return WktDistGeoPoints{}(point1, point2, UnitOfMeasurement::METERS);
+  double operator()(const std::optional<GeoPointOrWkt>& geom1,
+                    const std::optional<GeoPointOrWkt>& geom2) const {
+    return WktDist{}(geom1, geom2, UnitOfMeasurement::METERS);
   }
 };
 
