@@ -22,8 +22,8 @@ class ConstructQueryCache{
   ConstructQueryCache() = default;
 
   // clear cache for a new row.
-  void clearRowCache() {
-  }
+  void clearRowCache();
+
 
   // cache statistics (for debugging/optimization)
   class CacheStats {
