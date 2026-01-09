@@ -116,7 +116,7 @@ class CompactVectorOfStrings {
   /**
    * @brief operator []
    * @param i
-   * @return A std::pair containing a pointer to the data, and the number of
+   * @return A `value_type` containing a pointer to the data, and the number of
    *         elements stored at the pointers target.
    */
   const value_type operator[](size_t i) const {
@@ -124,6 +124,19 @@ class CompactVectorOfStrings {
     const data_type* ptr = data_.data() + offset;
     size_t size = offsets_[i + 1] - offset;
     return {ptr, size};
+  }
+
+  // Copy this class and apply the transformation `mappingFunction` to its
+  // elements.
+  template <typename Func>
+  CompactVectorOfStrings cloneAndRemap(Func mappingFunction) const {
+    CompactVectorOfStrings clone;
+    clone.offsets_ = offsets_;
+    clone.data_.reserve(data_.size());
+    for (const data_type& element : data_) {
+      clone.data_.push_back(std::invoke(mappingFunction, element));
+    }
+    return clone;
   }
 
   using Iterator = ad_utility::IteratorForAccessOperator<
