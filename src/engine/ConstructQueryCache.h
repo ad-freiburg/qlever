@@ -108,7 +108,7 @@ class ConstructQueryCache{
     size_t operator()(const VariableKey& key) const;
   };
 
-  // maps (variableKey, variablename) -> VariableKeyHash
+  // maps variableKey -> std::optional<std::string
   std::unordered_map<VariableKey, opt<std::string>, VariableKeyHash> variableCache_;
 
   // Cache for IRIs (which are global for a CONSTRUCT-query clause, i.e. the same for each row in the CONSTRUCT-clause)
@@ -126,7 +126,7 @@ class ConstructQueryCache{
     size_t operator()(const IriKey& key) const;
   };
 
-  // maps (irikey, iriname) -> IriKeyHash
+  // maps Irikey -> std::optional<std::string
   std::unordered_map<IriKey, std::optional<std::string>, IriKeyHash> iriCache_;
 
   // Cache for literals (global for CONSTRUCT-clause )
@@ -144,7 +144,7 @@ class ConstructQueryCache{
     size_t operator()(const LiteralKey& key) const;
   };
 
-  // maps (LiteralKey, LiteralName) -> LiteralKeyHash
+  // maps LiteralKey -> std::optional<std::string
   std::unordered_map<LiteralKey, std::optional<std::string>, LiteralKeyHash> literalCache_;
 
   // Cache for blank nodes (global for CONSTRUCT-clause )
@@ -162,7 +162,7 @@ class ConstructQueryCache{
     size_t operator()(const BlankNodeKey& key) const;
   };
 
-  // maps (BlankNodeKey, BlankNodeName) -> BlankNodeKeyHash
+  // maps BlankNodeKey -> std::optional<std::string
   std::unordered_map<BlankNodeKey, std::optional<std::string>, BlankNodeKeyHash> blankNodeCache_;
 
   CacheStats stats_;
