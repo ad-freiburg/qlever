@@ -130,6 +130,11 @@ struct RuntimeParameters {
   MemorySizeParameter materializedViewWriterMemory_{
       ad_utility::MemorySize::gigabytes(4), "materialized-view-writer-memory"};
 
+  // Memory threshold for switching from in-memory to external sort.
+  // If the input size exceeds this threshold, external sort is used.
+  MemorySizeParameter sortInMemoryThreshold_{
+      ad_utility::MemorySize::gigabytes(5), "sort-in-memory-threshold"};
+
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE
   // CONSTRUCTOR, S.T. THEY CAN ALSO BE ACCESSED VIA THE RUNTIME INTERFACE.
