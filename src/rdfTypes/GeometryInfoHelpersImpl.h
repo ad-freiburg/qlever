@@ -26,6 +26,7 @@
 
 #include "global/Constants.h"
 #include "rdfTypes/GeoPoint.h"
+#include "util/Views.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/Literal.h"
 #include "util/Exception.h"
@@ -341,7 +342,10 @@ struct MetricLengthVisitor {
     static_assert(ad_utility::similarToInstantiation<T, std::vector>);
 
     return ::ranges::accumulate(
-        ::ranges::transform_view(multiGeom, MetricLengthVisitor{}), 0);
+        // ::ranges::transform_view(multiGeom, MetricLengthVisitor{}), 0);
+        ::ranges::transform_view(ad_utility::allView(multiGeom),
+                                 MetricLengthVisitor{}),
+        0);
   }
 
   // Compute the length for the custom container type `AnyGeometry` from
