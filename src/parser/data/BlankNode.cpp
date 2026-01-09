@@ -22,21 +22,6 @@ BlankNode::BlankNode(bool generated, std::string label)
 }
 
 // ___________________________________________________________________________
-// Note<ms2144>: see https://www.w3.org/TR/rdf11-concepts/#dfn-concrete-rdf-syntax:~:text=3%2E4%20Blank%20Nodes,-Blank
-std::optional<std::string> BlankNode::evaluate(
-    const ConstructQueryExportContext& context,
-    [[maybe_unused]] PositionInTriple positionInTriple
-    ) const {
-  std::ostringstream stream;
-  stream << "_:";
-  // generated or user-defined
-  stream << (_generated ? 'g' : 'u');
-  stream << context._rowOffset + context._resultTableRow << '_';
-  stream << _label;
-  return stream.str();
-}
-
-// ___________________________________________________________________________
 std::string BlankNode::toSparql() const {
   std::ostringstream stream;
   stream << "_:";
