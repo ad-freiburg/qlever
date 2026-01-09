@@ -105,10 +105,9 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
     ql::span<const ColumnIndex> additionalColumns) {
   Permutation::ScanSpecAndBlocks scanSpecAndBlocks{std::move(scanSpec),
                                                    blockMetadataRanges};
-  auto fullScan =
-      permutation.lazyScan(scanSpecAndBlocks, std::nullopt, additionalColumns,
-                           cancellationHandle, *locatedTriplesSharedState,
-                           LimitOffsetClause{});
+  auto fullScan = permutation.lazyScan(
+      scanSpecAndBlocks, std::nullopt, additionalColumns, cancellationHandle,
+      *locatedTriplesSharedState, LimitOffsetClause{});
 
   return ad_utility::InputRangeTypeErased{
       ad_utility::CachingTransformInputRange{
@@ -149,7 +148,8 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
     const ad_utility::SharedCancellationHandle& cancellationHandle) {
   return readIndexAndRemap(
       permutation, std::move(scanSpec),
-      permutation.getAugmentedMetadataForPermutation(*locatedTriplesSharedState),
+      permutation.getAugmentedMetadataForPermutation(
+          *locatedTriplesSharedState),
       locatedTriplesSharedState, localVocabMapping, insertInfo,
       cancellationHandle,
       std::array{static_cast<ColumnIndex>(ADDITIONAL_COLUMN_GRAPH_ID)});
@@ -159,7 +159,10 @@ size_t getNumColumns(const BlockMetadataRanges& blockMetadataRanges) {
   if (!blockMetadataRanges.empty()) {
     const auto& first = blockMetadataRanges.at(0);
     if (!first.empty()) {
-      return first[0].offsetsAndCompressedSize_.size();
+      const auto& offsets = first[0].offsetsAndCompressedSize_;
+      if (offsets.has_value()) {
+        return offsets.value().size();
+      }
     }
   }
   return 4;
@@ -168,11 +171,12 @@ size_t getNumColumns(const BlockMetadataRanges& blockMetadataRanges) {
 
 // _____________________________________________________________________________
 namespace qlever {
-void materializeToIndex(const IndexImpl& index, const std::string& newIndexName,
-                        const std::vector<LocalVocabIndex>& entries,
-                        const LocatedTriplesSharedState& locatedTriplesSharedState,
-                        const CancellationHandle& cancellationHandle,
-                        const std::string& logFileName) {
+void materializeToIndex(
+    const IndexImpl& index, const std::string& newIndexName,
+    const std::vector<LocalVocabIndex>& entries,
+    const LocatedTriplesSharedState& locatedTriplesSharedState,
+    const CancellationHandle& cancellationHandle,
+    const std::string& logFileName) {
   AD_CONTRACT_CHECK(!logFileName.empty(), "Log file name must not be empty");
 
   // Set up logging to file
