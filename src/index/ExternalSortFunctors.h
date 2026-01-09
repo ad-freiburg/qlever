@@ -1,6 +1,13 @@
-// Copyright 2015, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Copyright 2015 - 2026 The QLever Authors, in particular:
+//
+// 2015 - 2017 Björn Buchhold <buchhold@cs.uni-freiburg.de>, UFR
+// 2023 - 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2025        Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_INDEX_EXTERNALSORTFUNCTORS_H
 #define QLEVER_SRC_INDEX_EXTERNALSORTFUNCTORS_H
@@ -68,6 +75,9 @@ struct SortText {
 
 // A comparator that sorts rows by a runtime-specified list of column indices.
 // Uses simple `<` comparison on Ids (internal order).
+//
+// TODO: This is not as efficient as it could be, because of the runtime state
+// (the vector of column indices); see `Sort::computeResultExternal`.
 struct SortByColumns {
   std::vector<ColumnIndex> sortColumns_;
 

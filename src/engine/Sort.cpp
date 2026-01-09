@@ -1,4 +1,4 @@
-// Copyright 2015 - 2025 The QLever Authors, in particular:
+// Copyright 2015 - 2026 The QLever Authors, in particular:
 //
 // 2015 - 2017 Björn Buchhold <buchhold@cs.uni-freiburg.de>, UFR
 // 2023 - 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
@@ -21,6 +21,11 @@
 #include "util/Random.h"
 
 // Type alias for the external sorter.
+//
+// TODO: The `SortByColumns` has runtime state (the vector of column indices).
+// This could be made more efficient by using `ad_utility::callFixedSize` on
+// the number of sort columns and permuting the columns such that the sort
+// columns come first.
 using Sorter = ad_utility::CompressedExternalIdTableSorter<SortByColumns, 0>;
 
 // _____________________________________________________________________________
@@ -155,6 +160,8 @@ Result Sort::computeResultExternal(std::vector<IdTable> collectedBlocks,
   std::string tempFilename =
       absl::StrCat(onDiskBase, ".sort.", uuidGen(), ".dat");
 
+  // Use the value of `sort-in-memory-threshold` also as memory limit for the
+  // external sorter.
   ad_utility::MemorySize memoryLimit =
       getRuntimeParameter<&RuntimeParameters::sortInMemoryThreshold_>();
   size_t numColumns = subtree_->getResultWidth();
@@ -195,6 +202,10 @@ Result Sort::computeResultExternal(std::vector<IdTable> collectedBlocks,
 
   // If laziness is not requested, materialize the result. The sorter knows the
   // size of the result, so we can reserve exactly the right amount of space.
+  //
+  // TODO: We could tell `getSortedBlocks` to give us a single block and thus
+  // avoid the loop. However, we would then have to handle cancellation inside
+  // `getSortedBlocks`.
   if (!requestLaziness) {
     IdTable result{numColumns, allocator()};
     result.reserve(sorter->size());
@@ -214,9 +225,8 @@ Result Sort::computeResultExternal(std::vector<IdTable> collectedBlocks,
   return {Result::LazyResult{ad_utility::CachingTransformInputRange{
               std::move(sortedBlocks),
               [sorter = std::move(sorter),
-               mergedLocalVocab = std::move(mergedLocalVocab),
-               this](IdTableStatic<0>& block) {
-                checkCancellation();
+               mergedLocalVocab =
+                   std::move(mergedLocalVocab)](IdTableStatic<0>& block) {
                 IdTable idTable = std::move(block).toDynamic();
                 return Result::IdTableVocabPair{std::move(idTable),
                                                 mergedLocalVocab.clone()};

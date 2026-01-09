@@ -1,4 +1,4 @@
-// Copyright 2015 - 2025 The QLever Authors, in particular:
+// Copyright 2015 - 2026 The QLever Authors, in particular:
 //
 // 2015 - 2017 Björn Buchhold <buchhold@cs.uni-freiburg.de>, UFR
 // 2023 - 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
@@ -85,12 +85,18 @@ class Sort : public Operation {
 
   virtual Result computeResult(bool requestLaziness) override;
 
-  // Helper methods for computeResult.
+  // Sort in memory, using `Engine::sort`.
   Result computeResultInMemory(IdTable idTable, LocalVocab localVocab) const;
 
-  // External sort: push collectedBlocks first, then consume remaining blocks.
-  // The `input` parameter is reset after consuming all blocks to free
-  // memory before materializing the sorted result.
+  // Sort externally, using `CompressedExternalIdTableSorter`, using the value
+  // of `sort-in-memory-threshold` as memory limit.
+  //
+  // The `collectedBlocks` are the blocks that have already been read from
+  // `input` (until the `sort-in-memory-threshold` was exceeded),
+  // `mergedLocalVocab` is the merged local vocabs for these blocks, and the
+  // remaining blocks to be read are provided via `it` and `end`. The shared
+  // pointer `input` is provided so that its resources can be freed once all
+  // blocks have been pushed to the external sorter.
   //
   // NOTE: `Iterator` and `Sentinel` are separate template types because C++20
   // ranges (like `InputRangeFromGet`) use different types for begin and end.
