@@ -111,6 +111,13 @@ TEST(GeoSparqlHelpers, WktDist) {
           "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
           KILOMETERS),
       1.7, 0.01);
+
+  // Invalid WKT literal.
+  EXPECT_TRUE(std::isnan(
+      WktDist()(eiffeltower,
+                // University building 101.
+                "\"POLYGON(bla bli blu)\""
+                "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")));
 }
 
 // _____________________________________________________________________________
