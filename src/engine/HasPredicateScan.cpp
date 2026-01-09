@@ -423,7 +423,7 @@ std::shared_ptr<QueryExecutionTree> HasPredicateScan::makePatternScan(
   auto [permutation, locatedTriples] =
       qlever::getPermutationAndLocatedTriplesPerBlockForTriple(
           Permutation::Enum::PSO, qec->getIndex(),
-          qec->sharedLocatedTriplesSnapshot(), triple);
+          qec->locatedTriplesSharedState(), triple);
   return ad_utility::makeExecutionTree<IndexScan>(qec, std::move(permutation),
                                                   std::move(locatedTriples),
                                                   std::move(triple));

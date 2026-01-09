@@ -19,10 +19,10 @@
 
 // Forward declaration of `IdTable`
 class IdTable;
-// TODO: get rid of them
+// TODO<2618>: get rid of them
 // Forward declaration of `LocatedTriplesPerBlock` and `LocatedTriplesSnapshot`
 class LocatedTriplesPerBlock;
-struct LocatedTriplesSnapshot;
+struct LocatedTriplesState;
 class DeltaTriples;
 
 // Helper class to store static properties of the different permutations to
@@ -180,7 +180,7 @@ class Permutation {
 
   // From the given snapshot, get the located triples for this permutation.
   const LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+      const LocatedTriplesState& locatedTriplesSnapshot) const;
 
   const CompressedRelationReader& reader() const { return reader_.value(); }
 

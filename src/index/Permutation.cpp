@@ -199,11 +199,11 @@ CompressedRelationReader::IdTableGeneratorInputRange Permutation::lazyScan(
 
 // ______________________________________________________________________
 const LocatedTriplesPerBlock& Permutation::getLocatedTriplesForPermutation(
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+    const LocatedTriplesState& locatedTriplesState) const {
   return isInternalPermutation_
-             ? locatedTriplesSnapshot.getInternalLocatedTriplesForPermutation(
+             ? locatedTriplesState.getLocatedTriplesForPermutation<true>(
                    permutation_)
-             : locatedTriplesSnapshot.getLocatedTriplesForPermutation(
+             : locatedTriplesState.getLocatedTriplesForPermutation<false>(
                    permutation_);
 }
 

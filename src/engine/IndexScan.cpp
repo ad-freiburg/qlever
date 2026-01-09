@@ -9,6 +9,7 @@
 
 #include <sstream>
 #include <string>
+#include <utility>
 
 #include "engine/QueryExecutionTree.h"
 #include "index/IndexImpl.h"
@@ -78,12 +79,13 @@ IndexScan::IndexScan(QueryExecutionContext* qec,
                      Permutation::Enum permutationType,
                      const SparqlTripleSimple& triple, Graphs graphsToFilter,
                      std::optional<ScanSpecAndBlocks> scanSpecAndBlocks)
+    // TODO<2618>: do the internal selection correctly
     : IndexScan(
           qec, qec->getIndex().getImpl().getPermutationPtr(permutationType),
           std::shared_ptr<const LocatedTriplesPerBlock>{
-              qec->sharedLocatedTriplesSnapshot(),
-              &qec->sharedLocatedTriplesSnapshot()
-                   ->getLocatedTriplesForPermutation(permutationType)},
+              qec->locatedTriplesSharedState(),
+              &qec->locatedTriplesSharedState()
+                   ->getLocatedTriplesForPermutation<false>(permutationType)},
           triple, std::move(graphsToFilter), std::move(scanSpecAndBlocks)) {}
 
 // _____________________________________________________________________________
@@ -343,7 +345,7 @@ void IndexScan::determineMultiplicities() {
       return {1.0f};
     } else if (numVariables_ == 2) {
       return idx.getMultiplicities(*getPermutedTriple()[0], permutation(),
-                                   locatedTriplesSnapshot());
+                                   locatedTriplesState());
     } else {
       AD_CORRECTNESS_CHECK(numVariables_ == 3);
       return idx.getMultiplicities(permutation());

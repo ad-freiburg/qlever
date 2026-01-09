@@ -7,6 +7,7 @@
 #include "./GTestHelpers.h"
 #include "./TripleComponentTestHelpers.h"
 #include "backports/StartsWithAndEndsWith.h"
+#include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "global/SpecialIds.h"
 #include "index/IndexImpl.h"
@@ -71,7 +72,8 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
     const Index& index) {
   const auto& indexImpl = index.getImpl();
   const DeltaTriplesManager& deltaTriplesManager{index.deltaTriplesManager()};
-  auto sharedLocatedTriplesSnapshot = deltaTriplesManager.getCurrentSnapshot();
+  auto sharedLocatedTriplesSnapshot =
+      deltaTriplesManager.getCurrentLocatedTriplesSharedState();
   const auto& locatedTriplesSnapshot = *sharedLocatedTriplesSnapshot;
   static constexpr size_t col0IdTag = 43;
   auto cancellationDummy = std::make_shared<ad_utility::CancellationHandle<>>();
@@ -334,10 +336,12 @@ QueryExecutionContext* getQec(TestIndexConfig c) {
     std::unique_ptr<Index> index_;
     std::unique_ptr<QueryResultCache> cache_;
     std::unique_ptr<NamedResultCache> namedCache_;
+    std::unique_ptr<MaterializedViewsManager> materializedViewsManager_;
     std::unique_ptr<QueryExecutionContext> qec_ =
         std::make_unique<QueryExecutionContext>(
             *index_, cache_.get(), makeAllocator(MemorySize::megabytes(100)),
-            SortPerformanceEstimator{}, namedCache_.get());
+            SortPerformanceEstimator{}, namedCache_.get(),
+            materializedViewsManager_.get());
   };
 
   static ad_utility::HashMap<TestIndexConfig, Context> contextMap;
@@ -357,7 +361,8 @@ QueryExecutionContext* getQec(TestIndexConfig c) {
                    }},
                    std::make_unique<Index>(makeTestIndex(testIndexBasename, c)),
                    std::make_unique<QueryResultCache>(),
-                   std::make_unique<NamedResultCache>()});
+                   std::make_unique<NamedResultCache>(),
+                   std::make_unique<MaterializedViewsManager>()});
   }
   auto* qec = contextMap.at(c).qec_.get();
   qec->getIndex().getImpl().setGlobalIndexAndComparatorOnlyForTesting();

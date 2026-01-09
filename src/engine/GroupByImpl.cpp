@@ -842,7 +842,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByObjectWithCount() const {
   const auto& permutation = indexScan->permutation();
   auto result = permutation.getDistinctCol1IdsAndCounts(
       col0Id.value(), cancellationHandle_,
-      permutation.getLocatedTriplesForPermutation(locatedTriplesSnapshot()),
+      permutation.getLocatedTriplesForPermutation(locatedTriplesState()),
       indexScan->getLimitOffset());
 
   indexScan->updateRuntimeInformationWhenOptimizedOut({});
@@ -902,7 +902,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByForFullIndexScan() const {
           permutationEnum.value());
   auto table = permutation.getDistinctCol0IdsAndCounts(
       cancellationHandle_,
-      permutation.getLocatedTriplesForPermutation(locatedTriplesSnapshot()),
+      permutation.getLocatedTriplesForPermutation(locatedTriplesState()),
       indexScan->getLimitOffset());
   if (numCounts == 0) {
     table.setColumnSubset(std::array{ColumnIndex{0}});
@@ -1030,7 +1030,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByForJoinWithFullScan() const {
   Id currentId = subresult->idTable()(0, columnIndex);
   size_t currentCount = 0;
   size_t currentCardinality =
-      index.getCardinality(currentId, permutation, locatedTriplesSnapshot());
+      index.getCardinality(currentId, permutation, locatedTriplesState());
 
   auto pushRow = [&]() {
     // If the count is 0 this means that the element with the `currentId`
@@ -1053,7 +1053,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByForJoinWithFullScan() const {
       // without the internally added triples, but that is not easy to
       // retrieve right now.
       currentCardinality =
-          index.getCardinality(id, permutation, locatedTriplesSnapshot());
+          index.getCardinality(id, permutation, locatedTriplesState());
     }
     currentCount += currentCardinality;
   }

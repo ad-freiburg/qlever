@@ -71,7 +71,7 @@ TEST(PermutationSelectorTest, internalPrefixIsCorrectlyChosen) {
 // _____________________________________________________________________________
 TEST(PermutationSelectorTest, getLocatedTriplesPerBlockForTriple) {
   const auto* qec = ad_utility::testing::getQec();
-  const auto& locatedTriples = qec->sharedLocatedTriplesSnapshot();
+  const auto& locatedTriples = qec->locatedTriplesSharedState();
 
   testPermutationSelection(
       [&locatedTriples](auto p, const auto& triple) {
@@ -79,9 +79,9 @@ TEST(PermutationSelectorTest, getLocatedTriplesPerBlockForTriple) {
                                                           triple);
       },
       [&locatedTriples](const auto& p) {
-        return &locatedTriples->getLocatedTriplesForPermutation(p);
+        return &locatedTriples->getLocatedTriplesForPermutation<false>(p);
       },
       [&locatedTriples](const auto& p) {
-        return &locatedTriples->getInternalLocatedTriplesForPermutation(p);
+        return &locatedTriples->getLocatedTriplesForPermutation<true>(p);
       });
 }

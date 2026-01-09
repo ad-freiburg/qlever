@@ -8,6 +8,7 @@
 #include <string>
 
 #include "engine/Operation.h"
+#include "index/DeltaTriples.h"
 #include "util/HashMap.h"
 
 class SparqlTriple;
@@ -16,10 +17,10 @@ class SparqlTripleSimple;
 class IndexScan final : public Operation {
  public:
   using Graphs = ScanSpecificationAsTripleComponent::GraphFilter;
-  // TODO: get rid of them, especially the dubling with `PermutationSelector`
+  // TODO<2618>: get rid of them, especially the dubling with
+  // `PermutationSelector`
   using PermutationPtr = std::shared_ptr<const Permutation>;
-  using LocatedTriplesSnapshotPtr =
-      std::shared_ptr<const LocatedTriplesSnapshot>;
+  using LocatedTriplesStatePtr = std::shared_ptr<const LocatedTriplesState>;
   using LocatedTriplesPerBlockPtr =
       std::shared_ptr<const LocatedTriplesPerBlock>;
 

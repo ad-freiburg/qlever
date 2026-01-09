@@ -13,8 +13,8 @@
 
 namespace qlever {
 
-// TODO: get rid of them
-using LocatedTriplesSnapshotPtr = std::shared_ptr<const LocatedTriplesSnapshot>;
+// TODO<2618>: get rid of them
+using LocatedTriplesStatePtr = std::shared_ptr<const LocatedTriplesState>;
 using LocatedTriplesPerBlockPtr = std::shared_ptr<const LocatedTriplesPerBlock>;
 using PermutationPtr = std::shared_ptr<const Permutation>;
 
@@ -29,7 +29,7 @@ PermutationPtr getPermutationForTriple(Permutation::Enum permutation,
 // based on the `permutation` enum and the values in `triple`. See
 // `getPermutationAndLocatedTriplesPerBlockForTriple` for details.
 LocatedTriplesPerBlockPtr getLocatedTriplesPerBlockForTriple(
-    Permutation::Enum permutation, LocatedTriplesSnapshotPtr snapshot,
+    Permutation::Enum permutation, LocatedTriplesStatePtr snapshot,
     const SparqlTripleSimple& triple);
 
 // Return a shared pointer to the correct permutation in `index` and
@@ -43,7 +43,7 @@ LocatedTriplesPerBlockPtr getLocatedTriplesPerBlockForTriple(
 std::pair<PermutationPtr, LocatedTriplesPerBlockPtr>
 getPermutationAndLocatedTriplesPerBlockForTriple(
     Permutation::Enum permutation, const Index& index,
-    LocatedTriplesSnapshotPtr snapshot, const SparqlTripleSimple& triple);
+    LocatedTriplesStatePtr snapshot, const SparqlTripleSimple& triple);
 }  // namespace qlever
 
 #endif  // QLEVER_SRC_ENGINE_PERMUTATIONSELECTOR_H

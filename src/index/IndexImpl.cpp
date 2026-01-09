@@ -1567,10 +1567,10 @@ Index::NumNormalAndInternal IndexImpl::numDistinctCol0(
 // ___________________________________________________________________________
 size_t IndexImpl::getCardinality(
     Id id, Permutation::Enum permutation,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+    const LocatedTriplesState& locatedTriplesState) const {
   const auto& perm = getPermutation(permutation);
   if (const auto& meta = perm.getMetadata(
-          id, perm.getLocatedTriplesForPermutation(locatedTriplesSnapshot));
+          id, perm.getLocatedTriplesForPermutation(locatedTriplesState));
       meta.has_value()) {
     return meta.value().numRows_;
   }
@@ -1580,7 +1580,7 @@ size_t IndexImpl::getCardinality(
 // ___________________________________________________________________________
 size_t IndexImpl::getCardinality(
     const TripleComponent& comp, Permutation::Enum permutation,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+    const LocatedTriplesState& locatedTriplesState) const {
   // TODO<joka921> This special case is only relevant for the `PSO` and `POS`
   // permutations, but this internal predicate should never appear in subjects
   // or objects anyway.
@@ -1591,7 +1591,7 @@ size_t IndexImpl::getCardinality(
   }
   if (std::optional<Id> relId =
           comp.toValueId(getVocab(), encodedIriManager())) {
-    return getCardinality(relId.value(), permutation, locatedTriplesSnapshot);
+    return getCardinality(relId.value(), permutation, locatedTriplesState);
   }
   return 0;
 }
@@ -1617,11 +1617,11 @@ Index::Vocab::PrefixRanges IndexImpl::prefixRanges(
 // _____________________________________________________________________________
 std::vector<float> IndexImpl::getMultiplicities(
     const TripleComponent& key, const Permutation& permutation,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+    const LocatedTriplesState& locatedTriplesState) const {
   if (auto keyId = key.toValueId(getVocab(), encodedIriManager())) {
     auto meta = permutation.getMetadata(
         keyId.value(),
-        permutation.getLocatedTriplesForPermutation(locatedTriplesSnapshot));
+        permutation.getLocatedTriplesForPermutation(locatedTriplesState));
     if (meta.has_value()) {
       return {meta.value().getCol1Multiplicity(),
               meta.value().getCol2Multiplicity()};
@@ -1645,10 +1645,10 @@ std::vector<float> IndexImpl::getMultiplicities(
 size_t IndexImpl::getResultSizeOfScan(
     const ScanSpecification& scanSpecification,
     const Permutation::Enum& permutation,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+    const LocatedTriplesState& locatedTriplesState) const {
   const auto& perm = getPermutation(permutation);
   const auto& locatedTriples =
-      perm.getLocatedTriplesForPermutation(locatedTriplesSnapshot);
+      perm.getLocatedTriplesForPermutation(locatedTriplesState);
   return perm.getResultSizeOfScan(
       CompressedRelationReader::ScanSpecAndBlocks::withUpdates(
           scanSpecification, locatedTriples),

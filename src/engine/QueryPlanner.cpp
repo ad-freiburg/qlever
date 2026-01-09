@@ -32,6 +32,7 @@
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/Load.h"
+#include "engine/MaterializedViews.h"
 #include "engine/Minus.h"
 #include "engine/MultiColumnJoin.h"
 #include "engine/NamedResultCache.h"
@@ -924,8 +925,8 @@ auto QueryPlanner::seedWithScansAndText(
 
       auto [actualPermutation, locatedTriples] =
           qlever::getPermutationAndLocatedTriplesPerBlockForTriple(
-              permutation, _qec->getIndex(),
-              _qec->sharedLocatedTriplesSnapshot(), triple);
+              permutation, _qec->getIndex(), _qec->locatedTriplesSharedState(),
+              triple);
       pushPlan(makeSubtreePlan<IndexScan>(_qec, std::move(actualPermutation),
                                           std::move(locatedTriples),
                                           std::move(triple), relevantGraphs));
@@ -3157,9 +3158,9 @@ void QueryPlanner::GraphPatternPlanner::visitPathSearch(
 
 // _______________________________________________________________
 SubtreePlan QueryPlanner::getMaterializedViewIndexScanPlan(
-    const parsedQuery::MaterializedViewQuery&) {
-  throw std::runtime_error(
-      "Materialized views are currently not supported yet.");
+    const parsedQuery::MaterializedViewQuery& viewQuery) {
+  return makeSubtreePlan<IndexScan>(
+      _qec->materializedViewsManager().makeIndexScan(_qec, viewQuery));
 }
 
 // _______________________________________________________________

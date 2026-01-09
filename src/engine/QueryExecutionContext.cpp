@@ -6,6 +6,7 @@
 #include "engine/QueryExecutionContext.h"
 
 #include "global/RuntimeParameters.h"
+#include "util/Exception.h"
 
 using namespace std::chrono_literals;
 
@@ -25,6 +26,7 @@ QueryExecutionContext::QueryExecutionContext(
     ad_utility::AllocatorWithLimit<Id> allocator,
     SortPerformanceEstimator sortPerformanceEstimator,
     NamedResultCache* namedResultCache,
+    MaterializedViewsManager* materializedViewsManager,
     std::function<void(std::string)> updateCallback, const bool pinSubtrees,
     const bool pinResult)
     : _pinSubtrees(pinSubtrees),
@@ -34,7 +36,12 @@ QueryExecutionContext::QueryExecutionContext(
       _allocator(std::move(allocator)),
       _sortPerformanceEstimator(sortPerformanceEstimator),
       updateCallback_(std::move(updateCallback)),
-      namedResultCache_(namedResultCache) {}
+      namedResultCache_(namedResultCache),
+      materializedViewsManager_(materializedViewsManager) {
+  AD_CORRECTNESS_CHECK(cache != nullptr);
+  AD_CORRECTNESS_CHECK(namedResultCache != nullptr);
+  AD_CORRECTNESS_CHECK(materializedViewsManager != nullptr);
+}
 
 // _____________________________________________________________________________
 void QueryExecutionContext::signalQueryUpdate(
