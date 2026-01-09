@@ -34,10 +34,6 @@ class ConstructQueryCache{
     size_t blankNodeMisses_{0};
 
    public:
-    [[nodiscard]] double variableHitRate() const {
-      return double(variableHits_) / (double(variableMisses_) + double(variableHits_));
-    }
-
     [[nodiscard]] size_t variableHits() const {
       return variableHits_;
     }
