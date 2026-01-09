@@ -6,6 +6,7 @@
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "engine/ExportQueryExecutionTrees.h"
+#include "engine/ConstructQueryCache.h"
 
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
@@ -45,6 +46,7 @@ LiteralOrIri encodedIdToLiteralOrIri(Id id, const IndexImpl& index) {
   const auto& mgr = index.encodedIriManager();
   return LiteralOrIri::fromStringRepresentation(mgr.toString(id));
 }
+
 
 // _____________________________________________________________________________
 STREAMABLE_GENERATOR_TYPE computeResultForAsk(
@@ -143,7 +145,7 @@ ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
 
   // An `IdTable` of which a certain subrange becomes part of the result,
   // together with a bool that indicates whether this is the last `IdTable` (to
-  // stop the computation of possibly expensive results as soon as possible.
+  // stop the computation of possibly expensive results as soon as possible.)
   struct Export {
     TableWithRange tableWithRange_;
     bool isLast_;
@@ -240,8 +242,11 @@ ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
       // `take_while` above seems redundant, but it might be that no IdTable is
       // yielded at all.
       | ad_utility::views::takeUntilInclusive([](const State& state) {
-          auto ptr = std::get_if<Export>(&state);
-          return ptr && ptr->isLast_;
+          const Export* ptr = std::get_if<Export>(&state);
+          if (ptr != nullptr) {
+           return ptr->isLast_ ;
+          }
+          return false;
         })
       // At this stage we only see `Export` or `OnlyCountForExport`. For the
       // latter we don't have to do anything, because the `transformToState`
@@ -256,69 +261,112 @@ ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
         })};
 }
 
-namespace {
-// Evaluate a `ConstructTriple` on the `context`. If the evaluation fails (e.g.
-// because an entry of the triple would be invalid), return an empty
-// `StringTriple`.
-auto evaluateTripleForConstruct =
-    [](const auto& triple, const ConstructQueryExportContext& context) {
-      using enum PositionInTriple;
-      auto subject = triple[0].evaluate(context, SUBJECT);
-      auto predicate = triple[1].evaluate(context, PREDICATE);
-      auto object = triple[2].evaluate(context, OBJECT);
-      if (!subject.has_value() || !predicate.has_value() ||
-          !object.has_value()) {
-        return QueryExecutionTree::StringTriple();
-      }
-      return QueryExecutionTree::StringTriple(std::move(subject.value()),
-                                              std::move(predicate.value()),
-                                              std::move(object.value()));
+// _____________________________________________________________________________
+cppcoro::generator<QueryExecutionTree::StringTriple>
+ExportQueryExecutionTrees::constructQueryResultToTriples(
+    const QueryExecutionTree& qet,
+    const ad_utility::sparql_types::Triples& constructTriples, //Note<ms2144>: these are the triples of the CONSTRUCT-clause
+    LimitOffsetClause limitAndOffset,
+    std::shared_ptr<const Result> result,
+    uint64_t& resultSize,
+    CancellationHandle cancellationHandle)
+{
+  // helper ____________________________________________________________________
+  // helper to log stats on destruction (even if generator exits early)
+  class StatsLogger {
+   public:
+    explicit StatsLogger(ConstructQueryCache& cache) : cache_(cache) {}
+    ~StatsLogger() {
+      auto stats = cache_.getStats();
+      AD_LOG_INFO << "Construct Query Cache stats at exit: \n"
+                   << "Total var eval: " << stats.variableHits() + stats.variableMisses()
+                   << " (hits: " << stats.variableHits()
+                   << ", misses: " << stats.variableMisses() << ")\n"
+                   << "Total literal eval: " << stats.literalHits() + stats.literalMisses()
+                   << " (hits: " << stats.literalHits()
+                   << ", misses: " << stats.literalMisses() << ")\n"
+                   << "Total iri eval: " << stats.iriHits() + stats.iriMisses()
+                   << " (hits: " << stats.iriHits()
+                   << ", misses: " << stats.iriMisses() << ")\n"
+                   << "Total blankNode eval: " << stats.blankNodeHits() + stats.blankNodeMisses()
+                   << " (hits: " << stats.blankNodeHits()
+                   << ", misses: " << stats.blankNodeMisses() << ")"
+                   << std::endl;
+    }
+
+    void logPeriodic(size_t rowsProcessed) {
+      auto stats = cache_.getStats();
+      AD_LOG_INFO << "Processed " << rowsProcessed << " rows. Cache stats:\n"
+                    << "total var cache hits: " << stats.variableHits()  << "\n"
+                    << "total var cache misses: " << stats.variableMisses()  << "\n"
+                    << "total iri cache hits: " << stats.iriHits()  << "\n"
+                    << "total iri cache misses: " << stats.iriMisses()  << "\n"
+                    << "total literal cache hits: " << stats.literalHits()  << "\n"
+                    << "total literal cache misses: " << stats.literalMisses()  << std::endl;
     };
 
-}  // namespace
-// _____________________________________________________________________________
-auto ExportQueryExecutionTrees::constructQueryResultToTriples(
-    const QueryExecutionTree& qet,
-    const ad_utility::sparql_types::Triples& constructTriples,
-    LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
-    uint64_t& resultSize, CancellationHandle cancellationHandle) {
-  // The `resultSizeMultiplicator`(last argument of `getRowIndices`) is
-  // explained by the following: For each result from the WHERE clause, we
-  // produce up to `constructTriples.size()` triples. We do not account for
-  // triples that are filtered out because one of the components is UNDEF (it
-  // would require materializing the whole result)
-  auto rowIndices = getRowIndices(limitAndOffset, *result, resultSize,
-                                  constructTriples.size());
-  return ad_utility::InputRangeTypeErased(
-      ad_utility::OwningView{std::move(rowIndices)} |
-      ql::views::transform(
-          [&qet, &constructTriples, result = std::move(result),
-           cancellationHandle = std::move(cancellationHandle),
-           rowOffset = size_t{0}](const auto& tableWithView) mutable {
-            // NOTE: This reference is captured in the following lambda.
-            // Normally it would be dangling, but as the `idTable` is not owned
-            // by the `tableWithView`, but backed by the outermost range, This
-            // is fine.
-            auto& idTable = tableWithView.tableWithVocab_.idTable();
-            auto currentRowOffset = rowOffset;
-            rowOffset += idTable.size();
-            return ql::ranges::transform_view(
-                tableWithView.view_, [&, currentRowOffset](uint64_t i) {
-                  auto& localVocab = tableWithView.tableWithVocab_.localVocab();
-                  return ql::ranges::transform_view(
-                      constructTriples,
-                      [&cancellationHandle,
-                       context = ConstructQueryExportContext{
-                           i, idTable, localVocab, qet.getVariableColumns(),
-                           qet.getQec()->getIndex(),
-                           currentRowOffset}](const auto& triple) mutable {
-                        cancellationHandle->throwIfCancelled();
-                        return evaluateTripleForConstruct(triple, context);
-                      });
-                });
-          }) |
-      ql::views::join | ql::views::join |
-      ql::views::filter([](const auto& triple) { return !triple.isEmpty(); }));
+   private:
+    ConstructQueryCache& cache_;
+  };
+  // ___________________________________________________________________________
+
+
+  size_t rowOffset = 0;
+  const size_t LOG_INTERVAL = 10000; // Log every 10000 rows
+
+  InputRangeTypeErased<TableWithRange> rowindices = getRowIndices(limitAndOffset, *result, resultSize);
+
+  // create cache instance, initialize cache logger
+  ConstructQueryCache cache;
+  StatsLogger statsLogger(cache);
+
+  for (const auto& [pair, range] : rowindices) {
+
+    std::reference_wrapper<const IdTable> idTable = pair.idTable_;
+
+    // loop over rows of result table
+    for (uint64_t rowIndexOfResultTable : range) {
+
+      ConstructQueryExportContext context{
+          rowIndexOfResultTable, // Current row index (row of the result table of the WHERE-clause)
+          idTable, // Result data table
+          pair.localVocab_, // string vocabulary
+          qet.getVariableColumns(), // Map: variable name -> column index
+          qet.getQec()->getIndex(), // database index for IRIs
+          rowOffset}; // Total rows processed so far
+
+      using enum PositionInTriple;
+
+      // tell cache that we are now at a new row of the WHERE-clause result-table, and
+      // thus need to clear the VariableCache, BlankNodeCache etc.
+      cache.startNewRow(rowIndexOfResultTable);
+
+      // loop over all triple patterns in the CONSTRUCT template.
+      for (const std::array<GraphTerm, 3>& triple : constructTriples) {
+        // use cache for evaluation
+        std::optional<std::string> subject = cache.evaluateWithCache(triple[0], context, SUBJECT);
+        std::optional<std::string> predicate = cache.evaluateWithCache(triple[1], context, PREDICATE);
+        std::optional<std::string> object = cache.evaluateWithCache(triple[2], context, OBJECT);
+
+        // skip any triple where either the subject, predicate, or object is undefined
+        if (!subject.has_value() || !predicate.has_value() || !object.has_value()) {
+          continue;
+        }
+
+        co_yield {std::move(subject.value()), std::move(predicate.value()),std::move(object.value())};
+
+        cancellationHandle->throwIfCancelled();
+      }
+    }
+    rowOffset += idTable.get().size(); // progress tracking
+  };
+
+  // For each result from the WHERE clause, we produce up to
+  // `constructTriples.size()` triples. We do not account for triples that are
+  // filtered out because one of the components is UNDEF (it would require
+  // materializing the whole result).
+  // TODO<ms2144>: I don't get it, why would that require materializing the whole result.
+  resultSize *= constructTriples.size();
 }
 
 // _____________________________________________________________________________
@@ -414,9 +462,11 @@ nlohmann::json idTableToQLeverJSONRow(
 
 // _____________________________________________________________________________
 auto ExportQueryExecutionTrees::idTableToQLeverJSONBindings(
-    const QueryExecutionTree& qet, LimitOffsetClause limitAndOffset,
+    const QueryExecutionTree& qet,
+    const LimitOffsetClause limitAndOffset,
     QueryExecutionTree::ColumnIndicesAndTypes columns,
-    std::shared_ptr<const Result> result, uint64_t& resultSize,
+    std::shared_ptr<const Result> result,
+    uint64_t& resultSize,
     CancellationHandle cancellationHandle) {
   AD_CORRECTNESS_CHECK(result != nullptr);
 
@@ -695,7 +745,7 @@ ExportQueryExecutionTrees::getLiteralOrNullopt(
     return std::move(litOrIri.value().getLiteral());
   }
   return std::nullopt;
-};
+}
 
 // _____________________________________________________________________________
 std::optional<LiteralOrIri>
@@ -1064,9 +1114,9 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
        getRowIndices(limitAndOffset, *result, resultSize)) {
     for (uint64_t i : range) {
       STREAMABLE_YIELD("\n  <result>");
-      for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
-        if (selectedColumnIndices[j].has_value()) {
-          const auto& val = selectedColumnIndices[j].value();
+      for (auto & selectedColumnIndice : selectedColumnIndices) {
+        if (selectedColumnIndice.has_value()) {
+          const auto& val = selectedColumnIndice.value();
           Id id = pair.idTable()(i, val.columnIndex_);
           STREAMABLE_YIELD(idToXMLBinding(
               val.variable_, id, qet.getQec()->getIndex(), pair.localVocab()));
@@ -1176,9 +1226,11 @@ STREAMABLE_GENERATOR_TYPE
 ExportQueryExecutionTrees::constructQueryResultToStream(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples,
-    LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
+    LimitOffsetClause limitAndOffset,
+    std::shared_ptr<const Result> result,
     CancellationHandle cancellationHandle,
-    [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
+    [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder
+    ) {
   static_assert(format == MediaType::octetStream || format == MediaType::csv ||
                 format == MediaType::tsv || format == MediaType::sparqlXml ||
                 format == MediaType::sparqlJson ||
@@ -1226,7 +1278,7 @@ ExportQueryExecutionTrees::convertStreamGeneratorForChunkedTransfer(
   // Note: `begin` advances until the first block.
   auto it = streamGenerator.begin();
   return InputRangeTypeErased(InputRangeFromLoopControlGet(
-      [it = std::move(it), streamGenerator = std::move(streamGenerator),
+      [it = it, streamGenerator = std::move(streamGenerator),
        exceptionMessage = std::optional<std::string>(std::nullopt)]() mutable {
         // TODO<joka921, RobinTF> Think of a better way to propagate and log
         // those errors. We can additionally send them via the
@@ -1428,7 +1480,7 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
 [[nodiscard]] static std::optional<std::string> evaluateVariableForConstruct(
     const Variable& var, const ConstructQueryExportContext& context,
     [[maybe_unused]] PositionInTriple positionInTriple) {
-  size_t row = context._row;
+  size_t row = context._resultTableRow;
   const auto& variableColumns = context._variableColumns;
   const Index& qecIndex = context._qecIndex;
   const auto& idTable = context.idTable_;
@@ -1464,3 +1516,4 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
   Variable::decoupledEvaluateFuncPtr() = &evaluateVariableForConstruct;
   return 42;
 }();
+
