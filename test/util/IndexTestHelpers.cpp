@@ -33,6 +33,8 @@ Index makeIndexWithTestSettings(ad_utility::MemorySize parserBufferSize) {
       parserBufferSize;  // Note that the default value remains unchanged, but
                          // some tests (i.e. polygon testing in Spatial Joins)
                          // require a larger buffer size
+  // By default, don't add ql:has-word triples in test indices.
+  index.addHasWordTriples() = false;
   return index;
 }
 
@@ -197,6 +199,7 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
     index.usePatterns() = c.usePatterns;
     index.setSettingsFile(inputFilename + ".settings.json");
     index.loadAllPermutations() = c.loadAllPermutations;
+    index.addHasWordTriples() = c.addHasWordTriples;
     qlever::InputFileSpecification spec{inputFilename, c.indexType,
                                         std::nullopt};
     // randomly choose one of the vocabulary implementations
