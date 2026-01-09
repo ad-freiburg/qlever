@@ -1,11 +1,12 @@
-#include "ConstructQueryEvaluator.h"
 #include "ConstructQueryCache.h"
-#include "rdfTypes/Iri.h"
+
+#include "ConstructQueryEvaluator.h"
 #include "parser/data/BlankNode.h"
+#include "rdfTypes/Iri.h"
 
 // using statements ____________________________________________________________
 using string = std::string;
-template<typename T>
+template <typename T>
 using opt = std::optional<T>;
 // _____________________________________________________________________________
 
@@ -15,42 +16,44 @@ using opt = std::optional<T>;
 // and row index of the WHERE-query-result, since the variable
 // value changes per row of the result-table.
 // NOTE: ^ = XOR, << = left bitshift
-size_t ConstructQueryCache::VariableKeyHash::operator()(const ConstructQueryCache::VariableKey& key) const {
-  return std::hash<std::string>{}(key.variable_.name()) ^ (std::hash<uint64_t>{}(key.rowIndex_) << 1);
+size_t ConstructQueryCache::VariableKeyHash::operator()(
+    const ConstructQueryCache::VariableKey& key) const {
+  return std::hash<std::string>{}(key.variable_.name()) ^
+         (std::hash<uint64_t>{}(key.rowIndex_) << 1);
 }
 
-
-// use Iri string repr (iri string repr names are unique in the CONSTRUCT-clause),
-// and reference to execution context object. Constants shouldn't vary per row,
-// but context might affect evaluation. (TODO<ms2144): do we really need the context here?)
-// NOTE: ^ = XOR, << = left bitshift
+// use Iri string repr (iri string repr names are unique in the
+// CONSTRUCT-clause), and reference to execution context object. Constants
+// shouldn't vary per row, but context might affect evaluation. (TODO<ms2144):
+// do we really need the context here?) NOTE: ^ = XOR, << = left bitshift
 size_t ConstructQueryCache::IriKeyHash::operator()(const IriKey& key) const {
   return std::hash<std::string>{}(key.iri_.iri());
 }
 
 // use Literalstring repr,
 // and reference to execution context object. Constants shouldn't vary per row,
-// but context might affect evaluation. (TODO<ms2144): do we really need the context here?)
-// NOTE: ^ = XOR, << = left bitshift
-size_t ConstructQueryCache::LiteralKeyHash::operator()(const LiteralKey& key) const {
+// but context might affect evaluation. (TODO<ms2144): do we really need the
+// context here?) NOTE: ^ = XOR, << = left bitshift
+size_t ConstructQueryCache::LiteralKeyHash::operator()(
+    const LiteralKey& key) const {
   return std::hash<std::string>{}(key.literal_.literal());
 }
 
 // NOTE: ^ = XOR, << = left bitshift
-size_t ConstructQueryCache::BlankNodeKeyHash::operator()(const BlankNodeKey& key) const {
+size_t ConstructQueryCache::BlankNodeKeyHash::operator()(
+    const BlankNodeKey& key) const {
   return std::hash<std::string>{}(key.blankNode_.label()) ^
-         (std::hash<const ConstructQueryExportContext*>{}(&key.context_.get()) << 1);
+         (std::hash<const ConstructQueryExportContext*>{}(&key.context_.get())
+          << 1);
 }
 
 //______________________________________________________________________________
 
 // methods for interacting with the cache ______________________________________
-template<>
+template <>
 opt<string> ConstructQueryCache::evaluateWithCacheImpl<Variable>(
-    const Variable& term,
-    const ConstructQueryExportContext& context,
-    PositionInTriple posInTriple){
-
+    const Variable& term, const ConstructQueryExportContext& context,
+    PositionInTriple posInTriple) {
   VariableKey key{term, context._resultTableRow};
 
   auto it = variableCache_.find(key);
@@ -66,16 +69,19 @@ opt<string> ConstructQueryCache::evaluateWithCacheImpl<Variable>(
   return result;
 }
 
-//TODO<ms2144> the ad_utility::triple_component::Iri class does not have an evaluate method,
-// why? Can I add the one from "src/parser/data/Iri.h" to ad_utility::triple_component::Iri?
-// I would otherwise use the ad_utility_::triple_component::Iri class here instead of the
-// "src/parser/data/Iri.h".
-template<>
-opt<string> ConstructQueryCache::evaluateWithCacheImpl<Iri>(
-    const Iri& term,
-    const ConstructQueryExportContext& context,
-    PositionInTriple posInTriple){
+// TODO<ms2144> the ad_utility::triple_component::Iri class does not have an
+// evaluate method,
+//  why? Can I add the one from "src/parser/data/Iri.h" to
+//  ad_utility::triple_component::Iri? I would otherwise use the
+//  ad_utility_::triple_component::Iri class here instead of the
+//  "src/parser/data/Iri.h".
 
+// TODO: iri shouldn't even be cached here.
+template <>
+opt<string> ConstructQueryCache::evaluateWithCacheImpl<Iri>(
+    const Iri& term, const ConstructQueryExportContext& context,
+    PositionInTriple posInTriple) {
+  // TODO: iri shouldn't even be cached here.
   IriKey key{term, std::cref(context)};
 
   auto it = iriCache_.find(key);
@@ -90,12 +96,10 @@ opt<string> ConstructQueryCache::evaluateWithCacheImpl<Iri>(
   return result;
 }
 
-template<>
+template <>
 opt<string> ConstructQueryCache::evaluateWithCacheImpl<Literal>(
-    const Literal& term,
-    const ConstructQueryExportContext& context,
-    PositionInTriple posInTriple)
-{
+    const Literal& term, const ConstructQueryExportContext& context,
+    PositionInTriple posInTriple) {
   const Literal& literal = term;
 
   LiteralKey key{literal, std::cref(context)};
@@ -114,12 +118,10 @@ opt<string> ConstructQueryCache::evaluateWithCacheImpl<Literal>(
   return result;
 }
 
-template<>
+template <>
 opt<string> ConstructQueryCache::evaluateWithCacheImpl<BlankNode>(
-    const BlankNode& term,
-    const ConstructQueryExportContext& context,
-    PositionInTriple posInTriple)
-{
+    const BlankNode& term, const ConstructQueryExportContext& context,
+    PositionInTriple posInTriple) {
   const BlankNode& blankNode = term;
 
   BlankNodeKey key{blankNode, std::cref(context)};
@@ -148,10 +150,8 @@ void ConstructQueryCache::startNewRow(uint64_t row) {
 }
 
 opt<string> ConstructQueryCache::evaluateWithCache(
-    const GraphTerm& term,
-    const ConstructQueryExportContext& context,
+    const GraphTerm& term, const ConstructQueryExportContext& context,
     PositionInTriple posInTriple) {
-
   if (std::holds_alternative<Variable>(term)) {
     const auto& var = std::get<Variable>(term);
     return evaluateWithCacheImpl<Variable>(var, context, posInTriple);
