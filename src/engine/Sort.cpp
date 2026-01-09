@@ -81,10 +81,10 @@ Result Sort::computeResult(bool requestLaziness) {
                                    input->getCopyOfLocalVocab());
     } else {
       LocalVocab localVocab = input->getCopyOfLocalVocab();
-      std::span<Result::IdTableVocabPair> noRemainingBlocks;
-      return computeResultExternal(
-          {}, std::move(localVocab), noRemainingBlocks.begin(),
-          noRemainingBlocks.end(), std::move(input), requestLaziness);
+      std::span<const IdTable> inputTableSpan{&inputTable, 1};
+      return computeResultExternal({}, std::move(localVocab),
+                                   inputTableSpan.begin(), inputTableSpan.end(),
+                                   std::move(input), requestLaziness);
     }
   }
 
@@ -166,33 +166,28 @@ Result Sort::computeResultExternal(std::vector<IdTable> collectedBlocks,
       ad_utility::DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
       SortByColumns{sortColumnIndices_});
 
-  // For lazy input, push the already collected blocks and the remaining blocks.
-  // For fully materialized input, push the input in chunks to avoid cloning the
-  // entire table (which would defeat the purpose of an external sort).
-  bool inputIsFullyMaterialized = input && input->isFullyMaterialized();
-  if (!inputIsFullyMaterialized) {
-    for (auto& block : collectedBlocks) {
-      sorter->pushBlock(std::move(block));
-    }
-    while (it != end) {
-      checkCancellation();
+  // Push the already collected blocks and the remaining blocks from the
+  // iterator. For lazy input, the iterator yields `IdTableVocabPair` (move the
+  // table, merge the local vocab). For materialized input, the iterator yields
+  // `const IdTable&` (pass to `pushBlock`, which handles chunking internally).
+  for (auto& block : collectedBlocks) {
+    sorter->pushBlock(std::move(block));
+  }
+  while (it != end) {
+    checkCancellation();
+    if constexpr (ad_utility::isSimilar<std::iter_value_t<Iterator>,
+                                        Result::IdTableVocabPair>) {
       auto& idTableAndLocalVocab = *it;
       sorter->pushBlock(std::move(idTableAndLocalVocab.idTable_));
       mergedLocalVocab.mergeWith(idTableAndLocalVocab.localVocab_);
-      ++it;
+    } else {
+      // NOTE: `pushBlock` with a const reference iterates over the rows and
+      // calls `push` for each, which buffers rows and flushes to disk when the
+      // buffer is full. This avoids having to clone the (potentially large)
+      // input table.
+      sorter->pushBlock(*it);
     }
-  } else {
-    AD_CORRECTNESS_CHECK(collectedBlocks.empty());
-    const IdTable& inputTable = input->idTable();
-    size_t chunkSize = memoryLimit.getBytes() / (numColumns * sizeof(Id));
-    for (size_t chunkStart = 0; chunkStart < inputTable.numRows();
-         chunkStart += chunkSize) {
-      checkCancellation();
-      size_t chunkEnd = std::min(chunkStart + chunkSize, inputTable.numRows());
-      IdTable chunk{numColumns, allocator()};
-      chunk.insertAtEnd(inputTable, chunkStart, chunkEnd);
-      sorter->pushBlock(std::move(chunk));
-    }
+    ++it;
   }
 
   // The `input` has served its purpose; we can (and should) free its resources.
