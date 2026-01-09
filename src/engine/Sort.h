@@ -12,11 +12,10 @@
 #ifndef QLEVER_SRC_ENGINE_SORT_H
 #define QLEVER_SRC_ENGINE_SORT_H
 
+#include "engine/LocalVocab.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/Result.h"
-#include "engine/idTable/CompressedExternalIdTable.h"
-#include "index/ExternalSortFunctors.h"
 
 // This operation sorts an `IdTable` by the `internal` order of the IDs. This
 // order is cheap to compute (just a bitwise compare of integers), but is
@@ -87,20 +86,20 @@ class Sort : public Operation {
   virtual Result computeResult(bool requestLaziness) override;
 
   // Helper methods for computeResult.
-  template <typename LocalVocabT>
-  Result computeResultInMemory(IdTable idTable, LocalVocabT localVocab) const;
-
-  // Type alias for the external sorter.
-  using Sorter = ad_utility::CompressedExternalIdTableSorter<SortByColumns, 0>;
+  Result computeResultInMemory(IdTable idTable, LocalVocab localVocab) const;
 
   // External sort: push collectedBlocks first, then consume remaining blocks.
+  // The `input` parameter is reset after consuming all blocks to free
+  // memory before materializing the sorted result.
   //
   // NOTE: `Iterator` and `Sentinel` are separate template types because C++20
   // ranges (like `InputRangeFromGet`) use different types for begin and end.
   template <typename Iterator, typename Sentinel>
   Result computeResultExternal(std::vector<IdTable> collectedBlocks,
                                LocalVocab mergedLocalVocab, Iterator it,
-                               Sentinel end, bool requestLaziness) const;
+                               Sentinel end,
+                               std::shared_ptr<const Result> input,
+                               bool requestLaziness) const;
 
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap()
       const override {

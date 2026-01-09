@@ -273,7 +273,7 @@ TEST(Sort, externalSortLazyInput) {
       setRuntimeParameterForTest<&RuntimeParameters::sortInMemoryThreshold_>(
           ad_utility::MemorySize::kilobytes(100));
 
-  // Create `Sort` operation and get the result.
+  // Create the `Sort` operation and get the result.
   Sort externalSort{qec, subtree, {0, 1, 2}};
   auto result = externalSort.getResult();
 
@@ -309,16 +309,16 @@ TEST(Sort, externalSortMaterializedInput) {
   }
   auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
 
-  // Create `ValuesForTesting` with `forceFullyMaterialized = true` (the last
-  // argument) to ensure the subtree returns a fully materialized result even
-  // when lazy is requested.
+  // Create a `ValuesForTesting` operation with `forceFullyMaterialized = true`
+  // (the last argument) to ensure the subtree returns a fully materialized
+  // result even when lazy is requested.
   std::vector<std::optional<Variable>> vars = {Variable{"?0"}, Variable{"?1"},
                                                Variable{"?2"}};
   auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, std::move(inputTable), vars, false, std::vector<ColumnIndex>{},
       LocalVocab{}, std::nullopt, true);
 
-  // Create `Sort` operation and get the result.
+  // Create the `Sort` operation and get the result.
   Sort externalSort{qec, subtree, {0, 1, 2}};
   auto result = externalSort.getResult();
 
@@ -340,7 +340,7 @@ TEST(Sort, externalSortLazyOutput) {
   // Clear cache at start to avoid hits from previous tests.
   qec->getQueryTreeCache().clearAll();
 
-  // Create input table large enough to exceed the second threshold of 100 KB
+  // Create an input table large enough to exceed the second threshold of 100 KB
   // below: 5000 rows × 3 cols × 8 bytes = 120 KB.
   VectorTable input;
   for (int64_t i = 0; i < 5000; ++i) {
@@ -364,7 +364,7 @@ TEST(Sort, externalSortLazyOutput) {
       setRuntimeParameterForTest<&RuntimeParameters::sortInMemoryThreshold_>(
           ad_utility::MemorySize::kilobytes(100));
 
-  // Create `Sort` operation and get the result lazily.
+  // Create the `Sort` operation and get the result lazily.
   Sort externalSort = makeSort(inputTable.clone(), {0, 1, 2});
   auto lazyResult =
       externalSort.getResult(false, ComputationMode::LAZY_IF_SUPPORTED);
@@ -402,15 +402,16 @@ TEST(Sort, inMemorySortMaterializedInput) {
   }
   auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
 
-  // Create `ValuesForTesting` with `forceFullyMaterialized = true` (the last
-  // argument) to ensure the subtree returns a fully materialized result.
+  // Create a `ValuesForTesting` operation with `forceFullyMaterialized = true`
+  // (the last argument) to ensure the subtree returns a fully materialized
+  // result.
   std::vector<std::optional<Variable>> vars = {Variable{"?0"}, Variable{"?1"},
                                                Variable{"?2"}};
   auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, std::move(inputTable), vars, false, std::vector<ColumnIndex>{},
       LocalVocab{}, std::nullopt, true);
 
-  // Create `Sort` operation and get the result.
+  // Create the `Sort` operation and get the result.
   Sort inMemorySort{qec, subtree, {0, 1, 2}};
   auto result = inMemorySort.getResult();
 
