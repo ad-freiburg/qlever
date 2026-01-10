@@ -125,43 +125,6 @@ struct MakeNumericExpression {
   }
 };
 
-// Same as above, just added DateYearOrDuration.
-// Takes a `Function` that takes and returns numeric values (integral or
-// floating point) or dates  and converts it to a function, that takes the same
-// arguments and returns the same result, but the arguments and the return type
-// are the `NumericOrDate` variant.
-template <typename Function, bool NanOrInfToUndef = false>
-struct MakeNumericOrDateExpression {
-  template <typename... Args>
-  Id operator()(const Args&... args) const {
-    CPP_assert((concepts::same_as<std::decay_t<Args>, NumericOrDate> && ...));
-    auto visitor = [](const auto&... t) {
-      if constexpr ((... ||
-                     std::is_same_v<NotNumeric, std::decay_t<decltype(t)>>)) {
-        return Id::makeUndefined();
-      } else if constexpr ((... && std::is_same_v<DateYearOrDuration,
-                                                  std::decay_t<decltype(t)>>)) {
-        // Operation containing Date can only work with other dates, not with a
-        // numeric value.
-        return makeFromDate(Function{}(t...));
-      } else if constexpr ((... &&
-                            (std::is_same_v<double,
-                                            std::decay_t<decltype(t)>> ||
-                             std::is_same_v<int64_t,
-                                            std::decay_t<decltype(t)>>))) {
-        // We need to guarantee that the result of Function is of a numeric type
-        // TODO: this is problematic because it is dedicated to NumericValue and
-        // not NumericOrDate
-        return makeNumericId<NanOrInfToUndef>(Function{}(t...));
-      } else {
-        // Other combinations are not defined
-        return Id::makeUndefined();
-      }
-    };
-    return std::visit(visitor, args...);
-  }
-};
-
 // Two short aliases to make the instantiations more readable.
 template <typename... T>
 using FV = FunctionAndValueGetters<T...>;
