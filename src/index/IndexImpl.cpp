@@ -1807,6 +1807,30 @@ void countDistinct(std::optional<Id>& lastId, size_t& counter,
     }
   }
 }
+
+// Helper function that returns a packaged task that computes distinct counts
+// over all tables produced by scanning the given permutation. The customAction
+// is invoked for each table to allow for additional computations while
+// scanning.
+std::packaged_task<void()> computeStatistics(
+    const LocatedTriplesSharedState& locatedTriplesSharedState, size_t& counter,
+    const Permutation& permutation, auto customAction) {
+  return std::packaged_task{[&counter, &permutation, &locatedTriplesSharedState,
+                             customAction = std::move(customAction)]() {
+    auto cancellationHandle =
+        std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+    ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
+    auto tables = permutation.lazyScan(
+        permutation.getScanSpecAndBlocks(scanSpec, *locatedTriplesSharedState),
+        std::nullopt, CompressedRelationReader::ColumnIndicesRef{},
+        cancellationHandle, *locatedTriplesSharedState);
+    std::optional<Id> lastPredicate = std::nullopt;
+    for (const auto& table : tables) {
+      std::invoke(customAction, table);
+      countDistinct(lastPredicate, counter, table);
+    }
+  }};
+}
 }  // namespace
 
 // _____________________________________________________________________________
@@ -1819,74 +1843,39 @@ nlohmann::json IndexImpl::recomputeStatistics(
   size_t numPredicatesInternal = 0;
   size_t numObjects = 0;
   uint64_t nextBlankNode = 0;
-  auto cancellationHandle =
-      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
-  ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
+
   std::vector<std::packaged_task<void()>> tasks;
 
-  tasks.push_back(std::packaged_task{
-      [this, &numTriples, &numPredicates, &nextBlankNode, &scanSpec,
-       &locatedTriplesSharedState, &cancellationHandle]() {
-        auto tables = pso_->lazyScan(
-            pso_->getScanSpecAndBlocks(scanSpec, *locatedTriplesSharedState),
-            std::nullopt, CompressedRelationReader::ColumnIndicesRef{},
-            cancellationHandle, *locatedTriplesSharedState);
-        std::optional<Id> lastPredicate = std::nullopt;
-        for (const auto& table : tables) {
-          numTriples += table.numRows();
-          for (auto col : table.getColumns()) {
-            for (auto id : col) {
-              if (id.getDatatype() == Datatype::BlankNodeIndex) {
-                nextBlankNode =
-                    std::max(nextBlankNode, id.getBlankNodeIndex().get() + 1);
-              }
+  auto getCounterTask = [&locatedTriplesSharedState](
+                            size_t& counter, const Permutation& permutation,
+                            auto customAction) {
+    return computeStatistics(locatedTriplesSharedState, counter, permutation,
+                             customAction);
+  };
+
+  tasks.push_back(getCounterTask(
+      numPredicates, *pso_,
+      [&numTriples, &nextBlankNode](const IdTable& table) {
+        numTriples += table.numRows();
+        for (auto col : table.getColumns()) {
+          for (auto id : col) {
+            if (id.getDatatype() == Datatype::BlankNodeIndex) {
+              nextBlankNode =
+                  std::max(nextBlankNode, id.getBlankNodeIndex().get() + 1);
             }
           }
-          countDistinct(lastPredicate, numPredicates, table);
         }
-      }});
+      }));
 
-  tasks.push_back(std::packaged_task{
-      [this, &numTriplesInternal, &numPredicatesInternal, &scanSpec,
-       &locatedTriplesSharedState, &cancellationHandle]() {
-        auto tables = pso_->internalPermutation().lazyScan(
-            pso_->internalPermutation().getScanSpecAndBlocks(
-                scanSpec, *locatedTriplesSharedState),
-            std::nullopt, CompressedRelationReader::ColumnIndicesRef{},
-            cancellationHandle, *locatedTriplesSharedState);
-        std::optional<Id> lastPredicate = std::nullopt;
-        for (const auto& table : tables) {
-          numTriplesInternal += table.numRows();
-          countDistinct(lastPredicate, numPredicatesInternal, table);
-        }
-      }});
+  tasks.push_back(getCounterTask(numPredicatesInternal,
+                                 pso_->internalPermutation(),
+                                 [&numTriplesInternal](const IdTable& table) {
+                                   numTriplesInternal += table.numRows();
+                                 }));
 
   if (hasAllPermutations()) {
-    tasks.push_back(
-        std::packaged_task{[this, &numSubjects, &scanSpec,
-                            &locatedTriplesSharedState, &cancellationHandle]() {
-          auto tables = spo_->lazyScan(
-              spo_->getScanSpecAndBlocks(scanSpec, *locatedTriplesSharedState),
-              std::nullopt, CompressedRelationReader::ColumnIndicesRef{},
-              cancellationHandle, *locatedTriplesSharedState);
-          std::optional<Id> lastSubject = std::nullopt;
-          for (const auto& table : tables) {
-            countDistinct(lastSubject, numSubjects, table);
-          }
-        }});
-
-    tasks.push_back(
-        std::packaged_task{[this, &numObjects, &scanSpec,
-                            &locatedTriplesSharedState, &cancellationHandle]() {
-          auto tables = osp_->lazyScan(
-              osp_->getScanSpecAndBlocks(scanSpec, *locatedTriplesSharedState),
-              std::nullopt, CompressedRelationReader::ColumnIndicesRef{},
-              cancellationHandle, *locatedTriplesSharedState);
-          std::optional<Id> lastObject = std::nullopt;
-          for (const auto& table : tables) {
-            countDistinct(lastObject, numObjects, table);
-          }
-        }});
+    tasks.push_back(getCounterTask(numSubjects, *spo_, ad_utility::noop));
+    tasks.push_back(getCounterTask(numObjects, *osp_, ad_utility::noop));
   }
   ad_utility::runTasksInParallel(tasks);
   auto configuration = configurationJson_;
