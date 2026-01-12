@@ -343,6 +343,7 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
 
   // Test that writing a view with less than four columns is possible.
   {
+    clearLog();
     MaterializedViewWriter::writeViewToDisk(
         testIndexBase_, "testView5",
         qlv().parseAndPlanQuery("SELECT * { ?s ?p ?o }"));
@@ -350,6 +351,7 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
     EXPECT_THAT(columnNames(view),
                 ::testing::ElementsAreArray(
                     std::vector<V>{V{"?s"}, V{"?p"}, V{"?o"}, V{"?_empty_0"}}));
+    EXPECT_THAT(log_.str(), ::testing::HasSubstr("1 empty column"));
   }
 }
 
