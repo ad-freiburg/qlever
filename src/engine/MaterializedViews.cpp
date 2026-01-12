@@ -92,6 +92,7 @@ MaterializedViewWriter::getIdTableColumnNamesAndPermutation() const {
 
   auto targetVarsAndCols =
       qet_->selectedVariablesToColumnIndices(parsedQuery_.selectClause());
+  const size_t numCols = targetVarsAndCols.size();
 
   // Column information for the columns selected by the user's query.
   auto result = ::ranges::to<ColumnNamesAndPermutation>(
@@ -102,8 +103,14 @@ MaterializedViewWriter::getIdTableColumnNamesAndPermutation() const {
       }));
 
   // Add dummy columns such that the view has at least four columns in total.
-  for (uint8_t i = 0; i < 4 - targetVarsAndCols.size(); ++i) {
-    result.push_back({Variable{absl::StrCat("?_empty_", i)}, std::nullopt});
+  if (numCols < 4) {
+    AD_LOG_INFO << "The query to write the materialized view '" << name_
+                << "' selects only " << numCols << " column(s). " << 4 - numCols
+                << " empty column(s) will be appended." << std::endl;
+
+    for (uint8_t i = 0; i < 4 - numCols; ++i) {
+      result.push_back({Variable{absl::StrCat("?_empty_", i)}, std::nullopt});
+    }
   }
 
   return result;
