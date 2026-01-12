@@ -28,13 +28,10 @@ namespace {
 using CancellationHandle = ad_utility::SharedCancellationHandle;
 
 // Write a new vocabulary that contains all words from `vocab` plus all
-// entries in `entries`. Returns a pair consisting of a vector of tuples
-// containing information about the inserted entries (the `VocabIndex` of their
-// position in the old `vocab`, the string representation of the newly added
-// value, and the original `Id`) and a mapping from old local vocab `Id`s to
-// new vocab `Id`s.
-std::pair<std::vector<std::tuple<VocabIndex, std::string_view, Id>>,
-          ad_utility::HashMap<Id, Id>>
+// entries in `entries`. Returns a pair consisting of a vector insertion
+// positions (the `VocabIndex` of the `LocalVocabEntry`s position in the old
+// `vocab`) and a mapping from old local vocab `Id`s to new vocab `Id`s.
+std::pair<std::vector<VocabIndex>, ad_utility::HashMap<Id, Id>>
 materializeLocalVocab(const std::vector<LocalVocabIndex>& entries,
                       const Index::Vocab& vocab,
                       const std::string& newIndexName) {
@@ -82,19 +79,24 @@ materializeLocalVocab(const std::vector<LocalVocabIndex>& entries,
     localVocabMapping.emplace(
         id, Id::makeFromVocabIndex(VocabIndex::make(newIndex)));
   }
-  return std::make_pair(std::move(insertInfo), std::move(localVocabMapping));
+  std::vector<VocabIndex> insertionPositions;
+  insertionPositions.reserve(insertInfo.size());
+  for (const auto& [vocabIndex, _, __] : insertInfo) {
+    insertionPositions.push_back(vocabIndex);
+  }
+  return std::make_pair(std::move(insertionPositions),
+                        std::move(localVocabMapping));
 }
 
-// Map old vocab `Id`s to new vocab `Id`s according to the given `insertInfo`.
+// Map old vocab `Id`s to new vocab `Id`s according to the given
+// `insertionPositions`.
 Id remapVocabId(Id original,
-                const std::vector<std::tuple<VocabIndex, std::string_view, Id>>&
-                    insertInfo) {
+                const std::vector<VocabIndex>& insertionPositions) {
   AD_CONTRACT_CHECK(original.getDatatype() == Datatype::VocabIndex);
   size_t offset = ql::ranges::distance(
-      insertInfo.begin(),
-      ql::ranges::upper_bound(
-          insertInfo, original.getVocabIndex(), std::less{},
-          [](const auto& tuple) { return std::get<0>(tuple); }));
+      insertionPositions.begin(),
+      ql::ranges::upper_bound(insertionPositions, original.getVocabIndex(),
+                              std::less{}));
   return Id::makeFromVocabIndex(
       VocabIndex::make(original.getVocabIndex().get() + offset));
 }
@@ -108,7 +110,7 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
     const BlockMetadataRanges& blockMetadataRanges,
     const LocatedTriplesSharedState& locatedTriplesSharedState,
     const ad_utility::HashMap<Id, Id>& localVocabMapping,
-    const std::vector<std::tuple<VocabIndex, std::string_view, Id>>& insertInfo,
+    const std::vector<VocabIndex>& insertionPositions,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
     ql::span<const ColumnIndex> additionalColumns) {
   Permutation::ScanSpecAndBlocks scanSpecAndBlocks{std::move(scanSpec),
@@ -120,7 +122,7 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
   return ad_utility::InputRangeTypeErased{
       ad_utility::CachingTransformInputRange{
           std::move(fullScan),
-          [&localVocabMapping, &insertInfo](IdTable& idTable) {
+          [&localVocabMapping, &insertionPositions](IdTable& idTable) {
             // TODO<RobinTF> process columns in parallel.
             auto allCols = idTable.getColumns();
             // Extra columns beyond the graph column only contain integers (or
@@ -128,14 +130,13 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
             // remapped.
             constexpr size_t REGULAR_COLUMNS = 4;
             for (auto col : allCols | ::ranges::views::take(REGULAR_COLUMNS)) {
-              ql::ranges::for_each(
-                  col, [&localVocabMapping, &insertInfo](Id& id) {
-                    if (id.getDatatype() == Datatype::LocalVocabIndex) {
-                      id = localVocabMapping.at(id);
-                    } else if (id.getDatatype() == Datatype::VocabIndex) {
-                      id = remapVocabId(id, insertInfo);
-                    }
-                  });
+              for (Id& id : col) {
+                if (id.getDatatype() == Datatype::LocalVocabIndex) {
+                  id = localVocabMapping.at(id);
+                } else if (id.getDatatype() == Datatype::VocabIndex) {
+                  id = remapVocabId(id, insertionPositions);
+                }
+              }
             }
             AD_EXPENSIVE_CHECK(ql::ranges::all_of(
                 allCols | ::ranges::views::drop(REGULAR_COLUMNS), [](auto col) {
@@ -154,13 +155,13 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
     const Permutation& permutation, ScanSpecification scanSpec,
     const LocatedTriplesSharedState& locatedTriplesSharedState,
     const ad_utility::HashMap<Id, Id>& localVocabMapping,
-    const std::vector<std::tuple<VocabIndex, std::string_view, Id>>& insertInfo,
+    const std::vector<VocabIndex>& insertionPositions,
     const ad_utility::SharedCancellationHandle& cancellationHandle) {
   return readIndexAndRemap(
       permutation, std::move(scanSpec),
       permutation.getAugmentedMetadataForPermutation(
           *locatedTriplesSharedState),
-      locatedTriplesSharedState, localVocabMapping, insertInfo,
+      locatedTriplesSharedState, localVocabMapping, insertionPositions,
       cancellationHandle,
       std::array{static_cast<ColumnIndex>(ADDITIONAL_COLUMN_GRAPH_ID)});
 }
