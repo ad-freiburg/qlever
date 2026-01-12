@@ -23,6 +23,7 @@
 #include "util/HashMap.h"
 #include "util/InputRangeUtils.h"
 #include "util/Log.h"
+#include "util/ParallelExecutor.h"
 
 namespace {
 using CancellationHandle = ad_utility::SharedCancellationHandle;
@@ -223,11 +224,10 @@ void materializeToIndex(
 
   REBUILD_LOG_INFO << "Writing new permutations ..." << std::endl;
 
-  // TODO<RobinTF> Make sure any exceptions are properly handled and propagated.
-  std::vector<ad_utility::JThread> tasks;
+  std::vector<std::packaged_task<void()>> tasks;
 
   if (index.usePatterns()) {
-    tasks.push_back(ad_utility::JThread{[&newIndex, &index, &insertInfo]() {
+    tasks.push_back(std::packaged_task{[&newIndex, &index, &insertInfo]() {
       newIndex.getPatterns() =
           index.getPatterns().cloneAndRemap([&insertInfo](const Id& oldId) {
             return remapVocabId(oldId, insertInfo);
@@ -240,7 +240,7 @@ void materializeToIndex(
     using enum Permutation::Enum;
     for (auto permutation : {SPO, SOP, OPS, OSP}) {
       const auto& actualPermutation = index.getPermutation(permutation);
-      tasks.push_back(ad_utility::JThread{
+      tasks.push_back(std::packaged_task{
           [&newIndex, &actualPermutation, &scanSpec, &locatedTriplesSharedState,
            &localVocabMapping, &insertInfo, &cancellationHandle]() {
             newIndex.createPermutation(
@@ -256,7 +256,7 @@ void materializeToIndex(
   for (auto permutation : Permutation::INTERNAL) {
     const auto& actualPermutation = index.getPermutation(permutation);
     const auto& internalPermutation = actualPermutation.internalPermutation();
-    tasks.push_back(ad_utility::JThread{
+    tasks.push_back(std::packaged_task{
         [&newIndex, &internalPermutation, &scanSpec, &locatedTriplesSharedState,
          &localVocabMapping, &insertInfo, &cancellationHandle]() {
           newIndex.createPermutation(
@@ -281,7 +281,7 @@ void materializeToIndex(
       additionalColumns.push_back(col);
     }
     AD_CORRECTNESS_CHECK(additionalColumns.size() == numColumns - 3);
-    tasks.push_back(ad_utility::JThread{
+    tasks.push_back(std::packaged_task{
         [&newIndex, &actualPermutation, &scanSpec, &locatedTriplesSharedState,
          &localVocabMapping, &insertInfo, &cancellationHandle, numColumns,
          blockMetadataRanges = std::move(blockMetadataRanges),
@@ -296,8 +296,7 @@ void materializeToIndex(
         }});
   }
 
-  // Explicitly wait for all threads to complete before logging completion
-  tasks.clear();
+  ad_utility::runTasksInParallel(tasks);
 
   REBUILD_LOG_INFO << "Index rebuild completed" << std::endl;
 
