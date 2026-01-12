@@ -47,7 +47,9 @@ class MaterializedViewWriter {
   ad_utility::MemorySize memoryLimit_;
   ad_utility::AllocatorWithLimit<Id> allocator_;
 
-  // The correctly ordered column names of the view.
+  // The correctly ordered column names of the view. These may include variables
+  // of the form `?_empty_N` if the query to write the view has less than four
+  // columns.
   std::vector<Variable> columnNames_;
 
   // The columns of the `IdTable`s we get when executing the query can be in
