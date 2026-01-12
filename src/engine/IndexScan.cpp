@@ -11,6 +11,7 @@
 #include <string>
 #include <utility>
 
+#include "PermutationSelector.h"
 #include "engine/QueryExecutionTree.h"
 #include "index/IndexImpl.h"
 #include "parser/ParsedQuery.h"
@@ -81,10 +82,8 @@ IndexScan::IndexScan(QueryExecutionContext* qec,
                      std::optional<ScanSpecAndBlocks> scanSpecAndBlocks)
     : IndexScan(
           qec, qec->getIndex().getImpl().getPermutationPtr(permutationType),
-          std::shared_ptr<const LocatedTriplesPerBlock>{
-              qec->locatedTriplesSharedState(),
-              &qec->locatedTriplesSharedState()
-                   ->getLocatedTriplesForPermutation<false>(permutationType)},
+          qlever::getLocatedTriplesPerBlockForTriple(
+              permutationType, qec->locatedTriplesSharedState(), triple),
           triple, std::move(graphsToFilter), std::move(scanSpecAndBlocks)) {}
 
 // _____________________________________________________________________________
@@ -399,7 +398,8 @@ IndexScan::getSortedVariableAndMetadataColumnIndexForPrefiltering() const {
 }
 
 // ___________________________________________________________________________
-Permutation::ScanSpecAndBlocks IndexScan::getScanSpecAndBlocks() const {
+CompressedRelationReader::ScanSpecAndBlocks IndexScan::getScanSpecAndBlocks()
+    const {
   return CompressedRelationReader::ScanSpecAndBlocks::withUpdates(
       getScanSpecification(), locatedTriplesPerBlock());
 }
