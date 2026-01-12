@@ -268,13 +268,6 @@ std::vector<float> Index::getMultiplicities(
 }
 
 // ____________________________________________________________________________
-std::vector<float> Index::getMultiplicities(
-    const TripleComponent& key, const Permutation& p,
-    const LocatedTriplesState& locatedTriplesState) const {
-  return pimpl_->getMultiplicities(key, p, locatedTriplesState);
-}
-
-// ____________________________________________________________________________
 size_t Index::getResultSizeOfScan(
     const ScanSpecification& scanSpecification,
     const Permutation::Enum& permutation,

@@ -1612,23 +1612,8 @@ Index::Vocab::PrefixRanges IndexImpl::prefixRanges(
 
 // _____________________________________________________________________________
 std::vector<float> IndexImpl::getMultiplicities(
-    const TripleComponent& key, const Permutation& permutation,
-    const LocatedTriplesState& locatedTriplesState) const {
-  if (auto keyId = key.toValueId(getVocab(), encodedIriManager())) {
-    auto meta = permutation.getMetadata(
-        keyId.value(),
-        permutation.getLocatedTriplesForPermutation(locatedTriplesState));
-    if (meta.has_value()) {
-      return {meta.value().getCol1Multiplicity(),
-              meta.value().getCol2Multiplicity()};
-    }
-  }
-  return {1.0f, 1.0f};
-}
-
-// _____________________________________________________________________________
-std::vector<float> IndexImpl::getMultiplicities(
     const Permutation& permutation) const {
+  // TODO: these numbers are wrong if there are updates
   auto numTriples = static_cast<float>(this->numTriples().normal);
   std::array multiplicities{numTriples / numDistinctSubjects().normal,
                             numTriples / numDistinctPredicates().normal,

@@ -222,11 +222,6 @@ class Index {
   bool hasAllPermutations() const;
 
   // ___________________________________________________________________________
-  std::vector<float> getMultiplicities(
-      const TripleComponent& key, const Permutation& permutation,
-      const LocatedTriplesState& locatedTriplesState) const;
-
-  // ___________________________________________________________________________
   std::vector<float> getMultiplicities(const Permutation& permutation) const;
 
   // Similar to the previous overload of `scan`, but only get the exact size of

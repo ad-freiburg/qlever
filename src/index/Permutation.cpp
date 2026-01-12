@@ -198,16 +198,6 @@ CompressedRelationReader::IdTableGeneratorInputRange Permutation::lazyScan(
 }
 
 // ______________________________________________________________________
-const LocatedTriplesPerBlock& Permutation::getLocatedTriplesForPermutation(
-    const LocatedTriplesState& locatedTriplesState) const {
-  return isInternalPermutation_
-             ? locatedTriplesState.getLocatedTriplesForPermutation<true>(
-                   permutation_)
-             : locatedTriplesState.getLocatedTriplesForPermutation<false>(
-                   permutation_);
-}
-
-// ______________________________________________________________________
 const Permutation& Permutation::internalPermutation() const {
   AD_CONTRACT_CHECK(internalPermutation_ != nullptr);
   return *internalPermutation_;

@@ -177,10 +177,6 @@ class Permutation {
   // _______________________________________________________
   const MetaData& metaData() const { return meta_; }
 
-  // From the given snapshot, get the located triples for this permutation.
-  const LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
-      const LocatedTriplesState& locatedTriplesSnapshot) const;
-
   const CompressedRelationReader& reader() const { return reader_.value(); }
 
   Enum permutation() const { return permutation_; }

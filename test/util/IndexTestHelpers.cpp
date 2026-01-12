@@ -106,11 +106,12 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
     }
   };
 
-  auto checkConsistencyForCol0IdAndPermutation =
+  auto checkConsistencyForCol0IdAndExternalPermutation =
       [&](Id col0Id, const Permutation& permutation, size_t subjectColIdx,
           size_t objectColIdx) {
         const auto& locatedTriples =
-            permutation.getLocatedTriplesForPermutation(locatedTriplesSnapshot);
+            locatedTriplesSnapshot.getLocatedTriplesForPermutation<false>(
+                permutation.permutation());
         auto scanResult = permutation.scan(
             CompressedRelationReader::ScanSpecAndBlocks::withUpdates(
                 ScanSpecification{col0Id, std::nullopt, std::nullopt},
@@ -131,16 +132,16 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
 
   auto checkConsistencyForPredicate = [&](Id predicateId) {
     using enum Permutation::Enum;
-    checkConsistencyForCol0IdAndPermutation(
+    checkConsistencyForCol0IdAndExternalPermutation(
         predicateId, indexImpl.getPermutation(PSO), 0, 1);
-    checkConsistencyForCol0IdAndPermutation(
+    checkConsistencyForCol0IdAndExternalPermutation(
         predicateId, indexImpl.getPermutation(POS), 1, 0);
   };
   auto checkConsistencyForObject = [&](Id objectId) {
     using enum Permutation::Enum;
-    checkConsistencyForCol0IdAndPermutation(
+    checkConsistencyForCol0IdAndExternalPermutation(
         objectId, indexImpl.getPermutation(OPS), 1, col0IdTag);
-    checkConsistencyForCol0IdAndPermutation(
+    checkConsistencyForCol0IdAndExternalPermutation(
         objectId, indexImpl.getPermutation(OSP), 0, col0IdTag);
   };
   const auto& pso = index.getImpl().PSO();

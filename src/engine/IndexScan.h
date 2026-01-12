@@ -15,6 +15,8 @@ class SparqlTriple;
 class SparqlTripleSimple;
 
 class IndexScan final : public Operation {
+  FRIEND_TEST(IndexScanTest, getMultiplicities);
+
  public:
   using Graphs = ScanSpecificationAsTripleComponent::GraphFilter;
   using PermutationPtr = std::shared_ptr<const Permutation>;
@@ -188,8 +190,8 @@ class IndexScan final : public Operation {
   // Instead of using the `LocatedTriplesSnapshot` of the `Operation` base
   // class, which accesses the one stored in the `QueryExecutionContext`, use
   // the `LocatedTriplesPerBlock` held in this object. This already is exactly
-  // the located triples for the permutation of the index scan and should be
-  // used wherever possible.
+  // the located triples for the permutation of the index scan.
+  // `locatedTriplesState` should not be used in `IndexScan`.
   const LocatedTriplesPerBlock& locatedTriplesPerBlock() const;
 
   // Return the stored triple in the order that corresponds to the
@@ -289,6 +291,8 @@ class IndexScan final : public Operation {
       return std::move(table);
     };
   }
+
+  std::vector<float> getMultiplicities(const TripleComponent& key) const;
 
  public:
   std::optional<std::shared_ptr<QueryExecutionTree>>

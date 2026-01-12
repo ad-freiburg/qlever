@@ -5,6 +5,10 @@
 #ifndef QLEVER_SRC_ENGINE_PERMUTATIONSELECTOR_H
 #define QLEVER_SRC_ENGINE_PERMUTATIONSELECTOR_H
 
+#include <memory>
+
+#include "index/DeltaTriples.h"
+#include "index/Index.h"
 #include "index/Permutation.h"
 #include "parser/SparqlTriple.h"
 

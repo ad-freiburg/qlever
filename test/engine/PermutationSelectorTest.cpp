@@ -4,12 +4,17 @@
 
 #include <gtest/gtest.h>
 
+#include "../util/GTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "engine/PermutationSelector.h"
 #include "index/IndexImpl.h"
 
-auto testPermutationSelection = [](auto retrivalFunction, auto getExpected,
-                                   auto getExpectedInternal) {
+auto testPermutationSelection = [](auto retrievalFunction, auto getExpected,
+                                   auto getExpectedInternal,
+                                   ad_utility::source_location sourceLocation =
+                                       AD_CURRENT_SOURCE_LOC()) {
+  auto l = generateLocationTrace(sourceLocation);
+
   TripleComponent internalIri{ad_utility::triple_component::Iri::fromIriref(
       makeQleverInternalIri("something"))};
   TripleComponent languageTaggedIri{
@@ -24,7 +29,7 @@ auto testPermutationSelection = [](auto retrivalFunction, auto getExpected,
          {SparqlTripleSimple{regularIri, regularIri, regularIri},
           SparqlTripleSimple{regularLiteral, regularLiteral, regularLiteral},
           SparqlTripleSimple{regularLiteral, regularIri, regularLiteral}}) {
-      EXPECT_EQ(retrivalFunction(permutation, triple).get(), expectedPtr);
+      EXPECT_EQ(retrievalFunction(permutation, triple).get(), expectedPtr);
     }
   }
 
@@ -37,7 +42,7 @@ auto testPermutationSelection = [](auto retrivalFunction, auto getExpected,
           SparqlTripleSimple{languageTaggedIri, regularIri, regularIri},
           SparqlTripleSimple{regularIri, languageTaggedIri, regularIri},
           SparqlTripleSimple{regularIri, regularIri, languageTaggedIri}}) {
-      EXPECT_EQ(retrivalFunction(permutation, triple).get(), expectedPtr);
+      EXPECT_EQ(retrievalFunction(permutation, triple).get(), expectedPtr);
     }
   }
 
@@ -45,9 +50,9 @@ auto testPermutationSelection = [](auto retrivalFunction, auto getExpected,
   // Unsupported configurations.
   for (auto permutation : {OPS, OSP, SOP, SPO}) {
     EXPECT_THROW(
-        retrivalFunction(permutation,
-                         SparqlTripleSimple{languageTaggedIri, internalIri,
-                                            languageTaggedIri}),
+        retrievalFunction(permutation,
+                          SparqlTripleSimple{languageTaggedIri, internalIri,
+                                             languageTaggedIri}),
         ad_utility::Exception);
   }
 };

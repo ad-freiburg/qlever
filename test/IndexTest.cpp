@@ -511,12 +511,6 @@ TEST(IndexTest, NumDistinctEntities) {
   EXPECT_FLOAT_EQ(multiplicities[0], 7.0 / 3.0);
   EXPECT_FLOAT_EQ(multiplicities[1], 7.0 / 2.0);
   EXPECT_FLOAT_EQ(multiplicities[2], 7.0 / 7.0);
-
-  multiplicities = index.getMultiplicities(
-      iri("<x>"), index.getPermutation(Permutation::SPO),
-      qec.locatedTriplesState());
-  EXPECT_FLOAT_EQ(multiplicities[0], 2.5);
-  EXPECT_FLOAT_EQ(multiplicities[1], 1);
 }
 
 TEST(IndexTest, NumDistinctEntitiesCornerCases) {

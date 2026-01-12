@@ -11,7 +11,7 @@
 #include <string>
 #include <utility>
 
-#include "PermutationSelector.h"
+#include "engine/PermutationSelector.h"
 #include "engine/QueryExecutionTree.h"
 #include "index/IndexImpl.h"
 #include "parser/ParsedQuery.h"
@@ -342,8 +342,7 @@ void IndexScan::determineMultiplicities() {
       // There are no duplicate triples in RDF and two elements are fixed.
       return {1.0f};
     } else if (numVariables_ == 2) {
-      return idx.getMultiplicities(*getPermutedTriple()[0], permutation(),
-                                   locatedTriplesState());
+      return getMultiplicities(*getPermutedTriple()[0]);
     } else {
       AD_CORRECTNESS_CHECK(numVariables_ == 3);
       return idx.getMultiplicities(permutation());
@@ -802,4 +801,19 @@ std::vector<ColumnIndex> IndexScan::getSubsetForStrippedColumns() const {
     ++idx;
   }
   return result;
+}
+
+// _____________________________________________________________________________
+std::vector<float> IndexScan::getMultiplicities(
+    const TripleComponent& key) const {
+  const auto& idx = getIndex();
+  if (auto keyId = key.toValueId(idx.getVocab(), idx.encodedIriManager())) {
+    auto meta =
+        permutation().getMetadata(keyId.value(), locatedTriplesPerBlock());
+    if (meta.has_value()) {
+      return {meta.value().getCol1Multiplicity(),
+              meta.value().getCol2Multiplicity()};
+    }
+  }
+  return {1.0f, 1.0f};
 }
