@@ -522,8 +522,8 @@ qlever_target_link_libraries(PrintIndexVersionMain util)
 target_include_directories(IndexBuilderMain PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 target_include_directories(ServerMain PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 
-# set_target_properties(IndexBuilderMain PROPERTIES OUTPUT_NAME "qlever-index-builder")
-# set_target_properties(ServerMain PROPERTIES OUTPUT_NAME "qlever-server")
+set_target_properties(IndexBuilderMain PROPERTIES OUTPUT_NAME "qlever-loader")
+set_target_properties(ServerMain PROPERTIES OUTPUT_NAME "qlever-server")
 
 install(TARGETS
     ServerMain
@@ -574,12 +574,5 @@ set(CPACK_VERBATIM_VARIABLES YES)
 
 set(CPACK_PACKAGE_DESCRIPTION "QLever Graph Database")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "QLever Graph Database implementing the RDF and SPARQL standards.")
-
-if(APPLE)
-  set(CPACK_GENERATOR "DragNDrop")
-  set(CPACK_DMG_VOLUME_NAME "QLever")
-  set(CPACK_PACKAGE_FILE_NAME
-      "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-macos")
-endif()
 
 include(CPack)
