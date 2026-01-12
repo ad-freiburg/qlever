@@ -62,6 +62,12 @@ std::optional<std::string> geometryNAsWkt(GeoPointOrWkt wkt, int64_t n) {
   return utilGeomToWkt(getGeometryN(wkt, n));
 }
 
+// _____________________________________________________________________________
+std::optional<double> wktDistLibSpatialJoinImpl(const GeoPointOrWkt& a,
+                                                const GeoPointOrWkt& b) {
+  return computeMetricDistance(projectWebMerc(a), projectWebMerc(b));
+}
+
 }  // namespace detail
 
 }  // namespace ad_utility

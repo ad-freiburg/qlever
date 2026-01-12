@@ -31,16 +31,16 @@ NARY_EXPRESSION(
     CentroidExpression, 1,
     FV<ad_utility::WktCentroid, GeometryInfoValueGetter<ad_utility::Centroid>>);
 
-NARY_EXPRESSION(DistExpression, 2,
-                FV<NumericIdWrapper<ad_utility::WktDistGeoPoints, true>,
-                   GeoPointValueGetter>);
+NARY_EXPRESSION(
+    DistExpression, 2,
+    FV<NumericIdWrapper<ad_utility::WktDist, true>, GeoPointOrWktValueGetter>);
 NARY_EXPRESSION(MetricDistExpression, 2,
-                FV<NumericIdWrapper<ad_utility::WktMetricDistGeoPoints, true>,
-                   GeoPointValueGetter>);
+                FV<NumericIdWrapper<ad_utility::WktMetricDist, true>,
+                   GeoPointOrWktValueGetter>);
 NARY_EXPRESSION(
     DistWithUnitExpression, 3,
-    FV<NumericIdWrapper<ad_utility::WktDistGeoPoints, true>,
-       GeoPointValueGetter, GeoPointValueGetter, UnitOfMeasurementValueGetter>);
+    FV<NumericIdWrapper<ad_utility::WktDist, true>, GeoPointOrWktValueGetter,
+       GeoPointOrWktValueGetter, UnitOfMeasurementValueGetter>);
 
 NARY_EXPRESSION(
     AreaExpression, 2,
