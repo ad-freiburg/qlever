@@ -55,6 +55,10 @@ class MaterializedViewWriter {
   // with the same column ordering as the `SELECT` statement.
   std::vector<ColumnIndex> columnPermutation_;
 
+  // The number of empty columns to add to the query result such that the
+  // resulting table has at least four columns.
+  uint8_t numAddEmptyColumns_;
+
   using RangeOfIdTables = ad_utility::InputRangeTypeErased<IdTableStatic<0>>;
   // SPO comparator
   using Comparator = SortTriple<0, 1, 2>;
@@ -82,12 +86,14 @@ class MaterializedViewWriter {
   // the `QueryExecutionTree` must be permuted to match the requested target
   // columns and column ordering. This is called in the constructor to populate
   // `columnNamesAndPermutation_`.
-  using ColumnNameAndIndex = std::pair<Variable, ColumnIndex>;
+  using ColumnNameAndIndex = std::pair<Variable, std::optional<ColumnIndex>>;
   using ColumnNamesAndPermutation = std::vector<ColumnNameAndIndex>;
   ColumnNamesAndPermutation getIdTableColumnNamesAndPermutation() const;
 
   // The number of columns of the view.
-  size_t numCols() const { return columnPermutation_.size(); }
+  size_t numCols() const {
+    return columnPermutation_.size() + numAddEmptyColumns_;
+  }
 
   // Helper to permute an `IdTable` according to `columnPermutation_` and verify
   // that there are no `LocalVocabEntry` values in any of the selected columns.

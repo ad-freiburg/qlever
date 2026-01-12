@@ -340,16 +340,21 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
         ad_utility::MediaType::tsv);
     EXPECT_EQ(res, "?o\n\"abc\"\n\"xyz\"\n");
   }
+
+  // Test that writing a view with less than four columns is possible.
+  {
+    MaterializedViewWriter::writeViewToDisk(
+        testIndexBase_, "testView5",
+        qlv().parseAndPlanQuery("SELECT * { ?s ?p ?o }"));
+    MaterializedView view{testIndexBase_, "testView5"};
+    EXPECT_THAT(columnNames(view),
+                ::testing::ElementsAreArray(
+                    std::vector<V>{V{"?s"}, V{"?p"}, V{"?o"}, V{"?_empty_0"}}));
+  }
 }
 
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, InvalidInputToWriter) {
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      MaterializedViewWriter::writeViewToDisk(
-          testIndexBase_, "testView1",
-          qlv().parseAndPlanQuery("SELECT * { ?s ?p ?o }")),
-      ::testing::HasSubstr("Currently the query used to write a materialized "
-                           "view needs to have at least four columns"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       MaterializedViewWriter::writeViewToDisk(
           testIndexBase_, "Something Out!of~the.ordinary",

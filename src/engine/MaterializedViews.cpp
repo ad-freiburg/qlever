@@ -11,6 +11,7 @@
 #include <filesystem>
 #include <memory>
 #include <nlohmann/json.hpp>
+#include <ranges>
 #include <stdexcept>
 
 #include "engine/IndexScan.h"
@@ -50,7 +51,12 @@ MaterializedViewWriter::MaterializedViewWriter(
   columnNames_ = ::ranges::to<std::vector<Variable>>(columnNamesAndPermutation |
                                                      ql::views::keys);
   columnPermutation_ = ::ranges::to<std::vector<ColumnIndex>>(
-      columnNamesAndPermutation | ql::views::values);
+      columnNamesAndPermutation | ql::views::values |
+      ql::views::filter([](const auto& idx) { return idx.has_value(); }) |
+      ql::views::transform([](const auto& idx) { return idx.value(); }));
+  numAddEmptyColumns_ = ::ranges::count_if(
+      columnNamesAndPermutation,
+      [](const auto& col) { return col.second.has_value(); });
 }
 
 // _____________________________________________________________________________
@@ -86,16 +92,21 @@ MaterializedViewWriter::getIdTableColumnNamesAndPermutation() const {
 
   auto targetVarsAndCols =
       qet_->selectedVariablesToColumnIndices(parsedQuery_.selectClause());
-  AD_CONTRACT_CHECK(targetVarsAndCols.size() >= 4,
-                    "Currently the query used to write a materialized view "
-                    "needs to have at least four columns.");
 
-  return ::ranges::to<ColumnNamesAndPermutation>(
+  // Column information for the columns selected by the user's query.
+  auto result = ::ranges::to<ColumnNamesAndPermutation>(
       targetVarsAndCols | ql::views::transform([](const auto& opt) {
         AD_CONTRACT_CHECK(opt.has_value());
         return ColumnNameAndIndex{opt.value().variable_,
                                   opt.value().columnIndex_};
       }));
+
+  // Add dummy columns such that the view has at least four columns in total.
+  for (uint8_t i = 0; i < 4 - targetVarsAndCols.size(); ++i) {
+    result.push_back({Variable{absl::StrCat("?_empty_", i)}, std::nullopt});
+  }
+
+  return result;
 }
 
 // _____________________________________________________________________________
@@ -106,6 +117,11 @@ void MaterializedViewWriter::permuteIdTableAndCheckNoLocalVocabEntries(
   // ordering we want to have in our materialized view. In
   // particular, the indexed column should be the first.
   block.setColumnSubset(columnPermutation_);
+
+  // Add empty columns such that the view has at least four columns.
+  for (uint8_t i = 0; i < numAddEmptyColumns_; ++i) {
+    block.addEmptyColumn();
+  }
 
   // Check that there are no values of type `LocalVocabIndex` in the selected
   // columns of the `IdTable` as materialized views do not support them as of
