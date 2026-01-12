@@ -693,8 +693,8 @@ TEST(IndexImpl, recomputeStatistics) {
     Id label = Id::makeFromVocabIndex(VocabIndex::make(10));
     Id alpha = Id::makeFromVocabIndex(VocabIndex::make(1));
     deltaTriples.insertTriples(
-        cancellationHandle, {IdTriple{{blankNodeId, zzzId, literalId, zzzId}},
-                             IdTriple{{x, label, alpha, x}}});
+        cancellationHandle, {IdTriple{{x, label, alpha, x}},
+                             IdTriple{{blankNodeId, zzzId, literalId, zzzId}}});
   });
 
   for (bool loadAllPermutations : {true, false}) {
