@@ -4,6 +4,8 @@
 //   2024      Johannes Herrmann <johannes.r.herrmann(at)gmail.com>
 //   2025-     Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
 #include "engine/TransitivePathBinSearch.h"
 
 #include <memory>
@@ -171,3 +173,5 @@ std::unique_ptr<Operation> TransitivePathBinSearch::cloneImpl() const {
   copy->rhs_ = rhs_.clone();
   return copy;
 }
+
+#endif

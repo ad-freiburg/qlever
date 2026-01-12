@@ -8,11 +8,20 @@
 #define QLEVER_SRC_BACKPORTS_ITERATOR_H
 
 #include <iterator>
-#include <type_traits>
+#include <range/v3/iterator/access.hpp>
 
 #include "backports/concepts.h"
+#include "backports/type_traits.h"
 
+// Backport types and traits from the `<iterator>` header s.t. they
+// can be used in C++17 using the `ql` namespace, in particular
+// `default_sentinel`, `move_sentinel` and `iter_reference_t`.
 namespace ql {
+
+// Backport of `std::default_sentinel[_t]`
+struct default_sentinel_t {};
+inline constexpr default_sentinel_t default_sentinel{};
+
 // A backport of `std::move_sentinel` for C++17. It wraps an iterator or
 // sentinel type and can be compared with a compatible `std::move_iterator`.
 CPP_template(typename Sent)(
@@ -72,6 +81,8 @@ CPP_template(typename Sent)(
  private:
   [[no_unique_address]] Sent sent_;
 };
+
+using ::ranges::iter_reference_t;
 }  // namespace ql
 
 #endif  // QLEVER_SRC_BACKPORTS_ITERATOR_H

@@ -209,7 +209,7 @@ using namespace geoInfoTestHelpers;
 // LocalVocabIndex as a ValueId to the GeometryInfoValueGetter
 inline void checkGeoInfoFromLocalVocab(
     std::string wktInput, std::optional<ad_utility::GeometryInfo> expected,
-    Loc sourceLocation = Loc::current()) {
+    Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
   sparqlExpression::detail::GeometryInfoValueGetter getter;
   // Not the geoInfoTtl here because the literals should not be contained
@@ -239,7 +239,7 @@ const std::string geoInfoTtl =
 // VocabIndex for a string in the example knowledge graph.
 inline void checkGeoInfoFromVocab(
     std::string wktInput, std::optional<ad_utility::GeometryInfo> expected,
-    Loc sourceLocation = Loc::current()) {
+    Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
   sparqlExpression::detail::GeometryInfoValueGetter getter;
   TestContextWithGivenTTl testContext{
@@ -257,7 +257,7 @@ inline void checkGeoInfoFromVocab(
 // Helper that tests the GeometryInfoValueGetter using an arbitrary ValueId
 inline void checkGeoInfoFromValueId(
     ValueId input, std::optional<ad_utility::GeometryInfo> expected,
-    Loc sourceLocation = Loc::current()) {
+    Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
   sparqlExpression::detail::GeometryInfoValueGetter getter;
   TestContextWithGivenTTl testContext{geoInfoTtl};
@@ -269,7 +269,7 @@ inline void checkGeoInfoFromValueId(
 // as LiteralOrIri, not ValueId
 inline void checkGeoInfoFromLiteral(
     std::string wktInput, std::optional<ad_utility::GeometryInfo> expected,
-    Loc sourceLocation = Loc::current()) {
+    Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
   sparqlExpression::detail::GeometryInfoValueGetter getter;
   TestContextWithGivenTTl testContext{geoInfoTtl};
@@ -284,7 +284,7 @@ inline void checkGeoInfoFromLiteral(
 // input
 inline void checkGeoInfoFromLocalAndNormalVocabAndLiteral(
     std::string wktInput, std::optional<ad_utility::GeometryInfo> expected,
-    Loc sourceLocation = Loc::current()) {
+    Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
   checkGeoInfoFromVocab(wktInput, expected);
   checkGeoInfoFromLocalVocab(wktInput, expected);

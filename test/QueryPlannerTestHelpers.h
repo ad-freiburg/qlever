@@ -12,12 +12,14 @@
 #include <variant>
 
 #include "./util/GTestHelpers.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"
 #include "engine/CountAvailablePredicates.h"
 #include "engine/Describe.h"
 #include "engine/Distinct.h"
 #include "engine/ExistsJoin.h"
+#include "engine/ExplicitIdTableOperation.h"
 #include "engine/Filter.h"
 #include "engine/GroupBy.h"
 #include "engine/IndexScan.h"
@@ -124,7 +126,7 @@ constexpr auto IndexScan =
     [](TripleComponent subject, TripleComponent predicate,
        TripleComponent object,
        const std::vector<Permutation::Enum>& allowedPermutations = {},
-       const ScanSpecificationAsTripleComponent::Graphs& graphs = std::nullopt,
+       const IndexScan::Graphs& graphs = IndexScan::Graphs::All(),
        const std::vector<Variable>& additionalVariables = {},
        const std::vector<ColumnIndex>& additionalColumns = {},
        const std::optional<size_t>& strippedSize = std::nullopt) -> QetMatcher {
@@ -161,7 +163,7 @@ constexpr auto TextIndexScanForWord = [](Variable textRecordVar,
                                          std::string word) -> QetMatcher {
   return RootOperation<::TextIndexScanForWord>(AllOf(
       AD_PROPERTY(::TextIndexScanForWord, getResultWidth,
-                  Eq(2 + word.ends_with('*'))),
+                  Eq(2 + ql::ends_with(word, '*'))),
       AD_PROPERTY(::TextIndexScanForWord, textRecordVar, Eq(textRecordVar)),
       AD_PROPERTY(::TextIndexScanForWord, word, word)));
 };
@@ -233,7 +235,8 @@ inline auto Bind = [](const QetMatcher& childMatcher,
 // Matcher for a `CountAvailablePredicatesMatcher` operation. The case of 0
 // children means that it's a full scan.
 struct CountAvailablePredicatesMatcher {
-  template <QL_CONCEPT_OR_TYPENAME(std::same_as<QetMatcher>)... ChildArgs>
+  template <
+      QL_CONCEPT_OR_TYPENAME(ql::concepts::same_as<QetMatcher>)... ChildArgs>
   auto operator()(size_t subjectColumnIdx, const Variable& predicateVar,
                   const Variable& countVar,
                   const ChildArgs&... childMatchers) const
@@ -249,6 +252,10 @@ struct CountAvailablePredicatesMatcher {
 };
 constexpr inline CountAvailablePredicatesMatcher countAvailablePredicates;
 
+// Class used to indicate only named graphs are allowed when using
+// `IndexScanFromStrings`.
+class NamedTag {};
+
 // Same as above, but the subject, predicate, and object are passed in as
 // strings. The strings are automatically converted a matching
 // `TripleComponent`.
@@ -256,26 +263,32 @@ inline auto IndexScanFromStrings =
     [](std::string_view subject, std::string_view predicate,
        std::string_view object,
        const std::vector<Permutation::Enum>& allowedPermutations = {},
-       const std::optional<ad_utility::HashSet<std::string>> graphs =
-           std::nullopt,
+       const std::variant<std::monostate, NamedTag,
+                          ad_utility::HashSet<std::string>>
+           graphs = std::monostate{},
        const std::vector<Variable>& additionalVariables = {},
        const std::vector<ColumnIndex>& additionalColumns = {},
        const std::optional<size_t>& strippedSize = std::nullopt) -> QetMatcher {
   auto strToComp = [](std::string_view s) -> TripleComponent {
-    if (s.starts_with("?")) {
+    if (ql::starts_with(s, "?")) {
       return ::Variable{std::string{s}};
-    } else if (s.starts_with('<')) {
+    } else if (ql::starts_with(s, '<')) {
       return TripleComponent::Iri::fromIriref(s);
     }
     return s;
   };
 
-  ScanSpecificationAsTripleComponent::Graphs graphsOut = std::nullopt;
-  if (graphs.has_value()) {
-    graphsOut.emplace();
-    for (const auto& graphIn : graphs.value()) {
-      graphsOut->insert(strToComp(graphIn));
+  IndexScan::Graphs graphsOut = IndexScan::Graphs::All();
+  if (std::holds_alternative<NamedTag>(graphs)) {
+    graphsOut = IndexScan::Graphs::Blacklist(
+        TripleComponent{TripleComponent::Iri::fromIriref(DEFAULT_GRAPH_IRI)});
+  } else if (std::holds_alternative<ad_utility::HashSet<std::string>>(graphs)) {
+    ad_utility::HashSet<TripleComponent> whitelist;
+    for (const auto& graphIn :
+         std::get<ad_utility::HashSet<std::string>>(graphs)) {
+      whitelist.insert(strToComp(graphIn));
     }
+    graphsOut = IndexScan::Graphs::Whitelist(std::move(whitelist));
   }
   return IndexScan(strToComp(subject), strToComp(predicate), strToComp(object),
                    allowedPermutations, graphsOut, additionalVariables,
@@ -337,7 +350,8 @@ inline auto TransitivePathSideMatcher = [](TransitivePathSide side) {
 
 // Match a TransitivePath operation
 struct TransitivePath {
-  template <QL_CONCEPT_OR_TYPENAME(std::same_as<QetMatcher>)... ChildArgs>
+  template <
+      QL_CONCEPT_OR_TYPENAME(ql::concepts::same_as<QetMatcher>)... ChildArgs>
   auto operator()(TransitivePathSide left, TransitivePathSide right,
                   size_t minDist, size_t maxDist,
                   const ChildArgs&... childMatchers) const {
@@ -371,7 +385,8 @@ inline auto PathSearchConfigMatcher = [](PathSearchConfiguration config) {
 
 // Match a PathSearch operation
 struct PathSearch {
-  template <QL_CONCEPT_OR_TYPENAME(std::same_as<QetMatcher>)... ChildArgs>
+  template <
+      QL_CONCEPT_OR_TYPENAME(ql::concepts::same_as<QetMatcher>)... ChildArgs>
   auto operator()(PathSearchConfiguration config, bool sourceBound,
                   bool targetBound, const ChildArgs&... childMatchers) const {
     return RootOperation<::PathSearch>(AllOf(
@@ -391,7 +406,8 @@ inline auto ValuesClause = [](std::string cacheKey) {
 // Match a SpatialJoin operation, set arguments to ignore to -1
 template <bool Substitute = false>
 struct SpatialJoinMatcher {
-  template <QL_CONCEPT_OR_TYPENAME(std::same_as<QetMatcher>)... ChildArgs>
+  template <
+      QL_CONCEPT_OR_TYPENAME(ql::concepts::same_as<QetMatcher>)... ChildArgs>
   auto operator()(double maxDist, size_t maxResults, Variable left,
                   Variable right, std::optional<Variable> distanceVariable,
                   PayloadVariables payloadVariables,
@@ -484,6 +500,16 @@ inline QetMatcher Describe(
 inline QetMatcher ExistsJoin(const QetMatcher& leftChild,
                              const QetMatcher& rightChild) {
   return RootOperation<::ExistsJoin>(AllOf(children(leftChild, rightChild)));
+}
+
+// Match an `ExplicitIdTableOperation`, but only test its size estimate (which
+// is equal to the actual number of rows in the result). More detailed tests for
+// this operation can be found in `ExplicitIdTableOperationTest.cpp` and
+// `NamedResultCacheTest.cpp`.
+inline QetMatcher ExplicitIdTableOperation(size_t sizeEstimate) {
+  auto p = AD_PROPERTY(::ExplicitIdTableOperation, sizeEstimate,
+                       ::testing::Eq(sizeEstimate));
+  return RootOperation<::ExplicitIdTableOperation>(p);
 }
 
 //
@@ -581,9 +607,12 @@ inline QueryExecutionTree parseAndPlan(std::string query,
   ParsedQuery pq = SparqlParser::parseQuery(&ev, std::move(query));
   // TODO<joka921> make it impossible to pass `nullptr` here, properly mock
   // a queryExecutionContext.
-  return QueryPlannerClass{qec,
-                           std::make_shared<ad_utility::CancellationHandle<>>()}
-      .createExecutionTree(pq);
+  auto tree =
+      QueryPlannerClass{qec,
+                        std::make_shared<ad_utility::CancellationHandle<>>()}
+          .createExecutionTree(pq);
+  tree.isRoot() = true;
+  return tree;
 }
 
 // Check that the `QueryExecutionTree` that is obtained by parsing and
@@ -595,11 +624,13 @@ template <typename QueryPlannerClass = QueryPlanner>
 void expectWithGivenBudget(std::string query, auto matcher,
                            std::optional<QueryExecutionContext*> optQec,
                            size_t queryPlanningBudget,
-                           source_location l = source_location::current()) {
-  auto budgetBackup = RuntimeParameters().get<"query-planning-budget">();
-  RuntimeParameters().set<"query-planning-budget">(queryPlanningBudget);
+                           source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto budgetBackup =
+      getRuntimeParameter<&RuntimeParameters::queryPlanningBudget_>();
+  setRuntimeParameter<&RuntimeParameters::queryPlanningBudget_>(
+      queryPlanningBudget);
   auto cleanup = absl::Cleanup{[budgetBackup]() {
-    RuntimeParameters().set<"query-planning-budget">(budgetBackup);
+    setRuntimeParameter<&RuntimeParameters::queryPlanningBudget_>(budgetBackup);
   }};
   auto trace = generateLocationTrace(
       l, absl::StrCat("expect with budget ", queryPlanningBudget));
@@ -615,7 +646,7 @@ template <typename QueryPlannerClass = QueryPlanner>
 void expectWithGivenBudgets(std::string query, auto matcher,
                             std::optional<QueryExecutionContext*> optQec,
                             std::vector<size_t> queryPlanningBudgets,
-                            source_location l = source_location::current()) {
+                            source_location l = AD_CURRENT_SOURCE_LOC()) {
   for (size_t budget : queryPlanningBudgets) {
     expectWithGivenBudget<QueryPlannerClass>(query, matcher, optQec, budget, l);
   }
@@ -626,7 +657,7 @@ void expectWithGivenBudgets(std::string query, auto matcher,
 template <typename QueryPlannerClass = QueryPlanner>
 void expectGreedy(std::string query, auto matcher,
                   std::optional<QueryExecutionContext*> optQec = std::nullopt,
-                  source_location l = source_location::current()) {
+                  source_location l = AD_CURRENT_SOURCE_LOC()) {
   expectWithGivenBudget<QueryPlannerClass>(std::move(query), std::move(matcher),
                                            optQec, 0, l);
 }
@@ -636,7 +667,7 @@ template <typename QueryPlannerClass = QueryPlanner>
 void expectDynamicProgramming(
     std::string query, auto matcher,
     std::optional<QueryExecutionContext*> optQec = std::nullopt,
-    source_location l = source_location::current()) {
+    source_location l = AD_CURRENT_SOURCE_LOC()) {
   expectWithGivenBudget<QueryPlannerClass>(
       std::move(query), std::move(matcher), optQec,
       std::numeric_limits<size_t>::max(), l);
@@ -648,7 +679,7 @@ void expectDynamicProgramming(
 template <typename QueryPlannerClass = QueryPlanner>
 void expect(std::string query, auto matcher,
             std::optional<QueryExecutionContext*> optQec = std::nullopt,
-            source_location l = source_location::current()) {
+            source_location l = AD_CURRENT_SOURCE_LOC()) {
   expectWithGivenBudgets<QueryPlannerClass>(
       std::move(query), std::move(matcher), std::move(optQec),
       {0, 1, 4, 16, 64'000'000}, l);

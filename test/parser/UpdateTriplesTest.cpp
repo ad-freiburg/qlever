@@ -31,9 +31,8 @@ TEST(UpdateTriples, ConstructorsAndAssignments) {
 
   // Check that the `UpdateTriples tr` consist of exactly the single `triple` as
   // specified above and that the local vocab was also correctly porpagated.
-  auto testTriples = [&](auto&& tr,
-                         ad_utility::source_location loc =
-                             ad_utility::source_location::current()) {
+  auto testTriples = [&](auto&& tr, ad_utility::source_location loc =
+                                        AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(loc);
     EXPECT_EQ(tr.triples_, triples);
     EXPECT_THAT(tr.localVocab_.getAllWordsForTesting(),

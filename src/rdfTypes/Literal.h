@@ -9,6 +9,7 @@
 #include <variant>
 
 #include "backports/concepts.h"
+#include "backports/three_way_comparison.h"
 #include "parser/NormalizedString.h"
 #include "rdfTypes/Iri.h"
 
@@ -44,11 +45,11 @@ class Literal {
 
  public:
   CPP_template(typename H,
-               typename L)(requires std::same_as<L, Literal>) friend H
+               typename L)(requires ql::concepts::same_as<L, Literal>) friend H
       AbslHashValue(H h, const L& literal) {
     return H::combine(std::move(h), literal.content_);
   }
-  bool operator==(const Literal&) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Literal, content_, beginOfSuffix_)
 
   const std::string& toStringRepresentation() const;
   std::string& toStringRepresentation();

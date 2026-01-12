@@ -11,6 +11,7 @@
 #include <ostream>
 
 #include "backports/algorithm.h"
+#include "backports/three_way_comparison.h"
 #include "global/Id.h"
 #include "index/CompressedRelation.h"
 #include "index/KeyOrder.h"
@@ -39,7 +40,8 @@ struct IdTriple {
   const auto& payload() const { return std::get<1>(data_); }
   auto& payload() { return std::get<1>(data_); }
 
-  explicit IdTriple(const std::array<Id, NumCols>& idsIn) requires(N == 0)
+  CPP_template_2(typename = void)(requires(N == 0)) explicit IdTriple(
+      const std::array<Id, NumCols>& idsIn)
       : data_{idsIn, {}} {};
 
   explicit IdTriple(const std::array<Id, NumCols>& idsIn,
@@ -58,15 +60,16 @@ struct IdTriple {
 
   // Note: The payload is not part of the value representation and therefore not
   // compared.
-  std::strong_ordering operator<=>(const IdTriple& other) const {
+  ql::strong_ordering compareThreeWay(const IdTriple& other) const {
     // Note: Libc++ in our clang build neither has three-way comparisons for
     // `std::array`, nor the `lexicographical_compare_three_way` function.
     static_assert(NumCols == 4);
     auto tie = [](const auto& ids) {
       return std::tie(ids[0], ids[1], ids[2], ids[3]);
     };
-    return tie(ids()) <=> tie(other.ids());
+    return ql::compareThreeWay(tie(ids()), tie(other.ids()));
   }
+  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(IdTriple)
 
   bool operator==(const IdTriple& other) const { return ids() == other.ids(); }
 
@@ -81,8 +84,8 @@ struct IdTriple {
     return IdTriple{keyOrder.permuteTuple(ids()), payload()};
   }
 
-  CompressedBlockMetadata::PermutedTriple toPermutedTriple() const
-      requires(N == 0) {
+  CPP_template_2(typename = void)(requires(N == 0))
+      CompressedBlockMetadata::PermutedTriple toPermutedTriple() const {
     static_assert(NumCols == 4);
     return {ids()[0], ids()[1], ids()[2], ids()[3]};
   }

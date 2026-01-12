@@ -279,6 +279,11 @@ class QueryExecutionTree {
         : subject_{std::move(subject)},
           predicate_{std::move(predicate)},
           object_{std::move(object)} {}
+    StringTriple() = default;
+
+    bool isEmpty() const {
+      return subject_.empty() && predicate_.empty() && object_.empty();
+    }
   };
 
   std::shared_ptr<QueryExecutionTree> clone() const {

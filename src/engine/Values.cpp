@@ -142,9 +142,9 @@ void Values::writeValues(IdTable* idTablePtr, LocalVocab* localVocab) {
     rowIdx++;
   }
   AD_CORRECTNESS_CHECK(rowIdx == parsedValues_._values.size());
-  LOG(INFO) << "Number of tuples in VALUES clause: " << rowIdx << std::endl;
-  LOG(INFO) << "Number of entries in local vocabulary per column: "
-            << absl::StrJoin(numLocalVocabPerColumn, ", ") << std::endl;
+  AD_LOG_INFO << "Number of tuples in VALUES clause: " << rowIdx << std::endl;
+  AD_LOG_INFO << "Number of entries in local vocabulary per column: "
+              << absl::StrJoin(numLocalVocabPerColumn, ", ") << std::endl;
   *idTablePtr = std::move(idTable).toDynamic();
 }
 

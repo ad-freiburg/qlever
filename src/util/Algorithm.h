@@ -151,10 +151,12 @@ CPP_template(typename Range)(requires ql::ranges::forward_range<
 // Return a new `std::input` that is obtained by applying the `function` to each
 // of the elements of the `input`.
 CPP_template(typename Array, typename Function)(
-    requires ad_utility::isArray<std::decay_t<Array>> CPP_and std::invocable<
-        Function,
-        typename Array::value_type>) auto transformArray(Array&& input,
-                                                         Function function) {
+    requires ad_utility::isArray<std::decay_t<Array>> CPP_and
+        ql::concepts::invocable<
+            Function,
+            typename Array::value_type>) auto transformArray(Array&& input,
+                                                             Function
+                                                                 function) {
   return std::apply(
       [&function](auto&&... vals) {
         return std::array{std::invoke(function, AD_FWD(vals))...};
@@ -166,8 +168,9 @@ CPP_template(typename Array, typename Function)(
 // but an iterator (first argument) and a value (second argument). The
 // implementation is copied from libstdc++ which has this function as an
 // internal detail, but doesn't expose it to the outside.
-CPP_template(typename ForwardIterator, typename Tp, typename Compare)(
-    requires std::forward_iterator<ForwardIterator>) constexpr ForwardIterator
+CPP_template(typename ForwardIterator, typename Tp,
+             typename Compare)(requires ql::concepts::forward_iterator<
+                               ForwardIterator>) constexpr ForwardIterator
     lower_bound_iterator(ForwardIterator first, ForwardIterator last,
                          const Tp& val, Compare comp) {
   using DistanceType = std::iterator_traits<ForwardIterator>::difference_type;
@@ -192,8 +195,9 @@ CPP_template(typename ForwardIterator, typename Tp, typename Compare)(
 // but a value (first argument) and an iterator (second argument). The
 // implementation is copied from libstdc++ which has this function as an
 // internal detail, but doesn't expose it to the outside.
-CPP_template(typename ForwardIterator, typename Tp, typename Compare)(
-    requires std::forward_iterator<ForwardIterator>) constexpr ForwardIterator
+CPP_template(typename ForwardIterator, typename Tp,
+             typename Compare)(requires ql::concepts::forward_iterator<
+                               ForwardIterator>) constexpr ForwardIterator
     upper_bound_iterator(ForwardIterator first, ForwardIterator last,
                          const Tp& val, Compare comp) {
   using DistanceType = std::iterator_traits<ForwardIterator>::difference_type;

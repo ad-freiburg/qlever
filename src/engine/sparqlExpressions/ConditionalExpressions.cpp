@@ -13,23 +13,26 @@
 namespace sparqlExpression {
 namespace detail::conditional_expressions {
 using namespace sparqlExpression::detail;
-[[maybe_unused]] auto ifImpl = [](EffectiveBooleanValueGetter::Result condition,
-                                  auto&& i, auto&& e)
-    -> CPP_ret(IdOrLiteralOrIri)(
-        requires SingleExpressionResult<decltype(i)>&& SingleExpressionResult<
-            decltype(e)>&& std::is_rvalue_reference_v<decltype(i)&&>&&
-            std::is_rvalue_reference_v<decltype(e)&&>) {
-  if (condition == EffectiveBooleanValueGetter::Result::True) {
-    return AD_FWD(i);
-  } else if (condition == EffectiveBooleanValueGetter::Result::False) {
-    return AD_FWD(e);
+struct IfImpl {
+  CPP_template(typename I, typename E)(
+      requires SingleExpressionResult<I>&& SingleExpressionResult<E>&&
+          std::is_rvalue_reference_v<I&&>&& std::is_rvalue_reference_v<E&&>)
+      IdOrLiteralOrIri
+      operator()(EffectiveBooleanValueGetter::Result condition, I&& i,
+                 E&& e) const {
+    if (condition == EffectiveBooleanValueGetter::Result::True) {
+      return AD_FWD(i);
+    } else if (condition == EffectiveBooleanValueGetter::Result::False) {
+      return AD_FWD(e);
+    }
+    AD_CORRECTNESS_CHECK(condition ==
+                         EffectiveBooleanValueGetter::Result::Undef);
+    return IdOrLiteralOrIri{Id::makeUndefined()};
   }
-  AD_CORRECTNESS_CHECK(condition == EffectiveBooleanValueGetter::Result::Undef);
-  return IdOrLiteralOrIri{Id::makeUndefined()};
 };
 NARY_EXPRESSION(IfExpression, 3,
-                FV<decltype(ifImpl), EffectiveBooleanValueGetter,
-                   ActualValueGetter, ActualValueGetter>);
+                FV<IfImpl, EffectiveBooleanValueGetter, ActualValueGetter,
+                   ActualValueGetter>);
 
 // The implementation of the COALESCE expression. It (at least currently) has to
 // be done manually as we have no Generic implementation for variadic

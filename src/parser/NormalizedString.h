@@ -8,9 +8,12 @@
 #include <string>
 #include <string_view>
 
+#include "backports/three_way_comparison.h"
+
 struct NormalizedChar {
   char c_;
-  auto operator<=>(const NormalizedChar&) const = default;
+
+  QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL(NormalizedChar, c_)
 };
 
 // A bespoke string representation that ensures the content
