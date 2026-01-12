@@ -14,6 +14,7 @@
 
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
+#include "engine/NamedResultCacheSerializer.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryPlanner.h"
 #include "global/RuntimeParameters.h"
@@ -232,6 +233,7 @@ class Qlever {
 
   // Clear the result with the given `name` from the cache.
   void eraseResultWithName(std::string name);
+  // Completely clear the `NamedResultCache`.
   void clearNamedResultCache();
 
   // Write a new materialized view with `name` to disk and store the result of
@@ -241,6 +243,19 @@ class Qlever {
   // Preload a materialized view s.t. the first query to the view does not have
   // to load the view.
   void loadMaterializedView(std::string name) const;
+
+  // Write the contents of the `NamedResultCache` to disk.
+  template <typename Serializer>
+  void writeNamedResultCacheToSerializer(Serializer& serializer) const {
+    namedResultCache_.writeToSerializer(serializer);
+  }
+
+  // Read the contents of the `NamedResultCache` from disk.
+  template <typename Serializer>
+  void readNamedResultCacheFromDisk(Serializer& serializer) {
+    namedResultCache_.readFromSerializer(serializer, allocator_,
+                                         *index_.getBlankNodeManager());
+  }
 };
 }  // namespace qlever
 
