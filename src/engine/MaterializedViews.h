@@ -16,6 +16,7 @@
 #include "parser/MaterializedViewQuery.h"
 #include "parser/ParsedQuery.h"
 #include "parser/SparqlTriple.h"
+#include "rdfTypes/Iri.h"
 #include "util/HashMap.h"
 
 // Forward declarations
@@ -222,6 +223,31 @@ class MaterializedView {
       const parsedQuery::MaterializedViewQuery& viewQuery) const;
 };
 
+//
+struct SingleChain {
+  // ?something <predjoinobj> ?x .
+  ad_utility::triple_component::Iri predJoinObj_;
+  // ?x <predjoinsubj> ?something_else .
+  ad_utility::triple_component::Iri predJoinSubj_;
+
+  CPP_template(typename H, typename G)(
+      requires ql::concepts::same_as<G, SingleChain>) friend H
+      AbslHashValue(H h, const G& g) {
+    return H::combine(std::move(h), g.predJoinObj_, g.predJoinSubj_);
+  }
+
+  // Serialize to JSON
+  // Deserialize from JSON
+  // Detect
+};
+// Hashing doesn't work for stars if we only want a part of the star...
+// struct Star {
+//     std::vector<ad_utility::triple_component::Iri> predicates_; // Should be
+//     sorted
+//     // TODO hash
+// };
+using JoinPattern = std::variant<SingleChain>;
+
 // The `MaterializedViewsManager` is part of the `QueryExecutionContext` and is
 // used to manage the currently loaded `MaterializedViews` in a `Server` or
 // `Qlever` instance.
@@ -231,6 +257,10 @@ class MaterializedViewsManager {
   mutable ad_utility::Synchronized<
       ad_utility::HashMap<std::string, std::shared_ptr<MaterializedView>>>
       loadedViews_;
+  // TODO multiple?
+  mutable ad_utility::Synchronized<
+      ad_utility::HashMap<JoinPattern, std::shared_ptr<MaterializedView>>>
+      joinPatterns_;
 
  public:
   MaterializedViewsManager() = default;
@@ -257,6 +287,9 @@ class MaterializedViewsManager {
   std::shared_ptr<IndexScan> makeIndexScan(
       QueryExecutionContext* qec,
       const parsedQuery::MaterializedViewQuery& viewQuery) const;
+  // TODO . If no matching -> return nullptr.
+  std::shared_ptr<IndexScan> makeIndexScan(
+      QueryExecutionContext* qec, const JoinPattern& joinPattern) const;
 };
 
 #endif  // QLEVER_SRC_ENGINE_MATERIALIZEDVIEWS_H_

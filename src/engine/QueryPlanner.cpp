@@ -2248,6 +2248,12 @@ std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
     candidates.push_back(std::move(plan));
   }
 
+  // TODO this should be replaced by triple graph version below . st we do not
+  // check the same repeatedly.
+  if (auto opt = createMaterializedViewJoinReplacement(a, b, jcs)) {
+    candidates.push_back(std::move(opt.value()));
+  }
+
   // "NORMAL" CASE:
   // The join class takes care of sorting the subtrees if necessary
   SubtreePlan plan =
@@ -2524,6 +2530,61 @@ auto QueryPlanner::createJoinWithTransitivePath(const SubtreePlan& a,
   mergeSubtreePlanIds(plan, a, b);
   return plan;
 #endif
+}
+
+// _____________________________________________________________________________
+auto QueryPlanner::createMaterializedViewJoinReplacement(
+    const SubtreePlan& a, const SubtreePlan& b, const JoinColumns&) const
+    -> std::optional<SubtreePlan> {
+  auto isIndexScan = [](const auto& tree) -> std::shared_ptr<IndexScan> {
+    return std::dynamic_pointer_cast<IndexScan>(tree._qet->getRootOperation());
+  };
+  auto aScan = isIndexScan(a);
+  auto bScan = isIndexScan(b);
+  if (!aScan || !bScan) {
+    return std::nullopt;
+  }
+
+  // TODO
+  if (!aScan->predicate().isIri() || !bScan->predicate().isIri()) {
+    return std::nullopt;
+  }
+  // TODO andersrum
+  std::string x = "<http://www.opengis.net/ont/geosparql#hasGeometry>";
+  std::string y = "<http://www.opengis.net/ont/geosparql#asWKT>";
+  if (aScan->predicate().getIri().toStringRepresentation() == x &&
+      bScan->predicate().getIri().toStringRepresentation() == y &&
+      aScan->object() == bScan->subject() &&
+      aScan->subject() != bScan->object() &&
+      aScan->subject() != aScan->object()) {
+    SingleChain chain{aScan->predicate().getIri(), bScan->predicate().getIri()};
+    // _qec->materializedViewsManager().makeIndexScan(QueryExecutionContext
+    // *qec, const parsedQuery::MaterializedViewQuery &viewQuery)
+    AD_LOG_INFO << "SCAN: "
+                << aScan->predicate().getIri().toStringRepresentation()
+                << " CHAIN JOIN "
+                << bScan->predicate().getIri().toStringRepresentation()
+                << std::endl;
+    parsedQuery::MaterializedViewQuery q{
+        ad_utility::triple_component::Iri::fromIriref(
+            "<https://qlever.cs.uni-freiburg.de/materializedView/geom>")};
+    q.addParameter(SparqlTriple{
+        ad_utility::triple_component::Iri::fromIriref("<config>"),
+        ad_utility::triple_component::Iri::fromIriref("<column-osm>"),
+        aScan->subject()});
+    q.addParameter(SparqlTriple{
+        ad_utility::triple_component::Iri::fromIriref("<config>"),
+        ad_utility::triple_component::Iri::fromIriref("<column-interm>"),
+        aScan->object()});
+    q.addParameter(SparqlTriple{
+        ad_utility::triple_component::Iri::fromIriref("<config>"),
+        ad_utility::triple_component::Iri::fromIriref("<column-geometry>"),
+        bScan->object()});
+    return getMaterializedViewIndexScanPlan(q);
+  }
+  //<http://www.opengis.net/ont/geosparql#>
+
+  return std::nullopt;
 }
 
 // ______________________________________________________________________________________
@@ -3157,7 +3218,7 @@ void QueryPlanner::GraphPatternPlanner::visitPathSearch(
 
 // _______________________________________________________________
 SubtreePlan QueryPlanner::getMaterializedViewIndexScanPlan(
-    const parsedQuery::MaterializedViewQuery& viewQuery) {
+    const parsedQuery::MaterializedViewQuery& viewQuery) const {
   return makeSubtreePlan<IndexScan>(
       _qec->materializedViewsManager().makeIndexScan(_qec, viewQuery));
 }
@@ -3305,6 +3366,8 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::optimizeCommutatively() {
   auto tg = planner_.createTripleGraph(&candidateTriples_);
+  // tg._adjLists;
+  // TODO somehow add candidates for matviews
   auto lastRow = planner_
                      .fillDpTab(tg, rootPattern_->_filters,
                                 rootPattern_->textLimits_, candidatePlans_)

@@ -343,11 +343,23 @@ std::shared_ptr<const Permutation> MaterializedView::permutation() const {
 
 // _____________________________________________________________________________
 void MaterializedViewsManager::loadView(const std::string& name) const {
-  auto lock = loadedViews_.wlock();
-  if (lock->contains(name)) {
-    return;
+  {
+    auto lock = loadedViews_.wlock();
+    if (lock->contains(name)) {
+      return;
+    }
+    lock->insert({name, std::make_shared<MaterializedView>(onDiskBase_, name)});
   }
-  lock->insert({name, std::make_shared<MaterializedView>(onDiskBase_, name)});
+  // TODO
+  if (name == "geom") {
+    auto lock = joinPatterns_.wlock();
+    auto x = ad_utility::triple_component::Iri::fromIriref(
+        "<http://www.opengis.net/ont/geosparql#hasGeometry>");
+    auto y = ad_utility::triple_component::Iri::fromIriref(
+        "<http://www.opengis.net/ont/geosparql#asWKT>");
+    lock->insert(
+        {JoinPattern{SingleChain{x, y}}, loadedViews_.rlock()->at(name)});
+  }
 };
 
 // _____________________________________________________________________________
@@ -552,6 +564,18 @@ std::shared_ptr<IndexScan> MaterializedView::makeIndexScan(
       qec, permutation_, LocatedTriplesSharedState{locatedTriplesState_},
       std::move(scanTriple), IndexScan::Graphs::All(), std::nullopt,
       viewQuery.getVarsToKeep());
+}
+
+// _____________________________________________________________________________
+std::shared_ptr<IndexScan> MaterializedViewsManager::makeIndexScan(
+    QueryExecutionContext*, const JoinPattern& joinPattern) const {
+  auto lock = loadedViews_.rlock();
+  if (lock->contains(joinPattern)) {
+    auto view = lock->at(joinPattern);
+    // view->makeIndexScan(qec, joinPattern, ...)
+    // we need join pattern, var names from query,.
+  }
+  return nullptr;
 }
 
 // _____________________________________________________________________________

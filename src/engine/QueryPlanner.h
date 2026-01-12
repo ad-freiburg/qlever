@@ -450,6 +450,10 @@ class QueryPlanner {
                                                       const SubtreePlan& b,
                                                       const JoinColumns& jcs);
 
+  // TODO
+  std::optional<SubtreePlan> createMaterializedViewJoinReplacement(
+      const SubtreePlan& a, const SubtreePlan& b, const JoinColumns& jcs) const;
+
   vector<SubtreePlan> getOrderByRow(
       const ParsedQuery& pq,
       const std::vector<std::vector<SubtreePlan>>& dpTab) const;
@@ -613,7 +617,7 @@ class QueryPlanner {
   // Given a `MaterializedViewQuery` construct a `SubtreePlan` for an
   // `IndexScan` operation on the requested materialized view.
   SubtreePlan getMaterializedViewIndexScanPlan(
-      const parsedQuery::MaterializedViewQuery& viewQuery);
+      const parsedQuery::MaterializedViewQuery& viewQuery) const;
 
   // An internal helper class that encapsulates the functionality to optimize
   // a single graph pattern. It tightly interacts with the outer `QueryPlanner`
