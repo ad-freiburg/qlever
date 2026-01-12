@@ -12,6 +12,7 @@
 #include <utility>
 #include <vector>
 
+#include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "engine/NamedResultCacheSerializer.h"
 #include "engine/QueryExecutionContext.h"
@@ -174,6 +175,7 @@ class Qlever {
   SortPerformanceEstimator sortPerformanceEstimator_;
   Index index_;
   mutable NamedResultCache namedResultCache_;
+  mutable MaterializedViewsManager materializedViewsManager_;
   bool enablePatternTrick_;
 
  public:
@@ -234,13 +236,21 @@ class Qlever {
   // Completely clear the `NamedResultCache`.
   void clearNamedResultCache();
 
-  // Serialize the contents of the `NamedResultCache` to or from a file
-  // specified by the `filename`.
+  // Write a new materialized view with `name` to disk and store the result of
+  // `query`.
+  void writeMaterializedView(std::string name, std::string query) const;
+
+  // Preload a materialized view s.t. the first query to the view does not have
+  // to load the view.
+  void loadMaterializedView(std::string name) const;
+
+  // Write the contents of the `NamedResultCache` to disk.
   template <typename Serializer>
   void writeNamedResultCacheToSerializer(Serializer& serializer) const {
     namedResultCache_.writeToSerializer(serializer);
   }
 
+  // Read the contents of the `NamedResultCache` from disk.
   template <typename Serializer>
   void readNamedResultCacheFromDisk(Serializer& serializer) {
     namedResultCache_.readFromSerializer(serializer, allocator_,
