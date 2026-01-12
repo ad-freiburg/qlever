@@ -426,19 +426,18 @@ auto IsPossiblyExternalString = [](TripleComponent content, bool isExternal) {
                                 ::testing::Eq(isExternal))));
 };
 
-TEST(IndexTest, TripleToInternalRepresentation) {
+TEST(IndexTest, processTriple) {
   {
     IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
     TurtleTriple turtleTriple{iri("<subject>"), iri("<predicate>"),
                               lit("\"literal\"")};
-    LangtagAndTriple res =
-        index.tripleToInternalRepresentation(std::move(turtleTriple));
-    EXPECT_TRUE(res.langtag_.empty());
-    EXPECT_THAT(res.triple_[0],
+    ProcessedTriple result = index.processTriple(std::move(turtleTriple));
+    EXPECT_TRUE(result.langtag_.empty());
+    EXPECT_THAT(result.triple_[0],
                 IsPossiblyExternalString(iri("<subject>"), true));
-    EXPECT_THAT(res.triple_[1],
+    EXPECT_THAT(result.triple_[1],
                 IsPossiblyExternalString(iri("<predicate>"), true));
-    EXPECT_THAT(res.triple_[2],
+    EXPECT_THAT(result.triple_[2],
                 IsPossiblyExternalString(lit("\"literal\""), true));
   }
   {
@@ -447,23 +446,21 @@ TEST(IndexTest, TripleToInternalRepresentation) {
         std::vector{"<subj"s});
     TurtleTriple turtleTriple{iri("<subject>"), iri("<predicate>"),
                               lit("\"literal\"", "@fr")};
-    LangtagAndTriple res =
-        index.tripleToInternalRepresentation(std::move(turtleTriple));
-    EXPECT_EQ(res.langtag_, "fr");
-    EXPECT_THAT(res.triple_[0],
+    ProcessedTriple result = index.processTriple(std::move(turtleTriple));
+    EXPECT_EQ(result.langtag_, "fr");
+    EXPECT_THAT(result.triple_[0],
                 IsPossiblyExternalString(iri("<subject>"), true));
-    EXPECT_THAT(res.triple_[1],
+    EXPECT_THAT(result.triple_[1],
                 IsPossiblyExternalString(iri("<predicate>"), false));
     // By default all languages other than English are externalized.
-    EXPECT_THAT(res.triple_[2],
+    EXPECT_THAT(result.triple_[2],
                 IsPossiblyExternalString(lit("\"literal\"", "@fr"), true));
   }
   {
     IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
     TurtleTriple turtleTriple{iri("<subject>"), iri("<predicate>"), 42.0};
-    LangtagAndTriple res =
-        index.tripleToInternalRepresentation(std::move(turtleTriple));
-    EXPECT_EQ(Id::makeFromDouble(42.0), std::get<Id>(res.triple_[2]));
+    ProcessedTriple result = index.processTriple(std::move(turtleTriple));
+    EXPECT_EQ(Id::makeFromDouble(42.0), std::get<Id>(result.triple_[2]));
   }
 }
 
@@ -473,7 +470,9 @@ TEST(IndexTest, NumDistinctEntities) {
       "<x> "
       "<label> \"Beta\". <x> <is-a> <y>. <y> <is-a> <x>. <z> <label> "
       "\"zz\"@en";
-  const auto& qec = *getQec(turtleInput);
+  TestIndexConfig config{turtleInput};
+  config.addHasWordTriples = true;
+  const auto& qec = *getQec(config);
   const IndexImpl& index = qec.getIndex().getImpl();
   // Note: Those numbers might change as the triples of the test index in
   // `IndexTestHelpers.cpp` change.
@@ -487,10 +486,10 @@ TEST(IndexTest, NumDistinctEntities) {
 
   auto numPredicates = index.numDistinctPredicates();
   EXPECT_EQ(numPredicates.normal, 2);
-  // The added numPredicates are `ql:has-pattern`, `ql:langtag`, and one added
-  // predicate for each combination of predicate+language that is actually used
-  // (e.g. `@en@label`).
-  EXPECT_EQ(numPredicates.internal, 3);
+  // The added numPredicates are `ql:has-pattern`, `ql:langtag`, `ql:has-word`,
+  // and one added predicate for each combination of predicate+language that is
+  // actually used (e.g. `@en@label`).
+  EXPECT_EQ(numPredicates.internal, 4);
   EXPECT_EQ(numPredicates, index.numDistinctCol0(Permutation::PSO));
   EXPECT_EQ(numPredicates, index.numDistinctCol0(Permutation::POS));
 
@@ -501,9 +500,10 @@ TEST(IndexTest, NumDistinctEntities) {
 
   auto numTriples = index.numTriples();
   EXPECT_EQ(numTriples.normal, 7);
-  // Two added triples for each triple that has an object with a language tag
-  // and one triple per subject for the pattern.
-  EXPECT_EQ(numTriples.internal, 5);
+  // Two added triples for each triple that has an object with a language tag,
+  // one triple per subject for the pattern, and one ql:has-word triple per
+  // word in the literals (5 literals with 1 word each = 5 word triples).
+  EXPECT_EQ(numTriples.internal, 10);
 
   auto multiplicities =
       index.getMultiplicities(index.getPermutation(Permutation::SPO));

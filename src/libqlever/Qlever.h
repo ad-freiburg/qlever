@@ -62,6 +62,13 @@ struct CommonConfig {
   // TODO: We have not tested this mode in a while. In particular, it is
   // unlikely to work when updates are involved.
   bool onlyPsoAndPos_ = false;
+
+  // Option to add `ql:has-word` triples for each word in each literal. For
+  // each literal, a triple `<literal> ql:has-word "word"` is added for each
+  // word in the literal. This is useful for keyword search in literals.
+  // NOTE: While testing, this defaults to true. Eventually, it should default
+  // to false.
+  bool addHasWordTriples_ = true;
 };
 
 // Additional configuration used for building an index for a given dataset.

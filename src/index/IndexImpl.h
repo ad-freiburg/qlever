@@ -138,6 +138,9 @@ class IndexImpl {
   double avgNumDistinctSubjectsPerPredicate_;
   uint64_t numDistinctSubjectPredicatePairs_;
 
+  // If true, add `ql:has-word` triples for each word in each literal.
+  bool addHasWordTriples_ = true;
+
   size_t parserBatchSize_ = PARSER_BATCH_SIZE;
   size_t numTriplesPerBatch_ = NUM_TRIPLES_PER_PARTIAL_VOCAB;
 
@@ -437,6 +440,8 @@ class IndexImpl {
 
   bool& loadAllPermutations();
 
+  bool& addHasWordTriples();
+
   void setKeepTempFiles(bool keepTempFiles);
 
   ad_utility::MemorySize& memoryLimitIndexBuilding() {
@@ -647,7 +652,13 @@ class IndexImpl {
   bool isLiteral(std::string_view object) const;
 
  public:
-  LangtagAndTriple tripleToInternalRepresentation(TurtleTriple&& triple) const;
+  // Process the given parsed triple in a number of ways:
+  //
+  // 1. If the object has a language tag, extract and store it
+  // 2. If the object is a literal, store the distinct words contained in it
+  //    together with their term frequencies
+  // 3. If the IRI or literal can be encoded directly into an `Id`, do so
+  ProcessedTriple processTriple(TurtleTriple&& triple) const;
 
  protected:
   /**

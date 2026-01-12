@@ -186,6 +186,8 @@ class Index {
 
   bool& loadAllPermutations();
 
+  bool& addHasWordTriples();
+
   void setKeepTempFiles(bool keepTempFiles);
 
   ad_utility::MemorySize& memoryLimitIndexBuilding();
