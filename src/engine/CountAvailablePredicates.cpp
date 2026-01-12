@@ -168,13 +168,13 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
           TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE), std::nullopt,
           std::nullopt}
           .toScanSpecification(index);
-  const auto& perm = index.getPermutation(Permutation::Enum::PSO);
-  const auto& locatedTriple =
-      perm.getLocatedTriplesForPermutation(locatedTriplesState());
-  auto fullHasPattern =
-      perm.lazyScan(CompressedRelationReader::ScanSpecAndBlocks::withUpdates(
-                        scanSpec, locatedTriple),
-                    std::nullopt, {}, cancellationHandle_, locatedTriple);
+  const auto perm = Permutation::Enum::PSO;
+  const auto& locatedTriples =
+      locatedTriplesState().getLocatedTriplesForPermutation<false>(perm);
+  auto fullHasPattern = index.getPermutation(perm).lazyScan(
+      CompressedRelationReader::ScanSpecAndBlocks::withUpdates(scanSpec,
+                                                               locatedTriples),
+      std::nullopt, {}, cancellationHandle_, locatedTriples);
   for (const auto& idTable : fullHasPattern) {
     for (const auto& patternId : idTable.getColumn(1)) {
       AD_CORRECTNESS_CHECK(patternId.getDatatype() == Datatype::Int);

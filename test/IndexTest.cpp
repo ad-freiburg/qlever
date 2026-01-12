@@ -58,8 +58,8 @@ auto makeTestScanWidthOne = [](const IndexImpl& index,
     auto t = generateLocationTrace(l);
     const auto& actualPermutation = index.getPermutation(permutation);
     const auto& locatedTriples =
-        actualPermutation.getLocatedTriplesForPermutation(
-            qec.locatedTriplesState());
+        qec.locatedTriplesState().getLocatedTriplesForPermutation<false>(
+            permutation);
     IdTable result = actualPermutation.scan(
         CompressedRelationReader::ScanSpecAndBlocks::withUpdates(
             ScanSpecificationAsTripleComponent{c0, c1, std::nullopt}
@@ -84,8 +84,8 @@ auto makeTestScanWidthTwo = [](const IndexImpl& index,
     auto t = generateLocationTrace(l);
     const auto& actualPermutation = index.getPermutation(permutation);
     const auto& locatedTriples =
-        actualPermutation.getLocatedTriplesForPermutation(
-            qec.locatedTriplesState());
+        qec.locatedTriplesState().getLocatedTriplesForPermutation<false>(
+            permutation);
     IdTable wol = actualPermutation.scan(
         CompressedRelationReader::ScanSpecAndBlocks::withUpdates(
             ScanSpecificationAsTripleComponent{c0, std::nullopt, std::nullopt}
@@ -121,7 +121,7 @@ TEST(IndexTest, createFromTurtleTest) {
         return;
       }
       const auto& [index, qec] = getIndex();
-      const auto& locatedTriplesSnapshot = qec.locatedTriplesState();
+      const auto& locatedTriplesState = qec.locatedTriplesState();
 
       auto getId = makeGetId(getQec(kb)->getIndex());
       Id a = getId("<a>");
@@ -134,7 +134,8 @@ TEST(IndexTest, createFromTurtleTest) {
       // TODO<joka921> We could also test the multiplicities here.
       const auto& pso = index.PSO();
       const auto& psoLTPB =
-          pso.getLocatedTriplesForPermutation(locatedTriplesSnapshot);
+          qec.locatedTriplesState().getLocatedTriplesForPermutation<false>(
+              Permutation::PSO);
       ASSERT_TRUE(pso.getMetadata(b, psoLTPB).has_value());
       ASSERT_TRUE(pso.getMetadata(b2, psoLTPB).has_value());
       ASSERT_FALSE(pso.getMetadata(a2, psoLTPB).has_value());
@@ -148,7 +149,8 @@ TEST(IndexTest, createFromTurtleTest) {
 
       const auto& pos = index.POS();
       const auto& posLTPB =
-          pos.getLocatedTriplesForPermutation(locatedTriplesSnapshot);
+          locatedTriplesState.getLocatedTriplesForPermutation<false>(
+              Permutation::POS);
       ASSERT_TRUE(pos.getMetadata(b, posLTPB).has_value());
       ASSERT_TRUE(pos.getMetadata(b2, posLTPB).has_value());
       ASSERT_FALSE(pos.getMetadata(a2, posLTPB).has_value());
@@ -209,14 +211,16 @@ TEST(IndexTest, createFromTurtleTest) {
       Id isA = getId("<is-a>");
 
       const auto& pso = index.PSO();
-      const auto& psoLTPB = pso.getLocatedTriplesForPermutation(deltaTriples);
+      const auto& psoLTPB = deltaTriples.getLocatedTriplesForPermutation<false>(
+          Permutation::Enum::PSO);
       ASSERT_TRUE(pso.getMetadata(isA, psoLTPB).has_value());
       ASSERT_FALSE(pso.getMetadata(a, psoLTPB).has_value());
 
       ASSERT_FALSE(pso.getMetadata(isA, psoLTPB).value().isFunctional());
 
       const auto& pos = index.POS();
-      const auto& posLTPB = pos.getLocatedTriplesForPermutation(deltaTriples);
+      const auto& posLTPB = deltaTriples.getLocatedTriplesForPermutation<false>(
+          Permutation::Enum::POS);
       ASSERT_TRUE(pos.getMetadata(isA, posLTPB).has_value());
       ASSERT_FALSE(pos.getMetadata(isA, posLTPB).value().isFunctional());
 
@@ -264,7 +268,8 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
   Id c = getId("<c>");
 
   const auto& pso = index.PSO();
-  const auto& psoLTPB = pso.getLocatedTriplesForPermutation(deltaTriples);
+  const auto& psoLTPB = deltaTriples.getLocatedTriplesForPermutation<false>(
+      Permutation::Enum::PSO);
   ASSERT_TRUE(pso.getMetadata(b, psoLTPB).has_value());
   ASSERT_TRUE(pso.getMetadata(b2, psoLTPB).has_value());
   ASSERT_FALSE(pso.getMetadata(a, psoLTPB).has_value());
@@ -273,7 +278,8 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
   ASSERT_TRUE(pso.getMetadata(b2, psoLTPB).value().isFunctional());
 
   const auto& pos = index.POS();
-  const auto& posLTPB = pos.getLocatedTriplesForPermutation(deltaTriples);
+  const auto& posLTPB = deltaTriples.getLocatedTriplesForPermutation<false>(
+      Permutation::Enum::POS);
   ASSERT_TRUE(pos.getMetadata(b, posLTPB).has_value());
   ASSERT_TRUE(pos.getMetadata(b2, posLTPB).has_value());
   ASSERT_FALSE(pos.getMetadata(a, posLTPB).has_value());

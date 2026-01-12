@@ -1565,7 +1565,8 @@ size_t IndexImpl::getCardinality(
     const LocatedTriplesState& locatedTriplesState) const {
   const auto& perm = getPermutation(permutation);
   if (const auto& meta = perm.getMetadata(
-          id, perm.getLocatedTriplesForPermutation(locatedTriplesState));
+          id, locatedTriplesState.getLocatedTriplesForPermutation<false>(
+                  permutation));
       meta.has_value()) {
     return meta.value().numRows_;
   }
@@ -1643,7 +1644,7 @@ size_t IndexImpl::getResultSizeOfScan(
     const LocatedTriplesState& locatedTriplesState) const {
   const auto& perm = getPermutation(permutation);
   const auto& locatedTriples =
-      perm.getLocatedTriplesForPermutation(locatedTriplesState);
+      locatedTriplesState.getLocatedTriplesForPermutation<false>(permutation);
   return perm.getResultSizeOfScan(
       CompressedRelationReader::ScanSpecAndBlocks::withUpdates(
           scanSpecification, locatedTriples),

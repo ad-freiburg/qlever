@@ -985,7 +985,8 @@ TEST(CompressedRelationReader, getResultSizeImpl) {
     auto& perm = impl.getPermutation(p);
     auto& reader = perm.reader();
     auto scanSpecAndBlocks = ScanSpecAndBlocks::withUpdates(
-        scanSpec, perm.getLocatedTriplesForPermutation(locatedTriplesState));
+        scanSpec,
+        locatedTriplesState.getLocatedTriplesForPermutation<false>(p));
     auto& ltpb = locatedTriplesState.getLocatedTriplesForPermutation<false>(
         perm.permutation());
     auto [actual_lower, actual_upper] =
@@ -1071,8 +1072,8 @@ TEST(CompressedRelationReader, getFirstAndLastTripleIgnoringGraph) {
     CompressedRelationReader::ScanSpecAndBlocks metadataAndBlocks =
         CompressedRelationReader::ScanSpecAndBlocks::withUpdates(
             std::move(scanSpecification),
-            permutation.getLocatedTriplesForPermutation(
-                *currentLocatedTriplesSharedState));
+            currentLocatedTriplesSharedState
+                ->getLocatedTriplesForPermutation<false>(permutationEnum));
     const auto& reader =
         index.getImpl().getPermutation(permutationEnum).reader();
     return reader.getFirstAndLastTripleIgnoringGraph(metadataAndBlocks,
@@ -1129,15 +1130,15 @@ TEST(CompressedRelationReader, ensureDummyBlockWith6ColumnsDoesntCauseIssues) {
   for (bool usePatternPermutation : {false, true}) {
     auto permutationEnum =
         usePatternPermutation ? Permutation::Enum::PSO : Permutation::Enum::SPO;
-    const auto& permutation = index.getImpl().getPermutation(permutationEnum);
+    const auto& locatedTriples =
+        locatedTriplesSharedState->getLocatedTriplesForPermutation<false>(
+            permutationEnum);
 
     ScanSpecification scanSpecification{std::nullopt, std::nullopt,
                                         std::nullopt};
     auto metadataAndBlocks =
         CompressedRelationReader::ScanSpecAndBlocks::withUpdates(
-            std::move(scanSpecification),
-            permutation.getLocatedTriplesForPermutation(
-                *locatedTriplesSharedState));
+            std::move(scanSpecification), locatedTriples);
 
     std::vector<ColumnIndex> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
     if (usePatternPermutation) {
@@ -1146,13 +1147,11 @@ TEST(CompressedRelationReader, ensureDummyBlockWith6ColumnsDoesntCauseIssues) {
     }
 
     while (!additionalColumns.empty()) {
-      auto blocks = index.getImpl()
-                        .getPermutation(permutationEnum)
-                        .lazyScan(metadataAndBlocks, std::nullopt,
-                                  additionalColumns, cancellationHandle,
-                                  locatedTriplesSharedState
-                                      ->getLocatedTriplesForPermutation<false>(
-                                          permutationEnum));
+      auto blocks =
+          index.getImpl()
+              .getPermutation(permutationEnum)
+              .lazyScan(metadataAndBlocks, std::nullopt, additionalColumns,
+                        cancellationHandle, locatedTriples);
       for (const IdTable& block : blocks) {
         EXPECT_EQ(block.numColumns(), 3 + additionalColumns.size());
       }

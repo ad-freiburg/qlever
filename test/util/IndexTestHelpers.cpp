@@ -82,11 +82,12 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
   auto checkSingleElement = [&cancellationDummy, &iriOfHasPattern,
                              &locatedTriplesSnapshot,
                              &indexImpl](size_t patternIdx, Id id) {
-    const auto& permutation =
-        indexImpl.getPermutation(Permutation::Enum::PSO).internalPermutation();
+    const auto perm = Permutation::Enum::PSO;
+    const auto& actualPermutation =
+        indexImpl.getPermutation(perm).internalPermutation();
     const auto& locatedTriples =
-        permutation.getLocatedTriplesForPermutation(locatedTriplesSnapshot);
-    auto scanResultHasPattern = permutation.scan(
+        locatedTriplesSnapshot.getLocatedTriplesForPermutation<true>(perm);
+    auto scanResultHasPattern = actualPermutation.scan(
         CompressedRelationReader::ScanSpecAndBlocks::withUpdates(
             ScanSpecificationAsTripleComponent{iriOfHasPattern, id,
                                                std::nullopt}
@@ -145,14 +146,18 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
   const auto& pso = index.getImpl().PSO();
   auto predicates = pso.getDistinctCol0IdsAndCounts(
       cancellationDummy,
-      pso.getLocatedTriplesForPermutation(locatedTriplesSnapshot), {});
+      locatedTriplesSnapshot.getLocatedTriplesForPermutation<false>(
+          Permutation::Enum::PSO),
+      {});
   for (const auto& predicate : predicates.getColumn(0)) {
     checkConsistencyForPredicate(predicate);
   }
   const auto& osp = index.getImpl().OSP();
   auto objects = osp.getDistinctCol0IdsAndCounts(
       cancellationDummy,
-      osp.getLocatedTriplesForPermutation(locatedTriplesSnapshot), {});
+      locatedTriplesSnapshot.getLocatedTriplesForPermutation<false>(
+          Permutation::Enum::OSP),
+      {});
   for (const auto& object : objects.getColumn(0)) {
     checkConsistencyForObject(object);
   }
