@@ -48,7 +48,8 @@ void QueryToSocketDistributor::addQueryStatusUpdate(std::string payload) {
   // reasoning much simpler.
   auto impl = [self = shared_from_this(),
                sharedPayload = std::move(sharedPayload)]() mutable {
-    self->data_.push_back(std::move(sharedPayload));
+    self->data_ = std::move(sharedPayload);
+    self->currentIndex_++;
     self->wakeUpWaitingListeners();
   };
   AD_CONTRACT_CHECK(!finished_.test());
@@ -68,21 +69,23 @@ void QueryToSocketDistributor::signalEnd() {
 }
 
 // _____________________________________________________________________________
-net::awaitable<std::shared_ptr<const std::string>>
-QueryToSocketDistributor::waitForNextDataPiece(size_t index) const {
+net::awaitable<std::pair<std::shared_ptr<const std::string>, size_t>>
+QueryToSocketDistributor::waitForNextDataPiece(size_t oldIndex) const {
   AD_CORRECTNESS_CHECK(strand_.running_in_this_thread());
-  if (index < data_.size()) {
-    co_return data_.at(index);
+  if (oldIndex < currentIndex_) {
+    co_return std::make_pair(data_, currentIndex_);
   } else if (finished_.test()) {
-    co_return nullptr;
+    co_return std::make_pair(nullptr, currentIndex_);
   }
 
   co_await waitForUpdate();
 
-  if (index < data_.size()) {
-    co_return data_.at(index);
+  // When `waitForUpdate()` returns, `currentIteration_` might have a different
+  // value.
+  if (oldIndex < currentIndex_) {
+    co_return std::make_pair(data_, currentIndex_);
   } else {
-    co_return nullptr;
+    co_return std::make_pair(nullptr, currentIndex_);
   }
 }
 }  // namespace ad_utility::websocket

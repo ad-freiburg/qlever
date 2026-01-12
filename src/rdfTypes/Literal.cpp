@@ -128,10 +128,10 @@ void Literal::addDatatype(const Iri& datatype) {
 }
 
 // __________________________________________
-const std::string& Literal::toStringRepresentation() const { return content_; }
+const std::string& Literal::toStringRepresentation() const& { return content_; }
 
 // __________________________________________
-std::string& Literal::toStringRepresentation() { return content_; }
+std::string Literal::toStringRepresentation() && { return std::move(content_); }
 
 // __________________________________________
 Literal Literal::fromStringRepresentation(std::string internal) {

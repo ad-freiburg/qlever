@@ -462,7 +462,8 @@ CPP_template(typename Parser)(requires ql::concepts::derived_from<
     // TODO<joka921> Make it possible to use an optional here.
     EncodedIriManager encodedIriManager;
     RdfStringParser parser{&encodedIriManager};
-    parser.parseUtf8String(absl::StrCat("<a> <b> ", objectString, "."));
+    parser.setInputStream(objectString);
+    parser.object();
     AD_CONTRACT_CHECK(parser.triples_.size() == 1);
     return std::move(parser.triples_[0].object_);
   }
@@ -487,7 +488,7 @@ CPP_template(typename Parser)(requires ql::concepts::derived_from<
   // testing interface for reusing a parser
   // only specifies the tokenizers input stream.
   // Does not alter the tokenizers state
-  void setInputStream(const std::string& toParse) {
+  void setInputStream(std::string_view toParse) {
     tmpToParse_.clear();
     tmpToParse_.reserve(toParse.size());
     tmpToParse_.insert(tmpToParse_.end(), toParse.begin(), toParse.end());

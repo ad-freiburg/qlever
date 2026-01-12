@@ -240,7 +240,7 @@ TEST(VocabularyGeneratorTest, createInternalMapping) {
   input.emplace_back("e", S{38, d});
   input.emplace_back("xenon", S{0, d});
 
-  auto res = createInternalMapping(&input);
+  auto res = createInternalMapping(input);
   ASSERT_EQ(0u, input[0].second.id_);
   ASSERT_EQ(1u, input[1].second.id_);
   ASSERT_EQ(1u, input[2].second.id_);

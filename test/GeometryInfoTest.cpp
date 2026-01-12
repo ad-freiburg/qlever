@@ -9,6 +9,7 @@
 #include <range/v3/numeric/accumulate.hpp>
 #include <stdexcept>
 
+#include "./printers/GeometryInfoPrinters.h"
 #include "GeometryInfoTestHelpers.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
@@ -25,24 +26,39 @@ using namespace geoInfoTestHelpers;
 // Example WKT literals for all supported geometry types
 constexpr std::string_view litPoint =
     "\"POINT(3 4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+const DPoint expectedPoint{3, 4};
 constexpr std::string_view litLineString =
-    "\"LINESTRING(2 2, 4 4)\""
+    "\"LINESTRING(2 2,4 4)\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+const DLine expectedLine{{2, 2}, {4, 4}};
 constexpr std::string_view litPolygon =
-    "\"POLYGON((2 4, 4 4, 4 2, 2 2))\""
+    "\"POLYGON((2 2,4 2,4 4,2 4,2 2))\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+const DPolygon expectedPolygon{{{2, 2}, {4, 2}, {4, 4}, {2, 4}}};
 constexpr std::string_view litMultiPoint =
-    "\"MULTIPOINT((2 2), (4 4))\""
+    "\"MULTIPOINT(2 2,4 4)\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+const DMultiPoint expectedMultiPoint{{2, 2}, {4, 4}};
 constexpr std::string_view litMultiLineString =
-    "\"MULTILINESTRING((2 2, 4 4), (2 2, 6 8))\""
+    "\"MULTILINESTRING((2 2,4 4),(2 2,6 8))\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+const DMultiLine expectedMultiLineString{{{2, 2}, {4, 4}}, {{2, 2}, {6, 8}}};
 constexpr std::string_view litMultiPolygon =
-    "\"MULTIPOLYGON(((2 4,8 4,8 6,2 6,2 4)), ((2 4, 4 4, 4 2, 2 2)))\""
+    "\"MULTIPOLYGON(((2 4,8 4,8 6,2 6,2 4)),((2 2,4 2,4 4,2 4,2 2)))\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+const DMultiPolygon expectedMultiPolygon{
+    DPolygon{{{2, 4}, {8, 4}, {8, 6}, {2, 6}, {2, 4}}},
+    DPolygon{{{2, 2}, {4, 2}, {4, 4}, {2, 4}, {2, 2}}}};
 constexpr std::string_view litCollection =
-    "\"GEOMETRYCOLLECTION(POLYGON((2 4,8 4,8 6,2 6,2 4)), LINESTRING(2 2, 4 4),"
+    "\"GEOMETRYCOLLECTION(POLYGON((2 4,8 4,8 6,2 6,2 4)),LINESTRING(2 2,4 4),"
     "POINT(3 4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+const DPolygon expectedCollectionElement1{
+    {{2, 4}, {8, 4}, {8, 6}, {2, 6}, {2, 4}}};
+const DLine expectedCollectionElement2{{2, 2}, {4, 4}};
+const DPoint expectedCollectionElement3{3, 4};
+const DCollection expectedCollection{DAnyGeometry{expectedCollectionElement1},
+                                     DAnyGeometry{expectedCollectionElement2},
+                                     DAnyGeometry{expectedCollectionElement3}};
 
 constexpr std::string_view litInvalidType =
     "\"BLABLIBLU(xyz)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
@@ -68,6 +84,30 @@ constexpr std::string_view litSmallRealWorldPolygon1 =
     "48.0128404,7.8347244 48.0126985,7.8346338 48.0126612))\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 const double areaSmallRealWorldPolygon1 = 1611.0;
+const DPolygon expectedSmallRealWorldPolygon1{
+    {{7.8346338, 48.0126612},
+     {7.8348921, 48.0123905},
+     {7.8349457, 48.0124216},
+     {7.8349855, 48.0124448},
+     {7.8353244, 48.0126418},
+     {7.8354091, 48.0126911},
+     {7.8352246, 48.0129047},
+     {7.8351623, 48.012879},
+     {7.8350687, 48.0128404},
+     {7.8347244, 48.0126985}},
+};
+const DPolygon expectedSmallRealWorldPolygon1WebMerc{
+    {{872147.445168, 6108961.465963},
+     {872176.198992, 6108916.420191},
+     {872182.165717, 6108921.595367},
+     {872186.596233, 6108925.455951},
+     {872224.322408, 6108958.237703},
+     {872233.751169, 6108966.441481},
+     {872213.212723, 6109001.985728},
+     {872206.277519, 6108997.709095},
+     {872195.858014, 6108991.285829},
+     {872157.530714, 6108967.672880}},
+};
 
 // University building 106 in Freiburg: ca. 491 square-meters (osmway:33903567)
 constexpr std::string_view litSmallRealWorldPolygon2 =
@@ -143,6 +183,17 @@ const auto getAllTestLiterals = []() {
   return std::vector<std::string_view>{
       litPoint,           litLineString,   litPolygon,   litMultiPoint,
       litMultiLineString, litMultiPolygon, litCollection};
+};
+
+const auto getAllExpectedParseResults = []() {
+  using enum WKTType;
+  return std::vector<ParseResult>{{POINT, expectedPoint},
+                                  {LINESTRING, expectedLine},
+                                  {POLYGON, expectedPolygon},
+                                  {MULTIPOINT, expectedMultiPoint},
+                                  {MULTILINESTRING, expectedMultiLineString},
+                                  {MULTIPOLYGON, expectedMultiPolygon},
+                                  {COLLECTION, expectedCollection}};
 };
 
 constexpr std::array<uint32_t, 7> allTestLiteralNumGeometries{1, 1, 1, 2,
@@ -577,6 +628,187 @@ TEST(GeometryInfoTest, SizeOfAndAlignmentBytes) {
                     sizeof(EncodedGeometryTypeAndCentroid) +
                     sizeof(EncodedBoundingBox) + sizeof(NumGeometries) +
                     sizeof(MetricLength) + sizeof(MetricArea));
+}
+
+// _____________________________________________________________________________
+TEST(GeometryInfoTest, ParseGeoPointOrWktVisitor) {
+  using namespace ad_utility::detail;
+  auto fromSV = [](std::string_view lit) {
+    return GeoPointOrWkt{std::string{lit}};
+  };
+
+  // Test for `GeoPoint`.
+  EXPECT_THAT(parseGeoPointOrWkt(GeoPoint{1, 2}),
+              parseResultNear(ParseResult{POINT, DPoint(2, 1)}));
+
+  // Explicit test for a real-world WKT string.
+  EXPECT_THAT(
+      parseGeoPointOrWkt(std::string{litSmallRealWorldPolygon1}),
+      parseResultNear(ParseResult{POLYGON, expectedSmallRealWorldPolygon1}));
+
+  // Tests for other geometry types (WKT strings).
+  auto literals = getAllTestLiterals();
+  auto geometries = getAllExpectedParseResults();
+  ASSERT_EQ(literals.size(), geometries.size());
+
+  for (size_t i = 0; i < literals.size(); ++i) {
+    EXPECT_THAT(parseGeoPointOrWkt(fromSV(literals[i])),
+                parseResultNear(geometries[i]));
+  }
+}
+
+// _____________________________________________________________________________
+TEST(GeometryInfoTest, UtilGeomToWktVisitor) {
+  using namespace ad_utility::detail;
+
+  auto literals = getAllTestLiterals();
+  auto geometries = getAllExpectedParseResults();
+  ASSERT_EQ(literals.size(), geometries.size());
+
+  for (size_t i = 0; i < literals.size(); ++i) {
+    auto parsedWkt = geometries[i].second;
+    auto expected = removeDatatype(literals[i]);
+    ASSERT_TRUE(parsedWkt.has_value());
+
+    // Test with `ParsedWKT` input.
+    EXPECT_EQ(utilGeomToWkt(parsedWkt.value()), expected);
+
+    // Test with optional input.
+    EXPECT_EQ(utilGeomToWkt(parsedWkt), expected);
+
+    // Test with individual geometry type as input.
+    std::visit(
+        [&](const auto& geom) -> void {
+          EXPECT_EQ(utilGeomToWkt(geom), expected);
+          EXPECT_EQ(utilGeomToWkt(DAnyGeometry{geom}), expected);
+        },
+        parsedWkt.value());
+  }
+}
+
+// _____________________________________________________________________________
+TEST(GeometryInfoTest, GeometryN) {
+  using namespace ad_utility::detail;
+
+  using s = std::string;
+  std::vector<ExpectedGeometryN> expected{
+      // Single geometries, valid index.
+      {1, s{litPoint}, {expectedPoint}},
+      {1, s{litLineString}, {expectedLine}},
+      {1, s{litPolygon}, {expectedPolygon}},
+      // Single geometries, invalid index.
+      {2, s{litPoint}, std::nullopt},
+      {2, s{litLineString}, std::nullopt},
+      {2, s{litPolygon}, std::nullopt},
+      // Collection geometries, valid index.
+      {1, s{litMultiPoint}, {expectedMultiPoint.at(0)}},
+      {1, s{litMultiLineString}, {expectedMultiLineString.at(0)}},
+      {1, s{litMultiPolygon}, {expectedMultiPolygon.at(0)}},
+      {1, s{litCollection}, {expectedCollectionElement1}},
+      {2, s{litMultiPoint}, {expectedMultiPoint.at(1)}},
+      {2, s{litMultiLineString}, {expectedMultiLineString.at(1)}},
+      {2, s{litMultiPolygon}, {expectedMultiPolygon.at(1)}},
+      {2, s{litCollection}, {expectedCollectionElement2}},
+      {3, s{litCollection}, {expectedCollectionElement3}},
+      // Collection geometries, invalid index.
+      {3, s{litMultiPoint}, std::nullopt},
+      {3, s{litMultiLineString}, std::nullopt},
+      {3, s{litMultiPolygon}, std::nullopt},
+      {4, s{litCollection}, std::nullopt},
+  };
+
+  auto noGeom = parsedWktNear(std::nullopt);
+  EXPECT_THAT(getGeometryN(std::optional<ParsedWkt>{}, 1), noGeom);
+
+  for (const auto& [n, wkt, expectedGeom] : expected) {
+    // Test with `GeoPointOrWkt` (not parsed).
+    EXPECT_THAT(getGeometryN(GeoPointOrWkt{wkt}, n),
+                parsedWktNear(expectedGeom));
+
+    // Test with already parsed geometry.
+    auto [type, parsed] = parseWkt(wkt);
+    EXPECT_THAT(getGeometryN(parsed, n), parsedWktNear(expectedGeom));
+
+    // Invalid indexes.
+    EXPECT_THAT(getGeometryN(parsed, 0), noGeom);
+    EXPECT_THAT(getGeometryN(parsed, 10'000), noGeom);
+  }
+}
+
+// Mock projection for `ProjectionVisitor` unit test below.
+struct TwiceProjection {
+  DPoint operator()(const DPoint& p) const {
+    return {2 * p.getX(), 2 * p.getY()};
+  }
+};
+
+// _____________________________________________________________________________
+TEST(GeometryInfoTest, ProjectionVisitor) {
+  using namespace ad_utility::detail;
+
+  EXPECT_THAT(projectWebMerc(GeoPointOrWkt{std::string{litInvalidType}}),
+              parseResultNear(ParseResult{NONE, std::nullopt}));
+  EXPECT_EQ(projectWebMerc(std::optional<ParsedWkt>{}), std::nullopt);
+  EXPECT_THAT(
+      projectWebMerc(GeoPointOrWkt{std::string{litSmallRealWorldPolygon1}}),
+      parseResultNear(ParseResult{
+          POLYGON, projectWebMerc(expectedSmallRealWorldPolygon1)}));
+  EXPECT_THAT(projectWebMerc(GeoPointOrWkt{std::string{litCollection}}),
+              parseResultNear(
+                  ParseResult{COLLECTION, projectWebMerc(expectedCollection)}));
+  EXPECT_THAT(projectWebMerc(expectedLine),
+              utilLineNear(DLine{{222638.9816, 222684.2085},
+                                 {445277.9632, 445640.1097}}));
+
+  constexpr UtilGeomProjectionVisitor<TwiceProjection> projectMock;
+  EXPECT_THAT(projectMock(DPoint{5, 5}), utilPointNear({10, 10}));
+  EXPECT_THAT(projectMock(DAnyGeometry{DPoint{5, 5}}),
+              utilAnyGeometryNear(DPoint{10, 10}));
+  EXPECT_THAT(projectMock(expectedMultiPoint),
+              utilMultiPointNear({{4, 4}, {8, 8}}));
+}
+
+// _____________________________________________________________________________
+TEST(GeometryInfoTest, MetricDistanceVisitor) {
+  using namespace ad_utility::detail;
+  // Distance between points (Freiburg Central Railway Station and Freiburg
+  // Cathedral).
+  EXPECT_THAT(computeMetricDistance(
+                  projectWebMerc(GeoPointOrWkt{GeoPoint{47.997731, 7.841295}}),
+                  projectWebMerc(GeoPointOrWkt{GeoPoint{47.995562, 7.852918}})),
+              Optional(DoubleNear(900, 25)));
+
+  // Distance between a multi-polygon (university buildings 101 and 106) and
+  // Freiburg Cathedral.
+  EXPECT_THAT(computeMetricDistance(
+                  projectWebMerc(GeoPointOrWkt{
+                      std::string{litRealWorldMultiPolygonNonIntersecting}}),
+                  projectWebMerc(GeoPointOrWkt{GeoPoint{47.995562, 7.852918}})),
+              Optional(DoubleNear(2'300, 50)));
+
+  // Distance between a multi-polygon (university buildings 101 and 106) and
+  // a short line in Freiburg.
+  EXPECT_THAT(
+      computeMetricDistance(
+          projectWebMerc(GeoPointOrWkt{
+              std::string{litRealWorldMultiPolygonNonIntersecting}}),
+          projectWebMerc(GeoPointOrWkt{std::string{litShortRealWorldLine}})),
+      Optional(DoubleNear(1'700, 50)));
+
+  // One polygon is contained in the larger multi-polygon.
+  EXPECT_THAT(computeMetricDistance(
+                  projectWebMerc(GeoPointOrWkt{
+                      std::string{litRealWorldMultiPolygonNonIntersecting}}),
+                  projectWebMerc(
+                      GeoPointOrWkt{std::string{litSmallRealWorldPolygon1}})),
+              Optional(Eq(0.0)));
+
+  // Test invalid case.
+  EXPECT_EQ(computeMetricDistance(
+                projectWebMerc(GeoPointOrWkt{std::string{litInvalidType}}),
+                projectWebMerc(
+                    GeoPointOrWkt{std::string{litSmallRealWorldPolygon1}})),
+            std::nullopt);
 }
 
 }  // namespace
