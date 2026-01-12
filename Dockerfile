@@ -77,8 +77,7 @@ ENV QLEVER_IS_RUNNING_IN_CONTAINER=1
 # Copy the binaries and the entrypoint script.
 COPY --from=builder /qlever/build/*Main /qlever/
 COPY --from=builder /qlever/e2e/* /qlever/e2e/
-COPY docker-entrypoint.sh /qlever/
-RUN sudo chmod +x /qlever/docker-entrypoint.sh
+COPY --chmod=755 docker-entrypoint.sh /qlever/
 
 # Our entrypoint script does some clever things; see the comments in there.
 ENTRYPOINT ["/qlever/docker-entrypoint.sh"]

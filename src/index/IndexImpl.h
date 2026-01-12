@@ -35,7 +35,6 @@
 #include "parser/RdfParser.h"
 #include "parser/TripleComponent.h"
 #include "util/BufferedVector.h"
-#include "util/CancellationHandle.h"
 #include "util/File.h"
 #include "util/Forward.h"
 #include "util/MemorySize/MemorySize.h"
@@ -696,6 +695,7 @@ class IndexImpl {
    */
   void deleteTemporaryFile(const std::string& path);
 
+  // Return the filename where the patterns are stored.
   std::string getPatternFilename() const;
 
  public:

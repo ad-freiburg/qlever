@@ -557,6 +557,124 @@ struct GeometryNVisitor {
 
 static constexpr GeometryNVisitor getGeometryN;
 
+// Implements the web mercator projection for points. Use together via
+// `ProjectionVisitor<WebMercatorProjection>` for other geometry types.
+struct WebMercatorProjection {
+  DPoint operator()(const DPoint& p) const { return latLngToWebMerc(p); }
+};
+
+// Concept to generically model a projection function (that is, point to point
+// mapping). Used for the `UtilGeomProjectionVisitor` below.
+template <typename T>
+CPP_concept IsProjectionFunction =
+    InvocableWithExactReturnType<T, DPoint, const DPoint&>;
+static_assert(IsProjectionFunction<WebMercatorProjection>);
+
+// Helper for `UtilGeomProjectionVisitor`.
+template <typename T>
+CPP_concept VectorBasedGeometry = isVector<T> || SimilarTo<T, DLine>;
+
+// Helper to translate the coordinates of a given geometry to another projection
+// (the projection is applied to each coordinate pair).
+CPP_template(typename Projection)(
+    requires IsProjectionFunction<Projection>) struct UtilGeomProjectionVisitor
+    : Projection {
+  // Inherit the transformation of points.
+  using Projection::operator();
+
+  // Transform collections (might be called recursively, for example for points
+  // in a `MultiLine`).
+  CPP_template_2(typename T)(requires VectorBasedGeometry<T>) T operator()(
+      T multi) const {
+    ql::ranges::transform(multi, multi.begin(), *this);
+    return multi;
+  };
+
+  // Polygons require special treatment for inner (~ a line) and outer
+  // boundaries (~ a multi line).
+  DPolygon operator()(DPolygon poly) const {
+    return {(*this)(std::move(poly.getOuter())),
+            (*this)(std::move(poly.getInners()))};
+  }
+
+  // Unwrap dynamic `AnyGeometry` container type.
+  DAnyGeometry operator()(DAnyGeometry anyGeom) const {
+    return visitAnyGeometry(
+        [this](auto&& contained) {
+          // TODO<ullingerc> `AnyGeometry` should allow moving out its contained
+          // value. Then this can be:
+          // `static_assert(std::is_rvalue_reference_v<decltype(contained)>);`
+          return DAnyGeometry{(*this)(AD_FWD(contained))};
+        },
+        std::move(anyGeom));
+  }
+
+  // Handle `ParsedWkt` variant.
+  ParsedWkt operator()(ParsedWkt geom) const {
+    return std::visit(
+        [this](auto&& contained) {
+          static_assert(std::is_rvalue_reference_v<decltype(contained)>);
+          return ParsedWkt{(*this)(AD_FWD(contained))};
+        },
+        std::move(geom));
+  }
+
+  // Handle values contained in `std::optional`.
+  CPP_template_2(typename T)(
+      requires(!SimilarTo<T, GeoPointOrWkt>)) std::optional<T>
+  operator()(std::optional<T> opt) const {
+    if (!opt.has_value()) {
+      return std::nullopt;
+    }
+    return (*this)(std::move(opt.value()));
+  }
+
+  // Handle `GeoPointOrWkt` (raw unparsed geometry).
+  ParseResult operator()(std::optional<GeoPointOrWkt> geoPointOrWkt) const {
+    auto [type, parsed] = ParseGeoPointOrWktVisitor{}(geoPointOrWkt);
+    return {type, (*this)(std::move(parsed))};
+  }
+};
+
+// Instantiation for projection to web mercator of the various supported
+// geometry types.
+static constexpr UtilGeomProjectionVisitor<WebMercatorProjection>
+    projectWebMerc;
+
+// Helper for `MetricDistanceVisitor`.
+template <typename T, typename U>
+CPP_concept IsPairOfUtilGeoms =
+    SimilarToAnyTypeIn<T, ParsedWkt> && SimilarToAnyTypeIn<U, ParsedWkt>;
+
+// Visitor to compute the distance in meters given a geometry that has been
+// converted to web mercator projection.
+struct MetricDistanceVisitor {
+  // Handle `ParsedWkt` variant.
+  double operator()(const ParsedWkt& a, const ParsedWkt& b) const {
+    return std::visit(MetricDistanceVisitor{}, a, b);
+  }
+
+  // Delegate the actual distance computation to `pb_util`.
+  CPP_template(typename T, typename U)(requires IsPairOfUtilGeoms<T, U>) double
+  operator()(const T& a, const U& b) const {
+    return util::geo::webMercMeterDist<T, U>(a, b);
+  }
+
+  // Handle optional geometries that may be contained in a `ParseResult`.
+  std::optional<double> operator()(const ParseResult& a,
+                                   const ParseResult& b) const {
+    if (!a.second.has_value() || !b.second.has_value()) {
+      return std::nullopt;
+    }
+    return MetricDistanceVisitor{}(a.second.value(), b.second.value());
+  }
+};
+
+// Compute the metric distance between any combination of supported geometry
+// types. Note that the coordinate pairs of the geometry must first be projected
+// to web mercator, e.g. using `projectWebMerc` above.
+constexpr MetricDistanceVisitor computeMetricDistance;
+
 }  // namespace ad_utility::detail
 
 #endif  // QLEVER_SRC_RDFTYPES_GEOMETRYINFOHELPERSIMPL_H
