@@ -79,7 +79,6 @@ IndexScan::IndexScan(QueryExecutionContext* qec,
                      Permutation::Enum permutationType,
                      const SparqlTripleSimple& triple, Graphs graphsToFilter,
                      std::optional<ScanSpecAndBlocks> scanSpecAndBlocks)
-    // TODO<2618>: do the internal selection correctly
     : IndexScan(
           qec, qec->getIndex().getImpl().getPermutationPtr(permutationType),
           std::shared_ptr<const LocatedTriplesPerBlock>{

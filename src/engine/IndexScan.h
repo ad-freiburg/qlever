@@ -17,10 +17,7 @@ class SparqlTripleSimple;
 class IndexScan final : public Operation {
  public:
   using Graphs = ScanSpecificationAsTripleComponent::GraphFilter;
-  // TODO<2618>: get rid of them, especially the dubling with
-  // `PermutationSelector`
   using PermutationPtr = std::shared_ptr<const Permutation>;
-  using LocatedTriplesStatePtr = std::shared_ptr<const LocatedTriplesState>;
   using LocatedTriplesPerBlockPtr =
       std::shared_ptr<const LocatedTriplesPerBlock>;
 

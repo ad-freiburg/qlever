@@ -19,7 +19,6 @@
 
 // Forward declaration of `IdTable`
 class IdTable;
-// TODO<2618>: get rid of them
 // Forward declaration of `LocatedTriplesPerBlock` and `LocatedTriplesSnapshot`
 class LocatedTriplesPerBlock;
 struct LocatedTriplesState;
@@ -215,5 +214,9 @@ class Permutation {
 
   bool isInternalPermutation_ = false;
 };
+
+namespace qlever {
+using PermutationPtr = std::shared_ptr<const Permutation>;
+}
 
 #endif  // QLEVER_SRC_INDEX_PERMUTATION_H

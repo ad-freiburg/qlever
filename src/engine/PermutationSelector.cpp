@@ -52,7 +52,7 @@ PermutationPtr getPermutationForTriple(Permutation::Enum permutation,
 
 // _____________________________________________________________________________
 LocatedTriplesPerBlockPtr getLocatedTriplesPerBlockForTriple(
-    Permutation::Enum permutation, LocatedTriplesStatePtr snapshot,
+    Permutation::Enum permutation, LocatedTriplesSharedState snapshot,
     const SparqlTripleSimple& triple) {
   // Create alias shared pointer of internal the right `LocatedTriplesPerBlock`.
   const auto& locatedTriples =
@@ -66,7 +66,7 @@ LocatedTriplesPerBlockPtr getLocatedTriplesPerBlockForTriple(
 std::pair<PermutationPtr, LocatedTriplesPerBlockPtr>
 getPermutationAndLocatedTriplesPerBlockForTriple(
     Permutation::Enum permutation, const Index& index,
-    LocatedTriplesStatePtr snapshot, const SparqlTripleSimple& triple) {
+    LocatedTriplesSharedState snapshot, const SparqlTripleSimple& triple) {
   return {getPermutationForTriple(permutation, index, triple),
           getLocatedTriplesPerBlockForTriple(permutation, std::move(snapshot),
                                              triple)};

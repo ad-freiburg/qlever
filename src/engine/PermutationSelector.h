@@ -5,16 +5,11 @@
 #ifndef QLEVER_SRC_ENGINE_PERMUTATIONSELECTOR_H
 #define QLEVER_SRC_ENGINE_PERMUTATIONSELECTOR_H
 
-#include <memory>
-
-#include "index/Index.h"
 #include "index/Permutation.h"
 #include "parser/SparqlTriple.h"
 
 namespace qlever {
 
-// TODO<2618>: get rid of them
-using LocatedTriplesStatePtr = std::shared_ptr<const LocatedTriplesState>;
 using LocatedTriplesPerBlockPtr = std::shared_ptr<const LocatedTriplesPerBlock>;
 using PermutationPtr = std::shared_ptr<const Permutation>;
 
@@ -29,7 +24,7 @@ PermutationPtr getPermutationForTriple(Permutation::Enum permutation,
 // based on the `permutation` enum and the values in `triple`. See
 // `getPermutationAndLocatedTriplesPerBlockForTriple` for details.
 LocatedTriplesPerBlockPtr getLocatedTriplesPerBlockForTriple(
-    Permutation::Enum permutation, LocatedTriplesStatePtr snapshot,
+    Permutation::Enum permutation, LocatedTriplesSharedState snapshot,
     const SparqlTripleSimple& triple);
 
 // Return a shared pointer to the correct permutation in `index` and
@@ -43,7 +38,7 @@ LocatedTriplesPerBlockPtr getLocatedTriplesPerBlockForTriple(
 std::pair<PermutationPtr, LocatedTriplesPerBlockPtr>
 getPermutationAndLocatedTriplesPerBlockForTriple(
     Permutation::Enum permutation, const Index& index,
-    LocatedTriplesStatePtr snapshot, const SparqlTripleSimple& triple);
+    LocatedTriplesSharedState snapshot, const SparqlTripleSimple& triple);
 }  // namespace qlever
 
 #endif  // QLEVER_SRC_ENGINE_PERMUTATIONSELECTOR_H
