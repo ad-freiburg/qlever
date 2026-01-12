@@ -30,8 +30,9 @@ using CancellationHandle = ad_utility::SharedCancellationHandle;
 // Write a new vocabulary that contains all words from `vocab` plus all
 // entries in `entries`. Returns a pair consisting of a vector insertion
 // positions (the `VocabIndex` of the `LocalVocabEntry`s position in the old
-// `vocab`) and a mapping from old local vocab `Id`s to new vocab `Id`s.
-std::pair<std::vector<VocabIndex>, ad_utility::HashMap<Id, Id>>
+// `vocab`) and a mapping from old local vocab `Id`s bit representation (for
+// cheaper hash functions) to new vocab `Id`s.
+std::pair<std::vector<VocabIndex>, ad_utility::HashMap<Id::T, Id>>
 materializeLocalVocab(const std::vector<LocalVocabIndex>& entries,
                       const Index::Vocab& vocab,
                       const std::string& newIndexName) {
@@ -39,7 +40,7 @@ materializeLocalVocab(const std::vector<LocalVocabIndex>& entries,
   std::vector<std::tuple<VocabIndex, std::string_view, Id>> insertInfo;
   insertInfo.reserve(entries.size());
 
-  ad_utility::HashMap<Id, Id> localVocabMapping;
+  ad_utility::HashMap<Id::T, Id> localVocabMapping;
 
   for (auto* entry : entries) {
     const auto& [lower, upper] = entry->positionInVocab();
@@ -65,7 +66,7 @@ materializeLocalVocab(const std::vector<LocalVocabIndex>& entries,
       auto word = std::get<std::string_view>(insertInfo.at(newWordCount));
       auto newIndex = (*vocabWriter)(word, vocab.shouldBeExternalized(word));
       localVocabMapping.emplace(
-          std::get<Id>(insertInfo.at(newWordCount)),
+          std::get<Id>(insertInfo.at(newWordCount)).getBits(),
           Id::makeFromVocabIndex(VocabIndex::make(newIndex)));
       newWordCount++;
     }
@@ -77,7 +78,7 @@ materializeLocalVocab(const std::vector<LocalVocabIndex>& entries,
   for (const auto& [_, word, id] : insertInfo | ql::views::drop(newWordCount)) {
     auto newIndex = (*vocabWriter)(word, vocab.shouldBeExternalized(word));
     localVocabMapping.emplace(
-        id, Id::makeFromVocabIndex(VocabIndex::make(newIndex)));
+        id.getBits(), Id::makeFromVocabIndex(VocabIndex::make(newIndex)));
   }
   std::vector<VocabIndex> insertionPositions;
   insertionPositions.reserve(insertInfo.size());
@@ -89,10 +90,13 @@ materializeLocalVocab(const std::vector<LocalVocabIndex>& entries,
 }
 
 // Map old vocab `Id`s to new vocab `Id`s according to the given
-// `insertionPositions`.
-Id remapVocabId(Id original,
-                const std::vector<VocabIndex>& insertionPositions) {
-  AD_CONTRACT_CHECK(original.getDatatype() == Datatype::VocabIndex);
+// `insertionPositions`. This is the  most performance critical code of the
+// rebuild.
+AD_ALWAYS_INLINE Id
+remapVocabId(Id original, const std::vector<VocabIndex>& insertionPositions) {
+  AD_EXPENSIVE_CHECK(
+      original.getDatatype() == Datatype::VocabIndex,
+      "Only ids resembling a vocab index can be remapped with this function.");
   size_t offset = ql::ranges::distance(
       insertionPositions.begin(),
       ql::ranges::upper_bound(insertionPositions, original.getVocabIndex(),
@@ -109,7 +113,7 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
     const Permutation& permutation, ScanSpecification scanSpec,
     const BlockMetadataRanges& blockMetadataRanges,
     const LocatedTriplesSharedState& locatedTriplesSharedState,
-    const ad_utility::HashMap<Id, Id>& localVocabMapping,
+    const ad_utility::HashMap<Id::T, Id>& localVocabMapping,
     const std::vector<VocabIndex>& insertionPositions,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
     ql::span<const ColumnIndex> additionalColumns) {
@@ -131,10 +135,10 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
             constexpr size_t REGULAR_COLUMNS = 4;
             for (auto col : allCols | ::ranges::views::take(REGULAR_COLUMNS)) {
               for (Id& id : col) {
-                if (id.getDatatype() == Datatype::LocalVocabIndex) {
-                  id = localVocabMapping.at(id);
-                } else if (id.getDatatype() == Datatype::VocabIndex) {
+                if (id.getDatatype() == Datatype::VocabIndex) [[likely]] {
                   id = remapVocabId(id, insertionPositions);
+                } else if (id.getDatatype() == Datatype::LocalVocabIndex) {
+                  id = localVocabMapping.at(id.getBits());
                 }
               }
             }
@@ -154,7 +158,7 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
 ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
     const Permutation& permutation, ScanSpecification scanSpec,
     const LocatedTriplesSharedState& locatedTriplesSharedState,
-    const ad_utility::HashMap<Id, Id>& localVocabMapping,
+    const ad_utility::HashMap<Id::T, Id>& localVocabMapping,
     const std::vector<VocabIndex>& insertionPositions,
     const ad_utility::SharedCancellationHandle& cancellationHandle) {
   return readIndexAndRemap(
