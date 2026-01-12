@@ -1792,19 +1792,18 @@ void IndexImpl::setPrefixesForEncodedValues(
 namespace {
 void countDistinct(std::optional<Id>& lastId, size_t& counter,
                    const IdTable& table) {
-  if (!table.empty()) {
-    auto col = table.getColumn(0);
-    counter +=
-        ql::ranges::distance(col | ::ranges::views::unique([](Id a, Id b) {
-                               return a.getBits() == b.getBits();
-                             }));
-    if (lastId != col[0]) {
-      lastId = col[0];
-    } else {
-      // Avoid double counting in case the last id of the previous block is the
-      // same as the first id of this block.
-      counter--;
-    }
+  AD_CORRECTNESS_CHECK(
+      !table.empty(), "Empty tables should never be yielded by the lazy scan.");
+  auto col = table.getColumn(0);
+  counter += ql::ranges::distance(col | ::ranges::views::unique([](Id a, Id b) {
+                                    return a.getBits() == b.getBits();
+                                  }));
+  if (lastId != col[0]) {
+    lastId = col[0];
+  } else {
+    // Avoid double counting in case the last id of the previous block is the
+    // same as the first id of this block.
+    counter--;
   }
 }
 
