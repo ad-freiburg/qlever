@@ -2557,7 +2557,8 @@ auto QueryPlanner::createMaterializedViewJoinReplacement(
       aScan->object() == bScan->subject() &&
       aScan->subject() != bScan->object() &&
       aScan->subject() != aScan->object()) {
-    SingleChain chain{aScan->predicate().getIri(), bScan->predicate().getIri()};
+    // SingleChain chain{aScan->predicate().getIri(),
+    // bScan->predicate().getIri()};
     // _qec->materializedViewsManager().makeIndexScan(QueryExecutionContext
     // *qec, const parsedQuery::MaterializedViewQuery &viewQuery)
     AD_LOG_INFO << "SCAN: "

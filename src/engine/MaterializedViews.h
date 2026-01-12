@@ -226,9 +226,11 @@ class MaterializedView {
 //
 struct SingleChain {
   // ?something <predjoinobj> ?x .
-  ad_utility::triple_component::Iri predJoinObj_;
+  std::string predJoinObj_;
   // ?x <predjoinsubj> ?something_else .
-  ad_utility::triple_component::Iri predJoinSubj_;
+  std::string predJoinSubj_;
+
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_CONSTEXPR(SingleChain);
 
   CPP_template(typename H, typename G)(
       requires ql::concepts::same_as<G, SingleChain>) friend H
@@ -258,9 +260,9 @@ class MaterializedViewsManager {
       ad_utility::HashMap<std::string, std::shared_ptr<MaterializedView>>>
       loadedViews_;
   // TODO multiple?
-  mutable ad_utility::Synchronized<
-      ad_utility::HashMap<JoinPattern, std::shared_ptr<MaterializedView>>>
-      joinPatterns_;
+  //   mutable ad_utility::Synchronized<
+  //       ad_utility::HashMap<SingleChain, std::shared_ptr<MaterializedView>>>
+  //       joinPatterns_;
 
  public:
   MaterializedViewsManager() = default;
