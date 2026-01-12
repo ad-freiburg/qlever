@@ -563,6 +563,13 @@ class IndexImpl {
                             Permutation::KeyOrder permutation,
                             Callbacks&&... perTripleCallbacks);
 
+  // Write a single permutation to disk. `numColumns` specifies the number of
+  // columns in the relation (usually 4, sometimes 6 with patterns).
+  // `fileName` is the base name of the files to write to (without suffixes).
+  // `sortedTriples` is an input range that provides the triples in the correct
+  // order.
+  // Return the number of triples written and the metadata for the written
+  // permutation.
   std::tuple<size_t, IndexMetaDataMmapDispatcher::WriteType>
   createPermutationImpl(
       size_t numColumns, const std::string& fileName,
@@ -606,6 +613,16 @@ class IndexImpl {
                      Callbacks&&... perTripleCallbacks);
 
  public:
+  // Write a single permutation to disk. `numColumns` specifies the number of
+  // columns in the relation (usually 4, sometimes 6 with patterns).
+  // `sortedTriples` is an input range that provides the triples in the correct
+  // order.
+  // `permutation` specifies which permutation to write.
+  // `internal` specifies whether this is an internal permutation and adjusts
+  // the filename of the generated file on disk accordingly.
+  // Return the number of distinct values on the first column of the written
+  // permutation. (Predicates for PSO/POS, Subjects for SPO/SOP, Objects for
+  // OSP/OPS).
   size_t createPermutation(
       size_t numColumns,
       ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
@@ -828,6 +845,9 @@ class IndexImpl {
   void storeTextScoringParamsInConfiguration(TextScoringMetric scoringMetric,
                                              float b, float k);
 
+  // Overwrite the config of this instance of `IndexImpl` with the config of
+  // `other`, adjusting the name to `newName` and the statistics to
+  // `newStats`.
   void loadConfigFromOldIndex(const std::string& newName,
                               const IndexImpl& other,
                               const nlohmann::json& newStats);

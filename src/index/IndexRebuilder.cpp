@@ -27,7 +27,12 @@
 namespace {
 using CancellationHandle = ad_utility::SharedCancellationHandle;
 
-// _____________________________________________________________________________
+// Write a new vocabulary that contains all words from `vocab` plus all
+// entries in `entries`. Returns a pair consisting of a vector of tuples
+// containing information about the inserted entries (the `VocabIndex` of their
+// position in the old `vocab`, the string representation of the newly added
+// value, and the original `Id`) and a mapping from old local vocab `Id`s to
+// new vocab `Id`s.
 std::pair<std::vector<std::tuple<VocabIndex, std::string_view, Id>>,
           ad_utility::HashMap<Id, Id>>
 materializeLocalVocab(const std::vector<LocalVocabIndex>& entries,
@@ -77,10 +82,10 @@ materializeLocalVocab(const std::vector<LocalVocabIndex>& entries,
     localVocabMapping.emplace(
         id, Id::makeFromVocabIndex(VocabIndex::make(newIndex)));
   }
-  return std::pair{std::move(insertInfo), std::move(localVocabMapping)};
+  return std::make_pair(std::move(insertInfo), std::move(localVocabMapping));
 }
 
-// _____________________________________________________________________________
+// Map old vocab `Id`s to new vocab `Id`s according to the given `insertInfo`.
 Id remapVocabId(Id original,
                 const std::vector<std::tuple<VocabIndex, std::string_view, Id>>&
                     insertInfo) {
@@ -94,7 +99,10 @@ Id remapVocabId(Id original,
       VocabIndex::make(original.getVocabIndex().get() + offset));
 }
 
-// _____________________________________________________________________________
+// Create a copy of the given `permutation` scanned according to `scanSpec`,
+// where all local vocab `Id`s are remapped according to `localVocabMapping`
+// and all vocab `Id`s are remapped according to `insertInfo` to create a new
+// index where all of these values are all vocab `Id`s in the new vocabulary.
 ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
     const Permutation& permutation, ScanSpecification scanSpec,
     const BlockMetadataRanges& blockMetadataRanges,
@@ -140,6 +148,8 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
           }}};
 }
 
+// Overload that automatically retrieves the block metadata ranges for the given
+// `permutation` and passes the graph ID as an additional column to be read.
 ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
     const Permutation& permutation, ScanSpecification scanSpec,
     const LocatedTriplesSharedState& locatedTriplesSharedState,
@@ -155,6 +165,8 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
       std::array{static_cast<ColumnIndex>(ADDITIONAL_COLUMN_GRAPH_ID)});
 }
 
+// Get the number of columns in the given `blockMetadataRanges`. If this cannot
+// be determined, return 4 as a safe default.
 size_t getNumColumns(const BlockMetadataRanges& blockMetadataRanges) {
   if (!blockMetadataRanges.empty()) {
     const auto& first = blockMetadataRanges.at(0);

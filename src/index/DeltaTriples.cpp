@@ -617,8 +617,6 @@ std::vector<LocalVocabIndex> DeltaTriples::copyLocalVocab() const {
   std::vector<LocalVocabIndex> entries;
   entries.reserve(localVocab_.size());
 
-  ad_utility::HashMap<Id, Id> localVocabMapping;
-
   for (const LocalVocabEntry& entry : localVocab_.primaryWordSet()) {
     entries.push_back(&entry);
   }
