@@ -18,8 +18,9 @@ TEST(GraphTerm, toSparql) {
   using GT = GraphTerm;
   EXPECT_EQ(GT(V("?x")).toSparql(), "?x");
   EXPECT_EQ(GT(Iri("<x>")).toSparql(), "<x>");
-  EXPECT_EQ(GT(Literal("\"x\"")).toSparql(), "\"x\"");
-  EXPECT_EQ(GT(Literal("\"x\"@en")).toSparql(), "\"x\"@en");
+  EXPECT_EQ(GT(Literal::fromStringRepresentation("\"x\"")).toSparql(), "\"x\"");
+  EXPECT_EQ(GT(Literal::fromStringRepresentation("\"x\"@en")).toSparql(),
+            "\"x\"@en");
   EXPECT_EQ(GT(BlankNode(true, "blubb")).toSparql(), "_:g_blubb");
 }
 
@@ -29,8 +30,11 @@ TEST(GraphTerm, toTripleComponent) {
   using GT = GraphTerm;
   EXPECT_EQ(GT(V("?x")).toTripleComponent(), V("?x"));
   EXPECT_EQ(GT(Iri("<x>")).toTripleComponent(), iri("<x>"));
-  EXPECT_EQ(GT(Literal("\"x\"")).toTripleComponent(), lit("x"));
-  EXPECT_EQ(GT(Literal("\"x\"@en")).toTripleComponent(), lit("x", "@en"));
+  EXPECT_EQ(GT(Literal::fromStringRepresentation("\"x\"")).toTripleComponent(),
+            lit("x"));
+  EXPECT_EQ(
+      GT(Literal::fromStringRepresentation("\"x\"@en")).toTripleComponent(),
+      lit("x", "@en"));
   EXPECT_EQ(GT(BlankNode(true, "blubb")).toTripleComponent(),
             V("?_QLever_internal_variable_bn_g_blubb"));
 }

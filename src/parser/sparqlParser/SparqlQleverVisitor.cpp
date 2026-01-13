@@ -1664,8 +1664,7 @@ TripleComponent Visitor::visit(Parser::DataBlockValueContext* ctx) {
   if (ctx->iri()) {
     return visit(ctx->iri());
   } else if (ctx->rdfLiteral()) {
-    return RdfStringParser<TurtleParser<Tokenizer>>::parseTripleObject(
-        visit(ctx->rdfLiteral()));
+    return visit(ctx->rdfLiteral());
   } else if (ctx->numericLiteral()) {
     return std::visit(
         [](auto intOrDouble) { return TripleComponent{intOrDouble}; },
@@ -2327,9 +2326,34 @@ GraphTerm Visitor::visit(Parser::GraphTermContext* ctx) {
     return Iri{std::string{visit(ctx->iri()).toStringRepresentation()}};
   } else if (ctx->NIL()) {
     return Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>"};
+  } else if (ctx->numericLiteral()) {
+    auto numericValue = visit(ctx->numericLiteral());
+    return std::visit(
+        [](auto value) -> Literal {
+          using T = std::decay_t<decltype(value)>;
+          std::string valueStr;
+          std::string datatypeIri;
+          if constexpr (std::is_same_v<T, int64_t>) {
+            valueStr = std::to_string(value);
+            datatypeIri = "<http://www.w3.org/2001/XMLSchema#integer>";
+          } else {
+            static_assert(std::is_same_v<T, double>);
+            valueStr = std::to_string(value);
+            datatypeIri = "<http://www.w3.org/2001/XMLSchema#double>";
+          }
+          return Literal::literalWithoutQuotes(
+              valueStr, Iri::fromStringRepresentation(std::move(datatypeIri)));
+        },
+        numericValue);
+  } else if (ctx->booleanLiteral()) {
+    bool boolValue = visit(ctx->booleanLiteral());
+    return Literal::literalWithoutQuotes(
+        boolValue ? "true" : "false",
+        Iri::fromStringRepresentation(
+            "<http://www.w3.org/2001/XMLSchema#boolean>"));
   } else {
-    return visitAlternative<Literal>(ctx->numericLiteral(),
-                                     ctx->booleanLiteral(), ctx->rdfLiteral());
+    AD_CORRECTNESS_CHECK(ctx->rdfLiteral());
+    return visit(ctx->rdfLiteral());
   }
 }
 
@@ -2567,7 +2591,7 @@ ExpressionPtr Visitor::visit(Parser::PrimaryExpressionContext* ctx) {
   if (ctx->rdfLiteral()) {
     auto tripleComponent =
         RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
-            visit(ctx->rdfLiteral()));
+            visit(ctx->rdfLiteral()).toSparql());
     AD_CORRECTNESS_CHECK(!tripleComponent.isIri() &&
                          !tripleComponent.isString());
     if (tripleComponent.isLiteral()) {
@@ -2934,17 +2958,18 @@ ExpressionPtr Visitor::visit(Parser::IriOrFunctionContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-std::string Visitor::visit(Parser::RdfLiteralContext* ctx) {
-  // TODO: This should really be an RdfLiteral class that stores a unified
-  //  version of the string, and the langtag/datatype separately.
-  std::string ret = ctx->string()->getText();
+ad_utility::triple_component::Literal Visitor::visit(
+    Parser::RdfLiteralContext* ctx) {
+  std::string literalContent = ctx->string()->getText();
+  std::optional<std::variant<ad_utility::triple_component::Iri, std::string>>
+      descriptor;
   if (ctx->LANGTAG()) {
-    ret += ctx->LANGTAG()->getText();
+    descriptor = ctx->LANGTAG()->getText();
   } else if (ctx->iri()) {
-    // TODO<joka921> Also unify the two Literal classes...
-    ret += "^^" + visit(ctx->iri()).toStringRepresentation();
+    descriptor = visit(ctx->iri());
   }
-  return ret;
+  return ad_utility::triple_component::Literal::fromEscapedRdfLiteral(
+      literalContent, std::move(descriptor));
 }
 
 // ____________________________________________________________________________________
