@@ -22,6 +22,15 @@ jobs:
         pipx install conan
       shell: bash
 
+    - name: Install curl, npm, nvm and nodejs
+      run: |
+        sudo apt install curl npm
+        source ~/.bashrc
+        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+        \. "$HOME/.nvm/nvm.sh"
+        nvm install 25
+      shell: bash
+
     - name: Get build and host profiles for conan
       working-directory: ${{github.workspace}}
       run: |
@@ -65,6 +74,7 @@ jobs:
       run: >
         source ${{github.workspace}}/build/conanrun.sh;
         ${{github.workspace}}/e2e/e2e.sh -d build
+
 
 
 
