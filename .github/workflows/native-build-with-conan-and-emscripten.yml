@@ -30,6 +30,7 @@ jobs:
         \. "$HOME/.nvm/nvm.sh"
         nvm install 25
         source ~/.bashrc
+        node -v
       shell: bash
 
     - name: Get build and host profiles for conan
