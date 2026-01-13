@@ -26,13 +26,13 @@
 
 #include "global/Constants.h"
 #include "rdfTypes/GeoPoint.h"
-#include "util/Views.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/Literal.h"
 #include "util/Exception.h"
 #include "util/GeoConverters.h"
 #include "util/Log.h"
 #include "util/TypeTraits.h"
+#include "util/Views.h"
 
 // This file contains functions used for parsing and processing WKT geometries
 // using `pb_util`. To avoid unnecessarily compiling expensive modules, this

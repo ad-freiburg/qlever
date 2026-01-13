@@ -5,10 +5,22 @@ endif ()
 project(QLever C CXX)
 
 if (APPLE)
-    # Add Homebrew paths for M-series
-    list(APPEND CMAKE_PREFIX_PATH "/opt/homebrew")
-    link_directories(/opt/homebrew/lib)
-    include_directories(/opt/homebrew/include)
+    # Dynamically detect Homebrew prefix
+    execute_process(
+        COMMAND brew --prefix
+        OUTPUT_VARIABLE HOMEBREW_PREFIX
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        RESULT_VARIABLE BREW_RESULT
+        ERROR_QUIET
+    )
+    if (BREW_RESULT EQUAL 0 AND HOMEBREW_PREFIX)
+        message(STATUS "Found Homebrew at: ${HOMEBREW_PREFIX}")
+        list(APPEND CMAKE_PREFIX_PATH "${HOMEBREW_PREFIX}")
+        link_directories(${HOMEBREW_PREFIX}/lib)
+        include_directories(${HOMEBREW_PREFIX}/include)
+    else()
+        message(WARNING "Homebrew not found. You may need to manually set CMAKE_PREFIX_PATH to locate dependencies (Boost, ICU, OpenSSL, etc.)")
+    endif()
 endif ()
 
 # C/C++ Versions
@@ -69,7 +81,7 @@ elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL
         set(RANGE_V3_REQUIRED_BY_COMPILER ON)
     endif ()
 else ()
-    MESSAGE(FATAL_ERROR "QLever currently only supports the G++ or LLVM-Clang++ compilers. Found ${CMAKE_CXX_COMPILER_ID}")
+    MESSAGE(FATAL_ERROR "QLever currently only supports the G++, LLVM-Clang++ or AppleClang compilers. Found ${CMAKE_CXX_COMPILER_ID}")
 endif ()
 
 ## Build targets for address sanitizer
