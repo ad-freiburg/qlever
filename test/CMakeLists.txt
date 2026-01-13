@@ -141,6 +141,8 @@ if (NOT _DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS)
     addLinkAndDiscoverTest(GraphStoreProtocolTest engine)
 
     addLinkAndDiscoverTest(ParsedRequestBuilderTest engine)
+
+    addLinkAndDiscoverTest(ExceptionHandlingTest)
 endif ()
 
 addLinkAndDiscoverTest(ValueIdComparatorsTest util)
@@ -369,8 +371,6 @@ addLinkAndDiscoverTestSerial(ExportQueryExecutionTreesTest index engine parser)
 addLinkAndDiscoverTestSerial(AggregateExpressionTest parser sparqlExpressions index engine)
 
 addLinkAndDiscoverTest(OnDestructionDontThrowDuringStackUnwindingTest)
-
-addLinkAndDiscoverTest(ExceptionHandlingTest)
 
 addLinkAndDiscoverTest(SparqlExpressionTypesTest sparqlExpressions util)
 
