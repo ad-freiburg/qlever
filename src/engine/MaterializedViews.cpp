@@ -11,7 +11,6 @@
 #include <filesystem>
 #include <memory>
 #include <nlohmann/json.hpp>
-#include <ranges>
 #include <stdexcept>
 
 #include "engine/IndexScan.h"
@@ -47,16 +46,13 @@ MaterializedViewWriter::MaterializedViewWriter(
   qet_ = qet;
   qec_ = qec;
   parsedQuery_ = std::move(parsedQuery);
-  auto columnNamesAndPermutation = getIdTableColumnNamesAndPermutation();
+  auto [columnNamesAndPermutation, numAddEmptyColumns] =
+      getIdTableColumnNamesAndPermutation();
   columnNames_ = ::ranges::to<std::vector<Variable>>(columnNamesAndPermutation |
                                                      ql::views::keys);
   columnPermutation_ = ::ranges::to<std::vector<ColumnIndex>>(
-      columnNamesAndPermutation | ql::views::values |
-      ql::views::filter([](const auto& idx) { return idx.has_value(); }) |
-      ql::views::transform([](const auto& idx) { return idx.value(); }));
-  numAddEmptyColumns_ = ::ranges::count_if(
-      columnNamesAndPermutation,
-      [](const auto& col) { return col.second.has_value(); });
+      columnNamesAndPermutation | ql::views::values);
+  numAddEmptyColumns_ = numAddEmptyColumns;
 }
 
 // _____________________________________________________________________________
@@ -95,7 +91,7 @@ MaterializedViewWriter::getIdTableColumnNamesAndPermutation() const {
   const size_t numCols = targetVarsAndCols.size();
 
   // Column information for the columns selected by the user's query.
-  auto result = ::ranges::to<ColumnNamesAndPermutation>(
+  auto existingCols = ::ranges::to<std::vector<ColumnNameAndIndex>>(
       targetVarsAndCols | ql::views::transform([](const auto& opt) {
         AD_CONTRACT_CHECK(opt.has_value());
         return ColumnNameAndIndex{opt.value().variable_,
@@ -103,17 +99,15 @@ MaterializedViewWriter::getIdTableColumnNamesAndPermutation() const {
       }));
 
   // Add dummy columns such that the view has at least four columns in total.
+  uint8_t numAddEmptyCols = 0;
   if (numCols < 4) {
     AD_LOG_INFO << "The query to write the materialized view '" << name_
                 << "' selects only " << numCols << " column(s). " << 4 - numCols
                 << " empty column(s) will be appended." << std::endl;
-
-    for (uint8_t i = 0; i < 4 - numCols; ++i) {
-      result.push_back({Variable{absl::StrCat("?_empty_", i)}, std::nullopt});
-    }
+    numAddEmptyCols = 4 - numCols;
   }
 
-  return result;
+  return {std::move(existingCols), numAddEmptyCols};
 }
 
 // _____________________________________________________________________________
@@ -343,9 +337,6 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
 
   // Make variable to column map
   auto columnNames = viewInfoJson.at("columns").get<std::vector<std::string>>();
-  AD_CORRECTNESS_CHECK(
-      columnNames.size() >= 4,
-      "Expected at least four columns in materialized view metadata");
   for (const auto& [index, columnName] :
        ::ranges::views::enumerate(columnNames)) {
     varToColMap_.insert({Variable{columnName},

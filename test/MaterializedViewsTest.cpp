@@ -341,17 +341,22 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
     EXPECT_EQ(res, "?o\n\"abc\"\n\"xyz\"\n");
   }
 
-  // Test that writing a view with less than four columns is possible.
+  // Test that writing and reading from a view with less than four columns is
+  // possible.
   {
     clearLog();
     MaterializedViewWriter::writeViewToDisk(
         testIndexBase_, "testView5",
-        qlv().parseAndPlanQuery("SELECT * { ?s ?p ?o }"));
+        qlv().parseAndPlanQuery("SELECT * { <s1> ?p ?o }"));
     MaterializedView view{testIndexBase_, "testView5"};
     EXPECT_THAT(columnNames(view),
-                ::testing::ElementsAreArray(
-                    std::vector<V>{V{"?s"}, V{"?p"}, V{"?o"}, V{"?_empty_0"}}));
-    EXPECT_THAT(log_.str(), ::testing::HasSubstr("1 empty column"));
+                ::testing::ElementsAreArray(std::vector<V>{V{"?p"}, V{"?o"}}));
+    EXPECT_THAT(log_.str(), ::testing::HasSubstr("2 empty column(s)"));
+    auto res = qlv().query(
+        "PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>"
+        "SELECT * { <p1> view:testView5-o ?o }",
+        ad_utility::MediaType::tsv);
+    EXPECT_EQ(res, "?o\n\"abc\"\n");
   }
 }
 

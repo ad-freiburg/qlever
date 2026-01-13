@@ -88,8 +88,11 @@ class MaterializedViewWriter {
   // the `QueryExecutionTree` must be permuted to match the requested target
   // columns and column ordering. This is called in the constructor to populate
   // `columnNamesAndPermutation_`.
-  using ColumnNameAndIndex = std::pair<Variable, std::optional<ColumnIndex>>;
-  using ColumnNamesAndPermutation = std::vector<ColumnNameAndIndex>;
+  using ColumnNameAndIndex = std::pair<Variable, ColumnIndex>;
+  struct ColumnNamesAndPermutation {
+    std::vector<ColumnNameAndIndex> columnNamesAndIndices_;
+    uint8_t numAddEmptyColumns_;
+  };
   ColumnNamesAndPermutation getIdTableColumnNamesAndPermutation() const;
 
   // The number of columns of the view.
