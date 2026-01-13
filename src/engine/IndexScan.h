@@ -94,6 +94,10 @@ class IndexScan final : public Operation {
 
   std::vector<ColumnIndex> resultSortedOn() const override;
 
+  std::array<TripleComponent, 3> triple() const {
+    return {subject_, predicate_, object_};
+  }
+
   // Set `PrefilterExpression`s and return updated `QueryExecutionTree` pointer
   // if necessary.
   std::optional<std::shared_ptr<QueryExecutionTree>>

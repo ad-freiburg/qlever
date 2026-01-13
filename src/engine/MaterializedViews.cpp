@@ -14,6 +14,7 @@
 #include <stdexcept>
 
 #include "engine/IndexScan.h"
+#include "engine/Join.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/VariableToColumnMap.h"
@@ -108,6 +109,54 @@ MaterializedViewWriter::getIdTableColumnNamesAndPermutation() const {
   }
 
   return {std::move(existingCols), numAddEmptyCols};
+}
+
+// _____________________________________________________________________________
+std::string MaterializedViewWriter::detectJoinPattern() const {
+  auto op = qet_->getRootOperation();
+  auto join = std::dynamic_pointer_cast<Join>(op);
+  if (join == nullptr) {
+    return "";
+  }
+  const auto& children = join->getChildren();
+  AD_CORRECTNESS_CHECK(children.size() == 2);
+  auto getIndexScan = [](QueryExecutionTree* ptr) {
+    return std::dynamic_pointer_cast<IndexScan>(ptr->getRootOperation());
+  };
+  auto left = getIndexScan(children.at(0));
+  auto right = getIndexScan(children.at(1));
+  if (left == nullptr || right == nullptr) {
+    return "";
+  }
+
+  // we are looking for the pattern:
+  // ?a <p1> ?b .
+  // ?b <p2> ?c .
+
+  auto check = [](std::shared_ptr<IndexScan> a,
+                  std::shared_ptr<IndexScan> b) -> std::string {
+    auto [s1, p1, o1] = a->triple();
+    auto [s2, p2, o2] = b->triple();
+
+    if (s1.isVariable() && s1 != s2 && s1 != o1 && p1.isIri() &&
+        o1.isVariable() && o1 == s2 && p2.isIri() && o2.isVariable() &&
+        s1 != o2 && o1 != o2) {
+      return absl::StrCat(p1.toString(), " CHAIN ", p2.toString());
+      // TODO remember variables
+    }
+    return "";
+  };
+
+  auto lr = check(left, right);
+  if (!lr.empty()) {
+    return lr;
+  }
+  auto rl = check(right, left);
+  if (!rl.empty()) {
+    return rl;
+  }
+
+  return "";
 }
 
 // _____________________________________________________________________________
@@ -281,7 +330,8 @@ void MaterializedViewWriter::writeViewMetadata() const {
       {"columns", (columnNames_ | ql::views::transform([](const Variable& v) {
                      return v.name();
                    }) |
-                   ::ranges::to<std::vector<std::string>>())}};
+                   ::ranges::to<std::vector<std::string>>())},
+      {"joinPattern", detectJoinPattern()}};
   ad_utility::makeOfstream(getFilenameBase() + ".viewinfo.json")
       << viewInfo.dump() << std::endl;
 }

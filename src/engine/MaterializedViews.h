@@ -126,6 +126,9 @@ class MaterializedViewWriter {
   // `CompressedRelationWriter`. Returns the permutation metadata.
   IndexMetaDataMmap writePermutation(RangeOfIdTables sortedBlocksSPO) const;
 
+  // TODO
+  std::string detectJoinPattern() const;
+
   // Helper for `computeResultAndWritePermutation`: Writes the metadata JSON
   // files with column names and ordering to disk.
   void writeViewMetadata() const;
