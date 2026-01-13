@@ -15,7 +15,7 @@ jobs:
       with:
         submodules: 'recursive'
     - name: Install conan package manager
-      run: | 
+      run: |
         sudo apt-get install pipx
         pipx ensurepath
         source ~/.bashrc
@@ -41,7 +41,7 @@ jobs:
 
     - name: Configure CMake
       working-directory: ${{github.workspace}}/build
-      run: cmake -S .. -B . -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_PARALLEL=true -D_NO_TIMING_TESTS=ON -D_EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER=ON -D_DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS=ON -GNinja
+      run: cmake -S .. -B . -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_PARALLEL=true -D_NO_TIMING_TESTS=ON -D_EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER=ON -D_NO_BENCHMARK=ON -D_DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS=ON -GNinja
 
     - name: Build
       working-directory: ${{github.workspace}}/build
@@ -55,7 +55,7 @@ jobs:
 
     - name: Running and printing the benchmark examples.
       working-directory: ${{github.workspace}}/build
-      run: > 
+      run: >
         source ./conanrun.sh;
         benchmark/BenchmarkExamples -p;
 
