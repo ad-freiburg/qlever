@@ -16,7 +16,7 @@ namespace serverTestHelpers {
 namespace http = boost::beast::http;
 
 using ReqT = http::request<http::string_body>;
-using ResT = std::optional<http::response<http::string_body>>;
+using ResT = http::response<ad_utility::httpUtils::streamable_body>;
 
 // Test the HTTP request processing of the `Server` class.
 struct SimulateHttpRequest {
@@ -45,13 +45,10 @@ struct SimulateHttpRequest {
         boost::asio::use_future);
     io.run();
     auto response = fut.get();
-    if (!response.has_value()) {
-      return std::nullopt;
-    }
 
     // Check `Content-type`: currently only `application/json` is supported.
-    auto it = response.value().find(http::field::content_type);
-    if (it != response.value().end()) {
+    auto it = response.find(http::field::content_type);
+    if (it != response.end()) {
       // We check `starts_with` instead of `==` because a `charset=utf-8` could
       // follow.
       if (!it->value().starts_with("application/json")) {
@@ -60,7 +57,13 @@ struct SimulateHttpRequest {
     }
 
     // Parse the JSON body.
-    return std::optional{nlohmann::json::parse(response.value().body())};
+    return std::optional{nlohmann::json::parse([&response]() -> std::string {
+      std::string r;
+      for (auto& part : response.body()) {
+        r.append(part);
+      }
+      return r;
+    }())};
   };
 };
 
