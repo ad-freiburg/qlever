@@ -8,6 +8,7 @@ on:
 
 jobs:
   build:
+    runs on: ubuntu-24.04
 
     steps:
     - uses: actions/checkout@v4
@@ -56,6 +57,7 @@ jobs:
       run: >
         source ${{github.workspace}}/build/conanrun.sh;
         ${{github.workspace}}/e2e/e2e.sh -d build
+
 
 
 
