@@ -29,6 +29,7 @@ jobs:
         curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
         \. "$HOME/.nvm/nvm.sh"
         nvm install 25
+        source ~/.bashrc
       shell: bash
 
     - name: Get build and host profiles for conan
@@ -74,6 +75,7 @@ jobs:
       run: >
         source ${{github.workspace}}/build/conanrun.sh;
         ${{github.workspace}}/e2e/e2e.sh -d build
+
 
 
 
