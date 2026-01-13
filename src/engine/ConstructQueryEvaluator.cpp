@@ -2,11 +2,12 @@
 
 #include "ExportQueryExecutionTrees.h"
 
-std::optional<std::string> ConstructQueryEvaluator::evaluate(const Iri& iri) {
+std::optional<std::string> ConstructQueryEvaluator::evaluateIri(
+    const Iri& iri) {
   return iri.toStringRepresentation();
 }
 
-std::optional<std::string> ConstructQueryEvaluator::evaluate(
+std::optional<std::string> ConstructQueryEvaluator::evaluateLiteral(
     const Literal& literal, PositionInTriple role) {
   if (role == PositionInTriple::OBJECT) {
     return literal.toStringRepresentation();
@@ -14,7 +15,7 @@ std::optional<std::string> ConstructQueryEvaluator::evaluate(
   return std::nullopt;
 }
 
-std::optional<std::string> ConstructQueryEvaluator::evaluate(
+std::optional<std::string> ConstructQueryEvaluator::evaluateVar(
     const Variable& var, const ConstructQueryExportContext& context) {
   size_t resultTableRow = context._resultTableRow;
   const auto& variableColumns = context._variableColumns;
@@ -48,7 +49,7 @@ std::optional<std::string> ConstructQueryEvaluator::evaluate(
   return std::nullopt;
 }
 
-std::optional<std::string> ConstructQueryEvaluator::evaluate(
+std::optional<std::string> ConstructQueryEvaluator::evaluateBlankNode(
     const BlankNode& node, const ConstructQueryExportContext& context) {
   std::ostringstream stream;
   stream << "_:";
@@ -56,4 +57,32 @@ std::optional<std::string> ConstructQueryEvaluator::evaluate(
   stream << context._rowOffset + context._resultTableRow << '_';
   stream << node.label();
   return stream.str();
+}
+
+std::optional<std::string> ConstructQueryEvaluator::evaluate(
+    const GraphTerm& term, const ConstructQueryExportContext& context,
+    PositionInTriple posInTriple) {
+  if (std::holds_alternative<Variable>(term)) {
+    const Variable& var = std::get<Variable>(term);
+    return ConstructQueryEvaluator::evaluateVar(var, context);
+  }
+
+  if (std::holds_alternative<BlankNode>(term)) {
+    BlankNode node = std::get<BlankNode>(term);
+    return ConstructQueryEvaluator::evaluateBlankNode(node, context);
+  }
+
+  if (std::holds_alternative<ad_utility::triple_component::Iri>(term)) {
+    ad_utility::triple_component::Iri iri =
+        std::get<ad_utility::triple_component::Iri>(term);
+    return ConstructQueryEvaluator::evaluateIri(iri);
+  }
+
+  if (std::holds_alternative<ad_utility::triple_component::Literal>(term)) {
+    ad_utility::triple_component::Literal literal =
+        std::get<ad_utility::triple_component::Literal>(term);
+    return ConstructQueryEvaluator::evaluateLiteral(literal, posInTriple);
+  }
+
+  AD_FAIL();
 }

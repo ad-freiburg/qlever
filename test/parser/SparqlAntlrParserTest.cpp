@@ -159,8 +159,14 @@ TEST(SparqlParser, ComplexConstructTemplate) {
 
 TEST(SparqlParser, GraphTerm) {
   auto expectGraphTerm = ExpectCompleteParse<&Parser::graphTerm>{};
-  expectGraphTerm("1337", m::Literal("1337"));
-  expectGraphTerm("true", m::Literal("true"));
+  // Numeric literals get xsd:integer or xsd:double datatype
+  expectGraphTerm(
+      "1337",
+      m::Literal("\"1337\"^^<http://www.w3.org/2001/XMLSchema#integer>"));
+  // Boolean literals get xsd:boolean datatype
+  expectGraphTerm(
+      "true",
+      m::Literal("\"true\"^^<http://www.w3.org/2001/XMLSchema#boolean>"));
   expectGraphTerm("[]", m::InternalVariable("0"));
   auto expectGraphTermConstruct =
       ExpectCompleteParse<&Parser::graphTerm, true>{};
@@ -169,6 +175,7 @@ TEST(SparqlParser, GraphTerm) {
     const std::string iri = "<http://dummy-iri.com#fragment>";
     expectCompleteParse(parse<&Parser::graphTerm>(iri), m::Iri(iri));
   }
+  // Plain string literals keep their quotes
   expectGraphTerm("\"abc\"", m::Literal("\"abc\""));
   expectGraphTerm("()", m::Iri(nil));
 }
@@ -764,7 +771,8 @@ TEST(SparqlParser, triplesSameSubjectPath) {
                  {Var{"?foo"}, PathIri("<mehr>"), Var{"?d"}}});
   expectTriples("<foo> <bar> ?baz ; ?mehr \"a\"",
                 {{Iri("<foo>"), PathIri("<bar>"), Var{"?baz"}},
-                 {Iri("<foo>"), Var("?mehr"), Literal("\"a\"")}});
+                 {Iri("<foo>"), Var("?mehr"),
+                  Literal::fromStringRepresentation("\"a\"")}});
   auto expectTriplesConstruct =
       ExpectCompleteParse<&Parser::triplesSameSubjectPath, true>{};
   expectTriplesConstruct("_:1 <bar> ?baz", {{BlankNode(false, "1"),
@@ -773,8 +781,16 @@ TEST(SparqlParser, triplesSameSubjectPath) {
       "_:one <bar> ?baz",
       {{Var{absl::StrCat(QLEVER_INTERNAL_BLANKNODE_VARIABLE_PREFIX, "one")},
         PathIri("<bar>"), Var{"?baz"}}});
-  expectTriples("10.0 <bar> true",
-                {{Literal(10.0), PathIri("<bar>"), Literal(true)}});
+  expectTriples(
+      "10.0 <bar> true",
+      {{Literal::literalWithoutQuotes(
+            std::to_string(10.0),
+            Iri::fromStringRepresentation(
+                "<http://www.w3.org/2001/XMLSchema#double>")),
+        PathIri("<bar>"),
+        Literal::literalWithoutQuotes(
+            "true", Iri::fromStringRepresentation(
+                        "<http://www.w3.org/2001/XMLSchema#boolean>"))}});
   expectTriples(
       "<foo> "
       "<http://qlever.cs.uni-freiburg.de/builtin-functions/contains-word> "
@@ -782,7 +798,7 @@ TEST(SparqlParser, triplesSameSubjectPath) {
       {{Iri("<foo>"),
         PathIri("<http://qlever.cs.uni-freiburg.de/builtin-functions/"
                 "contains-word>"),
-        Literal("\"Berlin Freiburg\"")}});
+        Literal::fromStringRepresentation("\"Berlin Freiburg\"")}});
 }
 
 TEST(SparqlParser, SelectClause) {
@@ -979,15 +995,18 @@ TEST(SparqlParser, RDFLiteral) {
       {{"xsd", "<http://www.w3.org/2001/XMLSchema#>"}}};
   auto expectRDFLiteralFails = ExpectParseFails<&Parser::rdfLiteral>();
 
-  expectRDFLiteral("   \"Astronaut\"^^xsd:string  \t",
-                   "\"Astronaut\"^^<http://www.w3.org/2001/XMLSchema#string>"s);
+  expectRDFLiteral(
+      "   \"Astronaut\"^^xsd:string  \t",
+      Literal::fromStringRepresentation(
+          "\"Astronaut\"^^<http://www.w3.org/2001/XMLSchema#string>"));
   // The conversion to the internal date format
   // (":v:date:0000000000000001950-01-01T00:00:00") is done by
   // RdfStringParser<TokenizerCtre>::parseTripleObject(resultAsString) which
   // is only called at triplesBlock.
   expectRDFLiteral(
       "\"1950-01-01T00:00:00\"^^xsd:dateTime",
-      "\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime>"s);
+      Literal::fromStringRepresentation("\"1950-01-01T00:00:00\"^^<http://"
+                                        "www.w3.org/2001/XMLSchema#dateTime>"));
   expectRDFLiteralFails(R"(?a ?b "The \"Moon\""@en .)");
 }
 
@@ -1189,7 +1208,8 @@ TEST(SparqlParser, ConstructQuery) {
   expectConstructQuery(
       "CONSTRUCT WHERE { <bar> ?foo \"Abc\"@en }",
       m::ConstructQuery(
-          {{Iri{"<bar>"}, Var{"?foo"}, Literal{"\"Abc\"@en"}}},
+          {{Iri{"<bar>"}, Var{"?foo"},
+            Literal::fromStringRepresentation("\"Abc\"@en")}},
           m::GraphPattern(m::Triples(
               {{iri("<bar>"), Var{"?foo"}, lit("\"Abc\"", "@en")}}))));
   // CONSTRUCT with datasets.
@@ -1208,9 +1228,10 @@ TEST(SparqlParser, ensureExceptionOnInvalidGraphTerm) {
   EXPECT_THROW(
       visitor.toGraphPattern({{Var{"?a"}, BlankNode{true, "0"}, Var{"?b"}}}),
       ad_utility::Exception);
-  EXPECT_THROW(
-      visitor.toGraphPattern({{Var{"?a"}, Literal{"\"Abc\""}, Var{"?b"}}}),
-      ad_utility::Exception);
+  EXPECT_THROW(visitor.toGraphPattern(
+                   {{Var{"?a"}, Literal::fromStringRepresentation("\"Abc\""),
+                     Var{"?b"}}}),
+               ad_utility::Exception);
 }
 
 // Test that ASK queries are parsed as they should.

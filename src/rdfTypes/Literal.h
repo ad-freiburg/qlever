@@ -28,9 +28,6 @@ class Literal {
   // datatypes.
   std::size_t beginOfSuffix_;
 
-  // Create a new literal without any descriptor
-  explicit Literal(std::string content, size_t beginOfSuffix_);
-
   // Internal helper function. Return either the empty string (for a plain
   // literal), `@langtag` or `^^<datatypeIri>`.
   std::string_view getSuffix() const {
@@ -44,6 +41,9 @@ class Literal {
   }
 
  public:
+  // Create a new literal without any descriptor
+  explicit Literal(std::string content, size_t beginOfSuffix_);
+
   CPP_template(typename H,
                typename L)(requires ql::concepts::same_as<L, Literal>) friend H
       AbslHashValue(H h, const L& literal) {
@@ -53,6 +53,8 @@ class Literal {
 
   const std::string& toStringRepresentation() const&;
   std::string toStringRepresentation() &&;
+
+  std::string toSparql() const { return toStringRepresentation(); };
 
   static Literal fromStringRepresentation(std::string internal);
 
