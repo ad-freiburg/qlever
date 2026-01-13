@@ -17,7 +17,7 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
-#include "engine/ConstructQueryCache.h"
+#include "engine/ConstructQueryEvaluator.h"
 #include "global/RuntimeParameters.h"
 #include "index/EncodedIriManager.h"
 #include "index/IndexImpl.h"
@@ -272,9 +272,11 @@ ExportQueryExecutionTrees::createConstructTriplesForRow(
   for (const std::array<GraphTerm, 3>& triple : constructTriples) {
     cancellationHandle->throwIfCancelled();
 
-    auto subject = triple[0].evaluate(context, SUBJECT);
-    auto predicate = triple[1].evaluate(context, PREDICATE);
-    auto object = triple[2].evaluate(context, OBJECT);
+    auto subject =
+        ConstructQueryEvaluator::evaluate(triple[0], context, SUBJECT);
+    auto predicate =
+        ConstructQueryEvaluator::evaluate(triple[1], context, PREDICATE);
+    auto object = ConstructQueryEvaluator::evaluate(triple[2], context, OBJECT);
 
     if (subject.has_value() && predicate.has_value() && object.has_value()) {
       triples.emplace_back(std::move(subject.value()),
