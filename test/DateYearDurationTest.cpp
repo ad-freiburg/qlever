@@ -575,3 +575,67 @@ TEST(DateYearOrDuration, Hashing) {
   ad_utility::HashSet<DateYearOrDuration> set{d1, d2};
   EXPECT_THAT(set, ::testing::UnorderedElementsAre(d1, d2));
 }
+
+// _____________________________________________________________________________
+TEST(DateYearOrDuration, Subtraction) {
+  for (int i = 0; i < 10; ++i) {
+    auto year = yearGenerator();
+    auto month = monthGenerator();
+    auto day = dayGenerator();
+    /*auto hour = hourGenerator();
+    auto minute = minuteGenerator();
+    auto second = secondGenerator();
+    auto timeZone = timeZoneGenerator();*/
+
+    // Date date(year, month, day, hour, minute, second, timeZone);
+    Date date(year, month, day);
+    DateYearOrDuration date1(date);
+
+    auto year2 = yearGenerator();
+    auto month2 = monthGenerator();
+    auto day2 = dayGenerator();
+    /*auto hour2 = hourGenerator();
+    auto minute2 = minuteGenerator();
+    auto second2 = secondGenerator();
+    auto timeZone2 = timeZoneGenerator();*/
+
+    // Date date_(year2, month2, day2, hour2, minute2, second2, timeZone2);
+    Date date_(year2, month2, day2);
+    DateYearOrDuration date2(date_);
+
+    DateYearOrDuration zero_duration(
+        DayTimeDuration(DayTimeDuration::Type::Positive, 0));
+    ASSERT_EQ(zero_duration, date1 - date1);
+    ASSERT_EQ(zero_duration, date2 - date2);
+
+    DateYearOrDuration result = date1 - date2;
+    ASSERT_EQ(true, result.isDayTimeDuration());
+  }
+  // hardcoded test
+  DateYearOrDuration test1 = DateYearOrDuration(Date(2012, 12, 24));
+  DateYearOrDuration test2 = DateYearOrDuration(Date(2012, 12, 1));
+
+  DateYearOrDuration result = test1 - test2;
+  ASSERT_EQ(true, result.isDayTimeDuration());
+  ASSERT_EQ(
+      DateYearOrDuration(DayTimeDuration(DayTimeDuration::Type::Positive, 23)),
+      result);
+  result = test2 - test1;
+  ASSERT_EQ(true, result.isDayTimeDuration());
+  ASSERT_EQ(
+      DateYearOrDuration(DayTimeDuration(DayTimeDuration::Type::Positive, 23)),
+      result);
+
+  test1 = DateYearOrDuration(Date(2012, 12, 24));
+  test2 = DateYearOrDuration(Date(2010, 12, 24));
+  result = test1 - test2;
+  ASSERT_EQ(true, result.isDayTimeDuration());
+  ASSERT_EQ(
+      DateYearOrDuration(DayTimeDuration(DayTimeDuration::Type::Positive, 731)),
+      test1 - test2);
+  result = test2 - test1;
+  ASSERT_EQ(true, result.isDayTimeDuration());
+  ASSERT_EQ(
+      DateYearOrDuration(DayTimeDuration(DayTimeDuration::Type::Positive, 731)),
+      result);
+}

@@ -343,34 +343,61 @@ std::optional<DateYearOrDuration> DateYearOrDuration::convertToXsdDate(
 }
 
 // _____________________________________________________________________________
+#ifndef REDUCED_FEATURE_SET_FOR_CPP17
 DateYearOrDuration DateYearOrDuration::operator-(
     const DateYearOrDuration& rhs) const {
   // TODO: also support hours, minutes and seconds
   if (isDate() && rhs.isDate()) {
+    // TODO: handle time as well
     // Date - Date = Duration | getting time between the two Dates
-
-    // First Attempt
     const Date& ownDate = getDateUnchecked();
     const Date& otherDate = rhs.getDateUnchecked();
-    int yearsPassed = ownDate.getYear() - otherDate.getYear();
-    int monthsPassed = ownDate.getMonth() - otherDate.getMonth();
-    int daysPassed = ownDate.getDay() - otherDate.getDay();
-    // TODO What happens in Schaltjahren?
+
+    auto date1 =
+        std::chrono::year_month_day{std::chrono::year(ownDate.getYear()) /
+                                    ownDate.getMonth() / ownDate.getDay()};
+    auto date2 =
+        std::chrono::year_month_day{std::chrono::year(otherDate.getYear()) /
+                                    otherDate.getMonth() / otherDate.getDay()};
+
+    int daysPassed =
+        (std::chrono::sys_days{date1} - std::chrono::sys_days{date2}).count();
+
+    if (daysPassed < 0) {
+      daysPassed = abs(daysPassed);
+    }
+
+    // Third Attempt
+    // std::chrono::sys_days{ End } - std::chrono::sys_days{ Start }
+    // const Date& ownDate = getDateUnchecked();
+    // const Date& otherDate = rhs.getDateUnchecked();
+
+    // ownDate.get
+    // std::chrono::system_clock::from_time_t
+
+    // First Attempt
+    /*
+    const Date& ownDate = getDateUnchecked();
+    const Date& otherDate = rhs.getDateUnchecked();
+    int yearsPassed = abs(ownDate.getYear() - otherDate.getYear());
+    int monthsPassed = abs(ownDate.getMonth() - otherDate.getMonth());
+    int daysPassed = abs(ownDate.getDay() - otherDate.getDay());
     daysPassed = daysPassed + (monthsPassed * 31) + (yearsPassed * 365);
+    */
 
     // Second Attempt
     // Getting the dates
-    int ownYear = ownDate.getYear();
+    /*int ownYear = ownDate.getYear();
     int otherYear = otherDate.getYear();
     int ownMonth = ownDate.getMonth();
     int otherMonth = otherDate.getMonth();
     int ownDay = ownDate.getDay();
-    int otherDay = otherDate.getDay();
+    int otherDay = otherDate.getDay();*/
 
     // Counting the days passed.
-    daysPassed = 0;
+    /*daysPassed = 0;
     while (!((ownYear == otherYear) && (ownMonth == otherMonth) &&
-             (ownDay == otherDay))) {
+            (ownDay == otherDay))) {
       daysPassed++;
       // TODO: store this in a separate function
       // TODO: handle Schaltjahre
@@ -396,7 +423,7 @@ DateYearOrDuration DateYearOrDuration::operator-(
         otherDay = 1;
         continue;
       }
-    }
+    }*/
     return DateYearOrDuration(
         DayTimeDuration(DayTimeDuration::Type::Positive, daysPassed));
   }
@@ -420,29 +447,5 @@ DateYearOrDuration DateYearOrDuration::operator-(
   else {
     throw std::invalid_argument("No Subtraction possible!");
   }
-
-  /*
-  if (getType() != rhs.getType()) {
-    // No possible Subtraction.
-    throw std::invalid_argument("To subtract the two objects, they need to have
-  the same type.");
-  }
-  // switch case actually on type of both objects
-  switch (getType()) {
-    case Type::DateTime: {
-      break;
-    }
-    case Type::Date: {
-      const Date& date1 = getDate();
-      const Date& date2 = rhs.getDate();
-      break;
-    }
-    case Type::YearMonth: {
-      break;
-    }
-    case Type::Year: {
-      break;
-    }
-  }
-  */
 }
+#endif
