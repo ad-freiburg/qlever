@@ -210,8 +210,8 @@ class IdTable {
   CPP_template(typename ColT)(
       requires ql::ranges::forward_range<ColT> CPP_and CPP_NOT(isView))
       IdTable(size_t numColumns, ColT columns)
-      : data_{std::make_move_iterator(columns.begin()),
-              std::make_move_iterator(columns.end())},
+      : data_{ql::make_move_iterator(columns.begin()),
+              ql::make_move_iterator(columns.end())},
         numColumns_{numColumns} {
     if constexpr (!isDynamic) {
       AD_CONTRACT_CHECK(NumColumns == numColumns);
@@ -524,8 +524,8 @@ class IdTable {
           std::vector<ColumnStorage> newColumns,
           Allocator allocator = {}) const {
     AD_CONTRACT_CHECK(newColumns.size() >= numColumns());
-    Data newStorage(std::make_move_iterator(newColumns.begin()),
-                    std::make_move_iterator(newColumns.begin() + numColumns()));
+    Data newStorage(ql::make_move_iterator(newColumns.begin()),
+                    ql::make_move_iterator(newColumns.begin() + numColumns()));
     ql::ranges::for_each(
         ad_utility::integerRange(numColumns()), [this, &newStorage](auto i) {
           newStorage[i].insert(newStorage[i].end(), data()[i].begin(),
@@ -771,6 +771,29 @@ class IdTable {
               table.getColumn(mappedIndex).subspan(begin, numInserted),
               getColumn(i).begin() + oldSize);
         });
+  }
+
+  // Add the rows with the specified `indices` from the `table` at the end of
+  // this IdTable. The order of the inserted rows is the same as in `indices`.
+  // The `table` must be some kind of `IdTable`.
+  template <typename Table>
+  void insertSubsetAtEnd(const Table& table,
+                         const std::vector<size_t>& indices) {
+    AD_CORRECTNESS_CHECK(table.numColumns() == numColumns());
+    const size_t numInserted = indices.size();
+    if (numInserted == 0) return;
+
+    AD_EXPENSIVE_CHECK(ql::ranges::all_of(
+        indices, [&table](size_t idx) { return idx < table.size(); }));
+    const size_t oldSize = size();
+    resize(numRows() + numInserted);
+    // For each column, copy the requested rows into the reserved tail.
+    for (auto&& [destination, source] :
+         ::ranges::views::zip(ad_utility::allView(getColumns()),
+                              ad_utility::allView(table.getColumns()))) {
+      ql::ranges::transform(indices, destination.begin() + oldSize,
+                            [&source](size_t idx) { return source[idx]; });
+    }
   }
 
   // Check whether two `IdTables` have the same content. Mostly used for unit

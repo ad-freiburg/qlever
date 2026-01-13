@@ -21,8 +21,8 @@
 class IdTable;
 // Forward declaration of `LocatedTriplesPerBlock`
 class LocatedTriplesPerBlock;
-class SharedLocatedTriplesSnapshot;
-struct LocatedTriplesSnapshot;
+struct LocatedTriplesState;
+class DeltaTriples;
 
 // Helper class to store static properties of the different permutations to
 // avoid code duplication.
@@ -41,6 +41,16 @@ class Permutation {
   static constexpr auto OSP = Enum::OSP;
   static constexpr auto ALL = {Enum::PSO, Enum::POS, Enum::SPO,
                                Enum::SOP, Enum::OPS, Enum::OSP};
+  static constexpr auto INTERNAL = {Enum::PSO, Enum::POS};
+
+  template <bool isInternal>
+  static constexpr const auto& all() {
+    if constexpr (isInternal) {
+      return INTERNAL;
+    } else {
+      return ALL;
+    }
+  }
 
   using MetaData = IndexMetaDataMmapView;
   using Allocator = ad_utility::AllocatorWithLimit<Id>;
@@ -60,9 +70,11 @@ class Permutation {
   explicit Permutation(Enum permutation, Allocator allocator);
 
   // everything that has to be done when reading an index from disk
-  void loadFromDisk(const std::string& onDiskBase,
-                    std::function<bool(Id)> isInternalId,
-                    bool loadAdditional = false);
+  void loadFromDisk(const std::string& onDiskBase, bool loadAdditional = false);
+
+  // Set the original metadata for the delta triples. This also sets the
+  // metadata for internal permutation if present.
+  void setOriginalMetadataForDeltaTriples(DeltaTriples& deltaTriples) const;
 
   // For a given ID for the col0, retrieve all IDs of the col1 and col2.
   // If `col1Id` is specified, only the col2 is returned for triples that
@@ -71,7 +83,7 @@ class Permutation {
   IdTable scan(const ScanSpecAndBlocks& scanSpecAndBlocks,
                ColumnIndicesRef additionalColumns,
                const CancellationHandle& cancellationHandle,
-               const LocatedTriplesSnapshot& locatedTriplesSnapshot,
+               const LocatedTriplesState& locatedTriplesState,
                const LimitOffsetClause& limitOffset = {}) const;
 
   // For a given relation, determine the `col1Id`s and their counts. This is
@@ -79,12 +91,12 @@ class Permutation {
   // in `meta_`.
   IdTable getDistinctCol1IdsAndCounts(
       Id col0Id, const CancellationHandle& cancellationHandle,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot,
+      const LocatedTriplesState& locatedTriplesState,
       const LimitOffsetClause& limitOffset) const;
 
   IdTable getDistinctCol0IdsAndCounts(
       const CancellationHandle& cancellationHandle,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot,
+      const LocatedTriplesState& locatedTriplesState,
       const LimitOffsetClause& limitOffset) const;
 
   // Typedef to propagate the `MetadataAndblocks` and `IdTableGenerator` type.
@@ -113,17 +125,17 @@ class Permutation {
       std::optional<std::vector<CompressedBlockMetadata>> optBlocks,
       ColumnIndicesRef additionalColumns,
       const CancellationHandle& cancellationHandle,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot,
+      const LocatedTriplesState& locatedTriplesState,
       const LimitOffsetClause& limitOffset = {}) const;
 
   // Returns the corresponding `CompressedRelationReader::ScanSpecAndBlocks`
   // with relevant `BlockMetadataRanges`.
   ScanSpecAndBlocks getScanSpecAndBlocks(
       const ScanSpecification& scanSpec,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+      const LocatedTriplesState& locatedTriplesState) const;
 
   std::optional<CompressedRelationMetadata> getMetadata(
-      Id col0Id, const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+      Id col0Id, const LocatedTriplesState& locatedTriplesState) const;
 
   // Return the metadata for the scan specified by the `scanSpecification`
   // along with the metadata for all the blocks that are relevant for this
@@ -131,21 +143,21 @@ class Permutation {
   // be empty) return `nullopt`.
   std::optional<MetadataAndBlocks> getMetadataAndBlocks(
       const ScanSpecAndBlocks& scanSpecAndBlocks,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+      const LocatedTriplesState& locatedTriplesState) const;
 
   // Get the exact size of the result of a scan, taking into account the
   // given located triples. This requires an exact location of the delta
   // triples within the respective blocks.
   size_t getResultSizeOfScan(
       const ScanSpecAndBlocks& scanSpecAndBlocks,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+      const LocatedTriplesState& locatedTriplesState) const;
 
   // Get a lower and upper bound for the size of the result of a scan, taking
   // into account the given `deltaTriples`. For this call, it is enough that
   // each delta triple know to which block it belongs.
   std::pair<size_t, size_t> getSizeEstimateForScan(
       const ScanSpecAndBlocks& scanSpecAndBlocks,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+      const LocatedTriplesState& locatedTriplesState) const;
 
   // _______________________________________________________
   void setKbName(const std::string& name) { meta_.setName(name); }
@@ -171,22 +183,22 @@ class Permutation {
   // _______________________________________________________
   const MetaData& metaData() const { return meta_; }
 
-  // _______________________________________________________
-  const Permutation& getActualPermutation(const ScanSpecification& spec) const;
-  const Permutation& getActualPermutation(Id id) const;
-
   // From the given snapshot, get the located triples for this permutation.
   const LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+      const LocatedTriplesState& locatedTriplesState) const;
 
   // From the given snapshot, get the augmented block metadata for this
   // permutation.
   BlockMetadataRanges getAugmentedMetadataForPermutation(
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+      const LocatedTriplesState& locatedTriplesState) const;
 
   const CompressedRelationReader& reader() const { return reader_.value(); }
 
   Enum permutation() const { return permutation_; }
+
+  // Provide const access to a linked internal permutation. If no internal
+  // permutation is available, this function throws an exception.
+  const Permutation& internalPermutation() const;
 
  private:
   // The base filename of the permutation without the suffix below
@@ -210,8 +222,6 @@ class Permutation {
 
   Enum permutation_;
   std::unique_ptr<Permutation> internalPermutation_ = nullptr;
-
-  std::function<bool(Id)> isInternalId_;
 
   bool isInternalPermutation_ = false;
 };

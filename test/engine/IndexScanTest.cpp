@@ -970,7 +970,7 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesFilterCorrectly) {
         const auto& rti = scan.runtimeInfo();
         if (counter >= sideOffset) {
           EXPECT_EQ(rti.status_,
-                    RuntimeInformation::Status::lazilyMaterialized);
+                    RuntimeInformation::Status::lazilyMaterializedInProgress);
         }
         if (counter >= 2 + sideOffset) {
           EXPECT_GT(rti.numRows_, 0);
@@ -1004,7 +1004,8 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesFilterCorrectly) {
             makeIdTable({iri("<c>"), iri("<q>"), iri("<xb>")}));
 
   const auto& rti = scan.runtimeInfo();
-  EXPECT_EQ(rti.status_, RuntimeInformation::Status::lazilyMaterialized);
+  EXPECT_EQ(rti.status_,
+            RuntimeInformation::Status::lazilyMaterializedInProgress);
   EXPECT_EQ(rti.numRows_, 4);
   // Note: In the code the `totalTime_` is also set, but the actual code runs
   // faster than a single millisecond, so it won't show up in the data.
@@ -1068,7 +1069,8 @@ TEST_P(IndexScanWithLazyJoin,
   ASSERT_EQ(joinSideResults.size(), 0);
 
   const auto& rti = scan.runtimeInfo();
-  EXPECT_EQ(rti.status_, RuntimeInformation::Status::lazilyMaterialized);
+  EXPECT_EQ(rti.status_,
+            RuntimeInformation::Status::lazilyMaterializedInProgress);
   EXPECT_EQ(rti.numRows_, 0);
   EXPECT_EQ(rti.details_["num-blocks-read"], 0);
   EXPECT_EQ(rti.details_["num-blocks-all"], 1);
@@ -1188,7 +1190,8 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesNotFilterOnUndefined) {
       tableFromTriples({{iri("<c>"), iri("<C>")}, {iri("<c>"), iri("<C2>")}}));
 
   const auto& rti = scan.runtimeInfo();
-  EXPECT_EQ(rti.status_, RuntimeInformation::Status::lazilyMaterialized);
+  EXPECT_EQ(rti.status_,
+            RuntimeInformation::Status::lazilyMaterializedInProgress);
   EXPECT_EQ(rti.numRows_, 6);
   EXPECT_EQ(rti.details_["num-blocks-read"], 3);
   EXPECT_EQ(rti.details_["num-blocks-all"], 3);
@@ -1242,7 +1245,8 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesWorksWithSingleEmptyTable) {
   ASSERT_EQ(scanResults.size(), 0);
 
   const auto& rti = scan.runtimeInfo();
-  EXPECT_EQ(rti.status_, RuntimeInformation::Status::lazilyMaterialized);
+  EXPECT_EQ(rti.status_,
+            RuntimeInformation::Status::lazilyMaterializedInProgress);
   EXPECT_EQ(rti.numRows_, 0);
   EXPECT_EQ(rti.details_["num-blocks-read"], 0);
   EXPECT_EQ(rti.details_["num-blocks-all"], 3);

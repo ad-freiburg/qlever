@@ -516,8 +516,8 @@ RelationalExpression<Comparison>::logicalComplement() const {
   // (4) ?var > referenceValue -> ?var <= referenceValue
   // (5) ?var = referenceValue -> ?var != referenceValue
   // (6) ?var != referenceValue -> ?var = referenceValue
-  constexpr ConstexprMap<CompOp, CompOp, 6> complementMap(
-      {P{LT, GE}, P{LE, GT}, P{GE, LT}, P{GT, LE}, P{EQ, NE}, P{NE, EQ}});
+  constexpr ConstexprMap<CompOp, CompOp, 6> complementMap(std::array<P, 6>{
+      P{LT, GE}, P{LE, GT}, P{GE, LT}, P{GT, LE}, P{EQ, NE}, P{NE, EQ}});
   return make<RelationalExpression<complementMap.at(Comparison)>>(
       rightSideReferenceValue_);
 }
@@ -1025,7 +1025,8 @@ std::vector<PrefilterExprVariablePair> makePrefilterExpressionVec(
     // procedure will transform the relational expression
     // `referenceValue > ?var` into `?var < referenceValue`.
     constexpr ad_utility::ConstexprMap<CompOp, CompOp, 6> mirrorMap(
-        {P{LT, GT}, P{LE, GE}, P{GE, LE}, P{GT, LT}, P{EQ, EQ}, P{NE, NE}});
+        std::array<P, 6>{P{LT, GT}, P{LE, GE}, P{GE, LE}, P{GT, LT}, P{EQ, EQ},
+                         P{NE, NE}});
     resVec.emplace_back(
         makePrefilterExpressionVecImpl<mirrorMap.at(comparison)>(
             referenceValue, prefilterDateByYear),

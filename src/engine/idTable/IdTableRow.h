@@ -67,8 +67,10 @@ class Row {
   CPP_template_2(typename = void)(requires(!isDynamic())) Row(){};
 
   CPP_template_2(typename = void)(requires(!isDynamic())) explicit Row(
-      [[maybe_unused]] size_t numCols)
-      : Row() {}
+      size_t numCols)
+      : Row() {
+    (void)numCols;
+  }
 
   // Access the i-th element.
   T& operator[](size_t i) { return data_[i]; }
@@ -94,7 +96,7 @@ class Row {
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Row, data_)
 
   // Convert from a static `RowReference` to a `std::array` (makes a copy).
-  CPP_template_2(typename = void)(requires(numStaticColumns != 0)) explicit
+  CPP_template_2(typename = void)(requires(NumColumns != 0)) explicit
   operator std::array<T, numStaticColumns>() const {
     std::array<T, numStaticColumns> result;
     ql::ranges::copy(*this, result.begin());
@@ -266,9 +268,11 @@ class RowReferenceImpl {
 
     // Equality comparison. Works between two `RowReference`s, but also between
     // a `RowReference` and a `Row` if the number of columns match.
-    CPP_template(typename U)(requires(numStaticColumns ==
-                                      U::numStaticColumns)) bool
-    operator==(const U& other) const {
+    // Note: QCC 8.3 doesn't have access to `U::numStaticColumns`.
+    template <typename U>
+    QL_CONCEPT_OR_NOTHING(requires(numStaticColumns == U::numStaticColumns))
+    bool operator==(const U& other) const {
+      static_assert(numStaticColumns == U::numStaticColumns);
       if constexpr (numStaticColumns == 0) {
         if (numColumns() != other.numColumns()) {
           return false;
@@ -280,6 +284,11 @@ class RowReferenceImpl {
         }
       }
       return true;
+    }
+    template <typename U>
+    QL_CONCEPT_OR_NOTHING(requires(numStaticColumns == U::numStaticColumns))
+    bool operator!=(const U& other) const {
+      return !(*this == other);
     }
 
     // Convert from a `RowReference` to a `Row`.
@@ -358,10 +367,12 @@ template <typename Table, ad_utility::IsConst isConstTag>
 class RowReference
     : public RowReferenceImpl::RowReferenceWithRestrictedAccess<Table,
                                                                 isConstTag> {
- private:
+ public:
   using Base =
       RowReferenceImpl::RowReferenceWithRestrictedAccess<Table, isConstTag>;
   using Base::numStaticColumns;
+
+ private:
   using TablePtr = typename Base::TablePtr;
   using T = typename Base::T;
   static constexpr bool isConst = isConstTag == ad_utility::IsConst::True;
@@ -410,6 +421,12 @@ class RowReference
     return base() == other;
   }
 
+  CPP_template_2(typename T)(requires(numStaticColumns ==
+                                      T::numStaticColumns)) bool
+  operator!=(const T& other) const {
+    return !(base() == other);
+  }
+
  public:
   // Assignment from a `Row` with the same number of columns.
   RowReference& operator=(const Row<T, numStaticColumns>& other) & {
@@ -435,10 +452,15 @@ class RowReference
     return *this;
   }
 
-  // No need to copy `RowReference`s, because that is also most likely a bug.
-  // Currently none of our functions or of the STL-algorithms require it.
-  // If necessary, we can still enable it in the future.
+  // It is technically a bug to copy a row reference, hence we delete the copy
+  // constructor, at least in C++20 mode. However, on older compilers like QCC8,
+  // range-v3 requires not only a declaration, but a definition of the copy
+  // constructor.
+#ifdef QLEVER_CPP_17
+  RowReference(const RowReference&) = default;
+#else
   RowReference(const RowReference&) = delete;
+#endif
 };
 
 }  // namespace columnBasedIdTable

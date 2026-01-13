@@ -11,8 +11,6 @@
 #ifndef QLEVER_SRC_INDEX_LOCATEDTRIPLES_H
 #define QLEVER_SRC_INDEX_LOCATEDTRIPLES_H
 
-#include <boost/optional.hpp>
-
 #include "backports/three_way_comparison.h"
 #include "engine/idTable/IdTable.h"
 #include "global/IdTriple.h"
