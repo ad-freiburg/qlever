@@ -136,6 +136,9 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
             constexpr size_t REGULAR_COLUMNS = 4;
             for (auto col : allCols | ::ranges::views::take(REGULAR_COLUMNS)) {
               for (Id& id : col) {
+                // TODO<RobinTF> Experiment with caching the last remapped id
+                // and reusing it if the same id appears again. See if that
+                // improves performance or if it makes it worse.
                 if (id.getDatatype() == Datatype::VocabIndex) [[likely]] {
                   id = remapVocabId(id, insertionPositions);
                 } else if (id.getDatatype() == Datatype::LocalVocabIndex) {
