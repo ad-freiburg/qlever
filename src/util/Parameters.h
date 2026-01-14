@@ -202,7 +202,7 @@ struct MemorySizeFromString {
 }  // namespace detail::parameterSerializers
 
 namespace detail::parameterShortNames {
-namespace n = detail::parameterSerializers;
+namespace n = parameterSerializers;
 /// Partial template specialization for Parameters with common types (numeric
 /// types and strings)
 using Float = Parameter<float, n::fl, n::toString>;
