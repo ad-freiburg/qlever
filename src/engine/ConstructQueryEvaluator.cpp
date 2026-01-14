@@ -17,7 +17,7 @@ std::optional<std::string> ConstructQueryEvaluator::evaluateLiteral(
 
 std::optional<std::string> ConstructQueryEvaluator::evaluateVar(
     const Variable& var, const ConstructQueryExportContext& context) {
-  size_t resultTableRow = context._resultTableRow;
+  size_t resultTableRow = context._resultTableRowIdx;
   const auto& variableColumns = context._variableColumns;
   const Index& qecIndex = context._qecIndex;
   const IdTable& idTable = context.idTable_;
@@ -54,7 +54,7 @@ std::optional<std::string> ConstructQueryEvaluator::evaluateBlankNode(
   std::ostringstream stream;
   stream << "_:";
   stream << (node.isGenerated() ? 'g' : 'u');  // generated or user-defined
-  stream << context._rowOffset + context._resultTableRow << '_';
+  stream << context._rowOffset + context._resultTableRowIdx << '_';
   stream << node.label();
   return stream.str();
 }

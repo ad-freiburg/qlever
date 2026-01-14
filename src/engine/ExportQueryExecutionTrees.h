@@ -218,7 +218,7 @@ class ExportQueryExecutionTrees {
   // `application/ qlever+json` format.
   static auto idTableToQLeverJSONBindings(
       const QueryExecutionTree& qet, LimitOffsetClause limitAndOffset,
-      QueryExecutionTree::ColumnIndicesAndTypes columns,
+      const QueryExecutionTree::ColumnIndicesAndTypes columns,
       std::shared_ptr<const Result> result, uint64_t& resultSize,
       CancellationHandle cancellationHandle);
 
@@ -261,15 +261,13 @@ class ExportQueryExecutionTrees {
     std::reference_wrapper<const IdTable> idTable_;
     std::reference_wrapper<const LocalVocab> localVocab_;
 
-    [[nodiscard]] const IdTable& idTable() const { return idTable_.get(); }
+    const IdTable& idTable() const { return idTable_.get(); }
 
-    [[nodiscard]] const LocalVocab& localVocab() const {
-      return localVocab_.get();
-    }
+    const LocalVocab& localVocab() const { return localVocab_.get(); }
   };
   // Helper type that contains an `IdTable` and a view with related indices to
   // access the `IdTable` with.
-  struct TableWithRange {  // NOLINT(*-pro-type-member-init)
+  struct TableWithRange {
     TableConstRefWithVocab tableWithVocab_;
     ql::ranges::iota_view<uint64_t, uint64_t> view_;
   };

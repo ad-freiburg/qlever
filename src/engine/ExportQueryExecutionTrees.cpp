@@ -320,7 +320,7 @@ auto ExportQueryExecutionTrees::constructQueryResultToTriples(
                              tableWithView.tableWithVocab_.localVocab();
 
                          ConstructQueryExportContext context{
-                             ._resultTableRow = i,
+                             ._resultTableRowIdx = i,
                              .idTable_ = idTable,
                              .localVocab_ = localVocab,
                              ._variableColumns = variableColumns,
@@ -430,7 +430,7 @@ nlohmann::json idTableToQLeverJSONRow(
 
 // _____________________________________________________________________________
 auto ExportQueryExecutionTrees::idTableToQLeverJSONBindings(
-    const QueryExecutionTree& qet, const LimitOffsetClause limitAndOffset,
+    const QueryExecutionTree& qet, LimitOffsetClause limitAndOffset,
     QueryExecutionTree::ColumnIndicesAndTypes columns,
     std::shared_ptr<const Result> result, uint64_t& resultSize,
     CancellationHandle cancellationHandle) {
@@ -454,7 +454,7 @@ auto ExportQueryExecutionTrees::idTableToQLeverJSONBindings(
                    });
              }) |
          ql::views::join;
-}
+};
 
 // _____________________________________________________________________________
 std::optional<std::pair<std::string, const char*>>
@@ -1242,7 +1242,7 @@ ExportQueryExecutionTrees::convertStreamGeneratorForChunkedTransfer(
   // Note: `begin` advances until the first block.
   auto it = streamGenerator.begin();
   return InputRangeTypeErased(InputRangeFromLoopControlGet(
-      [it = it, streamGenerator = std::move(streamGenerator),
+      [it = std::move(it), streamGenerator = std::move(streamGenerator),
        exceptionMessage = std::optional<std::string>(std::nullopt)]() mutable {
         // TODO<joka921, RobinTF> Think of a better way to propagate and log
         // those errors. We can additionally send them via the
