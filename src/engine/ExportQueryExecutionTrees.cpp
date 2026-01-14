@@ -241,11 +241,8 @@ ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
       // `take_while` above seems redundant, but it might be that no IdTable is
       // yielded at all.
       | ad_utility::views::takeUntilInclusive([](const State& state) {
-          const Export* ptr = std::get_if<Export>(&state);
-          if (ptr != nullptr) {
-            return ptr->isLast_;
-          }
-          return false;
+          auto ptr = std::get_if<Export>(&state);
+          return ptr && ptr->isLast_;
         })
       // At this stage we only see `Export` or `OnlyCountForExport`. For the
       // latter we don't have to do anything, because the `transformToState`
