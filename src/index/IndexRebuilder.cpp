@@ -111,15 +111,16 @@ remapVocabId(Id original, const std::vector<VocabIndex>& insertionPositions) {
 // and all vocab `Id`s are remapped according to `insertInfo` to create a new
 // index where all of these values are all vocab `Id`s in the new vocabulary.
 ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
-    const Permutation& permutation, ScanSpecification scanSpec,
+    const Permutation& permutation,
     const BlockMetadataRanges& blockMetadataRanges,
     const LocatedTriplesSharedState& locatedTriplesSharedState,
     const ad_utility::HashMap<Id::T, Id>& localVocabMapping,
     const std::vector<VocabIndex>& insertionPositions,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
     ql::span<const ColumnIndex> additionalColumns) {
-  Permutation::ScanSpecAndBlocks scanSpecAndBlocks{std::move(scanSpec),
-                                                   blockMetadataRanges};
+  Permutation::ScanSpecAndBlocks scanSpecAndBlocks{
+      ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
+      blockMetadataRanges};
   auto fullScan = permutation.lazyScan(
       scanSpecAndBlocks, std::nullopt, additionalColumns, cancellationHandle,
       *locatedTriplesSharedState, LimitOffsetClause{});
@@ -200,12 +201,10 @@ std::packaged_task<void()> createPermutationWriterTask(
        additionalColumns = std::move(additionalColumns)]() {
         newIndex.createPermutation(
             numColumns,
-            readIndexAndRemap(
-                permutation,
-                ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
-                blockMetadataRanges, locatedTriplesSharedState,
-                localVocabMapping, insertionPositions, cancellationHandle,
-                additionalColumns),
+            readIndexAndRemap(permutation, blockMetadataRanges,
+                              locatedTriplesSharedState, localVocabMapping,
+                              insertionPositions, cancellationHandle,
+                              additionalColumns),
             permutation, isInternal);
       }};
 }
