@@ -8,6 +8,8 @@ on:
 
 jobs:
   build:
+    strategy:
+      fail-fast: false
     runs-on: ubuntu-24.04
 
     steps:
@@ -76,6 +78,7 @@ jobs:
       run: >
         source ${{github.workspace}}/build/conanrun.sh;
         ${{github.workspace}}/e2e/e2e.sh -d build
+
 
 
 
