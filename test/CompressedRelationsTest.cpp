@@ -1038,7 +1038,6 @@ TEST(CompressedRelationReader, getFirstAndLastTripleIgnoringGraph) {
   auto currentLocatedTriplesSharedState =
       index.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
   auto permutationEnum = Permutation::Enum::SPO;
-  const auto& permutation = index.getImpl().getPermutation(permutationEnum);
   const auto& locatedTriplesPerBlock =
       currentLocatedTriplesSharedState->getLocatedTriplesForPermutation<false>(
           permutationEnum);
@@ -1057,10 +1056,10 @@ TEST(CompressedRelationReader, getFirstAndLastTripleIgnoringGraph) {
   auto g2 = getId("<g2>");
   auto g3 = getId("<g3>");
 
-  auto getTriples = [&permutation, &currentLocatedTriplesSharedState,
-                     permutationEnum, &index, &locatedTriplesPerBlock](
-                        std::optional<Id> col0, std::optional<Id> col1,
-                        std::optional<Id> graphId) {
+  auto getTriples = [&currentLocatedTriplesSharedState, permutationEnum, &index,
+                     &locatedTriplesPerBlock](std::optional<Id> col0,
+                                              std::optional<Id> col1,
+                                              std::optional<Id> graphId) {
     ScanSpecification scanSpecification{
         std::move(col0),
         std::move(col1),
