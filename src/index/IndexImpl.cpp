@@ -977,10 +977,11 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
     osp_ = nullptr;
     spo_ = nullptr;
     sop_ = nullptr;
-    AD_LOG_INFO << "No permutations were loaded due to dontLoadPermutations "
-                   "being set to true. Only queries that don't require "
-                   "accessing the permutations can be executed."
-                << std::endl;
+    AD_LOG_INFO
+        << "No permutations were loaded due to `dontLoadPermutations` "
+           "being set to true. Only queries that don't contain any triples "
+           "can be executed."
+        << std::endl;
   } else {
     load(pso_, true);
     load(pos_, true);
@@ -1555,9 +1556,8 @@ IndexImpl::PermutationPtr IndexImpl::getPermutationPtr(Permutation::Enum p) {
 
 // ____________________________________________________________________________
 Permutation& IndexImpl::getPermutation(Permutation::Enum p) {
-  auto ptr = getPermutationPtr(p);
-  getPermutationImpl(ptr, Permutation::toString(p));
-  return *ptr;
+  return const_cast<Permutation&>(
+      getPermutationImpl(getPermutationPtr(p), Permutation::toString(p)));
 }
 
 // ____________________________________________________________________________
