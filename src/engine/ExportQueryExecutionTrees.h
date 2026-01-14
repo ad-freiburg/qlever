@@ -275,9 +275,6 @@ class ExportQueryExecutionTrees {
   using TableWithRange = ExportQueryExecutionTrees::TableWithRange;
 
  private:
-  // given a row of the WHERE-clause result,
-  // generate the triples of the CONSTRUCT-clause for that row.
-
   // Yield all `IdTables` provided by the given `result`.
   static ad_utility::InputRangeTypeErased<TableConstRefWithVocab> getIdTables(
       const Result& result);
