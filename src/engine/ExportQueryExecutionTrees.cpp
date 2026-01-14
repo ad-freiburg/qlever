@@ -260,13 +260,13 @@ ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
 // _____________________________________________________________________________
 std::vector<QueryExecutionTree::StringTriple>
 ExportQueryExecutionTrees::createConstructTriplesForRow(
-    const ad_utility::sparql_types::Triples& constructTriples,
+    const ad_utility::sparql_types::Triples& constructClauseTriples,
     CancellationHandle cancellationHandle,
     ConstructQueryExportContext context) {
   using enum PositionInTriple;
   std::vector<QueryExecutionTree::StringTriple> triples;
 
-  for (const std::array<GraphTerm, 3>& triple : constructTriples) {
+  for (const std::array<GraphTerm, 3>& triple : constructClauseTriples) {
     cancellationHandle->throwIfCancelled();
 
     auto subject =

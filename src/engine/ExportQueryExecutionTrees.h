@@ -234,7 +234,7 @@ class ExportQueryExecutionTrees {
   // single WHERE-result-table-row.
   std::
       vector<QueryExecutionTree::StringTriple> static createConstructTriplesForRow(
-          const ad_utility::sparql_types::Triples& constructTriples,
+          const ad_utility::sparql_types::Triples& constructClauseTriples,
           CancellationHandle cancellationHandle,
           ConstructQueryExportContext context);
 
