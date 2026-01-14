@@ -21,13 +21,15 @@ function print_usage {
   echo "Options:"
   echo "  -i  Use index from the given directory (which must be the root directory of the working copy of QLever, not the e2e_data subdirectory)"
   echo "  -d  Directory of the QLever binaries (relative to the main directory), default: 'build'"
-  echo "  -t  Build the text index with a separate explicit call to `IndexBuilderMain`"
+  echo "  -t  Build the text index with a separate explicit call to $INDEX_BUILDER_BINARY"
 }
 
 REBUILD_THE_INDEX="YES"
 INDEX_DIRECTORY="." #if not set, we will build the index ourselves.
 BINARY_DIRECTORY="build"
 BUILD_TEXT_INDEX_SEPARATELY="NO"
+INDEX_BUILDER_BINARY="qlever-loader"
+SERVER_BINARY="qlever-server"
 
 while getopts ":i:d:t" arg; do
   case ${arg} in
@@ -104,7 +106,7 @@ if [ ${REBUILD_THE_INDEX} == "YES" ] || ! [ -f "${INDEX}.index.pso" ]; then
 
   if [ ${BUILD_TEXT_INDEX_SEPARATELY} == "NO" ]; then
     echo "Building index $INDEX"
-    ./IndexBuilderMain -i "$INDEX" \
+    ./"$INDEX_BUILDER_BINARY" -i "$INDEX" \
         -F ttl \
         -f "$INPUT.nt" \
         -s "$PROJECT_DIR/e2e/e2e-build-settings.json" \
@@ -113,13 +115,13 @@ if [ ${REBUILD_THE_INDEX} == "YES" ] || ! [ -f "${INDEX}.index.pso" ]; then
         -d "$INPUT.docsfile.tsv" || bail "Building Index failed"
 	else
     echo "Building index $INDEX without text index"
-    ./IndexBuilderMain -i "$INDEX" \
+    ./"$INDEX_BUILDER_BINARY" -i "$INDEX" \
         -F ttl \
         -f "$INPUT.nt" \
         -s "$PROJECT_DIR/e2e/e2e-build-settings.json" \
         || bail "Building Index failed"
     echo "Adding text index"
-    ./IndexBuilderMain -A -i "$INDEX" \
+    ./"$INDEX_BUILDER_BINARY" -A -i "$INDEX" \
         -s "$PROJECT_DIR/e2e/e2e-build-settings.json" \
         -w "$INPUT.wordsfile.tsv" \
               -W \
@@ -133,13 +135,13 @@ fi
 # here because then we can't easily get the SERVER_PID out of that subshell
 pushd "$BINARY_DIR"
 echo "Launching server from path $(pwd)"
-./ServerMain -i "$INDEX" -p 9099 -m 1GB -t --default-query-timeout 30s &> server_log.txt &
+./"$SERVER_BINARY" -i "$INDEX" -p 9099 -m 1GB -t --default-query-timeout 30s &> server_log.txt &
 SERVER_PID=$!
 popd
 
 # Setup the kill switch so it gets called whatever way we exit
 trap cleanup_server EXIT
-echo "Waiting for ServerMain to launch and open port"
+echo "Waiting for $SERVER_BINARY to launch and open port"
 i=0
 until [ $i -eq 60 ] || curl --max-time 1 --output /dev/null --silent http://localhost:9099/; do
 	sleep 1;
@@ -147,10 +149,10 @@ until [ $i -eq 60 ] || curl --max-time 1 --output /dev/null --silent http://loca
 done
 
 if [ $i -ge 60 ]; then
-  echo "ServerMain could not be reached after waiting for 60 seconds, exiting";
+  echo "$SERVER_BINARY could not be reached after waiting for 60 seconds, exiting";
   exit 1
 fi
 
-echo "ServerMain was successfully started, running queries ..."
+echo "$SERVER_BINARY was successfully started, running queries ..."
 $PYTHON_BINARY "$PROJECT_DIR/e2e/queryit.py" "$PROJECT_DIR/e2e/scientists_queries.yaml" "http://localhost:9099" | tee "$BINARY_DIR/query_log.txt" || bail "Querying Server failed"
 popd
