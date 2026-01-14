@@ -789,8 +789,7 @@ TEST(SparqlParser, triplesSameSubjectPath) {
                 "<http://www.w3.org/2001/XMLSchema#double>")),
         PathIri("<bar>"),
         Literal::literalWithoutQuotes(
-            "true", Iri::fromStringRepresentation(
-                        "<http://www.w3.org/2001/XMLSchema#boolean>"))}});
+            "true", Iri("<http://www.w3.org/2001/XMLSchema#boolean>"))}});
   expectTriples(
       "<foo> "
       "<http://qlever.cs.uni-freiburg.de/builtin-functions/contains-word> "

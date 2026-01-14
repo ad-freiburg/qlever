@@ -44,6 +44,8 @@ class Literal {
   // Create a new literal without any descriptor
   explicit Literal(std::string content, size_t beginOfSuffix_);
 
+  explicit Literal(std::string internal);
+
   CPP_template(typename H,
                typename L)(requires ql::concepts::same_as<L, Literal>) friend H
       AbslHashValue(H h, const L& literal) {
