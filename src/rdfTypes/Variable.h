@@ -17,7 +17,6 @@
 // Forward declaration because of cyclic dependencies
 // TODO<joka921> The coupling of the `Variable` with its `evaluate` methods
 // is not very clean and should be refactored.
-// TODO<ms2144> address this comment
 struct ConstructQueryExportContext;
 enum struct PositionInTriple : int;
 
@@ -34,7 +33,6 @@ class Variable {
 
   // TODO<joka921> There are several similar variants of this function across
   // the codebase. Unify them!
-  // TODO<ms2144> address this comment.
   // ___________________________________________________________________________
   [[nodiscard]] std::string toSparql() const { return _name; }
 
