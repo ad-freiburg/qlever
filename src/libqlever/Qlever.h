@@ -163,7 +163,9 @@ struct EngineConfig : CommonConfig {
 
   // If set to true, no permutations will be loaded from disk. This is useful
   // when only queries that don't require accessing the permutations need to be
-  // executed (e.g., queries that only compute constant expressions).
+  // executed (e.g., queries that only compute constant expressions, or query
+  // that only resuly on the `NamedQueryCache` which can be populated
+  // separately).
   bool dontLoadPermutations_ = false;
 };
 
@@ -237,6 +239,9 @@ class Qlever {
   // Clear the result with the given `name` from the cache.
   void eraseResultWithName(std::string name);
   void clearNamedResultCache();
+
+  // Low-level access to the QLever API, use with care.
+  Index& index() { return index_; }
 };
 }  // namespace qlever
 

@@ -199,10 +199,14 @@ TEST(LibQlever, loadIndexWithoutPermutations) {
   // Build the index normally.
   EXPECT_NO_THROW(Qlever::buildIndex(c));
 
-  // Load the index with dontLoadPermutations set to true.
+  // Load the index with `dontLoadPermutations` set to true.
   EngineConfig ec{c};
   ec.dontLoadPermutations_ = true;
   Qlever engine{ec};
+
+  // Test that the `setKbName` function silently does nothing, if we have no
+  // index.
+  EXPECT_NO_THROW(engine.index().setKbName("we have no triples!"));
 
   // Run a query that doesn't need to access permutations (constant expression).
   std::string query = "SELECT (3 + 5 AS ?result) {}";
