@@ -163,6 +163,11 @@ struct EngineConfig : CommonConfig {
   // after a restart). To revert to the state of the index without updates,
   // simply delete this file.
   bool persistUpdates_ = true;
+
+  // If set to true, no permutations will be loaded from disk. This is useful
+  // when only queries that don't require accessing the permutations need to be
+  // executed (e.g., queries that only compute constant expressions).
+  bool dontLoadPermutations_ = false;
 };
 
 // Class to use QLever as an embedded database, without the HTTP server. See
@@ -256,6 +261,14 @@ class Qlever {
     namedResultCache_.readFromSerializer(serializer, allocator_,
                                          *index_.getBlankNodeManager());
   }
+
+  // Serialize the vocabulary, metadata JSON, and named result cache to a blob.
+  // The blob is returned as a vector of bytes.
+  std::vector<char> serializeToBlob() const;
+
+  // Deserialize the vocabulary, metadata JSON, and named result cache from a
+  // blob. This initializes the index without loading permutations.
+  void deserializeFromBlob(const std::vector<char>& blob);
 };
 }  // namespace qlever
 

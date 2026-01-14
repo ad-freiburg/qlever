@@ -480,6 +480,9 @@ endif()
 add_executable(LibQLeverExample src/libqlever/LibQLeverExample.cpp)
 qlever_target_link_libraries(LibQLeverExample parser engine util index qlever absl::strings)
 
+add_executable(CreateBlobMain src/libqlever/CreateBlobMain.cpp)
+qlever_target_link_libraries(CreateBlobMain parser engine util index qlever absl::strings Boost::program_options compilationInfo)
+
 add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
 qlever_target_link_libraries(VocabularyMergerMain index parser ${CMAKE_THREAD_LIBS_INIT})
 

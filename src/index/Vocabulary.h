@@ -115,6 +115,14 @@ class Vocabulary {
   //! Read the vocabulary from file.
   void readFromFile(const std::string& filename);
 
+  //! Read the vocabulary from a serializer.
+  template <typename Serializer>
+  void readFromSerializer(Serializer& serializer);
+
+  //! Write the vocabulary to a serializer...
+  template <typename Serializer>
+  void writeToSerializer(Serializer& serializer) const;
+
   // Get the word with the given `idx`. Throw if the `idx` is not contained
   // in the vocabulary.
   AccessReturnType operator[](IndexType idx) const;
@@ -241,6 +249,27 @@ class Vocabulary {
     }
   }
 };
+
+// _____________________________________________________________________________
+template <class S, class C, typename I>
+template <typename Serializer>
+void Vocabulary<S, C, I>::readFromSerializer(Serializer& serializer) {
+  vocabulary_.close();
+  serializer | vocabulary_;
+
+  // Precomputing ranges for IRIs, blank nodes, and literals, for faster
+  // processing of the `isIrI` and `isLiteral` functions.
+  prefixRangesIris_ = prefixRanges("<");
+  prefixRangesLiterals_ = prefixRanges("\"");
+}
+
+// _____________________________________________________________________________
+// TODO<joka921> make this an oridnary serialize function.
+template <class S, class C, typename I>
+template <typename Serializer>
+void Vocabulary<S, C, I>::writeToSerializer(Serializer& serializer) const {
+  serializer << vocabulary_;
+}
 
 namespace detail {
 // Thecompile-time definitions `QLEVER_VOCAB_UNCOMPRESSED_IN_MEMORY` can be

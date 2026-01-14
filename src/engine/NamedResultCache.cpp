@@ -41,12 +41,13 @@ auto NamedResultCache::get(const Key& name) const
 
 // _____________________________________________________________________________
 void NamedResultCache::store(const Key& name, Value result) {
-  auto lock = cache_.wlock();
+  auto cacheLock = cache_.wlock();
+
   // The underlying cache throws on insert if the key is already present. We
   // therefore first call `erase`, which silently ignores keys that are not
   // present to avoid this behavior.
-  lock->erase(name);
-  lock->insert(name, std::move(result));
+  cacheLock->erase(name);
+  cacheLock->insert(name, std::move(result));
 }
 
 // _____________________________________________________________________________

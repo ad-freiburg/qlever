@@ -182,3 +182,99 @@ TEST(IndexBuilderConfig, validate) {
   AD_EXPECT_THROW_WITH_MESSAGE(c.validate(),
                                HasSubstr("Only specified docsfile"));
 }
+
+// _____________________________________________________________________________
+TEST(LibQlever, loadIndexWithoutPermutations) {
+  std::string filename = "libQleverLoadIndexWithoutPermutations.ttl";
+  {
+    auto ofs = ad_utility::makeOfstream(filename);
+    ofs << "<s> <p> <o>. <s2> <p2> \"literal\".";
+  }
+
+  IndexBuilderConfig c;
+  c.inputFiles_.push_back({filename, Filetype::Turtle, std::nullopt});
+  c.baseName_ = "testIndexWithoutPermutations";
+  c.memoryLimit_ = std::nullopt;
+
+  // Build the index normally.
+  EXPECT_NO_THROW(Qlever::buildIndex(c));
+
+  // Load the index with dontLoadPermutations set to true.
+  EngineConfig ec{c};
+  ec.dontLoadPermutations_ = true;
+  Qlever engine{ec};
+
+  // Run a query that doesn't need to access permutations (constant expression).
+  std::string query = "SELECT (3 + 5 AS ?result) {}";
+  auto res = engine.query(query, ad_utility::MediaType::tsv);
+  // The result should contain the computed value.
+  EXPECT_THAT(res, HasSubstr("8"));
+
+  // Try a query that would need to access permutations and verify it throws.
+  std::string queryNeedingPermutations = "SELECT ?s WHERE { ?s <p> <o> }";
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      engine.query(queryNeedingPermutations, ad_utility::MediaType::tsv),
+      HasSubstr("permutation to be loaded"));
+}
+
+// _____________________________________________________________________________
+TEST(LibQlever, serializeAndDeserializeBlob) {
+  std::string filename = "libQleverBlobSerialization.ttl";
+  {
+    auto ofs = ad_utility::makeOfstream(filename);
+    ofs << "<s> <p> <o>. <s2> <p> \"test literal\".";
+  }
+
+  IndexBuilderConfig c;
+  c.inputFiles_.push_back({filename, Filetype::Turtle, std::nullopt});
+  c.baseName_ = "testIndexForBlobSerialization";
+  c.vocabType_ = ad_utility::VocabularyType{
+      ad_utility::VocabularyType::Enum::InMemoryCompressed};
+  c.memoryLimit_ = std::nullopt;
+
+  // Build the index normally.
+  EXPECT_NO_THROW(Qlever::buildIndex(c));
+
+  std::vector<char> blob;
+  {
+    // Load the index and pin a query result to the named result cache.
+    EngineConfig ec{c};
+    Qlever engine{ec};
+
+    // Pin a query result.
+    std::string query = "SELECT ?s WHERE { ?s <p> <o> }";
+    engine.queryAndPinResultWithName("pinnedQuery", query);
+
+    // Verify the pinned query works.
+    std::string serviceQuery =
+        "SELECT ?s WHERE { SERVICE ql:cached-result-with-name-pinnedQuery {}}";
+    auto res = engine.query(serviceQuery, ad_utility::MediaType::tsv);
+    EXPECT_EQ(res, "?s\n<s>\n");
+
+    // Serialize to blob.
+    blob = engine.serializeToBlob();
+    EXPECT_GT(blob.size(), 0);
+  }
+
+  {
+    // Create a fresh Qlever instance and deserialize from the blob.
+    EngineConfig ec{c};
+    Qlever engine{ec};
+
+    // Deserialize from blob.
+    ASSERT_NO_THROW(engine.deserializeFromBlob(blob));
+
+    // Verify that the pinned query still works after deserialization.
+    std::string serviceQuery =
+        "SELECT ?s WHERE { SERVICE ql:cached-result-with-name-pinnedQuery {}}";
+    auto res = engine.query(serviceQuery, ad_utility::MediaType::tsv);
+    EXPECT_EQ(res, "?s\n<s>\n");
+
+    // Verify that queries requiring permutations don't work (since we didn't
+    // load them from the blob).
+    std::string queryNeedingPermutations = "SELECT ?s WHERE { ?s <p> <o> }";
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        engine.query(queryNeedingPermutations, ad_utility::MediaType::tsv),
+        HasSubstr("permutation to be loaded"));
+  }
+}

@@ -191,6 +191,11 @@ class IndexImpl {
   std::optional<Id> idOfHasPatternDuringIndexBuilding_;
   std::optional<Id> idOfInternalGraphDuringIndexBuilding_;
 
+  // If true, the permutations will not be loaded from disk when calling
+  // createFromOnDiskIndex. This is useful when only queries that don't require
+  // the permutations need to be executed.
+  bool dontLoadPermutations_ = false;
+
   // The vocabulary type that is used (only relevant during index building).
   ad_utility::VocabularyType vocabularyTypeForIndexBuilding_{
       ad_utility::VocabularyType::Enum::OnDiskCompressed};
@@ -211,18 +216,12 @@ class IndexImpl {
   IndexImpl& operator=(IndexImpl&&) = delete;
   IndexImpl(IndexImpl&&) = delete;
 
-  const auto& POS() const { return *pos_; }
-  auto& POS() { return *pos_; }
-  const auto& PSO() const { return *pso_; }
-  auto& PSO() { return *pso_; }
-  const auto& SPO() const { return *spo_; }
-  auto& SPO() { return *spo_; }
-  const auto& SOP() const { return *sop_; }
-  auto& SOP() { return *sop_; }
-  const auto& OPS() const { return *ops_; }
-  auto& OPS() { return *ops_; }
-  const auto& OSP() const { return *osp_; }
-  auto& OSP() { return *osp_; }
+  const auto& POS() const { return getPermutationImpl(pos_, "POS"); }
+  const auto& PSO() const { return getPermutationImpl(pso_, "PSO"); }
+  const auto& SPO() const { return getPermutationImpl(spo_, "SPO"); }
+  const auto& SOP() const { return getPermutationImpl(sop_, "SOP"); }
+  const auto& OPS() const { return getPermutationImpl(ops_, "OPS"); }
+  const auto& OSP() const { return getPermutationImpl(osp_, "OSP"); }
 
   static const IndexImpl& staticGlobalSingletonIndex() {
     AD_CORRECTNESS_CHECK(globalSingletonIndex_ != nullptr);
@@ -258,6 +257,12 @@ class IndexImpl {
   void createFromOnDiskIndex(const std::string& onDiskBase,
                              bool persistUpdatesOnDisk);
 
+  // Creates an index object from a serialized blob. The blob contains the
+  // vocabulary, metadata JSON, and named result cache. Permutations are not
+  // loaded (dontLoadPermutations_ is set to true).
+  template <typename Serializer>
+  void createFromBlobData(Serializer& serializer, bool persistUpdatesOnDisk);
+
   // Adds text index from on disk index that has previously been constructed.
   // Read necessary meta data into memory and opens file handles.
   void addTextFromOnDiskIndex();
@@ -277,6 +282,9 @@ class IndexImpl {
   }
 
   const auto& encodedIriManager() const { return encodedIriManager_; }
+
+  // Get the configuration JSON (metadata).
+  const nlohmann::json& configurationJson() const { return configurationJson_; }
 
   // Set the prefixes of the IRIs that will be encoded directly into
   // the `Id`; see `EncodedIriManager` for details.
@@ -436,6 +444,8 @@ class IndexImpl {
   bool& usePatterns();
 
   bool& loadAllPermutations();
+
+  bool& dontLoadPermutations();
 
   void setKeepTempFiles(bool keepTempFiles);
 
@@ -657,8 +667,15 @@ class IndexImpl {
    */
   void throwExceptionIfNoPatterns() const;
 
+  // Dereference the `permutationPtr` and throw an exception if it is `nullptr`.
+  // The `permutationName` is used to enrich the error message.
+  const Permutation& getPermutationImpl(const PermutationPtr& permutationPtr,
+                                        std::string_view permutationName) const;
+
   void writeConfiguration() const;
   void readConfiguration();
+  // Apply configuration from a JSON object (extracted from readConfiguration).
+  void applyConfiguration(const nlohmann::json& configJson);
 
   // initialize the index-build-time settings for the vocabulary
   void readIndexBuilderSettingsFromFile();
@@ -802,5 +819,47 @@ class IndexImpl {
   void storeTextScoringParamsInConfiguration(TextScoringMetric scoringMetric,
                                              float b, float k);
 };
+
+// _____________________________________________________________________________
+template <typename Serializer>
+void IndexImpl::createFromBlobData(Serializer& serializer,
+                                   bool persistUpdatesOnDisk) {
+  // Deserialize the metadata JSON.
+  std::string metadataJson;
+  serializer >> metadataJson;
+
+  // Apply configuration to set up vocabulary type, comparator, etc.
+  applyConfiguration(nlohmann::json::parse(metadataJson));
+
+  // Deserialize the vocabulary using the configuration.
+  vocab_.readFromSerializer(serializer);
+  globalSingletonComparator_ = &vocab_.getCaseComparator();
+
+  AD_LOG_DEBUG << "Number of words in internal and external vocabulary: "
+               << vocab_.size() << std::endl;
+
+  // Set dontLoadPermutations to true as permutations are not in the blob.
+  dontLoadPermutations_ = true;
+
+  // Set all permutations to nullptr to indicate they are not loaded.
+  pso_ = nullptr;
+  pos_ = nullptr;
+  ops_ = nullptr;
+  osp_ = nullptr;
+  spo_ = nullptr;
+  sop_ = nullptr;
+  AD_LOG_INFO << "No permutations were loaded from blob. Only queries that "
+                 "don't require accessing the permutations can be executed."
+              << std::endl;
+
+  // Don't load patterns (they are not in the blob).
+  usePatterns_ = false;
+
+  // Load delta triples from disk if requested.
+  if (persistUpdatesOnDisk) {
+    deltaTriples_.value().setFilenameForPersistentUpdatesAndReadFromDisk(
+        onDiskBase_ + ".update-triples");
+  }
+}
 
 #endif  // QLEVER_SRC_INDEX_INDEXIMPL_H
