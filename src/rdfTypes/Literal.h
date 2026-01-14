@@ -21,12 +21,15 @@ class Literal {
   // and descriptors.
   //  For example `"Hello World"@en`  or `"With"Quote"^^<someDatatype>` (note
   //  that the quote in the middle is unescaped because this is the normalized
-  //  form that QLever stores.
+  //  form that QLever stores.)
   std::string content_;
   // The position after the closing `"`, so either the size of the string, or
   // the position of the `@` or `^^` for literals with language tags or
   // datatypes.
   std::size_t beginOfSuffix_;
+
+  // Create a new literal without any descriptor
+  explicit Literal(std::string content, size_t beginOfSuffix_);
 
   // Internal helper function. Return either the empty string (for a plain
   // literal), `@langtag` or `^^<datatypeIri>`.
@@ -41,11 +44,6 @@ class Literal {
   }
 
  public:
-  // Create a new literal without any descriptor
-  explicit Literal(std::string content, size_t beginOfSuffix_);
-
-  explicit Literal(std::string internal);
-
   CPP_template(typename H,
                typename L)(requires ql::concepts::same_as<L, Literal>) friend H
       AbslHashValue(H h, const L& literal) {
