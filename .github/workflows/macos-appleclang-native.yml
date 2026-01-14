@@ -29,6 +29,8 @@ jobs:
         run: |
           brew update                                                                                                                                                                                                                       
           brew install boost icu4c openssl@3 zstd jemalloc pkg-config
+          echo PATH="$(brew --prefix icu4c)/bin:$(brew --prefix icu4c)/sbin:$PATH" >> $GITHUB_ENV
+          echo PKG_CONFIG_PATH="$PKG_CONFIG_PATH:$(brew --prefix icu4c)/lib/pkgconfig" >> $GITHUB_ENV
 
       - name: Install python dependencies for E2E tests
         run: |
