@@ -1823,3 +1823,13 @@ TEST(IndexScanTest, StripColumnsWithPrefiltering) {
         << varsToKeep.size() << " variables";
   }
 }
+
+TEST(IndexScanTest, getMultiplicities) {
+  auto* qec = getQec();
+  auto s = Tc::Iri::fromIriref("<x>");
+  IndexScan scan{qec, Permutation::SPO,
+                 SparqlTripleSimple{s, Var{"?y"}, Var{"?z"}}};
+  auto multiplicities = scan.getMultiplicities(s);
+  EXPECT_FLOAT_EQ(multiplicities[0], 2.5);
+  EXPECT_FLOAT_EQ(multiplicities[1], 1);
+}

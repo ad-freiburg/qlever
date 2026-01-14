@@ -148,13 +148,14 @@ class MaterializedView {
   std::shared_ptr<Permutation> permutation_{std::make_shared<Permutation>(
       Permutation::Enum::SPO, ad_utility::makeUnlimitedAllocator<Id>())};
   VariableToColumnMap varToColMap_;
-  std::shared_ptr<LocatedTriplesState> locatedTriplesState_;
+  std::shared_ptr<LocatedTriplesPerBlock> locatedTriplesPerBlock_;
 
   using AdditionalScanColumns = SparqlTripleSimple::AdditionalScanColumns;
 
-  // Helper to create an empty `LocatedTriplesState` for `IndexScan`s as
+  // Helper to create an empty `LocatedTriplesPerBlock` for `IndexScan`s as
   // materialized views do not support updates yet.
-  std::shared_ptr<LocatedTriplesState> makeEmptyLocatedTriplesState() const;
+  std::shared_ptr<LocatedTriplesPerBlock> makeEmptyLocatedTriplesPerBlock()
+      const;
 
  public:
   // Load a materialized view from disk given the filename components. The
@@ -181,10 +182,10 @@ class MaterializedView {
   // `nullptr`.
   std::shared_ptr<const Permutation> permutation() const;
 
-  // Return a reference to the `LocatedTriplesSnapshot` for the permutation. For
+  // Return a reference to the `LocatedTriplesPerBlock` for the permutation. For
   // now this is always an empty snapshot but with the correct permutation
   // metadata.
-  LocatedTriplesSharedState locatedTriplesState() const;
+  std::shared_ptr<const LocatedTriplesPerBlock> locatedTriplesPerBlock() const;
 
   // Checks if the given name is allowed for a materialized view. Currently only
   // alphanumerics and hyphens are allowed. This is relevant for safe filenames
