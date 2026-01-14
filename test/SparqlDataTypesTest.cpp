@@ -5,7 +5,6 @@
 #include <gmock/gmock.h>
 
 #include "./util/AllocatorTestHelpers.h"
-#include "engine/ConstructQueryEvaluator.h"
 #include "index/Index.h"
 #include "parser/data/ConstructQueryExportContext.h"
 #include "parser/data/Types.h"
@@ -56,26 +55,32 @@ TEST(SparqlDataTypesTest, BlankNodeEvaluatesCorrectlyBasedOnContext) {
   BlankNode blankNodeA{false, "a"};
   BlankNode blankNodeB{true, "b"};
   ConstructQueryExportContext context0 = wrapper.createContextForRow(0);
+  using enum PositionInTriple;
 
-  // BlankNode evaluation doesn't depend on position
-  EXPECT_THAT(ConstructQueryEvaluator::evaluateBlankNode(blankNodeA, context0),
-              Optional("_:u0_a"s));
-  EXPECT_THAT(ConstructQueryEvaluator::evaluateBlankNode(blankNodeB, context0),
-              Optional("_:g0_b"s));
+  EXPECT_THAT(blankNodeA.evaluate(context0, SUBJECT), Optional("_:u0_a"s));
+  EXPECT_THAT(blankNodeA.evaluate(context0, PREDICATE), Optional("_:u0_a"s));
+  EXPECT_THAT(blankNodeA.evaluate(context0, OBJECT), Optional("_:u0_a"s));
+  EXPECT_THAT(blankNodeB.evaluate(context0, SUBJECT), Optional("_:g0_b"s));
+  EXPECT_THAT(blankNodeB.evaluate(context0, PREDICATE), Optional("_:g0_b"s));
+  EXPECT_THAT(blankNodeB.evaluate(context0, SUBJECT), Optional("_:g0_b"s));
 
   ConstructQueryExportContext context10 = wrapper.createContextForRow(10);
 
-  EXPECT_THAT(ConstructQueryEvaluator::evaluateBlankNode(blankNodeA, context10),
-              Optional("_:u10_a"s));
-  EXPECT_THAT(ConstructQueryEvaluator::evaluateBlankNode(blankNodeB, context10),
-              Optional("_:g10_b"s));
+  EXPECT_THAT(blankNodeA.evaluate(context10, SUBJECT), Optional("_:u10_a"s));
+  EXPECT_THAT(blankNodeA.evaluate(context10, PREDICATE), Optional("_:u10_a"s));
+  EXPECT_THAT(blankNodeA.evaluate(context10, OBJECT), Optional("_:u10_a"s));
+  EXPECT_THAT(blankNodeB.evaluate(context10, SUBJECT), Optional("_:g10_b"s));
+  EXPECT_THAT(blankNodeB.evaluate(context10, PREDICATE), Optional("_:g10_b"s));
+  EXPECT_THAT(blankNodeB.evaluate(context10, SUBJECT), Optional("_:g10_b"s));
 
   ConstructQueryExportContext context12 = wrapper.createContextForRow(7, 5);
 
-  EXPECT_THAT(ConstructQueryEvaluator::evaluateBlankNode(blankNodeA, context12),
-              Optional("_:u12_a"s));
-  EXPECT_THAT(ConstructQueryEvaluator::evaluateBlankNode(blankNodeB, context12),
-              Optional("_:g12_b"s));
+  EXPECT_THAT(blankNodeA.evaluate(context12, SUBJECT), Optional("_:u12_a"s));
+  EXPECT_THAT(blankNodeA.evaluate(context12, PREDICATE), Optional("_:u12_a"s));
+  EXPECT_THAT(blankNodeA.evaluate(context12, OBJECT), Optional("_:u12_a"s));
+  EXPECT_THAT(blankNodeB.evaluate(context12, SUBJECT), Optional("_:g12_b"s));
+  EXPECT_THAT(blankNodeB.evaluate(context12, PREDICATE), Optional("_:g12_b"s));
+  EXPECT_THAT(blankNodeB.evaluate(context12, SUBJECT), Optional("_:g12_b"s));
 }
 
 TEST(SparqlDataTypesTest, BlankNodeEvaluateIsPropagatedCorrectly) {
@@ -86,28 +91,51 @@ TEST(SparqlDataTypesTest, BlankNodeEvaluateIsPropagatedCorrectly) {
 
   auto expectedLabel = Optional("_:u42_label"s);
 
-  EXPECT_THAT(ConstructQueryEvaluator::evaluateBlankNode(blankNode, context),
-              expectedLabel);
-  EXPECT_THAT(
-      ConstructQueryEvaluator::evaluate(GraphTerm{blankNode}, context, SUBJECT),
-      expectedLabel);
+  EXPECT_THAT(blankNode.evaluate(context, SUBJECT), expectedLabel);
+  EXPECT_THAT(GraphTerm{blankNode}.evaluate(context, SUBJECT), expectedLabel);
+  EXPECT_THAT(GraphTerm{blankNode}.evaluate(context, SUBJECT), expectedLabel);
 }
 
-// Note: The unified rdfTypes/Iri class no longer validates in the constructor
-// because it is used in many internal contexts. IRI validation happens at
-// parse time via fromIriref and related factory methods.
+TEST(SparqlDataTypesTest, IriInvalidSyntaxThrowsException) {
+  EXPECT_THROW(Iri{"http://linkwithoutangularbrackets"}, ad_utility::Exception);
+  EXPECT_THROW(Iri{"<<nestedangularbrackets>>"}, ad_utility::Exception);
+  EXPECT_THROW(Iri{"<duplicatedangularbracker>>"}, ad_utility::Exception);
+  EXPECT_THROW(Iri{"<<duplicatedangularbracker>"}, ad_utility::Exception);
+  EXPECT_THROW(Iri{"<noend"}, ad_utility::Exception);
+  EXPECT_THROW(Iri{"nostart>"}, ad_utility::Exception);
+  EXPECT_THROW(Iri{"<\"withdoublequote>"}, ad_utility::Exception);
+  EXPECT_THROW(Iri{"<{withcurlybrace>"}, ad_utility::Exception);
+  EXPECT_THROW(Iri{"<}withcurlybrace>"}, ad_utility::Exception);
+  EXPECT_THROW(Iri{"<|withpipesymbol>"}, ad_utility::Exception);
+  EXPECT_THROW(Iri{"<^withcaret>"}, ad_utility::Exception);
+  EXPECT_THROW(Iri{"<\\withbackslash>"}, ad_utility::Exception);
+  EXPECT_THROW(Iri{"<`withbacktick>"}, ad_utility::Exception);
+  // U+0000 (NULL) to U+0020 (Space) are all forbidden characters
+  // but the following two are probably the most common cases
+  EXPECT_THROW(Iri{"<with whitespace>"}, ad_utility::Exception);
+  EXPECT_THROW(Iri{"<with\r\nnewline>"}, ad_utility::Exception);
+}
 
 TEST(SparqlDataTypesTest, IriValidIriIsPreserved) {
-  ASSERT_EQ(Iri{"<http://valid-iri>"}.toStringRepresentation(),
-            "<http://valid-iri>");
+  ASSERT_EQ(Iri{"<http://valid-iri>"}.iri(), "<http://valid-iri>");
 }
 
 TEST(SparqlDataTypesTest, IriEvaluatesCorrectlyBasedOnContext) {
+  auto wrapper = prepareContext();
+
   std::string iriString{"<http://some-iri>"};
   Iri iri{iriString};
+  ConstructQueryExportContext context0 = wrapper.createContextForRow(0);
 
-  // Iri evaluation doesn't depend on context or position
-  EXPECT_THAT(ConstructQueryEvaluator::evaluateIri(iri), Optional(iriString));
+  EXPECT_THAT(iri.evaluate(context0, SUBJECT), Optional(iriString));
+  EXPECT_THAT(iri.evaluate(context0, PREDICATE), Optional(iriString));
+  EXPECT_THAT(iri.evaluate(context0, OBJECT), Optional(iriString));
+
+  ConstructQueryExportContext context1337 = wrapper.createContextForRow(1337);
+
+  EXPECT_THAT(iri.evaluate(context1337, SUBJECT), Optional(iriString));
+  EXPECT_THAT(iri.evaluate(context1337, PREDICATE), Optional(iriString));
+  EXPECT_THAT(iri.evaluate(context1337, OBJECT), Optional(iriString));
 }
 
 TEST(SparqlDataTypesTest, IriEvaluateIsPropagatedCorrectly) {
@@ -118,65 +146,61 @@ TEST(SparqlDataTypesTest, IriEvaluateIsPropagatedCorrectly) {
 
   auto expectedString = Optional("<http://some-iri>"s);
 
-  EXPECT_THAT(ConstructQueryEvaluator::evaluateIri(iri), expectedString);
-  EXPECT_THAT(
-      ConstructQueryEvaluator::evaluate(GraphTerm{iri}, context, SUBJECT),
-      expectedString);
+  EXPECT_THAT(iri.evaluate(context, SUBJECT), expectedString);
+  EXPECT_THAT(GraphTerm{iri}.evaluate(context, SUBJECT), expectedString);
+  EXPECT_THAT(GraphTerm{iri}.evaluate(context, SUBJECT), expectedString);
 }
 
 TEST(SparqlDataTypesTest, LiteralBooleanIsCorrectlyFormatted) {
-  EXPECT_EQ(Literal::literalWithoutQuotes("true").toStringRepresentation(),
-            "\"true\"");
-  EXPECT_EQ(Literal::literalWithoutQuotes("false").toStringRepresentation(),
-            "\"false\"");
+  EXPECT_EQ(Literal{true}.literal(), "true");
+  EXPECT_EQ(Literal{false}.literal(), "false");
 }
 
 TEST(SparqlDataTypesTest, LiteralStringIsCorrectlyFormatted) {
-  EXPECT_EQ(Literal::literalWithoutQuotes("abcdef").toStringRepresentation(),
-            "\"abcdef\"");
-  EXPECT_EQ(
-      Literal::literalWithoutQuotes("\U0001f937\U0001f3fc\u200d\u2642\ufe0f")
-          .toStringRepresentation(),
-      "\"🤷🏼‍♂️\"");
+  EXPECT_EQ(Literal{"abcdef"}.literal(), "abcdef");
+  EXPECT_EQ(Literal{"\U0001f937\U0001f3fc\u200d\u2642\ufe0f"}.literal(),
+            "🤷🏼‍♂️");
+}
+
+TEST(SparqlDataTypesTest, LiteralNumberIsCorrectlyFormatted) {
+  EXPECT_EQ(Literal{1234567890}.literal(), "1234567890");
+  EXPECT_EQ(Literal{-1337}.literal(), "-1337");
+  EXPECT_EQ(Literal{1.3}.literal(), "1.3");
 }
 
 TEST(SparqlDataTypesTest, LiteralEvaluatesCorrectlyBasedOnContext) {
-  std::string literalString{"\"true\""};
-  Literal literal = Literal::literalWithoutQuotes("true");
+  auto wrapper = prepareContext();
 
-  EXPECT_EQ(ConstructQueryEvaluator::evaluateLiteral(literal, SUBJECT),
-            std::nullopt);
-  EXPECT_EQ(ConstructQueryEvaluator::evaluateLiteral(literal, PREDICATE),
-            std::nullopt);
-  EXPECT_THAT(ConstructQueryEvaluator::evaluateLiteral(literal, OBJECT),
-              Optional(literalString));
+  std::string literalString{"true"};
+  Literal literal{literalString};
+  ConstructQueryExportContext context0 = wrapper.createContextForRow(0);
+
+  EXPECT_EQ(literal.evaluate(context0, SUBJECT), std::nullopt);
+  EXPECT_EQ(literal.evaluate(context0, PREDICATE), std::nullopt);
+  EXPECT_THAT(literal.evaluate(context0, OBJECT), Optional(literalString));
+
+  ConstructQueryExportContext context1337 = wrapper.createContextForRow(1337);
+
+  EXPECT_EQ(literal.evaluate(context1337, SUBJECT), std::nullopt);
+  EXPECT_EQ(literal.evaluate(context1337, PREDICATE), std::nullopt);
+  EXPECT_THAT(literal.evaluate(context1337, OBJECT), Optional(literalString));
 }
 
 TEST(SparqlDataTypesTest, LiteralEvaluateIsPropagatedCorrectly) {
   auto wrapper = prepareContext();
 
-  Literal literal = Literal::literalWithoutQuotes("some literal");
+  Literal literal{"some literal"};
   ConstructQueryExportContext context = wrapper.createContextForRow(42);
 
-  EXPECT_EQ(ConstructQueryEvaluator::evaluateLiteral(literal, SUBJECT),
-            std::nullopt);
-  EXPECT_EQ(
-      ConstructQueryEvaluator::evaluate(GraphTerm{literal}, context, SUBJECT),
-      std::nullopt);
-  EXPECT_EQ(
-      ConstructQueryEvaluator::evaluate(GraphTerm{literal}, context, SUBJECT),
-      std::nullopt);
+  EXPECT_EQ(literal.evaluate(context, SUBJECT), std::nullopt);
+  EXPECT_EQ(GraphTerm{literal}.evaluate(context, SUBJECT), std::nullopt);
+  EXPECT_EQ(GraphTerm{literal}.evaluate(context, SUBJECT), std::nullopt);
 
-  auto expectedString = Optional("\"some literal\""s);
+  auto expectedString = Optional("some literal"s);
 
-  EXPECT_THAT(ConstructQueryEvaluator::evaluateLiteral(literal, OBJECT),
-              expectedString);
-  EXPECT_THAT(
-      ConstructQueryEvaluator::evaluate(GraphTerm{literal}, context, OBJECT),
-      expectedString);
-  EXPECT_THAT(
-      ConstructQueryEvaluator::evaluate(GraphTerm{literal}, context, OBJECT),
-      expectedString);
+  EXPECT_THAT(literal.evaluate(context, OBJECT), expectedString);
+  EXPECT_THAT(GraphTerm{literal}.evaluate(context, OBJECT), expectedString);
+  EXPECT_THAT(GraphTerm{literal}.evaluate(context, OBJECT), expectedString);
 }
 
 TEST(SparqlDataTypesTest, VariableNormalizesDollarSign) {
@@ -216,19 +240,22 @@ TEST(SparqlDataTypesTest, VariableEvaluatesCorrectlyBasedOnContext) {
   Variable variable{"?var"};
   ConstructQueryExportContext context0 = wrapper.createContextForRow(0);
 
-  EXPECT_THAT(ConstructQueryEvaluator::evaluateVar(variable, context0),
-              Optional("69"s));
+  EXPECT_THAT(variable.evaluate(context0, SUBJECT), Optional("69"s));
+  EXPECT_THAT(variable.evaluate(context0, PREDICATE), Optional("69"s));
+  EXPECT_THAT(variable.evaluate(context0, OBJECT), Optional("69"s));
 
   // Row offset should be ignored.
   ConstructQueryExportContext context0b = wrapper.createContextForRow(0, 42);
 
-  EXPECT_THAT(ConstructQueryEvaluator::evaluateVar(variable, context0b),
-              Optional("69"s));
+  EXPECT_THAT(variable.evaluate(context0b, SUBJECT), Optional("69"s));
+  EXPECT_THAT(variable.evaluate(context0b, PREDICATE), Optional("69"s));
+  EXPECT_THAT(variable.evaluate(context0b, OBJECT), Optional("69"s));
 
   ConstructQueryExportContext context1 = wrapper.createContextForRow(1);
 
-  EXPECT_THAT(ConstructQueryEvaluator::evaluateVar(variable, context1),
-              Optional("420"s));
+  EXPECT_THAT(variable.evaluate(context1, SUBJECT), Optional("420"s));
+  EXPECT_THAT(variable.evaluate(context1, PREDICATE), Optional("420"s));
+  EXPECT_THAT(variable.evaluate(context1, OBJECT), Optional("420"s));
 }
 
 TEST(SparqlDataTypesTest, VariableEvaluatesNothingForUnusedName) {
@@ -237,13 +264,15 @@ TEST(SparqlDataTypesTest, VariableEvaluatesNothingForUnusedName) {
   Variable variable{"?var"};
   ConstructQueryExportContext context0 = wrapper.createContextForRow(0);
 
-  EXPECT_EQ(ConstructQueryEvaluator::evaluateVar(variable, context0),
-            std::nullopt);
+  EXPECT_EQ(variable.evaluate(context0, SUBJECT), std::nullopt);
+  EXPECT_EQ(variable.evaluate(context0, PREDICATE), std::nullopt);
+  EXPECT_EQ(variable.evaluate(context0, OBJECT), std::nullopt);
 
   ConstructQueryExportContext context1337 = wrapper.createContextForRow(1337);
 
-  EXPECT_EQ(ConstructQueryEvaluator::evaluateVar(variable, context1337),
-            std::nullopt);
+  EXPECT_EQ(variable.evaluate(context1337, SUBJECT), std::nullopt);
+  EXPECT_EQ(variable.evaluate(context1337, PREDICATE), std::nullopt);
+  EXPECT_EQ(variable.evaluate(context1337, OBJECT), std::nullopt);
 }
 
 TEST(SparqlDataTypesTest, VariableEvaluateIsPropagatedCorrectly) {
@@ -259,17 +288,13 @@ TEST(SparqlDataTypesTest, VariableEvaluateIsPropagatedCorrectly) {
   Variable variableKnown{"?var"};
   ConstructQueryExportContext context = wrapper.createContextForRow(0);
 
-  EXPECT_THAT(ConstructQueryEvaluator::evaluateVar(variableKnown, context),
-              Optional("69"s));
-  EXPECT_THAT(ConstructQueryEvaluator::evaluate(GraphTerm{variableKnown},
-                                                context, SUBJECT),
+  EXPECT_THAT(variableKnown.evaluate(context, SUBJECT), Optional("69"s));
+  EXPECT_THAT(GraphTerm{variableKnown}.evaluate(context, SUBJECT),
               Optional("69"s));
 
   Variable variableUnknown{"?unknownVar"};
 
-  EXPECT_EQ(ConstructQueryEvaluator::evaluateVar(variableUnknown, context),
-            std::nullopt);
-  EXPECT_EQ(ConstructQueryEvaluator::evaluate(GraphTerm{variableUnknown},
-                                              context, SUBJECT),
+  EXPECT_EQ(variableUnknown.evaluate(context, SUBJECT), std::nullopt);
+  EXPECT_EQ(GraphTerm{variableUnknown}.evaluate(context, SUBJECT),
             std::nullopt);
 }
