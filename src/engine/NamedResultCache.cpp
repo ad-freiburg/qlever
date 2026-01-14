@@ -23,7 +23,13 @@ std::shared_ptr<ExplicitIdTableOperation> NamedResultCache::getOperation(
 }
 
 // _____________________________________________________________________________
-auto NamedResultCache::get(const Key& name) -> std::shared_ptr<const Value> {
+auto NamedResultCache::get(const Key& name) const
+    -> std::shared_ptr<const Value> {
+  // Note: this function is `const`, but we need to use the (non-const) `wlock`
+  // function on the `mutable` `cache_`, because the `operator[]` is not `const`
+  // because it updates the LRU structures in the cache. However, logically it
+  // doesn't change the contents of the cache and additionally (because of the
+  // `wlock`) is threadsafe, this usage of `mutable` is okay.
   auto lock = cache_.wlock();
   if (!lock->contains(name)) {
     throw std::runtime_error{

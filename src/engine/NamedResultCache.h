@@ -7,16 +7,13 @@
 #ifndef QLEVER_SRC_ENGINE_NAMEDRESULTCACHE_H
 #define QLEVER_SRC_ENGINE_NAMEDRESULTCACHE_H
 
+#include <boost/optional.hpp>
+
 #include "engine/ExplicitIdTableOperation.h"
 #include "engine/LocalVocab.h"
 #include "engine/SpatialJoinCachedIndex.h"
 #include "util/Cache.h"
-#include "util/Serializer/SerializeHashMap.h"
-#include "util/Serializer/SerializeOptional.h"
-#include "util/Serializer/SerializeString.h"
-#include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/Serializer.h"
-#include "util/Serializer/TripleSerializer.h"
 #include "util/Synchronized.h"
 
 // Forward declarations
@@ -39,7 +36,9 @@ class NamedResultCache {
     LocalVocab localVocab_;
     std::string cacheKey_;
     std::optional<SpatialJoinCachedIndex> cachedGeoIndex_;
-    // This allocator is only used during the `readFromDisk` member function.
+
+    // The following two members (`Allocator` and `BlankNodeManager`) are only
+    // used when reading a `Value` from a serializer.
     using Allocator = ad_utility::AllocatorWithLimit<Id>;
     std::optional<Allocator> allocatorForSerialization_{std::nullopt};
     boost::optional<ad_utility::BlankNodeManager&>
@@ -61,6 +60,11 @@ class NamedResultCache {
   using Cache = ad_utility::LRUCache<Key, Value, ValueSizeGetter>;
 
  private:
+  // The `cache_` has a non-const `operator[]` which is non-const because it has
+  // to update data structures for the `LRU` mechanism. That's why we
+  // unfortunately have to use `mutable` here. We get threadsafety via the
+  // `Synchronized` wrapper, and manually have to make sure that we logically
+  // don't violate the constness.
   mutable ad_utility::Synchronized<Cache> cache_;
 
  public:
@@ -80,7 +84,7 @@ class NamedResultCache {
 
   // Get a pointer to the cached result with the given `name`. If no such
   // result exists, throw an exception.
-  std::shared_ptr<const Value> get(const Key& name);
+  std::shared_ptr<const Value> get(const Key& name) const;
 
   // Get a pointer to the cached result with the given `name`, and convert
   // it into an `ExplicitIdTableOperation` that can be used as part of a
@@ -88,166 +92,27 @@ class NamedResultCache {
   std::shared_ptr<ExplicitIdTableOperation> getOperation(
       const Key& name, QueryExecutionContext* qec);
 
-  // _____________________________________________________________________________
-  template <typename Serializer>
-  void writeToSerializer(Serializer& serializer) const {
-    auto lock = cache_.wlock();
-    std::vector<std::pair<Key, std::shared_ptr<const Value>>> entries;
-    for (const auto& key : lock->getAllNonpinnedKeys()) {
-      entries.emplace_back(key, (*lock)[key]);
-      AD_CORRECTNESS_CHECK(entries.back().second != nullptr);
-    }
+  // NOTE: The following two templated serialization functions are defined in
+  // the `NamedResultCacheSerializer.h` header which has to be included by the
+  // code that actually calls them to not get any undefined references.
 
-    // Serialize the number of entries
-    serializer << entries.size();
+  // Write the current contents of the result cache to the `serializer`.
+  CPP_template(typename Serializer)(
+      requires ad_utility::serialization::WriteSerializer<
+          Serializer>) void writeToSerializer(Serializer& serializer) const;
 
-    // Serialize each entry
-    for (const auto& [key, value] : entries) {
-      serializer << key;
-      serializer << *value;
-    }
-  }
-
-  // _____________________________________________________________________________
-  template <typename Serializer>
-  void readFromSerializer(Serializer& serializer, Value::Allocator allocator,
-                          ad_utility::BlankNodeManager& blankNodeManager) {
-    // Clear the cache first
-    clear();
-
-    // Deserialize the number of entries
-    size_t numEntries;
-    serializer >> numEntries;
-
-    // Deserialize each entry and add to the cache
-    for (size_t i = 0; i < numEntries; ++i) {
-      // Deserialize the key
-      Key key;
-      serializer >> key;
-
-      // Deserialize the value
-      Value value;
-      value.allocatorForSerialization_ = allocator;
-      value.blankNodeManagerForSerialization_ = blankNodeManager;
-      serializer >> value;
-
-      // Use the store method to maintain consistency
-      store(key, std::move(value));
-    }
-  }
+  // Read the contents of the result cache from the `serializer`.
+  // NOTE: This function has to be called after the index has been loaded, but
+  // before any queries are executed, because of the deserialization of possible
+  // blank nodes in the cache entries. In particular, if the serialized cache
+  // contains a local blank node, and the `blankNodeManager` already has handed
+  // out randomly allocated blank nodes, an `AD_CORRECTNESS_CHECK` will fail.
+  CPP_template(typename Serializer)(
+      requires ad_utility::serialization::ReadSerializer<
+          Serializer>) void readFromSerializer(Serializer& serializer,
+                                               Value::Allocator allocator,
+                                               ad_utility::BlankNodeManager&
+                                                   blankNodeManager);
 };
-
-// TODO<joka921> Move all this to a separate file, to make the includes more
-// slim.
-namespace ad_utility::serialization {
-
-// Serialization for NamedResultCache::Value
-// This serializes the complete Value including LocalVocab with proper ID
-// remapping
-AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
-    (ad_utility::SimilarTo<T, NamedResultCache::Value>)) {
-  if constexpr (WriteSerializer<S>) {
-    // Serialize the LocalVocab first (required for ID remapping)
-    ad_utility::detail::serializeLocalVocab(serializer, arg.localVocab_);
-
-    // Serialize the IdTable (uses the `serializeIds` helper which handles
-    // LocalVocab IDs)
-    serializer << arg.result_->numRows();
-    serializer << arg.result_->numColumns();
-    for (const auto& col : arg.result_->getColumns()) {
-      ad_utility::detail::serializeIds(serializer, col);
-    }
-
-    // Serialize VariableToColumnMap manually (can't use HashMap serialization
-    // because Variable is not default-constructible)
-    serializer << arg.varToColMap_.size();
-    for (const auto& [var, colInfo] : arg.varToColMap_) {
-      serializer << var;
-      serializer << colInfo;
-    }
-
-    // Serialize resultSortedOn (vector of ColumnIndex)
-    serializer << arg.resultSortedOn_;
-
-    // Serialize cacheKey (string)
-    serializer << arg.cacheKey_;
-
-    // Serialize cachedGeoIndex (optional)
-    // Note: We cannot serialize the `optional` directly, because the geo index
-    // has no default constructor for safety reasons.
-    serializer << arg.cachedGeoIndex_.has_value();
-    bool hasGeoIndex = arg.cachedGeoIndex_.has_value();
-    serializer << hasGeoIndex;
-    if (hasGeoIndex) {
-      serializer << arg.cachedGeoIndex_.value();
-    }
-  } else {
-    // Deserialize the LocalVocab and get the ID mapping
-    AD_CORRECTNESS_CHECK(arg.blankNodeManagerForSerialization_.has_value());
-    auto [localVocab, mapping] = ad_utility::detail::deserializeLocalVocab(
-        serializer, &arg.blankNodeManagerForSerialization_.value());
-
-    std::optional<NamedResultCache::Value::Allocator> dummyAllocator;
-    const auto& allocator = [&]() -> const auto& {
-      if (arg.allocatorForSerialization_.has_value()) {
-        return arg.allocatorForSerialization_.value();
-      } else {
-        dummyAllocator = ad_utility::makeUnlimitedAllocator<Id>();
-        return dummyAllocator.value();
-      }
-    }();
-
-    // Deserialize the IdTable with ID mapping applied
-    size_t numRows, numColumns;
-    serializer >> numRows;
-    serializer >> numColumns;
-
-    IdTable idTable{numColumns, allocator};
-    idTable.resize(numRows);
-    for (decltype(auto) col : idTable.getColumns()) {
-      ad_utility::detail::deserializeIds(serializer, mapping, col);
-    }
-
-    // Deserialize VariableToColumnMap manually
-    size_t mapSize;
-    serializer >> mapSize;
-    VariableToColumnMap varToColMap;
-    for (size_t i = 0; i < mapSize; ++i) {
-      Variable var{"?dummy"};  // Variable needs a non-empty name
-      serializer >> var;
-      ColumnIndexAndTypeInfo colInfo{0, ColumnIndexAndTypeInfo::AlwaysDefined};
-      serializer >> colInfo;
-      varToColMap[std::move(var)] = colInfo;
-    }
-
-    // Deserialize resultSortedOn
-    std::vector<ColumnIndex> resultSortedOn;
-    serializer >> resultSortedOn;
-
-    // Deserialize cacheKey
-    std::string cacheKey;
-    serializer >> cacheKey;
-
-    // Deserialize cachedGeoIndex
-    bool hasGeoIndex;
-    serializer >> hasGeoIndex;
-    std::optional<SpatialJoinCachedIndex> cachedGeoIndex;
-    if (hasGeoIndex) {
-      cachedGeoIndex.emplace(SpatialJoinCachedIndex::TagForSerialization{});
-      serializer >> cachedGeoIndex.value();
-    }
-
-    // Construct the Value
-    arg = NamedResultCache::Value{
-        std::make_shared<const IdTable>(std::move(idTable)),
-        std::move(varToColMap),
-        std::move(resultSortedOn),
-        std::move(localVocab),
-        std::move(cacheKey),
-        std::move(cachedGeoIndex)};
-  }
-}
-
-}  // namespace ad_utility::serialization
 
 #endif  // QLEVER_SRC_ENGINE_NAMEDRESULTCACHE_H

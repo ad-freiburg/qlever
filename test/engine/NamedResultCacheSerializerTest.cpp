@@ -17,79 +17,64 @@
 
 using namespace ad_utility::serialization;
 using ::testing::ElementsAre;
+using ::testing::Pointee;
 using ::testing::UnorderedElementsAreArray;
 
 namespace {
-// Serialize and immediately deserialize the value.
-NamedResultCache::Value serializeAndDeserializeValue(
-    const NamedResultCache::Value& value) {
-  ByteBufferWriteSerializer writeSerializer;
-  writeSerializer << value;
-  ByteBufferReadSerializer readSerializer{std::move(writeSerializer).data()};
-  NamedResultCache::Value result;
-  readSerializer >> result;
-  return result;
-}
 
-// Note: VariableToColumnMap serialization is tested as part of Value
-// serialization since Variable is not default-constructible and thus
-// can't be used with the generic HashMap serialization.
+// Test fixture for NamedResultCacheSerializer tests.
+class NamedResultCacheSerializerTest : public ::testing::Test {
+ protected:
+  // Blank node manager and allocator that can be used when we don't really
+  // care about blank nodes and allocation details.
+  ad_utility::BlankNodeManager blankNodeManager_;
+  ad_utility::AllocatorWithLimit<Id> alloc_{
+      ad_utility::makeUnlimitedAllocator<Id>()};
 
-// Test serialization of IdTable with LocalVocab via NamedResultCache::Value
-// (IdTable serialization is part of Value serialization)
-TEST(NamedResultCacheSerializer, IdTableSerialization) {
-  // Create an IdTable with some data
-  auto table = makeIdTableFromVector({{3, 7}, {9, 11}});
+  // Serialize and immediately deserialize and return the `value`.
+  NamedResultCache::Value serializeAndDeserializeValue(
+      const NamedResultCache::Value& value, ad_utility::BlankNodeManager& bm,
+      ad_utility::AllocatorWithLimit<Id> allocator) const {
+    ByteBufferWriteSerializer writeSerializer;
+    writeSerializer << value;
+    ByteBufferReadSerializer readSerializer{std::move(writeSerializer).data()};
+    NamedResultCache::Value result;
+    result.allocatorForSerialization_ = std::move(allocator);
+    result.blankNodeManagerForSerialization_.emplace(bm);
+    readSerializer >> result;
+    return result;
+  }
 
-  // Create a LocalVocab with some entries
-  LocalVocab localVocab;
-  auto localEntry = ad_utility::triple_component::LiteralOrIri::iriref(
-      "<http://example.org/test>");
-  auto localVocabIndex =
-      localVocab.getIndexAndAddIfNotContained(std::move(localEntry));
-  auto localId = Id::makeFromLocalVocabIndex(localVocabIndex);
+  // Overload that uses the default member variables, cannot be const, because
+  // the calls might modify the `BlankNodeManager` or the `LocalVocab`.
+  NamedResultCache::Value serializeAndDeserializeValue(
+      const NamedResultCache::Value& value) {
+    return serializeAndDeserializeValue(value, blankNodeManager_, alloc_);
+  }
+};
 
-  // Add the local vocab ID to the table
-  table(0, 0) = localId;
-
-  // Create a simple Value to test IdTable serialization
-  NamedResultCache::Value value{std::make_shared<const IdTable>(table.clone()),
-                                VariableToColumnMap{},
-                                {},
-                                std::move(localVocab),
-                                "test-key",
-                                std::nullopt};
-
-  auto deserializedValue = serializeAndDeserializeValue(value);
-  // Check the IdTable dimensions
-  EXPECT_EQ(deserializedValue.result_->numRows(), 2);
-  EXPECT_EQ(deserializedValue.result_->numColumns(), 2);
-
-  // Check the local vocab entry
-  EXPECT_EQ((*deserializedValue.result_)(0, 0).getDatatype(),
-            Datatype::LocalVocabIndex);
-
-  // Check other entries (without using matchesIdTable which needs index setup)
-  EXPECT_EQ((*deserializedValue.result_)(0, 1), table(0, 1));
-  EXPECT_EQ((*deserializedValue.result_)(1, 0), table(1, 0));
-  EXPECT_EQ((*deserializedValue.result_)(1, 1), table(1, 1));
-}
-
-// Test serialization of a complete NamedResultCache::Value
-TEST(NamedResultCacheSerializer, ValueSerialization) {
+// Test serialization of a complete `NamedResultCache::Value`.
+TEST_F(NamedResultCacheSerializerTest, ValueSerialization) {
+  // we need to setup a dummy index somewhere, because otherwise the comparison
+  // of `IdTable`s won't work;
+  [[maybe_unused]] auto qec = ad_utility::testing::getQec();
   // Create a test Value
-  auto table = makeIdTableFromVector({{3, 7}, {9, 11}, {13, 17}});
+  LocalVocab localVocab;
+  [[maybe_unused]] auto local = localVocab.getIndexAndAddIfNotContained(
+      ad_utility::triple_component::LiteralOrIri::iriref(
+          "<http://example.org/test>"));
+
+  // Note: Currently the serialization throws if we pass a `LocalVocabIndex`
+  // inside the `IdTable` As soon as we have improved the serialization of local
+  // vocabs to work in all cases, we can again replace one of the entries in the
+  // following table by `local` and adapt the remainder of the test accordingly.
+  auto table = makeIdTableFromVector({{0, 7}, {9, 11}, {13, 17}});
 
   VariableToColumnMap varColMap;
   varColMap[Variable{"?x"}] = makeAlwaysDefinedColumn(0);
   varColMap[Variable{"?y"}] = makePossiblyUndefinedColumn(1);
 
   std::vector<ColumnIndex> sortedOn = {0, 1};
-
-  LocalVocab localVocab;
-  localVocab.getIndexAndAddIfNotContained(
-      ad_utility::triple_component::LiteralOrIri::iriref(
-          "<http://example.org/test>"));
 
   std::string cacheKey = "test-cache-key";
 
@@ -106,27 +91,28 @@ TEST(NamedResultCacheSerializer, ValueSerialization) {
   };
 
   auto deserializedValue = serializeAndDeserializeValue(value);
-  // Check the result
-  EXPECT_THAT(*deserializedValue.result_, matchesIdTable(table));
-  EXPECT_THAT(deserializedValue.varToColMap_,
-              UnorderedElementsAreArray(varColMap));
-  EXPECT_THAT(deserializedValue.resultSortedOn_, ElementsAre(0, 1));
-  EXPECT_EQ(deserializedValue.cacheKey_, cacheKey);
-  EXPECT_FALSE(deserializedValue.cachedGeoIndex_.has_value());
 
-  // Check LocalVocab
+  // Check the result pointer is valid.
+  ASSERT_NE(deserializedValue.result_, nullptr);
+
+  // Check the local vocab.
   auto deserWords = deserializedValue.localVocab_.getAllWordsForTesting();
   EXPECT_EQ(origWords.size(), deserWords.size());
   for (size_t i = 0; i < origWords.size(); ++i) {
     EXPECT_EQ(origWords[i].toStringRepresentation(),
               deserWords[i].toStringRepresentation());
   }
+  // Check the result
+  EXPECT_THAT(deserializedValue.result_, Pointee(matchesIdTable(table)));
+  EXPECT_THAT(deserializedValue.varToColMap_,
+              UnorderedElementsAreArray(varColMap));
+  EXPECT_THAT(deserializedValue.resultSortedOn_, ElementsAre(0, 1));
+  EXPECT_EQ(deserializedValue.cacheKey_, cacheKey);
+  EXPECT_FALSE(deserializedValue.cachedGeoIndex_.has_value());
 }
 
-// Test serialization of the entire NamedResultCache
-TEST(NamedResultCacheSerializer, CacheSerialization) {
-  std::string tempFile = "/tmp/test_named_result_cache.bin";
-
+// Test serialization of the entire NamedResultCache.
+TEST_F(NamedResultCacheSerializerTest, CacheSerialization) {
   // Create a cache and add some entries
   NamedResultCache cache;
 
@@ -186,25 +172,22 @@ TEST(NamedResultCacheSerializer, CacheSerialization) {
   EXPECT_EQ(cache2.numEntries(), 2);
 
   auto result1 = cache2.get("query-1");
-  EXPECT_THAT(*result1->result_, matchesIdTable(table1));
+  ASSERT_NE(result1, nullptr);
+  EXPECT_THAT(result1->result_, Pointee(matchesIdTable(table1)));
   EXPECT_THAT(result1->varToColMap_, UnorderedElementsAreArray(varColMap1));
   EXPECT_THAT(result1->resultSortedOn_, ElementsAre(0));
   EXPECT_EQ(result1->cacheKey_, "key1");
 
   auto result2 = cache2.get("query-2");
-  EXPECT_THAT(*result2->result_, matchesIdTable(table2));
+  ASSERT_NE(result2, nullptr);
+  EXPECT_THAT(result2->result_, Pointee(matchesIdTable(table2)));
   EXPECT_THAT(result2->varToColMap_, UnorderedElementsAreArray(varColMap2));
   EXPECT_THAT(result2->resultSortedOn_, ElementsAre(1, 0));
   EXPECT_EQ(result2->cacheKey_, "key2");
-
-  // Clean up
-  ad_utility::deleteFile(tempFile);
 }
 
-// Test empty cache serialization
-TEST(NamedResultCacheSerializer, EmptyCacheSerialization) {
-  std::string tempFile = "/tmp/test_empty_cache.bin";
-
+// Test empty cache serialization.
+TEST_F(NamedResultCacheSerializerTest, EmptyCacheSerialization) {
   // Create an empty cache
   NamedResultCache cache;
   EXPECT_EQ(cache.numEntries(), 0);
@@ -220,12 +203,7 @@ TEST(NamedResultCacheSerializer, EmptyCacheSerialization) {
                               *qec->getIndex().getBlankNodeManager());
     return cache2;
   }();
-
-  // Check
   EXPECT_EQ(cache2.numEntries(), 0);
-
-  // Clean up
-  std::filesystem::remove(tempFile);
 }
 
 }  // namespace

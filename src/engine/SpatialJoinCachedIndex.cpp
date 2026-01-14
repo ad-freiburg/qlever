@@ -6,8 +6,8 @@
 
 #include <s2/mutable_s2shape_index.h>
 #include <s2/s2polyline.h>
+#include <s2/s2shapeutil_coding.h>
 
-#include "../../cmake-build-gcc-13-relwithdebinfo/_deps/s2-src/src/s2/s2shapeutil_coding.h"
 #include "engine/SpatialJoinAlgorithms.h"
 
 // An instance of this type erased class holds the actual data for each
@@ -19,12 +19,12 @@
 class SpatialJoinCachedIndexImpl {
  public:
   MutableS2ShapeIndex s2index_;
+  using ShapeIndexToRow = SpatialJoinCachedIndex::ShapeIndexToRow;
 
   // Construct the index, and return the mapping from shape indices to rows.
-  ad_utility::HashMap<size_t, size_t> populate(ColumnIndex col,
-                                               const IdTable& restable,
-                                               const Index& index) {
-    ad_utility::HashMap<size_t, size_t> shapeIndexToRow;
+  ShapeIndexToRow populate(ColumnIndex col, const IdTable& restable,
+                           const Index& index) {
+    ShapeIndexToRow shapeIndexToRow;
     AD_CORRECTNESS_CHECK(s2index_.num_shape_ids() == 0);
     // Populate the index from the given `IdTable`
     for (size_t row = 0; row < restable.size(); row++) {
@@ -36,16 +36,19 @@ class SpatialJoinCachedIndexImpl {
         shapeIndexToRow[shapeIndex] = row;
       }
     }
+    // By default, the S2 indices are constructed lazily on the first query,
+    // which then is slow. The following call avoids this.
+    s2index_.ForceBuild();
     return shapeIndexToRow;
   }
 };
 
 // ____________________________________________________________________________
-SpatialJoinCachedIndex::SpatialJoinCachedIndex(const Variable& geometryColumn,
+SpatialJoinCachedIndex::SpatialJoinCachedIndex(Variable geometryColumn,
                                                ColumnIndex col,
                                                const IdTable& restable,
                                                const Index& index)
-    : geometryColumn_{geometryColumn},
+    : geometryColumn_{std::move(geometryColumn)},
       pimpl_{std::make_shared<SpatialJoinCachedIndexImpl>()} {
   shapeIndexToRow_ = pimpl_->populate(col, restable, index);
 }
@@ -62,7 +65,7 @@ std::shared_ptr<const MutableS2ShapeIndex> SpatialJoinCachedIndex::getIndex()
 }
 
 // ____________________________________________________________________________
-std::string SpatialJoinCachedIndex::serializeShapes() const {
+std::string SpatialJoinCachedIndex::serializeS2Index() const {
   Encoder encoder;
   s2shapeutil::CompactEncodeTaggedShapes(pimpl_->s2index_, &encoder);
   pimpl_->s2index_.Encode(&encoder);
@@ -70,24 +73,20 @@ std::string SpatialJoinCachedIndex::serializeShapes() const {
 }
 
 // _____________________________________________________________________________
-const SpatialJoinCachedIndex::ShapeIndexToRow&
-SpatialJoinCachedIndex::serializeLineIndices() const {
-  return shapeIndexToRow_;
-}
-
-// _____________________________________________________________________________
 void SpatialJoinCachedIndex::populateFromSerialized(
-    std::string_view serializedShapes, ShapeIndexToRow shapeIndexToRow) {
-  shapeIndexToRow_ = std::move(shapeIndexToRow);
-  pimpl_ = std::make_shared<SpatialJoinCachedIndexImpl>();
+    std::string_view serializedShapes) {
+  AD_CORRECTNESS_CHECK(pimpl_ != nullptr);
   Decoder decoder(serializedShapes.data(), serializedShapes.size());
-  if (!pimpl_->s2index_.Init(&decoder,
-                             s2shapeutil::FullDecodeShapeFactory(&decoder))) {
-    throw std::runtime_error("Could not decode the serialized S2 index");
-  }
-  // To my understanding, the following call should be a noop, as the built
-  // index remembers its structure when being decoded.
-  pimpl_->s2index_.ForceBuild();
+  bool success = pimpl_->s2index_.Init(
+      &decoder, s2shapeutil::FullDecodeShapeFactory(&decoder));
+  AD_CORRECTNESS_CHECK(success,
+                       "Initializing the S2 index from its serialized form "
+                       "failed, probably the input data is corrupt");
+  // We call `ForceBuild` when initializing the index, and the serialization
+  // preserves the index structure, so the following assertion holds, which
+  // ensures that the index is ready for (cheap) usage by queries after
+  // deserializing it.
+  AD_CORRECTNESS_CHECK(pimpl_->s2index_.is_fresh());
 }
 
 // _____________________________________________________________________________
