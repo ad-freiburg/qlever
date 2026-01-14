@@ -186,7 +186,7 @@ class Index {
 
   bool& loadAllPermutations();
 
-  bool& dontLoadPermutations();
+  bool& doNotLoadPermutations();
 
   void setKeepTempFiles(bool keepTempFiles);
 

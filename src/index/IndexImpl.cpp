@@ -945,7 +945,7 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
     setMetadata(*permutation);
   };
 
-  if (dontLoadPermutations_) {
+  if (doNotLoadPermutations_) {
     // Set all permutations to nullptr to indicate they are not loaded.
     pso_ = nullptr;
     pos_ = nullptr;
@@ -954,7 +954,7 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
     spo_ = nullptr;
     sop_ = nullptr;
     AD_LOG_INFO
-        << "No permutations were loaded due to `dontLoadPermutations` "
+        << "No permutations were loaded due to `doNotLoadPermutations` "
            "being set to true. Only queries that don't contain any triples "
            "can be executed."
         << std::endl;
@@ -1009,12 +1009,14 @@ void IndexImpl::throwExceptionIfNoPatterns() const {
 
 // _____________________________________________________________________________
 const Permutation& IndexImpl::getPermutationImpl(
-    const PermutationPtr& permutation, std::string_view permutationName) const {
-  AD_CONTRACT_CHECK(permutation != nullptr,
-                    "The requested operation requires the ", permutationName,
-                    " permutation to be loaded, but it was not loaded. This "
-                    "typically happens when the index was loaded with the "
-                    "`dontLoadPermutations` option set to true.");
+    const PermutationPtr& permutation, std::string_view permutationName) {
+  if (!permutation) {
+    throw std::runtime_error{
+        absl::StrCat("The requested operation requires the ", permutationName,
+                     " permutation to be loaded, but it was not loaded. This "
+                     "typically happens when the index was loaded with the "
+                     "`doNotLoadPermutations` option set to true.")};
+  }
   return *permutation;
 }
 
@@ -1074,7 +1076,7 @@ bool& IndexImpl::usePatterns() { return usePatterns_; }
 bool& IndexImpl::loadAllPermutations() { return loadAllPermutations_; }
 
 // _____________________________________________________________________________
-bool& IndexImpl::dontLoadPermutations() { return dontLoadPermutations_; }
+bool& IndexImpl::doNotLoadPermutations() { return doNotLoadPermutations_; }
 
 // ____________________________________________________________________________
 void IndexImpl::setSettingsFile(const std::string& filename) {

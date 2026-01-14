@@ -194,7 +194,7 @@ class IndexImpl {
   // If true, the permutations will not be loaded from disk when calling
   // createFromOnDiskIndex. This is useful when only queries that don't require
   // the permutations need to be executed.
-  bool dontLoadPermutations_ = false;
+  bool doNotLoadPermutations_ = false;
 
   // The vocabulary type that is used (only relevant during index building).
   ad_utility::VocabularyType vocabularyTypeForIndexBuilding_{
@@ -436,7 +436,7 @@ class IndexImpl {
 
   bool& loadAllPermutations();
 
-  bool& dontLoadPermutations();
+  bool& doNotLoadPermutations();
 
   void setKeepTempFiles(bool keepTempFiles);
 
@@ -660,8 +660,8 @@ class IndexImpl {
 
   // Dereference the `permutationPtr` and throw an exception if it is `nullptr`.
   // The `permutationName` is used to enrich the error message.
-  const Permutation& getPermutationImpl(const PermutationPtr& permutationPtr,
-                                        std::string_view permutationName) const;
+  static const Permutation& getPermutationImpl(
+      const PermutationPtr& permutationPtr, std::string_view permutationName);
 
   void writeConfiguration() const;
   void readConfiguration();

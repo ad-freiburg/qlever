@@ -199,9 +199,9 @@ TEST(LibQlever, loadIndexWithoutPermutations) {
   // Build the index normally.
   EXPECT_NO_THROW(Qlever::buildIndex(c));
 
-  // Load the index with `dontLoadPermutations` set to true.
+  // Load the index with `doNotLoadPermutations` set to true.
   EngineConfig ec{c};
-  ec.dontLoadPermutations_ = true;
+  ec.doNotLoadPermutations_ = true;
   Qlever engine{ec};
 
   // Test that the `setKbName` function silently does nothing, if we have no

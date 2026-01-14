@@ -167,9 +167,9 @@ struct EngineConfig : CommonConfig {
   // If set to true, no permutations will be loaded from disk. This is useful
   // when only queries that don't require accessing the permutations need to be
   // executed (e.g., queries that only compute constant expressions, or query
-  // that only resuly on the `NamedQueryCache` which can be populated
+  // that only rely on the `NamedQueryCache` which can be populated
   // separately).
-  bool dontLoadPermutations_ = false;
+  bool doNotLoadPermutations_ = false;
 };
 
 // Class to use QLever as an embedded database, without the HTTP server. See
