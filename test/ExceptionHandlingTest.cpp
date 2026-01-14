@@ -17,8 +17,9 @@ TEST(ExceptionHandling, terminateIfThrows) {
   auto alwaysThrow = []() { throw 42; };
 
   // Test the default logic (which calls `std::terminate`).
-  EXPECT_DEATH(ad_utility::terminateIfThrows(alwaysThrow, "A function "),
-               "A function that should never throw");
+  EXPECT_DEATH_IF_SUPPORTED(
+      ad_utility::terminateIfThrows(alwaysThrow, "A function "),
+      "A function that should never throw");
   // Replace the call to `std::terminate` by a custom exception to correctly
   // track the coverage.
   ad_utility::terminateIfThrows(alwaysThrow, "A function ", mockedTerminate);
@@ -27,9 +28,9 @@ TEST(ExceptionHandling, terminateIfThrows) {
   auto alwaysThrowException = []() {
     throw std::runtime_error("throwing in test");
   };
-  EXPECT_DEATH(ad_utility::terminateIfThrows(alwaysThrowException,
-                                             "test for terminating"),
-               "A function that should never throw");
+  EXPECT_DEATH_IF_SUPPORTED(ad_utility::terminateIfThrows(
+                                alwaysThrowException, "test for terminating"),
+                            "A function that should never throw");
   ad_utility::terminateIfThrows(alwaysThrowException, "A function ",
                                 mockedTerminate);
   EXPECT_EQ(numCallsToMockedTerminate, 2);
