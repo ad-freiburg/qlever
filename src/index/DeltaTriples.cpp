@@ -17,6 +17,7 @@
 #include "backports/algorithm.h"
 #include "engine/ExecuteUpdate.h"
 #include "engine/ExportQueryExecutionTrees.h"
+#include "global/RuntimeParameters.h"
 #include "index/Index.h"
 #include "index/IndexImpl.h"
 #include "index/LocatedTriples.h"
@@ -421,81 +422,89 @@ DeltaTriples::DeltaTriples(const Index& index)
 DeltaTriplesManager::DeltaTriplesManager(const IndexImpl& index)
     : deltaTriples_{index},
       currentLocatedTriplesSharedState_{
-          deltaTriples_.wlock()->getLocatedTriplesSharedStateCopy()} {}
+          deltaTriples_.wlock()->getLocatedTriplesSharedStateCopy()} {
+  // Set up callback for propagate-changes-from-updates parameter changes.
+  globalRuntimeParameters.wlock()
+      ->propagateChangesFromUpdates_.setOnUpdateAction([this](bool newValue) {
+        // When update change propagation is enabled from being disabled before,
+        // update the metadata and create a snapshot.
+        if (!previousPropagateChangesFromUpdates_ && newValue) {
+          forceMetadataUpdate();
+          updateStoredSnapshot();
+        }
+        previousPropagateChangesFromUpdates_ = newValue;
+      });
+}
 
 // _____________________________________________________________________________
 template <typename ReturnType>
 ReturnType DeltaTriplesManager::modify(
-    const std::function<ReturnType(DeltaTriples&)>& function,
-    bool writeToDiskAfterRequest, bool updateMetadataAfterRequest,
+    const std::function<ReturnType(DeltaTriples&)>& function, int options,
     ad_utility::timer::TimeTracer& tracer) {
   // While holding the lock for the underlying `DeltaTriples`, perform the
   // actual `function` (typically some combination of insert and delete
   // operations) and (while still holding the lock) update the
   // `currentLocatedTriplesSnapshot_`.
   tracer.beginTrace("acquiringDeltaTriplesWriteLock");
-  return deltaTriples_.withWriteLock([this, &function, writeToDiskAfterRequest,
-                                      updateMetadataAfterRequest,
-                                      &tracer](DeltaTriples& deltaTriples) {
-    auto updateSnapshot = [this, &deltaTriples] {
-      auto newSnapshot = deltaTriples.getLocatedTriplesSharedStateCopy();
-      currentLocatedTriplesSharedState_.withWriteLock(
-          [&newSnapshot](auto& currentSnapshot) {
-            currentSnapshot = std::move(newSnapshot);
-          });
-    };
-    auto writeAndUpdateSnapshot = [&updateSnapshot, &deltaTriples, &tracer,
-                                   writeToDiskAfterRequest]() {
-      if (writeToDiskAfterRequest) {
-        tracer.beginTrace("diskWriteback");
-        deltaTriples.writeToDisk();
-        tracer.endTrace("diskWriteback");
-      }
-      tracer.beginTrace("snapshotCreation");
-      updateSnapshot();
-      tracer.endTrace("snapshotCreation");
-    };
-    auto updateMetadata = [&tracer, &deltaTriples,
-                           updateMetadataAfterRequest]() {
-      if (updateMetadataAfterRequest) {
-        tracer.beginTrace("metadataUpdateForSnapshot");
-        deltaTriples.updateAugmentedMetadata();
-        tracer.endTrace("metadataUpdateForSnapshot");
-      }
-    };
+  return deltaTriples_.withWriteLock(
+      [this, &function, options, &tracer](DeltaTriples& deltaTriples) {
+        auto updateSnapshot = [this, &deltaTriples, options] {
+          if (options & UpdateSnapshotAfterRequest) {
+            auto newSnapshot = deltaTriples.getLocatedTriplesSharedStateCopy();
+            currentLocatedTriplesSharedState_.withWriteLock(
+                [&newSnapshot](auto& currentSnapshot) {
+                  currentSnapshot = std::move(newSnapshot);
+                });
+          }
+        };
+        auto writeAndUpdateSnapshot = [&updateSnapshot, &deltaTriples, &tracer,
+                                       options]() {
+          tracer.beginTrace("diskWriteback");
+          if (options & WriteDiskAfterRequest) {
+            deltaTriples.writeToDisk();
+          }
+          tracer.endTrace("diskWriteback");
+          tracer.beginTrace("snapshotCreation");
+          updateSnapshot();
+          tracer.endTrace("snapshotCreation");
+        };
+        auto updateMetadata = [&tracer, &deltaTriples, options]() {
+          tracer.beginTrace("metadataUpdateForSnapshot");
+          if (options & UpdateMetadataAfterRequest) {
+            deltaTriples.updateAugmentedMetadata();
+          }
+          tracer.endTrace("metadataUpdateForSnapshot");
+        };
 
-    tracer.endTrace("acquiringDeltaTriplesWriteLock");
-    if constexpr (std::is_void_v<ReturnType>) {
-      tracer.beginTrace("operations");
-      function(deltaTriples);
-      tracer.endTrace("operations");
-      updateMetadata();
-      writeAndUpdateSnapshot();
-    } else {
-      tracer.beginTrace("operations");
-      ReturnType returnValue = function(deltaTriples);
-      tracer.endTrace("operations");
-      updateMetadata();
-      writeAndUpdateSnapshot();
-      return returnValue;
-    }
-  });
+        tracer.endTrace("acquiringDeltaTriplesWriteLock");
+        if constexpr (std::is_void_v<ReturnType>) {
+          tracer.beginTrace("operations");
+          function(deltaTriples);
+          tracer.endTrace("operations");
+          updateMetadata();
+          writeAndUpdateSnapshot();
+        } else {
+          tracer.beginTrace("operations");
+          ReturnType returnValue = function(deltaTriples);
+          tracer.endTrace("operations");
+          updateMetadata();
+          writeAndUpdateSnapshot();
+          return returnValue;
+        }
+      });
 }
 // Explicit instantiations
 template void DeltaTriplesManager::modify<void>(
-    std::function<void(DeltaTriples&)> const&, bool writeToDiskAfterRequest,
-    bool updateMetadataAfterRequest, ad_utility::timer::TimeTracer&);
+    std::function<void(DeltaTriples&)> const&, int options,
+    ad_utility::timer::TimeTracer&);
 template UpdateMetadata DeltaTriplesManager::modify<UpdateMetadata>(
-    const std::function<UpdateMetadata(DeltaTriples&)>&,
-    bool writeToDiskAfterRequest, bool updateMetadataAfterRequest,
+    const std::function<UpdateMetadata(DeltaTriples&)>&, int options,
     ad_utility::timer::TimeTracer&);
 template DeltaTriplesCount DeltaTriplesManager::modify<DeltaTriplesCount>(
-    const std::function<DeltaTriplesCount(DeltaTriples&)>&,
-    bool writeToDiskAfterRequest, bool updateMetadataAfterRequest,
+    const std::function<DeltaTriplesCount(DeltaTriples&)>&, int options,
     ad_utility::timer::TimeTracer&);
 template nlohmann::json DeltaTriplesManager::modify<nlohmann::json>(
-    const std::function<nlohmann::json(DeltaTriples&)>&,
-    bool writeToDiskAfterRequest, bool updateMetadataAfterRequest,
+    const std::function<nlohmann::json(DeltaTriples&)>&, int options,
     ad_utility::timer::TimeTracer&);
 
 // _____________________________________________________________________________
@@ -505,6 +514,23 @@ void DeltaTriplesManager::clear() { modify<void>(&DeltaTriples::clear); }
 LocatedTriplesSharedState
 DeltaTriplesManager::getCurrentLocatedTriplesSharedState() const {
   return *currentLocatedTriplesSharedState_.rlock();
+}
+// _____________________________________________________________________________
+void DeltaTriplesManager::updateStoredSnapshot() {
+  deltaTriples_.withWriteLock([this](DeltaTriples& deltaTriples) {
+    auto newSharedState = deltaTriples.getLocatedTriplesSharedStateCopy();
+    currentLocatedTriplesSharedState_.withWriteLock(
+        [&newSharedState](auto& currentSharedState) {
+          currentSharedState = std::move(newSharedState);
+        });
+  });
+}
+
+// _____________________________________________________________________________
+void DeltaTriplesManager::forceMetadataUpdate() {
+  deltaTriples_.withWriteLock([](DeltaTriples& deltaTriples) {
+    deltaTriples.updateAugmentedMetadata();
+  });
 }
 
 // _____________________________________________________________________________
@@ -600,5 +626,5 @@ void DeltaTriplesManager::setFilenameForPersistentUpdatesAndReadFromDisk(
         deltaTriples.setPersists(std::move(filename));
         deltaTriples.readFromDisk();
       },
-      false);
+      UpdateMetadataAfterRequest | UpdateSnapshotAfterRequest);
 }

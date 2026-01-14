@@ -15,6 +15,7 @@
 #include "backports/three_way_comparison.h"
 #include "engine/LocalVocab.h"
 #include "global/IdTriple.h"
+#include "global/RuntimeParameters.h"
 #include "index/Index.h"
 #include "index/IndexBuilderTypes.h"
 #include "index/LocatedTriples.h"
@@ -104,6 +105,7 @@ class DeltaTriples {
   FRIEND_TEST(DeltaTriplesTest, clear);
   FRIEND_TEST(DeltaTriplesTest, addTriplesToLocalVocab);
   FRIEND_TEST(DeltaTriplesTest, storeAndRestoreData);
+  FRIEND_TEST(DeltaTriplesTest, propagateChangesFromUpdatesMetadataBehavior);
 
  public:
   using Triples = std::vector<IdTriple<0>>;
@@ -335,6 +337,8 @@ class DeltaTriplesManager {
   ad_utility::Synchronized<DeltaTriples> deltaTriples_;
   ad_utility::Synchronized<LocatedTriplesSharedState, std::shared_mutex>
       currentLocatedTriplesSharedState_;
+  bool previousPropagateChangesFromUpdates_ =
+      getRuntimeParameter<&RuntimeParameters::propagateChangesFromUpdates_>();
 
  public:
   using CancellationHandle = DeltaTriples::CancellationHandle;
@@ -342,6 +346,16 @@ class DeltaTriplesManager {
 
   explicit DeltaTriplesManager(const IndexImpl& index);
   FRIEND_TEST(DeltaTriplesTest, DeltaTriplesManager);
+  FRIEND_TEST(DeltaTriplesTest, propagateChangesFromUpdatesMetadataBehavior);
+
+  enum ModifyOptions {
+    Nothing = 0,
+    WriteDiskAfterRequest = 1 << 0,
+    UpdateMetadataAfterRequest = 1 << 1,
+    UpdateSnapshotAfterRequest = 1 << 2,
+    All = WriteDiskAfterRequest | UpdateMetadataAfterRequest |
+          UpdateSnapshotAfterRequest
+  };
 
   // Modify the underlying `DeltaTriples` by applying `function` and then update
   // the current snapshot. Concurrent calls to `modify` and `clear` will be
@@ -350,8 +364,9 @@ class DeltaTriplesManager {
   // modification.
   template <typename ReturnType>
   ReturnType modify(const std::function<ReturnType(DeltaTriples&)>& function,
-                    bool writeToDiskAfterRequest = true,
-                    bool updateMetadataAfterRequest = true,
+                    int options = WriteDiskAfterRequest |
+                                  UpdateMetadataAfterRequest |
+                                  UpdateSnapshotAfterRequest,
                     ad_utility::timer::TimeTracer& tracer =
                         ad_utility::timer::DEFAULT_TIME_TRACER);
 
@@ -365,6 +380,16 @@ class DeltaTriplesManager {
   // This can be safely used to execute a query without interfering with future
   // updates.
   LocatedTriplesSharedState getCurrentLocatedTriplesSharedState() const;
+
+  // Updates the stored snapshot with the current state of the `DeltaTriples`,
+  // regardless of the update-no-snapshots parameter. This is used when the
+  // parameter changes from true to false.
+  void updateStoredSnapshot();
+
+  // Force update of augmented metadata for all permutations, regardless of
+  // the update-no-snapshots parameter. This is used when the parameter
+  // changes from true to false.
+  void forceMetadataUpdate();
 };
 
 #endif  // QLEVER_SRC_INDEX_DELTATRIPLES_H

@@ -1135,20 +1135,29 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       [this, &requestTimer, &cancellationHandle, &updates, &qec, &timeLimit,
        &plannedUpdate, outerTracer]() {
         outerTracer->endTrace("waitingForUpdateThread");
+        bool propagateUpdates = getRuntimeParameter<
+            &RuntimeParameters::propagateChangesFromUpdates_>();
+        int modifyFlags =
+            propagateUpdates
+                ? DeltaTriplesManager::UpdateMetadataAfterRequest |
+                      DeltaTriplesManager::UpdateSnapshotAfterRequest |
+                      DeltaTriplesManager::WriteDiskAfterRequest
+                : 0;
         return index_.deltaTriplesManager().modify<json>(
             [this, &cancellationHandle, &plannedUpdate, &updates, &requestTimer,
-             &timeLimit, &qec](DeltaTriples& deltaTriples) {
+             &timeLimit, &qec, propagateUpdates](DeltaTriples& deltaTriples) {
               qec.setLocatedTriplesForEvaluation(
                   deltaTriples.getLocatedTriplesSharedStateReference());
               json results = json::array();
               for (auto&& [i, update] : ranges::views::enumerate(updates)) {
                 auto tracer = ad_utility::timer::TimeTracer("update");
                 // The augmented metadata is invalidated by any update. It is
-                // only updated automatically at the end of modify. Updates with
-                // non-empty graph patterns need the augmented metadata. Update
-                // the augmented metadata before executing those updates.
+                // only updated automatically at the end of modify if update
+                // propagation is enabled. Updates with non-empty graph patterns
+                // need the augmented metadata. Update the augmented metadata
+                // before executing those updates.
                 tracer.beginTrace("updateMetadata");
-                if (i != 0 &&
+                if ((i != 0 || !propagateUpdates) &&
                     !update._rootGraphPattern._graphPatterns.empty()) {
                   deltaTriples.updateAugmentedMetadata();
                 }
@@ -1185,7 +1194,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
               }
               return results;
             },
-            true, true, *outerTracer);
+            modifyFlags, *outerTracer);
       },
       cancellationHandle);
   auto operations = co_await std::move(coroutine);

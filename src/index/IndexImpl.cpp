@@ -936,7 +936,7 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
         [&permutation](DeltaTriples& deltaTriples) {
           permutation.setOriginalMetadataForDeltaTriples(deltaTriples);
         },
-        false, false);
+        DeltaTriplesManager::UpdateSnapshotAfterRequest);
   };
 
   auto load = [this, &setMetadata](PermutationPtr permutation,

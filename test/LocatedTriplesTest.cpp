@@ -823,6 +823,9 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
 
 // _____________________________________________________________________________
 TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
+  // Explicitly set the default value - updates are visible
+  setRuntimeParameter<&RuntimeParameters::propagateChangesFromUpdates_>(true);
+
   // Create a vector that is automatically converted to a span.
   using Span = std::vector<IdTriple<0>>;
 

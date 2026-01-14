@@ -96,6 +96,7 @@ class LocatedTriplesPerBlock {
   ad_utility::HashMap<size_t, LocatedTriples> map_;
 
   FRIEND_TEST(LocatedTriplesTest, numTriplesInBlock);
+  FRIEND_TEST(DeltaTriplesTest, propagateChangesFromUpdatesMetadataBehavior);
 
   // Implementation of the `mergeTriples` function (which has `numIndexColumns`
   // as a normal argument, and translates it into a template argument).
