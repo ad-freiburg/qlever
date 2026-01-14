@@ -76,6 +76,16 @@ bool CompressedBlockMetadataNoBlockIndex::isConsistentWith(
          getMaskedTriple(other.firstTriple_, columnIndex);
 }
 
+// _____________________________________________________________________________
+CompressedBlockMetadataNoBlockIndex::OffsetAndCompressedSize
+CompressedBlockMetadataNoBlockIndex::getOffsetAndCompressedSizeForColumn(
+    ColumnIndex columnIndex) const {
+  if (!offsetsAndCompressedSize_.has_value()) {
+    return {0, 0};
+  }
+  return offsetsAndCompressedSize_.value().at(columnIndex);
+}
+
 // Return true iff the `triple` is contained in the `scanSpec`. For example, the
 // triple ` 42 0 3 ` is contained in the specs `U U U`, `42 U U` and `42 0 U` ,
 // but not in `42 2 U` where `U` means "scan for all possible values".
@@ -761,9 +771,6 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
     const CompressedBlockMetadata& blockMetadata,
     std::optional<std::reference_wrapper<LazyScanMetadata>> scanMetadata,
     const LocatedTriplesPerBlock& locatedTriples) const {
-  AD_CORRECTNESS_CHECK(ADDITIONAL_COLUMN_GRAPH_ID <
-                       blockMetadata.offsetsAndCompressedSize_.size());
-
   bool manuallyDeleteGraphColumn = scanConfig.graphFilter_.deleteGraphColumn_;
   // We first scan the complete block including ALL columns with the following
   // exception: If `manuallyDeleteGraphColumn` is true, then the `graphColumn`
@@ -773,11 +780,14 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
   // the block. The downside of this approach is that further down we have to be
   // aware of this already dropped column when assembling the final result.
   std::vector<ColumnIndex> allAdditionalColumns;
-  ql::ranges::copy(
-      ql::views::iota(ADDITIONAL_COLUMN_GRAPH_ID +
-                          static_cast<size_t>(manuallyDeleteGraphColumn),
-                      blockMetadata.offsetsAndCompressedSize_.size()),
-      std::back_inserter(allAdditionalColumns));
+  if (!manuallyDeleteGraphColumn) {
+    allAdditionalColumns.push_back(ADDITIONAL_COLUMN_GRAPH_ID);
+  }
+  for (ColumnIndex index : scanConfig.scanColumns_) {
+    if (index > ADDITIONAL_COLUMN_GRAPH_ID) {
+      allAdditionalColumns.push_back(index);
+    }
+  }
   ScanSpecification specForAllColumns{std::nullopt,
                                       std::nullopt,
                                       std::nullopt,
@@ -1130,7 +1140,7 @@ CompressedBlock CompressedRelationReader::readCompressedBlockFromFile(
   // TODO<C++23> Use `ql::views::zip`
   for (size_t i = 0; i < compressedBuffer.size(); ++i) {
     const auto& offset =
-        blockMetaData.offsetsAndCompressedSize_.at(columnIndices[i]);
+        blockMetaData.getOffsetAndCompressedSizeForColumn(columnIndices[i]);
     auto& currentCol = compressedBuffer[i];
     currentCol.resize(offset.compressedSize_);
     file_.read(currentCol.data(), offset.compressedSize_, offset.offsetInFile_);
@@ -1608,12 +1618,22 @@ auto CompressedRelationWriter::createPermutationPair(
     const std::string& basename, WriterAndCallback writerAndCallback1,
     WriterAndCallback writerAndCallback2,
     ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
-    qlever::KeyOrder permutation,
-    const std::vector<std::function<void(const IdTableStatic<0>&)>>&
-        perBlockCallbacks) -> PermutationPairResult {
-  PermutationWriter permutationWriter{
+    qlever::KeyOrder permutation, const PerBlockCallbacks& perBlockCallbacks)
+    -> PermutationPairResult {
+  PermutationWriter<true> permutationWriter{
       basename, std::move(writerAndCallback1), std::move(writerAndCallback2),
       std::move(permutation), perBlockCallbacks};
+  return permutationWriter.writePermutation(std::move(sortedTriples));
+}
+
+// _____________________________________________________________________________
+auto CompressedRelationWriter::createPermutation(
+    WriterAndCallback writerAndCallback,
+    ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
+    qlever::KeyOrder permutation, const PerBlockCallbacks& perBlockCallbacks)
+    -> PermutationSingleResult {
+  PermutationWriter<false> permutationWriter{
+      std::move(writerAndCallback), std::move(permutation), perBlockCallbacks};
   return permutationWriter.writePermutation(std::move(sortedTriples));
 }
 

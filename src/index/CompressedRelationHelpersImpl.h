@@ -76,20 +76,25 @@ CPP_template(typename T, typename Function)(
 
 using MetadataCallback = CompressedRelationWriter::MetadataCallback;
 
+// The `CompressedRelationMetadata` for a single permutation can be directly
+// input blockwise to the `MetadataCallback` (collecting the blocks uses the
+// `Batcher` helper from above).
+using SingleMetadataWriter =
+    Batcher<CompressedRelationMetadata, MetadataCallback>;
+
 // A class that is called for all pairs of `CompressedRelationMetadata` for
 // the same `col0Id` and the "twin permutations" (e.g. PSO and POS). The
 // multiplicity of the last column is exchanged and then the metadata are
 // passed on to the respective `MetadataCallback`.
-class MetadataWriter {
+class PairMetadataWriter {
  private:
-  using B = Batcher<CompressedRelationMetadata, MetadataCallback>;
-  B batcher1_;
-  B batcher2_;
+  SingleMetadataWriter batcher1_;
+  SingleMetadataWriter batcher2_;
 
  public:
   // ___________________________________________________________________________
-  MetadataWriter(MetadataCallback callback1, MetadataCallback callback2,
-                 size_t blocksize)
+  PairMetadataWriter(MetadataCallback callback1, MetadataCallback callback2,
+                     size_t blocksize)
       : batcher1_{std::move(callback1), blocksize},
         batcher2_{std::move(callback2), blocksize} {}
 
