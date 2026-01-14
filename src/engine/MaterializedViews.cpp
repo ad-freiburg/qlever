@@ -113,6 +113,14 @@ MaterializedViewWriter::getIdTableColumnNamesAndPermutation() const {
 
 // _____________________________________________________________________________
 std::string MaterializedViewWriter::detectJoinPattern() const {
+  // AD_LOG_INFO << parsedQuery_._rootGraphPattern._graphPatterns.at(0)
+  //                    .getBasic()
+  //                    ._triples.at(0)
+  //                    .asString()
+  //             << std::endl;
+  // auto parsedQuery = SparqlParser::parseQuery(
+  //     &index_.getImpl().encodedIriManager(), std::move(query), {});
+
   auto op = qet_->getRootOperation();
   auto join = std::dynamic_pointer_cast<Join>(op);
   if (join == nullptr) {
@@ -331,7 +339,9 @@ void MaterializedViewWriter::writeViewMetadata() const {
                      return v.name();
                    }) |
                    ::ranges::to<std::vector<std::string>>())},
-      {"joinPattern", detectJoinPattern()}};
+      {"query", parsedQuery_._originalString},
+      // {"joinPattern", detectJoinPattern()}
+  };
   ad_utility::makeOfstream(getFilenameBase() + ".viewinfo.json")
       << viewInfo.dump() << std::endl;
 }
@@ -340,7 +350,8 @@ void MaterializedViewWriter::writeViewMetadata() const {
 void MaterializedViewWriter::computeResultAndWritePermutation() const {
   // Run query and sort the result externally (only if necessary)
   AD_LOG_INFO << "Computing result for materialized view query " << name_
-              << "..." << std::endl;
+              << ":\n"
+              << parsedQuery_._originalString << std::endl;
   auto result = qet_->getResult(true);
 
   Sorter spoSorter{getFilenameBase() + ".spo-sorter.dat", numCols(),
@@ -394,6 +405,9 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
                           ColumnIndexAndTypeInfo::PossiblyUndefined}});
   }
 
+  // Restore original query string.
+  originalQuery_ = viewInfoJson.at("query").get<std::string>();
+
   // Read permutation
   permutation_->loadFromDisk(filename, false);
   AD_CORRECTNESS_CHECK(permutation_->isLoaded());
@@ -407,21 +421,24 @@ std::shared_ptr<const Permutation> MaterializedView::permutation() const {
 
 // _____________________________________________________________________________
 void MaterializedViewsManager::loadView(const std::string& name) const {
-    {auto lock = loadedViews_.wlock();
-if (lock->contains(name)) {
-  return;
+  auto lock = loadedViews_.wlock();
+  auto patternLock = queryPatternCache_.wlock();
+  if (lock->contains(name)) {
+    return;
+  }
+  auto view = std::make_shared<MaterializedView>(onDiskBase_, name);
+  lock->insert({name, view});
+  // Analyzing the view when loading instead of (de)serializing an analysis
+  // result has the benefit that query analysis can be extended without needing
+  // to rewrite views.
+  patternLock->analyzeView(view);
+  // if (name == "geom") {
+  //   auto lock = joinPatterns_.wlock();
+  //   std::string x = ("<http://www.opengis.net/ont/geosparql#hasGeometry>");
+  //   std::string y = ("<http://www.opengis.net/ont/geosparql#asWKT>");
+  //   lock->insert({SingleChain{x, y}, loadedViews_.rlock()->at(name)});
+  // }
 }
-lock->insert({name, std::make_shared<MaterializedView>(onDiskBase_, name)});
-}
-// TODO
-// if (name == "geom") {
-//   auto lock = joinPatterns_.wlock();
-//   std::string x = ("<http://www.opengis.net/ont/geosparql#hasGeometry>");
-//   std::string y = ("<http://www.opengis.net/ont/geosparql#asWKT>");
-//   lock->insert({SingleChain{x, y}, loadedViews_.rlock()->at(name)});
-// }
-}
-;
 
 // _____________________________________________________________________________
 std::shared_ptr<const MaterializedView> MaterializedViewsManager::getView(
