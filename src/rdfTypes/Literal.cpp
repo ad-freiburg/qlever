@@ -32,6 +32,16 @@ Literal::Literal(std::string content, size_t beginOfSuffix)
 }
 
 // __________________________________________
+Literal::Literal(std::string internal) {
+  // TODO<joka921> This is a little dangerous as there might be quotes in the
+  // IRI which might lead to unexpected results here.
+  AD_CORRECTNESS_CHECK(ql::starts_with(internal, '"'));
+  auto endIdx = internal.rfind('"');
+  AD_CORRECTNESS_CHECK(endIdx > 0);
+  Literal{std::move(internal), endIdx + 1};
+}
+
+// __________________________________________
 bool Literal::hasLanguageTag() const {
   return ql::starts_with(getSuffix(), at);
 }
