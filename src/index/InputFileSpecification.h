@@ -39,6 +39,13 @@ struct InputFileSpecification {
                                               parseInParallel_,
                                               parseInParallelSetExplicitly_)
 };
+
+// TODO<joka921> Better name.
+struct InputFileSpecificationWithFileContent {
+  std::string fileContents_;
+  Filetype filetype_;
+  std::optional<std::string> defaultGraph_;
+};
 }  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_INPUTFILESPECIFICATION_H
