@@ -154,23 +154,6 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
           }}};
 }
 
-// Overload that automatically retrieves the block metadata ranges for the given
-// `permutation` and passes the graph ID as an additional column to be read.
-ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
-    const Permutation& permutation, ScanSpecification scanSpec,
-    const LocatedTriplesSharedState& locatedTriplesSharedState,
-    const ad_utility::HashMap<Id::T, Id>& localVocabMapping,
-    const std::vector<VocabIndex>& insertionPositions,
-    const ad_utility::SharedCancellationHandle& cancellationHandle) {
-  return readIndexAndRemap(
-      permutation, std::move(scanSpec),
-      permutation.getAugmentedMetadataForPermutation(
-          *locatedTriplesSharedState),
-      locatedTriplesSharedState, localVocabMapping, insertionPositions,
-      cancellationHandle,
-      std::array{static_cast<ColumnIndex>(ADDITIONAL_COLUMN_GRAPH_ID)});
-}
-
 // Get the number of columns in the given `blockMetadataRanges`. If this cannot
 // be determined, return 4 as a safe default.
 size_t getNumColumns(const BlockMetadataRanges& blockMetadataRanges) {
@@ -184,6 +167,44 @@ size_t getNumColumns(const BlockMetadataRanges& blockMetadataRanges) {
     }
   }
   return 4;
+}
+
+// Create a `std::packaged_task` that writes a new permutation according to the
+// settings of `newIndex`, based on the data of the current index.
+std::packaged_task<void()> createPermutationWriterTask(
+    IndexImpl& newIndex, const Permutation& permutation, bool isInternal,
+    const LocatedTriplesSharedState& locatedTriplesSharedState,
+    const ad_utility::HashMap<Id::T, Id>& localVocabMapping,
+    const std::vector<VocabIndex>& insertionPositions,
+    const ad_utility::SharedCancellationHandle& cancellationHandle) {
+  auto blockMetadataRanges = permutation.getAugmentedMetadataForPermutation(
+      *locatedTriplesSharedState);
+  size_t numColumns = getNumColumns(blockMetadataRanges);
+  std::vector<ColumnIndex> additionalColumns;
+  additionalColumns.push_back(ADDITIONAL_COLUMN_GRAPH_ID);
+  for (ColumnIndex col : {ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN,
+                          ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN}) {
+    if (additionalColumns.size() >= numColumns - 3) {
+      break;
+    }
+    additionalColumns.push_back(col);
+  }
+  AD_CORRECTNESS_CHECK(additionalColumns.size() == numColumns - 3);
+  return std::packaged_task{
+      [numColumns, blockMetadataRanges = std::move(blockMetadataRanges),
+       &newIndex, &permutation, isInternal, &locatedTriplesSharedState,
+       &localVocabMapping, &insertionPositions, &cancellationHandle,
+       additionalColumns = std::move(additionalColumns)]() {
+        newIndex.createPermutation(
+            numColumns,
+            readIndexAndRemap(
+                permutation,
+                ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
+                blockMetadataRanges, locatedTriplesSharedState,
+                localVocabMapping, insertionPositions, cancellationHandle,
+                additionalColumns),
+            permutation, isInternal);
+      }};
 }
 }  // namespace
 
@@ -211,14 +232,14 @@ void materializeToIndex(
 
   REBUILD_LOG_INFO << "Writing new vocabulary ..." << std::endl;
 
-  const auto& [insertInfo, localVocabMapping] =
+  const auto& [insertionPositions, localVocabMapping] =
       materializeLocalVocab(entries, index.getVocab(), newIndexName);
 
   REBUILD_LOG_INFO << "Recomputing statistics ..." << std::endl;
 
   auto newStats = index.recomputeStatistics(locatedTriplesSharedState);
 
-  ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
+  ;
   IndexImpl newIndex{index.allocator(), false};
   newIndex.loadConfigFromOldIndex(newIndexName, index, newStats);
 
@@ -227,73 +248,35 @@ void materializeToIndex(
   std::vector<std::packaged_task<void()>> tasks;
 
   if (index.usePatterns()) {
-    tasks.push_back(std::packaged_task{[&newIndex, &index, &insertInfo]() {
-      newIndex.getPatterns() =
-          index.getPatterns().cloneAndRemap([&insertInfo](const Id& oldId) {
-            return remapVocabId(oldId, insertInfo);
-          });
-      newIndex.writePatternsToFile();
-    }});
+    tasks.push_back(
+        std::packaged_task{[&newIndex, &index, &insertionPositions]() {
+          newIndex.getPatterns() = index.getPatterns().cloneAndRemap(
+              [&insertionPositions](const Id& oldId) {
+                return remapVocabId(oldId, insertionPositions);
+              });
+          newIndex.writePatternsToFile();
+        }});
   }
 
   if (index.hasAllPermutations()) {
     using enum Permutation::Enum;
     for (auto permutation : {SPO, SOP, OPS, OSP}) {
       const auto& actualPermutation = index.getPermutation(permutation);
-      tasks.push_back(std::packaged_task{
-          [&newIndex, &actualPermutation, &scanSpec, &locatedTriplesSharedState,
-           &localVocabMapping, &insertInfo, &cancellationHandle]() {
-            newIndex.createPermutation(
-                4,
-                readIndexAndRemap(actualPermutation, scanSpec,
-                                  locatedTriplesSharedState, localVocabMapping,
-                                  insertInfo, cancellationHandle),
-                actualPermutation);
-          }});
+      tasks.push_back(createPermutationWriterTask(
+          newIndex, actualPermutation, false, locatedTriplesSharedState,
+          localVocabMapping, insertionPositions, cancellationHandle));
     }
   }
 
   for (auto permutation : Permutation::INTERNAL) {
     const auto& actualPermutation = index.getPermutation(permutation);
     const auto& internalPermutation = actualPermutation.internalPermutation();
-    tasks.push_back(std::packaged_task{
-        [&newIndex, &internalPermutation, &scanSpec, &locatedTriplesSharedState,
-         &localVocabMapping, &insertInfo, &cancellationHandle]() {
-          newIndex.createPermutation(
-              4,
-              readIndexAndRemap(internalPermutation, scanSpec,
-                                locatedTriplesSharedState, localVocabMapping,
-                                insertInfo, cancellationHandle),
-              internalPermutation, true);
-        }});
-
-    auto blockMetadataRanges =
-        actualPermutation.getAugmentedMetadataForPermutation(
-            *locatedTriplesSharedState);
-    size_t numColumns = getNumColumns(blockMetadataRanges);
-    std::vector<ColumnIndex> additionalColumns;
-    additionalColumns.push_back(ADDITIONAL_COLUMN_GRAPH_ID);
-    for (ColumnIndex col : {ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN,
-                            ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN}) {
-      if (additionalColumns.size() >= numColumns - 3) {
-        break;
-      }
-      additionalColumns.push_back(col);
-    }
-    AD_CORRECTNESS_CHECK(additionalColumns.size() == numColumns - 3);
-    tasks.push_back(std::packaged_task{
-        [&newIndex, &actualPermutation, &scanSpec, &locatedTriplesSharedState,
-         &localVocabMapping, &insertInfo, &cancellationHandle, numColumns,
-         blockMetadataRanges = std::move(blockMetadataRanges),
-         additionalColumns = std::move(additionalColumns)]() {
-          newIndex.createPermutation(
-              numColumns,
-              readIndexAndRemap(actualPermutation, scanSpec,
-                                blockMetadataRanges, locatedTriplesSharedState,
-                                localVocabMapping, insertInfo,
-                                cancellationHandle, additionalColumns),
-              actualPermutation);
-        }});
+    tasks.push_back(createPermutationWriterTask(
+        newIndex, internalPermutation, true, locatedTriplesSharedState,
+        localVocabMapping, insertionPositions, cancellationHandle));
+    tasks.push_back(createPermutationWriterTask(
+        newIndex, actualPermutation, false, locatedTriplesSharedState,
+        localVocabMapping, insertionPositions, cancellationHandle));
   }
 
   ad_utility::runTasksInParallel(tasks);

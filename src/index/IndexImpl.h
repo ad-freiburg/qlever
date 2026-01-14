@@ -626,7 +626,7 @@ class IndexImpl {
   size_t createPermutation(
       size_t numColumns,
       ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
-      const Permutation& permutation, bool internal = false);
+      const Permutation& permutation, bool internal);
 
  protected:
   void openTextFileHandle();
