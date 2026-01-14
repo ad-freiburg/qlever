@@ -82,11 +82,9 @@ inline void setGlobalLoggingStream(std::ostream* stream) {
 // Helper class to get thousandth separators in a locale
 class CommaNumPunct : public std::numpunct<char> {
  protected:
-  char do_thousands_sep() const override { return ','; }
+  virtual char do_thousands_sep() const { return ','; }
 
-  std::string do_grouping() const override { return "\03"; }
-
-  ~CommaNumPunct() override = default;
+  virtual std::string do_grouping() const { return "\03"; }
 };
 
 const static std::locale commaLocale(std::locale(), new CommaNumPunct());
