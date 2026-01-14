@@ -157,6 +157,9 @@ bool& Index::usePatterns() { return pimpl_->usePatterns(); }
 bool& Index::loadAllPermutations() { return pimpl_->loadAllPermutations(); }
 
 // ____________________________________________________________________________
+bool& Index::doNotLoadPermutations() { return pimpl_->doNotLoadPermutations(); }
+
+// ____________________________________________________________________________
 void Index::setKeepTempFiles(bool keepTempFiles) {
   return pimpl_->setKeepTempFiles(keepTempFiles);
 }

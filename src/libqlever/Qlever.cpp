@@ -36,6 +36,7 @@ Qlever::Qlever(const EngineConfig& config)
   // Load the index from disk.
   index_.usePatterns() = enablePatternTrick_;
   index_.loadAllPermutations() = !config.onlyPsoAndPos_;
+  index_.doNotLoadPermutations() = config.doNotLoadPermutations_;
   index_.createFromOnDiskIndex(config.baseName_, config.persistUpdates_);
   if (config.loadTextIndex_) {
     index_.addTextFromOnDiskIndex();

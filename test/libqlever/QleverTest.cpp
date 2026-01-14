@@ -182,3 +182,41 @@ TEST(IndexBuilderConfig, validate) {
   AD_EXPECT_THROW_WITH_MESSAGE(c.validate(),
                                HasSubstr("Only specified docsfile"));
 }
+
+// _____________________________________________________________________________
+TEST(LibQlever, loadIndexWithoutPermutations) {
+  std::string filename = "libQleverLoadIndexWithoutPermutations.ttl";
+  {
+    auto ofs = ad_utility::makeOfstream(filename);
+    ofs << "<s> <p> <o>. <s2> <p2> \"literal\".";
+  }
+
+  IndexBuilderConfig c;
+  c.inputFiles_.push_back({filename, Filetype::Turtle, std::nullopt});
+  c.baseName_ = "testIndexWithoutPermutations";
+  c.memoryLimit_ = std::nullopt;
+
+  // Build the index normally.
+  EXPECT_NO_THROW(Qlever::buildIndex(c));
+
+  // Load the index with `doNotLoadPermutations` set to true.
+  EngineConfig ec{c};
+  ec.doNotLoadPermutations_ = true;
+  Qlever engine{ec};
+
+  // Test that the `setKbName` function silently does nothing, if we have no
+  // index.
+  EXPECT_NO_THROW(engine.index().setKbName("we have no triples!"));
+
+  // Run a query that doesn't need to access permutations (constant expression).
+  std::string query = "SELECT (3 + 5 AS ?result) {}";
+  auto res = engine.query(query, ad_utility::MediaType::tsv);
+  // The result should contain the computed value.
+  EXPECT_THAT(res, HasSubstr("8"));
+
+  // Try a query that would need to access permutations and verify it throws.
+  std::string queryNeedingPermutations = "SELECT ?s WHERE { ?s <p> <o> }";
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      engine.query(queryNeedingPermutations, ad_utility::MediaType::tsv),
+      HasSubstr("permutation to be loaded"));
+}
