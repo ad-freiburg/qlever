@@ -1080,9 +1080,9 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
        getRowIndices(limitAndOffset, *result, resultSize)) {
     for (uint64_t i : range) {
       STREAMABLE_YIELD("\n  <result>");
-      for (auto& selectedColumnIndice : selectedColumnIndices) {
-        if (selectedColumnIndice.has_value()) {
-          const auto& val = selectedColumnIndice.value();
+      for (auto& selectedColIdx : selectedColumnIndices) {
+        if (selectedColIdx.has_value()) {
+          const auto& val = selectedColIdx.value();
           Id id = pair.idTable()(i, val.columnIndex_);
           STREAMABLE_YIELD(idToXMLBinding(
               val.variable_, id, qet.getQec()->getIndex(), pair.localVocab()));
