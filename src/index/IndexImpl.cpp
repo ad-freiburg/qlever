@@ -1010,12 +1010,11 @@ void IndexImpl::throwExceptionIfNoPatterns() const {
 // _____________________________________________________________________________
 const Permutation& IndexImpl::getPermutationImpl(
     const PermutationPtr& permutation, std::string_view permutationName) const {
-  AD_CONTRACT_CHECK(
-      permutation != nullptr,
-      absl::StrCat("The requested operation requires the ", permutationName,
-                   " permutation to be loaded, but it was not loaded. This "
-                   "typically happens when the index was loaded with the "
-                   "`dontLoadPermutations` option set to true."));
+  AD_CONTRACT_CHECK(permutation != nullptr,
+                    "The requested operation requires the ", permutationName,
+                    " permutation to be loaded, but it was not loaded. This "
+                    "typically happens when the index was loaded with the "
+                    "`dontLoadPermutations` option set to true.");
   return *permutation;
 }
 
@@ -1532,6 +1531,8 @@ IndexImpl::PermutationPtr IndexImpl::getPermutationPtr(Permutation::Enum p) {
 
 // ____________________________________________________________________________
 Permutation& IndexImpl::getPermutation(Permutation::Enum p) {
+  // Note: the `const_cast` is fine here, we only access objects, that are
+  // actually mutable.
   return const_cast<Permutation&>(
       getPermutationImpl(getPermutationPtr(p), Permutation::toString(p)));
 }
