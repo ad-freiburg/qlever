@@ -44,16 +44,7 @@ jobs:
 
       - name: Configure CMake
         working-directory: ${{ github.workspace }}/build
-        run: |
-          cmake -B ${{github.workspace}}/build \
-                -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} \                                                                                                                                                                               
-                -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \                                                                                                                                                                                        
-                -DLOGLEVEL=INFO \                                                                                                                                                                                                           
-                -DUSE_PARALLEL=false \                                                                                                                                                                                                      
-                -D_NO_TIMING_TESTS=ON \                                                                                                                                                                                                     
-                -DCOMPILER_SUPPORTS_MARCH_NATIVE=FALSE \                                                                                                                                                                                    
-                -GNinja \                                                                                                                                                                                                                   
-                ..
+        run: cmake -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 -DLOGLEVEL=INFO -DUSE_PARALLEL=false -D_NO_TIMING_TESTS=ON -DCOMPILER_SUPPORTS_MARCH_NATIVE=FALSE -GNinja ..
 
       - name: Build
         # Build your program with the given configuration
