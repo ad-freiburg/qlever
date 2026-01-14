@@ -1823,10 +1823,10 @@ std::packaged_task<void()> computeStatistics(
         permutation.getScanSpecAndBlocks(scanSpec, *locatedTriplesSharedState),
         std::nullopt, CompressedRelationReader::ColumnIndicesRef{},
         cancellationHandle, *locatedTriplesSharedState);
-    std::optional<Id> lastPredicate = std::nullopt;
+    std::optional<Id> lastCol0 = std::nullopt;
     for (const auto& table : tables) {
       std::invoke(customAction, table);
-      countDistinct(lastPredicate, counter, table);
+      countDistinct(lastCol0, counter, table);
     }
   }};
 }
@@ -1876,7 +1876,7 @@ nlohmann::json IndexImpl::recomputeStatistics(
     tasks.push_back(getCounterTask(numSubjects, *spo_, ad_utility::noop));
     tasks.push_back(getCounterTask(numObjects, *osp_, ad_utility::noop));
   }
-  ad_utility::runTasksInParallel(tasks);
+  ad_utility::runTasksInParallel(std::move(tasks));
   auto configuration = configurationJson_;
   configuration["num-triples"] =
       NumNormalAndInternal{numTriples, numTriplesInternal};

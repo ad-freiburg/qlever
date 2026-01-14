@@ -12,17 +12,14 @@
 #include "util/ParallelExecutor.h"
 
 // _____________________________________________________________________________
-TEST(ParallelExecutor, noTasks) {
-  std::vector<std::packaged_task<void()>> tasks;
-  ad_utility::runTasksInParallel(tasks);
-}
+TEST(ParallelExecutor, noTasks) { ad_utility::runTasksInParallel({}); }
 
 // _____________________________________________________________________________
 TEST(ParallelExecutor, singleTask) {
   bool executed = false;
   std::vector<std::packaged_task<void()>> tasks;
   tasks.push_back(std::packaged_task{[&executed]() { executed = true; }});
-  ad_utility::runTasksInParallel(tasks);
+  ad_utility::runTasksInParallel(std::move(tasks));
   EXPECT_TRUE(executed);
 }
 
@@ -36,7 +33,7 @@ TEST(ParallelExecutor, multipleTasks) {
     tasks.push_back(
         std::packaged_task{[&executed, i]() { executed.at(i) = true; }});
   }
-  ad_utility::runTasksInParallel(tasks);
+  ad_utility::runTasksInParallel(std::move(tasks));
   for (size_t i = 0; i < NUM_TASKS; ++i) {
     EXPECT_TRUE(executed.at(i));
   }
@@ -56,7 +53,8 @@ TEST(ParallelExecutor, multipleTaskWithOneException) {
       }
     }});
   }
-  EXPECT_THROW(ad_utility::runTasksInParallel(tasks), std::runtime_error);
+  EXPECT_THROW(ad_utility::runTasksInParallel(std::move(tasks)),
+               std::runtime_error);
   for (size_t i = 0; i < NUM_TASKS; ++i) {
     EXPECT_TRUE(executed.at(i));
   }
@@ -75,9 +73,9 @@ TEST(ParallelExecutor, multipleTaskWithOnlyExceptions) {
     }});
   }
   // Only the first error should be rethrown for simplicity.
-  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(ad_utility::runTasksInParallel(tasks),
-                                        ::testing::StrEq("Error 0"),
-                                        std::runtime_error);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      ad_utility::runTasksInParallel(std::move(tasks)),
+      ::testing::StrEq("Error 0"), std::runtime_error);
   for (size_t i = 0; i < NUM_TASKS; ++i) {
     EXPECT_TRUE(executed.at(i));
   }
