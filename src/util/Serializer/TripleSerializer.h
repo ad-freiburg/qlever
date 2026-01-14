@@ -30,6 +30,9 @@ namespace detail {
 constexpr std::array magicBytes{'Q', 'L', 'E', 'V', 'E', 'R', '.',
                                 'U', 'P', 'D', 'A', 'T', 'E'};
 
+// The `formatVersion` has to be increased when the format below is changed.
+constexpr uint16_t formatVersion = 1;
+
 // Read a value of type T from the `serializer`.
 CPP_template(typename T, typename Serializer)(
     requires serialization::ReadSerializer<Serializer>) T
@@ -40,13 +43,12 @@ CPP_template(typename T, typename Serializer)(
 }
 
 // Write the header of the file format to the output stream. We are currently at
-// version 0.
+// version 1.
 CPP_template(typename Serializer)(
     requires serialization::WriteSerializer<
         Serializer>) void writeHeader(Serializer& serializer) {
   serializer << magicBytes;
-  uint16_t version = 0;
-  serializer << version;
+  serializer << formatVersion;
 }
 
 // Read the header of the file format from the input stream and ensure that it
@@ -59,7 +61,14 @@ CPP_template(typename Serializer)(
   AD_CORRECTNESS_CHECK(magicByteBuffer == magicBytes);
   uint16_t version;
   serializer >> version;
-  AD_CORRECTNESS_CHECK(version == 0);
+  AD_CORRECTNESS_CHECK(
+      version == formatVersion,
+      "The format version for serialized triples (e.g. persisted UPDATEs or "
+      "serialized cached results) in the version of QLever is ",
+      formatVersion, " but you tried to read serialized triples with version ",
+      version,
+      ", As those features are currently still experimental, please contact "
+      "the developers of QLever");
 }
 
 // Serialize the local vocabulary to the output stream. Returns a mapping from
@@ -69,11 +78,7 @@ CPP_template(typename Serializer)(
         Serializer>) void serializeLocalVocab(Serializer& serializer,
                                               const LocalVocab& vocab) {
   serializer << vocab.getOwnedLocalBlankNodeBlocks();
-  uint64_t numWords = vocab.primaryWordSet().size() +
-                      ::ranges::accumulate(vocab.otherSets(), 0ULL,
-                                           [](auto acc, const auto& set) {
-                                             return acc + set->size();
-                                           });
+  uint64_t numWords = vocab.size();
   serializer << numWords;
 
   auto writeWordSet = [&serializer](const auto& words) {

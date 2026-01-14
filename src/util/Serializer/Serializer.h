@@ -245,11 +245,11 @@ CPP_requires(
 template <typename T>
 CPP_concept TriviallySerializable =
     (CPP_requires_ref(triviallySerializableRequires, T) &&
-     std::is_trivially_copyable_v<std::decay_t<T>>) ||
-    std::is_enum_v<std::decay_t<T>>;
+     std::is_trivially_copyable_v<std::decay_t<T>>);
 
-/// Serialize function for `TriviallySerializable` types that works by simply
-/// serializing the binary object representation.
+// An explicit helper function to serialize trivially copyable types, that
+// don't have the explicit serialization enabled. It simply serializes the
+// bytes.
 CPP_template(typename S, typename T)(
     requires Serializer<S> CPP_and std::is_trivially_copyable_v<
         std::decay_t<T>>) void triviallySerialize(S& serializer, T&& t) {
@@ -261,6 +261,8 @@ CPP_template(typename S, typename T)(
   }
 }
 
+/// Serialization function for `TriviallySerializable` types that is implemented
+/// in terms of `triviallySerialize` above.
 CPP_template(typename S, typename T)(
     requires Serializer<S> CPP_and
         TriviallySerializable<T>) void serialize(S& serializer, T&& t) {
@@ -275,9 +277,6 @@ CPP_template(typename T,
     [[maybe_unused]] std::true_type allowTrivialSerialization(T, U) {
   return {};
 }
-
-// An explicit helper function to serialize trivially serializable types, that
-// don't have the explicit serialization enabled.
 
 }  // namespace ad_utility::serialization
 

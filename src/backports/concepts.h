@@ -90,6 +90,7 @@
 #define CPP_and_def CPP_and_sfinae_def
 #define CPP_and_2_def CPP_and_2_def_sfinae
 #define CPP_variadic_template CPP_template_NO_DEFAULT_SFINAE
+#define CPP_variadic_template_def CPP_variadic_template_def_SFINAE
 #define CPP_class_template CPP_template_VARIADIC_CLASS_SFINAE
 #define CPP_member_def CPP_member_def_sfinae
 #define CPP_template_out_def CPP_template_out_def_sfinae
@@ -106,6 +107,7 @@
 #define CPP_and_def CPP_and
 #define CPP_and_2_def CPP_and
 #define CPP_variadic_template CPP_template
+#define CPP_variadic_template_def CPP_variadic_template
 #define CPP_class_template CPP_template
 #define CPP_member_def CPP_member
 #define CPP_template_out_def CPP_template_def

@@ -69,6 +69,7 @@ namespace {
 // folded into the permutations as additional columns.
 void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
     const Index& index) {
+  const auto& indexImpl = index.getImpl();
   const DeltaTriplesManager& deltaTriplesManager{index.deltaTriplesManager()};
   auto sharedLocatedTriplesSnapshot = deltaTriplesManager.getCurrentSnapshot();
   const auto& locatedTriplesSnapshot = *sharedLocatedTriplesSnapshot;
@@ -77,11 +78,17 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
   auto iriOfHasPattern =
       TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE);
   auto checkSingleElement = [&cancellationDummy, &iriOfHasPattern,
-                             &locatedTriplesSnapshot](
-                                const Index& index, size_t patternIdx, Id id) {
-    auto scanResultHasPattern = index.scan(
-        ScanSpecificationAsTripleComponent{iriOfHasPattern, id, std::nullopt},
-        Permutation::Enum::PSO, {}, cancellationDummy, locatedTriplesSnapshot);
+                             &locatedTriplesSnapshot,
+                             &indexImpl](size_t patternIdx, Id id) {
+    const auto& permutation =
+        indexImpl.getPermutation(Permutation::Enum::PSO).internalPermutation();
+    auto scanResultHasPattern =
+        permutation.scan(permutation.getScanSpecAndBlocks(
+                             ScanSpecificationAsTripleComponent{
+                                 iriOfHasPattern, id, std::nullopt}
+                                 .toScanSpecification(indexImpl),
+                             locatedTriplesSnapshot),
+                         {}, cancellationDummy, locatedTriplesSnapshot);
     // Each ID has at most one pattern, it can have none if it doesn't
     // appear as a subject in the knowledge graph.
     AD_CORRECTNESS_CHECK(scanResultHasPattern.numRows() <= 1);
@@ -95,10 +102,12 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
   };
 
   auto checkConsistencyForCol0IdAndPermutation =
-      [&](Id col0Id, Permutation::Enum permutation, size_t subjectColIdx,
+      [&](Id col0Id, const Permutation& permutation, size_t subjectColIdx,
           size_t objectColIdx) {
-        auto scanResult = index.scan(
-            ScanSpecification{col0Id, std::nullopt, std::nullopt}, permutation,
+        auto scanResult = permutation.scan(
+            permutation.getScanSpecAndBlocks(
+                ScanSpecification{col0Id, std::nullopt, std::nullopt},
+                locatedTriplesSnapshot),
             std::array{ColumnIndex{ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN},
                        ColumnIndex{ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN}},
             cancellationDummy, locatedTriplesSnapshot);
@@ -106,22 +115,26 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
         for (const auto& row : scanResult) {
           auto patternIdx = row[2].getInt();
           Id subjectId = row[subjectColIdx];
-          checkSingleElement(index, patternIdx, subjectId);
+          checkSingleElement(patternIdx, subjectId);
           Id objectId = objectColIdx == col0IdTag ? col0Id : row[objectColIdx];
           auto patternIdxObject = row[3].getInt();
-          checkSingleElement(index, patternIdxObject, objectId);
+          checkSingleElement(patternIdxObject, objectId);
         }
       };
 
   auto checkConsistencyForPredicate = [&](Id predicateId) {
     using enum Permutation::Enum;
-    checkConsistencyForCol0IdAndPermutation(predicateId, PSO, 0, 1);
-    checkConsistencyForCol0IdAndPermutation(predicateId, POS, 1, 0);
+    checkConsistencyForCol0IdAndPermutation(
+        predicateId, indexImpl.getPermutation(PSO), 0, 1);
+    checkConsistencyForCol0IdAndPermutation(
+        predicateId, indexImpl.getPermutation(POS), 1, 0);
   };
   auto checkConsistencyForObject = [&](Id objectId) {
     using enum Permutation::Enum;
-    checkConsistencyForCol0IdAndPermutation(objectId, OPS, 1, col0IdTag);
-    checkConsistencyForCol0IdAndPermutation(objectId, OSP, 0, col0IdTag);
+    checkConsistencyForCol0IdAndPermutation(
+        objectId, indexImpl.getPermutation(OPS), 1, col0IdTag);
+    checkConsistencyForCol0IdAndPermutation(
+        objectId, indexImpl.getPermutation(OSP), 0, col0IdTag);
   };
 
   auto predicates = index.getImpl().PSO().getDistinctCol0IdsAndCounts(
