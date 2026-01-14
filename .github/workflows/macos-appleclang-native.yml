@@ -1,0 +1,83 @@
+name: Native build with AppleClang on MacOS
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  merge_group:
+
+concurrency:
+  group: "${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}"
+  cancel-in-progress: true
+
+jobs:
+  build:
+    # The CMake configure and build commands are platform-agnostic and should work equally
+    # well on Windows or Mac.  You can convert this to a matrix build if you need
+    # cross-platform coverage.
+    # See: https://docs.github.com/en/free-pro-team@latest/actions/learn-github-actions/managing-complex-workflows#using-a-build-matrix
+    strategy:
+      fail-fast: false
+      matrix:
+        build-type: [Release]
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies via Homebrew
+        run: |
+          brew update                                                                                                                                                                                                                       
+          brew install boost icu4c openssl@3 zstd jemalloc pkg-config
+
+      - name: Install python dependencies for E2E tests
+        run: |
+          pip3 install --break-system-packages pyaml --no-binary=:pyicu: pyicu
+
+      - name: Print clang version
+        run: clang++ --version
+
+      - name: Create build directory
+        run: mkdir ${{github.workspace}}/build
+
+      - name: Configure CMake
+        working-directory: ${{ github.workspace }}/build
+        run: |
+          cmake -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} \                                                                                                                                                                               
+                -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \                                                                                                                                                                                        
+                -DLOGLEVEL=INFO \                                                                                                                                                                                                           
+                -DUSE_PARALLEL=false \                                                                                                                                                                                                      
+                -D_NO_TIMING_TESTS=ON \                                                                                                                                                                                                     
+                -DCOMPILER_SUPPORTS_MARCH_NATIVE=FALSE \                                                                                                                                                                                    
+                -GNinja \                                                                                                                                                                                                                   
+                ..
+
+      - name: Build
+        # Build your program with the given configuration
+        run: |
+          cmake --build ${{github.workspace}}/build --config ${{matrix.build-type}} -- -j $(sysctl -n hw.ncpu)
+        id: build
+
+      - name: Test
+        id: complete_tests
+        working-directory: ${{github.workspace}}/build/test
+        run: env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{matrix.build-type}} .
+
+      - name: Running and printing the benchmark examples.
+        run: ${{github.workspace}}/build/benchmark/BenchmarkExamples -p
+
+      - name: Test
+        working-directory: ${{github.workspace}}/build/test
+        # Execute tests defined by the CMake configuration.
+        # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
+        run: |
+          df -h
+          source ${{github.workspace}}/build/conanrun.sh
+          env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{matrix.build-type}} .
+
+      - name: Running and printing the benchmark examples.
+        working-directory: ${{github.workspace}}/build
+        run: benchmark/BenchmarkExamples -p
+
+      - name: E2E
+        run: ${{github.workspace}}/e2e/e2e.sh
