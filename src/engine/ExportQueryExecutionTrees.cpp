@@ -711,7 +711,7 @@ ExportQueryExecutionTrees::getLiteralOrNullopt(
     return std::move(litOrIri.value().getLiteral());
   }
   return std::nullopt;
-}
+};
 
 // _____________________________________________________________________________
 std::optional<LiteralOrIri>
