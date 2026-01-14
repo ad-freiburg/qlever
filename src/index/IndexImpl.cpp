@@ -1789,24 +1789,24 @@ void IndexImpl::setPrefixesForEncodedValues(
       EncodedIriManager{std::move(prefixesWithoutAngleBrackets)};
 }
 
-namespace {
-void countDistinct(std::optional<Id>& lastId, size_t& counter,
-                   const IdTable& table) {
+// _____________________________________________________________________________
+void IndexImpl::countDistinct(std::optional<Id>& lastId, size_t& counter,
+                              const IdTable& table) {
   AD_CORRECTNESS_CHECK(
       !table.empty(), "Empty tables should never be yielded by the lazy scan.");
   auto col = table.getColumn(0);
   counter += ql::ranges::distance(col | ::ranges::views::unique([](Id a, Id b) {
                                     return a.getBits() == b.getBits();
                                   }));
-  if (lastId != col[0]) {
-    lastId = col[0];
-  } else {
+  if (lastId == col.front()) {
     // Avoid double counting in case the last id of the previous block is the
     // same as the first id of this block.
     counter--;
   }
+  lastId = col.back();
 }
 
+namespace {
 // Helper function that returns a packaged task that computes distinct counts
 // over all tables produced by scanning the given permutation. The customAction
 // is invoked for each table to allow for additional computations while
@@ -1826,7 +1826,7 @@ std::packaged_task<void()> computeStatistics(
     std::optional<Id> lastCol0 = std::nullopt;
     for (const auto& table : tables) {
       std::invoke(customAction, table);
-      countDistinct(lastCol0, counter, table);
+      IndexImpl::countDistinct(lastCol0, counter, table);
     }
   }};
 }
