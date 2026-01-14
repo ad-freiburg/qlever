@@ -262,19 +262,6 @@ class Qlever {
                                          *index_.getBlankNodeManager());
   }
 
-  // Serialize the contents of the `NamedResultCache` to or from a file
-  // specified by the `filename`.
-  template <typename Serializer>
-  void writeNamedResultCacheToSerializer(Serializer& serializer) const {
-    namedResultCache_.writeToSerializer(serializer);
-  }
-
-  template <typename Serializer>
-  void readNamedResultCacheFromDisk(Serializer& serializer) {
-    namedResultCache_.readFromSerializer(serializer, allocator_,
-                                         *index_.getBlankNodeManager());
-  }
-
   // Serialize the vocabulary, metadata JSON, and named result cache to a blob.
   // The blob is returned as a vector of bytes.
   std::vector<char> serializeToBlob() const;
