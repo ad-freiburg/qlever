@@ -16,8 +16,8 @@ jobs:
     - uses: actions/checkout@v4
       with:
         submodules: 'recursive'
-    - name: Install conan package manager. Install curl, npm, nvm and nodejs. Get build and host profiles for conan. Install and run conan. Also create a build directory. Configure CMake and build.
 
+    - name: Install conan package manager. Install curl, npm, nvm and nodejs. Get build and host profiles for conan. Install and run conan. Also create a build directory. Configure CMake and build.
       working-directory: ${{github.workspace}}
       run: |
         sudo apt-get install pipx
@@ -71,6 +71,7 @@ jobs:
       run: >
         source ${{github.workspace}}/build/conanrun.sh;
         ${{github.workspace}}/e2e/e2e.sh -d build
+
 
 
 
