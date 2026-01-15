@@ -40,13 +40,13 @@ jobs:
         cmake --build .
       shell: bash  
 
-      - name: Cache for conan
-        uses: actions/cache@v3
-        env:
-          cache-name: cache-conan-with-emscripten-modules-ubuntu-24.04
-        with:
-          path: ~/.conan2
-          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('conanfile.txt', 'conanprofiles/emscripten.profile')}}
+    - name: Cache for conan
+      uses: actions/cache@v3
+      env:
+        cache-name: cache-conan-with-emscripten-modules-ubuntu-24.04
+      with:
+        path: ~/.conan2
+        key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('conanfile.txt', 'conanprofiles/emscripten.profile')}}
 
     - name: Test
       working-directory: ${{github.workspace}}/build/test
@@ -66,6 +66,7 @@ jobs:
       run: >
         source ${{github.workspace}}/build/conanrun.sh;
         ${{github.workspace}}/e2e/e2e.sh -d build
+
 
 
 
