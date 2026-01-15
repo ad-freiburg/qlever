@@ -375,7 +375,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
   ASSERT_TRUE(view != nullptr);
   EXPECT_EQ(view->name(), "testView1");
   EXPECT_EQ(view->permutation()->permutation(), Permutation::Enum::SPO);
-  EXPECT_NE(view->locatedTriplesSnapshot(), nullptr);
+  EXPECT_NE(view->locatedTriplesState(), nullptr);
 
   MaterializedViewsManager managerNoBaseName;
   AD_EXPECT_THROW_WITH_MESSAGE(

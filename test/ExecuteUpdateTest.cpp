@@ -52,16 +52,20 @@ TEST(ExecuteUpdate, executeUpdate) {
         const std::vector<DatasetClause> datasets = {};
         ad_utility::BlankNodeManager bnm;
         auto pqs = SparqlParser::parseUpdate(&bnm, encodedIriManager(), update);
-        for (auto& pq : pqs) {
-          QueryPlanner qp{&qec, sharedHandle};
-          const auto qet = qp.createExecutionTree(pq);
-          index.deltaTriplesManager().modify<void>(
-              [&index, &pq, &qet, &sharedHandle](DeltaTriples& deltaTriples) {
+        index.deltaTriplesManager().modify<void>(
+            [&index, &sharedHandle, &pqs, &qec](DeltaTriples& deltaTriples) {
+              qec.setLocatedTriplesForEvaluation(
+                  deltaTriples.getLocatedTriplesSharedStateReference());
+              for (auto& pq : pqs) {
+                // Not needed for the first update, but also doesn't break
+                // anything.
+                deltaTriples.updateAugmentedMetadata();
+                QueryPlanner qp{&qec, sharedHandle};
+                const auto qet = qp.createExecutionTree(pq);
                 ExecuteUpdate::executeUpdate(index, pq, qet, deltaTriples,
                                              sharedHandle);
-              });
-          qec.updateLocatedTriplesSnapshot();
-        }
+              }
+            });
       };
   ad_utility::testing::TestIndexConfig indexConfig{};
   // Execute the given `update` and check that the delta triples are correct.
