@@ -33,6 +33,8 @@ jobs:
         nvm install 25
         source ~/.bashrc
         node -v
+        nvm alias default 25
+        source ~/.bashrc
       shell: bash
 
     - name: Get build and host profiles for conan
