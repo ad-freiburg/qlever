@@ -2,9 +2,9 @@ name: sonarcloud-analysis
 
 on:
   push:
-    branches: [master]
+    branches: [masterX]
   pull_request:
-    branches: [master]
+    branches: [masterX]
 
 jobs:
   build:
