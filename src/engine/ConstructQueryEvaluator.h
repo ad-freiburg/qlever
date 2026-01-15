@@ -14,12 +14,12 @@ class ConstructQueryEvaluator {
   using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 
  public:
-  static std::optional<std::string> evaluateIri(const Iri& iri);
+  static std::optional<std::string> evaluate(const Iri& iri);
 
-  static std::optional<std::string> evaluateLiteral(
-      const Literal& literal, PositionInTriple posInTriple);
+  static std::optional<std::string> evaluate(const Literal& literal,
+                                             PositionInTriple role);
 
-  static std::optional<std::string> evaluateBlankNode(
+  static std::optional<std::string> evaluate(
       const BlankNode& node, const ConstructQueryExportContext& context);
 
   static std::optional<std::string> evaluateVar(

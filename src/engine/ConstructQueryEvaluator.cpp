@@ -2,12 +2,11 @@
 
 #include "ExportQueryExecutionTrees.h"
 
-std::optional<std::string> ConstructQueryEvaluator::evaluateIri(
-    const Iri& iri) {
+std::optional<std::string> ConstructQueryEvaluator::evaluate(const Iri& iri) {
   return iri.toStringRepresentation();
 }
 
-std::optional<std::string> ConstructQueryEvaluator::evaluateLiteral(
+std::optional<std::string> ConstructQueryEvaluator::evaluate(
     const Literal& literal, PositionInTriple role) {
   if (role == PositionInTriple::OBJECT) {
     return literal.toStringRepresentation();
@@ -49,7 +48,7 @@ std::optional<std::string> ConstructQueryEvaluator::evaluateVar(
   return std::nullopt;
 }
 
-std::optional<std::string> ConstructQueryEvaluator::evaluateBlankNode(
+std::optional<std::string> ConstructQueryEvaluator::evaluate(
     const BlankNode& node, const ConstructQueryExportContext& context) {
   std::ostringstream stream;
   stream << "_:";
@@ -69,19 +68,19 @@ std::optional<std::string> ConstructQueryEvaluator::evaluate(
 
   if (std::holds_alternative<BlankNode>(term)) {
     BlankNode node = std::get<BlankNode>(term);
-    return ConstructQueryEvaluator::evaluateBlankNode(node, context);
+    return ConstructQueryEvaluator::evaluate(node, context);
   }
 
   if (std::holds_alternative<ad_utility::triple_component::Iri>(term)) {
     ad_utility::triple_component::Iri iri =
         std::get<ad_utility::triple_component::Iri>(term);
-    return ConstructQueryEvaluator::evaluateIri(iri);
+    return ConstructQueryEvaluator::evaluate(iri);
   }
 
   if (std::holds_alternative<ad_utility::triple_component::Literal>(term)) {
     ad_utility::triple_component::Literal literal =
         std::get<ad_utility::triple_component::Literal>(term);
-    return ConstructQueryEvaluator::evaluateLiteral(literal, posInTriple);
+    return ConstructQueryEvaluator::evaluate(literal, posInTriple);
   }
 
   AD_FAIL();
