@@ -12,7 +12,6 @@
 #include <vector>
 
 #include "CompilationInfo.h"
-#include "ProjectVersion.h"
 #include "engine/Server.h"
 #include "global/Constants.h"
 #include "global/RuntimeParameters.h"
@@ -186,7 +185,8 @@ int main(int argc, char** argv) {
       return EXIT_SUCCESS;
     }
     if (optionsMap.count("version")) {
-      std::cout << "QLever ServerMain " << QLEVER_SRC_PROJECTVERSION << '\n';
+      std::cout << "QLever ServerMain " << qlever::version::ProjectVersion
+                << '\n';
       return EXIT_SUCCESS;
     }
     po::notify(optionsMap);

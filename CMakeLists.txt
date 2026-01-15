@@ -426,23 +426,6 @@ else ()
             COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/CompilationInfo.cmake)
 endif ()
 
-# For the latest commit return `{most recent tag}-{how many commits back the tag is}-{hash of latest commit}`
-execute_process(
-    COMMAND git describe --tags --always
-    OUTPUT_VARIABLE PROJECT_VERSION
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-)
-
-if(PROJECT_VERSION STREQUAL "")
-    set(PROJECT_VERSION "0.0.0-unknown")
-endif()
-
-configure_file(
-    ${CMAKE_SOURCE_DIR}/src/ProjectVersion.h.in
-    ${CMAKE_CURRENT_BINARY_DIR}/ProjectVersion.h
-    @ONLY
-)
-
 set(LOG_LEVEL_FATAL FATAL)
 set(LOG_LEVEL_ERROR ERROR)
 set(LOG_LEVEL_WARN WARN)
@@ -513,9 +496,6 @@ qlever_target_link_libraries(VocabularyMergerMain index parser ${CMAKE_THREAD_LI
 add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
 qlever_target_link_libraries(PrintIndexVersionMain util)
 
-# For IndexBuilderMain and ServerMain to find generated ProjectVersion.h
-target_include_directories(IndexBuilderMain PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
-target_include_directories(ServerMain PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 
 # set_target_properties(IndexBuilderMain PROPERTIES OUTPUT_NAME "qlever-index-builder")
 # set_target_properties(ServerMain PROPERTIES OUTPUT_NAME "qlever-server")

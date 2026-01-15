@@ -15,7 +15,6 @@
 #include <string>
 
 #include "CompilationInfo.h"
-#include "ProjectVersion.h"
 #include "global/Constants.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "libqlever/Qlever.h"
@@ -263,7 +262,7 @@ int main(int argc, char** argv) {
       return EXIT_SUCCESS;
     }
     if (optionsMap.count("version")) {
-      std::cout << "QLever IndexBuilderMain " << QLEVER_SRC_PROJECTVERSION
+      std::cout << "QLever IndexBuilderMain " << qlever::version::ProjectVersion
                 << '\n';
       return EXIT_SUCCESS;
     }
