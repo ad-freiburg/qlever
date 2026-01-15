@@ -508,6 +508,15 @@ DeltaTriplesManager::getCurrentLocatedTriplesSharedState() const {
 }
 
 // _____________________________________________________________________________
+std::pair<LocatedTriplesSharedState, std::vector<LocalVocabIndex>>
+DeltaTriplesManager::getCurrentLocatedTriplesSharedStateWithVocab() const {
+  return deltaTriples_.withReadLock([this](const DeltaTriples& deltaTriples) {
+    return std::make_pair(*currentLocatedTriplesSharedState_.rlock(),
+                          deltaTriples.copyLocalVocab());
+  });
+}
+
+// _____________________________________________________________________________
 void DeltaTriples::setOriginalMetadata(
     Permutation::Enum permutation,
     std::shared_ptr<const std::vector<CompressedBlockMetadata>> metadata,
@@ -601,4 +610,15 @@ void DeltaTriplesManager::setFilenameForPersistentUpdatesAndReadFromDisk(
         deltaTriples.readFromDisk();
       },
       false);
+}
+
+// _____________________________________________________________________________
+std::vector<LocalVocabIndex> DeltaTriples::copyLocalVocab() const {
+  std::vector<LocalVocabIndex> entries;
+  entries.reserve(localVocab_.size());
+
+  for (const LocalVocabEntry& entry : localVocab_.primaryWordSet()) {
+    entries.push_back(&entry);
+  }
+  return entries;
 }
