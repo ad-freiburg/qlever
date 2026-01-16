@@ -4,6 +4,25 @@ if (POLICY CMP0167)
 endif ()
 project(QLever C CXX)
 
+if (APPLE)
+    # Dynamically detect Homebrew prefix
+    execute_process(
+        COMMAND brew --prefix
+        OUTPUT_VARIABLE HOMEBREW_PREFIX
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        RESULT_VARIABLE BREW_RESULT
+        ERROR_QUIET
+    )
+    if (BREW_RESULT EQUAL 0 AND HOMEBREW_PREFIX)
+        message(STATUS "Found Homebrew at: ${HOMEBREW_PREFIX}")
+        list(APPEND CMAKE_PREFIX_PATH "${HOMEBREW_PREFIX}")
+        link_directories(${HOMEBREW_PREFIX}/lib)
+        include_directories(${HOMEBREW_PREFIX}/include)
+    else()
+        message(WARNING "Homebrew not found. You may need to manually set CMAKE_PREFIX_PATH to locate dependencies (Boost, ICU, OpenSSL, etc.)")
+    endif()
+endif ()
+
 # C/C++ Versions
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -51,7 +70,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         add_compile_options(-fcoroutines)
     endif ()
 
-elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang" )
     if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.0.0" AND NOT COMPILER_VERSION_CHECK_DEACTIVATED)
         MESSAGE(FATAL_ERROR "Clang++ versions older than 16.0 are not supported by QLever")
     endif ()
@@ -62,7 +81,7 @@ elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         set(RANGE_V3_REQUIRED_BY_COMPILER ON)
     endif ()
 else ()
-    MESSAGE(FATAL_ERROR "QLever currently only supports the G++ or LLVM-Clang++ compilers. Found ${CMAKE_CXX_COMPILER_ID}")
+    MESSAGE(FATAL_ERROR "QLever currently only supports the G++, LLVM-Clang++ or AppleClang compilers. Found ${CMAKE_CXX_COMPILER_ID}")
 endif ()
 
 ## Build targets for address sanitizer
@@ -80,7 +99,7 @@ set(CMAKE_CXX_FLAGS_ASAN
 if ("${CMAKE_GENERATOR}" STREQUAL "Ninja")
     if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
         add_compile_options(-fdiagnostics-color=always)
-    elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+    elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang" OR "${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang")
         add_compile_options(-fcolor-diagnostics)
     endif ()
 endif ()
@@ -108,6 +127,7 @@ FetchContent_Declare(
         googletest
         GIT_REPOSITORY https://github.com/google/googletest.git
         GIT_TAG 7917641ff965959afae189afb5f052524395525c # main branch on 2025/09/11
+        EXCLUDE_FROM_ALL
 )
 
 ################################
@@ -119,6 +139,7 @@ FetchContent_Declare(
         nlohmann-json
         URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz
         URL_HASH SHA3_224=0ad805c53f1769489a9c6bdeefd0a36c19f74239785cdb9c4344e8c1
+        EXCLUDE_FROM_ALL
 )
 
 ###############################
@@ -131,6 +152,7 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/antlr/antlr4.git
         GIT_TAG cc82115a4e7f53d71d9d905caa2c2dfa4da58899 # 4.13.12
         SOURCE_SUBDIR runtime/Cpp
+        EXCLUDE_FROM_ALL
 )
 
 #################################
@@ -144,6 +166,7 @@ FetchContent_Declare(
         # This branch removes some differences in the interface between `range-v3` and `std::ranges` s.t.
         # the former can be used as an (almost) drop-in replacement for the latter.
         GIT_TAG 42340ef354f7b4e4660268b788e37008d9cc85aa # branch fork-for-qlever
+        EXCLUDE_FROM_ALL
 )
 
 #################################
@@ -153,6 +176,7 @@ FetchContent_Declare(
         spatialjoin
         GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
         GIT_TAG c358e479ebb5f40df99522e69a0b52d73416020b
+        EXCLUDE_FROM_ALL
 )
 # disable bzip2 and zlib support in spatialjoin, we don't need it
 add_compile_definitions(SPATIALJOIN_NO_BZIP2=True SPATIALJOIN_NO_ZLIB=True)
@@ -266,9 +290,7 @@ if (${ALLOW_SHUTDOWN})
     message(STATUS "Adding -DALLOW_SHUTDOWN")
 endif ()
 
-
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
-
 
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
@@ -280,6 +302,7 @@ FetchContent_Declare(
         ctre
         GIT_REPOSITORY https://github.com/hanickadot/compile-time-regular-expressions.git
         GIT_TAG e34c26ba149b9fd9c34aa0f678e39739641a0d1e # v3.10.0
+        EXCLUDE_FROM_ALL
 )
 
 ################################
@@ -292,6 +315,7 @@ FetchContent_Declare(
         abseil
         GIT_REPOSITORY https://github.com/abseil/abseil-cpp.git
         GIT_TAG 93ac3a4f9ee7792af399cebd873ee99ce15aed08  # 2024-05-16
+        EXCLUDE_FROM_ALL
 )
 
 ################################
@@ -303,6 +327,7 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/google/s2geometry.git
         GIT_TAG 5b5eccd54a08ae03b4467e79ffbb076d0b5f221e  #version 0.11.1
         SYSTEM
+        EXCLUDE_FROM_ALL
 )
 
 
@@ -351,6 +376,7 @@ FetchContent_Declare(
         fsst
         GIT_REPOSITORY https://github.com/cwida/fsst.git
         GIT_TAG b228af6356196095eaf9f8f5654b0635f969661e # main branch from 27th May 2025
+        EXCLUDE_FROM_ALL
 )
 
 
@@ -364,6 +390,7 @@ FetchContent_Declare(
         GIT_TAG bc0faab533e2b27b85b8ad312abf061e33ed6b5d # v.2023-11-01
         GIT_SHALLOW TRUE
         OVERRIDE_FIND_PACKAGE
+        EXCLUDE_FROM_ALL
 )
 
 ################################
@@ -423,7 +450,6 @@ set(LOG_LEVEL_INFO INFO)
 set(LOG_LEVEL_DEBUG DEBUG)
 set(LOG_LEVEL_TIMING TIMING)
 set(LOG_LEVEL_TRACE TRACE)
-
 
 if (CMAKE_BUILD_TYPE MATCHES DEBUG)
     set(LOGLEVEL DEBUG CACHE STRING "The loglevel")
@@ -485,3 +511,55 @@ qlever_target_link_libraries(VocabularyMergerMain index parser ${CMAKE_THREAD_LI
 
 add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
 qlever_target_link_libraries(PrintIndexVersionMain util)
+
+set_target_properties(IndexBuilderMain PROPERTIES OUTPUT_NAME "qlever-index")
+set_target_properties(ServerMain PROPERTIES OUTPUT_NAME "qlever-server")
+
+install(TARGETS
+    ServerMain
+    IndexBuilderMain
+    RUNTIME DESTINATION bin
+)
+
+###############################################################
+# CPack packaging
+###############################################################
+
+set(CPACK_PACKAGE_NAME "qlever")
+
+# Set CPACK_PACKAGE_VERSION according to Debian packaging naming rules
+# If git describe output begins with v + semver:
+if (PROJECT_VERSION MATCHES "^v([0-9]+\\.[0-9]+\\.[0-9]+)(-[0-9]+)?(-g[0-9a-f]+)?$")
+    
+    # CMAKE_MATCH_1 is "major.minor.patch"
+    set(TAG_VERSION "${CMAKE_MATCH_1}")
+    
+    # CMAKE_MATCH_2 is "-commits_ahead" (or empty)
+    if (CMAKE_MATCH_2)
+        string(SUBSTRING "${CMAKE_MATCH_2}" 1 -1 COMMITS_AHEAD)
+        set(CPACK_PACKAGE_VERSION "${TAG_VERSION}-${COMMITS_AHEAD}")
+    else()
+        set(CPACK_PACKAGE_VERSION "${TAG_VERSION}")
+    endif()
+
+else()
+    # Fallback for non-tagged builds: Use commit hash
+    if (PROJECT_VERSION MATCHES "-g([0-9a-f]+)$")
+        set(HASH "${CMAKE_MATCH_1}")
+    else()
+        set(HASH "${PROJECT_VERSION}")
+    endif()
+    set(CPACK_PACKAGE_VERSION "0.0.0-${HASH}")
+endif()
+
+set(CPACK_PACKAGE_CONTACT "mundhahj@tf.uni-freiburg.de")
+set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/ad-freiburg/qlever")
+
+set(CPACK_OUTPUT_FILE_PREFIX "${CMAKE_CURRENT_BINARY_DIR}/packages")
+set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+
+set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
+
+set(CPACK_VERBATIM_VARIABLES YES)
+
+include(CPack)
