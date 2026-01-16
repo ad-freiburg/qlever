@@ -344,6 +344,63 @@ std::optional<DateYearOrDuration> DateYearOrDuration::convertToXsdDate(
 
 // _____________________________________________________________________________
 #ifndef REDUCED_FEATURE_SET_FOR_CPP17
+void updatePassedTimes(const Date& date1, const Date& date2, int& daysPassed,
+                       int& hoursPassed, int& minutesPassed,
+                       double& secondsPassed) {
+  // helper function for Subtraction
+  // this function allows to swap the dates, if daysPassed was negative before
+  // applying abs. updating daysPassed, hoursPassed, minutesPassed,
+  // secondsPassed accordingly
+  if (date1.hasTime()) {
+    int hour1 = date1.getHour();
+    int minute1 = date1.getMinute();
+    double second1 = date1.getSecond();
+    if (date2.hasTime()) {
+      int hour2 = date2.getHour();
+      int minute2 = date2.getMinute();
+      double second2 = date2.getSecond();
+      if (hour1 < hour2) {
+        daysPassed--;  // counted one day to much
+        hoursPassed =
+            24 - (hour2 - hour1);  // total hours of a day - difference
+      } else {
+        hoursPassed = (hour1 - hour2);
+      }
+      if (minute1 < minute2) {
+        hoursPassed--;  // same as above just one level down
+        minutesPassed = 60 - (minute2 - minute1);
+      } else {
+        minutesPassed = (minute1 - minute2);
+      }
+      if (second1 < second2) {
+        minutesPassed--;
+        secondsPassed = 60 - (second2 - second1);
+      } else {
+        secondsPassed = (second1 - second2);
+      }
+    } else {
+      // if there is no time given, assume 00:00h 0seconds
+      hoursPassed = hour1;
+      minutesPassed = minute1;
+      secondsPassed = second1;
+    }
+  } else {
+    // date1 has no time, therefore we are assuming time 00:00:00
+    if (date2.hasTime()) {
+      int hour2 = date2.getHour();
+      int minute2 = date2.getMinute();
+      double second2 = date2.getSecond();
+      daysPassed--;
+      secondsPassed = 60.0 - second2;
+      minutesPassed =
+          60 -
+          (minute2 + 1 * (secondsPassed >
+                          0.0));  // we add 1 because the seconds added a minute
+      hoursPassed = 24 - (hour2 + 1 * (minutesPassed > 0));
+    }
+  }
+}
+
 DateYearOrDuration DateYearOrDuration::operator-(
     const DateYearOrDuration& rhs) const {
   // TODO: also support hours, minutes and seconds
@@ -353,6 +410,7 @@ DateYearOrDuration DateYearOrDuration::operator-(
     const Date& ownDate = getDateUnchecked();
     const Date& otherDate = rhs.getDateUnchecked();
 
+    // Calculate number of days between the two Dates
     auto date1 =
         std::chrono::year_month_day{std::chrono::year(ownDate.getYear()) /
                                     ownDate.getMonth() / ownDate.getDay()};
@@ -362,70 +420,28 @@ DateYearOrDuration DateYearOrDuration::operator-(
 
     int daysPassed =
         (std::chrono::sys_days{date1} - std::chrono::sys_days{date2}).count();
+    int hoursPassed = 0;
+    int minutesPassed = 0;
+    double secondsPassed = 0.0;
+
+    bool isDaysPassedPos = true;
 
     if (daysPassed < 0) {
+      isDaysPassedPos = false;
       daysPassed = abs(daysPassed);
     }
-
-    // Third Attempt
-    // std::chrono::sys_days{ End } - std::chrono::sys_days{ Start }
-    // const Date& ownDate = getDateUnchecked();
-    // const Date& otherDate = rhs.getDateUnchecked();
-
-    // ownDate.get
-    // std::chrono::system_clock::from_time_t
-
-    // First Attempt
-    /*
-    const Date& ownDate = getDateUnchecked();
-    const Date& otherDate = rhs.getDateUnchecked();
-    int yearsPassed = abs(ownDate.getYear() - otherDate.getYear());
-    int monthsPassed = abs(ownDate.getMonth() - otherDate.getMonth());
-    int daysPassed = abs(ownDate.getDay() - otherDate.getDay());
-    daysPassed = daysPassed + (monthsPassed * 31) + (yearsPassed * 365);
-    */
-
-    // Second Attempt
-    // Getting the dates
-    /*int ownYear = ownDate.getYear();
-    int otherYear = otherDate.getYear();
-    int ownMonth = ownDate.getMonth();
-    int otherMonth = otherDate.getMonth();
-    int ownDay = ownDate.getDay();
-    int otherDay = otherDate.getDay();*/
-
-    // Counting the days passed.
-    /*daysPassed = 0;
-    while (!((ownYear == otherYear) && (ownMonth == otherMonth) &&
-            (ownDay == otherDay))) {
-      daysPassed++;
-      // TODO: store this in a separate function
-      // TODO: handle Schaltjahre
-      if ((otherMonth == 12) && (otherDay == 31)) {
-        // jump to Jan 1 of next year
-        otherYear++;
-        otherMonth = 1;
-        otherDay = 1;
-        continue;
-      }
-
-      if ((otherMonth == 2) && (otherDay == 28)) {
-        // special case: february month jump
-        otherMonth++;
-        otherDay = 1;
-        continue;
-      }
-
-      if (otherDay == 30 + 1 * (((otherMonth <= 7) && (otherMonth % 2 == 1)) ||
-                                ((otherMonth >= 8) && otherMonth % 2 == 0))) {
-        // normal month jump
-        otherMonth++;
-        otherDay = 1;
-        continue;
-      }
-    }*/
-    return DateYearOrDuration(
-        DayTimeDuration(DayTimeDuration::Type::Positive, daysPassed));
+    // Calculate time passed between the two Dates if at least one of them has a
+    // Time.
+    if (isDaysPassedPos) {
+      updatePassedTimes(ownDate, otherDate, daysPassed, hoursPassed,
+                        minutesPassed, secondsPassed);
+    } else {
+      updatePassedTimes(otherDate, ownDate, daysPassed, hoursPassed,
+                        minutesPassed, secondsPassed);
+    }
+    return DateYearOrDuration(DayTimeDuration(DayTimeDuration::Type::Positive,
+                                              daysPassed, hoursPassed,
+                                              minutesPassed, secondsPassed));
   }
 
   if (isDayTimeDuration() && rhs.isDayTimeDuration()) {

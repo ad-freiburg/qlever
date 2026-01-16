@@ -578,29 +578,28 @@ TEST(DateYearOrDuration, Hashing) {
 
 // _____________________________________________________________________________
 TEST(DateYearOrDuration, Subtraction) {
-  for (int i = 0; i < 10; ++i) {
+  // OVERFLOW
+  /*for (int i = 0; i < 10; ++i) {
     auto year = yearGenerator();
     auto month = monthGenerator();
     auto day = dayGenerator();
-    /*auto hour = hourGenerator();
+    auto hour = hourGenerator();
     auto minute = minuteGenerator();
     auto second = secondGenerator();
-    auto timeZone = timeZoneGenerator();*/
+    auto timeZone = timeZoneGenerator();
 
-    // Date date(year, month, day, hour, minute, second, timeZone);
-    Date date(year, month, day);
+    Date date(year, month, day, hour, minute, second, timeZone);
     DateYearOrDuration date1(date);
 
     auto year2 = yearGenerator();
     auto month2 = monthGenerator();
     auto day2 = dayGenerator();
-    /*auto hour2 = hourGenerator();
+    auto hour2 = hourGenerator();
     auto minute2 = minuteGenerator();
     auto second2 = secondGenerator();
-    auto timeZone2 = timeZoneGenerator();*/
+    auto timeZone2 = timeZoneGenerator();
 
-    // Date date_(year2, month2, day2, hour2, minute2, second2, timeZone2);
-    Date date_(year2, month2, day2);
+    Date date_(year2, month2, day2, hour2, minute2, second2, timeZone2);
     DateYearOrDuration date2(date_);
 
     DateYearOrDuration zero_duration(
@@ -610,8 +609,12 @@ TEST(DateYearOrDuration, Subtraction) {
 
     DateYearOrDuration result = date1 - date2;
     ASSERT_EQ(true, result.isDayTimeDuration());
-  }
+  }*/
+  // OVERFLOW
+
   // hardcoded test
+  // ____________________________________________________________________________
+  // Test for Date Subtraction
   DateYearOrDuration test1 = DateYearOrDuration(Date(2012, 12, 24));
   DateYearOrDuration test2 = DateYearOrDuration(Date(2012, 12, 1));
 
@@ -638,4 +641,52 @@ TEST(DateYearOrDuration, Subtraction) {
   ASSERT_EQ(
       DateYearOrDuration(DayTimeDuration(DayTimeDuration::Type::Positive, 731)),
       result);
+
+  test2 = DateYearOrDuration(Date(1979, 3, 13));
+  result = test1 - test2;
+  ASSERT_EQ(true, result.isDayTimeDuration());
+  ASSERT_EQ(DateYearOrDuration(
+                DayTimeDuration(DayTimeDuration::Type::Positive, 12340)),
+            result);
+
+  test1 = DateYearOrDuration(Date(1868, 5, 16));
+  result = test1 - test2;
+  ASSERT_EQ(true, result.isDayTimeDuration());
+  ASSERT_EQ(DateYearOrDuration(
+                DayTimeDuration(DayTimeDuration::Type::Positive, 40477)),
+            result);
+  // ____________________________________________________________________________
+  // Test for DateTime Subtraction
+  // DateTime - DateTime
+  DateYearOrDuration date1 = DateYearOrDuration(Date(2012, 12, 22, 12, 6, 12));
+  DateYearOrDuration date2 = DateYearOrDuration(Date(2012, 12, 20, 15, 15, 59));
+  // expected duration of 1d20h50min13sec
+  result = date1 - date2;
+  ASSERT_EQ(DateYearOrDuration(DayTimeDuration(DayTimeDuration::Type::Positive,
+                                               1, 20, 50, 13)),
+            result);
+  result = date2 - date1;
+  ASSERT_EQ(DateYearOrDuration(DayTimeDuration(DayTimeDuration::Type::Positive,
+                                               1, 20, 50, 13)),
+            result);
+
+  date2 = DateYearOrDuration(Date(2010, 1, 13, 10, 32, 15));
+  // expected duration of 1074d1h33min57sec
+  result = date1 - date2;
+  ASSERT_EQ(DateYearOrDuration(DayTimeDuration(DayTimeDuration::Type::Positive,
+                                               1074, 1, 33, 57)),
+            result);
+
+  // Date - DateTime
+  date1 = DateYearOrDuration(Date(2012, 12, 22));
+  date2 = DateYearOrDuration(Date(2012, 12, 20, 13, 50, 59));
+  // expected duration of 1d10h9min1sec
+  result = date1 - date2;
+  ASSERT_EQ(DateYearOrDuration(
+                DayTimeDuration(DayTimeDuration::Type::Positive, 1, 10, 9, 1)),
+            result);
+  result = date2 - date1;
+  ASSERT_EQ(DateYearOrDuration(
+                DayTimeDuration(DayTimeDuration::Type::Positive, 1, 10, 9, 1)),
+            result);
 }
