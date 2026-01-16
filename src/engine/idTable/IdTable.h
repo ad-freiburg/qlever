@@ -783,8 +783,9 @@ class IdTable {
     const size_t numInserted = indices.size();
     if (numInserted == 0) return;
 
+    const size_t srcSize = table.size();
     AD_EXPENSIVE_CHECK(ql::ranges::all_of(
-        indices, [&table](size_t idx) { return idx < table.size(); }));
+        indices, [srcSize](size_t idx) { return idx < srcSize; }));
     const size_t oldSize = size();
     resize(numRows() + numInserted);
     // For each column, copy the requested rows into the reserved tail.
