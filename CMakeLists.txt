@@ -443,23 +443,6 @@ else ()
             COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/CompilationInfo.cmake)
 endif ()
 
-# For the latest commit return `{most recent tag}-{how many commits back the tag is}-{hash of latest commit}`
-execute_process(
-    COMMAND git describe --tags --always
-    OUTPUT_VARIABLE PROJECT_VERSION
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-)
-
-if(PROJECT_VERSION STREQUAL "")
-    set(PROJECT_VERSION "0.0.0-unknown")
-endif()
-
-configure_file(
-    ${CMAKE_SOURCE_DIR}/src/ProjectVersion.h.in
-    ${CMAKE_CURRENT_BINARY_DIR}/ProjectVersion.h
-    @ONLY
-)
-
 set(LOG_LEVEL_FATAL FATAL)
 set(LOG_LEVEL_ERROR ERROR)
 set(LOG_LEVEL_WARN WARN)
@@ -467,7 +450,6 @@ set(LOG_LEVEL_INFO INFO)
 set(LOG_LEVEL_DEBUG DEBUG)
 set(LOG_LEVEL_TIMING TIMING)
 set(LOG_LEVEL_TRACE TRACE)
-
 
 if (CMAKE_BUILD_TYPE MATCHES DEBUG)
     set(LOGLEVEL DEBUG CACHE STRING "The loglevel")
@@ -530,11 +512,7 @@ qlever_target_link_libraries(VocabularyMergerMain index parser ${CMAKE_THREAD_LI
 add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
 qlever_target_link_libraries(PrintIndexVersionMain util)
 
-# For IndexBuilderMain and ServerMain to find generated ProjectVersion.h
-target_include_directories(IndexBuilderMain PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
-target_include_directories(ServerMain PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
-
-set_target_properties(IndexBuilderMain PROPERTIES OUTPUT_NAME "qlever-loader")
+set_target_properties(IndexBuilderMain PROPERTIES OUTPUT_NAME "qlever-index")
 set_target_properties(ServerMain PROPERTIES OUTPUT_NAME "qlever-server")
 
 install(TARGETS
@@ -574,7 +552,7 @@ else()
     set(CPACK_PACKAGE_VERSION "0.0.0-${HASH}")
 endif()
 
-set(CPACK_PACKAGE_CONTACT "bast@cs.uni-freiburg.de")
+set(CPACK_PACKAGE_CONTACT "mundhahj@tf.uni-freiburg.de")
 set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/ad-freiburg/qlever")
 
 set(CPACK_OUTPUT_FILE_PREFIX "${CMAKE_CURRENT_BINARY_DIR}/packages")
@@ -583,8 +561,5 @@ set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
 set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
 
 set(CPACK_VERBATIM_VARIABLES YES)
-
-set(CPACK_PACKAGE_DESCRIPTION "QLever Graph Database")
-set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "QLever Graph Database implementing the RDF and SPARQL standards.")
 
 include(CPack)

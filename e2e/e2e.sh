@@ -28,7 +28,7 @@ REBUILD_THE_INDEX="YES"
 INDEX_DIRECTORY="." #if not set, we will build the index ourselves.
 BINARY_DIRECTORY="build"
 BUILD_TEXT_INDEX_SEPARATELY="NO"
-INDEX_BUILDER_BINARY="qlever-loader"
+INDEX_BUILDER_BINARY="qlever-index"
 SERVER_BINARY="qlever-server"
 
 while getopts ":i:d:t" arg; do
