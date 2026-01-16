@@ -28,11 +28,14 @@ jobs:
         source ~/.bashrc
         curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
         \. "$HOME/.nvm/nvm.sh"
-        nvm install 25
+        nvm install 25.2.1
         source ~/.bashrc
         node -v
-        nvm use 25
+        echo $PATH
+        nvm use 25.2.1
         source ~/.bashrc
+        nvm list
+        nvm alias default 25.2.1
         nvm list
         echo $PATH
       shell: bash
@@ -72,6 +75,7 @@ jobs:
       run: >
         source ${{github.workspace}}/build/conanrun.sh;
         ${{github.workspace}}/e2e/e2e.sh -d build
+
 
 
 
