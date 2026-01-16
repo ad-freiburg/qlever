@@ -42,7 +42,7 @@ jobs:
         nvm list
         cd /usr/bin
         ls -lah
-        rm -rf nodejs
+        sudo rm -rf nodejs
         ls -lah
         cd -
         echo $PATH
@@ -83,6 +83,7 @@ jobs:
       run: >
         source ${{github.workspace}}/build/conanrun.sh;
         ${{github.workspace}}/e2e/e2e.sh -d build
+
 
 
 
