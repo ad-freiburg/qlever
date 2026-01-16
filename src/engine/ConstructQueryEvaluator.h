@@ -20,7 +20,7 @@ class ConstructQueryEvaluator {
   static std::optional<std::string> evaluate(
       const BlankNode& node, const ConstructQueryExportContext& context);
 
-  static std::optional<std::string> evaluateVar(
+  static std::optional<std::string> evaluate(
       const Variable& var, const ConstructQueryExportContext& context);
 
   static std::optional<std::string> evaluate(

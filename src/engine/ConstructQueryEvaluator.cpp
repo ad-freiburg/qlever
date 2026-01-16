@@ -14,7 +14,7 @@ std::optional<std::string> ConstructQueryEvaluator::evaluate(
   return std::nullopt;
 }
 
-std::optional<std::string> ConstructQueryEvaluator::evaluateVar(
+std::optional<std::string> ConstructQueryEvaluator::evaluate(
     const Variable& var, const ConstructQueryExportContext& context) {
   size_t resultTableRow = context._resultTableRowIdx;
   const auto& variableColumns = context._variableColumns;
@@ -63,7 +63,7 @@ std::optional<std::string> ConstructQueryEvaluator::evaluate(
     PositionInTriple posInTriple) {
   if (std::holds_alternative<Variable>(term)) {
     const Variable& var = std::get<Variable>(term);
-    return ConstructQueryEvaluator::evaluateVar(var, context);
+    return ConstructQueryEvaluator::evaluate(var, context);
   }
 
   if (std::holds_alternative<BlankNode>(term)) {
