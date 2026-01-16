@@ -14,6 +14,7 @@
 
 #include "engine/Engine.h"
 #include "engine/ExecuteUpdate.h"
+#include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
@@ -35,6 +36,11 @@ CPP_concept QueryOrUpdate =
                           ad_utility::url_parser::sparqlOperation::Query,
                           ad_utility::url_parser::sparqlOperation::Update>;
 
+// Forward declaration for testing.
+namespace serverTestHelpers {
+struct SimulateHttpRequest;
+}
+
 //! The HTTP Server used.
 class Server {
   using json = nlohmann::json;
@@ -42,6 +48,7 @@ class Server {
   FRIEND_TEST(ServerTest, createMessageSender);
   FRIEND_TEST(ServerTest, adjustParsedQueryLimitOffset);
   FRIEND_TEST(ServerTest, configurePinnedResultWithName);
+  friend serverTestHelpers::SimulateHttpRequest;
 
  public:
   explicit Server(unsigned short port, size_t numThreads,
@@ -83,6 +90,7 @@ class Server {
   bool noAccessCheck_;
   QueryResultCache cache_;
   NamedResultCache namedResultCache_;
+  MaterializedViewsManager materializedViewsManager_;
   ad_utility::AllocatorWithLimit<Id> allocator_;
   SortPerformanceEstimator sortPerformanceEstimator_;
   Index index_;
@@ -142,6 +150,12 @@ class Server {
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> process(RequestT& request, ResponseT&& send);
 
+  // Helper function for unit tests, calls `process` with the given request and
+  // returns the response that would have been sent.
+  CPP_template(typename RequestT, typename ResponseT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>)
+      Awaitable<ResponseT> onlyForTestingProcess(RequestT& request);
+
   // Wraps the error handling around the processing of operations. Calls the
   // visitor on the given operation.
   CPP_template(typename VisitorT, typename RequestT, typename ResponseT)(
@@ -169,10 +183,10 @@ class Server {
           ad_utility::SharedCancellationHandle cancellationHandle,
           QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
           TimeLimit timeLimit, std::optional<PlannedQuery>& plannedQuery);
-  // For an executed update create a json with some stats on the update (timing,
+  // For an executed update create a JSON with some stats on the update (timing,
   // number of changed triples, etc.).
   static nlohmann::ordered_json createResponseMetadataForUpdate(
-      const Index& index, SharedLocatedTriplesSnapshot deltaTriples,
+      const Index& index, const LocatedTriplesState& locatedTriples,
       const PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
       const UpdateMetadata& updateMetadata,
       const ad_utility::timer::TimeTracer& tracer);
@@ -322,6 +336,17 @@ class Server {
           ad_utility::MediaType mediaType, const PlannedQuery& plannedQuery,
           const QueryExecutionTree& qet, const ad_utility::Timer& requestTimer,
           SharedCancellationHandle cancellationHandle) const;
+
+  // Given a name and query, compute the query result and write a new
+  // materialized view of this result to disk. This assumes that the access
+  // token has already been checked.
+  void writeMaterializedView(
+      const std::string& name,
+      const ad_utility::url_parser::sparqlOperation::Query& query,
+      const ad_utility::Timer& requestTimer,
+      ad_utility::SharedCancellationHandle cancellationHandle,
+      TimeLimit timeLimit);
+  FRIEND_TEST(MaterializedViewsTest, serverIntegration);
 };
 
 #endif  // QLEVER_SRC_ENGINE_SERVER_H

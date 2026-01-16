@@ -10,7 +10,6 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Install the packages needed for building the binaries (this is a separate
 # stage to keep the final image small).
 FROM base AS builder
-ARG TARGETPLATFORM
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y wget
 RUN wget https://apt.kitware.com/kitware-archive.sh && chmod +x kitware-archive.sh && ./kitware-archive.sh
@@ -32,9 +31,11 @@ COPY CompilationInfo.cmake /qlever/
 
 # Build and compile. By default, also compile and run all tests. In order not
 # to, build the image with `--build-arg RUN_TESTS=false`.
+# `-DCOMPILER_SUPPORTS_MARCH_NATIVE=FALSE` prevents fsst from compiling with
+# `-march=native`.
 ARG RUN_TESTS=true
 WORKDIR /qlever/build/
-RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_PARALLEL=true -D_NO_TIMING_TESTS=ON -GNinja ..
+RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_PARALLEL=true -D_NO_TIMING_TESTS=ON -DCOMPILER_SUPPORTS_MARCH_NATIVE=FALSE -GNinja ..
 RUN if [ "$RUN_TESTS" = "true" ]; then \
       cmake --build . && ctest --rerun-failed --output-on-failure; \
     else \
@@ -76,8 +77,7 @@ ENV QLEVER_IS_RUNNING_IN_CONTAINER=1
 # Copy the binaries and the entrypoint script.
 COPY --from=builder /qlever/build/*Main /qlever/
 COPY --from=builder /qlever/e2e/* /qlever/e2e/
-COPY docker-entrypoint.sh /qlever/
-RUN sudo chmod +x /qlever/docker-entrypoint.sh
+COPY --chmod=755 docker-entrypoint.sh /qlever/
 
 # Our entrypoint script does some clever things; see the comments in there.
 ENTRYPOINT ["/qlever/docker-entrypoint.sh"]

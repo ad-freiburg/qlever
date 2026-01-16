@@ -48,7 +48,9 @@ RuntimeParameters::RuntimeParameters() {
   add(enableDistributiveUnion_);
   add(treatDefaultGraphAsNamedGraph_);
   add(sparqlResultsJsonWithTime_);
+  add(materializedViewWriterMemory_);
   add(defaultQueryTimeout_);
+  add(sortInMemoryThreshold_);
 
   defaultQueryTimeout_.setParameterConstraint(
       [](std::chrono::seconds value, std::string_view parameterName) {

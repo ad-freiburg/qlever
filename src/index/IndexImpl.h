@@ -35,11 +35,9 @@
 #include "parser/RdfParser.h"
 #include "parser/TripleComponent.h"
 #include "util/BufferedVector.h"
-#include "util/CancellationHandle.h"
 #include "util/File.h"
 #include "util/Forward.h"
 #include "util/MemorySize/MemorySize.h"
-#include "util/MmapVector.h"
 #include "util/json.h"
 
 template <typename Comparator, size_t I = NumColumnsIndexBuilding>
@@ -305,12 +303,12 @@ class IndexImpl {
 
   // ___________________________________________________________________________
   size_t getCardinality(Id id, Permutation::Enum permutation,
-                        const LocatedTriplesSnapshot&) const;
+                        const LocatedTriplesState&) const;
 
   // ___________________________________________________________________________
-  size_t getCardinality(
-      const TripleComponent& comp, Permutation::Enum permutation,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+  size_t getCardinality(const TripleComponent& comp,
+                        Permutation::Enum permutation,
+                        const LocatedTriplesState& locatedTriplesState) const;
 
   // ___________________________________________________________________________
   RdfsVocabulary::AccessReturnType indexToString(VocabIndex id) const;
@@ -485,31 +483,16 @@ class IndexImpl {
   // ___________________________________________________________________________
   std::vector<float> getMultiplicities(
       const TripleComponent& key, const Permutation& permutation,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+      const LocatedTriplesState& locatedTriplesState) const;
 
   // ___________________________________________________________________________
   std::vector<float> getMultiplicities(const Permutation& permutation) const;
 
   // _____________________________________________________________________________
-  IdTable scan(const ScanSpecificationAsTripleComponent& scanSpecification,
-               const Permutation::Enum& permutation,
-               Permutation::ColumnIndicesRef additionalColumns,
-               const ad_utility::SharedCancellationHandle& cancellationHandle,
-               const LocatedTriplesSnapshot& locatedTriplesSnapshot,
-               const LimitOffsetClause& limitOffset = {}) const;
-
-  // _____________________________________________________________________________
-  IdTable scan(const ScanSpecification& scanSpecification, Permutation::Enum p,
-               Permutation::ColumnIndicesRef additionalColumns,
-               const ad_utility::SharedCancellationHandle& cancellationHandle,
-               const LocatedTriplesSnapshot& locatedTriplesSnapshot,
-               const LimitOffsetClause& limitOffset = {}) const;
-
-  // _____________________________________________________________________________
   size_t getResultSizeOfScan(
       const ScanSpecification& scanSpecification,
       const Permutation::Enum& permutation,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+      const LocatedTriplesState& locatedTriplesState) const;
 
  protected:
   // Private member functions
@@ -686,6 +669,9 @@ class IndexImpl {
    */
   void deleteTemporaryFile(const std::string& path);
 
+  // Return the filename where the patterns are stored.
+  std::string getPatternFilename() const;
+
  public:
   // Count the number of "QLever-internal" triples (predicate ql:langtag or
   // predicate starts with @) and all other triples (that were actually part of
@@ -709,6 +695,7 @@ class IndexImpl {
       std::optional<PatternCreator::TripleSorter> createSPOAndSOP(
           size_t numColumns, BlocksOfTriples sortedTriples,
           NextSorter&&... nextSorter);
+
   // Create the OSP and OPS permutations. Additionally, count the number of
   // distinct objects and write it to the metadata.
   CPP_template(typename... NextSorter)(requires(
@@ -727,6 +714,7 @@ class IndexImpl {
                                             BlocksOfTriples sortedTriples,
                                             bool doWriteConfiguration,
                                             NextSorter&&... nextSorter);
+
   // Call `createPSOAndPOSImpl` with the given arguments and with
   // `doWriteConfiguration` set to `true` (see above).
   CPP_template(typename... NextSorter)(requires(

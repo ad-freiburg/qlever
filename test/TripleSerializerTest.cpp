@@ -12,7 +12,6 @@
 namespace {
 auto I = ad_utility::testing::IntId;
 auto V = ad_utility::testing::VocabId;
-auto BN = ad_utility::testing::BlankNodeId;
 TEST(TripleSerializer, simpleExample) {
   LocalVocab localVocab;
   std::vector<std::vector<Id>> ids;
@@ -56,27 +55,44 @@ TEST(TripleSerializer, localVocabIsRemapped) {
   }
 }
 
-// _____________________________________________________________________________
-TEST(TripleSerializer, blankNodesAreRemapped) {
+TEST(TripleSerializer, blankNodesRemapper) {
   ad_utility::testing::getQec();
+  ad_utility::BlankNodeManager bm;
   LocalVocab localVocab;
   std::vector<std::vector<Id>> ids;
 
-  ids.emplace_back(std::vector{BN(1337), BN(1338), BN(1337)});
+  auto bn = [&]() {
+    return Id::makeFromBlankNodeIndex(localVocab.getBlankNodeIndex(&bm));
+  };
+
+  ids.emplace_back(std::vector{bn(), bn(), bn()});
   std::string filename = "tripleSerializerTestBlankNodesAreRemapped.dat";
   ad_utility::serializeIds(filename, localVocab, ids);
 
-  ad_utility::BlankNodeManager bm;
-  auto [localVocabOut, idsOut] = ad_utility::deserializeIds(filename, &bm);
-  ASSERT_THAT(
-      idsOut,
-      ::testing::ElementsAre(::testing::Each(AD_PROPERTY(
-          ValueId, getDatatype, ::testing::Eq(Datatype::BlankNodeIndex)))));
-  EXPECT_EQ(ids.at(0).size(), idsOut.at(0).size());
-  EXPECT_NE(ids, idsOut);
-  EXPECT_EQ(idsOut.at(0).at(0), idsOut.at(0).at(2));
-  EXPECT_NE(idsOut.at(0).at(0), idsOut.at(0).at(1));
-  EXPECT_NE(idsOut.at(0).at(1), idsOut.at(0).at(2));
+  ad_utility::BlankNodeManager bm2;
+  auto [localVocabOut, idsOut] = ad_utility::deserializeIds(filename, &bm2);
+  // Blank nodes are now preserved (not remapped).
+  EXPECT_EQ(ids, idsOut);
+
+  // The deserialized blank node blocks are equal to the original blank node
+  // blocks (same block indices + same uuid), but with an empty block (for new
+  // blank node indices) prepended, such that we can safely add new indices,
+  // without interfering with other local vocabs that share the same blocks.
+  auto blankNodeBlocksOriginal = localVocab.getOwnedLocalBlankNodeBlocks();
+  auto blankNodeBlocksDeserialized =
+      localVocabOut.getOwnedLocalBlankNodeBlocks();
+
+  ASSERT_EQ(blankNodeBlocksDeserialized.size(),
+            blankNodeBlocksOriginal.size() + 1);
+  EXPECT_TRUE(blankNodeBlocksDeserialized.at(0).blockIndices_.empty());
+  for (size_t i = 0; i < blankNodeBlocksOriginal.size(); ++i) {
+    EXPECT_EQ(blankNodeBlocksOriginal[i].uuid_,
+              blankNodeBlocksDeserialized[i + 1].uuid_)
+        << i;
+    EXPECT_EQ(blankNodeBlocksOriginal[i].blockIndices_,
+              blankNodeBlocksDeserialized[i + 1].blockIndices_)
+        << i;
+  }
 }
 
 // _____________________________________________________________________________
@@ -86,7 +102,7 @@ TEST(TripleSerializer, headerFormatIsCorrect) {
 
   EXPECT_THAT(serializer.data(),
               ::testing::ElementsAre('Q', 'L', 'E', 'V', 'E', 'R', '.', 'U',
-                                     'P', 'D', 'A', 'T', 'E', 0, 0));
+                                     'P', 'D', 'A', 'T', 'E', 1, 0));
 }
 
 // _____________________________________________________________________________
@@ -94,7 +110,7 @@ TEST(TripleSerializer, errorOnWrongHeaderFormat) {
   // Wrong magic bytes
   {
     ad_utility::serialization::ByteBufferReadSerializer serializer{
-        {'q', 'L', 'E', 'V', 'E', 'R', '.', 'U', 'P', 'D', 'A', 'T', 'E', 0,
+        {'q', 'L', 'E', 'V', 'E', 'R', '.', 'U', 'P', 'D', 'A', 'T', 'E', 1,
          0}};
     EXPECT_THROW(ad_utility::detail::readHeader(serializer),
                  ad_utility::Exception);
@@ -113,10 +129,10 @@ TEST(TripleSerializer, errorOnWrongHeaderFormat) {
     EXPECT_THROW(ad_utility::detail::readHeader(serializer),
                  ad_utility::Exception);
   }
-  // Non zero version
+  // Wrong version
   {
     ad_utility::serialization::ByteBufferReadSerializer serializer{
-        {'Q', 'L', 'E', 'V', 'E', 'R', '.', 'U', 'P', 'D', 'A', 'T', 'E', 1,
+        {'Q', 'L', 'E', 'V', 'E', 'R', '.', 'U', 'P', 'D', 'A', 'T', 'E', 0,
          0}};
     EXPECT_THROW(ad_utility::detail::readHeader(serializer),
                  ad_utility::Exception);
@@ -131,16 +147,53 @@ TEST(TripleSerializer, errorOnWrongHeaderFormat) {
 }
 
 // _____________________________________________________________________________
-TEST(TripleSerializer, onlySingleWordSetSupportedForLocalVocab) {
-  ad_utility::serialization::ByteBufferWriteSerializer serializer;
+TEST(TripleSerializer, multipleWordSetsInASerializedLocalVocab) {
+  ad_utility::testing::getQec();
   LocalVocab localVocab;
-  localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
-      ad_utility::triple_component::Literal::literalWithoutQuotes("abc")});
-  // Move entry to otherWordSet
-  localVocab = localVocab.clone();
+  auto LV = [&localVocab](std::string value) {
+    return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
+        ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
+            std::move(value))));
+  };
+  std::vector<std::vector<Id>> ids;
 
-  EXPECT_THROW(ad_utility::detail::serializeLocalVocab(serializer, localVocab),
-               ad_utility::Exception);
+  ids.emplace_back(std::vector{LV("abc"), LV("def"), LV("ghi")});
+  // Move entries to otherWordSet.
+  localVocab = localVocab.clone();
+  ids.emplace_back(std::vector{LV("xyz"), LV("123"), LV("456")});
+
+  ad_utility::serialization::ByteBufferWriteSerializer writer;
+  ad_utility::detail::serializeLocalVocab(writer, localVocab);
+
+  ad_utility::serialization::ByteBufferReadSerializer reader{
+      std::move(writer).data()};
+
+  ad_utility::BlankNodeManager bm;
+  auto [localVocabOut, mapping] =
+      ad_utility::detail::deserializeLocalVocab(reader, &bm);
+  auto fromMapping = [&]() {
+    return ::ranges::to<std::vector>(
+        mapping | ql::views::values |
+        ql::views::transform([](Id id) { return *id.getLocalVocabIndex(); }));
+  };
+  auto fromMappingOrigin = [&]() {
+    return ::ranges::to<std::vector>(
+        mapping | ql::views::keys | ql::views::transform([](Id::T id) {
+          return *Id::fromBits(id).getLocalVocabIndex();
+        }));
+  };
+  EXPECT_EQ(localVocabOut.size(), localVocab.size());
+  auto allWords = localVocab.getAllWordsForTesting();
+  EXPECT_THAT(allWords, ::testing::UnorderedElementsAreArray(
+                            localVocabOut.getAllWordsForTesting()));
+  EXPECT_THAT(allWords, ::testing::UnorderedElementsAreArray(fromMapping()));
+  EXPECT_THAT(allWords,
+              ::testing::UnorderedElementsAreArray(fromMappingOrigin()));
+  // Clear the original local vocab, then ensure that the target side of the
+  // mapping is still valid, which means that it's being kept alive by the
+  // new local vocab.
+  localVocab = LocalVocab{};
+  EXPECT_THAT(allWords, ::testing::UnorderedElementsAreArray(fromMapping()));
 }
 
 // _____________________________________________________________________________

@@ -29,6 +29,14 @@ constexpr auto encodedIriManager = []() -> const EncodedIriManager* {
   static EncodedIriManager encodedIriManager_;
   return &encodedIriManager_;
 };
+
+constexpr auto iri = [](std::string_view s) -> TripleComponent {
+  return TripleComponent{TripleComponent::Iri::fromIriref(s)};
+};
+
+constexpr auto lit = [](std::string s) -> TripleComponent {
+  return TripleComponent{TripleComponent::Literal::fromStringRepresentation(s)};
+};
 }  // namespace
 
 // Fixture that sets up a test index.
@@ -104,7 +112,7 @@ TEST_F(DeltaTriplesTest, clear) {
   // Insert then clear.
   deltaTriples.insertTriples(
       cancellationHandle, makeIdTriples(vocab, localVocab, {"<a> <UPP> <A>"}));
-  deltaTriples.insertInternalTriples(
+  deltaTriples.insertInternalTriplesForTesting(
       cancellationHandle,
       makeIdTriples(vocab, localVocab,
                     {"<internal-a> <internal-UPP> <internal-A>"}));
@@ -118,7 +126,7 @@ TEST_F(DeltaTriplesTest, clear) {
   // Delete, insert and then clear.
   deltaTriples.deleteTriples(
       cancellationHandle, makeIdTriples(vocab, localVocab, {"<A> <low> <a>"}));
-  deltaTriples.deleteInternalTriples(
+  deltaTriples.deleteInternalTriplesForTesting(
       cancellationHandle,
       makeIdTriples(vocab, localVocab,
                     {"<internal-A> <internal-low> <internal-a>"}));
@@ -126,7 +134,7 @@ TEST_F(DeltaTriplesTest, clear) {
 
   deltaTriples.insertTriples(
       cancellationHandle, makeIdTriples(vocab, localVocab, {"<a> <UPP> <A>"}));
-  deltaTriples.insertInternalTriples(
+  deltaTriples.insertInternalTriplesForTesting(
       cancellationHandle,
       makeIdTriples(vocab, localVocab,
                     {"<internal-a> <internal-UPP> <internal-A>"}));
@@ -313,7 +321,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
                       {}, {}));
 
   // Insert new internal triple.
-  deltaTriples.insertInternalTriples(
+  deltaTriples.insertInternalTriplesForTesting(
       cancellationHandle,
       makeIdTriples(vocab, localVocab,
                     {"<internal-A> <internal-B> <internal-F>"}));
@@ -326,7 +334,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
                       {"<internal-A> <internal-B> <internal-F>"}, {}));
 
   // Remove "existing" internal triple.
-  deltaTriples.deleteInternalTriples(
+  deltaTriples.deleteInternalTriplesForTesting(
       cancellationHandle,
       makeIdTriples(vocab, localVocab,
                     {"<internal-C> <internal-D> <internal-E>"}));
@@ -340,7 +348,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
                       {"<internal-C> <internal-D> <internal-E>"}));
 
   // Remove previously inserted internal triple.
-  deltaTriples.deleteInternalTriples(
+  deltaTriples.deleteInternalTriplesForTesting(
       cancellationHandle,
       makeIdTriples(vocab, localVocab,
                     {"<internal-A> <internal-B> <internal-F>"}));
@@ -355,7 +363,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
                        "<internal-C> <internal-D> <internal-E>"}));
 
   // Remove previously removes internal triple again.
-  deltaTriples.deleteInternalTriples(
+  deltaTriples.deleteInternalTriplesForTesting(
       cancellationHandle,
       makeIdTriples(vocab, localVocab,
                     {"<internal-C> <internal-D> <internal-E>"}));
@@ -370,7 +378,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
                        "<internal-C> <internal-D> <internal-E>"}));
 
   // Inserting previously deleted internal triple.
-  deltaTriples.insertInternalTriples(
+  deltaTriples.insertInternalTriplesForTesting(
       cancellationHandle,
       makeIdTriples(vocab, localVocab,
                     {"<internal-C> <internal-D> <internal-E>"}));
@@ -382,6 +390,98 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
                        "<C> <prev> <B>", "<B> <prev> <A>"},
                       {"<internal-C> <internal-D> <internal-E>"},
                       {"<internal-A> <internal-B> <internal-F>"}));
+
+  deltaTriples.clear();
+  // Test internal language filter triples are inserted correctly.
+  auto toId = [this, &vocab, &localVocab](TripleComponent& component) {
+    return std::move(component).toValueId(
+        vocab, localVocab, testQec->getIndex().encodedIriManager());
+  };
+
+  Id graphId = qlever::specialIds().at(DEFAULT_GRAPH_IRI);
+  auto keysMatch =
+      [&toId,
+       graphId](std::vector<std::array<TripleComponent, 3>> tripleComponents) {
+        std::vector<::testing::internal::KeyMatcher<
+            ::testing::internal::EqMatcher<IdTriple<0>>>>
+            keys;
+        for (auto& [subject, predicate, object] : tripleComponents) {
+          keys.push_back(::testing::Key(::testing::Eq(IdTriple<0>{
+              {toId(subject), toId(predicate), toId(object), graphId}})));
+        }
+        return ::testing::UnorderedElementsAreArray(keys);
+      };
+  auto TriplesAre =
+      [&keysMatch](std::vector<std::array<TripleComponent, 3>> inserted,
+                   std::vector<std::array<TripleComponent, 3>> deleted,
+                   std::vector<std::array<TripleComponent, 3>> internalInserted,
+                   std::vector<std::array<TripleComponent, 3>> internalDeleted)
+      -> testing::Matcher<const DeltaTriples&> {
+    using ::testing::AllOf;
+    using TriplesNormal = DeltaTriples::TriplesToHandles<false>;
+    using TriplesInternal = DeltaTriples::TriplesToHandles<true>;
+    return AllOf(
+        AD_FIELD(DeltaTriples, triplesToHandlesNormal_,
+                 AllOf(AD_FIELD(TriplesNormal, triplesInserted_,
+                                keysMatch(std::move(inserted))),
+                       AD_FIELD(TriplesNormal, triplesDeleted_,
+                                keysMatch(std::move(deleted))))),
+        AD_FIELD(DeltaTriples, triplesToHandlesInternal_,
+                 AllOf(AD_FIELD(TriplesInternal, triplesInserted_,
+                                keysMatch(std::move(internalInserted))),
+                       AD_FIELD(TriplesInternal, triplesDeleted_,
+                                keysMatch(std::move(internalDeleted))))));
+  };
+
+  deltaTriples.insertTriples(
+      cancellationHandle,
+      makeIdTriples(
+          vocab, localVocab,
+          {"<a> <b> 1", "<a> <b> \"abc\"", "<a> <b> \"abc\"@de",
+           "<a> <b> \"abc\"@en",
+           "<a> <b> \"abc\"^^<http://example.com/datatype>", "<a> <b> <abc>",
+           "<a> <other> \"def\"@de", "<a> <other> \"def\"@es"}));
+  auto a = iri("<a>");
+  auto b = iri("<b>");
+  EXPECT_THAT(deltaTriples,
+              TriplesAre({{a, b, TripleComponent{1}},
+                          {a, b, lit("\"abc\"")},
+                          {a, b, lit("\"abc\"@de")},
+                          {a, b, lit("\"abc\"@en")},
+                          {a, b, lit("\"abc\"^^<http://example.com/datatype>")},
+                          {a, b, iri("<abc>")},
+                          {a, iri("<other>"), lit("\"def\"@de")},
+                          {a, iri("<other>"), lit("\"def\"@es")}},
+                         {},
+                         {{a, iri("@de@<b>"), lit("\"abc\"@de")},
+                          {a, iri("@en@<b>"), lit("\"abc\"@en")},
+                          {a, iri("@de@<other>"), lit("\"def\"@de")},
+                          {a, iri("@es@<other>"), lit("\"def\"@es")}},
+                         {}));
+
+  deltaTriples.deleteTriples(
+      cancellationHandle,
+      makeIdTriples(
+          vocab, localVocab,
+          {"<a> <b> 1", "<a> <b> \"abc\"", "<a> <b> \"abc\"@de",
+           "<a> <b> \"abc\"@en",
+           "<a> <b> \"abc\"^^<http://example.com/datatype>", "<a> <b> <abc>",
+           "<a> <other> \"def\"@de", "<a> <other> \"def\"@es"}));
+  EXPECT_THAT(deltaTriples,
+              TriplesAre({},
+                         {{a, b, TripleComponent{1}},
+                          {a, b, lit("\"abc\"")},
+                          {a, b, lit("\"abc\"@de")},
+                          {a, b, lit("\"abc\"@en")},
+                          {a, b, lit("\"abc\"^^<http://example.com/datatype>")},
+                          {a, b, iri("<abc>")},
+                          {a, iri("<other>"), lit("\"def\"@de")},
+                          {a, iri("<other>"), lit("\"def\"@es")}},
+                         {},
+                         {{a, iri("@de@<b>"), lit("\"abc\"@de")},
+                          {a, iri("@en@<b>"), lit("\"abc\"@en")},
+                          {a, iri("@de@<other>"), lit("\"def\"@de")},
+                          {a, iri("@es@<other>"), lit("\"def\"@es")}}));
 }
 
 // Test the rewriting of local vocab entries and blank nodes.
@@ -476,8 +576,8 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
   // middle of these updates is as expected.
   auto insertAndDelete = [&](size_t threadIdx) {
     LocalVocab localVocab;
-    SharedLocatedTriplesSnapshot beforeUpdate =
-        deltaTriplesManager.getCurrentSnapshot();
+    LocatedTriplesSharedState beforeUpdate =
+        deltaTriplesManager.getCurrentLocatedTriplesSharedState();
     for (size_t i = 0; i < numIterations; ++i) {
       // The first triple in both vectors is the same for all threads, the
       // others are exclusive to this thread via the `threadIdx`.
@@ -495,7 +595,8 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
       });
       // We should have successfully completed an update, so the snapshot
       // pointer should have changed.
-      EXPECT_NE(beforeUpdate, deltaTriplesManager.getCurrentSnapshot());
+      EXPECT_NE(beforeUpdate,
+                deltaTriplesManager.getCurrentLocatedTriplesSharedState());
       // Delete the `triplesToDelete`.
       deltaTriplesManager.modify<void>([&](DeltaTriples& deltaTriples) {
         deltaTriples.deleteTriples(cancellationHandle, triplesToDelete);
@@ -510,7 +611,8 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
           // Boolean argument specifies whether the triple was inserted (`true`)
           // or deleted (`false`).
           const auto& locatedSPO =
-              beforeUpdate->getLocatedTriplesForPermutation(Permutation::SPO);
+              beforeUpdate->getLocatedTriplesForPermutation<false>(
+                  Permutation::SPO);
           EXPECT_FALSE(locatedSPO.isLocatedTriple(triplesToInsert.at(1), true));
           EXPECT_FALSE(
               locatedSPO.isLocatedTriple(triplesToInsert.at(1), false));
@@ -525,9 +627,9 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
           // Check for several of the thread-exclusive triples that they are
           // properly contained in the current snapshot.
           //
-          auto p = deltaTriplesManager.getCurrentSnapshot();
+          auto p = deltaTriplesManager.getCurrentLocatedTriplesSharedState();
           const auto& locatedSPO =
-              p->getLocatedTriplesForPermutation(Permutation::SPO);
+              p->getLocatedTriplesForPermutation<false>(Permutation::SPO);
           EXPECT_TRUE(locatedSPO.isLocatedTriple(triplesToInsert.at(1), true));
           // This triple is exclusive to the thread and is inserted and then
           // immediately deleted again. The `DeltaTriples` thus only store it
@@ -548,11 +650,11 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
   threads.clear();
 
   // Check that without updates, the snapshot pointer does not change.
-  auto p1 = deltaTriplesManager.getCurrentSnapshot();
-  auto p2 = deltaTriplesManager.getCurrentSnapshot();
+  auto p1 = deltaTriplesManager.getCurrentLocatedTriplesSharedState();
+  auto p2 = deltaTriplesManager.getCurrentLocatedTriplesSharedState();
   EXPECT_EQ(p1, p2);
 
-  // Each of the threads above inserts on thread-exclusive triple, deletes one
+  // Each of the threads above inserts one thread-exclusive triple, deletes one
   // thread-exclusive triple and inserts one thread-exclusive triple that is
   // deleted right after (This triple is stored as deleted in the `DeltaTriples`
   // because it might be contained in the original input). Additionally, there
@@ -561,6 +663,56 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
   auto deltaImpl = deltaTriplesManager.deltaTriples_.rlock();
   EXPECT_THAT(*deltaImpl, NumTriples(numThreads + 1, 2 * numThreads + 1,
                                      3 * numThreads + 2));
+}
+
+// _____________________________________________________________________________
+TEST_F(DeltaTriplesTest, LocatedTriplesSharedState) {
+  auto Snapshot = [](size_t index, size_t numTriples)
+      -> testing::Matcher<const LocatedTriplesSharedState> {
+    auto m = AD_PROPERTY(LocatedTriplesPerBlock, numTriples, numTriples);
+    return testing::Pointee(testing::AllOf(
+        AD_FIELD(LocatedTriplesState, index_, testing::Eq(index)),
+        AD_FIELD(LocatedTriplesState, locatedTriplesPerBlock_,
+                 testing::ElementsAre(m, m, m, m, m, m))));
+  };
+  DeltaTriples deltaTriples(testQec->getIndex());
+  auto& vocab = testQec->getIndex().getVocab();
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+
+  // Do one transparent and two copied snapshots.
+  LocatedTriplesSharedState transparentSnapshotBeforeUpdate =
+      deltaTriples.getLocatedTriplesSharedStateReference();
+  LocatedTriplesSharedState copiedSnapshotBeforeUpdate =
+      deltaTriples.getLocatedTriplesSharedStateCopy();
+  LocatedTriplesSharedState copiedSnapshotBeforeUpdate2 =
+      deltaTriples.getLocatedTriplesSharedStateCopy();
+
+  // All snapshots have the same index and triples.
+  EXPECT_THAT(transparentSnapshotBeforeUpdate, Snapshot(0, 0));
+  EXPECT_THAT(copiedSnapshotBeforeUpdate, Snapshot(0, 0));
+  EXPECT_THAT(copiedSnapshotBeforeUpdate2, Snapshot(0, 0));
+
+  // Modifying the delta triples increases the index_.
+  LocalVocab localVocab;
+  auto triplesToInsert = makeIdTriples(vocab, localVocab, {"<A> <B> <C>"});
+  deltaTriples.insertTriples(cancellationHandle, std::move(triplesToInsert));
+
+  // Another transparent and copied snapshot.
+  LocatedTriplesSharedState transparentSnapshotAfterUpdate =
+      deltaTriples.getLocatedTriplesSharedStateReference();
+  LocatedTriplesSharedState copiedSnapshotAfterUpdate =
+      deltaTriples.getLocatedTriplesSharedStateCopy();
+
+  // The two new snapshots are identical and up-to-date.
+  EXPECT_THAT(transparentSnapshotAfterUpdate, Snapshot(1, 1));
+  EXPECT_THAT(copiedSnapshotAfterUpdate, Snapshot(1, 1));
+  // The transparent snapshot mirrors the underlying state of the
+  // `DeltaTriples`, so the transparent snapshots from before the update now has
+  // the state after the update.
+  EXPECT_THAT(transparentSnapshotBeforeUpdate, Snapshot(1, 1));
+  // The copied snapshot before the update is unchanged.
+  EXPECT_THAT(copiedSnapshotBeforeUpdate, Snapshot(0, 0));
 }
 
 // _____________________________________________________________________________
@@ -587,7 +739,7 @@ TEST_F(DeltaTriplesTest, storeAndRestoreFromEmptySet) {
   EXPECT_NO_THROW(deltaTriples.writeToDisk());
 
   // Check if file contents match
-  std::array<char, 47> expectedContent{
+  std::array<char, 55> expectedContent{
       // Magic bytes
       'Q',
       'L',
@@ -603,6 +755,15 @@ TEST_F(DeltaTriplesTest, storeAndRestoreFromEmptySet) {
       'T',
       'E',
       // Version
+      1,
+      0,
+      // Size of `BlankNodeBlocks`.
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
       0,
       0,
       // LocalVocab size
@@ -643,7 +804,7 @@ TEST_F(DeltaTriplesTest, storeAndRestoreFromEmptySet) {
       0,
   };
 
-  std::array<char, 47> actualContent{};
+  std::array<char, expectedContent.size()> actualContent{};
 
   std::ifstream tmpFileStream{tmpFile, std::ios::binary};
   tmpFileStream.read(actualContent.data(), actualContent.size());
