@@ -21,7 +21,7 @@ class Literal {
   // and descriptors.
   //  For example `"Hello World"@en`  or `"With"Quote"^^<someDatatype>` (note
   //  that the quote in the middle is unescaped because this is the normalized
-  //  form that QLever stores.)
+  //  form that QLever stores.
   std::string content_;
   // The position after the closing `"`, so either the size of the string, or
   // the position of the `@` or `^^` for literals with language tags or
@@ -43,31 +43,16 @@ class Literal {
     return asNormalizedStringViewUnsafe(content_);
   }
 
-  CPP_template_2(typename T)(
-      requires ad_utility::Streamable<T>) static std::string
-      toString(const T& t) {
-    std::ostringstream stream;
-    stream << t;
-    return std::move(stream).str();
-  }
-
  public:
-  static_assert(!ad_utility::Streamable<Literal>,
-                "If Literal satisfies the Streamable concept, copy and move "
-                "constructors are hidden, leading to unexpected behaviour");
-
   CPP_template(typename H,
                typename L)(requires ql::concepts::same_as<L, Literal>) friend H
       AbslHashValue(H h, const L& literal) {
     return H::combine(std::move(h), literal.content_);
   }
-
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Literal, content_, beginOfSuffix_)
 
   const std::string& toStringRepresentation() const&;
   std::string toStringRepresentation() &&;
-
-  std::string toSparql() const { return toStringRepresentation(); };
 
   static Literal fromStringRepresentation(std::string internal);
 

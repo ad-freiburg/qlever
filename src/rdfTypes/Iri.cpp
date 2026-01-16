@@ -122,7 +122,4 @@ const std::string& Iri::toStringRepresentation() const& { return iri_; }
 // ____________________________________________________________________________
 std::string Iri::toStringRepresentation() && { return std::move(iri_); }
 
-// ____________________________________________________________________________
-std::string Iri::toSparql() const { return Iri::toStringRepresentation(); }
-
 }  // namespace ad_utility::triple_component

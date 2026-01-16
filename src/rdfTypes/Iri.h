@@ -20,6 +20,9 @@ class Iri {
   // Store the string value of the IRI including the angle brackets.
   std::string iri_;
 
+  // Create a new `Iri` object
+  explicit Iri(std::string iri);
+
   // Create a new `Iri` using a prefix
   Iri(const Iri& prefix, NormalizedStringView suffix);
 
@@ -72,12 +75,6 @@ class Iri {
   // Return the string value of the iri object without any leading or trailing
   // angled brackets.
   NormalizedStringView getContent() const;
-
-  std::string toSparql() const;
-
-  // Create a new `Iri` object
-  // (this is now public, since SparqlQleverVisitor uses this constructor)
-  explicit Iri(std::string iri);
 };
 
 }  // namespace ad_utility::triple_component

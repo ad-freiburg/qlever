@@ -30,6 +30,7 @@
 
 namespace {
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+using Literal = ad_utility::triple_component::Literal;
 
 // Return true iff the `result` is nonempty.
 bool getResultForAsk(const std::shared_ptr<const Result>& result) {
@@ -532,8 +533,7 @@ ExportQueryExecutionTrees::idToLiteralForEncodedValue(
     return std::nullopt;
   }
 
-  return ad_utility::triple_component::Literal::literalWithoutQuotes(
-      optionalStringAndType->first);
+  return Literal::literalWithoutQuotes(optionalStringAndType->first);
 }
 
 // _____________________________________________________________________________

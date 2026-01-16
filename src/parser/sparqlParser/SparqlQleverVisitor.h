@@ -524,7 +524,7 @@ class SparqlQleverVisitor {
 
   ExpressionPtr visit(Parser::IriOrFunctionContext* ctx);
 
-  Literal visit(Parser::RdfLiteralContext* ctx);
+  std::string visit(Parser::RdfLiteralContext* ctx);
 
   IntOrDouble visit(Parser::NumericLiteralContext* ctx);
 

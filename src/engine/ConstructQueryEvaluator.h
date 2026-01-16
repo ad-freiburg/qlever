@@ -7,12 +7,10 @@
 #include "index/IndexImpl.h"
 #include "parser/data/BlankNode.h"
 #include "parser/data/GraphTerm.h"
+#include "parser/data/Iri.h"
+#include "parser/data/Literal.h"
 
 class ConstructQueryEvaluator {
-  using Iri = ad_utility::triple_component::Iri;
-  using Literal = ad_utility::triple_component::Literal;
-  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
-
  public:
   static std::optional<std::string> evaluate(const Iri& iri);
 

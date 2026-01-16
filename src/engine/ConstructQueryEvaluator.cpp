@@ -3,13 +3,13 @@
 #include "ExportQueryExecutionTrees.h"
 
 std::optional<std::string> ConstructQueryEvaluator::evaluate(const Iri& iri) {
-  return iri.toStringRepresentation();
+  return iri.iri();
 }
 
 std::optional<std::string> ConstructQueryEvaluator::evaluate(
     const Literal& literal, PositionInTriple role) {
   if (role == PositionInTriple::OBJECT) {
-    return literal.toStringRepresentation();
+    return literal.literal();
   }
   return std::nullopt;
 }
@@ -71,15 +71,13 @@ std::optional<std::string> ConstructQueryEvaluator::evaluate(
     return ConstructQueryEvaluator::evaluate(node, context);
   }
 
-  if (std::holds_alternative<ad_utility::triple_component::Iri>(term)) {
-    ad_utility::triple_component::Iri iri =
-        std::get<ad_utility::triple_component::Iri>(term);
+  if (std::holds_alternative<Iri>(term)) {
+    Iri iri = std::get<Iri>(term);
     return ConstructQueryEvaluator::evaluate(iri);
   }
 
-  if (std::holds_alternative<ad_utility::triple_component::Literal>(term)) {
-    ad_utility::triple_component::Literal literal =
-        std::get<ad_utility::triple_component::Literal>(term);
+  if (std::holds_alternative<Literal>(term)) {
+    Literal literal = std::get<Literal>(term);
     return ConstructQueryEvaluator::evaluate(literal, posInTriple);
   }
 
