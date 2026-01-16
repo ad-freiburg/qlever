@@ -289,51 +289,52 @@ ExportQueryExecutionTrees::createConstructTriplesForRow(
 // _____________________________________________________________________________
 auto ExportQueryExecutionTrees::constructQueryResultToTriples(
     const QueryExecutionTree& qet,
-    const ad_utility::sparql_types::Triples& constructTriples,
+    const ad_utility::sparql_types::Triples& constructClauseTriples,
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
     uint64_t& resultSize, CancellationHandle cancellationHandle) {
   // The `resultSizeMultiplicator`(last argument of `getRowIndices`) is
   // explained by the following: For each result from the WHERE clause, we
-  // produce up to `constructTriples.size()` triples. We do not account for
-  // triples that are filtered out because one of the components is UNDEF (it
-  // would require materializing the whole result)
+  // produce up to `constructClauseTriples.size()` triples. We do not account
+  // for triples that are filtered out because one of the components is UNDEF
+  // (it would require materializing the whole result)
   auto rowIndices = getRowIndices(limitAndOffset, *result, resultSize,
-                                  constructTriples.size());
+                                  constructClauseTriples.size());
 
   const auto& variableColumns = qet.getVariableColumns();
   const auto& index = qet.getQec()->getIndex();
 
   return ad_utility::InputRangeTypeErased(
       ad_utility::OwningView{std::move(rowIndices)} |
-      ql::views::transform(
-          [&constructTriples, result = std::move(result), &variableColumns,
-           &index, cancellationHandle = std::move(cancellationHandle),
-           rowOffset = size_t{0}](const auto& tableWithView) mutable {
-            auto& idTable = tableWithView.tableWithVocab_.idTable();
-            auto currentRowOffset = rowOffset;
-            rowOffset += idTable.size();
+      ql::views::transform([&constructClauseTriples, result = std::move(result),
+                            &variableColumns, &index,
+                            cancellationHandle = std::move(cancellationHandle),
+                            rowOffset =
+                                size_t{0}](const auto& tableWithView) mutable {
+        auto& idTable = tableWithView.tableWithVocab_.idTable();
+        auto currentRowOffset = rowOffset;
+        rowOffset += idTable.size();
 
-            return ql::ranges::transform_view(
-                       tableWithView.view_,
+        return ql::ranges::transform_view(
+                   tableWithView.view_,
 
-                       [&, currentRowOffset](uint64_t i) {
-                         auto& localVocab =
-                             tableWithView.tableWithVocab_.localVocab();
+                   [&, currentRowOffset](uint64_t i) {
+                     auto& localVocab =
+                         tableWithView.tableWithVocab_.localVocab();
 
-                         ConstructQueryExportContext context{
-                             ._resultTableRowIdx = i,
-                             .idTable_ = idTable,
-                             .localVocab_ = localVocab,
-                             ._variableColumns = variableColumns,
-                             ._qecIndex = index,
-                             ._rowOffset = currentRowOffset};
+                     ConstructQueryExportContext context{
+                         ._resultTableRowIdx = i,
+                         .idTable_ = idTable,
+                         .localVocab_ = localVocab,
+                         ._variableColumns = variableColumns,
+                         ._qecIndex = index,
+                         ._rowOffset = currentRowOffset};
 
-                         return createConstructTriplesForRow(
-                             constructTriples, cancellationHandle,
-                             std::move(context));
-                       }) |
-                   ql::views::join;
-          }) |
+                     return createConstructTriplesForRow(constructClauseTriples,
+                                                         cancellationHandle,
+                                                         std::move(context));
+                   }) |
+               ql::views::join;
+      }) |
       ql::views::join |
       ql::views::filter([](const auto& triple) { return !triple.isEmpty(); }));
 }
