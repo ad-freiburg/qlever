@@ -33,6 +33,7 @@ jobs:
         node -v
         nvm use 25
         source ~/.bashrc
+        nvm list
         conan profile detect
         conan install . -pr:b default -pr:h conanprofiles/emscripten.profile -s build_type=Release -b missing -of build
         cd build
@@ -66,6 +67,7 @@ jobs:
       run: >
         source ${{github.workspace}}/build/conanrun.sh;
         ${{github.workspace}}/e2e/e2e.sh -d build
+
 
 
 
