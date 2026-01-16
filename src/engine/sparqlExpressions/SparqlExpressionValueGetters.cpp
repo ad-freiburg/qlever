@@ -47,6 +47,35 @@ NumericValue NumericValueGetter::operator()(
 }
 
 // _____________________________________________________________________________
+NumericOrDate NumericOrDateGetter::operator()(
+    ValueId id, const sparqlExpression::EvaluationContext*) const {
+  switch (id.getDatatype()) {
+    case Datatype::Double:
+      return id.getDouble();
+    case Datatype::Int:
+      return id.getInt();
+    case Datatype::Bool:
+      // TODO<joka921> Check in the specification what the correct behavior is
+      // here. They probably should be UNDEF as soon as we have conversion
+      // functions.
+      return static_cast<int64_t>(id.getBool());
+    case Datatype::Undefined:
+    case Datatype::EncodedVal:
+    case Datatype::VocabIndex:
+    case Datatype::LocalVocabIndex:
+    case Datatype::TextRecordIndex:
+    case Datatype::WordVocabIndex:
+      return NotNumeric{};
+    case Datatype::Date:
+      return id.getDate();
+    case Datatype::GeoPoint:
+    case Datatype::BlankNodeIndex:
+      return NotNumeric{};
+  }
+  AD_FAIL();
+}
+
+// _____________________________________________________________________________
 auto EffectiveBooleanValueGetter::operator()(
     ValueId id, const EvaluationContext* context) const -> Result {
   using enum Result;
