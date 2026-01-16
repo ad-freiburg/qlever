@@ -232,11 +232,15 @@ class ExportQueryExecutionTrees {
 
   // Helper function that generates the construct clause result triples for a
   // single WHERE-result-table-row.
-  std::
-      vector<QueryExecutionTree::StringTriple> static createConstructTriplesForRow(
-          const ad_utility::sparql_types::Triples& constructClauseTriples,
-          CancellationHandle cancellationHandle,
-          ConstructQueryExportContext context);
+  static auto generateTriplesForRow(
+      const ad_utility::sparql_types::Triples& constructTriples,
+      CancellationHandle cancellationHandle,
+      ConstructQueryExportContext context);
+
+  static QueryExecutionTree::StringTriple evaluateConstructTriple(
+      const std::array<GraphTerm, 3>& triple,
+      CancellationHandle cancellationHandle,
+      const ConstructQueryExportContext& context);
 
   // Helper function that generates the result of a CONSTRUCT query as a
   // CSV or TSV stream.
