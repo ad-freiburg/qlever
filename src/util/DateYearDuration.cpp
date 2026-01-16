@@ -403,10 +403,8 @@ void updatePassedTimes(const Date& date1, const Date& date2, int& daysPassed,
 
 DateYearOrDuration DateYearOrDuration::operator-(
     const DateYearOrDuration& rhs) const {
-  // TODO: also support hours, minutes and seconds
   if (isDate() && rhs.isDate()) {
-    // TODO: handle time as well
-    // Date - Date = Duration | getting time between the two Dates
+    // Date - Date => Duration | getting time between the two Dates
     const Date& ownDate = getDateUnchecked();
     const Date& otherDate = rhs.getDateUnchecked();
 
@@ -445,18 +443,19 @@ DateYearOrDuration DateYearOrDuration::operator-(
   }
 
   if (isDayTimeDuration() && rhs.isDayTimeDuration()) {
-    // Duration - Duration = Duration | getting new duration that is
+    // Duration - Duration => Duration | getting new duration that is
     // rhs.duration-time smaller return;
+    // TODO: implement
   }
 
   if (isDate() && rhs.isDayTimeDuration()) {
-    // Date - Duration = Date | getting new Date from rhs.duration-time earlier
+    // Date - Duration => Date | getting new Date from rhs.duration-time earlier
     // return;
+    // TODO: implement
   }
 
   if (isDayTimeDuration() && rhs.isDate()) {
     // Duration - Date |  not implemented
-    // return;
   }
 
   // no viable subtraction
