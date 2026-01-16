@@ -496,10 +496,6 @@ qlever_target_link_libraries(VocabularyMergerMain index parser ${CMAKE_THREAD_LI
 add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
 qlever_target_link_libraries(PrintIndexVersionMain util)
 
-
-# set_target_properties(IndexBuilderMain PROPERTIES OUTPUT_NAME "qlever-index-builder")
-# set_target_properties(ServerMain PROPERTIES OUTPUT_NAME "qlever-server")
-
 install(TARGETS
     ServerMain
     IndexBuilderMain
@@ -537,7 +533,7 @@ else()
     set(CPACK_PACKAGE_VERSION "0.0.0-${HASH}")
 endif()
 
-set(CPACK_PACKAGE_CONTACT "bast@cs.uni-freiburg.de")
+set(CPACK_PACKAGE_CONTACT "mundhahj@tf.uni-freiburg.de")
 set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/ad-freiburg/qlever")
 
 set(CPACK_OUTPUT_FILE_PREFIX "${CMAKE_CURRENT_BINARY_DIR}/packages")
@@ -546,8 +542,5 @@ set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
 set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
 
 set(CPACK_VERBATIM_VARIABLES YES)
-
-set(CPACK_PACKAGE_DESCRIPTION "QLever Graph Database")
-set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "QLever Graph Database implementing the RDF and SPARQL standards.")
 
 include(CPack)
