@@ -40,6 +40,11 @@ jobs:
         nvm list
         nvm alias default 25.2.1
         nvm list
+        cd /usr/bin
+        ls -lah
+        rm -rf nodejs
+        ls -lah
+        cd -
         echo $PATH
       shell: bash
     - name: Get build and host profiles for conan. Install and run conan. Also create a build directory. Configure CMake and build.
@@ -78,6 +83,7 @@ jobs:
       run: >
         source ${{github.workspace}}/build/conanrun.sh;
         ${{github.workspace}}/e2e/e2e.sh -d build
+
 
 
 
