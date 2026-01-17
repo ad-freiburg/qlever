@@ -1,6 +1,6 @@
 [settings]
 arch=wasm64
-build_type=Release
+build_type=Debug
 compiler=emcc
 compiler.cppstd=20
 compiler.libcxx=libc++
