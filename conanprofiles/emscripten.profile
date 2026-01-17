@@ -45,3 +45,4 @@ tools.cmake.cmaketoolchain:generator=Ninja
 tools.build:exelinkflags=['-sALLOW_MEMORY_GROWTH=1', '-sMAXIMUM_MEMORY=4GB', '-sINITIAL_MEMORY=64MB', '-sMEMORY64=1', '-sUSE_ICU=1', '-sUSE_BOOST_HEADERS=1', '-sUSE_ZLIB=1', '-sUSE_BZIP2=1', '-fexceptions', '-sMIN_NODE_VERSION=250000', '-DTEST_EXECUTOR=/home/runner/.nvm/versions/node/v25.2.1/bin/node']
 tools.build:sharedlinkflags=['-sALLOW_MEMORY_GROWTH=1', '-sMAXIMUM_MEMORY=4GB', '-sINITIAL_MEMORY=64MB', '-sMEMORY64=1', '-sUSE_ICU=1', '-sUSE_BOOST_HEADERS=1', '-sUSE_ZLIB=1', '-sUSE_BZIP2=1', '-fexceptions', '-sMIN_NODE_VERSION=250000', '-DTEST_EXECUTOR=/home/runner/.nvm/versions/node/v25.2.1/bin/node']
 boost/*:tools.build:cxxflags=['-sMEMORY64=1']
+gtest/*:tools.build:cxxflags=['-DTEST_EXECUTOR=/home/runner/.nvm/versions/node/v25.2.1/bin/node']
