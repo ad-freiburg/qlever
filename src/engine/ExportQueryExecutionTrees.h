@@ -237,6 +237,18 @@ class ExportQueryExecutionTrees {
       CancellationHandle cancellationHandle,
       ConstructQueryExportContext context);
 
+  static auto generateTriplesForRowView(
+      const ad_utility::sparql_types::Triples& constructClauseTriples,
+      const IdTable& idTable, const LocalVocab& localVocab,
+      const VariableToColumnMap& variableColumns, const Index& index,
+      CancellationHandle cancellationHandle, size_t rowOffsetBase);
+
+  static auto generateTriplesForTableView(
+      const ad_utility::sparql_types::Triples& constructClauseTriples,
+      std::shared_ptr<const Result> result,
+      const VariableToColumnMap& variableColumns, const Index& index,
+      CancellationHandle cancellationHandle);
+
   static QueryExecutionTree::StringTriple evaluateConstructTriple(
       const std::array<GraphTerm, 3>& triple,
       CancellationHandle cancellationHandle,
