@@ -282,50 +282,42 @@ ExportQueryExecutionTrees::evaluateConstructTriple(
                                           std::move(object.value()));
 }
 
-// _____________________________________________________________________________
-auto ExportQueryExecutionTrees::generateTriplesForRow(
-    const ad_utility::sparql_types::Triples& constructTriples,
-    CancellationHandle cancellationHandle,
-    ConstructQueryExportContext context) {
-  // for each triple pattern, evaluate it
-  return constructTriples |
-         ql::views::transform([cancellationHandle,
-                               context =
-                                   std::move(context)](const auto& triple) {
-           return evaluateConstructTriple(triple, cancellationHandle, context);
-         }) |
-         ql::views::filter(
-             [](const auto& triple) { return !triple.isEmpty(); });
-}
-
 // Helper function to generate triples for a single row
 auto ExportQueryExecutionTrees::generateTriplesForRowView(
     const ad_utility::sparql_types::Triples& constructClauseTriples,
     const IdTable& idTable, const LocalVocab& localVocab,
     const VariableToColumnMap& variableColumns, const Index& index,
-    CancellationHandle cancellationHandle, size_t rowOffsetBase) {
+    CancellationHandle cancellationHandle, size_t rowOffset) {
   return [constructClauseTriples, &idTable, &localVocab, &variableColumns,
-          &index, cancellationHandle, rowOffsetBase](uint64_t rowIdx) {
-    ConstructQueryExportContext context{
-        rowIdx, idTable, localVocab, variableColumns, index, rowOffsetBase};
+          &index, cancellationHandle, rowOffset](uint64_t rowIdx) {
+    ConstructQueryExportContext context{rowIdx,          idTable, localVocab,
+                                        variableColumns, index,   rowOffset};
 
-    return generateTriplesForRow(constructClauseTriples, cancellationHandle,
-                                 std::move(context));
+    return constructClauseTriples |
+           ql::views::transform(
+               [cancellationHandle,
+                context = std::move(context)](const auto& triple) {
+                 return evaluateConstructTriple(triple, cancellationHandle,
+                                                context);
+               }) |
+           ql::views::filter(
+               [](const auto& triple) { return !triple.isEmpty(); });
   };
 }
 
-// Helper function to generate triples for a table
+// Helper function to generate triples construct-query-result-triples given
+// `constructClauseTriples`, which are the triple-patterns of the
+// CONSTRUCT-clause of the asked sparql-query. `result` contains the result of
+// processing the WHERE-clause of the construct-sparql-query.
 auto ExportQueryExecutionTrees::generateTriplesForTableView(
     const ad_utility::sparql_types::Triples& constructClauseTriples,
     std::shared_ptr<const Result> result,
     const VariableToColumnMap& variableColumns, const Index& index,
     CancellationHandle cancellationHandle) {
-  size_t rowOffset = 0;
-
   // Return a lambda that takes TableWithView and returns a range
   return [constructClauseTriples, result = std::move(result), &variableColumns,
           &index, cancellationHandle = std::move(cancellationHandle),
-          rowOffset](const auto& tableWithView) mutable {
+          rowOffset = size_t{0}](const auto& tableWithView) mutable {
     const auto& idTable = tableWithView.tableWithVocab_.idTable();
     const auto& localVocab = tableWithView.tableWithVocab_.localVocab();
 
@@ -357,12 +349,10 @@ auto ExportQueryExecutionTrees::constructQueryResultToTriples(
 
   const auto& index = qet.getQec()->getIndex();
 
-  // Create the table generator - directly use the helper function
   auto tableGenerator = generateTriplesForTableView(
       constructClauseTriples, std::move(result), variableColumns, index,
       std::move(cancellationHandle));
 
-  // Use the pipeline style
   return ad_utility::InputRangeTypeErased(
       ad_utility::OwningView{std::move(rowIndices)} |
       ql::views::transform(tableGenerator) | ql::views::join);
