@@ -15,14 +15,8 @@ endif()
 message(STATUS "GIT_HASH is ${GIT_HASH}")
 
 # Get the project version from git describe.
-# Format: {most recent tag}-{commits since tag}-g{short hash} or just the short hash if no tags.
-execute_process(COMMAND git describe --tags --always
-    OUTPUT_VARIABLE PROJECT_VERSION
-    OUTPUT_STRIP_TRAILING_WHITESPACE)
-if ((NOT DEFINED PROJECT_VERSION) OR (PROJECT_VERSION STREQUAL ""))
-    set(PROJECT_VERSION "0.0.0-unknown")
-endif()
-set(PROJECT_VERSION "\"${PROJECT_VERSION}\"")
+include(${CMAKE_CURRENT_LIST_DIR}/GitVersion.cmake)
+set(PROJECT_VERSION "\"${GIT_VERSION}\"")
 message(STATUS "PROJECT_VERSION is ${PROJECT_VERSION}")
 
 # Write the .cpp file.
