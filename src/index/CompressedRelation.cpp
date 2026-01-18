@@ -849,17 +849,25 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
   const auto& columnIndices = scanConfig.scanColumns_;
 
   // If `manuallyDeleteGraphColumn` is `true`, then we don't output the graph
-  // column. Additionally, it means that the graph column has already been
-  // dropped by the call to `readAndDecompressBlock` (see above), so we have to
-  // shift the column origins above the graph column down by one.
-  for (const auto& inputColIdx :
+  // column. We need to find the position of each column in
+  // `config.scanColumns_` to correctly index into `block`, accounting for graph
+  // column deletion.
+  auto graphPosInConfig =
+      ql::ranges::find(config.scanColumns_, ADDITIONAL_COLUMN_GRAPH_ID);
+  for (const auto& colIdx :
        columnIndices | ql::views::filter([&](const auto& idx) {
          return !manuallyDeleteGraphColumn || idx != ADDITIONAL_COLUMN_GRAPH_ID;
-       }) | ql::views::transform([&](const auto& idx) {
-         return manuallyDeleteGraphColumn && idx > ADDITIONAL_COLUMN_GRAPH_ID
-                    ? idx - 1
-                    : idx;
        })) {
+    auto it = ql::ranges::find(config.scanColumns_, colIdx);
+    AD_CORRECTNESS_CHECK(it != config.scanColumns_.end());
+    ColumnIndex inputColIdx = it - config.scanColumns_.begin();
+    // If the graph column was deleted and this column's position is after
+    // the graph column's position, adjust down by 1.
+    if (manuallyDeleteGraphColumn &&
+        graphPosInConfig != config.scanColumns_.end() &&
+        it > graphPosInConfig) {
+      inputColIdx--;
+    }
     const auto& inputCol = block.getColumn(inputColIdx);
     ql::ranges::copy(inputCol.begin() + beginIdx, inputCol.begin() + endIdx,
                      result.getColumn(i).begin());
