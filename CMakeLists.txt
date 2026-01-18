@@ -508,7 +508,6 @@ install(TARGETS
 
 # Get version from git describe for CPack
 include(GitVersion.cmake)
-set(PROJECT_VERSION ${GIT_VERSION})
 
 set(CPACK_PACKAGE_NAME "qlever")
 

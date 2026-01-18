@@ -16,7 +16,7 @@ message(STATUS "GIT_HASH is ${GIT_HASH}")
 
 # Get the project version from git describe.
 include(${CMAKE_CURRENT_LIST_DIR}/GitVersion.cmake)
-set(PROJECT_VERSION "\"${GIT_VERSION}\"")
+set(PROJECT_VERSION "\"${PROJECT_VERSION}\"")
 message(STATUS "PROJECT_VERSION is ${PROJECT_VERSION}")
 
 # Write the .cpp file.
