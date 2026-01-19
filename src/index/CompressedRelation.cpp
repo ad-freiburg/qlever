@@ -818,6 +818,9 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
   // Set `beginIdx` and `endIdx` s.t. that they only represent the range in
   // `block` where the column with the `columnIdx` matches the `relevantId`.
 
+  // Those are the column indices from the scanned result (which might be
+  // different from the original indices, because additional columns might be
+  // missing) that will become part of the final result.
   std::vector<ColumnIndex> indicesToCopy;
   indicesToCopy.reserve(scanConfig.scanColumns_.size());
   // Helper lambda that narrows down the range of the block so that all values
@@ -834,9 +837,9 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
         column.begin() + beginIdx, column.begin() + endIdx, relevantId.value());
     beginIdx = matchingRange.begin() - column.begin();
     endIdx = matchingRange.end() - column.begin();
-    // The function `getFirstAndLastTriple` is the only function where the
-    // passed `scanConfig` isn't created from the passed `scanSpec`. Handle this
-    // case so that we don't drop the fixed columns in that case.
+    // The function `getFirstAndLastTripleIgnoringGraph` is the only function
+    // where the passed `scanConfig` isn't created from the passed `scanSpec`.
+    // Handle this case so that we don't drop the fixed columns in that case.
     if (ad_utility::contains(scanConfig.scanColumns_, columnIdx)) {
       indicesToCopy.push_back(columnIdx);
     }
@@ -850,7 +853,7 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
   filterColumn(scanSpec.col2Id(), 2);
 
   // Copy all additional columns as-is.
-  for (ColumnIndex i = 0; i < allAdditionalColumns.size(); i++) {
+  for (ColumnIndex i : ad_utility::integerRange(allAdditionalColumns.size())) {
     indicesToCopy.push_back(3 + i);
   }
 
