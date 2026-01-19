@@ -703,8 +703,8 @@ TEST(IndexImpl, recomputeStatistics) {
     // Simulate scenario where not all permutations are loaded.
     if (!loadAllPermutations) {
       // Overwrite with unloaded permutation.
-      indexImpl.SPO() = Permutation{Permutation::SPO,
-                                    ad_utility::makeUnlimitedAllocator<Id>()};
+      indexImpl.SPOForTesting() = Permutation{
+          Permutation::SPO, ad_utility::makeUnlimitedAllocator<Id>()};
       // Zero out original values.
       indexImpl.configurationJson_["num-subjects"] = NNAI(0, 0);
       indexImpl.configurationJson_["num-objects"] = NNAI(0, 0);
