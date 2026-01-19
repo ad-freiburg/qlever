@@ -65,10 +65,12 @@ struct SubtractImpl {
     } else if constexpr (std::is_same_v<T1, DateYearOrDuration> &&
                          std::is_same_v<T2, DateYearOrDuration>) {
       // Using - operator implementation in DateYearOrDuration.
+      AD_LOG_INFO << "Date" << std::endl;
       return Id::makeFromDate(lhs - rhs);
     }
     // For all other operations returning Undefined
     // It is not allowed to use subtractionn between Date and NumericValue
+    AD_LOG_INFO << "Undefined" << std::endl;
     return Id::makeUndefined();
   }
 };

@@ -459,8 +459,6 @@ DateYearOrDuration DateYearOrDuration::operator-(
   }
 
   // no viable subtraction
-  else {
-    throw std::invalid_argument("No Subtraction possible!");
-  }
+  throw std::invalid_argument("No Subtraction possible!");
 }
 #endif
