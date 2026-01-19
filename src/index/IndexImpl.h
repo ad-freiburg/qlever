@@ -225,6 +225,9 @@ class IndexImpl {
   const auto& OPS() const { return getPermutationImpl(ops_, "OPS"); }
   const auto& OSP() const { return getPermutationImpl(osp_, "OSP"); }
 
+  // Function only exposed for testing.
+  auto& SPOForTesting() { return const_cast<Permutation&>(SPO()); }
+
   static const IndexImpl& staticGlobalSingletonIndex() {
     AD_CORRECTNESS_CHECK(globalSingletonIndex_ != nullptr);
     return *globalSingletonIndex_;
