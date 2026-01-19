@@ -1,0 +1,21 @@
+#ifndef QLEVER_SRC_ENGINE_TABLEWITHRANGE_H
+#define QLEVER_SRC_ENGINE_TABLEWITHRANGE_H
+
+#include "engine/LocalVocab.h"
+#include "engine/idTable/IdTable.h"
+
+struct TableConstRefWithVocab {
+  std::reference_wrapper<const IdTable> idTable_;
+  std::reference_wrapper<const LocalVocab> localVocab_;
+
+  const IdTable& idTable() const { return idTable_.get(); }
+
+  const LocalVocab& localVocab() const { return localVocab_.get(); }
+};
+
+struct TableWithRange {
+  TableConstRefWithVocab tableWithVocab_;
+  ql::ranges::iota_view<uint64_t, uint64_t> view_;
+};
+
+#endif  // QLEVER_SRC_ENGINE_TABLEWITHRANGE_H

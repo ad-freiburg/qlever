@@ -17,7 +17,6 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
-#include "engine/ConstructQueryEvaluator.h"
 #include "engine/ConstructTripleGenerator.h"
 #include "global/RuntimeParameters.h"
 #include "index/EncodedIriManager.h"
@@ -98,8 +97,7 @@ STREAMABLE_GENERATOR_TYPE computeResultForAsk(
 }  // namespace
 
 // __________________________________________________________________________
-ad_utility::InputRangeTypeErased<
-    ExportQueryExecutionTrees::TableConstRefWithVocab>
+ad_utility::InputRangeTypeErased<TableConstRefWithVocab>
 ExportQueryExecutionTrees::getIdTables(const Result& result) {
   using namespace ad_utility;
   if (result.isFullyMaterialized()) {
@@ -115,7 +113,7 @@ ExportQueryExecutionTrees::getIdTables(const Result& result) {
 }
 
 // _____________________________________________________________________________
-ad_utility::InputRangeTypeErased<ExportQueryExecutionTrees::TableWithRange>
+ad_utility::InputRangeTypeErased<TableWithRange>
 ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
                                          const Result& result,
                                          uint64_t& resultSize,
@@ -259,29 +257,34 @@ ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
         })};
 }
 
-// _____________________________________________________________________________
 auto ExportQueryExecutionTrees::constructQueryResultToTriples(
     const QueryExecutionTree& qet,
-    const ad_utility::sparql_types::Triples& constructClauseTriples,
+    const ad_utility::sparql_types::Triples& constructTriples,
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
     uint64_t& resultSize, CancellationHandle cancellationHandle) {
-  // Get the indices of the rows that are part of the WHERE-clause result table.
+  // 1. Calculate row indices (logic remains the same).
   auto rowIndices = getRowIndices(limitAndOffset, *result, resultSize,
-                                  constructClauseTriples.size());
+                                  constructTriples.size());
 
-  // Get the variable-to-column mapping and index from the query execution tree.
-  const auto& variableColumns = qet.getVariableColumns();
-  const auto& index = qet.getQec()->getIndex();
+  // 2. Initialize the unified generator.
+  ConstructTripleGenerator generator(
+      constructTriples, std::move(result), qet.getVariableColumns(),
+      qet.getQec()->getIndex(), std::move(cancellationHandle));
 
-  // Create a producer that processes each table and yields triples.
-  // The producer is moved into the transform view to ensure it outlives
-  // the lazy evaluation of the range.
-  TableTripleProducer tableProducer(constructClauseTriples, std::move(result),
-                                    variableColumns, index,
-                                    std::move(cancellationHandle));
-  return ad_utility::InputRangeTypeErased(
-      ad_utility::OwningView{std::move(rowIndices)} |
-      ql::views::transform(std::move(tableProducer)) | ql::views::join);
+  // 3. Transform the range of tables into a flattened range of triples.
+  // We move the generator into the lambda. Because the generator is stateful
+  // (it tracks rowOffset_), the lambda must be marked 'mutable'.
+  auto tableTriples = ql::views::transform(
+      std::move(rowIndices),
+      [generator = std::move(generator)](TableWithRange table) mutable {
+        // The generator now handles the:
+        // Table -> Rows -> Triple Patterns -> StringTriples
+        return generator.generateForTable(table);
+      });
+
+  // 4. Flatten and return.
+  return ad_utility::InputRangeTypeErased<QueryExecutionTree::StringTriple>(
+      ql::views::join(std::move(tableTriples)));
 }
 
 // _____________________________________________________________________________

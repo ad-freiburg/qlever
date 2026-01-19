@@ -5,20 +5,24 @@
 
 #include "engine/ConstructQueryEvaluator.h"
 
-TripleEvaluator::StringTriple TripleEvaluator::operator()(
-    const std::array<GraphTerm, 3>& triple) const {
-  cancellationHandle_->throwIfCancelled();
-
+// _____________________________________________________________________________
+ConstructTripleGenerator::StringTriple ConstructTripleGenerator::evaluateTriple(
+    const std::array<GraphTerm, 3>& triple,
+    const ConstructQueryExportContext& context) const {
+  // We specify the position to the evaluator so it knows how to handle
+  // special cases (like blank node generation or IRI escaping).
   using enum PositionInTriple;
 
-  auto subject =
-      ConstructQueryEvaluator::evaluate(triple[0], context_, SUBJECT);
+  auto subject = ConstructQueryEvaluator::evaluate(triple[0], context, SUBJECT);
   auto predicate =
-      ConstructQueryEvaluator::evaluate(triple[1], context_, PREDICATE);
-  auto object = ConstructQueryEvaluator::evaluate(triple[2], context_, OBJECT);
+      ConstructQueryEvaluator::evaluate(triple[1], context, PREDICATE);
+  auto object = ConstructQueryEvaluator::evaluate(triple[2], context, OBJECT);
 
+  // In SPARQL CONSTRUCT, if any part of the triple (S, P, or O) evaluates
+  // to UNDEF, the entire triple is omitted from the result.
   if (!subject.has_value() || !predicate.has_value() || !object.has_value()) {
-    return StringTriple();  // Empty triple indicates UNDEF
+    return StringTriple();  // Returns an empty triple which is filtered out
+                            // later
   }
 
   return StringTriple(std::move(subject.value()), std::move(predicate.value()),
