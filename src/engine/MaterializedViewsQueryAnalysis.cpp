@@ -182,6 +182,7 @@ bool QueryPatternCache::analyzeView(ViewPtr view) {
   AD_LOG_INFO << triples.size() << std::endl;
   bool patternFound = false;
 
+  // TODO what about chain by property path
   if (triples.size() == 2) {
     // Could be chain
     const auto& a = triples.at(0);
