@@ -73,7 +73,6 @@ class RowTripleProducer {
 class TableTripleProducer {
  public:
   using CancellationHandle = ad_utility::SharedCancellationHandle;
-  using StringTriple = QueryExecutionTree::StringTriple;
   using Triples = ad_utility::sparql_types::Triples;
 
   TableTripleProducer(Triples constructTriples,
@@ -98,5 +97,31 @@ class TableTripleProducer {
   CancellationHandle cancellationHandle_;
   size_t rowOffset_ = 0;
 };
+
+inline auto RowTripleProducer::operator()(uint64_t rowIdx) const {
+  ConstructQueryExportContext context{rowIdx,           idTable_, localVocab_,
+                                      variableColumns_, index_,   rowOffset_};
+
+  TripleEvaluator evaluator(cancellationHandle_, std::move(context));
+
+  return constructTriples_ | ql::views::transform(std::move(evaluator)) |
+         ql::views::filter([](const StringTriple& t) { return !t.isEmpty(); });
+}
+
+template <typename TableWithRangeT>
+auto TableTripleProducer::operator()(const TableWithRangeT& tableWithRange) {
+  const auto& idTable = tableWithRange.tableWithVocab_.idTable();
+  const auto& localVocab = tableWithRange.tableWithVocab_.localVocab();
+
+  size_t currentRowOffset = rowOffset_;
+  rowOffset_ += idTable.size();
+
+  RowTripleProducer rowProducer(constructTriples_, idTable, localVocab,
+                                variableColumns_, index_, cancellationHandle_,
+                                currentRowOffset);
+
+  return tableWithRange.view_ | ql::views::transform(std::move(rowProducer)) |
+         ql::views::join;
+}
 
 #endif  // QLEVER_SRC_ENGINE_CONSTRUCTTRIPLEGENERATOR_H
