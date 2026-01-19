@@ -93,6 +93,12 @@ MaterializedViewQuery::MaterializedViewQuery(const SparqlTriple& triple) {
 }
 
 // _____________________________________________________________________________
+MaterializedViewQuery::MaterializedViewQuery(std::string name,
+                                             RequestedColumns requestedColumns)
+    : viewName_{std::move(name)},
+      requestedColumns_{std::move(requestedColumns)} {};
+
+// _____________________________________________________________________________
 ad_utility::HashSet<Variable> MaterializedViewQuery::getVarsToKeep() const {
   ad_utility::HashSet<Variable> varsToKeep;
   if (scanCol_.has_value() && scanCol_.value().isVariable()) {

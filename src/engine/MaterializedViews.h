@@ -266,7 +266,11 @@ struct SingleChain {
 //     sorted
 //     // TODO hash
 // };
-using JoinPattern = std::variant<SingleChain>;
+// using JoinPattern = std::variant<SingleChain>;
+
+struct JoinPattern {
+  // TODO only simple chain for now
+};
 
 // The `MaterializedViewsManager` is part of the `QueryExecutionContext` and is
 // used to manage the currently loaded `MaterializedViews` in a `Server` or
@@ -313,6 +317,11 @@ class MaterializedViewsManager {
   // TODO . If no matching -> return nullptr.
   std::shared_ptr<IndexScan> makeIndexScan(
       QueryExecutionContext* qec, const JoinPattern& joinPattern) const;
+
+  // TODO . If no matching -> return nullptr.
+  std::shared_ptr<IndexScan> makeSingleChainReplacementIndexScan(
+      QueryExecutionContext* qec, std::shared_ptr<IndexScan> left,
+      std::shared_ptr<IndexScan> right) const;
 };
 
 #endif  // QLEVER_SRC_ENGINE_MATERIALIZEDVIEWS_H_

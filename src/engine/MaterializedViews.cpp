@@ -15,6 +15,7 @@
 
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
+#include "engine/MaterializedViewsQueryAnalysis.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/VariableToColumnMap.h"
@@ -431,7 +432,10 @@ void MaterializedViewsManager::loadView(const std::string& name) const {
   // Analyzing the view when loading instead of (de)serializing an analysis
   // result has the benefit that query analysis can be extended without needing
   // to rewrite views.
-  patternLock->analyzeView(view);
+  if (patternLock->analyzeView(view)) {
+    AD_LOG_INFO << "The materialized view '" << name
+                << "' was added to the query pattern cache." << std::endl;
+  }
   // if (name == "geom") {
   //   auto lock = joinPatterns_.wlock();
   //   std::string x = ("<http://www.opengis.net/ont/geosparql#hasGeometry>");
@@ -647,13 +651,59 @@ std::shared_ptr<IndexScan> MaterializedView::makeIndexScan(
 // _____________________________________________________________________________
 std::shared_ptr<IndexScan> MaterializedViewsManager::makeIndexScan(
     QueryExecutionContext*, const JoinPattern&) const {
-  auto lock = loadedViews_.rlock();
+  // auto lock = loadedViews_.rlock();
   // if (lock->contains(joinPattern)) {
   //   auto view = lock->at(joinPattern);
   //   // view->makeIndexScan(qec, joinPattern, ...)
   //   // we need join pattern, var names from query,.
   // }
   return nullptr;
+}
+
+// _____________________________________________________________________________
+std::shared_ptr<IndexScan>
+MaterializedViewsManager::makeSingleChainReplacementIndexScan(
+    QueryExecutionContext* qec, std::shared_ptr<IndexScan> left,
+    std::shared_ptr<IndexScan> right) const {
+  auto lock = loadedViews_.rlock();
+  auto patternLock = queryPatternCache_.rlock();
+  AD_LOG_INFO << "makeSingleChainReplacementIndexScan." << std::endl;
+  auto res =
+      [&]() -> std::optional<materializedViewsQueryAnalysis::UserQueryChain> {
+    if (auto c = patternLock->checkSimpleChain(left, right)) {
+      return c;
+    }
+    if (auto c = patternLock->checkSimpleChain(right, left)) {
+      return c;
+    }
+    return std::nullopt;
+  }();
+
+  if (!res.has_value()) {
+    return nullptr;
+  }
+  if (res.value().chainInfos_.size() == 0) {
+    return nullptr;
+  }
+  // TODO we should maybe consider all the possible views (could have different
+  // sorting)
+  const auto& [subj, chain, obj, view] = res.value().chainInfos_.at(0);
+  if (!res.value().subject_.isVariable() &&
+      view->variableToColumnMap().at(subj).columnIndex_ != 0) {
+    // subject of chain is fixed, but subject is not first column of
+    // materialized view
+    AD_LOG_INFO
+        << "We could use view for join but column ordering doesn't match."
+        << std::endl;
+    return nullptr;
+  }
+  parsedQuery::MaterializedViewQuery::RequestedColumns cols{
+      {subj, res.value().subject_},
+      {chain, res.value().chain_},
+      {obj, res.value().object_}};
+  AD_LOG_INFO << "return scan." << std::endl;
+  return view->makeIndexScan(
+      qec, parsedQuery::MaterializedViewQuery{view->name(), std::move(cols)});
 }
 
 // _____________________________________________________________________________

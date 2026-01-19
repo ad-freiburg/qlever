@@ -7,10 +7,15 @@
 #ifndef QLEVER_SRC_ENGINE_MATERIALIZEDVIEWSQUERYANALYSIS_H_
 #define QLEVER_SRC_ENGINE_MATERIALIZEDVIEWSQUERYANALYSIS_H_
 
+#include "parser/GraphPatternOperation.h"
+#include "parser/SparqlTriple.h"
+#include "parser/TripleComponent.h"
 #include "rdfTypes/Variable.h"
 #include "util/HashMap.h"
+#include "util/TypeTraits.h"
 
 class MaterializedView;
+class IndexScan;
 
 namespace materializedViewsQueryAnalysis {
 
@@ -26,6 +31,33 @@ struct ChainInfo {
   ViewPtr view_;
 };
 
+//
+ad_utility::HashSet<Variable> getVariablesPresentInBasicGraphPatterns(
+    const std::vector<parsedQuery::GraphPatternOperation>& graphPatterns);
+
+//
+struct BasicGraphPatternsInvariantTo {
+  ad_utility::HashSet<Variable> variables_;
+
+  bool operator()(const parsedQuery::Optional& optional) const;
+  bool operator()(const parsedQuery::Bind& bind) const;
+  bool operator()(const parsedQuery::Values& values) const;
+
+  CPP_template(typename T)(requires(
+      !ad_utility::SimilarToAny<T, parsedQuery::Optional, parsedQuery::Bind,
+                                parsedQuery::Values>)) bool
+  operator()(const T&) const {
+    return false;
+  }
+};
+
+struct UserQueryChain {
+  TripleComponent subject_;  // Allow fixing the subject of the chain
+  Variable chain_;
+  Variable object_;
+  const std::vector<ChainInfo>& chainInfos_;
+};
+
 class QueryPatternCache {
   // Simple chains can be found by direct access into a hash map.
   ad_utility::HashMap<ChainedPredicates, std::vector<ChainInfo>>
@@ -36,7 +68,15 @@ class QueryPatternCache {
 
   // TODO cache for stars
  public:
-  void analyzeView(ViewPtr view);
+  bool analyzeView(ViewPtr view);
+
+  std::optional<UserQueryChain> checkSimpleChain(
+      std::shared_ptr<IndexScan> left, std::shared_ptr<IndexScan> right) const;
+
+ private:
+  // checks only one direction, so call with a-b and b-a
+  bool analyzeSimpleChain(ViewPtr view, const SparqlTriple& a,
+                          const SparqlTriple& b);
 };
 
 }  // namespace materializedViewsQueryAnalysis
