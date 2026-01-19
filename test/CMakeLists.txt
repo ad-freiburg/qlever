@@ -143,17 +143,17 @@ if (NOT _DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS)
     addLinkAndDiscoverTest(ParsedRequestBuilderTest engine)
 
     addLinkAndDiscoverTest(ExceptionHandlingTest)
-
-    addLinkAndDiscoverTestNoLibs(ConstexprSmallStringTest)
-
-    addLinkAndDiscoverTest(StringUtilsTest util)
-
-    addLinkAndDiscoverTest(CryptographicHashUtilsTest util)
-
-    addLinkAndDiscoverTest(ValueIdComparatorsTest util)
-
-    addLinkAndDiscoverTest(SparqlParserTest parser engine sparqlExpressions)
 endif ()
+
+addLinkAndDiscoverTest(ValueIdComparatorsTest util)
+
+addLinkAndDiscoverTest(SparqlParserTest parser engine sparqlExpressions)
+
+addLinkAndDiscoverTest(StringUtilsTest util)
+
+addLinkAndDiscoverTestNoLibs(ConstexprSmallStringTest)
+
+addLinkAndDiscoverTest(CryptographicHashUtilsTest util)
 
 addLinkAndDiscoverTest(CacheTest)
 

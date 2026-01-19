@@ -16,41 +16,49 @@ jobs:
     - uses: actions/checkout@v4
       with:
         submodules: 'recursive'
-    - name: Install conan package manager. Install curl, npm, nvm and nodejs. Get build and host profiles for conan. Install and run conan. Also create a build directory. Configure CMake and build.
-
+        
+    - name: Install conan package manager. Install curl, npm, nvm and nodejs.
       working-directory: ${{github.workspace}}
       run: |
         sudo apt-get install pipx
         pipx ensurepath
         source ~/.bashrc
         pipx install conan
-
         sudo apt install curl npm
         source ~/.bashrc
         curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
-        \. "$HOME/.nvm/nvm.sh"
-        nvm install 25
+        export NVM_DIR="${HOME}/.nvm"
+        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
+        [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
+        source ~/.bashrc
+        nvm install 25.2.1
         source ~/.bashrc
         node -v
-        nvm alias default 25
+        echo $PATH
+        nvm use 25.2.1
         source ~/.bashrc
-
+        cd /home/runner/.nvm/versions/node/v25.2.1/bin
+        sudo ln -sf node /usr/bin/nodejs
+        cd /usr/bin
+        ls -lah
+      shell: bash
+    - name: Get build and host profiles for conan. Install and run conan. Also create a build directory. Configure CMake and build.
+      working-directory: ${{github.workspace}}
+      run: |
         conan profile detect
-
         conan install . -pr:b default -pr:h conanprofiles/emscripten.profile -s build_type=Release -b missing -of build
         cd build
-
-        cmake -S .. -B . -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_PARALLEL=true -D_NO_TIMING_TESTS=ON -D_EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER=ON -D_NO_BENCHMARK=ON -D_DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS=ON -GNinja
-
+        cmake -S .. -B . -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Debug -DLOGLEVEL=INFO -DUSE_PARALLEL=true -D_NO_TIMING_TESTS=ON -D_EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER=ON -D_NO_BENCHMARK=ON -D_DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS=ON -DTEST_EXECUTOR=/home/runner/.nvm/versions/node/v25.2.1/bin/node -GNinja
         cmake --build .
+      shell: bash  
 
-      - name: Cache for conan
-        uses: actions/cache@v3
-        env:
-          cache-name: cache-conan-with-emscripten-modules-ubuntu-24.04
-        with:
-          path: ~/.conan2
-          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('conanfile.txt', 'conanprofiles/emscripten.profile')}}
+    - name: Cache for conan
+      uses: actions/cache@v3
+      env:
+        cache-name: cache-conan-with-emscripten-modules-ubuntu-24.04
+      with:
+        path: ~/.conan2
+        key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('conanfile.txt', 'conanprofiles/emscripten.profile')}}
 
     - name: Test
       working-directory: ${{github.workspace}}/build/test
@@ -70,6 +78,26 @@ jobs:
       run: >
         source ${{github.workspace}}/build/conanrun.sh;
         ${{github.workspace}}/e2e/e2e.sh -d build
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
