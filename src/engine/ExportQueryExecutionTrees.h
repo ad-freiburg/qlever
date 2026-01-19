@@ -230,30 +230,6 @@ class ExportQueryExecutionTrees {
       LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
       uint64_t& resultSize, CancellationHandle cancellationHandle);
 
-  // Helper function that generates the construct clause result triples for a
-  // single WHERE-result-table-row.
-  static auto generateTriplesForRow(
-      const ad_utility::sparql_types::Triples& constructTriples,
-      CancellationHandle cancellationHandle,
-      ConstructQueryExportContext context);
-
-  static auto generateTriplesForRowView(
-      const ad_utility::sparql_types::Triples& constructClauseTriples,
-      const IdTable& idTable, const LocalVocab& localVocab,
-      const VariableToColumnMap& variableColumns, const Index& index,
-      CancellationHandle cancellationHandle, size_t rowOffsetBase);
-
-  static auto generateTriplesForTableView(
-      const ad_utility::sparql_types::Triples& constructClauseTriples,
-      std::shared_ptr<const Result> result,
-      const VariableToColumnMap& variableColumns, const Index& index,
-      CancellationHandle cancellationHandle);
-
-  static QueryExecutionTree::StringTriple evaluateConstructTriple(
-      const std::array<GraphTerm, 3>& triple,
-      CancellationHandle cancellationHandle,
-      const ConstructQueryExportContext& context);
-
   // Helper function that generates the result of a CONSTRUCT query as a
   // CSV or TSV stream.
   template <MediaType format>

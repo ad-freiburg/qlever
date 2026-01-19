@@ -18,6 +18,7 @@
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
 #include "engine/ConstructQueryEvaluator.h"
+#include "engine/ConstructTripleGenerator.h"
 #include "global/RuntimeParameters.h"
 #include "index/EncodedIriManager.h"
 #include "index/IndexImpl.h"
@@ -259,103 +260,28 @@ ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
 }
 
 // _____________________________________________________________________________
-QueryExecutionTree::StringTriple
-ExportQueryExecutionTrees::evaluateConstructTriple(
-    const std::array<GraphTerm, 3>& triple,
-    CancellationHandle cancellationHandle,
-    const ConstructQueryExportContext& context) {
-  cancellationHandle->throwIfCancelled();
-
-  using enum PositionInTriple;
-
-  auto subject = ConstructQueryEvaluator::evaluate(triple[0], context, SUBJECT);
-  auto predicate =
-      ConstructQueryEvaluator::evaluate(triple[1], context, PREDICATE);
-  auto object = ConstructQueryEvaluator::evaluate(triple[2], context, OBJECT);
-
-  if (!subject.has_value() || !predicate.has_value() || !object.has_value()) {
-    return QueryExecutionTree::StringTriple();  // Empty triple
-  }
-
-  return QueryExecutionTree::StringTriple(std::move(subject.value()),
-                                          std::move(predicate.value()),
-                                          std::move(object.value()));
-}
-
-// Helper function to generate triples for a single row
-auto ExportQueryExecutionTrees::generateTriplesForRowView(
-    const ad_utility::sparql_types::Triples& constructClauseTriples,
-    const IdTable& idTable, const LocalVocab& localVocab,
-    const VariableToColumnMap& variableColumns, const Index& index,
-    CancellationHandle cancellationHandle, size_t rowOffset) {
-  return [constructClauseTriples, &idTable, &localVocab, &variableColumns,
-          &index, cancellationHandle, rowOffset](uint64_t rowIdx) {
-    ConstructQueryExportContext context{rowIdx,          idTable, localVocab,
-                                        variableColumns, index,   rowOffset};
-
-    return constructClauseTriples |
-           ql::views::transform(
-               [cancellationHandle,
-                context = std::move(context)](const auto& triple) {
-                 return evaluateConstructTriple(triple, cancellationHandle,
-                                                context);
-               }) |
-           ql::views::filter(
-               [](const auto& triple) { return !triple.isEmpty(); });
-  };
-}
-
-// Helper function to generate triples construct-query-result-triples given
-// `constructClauseTriples`, which are the triple-patterns of the
-// CONSTRUCT-clause of the asked sparql-query. `result` contains the result of
-// processing the WHERE-clause of the construct-sparql-query.
-auto ExportQueryExecutionTrees::generateTriplesForTableView(
-    const ad_utility::sparql_types::Triples& constructClauseTriples,
-    std::shared_ptr<const Result> result,
-    const VariableToColumnMap& variableColumns, const Index& index,
-    CancellationHandle cancellationHandle) {
-  // Return a lambda that takes TableWithView and returns a range
-  return [constructClauseTriples, result = std::move(result), &variableColumns,
-          &index, cancellationHandle = std::move(cancellationHandle),
-          rowOffset = size_t{0}](const auto& tableWithView) mutable {
-    const auto& idTable = tableWithView.tableWithVocab_.idTable();
-    const auto& localVocab = tableWithView.tableWithVocab_.localVocab();
-
-    auto currentRowOffset = rowOffset;
-    rowOffset += idTable.size();
-
-    // Generate triples for all rows in this table
-    auto rowGenerator = generateTriplesForRowView(
-        constructClauseTriples, idTable, localVocab, variableColumns, index,
-        cancellationHandle, currentRowOffset);
-
-    return tableWithView.view_ | ql::views::transform(rowGenerator) |
-           ql::views::join;
-  };
-}
-
 auto ExportQueryExecutionTrees::constructQueryResultToTriples(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructClauseTriples,
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
     uint64_t& resultSize, CancellationHandle cancellationHandle) {
-  // get the indices of the rows that are part of the WERE-clause result table.
+  // Get the indices of the rows that are part of the WHERE-clause result table.
   auto rowIndices = getRowIndices(limitAndOffset, *result, resultSize,
                                   constructClauseTriples.size());
 
-  // get the col indices of the cols of the WHERE-clause result table that
-  // contain the values of the variables that are used in the query.
+  // Get the variable-to-column mapping and index from the query execution tree.
   const auto& variableColumns = qet.getVariableColumns();
-
   const auto& index = qet.getQec()->getIndex();
 
-  auto tableGenerator = generateTriplesForTableView(
-      constructClauseTriples, std::move(result), variableColumns, index,
-      std::move(cancellationHandle));
-
+  // Create a producer that processes each table and yields triples.
+  // The producer is moved into the transform view to ensure it outlives
+  // the lazy evaluation of the range.
+  TableTripleProducer tableProducer(constructClauseTriples, std::move(result),
+                                    variableColumns, index,
+                                    std::move(cancellationHandle));
   return ad_utility::InputRangeTypeErased(
       ad_utility::OwningView{std::move(rowIndices)} |
-      ql::views::transform(tableGenerator) | ql::views::join);
+      ql::views::transform(std::move(tableProducer)) | ql::views::join);
 }
 
 // _____________________________________________________________________________
