@@ -38,7 +38,7 @@ jobs:
         nvm use 25.2.1
         source ~/.bashrc
         cd /home/runner/.nvm/versions/node/v25.2.1/bin
-        sudo ln -sf node /usr/bin/nodejs
+        sudo ln node /usr/bin/nodejs
         cd /usr/bin
         ls -lah
       shell: bash
@@ -78,6 +78,7 @@ jobs:
       run: >
         source ${{github.workspace}}/build/conanrun.sh;
         ${{github.workspace}}/e2e/e2e.sh -d build
+
 
 
 
