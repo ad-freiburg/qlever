@@ -41,12 +41,12 @@ class RowTripleProducer {
   using StringTriple = QueryExecutionTree::StringTriple;
   using Triples = ad_utility::sparql_types::Triples;
 
-  RowTripleProducer(Triples constructTriples, const IdTable& idTable,
+  RowTripleProducer(const Triples& constructTriples, const IdTable& idTable,
                     const LocalVocab& localVocab,
                     const VariableToColumnMap& variableColumns,
                     const Index& index, CancellationHandle cancellationHandle,
                     size_t rowOffset)
-      : constructTriples_(std::move(constructTriples)),
+      : constructTriples_(constructTriples),
         idTable_(idTable),
         localVocab_(localVocab),
         variableColumns_(variableColumns),
@@ -67,7 +67,7 @@ class RowTripleProducer {
   }
 
  private:
-  Triples constructTriples_;  // Owned copy
+  const Triples& constructTriples_;  // Reference to TableTripleProducer's copy
   const IdTable& idTable_;
   const LocalVocab& localVocab_;
   const VariableToColumnMap& variableColumns_;
