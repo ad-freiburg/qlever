@@ -662,3 +662,81 @@ TEST(IndexTest, getBlankNodeManager) {
   const Index& index3 = getQec(kb)->getIndex();
   EXPECT_EQ(index3.getBlankNodeManager()->minIndex_, 3);
 }
+
+// _____________________________________________________________________________
+TEST(IndexImpl, recomputeStatistics) {
+  std::string turtleInput =
+      "<x> <label> \"alpha\" . <x> <label> \"A\" . "
+      "<y> <label> \"Beta\". <z> <label> \"zz\"@en";
+  auto index = makeTestIndex("recomputeStatistics", std::move(turtleInput));
+  auto cancellationHandle =
+      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+
+  auto& indexImpl = index.getImpl();
+  // No-op, should return the same stats.
+  auto result = indexImpl.recomputeStatistics(
+      index.deltaTriplesManager().getCurrentLocatedTriplesSharedState());
+  EXPECT_EQ(result, indexImpl.configurationJson_);
+
+  // Now, modify the index by adding triples.
+  Id blankNodeId = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(42));
+  index.deltaTriplesManager().modify<void>([&cancellationHandle, blankNodeId](
+                                               DeltaTriples& deltaTriples) {
+    LocalVocabEntry zzz{ad_utility::triple_component::Iri::fromIriref("<zzz>")};
+    LocalVocabEntry literal{
+        ad_utility::triple_component::Literal::fromStringRepresentation(
+            "\"test\"@en")};
+    Id zzzId = Id::makeFromLocalVocabIndex(&zzz);
+    Id literalId = Id::makeFromLocalVocabIndex(&literal);
+    // Create duplicate in different graph.
+    Id x = Id::makeFromVocabIndex(VocabIndex::make(11));
+    Id label = Id::makeFromVocabIndex(VocabIndex::make(10));
+    Id alpha = Id::makeFromVocabIndex(VocabIndex::make(1));
+    deltaTriples.insertTriples(
+        cancellationHandle, {IdTriple{{x, label, alpha, x}},
+                             IdTriple{{blankNodeId, zzzId, literalId, zzzId}}});
+  });
+
+  for (bool loadAllPermutations : {true, false}) {
+    using NNAI = Index::NumNormalAndInternal;
+
+    // Simulate scenario where not all permutations are loaded.
+    if (!loadAllPermutations) {
+      // Overwrite with unloaded permutation.
+      indexImpl.SPO() = Permutation{Permutation::SPO,
+                                    ad_utility::makeUnlimitedAllocator<Id>()};
+      // Zero out original values.
+      indexImpl.configurationJson_["num-subjects"] = NNAI(0, 0);
+      indexImpl.configurationJson_["num-objects"] = NNAI(0, 0);
+    }
+
+    auto newStats = indexImpl.recomputeStatistics(
+        index.deltaTriplesManager().getCurrentLocatedTriplesSharedState());
+    EXPECT_NE(newStats, indexImpl.configurationJson_);
+    EXPECT_EQ(newStats["num-triples"], NNAI(5, 6));
+    EXPECT_EQ(newStats["num-predicates"], NNAI(2, 4));
+    if (loadAllPermutations) {
+      EXPECT_EQ(newStats["num-subjects"], NNAI(4, 0));
+      EXPECT_EQ(newStats["num-objects"], NNAI(5, 0));
+    } else {
+      EXPECT_EQ(newStats["num-subjects"], NNAI(0, 0));
+      EXPECT_EQ(newStats["num-objects"], NNAI(0, 0));
+    }
+    // Blank node ids are remapped, so we cannot predict the exact number.
+    EXPECT_NE(newStats["num-blank-nodes-total"], 0);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(IndexImpl, countDistinct) {
+  std::vector<IdTable> tables;
+  tables.push_back(makeIdTableFromVector({{1}, {2}}));
+  tables.push_back(makeIdTableFromVector({{2}, {2}}));
+
+  size_t counter = 0;
+  std::optional<Id> lastId;
+  for (const IdTable& table : tables) {
+    IndexImpl::countDistinct(lastId, counter, table);
+  }
+  EXPECT_EQ(counter, 2);
+}

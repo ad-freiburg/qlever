@@ -17,7 +17,8 @@ namespace ad_utility {
 // will spawn a new thread for each task. If one of the tasks throws an
 // exception, this exception will be rethrown in the main thread. If multiple
 // tasks throw exceptions, only the first one will be rethrown.
-inline void runTasksInParallel(std::vector<std::packaged_task<void()>>& tasks) {
+inline void runTasksInParallel(
+    std::vector<std::packaged_task<void()>>&& tasks) {
   std::vector<std::future<void>> futures;
   futures.reserve(tasks.size());
   std::vector<JThread> threads;

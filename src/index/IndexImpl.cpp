@@ -1004,18 +1004,33 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
     setMetadata(*permutation);
   };
 
-  load(pso_, true);
-  load(pos_, true);
-  if (loadAllPermutations_) {
-    load(ops_);
-    load(osp_);
-    load(spo_);
-    load(sop_);
-  } else {
+  if (doNotLoadPermutations_) {
+    // Set all permutations to nullptr to indicate they are not loaded.
+    pso_ = nullptr;
+    pos_ = nullptr;
+    ops_ = nullptr;
+    osp_ = nullptr;
+    spo_ = nullptr;
+    sop_ = nullptr;
     AD_LOG_INFO
-        << "Only the PSO and POS permutation were loaded, SPARQL queries "
-           "with predicate variables will therefore not work"
+        << "No permutations were loaded due to `doNotLoadPermutations` "
+           "being set to true. Only queries that don't contain any triples "
+           "can be executed."
         << std::endl;
+  } else {
+    load(pso_, true);
+    load(pos_, true);
+    if (loadAllPermutations_) {
+      load(ops_);
+      load(osp_);
+      load(spo_);
+      load(sop_);
+    } else {
+      AD_LOG_INFO
+          << "Only the PSO and POS permutation were loaded, SPARQL queries "
+             "with predicate variables will therefore not work"
+          << std::endl;
+    }
   }
 
   // We have to load the patterns first to figure out if the patterns were built
@@ -1052,6 +1067,19 @@ void IndexImpl::throwExceptionIfNoPatterns() const {
 }
 
 // _____________________________________________________________________________
+const Permutation& IndexImpl::getPermutationImpl(
+    const PermutationPtr& permutation, std::string_view permutationName) {
+  if (!permutation) {
+    throw std::runtime_error{
+        absl::StrCat("The requested operation requires the ", permutationName,
+                     " permutation to be loaded, but it was not loaded. This "
+                     "typically happens when the index was loaded with the "
+                     "`doNotLoadPermutations` option set to true.")};
+  }
+  return *permutation;
+}
+
+// _____________________________________________________________________________
 const CompactVectorOfStrings<Id>& IndexImpl::getPatterns() const {
   throwExceptionIfNoPatterns();
   return patterns_;
@@ -1085,12 +1113,12 @@ bool IndexImpl::isLiteral(std::string_view object) const {
 
 // _____________________________________________________________________________
 void IndexImpl::setKbName(const std::string& name) {
-  pos_->setKbName(name);
-  pso_->setKbName(name);
-  sop_->setKbName(name);
-  spo_->setKbName(name);
-  ops_->setKbName(name);
-  osp_->setKbName(name);
+  if (pos_) pos_->setKbName(name);
+  if (pso_) pso_->setKbName(name);
+  if (sop_) sop_->setKbName(name);
+  if (spo_) spo_->setKbName(name);
+  if (ops_) ops_->setKbName(name);
+  if (osp_) osp_->setKbName(name);
 }
 
 // ____________________________________________________________________________
@@ -1111,6 +1139,9 @@ bool IndexImpl::usePatterns() const { return usePatterns_; }
 
 // _____________________________________________________________________________
 bool& IndexImpl::loadAllPermutations() { return loadAllPermutations_; }
+
+// _____________________________________________________________________________
+bool& IndexImpl::doNotLoadPermutations() { return doNotLoadPermutations_; }
 
 // ____________________________________________________________________________
 void IndexImpl::setSettingsFile(const std::string& filename) {
@@ -1567,7 +1598,10 @@ IndexImpl::PermutationPtr IndexImpl::getPermutationPtr(Permutation::Enum p) {
 
 // ____________________________________________________________________________
 Permutation& IndexImpl::getPermutation(Permutation::Enum p) {
-  return *getPermutationPtr(p);
+  // Note: the `const_cast` is fine here, we only access objects, that are
+  // actually mutable.
+  return const_cast<Permutation&>(
+      getPermutationImpl(getPermutationPtr(p), Permutation::toString(p)));
 }
 
 // ____________________________________________________________________________
@@ -1888,23 +1922,46 @@ void IndexImpl::writePatternsToFile() const {
   patternWriter << patterns_;
 }
 
-namespace {
-void countDistinct(std::optional<Id>& lastId, size_t& counter,
-                   const IdTable& table) {
-  if (!table.empty()) {
-    auto col = table.getColumn(0);
-    counter +=
-        ql::ranges::distance(col | ::ranges::views::unique([](Id a, Id b) {
-                               return a.getBits() == b.getBits();
-                             }));
-    if (lastId != col[0]) {
-      lastId = col[0];
-    } else {
-      // Avoid double counting in case the last id of the previous block is the
-      // same as the first id of this block.
-      counter--;
-    }
+// _____________________________________________________________________________
+void IndexImpl::countDistinct(std::optional<Id>& lastId, size_t& counter,
+                              const IdTable& table) {
+  AD_CORRECTNESS_CHECK(
+      !table.empty(), "Empty tables should never be yielded by the lazy scan.");
+  auto col = table.getColumn(0);
+  counter += ql::ranges::distance(col | ::ranges::views::unique([](Id a, Id b) {
+                                    return a.getBits() == b.getBits();
+                                  }));
+  if (lastId == col.front()) {
+    // Avoid double counting in case the last id of the previous block is the
+    // same as the first id of this block.
+    counter--;
   }
+  lastId = col.back();
+}
+
+namespace {
+// Helper function that returns a packaged task that computes distinct counts
+// over all tables produced by scanning the given permutation. The customAction
+// is invoked for each table to allow for additional computations while
+// scanning.
+std::packaged_task<void()> computeStatistics(
+    const LocatedTriplesSharedState& locatedTriplesSharedState, size_t& counter,
+    const Permutation& permutation, auto customAction) {
+  return std::packaged_task{[&counter, &permutation, &locatedTriplesSharedState,
+                             customAction = std::move(customAction)]() {
+    auto cancellationHandle =
+        std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+    ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
+    auto tables = permutation.lazyScan(
+        permutation.getScanSpecAndBlocks(scanSpec, *locatedTriplesSharedState),
+        std::nullopt, CompressedRelationReader::ColumnIndicesRef{},
+        cancellationHandle, *locatedTriplesSharedState);
+    std::optional<Id> lastCol0 = std::nullopt;
+    for (const auto& table : tables) {
+      std::invoke(customAction, table);
+      IndexImpl::countDistinct(lastCol0, counter, table);
+    }
+  }};
 }
 }  // namespace
 
@@ -1918,76 +1975,41 @@ nlohmann::json IndexImpl::recomputeStatistics(
   size_t numPredicatesInternal = 0;
   size_t numObjects = 0;
   uint64_t nextBlankNode = 0;
-  auto cancellationHandle =
-      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
-  ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
+
   std::vector<std::packaged_task<void()>> tasks;
 
-  tasks.push_back(std::packaged_task{
-      [this, &numTriples, &numPredicates, &nextBlankNode, &scanSpec,
-       &locatedTriplesSharedState, &cancellationHandle]() {
-        auto tables = pso_->lazyScan(
-            pso_->getScanSpecAndBlocks(scanSpec, *locatedTriplesSharedState),
-            std::nullopt, CompressedRelationReader::ColumnIndicesRef{},
-            cancellationHandle, *locatedTriplesSharedState);
-        std::optional<Id> lastPredicate = std::nullopt;
-        for (const auto& table : tables) {
-          numTriples += table.numRows();
-          for (auto col : table.getColumns()) {
-            for (auto id : col) {
-              if (id.getDatatype() == Datatype::BlankNodeIndex) {
-                nextBlankNode =
-                    std::max(nextBlankNode, id.getBlankNodeIndex().get() + 1);
-              }
+  auto getCounterTask = [&locatedTriplesSharedState](
+                            size_t& counter, const Permutation& permutation,
+                            auto customAction) {
+    return computeStatistics(locatedTriplesSharedState, counter, permutation,
+                             customAction);
+  };
+
+  tasks.push_back(getCounterTask(
+      numPredicates, *pso_,
+      [&numTriples, &nextBlankNode](const IdTable& table) {
+        numTriples += table.numRows();
+        for (auto col : table.getColumns()) {
+          for (auto id : col) {
+            if (id.getDatatype() == Datatype::BlankNodeIndex) {
+              nextBlankNode =
+                  std::max(nextBlankNode, id.getBlankNodeIndex().get() + 1);
             }
           }
-          countDistinct(lastPredicate, numPredicates, table);
         }
-      }});
+      }));
 
-  tasks.push_back(std::packaged_task{
-      [this, &numTriplesInternal, &numPredicatesInternal, &scanSpec,
-       &locatedTriplesSharedState, &cancellationHandle]() {
-        auto tables = pso_->internalPermutation().lazyScan(
-            pso_->internalPermutation().getScanSpecAndBlocks(
-                scanSpec, *locatedTriplesSharedState),
-            std::nullopt, CompressedRelationReader::ColumnIndicesRef{},
-            cancellationHandle, *locatedTriplesSharedState);
-        std::optional<Id> lastPredicate = std::nullopt;
-        for (const auto& table : tables) {
-          numTriplesInternal += table.numRows();
-          countDistinct(lastPredicate, numPredicatesInternal, table);
-        }
-      }});
+  tasks.push_back(getCounterTask(numPredicatesInternal,
+                                 pso_->internalPermutation(),
+                                 [&numTriplesInternal](const IdTable& table) {
+                                   numTriplesInternal += table.numRows();
+                                 }));
 
   if (hasAllPermutations()) {
-    tasks.push_back(
-        std::packaged_task{[this, &numSubjects, &scanSpec,
-                            &locatedTriplesSharedState, &cancellationHandle]() {
-          auto tables = spo_->lazyScan(
-              spo_->getScanSpecAndBlocks(scanSpec, *locatedTriplesSharedState),
-              std::nullopt, CompressedRelationReader::ColumnIndicesRef{},
-              cancellationHandle, *locatedTriplesSharedState);
-          std::optional<Id> lastSubject = std::nullopt;
-          for (const auto& table : tables) {
-            countDistinct(lastSubject, numSubjects, table);
-          }
-        }});
-
-    tasks.push_back(
-        std::packaged_task{[this, &numObjects, &scanSpec,
-                            &locatedTriplesSharedState, &cancellationHandle]() {
-          auto tables = osp_->lazyScan(
-              osp_->getScanSpecAndBlocks(scanSpec, *locatedTriplesSharedState),
-              std::nullopt, CompressedRelationReader::ColumnIndicesRef{},
-              cancellationHandle, *locatedTriplesSharedState);
-          std::optional<Id> lastObject = std::nullopt;
-          for (const auto& table : tables) {
-            countDistinct(lastObject, numObjects, table);
-          }
-        }});
+    tasks.push_back(getCounterTask(numSubjects, *spo_, ad_utility::noop));
+    tasks.push_back(getCounterTask(numObjects, *osp_, ad_utility::noop));
   }
-  ad_utility::runTasksInParallel(tasks);
+  ad_utility::runTasksInParallel(std::move(tasks));
   auto configuration = configurationJson_;
   configuration["num-triples"] =
       NumNormalAndInternal{numTriples, numTriplesInternal};

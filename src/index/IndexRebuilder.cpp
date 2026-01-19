@@ -281,7 +281,7 @@ void materializeToIndex(
         localVocabMapping, insertionPositions, cancellationHandle));
   }
 
-  ad_utility::runTasksInParallel(tasks);
+  ad_utility::runTasksInParallel(std::move(tasks));
 
   REBUILD_LOG_INFO << "Index rebuild completed" << std::endl;
 
