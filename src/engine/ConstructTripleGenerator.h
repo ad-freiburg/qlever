@@ -55,16 +55,7 @@ class RowTripleProducer {
         rowOffset_(rowOffset) {}
 
   // Returns a filtered range of StringTriples for the given row index.
-  auto operator()(uint64_t rowIdx) const {
-    ConstructQueryExportContext context{rowIdx,           idTable_, localVocab_,
-                                        variableColumns_, index_,   rowOffset_};
-
-    TripleEvaluator evaluator(cancellationHandle_, std::move(context));
-
-    return constructTriples_ | ql::views::transform(std::move(evaluator)) |
-           ql::views::filter(
-               [](const StringTriple& t) { return !t.isEmpty(); });
-  }
+  auto operator()(uint64_t rowIdx) const;
 
  private:
   const Triples& constructTriples_;  // Reference to TableTripleProducer's copy
@@ -97,20 +88,7 @@ class TableTripleProducer {
 
   // Process a TableWithRange and return a joined range of all triples.
   template <typename TableWithRangeT>
-  auto operator()(const TableWithRangeT& tableWithRange) {
-    const auto& idTable = tableWithRange.tableWithVocab_.idTable();
-    const auto& localVocab = tableWithRange.tableWithVocab_.localVocab();
-
-    size_t currentRowOffset = rowOffset_;
-    rowOffset_ += idTable.size();
-
-    RowTripleProducer rowProducer(constructTriples_, idTable, localVocab,
-                                  variableColumns_, index_, cancellationHandle_,
-                                  currentRowOffset);
-
-    return tableWithRange.view_ | ql::views::transform(std::move(rowProducer)) |
-           ql::views::join;
-  }
+  auto operator()(const TableWithRangeT& tableWithRange);
 
  private:
   Triples constructTriples_;  // Owned copy
