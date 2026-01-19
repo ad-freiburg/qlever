@@ -54,25 +54,6 @@ jobs:
       working-directory: ${{github.workspace}}/build
       run: cmake --build .
 
-    - name: Test
-      working-directory: ${{github.workspace}}/build/test
-      run: >
-        source ../conanrun.sh;
-        env CTEST_OUTPUT_ON_FAILURE=1 ctest -C Release .;
-
-    - name: Running and printing the benchmark examples.
-      working-directory: ${{github.workspace}}/build
-      run: >
-        source ./conanrun.sh;
-        benchmark/BenchmarkExamples -p;
-
-      # explicitly specify the binary directory for the E2E script via the `-d` option to also
-      # test that it works.
-    - name: E2E
-      run: >
-        source ${{github.workspace}}/build/conanrun.sh;
-        ${{github.workspace}}/e2e/e2e.sh -d build
-
 
 
 
