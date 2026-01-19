@@ -50,10 +50,10 @@ jobs:
         run: mkdir ${{github.workspace}}/qlever-code/build
       - name: Configure CMake
         run: cmake -S ${{github.workspace}}/qlever-code/ -B ${{github.workspace}}/qlever-code/build ${{env.cmake-flags}} -DCMAKE_BUILD_TYPE=${{env.build-type}} -DLOGLEVEL=INFO -DUSE_PARALLEL=false
-      - name: Build IndexBuilderMain
-        run: cmake --build ${{github.workspace}}/qlever-code/build --target IndexBuilderMain --config ${{env.build-type}} -- -j $(nproc)
-      - name: Build ServerMain
-        run: cmake --build ${{github.workspace}}/qlever-code/build --target ServerMain  --config ${{env.build-type}} -- -j $(nproc)
+      - name: Build qlever-index
+        run: cmake --build ${{github.workspace}}/qlever-code/build --target qlever-index --config ${{env.build-type}} -- -j $(nproc)
+      - name: Build qlever-server
+        run: cmake --build ${{github.workspace}}/qlever-code/build --target qlever-server  --config ${{env.build-type}} -- -j $(nproc)
       - name: Execute test suite
         run: |
           cd qlever-test-suite

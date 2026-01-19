@@ -468,13 +468,13 @@ add_subdirectory(test)
 add_library(compilationInfo ${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp)
 qlever_target_link_libraries(compilationInfo)
 
-add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp)
-qlever_target_link_libraries(IndexBuilderMain qlever index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
+add_executable(qlever-index src/index/IndexBuilderMain.cpp)
+qlever_target_link_libraries(qlever-index qlever index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
 
-add_executable(ServerMain src/ServerMain.cpp)
-qlever_target_link_libraries(ServerMain engine server ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
+add_executable(qlever-server src/ServerMain.cpp)
+qlever_target_link_libraries(qlever-server engine server ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
 if (USE_PRECOMPILED_HEADERS)
-target_precompile_headers(ServerMain REUSE_FROM engine)
+    target_precompile_headers(qlever-server REUSE_FROM engine)
 endif()
 
 add_executable(LibQLeverExample src/libqlever/LibQLeverExample.cpp)
