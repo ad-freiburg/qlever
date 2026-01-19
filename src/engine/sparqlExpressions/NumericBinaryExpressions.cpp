@@ -45,8 +45,14 @@ NARY_EXPRESSION(AddExpression, 2, FV<Add, NumericValueGetter>);
 // _____________________________________________________________________________
 // Subtract.
 struct SubtractImpl {
-  template <typename L, typename R>
-  ValueId operator()(L lhs, R rhs) const {
+  ValueId operator()(NumericOrDate lhs, NumericOrDate rhs) const {
+    return std::visit(SubtractImpl{}, lhs, rhs);
+  }
+
+  CPP_template(typename L, typename R)(
+      requires(!std::is_same_v<L, NumericOrDate>
+                   CPP_and !std::is_same_v<R, NumericOrDate>)) ValueId
+  operator()(L lhs, R rhs) const {
     using T1 = std::decay_t<decltype(lhs)>;
     using T2 = std::decay_t<decltype(rhs)>;
 
@@ -58,7 +64,7 @@ struct SubtractImpl {
       }
     } else if constexpr (std::is_same_v<T1, int64_t>) {
       if constexpr (std::is_same_v<T2, double>) {
-        return Id::makeFromDouble(tstatic_cast<double>(lhs) - rhs);
+        return Id::makeFromDouble(static_cast<double>(lhs) - rhs);
       } else if constexpr (std::is_same_v<T2, int64_t>) {
         return Id::makeFromInt(lhs - rhs);
       }
