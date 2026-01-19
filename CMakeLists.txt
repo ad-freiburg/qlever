@@ -525,6 +525,9 @@ install(TARGETS
 # CPack packaging
 ###############################################################
 
+# Get version from git describe for CPack
+include(GitVersion.cmake)
+
 set(CPACK_PACKAGE_NAME "qlever")
 
 # Set CPACK_PACKAGE_VERSION according to Debian packaging naming rules
