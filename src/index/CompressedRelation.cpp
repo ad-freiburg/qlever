@@ -818,12 +818,15 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
   // Set `beginIdx` and `endIdx` s.t. that they only represent the range in
   // `block` where the column with the `columnIdx` matches the `relevantId`.
 
+  std::vector<ColumnIndex> indicesToCopy;
+  indicesToCopy.reserve(scanConfig.scanColumns_.size());
   // Helper lambda that narrows down the range of the block so that all values
   // in column `columnIdx` are equal to `relevantId`. If `relevantId` is
   // `std::nullopt`, the range is not narrowed down.
-  auto filterColumn = [&block, &beginIdx, &endIdx](std::optional<Id> relevantId,
-                                                   size_t columnIdx) {
+  auto filterColumn = [&block, &beginIdx, &endIdx, &indicesToCopy, &scanConfig](
+                          std::optional<Id> relevantId, ColumnIndex columnIdx) {
     if (!relevantId.has_value()) {
+      indicesToCopy.push_back(columnIdx);
       return;
     }
     const auto& column = block.getColumn(columnIdx);
@@ -831,6 +834,12 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
         column.begin() + beginIdx, column.begin() + endIdx, relevantId.value());
     beginIdx = matchingRange.begin() - column.begin();
     endIdx = matchingRange.end() - column.begin();
+    // The function `getFirstAndLastTriple` is the only function where the
+    // passed `scanConfig` isn't created from the passed `scanSpec`. Handle this
+    // case so that we don't drop the fixed columns in that case.
+    if (ad_utility::contains(scanConfig.scanColumns_, columnIdx)) {
+      indicesToCopy.push_back(columnIdx);
+    }
   };
 
   // Now narrow down the range of the block by first `scanSpec.col0Id()`,
@@ -840,39 +849,14 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
   filterColumn(scanSpec.col1Id(), 1);
   filterColumn(scanSpec.col2Id(), 2);
 
-  // Now copy the range `[beginIdx, endIdx)` from `block` to `result`.
-  DecompressedBlock result{scanConfig.scanColumns_.size() -
-                               static_cast<size_t>(manuallyDeleteGraphColumn),
-                           allocator_};
-  result.resize(endIdx - beginIdx);
-  size_t i = 0;
-  const auto& columnIndices = scanConfig.scanColumns_;
-
-  // If `manuallyDeleteGraphColumn` is `true`, then we don't output the graph
-  // column. We need to find the position of each column in
-  // `config.scanColumns_` to correctly index into `block`, accounting for graph
-  // column deletion.
-  auto graphPosInConfig =
-      ql::ranges::find(config.scanColumns_, ADDITIONAL_COLUMN_GRAPH_ID);
-  for (const auto& colIdx :
-       columnIndices | ql::views::filter([&](const auto& idx) {
-         return !manuallyDeleteGraphColumn || idx != ADDITIONAL_COLUMN_GRAPH_ID;
-       })) {
-    auto it = ql::ranges::find(config.scanColumns_, colIdx);
-    AD_CORRECTNESS_CHECK(it != config.scanColumns_.end());
-    ColumnIndex inputColIdx = it - config.scanColumns_.begin();
-    // If the graph column was deleted and this column's position is after
-    // the graph column's position, adjust down by 1.
-    if (manuallyDeleteGraphColumn &&
-        graphPosInConfig != config.scanColumns_.end() &&
-        it > graphPosInConfig) {
-      inputColIdx--;
-    }
-    const auto& inputCol = block.getColumn(inputColIdx);
-    ql::ranges::copy(inputCol.begin() + beginIdx, inputCol.begin() + endIdx,
-                     result.getColumn(i).begin());
-    ++i;
+  // Copy all additional columns as-is.
+  for (ColumnIndex i = 0; i < allAdditionalColumns.size(); i++) {
+    indicesToCopy.push_back(3 + i);
   }
+
+  // Now copy the range `[beginIdx, endIdx)` from `block` to `result`.
+  DecompressedBlock result{indicesToCopy.size(), allocator_};
+  result.insertAtEnd(block, beginIdx, endIdx, indicesToCopy);
 
   // Return the result.
   return result;
