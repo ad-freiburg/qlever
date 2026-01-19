@@ -24,29 +24,28 @@ jobs:
         pipx install conan
       shell: bash
 
-    - name: Install curl, npm, nvm and nodejs
+    - name: Install curl, npm, nvm and nodejs. Redirect /usr/bin/nodejs to the nodejs installed via nvm and npm.
       run: |
         sudo apt install curl npm
         source ~/.bashrc
         curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
-        \. "$HOME/.nvm/nvm.sh"
+        export NVM_DIR="${HOME}/.nvm"
+        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
+        [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
+        source ~/.bashrc
         nvm install 25
         source ~/.bashrc
         node -v
+        nvm use 25.2.1
+        source ~/.bashrc
+        cd /home/runner/.nvm/versions/node/v25.2.1/bin
+        sudo ln -f node /usr/bin/nodejs
       shell: bash
 
     - name: Get build and host profiles for conan
       working-directory: ${{github.workspace}}
       run: |
         conan profile detect
-
-    - name: Cache for conan
-      uses: actions/cache@v3
-      env:
-        cache-name: cache-conan-with-emscripten-modules-ubuntu-24.04
-      with:
-        path: ~/.conan2
-        key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('conanfile.txt', 'conanprofiles/emscripten.profile')}}
 
     - name: Install and run conan. Also create a build directory.
       working-directory:  ${{github.workspace}}
@@ -55,6 +54,14 @@ jobs:
     - name: Configure CMake
       working-directory: ${{github.workspace}}/build
       run: cmake -S .. -B . -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_PARALLEL=true -D_NO_TIMING_TESTS=ON -D_EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER=ON -D_NO_BENCHMARK=ON -D_DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS=ON -GNinja
+
+    - name: Cache for conan
+      uses: actions/cache@v3
+      env:
+        cache-name: cache-conan-with-emscripten-modules-ubuntu-24.04
+      with:
+        path: ~/.conan2
+        key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('conanfile.txt', 'conanprofiles/emscripten.profile')}}
 
     - name: Build
       working-directory: ${{github.workspace}}/build
@@ -78,6 +85,7 @@ jobs:
       run: >
         source ${{github.workspace}}/build/conanrun.sh;
         ${{github.workspace}}/e2e/e2e.sh -d build
+
 
 
 
