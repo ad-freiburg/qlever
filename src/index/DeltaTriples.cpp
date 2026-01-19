@@ -508,11 +508,15 @@ DeltaTriplesManager::getCurrentLocatedTriplesSharedState() const {
 }
 
 // _____________________________________________________________________________
-std::pair<LocatedTriplesSharedState, std::vector<LocalVocabIndex>>
+std::tuple<
+    LocatedTriplesSharedState, std::vector<LocalVocabIndex>,
+    std::vector<
+        ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>>
 DeltaTriplesManager::getCurrentLocatedTriplesSharedStateWithVocab() const {
   return deltaTriples_.withReadLock([this](const DeltaTriples& deltaTriples) {
-    return std::make_pair(*currentLocatedTriplesSharedState_.rlock(),
-                          deltaTriples.copyLocalVocab());
+    auto [indices, ownedBlocks] = deltaTriples.copyLocalVocab();
+    return std::make_tuple(*currentLocatedTriplesSharedState_.rlock(),
+                           std::move(indices), std::move(ownedBlocks));
   });
 }
 
@@ -613,12 +617,17 @@ void DeltaTriplesManager::setFilenameForPersistentUpdatesAndReadFromDisk(
 }
 
 // _____________________________________________________________________________
-std::vector<LocalVocabIndex> DeltaTriples::copyLocalVocab() const {
+std::pair<
+    std::vector<LocalVocabIndex>,
+    std::vector<
+        ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>>
+DeltaTriples::copyLocalVocab() const {
   std::vector<LocalVocabIndex> entries;
   entries.reserve(localVocab_.size());
 
   for (const LocalVocabEntry& entry : localVocab_.primaryWordSet()) {
     entries.push_back(&entry);
   }
-  return entries;
+  return std::make_pair(std::move(entries),
+                        localVocab_.getOwnedLocalBlankNodeBlocks());
 }

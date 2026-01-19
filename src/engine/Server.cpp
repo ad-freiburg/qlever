@@ -481,12 +481,12 @@ CPP_template_def(typename RequestT, typename ResponseT)(
           queryThreadPool_,
           [this, &handle, fileName = std::move(fileName)] {
             auto logFileName = fileName + ".rebuild-index-log.txt";
-            auto [currentSnapshot, localVocabCopy] =
+            auto [currentSnapshot, localVocabCopy, ownedBlocks] =
                 index_.deltaTriplesManager()
                     .getCurrentLocatedTriplesSharedStateWithVocab();
             qlever::materializeToIndex(index_.getImpl(), fileName,
-                                       localVocabCopy, currentSnapshot, handle,
-                                       logFileName);
+                                       currentSnapshot, localVocabCopy,
+                                       ownedBlocks, handle, logFileName);
           },
           handle);
       co_await std::move(coroutine);

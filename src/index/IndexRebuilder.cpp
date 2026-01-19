@@ -33,10 +33,14 @@ using CancellationHandle = ad_utility::SharedCancellationHandle;
 // positions (the `VocabIndex` of the `LocalVocabEntry`s position in the old
 // `vocab`) and a mapping from old local vocab `Id`s bit representation (for
 // cheaper hash functions) to new vocab `Id`s.
-std::pair<std::vector<VocabIndex>, ad_utility::HashMap<Id::T, Id>>
-materializeLocalVocab(const std::vector<LocalVocabIndex>& entries,
-                      const Index::Vocab& vocab,
-                      const std::string& newIndexName) {
+std::tuple<std::vector<VocabIndex>, ad_utility::HashMap<Id::T, Id>,
+           std::vector<uint64_t>>
+materializeLocalVocab(
+    const std::vector<LocalVocabIndex>& entries,
+    const std::vector<
+        ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>&
+        ownedBlocks,
+    const Index::Vocab& vocab, const std::string& newIndexName) {
   size_t newWordCount = 0;
   std::vector<std::tuple<VocabIndex, std::string_view, Id>> insertInfo;
   insertInfo.reserve(entries.size());
@@ -86,8 +90,15 @@ materializeLocalVocab(const std::vector<LocalVocabIndex>& entries,
   for (const auto& [vocabIndex, _, __] : insertInfo) {
     insertionPositions.push_back(vocabIndex);
   }
-  return std::make_pair(std::move(insertionPositions),
-                        std::move(localVocabMapping));
+  std::vector<uint64_t> flatBlockIndices;
+  for (const auto& ownedBlockEntry : ownedBlocks) {
+    ql::ranges::copy(ownedBlockEntry.blockIndices_,
+                     std::back_inserter(flatBlockIndices));
+  }
+  ql::ranges::sort(flatBlockIndices);
+  return std::make_tuple(std::move(insertionPositions),
+                         std::move(localVocabMapping),
+                         std::move(flatBlockIndices));
 }
 
 // Map old vocab `Id`s to new vocab `Id`s according to the given
@@ -106,6 +117,29 @@ remapVocabId(Id original, const std::vector<VocabIndex>& insertionPositions) {
       VocabIndex::make(original.getVocabIndex().get() + offset));
 }
 
+// Remaps a blank node `Id` to another id that's more dense.
+Id remapBlankNodeId(Id original, const std::vector<uint64_t>& blankNodeBlocks,
+                    uint64_t minBlankNodeIndex) {
+  AD_EXPENSIVE_CHECK(
+      original.getDatatype() == Datatype::BlankNodeIndex,
+      "Only ids resembling a blank node index can be remapped with this "
+      "function.");
+  auto rawId = original.getBlankNodeIndex().get();
+  if (rawId < minBlankNodeIndex) {
+    return original;
+  }
+  auto normalizedId = rawId - minBlankNodeIndex;
+  auto blockIndex = normalizedId / ad_utility::BlankNodeManager::blockSize_;
+  auto it = ql::ranges::lower_bound(blankNodeBlocks, blockIndex);
+  AD_EXPENSIVE_CHECK(it != blankNodeBlocks.end() && *it == blockIndex,
+                     "Could not find block index of blank node.");
+  return Id::makeFromBlankNodeIndex(BlankNodeIndex::make(
+      (normalizedId % ad_utility::BlankNodeManager::blockSize_) +
+      ql::ranges::distance(blankNodeBlocks.begin(), it) *
+          ad_utility::BlankNodeManager::blockSize_ +
+      minBlankNodeIndex));
+}
+
 // Create a copy of the given `permutation` scanned according to `scanSpec`,
 // where all local vocab `Id`s are remapped according to `localVocabMapping`
 // and all vocab `Id`s are remapped according to `insertInfo` to create a new
@@ -116,8 +150,11 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
     const LocatedTriplesSharedState& locatedTriplesSharedState,
     const ad_utility::HashMap<Id::T, Id>& localVocabMapping,
     const std::vector<VocabIndex>& insertionPositions,
+    const std::vector<uint64_t>& blankNodeBlocks, uint64_t minBlankNodeIndex,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
     ql::span<const ColumnIndex> additionalColumns) {
+  AD_CORRECTNESS_CHECK(ql::ranges::is_sorted(insertionPositions));
+  AD_CORRECTNESS_CHECK(ql::ranges::is_sorted(blankNodeBlocks));
   Permutation::ScanSpecAndBlocks scanSpecAndBlocks{
       ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
       blockMetadataRanges};
@@ -128,7 +165,8 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
   return ad_utility::InputRangeTypeErased{
       ad_utility::CachingTransformInputRange{
           std::move(fullScan),
-          [&localVocabMapping, &insertionPositions](IdTable& idTable) {
+          [&localVocabMapping, &insertionPositions, &blankNodeBlocks,
+           minBlankNodeIndex](IdTable& idTable) {
             // TODO<RobinTF> process columns in parallel.
             auto allCols = idTable.getColumns();
             // Extra columns beyond the graph column only contain integers (or
@@ -144,6 +182,8 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
                   id = remapVocabId(id, insertionPositions);
                 } else if (id.getDatatype() == Datatype::LocalVocabIndex) {
                   id = localVocabMapping.at(id.getBits());
+                } else if (id.getDatatype() == Datatype::BlankNodeIndex) {
+                  id = remapBlankNodeId(id, blankNodeBlocks, minBlankNodeIndex);
                 }
               }
             }
@@ -180,6 +220,7 @@ std::packaged_task<void()> createPermutationWriterTask(
     const LocatedTriplesSharedState& locatedTriplesSharedState,
     const ad_utility::HashMap<Id::T, Id>& localVocabMapping,
     const std::vector<VocabIndex>& insertionPositions,
+    const std::vector<uint64_t>& blankNodeBlocks, uint64_t minBlankNodeIndex,
     const ad_utility::SharedCancellationHandle& cancellationHandle) {
   auto blockMetadataRanges = permutation.getAugmentedMetadataForPermutation(
       *locatedTriplesSharedState);
@@ -197,14 +238,15 @@ std::packaged_task<void()> createPermutationWriterTask(
   return std::packaged_task{
       [numColumns, blockMetadataRanges = std::move(blockMetadataRanges),
        &newIndex, &permutation, isInternal, &locatedTriplesSharedState,
-       &localVocabMapping, &insertionPositions, &cancellationHandle,
+       &localVocabMapping, &insertionPositions, &blankNodeBlocks,
+       minBlankNodeIndex, &cancellationHandle,
        additionalColumns = std::move(additionalColumns)]() {
         newIndex.createPermutation(
             numColumns,
-            readIndexAndRemap(permutation, blockMetadataRanges,
-                              locatedTriplesSharedState, localVocabMapping,
-                              insertionPositions, cancellationHandle,
-                              additionalColumns),
+            readIndexAndRemap(
+                permutation, blockMetadataRanges, locatedTriplesSharedState,
+                localVocabMapping, insertionPositions, blankNodeBlocks,
+                minBlankNodeIndex, cancellationHandle, additionalColumns),
             permutation, isInternal);
       }};
 }
@@ -214,8 +256,11 @@ std::packaged_task<void()> createPermutationWriterTask(
 namespace qlever {
 void materializeToIndex(
     const IndexImpl& index, const std::string& newIndexName,
-    const std::vector<LocalVocabIndex>& entries,
     const LocatedTriplesSharedState& locatedTriplesSharedState,
+    const std::vector<LocalVocabIndex>& entries,
+    const std::vector<
+        ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>&
+        ownedBlocks,
     const CancellationHandle& cancellationHandle,
     const std::string& logFileName) {
   AD_CONTRACT_CHECK(!logFileName.empty(), "Log file name must not be empty");
@@ -234,14 +279,21 @@ void materializeToIndex(
 
   REBUILD_LOG_INFO << "Writing new vocabulary ..." << std::endl;
 
-  const auto& [insertionPositions, localVocabMapping] =
-      materializeLocalVocab(entries, index.getVocab(), newIndexName);
+  const auto& [insertionPositions, localVocabMapping, blankNodeBlocks] =
+      materializeLocalVocab(entries, ownedBlocks, index.getVocab(),
+                            newIndexName);
 
   REBUILD_LOG_INFO << "Recomputing statistics ..." << std::endl;
 
   auto newStats = index.recomputeStatistics(locatedTriplesSharedState);
 
-  ;
+  auto minBlankNodeIndex = index.getBlankNodeManager()->minIndex_;
+
+  // Set newer lower bound for dynamic blank node indices.
+  newStats["num-blank-nodes-total"] =
+      minBlankNodeIndex +
+      blankNodeBlocks.size() * ad_utility::BlankNodeManager::blockSize_;
+
   IndexImpl newIndex{index.allocator(), false};
   newIndex.loadConfigFromOldIndex(newIndexName, index, newStats);
 
@@ -266,7 +318,8 @@ void materializeToIndex(
       const auto& actualPermutation = index.getPermutation(permutation);
       tasks.push_back(createPermutationWriterTask(
           newIndex, actualPermutation, false, locatedTriplesSharedState,
-          localVocabMapping, insertionPositions, cancellationHandle));
+          localVocabMapping, insertionPositions, blankNodeBlocks,
+          minBlankNodeIndex, cancellationHandle));
     }
   }
 
@@ -275,10 +328,12 @@ void materializeToIndex(
     const auto& internalPermutation = actualPermutation.internalPermutation();
     tasks.push_back(createPermutationWriterTask(
         newIndex, internalPermutation, true, locatedTriplesSharedState,
-        localVocabMapping, insertionPositions, cancellationHandle));
+        localVocabMapping, insertionPositions, blankNodeBlocks,
+        minBlankNodeIndex, cancellationHandle));
     tasks.push_back(createPermutationWriterTask(
         newIndex, actualPermutation, false, locatedTriplesSharedState,
-        localVocabMapping, insertionPositions, cancellationHandle));
+        localVocabMapping, insertionPositions, blankNodeBlocks,
+        minBlankNodeIndex, cancellationHandle));
   }
 
   ad_utility::runTasksInParallel(std::move(tasks));

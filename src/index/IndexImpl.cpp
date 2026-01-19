@@ -43,6 +43,11 @@ using namespace ad_utility::memory_literals;
 // sorter.
 static constexpr size_t NUM_EXTERNAL_SORTERS_AT_SAME_TIME = 2u;
 
+// The name of this JSON property no longer holds up as soon as blank nodes are
+// added or removed via updates. For backwards compatibility we keep the name.
+constexpr std::string_view BLANK_NODE_ALLOCATION_START =
+    "num-blank-nodes-total";
+
 // _____________________________________________________________________________
 IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator,
                      bool registerSingleton)
@@ -447,7 +452,7 @@ void IndexImpl::createFromFiles(
     configurationJson_["has-all-permutations"] = true;
   }
 
-  configurationJson_["num-blank-nodes-total"] =
+  configurationJson_[BLANK_NODE_ALLOCATION_START] =
       indexBuilderData.vocabularyMetaData_.getNextBlankNodeIndex();
 
   addInternalStatisticsToConfiguration(numTriplesInternal,
@@ -1284,7 +1289,7 @@ void IndexImpl::readConfiguration() {
 
   // Initialize BlankNodeManager
   uint64_t numBlankNodesTotal;
-  loadDataMember("num-blank-nodes-total", numBlankNodesTotal);
+  loadDataMember(BLANK_NODE_ALLOCATION_START, numBlankNodesTotal);
   blankNodeManager_ =
       std::make_unique<ad_utility::BlankNodeManager>(numBlankNodesTotal);
 
@@ -1974,7 +1979,6 @@ nlohmann::json IndexImpl::recomputeStatistics(
   size_t numPredicates = 0;
   size_t numPredicatesInternal = 0;
   size_t numObjects = 0;
-  uint64_t nextBlankNode = 0;
 
   std::vector<std::packaged_task<void()>> tasks;
 
@@ -1987,17 +1991,7 @@ nlohmann::json IndexImpl::recomputeStatistics(
 
   tasks.push_back(getCounterTask(
       numPredicates, *pso_,
-      [&numTriples, &nextBlankNode](const IdTable& table) {
-        numTriples += table.numRows();
-        for (auto col : table.getColumns()) {
-          for (auto id : col) {
-            if (id.getDatatype() == Datatype::BlankNodeIndex) {
-              nextBlankNode =
-                  std::max(nextBlankNode, id.getBlankNodeIndex().get() + 1);
-            }
-          }
-        }
-      }));
+      [&numTriples](const IdTable& table) { numTriples += table.numRows(); }));
 
   tasks.push_back(getCounterTask(numPredicatesInternal,
                                  pso_->internalPermutation(),
@@ -2022,6 +2016,5 @@ nlohmann::json IndexImpl::recomputeStatistics(
     configuration["num-subjects"] = NumNormalAndInternal{numSubjects, 0};
     configuration["num-objects"] = NumNormalAndInternal{numObjects, 0};
   }
-  configuration["num-blank-nodes-total"] = nextBlankNode;
   return configuration;
 }

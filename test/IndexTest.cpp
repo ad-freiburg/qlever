@@ -722,8 +722,6 @@ TEST(IndexImpl, recomputeStatistics) {
       EXPECT_EQ(newStats["num-subjects"], NNAI(0, 0));
       EXPECT_EQ(newStats["num-objects"], NNAI(0, 0));
     }
-    // Blank node ids are remapped, so we cannot predict the exact number.
-    EXPECT_NE(newStats["num-blank-nodes-total"], 0);
   }
 }
 

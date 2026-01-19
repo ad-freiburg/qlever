@@ -278,7 +278,10 @@ class DeltaTriples {
   // Create a copy of the local vocab such that it can be processed
   // without holding the lock. You have to make sure separately that the
   // pointers are still valid.
-  std::vector<LocalVocabIndex> copyLocalVocab() const;
+  std::pair<std::vector<LocalVocabIndex>,
+            std::vector<ad_utility::BlankNodeManager::LocalBlankNodeManager::
+                            OwnedBlocksEntry>>
+  copyLocalVocab() const;
 
  private:
   // The proper state according to the template parameter. This will either
@@ -372,8 +375,11 @@ class DeltaTriplesManager {
   LocatedTriplesSharedState getCurrentLocatedTriplesSharedState() const;
 
   // In addition to the located triples shared state, also acquire a copy of the
-  // local vocab indices.
-  std::pair<LocatedTriplesSharedState, std::vector<LocalVocabIndex>>
+  // local vocab indices and the local blank node blocks owned by the local
+  // vocab.
+  std::tuple<LocatedTriplesSharedState, std::vector<LocalVocabIndex>,
+             std::vector<ad_utility::BlankNodeManager::LocalBlankNodeManager::
+                             OwnedBlocksEntry>>
   getCurrentLocatedTriplesSharedStateWithVocab() const;
 };
 

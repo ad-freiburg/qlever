@@ -8,7 +8,10 @@
 #include <string>
 #include <vector>
 
+#include "global/IndexTypes.h"
+#include "index/DeltaTriples.h"
 #include "index/IndexImpl.h"
+#include "util/BlankNodeManager.h"
 #include "util/CancellationHandle.h"
 
 namespace qlever {
@@ -16,8 +19,11 @@ namespace qlever {
 // Build a new index based on this data.
 void materializeToIndex(
     const IndexImpl& index, const std::string& newIndexName,
-    const std::vector<LocalVocabIndex>& entries,
     const LocatedTriplesSharedState& locatedTriplesSharedState,
+    const std::vector<LocalVocabIndex>& entries,
+    const std::vector<
+        ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>&
+        ownedBlocks,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
     const std::string& logFileName);
 
