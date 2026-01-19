@@ -242,7 +242,7 @@ class BlankNodeManager {
   [[nodiscard]] Block allocateBlock();
 
   // Allocate and return the block with the given `blockIdx`. This function can
-  // only be safely called when no calls to `allocatedBlock()` have been
+  // only be safely called when no calls to `allocateBlock()` have been
   // performed. It can for example be used to restore blocks from previously
   // serialized cache results or updates when the engine is started, but before
   // any queries are performed. Can be used while alreading holding a lock to
