@@ -24,23 +24,10 @@ jobs:
         pipx install conan
       shell: bash
 
-    - name: Install curl, nvm and nodejs. Redirect /usr/bin/nodejs to the nodejs installed via nvm and npm.
-      run: |
-        sudo apt install curl
-        source ~/.bashrc
-        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
-        export NVM_DIR="${HOME}/.nvm"
-        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
-        [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
-        source ~/.bashrc
-        nvm install 25
-        source ~/.bashrc
-        node -v
-        nvm use 25.2.1
-        source ~/.bashrc
-        cd /home/runner/.nvm/versions/node/v25.2.1/bin
-        sudo ln -f node /usr/bin/nodejs
-      shell: bash
+    - name: Set up nodejs v25.
+      uses: actions/setup-node@v6
+      with:
+        node-version: 25
 
     - name: Get build and host profiles for conan
       working-directory: ${{github.workspace}}
@@ -85,6 +72,7 @@ jobs:
       run: >
         source ${{github.workspace}}/build/conanrun.sh;
         ${{github.workspace}}/e2e/e2e.sh -d build
+
 
 
 
