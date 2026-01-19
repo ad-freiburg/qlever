@@ -1173,7 +1173,8 @@ TEST(CompressedRelationReader, onlyRequestingObjectPatternsWorks) {
       permutation.getAugmentedMetadataForPermutation(
           *sharedLocatedTriplesSnapshot)};
 
-  std::vector additionalColumns{ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN};
+  std::vector<ColumnIndex> additionalColumns{
+      ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN};
 
   auto cancellationHandle =
       std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
