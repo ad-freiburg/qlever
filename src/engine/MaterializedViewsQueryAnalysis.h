@@ -68,7 +68,7 @@ struct UserQueryChain {
 
 // Cache data structure for the `MaterializedViewsManager`. This object can be
 // used for quickly looking up if a given query can be optimized by making use
-// of an exisiting materialized view.
+// of an existing materialized view.
 class QueryPatternCache {
   // Simple chains can be found by direct access into a hash map.
   ad_utility::HashMap<ChainedPredicates, std::vector<ChainInfo>>

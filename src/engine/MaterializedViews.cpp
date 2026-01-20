@@ -605,7 +605,7 @@ MaterializedViewsManager::makeSingleChainReplacementIndexScan(
     return std::nullopt;
   }();
 
-  // The join between `left` and `right` does not constitue a chain.
+  // The join between `left` and `right` does not constitute a chain.
   if (!userQueryChain.has_value()) {
     return nullptr;
   }
