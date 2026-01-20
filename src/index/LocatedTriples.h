@@ -35,6 +35,23 @@ struct NumAddedAndDeleted {
   }
 };
 
+// Statistics collected during a VACUUM operation on a block.
+struct VacuumStatistics {
+  size_t numDeletionsRemoved_;   // Invalid deletions removed
+  size_t numInsertionsRemoved_;  // Redundant insertions removed
+  size_t numDeletionsKept_;      // Valid deletions kept
+  size_t numInsertionsKept_;     // Valid insertions kept
+
+  size_t totalRemoved() const {
+    return numDeletionsRemoved_ + numInsertionsRemoved_;
+  }
+
+  size_t totalKept() const { return numDeletionsKept_ + numInsertionsKept_; }
+
+  friend std::ostream& operator<<(std::ostream& os,
+                                  const VacuumStatistics& stats);
+};
+
 // A triple and its block in a particular permutation. For a detailed definition
 // of all border cases, see the definition at the end of this file.
 struct LocatedTriple {
@@ -102,6 +119,11 @@ class LocatedTriplesPerBlock {
   template <size_t numIndexColumns, bool includeGraphColumn>
   IdTable mergeTriplesImpl(size_t blockIndex, const IdTable& block) const;
 
+  // Implementation of the `vacuumBlock` function (which has `numIndexColumns`
+  // as a normal argument, and translates it into a template argument).
+  template <size_t numIndexColumns, bool includeGraphColumn>
+  VacuumStatistics vacuumBlockImpl(size_t blockIndex, const IdTable& block);
+
   // Stores the block metadata where the block borders have been adjusted for
   // the updated triples.
   std::optional<std::vector<CompressedBlockMetadata>> augmentedMetadata_;
@@ -155,6 +177,20 @@ class LocatedTriplesPerBlock {
   // located triple will have values for OSG and UNDEF for X and Y.
   IdTable mergeTriples(size_t blockIndex, const IdTable& block,
                        size_t numIndexColumns, bool includeGraphColumn) const;
+
+  // Vacuum updates for a specific block, removing redundant operations.
+  // This removes:
+  // - Deletions of triples that don't exist in the original dataset
+  // - Insertions of triples that already exist in the original dataset
+  //
+  // `numIndexColumns` is the number of columns in `block`, except the graph
+  // column and payload if any, that is, a number from `{1, 2, 3}`.
+  // `includeGraphColumn` specifies whether `block` contains the graph column.
+  //
+  // NOTE: After calling this function, `updateAugmentedMetadata()` should be
+  // called to maintain metadata consistency.
+  void vacuumBlock(size_t blockIndex, const IdTable& block,
+                   size_t numIndexColumns, bool includeGraphColumn);
 
   // Return true iff there are located triples in the block with the given
   // index.

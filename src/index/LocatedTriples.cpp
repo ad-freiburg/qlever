@@ -230,6 +230,126 @@ IdTable LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
 }
 
 // ____________________________________________________________________________
+template <size_t numIndexColumns, bool includeGraphColumn>
+VacuumStatistics LocatedTriplesPerBlock::vacuumBlockImpl(size_t blockIndex,
+                                                         const IdTable& block) {
+  // This method should only be called if there are located triples in the
+  // specified block.
+  AD_CONTRACT_CHECK(map_.contains(blockIndex));
+
+  AD_CONTRACT_CHECK(numIndexColumns + static_cast<size_t>(includeGraphColumn) <=
+                    block.numColumns());
+
+  const auto& locatedTriples = map_.at(blockIndex);
+
+  // Build a new set with only valid updates.
+  LocatedTriples newUpdates;
+  VacuumStatistics stats{0, 0, 0, 0};
+
+  auto lessThan = [](const auto& lt, const auto& row) {
+    return tieLocatedTriple<numIndexColumns, includeGraphColumn>(lt) <
+           tieIdTableRow<numIndexColumns, includeGraphColumn>(row);
+  };
+  auto equal = [](const auto& lt, const auto& row) {
+    return tieLocatedTriple<numIndexColumns, includeGraphColumn>(lt) ==
+           tieIdTableRow<numIndexColumns, includeGraphColumn>(row);
+  };
+
+  auto rowIt = block.begin();
+  auto updateIt = locatedTriples.begin();
+
+  // Two-pointer merge to identify valid updates.
+  while (updateIt != locatedTriples.end() && rowIt != block.end()) {
+    if (lessThan(updateIt, *rowIt)) {
+      // Update is for a triple not in the original dataset.
+      if (updateIt->insertOrDelete_) {
+        // Valid insertion of a new triple.
+        newUpdates.insert(*updateIt);
+        stats.numInsertionsKept_++;
+      } else {
+        // Redundant deletion of a non-existent triple.
+        stats.numDeletionsRemoved_++;
+      }
+      updateIt++;
+    } else if (equal(updateIt, *rowIt)) {
+      // Update matches an existing triple in the dataset.
+      if (updateIt->insertOrDelete_) {
+        // Redundant insertion of an existing triple.
+        stats.numInsertionsRemoved_++;
+      } else {
+        // Valid deletion of an existing triple.
+        newUpdates.insert(*updateIt);
+        stats.numDeletionsKept_++;
+      }
+      updateIt++;
+    } else {
+      // Row is less than update, advance row iterator.
+      rowIt++;
+    }
+  }
+
+  // Handle remaining updates after block is exhausted.
+  while (updateIt != locatedTriples.end()) {
+    if (updateIt->insertOrDelete_) {
+      // Valid insertion (triple not in dataset).
+      newUpdates.insert(*updateIt);
+      stats.numInsertionsKept_++;
+    } else {
+      // Redundant deletion (triple not in dataset).
+      stats.numDeletionsRemoved_++;
+    }
+    updateIt++;
+  }
+
+  // Update the data structure.
+  size_t numRemoved = stats.totalRemoved();
+  if (newUpdates.empty()) {
+    // All updates were redundant, remove the block from the map.
+    map_.erase(blockIndex);
+  } else {
+    // Replace old updates with new (valid) updates.
+    map_[blockIndex] = std::move(newUpdates);
+  }
+
+  // Update the counter.
+  numTriples_ -= numRemoved;
+
+  return stats;
+}
+
+// ____________________________________________________________________________
+void LocatedTriplesPerBlock::vacuumBlock(size_t blockIndex,
+                                         const IdTable& block,
+                                         size_t numIndexColumns,
+                                         bool includeGraphColumn) {
+  // Early exit if there are no updates for this block.
+  if (!hasUpdates(blockIndex)) {
+    return;
+  }
+
+  // The following code does nothing more than turn `numIndexColumns` and
+  // `includeGraphColumn` into template parameters of `vacuumBlockImpl`.
+  auto vacuumBlockImplHelper = [numIndexColumns, blockIndex, &block,
+                                this](auto hasGraphColumn) {
+    if (numIndexColumns == 3) {
+      return vacuumBlockImpl<3, hasGraphColumn>(blockIndex, block);
+    } else if (numIndexColumns == 2) {
+      return vacuumBlockImpl<2, hasGraphColumn>(blockIndex, block);
+    } else {
+      AD_CORRECTNESS_CHECK(numIndexColumns == 1);
+      return vacuumBlockImpl<1, hasGraphColumn>(blockIndex, block);
+    }
+  };
+
+  using ad_utility::use_value_identity::vi;
+  if (includeGraphColumn) {
+    vacuumBlockImplHelper(vi<true>);
+  } else {
+    vacuumBlockImplHelper(vi<false>);
+  }
+}
+
+// ____________________________________________________________________________
 std::vector<LocatedTriples::iterator> LocatedTriplesPerBlock::add(
     ql::span<const LocatedTriple> locatedTriples,
     ad_utility::timer::TimeTracer& tracer) {
@@ -356,6 +476,17 @@ void LocatedTriplesPerBlock::updateAugmentedMetadata() {
         CompressedBlockMetadata::checkInvariantsForSortedBlocks(
             *augmentedMetadata_));
   }
+}
+
+// ____________________________________________________________________________
+std::ostream& operator<<(std::ostream& os, const VacuumStatistics& stats) {
+  os << "VacuumStatistics{removed: " << stats.totalRemoved()
+     << " (insertions: " << stats.numInsertionsRemoved_
+     << ", deletions: " << stats.numDeletionsRemoved_
+     << "), kept: " << stats.totalKept()
+     << " (insertions: " << stats.numInsertionsKept_
+     << ", deletions: " << stats.numDeletionsKept_ << ")}";
+  return os;
 }
 
 // ____________________________________________________________________________
