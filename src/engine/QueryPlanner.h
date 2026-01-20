@@ -450,8 +450,14 @@ class QueryPlanner {
                                                       const SubtreePlan& b,
                                                       const JoinColumns& jcs);
 
-  // TODO
-  std::optional<SubtreePlan> createMaterializedViewJoinReplacement(
+  // Helper that checks if `a` and `b` are `IndexScan` plans and the
+  // `MaterializedViewManager` has a replacement for a simple join between them.
+  // Returns an `IndexScan` plan on the respective materialized view, if
+  // available.
+  // TODO<ullingerc> Add a second version which detects more complex joins from
+  // a `BasicGraphPattern` (and plans the non-optimized parts with another
+  // `GraphPatternPlanner`).
+  std::optional<SubtreePlan> createMaterializedViewSimpleJoinReplacement(
       const SubtreePlan& a, const SubtreePlan& b, const JoinColumns& jcs) const;
 
   vector<SubtreePlan> getOrderByRow(

@@ -113,62 +113,6 @@ MaterializedViewWriter::getIdTableColumnNamesAndPermutation() const {
 }
 
 // _____________________________________________________________________________
-std::string MaterializedViewWriter::detectJoinPattern() const {
-  // AD_LOG_INFO << parsedQuery_._rootGraphPattern._graphPatterns.at(0)
-  //                    .getBasic()
-  //                    ._triples.at(0)
-  //                    .asString()
-  //             << std::endl;
-  // auto parsedQuery = SparqlParser::parseQuery(
-  //     &index_.getImpl().encodedIriManager(), std::move(query), {});
-
-  auto op = qet_->getRootOperation();
-  auto join = std::dynamic_pointer_cast<Join>(op);
-  if (join == nullptr) {
-    return "";
-  }
-  const auto& children = join->getChildren();
-  AD_CORRECTNESS_CHECK(children.size() == 2);
-  auto getIndexScan = [](QueryExecutionTree* ptr) {
-    return std::dynamic_pointer_cast<IndexScan>(ptr->getRootOperation());
-  };
-  auto left = getIndexScan(children.at(0));
-  auto right = getIndexScan(children.at(1));
-  if (left == nullptr || right == nullptr) {
-    return "";
-  }
-
-  // we are looking for the pattern:
-  // ?a <p1> ?b .
-  // ?b <p2> ?c .
-
-  auto check = [](std::shared_ptr<IndexScan> a,
-                  std::shared_ptr<IndexScan> b) -> std::string {
-    auto [s1, p1, o1] = a->triple();
-    auto [s2, p2, o2] = b->triple();
-
-    if (s1.isVariable() && s1 != s2 && s1 != o1 && p1.isIri() &&
-        o1.isVariable() && o1 == s2 && p2.isIri() && o2.isVariable() &&
-        s1 != o2 && o1 != o2) {
-      return absl::StrCat(p1.toString(), " CHAIN ", p2.toString());
-      // TODO remember variables
-    }
-    return "";
-  };
-
-  auto lr = check(left, right);
-  if (!lr.empty()) {
-    return lr;
-  }
-  auto rl = check(right, left);
-  if (!rl.empty()) {
-    return rl;
-  }
-
-  return "";
-}
-
-// _____________________________________________________________________________
 void MaterializedViewWriter::permuteIdTableAndCheckNoLocalVocabEntries(
     IdTable& block) const {
   // The `IdTable` may have a different column ordering from the
@@ -341,7 +285,6 @@ void MaterializedViewWriter::writeViewMetadata() const {
                    }) |
                    ::ranges::to<std::vector<std::string>>())},
       {"query", parsedQuery_._originalString},
-      // {"joinPattern", detectJoinPattern()}
   };
   ad_utility::makeOfstream(getFilenameBase() + ".viewinfo.json")
       << viewInfo.dump() << std::endl;
@@ -436,12 +379,6 @@ void MaterializedViewsManager::loadView(const std::string& name) const {
     AD_LOG_INFO << "The materialized view '" << name
                 << "' was added to the query pattern cache." << std::endl;
   }
-  // if (name == "geom") {
-  //   auto lock = joinPatterns_.wlock();
-  //   std::string x = ("<http://www.opengis.net/ont/geosparql#hasGeometry>");
-  //   std::string y = ("<http://www.opengis.net/ont/geosparql#asWKT>");
-  //   lock->insert({SingleChain{x, y}, loadedViews_.rlock()->at(name)});
-  // }
 }
 
 // _____________________________________________________________________________
@@ -649,18 +586,6 @@ std::shared_ptr<IndexScan> MaterializedView::makeIndexScan(
 }
 
 // _____________________________________________________________________________
-std::shared_ptr<IndexScan> MaterializedViewsManager::makeIndexScan(
-    QueryExecutionContext*, const JoinPattern&) const {
-  // auto lock = loadedViews_.rlock();
-  // if (lock->contains(joinPattern)) {
-  //   auto view = lock->at(joinPattern);
-  //   // view->makeIndexScan(qec, joinPattern, ...)
-  //   // we need join pattern, var names from query,.
-  // }
-  return nullptr;
-}
-
-// _____________________________________________________________________________
 std::shared_ptr<IndexScan>
 MaterializedViewsManager::makeSingleChainReplacementIndexScan(
     QueryExecutionContext* qec, std::shared_ptr<IndexScan> left,
@@ -685,6 +610,7 @@ MaterializedViewsManager::makeSingleChainReplacementIndexScan(
   if (res.value().chainInfos_.size() == 0) {
     return nullptr;
   }
+
   // TODO we should maybe consider all the possible views (could have different
   // sorting)
   const auto& [subj, chain, obj, view] = res.value().chainInfos_.at(0);

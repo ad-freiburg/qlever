@@ -128,9 +128,6 @@ class MaterializedViewWriter {
   // `CompressedRelationWriter`. Returns the permutation metadata.
   IndexMetaDataMmap writePermutation(RangeOfIdTables sortedBlocksSPO) const;
 
-  // TODO
-  std::string detectJoinPattern() const;
-
   // Helper for `computeResultAndWritePermutation`: Writes the metadata JSON
   // files with column names and ordering to disk.
   void writeViewMetadata() const;
@@ -241,37 +238,6 @@ class MaterializedView {
       const parsedQuery::MaterializedViewQuery& viewQuery) const;
 };
 
-//
-struct SingleChain {
-  // ?something <predjoinobj> ?x .
-  std::string predJoinObj_;
-  // ?x <predjoinsubj> ?something_else .
-  std::string predJoinSubj_;
-
-  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_CONSTEXPR(SingleChain);
-
-  CPP_template(typename H, typename G)(
-      requires ql::concepts::same_as<G, SingleChain>) friend H
-      AbslHashValue(H h, const G& g) {
-    return H::combine(std::move(h), g.predJoinObj_, g.predJoinSubj_);
-  }
-
-  // Serialize to JSON
-  // Deserialize from JSON
-  // Detect
-};
-// Hashing doesn't work for stars if we only want a part of the star...
-// struct Star {
-//     std::vector<ad_utility::triple_component::Iri> predicates_; // Should be
-//     sorted
-//     // TODO hash
-// };
-// using JoinPattern = std::variant<SingleChain>;
-
-struct JoinPattern {
-  // TODO only simple chain for now
-};
-
 // The `MaterializedViewsManager` is part of the `QueryExecutionContext` and is
 // used to manage the currently loaded `MaterializedViews` in a `Server` or
 // `Qlever` instance.
@@ -281,10 +247,6 @@ class MaterializedViewsManager {
   mutable ad_utility::Synchronized<
       ad_utility::HashMap<std::string, std::shared_ptr<MaterializedView>>>
       loadedViews_;
-  // TODO multiple?
-  //   mutable ad_utility::Synchronized<
-  //       ad_utility::HashMap<SingleChain, std::shared_ptr<MaterializedView>>>
-  //       joinPatterns_;
   mutable ad_utility::Synchronized<
       materializedViewsQueryAnalysis::QueryPatternCache>
       queryPatternCache_;
@@ -314,9 +276,6 @@ class MaterializedViewsManager {
   std::shared_ptr<IndexScan> makeIndexScan(
       QueryExecutionContext* qec,
       const parsedQuery::MaterializedViewQuery& viewQuery) const;
-  // TODO . If no matching -> return nullptr.
-  std::shared_ptr<IndexScan> makeIndexScan(
-      QueryExecutionContext* qec, const JoinPattern& joinPattern) const;
 
   // TODO . If no matching -> return nullptr.
   std::shared_ptr<IndexScan> makeSingleChainReplacementIndexScan(
