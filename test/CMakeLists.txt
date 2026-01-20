@@ -491,3 +491,5 @@ addLinkAndDiscoverTest(UnitOfMeasurementTest util)
 addLinkAndDiscoverTest(MaterializedViewsTest qlever engine server)
 
 addLinkAndDiscoverTestNoLibs(ConstexprMapTest)
+
+addLinkAndDiscoverTestNoLibs(ParallelExecutorTest)
