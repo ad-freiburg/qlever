@@ -509,7 +509,7 @@ install(TARGETS
 # Get version from git describe for CPack
 include(GitVersion.cmake)
 
-set(CPACK_PACKAGE_NAME "qlever")
+set(CPACK_PACKAGE_NAME "qlever-bin")
 
 # Set CPACK_PACKAGE_VERSION according to Debian packaging naming rules
 # If git describe output begins with v + semver:
