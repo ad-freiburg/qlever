@@ -187,10 +187,17 @@ class LocatedTriplesPerBlock {
   // column and payload if any, that is, a number from `{1, 2, 3}`.
   // `includeGraphColumn` specifies whether `block` contains the graph column.
   //
+  // Returns statistics about the vacuum operation.
+  //
   // NOTE: After calling this function, `updateAugmentedMetadata()` should be
   // called to maintain metadata consistency.
-  void vacuumBlock(size_t blockIndex, const IdTable& block,
-                   size_t numIndexColumns, bool includeGraphColumn);
+  VacuumStatistics vacuumBlock(size_t blockIndex, const IdTable& block,
+                               size_t numIndexColumns, bool includeGraphColumn);
+
+  // Vacuum all blocks with more than 100k updates, removing redundant
+  // operations by comparing with original block data read from the permutation.
+  // Returns aggregated statistics for all vacuumed blocks.
+  VacuumStatistics vacuum(const Permutation& permutation);
 
   // Return true iff there are located triples in the block with the given
   // index.

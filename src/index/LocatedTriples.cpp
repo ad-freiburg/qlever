@@ -13,7 +13,9 @@
 #include "backports/algorithm.h"
 #include "index/CompressedRelation.h"
 #include "index/ConstantsIndexBuilding.h"
+#include "index/Permutation.h"
 #include "util/ChunkedForLoop.h"
+#include "util/Log.h"
 #include "util/ValueIdentity.h"
 
 // ____________________________________________________________________________
@@ -318,13 +320,13 @@ VacuumStatistics LocatedTriplesPerBlock::vacuumBlockImpl(size_t blockIndex,
 }
 
 // ____________________________________________________________________________
-void LocatedTriplesPerBlock::vacuumBlock(size_t blockIndex,
-                                         const IdTable& block,
-                                         size_t numIndexColumns,
-                                         bool includeGraphColumn) {
+VacuumStatistics LocatedTriplesPerBlock::vacuumBlock(size_t blockIndex,
+                                                     const IdTable& block,
+                                                     size_t numIndexColumns,
+                                                     bool includeGraphColumn) {
   // Early exit if there are no updates for this block.
   if (!hasUpdates(blockIndex)) {
-    return;
+    return VacuumStatistics{0, 0, 0, 0};
   }
 
   // The following code does nothing more than turn `numIndexColumns` and
@@ -343,10 +345,79 @@ void LocatedTriplesPerBlock::vacuumBlock(size_t blockIndex,
 
   using ad_utility::use_value_identity::vi;
   if (includeGraphColumn) {
-    vacuumBlockImplHelper(vi<true>);
+    return vacuumBlockImplHelper(vi<true>);
   } else {
-    vacuumBlockImplHelper(vi<false>);
+    return vacuumBlockImplHelper(vi<false>);
   }
+}
+
+// ____________________________________________________________________________
+VacuumStatistics LocatedTriplesPerBlock::vacuum(const Permutation& permutation) {
+  VacuumStatistics totalStats{0, 0, 0, 0};
+
+  // Threshold for vacuuming a block
+  constexpr size_t VACUUM_THRESHOLD = 100000;
+
+  // Step 1: Collect blocks needing vacuum
+  std::vector<size_t> blocksToVacuum;
+  for (const auto& [blockIndex, locatedTriples] : map_) {
+    if (locatedTriples.size() > VACUUM_THRESHOLD) {
+      blocksToVacuum.push_back(blockIndex);
+    }
+  }
+
+  // Early exit if nothing to vacuum
+  if (blocksToVacuum.empty()) {
+    return totalStats;
+  }
+
+  // Step 2: Get reader and metadata
+  const auto& reader = permutation.reader();
+  const auto& blockMetadata = permutation.metaData().blockData();
+
+  // Step 3: Process each block
+  for (size_t blockIndex : blocksToVacuum) {
+    // 3a: Validate
+    if (blockIndex >= blockMetadata.size()) continue;
+    const auto& blockMeta = blockMetadata[blockIndex];
+    if (!blockMeta.offsetsAndCompressedSize_.has_value()) continue;
+    AD_CORRECTNESS_CHECK(blockMeta.blockIndex_ == blockIndex);
+
+    // 3b: Determine columns
+    // TODO:
+    std::vector<ColumnIndex> columnIndices;
+    for (size_t col = 0; col < 4; ++col) {
+      const auto& colData = blockMeta.offsetsAndCompressedSize_.value()[col];
+      if (colData.compressedSize_ > 0) {
+        columnIndices.push_back(col);
+      }
+    }
+    if (columnIndices.empty()) {
+      AD_LOG_WARN << "Block " << blockIndex
+                  << " has no columns in metadata, skipping vacuum";
+      continue;
+    }
+
+    // 3c: Read and decompress
+    auto compressedBlock =
+        reader.readCompressedBlockFromFile(blockMeta, columnIndices);
+    auto decompressedBlock =
+        reader.decompressBlock(compressedBlock, blockMeta.numRows_);
+
+    // 3d: Determine parameters
+    auto [numIndexColumns, includeGraphColumn] =
+        reader.prepareLocatedTriples(columnIndices);
+
+    // 3e: Vacuum and accumulate statistics
+    auto stats = vacuumBlock(blockIndex, decompressedBlock, numIndexColumns,
+                             includeGraphColumn);
+    totalStats.numInsertionsRemoved_ += stats.numInsertionsRemoved_;
+    totalStats.numDeletionsRemoved_ += stats.numDeletionsRemoved_;
+    totalStats.numInsertionsKept_ += stats.numInsertionsKept_;
+    totalStats.numDeletionsKept_ += stats.numDeletionsKept_;
+  }
+
+  return totalStats;
 }
 
 // ____________________________________________________________________________
