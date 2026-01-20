@@ -8,6 +8,7 @@
 #include <gmock/gmock.h>
 
 #include "./MaterializedViewsTestHelpers.h"
+#include "./QueryPlannerTestHelpers.h"
 #include "./ServerTestHelpers.h"
 #include "./util/HttpRequestHelpers.h"
 #include "engine/IndexScan.h"
@@ -738,5 +739,59 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
     auto count = res->idTable().at(0, col);
     ASSERT_TRUE(count.getDatatype() == Datatype::Int);
     EXPECT_EQ(count.getInt(), 2 * numFakeSubjects_);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(MaterializedViewsQueryRewriteTest, simpleChain) {
+  namespace h = queryPlannerTestHelpers;
+
+  // Test dataset and query.
+  const std::string simpleChain = "SELECT * { ?s <p1> ?m . ?m <p2> ?o }";
+  const std::string simpleChainRenamed = "SELECT * { ?b <p2> ?c . ?a <p1> ?b }";
+  const std::string simpleChainFixed = "SELECT * {  <s2> <p1>/<p2> ?c . }";
+  const std::string chainTtl =
+      " <s1> <p1> <m2> . \n"
+      " <m1> <p2> <o1> . \n"
+      " <s2> <p1> <m2> . \n"
+      " <m2> <p2> <http://example.com/> . \n"
+      " <m2> <p3> \"abc\" .";
+  const std::string onDiskBase = "_materializedViewRewriteChain";
+  const std::string viewName = "testViewChain";
+
+  // Initialized libqlever.
+  materializedViewsTestHelpers::makeTestIndex(onDiskBase, chainTtl);
+  auto cleanUp = absl::MakeCleanup(
+      [&]() { materializedViewsTestHelpers::removeTestIndex(onDiskBase); });
+  qlever::EngineConfig config;
+  config.baseName_ = onDiskBase;
+  qlever::Qlever qlv{config};
+
+  // Without the materialized view, a regular join is executed.
+  h::expect(simpleChain, h::Join(h::IndexScanFromStrings("?s", "<p1>", "?m"),
+                                 h::IndexScanFromStrings("?m", "<p2>", "?o")));
+
+  // Write a chain structure to the materialized view.
+  MaterializedViewWriter::writeViewToDisk(onDiskBase, viewName,
+                                          qlv.parseAndPlanQuery(simpleChain));
+  qlv.loadMaterializedView(viewName);
+
+  // With the materialized view loaded, an index scan on the view is performed
+  // instead of a regular join.
+  {
+    auto [qet, qec, parsed] = qlv.parseAndPlanQuery(simpleChain);
+    EXPECT_THAT(*qet, h::IndexScanFromStrings("?s", "?m", "?o",
+                                              {Permutation::Enum::SPO}));
+  }
+  {
+    auto [qet, qec, parsed] = qlv.parseAndPlanQuery(simpleChainRenamed);
+    EXPECT_THAT(*qet, h::IndexScanFromStrings("?a", "?b", "?c",
+                                              {Permutation::Enum::SPO}));
+  }
+  {
+    auto [qet, qec, parsed] = qlv.parseAndPlanQuery(simpleChainFixed);
+    EXPECT_THAT(
+        *qet, h::IndexScanFromStrings("<s2>", "?_QLever_internal_variable_qp_0",
+                                      "?c", {Permutation::Enum::SPO}));
   }
 }
