@@ -262,11 +262,11 @@ auto ExportQueryExecutionTrees::constructQueryResultToTriples(
     const ad_utility::sparql_types::Triples& constructTriples,
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
     uint64_t& resultSize, CancellationHandle cancellationHandle) {
-  // 1. Calculate row indices (logic remains the same).
+  // 1. Calculate row indices of the rows of the result table.
   auto rowIndices = getRowIndices(limitAndOffset, *result, resultSize,
                                   constructTriples.size());
 
-  // 2. Initialize the unified generator.
+  // 2. Initialize the generator.
   ConstructTripleGenerator generator(
       constructTriples, std::move(result), qet.getVariableColumns(),
       qet.getQec()->getIndex(), std::move(cancellationHandle));

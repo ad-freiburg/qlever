@@ -13,7 +13,7 @@
 #include "util/CancellationHandle.h"
 
 /**
- * ConstructTripleGenerator: A unified class that generates StringTriples from
+ * ConstructTripleGenerator: generates StringTriples from
  * query results. It manages the global row offset and transforms result tables
  * and rows into a single continuous range of triples.
  */
@@ -41,7 +41,7 @@ class ConstructTripleGenerator {
     rowOffset_ += tableWithVocab.idTable().numRows();
 
     // this is a pipeline which transforms the rows of the result table
-    // (`table.view_`) using
+    // (`table.view_`) using the triple patterns of the CONSTRUCT-clause
     return ql::views::join(ql::views::transform(
         std::move(table.view_),
         [this, tableWithVocab, currentRowOffset](uint64_t rowIdx) {
