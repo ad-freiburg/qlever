@@ -75,6 +75,9 @@ ENV QLEVER_ARGCOMPLETE_ENABLED=1
 ENV QLEVER_IS_RUNNING_IN_CONTAINER=1
 
 # Copy the binaries and the entrypoint script.
+# qlever-server, qlever-index
+COPY --from=builder /qlever/build/qlever-* /qlever/
+# PrintIndexVersionMain, VocabularyMergerMain
 COPY --from=builder /qlever/build/*Main /qlever/
 COPY --from=builder /qlever/e2e/* /qlever/e2e/
 COPY --chmod=755 docker-entrypoint.sh /qlever/
