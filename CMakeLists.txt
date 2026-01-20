@@ -514,10 +514,10 @@ set(CPACK_PACKAGE_NAME "qlever")
 # Set CPACK_PACKAGE_VERSION according to Debian packaging naming rules
 # If git describe output begins with v + semver:
 if (PROJECT_VERSION MATCHES "^v([0-9]+\\.[0-9]+\\.[0-9]+)(-[0-9]+)?(-g[0-9a-f]+)?$")
-    
+
     # CMAKE_MATCH_1 is "major.minor.patch"
     set(TAG_VERSION "${CMAKE_MATCH_1}")
-    
+
     # CMAKE_MATCH_2 is "-commits_ahead" (or empty)
     if (CMAKE_MATCH_2)
         string(SUBSTRING "${CMAKE_MATCH_2}" 1 -1 COMMITS_AHEAD)
@@ -535,6 +535,46 @@ else()
     endif()
     set(CPACK_PACKAGE_VERSION "0.0.0-${HASH}")
 endif()
+
+# Debian package revision number (e.g., the "1" in "0.5.42-1~plucky~25.04").
+# Override with: cmake -DPACKAGE_REVISION=2
+set(PACKAGE_REVISION "1" CACHE STRING "Debian package revision number")
+
+# Version suffix for distribution-specific packages (e.g., "~plucky~25.04").
+# Auto-detected from the system, override with: cmake -DVERSION_SUFFIX="~noble~24.04"
+# Map Ubuntu codenames to version numbers
+set(UBUNTU_jammy "22.04")
+set(UBUNTU_noble "24.04")
+set(UBUNTU_oracular "24.10")
+set(UBUNTU_plucky "25.04")
+set(UBUNTU_questing "25.10")
+set(UBUNTU_resolute "26.04")
+
+set(DEFAULT_VERSION_SUFFIX "")
+if (EXISTS "/etc/os-release")
+    # Read os-release to get distribution info
+    file(STRINGS "/etc/os-release" OS_RELEASE_CONTENTS)
+
+    # Prefer UBUNTU_CODENAME (set on Ubuntu derivatives like Linux Mint)
+    # Fall back to VERSION_CODENAME
+    set(DISTRO_CODENAME "")
+    foreach(line ${OS_RELEASE_CONTENTS})
+        if (line MATCHES "^UBUNTU_CODENAME=(.*)$")
+            set(DISTRO_CODENAME "${CMAKE_MATCH_1}")
+            break()
+        elseif (line MATCHES "^VERSION_CODENAME=(.*)$" AND NOT DISTRO_CODENAME)
+            set(DISTRO_CODENAME "${CMAKE_MATCH_1}")
+        endif()
+    endforeach()
+
+    if (DEFINED UBUNTU_${DISTRO_CODENAME})
+        set(DEFAULT_VERSION_SUFFIX "~${DISTRO_CODENAME}~${UBUNTU_${DISTRO_CODENAME}}")
+    endif()
+endif()
+
+set(VERSION_SUFFIX "${DEFAULT_VERSION_SUFFIX}" CACHE STRING "Distribution-specific version suffix")
+
+set(CPACK_PACKAGE_VERSION "${CPACK_PACKAGE_VERSION}-${PACKAGE_REVISION}${VERSION_SUFFIX}")
 
 set(CPACK_PACKAGE_CONTACT "mundhahj@tf.uni-freiburg.de")
 set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/ad-freiburg/qlever")
