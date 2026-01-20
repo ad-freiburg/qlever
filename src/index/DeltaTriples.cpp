@@ -98,6 +98,51 @@ void DeltaTriples::clear() {
 }
 
 // ____________________________________________________________________________
+VacuumStatistics DeltaTriples::vacuum() {
+  // Lambda to vacuum all permutations in a LocatedTriplesPerBlock array
+  auto vacuumImpl = [this](const auto& allPermutations, auto& locatedTriples) {
+    VacuumStatistics totalStats{0, 0, 0, 0};
+
+    // Iterate over all permutations (6 for external, 2 for internal)
+    size_t i = 0;
+    for (auto permutation : allPermutations) {
+      const auto& perm = index_.getPermutation(permutation);
+
+      auto stats = locatedTriples[i].vacuum(perm);
+
+      // Accumulate statistics
+      totalStats.numInsertionsRemoved_ += stats.numInsertionsRemoved_;
+      totalStats.numDeletionsRemoved_ += stats.numDeletionsRemoved_;
+      totalStats.numInsertionsKept_ += stats.numInsertionsKept_;
+      totalStats.numDeletionsKept_ += stats.numDeletionsKept_;
+
+      ++i;
+    }
+
+    return totalStats;
+  };
+
+  // Process external permutations (PSO, POS, SPO, SOP, OPS, OSP)
+  auto externalStats = vacuumImpl(
+      Permutation::all<false>(),
+      locatedTriples_->getLocatedTriples<false>());
+
+  // Process internal permutations (PSO, POS)
+  auto internalStats = vacuumImpl(
+      Permutation::all<true>(),
+      locatedTriples_->getLocatedTriples<true>());
+
+  // Aggregate external and internal statistics
+  VacuumStatistics totalStats = externalStats;
+  totalStats.numInsertionsRemoved_ += internalStats.numInsertionsRemoved_;
+  totalStats.numDeletionsRemoved_ += internalStats.numDeletionsRemoved_;
+  totalStats.numInsertionsKept_ += internalStats.numInsertionsKept_;
+  totalStats.numDeletionsKept_ += internalStats.numDeletionsKept_;
+
+  return totalStats;
+}
+
+// ____________________________________________________________________________
 template <bool isInternal>
 DeltaTriples::TriplesToHandles<isInternal>& DeltaTriples::getState() {
   if constexpr (isInternal) {
@@ -495,6 +540,10 @@ template DeltaTriplesCount DeltaTriplesManager::modify<DeltaTriplesCount>(
     ad_utility::timer::TimeTracer&);
 template nlohmann::json DeltaTriplesManager::modify<nlohmann::json>(
     const std::function<nlohmann::json(DeltaTriples&)>&,
+    bool writeToDiskAfterRequest, bool updateMetadataAfterRequest,
+    ad_utility::timer::TimeTracer&);
+template VacuumStatistics DeltaTriplesManager::modify<VacuumStatistics>(
+    const std::function<VacuumStatistics(DeltaTriples&)>&,
     bool writeToDiskAfterRequest, bool updateMetadataAfterRequest,
     ad_utility::timer::TimeTracer&);
 

@@ -50,6 +50,10 @@ struct VacuumStatistics {
 
   friend std::ostream& operator<<(std::ostream& os,
                                   const VacuumStatistics& stats);
+
+  /// Output as json. The signature of this function is mandated by the json
+  /// library to allow for implicit conversion.
+  friend void to_json(nlohmann::json& j, const VacuumStatistics& stats);
 };
 
 // A triple and its block in a particular permutation. For a detailed definition

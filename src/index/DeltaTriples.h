@@ -189,6 +189,10 @@ class DeltaTriples {
   // structures.
   void clear();
 
+  // Vacuum all blocks with more than 100k updates across all permutations,
+  // removing redundant operations. Returns aggregated statistics.
+  VacuumStatistics vacuum();
+
   // The number of delta triples added and subtracted.
   int64_t numInserted() const {
     return static_cast<int64_t>(

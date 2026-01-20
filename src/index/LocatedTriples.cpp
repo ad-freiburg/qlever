@@ -356,7 +356,7 @@ VacuumStatistics LocatedTriplesPerBlock::vacuum(const Permutation& permutation) 
   VacuumStatistics totalStats{0, 0, 0, 0};
 
   // Threshold for vacuuming a block
-  constexpr size_t VACUUM_THRESHOLD = 100000;
+  constexpr size_t VACUUM_THRESHOLD = 10000;
 
   // Step 1: Collect blocks needing vacuum
   std::vector<size_t> blocksToVacuum;
@@ -558,6 +558,17 @@ std::ostream& operator<<(std::ostream& os, const VacuumStatistics& stats) {
      << " (insertions: " << stats.numInsertionsKept_
      << ", deletions: " << stats.numDeletionsKept_ << ")}";
   return os;
+}
+
+// ____________________________________________________________________________
+void to_json(nlohmann::json& j, const VacuumStatistics& stats) {
+  j = nlohmann::json{
+      {"insertionsRemoved", stats.numInsertionsRemoved_},
+      {"deletionsRemoved", stats.numDeletionsRemoved_},
+      {"insertionsKept", stats.numInsertionsKept_},
+      {"deletionsKept", stats.numDeletionsKept_},
+      {"totalRemoved", stats.totalRemoved()},
+      {"totalKept", stats.totalKept()}};
 }
 
 // ____________________________________________________________________________

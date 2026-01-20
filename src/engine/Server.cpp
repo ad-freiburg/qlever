@@ -444,6 +444,31 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         handle);
     auto countAfterClear = co_await std::move(coroutine);
     response = createJsonResponse(json(countAfterClear), request);
+  } else if (auto cmd = checkParameter("cmd", "vacuum-delta-triples")) {
+    requireValidAccessToken("vacuum-delta-triples");
+    logCommand(cmd, "vacuum delta triples to remove redundant updates");
+
+    // The function requires a SharedCancellationHandle, but the operation is
+    // not cancellable.
+    auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+
+    // We don't directly `co_await` because of lifetime issues (bugs) in the
+    // Conan setup.
+    auto coroutine = computeInNewThread(
+        updateThreadPool_,
+        [this] {
+          // Use `this` explicitly to silence false-positive errors on the
+          // captured `this` being unused.
+          auto stats =
+              this->index_.deltaTriplesManager().modify<VacuumStatistics>(
+                  [](auto& deltaTriples) {
+                    return deltaTriples.vacuum();
+                  });
+          return stats;
+        },
+        handle);
+    auto vacuumStats = co_await std::move(coroutine);
+    response = createJsonResponse(json(vacuumStats), request);
   } else if (auto cmd = checkParameter("cmd", "get-settings")) {
     logCommand(cmd, "get server settings");
     response = createJsonResponse(
