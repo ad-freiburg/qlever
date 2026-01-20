@@ -460,7 +460,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
           // Use `this` explicitly to silence false-positive errors on the
           // captured `this` being unused.
           auto stats =
-              this->index_.deltaTriplesManager().modify<VacuumStatistics>(
+              this->index_.deltaTriplesManager().modify<nlohmann::json>(
                   [](auto& deltaTriples) {
                     return deltaTriples.vacuum();
                   });
@@ -468,7 +468,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         },
         handle);
     auto vacuumStats = co_await std::move(coroutine);
-    response = createJsonResponse(json(vacuumStats), request);
+    response = createJsonResponse(vacuumStats, request);
   } else if (auto cmd = checkParameter("cmd", "get-settings")) {
     logCommand(cmd, "get server settings");
     response = createJsonResponse(

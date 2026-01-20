@@ -190,8 +190,8 @@ class DeltaTriples {
   void clear();
 
   // Vacuum all blocks with more than 100k updates across all permutations,
-  // removing redundant operations. Returns aggregated statistics.
-  VacuumStatistics vacuum();
+  // removing redundant operations. Returns per-permutation statistics as JSON.
+  nlohmann::json vacuum();
 
   // The number of delta triples added and subtracted.
   int64_t numInserted() const {
