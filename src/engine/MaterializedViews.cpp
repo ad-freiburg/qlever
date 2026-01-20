@@ -592,42 +592,49 @@ MaterializedViewsManager::makeSingleChainReplacementIndexScan(
     std::shared_ptr<IndexScan> right) const {
   auto lock = loadedViews_.rlock();
   auto patternLock = queryPatternCache_.rlock();
-  AD_LOG_INFO << "makeSingleChainReplacementIndexScan." << std::endl;
-  auto res =
+
+  // Try both possible orderings of the join's children.
+  auto userQueryChain =
       [&]() -> std::optional<materializedViewsQueryAnalysis::UserQueryChain> {
-    if (auto c = patternLock->checkSimpleChain(left, right)) {
-      return c;
+    if (auto chain = patternLock->checkSimpleChain(left, right)) {
+      return chain;
     }
-    if (auto c = patternLock->checkSimpleChain(right, left)) {
-      return c;
+    if (auto chain = patternLock->checkSimpleChain(right, left)) {
+      return chain;
     }
     return std::nullopt;
   }();
 
-  if (!res.has_value()) {
+  // The join between `left` and `right` does not constitue a chain.
+  if (!userQueryChain.has_value()) {
     return nullptr;
   }
-  if (res.value().chainInfos_.size() == 0) {
+  if (userQueryChain.value().chainInfos_.size() == 0) {
     return nullptr;
   }
 
-  // TODO we should maybe consider all the possible views (could have different
-  // sorting)
-  const auto& [subj, chain, obj, view] = res.value().chainInfos_.at(0);
-  if (!res.value().subject_.isVariable() &&
+  // TODO<ullingerc> We should consider all the possible views for the
+  // combination of predicates. They could have different sorting.
+  const auto& [subj, chain, obj, view] =
+      userQueryChain.value().chainInfos_.at(0);
+
+  // Ensure the subject is the first column if it is fixed.
+  if (!userQueryChain.value().subject_.isVariable() &&
       view->variableToColumnMap().at(subj).columnIndex_ != 0) {
-    // subject of chain is fixed, but subject is not first column of
-    // materialized view
-    AD_LOG_INFO
-        << "We could use view for join but column ordering doesn't match."
-        << std::endl;
+    AD_LOG_INFO << "We could use the materialized view '" << view->name()
+                << "' for the join on '" << chain.name()
+                << "', however the subject is fixed to '"
+                << userQueryChain.value().subject_.toRdfLiteral()
+                << "' and column '" << subj.name()
+                << "' is not the first column of the view." << std::endl;
     return nullptr;
   }
+
+  // Construct requested columns for scan specification.
   parsedQuery::MaterializedViewQuery::RequestedColumns cols{
-      {subj, res.value().subject_},
-      {chain, res.value().chain_},
-      {obj, res.value().object_}};
-  AD_LOG_INFO << "return scan." << std::endl;
+      {subj, userQueryChain.value().subject_},
+      {chain, userQueryChain.value().chain_},
+      {obj, userQueryChain.value().object_}};
   return view->makeIndexScan(
       qec, parsedQuery::MaterializedViewQuery{view->name(), std::move(cols)});
 }

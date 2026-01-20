@@ -42,7 +42,8 @@ ad_utility::HashSet<Variable> getVariablesPresentInBasicGraphPatterns(
 // _____________________________________________________________________________
 bool BasicGraphPatternsInvariantTo::operator()(
     const parsedQuery::Optional&) const {
-  // TODO
+  // TODO<ullingerc> Analyze if the optional binds values from the outside
+  // query.
   return false;
 }
 
@@ -117,11 +118,8 @@ bool QueryPatternCache::analyzeSimpleChain(ViewPtr view, const SparqlTriple& a,
   }
   auto bObj = b.o_.getVariable();
 
-  // Insert chain.
+  // Insert chain to cache.
   ChainedPredicates preds{aPred.value(), bPred.value()};
-  AD_LOG_INFO << view->name() << " --> " << aPred.value() << " "
-              << bPred.value() << " " << aSubj.name() << " " << chainVar.name()
-              << " " << bObj.name() << std::endl;
   if (!simpleChainCache_.contains(preds)) {
     simpleChainCache_[preds] = {};
   }
@@ -134,34 +132,22 @@ bool QueryPatternCache::analyzeSimpleChain(ViewPtr view, const SparqlTriple& a,
 bool QueryPatternCache::analyzeView(ViewPtr view) {
   AD_LOG_INFO << view->name() << std::endl;
   auto q = view->originalQuery();
-  EncodedIriManager e;  // TODO currently we dont use this
+  // We do not need the `EncodedIriManager` because we are only interested in
+  // analyzing the query structure, not in converting its components to
+  // `ValueId`s.
+  EncodedIriManager e;
   auto parsed = SparqlParser::parseQuery(&e, q, {});
 
-  // TODO do we want to report the reason for non-optimizable queries?
+  // TODO<ullingerc> Do we want to report the reason for non-optimizable
+  // queries?
 
-  // parsed._rootGraphPattern._graphPatterns.at(0)
-  //     .getBasic()
-  //     ._triples.at(0)
-  //     .asString()
-  // auto graphPatterns = ::ranges::to<std::vector>(
-  //     parsed._rootGraphPattern._graphPatterns |
-  //     ql::views::filter([](const auto& pattern) {
-  //       // it should be safe to ignore certain kinds of graph patterns like
-  //       // BIND, VALUES, OPTIONAL (where the values of the other cols dont
-  //       // change and no rows are omitted, only possibly repeated)
-  //       // TODO this only works if they contain no variables from the other
-  //       // triples
-  //       return !std::holds_alternative<parsedQuery::Optional>(pattern) &&
-  //              !std::holds_alternative<parsedQuery::Bind>(pattern) &&
-  //              !std::holds_alternative<parsedQuery::Values>(pattern);
-  //     }));
   const auto& graphPatterns = parsed._rootGraphPattern._graphPatterns;
   BasicGraphPatternsInvariantTo invariantCheck{
       getVariablesPresentInBasicGraphPatterns(graphPatterns)};
   // Filter out graph patterns that do not change the result of the basic graph
-  // pattern analyzed
-  // TODO (deduplication necessary when reading , the vars should not be in the
-  // first three)
+  // pattern analyzed.
+  // TODO<ullingerc> Deduplication necessary when reading, the variables should
+  // not be in the first three
   auto graphPatternsFiltered =
       ::ranges::to<std::vector>(parsed._rootGraphPattern._graphPatterns |
                                 ql::views::filter([&](const auto& pattern) {
@@ -174,17 +160,15 @@ bool QueryPatternCache::analyzeView(ViewPtr view) {
   if (!std::holds_alternative<parsedQuery::BasicGraphPattern>(graphPattern)) {
     return false;
   }
+  // TODO<ullingerc> Property path is stored as a single predicate here.
   const auto& triples = graphPattern.getBasic()._triples;
   if (triples.size() == 0) {
     return false;
   }
-  // TODO Property path is stored as a single predicate here
-  AD_LOG_INFO << triples.size() << std::endl;
   bool patternFound = false;
 
-  // TODO what about chain by property path
+  // TODO<ullingerc> Possibly handle chain by property path.
   if (triples.size() == 2) {
-    // Could be chain
     const auto& a = triples.at(0);
     const auto& b = triples.at(1);
     if (!analyzeSimpleChain(view, a, b)) {
@@ -194,9 +178,10 @@ bool QueryPatternCache::analyzeView(ViewPtr view) {
     }
   }
 
-  // TODO other patterns
+  // TODO<ullingerc> Add support for other patterns, in particular, stars.
 
-  // Predicate in view - only if any pattern is detected
+  // Remember predicates that appear in certain views, only if any pattern is
+  // detected.
   if (patternFound) {
     for (const auto& triple : triples) {
       auto predicate = triple.getSimplePredicate();
