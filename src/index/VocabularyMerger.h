@@ -174,12 +174,23 @@ struct VocabularyMetaData {
 // language tagged predicates. Argument `comparator` gives the way to order
 // strings (case-sensitive or not). Argument `wordCallback`
 // is called for each merged word in the vocabulary in the order of their
-// appearance.
+// appearance. Argument `maxFilesPerBatch` controls the maximum number of files
+// to merge simultaneously (to avoid file descriptor limits).
 template <typename W, typename C>
 auto mergeVocabulary(const std::string& basename, size_t numFiles, W comparator,
-                     C& wordCallback, ad_utility::MemorySize memoryToUse)
+                     C& wordCallback, ad_utility::MemorySize memoryToUse,
+                     size_t maxFilesPerBatch = MAX_NUM_FILES_FOR_DIRECT_MERGE)
     -> CPP_ret(VocabularyMetaData)(
         requires WordComparator<W>&& WordCallback<C>);
+
+// Helper structure that holds information about batch merging.
+struct BatchInfo {
+  size_t batchIndex_;         // Which meta-batch (0, 1, 2, ...)
+  size_t originalFileIndex_;  // Original file index in the full set
+
+  BatchInfo(size_t batchIndex, size_t originalFileIndex)
+      : batchIndex_(batchIndex), originalFileIndex_(originalFileIndex) {}
+};
 
 // A helper class that implements the `mergeVocabulary` function (see
 // above). Everything in this class is private and only the
@@ -190,7 +201,44 @@ class VocabularyMerger {
 
   // The result (mostly metadata) which we'll return.
   VocabularyMetaData metaData_;
-  std::optional<TripleComponentWithIndex> lastTripleComponent_ = std::nullopt;
+  /**
+   * @brief Struct to manage duplicate occurrences of words during merging of
+   *        partial vocabularies.
+   * @detail This struct is needed for the correct semantics of isExternal.
+   *         If multiple occurrences of the same iriOrLiteral appear, they are
+   *         flattened to one vocab entry. If those occurrences have different
+   *         values for isExternal the logic is as follows:
+   *         For isExternal: If one of the occurrences has this set to true,
+   *         this should be set to true later on after merging.
+   *
+   *         This struct is used to collect all multiple occurrences of
+   *         iriOrLiterals and once all are collected, the writing happens. The
+   *         reason the collection works is the QueueWords being sorted.
+   */
+  struct EqualWords {
+    std::string iriOrLiteral_;
+    bool isExternal_;
+    // The targetId_ the Id the words are mapped to by vocabulary. This is the
+    // same for equal words since they are later written as one.
+    Id targetId_;
+    // partialVocabAndPartialFileIds
+    struct PartialIds {
+      size_t fileId_;
+      size_t localIndex_;
+    };
+    std::vector<PartialIds> partialIds_;
+
+    EqualWords(std::string iriOrLiteral, bool isExternal,
+               size_t fileId, size_t localIndex)
+        : iriOrLiteral_(std::move(iriOrLiteral)),
+          isExternal_(isExternal),
+          partialIds_({{fileId, localIndex}}) {
+      targetId_ = Id::makeUndefined();
+    }
+
+    bool isBlankNode() const { return iriOrLiteral_.starts_with("_:"); }
+  };
+  std::optional<EqualWords> currentWord_ = std::nullopt;
   // we will store pairs of <partialId, globalId>
   std::vector<IdMapWriter> idMaps_;
 
@@ -200,7 +248,8 @@ class VocabularyMerger {
   template <typename W, typename C>
   friend auto mergeVocabulary(const std::string& basename, size_t numFiles,
                               W comparator, C& wordCallback,
-                              ad_utility::MemorySize memoryToUse)
+                              ad_utility::MemorySize memoryToUse,
+                              size_t maxFilesPerBatch)
       -> CPP_ret(VocabularyMetaData)(
           requires WordComparator<W>&& WordCallback<C>);
   VocabularyMerger() = default;
@@ -211,7 +260,8 @@ class VocabularyMerger {
   template <typename W, typename C>
   auto mergeVocabulary(const std::string& basename, size_t numFiles,
                        W comparator, C& wordCallback,
-                       ad_utility::MemorySize memoryToUse)
+                       ad_utility::MemorySize memoryToUse,
+                       size_t maxFilesPerBatch)
       -> CPP_ret(VocabularyMetaData)(
           requires WordComparator<W>&& WordCallback<C>);
 
@@ -254,11 +304,33 @@ class VocabularyMerger {
                                   C& wordCallback, const L& lessThan,
                                   ad_utility::ProgressBar& progressBar);
 
+  // Write queue words for two-stage merging (writes to batch ID maps instead of
+  // final ID maps).
+  // clang-format off
+    CPP_template(typename C, typename L)(
+      requires WordCallback<C> CPP_and ranges::predicate<
+          L, TripleComponentWithIndex, TripleComponentWithIndex>)
+      // clang-format on
+      void writeQueueWordsToIdMapTwoStage(
+          const std::vector<QueueWord>& buffer, C& wordCallback,
+          const L& lessThan, ad_utility::ProgressBar& progressBar,
+          std::vector<IdMapWriter>& batchToGlobalIdMaps);
+
+  // This function has to be called for a word once all of its occurrences in
+  // the different partial vocabularies have been processed by the queue. It
+  // gets the index and target index for EqualWords. This target index has to be
+  // set only once for EqualWords. The function isn't const since `metaData_` is
+  // modified.
+  CPP_template(typename C)(
+      requires WordCallback<C>) void writeAndGetEqualWordIds(EqualWords&
+                                                                 equalWords,
+                                                             C& wordCallback);
+
   // Close all associated files and file-based vectors and reset all internal
   // variables.
   void clear() {
     metaData_ = VocabularyMetaData{};
-    lastTripleComponent_ = std::nullopt;
+    currentWord_ = std::nullopt;
     idMaps_.clear();
   }
 
@@ -267,6 +339,54 @@ class VocabularyMerger {
   // globalId>>`.
   void doActualWrite(
       const std::vector<std::pair<size_t, std::pair<size_t, Id>>>& buffer);
+
+  // Helper: Create comparator functions from a word comparator.
+  template <typename W>
+  static auto makeComparators(W comparator);
+
+  // Helper: Create a generator that reads words from a partial vocabulary file.
+  static auto makePartialVocabGenerator(const std::string& basename,
+                                        size_t fileIndex);
+
+  // Helper: Create a generator that reads words from a batch vocabulary file.
+  static auto makeBatchVocabGenerator(const std::string& basename,
+                                      size_t batchIndex);
+
+  // Helper: Process a queue word and update metadata/mappings.
+  // Returns true if this is a new unique word.
+  template <typename C, typename L>
+  bool processQueueWord(const QueueWord& word, C& wordCallback,
+                        const L& lessThan, ad_utility::ProgressBar& progressBar)
+      requires WordCallback<C> && ranges::predicate<L, TripleComponentWithIndex,
+                                                    TripleComponentWithIndex>;
+
+  // Helper: Compute the target ID for the last processed triple component.
+  Id getTargetIdForLastComponent() const;
+
+  // Helper: Setup and execute parallel multiway merge for generators.
+  template <typename GeneratorRange, typename Comparator>
+  static auto setupParallelMerge(GeneratorRange&& generators,
+                                 const Comparator& lessThanForQueue,
+                                 ad_utility::MemorySize memoryToUse);
+
+  // Helper: Compose ID mappings in Stage 3 of two-stage merge.
+  void composeIdMappings(const std::string& basename, size_t numFiles,
+                         size_t batchSize, size_t numBatches);
+
+  // Merge a batch of partial vocabulary files into a single batch file.
+  // Returns the number of words in the merged batch.
+  template <typename W>
+  size_t mergeSingleBatch(const std::string& basename, size_t batchIndex,
+                          size_t startFile, size_t endFile, W comparator,
+                          ad_utility::MemorySize memoryToUse);
+
+  // Perform two-stage merge when the number of files exceeds the limit.
+  template <typename W, typename C>
+  auto mergeTwoStage(const std::string& basename, size_t numFiles, W comparator,
+                     C& wordCallback, ad_utility::MemorySize memoryToUse,
+                     size_t maxFilesPerBatch)
+      -> CPP_ret(VocabularyMetaData)(
+          requires WordComparator<W>&& WordCallback<C>);
 };
 
 // ____________________________________________________________________________
