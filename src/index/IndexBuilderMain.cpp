@@ -180,6 +180,10 @@ int main(int argc, char** argv) {
       "The graph IRI without angle brackets. Write `-` for the default graph. "
       "Can be omitted (then all files use the default graph), specified once "
       "(then all files use that graph), or once per file.");
+  add("turtle-files-via-server",
+      po::bool_switch(&config.getTurtleFilesViaServer_),
+      "The the turtle strings via an HTTP Server. Currently highly "
+      "experimental");
   add("parse-parallel,p", po::value(&parseParallel),
       "Enable or disable the parallel parser for all files (if specified once) "
       "or once per input file. Parallel parsing works for all input files "

@@ -28,6 +28,9 @@
 #include "index/Index.h"
 #include "index/IndexBuilderTypes.h"
 #include "index/IndexMetaData.h"
+// TODO<joka921> Don't require the expensive include here, only use a small
+// dummy header.
+#include "index/InputFileServer.h"
 #include "index/PatternCreator.h"
 #include "index/Permutation.h"
 #include "index/TextMetaData.h"
@@ -256,6 +259,11 @@ class IndexImpl {
   // !! The index can not directly be used after this call, but has to be setup
   // by createFromOnDiskIndex after this call.
   void createFromFiles(std::vector<Index::InputFileSpecification> files);
+
+  void createFromTurtleStringGenerator(InputFileServer::FileRange files);
+  // _____________________________________________________________________________
+  template <typename Files, typename MakeParser>
+  void createFromFilesImpl(Files&& files, MakeParser makeParser);
 
   // Creates an index object from an on disk index that has previously been
   // constructed. Read necessary meta data into memory and opens file handles.

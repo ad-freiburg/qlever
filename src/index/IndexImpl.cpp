@@ -368,6 +368,25 @@ void IndexImpl::updateInputFileSpecificationsAndLog(
 // _____________________________________________________________________________
 void IndexImpl::createFromFiles(
     std::vector<Index::InputFileSpecification> files) {
+  auto makeParser = [this](auto&& files) {
+    updateInputFileSpecificationsAndLog(files, useParallelParser_);
+    return makeRdfParser(AD_FWD(files));
+  };
+  return createFromFilesImpl(std::move(files), makeParser);
+}
+
+// _____________________________________________________________________________
+void IndexImpl::createFromTurtleStringGenerator(
+    InputFileServer::FileRange files) {
+  auto makeParser = [this](auto&& files) -> std::unique_ptr<RdfParserBase> {
+    return std::make_unique<RdfMultifileParser>(std::move(files),
+                                                &encodedIriManager());
+  };
+  return createFromFilesImpl(std::move(files), makeParser);
+}
+// _____________________________________________________________________________
+template <typename Files, typename MakeParser>
+void IndexImpl::createFromFilesImpl(Files&& files, MakeParser makeParser) {
   if (!loadAllPermutations_ && usePatterns_) {
     throw std::runtime_error{
         "The patterns can only be built when all 6 permutations are created"};
@@ -379,9 +398,8 @@ void IndexImpl::createFromFiles(
 
   readIndexBuilderSettingsFromFile();
 
-  updateInputFileSpecificationsAndLog(files, useParallelParser_);
   IndexBuilderDataAsFirstPermutationSorter indexBuilderData =
-      createIdTriplesAndVocab(makeRdfParser(files));
+      createIdTriplesAndVocab(makeParser(AD_FWD(files)));
 
   // Write the configuration already at this point, so we have it available in
   // case any of the permutations fail.
