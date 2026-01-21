@@ -300,7 +300,8 @@ void MaterializedViewWriter::writeViewMetadata() const {
 void MaterializedViewWriter::computeResultAndWritePermutation() const {
   // Run query and sort the result externally (only if necessary).
   AD_LOG_INFO << "Computing query result for materialized view '" << name_
-              << "': " << parsedQuery_._originalString << std::endl;
+              << "': " << parsedQuery_._originalString.substr(0, 80) << "..."
+              << std::endl;
   auto result = qet_->getResult(true);
 
   Sorter spoSorter{getFilenameBase() + ".spo-sorter.dat", numCols(),
@@ -361,7 +362,9 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
   }
 
   // Restore original query string.
-  originalQuery_ = viewInfoJson.at("query").get<std::string>();
+  if (viewInfoJson.contains("query")) {
+    originalQuery_ = viewInfoJson.at("query").get<std::string>();
+  }
 
   // Read permutation
   permutation_->loadFromDisk(filename, false);
