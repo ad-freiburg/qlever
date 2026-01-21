@@ -117,7 +117,7 @@ IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
 string IndexScan::getCacheKeyImpl() const {
   std::ostringstream os;
   // This string only represents the type of permutation, like "SPO".
-  auto permutationString = permutation().readableName();
+  auto permutationString = Permutation::toString(permutation().permutation());
 
   if (numVariables_ == 3) {
     os << "SCAN FOR FULL INDEX " << permutationString;

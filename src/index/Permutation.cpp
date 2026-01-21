@@ -11,12 +11,19 @@
 #include "util/StringUtils.h"
 
 // _____________________________________________________________________
-Permutation::Permutation(Enum permutation, Allocator allocator)
-    : readableName_(toString(permutation)),
-      fileSuffix_(absl::StrCat(".", ad_utility::utf8ToLower(readableName_))),
+Permutation::Permutation(Enum permutation, Allocator allocator,
+                         std::optional<std::string> readableName)
+    : fileSuffix_(
+          absl::StrCat(".", ad_utility::utf8ToLower(toString(permutation)))),
       keyOrder_(toKeyOrder(permutation)),
       allocator_{std::move(allocator)},
-      permutation_{permutation} {}
+      permutation_{permutation} {
+  if (readableName.has_value()) {
+    readableName_ = std::move(readableName.value());
+  } else {
+    readableName_ = toString(permutation);
+  }
+}
 
 // _____________________________________________________________________
 CompressedRelationReader::ScanSpecAndBlocks Permutation::getScanSpecAndBlocks(
