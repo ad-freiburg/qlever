@@ -59,7 +59,7 @@ int main(int argc, char** argv) {
   ad_utility::ParameterToProgramOptionFactory optionFactory{
       &globalRuntimeParameters};
 
-  po::options_description options("Options for ServerMain");
+  po::options_description options("Options for qlever-server");
   auto add = [&options](auto&&... args) {
     options.add_options()(AD_FWD(args)...);
   };
@@ -111,7 +111,7 @@ int main(int argc, char** argv) {
       "`ql:has-predicate` is not available.");
   add("text,t", po::bool_switch(&text),
       "Also load the text index. The text index must have been built before "
-      "using `IndexBuilderMain` with options `-d` and `- w`.");
+      "using `qlever-index` with options `-d` and `- w`.");
   add("only-pso-and-pos-permutations,o",
       po::bool_switch(&onlyPsoAndPosPermutations),
       "Only load the PSO and POS permutations. This disables queries with "
