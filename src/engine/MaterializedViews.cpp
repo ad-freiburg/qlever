@@ -124,6 +124,12 @@ void MaterializedViewWriter::permuteIdTableAndCheckNoLocalVocabEntries(
   // Add empty columns such that the view has at least four columns.
   for (uint8_t i = 0; i < numAddEmptyColumns_; ++i) {
     block.addEmptyColumn();
+    // Initialize the new empty column to `UNDEF` (all bits zero) such that it
+    // can be compressed optimally.
+    const size_t col = block.numColumns() - 1;
+    for (size_t row = 0; row < block.numRows(); ++row) {
+      block.at(row, col) = ValueId::makeUndefined();
+    }
   }
 
   // Check that there are no values of type `LocalVocabIndex` in the selected
