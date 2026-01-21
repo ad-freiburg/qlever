@@ -376,7 +376,8 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
   EXPECT_EQ(view->name(), "testView1");
   EXPECT_EQ(view->permutation()->permutation(), Permutation::Enum::SPO);
   EXPECT_NE(view->locatedTriplesState(), nullptr);
-  EXPECT_EQ(view->originalQuery(), simpleWriteQuery_);
+  EXPECT_THAT(view->originalQuery(),
+              ::testing::Optional(::testing::Eq(simpleWriteQuery_)));
 
   MaterializedViewsManager managerNoBaseName;
   AD_EXPECT_THROW_WITH_MESSAGE(
