@@ -41,9 +41,17 @@ TEST_F(MaterializedViewsTest, Basic) {
   qlv().writeMaterializedView("testView1", simpleWriteQuery_);
   EXPECT_THAT(log_.str(), ::testing::HasSubstr(
                               "Materialized view testView1 written to disk"));
+  EXPECT_FALSE(qlv().isMaterializedViewLoaded("testView1"));
   qlv().loadMaterializedView("testView1");
   EXPECT_THAT(log_.str(), ::testing::HasSubstr(
                               "Loading materialized view testView1 from disk"));
+  EXPECT_TRUE(qlv().isMaterializedViewLoaded("testView1"));
+
+  // Overwriting a materialized view automatically unloads it first.
+  qlv().writeMaterializedView("testView1", simpleWriteQuery_);
+  EXPECT_FALSE(qlv().isMaterializedViewLoaded("testView1"));
+  qlv().loadMaterializedView("testView1");
+  EXPECT_TRUE(qlv().isMaterializedViewLoaded("testView1"));
 
   // Test index scan on materialized view.
   std::vector<std::string> equivalentQueries{

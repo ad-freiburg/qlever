@@ -351,10 +351,25 @@ void MaterializedViewsManager::loadView(const std::string& name) const {
 };
 
 // _____________________________________________________________________________
+void MaterializedViewsManager::unloadViewIfLoaded(
+    const std::string& name) const {
+  auto lock = loadedViews_.wlock();
+  if (!lock->contains(name)) {
+    return;
+  }
+  lock->erase(name);
+}
+
+// _____________________________________________________________________________
 std::shared_ptr<const MaterializedView> MaterializedViewsManager::getView(
     const std::string& name) const {
   loadView(name);
   return loadedViews_.rlock()->at(name);
+}
+
+// _____________________________________________________________________________
+bool MaterializedViewsManager::isViewLoaded(const std::string& name) const {
+  return loadedViews_.rlock()->contains(name);
 }
 
 // _____________________________________________________________________________

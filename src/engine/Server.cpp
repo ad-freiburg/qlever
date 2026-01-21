@@ -1401,6 +1401,7 @@ void Server::writeMaterializedView(
       std::make_shared<QueryExecutionTree>(std::move(plan.queryExecutionTree_));
   auto memoryLimit =
       getRuntimeParameter<&RuntimeParameters::materializedViewWriterMemory_>();
+  materializedViewsManager_.unloadViewIfLoaded(name);
   MaterializedViewWriter::writeViewToDisk(
       qec->getIndex().getOnDiskBase(), name,
       {qet, qec, std::move(plan.parsedQuery_)}, memoryLimit);
