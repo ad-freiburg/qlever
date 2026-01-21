@@ -1,5 +1,5 @@
-# A small cmake script that writes the current git hash and time to a
-# .cpp file
+# A small cmake script that writes the current git hash, project version,
+# and time to a .cpp file
 
 # Get the current time, remove the trailing newline and add quotes.
 execute_process(COMMAND date OUTPUT_VARIABLE DATETIME_OF_COMPILATION)
@@ -14,16 +14,23 @@ if ((NOT DEFINED GIT_HASH) OR (GIT_HASH STREQUAL ""))
 endif()
 message(STATUS "GIT_HASH is ${GIT_HASH}")
 
+# Get the project version from git describe.
+include(${CMAKE_CURRENT_LIST_DIR}/GitVersion.cmake)
+set(PROJECT_VERSION "\"${PROJECT_VERSION}\"")
+message(STATUS "PROJECT_VERSION is ${PROJECT_VERSION}")
+
 # Write the .cpp file.
 set(CONSTANTS "#include \"CompilationInfo.h\"
 namespace qlever::version {
 constexpr std::string_view GitHash = ${GIT_HASH};
 constexpr std::string_view GitShortHash = GitHash.substr(0, 6);
 constexpr std::string_view DatetimeOfCompilation = ${DATETIME_OF_COMPILATION};
+constexpr std::string_view ProjectVersion = ${PROJECT_VERSION};
 
 void copyVersionInfo() {
   *gitShortHashWithoutLinking.wlock() = GitShortHash;
   *datetimeOfCompilationWithoutLinking.wlock() = DatetimeOfCompilation;
+  *projectVersionWithoutLinking.wlock() = ProjectVersion;
 }
 }")
 
