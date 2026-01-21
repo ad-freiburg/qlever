@@ -258,29 +258,31 @@ IndexMetaDataMmap MaterializedViewWriter::writePermutation(
 
 // _____________________________________________________________________________
 void MaterializedViewWriter::writeViewMetadata() const {
-  // Export column names to view info JSON file
+  // Export column names to view info JSON file.
   nlohmann::json viewInfo = {
       {"version", MATERIALIZED_VIEWS_VERSION},
       {"columns", (columnNames_ | ql::views::transform([](const Variable& v) {
                      return v.name();
                    }) |
-                   ::ranges::to<std::vector<std::string>>())}};
+                   ::ranges::to<std::vector<std::string>>())},
+      {"query", parsedQuery_._originalString},
+  };
   ad_utility::makeOfstream(getFilenameBase() + ".viewinfo.json")
       << viewInfo.dump() << std::endl;
 }
 
 // _____________________________________________________________________________
 void MaterializedViewWriter::computeResultAndWritePermutation() const {
-  // Run query and sort the result externally (only if necessary)
-  AD_LOG_INFO << "Computing result for materialized view query " << name_
-              << "..." << std::endl;
+  // Run query and sort the result externally (only if necessary).
+  AD_LOG_INFO << "Computing query result for materialized view '" << name_
+              << "': " << parsedQuery_._originalString << std::endl;
   auto result = qet_->getResult(true);
 
   Sorter spoSorter{getFilenameBase() + ".spo-sorter.dat", numCols(),
                    memoryLimit_, allocator_};
   RangeOfIdTables sortedBlocksSPO = getSortedBlocks(spoSorter, result);
 
-  // Write compressed relation to disk
+  // Write compressed relation to disk.
   AD_LOG_INFO << "Writing materialized view " << name_ << " to disk ..."
               << std::endl;
   auto spoMetaData = writePermutation(std::move(sortedBlocksSPO));
@@ -316,7 +318,13 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
 
   // Check version of view and restore column names
   auto version = viewInfoJson.at("version").get<size_t>();
-  AD_CORRECTNESS_CHECK(version == MATERIALIZED_VIEWS_VERSION);
+  if (version != MATERIALIZED_VIEWS_VERSION) {
+    throw std::runtime_error{absl::StrCat(
+        "The materialized view '", name_, "' is saved with format version ",
+        version, ", however this version of QLever expects format version ",
+        MATERIALIZED_VIEWS_VERSION,
+        ". Please re-write the materialized view.")};
+  }
 
   // Make variable to column map
   auto columnNames = viewInfoJson.at("columns").get<std::vector<std::string>>();
@@ -329,6 +337,9 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
                          {static_cast<ColumnIndex>(index),
                           ColumnIndexAndTypeInfo::PossiblyUndefined}});
   }
+
+  // Restore original query string.
+  originalQuery_ = viewInfoJson.at("query").get<std::string>();
 
   // Read permutation
   permutation_->loadFromDisk(filename, false);

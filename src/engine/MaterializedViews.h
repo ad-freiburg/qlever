@@ -26,7 +26,7 @@ class IndexScan;
 // For the future, materialized views save their version. If we change something
 // about the way materialized views are stored, we can break the existing ones
 // cleanly without breaking the entire index format.
-static constexpr size_t MATERIALIZED_VIEWS_VERSION = 1;
+static constexpr size_t MATERIALIZED_VIEWS_VERSION = 2;
 
 // The `MaterializedViewWriter` can be used to write a new materialized view to
 // disk, given an already planned query. The query will be executed lazily and
@@ -149,6 +149,7 @@ class MaterializedView {
       Permutation::Enum::SPO, ad_utility::makeUnlimitedAllocator<Id>())};
   VariableToColumnMap varToColMap_;
   std::shared_ptr<LocatedTriplesState> locatedTriplesState_;
+  std::string originalQuery_;
 
   using AdditionalScanColumns = SparqlTripleSimple::AdditionalScanColumns;
 
@@ -169,6 +170,9 @@ class MaterializedView {
   const VariableToColumnMap& variableToColumnMap() const {
     return varToColMap_;
   }
+
+  // Get the original query string used for writing the view.
+  const std::string& originalQuery() const { return originalQuery_; }
 
   // Return the combined filename from the index' `onDiskBase` and the name of
   // the view. Note that this function does not check for validity or existence.
