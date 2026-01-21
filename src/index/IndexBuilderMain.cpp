@@ -161,7 +161,7 @@ int main(int argc, char** argv) {
   std::vector<bool> parseParallel;
 
   boost::program_options::options_description boostOptions(
-      "Options for IndexBuilderMain");
+      "Options for qlever-index");
   auto add = [&boostOptions](auto&&... args) {
     boostOptions.add_options()(AD_FWD(args)...);
   };

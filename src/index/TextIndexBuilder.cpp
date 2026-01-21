@@ -33,7 +33,7 @@ void TextIndexBuilder::buildTextIndexFile(
                 << "onsidering each literal as a text record" << std::endl;
   }
   // We have deleted the vocabulary during the index creation to save RAM, so
-  // now we have to reload it. Also, when IndexBuilderMain is called with option
+  // now we have to reload it. Also, when qlever-index is called with option
   // -A (add text index), this is the first thing we do .
   //
   // NOTE: In the previous version of the code (where the only option was to
