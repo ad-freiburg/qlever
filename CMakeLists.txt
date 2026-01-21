@@ -497,8 +497,8 @@ add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
 qlever_target_link_libraries(PrintIndexVersionMain util)
 
 install(TARGETS
-    ServerMain
-    IndexBuilderMain
+    qlever-index
+    qlever-server
     RUNTIME DESTINATION bin
 )
 
