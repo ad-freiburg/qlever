@@ -185,8 +185,7 @@ int main(int argc, char** argv) {
       return EXIT_SUCCESS;
     }
     if (optionsMap.count("version")) {
-      std::cout << "QLever ServerMain " << qlever::version::ProjectVersion
-                << '\n';
+      std::cout << argv[0] << " " << qlever::version::ProjectVersion << '\n';
       return EXIT_SUCCESS;
     }
     po::notify(optionsMap);
@@ -196,7 +195,7 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
 
-  AD_LOG_INFO << EMPH_ON << "QLever Server, compiled on "
+  AD_LOG_INFO << EMPH_ON << "QLever server, compiled on "
               << qlever::version::DatetimeOfCompilation << " using git hash "
               << qlever::version::GitShortHash << EMPH_OFF << std::endl;
 
