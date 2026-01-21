@@ -543,12 +543,12 @@ set(PACKAGE_REVISION "1" CACHE STRING "Debian package revision number")
 # Version suffix for distribution-specific packages (e.g., "~plucky~25.04").
 # Auto-detected from the system, override with: cmake -DVERSION_SUFFIX="~noble~24.04"
 # Map Ubuntu codenames to version numbers
-set(UBUNTU_jammy "22.04")
 set(UBUNTU_noble "24.04")
-set(UBUNTU_oracular "24.10")
 set(UBUNTU_plucky "25.04")
 set(UBUNTU_questing "25.10")
 set(UBUNTU_resolute "26.04")
+set(DEBIAN_trixie "deb13")
+set(DEBIAN_bookworm "deb12")
 
 set(DEFAULT_VERSION_SUFFIX "")
 if (EXISTS "/etc/os-release")
@@ -569,6 +569,8 @@ if (EXISTS "/etc/os-release")
 
     if (DEFINED UBUNTU_${DISTRO_CODENAME})
         set(DEFAULT_VERSION_SUFFIX "~${DISTRO_CODENAME}~${UBUNTU_${DISTRO_CODENAME}}")
+    elseif (DEFINED DEBIAN_${DISTRO_CODENAME})
+        set(DEFAULT_VERSION_SUFFIX "~${DISTRO_CODENAME}~${DEBIAN_${DISTRO_CODENAME}}")
     endif()
 endif()
 
