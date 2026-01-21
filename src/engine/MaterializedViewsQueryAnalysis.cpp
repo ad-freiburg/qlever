@@ -131,12 +131,16 @@ bool QueryPatternCache::analyzeSimpleChain(ViewPtr view, const SparqlTriple& a,
 // _____________________________________________________________________________
 bool QueryPatternCache::analyzeView(ViewPtr view) {
   AD_LOG_INFO << view->name() << std::endl;
-  auto q = view->originalQuery();
+  const auto& query = view->originalQuery();
+  if (!query.has_value()) {
+    return false;
+  }
+
   // We do not need the `EncodedIriManager` because we are only interested in
   // analyzing the query structure, not in converting its components to
   // `ValueId`s.
   EncodedIriManager e;
-  auto parsed = SparqlParser::parseQuery(&e, q, {});
+  auto parsed = SparqlParser::parseQuery(&e, query.value(), {});
 
   // TODO<ullingerc> Do we want to report the reason for non-optimizable
   // queries?
