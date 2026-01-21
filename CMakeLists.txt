@@ -541,36 +541,32 @@ endif()
 set(PACKAGE_REVISION "1" CACHE STRING "Debian package revision number")
 
 # Version suffix for distribution-specific packages (e.g., "~plucky~25.04").
-# Auto-detected from the system, override with: cmake -DVERSION_SUFFIX="~noble~24.04"
-# Map Ubuntu codenames to version numbers
-set(UBUNTU_noble "24.04")
-set(UBUNTU_plucky "25.04")
-set(UBUNTU_questing "25.10")
-set(UBUNTU_resolute "26.04")
-set(DEBIAN_trixie "deb13")
-set(DEBIAN_bookworm "deb12")
-
+# Auto-detected from /etc/os-release for Ubuntu and Debian.
+# For derived distros, override with: cmake -DVERSION_SUFFIX="~noble~24.04"
 set(DEFAULT_VERSION_SUFFIX "")
 if (EXISTS "/etc/os-release")
-    # Read os-release to get distribution info
     file(STRINGS "/etc/os-release" OS_RELEASE_CONTENTS)
 
-    # Prefer UBUNTU_CODENAME (set on Ubuntu derivatives like Linux Mint)
-    # Fall back to VERSION_CODENAME
-    set(DISTRO_CODENAME "")
+    set(_OS_ID "")
+    set(_OS_VERSION_ID "")
+    set(_OS_VERSION_CODENAME "")
+
     foreach(line ${OS_RELEASE_CONTENTS})
-        if (line MATCHES "^UBUNTU_CODENAME=(.*)$")
-            set(DISTRO_CODENAME "${CMAKE_MATCH_1}")
-            break()
-        elseif (line MATCHES "^VERSION_CODENAME=(.*)$" AND NOT DISTRO_CODENAME)
-            set(DISTRO_CODENAME "${CMAKE_MATCH_1}")
+        if (line MATCHES "^ID=\"?([^\"]*)\"?$")
+            set(_OS_ID "${CMAKE_MATCH_1}")
+        elseif (line MATCHES "^VERSION_ID=\"?([^\"]*)\"?$")
+            set(_OS_VERSION_ID "${CMAKE_MATCH_1}")
+        elseif (line MATCHES "^VERSION_CODENAME=\"?([^\"]*)\"?$")
+            set(_OS_VERSION_CODENAME "${CMAKE_MATCH_1}")
         endif()
     endforeach()
 
-    if (DEFINED UBUNTU_${DISTRO_CODENAME})
-        set(DEFAULT_VERSION_SUFFIX "~${DISTRO_CODENAME}~${UBUNTU_${DISTRO_CODENAME}}")
-    elseif (DEFINED DEBIAN_${DISTRO_CODENAME})
-        set(DEFAULT_VERSION_SUFFIX "~${DISTRO_CODENAME}~${DEBIAN_${DISTRO_CODENAME}}")
+    if (_OS_VERSION_CODENAME AND _OS_VERSION_ID)
+        if (_OS_ID STREQUAL "ubuntu")
+            set(DEFAULT_VERSION_SUFFIX "~${_OS_VERSION_CODENAME}~${_OS_VERSION_ID}")
+        elseif (_OS_ID STREQUAL "debian")
+            set(DEFAULT_VERSION_SUFFIX "~${_OS_VERSION_CODENAME}~deb${_OS_VERSION_ID}")
+        endif()
     endif()
 endif()
 
