@@ -108,6 +108,7 @@ FetchContent_Declare(
         googletest
         GIT_REPOSITORY https://github.com/google/googletest.git
         GIT_TAG 7917641ff965959afae189afb5f052524395525c # main branch on 2025/09/11
+        EXCLUDE_FROM_ALL
 )
 
 ################################
@@ -119,6 +120,7 @@ FetchContent_Declare(
         nlohmann-json
         URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz
         URL_HASH SHA3_224=0ad805c53f1769489a9c6bdeefd0a36c19f74239785cdb9c4344e8c1
+        EXCLUDE_FROM_ALL
 )
 
 ###############################
@@ -131,6 +133,7 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/antlr/antlr4.git
         GIT_TAG cc82115a4e7f53d71d9d905caa2c2dfa4da58899 # 4.13.12
         SOURCE_SUBDIR runtime/Cpp
+        EXCLUDE_FROM_ALL
 )
 
 #################################
@@ -144,6 +147,7 @@ FetchContent_Declare(
         # This branch removes some differences in the interface between `range-v3` and `std::ranges` s.t.
         # the former can be used as an (almost) drop-in replacement for the latter.
         GIT_TAG 42340ef354f7b4e4660268b788e37008d9cc85aa # branch fork-for-qlever
+        EXCLUDE_FROM_ALL
 )
 
 #################################
@@ -153,6 +157,7 @@ FetchContent_Declare(
         spatialjoin
         GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
         GIT_TAG c358e479ebb5f40df99522e69a0b52d73416020b
+        EXCLUDE_FROM_ALL
 )
 # disable bzip2 and zlib support in spatialjoin, we don't need it
 add_compile_definitions(SPATIALJOIN_NO_BZIP2=True SPATIALJOIN_NO_ZLIB=True)
@@ -280,6 +285,7 @@ FetchContent_Declare(
         ctre
         GIT_REPOSITORY https://github.com/hanickadot/compile-time-regular-expressions.git
         GIT_TAG e34c26ba149b9fd9c34aa0f678e39739641a0d1e # v3.10.0
+        EXCLUDE_FROM_ALL
 )
 
 ################################
@@ -292,6 +298,7 @@ FetchContent_Declare(
         abseil
         GIT_REPOSITORY https://github.com/abseil/abseil-cpp.git
         GIT_TAG 93ac3a4f9ee7792af399cebd873ee99ce15aed08  # 2024-05-16
+        EXCLUDE_FROM_ALL
 )
 
 ################################
@@ -303,6 +310,7 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/google/s2geometry.git
         GIT_TAG 5b5eccd54a08ae03b4467e79ffbb076d0b5f221e  #version 0.11.1
         SYSTEM
+        EXCLUDE_FROM_ALL
 )
 
 
@@ -351,6 +359,7 @@ FetchContent_Declare(
         fsst
         GIT_REPOSITORY https://github.com/cwida/fsst.git
         GIT_TAG b228af6356196095eaf9f8f5654b0635f969661e # main branch from 27th May 2025
+        EXCLUDE_FROM_ALL
 )
 
 
@@ -364,6 +373,7 @@ FetchContent_Declare(
         GIT_TAG bc0faab533e2b27b85b8ad312abf061e33ed6b5d # v.2023-11-01
         GIT_SHALLOW TRUE
         OVERRIDE_FIND_PACKAGE
+        EXCLUDE_FROM_ALL
 )
 
 ################################
@@ -485,3 +495,93 @@ qlever_target_link_libraries(VocabularyMergerMain index parser ${CMAKE_THREAD_LI
 
 add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
 qlever_target_link_libraries(PrintIndexVersionMain util)
+
+install(TARGETS
+    qlever-index
+    qlever-server
+    RUNTIME DESTINATION bin
+)
+
+###############################################################
+# CPack packaging
+###############################################################
+
+# Get version from git describe for CPack
+include(GitVersion.cmake)
+
+set(CPACK_PACKAGE_NAME "qlever-bin")
+
+# Set CPACK_PACKAGE_VERSION according to Debian packaging naming rules
+# If git describe output begins with v + semver:
+if (PROJECT_VERSION MATCHES "^v([0-9]+\\.[0-9]+\\.[0-9]+)(-[0-9]+)?(-g[0-9a-f]+)?$")
+
+    # CMAKE_MATCH_1 is "major.minor.patch"
+    set(TAG_VERSION "${CMAKE_MATCH_1}")
+
+    # CMAKE_MATCH_2 is "-commits_ahead" (or empty)
+    if (CMAKE_MATCH_2)
+        string(SUBSTRING "${CMAKE_MATCH_2}" 1 -1 COMMITS_AHEAD)
+        set(CPACK_PACKAGE_VERSION "${TAG_VERSION}+${COMMITS_AHEAD}")
+    else()
+        set(CPACK_PACKAGE_VERSION "${TAG_VERSION}")
+    endif()
+
+else()
+    # Fallback for non-tagged builds: Use commit hash
+    if (PROJECT_VERSION MATCHES "-g([0-9a-f]+)$")
+        set(HASH "${CMAKE_MATCH_1}")
+    else()
+        set(HASH "${PROJECT_VERSION}")
+    endif()
+    set(CPACK_PACKAGE_VERSION "0.0.0+${HASH}")
+endif()
+
+# Debian package revision number (e.g., the "1" in "0.5.42-1~plucky~25.04").
+# Override with: cmake -DPACKAGE_REVISION=2
+set(PACKAGE_REVISION "1" CACHE STRING "Debian package revision number")
+
+# Version suffix for distribution-specific packages (e.g., "~plucky~25.04").
+# Auto-detected from /etc/os-release for Ubuntu and Debian.
+# For derived distros, override with: cmake -DVERSION_SUFFIX="~noble~24.04"
+set(DEFAULT_VERSION_SUFFIX "")
+if (EXISTS "/etc/os-release")
+    file(STRINGS "/etc/os-release" OS_RELEASE_CONTENTS)
+
+    set(_OS_ID "")
+    set(_OS_VERSION_ID "")
+    set(_OS_VERSION_CODENAME "")
+
+    foreach(line ${OS_RELEASE_CONTENTS})
+        if (line MATCHES "^ID=\"?([^\"]*)\"?$")
+            set(_OS_ID "${CMAKE_MATCH_1}")
+        elseif (line MATCHES "^VERSION_ID=\"?([^\"]*)\"?$")
+            set(_OS_VERSION_ID "${CMAKE_MATCH_1}")
+        elseif (line MATCHES "^VERSION_CODENAME=\"?([^\"]*)\"?$")
+            set(_OS_VERSION_CODENAME "${CMAKE_MATCH_1}")
+        endif()
+    endforeach()
+
+    if (_OS_VERSION_CODENAME AND _OS_VERSION_ID)
+        if (_OS_ID STREQUAL "ubuntu")
+            set(DEFAULT_VERSION_SUFFIX "~${_OS_VERSION_CODENAME}~${_OS_VERSION_ID}")
+        elseif (_OS_ID STREQUAL "debian")
+            set(DEFAULT_VERSION_SUFFIX "~${_OS_VERSION_CODENAME}~deb${_OS_VERSION_ID}")
+        endif()
+    endif()
+endif()
+
+set(VERSION_SUFFIX "${DEFAULT_VERSION_SUFFIX}" CACHE STRING "Distribution-specific version suffix")
+
+set(CPACK_PACKAGE_VERSION "${CPACK_PACKAGE_VERSION}-${PACKAGE_REVISION}${VERSION_SUFFIX}")
+
+set(CPACK_PACKAGE_CONTACT "mundhahj@tf.uni-freiburg.de")
+set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/ad-freiburg/qlever")
+
+set(CPACK_OUTPUT_FILE_PREFIX "${CMAKE_CURRENT_BINARY_DIR}/packages")
+set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+
+set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
+
+set(CPACK_VERBATIM_VARIABLES YES)
+
+include(CPack)

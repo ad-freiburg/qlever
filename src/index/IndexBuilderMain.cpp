@@ -166,6 +166,7 @@ int main(int argc, char** argv) {
     boostOptions.add_options()(AD_FWD(args)...);
   };
   add("help,h", "Produce this help message.");
+  add("version,v", "Print version information.");
   add("index-basename,i", po::value(&config.baseName_)->required(),
       "The basename of the output files (required).");
   add("kg-input-file,f", po::value(&inputFile),
@@ -257,17 +258,22 @@ int main(int argc, char** argv) {
   try {
     po::store(po::parse_command_line(argc, argv, boostOptions), optionsMap);
     if (optionsMap.count("help")) {
-      std::cout << boostOptions << '\n';
+      std::cout << boostOptions << std::endl;
+      return EXIT_SUCCESS;
+    }
+    if (optionsMap.count("version")) {
+      std::cout << argv[0] << " " << qlever::version::ProjectVersion
+                << std::endl;
       return EXIT_SUCCESS;
     }
     po::notify(optionsMap);
   } catch (const std::exception& e) {
-    std::cerr << "Error in command-line argument: " << e.what() << '\n';
-    std::cerr << boostOptions << '\n';
+    std::cerr << "Error in command-line argument: " << e.what() << std::endl;
+    std::cerr << boostOptions << std::endl;
     return EXIT_FAILURE;
   }
 
-  AD_LOG_INFO << EMPH_ON << "QLever IndexBuilder, compiled on "
+  AD_LOG_INFO << EMPH_ON << "QLever index builder, compiled on "
               << qlever::version::DatetimeOfCompilation << " using git hash "
               << qlever::version::GitShortHash << EMPH_OFF << std::endl;
 

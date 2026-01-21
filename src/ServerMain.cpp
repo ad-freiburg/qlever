@@ -64,6 +64,7 @@ int main(int argc, char** argv) {
     options.add_options()(AD_FWD(args)...);
   };
   add("help,h", "Produce this help message.");
+  add("version,v", "Print version information.");
   // TODO<joka921> Can we output the "required" automatically?
   add("index-basename,i", po::value<std::string>(&indexBasename)->required(),
       "The basename of the index files (required).");
@@ -183,6 +184,10 @@ int main(int argc, char** argv) {
       std::cout << options << '\n';
       return EXIT_SUCCESS;
     }
+    if (optionsMap.count("version")) {
+      std::cout << argv[0] << " " << qlever::version::ProjectVersion << '\n';
+      return EXIT_SUCCESS;
+    }
     po::notify(optionsMap);
   } catch (const std::exception& e) {
     std::cerr << "Error in command-line argument: " << e.what() << '\n';
@@ -190,7 +195,7 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
 
-  AD_LOG_INFO << EMPH_ON << "QLever Server, compiled on "
+  AD_LOG_INFO << EMPH_ON << "QLever server, compiled on "
               << qlever::version::DatetimeOfCompilation << " using git hash "
               << qlever::version::GitShortHash << EMPH_OFF << std::endl;
 

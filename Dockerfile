@@ -28,6 +28,7 @@ COPY benchmark /qlever/benchmark/
 COPY .git /qlever/.git/
 COPY CMakeLists.txt /qlever/
 COPY CompilationInfo.cmake /qlever/
+COPY GitVersion.cmake /qlever/
 
 # Build and compile. By default, also compile and run all tests. In order not
 # to, build the image with `--build-arg RUN_TESTS=false`.
