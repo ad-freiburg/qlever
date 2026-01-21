@@ -63,7 +63,7 @@ jobs:
         include:
           - compiler: gcc
             compiler-version: 11
-            additional-cmake-options: "-DUSE_CPP_17_BACKPORTS=ON"
+            additional-cmake-options: "-DUSE_CPP_17_BACKPORTS=ON -DEXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17=ON"
             build-type: Release
 # TODO<joka921> Figure out a way to enable this build only for master pushes and not for the PR.
 #          - compiler: clang

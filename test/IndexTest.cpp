@@ -50,19 +50,24 @@ auto lit = ad_utility::testing::tripleComponentLiteral;
 // scan matches `expected`.
 auto makeTestScanWidthOne = [](const IndexImpl& index,
                                const QueryExecutionContext& qec) {
-  return
-      [&index, &qec](const TripleComponent& c0, const TripleComponent& c1,
-                     Permutation::Enum permutation, const VectorTable& expected,
-                     Permutation::ColumnIndices additionalColumns = {},
-                     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
-        auto t = generateLocationTrace(l);
-        IdTable result =
-            index.scan({c0, c1, std::nullopt}, permutation, additionalColumns,
-                       std::make_shared<ad_utility::CancellationHandle<>>(),
-                       qec.locatedTriplesSnapshot());
-        ASSERT_EQ(result.numColumns(), 1 + additionalColumns.size());
-        ASSERT_EQ(result, makeIdTableFromVector(expected));
-      };
+  return [&index, &qec](
+             const TripleComponent& c0, const TripleComponent& c1,
+             Permutation::Enum permutation, const VectorTable& expected,
+             Permutation::ColumnIndices additionalColumns = {},
+             ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto t = generateLocationTrace(l);
+    const auto& actualPermutation = index.getPermutation(permutation);
+    auto locatedTriplesSnapshot = qec.locatedTriplesState();
+    IdTable result = actualPermutation.scan(
+        actualPermutation.getScanSpecAndBlocks(
+            ScanSpecificationAsTripleComponent{c0, c1, std::nullopt}
+                .toScanSpecification(index),
+            locatedTriplesSnapshot),
+        additionalColumns, std::make_shared<ad_utility::CancellationHandle<>>(),
+        locatedTriplesSnapshot);
+    ASSERT_EQ(result.numColumns(), 1 + additionalColumns.size());
+    ASSERT_EQ(result, makeIdTableFromVector(expected));
+  };
 };
 // Return a lambda that runs a scan for a fixed element `c0`
 // on the `permutation` (e.g. a fixed P in the PSO permutation)
@@ -70,18 +75,23 @@ auto makeTestScanWidthOne = [](const IndexImpl& index,
 // scan matches `expected`.
 auto makeTestScanWidthTwo = [](const IndexImpl& index,
                                const QueryExecutionContext& qec) {
-  return
-      [&index, &qec](const TripleComponent& c0, Permutation::Enum permutation,
-                     const VectorTable& expected,
-                     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
-        auto t = generateLocationTrace(l);
-        IdTable wol =
-            index.scan({c0, std::nullopt, std::nullopt}, permutation,
-                       Permutation::ColumnIndicesRef{},
-                       std::make_shared<ad_utility::CancellationHandle<>>(),
-                       qec.locatedTriplesSnapshot());
-        ASSERT_EQ(wol, makeIdTableFromVector(expected));
-      };
+  return [&index, &qec](
+             const TripleComponent& c0, Permutation::Enum permutation,
+             const VectorTable& expected,
+             ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto t = generateLocationTrace(l);
+    const auto& actualPermutation = index.getPermutation(permutation);
+    auto locatedTriplesSnapshot = qec.locatedTriplesState();
+    IdTable wol = actualPermutation.scan(
+        actualPermutation.getScanSpecAndBlocks(
+            ScanSpecificationAsTripleComponent{c0, std::nullopt, std::nullopt}
+                .toScanSpecification(index),
+            locatedTriplesSnapshot),
+        Permutation::ColumnIndicesRef{},
+        std::make_shared<ad_utility::CancellationHandle<>>(),
+        locatedTriplesSnapshot);
+    ASSERT_EQ(wol, makeIdTableFromVector(expected));
+  };
 };
 }  // namespace
 
@@ -108,7 +118,7 @@ TEST(IndexTest, createFromTurtleTest) {
         return;
       }
       const auto& [index, qec] = getIndex();
-      const auto& locatedTriplesSnapshot = qec.locatedTriplesSnapshot();
+      const auto& locatedTriplesSnapshot = qec.locatedTriplesState();
 
       auto getId = makeGetId(getQec(kb)->getIndex());
       Id a = getId("<a>");
@@ -199,7 +209,7 @@ TEST(IndexTest, createFromTurtleTest) {
 
       const auto& qec = *getQec(kb);
       const IndexImpl& index = qec.getIndex().getImpl();
-      const auto& deltaTriples = qec.locatedTriplesSnapshot();
+      const auto& deltaTriples = qec.locatedTriplesState();
 
       auto getId = makeGetId(getQec(kb)->getIndex());
       Id zero = getId("<0>");
@@ -256,7 +266,7 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
       "<a2> <b2> <c2> .";
   const auto& qec = *getQec(kb);
   const IndexImpl& index = qec.getIndex().getImpl();
-  const auto& deltaTriples = qec.locatedTriplesSnapshot();
+  const auto& deltaTriples = qec.locatedTriplesState();
 
   auto getId = makeGetId(getQec(kb)->getIndex());
   Id b = getId("<b>");
@@ -495,15 +505,17 @@ TEST(IndexTest, NumDistinctEntities) {
   // and one triple per subject for the pattern.
   EXPECT_EQ(numTriples.internal, 5);
 
-  auto multiplicities = index.getMultiplicities(Permutation::SPO);
+  auto multiplicities =
+      index.getMultiplicities(index.getPermutation(Permutation::SPO));
   // 7 triples, three distinct numSubjects, 2 distinct numPredicates, 7 distinct
   // objects.
   EXPECT_FLOAT_EQ(multiplicities[0], 7.0 / 3.0);
   EXPECT_FLOAT_EQ(multiplicities[1], 7.0 / 2.0);
   EXPECT_FLOAT_EQ(multiplicities[2], 7.0 / 7.0);
 
-  multiplicities = index.getMultiplicities(iri("<x>"), Permutation::SPO,
-                                           qec.locatedTriplesSnapshot());
+  multiplicities = index.getMultiplicities(
+      iri("<x>"), index.getPermutation(Permutation::SPO),
+      qec.locatedTriplesState());
   EXPECT_FLOAT_EQ(multiplicities[0], 2.5);
   EXPECT_FLOAT_EQ(multiplicities[1], 1);
 }
@@ -649,4 +661,82 @@ TEST(IndexTest, getBlankNodeManager) {
       "_:c <a> <b> .";
   const Index& index3 = getQec(kb)->getIndex();
   EXPECT_EQ(index3.getBlankNodeManager()->minIndex_, 3);
+}
+
+// _____________________________________________________________________________
+TEST(IndexImpl, recomputeStatistics) {
+  std::string turtleInput =
+      "<x> <label> \"alpha\" . <x> <label> \"A\" . "
+      "<y> <label> \"Beta\". <z> <label> \"zz\"@en";
+  auto index = makeTestIndex("recomputeStatistics", std::move(turtleInput));
+  auto cancellationHandle =
+      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+
+  auto& indexImpl = index.getImpl();
+  // No-op, should return the same stats.
+  auto result = indexImpl.recomputeStatistics(
+      index.deltaTriplesManager().getCurrentLocatedTriplesSharedState());
+  EXPECT_EQ(result, indexImpl.configurationJson_);
+
+  // Now, modify the index by adding triples.
+  Id blankNodeId = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(42));
+  index.deltaTriplesManager().modify<void>([&cancellationHandle, blankNodeId](
+                                               DeltaTriples& deltaTriples) {
+    LocalVocabEntry zzz{ad_utility::triple_component::Iri::fromIriref("<zzz>")};
+    LocalVocabEntry literal{
+        ad_utility::triple_component::Literal::fromStringRepresentation(
+            "\"test\"@en")};
+    Id zzzId = Id::makeFromLocalVocabIndex(&zzz);
+    Id literalId = Id::makeFromLocalVocabIndex(&literal);
+    // Create duplicate in different graph.
+    Id x = Id::makeFromVocabIndex(VocabIndex::make(11));
+    Id label = Id::makeFromVocabIndex(VocabIndex::make(10));
+    Id alpha = Id::makeFromVocabIndex(VocabIndex::make(1));
+    deltaTriples.insertTriples(
+        cancellationHandle, {IdTriple{{x, label, alpha, x}},
+                             IdTriple{{blankNodeId, zzzId, literalId, zzzId}}});
+  });
+
+  for (bool loadAllPermutations : {true, false}) {
+    using NNAI = Index::NumNormalAndInternal;
+
+    // Simulate scenario where not all permutations are loaded.
+    if (!loadAllPermutations) {
+      // Overwrite with unloaded permutation.
+      indexImpl.SPOForTesting() = Permutation{
+          Permutation::SPO, ad_utility::makeUnlimitedAllocator<Id>()};
+      // Zero out original values.
+      indexImpl.configurationJson_["num-subjects"] = NNAI(0, 0);
+      indexImpl.configurationJson_["num-objects"] = NNAI(0, 0);
+    }
+
+    auto newStats = indexImpl.recomputeStatistics(
+        index.deltaTriplesManager().getCurrentLocatedTriplesSharedState());
+    EXPECT_NE(newStats, indexImpl.configurationJson_);
+    EXPECT_EQ(newStats["num-triples"], NNAI(5, 6));
+    EXPECT_EQ(newStats["num-predicates"], NNAI(2, 4));
+    if (loadAllPermutations) {
+      EXPECT_EQ(newStats["num-subjects"], NNAI(4, 0));
+      EXPECT_EQ(newStats["num-objects"], NNAI(5, 0));
+    } else {
+      EXPECT_EQ(newStats["num-subjects"], NNAI(0, 0));
+      EXPECT_EQ(newStats["num-objects"], NNAI(0, 0));
+    }
+    // Blank node ids are remapped, so we cannot predict the exact number.
+    EXPECT_NE(newStats["num-blank-nodes-total"], 0);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(IndexImpl, countDistinct) {
+  std::vector<IdTable> tables;
+  tables.push_back(makeIdTableFromVector({{1}, {2}}));
+  tables.push_back(makeIdTableFromVector({{2}, {2}}));
+
+  size_t counter = 0;
+  std::optional<Id> lastId;
+  for (const IdTable& table : tables) {
+    IndexImpl::countDistinct(lastId, counter, table);
+  }
+  EXPECT_EQ(counter, 2);
 }

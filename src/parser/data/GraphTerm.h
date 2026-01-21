@@ -10,7 +10,7 @@
 #include <string>
 #include <variant>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "index/EncodedIriManager.h"
 #include "parser/RdfParser.h"
 #include "parser/TokenizerCtre.h"
@@ -56,9 +56,11 @@ class GraphTerm : public GraphTermBase,
       using T = std::decay_t<decltype(element)>;
       if constexpr (std::is_same_v<T, Variable>) {
         return element;
-      } else if constexpr (std::is_same_v<T, Literal> ||
-                           std::is_same_v<T, Iri>) {
+      } else if constexpr (std::is_same_v<T, Literal>) {
         return RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
+            element.toSparql());
+      } else if constexpr (std::is_same_v<T, Iri>) {
+        return ad_utility::triple_component::Iri::fromStringRepresentation(
             element.toSparql());
       } else {
         static_assert(std::is_same_v<T, BlankNode>);

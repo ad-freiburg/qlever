@@ -7,9 +7,11 @@
 #include "libqlever/Qlever.h"
 
 #include "engine/ExportQueryExecutionTrees.h"
+#include "engine/MaterializedViews.h"
 #include "index/IndexImpl.h"
 #include "index/InputFileServer.h"
 #include "index/TextIndexBuilder.h"
+#include "libqlever/QleverTypes.h"
 #include "parser/SparqlParser.h"
 
 namespace qlever {
@@ -35,10 +37,13 @@ Qlever::Qlever(const EngineConfig& config)
   // Load the index from disk.
   index_.usePatterns() = enablePatternTrick_;
   index_.loadAllPermutations() = !config.onlyPsoAndPos_;
+  index_.doNotLoadPermutations() = config.doNotLoadPermutations_;
   index_.createFromOnDiskIndex(config.baseName_, config.persistUpdates_);
   if (config.loadTextIndex_) {
     index_.addTextFromOnDiskIndex();
   }
+
+  materializedViewsManager_.setOnDiskBase(config.baseName_);
 
   // Estimate the cost of sorting operations (needed for query planning).
   sortPerformanceEstimator_.computeEstimatesExpensively(
@@ -144,11 +149,19 @@ std::string Qlever::query(const QueryPlan& queryPlan,
 }
 
 // _____________________________________________________________________________
-void Qlever::queryAndPinResultWithName(std::string name, std::string query) {
+void Qlever::queryAndPinResultWithName(
+    QueryExecutionContext::PinResultWithName options, std::string query) {
   auto queryPlan = parseAndPlanQuery(std::move(query));
   auto& [qet, qec, parsedQuery] = queryPlan;
-  qec->pinResultWithName() = std::move(name);
+  qec->pinResultWithName() = std::move(options);
   [[maybe_unused]] auto result = this->query(queryPlan);
+}
+
+// _____________________________________________________________________________
+void Qlever::queryAndPinResultWithName(std::string name, std::string query) {
+  queryAndPinResultWithName(
+      QueryExecutionContext::PinResultWithName{std::move(name)},
+      std::move(query));
 }
 
 // _____________________________________________________________________________
@@ -163,7 +176,7 @@ void Qlever::eraseResultWithName(std::string name) {
 Qlever::QueryPlan Qlever::parseAndPlanQuery(std::string query) const {
   auto qecPtr = std::make_shared<QueryExecutionContext>(
       index_, &cache_, allocator_, sortPerformanceEstimator_,
-      &namedResultCache_);
+      &namedResultCache_, &materializedViewsManager_);
   // TODO<joka921> support Dataset clauses.
   auto parsedQuery = SparqlParser::parseQuery(
       &index_.getImpl().encodedIriManager(), std::move(query), {});
@@ -195,6 +208,18 @@ void IndexBuilderConfig::validate() const {
         "text index. If none are given the option to add words from literals "
         "has to be true. For details see --help."));
   }
+}
+
+// ___________________________________________________________________________
+void Qlever::writeMaterializedView(std::string name, std::string query) const {
+  MaterializedViewWriter::writeViewToDisk(index_.getOnDiskBase(),
+                                          std::move(name),
+                                          parseAndPlanQuery(std::move(query)));
+}
+
+// ___________________________________________________________________________
+void Qlever::loadMaterializedView(std::string name) const {
+  materializedViewsManager_.loadView(name);
 }
 
 }  // namespace qlever

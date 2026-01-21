@@ -7,20 +7,22 @@
 #ifndef QLEVER_SRC_LIBQLEVER_QLEVER_H
 #define QLEVER_SRC_LIBQLEVER_QLEVER_H
 
-#include <util/MemorySize/MemorySize.h>
-
 #include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
+#include "engine/NamedResultCacheSerializer.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryPlanner.h"
 #include "global/RuntimeParameters.h"
 #include "index/Index.h"
 #include "index/InputFileSpecification.h"
+#include "libqlever/QleverTypes.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/MemorySize/MemorySize.h"
 #include "util/http/MediaTypes.h"
 
 namespace qlever {
@@ -163,6 +165,13 @@ struct EngineConfig : CommonConfig {
   // after a restart). To revert to the state of the index without updates,
   // simply delete this file.
   bool persistUpdates_ = true;
+
+  // If set to true, no permutations will be loaded from disk. This is useful
+  // when only queries that don't require accessing the permutations need to be
+  // executed (e.g., queries that only compute constant expressions, or query
+  // that only rely on the `NamedQueryCache` which can be populated
+  // separately).
+  bool doNotLoadPermutations_ = false;
 };
 
 // Class to use QLever as an embedded database, without the HTTP server. See
@@ -175,6 +184,7 @@ class Qlever {
   SortPerformanceEstimator sortPerformanceEstimator_;
   Index index_;
   mutable NamedResultCache namedResultCache_;
+  mutable MaterializedViewsManager materializedViewsManager_;
   bool enablePatternTrick_;
 
  public:
@@ -197,9 +207,7 @@ class Qlever {
   //
   // 3. It enables an inspection or even modification of the query plan before
   // executing it (this requires some expertise).
-  using QueryPlan =
-      std::tuple<std::shared_ptr<QueryExecutionTree>,
-                 std::shared_ptr<QueryExecutionContext>, ParsedQuery>;
+  using QueryPlan = qlever::QueryPlan;
   QueryPlan parseAndPlanQuery(std::string query) const;
 
   // Run the given parsed and planned query. The result is returned as a
@@ -223,13 +231,43 @@ class Qlever {
                         ad_utility::MediaType::sparqlJson) const;
 
   // Plan, parse, and execute the given `query` and pin the result to the cache
-  // with the given `name`. This result can then be reused in a query as
-  // follows: `SERVICE ql:cached-result-with-name-<name> {}`.
+  // with the given options (name and possibly request for building a geometry
+  // index). This result can then be reused in a query as follows: `SERVICE
+  // ql:cached-result-with-name-<name> {}`.
+  void queryAndPinResultWithName(
+      QueryExecutionContext::PinResultWithName options, std::string query);
+  // Shorthand using only the name and no geo index for convenience and
+  // compatibility.
   void queryAndPinResultWithName(std::string name, std::string query);
 
   // Clear the result with the given `name` from the cache.
   void eraseResultWithName(std::string name);
+  // Completely clear the `NamedResultCache`.
   void clearNamedResultCache();
+
+  // Write a new materialized view with `name` to disk and store the result of
+  // `query`.
+  void writeMaterializedView(std::string name, std::string query) const;
+
+  // Preload a materialized view s.t. the first query to the view does not have
+  // to load the view.
+  void loadMaterializedView(std::string name) const;
+
+  // Write the contents of the `NamedResultCache` to disk.
+  template <typename Serializer>
+  void writeNamedResultCacheToSerializer(Serializer& serializer) const {
+    namedResultCache_.writeToSerializer(serializer);
+  }
+
+  // Read the contents of the `NamedResultCache` from disk.
+  template <typename Serializer>
+  void readNamedResultCacheFromDisk(Serializer& serializer) {
+    namedResultCache_.readFromSerializer(serializer, allocator_,
+                                         *index_.getBlankNodeManager());
+  }
+
+  // Low-level access to the QLever API, use with care.
+  Index& index() { return index_; }
 };
 }  // namespace qlever
 

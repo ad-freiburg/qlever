@@ -6,12 +6,12 @@
 #ifndef QLEVER_SRC_PARSER_TRIPLECOMPONENT_H
 #define QLEVER_SRC_PARSER_TRIPLECOMPONENT_H
 
-#include <concepts>
 #include <cstdint>
 #include <string>
 #include <variant>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
+#include "backports/three_way_comparison.h"
 #include "backports/type_traits.h"
 #include "engine/LocalVocab.h"
 #include "global/Constants.h"
@@ -48,7 +48,7 @@ class TripleComponent {
   // Own class for the UNDEF value.
   struct UNDEF {
     // Default equality operator.
-    bool operator==(const UNDEF&) const = default;
+    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(UNDEF)
     // Hash to arbitrary (fixed) value. For example, needed in
     // `Values::computeMultiplicities`.
     template <typename H>
@@ -71,8 +71,8 @@ class TripleComponent {
   /// Construct from anything that is able to construct the underlying
   /// `Variant`.
   CPP_template(typename FirstArg, typename... Args)(
-      requires CPP_NOT(
-          std::same_as<ql::remove_cvref_t<FirstArg>, TripleComponent>) &&
+      requires CPP_NOT(ql::concepts::same_as<ql::remove_cvref_t<FirstArg>,
+                                             TripleComponent>) &&
       std::is_constructible_v<Variant, FirstArg&&, Args&&...>)
       TripleComponent(FirstArg&& firstArg, Args&&... args)
       : _variant(AD_FWD(firstArg), AD_FWD(args)...) {
@@ -126,15 +126,15 @@ class TripleComponent {
   }
 
   /// Equality comparison between two `TripleComponent`s.
-  bool operator==(const TripleComponent&) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR(TripleComponent, _variant)
 
   /// Hash value for `TripleComponent` object.
-  /// Note: It is important to use `std::same_as` because otherwise this
-  /// overload would also be eligible for the contained types that are
+  /// Note: It is important to use `ql::concepts::same_as` because otherwise
+  /// this overload would also be eligible for the contained types that are
   /// implicitly convertible to `TripleComponent` which would lead to strange
   /// bugs.
-  CPP_template(typename H,
-               typename TC)(requires std::same_as<TC, TripleComponent>) friend H
+  CPP_template(typename H, typename TC)(
+      requires ql::concepts::same_as<TC, TripleComponent>) friend H
       AbslHashValue(H h, const TC& tc) {
     return H::combine(std::move(h), tc._variant);
   }
@@ -214,55 +214,72 @@ class TripleComponent {
   [[nodiscard]] std::optional<Id> toValueIdIfNotString(
       const EncodedIriManager* encodedIriManager) const;
 
-  // Convert the `TripleComponent` to an ID. If the `TripleComponent` is a
-  // string, the IDs are resolved using the `vocabulary`. If a string is not
-  // found in the vocabulary, `std::nullopt` is returned.
+  // Convert the `TripleComponent` to an `Id`. If the `TripleComponent` is a
+  // literal or IRI, resolve using the `vocabulary`. If they are not found in
+  // the vocabulary, return the positions of the two neighboring entries.
   template <typename Vocabulary>
-  [[nodiscard]] std::optional<Id> toValueId(
-      const Vocabulary& vocabulary, const EncodedIriManager& evManager) const {
+  [[nodiscard]] std::variant<Id, std::pair<VocabIndex, VocabIndex>>
+  toValueIdOrBounds(const Vocabulary& vocabulary,
+                    const EncodedIriManager& evManager) const {
     AD_CONTRACT_CHECK(!isString());
     std::optional<Id> vid = toValueIdIfNotString(&evManager);
-    if (vid != std::nullopt) return vid;
+    if (vid != std::nullopt) return vid.value();
     AD_CORRECTNESS_CHECK(isLiteral() || isIri());
-    VocabIndex idx;
     const std::string& content = isLiteral()
                                      ? getLiteral().toStringRepresentation()
                                      : getIri().toStringRepresentation();
-    if (vocabulary.getId(content, &idx)) {
-      return Id::makeFromVocabIndex(idx);
+    auto [lower, upper] = vocabulary.getPositionOfWord(content);
+    if (lower != upper) {
+      return Id::makeFromVocabIndex(lower);
+    }
+    return std::pair(lower, upper);
+  }
+
+  // Like `toValueIdOrBounds`, but returns `std::nullopt` if not found.
+  template <typename Vocabulary>
+  [[nodiscard]] std::optional<Id> toValueId(
+      const Vocabulary& vocabulary, const EncodedIriManager& evManager) const {
+    auto idOrBounds = toValueIdOrBounds(vocabulary, evManager);
+    if (auto* id = std::get_if<Id>(&idOrBounds)) {
+      return *id;
     }
     return std::nullopt;
   }
 
-  // Same as the above, but also consider the given local vocabulary. If the
-  // string is neither in `vocabulary` nor in `localVocab`, it will be added to
-  // `localVocab`. Therefore, we get a valid `Id` in any case. The modifier is
-  // `&&` because in our uses of this method, the `TripleComponent` object is
-  // created solely to call this method and we want to avoid copying the
-  // `std::string` when passing it to the local vocabulary.
+  // Like `toValueIdOrBounds`, but also take the given `LocalVocab` into
+  // account. If this `TripleComponent` is neither found in `vocabulary` nor in
+  // `localVocab`, it will be added to `localVocab`. That way, we always get a
+  // valid `Id`.
+  //
+  // NOTE: The modifier is `&&` because in our uses of this method, the
+  // `TripleComponent` object is created solely to call this method and we want
+  // to avoid copying the literal or IRI when passing it to the local
+  // vocabulary.
   template <typename Vocabulary>
   [[nodiscard]] Id toValueId(const Vocabulary& vocabulary,
                              LocalVocab& localVocab,
                              const EncodedIriManager& encodedIriManager) && {
-    std::optional<Id> id = toValueId(vocabulary, encodedIriManager);
-    if (!id) {
-      // If `toValueId` could not convert to `Id`, we have a string, which we
-      // look up in (and potentially add to) our local vocabulary.
-      AD_CORRECTNESS_CHECK(isLiteral() || isIri());
-      using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
-      auto moveWord = [&]() -> LiteralOrIri {
-        if (isLiteral()) {
-          return LiteralOrIri{std::move(getLiteral())};
-        } else {
-          return LiteralOrIri{std::move(getIri())};
-        }
-      };
-      // NOTE: There is a `&&` version of `getIndexAndAddIfNotContained`.
-      // Otherwise, `newWord` would be copied here despite the `std::move`.
-      id = Id::makeFromLocalVocabIndex(
-          localVocab.getIndexAndAddIfNotContained(moveWord()));
+    auto idOrBounds = toValueIdOrBounds(vocabulary, encodedIriManager);
+    if (auto* id = std::get_if<Id>(&idOrBounds)) {
+      return *id;
     }
-    return id.value();
+    using Bounds = std::pair<VocabIndex, VocabIndex>;
+    AD_CORRECTNESS_CHECK(std::holds_alternative<Bounds>(idOrBounds));
+    auto [lower, upper] = std::get<Bounds>(idOrBounds);
+    // If `toValueId` could not convert to `Id`, we have a Literal or Iri,
+    // which we look up in (and potentially add to) our local vocabulary.
+    AD_CORRECTNESS_CHECK(isLiteral() || isIri());
+    using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+    auto moveWord = [&]() -> LiteralOrIri {
+      if (isLiteral()) {
+        return LiteralOrIri{std::move(getLiteral())};
+      } else {
+        return LiteralOrIri{std::move(getIri())};
+      }
+    };
+    return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
+        LocalVocabEntry(moveWord(), Id::makeFromVocabIndex(lower),
+                        Id::makeFromVocabIndex(upper))));
   }
 
   // Human-readable output. Is used for debugging, testing, and for the creation

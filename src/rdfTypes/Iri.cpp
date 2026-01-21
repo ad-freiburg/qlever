@@ -9,7 +9,7 @@
 
 #include <utility>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "parser/LiteralOrIri.h"
 #include "rdfTypes/RdfEscaping.h"
 #include "util/Log.h"
@@ -45,7 +45,7 @@ Iri Iri::fromIriref(std::string_view stringWithBrackets) {
 // ____________________________________________________________________________
 Iri Iri::fromIrirefWithoutBrackets(std::string_view stringWithoutBrackets) {
   AD_CORRECTNESS_CHECK(!ql::starts_with(stringWithoutBrackets, '<') &&
-                       !stringWithoutBrackets.ends_with('>'));
+                       !ql::ends_with(stringWithoutBrackets, '>'));
   return Iri{absl::StrCat("<"sv, stringWithoutBrackets, ">"sv)};
 }
 
@@ -57,7 +57,8 @@ Iri Iri::fromPrefixAndSuffix(const Iri& prefix, std::string_view suffix) {
 
 // ____________________________________________________________________________
 Iri Iri::getBaseIri(bool domainOnly) const {
-  AD_CORRECTNESS_CHECK(ql::starts_with(iri_, '<') && iri_.ends_with('>'), iri_);
+  AD_CORRECTNESS_CHECK(ql::starts_with(iri_, '<') && ql::ends_with(iri_, '>'),
+                       iri_);
   // Check if we have a scheme and find the first `/` after that (or the first
   // `/` at all if there is no scheme).
   size_t pos = iri_.find(schemePattern);
@@ -116,9 +117,9 @@ Iri Iri::fromStringRepresentation(std::string s) {
 }
 
 // ____________________________________________________________________________
-const std::string& Iri::toStringRepresentation() const { return iri_; }
+const std::string& Iri::toStringRepresentation() const& { return iri_; }
 
 // ____________________________________________________________________________
-std::string& Iri::toStringRepresentation() { return iri_; }
+std::string Iri::toStringRepresentation() && { return std::move(iri_); }
 
 }  // namespace ad_utility::triple_component

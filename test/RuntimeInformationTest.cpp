@@ -92,13 +92,20 @@ TEST(RuntimeInformation, setColumnNames) {
 TEST(RuntimeInformation, statusToString) {
   using enum RuntimeInformation::Status;
   using R = RuntimeInformation;
-  EXPECT_EQ(R::toString(fullyMaterialized), "fully materialized");
-  EXPECT_EQ(R::toString(lazilyMaterialized), "lazily materialized");
+  EXPECT_EQ(R::toString(fullyMaterializedCompleted),
+            "fully materialized completed");
+  EXPECT_EQ(R::toString(lazilyMaterializedInProgress),
+            "lazily materialized in progress");
+  EXPECT_EQ(R::toString(lazilyMaterializedCompleted),
+            "lazily materialized completed");
+  EXPECT_EQ(R::toString(fullyMaterializedInProgress),
+            "fully materialized in progress");
   EXPECT_EQ(R::toString(notStarted), "not started");
   EXPECT_EQ(R::toString(optimizedOut), "optimized out");
   EXPECT_EQ(R::toString(failed), "failed");
   EXPECT_EQ(R::toString(failedBecauseChildFailed),
             "failed because child failed");
+  EXPECT_EQ(R::toString(cancelled), "cancelled");
   EXPECT_ANY_THROW(R::toString(static_cast<RuntimeInformation::Status>(72)));
 }
 
@@ -152,7 +159,7 @@ TEST(RuntimeInformation, toStringAndJson) {
   parent.columnNames_.push_back("?alpha");
   parent.totalTime_ = 6ms;
   parent.cacheStatus_ = ad_utility::CacheStatus::computed;
-  parent.status_ = RuntimeInformation::Status::fullyMaterialized;
+  parent.status_ = RuntimeInformation::Status::fullyMaterializedCompleted;
 
   parent.children_.push_back(std::make_shared<RuntimeInformation>(child));
 
@@ -164,7 +171,7 @@ TEST(RuntimeInformation, toStringAndJson) {
 │  columns: ?alpha
 │  total_time: 6 ms
 │  operation_time: 3 ms
-│  status: fully materialized
+│  status: fully materialized completed
 │  cache_status: computed
 │  ┬
 │  │
@@ -198,7 +205,7 @@ TEST(RuntimeInformation, toStringAndJson) {
 "estimated_operation_cost": 0,
 "estimated_column_multiplicities": [],
 "estimated_size": 0,
-"status": "fully materialized",
+"status": "fully materialized completed",
 "children": [
     {
         "description": "child",

@@ -31,16 +31,24 @@ NARY_EXPRESSION(
     CentroidExpression, 1,
     FV<ad_utility::WktCentroid, GeometryInfoValueGetter<ad_utility::Centroid>>);
 
-NARY_EXPRESSION(DistExpression, 2,
-                FV<NumericIdWrapper<ad_utility::WktDistGeoPoints, true>,
-                   GeoPointValueGetter>);
+NARY_EXPRESSION(
+    DistExpression, 2,
+    FV<NumericIdWrapper<ad_utility::WktDist, true>, GeoPointOrWktValueGetter>);
 NARY_EXPRESSION(MetricDistExpression, 2,
-                FV<NumericIdWrapper<ad_utility::WktMetricDistGeoPoints, true>,
-                   GeoPointValueGetter>);
+                FV<NumericIdWrapper<ad_utility::WktMetricDist, true>,
+                   GeoPointOrWktValueGetter>);
 NARY_EXPRESSION(
     DistWithUnitExpression, 3,
-    FV<NumericIdWrapper<ad_utility::WktDistGeoPoints, true>,
-       GeoPointValueGetter, GeoPointValueGetter, UnitOfMeasurementValueGetter>);
+    FV<NumericIdWrapper<ad_utility::WktDist, true>, GeoPointOrWktValueGetter,
+       GeoPointOrWktValueGetter, UnitOfMeasurementValueGetter>);
+
+NARY_EXPRESSION(
+    AreaExpression, 2,
+    FV<ad_utility::WktArea, GeometryInfoValueGetter<ad_utility::MetricArea>,
+       UnitOfMeasurementValueGetter>);
+NARY_EXPRESSION(MetricAreaExpression, 1,
+                FV<ad_utility::WktMetricArea,
+                   GeometryInfoValueGetter<ad_utility::MetricArea>>);
 
 NARY_EXPRESSION(EnvelopeExpression, 1,
                 FV<ad_utility::WktEnvelope,
@@ -49,6 +57,18 @@ NARY_EXPRESSION(EnvelopeExpression, 1,
 NARY_EXPRESSION(GeometryTypeExpression, 1,
                 FV<ad_utility::WktGeometryType,
                    GeometryInfoValueGetter<ad_utility::GeometryType>>);
+
+NARY_EXPRESSION(
+    LengthExpression, 2,
+    FV<ad_utility::WktLength, GeometryInfoValueGetter<ad_utility::MetricLength>,
+       UnitOfMeasurementValueGetter>);
+NARY_EXPRESSION(MetricLengthExpression, 1,
+                FV<ad_utility::WktMetricLength,
+                   GeometryInfoValueGetter<ad_utility::MetricLength>>);
+
+NARY_EXPRESSION(
+    GeometryNExpression, 2,
+    FV<ad_utility::WktGeometryN, GeoPointOrWktValueGetter, IntValueGetter>);
 
 template <SpatialJoinType Relation>
 NARY_EXPRESSION(
@@ -59,6 +79,10 @@ template <ad_utility::BoundingCoordinate RequestedCoordinate>
 NARY_EXPRESSION(BoundingCoordinateExpression, 1,
                 FV<ad_utility::WktBoundingCoordinate<RequestedCoordinate>,
                    GeometryInfoValueGetter<ad_utility::BoundingBox>>);
+
+NARY_EXPRESSION(NumGeometriesExpression, 1,
+                FV<ad_utility::WktNumGeometries,
+                   GeometryInfoValueGetter<ad_utility::NumGeometries>>);
 
 }  // namespace detail
 
@@ -102,6 +126,17 @@ SparqlExpression::Ptr makeDistWithUnitExpression(
 }
 
 // _____________________________________________________________________________
+SparqlExpression::Ptr makeAreaExpression(SparqlExpression::Ptr child1,
+                                         SparqlExpression::Ptr child2) {
+  return std::make_unique<AreaExpression>(std::move(child1), std::move(child2));
+}
+
+// _____________________________________________________________________________
+SparqlExpression::Ptr makeMetricAreaExpression(SparqlExpression::Ptr child1) {
+  return std::make_unique<MetricAreaExpression>(std::move(child1));
+}
+
+// _____________________________________________________________________________
 SparqlExpression::Ptr makeCentroidExpression(SparqlExpression::Ptr child) {
   return std::make_unique<CentroidExpression>(std::move(child));
 }
@@ -114,6 +149,25 @@ SparqlExpression::Ptr makeEnvelopeExpression(SparqlExpression::Ptr child) {
 // _____________________________________________________________________________
 SparqlExpression::Ptr makeGeometryTypeExpression(SparqlExpression::Ptr child) {
   return std::make_unique<GeometryTypeExpression>(std::move(child));
+}
+
+// _____________________________________________________________________________
+SparqlExpression::Ptr makeLengthExpression(SparqlExpression::Ptr child1,
+                                           SparqlExpression::Ptr child2) {
+  return std::make_unique<LengthExpression>(std::move(child1),
+                                            std::move(child2));
+}
+
+// _____________________________________________________________________________
+SparqlExpression::Ptr makeMetricLengthExpression(SparqlExpression::Ptr child1) {
+  return std::make_unique<MetricLengthExpression>(std::move(child1));
+}
+
+// _____________________________________________________________________________
+SparqlExpression::Ptr makeGeometryNExpression(SparqlExpression::Ptr child1,
+                                              SparqlExpression::Ptr child2) {
+  return std::make_unique<GeometryNExpression>(std::move(child1),
+                                               std::move(child2));
 }
 
 // _____________________________________________________________________________
@@ -131,6 +185,11 @@ SparqlExpression::Ptr makeBoundingCoordinateExpression(
   return std::make_unique<BoundingCoordinateExpression<RequestedCoordinate>>(
       std::move(child));
 };
+
+// _____________________________________________________________________________
+SparqlExpression::Ptr makeNumGeometriesExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<NumGeometriesExpression>(std::move(child));
+}
 
 namespace {
 

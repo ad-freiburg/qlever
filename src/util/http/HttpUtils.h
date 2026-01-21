@@ -11,9 +11,9 @@
 #include <string>
 #include <string_view>
 
+#include "backports/three_way_comparison.h"
 #include "util/AsyncStream.h"
 #include "util/CompressorStream.h"
-#include "util/GeneratorConverter.h"
 #include "util/StringUtils.h"
 #include "util/TypeTraits.h"
 #include "util/http/MediaTypes.h"
@@ -75,7 +75,8 @@ class Url {
     return absl::StrCat(protocolAsString(), "://", host_, ":", port_, target_);
   }
 
-  bool operator==(const Url&) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Url, protocol_, host_, port_,
+                                              target_)
 };
 
 // A concept for `http::request`
@@ -166,7 +167,11 @@ CPP_template(typename RequestType)(
       ad_utility::content_encoding::getCompressionMethodForRequest(request);
 
   auto asyncGenerator = streams::runStreamAsync(std::move(generator), 100);
-  auto coroAsyncGenerator = cppcoro::fromInputRange(std::move(asyncGenerator));
+  auto coroAsyncGenerator = [](auto range) -> cppcoro::generator<std::string> {
+    for (auto& value : range) {
+      co_yield value;
+    }
+  }(std::move(asyncGenerator));
 
   if (method != CompressionMethod::NONE) {
     response.body() =

@@ -10,6 +10,7 @@
 
 #include "backports/algorithm.h"
 #include "backports/iterator.h"
+#include "backports/keywords.h"
 #include "util/Concepts.h"
 #include "util/ConstexprSmallString.h"
 
@@ -158,8 +159,8 @@ std::string insertThousandSeparator(const std::string_view str,
 // characters. An equally safe, but slower method to achieve the same thing
 // would be to compute cryptographically secure hashes (like SHA-3 for example)
 // and compare the hashes instead of the actual strings.
-constexpr bool constantTimeEquals(std::string_view view1,
-                                  std::string_view view2) {
+inline QL_CONSTEXPR bool constantTimeEquals(std::string_view view1,
+                                            std::string_view view2) {
   using byte_view = std::basic_string_view<volatile std::byte>;
   auto impl = [](byte_view str1, byte_view str2) {
     if (str1.length() != str2.length()) {
@@ -272,8 +273,10 @@ constexpr std::string_view constexprStrCat() {
   return {b.data(), b.size() - 1};
 }
 
-// Truncates the operation string to a maximum length of
-// `MAX_LENGTH_OPERATION_ECHO`.
+// Truncates the operation string. The length is computed in codepoints, not in
+// bytes. Strings with a length that exceeds `MAX_LENGTH_OPERATION_ECHO` are
+// truncated to that length and get a "..." suffix appended to it. Shorter
+// strings are returned as-is.
 std::string truncateOperationString(std::string_view operation);
 }  // namespace ad_utility
 

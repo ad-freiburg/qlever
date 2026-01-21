@@ -12,7 +12,7 @@
 #include <exception>
 #include <optional>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "engine/CallFixedSize.h"
 #include "global/Constants.h"
 #include "index/EncodedIriManager.h"
@@ -435,9 +435,9 @@ bool NQuadParser<T>::statement() {
   }
   this->check(this->template skip<TurtleTokenId::Dot>());
   if (!this->currentTripleIgnoredBecauseOfInvalidLiteral_) {
-    this->triples_.emplace_back(
-        std::move(this->activeSubject_), std::move(this->activePredicate_),
-        std::move(activeObject_), std::move(activeGraphLabel_));
+    this->triples_.push_back(
+        {std::move(this->activeSubject_), std::move(this->activePredicate_),
+         std::move(activeObject_), std::move(activeGraphLabel_)});
   }
   this->currentTripleIgnoredBecauseOfInvalidLiteral_ = false;
   return true;
@@ -769,8 +769,8 @@ bool TurtleParser<T>::parseTerminal() {
 template <class Tokenizer_T>
 void TurtleParser<Tokenizer_T>::emitTriple() {
   if (!currentTripleIgnoredBecauseOfInvalidLiteral_) {
-    triples_.emplace_back(activeSubject_, activePredicate_, lastParseResult_,
-                          defaultGraphIri_);
+    triples_.push_back(
+        {activeSubject_, activePredicate_, lastParseResult_, defaultGraphIri_});
   }
   currentTripleIgnoredBecauseOfInvalidLiteral_ = false;
 }
@@ -813,9 +813,12 @@ bool TurtleParser<T>::blankNodeLabel() {
     // Add a special prefix to ensure that the manually specified blank nodes
     // never interfere with the automatically generated ones. The `substr`
     // removes the leading `_:` which will be added again by the `BlankNode`
-    // constructor.
+    // constructor. We also add the `blankNodePrefix_` to ensure that blank
+    // nodes with the same label from different files are treated as different.
     lastParseResult_ =
-        BlankNode{false, lastParseResult_.getString().substr(2)}.toSparql();
+        BlankNode{false, absl::StrCat(blankNodePrefix_, "_",
+                                      lastParseResult_.getString().substr(2))}
+            .toSparql();
   }
   return res;
 }

@@ -8,6 +8,7 @@
 #include <optional>
 
 #include "engine/IndexScan.h"
+#include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "engine/NeutralElementOperation.h"
 #include "engine/ValuesForTesting.h"
@@ -104,7 +105,7 @@ TEST(OperationTest, getResultOnlyCached) {
   NeutralElementOperation n2{qec};
   auto result = n2.getResult();
   EXPECT_NE(result, nullptr);
-  EXPECT_EQ(n2.runtimeInfo().status_, Status::fullyMaterialized);
+  EXPECT_EQ(n2.runtimeInfo().status_, Status::fullyMaterializedCompleted);
   EXPECT_EQ(n2.runtimeInfo().cacheStatus_, CacheStatus::computed);
   EXPECT_EQ(qec->getQueryTreeCache().numNonPinnedEntries(), 1);
   EXPECT_EQ(qec->getQueryTreeCache().numPinnedEntries(), 0);
@@ -183,12 +184,14 @@ class OperationTestFixture : public testing::Test {
   }();
   QueryResultCache cache;
   NamedResultCache namedCache;
+  MaterializedViewsManager materializedViewsManager;
   QueryExecutionContext qec{
       index,
       &cache,
       makeAllocator(),
       SortPerformanceEstimator{},
       &namedCache,
+      &materializedViewsManager,
       [&](std::string json) { jsonHistory.emplace_back(std::move(json)); }};
   IdTable table = makeIdTableFromVector({{}, {}, {}});
   ValuesForTesting operation{&qec, std::move(table), {}};
@@ -203,14 +206,16 @@ TEST_F(OperationTestFixture,
 
   EXPECT_THAT(
       jsonHistory,
-      ElementsAre(
-          ParsedAsJson(HasKeyMatching("status", Eq("not started"))),
-          ParsedAsJson(HasKeyMatching("status", Eq("in progress"))),
-          // Note: Currently the implementation triggers twice if a value
-          // is not cached. This is not a requirement, just an implementation
-          // detail that we account for here.
-          ParsedAsJson(HasKeyMatching("status", Eq("fully materialized"))),
-          ParsedAsJson(HasKeyMatching("status", Eq("fully materialized")))));
+      ElementsAre(ParsedAsJson(HasKeyMatching("status", Eq("not started"))),
+                  ParsedAsJson(HasKeyMatching(
+                      "status", Eq("fully materialized in progress"))),
+                  // Note: Currently the implementation triggers twice if a
+                  // value is not cached. This is not a requirement, just an
+                  // implementation detail that we account for here.
+                  ParsedAsJson(HasKeyMatching(
+                      "status", Eq("fully materialized completed"))),
+                  ParsedAsJson(HasKeyMatching(
+                      "status", Eq("fully materialized completed")))));
 }
 
 // _____________________________________________________________________________
@@ -223,9 +228,9 @@ TEST_F(OperationTestFixture, verifyCachePreventsInProgressState) {
 
   EXPECT_THAT(
       jsonHistory,
-      ElementsAre(
-          ParsedAsJson(HasKeyMatching("status", Eq("not started"))),
-          ParsedAsJson(HasKeyMatching("status", Eq("fully materialized")))));
+      ElementsAre(ParsedAsJson(HasKeyMatching("status", Eq("not started"))),
+                  ParsedAsJson(HasKeyMatching(
+                      "status", Eq("fully materialized completed")))));
 }
 
 // _____________________________________________________________________________
@@ -446,7 +451,7 @@ TEST(Operation, verifyRuntimeInformationIsUpdatedForLazyOperations) {
 
   auto& rti = valuesForTesting.runtimeInfo();
 
-  EXPECT_EQ(rti.status_, Status::lazilyMaterialized);
+  EXPECT_EQ(rti.status_, Status::lazilyMaterializedInProgress);
   EXPECT_GE(rti.totalTime_, timeout);
   EXPECT_GE(rti.originalTotalTime_, timeout);
   EXPECT_GE(rti.originalOperationTime_, timeout);
@@ -454,21 +459,21 @@ TEST(Operation, verifyRuntimeInformationIsUpdatedForLazyOperations) {
   expectAtEachStageOfGenerator(
       result.idTables(),
       {[&]() {
-         EXPECT_EQ(rti.status_, Status::lazilyMaterialized);
+         EXPECT_EQ(rti.status_, Status::lazilyMaterializedInProgress);
          expectRtiHasDimensions(rti, 2, 1);
          ASSERT_TRUE(rti.details_.contains("non-empty-local-vocabs"));
          EXPECT_EQ(rti.details_["non-empty-local-vocabs"],
                    "1 / 1, Ø = 1, max = 1");
        },
        [&]() {
-         EXPECT_EQ(rti.status_, Status::lazilyMaterialized);
+         EXPECT_EQ(rti.status_, Status::lazilyMaterializedInProgress);
          expectRtiHasDimensions(rti, 2, 2);
          ASSERT_TRUE(rti.details_.contains("non-empty-local-vocabs"));
          EXPECT_EQ(rti.details_["non-empty-local-vocabs"],
                    "2 / 2, Ø = 1, max = 1");
        }});
 
-  EXPECT_EQ(rti.status_, Status::lazilyMaterialized);
+  EXPECT_EQ(rti.status_, Status::lazilyMaterializedCompleted);
   expectRtiHasDimensions(rti, 2, 2);
   ASSERT_TRUE(rti.details_.contains("non-empty-local-vocabs"));
   EXPECT_EQ(rti.details_["non-empty-local-vocabs"], "2 / 2, Ø = 1, max = 1");
@@ -480,19 +485,22 @@ TEST(Operation, ensureFailedStatusIsSetWhenGeneratorThrowsException) {
   const Index& index = ad_utility::testing::getQec()->getIndex();
   QueryResultCache cache{};
   NamedResultCache namedCache{};
+  MaterializedViewsManager materializedViewsManager;
   QueryExecutionContext context{
       index,
       &cache,
       makeAllocator(ad_utility::MemorySize::megabytes(100)),
       SortPerformanceEstimator{},
       &namedCache,
+      &materializedViewsManager,
       [&](std::string) { signaledUpdate = true; }};
   AlwaysFailOperation operation{&context};
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
   auto result =
       operation.runComputation(timer, ComputationMode::LAZY_IF_SUPPORTED);
 
-  EXPECT_EQ(operation.runtimeInfo().status_, Status::lazilyMaterialized);
+  EXPECT_EQ(operation.runtimeInfo().status_,
+            Status::lazilyMaterializedInProgress);
 
   EXPECT_THROW(result.idTables().begin(), std::runtime_error);
 
@@ -510,12 +518,14 @@ TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
   const Index& index = getQec()->getIndex();
   QueryResultCache cache{};
   NamedResultCache namedCache{};
+  MaterializedViewsManager materializedViewsManager;
   QueryExecutionContext context{
       index,
       &cache,
       makeAllocator(ad_utility::MemorySize::megabytes(100)),
       SortPerformanceEstimator{},
       &namedCache,
+      &materializedViewsManager,
       [&](std::string) { ++updateCallCounter; }};
   CustomGeneratorOperation operation{
       &context, [](const IdTable& idTable) -> Result::Generator {
@@ -556,12 +566,14 @@ TEST(Operation, ensureSignalUpdateIsCalledAtTheEndOfPartialConsumption) {
   const Index& index = getQec()->getIndex();
   QueryResultCache cache{};
   NamedResultCache namedCache{};
+  MaterializedViewsManager materializedViewsManager;
   QueryExecutionContext context{
       index,
       &cache,
       makeAllocator(ad_utility::MemorySize::megabytes(100)),
       SortPerformanceEstimator{},
       &namedCache,
+      &materializedViewsManager,
       [&](std::string) { ++updateCallCounter; }};
   CustomGeneratorOperation operation{
       &context, [](const IdTable& idTable) -> Result::Generator {
@@ -665,7 +677,7 @@ TEST(Operation, ensureLazyOperationIsCachedIfSmallEnough) {
   EXPECT_EQ(newRti.totalTime_, oldRti.totalTime_);
   EXPECT_EQ(newRti.originalTotalTime_, oldRti.originalTotalTime_);
   EXPECT_EQ(newRti.originalOperationTime_, oldRti.originalOperationTime_);
-  EXPECT_EQ(newRti.status_, Status::fullyMaterialized);
+  EXPECT_EQ(newRti.status_, Status::fullyMaterializedCompleted);
 
   const auto& aggregatedResult =
       aggregatedValue.value()._resultPointer->resultTable();
@@ -796,7 +808,7 @@ TEST(OperationTest, disableCaching) {
       qec, std::move(idTablesVector), {Variable{"?x"}, Variable{"?y"}}, true};
 
   QueryCacheKey cacheKey{valuesForTesting.getCacheKey(),
-                         qec->locatedTriplesSnapshot().index_};
+                         qec->locatedTriplesState().index_};
 
   // By default, the result of `valuesForTesting` is cached because it is
   // sufficiently small, no matter if it was computed lazily or fully

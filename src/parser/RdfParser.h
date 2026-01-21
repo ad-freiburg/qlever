@@ -13,6 +13,7 @@
 #include <stdexcept>
 #include <string_view>
 
+#include "backports/three_way_comparison.h"
 #include "global/Constants.h"
 #include "global/SpecialIds.h"
 #include "index/ConstantsIndexBuilding.h"
@@ -46,7 +47,8 @@ struct TurtleTriple {
   TripleComponent object_;
   TripleComponent graphIri_ = qlever::specialIds().at(DEFAULT_GRAPH_IRI);
 
-  bool operator==(const TurtleTriple&) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(TurtleTriple, subject_,
+                                              predicate_, object_, graphIri_)
 };
 
 // A base class for all the different turtle and N-Quad parsers.
@@ -370,6 +372,7 @@ class TurtleParser : public RdfParserBase {
   FRIEND_TEST(RdfParserTest, base);
   FRIEND_TEST(RdfParserTest, sparqlBase);
   FRIEND_TEST(RdfParserTest, blankNode);
+  FRIEND_TEST(RdfParserTest, blankNodesUniqueAcrossFiles);
   FRIEND_TEST(RdfParserTest, blankNodePropertyList);
   FRIEND_TEST(RdfParserTest, numericLiteral);
   FRIEND_TEST(RdfParserTest, booleanLiteral);
@@ -409,8 +412,8 @@ class NQuadParser : public TurtleParser<Tokenizer_T> {
  * Parses turtle from std::string. Used to perform unit tests for
  * the different parser rules
  */
-CPP_template(typename Parser)(
-    requires std::derived_from<Parser, RdfParserBase>) class RdfStringParser
+CPP_template(typename Parser)(requires ql::concepts::derived_from<
+                              Parser, RdfParserBase>) class RdfStringParser
     : public Parser {
  public:
   using Parser::getLine;
@@ -461,7 +464,8 @@ CPP_template(typename Parser)(
     // TODO<joka921> Make it possible to use an optional here.
     EncodedIriManager encodedIriManager;
     RdfStringParser parser{&encodedIriManager};
-    parser.parseUtf8String(absl::StrCat("<a> <b> ", objectString, "."));
+    parser.setInputStream(objectString);
+    parser.object();
     AD_CONTRACT_CHECK(parser.triples_.size() == 1);
     return std::move(parser.triples_[0].object_);
   }
@@ -486,7 +490,7 @@ CPP_template(typename Parser)(
   // testing interface for reusing a parser
   // only specifies the tokenizers input stream.
   // Does not alter the tokenizers state
-  void setInputStream(const std::string& toParse) {
+  void setInputStream(std::string_view toParse) {
     tmpToParse_.clear();
     tmpToParse_.reserve(toParse.size());
     tmpToParse_.insert(tmpToParse_.end(), toParse.begin(), toParse.end());

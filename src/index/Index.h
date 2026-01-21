@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "backports/three_way_comparison.h"
 #include "global/Id.h"
 #include "index/InputFileSpecification.h"
 #include "index/Permutation.h"
@@ -25,7 +26,7 @@
 class IdTable;
 class TextBlockMetaData;
 class IndexImpl;
-struct LocatedTriplesSnapshot;
+struct LocatedTriplesState;
 class DeltaTriplesManager;
 
 class Index {
@@ -41,12 +42,14 @@ class Index {
   struct NumNormalAndInternal {
     size_t normal{};
     size_t internal{};
+
     size_t normalAndInternal_() const { return normal + internal; }
-    bool operator==(const NumNormalAndInternal&) const = default;
-    static NumNormalAndInternal fromNormalAndTotal(size_t normal,
-                                                   size_t total) {
-      AD_CONTRACT_CHECK(total >= normal);
-      return {normal, total - normal};
+
+    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(NumNormalAndInternal, normal,
+                                                internal)
+
+    static NumNormalAndInternal fromNormal(size_t normal) {
+      return {normal, 0};
     }
     NLOHMANN_DEFINE_TYPE_INTRUSIVE(NumNormalAndInternal, normal, internal);
   };
@@ -121,10 +124,10 @@ class Index {
   // --------------------------------------------------------------------------
   [[nodiscard]] size_t getCardinality(
       const TripleComponent& comp, Permutation::Enum permutation,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+      const LocatedTriplesState& locatedTriplesState) const;
   [[nodiscard]] size_t getCardinality(
       Id id, Permutation::Enum permutation,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+      const LocatedTriplesState& locatedTriplesState) const;
 
   // TODO<joka921> Once we have an overview over the folding this logic should
   // probably not be in the index class.
@@ -183,6 +186,8 @@ class Index {
 
   bool& loadAllPermutations();
 
+  bool& doNotLoadPermutations();
+
   void setKeepTempFiles(bool keepTempFiles);
 
   ad_utility::MemorySize& memoryLimitIndexBuilding();
@@ -218,54 +223,28 @@ class Index {
 
   bool hasAllPermutations() const;
 
-  // _____________________________________________________________________________
+  // ___________________________________________________________________________
   std::vector<float> getMultiplicities(
-      const TripleComponent& key, Permutation::Enum permutation,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+      const TripleComponent& key, const Permutation& permutation,
+      const LocatedTriplesState& locatedTriplesState) const;
 
-  // ___________________________________________________________________
-  std::vector<float> getMultiplicities(Permutation::Enum p) const;
-
-  /**
-   * @brief Perform a scan for one or two keys i.e. retrieve all YZ from the XYZ
-   * permutation for specific key values of X if `col1String` is `nullopt`, and
-   * all Z for the given XY if `col1String` is specified.
-   * @tparam Permutation The permutations Index::POS()... have different types
-   * @param col0String The first key (as a raw string that is yet to be
-   * transformed to index space) for which to search, e.g. fixed value for O in
-   * OSP permutation.
-   * @param col1String The second key (as a raw string that is yet to be
-   * transformed to index space) for which to search, e.g. fixed value for S in
-   * OSP permutation.
-   * @param result The Id table to which we will write. Must have 2 columns.
-   * @param p The Permutation::Enum to use (in particularly POS(), SOP,...
-   * members of Index class).
-   */
-  IdTable scan(const ScanSpecificationAsTripleComponent& scanSpecification,
-               Permutation::Enum p,
-               Permutation::ColumnIndicesRef additionalColumns,
-               const ad_utility::SharedCancellationHandle& cancellationHandle,
-               const LocatedTriplesSnapshot& locatedTriplesSnapshot,
-               const LimitOffsetClause& limitOffset = {}) const;
-
-  // Similar to the overload of `scan` above, but the keys are specified as IDs.
-  IdTable scan(const ScanSpecification& scanSpecification, Permutation::Enum p,
-               Permutation::ColumnIndicesRef additionalColumns,
-               const ad_utility::SharedCancellationHandle& cancellationHandle,
-               const LocatedTriplesSnapshot& locatedTriplesSnapshot,
-               const LimitOffsetClause& limitOffset = {}) const;
+  // ___________________________________________________________________________
+  std::vector<float> getMultiplicities(const Permutation& permutation) const;
 
   // Similar to the previous overload of `scan`, but only get the exact size of
   // the scan result.
   size_t getResultSizeOfScan(
       const ScanSpecification& scanSpecification,
       const Permutation::Enum& permutation,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+      const LocatedTriplesState& locatedTriplesState) const;
 
   // Get access to the implementation. This should be used rarely as it
   // requires including the rather expensive `IndexImpl.h` header
   IndexImpl& getImpl() { return *pimpl_; }
   [[nodiscard]] const IndexImpl& getImpl() const { return *pimpl_; }
+
+  // Allow implicit conversions to `const IndexImpl&`.
+  operator const IndexImpl&() const { return getImpl(); }
 };
 
 #endif  // QLEVER_SRC_INDEX_INDEX_H

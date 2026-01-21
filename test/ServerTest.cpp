@@ -12,6 +12,7 @@
 #include "util/GTestHelpers.h"
 #include "util/HttpRequestHelpers.h"
 #include "util/IndexTestHelpers.h"
+#include "util/RuntimeParametersTestHelpers.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/UrlParser.h"
 #include "util/json.h"
@@ -247,9 +248,15 @@ TEST(ServerTest, createResponseMetadata) {
   ad_utility::timer::TimeTracer tracer2(
       "ServerTest::createResponseMetadata tracer2");
   tracer2.endTrace("ServerTest::createResponseMetadata tracer2");
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      Server::createResponseMetadataForUpdate(
+          index, *deltaTriples.getLocatedTriplesSharedStateReference(),
+          plannedQuery, plannedQuery.queryExecutionTree_, UpdateMetadata{},
+          tracer2),
+      testing::HasSubstr("updateMetadata.countBefore_.has_value()"));
   json metadata = Server::createResponseMetadataForUpdate(
-      index, deltaTriples.getSnapshot(), plannedQuery,
-      plannedQuery.queryExecutionTree_, updateMetadata, tracer2);
+      index, *deltaTriples.getLocatedTriplesSharedStateReference(),
+      plannedQuery, plannedQuery.queryExecutionTree_, updateMetadata, tracer2);
   json deltaTriplesJson{
       {"before", {{"inserted", 0}, {"deleted", 0}, {"total", 0}}},
       {"after", {{"inserted", 1}, {"deleted", 0}, {"total", 1}}},
@@ -299,11 +306,27 @@ TEST(ServerTest, adjustParsedQueryLimitOffset) {
   std::string complexQuery{
       "SELECT * WHERE { ?a ?b ?c . FILTER(LANG(?a) = 'en') . "
       "BIND(RAND() as ?r) . } OFFSET 5"};
-  // The export limit is only set for media type `qleverJson`.
+
+  // Check that the export limit is set for `qlever-results+json`.
   expectExportLimit(qleverJson, 12);
   expectExportLimit(qleverJson, 13, "SELECT * WHERE { <a> <b> ?c }",
                     {{"send", {"13"}}});
   expectExportLimit(qleverJson, 13, complexQuery, {{"send", {"13"}}});
+
+  // Check that the export limit is set for `sparql-results+json` if and
+  // only if the runtime parameter `sparql-results-json-with-time`  is set.
+  {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::sparqlResultsJsonWithTime_>(true);
+    expectExportLimit(sparqlJson, 12);
+  }
+  {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::sparqlResultsJsonWithTime_>(false);
+    expectExportLimit(sparqlJson, std::nullopt);
+  }
+
+  // Check that no export limit is set for other media types.
   expectExportLimit(csv, std::nullopt);
   expectExportLimit(csv, std::nullopt, complexQuery);
   expectExportLimit(tsv, std::nullopt);
@@ -315,24 +338,46 @@ TEST(ServerTest, configurePinnedResultWithName) {
 
   // Test with no pinNamed value - should not modify qec
   std::optional<std::string> noPinNamed = std::nullopt;
-  Server::configurePinnedResultWithName(noPinNamed, true, *qec);
+  Server::configurePinnedResultWithName(noPinNamed, std::nullopt, true, *qec);
   EXPECT_FALSE(qec->pinResultWithName().has_value());
 
   // Test with pinNamed and valid access token - should set the pin name
   std::optional<std::string> pinNamed = "test_query_name";
-  Server::configurePinnedResultWithName(pinNamed, true, *qec);
+  Server::configurePinnedResultWithName(pinNamed, std::nullopt, true, *qec);
   EXPECT_TRUE(qec->pinResultWithName().has_value());
-  EXPECT_EQ(qec->pinResultWithName().value(), "test_query_name");
+  EXPECT_EQ(qec->pinResultWithName().value().name_, "test_query_name");
+
+  // Reset for next test
+  qec->pinResultWithName() = std::nullopt;
+  // Test with pinNamed AND pinned geo Var.
+  Server::configurePinnedResultWithName(pinNamed, "geom_var", true, *qec);
+  ASSERT_TRUE(qec->pinResultWithName().has_value());
+  EXPECT_EQ(qec->pinResultWithName().value().name_, "test_query_name");
+  EXPECT_THAT(qec->pinResultWithName().value().geoIndexVar_,
+              ::testing::Optional(Variable{"?geom_var"}));
 
   // Reset for next test
   qec->pinResultWithName() = std::nullopt;
 
   // Test with pinNamed but invalid access token - should throw exception
   AD_EXPECT_THROW_WITH_MESSAGE(
-      Server::configurePinnedResultWithName(pinNamed, false, *qec),
+      Server::configurePinnedResultWithName(pinNamed, std::nullopt, false,
+                                            *qec),
       testing::HasSubstr(
           "Pinning a result with a name requires a valid access token"));
 
   // Verify qec was not modified when exception was thrown
   EXPECT_FALSE(qec->pinResultWithName().has_value());
+}
+
+TEST(ServerTest, checkAccessToken) {
+  Server server{4321, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
+  EXPECT_TRUE(server.checkAccessToken("accessToken"));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      server.checkAccessToken("invalidAccessToken"),
+      testing::HasSubstr("Access token was provided but it was invalid"));
+
+  Server server2{1234, 1, ad_utility::MemorySize::megabytes(1), "", true};
+  EXPECT_TRUE(server2.checkAccessToken(std::nullopt));
 }

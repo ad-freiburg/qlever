@@ -131,6 +131,8 @@ addLinkAndDiscoverTest(SparqlParserTest parser engine sparqlExpressions)
 
 addLinkAndDiscoverTest(StringUtilsTest util)
 
+addLinkAndDiscoverTestNoLibs(ConstexprSmallStringTest)
+
 addLinkAndDiscoverTest(CryptographicHashUtilsTest util)
 
 addLinkAndDiscoverTest(CacheTest)
@@ -166,6 +168,8 @@ addLinkAndDiscoverTest(JoinTest engine)
 addLinkAndDiscoverTest(TextLimitOperationTest engine)
 
 addLinkAndDiscoverTestSerial(QueryPlannerTest engine)
+
+addLinkAndDiscoverTestSerial(QueryPlannerSpatialJoinTest engine)
 
 addLinkAndDiscoverTestNoLibs(HashMapTest)
 
@@ -210,7 +214,7 @@ addLinkAndDiscoverTestNoLibs(StringSortComparatorTest)
 
 addLinkAndDiscoverTest(PriorityQueueTest)
 
-addLinkAndDiscoverTest(SynchronizedTest)
+addLinkAndDiscoverTestNoLibs(SynchronizedTest)
 
 addLinkAndDiscoverTest(AllocatorWithLimitTest)
 
@@ -226,7 +230,7 @@ addAndLinkTest(SortPerformanceEstimatorTest SortPerformanceEstimator)
 # cases are run in parallel. This should be fixed by using distinct filenames
 # for each test case.
 # TODO<qup42, joka921> fix this
-addLinkAndDiscoverTestSerial(SerializerTest)
+addLinkAndDiscoverTestNoLibs(SerializerTest)
 
 addLinkAndDiscoverTestNoLibs(ParametersTest)
 
@@ -262,6 +266,8 @@ addLinkAndDiscoverTest(VocabularyTest index)
 addLinkAndDiscoverTestNoLibs(IteratorTest)
 
 addLinkAndDiscoverTestNoLibs(ViewsTest)
+
+addLinkAndDiscoverTestNoLibs(TakeUntilInclusiveViewTest)
 
 addLinkAndDiscoverTest(ForwardTest)
 
@@ -313,7 +319,7 @@ addLinkAndDiscoverTestSerial(HttpTest Boost::iostreams http)
 
 addLinkAndDiscoverTestNoLibs(CallFixedSizeTest)
 
-addLinkAndDiscoverTest(ConstexprUtilsTest)
+addLinkAndDiscoverTestNoLibs(ConstexprUtilsTest)
 
 addLinkAndDiscoverTestNoLibs(ResetWhenMovedTest)
 
@@ -476,3 +482,11 @@ addLinkAndDiscoverTestSerial(HttpErrorTest engine)
 addLinkAndDiscoverTest(TimeTracerTest)
 
 addLinkAndDiscoverTestNoLibs(SourceLocationTest)
+
+addLinkAndDiscoverTest(UnitOfMeasurementTest util)
+
+addLinkAndDiscoverTest(MaterializedViewsTest qlever engine server)
+
+addLinkAndDiscoverTestNoLibs(ConstexprMapTest)
+
+addLinkAndDiscoverTestNoLibs(ParallelExecutorTest)

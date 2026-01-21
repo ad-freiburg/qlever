@@ -90,7 +90,9 @@ class stream_generator_promise {
   // every bit of `value` is written, then the coroutine will be resumed.
   suspend_sometimes yield_value(std::string_view value) noexcept {
     if (isBufferLargeEnough(value)) {
-      std::memcpy(data_.data() + currentIndex_, value.data(), value.size());
+      if (!value.empty()) {
+        std::memcpy(data_.data() + currentIndex_, value.data(), value.size());
+      }
       currentIndex_ += value.size();
       overflow_ = {};
       // Only suspend if we reached the maximum capacity exactly.
@@ -311,7 +313,7 @@ using stream_generator = basic_stream_generator<1u << 20>;
 // NOTE: A `string_view` that is pushed via `operator()` might and often will be
 // split up between two callback invocations. The callback for the final batch
 // is invoked either in the destructor or via an explicit call to `finish()`.
-template <size_t BATCH_SIZE = 1u << 20>
+template <size_t BATCH_SIZE = 1'000>
 class StringBatcher {
   using CallbackForBatches = std::function<void(std::string_view)>;
   CallbackForBatches callbackForBatches_;

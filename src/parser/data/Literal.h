@@ -9,6 +9,7 @@
 #include <sstream>
 #include <string>
 
+#include "backports/three_way_comparison.h"
 #include "backports/type_traits.h"
 #include "parser/data/ConstructQueryExportContext.h"
 #include "util/Concepts.h"
@@ -30,7 +31,7 @@ class Literal {
 
  public:
   CPP_template_2(typename T)(
-      requires CPP_NOT(std::same_as<ql::remove_cvref_t<T>, Literal>)
+      requires CPP_NOT(ql::concepts::same_as<ql::remove_cvref_t<T>, Literal>)
           CPP_and_2 ad_utility::Streamable<T>) explicit Literal(T&& t)
       : _stringRepresentation(toString(std::forward<T>(t))) {}
 
@@ -61,7 +62,7 @@ class Literal {
   // ___________________________________________________________________________
   [[nodiscard]] std::string toSparql() const { return _stringRepresentation; }
 
-  bool operator==(const Literal& other) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Literal, _stringRepresentation)
 };
 
 #endif  // QLEVER_SRC_PARSER_DATA_LITERAL_H

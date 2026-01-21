@@ -12,7 +12,6 @@
 #include <mutex>
 #include <optional>
 #include <queue>
-#include <ranges>
 
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
@@ -21,7 +20,12 @@
 
 namespace ad_utility::data_structures {
 
-/// A thread safe, multi-consumer, multi-producer queue.
+// A queue to which multiple threads can push and from which multiple threads
+// can pop in a thread-safe manner. Any producer or consumer can call `finish`;
+// after that, no more elements can be pushed to the queue, and only those
+// elements that were already in the queue can be popped. Furthermore, any
+// producers can push an exception to the queue; after that, no more elements
+// can be pushed, and each call to `pop` will rethrow the exception.
 template <typename T>
 class ThreadSafeQueue {
   std::exception_ptr pushedException_;
@@ -42,10 +46,10 @@ class ThreadSafeQueue {
   ThreadSafeQueue(ThreadSafeQueue&&) = delete;
   const ThreadSafeQueue& operator=(ThreadSafeQueue&&) = delete;
 
-  /// Push an element into the queue. Block until there is free space in the
-  /// queue or until finish() was called. Return false if finish()
-  /// was called. In this case the current element element and all future
-  /// elements are not added to the queue.
+  // Push an element into the queue. Block until there is free space in the
+  // queue or until finish() was called. Return false if finish()
+  // was called. In this case the current element element and all future
+  // elements are not added to the queue.
   bool push(T value) {
     std::unique_lock lock{mutex_};
     popNotification_.wait(
@@ -130,15 +134,15 @@ class ThreadSafeQueue {
         "Locking or unlocking a mutex in a threadsafe queue failed.");
   }
 
-  /// Always call `finish` on destruction. This makes sure that worker
-  /// threads that pop from the queue always see std::nullopt, even if the
-  /// threads that push to the queue exit via an exception or if the
-  /// explicit call to `finish` is missing.
+  // Always call `finish` on destruction. This makes sure that worker
+  // threads that pop from the queue always see std::nullopt, even if the
+  // threads that push to the queue exit via an exception or if the
+  // explicit call to `finish` is missing.
   ~ThreadSafeQueue() { finish(); }
 
-  /// Blocks until another thread pushes an element via push() which is
-  /// hen returned or signalLastElementWasPushed() is called resulting in an
-  /// empty optional, whatever happens first
+  // Blocks until another thread pushes an element via push() which is
+  // hen returned or signalLastElementWasPushed() is called resulting in an
+  // empty optional, whatever happens first
   std::optional<T> pop() {
     std::unique_lock lock{mutex_};
     pushNotification_.wait(lock, [this] {
@@ -262,7 +266,7 @@ namespace detail {
 // and the queue is finished if `numThreads <= 0`. All exceptions that
 // happen during the execution of `producer` are propagated to the queue.
 CPP_template(typename Queue, typename Producer)(
-    requires IsThreadsafeQueue<Queue> CPP_and std::invocable<
+    requires IsThreadsafeQueue<Queue> CPP_and ql::concepts::invocable<
         Producer>) auto makeQueueTask(Queue& queue, Producer producer,
                                       std::atomic<int64_t>& numThreads) {
   return [&queue, producer = std::move(producer), &numThreads] {

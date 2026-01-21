@@ -31,15 +31,21 @@ class RuntimeInformation {
   /// The computation status of an operation.
   enum struct Status {
     notStarted,
-    inProgress,
-    fullyMaterialized,
-    lazilyMaterialized,
+    fullyMaterializedInProgress,
+    fullyMaterializedCompleted,
+    lazilyMaterializedInProgress,
+    lazilyMaterializedCompleted,
     optimizedOut,
     failed,
     failedBecauseChildFailed,
     cancelled
   };
   using enum Status;
+
+  // The priority with which to send updated runtime information. With `IfDue`,
+  // the update is only sent if a certain amount of time has passed since the
+  // last update. With `Always`, the update is always sent.
+  enum class SendPriority { IfDue, Always };
 
   // Public members
 

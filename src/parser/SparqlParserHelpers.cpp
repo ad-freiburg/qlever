@@ -2,7 +2,7 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include "SparqlParserHelpers.h"
+#include "parser/SparqlParserHelpers.h"
 
 #include <unicode/unistr.h>
 
@@ -13,6 +13,12 @@
 
 namespace sparqlParserHelpers {
 using std::string;
+
+namespace detail {
+// CTRE regex pattern for C++17 compatibility
+constexpr ctll::fixed_string unicodeEscapeRegex =
+    R"(\\U[0-9A-Fa-f]{8}|\\u[0-9A-Fa-f]{4})";
+}  // namespace detail
 
 // _____________________________________________________________________________
 ParserAndVisitor::ParserAndVisitor(
@@ -54,8 +60,7 @@ std::string ParserAndVisitor::unescapeUnicodeSequences(std::string input) {
     }
   };
 
-  for (const auto& match :
-       ctre::search_all<R"(\\U[0-9A-Fa-f]{8}|\\u[0-9A-Fa-f]{4})">(view)) {
+  for (const auto& match : ctre::search_all<detail::unicodeEscapeRegex>(view)) {
     if (noEscapeSequenceFound) {
       output.reserve(input.size());
       noEscapeSequenceFound = false;

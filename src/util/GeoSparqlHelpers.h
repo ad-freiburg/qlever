@@ -22,6 +22,7 @@
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/Iri.h"
 #include "rdfTypes/Literal.h"
+#include "util/UnitOfMeasurement.h"
 
 namespace ad_utility {
 
@@ -29,8 +30,6 @@ namespace detail {
 
 static constexpr double invalidCoordinate =
     std::numeric_limits<double>::quiet_NaN();
-
-static constexpr double kilometerToMile = 0.62137119;
 
 // TODO: Make the SPARQL expressions work for function pointers or
 // std::function.
@@ -41,21 +40,15 @@ std::pair<double, double> parseWktPoint(const std::string_view point);
 // Calculate geographic distance between points in kilometers using s2geometry.
 double wktDistImpl(GeoPoint point1, GeoPoint point2);
 
-// Convert kilometers to other supported units. If `unit` is `std::nullopt` it
-// is treated as kilometers.
-double kilometerToUnit(double kilometers,
-                       std::optional<UnitOfMeasurement> unit);
-
-// Convert value from any supported unit to kilometers. If `unit` is
-// `std::nullopt` it is treated as kilometers.
-double valueInUnitToKilometer(double valueInUnit,
-                              std::optional<UnitOfMeasurement> unit);
-
-// Convert a unit IRI string (without quotes or brackets) to unit.
-UnitOfMeasurement iriToUnitOfMeasurement(const std::string_view& uri);
+// Helper to avoid including `GeometryInfoHelpersImpl.h`
+std::optional<std::string> geometryNAsWkt(GeoPointOrWkt wkt, int64_t n);
 
 const auto wktLiteralIri =
     triple_component::Iri::fromIrirefWithoutBrackets(GEO_WKT_LITERAL);
+
+// Calculate geographic distance between geometries in meters using `pb_util`.
+std::optional<double> wktDistLibSpatialJoinImpl(const GeoPointOrWkt& a,
+                                                const GeoPointOrWkt& b);
 
 }  // namespace detail
 
@@ -81,28 +74,56 @@ class WktLatitude {
   }
 };
 
-// Compute the distance between two WKT points.
-class WktDistGeoPoints {
+// Compute the distance between two WKT geometries.
+class WktDist {
  public:
   double operator()(
-      const std::optional<GeoPoint>& point1,
-      const std::optional<GeoPoint>& point2,
+      const std::optional<GeoPointOrWkt>& geom1,
+      const std::optional<GeoPointOrWkt>& geom2,
       const std::optional<UnitOfMeasurement>& unit = std::nullopt) const {
-    if (!point1.has_value() || !point2.has_value()) {
+    if (!geom1.has_value() || !geom2.has_value()) {
       return std::numeric_limits<double>::quiet_NaN();
     }
 
-    return detail::kilometerToUnit(
-        detail::wktDistImpl(point1.value(), point2.value()), unit);
+    auto dist = detail::wktDistLibSpatialJoinImpl(geom1.value(), geom2.value());
+    if (!dist.has_value()) {
+      return std::numeric_limits<double>::quiet_NaN();
+    }
+    return detail::kilometerToUnit(dist.value() / 1000.0, unit);
   }
 };
 
 // Compute the distance between two WKT points in meters.
-class WktMetricDistGeoPoints {
+class WktMetricDist {
  public:
-  double operator()(const std::optional<GeoPoint>& point1,
-                    const std::optional<GeoPoint>& point2) const {
-    return WktDistGeoPoints{}(point1, point2, UnitOfMeasurement::METERS);
+  double operator()(const std::optional<GeoPointOrWkt>& geom1,
+                    const std::optional<GeoPointOrWkt>& geom2) const {
+    return WktDist{}(geom1, geom2, UnitOfMeasurement::METERS);
+  }
+};
+
+// Compute the length of a WKT geometry.
+class WktLength {
+ public:
+  ValueId operator()(
+      const std::optional<MetricLength>& len,
+      const std::optional<UnitOfMeasurement>& unit = std::nullopt) const {
+    if (!len.has_value()) {
+      return ValueId::makeUndefined();
+    }
+    return ValueId::makeFromDouble(
+        detail::kilometerToUnit(len.value().length() / 1000.0, unit));
+  }
+};
+
+// Compute the length of a WKT geometry in meters.
+class WktMetricLength {
+ public:
+  ValueId operator()(const std::optional<MetricLength>& len) const {
+    if (!len.has_value()) {
+      return ValueId::makeUndefined();
+    }
+    return ValueId::makeFromDouble(len.value().length());
   }
 };
 
@@ -145,7 +166,7 @@ class WktBoundingCoordinate {
   }
 };
 
-// Compute the distance between two WKT points in meters.
+// Get the geometry type of WKT literal using `GeometryInfo`.
 class WktGeometryType {
  public:
   sparqlExpression::IdOrLiteralOrIri operator()(
@@ -168,6 +189,28 @@ class WktGeometryType {
   }
 };
 
+// Get the WKT for the n-th element (1-indexed) of the given WKT.
+class WktGeometryN {
+ public:
+  sparqlExpression::IdOrLiteralOrIri operator()(
+      const std::optional<GeoPointOrWkt>& wkt,
+      const std::optional<int64_t>& n) const {
+    using namespace triple_component;
+    if (!wkt.has_value() || !n.has_value()) {
+      return ValueId::makeUndefined();
+    }
+
+    auto resultWkt = detail::geometryNAsWkt(wkt.value(), n.value());
+
+    if (!resultWkt.has_value()) {
+      return ValueId::makeUndefined();
+    }
+    auto lit = Literal::literalWithoutQuotes(resultWkt.value());
+    lit.addDatatype(detail::wktLiteralIri);
+    return {LiteralOrIri{lit}};
+  }
+};
+
 // A generic operation for all geometric relation functions, like
 // `geof:sfIntersects`.
 template <SpatialJoinType Relation>
@@ -182,6 +225,46 @@ class WktGeometricRelation {
         "Geometric relations via the `geof:sfIntersects` ... functions are "
         "currently only implemented for a subset of all possible queries. More "
         "details on GeoSPARQL support can be found on the QLever Wiki.");
+  }
+};
+
+// Get the number of geometries in a WKT literal.
+class WktNumGeometries {
+ public:
+  ValueId operator()(const std::optional<NumGeometries>& numGeom) const {
+    if (!numGeom.has_value()) {
+      return ValueId::makeUndefined();
+    }
+    return ValueId::makeFromInt(numGeom.value().numGeometries());
+  }
+};
+
+// Compute the area of a WKT geometry.
+class WktArea {
+ public:
+  ValueId operator()(
+      const std::optional<MetricArea>& area,
+      const std::optional<UnitOfMeasurement>& unit = std::nullopt) const {
+    if (!area.has_value() ||
+        (unit.has_value() && !detail::isAreaUnit(unit.value()))) {
+      return ValueId::makeUndefined();
+    }
+    double val = detail::squareMeterToUnit(area.value().area(), unit);
+    if (std::isnan(val)) {
+      return ValueId::makeUndefined();
+    }
+    return ValueId::makeFromDouble(val);
+  }
+};
+
+// Compute the area of a WKT geometry in square meters.
+class WktMetricArea {
+ public:
+  ValueId operator()(const std::optional<MetricArea>& area) const {
+    if (!area.has_value() || std::isnan(area.value().area())) {
+      return ValueId::makeUndefined();
+    }
+    return ValueId::makeFromDouble(area.value().area());
   }
 };
 

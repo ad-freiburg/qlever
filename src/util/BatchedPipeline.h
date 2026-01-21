@@ -8,6 +8,7 @@
 #include <future>
 #include <utility>
 
+#include "backports/iterator.h"
 #include "util/Exception.h"
 #include "util/Log.h"
 #include "util/Timer.h"
@@ -34,6 +35,9 @@ struct Batch {
   std::vector<T, ad_utility::default_init_allocator<T>>
       content_;  // the actual payload
 };
+
+template <typename Creator>
+CPP_requires(HasGetBatch, requires(Creator creator)(creator.getBatch()));
 
 /*
  * The Batcher class takes a Creator (A Functor that returns a std::optional<T>
@@ -121,7 +125,7 @@ class Batcher {
     detail::Batch<ValueT> res;
     // If the Creator type has a method `getBatch`, use this method to produce
     // the batch in one step, otherwise produce the batch value by value.
-    if constexpr (requires { creator->getBatch(); }) {
+    if constexpr (CPP_requires_ref(HasGetBatch, Creator)) {
       auto opt = creator->getBatch();
       if (!opt) {
         res.isPipelineGood_ = false;
@@ -305,7 +309,7 @@ class BatchedPipeline {
   template <typename It, typename ResIt, typename TransformerPtr>
   static void moveAndTransform(It beg, It end, ResIt res,
                                TransformerPtr transformer) {
-    std::transform(std::make_move_iterator(beg), std::make_move_iterator(end),
+    std::transform(ql::make_move_iterator(beg), ql::make_move_iterator(end),
                    res,
                    [transformer](typename std::decay_t<decltype(*beg)>&& x) {
                      return (*transformer)(std::move(x));
