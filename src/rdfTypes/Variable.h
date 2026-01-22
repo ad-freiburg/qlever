@@ -34,13 +34,13 @@ class Variable {
   // TODO<joka921> There are several similar variants of this function across
   // the codebase. Unify them!
   // ___________________________________________________________________________
-  [[nodiscard]] std::string toSparql() const { return _name; }
+  std::string toSparql() const { return _name; }
 
   // ___________________________________________________________________________
-  [[nodiscard]] const std::string& name() const { return _name; }
+  const std::string& name() const { return _name; }
 
   // Needed for consistency with the `Alias` class.
-  [[nodiscard]] const std::string& targetVariable() const { return _name; }
+  const std::string& targetVariable() const { return _name; }
 
   // Converts `?someTextVar` and `?someEntityVar` into
   // `?ql_someTextVar_score_var_someEntityVar`.

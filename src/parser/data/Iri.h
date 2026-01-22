@@ -18,10 +18,10 @@ class Iri {
 
   // ___________________________________________________________________________
   // Used for testing
-  [[nodiscard]] const std::string& iri() const { return _string; }
+  const std::string& iri() const { return _string; }
 
   // ___________________________________________________________________________
-  [[nodiscard]] std::string toSparql() const { return _string; }
+  std::string toSparql() const { return _string; }
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Iri, _string)
 };

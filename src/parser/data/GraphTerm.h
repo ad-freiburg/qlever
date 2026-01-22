@@ -27,7 +27,7 @@ class GraphTerm : public GraphTermBase,
   using GraphTermBase::GraphTermBase;
 
   // ___________________________________________________________________________
-  [[nodiscard]] std::string toSparql() const {
+  std::string toSparql() const {
     return visit(
         [](const auto& object) -> std::string { return object.toSparql(); });
   }
@@ -40,7 +40,7 @@ class GraphTerm : public GraphTermBase,
   // `DELETE WHERE{...}`. It is necessary, because the parser internally
   // represents the templates of UPDATE requests and CONSTRUCT queries
   // differently than The "normal" WHERE clauses.
-  [[nodiscard]] TripleComponent toTripleComponent() const {
+  TripleComponent toTripleComponent() const {
     return visit([](const auto& element) -> TripleComponent {
       using T = std::decay_t<decltype(element)>;
       if constexpr (std::is_same_v<T, Variable>) {
