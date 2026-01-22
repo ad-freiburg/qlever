@@ -8,7 +8,7 @@
 #include <string>
 
 #include "backports/three_way_comparison.h"
-#include "parser/data/ConstructQueryExportContext.h"
+#include "util/Exception.h"
 
 class BlankNode {
   bool _generated;

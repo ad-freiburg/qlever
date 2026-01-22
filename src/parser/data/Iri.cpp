@@ -6,7 +6,7 @@
 
 #include <ctre-unicode.hpp>
 
-#include "parser/data/ConstructQueryExportContext.h"
+#include "util/Exception.h"
 
 namespace {
 // CTRE regex pattern for C++17 compatibility
