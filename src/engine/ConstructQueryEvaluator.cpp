@@ -78,17 +78,17 @@ std::optional<std::string> ConstructQueryEvaluator::evaluate(
   }
 
   if (std::holds_alternative<BlankNode>(term)) {
-    BlankNode node = std::get<BlankNode>(term);
+    const BlankNode& node = std::get<BlankNode>(term);
     return ConstructQueryEvaluator::evaluate(node, context);
   }
 
   if (std::holds_alternative<Iri>(term)) {
-    Iri iri = std::get<Iri>(term);
+    const Iri& iri = std::get<Iri>(term);
     return ConstructQueryEvaluator::evaluate(iri);
   }
 
   if (std::holds_alternative<Literal>(term)) {
-    Literal literal = std::get<Literal>(term);
+    const Literal& literal = std::get<Literal>(term);
     return ConstructQueryEvaluator::evaluate(literal, posInTriple);
   }
 
