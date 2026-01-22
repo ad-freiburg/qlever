@@ -296,9 +296,6 @@ void MaterializedViewWriter::computeResultAndWritePermutation() const {
 MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
     : onDiskBase_{std::move(onDiskBase)},
       name_{std::move(name)},
-      permutation_{std::make_shared<Permutation>(
-          Permutation::Enum::SPO, ad_utility::makeUnlimitedAllocator<Id>(),
-          name_)},
       locatedTriplesState_{makeEmptyLocatedTriplesState()} {
   AD_CORRECTNESS_CHECK(onDiskBase_ != "",
                        "The index base filename was not set.");
