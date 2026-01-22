@@ -11,7 +11,6 @@
 
 #include "backports/three_way_comparison.h"
 #include "backports/type_traits.h"
-#include "parser/data/ConstructQueryExportContext.h"
 #include "util/Concepts.h"
 
 class Literal {

@@ -12,6 +12,7 @@
 
 #include "index/IndexImpl.h"
 #include "parser/data/BlankNode.h"
+#include "parser/data/ConstructQueryExportContext.h"
 #include "parser/data/GraphTerm.h"
 #include "parser/data/Iri.h"
 #include "parser/data/Literal.h"

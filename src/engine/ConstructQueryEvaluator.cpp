@@ -72,25 +72,22 @@ std::optional<std::string> ConstructQueryEvaluator::evaluate(
 std::optional<std::string> ConstructQueryEvaluator::evaluate(
     const GraphTerm& term, const ConstructQueryExportContext& context,
     PositionInTriple posInTriple) {
-  if (std::holds_alternative<Variable>(term)) {
-    const Variable& var = std::get<Variable>(term);
-    return ConstructQueryEvaluator::evaluate(var, context);
-  }
+  return std::visit(
+      [&context, &posInTriple](auto&& arg) -> std::optional<std::string> {
+        // strips reference/const qualifiers
+        using T = std::decay_t<decltype(arg)>;
 
-  if (std::holds_alternative<BlankNode>(term)) {
-    const BlankNode& node = std::get<BlankNode>(term);
-    return ConstructQueryEvaluator::evaluate(node, context);
-  }
-
-  if (std::holds_alternative<Iri>(term)) {
-    const Iri& iri = std::get<Iri>(term);
-    return ConstructQueryEvaluator::evaluate(iri);
-  }
-
-  if (std::holds_alternative<Literal>(term)) {
-    const Literal& literal = std::get<Literal>(term);
-    return ConstructQueryEvaluator::evaluate(literal, posInTriple);
-  }
-
-  AD_FAIL();
+        if constexpr (std::is_same_v<T, Variable>) {
+          return ConstructQueryEvaluator::evaluate(arg, context);
+        } else if constexpr (std::is_same_v<T, BlankNode>) {
+          return ConstructQueryEvaluator::evaluate(arg, context);
+        } else if constexpr (std::is_same_v<T, Iri>) {
+          return ConstructQueryEvaluator::evaluate(arg);
+        } else if constexpr (std::is_same_v<T, Literal>) {
+          return ConstructQueryEvaluator::evaluate(arg, posInTriple);
+        } else {
+          AD_FAIL();
+        }
+      },
+      term);
 }
