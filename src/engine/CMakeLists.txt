@@ -19,7 +19,6 @@ add_library(engine
         NeutralOptional.cpp Load.cpp StripColumns.cpp NamedResultCache.cpp
         ExplicitIdTableOperation.cpp StringMapping.cpp MaterializedViews.cpp
         PermutationSelector.cpp
-        ConstructQueryEvaluator.h
         ConstructQueryEvaluator.cpp
         ConstructTripleGenerator.cpp)
 
