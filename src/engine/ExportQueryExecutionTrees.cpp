@@ -287,7 +287,7 @@ auto ExportQueryExecutionTrees::constructQueryResultToTriples(
       [generator = std::move(generator)](TableWithRange table) mutable {
         // The generator now handles the:
         // Table -> Rows -> Triple Patterns -> StringTriples
-        return generator.generateForTable(table);
+        return generator.generateStringTriplesForResultTable(table);
       });
 
   // 4. Flatten and return.

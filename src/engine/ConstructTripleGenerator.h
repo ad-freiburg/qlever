@@ -38,7 +38,17 @@ class ConstructTripleGenerator {
         cancellationHandle_(std::move(cancellationHandle)) {}
 
   // _____________________________________________________________________________
-  auto generateForTable(TableWithRange table) {
+  // This generator has to be called for each table contained in the result of
+  // `ExportQueryExecutionTrees::getRowIndices` IN ORDER (because of
+  // rowOffsset).
+  //
+  // For each row of the result table (the table that is created as result of
+  // processing the WHERE-clause of a CONSTRUCT-query) it creates the resulting
+  // triples by instantiating the triple-patterns with the values of the
+  // result-table row (triple-patterns are the triples in the CONSTRUCT-clause
+  // of a CONSTRUCT-query). The following pipeline takes place conceptually:
+  // result-table -> result-table Rows -> Triple Patterns -> StringTriples
+  auto generateStringTriplesForResultTable(TableWithRange table) {
     const auto tableWithVocab = table.tableWithVocab_;
     size_t currentRowOffset = rowOffset_;
     rowOffset_ += tableWithVocab.idTable().numRows();
