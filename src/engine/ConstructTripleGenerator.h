@@ -9,6 +9,7 @@
 
 #include <functional>
 
+#include "engine/ConstructQueryEvaluator.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryExportTypes.h"
 #include "global/Constants.h"
@@ -68,7 +69,7 @@ class ConstructTripleGenerator {
       auto innerTransformer =
           [this, context = std::move(context)](const auto& triple) {
             cancellationHandle_->throwIfCancelled();
-            return this->evaluateTriple(triple, context);
+            return ConstructQueryEvaluator::evaluateTriple(triple, context);
           };
       auto filterer = [](const StringTriple& t) { return !t.isEmpty(); };
 
@@ -80,10 +81,6 @@ class ConstructTripleGenerator {
   }
 
  private:
-  // Evaluates a single CONSTRUCT triple pattern using the provided context.
-  StringTriple evaluateTriple(const std::array<GraphTerm, 3>& triple,
-                              const ConstructQueryExportContext& context) const;
-
   Triples constructTriples_;
   std::shared_ptr<const Result> result_;
   std::reference_wrapper<const VariableToColumnMap> variableColumns_;

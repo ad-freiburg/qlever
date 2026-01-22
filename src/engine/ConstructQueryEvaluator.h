@@ -7,6 +7,7 @@
 #ifndef QLEVER_CONSTRUCTQUERYEVALUATOR_H
 #define QLEVER_CONSTRUCTQUERYEVALUATOR_H
 
+#include "engine/QueryExecutionTree.h"
 #include "parser/data/BlankNode.h"
 #include "parser/data/ConstructQueryExportContext.h"
 #include "parser/data/GraphTerm.h"
@@ -14,6 +15,8 @@
 #include "parser/data/Literal.h"
 
 class ConstructQueryEvaluator {
+  using StringTriple = QueryExecutionTree::StringTriple;
+
  public:
   static std::optional<std::string> evaluate(const Iri& iri);
 
@@ -29,6 +32,11 @@ class ConstructQueryEvaluator {
   static std::optional<std::string> evaluate(
       const GraphTerm& term, const ConstructQueryExportContext& context,
       PositionInTriple posInTriple);
+
+  // Evaluates a single CONSTRUCT triple pattern using the provided context.
+  static StringTriple evaluateTriple(
+      const std::array<GraphTerm, 3>& triple,
+      const ConstructQueryExportContext& context);
 };
 
 #endif  // QLEVER_CONSTRUCTQUERYEVALUATOR_H
