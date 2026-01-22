@@ -257,6 +257,7 @@ ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
         })};
 }
 
+// _____________________________________________________________________________
 auto ExportQueryExecutionTrees::constructQueryResultToTriples(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples,
