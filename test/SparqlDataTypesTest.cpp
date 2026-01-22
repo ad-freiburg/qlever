@@ -64,54 +64,30 @@ TEST(SparqlDataTypesTest, BlankNodeEvaluatesCorrectlyBasedOnContext) {
   ConstructQueryExportContext context0 = wrapper.createContextForRow(0);
   using enum PositionInTriple;
 
-  EXPECT_THAT(ConstructQueryEvaluator::evaluate(blankNodeA, context0, SUBJECT),
-              Optional("_:u0_a"s));
-  EXPECT_THAT(
-      ConstructQueryEvaluator::evaluate(blankNodeA, context0, PREDICATE),
-      Optional("_:u0_a"s));
-  EXPECT_THAT(ConstructQueryEvaluator::evaluate(blankNodeA, context0, OBJECT),
-              Optional("_:u0_a"s));
-  EXPECT_THAT(ConstructQueryEvaluator::evaluate(blankNodeB, context0, SUBJECT),
-              Optional("_:g0_b"s));
-  EXPECT_THAT(
-      ConstructQueryEvaluator::evaluate(blankNodeB, context0, PREDICATE),
-      Optional("_:g0_b"s));
-  EXPECT_THAT(ConstructQueryEvaluator::evaluate(blankNodeB, context0, OBJECT),
-              Optional("_:g0_b"s));
+  EXPECT_THAT(evaluate(blankNodeA, context0, SUBJECT), Optional("_:u0_a"s));
+  EXPECT_THAT(evaluate(blankNodeA, context0, PREDICATE), Optional("_:u0_a"s));
+  EXPECT_THAT(evaluate(blankNodeA, context0, OBJECT), Optional("_:u0_a"s));
+  EXPECT_THAT(evaluate(blankNodeB, context0, SUBJECT), Optional("_:g0_b"s));
+  EXPECT_THAT(evaluate(blankNodeB, context0, PREDICATE), Optional("_:g0_b"s));
+  EXPECT_THAT(evaluate(blankNodeB, context0, OBJECT), Optional("_:g0_b"s));
 
   ConstructQueryExportContext context10 = wrapper.createContextForRow(10);
 
-  EXPECT_THAT(ConstructQueryEvaluator::evaluate(blankNodeA, context10, SUBJECT),
-              Optional("_:u10_a"s));
-  EXPECT_THAT(
-      ConstructQueryEvaluator::evaluate(blankNodeA, context10, PREDICATE),
-      Optional("_:u10_a"s));
-  EXPECT_THAT(ConstructQueryEvaluator::evaluate(blankNodeA, context10, OBJECT),
-              Optional("_:u10_a"s));
-  EXPECT_THAT(ConstructQueryEvaluator::evaluate(blankNodeB, context10, SUBJECT),
-              Optional("_:g10_b"s));
-  EXPECT_THAT(
-      ConstructQueryEvaluator::evaluate(blankNodeB, context10, PREDICATE),
-      Optional("_:g10_b"s));
-  EXPECT_THAT(ConstructQueryEvaluator::evaluate(blankNodeB, context10, SUBJECT),
-              Optional("_:g10_b"s));
+  EXPECT_THAT(evaluate(blankNodeA, context10, SUBJECT), Optional("_:u10_a"s));
+  EXPECT_THAT(evaluate(blankNodeA, context10, PREDICATE), Optional("_:u10_a"s));
+  EXPECT_THAT(evaluate(blankNodeA, context10, OBJECT), Optional("_:u10_a"s));
+  EXPECT_THAT(evaluate(blankNodeB, context10, SUBJECT), Optional("_:g10_b"s));
+  EXPECT_THAT(evaluate(blankNodeB, context10, PREDICATE), Optional("_:g10_b"s));
+  EXPECT_THAT(evaluate(blankNodeB, context10, SUBJECT), Optional("_:g10_b"s));
 
   ConstructQueryExportContext context12 = wrapper.createContextForRow(7, 5);
 
-  EXPECT_THAT(ConstructQueryEvaluator::evaluate(blankNodeA, context12, SUBJECT),
-              Optional("_:u12_a"s));
-  EXPECT_THAT(
-      ConstructQueryEvaluator::evaluate(blankNodeA, context12, PREDICATE),
-      Optional("_:u12_a"s));
-  EXPECT_THAT(ConstructQueryEvaluator::evaluate(blankNodeA, context12, OBJECT),
-              Optional("_:u12_a"s));
-  EXPECT_THAT(ConstructQueryEvaluator::evaluate(blankNodeB, context12, SUBJECT),
-              Optional("_:g12_b"s));
-  EXPECT_THAT(
-      ConstructQueryEvaluator::evaluate(blankNodeB, context12, PREDICATE),
-      Optional("_:g12_b"s));
-  EXPECT_THAT(ConstructQueryEvaluator::evaluate(blankNodeB, context12, SUBJECT),
-              Optional("_:g12_b"s));
+  EXPECT_THAT(evaluate(blankNodeA, context12, SUBJECT), Optional("_:u12_a"s));
+  EXPECT_THAT(evaluate(blankNodeA, context12, PREDICATE), Optional("_:u12_a"s));
+  EXPECT_THAT(evaluate(blankNodeA, context12, OBJECT), Optional("_:u12_a"s));
+  EXPECT_THAT(evaluate(blankNodeB, context12, SUBJECT), Optional("_:g12_b"s));
+  EXPECT_THAT(evaluate(blankNodeB, context12, PREDICATE), Optional("_:g12_b"s));
+  EXPECT_THAT(evaluate(blankNodeB, context12, SUBJECT), Optional("_:g12_b"s));
 }
 
 TEST(SparqlDataTypesTest, BlankNodeEvaluateIsPropagatedCorrectly) {
@@ -122,14 +98,9 @@ TEST(SparqlDataTypesTest, BlankNodeEvaluateIsPropagatedCorrectly) {
 
   auto expectedLabel = Optional("_:u42_label"s);
 
-  EXPECT_THAT(ConstructQueryEvaluator::evaluate(blankNode, context, SUBJECT),
-              expectedLabel);
-  EXPECT_THAT(
-      ConstructQueryEvaluator::evaluate(GraphTerm{blankNode}, context, SUBJECT),
-      expectedLabel);
-  EXPECT_THAT(
-      ConstructQueryEvaluator::evaluate(GraphTerm{blankNode}, context, SUBJECT),
-      expectedLabel);
+  EXPECT_THAT(evaluate(blankNode, context, SUBJECT), expectedLabel);
+  EXPECT_THAT(evaluate(GraphTerm{blankNode}, context, SUBJECT), expectedLabel);
+  EXPECT_THAT(evaluate(GraphTerm{blankNode}, context, SUBJECT), expectedLabel);
 }
 
 TEST(SparqlDataTypesTest, IriInvalidSyntaxThrowsException) {
@@ -163,21 +134,15 @@ TEST(SparqlDataTypesTest, IriEvaluatesCorrectlyBasedOnContext) {
   Iri iri{iriString};
   ConstructQueryExportContext context0 = wrapper.createContextForRow(0);
 
-  EXPECT_THAT(ConstructQueryEvaluator::evaluate(iri, context0, SUBJECT),
-              Optional(iriString));
-  EXPECT_THAT(ConstructQueryEvaluator::evaluate(iri, context0, PREDICATE),
-              Optional(iriString));
-  EXPECT_THAT(ConstructQueryEvaluator::evaluate(iri, context0, OBJECT),
-              Optional(iriString));
+  EXPECT_THAT(evaluate(iri, context0, SUBJECT), Optional(iriString));
+  EXPECT_THAT(evaluate(iri, context0, PREDICATE), Optional(iriString));
+  EXPECT_THAT(evaluate(iri, context0, OBJECT), Optional(iriString));
 
   ConstructQueryExportContext context1337 = wrapper.createContextForRow(1337);
 
-  EXPECT_THAT(ConstructQueryEvaluator::evaluate(iri, context1337, SUBJECT),
-              Optional(iriString));
-  EXPECT_THAT(ConstructQueryEvaluator::evaluate(iri, context1337, PREDICATE),
-              Optional(iriString));
-  EXPECT_THAT(ConstructQueryEvaluator::evaluate(iri, context1337, OBJECT),
-              Optional(iriString));
+  EXPECT_THAT(evaluate(iri, context1337, SUBJECT), Optional(iriString));
+  EXPECT_THAT(evaluate(iri, context1337, PREDICATE), Optional(iriString));
+  EXPECT_THAT(evaluate(iri, context1337, OBJECT), Optional(iriString));
 }
 
 TEST(SparqlDataTypesTest, IriEvaluateIsPropagatedCorrectly) {
@@ -188,14 +153,9 @@ TEST(SparqlDataTypesTest, IriEvaluateIsPropagatedCorrectly) {
 
   auto expectedString = Optional("<http://some-iri>"s);
 
-  EXPECT_THAT(ConstructQueryEvaluator::evaluate(iri, context, SUBJECT),
-              expectedString);
-  EXPECT_THAT(
-      ConstructQueryEvaluator::evaluate(GraphTerm{iri}, context, SUBJECT),
-      expectedString);
-  EXPECT_THAT(
-      ConstructQueryEvaluator::evaluate(GraphTerm{iri}, context, SUBJECT),
-      expectedString);
+  EXPECT_THAT(evaluate(iri, context, SUBJECT), expectedString);
+  EXPECT_THAT(evaluate(GraphTerm{iri}, context, SUBJECT), expectedString);
+  EXPECT_THAT(evaluate(GraphTerm{iri}, context, SUBJECT), expectedString);
 }
 
 TEST(SparqlDataTypesTest, LiteralBooleanIsCorrectlyFormatted) {
