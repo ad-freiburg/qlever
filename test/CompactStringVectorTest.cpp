@@ -289,3 +289,34 @@ TYPED_TEST(CompactVectorOfStringsFixture, SerializationWithPushMiddleOfFile) {
 
   ad_utility::deleteFile(filename);
 }
+
+// _____________________________________________________________________________
+TYPED_TEST(CompactVectorOfStringsFixture, cloneAndRemap) {
+  const auto& input = this->input_;
+  using CompactVector = typename TestFixture::CompactVector;
+
+  CompactVector original;
+  // Try with empty vector.
+  auto copy0 = original.cloneAndRemap(std::identity{});
+  EXPECT_TRUE(ql::ranges::equal(original, copy0));
+
+  original.build(input);
+
+  auto copy1 = original.cloneAndRemap(std::identity{});
+  EXPECT_TRUE(ql::ranges::equal(original, copy1));
+
+  auto mappingFunction = [](const auto& x) { return x + 1; };
+
+  auto copy2 = original.cloneAndRemap(mappingFunction);
+
+  ASSERT_EQ(original.size(), copy2.size());
+  for (auto [reference, element] : ql::ranges::zip_view(original, copy2)) {
+    ASSERT_EQ(reference.size(), element.size());
+    typename CompactVector::vector_type modifiedReference{reference.begin(),
+                                                          reference.end()};
+    ql::ranges::for_each(
+        modifiedReference.begin(), modifiedReference.end(),
+        [&mappingFunction](auto& value) { value = mappingFunction(value); });
+    EXPECT_TRUE(ql::ranges::equal(modifiedReference, element));
+  }
+}
