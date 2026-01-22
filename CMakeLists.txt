@@ -487,7 +487,7 @@ if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
     add_executable(qlever-server src/ServerMain.cpp)
     qlever_target_link_libraries(qlever-server engine server ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
     if (USE_PRECOMPILED_HEADERS)
-      target_precompile_headers(qlever-server REUSE_FROM engine)
+        target_precompile_headers(qlever-server REUSE_FROM engine)
     endif()
 endif()
 
@@ -500,11 +500,13 @@ qlever_target_link_libraries(VocabularyMergerMain index parser ${CMAKE_THREAD_LI
 add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
 qlever_target_link_libraries(PrintIndexVersionMain util)
 
-install(TARGETS
-    qlever-index
-    qlever-server
-    RUNTIME DESTINATION bin
-)
+if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
+    install(TARGETS
+        qlever-index
+        qlever-server
+        RUNTIME DESTINATION bin
+    )
+endif()
 
 ###############################################################
 # CPack packaging
