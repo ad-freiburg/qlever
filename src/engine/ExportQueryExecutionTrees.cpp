@@ -263,6 +263,11 @@ auto ExportQueryExecutionTrees::constructQueryResultToTriples(
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
     uint64_t& resultSize, CancellationHandle cancellationHandle) {
   // 1. Calculate row indices of the rows of the result table.
+  // The `resultSizeMultiplicator`(last argument of `getRowIndices`) is
+  // explained by the following: For each result from the WHERE clause, we
+  // produce up to `constructTriples.size()` triples. We do not account for
+  // triples that are filtered out because one of the components is UNDEF (it
+  // would require materializing the whole result)
   auto rowIndices = getRowIndices(limitAndOffset, *result, resultSize,
                                   constructTriples.size());
 
