@@ -242,6 +242,9 @@ class MaterializedViewsManager {
   // before any calls to `loadView` and `getView`.
   void setOnDiskBase(const std::string& onDiskBase);
 
+  // Check if a materialized view is currently loaded.
+  bool isViewLoaded(const std::string& name) const;
+
   // Since we don't want to break the const-ness in a lot of places just for the
   // loading of views, `loadedViews_` is mutable. Note that this is okay,
   // because the views themselves aren't changed (only loaded on-demand).

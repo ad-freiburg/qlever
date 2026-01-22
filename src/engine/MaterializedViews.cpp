@@ -358,6 +358,11 @@ std::shared_ptr<const MaterializedView> MaterializedViewsManager::getView(
 }
 
 // _____________________________________________________________________________
+bool MaterializedViewsManager::isViewLoaded(const std::string& name) const {
+  return loadedViews_.rlock()->contains(name);
+}
+
+// _____________________________________________________________________________
 void MaterializedView::throwIfScanColumnMissing(
     const std::optional<TripleComponent>& s) const {
   // The scan column must be set.
