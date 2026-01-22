@@ -1,5 +1,8 @@
-// Copyright 2025, University of Freiburg
-// Chair of Algorithms and Data Structures
+// Copyright 2025 The QLever Authors, in particular:
+//
+// 2025 Marvin Stoetzel <marvin.stoetzel@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #ifndef QLEVER_SRC_ENGINE_CONSTRUCTTRIPLEGENERATOR_H
 #define QLEVER_SRC_ENGINE_CONSTRUCTTRIPLEGENERATOR_H

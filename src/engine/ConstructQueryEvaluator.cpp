@@ -1,4 +1,8 @@
-#include "ConstructQueryEvaluator.h"
+// Copyright 2025 The QLever Authors, in particular:
+//
+// 2025 Marvin Stoetzel <marvin.stoetzel@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #include "ExportQueryExecutionTrees.h"
 
@@ -48,6 +52,7 @@ std::optional<std::string> ConstructQueryEvaluator::evaluate(
   return std::nullopt;
 }
 
+// _____________________________________________________________________________
 std::optional<std::string> ConstructQueryEvaluator::evaluate(
     const BlankNode& node, const ConstructQueryExportContext& context) {
   std::ostringstream stream;
@@ -58,6 +63,7 @@ std::optional<std::string> ConstructQueryEvaluator::evaluate(
   return stream.str();
 }
 
+// _____________________________________________________________________________
 std::optional<std::string> ConstructQueryEvaluator::evaluate(
     const GraphTerm& term, const ConstructQueryExportContext& context,
     PositionInTriple posInTriple) {
