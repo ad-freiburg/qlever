@@ -8,7 +8,7 @@
 
 #include "global/Constants.h"
 #include "parser/ParserAndVisitorBase.h"
-#include "parser/data/ConstructQueryExportContext.h"
+#include "util/Exception.h"
 
 // ___________________________________________________________________________
 Variable::Variable(std::string name, bool checkName) : _name{std::move(name)} {
