@@ -14,12 +14,6 @@
 #include "util/Serializer/SerializeString.h"
 #include "util/Serializer/Serializer.h"
 
-// Forward declaration because of cyclic dependencies
-// TODO<joka921> The coupling of the `Variable` with its `evaluate` methods
-// is not very clean and should be refactored.
-struct ConstructQueryExportContext;
-enum struct PositionInTriple : int;
-
 class Variable {
  private:
   std::string _name;
