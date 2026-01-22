@@ -4,12 +4,16 @@
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
-#include "ExportQueryExecutionTrees.h"
+#include "engine/ConstructQueryEvaluator.h"
 
+#include "engine/ExportQueryExecutionTrees.h"
+
+// _____________________________________________________________________________
 std::optional<std::string> ConstructQueryEvaluator::evaluate(const Iri& iri) {
   return iri.iri();
 }
 
+// _____________________________________________________________________________
 std::optional<std::string> ConstructQueryEvaluator::evaluate(
     const Literal& literal, PositionInTriple role) {
   if (role == PositionInTriple::OBJECT) {
@@ -18,6 +22,7 @@ std::optional<std::string> ConstructQueryEvaluator::evaluate(
   return std::nullopt;
 }
 
+// _____________________________________________________________________________
 std::optional<std::string> ConstructQueryEvaluator::evaluate(
     const Variable& var, const ConstructQueryExportContext& context) {
   size_t resultTableRow = context._resultTableRowIdx;
