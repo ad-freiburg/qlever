@@ -59,11 +59,10 @@ struct BasicGraphPatternsInvariantTo {
 // Similar to `ChainInfo`, this struct represents a simple chain, however it may
 // bind the subject.
 struct UserQueryChain {
-  TripleComponent subject_;  // Allow fixing the subject of the chain
+  TripleComponent subject_;  // Allow fixing the subject of the chain.
   Variable chain_;
   Variable object_;
-  // TODO<ullingerc> Switch to `shared_ptr`
-  const std::vector<ChainInfo>& chainInfos_;
+  std::shared_ptr<const std::vector<ChainInfo>> chainInfos_;
 };
 
 // Cache data structure for the `MaterializedViewsManager`. This object can be
@@ -71,7 +70,8 @@ struct UserQueryChain {
 // of an existing materialized view.
 class QueryPatternCache {
   // Simple chains can be found by direct access into a hash map.
-  ad_utility::HashMap<ChainedPredicates, std::vector<ChainInfo>>
+  ad_utility::HashMap<ChainedPredicates,
+                      std::shared_ptr<std::vector<ChainInfo>>>
       simpleChainCache_;
 
   // Cache for predicates appearing in a materialized view.
@@ -91,8 +91,8 @@ class QueryPatternCache {
  private:
   // Helper for `analyzeView`, that checks for a simple chain. It returns `true`
   // iff a simple chain `a->b` is present.
-  // NOTE: This function only checks only one direction, so it should also be
-  // called with `a` and `b` switched if it returns `false`.
+  // NOTE: This function only checks one direction, so it should also be called
+  // with `a` and `b` switched if it returns `false`.
   bool analyzeSimpleChain(ViewPtr view, const SparqlTriple& a,
                           const SparqlTriple& b);
 };

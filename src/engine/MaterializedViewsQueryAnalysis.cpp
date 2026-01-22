@@ -121,9 +121,9 @@ bool QueryPatternCache::analyzeSimpleChain(ViewPtr view, const SparqlTriple& a,
   // Insert chain to cache.
   ChainedPredicates preds{aPred.value(), bPred.value()};
   if (!simpleChainCache_.contains(preds)) {
-    simpleChainCache_[preds] = {};
+    simpleChainCache_[preds] = std::make_shared<std::vector<ChainInfo>>();
   }
-  simpleChainCache_[preds].push_back(
+  simpleChainCache_[preds]->push_back(
       ChainInfo{std::move(aSubj), std::move(chainVar), std::move(bObj), view});
   return true;
 }

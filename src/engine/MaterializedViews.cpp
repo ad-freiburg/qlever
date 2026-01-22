@@ -620,17 +620,16 @@ MaterializedViewsManager::makeSingleChainReplacementIndexScan(
   }();
 
   // The join between `left` and `right` does not constitute a chain.
-  if (!userQueryChain.has_value()) {
-    return nullptr;
-  }
-  if (userQueryChain.value().chainInfos_.size() == 0) {
+  if (!userQueryChain.has_value() ||
+      userQueryChain.value().chainInfos_ == nullptr ||
+      userQueryChain.value().chainInfos_->size() == 0) {
     return nullptr;
   }
 
   // TODO<ullingerc> We should consider all the possible views for the
   // combination of predicates. They could have different sorting.
   const auto& [subj, chain, obj, view] =
-      userQueryChain.value().chainInfos_.at(0);
+      userQueryChain.value().chainInfos_->at(0);
 
   // Ensure the subject is the first column if it is fixed.
   if (!userQueryChain.value().subject_.isVariable() &&

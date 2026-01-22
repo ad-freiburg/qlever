@@ -279,7 +279,10 @@ class MaterializedViewsManager {
       QueryExecutionContext* qec,
       const parsedQuery::MaterializedViewQuery& viewQuery) const;
 
-  // TODO . If no matching -> return nullptr.
+  // If the given two `IndexScan`s represent the children of a chain join, that
+  // is `?s <p1> ?m . ?m <p2> ?o`, check if a loaded materialized view can
+  // replace the join operation. If no matching view is found, or the join on
+  // `left` and `right` is not a chain, this function returns `nullptr`.
   std::shared_ptr<IndexScan> makeSingleChainReplacementIndexScan(
       QueryExecutionContext* qec, std::shared_ptr<IndexScan> left,
       std::shared_ptr<IndexScan> right) const;
