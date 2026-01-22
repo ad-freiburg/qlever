@@ -28,6 +28,9 @@
 #include "util/json.h"
 #include "util/views/TakeUntilInclusiveView.h"
 
+template <class T>
+using InputRangeTypeErased = ad_utility::InputRangeTypeErased<T>;
+
 namespace {
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 using Literal = ad_utility::triple_component::Literal;
@@ -99,7 +102,7 @@ STREAMABLE_GENERATOR_TYPE computeResultForAsk(
 }  // namespace
 
 // __________________________________________________________________________
-ad_utility::InputRangeTypeErased<TableConstRefWithVocab>
+InputRangeTypeErased<TableConstRefWithVocab>
 ExportQueryExecutionTrees::getIdTables(const Result& result) {
   using namespace ad_utility;
   if (result.isFullyMaterialized()) {
@@ -115,11 +118,9 @@ ExportQueryExecutionTrees::getIdTables(const Result& result) {
 }
 
 // _____________________________________________________________________________
-ad_utility::InputRangeTypeErased<TableWithRange>
-ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
-                                         const Result& result,
-                                         uint64_t& resultSize,
-                                         uint64_t resultSizeMultiplicator) {
+InputRangeTypeErased<TableWithRange> ExportQueryExecutionTrees::getRowIndices(
+    LimitOffsetClause limitOffset, const Result& result, uint64_t& resultSize,
+    uint64_t resultSizeMultiplicator) {
   using namespace ad_utility;
   // The first call initializes the `resultSize` to zero (no need to
   // initialize it outside of the function).
@@ -291,8 +292,7 @@ auto ExportQueryExecutionTrees::constructQueryResultToTriples(
       });
 
   // 4. Flatten and return.
-  return ad_utility::InputRangeTypeErased<QueryExecutionTree::StringTriple>(
-      ql::views::join(std::move(tableTriples)));
+  return InputRangeTypeErased(ql::views::join(std::move(tableTriples)));
 }
 
 // _____________________________________________________________________________
@@ -807,7 +807,7 @@ static nlohmann::json stringAndTypeToBinding(std::string_view entitystr,
 }
 
 // _____________________________________________________________________________
-ad_utility::InputRangeTypeErased<std::string> askQueryResultToQLeverJSON(
+InputRangeTypeErased<std::string> askQueryResultToQLeverJSON(
     std::shared_ptr<const Result> result) {
   return ad_utility::InputRangeTypeErased(
       ad_utility::lazySingleValueRange([result = std::move(result)]() {
@@ -821,7 +821,7 @@ ad_utility::InputRangeTypeErased<std::string> askQueryResultToQLeverJSON(
 }
 
 // _____________________________________________________________________________
-ad_utility::InputRangeTypeErased<std::string>
+InputRangeTypeErased<std::string>
 ExportQueryExecutionTrees::selectQueryResultBindingsToQLeverJSON(
     const QueryExecutionTree& qet,
     const parsedQuery::SelectClause& selectClause,
@@ -1189,7 +1189,7 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 // _____________________________________________________________________________
-ad_utility::InputRangeTypeErased<std::string>
+InputRangeTypeErased<std::string>
 ExportQueryExecutionTrees::convertStreamGeneratorForChunkedTransfer(
     STREAMABLE_GENERATOR_TYPE streamGenerator) {
   using namespace ad_utility;
