@@ -21,7 +21,7 @@ BlankNode::BlankNode(bool generated, std::string label)
   AD_CONTRACT_CHECK(ctre::match<blankNodeLabelRegex>(_label));
 }
 
-// ___________________________________________________________________________
+// _____________________________________________________________________________
 std::string BlankNode::toSparql() const {
   std::ostringstream stream;
   stream << "_:";
