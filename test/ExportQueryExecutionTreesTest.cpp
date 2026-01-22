@@ -1039,6 +1039,7 @@ testIriKg</uri></binding>
   runConstructQueryTestCase(testCaseConstruct);
 }
 
+// ____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, TestWithIriExtendedEscaped) {
   std::string kg =
       "<s> <p>"
@@ -1528,6 +1529,7 @@ TEST(ExportQueryExecutionTrees, CornerCases) {
       ::testing::ContainsRegex("should be unreachable"));
 }
 
+// _____________________________________________________________________________
 // Test the correct exporting of ASK queries.
 TEST(ExportQueryExecutionTrees, AskQuery) {
   auto askResultTrue = [](bool lazy) {
@@ -2245,6 +2247,7 @@ TEST(ExportQueryExecutionTrees, GetLiteralOrIriFromVocabIndexWithEncodedIris) {
   }
 }
 
+// _____________________________________________________________________________
 // Test that a `sparql-results+json` export includes a `meta` field if and
 // only if the respective runtime parameter is enabled.
 TEST(ExportQueryExecutionTrees, SparqlJsonWithMetaField) {
