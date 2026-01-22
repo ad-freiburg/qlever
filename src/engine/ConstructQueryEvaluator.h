@@ -7,10 +7,6 @@
 #ifndef QLEVER_CONSTRUCTQUERYEVALUATOR_H
 #define QLEVER_CONSTRUCTQUERYEVALUATOR_H
 
-#include <optional>
-#include <string>
-
-#include "index/IndexImpl.h"
 #include "parser/data/BlankNode.h"
 #include "parser/data/ConstructQueryExportContext.h"
 #include "parser/data/GraphTerm.h"
