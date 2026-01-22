@@ -32,6 +32,7 @@ namespace {
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 using Literal = ad_utility::triple_component::Literal;
 
+// _____________________________________________________________________________
 // Return true iff the `result` is nonempty.
 bool getResultForAsk(const std::shared_ptr<const Result>& result) {
   if (result->isFullyMaterialized()) {
@@ -43,6 +44,7 @@ bool getResultForAsk(const std::shared_ptr<const Result>& result) {
   }
 }
 
+// _____________________________________________________________________________
 LiteralOrIri encodedIdToLiteralOrIri(Id id, const IndexImpl& index) {
   const auto& mgr = index.encodedIriManager();
   return LiteralOrIri::fromStringRepresentation(mgr.toString(id));
