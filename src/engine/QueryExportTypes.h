@@ -10,6 +10,8 @@
 #include "engine/LocalVocab.h"
 #include "engine/idTable/IdTable.h"
 
+// Helper type that provides const ref access to the underlying `IdTable` and
+// `LocalVocab` associated with the `IdTable`.
 struct TableConstRefWithVocab {
   std::reference_wrapper<const IdTable> idTable_;
   std::reference_wrapper<const LocalVocab> localVocab_;
@@ -19,6 +21,8 @@ struct TableConstRefWithVocab {
   const LocalVocab& localVocab() const { return localVocab_.get(); }
 };
 
+// Helper type that contains an `IdTable` and a view with related indices to
+// access the `IdTable` with.
 struct TableWithRange {
   TableConstRefWithVocab tableWithVocab_;
   ql::ranges::iota_view<uint64_t, uint64_t> view_;
