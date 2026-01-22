@@ -19,14 +19,14 @@ class BlankNode {
 
   // ___________________________________________________________________________
   // Used for testing
-  [[nodiscard]] bool isGenerated() const { return _generated; }
+  bool isGenerated() const { return _generated; }
 
   // ___________________________________________________________________________
   // Used for testing
-  [[nodiscard]] const std::string& label() const { return _label; }
+  const std::string& label() const { return _label; }
 
   // ___________________________________________________________________________
-  [[nodiscard]] std::string toSparql() const;
+  std::string toSparql() const;
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(BlankNode, _generated, _label)
 };
