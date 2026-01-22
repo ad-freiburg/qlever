@@ -62,10 +62,8 @@ class MaterializedViewWriter {
   // argument `NumStaticCols == 0`)
   using Sorter = ad_utility::CompressedExternalIdTableSorter<Comparator, 0>;
 
- public:
   using QueryPlan = qlever::QueryPlan;
 
- private:
   // Initialize a writer given the base filename of the view and a query plan.
   // The view will be written to files prefixed with the index basename followed
   // by the view name.
@@ -124,19 +122,7 @@ class MaterializedViewWriter {
   // and writes the view (SPO permutation and metadata) to disk.
   void computeResultAndWritePermutation() const;
 
- public:
-  // Write a `MaterializedView` given the index' `onDiskBase`, a valid `name`
-  // (consisting only of alphanumerics and hyphens) and a `queryPlan` to be
-  // executed. The query's result is written to the view.
-  //
-  // The `memoryLimit` and `allocator` are used only for sorting the
-  // permutation if the query result is not correctly sorted already. The
-  // `queryPlan` is executed with the normal query memory limit.
-  static void writeViewToDisk(
-      std::string onDiskBase, std::string name, const QueryPlan& queryPlan,
-      ad_utility::MemorySize memoryLimit = ad_utility::MemorySize::gigabytes(4),
-      ad_utility::AllocatorWithLimit<Id> allocator =
-          ad_utility::makeUnlimitedAllocator<Id>());
+  friend MaterializedViewsManager;
 };
 
 // This class represents a single loaded `MaterializedView`. It can be used for
@@ -264,6 +250,22 @@ class MaterializedViewsManager {
   std::shared_ptr<IndexScan> makeIndexScan(
       QueryExecutionContext* qec,
       const parsedQuery::MaterializedViewQuery& viewQuery) const;
+
+  // Write a `MaterializedView` given a valid `name` (consisting only of
+  // alphanumerics and hyphens) and a `queryPlan` to be executed. The query's
+  // result is written to the view.
+  //
+  // If a view with the same name is already loaded, it is unloaded before
+  // writing.
+  //
+  // The `memoryLimit` and `allocator` are used only for sorting the
+  // permutation if the query result is not correctly sorted already. The
+  // `queryPlan` is executed with the normal query memory limit.
+  void writeViewToDisk(
+      std::string name, const qlever::QueryPlan& queryPlan,
+      ad_utility::MemorySize memoryLimit = ad_utility::MemorySize::gigabytes(4),
+      ad_utility::AllocatorWithLimit<Id> allocator =
+          ad_utility::makeUnlimitedAllocator<Id>()) const;
 };
 
 #endif  // QLEVER_SRC_ENGINE_MATERIALIZEDVIEWS_H_

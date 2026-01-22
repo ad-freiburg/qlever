@@ -54,14 +54,13 @@ MaterializedViewWriter::MaterializedViewWriter(
 }
 
 // _____________________________________________________________________________
-void MaterializedViewWriter::writeViewToDisk(
-    std::string onDiskBase, std::string name,
-    const qlever::Qlever::QueryPlan& queryPlan,
+void MaterializedViewsManager::writeViewToDisk(
+    std::string name, const qlever::Qlever::QueryPlan& queryPlan,
     ad_utility::MemorySize memoryLimit,
-    ad_utility::AllocatorWithLimit<Id> allocator) {
-  MaterializedViewWriter writer{std::move(onDiskBase), std::move(name),
-                                queryPlan, std::move(memoryLimit),
-                                std::move(allocator)};
+    ad_utility::AllocatorWithLimit<Id> allocator) const {
+  unloadViewIfLoaded(name);
+  MaterializedViewWriter writer{onDiskBase_, std::move(name), queryPlan,
+                                std::move(memoryLimit), std::move(allocator)};
   writer.computeResultAndWritePermutation();
 }
 
@@ -353,11 +352,8 @@ void MaterializedViewsManager::loadView(const std::string& name) const {
 // _____________________________________________________________________________
 void MaterializedViewsManager::unloadViewIfLoaded(
     const std::string& name) const {
-  auto lock = loadedViews_.wlock();
-  if (!lock->contains(name)) {
-    return;
-  }
-  lock->erase(name);
+  // `HashMap::erase` is a no-op for nonexisting keys.
+  loadedViews_.wlock()->erase(name);
 }
 
 // _____________________________________________________________________________
