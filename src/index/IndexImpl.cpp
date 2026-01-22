@@ -1598,8 +1598,10 @@ Index::NumNormalAndInternal IndexImpl::numDistinctCol0(
 size_t IndexImpl::getCardinality(
     Id id, Permutation::Enum permutation,
     const LocatedTriplesState& locatedTriplesState) const {
-  if (const auto& meta =
-          getPermutation(permutation).getMetadata(id, locatedTriplesState);
+  const auto& perm = getPermutation(permutation);
+  if (const auto& meta = perm.getMetadata(
+          id, locatedTriplesState.getLocatedTriplesForPermutation<false>(
+                  permutation));
       meta.has_value()) {
     return meta.value().numRows_;
   }
@@ -1645,21 +1647,8 @@ Index::Vocab::PrefixRanges IndexImpl::prefixRanges(
 
 // _____________________________________________________________________________
 std::vector<float> IndexImpl::getMultiplicities(
-    const TripleComponent& key, const Permutation& permutation,
-    const LocatedTriplesState& locatedTriplesState) const {
-  if (auto keyId = key.toValueId(getVocab(), encodedIriManager())) {
-    auto meta = permutation.getMetadata(keyId.value(), locatedTriplesState);
-    if (meta.has_value()) {
-      return {meta.value().getCol1Multiplicity(),
-              meta.value().getCol2Multiplicity()};
-    }
-  }
-  return {1.0f, 1.0f};
-}
-
-// _____________________________________________________________________________
-std::vector<float> IndexImpl::getMultiplicities(
     const Permutation& permutation) const {
+  // TODO: these numbers are wrong if there are updates
   auto numTriples = static_cast<float>(this->numTriples().normal);
   std::array multiplicities{numTriples / numDistinctSubjects().normal,
                             numTriples / numDistinctPredicates().normal,
@@ -1674,9 +1663,12 @@ size_t IndexImpl::getResultSizeOfScan(
     const Permutation::Enum& permutation,
     const LocatedTriplesState& locatedTriplesState) const {
   const auto& perm = getPermutation(permutation);
+  const auto& locatedTriples =
+      locatedTriplesState.getLocatedTriplesForPermutation<false>(permutation);
   return perm.getResultSizeOfScan(
-      perm.getScanSpecAndBlocks(scanSpecification, locatedTriplesState),
-      locatedTriplesState);
+      CompressedRelationReader::ScanSpecAndBlocks::withUpdates(
+          scanSpecification, locatedTriples),
+      locatedTriples);
 }
 
 // _____________________________________________________________________________

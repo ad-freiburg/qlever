@@ -1823,6 +1823,14 @@ CompressedRelationReader::ScanSpecAndBlocks::ScanSpecAndBlocks(
 }
 
 // _____________________________________________________________________________
+CompressedRelationReader::ScanSpecAndBlocks
+CompressedRelationReader::ScanSpecAndBlocks::withUpdates(
+    ScanSpecification scanSpec, const LocatedTriplesPerBlock& locatedTriples) {
+  BlockMetadataSpan blocks(locatedTriples.getAugmentedMetadata());
+  return {std::move(scanSpec), {{blocks.begin(), blocks.end()}}};
+}
+
+// _____________________________________________________________________________
 ql::span<const CompressedBlockMetadata>
 CompressedRelationReader::ScanSpecAndBlocks::getBlockMetadataSpan() const {
   // ScanSpecAndBlocks must contain exactly one BlockMetadataRange to be

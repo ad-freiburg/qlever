@@ -15,16 +15,20 @@ class SparqlTriple;
 class SparqlTripleSimple;
 
 class IndexScan final : public Operation {
+  FRIEND_TEST(IndexScanTest, getMultiplicities);
+
  public:
   using Graphs = ScanSpecificationAsTripleComponent::GraphFilter;
   using PermutationPtr = std::shared_ptr<const Permutation>;
+  using LocatedTriplesPerBlockPtr =
+      std::shared_ptr<const LocatedTriplesPerBlock>;
 
  private:
   using ScanSpecAndBlocks = Permutation::ScanSpecAndBlocks;
 
  private:
   PermutationPtr permutation_;
-  LocatedTriplesSharedState locatedTriplesSharedState_;
+  LocatedTriplesPerBlockPtr locatedTriplesPerBlock_;
   TripleComponent subject_;
   TripleComponent predicate_;
   TripleComponent object_;
@@ -50,7 +54,7 @@ class IndexScan final : public Operation {
 
  public:
   IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
-            LocatedTriplesSharedState locatedTriplesSharedState,
+            LocatedTriplesPerBlockPtr locatedTriplesPerBlock,
             const SparqlTripleSimple& triple,
             Graphs graphsToFilter = Graphs::All(),
             std::optional<ScanSpecAndBlocks> scanSpecAndBlocks = std::nullopt,
@@ -66,7 +70,7 @@ class IndexScan final : public Operation {
 
   // Constructor to simplify copy creation of an `IndexScan`.
   IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
-            LocatedTriplesSharedState locatedTriplesSharedState,
+            LocatedTriplesPerBlockPtr locatedTriplesPerBlock,
             const TripleComponent& s, const TripleComponent& p,
             const TripleComponent& o,
             std::vector<ColumnIndex> additionalColumns,
@@ -185,9 +189,10 @@ class IndexScan final : public Operation {
 
   // Instead of using the `LocatedTriplesSnapshot` of the `Operation` base
   // class, which accesses the one stored in the `QueryExecutionContext`, use
-  // the `LocatedTriplesSnapshot` held in this object. This might be a different
-  // one if a custom permutation is used.
-  const LocatedTriplesState& locatedTriplesState() const override;
+  // the `LocatedTriplesPerBlock` held in this object. This already is exactly
+  // the located triples for the permutation of the index scan.
+  // `locatedTriplesState` should not be used in `IndexScan`.
+  const LocatedTriplesPerBlock& locatedTriplesPerBlock() const;
 
   // Return the stored triple in the order that corresponds to the
   // `permutation_`. For example if `permutation_ == PSO` then the result is
@@ -286,6 +291,8 @@ class IndexScan final : public Operation {
       return std::move(table);
     };
   }
+
+  std::vector<float> getMultiplicities(const TripleComponent& key) const;
 
  public:
   std::optional<std::shared_ptr<QueryExecutionTree>>

@@ -11,6 +11,7 @@
 #include <string>
 #include <utility>
 
+#include "engine/PermutationSelector.h"
 #include "engine/QueryExecutionTree.h"
 #include "index/IndexImpl.h"
 #include "parser/ParsedQuery.h"
@@ -33,13 +34,13 @@ static size_t getNumberOfVariables(const TripleComponent& subject,
 
 // _____________________________________________________________________________
 IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
-                     LocatedTriplesSharedState locatedTriplesSharedState,
+                     LocatedTriplesPerBlockPtr locatedTriplesPerBlock,
                      const SparqlTripleSimple& triple, Graphs graphsToFilter,
                      std::optional<ScanSpecAndBlocks> scanSpecAndBlocks,
                      VarsToKeep varsToKeep)
     : Operation(qec),
       permutation_(std::move(permutation)),
-      locatedTriplesSharedState_(std::move(locatedTriplesSharedState)),
+      locatedTriplesPerBlock_(std::move(locatedTriplesPerBlock)),
       subject_(triple.s_),
       predicate_(triple.p_),
       object_(triple.o_),
@@ -50,7 +51,7 @@ IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
       numVariables_(getNumberOfVariables(subject_, predicate_, object_)),
       varsToKeep_(std::move(varsToKeep)) {
   AD_CONTRACT_CHECK(permutation_ != nullptr);
-  AD_CONTRACT_CHECK(locatedTriplesSharedState_ != nullptr);
+  AD_CONTRACT_CHECK(locatedTriplesPerBlock_ != nullptr);
 
   // We previously had `nullptr`s here in unit tests. This is no longer
   // necessary nor allowed.
@@ -79,14 +80,15 @@ IndexScan::IndexScan(QueryExecutionContext* qec,
                      Permutation::Enum permutationType,
                      const SparqlTripleSimple& triple, Graphs graphsToFilter,
                      std::optional<ScanSpecAndBlocks> scanSpecAndBlocks)
-    : IndexScan(qec,
-                qec->getIndex().getImpl().getPermutationPtr(permutationType),
-                qec->locatedTriplesSharedState(), triple,
-                std::move(graphsToFilter), std::move(scanSpecAndBlocks)) {}
+    : IndexScan(
+          qec, qec->getIndex().getImpl().getPermutationPtr(permutationType),
+          qlever::getLocatedTriplesPerBlockForTriple(
+              permutationType, qec->locatedTriplesSharedState(), triple),
+          triple, std::move(graphsToFilter), std::move(scanSpecAndBlocks)) {}
 
 // _____________________________________________________________________________
 IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
-                     LocatedTriplesSharedState locatedTriplesSharedState,
+                     LocatedTriplesPerBlockPtr locatedTriplesPerBlock,
                      const TripleComponent& s, const TripleComponent& p,
                      const TripleComponent& o,
                      std::vector<ColumnIndex> additionalColumns,
@@ -95,7 +97,7 @@ IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
                      bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep)
     : Operation(qec),
       permutation_(std::move(permutation)),
-      locatedTriplesSharedState_(std::move(locatedTriplesSharedState)),
+      locatedTriplesPerBlock_(std::move(locatedTriplesPerBlock)),
       subject_(s),
       predicate_(p),
       object_(o),
@@ -108,7 +110,7 @@ IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
       varsToKeep_{std::move(varsToKeep)} {
   AD_CONTRACT_CHECK(qec != nullptr);
   AD_CONTRACT_CHECK(permutation_ != nullptr);
-  AD_CONTRACT_CHECK(locatedTriplesSharedState_ != nullptr);
+  AD_CONTRACT_CHECK(locatedTriplesPerBlock_ != nullptr);
   std::tie(sizeEstimateIsExact_, sizeEstimate_) = computeSizeEstimate();
   determineMultiplicities();
 }
@@ -261,7 +263,7 @@ std::shared_ptr<QueryExecutionTree>
 IndexScan::makeCopyWithPrefilteredScanSpecAndBlocks(
     ScanSpecAndBlocks scanSpecAndBlocks) const {
   return ad_utility::makeExecutionTree<IndexScan>(
-      getExecutionContext(), permutation_, locatedTriplesSharedState_, subject_,
+      getExecutionContext(), permutation_, locatedTriplesPerBlock_, subject_,
       predicate_, object_, additionalColumns_, additionalVariables_,
       graphsToFilter_, std::move(scanSpecAndBlocks), true, varsToKeep_);
 }
@@ -276,9 +278,9 @@ Result::LazyResult IndexScan::chunkedIndexScan() const {
 
 // _____________________________________________________________________________
 IdTable IndexScan::materializedIndexScan() const {
-  IdTable idTable = permutation().scan(scanSpecAndBlocks_, additionalColumns(),
-                                       cancellationHandle_,
-                                       locatedTriplesState(), getLimitOffset());
+  IdTable idTable = permutation().scan(
+      scanSpecAndBlocks_, additionalColumns(), cancellationHandle_,
+      locatedTriplesPerBlock(), getLimitOffset());
   AD_LOG_DEBUG << "IndexScan result computation done.\n";
   checkCancellation();
   idTable = makeApplyColumnSubset()(std::move(idTable));
@@ -302,16 +304,16 @@ const Permutation& IndexScan::permutation() const {
 }
 
 // _____________________________________________________________________________
-const LocatedTriplesState& IndexScan::locatedTriplesState() const {
-  AD_CONTRACT_CHECK(locatedTriplesSharedState_ != nullptr);
-  return *locatedTriplesSharedState_;
+const LocatedTriplesPerBlock& IndexScan::locatedTriplesPerBlock() const {
+  AD_CONTRACT_CHECK(locatedTriplesPerBlock_ != nullptr);
+  return *locatedTriplesPerBlock_;
 }
 
 // _____________________________________________________________________________
 std::pair<bool, size_t> IndexScan::computeSizeEstimate() const {
   AD_CORRECTNESS_CHECK(_executionContext);
   auto [lower, upper] = permutation().getSizeEstimateForScan(
-      scanSpecAndBlocks_, locatedTriplesState());
+      scanSpecAndBlocks_, locatedTriplesPerBlock());
   // NOTE: Starting from C++20 we could use `std::midpoint` here
   return {lower == upper, lower + (upper - lower) / 2};
 }
@@ -320,7 +322,7 @@ std::pair<bool, size_t> IndexScan::computeSizeEstimate() const {
 size_t IndexScan::getExactSize() const {
   AD_CORRECTNESS_CHECK(_executionContext);
   return permutation().getResultSizeOfScan(scanSpecAndBlocks_,
-                                           locatedTriplesState());
+                                           locatedTriplesPerBlock());
 }
 
 // _____________________________________________________________________________
@@ -340,8 +342,7 @@ void IndexScan::determineMultiplicities() {
       // There are no duplicate triples in RDF and two elements are fixed.
       return {1.0f};
     } else if (numVariables_ == 2) {
-      return idx.getMultiplicities(*getPermutedTriple()[0], permutation(),
-                                   locatedTriplesState());
+      return getMultiplicities(*getPermutedTriple()[0]);
     } else {
       AD_CORRECTNESS_CHECK(numVariables_ == 3);
       return idx.getMultiplicities(permutation());
@@ -396,9 +397,10 @@ IndexScan::getSortedVariableAndMetadataColumnIndexForPrefiltering() const {
 }
 
 // ___________________________________________________________________________
-Permutation::ScanSpecAndBlocks IndexScan::getScanSpecAndBlocks() const {
-  return permutation().getScanSpecAndBlocks(getScanSpecification(),
-                                            locatedTriplesState());
+CompressedRelationReader::ScanSpecAndBlocks IndexScan::getScanSpecAndBlocks()
+    const {
+  return CompressedRelationReader::ScanSpecAndBlocks::withUpdates(
+      getScanSpecification(), locatedTriplesPerBlock());
 }
 
 // _____________________________________________________________________________
@@ -412,7 +414,7 @@ CompressedRelationReader::IdTableGeneratorInputRange IndexScan::getLazyScan(
       getLimitOffset().isUnconstrained() ? std::move(blocks) : std::nullopt;
   auto lazyScanAllCols = permutation().lazyScan(
       scanSpecAndBlocks_, filteredBlocks, additionalColumns(),
-      cancellationHandle_, locatedTriplesState(), getLimitOffset());
+      cancellationHandle_, locatedTriplesPerBlock(), getLimitOffset());
 
   return CompressedRelationReader::IdTableGeneratorInputRange{
       ad_utility::CachingTransformInputRange<
@@ -426,7 +428,7 @@ CompressedRelationReader::IdTableGeneratorInputRange IndexScan::getLazyScan(
 std::optional<Permutation::MetadataAndBlocks> IndexScan::getMetadataForScan()
     const {
   return permutation().getMetadataAndBlocks(scanSpecAndBlocks_,
-                                            locatedTriplesState());
+                                            locatedTriplesPerBlock());
 };
 
 // _____________________________________________________________________________
@@ -747,7 +749,7 @@ std::pair<Result::LazyResult, Result::LazyResult> IndexScan::prefilterTables(
 // _____________________________________________________________________________
 std::unique_ptr<Operation> IndexScan::cloneImpl() const {
   return std::make_unique<IndexScan>(
-      _executionContext, permutation_, locatedTriplesSharedState_, subject_,
+      _executionContext, permutation_, locatedTriplesPerBlock_, subject_,
       predicate_, object_, additionalColumns_, additionalVariables_,
       graphsToFilter_, scanSpecAndBlocks_, scanSpecAndBlocksIsPrefiltered_,
       varsToKeep_);
@@ -772,7 +774,7 @@ IndexScan::makeTreeWithStrippedColumns(
   }
 
   return ad_utility::makeExecutionTree<IndexScan>(
-      _executionContext, permutation_, locatedTriplesSharedState_, subject_,
+      _executionContext, permutation_, locatedTriplesPerBlock_, subject_,
       predicate_, object_, additionalColumns_, additionalVariables_,
       graphsToFilter_, scanSpecAndBlocks_, scanSpecAndBlocksIsPrefiltered_,
       VarsToKeep{std::move(newVariables)});
@@ -799,4 +801,19 @@ std::vector<ColumnIndex> IndexScan::getSubsetForStrippedColumns() const {
     ++idx;
   }
   return result;
+}
+
+// _____________________________________________________________________________
+std::vector<float> IndexScan::getMultiplicities(
+    const TripleComponent& key) const {
+  const auto& idx = getIndex();
+  if (auto keyId = key.toValueId(idx.getVocab(), idx.encodedIriManager())) {
+    auto meta =
+        permutation().getMetadata(keyId.value(), locatedTriplesPerBlock());
+    if (meta.has_value()) {
+      return {meta.value().getCol1Multiplicity(),
+              meta.value().getCol2Multiplicity()};
+    }
+  }
+  return {1.0f, 1.0f};
 }

@@ -971,11 +971,11 @@ TEST(CompressedRelationReader, getResultSizeImpl) {
     dt.insertTriples(handle, {IdTriple{{I(0), I(1), I(2), I(3)}},
                               IdTriple{{I(0), I(4), I(5), I(3)}}});
   });
-  auto sharedLocatedTriplesSnapshot =
+  auto locatedTriplesSharedState =
       deltaTriplesManager.getCurrentLocatedTriplesSharedState();
-  const auto& locatedTriplesSnapshot = *sharedLocatedTriplesSnapshot;
+  const auto& locatedTriplesState = *locatedTriplesSharedState;
   auto& impl = index.getImpl();
-  auto expectResultSizes = [&impl, &locatedTriplesSnapshot](
+  auto expectResultSizes = [&impl, &locatedTriplesState](
                                Permutation::Enum p,
                                const ScanSpecification& scanSpec, size_t lower,
                                size_t upper, size_t exact,
@@ -984,16 +984,16 @@ TEST(CompressedRelationReader, getResultSizeImpl) {
     auto loc = generateLocationTrace(sourceLocation);
     auto& perm = impl.getPermutation(p);
     auto& reader = perm.reader();
-    auto augmentedBlocks =
-        perm.getAugmentedMetadataForPermutation(locatedTriplesSnapshot);
-    auto& ltpb = locatedTriplesSnapshot.getLocatedTriplesForPermutation<false>(
+    auto scanSpecAndBlocks = ScanSpecAndBlocks::withUpdates(
+        scanSpec,
+        locatedTriplesState.getLocatedTriplesForPermutation<false>(p));
+    auto& ltpb = locatedTriplesState.getLocatedTriplesForPermutation<false>(
         perm.permutation());
-    auto [actual_lower, actual_upper] = reader.getSizeEstimateForScan(
-        ScanSpecAndBlocks{scanSpec, augmentedBlocks}, ltpb);
+    auto [actual_lower, actual_upper] =
+        reader.getSizeEstimateForScan(scanSpecAndBlocks, ltpb);
     EXPECT_THAT(actual_lower, testing::Eq(lower));
     EXPECT_THAT(actual_upper, testing::Eq(upper));
-    auto actual_exact = reader.getResultSizeOfScan(
-        ScanSpecAndBlocks{scanSpec, augmentedBlocks}, ltpb);
+    auto actual_exact = reader.getResultSizeOfScan(scanSpecAndBlocks, ltpb);
     EXPECT_THAT(actual_exact, testing::Eq(exact));
   };
   // The Scans request all triples of the one and only block.
@@ -1035,12 +1035,12 @@ TEST(CompressedRelationReader, getFirstAndLastTripleIgnoringGraph) {
       "<a> <b> <d> <g1> . <a> <b> <g> <g2> . <a> <b> <k> <g3> .";
   auto index = ad_utility::testing::makeTestIndex(
       "getFirstAndLastTripleIgnoringGraph", std::move(testIndexConfig));
-  auto currentSnapshot =
+  auto currentLocatedTriplesSharedState =
       index.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
   auto permutationEnum = Permutation::Enum::SPO;
-  const auto& permutation = index.getImpl().getPermutation(permutationEnum);
   const auto& locatedTriplesPerBlock =
-      currentSnapshot->getLocatedTriplesForPermutation<false>(permutationEnum);
+      currentLocatedTriplesSharedState->getLocatedTriplesForPermutation<false>(
+          permutationEnum);
 
   auto getId = [&index](std::string_view iri) {
     return TripleComponent{ad_utility::triple_component::Iri::fromIriref(iri)}
@@ -1056,7 +1056,7 @@ TEST(CompressedRelationReader, getFirstAndLastTripleIgnoringGraph) {
   auto g2 = getId("<g2>");
   auto g3 = getId("<g3>");
 
-  auto getTriples = [&permutation, &currentSnapshot, permutationEnum, &index,
+  auto getTriples = [&currentLocatedTriplesSharedState, permutationEnum, &index,
                      &locatedTriplesPerBlock](std::optional<Id> col0,
                                               std::optional<Id> col1,
                                               std::optional<Id> graphId) {
@@ -1068,9 +1068,11 @@ TEST(CompressedRelationReader, getFirstAndLastTripleIgnoringGraph) {
         graphId.has_value() ? ScanSpecification::GraphFilter::Whitelist(
                                   {std::move(graphId).value()})
                             : ScanSpecification::GraphFilter::All()};
-    CompressedRelationReader::ScanSpecAndBlocks metadataAndBlocks{
-        std::move(scanSpecification),
-        permutation.getAugmentedMetadataForPermutation(*currentSnapshot)};
+    CompressedRelationReader::ScanSpecAndBlocks metadataAndBlocks =
+        CompressedRelationReader::ScanSpecAndBlocks::withUpdates(
+            std::move(scanSpecification),
+            currentLocatedTriplesSharedState
+                ->getLocatedTriplesForPermutation<false>(permutationEnum));
     const auto& reader =
         index.getImpl().getPermutation(permutationEnum).reader();
     return reader.getFirstAndLastTripleIgnoringGraph(metadataAndBlocks,
@@ -1122,19 +1124,20 @@ TEST(CompressedRelationReader, ensureDummyBlockWith6ColumnsDoesntCauseIssues) {
         deltaTriples.insertTriples(cancellationHandle,
                                    {IdTriple{{id, id, id, id}}});
       });
-  auto sharedLocatedTriplesSnapshot =
+  auto locatedTriplesSharedState =
       index.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
   for (bool usePatternPermutation : {false, true}) {
     auto permutationEnum =
         usePatternPermutation ? Permutation::Enum::PSO : Permutation::Enum::SPO;
-    const auto& permutation = index.getImpl().getPermutation(permutationEnum);
+    const auto& locatedTriples =
+        locatedTriplesSharedState->getLocatedTriplesForPermutation<false>(
+            permutationEnum);
 
     ScanSpecification scanSpecification{std::nullopt, std::nullopt,
                                         std::nullopt};
-    CompressedRelationReader::ScanSpecAndBlocks metadataAndBlocks{
-        std::move(scanSpecification),
-        permutation.getAugmentedMetadataForPermutation(
-            *sharedLocatedTriplesSnapshot)};
+    auto metadataAndBlocks =
+        CompressedRelationReader::ScanSpecAndBlocks::withUpdates(
+            std::move(scanSpecification), locatedTriples);
 
     std::vector<ColumnIndex> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
     if (usePatternPermutation) {
@@ -1147,7 +1150,7 @@ TEST(CompressedRelationReader, ensureDummyBlockWith6ColumnsDoesntCauseIssues) {
           index.getImpl()
               .getPermutation(permutationEnum)
               .lazyScan(metadataAndBlocks, std::nullopt, additionalColumns,
-                        cancellationHandle, *sharedLocatedTriplesSnapshot);
+                        cancellationHandle, locatedTriples);
       for (const IdTable& block : blocks) {
         EXPECT_EQ(block.numColumns(), 3 + additionalColumns.size());
       }

@@ -296,7 +296,7 @@ void MaterializedViewWriter::computeResultAndWritePermutation() const {
 MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
     : onDiskBase_{std::move(onDiskBase)},
       name_{std::move(name)},
-      locatedTriplesState_{makeEmptyLocatedTriplesState()} {
+      locatedTriplesPerBlock_{makeEmptyLocatedTriplesPerBlock()} {
   AD_CORRECTNESS_CHECK(onDiskBase_ != "",
                        "The index base filename was not set.");
   throwIfInvalidName(name_);
@@ -517,22 +517,17 @@ void MaterializedViewsManager::setOnDiskBase(const std::string& onDiskBase) {
 }
 
 // _____________________________________________________________________________
-LocatedTriplesSharedState MaterializedView::locatedTriplesState() const {
-  return {locatedTriplesState_};
+std::shared_ptr<const LocatedTriplesPerBlock>
+MaterializedView::locatedTriplesPerBlock() const {
+  return locatedTriplesPerBlock_;
 }
 
 // _____________________________________________________________________________
-std::shared_ptr<LocatedTriplesState>
-MaterializedView::makeEmptyLocatedTriplesState() const {
-  LocatedTriplesPerBlockAllPermutations<false> emptyLocatedTriples;
-  emptyLocatedTriples.at(static_cast<size_t>(permutation_->permutation()))
-      .setOriginalMetadata(permutation_->metaData().blockDataShared());
-  LocatedTriplesPerBlockAllPermutations<true> emptyInternalLocatedTriples;
-  LocalVocab emptyVocab;
-
-  return std::make_shared<LocatedTriplesState>(
-      emptyLocatedTriples, emptyInternalLocatedTriples,
-      emptyVocab.getLifetimeExtender(), 0);
+std::shared_ptr<LocatedTriplesPerBlock>
+MaterializedView::makeEmptyLocatedTriplesPerBlock() const {
+  auto ltpb = std::make_shared<LocatedTriplesPerBlock>();
+  ltpb->setOriginalMetadata(permutation_->metaData().blockDataShared());
+  return ltpb;
 }
 
 // _____________________________________________________________________________
@@ -549,9 +544,8 @@ std::shared_ptr<IndexScan> MaterializedView::makeIndexScan(
   // query.
   auto scanTriple = makeScanConfig(viewQuery);
   return std::make_shared<IndexScan>(
-      qec, permutation_, LocatedTriplesSharedState{locatedTriplesState_},
-      std::move(scanTriple), IndexScan::Graphs::All(), std::nullopt,
-      viewQuery.getVarsToKeep());
+      qec, permutation_, locatedTriplesPerBlock_, std::move(scanTriple),
+      IndexScan::Graphs::All(), std::nullopt, viewQuery.getVarsToKeep());
 }
 
 // _____________________________________________________________________________

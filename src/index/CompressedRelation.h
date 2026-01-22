@@ -609,6 +609,12 @@ class CompressedRelationReader {
     ScanSpecAndBlocks(ScanSpecification scanSpec,
                       const BlockMetadataRanges& blockMetadataRanges);
 
+    // Create a new `ScanSpecAndBlocks` with the current block metadata changed
+    // through updates.
+    static ScanSpecAndBlocks withUpdates(
+        ScanSpecification scanSpec,
+        const LocatedTriplesPerBlock& locatedTriples);
+
     // Direct view access via `ql::views::join` over all
     // `CompressedBlockMetadata` values contained in `BlockMetadatatRanges
     // blockMetadata_`.
