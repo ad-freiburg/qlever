@@ -923,6 +923,7 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream(
   AD_LOG_DEBUG << "Done creating readable result.\n";
 }
 
+// _____________________________________________________________________________
 // Convert a single ID to an XML binding of the given `variable`.
 template <typename IndexType, typename LocalVocabType>
 static std::string idToXMLBinding(std::string_view variable, Id id,
