@@ -177,7 +177,7 @@ int main(int argc, char** argv) {
           &RuntimeParameters::materializedViewWriterMemory_>(),
       "Memory limit for sorting rows during the writing of materialized "
       "views.");
-  add("preload-materialized-view",
+  add("preload-materialized-views,l",
       po::value<std::vector<std::string>>(&preloadMaterializedViews)
           ->multitoken(),
       "The names of materialized views to be loaded automatically on server "
