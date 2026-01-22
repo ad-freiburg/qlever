@@ -95,7 +95,9 @@ MaterializedViewWriter::getIdTableColumnNamesAndPermutation() const {
   // Column information for the columns selected by the user's query.
   auto existingCols = ::ranges::to<std::vector<ColumnNameAndIndex>>(
       targetVarsAndCols | ql::views::transform([](const auto& opt) {
-        AD_CONTRACT_CHECK(opt.has_value());
+        AD_CONTRACT_CHECK(
+            opt.has_value(),
+            "Please ensure that all variables in your SELECT are bound.");
         return ColumnNameAndIndex{opt.value().variable_,
                                   opt.value().columnIndex_};
       }));
