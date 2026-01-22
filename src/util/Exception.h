@@ -19,6 +19,21 @@
 
 // Helper macro that is required if "x" itself is another macro.
 // It expands "x" before it turns it into a string.
+// Here's an example how it works:
+//
+// #include <iostream>
+//
+// #define AD_STRINGIFY(x) #x
+// #define TEST(x) std::cout << (x) << std::endl;
+// #define TEST1(x) TEST(#x)
+// #define TEST2(x) TEST(AD_STRINGIFY(x))
+// #define MACRO_THINGY lol
+//
+//
+// int main() {
+//     TEST1(MACRO_THINGY); // -> prints MACRO_THINGY
+//     TEST2(MACRO_THINGY); // -> prints lol
+// }
 #define AD_STRINGIFY(x) #x
 
 // -------------------------------------------
