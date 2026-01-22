@@ -45,26 +45,28 @@ class ConstructTripleGenerator {
 
     // this is a pipeline which transforms the rows of the result table
     // (`table.view_`) using the triple patterns of the CONSTRUCT-clause
-    return ql::views::join(ql::views::transform(
-        std::move(table.view_),
-        [this, tableWithVocab, currentRowOffset](uint64_t rowIdx) {
-          ConstructQueryExportContext context{rowIdx,
-                                              tableWithVocab.idTable(),
-                                              tableWithVocab.localVocab(),
-                                              variableColumns_.get(),
-                                              index_.get(),
-                                              currentRowOffset};
+    auto outerTransformer = [this, tableWithVocab,
+                             currentRowOffset](uint64_t rowIdx) {
+      ConstructQueryExportContext context{rowIdx,
+                                          tableWithVocab.idTable(),
+                                          tableWithVocab.localVocab(),
+                                          variableColumns_.get(),
+                                          index_.get(),
+                                          currentRowOffset};
 
-          // Transform patterns into triples and filter out UNDEF results.
-          return ql::views::filter(
-              ql::views::transform(
-                  constructTriples_,
-                  [this, context = std::move(context)](const auto& triple) {
-                    cancellationHandle_->throwIfCancelled();
-                    return this->evaluateTriple(triple, context);
-                  }),
-              [](const StringTriple& t) { return !t.isEmpty(); });
-        }));
+      // Transform patterns into triples and filter out UNDEF results.
+      auto innerTransformer =
+          [this, context = std::move(context)](const auto& triple) {
+            cancellationHandle_->throwIfCancelled();
+            return this->evaluateTriple(triple, context);
+          };
+      auto filterer = [](const StringTriple& t) { return !t.isEmpty(); };
+
+      return constructTriples_ | ql::views::transform(innerTransformer) |
+             ql::views::filter(filterer);
+    };
+    return table.view_ | ql::views::transform(outerTransformer) |
+           ql::views::join;
   }
 
  private:
