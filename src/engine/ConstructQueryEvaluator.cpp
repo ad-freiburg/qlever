@@ -7,6 +7,7 @@
 #include "engine/ConstructQueryEvaluator.h"
 
 #include "engine/ExportQueryExecutionTrees.h"
+#include "util/TypeTraits.h"
 
 // _____________________________________________________________________________
 std::optional<std::string> ConstructQueryEvaluator::evaluate(const Iri& iri) {
@@ -86,7 +87,7 @@ std::optional<std::string> ConstructQueryEvaluator::evaluate(
         } else if constexpr (std::is_same_v<T, Literal>) {
           return ConstructQueryEvaluator::evaluate(arg, posInTriple);
         } else {
-          AD_FAIL();
+          static_assert(ad_utility::alwaysFalse<T>);
         }
       },
       term);
