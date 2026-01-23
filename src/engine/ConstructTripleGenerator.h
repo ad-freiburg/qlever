@@ -78,7 +78,7 @@ class ConstructTripleGenerator {
       return constructTriples_ |
              ql::views::transform(
                  evaluateConstructTriplesForRowFromWhereClause) |
-             ql::views::filter(&StringTriple::isEmpty);
+             ql::views::filter(std::not_fn(&StringTriple::isEmpty));
     };
     return table.view_ | ql::views::transform(outerTransformer) |
            ql::views::join;
