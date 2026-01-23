@@ -16,11 +16,9 @@
 #include "parser/data/ConstructQueryExportContext.h"
 #include "util/CancellationHandle.h"
 
-/**
- * ConstructTripleGenerator: generates StringTriples from
- * query results. It manages the global row offset and transforms result tables
- * and rows into a single continuous range of triples.
- */
+// ConstructTripleGenerator: generates StringTriples from
+// query results. It manages the global row offset and transforms result tables
+// and rows into a single continuous range of triples.
 class ConstructTripleGenerator {
  public:
   using CancellationHandle = ad_utility::SharedCancellationHandle;
