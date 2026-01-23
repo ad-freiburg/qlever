@@ -186,6 +186,8 @@ class Index {
 
   bool& loadAllPermutations();
 
+  bool& doNotLoadPermutations();
+
   void setKeepTempFiles(bool keepTempFiles);
 
   ad_utility::MemorySize& memoryLimitIndexBuilding();

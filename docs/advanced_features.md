@@ -58,7 +58,7 @@ This query will yield a JSON response that features:
 
 The name of an index is the name of the input `.nt` file (and wordsfile for the
 text index), but can also be specified manually while building an index.
-Therefore, IndexbuilderMain takes two optional arguments: `--text-index-name` (`-T`)
+Therefore, qlever-index takes two optional arguments: `--text-index-name` (`-T`)
 and `--kb-index-name` (`-K`).
 
 

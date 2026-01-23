@@ -40,12 +40,12 @@ either add `./build/` to your path or prefix all commands with `./` and that
 
 * Without text collection:
 
-      ./ServerMain -i /path/to/myindex -p <PORT>
+      ./qlever-server -i /path/to/myindex -p <PORT>
 
 
 * With text collection:
 
-      ./ServerMain -i /path/to/myindex -p <PORT> -t
+      ./qlever-server -i /path/to/myindex -p <PORT> -t
 
 Depending on if you built the index with the -a version, two or six index permutations will be registered.
 For some data this can be a significant difference in memory consumption.
@@ -53,4 +53,4 @@ For some data this can be a significant difference in memory consumption.
 If you built an index using the -a option, make sure to include it at startup
 (otherwise only 2 of the 6 permutations will be registered).
 
-    ./ServerMain -i /path/to/myindex -p <PORT> -t -a
+    ./qlever-server -i /path/to/myindex -p <PORT> -t -a
