@@ -70,7 +70,7 @@ std::optional<std::string> ConstructQueryEvaluator::evaluate(
 }
 
 // _____________________________________________________________________________
-std::optional<std::string> ConstructQueryEvaluator::evaluate(
+std::optional<std::string> ConstructQueryEvaluator::evaluateTerm(
     const GraphTerm& term, const ConstructQueryExportContext& context,
     PositionInTriple posInTriple) {
   return std::visit(
@@ -101,9 +101,9 @@ ConstructQueryEvaluator::StringTriple ConstructQueryEvaluator::evaluateTriple(
   // special cases (like blank node generation or IRI escaping).
   using enum PositionInTriple;
 
-  auto subject = evaluate(triple[0], context, SUBJECT);
-  auto predicate = evaluate(triple[1], context, PREDICATE);
-  auto object = evaluate(triple[2], context, OBJECT);
+  auto subject = evaluateTerm(triple[0], context, SUBJECT);
+  auto predicate = evaluateTerm(triple[1], context, PREDICATE);
+  auto object = evaluateTerm(triple[2], context, OBJECT);
 
   // In SPARQL CONSTRUCT, if any part of the triple (S, P, or O) evaluates
   // to UNDEF, the entire triple is omitted from the result.

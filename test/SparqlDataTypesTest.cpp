@@ -43,7 +43,7 @@ ContextWrapper prepareContext() { return {}; }
 
 namespace {
 constexpr auto evaluate = [](auto&&... args) {
-  return ConstructQueryEvaluator::evaluate(AD_FWD(args)...);
+  return ConstructQueryEvaluator::evaluateTerm(AD_FWD(args)...);
 };
 }  // namespace
 
