@@ -34,7 +34,7 @@ auto vectorsEqual = [](const auto& compactVector, const auto& compareVector) {
   }
 };
 
-// Type traits helper to get test data for each type
+// Type traits helper to get test data for each type.
 template <typename T>
 struct TestData;
 
