@@ -73,10 +73,9 @@ class ConstructTripleGenerator {
             cancellationHandle_->throwIfCancelled();
             return ConstructQueryEvaluator::evaluateTriple(triple, context);
           };
-      auto filterer = [](const StringTriple& t) { return !t.isEmpty(); };
 
       return constructTriples_ | ql::views::transform(innerTransformer) |
-             ql::views::filter(filterer);
+             ql::views::filter(&StringTriple::isEmpty);
     };
     return table.view_ | ql::views::transform(outerTransformer) |
            ql::views::join;
