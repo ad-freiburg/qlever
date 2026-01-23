@@ -846,7 +846,7 @@ std::string IndexImpl::getFilenameForPermutation(const Permutation& permutation,
 // _____________________________________________________________________________
 CompressedRelationWriter::WriterAndCallback IndexImpl::getWriterAndCallback(
     IndexMetaDataMmapDispatcher::WriteType& metaData, size_t numColumns,
-    const std::string fileName) const {
+    const std::string& fileName) const {
   static_assert(IndexMetaDataMmapDispatcher::WriteType::isMmapBased_);
   metaData.setup(fileName + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
 
@@ -869,9 +869,10 @@ IndexImpl::createPermutationPairImpl(size_t numColumns,
                                      T&& sortedTriples,
                                      Permutation::KeyOrder permutation,
                                      Callbacks&&... perTripleCallbacks) {
-  IndexMetaDataMmapDispatcher::WriteType metaData1, metaData2;
+  IndexMetaDataMmapDispatcher::WriteType metaData1;
   auto writerAndCallback1 =
       getWriterAndCallback(metaData1, numColumns, fileName1);
+  IndexMetaDataMmapDispatcher::WriteType metaData2;
   auto writerAndCallback2 =
       getWriterAndCallback(metaData2, numColumns, fileName2);
 
@@ -1888,21 +1889,15 @@ void IndexImpl::setPrefixesForEncodedValues(
 }
 // _____________________________________________________________________________
 void IndexImpl::writePatternsToFile() const {
-  // Write the subjectToPatternMap.
-  ad_utility::serialization::FileWriteSerializer patternWriter{
-      getPatternFilename()};
-
-  // Write the statistics and the patterns.
   PatternStatistics statistics;
-
   statistics.numDistinctSubjectPredicatePairs_ =
       numDistinctSubjectPredicatePairs_;
   statistics.avgNumDistinctSubjectsPerPredicate_ =
       avgNumDistinctSubjectsPerPredicate_;
   statistics.avgNumDistinctPredicatesPerSubject_ =
       avgNumDistinctPredicatesPerSubject_;
-  patternWriter << statistics;
-  patternWriter << patterns_;
+  PatternCreator::writePatternsToFile(getPatternFilename(), patterns_,
+                                      statistics);
 }
 
 // _____________________________________________________________________________

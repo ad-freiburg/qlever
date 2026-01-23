@@ -553,11 +553,11 @@ class IndexImpl {
   std::string getFilenameForPermutation(const Permutation& permutation,
                                         bool internal) const;
 
-  // Create a `CompressedRelationWriter` and a callback that writes triples to
-  // the provided metadata.
+  // Create a `CompressedRelationWriter` and a callback that adds the metadata
+  // of large relations to the `metaData` object.
   CompressedRelationWriter::WriterAndCallback getWriterAndCallback(
       IndexMetaDataMmapDispatcher::WriteType& metaData, size_t numColumns,
-      std::string fileName) const;
+      const std::string& fileName) const;
 
   // TODO<joka921> Get rid of the `numColumns` by including them into the
   // `sortedTriples` argument.
