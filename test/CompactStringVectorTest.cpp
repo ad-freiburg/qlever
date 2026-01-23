@@ -297,12 +297,12 @@ TYPED_TEST(CompactVectorOfStringsFixture, cloneAndRemap) {
   CompactVector original;
   // Try with empty vector.
   auto copy0 = original.cloneAndRemap(std::identity{});
-  EXPECT_TRUE(::ranges::equal(original, copy0));
+  EXPECT_TRUE(ql::ranges::equal(original, copy0, ql::ranges::equal));
 
   original.build(input);
 
   auto copy1 = original.cloneAndRemap(std::identity{});
-  EXPECT_TRUE(::ranges::equal(original, copy1));
+  EXPECT_TRUE(ql::ranges::equal(original, copy1, ql::ranges::equal));
 
   auto mappingFunction = [](const auto& x) { return x + 1; };
 
@@ -316,6 +316,6 @@ TYPED_TEST(CompactVectorOfStringsFixture, cloneAndRemap) {
     ql::ranges::for_each(
         modifiedReference.begin(), modifiedReference.end(),
         [&mappingFunction](auto& value) { value = mappingFunction(value); });
-    EXPECT_TRUE(::ranges::equal(modifiedReference, element));
+    EXPECT_TRUE(ql::ranges::equal(modifiedReference, element));
   }
 }

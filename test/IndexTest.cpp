@@ -779,13 +779,17 @@ TEST(IndexImpl, createPermutation) {
   Permutation permutation{Permutation::PSO,
                           ad_utility::makeUnlimitedAllocator<Id>()};
   size_t uniquePredicates = index.createPermutation(
-      4, ad_utility::InputRangeTypeErased{tables}, permutation, false);
+      4,
+      ad_utility::InputRangeTypeErased{std::array<IdTableStatic<0>, 2>{
+          tables.at(0).clone(), tables.at(1).clone()}},
+      permutation, false);
   EXPECT_EQ(uniquePredicates, 3);
   EXPECT_TRUE(std::filesystem::exists(onDiskBase + ".index.pso"));
   EXPECT_TRUE(std::filesystem::exists(onDiskBase + ".index.pso.meta"));
 
   size_t uniqueInternalPredicates = index.createPermutation(
-      4, ad_utility::InputRangeTypeErased{tables}, permutation, true);
+      4, ad_utility::InputRangeTypeErased{std::move(tables)}, permutation,
+      true);
   EXPECT_EQ(uniqueInternalPredicates, 3);
   EXPECT_TRUE(std::filesystem::exists(onDiskBase + ".internal.index.pso"));
   EXPECT_TRUE(std::filesystem::exists(onDiskBase + ".internal.index.pso.meta"));
@@ -855,5 +859,6 @@ TEST(IndexImpl, writePatternsToFile) {
             avgNumDistinctPredicatesPerSubject);
   EXPECT_EQ(index.numDistinctSubjectPredicatePairs_,
             numDistinctSubjectPredicatePairs);
-  EXPECT_TRUE(::ranges::equal(CompactVectorOfStrings{data}, result));
+  EXPECT_TRUE(ql::ranges::equal(CompactVectorOfStrings{data}, result,
+                                ql::ranges::equal));
 }
