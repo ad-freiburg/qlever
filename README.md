@@ -46,7 +46,7 @@ or if there is anything else you want to tell us, please [open an
 issue](https://github.com/ad-freiburg/qlever/issues) or [open a
 discussion](https://github.com/ad-freiburg/qlever/discussions).
 
-# Quickstart
+# Quickstart and documentation
 
 Use QLever via the `qlever` command-line interface (CLI),  which can be
 installed via `pip install qlever`. It is self-documenting via `qlever --help`
@@ -63,6 +63,8 @@ you see fit. Every option from the `Qleverfile` can also be set (and
 overridden) via a command-line option with the same name, see `qlever <command>
 --help`. A detailed explanation of all `Qleverfile` options may also be found at <https://docs.qlever.dev/qleverfile/>. 
 
+For the official documentation, see <https://docs.qlever.dev>. Additional
+information can be found in the [QLever Wiki](https://github.com/ad-freiburg/qlever/wiki).
 
 # Using QLever without the `qlever` CLI
 
@@ -83,12 +85,3 @@ QLever can also be used as an embedded database, that is, without the standard
 client-server setup but running it in-process inside your own C++ program.
 See https://github.com/ad-freiburg/qlever/pull/2100 for details and a link to a
 small example program.
-
-# Documentation
-
-QLever's main documentation can be browsed at [docs.qlever.dev](https://docs.qlever.dev/) ([GitHub repository](https://github.com/qlever-dev/qlever-docs)). In particular, it explains the set up of QLever as well as its advanced features. 
-However, for the RDF/SPARQL specialist not interested in additional features, the self-documenting `qlever` CLI should be sufficient already.
-
-Furthermore, the [Qlever Wiki](https://github.com/ad-freiburg/qlever/wiki) provides
-high-level descriptions of how Qlever works internally, as well as performance evaluations,
-experiences with some concrete datasets, and further details.
