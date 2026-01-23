@@ -34,7 +34,7 @@ class ConstructTripleGenerator {
                            const VariableToColumnMap& variableColumns,
                            const Index& index,
                            CancellationHandle cancellationHandle)
-      : constructTriples_(std::move(constructTriples)),
+      : templateTriples_(std::move(constructTriples)),
         result_(std::move(result)),
         variableColumns_(variableColumns),
         index_(index),
@@ -81,7 +81,7 @@ class ConstructTripleGenerator {
       // Apply the transformer from above and filter out invalid evaluations
       // (which are returned as empty `StringTriples` from
       // `evaluateConstructTripleForRowFromWhereClause`).
-      return constructTriples_ |
+      return templateTriples_ |
              ql::views::transform(
                  evaluateConstructTripleForRowFromWhereClause) |
              ql::views::filter(std::not_fn(&StringTriple::isEmpty));
@@ -100,8 +100,14 @@ class ConstructTripleGenerator {
       uint64_t& resultSize, CancellationHandle cancellationHandle);
 
  private:
-  Triples constructTriples_;
+  // triple templates contained in the graph template
+  // (the CONSTRUCT-clause of the CONSTRUCt-query) of the CONSTRUCT-query.
+  Triples templateTriples_;
+  // wrapper around the result-table obtained from processing the
+  // WHERE-clause of the CONSTRUCT-query.
   std::shared_ptr<const Result> result_;
+  // map from Variables to the column idx of the `IdTable` (needed for fetching
+  // the value of a Variable for a specific row of the `IdTable`).
   std::reference_wrapper<const VariableToColumnMap> variableColumns_;
   std::reference_wrapper<const Index> index_;
   CancellationHandle cancellationHandle_;
