@@ -8,6 +8,7 @@
 
 #include "engine/ExportQueryExecutionTrees.h"
 
+// _____________________________________________________________________________
 ad_utility::InputRangeTypeErased<QueryExecutionTree::StringTriple>
 ConstructTripleGenerator::generateStringTriples(
     const QueryExecutionTree& qet,
