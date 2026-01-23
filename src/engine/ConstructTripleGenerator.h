@@ -51,44 +51,7 @@ class ConstructTripleGenerator {
   // result-table row (triple-patterns are the triples in the CONSTRUCT-clause
   // of a CONSTRUCT-query). The following pipeline takes place conceptually:
   // result-table -> result-table Rows -> Triple Patterns -> StringTriples
-  auto generateStringTriplesForResultTable(TableWithRange table) {
-    const auto tableWithVocab = table.tableWithVocab_;
-    size_t currentRowOffset = rowOffset_;
-    rowOffset_ += tableWithVocab.idTable().numRows();
-
-    // For a single row from the WHERE clause (specified by `idTable` and
-    // `rowIdx` stored in the `context`), evaluate all triples in the CONSTRUCT
-    // template.
-    auto outerTransformer = [this, tableWithVocab,
-                             currentRowOffset](uint64_t rowIdx) {
-      ConstructQueryExportContext context{rowIdx,
-                                          tableWithVocab.idTable(),
-                                          tableWithVocab.localVocab(),
-                                          variableColumns_.get(),
-                                          index_.get(),
-                                          currentRowOffset};
-
-      // Transform a single template triple from the CONSTRUCT-template into
-      // a `StringTriple` for a single row of the WHERE clause (specified by
-      // `idTable` and `rowIdx` stored in `context`).
-      auto evaluateConstructTripleForRowFromWhereClause =
-          [this, context = std::move(context)](const auto& templateTriple) {
-            cancellationHandle_->throwIfCancelled();
-            return ConstructQueryEvaluator::evaluateTriple(templateTriple,
-                                                           context);
-          };
-
-      // Apply the transformer from above and filter out invalid evaluations
-      // (which are returned as empty `StringTriples` from
-      // `evaluateConstructTripleForRowFromWhereClause`).
-      return templateTriples_ |
-             ql::views::transform(
-                 evaluateConstructTripleForRowFromWhereClause) |
-             ql::views::filter(std::not_fn(&StringTriple::isEmpty));
-    };
-    return table.view_ | ql::views::transform(outerTransformer) |
-           ql::views::join;
-  }
+  auto generateStringTriplesForResultTable(TableWithRange table);
 
   // _____________________________________________________________________________
   // Helper function that generates the result of a CONSTRUCT query as a range
