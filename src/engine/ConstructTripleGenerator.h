@@ -28,6 +28,7 @@ class ConstructTripleGenerator {
   template <class T>
   using InputRangeTypeErased = ad_utility::InputRangeTypeErased<T>;
 
+  // _____________________________________________________________________________
   ConstructTripleGenerator(Triples constructTriples,
                            std::shared_ptr<const Result> result,
                            const VariableToColumnMap& variableColumns,
