@@ -344,7 +344,7 @@ std::optional<DateYearOrDuration> DateYearOrDuration::convertToXsdDate(
 
 // _____________________________________________________________________________
 #ifndef REDUCED_FEATURE_SET_FOR_CPP17
-void updatePassedTimes(const Date& date1, const Date& date2, int& daysPassed,
+void updatePassedTimes(const Date& date1, const Date& date2, long& daysPassed,
                        int& hoursPassed, int& minutesPassed,
                        double& secondsPassed) {
   // helper function for Subtraction
@@ -406,9 +406,10 @@ void updatePassedTimes(const Date& date1, const Date& date2, int& daysPassed,
       secondsPassed = 60.0 - second2;
       minutesPassed =
           60 -
-          (minute2 + 1 * (secondsPassed >
-                          0.0));  // we add 1 because the seconds added a minute
-      hoursPassed = 24 - (hour2 + 1 * (minutesPassed > 0));
+          (minute2 + (secondsPassed > 0.0
+                          ? 1
+                          : 0));  // we add 1 because the seconds added a minute
+      hoursPassed = 24 - (hour2 + (minutesPassed > 0 ? 1 : 0));
     }
   }
 }
@@ -428,7 +429,7 @@ DateYearOrDuration DateYearOrDuration::operator-(
         std::chrono::year_month_day{std::chrono::year(otherDate.getYear()) /
                                     otherDate.getMonth() / otherDate.getDay()};
 
-    int daysPassed =
+    long daysPassed =
         (std::chrono::sys_days{date1} - std::chrono::sys_days{date2}).count();
     int hoursPassed = 0;
     int minutesPassed = 0;

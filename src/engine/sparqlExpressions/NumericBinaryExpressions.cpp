@@ -40,8 +40,6 @@ NARY_EXPRESSION(DivideExpressionByZeroIsNan, 2,
 using Add = MakeNumericExpression<std::plus<>>;
 NARY_EXPRESSION(AddExpression, 2, FV<Add, NumericValueGetter>);
 
-// using Subtract = MakeNumericExpression<std::minus<>>;
-// NARY_EXPRESSION(SubtractExpression, 2, FV<Subtract, NumericValueGetter>);
 // _____________________________________________________________________________
 // Subtract.
 struct SubtractImpl {
