@@ -855,5 +855,5 @@ TEST(IndexImpl, writePatternsToFile) {
             avgNumDistinctPredicatesPerSubject);
   EXPECT_EQ(index.numDistinctSubjectPredicatePairs_,
             numDistinctSubjectPredicatePairs);
-  EXPECT_TRUE(ql::ranges::equal(CompactVectorOfStrings{data}, result));
+  EXPECT_TRUE(::ranges::equal(CompactVectorOfStrings{data}, result));
 }

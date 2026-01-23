@@ -217,8 +217,8 @@ TYPED_TEST(CompactVectorOfStringsFixture, MoveIntoEmptyWriter) {
 // Test the special case of move-assigning a `CompactStringVectorWriter` where
 // the target of the move has already been written to.
 TYPED_TEST(CompactVectorOfStringsFixture, MoveIntoFullWriter) {
-  const auto& input = this->input_;
-  const auto& input1 = this->input1_;
+  const auto& input1 = this->input_;
+  const auto& input2 = this->input1_;
   using CompactVector = typename TestFixture::CompactVector;
 
   const std::string filename = "_writerTest1029348A.dat";
@@ -226,21 +226,21 @@ TYPED_TEST(CompactVectorOfStringsFixture, MoveIntoFullWriter) {
   {
     // Move-assign and move-construct before pushing anything.
     typename CompactVector::Writer writer{filename};
-    for (const auto& s : input) {
+    for (const auto& s : input1) {
       writer.push(s.data(), s.size());
     }
 
     typename CompactVector::Writer writer2{filename2};
-    AD_CORRECTNESS_CHECK(input.size() > 1);
     AD_CORRECTNESS_CHECK(input1.size() > 1);
-    auto& fst = input1.at(0);
+    AD_CORRECTNESS_CHECK(input2.size() > 1);
+    auto& fst = input2.at(0);
     writer2.push(fst.data(), fst.size());
 
     // Move the writer, both of the involved writers already have been written
     // to.
     writer = std::move(writer2);
-    for (size_t i = 1; i < input1.size(); ++i) {
-      auto& el = input1.at(i);
+    for (size_t i = 1; i < input2.size(); ++i) {
+      auto& el = input2.at(i);
       writer.push(el.data(), el.size());
     }
   }
@@ -249,10 +249,10 @@ TYPED_TEST(CompactVectorOfStringsFixture, MoveIntoFullWriter) {
   ad_utility::serialization::FileReadSerializer ser{filename};
   ser >> compactVector;
 
-  vectorsEqual(input, compactVector);
+  vectorsEqual(input1, compactVector);
   ad_utility::serialization::FileReadSerializer ser2{filename2};
   ser2 >> compactVector;
-  vectorsEqual(input1, compactVector);
+  vectorsEqual(input2, compactVector);
 
   ad_utility::deleteFile(filename);
   ad_utility::deleteFile(filename2);
@@ -298,25 +298,25 @@ TYPED_TEST(CompactVectorOfStringsFixture, cloneAndRemap) {
   CompactVector original;
   // Try with empty vector.
   auto copy0 = original.cloneAndRemap(std::identity{});
-  EXPECT_TRUE(ql::ranges::equal(original, copy0));
+  EXPECT_TRUE(::ranges::equal(original, copy0));
 
   original.build(input);
 
   auto copy1 = original.cloneAndRemap(std::identity{});
-  EXPECT_TRUE(ql::ranges::equal(original, copy1));
+  EXPECT_TRUE(::ranges::equal(original, copy1));
 
   auto mappingFunction = [](const auto& x) { return x + 1; };
 
   auto copy2 = original.cloneAndRemap(mappingFunction);
 
   ASSERT_EQ(original.size(), copy2.size());
-  for (auto [reference, element] : ql::ranges::zip_view(original, copy2)) {
+  for (auto [reference, element] : ::ranges::zip_view(original, copy2)) {
     ASSERT_EQ(reference.size(), element.size());
     typename CompactVector::vector_type modifiedReference{reference.begin(),
                                                           reference.end()};
     ql::ranges::for_each(
         modifiedReference.begin(), modifiedReference.end(),
         [&mappingFunction](auto& value) { value = mappingFunction(value); });
-    EXPECT_TRUE(ql::ranges::equal(modifiedReference, element));
+    EXPECT_TRUE(::ranges::equal(modifiedReference, element));
   }
 }
