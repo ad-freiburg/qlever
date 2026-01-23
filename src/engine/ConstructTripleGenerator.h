@@ -27,6 +27,9 @@ class ConstructTripleGenerator {
   using StringTriple = QueryExecutionTree::StringTriple;
   using Triples = ad_utility::sparql_types::Triples;
 
+  template <class T>
+  using InputRangeTypeErased = ad_utility::InputRangeTypeErased<T>;
+
   ConstructTripleGenerator(Triples constructTriples,
                            std::shared_ptr<const Result> result,
                            const VariableToColumnMap& variableColumns,
@@ -78,6 +81,39 @@ class ConstructTripleGenerator {
     };
     return table.view_ | ql::views::transform(outerTransformer) |
            ql::views::join;
+  }
+
+  // _____________________________________________________________________________
+  // Helper function that generates the result of a CONSTRUCT query as a range
+  // of `StringTriple`s.
+  static InputRangeTypeErased<StringTriple> generateStringTriples(
+      const QueryExecutionTree& qet,
+      const ad_utility::sparql_types::Triples& constructTriples,
+      LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
+      uint64_t& resultSize, CancellationHandle cancellationHandle) {
+    // The `resultSizeMultiplicator`(last argument of `getRowIndices`) is
+    // explained by the following: For each result from the WHERE clause, we
+    // produce up to `constructTriples.size()` triples. We do not account for
+    // triples that are filtered out because one of the components is UNDEF (it
+    // would require materializing the whole result)
+    auto rowIndices = ExportQueryExecutionTrees::getRowIndices(
+        limitAndOffset, *result, resultSize, constructTriples.size());
+
+    ConstructTripleGenerator generator(
+        constructTriples, std::move(result), qet.getVariableColumns(),
+        qet.getQec()->getIndex(), std::move(cancellationHandle));
+
+    // Transform the range of tables into a flattened range of triples.
+    // We move the generator into the lambda. Because the generator is stateful
+    // (it tracks rowOffset_), the lambda must be marked 'mutable'.
+    auto tableTriples = ql::views::transform(
+        std::move(rowIndices),
+        [generator = std::move(generator)](TableWithRange table) mutable {
+          // The generator now handles the:
+          // Table -> Rows -> Triple Patterns -> StringTriples
+          return generator.generateStringTriplesForResultTable(table);
+        });
+    return InputRangeTypeErased(ql::views::join(std::move(tableTriples)));
   }
 
  private:

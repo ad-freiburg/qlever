@@ -266,33 +266,9 @@ auto ExportQueryExecutionTrees::constructQueryResultToTriples(
     const ad_utility::sparql_types::Triples& constructTriples,
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
     uint64_t& resultSize, CancellationHandle cancellationHandle) {
-  // 1. Calculate row indices of the rows of the result table.
-  // The `resultSizeMultiplicator`(last argument of `getRowIndices`) is
-  // explained by the following: For each result from the WHERE clause, we
-  // produce up to `constructTriples.size()` triples. We do not account for
-  // triples that are filtered out because one of the components is UNDEF (it
-  // would require materializing the whole result)
-  auto rowIndices = getRowIndices(limitAndOffset, *result, resultSize,
-                                  constructTriples.size());
-
-  // 2. Initialize the generator.
-  ConstructTripleGenerator generator(
-      constructTriples, std::move(result), qet.getVariableColumns(),
-      qet.getQec()->getIndex(), std::move(cancellationHandle));
-
-  // 3. Transform the range of tables into a flattened range of triples.
-  // We move the generator into the lambda. Because the generator is stateful
-  // (it tracks rowOffset_), the lambda must be marked 'mutable'.
-  auto tableTriples = ql::views::transform(
-      std::move(rowIndices),
-      [generator = std::move(generator)](TableWithRange table) mutable {
-        // The generator now handles the:
-        // Table -> Rows -> Triple Patterns -> StringTriples
-        return generator.generateStringTriplesForResultTable(table);
-      });
-
-  // 4. Flatten and return.
-  return InputRangeTypeErased(ql::views::join(std::move(tableTriples)));
+  return ConstructTripleGenerator::generateStringTriples(
+      qet, constructTriples, limitAndOffset, result, resultSize,
+      cancellationHandle);
 }
 
 // _____________________________________________________________________________
