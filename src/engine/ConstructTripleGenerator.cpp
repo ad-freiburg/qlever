@@ -8,19 +8,13 @@
 
 #include "engine/ExportQueryExecutionTrees.h"
 
-template <class T>
-using InputRangeTypeErased = ad_utility::InputRangeTypeErased<T>;
-
-using CancellationHandle = ad_utility::SharedCancellationHandle;
-using Triples = ad_utility::sparql_types::Triples;
-using StringTriple = QueryExecutionTree::StringTriple;
-
-InputRangeTypeErased<StringTriple>
+ad_utility::InputRangeTypeErased<QueryExecutionTree::StringTriple>
 ConstructTripleGenerator::generateStringTriples(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples,
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
-    uint64_t& resultSize, CancellationHandle cancellationHandle) {
+    uint64_t& resultSize,
+    ad_utility::SharedCancellationHandle cancellationHandle) {
   // The `resultSizeMultiplicator`(last argument of `getRowIndices`) is
   // explained by the following: For each result from the WHERE clause, we
   // produce up to `constructTriples.size()` triples. We do not account for
