@@ -622,12 +622,12 @@ std::pair<
     std::vector<
         ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>>
 DeltaTriples::copyLocalVocab() const {
-  std::vector<LocalVocabIndex> entries;
-  entries.reserve(localVocab_.size());
-
-  for (const LocalVocabEntry& entry : localVocab_.primaryWordSet()) {
-    entries.push_back(&entry);
-  }
+  AD_CORRECTNESS_CHECK(localVocab_.otherSets().empty(),
+                       "This function only copies from the primary word set.");
+  std::vector<LocalVocabIndex> entries = ::ranges::to_vector(
+      localVocab_.primaryWordSet() |
+      ql::views::transform(
+          [](const LocalVocabEntry& entry) { return &entry; }));
   return std::make_pair(std::move(entries),
                         localVocab_.getOwnedLocalBlankNodeBlocks());
 }

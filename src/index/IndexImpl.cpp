@@ -830,11 +830,18 @@ namespace {
 // Lift a callback that works on single elements to a callback that works on
 // blocks.
 auto liftCallback(auto callback) {
-  return [callback](const auto& block) mutable {
+  return [callback = std::move(callback)](const auto& block) mutable {
     ql::ranges::for_each(block, callback);
   };
 }
 }  // namespace
+
+// _____________________________________________________________________________
+std::string IndexImpl::getFilenameForPermutation(const Permutation& permutation,
+                                                 bool internal) const {
+  return absl::StrCat(onDiskBase_, internal ? QLEVER_INTERNAL_INDEX_INFIX : "",
+                      ".index", permutation.fileSuffix());
+}
 
 // _____________________________________________________________________________
 template <typename T, typename... Callbacks>
@@ -911,8 +918,8 @@ IndexImpl::createPermutations(size_t numColumns, T&& sortedTriples,
   AD_LOG_INFO << "Creating permutations " << p1.readableName() << " and "
               << p2.readableName() << " ..." << std::endl;
   auto metaData = createPermutationPairImpl(
-      numColumns, onDiskBase_ + ".index" + p1.fileSuffix(),
-      onDiskBase_ + ".index" + p2.fileSuffix(), AD_FWD(sortedTriples),
+      numColumns, getFilenameForPermutation(p1, false),
+      getFilenameForPermutation(p2, false), AD_FWD(sortedTriples),
       p1.keyOrder(), AD_FWD(perTripleCallbacks)...);
 
   auto& [numDistinctCol0, meta1, meta2] = metaData;
@@ -926,16 +933,22 @@ IndexImpl::createPermutations(size_t numColumns, T&& sortedTriples,
   return metaData;
 }
 
-// ________________________________________________________________________
+// _____________________________________________________________________________
+void IndexImpl::writeMetaData(IndexMetaDataMmapDispatcher::WriteType& metaData,
+                              const std::string& filename) const {
+  metaData.setName(getKbName());
+  ad_utility::File f(filename, "r+");
+  metaData.appendToFile(&f);
+}
+
+// _____________________________________________________________________________
 size_t IndexImpl::createPermutation(
     size_t numColumns,
     ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
     const Permutation& permutation, bool internal) {
   AD_LOG_INFO << "Creating permutation " << permutation.readableName() << " ..."
               << std::endl;
-  std::string fileName =
-      absl::StrCat(onDiskBase_, internal ? QLEVER_INTERNAL_INDEX_INFIX : "",
-                   ".index", permutation.fileSuffix());
+  std::string fileName = getFilenameForPermutation(permutation, internal);
   auto metaData =
       createPermutationImpl(numColumns, fileName, std::move(sortedTriples));
 
@@ -944,9 +957,7 @@ size_t IndexImpl::createPermutation(
   AD_LOG_INFO << "Statistics for " << permutation.readableName() << ": "
               << meta.statistics() << std::endl;
 
-  meta.setName(getKbName());
-  ad_utility::File f{fileName, "r+"};
-  meta.appendToFile(&f);
+  writeMetaData(meta, fileName);
   return numDistinctCol0;
 }
 
@@ -959,20 +970,10 @@ size_t IndexImpl::createPermutationPair(size_t numColumns,
                                         CallbackTypes&&... perTripleCallbacks) {
   auto [numDistinctC0, metaData1, metaData2] = createPermutations(
       numColumns, AD_FWD(sortedTriples), p1, p2, AD_FWD(perTripleCallbacks)...);
-  // Set the name of this newly created pair of `IndexMetaData` objects.
-  // NOTE: When `setKbName` was called, it set the name of pso_.meta_,
-  // pso_.meta_, ... which however are not used during index building.
-  // `getKbName` simple reads one of these names.
-  auto writeMetadata = [this](auto& metaData, const auto& permutation) {
-    metaData.setName(getKbName());
-    ad_utility::File f(
-        absl::StrCat(onDiskBase_, ".index", permutation.fileSuffix()), "r+");
-    metaData.appendToFile(&f);
-  };
   AD_LOG_DEBUG << "Writing meta data for " << p1.readableName() << " and "
                << p2.readableName() << " ..." << std::endl;
-  writeMetadata(metaData1, p1);
-  writeMetadata(metaData2, p2);
+  writeMetaData(metaData1, getFilenameForPermutation(p1, false));
+  writeMetaData(metaData2, getFilenameForPermutation(p2, false));
   return numDistinctC0;
 }
 
@@ -1993,5 +1994,8 @@ nlohmann::json IndexImpl::recomputeStatistics(
     configuration["num-subjects"] = NumNormalAndInternal{numSubjects, 0};
     configuration["num-objects"] = NumNormalAndInternal{numObjects, 0};
   }
+  // Note: We don't update the key represented by `BLANK_NODE_ALLOCATION_START`,
+  // because during index rebuilding blank nodes are remapped and therefore the
+  // actual value can be much lower than that.
   return configuration;
 }

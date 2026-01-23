@@ -128,14 +128,14 @@ class CompactVectorOfStrings {
 
   // Copy this class and apply the transformation `mappingFunction` to its
   // elements.
-  template <typename Func>
-  CompactVectorOfStrings cloneAndRemap(Func mappingFunction) const {
+  CPP_template(typename Func)(
+      requires ad_utility::InvocableWithSimilarReturnType<Func, data_type,
+                                                          data_type>)
+      CompactVectorOfStrings cloneAndRemap(Func mappingFunction) const {
     CompactVectorOfStrings clone;
     clone.offsets_ = offsets_;
-    clone.data_.reserve(data_.size());
-    for (const data_type& element : data_) {
-      clone.data_.push_back(std::invoke(mappingFunction, element));
-    }
+    clone.data_ = ::ranges::to_vector(
+        data_ | ql::views::transform(std::move(mappingFunction)));
     return clone;
   }
 

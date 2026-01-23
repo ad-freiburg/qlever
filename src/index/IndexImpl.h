@@ -549,6 +549,10 @@ class IndexImpl {
       TripleVec& data, const std::vector<size_t>& actualLinesPerPartial,
       size_t linesPerPartial, Func isQLeverInternalTriple);
 
+  // Helper function to get the filename for a given permutation.
+  std::string getFilenameForPermutation(const Permutation& permutation,
+                                        bool internal) const;
+
   // TODO<joka921> Get rid of the `numColumns` by including them into the
   // `sortedTriples` argument.
   template <typename T, typename... Callbacks>
@@ -585,6 +589,10 @@ class IndexImpl {
   // createPatternsAfterFirst is only valid when  the pair is SPO-SOP because
   // the SPO permutation is also needed for patterns (see usage in
   // IndexImpl::createFromFile function)
+
+  // Write `metaData` to the provided file.
+  void writeMetaData(IndexMetaDataMmapDispatcher::WriteType& metaData,
+                     const std::string& filename) const;
 
   template <typename SortedTriplesType, typename... CallbackTypes>
   [[nodiscard]] size_t createPermutationPair(

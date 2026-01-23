@@ -275,9 +275,9 @@ class DeltaTriples {
   // Update the block metadata.
   void updateAugmentedMetadata();
 
-  // Create a copy of the local vocab such that it can be processed
+  // Create a shallow copy of the local vocab such that it can be processed
   // without holding the lock. You have to make sure separately that the
-  // pointers are still valid.
+  // pointers that the returned `LocalVocabIndex`es represent are still valid.
   std::pair<std::vector<LocalVocabIndex>,
             std::vector<ad_utility::BlankNodeManager::LocalBlankNodeManager::
                             OwnedBlocksEntry>>
@@ -376,7 +376,10 @@ class DeltaTriplesManager {
 
   // In addition to the located triples shared state, also acquire a copy of the
   // local vocab indices and the local blank node blocks owned by the local
-  // vocab.
+  // vocab. As long as the returned `LocatedTriplesSharedState` is alive, the
+  // local vocab entries and blank nodes will remain valid. So the return value
+  // basically acts as a complete shallow copy of the current state of the
+  // `DeltaTriples`.
   std::tuple<LocatedTriplesSharedState, std::vector<LocalVocabIndex>,
              std::vector<ad_utility::BlankNodeManager::LocalBlankNodeManager::
                              OwnedBlocksEntry>>

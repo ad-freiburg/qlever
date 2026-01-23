@@ -4,7 +4,7 @@
 //
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
 #include <algorithm>
 
@@ -70,6 +70,7 @@ struct TestData<int> {
 template <typename T>
 class CompactVectorOfStringsFixture : public ::testing::Test {
  protected:
+  using Type = T;
   using Data = TestData<T>;
   using CompactVector = typename Data::CompactVector;
 
@@ -304,18 +305,15 @@ TYPED_TEST(CompactVectorOfStringsFixture, cloneAndRemap) {
   auto copy1 = original.cloneAndRemap(std::identity{});
   EXPECT_TRUE(ql::ranges::equal(original, copy1, ql::ranges::equal));
 
-  auto mappingFunction = [](const auto& x) { return x + 1; };
+  auto mappingFunction = [](auto x) -> TestFixture::Type { return x + 1; };
 
   auto copy2 = original.cloneAndRemap(mappingFunction);
 
   ASSERT_EQ(original.size(), copy2.size());
   for (auto [reference, element] : ::ranges::zip_view(original, copy2)) {
     ASSERT_EQ(reference.size(), element.size());
-    typename CompactVector::vector_type modifiedReference{reference.begin(),
-                                                          reference.end()};
-    ql::ranges::for_each(
-        modifiedReference.begin(), modifiedReference.end(),
-        [&mappingFunction](auto& value) { value = mappingFunction(value); });
-    EXPECT_TRUE(ql::ranges::equal(modifiedReference, element));
+    auto modifiedReference = ::ranges::to<typename CompactVector::vector_type>(
+        reference | ql::views::transform(mappingFunction));
+    EXPECT_THAT(modifiedReference, ::testing::ElementsAreArray(element));
   }
 }
