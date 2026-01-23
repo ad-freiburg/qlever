@@ -29,8 +29,9 @@ ConstructTripleGenerator::generateStringTriples(
       qet.getQec()->getIndex(), std::move(cancellationHandle));
 
   // Transform the range of tables into a flattened range of triples.
-  // We move the generator into the lambda. Because the generator is stateful
-  // (it tracks rowOffset_), the lambda must be marked 'mutable'.
+  // We move the generator into the transformation lambda to extend its
+  // lifetime. Because the transformation is stateful (it tracks rowOffset_),
+  // the lambda must be marked 'mutable'.
   auto tableTriples = ql::views::transform(
       std::move(rowIndices),
       [generator = std::move(generator)](TableWithRange table) mutable {
