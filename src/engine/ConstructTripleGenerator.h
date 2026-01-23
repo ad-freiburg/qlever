@@ -57,7 +57,7 @@ class ConstructTripleGenerator {
     rowOffset_ += tableWithVocab.idTable().numRows();
 
     // For a single row from the WHERE clause (specified by `idTable` and
-    // `rowIdx` stored in the `context`, evaluate all triples in the CONSTRUCT
+    // `rowIdx` stored in the `context`), evaluate all triples in the CONSTRUCT
     // template.
     auto outerTransformer = [this, tableWithVocab,
                              currentRowOffset](uint64_t rowIdx) {
@@ -68,16 +68,22 @@ class ConstructTripleGenerator {
                                           index_.get(),
                                           currentRowOffset};
 
-      // Transform patterns into triples and filter out UNDEF results.
-      auto evaluateConstructTriplesForRowFromWhereClause =
-          [this, context = std::move(context)](const auto& triple) {
+      // Transform a single template triple from the CONSTRUCT-template into
+      // a `StringTriple` for a single row of the WHERE clause (specified by
+      // `idTable` and `rowIdx` stored in `context`).
+      auto evaluateConstructTripleForRowFromWhereClause =
+          [this, context = std::move(context)](const auto& templateTriple) {
             cancellationHandle_->throwIfCancelled();
-            return ConstructQueryEvaluator::evaluateTriple(triple, context);
+            return ConstructQueryEvaluator::evaluateTriple(templateTriple,
+                                                           context);
           };
 
+      // Apply the transformer from above and filter out invalid evaluations
+      // (which are returned as empty `StringTriples` from
+      // `evaluateConstructTripleForRowFromWhereClause`).
       return constructTriples_ |
              ql::views::transform(
-                 evaluateConstructTriplesForRowFromWhereClause) |
+                 evaluateConstructTripleForRowFromWhereClause) |
              ql::views::filter(std::not_fn(&StringTriple::isEmpty));
     };
     return table.view_ | ql::views::transform(outerTransformer) |
