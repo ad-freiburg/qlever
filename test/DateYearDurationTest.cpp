@@ -578,40 +578,6 @@ TEST(DateYearOrDuration, Hashing) {
 
 // _____________________________________________________________________________
 TEST(DateYearOrDuration, Subtraction) {
-  // OVERFLOW
-  /*for (int i = 0; i < 10; ++i) {
-    auto year = yearGenerator();
-    auto month = monthGenerator();
-    auto day = dayGenerator();
-    auto hour = hourGenerator();
-    auto minute = minuteGenerator();
-    auto second = secondGenerator();
-    auto timeZone = timeZoneGenerator();
-
-    Date date(year, month, day, hour, minute, second, timeZone);
-    DateYearOrDuration date1(date);
-
-    auto year2 = yearGenerator();
-    auto month2 = monthGenerator();
-    auto day2 = dayGenerator();
-    auto hour2 = hourGenerator();
-    auto minute2 = minuteGenerator();
-    auto second2 = secondGenerator();
-    auto timeZone2 = timeZoneGenerator();
-
-    Date date_(year2, month2, day2, hour2, minute2, second2, timeZone2);
-    DateYearOrDuration date2(date_);
-
-    DateYearOrDuration zero_duration(
-        DayTimeDuration(DayTimeDuration::Type::Positive, 0));
-    ASSERT_EQ(zero_duration, date1 - date1);
-    ASSERT_EQ(zero_duration, date2 - date2);
-
-    DateYearOrDuration result = date1 - date2;
-    ASSERT_EQ(true, result.isDayTimeDuration());
-  }*/
-  // OVERFLOW
-
   // hardcoded test
   // ____________________________________________________________________________
   // Test for Date Subtraction
@@ -688,5 +654,33 @@ TEST(DateYearOrDuration, Subtraction) {
   result = date2 - date1;
   ASSERT_EQ(DateYearOrDuration(
                 DayTimeDuration(DayTimeDuration::Type::Positive, 1, 10, 9, 1)),
+            result);
+  // ____________________________________________________________________________
+  // Test previous bug where days/hours/minutes passed got negative
+  // daysPassed < 0
+  date1 = DateYearOrDuration(Date(2021, 01, 23, 21, 0, 0));
+  date2 = DateYearOrDuration(Date(2021, 01, 23, 23, 0, 0));
+  // expected duration of 0d2h0min0sec
+  result = date1 - date2;
+  ASSERT_EQ(DateYearOrDuration(
+                DayTimeDuration(DayTimeDuration::Type::Positive, 0, 2, 0, 0)),
+            result);
+
+  // hoursPassed < 0
+  date1 = DateYearOrDuration(Date(2021, 01, 23, 22, 10, 0));
+  date2 = DateYearOrDuration(Date(2021, 01, 23, 22, 30, 0));
+  // expected duration of 0d0h20min0sec
+  result = date1 - date2;
+  ASSERT_EQ(DateYearOrDuration(
+                DayTimeDuration(DayTimeDuration::Type::Positive, 0, 0, 20, 0)),
+            result);
+
+  // minutesPassed < 0
+  date1 = DateYearOrDuration(Date(2021, 01, 23, 22, 10, 03));
+  date2 = DateYearOrDuration(Date(2021, 01, 23, 22, 10, 43));
+  // expected duration of 0d0h0min40sec
+  result = date1 - date2;
+  ASSERT_EQ(DateYearOrDuration(
+                DayTimeDuration(DayTimeDuration::Type::Positive, 0, 0, 0, 40)),
             result);
 }
