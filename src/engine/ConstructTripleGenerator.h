@@ -56,8 +56,9 @@ class ConstructTripleGenerator {
     size_t currentRowOffset = rowOffset_;
     rowOffset_ += tableWithVocab.idTable().numRows();
 
-    // this is a pipeline which transforms the rows of the result table
-    // (`table.view_`) using the triple patterns of the CONSTRUCT-clause
+    // For a single row from the WHERE clause (specified by `idTable` and
+    // `rowIdx` stored in the `context`, evaluate all triples in the CONSTRUCT
+    // template.
     auto outerTransformer = [this, tableWithVocab,
                              currentRowOffset](uint64_t rowIdx) {
       ConstructQueryExportContext context{rowIdx,
@@ -68,13 +69,15 @@ class ConstructTripleGenerator {
                                           currentRowOffset};
 
       // Transform patterns into triples and filter out UNDEF results.
-      auto innerTransformer =
+      auto evaluateConstructTriplesForRowFromWhereClause =
           [this, context = std::move(context)](const auto& triple) {
             cancellationHandle_->throwIfCancelled();
             return ConstructQueryEvaluator::evaluateTriple(triple, context);
           };
 
-      return constructTriples_ | ql::views::transform(innerTransformer) |
+      return constructTriples_ |
+             ql::views::transform(
+                 evaluateConstructTriplesForRowFromWhereClause) |
              ql::views::filter(&StringTriple::isEmpty);
     };
     return table.view_ | ql::views::transform(outerTransformer) |
