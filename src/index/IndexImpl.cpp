@@ -1088,6 +1088,9 @@ const CompactVectorOfStrings<Id>& IndexImpl::getPatterns() const {
 }
 
 // _____________________________________________________________________________
+CompactVectorOfStrings<Id>& IndexImpl::getPatterns() { return patterns_; }
+
+// _____________________________________________________________________________
 double IndexImpl::getAvgNumDistinctPredicatesPerSubject() const {
   throwExceptionIfNoPatterns();
   return avgNumDistinctPredicatesPerSubject_;

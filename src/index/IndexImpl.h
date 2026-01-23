@@ -325,6 +325,9 @@ class IndexImpl {
   Index::Vocab::PrefixRanges prefixRanges(std::string_view prefix) const;
 
   const CompactVectorOfStrings<Id>& getPatterns() const;
+
+  CompactVectorOfStrings<Id>& getPatterns();
+
   /**
    * @return The multiplicity of the Entities column (0) of the full
    * has-relation relation after unrolling the patterns.
@@ -680,6 +683,7 @@ class IndexImpl {
   friend class IndexTest_createFromOnDiskIndexTest_Test;
   friend class CreatePatternsFixture_createPatterns_Test;
   FRIEND_TEST(IndexImpl, recomputeStatistics);
+  FRIEND_TEST(IndexImpl, writePatternsToFile);
 
   bool isLiteral(std::string_view object) const;
 
@@ -843,7 +847,6 @@ class IndexImpl {
 
   void storeTextScoringParamsInConfiguration(TextScoringMetric scoringMetric,
                                              float b, float k);
-
 
   // Write the stored in-memory patterns to a pattern file.
   void writePatternsToFile() const;
