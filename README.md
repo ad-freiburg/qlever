@@ -19,6 +19,8 @@ outstanding performance, QLever offers a variety of unique features: advanced
 text search capabilities, context-sensitive autocompletion of SPARQL queries,
 live query analysis, very efficient spatial queries, and the interactive
 visualization of very large numbers of geometric objects on a map.
+QLever can also be used as an embedded database, that is, without the standard
+client-server setup but running it in-process inside your own C++ program.
 
 [Here are demos of QLever](http://qlever.cs.uni-freiburg.de) on a variety of
 large datasets, including the complete Wikidata, Wikimedia Commons,
@@ -78,10 +80,3 @@ The easiest way to find out the right command line is to use the `qlever` CLI,
 which for each command prints the exact command line it is going to execute.
 With the option `--show`, it will print the command-line without executing it,
 e.g., `qlever start --show`.
-
-# Using QLever as an embedded database
-
-QLever can also be used as an embedded database, that is, without the standard
-client-server setup but running it in-process inside your own C++ program.
-See https://github.com/ad-freiburg/qlever/pull/2100 for details and a link to a
-small example program.
