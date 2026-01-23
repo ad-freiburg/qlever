@@ -72,10 +72,9 @@ class CompactVectorOfStringsFixture : public ::testing::Test {
  protected:
   using Data = TestData<T>;
   using CompactVector = typename Data::CompactVector;
-  using InputType = typename Data::InputType;
 
-  InputType input_ = Data::input();
-  InputType input1_ = Data::input1();
+  static inline const typename Data::InputType input_ = Data::input();
+  static inline const typename Data::InputType input1_ = Data::input1();
 };
 
 // _____________________________________________________________________________
@@ -84,7 +83,7 @@ TYPED_TEST_SUITE(CompactVectorOfStringsFixture, TestTypes);
 
 // _____________________________________________________________________________
 TYPED_TEST(CompactVectorOfStringsFixture, Build) {
-  const auto& input = this->input_;
+  const auto& input = TestFixture::input_;
   typename TestFixture::CompactVector v;
   v.build(input);
   vectorsEqual(v, input);
@@ -92,7 +91,7 @@ TYPED_TEST(CompactVectorOfStringsFixture, Build) {
 
 // _____________________________________________________________________________
 TYPED_TEST(CompactVectorOfStringsFixture, Iterator) {
-  const auto& input = this->input_;
+  const auto& input = TestFixture::input_;
   typename TestFixture::CompactVector s;
   s.build(input);
 
@@ -131,7 +130,7 @@ TEST(CompactVectorOfStrings, IteratorCategory) {
 
 // _____________________________________________________________________________
 TYPED_TEST(CompactVectorOfStringsFixture, Serialization) {
-  const auto& input = this->input_;
+  const auto& input = TestFixture::input_;
   using CompactVector = typename TestFixture::CompactVector;
 
   const std::string filename = "_writerTest1.dat";
@@ -153,7 +152,7 @@ TYPED_TEST(CompactVectorOfStringsFixture, Serialization) {
 
 // _____________________________________________________________________________
 TYPED_TEST(CompactVectorOfStringsFixture, SerializationWithPush) {
-  const auto& input = this->input_;
+  const auto& input = TestFixture::input_;
   using CompactVector = typename TestFixture::CompactVector;
 
   const std::string filename = "_writerTest2.dat";
@@ -176,7 +175,7 @@ TYPED_TEST(CompactVectorOfStringsFixture, SerializationWithPush) {
 // Test that a `CompactStringVectorWriter` can be correctly move-constructed and
 // move-assigned into an empty writer, even when writing has already started.
 TYPED_TEST(CompactVectorOfStringsFixture, MoveIntoEmptyWriter) {
-  const auto& input = this->input_;
+  const auto& input = TestFixture::input_;
   using CompactVector = typename TestFixture::CompactVector;
 
   const std::string filename = "_writerTest1029348.dat";
@@ -217,8 +216,8 @@ TYPED_TEST(CompactVectorOfStringsFixture, MoveIntoEmptyWriter) {
 // Test the special case of move-assigning a `CompactStringVectorWriter` where
 // the target of the move has already been written to.
 TYPED_TEST(CompactVectorOfStringsFixture, MoveIntoFullWriter) {
-  const auto& input1 = this->input_;
-  const auto& input2 = this->input1_;
+  const auto& input1 = TestFixture::input_;
+  const auto& input2 = TestFixture::input1_;
   using CompactVector = typename TestFixture::CompactVector;
 
   const std::string filename = "_writerTest1029348A.dat";
@@ -260,7 +259,7 @@ TYPED_TEST(CompactVectorOfStringsFixture, MoveIntoFullWriter) {
 
 // _____________________________________________________________________________
 TYPED_TEST(CompactVectorOfStringsFixture, SerializationWithPushMiddleOfFile) {
-  const auto& input = this->input_;
+  const auto& input = TestFixture::input_;
   using CompactVector = typename TestFixture::CompactVector;
 
   const std::string filename = "_writerTest3.dat";
@@ -292,7 +291,7 @@ TYPED_TEST(CompactVectorOfStringsFixture, SerializationWithPushMiddleOfFile) {
 
 // _____________________________________________________________________________
 TYPED_TEST(CompactVectorOfStringsFixture, cloneAndRemap) {
-  const auto& input = this->input_;
+  const auto& input = TestFixture::input_;
   using CompactVector = typename TestFixture::CompactVector;
 
   CompactVector original;
