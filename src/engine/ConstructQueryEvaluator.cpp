@@ -79,13 +79,13 @@ std::optional<std::string> ConstructQueryEvaluator::evaluate(
         using T = std::decay_t<decltype(arg)>;
 
         if constexpr (std::is_same_v<T, Variable>) {
-          return ConstructQueryEvaluator::evaluate(arg, context);
+          return evaluate(arg, context);
         } else if constexpr (std::is_same_v<T, BlankNode>) {
-          return ConstructQueryEvaluator::evaluate(arg, context);
+          return evaluate(arg, context);
         } else if constexpr (std::is_same_v<T, Iri>) {
-          return ConstructQueryEvaluator::evaluate(arg);
+          return evaluate(arg);
         } else if constexpr (std::is_same_v<T, Literal>) {
-          return ConstructQueryEvaluator::evaluate(arg, posInTriple);
+          return evaluate(arg, posInTriple);
         } else {
           static_assert(ad_utility::alwaysFalse<T>);
         }
@@ -101,10 +101,9 @@ ConstructQueryEvaluator::StringTriple ConstructQueryEvaluator::evaluateTriple(
   // special cases (like blank node generation or IRI escaping).
   using enum PositionInTriple;
 
-  auto subject = ConstructQueryEvaluator::evaluate(triple[0], context, SUBJECT);
-  auto predicate =
-      ConstructQueryEvaluator::evaluate(triple[1], context, PREDICATE);
-  auto object = ConstructQueryEvaluator::evaluate(triple[2], context, OBJECT);
+  auto subject = evaluate(triple[0], context, SUBJECT);
+  auto predicate = evaluate(triple[1], context, PREDICATE);
+  auto object = evaluate(triple[2], context, OBJECT);
 
   // In SPARQL CONSTRUCT, if any part of the triple (S, P, or O) evaluates
   // to UNDEF, the entire triple is omitted from the result.
