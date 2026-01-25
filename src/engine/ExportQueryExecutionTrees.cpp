@@ -266,8 +266,8 @@ auto ExportQueryExecutionTrees::constructQueryResultToTriples(
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
     uint64_t& resultSize, CancellationHandle cancellationHandle) {
   return ConstructTripleGenerator::generateStringTriples(
-      qet, constructTriples, limitAndOffset, result, resultSize,
-      cancellationHandle);
+      qet, constructTriples, limitAndOffset, std::move(result), resultSize,
+      std::move(cancellationHandle));
 }
 
 // _____________________________________________________________________________
