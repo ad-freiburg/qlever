@@ -28,6 +28,7 @@ COPY benchmark /qlever/benchmark/
 COPY .git /qlever/.git/
 COPY CMakeLists.txt /qlever/
 COPY CompilationInfo.cmake /qlever/
+COPY GitVersion.cmake /qlever/
 
 # Build and compile. By default, also compile and run all tests. In order not
 # to, build the image with `--build-arg RUN_TESTS=false`.
@@ -39,7 +40,7 @@ RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_PARALLEL=true -D_NO_T
 RUN if [ "$RUN_TESTS" = "true" ]; then \
       cmake --build . && ctest --rerun-failed --output-on-failure; \
     else \
-      cmake --build . --target IndexBuilderMain ServerMain && echo "Skipping tests"; \
+      cmake --build . --target qlever-index qlever-server && echo "Skipping tests"; \
     fi
 
 # Install the packages needed for the final image.
@@ -75,6 +76,9 @@ ENV QLEVER_ARGCOMPLETE_ENABLED=1
 ENV QLEVER_IS_RUNNING_IN_CONTAINER=1
 
 # Copy the binaries and the entrypoint script.
+# qlever-server, qlever-index
+COPY --from=builder /qlever/build/qlever-* /qlever/
+# PrintIndexVersionMain, VocabularyMergerMain
 COPY --from=builder /qlever/build/*Main /qlever/
 COPY --from=builder /qlever/e2e/* /qlever/e2e/
 COPY --chmod=755 docker-entrypoint.sh /qlever/

@@ -7,6 +7,8 @@
 #ifndef QLEVER_SRC_INDEX_INDEXIMPL_H
 #define QLEVER_SRC_INDEX_INDEXIMPL_H
 
+#include <gtest/gtest_prod.h>
+
 #include <memory>
 #include <optional>
 #include <string>
@@ -35,11 +37,9 @@
 #include "parser/RdfParser.h"
 #include "parser/TripleComponent.h"
 #include "util/BufferedVector.h"
-#include "util/CancellationHandle.h"
 #include "util/File.h"
 #include "util/Forward.h"
 #include "util/MemorySize/MemorySize.h"
-#include "util/MmapVector.h"
 #include "util/json.h"
 
 template <typename Comparator, size_t I = NumColumnsIndexBuilding>
@@ -140,8 +140,9 @@ class IndexImpl {
   double avgNumDistinctSubjectsPerPredicate_;
   uint64_t numDistinctSubjectPredicatePairs_;
 
-  // If true, add `ql:has-word` triples for each word in each literal.
-  bool addHasWordTriples_ = true;
+  // If > 0, add `ql:has-qgram` triples for each q-gram (of this size) in each
+  // literal. If 0, no such triples are added.
+  size_t qgramSize_ = 0;
 
   size_t parserBatchSize_ = PARSER_BATCH_SIZE;
   size_t numTriplesPerBatch_ = NUM_TRIPLES_PER_PARTIAL_VOCAB;
@@ -196,6 +197,11 @@ class IndexImpl {
   std::optional<Id> idOfHasPatternDuringIndexBuilding_;
   std::optional<Id> idOfInternalGraphDuringIndexBuilding_;
 
+  // If true, the permutations will not be loaded from disk when calling
+  // createFromOnDiskIndex. This is useful when only queries that don't require
+  // the permutations need to be executed.
+  bool doNotLoadPermutations_ = false;
+
   // The vocabulary type that is used (only relevant during index building).
   ad_utility::VocabularyType vocabularyTypeForIndexBuilding_{
       ad_utility::VocabularyType::Enum::OnDiskCompressed};
@@ -216,18 +222,15 @@ class IndexImpl {
   IndexImpl& operator=(IndexImpl&&) = delete;
   IndexImpl(IndexImpl&&) = delete;
 
-  const auto& POS() const { return *pos_; }
-  auto& POS() { return *pos_; }
-  const auto& PSO() const { return *pso_; }
-  auto& PSO() { return *pso_; }
-  const auto& SPO() const { return *spo_; }
-  auto& SPO() { return *spo_; }
-  const auto& SOP() const { return *sop_; }
-  auto& SOP() { return *sop_; }
-  const auto& OPS() const { return *ops_; }
-  auto& OPS() { return *ops_; }
-  const auto& OSP() const { return *osp_; }
-  auto& OSP() { return *osp_; }
+  const auto& POS() const { return getPermutationImpl(pos_, "POS"); }
+  const auto& PSO() const { return getPermutationImpl(pso_, "PSO"); }
+  const auto& SPO() const { return getPermutationImpl(spo_, "SPO"); }
+  const auto& SOP() const { return getPermutationImpl(sop_, "SOP"); }
+  const auto& OPS() const { return getPermutationImpl(ops_, "OPS"); }
+  const auto& OSP() const { return getPermutationImpl(osp_, "OSP"); }
+
+  // Function only exposed for testing.
+  auto& SPOForTesting() { return const_cast<Permutation&>(SPO()); }
 
   static const IndexImpl& staticGlobalSingletonIndex() {
     AD_CORRECTNESS_CHECK(globalSingletonIndex_ != nullptr);
@@ -442,7 +445,9 @@ class IndexImpl {
 
   bool& loadAllPermutations();
 
-  bool& addHasWordTriples();
+  bool& doNotLoadPermutations();
+
+  size_t& qgramSize();
 
   void setKeepTempFiles(bool keepTempFiles);
 
@@ -650,6 +655,7 @@ class IndexImpl {
   friend class IndexTest_createFromTsvTest_Test;
   friend class IndexTest_createFromOnDiskIndexTest_Test;
   friend class CreatePatternsFixture_createPatterns_Test;
+  FRIEND_TEST(IndexImpl, recomputeStatistics);
 
   bool isLiteral(std::string_view object) const;
 
@@ -670,6 +676,11 @@ class IndexImpl {
    */
   void throwExceptionIfNoPatterns() const;
 
+  // Dereference the `permutationPtr` and throw an exception if it is `nullptr`.
+  // The `permutationName` is used to enrich the error message.
+  static const Permutation& getPermutationImpl(
+      const PermutationPtr& permutationPtr, std::string_view permutationName);
+
   void writeConfiguration() const;
   void readConfiguration();
 
@@ -681,6 +692,9 @@ class IndexImpl {
    * @param path
    */
   void deleteTemporaryFile(const std::string& path);
+
+  // Return the filename where the patterns are stored.
+  std::string getPatternFilename() const;
 
  public:
   // Count the number of "QLever-internal" triples (predicate ql:langtag or
@@ -705,6 +719,7 @@ class IndexImpl {
       std::optional<PatternCreator::TripleSorter> createSPOAndSOP(
           size_t numColumns, BlocksOfTriples sortedTriples,
           NextSorter&&... nextSorter);
+
   // Create the OSP and OPS permutations. Additionally, count the number of
   // distinct objects and write it to the metadata.
   CPP_template(typename... NextSorter)(requires(
@@ -723,6 +738,7 @@ class IndexImpl {
                                             BlocksOfTriples sortedTriples,
                                             bool doWriteConfiguration,
                                             NextSorter&&... nextSorter);
+
   // Call `createPSOAndPOSImpl` with the given arguments and with
   // `doWriteConfiguration` set to `true` (see above).
   CPP_template(typename... NextSorter)(requires(
@@ -809,6 +825,18 @@ class IndexImpl {
 
   void storeTextScoringParamsInConfiguration(TextScoringMetric scoringMetric,
                                              float b, float k);
+
+  // Helper function to count the number of distinct Ids in a sorted IdTable.
+  // `lastId` is used to keep track of the last seen Id between multiple calls
+  // for subsequent tables and `counter` is the counter that is incremented.
+  // This function is only exposed for testing.
+  static void countDistinct(std::optional<Id>& lastId, size_t& counter,
+                            const IdTable& table);
+
+  // Recompute the statistics about the index based on the passed located
+  // triples shared state.
+  nlohmann::json recomputeStatistics(
+      const LocatedTriplesSharedState& locatedTriplesSharedState) const;
 };
 
 #endif  // QLEVER_SRC_INDEX_INDEXIMPL_H

@@ -223,12 +223,12 @@ struct alignas(256) ItemMapManager {
 };
 
 // A triple together with the language tag of its object (if any). If the object
-// is a text literal, and the option to add `ql:has-word` triples is enabled,
-// also store each word in the literal together with its term frequency.
+// is a text literal, and the option to add `ql:has-qgram` triples is enabled,
+// also store the q-grams (the position is the 1-based index in the vector).
 struct ProcessedTriple {
   Triple triple_;
   std::string langtag_;
-  ad_utility::HashMap<std::string, size_t> wordFrequencies_;
+  std::vector<std::string> qgrams_;
 };
 
 /**
@@ -264,7 +264,7 @@ auto getIdMapLambdas(
     std::array<std::optional<ItemMapManager>, NumThreads>* itemMapsPtr,
     size_t maxNumberOfTriples, const TripleComponentComparator* comp,
     IndexPtr* index, ItemAlloc alloc,
-    std::atomic<size_t>* numHasWordTriples = nullptr) {
+    std::atomic<size_t>* numHasQgramTriples = nullptr) {
   // Create one `ItemMapManager` per thread, each with its own ID range.
   auto& itemMaps = *itemMapsPtr;
   for (size_t j = 0; j < NumThreads; ++j) {
@@ -279,15 +279,15 @@ auto getIdMapLambdas(
     itemMaps[j]->map_.map_.reserve(5 * maxNumberOfTriples / NumThreads);
 
     // In each map, assign the first IDs to the special IRIs `ql:langtag` and
-    // `ql:has-word`.
+    // `ql:has-qgram`.
     //
     // NOTE: This is not necessary for functionality, but certain unit tests
     // currently fail without it.
     itemMaps[j]->getId(TripleComponent{
         ad_utility::triple_component::Iri::fromIriref(LANGUAGE_PREDICATE)});
-    if (index->addHasWordTriples()) {
+    if (index->qgramSize() > 0) {
       itemMaps[j]->getId(TripleComponent{
-          ad_utility::triple_component::Iri::fromIriref(HAS_WORD_PREDICATE)});
+          ad_utility::triple_component::Iri::fromIriref(HAS_QGRAM_PREDICATE)});
     }
   }
   using IdTriple = std::array<Id, NumColumnsIndexBuilding>;
@@ -297,17 +297,17 @@ auto getIdMapLambdas(
   // return a lambda that takes a single parsed `triple` and returns
   // `IdTriples`, which contains a processed version of the triple plus
   // additional internal triples if applicable.
-  const auto itemMapLamdaCreator = [&itemMaps, index,
-                                    numHasWordTriples](const size_t itemIndex) {
-    return [&map = *itemMaps[itemIndex], index, numHasWordTriples](
+  const auto itemMapLamdaCreator = [&itemMaps, index, numHasQgramTriples](
+                                       const size_t itemIndex) {
+    return [&map = *itemMaps[itemIndex], index, numHasQgramTriples](
                QL_CONCEPT_OR_NOTHING(ad_utility::Rvalue) auto&& triple) {
       // Process the given triple.
       ProcessedTriple lt = index->processTriple(AD_FWD(triple));
 
       // We return processed versions of: (1) the original triple, (2) two
       // internal triples for the language tag (if any), and (3) one triple for
-      // each distinct word in the literal (if applicable).
-      IdTriples result(3 + lt.wordFrequencies_.size());
+      // each q-gram occurrence in the literal (if applicable).
+      IdTriples result(3 + lt.qgrams_.size());
 
       // First, process the original triple.
       result[0] = map.getId(lt.triple_);
@@ -346,27 +346,27 @@ auto getIdMapLambdas(
             langTagId, tripleGraphId});
       }
 
-      // Third, if applicable, add a `ql:has-word` triple for each distinct word
-      // in the literal. We abuse the graph ID field to store the term
-      // frequency of the word in the literal.
-      if (!lt.wordFrequencies_.empty()) {
-        auto hasWordPredId = map.getId(TripleComponent{
-            ad_utility::triple_component::Iri::fromIriref(HAS_WORD_PREDICATE)});
+      // Third, if applicable, add a `ql:has-qgram` triple for each q-gram
+      // occurrence in the literal. We use the graph ID field to store the
+      // 1-based position of the q-gram in the literal.
+      if (!lt.qgrams_.empty()) {
+        auto hasQgramPredId = map.getId(
+            TripleComponent{ad_utility::triple_component::Iri::fromIriref(
+                HAS_QGRAM_PREDICATE)});
         size_t resultIndex = 3;
-        for (const auto& [word, termFrequency] : lt.wordFrequencies_) {
-          // Add the internal triple `<literal> ql:has-word "word"`.
-          auto wordId = map.getId(TripleComponent{
+        for (size_t i = 0; i < lt.qgrams_.size(); ++i) {
+          // Add the internal triple `<literal> ql:has-qgram "qgram"`.
+          auto qgramId = map.getId(TripleComponent{
               ad_utility::triple_component::Literal::fromEscapedRdfLiteral(
-                  absl::StrCat("\"", word, "\""))});
-          auto termFrequencyId =
-              Id::makeFromInt(static_cast<int64_t>(termFrequency));
+                  absl::StrCat("\"", lt.qgrams_[i], "\""))});
+          auto positionId = Id::makeFromInt(static_cast<int64_t>(i + 1));
           result[resultIndex++].emplace(
-              IdTriple{spoIds[2], hasWordPredId, wordId, termFrequencyId});
+              IdTriple{spoIds[2], hasQgramPredId, qgramId, positionId});
         }
-        // Update the counter for the number of ql:has-word triples.
-        if (numHasWordTriples != nullptr) {
-          numHasWordTriples->fetch_add(lt.wordFrequencies_.size(),
-                                       std::memory_order_relaxed);
+        // Update the counter for the number of ql:has-qgram triples.
+        if (numHasQgramTriples != nullptr) {
+          numHasQgramTriples->fetch_add(lt.qgrams_.size(),
+                                        std::memory_order_relaxed);
         }
       }
 

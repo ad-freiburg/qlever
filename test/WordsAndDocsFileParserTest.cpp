@@ -179,3 +179,87 @@ TEST(TokenizeAndNormalizeText, Unicode) {
   AD_EXPECT_THROW_WITH_MESSAGE(testTokenizeAndNormalizeText("\255", {}),
                                ::testing::HasSubstr("Invalid UTF-8"));
 }
+
+// _____________________________________________________________________________
+TEST(QgramizeAndNormalizeText, Basic) {
+  // Helper to collect q-grams into a vector for easy comparison.
+  auto collectQgrams = [](std::string_view text, size_t q) {
+    std::vector<std::string> result;
+    for (std::string_view qgram : qgramizeAndNormalizeText(text, q)) {
+      result.emplace_back(qgram);
+    }
+    return result;
+  };
+
+  // Test case from the docstring: "Fei-F. Wu" with q=3
+  // Normalized: "feif wu" (hyphen and period removed)
+  // Padded: "$$feif wu$$"
+  // Q-grams: $$f, $fe, fei, eif, if , f w,  wu, wu$, u$$
+  EXPECT_THAT(collectQgrams("Fei-F. Wu", 3),
+              ::testing::ElementsAre("$$f", "$fe", "fei", "eif", "if ", "f w",
+                                     " wu", "wu$", "u$$"));
+
+  // Test diacritic removal: "Müller" -> "muller"
+  // Padded: "$$muller$$"
+  EXPECT_THAT(collectQgrams("Müller", 3),
+              ::testing::ElementsAre("$$m", "$mu", "mul", "ull", "lle", "ler",
+                                     "er$", "r$$"));
+
+  // Test with accented characters: "José García" -> "jose garcia"
+  // Padded: "$$jose garcia$$"
+  EXPECT_THAT(
+      collectQgrams("José García", 3),
+      ::testing::ElementsAre("$$j", "$jo", "jos", "ose", "se ", "e g", " ga",
+                             "gar", "arc", "rci", "cia", "ia$", "a$$"));
+
+  // Test empty string: padded to "$$$$" (length 4), yields 2 q-grams
+  EXPECT_THAT(collectQgrams("", 3), ::testing::ElementsAre("$$$", "$$$"));
+
+  // Test string that normalizes to empty (only punctuation): same as empty
+  EXPECT_THAT(collectQgrams(".,!?", 3), ::testing::ElementsAre("$$$", "$$$"));
+
+  // Test with q=2
+  EXPECT_THAT(collectQgrams("ab", 2), ::testing::ElementsAre("$a", "ab", "b$"));
+
+  // Test with q=1 (edge case: no padding needed)
+  EXPECT_THAT(collectQgrams("abc", 1), ::testing::ElementsAre("a", "b", "c"));
+
+  // Test that numbers are removed: "test123" -> "test"
+  EXPECT_THAT(collectQgrams("test123", 3),
+              ::testing::ElementsAre("$$t", "$te", "tes", "est", "st$", "t$$"));
+
+  // Test size() and empty() methods
+  auto range = qgramizeAndNormalizeText("hello", 3);
+  EXPECT_EQ(range.size(), 7u);  // "$$hello$$" has length 9, so 9-3+1=7 q-grams
+  EXPECT_FALSE(range.empty());
+
+  auto emptyRange = qgramizeAndNormalizeText("", 3);
+  // Empty string -> "" -> padded "$$$$" (length 4) -> 4-3+1=2 q-grams
+  EXPECT_EQ(emptyRange.size(), 2u);
+  EXPECT_FALSE(emptyRange.empty());
+}
+
+// _____________________________________________________________________________
+TEST(QgramizeAndNormalizeText, EdgeCases) {
+  auto collectQgrams = [](std::string_view text, size_t q) {
+    std::vector<std::string> result;
+    for (std::string_view qgram : qgramizeAndNormalizeText(text, q)) {
+      result.emplace_back(qgram);
+    }
+    return result;
+  };
+
+  // Single character: "a" with q=3
+  // Padded: "$$a$$" (length 5), q-grams: "$$a", "$a$", "a$$"
+  EXPECT_THAT(collectQgrams("a", 3),
+              ::testing::ElementsAre("$$a", "$a$", "a$$"));
+
+  // String shorter than q after normalization but with padding
+  // "x" with q=5: padded "$$$$x$$$$" (length 9), 9-5+1=5 q-grams
+  EXPECT_THAT(
+      collectQgrams("x", 5),
+      ::testing::ElementsAre("$$$$x", "$$$x$", "$$x$$", "$x$$$", "x$$$$"));
+
+  // Q must be positive
+  EXPECT_THROW(qgramizeAndNormalizeText("test", 0), ad_utility::Exception);
+}

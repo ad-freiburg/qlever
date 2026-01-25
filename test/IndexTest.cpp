@@ -462,6 +462,64 @@ TEST(IndexTest, processTriple) {
     ProcessedTriple result = index.processTriple(std::move(turtleTriple));
     EXPECT_EQ(Id::makeFromDouble(42.0), std::get<Id>(result.triple_[2]));
   }
+  // Test q-gram extraction with positions.
+  {
+    IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
+    index.qgramSize() = 3;
+    TurtleTriple turtleTriple{iri("<subject>"), iri("<predicate>"),
+                              lit("\"foo\"")};
+    ProcessedTriple result = index.processTriple(std::move(turtleTriple));
+    // "foo" -> normalized "foo" -> padded "$$foo$$" -> q-grams:
+    // $$f, $fo, foo, oo$, o$$
+    ASSERT_EQ(result.qgrams_.size(), 5);
+    EXPECT_EQ(result.qgrams_[0], "$$f");
+    EXPECT_EQ(result.qgrams_[1], "$fo");
+    EXPECT_EQ(result.qgrams_[2], "foo");
+    EXPECT_EQ(result.qgrams_[3], "oo$");
+    EXPECT_EQ(result.qgrams_[4], "o$$");
+  }
+  // Test that q-gram positions are correctly stored in the index.
+  // Use "A" which normalizes to "a", padded to "$$a$$", yielding 3 q-grams.
+  {
+    std::string turtleInput = "<x> <label> \"A\" .";
+    TestIndexConfig config{turtleInput};
+    config.qgramSize = 3;
+    const auto& qec = *getQec(config);
+    const IndexImpl& index = qec.getIndex().getImpl();
+
+    // Internal triples (like ql:has-qgram) are stored in the internal
+    // permutation, not the regular one.
+    const auto& pso = index.getPermutation(Permutation::PSO);
+    const auto& internalPso = pso.internalPermutation();
+    auto locatedTriplesSnapshot = qec.locatedTriplesState();
+
+    // Request the graph column (index 3) which stores the position.
+    Permutation::ColumnIndices additionalColumns = {ADDITIONAL_COLUMN_GRAPH_ID};
+    IdTable scanResult = internalPso.scan(
+        internalPso.getScanSpecAndBlocks(
+            ScanSpecificationAsTripleComponent{iri(HAS_QGRAM_PREDICATE),
+                                               std::nullopt, std::nullopt}
+                .toScanSpecification(index),
+            locatedTriplesSnapshot),
+        additionalColumns, std::make_shared<ad_utility::CancellationHandle<>>(),
+        locatedTriplesSnapshot);
+
+    // Should have 3 q-grams: $$a, $a$, a$$
+    ASSERT_EQ(scanResult.numRows(), 3);
+
+    // Column 0 is subject (the literal), column 1 is object (the q-gram),
+    // column 2 is the graph ID (position).
+    // Collect the positions.
+    std::vector<int64_t> positions;
+    for (size_t i = 0; i < scanResult.numRows(); ++i) {
+      Id graphId = scanResult(i, 2);  // position
+      positions.push_back(graphId.getInt());
+    }
+
+    // Sort positions and verify they are 1, 2, 3.
+    std::sort(positions.begin(), positions.end());
+    EXPECT_THAT(positions, ::testing::ElementsAre(1, 2, 3));
+  }
 }
 
 TEST(IndexTest, NumDistinctEntities) {
@@ -471,7 +529,7 @@ TEST(IndexTest, NumDistinctEntities) {
       "<label> \"Beta\". <x> <is-a> <y>. <y> <is-a> <x>. <z> <label> "
       "\"zz\"@en";
   TestIndexConfig config{turtleInput};
-  config.addHasWordTriples = true;
+  config.qgramSize = 3;
   const auto& qec = *getQec(config);
   const IndexImpl& index = qec.getIndex().getImpl();
   // Note: Those numbers might change as the triples of the test index in
@@ -486,7 +544,7 @@ TEST(IndexTest, NumDistinctEntities) {
 
   auto numPredicates = index.numDistinctPredicates();
   EXPECT_EQ(numPredicates.normal, 2);
-  // The added numPredicates are `ql:has-pattern`, `ql:langtag`, `ql:has-word`,
+  // The added numPredicates are `ql:has-pattern`, `ql:langtag`, `ql:has-qgram`,
   // and one added predicate for each combination of predicate+language that is
   // actually used (e.g. `@en@label`).
   EXPECT_EQ(numPredicates.internal, 4);
@@ -501,9 +559,10 @@ TEST(IndexTest, NumDistinctEntities) {
   auto numTriples = index.numTriples();
   EXPECT_EQ(numTriples.normal, 7);
   // Two added triples for each triple that has an object with a language tag,
-  // one triple per subject for the pattern, and one ql:has-word triple per
-  // word in the literals (5 literals with 1 word each = 5 word triples).
-  EXPECT_EQ(numTriples.internal, 10);
+  // one triple per subject for the pattern, and ql:has-qgram triples for each
+  // q-gram in the literals (with q=3: "alpha"->7, "älpha"->"alpha"->7, "a"->3,
+  // "beta"->6, "zz"->4 = 27 q-gram triples). Total: 2 + 3 + 27 = 32.
+  EXPECT_EQ(numTriples.internal, 32);
 
   auto multiplicities =
       index.getMultiplicities(index.getPermutation(Permutation::SPO));
@@ -661,4 +720,82 @@ TEST(IndexTest, getBlankNodeManager) {
       "_:c <a> <b> .";
   const Index& index3 = getQec(kb)->getIndex();
   EXPECT_EQ(index3.getBlankNodeManager()->minIndex_, 3);
+}
+
+// _____________________________________________________________________________
+TEST(IndexImpl, recomputeStatistics) {
+  std::string turtleInput =
+      "<x> <label> \"alpha\" . <x> <label> \"A\" . "
+      "<y> <label> \"Beta\". <z> <label> \"zz\"@en";
+  auto index = makeTestIndex("recomputeStatistics", std::move(turtleInput));
+  auto cancellationHandle =
+      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+
+  auto& indexImpl = index.getImpl();
+  // No-op, should return the same stats.
+  auto result = indexImpl.recomputeStatistics(
+      index.deltaTriplesManager().getCurrentLocatedTriplesSharedState());
+  EXPECT_EQ(result, indexImpl.configurationJson_);
+
+  // Now, modify the index by adding triples.
+  Id blankNodeId = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(42));
+  index.deltaTriplesManager().modify<void>([&cancellationHandle, blankNodeId](
+                                               DeltaTriples& deltaTriples) {
+    LocalVocabEntry zzz{ad_utility::triple_component::Iri::fromIriref("<zzz>")};
+    LocalVocabEntry literal{
+        ad_utility::triple_component::Literal::fromStringRepresentation(
+            "\"test\"@en")};
+    Id zzzId = Id::makeFromLocalVocabIndex(&zzz);
+    Id literalId = Id::makeFromLocalVocabIndex(&literal);
+    // Create duplicate in different graph.
+    Id x = Id::makeFromVocabIndex(VocabIndex::make(11));
+    Id label = Id::makeFromVocabIndex(VocabIndex::make(10));
+    Id alpha = Id::makeFromVocabIndex(VocabIndex::make(1));
+    deltaTriples.insertTriples(
+        cancellationHandle, {IdTriple{{x, label, alpha, x}},
+                             IdTriple{{blankNodeId, zzzId, literalId, zzzId}}});
+  });
+
+  for (bool loadAllPermutations : {true, false}) {
+    using NNAI = Index::NumNormalAndInternal;
+
+    // Simulate scenario where not all permutations are loaded.
+    if (!loadAllPermutations) {
+      // Overwrite with unloaded permutation.
+      indexImpl.SPOForTesting() = Permutation{
+          Permutation::SPO, ad_utility::makeUnlimitedAllocator<Id>()};
+      // Zero out original values.
+      indexImpl.configurationJson_["num-subjects"] = NNAI(0, 0);
+      indexImpl.configurationJson_["num-objects"] = NNAI(0, 0);
+    }
+
+    auto newStats = indexImpl.recomputeStatistics(
+        index.deltaTriplesManager().getCurrentLocatedTriplesSharedState());
+    EXPECT_NE(newStats, indexImpl.configurationJson_);
+    EXPECT_EQ(newStats["num-triples"], NNAI(5, 6));
+    EXPECT_EQ(newStats["num-predicates"], NNAI(2, 4));
+    if (loadAllPermutations) {
+      EXPECT_EQ(newStats["num-subjects"], NNAI(4, 0));
+      EXPECT_EQ(newStats["num-objects"], NNAI(5, 0));
+    } else {
+      EXPECT_EQ(newStats["num-subjects"], NNAI(0, 0));
+      EXPECT_EQ(newStats["num-objects"], NNAI(0, 0));
+    }
+    // Blank node ids are remapped, so we cannot predict the exact number.
+    EXPECT_NE(newStats["num-blank-nodes-total"], 0);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(IndexImpl, countDistinct) {
+  std::vector<IdTable> tables;
+  tables.push_back(makeIdTableFromVector({{1}, {2}}));
+  tables.push_back(makeIdTableFromVector({{2}, {2}}));
+
+  size_t counter = 0;
+  std::optional<Id> lastId;
+  for (const IdTable& table : tables) {
+    IndexImpl::countDistinct(lastId, counter, table);
+  }
+  EXPECT_EQ(counter, 2);
 }

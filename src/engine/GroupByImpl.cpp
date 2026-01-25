@@ -779,6 +779,11 @@ std::optional<IdTable> GroupByImpl::computeGroupByForSingleIndexScan() const {
     // The variable is never bound, so its count is zero.
     table(0, 0) = Id::makeFromInt(0);
   } else if (indexScan->numVariables() == 3) {
+    // TODO<RobinTF> This currently doesn't work correctly with UPDATE. It
+    // queries the statistics which are never updated. Consider calling
+    // `IndexImpl::recomputeStatistics` and storing the result somewhere in this
+    // case. It also doesn't return the correct result for internal
+    // permutations.
     if (countIsDistinct) {
       auto permutation =
           getPermutationForThreeVariableTriple(*_subtree, var, var);

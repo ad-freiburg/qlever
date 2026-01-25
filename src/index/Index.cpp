@@ -157,7 +157,10 @@ bool& Index::usePatterns() { return pimpl_->usePatterns(); }
 bool& Index::loadAllPermutations() { return pimpl_->loadAllPermutations(); }
 
 // ____________________________________________________________________________
-bool& Index::addHasWordTriples() { return pimpl_->addHasWordTriples(); }
+bool& Index::doNotLoadPermutations() { return pimpl_->doNotLoadPermutations(); }
+
+// ____________________________________________________________________________
+size_t& Index::qgramSize() { return pimpl_->qgramSize(); }
 
 // ____________________________________________________________________________
 void Index::setKeepTempFiles(bool keepTempFiles) {

@@ -48,10 +48,8 @@ class Index {
     QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(NumNormalAndInternal, normal,
                                                 internal)
 
-    static NumNormalAndInternal fromNormalAndTotal(size_t normal,
-                                                   size_t total) {
-      AD_CONTRACT_CHECK(total >= normal);
-      return {normal, total - normal};
+    static NumNormalAndInternal fromNormal(size_t normal) {
+      return {normal, 0};
     }
     NLOHMANN_DEFINE_TYPE_INTRUSIVE(NumNormalAndInternal, normal, internal);
   };
@@ -188,7 +186,9 @@ class Index {
 
   bool& loadAllPermutations();
 
-  bool& addHasWordTriples();
+  bool& doNotLoadPermutations();
+
+  size_t& qgramSize();
 
   void setKeepTempFiles(bool keepTempFiles);
 

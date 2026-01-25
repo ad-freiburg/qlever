@@ -14,6 +14,7 @@
 #include <gtest/gtest_prod.h>
 
 #include <boost/functional/hash.hpp>
+#include <boost/optional.hpp>
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <vector>
@@ -79,6 +80,11 @@ class BlankNodeManager {
                         boost::hash<boost::uuids::uuid>>
         managedBlockSets_;
 
+    // Keep track of whether the method for retrieving a random block has been
+    // called at least once. after this point, the allocation of blocks by
+    // explicit indices is forbidden.
+    ad_utility::ResetWhenMoved<bool, false> randomBlockWasRequested_ = false;
+
     // Constructor, all members except for the block index generator can be
     // default-constructed.
     explicit State(SlowRandomIntGenerator<uint64_t> randBlockIndex)
@@ -88,6 +94,7 @@ class BlankNodeManager {
   // The actual state variable, wrapped in a `Synchronized` to enforce
   // threadsafe access.
   Synchronized<State> state_;
+  using WriteLock = decltype(state_.wlock());
 
   // A block of blank node indices.
   class Block {
@@ -238,8 +245,13 @@ class BlankNodeManager {
   // only be safely called when no calls to `allocatedBlock()` have been
   // performed. It can for example be used to restore blocks from previously
   // serialized cache results or updates when the engine is started, but before
-  // any queries are performed.
-  [[nodiscard]] Block allocateExplicitBlock(uint64_t blockIdx);
+  // any queries are performed. Can be used while alreading holding a lock to
+  // the synchronized `state`, in which case the lock has to be passed as the
+  // second argument. Can also be used without holding the lock, then the second
+  // argument has to be `boost::none` and the function obtains its own lock
+  // (this is used for more fine-grained unit tests).
+  [[nodiscard]] Block allocateExplicitBlock(
+      uint64_t blockIdx, boost::optional<WriteLock&> lock = boost::none);
 
   // If the `uuid` of the `entry` is not yet registered with this
   // `BlankNodeManager`, register and return a new `Blocks` struct with the

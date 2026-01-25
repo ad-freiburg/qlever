@@ -36,6 +36,7 @@ Qlever::Qlever(const EngineConfig& config)
   // Load the index from disk.
   index_.usePatterns() = enablePatternTrick_;
   index_.loadAllPermutations() = !config.onlyPsoAndPos_;
+  index_.doNotLoadPermutations() = config.doNotLoadPermutations_;
   index_.createFromOnDiskIndex(config.baseName_, config.persistUpdates_);
   if (config.loadTextIndex_) {
     index_.addTextFromOnDiskIndex();
@@ -76,7 +77,7 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   index.setKeepTempFiles(config.keepTemporaryFiles_);
   index.setSettingsFile(config.settingsFile_);
   index.loadAllPermutations() = !config.onlyPsoAndPos_;
-  index.addHasWordTriples() = config.addHasWordTriples_;
+  index.qgramSize() = config.qgramSize_;
   index.getImpl().setVocabularyTypeForIndexBuilding(config.vocabType_);
   index.getImpl().setPrefixesForEncodedValues(config.prefixesForIdEncodedIris_);
 

@@ -8,6 +8,7 @@
 
 #include <absl/strings/str_split.h>
 #include <unicode/locid.h>
+#include <unicode/normalizer2.h>
 #include <unicode/uchar.h>
 
 #include <fstream>
@@ -141,6 +142,139 @@ inline auto tokenizeAndNormalizeText(std::string_view text,
                                 return localeManager.getLowercaseUtf8(str);
                               });
 }
+
+/**
+ * @brief A range that owns a padded string and yields q-grams as string_views.
+ *
+ * This class stores the normalized and padded string and provides iteration
+ * over all q-grams (substrings of length q).
+ */
+class QgramRange {
+ private:
+  std::string paddedText_;
+  size_t q_;
+
+ public:
+  QgramRange(std::string paddedText, size_t q)
+      : paddedText_(std::move(paddedText)), q_(q) {}
+
+  class iterator {
+   private:
+    const std::string* text_;
+    size_t pos_;
+    size_t q_;
+
+   public:
+    using iterator_category = std::forward_iterator_tag;
+    using value_type = std::string_view;
+    using difference_type = std::ptrdiff_t;
+    using pointer = const std::string_view*;
+    using reference = std::string_view;
+
+    iterator(const std::string* text, size_t pos, size_t q)
+        : text_(text), pos_(pos), q_(q) {}
+
+    std::string_view operator*() const {
+      return std::string_view(*text_).substr(pos_, q_);
+    }
+
+    iterator& operator++() {
+      ++pos_;
+      return *this;
+    }
+
+    iterator operator++(int) {
+      iterator tmp = *this;
+      ++pos_;
+      return tmp;
+    }
+
+    bool operator==(const iterator& other) const { return pos_ == other.pos_; }
+    bool operator!=(const iterator& other) const { return pos_ != other.pos_; }
+  };
+
+  iterator begin() const { return iterator(&paddedText_, 0, q_); }
+
+  iterator end() const {
+    size_t endPos = paddedText_.size() >= q_ ? paddedText_.size() - q_ + 1 : 0;
+    return iterator(&paddedText_, endPos, q_);
+  }
+
+  size_t size() const {
+    return paddedText_.size() >= q_ ? paddedText_.size() - q_ + 1 : 0;
+  }
+
+  bool empty() const { return size() == 0; }
+};
+
+/**
+ * @brief Normalize text and generate q-grams.
+ *
+ * Normalization steps:
+ * 1. Remove diacritics (e.g., ö → o, é → e) using Unicode NFD decomposition
+ * 2. Transform to lowercase
+ * 3. Keep only characters in [a-z ] (ASCII letters and space)
+ * 4. Pad with (q-1) '$' characters on both sides
+ *
+ * @param text The text to process.
+ * @param q The size of q-grams (must be > 0).
+ * @return A QgramRange that can be iterated to yield all q-grams as
+ *         string_views.
+ *
+ * @example For text "Fei-F. Wu" and q=3:
+ *   - Normalized: "feif wu"
+ *   - Padded: "$$feif wu$$"
+ *   - Q-grams: $$f, $fe, fei, eif, if , f w,  wu, wu$, u$$
+ */
+inline QgramRange qgramizeAndNormalizeText(std::string_view text, size_t q) {
+  AD_CONTRACT_CHECK(q > 0, "q must be positive");
+
+  // Get the NFD normalizer (decomposes characters into base + combining marks)
+  UErrorCode err = U_ZERO_ERROR;
+  const icu::Normalizer2* nfd = icu::Normalizer2::getNFDInstance(err);
+  AD_CONTRACT_CHECK(U_SUCCESS(err), u_errorName(err));
+
+  // Convert to ICU UnicodeString and normalize to NFD
+  icu::UnicodeString ustr = icu::UnicodeString::fromUTF8(
+      icu::StringPiece(text.data(), static_cast<int32_t>(text.size())));
+  icu::UnicodeString normalized;
+  nfd->normalize(ustr, normalized, err);
+  AD_CONTRACT_CHECK(U_SUCCESS(err), u_errorName(err));
+
+  // Build the result: skip combining marks, lowercase, keep only [a-z ]
+  std::string padded;
+  padded.reserve((q - 1) * 2 + text.size());
+
+  // Add (q-1) padding at the start
+  padded.append(q - 1, '$');
+
+  // Process each code point
+  for (int32_t i = 0; i < normalized.length();) {
+    UChar32 c = normalized.char32At(i);
+    i += U16_LENGTH(c);
+
+    // Skip combining marks (diacritics)
+    if (u_getCombiningClass(c) != 0) {
+      continue;
+    }
+
+    // Lowercase
+    UChar32 lower = u_tolower(c);
+
+    // Keep only [a-z] and space
+    if (lower >= 'a' && lower <= 'z') {
+      padded.push_back(static_cast<char>(lower));
+    } else if (c == ' ') {
+      padded.push_back(' ');
+    }
+  }
+
+  // Add (q-1) padding at the end
+  padded.append(q - 1, '$');
+
+  return QgramRange(std::move(padded), q);
+}
+
 /**
  * @brief This class is the parent class of WordsFileParser and DocsFileParser
  *
