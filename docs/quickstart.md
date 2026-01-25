@@ -63,20 +63,20 @@ line does the job. It takes about 20 seconds on an AMD Ryzen 9 5900X.  The only
 purpose of the final `tee` is to save the log in a file (you can also recover
 the log from the docker container as long as it exists).
 
-        chmod o+w . && docker run -it --rm -v $QLEVER_HOME/qlever-indices/olympics:/index --entrypoint bash qlever -c "cd /index && xzcat olympics.nt.xz | IndexBuilderMain -F ttl -f - -l -i olympics -s olympics.settings.json | tee olympics.index-log.txt"
+        chmod o+w . && docker run -it --rm -v $QLEVER_HOME/qlever-indices/olympics:/index --entrypoint bash qlever -c "cd /index && xzcat olympics.nt.xz | qlever-index -F ttl -f - -l -i olympics -s olympics.settings.json | tee olympics.index-log.txt"
 
 To build an index for the complete Wikidata (16 billion triples as of 30.09.2021), the
 following command line does the job (after obtaining the dataset and the
 settings as explained in the previous paragraph). It takes about 20 hours on an
 AMD Ryzen 9 5900X. Note that the only difference is the basename (`wikidata`
 instead of `olympics`) and how the input files are piped into the
-`IndexBuilderMain` executable (using `bzcat` instead of `xzcat` and two files
+`qlever-index` executable (using `bzcat` instead of `xzcat` and two files
 instead of one). Also note the `ulimit -Sn 1048576`, which ensures that the
 operating system allows a sufficient number of open files (on some systems, the
 default is as low as `1024`, and for large datasets, QLever operates with more
 temporary files than that).
 
-        chmod o+w . && docker run -it --rm -v $QLEVER_HOME/qlever-indices/wikidata:/index --entrypoint bash qlever -c "cd /index && ulimit -Sn 1048576 && bzcat latest-all.ttl.bz2 latest-lexemes.ttl.bz2 | IndexBuilderMain -F ttl -f - -l -i wikidata -s wikidata.settings.json | tee wikidata.index-log.txt"
+        chmod o+w . && docker run -it --rm -v $QLEVER_HOME/qlever-indices/wikidata:/index --entrypoint bash qlever -c "cd /index && ulimit -Sn 1048576 && bzcat latest-all.ttl.bz2 latest-lexemes.ttl.bz2 | qlever-index -F ttl -f - -l -i wikidata -s wikidata.settings.json | tee wikidata.index-log.txt"
 
 ## Start the engine
 
