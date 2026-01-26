@@ -56,8 +56,9 @@ class ConstructTripleGenerator {
   static ad_utility::InputRangeTypeErased<StringTriple> generateStringTriples(
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructTriples,
-      LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
-      uint64_t& resultSize, CancellationHandle cancellationHandle);
+      const LimitOffsetClause& limitAndOffset,
+      std::shared_ptr<const Result> result, uint64_t& resultSize,
+      CancellationHandle cancellationHandle);
 
  private:
   // triple templates contained in the graph template
