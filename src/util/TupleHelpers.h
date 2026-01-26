@@ -20,7 +20,7 @@ namespace detail {
  */
 template <class F, size_t... I>
 auto setupTupleFromCallableImpl(F&& f, std::index_sequence<I...>) {
-  return std::tuple(f(I)...);
+  return std::make_tuple(f(I)...);
 }
 }  // namespace detail
 
@@ -32,7 +32,7 @@ auto setupTupleFromCallableImpl(F&& f, std::index_sequence<I...>) {
  * @tparam numEntries the size of the tuple to be created
  * @tparam F A function object that takes a single size_t as an argument
  * @param f
- * @return std::tuple(f(0), f(1), f(2), ... f(numEntries - 1));
+ * @return std::make_tuple(f(0), f(1), f(2), ... f(numEntries - 1));
  * @todo<joka921> Can we simplify this implementation via fold expressions etc?
  */
 template <size_t numEntries, class F>
@@ -46,16 +46,17 @@ auto setupTupleFromCallable(F&& f) {
  * @brief convert a parameter pack to a tuple of unique_ptrs that are
  * constructed from the elements of the parameter pack. E.g.
  * toUniquePtrTuple(int(3), std::string("foo")) ==
- * std::tuple(std::make_unique<int>(3), std::make_unique<std::string>("foo")) It
- * can take an arbitrary positive number of arguments. Currently this template
- * is linearly expanded, if this becomes a bottleneck at compile time (e.g. for
- * very long parameter packs) we could do something more intelligent.
- * @return std::tuple(std::make_unique<First>(std::forward<First>(l),
+ * std::make_tuple(std::make_unique<int>(3),
+ * std::make_unique<std::string>("foo")) It can take an arbitrary positive
+ * number of arguments. Currently this template is linearly expanded, if this
+ * becomes a bottleneck at compile time (e.g. for very long parameter packs) we
+ * could do something more intelligent.
+ * @return std::make_tuple(std::make_unique<First>(std::forward<First>(l),
  * std::make_unique<FirstOfRem.....
  */
 template <typename... Rest>
 auto toUniquePtrTuple(Rest&&... rem) {
-  return std::tuple(
+  return std::make_tuple(
       std::make_unique<std::decay_t<Rest>>(std::forward<Rest>(rem))...);
 }
 
@@ -73,8 +74,8 @@ using toUniquePtrTuple_t = decltype(toUniquePtrTuple(std::declval<ts>()...));
  * .get() method e.g. std::tuple<std::unique_ptr<int>,
  * std::shared_ptr<std::string>> or std::array<std::shared_ptr<int>, 42>;
  * @param tuple A tuple/array of type Tuple
- * @return std::tuple(std::get<0>(tuple).get(), std::get<1>(tuple).get(), ...
- * std::get<std::tuple_size_v<Tuple>>(tuple).get());
+ * @return std::make_tuple(std::get<0>(tuple).get(), std::get<1>(tuple).get(),
+ * ... std::get<std::tuple_size_v<Tuple>>(tuple).get());
  */
 template <typename Tuple, bool safe = true>
 auto toRawPtrTuple(Tuple&& tuple) {
@@ -84,7 +85,7 @@ auto toRawPtrTuple(Tuple&& tuple) {
         "You can't pass an rvalue reference to toRawPtrTuple, because "
         "the argument preserves the ownership to the pointers");
   }
-  auto f = [](auto&&... args) { return std::tuple(args.get()...); };
+  auto f = [](auto&&... args) { return std::make_tuple(args.get()...); };
   return std::apply(f, tuple);  // std::forward<Tuple>(tuple));
 }
 

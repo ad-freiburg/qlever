@@ -10,10 +10,10 @@
 
 #include <cstddef>
 #include <sstream>
-#include <type_traits>
 #include <variant>
 
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
+#include "backports/type_traits.h"
 #include "util/TypeTraits.h"
 
 /*

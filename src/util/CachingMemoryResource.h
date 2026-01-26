@@ -5,13 +5,12 @@
 #ifndef QLEVER_SRC_UTIL_CACHINGMEMORYRESOURCE_H
 #define QLEVER_SRC_UTIL_CACHINGMEMORYRESOURCE_H
 
-#include <memory_resource>
-
+#include "backports/memory_resource.h"
 #include "util/HashMap.h"
 
 namespace ad_utility {
 
-// A memory resource that inherits from `std::pmr::memory_resource` with the
+// A memory resource that inherits from `ql::pmr::memory_resource` with the
 // following properties:
 // 1. It is threadsafe
 // 2. It internally holds a cache of previously allocated blocks. Allocation
@@ -27,9 +26,9 @@ namespace ad_utility {
 // for multiple hash maps that all reserve the same amount of space. A simpler
 // approach would be to reuse the hash maps directly, but once this is not
 // feasible, this allocator can come in handy.
-class CachingMemoryResource : public std::pmr::memory_resource {
+class CachingMemoryResource : public ql::pmr::memory_resource {
  private:
-  std::pmr::memory_resource* allocator_ = std::pmr::get_default_resource();
+  ql::pmr::memory_resource* allocator_ = ql::pmr::get_default_resource();
   ad_utility::HashMap<std::pair<size_t, size_t>, std::vector<void*>> cache_;
   std::mutex mutex_;
 
@@ -56,7 +55,7 @@ class CachingMemoryResource : public std::pmr::memory_resource {
 
   // Equality implementation.
   bool do_is_equal(
-      const std::pmr::memory_resource& other) const noexcept override {
+      const ql::pmr::memory_resource& other) const noexcept override {
     return this == &other;
   }
 

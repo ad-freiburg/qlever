@@ -15,10 +15,9 @@ using namespace sparqlExpression;
 namespace tc = ad_utility::triple_component;
 
 // _____________________________________________________________________________
-void expectIdsAreConcatenatedTo(bool distinct, const IdTable& idTable,
-                                const ExpressionResult& expected,
-                                ad_utility::source_location location =
-                                    ad_utility::source_location::current()) {
+void expectIdsAreConcatenatedTo(
+    bool distinct, const IdTable& idTable, const ExpressionResult& expected,
+    ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) {
   AD_CONTRACT_CHECK(idTable.numColumns() == 1);
   auto* qec = ad_utility::testing::getQec();
   auto g = generateLocationTrace(location);
@@ -50,8 +49,7 @@ void expectIdsAreConcatenatedTo(bool distinct, const IdTable& idTable,
 void expectLiteralsAreConcatenatedTo(
     bool distinct, const std::vector<tc::Literal>& literals,
     const ad_utility::triple_component::Literal& literal,
-    ad_utility::source_location location =
-        ad_utility::source_location::current()) {
+    ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) {
   LocalVocab localVocab;
   IdTable input{1, ad_utility::makeUnlimitedAllocator<Id>()};
 

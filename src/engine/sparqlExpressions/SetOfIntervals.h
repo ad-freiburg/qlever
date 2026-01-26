@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "backports/algorithm.h"
+#include "backports/three_way_comparison.h"
 #include "util/Exception.h"
 
 namespace ad_utility {
@@ -24,7 +25,7 @@ struct SetOfIntervals {
   constexpr static size_t upperBound = std::numeric_limits<size_t>::max();
 
   // _________________________________________________________________________
-  bool operator==(const SetOfIntervals&) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(SetOfIntervals, _intervals)
 
   /// Sort the intervals in ascending order and assert that they are indeed
   /// disjoint and nonempty.

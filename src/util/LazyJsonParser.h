@@ -5,6 +5,7 @@
 #ifndef QLEVER_SRC_UTIL_LAZYJSONPARSER_H
 #define QLEVER_SRC_UTIL_LAZYJSONPARSER_H
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include <optional>
 #include <variant>
 
@@ -116,4 +117,5 @@ class LazyJsonParser {
 };
 }  // namespace ad_utility
 
+#endif
 #endif  // QLEVER_SRC_UTIL_LAZYJSONPARSER_H

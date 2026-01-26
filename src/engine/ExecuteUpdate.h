@@ -10,15 +10,14 @@
 #include "index/Index.h"
 #include "parser/ParsedQuery.h"
 #include "util/CancellationHandle.h"
+#include "util/TimeTracer.h"
 
-// Metadata about the time spent on different parts of an update.
+// Metadata of a single update operation: number of inserted and deleted triples
+// before the operation, of the operation, and after the operation.
 struct UpdateMetadata {
-  using Milliseconds = std::chrono::milliseconds;
-  static constexpr Milliseconds Zero = Milliseconds::zero();
-  Milliseconds triplePreparationTime_ = Zero;
-  Milliseconds insertionTime_ = Zero;
-  Milliseconds deletionTime_ = Zero;
+  std::optional<DeltaTriplesCount> countBefore_;
   std::optional<DeltaTriplesCount> inUpdate_;
+  std::optional<DeltaTriplesCount> countAfter_;
 };
 
 class ExecuteUpdate {
@@ -32,15 +31,18 @@ class ExecuteUpdate {
   static UpdateMetadata executeUpdate(
       const Index& index, const ParsedQuery& query,
       const QueryExecutionTree& qet, DeltaTriples& deltaTriples,
-      const CancellationHandle& cancellationHandle);
+      const CancellationHandle& cancellationHandle,
+      ad_utility::timer::TimeTracer& tracer =
+          ad_utility::timer::DEFAULT_TIME_TRACER);
 
  private:
   // Resolve all `TripleComponent`s and `Graph`s in a vector of
   // `SparqlTripleSimpleWithGraph` into `Variable`s or `Id`s.
-  static std::pair<std::vector<TransformedTriple>, LocalVocab>
-  transformTriplesTemplate(const Index::Vocab& vocab,
-                           const VariableToColumnMap& variableColumns,
-                           std::vector<SparqlTripleSimpleWithGraph>&& triples);
+  static std::pair<std::vector<ExecuteUpdate::TransformedTriple>, LocalVocab>
+  transformTriplesTemplate(
+      const EncodedIriManager& encodedIriManager, const Index::Vocab& vocab,
+      const VariableToColumnMap& variableColumns,
+      const std::vector<SparqlTripleSimpleWithGraph>& triples);
   FRIEND_TEST(ExecuteUpdate, transformTriplesTemplate);
 
   // Resolve a single `IdOrVariable` to an `Id` by looking up the value in the
@@ -72,7 +74,9 @@ class ExecuteUpdate {
                           const Result& result,
                           const VariableToColumnMap& variableColumns,
                           const CancellationHandle& cancellationHandle,
-                          UpdateMetadata& metadata);
+                          UpdateMetadata& metadata,
+                          ad_utility::timer::TimeTracer& tracer =
+                              ad_utility::timer::DEFAULT_TIME_TRACER);
   FRIEND_TEST(ExecuteUpdate, computeGraphUpdateQuads);
 
   // After the operation the vector is sorted and contains no duplicate

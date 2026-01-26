@@ -36,7 +36,7 @@ static auto constexpr getResultFunctionFactory =
        RequestMatchers matchers_ = {},
        std::exception_ptr mockException = nullptr,
        ad_utility::source_location loc =
-           ad_utility::source_location::current()) -> SendRequestType {
+           AD_CURRENT_SOURCE_LOC()) -> SendRequestType {
   return
       [=](const ad_utility::httpUtils::Url& url,
           ad_utility::SharedCancellationHandle,

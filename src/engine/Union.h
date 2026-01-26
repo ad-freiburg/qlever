@@ -124,6 +124,11 @@ class Union : public Operation {
   Result::LazyResult computeResultKeepOrder(
       bool requestLaziness, std::shared_ptr<const Result> result1,
       std::shared_ptr<const Result> result2) const;
+
+  // ___________________________________________________________________________
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(
+      const std::set<Variable>& variables) const override;
 };
 
 #endif  // QLEVER_SRC_ENGINE_UNION_H

@@ -30,19 +30,23 @@ class Join : public Operation {
 
   std::vector<float> _multiplicities;
 
+  // If set to false, the join column will not be part of the result.
+  bool keepJoinColumn_ = true;
+
  public:
   // `allowSwappingChildrenOnlyForTesting` should only ever be changed by tests.
   Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
        std::shared_ptr<QueryExecutionTree> t2, ColumnIndex t1JoinCol,
-       ColumnIndex t2JoinCol, bool allowSwappingChildrenOnlyForTesting = true);
+       ColumnIndex t2JoinCol, bool keepJoinColumn = true,
+       bool allowSwappingChildrenOnlyForTesting = true);
 
   using OptionalPermutation = std::optional<std::vector<ColumnIndex>>;
 
-  virtual std::string getDescriptor() const override;
+  std::string getDescriptor() const override;
 
-  virtual size_t getResultWidth() const override;
+  size_t getResultWidth() const override;
 
-  virtual std::vector<ColumnIndex> resultSortedOn() const override;
+  std::vector<ColumnIndex> resultSortedOn() const override;
 
  private:
   uint64_t getSizeEstimateBeforeLimit() override {
@@ -138,6 +142,10 @@ class Join : public Operation {
   Result computeResult(bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
+
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(
+      const std::set<Variable>& variables) const override;
 
   // A special implementation that is called when both children are
   // `IndexScan`s. Uses the lazy scans to only retrieve the subset of the

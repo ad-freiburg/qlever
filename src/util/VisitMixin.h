@@ -7,7 +7,7 @@
 
 #include <variant>
 
-#include "../util/Forward.h"
+#include "util/Forward.h"
 
 // TODO add requires (BaseVariant is a Variant, Derived derives from
 // BaseVariant)

@@ -7,13 +7,12 @@
 #define QLEVER_SRC_UTIL_CONFIGMANAGER_VALIDATOR_H
 
 #include <atomic>
-#include <concepts>
-#include <functional>
 #include <optional>
 #include <stdexcept>
 #include <string>
 #include <unordered_set>
 
+#include "backports/functional.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigOptionProxy.h"
 #include "util/HashSet.h"
@@ -135,8 +134,8 @@ class ConfigOptionValidatorManager {
                typename... ExceptionValidatorParameterTypes)(
       requires(...&& isInstantiation<ExceptionValidatorParameterTypes,
                                      ConstConfigOptionProxy>)
-          CPP_and(...&& std::invocable<TranslationFunction,
-                                       const ExceptionValidatorParameterTypes>)
+          CPP_and(...&& ql::concepts::invocable<
+                  TranslationFunction, const ExceptionValidatorParameterTypes>)
               CPP_and ExceptionValidatorFunction<
                   ExceptionValidatorFunc,
                   std::invoke_result_t<
@@ -201,8 +200,9 @@ class ConfigOptionValidatorManager {
                typename... ValidatorParameterTypes)(
       requires(...&& isInstantiation<ValidatorParameterTypes,
                                      ConstConfigOptionProxy>)
-          CPP_and(... && (std::invocable<TranslationFunction,
-                                         const ValidatorParameterTypes>))
+          CPP_and(... &&
+                  (ql::concepts::invocable<TranslationFunction,
+                                           const ValidatorParameterTypes>))
               CPP_and(ValidatorFunction<
                       ValidatorFunc,
                       std::invoke_result_t<TranslationFunction,

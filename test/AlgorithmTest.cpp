@@ -60,6 +60,9 @@ TEST(Algorithm, Contains) {
       },
       [&v](const auto& el) { return contains(v, el); }));
 
+  EXPECT_TRUE(contains((std::unordered_set{3, 4, 5}), 5));
+  EXPECT_TRUE(contains((ad_utility::HashSet<int>{3, 4, 5}), 5));
+
   testStringLike<std::string>();
   testStringLike<std::string_view>();
 }

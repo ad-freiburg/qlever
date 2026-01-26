@@ -9,6 +9,7 @@
 #include <string_view>
 
 #include "backports/concepts.h"
+#include "backports/three_way_comparison.h"
 #include "parser/NormalizedString.h"
 
 namespace ad_utility::triple_component {
@@ -32,15 +33,18 @@ class Iri {
  public:
   // A default constructed IRI is empty.
   Iri() = default;
-  CPP_template(typename H, typename I)(requires std::same_as<I, Iri>) friend H
+  CPP_template(typename H,
+               typename I)(requires ql::concepts::same_as<I, Iri>) friend H
       AbslHashValue(H h, const I& iri) {
     return H::combine(std::move(h), iri.iri_);
   }
-  bool operator==(const Iri&) const = default;
+
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Iri, iri_)
+
   static Iri fromStringRepresentation(std::string s);
 
-  const std::string& toStringRepresentation() const;
-  std::string& toStringRepresentation();
+  const std::string& toStringRepresentation() const&;
+  std::string toStringRepresentation() &&;
 
   // Create a new `Ìri` given an IRI string with brackets.
   static Iri fromIriref(std::string_view stringWithBrackets);

@@ -136,8 +136,7 @@ auto litOrIri = [](const std::string& literal) {
 auto assertLangTagValueGetter =
     [](const std::vector<Id>& input, const std::vector<strOpt>& expected,
        LanguageTagGetter& langTagValueGetter, TestContext& testContext,
-       ad_utility::source_location loc =
-           ad_utility::source_location::current()) {
+       ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
       auto trace = generateLocationTrace(loc);
       EXPECT_EQ(input.size(), expected.size());
       auto ctx = &testContext.context;
@@ -245,12 +244,10 @@ TEST(LangExpression, testLangExpressionOnMixedColumn) {
 TEST(LangExpression, testSimpleMethods) {
   auto langExpr =
       makeLangExpression(std::make_unique<VariableExpression>(Variable{"?x"}));
-  ASSERT_TRUE(langExpr->containsLangExpression());
   auto optVar = getVariableFromLangExpression(langExpr.get());
   ASSERT_TRUE(optVar.has_value());
   ASSERT_EQ(optVar.value().name(), "?x");
   langExpr = makeLangExpression(std::make_unique<IdExpression>(IntId(1)));
-  ASSERT_TRUE(langExpr->containsLangExpression());
   optVar = getVariableFromLangExpression(langExpr.get());
   ASSERT_TRUE(!optVar.has_value());
 }

@@ -4,6 +4,7 @@
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include "engine/Load.h"
 
 #include "global/RuntimeParameters.h"
@@ -16,11 +17,11 @@ Load::Load(QueryExecutionContext* qec, parsedQuery::Load loadClause,
       loadClause_(std::move(loadClause)),
       getResultFunction_(std::move(getResultFunction)),
       loadResultCachingEnabled_(
-          RuntimeParameters().get<"cache-load-results">()) {}
+          getRuntimeParameter<&RuntimeParameters::cacheLoadResults_>()) {}
 
 // _____________________________________________________________________________
 std::string Load::getCacheKeyImpl() const {
-  if (RuntimeParameters().get<"cache-load-results">()) {
+  if (getRuntimeParameter<&RuntimeParameters::cacheLoadResults_>()) {
     return absl::StrCat("LOAD ", loadClause_.iri_.toStringRepresentation(),
                         loadClause_.silent_ ? " SILENT" : "");
   }
@@ -77,7 +78,7 @@ Result Load::computeResult(bool requestLaziness) {
   // In the syntax test mode we don't even try to compute the result, as this
   // could run into timeouts which would be a waste of time and is hard to
   // properly recover from.
-  if (RuntimeParameters().get<"syntax-test-mode">()) {
+  if (getRuntimeParameter<&RuntimeParameters::syntaxTestMode_>()) {
     return makeSilentResult();
   }
   try {
@@ -104,7 +105,7 @@ Result Load::computeResultImpl([[maybe_unused]] bool requestLaziness) {
   // TODO<qup42> implement lazy loading; requires modifications to the parser
   ad_utility::httpUtils::Url url{
       asStringViewUnsafe(loadClause_.iri_.getContent())};
-  LOG(INFO) << "Loading RDF dataset from " << url.asString() << std::endl;
+  AD_LOG_INFO << "Loading RDF dataset from " << url.asString() << std::endl;
   HttpOrHttpsResponse response = getResultFunction_(
       url, cancellationHandle_, boost::beast::http::verb::get, "", "", "");
 
@@ -139,7 +140,8 @@ Result Load::computeResultImpl([[maybe_unused]] bool requestLaziness) {
         "\". Supported `Content-Type`s are ", supportedMediatypes));
   }
   using Re2Parser = RdfStringParser<TurtleParser<Tokenizer>>;
-  auto parser = Re2Parser();
+  const auto& encodedIriManager = getIndex().encodedIriManager();
+  auto parser = Re2Parser(&encodedIriManager);
   std::string body;
   for (const auto& bytes : response.body_) {
     body.append(reinterpret_cast<const char*>(bytes.data()), bytes.size());
@@ -147,8 +149,9 @@ Result Load::computeResultImpl([[maybe_unused]] bool requestLaziness) {
   parser.setInputStream(body);
   LocalVocab lv;
   IdTable result{getResultWidth(), getExecutionContext()->getAllocator()};
-  auto toId = [this, &lv](TripleComponent&& tc) {
-    return std::move(tc).toValueId(getIndex().getVocab(), lv);
+  auto toId = [this, &lv, &encodedIriManager](TripleComponent&& tc) {
+    return std::move(tc).toValueId(getIndex().getVocab(), lv,
+                                   encodedIriManager);
   };
   for (auto& triple : parser.parseAndReturnAllTriples()) {
     result.push_back(
@@ -188,3 +191,4 @@ bool Load::canResultBeCachedImpl() const { return loadResultCachingEnabled_; }
 void Load::resetGetResultFunctionForTesting(SendRequestType func) {
   getResultFunction_ = std::move(func);
 }
+#endif

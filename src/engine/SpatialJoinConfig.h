@@ -65,7 +65,8 @@ enum class SpatialJoinAlgorithm {
   BASELINE,
   S2_GEOMETRY,
   BOUNDING_BOX,
-  LIBSPATIALJOIN
+  LIBSPATIALJOIN,
+  S2_POINT_POLYLINE
 };
 const SpatialJoinAlgorithm SPATIAL_JOIN_DEFAULT_ALGORITHM =
     SpatialJoinAlgorithm::S2_GEOMETRY;
@@ -91,7 +92,12 @@ struct SpatialJoinConfiguration {
   // Choice of algorithm.
   SpatialJoinAlgorithm algo_ = SPATIAL_JOIN_DEFAULT_ALGORITHM;
 
+  // Join type for `libspatialjoin` algorithm.
   std::optional<SpatialJoinType> joinType_ = std::nullopt;
+
+  // Cache name for precomputed right child with s2 index (only for
+  // s2-point-polyline algorithm)
+  std::optional<std::string> rightCacheName_ = std::nullopt;
 };
 
 // The spatial join operation without a limit on the maximum number of results

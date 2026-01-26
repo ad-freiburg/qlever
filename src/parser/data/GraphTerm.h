@@ -10,6 +10,8 @@
 #include <string>
 #include <variant>
 
+#include "backports/StartsWithAndEndsWith.h"
+#include "index/EncodedIriManager.h"
 #include "parser/RdfParser.h"
 #include "parser/TokenizerCtre.h"
 #include "parser/data/BlankNode.h"
@@ -54,14 +56,16 @@ class GraphTerm : public GraphTermBase,
       using T = std::decay_t<decltype(element)>;
       if constexpr (std::is_same_v<T, Variable>) {
         return element;
-      } else if constexpr (std::is_same_v<T, Literal> ||
-                           std::is_same_v<T, Iri>) {
+      } else if constexpr (std::is_same_v<T, Literal>) {
         return RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
+            element.toSparql());
+      } else if constexpr (std::is_same_v<T, Iri>) {
+        return ad_utility::triple_component::Iri::fromStringRepresentation(
             element.toSparql());
       } else {
         static_assert(std::is_same_v<T, BlankNode>);
         const auto& blankNode = element.toSparql();
-        AD_CORRECTNESS_CHECK(blankNode.starts_with("_:"));
+        AD_CORRECTNESS_CHECK(ql::starts_with(blankNode, "_:"));
         return Variable{absl::StrCat(QLEVER_INTERNAL_BLANKNODE_VARIABLE_PREFIX,
                                      blankNode.substr(2))};
       }

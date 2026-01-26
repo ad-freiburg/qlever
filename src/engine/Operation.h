@@ -43,8 +43,9 @@ class Operation {
 
   std::shared_ptr<RuntimeInformation> _runtimeInfo =
       std::make_shared<RuntimeInformation>();
-  /// Pointer to the head of the `RuntimeInformation`.
-  /// Used in `signalQueryUpdate()`, reset in `createRuntimeInfoFromEstimates()`
+
+  // Pointer to the `RuntimeInformation` tree; used in `signalQueryUpdate()`,
+  // and reset in `createRuntimeInfoFromEstimates()`.
   std::shared_ptr<const RuntimeInformation> _rootRuntimeInfo = _runtimeInfo;
   RuntimeInformationWholeQuery _runtimeInfoWholeQuery;
 
@@ -144,8 +145,8 @@ class Operation {
 
   const Index& getIndex() const { return _executionContext->getIndex(); }
 
-  const auto& locatedTriplesSnapshot() const {
-    return _executionContext->locatedTriplesSnapshot();
+  virtual const LocatedTriplesState& locatedTriplesState() const {
+    return _executionContext->locatedTriplesState();
   }
 
   // Get an updated `QueryExecutionTree` that applies as many of the given
@@ -241,8 +242,9 @@ class Operation {
     return _runtimeInfoWholeQuery;
   }
 
-  /// Notify the `QueryExecutionContext` of the latest `RuntimeInformation`.
-  void signalQueryUpdate() const;
+  // Notify the `QueryExecutionContext` of the latest `RuntimeInformation` with
+  // the given `sendPriority` (`Always` or `IfDue`).
+  void signalQueryUpdate(RuntimeInformation::SendPriority sendPriority) const;
 
   /**
    * @brief Get the result for the subtree rooted at this element. Use existing
@@ -298,6 +300,10 @@ class Operation {
     // If `supportsLimitOffset()` returns `false`, this function has to be
     // no-op.
   }
+
+  // This function is called when the operation's result is requested to be
+  // cached and pinned to a name.
+  void storeToNamedResultCache(const Result& result);
 
  public:
   // Set the value of the `LIMIT`/`OFFSET` clause that will be applied to the
@@ -357,6 +363,15 @@ class Operation {
   virtual std::optional<std::shared_ptr<QueryExecutionTree>> makeSortedTree(
       const std::vector<ColumnIndex>& sortColumns) const;
 
+  // Try to create a version of this operation that only contains the given
+  // `variables`, and therefore strips away all other columns. The default
+  // implementation returns `std::nullopt`.
+  // TODO<joka921/RobinTF> Would it make the code simpler or be beneficial in
+  // any other way, if the default implementation would add a `StripColumns`
+  // operation? The the result wouldn't have to be `optional`.
+  virtual std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(const std::set<Variable>& variables) const;
+
  protected:
   // The QueryExecutionContext for this particular element.
   // No ownership.
@@ -376,8 +391,7 @@ class Operation {
   // potentially can take a (too) long time. This function is designed to be
   // as lightweight as possible because of that.
   AD_ALWAYS_INLINE void checkCancellation(
-      ad_utility::source_location location =
-          ad_utility::source_location::current()) const {
+      ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) const {
     cancellationHandle_->throwIfCancelled(location,
                                           [this]() { return getDescriptor(); });
   }
@@ -453,18 +467,14 @@ class Operation {
   // children were evaluated nevertheless. For an example usage of this feature
   // see `GroupBy.cpp`
   virtual void updateRuntimeInformationWhenOptimizedOut(
-      std::vector<std::shared_ptr<RuntimeInformation>> children,
-      RuntimeInformation::Status status =
-          RuntimeInformation::Status::optimizedOut);
+      std::vector<std::shared_ptr<RuntimeInformation>> children);
 
   // Use the already stored runtime info for the children,
   // but set all of them to `optimizedOut`. This can be used, when a complete
   // tree was optimized out. For example when one child of a JOIN operation is
   // empty, the result will be empty, and it is not necessary to evaluate the
   // other child.
-  virtual void updateRuntimeInformationWhenOptimizedOut(
-      RuntimeInformation::Status status =
-          RuntimeInformation::Status::optimizedOut);
+  virtual void updateRuntimeInformationWhenOptimizedOut();
 
   // Return true if all values that the `variable` will be bound to by this
   // expression are guaranteed to be contained in the underlying knowledge

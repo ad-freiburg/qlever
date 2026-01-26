@@ -9,6 +9,7 @@
 
 #include <utility>
 
+#include "backports/StartsWithAndEndsWith.h"
 #include "parser/LiteralOrIri.h"
 #include "rdfTypes/RdfEscaping.h"
 #include "util/Log.h"
@@ -43,8 +44,8 @@ Iri Iri::fromIriref(std::string_view stringWithBrackets) {
 
 // ____________________________________________________________________________
 Iri Iri::fromIrirefWithoutBrackets(std::string_view stringWithoutBrackets) {
-  AD_CORRECTNESS_CHECK(!stringWithoutBrackets.starts_with('<') &&
-                       !stringWithoutBrackets.ends_with('>'));
+  AD_CORRECTNESS_CHECK(!ql::starts_with(stringWithoutBrackets, '<') &&
+                       !ql::ends_with(stringWithoutBrackets, '>'));
   return Iri{absl::StrCat("<"sv, stringWithoutBrackets, ">"sv)};
 }
 
@@ -56,7 +57,8 @@ Iri Iri::fromPrefixAndSuffix(const Iri& prefix, std::string_view suffix) {
 
 // ____________________________________________________________________________
 Iri Iri::getBaseIri(bool domainOnly) const {
-  AD_CORRECTNESS_CHECK(iri_.starts_with('<') && iri_.ends_with('>'), iri_);
+  AD_CORRECTNESS_CHECK(ql::starts_with(iri_, '<') && ql::ends_with(iri_, '>'),
+                       iri_);
   // Check if we have a scheme and find the first `/` after that (or the first
   // `/` at all if there is no scheme).
   size_t pos = iri_.find(schemePattern);
@@ -110,14 +112,14 @@ Iri Iri::fromIrirefConsiderBase(std::string_view iriStringWithBrackets,
 
 // ____________________________________________________________________________
 Iri Iri::fromStringRepresentation(std::string s) {
-  AD_CORRECTNESS_CHECK(s.starts_with("<") || s.starts_with("@"));
+  AD_CORRECTNESS_CHECK(ql::starts_with(s, "<") || ql::starts_with(s, "@"));
   return Iri{std::move(s)};
 }
 
 // ____________________________________________________________________________
-const std::string& Iri::toStringRepresentation() const { return iri_; }
+const std::string& Iri::toStringRepresentation() const& { return iri_; }
 
 // ____________________________________________________________________________
-std::string& Iri::toStringRepresentation() { return iri_; }
+std::string Iri::toStringRepresentation() && { return std::move(iri_); }
 
 }  // namespace ad_utility::triple_component

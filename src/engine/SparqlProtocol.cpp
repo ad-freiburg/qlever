@@ -2,15 +2,17 @@
 // Chair of Algorithms and Data Structures
 // Authors: Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 
-#include "engine/SPARQLProtocol.h"
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+#include "engine/SparqlProtocol.h"
 
+#include "backports/StartsWithAndEndsWith.h"
 #include "engine/HttpError.h"
 
 using namespace ad_utility::url_parser::sparqlOperation;
 namespace http = boost::beast::http;
 
 // ____________________________________________________________________________
-ad_utility::url_parser::ParsedRequest SPARQLProtocol::parseGET(
+ad_utility::url_parser::ParsedRequest SparqlProtocol::parseGET(
     const RequestType& request) {
   auto parsedRequestBuilder = ParsedRequestBuilder(request);
   parsedRequestBuilder.extractAccessToken(request);
@@ -18,13 +20,13 @@ ad_utility::url_parser::ParsedRequest SPARQLProtocol::parseGET(
   if (parsedRequestBuilder.parametersContain("update")) {
     throw std::runtime_error("SPARQL Update is not allowed as GET request.");
   }
-  if (parsedRequestBuilder.isGraphStoreOperation()) {
+  if (parsedRequestBuilder.isGraphStoreOperationIndirect()) {
     if (isQuery) {
       throw std::runtime_error(
           R"(Request contains parameters for both a SPARQL Query ("query") and a Graph Store Protocol operation ("graph" or "default").)");
     }
     // SPARQL Graph Store HTTP Protocol with indirect graph identification
-    parsedRequestBuilder.extractGraphStoreOperation();
+    parsedRequestBuilder.extractGraphStoreOperationIndirect();
   } else if (isQuery) {
     // SPARQL Query
     parsedRequestBuilder.extractOperationIfSpecified<Query>("query");
@@ -34,7 +36,7 @@ ad_utility::url_parser::ParsedRequest SPARQLProtocol::parseGET(
 }
 
 // ____________________________________________________________________________
-ad_utility::url_parser::ParsedRequest SPARQLProtocol::parseUrlencodedPOST(
+ad_utility::url_parser::ParsedRequest SparqlProtocol::parseUrlencodedPOST(
     const RequestType& request) {
   auto parsedRequestBuilder = ParsedRequestBuilder(request);
   // All parameters must be included in the request body for URL-encoded
@@ -82,7 +84,7 @@ ad_utility::url_parser::ParsedRequest SPARQLProtocol::parseUrlencodedPOST(
 
 // ____________________________________________________________________________
 template <typename Operation>
-ad_utility::url_parser::ParsedRequest SPARQLProtocol::parseSPARQLPOST(
+ad_utility::url_parser::ParsedRequest SparqlProtocol::parseSPARQLPOST(
     const RequestType& request, std::string_view contentType) {
   using namespace ad_utility::url_parser::sparqlOperation;
   auto parsedRequestBuilder = ParsedRequestBuilder(request);
@@ -95,7 +97,7 @@ ad_utility::url_parser::ParsedRequest SPARQLProtocol::parseSPARQLPOST(
 }
 
 // ____________________________________________________________________________
-ad_utility::url_parser::ParsedRequest SPARQLProtocol::parsePOST(
+ad_utility::url_parser::ParsedRequest SparqlProtocol::parsePOST(
     const RequestType& request) {
   // For a POST request, the content type must be either
   // "application/x-www-form-urlencoded" (1), "application/sparql-query"
@@ -120,28 +122,28 @@ ad_utility::url_parser::ParsedRequest SPARQLProtocol::parsePOST(
   // Reference: https://www.w3.org/TR/2013/REC-sparql11-protocol-20130321
   std::string_view contentType =
       request.base()[boost::beast::http::field::content_type];
-  LOG(DEBUG) << "Content-type: \"" << contentType << "\"" << std::endl;
+  AD_LOG_DEBUG << "Content-type: \"" << contentType << "\"" << std::endl;
 
   // Note: For simplicity we only check via `starts_with`. This ignores
   // additional parameters like `application/sparql-query;charset=utf8`. We
   // currently always expect UTF-8.
   // TODO<joka921> Implement more complete parsing that allows the checking
   // of these parameters.
-  if (contentType.starts_with(contentTypeUrlEncoded)) {
+  if (ql::starts_with(contentType, contentTypeUrlEncoded)) {
     return parseUrlencodedPOST(request);
   }
-  if (contentType.starts_with(contentTypeSparqlQuery)) {
+  if (ql::starts_with(contentType, contentTypeSparqlQuery)) {
     return parseSPARQLPOST<Query>(request, contentTypeSparqlQuery);
   }
-  if (contentType.starts_with(contentTypeSparqlUpdate)) {
+  if (ql::starts_with(contentType, contentTypeSparqlUpdate)) {
     return parseSPARQLPOST<Update>(request, contentTypeSparqlUpdate);
   }
   // No content type applies, we expect the request to be a graph store
   // request. Checking if the content type is supported by the Graph Store HTTP
   // Protocol implementation is done later.
   auto parsedRequestBuilder = ParsedRequestBuilder(request);
-  if (parsedRequestBuilder.isGraphStoreOperation()) {
-    parsedRequestBuilder.extractGraphStoreOperation();
+  if (parsedRequestBuilder.isGraphStoreOperationIndirect()) {
+    parsedRequestBuilder.extractGraphStoreOperationIndirect();
     parsedRequestBuilder.extractAccessToken(request);
     return std::move(parsedRequestBuilder).build();
   }
@@ -155,20 +157,71 @@ ad_utility::url_parser::ParsedRequest SPARQLProtocol::parsePOST(
 }
 
 // ____________________________________________________________________________
-ad_utility::url_parser::ParsedRequest SPARQLProtocol::parseHttpRequest(
-    const RequestType& request) {
+ad_utility::url_parser::ParsedRequest
+SparqlProtocol::parseGraphStoreProtocolIndirect(const RequestType& request) {
+  auto parsedRequestBuilder = ParsedRequestBuilder(request);
+  parsedRequestBuilder.extractAccessToken(request);
+  if (!parsedRequestBuilder.isGraphStoreOperationIndirect()) {
+    throw std::runtime_error(
+        R"(Expecting a Graph Store Protocol request, but missing query parameters "graph" or "default" in request)");
+  }
+  parsedRequestBuilder.extractGraphStoreOperationIndirect();
+  return std::move(parsedRequestBuilder).build();
+}
+
+// ____________________________________________________________________________
+ad_utility::url_parser::ParsedRequest
+SparqlProtocol::parseGraphStoreProtocolDirect(const RequestType& request) {
+  auto parsedRequestBuilder = ParsedRequestBuilder(request);
+  parsedRequestBuilder.extractAccessToken(request);
+  parsedRequestBuilder.extractGraphStoreOperationDirect();
+  return std::move(parsedRequestBuilder).build();
+}
+
+// ____________________________________________________________________________
+ad_utility::url_parser::ParsedRequest SparqlProtocol::parseHttpRequest(
+    RequestType& request) {
+  // TODO<qup42>: make request const again once the conformance tests are fixed.
+  // Fixup for request target missing the leading slash.
+  std::string target = request.target();
+  if (!ql::starts_with(target, "/")) {
+    target = absl::StrCat("/", target);
+  }
+  request.target(target);
+  // Graph Store Protocol with direct graph identification
+  auto urlResult = boost::urls::parse_origin_form(request.target());
+  if (urlResult.has_error()) {
+    throw std::runtime_error(absl::StrCat(
+        "Failed to parse URL: \"", std::string{request.target()}, "\"."));
+  }
+  boost::url url = urlResult.value();
+  // `GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX` is the (currently fixed) prefix
+  // for the Graph Store Protocol with direct graph identification.
+  if (!url.segments().empty() &&
+      url.segments().front() == GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX) {
+    return parseGraphStoreProtocolDirect(request);
+  }
+
+  // SPARQL Query or Graph Store Protocol with indirect graph identification
   if (request.method() == http::verb::get) {
     return parseGET(request);
   }
+  // SPARQL Query, SPARQL Update or Graph Store Protocol with indirect graph
+  // identification
   if (request.method() == http::verb::post) {
     return parsePOST(request);
   }
-  std::ostringstream requestMethodName;
-  requestMethodName << request.method();
+  // Graph Store Protocol with indirect graph identification
+  std::string_view methodStr = request.method_string();
+  if (request.method() == http::verb::put ||
+      request.method() == http::verb::delete_ || methodStr == "TSOP") {
+    return parseGraphStoreProtocolIndirect(request);
+  }
   throw HttpError(
       boost::beast::http::status::method_not_allowed,
       absl::StrCat(
-          "Request method \"", requestMethodName.str(),
-          "\" not supported (only GET and POST are supported; PUT, DELETE, "
+          "Request method \"", methodStr,
+          "\" not supported (GET, POST, TSOP, PUT and DELETE are supported; "
           "HEAD and PATCH for graph store protocol are not yet supported)"));
 }
+#endif

@@ -8,9 +8,10 @@
 
 #include <gmock/gmock.h>
 
-#include <concepts>
 #include <optional>
 
+#include "backports/concepts.h"
+#include "backports/three_way_comparison.h"
 #include "util/SourceLocation.h"
 #include "util/TypeTraits.h"
 #include "util/json.h"
@@ -121,6 +122,14 @@ MATCHER_P2(HasKeyMatching, key, matcher,
                    << arg[key] << ' ';
   return testing::ExplainMatchResult(matcher, arg[key], result_listener);
 }
+MATCHER_P(HasKey, key, (negation ? "has no key " : "has key ")) {
+  if (!arg.contains(key)) {
+    *result_listener << "that does not contain key \"" << key << '"';
+    return false;
+  }
+  *result_listener << "that contains key \"" << key << "\" ";
+  return true;
+}
 
 // Matcher that can be used the make assertions about objects `<<` (insert into
 // stream) operator.
@@ -140,21 +149,25 @@ class CopyShield {
   std::shared_ptr<T> pointer_;
 
  public:
-  template <typename... Ts>
-  requires std::constructible_from<T, Ts&&...> explicit CopyShield(Ts&&... args)
+  CPP_variadic_template(typename... Ts)(
+      requires ql::concepts::constructible_from<
+          T, Ts&&...>) explicit CopyShield(Ts&&... args)
       : pointer_{std::make_shared<T>(AD_FWD(args)...)} {}
 
-  template <typename Ts>
-  requires std::constructible_from<T, Ts&&> CopyShield& operator=(Ts&& ts) {
+  CPP_template(typename Ts)(requires ql::concepts::constructible_from<T, Ts&&>)
+      CopyShield&
+      operator=(Ts&& ts) {
     pointer_ = std::make_shared<T>(AD_FWD(ts));
     return *this;
   }
 
-  auto operator<=>(const T& other) const requires std::three_way_comparable<T> {
-    return *pointer_ <=> other;
+  auto compareThreeWay(const T& other) const {
+    return ql::compareThreeWay(*pointer_, other);
   }
+  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(T)
 
-  bool operator==(const T& other) const requires std::equality_comparable<T> {
+  CPP_member auto operator==(const T& other) const
+      -> CPP_ret(bool)(requires ql::concepts::equality_comparable<T>) {
     return *pointer_ == other;
   }
 
@@ -163,5 +176,39 @@ class CopyShield {
     return os;
   }
 };
+
+// Helper that takes an explicit type `T`, and a function `T -> Matcher<T>`
+// (where `T` is the type of the expected value for the matcher), and lifts it
+// to a function `std::optional<T> -> Matcher<std::optional<T>>` , by handling
+// the case of `std::nullopt` as expected (`std::nullopt` matches
+// `std::nullopt`) for both the expected and actual value.
+template <typename T, typename MakeMatcher>
+auto liftOptionalMatcher(MakeMatcher makeMatcher) {
+  return
+      [makeMatcher](
+          std::optional<T> expected) -> ::testing::Matcher<std::optional<T>> {
+        if (!expected.has_value()) {
+          return ::testing::Eq(std::nullopt);
+        } else {
+          return ::testing::Optional(makeMatcher(expected.value()));
+        }
+      };
+}
+
+// Helper that takes an explicit type `T`, and a function `T -> Matcher<T>`. It
+// returns a function `ArrayType -> Matcher<ArrayType>` that applies
+// `MakeMatcher` to each of the expected values in the argument of `ArrayType`
+// and returns an `ElementsAreArray` matcher of these submatchers.
+template <typename T, typename ArrayType, typename MakeMatcher>
+requires std::is_convertible_v<ArrayType, std::vector<T>>
+auto liftMatcherToElementsAreArray(MakeMatcher makeMatcher) {
+  return
+      [makeMatcher](ArrayType expectedValues) -> ::testing::Matcher<ArrayType> {
+        std::vector<::testing::Matcher<T>> childMatchers;
+        ql::ranges::transform(expectedValues, std::back_inserter(childMatchers),
+                              makeMatcher);
+        return ::testing::ElementsAreArray(childMatchers);
+      };
+}
 
 #endif  // QLEVER_TEST_UTIL_GTESTHELPERS_H

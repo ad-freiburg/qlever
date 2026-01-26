@@ -5,13 +5,14 @@
 #define QLEVER_TASKQUEUE_H
 
 #include <absl/cleanup/cleanup.h>
+#include <absl/functional/any_invocable.h>
 
-#include <functional>
 #include <optional>
 #include <queue>
 #include <string>
 #include <thread>
 
+#include "backports/atomic_flag.h"
 #include "util/Exception.h"
 #include "util/ThreadSafeQueue.h"
 #include "util/Timer.h"
@@ -29,13 +30,13 @@ namespace ad_utility {
 template <bool TrackTimes = false>
 class TaskQueue {
  private:
-  using Task = std::function<void()>;
+  using Task = absl::AnyInvocable<void()>;
   using Timer = ad_utility::Timer;
   using AtomicMs = std::atomic<std::chrono::milliseconds::rep>;
   using Queue = ad_utility::data_structures::ThreadSafeQueue<Task>;
 
-  std::atomic_flag startedFinishing_ = false;
-  std::atomic_flag finishedFinishing_ = false;
+  ql::atomic_flag startedFinishing_{false};
+  ql::atomic_flag finishedFinishing_{false};
   size_t queueMaxSize_ = 1;
   Queue queuedTasks_{queueMaxSize_};
   std::vector<ad_utility::JThread> threads_;
@@ -92,7 +93,7 @@ class TaskQueue {
     finishImpl();
   }
 
-  void resetTimers() requires TrackTimes {
+  CPP_member auto resetTimers() -> CPP_ret(void)(requires TrackTimes) {
     pushTime_ = 0;
     popTime_ = 0;
   }
@@ -114,7 +115,8 @@ class TaskQueue {
   }
 
   // __________________________________________________________________________
-  std::string getTimeStatistics() const requires TrackTimes {
+  CPP_member auto getTimeStatistics() const
+      -> CPP_ret(std::string)(requires TrackTimes) {
     return "Time spent waiting in queue " + name_ + ": " +
            std::to_string(pushTime_) + "ms (push), " +
            std::to_string(popTime_) + "ms (pop)";

@@ -36,7 +36,7 @@ namespace ad_utility {
 // the batch size is purely a parameter of this class, the actual computation
 // need not proceed in batches in any way.
 //
-// Typical usage (note the `std::flush` at the end of the `LOG(INFO)` calls in
+// Typical usage (note the `std::flush` at the end of the `AD_LOG_INFO` calls in
 // order to ensure a flush for lines ending in `\r` instead of `\n`):
 //
 // numTriplesProcessed = 0;
@@ -46,10 +46,10 @@ namespace ad_utility {
 //   // Code that does the processing.
 //   ++numTriplesProcessed;
 //   if (progressBar.update()) {
-//     LOG(INFO) << progressBar.getProgressString() << std::flush;
+//     AD_LOG_INFO << progressBar.getProgressString() << std::flush;
 //   }
 // }
-// LOG(INFO) << progressBar.getFinalProgressString() << std::flush;
+// AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
 //
 class ProgressBar {
  public:

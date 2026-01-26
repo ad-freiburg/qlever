@@ -2,7 +2,7 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#include "CancellationHandle.h"
+#include "util/CancellationHandle.h"
 
 #include "util/Exception.h"
 

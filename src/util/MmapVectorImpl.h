@@ -319,6 +319,12 @@ MmapVector<T>& MmapVector<T>::operator=(MmapVector<T>&& other) noexcept {
 // ________________________________________________________________
 template <class T>
 void MmapVector<T>::advise(AccessPattern pattern) {
+  // The constants `MADV_SEQUENTIAL` etc. don't seem to be present on all POSIX
+  // systems, in particular they are not present on the `QNX` platform which
+  // we target with the `REDUCED_FEATURE_SET` mode. Therefore, we simply disable
+  // the following `madvise` calls, as they only are hints to the runtime and
+  // do not change the program semantics.
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   switch (pattern) {
     case AccessPattern::Sequential:
       madvise(static_cast<void*>(_ptr), _bytesize, MADV_SEQUENTIAL);
@@ -330,6 +336,9 @@ void MmapVector<T>::advise(AccessPattern pattern) {
       madvise(static_cast<void*>(_ptr), _bytesize, MADV_NORMAL);
       break;
   }
+#else
+  (void)pattern;
+#endif
 }
 
 // ________________________________________________________________

@@ -21,9 +21,14 @@ struct ContextWrapper {
   // TODO<joka921> `VariableToColumnMap`
   VariableToColumnMap _hashMap{};
 
-  ConstructQueryExportContext createContextForRow(size_t row) const {
-    return {row, _resultTable.idTable(), _resultTable.localVocab(), _hashMap,
-            _index};
+  ConstructQueryExportContext createContextForRow(size_t row,
+                                                  size_t rowOffset = 0) const {
+    return {row,
+            _resultTable.idTable(),
+            _resultTable.localVocab(),
+            _hashMap,
+            _index,
+            rowOffset};
   }
 
   void setIdTable(IdTable&& table) {
@@ -67,6 +72,15 @@ TEST(SparqlDataTypesTest, BlankNodeEvaluatesCorrectlyBasedOnContext) {
   EXPECT_THAT(blankNodeB.evaluate(context10, SUBJECT), Optional("_:g10_b"s));
   EXPECT_THAT(blankNodeB.evaluate(context10, PREDICATE), Optional("_:g10_b"s));
   EXPECT_THAT(blankNodeB.evaluate(context10, SUBJECT), Optional("_:g10_b"s));
+
+  ConstructQueryExportContext context12 = wrapper.createContextForRow(7, 5);
+
+  EXPECT_THAT(blankNodeA.evaluate(context12, SUBJECT), Optional("_:u12_a"s));
+  EXPECT_THAT(blankNodeA.evaluate(context12, PREDICATE), Optional("_:u12_a"s));
+  EXPECT_THAT(blankNodeA.evaluate(context12, OBJECT), Optional("_:u12_a"s));
+  EXPECT_THAT(blankNodeB.evaluate(context12, SUBJECT), Optional("_:g12_b"s));
+  EXPECT_THAT(blankNodeB.evaluate(context12, PREDICATE), Optional("_:g12_b"s));
+  EXPECT_THAT(blankNodeB.evaluate(context12, SUBJECT), Optional("_:g12_b"s));
 }
 
 TEST(SparqlDataTypesTest, BlankNodeEvaluateIsPropagatedCorrectly) {
@@ -229,6 +243,13 @@ TEST(SparqlDataTypesTest, VariableEvaluatesCorrectlyBasedOnContext) {
   EXPECT_THAT(variable.evaluate(context0, SUBJECT), Optional("69"s));
   EXPECT_THAT(variable.evaluate(context0, PREDICATE), Optional("69"s));
   EXPECT_THAT(variable.evaluate(context0, OBJECT), Optional("69"s));
+
+  // Row offset should be ignored.
+  ConstructQueryExportContext context0b = wrapper.createContextForRow(0, 42);
+
+  EXPECT_THAT(variable.evaluate(context0b, SUBJECT), Optional("69"s));
+  EXPECT_THAT(variable.evaluate(context0b, PREDICATE), Optional("69"s));
+  EXPECT_THAT(variable.evaluate(context0b, OBJECT), Optional("69"s));
 
   ConstructQueryExportContext context1 = wrapper.createContextForRow(1);
 

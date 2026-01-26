@@ -31,10 +31,14 @@ class OptionalJoin : public Operation {
   std::optional<size_t> _costEstimate;
   bool _multiplicitiesComputed = false;
 
+  // Specify whether the join columns should be part of the result.
+  bool keepJoinColumns_ = true;
+
  public:
   OptionalJoin(QueryExecutionContext* qec,
                std::shared_ptr<QueryExecutionTree> t1,
-               std::shared_ptr<QueryExecutionTree> t2);
+               std::shared_ptr<QueryExecutionTree> t2,
+               bool keepJoinColumns = true);
 
  private:
   std::string getCacheKeyImpl() const override;
@@ -79,6 +83,18 @@ class OptionalJoin : public Operation {
 
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
+
+  // Helper function for `tryIndexNestedLoopJoinIfSuitable` which makes the
+  // logic reusable.
+  bool isIndexNestedLoopJoinSuitable() const;
+
+  // Nested loop join optimization than can apply when a memory intensive sort
+  // can be avoided this way.
+  std::optional<Result> tryIndexNestedLoopJoinIfSuitable(bool requestLaziness);
+
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(
+      const std::set<Variable>& variables) const override;
 
   void computeSizeEstimateAndMultiplicities();
 

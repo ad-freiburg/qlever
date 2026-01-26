@@ -7,7 +7,7 @@
 
 #include <vector>
 
-#include "index/ScanSpecification.h"
+#include "backports/three_way_comparison.h"
 #include "parser/sparqlParser/DatasetClause.h"
 
 namespace parsedQuery {
@@ -15,7 +15,9 @@ namespace parsedQuery {
 // A struct for the FROM [NAMED] clause in queries, and the `USING [NAMED]` and
 // `WITH` clauses from `SPARQL Update`.
 struct DatasetClauses {
-  using Graphs = ScanSpecificationAsTripleComponent::Graphs;
+  // TODO<RobinTF> consider using the `GraphFilter` class for this, which has
+  // similar semantics but provides a strong type.
+  using Graphs = std::optional<ad_utility::HashSet<TripleComponent>>;
 
  private:
   // Store the default and named graphs.
@@ -82,7 +84,9 @@ struct DatasetClauses {
   // implicitly allowed.
   bool isCompatibleNamedGraph(const TripleComponent::Iri& graph) const;
 
-  bool operator==(const DatasetClauses& other) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(DatasetClauses, defaultGraphs_,
+                                              namedGraphs_, emptyDummy_,
+                                              defaultGraphSpecifiedUsingWith_)
 };
 }  // namespace parsedQuery
 

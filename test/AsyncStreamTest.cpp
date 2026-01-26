@@ -9,7 +9,7 @@
 #include <chrono>
 #include <semaphore>
 
-#include "../src/util/AsyncStream.h"
+#include "util/AsyncStream.h"
 #include "util/GTestHelpers.h"
 
 namespace {

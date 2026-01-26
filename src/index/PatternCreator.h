@@ -143,7 +143,7 @@ class PatternCreator {
                 basename + ".second-sorter.dat", memoryLimit / 2,
                 ad_utility::makeUnlimitedAllocator<Id>())},
         idOfHasPattern_{idOfHasPattern} {
-    LOG(DEBUG) << "Computing predicate patterns ..." << std::endl;
+    AD_LOG_DEBUG << "Computing predicate patterns ..." << std::endl;
   }
 
   // This function has to be called for all the triples in the SPO permutation

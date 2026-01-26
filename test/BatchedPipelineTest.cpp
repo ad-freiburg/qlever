@@ -6,7 +6,7 @@
 
 #include <optional>
 
-#include "../src/util/BatchedPipeline.h"
+#include "util/BatchedPipeline.h"
 
 TEST(BatcherTest, MoveOnlyCreator) {
   auto pipeline = ad_pipeline::detail::Batcher(

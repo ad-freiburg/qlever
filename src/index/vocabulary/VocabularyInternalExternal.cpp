@@ -2,7 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach<joka921> (kalmbach@cs.uni-freiburg.de)
 
-#include "./VocabularyInternalExternal.h"
+#include "index/vocabulary/VocabularyInternalExternal.h"
 
 // _____________________________________________________________________________
 std::string VocabularyInternalExternal::operator[](uint64_t i) const {

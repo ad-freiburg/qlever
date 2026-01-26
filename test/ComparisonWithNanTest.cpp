@@ -4,9 +4,8 @@
 
 #include <gtest/gtest.h>
 
-#include <functional>
-
 #include "backports/algorithm.h"
+#include "backports/functional.h"
 #include "util/ComparisonWithNan.h"
 
 namespace {

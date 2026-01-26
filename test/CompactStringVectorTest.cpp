@@ -7,8 +7,8 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
-#include <iterator>
 
+#include "backports/iterator.h"
 #include "global/Pattern.h"
 
 namespace {

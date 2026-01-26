@@ -4,8 +4,8 @@
 
 #include <gmock/gmock.h>
 
-#include "../src/util/CompressorStream.h"
-#include "../src/util/Exception.h"
+#include "util/CompressorStream.h"
+#include "util/Exception.h"
 
 namespace io = boost::iostreams;
 

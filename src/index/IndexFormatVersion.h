@@ -7,6 +7,7 @@
 
 #include <cstdint>
 
+#include "backports/three_way_comparison.h"
 #include "util/DateYearDuration.h"
 #include "util/json.h"
 
@@ -31,7 +32,9 @@ struct IndexFormatVersion {
     version.prNumber_ = static_cast<uint64_t>(j["pull-request-number"]);
     version.date_ = DateYearOrDuration::parseXsdDate(std::string{j["date"]});
   }
-  bool operator==(const IndexFormatVersion&) const = default;
+
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(IndexFormatVersion, prNumber_,
+                                              date_)
 };
 
 // The actual index version. Change it once the binary format of the index

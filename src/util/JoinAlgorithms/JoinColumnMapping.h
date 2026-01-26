@@ -13,6 +13,7 @@
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "util/Algorithm.h"
+#include "util/TransparentFunctors.h"
 
 namespace ad_utility {
 // The implementations of the join algorithms (merge/zipper join, galloping
@@ -28,6 +29,8 @@ namespace ad_utility {
 // (also in the same order). The following struct stores the information, which
 // permutations have to be applied to the input and the result to convert from
 // one of those formats to the other.
+// NOTE: This mapping always has to be consistent with the one created by
+// `makeVarToColMapForJoinOperation` in `VariableToColumnMap.h.
 class JoinColumnMapping {
  private:
   // For a documentation of those members, see the getter function with the same
@@ -69,7 +72,8 @@ class JoinColumnMapping {
   // (leftColIndex, rightColIndex)`), and the total number of columns in the
   // left and right input respectively.
   JoinColumnMapping(const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
-                    size_t numColsLeft, size_t numColsRight) {
+                    size_t numColsLeft, size_t numColsRight,
+                    bool keepJoinColumns = true) {
     permutationResult_.resize(numColsLeft + numColsRight - joinColumns.size());
     for (auto [colA, colB] : joinColumns) {
       permutationResult_.at(colA) = jcsLeft_.size();
@@ -96,6 +100,16 @@ class JoinColumnMapping {
       } else {
         ++numSkippedJoinColumns;
       }
+    }
+
+    // If the join columns are not kept, the result permutation is just the
+    // identity, because the original permutation preserves the order of the
+    // non-join-columns.
+    if (!keepJoinColumns) {
+      permutationResult_.clear();
+      ql::ranges::copy(ad_utility::integerRange(numColsLeft + numColsRight -
+                                                2 * joinColumns.size()),
+                       std::back_inserter(permutationResult_));
     }
   }
 };

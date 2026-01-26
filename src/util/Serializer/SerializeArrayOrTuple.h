@@ -10,6 +10,7 @@
 #include <array>
 #include <tuple>
 
+#include "backports/keywords.h"
 #include "util/ConstexprUtils.h"
 #include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
@@ -35,7 +36,7 @@ struct IsTriviallySerializable {
 };
 
 template <typename T>
-consteval bool tupleTriviallySerializableImpl() {
+QL_CONSTEVAL bool tupleTriviallySerializableImpl() {
   bool result = true;
   ad_utility::forEachTypeInTemplateType<T>(IsTriviallySerializable{result});
   return result;

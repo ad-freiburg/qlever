@@ -73,8 +73,8 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
       for (size_t i = 0; i < testLiterals.size(); i++) {
         ASSERT_EQ(geoVocab[i], testLiterals[i]);
         ASSERT_EQ(geoVocab.getUnderlyingVocabulary()[i], testLiterals[i]);
-        checkGeoInfo(geoVocab.getGeoInfo(i),
-                     GeometryInfo::fromWktLiteral(testLiterals[i]));
+        EXPECT_GEOMETRYINFO(geoVocab.getGeoInfo(i),
+                            GeometryInfo::fromWktLiteral(testLiterals[i]));
       }
     };
 
@@ -120,10 +120,10 @@ TEST(GeoVocabularyTest, VocabularyGetGeoInfoFromUnderlyingGeoVocab) {
   ASSERT_TRUE(vocabulary.isGeoInfoAvailable());
   auto wordCallback = vocabulary.makeWordWriterPtr("geoVocabTest.dat");
   auto nonGeoIdx = (*wordCallback)("<http://example.com/abc>", true);
-  auto geoIdx = (*wordCallback)(
+  static constexpr std::string_view exampleGeoLit =
       "\"LINESTRING(2 2, 4 "
-      "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
-      true);
+      "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+  auto geoIdx = (*wordCallback)(exampleGeoLit, true);
   wordCallback->finish();
 
   // Load test vocabulary and try to retrieve precomputed `GeometryInfo`
@@ -132,8 +132,13 @@ TEST(GeoVocabularyTest, VocabularyGetGeoInfoFromUnderlyingGeoVocab) {
   ASSERT_FALSE(vocabulary.getGeoInfo(VocabIndex::make(nonGeoIdx)).has_value());
   auto gi = vocabulary.getGeoInfo(VocabIndex::make(geoIdx));
   ASSERT_TRUE(gi.has_value());
-  GeometryInfo exp{2, {{2, 2}, {4, 4}}, {3, 3}};
-  checkGeoInfo(gi.value(), exp);
+  GeometryInfo exp{2,
+                   {{2, 2}, {4, 4}},
+                   {3, 3},
+                   {1},
+                   getLengthForTesting(exampleGeoLit),
+                   getAreaForTesting(exampleGeoLit)};
+  EXPECT_GEOMETRYINFO(gi.value(), exp);
 
   // Cannot get `GeometryInfo` from `PolymorphicVocabulary` with no underlying
   // `GeoVocabulary`

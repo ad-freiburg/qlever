@@ -5,7 +5,7 @@
 
 #include <gtest/gtest.h>
 
-#include "../src/util/BitUtils.h"
+#include "util/BitUtils.h"
 
 namespace {
 using namespace ad_utility;

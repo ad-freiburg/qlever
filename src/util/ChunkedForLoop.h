@@ -5,7 +5,6 @@
 #ifndef QLEVER_CHUNKEDFORLOOP_H
 #define QLEVER_CHUNKEDFORLOOP_H
 
-#include <concepts>
 #include <cstdint>
 
 #include "backports/algorithm.h"
@@ -31,13 +30,13 @@ using SetIndexToEndAction =
 /// where `*` can be any type. False otherwise.
 template <typename Func>
 CPP_concept IteratorWithBreak =
-    std::invocable<Func, size_t, SetIndexToEndAction>;
+    ql::concepts::invocable<Func, size_t, SetIndexToEndAction>;
 
 /// Helper concept that allows `chunkedForLoop` to offer an action with an
 /// optional second argument in `action`.
 template <typename Func>
 CPP_concept IteratorAction =
-    std::is_invocable_v<Func, std::size_t> || IteratorWithBreak<Func>;
+    ql::concepts::invocable<Func, std::size_t> || IteratorWithBreak<Func>;
 }  // namespace detail
 
 /// Helper function to run a classic for-loop from `start` to `end`, where
@@ -47,7 +46,7 @@ CPP_concept IteratorAction =
 /// every `CHUNK_SIZE` iteration steps, and at least a single time at the end if
 /// the range is not empty.
 CPP_template(std::size_t CHUNK_SIZE, typename Action, typename ChunkOpT)(
-    requires detail::IteratorAction<Action> CPP_and std::invocable<
+    requires detail::IteratorAction<Action> CPP_and ql::concepts::invocable<
         ChunkOpT>) inline void chunkedForLoop(std::size_t start,
                                               std::size_t end,
                                               const Action& action,
@@ -77,9 +76,9 @@ CPP_concept SizedInputRange =
 // `chunkSize` elements. (Round up to the next chunk size if the range size is
 // not a multiple of `chunkSize`.)
 CPP_template(typename R, typename O, typename ChunkOperationFunc)(
-    requires SizedInputRange<R> CPP_and std::weakly_incrementable<O> CPP_and
-        std::invocable<ChunkOperationFunc>
-            CPP_and std::indirectly_copyable<
+    requires SizedInputRange<R> CPP_and ql::concepts::weakly_incrementable<O>
+        CPP_and ql::concepts::invocable<ChunkOperationFunc>
+            CPP_and ql::concepts::indirectly_copyable<
                 ql::ranges::iterator_t<R>,
                 O>) inline void chunkedCopy(R&& inputRange, O result,
                                             ql::ranges::range_difference_t<R>
@@ -108,7 +107,7 @@ CPP_concept SizedOutputRange =
 // `chunkSize` elements. (Round up to the next chunk size if the range size is
 // not a multiple of `chunkSize`.)
 CPP_template(typename T, typename R, typename ChunkOperationFunc)(
-    requires SizedOutputRange<R, T> CPP_and std::invocable<
+    requires SizedOutputRange<R, T> CPP_and ql::concepts::invocable<
         ChunkOperationFunc>) inline void chunkedFill(R&& outputRange,
                                                      const T& value,
                                                      ql::ranges::

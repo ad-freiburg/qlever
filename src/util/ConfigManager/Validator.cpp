@@ -5,8 +5,7 @@
 
 #include "util/ConfigManager/Validator.h"
 
-#include <functional>
-
+#include "backports/functional.h"
 #include "util/Exception.h"
 
 namespace ad_utility {

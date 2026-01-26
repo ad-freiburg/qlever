@@ -14,6 +14,7 @@
 #include "util/File.h"
 #include "util/Iterators.h"
 #include "util/MmapVector.h"
+#include "util/Serializer/Serializer.h"
 
 // On-disk vocabulary of strings. Each entry is a pair of <ID, String>. The IDs
 // are ascending, but not (necessarily) contiguous. If the strings are sorted,
@@ -90,10 +91,13 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
     uint64_t size_;
   };
 
-  // Helper function for implementing a random access iterator.
-  using Accessor = decltype([](const auto& vocabulary, uint64_t index) {
-    return vocabulary[index];
-  });
+  // The `Accessor` for the `IteratorForAccessOperator` class below.
+  struct Accessor {
+    template <typename Voc>
+    constexpr auto operator()(const Voc& vocabulary, uint64_t index) const {
+      return vocabulary[index];
+    }
+  };
   // Const random access iterators, implemented via the
   // `IteratorForAccessOperator` template.
   using const_iterator =
@@ -109,6 +113,14 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
     } else {
       return {*it, static_cast<uint64_t>(it - begin())};
     }
+  }
+
+  // Generic serialization support.
+  AD_SERIALIZE_FRIEND_FUNCTION(VocabularyOnDisk) {
+    (void)serializer;
+    (void)arg;
+    throw std::runtime_error(
+        "Generic serialization is not implemented for VocabularyOnDisk.");
   }
 
  private:

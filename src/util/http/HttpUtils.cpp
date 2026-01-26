@@ -3,7 +3,7 @@
 //  Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //           Hannah Bast <bast@cs.uni-freiburg.de>
 
-#include "./HttpUtils.h"
+#include "util/http/HttpUtils.h"
 
 #include <ctre-unicode.hpp>
 

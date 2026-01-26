@@ -18,7 +18,7 @@ Id g = V(123405);
 }  // namespace
 
 TEST(RelationMetaDataTest, writeReadTest) {
-  CompressedBlockMetadata rmdB{{{{12, 34}, {46, 11}},
+  CompressedBlockMetadata rmdB{{{{{12, 34}, {46, 11}}},
                                 5,
                                 {V(0), V(2), V(13), g},
                                 {V(3), V(24), V(62), g},
@@ -48,14 +48,14 @@ TEST(IndexMetaDataTest, writeReadTest2Mmap) {
   std::string mmapFilename = imdFilename + ".mmap";
   std::vector<CompressedBlockMetadata> bs;
   // A value for the Graph Id.
-  bs.push_back(CompressedBlockMetadata{{{{12, 34}, {42, 17}},
+  bs.push_back(CompressedBlockMetadata{{{{{12, 34}, {42, 17}}},
                                         5,
                                         {V(0), V(2), V(13), g},
                                         {V(2), V(24), V(62), g},
                                         std::vector{V(512)},
                                         true},
                                        17});
-  bs.push_back(CompressedBlockMetadata{{{{12, 34}, {16, 12}},
+  bs.push_back(CompressedBlockMetadata{{{{{12, 34}, {16, 12}}},
                                         5,
                                         {V(0), V(2), V(13), g},
                                         {V(3), V(24), V(62), g},

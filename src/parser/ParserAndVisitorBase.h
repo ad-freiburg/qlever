@@ -10,6 +10,7 @@
 
 #include "sparqlParser/generated/SparqlAutomaticLexer.h"
 #include "sparqlParser/generated/SparqlAutomaticParser.h"
+#include "util/StringUtils.h"
 #include "util/antlr/ANTLRErrorHandling.h"
 namespace sparqlParserHelpers {
 

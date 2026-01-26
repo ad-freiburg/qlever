@@ -97,9 +97,9 @@ void Variable::appendEscapedWord(std::string_view word, std::string& target) {
     // Convert all other characters based on their unicode codepoint.
     UChar32 codePoint;
     int64_t i = 0;
-    U8_NEXT_OR_FFFD(reinterpret_cast<const uint8_t*>(ptr), i,
-                    static_cast<int64_t>(word.size()), codePoint);
-    AD_CONTRACT_CHECK(codePoint != 0xFFFD, "Invalid UTF-8");
+    U8_NEXT(reinterpret_cast<const uint8_t*>(ptr), i,
+            static_cast<int64_t>(word.size()), codePoint);
+    AD_CONTRACT_CHECK(codePoint != U_SENTINEL, "Invalid UTF-8");
     if (codePointSuitableForVariableName(codePoint)) {
       target.append(ptr, i);
     } else {

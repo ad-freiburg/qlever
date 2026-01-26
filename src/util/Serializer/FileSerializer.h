@@ -7,8 +7,8 @@
 
 #include <memory>
 
-#include "../File.h"
-#include "./Serializer.h"
+#include "util/File.h"
+#include "util/Serializer/Serializer.h"
 
 namespace ad_utility {
 namespace serialization {

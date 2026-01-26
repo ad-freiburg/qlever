@@ -1,4 +1,4 @@
-//  Copyright 2024, University of Freiburg,
+//  Copyright 2024 - 2025, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: @Jonathan24680
 //  Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
@@ -19,8 +19,6 @@
 #include "../printers/VariableToColumnMapPrinters.h"
 #include "../util/GTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
-#include "./../../src/global/ValueId.h"
-#include "./../../src/util/GeoSparqlHelpers.h"
 #include "./SpatialJoinTestHelpers.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/IndexScan.h"
@@ -31,9 +29,11 @@
 #include "engine/SpatialJoin.h"
 #include "engine/VariableToColumnMap.h"
 #include "global/Constants.h"
-#include "gmock/gmock.h"
+#include "global/Id.h"
+#include "global/ValueId.h"
 #include "parser/SparqlParser.h"
 #include "rdfTypes/Variable.h"
+#include "util/GeoSparqlHelpers.h"
 
 namespace {  // anonymous namespace to avoid linker problems
 
@@ -227,14 +227,17 @@ using VarToColVec = std::vector<std::pair<V, ColumnIndexAndTypeInfo>>;
 std::shared_ptr<SpatialJoin> makeSpatialJoinFromValues(
     QueryExecutionContext* qec, PayloadVariables pv = PayloadVariables::all(),
     SpatialJoinAlgorithm alg = SPATIAL_JOIN_DEFAULT_ALGORITHM) {
+  EncodedIriManager encodedIriManager;
   const auto sharedHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
   // also include some garbage input geometries
   auto pqLeft = SparqlParser::parseQuery(
+      &encodedIriManager,
       "PREFIX geo: <http://www.opengis.net/ont/geosparql#>\nSELECT ?a {VALUES "
       "(?a) {(\"POLYGON((8.529 47.375, 8.549 47.375, 8.549 47.395, 8.529 "
       "47.395, 8.529 47.375))\"^^geo:wktLiteral) (\"garbage\") (5) (<>)}}");
   auto pqRight = SparqlParser::parseQuery(
+      &encodedIriManager,
       "PREFIX geo: <http://www.opengis.net/ont/geosparql#>\nSELECT ?b {VALUES "
       "(?b) {(\"POINT(8.542 47.385)\"^^geo:wktLiteral)}}");
   QueryPlanner qp{qec, sharedHandle};
@@ -453,29 +456,23 @@ class SpatialJoinVarColParamTest
         const IdTable* r = &resultTable.idTable();
         ASSERT_LT(0, r->numRows());
         ASSERT_LT(ind, r->numColumns());
-        ValueId tableEntry = r->at(0, ind);
 
-        if (tableEntry.getDatatype() == Datatype::VocabIndex) {
-          std::string value = ExportQueryExecutionTrees::idToStringAndType(
-                                  qec->getIndex(), tableEntry, {})
-                                  .value()
-                                  .first;
-          ASSERT_TRUE(value.find(expectedColumns.at(i).second, 0) !=
-                      std::string::npos);
-        } else if (tableEntry.getDatatype() == Datatype::Int) {
-          std::string value = ExportQueryExecutionTrees::idToStringAndType(
-                                  qec->getIndex(), tableEntry, {})
-                                  .value()
-                                  .first;
-          ASSERT_EQ(value, expectedColumns.at(i).second);
-        } else if (tableEntry.getDatatype() == Datatype::GeoPoint) {
+        auto col = r->getColumn(ind);
+        std::vector<std::string> columnEntries;
+        columnEntries.reserve(r->numRows());
+        for (const auto& valueId : col) {
           auto [value, type] = ExportQueryExecutionTrees::idToStringAndType(
-                                   qec->getIndex(), tableEntry, {})
+                                   qec->getIndex(), valueId, {})
                                    .value();
-          value = absl::StrCat("\"", value, "\"^^<", type, ">");
-          ASSERT_TRUE(value.find(expectedColumns.at(i).second, 0) !=
-                      std::string::npos);
+          if (valueId.getDatatype() == Datatype::GeoPoint) {
+            value = absl::StrCat("\"", value, "\"^^<", type, ">");
+          }
+          columnEntries.push_back(value);
         }
+
+        auto expected = expectedColumns.at(i).second;
+        EXPECT_THAT(columnEntries,
+                    ::testing::Contains(::testing::StartsWith(expected)));
       }
     }
   }

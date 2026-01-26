@@ -8,6 +8,8 @@
 #include <cstdint>
 #include <cstdlib>
 
+#include "backports/type_traits.h"
+
 // Code to generate index sequences used in the optimized, precompiled
 // join methods, for example. For reference:
 // http://stackoverflow.com/questions/27124920/

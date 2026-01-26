@@ -44,7 +44,7 @@ template <size_t I>
 void testSmallerUndefRangesForArbitraryRows(
     Arr<I> row, const std::vector<Arr<I>>& range,
     const std::vector<size_t>& expectedPositions,
-    source_location l = source_location::current()) {
+    source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   // TODO<joka921> also actually test the bool;
   [[maybe_unused]] bool outOfOrder;
@@ -64,7 +64,7 @@ template <size_t I>
 void testSmallerUndefRangesForRowsWithoutUndef(
     Arr<I> row, const std::vector<Arr<I>>& range,
     const std::vector<size_t>& positions,
-    source_location l = source_location::current()) {
+    source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   ASSERT_TRUE(ql::ranges::is_sorted(range));
   std::vector<int64_t> foundPositions;
@@ -112,7 +112,7 @@ template <size_t I>
 void testSmallerUndefRangesForRowsWithUndefInLastColumns(
     Arr<I> row, const std::vector<Arr<I>>& range, size_t numLastUndef,
     const std::vector<size_t>& positions,
-    source_location l = source_location::current()) {
+    source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   ASSERT_TRUE(ql::ranges::is_sorted(range));
   std::vector<int64_t> foundPositions;

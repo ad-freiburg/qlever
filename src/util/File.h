@@ -202,8 +202,8 @@ inline void deleteFile(const std::filesystem::path& path,
                        bool warnOnFailure = true) {
   if (!std::filesystem::remove(path)) {
     if (warnOnFailure) {
-      LOG(WARN) << "Deletion of file '" << path << "' was not successful"
-                << std::endl;
+      AD_LOG_WARN << "Deletion of file '" << path << "' was not successful"
+                  << std::endl;
     }
   }
 }

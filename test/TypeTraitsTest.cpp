@@ -5,11 +5,9 @@
 
 #include <gtest/gtest.h>
 
-#include <concepts>
-#include <functional>
-#include <type_traits>
-
 #include "../test/util/TypeTraitsTestHelpers.h"
+#include "backports/functional.h"
+#include "backports/type_traits.h"
 #include "util/ConstexprUtils.h"
 #include "util/TypeTraits.h"
 
@@ -97,7 +95,7 @@ TEST(TypeTraits, SameAsAnyTypeIn) {
         using CorrectT = typename std::decay_t<decltype(t2)>::type;
         using T = typename decltype(t3)::type;
         (void)t2;
-        if constexpr (!std::same_as<CorrectT, T>) {
+        if constexpr (!ql::concepts::same_as<CorrectT, T>) {
           static_assert(!SameAsAnyTypeIn<T, tup>);
         }
       });
@@ -280,7 +278,7 @@ TEST(TypeTraits, InvocableWithConvertibleReturnType) {
       ti<int>, [&bothInvocableWithExactReturnType,
                 &bothInvocableWithSimilarReturnType](auto t) {
         using ReturnType = typename decltype(t)::type;
-        if constexpr (std::same_as<ReturnType, int>) {
+        if constexpr (ql::concepts::same_as<ReturnType, int>) {
           static_assert(bothInvocableWithExactReturnType.template
                         operator()<SingleParameter, ReturnType, int&>());
         }
@@ -291,7 +289,7 @@ TEST(TypeTraits, InvocableWithConvertibleReturnType) {
                                         &bothInvocableWithExactReturnType](
                                            auto t) {
     using ReturnType = typename decltype(t)::type;
-    if constexpr (std::same_as<ReturnType, bool>) {
+    if constexpr (ql::concepts::same_as<ReturnType, bool>) {
       static_assert(bothInvocableWithExactReturnType.template
                     operator()<DoubleParameter, ReturnType, bool&, bool&>());
     }
@@ -316,7 +314,7 @@ TEST(TypeTraits, InvocableWithConvertibleReturnType) {
       ti<int>, [&bothInvocableWithExactReturnType,
                 &bothInvocableWithSimilarReturnType](auto t) {
         using ParameterType = typename decltype(t)::type;
-        if constexpr (!std::same_as<ParameterType, int&>) {
+        if constexpr (!ql::concepts::same_as<ParameterType, int&>) {
           static_assert(!bothInvocableWithExactReturnType.template
                          operator()<SingleParameter, int, ParameterType>());
           static_assert(!bothInvocableWithSimilarReturnType.template
@@ -328,8 +326,8 @@ TEST(TypeTraits, InvocableWithConvertibleReturnType) {
                  &bothInvocableWithSimilarReturnType](auto t1, auto t2) {
         using FirstParameterType = typename decltype(t1)::type;
         using SecondParameterType = typename decltype(t2)::type;
-        if constexpr (!std::same_as<FirstParameterType, bool&> ||
-                      !std::same_as<SecondParameterType, bool&>) {
+        if constexpr (!ql::concepts::same_as<FirstParameterType, bool&> ||
+                      !ql::concepts::same_as<SecondParameterType, bool&>) {
           static_assert(!bothInvocableWithExactReturnType.template
                          operator()<DoubleParameter, bool, FirstParameterType,
                                     SecondParameterType>());
@@ -343,7 +341,7 @@ TEST(TypeTraits, InvocableWithConvertibleReturnType) {
   callWithEveryVariantOfType(
       ti<int>, [&bothInvocableWithExactReturnType](auto t) {
         using ReturnType = typename decltype(t)::type;
-        if constexpr (!std::same_as<ReturnType, int>) {
+        if constexpr (!ql::concepts::same_as<ReturnType, int>) {
           static_assert(!bothInvocableWithExactReturnType.template
                          operator()<SingleParameter, ReturnType, int&>());
         }
@@ -351,7 +349,7 @@ TEST(TypeTraits, InvocableWithConvertibleReturnType) {
   callWithEveryVariantOfType(ti<bool>, [&bothInvocableWithExactReturnType](
                                            auto t) {
     using ReturnType = typename decltype(t)::type;
-    if constexpr (!std::same_as<ReturnType, bool>) {
+    if constexpr (!ql::concepts::same_as<ReturnType, bool>) {
       static_assert(!bothInvocableWithExactReturnType.template
                      operator()<DoubleParameter, ReturnType, bool&, bool&>());
     }
@@ -363,8 +361,8 @@ TEST(TypeTraits, InvocableWithConvertibleReturnType) {
       ti<int>, [&bothInvocableWithExactReturnType](auto t1, auto t2) {
         using ReturnType = typename decltype(t1)::type;
         using ParameterType = typename decltype(t2)::type;
-        if constexpr (!std::same_as<ReturnType, int> &&
-                      !std::same_as<ParameterType, int&>) {
+        if constexpr (!ql::concepts::same_as<ReturnType, int> &&
+                      !ql::concepts::same_as<ParameterType, int&>) {
           static_assert(
               !bothInvocableWithExactReturnType.template
                operator()<SingleParameter, ReturnType, ParameterType>());
@@ -379,8 +377,10 @@ TEST(TypeTraits, InvocableWithConvertibleReturnType) {
         callWithEveryVariantOfType(
             ti<bool>, [&bothInvocableWithExactReturnType](auto t) {
               using ReturnType = typename decltype(t)::type;
-              if constexpr ((!std::same_as<FirstParameterType, bool&> ||
-                             !std::same_as<SecondParameterType, bool&>)&&!std::
+              if constexpr ((!ql::concepts::same_as<FirstParameterType,
+                                                    bool&> ||
+                             !ql::concepts::same_as<SecondParameterType,
+                                                    bool&>)&&!ql::concepts::
                                 same_as<ReturnType, bool>) {
                 static_assert(
                     !bothInvocableWithExactReturnType.template
@@ -416,4 +416,18 @@ TEST(TypeTraits, InvokeResultSfinaeFriendly) {
   [[maybe_unused]] auto tp2 = getInvokeResultImpl<decltype(x), const char*>();
   EXPECT_TRUE((std::is_same_v<typename decltype(tp2)::type,
                               InvalidInvokeResult<decltype(x), const char*>>));
+}
+
+// This function is never called, because only its return type is used.
+// We still test it here, to make the coverage tool happy.
+TEST(TypeTraits, getInvokeResultImpl) {
+  auto lambda = [](int) -> bool { return false; };
+  using namespace ad_utility::invokeResultSfinaeFriendly::detail;
+  auto tp = getInvokeResultImpl<decltype(lambda), int>();
+  EXPECT_TRUE((std::is_same_v<typename decltype(tp)::type, bool>));
+
+  auto tp2 = getInvokeResultImpl<decltype(lambda), const char*>();
+  EXPECT_TRUE(
+      (std::is_same_v<typename decltype(tp2)::type,
+                      InvalidInvokeResult<decltype(lambda), const char*>>));
 }

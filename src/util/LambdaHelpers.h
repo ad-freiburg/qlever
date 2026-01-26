@@ -5,8 +5,8 @@
 #ifndef QLEVER_LAMBDAHELPERS_H
 #define QLEVER_LAMBDAHELPERS_H
 
-#include "./Forward.h"
 #include "backports/concepts.h"
+#include "util/Forward.h"
 
 namespace ad_utility {
 

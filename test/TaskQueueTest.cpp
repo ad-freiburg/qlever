@@ -8,8 +8,8 @@
 #include <future>
 #include <vector>
 
-#include "../src/util/TaskQueue.h"
-#include "../src/util/ValueIdentity.h"
+#include "util/TaskQueue.h"
+#include "util/ValueIdentity.h"
 
 using namespace std::chrono_literals;
 

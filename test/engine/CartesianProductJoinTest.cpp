@@ -60,7 +60,7 @@ CartesianProductJoin makeJoin(const std::vector<VectorTable>& inputs,
 void testCartesianProductImpl(VectorTable expected,
                               std::vector<VectorTable> inputs,
                               bool useLimitInSuboperations = false,
-                              source_location l = source_location::current()) {
+                              source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   {
     auto join = makeJoin(inputs, useLimitInSuboperations);
@@ -87,7 +87,7 @@ void testCartesianProductImpl(VectorTable expected,
 // result. Perform the test for children that directly support the LIMIT
 // operation as well for children that don't (see `makeJoin` above for details).
 void testCartesianProduct(VectorTable expected, std::vector<VectorTable> inputs,
-                          source_location l = source_location::current()) {
+                          source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   testCartesianProductImpl(expected, inputs, true);
   testCartesianProductImpl(expected, inputs, false);
@@ -375,7 +375,7 @@ class CartesianProductJoinLazyTest
       CartesianProductJoin& join, size_t expectedSize,
       const std::vector<size_t>& occurenceCounts,
       const std::vector<size_t>& valueCount,
-      source_location loc = source_location::current()) {
+      source_location loc = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(loc);
     join.getExecutionContext()->getQueryTreeCache().clearAll();
     Result result = join.computeResultOnlyForTesting(true);

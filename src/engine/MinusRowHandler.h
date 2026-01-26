@@ -68,6 +68,12 @@ class MinusRowHandler {
     // `BlockZipperJoinImpl` expects this interface.
   }
 
+  // No-op for `MINUS`.
+  template <typename R1, typename R2>
+  static void addRows(const R1&, const R2&) {
+    // `BlockZipperJoinImpl` expects this interface.
+  }
+
   // Flush remaining pending entries before changing the input.
   void flushBeforeInputChange() {
     // Clear to avoid unnecessary merge.

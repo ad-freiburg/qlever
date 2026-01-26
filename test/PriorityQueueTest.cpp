@@ -6,7 +6,7 @@
 
 #include <string>
 
-#include "../src/util/Cache.h"
+#include "util/Cache.h"
 
 using ad_utility::HeapBasedPQ;
 using ad_utility::TreeBasedPQ;

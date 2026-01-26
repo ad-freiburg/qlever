@@ -378,15 +378,25 @@ TEST(Result, verifyApplyLimitOffsetDoesCorrectlyApplyLimitAndOffset) {
   {
     auto comparisonTable = makeIdTableFromVector({{2, 7}, {3, 6}});
     uint32_t callCounter = 0;
-    Result result{idTable.clone(), {}, LocalVocab{}};
-    result.applyLimitOffset(
-        limitOffset, [&](std::chrono::microseconds, const IdTable& innerTable) {
-          // NOTE: duration can't be tested here, processors are too fast
-          EXPECT_EQ(innerTable, comparisonTable);
-          ++callCounter;
-        });
-    EXPECT_EQ(callCounter, 1);
-    EXPECT_EQ(result.idTable(), comparisonTable);
+    auto callback = [&](std::chrono::microseconds, const IdTable& innerTable) {
+      // NOTE: duration can't be tested here, processors are too fast
+      EXPECT_EQ(innerTable, comparisonTable);
+      ++callCounter;
+    };
+    {
+      Result result{idTable.clone(), {}, LocalVocab{}};
+      result.applyLimitOffset(limitOffset, callback);
+      EXPECT_EQ(callCounter, 1);
+      EXPECT_EQ(result.idTable(), comparisonTable);
+    }
+    {
+      // Now test the limit offset application for shared results;
+      Result result2{
+          std::make_shared<const IdTable>(idTable.clone()), {}, LocalVocab{}};
+      result2.applyLimitOffset(limitOffset, callback);
+      EXPECT_EQ(callCounter, 2);
+      EXPECT_EQ(result2.idTable(), comparisonTable);
+    }
   }
 
   for (auto& generator : getAllSubSplits(idTable)) {
@@ -602,3 +612,8 @@ INSTANTIATE_TEST_SUITE_P(SuccessCases, ResultDefinednessTest,
 INSTANTIATE_TEST_SUITE_P(
     FailureCases, ResultDefinednessTest,
     Combine(Values(false), Values(&wrongTable1, &wrongTable2, &wrongTable3)));
+
+// _____________________________________________________________________________
+TEST(Result, assertionOnNullptrConstruction) {
+  EXPECT_ANY_THROW(Result(Result::IdTablePtr(nullptr), {}, LocalVocab{}));
+}

@@ -278,8 +278,7 @@ TEST(BenchmarkMeasurementContainerTest, ResultTableEraseRow) {
   auto singleEraseOperationTest =
       [&createTestTable, &checkForm, &testTableColumnNames](
           const size_t numRows, const size_t rowToDelete,
-          ad_utility::source_location l =
-              ad_utility::source_location::current()) {
+          ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
         // For generating better messages, when failing a test.
         auto trace{generateLocationTrace(l, "singleEraseOperationTest")};
         ResultTable table{createTestTable(numRows)};
@@ -336,11 +335,10 @@ TEST(BenchmarkMeasurementContainerTest, ResultGroupDeleteMember) {
   @param memberDeletionPoint The number of dummy members, that are added, before
   we add the member, that will be later deleted.
   */
-  auto singleDeleteTest = [&addDummyMembers](
-                              const size_t numMembers,
-                              const size_t memberDeletionPoint,
-                              ad_utility::source_location l =
-                                  ad_utility::source_location::current()) {
+  auto singleDeleteTest = [&addDummyMembers](const size_t numMembers,
+                                             const size_t memberDeletionPoint,
+                                             ad_utility::source_location l =
+                                                 AD_CURRENT_SOURCE_LOC()) {
     AD_CONTRACT_CHECK(memberDeletionPoint < numMembers);
     // For generating better messages, when failing a test.
     auto trace{generateLocationTrace(l, "singleDeleteTest")};

@@ -6,8 +6,8 @@
 
 #include <unordered_set>
 
-#include "../src/engine/sparqlExpressions/SetOfIntervals.h"
-#include "../src/util/Random.h"
+#include "engine/sparqlExpressions/SetOfIntervals.h"
+#include "util/Random.h"
 
 using namespace ad_utility;
 

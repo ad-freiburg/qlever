@@ -28,8 +28,7 @@ void testMinus(std::vector<IdTable> leftTables,
                std::vector<IdTable> rightTables,
                const std::vector<IdTable>& expectedResult,
                bool singleVar = false,
-               ad_utility::source_location location =
-                   ad_utility::source_location::current()) {
+               ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) {
   auto g = generateLocationTrace(location);
   auto qec = ad_utility::testing::getQec();
 
@@ -141,6 +140,84 @@ TEST(Minus, computeMinus) {
   IdTable vres = vm.computeMinus(va, vb, jcls);
 
   EXPECT_EQ(vres, makeIdTableFromVector({{7, 6, 5, 4, 3, 2}}));
+}
+
+// _____________________________________________________________________________
+TEST(Minus, ensureLocalVocabFromLeftIsPassed) {
+  IdTable a = makeIdTableFromVector({{0}, {1}, {2}, {3}, {4}});
+  IdTable b = makeIdTableFromVector({{0}});
+  LocalVocabEntry aEntry = LocalVocabEntry::fromStringRepresentation("\"a\"");
+  LocalVocab vocabA;
+  vocabA.getIndexAndAddIfNotContained(aEntry);
+  LocalVocab vocabB;
+  vocabB.getIndexAndAddIfNotContained(
+      LocalVocabEntry::fromStringRepresentation("\"b\""));
+
+  auto* qec = ad_utility::testing::getQec();
+  Minus m{qec,
+          ad_utility::makeExecutionTree<ValuesForTesting>(
+              qec, std::move(a),
+              std::vector<std::optional<Variable>>{Variable{"?a"}}, false,
+              std::vector<ColumnIndex>{0}, std::move(vocabA)),
+          ad_utility::makeExecutionTree<ValuesForTesting>(
+              qec, std::move(b),
+              std::vector<std::optional<Variable>>{Variable{"?a"}}, false,
+              std::vector<ColumnIndex>{0}, std::move(vocabB))};
+
+  auto result = m.computeResultOnlyForTesting(false);
+  EXPECT_THAT(result.localVocab().getAllWordsForTesting(),
+              ::testing::ElementsAre(::testing::Eq(aEntry)));
+}
+
+// _____________________________________________________________________________
+TEST(Minus, computeMinusIndexNestedLoopJoinOptimization) {
+  LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation("\"a\"");
+  LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation("\"b\"");
+
+  LocalVocab leftVocab;
+  leftVocab.getIndexAndAddIfNotContained(entryA);
+  LocalVocab rightVocab;
+  rightVocab.getIndexAndAddIfNotContained(entryB);
+
+  // From this table columns 1 and 2 will be used for the join.
+  IdTable a = makeIdTableFromVector(
+      {{1, 1, 2}, {4, 2, 1}, {2, 8, 1}, {3, 8, 2}, {4, 8, 2}});
+
+  // From this table columns 2 and 1 will be used for the join.
+  // This is deliberately not sorted to check the optimization that avoids
+  // sorting on the right if bigger
+  IdTable b = makeIdTableFromVector({{7, 2, 1, 5},
+                                     {1, 3, 3, 5},
+                                     {1, 8, 1, 5},
+                                     {7, 2, 8, 14},
+                                     {10, 11, 12, 13},
+                                     {14, 15, 16, 17}});
+  IdTable expected = makeIdTableFromVector({{4, 2, 1}, {2, 8, 1}});
+
+  auto* qec = ad_utility::testing::getQec();
+  for (bool forceFullyMaterialized : {false, true}) {
+    Minus m{qec,
+            ad_utility::makeExecutionTree<ValuesForTesting>(
+                qec, a.clone(),
+                std::vector<std::optional<Variable>>{
+                    std::nullopt, Variable{"?a"}, Variable{"?b"}},
+                false, std::vector<ColumnIndex>{1, 2}, leftVocab.clone()),
+            ad_utility::makeExecutionTree<ValuesForTesting>(
+                qec, b.clone(),
+                std::vector<std::optional<Variable>>{
+                    std::nullopt, Variable{"?b"}, Variable{"?a"}, std::nullopt},
+                false, std::vector<ColumnIndex>{}, rightVocab.clone(),
+                std::nullopt, forceFullyMaterialized)};
+    auto result = m.computeResultOnlyForTesting(true);
+    ASSERT_TRUE(result.isFullyMaterialized());
+    EXPECT_EQ(result.idTable(), expected);
+    EXPECT_THAT(result.localVocab().getAllWordsForTesting(),
+                ::testing::UnorderedElementsAre(entryA));
+    const auto& runtimeInfo =
+        m.getChildren().at(1)->getRootOperation()->runtimeInfo();
+    EXPECT_EQ(runtimeInfo.status_, RuntimeInformation::Status::optimizedOut);
+    EXPECT_EQ(runtimeInfo.numRows_, 0);
+  }
 }
 
 // _____________________________________________________________________________

@@ -6,33 +6,110 @@ on:
   pull_request:
     branches: [ master ]
 
+env:
+  IMAGE: adfreiburg/qlever
+
 concurrency:
   # When this is not a pull request, then we want all the docker containers to be pushed, we therefore
   # directly fall back to the commit hash which will be distinct for each push to master.
   group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.sha}}'
   cancel-in-progress: true
 
+# This workflow is heavily based on https://docs.docker.com/build/ci/github-actions/multi-platform/#distribute-build-across-multiple-runners .
 jobs:
-  docker:
-    runs-on: ubuntu-24.04
+  build:
+    strategy:
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-24.04
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        # Generate metadata for the docker image based on the GH Actions environment.
+      - name: Generate image metadata
+        id: meta
+        uses: docker/metadata-action@v5
         with:
-          submodules: 'recursive'
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-        with:
-          # As of Jan, 28, 2025 the default value here (`binfmt:latest`)
-          # downloads a QEMU version that leads to segfaults in the compiler.
-          # We therefore fix a working version
-          # TODO<joka921> GitHub actions now has ARM runners,
-          # avoid cross-compilation completely
-          image : 'tonistiigi/binfmt:desktop-v8.1.5-44'
+          images: ${{ env.IMAGE }}
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Login to Docker Hub
         if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build ${{ matrix.platform }}
+        uses: docker/build-push-action@v6
+        id: build
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          tags: ${{ env.IMAGE }}
+          # push-by-digest means that the built image is not associated with a tag. Instead, the only way to refer to it
+          # is by using its digest (which is basically a unique hash).
+          outputs: type=image,push-by-digest=true,name-canonical=true,push=${{ github.event_name != 'pull_request' }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+        # Export the digest outside of this job, so that the merge job can pick it up.
+      - name: Export digest
+        if: github.event_name != 'pull_request'
+        run: |
+          # Strip forward slash from matrix.platform
+          platform=${{ matrix.platform }}
+          echo "ARTIFACT_NAME=${platform//\//-}" >> $GITHUB_ENV
+          mkdir -p ${{ runner.temp }}/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "${{ runner.temp }}/digests/${digest#sha256:}"
+      - name: Upload digest
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ env.ARTIFACT_NAME }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+        # Build image for local use. Since we pushed by digest it has not been loaded into the local docker instance.
+        # It might be possible to directly push by using a unique tag and make this step redundant, but pushing by digest
+        # seems to be the recommended way to do it.
+      - name: Setup E2E test image
+        if: matrix.platform == 'linux/amd64'
+        uses: docker/build-push-action@v6
+        with:
+          # The cache should already provide this. So no rebuild should occur.
+          context: .
+          load: true
+          push: false
+          tags: ${{ env.IMAGE }}:tmp-${{ github.sha }}
+      - name: E2E in Docker
+        if: matrix.platform == 'linux/amd64'
+        run: |
+          sudo mkdir ${{ github.workspace }}/e2e_data
+          sudo chmod a+rwx ${{ github.workspace }}/e2e_data
+          sudo docker run -i --rm -v "${{ github.workspace }}/e2e_data:/app/e2e_data/" --entrypoint e2e/e2e.sh ${{ env.IMAGE }}:tmp-${{ github.sha }}
+  docker-merge:
+    if: github.event_name != 'pull_request'
+    needs: [ build ]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Generate image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        env:
+          # We build multiplatform images which have an image index above the
+          # image manifests. Attach the annotations directly to the image index.
+          DOCKER_METADATA_ANNOTATIONS_LEVELS: "index"
+        with:
+          images: ${{ env.IMAGE }}
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -43,77 +120,36 @@ jobs:
       - name: Get PR number
         id: pr
         run: echo "pr_num=$(git log --format=%s -n 1 | sed -nr 's/.*\(\#([0-9]+)\)/\1/p')" >> $GITHUB_OUTPUT
-      - name: Build X-86-64
-        uses: docker/build-push-action@v6
+      - name: Download digests
+        uses: actions/download-artifact@v4
         with:
-          context: .
-          # Docker multiplatform images require an entry in their manifests. If this
-          # entry is missing, then the images for each platform are considered seperate.
-          # If this action runs on a single runner (i.e. the attribute `platforms`
-          # contains a list of all platforms) then the manifest is configured automatically.
-          # If the build and push is split over multiple runners, then the action requires an additional `merge`
-          # job, which merges the images for each platform into a single multiplatform image.
-          # References:
-          # https://docs.docker.com/build/ci/github-actions/multi-platform/#distribute-build-across-multiple-runners
-          # https://www.docker.com/blog/multi-arch-build-and-images-the-simple-way/
-          platforms: linux/amd64
-
-          # Only  export to the local docker for testing.
-          load: true
-          tags: adfreiburg/qlever:test
-
-      - name: E2E in Docker
+          path: ${{ runner.temp }}/digests
+          pattern: digests-*
+          merge-multiple: true
+      - name: Merge amd64 + arm64 images into multi-arch manifest
+        # Changing the working directory to this folder is important, so that
+        # the '*' in printf down below is expanded to the simple filenames without
+        # a leading path in the way.
+        working-directory: ${{ runner.temp }}/digests
+        # steps.meta.outputs.annotations contains a line for every annotation.
+        # To properly handle the expansion of this multi-line value in bash,
+        # we need to properly transform it into the `EXPANDED_ANNOTATIONS`
+        # variable, which then no longer contains newlines and properly
+        # handles other spaces in the annotations.
         run: |
-          sudo mkdir ${{github.workspace}}/e2e_data
-          sudo chmod a+rwx ${{github.workspace}}/e2e_data
-          sudo docker run -i --rm -v "${{github.workspace}}/e2e_data:/app/e2e_data/" --entrypoint e2e/e2e.sh adfreiburg/qlever:test
-
-      - name: Build ARM-64
-        # The cross-compilation to ARM64 takes a long time, so we typically
-        # only perform it on the pushes to master when we actually need that
-        # container. Should the building of the container however fail  in the
-        # future, then we can set this to `true`. Then the ARM64 image will also
-        # be built on pull requests which allows for debugging without changing
-        # the master branch.
-        if: false
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          platforms: linux/arm64
-
-          # Only build, don't run.
-          load: false
-          push: false
-
-      - name: Generate image metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        env:
-          # We build multiplatform images which have an image index above the
-          # image manifests. Attach the annotations directly to the image index.
-          DOCKER_METADATA_ANNOTATIONS_LEVELS: "index"
-
-      - name: Build and push
-        if: github.event_name != 'pull_request'
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-
-          # Push to dockerhub, reuse the cached steps from the previous build.
-          push: true
-
-          # If this is a push on master, publish with short commit sha
-          # else use the ref name, which has to be the tag in this case.
-          # We have to explicitly add the "qlever:latest" tag for it to work correctly,
-          # see e.g. https://stackoverflow.com/questions/27643017/do-i-need-to-manually-tag-latest-when-pushing-to-docker-public-repository
-          tags: >
-            adfreiburg/qlever:latest,
-            adfreiburg/qlever:${{ github.ref_name == 'master' && format('pr-{0}', steps.pr.outputs.pr_num) || github.ref_name }},
-            adfreiburg/qlever:commit-${{ steps.sha.outputs.sha_short }},
-
-          # Set Annotations and Labels that conform to the OpenContainers
-          # Annotations Spec
-          annotations: ${{ steps.meta.outputs.annotations }}
-          labels: ${{ steps.meta.outputs.labels }}
-
+          ANNOTATIONS=$(cat <<'EOF'
+          ${{ steps.meta.outputs.annotations }}
+          EOF
+          )
+          EXPANDED_ANNOTATIONS=()
+          while IFS= read -r line; do
+            # Skip empty lines
+            [[ -n "$line" ]] || continue
+            EXPANDED_ANNOTATIONS+=( --annotation "$line" )
+          done <<< "$ANNOTATIONS"
+          docker buildx imagetools create \
+            -t ${{ env.IMAGE }}:latest \
+            -t ${{ env.IMAGE }}:${{ github.ref_name == 'master' && format('pr-{0}', steps.pr.outputs.pr_num) || github.ref_name }} \
+            -t ${{ env.IMAGE }}:commit-${{ steps.sha.outputs.sha_short }} \
+            "${EXPANDED_ANNOTATIONS[@]}" \
+            $(printf '${{ env.IMAGE }}@sha256:%s ' *)

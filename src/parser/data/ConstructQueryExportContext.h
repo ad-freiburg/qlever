@@ -20,6 +20,7 @@ struct ConstructQueryExportContext {
   const LocalVocab& localVocab_;
   const VariableToColumnMap& _variableColumns;
   const Index& _qecIndex;
+  const size_t _rowOffset;
 };
 
 #endif  // QLEVER_SRC_PARSER_DATA_CONSTRUCTQUERYEXPORTCONTEXT_H

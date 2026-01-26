@@ -9,15 +9,16 @@
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 
-#include <type_traits>
 #include <variant>
 
+#include "backports/type_traits.h"
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/SplitVocabulary.h"
 #include "index/vocabulary/VocabularyConstraints.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
 #include "index/vocabulary/VocabularyType.h"
+#include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
 #include "util/json.h"
 
@@ -167,6 +168,11 @@ class PolymorphicVocabulary {
   // `this`.
   std::unique_ptr<WordWriterBase> makeDiskWriterPtr(
       const std::string& filename) const;
+
+  // Generic serialization support - delegates to the active variant.
+  AD_SERIALIZE_FRIEND_FUNCTION(PolymorphicVocabulary) {
+    std::visit([&serializer](auto& vocab) { serializer | vocab; }, arg.vocab_);
+  }
 };
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_POLYMORPHICVOCABULARY_H

@@ -4,12 +4,16 @@
 
 #include "engine/ExistsJoin.h"
 
+#include "backports/three_way_comparison.h"
 #include "engine/CallFixedSize.h"
 #include "engine/JoinHelpers.h"
 #include "engine/QueryPlanner.h"
 #include "engine/Result.h"
+#include "engine/Sort.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "util/ChunkedForLoop.h"
+#include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 
 // _____________________________________________________________________________
@@ -99,6 +103,13 @@ size_t ExistsJoin::getCostEstimate() {
 // ____________________________________________________________________________
 Result ExistsJoin::computeResult(bool requestLaziness) {
   bool noJoinNecessary = joinColumns_.empty();
+
+  if (!noJoinNecessary) {
+    if (auto res = tryIndexNestedLoopJoinIfSuitable()) {
+      return std::move(res).value();
+    }
+  }
+
   // The lazy exists join implementation does only work if there's just a single
   // join column. This might be extended in the future.
   bool lazyJoinIsSupported = joinColumns_.size() == 1;
@@ -214,8 +225,8 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
   }
 
   // The added column only contains Boolean values, and adds no new words to the
-  // local vocabulary, so we can simply copy the local vocab from `leftRes`.
-  return {std::move(result), resultSortedOn(), leftRes->getCopyOfLocalVocab()};
+  // local vocabulary, so we can use the local vocab from `leftRes`.
+  return {std::move(result), resultSortedOn(), leftRes->getSharedLocalVocab()};
 }
 
 // _____________________________________________________________________________
@@ -258,6 +269,38 @@ std::unique_ptr<Operation> ExistsJoin::cloneImpl() const {
   newJoin->left_ = left_->clone();
   newJoin->right_ = right_->clone();
   return newJoin;
+}
+
+// _____________________________________________________________________________
+std::optional<Result> ExistsJoin::tryIndexNestedLoopJoinIfSuitable() {
+  auto alwaysDefined = [this]() {
+    return qlever::joinHelpers::joinColumnsAreAlwaysDefined(joinColumns_, left_,
+                                                            right_);
+  };
+  // This algorithm only works well if the left side is smaller and we can avoid
+  // sorting the right side. It currently doesn't support undef.
+  auto sort = std::dynamic_pointer_cast<Sort>(right_->getRootOperation());
+  if (!sort || left_->getSizeEstimate() > right_->getSizeEstimate() ||
+      !alwaysDefined()) {
+    return std::nullopt;
+  }
+
+  auto leftRes = left_->getResult(false);
+  auto rightRes = qlever::joinHelpers::computeResultSkipChild(sort);
+
+  IdTable result = leftRes->idTable().clone();
+  LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
+  joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
+      joinColumns_, std::move(leftRes), std::move(rightRes)};
+  result.addEmptyColumn();
+  ad_utility::chunkedCopy(
+      ql::views::transform(
+          ad_utility::OwningView{nestedLoopJoin.computeExistance()},
+          [](char tracker) { return Id::makeFromBool(tracker != 0); }),
+      result.getColumn(result.numColumns() - 1).begin(),
+      qlever::joinHelpers::CHUNK_SIZE, [this]() { checkCancellation(); });
+  return std::optional{
+      Result{std::move(result), resultSortedOn(), std::move(localVocab)}};
 }
 
 // _____________________________________________________________________________
@@ -382,8 +425,9 @@ struct LazyExistsJoinImpl
     while (currentRight_.has_value()) {
       AD_CORRECTNESS_CHECK(currentRightIndex_ <
                            currentRight_.value().get().size());
-      auto comparison = currentRight_.value().get().at(currentRightIndex_,
-                                                       rightJoinColumn_) <=> id;
+      auto comparison = ql::compareThreeWay(
+          currentRight_.value().get().at(currentRightIndex_, rightJoinColumn_),
+          id);
       if (comparison == 0) {
         return true;
       }

@@ -222,6 +222,6 @@ using MetaWrapperMmapView = MetaDataWrapperDense<
 using IndexMetaDataMmap = IndexMetaData<MetaWrapperMmap>;
 using IndexMetaDataMmapView = IndexMetaData<MetaWrapperMmapView>;
 
-#include "./IndexMetaDataImpl.h"
+#include "index/IndexMetaDataImpl.h"
 
 #endif  // QLEVER_SRC_INDEX_INDEXMETADATA_H

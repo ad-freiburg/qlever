@@ -10,6 +10,20 @@
 
 #include "global/Constants.h"
 
+namespace {
+// CTRE regex pattern for C++17 compatibility (namespace scope)
+constexpr ctll::fixed_string dayTimePattern =
+    "(?<negation>-?)P((?<days>\\d+)D)?(T((?<hours>\\d+)H)?((?<"
+    "minutes>\\d+)M)?((?<seconds>\\d+(\\.\\d+)?)S)?)?";
+
+// CTRE named capture group identifiers for C++17 compatibility
+constexpr ctll::fixed_string negationGroup = "negation";
+constexpr ctll::fixed_string daysGroup = "days";
+constexpr ctll::fixed_string hoursGroup = "hours";
+constexpr ctll::fixed_string minutesGroup = "minutes";
+constexpr ctll::fixed_string secondsGroup = "seconds";
+}  // namespace
+
 //______________________________________________________________________________
 std::pair<std::string, const char*> DayTimeDuration::toStringAndType() const {
   std::string str = isPositive() ? "P" : "-P";
@@ -61,10 +75,6 @@ std::pair<std::string, const char*> DayTimeDuration::toStringAndType() const {
 //______________________________________________________________________________
 DayTimeDuration DayTimeDuration::parseXsdDayTimeDuration(
     std::string_view dayTimeDurationStr) {
-  static constexpr ctll::fixed_string dayTimePattern =
-      "(?<negation>-?)P((?<days>\\d+)D)?(T((?<hours>\\d+)H)?((?<"
-      "minutes>\\d+)M)?((?<seconds>\\d+(\\.\\d+)?)S)?)?";
-
   // Try to match the given pattern with the provided string. If the matching
   // procedure fails, raise DurationParseException (for Turtle Parser).
   auto match = ctre::match<dayTimePattern>(dayTimeDurationStr);
@@ -73,8 +83,9 @@ DayTimeDuration DayTimeDuration::parseXsdDayTimeDuration(
         absl::StrCat("The value ", dayTimeDurationStr,
                      " cannot be parsed as an `xsd:dayTimeDuration`.")};
   } else {
-    Type negation = match.get<"negation">().to_string() == "-" ? Type::Negative
-                                                               : Type::Positive;
+    Type negation = match.get<negationGroup>().to_view() == "-"
+                        ? Type::Negative
+                        : Type::Positive;
     int days = 0;
     int hours = 0;
     int minutes = 0;
@@ -82,16 +93,17 @@ DayTimeDuration DayTimeDuration::parseXsdDayTimeDuration(
 
     // Certain duration strings could trigger segmentations faults, thus a
     // check for value is necessary here.
-    if (auto matchedDays = match.template get<"days">(); matchedDays) {
+    if (auto matchedDays = match.template get<daysGroup>(); matchedDays) {
       days = matchedDays.to_number();
     }
-    if (auto matchedHours = match.template get<"hours">(); matchedHours) {
+    if (auto matchedHours = match.template get<hoursGroup>(); matchedHours) {
       hours = matchedHours.to_number();
     }
-    if (auto matchedMinutes = match.template get<"minutes">(); matchedMinutes) {
+    if (auto matchedMinutes = match.template get<minutesGroup>();
+        matchedMinutes) {
       minutes = matchedMinutes.to_number();
     }
-    if (auto matchedSeconds = match.get<"seconds">(); matchedSeconds) {
+    if (auto matchedSeconds = match.get<secondsGroup>(); matchedSeconds) {
       seconds = std::strtod(matchedSeconds.data(), nullptr);
     }
     return DayTimeDuration(negation, days, hours, minutes, seconds);

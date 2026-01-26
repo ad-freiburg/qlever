@@ -5,7 +5,7 @@
 //   2022-    Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 //
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
-#include "Union.h"
+#include "engine/Union.h"
 
 #include "backports/span.h"
 #include "engine/CallFixedSize.h"
@@ -206,13 +206,28 @@ uint64_t Union::getSizeEstimateBeforeLimit() {
   return _subtrees[0]->getSizeEstimate() + _subtrees[1]->getSizeEstimate();
 }
 
+// _____________________________________________________________________________
 size_t Union::getCostEstimate() {
+  uint64_t elementsToCopy = getSizeEstimateBeforeLimit() * getResultWidth();
+  // Magic value that is empirically determined (using commit 59391af) such that
+  // costs of distributively applied joins roughly match the actual time.
+  uint64_t timeEstimate = std::max(uint64_t{1}, elementsToCopy / 10);
+  if (!targetOrder_.empty() &&
+      _columnOrigins.at(targetOrder_.at(0)).at(0) != NO_COLUMN) {
+    // A sorted UNION is rather expensive the factor 63 is an empirically
+    // determined average factor (using commit 59391af) under the assumption
+    // that the left and right side are equivalent and thus the whole range
+    // completely overlaps. We assume that typically the last quarter does not
+    // overlap, so we don't multiply the whole number of elements.
+    constexpr uint64_t sortOverhead = 63;
+    timeEstimate *= (1 + 3 * sortOverhead) / 4;
+  }
   return _subtrees[0]->getCostEstimate() + _subtrees[1]->getCostEstimate() +
-         getSizeEstimateBeforeLimit();
+         timeEstimate;
 }
 
 Result Union::computeResult(bool requestLaziness) {
-  LOG(DEBUG) << "Union result computation..." << std::endl;
+  AD_LOG_DEBUG << "Union result computation..." << std::endl;
   std::shared_ptr<const Result> subRes1 =
       _subtrees[0]->getResult(requestLaziness);
   std::shared_ptr<const Result> subRes2 =
@@ -234,12 +249,12 @@ Result Union::computeResult(bool requestLaziness) {
             resultSortedOn()};
   }
 
-  LOG(DEBUG) << "Union subresult computation done." << std::endl;
+  AD_LOG_DEBUG << "Union subresult computation done." << std::endl;
 
   IdTable idTable =
       computeUnion(subRes1->idTable(), subRes2->idTable(), _columnOrigins);
 
-  LOG(DEBUG) << "Union result computation done" << std::endl;
+  AD_LOG_DEBUG << "Union result computation done" << std::endl;
   // If only one of the two operands has a non-empty local vocabulary, share
   // with that one (otherwise, throws an exception).
   return {std::move(idTable), resultSortedOn(),
@@ -432,4 +447,22 @@ Result::LazyResult Union::computeResultKeepOrder(
             });
       },
       std::move(leftRange), std::move(rightRange));
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Union::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
+  // TODO<joka921> Implement this optimization for the `sortedUnion` case, we
+  // have to find out the names of the variables.
+  if (!targetOrder_.empty()) {
+    return std::nullopt;
+  }
+
+  auto left =
+      QueryExecutionTree::makeTreeWithStrippedColumns(leftChild(), variables);
+  auto right =
+      QueryExecutionTree::makeTreeWithStrippedColumns(rightChild(), variables);
+
+  return ad_utility::makeExecutionTree<Union>(
+      getExecutionContext(), std::move(left), std::move(right));
 }

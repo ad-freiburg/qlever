@@ -14,6 +14,7 @@ add_library(parser
         TripleComponent.cpp
         GraphPatternOperation.cpp
         MagicServiceQuery.cpp
+        NamedCachedResult.cpp
         PathQuery.cpp
         SpatialQuery.cpp
         PayloadVariables.cpp
@@ -25,8 +26,9 @@ add_library(parser
         LiteralOrIri.cpp
         DatasetClauses.cpp
         TextSearchQuery.cpp
+        MaterializedViewQuery.cpp
         Quads.cpp
         UpdateTriples.cpp
+        MaterializedViewQuery.cpp
 )
-qlever_target_link_libraries(parser sparqlParser parserData sparqlExpressions rdfEscaping re2::re2 util engine index rdfTypes)
-
+qlever_target_link_libraries(parser sparqlParser parserData sparqlExpressions rdfEscaping global re2::re2 util engine index rdfTypes)

@@ -114,17 +114,17 @@ auto determineTypeString = [](ValueIdType type) {
 
 auto determineAggregateString = [](auto ti) {
   using T = typename decltype(ti)::type;
-  if constexpr (std::same_as<T, MinExpression>)
+  if constexpr (ql::concepts::same_as<T, MinExpression>)
     return "MIN";
-  else if constexpr (std::same_as<T, MaxExpression>)
+  else if constexpr (ql::concepts::same_as<T, MaxExpression>)
     return "MAX";
-  else if constexpr (std::same_as<T, AvgExpression>)
+  else if constexpr (ql::concepts::same_as<T, AvgExpression>)
     return "AVG";
-  else if constexpr (std::same_as<T, SumExpression>)
+  else if constexpr (ql::concepts::same_as<T, SumExpression>)
     return "SUM";
-  else if constexpr (std::same_as<T, CountExpression>)
+  else if constexpr (ql::concepts::same_as<T, CountExpression>)
     return "COUNT";
-  else if constexpr (std::same_as<T, GroupConcatExpression>)
+  else if constexpr (ql::concepts::same_as<T, GroupConcatExpression>)
     return "GROUP_CONCAT";
   else
     AD_THROW("Unsupported expression. Is this an aggregate?");
@@ -242,14 +242,15 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
   static void computeGroupBy(QueryExecutionContext* qec,
                              std::shared_ptr<QueryExecutionTree> subtree,
                              bool useOptimization) {
-    RuntimeParameters().set<"group-by-hash-map-enabled">(useOptimization);
+    setRuntimeParameter<&RuntimeParameters::groupByHashMapEnabled_>(
+        useOptimization);
 
     using namespace sparqlExpression;
 
     auto createExpression = [](auto ti) {
       using A = typename decltype(ti)::type;
 
-      if constexpr (std::same_as<A, GroupConcatExpression>)
+      if constexpr (ql::concepts::same_as<A, GroupConcatExpression>)
         return std::make_unique<T>(false,
                                    makeVariableExpression(Variable{"?b"}), "'");
       else
@@ -280,14 +281,15 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
   static void computeGroupByTwoAggregates(
       QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> subtree,
       bool useOptimization) {
-    RuntimeParameters().set<"group-by-hash-map-enabled">(useOptimization);
+    setRuntimeParameter<&RuntimeParameters::groupByHashMapEnabled_>(
+        useOptimization);
 
     using namespace sparqlExpression;
 
     auto createExpression1 = [](auto ti) {
       using A = typename decltype(ti)::type;
 
-      if constexpr (std::same_as<A, GroupConcatExpression>)
+      if constexpr (ql::concepts::same_as<A, GroupConcatExpression>)
         return std::make_unique<T1>(
             false, makeVariableExpression(Variable{"?b"}), "'");
       else
@@ -298,7 +300,7 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
     auto createExpression2 = [](auto ti) {
       using A = typename decltype(ti)::type;
 
-      if constexpr (std::same_as<A, GroupConcatExpression>)
+      if constexpr (ql::concepts::same_as<A, GroupConcatExpression>)
         return std::make_unique<T2>(
             false, makeVariableExpression(Variable{"?b"}), "'");
       else
@@ -340,7 +342,7 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
     // Initialize benchmark results group
     std::ostringstream buffer;
     std::ostringstream opString;
-    if constexpr (std::same_as<T2, std::nullopt_t>) {
+    if constexpr (ql::concepts::same_as<T2, std::nullopt_t>) {
       opString << determineAggregateString(ti<T1>);
     } else {
       opString << determineAggregateString(ti<T1>) << ", "
@@ -423,7 +425,7 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
 
     for (size_t i = 0; i < numMeasurements; i++)
       group.addMeasurement(std::to_string(i), [&]() {
-        if constexpr (std::same_as<T2, std::nullopt_t>) {
+        if constexpr (ql::concepts::same_as<T2, std::nullopt_t>) {
           computeGroupBy<T1>(qec, valueTree, optimizationEnabled);
         } else {
           computeGroupByTwoAggregates<T1, T2>(qec, valueTree,

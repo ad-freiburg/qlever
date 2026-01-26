@@ -5,7 +5,6 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINTERNALEXTERNAL_H
 #define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINTERNALEXTERNAL_H
 
-#include <ranges>
 #include <string>
 #include <string_view>
 
@@ -13,6 +12,7 @@
 #include "index/vocabulary/VocabularyOnDisk.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/Exception.h"
+#include "util/Serializer/Serializer.h"
 
 // A vocabulary that stores all the words on disk. Additionally, some of the
 // words can be stored in RAM. The words that are stored in RAM can be accessed
@@ -134,6 +134,15 @@ class VocabularyInternalExternal {
   uint64_t iteratorToIndex(
       ql::ranges::iterator_t<VocabularyInMemoryBinSearch> it) const {
     return internalVocab_.indices().at(it - internalVocab_.begin());
+  }
+
+  // Generic serialization support.
+  AD_SERIALIZE_FRIEND_FUNCTION(VocabularyInternalExternal) {
+    (void)serializer;
+    (void)arg;
+    throw std::runtime_error(
+        "Generic serialization is not implemented for "
+        "VocabularyInternalExternal.");
   }
 
  private:

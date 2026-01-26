@@ -16,30 +16,13 @@
 #include <sstream>
 #include <string>
 
+#include "backports/keywords.h"
 #include "util/ConstexprMap.h"
 #include "util/TypeTraits.h"
 
 #ifndef LOGLEVEL
 #define LOGLEVEL INFO
 #endif
-
-// Abseil also defines its own LOG macro, so we need to undefine it here.
-//
-// NOTE: In case you run into trouble with this conflict, in particular, if you
-// use the `LOG(INFO)` macro and you get compilation errors that mention
-// `abseil`, use the (otherwise identical) `AD_LOG_INFO` macro below.
-//
-// TODO<joka921>: Eventually replace the `LOG` macro by `AD_LOG` everywhere.
-
-#ifdef LOG
-#undef LOG
-#endif
-
-#define LOG(x)      \
-  if (x > LOGLEVEL) \
-    ;               \
-  else              \
-    ad_utility::Log::getLog<x>()  // NOLINT
 
 #define AD_LOG(x)   \
   if (x > LOGLEVEL) \
@@ -57,8 +40,7 @@ enum class LogLevel {
   TRACE = 6
 };
 
-// Macros for the different log levels. Always use these instead of the old
-// `LOG(...)` macro to avoid conflicts with `abseil`.
+// Macros for the different log levels.
 #define AD_LOG_FATAL AD_LOG(LogLevel::FATAL)
 #define AD_LOG_ERROR AD_LOG(LogLevel::ERROR)
 #define AD_LOG_WARN AD_LOG(LogLevel::WARN)
@@ -125,16 +107,16 @@ class Log {
   }
 
   template <LogLevel LEVEL>
-  static consteval std::string_view getLevel() {
-    using std::pair;
-    constexpr ad_utility::ConstexprMap map{std::array{
-        pair(TRACE, "TRACE: "),
-        pair(TIMING, "TIMING: "),
-        pair(DEBUG, "DEBUG: "),
-        pair(INFO, "INFO: "),
-        pair(WARN, "WARN: "),
-        pair(ERROR, "ERROR: "),
-        pair(FATAL, "FATAL: "),
+  static QL_CONSTEVAL std::string_view getLevel() {
+    using P = ConstexprMapPair<LogLevel, std::string_view>;
+    constexpr ConstexprMap map{std::array<P, 7>{
+        P(TRACE, "TRACE: "),
+        P(TIMING, "TIMING: "),
+        P(DEBUG, "DEBUG: "),
+        P(INFO, "INFO: "),
+        P(WARN, "WARN: "),
+        P(ERROR, "ERROR: "),
+        P(FATAL, "FATAL: "),
     }};
     return map.at(LEVEL);
   }

@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "backports/three_way_comparison.h"
 #include "parser/data/ConstructQueryExportContext.h"
 
 class BlankNode {
@@ -32,7 +33,7 @@ class BlankNode {
   // ___________________________________________________________________________
   [[nodiscard]] std::string toSparql() const;
 
-  bool operator==(const BlankNode& other) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(BlankNode, _generated, _label)
 };
 
 #endif  // QLEVER_SRC_PARSER_DATA_BLANKNODE_H

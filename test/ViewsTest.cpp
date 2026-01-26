@@ -17,6 +17,7 @@
 #include "util/ValueIdentity.h"
 #include "util/Views.h"
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 TEST(Views, BufferedAsyncView) {
   auto testWithVector = [](const auto& inputVector) {
     using T = std::decay_t<decltype(inputVector)>;
@@ -147,95 +148,9 @@ TEST(Views, integerRange) {
 }
 
 // __________________________________________________________________________
-TEST(Views, inPlaceTransform) {
-  std::vector v{0, 1, 2, 3, 4, 5};
-  auto twice = [](int& i) { i *= 2; };
-  auto transformed = ad_utility::inPlaceTransformView(v, twice);
-  std::vector<int> res1;
-  std::vector<int> res2;
-  std::vector<int> res3;
-  for (auto it = transformed.begin(); it != transformed.end(); ++it) {
-    res1.push_back(*it);
-    res2.push_back(*it);
-    res3.push_back(*it);
-  }
-
-  EXPECT_THAT(res1, ::testing::ElementsAre(0, 2, 4, 6, 8, 10));
-  // The original range was also modified.
-  EXPECT_THAT(v, ::testing::ElementsAre(0, 2, 4, 6, 8, 10));
-
-  EXPECT_THAT(res2, ::testing::ElementsAreArray(res1));
-  EXPECT_THAT(res3, ::testing::ElementsAreArray(res1));
-}
-
-// __________________________________________________________________________
 
 std::string_view toView(ql::span<char> span) {
   return {span.data(), span.size()};
-}
-
-// __________________________________________________________________________
-TEST(Views, verifyLineByLineWorksWithMinimalChunks) {
-  auto range =
-      std::string_view{"\nabc\ndefghij\n"} |
-      ql::views::transform([](char c) { return ql::ranges::single_view(c); });
-  auto lineByLineGenerator =
-      ad_utility::reChunkAtSeparator(std::move(range), '\n');
-
-  auto iterator = lineByLineGenerator.begin();
-  ASSERT_NE(iterator, lineByLineGenerator.end());
-  EXPECT_EQ(toView(*iterator), "");
-
-  ++iterator;
-  ASSERT_NE(iterator, lineByLineGenerator.end());
-  EXPECT_EQ(toView(*iterator), "abc");
-
-  ++iterator;
-  ASSERT_NE(iterator, lineByLineGenerator.end());
-  EXPECT_EQ(toView(*iterator), "defghij");
-
-  ++iterator;
-  ASSERT_EQ(iterator, lineByLineGenerator.end());
-}
-
-// __________________________________________________________________________
-TEST(Views, verifyLineByLineWorksWithNoTrailingNewline) {
-  auto range = std::string_view{"abc"} | ql::views::transform([](char c) {
-                 return ql::ranges::single_view(c);
-               });
-
-  auto lineByLineGenerator =
-      ad_utility::reChunkAtSeparator(std::move(range), '\n');
-
-  auto iterator = lineByLineGenerator.begin();
-  ASSERT_NE(iterator, lineByLineGenerator.end());
-  EXPECT_EQ(toView(*iterator), "abc");
-
-  ++iterator;
-  ASSERT_EQ(iterator, lineByLineGenerator.end());
-}
-
-// __________________________________________________________________________
-TEST(Views, verifyLineByLineWorksWithChunksBiggerThanLines) {
-  using namespace std::string_view_literals;
-
-  auto lineByLineGenerator = ad_utility::reChunkAtSeparator(
-      std::vector{"\nabc\nd"sv, "efghij"sv, "\n"sv}, '\n');
-
-  auto iterator = lineByLineGenerator.begin();
-  ASSERT_NE(iterator, lineByLineGenerator.end());
-  EXPECT_EQ(toView(*iterator), "");
-
-  ++iterator;
-  ASSERT_NE(iterator, lineByLineGenerator.end());
-  EXPECT_EQ(toView(*iterator), "abc");
-
-  ++iterator;
-  ASSERT_NE(iterator, lineByLineGenerator.end());
-  EXPECT_EQ(toView(*iterator), "defghij");
-
-  ++iterator;
-  ASSERT_EQ(iterator, lineByLineGenerator.end());
 }
 
 TEST(Views, CallbackOnEndView) {
@@ -275,6 +190,8 @@ TEST(Views, CallbackOnEndView) {
   // Callback not invoked for the destructor of the moved-from `viewA`.
   EXPECT_EQ(numCalls, 3);
 }
+
+#endif
 // _____________________________________________________________________________
 TEST(Views, RvalueView) {
   // Initial value is `true` and when being moved from it will be `false`.
@@ -290,7 +207,7 @@ TEST(Views, RvalueView) {
   // place where it's used (second argument).
   auto testImpl = [&t, &f](auto isConst, bool doMove,
                            ad_utility::source_location loc =
-                               ad_utility::source_location::current()) {
+                               AD_CURRENT_SOURCE_LOC()) {
     auto tr = generateLocationTrace(loc);
     std::vector<MoveTracker> vec(10, t);
 
@@ -349,4 +266,24 @@ TEST(Views, ForceInputView) {
   // `begin` has already been called via the `ranges::copy` above, so additional
   // iterations should throw.
   EXPECT_ANY_THROW(view.begin());
+}
+
+// The following test is used to debug cases where certain combinations of
+// ranges and views lead to a result that doesn't fulfill the `range` or `view`
+// concept anymore (which might happen only in C++17 mode, because the rules are
+// a bit different for the concepts in the SFINAE-based implementations of
+// `range-v3`s C++17 mode).
+TEST(Views, combinedConcepts) {
+  auto it = ad_utility::InputRangeTypeErased<std::optional<int>>{};
+  auto v = ad_utility::RvalueView{ad_utility::OwningView{std::move(it)}};
+  using V = decltype(v);
+  // Check that the following two calls compile, and get reasonable compiler
+  // messages if they don't.
+  [[maybe_unused]] auto b = ql::ranges::begin(v);
+  [[maybe_unused]] auto e = ql::ranges::end(v);
+  static_assert(ql::ranges::range<V>);
+  static_assert(ql::ranges::view<V>);
+  static_assert(ql::ranges::input_range<V>);
+  static_assert(!ql::ranges::forward_range<V>);
+  static_assert(ranges::viewable_range<V>);
 }
