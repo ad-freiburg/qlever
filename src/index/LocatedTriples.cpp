@@ -230,6 +230,150 @@ IdTable LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
 }
 
 // ____________________________________________________________________________
+IdTable LocatedTriplesPerBlock::mergeTriples(
+    size_t blockIndex, const IdTable& block, size_t numIndexColumns,
+    bool includeGraphColumn, const std::optional<IdTable>& onDiskDeleteBlock,
+    const std::optional<IdTable>& onDiskInsertBlock) const {
+  // Start with the original block.
+  IdTable result = block.clone();
+
+  // Step 1: Merge with on-disk deletes (remove deleted triples).
+  if (onDiskDeleteBlock.has_value() && !onDiskDeleteBlock->empty()) {
+    result = mergeWithOnDiskDeletes(result, onDiskDeleteBlock.value(),
+                                    numIndexColumns, includeGraphColumn);
+  }
+
+  // Step 2: Merge with on-disk inserts (add inserted triples).
+  if (onDiskInsertBlock.has_value() && !onDiskInsertBlock->empty()) {
+    result = mergeWithOnDiskInserts(result, onDiskInsertBlock.value(),
+                                    numIndexColumns, includeGraphColumn);
+  }
+
+  // Step 3: Merge with in-memory deltas using existing logic.
+  if (containsTriples(blockIndex)) {
+    result =
+        mergeTriples(blockIndex, result, numIndexColumns, includeGraphColumn);
+  }
+
+  return result;
+}
+
+// ____________________________________________________________________________
+IdTable LocatedTriplesPerBlock::mergeWithOnDiskDeletes(
+    const IdTable& block, const IdTable& deleteBlock, size_t numIndexColumns,
+    bool includeGraphColumn) const {
+  // Merge by removing rows from `block` that appear in `deleteBlock`.
+  // Both blocks are sorted.
+
+  size_t numCols = numIndexColumns + static_cast<size_t>(includeGraphColumn);
+  IdTable result{block.numColumns(), block.getAllocator()};
+  result.reserve(block.numRows());
+
+  auto blockIt = block.begin();
+  auto deleteIt = deleteBlock.begin();
+
+  // Compare function for the relevant columns.
+  auto compare = [numCols](const auto& row1, const auto& row2) {
+    for (size_t i = 0; i < numCols; ++i) {
+      if (row1[i] < row2[i]) return -1;
+      if (row1[i] > row2[i]) return 1;
+    }
+    return 0;
+  };
+
+  // Merge: copy rows from block that don't appear in deleteBlock.
+  while (blockIt != block.end() && deleteIt != deleteBlock.end()) {
+    int cmp = compare(*blockIt, *deleteIt);
+    if (cmp < 0) {
+      // Row in block is not deleted, keep it.
+      result.push_back(*blockIt);
+      ++blockIt;
+    } else if (cmp == 0) {
+      // Row in block matches delete, skip it.
+      ++blockIt;
+      ++deleteIt;
+    } else {
+      // Delete row not in block (shouldn't happen normally), advance delete.
+      ++deleteIt;
+    }
+  }
+
+  // Copy remaining rows from block.
+  while (blockIt != block.end()) {
+    result.push_back(*blockIt);
+    ++blockIt;
+  }
+
+  return result;
+}
+
+// ____________________________________________________________________________
+IdTable LocatedTriplesPerBlock::mergeWithOnDiskInserts(
+    const IdTable& block, const IdTable& insertBlock, size_t numIndexColumns,
+    bool includeGraphColumn) const {
+  // Merge by adding rows from `insertBlock` that don't already exist in
+  // `block`. Both blocks are sorted.
+
+  size_t numCols = numIndexColumns + static_cast<size_t>(includeGraphColumn);
+  IdTable result{block.numColumns(), block.getAllocator()};
+  result.reserve(block.numRows() + insertBlock.numRows());
+
+  auto blockIt = block.begin();
+  auto insertIt = insertBlock.begin();
+
+  // Compare function for the relevant columns.
+  auto compare = [numCols](const auto& row1, const auto& row2) {
+    for (size_t i = 0; i < numCols; ++i) {
+      if (row1[i] < row2[i]) return -1;
+      if (row1[i] > row2[i]) return 1;
+    }
+    return 0;
+  };
+
+  // Merge: combine rows from both blocks, preferring block when equal.
+  while (blockIt != block.end() && insertIt != insertBlock.end()) {
+    int cmp = compare(*blockIt, *insertIt);
+    if (cmp < 0) {
+      // Row from block comes first.
+      result.push_back(*blockIt);
+      ++blockIt;
+    } else if (cmp == 0) {
+      // Rows are equal, keep the one from block (avoid duplicates).
+      result.push_back(*blockIt);
+      ++blockIt;
+      ++insertIt;
+    } else {
+      // Row from insertBlock comes first, add it.
+      // For inserted rows, set payload columns to UNDEF.
+      size_t rowIdx = result.size();
+      result.push_back(*insertIt);
+      for (size_t i = numCols; i < result.numColumns(); ++i) {
+        result(rowIdx, i) = ValueId::makeUndefined();
+      }
+      ++insertIt;
+    }
+  }
+
+  // Copy remaining rows from block.
+  while (blockIt != block.end()) {
+    result.push_back(*blockIt);
+    ++blockIt;
+  }
+
+  // Copy remaining rows from insertBlock.
+  while (insertIt != insertBlock.end()) {
+    size_t rowIdx = result.size();
+    result.push_back(*insertIt);
+    for (size_t i = numCols; i < result.numColumns(); ++i) {
+      result(rowIdx, i) = ValueId::makeUndefined();
+    }
+    ++insertIt;
+  }
+
+  return result;
+}
+
+// ____________________________________________________________________________
 std::vector<LocatedTriples::iterator> LocatedTriplesPerBlock::add(
     ql::span<const LocatedTriple> locatedTriples,
     ad_utility::timer::TimeTracer& tracer) {
@@ -309,6 +453,21 @@ static auto updateGraphMetadata(CompressedBlockMetadata& blockMetadata,
   // Sort the stored graphs. Note: this is currently not expected by the code
   // that uses the graph info, but makes testing much easier.
   ql::ranges::sort(graphs.value());
+}
+
+// ____________________________________________________________________________
+std::vector<LocatedTriple> LocatedTriplesPerBlock::extractAllTriples() const {
+  std::vector<LocatedTriple> result;
+  result.reserve(numTriples_);
+
+  // Iterate over all blocks and extract all located triples.
+  for (const auto& [blockIndex, locatedTriples] : map_) {
+    for (const auto& lt : locatedTriples) {
+      result.push_back(lt);
+    }
+  }
+
+  return result;
 }
 
 // ____________________________________________________________________________

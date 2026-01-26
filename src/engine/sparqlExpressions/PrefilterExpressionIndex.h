@@ -11,6 +11,7 @@
 #include "global/Id.h"
 #include "global/ValueIdComparators.h"
 #include "index/CompressedRelation.h"
+#include "index/Permutation.h"
 #include "index/Vocabulary.h"
 #include "util/Iterators.h"
 

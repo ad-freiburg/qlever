@@ -13,6 +13,7 @@
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "index/KeyOrder.h"
+#include "index/Permutation.h"
 #include "index/ScanSpecification.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"
@@ -28,7 +29,10 @@
 class IdTable;
 
 class LocatedTriplesPerBlock;
+class OnDiskDeltaTriples;
+class Permutation;
 
+enum struct PermutationEnum { PSO, POS, SPO, SOP, OPS, OSP };
 // This type is used to buffer small relations that will be stored in the same
 // block.
 using SmallRelationsBuffer = IdTable;
@@ -584,6 +588,8 @@ class CompressedRelationReader {
     ColumnIndices scanColumns_;
     FilterDuplicatesAndGraphs graphFilter_;
     const LocatedTriplesPerBlock& locatedTriples_;
+    const OnDiskDeltaTriples* onDiskDeltas_ = nullptr;  // nullptr if none.
+    PermutationEnum permutation_;  // Needed for reading on-disk deltas.
   };
 
   // The specification of scan, together with the blocks on which this scan is
@@ -773,14 +779,18 @@ class CompressedRelationReader {
       ColumnIndices additionalColumns,
       const CancellationHandle& cancellationHandle,
       const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-      const LimitOffsetClause& limitOffset = {}) const;
+      const LimitOffsetClause& limitOffset = {},
+      const OnDiskDeltaTriples* onDiskDeltas = nullptr,
+      PermutationEnum permutation = PermutationEnum::PSO) const;
 
   // Get the exact size of the result of the scan, taking the given located
   // triples into account. This requires locating the triples exactly in each
   // of the relevant blocks.
   size_t getResultSizeOfScan(
       const ScanSpecAndBlocks& scanSpecAndBlocks,
-      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+      const OnDiskDeltaTriples* onDiskDeltas = nullptr,
+      PermutationEnum permutation = PermutationEnum::PSO) const;
 
   // Get a lower and an upper bound for the size of the result of the scan. For
   // this call, it is enough that each located triple knows the block to which
@@ -795,7 +805,9 @@ class CompressedRelationReader {
   template <bool exactSize>
   std::pair<size_t, size_t> getResultSizeImpl(
       const ScanSpecAndBlocks& scanSpecAndBlocks,
-      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+      const OnDiskDeltaTriples* onDiskDeltas = nullptr,
+      PermutationEnum permutation = PermutationEnum::PSO) const;
 
  public:
   // For a given relation, determine the `col1Id`s and their counts. This is
@@ -816,7 +828,9 @@ class CompressedRelationReader {
 
   std::optional<CompressedRelationMetadata> getMetadataForSmallRelation(
       const ScanSpecAndBlocks& scanSpecAndBlocks, Id col0Id,
-      const LocatedTriplesPerBlock&) const;
+      const LocatedTriplesPerBlock&,
+      const OnDiskDeltaTriples* onDiskDeltas = nullptr,
+      PermutationEnum permutation = PermutationEnum::PSO) const;
 
   // Return the number of `CompressedBlockMetadata` values contained in given
   // `BlockMetadataRanges` object.
@@ -934,7 +948,9 @@ class CompressedRelationReader {
 
   static ScanImplConfig getScanConfig(
       const ScanSpecification& scanSpec, ColumnIndicesRef additionalColumns,
-      const LocatedTriplesPerBlock& locatedTriples);
+      const LocatedTriplesPerBlock& locatedTriples,
+      const OnDiskDeltaTriples* onDiskDeltas = nullptr,
+      PermutationEnum permutation = PermutationEnum::PSO);
 
   // The common implementation for `getDistinctCol0IdsAndCounts` and
   // `getCol1IdsAndCounts`.
