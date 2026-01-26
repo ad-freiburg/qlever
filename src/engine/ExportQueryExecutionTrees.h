@@ -245,7 +245,6 @@ class ExportQueryExecutionTrees {
       LimitOffsetClause limitAndOffset, CancellationHandle cancellationHandle,
       const ad_utility::Timer& requestTimer, STREAMABLE_YIELDER_ARG_DECL);
 
- private:
   // Yield all `IdTables` provided by the given `result`.
   static ad_utility::InputRangeTypeErased<TableConstRefWithVocab> getIdTables(
       const Result& result);
