@@ -66,10 +66,8 @@ class MaterializedViewWriter {
   // argument `NumStaticCols == 0`)
   using Sorter = ad_utility::CompressedExternalIdTableSorter<Comparator, 0>;
 
- public:
   using QueryPlan = qlever::QueryPlan;
 
- private:
   // Initialize a writer given the base filename of the view and a query plan.
   // The view will be written to files prefixed with the index basename followed
   // by the view name.
@@ -133,19 +131,7 @@ class MaterializedViewWriter {
   // and writes the view (SPO permutation and metadata) to disk.
   void computeResultAndWritePermutation() const;
 
- public:
-  // Write a `MaterializedView` given the index' `onDiskBase`, a valid `name`
-  // (consisting only of alphanumerics and hyphens) and a `queryPlan` to be
-  // executed. The query's result is written to the view.
-  //
-  // The `memoryLimit` and `allocator` are used only for sorting the
-  // permutation if the query result is not correctly sorted already. The
-  // `queryPlan` is executed with the normal query memory limit.
-  static void writeViewToDisk(
-      std::string onDiskBase, std::string name, const QueryPlan& queryPlan,
-      ad_utility::MemorySize memoryLimit = ad_utility::MemorySize::gigabytes(4),
-      ad_utility::AllocatorWithLimit<Id> allocator =
-          ad_utility::makeUnlimitedAllocator<Id>());
+  friend MaterializedViewsManager;
 };
 
 // This class represents a single loaded `MaterializedView`. It can be used for
@@ -257,10 +243,17 @@ class MaterializedViewsManager {
   // before any calls to `loadView` and `getView`.
   void setOnDiskBase(const std::string& onDiskBase);
 
+  // Check if a materialized view is currently loaded.
+  bool isViewLoaded(const std::string& name) const;
+
   // Since we don't want to break the const-ness in a lot of places just for the
   // loading of views, `loadedViews_` is mutable. Note that this is okay,
   // because the views themselves aren't changed (only loaded on-demand).
   void loadView(const std::string& name) const;
+
+  // Unload a materialized view if it is loaded. This function is a no-op
+  // otherwise. It is `const` for the same reason described above.
+  void unloadViewIfLoaded(const std::string& name) const;
 
   // Load the given view if it is not already loaded and return it. This pointer
   // is never `nullptr`. If the view does not exist, the function throws.
@@ -272,6 +265,22 @@ class MaterializedViewsManager {
   std::shared_ptr<IndexScan> makeIndexScan(
       QueryExecutionContext* qec,
       const parsedQuery::MaterializedViewQuery& viewQuery) const;
+
+  // Write a `MaterializedView` given a valid `name` (consisting only of
+  // alphanumerics and hyphens) and a `queryPlan` to be executed. The query's
+  // result is written to the view.
+  //
+  // If a view with the same name is already loaded, it is unloaded before
+  // writing.
+  //
+  // The `memoryLimit` and `allocator` are used only for sorting the
+  // permutation if the query result is not correctly sorted already. The
+  // `queryPlan` is executed with the normal query memory limit.
+  void writeViewToDisk(
+      std::string name, const qlever::QueryPlan& queryPlan,
+      ad_utility::MemorySize memoryLimit = ad_utility::MemorySize::gigabytes(4),
+      ad_utility::AllocatorWithLimit<Id> allocator =
+          ad_utility::makeUnlimitedAllocator<Id>()) const;
 };
 
 #endif  // QLEVER_SRC_ENGINE_MATERIALIZEDVIEWS_H_
