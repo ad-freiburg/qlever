@@ -46,11 +46,13 @@ MaterializedViewWriter::MaterializedViewWriter(
   qet_ = qet;
   qec_ = qec;
   parsedQuery_ = std::move(parsedQuery);
-  auto columnNamesAndPermutation = getIdTableColumnNamesAndPermutation();
+  auto [columnNamesAndPermutation, numAddEmptyColumns] =
+      getIdTableColumnNamesAndPermutation();
   columnNames_ = ::ranges::to<std::vector<Variable>>(columnNamesAndPermutation |
                                                      ql::views::keys);
   columnPermutation_ = ::ranges::to<std::vector<ColumnIndex>>(
       columnNamesAndPermutation | ql::views::values);
+  numAddEmptyColumns_ = numAddEmptyColumns;
 }
 
 // _____________________________________________________________________________
@@ -85,16 +87,26 @@ MaterializedViewWriter::getIdTableColumnNamesAndPermutation() const {
 
   auto targetVarsAndCols =
       qet_->selectedVariablesToColumnIndices(parsedQuery_.selectClause());
-  AD_CONTRACT_CHECK(targetVarsAndCols.size() >= 4,
-                    "Currently the query used to write a materialized view "
-                    "needs to have at least four columns.");
+  const size_t numCols = targetVarsAndCols.size();
 
-  return ::ranges::to<ColumnNamesAndPermutation>(
+  // Column information for the columns selected by the user's query.
+  auto existingCols = ::ranges::to<std::vector<ColumnNameAndIndex>>(
       targetVarsAndCols | ql::views::transform([](const auto& opt) {
         AD_CONTRACT_CHECK(opt.has_value());
         return ColumnNameAndIndex{opt.value().variable_,
                                   opt.value().columnIndex_};
       }));
+
+  // Add dummy columns such that the view has at least four columns in total.
+  uint8_t numAddEmptyCols = 0;
+  if (numCols < 4) {
+    AD_LOG_INFO << "The query to write the materialized view '" << name_
+                << "' selects only " << numCols << " column(s). " << 4 - numCols
+                << " empty column(s) will be appended." << std::endl;
+    numAddEmptyCols = 4 - numCols;
+  }
+
+  return {std::move(existingCols), numAddEmptyCols};
 }
 
 // _____________________________________________________________________________
@@ -105,6 +117,17 @@ void MaterializedViewWriter::permuteIdTableAndCheckNoLocalVocabEntries(
   // ordering we want to have in our materialized view. In
   // particular, the indexed column should be the first.
   block.setColumnSubset(columnPermutation_);
+
+  // Add empty columns such that the view has at least four columns.
+  for (uint8_t i = 0; i < numAddEmptyColumns_; ++i) {
+    block.addEmptyColumn();
+    // Initialize the new empty column to `UNDEF` (all bits zero) such that it
+    // can be compressed optimally.
+    const size_t col = block.numColumns() - 1;
+    for (size_t row = 0; row < block.numRows(); ++row) {
+      block.at(row, col) = ValueId::makeUndefined();
+    }
+  }
 
   // Check that there are no values of type `LocalVocabIndex` in the selected
   // columns of the `IdTable` as materialized views do not support them as of
@@ -257,29 +280,32 @@ IndexMetaDataMmap MaterializedViewWriter::writePermutation(
 
 // _____________________________________________________________________________
 void MaterializedViewWriter::writeViewMetadata() const {
-  // Export column names to view info JSON file
+  // Export column names to view info JSON file.
   nlohmann::json viewInfo = {
       {"version", MATERIALIZED_VIEWS_VERSION},
       {"columns", (columnNames_ | ql::views::transform([](const Variable& v) {
                      return v.name();
                    }) |
-                   ::ranges::to<std::vector<std::string>>())}};
+                   ::ranges::to<std::vector<std::string>>())},
+      {"query", parsedQuery_._originalString},
+  };
   ad_utility::makeOfstream(getFilenameBase() + ".viewinfo.json")
       << viewInfo.dump() << std::endl;
 }
 
 // _____________________________________________________________________________
 void MaterializedViewWriter::computeResultAndWritePermutation() const {
-  // Run query and sort the result externally (only if necessary)
-  AD_LOG_INFO << "Computing result for materialized view query " << name_
-              << "..." << std::endl;
+  // Run query and sort the result externally (only if necessary).
+  AD_LOG_INFO << "Computing query result for materialized view '" << name_
+              << "': " << parsedQuery_._originalString.substr(0, 80) << "..."
+              << std::endl;
   auto result = qet_->getResult(true);
 
   Sorter spoSorter{getFilenameBase() + ".spo-sorter.dat", numCols(),
                    memoryLimit_, allocator_};
   RangeOfIdTables sortedBlocksSPO = getSortedBlocks(spoSorter, result);
 
-  // Write compressed relation to disk
+  // Write compressed relation to disk.
   AD_LOG_INFO << "Writing materialized view " << name_ << " to disk ..."
               << std::endl;
   auto spoMetaData = writePermutation(std::move(sortedBlocksSPO));
@@ -315,18 +341,26 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
 
   // Check version of view and restore column names
   auto version = viewInfoJson.at("version").get<size_t>();
-  AD_CORRECTNESS_CHECK(version == MATERIALIZED_VIEWS_VERSION);
+  if (version != MATERIALIZED_VIEWS_VERSION) {
+    throw std::runtime_error{absl::StrCat(
+        "The materialized view '", name_, "' is saved with format version ",
+        version, ", however this version of QLever expects format version ",
+        MATERIALIZED_VIEWS_VERSION,
+        ". Please re-write the materialized view.")};
+  }
 
   // Make variable to column map
   auto columnNames = viewInfoJson.at("columns").get<std::vector<std::string>>();
-  AD_CORRECTNESS_CHECK(
-      columnNames.size() >= 4,
-      "Expected at least four columns in materialized view metadata");
   for (const auto& [index, columnName] :
        ::ranges::views::enumerate(columnNames)) {
     varToColMap_.insert({Variable{columnName},
                          {static_cast<ColumnIndex>(index),
                           ColumnIndexAndTypeInfo::PossiblyUndefined}});
+  }
+
+  // Restore original query string.
+  if (viewInfoJson.contains("query")) {
+    originalQuery_ = viewInfoJson.at("query").get<std::string>();
   }
 
   // Read permutation
