@@ -26,7 +26,7 @@ std::optional<std::string> ConstructQueryEvaluator::evaluate(
 // _____________________________________________________________________________
 std::optional<std::string> ConstructQueryEvaluator::evaluate(
     const Variable& var, const ConstructQueryExportContext& context) {
-  size_t resultTableRow = context._resultTableRowIdx;
+  size_t resultTableRow = context.resultTableRowIndex_;
   const auto& variableColumns = context._variableColumns;
   const Index& qecIndex = context._qecIndex;
   const IdTable& idTable = context.idTable_;
@@ -73,7 +73,7 @@ std::optional<std::string> ConstructQueryEvaluator::evaluate(
   std::ostringstream stream;
   stream << "_:";
   stream << (node.isGenerated() ? 'g' : 'u');  // generated or user-defined
-  stream << context._rowOffset + context._resultTableRowIdx << '_';
+  stream << context._rowOffset + context.resultTableRowIndex_ << '_';
   stream << node.label();
 
   // Store in cache and return
@@ -86,7 +86,7 @@ std::optional<std::string> ConstructQueryEvaluator::evaluateTerm(
     const GraphTerm& term, const ConstructQueryExportContext& context,
     PositionInTriple posInTriple) {
   return std::visit(
-      [&context, &posInTriple](auto&& arg) -> std::optional<std::string> {
+      [&context, &posInTriple](const auto& arg) -> std::optional<std::string> {
         // strips reference/const qualifiers
         using T = std::decay_t<decltype(arg)>;
 
