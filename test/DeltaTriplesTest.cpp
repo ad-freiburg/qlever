@@ -898,3 +898,86 @@ TEST_F(DeltaTriplesTest, storeAndRestoreData) {
              Id::makeFromBool(false)}})));
   }
 }
+
+// _____________________________________________________________________________
+TEST_F(DeltaTriplesTest, copyLocalVocab) {
+  using namespace ::testing;
+  using ad_utility::triple_component::LiteralOrIri;
+  DeltaTriples deltaTriples{testQec->getIndex()};
+
+  std::string iri1 = "<test>";
+  std::string iri2 = "<other>";
+
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  LocalVocabEntry entry1{LiteralOrIri::fromStringRepresentation(iri1)};
+  deltaTriples.insertTriples(
+      cancellationHandle,
+      {IdTriple<>{{Id::makeFromInt(1), Id::makeFromLocalVocabIndex(&entry1),
+                   Id::makeFromBlankNodeIndex(BlankNodeIndex::make(1337))}}});
+  LocalVocabEntry entry2{LiteralOrIri::fromStringRepresentation(iri2)};
+  deltaTriples.deleteTriples(
+      cancellationHandle,
+      {IdTriple<>{{Id::makeFromInt(2), Id::makeFromLocalVocabIndex(&entry2),
+                   Id::makeFromBool(false)}}});
+
+  auto [indices, ownedBlocks] = deltaTriples.copyLocalVocab();
+
+  using namespace ::testing;
+
+  EXPECT_THAT(indices,
+              UnorderedElementsAre(
+                  Pointee(AD_PROPERTY(LocalVocabEntry, toStringRepresentation,
+                                      Eq(iri1))),
+                  Pointee(AD_PROPERTY(LocalVocabEntry, toStringRepresentation,
+                                      Eq(iri2)))));
+
+  using OBE =
+      ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry;
+  // Blank Nodes are assigned at random, so all we can check is that there is
+  // exactly one block allocated.
+  EXPECT_THAT(ownedBlocks, ElementsAre(AD_FIELD(OBE, blockIndices_,
+                                                ElementsAre(A<uint64_t>()))));
+}
+
+// _____________________________________________________________________________
+TEST_F(DeltaTriplesTest, getCurrentLocatedTriplesSharedStateWithVocab) {
+  using namespace ::testing;
+  using ad_utility::triple_component::LiteralOrIri;
+  DeltaTriplesManager deltaTriplesManager(testQec->getIndex().getImpl());
+
+  std::string iri1 = "<test>";
+  LocalVocabEntry entry1{LiteralOrIri::fromStringRepresentation(iri1)};
+  IdTriple<> triple1{{Id::makeFromInt(1), Id::makeFromLocalVocabIndex(&entry1),
+                      Id::makeFromBool(true)}};
+  std::string iri2 = "<other>";
+  LocalVocabEntry entry2{LiteralOrIri::fromStringRepresentation(iri2)};
+  IdTriple<> triple2{{Id::makeFromInt(2), Id::makeFromLocalVocabIndex(&entry2),
+                      Id::makeFromBool(false)}};
+  deltaTriplesManager.modify<void>(
+      [&triple1, &triple2](DeltaTriples& deltaTriples) {
+        auto cancellationHandle =
+            std::make_shared<ad_utility::CancellationHandle<>>();
+        deltaTriples.insertTriples(cancellationHandle, {triple1});
+        deltaTriples.deleteTriples(cancellationHandle, {triple2});
+      });
+
+  auto [sharedState, indices, ownedBlocks] =
+      deltaTriplesManager.getCurrentLocatedTriplesSharedStateWithVocab();
+
+  using namespace ::testing;
+
+  const auto& locatedSPO =
+      sharedState->getLocatedTriplesForPermutation<false>(Permutation::SPO);
+  EXPECT_TRUE(locatedSPO.isLocatedTriple(triple1, true));
+  EXPECT_TRUE(locatedSPO.isLocatedTriple(triple2, false));
+
+  EXPECT_THAT(indices,
+              UnorderedElementsAre(
+                  Pointee(AD_PROPERTY(LocalVocabEntry, toStringRepresentation,
+                                      Eq(iri1))),
+                  Pointee(AD_PROPERTY(LocalVocabEntry, toStringRepresentation,
+                                      Eq(iri2)))));
+
+  EXPECT_THAT(ownedBlocks, ElementsAre());
+}
