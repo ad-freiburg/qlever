@@ -118,8 +118,8 @@ ExportQueryExecutionTrees::getIdTables(const Result& result) {
 
 // _____________________________________________________________________________
 InputRangeTypeErased<TableWithRange> ExportQueryExecutionTrees::getRowIndices(
-    LimitOffsetClause limitOffset, const Result& result, uint64_t& resultSize,
-    uint64_t resultSizeMultiplicator) {
+    const LimitOffsetClause& limitOffset, const Result& result,
+    uint64_t& resultSize, uint64_t resultSizeMultiplicator) {
   using namespace ad_utility;
   // The first call initializes the `resultSize` to zero (no need to
   // initialize it outside of the function).

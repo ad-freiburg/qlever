@@ -54,8 +54,8 @@ ad_utility::InputRangeTypeErased<QueryExecutionTree::StringTriple>
 ConstructTripleGenerator::generateStringTriples(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples,
-    LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
-    uint64_t& resultSize,
+    const LimitOffsetClause& limitAndOffset,
+    std::shared_ptr<const Result> result, uint64_t& resultSize,
     ad_utility::SharedCancellationHandle cancellationHandle) {
   // The `resultSizeMultiplicator`(last argument of `getRowIndices`) is
   // explained by the following: For each result from the WHERE clause, we
