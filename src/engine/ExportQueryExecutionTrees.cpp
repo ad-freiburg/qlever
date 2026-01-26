@@ -28,8 +28,7 @@
 #include "util/json.h"
 #include "util/views/TakeUntilInclusiveView.h"
 
-template <class T>
-using InputRangeTypeErased = ad_utility::InputRangeTypeErased<T>;
+using ad_utility::InputRangeTypeErased;
 
 namespace {
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
@@ -227,7 +226,7 @@ InputRangeTypeErased<TableWithRange> ExportQueryExecutionTrees::getRowIndices(
   // the blocks of which some part has to be exported. Consume as few blocks
   // of the result as possible.
   namespace v = ql::views;
-  return InputRangeTypeErased<TableWithRange>{
+  return InputRangeTypeErased{
       OwningView{getIdTables(result)} |
       v::transform(tableToState)
       // The caching is required to make the pattern of a modifying transform
@@ -309,7 +308,7 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::
 }
 
 // _____________________________________________________________________________
-ad_utility::InputRangeTypeErased<std::string>
+InputRangeTypeErased<std::string>
 ExportQueryExecutionTrees::constructQueryResultBindingsToQLeverJSON(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples,
@@ -320,14 +319,13 @@ ExportQueryExecutionTrees::constructQueryResultBindingsToQLeverJSON(
       qet, constructTriples, limitAndOffset, std::move(result), resultSize,
       std::move(cancellationHandle));
 
-  return ad_utility::InputRangeTypeErased<std::string>(
-      ad_utility::CachingTransformInputRange(
-          std::move(generator), [](QueryExecutionTree::StringTriple& triple) {
-            auto binding = nlohmann::json::array({std::move(triple.subject_),
-                                                  std::move(triple.predicate_),
-                                                  std::move(triple.object_)});
-            return binding.dump();
-          }));
+  return InputRangeTypeErased(ad_utility::CachingTransformInputRange(
+      std::move(generator), [](QueryExecutionTree::StringTriple& triple) {
+        auto binding = nlohmann::json::array({std::move(triple.subject_),
+                                              std::move(triple.predicate_),
+                                              std::move(triple.object_)});
+        return binding.dump();
+      }));
 }
 
 // _____________________________________________________________________________
@@ -785,7 +783,7 @@ static nlohmann::json stringAndTypeToBinding(std::string_view entitystr,
 // _____________________________________________________________________________
 InputRangeTypeErased<std::string> askQueryResultToQLeverJSON(
     std::shared_ptr<const Result> result) {
-  return ad_utility::InputRangeTypeErased(
+  return InputRangeTypeErased(
       ad_utility::lazySingleValueRange([result = std::move(result)]() {
         AD_CORRECTNESS_CHECK(result != nullptr);
         std::string_view value = getResultForAsk(result) ? "true" : "false";
@@ -809,7 +807,7 @@ ExportQueryExecutionTrees::selectQueryResultBindingsToQLeverJSON(
   QueryExecutionTree::ColumnIndicesAndTypes selectedColumnIndices =
       qet.selectedVariablesToColumnIndices(selectClause, true);
 
-  return ad_utility::InputRangeTypeErased(idTableToQLeverJSONBindings(
+  return InputRangeTypeErased(idTableToQLeverJSONBindings(
       qet, limitAndOffset, std::move(selectedColumnIndices), std::move(result),
       resultSize, std::move(cancellationHandle)));
 }

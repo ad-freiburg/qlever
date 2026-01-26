@@ -8,6 +8,8 @@
 
 #include "engine/ExportQueryExecutionTrees.h"
 
+using ad_utility::InputRangeTypeErased;
+
 // _____________________________________________________________________________
 auto ConstructTripleGenerator::generateStringTriplesForResultTable(
     TableWithRange table) {
