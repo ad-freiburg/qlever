@@ -28,6 +28,9 @@
 #include "util/json.h"
 #include "util/views/TakeUntilInclusiveView.h"
 
+template <class T>
+using InputRangeTypeErased = ad_utility::InputRangeTypeErased<T>;
+
 namespace {
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 using Literal = ad_utility::triple_component::Literal;
@@ -99,27 +102,25 @@ STREAMABLE_GENERATOR_TYPE computeResultForAsk(
 }  // namespace
 
 // __________________________________________________________________________
-ad_utility::InputRangeTypeErased<TableConstRefWithVocab>
+InputRangeTypeErased<TableConstRefWithVocab>
 ExportQueryExecutionTrees::getIdTables(const Result& result) {
   using namespace ad_utility;
   if (result.isFullyMaterialized()) {
-    return ad_utility::InputRangeTypeErased(lazySingleValueRange([&result]() {
+    return InputRangeTypeErased(lazySingleValueRange([&result]() {
       return TableConstRefWithVocab{result.idTable(), result.localVocab()};
     }));
   }
 
-  return ad_utility::InputRangeTypeErased(CachingTransformInputRange(
+  return InputRangeTypeErased(CachingTransformInputRange(
       result.idTables(), [](const Result::IdTableVocabPair& pair) {
         return TableConstRefWithVocab{pair.idTable_, pair.localVocab_};
       }));
 }
 
 // _____________________________________________________________________________
-ad_utility::InputRangeTypeErased<TableWithRange>
-ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
-                                         const Result& result,
-                                         uint64_t& resultSize,
-                                         uint64_t resultSizeMultiplicator) {
+InputRangeTypeErased<TableWithRange> ExportQueryExecutionTrees::getRowIndices(
+    LimitOffsetClause limitOffset, const Result& result, uint64_t& resultSize,
+    uint64_t resultSizeMultiplicator) {
   using namespace ad_utility;
   // The first call initializes the `resultSize` to zero (no need to
   // initialize it outside of the function).
@@ -128,7 +129,7 @@ ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
   // If the LIMIT is zero, there are no blocks to yield and the total result
   // size is zero.
   if (limitOffset._limit.value_or(1) == 0) {
-    return ad_utility::InputRangeTypeErased(ql::span<TableWithRange>());
+    return InputRangeTypeErased(ql::span<TableWithRange>());
   }
 
   // The following structs and variant is used to encode the subrange of an
@@ -782,7 +783,7 @@ static nlohmann::json stringAndTypeToBinding(std::string_view entitystr,
 }
 
 // _____________________________________________________________________________
-ad_utility::InputRangeTypeErased<std::string> askQueryResultToQLeverJSON(
+InputRangeTypeErased<std::string> askQueryResultToQLeverJSON(
     std::shared_ptr<const Result> result) {
   return ad_utility::InputRangeTypeErased(
       ad_utility::lazySingleValueRange([result = std::move(result)]() {
@@ -796,7 +797,7 @@ ad_utility::InputRangeTypeErased<std::string> askQueryResultToQLeverJSON(
 }
 
 // _____________________________________________________________________________
-ad_utility::InputRangeTypeErased<std::string>
+InputRangeTypeErased<std::string>
 ExportQueryExecutionTrees::selectQueryResultBindingsToQLeverJSON(
     const QueryExecutionTree& qet,
     const parsedQuery::SelectClause& selectClause,
@@ -1164,7 +1165,7 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 // _____________________________________________________________________________
-ad_utility::InputRangeTypeErased<std::string>
+InputRangeTypeErased<std::string>
 ExportQueryExecutionTrees::convertStreamGeneratorForChunkedTransfer(
     STREAMABLE_GENERATOR_TYPE streamGenerator) {
   using namespace ad_utility;
@@ -1174,7 +1175,7 @@ ExportQueryExecutionTrees::convertStreamGeneratorForChunkedTransfer(
   // response with error status codes etc. at least for those exceptions.
   // Note: `begin` advances until the first block.
   auto it = streamGenerator.begin();
-  return ad_utility::InputRangeTypeErased(InputRangeFromLoopControlGet(
+  return InputRangeTypeErased(InputRangeFromLoopControlGet(
       [it = std::move(it), streamGenerator = std::move(streamGenerator),
        exceptionMessage = std::optional<std::string>(std::nullopt)]() mutable {
         // TODO<joka921, RobinTF> Think of a better way to propagate and log
