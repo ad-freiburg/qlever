@@ -72,7 +72,7 @@ ConstructTripleGenerator::generateStringTriples(
   // lifetime. Because the transformation is stateful (it tracks rowOffset_),
   // the lambda must be marked 'mutable'.
   auto tableTriples = ql::views::transform(
-      std::move(rowIndices),
+      ad_utility::OwningView{std::move(rowIndices)},
       [generator = std::move(generator)](TableWithRange table) mutable {
         // The generator now handles the:
         // Table -> Rows -> Triple Patterns -> StringTriples
