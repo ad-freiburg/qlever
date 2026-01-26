@@ -46,11 +46,13 @@ MaterializedViewWriter::MaterializedViewWriter(
   qet_ = qet;
   qec_ = qec;
   parsedQuery_ = std::move(parsedQuery);
-  auto columnNamesAndPermutation = getIdTableColumnNamesAndPermutation();
+  auto [columnNamesAndPermutation, numAddEmptyColumns] =
+      getIdTableColumnNamesAndPermutation();
   columnNames_ = ::ranges::to<std::vector<Variable>>(columnNamesAndPermutation |
                                                      ql::views::keys);
   columnPermutation_ = ::ranges::to<std::vector<ColumnIndex>>(
       columnNamesAndPermutation | ql::views::values);
+  numAddEmptyColumns_ = numAddEmptyColumns;
 }
 
 // _____________________________________________________________________________
@@ -86,16 +88,26 @@ MaterializedViewWriter::getIdTableColumnNamesAndPermutation() const {
 
   auto targetVarsAndCols =
       qet_->selectedVariablesToColumnIndices(parsedQuery_.selectClause());
-  AD_CONTRACT_CHECK(targetVarsAndCols.size() >= 4,
-                    "Currently the query used to write a materialized view "
-                    "needs to have at least four columns.");
+  const size_t numCols = targetVarsAndCols.size();
 
-  return ::ranges::to<ColumnNamesAndPermutation>(
+  // Column information for the columns selected by the user's query.
+  auto existingCols = ::ranges::to<std::vector<ColumnNameAndIndex>>(
       targetVarsAndCols | ql::views::transform([](const auto& opt) {
         AD_CONTRACT_CHECK(opt.has_value());
         return ColumnNameAndIndex{opt.value().variable_,
                                   opt.value().columnIndex_};
       }));
+
+  // Add dummy columns such that the view has at least four columns in total.
+  uint8_t numAddEmptyCols = 0;
+  if (numCols < 4) {
+    AD_LOG_INFO << "The query to write the materialized view '" << name_
+                << "' selects only " << numCols << " column(s). " << 4 - numCols
+                << " empty column(s) will be appended." << std::endl;
+    numAddEmptyCols = 4 - numCols;
+  }
+
+  return {std::move(existingCols), numAddEmptyCols};
 }
 
 // _____________________________________________________________________________
@@ -106,6 +118,17 @@ void MaterializedViewWriter::permuteIdTableAndCheckNoLocalVocabEntries(
   // ordering we want to have in our materialized view. In
   // particular, the indexed column should be the first.
   block.setColumnSubset(columnPermutation_);
+
+  // Add empty columns such that the view has at least four columns.
+  for (uint8_t i = 0; i < numAddEmptyColumns_; ++i) {
+    block.addEmptyColumn();
+    // Initialize the new empty column to `UNDEF` (all bits zero) such that it
+    // can be compressed optimally.
+    const size_t col = block.numColumns() - 1;
+    for (size_t row = 0; row < block.numRows(); ++row) {
+      block.at(row, col) = ValueId::makeUndefined();
+    }
+  }
 
   // Check that there are no values of type `LocalVocabIndex` in the selected
   // columns of the `IdTable` as materialized views do not support them as of
@@ -320,9 +343,6 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
 
   // Make variable to column map
   auto columnNames = viewInfoJson.at("columns").get<std::vector<std::string>>();
-  AD_CORRECTNESS_CHECK(
-      columnNames.size() >= 4,
-      "Expected at least four columns in materialized view metadata");
   for (const auto& [index, columnName] :
        ::ranges::views::enumerate(columnNames)) {
     varToColMap_.insert({Variable{columnName},
