@@ -78,6 +78,5 @@ ConstructTripleGenerator::generateStringTriples(
         // Table -> Rows -> Triple Patterns -> StringTriples
         return generator.generateStringTriplesForResultTable(table);
       });
-  return ad_utility::InputRangeTypeErased(
-      ql::views::join(std::move(tableTriples)));
+  return InputRangeTypeErased(ql::views::join(std::move(tableTriples)));
 }
