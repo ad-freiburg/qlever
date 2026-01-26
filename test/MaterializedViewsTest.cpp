@@ -388,6 +388,8 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
   EXPECT_EQ(view->name(), "testView1");
   EXPECT_EQ(view->permutation()->permutation(), Permutation::Enum::SPO);
   EXPECT_NE(view->locatedTriplesState(), nullptr);
+  EXPECT_THAT(view->originalQuery(),
+              ::testing::Optional(::testing::Eq(simpleWriteQuery_)));
 
   MaterializedViewsManager managerNoBaseName;
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -536,6 +538,24 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
     EXPECT_THAT(query.getVarsToKeep(),
                 ::testing::UnorderedElementsAre(::testing::Eq(V{"?s"}),
                                                 ::testing::Eq(V{"?o"})));
+  }
+
+  // Unsupported format version.
+  {
+    auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
+    MaterializedViewWriter::writeViewToDisk(testIndexBase_, "testView5", plan);
+    {
+      // Write fake view metadata with unsupported version.
+      nlohmann::json viewInfo = {{"version", 0}};
+      ad_utility::makeOfstream(
+          "_materializedViewsTestIndex.view.testView5.viewinfo.json")
+          << viewInfo.dump() << std::endl;
+    }
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        MaterializedView(testIndexBase_, "testView5"),
+        ::testing::HasSubstr(
+            "The materialized view 'testView5' is saved with format version "
+            "0, however this version of QLever expects"));
   }
 }
 

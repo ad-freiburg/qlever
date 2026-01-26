@@ -158,6 +158,7 @@ class MaterializedView {
       Permutation::Enum::SPO, ad_utility::makeUnlimitedAllocator<Id>())};
   VariableToColumnMap varToColMap_;
   std::shared_ptr<LocatedTriplesState> locatedTriplesState_;
+  std::optional<std::string> originalQuery_;
 
   using AdditionalScanColumns = SparqlTripleSimple::AdditionalScanColumns;
 
@@ -177,6 +178,11 @@ class MaterializedView {
   // Get the variable to column map.
   const VariableToColumnMap& variableToColumnMap() const {
     return varToColMap_;
+  }
+
+  // Get the original query string used for writing the view.
+  const std::optional<std::string>& originalQuery() const {
+    return originalQuery_;
   }
 
   // Return the combined filename from the index' `onDiskBase` and the name of
