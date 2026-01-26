@@ -13,7 +13,6 @@
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "index/KeyOrder.h"
-#include "index/Permutation.h"
 #include "index/ScanSpecification.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"

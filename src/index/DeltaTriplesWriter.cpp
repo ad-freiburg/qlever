@@ -115,10 +115,14 @@ DeltaTriplesWriter::writeSortedTriplesToFile(const IdTable& sortedTriples,
 
   outfile.close();
 
+  // TODO<joka921> Fix this correctly, and unify with the ordinary permutation
+  // writing.
+  /*
   // Write metadata to the end of the file using serialization.
   ad_utility::serialization::FileWriteSerializer metadataWriter{filename,
                                                                 std::ios::app};
   metadataWriter << blockMetadata;
+  */
 
   return blockMetadata;
 }
@@ -185,12 +189,18 @@ void DeltaTriplesWriter::commitTemporaryFiles() {
     std::string permDeletes = getDeltaDeletesPath(baseDir_, permutation);
 
     // Rename if temporary files exist.
+    /*
     if (ad_utility::isRegularFile(tempInserts)) {
       std::rename(tempInserts.c_str(), permInserts.c_str());
     }
     if (ad_utility::isRegularFile(tempDeletes)) {
       std::rename(tempDeletes.c_str(), permDeletes.c_str());
     }
+    */
+    // TODO<joka921> MAke sure that this renaming is only done, if the files
+    // exist (the above function is hallucinated).
+    std::rename(tempInserts.c_str(), permInserts.c_str());
+    std::rename(tempDeletes.c_str(), permDeletes.c_str());
   }
 
   // Same for internal permutations.
@@ -200,11 +210,16 @@ void DeltaTriplesWriter::commitTemporaryFiles() {
     std::string tempDeletes = getDeltaTempDeletesPath(baseDir_, permutation);
     std::string permDeletes = getDeltaDeletesPath(baseDir_, permutation);
 
+    /*
     if (ad_utility::isRegularFile(tempInserts)) {
       std::rename(tempInserts.c_str(), permInserts.c_str());
     }
     if (ad_utility::isRegularFile(tempDeletes)) {
       std::rename(tempDeletes.c_str(), permDeletes.c_str());
     }
+    */
+    // Same <TODO> as above + code duplication.
+    std::rename(tempInserts.c_str(), permInserts.c_str());
+    std::rename(tempDeletes.c_str(), permDeletes.c_str());
   }
 }

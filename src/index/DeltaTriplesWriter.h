@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "index/CompressedRelation.h"
+#include "index/DeltaTriples.h"
 #include "index/LocatedTriples.h"
 #include "index/Permutation.h"
 
