@@ -15,7 +15,6 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "index/LocatedTriples.h"
 #include "index/OnDiskDeltaTriples.h"
-#include "index/Permutation.h"  // Must be included before CompressedRelation.h for Permutation::Enum
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/Iterators.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
