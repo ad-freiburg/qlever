@@ -34,7 +34,7 @@ std::string getDeltaDeletesPath(const std::string& baseDir,
 }
 
 // ____________________________________________________________________________
-std::string getDeltaTempInsertsPathconst std::string& baseDir,
+std::string getDeltaTempInsertsPath(const std::string& baseDir,
                                     Permutation::Enum permutation) {
   return absl::StrCat(baseDir, ".delta-inserts.tmp.",
                       permutationToLowercase(permutation));

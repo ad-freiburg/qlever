@@ -15,7 +15,6 @@
 #include "global/Id.h"
 #include "index/CompressedRelation.h"
 #include "index/KeyOrder.h"
-#include "index/Permutation.h"
 
 template <size_t N = 0>
 struct IdTriple {
