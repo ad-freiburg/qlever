@@ -155,7 +155,7 @@ class MaterializedView {
   std::string onDiskBase_;
   std::string name_;
   std::shared_ptr<Permutation> permutation_{std::make_shared<Permutation>(
-      Permutation::Enum::SPO, ad_utility::makeUnlimitedAllocator<Id>())};
+      Permutation::Enum::SPO, ad_utility::makeUnlimitedAllocator<Id>(), name_)};
   VariableToColumnMap varToColMap_;
   std::shared_ptr<LocatedTriplesState> locatedTriplesState_;
   std::optional<std::string> originalQuery_;

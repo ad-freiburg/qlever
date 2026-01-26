@@ -387,6 +387,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
   ASSERT_TRUE(view != nullptr);
   EXPECT_EQ(view->name(), "testView1");
   EXPECT_EQ(view->permutation()->permutation(), Permutation::Enum::SPO);
+  EXPECT_EQ(view->permutation()->readableName(), "testView1");
   EXPECT_NE(view->locatedTriplesState(), nullptr);
   EXPECT_THAT(view->originalQuery(),
               ::testing::Optional(::testing::Eq(simpleWriteQuery_)));
@@ -744,6 +745,7 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
                 << " block(s)" << std::endl;
 
     EXPECT_THAT(scan->getCacheKey(), ::testing::HasSubstr("testView1"));
+    EXPECT_THAT(scan->getDescriptor(), ::testing::HasSubstr("testView1"));
   }
 
   // Regression test for `COUNT(*)`.
