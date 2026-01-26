@@ -25,6 +25,9 @@ class ConstructTripleGenerator {
   using StringTriple = QueryExecutionTree::StringTriple;
   using Triples = ad_utility::sparql_types::Triples;
 
+  template <class T>
+  using InputRangeTypeErased = ad_utility::InputRangeTypeErased<T>;
+
   // _____________________________________________________________________________
   ConstructTripleGenerator(Triples constructTriples,
                            std::shared_ptr<const Result> result,
@@ -53,7 +56,7 @@ class ConstructTripleGenerator {
   // _____________________________________________________________________________
   // Helper function that generates the result of a CONSTRUCT query as a range
   // of `StringTriple`s.
-  static ad_utility::InputRangeTypeErased<StringTriple> generateStringTriples(
+  static InputRangeTypeErased<StringTriple> generateStringTriples(
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructTriples,
       LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
