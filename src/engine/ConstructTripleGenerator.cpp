@@ -12,7 +12,7 @@ using ad_utility::InputRangeTypeErased;
 
 // _____________________________________________________________________________
 auto ConstructTripleGenerator::generateStringTriplesForResultTable(
-    TableWithRange table) {
+    const TableWithRange& table) {
   const auto tableWithVocab = table.tableWithVocab_;
   size_t currentRowOffset = rowOffset_;
   rowOffset_ += tableWithVocab.idTable().numRows();
@@ -75,7 +75,7 @@ ConstructTripleGenerator::generateStringTriples(
   // the lambda must be marked 'mutable'.
   auto tableTriples = ql::views::transform(
       ad_utility::OwningView{std::move(rowIndices)},
-      [generator = std::move(generator)](TableWithRange table) mutable {
+      [generator = std::move(generator)](const TableWithRange& table) mutable {
         // The generator now handles the:
         // Table -> Rows -> Triple Patterns -> StringTriples
         return generator.generateStringTriplesForResultTable(table);

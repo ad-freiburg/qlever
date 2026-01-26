@@ -48,7 +48,7 @@ class ConstructTripleGenerator {
   // result-table row (triple-patterns are the triples in the CONSTRUCT-clause
   // of a CONSTRUCT-query). The following pipeline takes place conceptually:
   // result-table -> result-table Rows -> Triple Patterns -> StringTriples
-  auto generateStringTriplesForResultTable(TableWithRange table);
+  auto generateStringTriplesForResultTable(const TableWithRange& table);
 
   // _____________________________________________________________________________
   // Helper function that generates the result of a CONSTRUCT query as a range
