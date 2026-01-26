@@ -102,6 +102,20 @@ class LocatedTriplesPerBlock {
   template <size_t numIndexColumns, bool includeGraphColumn>
   IdTable mergeTriplesImpl(size_t blockIndex, const IdTable& block) const;
 
+  // Helper for 3-way merge: merge original block with on-disk deletes.
+  // Removes rows from `block` that appear in `deleteBlock`.
+  IdTable mergeWithOnDiskDeletes(const IdTable& block,
+                                 const IdTable& deleteBlock,
+                                 size_t numIndexColumns,
+                                 bool includeGraphColumn) const;
+
+  // Helper for 3-way merge: merge block with on-disk inserts.
+  // Adds rows from `insertBlock` that don't already exist in `block`.
+  IdTable mergeWithOnDiskInserts(const IdTable& block,
+                                 const IdTable& insertBlock,
+                                 size_t numIndexColumns,
+                                 bool includeGraphColumn) const;
+
   // Stores the block metadata where the block borders have been adjusted for
   // the updated triples.
   std::optional<std::vector<CompressedBlockMetadata>> augmentedMetadata_;
@@ -155,6 +169,22 @@ class LocatedTriplesPerBlock {
   // located triple will have values for OSG and UNDEF for X and Y.
   IdTable mergeTriples(size_t blockIndex, const IdTable& block,
                        size_t numIndexColumns, bool includeGraphColumn) const;
+
+  // Three-way merge: merge the original `block` with on-disk delta triples
+  // (deletes and inserts) and in-memory delta triples. This is used when
+  // delta triples have been spilled to disk.
+  //
+  // The merge order is:
+  // 1. Merge original block with on-disk deletes (remove deleted triples)
+  // 2. Merge result with on-disk inserts (add inserted triples)
+  // 3. Merge result with in-memory deltas (existing mergeTriples logic)
+  //
+  // If `onDiskDeleteBlock` or `onDiskInsertBlock` is nullopt, that step is
+  // skipped.
+  IdTable mergeTriples(size_t blockIndex, const IdTable& block,
+                       size_t numIndexColumns, bool includeGraphColumn,
+                       const std::optional<IdTable>& onDiskDeleteBlock,
+                       const std::optional<IdTable>& onDiskInsertBlock) const;
 
   // Return true iff there are located triples in the block with the given
   // index.
@@ -221,6 +251,11 @@ class LocatedTriplesPerBlock {
   // NOTE: This is expensive because it iterates over all blocks and checks
   // containment in each. It is only used in our tests, for convenience.
   bool isLocatedTriple(const IdTriple<0>& triple, bool insertOrDelete) const;
+
+  // Extract all located triples and return them as a vector. This is used when
+  // writing delta triples to disk. The triples are returned in arbitrary order
+  // (caller must sort them if needed).
+  std::vector<LocatedTriple> extractAllTriples() const;
 
   // This operator is only for debugging and testing. It returns a
   // human-readable representation.

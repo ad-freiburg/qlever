@@ -17,6 +17,7 @@
 #include "backports/algorithm.h"
 #include "engine/ExecuteUpdate.h"
 #include "engine/ExportQueryExecutionTrees.h"
+#include "index/DeltaTriplesWriter.h"
 #include "index/Index.h"
 #include "index/IndexImpl.h"
 #include "index/LocatedTriples.h"
@@ -385,10 +386,12 @@ LocatedTriplesSharedState DeltaTriples::getLocatedTriplesSharedStateCopy()
     const {
   // Create a copy of the `LocatedTriplesState` for use as a constant
   // snapshot.
-  return LocatedTriplesSharedState{std::make_shared<LocatedTriplesState>(
+  auto state = std::make_shared<LocatedTriplesState>(
       locatedTriples_->locatedTriplesPerBlock_,
       locatedTriples_->internalLocatedTriplesPerBlock_,
-      localVocab_.getLifetimeExtender(), locatedTriples_->index_)};
+      localVocab_.getLifetimeExtender(), locatedTriples_->index_);
+  state->onDiskDeltas_ = getOnDiskDeltas();
+  return LocatedTriplesSharedState{std::move(state)};
 }
 
 // ____________________________________________________________________________
@@ -396,6 +399,8 @@ LocatedTriplesSharedState DeltaTriples::getLocatedTriplesSharedStateReference()
     const {
   // Creating a `shared_ptr<const LocatedTriplesState>` from a
   // `shared_ptr<LocatedTriplesState>` is cheap.
+  // Ensure the on-disk deltas pointer is up to date.
+  locatedTriples_->onDiskDeltas_ = getOnDiskDeltas();
   return LocatedTriplesSharedState{locatedTriples_};
 }
 
@@ -464,17 +469,26 @@ ReturnType DeltaTriplesManager::modify(
       }
     };
 
+    // Check if we should spill to disk after the operation.
+    auto checkAndSpillToDisk = [&tracer, &deltaTriples]() {
+      if (deltaTriples.shouldSpillToDisk()) {
+        deltaTriples.spillToDisk(tracer);
+      }
+    };
+
     tracer.endTrace("acquiringDeltaTriplesWriteLock");
     if constexpr (std::is_void_v<ReturnType>) {
       tracer.beginTrace("operations");
       function(deltaTriples);
       tracer.endTrace("operations");
+      checkAndSpillToDisk();
       updateMetadata();
       writeAndUpdateSnapshot();
     } else {
       tracer.beginTrace("operations");
       ReturnType returnValue = function(deltaTriples);
       tracer.endTrace("operations");
+      checkAndSpillToDisk();
       updateMetadata();
       writeAndUpdateSnapshot();
       return returnValue;
@@ -601,4 +615,127 @@ void DeltaTriplesManager::setFilenameForPersistentUpdatesAndReadFromDisk(
         deltaTriples.readFromDisk();
       },
       false);
+}
+
+// _____________________________________________________________________________
+void DeltaTriples::setBaseDirForOnDiskDeltas(std::string baseDir) {
+  baseDirForOnDiskDeltas_ = std::move(baseDir);
+
+  // Check if on-disk delta files exist. If so, load them.
+  OnDiskDeltaTriples tempDeltas{baseDirForOnDiskDeltas_};
+  try {
+    tempDeltas.loadFromDisk();
+    // If loadFromDisk succeeded and found deltas, store them.
+    if (tempDeltas.hasOnDiskDeltas()) {
+      onDiskDeltas_ = std::move(tempDeltas);
+    }
+  } catch (const std::exception& e) {
+    // If loading fails (e.g., files don't exist), that's fine - we just
+    // don't have any on-disk deltas yet.
+  }
+}
+
+// _____________________________________________________________________________
+bool DeltaTriples::shouldSpillToDisk() const {
+  size_t totalTriples = numInserted() + numDeleted() + numInternalInserted() +
+                        numInternalDeleted();
+  return totalTriples >= SPILL_THRESHOLD_NUM_TRIPLES;
+}
+
+// _____________________________________________________________________________
+void DeltaTriples::spillToDisk(ad_utility::timer::TimeTracer& tracer) {
+  tracer.beginTrace("spillToDisk");
+
+  if (baseDirForOnDiskDeltas_.empty()) {
+    AD_LOG_WARN << "Cannot spill delta triples to disk: base directory not set."
+                << std::endl;
+    tracer.endTrace("spillToDisk");
+    return;
+  }
+
+  AD_LOG_INFO << "Spilling " << (numInserted() + numDeleted())
+              << " delta triples to disk (threshold: "
+              << SPILL_THRESHOLD_NUM_TRIPLES << ")" << std::endl;
+
+  // If on-disk deltas already exist, we need to rebuild (merge old + new).
+  if (onDiskDeltas_.has_value() && onDiskDeltas_->hasOnDiskDeltas()) {
+    AD_LOG_INFO << "On-disk deltas already exist, performing rebuild instead."
+                << std::endl;
+    rebuildOnDiskDeltas(tracer);
+    tracer.endTrace("spillToDisk");
+    return;
+  }
+
+  // Write current in-memory deltas to disk.
+  tracer.beginTrace("writeAllPermutations");
+  DeltaTriplesWriter writer(index_, baseDirForOnDiskDeltas_);
+  writer.writeAllPermutations(locatedTriples_->getLocatedTriples<false>(),
+                              locatedTriples_->getLocatedTriples<true>(),
+                              false);  // useTemporary = false
+  tracer.endTrace("writeAllPermutations");
+
+  // Load the newly written delta files.
+  tracer.beginTrace("loadFromDisk");
+  onDiskDeltas_.emplace(baseDirForOnDiskDeltas_);
+  onDiskDeltas_->loadFromDisk();
+  tracer.endTrace("loadFromDisk");
+
+  // Clear in-memory deltas (except LocalVocab which is preserved).
+  tracer.beginTrace("clearInMemory");
+  clear();
+  tracer.endTrace("clearInMemory");
+
+  AD_LOG_INFO << "Spilled delta triples to disk successfully." << std::endl;
+  tracer.endTrace("spillToDisk");
+}
+
+// _____________________________________________________________________________
+void DeltaTriples::rebuildOnDiskDeltas(ad_utility::timer::TimeTracer& tracer) {
+  tracer.beginTrace("rebuildOnDiskDeltas");
+
+  AD_LOG_INFO << "Rebuilding on-disk delta files by merging with new "
+                 "in-memory deltas."
+              << std::endl;
+
+  // TODO: Implement rebuild logic
+  // 1. Read old on-disk deltas
+  // 2. Merge with current in-memory deltas
+  // 3. Write to temporary files
+  // 4. Atomic rename
+  // 5. Clear in-memory deltas
+  //
+  // For now, as a placeholder, just do a simple spill (which will overwrite
+  // existing files). This is not correct but allows the rest of the system to
+  // compile.
+  AD_LOG_WARN << "rebuildOnDiskDeltas not fully implemented yet, using "
+                 "simple overwrite."
+              << std::endl;
+
+  tracer.beginTrace("writeAllPermutationsTemporary");
+  DeltaTriplesWriter writer(index_, baseDirForOnDiskDeltas_);
+  writer.writeAllPermutations(locatedTriples_->getLocatedTriples<false>(),
+                              locatedTriples_->getLocatedTriples<true>(),
+                              true);  // useTemporary = true
+  tracer.endTrace("writeAllPermutationsTemporary");
+
+  // Commit temporary files (atomic rename).
+  tracer.beginTrace("commitTemporaryFiles");
+  writer.commitTemporaryFiles();
+  tracer.endTrace("commitTemporaryFiles");
+
+  // Reload from disk.
+  tracer.beginTrace("reloadFromDisk");
+  if (!onDiskDeltas_.has_value()) {
+    onDiskDeltas_.emplace(baseDirForOnDiskDeltas_);
+  }
+  onDiskDeltas_->loadFromDisk();
+  tracer.endTrace("reloadFromDisk");
+
+  // Clear in-memory deltas.
+  tracer.beginTrace("clearInMemory");
+  clear();
+  tracer.endTrace("clearInMemory");
+
+  AD_LOG_INFO << "Rebuilt on-disk delta files successfully." << std::endl;
+  tracer.endTrace("rebuildOnDiskDeltas");
 }

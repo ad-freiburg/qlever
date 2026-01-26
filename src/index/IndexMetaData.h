@@ -14,6 +14,7 @@
 #include "global/Id.h"
 #include "index/CompressedRelation.h"
 #include "index/MetaDataHandler.h"
+#include "index/Permutation.h"
 #include "util/File.h"
 #include "util/MmapVector.h"
 #include "util/Serializer/Serializer.h"

@@ -30,7 +30,7 @@ class Permutation {
  public:
   using KeyOrder = qlever::KeyOrder;
   /// Identifiers for the six possible permutations.
-  enum struct Enum { PSO, POS, SPO, SOP, OPS, OSP };
+  using Enum = PermutationEnum;
   // Unfortunately there is a bug in GCC that doesn't allow use to simply use
   // `using enum`.
   static constexpr auto PSO = Enum::PSO;

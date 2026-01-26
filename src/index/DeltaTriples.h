@@ -12,12 +12,15 @@
 #ifndef QLEVER_SRC_INDEX_DELTATRIPLES_H
 #define QLEVER_SRC_INDEX_DELTATRIPLES_H
 
+#include <optional>
+
 #include "backports/three_way_comparison.h"
 #include "engine/LocalVocab.h"
 #include "global/IdTriple.h"
 #include "index/Index.h"
 #include "index/IndexBuilderTypes.h"
 #include "index/LocatedTriples.h"
+#include "index/OnDiskDeltaTriples.h"
 #include "index/Permutation.h"
 #include "util/Synchronized.h"
 #include "util/TimeTracer.h"
@@ -46,6 +49,9 @@ struct LocatedTriplesState {
   // than another, then the version that has been modified last has a higher
   // index. The index is used in the query cache.
   size_t index_;
+  // Pointer to on-disk delta triples (if any have been spilled to disk).
+  // This is nullptr if all deltas are in memory.
+  const OnDiskDeltaTriples* onDiskDeltas_ = nullptr;
   // Get `LocatedTriplesPerBlock` objects for the given permutation.
   template <bool isInternal>
   const LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
@@ -127,6 +133,20 @@ class DeltaTriples {
 
   // See the documentation of `setPersist()` below.
   std::optional<std::string> filenameForPersisting_;
+
+  // The base directory for storing on-disk delta triples. This is set when
+  // the index is loaded from disk.
+  std::string baseDirForOnDiskDeltas_;
+
+  // On-disk storage for delta triples when they exceed the threshold. When
+  // in-memory deltas grow too large, they are spilled to disk in compressed
+  // format and this object manages reading them during scans.
+  std::optional<OnDiskDeltaTriples> onDiskDeltas_;
+
+  // Threshold for spilling in-memory delta triples to disk. When the total
+  // number of inserted + deleted triples exceeds this value, we write them
+  // to disk and clear the in-memory structures (except LocalVocab).
+  static constexpr size_t SPILL_THRESHOLD_NUM_TRIPLES = 5'000'000;
 
   // Assert that the Permutation Enum values have the expected int values.
   // This is used to store and lookup items that exist for permutation in an
@@ -274,6 +294,28 @@ class DeltaTriples {
 
   // Update the block metadata.
   void updateAugmentedMetadata();
+
+  // Set the base directory for on-disk delta triples. This should be called
+  // when the index is loaded from disk.
+  void setBaseDirForOnDiskDeltas(std::string baseDir);
+
+  // Get access to the on-disk delta triples (if they exist).
+  const OnDiskDeltaTriples* getOnDiskDeltas() const {
+    return onDiskDeltas_.has_value() ? &onDiskDeltas_.value() : nullptr;
+  }
+
+  // Check if we should spill to disk based on the threshold.
+  bool shouldSpillToDisk() const;
+
+  // Write current in-memory delta triples to disk and clear in-memory state
+  // (except LocalVocab). This is called when the threshold is exceeded.
+  void spillToDisk(ad_utility::timer::TimeTracer& tracer =
+                       ad_utility::timer::DEFAULT_TIME_TRACER);
+
+  // Rebuild on-disk delta files by merging the existing on-disk deltas with
+  // the current in-memory deltas. Uses atomic rename for safety.
+  void rebuildOnDiskDeltas(ad_utility::timer::TimeTracer& tracer =
+                               ad_utility::timer::DEFAULT_TIME_TRACER);
 
  private:
   // The proper state according to the template parameter. This will either
