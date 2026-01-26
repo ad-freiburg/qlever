@@ -275,6 +275,14 @@ class DeltaTriples {
   // Update the block metadata.
   void updateAugmentedMetadata();
 
+  // Create a copy of the local vocab such that it can be processed
+  // without holding the lock. You have to make sure separately that the
+  // pointers are still valid.
+  std::pair<std::vector<LocalVocabIndex>,
+            std::vector<ad_utility::BlankNodeManager::LocalBlankNodeManager::
+                            OwnedBlocksEntry>>
+  copyLocalVocab() const;
+
  private:
   // The proper state according to the template parameter. This will either
   // return a reference to `triplesToHandlesInternal_` or
@@ -365,6 +373,14 @@ class DeltaTriplesManager {
   // This can be safely used to execute a query without interfering with future
   // updates.
   LocatedTriplesSharedState getCurrentLocatedTriplesSharedState() const;
+
+  // In addition to the located triples shared state, also acquire a copy of the
+  // local vocab indices and the local blank node blocks owned by the local
+  // vocab.
+  std::tuple<LocatedTriplesSharedState, std::vector<LocalVocabIndex>,
+             std::vector<ad_utility::BlankNodeManager::LocalBlankNodeManager::
+                             OwnedBlocksEntry>>
+  getCurrentLocatedTriplesSharedStateWithVocab() const;
 };
 
 #endif  // QLEVER_SRC_INDEX_DELTATRIPLES_H
