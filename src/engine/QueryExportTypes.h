@@ -7,6 +7,7 @@
 #ifndef QLEVER_SRC_ENGINE_TABLEWITHRANGE_H
 #define QLEVER_SRC_ENGINE_TABLEWITHRANGE_H
 
+#include "backports/algorithm.h"
 #include "engine/LocalVocab.h"
 #include "engine/idTable/IdTable.h"
 
