@@ -6,4 +6,5 @@
 !.git
 !CMakeLists.txt
 !CompilationInfo.cmake
+!GitVersion.cmake
 !docker-entrypoint.sh

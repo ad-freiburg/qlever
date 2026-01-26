@@ -350,6 +350,24 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
         ad_utility::MediaType::tsv);
     EXPECT_EQ(res, "?o\n\"abc\"\n\"xyz\"\n");
   }
+
+  // Test that writing and reading from a view with less than four columns is
+  // possible.
+  {
+    clearLog();
+    MaterializedViewWriter::writeViewToDisk(
+        testIndexBase_, "testView5",
+        qlv().parseAndPlanQuery("SELECT * { <s1> ?p ?o }"));
+    MaterializedView view{testIndexBase_, "testView5"};
+    EXPECT_THAT(columnNames(view),
+                ::testing::ElementsAreArray(std::vector<V>{V{"?p"}, V{"?o"}}));
+    EXPECT_THAT(log_.str(), ::testing::HasSubstr("2 empty column(s)"));
+    auto res = qlv().query(
+        "PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>"
+        "SELECT * { <p1> view:testView5-o ?o }",
+        ad_utility::MediaType::tsv);
+    EXPECT_EQ(res, "?o\n\"abc\"\n");
+  }
 }
 
 // _____________________________________________________________________________
@@ -362,8 +380,9 @@ TEST_F(MaterializedViewsTest, InvalidInputToWriter) {
       ::testing::HasSubstr("Currently the query used to write a materialized "
                            "view needs to have at least four columns"));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      manager.writeViewToDisk("Something Out!of~the.ordinary",
-                              qlv().parseAndPlanQuery(simpleWriteQuery_)),
+      MaterializedViewWriter::writeViewToDisk(
+          testIndexBase_, "Something Out!of~the.ordinary",
+          qlv().parseAndPlanQuery(simpleWriteQuery_)),
       ::testing::HasSubstr("not a valid name for a materialized view"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       manager.writeViewToDisk(
@@ -384,6 +403,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
   ASSERT_TRUE(view != nullptr);
   EXPECT_EQ(view->name(), "testView1");
   EXPECT_EQ(view->permutation()->permutation(), Permutation::Enum::SPO);
+  EXPECT_EQ(view->permutation()->readableName(), "testView1");
   EXPECT_NE(view->locatedTriplesState(), nullptr);
   EXPECT_TRUE(manager.isViewLoaded("testView1"));
   EXPECT_FALSE(manager.isViewLoaded("something"));
@@ -391,6 +411,8 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
   // Unloading a view that is not loaded is a no-op.
   manager.unloadViewIfLoaded("something");
   EXPECT_FALSE(manager.isViewLoaded("something"));
+  EXPECT_THAT(view->originalQuery(),
+              ::testing::Optional(::testing::Eq(simpleWriteQuery_)));
 
   MaterializedViewsManager managerNoBaseName;
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -539,6 +561,24 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
     EXPECT_THAT(query.getVarsToKeep(),
                 ::testing::UnorderedElementsAre(::testing::Eq(V{"?s"}),
                                                 ::testing::Eq(V{"?o"})));
+  }
+
+  // Unsupported format version.
+  {
+    auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
+    MaterializedViewWriter::writeViewToDisk(testIndexBase_, "testView5", plan);
+    {
+      // Write fake view metadata with unsupported version.
+      nlohmann::json viewInfo = {{"version", 0}};
+      ad_utility::makeOfstream(
+          "_materializedViewsTestIndex.view.testView5.viewinfo.json")
+          << viewInfo.dump() << std::endl;
+    }
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        MaterializedView(testIndexBase_, "testView5"),
+        ::testing::HasSubstr(
+            "The materialized view 'testView5' is saved with format version "
+            "0, however this version of QLever expects"));
   }
 }
 
@@ -726,6 +766,7 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
                 << " block(s)" << std::endl;
 
     EXPECT_THAT(scan->getCacheKey(), ::testing::HasSubstr("testView1"));
+    EXPECT_THAT(scan->getDescriptor(), ::testing::HasSubstr("testView1"));
   }
 
   // Regression test for `COUNT(*)`.
