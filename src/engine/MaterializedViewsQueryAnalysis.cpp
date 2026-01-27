@@ -148,7 +148,7 @@ QueryPatternCache::makeJoinReplacementIndexScans(
           auto& chainInfoPtr = it->second;
           for (const auto& chainInfo : *chainInfoPtr) {
             result.push_back(
-                {makeScanForSingleChain(qec, chainInfo, left.s_, std::nullopt,
+                {makeScanForSingleChain(qec, chainInfo, left.s_, varLeft,
                                         right.o_.getVariable()),
                  {tripleIdxLeft, tripleIdxRight}});
           }
