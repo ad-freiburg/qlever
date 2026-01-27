@@ -3122,17 +3122,7 @@ void QueryPlanner::GraphPatternPlanner::visitBasicGraphPattern(
     const parsedQuery::BasicGraphPattern& v) {
   // A basic graph patterns consists only of triples. First collect all
   // the bound variables.
-  for (const SparqlTriple& t : v._triples) {
-    if (t.s_.isVariable()) {
-      boundVariables_.insert(t.s_.getVariable());
-    }
-    if (auto predicate = t.getPredicateVariable()) {
-      boundVariables_.insert(predicate.value());
-    }
-    if (t.o_.isVariable()) {
-      boundVariables_.insert(t.o_.getVariable());
-    }
-  }
+  v.collectAllContainedVariables(boundVariables_);
 
   // Then collect the triples. Transform each triple with a property path to
   // an equivalent form without property path (using `seedFromPropertyPath`).

@@ -18,51 +18,6 @@
 namespace materializedViewsQueryAnalysis {
 
 // _____________________________________________________________________________
-ad_utility::HashSet<Variable> getVariablesPresentInBasicGraphPatterns(
-    const std::vector<parsedQuery::GraphPatternOperation>& graphPatterns) {
-  ad_utility::HashSet<Variable> vars;
-  for (const auto& graphPattern : graphPatterns) {
-    if (!std::holds_alternative<parsedQuery::BasicGraphPattern>(graphPattern)) {
-      continue;
-    }
-    for (const auto& triple : graphPattern.getBasic()._triples) {
-      if (triple.s_.isVariable()) {
-        vars.insert(triple.s_.getVariable());
-      }
-      if (triple.o_.isVariable()) {
-        vars.insert(triple.o_.getVariable());
-      }
-      if (auto p = triple.getPredicateVariable()) {
-        vars.insert(p.value());
-      }
-    }
-  }
-  return vars;
-}
-
-// _____________________________________________________________________________
-bool BasicGraphPatternsInvariantTo::operator()(
-    const parsedQuery::Optional&) const {
-  // TODO<ullingerc> Analyze if the optional binds values from the outside
-  // query.
-  return false;
-}
-
-// _____________________________________________________________________________
-bool BasicGraphPatternsInvariantTo::operator()(
-    const parsedQuery::Bind& bind) const {
-  return !variables_.contains(bind._target);
-}
-
-// _____________________________________________________________________________
-bool BasicGraphPatternsInvariantTo::operator()(
-    const parsedQuery::Values& values) const {
-  return !std::ranges::any_of(
-      values._inlineValues._variables,
-      [this](const auto& var) { return variables_.contains(var); });
-}
-
-// _____________________________________________________________________________
 std::vector<MaterializedViewJoinReplacement>
 QueryPatternCache::makeJoinReplacementIndexScans(
     QueryExecutionContext* qec,
