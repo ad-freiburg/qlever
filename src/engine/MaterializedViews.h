@@ -241,6 +241,9 @@ class MaterializedView {
       const parsedQuery::MaterializedViewQuery& viewQuery) const;
 };
 
+// Shorthand for query rewriting helper class.
+using materializedViewsQueryAnalysis::MaterializedViewJoinReplacement;
+
 // The `MaterializedViewsManager` is part of the `QueryExecutionContext` and is
 // used to manage the currently loaded `MaterializedViews` in a `Server` or
 // `Qlever` instance.
@@ -280,9 +283,11 @@ class MaterializedViewsManager {
       QueryExecutionContext* qec,
       const parsedQuery::MaterializedViewQuery& viewQuery) const;
 
-  //
-  std::vector<materializedViewsQueryAnalysis::MaterializedViewJoinReplacement>
-  makeJoinReplacementIndexScans(
+  // Given a set of triples, check if some join operations that would be
+  // required when evaluating them can be replaced by scans on materialized
+  // views that are currently loaded. This is implemented using the
+  // `queryPatternCache_`.
+  std::vector<MaterializedViewJoinReplacement> makeJoinReplacementIndexScans(
       QueryExecutionContext* qec,
       const parsedQuery::BasicGraphPattern& triples) const;
 };

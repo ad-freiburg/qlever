@@ -1505,15 +1505,18 @@ void QueryPlanner::applyTextLimitsIfPossible(vector<SubtreePlan>& row,
 
 // _____________________________________________________________________________
 size_t QueryPlanner::findUniqueNodeIds(
-    const std::vector<SubtreePlan>& connectedComponent) {
+    const std::vector<SubtreePlan>& connectedComponent,
+    bool allowReplacementPlans) {
   ad_utility::HashSet<uint64_t> uniqueNodeIds;
   auto nodeIds = connectedComponent |
                  ql::views::transform(&SubtreePlan::_idsOfIncludedNodes);
   // Check that all the `_idsOfIncludedNodes` are one-hot encodings of a single
-  // value, i.e. they have exactly one bit set.
-  // TODO no longer true (for replacement plans)
-  // AD_CORRECTNESS_CHECK(ql::ranges::all_of(
-  //     nodeIds, [](auto nodeId) { return absl::popcount(nodeId) == 1; }));
+  // value, i.e. they have exactly one bit set. If replacement plans are allowed
+  // this constraint is not applicable.
+  AD_CORRECTNESS_CHECK(allowReplacementPlans ||
+                       ql::ranges::all_of(nodeIds, [](auto nodeId) {
+                         return absl::popcount(nodeId) == 1;
+                       }));
   ql::ranges::copy(nodeIds, std::inserter(uniqueNodeIds, uniqueNodeIds.end()));
   return uniqueNodeIds.size();
 }
@@ -1530,7 +1533,7 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
   // (there might be duplicates because we already have multiple candidates
   // for each index scan with different permutations.
   dpTab.push_back(std::move(connectedComponent));
-  size_t numSeeds = findUniqueNodeIds(dpTab.back());
+  size_t numSeeds = findUniqueNodeIds(dpTab.back(), false);
 
   for (size_t k = 2; k <= numSeeds; ++k) {
     AD_LOG_TRACE << "Producing plans that unite " << k << " triples."
@@ -1638,11 +1641,12 @@ std::vector<SubtreePlan> QueryPlanner::runGreedyPlanningOnConnectedComponent(
     std::vector<SubtreePlan> connectedComponent,
     const FiltersAndOptionalSubstitutes& filters,
     const TextLimitVec& textLimits, const TripleGraph& tg,
-    const ReplacementPlans&) const {
+    const ReplacementPlans& replacementPlans) const {
   applyFiltersIfPossible<FilterMode::ReplaceUnfiltered>(connectedComponent,
                                                         filters);
   applyTextLimitsIfPossible(connectedComponent, textLimits, true);
-  const size_t numSeeds = findUniqueNodeIds(connectedComponent);
+  const size_t numSeeds =
+      findUniqueNodeIds(connectedComponent, !replacementPlans.empty());
   if (numSeeds <= 1) {
     // Only 0 or 1 nodes in the input, nothing to plan.
     return connectedComponent;
@@ -3386,6 +3390,7 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
 
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::optimizeCommutatively() {
+  // TODO<ullingerc> Add runtime parameter to disable join rewriting.
   auto replacementPlans =
       planner_.createMaterializedViewJoinReplacements(candidateTriples_);
   auto tg = planner_.createTripleGraph(&candidateTriples_);
