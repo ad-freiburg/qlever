@@ -26,6 +26,8 @@ using ViewPtr = std::shared_ptr<const MaterializedView>;
 // Key and value types of the cache for simple chains, that is queries of the
 // form `?s <p1> ?m . ?m <p2> ?o`.
 using ChainedPredicates = std::pair<std::string, std::string>;
+using ChainedPredicatesForLookup =
+    std::pair<std::string_view, std::string_view>;
 struct ChainInfo {
   Variable subject_;
   Variable chain_;
@@ -65,6 +67,14 @@ struct UserQueryChain {
   std::shared_ptr<const std::vector<ChainInfo>> chainInfos_;
 };
 
+//
+struct MaterializedViewJoinReplacement {
+  std::shared_ptr<IndexScan> indexScan_;
+  std::vector<size_t> coveredTriples_;
+
+  size_t numJoins() const { return coveredTriples_.size() - 1; }
+};
+
 // Cache data structure for the `MaterializedViewsManager`. This object can be
 // used for quickly looking up if a given query can be optimized by making use
 // of an existing materialized view.
@@ -83,10 +93,15 @@ class QueryPatternCache {
   // This is called from `MaterializedViewsManager::loadView`.
   bool analyzeView(ViewPtr view);
 
-  // Check if a simple chain on the two `IndexScan`s given can be optimized by
-  // any loaded materialized views.
-  std::optional<UserQueryChain> checkSimpleChain(
-      std::shared_ptr<IndexScan> left, std::shared_ptr<IndexScan> right) const;
+  //
+  std::vector<MaterializedViewJoinReplacement> makeJoinReplacementIndexScans(
+      QueryExecutionContext* qec,
+      const parsedQuery::BasicGraphPattern& triples) const;
+
+  std::shared_ptr<IndexScan> makeScanForSingleChain(
+      QueryExecutionContext* qec, ChainInfo cached,
+      const TripleComponent& subject, const std::optional<Variable>& chain,
+      const Variable& object) const;
 
  private:
   // Helper for `analyzeView`, that checks for a simple chain. It returns `true`

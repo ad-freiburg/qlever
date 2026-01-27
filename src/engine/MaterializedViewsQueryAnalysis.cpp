@@ -12,6 +12,7 @@
 #include "engine/IndexScan.h"
 #include "engine/MaterializedViews.h"
 #include "parser/GraphPatternOperation.h"
+#include "parser/PropertyPath.h"
 #include "parser/SparqlParser.h"
 
 namespace materializedViewsQueryAnalysis {
@@ -62,9 +63,104 @@ bool BasicGraphPatternsInvariantTo::operator()(
 }
 
 // _____________________________________________________________________________
-std::optional<UserQueryChain> QueryPatternCache::checkSimpleChain(
-    std::shared_ptr<IndexScan> left, std::shared_ptr<IndexScan> right) const {
-  if (!left || !right || !left->predicate().isIri() ||
+std::vector<MaterializedViewJoinReplacement>
+QueryPatternCache::makeJoinReplacementIndexScans(
+    QueryExecutionContext* qec,
+    const parsedQuery::BasicGraphPattern& triples) const {
+  // TODO now we have to deal with (a) subset + (b) property path not rewritten
+  // to join so far
+
+  std::vector<MaterializedViewJoinReplacement> result;
+
+  // Find all single chains
+
+  ad_utility::HashMap<Variable, std::vector<size_t>> chainLeft;
+  ad_utility::HashMap<Variable, std::vector<size_t>> chainRight;
+
+  for (const auto& [i, triple] : ::ranges::views::enumerate(triples._triples)) {
+    if (std::holds_alternative<PropertyPath>(triple.p_)) {
+      const auto& path = std::get<PropertyPath>(triple.p_);
+      if (path.isIri()) {
+        const auto& iri = path.getIri().toStringRepresentation();
+        // If no view that we know of contains this predicate so we can ignore
+        // this triple altogether.
+        if (!predicateInView_.contains(iri)) {
+          continue;
+        }
+        if (triple.s_.isVariable()) {
+          chainRight[triple.s_.getVariable()].push_back(i);
+        }
+        if (triple.o_.isVariable()) {
+          chainLeft[triple.o_.getVariable()].push_back(i);
+        }
+      } else if (path.isSequence()) {
+        // CHECK THIS - This doesnt seem to occur in practice
+        AD_THROW("This should not happen");
+        /*const auto& seq = path.getSequence();
+         if (seq.size() == 2 && seq.at(0).isIri() && seq.at(1).isIri() &&
+             triple.o_.isVariable()) {
+           const auto& chainIriLeft =
+               seq.at(0).getIri().toStringRepresentation();
+           const auto& chainIriRight =
+               seq.at(1).getIri().toStringRepresentation();
+           // TODO use std::string_view version to avoid copy - `is_transparent`
+           // hash for hash map
+           ChainedPredicates key{chainIriLeft, chainIriRight};
+           if (auto it = simpleChainCache_.find(key);
+               it != simpleChainCache_.end()) {
+             auto& chainInfoPtr = it->second;
+             for (const auto& chainInfo : *chainInfoPtr) {
+               result.push_back({makeScanForSingleChain(qec, chainInfo,
+                                                        triple.s_, std::nullopt,
+                                                        triple.o_.getVariable()),
+                                 {static_cast<size_t>(i)}});
+             }
+           }
+         }*/
+      }
+    }
+  }
+
+  for (const auto& [varLeft, triplesLeft] : chainLeft) {
+    if (!chainRight.contains(varLeft)) {
+      continue;
+    }
+    for (auto tripleIdxRight : chainRight.at(varLeft)) {
+      for (auto tripleIdxLeft : triplesLeft) {
+        const auto& left = triples._triples.at(tripleIdxLeft);
+        const auto& right = triples._triples.at(tripleIdxRight);
+
+        const auto& leftP = std::get<PropertyPath>(left.p_);
+        const auto& rightP = std::get<PropertyPath>(right.p_);
+
+        if (!leftP.isIri() || !rightP.isIri()) {
+          continue;
+        }
+
+        const auto& chainIriLeft = leftP.getIri().toStringRepresentation();
+        const auto& chainIriRight = rightP.getIri().toStringRepresentation();
+
+        // TODO use std::string_view version to avoid copy - `is_transparent`
+        // hash for hash map
+        ChainedPredicates key{chainIriLeft, chainIriRight};
+        if (auto it = simpleChainCache_.find(key);
+            it != simpleChainCache_.end()) {
+          auto& chainInfoPtr = it->second;
+          for (const auto& chainInfo : *chainInfoPtr) {
+            result.push_back(
+                {makeScanForSingleChain(qec, chainInfo, left.s_, std::nullopt,
+                                        right.o_.getVariable()),
+                 {tripleIdxLeft, tripleIdxRight}});
+          }
+        }
+      }
+    }
+  }
+
+  // auto temp = triples._triples.at(0);
+  // auto& x = std::get<PropertyPath>(temp.p_).getSequence().at(0).isIri();
+
+  /*if (!left || !right || !left->predicate().isIri() ||
       !right->predicate().isIri()) {
     return std::nullopt;
   }
@@ -80,8 +176,26 @@ std::optional<UserQueryChain> QueryPatternCache::checkSimpleChain(
                             right->object().getVariable(),
                             simpleChainCache_.at(preds)};
     }
+    }
+    return std::nullopt;
+    */
+  AD_LOG_INFO << "MV PLANS: " << result.size() << std::endl;
+  return result;
+}
+
+// _____________________________________________________________________________
+std::shared_ptr<IndexScan> QueryPatternCache::makeScanForSingleChain(
+    QueryExecutionContext* qec, ChainInfo cached,
+    const TripleComponent& subject, const std::optional<Variable>& chain,
+    const Variable& object) const {
+  const auto& [cSubj, cChain, cObj, view] = cached;
+  parsedQuery::MaterializedViewQuery::RequestedColumns cols{{cSubj, subject},
+                                                            {cObj, object}};
+  if (chain.has_value()) {
+    cols.insert({cChain, chain.value()});
   }
-  return std::nullopt;
+  return view->makeIndexScan(
+      qec, parsedQuery::MaterializedViewQuery{view->name(), std::move(cols)});
 }
 
 // _____________________________________________________________________________

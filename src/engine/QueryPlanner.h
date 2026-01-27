@@ -450,15 +450,12 @@ class QueryPlanner {
                                                       const SubtreePlan& b,
                                                       const JoinColumns& jcs);
 
-  // Helper that checks if `a` and `b` are `IndexScan` plans and the
-  // `MaterializedViewManager` has a replacement for a simple join between them.
-  // Returns an `IndexScan` plan on the respective materialized view, if
-  // available.
-  // TODO<ullingerc> Add a second version which detects more complex joins from
-  // a `BasicGraphPattern` (and plans the non-optimized parts with another
-  // `GraphPatternPlanner`).
-  std::optional<SubtreePlan> createMaterializedViewSimpleJoinReplacement(
-      const SubtreePlan& a, const SubtreePlan& b, const JoinColumns& jcs) const;
+  //
+  using ReplacementPlans = std::vector<std::vector<SubtreePlan>>;
+
+  // Helper that ...
+  ReplacementPlans createMaterializedViewJoinReplacements(
+      const parsedQuery::BasicGraphPattern& triples) const;
 
   vector<SubtreePlan> getOrderByRow(
       const ParsedQuery& pq,
@@ -585,7 +582,8 @@ class QueryPlanner {
    */
   vector<vector<SubtreePlan>> fillDpTab(
       const TripleGraph& graph, std::vector<SparqlFilter> fs,
-      TextLimitMap& textLimits, const vector<vector<SubtreePlan>>& children);
+      TextLimitMap& textLimits, const vector<vector<SubtreePlan>>& children,
+      const ReplacementPlans& replacementPlans);
 
   // Internal subroutine of `fillDpTab` that  only works on a single connected
   // component of the input. Throws if the subtrees in the `connectedComponent`
@@ -594,7 +592,8 @@ class QueryPlanner {
   runDynamicProgrammingOnConnectedComponent(
       std::vector<SubtreePlan> connectedComponent,
       const FiltersAndOptionalSubstitutes& filters,
-      const TextLimitVec& textLimits, const TripleGraph& tg) const;
+      const TextLimitVec& textLimits, const TripleGraph& tg,
+      const ReplacementPlans& replacementPlans) const;
 
   // Same as `runDynamicProgrammingOnConnectedComponent`, but uses a greedy
   // algorithm that always greedily chooses the smallest result of the possible
@@ -602,7 +601,8 @@ class QueryPlanner {
   std::vector<QueryPlanner::SubtreePlan> runGreedyPlanningOnConnectedComponent(
       std::vector<SubtreePlan> connectedComponent,
       const FiltersAndOptionalSubstitutes& filters,
-      const TextLimitVec& textLimits, const TripleGraph& tg) const;
+      const TextLimitVec& textLimits, const TripleGraph& tg,
+      const ReplacementPlans& replacementPlans) const;
 
   // Return the number of connected subgraphs is the `graph`, or `budget + 1`,
   // if the number of subgraphs is `> budget`. This is used to analyze the
