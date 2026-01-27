@@ -19,15 +19,54 @@ class MaterializedView;
 class IndexScan;
 
 // _____________________________________________________________________________
+namespace ad_utility::detail {
+
+using StringPair = std::pair<std::string, std::string>;
+using StringViewPair = std::pair<std::string_view, std::string_view>;
+
+// _____________________________________________________________________________
+struct StringPairHash {
+  // Allows looking up values from a hash map with `StringPair` keys also with
+  // `StringViewPair`.
+  using is_transparent = void;
+
+  size_t operator()(const StringPair& p) const {
+    return absl::HashOf(p.first, p.second);
+  }
+
+  size_t operator()(const StringViewPair& p) const {
+    return absl::HashOf(p.first, p.second);
+  }
+};
+
+// _____________________________________________________________________________
+struct StringPairEq {
+  using is_transparent = void;
+
+  bool operator()(const StringPair& a, const StringPair& b) const {
+    return a == b;
+  }
+
+  bool operator()(const StringPair& a, const StringViewPair& b) const {
+    return a.first == b.first && a.second == b.second;
+  }
+
+  bool operator()(const StringViewPair& a, const StringPair& b) const {
+    return b.first == a.first && b.second == a.second;
+  }
+};
+
+}  // namespace ad_utility::detail
+
+// _____________________________________________________________________________
 namespace materializedViewsQueryAnalysis {
 
 using ViewPtr = std::shared_ptr<const MaterializedView>;
 
 // Key and value types of the cache for simple chains, that is queries of the
 // form `?s <p1> ?m . ?m <p2> ?o`.
-using ChainedPredicates = std::pair<std::string, std::string>;
-using ChainedPredicatesForLookup =
-    std::pair<std::string_view, std::string_view>;
+using ChainedPredicates = ad_utility::detail::StringPair;
+using ChainedPredicatesForLookup = ad_utility::detail::StringViewPair;
 struct ChainInfo {
   Variable subject_;
   Variable chain_;
@@ -80,8 +119,9 @@ struct MaterializedViewJoinReplacement {
 // of an existing materialized view.
 class QueryPatternCache {
   // Simple chains can be found by direct access into a hash map.
-  ad_utility::HashMap<ChainedPredicates,
-                      std::shared_ptr<std::vector<ChainInfo>>>
+  ad_utility::HashMap<
+      ChainedPredicates, std::shared_ptr<std::vector<ChainInfo>>,
+      ad_utility::detail::StringPairHash, ad_utility::detail::StringPairEq>
       simpleChainCache_;
 
   // Cache for predicates appearing in a materialized view.
@@ -99,9 +139,8 @@ class QueryPatternCache {
       const parsedQuery::BasicGraphPattern& triples) const;
 
   std::shared_ptr<IndexScan> makeScanForSingleChain(
-      QueryExecutionContext* qec, ChainInfo cached,
-      const TripleComponent& subject, const std::optional<Variable>& chain,
-      const Variable& object) const;
+      QueryExecutionContext* qec, ChainInfo cached, TripleComponent subject,
+      std::optional<Variable> chain, Variable object) const;
 
  private:
   // Helper for `analyzeView`, that checks for a simple chain. It returns `true`

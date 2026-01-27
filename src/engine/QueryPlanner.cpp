@@ -2300,14 +2300,6 @@ std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
     candidates.push_back(std::move(plan));
   }
 
-  // If the given plans are two index scans and we would join them on a single
-  // column, we check for a possible replacement with a materialized view.
-  // TODO<ullingerc> Other join types should be checked in
-  // `optimizeCommutatively`
-  // if (auto opt = createMaterializedViewSimpleJoinReplacement(a, b, jcs)) {
-  //   candidates.push_back(std::move(opt.value()));
-  // }
-
   // "NORMAL" CASE:
   // The join class takes care of sorting the subtrees if necessary
   SubtreePlan plan =
@@ -2590,10 +2582,16 @@ auto QueryPlanner::createJoinWithTransitivePath(const SubtreePlan& a,
 auto QueryPlanner::createMaterializedViewJoinReplacements(
     const parsedQuery::BasicGraphPattern& triples) const -> ReplacementPlans {
   ReplacementPlans plans;
+  // The `MaterializedViewsManager` provides `IndexScan` instances for all the
+  // subsets of `triples` it can rewrite. The individual results do not cover
+  // all items of `triples`, instead each has a vector of triple indices it
+  // covers.
   auto scans = _qec->materializedViewsManager().makeJoinReplacementIndexScans(
       _qec, triples);
   plans.reserve(triples._triples.size());
 
+  // Convert all the `IndexScan`s to `SubtreePlan`s with the appropriate ids
+  // set.
   for (const auto& [scan, coveredTriples] : scans) {
     auto plan = makeSubtreePlan<IndexScan>(scan);
     // This is equivalent to a join between the covered triples, so we must mark

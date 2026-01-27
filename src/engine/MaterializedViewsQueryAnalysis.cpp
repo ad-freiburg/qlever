@@ -67,14 +67,14 @@ std::vector<MaterializedViewJoinReplacement>
 QueryPatternCache::makeJoinReplacementIndexScans(
     QueryExecutionContext* qec,
     const parsedQuery::BasicGraphPattern& triples) const {
-  // TODO now we have to deal with (a) subset + (b) property path not rewritten
-  // to join so far
-
   std::vector<MaterializedViewJoinReplacement> result;
 
-  // Find all single chains
-
+  // All triples of the form `anything <iri> ?variable` where `<iri>` is covered
+  // by a materialized view, stored by `?variable` for finding chains.
   ad_utility::HashMap<Variable, std::vector<size_t>> chainLeft;
+  // All triples of the form `?variable <iri> ?otherVariable` where `<iri>` is
+  // covered by a materialized view, where `?variable` is different from
+  // `?otherVariable`, stored by `?variable` for finding chains.
   ad_utility::HashMap<Variable, std::vector<size_t>> chainRight;
 
   for (const auto& [i, triple] : ::ranges::views::enumerate(triples._triples)) {
@@ -87,14 +87,16 @@ QueryPatternCache::makeJoinReplacementIndexScans(
         if (!predicateInView_.contains(iri)) {
           continue;
         }
-        if (triple.s_.isVariable()) {
+        if (triple.s_.isVariable() && triple.o_.isVariable()) {
+          // This triple could be the right side of a chain join.
           chainRight[triple.s_.getVariable()].push_back(i);
         }
-        if (triple.o_.isVariable()) {
+        if (triple.o_.isVariable() && triple.s_ != triple.o_) {
+          // This triple could be the left side of a chain join.
           chainLeft[triple.o_.getVariable()].push_back(i);
         }
       } else if (path.isSequence()) {
-        // CHECK THIS - This doesnt seem to occur in practice
+        // CHECK THIS - This doesn't seem to occur in practice
         AD_THROW("This should not happen");
         /*const auto& seq = path.getSequence();
          if (seq.size() == 2 && seq.at(0).isIri() && seq.at(1).isIri() &&
@@ -140,9 +142,8 @@ QueryPatternCache::makeJoinReplacementIndexScans(
         const auto& chainIriLeft = leftP.getIri().toStringRepresentation();
         const auto& chainIriRight = rightP.getIri().toStringRepresentation();
 
-        // TODO use std::string_view version to avoid copy - `is_transparent`
-        // hash for hash map
-        ChainedPredicates key{chainIriLeft, chainIriRight};
+        //
+        ChainedPredicatesForLookup key{chainIriLeft, chainIriRight};
         if (auto it = simpleChainCache_.find(key);
             it != simpleChainCache_.end()) {
           auto& chainInfoPtr = it->second;
@@ -157,42 +158,21 @@ QueryPatternCache::makeJoinReplacementIndexScans(
     }
   }
 
-  // auto temp = triples._triples.at(0);
-  // auto& x = std::get<PropertyPath>(temp.p_).getSequence().at(0).isIri();
-
-  /*if (!left || !right || !left->predicate().isIri() ||
-      !right->predicate().isIri()) {
-    return std::nullopt;
-  }
-  if (left->object() == right->subject() &&
-      left->subject() != right->object() && left->subject() != left->object() &&
-      right->subject() != right->object() && left->object().isVariable() &&
-      right->object().isVariable()) {
-    materializedViewsQueryAnalysis::ChainedPredicates preds{
-        left->predicate().getIri().toStringRepresentation(),
-        right->predicate().getIri().toStringRepresentation()};
-    if (simpleChainCache_.contains(preds)) {
-      return UserQueryChain{left->subject(), left->object().getVariable(),
-                            right->object().getVariable(),
-                            simpleChainCache_.at(preds)};
-    }
-    }
-    return std::nullopt;
-    */
   AD_LOG_INFO << "MV PLANS: " << result.size() << std::endl;
   return result;
 }
 
 // _____________________________________________________________________________
 std::shared_ptr<IndexScan> QueryPatternCache::makeScanForSingleChain(
-    QueryExecutionContext* qec, ChainInfo cached,
-    const TripleComponent& subject, const std::optional<Variable>& chain,
-    const Variable& object) const {
-  const auto& [cSubj, cChain, cObj, view] = cached;
-  parsedQuery::MaterializedViewQuery::RequestedColumns cols{{cSubj, subject},
-                                                            {cObj, object}};
+    QueryExecutionContext* qec, ChainInfo cached, TripleComponent subject,
+    std::optional<Variable> chain, Variable object) const {
+  auto& [cSubj, cChain, cObj, view] = cached;
+  parsedQuery::MaterializedViewQuery::RequestedColumns cols{
+      {std::move(cSubj), std::move(subject)},
+      {std::move(cObj), std::move(object)},
+  };
   if (chain.has_value()) {
-    cols.insert({cChain, chain.value()});
+    cols.insert({std::move(cChain), std::move(chain.value())});
   }
   return view->makeIndexScan(
       qec, parsedQuery::MaterializedViewQuery{view->name(), std::move(cols)});
@@ -233,6 +213,7 @@ bool QueryPatternCache::analyzeSimpleChain(ViewPtr view, const SparqlTriple& a,
   auto bObj = b.o_.getVariable();
 
   // Insert chain to cache.
+  // TODO avoid hashing 3x
   ChainedPredicates preds{aPred.value(), bPred.value()};
   if (!simpleChainCache_.contains(preds)) {
     simpleChainCache_[preds] = std::make_shared<std::vector<ChainInfo>>();

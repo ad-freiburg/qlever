@@ -450,10 +450,13 @@ class QueryPlanner {
                                                       const SubtreePlan& b,
                                                       const JoinColumns& jcs);
 
-  //
+  // Helper that generates `IndexScan` query plans on materialized views if they
+  // can be used to avoid joins between some of the `triples`. The resulting
+  // plans for part of the `triples` are given in a vector of query planning
+  // rounds in which they should be added to the planner. For example, at index
+  // 1 there is a vector of query plans that should be added in round 1 of the
+  // dynamic programming algorithm.
   using ReplacementPlans = std::vector<std::vector<SubtreePlan>>;
-
-  // Helper that ...
   ReplacementPlans createMaterializedViewJoinReplacements(
       const parsedQuery::BasicGraphPattern& triples) const;
 
