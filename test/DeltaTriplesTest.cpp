@@ -21,6 +21,7 @@
 #include "index/Permutation.h"
 #include "parser/RdfParser.h"
 #include "parser/Tokenizer.h"
+#include "util/RuntimeParametersTestHelpers.h"
 
 namespace {
 using namespace deltaTriplesTestHelpers;
@@ -663,6 +664,153 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
   auto deltaImpl = deltaTriplesManager.deltaTriples_.rlock();
   EXPECT_THAT(*deltaImpl, NumTriples(numThreads + 1, 2 * numThreads + 1,
                                      3 * numThreads + 2));
+}
+
+// _____________________________________________________________________________
+TEST_F(DeltaTriplesTest, propagateChangesFromUpdatesParameter) {
+  DeltaTriplesManager deltaTriplesManager(testQec->getIndex().getImpl());
+  auto& vocab = testQec->getIndex().getVocab();
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+
+  LocalVocab localVocab;
+
+  auto insertTriples = [&, this](const std::vector<std::string>& turtles) {
+    auto triples = makeIdTriples(vocab, localVocab, turtles);
+    auto updateSnapshot =
+        getRuntimeParameter<&RuntimeParameters::propagateChangesFromUpdates_>();
+    deltaTriplesManager.modify<void>(
+        [&](DeltaTriples& deltaTriples) {
+          deltaTriples.insertTriples(cancellationHandle, std::move(triples));
+        },
+        DeltaTriplesManager::WriteDiskAfterRequest |
+            DeltaTriplesManager::UpdateMetadataAfterRequest |
+            (updateSnapshot ? DeltaTriplesManager::UpdateSnapshotAfterRequest
+                            : DeltaTriplesManager::Nothing));
+  };
+
+  // Initially the changes from updates should be propagated.
+  EXPECT_TRUE(
+      getRuntimeParameter<&RuntimeParameters::propagateChangesFromUpdates_>());
+  auto initialSnapshot =
+      deltaTriplesManager.getCurrentLocatedTriplesSharedState();
+  auto initialIndex = initialSnapshot->index_;
+
+  insertTriples({"<A> <B> <C>"});
+
+  auto snapshotAfterInsert =
+      deltaTriplesManager.getCurrentLocatedTriplesSharedState();
+  EXPECT_EQ(snapshotAfterInsert->index_, initialIndex + 1);
+  // Disable the propagation of the changes from updates.
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::propagateChangesFromUpdates_>(false);
+
+  auto snapshotBeforeSecondUpdate =
+      deltaTriplesManager.getCurrentLocatedTriplesSharedState();
+  auto indexBeforeSecondUpdate = snapshotBeforeSecondUpdate->index_;
+  insertTriples({"<D> <E> <F>"});
+  auto snapshotAfterSecondInsert =
+      deltaTriplesManager.getCurrentLocatedTriplesSharedState();
+  EXPECT_EQ(snapshotAfterSecondInsert->index_, indexBeforeSecondUpdate);
+
+  // The changes from the updates should directly be visible after enabling.
+  setRuntimeParameter<&RuntimeParameters::propagateChangesFromUpdates_>(true);
+
+  auto snapshotBeforeThirdUpdate =
+      deltaTriplesManager.getCurrentLocatedTriplesSharedState();
+  auto indexBeforeThirdUpdate = snapshotBeforeThirdUpdate->index_;
+  EXPECT_EQ(indexBeforeThirdUpdate, indexBeforeSecondUpdate + 1);
+
+  insertTriples({"<G> <H> <I>"});
+
+  auto snapshotAfterThirdInsert =
+      deltaTriplesManager.getCurrentLocatedTriplesSharedState();
+  EXPECT_EQ(snapshotAfterThirdInsert->index_, indexBeforeThirdUpdate + 1);
+}
+
+// _____________________________________________________________________________
+TEST_F(DeltaTriplesTest, propagateChangesFromUpdatesMetadataBehavior) {
+  DeltaTriplesManager deltaTriplesManager(testQec->getIndex().getImpl());
+  auto& vocab = testQec->getIndex().getVocab();
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+
+  LocalVocab localVocab;
+
+  auto setPropagateChangesFromUpdates =
+      setRuntimeParameter<&RuntimeParameters::propagateChangesFromUpdates_,
+                          bool>;
+  auto ltpbHasAugmentedMetadata = AD_FIELD(
+      LocatedTriplesPerBlock, augmentedMetadata_, testing::Ne(std::nullopt));
+  auto notAvailable = testing::Each(testing::Not(ltpbHasAugmentedMetadata));
+  auto available = testing::Each(ltpbHasAugmentedMetadata);
+  auto augmentedMetadataIs =
+      [&deltaTriplesManager](
+          const testing::Matcher<LocatedTriplesPerBlockAllPermutations<false>>&
+              m,
+          ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
+        auto t = generateLocationTrace(loc);
+        deltaTriplesManager.deltaTriples_.withReadLock(
+            [&](const auto& deltaTriples) {
+              const auto& locatedTriples =
+                  deltaTriples.locatedTriples_->locatedTriplesPerBlock_;
+              EXPECT_THAT(locatedTriples, m);
+            });
+      };
+  auto resetMetadata = [&deltaTriplesManager]() {
+    deltaTriplesManager.deltaTriples_.withWriteLock(
+        [](DeltaTriples& deltaTriples) {
+          for (auto& permutation :
+               deltaTriples.locatedTriples_->locatedTriplesPerBlock_) {
+            permutation.augmentedMetadata_.reset();
+          }
+        });
+  };
+  auto insertTriples = [&, this](const std::vector<std::string>& turtles) {
+    auto triples = makeIdTriples(vocab, localVocab, turtles);
+    auto updateMetadata =
+        getRuntimeParameter<&RuntimeParameters::propagateChangesFromUpdates_>();
+    deltaTriplesManager.modify<void>(
+        [&](DeltaTriples& deltaTriples) {
+          deltaTriples.insertTriples(cancellationHandle, std::move(triples));
+        },
+        DeltaTriplesManager::WriteDiskAfterRequest |
+            DeltaTriplesManager::UpdateSnapshotAfterRequest |
+            (updateMetadata ? DeltaTriplesManager::UpdateMetadataAfterRequest
+                            : DeltaTriplesManager::Nothing));
+  };
+
+  // Restores the original value after the test.
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::propagateChangesFromUpdates_>(true);
+  augmentedMetadataIs(notAvailable);
+
+  // Insert first triple with normal behavior - should update metadata
+  insertTriples({"<A> <B> <C>"});
+  augmentedMetadataIs(available);
+
+  setPropagateChangesFromUpdates(false);
+  resetMetadata();
+  insertTriples({"<D> <E> <F>"});
+  augmentedMetadataIs(notAvailable);
+
+  insertTriples({"<G> <H> <I>"});
+  augmentedMetadataIs(notAvailable);
+
+  // Manually force metadata update - should work regardless of parameter
+  deltaTriplesManager.forceMetadataUpdate();
+  augmentedMetadataIs(available);
+
+  // Make the changes from updates visible again. Immediately creates augmented
+  // metadata and resumes updating metadata after updates
+  resetMetadata();
+  setPropagateChangesFromUpdates(true);
+  augmentedMetadataIs(available);
+
+  // Future updates should resume normal metadata updates
+  resetMetadata();
+  insertTriples({"<J> <K> <L>"});
+  augmentedMetadataIs(available);
 }
 
 // _____________________________________________________________________________

@@ -135,6 +135,10 @@ struct RuntimeParameters {
   MemorySizeParameter sortInMemoryThreshold_{
       ad_utility::MemorySize::gigabytes(5), "sort-in-memory-threshold"};
 
+  // The changes from updates operations run after this parameter has been set
+  // to `false` will not be visible to queries until it is set back to `true`.
+  Bool propagateChangesFromUpdates_{true, "propagate-changes-from-updates"};
+
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE
   // CONSTRUCTOR, S.T. THEY CAN ALSO BE ACCESSED VIA THE RUNTIME INTERFACE.
