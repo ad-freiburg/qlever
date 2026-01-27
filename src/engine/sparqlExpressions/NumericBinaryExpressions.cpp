@@ -43,13 +43,13 @@ NARY_EXPRESSION(AddExpression, 2, FV<Add, NumericValueGetter>);
 // _____________________________________________________________________________
 // Subtract.
 struct SubtractImpl {
-  ValueId operator()(NumericOrDate lhs, NumericOrDate rhs) const {
+  ValueId operator()(NumericOrDateValue lhs, NumericOrDateValue rhs) const {
     return std::visit(SubtractImpl{}, lhs, rhs);
   }
 
   CPP_template(typename L, typename R)(
-      requires(!std::is_same_v<L, NumericOrDate>
-                   CPP_and !std::is_same_v<R, NumericOrDate>)) ValueId
+      requires(!std::is_same_v<L, NumericOrDateValue>
+                   CPP_and !std::is_same_v<R, NumericOrDateValue>)) ValueId
   operator()(L lhs, R rhs) const {
     using T1 = std::decay_t<decltype(lhs)>;
     using T2 = std::decay_t<decltype(rhs)>;
@@ -76,7 +76,8 @@ struct SubtractImpl {
     return Id::makeUndefined();
   }
 };
-NARY_EXPRESSION(SubtractExpression, 2, FV<SubtractImpl, NumericOrDateGetter>);
+NARY_EXPRESSION(SubtractExpression, 2,
+                FV<SubtractImpl, NumericOrDateValueGetter>);
 
 // _____________________________________________________________________________
 // Power.

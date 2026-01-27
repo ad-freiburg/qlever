@@ -40,7 +40,7 @@ using IntOrDouble = std::variant<double, int64_t>;
 // The input to an expression that expects a numeric value or a date.
 // Will be used in `NumericBinaryExpressions.cpp` to allow for subtraction of
 // Dates.
-using NumericOrDate =
+using NumericOrDateValue =
     std::variant<NotNumeric, double, int64_t, DateYearOrDuration>;
 
 // Return type for `DatatypeValueGetter`.
@@ -107,17 +107,17 @@ struct NumericValueGetter : Mixin<NumericValueGetter> {
   NumericValue operator()(ValueId id, const EvaluationContext*) const;
 };
 
-// Return `NumericOrDate` which is then used as the input to numeric
+// Return `NumericOrDateValue` which is then used as the input to numeric
 // expressions.
-struct NumericOrDateGetter : Mixin<NumericOrDateGetter> {
-  using Mixin<NumericOrDateGetter>::operator();
+struct NumericOrDateValueGetter : Mixin<NumericOrDateValueGetter> {
+  using Mixin<NumericOrDateValueGetter>::operator();
   // same as in NumericValueGetter
-  NumericOrDate operator()(const LiteralOrIri&,
-                           const EvaluationContext*) const {
+  NumericOrDateValue operator()(const LiteralOrIri&,
+                                const EvaluationContext*) const {
     return NotNumeric{};
   }
 
-  NumericOrDate operator()(ValueId id, const EvaluationContext*) const;
+  NumericOrDateValue operator()(ValueId id, const EvaluationContext*) const;
 };
 
 /// Return the type exactly as it was passed in.

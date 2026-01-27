@@ -47,7 +47,7 @@ NumericValue NumericValueGetter::operator()(
 }
 
 // _____________________________________________________________________________
-NumericOrDate NumericOrDateGetter::operator()(
+NumericOrDateValue NumericOrDateValueGetter::operator()(
     ValueId id, const sparqlExpression::EvaluationContext*) const {
   switch (id.getDatatype()) {
     case Datatype::Double:
