@@ -25,8 +25,8 @@
 #include "parser/ParsedQuery.h"
 #include "parser/SparqlParserHelpers.h"
 #include "parser/TripleComponent.h"
-#include "parser/data/Iri.h"
 #include "parser/data/OrderKey.h"
+#include "rdfTypes/Iri.h"
 #include "rdfTypes/Variable.h"
 #include "util/SourceLocation.h"
 #include "util/TypeTraits.h"
@@ -38,12 +38,12 @@ inline std::ostream& operator<<(std::ostream& out, const GraphTerm& graphTerm) {
       [&](const auto& object) {
         using T = std::decay_t<decltype(object)>;
         if constexpr (ad_utility::isSimilar<T, Literal>) {
-          out << "Literal " << object.literal();
+          out << "Literal " << object.toStringRepresentation();
         } else if constexpr (ad_utility::isSimilar<T, BlankNode>) {
           out << "BlankNode generated: " << object.isGenerated()
               << ", label: " << object.label();
         } else if constexpr (ad_utility::isSimilar<T, Iri>) {
-          out << "Iri " << object.iri();
+          out << "Iri " << object.toStringRepresentation();
         } else if constexpr (ad_utility::isSimilar<T, Variable>) {
           out << "Variable " << object.name();
         } else {
@@ -269,7 +269,7 @@ MultiVariantWith(const Matcher<const ad_utility::Last<Ts...>&>& matcher) {
 // Returns a matcher that accepts a `GraphTerm` or `Iri`.
 inline auto Iri = [](const std::string& value) {
   return MultiVariantWith<GraphTerm, ::Iri>(
-      AD_PROPERTY(::Iri, iri, testing::Eq(value)));
+      AD_PROPERTY(::Iri, toStringRepresentation, testing::Eq(value)));
 };
 
 // Returns a matcher that accepts a `VarOrPath` or `PropertyPath`.
@@ -322,7 +322,7 @@ inline auto VariableVariant = [](const std::string& value) {
 // Returns a matcher that accepts a `GraphTerm` or `Literal`.
 inline auto Literal = [](const std::string& value) {
   return MultiVariantWith<GraphTerm, ::Literal>(
-      AD_PROPERTY(::Literal, literal, testing::Eq(value)));
+      AD_PROPERTY(::Literal, toStringRepresentation, testing::Eq(value)));
 };
 
 // _____________________________________________________________________________

@@ -8,6 +8,7 @@
 #include "engine/Result.h"
 #include "engine/VariableToColumnMap.h"
 #include "rdfTypes/Variable.h"
+#include "util/HashMap.h"
 
 // Forward declarations to avoid cyclic dependencies
 class Index;
@@ -15,12 +16,23 @@ enum struct PositionInTriple : int { SUBJECT, PREDICATE, OBJECT };
 
 // All the data that is needed to evaluate an element in a construct query.
 struct ConstructQueryExportContext {
-  const size_t _row;
+  // idx of row of result table for WHERE-clause
+  const size_t resultTableRowIndex_;
   const IdTable& idTable_;
   const LocalVocab& localVocab_;
   const VariableToColumnMap& _variableColumns;
   const Index& _qecIndex;
   const size_t _rowOffset;
+
+  // Note: The ConstructQueryExportContext is scoped to a row of the
+  // WHERE-clause result table, which is why we can cache evaluated values here.
+
+  // Per-row cache for Variable evaluations. Keyed by variable name (e.g., "?x")
+  mutable ad_utility::HashMap<std::string, std::optional<std::string>>
+      variableCache_;
+
+  // Per-row cache for BlankNode evaluations. Keyed by blank node label.
+  mutable ad_utility::HashMap<std::string, std::string> blankNodeCache_;
 };
 
 #endif  // QLEVER_SRC_PARSER_DATA_CONSTRUCTQUERYEXPORTCONTEXT_H
