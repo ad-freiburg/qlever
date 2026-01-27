@@ -1776,18 +1776,16 @@ std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
       coveredNodes |= plan._idsOfIncludedNodes;
     }
 
-    // TODO this could be hash-map based if we would return the indices in the
-    // create helper and pass them as part of replacementPlans
+    // TODO<ullingerc> This could be hash-map based if we would return the
+    // indices in the create helper and pass them as part of `replacementPlans`.
     ReplacementPlans applicableReplacementPlans;
-    // size_t numApplicableReplacementPlans = 0;
     for (auto& rPlans : replacementPlans) {
       std::vector<SubtreePlan> applicable;
       for (auto& plan : rPlans) {
-        // (a & b) == a -> a is subset of b
+        // Nodes covered by plan are a subset of the covered nodes.
         if ((plan._idsOfIncludedNodes & coveredNodes) ==
             plan._idsOfIncludedNodes) {
           applicable.push_back(std::move(plan));
-          // ++numApplicableReplacementPlans;
         }
       }
       applicableReplacementPlans.push_back(std::move(applicable));
@@ -1805,11 +1803,10 @@ std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
     auto impl = useGreedyPlanning
                     ? &QueryPlanner::runGreedyPlanningOnConnectedComponent
                     : &QueryPlanner::runDynamicProgrammingOnConnectedComponent;
-    // TODO greedy: once with replacementPlans of all levels on level 0 and all
-    // covered nodes removed ; once without replacementPlans -> use better
-    // result
+    // TODO<ullingerc> Run greedy also once without replacementPlans -> use
+    // better result
     if (useGreedyPlanning) {
-      // Remove covered ones
+      // Remove covered ones.
       for (const auto& a : applicableReplacementPlans) {
         for (const auto& p : a) {
           std::erase_if(component, [&p](const auto& c) {
@@ -1817,8 +1814,9 @@ std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
           });
         }
       }
-      // Insert replacements. TODO replacements themselves should not contain
-      // each other
+      // Insert replacements.
+      // TODO<ullingerc> How can we ensure that replacements themselves do not
+      // contain each other. This will be probably relevant for stars later.
       for (const auto& a : applicableReplacementPlans) {
         for (const auto& p : a) {
           component.push_back(p);
