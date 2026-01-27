@@ -7,8 +7,44 @@
 #include "engine/ConstructTripleGenerator.h"
 
 #include "engine/ExportQueryExecutionTrees.h"
+#include "parser/data/ConstructQueryExportContext.h"
 
 using ad_utility::InputRangeTypeErased;
+using enum PositionInTriple;
+using StringTriple = ConstructTripleGenerator::StringTriple;
+
+// _____________________________________________________________________________
+ConstructTripleGenerator::ConstructTripleGenerator(
+    Triples constructTriples, std::shared_ptr<const Result> result,
+    const VariableToColumnMap& variableColumns, const Index& index,
+    CancellationHandle cancellationHandle)
+    : templateTriples_(std::move(constructTriples)),
+      result_(std::move(result)),
+      variableColumns_(variableColumns),
+      index_(index),
+      cancellationHandle_(std::move(cancellationHandle)) {
+  // initialize a cache containing the constants of the graph triple template.
+  precomputedConstants_.resize(templateTriples_.size());
+  for (size_t tripleIdx = 0; tripleIdx < templateTriples_.size(); ++tripleIdx) {
+    const auto& triple = templateTriples_[tripleIdx];
+    for (size_t pos = 0; pos < 3; ++pos) {
+      const GraphTerm& term = triple[pos];
+      PositionInTriple role = static_cast<PositionInTriple>(pos);
+      if (std::holds_alternative<Iri>(term)) {
+        auto val = ConstructQueryEvaluator::evaluate(std::get<Iri>(term));
+        precomputedConstants_[tripleIdx][pos] =
+            val.has_value() ? std::make_optional((std::move(val.value())))
+                            : std::nullopt;
+      } else if (std::holds_alternative<Literal>(term)) {
+        auto val =
+            ConstructQueryEvaluator::evaluate(std::get<Literal>(term), role);
+        precomputedConstants_[tripleIdx][pos] =
+            val.has_value() ? std::make_optional(std::move(val.value()))
+                            : std::nullopt;
+      }
+    }
+  }
+}
 
 // _____________________________________________________________________________
 auto ConstructTripleGenerator::generateStringTriplesForResultTable(
@@ -33,16 +69,20 @@ auto ConstructTripleGenerator::generateStringTriplesForResultTable(
     // a `StringTriple` for a single row of the WHERE clause (specified by
     // `idTable` and `rowIdx` stored in `context`).
     auto evaluateConstructTripleForRowFromWhereClause =
-        [this, context = std::move(context)](const auto& templateTriple) {
+        [this, context = std::move(context)](const auto& pair) {
+          auto [tripleIdx, templateTriple] = pair;
           cancellationHandle_->throwIfCancelled();
-          return ConstructQueryEvaluator::evaluateTriple(templateTriple,
-                                                         context);
+          return ConstructTripleGenerator::evaluateTriple(
+              tripleIdx, templateTriple, context);
         };
 
     // Apply the transformer from above and filter out invalid evaluations
     // (which are returned as empty `StringTriples` from
     // `evaluateConstructTripleForRowFromWhereClause`).
-    return templateTriples_ |
+    return ql::views::iota(size_t{0}, templateTriples_.size()) |
+           ql::views::transform([this](size_t tripleIdx) {
+             return std::make_pair(tripleIdx, templateTriples_[tripleIdx]);
+           }) |
            ql::views::transform(evaluateConstructTripleForRowFromWhereClause) |
            ql::views::filter(std::not_fn(&StringTriple::isEmpty));
   };
@@ -81,4 +121,33 @@ ConstructTripleGenerator::generateStringTriples(
         return generator.generateStringTriplesForResultTable(table);
       });
   return InputRangeTypeErased(ql::views::join(std::move(tableTriples)));
+}
+
+// _____________________________________________________________________________
+StringTriple ConstructTripleGenerator::evaluateTriple(
+    size_t tripleIdx, const std::array<GraphTerm, 3>& triple,
+    const ConstructQueryExportContext& context) {
+  using enum PositionInTriple;
+
+  // array to hold evaluated components [SUBJECT=0, PREDICATE=1, OBJECT=2]
+  std::array<std::optional<std::string>, 3> components;
+
+  for (size_t pos = 0; pos < 3; ++pos) {
+    const GraphTerm& term = triple[pos];
+
+    // 1. check precomputed constants (IRIs/Literals) first - O(1) lookup
+    if (precomputedConstants_[tripleIdx][pos].has_value()) {
+      components[pos] = precomputedConstants_[tripleIdx][pos];
+    }
+    // 2. fall back to per-row evaluation for Variables/BlankNodes.
+    PositionInTriple role = static_cast<PositionInTriple>(pos);
+    components[pos] =
+        ConstructQueryEvaluator::evaluateTerm(term, context, role);
+
+    // early exit if this component is UNDEF.
+    if (!components[pos].has_value()) {
+      return StringTriple{};
+    }
+  }
+  return StringTriple{*components[0], *components[1], *components[2]};
 }

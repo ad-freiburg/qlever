@@ -104,26 +104,3 @@ std::optional<std::string> ConstructQueryEvaluator::evaluateTerm(
       },
       term);
 }
-
-// _____________________________________________________________________________
-ConstructQueryEvaluator::StringTriple ConstructQueryEvaluator::evaluateTriple(
-    const std::array<GraphTerm, 3>& triple,
-    const ConstructQueryExportContext& context) {
-  // We specify the position to the evaluator so it knows how to handle
-  // special cases (like blank node generation or IRI escaping).
-  using enum PositionInTriple;
-
-  auto subject = evaluateTerm(triple[0], context, SUBJECT);
-  auto predicate = evaluateTerm(triple[1], context, PREDICATE);
-  auto object = evaluateTerm(triple[2], context, OBJECT);
-
-  // In SPARQL CONSTRUCT, if any part of the triple (S, P, or O) evaluates
-  // to UNDEF, the entire triple is omitted from the result.
-  if (!subject.has_value() || !predicate.has_value() || !object.has_value()) {
-    return StringTriple();  // Returns an empty triple which is filtered out
-    // later
-  }
-
-  return StringTriple(std::move(subject.value()), std::move(predicate.value()),
-                      std::move(object.value()));
-}

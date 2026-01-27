@@ -25,17 +25,17 @@ class ConstructTripleGenerator {
   using StringTriple = QueryExecutionTree::StringTriple;
   using Triples = ad_utility::sparql_types::Triples;
 
+  // Precomputed constants: 2D vector [tripleIdx][position] -> evaluated
+  // constant
+  using PrecomputedConstants =
+      std::vector<std::array<std::optional<std::string>, 3>>;
+
   // _____________________________________________________________________________
   ConstructTripleGenerator(Triples constructTriples,
                            std::shared_ptr<const Result> result,
                            const VariableToColumnMap& variableColumns,
                            const Index& index,
-                           CancellationHandle cancellationHandle)
-      : templateTriples_(std::move(constructTriples)),
-        result_(std::move(result)),
-        variableColumns_(variableColumns),
-        index_(index),
-        cancellationHandle_(std::move(cancellationHandle)) {}
+                           CancellationHandle cancellationHandle);
 
   // _____________________________________________________________________________
   // This generator has to be called for each table contained in the result of
@@ -60,7 +60,20 @@ class ConstructTripleGenerator {
       std::shared_ptr<const Result> result, uint64_t& resultSize,
       CancellationHandle cancellationHandle);
 
+  // Evaluates a single CONSTRUCT triple pattern using the provided context.
+  // If any of the `GraphTerm` elements can't be evaluated,
+  // an empty `StringTriple` is returned.
+  // (meaning that all three member variables `subject_` , `predicate_`,
+  // `object_` of the `StringTriple` are set to the empty string).
+  StringTriple evaluateTriple(size_t tripleIdx,
+                              const std::array<GraphTerm, 3>& triple,
+                              const ConstructQueryExportContext& context);
+
  private:
+  const std::array<PositionInTriple, 3> ALL_POSITIONS = {
+      PositionInTriple::SUBJECT, PositionInTriple::PREDICATE,
+      PositionInTriple::OBJECT};
+
   // triple templates contained in the graph template
   // (the CONSTRUCT-clause of the CONSTRUCt-query) of the CONSTRUCT-query.
   Triples templateTriples_;
@@ -73,6 +86,7 @@ class ConstructTripleGenerator {
   std::reference_wrapper<const Index> index_;
   CancellationHandle cancellationHandle_;
   size_t rowOffset_ = 0;
+  std::vector<std::array<std::optional<std::string>, 3>> precomputedConstants_;
 };
 
 #endif  // QLEVER_SRC_ENGINE_CONSTRUCTTRIPLEGENERATOR_H

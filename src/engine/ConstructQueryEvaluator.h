@@ -16,6 +16,8 @@
 
 class ConstructQueryEvaluator {
   using StringTriple = QueryExecutionTree::StringTriple;
+  using SharedString = std::shared_ptr<std::string>;
+  using OptionalSharedString = std::optional<SharedString>;
 
  public:
   // Helper method for `evaluateTerm`.
@@ -47,15 +49,6 @@ class ConstructQueryEvaluator {
   static std::optional<std::string> evaluateTerm(
       const GraphTerm& term, const ConstructQueryExportContext& context,
       PositionInTriple posInTriple);
-
-  // Evaluates a single CONSTRUCT triple pattern using the provided context.
-  // If any of the `GraphTerm` elements can't be evaluated,
-  // an empty `StringTriple` is returned.
-  // (meaning that all three member variables `subject_` , `predicate_`,
-  // `object_` of the `StringTriple` are set to the empty string).
-  static StringTriple evaluateTriple(
-      const std::array<GraphTerm, 3>& triple,
-      const ConstructQueryExportContext& context);
 };
 
 #endif  // QLEVER_CONSTRUCTQUERYEVALUATOR_H
