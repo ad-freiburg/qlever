@@ -32,10 +32,15 @@ struct BasicGraphPatternsInvariantTo {
   bool operator()(const parsedQuery::Values& values) const;
 
   CPP_template(typename T)(requires(
-      // TODO<ullingerc> Whitelist
-      !ad_utility::SimilarToAny<T, parsedQuery::Optional, parsedQuery::Bind,
-                                parsedQuery::Values>)) bool operator()(const T&)
-      const {
+      ad_utility::SimilarToAny<
+          T, parsedQuery::Union, parsedQuery::Subquery, parsedQuery::TransPath,
+          parsedQuery::BasicGraphPattern, parsedQuery::Service,
+          parsedQuery::PathQuery, parsedQuery::SpatialQuery,
+          parsedQuery::TextSearchQuery, parsedQuery::Minus,
+          parsedQuery::GroupGraphPattern, parsedQuery::Describe,
+          parsedQuery::Load, parsedQuery::NamedCachedResult,
+          parsedQuery::MaterializedViewQuery>)) bool
+  operator()(const T&) const {
     return false;
   }
 };
