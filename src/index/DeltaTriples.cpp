@@ -167,8 +167,8 @@ DeltaTriplesCount DeltaTriples::getCounts() const {
 }
 
 // _____________________________________________________________________________
-DeltaTriples::Triples DeltaTriples::makeInternalTriples(
-    const Triples& triples) {
+DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
+                                                        bool insertion) {
   // NOTE: If this logic is ever changed, you need to also change the code
   // in `IndexBuilderTypes.h`, the function `getIdMapLambdas` specifically,
   // which adds the same extra triples for language tags to the internal triples
@@ -177,6 +177,14 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(
   constexpr size_t predicateCacheSize = 50;
   ad_utility::util::LRUCache<Id::T, ad_utility::triple_component::Iri>
       predicateCache{predicateCacheSize};
+
+  // Don't compute the id if it's not used by the code below.
+  Id languagePredicate =
+      insertion ? TripleComponent{ad_utility::triple_component::Iri::fromIriref(
+                                      LANGUAGE_PREDICATE)}
+                      .toValueId(index_.getVocab(), localVocab_,
+                                 index_.encodedIriManager())
+                : Id::makeUndefined();
   for (const auto& triple : triples) {
     const auto& ids = triple.ids();
     Id objectId = ids.at(2);
@@ -195,21 +203,29 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(
           AD_CORRECTNESS_CHECK(optionalPredicate.value().isIri());
           return std::move(optionalPredicate.value().getIri());
         });
-    auto specialPredicate = ad_utility::convertToLanguageTaggedPredicate(
-        predicate,
-        asStringViewUnsafe(optionalLiteralOrIri.value().getLanguageTag()));
+    auto langtag =
+        asStringViewUnsafe(optionalLiteralOrIri.value().getLanguageTag());
+    auto specialPredicate =
+        ad_utility::convertToLanguageTaggedPredicate(predicate, langtag);
     Id specialId = TripleComponent{std::move(specialPredicate)}.toValueId(
         index_.getVocab(), localVocab_, index_.encodedIriManager());
-    // NOTE: We currently only add one of the language triples, specifically
-    // `<subject> @language@<predicate> "object"@language` because it is
-    // directly tied to a regular triple, so insertion and removal work exactly
-    // the same. `<object> ql:langtag <@language>` on the other hand needs
-    // either some sort of reference counting or we have to keep it
-    // indefinitely, even if the object is removed. This means that some queries
-    // will return no results for entries with language tags that were inserted
-    // via an UPDATE operation.
+    // Extra triple `<subject> @language@<predicate> "object"@language`.
     internalTriples.push_back(
         IdTriple<0>{std::array{ids.at(0), specialId, ids.at(2), ids.at(3)}});
+    Id langtagId =
+        TripleComponent{ad_utility::convertLangtagToEntityUri(langtag)}
+            .toValueId(index_.getVocab(), localVocab_,
+                       index_.encodedIriManager());
+    // Because we don't track the exact counts of existing objects, we just
+    // conservatively add these internal triples on insertion, and never remove
+    // them. This is inefficient, but never wrong because queries that use these
+    // internal triples will always join these internal triples with a regular
+    // index scan.
+    if (insertion) {
+      // Extra triple `<object> ql:langtag <@language>`.
+      internalTriples.push_back(IdTriple<0>{
+          std::array{ids.at(2), languagePredicate, langtagId, ids.at(3)}});
+    }
   }
   // Because of the special predicates, we need to re-sort the triples.
   ql::ranges::sort(internalTriples);
@@ -221,7 +237,7 @@ void DeltaTriples::insertTriples(CancellationHandle cancellationHandle,
                                  Triples triples,
                                  ad_utility::timer::TimeTracer& tracer) {
   tracer.beginTrace("makeInternalTriples");
-  auto internalTriples = makeInternalTriples(triples);
+  auto internalTriples = makeInternalTriples(triples, true);
   tracer.endTrace("makeInternalTriples");
   tracer.beginTrace("externalPermutation");
   modifyTriplesImpl<false, true>(cancellationHandle, std::move(triples),
@@ -240,7 +256,7 @@ void DeltaTriples::deleteTriples(CancellationHandle cancellationHandle,
                                  Triples triples,
                                  ad_utility::timer::TimeTracer& tracer) {
   tracer.beginTrace("makeInternalTriples");
-  auto internalTriples = makeInternalTriples(triples);
+  auto internalTriples = makeInternalTriples(triples, false);
   tracer.endTrace("makeInternalTriples");
   tracer.beginTrace("externalPermutation");
   modifyTriplesImpl<false, false>(cancellationHandle, std::move(triples),

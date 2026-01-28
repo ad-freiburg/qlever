@@ -213,8 +213,11 @@ class DeltaTriples {
   // bunch of triples to be inserted into the internal permutation to make
   // things like efficient language filters work. This currently performs a
   // lookup from disk to check the language tag, but in the future this may be
-  // implemented more efficiently.
-  Triples makeInternalTriples(const Triples& triples);
+  // implemented more efficiently. If `insertion` is false, then some internal
+  // triples will not be created, in particular the triple of the form
+  // `<object> ql:langtag <@language>`, which is not always safe to delete,
+  // but doesn't cause issues when it's present.
+  Triples makeInternalTriples(const Triples& triples, bool insertion);
 
   // Insert triples.
   void insertTriples(CancellationHandle cancellationHandle, Triples triples,
