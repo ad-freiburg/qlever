@@ -359,7 +359,7 @@ void updatePassedTimes(const Date& date1, const Date& date2, long& daysPassed,
       int hour2 = date2.getHour();
       int minute2 = date2.getMinute();
       double second2 = date2.getSecond();
-      if (hour1 < hour2) {
+      if (hour1 <= hour2) {
         if (daysPassed > 0) {
           daysPassed--;  // counted one day to much
           hoursPassed =
@@ -370,7 +370,7 @@ void updatePassedTimes(const Date& date1, const Date& date2, long& daysPassed,
       } else {
         hoursPassed = (hour1 - hour2);
       }
-      if (minute1 < minute2) {
+      if (minute1 <= minute2) {
         if (hoursPassed > 0) {
           hoursPassed--;  // same as above just one level down
           minutesPassed = 60 - (minute2 - minute1);
@@ -380,7 +380,7 @@ void updatePassedTimes(const Date& date1, const Date& date2, long& daysPassed,
       } else {
         minutesPassed = (minute1 - minute2);
       }
-      if (second1 < second2) {
+      if (second1 <= second2) {
         if (minutesPassed > 0) {
           minutesPassed--;
           secondsPassed = 60 - (second2 - second1);
