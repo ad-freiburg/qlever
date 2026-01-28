@@ -11,6 +11,9 @@
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 
+// Forward declarations
+class IndexScan;
+
 class Minus : public Operation {
  private:
   std::shared_ptr<QueryExecutionTree> _left;
@@ -93,7 +96,7 @@ class Minus : public Operation {
   // single join column, otherwise this function will throw.
   Result lazyMinusJoin(std::shared_ptr<const Result> left,
                        std::shared_ptr<const Result> right,
-                       bool requestLaziness);
+                       bool requestLaziness) const;
 
   Result computeResult(bool requestLaziness) override;
 
@@ -102,6 +105,24 @@ class Minus : public Operation {
   std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithStrippedColumns(
       const std::set<Variable>& variables) const override;
+
+  // Specialized implementations for joins involving IndexScans (prefiltering).
+  // These methods are similar to those in OptionalJoin but adapted for MINUS
+  // semantics (only the right child can be prefiltered).
+
+  // When both children are IndexScans. Filter blocks on the right based on
+  // the left's block ranges.
+  Result computeResultForTwoIndexScans(bool requestLaziness) const;
+
+  // When the right child is an IndexScan and the left is fully materialized.
+  Result computeResultForIndexScanOnRight(
+      bool requestLaziness, std::shared_ptr<const Result> leftRes,
+      std::shared_ptr<IndexScan> rightScan) const;
+
+  // When the right child is an IndexScan and the left is lazy.
+  Result computeResultForIndexScanOnRightLazy(
+      bool requestLaziness, std::shared_ptr<const Result> leftRes,
+      std::shared_ptr<IndexScan> rightScan) const;
 };
 
 #endif  // QLEVER_SRC_ENGINE_MINUS_H
