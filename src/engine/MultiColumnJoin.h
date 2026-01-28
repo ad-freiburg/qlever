@@ -11,6 +11,9 @@
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 
+// Forward declarations
+class IndexScan;
+
 class MultiColumnJoin : public Operation {
  private:
   std::shared_ptr<QueryExecutionTree> _left;
@@ -77,6 +80,24 @@ class MultiColumnJoin : public Operation {
   VariableToColumnMap computeVariableToColumnMap() const override;
 
   void computeSizeEstimateAndMultiplicities();
+
+  // Specialized implementations for joins involving IndexScans (prefiltering).
+  // These methods are similar to those in Join but support multiple join
+  // columns.
+
+  // When both children are IndexScans. Filter blocks on both sides.
+  Result computeResultForTwoIndexScans(bool requestLaziness) const;
+
+  // When one child is an IndexScan and the other is fully materialized.
+  template <bool idTableIsRightInput>
+  Result computeResultForIndexScanAndIdTable(
+      bool requestLaziness, std::shared_ptr<const Result> resultWithIdTable,
+      std::shared_ptr<IndexScan> scan) const;
+
+  // When one child is an IndexScan and the other is lazy.
+  Result computeResultForIndexScanAndLazyOperation(
+      bool requestLaziness, std::shared_ptr<const Result> lazyResult,
+      std::shared_ptr<IndexScan> scan) const;
 };
 
 #endif  // QLEVER_SRC_ENGINE_MULTICOLUMNJOIN_H

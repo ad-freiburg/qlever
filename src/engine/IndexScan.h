@@ -208,6 +208,17 @@ class IndexScan final : public Operation {
   // Retrieve the `Permutation` entity for this `IndexScan`.
   const Permutation& permutation() const;
 
+  // Access the metadata and blocks for this scan. Used by join operations to
+  // perform block-level prefiltering. Returns `std::nullopt` if the scan
+  // doesn't have metadata (e.g., for very small relations).
+  std::optional<Permutation::MetadataAndBlocks> getMetadataForScan() const;
+
+  // Get a lazy scan that only reads the specified blocks. Used by join
+  // operations to scan only the prefiltered blocks.
+  CompressedRelationReader::IdTableGeneratorInputRange getLazyScan(
+      std::optional<std::vector<CompressedBlockMetadata>> blocks =
+          std::nullopt) const;
+
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
@@ -252,13 +263,6 @@ class IndexScan final : public Operation {
   // Access the `ScanSpecAndBlocks` associated with this `IndexScan` via the
   // `Permutation` class.
   ScanSpecAndBlocks getScanSpecAndBlocks() const;
-
-  // Helper functions for the public `getLazyScanFor...` methods and
-  // `chunkedIndexScan` (see above).
-  CompressedRelationReader::IdTableGeneratorInputRange getLazyScan(
-      std::optional<std::vector<CompressedBlockMetadata>> blocks =
-          std::nullopt) const;
-  std::optional<Permutation::MetadataAndBlocks> getMetadataForScan() const;
 
   // If the `varsToKeep_` member is set, meaning that this `IndexScan` only
   // returns a subset of this actual columns, return the subset of columns that

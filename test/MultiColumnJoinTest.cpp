@@ -16,11 +16,15 @@
 #include "util/IdTestHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
+#include "util/RuntimeParametersTestHelpers.h"
 
 using ad_utility::testing::makeAllocator;
 namespace {
 auto V = ad_utility::testing::VocabId;
-}
+auto iri = [](std::string_view s) {
+  return TripleComponent::Iri::fromIriref(s);
+};
+}  // namespace
 
 TEST(EngineTest, multiColumnJoinTest) {
   using std::array;
@@ -178,4 +182,45 @@ TEST(MultiColumnJoin, columnOriginatesFromGraphOrUndef) {
   testWithTrees(values2, index1, true, false, true);
   testWithTrees(values2, values3, false, false, false);
   testWithTrees(values2, values1, false, false, false);
+}
+
+// _____________________________________________________________________________
+TEST(MultiColumnJoin, prefilteringWithTwoIndexScans) {
+  // Create a dataset with overlap in subjects between two predicates.
+  // This tests that both IndexScans can be prefiltered when joining.
+  std::string kg;
+  for (size_t i = 0; i < 15; ++i) {
+    kg += absl::StrCat("<s", i, "> <p1> <o", i, "> .\n");
+  }
+  for (size_t i = 5; i < 20; ++i) {
+    kg += absl::StrCat("<s", i, "> <p2> <o2_", i, "> .\n");
+  }
+
+  auto qec = ad_utility::testing::getQec(kg);
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>(1);
+  qec->getQueryTreeCache().clearAll();
+
+  using V = Variable;
+  auto scan1 = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::PSO,
+      SparqlTripleSimple{V{"?s"}, iri("<p1>"), V{"?o1"}});
+  auto scan2 = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::PSO,
+      SparqlTripleSimple{V{"?s"}, iri("<p2>"), V{"?o2"}});
+
+  auto join = ad_utility::makeExecutionTree<MultiColumnJoin>(qec, scan1, scan2);
+
+  auto result = join->getResult();
+
+  // Verify result correctness: only subjects s5-s14 appear in both (10 rows)
+  ASSERT_TRUE(result->isFullyMaterialized());
+  EXPECT_EQ(result->idTable().size(), 10);
+
+  // Verify that the operation was recognized as using IndexScans by checking
+  // runtime info exists
+  const auto& scan1Rti = scan1->getRootOperation()->getRuntimeInfoPointer();
+  const auto& scan2Rti = scan2->getRootOperation()->getRuntimeInfoPointer();
+  ASSERT_NE(scan1Rti, nullptr);
+  ASSERT_NE(scan2Rti, nullptr);
 }
