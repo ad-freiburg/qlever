@@ -130,6 +130,14 @@ class IndexScan final : public Operation {
   std::pair<Result::LazyResult, Result::LazyResult> prefilterTables(
       Result::LazyResult input, ColumnIndex joinColumn);
 
+  // Similar to `prefilterTables`, but for OPTIONAL semantics: The first
+  // generator re-yields ALL input (never skips any), while the second generator
+  // still yields only the matching prefiltered blocks. This ensures that
+  // OPTIONAL joins produce output for all left rows, even when they don't
+  // match.
+  std::pair<Result::LazyResult, Result::LazyResult> prefilterTablesForOptional(
+      Result::LazyResult input, ColumnIndex joinColumn);
+
  private:
   // Implementation detail that allows to consume a lazy range from two other
   // cooperating ranges. Needs to be forward declared as it is used by
@@ -145,6 +153,11 @@ class IndexScan final : public Operation {
   // this index scan according to the block metadata, that match the tables
   // yielded by the input wrapped by `innerState`.
   Result::LazyResult createPrefilteredIndexScanSide(
+      std::shared_ptr<SharedGeneratorState> innerState);
+
+  // Helper function for OPTIONAL semantics: creates a lazy range that re-yields
+  // ALL input without filtering (even inputs that don't have matching blocks).
+  static Result::LazyResult createPrefilteredJoinSideForOptional(
       std::shared_ptr<SharedGeneratorState> innerState);
 
   // TODO<joka921> Make the `getSizeEstimateBeforeLimit()` function `const` for

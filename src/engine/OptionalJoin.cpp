@@ -274,16 +274,71 @@ Result OptionalJoin::computeResultForIndexScanOnRightLazy(
 
   AD_CORRECTNESS_CHECK(!leftRes->isFullyMaterialized());
 
-  // For lazy left input, we need to re-yield the left tables while
-  // filtering the right IndexScan. This is more complex and currently
-  // not fully supported for multi-column optional joins with lazy input.
-  // Fall back to regular lazy optional join for now.
-  // TODO: Implement proper lazy prefiltering similar to Join.
+  // Only support single join column for now
+  if (_joinColumns.size() != 1) {
+    return lazyOptionalJoin(
+        std::move(leftRes),
+        rightScan->getResult(true, ComputationMode::LAZY_IF_SUPPORTED),
+        requestLaziness);
+  }
 
-  return lazyOptionalJoin(
-      std::move(leftRes),
-      rightScan->getResult(true, ComputationMode::LAZY_IF_SUPPORTED),
-      requestLaziness);
+  // For OPTIONAL semantics, we must re-yield ALL left input (never filter it).
+  // We use prefilterTables which gives us filtered right blocks, but we need
+  // to ensure the left side always re-yields everything.
+  auto [leftSide, rightSide] = rightScan->prefilterTablesForOptional(
+      leftRes->idTables(), _joinColumns.at(0).at(0));
+
+  // Wrap in shared_ptr for const lambda capture
+  auto leftSidePtr = std::make_shared<Result::LazyResult>(std::move(leftSide));
+  auto rightSidePtr =
+      std::make_shared<Result::LazyResult>(std::move(rightSide));
+
+  auto action = [this, leftSidePtr, rightSidePtr, rightScan](
+                    std::function<void(IdTable&, LocalVocab&)> yieldTable) {
+    auto rowAdder = ad_utility::AddCombinedRowToIdTable{
+        _joinColumns.size(), IdTable{getResultWidth(), allocator()},
+        cancellationHandle_, keepJoinColumns_,
+        CHUNK_SIZE,          std::move(yieldTable)};
+
+    // Convert generators to the right format
+    std::vector<ColumnIndex> identityPerm;
+    identityPerm.resize(_left->getResultWidth());
+    std::iota(identityPerm.begin(), identityPerm.end(), 0);
+
+    auto leftRange = ad_utility::CachingTransformInputRange(
+        std::move(*leftSidePtr), [identityPerm](auto& pair) {
+          return ad_utility::IdTableAndFirstCol{
+              pair.idTable_.asColumnSubsetView(identityPerm),
+              std::move(pair.localVocab_)};
+        });
+
+    std::vector<ColumnIndex> rightPerm = {_joinColumns.at(0).at(1)};
+    auto rightRange = ad_utility::CachingTransformInputRange(
+        std::move(*rightSidePtr), [rightPerm](auto& pair) {
+          return ad_utility::IdTableAndFirstCol{
+              pair.idTable_.asColumnSubsetView(rightPerm),
+              std::move(pair.localVocab_)};
+        });
+
+    ad_utility::zipperJoinForBlocksWithPotentialUndef(
+        leftRange, rightRange, std::less{}, rowAdder, {}, {},
+        ad_utility::OptionalJoinTag{});
+
+    rightScan->runtimeInfo().status_ =
+        RuntimeInformation::Status::lazilyMaterializedCompleted;
+
+    auto localVocab = std::move(rowAdder.localVocab());
+    return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
+                                    std::move(localVocab)};
+  };
+
+  if (requestLaziness) {
+    return {runLazyJoinAndConvertToGenerator(std::move(action), {}),
+            resultSortedOn()};
+  } else {
+    auto [idTable, localVocab] = action(ad_utility::noop);
+    return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
+  }
 }
 
 // _____________________________________________________________________________
