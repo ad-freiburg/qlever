@@ -7,16 +7,19 @@
 #ifndef QLEVER_SRC_ENGINE_MATERIALIZEDVIEWS_H_
 #define QLEVER_SRC_ENGINE_MATERIALIZEDVIEWS_H_
 
+#include "engine/MaterializedViewsQueryAnalysis.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/DeltaTriples.h"
 #include "index/ExternalSortFunctors.h"
 #include "index/Permutation.h"
 #include "libqlever/QleverTypes.h"
+#include "parser/GraphPatternOperation.h"
 #include "parser/MaterializedViewQuery.h"
 #include "parser/ParsedQuery.h"
 #include "parser/SparqlTriple.h"
 #include "util/HashMap.h"
+#include "util/Synchronized.h"
 
 // Forward declarations
 class QueryExecutionContext;
@@ -237,6 +240,9 @@ class MaterializedView {
       const parsedQuery::MaterializedViewQuery& viewQuery) const;
 };
 
+// Shorthand for query rewriting helper class.
+using materializedViewsQueryAnalysis::MaterializedViewJoinReplacement;
+
 // The `MaterializedViewsManager` is part of the `QueryExecutionContext` and is
 // used to manage the currently loaded `MaterializedViews` in a `Server` or
 // `Qlever` instance.
@@ -246,6 +252,9 @@ class MaterializedViewsManager {
   mutable ad_utility::Synchronized<
       ad_utility::HashMap<std::string, std::shared_ptr<MaterializedView>>>
       loadedViews_;
+  mutable ad_utility::Synchronized<
+      materializedViewsQueryAnalysis::QueryPatternCache>
+      queryPatternCache_;
 
  public:
   MaterializedViewsManager() = default;
@@ -272,6 +281,14 @@ class MaterializedViewsManager {
   std::shared_ptr<IndexScan> makeIndexScan(
       QueryExecutionContext* qec,
       const parsedQuery::MaterializedViewQuery& viewQuery) const;
+
+  // Given a set of triples, check if some join operations that would be
+  // required when evaluating them can be replaced by scans on materialized
+  // views that are currently loaded. This is implemented using the
+  // `queryPatternCache_`.
+  std::vector<MaterializedViewJoinReplacement> makeJoinReplacementIndexScans(
+      QueryExecutionContext* qec,
+      const parsedQuery::BasicGraphPattern& triples) const;
 };
 
 #endif  // QLEVER_SRC_ENGINE_MATERIALIZEDVIEWS_H_

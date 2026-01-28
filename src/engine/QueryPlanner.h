@@ -450,6 +450,16 @@ class QueryPlanner {
                                                       const SubtreePlan& b,
                                                       const JoinColumns& jcs);
 
+  // Helper that generates `IndexScan` query plans on materialized views if they
+  // can be used to avoid joins between some of the `triples`. The resulting
+  // plans for part of the `triples` are given in a vector of query planning
+  // rounds in which they should be added to the planner. For example, at index
+  // 1 there is a vector of query plans that should be added in round 1 of the
+  // dynamic programming algorithm.
+  using ReplacementPlans = std::vector<std::vector<SubtreePlan>>;
+  ReplacementPlans createMaterializedViewJoinReplacements(
+      const parsedQuery::BasicGraphPattern& triples) const;
+
   vector<SubtreePlan> getOrderByRow(
       const ParsedQuery& pq,
       const std::vector<std::vector<SubtreePlan>>& dpTab) const;
@@ -575,7 +585,8 @@ class QueryPlanner {
    */
   vector<vector<SubtreePlan>> fillDpTab(
       const TripleGraph& graph, std::vector<SparqlFilter> fs,
-      TextLimitMap& textLimits, const vector<vector<SubtreePlan>>& children);
+      TextLimitMap& textLimits, const vector<vector<SubtreePlan>>& children,
+      const ReplacementPlans& replacementPlans);
 
   // Internal subroutine of `fillDpTab` that  only works on a single connected
   // component of the input. Throws if the subtrees in the `connectedComponent`
@@ -584,7 +595,8 @@ class QueryPlanner {
   runDynamicProgrammingOnConnectedComponent(
       std::vector<SubtreePlan> connectedComponent,
       const FiltersAndOptionalSubstitutes& filters,
-      const TextLimitVec& textLimits, const TripleGraph& tg) const;
+      const TextLimitVec& textLimits, const TripleGraph& tg,
+      const ReplacementPlans& replacementPlans) const;
 
   // Same as `runDynamicProgrammingOnConnectedComponent`, but uses a greedy
   // algorithm that always greedily chooses the smallest result of the possible
@@ -592,7 +604,8 @@ class QueryPlanner {
   std::vector<QueryPlanner::SubtreePlan> runGreedyPlanningOnConnectedComponent(
       std::vector<SubtreePlan> connectedComponent,
       const FiltersAndOptionalSubstitutes& filters,
-      const TextLimitVec& textLimits, const TripleGraph& tg) const;
+      const TextLimitVec& textLimits, const TripleGraph& tg,
+      const ReplacementPlans& replacementPlans) const;
 
   // Return the number of connected subgraphs is the `graph`, or `budget + 1`,
   // if the number of subgraphs is `> budget`. This is used to analyze the
@@ -613,7 +626,7 @@ class QueryPlanner {
   // Given a `MaterializedViewQuery` construct a `SubtreePlan` for an
   // `IndexScan` operation on the requested materialized view.
   SubtreePlan getMaterializedViewIndexScanPlan(
-      const parsedQuery::MaterializedViewQuery& viewQuery);
+      const parsedQuery::MaterializedViewQuery& viewQuery) const;
 
   // An internal helper class that encapsulates the functionality to optimize
   // a single graph pattern. It tightly interacts with the outer `QueryPlanner`
@@ -721,7 +734,8 @@ class QueryPlanner {
   static size_t findSmallestExecutionTree(
       const std::vector<SubtreePlan>& lastRow);
   static size_t findUniqueNodeIds(
-      const std::vector<SubtreePlan>& connectedComponent);
+      const std::vector<SubtreePlan>& connectedComponent,
+      bool allowReplacementPlans = false);
 
   /// if this Planner is not associated with a queryExecutionContext we are only
   /// in the unit test mode
