@@ -18,7 +18,6 @@
 #include "parser/MaterializedViewQuery.h"
 #include "parser/ParsedQuery.h"
 #include "parser/SparqlTriple.h"
-#include "rdfTypes/Iri.h"
 #include "util/HashMap.h"
 #include "util/Synchronized.h"
 

@@ -46,13 +46,16 @@ QueryPatternCache::makeJoinReplacementIndexScans(
         if (!predicateInView_.contains(iri)) {
           continue;
         }
-        if (triple.s_.isVariable() && triple.o_.isVariable()) {
-          // This triple could be the right side of a chain join.
-          chainRight[triple.s_.getVariable()].push_back(tripleIdx);
-        }
-        if (triple.o_.isVariable() && triple.s_ != triple.o_) {
-          // This triple could be the left side of a chain join.
-          chainLeft[triple.o_.getVariable()].push_back(tripleIdx);
+        // Check for potential join chain triple.
+        if (triple.o_.isVariable()) {
+          if (triple.s_.isVariable()) {
+            // This triple could be the right side of a chain join.
+            chainRight[triple.s_.getVariable()].push_back(tripleIdx);
+          }
+          if (triple.s_ != triple.o_) {
+            // This triple could be the left side of a chain join.
+            chainLeft[triple.o_.getVariable()].push_back(tripleIdx);
+          }
         }
       } else if (path.isSequence()) {
         AD_THROW(

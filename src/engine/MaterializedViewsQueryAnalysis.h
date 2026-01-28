@@ -13,7 +13,6 @@
 #include "parser/TripleComponent.h"
 #include "rdfTypes/Variable.h"
 #include "util/StringPairHashMap.h"
-#include "util/TypeTraits.h"
 
 // Forward declarations to prevent cyclic dependencies.
 class MaterializedView;
@@ -44,6 +43,7 @@ struct MaterializedViewJoinReplacement {
   std::shared_ptr<IndexScan> indexScan_;
   std::vector<size_t> coveredTriples_;
 
+  // ___________________________________________________________________________
   size_t numJoins() const { return coveredTriples_.size() - 1; }
 };
 
@@ -51,6 +51,7 @@ struct MaterializedViewJoinReplacement {
 // used for quickly looking up if a given query can be optimized by making use
 // of an existing materialized view.
 class QueryPatternCache {
+ private:
   // Simple chains can be found by direct access into a hash map.
   SimpleChainCache simpleChainCache_;
 
