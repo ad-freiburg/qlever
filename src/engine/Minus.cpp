@@ -172,11 +172,79 @@ Result Minus::computeResultForIndexScanOnRightLazy(
 
   AD_CORRECTNESS_CHECK(!leftRes->isFullyMaterialized());
 
-  // For lazy left input, we can't prefilter the right side efficiently,
-  // so fall back to the lazy minus join implementation.
-  auto rightRes = rightScan->getResult(true);
-  return lazyMinusJoin(std::move(leftRes), std::move(rightRes),
-                       requestLaziness);
+  // Only support single join column for now
+  if (_matchedColumns.size() != 1) {
+    return lazyMinusJoin(
+        std::move(leftRes),
+        rightScan->getResult(true, ComputationMode::LAZY_IF_SUPPORTED),
+        requestLaziness);
+  }
+
+  // For MINUS semantics, we must process ALL left input (similar to OPTIONAL).
+  // We use prefilterTablesForOptional which passes through all left rows
+  // while still prefiltering the right IndexScan.
+  auto [leftSide, rightSide] = rightScan->prefilterTablesForOptional(
+      leftRes->idTables(), _matchedColumns.at(0).at(0));
+
+  // Wrap in shared_ptr for const lambda capture
+  auto leftSidePtr = std::make_shared<Result::LazyResult>(std::move(leftSide));
+  auto rightSidePtr =
+      std::make_shared<Result::LazyResult>(std::move(rightSide));
+
+  std::vector<ColumnIndex> permutation;
+  permutation.resize(_left->getResultWidth());
+  ql::ranges::copy(ad_utility::integerRange(permutation.size()),
+                   permutation.begin());
+  ColumnIndex leftJoinColumn = _matchedColumns.at(0).at(0);
+  std::swap(permutation.at(0), permutation.at(leftJoinColumn));
+
+  auto action = [this, leftSidePtr, rightSidePtr, rightScan, permutation](
+                    std::function<void(IdTable&, LocalVocab&)> yieldTable) {
+    ad_utility::MinusRowHandler rowAdder{
+        _matchedColumns.size(), IdTable{getResultWidth(), allocator()},
+        cancellationHandle_, std::move(yieldTable)};
+
+    // Convert generators to the right format
+    std::vector<ColumnIndex> identityPerm;
+    identityPerm.resize(_left->getResultWidth());
+    std::iota(identityPerm.begin(), identityPerm.end(), 0);
+
+    auto leftRange = ad_utility::CachingTransformInputRange(
+        std::move(*leftSidePtr), [identityPerm](auto& pair) {
+          return ad_utility::IdTableAndFirstCol{
+              pair.idTable_.asColumnSubsetView(identityPerm),
+              std::move(pair.localVocab_)};
+        });
+
+    std::vector<ColumnIndex> rightPerm = {_matchedColumns.at(0).at(1)};
+    auto rightRange = ad_utility::CachingTransformInputRange(
+        std::move(*rightSidePtr), [rightPerm](auto& pair) {
+          return ad_utility::IdTableAndFirstCol{
+              pair.idTable_.asColumnSubsetView(rightPerm),
+              std::move(pair.localVocab_)};
+        });
+
+    ad_utility::zipperJoinForBlocksWithPotentialUndef(
+        leftRange, rightRange, std::less{}, rowAdder, {}, {},
+        ad_utility::MinusJoinTag{});
+
+    rightScan->runtimeInfo().status_ =
+        RuntimeInformation::Status::lazilyMaterializedCompleted;
+
+    auto localVocab = std::move(rowAdder.localVocab());
+    return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
+                                    std::move(localVocab)};
+  };
+
+  if (requestLaziness) {
+    return {qlever::joinHelpers::runLazyJoinAndConvertToGenerator(
+                std::move(action), std::move(permutation)),
+            resultSortedOn()};
+  } else {
+    auto [idTable, localVocab] = action(ad_utility::noop);
+    qlever::joinHelpers::applyPermutation(idTable, permutation);
+    return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
+  }
 }
 
 // _____________________________________________________________________________

@@ -697,3 +697,45 @@ TEST(Minus, prefilteringWithTwoIndexScans) {
   ASSERT_NE(scan1Rti, nullptr);
   ASSERT_NE(scan2Rti, nullptr);
 }
+
+// _____________________________________________________________________________
+TEST(Minus, prefilteringWithLazyLeftAndIndexScanRight) {
+  // Create a dataset where some subjects from p1 also appear in p2.
+  // MINUS should remove those subjects from the result.
+  std::string kg;
+  for (size_t i = 0; i < 20; ++i) {
+    kg += absl::StrCat("<s", i, "> <p1> <o", i, "> .\n");
+  }
+  // Subjects s5-s14 also appear in p2 (these should be removed by MINUS)
+  for (size_t i = 5; i < 15; ++i) {
+    kg += absl::StrCat("<s", i, "> <p2> <o2_", i, "> .\n");
+  }
+
+  auto qec = ad_utility::testing::getQec(kg);
+  // Set threshold to force lazy execution
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>(1);
+  qec->getQueryTreeCache().clearAll();
+
+  using V = Variable;
+  auto scan1 = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::PSO,
+      SparqlTripleSimple{V{"?s"}, iri("<p1>"), V{"?o1"}});
+  auto scan2 = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::PSO,
+      SparqlTripleSimple{V{"?s"}, iri("<p2>"), V{"?o2"}});
+
+  auto minusOp = ad_utility::makeExecutionTree<Minus>(qec, scan1, scan2);
+  auto result = minusOp->getResult();
+
+  // Verify result correctness: 10 rows (s0-s4 and s15-s19, excluding s5-s14)
+  ASSERT_TRUE(result->isFullyMaterialized());
+  EXPECT_EQ(result->idTable().size(), 10);
+
+  // All rows should be defined (no UNDEFs in MINUS results)
+  const auto& table = result->idTable();
+  for (size_t i = 0; i < table.size(); ++i) {
+    EXPECT_FALSE(table(i, 0).isUndefined());
+    EXPECT_FALSE(table(i, 1).isUndefined());
+  }
+}
