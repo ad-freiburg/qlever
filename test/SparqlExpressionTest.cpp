@@ -49,6 +49,7 @@ auto D = ad_utility::testing::DoubleId;
 auto B = ad_utility::testing::BoolId;
 auto I = ad_utility::testing::IntId;
 auto Voc = ad_utility::testing::VocabId;
+auto Dat = ad_utility::testing::DateId;
 auto U = Id::makeUndefined();
 
 using Ids = std::vector<Id>;
@@ -403,6 +404,12 @@ TEST(SparqlExpression, arithmeticOperators) {
 
   V<std::string> s{{"true", "", "false", ""}, alloc};
 
+  V<Id> dat{{Dat(DateYearOrDuration::parseXsdDatetime, "1909-10-10T10:11:23Z"),
+             Dat(DateYearOrDuration::parseXsdDatetime, "2009-09-23T01:01:59Z"),
+             Dat(DateYearOrDuration::parseXsdDatetime, "1959-03-13T13:13:13Z"),
+             Dat(DateYearOrDuration::parseXsdDatetime, "1889-10-29T00:12:30Z")},
+            alloc};
+
   V<Id> allNan{{D(naN), D(naN), D(naN), D(naN)}, alloc};
 
   V<Id> i{{I(32), I(-42), I(0), I(5)}, alloc};
@@ -411,6 +418,8 @@ TEST(SparqlExpression, arithmeticOperators) {
   V<Id> bPlusD{{D(2.0), D(-2.0), D(naN), D(1.0)}, alloc};
   V<Id> bMinusD{{D(0), D(2.0), D(naN), D(1)}, alloc};
   V<Id> dMinusB{{D(0), D(-2.0), D(naN), D(-1)}, alloc};
+  V<Id> dMinusDat{{U, U, U, U}, alloc};
+  V<Id> datMinusD{{U, U, U, U}, alloc};
   V<Id> bTimesD{{D(1.0), D(-0.0), D(naN), D(0.0)}, alloc};
   // Division by zero is `UNDEF`, to change this behavior a runtime parameter
   // can be set. This is tested explicitly below.
@@ -420,6 +429,8 @@ TEST(SparqlExpression, arithmeticOperators) {
   testPlus(bPlusD, b, d);
   testMinus(bMinusD, b, d);
   testMinus(dMinusB, d, b);
+  testMinus(dMinusDat, d, dat);
+  testMinus(datMinusD, dat, d);
   testMultiply(bTimesD, b, d);
   testDivide(bByD, b, d);
   testDivide(dByB, d, b);
@@ -448,6 +459,21 @@ TEST(SparqlExpression, arithmeticOperators) {
 
   testMultiply(times2, mixed, I(2));
   testMultiply(times13, mixed, D(1.3));
+
+  // Test for DateTime - DateTime
+  V<Id> minus2000{
+      {Dat(DateYearOrDuration::parseXsdDayTimeDuration, "P32954DT13H48M37S"),
+       Dat(DateYearOrDuration::parseXsdDayTimeDuration, "P3553DT1H1M59S"),
+       Dat(DateYearOrDuration::parseXsdDayTimeDuration, "P14903DT10H46M47S"),
+       Dat(DateYearOrDuration::parseXsdDayTimeDuration, "P40239DT23H47M30S")},
+      alloc};
+  testMinus(minus2000, dat,
+            Dat(DateYearOrDuration::parseXsdDatetime, "2000-01-01T00:00:00Z"));
+
+  V<Id> mixed2{{B(true), I(250), D(-113.2), Voc(4)}, alloc};
+  V<Id> mixed2MinusDat{{U, U, U, U}, alloc};
+  testMinus(mixed2MinusDat, dat, mixed2);
+  testMinus(mixed2MinusDat, mixed2, dat);
 
   // For division, all results are doubles, so there is no difference between
   // int and double inputs.
