@@ -32,11 +32,11 @@ BlankNodeManager::Block BlankNodeManager::allocateBlock() {
       absl::StrCat("Critical high number of blank node blocks in use: ",
                    numBlocks, " blocks"));
 
-  auto& usedBlocksSetPtr = stateLock->usedBlocksSet_;
+  auto& usedBlocksSet = stateLock->usedBlocksSet_;
   while (true) {
     auto blockIdx = stateLock->randBlockIndex_();
-    if (!usedBlocksSetPtr.contains(blockIdx)) {
-      usedBlocksSetPtr.insert(blockIdx);
+    auto [_, inserted] = usedBlocksSet.insert(blockIdx);
+    if (inserted) {
       return Block(blockIdx, minIndex_ + blockIdx * blockSize_);
     }
   }
@@ -53,10 +53,10 @@ BlankNodeManager::Block BlankNodeManager::allocateBlock() {
                     "The explicit allocation of blank node blocks (e.g. from "
                     "serialized updates or cached results) has to happen "
                     "before any additional random blank nodes are requested");
-  AD_CONTRACT_CHECK(!usedBlocksSet.contains(blockIdx),
+  auto [_, inserted] = usedBlocksSet.insert(blockIdx);
+  AD_CONTRACT_CHECK(inserted,
                     "Trying to explicitly allocate a block of blank nodes that "
                     "has previously already been allocated.");
-  usedBlocksSet.insert(blockIdx);
   return Block(blockIdx, minIndex_ + blockIdx * blockSize_);
 }
 
@@ -179,8 +179,8 @@ void BlankNodeManager::freeBlockSet(const Blocks& blocks) {
     }
     auto& usedBlockSet = state.usedBlocksSet_;
     for (const auto& block : blocks.blocks_) {
-      AD_CONTRACT_CHECK(usedBlockSet.contains(block.blockIdx_));
-      usedBlockSet.erase(block.blockIdx_);
+      size_t elementsRemoved = usedBlockSet.erase(block.blockIdx_);
+      AD_CONTRACT_CHECK(elementsRemoved == 1);
     }
   });
 }
