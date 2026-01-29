@@ -814,6 +814,7 @@ auto QueryPlanner::seedWithScansAndText(
   }
 
   for (size_t i = 0; i < tg._nodeMap.size(); ++i) {
+    checkCancellation();
     const TripleGraph::Node& node = *tg._nodeMap.find(i)->second;
 
     auto pushPlan = [&seeds, i](SubtreePlan plan) {
@@ -947,6 +948,7 @@ auto QueryPlanner::seedWithScansAndText(
     textLimits.erase(var);
   }
 
+  checkCancellation();
   return result;
 }
 
@@ -2115,6 +2117,7 @@ void QueryPlanner::setEnablePatternTrick(bool enablePatternTrick) {
 size_t QueryPlanner::findCheapestExecutionTree(
     const std::vector<SubtreePlan>& lastRow) const {
   AD_CONTRACT_CHECK(!lastRow.empty());
+  checkCancellation();
   auto compare = [this](const auto& a, const auto& b) {
     auto aCost = a.getCostEstimate(), bCost = b.getCostEstimate();
     if (aCost == bCost && isInTestMode()) {
