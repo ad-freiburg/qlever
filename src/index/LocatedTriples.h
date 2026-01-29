@@ -11,6 +11,8 @@
 #ifndef QLEVER_SRC_INDEX_LOCATEDTRIPLES_H
 #define QLEVER_SRC_INDEX_LOCATEDTRIPLES_H
 
+#include <boost/optional.hpp>
+
 #include "backports/three_way_comparison.h"
 #include "engine/idTable/IdTable.h"
 #include "global/IdTriple.h"
@@ -130,9 +132,10 @@ class LocatedTriplesPerBlock {
   // effective.
   NumAddedAndDeleted numTriples(size_t blockIndex) const;
 
-  // Returns whether there are updates triples for the block with the index
-  // `blockIndex`.
-  bool hasUpdates(size_t blockIndex) const;
+  // Returns an optional reference to update triples for the block with the
+  // index `blockIndex`. If no such block exists, return `std::nullopt`.
+  boost::optional<const LocatedTriples&> getUpdatesIfPresent(
+      size_t blockIndex) const;
 
   // Merge located triples for `blockIndex_` (there must be at least one,
   // otherwise this function must not be called) with the given input `block`.
