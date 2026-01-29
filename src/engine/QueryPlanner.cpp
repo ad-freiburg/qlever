@@ -3426,8 +3426,7 @@ QueryPlanner::findApplicableReplacementPlans(
       std::erase_if(plans, [&](SubtreePlan& plan) {
         bool res =
             (plan._idsOfIncludedNodes & nodesCoveredByReplacementPlans) != 0;
-        nodesCoveredByReplacementPlans =
-            nodesCoveredByReplacementPlans | plan._idsOfIncludedNodes;
+        nodesCoveredByReplacementPlans |= plan._idsOfIncludedNodes;
         return res;
       });
     }
