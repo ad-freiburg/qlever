@@ -72,7 +72,8 @@ class IndexScan final : public Operation {
             std::vector<ColumnIndex> additionalColumns,
             std::vector<Variable> additionalVariables, Graphs graphsToFilter,
             ScanSpecAndBlocks scanSpecAndBlocks,
-            bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep);
+            bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep,
+            bool sizeEstimateIsExact, size_t sizeEstimate);
 
   ~IndexScan() override = default;
 

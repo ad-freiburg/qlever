@@ -92,7 +92,8 @@ IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
                      std::vector<ColumnIndex> additionalColumns,
                      std::vector<Variable> additionalVariables,
                      Graphs graphsToFilter, ScanSpecAndBlocks scanSpecAndBlocks,
-                     bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep)
+                     bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep,
+                     bool sizeEstimateIsExact, size_t sizeEstimate)
     : Operation(qec),
       permutation_(std::move(permutation)),
       locatedTriplesSharedState_(std::move(locatedTriplesSharedState)),
@@ -103,13 +104,14 @@ IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
       scanSpecAndBlocks_(std::move(scanSpecAndBlocks)),
       scanSpecAndBlocksIsPrefiltered_(scanSpecAndBlocksIsPrefiltered),
       numVariables_(getNumberOfVariables(subject_, predicate_, object_)),
+      sizeEstimate_{sizeEstimate},
+      sizeEstimateIsExact_{sizeEstimateIsExact},
       additionalColumns_(std::move(additionalColumns)),
       additionalVariables_(std::move(additionalVariables)),
       varsToKeep_{std::move(varsToKeep)} {
   AD_CONTRACT_CHECK(qec != nullptr);
   AD_CONTRACT_CHECK(permutation_ != nullptr);
   AD_CONTRACT_CHECK(locatedTriplesSharedState_ != nullptr);
-  std::tie(sizeEstimateIsExact_, sizeEstimate_) = computeSizeEstimate();
   determineMultiplicities();
 }
 
@@ -260,10 +262,18 @@ VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
 std::shared_ptr<QueryExecutionTree>
 IndexScan::makeCopyWithPrefilteredScanSpecAndBlocks(
     ScanSpecAndBlocks scanSpecAndBlocks) const {
-  return ad_utility::makeExecutionTree<IndexScan>(
+  auto copy = ad_utility::makeExecutionTree<IndexScan>(
       getExecutionContext(), permutation_, locatedTriplesSharedState_, subject_,
       predicate_, object_, additionalColumns_, additionalVariables_,
-      graphsToFilter_, std::move(scanSpecAndBlocks), true, varsToKeep_);
+      graphsToFilter_, std::move(scanSpecAndBlocks), true, varsToKeep_, false,
+      static_cast<size_t>(0));
+  // Recompute size estimates for new prefilter.
+  auto indexScan =
+      std::dynamic_pointer_cast<IndexScan>(copy->getRootOperation());
+  AD_CORRECTNESS_CHECK(indexScan != nullptr);
+  std::tie(indexScan->sizeEstimateIsExact_, indexScan->sizeEstimate_) =
+      indexScan->computeSizeEstimate();
+  return copy;
 }
 
 // _____________________________________________________________________________
@@ -750,7 +760,7 @@ std::unique_ptr<Operation> IndexScan::cloneImpl() const {
       _executionContext, permutation_, locatedTriplesSharedState_, subject_,
       predicate_, object_, additionalColumns_, additionalVariables_,
       graphsToFilter_, scanSpecAndBlocks_, scanSpecAndBlocksIsPrefiltered_,
-      varsToKeep_);
+      varsToKeep_, sizeEstimateIsExact_, sizeEstimate_);
 }
 
 // _____________________________________________________________________________
@@ -775,7 +785,7 @@ IndexScan::makeTreeWithStrippedColumns(
       _executionContext, permutation_, locatedTriplesSharedState_, subject_,
       predicate_, object_, additionalColumns_, additionalVariables_,
       graphsToFilter_, scanSpecAndBlocks_, scanSpecAndBlocksIsPrefiltered_,
-      VarsToKeep{std::move(newVariables)});
+      VarsToKeep{std::move(newVariables)}, sizeEstimateIsExact_, sizeEstimate_);
 }
 
 // _____________________________________________________________________________
