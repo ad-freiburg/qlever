@@ -32,7 +32,9 @@ ARG UID=1000
 RUN groupadd -r qlever && useradd --no-log-init -r -u $UID -g qlever qlever && chown qlever:qlever /app
 USER qlever
 ENV PATH=/app/:$PATH
+ENV QLEVER_IS_RUNNING_IN_CONTAINER=1
 
+COPY --from=builder /qlever/build/qlever-* /qlever/
 COPY --from=builder /app/build/*Main /app/
 COPY --from=builder /app/e2e/* /app/e2e/
 
