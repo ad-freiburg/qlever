@@ -1396,6 +1396,7 @@ void QueryPlanner::applyFiltersIfPossible(
   for (auto& plan : row) {
     for (const auto& [i, filterAndSubst] :
          ::ranges::views::enumerate(filters)) {
+      checkCancellation();
       if (((plan._idsOfIncludedFilters >> i) & 1) != 0) {
         continue;
       }
@@ -1548,11 +1549,13 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
     // As we only passed in connected components, we expect the result to always
     // be nonempty.
     AD_CORRECTNESS_CHECK(!dpTab[k - 1].empty());
+    checkCancellation();
   }
   auto& result = dpTab.back();
   applyFiltersIfPossible<FilterMode::ReplaceUnfilteredNoSubstitutes>(result,
                                                                      filters);
   applyTextLimitsIfPossible(result, textLimits, true);
+  checkCancellation();
   return std::move(result);
 }
 
