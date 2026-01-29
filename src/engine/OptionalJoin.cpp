@@ -187,7 +187,7 @@ Result OptionalJoin::computeResultForTwoIndexScans(bool requestLaziness) const {
 // _____________________________________________________________________________
 Result OptionalJoin::computeResultForIndexScanOnRight(
     bool requestLaziness, std::shared_ptr<const Result> leftRes,
-    std::shared_ptr<IndexScan> rightScan) const {
+    const IndexScan& rightScan) const {
   using namespace qlever::joinWithIndexScanHelpers;
 
   AD_CORRECTNESS_CHECK(leftRes->isFullyMaterialized());
@@ -209,11 +209,11 @@ Result OptionalJoin::computeResultForIndexScanOnRight(
   CompressedRelationReader::IdTableGeneratorInputRange rightBlocks;
   if (!leftHasUndef) {
     rightBlocks = getBlocksForJoinOfColumnsWithScan(leftTable, _joinColumns,
-                                                    *rightScan, 0);
+                                                    rightScan, 0);
   } else {
     // Cannot prefilter with UNDEF, scan everything
-    rightBlocks = rightScan->getLazyScan(std::nullopt);
-    auto metaBlocks = rightScan->getMetadataForScan();
+    rightBlocks = rightScan.getLazyScan(std::nullopt);
+    auto metaBlocks = rightScan.getMetadataForScan();
     if (metaBlocks.has_value()) {
       rightBlocks.details().numBlocksAll_ =
           metaBlocks.value().sizeBlockMetadata_;
@@ -228,7 +228,8 @@ Result OptionalJoin::computeResultForIndexScanOnRight(
       std::make_shared<CompressedRelationReader::IdTableGeneratorInputRange>(
           std::move(rightBlocks));
 
-  auto action = [this, leftRes = std::move(leftRes), rightBlocksPtr, rightScan](
+  auto action = [this, leftRes = std::move(leftRes), rightBlocksPtr,
+                 &rightScan](
                     std::function<void(IdTable&, LocalVocab&)> yieldTable) {
     auto rowAdder = ad_utility::AddCombinedRowToIdTable{
         _joinColumns.size(), IdTable{getResultWidth(), allocator()},
@@ -243,13 +244,13 @@ Result OptionalJoin::computeResultForIndexScanOnRight(
         leftTable.asColumnSubsetView(identityPerm),
         leftRes->getCopyOfLocalVocab()}};
     auto rightConverted = qlever::joinWithIndexScanHelpers::convertGenerator(
-        std::move(*rightBlocksPtr), *rightScan);
+        std::move(*rightBlocksPtr), const_cast<IndexScan&>(rightScan));
 
     ad_utility::zipperJoinForBlocksWithPotentialUndef(
         leftBlock, rightConverted, std::less{}, rowAdder, {}, {},
         ad_utility::OptionalJoinTag{});
 
-    rightScan->runtimeInfo().status_ =
+    const_cast<IndexScan&>(rightScan).runtimeInfo().status_ =
         RuntimeInformation::Status::lazilyMaterializedCompleted;
 
     auto localVocab = std::move(rowAdder.localVocab());
@@ -269,31 +270,32 @@ Result OptionalJoin::computeResultForIndexScanOnRight(
 // _____________________________________________________________________________
 Result OptionalJoin::computeResultForIndexScanOnRightLazy(
     bool requestLaziness, std::shared_ptr<const Result> leftRes,
-    std::shared_ptr<IndexScan> rightScan) const {
+    const IndexScan& rightScan) const {
   using namespace qlever::joinWithIndexScanHelpers;
 
   AD_CORRECTNESS_CHECK(!leftRes->isFullyMaterialized());
 
   // Only support single join column for now
   if (_joinColumns.size() != 1) {
-    return lazyOptionalJoin(
-        std::move(leftRes),
-        rightScan->getResult(true, ComputationMode::LAZY_IF_SUPPORTED),
-        requestLaziness);
+    return lazyOptionalJoin(std::move(leftRes),
+                            const_cast<IndexScan&>(rightScan).getResult(
+                                true, ComputationMode::LAZY_IF_SUPPORTED),
+                            requestLaziness);
   }
 
   // For OPTIONAL semantics, we must re-yield ALL left input (never filter it).
   // We use prefilterTables which gives us filtered right blocks, but we need
   // to ensure the left side always re-yields everything.
-  auto [leftSide, rightSide] = rightScan->prefilterTablesForOptional(
-      leftRes->idTables(), _joinColumns.at(0).at(0));
+  auto [leftSide, rightSide] =
+      const_cast<IndexScan&>(rightScan).prefilterTablesForOptional(
+          leftRes->idTables(), _joinColumns.at(0).at(0));
 
   // Wrap in shared_ptr for const lambda capture
   auto leftSidePtr = std::make_shared<Result::LazyResult>(std::move(leftSide));
   auto rightSidePtr =
       std::make_shared<Result::LazyResult>(std::move(rightSide));
 
-  auto action = [this, leftSidePtr, rightSidePtr, rightScan](
+  auto action = [this, leftSidePtr, rightSidePtr, &rightScan](
                     std::function<void(IdTable&, LocalVocab&)> yieldTable) {
     auto rowAdder = ad_utility::AddCombinedRowToIdTable{
         _joinColumns.size(), IdTable{getResultWidth(), allocator()},
@@ -324,7 +326,7 @@ Result OptionalJoin::computeResultForIndexScanOnRightLazy(
         leftRange, rightRange, std::less{}, rowAdder, {}, {},
         ad_utility::OptionalJoinTag{});
 
-    rightScan->runtimeInfo().status_ =
+    const_cast<IndexScan&>(rightScan).runtimeInfo().status_ =
         RuntimeInformation::Status::lazilyMaterializedCompleted;
 
     auto localVocab = std::move(rowAdder.localVocab());
@@ -387,7 +389,7 @@ Result OptionalJoin::computeResult(bool requestLaziness) {
     if (leftResIfCached && leftResIfCached->isFullyMaterialized()) {
       // Left is materialized, use prefiltering
       return computeResultForIndexScanOnRight(
-          requestLaziness, std::move(leftResIfCached), rightIndexScan);
+          requestLaziness, std::move(leftResIfCached), *rightIndexScan);
     }
 
     // Get the full left result (might be lazy)
@@ -397,11 +399,11 @@ Result OptionalJoin::computeResult(bool requestLaziness) {
     if (leftResult->isFullyMaterialized()) {
       // Left became materialized, use prefiltering
       return computeResultForIndexScanOnRight(
-          requestLaziness, std::move(leftResult), rightIndexScan);
+          requestLaziness, std::move(leftResult), *rightIndexScan);
     } else {
       // Left is lazy, use lazy prefiltering
       return computeResultForIndexScanOnRightLazy(
-          requestLaziness, std::move(leftResult), rightIndexScan);
+          requestLaziness, std::move(leftResult), *rightIndexScan);
     }
   }
 

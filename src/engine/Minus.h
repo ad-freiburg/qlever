@@ -115,14 +115,14 @@ class Minus : public Operation {
   Result computeResultForTwoIndexScans(bool requestLaziness) const;
 
   // When the right child is an IndexScan and the left is fully materialized.
-  Result computeResultForIndexScanOnRight(
-      bool requestLaziness, std::shared_ptr<const Result> leftRes,
-      std::shared_ptr<IndexScan> rightScan) const;
+  Result computeResultForIndexScanOnRight(bool requestLaziness,
+                                          std::shared_ptr<const Result> leftRes,
+                                          const IndexScan& rightScan) const;
 
   // When the right child is an IndexScan and the left is lazy.
   Result computeResultForIndexScanOnRightLazy(
       bool requestLaziness, std::shared_ptr<const Result> leftRes,
-      std::shared_ptr<IndexScan> rightScan) const;
+      const IndexScan& rightScan) const;
 };
 
 #endif  // QLEVER_SRC_ENGINE_MINUS_H
