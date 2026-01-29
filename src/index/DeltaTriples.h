@@ -19,6 +19,7 @@
 #include "index/IndexBuilderTypes.h"
 #include "index/LocatedTriples.h"
 #include "index/Permutation.h"
+#include "util/LruCache.h"
 #include "util/Synchronized.h"
 #include "util/TimeTracer.h"
 
@@ -128,6 +129,12 @@ class DeltaTriples {
   // See the documentation of `setPersist()` below.
   std::optional<std::string> filenameForPersisting_;
 
+  // Store commonly used language tags of the form `<@lang>` to avoid repeated
+  // disk lookups.
+  static constexpr size_t languageTagCacheSize_ = 20;
+  ad_utility::util::LRUCache<std::string, Id> languageTagCache_{
+      languageTagCacheSize_};
+
   // Assert that the Permutation Enum values have the expected int values.
   // This is used to store and lookup items that exist for permutation in an
   // array.
@@ -213,10 +220,10 @@ class DeltaTriples {
   // bunch of triples to be inserted into the internal permutation to make
   // things like efficient language filters work. This currently performs a
   // lookup from disk to check the language tag, but in the future this may be
-  // implemented more efficiently. If `insertion` is false, then some internal
-  // triples will not be created, in particular the triple of the form
-  // `<object> ql:langtag <@language>`, which is not always safe to delete,
-  // but doesn't cause issues when it's present.
+  // implemented more efficiently. If `insertion` is false, this indicates that
+  // the triples are meant for deletion. In that case no triples are returned
+  // that may be unsafe to delete. In particular this refers to triples of the
+  // form `<object> ql:langtag <@language>`.
   Triples makeInternalTriples(const Triples& triples, bool insertion);
 
   // Insert triples.

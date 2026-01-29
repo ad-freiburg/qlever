@@ -20,7 +20,6 @@
 #include "index/Index.h"
 #include "index/IndexImpl.h"
 #include "index/LocatedTriples.h"
-#include "util/LruCache.h"
 #include "util/Serializer/TripleSerializer.h"
 
 // ____________________________________________________________________________
@@ -212,17 +211,20 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
     // Extra triple `<subject> @language@<predicate> "object"@language`.
     internalTriples.push_back(
         IdTriple<0>{std::array{ids.at(0), specialId, ids.at(2), ids.at(3)}});
-    Id langtagId =
-        TripleComponent{ad_utility::convertLangtagToEntityUri(langtag)}
-            .toValueId(index_.getVocab(), localVocab_,
-                       index_.encodedIriManager());
+    Id langtagId = languageTagCache_.getOrCompute(
+        std::string{langtag}, [this](const std::string& tag) {
+          return TripleComponent{ad_utility::convertLangtagToEntityUri(tag)}
+              .toValueId(index_.getVocab(), localVocab_,
+                         index_.encodedIriManager());
+        });
+
     // Because we don't track the exact counts of existing objects, we just
     // conservatively add these internal triples on insertion, and never remove
     // them. This is inefficient, but never wrong because queries that use these
     // internal triples will always join these internal triples with a regular
     // index scan.
     if (insertion) {
-      // Extra triple `<object> ql:langtag <@language>`.
+      // Extra triple `"object"@language ql:langtag <@language>`.
       internalTriples.push_back(IdTriple<0>{
           std::array{ids.at(2), languagePredicate, langtagId, ids.at(3)}});
     }
