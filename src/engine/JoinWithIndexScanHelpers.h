@@ -79,6 +79,24 @@ getBlocksForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2,
   return result;
 }
 
+// Helper to check if the first row of any of the specified columns contains
+// UNDEF values. Returns true if any join column in the first row is undefined,
+// false otherwise. Returns false if the table is empty.
+inline bool firstRowHasUndef(
+    const IdTable& table,
+    const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
+    size_t sideIndex) {
+  if (table.empty()) {
+    return false;
+  }
+  for (const auto& jc : joinColumns) {
+    if (table.at(0, jc[sideIndex]).isUndefined()) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // Helper to get blocks for join of a column with a scan (multi-column version)
 inline CompressedRelationReader::IdTableGeneratorInputRange
 getBlocksForJoinOfColumnsWithScan(
@@ -94,32 +112,26 @@ getBlocksForJoinOfColumnsWithScan(
     return {};
   }
 
+  // Cannot prefilter if first row has UNDEF in any join column
+  if (firstRowHasUndef(idTable, joinColumns, 0)) {
+    return {};
+  }
+
   CompressedRelationReader::GetBlocksForJoinResult blocksResult;
 
   if (joinColumns.size() == 1) {
     auto joinColumn = idTable.getColumn(joinColumns[0][0]);
-    if (!joinColumn.empty() && joinColumn[0].isUndefined()) {
-      // Cannot prefilter with UNDEF values
-      return {};
-    }
     blocksResult = CompressedRelationReader::getBlocksForJoin(
         joinColumn, metaBlocks.value());
   } else if (joinColumns.size() == 2) {
     auto col1 = idTable.getColumn(joinColumns[0][0]);
     auto col2 = idTable.getColumn(joinColumns[1][0]);
-    if (!col1.empty() && (col1[0].isUndefined() || col2[0].isUndefined())) {
-      return {};
-    }
     blocksResult = CompressedRelationReader::getBlocksForJoinMultiColumn(
         col1, col2, metaBlocks.value());
   } else if (joinColumns.size() == 3) {
     auto col1 = idTable.getColumn(joinColumns[0][0]);
     auto col2 = idTable.getColumn(joinColumns[1][0]);
     auto col3 = idTable.getColumn(joinColumns[2][0]);
-    if (!col1.empty() && (col1[0].isUndefined() || col2[0].isUndefined() ||
-                          col3[0].isUndefined())) {
-      return {};
-    }
     blocksResult = CompressedRelationReader::getBlocksForJoinMultiColumn(
         col1, col2, col3, metaBlocks.value());
   } else {

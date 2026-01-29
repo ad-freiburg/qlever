@@ -196,18 +196,9 @@ Result OptionalJoin::computeResultForIndexScanOnRight(
 
   const IdTable& leftTable = leftRes->idTable();
 
-  // Check if left has UNDEF in join columns
-  bool leftHasUndef = false;
-  for (const auto& [leftCol, rightCol] : _joinColumns) {
-    if (!leftTable.empty() && leftTable.at(0, leftCol).isUndefined()) {
-      leftHasUndef = true;
-      break;
-    }
-  }
-
   // Get prefiltered blocks from the right IndexScan
   CompressedRelationReader::IdTableGeneratorInputRange rightBlocks;
-  if (!leftHasUndef) {
+  if (!firstRowHasUndef(leftTable, _joinColumns, 0)) {
     rightBlocks = getBlocksForJoinOfColumnsWithScan(leftTable, _joinColumns,
                                                     rightScan, 0);
   } else {
