@@ -586,7 +586,7 @@ class QueryPlanner {
   vector<vector<SubtreePlan>> fillDpTab(
       const TripleGraph& graph, std::vector<SparqlFilter> fs,
       TextLimitMap& textLimits, const vector<vector<SubtreePlan>>& children,
-      const ReplacementPlans& replacementPlans);
+      ReplacementPlans replacementPlans);
 
   // Internal subroutine of `fillDpTab` that  only works on a single connected
   // component of the input. Throws if the subtrees in the `connectedComponent`
@@ -736,6 +736,34 @@ class QueryPlanner {
   static size_t findUniqueNodeIds(
       const std::vector<SubtreePlan>& connectedComponent,
       bool allowReplacementPlans = false);
+
+  // Helper for `fillDpTab` that extracts a subset of possible
+  // `ReplacementPlans` that is applicable to a connected component given by the
+  // covered node ids of the component.
+  //
+  // If the greedy query planning mode is active, this function guarantees that
+  // the returned replacement plans are disjunctive with regard to their covered
+  // node ids.
+  //
+  // The function returns the applicable replacement plans and a boolean for
+  // quickly checking whether any were found.
+  //
+  // NOTE: This function is destructive w.r.t. `allReplacementPlans`: the used
+  // replacement plans are moved out.
+  static std::pair<ReplacementPlans, bool> findApplicableReplacementPlans(
+      ReplacementPlans& allReplacementPlans, uint64_t coveredNodeIds,
+      bool useGreedyPlanning);
+
+  // Helper for `fillDpTab` that inserts replacement plans into a connected
+  // component for greedy query planning. The `IndexScan` plans for triples
+  // covered by the replacement plans are filtered out, s.t. the greedy planner
+  // is forced to use the replacement plans.
+  //
+  // NOTE: For this to work correctly the nodes covered by the replacement plans
+  // must be disjunctive.
+  static void useReplacementPlansForGreedyPlanner(
+      ReplacementPlans& applicableReplacementPlans,
+      std::vector<SubtreePlan>& connectedComponent);
 
   /// if this Planner is not associated with a queryExecutionContext we are only
   /// in the unit test mode

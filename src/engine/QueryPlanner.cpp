@@ -1746,7 +1746,7 @@ QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
 std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
     const QueryPlanner::TripleGraph& tg, vector<SparqlFilter> filters,
     TextLimitMap& textLimits, const vector<vector<SubtreePlan>>& children,
-    const ReplacementPlans& replacementPlans) {
+    ReplacementPlans replacementPlans) {
   auto [initialPlans, additionalFilters] =
       seedWithScansAndText(tg, children, textLimits);
   ql::ranges::move(additionalFilters, std::back_inserter(filters));
@@ -1776,23 +1776,6 @@ std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
       coveredNodes |= plan._idsOfIncludedNodes;
     }
 
-    // TODO<ullingerc> This could be hash-map based if we would return the
-    // indices in the create helper and pass them as part of `replacementPlans`.
-    bool hasApplicableReplacementPlans = false;
-    ReplacementPlans applicableReplacementPlans;
-    for (auto& rPlans : replacementPlans) {
-      std::vector<SubtreePlan> applicable;
-      for (auto& plan : rPlans) {
-        // Nodes covered by plan are a subset of the covered nodes.
-        if ((plan._idsOfIncludedNodes & coveredNodes) ==
-            plan._idsOfIncludedNodes) {
-          applicable.push_back(std::move(plan));
-          hasApplicableReplacementPlans = true;
-        }
-      }
-      applicableReplacementPlans.push_back(std::move(applicable));
-    }
-
     const size_t budget =
         getRuntimeParameter<&RuntimeParameters::queryPlanningBudget_>();
     bool useGreedyPlanning = countSubgraphs(g, filters, budget) > budget;
@@ -1801,6 +1784,10 @@ std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
           << "Using the greedy query planner for a large connected component"
           << std::endl;
     }
+
+    auto [applicableReplacementPlans, hasApplicableReplacementPlans] =
+        findApplicableReplacementPlans(replacementPlans, coveredNodes,
+                                       useGreedyPlanning);
 
     auto impl = useGreedyPlanning
                     ? &QueryPlanner::runGreedyPlanningOnConnectedComponent
@@ -1820,27 +1807,10 @@ std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
       addCandidates(std::invoke(impl, this, component, filtersAndOptSubstitutes,
                                 textLimitVec, tg, ReplacementPlans{}));
 
-      // Remove nodes from the `components` that are covered by replacement
-      // plans.
-      for (const auto& a : applicableReplacementPlans) {
-        for (const auto& p : a) {
-          std::erase_if(component, [&p](const auto& c) {
-            return (p._idsOfIncludedNodes & c._idsOfIncludedNodes) != 0;
-          });
-        }
-      }
-      // Insert replacement plans as initial plans.
-      // TODO<ullingerc> How can we ensure that replacements themselves do not
-      // contain each other. This will be probably relevant for stars later.
-      // Overlapping replacement plans create empty candidates (e.g.
-      // ?x geo:hasGeometry ?m . ?m geo:asWKT ?g . ?m geo:asWKT ?g2 ) ->
-      // Assertion error, greedy can't find a plan because it has only chain
-      // ?x->?m->?g and ?x->?m->?g2, but no scan ?m+?g or ?m+?g2.
-      for (const auto& a : applicableReplacementPlans) {
-        for (const auto& p : a) {
-          component.push_back(p);
-        }
-      }
+      // Then remove the plans for the nodes covered by replacement plans and
+      // insert the replacement plans.
+      useReplacementPlansForGreedyPlanner(applicableReplacementPlans,
+                                          component);
     }
 
     addCandidates(std::invoke(impl, this, std::move(component),
@@ -3406,7 +3376,7 @@ void QueryPlanner::GraphPatternPlanner::optimizeCommutatively() {
   auto lastRow =
       planner_
           .fillDpTab(tg, rootPattern_->_filters, rootPattern_->textLimits_,
-                     candidatePlans_, replacementPlans)
+                     candidatePlans_, std::move(replacementPlans))
           .back();
   candidateTriples_._triples.clear();
   candidatePlans_.clear();
@@ -3423,4 +3393,67 @@ void QueryPlanner::GraphPatternPlanner::visitDescribe(
       makeSubtreePlan<Describe>(planner_._qec, std::move(tree), describe);
   candidatePlans_.push_back(std::vector{std::move(describeOp)});
   planner_.checkCancellation();
+}
+
+// _______________________________________________________________
+std::pair<QueryPlanner::ReplacementPlans, bool>
+QueryPlanner::findApplicableReplacementPlans(
+    ReplacementPlans& allReplacementPlans, uint64_t coveredNodeIds,
+    bool useGreedyPlanning) {
+  // TODO<ullingerc> This could be hash-map based if we would return the
+  // indices in the create helper and pass them as part of `replacementPlans`.
+  bool hasApplicableReplacementPlans = false;
+  ReplacementPlans applicableReplacementPlans;
+  for (auto& rPlans : allReplacementPlans) {
+    std::vector<SubtreePlan> applicable;
+    for (auto& plan : rPlans) {
+      // Nodes covered by plan must be a subset of the covered nodes.
+      if ((plan._idsOfIncludedNodes & coveredNodeIds) ==
+          plan._idsOfIncludedNodes) {
+        applicable.push_back(std::move(plan));
+        hasApplicableReplacementPlans = true;
+      }
+    }
+    applicableReplacementPlans.push_back(std::move(applicable));
+  }
+
+  // Filter the plans to be disjunctive for greedy planning. This is done in
+  // reversed order of the number of triples they cover, s.t. plans covering
+  // more triples are preferred over smaller ones.
+  if (useGreedyPlanning) {
+    uint64_t nodesCoveredByReplacementPlans = 0;
+    for (auto& plans : applicableReplacementPlans | ql::views::reverse) {
+      std::erase_if(plans, [&](SubtreePlan& plan) {
+        bool res =
+            (plan._idsOfIncludedNodes & nodesCoveredByReplacementPlans) != 0;
+        nodesCoveredByReplacementPlans =
+            nodesCoveredByReplacementPlans | plan._idsOfIncludedNodes;
+        return res;
+      });
+    }
+  }
+
+  return {std::move(applicableReplacementPlans), hasApplicableReplacementPlans};
+}
+
+// _______________________________________________________________
+void QueryPlanner::useReplacementPlansForGreedyPlanner(
+    ReplacementPlans& applicableReplacementPlans,
+    std::vector<SubtreePlan>& connectedComponent) {
+  // Remove nodes from the `connectedComponent` that are covered by replacement
+  // plans.
+  for (const auto& plans : applicableReplacementPlans) {
+    for (const auto& plan : plans) {
+      std::erase_if(connectedComponent, [&plan](const auto& c) {
+        return (plan._idsOfIncludedNodes & c._idsOfIncludedNodes) != 0;
+      });
+    }
+  }
+
+  // Insert replacement plans as leaf plans.
+  for (auto& plans : applicableReplacementPlans) {
+    for (auto& plan : plans) {
+      connectedComponent.push_back(std::move(plan));
+    }
+  }
 }
