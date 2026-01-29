@@ -11,6 +11,8 @@
 #ifndef QLEVER_SRC_INDEX_LOCATEDTRIPLES_H
 #define QLEVER_SRC_INDEX_LOCATEDTRIPLES_H
 
+#include <absl/container/btree_map.h>
+
 #include <boost/optional.hpp>
 
 #include "backports/three_way_comparison.h"
@@ -95,7 +97,7 @@ class LocatedTriplesPerBlock {
 
   // For each block with a non-empty set of located triples, the located triples
   // in that block.
-  ad_utility::HashMap<size_t, LocatedTriples> map_;
+  absl::btree_map<size_t, LocatedTriples> map_;
 
   FRIEND_TEST(LocatedTriplesTest, numTriplesInBlock);
 
