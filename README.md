@@ -22,7 +22,7 @@ visualization of very large numbers of geometric objects on a map.
 QLever can also be used as an embedded database, that is, without the standard
 client-server setup but running it in-process inside your own C++ program.
 
-[Here are demos of QLever](http://qlever.cs.uni-freiburg.de) on a variety of
+[Here are demos of QLever](http://qlever.dev/) on a variety of
 large datasets, including the complete Wikidata, Wikimedia Commons,
 OpenStreetMap, UniProt, PubChem, and DBLP. Those demos also feature QLever's
 context-sensitive autocompletion, which makes SPARQL query construction so much
@@ -50,20 +50,7 @@ discussion](https://github.com/ad-freiburg/qlever/discussions).
 
 # Quickstart and documentation
 
-Use QLever via the `qlever` command-line interface (CLI),  which can be
-installed via `pip install qlever`. It is self-documenting via `qlever --help`
-(for an overview of all commands) and `qlever <command> --help` (for details on
-any specific command). For more information and example use cases, see
-https://github.com/ad-freiburg/qlever-control .
+To get started with QLever you may use our native packages released for [Debian, Ubuntu](https://docs.qlever.dev/quickstart/#debian-and-ubuntu) and [macOS](https://docs.qlever.dev/quickstart/#macos-apple-silicon). Additionally, a platform-independent version of QLever is available as an [image for Docker and Podman](https://hub.docker.com/r/adfreiburg/qlever), which can be used through our Python-based `qlever` command-line interface (CLI). Please refer to our [Quickstart documentation](https://docs.qlever.dev/quickstart/) for details.
 
-You can control everything `qlever` does via a single configuration file, the
-so-called `Qleverfile`. You can fetch any of a number of example `Qleverfile`s
-(in particular, one for each of the demos mentioned above) via `qlever
-setup-config <config-name>`. To write a `Qleverfile` for your own data, pick
-one of these configurations as a starting point and edit the `Qleverfile` as
-you see fit. Every option from the `Qleverfile` can also be set (and
-overridden) via a command-line option with the same name, see `qlever <command>
---help`. A detailed explanation of all `Qleverfile` options may also be found at <https://docs.qlever.dev/qleverfile/>. 
-
-For the official documentation, see <https://docs.qlever.dev>. Additional
-information can be found in the [QLever Wiki](https://github.com/ad-freiburg/qlever/wiki).
+For the official documentation, see [docs.qlever.dev](https://docs.qlever.dev/). Additional
+information can also be found in the [QLever Wiki](https://github.com/ad-freiburg/qlever/wiki).
