@@ -94,8 +94,10 @@ class LocatedTriplesPerBlock {
   size_t numTriples_ = 0;
 
   // For each block with a non-empty set of located triples, the located triples
-  // in that block.
-  ad_utility::HashMap<size_t, LocatedTriples> map_;
+  // in that block. Use `std::identity` as the hash function to trick the
+  // implementation to store values with similar indices next to each other if
+  // possible.
+  ad_utility::HashMap<size_t, LocatedTriples, std::identity> map_;
 
   FRIEND_TEST(LocatedTriplesTest, numTriplesInBlock);
 
