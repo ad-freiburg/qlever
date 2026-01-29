@@ -92,7 +92,9 @@ size_t Permutation::getResultSizeOfScan(
     const ScanSpecAndBlocks& scanSpecAndBlocks,
     const LocatedTriplesState& locatedTriplesState) const {
   return reader().getResultSizeOfScan(
-      scanSpecAndBlocks, getLocatedTriplesForPermutation(locatedTriplesState));
+      scanSpecAndBlocks, getLocatedTriplesForPermutation(locatedTriplesState),
+      locatedTriplesState.onDiskDeltas_,
+      static_cast<PermutationEnum>(permutation()));
 }
 
 // _____________________________________________________________________
@@ -177,7 +179,9 @@ std::optional<CompressedRelationMetadata> Permutation::getMetadata(
       getScanSpecAndBlocks(
           ScanSpecification{col0Id, std::nullopt, std::nullopt},
           locatedTriplesState),
-      col0Id, getLocatedTriplesForPermutation(locatedTriplesState));
+      col0Id, getLocatedTriplesForPermutation(locatedTriplesState),
+      locatedTriplesState.onDiskDeltas_,
+      static_cast<PermutationEnum>(permutation()));
 }
 
 // _____________________________________________________________________
@@ -206,10 +210,12 @@ CompressedRelationReader::IdTableGeneratorInputRange Permutation::lazyScan(
     optBlocks = CompressedRelationReader::convertBlockMetadataRangesToVector(
         scanSpecAndBlocks.blockMetadata_);
   }
-  return reader().lazyScan(
-      scanSpecAndBlocks.scanSpec_, std::move(optBlocks.value()),
-      std::move(columns), cancellationHandle,
-      getLocatedTriplesForPermutation(locatedTriplesState), limitOffset);
+  return reader().lazyScan(scanSpecAndBlocks.scanSpec_,
+                           std::move(optBlocks.value()), std::move(columns),
+                           cancellationHandle,
+                           getLocatedTriplesForPermutation(locatedTriplesState),
+                           limitOffset, locatedTriplesState.onDiskDeltas_,
+                           static_cast<PermutationEnum>(permutation()));
 }
 
 // ______________________________________________________________________

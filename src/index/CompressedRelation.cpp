@@ -14,6 +14,7 @@
 #include "index/CompressedRelationPermutationWriterImpl.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/LocatedTriples.h"
+#include "index/OnDiskDeltaTriples.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/Iterators.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
@@ -374,7 +375,8 @@ CompressedRelationReader::lazyScan(
     ColumnIndices additionalColumns,
     const CancellationHandle& cancellationHandle,
     const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-    const LimitOffsetClause& limitOffset) const {
+    const LimitOffsetClause& limitOffset,
+    const OnDiskDeltaTriples* onDiskDeltas, PermutationEnum permutation) const {
   AD_CONTRACT_CHECK(cancellationHandle);
 
   if (relevantBlockMetadata.empty()) {
@@ -531,7 +533,8 @@ CompressedRelationReader::lazyScan(
   };
 
   auto config =
-      getScanConfig(scanSpec, additionalColumns, locatedTriplesPerBlock);
+      getScanConfig(scanSpec, additionalColumns, locatedTriplesPerBlock,
+                    onDiskDeltas, permutation);
 
   return IdTableGeneratorInputRange{Generator{
       scanSpec, std::move(relevantBlockMetadata), additionalColumns,
@@ -793,8 +796,9 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
                                       std::nullopt,
                                       {},
                                       scanConfig.graphFilter_.graphFilter_};
-  auto config = getScanConfig(specForAllColumns,
-                              std::move(allAdditionalColumns), locatedTriples);
+  auto config = getScanConfig(
+      specForAllColumns, std::move(allAdditionalColumns), locatedTriples,
+      scanConfig.onDiskDeltas_, scanConfig.permutation_);
 
   // Helper lambda that returns the decompressed block or an empty block if
   // `readAndDecompressBlock` returns `std::nullopt`.
@@ -869,11 +873,13 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
 template <bool exactSize>
 std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
     const ScanSpecAndBlocks& scanSpecAndBlocks,
-    const LocatedTriplesPerBlock& locatedTriplesPerBlock) const {
+    const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+    const OnDiskDeltaTriples* onDiskDeltas, PermutationEnum permutation) const {
   const auto& blocks = scanSpecAndBlocks.getBlockMetadataView();
   auto [beginBlock, endBlock] = getBeginAndEnd(blocks);
   const auto& scanSpec = scanSpecAndBlocks.scanSpec_;
-  auto config = getScanConfig(scanSpec, {}, locatedTriplesPerBlock);
+  auto config = getScanConfig(scanSpec, {}, locatedTriplesPerBlock,
+                              onDiskDeltas, permutation);
 
   // The first and the last block might be incomplete (that is, only
   // a part of these blocks is actually part of the result,
@@ -951,9 +957,10 @@ std::pair<size_t, size_t> CompressedRelationReader::getSizeEstimateForScan(
 // ____________________________________________________________________________
 size_t CompressedRelationReader::getResultSizeOfScan(
     const ScanSpecAndBlocks& scanSpecAndBlocks,
-    const LocatedTriplesPerBlock& locatedTriplesPerBlock) const {
-  auto [lower, upper] =
-      getResultSizeImpl<true>(scanSpecAndBlocks, locatedTriplesPerBlock);
+    const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+    const OnDiskDeltaTriples* onDiskDeltas, PermutationEnum permutation) const {
+  auto [lower, upper] = getResultSizeImpl<true>(
+      scanSpecAndBlocks, locatedTriplesPerBlock, onDiskDeltas, permutation);
   AD_CORRECTNESS_CHECK(lower == upper);
   return lower;
 }
@@ -1165,12 +1172,34 @@ CompressedRelationReader::decompressAndPostprocessBlock(
   auto [numIndexColumns, includeGraphColumn] =
       prepareLocatedTriples(scanConfig.scanColumns_);
   bool hasUpdates = false;
-  if (scanConfig.locatedTriples_.containsTriples(metadata.blockIndex_)) {
+
+  // Check if we have on-disk delta triples for this block.
+  std::optional<IdTable> onDiskDeleteBlock;
+  std::optional<IdTable> onDiskInsertBlock;
+
+  if (scanConfig.onDiskDeltas_ != nullptr) {
+    // Read on-disk delta blocks for this block index.
+    onDiskDeleteBlock = scanConfig.onDiskDeltas_->readDeleteBlock(
+        scanConfig.permutation_, metadata.blockIndex_, scanConfig.scanColumns_,
+        decompressedBlock.getAllocator());
+    onDiskInsertBlock = scanConfig.onDiskDeltas_->readInsertBlock(
+        scanConfig.permutation_, metadata.blockIndex_, scanConfig.scanColumns_,
+        decompressedBlock.getAllocator());
+  }
+
+  // Use 3-way merge if we have on-disk deltas, otherwise use 2-way merge.
+  bool hasInMemoryUpdates =
+      scanConfig.locatedTriples_.containsTriples(metadata.blockIndex_);
+  bool hasOnDiskUpdates =
+      onDiskDeleteBlock.has_value() || onDiskInsertBlock.has_value();
+
+  if (hasOnDiskUpdates || hasInMemoryUpdates) {
     decompressedBlock = scanConfig.locatedTriples_.mergeTriples(
         metadata.blockIndex_, decompressedBlock, numIndexColumns,
-        includeGraphColumn);
+        includeGraphColumn, onDiskDeleteBlock, onDiskInsertBlock);
     hasUpdates = true;
   }
+
   bool wasPostprocessed =
       scanConfig.graphFilter_.postprocessBlock(decompressedBlock, metadata);
   return {std::move(decompressedBlock), wasPostprocessed, hasUpdates};
@@ -1636,12 +1665,14 @@ auto CompressedRelationWriter::createPermutation(
 std::optional<CompressedRelationMetadata>
 CompressedRelationReader::getMetadataForSmallRelation(
     const ScanSpecAndBlocks& scanSpecAndBlocks, Id col0Id,
-    const LocatedTriplesPerBlock& locatedTriplesPerBlock) const {
+    const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+    const OnDiskDeltaTriples* onDiskDeltas, PermutationEnum permutation) const {
   CompressedRelationMetadata metadata;
   metadata.col0Id_ = col0Id;
   metadata.offsetInBlock_ = 0;
   const auto& scanSpec = scanSpecAndBlocks.scanSpec_;
-  auto config = getScanConfig(scanSpec, {}, locatedTriplesPerBlock);
+  auto config = getScanConfig(scanSpec, {}, locatedTriplesPerBlock,
+                              onDiskDeltas, permutation);
   const auto& blocks = scanSpecAndBlocks.getBlockMetadataView();
   // For relations that already span more than one block when the index is first
   // built, this function should never be called. With SPARQL UPDATE it might
@@ -1692,7 +1723,9 @@ CompressedRelationReader::getMetadataForSmallRelation(
 // _____________________________________________________________________________
 auto CompressedRelationReader::getScanConfig(
     const ScanSpecification& scanSpec, ColumnIndicesRef additionalColumns,
-    const LocatedTriplesPerBlock& locatedTriples) -> ScanImplConfig {
+    const LocatedTriplesPerBlock& locatedTriples,
+    const OnDiskDeltaTriples* onDiskDeltas, PermutationEnum permutation)
+    -> ScanImplConfig {
   auto columnIndices = prepareColumnIndices(scanSpec, additionalColumns);
   // Determine the index of the graph column (which we need either for
   // filtering or for the output or both) and whether we we need it for
@@ -1714,7 +1747,8 @@ auto CompressedRelationReader::getScanConfig(
   }();
   FilterDuplicatesAndGraphs graphFilter{scanSpec.graphFilter(),
                                         graphColumnIndex, deleteGraphColumn};
-  return {std::move(columnIndices), std::move(graphFilter), locatedTriples};
+  return {std::move(columnIndices), std::move(graphFilter), locatedTriples,
+          onDiskDeltas, permutation};
 }
 
 // _____________________________________________________________________________

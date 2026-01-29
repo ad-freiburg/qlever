@@ -998,6 +998,15 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
     deltaTriples_.value().setFilenameForPersistentUpdatesAndReadFromDisk(
         onDiskBase + ".update-triples");
   }
+
+  // Initialize on-disk delta triples support. This sets the base directory
+  // and automatically loads any existing on-disk delta files from previous
+  // runs.
+  deltaTriplesManager().modify<void>(
+      [&onDiskBase](DeltaTriples& deltaTriples) {
+        deltaTriples.setBaseDirForOnDiskDeltas(onDiskBase);
+      },
+      false, false);
 }
 
 // _____________________________________________________________________________
