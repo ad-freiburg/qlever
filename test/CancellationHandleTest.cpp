@@ -294,8 +294,10 @@ TEST(CancellationHandle, verifyCheckDoesNotOverrideCancelledState) {
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyCheckAfterDeadlineMissDoesReportProperly) {
-  // If the log level is not high enough this test will fail
-  static_assert(LOGLEVEL >= WARN);
+  if constexpr (LOGLEVEL < WARN) {
+    GTEST_SKIP() << "This test requires log level of at least INFO.";
+  }
+  EXPECT_GE(LOGLEVEL, WARN);
   auto& choice = ad_utility::LogstreamChoice::get();
   CancellationHandle<ENABLED> handle;
 
@@ -324,8 +326,10 @@ TEST(CancellationHandle, verifyCheckAfterDeadlineMissDoesReportProperly) {
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary) {
-  // If the log level is not high enough this test will fail
-  static_assert(LOGLEVEL >= WARN);
+  if constexpr (LOGLEVEL < WARN) {
+    GTEST_SKIP() << "This test requires log level of at least INFO.";
+  }
+  EXPECT_GE(LOGLEVEL, WARN);
   auto& choice = ad_utility::LogstreamChoice::get();
   CancellationHandle<ENABLED> handle;
 
@@ -410,8 +414,10 @@ TEST(CancellationHandle, verifyPleaseWatchDogDoesNotAcceptInvalidState) {
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyIsCancelledDoesPleaseWatchDog) {
-  // If the log level is not high enough this test will fail
-  static_assert(LOGLEVEL >= WARN);
+  if constexpr (LOGLEVEL < WARN) {
+    GTEST_SKIP() << "This test requires log level of at least INFO.";
+  }
+  EXPECT_GE(LOGLEVEL, WARN);
   auto& choice = ad_utility::LogstreamChoice::get();
   CancellationHandle<ENABLED> handle;
 
