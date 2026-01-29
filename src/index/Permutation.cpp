@@ -11,9 +11,12 @@
 #include "util/StringUtils.h"
 
 // _____________________________________________________________________
-Permutation::Permutation(Enum permutation, Allocator allocator)
-    : readableName_(toString(permutation)),
-      fileSuffix_(absl::StrCat(".", ad_utility::utf8ToLower(readableName_))),
+Permutation::Permutation(Enum permutation, Allocator allocator,
+                         std::optional<std::string> readableName)
+    : readableName_{std::move(readableName)
+                        .value_or(std::string{toString(permutation)})},
+      fileSuffix_(
+          absl::StrCat(".", ad_utility::utf8ToLower(toString(permutation)))),
       keyOrder_(toKeyOrder(permutation)),
       allocator_{std::move(allocator)},
       permutation_{permutation} {}
