@@ -303,24 +303,9 @@ Result OptionalJoin::computeResultForIndexScanOnRightLazy(
         CHUNK_SIZE,          std::move(yieldTable)};
 
     // Convert generators to the right format
-    std::vector<ColumnIndex> identityPerm;
-    identityPerm.resize(_left->getResultWidth());
-    std::iota(identityPerm.begin(), identityPerm.end(), 0);
-
-    auto leftRange = ad_utility::CachingTransformInputRange(
-        std::move(*leftSidePtr), [identityPerm](auto& pair) {
-          return ad_utility::IdTableAndFirstCol{
-              pair.idTable_.asColumnSubsetView(identityPerm),
-              std::move(pair.localVocab_)};
-        });
-
-    std::vector<ColumnIndex> rightPerm = {_joinColumns.at(0).at(1)};
-    auto rightRange = ad_utility::CachingTransformInputRange(
-        std::move(*rightSidePtr), [rightPerm](auto& pair) {
-          return ad_utility::IdTableAndFirstCol{
-              pair.idTable_.asColumnSubsetView(rightPerm),
-              std::move(pair.localVocab_)};
-        });
+    auto [leftRange, rightRange] = convertPrefilteredGenerators(
+        leftSidePtr, rightSidePtr, _left->getResultWidth(),
+        _joinColumns.at(0).at(1));
 
     ad_utility::zipperJoinForBlocksWithPotentialUndef(
         leftRange, rightRange, std::less{}, rowAdder, {}, {},
