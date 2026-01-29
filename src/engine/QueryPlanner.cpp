@@ -3423,7 +3423,7 @@ QueryPlanner::findApplicableReplacementPlans(
   if (useGreedyPlanning) {
     uint64_t nodesCoveredByReplacementPlans = 0;
     for (auto& plans : applicableReplacementPlans | ql::views::reverse) {
-      std::erase_if(plans, [&](SubtreePlan& plan) {
+      ql::erase_if(plans, [&](SubtreePlan& plan) {
         bool res =
             (plan._idsOfIncludedNodes & nodesCoveredByReplacementPlans) != 0;
         nodesCoveredByReplacementPlans |= plan._idsOfIncludedNodes;
@@ -3443,7 +3443,7 @@ void QueryPlanner::useReplacementPlansForGreedyPlanner(
   // plans.
   for (const auto& plans : applicableReplacementPlans) {
     for (const auto& plan : plans) {
-      std::erase_if(connectedComponent, [&plan](const auto& c) {
+      ql::erase_if(connectedComponent, [&plan](const auto& c) {
         return (plan._idsOfIncludedNodes & c._idsOfIncludedNodes) != 0;
       });
     }
