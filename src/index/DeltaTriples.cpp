@@ -17,12 +17,15 @@
 #include "backports/algorithm.h"
 #include "engine/ExecuteUpdate.h"
 #include "engine/ExportQueryExecutionTrees.h"
+#include "index/DeltaTriplesPaths.h"
 #include "index/DeltaTriplesWriter.h"
 #include "index/Index.h"
 #include "index/IndexImpl.h"
 #include "index/LocatedTriples.h"
 #include "util/LruCache.h"
 #include "util/Serializer/TripleSerializer.h"
+
+using namespace ad_utility::delta_triples;
 
 // ____________________________________________________________________________
 template <bool isInternal>
@@ -697,26 +700,81 @@ void DeltaTriples::rebuildOnDiskDeltas(ad_utility::timer::TimeTracer& tracer) {
                  "in-memory deltas."
               << std::endl;
 
-  // TODO: Implement rebuild logic
-  // 1. Read old on-disk deltas
-  // 2. Merge with current in-memory deltas
-  // 3. Write to temporary files
-  // 4. Atomic rename
-  // 5. Clear in-memory deltas
-  //
-  // For now, as a placeholder, just do a simple spill (which will overwrite
-  // existing files). This is not correct but allows the rest of the system to
-  // compile.
-  AD_LOG_WARN << "rebuildOnDiskDeltas not fully implemented yet, using "
-                 "simple overwrite."
-              << std::endl;
+  AD_CORRECTNESS_CHECK(onDiskDeltas_.has_value());
+  AD_CORRECTNESS_CHECK(onDiskDeltas_->hasOnDiskDeltas());
 
-  tracer.beginTrace("writeAllPermutationsTemporary");
   DeltaTriplesWriter writer(index_, baseDirForOnDiskDeltas_);
-  writer.writeAllPermutations(locatedTriples_->getLocatedTriples<false>(),
-                              locatedTriples_->getLocatedTriples<true>(),
-                              true);  // useTemporary = true
-  tracer.endTrace("writeAllPermutationsTemporary");
+  auto allocator = ad_utility::makeUnlimitedAllocator<Id>();
+
+  // Helper to merge and write for a single permutation and type
+  // (insert/delete).
+  auto mergeAndWritePermutation =
+      [&](Permutation::Enum permutation, bool isInsert, bool isInternal,
+          const LocatedTriplesPerBlock& locatedTriples) {
+        tracer.beginTrace(absl::StrCat(Permutation::toString(permutation),
+                                       isInsert ? "-inserts" : "-deletes"));
+
+        // 1. Read old on-disk triples.
+        tracer.beginTrace("readOldOnDisk");
+        IdTable oldTriples = onDiskDeltas_->readAllTriples(
+            static_cast<PermutationEnum>(permutation), isInsert, allocator);
+        tracer.endTrace("readOldOnDisk");
+
+        // 2. Extract new in-memory triples.
+        tracer.beginTrace("extractNewInMemory");
+        auto keyOrder = Permutation::toKeyOrder(permutation);
+        IdTable newTriples =
+            writer.extractAndSortTriples(locatedTriples, keyOrder, isInsert);
+        tracer.endTrace("extractNewInMemory");
+
+        // 3. Merge and write to temporary file.
+        tracer.beginTrace("mergeAndWrite");
+        std::vector<IdTable> tablesToMerge;
+        if (oldTriples.numRows() > 0) {
+          tablesToMerge.push_back(std::move(oldTriples));
+        }
+        if (newTriples.numRows() > 0) {
+          tablesToMerge.push_back(std::move(newTriples));
+        }
+
+        std::string path =
+            isInsert
+                ? getDeltaTempInsertsPath(baseDirForOnDiskDeltas_, permutation)
+                : getDeltaTempDeletesPath(baseDirForOnDiskDeltas_, permutation);
+
+        if (!tablesToMerge.empty()) {
+          writer.mergeAndWriteTriples(std::move(tablesToMerge), path);
+        } else {
+          // Write empty file to maintain consistency.
+          writer.mergeAndWriteTriples({}, path);
+        }
+        tracer.endTrace("mergeAndWrite");
+
+        tracer.endTrace(absl::StrCat(Permutation::toString(permutation),
+                                     isInsert ? "-inserts" : "-deletes"));
+      };
+
+  // Merge all regular permutations.
+  tracer.beginTrace("regularPermutations");
+  for (auto permutation : Permutation::ALL) {
+    const auto& locatedTriples =
+        locatedTriples_
+            ->getLocatedTriples<false>()[static_cast<size_t>(permutation)];
+    mergeAndWritePermutation(permutation, true, false, locatedTriples);
+    mergeAndWritePermutation(permutation, false, false, locatedTriples);
+  }
+  tracer.endTrace("regularPermutations");
+
+  // Merge all internal permutations.
+  tracer.beginTrace("internalPermutations");
+  for (auto permutation : Permutation::INTERNAL) {
+    const auto& locatedTriples =
+        locatedTriples_
+            ->getLocatedTriples<true>()[static_cast<size_t>(permutation)];
+    mergeAndWritePermutation(permutation, true, true, locatedTriples);
+    mergeAndWritePermutation(permutation, false, true, locatedTriples);
+  }
+  tracer.endTrace("internalPermutations");
 
   // Commit temporary files (atomic rename).
   tracer.beginTrace("commitTemporaryFiles");
@@ -725,9 +783,6 @@ void DeltaTriples::rebuildOnDiskDeltas(ad_utility::timer::TimeTracer& tracer) {
 
   // Reload from disk.
   tracer.beginTrace("reloadFromDisk");
-  if (!onDiskDeltas_.has_value()) {
-    onDiskDeltas_.emplace(baseDirForOnDiskDeltas_);
-  }
   onDiskDeltas_->loadFromDisk();
   tracer.endTrace("reloadFromDisk");
 

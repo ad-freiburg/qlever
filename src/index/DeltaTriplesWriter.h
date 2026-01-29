@@ -63,9 +63,14 @@ class DeltaTriplesWriter {
   // writeAllPermutations with useTemporary=true during rebuild.
   void commitTemporaryFiles();
 
- private:
-  const IndexImpl& index_;
-  std::string baseDir_;
+  // Merge multiple sorted IdTables (e.g., old on-disk inserts + new in-memory
+  // inserts) and write the result to a file. Performs deduplication during the
+  // merge. Returns block metadata for the written file.
+  // `sortedTables`: vector of sorted IdTables to merge (all must be sorted)
+  // `filename`: output file path
+  // This is used during rebuild to merge old and new delta triples.
+  std::vector<CompressedBlockMetadata> mergeAndWriteTriples(
+      std::vector<IdTable> sortedTables, const std::string& filename);
 
   // Extract all triples from LocatedTriplesPerBlock and sort them by the given
   // permutation order. Returns a sorted IdTable.
@@ -74,6 +79,10 @@ class DeltaTriplesWriter {
   IdTable extractAndSortTriples(const LocatedTriplesPerBlock& locatedTriples,
                                 const qlever::KeyOrder& keyOrder,
                                 bool filterInserts);
+
+ private:
+  const IndexImpl& index_;
+  std::string baseDir_;
 
   // Write the given sorted triples to disk in compressed format. Returns block
   // metadata.

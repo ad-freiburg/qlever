@@ -4,6 +4,9 @@
 
 #include "index/DeltaTriplesWriter.h"
 
+#include <filesystem>
+#include <queue>
+
 #include "index/CompressedRelation.h"
 #include "index/DeltaTriplesPaths.h"
 #include "index/IndexImpl.h"
@@ -113,16 +116,15 @@ DeltaTriplesWriter::writeSortedTriplesToFile(const IdTable& sortedTriples,
     blockMetadata.push_back(std::move(metadata));
   }
 
+  // Write metadata to the end of the file. Format follows IndexMetaData::
+  // appendToFile: serialize metadata, then write offset to where metadata
+  // starts.
+  off_t startOfMeta = outfile.tell();
+  ad_utility::serialization::FileWriteSerializer serializer{std::move(outfile)};
+  serializer << blockMetadata;
+  outfile = std::move(serializer).file();
+  outfile.write(&startOfMeta, sizeof(startOfMeta));
   outfile.close();
-
-  // TODO<joka921> Fix this correctly, and unify with the ordinary permutation
-  // writing.
-  /*
-  // Write metadata to the end of the file using serialization.
-  ad_utility::serialization::FileWriteSerializer metadataWriter{filename,
-                                                                std::ios::app};
-  metadataWriter << blockMetadata;
-  */
 
   return blockMetadata;
 }
@@ -180,7 +182,74 @@ void DeltaTriplesWriter::writeAllPermutations(
 }
 
 // ____________________________________________________________________________
+std::vector<CompressedBlockMetadata> DeltaTriplesWriter::mergeAndWriteTriples(
+    std::vector<IdTable> sortedTables, const std::string& filename) {
+  // Priority queue element: (row data, table index, row index).
+  struct QueueElement {
+    std::array<Id, 4> row;
+    size_t tableIdx;
+    size_t rowIdx;
+
+    bool operator>(const QueueElement& other) const {
+      // Min-heap: smallest row first.
+      return std::tie(row[0], row[1], row[2], row[3]) >
+             std::tie(other.row[0], other.row[1], other.row[2], other.row[3]);
+    }
+  };
+
+  // Initialize priority queue with first row from each non-empty table.
+  std::priority_queue<QueueElement, std::vector<QueueElement>,
+                      std::greater<QueueElement>>
+      pq;
+
+  for (size_t i = 0; i < sortedTables.size(); ++i) {
+    if (sortedTables[i].numRows() > 0) {
+      pq.push({{sortedTables[i](0, 0), sortedTables[i](0, 1),
+                sortedTables[i](0, 2), sortedTables[i](0, 3)},
+               i,
+               0});
+    }
+  }
+
+  // Merge and write triples in blocks, with deduplication.
+  IdTable mergedTriples{4, ad_utility::makeUnlimitedAllocator<Id>()};
+  std::optional<std::array<Id, 4>> lastRow;  // For deduplication.
+
+  while (!pq.empty()) {
+    auto elem = pq.top();
+    pq.pop();
+
+    // Deduplicate: skip if same as last row.
+    if (!lastRow.has_value() || elem.row != *lastRow) {
+      mergedTriples.push_back(
+          {elem.row[0], elem.row[1], elem.row[2], elem.row[3]});
+      lastRow = elem.row;
+    }
+
+    // Push next row from same table if available.
+    size_t nextRowIdx = elem.rowIdx + 1;
+    if (nextRowIdx < sortedTables[elem.tableIdx].numRows()) {
+      const auto& table = sortedTables[elem.tableIdx];
+      pq.push({{table(nextRowIdx, 0), table(nextRowIdx, 1),
+                table(nextRowIdx, 2), table(nextRowIdx, 3)},
+               elem.tableIdx,
+               nextRowIdx});
+    }
+  }
+
+  // Write the merged and deduplicated triples to file.
+  return writeSortedTriplesToFile(mergedTriples, filename);
+}
+
+// ____________________________________________________________________________
 void DeltaTriplesWriter::commitTemporaryFiles() {
+  // Helper to safely rename a file if it exists.
+  auto safeRename = [](const std::string& from, const std::string& to) {
+    if (std::filesystem::exists(from)) {
+      std::filesystem::rename(from, to);
+    }
+  };
+
   // Atomically rename all temporary files to permanent files.
   for (auto permutation : Permutation::ALL) {
     std::string tempInserts = getDeltaTempInsertsPath(baseDir_, permutation);
@@ -188,19 +257,8 @@ void DeltaTriplesWriter::commitTemporaryFiles() {
     std::string tempDeletes = getDeltaTempDeletesPath(baseDir_, permutation);
     std::string permDeletes = getDeltaDeletesPath(baseDir_, permutation);
 
-    // Rename if temporary files exist.
-    /*
-    if (ad_utility::isRegularFile(tempInserts)) {
-      std::rename(tempInserts.c_str(), permInserts.c_str());
-    }
-    if (ad_utility::isRegularFile(tempDeletes)) {
-      std::rename(tempDeletes.c_str(), permDeletes.c_str());
-    }
-    */
-    // TODO<joka921> MAke sure that this renaming is only done, if the files
-    // exist (the above function is hallucinated).
-    std::rename(tempInserts.c_str(), permInserts.c_str());
-    std::rename(tempDeletes.c_str(), permDeletes.c_str());
+    safeRename(tempInserts, permInserts);
+    safeRename(tempDeletes, permDeletes);
   }
 
   // Same for internal permutations.
@@ -210,16 +268,7 @@ void DeltaTriplesWriter::commitTemporaryFiles() {
     std::string tempDeletes = getDeltaTempDeletesPath(baseDir_, permutation);
     std::string permDeletes = getDeltaDeletesPath(baseDir_, permutation);
 
-    /*
-    if (ad_utility::isRegularFile(tempInserts)) {
-      std::rename(tempInserts.c_str(), permInserts.c_str());
-    }
-    if (ad_utility::isRegularFile(tempDeletes)) {
-      std::rename(tempDeletes.c_str(), permDeletes.c_str());
-    }
-    */
-    // Same <TODO> as above + code duplication.
-    std::rename(tempInserts.c_str(), permInserts.c_str());
-    std::rename(tempDeletes.c_str(), permDeletes.c_str());
+    safeRename(tempInserts, permInserts);
+    safeRename(tempDeletes, permDeletes);
   }
 }

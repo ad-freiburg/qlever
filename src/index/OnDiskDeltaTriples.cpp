@@ -163,31 +163,83 @@ std::optional<IdTable> OnDiskDeltaTriples::readDeleteBlock(
 
 // ____________________________________________________________________________
 void OnDiskDeltaTriples::loadFromDisk() {
+  // Helper lambda to load metadata from end of file (follows IndexMetaData
+  // format).
+  auto loadMetadataFromFile =
+      [](const std::string& path,
+         std::vector<CompressedBlockMetadata>& metadata) {
+        try {
+          ad_utility::File file{path, "r"};
+          // Read the offset to the start of metadata from the end of the file.
+          file.seek(-static_cast<off_t>(sizeof(off_t)), SEEK_END);
+          off_t startOfMeta;
+          file.read(&startOfMeta, sizeof(startOfMeta));
+
+          // Seek to the start of metadata and deserialize.
+          file.seek(startOfMeta, SEEK_SET);
+          ad_utility::serialization::FileReadSerializer serializer{
+              std::move(file)};
+          serializer >> metadata;
+        } catch (...) {
+          // File doesn't exist or is corrupted, leave metadata empty.
+          metadata.clear();
+        }
+      };
+
   for (auto permutation : Permutation::ALL) {
     auto& perm = permutations_[static_cast<size_t>(permutation)];
 
-    // Try to load insert metadata.
+    // Load insert metadata.
     std::string insertsPath = getDeltaInsertsPath(baseDir_, permutation);
-    try {
-      ad_utility::serialization::FileReadSerializer insertsSerializer{
-          insertsPath};
-      insertsSerializer >> perm.insertsMetadata_;
-    } catch (...) {
-      // File doesn't exist or is corrupted, leave metadata empty.
-      perm.insertsMetadata_.clear();
-    }
+    loadMetadataFromFile(insertsPath, perm.insertsMetadata_);
 
-    // Try to load delete metadata.
+    // Load delete metadata.
     std::string deletesPath = getDeltaDeletesPath(baseDir_, permutation);
-    try {
-      ad_utility::serialization::FileReadSerializer deletesSerializer{
-          deletesPath};
-      deletesSerializer >> perm.deletesMetadata_;
-    } catch (...) {
-      // File doesn't exist or is corrupted, leave metadata empty.
-      perm.deletesMetadata_.clear();
+    loadMetadataFromFile(deletesPath, perm.deletesMetadata_);
+  }
+}
+
+// ____________________________________________________________________________
+IdTable OnDiskDeltaTriples::readAllTriples(
+    PermutationEnum permutation, bool isInsert,
+    const CompressedRelationReader::Allocator& allocator) const {
+  const auto& perm = permutations_[static_cast<size_t>(permutation)];
+  const auto& metadata =
+      isInsert ? perm.insertsMetadata_ : perm.deletesMetadata_;
+
+  // Create result table with 4 columns (col0, col1, col2, graph).
+  IdTable result{4, allocator};
+
+  if (metadata.empty()) {
+    return result;
+  }
+
+  // Get the file path and open it.
+  std::string path =
+      isInsert ? getDeltaInsertsPath(
+                     baseDir_, static_cast<Permutation::Enum>(permutation))
+               : getDeltaDeletesPath(
+                     baseDir_, static_cast<Permutation::Enum>(permutation));
+  auto& file = getFile(permutation, isInsert, path);
+
+  // Read all blocks and combine them.
+  std::vector<ColumnIndex> columns{0, 1, 2, 3};
+  for (const auto& blockMetadata : metadata) {
+    auto block = readBlockFromFile(metadata, file, blockMetadata.blockIndex_,
+                                   columns, allocator);
+    if (block.has_value()) {
+      // Append rows from this block to result.
+      size_t oldSize = result.numRows();
+      result.resize(oldSize + block->numRows());
+      for (size_t i = 0; i < block->numRows(); ++i) {
+        for (size_t col = 0; col < 4; ++col) {
+          result(oldSize + i, col) = (*block)(i, col);
+        }
+      }
     }
   }
+
+  return result;
 }
 
 // ____________________________________________________________________________

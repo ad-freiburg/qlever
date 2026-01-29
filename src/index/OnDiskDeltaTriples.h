@@ -78,6 +78,14 @@ class OnDiskDeltaTriples {
   // Delete all on-disk delta files (cleanup).
   void deleteFiles();
 
+  // Read all triples from a delta file (inserts or deletes) for a given
+  // permutation. Returns an IdTable with all triples in sorted order.
+  // This is used during rebuild to merge old on-disk deltas with new in-memory
+  // ones. Returns empty table if no file exists.
+  IdTable readAllTriples(
+      PermutationEnum permutation, bool isInsert,
+      const CompressedRelationReader::Allocator& allocator) const;
+
   // Get the base directory where delta files are stored.
   const std::string& baseDir() const { return baseDir_; }
 
