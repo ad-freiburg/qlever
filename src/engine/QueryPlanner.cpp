@@ -1778,6 +1778,7 @@ std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
 
     // TODO<ullingerc> This could be hash-map based if we would return the
     // indices in the create helper and pass them as part of `replacementPlans`.
+    bool hasApplicableReplacementPlans = false;
     ReplacementPlans applicableReplacementPlans;
     for (auto& rPlans : replacementPlans) {
       std::vector<SubtreePlan> applicable;
@@ -1786,6 +1787,7 @@ std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
         if ((plan._idsOfIncludedNodes & coveredNodes) ==
             plan._idsOfIncludedNodes) {
           applicable.push_back(std::move(plan));
+          hasApplicableReplacementPlans = true;
         }
       }
       applicableReplacementPlans.push_back(std::move(applicable));
@@ -1803,10 +1805,23 @@ std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
     auto impl = useGreedyPlanning
                     ? &QueryPlanner::runGreedyPlanningOnConnectedComponent
                     : &QueryPlanner::runDynamicProgrammingOnConnectedComponent;
-    // TODO<ullingerc> Run greedy also once without replacementPlans -> use
-    // better result
-    if (useGreedyPlanning) {
-      // Remove covered ones.
+
+    std::vector<SubtreePlan> lastDpRow;
+
+    auto addCandidates = [&lastDpRow](std::vector<SubtreePlan> candidates) {
+      std::move(candidates.begin(), candidates.end(),
+                std::back_inserter(lastDpRow));
+    };
+
+    if (useGreedyPlanning && hasApplicableReplacementPlans) {
+      // Plan once with a copy of `components` and without replacements to have
+      // a baseline plan. This plan may be better than the replacement if a
+      // certain sorting is required, that the replacement doesn't provide.
+      addCandidates(std::invoke(impl, this, component, filtersAndOptSubstitutes,
+                                textLimitVec, tg, ReplacementPlans{}));
+
+      // Remove nodes from the `components` that are covered by replacement
+      // plans.
       for (const auto& a : applicableReplacementPlans) {
         for (const auto& p : a) {
           std::erase_if(component, [&p](const auto& c) {
@@ -1814,18 +1829,24 @@ std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
           });
         }
       }
-      // Insert replacements.
+      // Insert replacement plans as initial plans.
       // TODO<ullingerc> How can we ensure that replacements themselves do not
       // contain each other. This will be probably relevant for stars later.
+      // Overlapping replacement plans create empty candidates (e.g.
+      // ?x geo:hasGeometry ?m . ?m geo:asWKT ?g . ?m geo:asWKT ?g2 ) ->
+      // Assertion error, greedy can't find a plan because it has only chain
+      // ?x->?m->?g and ?x->?m->?g2, but no scan ?m+?g or ?m+?g2.
       for (const auto& a : applicableReplacementPlans) {
         for (const auto& p : a) {
           component.push_back(p);
         }
       }
     }
-    lastDpRowFromComponents.push_back(
-        std::invoke(impl, this, std::move(component), filtersAndOptSubstitutes,
-                    textLimitVec, tg, applicableReplacementPlans));
+
+    addCandidates(std::invoke(impl, this, std::move(component),
+                              filtersAndOptSubstitutes, textLimitVec, tg,
+                              applicableReplacementPlans));
+    lastDpRowFromComponents.push_back(std::move(lastDpRow));
     checkCancellation();
   }
   size_t numConnectedComponents = lastDpRowFromComponents.size();
