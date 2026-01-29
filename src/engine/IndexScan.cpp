@@ -320,6 +320,22 @@ const LocatedTriplesState& IndexScan::locatedTriplesState() const {
 // _____________________________________________________________________________
 std::pair<bool, size_t> IndexScan::computeSizeEstimate() const {
   AD_CORRECTNESS_CHECK(_executionContext);
+  // For a full scan summing up rough estimates for all blocks is insanely
+  // expensive. So instead we just use the total amount of changes and assume
+  // half of them are insertions and the other half deletions.
+  if (numVariables() == 3 && additionalVariables().empty() &&
+      !scanSpecAndBlocksIsPrefiltered_) {
+    // We don't do full scans for internal triples, so this is always correct.
+    size_t numTriples = _executionContext->getIndex().numTriples().normal;
+    size_t numChanges =
+        permutation()
+            .getLocatedTriplesForPermutation(locatedTriplesState())
+            .numTriples();
+    size_t estimatedInsertions = numChanges / 2;
+    size_t estimatedDeletions = numChanges / 2;
+    return {numTriples - std::min(estimatedDeletions, numTriples),
+            numTriples + estimatedInsertions};
+  }
   auto [lower, upper] = permutation().getSizeEstimateForScan(
       scanSpecAndBlocks_, locatedTriplesState());
   // NOTE: Starting from C++20 we could use `std::midpoint` here

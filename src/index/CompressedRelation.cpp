@@ -945,23 +945,6 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
 std::pair<size_t, size_t> CompressedRelationReader::getSizeEstimateForScan(
     const ScanSpecAndBlocks& scanSpecAndBlocks,
     const LocatedTriplesPerBlock& locatedTriplesPerBlock) const {
-  const auto& scanSpec = scanSpecAndBlocks.scanSpec_;
-  if (!scanSpec.col0Id().has_value()) {
-    AD_CORRECTNESS_CHECK(!scanSpec.col1Id().has_value());
-    AD_CORRECTNESS_CHECK(!scanSpec.col2Id().has_value());
-    // For a full scan summing up rough estimates for all blocks is insanely
-    // expensive. So instead we just use the total amount of changes and assume
-    // half of them are insertions and the other half deletions.
-    const auto& blocks = scanSpecAndBlocks.getBlockMetadataView();
-    auto [beginBlock, endBlock] = getBeginAndEnd(blocks);
-    size_t numResults = 0;
-    ql::ranges::for_each(
-        beginBlock, endBlock,
-        [&numResults](const auto& block) { numResults += block.numRows_; });
-    size_t numChanges = locatedTriplesPerBlock.numTriples() / 2;
-    return {numResults - std::min(numChanges, numResults),
-            numResults + numChanges};
-  }
   return getResultSizeImpl<false>(scanSpecAndBlocks, locatedTriplesPerBlock);
 }
 
