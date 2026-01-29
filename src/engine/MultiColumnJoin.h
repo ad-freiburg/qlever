@@ -86,7 +86,9 @@ class MultiColumnJoin : public Operation {
   // columns.
 
   // When both children are IndexScans. Filter blocks on both sides.
-  Result computeResultForTwoIndexScans(bool requestLaziness) const;
+  Result computeResultForTwoIndexScans(bool requestLaziness,
+                                       const IndexScan& leftScan,
+                                       const IndexScan& rightScan) const;
 
   // When one child is an IndexScan and the other is fully materialized.
   template <bool idTableIsRightInput>

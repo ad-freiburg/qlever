@@ -65,20 +65,15 @@ string MultiColumnJoin::getDescriptor() const {
 
 // _____________________________________________________________________________
 Result MultiColumnJoin::computeResultForTwoIndexScans(
-    bool requestLaziness) const {
+    bool requestLaziness, const IndexScan& leftScan,
+    const IndexScan& rightScan) const {
   using namespace qlever::joinWithIndexScanHelpers;
-
-  auto leftScan =
-      std::dynamic_pointer_cast<IndexScan>(_left->getRootOperation());
-  auto rightScan =
-      std::dynamic_pointer_cast<IndexScan>(_right->getRootOperation());
-  AD_CORRECTNESS_CHECK(leftScan && rightScan);
 
   ad_utility::Timer timer{ad_utility::timer::Timer::InitialStatus::Started};
 
   // Get filtered blocks for both sides
   auto blocks =
-      getBlocksForJoinOfTwoScans(*leftScan, *rightScan, _joinColumns.size());
+      getBlocksForJoinOfTwoScans(leftScan, rightScan, _joinColumns.size());
 
   runtimeInfo().addDetail("time-for-filtering-blocks", timer.msecs());
 
@@ -91,7 +86,7 @@ Result MultiColumnJoin::computeResultForTwoIndexScans(
       std::make_shared<CompressedRelationReader::IdTableGeneratorInputRange>(
           std::move(blocks[1]));
 
-  auto action = [this, leftBlocksPtr, rightBlocksPtr, leftScan, rightScan](
+  auto action = [this, leftBlocksPtr, rightBlocksPtr, &leftScan, &rightScan](
                     std::function<void(IdTable&, LocalVocab&)> yieldTable) {
     auto rowAdder = ad_utility::AddCombinedRowToIdTable{
         _joinColumns.size(),
@@ -101,16 +96,17 @@ Result MultiColumnJoin::computeResultForTwoIndexScans(
         qlever::joinHelpers::CHUNK_SIZE,
         std::move(yieldTable)};
 
-    auto leftConverted = convertGenerator(std::move(*leftBlocksPtr), *leftScan);
-    auto rightConverted =
-        convertGenerator(std::move(*rightBlocksPtr), *rightScan);
+    auto leftConverted = convertGenerator(std::move(*leftBlocksPtr),
+                                          const_cast<IndexScan&>(leftScan));
+    auto rightConverted = convertGenerator(std::move(*rightBlocksPtr),
+                                           const_cast<IndexScan&>(rightScan));
 
     ad_utility::zipperJoinForBlocksWithPotentialUndef(
         leftConverted, rightConverted, std::less{}, rowAdder, {}, {});
 
-    leftScan->runtimeInfo().status_ =
+    const_cast<IndexScan&>(leftScan).runtimeInfo().status_ =
         RuntimeInformation::Status::lazilyMaterializedCompleted;
-    rightScan->runtimeInfo().status_ =
+    const_cast<IndexScan&>(rightScan).runtimeInfo().status_ =
         RuntimeInformation::Status::lazilyMaterializedCompleted;
 
     auto localVocab = std::move(rowAdder.localVocab());
@@ -253,7 +249,8 @@ Result MultiColumnJoin::computeResult([[maybe_unused]] bool requestLaziness) {
 
   // Case 1: Both children are IndexScans
   if (leftIndexScan && rightIndexScan) {
-    return computeResultForTwoIndexScans(requestLaziness);
+    return computeResultForTwoIndexScans(requestLaziness, *leftIndexScan,
+                                         *rightIndexScan);
   }
 
   // Case 2: One child is IndexScan, try to use prefiltering

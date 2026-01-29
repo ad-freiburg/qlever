@@ -106,14 +106,10 @@ string OptionalJoin::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-Result OptionalJoin::computeResultForTwoIndexScans(bool requestLaziness) const {
+Result OptionalJoin::computeResultForTwoIndexScans(
+    bool requestLaziness, const IndexScan& leftScan,
+    const IndexScan& rightScan) const {
   using namespace qlever::joinWithIndexScanHelpers;
-
-  auto leftScan =
-      std::dynamic_pointer_cast<IndexScan>(_left->getRootOperation());
-  auto rightScan =
-      std::dynamic_pointer_cast<IndexScan>(_right->getRootOperation());
-  AD_CORRECTNESS_CHECK(leftScan && rightScan);
 
   // For OPTIONAL joins, we cannot prefilter the left side (it must be
   // complete). We can only prefilter the right side based on the left's block
@@ -122,7 +118,7 @@ Result OptionalJoin::computeResultForTwoIndexScans(bool requestLaziness) const {
   ad_utility::Timer timer{ad_utility::timer::Timer::InitialStatus::Started};
 
   // Get unfiltered blocks for the left (required) side
-  auto leftMetaBlocks = leftScan->getMetadataForScan();
+  auto leftMetaBlocks = leftScan.getMetadataForScan();
   if (!leftMetaBlocks.has_value()) {
     // If no metadata, fall back to regular computation by returning to caller
     // Caller will handle the regular path
@@ -130,13 +126,13 @@ Result OptionalJoin::computeResultForTwoIndexScans(bool requestLaziness) const {
             LocalVocab{}};
   }
 
-  auto leftBlocks = leftScan->getLazyScan(std::nullopt);
+  auto leftBlocks = leftScan.getLazyScan(std::nullopt);
   leftBlocks.details().numBlocksAll_ =
       leftMetaBlocks.value().sizeBlockMetadata_;
 
   // Get filtered blocks for the right (optional) side based on left's ranges
   auto rightBlocks =
-      getBlocksForJoinOfTwoScans(*leftScan, *rightScan, _joinColumns.size());
+      getBlocksForJoinOfTwoScans(leftScan, rightScan, _joinColumns.size());
 
   runtimeInfo().addDetail("time-for-filtering-blocks", timer.msecs());
 
@@ -149,7 +145,7 @@ Result OptionalJoin::computeResultForTwoIndexScans(bool requestLaziness) const {
       std::make_shared<CompressedRelationReader::IdTableGeneratorInputRange>(
           std::move(rightBlocks[1]));
 
-  auto action = [this, leftBlocksPtr, rightBlocksPtr, leftScan, rightScan](
+  auto action = [this, leftBlocksPtr, rightBlocksPtr, &leftScan, &rightScan](
                     std::function<void(IdTable&, LocalVocab&)> yieldTable) {
     auto rowAdder = ad_utility::AddCombinedRowToIdTable{
         _joinColumns.size(), IdTable{getResultWidth(), allocator()},
@@ -157,17 +153,17 @@ Result OptionalJoin::computeResultForTwoIndexScans(bool requestLaziness) const {
         CHUNK_SIZE,          std::move(yieldTable)};
 
     auto leftConverted = qlever::joinWithIndexScanHelpers::convertGenerator(
-        std::move(*leftBlocksPtr), *leftScan);
+        std::move(*leftBlocksPtr), const_cast<IndexScan&>(leftScan));
     auto rightConverted = qlever::joinWithIndexScanHelpers::convertGenerator(
-        std::move(*rightBlocksPtr), *rightScan);
+        std::move(*rightBlocksPtr), const_cast<IndexScan&>(rightScan));
 
     ad_utility::zipperJoinForBlocksWithPotentialUndef(
         leftConverted, rightConverted, std::less{}, rowAdder, {}, {},
         ad_utility::OptionalJoinTag{});
 
-    leftScan->runtimeInfo().status_ =
+    const_cast<IndexScan&>(leftScan).runtimeInfo().status_ =
         RuntimeInformation::Status::lazilyMaterializedCompleted;
-    rightScan->runtimeInfo().status_ =
+    const_cast<IndexScan&>(rightScan).runtimeInfo().status_ =
         RuntimeInformation::Status::lazilyMaterializedCompleted;
 
     auto localVocab = std::move(rowAdder.localVocab());
@@ -344,7 +340,8 @@ Result OptionalJoin::computeResult(bool requestLaziness) {
 
     // Case 1: Both children are IndexScans
     if (leftIndexScan) {
-      if (auto res = computeResultForTwoIndexScans(requestLaziness);
+      if (auto res = computeResultForTwoIndexScans(
+              requestLaziness, *leftIndexScan, *rightIndexScan);
           !res.idTable().empty() || res.idTable().numColumns() > 0) {
         return res;
       }

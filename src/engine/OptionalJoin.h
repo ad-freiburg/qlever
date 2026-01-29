@@ -117,7 +117,9 @@ class OptionalJoin : public Operation {
 
   // When both children are IndexScans. Filter blocks on the right based on
   // the left's block ranges.
-  Result computeResultForTwoIndexScans(bool requestLaziness) const;
+  Result computeResultForTwoIndexScans(bool requestLaziness,
+                                       const IndexScan& leftScan,
+                                       const IndexScan& rightScan) const;
 
   // When the right child is an IndexScan and the left is fully materialized.
   Result computeResultForIndexScanOnRight(bool requestLaziness,
