@@ -810,6 +810,7 @@ auto QueryPlanner::seedWithScansAndText(
       seeds.emplace_back(newIdPlan);
     }
     idShift++;
+    checkCancellation();
   }
 
   for (size_t i = 0; i < tg._nodeMap.size(); ++i) {
@@ -921,6 +922,7 @@ auto QueryPlanner::seedWithScansAndText(
         }
         additionalColumns.emplace_back(ADDITIONAL_COLUMN_GRAPH_ID,
                                        std::move(internalVariable));
+        checkCancellation();
       }
 
       auto actualPermutation = qlever::getPermutationForTriple(
@@ -2164,6 +2166,7 @@ std::vector<SubtreePlan> QueryPlanner::createJoinCandidatesAllowEmpty(
 std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
     const SubtreePlan& ain, const SubtreePlan& bin,
     const JoinColumns& jcs) const {
+  checkCancellation();
   bool swapForTesting = isInTestMode() && bin.type != SubtreePlan::OPTIONAL &&
                         ain._qet->getCacheKey() < bin._qet->getCacheKey();
   const auto& a = !swapForTesting ? ain : bin;
@@ -2933,6 +2936,7 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
 template <typename Arg>
 void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
   using T = std::decay_t<Arg>;
+  planner_.checkCancellation();
   if constexpr (std::is_same_v<T, p::Optional> ||
                 std::is_same_v<T, p::GroupGraphPattern>) {
     // If this is a `GRAPH <graph> {...}` clause, then we have to overwrite the
@@ -3066,6 +3070,7 @@ void QueryPlanner::GraphPatternPlanner::visitBasicGraphPattern(
       ql::ranges::move(children._filters,
                        std::back_inserter(rootPattern_->_filters));
     }
+    planner_.checkCancellation();
   }
 }
 
