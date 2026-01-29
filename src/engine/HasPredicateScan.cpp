@@ -424,5 +424,5 @@ std::shared_ptr<QueryExecutionTree> HasPredicateScan::makePatternScan(
       qec,
       qlever::getPermutationForTriple(Permutation::Enum::PSO, qec->getIndex(),
                                       triple),
-      qec->sharedLocatedTriplesSnapshot(), triple);
+      qec->locatedTriplesSharedState(), triple);
 }

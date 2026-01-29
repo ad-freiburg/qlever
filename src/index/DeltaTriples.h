@@ -28,31 +28,45 @@ template <bool isInternal>
 using LocatedTriplesPerBlockAllPermutations =
     std::array<LocatedTriplesPerBlock, Permutation::all<isInternal>().size()>;
 
-// The locations of a set of delta triples (triples that were inserted or
-// deleted since the index was built) in each of the six permutations, and a
-// local vocab. This is all the information that is required to perform a query
-// that correctly respects these delta triples, hence the name.
-struct LocatedTriplesSnapshot {
+// The state of a set of delta triples (triples that were inserted or
+// deleted since the index was built):
+// - locations of the located triples in each of the six permutations
+// - an index (orders versions by the last modification time)
+// - a copy of the local vocab when used as fixed snapshot of a version
+// This is all the information that is required to perform a query that
+// correctly respects these delta triples.
+struct LocatedTriplesState {
   LocatedTriplesPerBlockAllPermutations<false> locatedTriplesPerBlock_;
   LocatedTriplesPerBlockAllPermutations<true> internalLocatedTriplesPerBlock_;
-  // Make sure to keep the local vocab alive as long as the snapshot is alive.
+  // Make sure to keep the local vocab alive as long as the version is alive.
   // The `DeltaTriples` class may concurrently add new entries under the hood,
   // but this is safe because the `LifetimeExtender` prevents access entirely.
-  LocalVocab::LifetimeExtender localVocabLifetimeExtender_;
-  // A unique index for this snapshot that is used in the query cache.
+  std::optional<LocalVocab::LifetimeExtender> localVocabLifetimeExtender_;
+  // A unique index for this snapshot. If one version has been modified later
+  // than another, then the version that has been modified last has a higher
+  // index. The index is used in the query cache.
   size_t index_;
-  // Get `TripleWithPosition` objects for given permutation.
+  // Get `LocatedTriplesPerBlock` objects for the given permutation.
+  template <bool isInternal>
   const LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
       Permutation::Enum permutation) const;
-  // Get `TripleWithPosition` objects for given internal permutation.
-  const LocatedTriplesPerBlock& getInternalLocatedTriplesForPermutation(
-      Permutation::Enum permutation) const;
+  template <bool isInternal>
+  LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
+      Permutation::Enum permutation);
+
+  // Helper functions to get the correct located triple (either internal or
+  // external), depending on the `internal` template parameter.
+  template <bool isInternal>
+  const LocatedTriplesPerBlockAllPermutations<isInternal>& getLocatedTriples()
+      const;
+  template <bool isInternal>
+  LocatedTriplesPerBlockAllPermutations<isInternal>& getLocatedTriples();
 };
 
-// A shared pointer to a constant `LocatedTriplesSnapshot`, but as an explicit
-// class, such that it can be forward-declared.
-class SharedLocatedTriplesSnapshot
-    : public std::shared_ptr<const LocatedTriplesSnapshot> {};
+// A shared pointer to a `LocatedTriplesState`, but as an explicit class, such
+// that it can be forward-declared. The actual content of the
+// `LocatedTriplesState` can change in some cases.
+using LocatedTriplesSharedState = std::shared_ptr<const LocatedTriplesState>;
 
 // A class for keeping track of the number of triples of the `DeltaTriples`.
 struct DeltaTriplesCount {
@@ -98,7 +112,14 @@ class DeltaTriples {
  private:
   // The index to which these triples are added.
   const IndexImpl& index_;
-  size_t nextSnapshotIndex_ = 0;
+
+  // The located triples for all permutations. We store it as a
+  // `shared_ptr` so that we can easily convert them to a
+  // `LocatedTriplesSnapshot`.
+  std::shared_ptr<LocatedTriplesState> locatedTriples_ =
+      std::make_shared<LocatedTriplesState>(
+          LocatedTriplesPerBlockAllPermutations<false>{},
+          LocatedTriplesPerBlockAllPermutations<true>{}, std::nullopt, 0);
 
   // The local vocabulary of the delta triples (they may have components,
   // which are not contained in the vocabulary of the original index).
@@ -142,9 +163,6 @@ class DeltaTriples {
 
   TriplesToHandles<false> triplesToHandlesNormal_;
   TriplesToHandles<true> triplesToHandlesInternal_;
-  // The located triples for all the permutations.
-  LocatedTriplesPerBlockAllPermutations<false> locatedTriplesNormal_;
-  LocatedTriplesPerBlockAllPermutations<true> locatedTriplesInternal_;
 
  public:
   // Construct for given index.
@@ -164,7 +182,7 @@ class DeltaTriples {
 
   const LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
       Permutation::Enum permutation) const {
-    return locatedTriplesNormal_.at(static_cast<size_t>(permutation));
+    return locatedTriples_->getLocatedTriplesForPermutation<false>(permutation);
   }
 
   // Clear `triplesAdded_` and `triplesSubtracted_` and all associated data
@@ -236,9 +254,15 @@ class DeltaTriples {
   void readFromDisk();
 
   // Return a deep copy of the `LocatedTriples` and the corresponding
-  // `LocalVocab` which form a snapshot of the current status of this
-  // `DeltaTriples` object.
-  SharedLocatedTriplesSnapshot getSnapshot();
+  // `LocalVocab` which form an unchanging snapshot of the current state of
+  // this `DeltaTriples` object.
+  LocatedTriplesSharedState getLocatedTriplesSharedStateCopy() const;
+
+  // Return a cheap shallow copy of the `LocatedTriples` which directly mirrors
+  // the state of this `DeltaTriples` object. NOTE: only use this when the
+  // DeltaTriples are not changed while the version is being used for
+  // evaluation.
+  LocatedTriplesSharedState getLocatedTriplesSharedStateReference() const;
 
   // Register the original `metadata` for the given `permutation`. This has to
   // be called before any updates are processed. If `setInternalMetadata` is
@@ -252,16 +276,11 @@ class DeltaTriples {
   void updateAugmentedMetadata();
 
  private:
-  // The the proper state according to the template parameter. This will either
+  // The proper state according to the template parameter. This will either
   // return a reference to `triplesToHandlesInternal_` or
   // `triplesToHandlesNormal_`.
   template <bool isInternal>
   TriplesToHandles<isInternal>& getState();
-
-  // Helper function to get the correct located triple (either internal or
-  // external), depending on the `internal` template parameter.
-  template <bool isInternal>
-  auto& getLocatedTriple();
 
   // Find the position of the given triple in the given permutation and add it
   // to each of the six `LocatedTriplesPerBlock` maps (one per permutation).
@@ -314,8 +333,8 @@ class DeltaTriples {
 // race conditions between concurrent updates and queries.
 class DeltaTriplesManager {
   ad_utility::Synchronized<DeltaTriples> deltaTriples_;
-  ad_utility::Synchronized<SharedLocatedTriplesSnapshot, std::shared_mutex>
-      currentLocatedTriplesSnapshot_;
+  ad_utility::Synchronized<LocatedTriplesSharedState, std::shared_mutex>
+      currentLocatedTriplesSharedState_;
 
  public:
   using CancellationHandle = DeltaTriples::CancellationHandle;
@@ -342,9 +361,10 @@ class DeltaTriplesManager {
   // update the current snapshot.
   void clear();
 
-  // Return a shared pointer to a deep copy of the current snapshot. This can
-  // be safely used to execute a query without interfering with future updates.
-  SharedLocatedTriplesSnapshot getCurrentSnapshot() const;
+  // Return a shared pointer to a deep copy of the current version snapshot.
+  // This can be safely used to execute a query without interfering with future
+  // updates.
+  LocatedTriplesSharedState getCurrentLocatedTriplesSharedState() const;
 };
 
 #endif  // QLEVER_SRC_INDEX_DELTATRIPLES_H

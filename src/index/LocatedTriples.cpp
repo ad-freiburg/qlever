@@ -343,18 +343,10 @@ void LocatedTriplesPerBlock::updateAugmentedMetadata() {
     auto firstTriple = blockUpdates.begin()->triple_.toPermutedTriple();
     auto lastTriple = blockUpdates.rbegin()->triple_.toPermutedTriple();
 
-    using O = CompressedBlockMetadata::OffsetAndCompressedSize;
-    O emptyBlock{0, 0};
-
-    // TODO<joka921> We need the appropriate number of columns here, or we need
-    // to make the reading code work regardless of the number of columns.
+    // The first `std::nullopt` means that this block contains only
+    // `LocatedTriple`s.
     CompressedBlockMetadataNoBlockIndex lastBlockN{
-        std::vector<O>(4, emptyBlock),
-        0,
-        firstTriple,
-        lastTriple,
-        std::nullopt,
-        true};
+        std::nullopt, 0, firstTriple, lastTriple, std::nullopt, true};
     lastBlockN.graphInfo_.emplace();
     CompressedBlockMetadata lastBlock{lastBlockN, blockIndex};
     updateGraphMetadata(lastBlock, blockUpdates);

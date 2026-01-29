@@ -72,7 +72,8 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
     const Index& index) {
   const auto& indexImpl = index.getImpl();
   const DeltaTriplesManager& deltaTriplesManager{index.deltaTriplesManager()};
-  auto sharedLocatedTriplesSnapshot = deltaTriplesManager.getCurrentSnapshot();
+  auto sharedLocatedTriplesSnapshot =
+      deltaTriplesManager.getCurrentLocatedTriplesSharedState();
   const auto& locatedTriplesSnapshot = *sharedLocatedTriplesSnapshot;
   static constexpr size_t col0IdTag = 43;
   auto cancellationDummy = std::make_shared<ad_utility::CancellationHandle<>>();

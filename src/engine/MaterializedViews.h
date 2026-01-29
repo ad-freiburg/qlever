@@ -55,6 +55,10 @@ class MaterializedViewWriter {
   // with the same column ordering as the `SELECT` statement.
   std::vector<ColumnIndex> columnPermutation_;
 
+  // The number of empty columns to add to the query result such that the
+  // resulting table has at least four columns.
+  uint8_t numAddEmptyColumns_;
+
   using RangeOfIdTables = ad_utility::InputRangeTypeErased<IdTableStatic<0>>;
   // SPO comparator
   using Comparator = SortTriple<0, 1, 2>;
@@ -83,11 +87,16 @@ class MaterializedViewWriter {
   // columns and column ordering. This is called in the constructor to populate
   // `columnNamesAndPermutation_`.
   using ColumnNameAndIndex = std::pair<Variable, ColumnIndex>;
-  using ColumnNamesAndPermutation = std::vector<ColumnNameAndIndex>;
+  struct ColumnNamesAndPermutation {
+    std::vector<ColumnNameAndIndex> columnNamesAndIndices_;
+    uint8_t numAddEmptyColumns_;
+  };
   ColumnNamesAndPermutation getIdTableColumnNamesAndPermutation() const;
 
   // The number of columns of the view.
-  size_t numCols() const { return columnPermutation_.size(); }
+  size_t numCols() const {
+    return columnPermutation_.size() + numAddEmptyColumns_;
+  }
 
   // Helper to permute an `IdTable` according to `columnPermutation_` and verify
   // that there are no `LocalVocabEntry` values in any of the selected columns.
@@ -146,16 +155,16 @@ class MaterializedView {
   std::string onDiskBase_;
   std::string name_;
   std::shared_ptr<Permutation> permutation_{std::make_shared<Permutation>(
-      Permutation::Enum::SPO, ad_utility::makeUnlimitedAllocator<Id>())};
+      Permutation::Enum::SPO, ad_utility::makeUnlimitedAllocator<Id>(), name_)};
   VariableToColumnMap varToColMap_;
-  std::shared_ptr<LocatedTriplesSnapshot> locatedTriplesSnapshot_;
+  std::shared_ptr<LocatedTriplesState> locatedTriplesState_;
+  std::optional<std::string> originalQuery_;
 
   using AdditionalScanColumns = SparqlTripleSimple::AdditionalScanColumns;
 
-  // Helper to create an empty `LocatedTriplesSnapshot` for `IndexScan`s as
+  // Helper to create an empty `LocatedTriplesState` for `IndexScan`s as
   // materialized views do not support updates yet.
-  std::shared_ptr<LocatedTriplesSnapshot> makeEmptyLocatedTriplesSnapshot()
-      const;
+  std::shared_ptr<LocatedTriplesState> makeEmptyLocatedTriplesState() const;
 
  public:
   // Load a materialized view from disk given the filename components. The
@@ -169,6 +178,11 @@ class MaterializedView {
   // Get the variable to column map.
   const VariableToColumnMap& variableToColumnMap() const {
     return varToColMap_;
+  }
+
+  // Get the original query string used for writing the view.
+  const std::optional<std::string>& originalQuery() const {
+    return originalQuery_;
   }
 
   // Return the combined filename from the index' `onDiskBase` and the name of
@@ -185,7 +199,7 @@ class MaterializedView {
   // Return a reference to the `LocatedTriplesSnapshot` for the permutation. For
   // now this is always an empty snapshot but with the correct permutation
   // metadata.
-  std::shared_ptr<const LocatedTriplesSnapshot> locatedTriplesSnapshot() const;
+  LocatedTriplesSharedState locatedTriplesState() const;
 
   // Checks if the given name is allowed for a materialized view. Currently only
   // alphanumerics and hyphens are allowed. This is relevant for safe filenames

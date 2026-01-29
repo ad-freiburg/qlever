@@ -65,7 +65,11 @@ struct CompressedBlockMetadataNoBlockIndex {
 
   using GraphInfo = std::optional<std::vector<Id>>;
 
-  std::vector<OffsetAndCompressedSize> offsetsAndCompressedSize_;
+  // For each column, the offset and compressed size of the column in the
+  // underlying file. `std::nullopt` is currently used for the last block which
+  // purely consists of `LocatedTriples`, and thus is not stored at all in the
+  // underlying file.
+  std::optional<std::vector<OffsetAndCompressedSize>> offsetsAndCompressedSize_;
   size_t numRows_;
 
   // Store the first and the last triple of the block. First and last are meant
@@ -129,6 +133,10 @@ struct CompressedBlockMetadataNoBlockIndex {
   // `columnIndex` compared to `firstTriple_` of block `other`.
   bool isConsistentWith(const CompressedBlockMetadataNoBlockIndex& other,
                         size_t columnIndex) const;
+
+  // Get the offset and compressed size for the given column.
+  OffsetAndCompressedSize getOffsetAndCompressedSizeForColumn(
+      ColumnIndex columnIndex) const;
 
   // Two of these are equal if all members are equal.
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(
@@ -197,7 +205,16 @@ AD_SERIALIZE_FUNCTION(CompressedBlockMetadata::OffsetAndCompressedSize) {
 
 // Serialization of the block metadata.
 AD_SERIALIZE_FUNCTION(CompressedBlockMetadata) {
-  serializer | arg.offsetsAndCompressedSize_;
+  if constexpr (ad_utility::serialization::WriteSerializer<S>) {
+    AD_CORRECTNESS_CHECK(arg.offsetsAndCompressedSize_.has_value(),
+                         "When serializing blocks offsets and compressed sizes "
+                         "need to be present.");
+  } else {
+    static_assert(ad_utility::serialization::ReadSerializer<S>);
+    // Insert a dummy to overwrite.
+    arg.offsetsAndCompressedSize_.emplace();
+  }
+  serializer | arg.offsetsAndCompressedSize_.value();
   serializer | arg.numRows_;
   serializer | arg.firstTriple_;
   serializer | arg.lastTriple_;

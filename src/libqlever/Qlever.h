@@ -14,6 +14,7 @@
 
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
+#include "engine/NamedResultCacheSerializer.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryPlanner.h"
 #include "global/RuntimeParameters.h"
@@ -162,6 +163,13 @@ struct EngineConfig : CommonConfig {
   // after a restart). To revert to the state of the index without updates,
   // simply delete this file.
   bool persistUpdates_ = true;
+
+  // If set to true, no permutations will be loaded from disk. This is useful
+  // when only queries that don't require accessing the permutations need to be
+  // executed (e.g., queries that only compute constant expressions, or query
+  // that only rely on the `NamedQueryCache` which can be populated
+  // separately).
+  bool doNotLoadPermutations_ = false;
 };
 
 // Class to use QLever as an embedded database, without the HTTP server. See
@@ -232,6 +240,7 @@ class Qlever {
 
   // Clear the result with the given `name` from the cache.
   void eraseResultWithName(std::string name);
+  // Completely clear the `NamedResultCache`.
   void clearNamedResultCache();
 
   // Write a new materialized view with `name` to disk and store the result of
@@ -241,6 +250,22 @@ class Qlever {
   // Preload a materialized view s.t. the first query to the view does not have
   // to load the view.
   void loadMaterializedView(std::string name) const;
+
+  // Write the contents of the `NamedResultCache` to disk.
+  template <typename Serializer>
+  void writeNamedResultCacheToSerializer(Serializer& serializer) const {
+    namedResultCache_.writeToSerializer(serializer);
+  }
+
+  // Read the contents of the `NamedResultCache` from disk.
+  template <typename Serializer>
+  void readNamedResultCacheFromDisk(Serializer& serializer) {
+    namedResultCache_.readFromSerializer(serializer, allocator_,
+                                         *index_.getBlankNodeManager());
+  }
+
+  // Low-level access to the QLever API, use with care.
+  Index& index() { return index_; }
 };
 }  // namespace qlever
 

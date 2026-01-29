@@ -169,7 +169,7 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
           std::nullopt}
           .toScanSpecification(index);
   const auto& perm = index.getPermutation(Permutation::Enum::PSO);
-  const auto& locatedTriple = locatedTriplesSnapshot();
+  const auto& locatedTriple = locatedTriplesState();
   auto fullHasPattern =
       perm.lazyScan(perm.getScanSpecAndBlocks(scanSpec, locatedTriple),
                     std::nullopt, {}, cancellationHandle_, locatedTriple);

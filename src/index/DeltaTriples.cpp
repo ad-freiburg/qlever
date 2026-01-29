@@ -25,6 +25,60 @@
 
 // ____________________________________________________________________________
 template <bool isInternal>
+const LocatedTriplesPerBlock&
+LocatedTriplesState::getLocatedTriplesForPermutation(
+    Permutation::Enum permutation) const {
+  if constexpr (isInternal) {
+    AD_CONTRACT_CHECK(permutation == Permutation::PSO ||
+                      permutation == Permutation::POS);
+  }
+  return getLocatedTriples<isInternal>().at(static_cast<int>(permutation));
+}
+
+template const LocatedTriplesPerBlock&
+LocatedTriplesState::getLocatedTriplesForPermutation<true>(
+    Permutation::Enum permutation) const;
+template const LocatedTriplesPerBlock&
+LocatedTriplesState::getLocatedTriplesForPermutation<false>(
+    Permutation::Enum permutation) const;
+
+// ____________________________________________________________________________
+template <bool isInternal>
+LocatedTriplesPerBlock& LocatedTriplesState::getLocatedTriplesForPermutation(
+    Permutation::Enum permutation) {
+  return const_cast<LocatedTriplesPerBlock&>(
+      std::as_const(*this).getLocatedTriplesForPermutation<isInternal>(
+          permutation));
+}
+
+template LocatedTriplesPerBlock&
+LocatedTriplesState::getLocatedTriplesForPermutation<true>(
+    Permutation::Enum permutation);
+template LocatedTriplesPerBlock&
+LocatedTriplesState::getLocatedTriplesForPermutation<false>(
+    Permutation::Enum permutation);
+
+// ____________________________________________________________________________
+template <bool isInternal>
+LocatedTriplesPerBlockAllPermutations<isInternal>&
+LocatedTriplesState::getLocatedTriples() {
+  return const_cast<LocatedTriplesPerBlockAllPermutations<isInternal>&>(
+      std::as_const(*this).getLocatedTriples<isInternal>());
+}
+
+// ____________________________________________________________________________
+template <bool isInternal>
+const LocatedTriplesPerBlockAllPermutations<isInternal>&
+LocatedTriplesState::getLocatedTriples() const {
+  if constexpr (isInternal) {
+    return internalLocatedTriplesPerBlock_;
+  } else {
+    return locatedTriplesPerBlock_;
+  }
+}
+
+// ____________________________________________________________________________
+template <bool isInternal>
 LocatedTriples::iterator& DeltaTriples::TriplesToHandles<isInternal>::
     LocatedTripleHandles::forPermutation(Permutation::Enum permutation) {
   return handles_[static_cast<size_t>(permutation)];
@@ -37,8 +91,10 @@ void DeltaTriples::clear() {
     state.triplesDeleted_.clear();
     ql::ranges::for_each(locatedTriples, &LocatedTriplesPerBlock::clear);
   };
-  clearImpl(triplesToHandlesNormal_, locatedTriplesNormal_);
-  clearImpl(triplesToHandlesInternal_, locatedTriplesInternal_);
+  clearImpl(triplesToHandlesNormal_,
+            locatedTriples_->getLocatedTriples<false>());
+  clearImpl(triplesToHandlesInternal_,
+            locatedTriples_->getLocatedTriples<true>());
 }
 
 // ____________________________________________________________________________
@@ -53,16 +109,6 @@ DeltaTriples::TriplesToHandles<isInternal>& DeltaTriples::getState() {
 
 // ____________________________________________________________________________
 template <bool isInternal>
-auto& DeltaTriples::getLocatedTriple() {
-  if constexpr (isInternal) {
-    return locatedTriplesInternal_;
-  } else {
-    return locatedTriplesNormal_;
-  }
-}
-
-// ____________________________________________________________________________
-template <bool isInternal>
 std::vector<
     typename DeltaTriples::TriplesToHandles<isInternal>::LocatedTripleHandles>
 DeltaTriples::locateAndAddTriples(CancellationHandle cancellationHandle,
@@ -70,7 +116,7 @@ DeltaTriples::locateAndAddTriples(CancellationHandle cancellationHandle,
                                   bool insertOrDelete,
                                   ad_utility::timer::TimeTracer& tracer) {
   constexpr const auto& allPermutations = Permutation::all<isInternal>();
-  auto& lt = getLocatedTriple<isInternal>();
+  auto& lt = locatedTriples_->getLocatedTriples<isInternal>();
   std::array<std::vector<LocatedTriples::iterator>, allPermutations.size()>
       intermediateHandles;
   for (auto permutation : allPermutations) {
@@ -107,7 +153,7 @@ DeltaTriples::locateAndAddTriples(CancellationHandle cancellationHandle,
 template <bool isInternal>
 void DeltaTriples::eraseTripleInAllPermutations(
     typename TriplesToHandles<isInternal>::LocatedTripleHandles& handles) {
-  auto& lt = getLocatedTriple<isInternal>();
+  auto& lt = locatedTriples_->getLocatedTriples<isInternal>();
   // Erase for all permutations.
   for (auto permutation : Permutation::all<isInternal>()) {
     auto ltIter = handles.forPermutation(permutation);
@@ -185,6 +231,8 @@ void DeltaTriples::insertTriples(CancellationHandle cancellationHandle,
   modifyTriplesImpl<true, true>(std::move(cancellationHandle),
                                 std::move(internalTriples), tracer);
   tracer.endTrace("internalPermutation");
+  // Update the index of the located triples to mark that they have changed.
+  locatedTriples_->index_++;
 }
 
 // ____________________________________________________________________________
@@ -202,6 +250,8 @@ void DeltaTriples::deleteTriples(CancellationHandle cancellationHandle,
   modifyTriplesImpl<true, false>(std::move(cancellationHandle),
                                  std::move(internalTriples), tracer);
   tracer.endTrace("internalPermutation");
+  // Update the index of the located triples to mark that they have changed.
+  locatedTriples_->index_++;
 }
 
 // ____________________________________________________________________________
@@ -227,8 +277,8 @@ void DeltaTriples::rewriteLocalVocabEntriesAndBlankNodes(Triples& triples) {
   // this class.
   ad_utility::HashMap<Id, Id> blankNodeMap;
   // For the given original blank node `id`, check if it has already been
-  // mapped. If not, map it to a new blank node managed by the `localVocab_` of
-  // this class. Either way, return the (already existing or newly created)
+  // mapped. If not, map it to a new blank node managed by the `localVocab_`
+  // of this class. Either way, return the (already existing or newly created)
   // value.
   auto getLocalBlankNode = [this, &blankNodeMap](Id id) {
     AD_CORRECTNESS_CHECK(id.getDatatype() == Datatype::BlankNodeIndex);
@@ -331,32 +381,22 @@ void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
 }
 
 // ____________________________________________________________________________
-const LocatedTriplesPerBlock&
-LocatedTriplesSnapshot::getLocatedTriplesForPermutation(
-    Permutation::Enum permutation) const {
-  return locatedTriplesPerBlock_[static_cast<int>(permutation)];
+LocatedTriplesSharedState DeltaTriples::getLocatedTriplesSharedStateCopy()
+    const {
+  // Create a copy of the `LocatedTriplesState` for use as a constant
+  // snapshot.
+  return LocatedTriplesSharedState{std::make_shared<LocatedTriplesState>(
+      locatedTriples_->locatedTriplesPerBlock_,
+      locatedTriples_->internalLocatedTriplesPerBlock_,
+      localVocab_.getLifetimeExtender(), locatedTriples_->index_)};
 }
 
 // ____________________________________________________________________________
-const LocatedTriplesPerBlock&
-LocatedTriplesSnapshot::getInternalLocatedTriplesForPermutation(
-    Permutation::Enum permutation) const {
-  AD_CONTRACT_CHECK(permutation == Permutation::PSO ||
-                    permutation == Permutation::POS);
-  return internalLocatedTriplesPerBlock_[static_cast<int>(permutation)];
-}
-
-// ____________________________________________________________________________
-SharedLocatedTriplesSnapshot DeltaTriples::getSnapshot() {
-  // NOTE: Both members of the `LocatedTriplesSnapshot` are copied, but the
-  // `localVocab_` has no copy constructor (in order to avoid accidental
-  // copies), hence the explicit `clone`.
-  auto snapshotIndex = nextSnapshotIndex_;
-  ++nextSnapshotIndex_;
-  return SharedLocatedTriplesSnapshot{
-      std::make_shared<LocatedTriplesSnapshot>(LocatedTriplesSnapshot{
-          locatedTriplesNormal_, locatedTriplesInternal_,
-          localVocab_.getLifetimeExtender(), snapshotIndex})};
+LocatedTriplesSharedState DeltaTriples::getLocatedTriplesSharedStateReference()
+    const {
+  // Creating a `shared_ptr<const LocatedTriplesState>` from a
+  // `shared_ptr<LocatedTriplesState>` is cheap.
+  return LocatedTriplesSharedState{locatedTriples_};
 }
 
 // ____________________________________________________________________________
@@ -380,7 +420,8 @@ DeltaTriples::DeltaTriples(const Index& index)
 // ____________________________________________________________________________
 DeltaTriplesManager::DeltaTriplesManager(const IndexImpl& index)
     : deltaTriples_{index},
-      currentLocatedTriplesSnapshot_{deltaTriples_.wlock()->getSnapshot()} {}
+      currentLocatedTriplesSharedState_{
+          deltaTriples_.wlock()->getLocatedTriplesSharedStateCopy()} {}
 
 // _____________________________________________________________________________
 template <typename ReturnType>
@@ -397,8 +438,8 @@ ReturnType DeltaTriplesManager::modify(
                                       updateMetadataAfterRequest,
                                       &tracer](DeltaTriples& deltaTriples) {
     auto updateSnapshot = [this, &deltaTriples] {
-      auto newSnapshot = deltaTriples.getSnapshot();
-      currentLocatedTriplesSnapshot_.withWriteLock(
+      auto newSnapshot = deltaTriples.getLocatedTriplesSharedStateCopy();
+      currentLocatedTriplesSharedState_.withWriteLock(
           [&newSnapshot](auto& currentSnapshot) {
             currentSnapshot = std::move(newSnapshot);
           });
@@ -417,19 +458,23 @@ ReturnType DeltaTriplesManager::modify(
     auto updateMetadata = [&tracer, &deltaTriples,
                            updateMetadataAfterRequest]() {
       if (updateMetadataAfterRequest) {
-        tracer.beginTrace("updateMetadata");
+        tracer.beginTrace("metadataUpdateForSnapshot");
         deltaTriples.updateAugmentedMetadata();
-        tracer.endTrace("updateMetadata");
+        tracer.endTrace("metadataUpdateForSnapshot");
       }
     };
 
     tracer.endTrace("acquiringDeltaTriplesWriteLock");
     if constexpr (std::is_void_v<ReturnType>) {
+      tracer.beginTrace("operations");
       function(deltaTriples);
+      tracer.endTrace("operations");
       updateMetadata();
       writeAndUpdateSnapshot();
     } else {
+      tracer.beginTrace("operations");
       ReturnType returnValue = function(deltaTriples);
+      tracer.endTrace("operations");
       updateMetadata();
       writeAndUpdateSnapshot();
       return returnValue;
@@ -448,13 +493,18 @@ template DeltaTriplesCount DeltaTriplesManager::modify<DeltaTriplesCount>(
     const std::function<DeltaTriplesCount(DeltaTriples&)>&,
     bool writeToDiskAfterRequest, bool updateMetadataAfterRequest,
     ad_utility::timer::TimeTracer&);
+template nlohmann::json DeltaTriplesManager::modify<nlohmann::json>(
+    const std::function<nlohmann::json(DeltaTriples&)>&,
+    bool writeToDiskAfterRequest, bool updateMetadataAfterRequest,
+    ad_utility::timer::TimeTracer&);
 
 // _____________________________________________________________________________
 void DeltaTriplesManager::clear() { modify<void>(&DeltaTriples::clear); }
 
 // _____________________________________________________________________________
-SharedLocatedTriplesSnapshot DeltaTriplesManager::getCurrentSnapshot() const {
-  return *currentLocatedTriplesSnapshot_.rlock();
+LocatedTriplesSharedState
+DeltaTriplesManager::getCurrentLocatedTriplesSharedState() const {
+  return *currentLocatedTriplesSharedState_.rlock();
 }
 
 // _____________________________________________________________________________
@@ -464,8 +514,9 @@ void DeltaTriples::setOriginalMetadata(
     bool setInternalMetadata) {
   auto& locatedTriplesPerBlock =
       setInternalMetadata
-          ? locatedTriplesInternal_.at(static_cast<size_t>(permutation))
-          : locatedTriplesNormal_.at(static_cast<size_t>(permutation));
+          ? locatedTriples_->getLocatedTriplesForPermutation<true>(permutation)
+          : locatedTriples_->getLocatedTriplesForPermutation<false>(
+                permutation);
   locatedTriplesPerBlock.setOriginalMetadata(std::move(metadata));
 }
 
@@ -474,8 +525,8 @@ void DeltaTriples::updateAugmentedMetadata() {
   auto update = [](auto& lt) {
     ql::ranges::for_each(lt, &LocatedTriplesPerBlock::updateAugmentedMetadata);
   };
-  update(locatedTriplesNormal_);
-  update(locatedTriplesInternal_);
+  update(locatedTriples_->getLocatedTriples<false>());
+  update(locatedTriples_->getLocatedTriples<true>());
 }
 
 // _____________________________________________________________________________
@@ -485,8 +536,8 @@ void DeltaTriples::writeToDisk() const {
   }
   // TODO<RobinTF> Currently this only writes non-internal delta triples to
   // disk. The internal triples will be regenerated when importing the rest
-  // again. In the future we might to also want to explicitly store the internal
-  // triples.
+  // again. In the future we might to also want to explicitly store the
+  // internal triples.
   auto toRange = [](const TriplesToHandles<false>::TriplesToHandlesMap& map) {
     return map | ql::views::keys |
            ql::views::transform(
