@@ -14,16 +14,7 @@ using enum PositionInTriple;
 using StringTriple = ConstructTripleGenerator::StringTriple;
 
 // _____________________________________________________________________________
-ConstructTripleGenerator::ConstructTripleGenerator(
-    Triples constructTriples, std::shared_ptr<const Result> result,
-    const VariableToColumnMap& variableColumns, const Index& index,
-    CancellationHandle cancellationHandle)
-    : templateTriples_(std::move(constructTriples)),
-      result_(std::move(result)),
-      variableColumns_(variableColumns),
-      index_(index),
-      cancellationHandle_(std::move(cancellationHandle)) {
-  // initialize a cache containing the constants of the graph triple template.
+void ConstructTripleGenerator::precomputeConstants() {
   precomputedConstants_.resize(templateTriples_.size());
   for (size_t tripleIdx = 0; tripleIdx < templateTriples_.size(); ++tripleIdx) {
     const auto& triple = templateTriples_[tripleIdx];
@@ -44,6 +35,20 @@ ConstructTripleGenerator::ConstructTripleGenerator(
       }
     }
   }
+}
+
+// _____________________________________________________________________________
+ConstructTripleGenerator::ConstructTripleGenerator(
+    Triples constructTriples, std::shared_ptr<const Result> result,
+    const VariableToColumnMap& variableColumns, const Index& index,
+    CancellationHandle cancellationHandle)
+    : templateTriples_(std::move(constructTriples)),
+      result_(std::move(result)),
+      variableColumns_(variableColumns),
+      index_(index),
+      cancellationHandle_(std::move(cancellationHandle)) {
+  // initialize a cache containing the constants of the graph triple template.
+  precomputeConstants();
 }
 
 // _____________________________________________________________________________

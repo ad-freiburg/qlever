@@ -35,12 +35,7 @@ class ConstructTripleGenerator {
                            std::shared_ptr<const Result> result,
                            const VariableToColumnMap& variableColumns,
                            const Index& index,
-                           CancellationHandle cancellationHandle)
-      : templateTriples_(std::move(constructTriples)),
-        result_(std::move(result)),
-        variableColumns_(variableColumns),
-        index_(index),
-        cancellationHandle_(std::move(cancellationHandle)) {}
+                           CancellationHandle cancellationHandle);
 
   // _____________________________________________________________________________
   // This generator has to be called for each table contained in the result of
@@ -75,9 +70,7 @@ class ConstructTripleGenerator {
                               const ConstructQueryExportContext& context);
 
  private:
-  const std::array<PositionInTriple, 3> ALL_POSITIONS = {
-      PositionInTriple::SUBJECT, PositionInTriple::PREDICATE,
-      PositionInTriple::OBJECT};
+  void precomputeConstants();
 
   // triple templates contained in the graph template
   // (the CONSTRUCT-clause of the CONSTRUCt-query) of the CONSTRUCT-query.

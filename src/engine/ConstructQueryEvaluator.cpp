@@ -61,24 +61,13 @@ std::optional<std::string> ConstructQueryEvaluator::evaluate(
 // _____________________________________________________________________________
 std::optional<std::string> ConstructQueryEvaluator::evaluate(
     const BlankNode& node, const ConstructQueryExportContext& context) {
-  auto& cache = context.blankNodeCache_;
-  const std::string& label = node.label();
-
-  // Check cache first - avoids repeated string construction when the same
-  // blank node appears multiple times in the CONSTRUCT template.
-  if (auto it = cache.find(label); it != cache.end()) {
-    return it->second;
-  }
-
   std::ostringstream stream;
   stream << "_:";
   stream << (node.isGenerated() ? 'g' : 'u');  // generated or user-defined
   stream << context._rowOffset + context.resultTableRowIndex_ << '_';
   stream << node.label();
 
-  // Store in cache and return
-  cache[label] = stream.str();
-  return cache[label];
+  return stream.str();
 }
 
 // _____________________________________________________________________________
