@@ -88,7 +88,7 @@ class QueryPatternCache {
   // `BasicGraphPatternInvariantTo`. For details, see the documentation for this
   // helper.
   static std::vector<parsedQuery::GraphPatternOperation>
-  graphPatternInvariantCheck(const ParsedQuery& parsed);
+  graphPatternInvariantFilter(const ParsedQuery& parsed);
 };
 
 }  // namespace materializedViewsQueryAnalysis

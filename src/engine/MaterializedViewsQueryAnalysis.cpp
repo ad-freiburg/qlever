@@ -182,6 +182,13 @@ bool QueryPatternCache::analyzeView(ViewPtr view) {
     return false;
   }
 
+  auto explainIgnore = [&](const std::string& reason) {
+    AD_LOG_INFO << "Materialized view '" << view->name()
+                << "' will not be added to the query pattern cache for query "
+                   "rewriting. Reason: "
+                << reason << "." << std::endl;
+  };
+
   // We do not need the `EncodedIriManager` because we are only interested in
   // analyzing the query structure, not in converting its components to
   // `ValueId`s.
@@ -191,17 +198,22 @@ bool QueryPatternCache::analyzeView(ViewPtr view) {
   // TODO<ullingerc> Do we want to report the reason for non-optimizable
   // queries?
 
-  auto graphPatternsFiltered = graphPatternInvariantCheck(parsed);
+  auto graphPatternsFiltered = graphPatternInvariantFilter(parsed);
   if (graphPatternsFiltered.size() != 1) {
+    explainIgnore(
+        "The view has more than one graph pattern (even after skipping ignored "
+        "patterns)");
     return false;
   }
   const auto& graphPattern = graphPatternsFiltered.at(0);
   if (!std::holds_alternative<parsedQuery::BasicGraphPattern>(graphPattern)) {
+    explainIgnore("The graph pattern is not a basic set of triples");
     return false;
   }
   // TODO<ullingerc> Property path is stored as a single predicate here.
   const auto& triples = graphPattern.getBasic()._triples;
   if (triples.size() == 0) {
+    explainIgnore("The query body is empty");
     return false;
   }
   bool patternFound = false;
@@ -230,12 +242,16 @@ bool QueryPatternCache::analyzeView(ViewPtr view) {
     }
   }
 
+  if (!patternFound) {
+    explainIgnore("No supported query pattern for rewriting joins was found");
+  }
+
   return patternFound;
 }
 
 // _____________________________________________________________________________
 std::vector<parsedQuery::GraphPatternOperation>
-QueryPatternCache::graphPatternInvariantCheck(const ParsedQuery& parsed) {
+QueryPatternCache::graphPatternInvariantFilter(const ParsedQuery& parsed) {
   BasicGraphPatternsInvariantTo invariantCheck{
       getVariablesPresentInBasicGraphPatterns(
           parsed._rootGraphPattern._graphPatterns)};
