@@ -14,6 +14,8 @@
 #include <stdexcept>
 
 #include "engine/IndexScan.h"
+#include "engine/Join.h"
+#include "engine/MaterializedViewsQueryAnalysis.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/VariableToColumnMap.h"
@@ -92,7 +94,9 @@ MaterializedViewWriter::getIdTableColumnNamesAndPermutation() const {
   // Column information for the columns selected by the user's query.
   auto existingCols = ::ranges::to<std::vector<ColumnNameAndIndex>>(
       targetVarsAndCols | ql::views::transform([](const auto& opt) {
-        AD_CONTRACT_CHECK(opt.has_value());
+        AD_CONTRACT_CHECK(
+            opt.has_value(),
+            "Please ensure that all variables in your SELECT are bound.");
         return ColumnNameAndIndex{opt.value().variable_,
                                   opt.value().columnIndex_};
       }));
@@ -375,17 +379,27 @@ std::shared_ptr<const Permutation> MaterializedView::permutation() const {
 // _____________________________________________________________________________
 void MaterializedViewsManager::loadView(const std::string& name) const {
   auto lock = loadedViews_.wlock();
+  auto patternLock = queryPatternCache_.wlock();
   if (lock->contains(name)) {
     return;
   }
-  lock->insert({name, std::make_shared<MaterializedView>(onDiskBase_, name)});
-};
+  auto view = std::make_shared<MaterializedView>(onDiskBase_, name);
+  lock->insert({name, view});
+  // Analyzing the view when loading instead of (de)serializing an analysis
+  // result has the benefit that query analysis can be extended without needing
+  // to rewrite views.
+  if (patternLock->analyzeView(view)) {
+    AD_LOG_INFO << "The materialized view '" << name
+                << "' was added to the query pattern cache." << std::endl;
+  }
+}
 
 // _____________________________________________________________________________
 void MaterializedViewsManager::unloadViewIfLoaded(
     const std::string& name) const {
   // `HashMap::erase` is a no-op for nonexisting keys.
   loadedViews_.wlock()->erase(name);
+  // TODO<ullingerc> Query pattern cache unload.
 }
 
 // _____________________________________________________________________________
@@ -595,6 +609,15 @@ std::shared_ptr<IndexScan> MaterializedView::makeIndexScan(
       qec, permutation_, LocatedTriplesSharedState{locatedTriplesState_},
       std::move(scanTriple), IndexScan::Graphs::All(), std::nullopt,
       viewQuery.getVarsToKeep());
+}
+
+// _____________________________________________________________________________
+std::vector<MaterializedViewJoinReplacement>
+MaterializedViewsManager::makeJoinReplacementIndexScans(
+    QueryExecutionContext* qec,
+    const parsedQuery::BasicGraphPattern& triples) const {
+  return queryPatternCache_.rlock()->makeJoinReplacementIndexScans(qec,
+                                                                   triples);
 }
 
 // _____________________________________________________________________________

@@ -80,7 +80,19 @@ struct BasicGraphPattern {
   std::vector<SparqlTriple> _triples;
   /// Append the triples from `other` to this `BasicGraphPattern`
   void appendTriples(BasicGraphPattern other);
+
+  // Collect all the `Variable`s present in this `BasicGraphPattern` and add
+  // them to a `HashSet`.
+  void collectAllContainedVariables(ad_utility::HashSet<Variable>& vars) const;
 };
+
+// Extract all variables present in a set of `BasicGraphPatterns` contained in
+// `GraphPatternOperation`s.
+//
+// IMPORTANT: This function does not consider variables that are contained in
+// other types of `GraphPatternOperation`s.
+ad_utility::HashSet<Variable> getVariablesPresentInBasicGraphPatterns(
+    const std::vector<parsedQuery::GraphPatternOperation>& graphPatterns);
 
 /// A `Values` clause
 struct Values {
