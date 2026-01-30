@@ -588,7 +588,12 @@ void DeltaTriples::readFromDisk() {
   if (!filenameForPersisting_.has_value()) {
     return;
   }
-  AD_CONTRACT_CHECK(localVocab_.empty());
+  AD_CONTRACT_CHECK(
+      localVocab_.empty() ||
+          (languagePredicate_.getDatatype() == Datatype::LocalVocabIndex &&
+           localVocab_.size() == 1),
+      "The local vocab must be empty or only contain the language "
+      "predicate before reading delta triples from disk.");
   auto [vocab, idRanges] = ad_utility::deserializeIds(
       filenameForPersisting_.value(), index_.getBlankNodeManager());
   if (idRanges.empty()) {
