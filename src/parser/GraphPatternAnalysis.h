@@ -21,26 +21,21 @@ namespace graphPatternAnalysis {
 //
 // NOTE: This does not guarantee completeness, so it might return `false` even
 // though we could be invariant to a `GraphPatternOperation`.
-//
-// NOTE: The selected query result is expected to be deduplicated, otherwise the
-// result indicated by this helper is not correct.
 struct BasicGraphPatternsInvariantTo {
   ad_utility::HashSet<Variable> variables_;
 
-  bool operator()(const parsedQuery::Optional& optional) const;
   bool operator()(const parsedQuery::Bind& bind) const;
   bool operator()(const parsedQuery::Values& values) const;
 
-  CPP_template(typename T)(requires(
-      ad_utility::SimilarToAny<
-          T, parsedQuery::Union, parsedQuery::Subquery, parsedQuery::TransPath,
-          parsedQuery::BasicGraphPattern, parsedQuery::Service,
-          parsedQuery::PathQuery, parsedQuery::SpatialQuery,
-          parsedQuery::TextSearchQuery, parsedQuery::Minus,
-          parsedQuery::GroupGraphPattern, parsedQuery::Describe,
-          parsedQuery::Load, parsedQuery::NamedCachedResult,
-          parsedQuery::MaterializedViewQuery>)) bool
-  operator()(const T&) const {
+  template <typename T>
+  bool operator()(const T&) const {
+    using namespace parsedQuery;
+    // The presence of any of these operations might remove or duplicate rows.
+    static_assert(
+        ad_utility::SimilarToAny<
+            T, Optional, Union, Subquery, TransPath, BasicGraphPattern, Service,
+            PathQuery, SpatialQuery, TextSearchQuery, Minus, GroupGraphPattern,
+            Describe, Load, NamedCachedResult, MaterializedViewQuery>);
     return false;
   }
 };
