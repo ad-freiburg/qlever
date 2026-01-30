@@ -12,6 +12,8 @@
 #include "../util/IndexTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
 #include "engine/IndexScan.h"
+#include "engine/MaterializedViews.h"
+#include "engine/NamedResultCache.h"
 #include "index/IndexImpl.h"
 #include "parser/ParsedQuery.h"
 
@@ -557,6 +559,63 @@ TEST(IndexScan, getResultSizeOfScan) {
     auto res = scan.computeResultOnlyForTesting();
     ASSERT_EQ(res.idTable().numRows(), 0);
     ASSERT_EQ(res.idTable().numColumns(), 0);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(IndexScan, getResultSizeOfScanWithDeltaTriples) {
+  auto index = makeTestIndex("getResultSizeOfScanWithDeltaTriples",
+                             "<a> <a> <a> . <b> <b> <b> . <c> <c> <c> .");
+  auto getId = makeGetId(index);
+  auto g = qlever::specialIds().at(QLEVER_INTERNAL_GRAPH_IRI);
+  auto a = getId("<a>");
+  auto b = getId("<b>");
+  using V = Variable;
+
+  QueryResultCache cache;
+  NamedResultCache namedCache;
+  MaterializedViewsManager materializedViewsManager;
+  QueryExecutionContext qec{
+      index,
+      &cache,
+      makeAllocator(ad_utility::MemorySize::megabytes(100)),
+      SortPerformanceEstimator{},
+      &namedCache,
+      &materializedViewsManager};
+  auto cancellationHandle =
+      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+  // Since the rough estimate doesn't know if the delta triples are inserts or
+  // deletions, the estimate remains the same regardless of the delta triples.
+  {
+    index.deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
+      deltaTriples.insertTriples(cancellationHandle,
+                                 {IdTriple<0>{std::array{a, a, a, g}}});
+      deltaTriples.deleteTriples(cancellationHandle,
+                                 {IdTriple<0>{std::array{b, b, b, g}}});
+    });
+    SparqlTripleSimple scanTriple{V{"?x"}, V("?y"), V{"?z"}};
+    IndexScan scan{&qec, Permutation::Enum::PSO, scanTriple};
+    EXPECT_EQ(scan.getSizeEstimate(), 3);
+  }
+  {
+    index.deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
+      deltaTriples.insertTriples(cancellationHandle,
+                                 {IdTriple<0>{std::array{b, b, b, g}}});
+    });
+    SparqlTripleSimple scanTriple{V{"?x"}, V("?y"), V{"?z"}};
+    IndexScan scan{&qec, Permutation::Enum::PSO, scanTriple};
+    EXPECT_EQ(scan.getSizeEstimate(), 3);
+  }
+  {
+    index.deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
+      deltaTriples.deleteTriples(cancellationHandle,
+                                 {IdTriple<0>{std::array{a, a, a, g}}});
+      deltaTriples.deleteTriples(cancellationHandle,
+                                 {IdTriple<0>{std::array{b, b, b, g}}});
+    });
+    SparqlTripleSimple scanTriple{V{"?x"}, V("?y"), V{"?z"}};
+    IndexScan scan{&qec, Permutation::Enum::PSO, scanTriple};
+    EXPECT_EQ(scan.getSizeEstimate(), 3);
   }
 }
 
