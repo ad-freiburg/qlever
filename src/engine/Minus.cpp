@@ -45,8 +45,8 @@ string Minus::getDescriptor() const { return "Minus"; }
 
 // _____________________________________________________________________________
 Result Minus::computeResultForTwoIndexScans(bool requestLaziness,
-                                            const IndexScan& leftScan,
-                                            const IndexScan& rightScan) const {
+                                            IndexScan& leftScan,
+                                            IndexScan& rightScan) const {
   using namespace qlever::joinWithIndexScanHelpers;
 
   // For MINUS, only the right child can be prefiltered.
@@ -70,23 +70,22 @@ Result Minus::computeResultForTwoIndexScans(bool requestLaziness,
   ColumnIndex leftJoinColumn = _matchedColumns.at(0).at(0);
   std::swap(permutation.at(0), permutation.at(leftJoinColumn));
 
-  auto action =
-      [this, leftBlocksPtr, rightBlocksPtr, &leftScan, &rightScan,
-       permutation](std::function<void(IdTable&, LocalVocab&)> yieldTable) {
-        ad_utility::MinusRowHandler rowAdder{
-            _matchedColumns.size(), IdTable{getResultWidth(), allocator()},
-            cancellationHandle_, std::move(yieldTable)};
-        auto leftConverted = convertGenerator(std::move(*leftBlocksPtr),
-                                              const_cast<IndexScan&>(leftScan));
-        auto rightConverted = convertGenerator(
-            std::move(*rightBlocksPtr), const_cast<IndexScan&>(rightScan));
-        ad_utility::zipperJoinForBlocksWithPotentialUndef(
-            leftConverted, rightConverted, std::less{}, rowAdder, {}, {},
-            ad_utility::MinusJoinTag{});
-        auto localVocab = std::move(rowAdder.localVocab());
-        return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
-                                        std::move(localVocab)};
-      };
+  auto action = [this, leftBlocksPtr, rightBlocksPtr, &leftScan, &rightScan,
+                 permutation](
+                    std::function<void(IdTable&, LocalVocab&)> yieldTable) {
+    ad_utility::MinusRowHandler rowAdder{
+        _matchedColumns.size(), IdTable{getResultWidth(), allocator()},
+        cancellationHandle_, std::move(yieldTable)};
+    auto leftConverted = convertGenerator(std::move(*leftBlocksPtr), leftScan);
+    auto rightConverted =
+        convertGenerator(std::move(*rightBlocksPtr), rightScan);
+    ad_utility::zipperJoinForBlocksWithPotentialUndef(
+        leftConverted, rightConverted, std::less{}, rowAdder, {}, {},
+        ad_utility::MinusJoinTag{});
+    auto localVocab = std::move(rowAdder.localVocab());
+    return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
+                                    std::move(localVocab)};
+  };
 
   if (requestLaziness) {
     return {qlever::joinHelpers::runLazyJoinAndConvertToGenerator(
@@ -102,7 +101,7 @@ Result Minus::computeResultForTwoIndexScans(bool requestLaziness,
 // _____________________________________________________________________________
 Result Minus::computeResultForIndexScanOnRight(
     bool requestLaziness, std::shared_ptr<const Result> leftRes,
-    const IndexScan& rightScan) const {
+    IndexScan& rightScan) const {
   using namespace qlever::joinWithIndexScanHelpers;
 
   AD_CORRECTNESS_CHECK(leftRes->isFullyMaterialized());
@@ -139,8 +138,8 @@ Result Minus::computeResultForIndexScanOnRight(
             leftTable.asColumnSubsetView(identityPerm),
             leftRes->getCopyOfLocalVocab()}};
 
-        auto rightConverted = convertGenerator(
-            std::move(*rightBlocksPtr), const_cast<IndexScan&>(rightScan));
+        auto rightConverted =
+            convertGenerator(std::move(*rightBlocksPtr), rightScan);
         ad_utility::zipperJoinForBlocksWithPotentialUndef(
             leftBlock, rightConverted, std::less{}, rowAdder, {}, {},
             ad_utility::MinusJoinTag{});
@@ -163,7 +162,7 @@ Result Minus::computeResultForIndexScanOnRight(
 // _____________________________________________________________________________
 Result Minus::computeResultForIndexScanOnRightLazy(
     bool requestLaziness, std::shared_ptr<const Result> leftRes,
-    const IndexScan& rightScan) const {
+    IndexScan& rightScan) const {
   using namespace qlever::joinWithIndexScanHelpers;
 
   AD_CORRECTNESS_CHECK(!leftRes->isFullyMaterialized());
@@ -179,9 +178,8 @@ Result Minus::computeResultForIndexScanOnRightLazy(
   // For MINUS semantics, we must process ALL left input (similar to OPTIONAL).
   // We use prefilterTablesForOptional which passes through all left rows
   // while still prefiltering the right IndexScan.
-  auto [leftSide, rightSide] =
-      const_cast<IndexScan&>(rightScan).prefilterTablesForOptional(
-          leftRes->idTables(), _matchedColumns.at(0).at(0));
+  auto [leftSide, rightSide] = rightScan.prefilterTablesForOptional(
+      leftRes->idTables(), _matchedColumns.at(0).at(0));
 
   // Wrap in shared_ptr for const lambda capture
   auto leftSidePtr = std::make_shared<Result::LazyResult>(std::move(leftSide));
@@ -210,8 +208,7 @@ Result Minus::computeResultForIndexScanOnRightLazy(
         leftRange, rightRange, std::less{}, rowAdder, {}, {},
         ad_utility::MinusJoinTag{});
 
-    const_cast<IndexScan&>(rightScan).runtimeInfo().status_ =
-        RuntimeInformation::Status::lazilyMaterializedCompleted;
+    setScanStatusToLazilyCompleted(rightScan);
 
     auto localVocab = std::move(rowAdder.localVocab());
     return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),

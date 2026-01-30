@@ -174,6 +174,14 @@ inline auto convertPrefilteredGenerators(
   return std::pair{std::move(leftRange), std::move(rightRange)};
 }
 
+// Helper to set scan status to lazily completed (variadic, accepts 1+ scans)
+template <typename... Scans>
+inline void setScanStatusToLazilyCompleted(Scans&... scans) {
+  (void(scans.runtimeInfo().status_ =
+            RuntimeInformation::Status::lazilyMaterializedCompleted),
+   ...);
+}
+
 }  // namespace qlever::joinWithIndexScanHelpers
 
 #endif  // QLEVER_SRC_ENGINE_JOINWITHINDEXSCANHELPERS_H

@@ -106,9 +106,9 @@ string OptionalJoin::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-Result OptionalJoin::computeResultForTwoIndexScans(
-    bool requestLaziness, const IndexScan& leftScan,
-    const IndexScan& rightScan) const {
+Result OptionalJoin::computeResultForTwoIndexScans(bool requestLaziness,
+                                                   IndexScan& leftScan,
+                                                   IndexScan& rightScan) const {
   using namespace qlever::joinWithIndexScanHelpers;
 
   // For OPTIONAL joins, we cannot prefilter the left side (it must be
@@ -153,18 +153,15 @@ Result OptionalJoin::computeResultForTwoIndexScans(
         CHUNK_SIZE,          std::move(yieldTable)};
 
     auto leftConverted = qlever::joinWithIndexScanHelpers::convertGenerator(
-        std::move(*leftBlocksPtr), const_cast<IndexScan&>(leftScan));
+        std::move(*leftBlocksPtr), leftScan);
     auto rightConverted = qlever::joinWithIndexScanHelpers::convertGenerator(
-        std::move(*rightBlocksPtr), const_cast<IndexScan&>(rightScan));
+        std::move(*rightBlocksPtr), rightScan);
 
     ad_utility::zipperJoinForBlocksWithPotentialUndef(
         leftConverted, rightConverted, std::less{}, rowAdder, {}, {},
         ad_utility::OptionalJoinTag{});
 
-    const_cast<IndexScan&>(leftScan).runtimeInfo().status_ =
-        RuntimeInformation::Status::lazilyMaterializedCompleted;
-    const_cast<IndexScan&>(rightScan).runtimeInfo().status_ =
-        RuntimeInformation::Status::lazilyMaterializedCompleted;
+    setScanStatusToLazilyCompleted(leftScan, rightScan);
 
     auto localVocab = std::move(rowAdder.localVocab());
     return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
@@ -183,7 +180,7 @@ Result OptionalJoin::computeResultForTwoIndexScans(
 // _____________________________________________________________________________
 Result OptionalJoin::computeResultForIndexScanOnRight(
     bool requestLaziness, std::shared_ptr<const Result> leftRes,
-    const IndexScan& rightScan) const {
+    IndexScan& rightScan) const {
   using namespace qlever::joinWithIndexScanHelpers;
 
   AD_CORRECTNESS_CHECK(leftRes->isFullyMaterialized());
@@ -231,14 +228,13 @@ Result OptionalJoin::computeResultForIndexScanOnRight(
         leftTable.asColumnSubsetView(identityPerm),
         leftRes->getCopyOfLocalVocab()}};
     auto rightConverted = qlever::joinWithIndexScanHelpers::convertGenerator(
-        std::move(*rightBlocksPtr), const_cast<IndexScan&>(rightScan));
+        std::move(*rightBlocksPtr), rightScan);
 
     ad_utility::zipperJoinForBlocksWithPotentialUndef(
         leftBlock, rightConverted, std::less{}, rowAdder, {}, {},
         ad_utility::OptionalJoinTag{});
 
-    const_cast<IndexScan&>(rightScan).runtimeInfo().status_ =
-        RuntimeInformation::Status::lazilyMaterializedCompleted;
+    setScanStatusToLazilyCompleted(rightScan);
 
     auto localVocab = std::move(rowAdder.localVocab());
     return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
@@ -257,7 +253,7 @@ Result OptionalJoin::computeResultForIndexScanOnRight(
 // _____________________________________________________________________________
 Result OptionalJoin::computeResultForIndexScanOnRightLazy(
     bool requestLaziness, std::shared_ptr<const Result> leftRes,
-    const IndexScan& rightScan) const {
+    IndexScan& rightScan) const {
   using namespace qlever::joinWithIndexScanHelpers;
 
   AD_CORRECTNESS_CHECK(!leftRes->isFullyMaterialized());
@@ -273,9 +269,8 @@ Result OptionalJoin::computeResultForIndexScanOnRightLazy(
   // For OPTIONAL semantics, we must re-yield ALL left input (never filter it).
   // We use prefilterTables which gives us filtered right blocks, but we need
   // to ensure the left side always re-yields everything.
-  auto [leftSide, rightSide] =
-      const_cast<IndexScan&>(rightScan).prefilterTablesForOptional(
-          leftRes->idTables(), _joinColumns.at(0).at(0));
+  auto [leftSide, rightSide] = rightScan.prefilterTablesForOptional(
+      leftRes->idTables(), _joinColumns.at(0).at(0));
 
   // Wrap in shared_ptr for const lambda capture
   auto leftSidePtr = std::make_shared<Result::LazyResult>(std::move(leftSide));
@@ -298,8 +293,7 @@ Result OptionalJoin::computeResultForIndexScanOnRightLazy(
         leftRange, rightRange, std::less{}, rowAdder, {}, {},
         ad_utility::OptionalJoinTag{});
 
-    const_cast<IndexScan&>(rightScan).runtimeInfo().status_ =
-        RuntimeInformation::Status::lazilyMaterializedCompleted;
+    setScanStatusToLazilyCompleted(rightScan);
 
     auto localVocab = std::move(rowAdder.localVocab());
     return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),

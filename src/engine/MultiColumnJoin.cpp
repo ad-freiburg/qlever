@@ -65,8 +65,7 @@ string MultiColumnJoin::getDescriptor() const {
 
 // _____________________________________________________________________________
 Result MultiColumnJoin::computeResultForTwoIndexScans(
-    bool requestLaziness, const IndexScan& leftScan,
-    const IndexScan& rightScan) const {
+    bool requestLaziness, IndexScan& leftScan, IndexScan& rightScan) const {
   using namespace qlever::joinWithIndexScanHelpers;
 
   ad_utility::Timer timer{ad_utility::timer::Timer::InitialStatus::Started};
@@ -96,18 +95,14 @@ Result MultiColumnJoin::computeResultForTwoIndexScans(
         qlever::joinHelpers::CHUNK_SIZE,
         std::move(yieldTable)};
 
-    auto leftConverted = convertGenerator(std::move(*leftBlocksPtr),
-                                          const_cast<IndexScan&>(leftScan));
-    auto rightConverted = convertGenerator(std::move(*rightBlocksPtr),
-                                           const_cast<IndexScan&>(rightScan));
+    auto leftConverted = convertGenerator(std::move(*leftBlocksPtr), leftScan);
+    auto rightConverted =
+        convertGenerator(std::move(*rightBlocksPtr), rightScan);
 
     ad_utility::zipperJoinForBlocksWithPotentialUndef(
         leftConverted, rightConverted, std::less{}, rowAdder, {}, {});
 
-    const_cast<IndexScan&>(leftScan).runtimeInfo().status_ =
-        RuntimeInformation::Status::lazilyMaterializedCompleted;
-    const_cast<IndexScan&>(rightScan).runtimeInfo().status_ =
-        RuntimeInformation::Status::lazilyMaterializedCompleted;
+    setScanStatusToLazilyCompleted(leftScan, rightScan);
 
     auto localVocab = std::move(rowAdder.localVocab());
     return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
@@ -197,8 +192,7 @@ Result MultiColumnJoin::computeResultForIndexScanAndIdTable(
           idTableBlock, scanConverted, std::less{}, rowAdder, {}, {});
     }
 
-    scan->runtimeInfo().status_ =
-        RuntimeInformation::Status::lazilyMaterializedCompleted;
+    setScanStatusToLazilyCompleted(*scan);
 
     auto localVocab = std::move(rowAdder.localVocab());
     return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
