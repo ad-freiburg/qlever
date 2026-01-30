@@ -287,4 +287,29 @@ TEST(IntValueGetterTest, OperatorWithLit) {
   t.checkFromLocalAndNormalVocabAndLiteral("<https://example.com/test>", noInt);
 }
 
+// _____________________________________________________________________________
+TEST(NumericOrDateValueGetterTest, OperatorWithId) {
+  NumericOrDateValueGetterTester t;
+  t.checkFromValueId(ValueId::makeFromInt(-42),
+                     Eq(sparqlExpression::detail::NumericOrDateValue(-42)));
+  t.checkFromValueId(ValueId::makeFromDouble(50.2),
+                     Optional(VariantWith<double>(DoubleNear(50.2, 0.01))));
+  t.checkFromValueId(ValueId::makeFromBool(true),
+                     Eq(sparqlExpression::detail::NumericOrDateValue(1)));
+  t.checkFromValueId(
+      ValueId::makeFromDate(DateYearOrDuration(Date(2013, 5, 16))),
+      Eq(sparqlExpression::detail::NumericOrDateValue(
+          DateYearOrDuration(Date(2013, 5, 16)))));
+  t.checkFromValueId(
+      ValueId::makeFromDate(DateYearOrDuration(
+          DayTimeDuration(DayTimeDuration::Type::Positive, 102))),
+      Eq(sparqlExpression::detail::NumericOrDateValue(DateYearOrDuration(
+          DayTimeDuration(DayTimeDuration::Type::Positive, 102)))));
+  t.checkFromValueId(ValueId::makeUndefined(),
+                     Eq(sparqlExpression::detail::NumericOrDateValue(
+                         sparqlExpression::detail::NotNumeric{})));
+  t.checkFromValueId(ValueId::makeFromGeoPoint({3, 4}),
+                     Eq(sparqlExpression::detail::NumericOrDateValue(
+                         sparqlExpression::detail::NotNumeric{})));
+}
 };  // namespace

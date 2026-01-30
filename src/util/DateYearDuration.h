@@ -205,6 +205,10 @@ class DateYearOrDuration {
   // std::nullopt.
   static std::optional<DateYearOrDuration> convertToXsdDate(
       const DateYearOrDuration& dateValue);
+
+  // Subtraction of two DateYearOrDuration Objects.
+  [[nodiscard]] DateYearOrDuration operator-(
+      const DateYearOrDuration& rhs) const;
 };
 #ifdef QLEVER_CPP_17
 static_assert(std::is_default_constructible_v<DateYearOrDuration>);
