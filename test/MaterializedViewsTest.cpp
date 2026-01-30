@@ -11,6 +11,7 @@
 #include "./QueryPlannerTestHelpers.h"
 #include "./ServerTestHelpers.h"
 #include "./util/HttpRequestHelpers.h"
+#include "./util/RuntimeParametersTestHelpers.h"
 #include "engine/IndexScan.h"
 #include "engine/MaterializedViews.h"
 #include "engine/QueryExecutionContext.h"
@@ -788,20 +789,34 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
   }
 }
 
+// Example queries for testing query rewriting.
+constexpr std::string_view simpleChain = "SELECT * { ?s <p1> ?m . ?m <p2> ?o }";
+constexpr std::string_view simpleChainRenamed =
+    "SELECT * { ?b <p2> ?c . ?a <p1> ?b }";
+constexpr std::string_view simpleChainFixed =
+    "SELECT * {  <s2> <p1>/<p2> ?c . }";
+constexpr std::string_view simpleChainPlusJoin =
+    "SELECT * { ?s <p1>/<p2> ?o . ?s <p3> ?o2 }";
+constexpr std::string_view simpleChainRenamedPlusBind =
+    "SELECT ?a ?b ?c ?x { ?b <p2> ?c . ?a <p1> ?b . BIND(5 AS ?x) }";
+
 // _____________________________________________________________________________
-TEST(MaterializedViewsQueryRewriteTest, simpleChain) {
+TEST_P(MaterializedViewsQueryRewriteTest, simpleChain) {
   namespace h = queryPlannerTestHelpers;
 
+  RewriteTestParams p = GetParam();
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::queryPlanningBudget_>(
+          p.queryPlanningBudget_);
+
   // Test dataset and query.
-  const std::string simpleChain = "SELECT * { ?s <p1> ?m . ?m <p2> ?o }";
-  const std::string simpleChainRenamed = "SELECT * { ?b <p2> ?c . ?a <p1> ?b }";
-  const std::string simpleChainFixed = "SELECT * {  <s2> <p1>/<p2> ?c . }";
   const std::string chainTtl =
       " <s1> <p1> <m2> . \n"
       " <m1> <p2> <o1> . \n"
       " <s2> <p1> <m2> . \n"
       " <m2> <p2> <http://example.com/> . \n"
-      " <m2> <p3> \"abc\" .";
+      " <m2> <p3> \"abc\" . \n"
+      " <s2> <p3> <o3> . \n";
   const std::string onDiskBase = "_materializedViewRewriteChain";
   const std::string viewName = "testViewChain";
 
@@ -814,45 +829,50 @@ TEST(MaterializedViewsQueryRewriteTest, simpleChain) {
   qlever::Qlever qlv{config};
 
   // Without the materialized view, a regular join is executed.
-  h::expect(simpleChain, h::Join(h::IndexScanFromStrings("?s", "<p1>", "?m"),
-                                 h::IndexScanFromStrings("?m", "<p2>", "?o")));
+  h::expect(std::string{simpleChain},
+            h::Join(h::IndexScanFromStrings("?s", "<p1>", "?m"),
+                    h::IndexScanFromStrings("?m", "<p2>", "?o")));
 
   // Write a chain structure to the materialized view.
   MaterializedViewsManager manager{onDiskBase};
-  manager.writeViewToDisk(viewName, qlv.parseAndPlanQuery(simpleChain));
+  manager.writeViewToDisk(viewName, qlv.parseAndPlanQuery(p.writeQuery_));
   qlv.loadMaterializedView(viewName);
 
   // With the materialized view loaded, an index scan on the view is performed
   // instead of a regular join.
-  {
-    auto [qet, qec, parsed] = qlv.parseAndPlanQuery(simpleChain);
-    EXPECT_THAT(*qet, h::IndexScanFromStrings("?s", "?m", "?o",
-                                              {Permutation::Enum::SPO}));
-  }
-  {
-    auto [qet, qec, parsed] = qlv.parseAndPlanQuery(simpleChainRenamed);
-    EXPECT_THAT(*qet, h::IndexScanFromStrings("?a", "?b", "?c",
-                                              {Permutation::Enum::SPO}));
-  }
-  {
-    auto [qet, qec, parsed] = qlv.parseAndPlanQuery(simpleChainFixed);
-    EXPECT_THAT(
-        *qet, h::IndexScanFromStrings("<s2>", "?_QLever_internal_variable_qp_0",
-                                      "?c", {Permutation::Enum::SPO}));
-  }
+  auto qpExpect = [](qlever::Qlever& qlv, const auto& query,
+                     ::testing::Matcher<const QueryExecutionTree&> matcher,
+                     source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+    auto l = generateLocationTrace(sourceLocation);
+    auto [qet, qec, parsed] = qlv.parseAndPlanQuery(std::string{query});
+    EXPECT_THAT(*qet, matcher);
+  };
 
-  // An additional `BIND` is ignored and the view can still be used for query
-  // rewriting. Also uses a different sorting.
-  qlever::Qlever qlv2{config};
-  const std::string simpleChainRenamedPlusBind =
-      "SELECT ?b ?c ?a ?x { ?b <p2> ?c . ?a <p1> ?b . BIND(5 AS ?x) }";
-  const std::string viewNameBind = "testViewChainPlusBind";
-  manager.writeViewToDisk(viewNameBind,
-                          qlv2.parseAndPlanQuery(simpleChainRenamedPlusBind));
-  qlv2.loadMaterializedView(viewNameBind);
-  {
-    auto [qet, qec, parsed] = qlv2.parseAndPlanQuery(simpleChain);
-    EXPECT_THAT(*qet, h::IndexScanFromStrings("?m", "?o", "?s",
-                                              {Permutation::Enum::SPO}));
-  }
+  qpExpect(qlv, std::string{simpleChain},
+           h::IndexScanFromStrings("?s", "?m", "?o", {Permutation::Enum::SPO}));
+  qpExpect(qlv, simpleChainRenamed,
+           h::IndexScanFromStrings("?a", "?b", "?c", {Permutation::Enum::SPO}));
+  qpExpect(qlv, simpleChainFixed,
+           h::IndexScanFromStrings("<s2>", "?_QLever_internal_variable_qp_0",
+                                   "?c", {Permutation::Enum::SPO}));
+  qpExpect(
+      qlv, simpleChainPlusJoin,
+      h::Join(h::IndexScanFromStrings("?s", "?_QLever_internal_variable_qp_0",
+                                      "?o", {Permutation::Enum::SPO}),
+              h::IndexScanFromStrings("?s", "<p3>", "?o2")));
 }
+
+// _____________________________________________________________________________
+INSTANTIATE_TEST_SUITE_P(
+    MaterializedViewsTest, MaterializedViewsQueryRewriteTest,
+    ::testing::Values(
+        // Default case.
+        RewriteTestParams{std::string{simpleChain}, 1500},
+
+        // Default query for writing the materialized view, but forced greedy
+        // planning.
+        RewriteTestParams{std::string{simpleChain}, 1},
+
+        // An additional `BIND` is ignored and the view can still be used for
+        // query rewriting. Also uses a different sorting.
+        RewriteTestParams{std::string{simpleChainRenamedPlusBind}, 1500}));
