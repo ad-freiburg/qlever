@@ -266,11 +266,6 @@ int main(int argc, char** argv) {
                 << std::endl;
       return EXIT_SUCCESS;
     }
-    if (optionsMap.count("version")) {
-      std::cout << "QLever IndexBuilderMain " << qlever::version::ProjectVersion
-                << '\n';
-      return EXIT_SUCCESS;
-    }
     po::notify(optionsMap);
   } catch (const std::exception& e) {
     std::cerr << "Error in command-line argument: " << e.what() << std::endl;

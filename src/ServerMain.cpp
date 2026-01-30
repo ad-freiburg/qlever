@@ -195,10 +195,10 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
 
-  AD_LOG_INFO << EMPH_ON << "QLever server "
-              << qlever::version::ProjectVersion << ", compiled on "
-              << qlever::version::DatetimeOfCompilation << " using git hash "
-              << qlever::version::GitShortHash << EMPH_OFF << std::endl;
+  AD_LOG_INFO << EMPH_ON << "QLever server " << qlever::version::ProjectVersion
+              << ", compiled on " << qlever::version::DatetimeOfCompilation
+              << " using git hash " << qlever::version::GitShortHash << EMPH_OFF
+              << std::endl;
 
   try {
     Server server(port, numSimultaneousQueries, memoryMaxSize,

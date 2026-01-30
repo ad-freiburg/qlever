@@ -47,9 +47,6 @@ void runAsyncTest(Func innerRun, size_t numThreads) {
         }
       });
       return fut;
-      // Original code that causes AppleClang segfault:
-      // return net::post(*ioContext, std::packaged_task<void()>{
-      //                                    [&] { innerRun(*ioContext); }});
     }
   }();
 

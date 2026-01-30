@@ -342,7 +342,6 @@ struct MetricLengthVisitor {
     static_assert(ad_utility::similarToInstantiation<T, std::vector>);
 
     return ::ranges::accumulate(
-        // ::ranges::transform_view(multiGeom, MetricLengthVisitor{}), 0);
         ::ranges::transform_view(ad_utility::allView(multiGeom),
                                  MetricLengthVisitor{}),
         0);

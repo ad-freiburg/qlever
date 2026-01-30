@@ -238,8 +238,6 @@ class IndexNestedLoopJoin {
     for (const auto& rightRow : rightTable) {
       size_t leftOffset = 0;
       size_t leftSize = leftTable.size();
-      // for (const auto& [rightId, leftCol] :
-      //      ::ranges::zip_view(rightRow, leftColumns)) {
       // Use index-based iteration instead of ranges::zip_view to avoid
       // copying RowReference (which has a deleted copy constructor) on
       // AppleClang.

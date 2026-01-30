@@ -131,13 +131,6 @@ class LazyGroupByRange
           table, aggregates_, evaluationContext, blockStart, blockEnd,
           &currentLocalVocab_, groupByCols_);
       resultTable_ = std::move(table).toDynamic();
-      // // This processes the whole block in batches if possible
-      // IdTableStatic<OUT_WIDTH> table =
-      //     std::move(resultTable_).toStatic<OUT_WIDTH>();
-      // parent_->processBlock<OUT_WIDTH>(table, aggregates_, evaluationContext,
-      //                                  blockStart, blockEnd,
-      //                                  &currentLocalVocab_, groupByCols_);
-      // resultTable_ = std::move(table).toDynamic();
     }
   }
 
