@@ -35,7 +35,12 @@ class ConstructTripleGenerator {
                            std::shared_ptr<const Result> result,
                            const VariableToColumnMap& variableColumns,
                            const Index& index,
-                           CancellationHandle cancellationHandle);
+                           CancellationHandle cancellationHandle)
+      : templateTriples_(std::move(constructTriples)),
+        result_(std::move(result)),
+        variableColumns_(variableColumns),
+        index_(index),
+        cancellationHandle_(std::move(cancellationHandle)) {}
 
   // _____________________________________________________________________________
   // This generator has to be called for each table contained in the result of
