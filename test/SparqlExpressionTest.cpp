@@ -397,6 +397,12 @@ TEST(SparqlExpression, arithmeticOperators) {
   // `DivideExpression`.
   //
   // TODO: Also test `UnaryMinusExpression`.
+  auto createDat = [](std::string timeString, bool fromDateTime = true) {
+    return Dat((fromDateTime ? DateYearOrDuration::parseXsdDatetime
+                             : DateYearOrDuration::parseXsdDayTimeDuration),
+               timeString);
+  };
+
   V<Id> b{{B(true), B(false), B(false), B(true)}, alloc};
   V<Id> bAsInt{{I(1), I(0), I(0), I(1)}, alloc};
 
@@ -404,11 +410,10 @@ TEST(SparqlExpression, arithmeticOperators) {
 
   V<std::string> s{{"true", "", "false", ""}, alloc};
 
-  V<Id> dat{{Dat(DateYearOrDuration::parseXsdDatetime, "1909-10-10T10:11:23Z"),
-             Dat(DateYearOrDuration::parseXsdDatetime, "2009-09-23T01:01:59Z"),
-             Dat(DateYearOrDuration::parseXsdDatetime, "1959-03-13T13:13:13Z"),
-             Dat(DateYearOrDuration::parseXsdDatetime, "1889-10-29T00:12:30Z")},
-            alloc};
+  V<Id> dat{
+      {createDat("1909-10-10T10:11:23Z"), createDat("2009-09-23T01:01:59Z"),
+       createDat("1959-03-13T13:13:13Z"), createDat("1889-10-29T00:12:30Z")},
+      alloc};
 
   V<Id> allNan{{D(naN), D(naN), D(naN), D(naN)}, alloc};
 
@@ -461,14 +466,12 @@ TEST(SparqlExpression, arithmeticOperators) {
   testMultiply(times13, mixed, D(1.3));
 
   // Test for DateTime - DateTime
-  V<Id> minus2000{
-      {Dat(DateYearOrDuration::parseXsdDayTimeDuration, "P32954DT13H48M37S"),
-       Dat(DateYearOrDuration::parseXsdDayTimeDuration, "P3553DT1H1M59S"),
-       Dat(DateYearOrDuration::parseXsdDayTimeDuration, "P14903DT10H46M47S"),
-       Dat(DateYearOrDuration::parseXsdDayTimeDuration, "P40239DT23H47M30S")},
-      alloc};
-  testMinus(minus2000, dat,
-            Dat(DateYearOrDuration::parseXsdDatetime, "2000-01-01T00:00:00Z"));
+  V<Id> minus2000{{createDat("P32954DT13H48M37S", false),
+                   createDat("P3553DT1H1M59S", false),
+                   createDat("P14903DT10H46M47S", false),
+                   createDat("P40239DT23H47M30S", false)},
+                  alloc};
+  testMinus(minus2000, dat, createDat("2000-01-01T00:00:00Z"));
 
   V<Id> mixed2{{B(true), I(250), D(-113.2), Voc(4)}, alloc};
   V<Id> mixed2MinusDat{{U, U, U, U}, alloc};
