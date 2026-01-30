@@ -327,10 +327,15 @@ std::pair<bool, size_t> IndexScan::computeSizeEstimate() const {
       !scanSpecAndBlocksIsPrefiltered_) {
     // We don't do full scans for internal triples, so this is always correct.
     size_t numTriples = _executionContext->getIndex().numTriples().normal;
+    size_t numChanges =
+        permutation()
+            .getLocatedTriplesForPermutation(locatedTriplesState())
+            .numTriples();
+
     // Since we don't know how many triples have been inserted vs deleted, we
     // assume that they are roughly evenly split, so the estimate stays the
     // same.
-    return {false, numTriples};
+    return {numChanges == 0, numTriples};
   }
   auto [lower, upper] = permutation().getSizeEstimateForScan(
       scanSpecAndBlocks_, locatedTriplesState());

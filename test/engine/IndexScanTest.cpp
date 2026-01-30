@@ -499,14 +499,10 @@ TEST(IndexScan, namedGraphs) {
               Eq(IndexScan::Graphs::Blacklist(defaultGraph)));
 }
 
+// _____________________________________________________________________________
 TEST(IndexScan, getResultSizeOfScan) {
   auto qec = getQec("<x> <p> <s1>, <s2>. <x> <p2> <s1>.");
   auto getId = makeGetId(qec->getIndex());
-  [[maybe_unused]] auto x = getId("<x>");
-  [[maybe_unused]] auto p = getId("<p>");
-  [[maybe_unused]] auto s1 = getId("<s1>");
-  [[maybe_unused]] auto s2 = getId("<s2>");
-  [[maybe_unused]] auto p2 = getId("<p2>");
   using V = Variable;
   using I = TripleComponent::Iri;
 
@@ -514,23 +510,27 @@ TEST(IndexScan, getResultSizeOfScan) {
     SparqlTripleSimple scanTriple{V{"?x"}, V("?y"), V{"?z"}};
     IndexScan scan{qec, Permutation::Enum::PSO, scanTriple};
     EXPECT_EQ(scan.getSizeEstimate(), 3);
+    EXPECT_TRUE(scan.sizeEstimateIsExactForTesting());
   }
   {
     SparqlTripleSimple scanTriple{V{"?x"}, I::fromIriref("<p>"), V{"?y"}};
     IndexScan scan{qec, Permutation::Enum::PSO, scanTriple};
     EXPECT_EQ(scan.getSizeEstimate(), 2);
+    EXPECT_TRUE(scan.sizeEstimateIsExactForTesting());
   }
   {
     SparqlTripleSimple scanTriple{I::fromIriref("<x>"), I::fromIriref("<p>"),
                                   V{"?y"}};
     IndexScan scan{qec, Permutation::Enum::PSO, scanTriple};
     EXPECT_EQ(scan.getSizeEstimate(), 2);
+    EXPECT_TRUE(scan.sizeEstimateIsExactForTesting());
   }
   {
     SparqlTripleSimple scanTriple{V("?x"), I::fromIriref("<p>"),
                                   I::fromIriref("<s1>")};
     IndexScan scan{qec, Permutation::Enum::POS, scanTriple};
     EXPECT_EQ(scan.getSizeEstimate(), 1);
+    EXPECT_TRUE(scan.sizeEstimateIsExactForTesting());
   }
   // 0 variables
   {
@@ -542,6 +542,7 @@ TEST(IndexScan, getResultSizeOfScan) {
     auto res = scan.computeResultOnlyForTesting();
     ASSERT_EQ(res.idTable().numRows(), 1);
     ASSERT_EQ(res.idTable().numColumns(), 0);
+    EXPECT_TRUE(scan.sizeEstimateIsExactForTesting());
   }
   {
     SparqlTripleSimple scanTriple{I::fromIriref("<x2>"), I::fromIriref("<p>"),
@@ -549,6 +550,7 @@ TEST(IndexScan, getResultSizeOfScan) {
     IndexScan scan{qec, Permutation::Enum::POS, scanTriple};
     EXPECT_EQ(scan.getSizeEstimate(), 1);
     EXPECT_EQ(scan.getExactSize(), 0);
+    EXPECT_TRUE(scan.sizeEstimateIsExactForTesting());
   }
   {
     SparqlTripleSimple scanTriple{I::fromIriref("<x>"), I::fromIriref("<p>"),
@@ -559,6 +561,7 @@ TEST(IndexScan, getResultSizeOfScan) {
     auto res = scan.computeResultOnlyForTesting();
     ASSERT_EQ(res.idTable().numRows(), 0);
     ASSERT_EQ(res.idTable().numColumns(), 0);
+    EXPECT_TRUE(scan.sizeEstimateIsExactForTesting());
   }
 }
 
@@ -575,13 +578,17 @@ TEST(IndexScan, getResultSizeOfScanWithDeltaTriples) {
   QueryResultCache cache;
   NamedResultCache namedCache;
   MaterializedViewsManager materializedViewsManager;
-  QueryExecutionContext qec{
-      index,
-      &cache,
-      makeAllocator(ad_utility::MemorySize::megabytes(100)),
-      SortPerformanceEstimator{},
-      &namedCache,
-      &materializedViewsManager};
+  std::unique_ptr<QueryExecutionContext> qec = nullptr;
+
+  auto makeScan = [&]() {
+    qec = std::make_unique<QueryExecutionContext>(
+        index, &cache, makeAllocator(ad_utility::MemorySize::megabytes(100)),
+        SortPerformanceEstimator{}, &namedCache, &materializedViewsManager);
+
+    SparqlTripleSimple scanTriple{V{"?x"}, V("?y"), V{"?z"}};
+    return IndexScan{qec.get(), Permutation::Enum::PSO, scanTriple};
+  };
+
   auto cancellationHandle =
       std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
   // Since the rough estimate doesn't know if the delta triples are inserts or
@@ -593,18 +600,18 @@ TEST(IndexScan, getResultSizeOfScanWithDeltaTriples) {
       deltaTriples.deleteTriples(cancellationHandle,
                                  {IdTriple<0>{std::array{b, b, b, g}}});
     });
-    SparqlTripleSimple scanTriple{V{"?x"}, V("?y"), V{"?z"}};
-    IndexScan scan{&qec, Permutation::Enum::PSO, scanTriple};
+    auto scan = makeScan();
     EXPECT_EQ(scan.getSizeEstimate(), 3);
+    EXPECT_FALSE(scan.sizeEstimateIsExactForTesting());
   }
   {
     index.deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
       deltaTriples.insertTriples(cancellationHandle,
                                  {IdTriple<0>{std::array{b, b, b, g}}});
     });
-    SparqlTripleSimple scanTriple{V{"?x"}, V("?y"), V{"?z"}};
-    IndexScan scan{&qec, Permutation::Enum::PSO, scanTriple};
+    auto scan = makeScan();
     EXPECT_EQ(scan.getSizeEstimate(), 3);
+    EXPECT_FALSE(scan.sizeEstimateIsExactForTesting());
   }
   {
     index.deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
@@ -613,9 +620,9 @@ TEST(IndexScan, getResultSizeOfScanWithDeltaTriples) {
       deltaTriples.deleteTriples(cancellationHandle,
                                  {IdTriple<0>{std::array{b, b, b, g}}});
     });
-    SparqlTripleSimple scanTriple{V{"?x"}, V("?y"), V{"?z"}};
-    IndexScan scan{&qec, Permutation::Enum::PSO, scanTriple};
+    auto scan = makeScan();
     EXPECT_EQ(scan.getSizeEstimate(), 3);
+    EXPECT_FALSE(scan.sizeEstimateIsExactForTesting());
   }
 }
 

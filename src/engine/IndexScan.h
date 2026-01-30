@@ -165,6 +165,9 @@ class IndexScan final : public Operation {
     return multiplicity_[col];
   }
 
+  // Return the internal flag for testing purposes.
+  bool sizeEstimateIsExactForTesting() const { return sizeEstimateIsExact_; }
+
   bool knownEmptyResult() override {
     return sizeEstimateIsExact_ && sizeEstimate_ == 0;
   }
