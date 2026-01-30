@@ -18,6 +18,7 @@
 #include "util/Exception.h"
 #include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
+#include "util/MemoryHelpers.h"
 
 using std::endl;
 using std::string;
@@ -51,17 +52,13 @@ Result Minus::computeResultForTwoIndexScans(bool requestLaziness,
 
   // For MINUS, only the right child can be prefiltered.
   // Get unfiltered blocks for left, filtered blocks for right.
-  auto leftBlocks = leftScan.getLazyScan(std::nullopt);
-  auto blocks =
-      getBlocksForJoinOfTwoScans(leftScan, rightScan, _matchedColumns.size());
+  auto [leftBlocks, rightBlocks] =
+      getUnfilteredLeftAndFilteredRightSideFromIndexScans(
+          leftScan, rightScan, _matchedColumns.size());
 
   // Wrap in shared_ptr for const lambda capture
-  auto leftBlocksPtr =
-      std::make_shared<CompressedRelationReader::IdTableGeneratorInputRange>(
-          std::move(leftBlocks));
-  auto rightBlocksPtr =
-      std::make_shared<CompressedRelationReader::IdTableGeneratorInputRange>(
-          std::move(blocks[1]));
+  auto leftBlocksPtr = ad_utility::toSharedPtr(std::move(leftBlocks));
+  auto rightBlocksPtr = ad_utility::toSharedPtr(std::move(rightBlocks));
 
   std::vector<ColumnIndex> permutation;
   permutation.resize(_left->getResultWidth());
@@ -73,6 +70,8 @@ Result Minus::computeResultForTwoIndexScans(bool requestLaziness,
   auto action = [this, leftBlocksPtr, rightBlocksPtr, &leftScan, &rightScan,
                  permutation](
                     std::function<void(IdTable&, LocalVocab&)> yieldTable) {
+    using namespace qlever::joinWithIndexScanHelpers;
+
     ad_utility::MinusRowHandler rowAdder{
         _matchedColumns.size(), IdTable{getResultWidth(), allocator()},
         cancellationHandle_, std::move(yieldTable)};
@@ -87,15 +86,9 @@ Result Minus::computeResultForTwoIndexScans(bool requestLaziness,
                                     std::move(localVocab)};
   };
 
-  if (requestLaziness) {
-    return {qlever::joinHelpers::runLazyJoinAndConvertToGenerator(
-                std::move(action), std::move(permutation)),
-            resultSortedOn()};
-  } else {
-    auto [idTable, localVocab] = action(ad_utility::noop);
-    qlever::joinHelpers::applyPermutation(idTable, permutation);
-    return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
-  }
+  return qlever::joinHelpers::createResultFromAction(
+      requestLaziness, std::move(action), [this] { return resultSortedOn(); },
+      permutation);
 }
 
 // _____________________________________________________________________________
@@ -112,9 +105,7 @@ Result Minus::computeResultForIndexScanOnRight(
   auto rightBlocks = getBlocksForJoinOfColumnsWithScan(
       leftTable, _matchedColumns, rightScan, _matchedColumns.at(0).at(1));
 
-  auto rightBlocksPtr =
-      std::make_shared<CompressedRelationReader::IdTableGeneratorInputRange>(
-          std::move(rightBlocks));
+  auto rightBlocksPtr = ad_utility::toSharedPtr(std::move(rightBlocks));
 
   std::vector<ColumnIndex> permutation;
   permutation.resize(_left->getResultWidth());
@@ -126,6 +117,8 @@ Result Minus::computeResultForIndexScanOnRight(
   auto action =
       [this, leftRes = std::move(leftRes), rightBlocksPtr, &rightScan,
        permutation](std::function<void(IdTable&, LocalVocab&)> yieldTable) {
+        using namespace qlever::joinWithIndexScanHelpers;
+
         ad_utility::MinusRowHandler rowAdder{
             _matchedColumns.size(), IdTable{getResultWidth(), allocator()},
             cancellationHandle_, std::move(yieldTable)};
@@ -148,15 +141,9 @@ Result Minus::computeResultForIndexScanOnRight(
                                         std::move(localVocab)};
       };
 
-  if (requestLaziness) {
-    return {qlever::joinHelpers::runLazyJoinAndConvertToGenerator(
-                std::move(action), std::move(permutation)),
-            resultSortedOn()};
-  } else {
-    auto [idTable, localVocab] = action(ad_utility::noop);
-    qlever::joinHelpers::applyPermutation(idTable, permutation);
-    return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
-  }
+  return qlever::joinHelpers::createResultFromAction(
+      requestLaziness, std::move(action), [this] { return resultSortedOn(); },
+      permutation);
 }
 
 // _____________________________________________________________________________
@@ -182,9 +169,8 @@ Result Minus::computeResultForIndexScanOnRightLazy(
       leftRes->idTables(), _matchedColumns.at(0).at(0));
 
   // Wrap in shared_ptr for const lambda capture
-  auto leftSidePtr = std::make_shared<Result::LazyResult>(std::move(leftSide));
-  auto rightSidePtr =
-      std::make_shared<Result::LazyResult>(std::move(rightSide));
+  auto leftSidePtr = ad_utility::toSharedPtr(std::move(leftSide));
+  auto rightSidePtr = ad_utility::toSharedPtr(std::move(rightSide));
 
   std::vector<ColumnIndex> permutation;
   permutation.resize(_left->getResultWidth());
@@ -195,6 +181,8 @@ Result Minus::computeResultForIndexScanOnRightLazy(
 
   auto action = [this, leftSidePtr, rightSidePtr, &rightScan, permutation](
                     std::function<void(IdTable&, LocalVocab&)> yieldTable) {
+    using namespace qlever::joinWithIndexScanHelpers;
+
     ad_utility::MinusRowHandler rowAdder{
         _matchedColumns.size(), IdTable{getResultWidth(), allocator()},
         cancellationHandle_, std::move(yieldTable)};
@@ -215,15 +203,9 @@ Result Minus::computeResultForIndexScanOnRightLazy(
                                     std::move(localVocab)};
   };
 
-  if (requestLaziness) {
-    return {qlever::joinHelpers::runLazyJoinAndConvertToGenerator(
-                std::move(action), std::move(permutation)),
-            resultSortedOn()};
-  } else {
-    auto [idTable, localVocab] = action(ad_utility::noop);
-    qlever::joinHelpers::applyPermutation(idTable, permutation);
-    return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
-  }
+  return qlever::joinHelpers::createResultFromAction(
+      requestLaziness, std::move(action), [this] { return resultSortedOn(); },
+      permutation);
 }
 
 // _____________________________________________________________________________
