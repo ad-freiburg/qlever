@@ -138,8 +138,10 @@ class DeltaTriples {
   ad_utility::util::LRUCache<std::string, Id> languageTagCache_{
       languageTagCacheSize_};
 
-  // Cache commonly used predicates between calls.
-  static constexpr size_t predicateCacheSize_ = 50;
+  // Cache commonly used predicates and their IRI representation between calls
+  // of `makeInternalTriples`. For example in wikidata `wdt:P31`, or `wdt:P279`
+  // are frequently used, so we try to avoid an expensive lookup from disk.
+  static constexpr size_t predicateCacheSize_ = 100;
   ad_utility::util::LRUCache<Id::T, ad_utility::triple_component::Iri>
       predicateCache_{predicateCacheSize_};
 
