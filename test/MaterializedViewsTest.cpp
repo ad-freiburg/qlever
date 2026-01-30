@@ -848,7 +848,7 @@ TEST_P(MaterializedViewsQueryRewriteTest, simpleChain) {
     EXPECT_THAT(*qet, matcher);
   };
 
-  qpExpect(qlv, std::string{simpleChain},
+  qpExpect(qlv, simpleChain,
            h::IndexScanFromStrings("?s", "?m", "?o", {Permutation::Enum::SPO}));
   qpExpect(qlv, simpleChainRenamed,
            h::IndexScanFromStrings("?a", "?b", "?c", {Permutation::Enum::SPO}));
@@ -860,6 +860,8 @@ TEST_P(MaterializedViewsQueryRewriteTest, simpleChain) {
       h::Join(h::IndexScanFromStrings("?s", "?_QLever_internal_variable_qp_0",
                                       "?o", {Permutation::Enum::SPO}),
               h::IndexScanFromStrings("?s", "<p3>", "?o2")));
+
+  // TODO<ullingerc> Test overlapping view plans.
 }
 
 // _____________________________________________________________________________
