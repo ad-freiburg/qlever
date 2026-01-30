@@ -847,19 +847,18 @@ TEST_P(MaterializedViewsQueryRewriteTest, simpleChain) {
     auto [qet, qec, parsed] = qlv.parseAndPlanQuery(std::string{query});
     EXPECT_THAT(*qet, matcher);
   };
+  auto viewScan = [](std::string a, std::string b, std::string c) {
+    return h::IndexScanFromStrings(std::move(a), std::move(b), std::move(c),
+                                   {Permutation::Enum::SPO});
+  };
 
-  qpExpect(qlv, simpleChain,
-           h::IndexScanFromStrings("?s", "?m", "?o", {Permutation::Enum::SPO}));
-  qpExpect(qlv, simpleChainRenamed,
-           h::IndexScanFromStrings("?a", "?b", "?c", {Permutation::Enum::SPO}));
+  qpExpect(qlv, simpleChain, viewScan("?s", "?m", "?o"));
+  qpExpect(qlv, simpleChainRenamed, viewScan("?a", "?b", "?c"));
   qpExpect(qlv, simpleChainFixed,
-           h::IndexScanFromStrings("<s2>", "?_QLever_internal_variable_qp_0",
-                                   "?c", {Permutation::Enum::SPO}));
-  qpExpect(
-      qlv, simpleChainPlusJoin,
-      h::Join(h::IndexScanFromStrings("?s", "?_QLever_internal_variable_qp_0",
-                                      "?o", {Permutation::Enum::SPO}),
-              h::IndexScanFromStrings("?s", "<p3>", "?o2")));
+           viewScan("<s2>", "?_QLever_internal_variable_qp_0", "?c"));
+  qpExpect(qlv, simpleChainPlusJoin,
+           h::Join(viewScan("?s", "?_QLever_internal_variable_qp_0", "?o"),
+                   h::IndexScanFromStrings("?s", "<p3>", "?o2")));
 
   // TODO<ullingerc> Test overlapping view plans.
 }
