@@ -310,7 +310,12 @@ TYPED_TEST(CompactVectorOfStringsFixture, cloneAndRemap) {
   auto copy2 = original.cloneAndRemap(mappingFunction);
 
   ASSERT_EQ(original.size(), copy2.size());
-  for (auto [reference, element] : ::ranges::zip_view(original, copy2)) {
+  // Use index-based iteration instead of ranges::zip_view to avoid
+  // copying CompactVectorOfStrings (which has a deleted copy constructor)
+  // on AppleClang.
+  for (size_t i = 0; i < original.size(); ++i) {
+    const auto& reference = original[i];
+    const auto& element = copy2[i];
     ASSERT_EQ(reference.size(), element.size());
     auto modifiedReference = ::ranges::to<typename CompactVector::vector_type>(
         reference | ql::views::transform(mappingFunction));
