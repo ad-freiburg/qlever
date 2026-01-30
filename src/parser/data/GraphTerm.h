@@ -15,7 +15,6 @@
 #include "parser/RdfParser.h"
 #include "parser/TokenizerCtre.h"
 #include "parser/data/BlankNode.h"
-#include "parser/data/ConstructQueryExportContext.h"
 #include "parser/data/Iri.h"
 #include "parser/data/Literal.h"
 #include "util/VisitMixin.h"
@@ -28,17 +27,7 @@ class GraphTerm : public GraphTermBase,
   using GraphTermBase::GraphTermBase;
 
   // ___________________________________________________________________________
-  [[nodiscard]] std::optional<std::string> evaluate(
-      const ConstructQueryExportContext& context, PositionInTriple role) const {
-    // TODO<C++23>: Use std::visit when it is possible
-    return visit(
-        [&context, &role](const auto& object) -> std::optional<std::string> {
-          return object.evaluate(context, role);
-        });
-  }
-
-  // ___________________________________________________________________________
-  [[nodiscard]] std::string toSparql() const {
+  std::string toSparql() const {
     return visit(
         [](const auto& object) -> std::string { return object.toSparql(); });
   }
@@ -51,7 +40,7 @@ class GraphTerm : public GraphTermBase,
   // `DELETE WHERE{...}`. It is necessary, because the parser internally
   // represents the templates of UPDATE requests and CONSTRUCT queries
   // differently than The "normal" WHERE clauses.
-  [[nodiscard]] TripleComponent toTripleComponent() const {
+  TripleComponent toTripleComponent() const {
     return visit([](const auto& element) -> TripleComponent {
       using T = std::decay_t<decltype(element)>;
       if constexpr (std::is_same_v<T, Variable>) {
