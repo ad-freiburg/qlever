@@ -5,10 +5,15 @@
 
 #include "engine/MultiColumnJoin.h"
 
+#include <numeric>
+
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/CallFixedSize.h"
 #include "engine/Engine.h"
+#include "engine/IndexScan.h"
 #include "engine/JoinHelpers.h"
+#include "engine/JoinWithIndexScanHelpers.h"
+#include "global/RuntimeParameters.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 
 using std::endl;
@@ -59,9 +64,248 @@ string MultiColumnJoin::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
+Result MultiColumnJoin::computeResultForTwoIndexScans(
+    bool requestLaziness, IndexScan& leftScan, IndexScan& rightScan) const {
+  using namespace qlever::joinWithIndexScanHelpers;
+
+  ad_utility::Timer timer{ad_utility::timer::Timer::InitialStatus::Started};
+
+  // Get filtered blocks for both sides
+  auto blocks =
+      getBlocksForJoinOfTwoScans(leftScan, rightScan, _joinColumns.size());
+
+  runtimeInfo().addDetail("time-for-filtering-blocks", timer.msecs());
+
+  // Create result generator
+  // Wrap generators in shared_ptr to allow const lambda capture
+  auto leftBlocksPtr =
+      std::make_shared<CompressedRelationReader::IdTableGeneratorInputRange>(
+          std::move(blocks[0]));
+  auto rightBlocksPtr =
+      std::make_shared<CompressedRelationReader::IdTableGeneratorInputRange>(
+          std::move(blocks[1]));
+
+  auto action = [this, leftBlocksPtr, rightBlocksPtr, &leftScan, &rightScan](
+                    std::function<void(IdTable&, LocalVocab&)> yieldTable) {
+    auto rowAdder = ad_utility::AddCombinedRowToIdTable{
+        _joinColumns.size(),
+        IdTable{getResultWidth(), allocator()},
+        cancellationHandle_,
+        true,  // keepJoinColumns (for multi-column joins, we always keep them)
+        qlever::joinHelpers::CHUNK_SIZE,
+        std::move(yieldTable)};
+
+    auto leftConverted = convertGenerator(std::move(*leftBlocksPtr), leftScan);
+    auto rightConverted =
+        convertGenerator(std::move(*rightBlocksPtr), rightScan);
+
+    ad_utility::zipperJoinForBlocksWithPotentialUndef(
+        leftConverted, rightConverted, std::less{}, rowAdder, {}, {});
+
+    setScanStatusToLazilyCompleted(leftScan, rightScan);
+
+    auto localVocab = std::move(rowAdder.localVocab());
+    return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
+                                    std::move(localVocab)};
+  };
+
+  if (requestLaziness) {
+    return {qlever::joinHelpers::runLazyJoinAndConvertToGenerator(
+                std::move(action), {}),
+            resultSortedOn()};
+  } else {
+    auto [idTable, localVocab] = action(ad_utility::noop);
+    return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
+  }
+}
+
+// _____________________________________________________________________________
+template <bool idTableIsRightInput>
+Result MultiColumnJoin::computeResultForIndexScanAndIdTable(
+    bool requestLaziness, std::shared_ptr<const Result> resultWithIdTable,
+    std::shared_ptr<IndexScan> scan) const {
+  using namespace qlever::joinWithIndexScanHelpers;
+
+  AD_CORRECTNESS_CHECK(resultWithIdTable->isFullyMaterialized());
+
+  ad_utility::Timer timer{ad_utility::timer::Timer::InitialStatus::Started};
+
+  const IdTable& idTable = resultWithIdTable->idTable();
+
+  // Check if IdTable has UNDEF in join columns
+  bool idTableHasUndef = false;
+  for (const auto& [leftCol, rightCol] : _joinColumns) {
+    auto col = idTableIsRightInput ? rightCol : leftCol;
+    if (!idTable.empty() && idTable.at(0, col).isUndefined()) {
+      idTableHasUndef = true;
+      break;
+    }
+  }
+
+  // Get prefiltered blocks from the IndexScan
+  CompressedRelationReader::IdTableGeneratorInputRange scanBlocks;
+  if (!idTableHasUndef) {
+    scanBlocks = getBlocksForJoinOfColumnsWithScan(idTable, _joinColumns, *scan,
+                                                   idTableIsRightInput ? 1 : 0);
+  } else {
+    // Cannot prefilter with UNDEF, scan everything
+    scanBlocks = scan->getLazyScan(std::nullopt);
+    auto metaBlocks = scan->getMetadataForScan();
+    if (metaBlocks.has_value()) {
+      scanBlocks.details().numBlocksAll_ =
+          metaBlocks.value().sizeBlockMetadata_;
+    }
+  }
+
+  runtimeInfo().addDetail("time-for-filtering-blocks", timer.msecs());
+
+  // Wrap generator in shared_ptr
+  auto scanBlocksPtr =
+      std::make_shared<CompressedRelationReader::IdTableGeneratorInputRange>(
+          std::move(scanBlocks));
+
+  auto action = [this, resultWithIdTable = std::move(resultWithIdTable),
+                 scanBlocksPtr,
+                 scan](std::function<void(IdTable&, LocalVocab&)> yieldTable) {
+    auto rowAdder = ad_utility::AddCombinedRowToIdTable{
+        _joinColumns.size(),
+        IdTable{getResultWidth(), allocator()},
+        cancellationHandle_,
+        true,  // keepJoinColumns (for multi-column joins, we always keep them)
+        qlever::joinHelpers::CHUNK_SIZE,
+        std::move(yieldTable)};
+
+    // Create view of idTable
+    const IdTable& table = resultWithIdTable->idTable();
+    std::vector<ColumnIndex> identityPerm(table.numColumns());
+    std::iota(identityPerm.begin(), identityPerm.end(), 0);
+    auto idTableBlock = std::array{ad_utility::IdTableAndFirstCol{
+        table.asColumnSubsetView(identityPerm),
+        resultWithIdTable->getCopyOfLocalVocab()}};
+    auto scanConverted = convertGenerator(std::move(*scanBlocksPtr), *scan);
+
+    if constexpr (idTableIsRightInput) {
+      ad_utility::zipperJoinForBlocksWithPotentialUndef(
+          scanConverted, idTableBlock, std::less{}, rowAdder, {}, {});
+    } else {
+      ad_utility::zipperJoinForBlocksWithPotentialUndef(
+          idTableBlock, scanConverted, std::less{}, rowAdder, {}, {});
+    }
+
+    setScanStatusToLazilyCompleted(*scan);
+
+    auto localVocab = std::move(rowAdder.localVocab());
+    return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
+                                    std::move(localVocab)};
+  };
+
+  if (requestLaziness) {
+    return {qlever::joinHelpers::runLazyJoinAndConvertToGenerator(
+                std::move(action), {}),
+            resultSortedOn()};
+  } else {
+    auto [idTable, localVocab] = action(ad_utility::noop);
+    return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
+  }
+}
+
+// Explicit template instantiation
+template Result MultiColumnJoin::computeResultForIndexScanAndIdTable<false>(
+    bool, std::shared_ptr<const Result>, std::shared_ptr<IndexScan>) const;
+template Result MultiColumnJoin::computeResultForIndexScanAndIdTable<true>(
+    bool, std::shared_ptr<const Result>, std::shared_ptr<IndexScan>) const;
+
+// _____________________________________________________________________________
+Result MultiColumnJoin::computeResultForIndexScanAndLazyOperation(
+    bool requestLaziness, std::shared_ptr<const Result> lazyResult,
+    std::shared_ptr<IndexScan> scan) const {
+  // For lazy input with IndexScan, we cannot use prefiltering efficiently
+  // TODO: Implement proper lazy prefiltering similar to Join
+  // For now, signal to fall back to regular path by returning empty result
+  (void)requestLaziness;
+  (void)lazyResult;
+  (void)scan;
+
+  // Return empty result to signal fallback to regular computation path
+  return {IdTable{getResultWidth(), allocator()}, resultSortedOn(),
+          LocalVocab{}};
+}
+
+// _____________________________________________________________________________
 Result MultiColumnJoin::computeResult([[maybe_unused]] bool requestLaziness) {
   AD_LOG_DEBUG << "MultiColumnJoin result computation..." << endl;
 
+  // Try prefiltering with IndexScans
+  auto leftIndexScan =
+      std::dynamic_pointer_cast<IndexScan>(_left->getRootOperation());
+  auto rightIndexScan =
+      std::dynamic_pointer_cast<IndexScan>(_right->getRootOperation());
+
+  // Case 1: Both children are IndexScans
+  if (leftIndexScan && rightIndexScan) {
+    return computeResultForTwoIndexScans(requestLaziness, *leftIndexScan,
+                                         *rightIndexScan);
+  }
+
+  // Case 2: One child is IndexScan, try to use prefiltering
+  if (leftIndexScan || rightIndexScan) {
+    bool leftIsSmall =
+        _left->getRootOperation()->getSizeEstimate() <
+        getRuntimeParameter<
+            &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>();
+    bool rightIsSmall =
+        _right->getRootOperation()->getSizeEstimate() <
+        getRuntimeParameter<
+            &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>();
+
+    auto leftResIfCached = _left->getRootOperation()->getResult(
+        false, leftIsSmall ? ComputationMode::FULLY_MATERIALIZED
+                           : ComputationMode::ONLY_IF_CACHED);
+    auto rightResIfCached = _right->getRootOperation()->getResult(
+        false, rightIsSmall ? ComputationMode::FULLY_MATERIALIZED
+                            : ComputationMode::ONLY_IF_CACHED);
+
+    if (leftIndexScan && rightResIfCached &&
+        rightResIfCached->isFullyMaterialized()) {
+      return computeResultForIndexScanAndIdTable<true>(
+          requestLaziness, std::move(rightResIfCached), leftIndexScan);
+    }
+
+    if (rightIndexScan && leftResIfCached &&
+        leftResIfCached->isFullyMaterialized()) {
+      return computeResultForIndexScanAndIdTable<false>(
+          requestLaziness, std::move(leftResIfCached), rightIndexScan);
+    }
+
+    // Try getting the full results
+    auto leftResult =
+        leftResIfCached ? leftResIfCached : _left->getResult(true);
+    auto rightResult =
+        rightResIfCached ? rightResIfCached : _right->getResult(true);
+
+    if (leftIndexScan && rightResult->isFullyMaterialized()) {
+      return computeResultForIndexScanAndIdTable<true>(
+          requestLaziness, std::move(rightResult), leftIndexScan);
+    }
+
+    if (rightIndexScan && leftResult->isFullyMaterialized()) {
+      return computeResultForIndexScanAndIdTable<false>(
+          requestLaziness, std::move(leftResult), rightIndexScan);
+    }
+
+    // Handle lazy cases
+    if (leftIndexScan && !rightResult->isFullyMaterialized()) {
+      return computeResultForIndexScanAndLazyOperation(
+          requestLaziness, std::move(rightResult), leftIndexScan);
+    }
+
+    if (rightIndexScan && !leftResult->isFullyMaterialized()) {
+      return computeResultForIndexScanAndLazyOperation(
+          requestLaziness, std::move(leftResult), rightIndexScan);
+    }
+  }
+
+  // Regular path: no IndexScan optimization
   IdTable idTable{getExecutionContext()->getAllocator()};
   idTable.setNumColumns(getResultWidth());
 
