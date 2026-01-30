@@ -58,14 +58,13 @@ MaterializedViewWriter::MaterializedViewWriter(
 }
 
 // _____________________________________________________________________________
-void MaterializedViewWriter::writeViewToDisk(
-    std::string onDiskBase, std::string name,
-    const qlever::Qlever::QueryPlan& queryPlan,
+void MaterializedViewsManager::writeViewToDisk(
+    std::string name, const qlever::Qlever::QueryPlan& queryPlan,
     ad_utility::MemorySize memoryLimit,
-    ad_utility::AllocatorWithLimit<Id> allocator) {
-  MaterializedViewWriter writer{std::move(onDiskBase), std::move(name),
-                                queryPlan, std::move(memoryLimit),
-                                std::move(allocator)};
+    ad_utility::AllocatorWithLimit<Id> allocator) const {
+  unloadViewIfLoaded(name);
+  MaterializedViewWriter writer{onDiskBase_, std::move(name), queryPlan,
+                                std::move(memoryLimit), std::move(allocator)};
   writer.computeResultAndWritePermutation();
 }
 
@@ -249,11 +248,9 @@ MaterializedViewWriter::RangeOfIdTables MaterializedViewWriter::getSortedBlocks(
 IndexMetaDataMmap MaterializedViewWriter::writePermutation(
     RangeOfIdTables sortedBlocksSPO) const {
   std::string spoFilename = getFilenameBase() + ".index.spo";
-  CompressedRelationWriter spoWriter{
-      numCols(),
-      ad_utility::File{spoFilename, "w"},
-      UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN,
-  };
+  auto spoWriter = std::make_unique<CompressedRelationWriter>(
+      numCols(), ad_utility::File{spoFilename, "w"},
+      UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN);
 
   qlever::KeyOrder spoKeyOrder{0, 1, 2, 3};
   IndexMetaDataMmap spoMetaData;
@@ -267,7 +264,7 @@ IndexMetaDataMmap MaterializedViewWriter::writePermutation(
 
   auto [numDistinctPredicates, blockData] =
       CompressedRelationWriter::createPermutation(
-          {spoWriter, spoCallback},
+          {std::move(spoWriter), spoCallback},
           ad_utility::InputRangeTypeErased{std::move(sortedBlocksSPO)},
           spoKeyOrder, {});
 
@@ -398,10 +395,22 @@ void MaterializedViewsManager::loadView(const std::string& name) const {
 }
 
 // _____________________________________________________________________________
+void MaterializedViewsManager::unloadViewIfLoaded(
+    const std::string& name) const {
+  // `HashMap::erase` is a no-op for nonexisting keys.
+  loadedViews_.wlock()->erase(name);
+}
+
+// _____________________________________________________________________________
 std::shared_ptr<const MaterializedView> MaterializedViewsManager::getView(
     const std::string& name) const {
   loadView(name);
   return loadedViews_.rlock()->at(name);
+}
+
+// _____________________________________________________________________________
+bool MaterializedViewsManager::isViewLoaded(const std::string& name) const {
+  return loadedViews_.rlock()->contains(name);
 }
 
 // _____________________________________________________________________________
