@@ -292,18 +292,19 @@ TEST(NumericOrDateValueGetterTest, OperatorWithId) {
   NumericOrDateValueGetterTester t;
   t.checkFromValueId(ValueId::makeFromInt(-42),
                      Eq(sparqlExpression::detail::NumericOrDateValue(-42)));
-  // TODO: still problem here: here nearly equal is needed
-  // t.checkFromValueId(ValueId::makeFromDouble(50.2),
-  // Eq(sparqlExpression::detail::NumericOrDateValue(50.2)));
+  t.checkFromValueId(ValueId::makeFromDouble(50.2),
+                     Optional(VariantWith<double>(DoubleNear(50.2, 0.01))));
   t.checkFromValueId(ValueId::makeFromBool(true),
                      Eq(sparqlExpression::detail::NumericOrDateValue(1)));
   t.checkFromValueId(
       ValueId::makeFromDate(DateYearOrDuration(Date(2013, 5, 16))),
       Eq(sparqlExpression::detail::NumericOrDateValue(
           DateYearOrDuration(Date(2013, 5, 16)))));
-  // TODO: still problem here: Type is making problems
-  // t.checkFromValueId(ValueId::makeFromDate(DateYearOrDuration(Duration(Type::Positive,
-  // 102))), Eq(DateYearOrDuration(Duration(Type::Positive, 102))));
+  t.checkFromValueId(
+      ValueId::makeFromDate(DateYearOrDuration(
+          DayTimeDuration(DayTimeDuration::Type::Positive, 102))),
+      Eq(sparqlExpression::detail::NumericOrDateValue(DateYearOrDuration(
+          DayTimeDuration(DayTimeDuration::Type::Positive, 102)))));
   t.checkFromValueId(ValueId::makeUndefined(),
                      Eq(sparqlExpression::detail::NumericOrDateValue(
                          sparqlExpression::detail::NotNumeric{})));
