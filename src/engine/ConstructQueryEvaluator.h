@@ -18,20 +18,19 @@ class ConstructQueryEvaluator {
   using StringTriple = QueryExecutionTree::StringTriple;
 
  public:
-  // Helper method for `evaluateTerm`.
-  // Evaluates an Iri (which is part of a CONSTRUCT triple pattern).
+  // Helper method for `evaluateTerm`. Evaluates an iri (which is part of a
+  // CONSTRUCT triple pattern).
   static std::optional<std::string> evaluate(const Iri& iri);
 
-  // Helper method for `evaluateTerm`
-  // Evaluates a Literal (which is part of a CONSTRUCT triple pattern) using
-  // the position of the literal in the template triple
-  // (Literals are only allowed to be in the OBJECT position of a triple).
+  // Helper method for `evaluateTerm`. Evaluates a literal (which is part of
+  // a CONSTRUCT triple pattern) using the position of the literal in the
+  // template triple (Literals are only allowed to be in the OBJECT position
+  // of a triple).
   static std::optional<std::string> evaluate(const Literal& literal,
                                              PositionInTriple role);
 
-  // Helper method for `evaluateTerm`.
-  // Evaluates a BlankNode (which is part of a CONSTRUCT triple pattern) using
-  // the provided context.
+  // Helper method for `evaluateTerm`. Evaluates a `BlankNode`
+  // (which is part of a CONSTRUCT triple pattern) using the provided context.
   static std::optional<std::string> evaluate(
       const BlankNode& node, const ConstructQueryExportContext& context);
 
