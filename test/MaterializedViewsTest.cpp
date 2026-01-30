@@ -41,9 +41,17 @@ TEST_F(MaterializedViewsTest, Basic) {
   qlv().writeMaterializedView("testView1", simpleWriteQuery_);
   EXPECT_THAT(log_.str(), ::testing::HasSubstr(
                               "Materialized view testView1 written to disk"));
+  EXPECT_FALSE(qlv().isMaterializedViewLoaded("testView1"));
   qlv().loadMaterializedView("testView1");
   EXPECT_THAT(log_.str(), ::testing::HasSubstr(
                               "Loading materialized view testView1 from disk"));
+  EXPECT_TRUE(qlv().isMaterializedViewLoaded("testView1"));
+
+  // Overwriting a materialized view automatically unloads it first.
+  qlv().writeMaterializedView("testView1", simpleWriteQuery_);
+  EXPECT_FALSE(qlv().isMaterializedViewLoaded("testView1"));
+  qlv().loadMaterializedView("testView1");
+  EXPECT_TRUE(qlv().isMaterializedViewLoaded("testView1"));
 
   // Test index scan on materialized view.
   std::vector<std::string> equivalentQueries{
@@ -141,8 +149,8 @@ TEST_F(MaterializedViewsTest, ParserConfigChecks) {
 TEST_F(MaterializedViewsTest, MetadataDependentConfigChecks) {
   // Simple materialized view for testing the checks when querying.
   auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
-  MaterializedViewWriter::writeViewToDisk(testIndexBase_, "testView1", plan);
   MaterializedViewsManager manager{testIndexBase_};
+  manager.writeViewToDisk("testView1", plan);
 
   // Helper that parses a query, but doesn't feed it to the `QueryPlanner` but
   // instead inputs the `MaterializedViewQuery` directly into a
@@ -291,6 +299,8 @@ TEST_F(MaterializedViewsTest, MetadataDependentConfigChecks) {
 
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, ColumnPermutation) {
+  MaterializedViewsManager manager{testIndexBase_};
+
   // Helper to get all column names from a view via its `VariableToColumnMap`.
   auto columnNames = [](const MaterializedView& view) {
     const auto& varToCol = view.variableToColumnMap();
@@ -309,8 +319,8 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
   {
     const std::string reorderedQuery =
         "SELECT ?p ?o (?s AS ?x) ?g { ?s ?p ?o . BIND(3 AS ?g) }";
-    MaterializedViewWriter::writeViewToDisk(
-        testIndexBase_, "testView3", qlv().parseAndPlanQuery(reorderedQuery));
+    manager.writeViewToDisk("testView3",
+                            qlv().parseAndPlanQuery(reorderedQuery));
     MaterializedView view{testIndexBase_, "testView3"};
     EXPECT_EQ(columnNames(view).at(0), V{"?p"});
     const auto& map = view.variableToColumnMap();
@@ -327,8 +337,8 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
     const std::string presortedQuery =
         "SELECT * { SELECT ?p ?o (?s AS ?x) ?g { ?s ?p ?o . BIND(3 AS ?g) } "
         "INTERNAL SORT BY ?p ?o ?x }";
-    MaterializedViewWriter::writeViewToDisk(
-        testIndexBase_, "testView4", qlv().parseAndPlanQuery(presortedQuery));
+    manager.writeViewToDisk("testView4",
+                            qlv().parseAndPlanQuery(presortedQuery));
     EXPECT_THAT(log_.str(),
                 ::testing::HasSubstr("Query result rows for materialized view "
                                      "testView4 are already sorted"));
@@ -345,9 +355,8 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
   // possible.
   {
     clearLog();
-    MaterializedViewWriter::writeViewToDisk(
-        testIndexBase_, "testView5",
-        qlv().parseAndPlanQuery("SELECT * { <s1> ?p ?o }"));
+    manager.writeViewToDisk("testView5",
+                            qlv().parseAndPlanQuery("SELECT * { <s1> ?p ?o }"));
     MaterializedView view{testIndexBase_, "testView5"};
     EXPECT_THAT(columnNames(view),
                 ::testing::ElementsAreArray(std::vector<V>{V{"?p"}, V{"?o"}}));
@@ -362,14 +371,15 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
 
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, InvalidInputToWriter) {
+  MaterializedViewsManager manager{testIndexBase_};
+
   AD_EXPECT_THROW_WITH_MESSAGE(
-      MaterializedViewWriter::writeViewToDisk(
-          testIndexBase_, "Something Out!of~the.ordinary",
-          qlv().parseAndPlanQuery(simpleWriteQuery_)),
+      manager.writeViewToDisk("Something Out!of~the.ordinary",
+                              qlv().parseAndPlanQuery(simpleWriteQuery_)),
       ::testing::HasSubstr("not a valid name for a materialized view"));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      MaterializedViewWriter::writeViewToDisk(
-          testIndexBase_, "testView2",
+      manager.writeViewToDisk(
+          "testView2",
           qlv().parseAndPlanQuery(
               "SELECT * { ?s ?p ?o . BIND(\"localVocabString\" AS ?g) }")),
       ::testing::HasSubstr(
@@ -379,16 +389,21 @@ TEST_F(MaterializedViewsTest, InvalidInputToWriter) {
 
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, ManualConfigurations) {
-  auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
-  MaterializedViewWriter::writeViewToDisk(testIndexBase_, "testView1", plan);
-
   MaterializedViewsManager manager{testIndexBase_};
+  auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
+  manager.writeViewToDisk("testView1", plan);
   auto view = manager.getView("testView1");
   ASSERT_TRUE(view != nullptr);
   EXPECT_EQ(view->name(), "testView1");
   EXPECT_EQ(view->permutation()->permutation(), Permutation::Enum::SPO);
   EXPECT_EQ(view->permutation()->readableName(), "testView1");
   EXPECT_NE(view->locatedTriplesState(), nullptr);
+  EXPECT_TRUE(manager.isViewLoaded("testView1"));
+  EXPECT_FALSE(manager.isViewLoaded("something"));
+
+  // Unloading a view that is not loaded is a no-op.
+  manager.unloadViewIfLoaded("something");
+  EXPECT_FALSE(manager.isViewLoaded("something"));
   EXPECT_THAT(view->originalQuery(),
               ::testing::Optional(::testing::Eq(simpleWriteQuery_)));
 
@@ -475,7 +490,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
     auto qet = std::get<0>(plan);
     auto res = qet->getResult(true);
     EXPECT_TRUE(res->isFullyMaterialized());
-    MaterializedViewWriter::writeViewToDisk(testIndexBase_, "testView4", plan);
+    manager.writeViewToDisk("testView4", plan);
   }
 
   // Invalid inputs.
@@ -544,7 +559,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
   // Unsupported format version.
   {
     auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
-    MaterializedViewWriter::writeViewToDisk(testIndexBase_, "testView5", plan);
+    manager.writeViewToDisk("testView5", plan);
     {
       // Write fake view metadata with unsupported version.
       nlohmann::json viewInfo = {{"version", 0}};
@@ -712,9 +727,8 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
   auto writePlan = qlv().parseAndPlanQuery(
       "SELECT * { ?s ?p ?o ."
       " VALUES ?g { 1 2 3 4 5 6 7 8 9 10 } }");
-  MaterializedViewWriter::writeViewToDisk(testIndexBase_, "testView1",
-                                          writePlan);
   MaterializedViewsManager manager{testIndexBase_};
+  manager.writeViewToDisk("testView1", writePlan);
   auto view = manager.getView("testView1");
   using ViewQuery = parsedQuery::MaterializedViewQuery;
 
