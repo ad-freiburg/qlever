@@ -191,18 +191,7 @@ bool QueryPatternCache::analyzeView(ViewPtr view) {
   // TODO<ullingerc> Do we want to report the reason for non-optimizable
   // queries?
 
-  const auto& graphPatterns = parsed._rootGraphPattern._graphPatterns;
-  BasicGraphPatternsInvariantTo invariantCheck{
-      getVariablesPresentInBasicGraphPatterns(graphPatterns)};
-  // Filter out graph patterns that do not change the result of the basic graph
-  // pattern analyzed.
-  // TODO<ullingerc> Deduplication necessary when reading, the variables should
-  // not be in the first three
-  auto graphPatternsFiltered =
-      ::ranges::to<std::vector>(parsed._rootGraphPattern._graphPatterns |
-                                ql::views::filter([&](const auto& pattern) {
-                                  return !std::visit(invariantCheck, pattern);
-                                }));
+  auto graphPatternsFiltered = graphPatternInvariantCheck(parsed);
   if (graphPatternsFiltered.size() != 1) {
     return false;
   }
@@ -242,6 +231,22 @@ bool QueryPatternCache::analyzeView(ViewPtr view) {
   }
 
   return patternFound;
+}
+
+// _____________________________________________________________________________
+std::vector<parsedQuery::GraphPatternOperation>
+QueryPatternCache::graphPatternInvariantCheck(const ParsedQuery& parsed) {
+  BasicGraphPatternsInvariantTo invariantCheck{
+      getVariablesPresentInBasicGraphPatterns(
+          parsed._rootGraphPattern._graphPatterns)};
+
+  // Filter out graph patterns that do not change the result of the basic graph
+  // pattern analyzed.
+  return ::ranges::to<std::vector>(parsed._rootGraphPattern._graphPatterns |
+                                   ql::views::filter([&](const auto& pattern) {
+                                     return !std::visit(invariantCheck,
+                                                        pattern);
+                                   }));
 }
 
 }  // namespace materializedViewsQueryAnalysis

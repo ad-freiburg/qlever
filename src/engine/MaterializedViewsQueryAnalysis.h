@@ -83,6 +83,12 @@ class QueryPatternCache {
   // with `a` and `b` switched if it returns `false`.
   bool analyzeSimpleChain(ViewPtr view, const SparqlTriple& a,
                           const SparqlTriple& b);
+
+  // Helper that filters the graph patterns of a parsed query using
+  // `BasicGraphPatternInvariantTo`. For details, see the documentation for this
+  // helper.
+  static std::vector<parsedQuery::GraphPatternOperation>
+  graphPatternInvariantCheck(const ParsedQuery& parsed);
 };
 
 }  // namespace materializedViewsQueryAnalysis
