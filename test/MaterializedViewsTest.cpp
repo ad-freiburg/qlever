@@ -818,8 +818,9 @@ TEST(MaterializedViewsQueryRewriteTest, simpleChain) {
                                  h::IndexScanFromStrings("?m", "<p2>", "?o")));
 
   // Write a chain structure to the materialized view.
-  MaterializedViewWriter::writeViewToDisk(onDiskBase, viewName,
-                                          qlv.parseAndPlanQuery(simpleChain));
+  MaterializedViewsManager manager{onDiskBase};
+  manager.writeViewToDisk(onDiskBase, viewName,
+                          qlv.parseAndPlanQuery(simpleChain));
   qlv.loadMaterializedView(viewName);
 
   // With the materialized view loaded, an index scan on the view is performed
