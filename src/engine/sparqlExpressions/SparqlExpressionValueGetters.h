@@ -113,7 +113,7 @@ struct NumericValueGetter : Mixin<NumericValueGetter> {
 // expressions.
 struct NumericOrDateValueGetter : Mixin<NumericOrDateValueGetter> {
   using Mixin<NumericOrDateValueGetter>::operator();
-  // same as in NumericValueGetter
+  // same as in `NumericValueGetter`
   NumericOrDateValue operator()(const LiteralOrIri&,
                                 const EvaluationContext*) const {
     return NotNumeric{};
