@@ -78,12 +78,10 @@ class CompactVectorOfStrings {
    * static assert. Both work, as there is only one overload of `build`.
    */
   template <typename T>
-  QL_CONCEPT_OR_NOTHING(requires requires(T t) {
-    { *(t.begin()->begin()) } -> ad_utility::SimilarTo<data_type>;
-  })
+  QL_CONCEPT_OR_NOTHING(
+      requires ad_utility::SimilarTo<
+          ql::ranges::range_value_t<ql::ranges::range_value_t<T>>, data_type>)
   void build(const T& input) {
-    static_assert(
-        ad_utility::SimilarTo<decltype(*(input.begin()->begin())), data_type>);
     // Also make room for the end offset of the last element.
     offsets_.reserve(input.size() + 1);
     size_t dataSize = 0;
@@ -116,7 +114,7 @@ class CompactVectorOfStrings {
   /**
    * @brief operator []
    * @param i
-   * @return A std::pair containing a pointer to the data, and the number of
+   * @return A `value_type` containing a pointer to the data, and the number of
    *         elements stored at the pointers target.
    */
   const value_type operator[](size_t i) const {
@@ -124,6 +122,19 @@ class CompactVectorOfStrings {
     const data_type* ptr = data_.data() + offset;
     size_t size = offsets_[i + 1] - offset;
     return {ptr, size};
+  }
+
+  // Copy this class and apply the transformation `mappingFunction` to its
+  // elements.
+  CPP_template(typename Func)(
+      requires ad_utility::InvocableWithSimilarReturnType<Func, data_type,
+                                                          data_type>)
+      CompactVectorOfStrings cloneAndRemap(Func mappingFunction) const {
+    CompactVectorOfStrings clone;
+    clone.offsets_ = offsets_;
+    clone.data_ = ::ranges::to_vector(
+        data_ | ql::views::transform(std::move(mappingFunction)));
+    return clone;
   }
 
   using Iterator = ad_utility::IteratorForAccessOperator<
