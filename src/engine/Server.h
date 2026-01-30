@@ -61,14 +61,16 @@ class Server {
   //! Initialize the server.
   void initialize(const std::string& indexBaseName, bool useText,
                   bool usePatterns = true, bool loadAllPermutations = true,
-                  bool persistUpdates = false);
+                  bool persistUpdates = false,
+                  std::vector<std::string> preloadMaterializedViews = {});
 
  public:
   // First initialize the server. Then loop, wait for requests and trigger
   // processing. This method never returns except when throwing an exception.
   void run(const std::string& indexBaseName, bool useText,
            bool usePatterns = true, bool loadAllPermutations = true,
-           bool persistUpdates = false);
+           bool persistUpdates = false,
+           std::vector<std::string> preloadMaterializedViews = {});
 
   Index& index() { return index_; }
   const Index& index() const { return index_; }

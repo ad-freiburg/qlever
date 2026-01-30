@@ -597,6 +597,16 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
                                  cancellationHandle, timeLimit);
   }
 
+  // Test the preloading of materialized views on server start.
+  {
+    qlv().writeMaterializedView("testViewForServerPreload", simpleWriteQuery_);
+    Server server{4321, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
+    server.initialize(testIndexBase_, false, true, true, false,
+                      {"testViewForServerPreload"});
+    EXPECT_TRUE(server.materializedViewsManager_.isViewLoaded(
+        "testViewForServerPreload"));
+  }
+
   // Try loading the new view.
   {
     qlv().loadMaterializedView("testViewFromServer");
