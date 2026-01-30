@@ -135,6 +135,11 @@ struct RuntimeParameters {
   MemorySizeParameter sortInMemoryThreshold_{
       ad_utility::MemorySize::gigabytes(5), "sort-in-memory-threshold"};
 
+  // If set, the query planner checks if suitable materialized views are loaded
+  // to substitute more expensive query plans.
+  Bool enableMaterializedViewQueryRewrite_{
+      true, "enable-materialized-view-query-rewrite"};
+
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE
   // CONSTRUCTOR, S.T. THEY CAN ALSO BE ACCESSED VIA THE RUNTIME INTERFACE.

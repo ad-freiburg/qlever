@@ -176,6 +176,11 @@ int main(int argc, char** argv) {
           &RuntimeParameters::materializedViewWriterMemory_>(),
       "Memory limit for sorting rows during the writing of materialized "
       "views.");
+  add("enable-materialized-view-query-rewrite",
+      optionFactory.getProgramOption<
+          &RuntimeParameters::enableMaterializedViewQueryRewrite_>(),
+      "If set to true, loaded materialized views will be considered as "
+      "alternative query plans for certain supported query patterns.");
   po::variables_map optionsMap;
 
   try {

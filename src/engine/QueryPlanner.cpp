@@ -2575,6 +2575,13 @@ auto QueryPlanner::createJoinWithTransitivePath(const SubtreePlan& a,
 auto QueryPlanner::createMaterializedViewJoinReplacements(
     const parsedQuery::BasicGraphPattern& triples) const -> ReplacementPlans {
   ReplacementPlans plans;
+
+  // Check if the user allows query rewriting.
+  if (!getRuntimeParameter<
+          &RuntimeParameters::enableMaterializedViewQueryRewrite_>()) {
+    return plans;
+  }
+
   // The `MaterializedViewsManager` provides `IndexScan` instances for all the
   // subsets of `triples` it can rewrite. The individual results do not cover
   // all items of `triples`, instead each has a vector of triple indices it
@@ -3369,7 +3376,6 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
 
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::optimizeCommutatively() {
-  // TODO<ullingerc> Add runtime parameter to disable join rewriting.
   auto replacementPlans =
       planner_.createMaterializedViewJoinReplacements(candidateTriples_);
   auto tg = planner_.createTripleGraph(&candidateTriples_);
