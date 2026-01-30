@@ -29,13 +29,16 @@ struct BasicGraphPatternsInvariantTo {
 
   template <typename T>
   bool operator()(const T&) const {
-    using namespace parsedQuery;
     // The presence of any of these operations might remove or duplicate rows.
     static_assert(ad_utility::SimilarToAny<
-                  T, Optional, Union, Subquery, TransPath, BasicGraphPattern,
-                  Service, PathQuery, SpatialQuery, TextSearchQuery, Minus,
-                  GroupGraphPattern, parsedQuery::Describe, parsedQuery::Load,
-                  NamedCachedResult, MaterializedViewQuery>);
+                  T, parsedQuery::Optional, parsedQuery::Union,
+                  parsedQuery::Subquery, parsedQuery::TransPath,
+                  parsedQuery::BasicGraphPattern, parsedQuery::Service,
+                  parsedQuery::PathQuery, parsedQuery::SpatialQuery,
+                  parsedQuery::TextSearchQuery, parsedQuery::Minus,
+                  parsedQuery::GroupGraphPattern, parsedQuery::Describe,
+                  parsedQuery::Load, parsedQuery::NamedCachedResult,
+                  parsedQuery::MaterializedViewQuery>);
     return false;
   }
 };
