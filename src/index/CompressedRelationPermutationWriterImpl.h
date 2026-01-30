@@ -95,16 +95,16 @@ struct CompressedRelationWriter::PermutationWriter {
   using IfPair = std::conditional_t<WritePair, TypeIfPair, TypeIfSingle>;
 
   qlever::KeyOrder permutation_;
-  CompressedRelationWriter& writer1_;
-  IfPair<CompressedRelationWriter&> writer2_;
+  std::unique_ptr<CompressedRelationWriter> writer1_;
+  IfPair<std::unique_ptr<CompressedRelationWriter>> writer2_;
 
   using MetadataWriter =
       IfPair<compressedRelationHelpers::PairMetadataWriter,
              compressedRelationHelpers::SingleMetadataWriter>;
   MetadataWriter writeMetadata_;
 
-  const size_t blocksize_{writer1_.blocksize()};
-  const size_t numColumns_{writer1_.numColumns()};
+  const size_t blocksize_{writer1_->blocksize()};
+  const size_t numColumns_{writer1_->numColumns()};
   size_t numDistinctCol0_ = 0;
 
   ad_utility::Timer inputWaitTimer_{ad_utility::Timer::Stopped};
@@ -137,11 +137,11 @@ struct CompressedRelationWriter::PermutationWriter {
                         qlever::KeyOrder permutation,
                         PerBlockCallbacks perBlockCallbacks)
       : permutation_{std::move(permutation)},
-        writer1_{writerAndCallback1.writer_},
-        writer2_{writerAndCallback2.writer_},
+        writer1_{std::move(writerAndCallback1.writer_)},
+        writer2_{std::move(writerAndCallback2.writer_)},
         writeMetadata_{std::move(writerAndCallback1.callback_),
                        std::move(writerAndCallback2.callback_),
-                       writerAndCallback1.writer_.blocksize()},
+                       writer1_->blocksize()},
         largeTwinRelationTimer_{ad_utility::Timer::Stopped},
         twinRelationSorter_{basename + ".twin-twinRelationSorter", numColumns_,
                             4_GB, alloc_},
@@ -151,11 +151,11 @@ struct CompressedRelationWriter::PermutationWriter {
     // column.
     AD_CORRECTNESS_CHECK(permutation_.keys().at(3) == 3);
 
-    AD_CORRECTNESS_CHECK(blocksize_ == writer2_.blocksize());
-    AD_CORRECTNESS_CHECK(numColumns_ == writer2_.numColumns());
+    AD_CORRECTNESS_CHECK(blocksize_ == writer2_->blocksize());
+    AD_CORRECTNESS_CHECK(numColumns_ == writer2_->numColumns());
 
-    writer1_.smallBlocksCallback_ =
-        AddBlockOfSmallRelationsToSwitched{writer2_};
+    writer1_->smallBlocksCallback_ =
+        AddBlockOfSmallRelationsToSwitched{*writer2_};
   };
 
   // Constructor for a `PermutationWriter` which writes a single permutation.
@@ -164,9 +164,9 @@ struct CompressedRelationWriter::PermutationWriter {
                         qlever::KeyOrder permutation,
                         PerBlockCallbacks perBlockCallbacks)
       : permutation_{std::move(permutation)},
-        writer1_{writerAndCallback1.writer_},
+        writer1_{std::move(writerAndCallback1.writer_)},
         writeMetadata_{std::move(writerAndCallback1.callback_),
-                       writerAndCallback1.writer_.blocksize()},
+                       writer1_->blocksize()},
         blockCallbackManager_{std::move(perBlockCallbacks)} {
     static_assert(!WritePair);
     // This logic only works for permutations that have the graph as the fourth
@@ -188,8 +188,8 @@ struct CompressedRelationWriter::PermutationWriter {
         twinRelationSorter_.push(row);
       }
     }
-    writer1_.addBlockForLargeRelation(col0IdCurrentRelation_.value(),
-                                      std::move(relation_).toDynamic());
+    writer1_->addBlockForLargeRelation(col0IdCurrentRelation_.value(),
+                                       std::move(relation_).toDynamic());
     relation_.clear();
     relation_.reserve(blocksize_);
     ++numBlocksCurrentRel_;
@@ -205,10 +205,10 @@ struct CompressedRelationWriter::PermutationWriter {
       // The relation is large;
       addBlockForLargeRelation();
       auto md1 =
-          writer1_.finishLargeRelation(distinctCol1Counter_.getAndReset());
+          writer1_->finishLargeRelation(distinctCol1Counter_.getAndReset());
       if constexpr (WritePair) {
         largeTwinRelationTimer_.cont();
-        auto md2 = writer2_.addCompleteLargeRelation(
+        auto md2 = writer2_->addCompleteLargeRelation(
             col0IdCurrentRelation_.value(),
             twinRelationSorter_.getSortedBlocks(blocksize_));
         largeTwinRelationTimer_.stop();
@@ -219,7 +219,7 @@ struct CompressedRelationWriter::PermutationWriter {
       }
     } else {
       // Small relations are written in one go.
-      [[maybe_unused]] auto md1 = writer1_.addSmallRelation(
+      [[maybe_unused]] auto md1 = writer1_->addSmallRelation(
           col0IdCurrentRelation_.value(), distinctCol1Counter_.getAndReset(),
           relation_.asStaticView<0>());
       // We don't need to do anything for the twin permutation and writer2,
@@ -237,12 +237,12 @@ struct CompressedRelationWriter::PermutationWriter {
                   << "s" << std::endl;
     AD_LOG_TIMING << "Time spent waiting for writer1's queue "
                   << ad_utility::Timer::toSeconds(
-                         writer1_.blockWriteQueueTimer_.msecs())
+                         writer1_->blockWriteQueueTimer_.msecs())
                   << "s" << std::endl;
     if constexpr (WritePair) {
       AD_LOG_TIMING << "Time spent waiting for writer2's queue "
                     << ad_utility::Timer::toSeconds(
-                           writer2_.blockWriteQueueTimer_.msecs())
+                           writer2_->blockWriteQueueTimer_.msecs())
                     << "s" << std::endl;
       AD_LOG_TIMING << "Time spent waiting for large twin relations "
                     << ad_utility::Timer::toSeconds(
@@ -346,19 +346,19 @@ struct CompressedRelationWriter::PermutationWriter {
       finishRelation();
     }
 
-    writer1_.finish();
+    writer1_->finish();
     if constexpr (WritePair) {
-      writer2_.finish();
+      writer2_->finish();
     }
     blockCallbackManager_.finishBlockCallbackQueue();
     logTimers();
     if constexpr (WritePair) {
       return PermutationPairResult{numDistinctCol0_,
-                                   std::move(writer1_).getFinishedBlocks(),
-                                   std::move(writer2_).getFinishedBlocks()};
+                                   std::move(*writer1_).getFinishedBlocks(),
+                                   std::move(*writer2_).getFinishedBlocks()};
     } else {
       return PermutationSingleResult{numDistinctCol0_,
-                                     std::move(writer1_).getFinishedBlocks()};
+                                     std::move(*writer1_).getFinishedBlocks()};
     }
   }
 };

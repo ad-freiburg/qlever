@@ -106,7 +106,6 @@ void PatternCreator::finish() {
   PatternStatistics patternStatistics(numDistinctSubjectPredicatePairs_,
                                       numDistinctSubjects_,
                                       distinctPredicates_.size());
-  patternSerializer_ << patternStatistics;
 
   // Store the actual patterns ordered by their pattern ID. They are currently
   // stored in a hash map, so we first have to sort them.
@@ -115,12 +114,9 @@ void PatternCreator::finish() {
       patternToIdAndCount_.begin(), patternToIdAndCount_.end()};
   ql::ranges::sort(orderedPatterns, std::less<>{},
                    [](const auto& a) { return a.second.patternId_; });
-  CompactVectorOfStrings<Pattern::value_type>::Writer patternWriter{
-      std::move(patternSerializer_).file()};
-  for (const auto& pattern : orderedPatterns | ql::views::keys) {
-    patternWriter.push(pattern.data(), pattern.size());
-  }
-  patternWriter.finish();
+  CompactVectorOfStrings<Id> patterns;
+  patterns.build(orderedPatterns | ql::views::keys);
+  writePatternsToFile(filename_, patterns, patternStatistics);
 
   // Print some statistics for the log of the index builder.
   printStatistics(patternStatistics);
@@ -150,7 +146,17 @@ void PatternCreator::readPatternsFromFile(
   avgNumPredicatesPerSubject = statistics.avgNumDistinctPredicatesPerSubject_;
 }
 
-// ____________________________________________________________________________
+// _____________________________________________________________________________
+void PatternCreator::writePatternsToFile(
+    const std::string& filename,
+    const CompactVectorOfStrings<Pattern::value_type>& patterns,
+    const PatternStatistics& statistics) {
+  ad_utility::serialization::FileWriteSerializer patternWriter{filename};
+  patternWriter << statistics;
+  patternWriter << patterns;
+}
+
+// _____________________________________________________________________________
 void PatternCreator::printStatistics(
     PatternStatistics patternStatistics) const {
   AD_LOG_INFO << "Number of distinct patterns: " << patternToIdAndCount_.size()

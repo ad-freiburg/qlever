@@ -73,7 +73,8 @@ class Permutation {
                        std::optional<std::string> readableName = std::nullopt);
 
   // everything that has to be done when reading an index from disk
-  void loadFromDisk(const std::string& onDiskBase, bool loadAdditional = false);
+  void loadFromDisk(const std::string& onDiskBase,
+                    bool loadInternalPermutation = false);
 
   // Set the original metadata for the delta triples. This also sets the
   // metadata for internal permutation if present.
