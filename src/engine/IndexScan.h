@@ -72,7 +72,8 @@ class IndexScan final : public Operation {
             std::vector<ColumnIndex> additionalColumns,
             std::vector<Variable> additionalVariables, Graphs graphsToFilter,
             ScanSpecAndBlocks scanSpecAndBlocks,
-            bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep);
+            bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep,
+            bool sizeEstimateIsExact, size_t sizeEstimate);
 
   ~IndexScan() override = default;
 
@@ -163,6 +164,9 @@ class IndexScan final : public Operation {
     AD_CORRECTNESS_CHECK(col < multiplicity_.size());
     return multiplicity_[col];
   }
+
+  // Return the internal flag for testing purposes.
+  bool sizeEstimateIsExactForTesting() const { return sizeEstimateIsExact_; }
 
   bool knownEmptyResult() override {
     return sizeEstimateIsExact_ && sizeEstimate_ == 0;

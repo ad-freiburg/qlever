@@ -12,6 +12,8 @@
 #include "../util/IndexTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
 #include "engine/IndexScan.h"
+#include "engine/MaterializedViews.h"
+#include "engine/NamedResultCache.h"
 #include "index/IndexImpl.h"
 #include "parser/ParsedQuery.h"
 
@@ -497,14 +499,10 @@ TEST(IndexScan, namedGraphs) {
               Eq(IndexScan::Graphs::Blacklist(defaultGraph)));
 }
 
+// _____________________________________________________________________________
 TEST(IndexScan, getResultSizeOfScan) {
   auto qec = getQec("<x> <p> <s1>, <s2>. <x> <p2> <s1>.");
   auto getId = makeGetId(qec->getIndex());
-  [[maybe_unused]] auto x = getId("<x>");
-  [[maybe_unused]] auto p = getId("<p>");
-  [[maybe_unused]] auto s1 = getId("<s1>");
-  [[maybe_unused]] auto s2 = getId("<s2>");
-  [[maybe_unused]] auto p2 = getId("<p2>");
   using V = Variable;
   using I = TripleComponent::Iri;
 
@@ -512,23 +510,27 @@ TEST(IndexScan, getResultSizeOfScan) {
     SparqlTripleSimple scanTriple{V{"?x"}, V("?y"), V{"?z"}};
     IndexScan scan{qec, Permutation::Enum::PSO, scanTriple};
     EXPECT_EQ(scan.getSizeEstimate(), 3);
+    EXPECT_TRUE(scan.sizeEstimateIsExactForTesting());
   }
   {
     SparqlTripleSimple scanTriple{V{"?x"}, I::fromIriref("<p>"), V{"?y"}};
     IndexScan scan{qec, Permutation::Enum::PSO, scanTriple};
     EXPECT_EQ(scan.getSizeEstimate(), 2);
+    EXPECT_TRUE(scan.sizeEstimateIsExactForTesting());
   }
   {
     SparqlTripleSimple scanTriple{I::fromIriref("<x>"), I::fromIriref("<p>"),
                                   V{"?y"}};
     IndexScan scan{qec, Permutation::Enum::PSO, scanTriple};
     EXPECT_EQ(scan.getSizeEstimate(), 2);
+    EXPECT_TRUE(scan.sizeEstimateIsExactForTesting());
   }
   {
     SparqlTripleSimple scanTriple{V("?x"), I::fromIriref("<p>"),
                                   I::fromIriref("<s1>")};
     IndexScan scan{qec, Permutation::Enum::POS, scanTriple};
     EXPECT_EQ(scan.getSizeEstimate(), 1);
+    EXPECT_TRUE(scan.sizeEstimateIsExactForTesting());
   }
   // 0 variables
   {
@@ -540,6 +542,7 @@ TEST(IndexScan, getResultSizeOfScan) {
     auto res = scan.computeResultOnlyForTesting();
     ASSERT_EQ(res.idTable().numRows(), 1);
     ASSERT_EQ(res.idTable().numColumns(), 0);
+    EXPECT_TRUE(scan.sizeEstimateIsExactForTesting());
   }
   {
     SparqlTripleSimple scanTriple{I::fromIriref("<x2>"), I::fromIriref("<p>"),
@@ -547,6 +550,7 @@ TEST(IndexScan, getResultSizeOfScan) {
     IndexScan scan{qec, Permutation::Enum::POS, scanTriple};
     EXPECT_EQ(scan.getSizeEstimate(), 1);
     EXPECT_EQ(scan.getExactSize(), 0);
+    EXPECT_TRUE(scan.sizeEstimateIsExactForTesting());
   }
   {
     SparqlTripleSimple scanTriple{I::fromIriref("<x>"), I::fromIriref("<p>"),
@@ -557,6 +561,68 @@ TEST(IndexScan, getResultSizeOfScan) {
     auto res = scan.computeResultOnlyForTesting();
     ASSERT_EQ(res.idTable().numRows(), 0);
     ASSERT_EQ(res.idTable().numColumns(), 0);
+    EXPECT_TRUE(scan.sizeEstimateIsExactForTesting());
+  }
+}
+
+// _____________________________________________________________________________
+TEST(IndexScan, getResultSizeOfScanWithDeltaTriples) {
+  auto index = makeTestIndex("getResultSizeOfScanWithDeltaTriples",
+                             "<a> <a> <a> . <b> <b> <b> . <c> <c> <c> .");
+  auto getId = makeGetId(index);
+  auto g = qlever::specialIds().at(QLEVER_INTERNAL_GRAPH_IRI);
+  auto a = getId("<a>");
+  auto b = getId("<b>");
+  using V = Variable;
+
+  QueryResultCache cache;
+  NamedResultCache namedCache;
+  MaterializedViewsManager materializedViewsManager;
+  std::unique_ptr<QueryExecutionContext> qec = nullptr;
+
+  auto makeScan = [&]() {
+    qec = std::make_unique<QueryExecutionContext>(
+        index, &cache, makeAllocator(ad_utility::MemorySize::megabytes(100)),
+        SortPerformanceEstimator{}, &namedCache, &materializedViewsManager);
+
+    SparqlTripleSimple scanTriple{V{"?x"}, V("?y"), V{"?z"}};
+    return IndexScan{qec.get(), Permutation::Enum::PSO, scanTriple};
+  };
+
+  auto cancellationHandle =
+      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+  // Since the rough estimate doesn't know if the delta triples are inserts or
+  // deletions, the estimate remains the same regardless of the delta triples.
+  {
+    index.deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
+      deltaTriples.insertTriples(cancellationHandle,
+                                 {IdTriple<0>{std::array{a, a, a, g}}});
+      deltaTriples.deleteTriples(cancellationHandle,
+                                 {IdTriple<0>{std::array{b, b, b, g}}});
+    });
+    auto scan = makeScan();
+    EXPECT_EQ(scan.getSizeEstimate(), 3);
+    EXPECT_FALSE(scan.sizeEstimateIsExactForTesting());
+  }
+  {
+    index.deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
+      deltaTriples.insertTriples(cancellationHandle,
+                                 {IdTriple<0>{std::array{b, b, b, g}}});
+    });
+    auto scan = makeScan();
+    EXPECT_EQ(scan.getSizeEstimate(), 3);
+    EXPECT_FALSE(scan.sizeEstimateIsExactForTesting());
+  }
+  {
+    index.deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
+      deltaTriples.deleteTriples(cancellationHandle,
+                                 {IdTriple<0>{std::array{a, a, a, g}}});
+      deltaTriples.deleteTriples(cancellationHandle,
+                                 {IdTriple<0>{std::array{b, b, b, g}}});
+    });
+    auto scan = makeScan();
+    EXPECT_EQ(scan.getSizeEstimate(), 3);
+    EXPECT_FALSE(scan.sizeEstimateIsExactForTesting());
   }
 }
 
