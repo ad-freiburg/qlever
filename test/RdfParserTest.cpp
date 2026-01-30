@@ -1421,6 +1421,65 @@ TEST(RdfParserTest, payloadSmallerThanInitialChunkSize) {
       "\n"
       "<http://vocab.getty.edu/aat/300312355> rdfs:label \"test\".");
 }
+// Test that blank node labels are consistent across batches when parsing in
+// parallel (issue #2656). The same user-specified blank node label should get
+// the same internal ID even when it appears in different batches.
+TEST(RdfParserTest, blankNodeLabelsConsistentInParallelParsing) {
+  std::string filename{"blankNodeLabelsConsistentInParallelParsing.dat"};
+  auto testWithParser = [&](auto t, bool useBatchInterface,
+                            ad_utility::MemorySize bufferSize) {
+    using Parser = typename decltype(t)::type;
+    // Create input where the same blank node label appears multiple times,
+    // with enough content to ensure batching happens with small buffer size.
+    std::string input = R"(PREFIX ex: <http://example.org/>
+ex:a ex:b _:blank .
+ex:filler1 ex:filler2 ex:filler3 .
+ex:filler4 ex:filler5 ex:filler6 .
+_:blank ex:b ex:c .
+)";
+    {
+      auto of = ad_utility::makeOfstream(filename);
+      of << input;
+    }
+    auto result =
+        parseFromFile<Parser>(filename, useBatchInterface, bufferSize);
+
+    // Find the blank node ID used for _:blank by looking at the first triple
+    // where it appears as the object.
+    std::optional<TripleComponent> blankNodeId;
+    for (const auto& triple : result) {
+      if (triple.subject_ == iri("<http://example.org/a>") &&
+          triple.predicate_ == iri("<http://example.org/b>")) {
+        blankNodeId = triple.object_;
+        break;
+      }
+    }
+    ASSERT_TRUE(blankNodeId.has_value());
+
+    // Verify that the same blank node ID is used as the subject in the second
+    // occurrence of _:blank.
+    bool foundAsSubject = false;
+    for (const auto& triple : result) {
+      if (triple.predicate_ == iri("<http://example.org/b>") &&
+          triple.object_ == iri("<http://example.org/c>")) {
+        EXPECT_EQ(triple.subject_, blankNodeId.value())
+            << "Blank node label _:blank should have consistent ID across "
+               "batches, but got different IDs: "
+            << blankNodeId.value().toRdfLiteral() << " vs "
+            << triple.subject_.toRdfLiteral();
+        foundAsSubject = true;
+        break;
+      }
+    }
+    EXPECT_TRUE(foundAsSubject)
+        << "Second occurrence of _:blank should be found as subject";
+
+    ad_utility::deleteFile(filename);
+  };
+
+  // Test with small buffer size to force batching
+  forAllParallelParsers(testWithParser, 70_B);
+}
 
 // _____________________________________________________________________________
 TEST(RdfParserTest, EncodedIriManagerUsage) {

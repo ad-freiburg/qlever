@@ -332,6 +332,7 @@ class IndexImpl {
   const CompactVectorOfStrings<Id>& getPatterns() const;
 
   CompactVectorOfStrings<Id>& getPatterns();
+
   /**
    * @return The multiplicity of the Entities column (0) of the full
    * has-relation relation after unrolling the patterns.
@@ -559,6 +560,16 @@ class IndexImpl {
       TripleVec& data, const std::vector<size_t>& actualLinesPerPartial,
       size_t linesPerPartial, Func isQLeverInternalTriple);
 
+  // Helper function to get the filename for a given permutation.
+  std::string getFilenameForPermutation(const Permutation& permutation,
+                                        bool internal) const;
+
+  // Create a `CompressedRelationWriter` and a callback that adds the metadata
+  // of large relations to the `metaData` object.
+  CompressedRelationWriter::WriterAndCallback getWriterAndCallback(
+      IndexMetaDataMmapDispatcher::WriteType& metaData, size_t numColumns,
+      const std::string& fileName) const;
+
   // TODO<joka921> Get rid of the `numColumns` by including them into the
   // `sortedTriples` argument.
   template <typename T, typename... Callbacks>
@@ -595,6 +606,10 @@ class IndexImpl {
   // createPatternsAfterFirst is only valid when  the pair is SPO-SOP because
   // the SPO permutation is also needed for patterns (see usage in
   // IndexImpl::createFromFile function)
+
+  // Write `metaData` to the provided file.
+  void writeMetaData(IndexMetaDataMmapDispatcher::WriteType& metaData,
+                     const std::string& filename) const;
 
   template <typename SortedTriplesType, typename... CallbackTypes>
   [[nodiscard]] size_t createPermutationPair(
@@ -693,6 +708,7 @@ class IndexImpl {
   friend class IndexTest_createFromOnDiskIndexTest_Test;
   friend class CreatePatternsFixture_createPatterns_Test;
   FRIEND_TEST(IndexImpl, recomputeStatistics);
+  FRIEND_TEST(IndexImpl, writePatternsToFile);
 
   bool isLiteral(std::string_view object) const;
 

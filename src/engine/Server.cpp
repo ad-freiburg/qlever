@@ -81,7 +81,8 @@ Server::Server(unsigned short port, size_t numThreads,
 // __________________________________________________________________________
 void Server::initialize(const std::string& indexBaseName, bool useText,
                         bool usePatterns, bool loadAllPermutations,
-                        bool persistUpdates) {
+                        bool persistUpdates,
+                        std::vector<std::string> preloadMaterializedViews) {
   AD_LOG_INFO << "Initializing server ..." << std::endl;
 
   index_.usePatterns() = usePatterns;
@@ -94,6 +95,18 @@ void Server::initialize(const std::string& indexBaseName, bool useText,
   }
 
   materializedViewsManager_.setOnDiskBase(indexBaseName);
+
+  // Preload materialized views as requested by the user. This is done in a
+  // try-catch block to prevent an exception during loading of a view from
+  // blocking the server start.
+  for (const auto& viewName : preloadMaterializedViews) {
+    try {
+      materializedViewsManager_.loadView(viewName);
+    } catch (const std::exception& ex) {
+      AD_LOG_ERROR << "Preloading materialized view '" << viewName
+                   << "' failed: " << ex.what() << "." << std::endl;
+    }
+  }
 
   sortPerformanceEstimator_.computeEstimatesExpensively(
       allocator_, index_.numTriples().normalAndInternal_() *
@@ -111,7 +124,8 @@ void Server::initialize(const std::string& indexBaseName, bool useText,
 // _____________________________________________________________________________
 void Server::run(const std::string& indexBaseName, bool useText,
                  bool usePatterns, bool loadAllPermutations,
-                 bool persistUpdates) {
+                 bool persistUpdates,
+                 std::vector<std::string> preloadMaterializedViews) {
   using namespace ad_utility::httpUtils;
 
   // Function that handles a request asynchronously, will be passed as argument
@@ -193,7 +207,7 @@ void Server::run(const std::string& indexBaseName, bool useText,
 
   // Initialize the index
   initialize(indexBaseName, useText, usePatterns, loadAllPermutations,
-             persistUpdates);
+             persistUpdates, std::move(preloadMaterializedViews));
 
   AD_LOG_INFO << "The server is ready, listening for requests on port "
               << std::to_string(httpServer.getPort()) << " ..." << std::endl;
@@ -1434,9 +1448,8 @@ void Server::writeMaterializedView(
       std::make_shared<QueryExecutionTree>(std::move(plan.queryExecutionTree_));
   auto memoryLimit =
       getRuntimeParameter<&RuntimeParameters::materializedViewWriterMemory_>();
-  MaterializedViewWriter::writeViewToDisk(
-      qec->getIndex().getOnDiskBase(), name,
-      {qet, qec, std::move(plan.parsedQuery_)}, memoryLimit);
+  materializedViewsManager_.writeViewToDisk(
+      name, {qet, qec, std::move(plan.parsedQuery_)}, memoryLimit);
 }
 
 // For helper function `Server::onlyForTestingProcess`

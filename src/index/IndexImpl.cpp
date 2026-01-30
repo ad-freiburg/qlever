@@ -833,11 +833,34 @@ namespace {
 // Lift a callback that works on single elements to a callback that works on
 // blocks.
 auto liftCallback(auto callback) {
-  return [callback](const auto& block) mutable {
+  return [callback = std::move(callback)](const auto& block) mutable {
     ql::ranges::for_each(block, callback);
   };
 }
 }  // namespace
+
+// _____________________________________________________________________________
+std::string IndexImpl::getFilenameForPermutation(const Permutation& permutation,
+                                                 bool internal) const {
+  return absl::StrCat(onDiskBase_, internal ? QLEVER_INTERNAL_INDEX_INFIX : "",
+                      ".index", permutation.fileSuffix());
+}
+
+// _____________________________________________________________________________
+CompressedRelationWriter::WriterAndCallback IndexImpl::getWriterAndCallback(
+    IndexMetaDataMmapDispatcher::WriteType& metaData, size_t numColumns,
+    const std::string& fileName) const {
+  static_assert(IndexMetaDataMmapDispatcher::WriteType::isMmapBased_);
+  metaData.setup(fileName + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
+
+  auto writer = std::make_unique<CompressedRelationWriter>(
+      numColumns, ad_utility::File(fileName, "w"),
+      blocksizePermutationPerColumn_);
+
+  auto callback =
+      liftCallback([&metaData](const auto& md) { metaData.add(md); });
+  return {std::move(writer), std::move(callback)};
+}
 
 // _____________________________________________________________________________
 template <typename T, typename... Callbacks>
@@ -849,29 +872,21 @@ IndexImpl::createPermutationPairImpl(size_t numColumns,
                                      T&& sortedTriples,
                                      Permutation::KeyOrder permutation,
                                      Callbacks&&... perTripleCallbacks) {
-  using MetaData = IndexMetaDataMmapDispatcher::WriteType;
-  MetaData metaData1, metaData2;
-  static_assert(MetaData::isMmapBased_);
-  metaData1.setup(fileName1 + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
-  metaData2.setup(fileName2 + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
-
-  CompressedRelationWriter writer1{numColumns, ad_utility::File(fileName1, "w"),
-                                   blocksizePermutationPerColumn_};
-  CompressedRelationWriter writer2{numColumns, ad_utility::File(fileName2, "w"),
-                                   blocksizePermutationPerColumn_};
-
-  auto callback1 =
-      liftCallback([&metaData1](const auto& md) { metaData1.add(md); });
-  auto callback2 =
-      liftCallback([&metaData2](const auto& md) { metaData2.add(md); });
+  IndexMetaDataMmapDispatcher::WriteType metaData1;
+  auto writerAndCallback1 =
+      getWriterAndCallback(metaData1, numColumns, fileName1);
+  IndexMetaDataMmapDispatcher::WriteType metaData2;
+  auto writerAndCallback2 =
+      getWriterAndCallback(metaData2, numColumns, fileName2);
 
   std::vector<std::function<void(const IdTableStatic<0>&)>> perBlockCallbacks{
       liftCallback(perTripleCallbacks)...};
 
   auto [numDistinctCol0, blockData1, blockData2] =
       CompressedRelationWriter::createPermutationPair(
-          fileName1, {writer1, callback1}, {writer2, callback2},
-          AD_FWD(sortedTriples), permutation, perBlockCallbacks);
+          fileName1, std::move(writerAndCallback1),
+          std::move(writerAndCallback2), AD_FWD(sortedTriples), permutation,
+          perBlockCallbacks);
   metaData1.blockData() = std::move(blockData1);
   metaData2.blockData() = std::move(blockData2);
 
@@ -883,22 +898,15 @@ std::tuple<size_t, IndexImpl::IndexMetaDataMmapDispatcher::WriteType>
 IndexImpl::createPermutationImpl(
     size_t numColumns, const std::string& fileName,
     ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples) {
-  using MetaData = IndexMetaDataMmapDispatcher::WriteType;
-  MetaData metaData;
-  static_assert(MetaData::isMmapBased_);
-  metaData.setup(fileName + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
-
-  CompressedRelationWriter writer{numColumns, ad_utility::File(fileName, "w"),
-                                  blocksizePermutationPerColumn_};
-
-  auto callback =
-      liftCallback([&metaData](const auto& md) { metaData.add(md); });
+  IndexMetaDataMmapDispatcher::WriteType metaData;
+  auto writerAndCallback = getWriterAndCallback(metaData, numColumns, fileName);
 
   // We can always supply the tables with the correct permutation. No need to
   // re-order everything.
   auto [numDistinctCol0, blockData] =
-      CompressedRelationWriter::createPermutation(
-          {writer, callback}, std::move(sortedTriples), {0, 1, 2, 3}, {});
+      CompressedRelationWriter::createPermutation(std::move(writerAndCallback),
+                                                  std::move(sortedTriples),
+                                                  {0, 1, 2, 3}, {});
   metaData.blockData() = std::move(blockData);
 
   return {numDistinctCol0, std::move(metaData)};
@@ -914,8 +922,8 @@ IndexImpl::createPermutations(size_t numColumns, T&& sortedTriples,
   AD_LOG_INFO << "Creating permutations " << p1.readableName() << " and "
               << p2.readableName() << " ..." << std::endl;
   auto metaData = createPermutationPairImpl(
-      numColumns, onDiskBase_ + ".index" + p1.fileSuffix(),
-      onDiskBase_ + ".index" + p2.fileSuffix(), AD_FWD(sortedTriples),
+      numColumns, getFilenameForPermutation(p1, false),
+      getFilenameForPermutation(p2, false), AD_FWD(sortedTriples),
       p1.keyOrder(), AD_FWD(perTripleCallbacks)...);
 
   auto& [numDistinctCol0, meta1, meta2] = metaData;
@@ -929,16 +937,22 @@ IndexImpl::createPermutations(size_t numColumns, T&& sortedTriples,
   return metaData;
 }
 
-// ________________________________________________________________________
+// _____________________________________________________________________________
+void IndexImpl::writeMetaData(IndexMetaDataMmapDispatcher::WriteType& metaData,
+                              const std::string& filename) const {
+  metaData.setName(getKbName());
+  ad_utility::File f(filename, "r+");
+  metaData.appendToFile(&f);
+}
+
+// _____________________________________________________________________________
 size_t IndexImpl::createPermutation(
     size_t numColumns,
     ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
     const Permutation& permutation, bool internal) {
   AD_LOG_INFO << "Creating permutation " << permutation.readableName() << " ..."
               << std::endl;
-  std::string fileName =
-      absl::StrCat(onDiskBase_, internal ? QLEVER_INTERNAL_INDEX_INFIX : "",
-                   ".index", permutation.fileSuffix());
+  std::string fileName = getFilenameForPermutation(permutation, internal);
   auto metaData =
       createPermutationImpl(numColumns, fileName, std::move(sortedTriples));
 
@@ -947,9 +961,7 @@ size_t IndexImpl::createPermutation(
   AD_LOG_INFO << "Statistics for " << permutation.readableName() << ": "
               << meta.statistics() << std::endl;
 
-  meta.setName(getKbName());
-  ad_utility::File f{fileName, "r+"};
-  meta.appendToFile(&f);
+  writeMetaData(meta, fileName);
   return numDistinctCol0;
 }
 
@@ -962,20 +974,10 @@ size_t IndexImpl::createPermutationPair(size_t numColumns,
                                         CallbackTypes&&... perTripleCallbacks) {
   auto [numDistinctC0, metaData1, metaData2] = createPermutations(
       numColumns, AD_FWD(sortedTriples), p1, p2, AD_FWD(perTripleCallbacks)...);
-  // Set the name of this newly created pair of `IndexMetaData` objects.
-  // NOTE: When `setKbName` was called, it set the name of pso_.meta_,
-  // pso_.meta_, ... which however are not used during index building.
-  // `getKbName` simple reads one of these names.
-  auto writeMetadata = [this](auto& metaData, const auto& permutation) {
-    metaData.setName(getKbName());
-    ad_utility::File f(
-        absl::StrCat(onDiskBase_, ".index", permutation.fileSuffix()), "r+");
-    metaData.appendToFile(&f);
-  };
   AD_LOG_DEBUG << "Writing meta data for " << p1.readableName() << " and "
                << p2.readableName() << " ..." << std::endl;
-  writeMetadata(metaData1, p1);
-  writeMetadata(metaData2, p2);
+  writeMetaData(metaData1, getFilenameForPermutation(p1, false));
+  writeMetaData(metaData2, getFilenameForPermutation(p2, false));
   return numDistinctC0;
 }
 
@@ -1891,6 +1893,18 @@ void IndexImpl::setPrefixesForEncodedValues(
   encodedIriManager_ =
       EncodedIriManager{std::move(prefixesWithoutAngleBrackets)};
 }
+// _____________________________________________________________________________
+void IndexImpl::writePatternsToFile() const {
+  PatternStatistics statistics;
+  statistics.numDistinctSubjectPredicatePairs_ =
+      numDistinctSubjectPredicatePairs_;
+  statistics.avgNumDistinctSubjectsPerPredicate_ =
+      avgNumDistinctSubjectsPerPredicate_;
+  statistics.avgNumDistinctPredicatesPerSubject_ =
+      avgNumDistinctPredicatesPerSubject_;
+  PatternCreator::writePatternsToFile(getPatternFilename(), patterns_,
+                                      statistics);
+}
 
 // _____________________________________________________________________________
 void IndexImpl::loadConfigFromOldIndex(const std::string& newName,
@@ -1906,25 +1920,6 @@ void IndexImpl::loadConfigFromOldIndex(const std::string& newName,
   numSubjects_ = static_cast<NumNormalAndInternal>(newStats["num-subjects"]);
   numObjects_ = static_cast<NumNormalAndInternal>(newStats["num-objects"]);
   writeConfiguration();
-}
-
-// _____________________________________________________________________________
-void IndexImpl::writePatternsToFile() const {
-  // Write the subjectToPatternMap.
-  ad_utility::serialization::FileWriteSerializer patternWriter{
-      getPatternFilename()};
-
-  // Write the statistics and the patterns.
-  PatternStatistics statistics;
-
-  statistics.numDistinctSubjectPredicatePairs_ =
-      numDistinctSubjectPredicatePairs_;
-  statistics.avgNumDistinctSubjectsPerPredicate_ =
-      avgNumDistinctSubjectsPerPredicate_;
-  statistics.avgNumDistinctPredicatesPerSubject_ =
-      avgNumDistinctPredicatesPerSubject_;
-  patternWriter << statistics;
-  patternWriter << patterns_;
 }
 
 // _____________________________________________________________________________
@@ -2016,5 +2011,10 @@ nlohmann::json IndexImpl::recomputeStatistics(
     configuration["num-subjects"] = NumNormalAndInternal{numSubjects, 0};
     configuration["num-objects"] = NumNormalAndInternal{numObjects, 0};
   }
+  // Note: We don't update the key represented by `BLANK_NODE_ALLOCATION_START`,
+  // because during index rebuilding blank nodes are remapped to sequentially
+  // incrementing values instead of using the randomly allocated ids from
+  // before. If we updated this value here, it would lead to an incorrect
+  // allocation start value during the next index rebuild.
   return configuration;
 }
