@@ -195,9 +195,6 @@ bool QueryPatternCache::analyzeView(ViewPtr view) {
   EncodedIriManager e;
   auto parsed = SparqlParser::parseQuery(&e, query.value(), {});
 
-  // TODO<ullingerc> Do we want to report the reason for non-optimizable
-  // queries?
-
   auto graphPatternsFiltered = graphPatternInvariantFilter(parsed);
   if (graphPatternsFiltered.size() != 1) {
     explainIgnore(
