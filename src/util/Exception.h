@@ -17,6 +17,25 @@
 #include "util/SourceLocation.h"
 #include "util/TypeTraits.h"
 
+// Helper macro that is required if "x" itself is another macro.
+// It expands "x" before it turns it into a string.
+// Here's an example how it works:
+//
+// #include <iostream>
+//
+// #define AD_STRINGIFY(x) #x
+// #define TEST(x) std::cout << (x) << std::endl;
+// #define TEST1(x) TEST(#x)
+// #define TEST2(x) TEST(AD_STRINGIFY(x))
+// #define MACRO_THINGY lol
+//
+//
+// int main() {
+//     TEST1(MACRO_THINGY); // -> prints MACRO_THINGY
+//     TEST2(MACRO_THINGY); // -> prints lol
+// }
+#define AD_STRINGIFY(x) #x
+
 // -------------------------------------------
 // Exception class code
 // -------------------------------------------
@@ -146,8 +165,8 @@ std::string concatMessages(Args&&... messages) {
 // types) or a callable that produce a `std::string`. The latter case is useful
 // if the error message is expensive to construct because the callables are only
 // invoked if the assertion fails. For examples see `ExceptionTest.cpp`.
-#define AD_CONTRACT_CHECK(condition, ...)       \
-  AD_CHECK_IMPL(condition, __STRING(condition), \
+#define AD_CONTRACT_CHECK(condition, ...)           \
+  AD_CHECK_IMPL(condition, AD_STRINGIFY(condition), \
                 AD_CURRENT_SOURCE_LOC() __VA_OPT__(, ) __VA_ARGS__)
 
 // Custom assert which does not abort but throws an exception. Use this for
@@ -165,9 +184,9 @@ inline void adCorrectnessCheckImpl(bool condition, std::string_view message,
   AD_CHECK_IMPL(condition, message, location, additionalMessages...);
 }
 }  // namespace ad_utility::detail
-#define AD_CORRECTNESS_CHECK(condition, ...)             \
-  ad_utility::detail::adCorrectnessCheckImpl(            \
-      static_cast<bool>(condition), __STRING(condition), \
+#define AD_CORRECTNESS_CHECK(condition, ...)                 \
+  ad_utility::detail::adCorrectnessCheckImpl(                \
+      static_cast<bool>(condition), AD_STRINGIFY(condition), \
       AD_CURRENT_SOURCE_LOC() __VA_OPT__(, ) __VA_ARGS__)
 
 // This check is similar to `AD_CORRECTNESS_CHECK` (see above), but the check is
