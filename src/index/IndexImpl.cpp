@@ -49,9 +49,12 @@ constexpr std::string_view BLANK_NODE_ALLOCATION_START =
     "num-blank-nodes-total";
 
 // _____________________________________________________________________________
-IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator)
+IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator,
+                     bool registerSingleton)
     : allocator_{std::move(allocator)} {
-  globalSingletonIndex_ = this;
+  if (registerSingleton) {
+    globalSingletonIndex_ = this;
+  }
   deltaTriples_.emplace(*this);
 }
 
@@ -1139,6 +1142,9 @@ void IndexImpl::setKeepTempFiles(bool keepTempFiles) {
 bool& IndexImpl::usePatterns() { return usePatterns_; }
 
 // _____________________________________________________________________________
+bool IndexImpl::usePatterns() const { return usePatterns_; }
+
+// _____________________________________________________________________________
 bool& IndexImpl::loadAllPermutations() { return loadAllPermutations_; }
 
 // _____________________________________________________________________________
@@ -1898,6 +1904,22 @@ void IndexImpl::writePatternsToFile() const {
       avgNumDistinctPredicatesPerSubject_;
   PatternCreator::writePatternsToFile(getPatternFilename(), patterns_,
                                       statistics);
+}
+
+// _____________________________________________________________________________
+void IndexImpl::loadConfigFromOldIndex(const std::string& newName,
+                                       const IndexImpl& other,
+                                       const nlohmann::json& newStats) {
+  setOnDiskBase(newName);
+  setKbName(other.getKbName());
+  blocksizePermutationPerColumn() = other.blocksizePermutationPerColumn();
+  configurationJson_ = newStats;
+  numTriples_ = static_cast<NumNormalAndInternal>(newStats["num-triples"]);
+  numPredicates_ =
+      static_cast<NumNormalAndInternal>(newStats["num-predicates"]);
+  numSubjects_ = static_cast<NumNormalAndInternal>(newStats["num-subjects"]);
+  numObjects_ = static_cast<NumNormalAndInternal>(newStats["num-objects"]);
+  writeConfiguration();
 }
 
 // _____________________________________________________________________________
