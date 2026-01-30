@@ -130,7 +130,8 @@ class DeltaTriples {
   std::optional<std::string> filenameForPersisting_;
 
   // Store the id of the `ql:langtag` predicate to avoid repeated disk lookups.
-  Id languagePredicate_;
+  // This is initialized on first use.
+  Id languagePredicate_ = Id::makeUndefined();
 
   // Store commonly used language tags of the form `<@lang>` to avoid repeated
   // disk lookups.

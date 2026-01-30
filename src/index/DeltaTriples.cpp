@@ -173,6 +173,14 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
   // which adds the same extra triples for language tags to the internal triples
   // on the initial index build.
   Triples internalTriples;
+  // Initialize on first use.
+  if (languagePredicate_.isUndefined()) {
+    languagePredicate_ =
+        TripleComponent{
+            ad_utility::triple_component::Iri::fromIriref(LANGUAGE_PREDICATE)}
+            .toValueId(index_.getVocab(), localVocab_,
+                       index_.encodedIriManager());
+  }
   for (const auto& triple : triples) {
     const auto& ids = triple.ids();
     Id objectId = ids.at(2);
@@ -425,12 +433,7 @@ DeltaTriples::DeltaTriples(const Index& index)
     : DeltaTriples(index.getImpl()) {}
 
 // ____________________________________________________________________________
-DeltaTriples::DeltaTriples(const IndexImpl& index)
-    : index_{index},
-      languagePredicate_{TripleComponent{
-          ad_utility::triple_component::Iri::fromIriref(LANGUAGE_PREDICATE)}
-                             .toValueId(index_.getVocab(), localVocab_,
-                                        index_.encodedIriManager())} {}
+DeltaTriples::DeltaTriples(const IndexImpl& index) : index_{index} {}
 
 // ____________________________________________________________________________
 DeltaTriplesManager::DeltaTriplesManager(const IndexImpl& index)
@@ -588,12 +591,7 @@ void DeltaTriples::readFromDisk() {
   if (!filenameForPersisting_.has_value()) {
     return;
   }
-  AD_CONTRACT_CHECK(
-      localVocab_.empty() ||
-          (languagePredicate_.getDatatype() == Datatype::LocalVocabIndex &&
-           localVocab_.size() == 1),
-      "The local vocab must be empty or only contain the language "
-      "predicate before reading delta triples from disk.");
+  AD_CONTRACT_CHECK(localVocab_.empty());
   auto [vocab, idRanges] = ad_utility::deserializeIds(
       filenameForPersisting_.value(), index_.getBlankNodeManager());
   if (idRanges.empty()) {
