@@ -207,7 +207,6 @@ class DateYearOrDuration {
       const DateYearOrDuration& dateValue);
 
   // Subtraction of two DateYearOrDuration Objects.
-  // Result should be used (nodiscard).
   [[nodiscard]] DateYearOrDuration operator-(
       const DateYearOrDuration& rhs) const;
 };
