@@ -173,17 +173,6 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
   // which adds the same extra triples for language tags to the internal triples
   // on the initial index build.
   Triples internalTriples;
-  constexpr size_t predicateCacheSize = 50;
-  ad_utility::util::LRUCache<Id::T, ad_utility::triple_component::Iri>
-      predicateCache{predicateCacheSize};
-
-  // Don't compute the id if it's not used by the code below.
-  Id languagePredicate =
-      insertion ? TripleComponent{ad_utility::triple_component::Iri::fromIriref(
-                                      LANGUAGE_PREDICATE)}
-                      .toValueId(index_.getVocab(), localVocab_,
-                                 index_.encodedIriManager())
-                : Id::makeUndefined();
   for (const auto& triple : triples) {
     const auto& ids = triple.ids();
     Id objectId = ids.at(2);
@@ -195,7 +184,7 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
       continue;
     }
     const auto& predicate =
-        predicateCache.getOrCompute(ids.at(1).getBits(), [this](Id::T bits) {
+        predicateCache_.getOrCompute(ids.at(1).getBits(), [this](Id::T bits) {
           auto optionalPredicate = ExportQueryExecutionTrees::idToLiteralOrIri(
               index_, Id::fromBits(bits), localVocab_, true);
           AD_CORRECTNESS_CHECK(optionalPredicate.has_value());
@@ -211,8 +200,8 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
     // Extra triple `<subject> @language@<predicate> "object"@language`.
     internalTriples.push_back(
         IdTriple<0>{std::array{ids.at(0), specialId, ids.at(2), ids.at(3)}});
-    Id langtagId = languageTagCache_.getOrCompute(
-        std::string{langtag}, [this](const std::string& tag) {
+    Id langtagId =
+        languageTagCache_.getOrCompute(langtag, [this](const std::string& tag) {
           return TripleComponent{ad_utility::convertLangtagToEntityUri(tag)}
               .toValueId(index_.getVocab(), localVocab_,
                          index_.encodedIriManager());
@@ -226,7 +215,7 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
     if (insertion) {
       // Extra triple `"object"@language ql:langtag <@language>`.
       internalTriples.push_back(IdTriple<0>{
-          std::array{ids.at(2), languagePredicate, langtagId, ids.at(3)}});
+          std::array{ids.at(2), languagePredicate_, langtagId, ids.at(3)}});
     }
   }
   // Because of the special predicates, we need to re-sort the triples.
@@ -434,6 +423,14 @@ DeltaTriplesCount operator-(const DeltaTriplesCount& lhs,
 // ____________________________________________________________________________
 DeltaTriples::DeltaTriples(const Index& index)
     : DeltaTriples(index.getImpl()) {}
+
+// ____________________________________________________________________________
+DeltaTriples::DeltaTriples(const IndexImpl& index)
+    : index_{index},
+      languagePredicate_{TripleComponent{
+          ad_utility::triple_component::Iri::fromIriref(LANGUAGE_PREDICATE)}
+                             .toValueId(index_.getVocab(), localVocab_,
+                                        index_.encodedIriManager())} {}
 
 // ____________________________________________________________________________
 DeltaTriplesManager::DeltaTriplesManager(const IndexImpl& index)

@@ -129,11 +129,19 @@ class DeltaTriples {
   // See the documentation of `setPersist()` below.
   std::optional<std::string> filenameForPersisting_;
 
+  // Store the id of the `ql:langtag` predicate to avoid repeated disk lookups.
+  Id languagePredicate_;
+
   // Store commonly used language tags of the form `<@lang>` to avoid repeated
   // disk lookups.
   static constexpr size_t languageTagCacheSize_ = 20;
   ad_utility::util::LRUCache<std::string, Id> languageTagCache_{
       languageTagCacheSize_};
+
+  // Cache commonly used predicates between calls.
+  static constexpr size_t predicateCacheSize_ = 50;
+  ad_utility::util::LRUCache<Id::T, ad_utility::triple_component::Iri>
+      predicateCache_{predicateCacheSize_};
 
   // Assert that the Permutation Enum values have the expected int values.
   // This is used to store and lookup items that exist for permutation in an
@@ -174,7 +182,7 @@ class DeltaTriples {
  public:
   // Construct for given index.
   explicit DeltaTriples(const Index& index);
-  explicit DeltaTriples(const IndexImpl& index) : index_{index} {}
+  explicit DeltaTriples(const IndexImpl& index);
 
   // Disable accidental copying.
   DeltaTriples(const DeltaTriples&) = delete;
