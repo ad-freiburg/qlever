@@ -8,7 +8,6 @@
 #include "engine/Result.h"
 #include "engine/VariableToColumnMap.h"
 #include "rdfTypes/Variable.h"
-#include "util/HashMap.h"
 
 // Forward declarations to avoid cyclic dependencies
 class Index;
@@ -23,16 +22,6 @@ struct ConstructQueryExportContext {
   const VariableToColumnMap& _variableColumns;
   const Index& _qecIndex;
   const size_t _rowOffset;
-
-  // Note: The ConstructQueryExportContext is scoped to a row of the
-  // WHERE-clause result table, which is why we can cache evaluated values here.
-
-  // Per-row cache for Variable evaluations. Keyed by variable name (e.g., "?x")
-  mutable ad_utility::HashMap<std::string, std::optional<std::string>>
-      variableCache_;
-
-  // Per-row cache for BlankNode evaluations. Keyed by blank node label.
-  mutable ad_utility::HashMap<std::string, std::string> blankNodeCache_;
 };
 
 #endif  // QLEVER_SRC_PARSER_DATA_CONSTRUCTQUERYEXPORTCONTEXT_H
