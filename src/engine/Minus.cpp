@@ -52,13 +52,9 @@ Result Minus::computeResultForTwoIndexScans(bool requestLaziness,
 
   // For MINUS, only the right child can be prefiltered.
   // Get unfiltered blocks for left, filtered blocks for right.
-  auto [leftBlocks, rightBlocks] =
+  auto [leftBlocksPtr, rightBlocksPtr] =
       getUnfilteredLeftAndFilteredRightSideFromIndexScans(
           leftScan, rightScan, _matchedColumns.size());
-
-  // Wrap in shared_ptr for const lambda capture
-  auto leftBlocksPtr = ad_utility::toSharedPtr(std::move(leftBlocks));
-  auto rightBlocksPtr = ad_utility::toSharedPtr(std::move(rightBlocks));
 
   std::vector<ColumnIndex> permutation;
   permutation.resize(_left->getResultWidth());
@@ -81,9 +77,7 @@ Result Minus::computeResultForTwoIndexScans(bool requestLaziness,
     ad_utility::zipperJoinForBlocksWithPotentialUndef(
         leftConverted, rightConverted, std::less{}, rowAdder, {}, {},
         ad_utility::MinusJoinTag{});
-    auto localVocab = std::move(rowAdder.localVocab());
-    return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
-                                    std::move(localVocab)};
+    return std::move(rowAdder).toIdTableVocabPair();
   };
 
   return qlever::joinHelpers::createResultFromAction(
@@ -105,8 +99,6 @@ Result Minus::computeResultForIndexScanOnRight(
   auto rightBlocks = getBlocksForJoinOfColumnsWithScan(
       leftTable, _matchedColumns, rightScan, _matchedColumns.at(0).at(1));
 
-  auto rightBlocksPtr = ad_utility::toSharedPtr(std::move(rightBlocks));
-
   std::vector<ColumnIndex> permutation;
   permutation.resize(_left->getResultWidth());
   ql::ranges::copy(ad_utility::integerRange(permutation.size()),
@@ -114,32 +106,29 @@ Result Minus::computeResultForIndexScanOnRight(
   ColumnIndex leftJoinColumn = _matchedColumns.at(0).at(0);
   std::swap(permutation.at(0), permutation.at(leftJoinColumn));
 
-  auto action =
-      [this, leftRes = std::move(leftRes), rightBlocksPtr, &rightScan,
-       permutation](std::function<void(IdTable&, LocalVocab&)> yieldTable) {
-        using namespace qlever::joinWithIndexScanHelpers;
+  auto action = [this, leftRes = std::move(leftRes),
+                 rightBlocks = std::move(rightBlocks), &rightScan, permutation](
+                    std::function<void(IdTable&, LocalVocab&)> yieldTable) {
+    using namespace qlever::joinWithIndexScanHelpers;
 
-        ad_utility::MinusRowHandler rowAdder{
-            _matchedColumns.size(), IdTable{getResultWidth(), allocator()},
-            cancellationHandle_, std::move(yieldTable)};
+    ad_utility::MinusRowHandler rowAdder{
+        _matchedColumns.size(), IdTable{getResultWidth(), allocator()},
+        cancellationHandle_, std::move(yieldTable)};
 
-        // Create view of left table for the join
-        const IdTable& leftTable = leftRes->idTable();
-        std::vector<ColumnIndex> identityPerm(leftTable.numColumns());
-        std::iota(identityPerm.begin(), identityPerm.end(), 0);
-        auto leftBlock = std::array{ad_utility::IdTableAndFirstCol{
-            leftTable.asColumnSubsetView(identityPerm),
-            leftRes->getCopyOfLocalVocab()}};
+    // Create view of left table for the join
+    const IdTable& leftTable = leftRes->idTable();
+    std::vector<ColumnIndex> identityPerm(leftTable.numColumns());
+    std::iota(identityPerm.begin(), identityPerm.end(), 0);
+    auto leftBlock = std::array{ad_utility::IdTableAndFirstCol{
+        leftTable.asColumnSubsetView(identityPerm),
+        leftRes->getCopyOfLocalVocab()}};
 
-        auto rightConverted =
-            convertGenerator(std::move(*rightBlocksPtr), rightScan);
-        ad_utility::zipperJoinForBlocksWithPotentialUndef(
-            leftBlock, rightConverted, std::less{}, rowAdder, {}, {},
-            ad_utility::MinusJoinTag{});
-        auto localVocab = std::move(rowAdder.localVocab());
-        return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
-                                        std::move(localVocab)};
-      };
+    auto rightConverted = convertGenerator(std::move(rightBlocks), rightScan);
+    ad_utility::zipperJoinForBlocksWithPotentialUndef(
+        leftBlock, rightConverted, std::less{}, rowAdder, {}, {},
+        ad_utility::MinusJoinTag{});
+    return std::move(rowAdder).toIdTableVocabPair();
+  };
 
   return qlever::joinHelpers::createResultFromAction(
       requestLaziness, std::move(action), [this] { return resultSortedOn(); },
@@ -168,10 +157,6 @@ Result Minus::computeResultForIndexScanOnRightLazy(
   auto [leftSide, rightSide] = rightScan.prefilterTablesForOptional(
       leftRes->idTables(), _matchedColumns.at(0).at(0));
 
-  // Wrap in shared_ptr for const lambda capture
-  auto leftSidePtr = ad_utility::toSharedPtr(std::move(leftSide));
-  auto rightSidePtr = ad_utility::toSharedPtr(std::move(rightSide));
-
   std::vector<ColumnIndex> permutation;
   permutation.resize(_left->getResultWidth());
   ql::ranges::copy(ad_utility::integerRange(permutation.size()),
@@ -179,7 +164,8 @@ Result Minus::computeResultForIndexScanOnRightLazy(
   ColumnIndex leftJoinColumn = _matchedColumns.at(0).at(0);
   std::swap(permutation.at(0), permutation.at(leftJoinColumn));
 
-  auto action = [this, leftSidePtr, rightSidePtr, &rightScan, permutation](
+  auto action = [this, leftSide = std::move(leftSide),
+                 rightSide = std::move(rightSide), &rightScan, permutation](
                     std::function<void(IdTable&, LocalVocab&)> yieldTable) {
     using namespace qlever::joinWithIndexScanHelpers;
 
@@ -188,6 +174,8 @@ Result Minus::computeResultForIndexScanOnRightLazy(
         cancellationHandle_, std::move(yieldTable)};
 
     // Convert generators to the right format
+    auto leftSidePtr = ad_utility::toSharedPtr(std::move(leftSide));
+    auto rightSidePtr = ad_utility::toSharedPtr(std::move(rightSide));
     auto [leftRange, rightRange] = convertPrefilteredGenerators(
         leftSidePtr, rightSidePtr, _left->getResultWidth(),
         _matchedColumns.at(0).at(1));
@@ -198,9 +186,7 @@ Result Minus::computeResultForIndexScanOnRightLazy(
 
     setScanStatusToLazilyCompleted(rightScan);
 
-    auto localVocab = std::move(rowAdder.localVocab());
-    return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
-                                    std::move(localVocab)};
+    return std::move(rowAdder).toIdTableVocabPair();
   };
 
   return qlever::joinHelpers::createResultFromAction(

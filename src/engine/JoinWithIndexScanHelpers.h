@@ -12,6 +12,7 @@
 #include "util/Iterators.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/JoinAlgorithms/JoinColumnMapping.h"
+#include "util/MemoryHelpers.h"
 
 namespace qlever::joinWithIndexScanHelpers {
 
@@ -183,8 +184,9 @@ inline void setScanStatusToLazilyCompleted(Scans&... scans) {
 }
 
 // Helper to get unfiltered blocks for the left scan and filtered blocks for
-// the right scan. Used by OptionalJoin and Minus where the left side must be
-// complete and only the right side can be prefiltered.
+// the right scan. Returns shared_ptrs ready for use in action lambdas.
+// Used by OptionalJoin and Minus where the left side must be complete and only
+// the right side can be prefiltered.
 inline auto getUnfilteredLeftAndFilteredRightSideFromIndexScans(
     IndexScan& leftScan, IndexScan& rightScan, size_t numJoinColumns) {
   auto leftMetaBlocks = leftScan.getMetadataForScan();
@@ -196,7 +198,8 @@ inline auto getUnfilteredLeftAndFilteredRightSideFromIndexScans(
   auto rightBlocks =
       getBlocksForJoinOfTwoScans(leftScan, rightScan, numJoinColumns);
 
-  return std::pair{std::move(leftBlocks), std::move(rightBlocks[1])};
+  return std::pair{ad_utility::toSharedPtr(std::move(leftBlocks)),
+                   ad_utility::toSharedPtr(std::move(rightBlocks[1]))};
 }
 
 }  // namespace qlever::joinWithIndexScanHelpers

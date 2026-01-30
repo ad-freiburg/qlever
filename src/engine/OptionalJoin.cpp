@@ -119,24 +119,18 @@ Result OptionalJoin::computeResultForTwoIndexScans(bool requestLaziness,
   ad_utility::Timer timer{ad_utility::timer::Timer::InitialStatus::Started};
 
   // Get unfiltered blocks for left and filtered blocks for right
-  auto [leftBlocks, rightBlocks] =
+  auto [leftBlocksPtr, rightBlocksPtr] =
       getUnfilteredLeftAndFilteredRightSideFromIndexScans(leftScan, rightScan,
                                                           _joinColumns.size());
 
   runtimeInfo().addDetail("time-for-filtering-blocks", timer.msecs());
 
-  // Wrap generators in shared_ptr to allow const lambda capture
-  auto leftBlocksPtr = ad_utility::toSharedPtr(std::move(leftBlocks));
-  auto rightBlocksPtr = ad_utility::toSharedPtr(std::move(rightBlocks));
-
   auto action = [this, leftBlocksPtr, rightBlocksPtr, &leftScan, &rightScan](
                     std::function<void(IdTable&, LocalVocab&)> yieldTable) {
     using namespace qlever::joinWithIndexScanHelpers;
 
-    auto rowAdder = ad_utility::AddCombinedRowToIdTable{
-        _joinColumns.size(), IdTable{getResultWidth(), allocator()},
-        cancellationHandle_, keepJoinColumns_,
-        CHUNK_SIZE,          std::move(yieldTable)};
+    auto rowAdder = getRowAdderForJoin(*this, _joinColumns.size(),
+                                       keepJoinColumns_, std::move(yieldTable));
 
     auto leftConverted = convertGenerator(std::move(*leftBlocksPtr), leftScan);
     auto rightConverted =
@@ -148,9 +142,7 @@ Result OptionalJoin::computeResultForTwoIndexScans(bool requestLaziness,
 
     setScanStatusToLazilyCompleted(leftScan, rightScan);
 
-    auto localVocab = std::move(rowAdder.localVocab());
-    return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
-                                    std::move(localVocab)};
+    return std::move(rowAdder).toIdTableVocabPair();
   };
 
   return createResultFromAction(requestLaziness, std::move(action),
@@ -186,39 +178,31 @@ Result OptionalJoin::computeResultForIndexScanOnRight(
 
   runtimeInfo().addDetail("time-for-filtering-blocks", timer.msecs());
 
-  // Wrap generator in shared_ptr to allow const lambda capture
-  auto rightBlocksPtr = ad_utility::toSharedPtr(std::move(rightBlocks));
+  auto action = [this, leftRes = std::move(leftRes),
+                 rightBlocks = std::move(rightBlocks), &rightScan](
+                    std::function<void(IdTable&, LocalVocab&)> yieldTable) {
+    using namespace qlever::joinWithIndexScanHelpers;
 
-  auto action =
-      [this, leftRes = std::move(leftRes), rightBlocksPtr,
-       &rightScan](std::function<void(IdTable&, LocalVocab&)> yieldTable) {
-        using namespace qlever::joinWithIndexScanHelpers;
+    auto rowAdder = getRowAdderForJoin(*this, _joinColumns.size(),
+                                       keepJoinColumns_, std::move(yieldTable));
 
-        auto rowAdder = ad_utility::AddCombinedRowToIdTable{
-            _joinColumns.size(), IdTable{getResultWidth(), allocator()},
-            cancellationHandle_, keepJoinColumns_,
-            CHUNK_SIZE,          std::move(yieldTable)};
+    // Create view of left table for the join
+    const IdTable& leftTable = leftRes->idTable();
+    std::vector<ColumnIndex> identityPerm(leftTable.numColumns());
+    std::iota(identityPerm.begin(), identityPerm.end(), 0);
+    auto leftBlock = std::array{ad_utility::IdTableAndFirstCol{
+        leftTable.asColumnSubsetView(identityPerm),
+        leftRes->getCopyOfLocalVocab()}};
+    auto rightConverted = convertGenerator(std::move(rightBlocks), rightScan);
 
-        // Create view of left table for the join
-        const IdTable& leftTable = leftRes->idTable();
-        std::vector<ColumnIndex> identityPerm(leftTable.numColumns());
-        std::iota(identityPerm.begin(), identityPerm.end(), 0);
-        auto leftBlock = std::array{ad_utility::IdTableAndFirstCol{
-            leftTable.asColumnSubsetView(identityPerm),
-            leftRes->getCopyOfLocalVocab()}};
-        auto rightConverted =
-            convertGenerator(std::move(*rightBlocksPtr), rightScan);
+    ad_utility::zipperJoinForBlocksWithPotentialUndef(
+        leftBlock, rightConverted, std::less{}, rowAdder, {}, {},
+        ad_utility::OptionalJoinTag{});
 
-        ad_utility::zipperJoinForBlocksWithPotentialUndef(
-            leftBlock, rightConverted, std::less{}, rowAdder, {}, {},
-            ad_utility::OptionalJoinTag{});
+    setScanStatusToLazilyCompleted(rightScan);
 
-        setScanStatusToLazilyCompleted(rightScan);
-
-        auto localVocab = std::move(rowAdder.localVocab());
-        return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
-                                        std::move(localVocab)};
-      };
+    return std::move(rowAdder).toIdTableVocabPair();
+  };
 
   return createResultFromAction(requestLaziness, std::move(action),
                                 [this] { return resultSortedOn(); });
@@ -246,20 +230,17 @@ Result OptionalJoin::computeResultForIndexScanOnRightLazy(
   auto [leftSide, rightSide] = rightScan.prefilterTablesForOptional(
       leftRes->idTables(), _joinColumns.at(0).at(0));
 
-  // Wrap in shared_ptr for const lambda capture
-  auto leftSidePtr = ad_utility::toSharedPtr(std::move(leftSide));
-  auto rightSidePtr = ad_utility::toSharedPtr(std::move(rightSide));
-
-  auto action = [this, leftSidePtr, rightSidePtr, &rightScan](
+  auto action = [this, leftSide = std::move(leftSide),
+                 rightSide = std::move(rightSide), &rightScan](
                     std::function<void(IdTable&, LocalVocab&)> yieldTable) {
     using namespace qlever::joinWithIndexScanHelpers;
 
-    auto rowAdder = ad_utility::AddCombinedRowToIdTable{
-        _joinColumns.size(), IdTable{getResultWidth(), allocator()},
-        cancellationHandle_, keepJoinColumns_,
-        CHUNK_SIZE,          std::move(yieldTable)};
+    auto rowAdder = getRowAdderForJoin(*this, _joinColumns.size(),
+                                       keepJoinColumns_, std::move(yieldTable));
 
     // Convert generators to the right format
+    auto leftSidePtr = ad_utility::toSharedPtr(std::move(leftSide));
+    auto rightSidePtr = ad_utility::toSharedPtr(std::move(rightSide));
     auto [leftRange, rightRange] = convertPrefilteredGenerators(
         leftSidePtr, rightSidePtr, _left->getResultWidth(),
         _joinColumns.at(0).at(1));
@@ -270,9 +251,7 @@ Result OptionalJoin::computeResultForIndexScanOnRightLazy(
 
     setScanStatusToLazilyCompleted(rightScan);
 
-    auto localVocab = std::move(rowAdder.localVocab());
-    return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
-                                    std::move(localVocab)};
+    return std::move(rowAdder).toIdTableVocabPair();
   };
 
   return createResultFromAction(requestLaziness, std::move(action),
