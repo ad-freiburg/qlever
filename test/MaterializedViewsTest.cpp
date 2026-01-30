@@ -819,8 +819,7 @@ TEST(MaterializedViewsQueryRewriteTest, simpleChain) {
 
   // Write a chain structure to the materialized view.
   MaterializedViewsManager manager{onDiskBase};
-  manager.writeViewToDisk(onDiskBase, viewName,
-                          qlv.parseAndPlanQuery(simpleChain));
+  manager.writeViewToDisk(viewName, qlv.parseAndPlanQuery(simpleChain));
   qlv.loadMaterializedView(viewName);
 
   // With the materialized view loaded, an index scan on the view is performed
@@ -840,5 +839,20 @@ TEST(MaterializedViewsQueryRewriteTest, simpleChain) {
     EXPECT_THAT(
         *qet, h::IndexScanFromStrings("<s2>", "?_QLever_internal_variable_qp_0",
                                       "?c", {Permutation::Enum::SPO}));
+  }
+
+  // An additional `BIND` is ignored and the view can still be used for query
+  // rewriting. Also uses a different sorting.
+  qlever::Qlever qlv2{config};
+  const std::string simpleChainRenamedPlusBind =
+      "SELECT ?b ?c ?a ?x { ?b <p2> ?c . ?a <p1> ?b . BIND(5 AS ?x) }";
+  const std::string viewNameBind = "testViewChainPlusBind";
+  manager.writeViewToDisk(viewNameBind,
+                          qlv2.parseAndPlanQuery(simpleChainRenamedPlusBind));
+  qlv2.loadMaterializedView(viewNameBind);
+  {
+    auto [qet, qec, parsed] = qlv2.parseAndPlanQuery(simpleChain);
+    EXPECT_THAT(*qet, h::IndexScanFromStrings("?m", "?o", "?s",
+                                              {Permutation::Enum::SPO}));
   }
 }
