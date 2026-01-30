@@ -206,8 +206,6 @@ class DateYearOrDuration {
   static std::optional<DateYearOrDuration> convertToXsdDate(
       const DateYearOrDuration& dateValue);
 
-  // Changes/Addition
-  //____________________________________________________________________________
   // Subtraction of two DateYearOrDuration Objects.
   // Result should be used (nodiscard).
   [[nodiscard]] DateYearOrDuration operator-(
