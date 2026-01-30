@@ -54,14 +54,20 @@ CPP_class_template(typename View, typename F,
 
   // The input view, the function, and the current iterator into the `view_`.
   // The iterator is `nullopt` before the first call to `get`.
-  View view_;
+  //
+  // NOTE: The order of these members matters for destruction. C++ destroys
+  // members in reverse declaration order. The `transfomation_` (which may own
+  // resources like file handles that `view_` depends on) must be declared
+  // AFTER `view_` so that it is destroyed LAST. Otherwise, `view_` may have
+  // dangling references when it is destroyed.
   ::ranges::semiregular_box_t<F> transfomation_;
+  View view_;
   std::optional<ql::ranges::iterator_t<View>> it_;
 
  public:
   // Constructor.
   explicit CachingTransformInputRange(View view, F transformation = {})
-      : view_{std::move(view)}, transfomation_(std::move(transformation)) {
+      : transfomation_(std::move(transformation)), view_{std::move(view)} {
     if constexpr (!std::is_same_v<Details, NoDetails>) {
       static_cast<Base*>(this)->setDetailsPointer(&view_.base().details());
     }
