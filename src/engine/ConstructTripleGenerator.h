@@ -19,6 +19,7 @@
 #include "parser/data/ConstructQueryExportContext.h"
 #include "util/CancellationHandle.h"
 #include "util/HashMap.h"
+#include "util/stream_generator.h"
 
 // ConstructTripleGenerator: generates StringTriples from
 // query results. It manages the global row offset and transforms result tables
@@ -138,6 +139,11 @@ class ConstructTripleGenerator {
   auto generateStringTriplesForResultTable(const TableWithRange& table);
 
   // _____________________________________________________________________________
+  // Generate triples and yield them as formatted turtle strings.
+  ad_utility::streams::stream_generator generateTurtleTriples(
+      const TableWithRange& table);
+
+  // _____________________________________________________________________________
   // Helper function that generates the result of a CONSTRUCT query as a range
   // of `StringTriple`s.
   static ad_utility::InputRangeTypeErased<StringTriple> generateStringTriples(
@@ -182,6 +188,13 @@ class ConstructTripleGenerator {
   // variable per row, reused across all triples in the row).
   StringTriple instantiateTripleFromBatch(
       size_t tripleIdx, const BatchEvaluationCache& batchCache,
+      size_t rowInBatch,
+      const std::vector<const std::string*>& variableStrings) const;
+
+  // Helper to get string pointer for a term in a triple.
+  // Returns nullptr if the term is UNDEF.
+  const std::string* getTermStringPtr(
+      size_t tripleIdx, size_t pos, const BatchEvaluationCache& batchCache,
       size_t rowInBatch,
       const std::vector<const std::string*>& variableStrings) const;
 
