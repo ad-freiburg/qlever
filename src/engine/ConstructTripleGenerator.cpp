@@ -26,13 +26,21 @@ size_t ConstructTripleGenerator::getBatchSize() {
       try {
         size_t val = std::stoull(envVal);
         if (val > 0) {
-          AD_LOG_INFO << "Using CONSTRUCT batch size from environment: " << val
+          AD_LOG_INFO << "CONSTRUCT batch size from environment: " << val
                       << "\n";
           return val;
         }
-      } catch (...) {
-        // Fall through to default
+        AD_LOG_WARN << "QLEVER_CONSTRUCT_BATCH_SIZE must be > 0, got: "
+                    << envVal << ", using default: " << DEFAULT_BATCH_SIZE
+                    << "\n";
+      } catch (const std::exception& e) {
+        AD_LOG_WARN << "Invalid QLEVER_CONSTRUCT_BATCH_SIZE value: " << envVal
+                    << " (" << e.what()
+                    << "), using default: " << DEFAULT_BATCH_SIZE << "\n";
       }
+    } else {
+      AD_LOG_INFO << "CONSTRUCT batch size: " << DEFAULT_BATCH_SIZE
+                  << " (default)\n";
     }
     return DEFAULT_BATCH_SIZE;
   }();
