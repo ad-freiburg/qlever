@@ -6,32 +6,90 @@
 
 #include "engine/ConstructTripleGenerator.h"
 
+#include <cstdlib>
+
 #include "engine/ExportQueryExecutionTrees.h"
 #include "parser/data/ConstructQueryExportContext.h"
+#include "util/Log.h"
 
 using ad_utility::InputRangeTypeErased;
 using enum PositionInTriple;
 using StringTriple = ConstructTripleGenerator::StringTriple;
 
 // _____________________________________________________________________________
-void ConstructTripleGenerator::precomputeConstants() {
+size_t ConstructTripleGenerator::getBatchSize() {
+  static const size_t batchSize = []() {
+    const char* envVal = std::getenv("QLEVER_CONSTRUCT_getBatchSize()");
+    if (envVal != nullptr) {
+      try {
+        size_t val = std::stoull(envVal);
+        if (val > 0) {
+          AD_LOG_INFO << "Using CONSTRUCT batch size from environment: " << val
+                      << "\n";
+          return val;
+        }
+      } catch (...) {
+        // Fall through to default
+      }
+    }
+    return DEFAULT_BATCH_SIZE;
+  }();
+  return batchSize;
+}
+
+// _____________________________________________________________________________
+void ConstructTripleGenerator::analyzeTemplate() {
   precomputedConstants_.resize(templateTriples_.size());
+  triplePatternInfos_.resize(templateTriples_.size());
+
   for (size_t tripleIdx = 0; tripleIdx < templateTriples_.size(); ++tripleIdx) {
     const auto& triple = templateTriples_[tripleIdx];
+    TriplePatternInfo& info = triplePatternInfos_[tripleIdx];
+
     for (size_t pos = 0; pos < 3; ++pos) {
       const GraphTerm& term = triple[pos];
       PositionInTriple role = static_cast<PositionInTriple>(pos);
+
       if (std::holds_alternative<Iri>(term)) {
+        // Precompute IRI value
         auto val = ConstructQueryEvaluator::evaluate(std::get<Iri>(term));
-        precomputedConstants_[tripleIdx][pos] =
-            val.has_value() ? std::make_optional((std::move(val.value())))
-                            : std::nullopt;
+        precomputedConstants_[tripleIdx][pos] = std::move(val);
+        info.resolutions[pos] = {TermSource::CONSTANT, tripleIdx};
+
       } else if (std::holds_alternative<Literal>(term)) {
+        // Precompute Literal value
         auto val =
             ConstructQueryEvaluator::evaluate(std::get<Literal>(term), role);
-        precomputedConstants_[tripleIdx][pos] =
-            val.has_value() ? std::make_optional(std::move(val.value()))
-                            : std::nullopt;
+        precomputedConstants_[tripleIdx][pos] = std::move(val);
+        info.resolutions[pos] = {TermSource::CONSTANT, tripleIdx};
+
+      } else if (std::holds_alternative<Variable>(term)) {
+        // Track Variable for per-row evaluation with pre-computed column index
+        const Variable& var = std::get<Variable>(term);
+        if (!variableToIndex_.contains(var)) {
+          size_t idx = variablesToEvaluate_.size();
+          variableToIndex_[var] = idx;
+          // Pre-compute the column index to avoid hash lookups during
+          // evaluation
+          std::optional<size_t> columnIndex;
+          if (variableColumns_.get().contains(var)) {
+            columnIndex = variableColumns_.get().at(var).columnIndex_;
+          }
+          variablesToEvaluate_.push_back({var, columnIndex});
+        }
+        info.resolutions[pos] = {TermSource::VARIABLE, variableToIndex_[var]};
+
+      } else if (std::holds_alternative<BlankNode>(term)) {
+        // Track BlankNode for per-row evaluation
+        const BlankNode& blankNode = std::get<BlankNode>(term);
+        const std::string& label = blankNode.label();
+        if (!blankNodeLabelToIndex_.contains(label)) {
+          size_t idx = blankNodesToEvaluate_.size();
+          blankNodeLabelToIndex_[label] = idx;
+          blankNodesToEvaluate_.push_back(blankNode);
+        }
+        info.resolutions[pos] = {TermSource::BLANK_NODE,
+                                 blankNodeLabelToIndex_[label]};
       }
     }
   }
@@ -47,8 +105,217 @@ ConstructTripleGenerator::ConstructTripleGenerator(
       variableColumns_(variableColumns),
       index_(index),
       cancellationHandle_(std::move(cancellationHandle)) {
-  // initialize a cache containing the constants of the graph triple template.
-  precomputeConstants();
+  // Analyze template: precompute constants and identify variables/blank nodes.
+  analyzeTemplate();
+}
+
+// _____________________________________________________________________________
+ConstructTripleGenerator::RowEvaluationCache
+ConstructTripleGenerator::evaluateRowTerms(
+    const ConstructQueryExportContext& context, IdCache& idCache,
+    IdCacheStats& cacheStats) const {
+  RowEvaluationCache rowCache;
+  const IdTable& idTable = context.idTable_;
+  size_t rowIdx = context.resultTableRowIndex_;
+
+  // Evaluate all Variables for this row using pre-computed column indices
+  // and caching ID-to-string conversions
+  rowCache.variableValues.reserve(variablesToEvaluate_.size());
+  for (const auto& varInfo : variablesToEvaluate_) {
+    if (!varInfo.columnIndex.has_value()) {
+      // Variable not in result
+      rowCache.variableValues.push_back(std::nullopt);
+      continue;
+    }
+
+    // Get the Id from the table
+    Id id = idTable(rowIdx, varInfo.columnIndex.value());
+
+    // Check the cache first
+    auto it = idCache.find(id);
+    if (it != idCache.end()) {
+      // Cache hit - use the cached value
+      ++cacheStats.hits;
+      rowCache.variableValues.push_back(it->second);
+    } else {
+      // Cache miss - compute and cache the result
+      ++cacheStats.misses;
+      auto value = ConstructQueryEvaluator::evaluateWithColumnIndex(
+          varInfo.columnIndex, context);
+      idCache[id] = value;
+      rowCache.variableValues.push_back(std::move(value));
+    }
+  }
+
+  // Evaluate all BlankNodes for this row
+  // Note: BlankNodes are not cached because their value depends on the row
+  rowCache.blankNodeValues.reserve(blankNodesToEvaluate_.size());
+  for (const BlankNode& blankNode : blankNodesToEvaluate_) {
+    rowCache.blankNodeValues.push_back(
+        ConstructQueryEvaluator::evaluate(blankNode, context));
+  }
+
+  return rowCache;
+}
+
+// _____________________________________________________________________________
+ConstructTripleGenerator::BatchEvaluationCache
+ConstructTripleGenerator::evaluateBatchColumnOriented(
+    const IdTable& idTable, const LocalVocab& localVocab,
+    ql::span<const uint64_t> rowIndices, size_t currentRowOffset,
+    IdCache& idCache, IdCacheStats& cacheStats) const {
+  BatchEvaluationCache batchCache;
+  const size_t numRows = rowIndices.size();
+  batchCache.numRows = numRows;
+
+  // Initialize variable values: [varIdx][rowInBatch]
+  // This layout allows column-oriented access: read all values for one variable
+  // before moving to the next
+  batchCache.variableValues.resize(variablesToEvaluate_.size());
+  for (auto& column : batchCache.variableValues) {
+    column.resize(numRows);
+  }
+
+  // Evaluate variables column-by-column for better cache locality
+  // The IdTable is accessed sequentially for each column
+  for (size_t varIdx = 0; varIdx < variablesToEvaluate_.size(); ++varIdx) {
+    const auto& varInfo = variablesToEvaluate_[varIdx];
+    auto& columnValues = batchCache.variableValues[varIdx];
+
+    if (!varInfo.columnIndex.has_value()) {
+      // Variable not in result - all values are nullopt (already default)
+      continue;
+    }
+
+    const size_t colIdx = varInfo.columnIndex.value();
+
+    // Read all IDs from this column for all rows in the batch
+    for (size_t rowInBatch = 0; rowInBatch < numRows; ++rowInBatch) {
+      const uint64_t rowIdx = rowIndices[rowInBatch];
+      Id id = idTable(rowIdx, colIdx);
+
+      // Check the cache first
+      auto it = idCache.find(id);
+      if (it != idCache.end()) {
+        ++cacheStats.hits;
+        columnValues[rowInBatch] = it->second;
+      } else {
+        ++cacheStats.misses;
+        // Build minimal context for ID-to-string conversion
+        ConstructQueryExportContext context{
+            rowIdx,       idTable,         localVocab, variableColumns_.get(),
+            index_.get(), currentRowOffset};
+        auto value = ConstructQueryEvaluator::evaluateWithColumnIndex(
+            varInfo.columnIndex, context);
+        idCache[id] = value;
+        columnValues[rowInBatch] = std::move(value);
+      }
+    }
+  }
+
+  // Initialize blank node values: [blankNodeIdx][rowInBatch]
+  batchCache.blankNodeValues.resize(blankNodesToEvaluate_.size());
+  for (auto& column : batchCache.blankNodeValues) {
+    column.resize(numRows);
+  }
+
+  // Evaluate blank nodes - these depend on row offset so we process row-by-row
+  // but still organize results by blank node index first for consistent access
+  for (size_t blankIdx = 0; blankIdx < blankNodesToEvaluate_.size();
+       ++blankIdx) {
+    const BlankNode& blankNode = blankNodesToEvaluate_[blankIdx];
+    auto& columnValues = batchCache.blankNodeValues[blankIdx];
+
+    for (size_t rowInBatch = 0; rowInBatch < numRows; ++rowInBatch) {
+      const uint64_t rowIdx = rowIndices[rowInBatch];
+      ConstructQueryExportContext context{rowIdx,       idTable,
+                                          localVocab,   variableColumns_.get(),
+                                          index_.get(), currentRowOffset};
+      columnValues[rowInBatch] =
+          ConstructQueryEvaluator::evaluate(blankNode, context);
+    }
+  }
+
+  return batchCache;
+}
+
+// _____________________________________________________________________________
+StringTriple ConstructTripleGenerator::instantiateTripleFromBatch(
+    size_t tripleIdx, const BatchEvaluationCache& batchCache,
+    size_t rowInBatch) const {
+  const TriplePatternInfo& info = triplePatternInfos_[tripleIdx];
+
+  // Helper lambda to get a pointer to the string value for a position.
+  // Returns nullptr if the value is UNDEF.
+  auto getStringPtr = [&](size_t pos) -> const std::string* {
+    const TermResolution& resolution = info.resolutions[pos];
+    const std::optional<std::string>* optPtr = nullptr;
+
+    switch (resolution.source) {
+      case TermSource::CONSTANT:
+        optPtr = &precomputedConstants_[tripleIdx][pos];
+        break;
+      case TermSource::VARIABLE:
+        optPtr = &batchCache.getVariableValue(resolution.index, rowInBatch);
+        break;
+      case TermSource::BLANK_NODE:
+        optPtr = &batchCache.getBlankNodeValue(resolution.index, rowInBatch);
+        break;
+    }
+
+    return optPtr->has_value() ? &optPtr->value() : nullptr;
+  };
+
+  // Get pointers to all components, returning early if any is UNDEF
+  const std::string* subject = getStringPtr(0);
+  if (!subject) return StringTriple{};
+
+  const std::string* predicate = getStringPtr(1);
+  if (!predicate) return StringTriple{};
+
+  const std::string* object = getStringPtr(2);
+  if (!object) return StringTriple{};
+
+  return StringTriple{*subject, *predicate, *object};
+}
+
+// _____________________________________________________________________________
+StringTriple ConstructTripleGenerator::instantiateTriple(
+    size_t tripleIdx, const RowEvaluationCache& cache) const {
+  const TriplePatternInfo& info = triplePatternInfos_[tripleIdx];
+
+  // Helper lambda to get a pointer to the string value for a position.
+  // Returns nullptr if the value is UNDEF.
+  auto getStringPtr = [&](size_t pos) -> const std::string* {
+    const TermResolution& resolution = info.resolutions[pos];
+    const std::optional<std::string>* optPtr = nullptr;
+
+    switch (resolution.source) {
+      case TermSource::CONSTANT:
+        optPtr = &precomputedConstants_[tripleIdx][pos];
+        break;
+      case TermSource::VARIABLE:
+        optPtr = &cache.variableValues[resolution.index];
+        break;
+      case TermSource::BLANK_NODE:
+        optPtr = &cache.blankNodeValues[resolution.index];
+        break;
+    }
+
+    return optPtr->has_value() ? &optPtr->value() : nullptr;
+  };
+
+  // Get pointers to all components, returning early if any is UNDEF
+  const std::string* subject = getStringPtr(0);
+  if (!subject) return StringTriple{};
+
+  const std::string* predicate = getStringPtr(1);
+  if (!predicate) return StringTriple{};
+
+  const std::string* object = getStringPtr(2);
+  if (!object) return StringTriple{};
+
+  return StringTriple{*subject, *predicate, *object};
 }
 
 // _____________________________________________________________________________
@@ -56,42 +323,88 @@ auto ConstructTripleGenerator::generateStringTriplesForResultTable(
     const TableWithRange& table) {
   const auto tableWithVocab = table.tableWithVocab_;
   size_t currentRowOffset = rowOffset_;
-  rowOffset_ += tableWithVocab.idTable().numRows();
+  size_t numRows = tableWithVocab.idTable().numRows();
+  rowOffset_ += numRows;
 
-  // For a single row from the WHERE clause (specified by `idTable` and
-  // `rowIdx` stored in the `context`), evaluate all triples in the CONSTRUCT
-  // template.
-  auto outerTransformer = [this, tableWithVocab,
-                           currentRowOffset](uint64_t rowIdx) {
-    ConstructQueryExportContext context{rowIdx,
-                                        tableWithVocab.idTable(),
-                                        tableWithVocab.localVocab(),
-                                        variableColumns_.get(),
-                                        index_.get(),
-                                        currentRowOffset};
+  // Create a shared ID cache for this table to avoid redundant ID-to-string
+  // conversions when the same ID appears in multiple rows.
+  // Using shared_ptr allows the cache to be captured by the lambda and shared
+  // across all batch processing calls.
+  auto idCache = std::make_shared<IdCache>();
 
-    // Transform a single template triple from the CONSTRUCT-template into
-    // a `StringTriple` for a single row of the WHERE clause (specified by
-    // `idTable` and `rowIdx` stored in `context`).
-    auto evaluateConstructTripleForRowFromWhereClause =
-        [this, context = std::move(context)](const auto& pair) {
-          auto [tripleIdx, templateTriple] = pair;
-          cancellationHandle_->throwIfCancelled();
-          return ConstructTripleGenerator::evaluateTriple(
-              tripleIdx, templateTriple, context);
-        };
+  // Track cache statistics for performance analysis.
+  // The shared_ptr ensures stats survive until all rows are processed.
+  // We use a custom destructor to log the stats when processing completes.
+  // Only log for batches with significant activity (>10000 lookups).
+  auto cacheStats = std::shared_ptr<IdCacheStats>(
+      new IdCacheStats(), [numRows](IdCacheStats* stats) {
+        if (stats->totalLookups() > 10000) {
+          AD_LOG_INFO << "ID Cache Stats - Rows: " << numRows
+                      << ", Lookups: " << stats->totalLookups()
+                      << ", Hits: " << stats->hits
+                      << ", Misses: " << stats->misses
+                      << ", Hit Rate: " << (stats->hitRate() * 100.0) << "%"
+                      << ", Unique IDs: " << stats->misses << "\n";
+        }
+        delete stats;
+      });
 
-    // Apply the transformer from above and filter out invalid evaluations
-    // (which are returned as empty `StringTriples` from
-    // `evaluateConstructTripleForRowFromWhereClause`).
-    return ql::views::iota(size_t{0}, templateTriples_.size()) |
-           ql::views::transform([this](size_t tripleIdx) {
-             return std::make_pair(tripleIdx, templateTriples_[tripleIdx]);
-           }) |
-           ql::views::transform(evaluateConstructTripleForRowFromWhereClause) |
-           ql::views::filter(std::not_fn(&StringTriple::isEmpty));
+  // Collect row indices into a vector for batching
+  // This allows us to process rows in batches with column-oriented access
+  auto rowIndicesVec = std::make_shared<std::vector<uint64_t>>(
+      ql::ranges::begin(table.view_), ql::ranges::end(table.view_));
+
+  // Calculate number of batches
+  size_t totalRows = rowIndicesVec->size();
+  size_t numBatches = (totalRows + getBatchSize() - 1) / getBatchSize();
+
+  // Process batches lazily using column-oriented evaluation.
+  // Each batch materializes its triples into a vector to reduce view nesting
+  // overhead. This trades a small bounded memory increase per batch for
+  // significantly reduced iterator indirection and better cache locality.
+  auto processBatch = [this, tableWithVocab, currentRowOffset, idCache,
+                       cacheStats, rowIndicesVec,
+                       totalRows](size_t batchIdx) mutable {
+    cancellationHandle_->throwIfCancelled();
+
+    // Calculate batch bounds
+    size_t batchStart = batchIdx * getBatchSize();
+    size_t batchEnd = std::min(batchStart + getBatchSize(), totalRows);
+
+    // Use span for zero-copy access to row indices for this batch
+    ql::span<const uint64_t> batchRowIndices(rowIndicesVec->data() + batchStart,
+                                             batchEnd - batchStart);
+
+    // Evaluate all variables and blank nodes for this batch using
+    // column-oriented access for better cache locality
+    BatchEvaluationCache batchCache = evaluateBatchColumnOriented(
+        tableWithVocab.idTable(), tableWithVocab.localVocab(), batchRowIndices,
+        currentRowOffset, *idCache, *cacheStats);
+
+    // Materialize triples for this batch into a vector.
+    // This reduces view nesting from 4 levels to 2 levels, eliminating
+    // significant iterator overhead for each triple access.
+    std::vector<StringTriple> batchTriples;
+    batchTriples.reserve(batchCache.numRows * templateTriples_.size());
+
+    for (size_t rowInBatch = 0; rowInBatch < batchCache.numRows; ++rowInBatch) {
+      for (size_t tripleIdx = 0; tripleIdx < templateTriples_.size();
+           ++tripleIdx) {
+        auto triple =
+            instantiateTripleFromBatch(tripleIdx, batchCache, rowInBatch);
+        if (!triple.isEmpty()) {
+          batchTriples.push_back(std::move(triple));
+        }
+      }
+    }
+
+    return batchTriples;
   };
-  return table.view_ | ql::views::transform(outerTransformer) | ql::views::join;
+
+  // Process all batches lazily and flatten the results.
+  // Now only 2 levels of view nesting instead of 4.
+  return ql::views::iota(size_t{0}, numBatches) |
+         ql::views::transform(processBatch) | ql::views::join;
 }
 
 // _____________________________________________________________________________
@@ -126,33 +439,4 @@ ConstructTripleGenerator::generateStringTriples(
         return generator.generateStringTriplesForResultTable(table);
       });
   return InputRangeTypeErased(ql::views::join(std::move(tableTriples)));
-}
-
-// _____________________________________________________________________________
-StringTriple ConstructTripleGenerator::evaluateTriple(
-    size_t tripleIdx, const std::array<GraphTerm, 3>& triple,
-    const ConstructQueryExportContext& context) {
-  using enum PositionInTriple;
-
-  // array to hold evaluated components [SUBJECT=0, PREDICATE=1, OBJECT=2]
-  std::array<std::optional<std::string>, 3> components;
-
-  for (size_t pos = 0; pos < 3; ++pos) {
-    const GraphTerm& term = triple[pos];
-
-    // 1. check precomputed constants (IRIs/Literals) first - O(1) lookup
-    if (precomputedConstants_[tripleIdx][pos].has_value()) {
-      components[pos] = precomputedConstants_[tripleIdx][pos];
-    }
-    // 2. fall back to per-row evaluation for Variables/BlankNodes.
-    PositionInTriple role = static_cast<PositionInTriple>(pos);
-    components[pos] =
-        ConstructQueryEvaluator::evaluateTerm(term, context, role);
-
-    // early exit if this component is UNDEF.
-    if (!components[pos].has_value()) {
-      return StringTriple{};
-    }
-  }
-  return StringTriple{*components[0], *components[1], *components[2]};
 }

@@ -17,9 +17,6 @@
 #include "util/http/MediaTypes.h"
 #include "util/stream_generator.h"
 
-// Class for computing the result of an already parsed and planned query and
-// exporting it in different formats (TSV, CSV, Turtle, JSON, Binary).
-//
 // TODO<joka921> Also implement a streaming JSON serializer to reduce the RAM
 // consumption of large JSON exports and to make this interface even simpler.
 class ExportQueryExecutionTrees {
@@ -170,6 +167,11 @@ class ExportQueryExecutionTrees {
       STREAMABLE_GENERATOR_TYPE streamGenerator);
 #endif
 
+ public:
+  static ad_utility::InputRangeTypeErased<TableWithRange> getRowIndices(
+      const LimitOffsetClause& limitOffset, const Result& result,
+      uint64_t& resutSizeTotal, uint64_t resultSizeMultiplicator = 1);
+
  private:
   // Make sure that the offset is not applied again when exporting the
   // result (it is already applied by the root operation in the query
@@ -249,28 +251,6 @@ class ExportQueryExecutionTrees {
   static ad_utility::InputRangeTypeErased<TableConstRefWithVocab> getIdTables(
       const Result& result);
 
-  // Generate the result in "blocks" and, when iterating over the generator
-  // from beginning to end, return the total number of rows in the result
-  // in `totalResultSize`.
-  //
-  // Blocks, where all rows are before OFFSET, are requested (and hence
-  // computed), but skipped.
-  //
-  // Blocks, where at least one row is after OFFSET but before the effective
-  // export limit (minimum of the LIMIT and the value of the `send` parameter),
-  // are requested and yielded (together with the corresponding `LocalVocab`
-  // and the range from that `IdTable` that belongs to the result).
-  //
-  // Blocks after the effective export limit until the LIMIT are requested, and
-  // counted towards the `totalResultSize`, but not yielded.
-  //
-  // Blocks after the LIMIT are not even requested.
- public:
-  static ad_utility::InputRangeTypeErased<TableWithRange> getRowIndices(
-      const LimitOffsetClause& limitOffset, const Result& result,
-      uint64_t& resutSizeTotal, uint64_t resultSizeMultiplicator = 1);
-
- private:
   FRIEND_TEST(ExportQueryExecutionTrees, getIdTablesReturnsSingletonIterator);
   FRIEND_TEST(ExportQueryExecutionTrees, getIdTablesMirrorsGenerator);
   FRIEND_TEST(ExportQueryExecutionTrees, ensureCorrectSlicingOfSingleIdTable);

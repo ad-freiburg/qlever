@@ -39,6 +39,14 @@ class ConstructQueryEvaluator {
   static std::optional<std::string> evaluate(
       const Variable& var, const ConstructQueryExportContext& context);
 
+  // Optimized variable evaluation using a pre-computed column index.
+  // This avoids the hash lookup in variableColumns during evaluation.
+  // If columnIndex is nullopt, the variable is not in the result and
+  // nullopt is returned.
+  static std::optional<std::string> evaluateWithColumnIndex(
+      std::optional<size_t> columnIndex,
+      const ConstructQueryExportContext& context);
+
   // Evaluates a `GraphTerm` (which is part of a CONSTRUCT triple pattern) using
   // the provided context and the position of the `GraphTerm` in the template
   // triple. If the `GraphTerm` can't be evaluated, `std::nullopt` is returned.
