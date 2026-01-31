@@ -21,7 +21,7 @@ using StringTriple = ConstructTripleGenerator::StringTriple;
 // _____________________________________________________________________________
 size_t ConstructTripleGenerator::getBatchSize() {
   static const size_t batchSize = []() {
-    const char* envVal = std::getenv("QLEVER_CONSTRUCT_getBatchSize()");
+    const char* envVal = std::getenv("QLEVER_CONSTRUCT_BATCH_SIZE");
     if (envVal != nullptr) {
       try {
         size_t val = std::stoull(envVal);
