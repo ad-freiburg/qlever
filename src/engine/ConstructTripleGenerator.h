@@ -84,7 +84,7 @@ class ConstructTripleGenerator {
   // Batch size affects CPU cache utilization:
   //   - Smaller batches: Better L1/L2 cache locality, more batch overhead
   //   - Larger batches: Amortized overhead, potential cache thrashing
-  static constexpr size_t DEFAULT_BATCH_SIZE = 1000;
+  static constexpr size_t DEFAULT_BATCH_SIZE = 64;
 
   // Get the batch size, configurable via QLEVER_CONSTRUCT_BATCH_SIZE env var.
   // Example: QLEVER_CONSTRUCT_BATCH_SIZE=256 ./ServerMain -i index -p 7001
