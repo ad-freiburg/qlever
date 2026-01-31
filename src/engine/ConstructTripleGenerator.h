@@ -77,18 +77,23 @@ class ConstructTripleGenerator {
   // Get the batch size, configurable via QLEVER_CONSTRUCT_BATCH_SIZE env var
   static size_t getBatchSize();
 
-  // Batch evaluation cache organized for column-oriented access
-  // variableValues[varIdx][rowInBatch] for sequential column access
-  // blankNodeValues[blankNodeIdx][rowInBatch] for sequential access
+  // Batch evaluation cache organized for column-oriented access.
+  // variableIds[varIdx][rowInBatch] stores Id values - strings are looked up
+  // from the shared IdCache on demand during instantiation, avoiding double
+  // storage of string values.
+  // blankNodeValues[blankNodeIdx][rowInBatch] stores strings directly since
+  // blank nodes can't be cached (they include the row number).
   struct BatchEvaluationCache {
-    std::vector<std::vector<std::optional<std::string>>> variableValues;
+    // Store Id values for variables - nullopt if variable not in result
+    std::vector<std::vector<std::optional<Id>>> variableIds;
+    // Store string values for blank nodes (can't be cached by Id)
     std::vector<std::vector<std::optional<std::string>>> blankNodeValues;
     size_t numRows = 0;
 
-    // Get value for a specific variable at a row in the batch
-    const std::optional<std::string>& getVariableValue(
-        size_t varIdx, size_t rowInBatch) const {
-      return variableValues[varIdx][rowInBatch];
+    // Get Id for a specific variable at a row in the batch
+    const std::optional<Id>& getVariableId(size_t varIdx,
+                                           size_t rowInBatch) const {
+      return variableIds[varIdx][rowInBatch];
     }
 
     // Get value for a specific blank node at a row in the batch
@@ -158,10 +163,11 @@ class ConstructTripleGenerator {
 
   // Instantiates a single triple using the precomputed constants and
   // the batch evaluation cache for a specific row. Returns an empty
-  // StringTriple if any component is UNDEF.
+  // StringTriple if any component is UNDEF. Variable values are looked
+  // up from idCache using the stored Id values.
   StringTriple instantiateTripleFromBatch(
       size_t tripleIdx, const BatchEvaluationCache& batchCache,
-      size_t rowInBatch) const;
+      size_t rowInBatch, const IdCache& idCache) const;
 
   // triple templates contained in the graph template
   // (the CONSTRUCT-clause of the CONSTRUCt-query) of the CONSTRUCT-query.

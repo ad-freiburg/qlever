@@ -168,11 +168,11 @@ ConstructTripleGenerator::evaluateBatchColumnOriented(
   const size_t numRows = rowIndices.size();
   batchCache.numRows = numRows;
 
-  // Initialize variable values: [varIdx][rowInBatch]
-  // This layout allows column-oriented access: read all values for one variable
-  // before moving to the next
-  batchCache.variableValues.resize(variablesToEvaluate_.size());
-  for (auto& column : batchCache.variableValues) {
+  // Initialize variable Ids: [varIdx][rowInBatch]
+  // We store Id values here and look up strings from idCache during
+  // instantiation. This avoids storing strings in both idCache and batchCache.
+  batchCache.variableIds.resize(variablesToEvaluate_.size());
+  for (auto& column : batchCache.variableIds) {
     column.resize(numRows);
   }
 
@@ -180,7 +180,7 @@ ConstructTripleGenerator::evaluateBatchColumnOriented(
   // The IdTable is accessed sequentially for each column
   for (size_t varIdx = 0; varIdx < variablesToEvaluate_.size(); ++varIdx) {
     const auto& varInfo = variablesToEvaluate_[varIdx];
-    auto& columnValues = batchCache.variableValues[varIdx];
+    auto& columnIds = batchCache.variableIds[varIdx];
 
     if (!varInfo.columnIndex.has_value()) {
       // Variable not in result - all values are nullopt (already default)
@@ -190,15 +190,18 @@ ConstructTripleGenerator::evaluateBatchColumnOriented(
     const size_t colIdx = varInfo.columnIndex.value();
 
     // Read all IDs from this column for all rows in the batch
+    // and ensure their string values are in the cache
     for (size_t rowInBatch = 0; rowInBatch < numRows; ++rowInBatch) {
       const uint64_t rowIdx = rowIndices[rowInBatch];
       Id id = idTable(rowIdx, colIdx);
 
-      // Check the cache first
+      // Store the Id in the batch cache
+      columnIds[rowInBatch] = id;
+
+      // Ensure the string value is in idCache (compute if not present)
       auto it = idCache.find(id);
       if (it != idCache.end()) {
         ++cacheStats.hits;
-        columnValues[rowInBatch] = it->second;
       } else {
         ++cacheStats.misses;
         // Build minimal context for ID-to-string conversion
@@ -207,8 +210,7 @@ ConstructTripleGenerator::evaluateBatchColumnOriented(
             index_.get(), currentRowOffset};
         auto value = ConstructQueryEvaluator::evaluateWithColumnIndex(
             varInfo.columnIndex, context);
-        idCache[id] = value;
-        columnValues[rowInBatch] = std::move(value);
+        idCache[id] = std::move(value);
       }
     }
   }
@@ -241,29 +243,43 @@ ConstructTripleGenerator::evaluateBatchColumnOriented(
 
 // _____________________________________________________________________________
 StringTriple ConstructTripleGenerator::instantiateTripleFromBatch(
-    size_t tripleIdx, const BatchEvaluationCache& batchCache,
-    size_t rowInBatch) const {
+    size_t tripleIdx, const BatchEvaluationCache& batchCache, size_t rowInBatch,
+    const IdCache& idCache) const {
   const TriplePatternInfo& info = triplePatternInfos_[tripleIdx];
 
   // Helper lambda to get a pointer to the string value for a position.
   // Returns nullptr if the value is UNDEF.
+  // For variables, looks up the Id in idCache to get the string value.
   auto getStringPtr = [&](size_t pos) -> const std::string* {
     const TermResolution& resolution = info.resolutions[pos];
-    const std::optional<std::string>* optPtr = nullptr;
 
     switch (resolution.source) {
-      case TermSource::CONSTANT:
-        optPtr = &precomputedConstants_[tripleIdx][pos];
-        break;
-      case TermSource::VARIABLE:
-        optPtr = &batchCache.getVariableValue(resolution.index, rowInBatch);
-        break;
-      case TermSource::BLANK_NODE:
-        optPtr = &batchCache.getBlankNodeValue(resolution.index, rowInBatch);
-        break;
+      case TermSource::CONSTANT: {
+        const auto& opt = precomputedConstants_[tripleIdx][pos];
+        return opt.has_value() ? &opt.value() : nullptr;
+      }
+      case TermSource::VARIABLE: {
+        // Get the Id from batch cache, then look up string in idCache
+        const auto& optId =
+            batchCache.getVariableId(resolution.index, rowInBatch);
+        if (!optId.has_value()) {
+          return nullptr;  // Variable not in result
+        }
+        // Look up string value from idCache (guaranteed to exist)
+        auto it = idCache.find(optId.value());
+        if (it == idCache.end() || !it->second.has_value()) {
+          return nullptr;  // UNDEF value
+        }
+        return &it->second.value();
+      }
+      case TermSource::BLANK_NODE: {
+        const auto& opt =
+            batchCache.getBlankNodeValue(resolution.index, rowInBatch);
+        return opt.has_value() ? &opt.value() : nullptr;
+      }
     }
 
-    return optPtr->has_value() ? &optPtr->value() : nullptr;
+    return nullptr;  // Unreachable
   };
 
   // Get pointers to all components, returning early if any is UNDEF
@@ -390,8 +406,8 @@ auto ConstructTripleGenerator::generateStringTriplesForResultTable(
     for (size_t rowInBatch = 0; rowInBatch < batchCache.numRows; ++rowInBatch) {
       for (size_t tripleIdx = 0; tripleIdx < templateTriples_.size();
            ++tripleIdx) {
-        auto triple =
-            instantiateTripleFromBatch(tripleIdx, batchCache, rowInBatch);
+        auto triple = instantiateTripleFromBatch(tripleIdx, batchCache,
+                                                 rowInBatch, *idCache);
         if (!triple.isEmpty()) {
           batchTriples.push_back(std::move(triple));
         }
