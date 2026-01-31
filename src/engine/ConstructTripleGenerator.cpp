@@ -10,8 +10,10 @@
 
 #include <cstdlib>
 
+#include "backports/StartsWithAndEndsWith.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "parser/data/ConstructQueryExportContext.h"
+#include "rdfTypes/RdfEscaping.h"
 #include "util/Log.h"
 
 using ad_utility::InputRangeTypeErased;
@@ -344,94 +346,43 @@ StringTriple ConstructTripleGenerator::instantiateTriple(
 auto ConstructTripleGenerator::generateStringTriplesForResultTable(
     const TableWithRange& table) {
   const auto tableWithVocab = table.tableWithVocab_;
-  size_t currentRowOffset = rowOffset_;
-  size_t numRows = tableWithVocab.idTable().numRows();
+  const size_t currentRowOffset = rowOffset_;
+  const size_t numRows = tableWithVocab.idTable().numRows();
   rowOffset_ += numRows;
 
-  // Create a shared ID cache for this table to avoid redundant ID-to-string
-  // conversions when the same ID appears in multiple rows.
-  // Using shared_ptr allows the cache to be captured by the lambda and shared
-  // across all batch processing calls.
-  auto idCache = std::make_shared<IdCache>();
+  auto [idCache, cacheStats] = createIdCacheWithStats(numRows);
 
-  // Track cache statistics for performance analysis.
-  // The shared_ptr ensures stats survive until all rows are processed.
-  // We use a custom destructor to log the stats when processing completes.
-  // Only log for batches with significant activity (>10000 lookups).
-  auto cacheStats = std::shared_ptr<IdCacheStats>(
-      new IdCacheStats(), [numRows](IdCacheStats* stats) {
-        if (stats->totalLookups() > 10000) {
-          AD_LOG_INFO << "ID Cache Stats - Rows: " << numRows
-                      << ", Lookups: " << stats->totalLookups()
-                      << ", Hits: " << stats->hits
-                      << ", Misses: " << stats->misses
-                      << ", Hit Rate: " << (stats->hitRate() * 100.0) << "%"
-                      << ", Unique IDs: " << stats->misses << "\n";
-        }
-        delete stats;
-      });
-
-  // Collect row indices into a vector for batching
-  // This allows us to process rows in batches with column-oriented access
   auto rowIndicesVec = std::make_shared<std::vector<uint64_t>>(
       ql::ranges::begin(table.view_), ql::ranges::end(table.view_));
 
-  // Calculate number of batches
-  size_t totalRows = rowIndicesVec->size();
-  size_t numBatches = (totalRows + getBatchSize() - 1) / getBatchSize();
+  const size_t totalRows = rowIndicesVec->size();
+  const size_t numBatches = (totalRows + getBatchSize() - 1) / getBatchSize();
 
-  // Process batches lazily using column-oriented evaluation.
-  // Each batch materializes its triples into a vector to reduce view nesting
-  // overhead. This trades a small bounded memory increase per batch for
-  // significantly reduced iterator indirection and better cache locality.
+  // Process batches lazily. Each batch materializes triples into a vector
+  // to reduce view nesting overhead.
   auto processBatch = [this, tableWithVocab, currentRowOffset, idCache,
                        cacheStats, rowIndicesVec,
                        totalRows](size_t batchIdx) mutable {
     cancellationHandle_->throwIfCancelled();
 
-    // Calculate batch bounds
-    size_t batchStart = batchIdx * getBatchSize();
-    size_t batchEnd = std::min(batchStart + getBatchSize(), totalRows);
-
-    // Use span for zero-copy access to row indices for this batch
+    const size_t batchStart = batchIdx * getBatchSize();
+    const size_t batchEnd = std::min(batchStart + getBatchSize(), totalRows);
     ql::span<const uint64_t> batchRowIndices(rowIndicesVec->data() + batchStart,
                                              batchEnd - batchStart);
 
-    // Evaluate all variables and blank nodes for this batch using
-    // column-oriented access for better cache locality
     BatchEvaluationCache batchCache = evaluateBatchColumnOriented(
         tableWithVocab.idTable(), tableWithVocab.localVocab(), batchRowIndices,
         currentRowOffset, *idCache, *cacheStats);
 
-    // Materialize triples for this batch into a vector.
-    // This reduces view nesting from 4 levels to 2 levels, eliminating
-    // significant iterator overhead for each triple access.
     std::vector<StringTriple> batchTriples;
     batchTriples.reserve(batchCache.numRows * templateTriples_.size());
 
-    // Pre-allocate cache for variable string pointers (reused across rows)
     std::vector<const std::string*> variableStrings(
         variablesToEvaluate_.size());
 
     for (size_t rowInBatch = 0; rowInBatch < batchCache.numRows; ++rowInBatch) {
-      // Pre-compute string pointers for all variables in this row.
-      // This avoids repeated idCache lookups when the same variable
-      // appears multiple times in the template.
-      for (size_t varIdx = 0; varIdx < variablesToEvaluate_.size(); ++varIdx) {
-        const auto& optId = batchCache.getVariableId(varIdx, rowInBatch);
-        if (!optId.has_value()) {
-          variableStrings[varIdx] = nullptr;  // Variable not in result
-          continue;
-        }
-        auto it = idCache->find(optId.value());
-        if (it == idCache->end() || !it->second.has_value()) {
-          variableStrings[varIdx] = nullptr;  // UNDEF value
-        } else {
-          variableStrings[varIdx] = &it->second.value();
-        }
-      }
+      lookupVariableStrings(batchCache, rowInBatch, *idCache, variableStrings);
 
-      // Now instantiate all triples using the cached variable strings
       for (size_t tripleIdx = 0; tripleIdx < templateTriples_.size();
            ++tripleIdx) {
         auto triple = instantiateTripleFromBatch(tripleIdx, batchCache,
@@ -445,8 +396,6 @@ auto ConstructTripleGenerator::generateStringTriplesForResultTable(
     return batchTriples;
   };
 
-  // Process all batches lazily and flatten the results.
-  // Now only 2 levels of view nesting instead of 4.
   return ql::views::iota(size_t{0}, numBatches) |
          ql::views::transform(processBatch) | ql::views::join;
 }
@@ -481,6 +430,128 @@ const std::string* ConstructTripleGenerator::getTermStringPtr(
   }
 
   return nullptr;  // Unreachable
+}
+
+// _____________________________________________________________________________
+std::pair<std::shared_ptr<ConstructTripleGenerator::IdCache>,
+          std::shared_ptr<ConstructTripleGenerator::IdCacheStats>>
+ConstructTripleGenerator::createIdCacheWithStats(size_t numRows) const {
+  auto idCache = std::make_shared<IdCache>();
+  auto cacheStats = std::shared_ptr<IdCacheStats>(
+      new IdCacheStats(), [numRows](IdCacheStats* stats) {
+        if (stats->totalLookups() > 10000) {
+          AD_LOG_DEBUG << "ID Cache Stats - Rows: " << numRows
+                       << ", Lookups: " << stats->totalLookups()
+                       << ", Hits: " << stats->hits
+                       << ", Misses: " << stats->misses
+                       << ", Hit Rate: " << (stats->hitRate() * 100.0) << "%"
+                       << ", Unique IDs: " << stats->misses << "\n";
+        }
+        delete stats;
+      });
+  return {std::move(idCache), std::move(cacheStats)};
+}
+
+// _____________________________________________________________________________
+void ConstructTripleGenerator::lookupVariableStrings(
+    const BatchEvaluationCache& batchCache, size_t rowInBatch,
+    const IdCache& idCache,
+    std::vector<const std::string*>& variableStrings) const {
+  for (size_t varIdx = 0; varIdx < variablesToEvaluate_.size(); ++varIdx) {
+    const auto& optId = batchCache.getVariableId(varIdx, rowInBatch);
+    if (!optId.has_value()) {
+      variableStrings[varIdx] = nullptr;
+      continue;
+    }
+    auto it = idCache.find(optId.value());
+    if (it == idCache.end() || !it->second.has_value()) {
+      variableStrings[varIdx] = nullptr;
+    } else {
+      variableStrings[varIdx] = &it->second.value();
+    }
+  }
+}
+
+// _____________________________________________________________________________
+std::string ConstructTripleGenerator::formatTriple(
+    const std::string* subject, const std::string* predicate,
+    const std::string* object, ConstructOutputFormat format) const {
+  if (!subject || !predicate || !object) {
+    return {};
+  }
+
+  switch (format) {
+    case ConstructOutputFormat::TURTLE: {
+      std::string objectValue = *object;
+      if (ql::starts_with(*object, "\"")) {
+        objectValue = RdfEscaping::validRDFLiteralFromNormalized(*object);
+      }
+      return absl::StrCat(*subject, " ", *predicate, " ", objectValue, " .\n");
+    }
+    case ConstructOutputFormat::CSV: {
+      return absl::StrCat(RdfEscaping::escapeForCsv(*subject), ",",
+                          RdfEscaping::escapeForCsv(*predicate), ",",
+                          RdfEscaping::escapeForCsv(*object), "\n");
+    }
+    case ConstructOutputFormat::TSV: {
+      return absl::StrCat(RdfEscaping::escapeForTsv(*subject), "\t",
+                          RdfEscaping::escapeForTsv(*predicate), "\t",
+                          RdfEscaping::escapeForTsv(*object), "\n");
+    }
+  }
+  return {};  // Unreachable
+}
+
+// _____________________________________________________________________________
+ad_utility::streams::stream_generator
+ConstructTripleGenerator::generateFormattedTriples(
+    const TableWithRange& table, ConstructOutputFormat format) {
+  const auto tableWithVocab = table.tableWithVocab_;
+  const size_t currentRowOffset = rowOffset_;
+  const size_t numRows = tableWithVocab.idTable().numRows();
+  rowOffset_ += numRows;
+
+  auto [idCache, cacheStats] = createIdCacheWithStats(numRows);
+
+  auto rowIndicesVec = std::make_shared<std::vector<uint64_t>>(
+      ql::ranges::begin(table.view_), ql::ranges::end(table.view_));
+
+  const size_t totalRows = rowIndicesVec->size();
+  const size_t batchSize = getBatchSize();
+
+  std::vector<const std::string*> variableStrings(variablesToEvaluate_.size());
+
+  for (size_t batchStart = 0; batchStart < totalRows; batchStart += batchSize) {
+    cancellationHandle_->throwIfCancelled();
+
+    const size_t batchEnd = std::min(batchStart + batchSize, totalRows);
+    ql::span<const uint64_t> batchRowIndices(rowIndicesVec->data() + batchStart,
+                                             batchEnd - batchStart);
+
+    BatchEvaluationCache batchCache = evaluateBatchColumnOriented(
+        tableWithVocab.idTable(), tableWithVocab.localVocab(), batchRowIndices,
+        currentRowOffset, *idCache, *cacheStats);
+
+    for (size_t rowInBatch = 0; rowInBatch < batchCache.numRows; ++rowInBatch) {
+      lookupVariableStrings(batchCache, rowInBatch, *idCache, variableStrings);
+
+      for (size_t tripleIdx = 0; tripleIdx < templateTriples_.size();
+           ++tripleIdx) {
+        const std::string* subject = getTermStringPtr(
+            tripleIdx, 0, batchCache, rowInBatch, variableStrings);
+        const std::string* predicate = getTermStringPtr(
+            tripleIdx, 1, batchCache, rowInBatch, variableStrings);
+        const std::string* object = getTermStringPtr(
+            tripleIdx, 2, batchCache, rowInBatch, variableStrings);
+
+        std::string formatted =
+            formatTriple(subject, predicate, object, format);
+        if (!formatted.empty()) {
+          co_yield formatted;
+        }
+      }
+    }
+  }
 }
 
 // _____________________________________________________________________________

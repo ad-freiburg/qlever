@@ -7,11 +7,8 @@
 #ifndef QLEVER_SRC_ENGINE_CONSTRUCTTRIPLEGENERATOR_H
 #define QLEVER_SRC_ENGINE_CONSTRUCTTRIPLEGENERATOR_H
 
-#include <absl/strings/str_cat.h>
-
 #include <functional>
 
-#include "backports/StartsWithAndEndsWith.h"
 #include "backports/span.h"
 #include "engine/ConstructQueryEvaluator.h"
 #include "engine/QueryExecutionTree.h"
@@ -20,10 +17,12 @@
 #include "global/Id.h"
 #include "parser/data/BlankNode.h"
 #include "parser/data/ConstructQueryExportContext.h"
-#include "rdfTypes/RdfEscaping.h"
 #include "util/CancellationHandle.h"
 #include "util/HashMap.h"
 #include "util/stream_generator.h"
+
+// Output format for CONSTRUCT query results.
+enum class ConstructOutputFormat { TURTLE, CSV, TSV };
 
 // ConstructTripleGenerator: generates StringTriples from
 // query results. It manages the global row offset and transforms result tables
@@ -143,11 +142,10 @@ class ConstructTripleGenerator {
   auto generateStringTriplesForResultTable(const TableWithRange& table);
 
   // _____________________________________________________________________________
-  // Generate triples and yield them as formatted strings.
-  template <typename EscapeFunction>
+  // Generate triples as formatted strings for the given output format.
+  // This is the main entry point for streaming CONSTRUCT results.
   ad_utility::streams::stream_generator generateFormattedTriples(
-      const TableWithRange& table, EscapeFunction&& escapeFunction,
-      char separator);
+      const TableWithRange& table, ConstructOutputFormat format);
 
   // _____________________________________________________________________________
   // Helper function that generates the result of a CONSTRUCT query as a range
@@ -204,6 +202,25 @@ class ConstructTripleGenerator {
       size_t rowInBatch,
       const std::vector<const std::string*>& variableStrings) const;
 
+  // Creates an ID cache with optional statistics logging on destruction.
+  // Stats are logged only when totalLookups > 10000.
+  std::pair<std::shared_ptr<IdCache>, std::shared_ptr<IdCacheStats>>
+  createIdCacheWithStats(size_t numRows) const;
+
+  // Populates variableStrings with pointers to cached string values for a row.
+  // Sets nullptr for variables that are not in the result or have UNDEF values.
+  void lookupVariableStrings(
+      const BatchEvaluationCache& batchCache, size_t rowInBatch,
+      const IdCache& idCache,
+      std::vector<const std::string*>& variableStrings) const;
+
+  // Formats a single triple according to the output format.
+  // Returns empty string if any component is UNDEF.
+  std::string formatTriple(const std::string* subject,
+                           const std::string* predicate,
+                           const std::string* object,
+                           ConstructOutputFormat format) const;
+
   // triple templates contained in the graph template
   // (the CONSTRUCT-clause of the CONSTRUCt-query) of the CONSTRUCT-query.
   Triples templateTriples_;
@@ -238,112 +255,5 @@ class ConstructTripleGenerator {
   // (index corresponds to cache index)
   std::vector<BlankNodeFormatInfo> blankNodesToEvaluate_;
 };
-
-// _____________________________________________________________________________
-// Template implementation for generateFormattedTriples.
-// For Turtle format (separator=' '): applies RDF literal normalization to
-// objects and ends with " .\n".
-// For CSV/TSV formats: applies the escape function to all parts and ends with
-// "\n".
-template <typename EscapeFunction>
-ad_utility::streams::stream_generator
-ConstructTripleGenerator::generateFormattedTriples(
-    const TableWithRange& table, EscapeFunction&& escapeFunction,
-    char separator) {
-  const auto tableWithVocab = table.tableWithVocab_;
-  size_t currentRowOffset = rowOffset_;
-  size_t numRows = tableWithVocab.idTable().numRows();
-  rowOffset_ += numRows;
-
-  auto idCache = std::make_shared<IdCache>();
-  auto cacheStats = std::shared_ptr<IdCacheStats>(
-      new IdCacheStats(), [numRows](IdCacheStats* stats) {
-        if (stats->totalLookups() > 10000) {
-          AD_LOG_DEBUG << "ID Cache Stats - Rows: " << numRows
-                       << ", Lookups: " << stats->totalLookups()
-                       << ", Hits: " << stats->hits
-                       << ", Misses: " << stats->misses
-                       << ", Hit Rate: " << (stats->hitRate() * 100.0) << "%"
-                       << ", Unique IDs: " << stats->misses << "\n";
-        }
-        delete stats;
-      });
-
-  auto rowIndicesVec = std::make_shared<std::vector<uint64_t>>(
-      ql::ranges::begin(table.view_), ql::ranges::end(table.view_));
-
-  size_t totalRows = rowIndicesVec->size();
-  size_t batchSize = getBatchSize();
-
-  // Determine if we're in Turtle mode (separator is space)
-  const bool isTurtleMode = (separator == ' ');
-
-  for (size_t batchStart = 0; batchStart < totalRows; batchStart += batchSize) {
-    cancellationHandle_->throwIfCancelled();
-
-    size_t batchEnd = std::min(batchStart + batchSize, totalRows);
-    ql::span<const uint64_t> batchRowIndices(rowIndicesVec->data() + batchStart,
-                                             batchEnd - batchStart);
-
-    BatchEvaluationCache batchCache = evaluateBatchColumnOriented(
-        tableWithVocab.idTable(), tableWithVocab.localVocab(), batchRowIndices,
-        currentRowOffset, *idCache, *cacheStats);
-
-    std::vector<const std::string*> variableStrings(
-        variablesToEvaluate_.size());
-
-    for (size_t rowInBatch = 0; rowInBatch < batchCache.numRows; ++rowInBatch) {
-      for (size_t varIdx = 0; varIdx < variablesToEvaluate_.size(); ++varIdx) {
-        const auto& optId = batchCache.getVariableId(varIdx, rowInBatch);
-        if (!optId.has_value()) {
-          variableStrings[varIdx] = nullptr;
-          continue;
-        }
-        auto it = idCache->find(optId.value());
-        if (it == idCache->end() || !it->second.has_value()) {
-          variableStrings[varIdx] = nullptr;
-        } else {
-          variableStrings[varIdx] = &it->second.value();
-        }
-      }
-
-      for (size_t tripleIdx = 0; tripleIdx < templateTriples_.size();
-           ++tripleIdx) {
-        const std::string* subject = getTermStringPtr(
-            tripleIdx, 0, batchCache, rowInBatch, variableStrings);
-        if (!subject) continue;
-
-        const std::string* predicate = getTermStringPtr(
-            tripleIdx, 1, batchCache, rowInBatch, variableStrings);
-        if (!predicate) continue;
-
-        const std::string* object = getTermStringPtr(
-            tripleIdx, 2, batchCache, rowInBatch, variableStrings);
-        if (!object) continue;
-
-        if (isTurtleMode) {
-          // Turtle format: no escaping, special RDF literal handling, " .\n"
-          std::string objectAsValidRdfLiteral;
-          if (ql::starts_with(*object, "\"")) {
-            objectAsValidRdfLiteral =
-                RdfEscaping::validRDFLiteralFromNormalized(*object);
-          }
-
-          co_yield absl::StrCat(*subject, " ", *predicate, " ",
-                                objectAsValidRdfLiteral.empty()
-                                    ? *object
-                                    : objectAsValidRdfLiteral,
-                                " .\n");
-        } else {
-          // CSV/TSV format: escape all parts, use separator, "\n"
-          std::string_view sep(&separator, 1);
-          co_yield absl::StrCat(escapeFunction(*subject), sep,
-                                escapeFunction(*predicate), sep,
-                                escapeFunction(*object), "\n");
-        }
-      }
-    }
-  }
-}
 
 #endif  // QLEVER_SRC_ENGINE_CONSTRUCTTRIPLEGENERATOR_H

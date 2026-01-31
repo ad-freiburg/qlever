@@ -1082,6 +1082,24 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
 }
 
 // _____________________________________________________________________________
+// Maps MediaType to ConstructOutputFormat for CONSTRUCT queries.
+constexpr ConstructOutputFormat mediaTypeToConstructFormat(
+    ad_utility::MediaType mediaType) {
+  using enum ad_utility::MediaType;
+  switch (mediaType) {
+    case turtle:
+      return ConstructOutputFormat::TURTLE;
+    case csv:
+      return ConstructOutputFormat::CSV;
+    case tsv:
+      return ConstructOutputFormat::TSV;
+    default:
+      // This should never be reached for valid CONSTRUCT formats
+      return ConstructOutputFormat::TURTLE;
+  }
+}
+
+// _____________________________________________________________________________
 template <ad_utility::MediaType format>
 STREAMABLE_GENERATOR_TYPE
 ExportQueryExecutionTrees::constructQueryResultToStream(
@@ -1090,12 +1108,11 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
     CancellationHandle cancellationHandle,
     [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
-  static_assert(format == MediaType::octetStream || format == MediaType::csv ||
-                format == MediaType::tsv || format == MediaType::sparqlXml ||
-                format == MediaType::sparqlJson ||
-                format == MediaType::qleverJson ||
-                format == MediaType::binaryQleverExport ||
-                format == MediaType::turtle);  // Added turtle here
+  static_assert(
+      format == MediaType::octetStream || format == MediaType::csv ||
+      format == MediaType::tsv || format == MediaType::sparqlXml ||
+      format == MediaType::sparqlJson || format == MediaType::qleverJson ||
+      format == MediaType::binaryQleverExport || format == MediaType::turtle);
 
   if constexpr (format == MediaType::octetStream ||
                 format == MediaType::binaryQleverExport) {
@@ -1108,15 +1125,9 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
   AD_CONTRACT_CHECK(format != MediaType::qleverJson);
 
   result->logResultSize();
-  constexpr auto& escapeFunction = format == MediaType::tsv
-                                       ? RdfEscaping::escapeForTsv
-                                       : RdfEscaping::escapeForCsv;
-  constexpr char sep = format == MediaType::tsv ? '\t' : ',';
 
-  // For Turtle format, the separator is a space and the escaping is handled
-  // internally by generateFormattedTriples. For other formats, we pass the
-  // escape function and separator.
-  constexpr char effectiveSeparator = (format == MediaType::turtle) ? ' ' : sep;
+  constexpr ConstructOutputFormat outputFormat =
+      mediaTypeToConstructFormat(format);
 
   [[maybe_unused]] uint64_t resultSize = 0;
   auto rowIndices = ExportQueryExecutionTrees::getRowIndices(
@@ -1128,10 +1139,9 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
 
   auto generatorOfFormattedTriples = ql::views::transform(
       ad_utility::OwningView{std::move(rowIndices)},
-      [generator = std::move(generator), &escapeFunction,
-       effectiveSeparator](const TableWithRange& table) mutable {
-        return generator.generateFormattedTriples(table, escapeFunction,
-                                                  effectiveSeparator);
+      [generator = std::move(generator),
+       outputFormat](const TableWithRange& table) mutable {
+        return generator.generateFormattedTriples(table, outputFormat);
       });
 
   for (auto&& innerGenerator : generatorOfFormattedTriples) {
