@@ -172,11 +172,13 @@ class ConstructTripleGenerator {
 
   // Instantiates a single triple using the precomputed constants and
   // the batch evaluation cache for a specific row. Returns an empty
-  // StringTriple if any component is UNDEF. Variable values are looked
-  // up from idCache using the stored Id values.
+  // StringTriple if any component is UNDEF. Variable string values are
+  // provided via the pre-computed variableStrings cache (one lookup per
+  // variable per row, reused across all triples in the row).
   StringTriple instantiateTripleFromBatch(
       size_t tripleIdx, const BatchEvaluationCache& batchCache,
-      size_t rowInBatch, const IdCache& idCache) const;
+      size_t rowInBatch,
+      const std::vector<const std::string*>& variableStrings) const;
 
   // triple templates contained in the graph template
   // (the CONSTRUCT-clause of the CONSTRUCt-query) of the CONSTRUCT-query.

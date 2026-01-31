@@ -251,12 +251,12 @@ ConstructTripleGenerator::evaluateBatchColumnOriented(
 // _____________________________________________________________________________
 StringTriple ConstructTripleGenerator::instantiateTripleFromBatch(
     size_t tripleIdx, const BatchEvaluationCache& batchCache, size_t rowInBatch,
-    const IdCache& idCache) const {
+    const std::vector<const std::string*>& variableStrings) const {
   const TriplePatternInfo& info = triplePatternInfos_[tripleIdx];
 
   // Helper lambda to get a pointer to the string value for a position.
   // Returns nullptr if the value is UNDEF.
-  // For variables, looks up the Id in idCache to get the string value.
+  // Variable strings are pre-looked-up in variableStrings cache.
   auto getStringPtr = [&](size_t pos) -> const std::string* {
     const TermResolution& resolution = info.resolutions[pos];
 
@@ -266,18 +266,9 @@ StringTriple ConstructTripleGenerator::instantiateTripleFromBatch(
         return opt.has_value() ? &opt.value() : nullptr;
       }
       case TermSource::VARIABLE: {
-        // Get the Id from batch cache, then look up string in idCache
-        const auto& optId =
-            batchCache.getVariableId(resolution.index, rowInBatch);
-        if (!optId.has_value()) {
-          return nullptr;  // Variable not in result
-        }
-        // Look up string value from idCache (guaranteed to exist)
-        auto it = idCache.find(optId.value());
-        if (it == idCache.end() || !it->second.has_value()) {
-          return nullptr;  // UNDEF value
-        }
-        return &it->second.value();
+        // Use pre-computed variable string pointer (already looked up from
+        // idCache once per variable per row)
+        return variableStrings[resolution.index];
       }
       case TermSource::BLANK_NODE: {
         const auto& opt =
@@ -410,11 +401,33 @@ auto ConstructTripleGenerator::generateStringTriplesForResultTable(
     std::vector<StringTriple> batchTriples;
     batchTriples.reserve(batchCache.numRows * templateTriples_.size());
 
+    // Pre-allocate cache for variable string pointers (reused across rows)
+    std::vector<const std::string*> variableStrings(
+        variablesToEvaluate_.size());
+
     for (size_t rowInBatch = 0; rowInBatch < batchCache.numRows; ++rowInBatch) {
+      // Pre-compute string pointers for all variables in this row.
+      // This avoids repeated idCache lookups when the same variable
+      // appears multiple times in the template.
+      for (size_t varIdx = 0; varIdx < variablesToEvaluate_.size(); ++varIdx) {
+        const auto& optId = batchCache.getVariableId(varIdx, rowInBatch);
+        if (!optId.has_value()) {
+          variableStrings[varIdx] = nullptr;  // Variable not in result
+          continue;
+        }
+        auto it = idCache->find(optId.value());
+        if (it == idCache->end() || !it->second.has_value()) {
+          variableStrings[varIdx] = nullptr;  // UNDEF value
+        } else {
+          variableStrings[varIdx] = &it->second.value();
+        }
+      }
+
+      // Now instantiate all triples using the cached variable strings
       for (size_t tripleIdx = 0; tripleIdx < templateTriples_.size();
            ++tripleIdx) {
         auto triple = instantiateTripleFromBatch(tripleIdx, batchCache,
-                                                 rowInBatch, *idCache);
+                                                 rowInBatch, variableStrings);
         if (!triple.isEmpty()) {
           batchTriples.push_back(std::move(triple));
         }
