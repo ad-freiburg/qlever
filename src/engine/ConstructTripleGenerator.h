@@ -80,10 +80,15 @@ class ConstructTripleGenerator {
     }
   };
 
-  // Default batch size for column-oriented processing
+  // Default batch size for column-oriented processing.
+  // Batch size affects CPU cache utilization:
+  //   - Smaller batches: Better L1/L2 cache locality, more batch overhead
+  //   - Larger batches: Amortized overhead, potential cache thrashing
   static constexpr size_t DEFAULT_BATCH_SIZE = 1000;
 
-  // Get the batch size, configurable via QLEVER_CONSTRUCT_BATCH_SIZE env var
+  // Get the batch size, configurable via QLEVER_CONSTRUCT_BATCH_SIZE env var.
+  // Example: QLEVER_CONSTRUCT_BATCH_SIZE=256 ./ServerMain -i index -p 7001
+  // The value is read once at first call and cached for the process lifetime.
   static size_t getBatchSize();
 
   // Batch evaluation cache organized for column-oriented access.
