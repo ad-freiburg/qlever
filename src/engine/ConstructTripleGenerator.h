@@ -55,6 +55,15 @@ class ConstructTripleGenerator {
     std::optional<size_t> columnIndex;  // nullopt if variable not in result
   };
 
+  // BlankNode with precomputed prefix and suffix for fast evaluation.
+  // The blank node format is: prefix + rowNumber + suffix
+  // where prefix is "_:g" or "_:u" and suffix is "_" + label.
+  // This avoids recomputing these constant parts for every row.
+  struct BlankNodeFormatInfo {
+    std::string prefix;  // "_:g" or "_:u"
+    std::string suffix;  // "_" + label
+  };
+
   // Cache for ID-to-string conversions to avoid redundant conversions
   // when the same ID appears multiple times across rows
   using IdCache = ad_utility::HashMap<Id, std::optional<std::string>>;
@@ -199,9 +208,9 @@ class ConstructTripleGenerator {
   // (index corresponds to cache index)
   std::vector<VariableWithColumnIndex> variablesToEvaluate_;
 
-  // Ordered list of BlankNodes for evaluation (index corresponds to cache
-  // index)
-  std::vector<BlankNode> blankNodesToEvaluate_;
+  // Ordered list of BlankNodes with precomputed format info for evaluation
+  // (index corresponds to cache index)
+  std::vector<BlankNodeFormatInfo> blankNodesToEvaluate_;
 };
 
 #endif  // QLEVER_SRC_ENGINE_CONSTRUCTTRIPLEGENERATOR_H

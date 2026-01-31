@@ -6,6 +6,8 @@
 
 #include "engine/ConstructTripleGenerator.h"
 
+#include <absl/strings/str_cat.h>
+
 #include <cstdlib>
 
 #include "engine/ExportQueryExecutionTrees.h"
@@ -80,13 +82,18 @@ void ConstructTripleGenerator::analyzeTemplate() {
         info.resolutions[pos] = {TermSource::VARIABLE, variableToIndex_[var]};
 
       } else if (std::holds_alternative<BlankNode>(term)) {
-        // Track BlankNode for per-row evaluation
+        // Track BlankNode for per-row evaluation with precomputed format
         const BlankNode& blankNode = std::get<BlankNode>(term);
         const std::string& label = blankNode.label();
         if (!blankNodeLabelToIndex_.contains(label)) {
           size_t idx = blankNodesToEvaluate_.size();
           blankNodeLabelToIndex_[label] = idx;
-          blankNodesToEvaluate_.push_back(blankNode);
+          // Precompute prefix ("_:g" or "_:u") and suffix ("_" + label)
+          // so we only need to concatenate the row number per row
+          BlankNodeFormatInfo formatInfo;
+          formatInfo.prefix = blankNode.isGenerated() ? "_:g" : "_:u";
+          formatInfo.suffix = absl::StrCat("_", label);
+          blankNodesToEvaluate_.push_back(std::move(formatInfo));
         }
         info.resolutions[pos] = {TermSource::BLANK_NODE,
                                  blankNodeLabelToIndex_[label]};
@@ -147,12 +154,13 @@ ConstructTripleGenerator::evaluateRowTerms(
     }
   }
 
-  // Evaluate all BlankNodes for this row
+  // Evaluate all BlankNodes for this row using precomputed prefix and suffix
   // Note: BlankNodes are not cached because their value depends on the row
   rowCache.blankNodeValues.reserve(blankNodesToEvaluate_.size());
-  for (const BlankNode& blankNode : blankNodesToEvaluate_) {
-    rowCache.blankNodeValues.push_back(
-        ConstructQueryEvaluator::evaluate(blankNode, context));
+  for (const BlankNodeFormatInfo& formatInfo : blankNodesToEvaluate_) {
+    rowCache.blankNodeValues.push_back(absl::StrCat(
+        formatInfo.prefix, context._rowOffset + context.resultTableRowIndex_,
+        formatInfo.suffix));
   }
 
   return rowCache;
@@ -221,20 +229,19 @@ ConstructTripleGenerator::evaluateBatchColumnOriented(
     column.resize(numRows);
   }
 
-  // Evaluate blank nodes - these depend on row offset so we process row-by-row
-  // but still organize results by blank node index first for consistent access
+  // Evaluate blank nodes using precomputed prefix and suffix.
+  // Only the row number needs to be concatenated per row.
+  // Format: prefix + (currentRowOffset + rowIdx) + suffix
   for (size_t blankIdx = 0; blankIdx < blankNodesToEvaluate_.size();
        ++blankIdx) {
-    const BlankNode& blankNode = blankNodesToEvaluate_[blankIdx];
+    const BlankNodeFormatInfo& formatInfo = blankNodesToEvaluate_[blankIdx];
     auto& columnValues = batchCache.blankNodeValues[blankIdx];
 
     for (size_t rowInBatch = 0; rowInBatch < numRows; ++rowInBatch) {
       const uint64_t rowIdx = rowIndices[rowInBatch];
-      ConstructQueryExportContext context{rowIdx,       idTable,
-                                          localVocab,   variableColumns_.get(),
-                                          index_.get(), currentRowOffset};
-      columnValues[rowInBatch] =
-          ConstructQueryEvaluator::evaluate(blankNode, context);
+      // Use precomputed prefix and suffix, only concatenate row number
+      columnValues[rowInBatch] = absl::StrCat(
+          formatInfo.prefix, currentRowOffset + rowIdx, formatInfo.suffix);
     }
   }
 
