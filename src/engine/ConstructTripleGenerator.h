@@ -90,12 +90,6 @@ class ConstructTripleGenerator {
     std::array<TermResolution, 3> resolutions;
   };
 
-  // Per-row evaluation cache
-  struct RowEvaluationCache {
-    std::vector<std::optional<std::string>> variableValues;
-    std::vector<std::optional<std::string>> blankNodeValues;
-  };
-
   // Variable with pre-computed column index for fast evaluation
   struct VariableWithColumnIndex {
     Variable variable;
@@ -141,7 +135,7 @@ class ConstructTripleGenerator {
   static constexpr size_t DEFAULT_BATCH_SIZE = 64;
 
   // Get the batch size, configurable via QLEVER_CONSTRUCT_BATCH_SIZE env var.
-  // Example: QLEVER_CONSTRUCT_BATCH_SIZE=256 ./ServerMain -i index -p 7001
+  // Example: QLEVER_CONSTRUCT_BATCH_SIZE=256 ./qlever-server -i index -p 7001
   // The value is read once at first call and cached for the process lifetime.
   static size_t getBatchSize();
 
@@ -150,7 +144,7 @@ class ConstructTripleGenerator {
   // from the shared IdCache on demand during instantiation, avoiding double
   // storage of string values.
   // blankNodeValues[blankNodeIdx][rowInBatch] stores strings directly since
-  // blank nodes can't be cached (they include the row number).
+  // blank nodes can't be cached (the blank node values include the row number).
   struct BatchEvaluationCache {
     // Store Id values for variables - nullopt if variable not in result
     std::vector<std::vector<std::optional<Id>>> variableIds;
@@ -212,14 +206,6 @@ class ConstructTripleGenerator {
   // precomputes constants (IRIs/Literals), and builds the resolution map.
   void analyzeTemplate();
 
-  // Evaluates all Variables and BlankNodes for a single row, returning
-  // a cache that can be used to instantiate all triples for that row.
-  // Uses idCache to avoid redundant ID-to-string conversions.
-  // Updates cacheStats with hit/miss information.
-  RowEvaluationCache evaluateRowTerms(
-      const ConstructQueryExportContext& context, IdCache& idCache,
-      IdCacheStats& cacheStats) const;
-
   // Evaluates all Variables and BlankNodes for a batch of rows using
   // column-oriented access for better cache locality.
   // Processes variables column-by-column, then blank nodes row-by-row.
@@ -228,12 +214,6 @@ class ConstructTripleGenerator {
       const IdTable& idTable, const LocalVocab& localVocab,
       ql::span<const uint64_t> rowIndices, size_t currentRowOffset,
       IdCache& idCache, IdCacheStats& cacheStats) const;
-
-  // Instantiates a single triple using the precomputed constants and
-  // the per-row evaluation cache. Returns an empty StringTriple if any
-  // component is UNDEF.
-  StringTriple instantiateTriple(size_t tripleIdx,
-                                 const RowEvaluationCache& cache) const;
 
   // Instantiates a single triple using the precomputed constants and
   // the batch evaluation cache for a specific row. Returns an empty
@@ -271,8 +251,7 @@ class ConstructTripleGenerator {
                            const std::string* object,
                            ConstructOutputFormat format) const;
 
-  // triple templates contained in the graph template
-  // (the CONSTRUCT-clause of the CONSTRUCt-query) of the CONSTRUCT-query.
+  // triple templates contained in the graph template of the CONSTRUCT-query.
   Triples templateTriples_;
   // wrapper around the result-table obtained from processing the
   // WHERE-clause of the CONSTRUCT-query.
@@ -291,17 +270,17 @@ class ConstructTripleGenerator {
   // Pre-analyzed info for each triple pattern (resolutions + skip flag)
   std::vector<TriplePatternInfo> triplePatternInfos_;
 
-  // Mapping from Variable to index in the per-row variable cache
+  // Mapping from variable to index in the per-row variable cache
   ad_utility::HashMap<Variable, size_t> variableToIndex_;
 
-  // Mapping from BlankNode label to index in the per-row blank node cache
+  // Mapping from blank node label to index in the per-row blank node cache
   ad_utility::HashMap<std::string, size_t> blankNodeLabelToIndex_;
 
-  // Ordered list of Variables with pre-computed column indices for evaluation
+  // Ordered list of `Variables` with pre-computed column indices for evaluation
   // (index corresponds to cache index)
   std::vector<VariableWithColumnIndex> variablesToEvaluate_;
 
-  // Ordered list of BlankNodes with precomputed format info for evaluation
+  // Ordered list of `BlankNodes` with precomputed format info for evaluation
   // (index corresponds to cache index)
   std::vector<BlankNodeFormatInfo> blankNodesToEvaluate_;
 };

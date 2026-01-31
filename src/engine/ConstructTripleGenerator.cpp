@@ -145,64 +145,6 @@ ConstructTripleGenerator::ConstructTripleGenerator(
 }
 
 // ============================================================================
-// Row Evaluation (Single-Row Processing)
-// ============================================================================
-// Evaluates Variables and BlankNodes for a single row. This is the simpler
-// counterpart to evaluateBatchColumnOriented, used when batch processing
-// is not applicable or for compatibility with the StringTriple-based API.
-// ============================================================================
-
-// _____________________________________________________________________________
-ConstructTripleGenerator::RowEvaluationCache
-ConstructTripleGenerator::evaluateRowTerms(
-    const ConstructQueryExportContext& context, IdCache& idCache,
-    IdCacheStats& cacheStats) const {
-  RowEvaluationCache rowCache;
-  const IdTable& idTable = context.idTable_;
-  size_t rowIdx = context.resultTableRowIndex_;
-
-  // Evaluate all Variables for this row using pre-computed column indices
-  // and caching ID-to-string conversions
-  rowCache.variableValues.reserve(variablesToEvaluate_.size());
-  for (const auto& varInfo : variablesToEvaluate_) {
-    if (!varInfo.columnIndex.has_value()) {
-      // Variable not in result
-      rowCache.variableValues.push_back(std::nullopt);
-      continue;
-    }
-
-    // Get the Id from the table
-    Id id = idTable(rowIdx, varInfo.columnIndex.value());
-
-    // Check the cache first
-    auto it = idCache.find(id);
-    if (it != idCache.end()) {
-      // Cache hit - use the cached value
-      ++cacheStats.hits;
-      rowCache.variableValues.push_back(it->second);
-    } else {
-      // Cache miss - compute and cache the result
-      ++cacheStats.misses;
-      auto value = ConstructQueryEvaluator::evaluateWithColumnIndex(
-          varInfo.columnIndex, context);
-      idCache[id] = value;
-      rowCache.variableValues.push_back(std::move(value));
-    }
-  }
-
-  // Evaluate all BlankNodes for this row using precomputed prefix and suffix
-  // Note: BlankNodes are not cached because their value depends on the row
-  rowCache.blankNodeValues.reserve(blankNodesToEvaluate_.size());
-  for (const BlankNodeFormatInfo& formatInfo : blankNodesToEvaluate_) {
-    rowCache.blankNodeValues.push_back(absl::StrCat(
-        formatInfo.prefix, context._rowOffset + context.resultTableRowIndex_,
-        formatInfo.suffix));
-  }
-
-  return rowCache;
-}
-
-// ============================================================================
 // Batch Evaluation (Column-Oriented Processing)
 // ============================================================================
 // Evaluates Variables and BlankNodes for a batch of rows using column-oriented
@@ -331,81 +273,17 @@ ConstructTripleGenerator::evaluateBatchColumnOriented(
 StringTriple ConstructTripleGenerator::instantiateTripleFromBatch(
     size_t tripleIdx, const BatchEvaluationCache& batchCache, size_t rowInBatch,
     const std::vector<const std::string*>& variableStrings) const {
-  const TriplePatternInfo& info = triplePatternInfos_[tripleIdx];
-
-  // Helper lambda to get a pointer to the string value for a position.
-  // Returns nullptr if the value is UNDEF.
-  // Variable strings are pre-looked-up in variableStrings cache.
-  auto getStringPtr = [&](size_t pos) -> const std::string* {
-    const TermResolution& resolution = info.resolutions[pos];
-
-    switch (resolution.source) {
-      case TermSource::CONSTANT: {
-        const auto& opt = precomputedConstants_[tripleIdx][pos];
-        return opt.has_value() ? &opt.value() : nullptr;
-      }
-      case TermSource::VARIABLE: {
-        // Use pre-computed variable string pointer (already looked up from
-        // idCache once per variable per row)
-        return variableStrings[resolution.index];
-      }
-      case TermSource::BLANK_NODE: {
-        const auto& opt =
-            batchCache.getBlankNodeValue(resolution.index, rowInBatch);
-        return opt.has_value() ? &opt.value() : nullptr;
-      }
-    }
-
-    return nullptr;  // Unreachable
-  };
-
   // Get pointers to all components, returning early if any is UNDEF
-  const std::string* subject = getStringPtr(0);
+  const std::string* subject =
+      getTermStringPtr(tripleIdx, 0, batchCache, rowInBatch, variableStrings);
   if (!subject) return StringTriple{};
 
-  const std::string* predicate = getStringPtr(1);
+  const std::string* predicate =
+      getTermStringPtr(tripleIdx, 1, batchCache, rowInBatch, variableStrings);
   if (!predicate) return StringTriple{};
 
-  const std::string* object = getStringPtr(2);
-  if (!object) return StringTriple{};
-
-  return StringTriple{*subject, *predicate, *object};
-}
-
-// _____________________________________________________________________________
-StringTriple ConstructTripleGenerator::instantiateTriple(
-    size_t tripleIdx, const RowEvaluationCache& cache) const {
-  const TriplePatternInfo& info = triplePatternInfos_[tripleIdx];
-
-  // Helper lambda to get a pointer to the string value for a position.
-  // Returns nullptr if the value is UNDEF.
-  auto getStringPtr = [&](size_t pos) -> const std::string* {
-    const TermResolution& resolution = info.resolutions[pos];
-    const std::optional<std::string>* optPtr = nullptr;
-
-    switch (resolution.source) {
-      case TermSource::CONSTANT:
-        optPtr = &precomputedConstants_[tripleIdx][pos];
-        break;
-      case TermSource::VARIABLE:
-        optPtr = &cache.variableValues[resolution.index];
-        break;
-      case TermSource::BLANK_NODE:
-        optPtr = &cache.blankNodeValues[resolution.index];
-        break;
-    }
-
-    return optPtr->has_value() ? &optPtr->value() : nullptr;
-  };
-
-  // Get pointers to all components, returning early if any is UNDEF
-  const std::string* subject = getStringPtr(0);
-  if (!subject) return StringTriple{};
-
-  const std::string* predicate = getStringPtr(1);
-  if (!predicate) return StringTriple{};
-
-  const std::string* object = getStringPtr(2);
+  const std::string* object =
+      getTermStringPtr(tripleIdx, 2, batchCache, rowInBatch, variableStrings);
   if (!object) return StringTriple{};
 
   return StringTriple{*subject, *predicate, *object};
@@ -584,11 +462,14 @@ std::string ConstructTripleGenerator::formatTriple(
 
   switch (format) {
     case ConstructOutputFormat::TURTLE: {
-      std::string objectValue = *object;
+      // Only escape literals (strings starting with "). IRIs and blank nodes
+      // are used as-is, avoiding an unnecessary string copy.
       if (ql::starts_with(*object, "\"")) {
-        objectValue = RdfEscaping::validRDFLiteralFromNormalized(*object);
+        return absl::StrCat(*subject, " ", *predicate, " ",
+                            RdfEscaping::validRDFLiteralFromNormalized(*object),
+                            " .\n");
       }
-      return absl::StrCat(*subject, " ", *predicate, " ", objectValue, " .\n");
+      return absl::StrCat(*subject, " ", *predicate, " ", *object, " .\n");
     }
     case ConstructOutputFormat::CSV: {
       return absl::StrCat(RdfEscaping::escapeForCsv(*subject), ",",
