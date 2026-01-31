@@ -20,6 +20,10 @@ using ad_utility::InputRangeTypeErased;
 using enum PositionInTriple;
 using StringTriple = ConstructTripleGenerator::StringTriple;
 
+// ============================================================================
+// Configuration
+// ============================================================================
+
 // _____________________________________________________________________________
 size_t ConstructTripleGenerator::getBatchSize() {
   static const size_t batchSize = []() {
@@ -48,6 +52,20 @@ size_t ConstructTripleGenerator::getBatchSize() {
   }();
   return batchSize;
 }
+
+// ============================================================================
+// Template Analysis (Precomputation Phase)
+// ============================================================================
+// Called once at construction to analyze the CONSTRUCT triple patterns.
+// For each pattern, we determine how each term (subject, predicate, object)
+// will be resolved:
+//   - CONSTANT: IRIs and Literals are evaluated once and stored
+//   - VARIABLE: Column index is pre-computed for O(1) access per row
+//   - BLANK_NODE: Format prefix/suffix are pre-built (row number varies)
+//
+// This analysis enables fast per-row instantiation without repeated parsing
+// or hash map lookups in the hot path.
+// ============================================================================
 
 // _____________________________________________________________________________
 void ConstructTripleGenerator::analyzeTemplate() {
@@ -126,6 +144,14 @@ ConstructTripleGenerator::ConstructTripleGenerator(
   analyzeTemplate();
 }
 
+// ============================================================================
+// Row Evaluation (Single-Row Processing)
+// ============================================================================
+// Evaluates Variables and BlankNodes for a single row. This is the simpler
+// counterpart to evaluateBatchColumnOriented, used when batch processing
+// is not applicable or for compatibility with the StringTriple-based API.
+// ============================================================================
+
 // _____________________________________________________________________________
 ConstructTripleGenerator::RowEvaluationCache
 ConstructTripleGenerator::evaluateRowTerms(
@@ -175,6 +201,29 @@ ConstructTripleGenerator::evaluateRowTerms(
 
   return rowCache;
 }
+
+// ============================================================================
+// Batch Evaluation (Column-Oriented Processing)
+// ============================================================================
+// Evaluates Variables and BlankNodes for a batch of rows using column-oriented
+// access for improved CPU cache locality:
+//
+// Column-oriented access pattern:
+//   for each variable V:
+//     for each row R in batch:
+//       read idTable[R][column(V)]    <-- Sequential reads within a column
+//
+// This is more cache-friendly than row-oriented access because:
+//   - CPU prefetchers work better with sequential memory access
+//   - Each column's data is contiguous in the IdTable
+//   - We process one cache line's worth of IDs before moving to the next
+//
+// The batch size (default 64) is tuned so the working set (IDs + cached
+// strings for batch rows) fits in L2 cache, avoiding cache thrashing.
+//
+// Note: BlankNodes are evaluated row-by-row because their values include
+// the row number and cannot be cached across rows.
+// ============================================================================
 
 // _____________________________________________________________________________
 ConstructTripleGenerator::BatchEvaluationCache
@@ -257,6 +306,26 @@ ConstructTripleGenerator::evaluateBatchColumnOriented(
 
   return batchCache;
 }
+
+// ============================================================================
+// Triple Instantiation
+// ============================================================================
+// Converts precomputed term values into concrete StringTriples or formatted
+// strings. Each term position (subject, predicate, object) is resolved based
+// on its TermSource:
+//
+//   CONSTANT    -> Use precomputed string (evaluated once at construction)
+//   VARIABLE    -> Lookup in variableStrings (pointer into IdCache)
+//   BLANK_NODE  -> Use batch cache (row-specific, includes row number)
+//
+// Key optimization: Variable strings are looked up once per variable per row
+// (via lookupVariableStrings) and reused across all triple patterns that
+// reference the same variable in that row.
+//
+// If any term is UNDEF (nullopt/nullptr), the entire triple is skipped.
+// This implements SPARQL CONSTRUCT semantics where incomplete triples are
+// not included in the output.
+// ============================================================================
 
 // _____________________________________________________________________________
 StringTriple ConstructTripleGenerator::instantiateTripleFromBatch(
@@ -432,6 +501,18 @@ const std::string* ConstructTripleGenerator::getTermStringPtr(
   return nullptr;  // Unreachable
 }
 
+// ============================================================================
+// ID Cache Helpers
+// ============================================================================
+// The ID cache maps Id values to their string representations, avoiding
+// redundant vocabulary lookups when the same entity appears multiple times
+// in the result set. High cache hit rates are common for queries with
+// repeated values (e.g., same predicate or shared subjects).
+//
+// Statistics logging helps identify queries where caching is effective
+// (high hit rate) vs. queries with mostly unique values (low hit rate).
+// ============================================================================
+
 // _____________________________________________________________________________
 std::pair<std::shared_ptr<ConstructTripleGenerator::IdCache>,
           std::shared_ptr<ConstructTripleGenerator::IdCacheStats>>
@@ -471,6 +552,27 @@ void ConstructTripleGenerator::lookupVariableStrings(
     }
   }
 }
+
+// ============================================================================
+// Output Formatting
+// ============================================================================
+// Formats triples for different output formats without intermediate
+// StringTriple allocations. This is the key performance optimization:
+//
+// Old approach (StringTriple-based):
+//   Row -> StringTriple{s,p,o} (allocation) -> formatForOutput (copy)
+//
+// New approach (direct formatting):
+//   Row -> formatTriple(s*,p*,o*) -> yield string (single allocation)
+//
+// Format-specific handling:
+//   TURTLE: Subject Predicate Object .\n (with literal escaping)
+//   CSV:    "s","p","o"\n (RFC 4180 escaping)
+//   TSV:    s\tp\to\n (minimal escaping)
+//
+// The stream_generator (co_yield) coalesces small strings into ~1MB buffers
+// for efficient streaming to the HTTP response.
+// ============================================================================
 
 // _____________________________________________________________________________
 std::string ConstructTripleGenerator::formatTriple(
@@ -553,6 +655,27 @@ ConstructTripleGenerator::generateFormattedTriples(
     }
   }
 }
+
+// ============================================================================
+// Public Interface
+// ============================================================================
+// Entry points for generating CONSTRUCT query output:
+//
+// generateStringTriples (static):
+//   - Returns a lazy range of StringTriple objects
+//   - Used when caller needs structured access to triple components
+//   - Triples are generated on-demand as the range is consumed
+//
+// generateFormattedTriples (instance method):
+//   - Returns a stream_generator yielding pre-formatted strings
+//   - More efficient for streaming output (avoids StringTriple allocation)
+//   - Called via ExportQueryExecutionTrees for HTTP responses
+//
+// Both methods:
+//   - Process result tables lazily (streaming, not materializing)
+//   - Maintain rowOffset_ state for correct blank node numbering
+//   - Support cancellation via cancellationHandle_
+// ============================================================================
 
 // _____________________________________________________________________________
 ad_utility::InputRangeTypeErased<QueryExecutionTree::StringTriple>

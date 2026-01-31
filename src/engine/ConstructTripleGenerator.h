@@ -24,9 +24,52 @@
 // Output format for CONSTRUCT query results.
 enum class ConstructOutputFormat { TURTLE, CSV, TSV };
 
-// ConstructTripleGenerator: generates StringTriples from
-// query results. It manages the global row offset and transforms result tables
-// and rows into a single continuous range of triples.
+// ============================================================================
+// ConstructTripleGenerator
+// ============================================================================
+//
+// Generates triples from CONSTRUCT query results by instantiating triple
+// patterns (from the CONSTRUCT clause) with values from the result table
+// (produced by the WHERE clause).
+//
+// ARCHITECTURE OVERVIEW
+// ---------------------
+// The generator transforms: Result Table → Rows → Triple Patterns → Output
+//
+// For each row in the result table, we instantiate each triple pattern by
+// substituting variables with their values from that row. The output is either
+// StringTriple objects or pre-formatted strings (Turtle/CSV/TSV).
+//
+// PERFORMANCE OPTIMIZATIONS
+// -------------------------
+// 1. PRECOMPUTATION (analyzeTemplate):
+//    - Constants (IRIs, Literals) are evaluated once at construction time
+//    - Variable column indices are pre-computed to avoid hash lookups per row
+//    - Blank node format strings are pre-built (only row number varies)
+//
+// 2. BATCH PROCESSING (getBatchSize, evaluateBatchColumnOriented):
+//    - Rows are processed in batches (default 64) for better cache locality
+//    - Column-oriented access: we read all values for one variable across
+//      all batch rows before moving to the next variable. This creates
+//      sequential memory access patterns that benefit from CPU prefetching.
+//
+// 3. ID CACHING (IdCache):
+//    - ID-to-string conversions are cached across rows within a table
+//    - High hit rates when the same entity appears in multiple result rows
+//    - Avoids redundant vocabulary lookups and string allocations
+//
+// 4. DIRECT FORMATTING (generateFormattedTriples):
+//    - For streaming output, we directly yield formatted strings
+//    - Avoids intermediate StringTriple object allocations
+//    - Uses stream_generator for 1MB buffer coalescence
+//
+// USAGE
+// -----
+// The generator maintains state (rowOffset_) and must process tables IN ORDER.
+// For streaming: use generateFormattedTriples() with the desired format.
+// For object access: use generateStringTriples() static helper.
+//
+// ============================================================================
 class ConstructTripleGenerator {
  public:
   using CancellationHandle = ad_utility::SharedCancellationHandle;
@@ -84,10 +127,17 @@ class ConstructTripleGenerator {
     }
   };
 
-  // Default batch size for column-oriented processing.
-  // Batch size affects CPU cache utilization:
-  //   - Smaller batches: Better L1/L2 cache locality, more batch overhead
-  //   - Larger batches: Amortized overhead, potential cache thrashing
+  // ---------------------------------------------------------------------------
+  // Batch Processing Configuration
+  // ---------------------------------------------------------------------------
+  // Batch size controls the trade-off between cache locality and overhead:
+  //   - Smaller batches (e.g., 64): Better L1/L2 cache hit rates because
+  //     the working set (IDs + strings for batch rows) fits in cache.
+  //   - Larger batches (e.g., 1000+): Lower per-batch overhead but risk
+  //     cache thrashing when working set exceeds cache size.
+  //
+  // The optimal value depends on: number of variables, average string size,
+  // and hardware cache hierarchy. Default of 64 works well empirically.
   static constexpr size_t DEFAULT_BATCH_SIZE = 64;
 
   // Get the batch size, configurable via QLEVER_CONSTRUCT_BATCH_SIZE env var.
