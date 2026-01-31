@@ -271,43 +271,6 @@ auto ExportQueryExecutionTrees::constructQueryResultToTriples(
 }
 
 // _____________________________________________________________________________
-template <>
-STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::
-    constructQueryResultToStream<ad_utility::MediaType::turtle>(
-        const QueryExecutionTree& qet,
-        const ad_utility::sparql_types::Triples& constructTriples,
-        LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
-        CancellationHandle cancellationHandle,
-        [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
-  result->logResultSize();
-  [[maybe_unused]] uint64_t resultSize = 0;
-  auto generator = constructQueryResultToTriples(
-      qet, constructTriples, limitAndOffset, result, resultSize,
-      std::move(cancellationHandle));
-  for (const auto& triple : generator) {
-    STREAMABLE_YIELD(triple.subject_);
-    STREAMABLE_YIELD(' ');
-    STREAMABLE_YIELD(triple.predicate_);
-    STREAMABLE_YIELD(' ');
-    // NOTE: It's tempting to STREAMABLE_YIELD an expression using a ternary
-    // operator: STREAMABLE_YIELD triple._object.starts_with('"')
-    //     ? RdfEscaping::validRDFLiteralFromNormalized(triple._object)
-    //     : triple._object;
-    // but this leads to 1. segfaults in GCC (probably a compiler bug) and 2.
-    // to unnecessary copies of `triple._object` in the `else` case because
-    // the ternary always has to create a new prvalue.
-    if (ql::starts_with(triple.object_, '"')) {
-      std::string objectAsValidRdfLiteral =
-          RdfEscaping::validRDFLiteralFromNormalized(triple.object_);
-      STREAMABLE_YIELD(objectAsValidRdfLiteral);
-    } else {
-      STREAMABLE_YIELD(triple.object_);
-    }
-    STREAMABLE_YIELD(" .\n");
-  }
-}
-
-// _____________________________________________________________________________
 InputRangeTypeErased<std::string>
 ExportQueryExecutionTrees::constructQueryResultBindingsToQLeverJSON(
     const QueryExecutionTree& qet,
@@ -1131,7 +1094,9 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
                 format == MediaType::tsv || format == MediaType::sparqlXml ||
                 format == MediaType::sparqlJson ||
                 format == MediaType::qleverJson ||
-                format == MediaType::binaryQleverExport);
+                format == MediaType::binaryQleverExport ||
+                format == MediaType::turtle);  // Added turtle here
+
   if constexpr (format == MediaType::octetStream ||
                 format == MediaType::binaryQleverExport) {
     AD_THROW("Binary export is not supported for CONSTRUCT queries");
@@ -1147,17 +1112,32 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
                                        ? RdfEscaping::escapeForTsv
                                        : RdfEscaping::escapeForCsv;
   constexpr char sep = format == MediaType::tsv ? '\t' : ',';
+
+  // For Turtle format, the separator is a space and the escaping is handled
+  // internally by generateFormattedTriples. For other formats, we pass the
+  // escape function and separator.
+  constexpr char effectiveSeparator = (format == MediaType::turtle) ? ' ' : sep;
+
   [[maybe_unused]] uint64_t resultSize = 0;
-  auto generator = constructQueryResultToTriples(
-      qet, constructTriples, limitAndOffset, result, resultSize,
-      std::move(cancellationHandle));
-  for (auto& triple : generator) {
-    STREAMABLE_YIELD(escapeFunction(std::move(triple.subject_)));
-    STREAMABLE_YIELD(sep);
-    STREAMABLE_YIELD(escapeFunction(std::move(triple.predicate_)));
-    STREAMABLE_YIELD(sep);
-    STREAMABLE_YIELD(escapeFunction(std::move(triple.object_)));
-    STREAMABLE_YIELD("\n");
+  auto rowIndices = ExportQueryExecutionTrees::getRowIndices(
+      limitAndOffset, *result, resultSize, constructTriples.size());
+
+  ConstructTripleGenerator generator(
+      constructTriples, std::move(result), qet.getVariableColumns(),
+      qet.getQec()->getIndex(), std::move(cancellationHandle));
+
+  auto generatorOfFormattedTriples = ql::views::transform(
+      ad_utility::OwningView{std::move(rowIndices)},
+      [generator = std::move(generator), &escapeFunction,
+       effectiveSeparator](const TableWithRange& table) mutable {
+        return generator.generateFormattedTriples(table, escapeFunction,
+                                                  effectiveSeparator);
+      });
+
+  for (auto&& innerGenerator : generatorOfFormattedTriples) {
+    for (auto&& tripleString : innerGenerator) {
+      STREAMABLE_YIELD(tripleString);
+    }
   }
 }
 
