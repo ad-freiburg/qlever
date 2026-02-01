@@ -18,6 +18,7 @@
 #include "util/IdTestHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/ParseableDuration.h"
+#include "util/RuntimeParametersTestHelpers.h"
 
 using namespace std::string_literals;
 using namespace std::chrono_literals;
@@ -66,7 +67,8 @@ std::string runQueryStreamableResult(
 // as JSON. `mediaType` must be `sparqlJSON` or `qleverJSON`.
 nlohmann::json runJSONQuery(const std::string& kg, const std::string& query,
                             ad_utility::MediaType mediaType,
-                            bool useTextIndex = false) {
+                            bool useTextIndex = false,
+                            std::optional<size_t> exportLimit = std::nullopt) {
   ad_utility::testing::TestIndexConfig config{kg};
   config.createTextIndex = useTextIndex;
   auto qec = ad_utility::testing::getQec(std::move(config));
@@ -77,6 +79,7 @@ nlohmann::json runJSONQuery(const std::string& kg, const std::string& query,
       std::make_shared<ad_utility::CancellationHandle<>>();
   QueryPlanner qp{qec, cancellationHandle};
   auto pq = parseQuery(query);
+  pq._limitOffset.exportLimit_ = exportLimit;
   auto qet = qp.createExecutionTree(pq);
   ad_utility::Timer timer{ad_utility::Timer::Started};
   std::string resStr;
@@ -139,6 +142,8 @@ struct TestCaseConstructQuery {
 void runSelectQueryTestCase(
     const TestCaseSelectQuery& testCase, bool useTextIndex = false,
     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::sparqlResultsJsonWithTime_>(false);
   auto trace = generateLocationTrace(l, "runSelectQueryTestCase");
   using enum ad_utility::MediaType;
   EXPECT_EQ(
@@ -181,6 +186,8 @@ void runSelectQueryTestCase(
 void runConstructQueryTestCase(
     const TestCaseConstructQuery& testCase,
     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::sparqlResultsJsonWithTime_>(false);
   auto trace = generateLocationTrace(l, "runConstructQueryTestCase");
   using enum ad_utility::MediaType;
   EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, tsv),
@@ -2238,5 +2245,40 @@ TEST(ExportQueryExecutionTrees, GetLiteralOrIriFromVocabIndexWithEncodedIris) {
 
     // Should successfully return some IRI or literal from vocabulary
     EXPECT_FALSE(vocabResult.toStringRepresentation().empty());
+  }
+}
+
+// Test that a `sparql-results+json` export includes a `meta` field if and
+// only if the respective runtime parameter is enabled.
+TEST(ExportQueryExecutionTrees, SparqlJsonWithMetaField) {
+  std::string kg = "<x> <y> <z>";
+  std::string query = "SELECT ?s ?p ?o WHERE {?s ?p ?o}";
+
+  // Case 1: Runtime parameter enabled (default).
+  {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::sparqlResultsJsonWithTime_>(true);
+    auto result = runJSONQuery(kg, query, ad_utility::MediaType::sparqlJson);
+    ASSERT_TRUE(result.contains("head"));
+    ASSERT_TRUE(result.contains("results"));
+    ASSERT_TRUE(result["head"].contains("vars"));
+    ASSERT_TRUE(result.contains("meta"));
+    ASSERT_TRUE(result["meta"].contains("query-time-ms"));
+    ASSERT_TRUE(result["meta"].contains("result-size-total"));
+    ASSERT_TRUE(result["meta"]["query-time-ms"].is_number());
+    ASSERT_TRUE(result["meta"]["result-size-total"].is_number());
+    EXPECT_GE(result["meta"]["query-time-ms"].get<int64_t>(), 0);
+    EXPECT_EQ(result["meta"]["result-size-total"].get<int64_t>(), 1);
+  }
+
+  // Case 2: Runtime parameter disabled.
+  {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::sparqlResultsJsonWithTime_>(false);
+    auto result = runJSONQuery(kg, query, ad_utility::MediaType::sparqlJson);
+    ASSERT_TRUE(result.contains("head"));
+    ASSERT_TRUE(result.contains("results"));
+    ASSERT_TRUE(result["head"].contains("vars"));
+    ASSERT_FALSE(result.contains("meta"));
   }
 }

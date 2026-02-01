@@ -76,6 +76,16 @@ bool CompressedBlockMetadataNoBlockIndex::isConsistentWith(
          getMaskedTriple(other.firstTriple_, columnIndex);
 }
 
+// _____________________________________________________________________________
+CompressedBlockMetadataNoBlockIndex::OffsetAndCompressedSize
+CompressedBlockMetadataNoBlockIndex::getOffsetAndCompressedSizeForColumn(
+    ColumnIndex columnIndex) const {
+  if (!offsetsAndCompressedSize_.has_value()) {
+    return {0, 0};
+  }
+  return offsetsAndCompressedSize_.value().at(columnIndex);
+}
+
 // Return true iff the `triple` is contained in the `scanSpec`. For example, the
 // triple ` 42 0 3 ` is contained in the specs `U U U`, `42 U U` and `42 0 U` ,
 // but not in `42 2 U` where `U` means "scan for all possible values".
@@ -761,9 +771,6 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
     const CompressedBlockMetadata& blockMetadata,
     std::optional<std::reference_wrapper<LazyScanMetadata>> scanMetadata,
     const LocatedTriplesPerBlock& locatedTriples) const {
-  AD_CORRECTNESS_CHECK(ADDITIONAL_COLUMN_GRAPH_ID <
-                       blockMetadata.offsetsAndCompressedSize_.size());
-
   bool manuallyDeleteGraphColumn = scanConfig.graphFilter_.deleteGraphColumn_;
   // We first scan the complete block including ALL columns with the following
   // exception: If `manuallyDeleteGraphColumn` is true, then the `graphColumn`
@@ -773,11 +780,14 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
   // the block. The downside of this approach is that further down we have to be
   // aware of this already dropped column when assembling the final result.
   std::vector<ColumnIndex> allAdditionalColumns;
-  ql::ranges::copy(
-      ql::views::iota(ADDITIONAL_COLUMN_GRAPH_ID +
-                          static_cast<size_t>(manuallyDeleteGraphColumn),
-                      blockMetadata.offsetsAndCompressedSize_.size()),
-      std::back_inserter(allAdditionalColumns));
+  if (!manuallyDeleteGraphColumn) {
+    allAdditionalColumns.push_back(ADDITIONAL_COLUMN_GRAPH_ID);
+  }
+  for (ColumnIndex index : scanConfig.scanColumns_) {
+    if (index > ADDITIONAL_COLUMN_GRAPH_ID) {
+      allAdditionalColumns.push_back(index);
+    }
+  }
   ScanSpecification specForAllColumns{std::nullopt,
                                       std::nullopt,
                                       std::nullopt,
@@ -808,12 +818,18 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
   // Set `beginIdx` and `endIdx` s.t. that they only represent the range in
   // `block` where the column with the `columnIdx` matches the `relevantId`.
 
+  // Those are the column indices from the scanned result (which might be
+  // different from the original indices, because additional columns might be
+  // missing) that will become part of the final result.
+  std::vector<ColumnIndex> indicesToCopy;
+  indicesToCopy.reserve(scanConfig.scanColumns_.size());
   // Helper lambda that narrows down the range of the block so that all values
   // in column `columnIdx` are equal to `relevantId`. If `relevantId` is
   // `std::nullopt`, the range is not narrowed down.
-  auto filterColumn = [&block, &beginIdx, &endIdx](std::optional<Id> relevantId,
-                                                   size_t columnIdx) {
+  auto filterColumn = [&block, &beginIdx, &endIdx, &indicesToCopy, &scanConfig](
+                          std::optional<Id> relevantId, ColumnIndex columnIdx) {
     if (!relevantId.has_value()) {
+      indicesToCopy.push_back(columnIdx);
       return;
     }
     const auto& column = block.getColumn(columnIdx);
@@ -821,6 +837,12 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
         column.begin() + beginIdx, column.begin() + endIdx, relevantId.value());
     beginIdx = matchingRange.begin() - column.begin();
     endIdx = matchingRange.end() - column.begin();
+    // The function `getFirstAndLastTripleIgnoringGraph` is the only function
+    // where the passed `scanConfig` isn't created from the passed `scanSpec`.
+    // Handle this case so that we don't drop the fixed columns in that case.
+    if (ad_utility::contains(scanConfig.scanColumns_, columnIdx)) {
+      indicesToCopy.push_back(columnIdx);
+    }
   };
 
   // Now narrow down the range of the block by first `scanSpec.col0Id()`,
@@ -830,31 +852,14 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
   filterColumn(scanSpec.col1Id(), 1);
   filterColumn(scanSpec.col2Id(), 2);
 
-  // Now copy the range `[beginIdx, endIdx)` from `block` to `result`.
-  DecompressedBlock result{scanConfig.scanColumns_.size() -
-                               static_cast<size_t>(manuallyDeleteGraphColumn),
-                           allocator_};
-  result.resize(endIdx - beginIdx);
-  size_t i = 0;
-  const auto& columnIndices = scanConfig.scanColumns_;
-
-  // If `manuallyDeleteGraphColumn` is `true`, then we don't output the graph
-  // column. Additionally, it means that the graph column has already been
-  // dropped by the call to `readAndDecompressBlock` (see above), so we have to
-  // shift the column origins above the graph column down by one.
-  for (const auto& inputColIdx :
-       columnIndices | ql::views::filter([&](const auto& idx) {
-         return !manuallyDeleteGraphColumn || idx != ADDITIONAL_COLUMN_GRAPH_ID;
-       }) | ql::views::transform([&](const auto& idx) {
-         return manuallyDeleteGraphColumn && idx > ADDITIONAL_COLUMN_GRAPH_ID
-                    ? idx - 1
-                    : idx;
-       })) {
-    const auto& inputCol = block.getColumn(inputColIdx);
-    ql::ranges::copy(inputCol.begin() + beginIdx, inputCol.begin() + endIdx,
-                     result.getColumn(i).begin());
-    ++i;
+  // Copy all additional columns as-is.
+  for (ColumnIndex i : ad_utility::integerRange(allAdditionalColumns.size())) {
+    indicesToCopy.push_back(3 + i);
   }
+
+  // Now copy the range `[beginIdx, endIdx)` from `block` to `result`.
+  DecompressedBlock result{indicesToCopy.size(), allocator_};
+  result.insertAtEnd(block, beginIdx, endIdx, indicesToCopy);
 
   // Return the result.
   return result;
@@ -1130,7 +1135,7 @@ CompressedBlock CompressedRelationReader::readCompressedBlockFromFile(
   // TODO<C++23> Use `ql::views::zip`
   for (size_t i = 0; i < compressedBuffer.size(); ++i) {
     const auto& offset =
-        blockMetaData.offsetsAndCompressedSize_.at(columnIndices[i]);
+        blockMetaData.getOffsetAndCompressedSizeForColumn(columnIndices[i]);
     auto& currentCol = compressedBuffer[i];
     currentCol.resize(offset.compressedSize_);
     file_.read(currentCol.data(), offset.compressedSize_, offset.offsetInFile_);
@@ -1608,12 +1613,22 @@ auto CompressedRelationWriter::createPermutationPair(
     const std::string& basename, WriterAndCallback writerAndCallback1,
     WriterAndCallback writerAndCallback2,
     ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
-    qlever::KeyOrder permutation,
-    const std::vector<std::function<void(const IdTableStatic<0>&)>>&
-        perBlockCallbacks) -> PermutationPairResult {
-  PermutationWriter permutationWriter{
+    qlever::KeyOrder permutation, const PerBlockCallbacks& perBlockCallbacks)
+    -> PermutationPairResult {
+  PermutationWriter<true> permutationWriter{
       basename, std::move(writerAndCallback1), std::move(writerAndCallback2),
       std::move(permutation), perBlockCallbacks};
+  return permutationWriter.writePermutation(std::move(sortedTriples));
+}
+
+// _____________________________________________________________________________
+auto CompressedRelationWriter::createPermutation(
+    WriterAndCallback writerAndCallback,
+    ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
+    qlever::KeyOrder permutation, const PerBlockCallbacks& perBlockCallbacks)
+    -> PermutationSingleResult {
+  PermutationWriter<false> permutationWriter{
+      std::move(writerAndCallback), std::move(permutation), perBlockCallbacks};
   return permutationWriter.writePermutation(std::move(sortedTriples));
 }
 

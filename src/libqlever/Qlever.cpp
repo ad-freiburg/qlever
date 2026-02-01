@@ -7,8 +7,10 @@
 #include "libqlever/Qlever.h"
 
 #include "engine/ExportQueryExecutionTrees.h"
+#include "engine/MaterializedViews.h"
 #include "index/IndexImpl.h"
 #include "index/TextIndexBuilder.h"
+#include "libqlever/QleverTypes.h"
 #include "parser/SparqlParser.h"
 
 namespace qlever {
@@ -34,10 +36,13 @@ Qlever::Qlever(const EngineConfig& config)
   // Load the index from disk.
   index_.usePatterns() = enablePatternTrick_;
   index_.loadAllPermutations() = !config.onlyPsoAndPos_;
+  index_.doNotLoadPermutations() = config.doNotLoadPermutations_;
   index_.createFromOnDiskIndex(config.baseName_, config.persistUpdates_);
   if (config.loadTextIndex_) {
     index_.addTextFromOnDiskIndex();
   }
+
+  materializedViewsManager_.setOnDiskBase(config.baseName_);
 
   // Estimate the cost of sorting operations (needed for query planning).
   sortPerformanceEstimator_.computeEstimatesExpensively(
@@ -163,7 +168,7 @@ void Qlever::eraseResultWithName(std::string name) {
 Qlever::QueryPlan Qlever::parseAndPlanQuery(std::string query) const {
   auto qecPtr = std::make_shared<QueryExecutionContext>(
       index_, &cache_, allocator_, sortPerformanceEstimator_,
-      &namedResultCache_);
+      &namedResultCache_, &materializedViewsManager_);
   // TODO<joka921> support Dataset clauses.
   auto parsedQuery = SparqlParser::parseQuery(
       &index_.getImpl().encodedIriManager(), std::move(query), {});
@@ -195,6 +200,22 @@ void IndexBuilderConfig::validate() const {
         "text index. If none are given the option to add words from literals "
         "has to be true. For details see --help."));
   }
+}
+
+// ___________________________________________________________________________
+void Qlever::writeMaterializedView(std::string name, std::string query) const {
+  materializedViewsManager_.writeViewToDisk(
+      std::move(name), parseAndPlanQuery(std::move(query)));
+}
+
+// ___________________________________________________________________________
+bool Qlever::isMaterializedViewLoaded(const std::string& name) const {
+  return materializedViewsManager_.isViewLoaded(name);
+}
+
+// ___________________________________________________________________________
+void Qlever::loadMaterializedView(std::string name) const {
+  materializedViewsManager_.loadView(name);
 }
 
 }  // namespace qlever

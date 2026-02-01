@@ -7,6 +7,8 @@
 #ifndef QLEVER_SRC_INDEX_INDEXIMPL_H
 #define QLEVER_SRC_INDEX_INDEXIMPL_H
 
+#include <gtest/gtest_prod.h>
+
 #include <memory>
 #include <optional>
 #include <string>
@@ -35,11 +37,9 @@
 #include "parser/RdfParser.h"
 #include "parser/TripleComponent.h"
 #include "util/BufferedVector.h"
-#include "util/CancellationHandle.h"
 #include "util/File.h"
 #include "util/Forward.h"
 #include "util/MemorySize/MemorySize.h"
-#include "util/MmapVector.h"
 #include "util/json.h"
 
 template <typename Comparator, size_t I = NumColumnsIndexBuilding>
@@ -193,6 +193,11 @@ class IndexImpl {
   std::optional<Id> idOfHasPatternDuringIndexBuilding_;
   std::optional<Id> idOfInternalGraphDuringIndexBuilding_;
 
+  // If true, the permutations will not be loaded from disk when calling
+  // createFromOnDiskIndex. This is useful when only queries that don't require
+  // the permutations need to be executed.
+  bool doNotLoadPermutations_ = false;
+
   // The vocabulary type that is used (only relevant during index building).
   ad_utility::VocabularyType vocabularyTypeForIndexBuilding_{
       ad_utility::VocabularyType::Enum::OnDiskCompressed};
@@ -213,18 +218,15 @@ class IndexImpl {
   IndexImpl& operator=(IndexImpl&&) = delete;
   IndexImpl(IndexImpl&&) = delete;
 
-  const auto& POS() const { return *pos_; }
-  auto& POS() { return *pos_; }
-  const auto& PSO() const { return *pso_; }
-  auto& PSO() { return *pso_; }
-  const auto& SPO() const { return *spo_; }
-  auto& SPO() { return *spo_; }
-  const auto& SOP() const { return *sop_; }
-  auto& SOP() { return *sop_; }
-  const auto& OPS() const { return *ops_; }
-  auto& OPS() { return *ops_; }
-  const auto& OSP() const { return *osp_; }
-  auto& OSP() { return *osp_; }
+  const auto& POS() const { return getPermutationImpl(pos_, "POS"); }
+  const auto& PSO() const { return getPermutationImpl(pso_, "PSO"); }
+  const auto& SPO() const { return getPermutationImpl(spo_, "SPO"); }
+  const auto& SOP() const { return getPermutationImpl(sop_, "SOP"); }
+  const auto& OPS() const { return getPermutationImpl(ops_, "OPS"); }
+  const auto& OSP() const { return getPermutationImpl(osp_, "OSP"); }
+
+  // Function only exposed for testing.
+  auto& SPOForTesting() { return const_cast<Permutation&>(SPO()); }
 
   static const IndexImpl& staticGlobalSingletonIndex() {
     AD_CORRECTNESS_CHECK(globalSingletonIndex_ != nullptr);
@@ -305,12 +307,12 @@ class IndexImpl {
 
   // ___________________________________________________________________________
   size_t getCardinality(Id id, Permutation::Enum permutation,
-                        const LocatedTriplesSnapshot&) const;
+                        const LocatedTriplesState&) const;
 
   // ___________________________________________________________________________
-  size_t getCardinality(
-      const TripleComponent& comp, Permutation::Enum permutation,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+  size_t getCardinality(const TripleComponent& comp,
+                        Permutation::Enum permutation,
+                        const LocatedTriplesState& locatedTriplesState) const;
 
   // ___________________________________________________________________________
   RdfsVocabulary::AccessReturnType indexToString(VocabIndex id) const;
@@ -323,6 +325,9 @@ class IndexImpl {
   Index::Vocab::PrefixRanges prefixRanges(std::string_view prefix) const;
 
   const CompactVectorOfStrings<Id>& getPatterns() const;
+
+  CompactVectorOfStrings<Id>& getPatterns();
+
   /**
    * @return The multiplicity of the Entities column (0) of the full
    * has-relation relation after unrolling the patterns.
@@ -439,6 +444,8 @@ class IndexImpl {
 
   bool& loadAllPermutations();
 
+  bool& doNotLoadPermutations();
+
   void setKeepTempFiles(bool keepTempFiles);
 
   ad_utility::MemorySize& memoryLimitIndexBuilding() {
@@ -485,31 +492,16 @@ class IndexImpl {
   // ___________________________________________________________________________
   std::vector<float> getMultiplicities(
       const TripleComponent& key, const Permutation& permutation,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+      const LocatedTriplesState& locatedTriplesState) const;
 
   // ___________________________________________________________________________
   std::vector<float> getMultiplicities(const Permutation& permutation) const;
 
   // _____________________________________________________________________________
-  IdTable scan(const ScanSpecificationAsTripleComponent& scanSpecification,
-               const Permutation::Enum& permutation,
-               Permutation::ColumnIndicesRef additionalColumns,
-               const ad_utility::SharedCancellationHandle& cancellationHandle,
-               const LocatedTriplesSnapshot& locatedTriplesSnapshot,
-               const LimitOffsetClause& limitOffset = {}) const;
-
-  // _____________________________________________________________________________
-  IdTable scan(const ScanSpecification& scanSpecification, Permutation::Enum p,
-               Permutation::ColumnIndicesRef additionalColumns,
-               const ad_utility::SharedCancellationHandle& cancellationHandle,
-               const LocatedTriplesSnapshot& locatedTriplesSnapshot,
-               const LimitOffsetClause& limitOffset = {}) const;
-
-  // _____________________________________________________________________________
   size_t getResultSizeOfScan(
       const ScanSpecification& scanSpecification,
       const Permutation::Enum& permutation,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+      const LocatedTriplesState& locatedTriplesState) const;
 
  protected:
   // Private member functions
@@ -557,6 +549,16 @@ class IndexImpl {
       TripleVec& data, const std::vector<size_t>& actualLinesPerPartial,
       size_t linesPerPartial, Func isQLeverInternalTriple);
 
+  // Helper function to get the filename for a given permutation.
+  std::string getFilenameForPermutation(const Permutation& permutation,
+                                        bool internal) const;
+
+  // Create a `CompressedRelationWriter` and a callback that adds the metadata
+  // of large relations to the `metaData` object.
+  CompressedRelationWriter::WriterAndCallback getWriterAndCallback(
+      IndexMetaDataMmapDispatcher::WriteType& metaData, size_t numColumns,
+      const std::string& fileName) const;
+
   // TODO<joka921> Get rid of the `numColumns` by including them into the
   // `sortedTriples` argument.
   template <typename T, typename... Callbacks>
@@ -567,6 +569,19 @@ class IndexImpl {
                             Permutation::KeyOrder permutation,
                             Callbacks&&... perTripleCallbacks);
 
+  // Write a single permutation to disk. `numColumns` specifies the number of
+  // columns in the relation (usually 4, sometimes 6 with patterns).
+  // `fileName` is the base name of the files to write to (without suffixes).
+  // `sortedTriples` is an input range that provides the triples in the correct
+  // order.
+  // Return the number of triples written and the metadata for the written
+  // permutation.
+  std::tuple<size_t, IndexMetaDataMmapDispatcher::WriteType>
+  createPermutationImpl(
+      size_t numColumns, const std::string& fileName,
+      ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples);
+
+ protected:
   // _______________________________________________________________________
   // Create a pair of permutations. Only works for valid pairs (PSO-POS,
   // OSP-OPS, SPO-SOP).  First creates the permutation and then exchanges the
@@ -580,6 +595,10 @@ class IndexImpl {
   // createPatternsAfterFirst is only valid when  the pair is SPO-SOP because
   // the SPO permutation is also needed for patterns (see usage in
   // IndexImpl::createFromFile function)
+
+  // Write `metaData` to the provided file.
+  void writeMetaData(IndexMetaDataMmapDispatcher::WriteType& metaData,
+                     const std::string& filename) const;
 
   template <typename SortedTriplesType, typename... CallbackTypes>
   [[nodiscard]] size_t createPermutationPair(
@@ -603,6 +622,23 @@ class IndexImpl {
                      const Permutation& p1, const Permutation& p2,
                      Callbacks&&... perTripleCallbacks);
 
+ public:
+  // Write a single permutation to disk. `numColumns` specifies the number of
+  // columns in the relation (usually 4, sometimes 6 with patterns).
+  // `sortedTriples` is an input range that provides the triples in the correct
+  // order.
+  // `permutation` specifies which permutation to write.
+  // `internal` specifies whether this is an internal permutation and adjusts
+  // the filename of the generated file on disk accordingly.
+  // Return the number of distinct values on the first column of the written
+  // permutation. (Predicates for PSO/POS, Subjects for SPO/SOP, Objects for
+  // OSP/OPS).
+  size_t createPermutation(
+      size_t numColumns,
+      ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
+      const Permutation& permutation, bool internal);
+
+ protected:
   void openTextFileHandle();
 
   // Get the metadata for the block from the text index that contains the
@@ -660,6 +696,8 @@ class IndexImpl {
   friend class IndexTest_createFromTsvTest_Test;
   friend class IndexTest_createFromOnDiskIndexTest_Test;
   friend class CreatePatternsFixture_createPatterns_Test;
+  FRIEND_TEST(IndexImpl, recomputeStatistics);
+  FRIEND_TEST(IndexImpl, writePatternsToFile);
 
   bool isLiteral(std::string_view object) const;
 
@@ -674,6 +712,11 @@ class IndexImpl {
    */
   void throwExceptionIfNoPatterns() const;
 
+  // Dereference the `permutationPtr` and throw an exception if it is `nullptr`.
+  // The `permutationName` is used to enrich the error message.
+  static const Permutation& getPermutationImpl(
+      const PermutationPtr& permutationPtr, std::string_view permutationName);
+
   void writeConfiguration() const;
   void readConfiguration();
 
@@ -685,6 +728,9 @@ class IndexImpl {
    * @param path
    */
   void deleteTemporaryFile(const std::string& path);
+
+  // Return the filename where the patterns are stored.
+  std::string getPatternFilename() const;
 
  public:
   // Count the number of "QLever-internal" triples (predicate ql:langtag or
@@ -709,6 +755,7 @@ class IndexImpl {
       std::optional<PatternCreator::TripleSorter> createSPOAndSOP(
           size_t numColumns, BlocksOfTriples sortedTriples,
           NextSorter&&... nextSorter);
+
   // Create the OSP and OPS permutations. Additionally, count the number of
   // distinct objects and write it to the metadata.
   CPP_template(typename... NextSorter)(requires(
@@ -727,6 +774,7 @@ class IndexImpl {
                                             BlocksOfTriples sortedTriples,
                                             bool doWriteConfiguration,
                                             NextSorter&&... nextSorter);
+
   // Call `createPSOAndPOSImpl` with the given arguments and with
   // `doWriteConfiguration` set to `true` (see above).
   CPP_template(typename... NextSorter)(requires(
@@ -813,6 +861,21 @@ class IndexImpl {
 
   void storeTextScoringParamsInConfiguration(TextScoringMetric scoringMetric,
                                              float b, float k);
+
+  // Write the stored in-memory patterns to a pattern file.
+  void writePatternsToFile() const;
+
+  // Helper function to count the number of distinct Ids in a sorted IdTable.
+  // `lastId` is used to keep track of the last seen Id between multiple calls
+  // for subsequent tables and `counter` is the counter that is incremented.
+  // This function is only exposed for testing.
+  static void countDistinct(std::optional<Id>& lastId, size_t& counter,
+                            const IdTable& table);
+
+  // Recompute the statistics about the index based on the passed located
+  // triples shared state.
+  nlohmann::json recomputeStatistics(
+      const LocatedTriplesSharedState& locatedTriplesSharedState) const;
 };
 
 #endif  // QLEVER_SRC_INDEX_INDEXIMPL_H

@@ -14,7 +14,8 @@
 #include "util/FsstCompressor.h"
 #include "util/OverloadCallOperator.h"
 #include "util/Serializer/FileSerializer.h"
-#include "util/Serializer/SerializePair.h"
+#include "util/Serializer/SerializeVector.h"
+#include "util/Serializer/Serializer.h"
 #include "util/TaskQueue.h"
 
 namespace detail {
@@ -273,6 +274,21 @@ CPP_template(typename UnderlyingVocabulary,
   }
 
   void close() { underlyingVocabulary_.close(); }
+
+  // Generic serialization support.
+  AD_SERIALIZE_FRIEND_FUNCTION(CompressedVocabulary) {
+    serializer | arg.underlyingVocabulary_;
+    if constexpr (ad_utility::serialization::WriteSerializer<S>) {
+      // Serialize the decoders.
+      const auto& decoders = arg.compressionWrapper_.getDecoders();
+      serializer | decoders;
+    } else {
+      // Deserialize the decoders.
+      std::vector<typename CompressionWrapper::Decoder> decoders;
+      serializer | decoders;
+      arg.compressionWrapper_ = CompressionWrapper{{std::move(decoders)}};
+    }
+  }
 
  private:
   // Get the correct decoder for the given `idx`.

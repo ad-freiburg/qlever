@@ -19,6 +19,7 @@
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeArrayOrTuple.h"
 #include "util/Serializer/SerializeString.h"
+#include "util/TransparentFunctors.h"
 #include "util/TypeTraits.h"
 #include "util/Views.h"
 
@@ -28,6 +29,9 @@ namespace detail {
 
 constexpr std::array magicBytes{'Q', 'L', 'E', 'V', 'E', 'R', '.',
                                 'U', 'P', 'D', 'A', 'T', 'E'};
+
+// The `formatVersion` has to be increased when the format below is changed.
+constexpr uint16_t formatVersion = 1;
 
 // Read a value of type T from the `serializer`.
 CPP_template(typename T, typename Serializer)(
@@ -39,13 +43,12 @@ CPP_template(typename T, typename Serializer)(
 }
 
 // Write the header of the file format to the output stream. We are currently at
-// version 0.
+// version 1.
 CPP_template(typename Serializer)(
     requires serialization::WriteSerializer<
         Serializer>) void writeHeader(Serializer& serializer) {
   serializer << magicBytes;
-  uint16_t version = 0;
-  serializer << version;
+  serializer << formatVersion;
 }
 
 // Read the header of the file format from the input stream and ensure that it
@@ -58,7 +61,14 @@ CPP_template(typename Serializer)(
   AD_CORRECTNESS_CHECK(magicByteBuffer == magicBytes);
   uint16_t version;
   serializer >> version;
-  AD_CORRECTNESS_CHECK(version == 0);
+  AD_CORRECTNESS_CHECK(
+      version == formatVersion,
+      "The format version for serialized triples (e.g. persisted UPDATEs or "
+      "serialized cached results) in the version of QLever is ",
+      formatVersion, " but you tried to read serialized triples with version ",
+      version,
+      ", As those features are currently still experimental, please contact "
+      "the developers of QLever");
 }
 
 // Serialize the local vocabulary to the output stream. Returns a mapping from
@@ -67,21 +77,32 @@ CPP_template(typename Serializer)(
     requires serialization::WriteSerializer<
         Serializer>) void serializeLocalVocab(Serializer& serializer,
                                               const LocalVocab& vocab) {
-  AD_CONTRACT_CHECK(vocab.numSets() == 1);
-  const auto& words = vocab.primaryWordSet();
-  serializer << words.size();
-  ql::ranges::for_each(words, [&serializer](const auto& localVocabEntry) {
-    serializer << Id::makeFromLocalVocabIndex(&localVocabEntry);
-    serializer << localVocabEntry.toStringRepresentation();
-  });
+  serializer << vocab.getOwnedLocalBlankNodeBlocks();
+  uint64_t numWords = vocab.size();
+  serializer << numWords;
+
+  auto writeWordSet = [&serializer](const auto& words) {
+    ql::ranges::for_each(words, [&serializer](const auto& localVocabEntry) {
+      serializer << Id::makeFromLocalVocabIndex(&localVocabEntry);
+      serializer << localVocabEntry.toStringRepresentation();
+    });
+  };
+  writeWordSet(vocab.primaryWordSet());
+  ql::ranges::for_each(vocab.otherSets(), writeWordSet,
+                       ad_utility::dereference);
 }
 
 // Deserialize the local vocabulary from the input stream.
 CPP_template(typename Serializer)(
     requires serialization::ReadSerializer<Serializer>) std::
     tuple<LocalVocab, absl::flat_hash_map<Id::T, Id>> deserializeLocalVocab(
-        Serializer& serializer) {
+        Serializer& serializer, BlankNodeManager* blankNodeManager) {
   LocalVocab vocab;
+  vocab.reserveBlankNodeBlocksFromExplicitIndices(
+      readValue<std::vector<
+          BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>>(
+          serializer),
+      blankNodeManager);
   auto size = readValue<uint64_t>(serializer);
   // Note:: It might happen that the `size` is zero because the local vocab was
   // empty.
@@ -102,35 +123,45 @@ CPP_template(typename Serializer)(
 CPP_template(typename Range, typename Serializer)(
     requires ql::ranges::range<Range>) void serializeIds(Serializer& serializer,
                                                          Range&& range) {
-  ad_utility::serialization::VectorIncrementalSerializer<Id, Serializer>
-      vectorSerializer{std::move(serializer)};
-  for (const Id& value : range) {
-    vectorSerializer.push(value);
+  if constexpr (std::ranges::contiguous_range<std::decay_t<Range>>) {
+    serializer << ql::span{range};
+  } else {
+    ad_utility::serialization::VectorIncrementalSerializer<Id, Serializer>
+        vectorSerializer{std::move(serializer)};
+    for (const Id& value : range) {
+      vectorSerializer.push(value);
+    }
+    vectorSerializer.finish();
+    serializer = std::move(vectorSerializer).serializer();
   }
-  vectorSerializer.finish();
-  serializer = std::move(vectorSerializer).serializer();
+}
+
+// TODO<joka921> Comments.
+inline void remapLocalVocab(ql::span<Id> ids,
+                            const absl::flat_hash_map<Id::T, Id>& mapping) {
+  for (Id& id : ids) {
+    if (id.getDatatype() == Datatype::LocalVocabIndex) {
+      id = mapping.at(id.getBits());
+    }
+  }
 }
 
 // Deserialize a range of Ids from the input stream. If an Id is of type
 // LocalVocabIndex, apply the mapping to the Id after reading it.
-CPP_template(typename Serializer, typename BlankNodeFunc)(
-    requires ad_utility::InvocableWithConvertibleReturnType<BlankNodeFunc,
-                                                            BlankNodeIndex>)
-    std::vector<Id> deserializeIds(
-        Serializer& serializer, const absl::flat_hash_map<Id::T, Id>& mapping,
-        BlankNodeFunc newBlankNodeIndex) {
+template <typename Serializer>
+void deserializeIds(Serializer& serializer,
+                    const absl::flat_hash_map<Id::T, Id>& mapping,
+                    ql::span<Id> ids) {
+  serializer >> ids;
+  remapLocalVocab(ids, mapping);
+}
+// Deserialize a range of Ids from the input stream. If an Id is of type
+// LocalVocabIndex, apply the mapping to the Id after reading it.
+template <typename Serializer>
+std::vector<Id> deserializeIds(Serializer& serializer,
+                               const absl::flat_hash_map<Id::T, Id>& mapping) {
   std::vector<Id> ids = readValue<std::vector<Id>>(serializer);
-  absl::flat_hash_map<Id, BlankNodeIndex> blankNodeMapping;
-  for (Id& id : ids) {
-    if (id.getDatatype() == Datatype::LocalVocabIndex) {
-      id = mapping.at(id.getBits());
-    } else if (id.getDatatype() == Datatype::BlankNodeIndex) {
-      BlankNodeIndex index = blankNodeMapping.contains(id)
-                                 ? blankNodeMapping[id]
-                                 : (blankNodeMapping[id] = newBlankNodeIndex());
-      id = Id::makeFromBlankNodeIndex(index);
-    }
-  }
+  remapLocalVocab(ids, mapping);
   return ids;
 }
 }  // namespace detail
@@ -172,14 +203,12 @@ inline std::tuple<LocalVocab, std::vector<std::vector<Id>>> deserializeIds(
   AD_LOG_INFO << "Reading and processing persisted updates from " << path
               << " ..." << std::endl;
   detail::readHeader(serializer);
-  auto [vocab, mapping] = detail::deserializeLocalVocab(serializer);
+  auto [vocab, mapping] =
+      detail::deserializeLocalVocab(serializer, blankNodeManager);
   std::vector<std::vector<Id>> idVectors;
   auto numRanges = detail::readValue<uint64_t>(serializer);
   for ([[maybe_unused]] auto i : ad_utility::integerRange(numRanges)) {
-    idVectors.push_back(detail::deserializeIds(
-        serializer, mapping, [blankNodeManager, &vocab]() {
-          return vocab.getBlankNodeIndex(blankNodeManager);
-        }));
+    idVectors.push_back(detail::deserializeIds(serializer, mapping));
   }
   return {std::move(vocab), std::move(idVectors)};
 }

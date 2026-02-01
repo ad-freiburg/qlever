@@ -145,8 +145,8 @@ class Operation {
 
   const Index& getIndex() const { return _executionContext->getIndex(); }
 
-  virtual const LocatedTriplesSnapshot& locatedTriplesSnapshot() const {
-    return _executionContext->locatedTriplesSnapshot();
+  virtual const LocatedTriplesState& locatedTriplesState() const {
+    return _executionContext->locatedTriplesState();
   }
 
   // Get an updated `QueryExecutionTree` that applies as many of the given

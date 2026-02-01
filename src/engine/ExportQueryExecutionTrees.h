@@ -96,7 +96,7 @@ class ExportQueryExecutionTrees {
   // These semantics are useful for the string expressions in
   // StringExpressions.cpp.
   static std::optional<Literal> idToLiteral(
-      const Index& index, Id id, const LocalVocab& localVocab,
+      const IndexImpl& index, Id id, const LocalVocab& localVocab,
       bool onlyReturnLiteralsWithXsdString = false);
 
   // Same as the previous function, but only handles the datatypes for which the
@@ -116,7 +116,7 @@ class ExportQueryExecutionTrees {
   // The function resolves a given `ValueId` to a `LiteralOrIri` object. Unlike
   // `idToLiteral` no further processing is applied to the string content.
   static std::optional<LiteralOrIri> idToLiteralOrIri(
-      const Index& index, Id id, const LocalVocab& localVocab,
+      const IndexImpl& index, Id id, const LocalVocab& localVocab,
       bool skipEncodedValues = false);
 
   // Helper for the `idToLiteralOrIri` function: Retrieves a string literal from
@@ -126,12 +126,12 @@ class ExportQueryExecutionTrees {
   // Helper for the `idToLiteralOrIri` function: Retrieves a string literal for
   // a word in the vocabulary.
   static std::optional<LiteralOrIri> getLiteralOrIriFromWordVocabIndex(
-      const Index& index, Id id);
+      const IndexImpl& index, Id id);
 
   // Helper for the `idToLiteralOrIri` function: Retrieves a string literal for
   // a word in the text index.
   static std::optional<LiteralOrIri> getLiteralOrIriFromTextRecordIndex(
-      const Index& index, Id id);
+      const IndexImpl& index, Id id);
 
   // Helper for the `idToLiteral` function: get only literals from the
   // `LiteralOrIri` object.
@@ -152,7 +152,7 @@ class ExportQueryExecutionTrees {
   // This function should only be called with suitable `Datatype` Id's,
   // otherwise `AD_FAIL()` is called.
   static LiteralOrIri getLiteralOrIriFromVocabIndex(
-      const Index& index, Id id, const LocalVocab& localVocab);
+      const IndexImpl& index, Id id, const LocalVocab& localVocab);
 
   // Convert a `stream_generator` to an "ordinary" `InputRange<string>` that
   // yields exactly the same chunks as the `stream_generator`. Exceptions that
@@ -242,7 +242,7 @@ class ExportQueryExecutionTrees {
       const QueryExecutionTree& qet,
       const parsedQuery::SelectClause& selectClause,
       LimitOffsetClause limitAndOffset, CancellationHandle cancellationHandle,
-      STREAMABLE_YIELDER_ARG_DECL);
+      const ad_utility::Timer& requestTimer, STREAMABLE_YIELDER_ARG_DECL);
 
   // Public for testing.
  public:

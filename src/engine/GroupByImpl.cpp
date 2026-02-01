@@ -779,6 +779,11 @@ std::optional<IdTable> GroupByImpl::computeGroupByForSingleIndexScan() const {
     // The variable is never bound, so its count is zero.
     table(0, 0) = Id::makeFromInt(0);
   } else if (indexScan->numVariables() == 3) {
+    // TODO<RobinTF> This currently doesn't work correctly with UPDATE. It
+    // queries the statistics which are never updated. Consider calling
+    // `IndexImpl::recomputeStatistics` and storing the result somewhere in this
+    // case. It also doesn't return the correct result for internal
+    // permutations.
     if (countIsDistinct) {
       auto permutation =
           getPermutationForThreeVariableTriple(*_subtree, var, var);
@@ -841,7 +846,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByObjectWithCount() const {
   // do the index scan, but something smarter).
   const auto& permutation = indexScan->permutation();
   auto result = permutation.getDistinctCol1IdsAndCounts(
-      col0Id.value(), cancellationHandle_, locatedTriplesSnapshot(),
+      col0Id.value(), cancellationHandle_, locatedTriplesState(),
       indexScan->getLimitOffset());
 
   indexScan->updateRuntimeInformationWhenOptimizedOut({});
@@ -900,8 +905,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByForFullIndexScan() const {
       getExecutionContext()->getIndex().getPimpl().getPermutation(
           permutationEnum.value());
   auto table = permutation.getDistinctCol0IdsAndCounts(
-      cancellationHandle_, locatedTriplesSnapshot(),
-      indexScan->getLimitOffset());
+      cancellationHandle_, locatedTriplesState(), indexScan->getLimitOffset());
   if (numCounts == 0) {
     table.setColumnSubset(std::array{ColumnIndex{0}});
   } else if (!variableIsBoundInSubtree) {
@@ -1028,7 +1032,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByForJoinWithFullScan() const {
   Id currentId = subresult->idTable()(0, columnIndex);
   size_t currentCount = 0;
   size_t currentCardinality =
-      index.getCardinality(currentId, permutation, locatedTriplesSnapshot());
+      index.getCardinality(currentId, permutation, locatedTriplesState());
 
   auto pushRow = [&]() {
     // If the count is 0 this means that the element with the `currentId`
@@ -1051,7 +1055,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByForJoinWithFullScan() const {
       // without the internally added triples, but that is not easy to
       // retrieve right now.
       currentCardinality =
-          index.getCardinality(id, permutation, locatedTriplesSnapshot());
+          index.getCardinality(id, permutation, locatedTriplesState());
     }
     currentCount += currentCardinality;
   }

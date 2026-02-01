@@ -17,3 +17,5 @@ addLinkAndDiscoverTestNoLibs(VocabularyTypeTest)
 addLinkAndDiscoverTest(GeoVocabularyTest vocabulary parser util)
 
 addLinkAndDiscoverTest(SplitVocabularyTest index)
+
+addLinkAndDiscoverTestNoLibs(VocabularyTypesTest)

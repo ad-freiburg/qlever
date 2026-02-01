@@ -53,17 +53,19 @@ int main(int argc, char** argv) {
   bool noPatterns;
   bool onlyPsoAndPosPermutations;
   bool persistUpdates;
+  std::vector<std::string> preloadMaterializedViews;
 
   ad_utility::MemorySize memoryMaxSize;
 
   ad_utility::ParameterToProgramOptionFactory optionFactory{
       &globalRuntimeParameters};
 
-  po::options_description options("Options for ServerMain");
+  po::options_description options("Options for qlever-server");
   auto add = [&options](auto&&... args) {
     options.add_options()(AD_FWD(args)...);
   };
   add("help,h", "Produce this help message.");
+  add("version,v", "Print version information.");
   // TODO<joka921> Can we output the "required" automatically?
   add("index-basename,i", po::value<std::string>(&indexBasename)->required(),
       "The basename of the index files (required).");
@@ -111,7 +113,7 @@ int main(int argc, char** argv) {
       "`ql:has-predicate` is not available.");
   add("text,t", po::bool_switch(&text),
       "Also load the text index. The text index must have been built before "
-      "using `IndexBuilderMain` with options `-d` and `- w`.");
+      "using `qlever-index` with options `-d` and `- w`.");
   add("only-pso-and-pos-permutations,o",
       po::bool_switch(&onlyPsoAndPosPermutations),
       "Only load the PSO and POS permutations. This disables queries with "
@@ -170,12 +172,26 @@ int main(int argc, char** argv) {
       "of the smaller join partner in a spatial join, such that prefiltering "
       "will be employed. To disable prefiltering for non-point geometries, set "
       "this option to 0.");
+  add("materialized-view-writer-memory",
+      optionFactory.getProgramOption<
+          &RuntimeParameters::materializedViewWriterMemory_>(),
+      "Memory limit for sorting rows during the writing of materialized "
+      "views.");
+  add("preload-materialized-views,l",
+      po::value<std::vector<std::string>>(&preloadMaterializedViews)
+          ->multitoken(),
+      "The names of materialized views to be loaded automatically on server "
+      "start (this option takes an arbitrary number of arguments).");
   po::variables_map optionsMap;
 
   try {
     po::store(po::parse_command_line(argc, argv, options), optionsMap);
     if (optionsMap.count("help")) {
       std::cout << options << '\n';
+      return EXIT_SUCCESS;
+    }
+    if (optionsMap.count("version")) {
+      std::cout << argv[0] << " " << qlever::version::ProjectVersion << '\n';
       return EXIT_SUCCESS;
     }
     po::notify(optionsMap);
@@ -185,7 +201,7 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
 
-  AD_LOG_INFO << EMPH_ON << "QLever Server, compiled on "
+  AD_LOG_INFO << EMPH_ON << "QLever server, compiled on "
               << qlever::version::DatetimeOfCompilation << " using git hash "
               << qlever::version::GitShortHash << EMPH_OFF << std::endl;
 
@@ -193,7 +209,7 @@ int main(int argc, char** argv) {
     Server server(port, numSimultaneousQueries, memoryMaxSize,
                   std::move(accessToken), noAccessCheck, !noPatterns);
     server.run(indexBasename, text, !noPatterns, !onlyPsoAndPosPermutations,
-               persistUpdates);
+               persistUpdates, preloadMaterializedViews);
   } catch (const std::exception& e) {
     // This code should never be reached as all exceptions should be handled
     // within server.run()
