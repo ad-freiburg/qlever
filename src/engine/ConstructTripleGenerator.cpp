@@ -486,55 +486,115 @@ std::string ConstructTripleGenerator::formatTriple(
 }
 
 // _____________________________________________________________________________
-ad_utility::streams::stream_generator
+ad_utility::InputRangeTypeErased<std::string>
 ConstructTripleGenerator::generateFormattedTriples(
     const TableWithRange& table, ConstructOutputFormat format) {
-  const auto tableWithVocab = table.tableWithVocab_;
-  const size_t currentRowOffset = rowOffset_;
-  const size_t numRows = tableWithVocab.idTable().numRows();
-  rowOffset_ += numRows;
+  // Capture state needed for iteration
+  struct FormattedTripleRange
+      : public ad_utility::InputRangeFromGet<std::string> {
+    // References to generator state
+    const ConstructTripleGenerator& generator_;
+    ConstructOutputFormat format_;
 
-  auto [idCache, cacheStats] = createIdCacheWithStats(numRows);
+    // Table data
+    TableConstRefWithVocab tableWithVocab_;
+    std::vector<uint64_t> rowIndicesVec_;
+    size_t currentRowOffset_;
 
-  auto rowIndicesVec = std::make_shared<std::vector<uint64_t>>(
-      ql::ranges::begin(table.view_), ql::ranges::end(table.view_));
+    // ID cache for avoiding redundant lookups
+    std::shared_ptr<IdCache> idCache_;
+    std::shared_ptr<IdCacheStats> cacheStats_;
 
-  const size_t totalRows = rowIndicesVec->size();
-  const size_t batchSize = getBatchSize();
+    // Iteration state
+    size_t batchSize_;
+    size_t batchStart_ = 0;
+    size_t rowInBatch_ = 0;
+    size_t tripleIdx_ = 0;
+    std::optional<BatchEvaluationCache> batchCache_;
+    std::vector<const std::string*> variableStrings_;
 
-  std::vector<const std::string*> variableStrings(variablesToEvaluate_.size());
-
-  for (size_t batchStart = 0; batchStart < totalRows; batchStart += batchSize) {
-    cancellationHandle_->throwIfCancelled();
-
-    const size_t batchEnd = std::min(batchStart + batchSize, totalRows);
-    ql::span<const uint64_t> batchRowIndices(rowIndicesVec->data() + batchStart,
-                                             batchEnd - batchStart);
-
-    BatchEvaluationCache batchCache = evaluateBatchColumnOriented(
-        tableWithVocab.idTable(), tableWithVocab.localVocab(), batchRowIndices,
-        currentRowOffset, *idCache, *cacheStats);
-
-    for (size_t rowInBatch = 0; rowInBatch < batchCache.numRows; ++rowInBatch) {
-      lookupVariableStrings(batchCache, rowInBatch, *idCache, variableStrings);
-
-      for (size_t tripleIdx = 0; tripleIdx < templateTriples_.size();
-           ++tripleIdx) {
-        const std::string* subject = getTermStringPtr(
-            tripleIdx, 0, batchCache, rowInBatch, variableStrings);
-        const std::string* predicate = getTermStringPtr(
-            tripleIdx, 1, batchCache, rowInBatch, variableStrings);
-        const std::string* object = getTermStringPtr(
-            tripleIdx, 2, batchCache, rowInBatch, variableStrings);
-
-        std::string formatted =
-            formatTriple(subject, predicate, object, format);
-        if (!formatted.empty()) {
-          co_yield formatted;
-        }
-      }
+    FormattedTripleRange(const ConstructTripleGenerator& generator,
+                         const TableWithRange& table,
+                         ConstructOutputFormat format, size_t currentRowOffset)
+        : generator_(generator),
+          format_(format),
+          tableWithVocab_(table.tableWithVocab_),
+          rowIndicesVec_(ql::ranges::begin(table.view_),
+                         ql::ranges::end(table.view_)),
+          currentRowOffset_(currentRowOffset),
+          batchSize_(ConstructTripleGenerator::getBatchSize()),
+          variableStrings_(generator.variablesToEvaluate_.size()) {
+      auto [cache, stats] =
+          generator_.createIdCacheWithStats(rowIndicesVec_.size());
+      idCache_ = std::move(cache);
+      cacheStats_ = std::move(stats);
     }
-  }
+
+    std::optional<std::string> get() override {
+      // Find the next non-empty formatted triple
+      while (batchStart_ < rowIndicesVec_.size()) {
+        generator_.cancellationHandle_->throwIfCancelled();
+
+        // Load new batch if needed
+        if (!batchCache_.has_value()) {
+          const size_t batchEnd =
+              std::min(batchStart_ + batchSize_, rowIndicesVec_.size());
+          ql::span<const uint64_t> batchRowIndices(
+              rowIndicesVec_.data() + batchStart_, batchEnd - batchStart_);
+
+          batchCache_ = generator_.evaluateBatchColumnOriented(
+              tableWithVocab_.idTable(), tableWithVocab_.localVocab(),
+              batchRowIndices, currentRowOffset_, *idCache_, *cacheStats_);
+          rowInBatch_ = 0;
+          tripleIdx_ = 0;
+        }
+
+        // Process current batch
+        while (rowInBatch_ < batchCache_->numRows) {
+          // Lookup variable strings for current row (once per row)
+          if (tripleIdx_ == 0) {
+            generator_.lookupVariableStrings(*batchCache_, rowInBatch_,
+                                             *idCache_, variableStrings_);
+          }
+
+          // Process triples for current row
+          while (tripleIdx_ < generator_.templateTriples_.size()) {
+            const std::string* subject = generator_.getTermStringPtr(
+                tripleIdx_, 0, *batchCache_, rowInBatch_, variableStrings_);
+            const std::string* predicate = generator_.getTermStringPtr(
+                tripleIdx_, 1, *batchCache_, rowInBatch_, variableStrings_);
+            const std::string* object = generator_.getTermStringPtr(
+                tripleIdx_, 2, *batchCache_, rowInBatch_, variableStrings_);
+
+            ++tripleIdx_;
+
+            std::string formatted =
+                generator_.formatTriple(subject, predicate, object, format_);
+            if (!formatted.empty()) {
+              return formatted;
+            }
+          }
+
+          // Move to next row
+          ++rowInBatch_;
+          tripleIdx_ = 0;
+        }
+
+        // Move to next batch
+        batchStart_ += batchSize_;
+        batchCache_.reset();
+      }
+
+      return std::nullopt;  // Done
+    }
+  };
+
+  const size_t currentRowOffset = rowOffset_;
+  rowOffset_ += table.tableWithVocab_.idTable().numRows();
+
+  return ad_utility::InputRangeTypeErased<std::string>{
+      std::make_unique<FormattedTripleRange>(*this, table, format,
+                                             currentRowOffset)};
 }
 
 // ============================================================================

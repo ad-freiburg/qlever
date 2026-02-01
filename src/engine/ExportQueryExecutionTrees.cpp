@@ -1137,15 +1137,11 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
       constructTriples, std::move(result), qet.getVariableColumns(),
       qet.getQec()->getIndex(), std::move(cancellationHandle));
 
-  auto generatorOfFormattedTriples = ql::views::transform(
-      ad_utility::OwningView{std::move(rowIndices)},
-      [generator = std::move(generator),
-       outputFormat](const TableWithRange& table) mutable {
-        return generator.generateFormattedTriples(table, outputFormat);
-      });
-
-  for (auto&& innerGenerator : generatorOfFormattedTriples) {
-    for (auto&& tripleString : innerGenerator) {
+  // generateFormattedTriples returns InputRangeTypeErased<std::string>
+  // which works in both C++17 and C++20 modes
+  for (auto&& table : rowIndices) {
+    for (auto&& tripleString :
+         generator.generateFormattedTriples(table, outputFormat)) {
       STREAMABLE_YIELD(tripleString);
     }
   }

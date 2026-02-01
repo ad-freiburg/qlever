@@ -188,7 +188,9 @@ class ConstructTripleGenerator {
   // _____________________________________________________________________________
   // Generate triples as formatted strings for the given output format.
   // This is the main entry point for streaming CONSTRUCT results.
-  ad_utility::streams::stream_generator generateFormattedTriples(
+  // Returns a type-erased input range that works in both C++17 and C++20.
+  // Yields formatted strings directly, avoiding StringTriple allocation.
+  ad_utility::InputRangeTypeErased<std::string> generateFormattedTriples(
       const TableWithRange& table, ConstructOutputFormat format);
 
   // _____________________________________________________________________________
