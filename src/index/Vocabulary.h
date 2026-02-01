@@ -243,7 +243,7 @@ class Vocabulary {
 };
 
 namespace detail {
-// Thecompile-time definitions `QLEVER_VOCAB_UNCOMPRESSED_IN_MEMORY` can be
+// The compile-time definitions `QLEVER_VOCAB_UNCOMPRESSED_IN_MEMORY` can be
 // used to disable the external vocab and the compression of the vocab at
 // compile time. NOTE: These change the binary format of QLever's index, so
 // changing them requires rebuilding of the indices.
