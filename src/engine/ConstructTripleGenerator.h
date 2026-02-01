@@ -71,7 +71,14 @@ enum class ConstructOutputFormat { TURTLE, CSV, TSV };
 // For object access: use generateStringTriples() static helper.
 //
 // ============================================================================
+
+// Forward declaration for friend access
+class FormattedTripleIterator;
+
 class ConstructTripleGenerator {
+  // Allow FormattedTripleIterator to access private members for iteration
+  friend class FormattedTripleIterator;
+
  public:
   using CancellationHandle = ad_utility::SharedCancellationHandle;
   using StringTriple = QueryExecutionTree::StringTriple;
