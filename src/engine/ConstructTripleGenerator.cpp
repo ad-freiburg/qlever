@@ -177,40 +177,40 @@ ConstructTripleGenerator::evaluateBatchColumnOriented(
   const size_t numRows = rowIndices.size();
   batchCache.numRows = numRows;
 
-  // Initialize variable Ids: [varIdx][rowInBatch]
-  // We store Id values here and look up strings from idCache during
-  // instantiation. This avoids storing strings in both idCache and batchCache.
-  batchCache.variableIds.resize(variablesToEvaluate_.size());
-  for (auto& column : batchCache.variableIds) {
-    column.resize(numRows);
+  // Initialize variable string pointers: [varIdx][rowInBatch]
+  // We store pointers directly into idCache to avoid a second hash lookup
+  // during instantiation. Pointers are stable within a batch since we don't
+  // modify idCache between evaluation and instantiation (no rehashing).
+  batchCache.variableStringPtrs.resize(variablesToEvaluate_.size());
+  for (auto& column : batchCache.variableStringPtrs) {
+    column.resize(numRows, nullptr);
   }
 
   // Evaluate variables column-by-column for better cache locality
   // The IdTable is accessed sequentially for each column
   for (size_t varIdx = 0; varIdx < variablesToEvaluate_.size(); ++varIdx) {
     const auto& varInfo = variablesToEvaluate_[varIdx];
-    auto& columnIds = batchCache.variableIds[varIdx];
+    auto& columnPtrs = batchCache.variableStringPtrs[varIdx];
 
     if (!varInfo.columnIndex.has_value()) {
-      // Variable not in result - all values are nullopt (already default)
+      // Variable not in result - all pointers are nullptr (already default)
       continue;
     }
 
     const size_t colIdx = varInfo.columnIndex.value();
 
-    // Read all IDs from this column for all rows in the batch
-    // and ensure their string values are in the cache
+    // Read all IDs from this column for all rows in the batch,
+    // ensure their string values are in the cache, and store pointers directly
     for (size_t rowInBatch = 0; rowInBatch < numRows; ++rowInBatch) {
       const uint64_t rowIdx = rowIndices[rowInBatch];
       Id id = idTable(rowIdx, colIdx);
 
-      // Store the Id in the batch cache
-      columnIds[rowInBatch] = id;
-
-      // Ensure the string value is in idCache (compute if not present)
+      // Look up or compute the string value and store pointer directly
       auto it = idCache.find(id);
       if (it != idCache.end()) {
         ++cacheStats.hits;
+        // Store pointer directly (empty string means UNDEF)
+        columnPtrs[rowInBatch] = it->second.empty() ? nullptr : &it->second;
       } else {
         ++cacheStats.misses;
         // Build minimal context for ID-to-string conversion
@@ -219,7 +219,11 @@ ConstructTripleGenerator::evaluateBatchColumnOriented(
             index_.get(), currentRowOffset};
         auto value = ConstructQueryEvaluator::evaluateWithColumnIndex(
             varInfo.columnIndex, context);
-        idCache[id] = std::move(value);
+        // Use empty string as sentinel for UNDEF values
+        auto [newIt, _] = idCache.emplace(id, value.value_or(std::string{}));
+        // Store pointer directly (empty string means UNDEF)
+        columnPtrs[rowInBatch] =
+            newIt->second.empty() ? nullptr : &newIt->second;
       }
     }
   }
@@ -353,10 +357,6 @@ const std::string* ConstructTripleGenerator::getTermStringPtr(
     size_t rowInBatch,
     const std::vector<const std::string*>& variableStrings) const {
   const TriplePatternInfo& info = triplePatternInfos_[tripleIdx];
-
-  // Helper lambda to get a pointer to the string value for a position.
-  // Returns nullptr if the value is UNDEF.
-  // Variable strings are pre-looked-up in variableStrings cache.
   const TermResolution& resolution = info.resolutions[pos];
 
   switch (resolution.source) {
@@ -365,14 +365,13 @@ const std::string* ConstructTripleGenerator::getTermStringPtr(
       return opt.has_value() ? &opt.value() : nullptr;
     }
     case TermSource::VARIABLE: {
-      // Use pre-computed variable string pointer (already looked up from
-      // idCache once per variable per row)
+      // Variable string pointers are already stored directly in the batch
+      // cache, eliminating hash lookups during instantiation
       return variableStrings[resolution.index];
     }
     case TermSource::BLANK_NODE: {
-      const auto& opt =
-          batchCache.getBlankNodeValue(resolution.index, rowInBatch);
-      return opt.has_value() ? &opt.value() : nullptr;
+      // Blank node values are always valid (computed for each row)
+      return &batchCache.getBlankNodeValue(resolution.index, rowInBatch);
     }
   }
 
@@ -396,6 +395,15 @@ std::pair<std::shared_ptr<ConstructTripleGenerator::IdCache>,
           std::shared_ptr<ConstructTripleGenerator::IdCacheStats>>
 ConstructTripleGenerator::createIdCacheWithStats(size_t numRows) const {
   auto idCache = std::make_shared<IdCache>();
+  // Pre-size the cache to reduce rehashing. Estimate unique IDs based on
+  // number of rows and variables. A fraction of (rows * variables) is a
+  // reasonable upper bound since many values repeat across rows.
+  const size_t numVars = variablesToEvaluate_.size();
+  const size_t estimatedUniqueIds =
+      std::min(numRows * numVars, size_t{100000});  // Cap at 100k
+  if (estimatedUniqueIds > 0) {
+    idCache->reserve(estimatedUniqueIds);
+  }
   auto cacheStats = std::shared_ptr<IdCacheStats>(
       new IdCacheStats(), [numRows](IdCacheStats* stats) {
         if (stats->totalLookups() > 10000) {
@@ -414,20 +422,12 @@ ConstructTripleGenerator::createIdCacheWithStats(size_t numRows) const {
 // _____________________________________________________________________________
 void ConstructTripleGenerator::lookupVariableStrings(
     const BatchEvaluationCache& batchCache, size_t rowInBatch,
-    const IdCache& idCache,
+    [[maybe_unused]] const IdCache& idCache,
     std::vector<const std::string*>& variableStrings) const {
+  // String pointers are already stored in the batch cache during evaluation,
+  // eliminating the need for hash lookups here. Just copy the pointers.
   for (size_t varIdx = 0; varIdx < variablesToEvaluate_.size(); ++varIdx) {
-    const auto& optId = batchCache.getVariableId(varIdx, rowInBatch);
-    if (!optId.has_value()) {
-      variableStrings[varIdx] = nullptr;
-      continue;
-    }
-    auto it = idCache.find(optId.value());
-    if (it == idCache.end() || !it->second.has_value()) {
-      variableStrings[varIdx] = nullptr;
-    } else {
-      variableStrings[varIdx] = &it->second.value();
-    }
+    variableStrings[varIdx] = batchCache.getVariableString(varIdx, rowInBatch);
   }
 }
 

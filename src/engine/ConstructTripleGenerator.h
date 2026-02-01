@@ -106,8 +106,9 @@ class ConstructTripleGenerator {
   };
 
   // Cache for ID-to-string conversions to avoid redundant conversions
-  // when the same ID appears multiple times across rows
-  using IdCache = ad_utility::HashMap<Id, std::optional<std::string>>;
+  // when the same ID appears multiple times across rows.
+  // Empty string represents UNDEF values (no valid RDF term is empty).
+  using IdCache = ad_utility::HashMap<Id, std::string>;
 
   // Statistics for ID cache performance analysis
   struct IdCacheStats {
@@ -140,27 +141,28 @@ class ConstructTripleGenerator {
   static size_t getBatchSize();
 
   // Batch evaluation cache organized for column-oriented access.
-  // variableIds[varIdx][rowInBatch] stores Id values - strings are looked up
-  // from the shared IdCache on demand during instantiation, avoiding double
-  // storage of string values.
+  // variableStringPtrs[varIdx][rowInBatch] stores pointers directly into the
+  // IdCache, eliminating the need for a second hash lookup during triple
+  // instantiation. Pointers are stable within a batch because we don't modify
+  // IdCache between evaluation and instantiation.
   // blankNodeValues[blankNodeIdx][rowInBatch] stores strings directly since
   // blank nodes can't be cached (the blank node values include the row number).
   struct BatchEvaluationCache {
-    // Store Id values for variables - nullopt if variable not in result
-    std::vector<std::vector<std::optional<Id>>> variableIds;
+    // Store pointers to strings in IdCache - nullptr for UNDEF or missing
+    std::vector<std::vector<const std::string*>> variableStringPtrs;
     // Store string values for blank nodes (can't be cached by Id)
-    std::vector<std::vector<std::optional<std::string>>> blankNodeValues;
+    std::vector<std::vector<std::string>> blankNodeValues;
     size_t numRows = 0;
 
-    // Get Id for a specific variable at a row in the batch
-    const std::optional<Id>& getVariableId(size_t varIdx,
-                                           size_t rowInBatch) const {
-      return variableIds[varIdx][rowInBatch];
+    // Get string pointer for a specific variable at a row in the batch
+    const std::string* getVariableString(size_t varIdx,
+                                         size_t rowInBatch) const {
+      return variableStringPtrs[varIdx][rowInBatch];
     }
 
     // Get value for a specific blank node at a row in the batch
-    const std::optional<std::string>& getBlankNodeValue(
-        size_t blankNodeIdx, size_t rowInBatch) const {
+    const std::string& getBlankNodeValue(size_t blankNodeIdx,
+                                         size_t rowInBatch) const {
       return blankNodeValues[blankNodeIdx][rowInBatch];
     }
   };
