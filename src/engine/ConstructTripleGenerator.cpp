@@ -501,7 +501,7 @@ ConstructTripleGenerator::generateFormattedTriples(
     std::vector<uint64_t> rowIndicesVec_;
     size_t currentRowOffset_;
 
-    // ID cache for avoiding redundant lookups
+    // ID cache for avoiding redundant lookups into `IdTable`.
     std::shared_ptr<IdCache> idCache_;
     std::shared_ptr<IdCacheStats> cacheStats_;
 
@@ -645,8 +645,8 @@ ConstructTripleGenerator::generateStringTriples(
   auto tableTriples = ql::views::transform(
       ad_utility::OwningView{std::move(rowIndices)},
       [generator = std::move(generator)](const TableWithRange& table) mutable {
-        // The generator now handles the:
-        // Table -> Rows -> Triple Patterns -> StringTriples
+        // conceptually, the generator now handles the following pipeline:
+        // table -> rows -> triple patterns -> string triples
         return generator.generateStringTriplesForResultTable(table);
       });
   return InputRangeTypeErased(ql::views::join(std::move(tableTriples)));
