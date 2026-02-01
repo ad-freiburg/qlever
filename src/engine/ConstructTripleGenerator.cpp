@@ -205,13 +205,13 @@ ConstructTripleGenerator::evaluateBatchColumnOriented(
       const uint64_t rowIdx = rowIndices[rowInBatch];
       Id id = idTable(rowIdx, colIdx);
 
-      // Look up or compute the string value and store pointer directly
-      auto it = idCache.find(id);
-      if (it != idCache.end()) {
-        ++cacheStats.hits;
-        // Store pointer directly (empty string means UNDEF)
-        columnPtrs[rowInBatch] = it->second.empty() ? nullptr : &it->second;
-      } else {
+      // Use LRU cache's getOrCompute: returns cached value or computes and
+      // caches it. The compute lambda is only called on cache miss.
+      // Pointers are stable within a batch because:
+      // 1. LRU only evicts entries not accessed in the current batch
+      // 2. Cache capacity >= batch_size * num_variables (ensured in creation)
+      size_t missesBefore = cacheStats.misses;
+      const std::string& cachedValue = idCache.getOrCompute(id, [&](const Id&) {
         ++cacheStats.misses;
         // Build minimal context for ID-to-string conversion
         ConstructQueryExportContext context{
@@ -220,11 +220,16 @@ ConstructTripleGenerator::evaluateBatchColumnOriented(
         auto value = ConstructQueryEvaluator::evaluateWithColumnIndex(
             varInfo.columnIndex, context);
         // Use empty string as sentinel for UNDEF values
-        auto [newIt, _] = idCache.emplace(id, value.value_or(std::string{}));
-        // Store pointer directly (empty string means UNDEF)
-        columnPtrs[rowInBatch] =
-            newIt->second.empty() ? nullptr : &newIt->second;
+        return value.value_or(std::string{});
+      });
+
+      // Track hits (compute lambda not called means it was a cache hit)
+      if (cacheStats.misses == missesBefore) {
+        ++cacheStats.hits;
       }
+
+      // Store pointer directly (empty string means UNDEF)
+      columnPtrs[rowInBatch] = cachedValue.empty() ? nullptr : &cachedValue;
     }
   }
 
@@ -394,25 +399,24 @@ const std::string* ConstructTripleGenerator::getTermStringPtr(
 std::pair<std::shared_ptr<ConstructTripleGenerator::IdCache>,
           std::shared_ptr<ConstructTripleGenerator::IdCacheStats>>
 ConstructTripleGenerator::createIdCacheWithStats(size_t numRows) const {
-  auto idCache = std::make_shared<IdCache>();
-  // Pre-size the cache to reduce rehashing. Estimate unique IDs based on
-  // number of rows and variables. A fraction of (rows * variables) is a
-  // reasonable upper bound since many values repeat across rows.
+  // Ensure cache capacity is large enough to hold the working set of a single
+  // batch (batch_size * num_variables) to guarantee pointer stability within
+  // a batch. Add headroom for cross-batch cache hits on repeated values.
   const size_t numVars = variablesToEvaluate_.size();
-  const size_t estimatedUniqueIds =
-      std::min(numRows * numVars, size_t{100000});  // Cap at 100k
-  if (estimatedUniqueIds > 0) {
-    idCache->reserve(estimatedUniqueIds);
-  }
+  const size_t minCapacityForBatch =
+      getBatchSize() * std::max(numVars, size_t{1}) * 2;
+  const size_t capacity = std::max(MIN_CACHE_CAPACITY, minCapacityForBatch);
+  auto idCache = std::make_shared<IdCache>(capacity);
   auto cacheStats = std::shared_ptr<IdCacheStats>(
-      new IdCacheStats(), [numRows](IdCacheStats* stats) {
+      new IdCacheStats(), [numRows, capacity](IdCacheStats* stats) {
         if (stats->totalLookups() > 10000) {
           AD_LOG_DEBUG << "ID Cache Stats - Rows: " << numRows
+                       << ", Capacity: " << capacity
                        << ", Lookups: " << stats->totalLookups()
                        << ", Hits: " << stats->hits
                        << ", Misses: " << stats->misses
                        << ", Hit Rate: " << (stats->hitRate() * 100.0) << "%"
-                       << ", Unique IDs: " << stats->misses << "\n";
+                       << "\n";
         }
         delete stats;
       });

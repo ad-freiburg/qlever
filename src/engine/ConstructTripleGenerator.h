@@ -8,6 +8,7 @@
 #define QLEVER_SRC_ENGINE_CONSTRUCTTRIPLEGENERATOR_H
 
 #include <functional>
+#include <list>
 
 #include "backports/span.h"
 #include "engine/ConstructQueryEvaluator.h"
@@ -23,6 +24,59 @@
 
 // Output format for CONSTRUCT query results.
 enum class ConstructOutputFormat { TURTLE, CSV, TSV };
+
+// ============================================================================
+// StableLRUCache
+// ============================================================================
+// An LRU cache with pointer/reference stability guarantees.
+//
+// Unlike ad_utility::util::LRUCache which uses absl::flat_hash_map (no pointer
+// stability on insertion), this implementation pre-reserves the hash map to
+// prevent rehashing. This guarantees that references returned by getOrCompute()
+// remain valid until the referenced entry is evicted.
+//
+// This is critical for ConstructTripleGenerator which stores pointers to
+// cached strings in BatchEvaluationCache for fast triple instantiation.
+// ============================================================================
+template <typename K, typename V>
+class StableLRUCache {
+ public:
+  explicit StableLRUCache(size_t capacity) : capacity_{capacity} {
+    AD_CONTRACT_CHECK(capacity > 0);
+    // Pre-allocate to prevent rehashing, ensuring pointer stability
+    cache_.reserve(capacity);
+  }
+
+  // Look up key in cache. On hit, return reference and mark as recently used.
+  // On miss, call computeFunc to get value, insert into cache (evicting LRU
+  // if at capacity), and return reference. The returned reference is stable
+  // until this entry is evicted by LRU.
+  template <typename Func>
+  const V& getOrCompute(const K& key, Func computeFunc) {
+    auto it = cache_.find(key);
+    if (it != cache_.end()) {
+      // Hit: move to front (most recently used)
+      keys_.splice(keys_.begin(), keys_, it->second.second);
+      return it->second.first;
+    }
+    // Miss: evict LRU if at capacity
+    if (cache_.size() >= capacity_) {
+      cache_.erase(keys_.back());
+      keys_.pop_back();
+    }
+    // Insert new entry
+    keys_.push_front(key);
+    auto [newIt, inserted] =
+        cache_.emplace(key, std::make_pair(computeFunc(key), keys_.begin()));
+    AD_CORRECTNESS_CHECK(inserted);
+    return newIt->second.first;
+  }
+
+ private:
+  size_t capacity_;
+  std::list<K> keys_;  // LRU order: front = most recent, back = least recent
+  ad_utility::HashMap<K, std::pair<V, typename std::list<K>::iterator>> cache_;
+};
 
 // ============================================================================
 // ConstructTripleGenerator
@@ -105,10 +159,19 @@ class ConstructTripleGenerator {
     std::string suffix;  // "_" + label
   };
 
-  // Cache for ID-to-string conversions to avoid redundant conversions
+  // Cache for ID-to-string conversions to avoid redundant vocabulary lookups
   // when the same ID appears multiple times across rows.
+  // Uses LRU eviction to bound memory usage for queries with many unique IDs.
   // Empty string represents UNDEF values (no valid RDF term is empty).
-  using IdCache = ad_utility::HashMap<Id, std::string>;
+  // Uses StableLRUCache to guarantee pointer stability for
+  // BatchEvaluationCache.
+  using IdCache = StableLRUCache<Id, std::string>;
+
+  // Minimum capacity for the LRU cache. This should be large enough to hold
+  // the working set of a single batch (batch_size * num_variables) plus
+  // headroom for cross-batch cache hits on repeated values (e.g., predicates).
+  // 100k entries ≈ 10-20MB depending on average string length.
+  static constexpr size_t MIN_CACHE_CAPACITY = 100'000;
 
   // Statistics for ID cache performance analysis
   struct IdCacheStats {
