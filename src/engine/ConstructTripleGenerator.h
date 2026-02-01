@@ -84,6 +84,9 @@ class ConstructTripleGenerator {
   using StringTriple = QueryExecutionTree::StringTriple;
   using Triples = ad_utility::sparql_types::Triples;
 
+  // Number of positions in a triple: subject, predicate, object.
+  static constexpr size_t NUM_TRIPLE_POSITIONS = 3;
+
   // Identifies the source of a term's value during triple instantiation
   enum class TermSource { CONSTANT, VARIABLE, BLANK_NODE };
 
@@ -95,7 +98,7 @@ class ConstructTripleGenerator {
 
   // Pre-analyzed info for a triple pattern to enable fast instantiation
   struct TriplePatternInfo {
-    std::array<TermResolution, 3> resolutions;
+    std::array<TermResolution, NUM_TRIPLE_POSITIONS> resolutions;
   };
 
   // Variable with pre-computed column index for fast evaluation
@@ -245,16 +248,50 @@ class ConstructTripleGenerator {
  private:
   // Scans the template triples to identify all unique Variables and BlankNodes,
   // precomputes constants (IRIs/Literals), and builds the resolution map.
+  // Delegates to analyzeTerm() for each term in each triple pattern.
   void analyzeTemplate();
+
+  // Analyzes a single term and returns its resolution info.
+  // Dispatches to the appropriate type-specific handler based on term type.
+  TermResolution analyzeTerm(const GraphTerm& term, size_t tripleIdx,
+                             size_t pos, PositionInTriple role);
+
+  // Analyzes an IRI term: precomputes the string value.
+  TermResolution analyzeIriTerm(const Iri& iri, size_t tripleIdx, size_t pos);
+
+  // Analyzes a Literal term: precomputes the string value.
+  TermResolution analyzeLiteralTerm(const Literal& literal, size_t tripleIdx,
+                                    size_t pos, PositionInTriple role);
+
+  // Analyzes a Variable term: registers it and precomputes column index.
+  TermResolution analyzeVariableTerm(const Variable& var);
+
+  // Analyzes a BlankNode term: registers it and precomputes format strings.
+  TermResolution analyzeBlankNodeTerm(const BlankNode& blankNode);
 
   // Evaluates all Variables and BlankNodes for a batch of rows using
   // column-oriented access for better cache locality.
-  // Processes variables column-by-column, then blank nodes row-by-row.
-  // Uses ql::span for zero-copy access to row indices.
+  // Delegates to evaluateVariablesForBatch() and evaluateBlankNodesForBatch().
   BatchEvaluationCache evaluateBatchColumnOriented(
       const IdTable& idTable, const LocalVocab& localVocab,
       ql::span<const uint64_t> rowIndices, size_t currentRowOffset,
       IdCache& idCache, IdCacheStatsLogger& statsLogger) const;
+
+  // Evaluates all variables for a batch of rows using column-oriented access.
+  // For each variable, reads all IDs from its column across all batch rows,
+  // converts them to strings (using the cache), and stores pointers.
+  void evaluateVariablesForBatch(BatchEvaluationCache& batchCache,
+                                 const IdTable& idTable,
+                                 const LocalVocab& localVocab,
+                                 ql::span<const uint64_t> rowIndices,
+                                 size_t currentRowOffset, IdCache& idCache,
+                                 IdCacheStatsLogger& statsLogger) const;
+
+  // Evaluates all blank nodes for a batch of rows.
+  // Uses precomputed prefix/suffix, only concatenating the row number per row.
+  void evaluateBlankNodesForBatch(BatchEvaluationCache& batchCache,
+                                  ql::span<const uint64_t> rowIndices,
+                                  size_t currentRowOffset) const;
 
   // Instantiates a single triple using the precomputed constants and
   // the batch evaluation cache for a specific row. Returns an empty
@@ -306,7 +343,8 @@ class ConstructTripleGenerator {
 
   // Precomputed constant values for IRIs and Literals
   // [tripleIdx][position] -> evaluated constant (or nullopt if not a constant)
-  std::vector<std::array<std::optional<std::string>, 3>> precomputedConstants_;
+  std::vector<std::array<std::optional<std::string>, NUM_TRIPLE_POSITIONS>>
+      precomputedConstants_;
 
   // Pre-analyzed info for each triple pattern (resolutions + skip flag)
   std::vector<TriplePatternInfo> triplePatternInfos_;

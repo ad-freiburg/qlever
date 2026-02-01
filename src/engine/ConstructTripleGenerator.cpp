@@ -64,6 +64,13 @@ size_t ConstructTripleGenerator::getBatchSize() {
 //   - VARIABLE: Column index is pre-computed for O(1) access per row
 //   - BLANK_NODE: Format prefix/suffix are pre-built (row number varies)
 //
+// The main entry point is analyzeTemplate(), which delegates to:
+//   - analyzeTerm(): Dispatches based on term type
+//   - analyzeIriTerm(): Precomputes IRI string value
+//   - analyzeLiteralTerm(): Precomputes Literal string value
+//   - analyzeVariableTerm(): Registers variable and precomputes column index
+//   - analyzeBlankNodeTerm(): Registers blank node and precomputes format
+//
 // This analysis enables fast per-row instantiation without repeated parsing
 // or hash map lookups in the hot path.
 // ============================================================================
@@ -77,58 +84,80 @@ void ConstructTripleGenerator::analyzeTemplate() {
     const auto& triple = templateTriples_[tripleIdx];
     TriplePatternInfo& info = triplePatternInfos_[tripleIdx];
 
-    for (size_t pos = 0; pos < 3; ++pos) {
-      const GraphTerm& term = triple[pos];
+    for (size_t pos = 0; pos < NUM_TRIPLE_POSITIONS; ++pos) {
       PositionInTriple role = static_cast<PositionInTriple>(pos);
-
-      if (std::holds_alternative<Iri>(term)) {
-        // Precompute IRI value
-        auto val = ConstructQueryEvaluator::evaluate(std::get<Iri>(term));
-        precomputedConstants_[tripleIdx][pos] = std::move(val);
-        info.resolutions[pos] = {TermSource::CONSTANT, tripleIdx};
-
-      } else if (std::holds_alternative<Literal>(term)) {
-        // Precompute Literal value
-        auto val =
-            ConstructQueryEvaluator::evaluate(std::get<Literal>(term), role);
-        precomputedConstants_[tripleIdx][pos] = std::move(val);
-        info.resolutions[pos] = {TermSource::CONSTANT, tripleIdx};
-
-      } else if (std::holds_alternative<Variable>(term)) {
-        // Track Variable for per-row evaluation with pre-computed column index
-        const Variable& var = std::get<Variable>(term);
-        if (!variableToIndex_.contains(var)) {
-          size_t idx = variablesToEvaluate_.size();
-          variableToIndex_[var] = idx;
-          // Pre-compute the column index to avoid hash lookups during
-          // evaluation
-          std::optional<size_t> columnIndex;
-          if (variableColumns_.get().contains(var)) {
-            columnIndex = variableColumns_.get().at(var).columnIndex_;
-          }
-          variablesToEvaluate_.push_back({var, columnIndex});
-        }
-        info.resolutions[pos] = {TermSource::VARIABLE, variableToIndex_[var]};
-
-      } else if (std::holds_alternative<BlankNode>(term)) {
-        // Track BlankNode for per-row evaluation with precomputed format
-        const BlankNode& blankNode = std::get<BlankNode>(term);
-        const std::string& label = blankNode.label();
-        if (!blankNodeLabelToIndex_.contains(label)) {
-          size_t idx = blankNodesToEvaluate_.size();
-          blankNodeLabelToIndex_[label] = idx;
-          // Precompute prefix ("_:g" or "_:u") and suffix ("_" + label)
-          // so we only need to concatenate the row number per row
-          BlankNodeFormatInfo formatInfo;
-          formatInfo.prefix = blankNode.isGenerated() ? "_:g" : "_:u";
-          formatInfo.suffix = absl::StrCat("_", label);
-          blankNodesToEvaluate_.push_back(std::move(formatInfo));
-        }
-        info.resolutions[pos] = {TermSource::BLANK_NODE,
-                                 blankNodeLabelToIndex_[label]};
-      }
+      info.resolutions[pos] = analyzeTerm(triple[pos], tripleIdx, pos, role);
     }
   }
+}
+
+// _____________________________________________________________________________
+ConstructTripleGenerator::TermResolution ConstructTripleGenerator::analyzeTerm(
+    const GraphTerm& term, size_t tripleIdx, size_t pos,
+    PositionInTriple role) {
+  if (std::holds_alternative<Iri>(term)) {
+    return analyzeIriTerm(std::get<Iri>(term), tripleIdx, pos);
+  } else if (std::holds_alternative<Literal>(term)) {
+    return analyzeLiteralTerm(std::get<Literal>(term), tripleIdx, pos, role);
+  } else if (std::holds_alternative<Variable>(term)) {
+    return analyzeVariableTerm(std::get<Variable>(term));
+  } else if (std::holds_alternative<BlankNode>(term)) {
+    return analyzeBlankNodeTerm(std::get<BlankNode>(term));
+  }
+  // Unreachable for valid GraphTerm
+  return {TermSource::CONSTANT, 0};
+}
+
+// _____________________________________________________________________________
+ConstructTripleGenerator::TermResolution
+ConstructTripleGenerator::analyzeIriTerm(const Iri& iri, size_t tripleIdx,
+                                         size_t pos) {
+  auto val = ConstructQueryEvaluator::evaluate(iri);
+  precomputedConstants_[tripleIdx][pos] = std::move(val);
+  return {TermSource::CONSTANT, tripleIdx};
+}
+
+// _____________________________________________________________________________
+ConstructTripleGenerator::TermResolution
+ConstructTripleGenerator::analyzeLiteralTerm(const Literal& literal,
+                                             size_t tripleIdx, size_t pos,
+                                             PositionInTriple role) {
+  auto val = ConstructQueryEvaluator::evaluate(literal, role);
+  precomputedConstants_[tripleIdx][pos] = std::move(val);
+  return {TermSource::CONSTANT, tripleIdx};
+}
+
+// _____________________________________________________________________________
+ConstructTripleGenerator::TermResolution
+ConstructTripleGenerator::analyzeVariableTerm(const Variable& var) {
+  if (!variableToIndex_.contains(var)) {
+    size_t idx = variablesToEvaluate_.size();
+    variableToIndex_[var] = idx;
+    // Pre-compute the column index to avoid hash lookups during evaluation
+    std::optional<size_t> columnIndex;
+    if (variableColumns_.get().contains(var)) {
+      columnIndex = variableColumns_.get().at(var).columnIndex_;
+    }
+    variablesToEvaluate_.push_back({var, columnIndex});
+  }
+  return {TermSource::VARIABLE, variableToIndex_[var]};
+}
+
+// _____________________________________________________________________________
+ConstructTripleGenerator::TermResolution
+ConstructTripleGenerator::analyzeBlankNodeTerm(const BlankNode& blankNode) {
+  const std::string& label = blankNode.label();
+  if (!blankNodeLabelToIndex_.contains(label)) {
+    size_t idx = blankNodesToEvaluate_.size();
+    blankNodeLabelToIndex_[label] = idx;
+    // Precompute prefix ("_:g" or "_:u") and suffix ("_" + label)
+    // so we only need to concatenate the row number per row
+    BlankNodeFormatInfo formatInfo;
+    formatInfo.prefix = blankNode.isGenerated() ? "_:g" : "_:u";
+    formatInfo.suffix = absl::StrCat("_", label);
+    blankNodesToEvaluate_.push_back(std::move(formatInfo));
+  }
+  return {TermSource::BLANK_NODE, blankNodeLabelToIndex_[label]};
 }
 
 // _____________________________________________________________________________
@@ -148,10 +177,13 @@ ConstructTripleGenerator::ConstructTripleGenerator(
 // ============================================================================
 // Batch Evaluation (Column-Oriented Processing)
 // ============================================================================
-// Evaluates Variables and BlankNodes for a batch of rows using column-oriented
-// access for improved CPU cache locality:
+// Evaluates Variables and BlankNodes for a batch of rows.
 //
-// Column-oriented access pattern:
+// The main entry point is evaluateBatchColumnOriented(), which delegates to:
+//   - evaluateVariablesForBatch(): Column-oriented variable evaluation
+//   - evaluateBlankNodesForBatch(): Row-by-row blank node generation
+//
+// Column-oriented access pattern for variables:
 //   for each variable V:
 //     for each row R in batch:
 //       read idTable[R][column(V)]    <-- Sequential reads within a column
@@ -175,10 +207,22 @@ ConstructTripleGenerator::evaluateBatchColumnOriented(
     ql::span<const uint64_t> rowIndices, size_t currentRowOffset,
     IdCache& idCache, IdCacheStatsLogger& statsLogger) const {
   BatchEvaluationCache batchCache;
-  const size_t numRows = rowIndices.size();
-  batchCache.numRows = numRows;
+  batchCache.numRows = rowIndices.size();
 
-  // Get reference to stats for tracking hits/misses
+  evaluateVariablesForBatch(batchCache, idTable, localVocab, rowIndices,
+                            currentRowOffset, idCache, statsLogger);
+  evaluateBlankNodesForBatch(batchCache, rowIndices, currentRowOffset);
+
+  return batchCache;
+}
+
+// _____________________________________________________________________________
+void ConstructTripleGenerator::evaluateVariablesForBatch(
+    BatchEvaluationCache& batchCache, const IdTable& idTable,
+    const LocalVocab& localVocab, ql::span<const uint64_t> rowIndices,
+    size_t currentRowOffset, IdCache& idCache,
+    IdCacheStatsLogger& statsLogger) const {
+  const size_t numRows = rowIndices.size();
   auto& cacheStats = statsLogger.stats();
 
   // Initialize variable string pointers: [varIdx][rowInBatch]
@@ -190,8 +234,8 @@ ConstructTripleGenerator::evaluateBatchColumnOriented(
     column.resize(numRows, nullptr);
   }
 
-  // Evaluate variables column-by-column for better cache locality
-  // The IdTable is accessed sequentially for each column
+  // Evaluate variables column-by-column for better cache locality.
+  // The IdTable is accessed sequentially for each column.
   for (size_t varIdx = 0; varIdx < variablesToEvaluate_.size(); ++varIdx) {
     const auto& varInfo = variablesToEvaluate_[varIdx];
     auto& columnPtrs = batchCache.variableStringPtrs[varIdx];
@@ -204,7 +248,7 @@ ConstructTripleGenerator::evaluateBatchColumnOriented(
     const size_t colIdx = varInfo.columnIndex.value();
 
     // Read all IDs from this column for all rows in the batch,
-    // ensure their string values are in the cache, and store pointers directly
+    // ensure their string values are in the cache, and store pointers directly.
     for (size_t rowInBatch = 0; rowInBatch < numRows; ++rowInBatch) {
       const uint64_t rowIdx = rowIndices[rowInBatch];
       Id id = idTable(rowIdx, colIdx);
@@ -236,6 +280,13 @@ ConstructTripleGenerator::evaluateBatchColumnOriented(
       columnPtrs[rowInBatch] = cachedValue.empty() ? nullptr : &cachedValue;
     }
   }
+}
+
+// _____________________________________________________________________________
+void ConstructTripleGenerator::evaluateBlankNodesForBatch(
+    BatchEvaluationCache& batchCache, ql::span<const uint64_t> rowIndices,
+    size_t currentRowOffset) const {
+  const size_t numRows = rowIndices.size();
 
   // Initialize blank node values: [blankNodeIdx][rowInBatch]
   batchCache.blankNodeValues.resize(blankNodesToEvaluate_.size());
@@ -258,8 +309,6 @@ ConstructTripleGenerator::evaluateBatchColumnOriented(
           formatInfo.prefix, currentRowOffset + rowIdx, formatInfo.suffix);
     }
   }
-
-  return batchCache;
 }
 
 // ============================================================================
