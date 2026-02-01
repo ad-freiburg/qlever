@@ -9,6 +9,7 @@
 #include <absl/strings/str_cat.h>
 
 #include <cstdlib>
+#include <iomanip>
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "engine/ExportQueryExecutionTrees.h"
@@ -172,10 +173,13 @@ ConstructTripleGenerator::BatchEvaluationCache
 ConstructTripleGenerator::evaluateBatchColumnOriented(
     const IdTable& idTable, const LocalVocab& localVocab,
     ql::span<const uint64_t> rowIndices, size_t currentRowOffset,
-    IdCache& idCache, IdCacheStats& cacheStats) const {
+    IdCache& idCache, IdCacheStatsLogger& statsLogger) const {
   BatchEvaluationCache batchCache;
   const size_t numRows = rowIndices.size();
   batchCache.numRows = numRows;
+
+  // Get reference to stats for tracking hits/misses
+  auto& cacheStats = statsLogger.stats();
 
   // Initialize variable string pointers: [varIdx][rowInBatch]
   // We store pointers directly into idCache to avoid a second hash lookup
@@ -306,7 +310,7 @@ auto ConstructTripleGenerator::generateStringTriplesForResultTable(
   const size_t numRows = tableWithVocab.idTable().numRows();
   rowOffset_ += numRows;
 
-  auto [idCache, cacheStats] = createIdCacheWithStats(numRows);
+  auto [idCache, statsLogger] = createIdCacheWithStats(numRows);
 
   auto rowIndicesVec = std::make_shared<std::vector<uint64_t>>(
       ql::ranges::begin(table.view_), ql::ranges::end(table.view_));
@@ -317,7 +321,7 @@ auto ConstructTripleGenerator::generateStringTriplesForResultTable(
   // Process batches lazily. Each batch materializes triples into a vector
   // to reduce view nesting overhead.
   auto processBatch = [this, tableWithVocab, currentRowOffset, idCache,
-                       cacheStats, rowIndicesVec,
+                       statsLogger, rowIndicesVec,
                        totalRows](size_t batchIdx) mutable {
     cancellationHandle_->throwIfCancelled();
 
@@ -328,7 +332,7 @@ auto ConstructTripleGenerator::generateStringTriplesForResultTable(
 
     BatchEvaluationCache batchCache = evaluateBatchColumnOriented(
         tableWithVocab.idTable(), tableWithVocab.localVocab(), batchRowIndices,
-        currentRowOffset, *idCache, *cacheStats);
+        currentRowOffset, *idCache, *statsLogger);
 
     std::vector<StringTriple> batchTriples;
     batchTriples.reserve(batchCache.numRows * templateTriples_.size());
@@ -396,8 +400,21 @@ const std::string* ConstructTripleGenerator::getTermStringPtr(
 // ============================================================================
 
 // _____________________________________________________________________________
+ConstructTripleGenerator::IdCacheStatsLogger::~IdCacheStatsLogger() {
+  // Only log if there were a meaningful number of lookups
+  if (stats_.totalLookups() > 1000) {
+    AD_LOG_INFO << "CONSTRUCT IdCache stats - Rows: " << numRows_
+                << ", Capacity: " << cacheCapacity_
+                << ", Lookups: " << stats_.totalLookups()
+                << ", Hits: " << stats_.hits << ", Misses: " << stats_.misses
+                << ", Hit rate: " << std::fixed << std::setprecision(1)
+                << (stats_.hitRate() * 100.0) << "%" << std::endl;
+  }
+}
+
+// _____________________________________________________________________________
 std::pair<std::shared_ptr<ConstructTripleGenerator::IdCache>,
-          std::shared_ptr<ConstructTripleGenerator::IdCacheStats>>
+          std::shared_ptr<ConstructTripleGenerator::IdCacheStatsLogger>>
 ConstructTripleGenerator::createIdCacheWithStats(size_t numRows) const {
   // Ensure cache capacity is large enough to hold the working set of a single
   // batch (batch_size * num_variables) to guarantee pointer stability within
@@ -407,20 +424,8 @@ ConstructTripleGenerator::createIdCacheWithStats(size_t numRows) const {
       getBatchSize() * std::max(numVars, size_t{1}) * 2;
   const size_t capacity = std::max(MIN_CACHE_CAPACITY, minCapacityForBatch);
   auto idCache = std::make_shared<IdCache>(capacity);
-  auto cacheStats = std::shared_ptr<IdCacheStats>(
-      new IdCacheStats(), [numRows, capacity](IdCacheStats* stats) {
-        if (stats->totalLookups() > 10000) {
-          AD_LOG_DEBUG << "ID Cache Stats - Rows: " << numRows
-                       << ", Capacity: " << capacity
-                       << ", Lookups: " << stats->totalLookups()
-                       << ", Hits: " << stats->hits
-                       << ", Misses: " << stats->misses
-                       << ", Hit Rate: " << (stats->hitRate() * 100.0) << "%"
-                       << "\n";
-        }
-        delete stats;
-      });
-  return {std::move(idCache), std::move(cacheStats)};
+  auto statsLogger = std::make_shared<IdCacheStatsLogger>(numRows, capacity);
+  return {std::move(idCache), std::move(statsLogger)};
 }
 
 // _____________________________________________________________________________
@@ -507,7 +512,7 @@ ConstructTripleGenerator::generateFormattedTriples(
 
     // ID cache for avoiding redundant lookups into `IdTable`.
     std::shared_ptr<IdCache> idCache_;
-    std::shared_ptr<IdCacheStats> cacheStats_;
+    std::shared_ptr<IdCacheStatsLogger> statsLogger_;
 
     // Iteration state
     size_t batchSize_;
@@ -528,10 +533,10 @@ ConstructTripleGenerator::generateFormattedTriples(
           currentRowOffset_(currentRowOffset),
           batchSize_(ConstructTripleGenerator::getBatchSize()),
           variableStrings_(generator.variablesToEvaluate_.size()) {
-      auto [cache, stats] =
+      auto [cache, logger] =
           generator_.createIdCacheWithStats(rowIndicesVec_.size());
       idCache_ = std::move(cache);
-      cacheStats_ = std::move(stats);
+      statsLogger_ = std::move(logger);
     }
 
     std::optional<std::string> get() override {
@@ -548,7 +553,7 @@ ConstructTripleGenerator::generateFormattedTriples(
 
           batchCache_ = generator_.evaluateBatchColumnOriented(
               tableWithVocab_.idTable(), tableWithVocab_.localVocab(),
-              batchRowIndices, currentRowOffset_, *idCache_, *cacheStats_);
+              batchRowIndices, currentRowOffset_, *idCache_, *statsLogger_);
           rowInBatch_ = 0;
           tripleIdx_ = 0;
         }

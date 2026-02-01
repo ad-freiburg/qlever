@@ -132,6 +132,26 @@ class ConstructTripleGenerator {
     }
   };
 
+  // RAII logger for IdCache statistics. Logs stats at INFO level when
+  // destroyed (i.e., after query execution completes). Only logs if there
+  // were a meaningful number of lookups (> 1000).
+  class IdCacheStatsLogger {
+   public:
+    IdCacheStatsLogger(size_t numRows, size_t cacheCapacity)
+        : numRows_(numRows), cacheCapacity_(cacheCapacity) {}
+
+    ~IdCacheStatsLogger();
+
+    // Accessors for the stats (used during cache operations)
+    IdCacheStats& stats() { return stats_; }
+    const IdCacheStats& stats() const { return stats_; }
+
+   private:
+    IdCacheStats stats_;
+    size_t numRows_;
+    size_t cacheCapacity_;
+  };
+
   // ---------------------------------------------------------------------------
   // Batch Processing Configuration
   // ---------------------------------------------------------------------------
@@ -227,7 +247,7 @@ class ConstructTripleGenerator {
   BatchEvaluationCache evaluateBatchColumnOriented(
       const IdTable& idTable, const LocalVocab& localVocab,
       ql::span<const uint64_t> rowIndices, size_t currentRowOffset,
-      IdCache& idCache, IdCacheStats& cacheStats) const;
+      IdCache& idCache, IdCacheStatsLogger& statsLogger) const;
 
   // Instantiates a single triple using the precomputed constants and
   // the batch evaluation cache for a specific row. Returns an empty
@@ -246,9 +266,9 @@ class ConstructTripleGenerator {
       size_t rowInBatch,
       const std::vector<const std::string*>& variableStrings) const;
 
-  // Creates an ID cache with optional statistics logging on destruction.
-  // Stats are logged only when totalLookups > 10000.
-  std::pair<std::shared_ptr<IdCache>, std::shared_ptr<IdCacheStats>>
+  // Creates an ID cache with a statistics logger that logs at INFO level
+  // when destroyed (after query execution completes).
+  std::pair<std::shared_ptr<IdCache>, std::shared_ptr<IdCacheStatsLogger>>
   createIdCacheWithStats(size_t numRows) const;
 
   // Populates variableStrings with pointers to cached string values for a row.
