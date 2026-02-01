@@ -360,7 +360,7 @@ CPP_template_def(typename R)(requires ql::ranges::range<R>) Result::LazyResult
 // _____________________________________________________________________________
 Result::LazyResult CartesianProductJoin::createLazyConsumer(
     LocalVocab staticMergedVocab,
-    ql::span<const std::shared_ptr<const Result>> subresults,
+    std::vector<std::shared_ptr<const Result>> subresults,
     std::shared_ptr<const Result> lazyResult) const {
   AD_CONTRACT_CHECK(lazyResult);
   std::vector<std::reference_wrapper<const IdTable>> idTables;
@@ -371,7 +371,8 @@ Result::LazyResult CartesianProductJoin::createLazyConsumer(
   auto get = [self = this, staticMergedVocab = std::move(staticMergedVocab),
               limit = getLimitOffset().limitOrDefault(),
               offset = getLimitOffset()._offset, idTables = std::move(idTables),
-              lastTableOffset = size_t{0}, producedTableSize = size_t{0},
+              subresults = std::move(subresults), lastTableOffset = size_t{0},
+              producedTableSize = size_t{0},
               idTableOpt = std::optional<Result::IdTableVocabPair>{}](
                  auto& idTableVocabPair) mutable {
     // These things have to be done after handling a single input, so we do them
