@@ -11,6 +11,7 @@
 #include <functional>
 
 #include "engine/QueryExecutionTree.h"
+#include "engine/QueryExportTypes.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"
 #include "util/http/MediaTypes.h"
@@ -223,7 +224,7 @@ class ExportQueryExecutionTrees {
   // `StringTriple`s.
   static auto constructQueryResultToTriples(
       const QueryExecutionTree& qet,
-      const ad_utility::sparql_types::Triples& constructTriples,
+      const ad_utility::sparql_types::Triples& constructClauseTriples,
       LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
       uint64_t& resultSize, CancellationHandle cancellationHandle);
 
@@ -244,24 +245,6 @@ class ExportQueryExecutionTrees {
       LimitOffsetClause limitAndOffset, CancellationHandle cancellationHandle,
       const ad_utility::Timer& requestTimer, STREAMABLE_YIELDER_ARG_DECL);
 
-  // Public for testing.
- public:
-  struct TableConstRefWithVocab {
-    std::reference_wrapper<const IdTable> idTable_;
-    std::reference_wrapper<const LocalVocab> localVocab_;
-
-    const IdTable& idTable() const { return idTable_.get(); }
-
-    const LocalVocab& localVocab() const { return localVocab_.get(); }
-  };
-  // Helper type that contains an `IdTable` and a view with related indices to
-  // access the `IdTable` with.
-  struct TableWithRange {
-    TableConstRefWithVocab tableWithVocab_;
-    ql::ranges::iota_view<uint64_t, uint64_t> view_;
-  };
-
- private:
   // Yield all `IdTables` provided by the given `result`.
   static ad_utility::InputRangeTypeErased<TableConstRefWithVocab> getIdTables(
       const Result& result);
@@ -284,7 +267,7 @@ class ExportQueryExecutionTrees {
   // Blocks after the LIMIT are not even requested.
  public:
   static ad_utility::InputRangeTypeErased<TableWithRange> getRowIndices(
-      LimitOffsetClause limitOffset, const Result& result,
+      const LimitOffsetClause& limitOffset, const Result& result,
       uint64_t& resutSizeTotal, uint64_t resultSizeMultiplicator = 1);
 
  private:

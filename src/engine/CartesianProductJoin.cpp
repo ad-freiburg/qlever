@@ -1,6 +1,12 @@
-//  Copyright 2023, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2024 - 2026 The QLever Authors, in particular:
+//
+// 2023 - 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2026        Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "engine/CartesianProductJoin.h"
 
@@ -360,7 +366,7 @@ CPP_template_def(typename R)(requires ql::ranges::range<R>) Result::LazyResult
 // _____________________________________________________________________________
 Result::LazyResult CartesianProductJoin::createLazyConsumer(
     LocalVocab staticMergedVocab,
-    ql::span<const std::shared_ptr<const Result>> subresults,
+    std::vector<std::shared_ptr<const Result>> subresults,
     std::shared_ptr<const Result> lazyResult) const {
   AD_CONTRACT_CHECK(lazyResult);
   std::vector<std::reference_wrapper<const IdTable>> idTables;
@@ -371,7 +377,8 @@ Result::LazyResult CartesianProductJoin::createLazyConsumer(
   auto get = [self = this, staticMergedVocab = std::move(staticMergedVocab),
               limit = getLimitOffset().limitOrDefault(),
               offset = getLimitOffset()._offset, idTables = std::move(idTables),
-              lastTableOffset = size_t{0}, producedTableSize = size_t{0},
+              subresults = std::move(subresults), lastTableOffset = size_t{0},
+              producedTableSize = size_t{0},
               idTableOpt = std::optional<Result::IdTableVocabPair>{}](
                  auto& idTableVocabPair) mutable {
     // These things have to be done after handling a single input, so we do them
