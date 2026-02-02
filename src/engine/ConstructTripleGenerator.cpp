@@ -235,10 +235,12 @@ void ConstructTripleGenerator::evaluateVariablesForBatch(
       // 1. LRU only evicts entries not accessed in the current batch
       // 2. Cache capacity >= batch_size * num_variables (ensured in creation)
       size_t missesBefore = cacheStats.misses_;
+      const VariableToColumnMap& varCols = variableColumns_.get();
+      const Index& idx = index_.get();
+      std::optional<size_t> colIdx = varInfo.columnIndex_;
       const std::string& cachedValue = idCache.getOrCompute(
-          id, [&cacheStats, &varCols = variableColumns_.get(),
-               &idx = index_.get(), colIdx = varInfo.columnIndex_, rowIdx,
-               &idTable, &localVocab, currentRowOffset](const Id&) {
+          id, [&cacheStats, &varCols, &idx, &colIdx, rowIdx, &idTable,
+               &localVocab, currentRowOffset](const Id&) {
             ++cacheStats.misses_;
             ConstructQueryExportContext context{
                 rowIdx, idTable, localVocab, varCols, idx, currentRowOffset};
