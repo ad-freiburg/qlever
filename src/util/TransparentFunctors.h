@@ -119,6 +119,15 @@ static constexpr detail::HoldsAlternativeImpl<T> holdsAlternative;
 template <typename T>
 static constexpr detail::GetImpl<T> get;
 
+// Helper that filters a range, like `std::vector` which contains `std::variant`
+// elements by a certain type `T` and returns a view of the contained values.
+CPP_template(typename T, typename R)(
+    requires ql::ranges::range<R>) auto filterRangeOfVariantsByType(const R&
+                                                                        range) {
+  return range | ql::views::filter(holdsAlternative<T>) |
+         ql::views::transform(get<T>);
+}
+
 // Transparent functor for `std::get_if`. As an extension to `std::get_if`,
 // `ad_utility::getIf` may also be called with a `variant` object or reference,
 // not only with a pointer.

@@ -16,14 +16,15 @@ bool BasicGraphPatternsInvariantTo::operator()(
 
 // _____________________________________________________________________________
 bool BasicGraphPatternsInvariantTo::operator()(
-    const parsedQuery::Values& values) const {
+    const parsedQuery::Values& valuesClause) const {
+  const auto& [variables, values] = valuesClause._inlineValues;
   return
-      // The `VALUES` doesn't bind to any of the `variables_`.
-      !std::ranges::any_of(
-          values._inlineValues._variables,
-          [this](const auto& var) { return variables_.contains(var); }) &&
       // There is exactly one row inside the `VALUES`.
-      values._inlineValues._values.size() == 1;
+      values.size() == 1 &&
+      // The `VALUES` doesn't bind to any of the `variables_`.
+      ql::ranges::none_of(variables, [this](const auto& var) {
+        return variables_.contains(var);
+      });
 }
 
 }  // namespace graphPatternAnalysis

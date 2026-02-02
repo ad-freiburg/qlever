@@ -133,6 +133,19 @@ class SparqlTriple
     auto ptr = std::get_if<Variable>(&p_);
     return (ptr != nullptr && *ptr == variable);
   }
+
+  // Call a function for every variable contained in the triple.
+  void forEachVariable(auto function) const {
+    if (s_.isVariable()) {
+      function(s_.getVariable());
+    }
+    if (auto predicate = getPredicateVariable()) {
+      function(predicate.value());
+    }
+    if (o_.isVariable()) {
+      function(o_.getVariable());
+    }
+  }
 };
 
 #endif  // QLEVER_SRC_PARSER_SPARQLTRIPLE_H
