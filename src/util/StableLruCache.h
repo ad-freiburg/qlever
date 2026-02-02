@@ -12,35 +12,14 @@
 
 namespace ad_utility {
 
-// ============================================================================
-// StableLRUCache
-// ============================================================================
-//
+// _____________________________________________________________________________
 // An LRU (Least Recently Used) cache with pointer/reference stability.
-//
-// POINTER STABILITY GUARANTEE
-// ---------------------------
-// References returned by getOrCompute() remain valid until the referenced
+// References returned by `getOrCompute()` remain valid until the referenced
 // entry is evicted by LRU replacement. This is achieved by pre-reserving the
-// underlying hash map to prevent rehashing.
-//
-// This differs from ad_utility::util::LRUCache which uses absl::flat_hash_map
-// without pre-reservation, meaning insertions can trigger rehashing and
-// invalidate all existing references.
-//
-// USE CASE
-// --------
-// Use this cache when you need to store pointers/references to cached values
-// for later use (within the same batch of operations). For example,
-// ConstructTripleGenerator stores pointers to cached strings in a batch
-// buffer to avoid repeated hash lookups during triple instantiation.
-//
-// COMPLEXITY
-// ----------
-// - getOrCompute: O(1) average for lookup/insert, O(1) for LRU bookkeeping
-// - Space: O(capacity) for hash map + O(capacity) for LRU list
-//
-// ============================================================================
+// underlying hash map to prevent rehashing. This differs from
+// `ad_utility::util::LRUCache` which uses `absl::flat_hash_map` w/o
+// pre-reservation, meaning insertions can trigger rehashing and invalidate all
+// existing references.
 template <typename K, typename V>
 class StableLRUCache {
  public:
@@ -54,7 +33,6 @@ class StableLRUCache {
 
   // Look up key in cache. On hit, mark as recently used and return reference.
   // On miss, compute value, insert (evicting LRU if at capacity), return ref.
-  //
   // The returned reference is stable until this entry is evicted by LRU.
   // Within a batch where you access at most `capacity` unique keys, all
   // returned references remain valid.
