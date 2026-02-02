@@ -14,6 +14,9 @@
 // values with pairs of string views as keys. This is implemented using custom
 // hash and equality operators.
 
+// TODO<ullingerc> This could be extended to support `std::tuple` or
+// `std::array`, not only `std::pair`, and other transparently
+
 // _____________________________________________________________________________
 namespace ad_utility {
 
