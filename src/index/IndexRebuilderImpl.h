@@ -1,0 +1,76 @@
+//   Copyright 2026 The QLever Authors, in particular:
+//
+//  2026 Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>, UFR
+//
+//  UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+#ifndef QLEVER_SRC_INDEX_INDEXREBUILDERIMPL_H
+#define QLEVER_SRC_INDEX_INDEXREBUILDERIMPL_H
+
+#include <cstdint>
+#include <tuple>
+#include <vector>
+
+#include "engine/idTable/IdTable.h"
+#include "global/Id.h"
+#include "index/IndexRebuilder.h"
+#include "util/CancellationHandle.h"
+#include "util/HashMap.h"
+#include "util/InputRangeUtils.h"
+
+namespace qlever::indexRebuilder {
+
+// Write a new vocabulary that contains all words from `vocab` plus all
+// entries in `entries`. Returns a pair consisting of a vector insertion
+// positions (the `VocabIndex` of the `LocalVocabEntry`s position in the old
+// `vocab`) and a mapping from old local vocab `Id`s bit representation (for
+// cheaper hash functions) to new vocab `Id`s.
+std::tuple<std::vector<VocabIndex>, ad_utility::HashMap<Id::T, Id>,
+           std::vector<uint64_t>>
+materializeLocalVocab(
+    const std::vector<LocalVocabIndex>& entries,
+    const std::vector<
+        ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>&
+        ownedBlocks,
+    const Index::Vocab& vocab, const std::string& newIndexName);
+
+// Map old vocab `Id`s to new vocab `Id`s according to the given
+// `insertionPositions`. This is the  most performance critical code of the
+// rebuild.
+Id remapVocabId(Id original, const std::vector<VocabIndex>& insertionPositions);
+
+// Remaps a blank node `Id` to another id that's more dense.
+Id remapBlankNodeId(Id original, const std::vector<uint64_t>& blankNodeBlocks,
+                    uint64_t minBlankNodeIndex);
+
+// Create a copy of the given `permutation` scanned according to `scanSpec`,
+// where all local vocab `Id`s are remapped according to `localVocabMapping`
+// and all vocab `Id`s are remapped according to `insertInfo` to create a new
+// index where all of these values are all vocab `Id`s in the new vocabulary.
+ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
+    const Permutation& permutation,
+    const BlockMetadataRanges& blockMetadataRanges,
+    const LocatedTriplesSharedState& locatedTriplesSharedState,
+    const ad_utility::HashMap<Id::T, Id>& localVocabMapping,
+    const std::vector<VocabIndex>& insertionPositions,
+    const std::vector<uint64_t>& blankNodeBlocks, uint64_t minBlankNodeIndex,
+    const ad_utility::SharedCancellationHandle& cancellationHandle,
+    ql::span<const ColumnIndex> additionalColumns);
+
+// Get the number of columns in the given `blockMetadataRanges`. If this cannot
+// be determined, return 4 as a safe default.
+size_t getNumColumns(const BlockMetadataRanges& blockMetadataRanges);
+
+// Create a `std::packaged_task` that writes a new permutation according to the
+// settings of `newIndex`, based on the data of the current index.
+std::packaged_task<void()> createPermutationWriterTask(
+    IndexImpl& newIndex, const Permutation& permutation, bool isInternal,
+    const LocatedTriplesSharedState& locatedTriplesSharedState,
+    const ad_utility::HashMap<Id::T, Id>& localVocabMapping,
+    const std::vector<VocabIndex>& insertionPositions,
+    const std::vector<uint64_t>& blankNodeBlocks, uint64_t minBlankNodeIndex,
+    const ad_utility::SharedCancellationHandle& cancellationHandle);
+
+}  // namespace qlever::indexRebuilder
+
+#endif  // QLEVER_SRC_INDEX_INDEXREBUILDERIMPL_H

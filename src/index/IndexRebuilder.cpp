@@ -16,6 +16,7 @@
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "index/IndexImpl.h"
+#include "index/IndexRebuilderImpl.h"
 #include "index/LocalVocabEntry.h"
 #include "index/Permutation.h"
 #include "util/CancellationHandle.h"
@@ -25,14 +26,8 @@
 #include "util/Log.h"
 #include "util/ParallelExecutor.h"
 
-namespace {
-using CancellationHandle = ad_utility::SharedCancellationHandle;
-
-// Write a new vocabulary that contains all words from `vocab` plus all
-// entries in `entries`. Returns a pair consisting of a vector insertion
-// positions (the `VocabIndex` of the `LocalVocabEntry`s position in the old
-// `vocab`) and a mapping from old local vocab `Id`s bit representation (for
-// cheaper hash functions) to new vocab `Id`s.
+namespace qlever::indexRebuilder {
+// _____________________________________________________________________________
 std::tuple<std::vector<VocabIndex>, ad_utility::HashMap<Id::T, Id>,
            std::vector<uint64_t>>
 materializeLocalVocab(
@@ -101,9 +96,7 @@ materializeLocalVocab(
                          std::move(flatBlockIndices));
 }
 
-// Map old vocab `Id`s to new vocab `Id`s according to the given
-// `insertionPositions`. This is the  most performance critical code of the
-// rebuild.
+// _____________________________________________________________________________
 AD_ALWAYS_INLINE Id
 remapVocabId(Id original, const std::vector<VocabIndex>& insertionPositions) {
   AD_EXPENSIVE_CHECK(
@@ -117,7 +110,7 @@ remapVocabId(Id original, const std::vector<VocabIndex>& insertionPositions) {
       VocabIndex::make(original.getVocabIndex().get() + offset));
 }
 
-// Remaps a blank node `Id` to another id that's more dense.
+// _____________________________________________________________________________
 Id remapBlankNodeId(Id original, const std::vector<uint64_t>& blankNodeBlocks,
                     uint64_t minBlankNodeIndex) {
   AD_EXPENSIVE_CHECK(
@@ -140,10 +133,7 @@ Id remapBlankNodeId(Id original, const std::vector<uint64_t>& blankNodeBlocks,
       minBlankNodeIndex));
 }
 
-// Create a copy of the given `permutation` scanned according to `scanSpec`,
-// where all local vocab `Id`s are remapped according to `localVocabMapping`
-// and all vocab `Id`s are remapped according to `insertInfo` to create a new
-// index where all of these values are all vocab `Id`s in the new vocabulary.
+// _____________________________________________________________________________
 ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
     const Permutation& permutation,
     const BlockMetadataRanges& blockMetadataRanges,
@@ -198,8 +188,7 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
           }}};
 }
 
-// Get the number of columns in the given `blockMetadataRanges`. If this cannot
-// be determined, return 4 as a safe default.
+// _____________________________________________________________________________
 size_t getNumColumns(const BlockMetadataRanges& blockMetadataRanges) {
   if (!blockMetadataRanges.empty()) {
     const auto& first = blockMetadataRanges.at(0);
@@ -213,8 +202,7 @@ size_t getNumColumns(const BlockMetadataRanges& blockMetadataRanges) {
   return 4;
 }
 
-// Create a `std::packaged_task` that writes a new permutation according to the
-// settings of `newIndex`, based on the data of the current index.
+// _____________________________________________________________________________
 std::packaged_task<void()> createPermutationWriterTask(
     IndexImpl& newIndex, const Permutation& permutation, bool isInternal,
     const LocatedTriplesSharedState& locatedTriplesSharedState,
@@ -241,6 +229,8 @@ std::packaged_task<void()> createPermutationWriterTask(
        &localVocabMapping, &insertionPositions, &blankNodeBlocks,
        minBlankNodeIndex, &cancellationHandle,
        additionalColumns = std::move(additionalColumns)]() {
+        // TODO<RobinTF> exchange the multiplicities of col1 and col2 for
+        // matching permutations before writing the metadata.
         newIndex.createPermutation(
             numColumns,
             readIndexAndRemap(
@@ -250,7 +240,7 @@ std::packaged_task<void()> createPermutationWriterTask(
             permutation, isInternal);
       }};
 }
-}  // namespace
+}  // namespace qlever::indexRebuilder
 
 // _____________________________________________________________________________
 namespace qlever {
@@ -261,8 +251,9 @@ void materializeToIndex(
     const std::vector<
         ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>&
         ownedBlocks,
-    const CancellationHandle& cancellationHandle,
+    const ad_utility::SharedCancellationHandle& cancellationHandle,
     const std::string& logFileName) {
+  using namespace indexRebuilder;
   AD_CONTRACT_CHECK(!logFileName.empty(), "Log file name must not be empty");
 
   // Set up logging to file
