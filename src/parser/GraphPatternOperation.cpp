@@ -86,27 +86,19 @@ void BasicGraphPattern::appendTriples(BasicGraphPattern other) {
 void BasicGraphPattern::collectAllContainedVariables(
     ad_utility::HashSet<Variable>& vars) const {
   for (const SparqlTriple& t : _triples) {
-    if (t.s_.isVariable()) {
-      vars.insert(t.s_.getVariable());
-    }
-    if (auto predicate = t.getPredicateVariable()) {
-      vars.insert(predicate.value());
-    }
-    if (t.o_.isVariable()) {
-      vars.insert(t.o_.getVariable());
-    }
+    t.forEachVariable([&vars](const auto& var) { vars.insert(var); });
   }
 }
 
 // _____________________________________________________________________________
-ad_utility::HashSet<Variable> getVariablesPresentInBasicGraphPatterns(
+ad_utility::HashSet<Variable> getVariablesPresentInFirstBasicGraphPattern(
     const std::vector<parsedQuery::GraphPatternOperation>& graphPatterns) {
   ad_utility::HashSet<Variable> vars;
-  for (const auto& graphPattern : graphPatterns) {
-    if (!std::holds_alternative<parsedQuery::BasicGraphPattern>(graphPattern)) {
-      continue;
-    }
-    graphPattern.getBasic().collectAllContainedVariables(vars);
+  auto basicGraphPatterns =
+      ad_utility::filterRangeOfVariantsByType<parsedQuery::BasicGraphPattern>(
+          graphPatterns);
+  if (!ql::ranges::empty(basicGraphPatterns)) {
+    (*basicGraphPatterns.begin()).collectAllContainedVariables(vars);
   }
   return vars;
 }

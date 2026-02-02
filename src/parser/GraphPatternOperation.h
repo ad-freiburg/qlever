@@ -86,12 +86,13 @@ struct BasicGraphPattern {
   void collectAllContainedVariables(ad_utility::HashSet<Variable>& vars) const;
 };
 
-// Extract all variables present in a set of `BasicGraphPatterns` contained in
-// `GraphPatternOperation`s.
+// Extract all variables present in a the first `BasicGraphPattern` contained in
+// a vector of `GraphPatternOperation`s. It is used for skipping some graph
+// patterns in `MaterializedViewQueryAnalysis.cpp`.
 //
 // IMPORTANT: This function does not consider variables that are contained in
 // other types of `GraphPatternOperation`s.
-ad_utility::HashSet<Variable> getVariablesPresentInBasicGraphPatterns(
+ad_utility::HashSet<Variable> getVariablesPresentInFirstBasicGraphPattern(
     const std::vector<parsedQuery::GraphPatternOperation>& graphPatterns);
 
 /// A `Values` clause
