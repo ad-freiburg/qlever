@@ -25,56 +25,46 @@
 // Output format for CONSTRUCT query results.
 enum class ConstructOutputFormat { TURTLE, CSV, TSV };
 
-// ============================================================================
+// =============================================================================
 // ConstructTripleGenerator
-// ============================================================================
-//
+// =============================================================================
 // Generates triples from CONSTRUCT query results by instantiating triple
 // patterns (from the CONSTRUCT clause) with values from the result table
 // (produced by the WHERE clause).
 //
 // ARCHITECTURE OVERVIEW
-// ---------------------
-// The generator transforms: Result Table → Rows → Triple Patterns → Output
-//
+// -----------------------------------------------------------------------------
+// The generator transforms: Result Table -> Rows -> Triple Patterns -> Output.
 // For each row in the result table, we instantiate each triple pattern by
 // substituting variables with their values from that row. The output is either
 // StringTriple objects or pre-formatted strings (Turtle/CSV/TSV).
 //
 // PERFORMANCE OPTIMIZATIONS
-// -------------------------
-// 1. PRECOMPUTATION (analyzeTemplate):
-//    - Constants (IRIs, Literals) are evaluated once at construction time
-//    - Variable column indices are pre-computed to avoid hash lookups per row
-//    - Blank node format strings are pre-built (only row number varies)
+// -----------------------------------------------------------------------------
+// 1. PRECOMPUTATION (`analyzeTemplate`):
+// Constants (IRIs, Literals) are evaluated once at construction time. Variable
+// column indices in `IdTable` are pre-computed. Blank node format strings are
+// pre-built (only row number varies).
 //
-// 2. BATCH PROCESSING (getBatchSize, evaluateBatchColumnOriented):
-//    - Rows are processed in batches (default 64) for better cache locality
-//    - Column-oriented access: we read all values for one variable across
-//      all batch rows before moving to the next variable. This creates
-//      sequential memory access patterns that benefit from CPU prefetching.
+// 2. BATCH PROCESSING (`getBatchSize`, `evaluateBatchColumnOriented`):
+// Rows are processed in batches (default 64) for better cache locality.
+// Column-oriented access: for each variable, we read all `Id`s from its
+// column in the `IdTable` across all rows in the batch before moving to
+// the next variable. Since `IdTable` uses column-major storage, this
+// creates sequential memory access patterns that benefit from CPU
+// prefetching.
 //
-// 3. ID CACHING (IdCache):
-//    - ID-to-string conversions are cached across rows within a table
-//    - High hit rates when the same entity appears in multiple result rows
-//    - Avoids redundant vocabulary lookups and string allocations
+// 3. ID CACHING (`IdCache`):
+// ID-to-string conversions are cached across rows within a table
+// High hit rates when the same entity appears in multiple result rows
+// Avoids redundant vocabulary lookups and string allocations
 //
-// 4. DIRECT FORMATTING (generateFormattedTriples):
-//    - For streaming output, we directly yield formatted strings
-//    - Avoids intermediate StringTriple object allocations
-//    - Uses stream_generator for 1MB buffer coalescence
-//
-// USAGE
-// -----
-// The generator maintains state (rowOffset_) and must process tables IN ORDER.
-// For streaming: use generateFormattedTriples() with the desired format.
-// For object access: use generateStringTriples() static helper.
-//
-// ============================================================================
-
+// 4. DIRECT FORMATTING (`generateFormattedTriples`):
+// For streaming output, we directly yield formatted strings. This Avoids
+// intermediate `StringTriple` object allocations
+// =============================================================================
 // Forward declaration for friend access
 class FormattedTripleIterator;
-
 class ConstructTripleGenerator {
   // Allow FormattedTripleIterator to access private members for iteration
   friend class FormattedTripleIterator;
@@ -101,16 +91,17 @@ class ConstructTripleGenerator {
     std::array<TermResolution, NUM_TRIPLE_POSITIONS> resolutions;
   };
 
-  // Variable with pre-computed column index for fast evaluation
+  // Variable with pre-computed column index for `IdTable`.
   struct VariableWithColumnIndex {
     Variable variable;
+    // idx of the column for the variable in the `IdTable`.
     std::optional<size_t> columnIndex;  // nullopt if variable not in result
   };
 
   // BlankNode with precomputed prefix and suffix for fast evaluation.
   // The blank node format is: prefix + rowNumber + suffix
   // where prefix is "_:g" or "_:u" and suffix is "_" + label.
-  // This avoids recomputing these constant parts for every row.
+  // This avoids recomputing these constant parts for every result table row.
   struct BlankNodeFormatInfo {
     std::string prefix;  // "_:g" or "_:u"
     std::string suffix;  // "_" + label
@@ -120,14 +111,14 @@ class ConstructTripleGenerator {
   // when the same ID appears multiple times across rows.
   // Uses LRU eviction to bound memory usage for queries with many unique IDs.
   // Empty string represents UNDEF values (no valid RDF term is empty).
-  // Uses StableLRUCache to guarantee pointer stability for
-  // BatchEvaluationCache.
+  // Uses `StableLRUCache` to guarantee pointer stability for
+  // `BatchEvaluationCache`.
   using IdCache = ad_utility::StableLRUCache<Id, std::string>;
 
   // Minimum capacity for the LRU cache. This should be large enough to hold
   // the working set of a single batch (batch_size * num_variables) plus
   // headroom for cross-batch cache hits on repeated values (e.g., predicates).
-  // 100k entries ≈ 10-20MB depending on average string length.
+  // 100k entries = 10-20MB depending on average string length.
   static constexpr size_t MIN_CACHE_CAPACITY = 100'000;
 
   // Statistics for ID cache performance analysis
@@ -168,7 +159,7 @@ class ConstructTripleGenerator {
   // each variable, we read its column from the `IdTable` across all rows in the
   // batch before moving to the next variable. This creates sequential memory
   // access patterns (`IdTable` has column-major memory layout) that benefit
-  // from CPU prefetching and cache line utilization.
+  // from CPU prefetching.
   //
   // Trade-off: Larger batches increase the chance of cache hits when the same
   // id appears multiple times within the batch (common for predicates).
@@ -200,7 +191,8 @@ class ConstructTripleGenerator {
   // instantiation. Pointers are stable within a batch because we don't modify
   // `IdCache` between evaluation and instantiation.
   // blankNodeValues[blankNodeIdx][rowInBatch] stores strings directly since
-  // blank nodes can't be cached (the blank node values include the row number).
+  // blank nodes can't be cached across result table rows (the blank node
+  // values include the row number).
   struct BatchEvaluationCache {
     // Store pointers to strings in IdCache. Nullptr for UNDEF or missing.
     // maps: variable idx -> idx of row in batch -> pointer to string in
@@ -226,14 +218,14 @@ class ConstructTripleGenerator {
     }
   };
 
-  // _____________________________________________________________________________
+  // ___________________________________________________________________________
   ConstructTripleGenerator(Triples constructTriples,
                            std::shared_ptr<const Result> result,
                            const VariableToColumnMap& variableColumns,
                            const Index& index,
                            CancellationHandle cancellationHandle);
 
-  // _____________________________________________________________________________
+  // ___________________________________________________________________________
   // This generator has to be called for each table contained in the result of
   // `ExportQueryExecutionTrees::getRowIndices` IN ORDER (because of
   // rowOffsset).
@@ -248,14 +240,14 @@ class ConstructTripleGenerator {
   ad_utility::InputRangeTypeErased<StringTriple>
   generateStringTriplesForResultTable(const TableWithRange& table);
 
-  // _____________________________________________________________________________
+  // ___________________________________________________________________________
   // Generate triples as formatted strings for the given output format.
   // This is the main entry point for streaming CONSTRUCT results.
   // Yields formatted strings directly, avoiding `StringTriple` allocation.
   ad_utility::InputRangeTypeErased<std::string> generateFormattedTriples(
       const TableWithRange& table, ConstructOutputFormat format);
 
-  // _____________________________________________________________________________
+  // ___________________________________________________________________________
   // Helper function that generates the result of a CONSTRUCT query as a range
   // of `StringTriple`s.
   static ad_utility::InputRangeTypeErased<StringTriple> generateStringTriples(
@@ -266,9 +258,10 @@ class ConstructTripleGenerator {
       CancellationHandle cancellationHandle);
 
  private:
-  // Scans the template triples to identify all unique Variables and BlankNodes,
-  // precomputes constants (IRIs/Literals), and builds the resolution map.
-  // Delegates to analyzeTerm() for each term in each triple pattern.
+  // Scans the template triples to identify all unique `Variables` and
+  // `BlankNodes`, precomputes constants (IRIs/Literals),
+  // and builds the resolution map (which maps each position of the graph
+  // template to how the term at this position is to be resolved).
   void analyzeTemplate();
 
   // Analyzes a single term and returns its resolution info.
@@ -370,13 +363,13 @@ class ConstructTripleGenerator {
   std::vector<TriplePatternInfo> triplePatternInfos_;
 
   // Mapping from variable to index in the per-row variable cache
+  // `variablesToEvaluate_`.
   ad_utility::HashMap<Variable, size_t> variableToIndex_;
 
   // Mapping from blank node label to index in the per-row blank node cache
   ad_utility::HashMap<std::string, size_t> blankNodeLabelToIndex_;
 
   // Ordered list of `Variables` with pre-computed column indices for evaluation
-  // (index corresponds to cache index)
   std::vector<VariableWithColumnIndex> variablesToEvaluate_;
 
   // Ordered list of `BlankNodes` with precomputed format info for evaluation

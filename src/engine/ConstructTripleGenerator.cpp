@@ -120,7 +120,8 @@ ConstructTripleGenerator::analyzeVariableTerm(const Variable& var) {
   if (!variableToIndex_.contains(var)) {
     size_t idx = variablesToEvaluate_.size();
     variableToIndex_[var] = idx;
-    // Pre-compute the column index to avoid hash lookups during evaluation
+    // Pre-compute the column index corresponding to the variable in the
+    // `IdTable`.
     std::optional<size_t> columnIndex;
     if (variableColumns_.get().contains(var)) {
       columnIndex = variableColumns_.get().at(var).columnIndex_;
