@@ -108,9 +108,9 @@ class QueryExecutionTree {
   }
 
   // The implementation of this method calls
-  // `Operation::getUpdatedQueryExecutionTreeWithPrefilterApplied()` for the root
-  // operation. Only `<PrefilterExpression, Variable>` pairs are passed, where
-  // the corresponding `Variable` is visible in the `VariableToColumnMap`.
+  // `Operation::getUpdatedQueryExecutionTreeWithPrefilterApplied()` for the
+  // root operation. Only `<PrefilterExpression, Variable>` pairs are passed,
+  // where the corresponding `Variable` is visible in the `VariableToColumnMap`.
   std::optional<std::shared_ptr<QueryExecutionTree>>
   getUpdatedQueryExecutionTreeWithPrefilterApplied(
       std::vector<Operation::PrefilterVariablePair> prefilterPairs) const;

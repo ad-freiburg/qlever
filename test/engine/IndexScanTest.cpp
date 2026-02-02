@@ -211,8 +211,10 @@ const auto testSetAndMakeScanWithPrefilterExpr =
       auto t = generateLocationTrace(l);
       IndexScan scan{getQec(kg), permutation, triple};
       auto variable = pr1.second;
-      auto optUpdatedQet = scan.getUpdatedQueryExecutionTreeWithPrefilterApplied(
-          makeFilterExpression::filterHelper::makePrefilterVec(std::move(pr1)));
+      auto optUpdatedQet =
+          scan.getUpdatedQueryExecutionTreeWithPrefilterApplied(
+              makeFilterExpression::filterHelper::makePrefilterVec(
+                  std::move(pr1)));
       if (pr2.has_value() && optUpdatedQet.has_value()) {
         // Testing with a second `PrefilterExpression`s only makes sense if the
         // first `PrefilterExpression` was successfully applied.
@@ -739,8 +741,9 @@ TEST(IndexScan, getSizeEstimateAndExactSizeWithAppliedPrefilter) {
                                         IndexScan::PrefilterVariablePair pair,
                                         const size_t estimateSize,
                                         const size_t exactSize) {
-    auto optUpdatedQet = indexScan.getUpdatedQueryExecutionTreeWithPrefilterApplied(
-        makePrefilterVec(std::move(pair)));
+    auto optUpdatedQet =
+        indexScan.getUpdatedQueryExecutionTreeWithPrefilterApplied(
+            makePrefilterVec(std::move(pair)));
     ASSERT_TRUE(optUpdatedQet.has_value());
     auto updatedQet = optUpdatedQet.value();
     ASSERT_EQ(updatedQet->getSizeEstimate(), estimateSize);
@@ -793,8 +796,8 @@ TEST(IndexScan, verifyThatPrefilteredIndexScanResultIsNotCacheable) {
   auto qet =
       ad_utility::makeExecutionTree<IndexScan>(qec, Permutation::PSO, triple);
   EXPECT_TRUE(qet->getRootOperation()->canResultBeCached());
-  auto updatedQet =
-      qet->getUpdatedQueryExecutionTreeWithPrefilterApplied(std::move(prefilterPairs));
+  auto updatedQet = qet->getUpdatedQueryExecutionTreeWithPrefilterApplied(
+      std::move(prefilterPairs));
   // We have a corresponding column for ?x (at ColumnIndex 1), which is also the
   // first sorted variable column. Thus, we expect that the PrefilterExpression
   // (< 5, ?x) is applied for this `IndexScan`, resulting in prefiltered
@@ -809,8 +812,8 @@ TEST(IndexScan, verifyThatPrefilteredIndexScanResultIsNotCacheable) {
                                     pr(gt(DoubleId(22)), V{"?z"}),
                                     pr(gt(IntId(10)), V{"?b"}));
   EXPECT_TRUE(qet->getRootOperation()->canResultBeCached());
-  updatedQet =
-      qet->getUpdatedQueryExecutionTreeWithPrefilterApplied(std::move(prefilterPairs));
+  updatedQet = qet->getUpdatedQueryExecutionTreeWithPrefilterApplied(
+      std::move(prefilterPairs));
   // No `PrefilterExpression` should be applied for this `IndexScan`, we don't
   // expect an updated QueryExecutionTree. The `IndexScan` should remain
   // unchanged, containing no prefiltered `BlockMetadataRanges`. Thus, it should
@@ -1814,7 +1817,8 @@ TEST(IndexScanTest, StripColumnsWithPrefiltering) {
     auto prefilteredThenStripped = [&]() {
       auto prefilteredQet =
           makeBaseScan()
-              ->getUpdatedQueryExecutionTreeWithPrefilterApplied(prefilterPairs())
+              ->getUpdatedQueryExecutionTreeWithPrefilterApplied(
+                  prefilterPairs())
               .value_or(makeBaseScan());
       std::set<Variable> varsSet(varsToKeep.begin(), varsToKeep.end());
       return QueryExecutionTree::makeTreeWithStrippedColumns(
