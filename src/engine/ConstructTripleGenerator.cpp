@@ -54,28 +54,14 @@ size_t ConstructTripleGenerator::getBatchSize() {
   return batchSize;
 }
 
-// ============================================================================
 // Template Analysis (Precomputation Phase)
-// ============================================================================
+//
 // Called once at construction to analyze the CONSTRUCT triple patterns.
 // For each pattern, we determine how each term (subject, predicate, object)
 // will be resolved:
-//   - CONSTANT: IRIs and Literals are evaluated once and stored
-//   - VARIABLE: Column index is pre-computed for O(1) access per row
-//   - BLANK_NODE: Format prefix/suffix are pre-built (row number varies)
-//
-// The main entry point is analyzeTemplate(), which delegates to:
-//   - analyzeTerm(): Dispatches based on term type
-//   - analyzeIriTerm(): Precomputes IRI string value
-//   - analyzeLiteralTerm(): Precomputes Literal string value
-//   - analyzeVariableTerm(): Registers variable and precomputes column index
-//   - analyzeBlankNodeTerm(): Registers blank node and precomputes format
-//
-// This analysis enables fast per-row instantiation without repeated parsing
-// or hash map lookups in the hot path.
-// ============================================================================
-
-// _____________________________________________________________________________
+// - CONSTANT: IRIs and Literals are evaluated once and stored
+// - VARIABLE: Column index is pre-computed for O(1) access per row
+// - BLANK_NODE: Format prefix/suffix are pre-built (row number varies)
 void ConstructTripleGenerator::analyzeTemplate() {
   precomputedConstants_.resize(templateTriples_.size());
   triplePatternInfos_.resize(templateTriples_.size());
@@ -105,6 +91,7 @@ ConstructTripleGenerator::TermResolution ConstructTripleGenerator::analyzeTerm(
     return analyzeBlankNodeTerm(std::get<BlankNode>(term));
   }
   // Unreachable for valid GraphTerm
+  // TODO<ms2144> add compile time error throw here.
   return {TermSource::CONSTANT, 0};
 }
 
@@ -174,33 +161,20 @@ ConstructTripleGenerator::ConstructTripleGenerator(
   analyzeTemplate();
 }
 
-// ============================================================================
-// Batch Evaluation (Column-Oriented Processing)
-// ============================================================================
+// _____________________________________________________________________________
+// Batch Evaluation (Column-Oriented Processing or multiple result-table rows)
+//
 // Evaluates Variables and BlankNodes for a batch of rows.
-//
-// The main entry point is evaluateBatchColumnOriented(), which delegates to:
-//   - evaluateVariablesForBatch(): Column-oriented variable evaluation
-//   - evaluateBlankNodesForBatch(): Row-by-row blank node generation
-//
 // Column-oriented access pattern for variables:
-//   for each variable V:
+//   for each variable V occurring in the template triples:
 //     for each row R in batch:
-//       read idTable[R][column(V)]    <-- Sequential reads within a column
+//       read idTable[column(V)][R]    <-- Sequential reads within a column
 //
-// This is more cache-friendly than row-oriented access because:
-//   - CPU prefetchers work better with sequential memory access
-//   - Each column's data is contiguous in the IdTable
-//   - We process one cache line's worth of IDs before moving to the next
-//
-// The batch size (default 64) is tuned so the working set (IDs + cached
-// strings for batch rows) fits in L2 cache, avoiding cache thrashing.
+// This is more cache-friendly than row-oriented access, because the memory
+// layout of `IdTable` is column-major.
 //
 // Note: BlankNodes are evaluated row-by-row because their values include
 // the row number and cannot be cached across rows.
-// ============================================================================
-
-// _____________________________________________________________________________
 ConstructTripleGenerator::BatchEvaluationCache
 ConstructTripleGenerator::evaluateBatchColumnOriented(
     const IdTable& idTable, const LocalVocab& localVocab,
@@ -227,8 +201,9 @@ void ConstructTripleGenerator::evaluateVariablesForBatch(
 
   // Initialize variable string pointers: [varIdx][rowInBatch]
   // We store pointers directly into idCache to avoid a second hash lookup
-  // during instantiation. Pointers are stable within a batch since we don't
-  // modify idCache between evaluation and instantiation (no rehashing).
+  // during template triple instantiation. Pointers are stable within a batch
+  // since we don't modify idCache between evaluation and instantiation (no
+  // rehashing).
   batchCache.variableStringPtrs.resize(variablesToEvaluate_.size());
   for (auto& column : batchCache.variableStringPtrs) {
     column.resize(numRows, nullptr);

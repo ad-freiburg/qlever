@@ -165,14 +165,22 @@ class ConstructTripleGenerator {
   // ---------------------------------------------------------------------------
   // Batch Processing Configuration
   // ---------------------------------------------------------------------------
-  // Batch size controls the trade-off between cache locality and overhead:
-  //   - Smaller batches (e.g., 64): Better L1/L2 cache hit rates because
-  //     the working set (IDs + strings for batch rows) fits in cache.
-  //   - Larger batches (e.g., 1000+): Lower per-batch overhead but risk
-  //     cache thrashing when working set exceeds cache size.
+  // We process rows in batches to enable column-oriented memory access. For
+  // each variable, we read its column across all rows in the batch before
+  // moving to the next variable. This creates sequential memory access patterns
+  // that benefit from CPU prefetching and cache line utilization.
   //
-  // The optimal value depends on: number of variables, average string size,
-  // and hardware cache hierarchy. Default of 64 works well empirically.
+  // Trade-off: Larger batches increase the chance of cache hits when the same
+  // ID appears multiple times within the batch (common for predicates).
+  // However, if the batch is too large, the working set (batch_size *
+  // num_variables * pointer_size for variableStringPtrs, plus cached strings in
+  // IdCache) may exceed L1/L2 cache capacity, causing cache thrashing.
+  //
+  // The value 64 was determined empirically. It provides good cache locality
+  // while keeping the working set small enough to fit in typical L2 caches.
+  //
+  // TODO<ms2144>: Compute batch size dynamically based on the number of
+  // variables and available cache size, rather than using a fixed value.
   static constexpr size_t DEFAULT_BATCH_SIZE = 64;
 
   // Get the batch size, configurable via QLEVER_CONSTRUCT_BATCH_SIZE env var.
@@ -188,9 +196,14 @@ class ConstructTripleGenerator {
   // blankNodeValues[blankNodeIdx][rowInBatch] stores strings directly since
   // blank nodes can't be cached (the blank node values include the row number).
   struct BatchEvaluationCache {
-    // Store pointers to strings in IdCache - nullptr for UNDEF or missing
+    // Store pointers to strings in IdCache. Nullptr for UNDEF or missing.
+    // maps: variable idx -> idx of row in batch -> pointer to string in
+    // `IdCache`, which the variable corresponding to the variable idx for the
+    // specific row of the batch evaluates to.
     std::vector<std::vector<const std::string*>> variableStringPtrs;
     // Store string values for blank nodes (can't be cached by Id)
+    // maps: blank node idx -> idx of row in batch -> string object representing
+    // the corresponding `BlankNode` object.
     std::vector<std::vector<std::string>> blankNodeValues;
     size_t numRows = 0;
 
