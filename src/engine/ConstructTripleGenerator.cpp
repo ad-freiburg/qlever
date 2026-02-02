@@ -287,26 +287,20 @@ void ConstructTripleGenerator::evaluateBlankNodesForBatch(
   }
 }
 
-// ============================================================================
-// Triple Instantiation
-// ============================================================================
-// Converts precomputed term values into concrete StringTriples or formatted
+// _____________________________________________________________________________
+// Converts precomputed term values into concrete `StringTriples` or formatted
 // strings. Each term position (subject, predicate, object) is resolved based
 // on its TermSource:
-//
 //   CONSTANT    -> Use precomputed string (evaluated once at construction)
 //   VARIABLE    -> Lookup in variableStrings (pointer into IdCache)
 //   BLANK_NODE  -> Use batch cache (row-specific, includes row number)
 //
-// Key optimization: Variable strings are looked up once per variable per row
-// (via lookupVariableStrings) and reused across all triple patterns that
+// variable strings are looked up once per variable per result-table row
+// (via `lookupVariableStrings`) and reused across all triple patterns that
 // reference the same variable in that row.
-//
 // If any term is UNDEF (nullopt/nullptr), the entire triple is skipped.
 // This implements SPARQL CONSTRUCT semantics where incomplete triples are
 // not included in the output.
-// ============================================================================
-
 // _____________________________________________________________________________
 StringTriple ConstructTripleGenerator::instantiateTripleFromBatch(
     size_t tripleIdx, const BatchEvaluationCache& batchCache, size_t rowInBatch,
@@ -414,18 +408,14 @@ const std::string* ConstructTripleGenerator::getTermStringPtr(
   return nullptr;  // Unreachable
 }
 
-// ============================================================================
-// ID Cache Helpers
-// ============================================================================
-// The ID cache maps Id values to their string representations, avoiding
+// _____________________________________________________________________________
+// ID Cache Helpers.
+// The ID cache maps `Id` values to their string representations, avoiding
 // redundant vocabulary lookups when the same entity appears multiple times
 // in the result set. High cache hit rates are common for queries with
 // repeated values (e.g., same predicate or shared subjects).
-//
 // Statistics logging helps identify queries where caching is effective
 // (high hit rate) vs. queries with mostly unique values (low hit rate).
-// ============================================================================
-
 // _____________________________________________________________________________
 ConstructTripleGenerator::IdCacheStatsLogger::~IdCacheStatsLogger() {
   // Only log if there were a meaningful number of lookups
@@ -467,27 +457,14 @@ void ConstructTripleGenerator::lookupVariableStrings(
   }
 }
 
-// ============================================================================
-// Output Formatting
-// ============================================================================
+// _____________________________________________________________________________
 // Formats triples for different output formats without intermediate
-// StringTriple allocations. This is the key performance optimization:
-//
-// Old approach (StringTriple-based):
-//   Row -> StringTriple{s,p,o} (allocation) -> formatForOutput (copy)
-//
-// New approach (direct formatting):
-//   Row -> formatTriple(s*,p*,o*) -> yield string (single allocation)
-//
+// `StringTriple` allocations.
+// Row -> formatTriple(s*,p*,o*) -> yield string (single allocation)
 // Format-specific handling:
 //   TURTLE: Subject Predicate Object .\n (with literal escaping)
 //   CSV:    "s","p","o"\n (RFC 4180 escaping)
 //   TSV:    s\tp\to\n (minimal escaping)
-//
-// The stream_generator (co_yield) coalesces small strings into ~1MB buffers
-// for efficient streaming to the HTTP response.
-// ============================================================================
-
 // _____________________________________________________________________________
 std::string ConstructTripleGenerator::formatTriple(
     const std::string* subject, const std::string* predicate,
@@ -521,19 +498,16 @@ std::string ConstructTripleGenerator::formatTriple(
   return {};  // Unreachable
 }
 
-// ============================================================================
+// _____________________________________________________________________________
 // FormattedTripleIterator
-// ============================================================================
 // Iterator that yields formatted triples (Turtle/CSV/TSV) one at a time.
-// Implements the InputRangeFromGet interface for lazy evaluation.
+// Implements the `InputRangeFromGet` interface for lazy evaluation.
 //
 // Iteration proceeds in three nested loops:
 //   1. Batches: Groups of rows processed together for cache locality
 //   2. Rows: Individual result rows within a batch
 //   3. Triples: Triple patterns instantiated for each row
-//
-// The iterator maintains state to resume iteration after each yield.
-// ============================================================================
+// _____________________________________________________________________________
 class FormattedTripleIterator
     : public ad_utility::InputRangeFromGet<std::string> {
  public:
@@ -668,39 +642,8 @@ class FormattedTripleIterator
 };
 
 // _____________________________________________________________________________
-ad_utility::InputRangeTypeErased<std::string>
-ConstructTripleGenerator::generateFormattedTriples(
-    const TableWithRange& table, ConstructOutputFormat format) {
-  const size_t currentRowOffset = rowOffset_;
-  rowOffset_ += table.tableWithVocab_.idTable().numRows();
-
-  return ad_utility::InputRangeTypeErased<std::string>{
-      std::make_unique<FormattedTripleIterator>(*this, table, format,
-                                                currentRowOffset)};
-}
-
-// ============================================================================
-// Public Interface
-// ============================================================================
-// Entry points for generating CONSTRUCT query output:
-//
-// generateStringTriples (static):
-//   - Returns a lazy range of StringTriple objects
-//   - Used when caller needs structured access to triple components
-//   - Triples are generated on-demand as the range is consumed
-//
-// generateFormattedTriples (instance method):
-//   - Returns a stream_generator yielding pre-formatted strings
-//   - More efficient for streaming output (avoids StringTriple allocation)
-//   - Called via ExportQueryExecutionTrees for HTTP responses
-//
-// Both methods:
-//   - Process result tables lazily (streaming, not materializing)
-//   - Maintain rowOffset_ state for correct blank node numbering
-//   - Support cancellation via cancellationHandle_
-// ============================================================================
-
-// _____________________________________________________________________________
+// Entry point for generating CONSTRUCT query output.
+// Used when caller needs structured access to triple components.
 ad_utility::InputRangeTypeErased<QueryExecutionTree::StringTriple>
 ConstructTripleGenerator::generateStringTriples(
     const QueryExecutionTree& qet,
@@ -733,4 +676,19 @@ ConstructTripleGenerator::generateStringTriples(
         return generator.generateStringTriplesForResultTable(table);
       });
   return InputRangeTypeErased(ql::views::join(std::move(tableTriples)));
+}
+
+// _____________________________________________________________________________
+// Entry point for generating CONSTRUCT query output.
+// More efficient for streaming output than `generateStringTriples` (avoids
+// `StringTriple` allocations).
+ad_utility::InputRangeTypeErased<std::string>
+ConstructTripleGenerator::generateFormattedTriples(
+    const TableWithRange& table, ConstructOutputFormat format) {
+  const size_t currentRowOffset = rowOffset_;
+  rowOffset_ += table.tableWithVocab_.idTable().numRows();
+
+  return ad_utility::InputRangeTypeErased<std::string>{
+      std::make_unique<FormattedTripleIterator>(*this, table, format,
+                                                currentRowOffset)};
 }
