@@ -265,8 +265,8 @@ IndexScan::makeCopyWithPrefilteredScanSpecAndBlocks(
       getExecutionContext(), permutation_, locatedTriplesSharedState_, subject_,
       predicate_, object_, additionalColumns_, additionalVariables_,
       graphsToFilter_, std::move(scanSpecAndBlocks), true, varsToKeep_, false,
-      static_cast<size_t>(0));
-  // Recompute size estimates for new prefilter.
+      size_t{0});
+  // Recompute size estimates for the new prefilter `scanSpecAndBlocks`.
   auto indexScan =
       std::dynamic_pointer_cast<IndexScan>(copy->getRootOperation());
   AD_CORRECTNESS_CHECK(indexScan != nullptr);
