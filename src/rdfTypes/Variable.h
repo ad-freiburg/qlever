@@ -14,12 +14,6 @@
 #include "util/Serializer/SerializeString.h"
 #include "util/Serializer/Serializer.h"
 
-// Forward declaration because of cyclic dependencies
-// TODO<joka921> The coupling of the `Variable` with its `evaluate` methods
-// is not very clean and should be refactored.
-struct ConstructQueryExportContext;
-enum struct PositionInTriple : int;
-
 class Variable {
  private:
   std::string _name;
@@ -33,41 +27,20 @@ class Variable {
 
   // TODO<joka921> There are several similar variants of this function across
   // the codebase. Unify them!
-
-  // The `evaluate` method, which is required for the export of CONSTRUCT query
-  // results depends on a lot of other code (in particular the complete
-  // `Index`). For the time being, To not be forced to link this class against
-  // all these types, we use the following approach: The `evaluate` method
-  // refers to a static function pointer, which is initially set to a dummy
-  // function. The Export module (in `ExportQueryExecutionTree.cpp`) sets this
-  // pointer to the actual implementation as part of the static initialization.
-  // In the future, the evaluation should be completely done outside the
-  // `Variable` class.
   // ___________________________________________________________________________
-  using EvaluateFuncPtr = std::optional<std::string> (*)(
-      const Variable&, const ConstructQueryExportContext& context,
-      [[maybe_unused]] PositionInTriple positionInTriple);
-
-  [[nodiscard]] std::optional<std::string> evaluate(
-      const ConstructQueryExportContext& context,
-      [[maybe_unused]] PositionInTriple positionInTriple) const;
-
-  static EvaluateFuncPtr& decoupledEvaluateFuncPtr();
+  std::string toSparql() const { return _name; }
 
   // ___________________________________________________________________________
-  [[nodiscard]] std::string toSparql() const { return _name; }
-
-  // ___________________________________________________________________________
-  [[nodiscard]] const std::string& name() const { return _name; }
+  const std::string& name() const { return _name; }
 
   // Needed for consistency with the `Alias` class.
-  [[nodiscard]] const std::string& targetVariable() const { return _name; }
+  const std::string& targetVariable() const { return _name; }
 
   // Converts `?someTextVar` and `?someEntityVar` into
   // `?ql_someTextVar_score_var_someEntityVar`.
   // Converts `?someTextVar` and `someFixedEntity` into
   // `?ql_someTextVar_fixedEntity_someFixedEntity`.
-  // Note that if the the fixed entity contains non ascii characters they are
+  // Note that if the fixed entity contains non ascii characters they are
   // converted to numbers and escaped.
   Variable getEntityScoreVariable(
       const std::variant<Variable, std::string>& varOrEntity) const;
