@@ -211,7 +211,7 @@ const auto testSetAndMakeScanWithPrefilterExpr =
       auto t = generateLocationTrace(l);
       IndexScan scan{getQec(kg), permutation, triple};
       auto variable = pr1.second;
-      auto optUpdatedQet = scan.setPrefilterGetUpdatedQueryExecutionTree(
+      auto optUpdatedQet = scan.getUpdatedQueryExecutionTreeWithPrefilterApplied(
           makeFilterExpression::filterHelper::makePrefilterVec(std::move(pr1)));
       if (pr2.has_value() && optUpdatedQet.has_value()) {
         // Testing with a second `PrefilterExpression`s only makes sense if the
@@ -219,7 +219,7 @@ const auto testSetAndMakeScanWithPrefilterExpr =
         ASSERT_TRUE(optUpdatedQet.has_value());
         optUpdatedQet =
             optUpdatedQet.value()
-                ->setPrefilterGetUpdatedQueryExecutionTree(
+                ->getUpdatedQueryExecutionTreeWithPrefilterApplied(
                     makeFilterExpression::filterHelper::makePrefilterVec(
                         std::move(pr2.value())))
                 .value_or(optUpdatedQet.value());
@@ -739,7 +739,7 @@ TEST(IndexScan, getSizeEstimateAndExactSizeWithAppliedPrefilter) {
                                         IndexScan::PrefilterVariablePair pair,
                                         const size_t estimateSize,
                                         const size_t exactSize) {
-    auto optUpdatedQet = indexScan.setPrefilterGetUpdatedQueryExecutionTree(
+    auto optUpdatedQet = indexScan.getUpdatedQueryExecutionTreeWithPrefilterApplied(
         makePrefilterVec(std::move(pair)));
     ASSERT_TRUE(optUpdatedQet.has_value());
     auto updatedQet = optUpdatedQet.value();
@@ -794,7 +794,7 @@ TEST(IndexScan, verifyThatPrefilteredIndexScanResultIsNotCacheable) {
       ad_utility::makeExecutionTree<IndexScan>(qec, Permutation::PSO, triple);
   EXPECT_TRUE(qet->getRootOperation()->canResultBeCached());
   auto updatedQet =
-      qet->setPrefilterGetUpdatedQueryExecutionTree(std::move(prefilterPairs));
+      qet->getUpdatedQueryExecutionTreeWithPrefilterApplied(std::move(prefilterPairs));
   // We have a corresponding column for ?x (at ColumnIndex 1), which is also the
   // first sorted variable column. Thus, we expect that the PrefilterExpression
   // (< 5, ?x) is applied for this `IndexScan`, resulting in prefiltered
@@ -810,7 +810,7 @@ TEST(IndexScan, verifyThatPrefilteredIndexScanResultIsNotCacheable) {
                                     pr(gt(IntId(10)), V{"?b"}));
   EXPECT_TRUE(qet->getRootOperation()->canResultBeCached());
   updatedQet =
-      qet->setPrefilterGetUpdatedQueryExecutionTree(std::move(prefilterPairs));
+      qet->getUpdatedQueryExecutionTreeWithPrefilterApplied(std::move(prefilterPairs));
   // No `PrefilterExpression` should be applied for this `IndexScan`, we don't
   // expect an updated QueryExecutionTree. The `IndexScan` should remain
   // unchanged, containing no prefiltered `BlockMetadataRanges`. Thus, it should
@@ -1385,7 +1385,7 @@ TEST(IndexScan, clone) {
     ASSERT_TRUE(cloneReference.getRootOperation()->canResultBeCached());
     auto prefilterPairs =
         makePrefilterVec(pr(eq(IntId(10)), Variable{"?price"}));
-    auto optUpdatedQet = qet->setPrefilterGetUpdatedQueryExecutionTree(
+    auto optUpdatedQet = qet->getUpdatedQueryExecutionTreeWithPrefilterApplied(
         std::move(prefilterPairs));
     ASSERT_TRUE(optUpdatedQet.has_value());
     const auto& updatedQet = optUpdatedQet.value();
@@ -1814,7 +1814,7 @@ TEST(IndexScanTest, StripColumnsWithPrefiltering) {
     auto prefilteredThenStripped = [&]() {
       auto prefilteredQet =
           makeBaseScan()
-              ->setPrefilterGetUpdatedQueryExecutionTree(prefilterPairs())
+              ->getUpdatedQueryExecutionTreeWithPrefilterApplied(prefilterPairs())
               .value_or(makeBaseScan());
       std::set<Variable> varsSet(varsToKeep.begin(), varsToKeep.end());
       return QueryExecutionTree::makeTreeWithStrippedColumns(
@@ -1827,7 +1827,7 @@ TEST(IndexScanTest, StripColumnsWithPrefiltering) {
       auto strippedFirst = QueryExecutionTree::makeTreeWithStrippedColumns(
           makeBaseScan(), varsSet);
       return strippedFirst
-          ->setPrefilterGetUpdatedQueryExecutionTree(prefilterPairs())
+          ->getUpdatedQueryExecutionTreeWithPrefilterApplied(prefilterPairs())
           .value_or(strippedFirst);
     }();
 
@@ -1854,7 +1854,7 @@ TEST(IndexScanTest, StripColumnsWithPrefiltering) {
     // First get the full prefiltered result (without column stripping)
     auto fullPrefilteredQet =
         makeBaseScan()
-            ->setPrefilterGetUpdatedQueryExecutionTree(prefilterPairs())
+            ->getUpdatedQueryExecutionTreeWithPrefilterApplied(prefilterPairs())
             .value_or(makeBaseScan());
 
     qec->clearCacheUnpinnedOnly();

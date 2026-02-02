@@ -199,32 +199,31 @@ std::vector<ColumnIndex> IndexScan::resultSortedOn() const {
 
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
-IndexScan::setPrefilterGetUpdatedQueryExecutionTree(
+IndexScan::getUpdatedQueryExecutionTreeWithPrefilterApplied(
     const std::vector<PrefilterVariablePair>& prefilterVariablePairs) const {
   if (!getLimitOffset().isUnconstrained() ||
       scanSpecAndBlocks_.sizeBlockMetadata_ == 0) {
     return std::nullopt;
   }
 
-  auto optSortedVarColIdxPair =
+  auto sortedVarAndColIndex =
       getSortedVariableAndMetadataColumnIndexForPrefiltering();
-  if (!optSortedVarColIdxPair.has_value()) {
+  if (!sortedVarAndColIndex.has_value()) {
     return std::nullopt;
   }
 
-  const auto& [sortedVar, colIdx] = optSortedVarColIdxPair.value();
+  // Return a new `IndexScan` with updated `scanSpecAndBlocks_`, by
+  // intersecting its block ranges with the block ranges from the applicable
+  // prefilters. If no prefilter applies, return `std::nullopt`.
+  const auto& [sortedVar, colIndex] = sortedVarAndColIndex.value();
   auto it =
       ql::ranges::find(prefilterVariablePairs, sortedVar, ad_utility::second);
   if (it != prefilterVariablePairs.end()) {
     const auto& vocab = getIndex().getVocab();
-    // If the `BlockMetadataRanges` were previously prefiltered, AND-merge
-    // the previous `BlockMetadataRanges` with the `BlockMetadataRanges`
-    // retrieved via the newly passed prefilter. This corresponds logically to a
-    // conjunction over the prefilters applied for this `IndexScan`.
     const auto& blockMetadataRanges =
         prefilterExpressions::detail::logicalOps::getIntersectionOfBlockRanges(
             it->first->evaluate(
-                vocab, getScanSpecAndBlocks().getBlockMetadataSpan(), colIdx),
+                vocab, getScanSpecAndBlocks().getBlockMetadataSpan(), colIndex),
             scanSpecAndBlocks_.blockMetadata_);
 
     return makeCopyWithPrefilteredScanSpecAndBlocks(

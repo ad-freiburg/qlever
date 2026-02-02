@@ -64,7 +64,8 @@ class IndexScan final : public Operation {
             Graphs graphsToFilter = Graphs::All(),
             std::optional<ScanSpecAndBlocks> scanSpecAndBlocks = std::nullopt);
 
-  // Constructor to simplify copy creation of an `IndexScan`.
+  // Constructor that takes all members explicitly. Used by
+  // `makeCopyWithPrefilteredScanSpecAndBlocks` and `cloneImpl`.
   IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
             LocatedTriplesSharedState locatedTriplesSharedState,
             const TripleComponent& s, const TripleComponent& p,
@@ -98,7 +99,7 @@ class IndexScan final : public Operation {
   // Set `PrefilterExpression`s and return updated `QueryExecutionTree` pointer
   // if necessary.
   std::optional<std::shared_ptr<QueryExecutionTree>>
-  setPrefilterGetUpdatedQueryExecutionTree(
+  getUpdatedQueryExecutionTreeWithPrefilterApplied(
       const std::vector<PrefilterVariablePair>& prefilterVariablePairs)
       const override;
 
@@ -234,10 +235,8 @@ class IndexScan final : public Operation {
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
-  // Return an updated QueryExecutionTree containing the new IndexScan which is
-  // a copy of this (`IndexScan`), but with added corresponding
-  // `PrefilterExpression` (`PrefilterIndexPair`). This method is called in the
-  // implementation part of `setPrefilterGetUpdatedQueryExecutionTree()`.
+  // Return a new `QueryExecutionTree` with prefiltered `scanSpecAndBlocks`. If
+  // no prefiltering was applied, return `std::nullopt`.
   std::shared_ptr<QueryExecutionTree> makeCopyWithPrefilteredScanSpecAndBlocks(
       ScanSpecAndBlocks scanSpecAndBlocks) const;
 
