@@ -164,23 +164,29 @@ class ConstructTripleGenerator {
 
   // ---------------------------------------------------------------------------
   // Batch Processing Configuration
-  // ---------------------------------------------------------------------------
   // We process rows in batches to enable column-oriented memory access. For
-  // each variable, we read its column across all rows in the batch before
-  // moving to the next variable. This creates sequential memory access patterns
-  // that benefit from CPU prefetching and cache line utilization.
+  // each variable, we read its column from the `IdTable` across all rows in the
+  // batch before moving to the next variable. This creates sequential memory
+  // access patterns (`IdTable` has column-major memory layout) that benefit
+  // from CPU prefetching and cache line utilization.
   //
   // Trade-off: Larger batches increase the chance of cache hits when the same
-  // ID appears multiple times within the batch (common for predicates).
+  // id appears multiple times within the batch (common for predicates).
   // However, if the batch is too large, the working set (batch_size *
   // num_variables * pointer_size for variableStringPtrs, plus cached strings in
-  // IdCache) may exceed L1/L2 cache capacity, causing cache thrashing.
-  //
+  // `IdCache`) may exceed L1/L2 cache capacity, causing cache thrashing.
   // The value 64 was determined empirically. It provides good cache locality
   // while keeping the working set small enough to fit in typical L2 caches.
+  // With a batch size of 64 and 4 distinct variables in the template triples,
+  // the `variableStringPtrs` array (which is populated using the sequential
+  // access pattern to the `IdTable`) uses 64 rows x 4 variables x 8 bytes per
+  // pointer = 2048 bytes. My CPU has, per core, L1d 32 KiB + L2 512KiB
+  // available.
   //
-  // TODO<ms2144>: Compute batch size dynamically based on the number of
-  // variables and available cache size, rather than using a fixed value.
+  // TODO<ms2144>: Use more principled approach: maybe compute batch size
+  // dynamically based on the number of variables and available cache size,
+  // rather than using a fixed value. And also monitor how much of the L2 cache
+  // is used when a batch is being processed.
   static constexpr size_t DEFAULT_BATCH_SIZE = 64;
 
   // Get the batch size, configurable via QLEVER_CONSTRUCT_BATCH_SIZE env var.
@@ -190,9 +196,9 @@ class ConstructTripleGenerator {
 
   // Batch evaluation cache organized for column-oriented access.
   // variableStringPtrs[varIdx][rowInBatch] stores pointers directly into the
-  // IdCache, eliminating the need for a second hash lookup during triple
+  // `IdCache`, eliminating the need for a second hash lookup during triple
   // instantiation. Pointers are stable within a batch because we don't modify
-  // IdCache between evaluation and instantiation.
+  // `IdCache` between evaluation and instantiation.
   // blankNodeValues[blankNodeIdx][rowInBatch] stores strings directly since
   // blank nodes can't be cached (the blank node values include the row number).
   struct BatchEvaluationCache {
@@ -201,7 +207,7 @@ class ConstructTripleGenerator {
     // `IdCache`, which the variable corresponding to the variable idx for the
     // specific row of the batch evaluates to.
     std::vector<std::vector<const std::string*>> variableStringPtrs;
-    // Store string values for blank nodes (can't be cached by Id)
+    // Store string values for blank nodes (can't be cached by `Id`)
     // maps: blank node idx -> idx of row in batch -> string object representing
     // the corresponding `BlankNode` object.
     std::vector<std::vector<std::string>> blankNodeValues;
@@ -237,14 +243,15 @@ class ConstructTripleGenerator {
   // triples by instantiating the triple-patterns with the values of the
   // result-table row (triple-patterns are the triples in the CONSTRUCT-clause
   // of a CONSTRUCT-query). The following pipeline takes place conceptually:
-  // result-table -> result-table Rows -> Triple Patterns -> StringTriples
-  auto generateStringTriplesForResultTable(const TableWithRange& table);
+  // result-table -> processing batches -> result-table rows -> triple patterns
+  // -> `StringTriples`
+  ad_utility::InputRangeTypeErased<StringTriple>
+  generateStringTriplesForResultTable(const TableWithRange& table);
 
   // _____________________________________________________________________________
   // Generate triples as formatted strings for the given output format.
   // This is the main entry point for streaming CONSTRUCT results.
-  // Returns a type-erased input range that works in both C++17 and C++20.
-  // Yields formatted strings directly, avoiding StringTriple allocation.
+  // Yields formatted strings directly, avoiding `StringTriple` allocation.
   ad_utility::InputRangeTypeErased<std::string> generateFormattedTriples(
       const TableWithRange& table, ConstructOutputFormat format);
 

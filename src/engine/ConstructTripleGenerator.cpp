@@ -327,7 +327,8 @@ StringTriple ConstructTripleGenerator::instantiateTripleFromBatch(
 }
 
 // _____________________________________________________________________________
-auto ConstructTripleGenerator::generateStringTriplesForResultTable(
+ad_utility::InputRangeTypeErased<StringTriple>
+ConstructTripleGenerator::generateStringTriplesForResultTable(
     const TableWithRange& table) {
   const auto tableWithVocab = table.tableWithVocab_;
   const size_t currentRowOffset = rowOffset_;
@@ -380,8 +381,9 @@ auto ConstructTripleGenerator::generateStringTriplesForResultTable(
     return batchTriples;
   };
 
-  return ql::views::iota(size_t{0}, numBatches) |
-         ql::views::transform(processBatch) | ql::views::join;
+  return InputRangeTypeErased(ql::views::iota(size_t{0}, numBatches) |
+                              ql::views::transform(processBatch) |
+                              ql::views::join);
 }
 
 // _____________________________________________________________________________
@@ -725,7 +727,8 @@ ConstructTripleGenerator::generateStringTriples(
       ad_utility::OwningView{std::move(rowIndices)},
       [generator = std::move(generator)](const TableWithRange& table) mutable {
         // conceptually, the generator now handles the following pipeline:
-        // table -> rows -> triple patterns -> string triples
+        // table -> processing batch -> table rows -> triple patterns -> string
+        // triples
         return generator.generateStringTriplesForResultTable(table);
       });
   return InputRangeTypeErased(ql::views::join(std::move(tableTriples)));
