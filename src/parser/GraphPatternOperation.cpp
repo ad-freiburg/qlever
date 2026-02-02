@@ -16,6 +16,7 @@
 #include "parser/TripleComponent.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
+#include "util/VariantRangeFilter.h"
 
 namespace parsedQuery {
 
