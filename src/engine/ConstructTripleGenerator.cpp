@@ -61,7 +61,7 @@ size_t ConstructTripleGenerator::getBatchSize() {
 // will be resolved:
 // - CONSTANT: IRIs and Literals are evaluated once and stored
 // - VARIABLE: Column index is pre-computed for O(1) access per row
-// - BLANK_NODE: Format prefix/suffix_ are pre-built (row number varies)
+// - BLANK_NODE: Format prefix/suffix are pre-built (row number varies)
 void ConstructTripleGenerator::analyzeTemplate() {
   precomputedConstants_.resize(templateTriples_.size());
   triplePatternInfos_.resize(templateTriples_.size());
