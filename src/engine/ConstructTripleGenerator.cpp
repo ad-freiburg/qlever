@@ -112,8 +112,8 @@ ConstructTripleGenerator::TermResolution ConstructTripleGenerator::analyzeTerm(
 ConstructTripleGenerator::TermResolution
 ConstructTripleGenerator::analyzeIriTerm(const Iri& iri, size_t tripleIdx,
                                          size_t pos) {
-  auto val = ConstructQueryEvaluator::evaluate(iri);
-  precomputedConstants_[tripleIdx][pos] = std::move(val);
+  precomputedConstants_[tripleIdx][pos] =
+      ConstructQueryEvaluator::evaluate(iri);
   return {TermSource::CONSTANT, tripleIdx};
 }
 
@@ -122,8 +122,8 @@ ConstructTripleGenerator::TermResolution
 ConstructTripleGenerator::analyzeLiteralTerm(const Literal& literal,
                                              size_t tripleIdx, size_t pos,
                                              PositionInTriple role) {
-  auto val = ConstructQueryEvaluator::evaluate(literal, role);
-  precomputedConstants_[tripleIdx][pos] = std::move(val);
+  precomputedConstants_[tripleIdx][pos] =
+      ConstructQueryEvaluator::evaluate(literal, role);
   return {TermSource::CONSTANT, tripleIdx};
 }
 
