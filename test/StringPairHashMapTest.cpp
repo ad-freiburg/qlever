@@ -27,5 +27,5 @@ TEST(StringPairHashMapTest, InsertAndLookup) {
   ASSERT_EQ(it->second, 7);
 
   EXPECT_EQ(map.count(StringViewPair{"foo", "bar"}), 1u);
-  EXPECT_EQ(map.count(StringViewPair{"doesnot", "exist"}), 0u);
+  EXPECT_EQ(map.count(StringViewPair{"does not", "exist"}), 0u);
 }
