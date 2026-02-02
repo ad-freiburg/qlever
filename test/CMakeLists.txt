@@ -193,6 +193,8 @@ addLinkAndDiscoverTestSerial(QueryPlannerSpatialJoinTest engine)
 
 addLinkAndDiscoverTestNoLibs(HashMapTest)
 
+addLinkAndDiscoverTestNoLibs(StringPairHashMapTest)
+
 addLinkAndDiscoverTest(HashSetTest)
 
 addLinkAndDiscoverTestSerial(GroupByTest engine)
