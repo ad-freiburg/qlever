@@ -88,23 +88,23 @@ class ConstructTripleGenerator {
 
   // Pre-analyzed info for a triple pattern to enable fast instantiation
   struct TriplePatternInfo {
-    std::array<TermResolution, NUM_TRIPLE_POSITIONS> resolutions;
+    std::array<TermResolution, NUM_TRIPLE_POSITIONS> resolutions_;
   };
 
   // Variable with pre-computed column index for `IdTable`.
   struct VariableWithColumnIndex {
-    Variable variable;
+    Variable variable_;
     // idx of the column for the variable in the `IdTable`.
-    std::optional<size_t> columnIndex;  // nullopt if variable not in result
+    std::optional<size_t> columnIndex_;  // nullopt if variable not in result
   };
 
   // BlankNode with precomputed prefix and suffix for fast evaluation.
   // The blank node format is: prefix + rowNumber + suffix
-  // where prefix is "_:g" or "_:u" and suffix is "_" + label.
+  // where prefix is "_:g" or "_:u" and suffix_ is "_" + label.
   // This avoids recomputing these constant parts for every result table row.
   struct BlankNodeFormatInfo {
-    std::string prefix;  // "_:g" or "_:u"
-    std::string suffix;  // "_" + label
+    std::string prefix_;  // "_:g" or "_:u"
+    std::string suffix_;  // "_" + label
   };
 
   // Cache for ID-to-string conversions to avoid redundant vocabulary lookups
@@ -117,17 +117,17 @@ class ConstructTripleGenerator {
 
   // Minimum capacity for the LRU cache. This should be large enough to hold
   // the working set of a single batch (batch_size * num_variables) plus
-  // headroom for cross-batch cache hits on repeated values (e.g., predicates).
+  // headroom for cross-batch cache hits_ on repeated values (e.g., predicates).
   // 100k entries = 10-20MB depending on average string length.
   static constexpr size_t MIN_CACHE_CAPACITY = 100'000;
 
   // Statistics for ID cache performance analysis
   struct IdCacheStats {
-    size_t hits = 0;
-    size_t misses = 0;
-    size_t totalLookups() const { return hits + misses; }
+    size_t hits_ = 0;
+    size_t misses_ = 0;
+    size_t totalLookups() const { return hits_ + misses_; }
     double hitRate() const {
-      return totalLookups() > 0 ? static_cast<double>(hits) /
+      return totalLookups() > 0 ? static_cast<double>(hits_) /
                                       static_cast<double>(totalLookups())
                                 : 0.0;
     }
@@ -142,6 +142,14 @@ class ConstructTripleGenerator {
         : numRows_(numRows), cacheCapacity_(cacheCapacity) {}
 
     ~IdCacheStatsLogger();
+
+    // Non-copyable: copying would cause duplicate logging on destruction.
+    IdCacheStatsLogger(const IdCacheStatsLogger&) = delete;
+    IdCacheStatsLogger& operator=(const IdCacheStatsLogger&) = delete;
+
+    // Non-movable: this logger is used in-place and should not be moved.
+    IdCacheStatsLogger(IdCacheStatsLogger&&) = delete;
+    IdCacheStatsLogger& operator=(IdCacheStatsLogger&&) = delete;
 
     // Accessors for the stats (used during cache operations)
     IdCacheStats& stats() { return stats_; }
@@ -161,18 +169,17 @@ class ConstructTripleGenerator {
   // access patterns (`IdTable` has column-major memory layout) that benefit
   // from CPU prefetching.
   //
-  // Trade-off: Larger batches increase the chance of cache hits when the same
+  // Trade-off: Larger batches increase the chance of cache hits_ when the same
   // id appears multiple times within the batch (common for predicates).
   // However, if the batch is too large, the working set (batch_size *
-  // num_variables * pointer_size for variableStringPtrs, plus cached strings in
-  // `IdCache`) may exceed L1/L2 cache capacity, causing cache thrashing.
-  // The value 64 was determined empirically. It provides good cache locality
-  // while keeping the working set small enough to fit in typical L2 caches.
-  // With a batch size of 64 and 4 distinct variables in the template triples,
-  // the `variableStringPtrs` array (which is populated using the sequential
-  // access pattern to the `IdTable`) uses 64 rows x 4 variables x 8 bytes per
-  // pointer = 2048 bytes. My CPU has, per core, L1d 32 KiB + L2 512KiB
-  // available.
+  // num_variables * pointer_size for variableStringPtrs_, plus cached strings
+  // in `IdCache`) may exceed L1/L2 cache capacity, causing cache thrashing. The
+  // value 64 was determined empirically. It provides good cache locality while
+  // keeping the working set small enough to fit in typical L2 caches. With a
+  // batch size of 64 and 4 distinct variables in the template triples, the
+  // `variableStringPtrs_` array (which is populated using the sequential access
+  // pattern to the `IdTable`) uses 64 rows x 4 variables x 8 bytes per pointer
+  // = 2048 bytes. My CPU has, per core, L1d 32 KiB + L2 512KiB available.
   //
   // TODO<ms2144>: Use more principled approach: maybe compute batch size
   // dynamically based on the number of variables and available cache size,
@@ -186,11 +193,11 @@ class ConstructTripleGenerator {
   static size_t getBatchSize();
 
   // Batch evaluation cache organized for column-oriented access.
-  // variableStringPtrs[varIdx][rowInBatch] stores pointers directly into the
+  // variableStringPtrs_[varIdx][rowInBatch] stores pointers directly into the
   // `IdCache`, eliminating the need for a second hash lookup during triple
   // instantiation. Pointers are stable within a batch because we don't modify
   // `IdCache` between evaluation and instantiation.
-  // blankNodeValues[blankNodeIdx][rowInBatch] stores strings directly since
+  // blankNodeValues_[blankNodeIdx][rowInBatch] stores strings directly since
   // blank nodes can't be cached across result table rows (the blank node
   // values include the row number).
   struct BatchEvaluationCache {
@@ -198,23 +205,23 @@ class ConstructTripleGenerator {
     // maps: variable idx -> idx of row in batch -> pointer to string in
     // `IdCache`, which the variable corresponding to the variable idx for the
     // specific row of the batch evaluates to.
-    std::vector<std::vector<const std::string*>> variableStringPtrs;
+    std::vector<std::vector<const std::string*>> variableStringPtrs_;
     // Store string values for blank nodes (can't be cached by `Id`)
     // maps: blank node idx -> idx of row in batch -> string object representing
     // the corresponding `BlankNode` object.
-    std::vector<std::vector<std::string>> blankNodeValues;
-    size_t numRows = 0;
+    std::vector<std::vector<std::string>> blankNodeValues_;
+    size_t numRows_ = 0;
 
     // Get string pointer for a specific variable at a row in the batch
     const std::string* getVariableString(size_t varIdx,
                                          size_t rowInBatch) const {
-      return variableStringPtrs[varIdx][rowInBatch];
+      return variableStringPtrs_[varIdx][rowInBatch];
     }
 
     // Get value for a specific blank node at a row in the batch
     const std::string& getBlankNodeValue(size_t blankNodeIdx,
                                          size_t rowInBatch) const {
-      return blankNodeValues[blankNodeIdx][rowInBatch];
+      return blankNodeValues_[blankNodeIdx][rowInBatch];
     }
   };
 
@@ -301,7 +308,7 @@ class ConstructTripleGenerator {
                                  IdCacheStatsLogger& statsLogger) const;
 
   // Evaluates all blank nodes for a batch of rows.
-  // Uses precomputed prefix/suffix, only concatenating the row number per row.
+  // Uses precomputed prefix/suffix_, only concatenating the row number per row.
   void evaluateBlankNodesForBatch(BatchEvaluationCache& batchCache,
                                   ql::span<const uint64_t> rowIndices,
                                   size_t currentRowOffset) const;
@@ -309,7 +316,7 @@ class ConstructTripleGenerator {
   // Instantiates a single triple using the precomputed constants and
   // the batch evaluation cache for a specific row. Returns an empty
   // StringTriple if any component is UNDEF. Variable string values are
-  // provided via the pre-computed variableStrings cache (one lookup per
+  // provided via the precomputed variableStrings cache (one lookup per
   // variable per row, reused across all triples in the row).
   StringTriple instantiateTripleFromBatch(
       size_t tripleIdx, const BatchEvaluationCache& batchCache,
@@ -359,7 +366,7 @@ class ConstructTripleGenerator {
   std::vector<std::array<std::optional<std::string>, NUM_TRIPLE_POSITIONS>>
       precomputedConstants_;
 
-  // Pre-analyzed info for each triple pattern (resolutions + skip flag)
+  // Pre-analyzed info for each triple pattern (resolutions_ + skip flag)
   std::vector<TriplePatternInfo> triplePatternInfos_;
 
   // Mapping from variable to index in the per-row variable cache

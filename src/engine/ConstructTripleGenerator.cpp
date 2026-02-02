@@ -21,47 +21,47 @@ using ad_utility::InputRangeTypeErased;
 using enum PositionInTriple;
 using StringTriple = ConstructTripleGenerator::StringTriple;
 
-// ============================================================================
-// Configuration
-// ============================================================================
+namespace {
+// Parse QLEVER_CONSTRUCT_BATCH_SIZE environment variable.
+// Returns the configured value if valid, or DEFAULT_BATCH_SIZE otherwise.
+size_t parseBatchSizeFromEnv() {
+  const char* envVal = std::getenv("QLEVER_CONSTRUCT_BATCH_SIZE");
+  if (envVal == nullptr) {
+    AD_LOG_INFO << "CONSTRUCT batch size: "
+                << ConstructTripleGenerator::DEFAULT_BATCH_SIZE
+                << " (default)\n";
+    return ConstructTripleGenerator::DEFAULT_BATCH_SIZE;
+  }
+  try {
+    size_t val = std::stoull(envVal);
+    if (val > 0) {
+      AD_LOG_INFO << "CONSTRUCT batch size from environment: " << val << "\n";
+      return val;
+    }
+    AD_LOG_WARN << "QLEVER_CONSTRUCT_BATCH_SIZE must be > 0, got: " << envVal
+                << ", using default: "
+                << ConstructTripleGenerator::DEFAULT_BATCH_SIZE << "\n";
+  } catch (const std::exception& e) {
+    AD_LOG_WARN << "Invalid QLEVER_CONSTRUCT_BATCH_SIZE value: " << envVal
+                << " (" << e.what() << "), using default: "
+                << ConstructTripleGenerator::DEFAULT_BATCH_SIZE << "\n";
+  }
+  return ConstructTripleGenerator::DEFAULT_BATCH_SIZE;
+}
+}  // namespace
 
 // _____________________________________________________________________________
 size_t ConstructTripleGenerator::getBatchSize() {
-  static const size_t batchSize = []() {
-    const char* envVal = std::getenv("QLEVER_CONSTRUCT_BATCH_SIZE");
-    if (envVal != nullptr) {
-      try {
-        size_t val = std::stoull(envVal);
-        if (val > 0) {
-          AD_LOG_INFO << "CONSTRUCT batch size from environment: " << val
-                      << "\n";
-          return val;
-        }
-        AD_LOG_WARN << "QLEVER_CONSTRUCT_BATCH_SIZE must be > 0, got: "
-                    << envVal << ", using default: " << DEFAULT_BATCH_SIZE
-                    << "\n";
-      } catch (const std::exception& e) {
-        AD_LOG_WARN << "Invalid QLEVER_CONSTRUCT_BATCH_SIZE value: " << envVal
-                    << " (" << e.what()
-                    << "), using default: " << DEFAULT_BATCH_SIZE << "\n";
-      }
-    } else {
-      AD_LOG_INFO << "CONSTRUCT batch size: " << DEFAULT_BATCH_SIZE
-                  << " (default)\n";
-    }
-    return DEFAULT_BATCH_SIZE;
-  }();
+  static const size_t batchSize = parseBatchSizeFromEnv();
   return batchSize;
 }
 
-// Template Analysis (Precomputation Phase)
-//
 // Called once at construction to analyze the CONSTRUCT triple patterns.
 // For each pattern, we determine how each term (subject, predicate, object)
 // will be resolved:
 // - CONSTANT: IRIs and Literals are evaluated once and stored
 // - VARIABLE: Column index is pre-computed for O(1) access per row
-// - BLANK_NODE: Format prefix/suffix are pre-built (row number varies)
+// - BLANK_NODE: Format prefix/suffix_ are pre-built (row number varies)
 void ConstructTripleGenerator::analyzeTemplate() {
   precomputedConstants_.resize(templateTriples_.size());
   triplePatternInfos_.resize(templateTriples_.size());
@@ -71,8 +71,8 @@ void ConstructTripleGenerator::analyzeTemplate() {
     TriplePatternInfo& info = triplePatternInfos_[tripleIdx];
 
     for (size_t pos = 0; pos < NUM_TRIPLE_POSITIONS; ++pos) {
-      PositionInTriple role = static_cast<PositionInTriple>(pos);
-      info.resolutions[pos] = analyzeTerm(triple[pos], tripleIdx, pos, role);
+      auto role = static_cast<PositionInTriple>(pos);
+      info.resolutions_[pos] = analyzeTerm(triple[pos], tripleIdx, pos, role);
     }
   }
 }
@@ -126,7 +126,7 @@ ConstructTripleGenerator::analyzeVariableTerm(const Variable& var) {
     if (variableColumns_.get().contains(var)) {
       columnIndex = variableColumns_.get().at(var).columnIndex_;
     }
-    variablesToEvaluate_.push_back({var, columnIndex});
+    variablesToEvaluate_.emplace_back(var, columnIndex);
   }
   return {TermSource::VARIABLE, variableToIndex_[var]};
 }
@@ -141,8 +141,8 @@ ConstructTripleGenerator::analyzeBlankNodeTerm(const BlankNode& blankNode) {
     // Precompute prefix ("_:g" or "_:u") and suffix ("_" + label)
     // so we only need to concatenate the row number per row
     BlankNodeFormatInfo formatInfo;
-    formatInfo.prefix = blankNode.isGenerated() ? "_:g" : "_:u";
-    formatInfo.suffix = absl::StrCat("_", label);
+    formatInfo.prefix_ = blankNode.isGenerated() ? "_:g" : "_:u";
+    formatInfo.suffix_ = absl::StrCat("_", label);
     blankNodesToEvaluate_.push_back(std::move(formatInfo));
   }
   return {TermSource::BLANK_NODE, blankNodeLabelToIndex_[label]};
@@ -182,7 +182,7 @@ ConstructTripleGenerator::evaluateBatchColumnOriented(
     ql::span<const uint64_t> rowIndices, size_t currentRowOffset,
     IdCache& idCache, IdCacheStatsLogger& statsLogger) const {
   BatchEvaluationCache batchCache;
-  batchCache.numRows = rowIndices.size();
+  batchCache.numRows_ = rowIndices.size();
 
   evaluateVariablesForBatch(batchCache, idTable, localVocab, rowIndices,
                             currentRowOffset, idCache, statsLogger);
@@ -205,8 +205,8 @@ void ConstructTripleGenerator::evaluateVariablesForBatch(
   // during template triple instantiation. Pointers are stable within a batch
   // since we don't modify idCache between evaluation and instantiation (no
   // rehashing).
-  batchCache.variableStringPtrs.resize(variablesToEvaluate_.size());
-  for (auto& column : batchCache.variableStringPtrs) {
+  batchCache.variableStringPtrs_.resize(variablesToEvaluate_.size());
+  for (auto& column : batchCache.variableStringPtrs_) {
     column.resize(numRows, nullptr);
   }
 
@@ -214,14 +214,14 @@ void ConstructTripleGenerator::evaluateVariablesForBatch(
   // The IdTable is accessed sequentially for each column.
   for (size_t varIdx = 0; varIdx < variablesToEvaluate_.size(); ++varIdx) {
     const auto& varInfo = variablesToEvaluate_[varIdx];
-    auto& columnPtrs = batchCache.variableStringPtrs[varIdx];
+    auto& columnPtrs = batchCache.variableStringPtrs_[varIdx];
 
-    if (!varInfo.columnIndex.has_value()) {
+    if (!varInfo.columnIndex_.has_value()) {
       // Variable not in result - all pointers are nullptr (already default)
       continue;
     }
 
-    const size_t colIdx = varInfo.columnIndex.value();
+    const size_t colIdx = varInfo.columnIndex_.value();
 
     // Read all IDs from this column for all rows in the batch,
     // ensure their string values are in the cache, and store pointers directly.
@@ -234,22 +234,21 @@ void ConstructTripleGenerator::evaluateVariablesForBatch(
       // Pointers are stable within a batch because:
       // 1. LRU only evicts entries not accessed in the current batch
       // 2. Cache capacity >= batch_size * num_variables (ensured in creation)
-      size_t missesBefore = cacheStats.misses;
-      const std::string& cachedValue = idCache.getOrCompute(id, [&](const Id&) {
-        ++cacheStats.misses;
-        // Build minimal context for ID-to-string conversion
-        ConstructQueryExportContext context{
-            rowIdx,       idTable,         localVocab, variableColumns_.get(),
-            index_.get(), currentRowOffset};
-        auto value = ConstructQueryEvaluator::evaluateWithColumnIndex(
-            varInfo.columnIndex, context);
-        // Use empty string as sentinel for UNDEF values
-        return value.value_or(std::string{});
-      });
+      size_t missesBefore = cacheStats.misses_;
+      const std::string& cachedValue = idCache.getOrCompute(
+          id, [&cacheStats, &varCols = variableColumns_.get(),
+               &idx = index_.get(), colIdx = varInfo.columnIndex_, rowIdx,
+               &idTable, &localVocab, currentRowOffset](const Id&) {
+            ++cacheStats.misses_;
+            ConstructQueryExportContext context{
+                rowIdx, idTable, localVocab, varCols, idx, currentRowOffset};
+            auto value = ConstructQueryEvaluator::evaluateWithColumnIndex(
+                colIdx, context);
+            return value.value_or(std::string{});
+          });
 
-      // Track hits (compute lambda not called means it was a cache hit)
-      if (cacheStats.misses == missesBefore) {
-        ++cacheStats.hits;
+      if (cacheStats.misses_ == missesBefore) {
+        ++cacheStats.hits_;
       }
 
       // Store pointer directly (empty string means UNDEF)
@@ -265,24 +264,24 @@ void ConstructTripleGenerator::evaluateBlankNodesForBatch(
   const size_t numRows = rowIndices.size();
 
   // Initialize blank node values: [blankNodeIdx][rowInBatch]
-  batchCache.blankNodeValues.resize(blankNodesToEvaluate_.size());
-  for (auto& column : batchCache.blankNodeValues) {
+  batchCache.blankNodeValues_.resize(blankNodesToEvaluate_.size());
+  for (auto& column : batchCache.blankNodeValues_) {
     column.resize(numRows);
   }
 
-  // Evaluate blank nodes using precomputed prefix and suffix.
+  // Evaluate blank nodes using precomputed prefix and suffix_.
   // Only the row number needs to be concatenated per row.
-  // Format: prefix + (currentRowOffset + rowIdx) + suffix
+  // Format: prefix + (currentRowOffset + rowIdx) + suffix_
   for (size_t blankIdx = 0; blankIdx < blankNodesToEvaluate_.size();
        ++blankIdx) {
     const BlankNodeFormatInfo& formatInfo = blankNodesToEvaluate_[blankIdx];
-    auto& columnValues = batchCache.blankNodeValues[blankIdx];
+    auto& columnValues = batchCache.blankNodeValues_[blankIdx];
 
     for (size_t rowInBatch = 0; rowInBatch < numRows; ++rowInBatch) {
       const uint64_t rowIdx = rowIndices[rowInBatch];
-      // Use precomputed prefix and suffix, only concatenate row number
+      // Use precomputed prefix and suffix_, only concatenate row number
       columnValues[rowInBatch] = absl::StrCat(
-          formatInfo.prefix, currentRowOffset + rowIdx, formatInfo.suffix);
+          formatInfo.prefix_, currentRowOffset + rowIdx, formatInfo.suffix_);
     }
   }
 }
@@ -355,12 +354,13 @@ ConstructTripleGenerator::generateStringTriplesForResultTable(
         currentRowOffset, *idCache, *statsLogger);
 
     std::vector<StringTriple> batchTriples;
-    batchTriples.reserve(batchCache.numRows * templateTriples_.size());
+    batchTriples.reserve(batchCache.numRows_ * templateTriples_.size());
 
     std::vector<const std::string*> variableStrings(
         variablesToEvaluate_.size());
 
-    for (size_t rowInBatch = 0; rowInBatch < batchCache.numRows; ++rowInBatch) {
+    for (size_t rowInBatch = 0; rowInBatch < batchCache.numRows_;
+         ++rowInBatch) {
       lookupVariableStrings(batchCache, rowInBatch, *idCache, variableStrings);
 
       for (size_t tripleIdx = 0; tripleIdx < templateTriples_.size();
@@ -387,19 +387,20 @@ const std::string* ConstructTripleGenerator::getTermStringPtr(
     size_t rowInBatch,
     const std::vector<const std::string*>& variableStrings) const {
   const TriplePatternInfo& info = triplePatternInfos_[tripleIdx];
-  const TermResolution& resolution = info.resolutions[pos];
+  const TermResolution& resolution = info.resolutions_[pos];
 
+  using enum ConstructTripleGenerator::TermSource;
   switch (resolution.source) {
-    case TermSource::CONSTANT: {
+    case CONSTANT: {
       const auto& opt = precomputedConstants_[tripleIdx][pos];
       return opt.has_value() ? &opt.value() : nullptr;
     }
-    case TermSource::VARIABLE: {
+    case VARIABLE: {
       // Variable string pointers are already stored directly in the batch
       // cache, eliminating hash lookups during instantiation
       return variableStrings[resolution.index];
     }
-    case TermSource::BLANK_NODE: {
+    case BLANK_NODE: {
       // Blank node values are always valid (computed for each row)
       return &batchCache.getBlankNodeValue(resolution.index, rowInBatch);
     }
@@ -423,7 +424,7 @@ ConstructTripleGenerator::IdCacheStatsLogger::~IdCacheStatsLogger() {
     AD_LOG_INFO << "CONSTRUCT IdCache stats - Rows: " << numRows_
                 << ", Capacity: " << cacheCapacity_
                 << ", Lookups: " << stats_.totalLookups()
-                << ", Hits: " << stats_.hits << ", Misses: " << stats_.misses
+                << ", Hits: " << stats_.hits_ << ", Misses: " << stats_.misses_
                 << ", Hit rate: " << std::fixed << std::setprecision(1)
                 << (stats_.hitRate() * 100.0) << "%" << std::endl;
   }
@@ -435,7 +436,7 @@ std::pair<std::shared_ptr<ConstructTripleGenerator::IdCache>,
 ConstructTripleGenerator::createIdCacheWithStats(size_t numRows) const {
   // Ensure cache capacity is large enough to hold the working set of a single
   // batch (batch_size * num_variables) to guarantee pointer stability within
-  // a batch. Add headroom for cross-batch cache hits on repeated values.
+  // a batch. Add headroom for cross-batch cache hits_ on repeated values.
   const size_t numVars = variablesToEvaluate_.size();
   const size_t minCapacityForBatch =
       getBatchSize() * std::max(numVars, size_t{1}) * 2;
@@ -524,7 +525,6 @@ class FormattedTripleIterator
         rowIndicesVec_(ql::ranges::begin(table.view_),
                        ql::ranges::end(table.view_)),
         currentRowOffset_(currentRowOffset),
-        batchSize_(ConstructTripleGenerator::getBatchSize()),
         variableStrings_(generator.variablesToEvaluate_.size()) {
     auto [cache, logger] =
         generator_.createIdCacheWithStats(rowIndicesVec_.size());
@@ -570,7 +570,7 @@ class FormattedTripleIterator
   // Process rows in the current batch, returning the next formatted triple.
   // Returns nullopt when the batch is exhausted (caller should advance).
   std::optional<std::string> processCurrentBatch() {
-    while (rowInBatch_ < batchCache_->numRows) {
+    while (rowInBatch_ < batchCache_->numRows_) {
       if (auto result = processCurrentRow()) {
         return result;
       }
@@ -633,7 +633,7 @@ class FormattedTripleIterator
   std::shared_ptr<IdCacheStatsLogger> statsLogger_;
 
   // Iteration state
-  size_t batchSize_;
+  size_t batchSize_ = ConstructTripleGenerator::getBatchSize();
   size_t batchStart_ = 0;
   size_t rowInBatch_ = 0;
   size_t tripleIdx_ = 0;

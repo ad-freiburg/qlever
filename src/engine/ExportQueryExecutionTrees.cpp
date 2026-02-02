@@ -1086,16 +1086,17 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
 constexpr ConstructOutputFormat mediaTypeToConstructFormat(
     ad_utility::MediaType mediaType) {
   using enum ad_utility::MediaType;
+  using enum ConstructOutputFormat;
   switch (mediaType) {
     case turtle:
-      return ConstructOutputFormat::TURTLE;
+      return TURTLE;
     case csv:
-      return ConstructOutputFormat::CSV;
+      return CSV;
     case tsv:
-      return ConstructOutputFormat::TSV;
+      return TSV;
     default:
       // This should never be reached for valid CONSTRUCT formats
-      return ConstructOutputFormat::TURTLE;
+      return TURTLE;
   }
 }
 
@@ -1139,11 +1140,15 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
 
   // generateFormattedTriples returns InputRangeTypeErased<std::string>
   // which works in both C++17 and C++20 modes
-  for (auto&& table : rowIndices) {
-    for (auto&& tripleString :
-         generator.generateFormattedTriples(table, outputFormat)) {
-      STREAMABLE_YIELD(tripleString);
-    }
+  auto formattedTriples =
+      rowIndices |
+      ql::views::transform([&generator, outputFormat](const auto& table) {
+        return generator.generateFormattedTriples(table, outputFormat);
+      }) |
+      ql::views::join;
+
+  for (const auto& tripleString : formattedTriples) {
+    STREAMABLE_YIELD(tripleString);
   }
 }
 

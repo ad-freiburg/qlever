@@ -167,7 +167,6 @@ class ExportQueryExecutionTrees {
       STREAMABLE_GENERATOR_TYPE streamGenerator);
 #endif
 
- public:
   static ad_utility::InputRangeTypeErased<TableWithRange> getRowIndices(
       const LimitOffsetClause& limitOffset, const Result& result,
       uint64_t& resutSizeTotal, uint64_t resultSizeMultiplicator = 1);
