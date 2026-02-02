@@ -709,6 +709,7 @@ class IndexImpl {
   friend class CreatePatternsFixture_createPatterns_Test;
   FRIEND_TEST(IndexImpl, recomputeStatistics);
   FRIEND_TEST(IndexImpl, writePatternsToFile);
+  FRIEND_TEST(IndexImpl, loadConfigFromOldIndex);
 
   bool isLiteral(std::string_view object) const;
 
