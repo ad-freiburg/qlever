@@ -81,4 +81,34 @@ void BasicGraphPattern::appendTriples(BasicGraphPattern other) {
   auto inner = _expression.getDescriptor();
   return "BIND (" + inner + " AS " + _target.name() + ")";
 }
+
+// ____________________________________________________________________________
+void BasicGraphPattern::collectAllContainedVariables(
+    ad_utility::HashSet<Variable>& vars) const {
+  for (const SparqlTriple& t : _triples) {
+    if (t.s_.isVariable()) {
+      vars.insert(t.s_.getVariable());
+    }
+    if (auto predicate = t.getPredicateVariable()) {
+      vars.insert(predicate.value());
+    }
+    if (t.o_.isVariable()) {
+      vars.insert(t.o_.getVariable());
+    }
+  }
+}
+
+// _____________________________________________________________________________
+ad_utility::HashSet<Variable> getVariablesPresentInBasicGraphPatterns(
+    const std::vector<parsedQuery::GraphPatternOperation>& graphPatterns) {
+  ad_utility::HashSet<Variable> vars;
+  for (const auto& graphPattern : graphPatterns) {
+    if (!std::holds_alternative<parsedQuery::BasicGraphPattern>(graphPattern)) {
+      continue;
+    }
+    graphPattern.getBasic().collectAllContainedVariables(vars);
+  }
+  return vars;
+}
+
 }  // namespace parsedQuery
