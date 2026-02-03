@@ -566,40 +566,6 @@ void Join::addCombinedRowToIdTable(const ROW_A& rowA, const ROW_B& rowB,
   }
 }
 
-// _____________________________________________________________________________
-namespace {
-// Type alias for the general InputRangeTypeErased with specific types.
-using IteratorWithSingleCol = InputRangeTypeErased<IdTableAndFirstCol<IdTable>>;
-
-// Convert a `CompressedRelationReader::IdTableGeneratorInputRange` to a
-// `InputRangeTypeErased<IdTableAndFirstCol<IdTable>>` for more efficient access
-// in the join columns below. This also makes sure the runtime information of
-// the passed `IndexScan` is updated properly as the range is consumed.
-IteratorWithSingleCol convertGenerator(
-    CompressedRelationReader::IdTableGeneratorInputRange gen, IndexScan& scan) {
-  // Store the generator in a wrapper so we can access its details after moving
-  auto generatorStorage =
-      std::make_shared<CompressedRelationReader::IdTableGeneratorInputRange>(
-          std::move(gen));
-
-  using SendPriority = RuntimeInformation::SendPriority;
-
-  auto range = CachingTransformInputRange(
-      *generatorStorage,
-      [generatorStorage, &scan,
-       sendPriority = SendPriority::Always](auto& table) mutable {
-        scan.updateRuntimeInfoForLazyScan(generatorStorage->details(),
-                                          sendPriority);
-        sendPriority = SendPriority::IfDue;
-        // IndexScans don't have a local vocabulary, so we can just use an empty
-        // one.
-        return IdTableAndFirstCol{std::move(table), LocalVocab{}};
-      });
-
-  return IteratorWithSingleCol{std::move(range)};
-}
-}  // namespace
-
 // ______________________________________________________________________________________________________
 Result Join::computeResultForTwoIndexScans(bool requestLaziness) const {
   return createResult(
@@ -676,7 +642,7 @@ Result Join::computeResultForIndexScanAndIdTable(
         std::optional<std::shared_ptr<const Result>> indexScanResult =
             std::nullopt;
         auto rightBlocks = [&scan, idTableHasUndef, &permutationIdTable,
-                            &indexScanResult]() -> LazyInputView {
+                            &indexScanResult]() -> LazyInputView<1> {
           if (idTableHasUndef) {
             indexScanResult =
                 scan->getResult(false, ComputationMode::LAZY_IF_SUPPORTED);

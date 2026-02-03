@@ -13,6 +13,7 @@
 #include "engine/JoinWithIndexScanHelpers.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
+#include "global/RuntimeParameters.h"
 #include "util/Algorithm.h"
 #include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
@@ -115,6 +116,20 @@ Result OptionalJoin::computeResult(bool requestLaziness) {
 
   if (auto res = tryIndexNestedLoopJoinIfSuitable(requestLaziness)) {
     return std::move(res).value();
+  }
+
+  if (getRuntimeParameter<&RuntimeParameters::prefilteredOptionalJoin_>()) {
+    if (auto indexScan =
+            std::dynamic_pointer_cast<IndexScan>(_right->getRootOperation())) {
+      auto leftRes = _left->getResult(true);
+      if (leftRes->isFullyMaterialized()) {
+        return materializedOptionalJoinWithIndexScan(
+            std::move(leftRes), std::move(indexScan), requestLaziness);
+      } else {
+        return lazyOptionalJoinWithIndexScan(
+            std::move(leftRes), std::move(indexScan), requestLaziness);
+      }
+    }
   }
 
   IdTable idTable{getResultWidth(), getExecutionContext()->getAllocator()};
@@ -481,6 +496,153 @@ Result OptionalJoin::lazyOptionalJoin(std::shared_ptr<const Result> left,
               ad_utility::OptionalJoinTag{});
         },
         leftRange, rightRange);
+    auto localVocab = std::move(rowAdder.localVocab());
+    return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
+                                    std::move(localVocab)};
+  };
+
+  if (requestLaziness) {
+    return {runLazyJoinAndConvertToGenerator(std::move(action),
+                                             std::move(resultPermutation)),
+            resultSortedOn()};
+  } else {
+    auto [idTable, localVocab] = action(ad_utility::noop);
+    applyPermutation(idTable, resultPermutation);
+    return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
+  }
+}
+// _____________________________________________________________________________
+Result OptionalJoin::lazyOptionalJoinWithIndexScan(
+    std::shared_ptr<const Result> left, std::shared_ptr<IndexScan> rightScan,
+    bool requestLaziness) {
+  AD_CONTRACT_CHECK(!left->isFullyMaterialized());
+  // Currently only supports a single join column.
+  AD_CORRECTNESS_CHECK(_joinColumns.size() == 1 ||
+                       implementation_ ==
+                           Implementation::OnlyUndefInLastJoinColumnOfLeft);
+  ad_utility::JoinColumnMapping joinColMap{
+      _joinColumns, _left->getResultWidth(), _right->getResultWidth(),
+      keepJoinColumns_};
+
+  auto resultPermutation = joinColMap.permutationResult();
+
+  auto action = [this, left = std::move(left), rightScan = std::move(rightScan),
+                 joinColMap = std::move(joinColMap)](
+                    std::function<void(IdTable&, LocalVocab&)> yieldTable) {
+    ad_utility::AddCombinedRowToIdTable rowAdder{
+        _joinColumns.size(), IdTable{getResultWidth(), allocator()},
+        cancellationHandle_, keepJoinColumns_,
+        CHUNK_SIZE,          std::move(yieldTable)};
+    auto getLeftAndRightRange = [&]<size_t numJoinCols>() {
+      auto firstJoinColLeft = _joinColumns.at(0).at(0);
+      auto [leftJoinSide, indexScanSide] =
+          rightScan->prefilterTables(left->idTables(), firstJoinColLeft);
+      auto leftRange = convertGenerator<decltype(leftJoinSide), numJoinCols>(
+          std::move(leftJoinSide), joinColMap.permutationLeft());
+      auto rightRange = convertGenerator<decltype(indexScanSide), numJoinCols>(
+          std::move(indexScanSide), joinColMap.permutationRight());
+      return std::pair{std::move(leftRange), std::move(rightRange)};
+    };
+    using namespace qlever::joinHelpers;
+    if (_joinColumns.size() == 1) {
+      // Note: The `zipperJoinForBlocksWithPotentialUndef` automatically
+      // switches to a more efficient implementation if there are no UNDEF
+      // values in any of the inputs.
+      auto [leftRange, rightRange] =
+          getLeftAndRightRange.template operator()<1>();
+      zipperJoinForBlocksWithPotentialUndef(
+          std::move(leftRange), std::move(rightRange), std::less{}, rowAdder);
+    } else {
+      AD_CORRECTNESS_CHECK(implementation_ ==
+                           Implementation::OnlyUndefInLastJoinColumnOfLeft);
+      auto [leftRange, rightRange] =
+          getLeftAndRightRange.template operator()<2>();
+      specialOptionalJoinForBlocks(std::move(leftRange), std::move(rightRange),
+                                   rowAdder);
+    }
+    auto localVocab = std::move(rowAdder.localVocab());
+    return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
+                                    std::move(localVocab)};
+  };
+
+  if (requestLaziness) {
+    return {runLazyJoinAndConvertToGenerator(std::move(action),
+                                             std::move(resultPermutation)),
+            resultSortedOn()};
+  } else {
+    auto [idTable, localVocab] = action(ad_utility::noop);
+    applyPermutation(idTable, resultPermutation);
+    return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
+  }
+}
+
+// _____________________________________________________________________________
+Result OptionalJoin::materializedOptionalJoinWithIndexScan(
+    std::shared_ptr<const Result> left, std::shared_ptr<IndexScan> rightScan,
+    bool requestLaziness) {
+  AD_CONTRACT_CHECK(left->isFullyMaterialized());
+  // Currently only supports a single join column.
+  AD_CORRECTNESS_CHECK(_joinColumns.size() == 1 ||
+                       implementation_ ==
+                           Implementation::OnlyUndefInLastJoinColumnOfLeft);
+  ad_utility::JoinColumnMapping joinColMap{
+      _joinColumns, _left->getResultWidth(), _right->getResultWidth(),
+      keepJoinColumns_};
+
+  auto resultPermutation = joinColMap.permutationResult();
+
+  auto action = [this, left = std::move(left), rightScan = std::move(rightScan),
+                 joinColMap = std::move(joinColMap)](
+                    std::function<void(IdTable&, LocalVocab&)> yieldTable) {
+    ad_utility::AddCombinedRowToIdTable rowAdder{
+        _joinColumns.size(), IdTable{getResultWidth(), allocator()},
+        cancellationHandle_, keepJoinColumns_,
+        CHUNK_SIZE,          std::move(yieldTable)};
+    auto getLeftAndRightRange = [&]<size_t numJoinCols>() {
+      auto firstJoinColLeft = _joinColumns.at(0).at(0);
+      auto rightBlocksInternal = rightScan->lazyScanForJoinOfColumnWithScan(
+          left->idTable().getColumn(firstJoinColLeft));
+      auto rightRange = convertGenerator<numJoinCols>(
+          std::move(rightBlocksInternal), *rightScan);
+      // TODO<joka921> unnecessary copy, debug what is going wrong...
+      auto permutationIdTable =
+          ad_utility::IdTableAndFirstCols<numJoinCols, IdTable>{
+              left->idTable()
+                  .asColumnSubsetView(joinColMap.permutationLeft())
+                  .clone(),
+              left->getCopyOfLocalVocab()};
+      /*
+      auto permutationIdTable =
+          ad_utility::IdTableAndFirstCols<numJoinCols, IdTableView<0>>{
+            left->idTable()
+                .asColumnSubsetView(joinColMap.permutationLeft())
+                ,
+            left->getCopyOfLocalVocab()};
+      */
+      auto leftRange = std::array{std::move(permutationIdTable)};
+
+      return std::pair{std::move(leftRange), std::move(rightRange)};
+    };
+    using namespace qlever::joinHelpers;
+    if (_joinColumns.size() == 1) {
+      // Note: The `zipperJoinForBlocksWithPotentialUndef` automatically
+      // switches to a more efficient implementation if there are no UNDEF
+      // values in any of the inputs.
+      auto [leftRange, rightRange] =
+          getLeftAndRightRange.template operator()<1>();
+      zipperJoinForBlocksWithPotentialUndef(
+          std::move(leftRange), std::move(rightRange), std::less{}, rowAdder);
+    } else {
+      AD_CORRECTNESS_CHECK(implementation_ ==
+                           Implementation::OnlyUndefInLastJoinColumnOfLeft);
+      auto [leftRange, rightRange] =
+          getLeftAndRightRange.template operator()<2>();
+      // AD_FAIL();
+      //  TODO<joka921> fix the bug here?
+      //  TODO<joka921> Does this work if we actually copy here?
+      specialOptionalJoinForBlocks(std::move(leftRange), std::move(rightRange),
+                                   rowAdder);
+    }
     auto localVocab = std::move(rowAdder.localVocab());
     return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
                                     std::move(localVocab)};

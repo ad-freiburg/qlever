@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "engine/AddCombinedRowToTable.h"
+#include "engine/IndexScan.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/Result.h"
@@ -42,24 +43,62 @@ inline void applyPermutation(IdTable& idTable,
   }
 }
 
-using LazyInputView = InputRangeTypeErased<IdTableAndFirstCol<IdTable>>;
+template <size_t NumJoinCols = 1>
+using LazyInputView =
+    InputRangeTypeErased<IdTableAndFirstCols<NumJoinCols, IdTable>>;
 
 // Convert a `generator<IdTableVocab>` to a `generator<IdTableAndFirstCol>` for
 // more efficient access in the join columns below and apply the given
 // permutation to each table.
-CPP_template(typename Input)(
+CPP_template(typename Input, size_t numJoinColumns = 1)(
     requires SameAsAny<Input, Result::Generator, Result::LazyResult>)
-    LazyInputView
-    convertGenerator(Input gen, OptionalPermutation permutation = {}) {
+    LazyInputView<numJoinColumns> convertGenerator(
+        Input gen, OptionalPermutation permutation = {}) {
   auto transformer = [permutation = std::move(permutation)](auto& element) {
     auto& [table, localVocab] = element;
     applyPermutation(table, permutation);
     // Make sure to actually move the table into the wrapper so that the tables
     // live as long as the wrapper.
-    return IdTableAndFirstCol{std::move(table), std::move(localVocab)};
+    return IdTableAndFirstCols<numJoinColumns, std::decay_t<decltype(table)>>{
+        std::move(table), std::move(localVocab)};
   };
   return InputRangeTypeErased{
       CachingTransformInputRange(std::move(gen), std::move(transformer))};
+}
+// _____________________________________________________________________________
+// Type alias for the general InputRangeTypeErased with specific types.
+template <size_t NumJoinCols = 1>
+using IteratorWithSingleCol =
+    InputRangeTypeErased<IdTableAndFirstCols<NumJoinCols, IdTable>>;
+
+// Convert a `CompressedRelationReader::IdTableGeneratorInputRange` to a
+// `InputRangeTypeErased<IdTableAndFirstCol<IdTable>>` for more efficient access
+// in the join columns below. This also makes sure the runtime information of
+// the passed `IndexScan` is updated properly as the range is consumed.
+template <size_t numJoinColumns = 1>
+IteratorWithSingleCol<numJoinColumns> convertGenerator(
+    CompressedRelationReader::IdTableGeneratorInputRange gen, IndexScan& scan) {
+  // Store the generator in a wrapper so we can access its details after moving
+  auto generatorStorage =
+      std::make_shared<CompressedRelationReader::IdTableGeneratorInputRange>(
+          std::move(gen));
+
+  using SendPriority = RuntimeInformation::SendPriority;
+
+  auto range = CachingTransformInputRange(
+      *generatorStorage,
+      [generatorStorage, &scan,
+       sendPriority = SendPriority::Always](auto& table) mutable {
+        scan.updateRuntimeInfoForLazyScan(generatorStorage->details(),
+                                          sendPriority);
+        sendPriority = SendPriority::IfDue;
+        // IndexScans don't have a local vocabulary, so we can just use an empty
+        // one.
+        return IdTableAndFirstCols<numJoinColumns, IdTable>{std::move(table),
+                                                            LocalVocab{}};
+      });
+
+  return IteratorWithSingleCol<numJoinColumns>{std::move(range)};
 }
 
 using MaterializedInputView = std::array<IdTableAndFirstCol<IdTableView<0>>, 1>;
@@ -78,7 +117,7 @@ inline MaterializedInputView asSingleTableView(
 // Wrap a result either in an array with a single element or in a range wrapping
 // the lazy result generator. Note that the lifetime of the view is coupled to
 // the lifetime of the result.
-inline std::variant<LazyInputView, MaterializedInputView> resultToView(
+inline std::variant<LazyInputView<1>, MaterializedInputView> resultToView(
     const Result& result, const std::vector<ColumnIndex>& permutation) {
   if (result.isFullyMaterialized()) {
     return asSingleTableView(result, permutation);

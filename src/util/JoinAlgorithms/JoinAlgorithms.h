@@ -19,7 +19,6 @@
 #include "util/InputRangeUtils.h"
 #include "util/JoinAlgorithms/FindUndefRanges.h"
 #include "util/JoinAlgorithms/JoinColumnMapping.h"
-#include "util/JoinAlgorithms/SpecialOptionalJoinForBlocks.h"
 #include "util/TransparentFunctors.h"
 #include "util/TypeTraits.h"
 
@@ -487,14 +486,16 @@ CPP_template(typename RangeSmaller, typename RangeLarger, typename LessThan,
  * @param compatibleRowAction Same as in `zipperJoinWithUndef`
  * @param elFromFirstNotFoundAction Same as in `zipperJoinWithUndef`
  */
-CPP_template(typename CompatibleActionT, typename NotFoundActionT,
+CPP_template(typename LeftTableLike, typename RightTableLike,
+             typename CompatibleActionT, typename NotFoundActionT,
              typename CancellationFuncT)(
-    requires BinaryIteratorFunction<CompatibleActionT, IdTableView<0>> CPP_and UnaryIteratorFunction<
-        NotFoundActionT, IdTableView<0>>
+    // TODO<joka921> Do we need different left and right types for now?
+    requires BinaryIteratorFunction<CompatibleActionT, LeftTableLike> CPP_and UnaryIteratorFunction<
+        NotFoundActionT, LeftTableLike>
         CPP_and ql::concepts::invocable<
-            CancellationFuncT>) void specialOptionalJoin(const IdTableView<0>&
+            CancellationFuncT>) void specialOptionalJoin(const LeftTableLike&
                                                              left,
-                                                         const IdTableView<0>&
+                                                         const RightTableLike&
                                                              right,
                                                          const CompatibleActionT&
                                                              compatibleRowAction,
@@ -535,8 +536,15 @@ CPP_template(typename CompatibleActionT, typename NotFoundActionT,
 
   // The last columns from the left and right input. Those will be dealt with
   // separately.
+  // TODO<joka921> This is a little inefficient, should be a getColumn on a
+  // column based interface.
+  auto transform = [](const auto& row) { return row[row.size() - 1]; };
+  /*
   ql::span<const Id> lastColumnLeft = left.getColumn(left.numColumns() - 1);
   ql::span<const Id> lastColumnRight = right.getColumn(right.numColumns() - 1);
+  */
+  auto lastColumnLeft = left | ql::views::transform(transform);
+  auto lastColumnRight = right | ql::views::transform(transform);
 
   while (it1 < end1 && it2 < end2) {
     checkCancellation();
@@ -585,12 +593,12 @@ CPP_template(typename CompatibleActionT, typename NotFoundActionT,
     // Set up the corresponding sub-ranges of the last columns.
     auto beg = it1 - left.begin();
     auto end = endSame1 - left.begin();
-    ql::span<const Id> leftSub{lastColumnLeft.begin() + beg,
-                               lastColumnLeft.begin() + end};
+    ql::ranges::subrange leftSub{lastColumnLeft.begin() + beg,
+                                 lastColumnLeft.begin() + end};
     beg = it2 - right.begin();
     end = endSame2 - right.begin();
-    ql::span<const Id> rightSub{lastColumnRight.begin() + beg,
-                                lastColumnRight.begin() + end};
+    ql::ranges::subrange rightSub{lastColumnRight.begin() + beg,
+                                  lastColumnRight.begin() + end};
 
     // Set up the generator for the UNDEF values.
     // TODO<joka921> We could probably also apply this optimization if both
@@ -727,26 +735,35 @@ class BlockAndSubrange {
 // combines the current iterator, then end iterator, the relevant projection to
 // obtain the input to the comparison, and a buffer for blocks that are
 // currently required by the join algorithm for one side of the join.
-template <typename Iterator, typename End, typename Projection>
+template <typename Iterator, typename End, typename Projection,
+          typename ProjectedElT = std::monostate>
 struct JoinSide {
   using CurrentBlocks =
       std::vector<detail::BlockAndSubrange<ql::iter_value_t<Iterator>>>;
   Iterator it_;
   [[no_unique_address]] const End end_;
   const Projection& projection_;
+  // Dummy, only required for better interface of `makeJoinnSide` below.
+  std::type_identity<ProjectedElT> projectedElT_{};
   CurrentBlocks currentBlocks_{};
   CurrentBlocks undefBlocks_{};
 
   // Type aliases for a single element from a block from the left/right input.
   using value_type = ql::ranges::range_value_t<ql::iter_value_t<Iterator>>;
   // Type alias for the result of the projection.
-  using ProjectedEl =
-      std::decay_t<std::invoke_result_t<const Projection&, value_type>>;
+  using ProjectedEl = std::conditional_t<
+      std::is_same_v<ProjectedElT, std::monostate>,
+      std::decay_t<std::invoke_result_t<const Projection&, value_type>>,
+      ProjectedElT>;
 };
 
 // Deduction guide required by the `makeJoinSide` function.
 template <typename It, typename End, typename Projection>
 JoinSide(It, End, const Projection&) -> JoinSide<It, End, Projection>;
+
+template <typename It, typename End, typename Projection, typename ProjectedElT>
+JoinSide(It, End, const Projection&, std::type_identity<ProjectedElT>)
+    -> JoinSide<It, End, Projection, ProjectedElT>;
 
 // Create a `JoinSide` object from a range of `blocks` and a `projection`. Note
 // that the `blocks` are stored as a reference, so the caller is responsible for
@@ -755,6 +772,13 @@ template <typename Blocks, typename Projection>
 auto makeJoinSide(Blocks& blocks, const Projection& projection) {
   return JoinSide{ql::ranges::begin(blocks), ql::ranges::end(blocks),
                   projection};
+}
+
+template <typename Blocks, typename Projection, typename ProjectionTarget>
+auto makeJoinSide(Blocks& blocks, const Projection& projection,
+                  std::type_identity<ProjectionTarget> tg) {
+  return JoinSide{ql::ranges::begin(blocks), ql::ranges::end(blocks),
+                  projection, tg};
 }
 
 // A concept to identify instantiations of the `JoinSide` template.
@@ -887,7 +911,7 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
   // Recompute the `currentEl`. It is the minimum of the last element in the
   // first block of either of the join sides.
   ProjectedEl getCurrentEl() {
-    auto getFirst = [](const Side& side) {
+    auto getFirst = [](const Side& side) -> ProjectedEl {
       return side.projection_(side.currentBlocks_.front().back());
     };
     return std::min(getFirst(leftSide_), getFirst(rightSide_), lessThan_);
@@ -1130,6 +1154,8 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
         getFirstBlock(currentBlocksRight, currentEl);
 
     compatibleRowAction_.setInput(fullBlockLeft, fullBlockRight);
+    // TODO<joka921> this is wrong and only for debugging.
+
     auto begL = fullBlockLeft.begin();
     auto begR = fullBlockRight.begin();
 
@@ -1138,6 +1164,9 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
       AD_EXPENSIVE_CHECK(itFromR >= begR);
       compatibleRowAction_.addRow(itFromL - begL, itFromR - begR);
     };
+    [[maybe_unused]] auto subrangeRightBla =
+        ql::ranges::subrange{subrangeRight.begin(), currentElItR};
+    [[maybe_unused]] auto idx = subrangeRightBla.begin() - begR;
     auto addRowIndices = [&begL, &begR, this](auto itFromL, auto endFromL,
                                               auto itFromR, auto endFromR) {
       AD_EXPENSIVE_CHECK(itFromL >= begL && endFromL >= itFromL);
@@ -1152,10 +1181,12 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
 
     auto addNotFoundRowIndex = [&]() {
       if constexpr (DoOptionalJoinOrMinus) {
-        return [this, begL = fullBlockLeft.begin()](auto itFromL) {
-          AD_CORRECTNESS_CHECK(!hasUndef(rightSide_));
-          compatibleRowAction_.addOptionalRow(itFromL - begL);
-        };
+        return
+            [this, begL = std::as_const(fullBlockLeft).begin()](auto itFromL) {
+              AD_CORRECTNESS_CHECK(!hasUndef(rightSide_));
+              // TODO<joka921> This is expensive, why is it not sized?
+              compatibleRowAction_.addOptionalRow(itFromL - begL);
+            };
 
       } else {
         return ad_utility::noop;
@@ -1599,8 +1630,10 @@ struct CompareAllButLast {
     // TODO<Joka921> get this in advance...
     auto numColumns = a.size();
     for (size_t i = 0; i < numColumns - 1; ++i) {
-      if (a[i] != b[i]) {
-        return a[i] < b[i];
+      const Id& aId = a[i];
+      const Id& bId = b[i];
+      if (aId != bId) {
+        return aId < bId;
       }
     }
     return false;
@@ -1641,24 +1674,30 @@ CPP_template(typename LeftSide, typename RightSide,
     }
 
     // Get allocator and number of columns from the first block.
-    auto allocator = blocksLeft.front().fullBlock().getAllocator();
-    size_t numCols = blocksLeft.front().fullBlock().numColumns();
+    auto allocator = makeUnlimitedAllocator<Id>();
+    AD_CORRECTNESS_CHECK(!blocksLeft.empty() && !blocksRight.empty());
+    size_t numColsLeft =
+        blocksLeft.front().fullBlock().template asStaticView<0>().numColumns();
 
     // TODO<joka921> This can be much more efficient, in particular it could use
     // zero copying.
     // Concatenate all rows from blocksLeft into a single IdTable.
-    IdTable leftTable(numCols, allocator);
+    IdTable leftTable(numColsLeft, allocator);
     for (const auto& block : blocksLeft) {
+      const auto& staticView = block.fullBlock().template asStaticView<0>();
       for (size_t idx : block.getIndexRange()) {
-        leftTable.push_back(block.fullBlock()[idx]);
+        leftTable.push_back(staticView[idx]);
       }
     }
 
+    size_t numColsRight =
+        blocksRight.front().fullBlock().template asStaticView<0>().numColumns();
     // Concatenate all rows from blocksRight into a single IdTable.
-    IdTable rightTable(numCols, allocator);
+    IdTable rightTable(numColsRight, allocator);
     for (const auto& block : blocksRight) {
+      const auto& staticView = block.fullBlock().template asStaticView<0>();
       for (size_t idx : block.getIndexRange()) {
-        rightTable.push_back(block.fullBlock()[idx]);
+        rightTable.push_back(staticView[idx]);
       }
     }
 
@@ -1667,9 +1706,13 @@ CPP_template(typename LeftSide, typename RightSide,
       return;
     }
 
+    // TODO<joka921> A little wonky, is always a constant
+    AD_CORRECTNESS_CHECK(!blocksLeft.front().fullBlock().empty());
+    size_t numJoinCols = blocksLeft.front().fullBlock()[0].size();
+
     // Extract the last columns.
-    auto lastColLeft = leftTable.getColumn(numCols - 1);
-    auto lastColRight = rightTable.getColumn(numCols - 1);
+    auto lastColLeft = leftTable.getColumn(numJoinCols - 1);
+    auto lastColRight = rightTable.getColumn(numJoinCols - 1);
 
     this->compatibleRowAction_.setInput(leftTable, rightTable);
     // Set up actions for the single-column join on the last column.
@@ -1732,6 +1775,39 @@ CPP_template(typename LeftSide, typename RightSide,
 };
 
 }  // namespace detail
+
+/**
+ * @brief Perform a special optional join for input ranges of blocks.
+ * This is a simplified implementation that works on blocks of row-like data.
+ * Preconditions:
+ * - Right input contains no UNDEF values
+ * - Left input only contains UNDEF in the last column
+ * - Both inputs are sorted lexicographically
+ * The join matches on all-but-last columns, then performs a join on the last
+ * column within matching groups.
+ */
+template <typename LeftBlocks, typename RightBlocks,
+          typename CompatibleRowAction>
+void specialOptionalJoinForBlocks(LeftBlocks&& leftBlocks,
+                                  RightBlocks&& rightBlocks,
+                                  CompatibleRowAction& compatibleRowAction) {
+  using ProjectedLeft = ql::ranges::range_value_t<
+      ql::ranges::range_value_t<std::decay_t<LeftBlocks>>>;
+  using ProjectedRight = ql::ranges::range_value_t<
+      ql::ranges::range_value_t<std::decay_t<RightBlocks>>>;
+  static_assert(std::is_same_v<ProjectedLeft, ProjectedRight>);
+  auto leftSide = detail::makeJoinSide(leftBlocks, ql::identity{},
+                                       std::type_identity<ProjectedLeft>{});
+  auto rightSide = detail::makeJoinSide(rightBlocks, ql::identity{},
+                                        std::type_identity<ProjectedLeft>{});
+  using LeftSide = decltype(leftSide);
+  using RightSide = decltype(rightSide);
+  detail::BlockZipperJoinImplForSpecialOptionalJoin<LeftSide, RightSide,
+                                                    CompatibleRowAction>
+      impl{leftSide, rightSide, detail::CompareAllButLast{},
+           compatibleRowAction};
+  impl.template runJoin<JoinType::OPTIONAL>();
+}
 
 /**
  * @brief Perform a zipper/merge join between two sorted inputs that are given

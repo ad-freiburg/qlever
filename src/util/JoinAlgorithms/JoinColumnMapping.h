@@ -6,6 +6,7 @@
 #define QLEVER_SRC_UTIL_JOINALGORITHMS_JOINCOLUMNMAPPING_H
 
 #include <array>
+#include <boost/qvm/map_mat_vec.hpp>
 #include <cstdint>
 #include <vector>
 
@@ -165,6 +166,74 @@ struct IdTableAndFirstCol {
   }
 
   const LocalVocab& getLocalVocab() const { return localVocab_; }
+};
+
+struct GetColsFromTable {
+  template <size_t numCols, typename Table>
+  decltype(auto) operator()(Table& table) {
+    return [&table]<size_t... I>(std::index_sequence<I...>) {
+      return ::ranges::views::zip(table.getColumn(I)...) |
+             ::ranges::views::transform([](auto&& tuple) {
+               return std::apply(
+                   [](auto&... refs) { return std::array{refs...}; },
+                   AD_FWD(tuple));
+             });
+    }(std::make_index_sequence<numCols>());
+  }
+};
+template <size_t numCols, typename Table>
+struct IdTableAndFirstCols {
+ private:
+  Table table_;
+  LocalVocab localVocab_;
+
+ public:
+  // Get access to the first column.
+  decltype(auto) cols() {
+    return GetColsFromTable{}.template operator()<numCols>(table_);
+  }
+  decltype(auto) cols() const {
+    return GetColsFromTable{}.template operator()<numCols>(table_);
+  }
+  // Typedef needed for generic interfaces.
+  using iterator = ql::ranges::iterator_t<
+      decltype(GetColsFromTable{}.template operator()<numCols>(
+          std::declval<Table&>()))>;
+  using const_iterator = ql::ranges::iterator_t<
+      decltype(GetColsFromTable{}.template operator()<numCols>(
+          std::declval<const Table&>()))>;
+  // Construct by taking ownership of the table.
+  IdTableAndFirstCols(Table t, LocalVocab localVocab)
+      : table_{std::move(t)}, localVocab_{std::move(localVocab)} {}
+
+  // The following functions all refer to the same column.
+  auto begin() { return cols().begin(); }
+  auto end() { return cols().end(); }
+  auto begin() const { return cols().begin(); }
+  auto end() const { return cols().end(); }
+
+  bool empty() const { return cols().empty(); }
+
+  decltype(auto) operator[](size_t idx) const { return cols()[idx]; }
+  decltype(auto) front() const { return cols().front(); }
+  decltype(auto) back() const { return cols().back(); }
+
+  size_t size() const { return cols().size(); }
+
+  // This interface is required in `Join.cpp` by the `AddCombinedRowToTable`
+  // class. Calling this function yields the same type, no matter if `Table` is
+  // `IdTable` or `IdTableView`.
+  template <size_t I = 0>
+  IdTableView<I> asStaticView() const {
+    return table_.template asStaticView<I>();
+  }
+
+  const LocalVocab& getLocalVocab() const { return localVocab_; }
+};
+
+template <typename Table>
+struct IdTableAndFirstCols<1, Table> : IdTableAndFirstCol<Table> {
+  using IdTableAndFirstCol<Table>::IdTableAndFirstCol;
 };
 }  // namespace ad_utility
 

@@ -83,6 +83,13 @@ class OptionalJoin : public Operation {
                           std::shared_ptr<const Result> right,
                           bool requestLaziness);
 
+  Result materializedOptionalJoinWithIndexScan(
+      std::shared_ptr<const Result> left, std::shared_ptr<IndexScan> rightScan,
+      bool requestLaziness);
+  Result lazyOptionalJoinWithIndexScan(std::shared_ptr<const Result> left,
+                                       std::shared_ptr<IndexScan> rightScan,
+                                       bool requestLaziness);
+
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
