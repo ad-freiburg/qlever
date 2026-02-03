@@ -4,12 +4,10 @@
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
-#include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
-#include "gmock/gmock.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/SparqlTriple.h"
-#include "rdfTypes/Iri.h"
 
 // _____________________________________________________________________________
 TEST(GraphPatternOperationTest, BasicPatternContainedVars) {
