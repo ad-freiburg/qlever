@@ -490,8 +490,9 @@ CPP_template(typename LeftTableLike, typename RightTableLike,
              typename CompatibleActionT, typename NotFoundActionT,
              typename CancellationFuncT)(
     // TODO<joka921> Do we need different left and right types for now?
-    requires BinaryIteratorFunction<CompatibleActionT, LeftTableLike> CPP_and UnaryIteratorFunction<
-        NotFoundActionT, LeftTableLike>
+    requires /*BinaryIteratorFunction<CompatibleActionT, LeftTableLike>
+                CPP_and*/
+    UnaryIteratorFunction<NotFoundActionT, LeftTableLike>
         CPP_and ql::concepts::invocable<
             CancellationFuncT>) void specialOptionalJoin(const LeftTableLike&
                                                              left,

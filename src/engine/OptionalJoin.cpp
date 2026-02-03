@@ -118,9 +118,9 @@ Result OptionalJoin::computeResult(bool requestLaziness) {
     return std::move(res).value();
   }
 
-  if (getRuntimeParameter<&RuntimeParameters::prefilteredOptionalJoin_>() &&
+  if (getRuntimeParameter<&RuntimeParameters::prefilteredOptionalJoin_>()/* &&
       implementation_ == Implementation::OnlyUndefInLastJoinColumnOfLeft &&
-      _joinColumns.size() == 2) {
+      _joinColumns.size() == 2*/) {
     if (auto indexScan =
             std::dynamic_pointer_cast<IndexScan>(_right->getRootOperation())) {
       auto leftRes = _left->getResult(true);
@@ -539,10 +539,12 @@ Result OptionalJoin::lazyOptionalJoinWithIndexScan(
       auto firstJoinColLeft = _joinColumns.at(0).at(0);
       auto [leftJoinSide, indexScanSide] =
           rightScan->prefilterTables(left->idTables(), firstJoinColLeft);
-      auto leftRange = convertGenerator<decltype(leftJoinSide), numJoinCols>(
-          std::move(leftJoinSide), joinColMap.permutationLeft());
-      auto rightRange = convertGenerator<decltype(indexScanSide), numJoinCols>(
-          std::move(indexScanSide), joinColMap.permutationRight());
+      auto leftRange =
+          convertGenerator<std::decay_t<decltype(leftJoinSide)>, numJoinCols>(
+              std::move(leftJoinSide), joinColMap.permutationLeft());
+      auto rightRange =
+          convertGenerator<std::decay_t<decltype(indexScanSide)>, numJoinCols>(
+              std::move(indexScanSide), joinColMap.permutationRight());
       return std::pair{std::move(leftRange), std::move(rightRange)};
     };
     using namespace qlever::joinHelpers;
@@ -606,21 +608,10 @@ Result OptionalJoin::materializedOptionalJoinWithIndexScan(
           left->idTable().getColumn(firstJoinColLeft));
       auto rightRange = convertGeneratorFromScan<numJoinCols>(
           std::move(rightBlocksInternal), *rightScan);
-      // TODO<joka921> unnecessary copy, debug what is going wrong...
-      auto permutationIdTable =
-          ad_utility::IdTableAndFirstCols<numJoinCols, IdTable>{
-              left->idTable()
-                  .asColumnSubsetView(joinColMap.permutationLeft())
-                  .clone(),
-              left->getCopyOfLocalVocab()};
-      /*
       auto permutationIdTable =
           ad_utility::IdTableAndFirstCols<numJoinCols, IdTableView<0>>{
-            left->idTable()
-                .asColumnSubsetView(joinColMap.permutationLeft())
-                ,
-            left->getCopyOfLocalVocab()};
-            */
+              left->idTable().asColumnSubsetView(joinColMap.permutationLeft()),
+              left->getCopyOfLocalVocab()};
       auto leftRange = std::array{std::move(permutationIdTable)};
 
       return std::pair{std::move(leftRange), std::move(rightRange)};

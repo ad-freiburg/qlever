@@ -188,6 +188,49 @@ struct IdTableAndFirstCols {
   LocalVocab localVocab_;
 
  public:
+  // Typedef needed for generic interfaces.
+  using BaseIterator = ql::ranges::iterator_t<
+      decltype(GetColsFromTable{}.template operator()<numCols>(
+          std::declval<Table&>()))>;
+  using ConstBaseIterator = ql::ranges::iterator_t<
+      decltype(GetColsFromTable{}.template operator()<numCols>(
+          std::declval<const Table&>()))>;
+  using iterator = BaseIterator;
+  using const_iterator = ConstBaseIterator;
+  /*
+  struct iterator : BaseIterator {
+    // Required type aliases for iterator_traits
+    using difference_type   = typename BaseIterator::difference_type;
+    using value_type        = typename BaseIterator::value_type;
+    using pointer           = typename BaseIterator::pointer;
+    using reference         = typename BaseIterator::reference;
+    using iterator_category = typename BaseIterator::iterator_category;
+    // C++20 also has:
+    // using iterator_concept = typename BaseIterator::iterator_concept;
+
+    // Inherit constructors
+    using BaseIterator::BaseIterator;
+
+    // Explicitly forward construction from base
+    iterator(const BaseIterator& base) : BaseIterator(base) {}
+  };
+  struct const_iterator : ConstBaseIterator {
+    // Required type aliases for iterator_traits
+    using difference_type   = typename ConstBaseIterator::difference_type;
+    using value_type        = typename ConstBaseIterator::value_type;
+    using pointer           = typename ConstBaseIterator::pointer;
+    using reference         = typename ConstBaseIterator::reference;
+    using iterator_category = typename ConstBaseIterator::iterator_category;
+    // C++20 also has:
+    // using iterator_concept = typename ConstBaseIterator::iterator_concept;
+
+    // Inherit constructors
+    using ConstBaseIterator::ConstBaseIterator;
+
+    // Explicitly forward construction from base
+    const_iterator(const ConstBaseIterator& base) : ConstBaseIterator(base) {}
+  };
+  */
   // Get access to the first column.
   decltype(auto) cols() {
     return GetColsFromTable{}.template operator()<numCols>(table_);
@@ -195,22 +238,15 @@ struct IdTableAndFirstCols {
   decltype(auto) cols() const {
     return GetColsFromTable{}.template operator()<numCols>(table_);
   }
-  // Typedef needed for generic interfaces.
-  using iterator = ql::ranges::iterator_t<
-      decltype(GetColsFromTable{}.template operator()<numCols>(
-          std::declval<Table&>()))>;
-  using const_iterator = ql::ranges::iterator_t<
-      decltype(GetColsFromTable{}.template operator()<numCols>(
-          std::declval<const Table&>()))>;
   // Construct by taking ownership of the table.
   IdTableAndFirstCols(Table t, LocalVocab localVocab)
       : table_{std::move(t)}, localVocab_{std::move(localVocab)} {}
 
   // The following functions all refer to the same column.
-  auto begin() { return cols().begin(); }
-  auto end() { return cols().end(); }
-  auto begin() const { return cols().begin(); }
-  auto end() const { return cols().end(); }
+  iterator begin() { return cols().begin(); }
+  iterator end() { return cols().end(); }
+  const_iterator begin() const { return cols().begin(); }
+  const_iterator end() const { return cols().end(); }
 
   bool empty() const { return cols().empty(); }
 
