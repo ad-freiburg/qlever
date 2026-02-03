@@ -304,6 +304,13 @@ class ConstructTripleGenerator {
                            const std::string* object,
                            ConstructOutputFormat format) const;
 
+  // Processes a single batch and returns the resulting StringTriples.
+  // Used by generateStringTriplesForResultTable to lazily process batches.
+  std::vector<StringTriple> processBatchForStringTriples(
+      const TableConstRefWithVocab& tableWithVocab, size_t currentRowOffset,
+      IdCache& idCache, IdCacheStatsLogger& statsLogger,
+      ql::span<const uint64_t> batchRowIndices);
+
   // triple templates contained in the graph template of the CONSTRUCT-query.
   Triples templateTriples_;
   // wrapper around the result-table obtained from processing the

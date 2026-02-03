@@ -339,48 +339,55 @@ ConstructTripleGenerator::generateStringTriplesForResultTable(
   const size_t totalRows = rowIndicesVec->size();
   const size_t numBatches = (totalRows + getBatchSize() - 1) / getBatchSize();
 
-  // Process batches lazily. Each batch materializes triples into a vector
-  // to reduce view nesting overhead.
+  // Process batches lazily, calling processBatchForStringTriples for each.
   auto processBatch = [this, tableWithVocab, currentRowOffset, idCache,
                        statsLogger, rowIndicesVec,
                        totalRows](size_t batchIdx) mutable {
-    cancellationHandle_->throwIfCancelled();
-
     const size_t batchStart = batchIdx * getBatchSize();
     const size_t batchEnd = std::min(batchStart + getBatchSize(), totalRows);
     ql::span<const uint64_t> batchRowIndices(rowIndicesVec->data() + batchStart,
                                              batchEnd - batchStart);
-
-    BatchEvaluationCache batchCache = evaluateBatchColumnOriented(
-        tableWithVocab.idTable(), tableWithVocab.localVocab(), batchRowIndices,
-        currentRowOffset, *idCache, *statsLogger);
-
-    std::vector<StringTriple> batchTriples;
-    batchTriples.reserve(batchCache.numRows_ * templateTriples_.size());
-
-    std::vector<const std::string*> variableStrings(
-        variablesToEvaluate_.size());
-
-    for (size_t rowInBatch = 0; rowInBatch < batchCache.numRows_;
-         ++rowInBatch) {
-      lookupVariableStrings(batchCache, rowInBatch, *idCache, variableStrings);
-
-      for (size_t tripleIdx = 0; tripleIdx < templateTriples_.size();
-           ++tripleIdx) {
-        auto triple = instantiateTripleFromBatch(tripleIdx, batchCache,
-                                                 rowInBatch, variableStrings);
-        if (!triple.isEmpty()) {
-          batchTriples.push_back(std::move(triple));
-        }
-      }
-    }
-
-    return batchTriples;
+    return processBatchForStringTriples(tableWithVocab, currentRowOffset,
+                                        *idCache, *statsLogger,
+                                        batchRowIndices);
   };
 
   return InputRangeTypeErased(ql::views::iota(size_t{0}, numBatches) |
                               ql::views::transform(processBatch) |
                               ql::views::join);
+}
+
+// _____________________________________________________________________________
+std::vector<StringTriple>
+ConstructTripleGenerator::processBatchForStringTriples(
+    const TableConstRefWithVocab& tableWithVocab, size_t currentRowOffset,
+    IdCache& idCache, IdCacheStatsLogger& statsLogger,
+    ql::span<const uint64_t> batchRowIndices) {
+  cancellationHandle_->throwIfCancelled();
+
+  BatchEvaluationCache batchCache = evaluateBatchColumnOriented(
+      tableWithVocab.idTable(), tableWithVocab.localVocab(), batchRowIndices,
+      currentRowOffset, idCache, statsLogger);
+
+  std::vector<StringTriple> batchTriples;
+  batchTriples.reserve(batchCache.numRows_ * templateTriples_.size());
+
+  std::vector<const std::string*> variableStrings(variablesToEvaluate_.size());
+
+  for (size_t rowInBatch = 0; rowInBatch < batchCache.numRows_; ++rowInBatch) {
+    lookupVariableStrings(batchCache, rowInBatch, idCache, variableStrings);
+
+    for (size_t tripleIdx = 0; tripleIdx < templateTriples_.size();
+         ++tripleIdx) {
+      auto triple = instantiateTripleFromBatch(tripleIdx, batchCache,
+                                               rowInBatch, variableStrings);
+      if (!triple.isEmpty()) {
+        batchTriples.push_back(std::move(triple));
+      }
+    }
+  }
+
+  return batchTriples;
 }
 
 // _____________________________________________________________________________
