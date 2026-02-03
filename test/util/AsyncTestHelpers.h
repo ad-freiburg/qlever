@@ -35,11 +35,9 @@ void runAsyncTest(Func innerRun, size_t numThreads) {
       return net::co_spawn(*ioContext, innerRun(*ioContext), net::use_future);
     } else {
       // Use a named variable to work around AppleClang compiler crash when
-      // passing a temporary packaged_task directly to net::post.
+      // passing a temporary `packaged_task` directly to `net::post`.
       std::packaged_task<void()> task{[&] { innerRun(*ioContext); }};
-      auto fut = task.get_future();
-      net::post(*ioContext, std::move(task));
-      return fut;
+      return net::post(*ioContext, std::move(task));
     }
   }();
 

@@ -238,11 +238,10 @@ class IndexNestedLoopJoin {
     for (const auto& rightRow : rightTable) {
       size_t leftOffset = 0;
       size_t leftSize = leftTable.size();
-      // Use `ql::ranges::ref_view` to avoid copying RowReference (which has a
+      // Use `ql::ranges::ref_view` to avoid copying `RowReference` (which has a
       // deleted copy constructor) on AppleClang.
       for (const auto& [rightId, leftCol] :
-           ::ranges::views::zip(ql::ranges::ref_view{rightRow},
-                                ql::ranges::ref_view{leftColumns})) {
+           ::ranges::views::zip(ql::ranges::ref_view{rightRow}, leftColumns)) {
         AD_EXPENSIVE_CHECK(!rightId.isUndefined());
         auto currentStart = leftCol.begin() + leftOffset;
         auto subrange = ql::ranges::equal_range(

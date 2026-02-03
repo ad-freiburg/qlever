@@ -124,7 +124,6 @@ class LazyGroupByRange
       groupSplitAcrossTables_ = false;
     } else {
       // This processes the whole block in batches if possible.
-      // Note: Use `template` keyword for dependent template name.
       IdTableStatic<OUT_WIDTH> table{
           std::move(resultTable_).template toStatic<OUT_WIDTH>()};
       parent_->template processBlock<OUT_WIDTH>(
