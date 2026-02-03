@@ -740,6 +740,31 @@ class CompressedRelationReader {
       const ScanSpecAndBlocksAndBounds& metadataAndBlocks,
       const ScanSpecAndBlocksAndBounds& metadataAndBlocks2);
 
+  // Multi-column versions of getBlocksForJoin that compare blocks based on
+  // multiple columns (up to 3) to provide more aggressive filtering. These
+  // methods extract the relevant column IDs from the block's firstTriple and
+  // lastTriple based on the scan specification and compare them as tuples.
+
+  // Get blocks where the relevant columns (determined by the scan spec) can
+  // match one of the tuples in joinColumns. `numColumns` indicates how many
+  // columns to compare (2 or 3). For example, if the scan has col0Id fixed,
+  // we compare (col1Id, col2Id) pairs from blocks against the joinColumns.
+  static GetBlocksForJoinResult getBlocksForJoinMultiColumn(
+      ql::span<const Id> joinColumn1, ql::span<const Id> joinColumn2,
+      const ScanSpecAndBlocksAndBounds& metadataAndBlocks);
+
+  static GetBlocksForJoinResult getBlocksForJoinMultiColumn(
+      ql::span<const Id> joinColumn1, ql::span<const Id> joinColumn2,
+      ql::span<const Id> joinColumn3,
+      const ScanSpecAndBlocksAndBounds& metadataAndBlocks);
+
+  // For joining two index scans with multiple join columns, get the blocks
+  // from both sides that can potentially match. Compares up to 3 columns.
+  static std::array<std::vector<CompressedBlockMetadata>, 2>
+  getBlocksForJoinMultiColumn(
+      const ScanSpecAndBlocksAndBounds& metadataAndBlocks1,
+      const ScanSpecAndBlocksAndBounds& metadataAndBlocks2,
+      size_t numJoinColumns);
   /**
    * @brief For a permutation XYZ, retrieve all Z for given X and Y (if `col1Id`
    * is set) or all YZ for a given X (if `col1Id` is `std::nullopt`.

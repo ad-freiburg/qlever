@@ -9,6 +9,8 @@
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 
+// Forward declaration
+class IndexScan;
 class OptionalJoin : public Operation {
  private:
   std::shared_ptr<QueryExecutionTree> _left;
@@ -107,6 +109,11 @@ class OptionalJoin : public Operation {
   static Implementation computeImplementationFromIdTables(
       const IdTable& left, const IdTable& right,
       const std::vector<std::array<ColumnIndex, 2>>&);
+
+  // When the right child is an IndexScan and the left is fully materialized.
+  Result computeResultForIndexScanOnRight(bool requestLaziness,
+                                          std::shared_ptr<const Result> leftRes,
+                                          IndexScan& rightScan) const;
 };
 
 #endif  // QLEVER_SRC_ENGINE_OPTIONALJOIN_H

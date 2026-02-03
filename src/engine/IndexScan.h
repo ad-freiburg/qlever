@@ -130,6 +130,19 @@ class IndexScan final : public Operation {
   std::pair<Result::LazyResult, Result::LazyResult> prefilterTables(
       Result::LazyResult input, ColumnIndex joinColumn);
 
+  // Multi-column version of `prefilterTables`. The `joinColumns` parameter
+  // specifies which columns to join on (up to 3, corresponding to the first n
+  // variable columns of this IndexScan) and whether each column might contain
+  // UNDEF values. When UNDEF values are detected:
+  // - UNDEF in first column: yield all blocks
+  // - UNDEF in second column (first defined): yield blocks matching first
+  // column only
+  // - UNDEF in third column (first two defined): yield blocks matching first
+  // two columns
+  std::pair<Result::LazyResult, Result::LazyResult> prefilterTables(
+      Result::LazyResult input,
+      std::vector<ColumnIndexAndTypeInfo> joinColumns);
+
  private:
   // Implementation detail that allows to consume a lazy range from two other
   // cooperating ranges. Needs to be forward declared as it is used by
@@ -253,6 +266,7 @@ class IndexScan final : public Operation {
   // `Permutation` class.
   ScanSpecAndBlocks getScanSpecAndBlocks() const;
 
+ public:
   // Helper functions for the public `getLazyScanFor...` methods and
   // `chunkedIndexScan` (see above).
   CompressedRelationReader::IdTableGeneratorInputRange getLazyScan(
@@ -260,6 +274,7 @@ class IndexScan final : public Operation {
           std::nullopt) const;
   std::optional<Permutation::MetadataAndBlocks> getMetadataForScan() const;
 
+ private:
   // If the `varsToKeep_` member is set, meaning that this `IndexScan` only
   // returns a subset of this actual columns, return the subset of columns that
   // has to be applied to the "full" result (without any columns stripped) to

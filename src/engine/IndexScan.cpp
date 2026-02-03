@@ -527,8 +527,9 @@ void IndexScan::updateRuntimeInfoForLazyScan(
 struct IndexScan::SharedGeneratorState {
   // The generator that yields the tables to be joined with the index scan.
   Result::LazyResult generator_;
-  // The column index of the join column in the tables yielded by the generator.
-  ColumnIndex joinColumn_;
+  // The join columns (indices and UNDEF status) in the tables yielded by the
+  // generator.
+  std::vector<ColumnIndexAndTypeInfo> joinColumns_;
   // Metadata and blocks of this index scan.
   Permutation::MetadataAndBlocks metaBlocks_;
   // The iterator of the generator that is currently being consumed.
@@ -540,16 +541,20 @@ struct IndexScan::SharedGeneratorState {
   PrefetchStorage prefetchedValues_{};
   // Metadata of blocks that still need to be read.
   std::vector<CompressedBlockMetadata> pendingBlocks_{};
-  // The join column entry in the last block that has already been fetched.
-  std::optional<Id> lastEntryInBlocks_ = std::nullopt;
-  // Indicates if the generator has yielded any undefined values.
-  bool hasUndef_ = false;
+  // The join column entries in the last block that has already been fetched
+  // (for multi-column joins).
+  std::array<std::optional<Id>, 3> lastEntriesInBlocks_{
+      std::nullopt, std::nullopt, std::nullopt};
+  // Indicates if the generator has yielded any undefined values in each column.
+  // Index corresponds to the join column index (0, 1, 2).
+  std::array<bool, 3> hasUndefInColumn_{false, false, false};
   // Indicates if the generator has been fully consumed.
   bool doneFetching_ = false;
 
-  // Advance the `iterator` to the next non-empty table. Set `hasUndef_` to true
-  // if the first table is undefined. Also set `doneFetching_` if the generator
-  // has been fully consumed.
+  // Advance the `iterator` to the next non-empty table. Set
+  // `hasUndefInColumn_[0]` to true if the first row of the first table has
+  // UNDEF in the first join column (since input is sorted by join columns).
+  // Also set `doneFetching_` if the generator has been fully consumed.
   void advanceInputToNextNonEmptyTable() {
     bool firstStep = !iterator_.has_value();
     if (iterator_.has_value()) {
@@ -562,10 +567,13 @@ struct IndexScan::SharedGeneratorState {
       ++iterator;
     }
     doneFetching_ = iterator_ == generator_.end();
-    // Set the undef flag if the first table is undefined.
-    if (firstStep) {
-      hasUndef_ =
-          !doneFetching_ && iterator->idTable_.at(0, joinColumn_).isUndefined();
+    // Set the undef flag for the first column if the first row is undefined.
+    // For the first column, we only need to check the first row since the input
+    // is sorted.
+    if (firstStep && !joinColumns_.empty()) {
+      hasUndefInColumn_[0] =
+          !doneFetching_ &&
+          iterator->idTable_.at(0, joinColumns_[0].columnIndex_).isUndefined();
     }
   }
 
@@ -580,25 +588,78 @@ struct IndexScan::SharedGeneratorState {
         return;
       }
       auto& idTable = iterator_.value()->idTable_;
-      auto joinColumn = idTable.getColumn(joinColumn_);
-      AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(joinColumn));
-      AD_CORRECTNESS_CHECK(!joinColumn.empty());
-      // Skip processing for undef case, it will be handled differently
-      if (hasUndef_) {
+
+      // Validate that we have enough columns.
+      AD_CONTRACT_CHECK(static_cast<size_t>(idTable.numColumns()) >=
+                        joinColumns_.size());
+
+      // Check for UNDEF in columns beyond the first (columns 1 and 2).
+      // For these columns, we need to scan all rows since the input is only
+      // sorted by the first join column.
+      for (size_t i = 1; i < joinColumns_.size(); ++i) {
+        if (joinColumns_[i].mightContainUndef_ ==
+            ColumnIndexAndTypeInfo::PossiblyUndefined) {
+          auto column = idTable.getColumn(joinColumns_[i].columnIndex_);
+          hasUndefInColumn_[i] = ql::ranges::any_of(column, &Id::isUndefined);
+        }
+      }
+
+      // Skip processing for undef case, it will be handled differently.
+      if (hasUndef()) {
         return;
       }
-      AD_CORRECTNESS_CHECK(!joinColumn[0].isUndefined());
-      auto [newBlocks, numBlocksCompletelyHandled] =
-          CompressedRelationReader::getBlocksForJoin(joinColumn, metaBlocks_);
+
+      // Extract join columns and determine how many columns to use for
+      // filtering.
+      size_t numColumnsForFiltering = joinColumns_.size();
+      std::array<ql::span<const Id>, 3> joinColumnSpans;
+      for (size_t i = 0; i < joinColumns_.size(); ++i) {
+        joinColumnSpans[i] = idTable.getColumn(joinColumns_[i].columnIndex_);
+        AD_EXPENSIVE_CHECK(i == 0 || ql::ranges::is_sorted(joinColumnSpans[i]));
+        AD_CORRECTNESS_CHECK(!joinColumnSpans[i].empty());
+        AD_CORRECTNESS_CHECK(!joinColumnSpans[i][0].isUndefined());
+      }
+
+      // Get matching blocks based on number of join columns.
+      CompressedRelationReader::GetBlocksForJoinResult result;
+      if (numColumnsForFiltering == 1) {
+        result = CompressedRelationReader::getBlocksForJoin(joinColumnSpans[0],
+                                                            metaBlocks_);
+      } else if (numColumnsForFiltering == 2) {
+        result = CompressedRelationReader::getBlocksForJoinMultiColumn(
+            joinColumnSpans[0], joinColumnSpans[1], metaBlocks_);
+      } else if (numColumnsForFiltering == 3) {
+        result = CompressedRelationReader::getBlocksForJoinMultiColumn(
+            joinColumnSpans[0], joinColumnSpans[1], joinColumnSpans[2],
+            metaBlocks_);
+      } else {
+        AD_FAIL();
+      }
+
+      auto& [newBlocks, numBlocksCompletelyHandled] = result;
+
       // The first `numBlocksCompletelyHandled` are either contained in
       // `newBlocks` or can never match any entry that is larger than the
       // entries in `joinColumn` and thus can be ignored from now on.
       metaBlocks_.removePrefix(numBlocksCompletelyHandled);
+
       if (!newBlocks.empty()) {
-        lastEntryInBlocks_ = CompressedRelationReader::getRelevantIdFromTriple(
-            newBlocks.back().lastTriple_, metaBlocks_);
-      } else if (joinColumn[0] >
-                 lastEntryInBlocks_.value_or(Id::makeUndefined())) {
+        // Update last entries for all join columns.
+        auto lastTriple = newBlocks.back().lastTriple_;
+        if (numColumnsForFiltering >= 1 &&
+            !metaBlocks_.scanSpec_.col0Id().has_value()) {
+          lastEntriesInBlocks_[0] = lastTriple.col0Id_;
+        }
+        if (numColumnsForFiltering >= 2 &&
+            !metaBlocks_.scanSpec_.col1Id().has_value()) {
+          lastEntriesInBlocks_[1] = lastTriple.col1Id_;
+        }
+        if (numColumnsForFiltering >= 3 &&
+            !metaBlocks_.scanSpec_.col2Id().has_value()) {
+          lastEntriesInBlocks_[2] = lastTriple.col2Id_;
+        }
+      } else if (joinColumnSpans[0][0] >
+                 lastEntriesInBlocks_[0].value_or(Id::makeUndefined())) {
         if (metaBlocks_.blockMetadata_.empty()) {
           // We have seen entries in the join column that are larger than the
           // largest block in the index scan, which means that there will be no
@@ -606,7 +667,7 @@ struct IndexScan::SharedGeneratorState {
           doneFetching_ = true;
           return;
         }
-        // The current `joinColumn` has no matching block in the index, we can
+        // The current join columns have no matching block in the index, we can
         // safely skip appending it to `prefetchedValues_`, but future values
         // might require later blocks from the index.
         continue;
@@ -616,13 +677,14 @@ struct IndexScan::SharedGeneratorState {
     }
   }
 
-  // Check if there are any undefined values yielded by the original generator.
-  // If the generator hasn't been started to get consumed, this will start it.
+  // Check if there are any undefined values yielded by the original generator
+  // in any of the join columns. If the generator hasn't been started to get
+  // consumed, this will start it.
   bool hasUndef() {
     if (!iterator_.has_value()) {
       fetch();
     }
-    return hasUndef_;
+    return ql::ranges::any_of(hasUndefInColumn_, [](bool b) { return b; });
   }
 };
 
@@ -729,19 +791,32 @@ Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
 
 // _____________________________________________________________________________
 std::pair<Result::LazyResult, Result::LazyResult> IndexScan::prefilterTables(
-    Result::LazyResult input, ColumnIndex joinColumn) {
+    Result::LazyResult input, std::vector<ColumnIndexAndTypeInfo> joinColumns) {
   AD_CORRECTNESS_CHECK(numVariables_ <= 3 && numVariables_ > 0);
+  AD_CONTRACT_CHECK(!joinColumns.empty() && joinColumns.size() <= 3);
+
   auto metaBlocks = getMetadataForScan();
 
   if (!metaBlocks.has_value()) {
-    // Return empty results
+    // Return empty results.
     return {Result::LazyResult{}, Result::LazyResult{}};
   }
 
   auto state = std::make_shared<SharedGeneratorState>(SharedGeneratorState{
-      std::move(input), joinColumn, std::move(metaBlocks.value())});
+      std::move(input), std::move(joinColumns), std::move(metaBlocks.value())});
   return {createPrefilteredJoinSide(state),
           createPrefilteredIndexScanSide(state)};
+}
+
+// _____________________________________________________________________________
+std::pair<Result::LazyResult, Result::LazyResult> IndexScan::prefilterTables(
+    Result::LazyResult input, ColumnIndex joinColumn) {
+  // Delegate to the multi-column version with a single column that is always
+  // defined (the original implementation assumed no UNDEF values in simple
+  // cases).
+  return prefilterTables(
+      std::move(input),
+      std::vector<ColumnIndexAndTypeInfo>{makeAlwaysDefinedColumn(joinColumn)});
 }
 
 // _____________________________________________________________________________

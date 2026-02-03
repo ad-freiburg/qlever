@@ -11,6 +11,7 @@
 #include <optional>
 #include <vector>
 
+#include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/Result.h"
 #include "engine/idTable/IdTable.h"
@@ -29,6 +30,7 @@ static constexpr size_t CHUNK_SIZE = 100'000;
 
 using namespace ad_utility;
 
+// Forward declaration for getRowAdderForJoin
 using OptionalPermutation = std::optional<std::vector<ColumnIndex>>;
 
 // _____________________________________________________________________________
@@ -121,6 +123,39 @@ CPP_template_2(typename ActionT)(
             });
         yieldValue(std::move(lastBlock));
       });
+}
+
+// Helper function to create a Result from an action, either lazy or
+// materialized depending on the requestLaziness parameter. The action is
+// expected to be a callable that takes a callback and returns an
+// IdTableVocabPair. An optional permutation can be applied to the result.
+template <typename Action, typename GetSortedOn>
+inline Result createResultFromAction(bool requestLaziness, Action&& action,
+                                     GetSortedOn&& getSortedOn,
+                                     OptionalPermutation permutation = {}) {
+  if (requestLaziness) {
+    return {runLazyJoinAndConvertToGenerator(std::forward<Action>(action),
+                                             std::move(permutation)),
+            getSortedOn()};
+  } else {
+    auto [idTable, localVocab] = action(ad_utility::noop);
+    applyPermutation(idTable, permutation);
+    return {std::move(idTable), getSortedOn(), std::move(localVocab)};
+  }
+}
+
+// Helper function to create an AddCombinedRowToIdTable for join operations.
+// This encapsulates the common pattern of constructing the row adder with
+// parameters derived from the operation.
+inline auto getRowAdderForJoin(
+    const Operation& op, size_t numJoinColumns, bool keepJoinColumns,
+    AddCombinedRowToIdTable::BlockwiseCallback yieldTable) {
+  return AddCombinedRowToIdTable{numJoinColumns,
+                                 IdTable{op.getResultWidth(), op.allocator()},
+                                 op.getCancellationHandle(),
+                                 keepJoinColumns,
+                                 CHUNK_SIZE,
+                                 std::move(yieldTable)};
 }
 
 // Helper function to check if the join of two columns propagate the value

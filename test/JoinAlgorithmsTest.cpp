@@ -561,3 +561,135 @@ TEST(JoinAlgorithm, DefaultIsUndefinedFunctionAlwaysReturnsFalse) {
   EXPECT_FALSE(impl.isUndefined_(I(1)));
   EXPECT_FALSE(impl.isUndefined_(Id::makeUndefined()));
 }
+
+// _____________________________________________________________________________
+// Tests for specialOptionalJoinForBlocks
+// _____________________________________________________________________________
+
+namespace {
+// Helper function to test the special optional join with blocks.
+void testSpecialOptionalJoin(const NestedBlock& a, const NestedBlock& b,
+                             JoinResult expected,
+                             source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(l);
+  JoinResult result;
+  auto adder = makeRowAdder(result);
+
+  auto addOptionalRow = [&adder](const auto& it) {
+    adder.addOptionalRow(it - adder.left_->begin());
+  };
+
+  ad_utility::specialOptionalJoinForBlocks(a, b, adder, addOptionalRow);
+
+  // The result must be sorted on the first column.
+  EXPECT_TRUE(ql::ranges::is_sorted(result, std::less<>{}, ad_utility::first));
+  // The exact order of the elements with the same first column is not important
+  // and depends on implementation details. We therefore do not enforce it here.
+  EXPECT_THAT(result, ::testing::UnorderedElementsAreArray(expected));
+}
+}  // namespace
+
+// _____________________________________________________________________________
+TEST(JoinAlgorithms, SpecialOptionalJoinEmptyInputs) {
+  testSpecialOptionalJoin({}, {}, {});
+
+  testSpecialOptionalJoin({{{13, 0}}}, {}, {{13, 0, U}});
+
+  testSpecialOptionalJoin({{}, {{13, 0}}, {}}, {{}}, {{13, 0, U}});
+}
+
+// _____________________________________________________________________________
+TEST(JoinAlgorithms, SpecialOptionalJoinSingleBlock) {
+  NestedBlock a{{{1, 11}, {4, 12}, {18, 13}, {42, 14}}};
+  NestedBlock b{{{0, 24}, {4, 25}, {5, 25}, {19, 26}, {42, 27}}};
+  JoinResult expectedResult{{1, 11, U}, {4, 12, 25}, {18, 13, U}, {42, 14, 27}};
+  testSpecialOptionalJoin(a, b, expectedResult);
+}
+
+// _____________________________________________________________________________
+TEST(JoinAlgorithms, SpecialOptionalJoinMultipleBlocks) {
+  NestedBlock a{{{1, 10}, {4, 11}, {18, 12}, {42, 13}},
+                {{54, 14}, {57, 15}, {59, 16}},
+                {{60, 17}, {67, 18}}};
+  NestedBlock b{{{0, 20}, {4, 21}, {5, 22}, {19, 23}, {42, 24}, {54, 25}},
+                {{56, 26}, {57, 27}, {58, 28}, {59, 29}},
+                {{61, 30}, {67, 30}}};
+  JoinResult expectedResult{{1, 10, U},   {4, 11, 21},  {18, 12, U},
+                            {42, 13, 24}, {54, 14, 25}, {57, 15, 27},
+                            {59, 16, 29}, {60, 17, U},  {67, 18, 30}};
+  testSpecialOptionalJoin(a, b, expectedResult);
+}
+
+// _____________________________________________________________________________
+TEST(JoinAlgorithms, SpecialOptionalJoinWithUndefInLastColumn) {
+  NestedBlock a{{{1, U}, {4, 12}, {18, U}, {42, 14}}};
+  NestedBlock b{{{4, 12}, {42, 14}}};
+  JoinResult expectedResult{{1, U, U}, {4, 12, 12}, {18, U, U}, {42, 14, 14}};
+  testSpecialOptionalJoin(a, b, expectedResult);
+}
+
+// _____________________________________________________________________________
+TEST(JoinAlgorithms, SpecialOptionalJoinAllRowsMatch) {
+  NestedBlock a{{{1, 10}, {4, 11}, {42, 13}}};
+  NestedBlock b{{{1, 10}, {4, 11}, {42, 13}}};
+  JoinResult expectedResult{{1, 10, 10}, {4, 11, 11}, {42, 13, 13}};
+  testSpecialOptionalJoin(a, b, expectedResult);
+}
+
+// _____________________________________________________________________________
+TEST(JoinAlgorithms, SpecialOptionalJoinNoRowsMatch) {
+  NestedBlock a{{{1, 10}, {2, 11}, {3, 12}}};
+  NestedBlock b{{{10, 20}, {20, 21}, {30, 22}}};
+  JoinResult expectedResult{{1, 10, U}, {2, 11, U}, {3, 12, U}};
+  testSpecialOptionalJoin(a, b, expectedResult);
+}
+
+// _____________________________________________________________________________
+TEST(JoinAlgorithms, SpecialOptionalJoinMixedMatching) {
+  NestedBlock a{{{1, 10}, {2, 11}, {3, 12}, {4, 13}, {5, 14}}};
+  NestedBlock b{{{2, 11}, {4, 13}}};
+  JoinResult expectedResult{
+      {1, 10, U}, {2, 11, 11}, {3, 12, U}, {4, 13, 13}, {5, 14, U}};
+  testSpecialOptionalJoin(a, b, expectedResult);
+}
+
+// _____________________________________________________________________________
+TEST(JoinAlgorithms, SpecialOptionalJoinMultipleBlocksPerElement) {
+  NestedBlock a{{{1, 0}, {42, 0}},
+                {{42, 1}, {42, 2}},
+                {{42, 3}, {48, 5}, {67, 0}},
+                {{96, 32}},
+                {{96, 33}}};
+  NestedBlock b{{{2, 0}, {42, 12}, {43, 1}}, {{67, 13}, {69, 14}}};
+  JoinResult expectedResult{{1, 0, U},   {42, 0, 12}, {42, 1, 12},
+                            {42, 2, 12}, {42, 3, 12}, {48, 5, U},
+                            {67, 0, 13}, {96, 32, U}, {96, 33, U}};
+  testSpecialOptionalJoin(a, b, expectedResult);
+}
+
+// _____________________________________________________________________________
+TEST(JoinAlgorithms, SpecialOptionalJoinLargeBlocks) {
+  NestedBlock a;
+  NestedBlock b;
+  JoinResult expectedResult;
+
+  // Create many blocks with some matching and non-matching elements.
+  for (int blockIdx = 0; blockIdx < 10; ++blockIdx) {
+    Block aBlock;
+    Block bBlock;
+    for (int i = 0; i < 10; ++i) {
+      size_t val = blockIdx * 10 + i;
+      aBlock.push_back({val, val * 2});
+      expectedResult.push_back({val, val * 2, (val % 2 == 0) ? val * 2 : U});
+      if (val % 2 == 0) {
+        bBlock.push_back({val, val * 2});
+      }
+    }
+    a.push_back(aBlock);
+    if (!bBlock.empty()) {
+      b.push_back(bBlock);
+    }
+  }
+
+  testSpecialOptionalJoin(a, b, expectedResult);
+}

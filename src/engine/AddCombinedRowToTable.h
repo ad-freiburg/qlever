@@ -259,6 +259,14 @@ class AddCombinedRowToIdTable {
 
   LocalVocab& localVocab() { return mergedVocab_; }
 
+  // Move both the result table and local vocab out as an IdTableVocabPair.
+  // This is a convenience method for the common pattern of moving both out.
+  auto toIdTableVocabPair() && {
+    flush();
+    return Result::IdTableVocabPair{std::move(resultTable_),
+                                    std::move(mergedVocab_)};
+  }
+
   // Disable copying and moving, it is currently not needed and makes it harder
   // to reason about
   AddCombinedRowToIdTable(const AddCombinedRowToIdTable&) = delete;

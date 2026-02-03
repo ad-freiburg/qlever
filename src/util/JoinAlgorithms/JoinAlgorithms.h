@@ -1512,6 +1512,300 @@ template <typename LHS, typename RHS, typename LessThan,
 BlockZipperJoinImpl(LHS&, RHS&, const LessThan&, CompatibleRowAction&, IsUndef)
     -> BlockZipperJoinImpl<LHS, RHS, LessThan, CompatibleRowAction, IsUndef>;
 
+// A helper class for the special optional join on blocks algorithm. This
+// implements an optimized optional join for the case where:
+// - The right input contains no UNDEF values in any join columns.
+// - The left input only contains UNDEF values in its least significant join
+//   column.
+// The algorithm works by comparing all-but-last columns lexicographically,
+// then performing a one-column join on the last column.
+CPP_template(typename LeftSide, typename RightSide,
+             typename CompatibleRowAction, typename NotFoundAction,
+             typename CheckCancellation = Noop)(
+    requires IsJoinSide<LeftSide> CPP_and
+        IsJoinSide<RightSide>) struct SpecialOptionalJoinImpl {
+  // The left and right inputs of the join.
+  LeftSide leftSide_;
+  RightSide rightSide_;
+  // The callbacks for handling matching and non-matching rows.
+  CompatibleRowAction& compatibleRowAction_;
+  NotFoundAction& notFoundAction_;
+  [[no_unique_address]] CheckCancellation checkCancellation_{};
+
+  using LeftBlocks = typename LeftSide::CurrentBlocks;
+  using RightBlocks = typename RightSide::CurrentBlocks;
+  using value_type = typename LeftSide::value_type;
+
+// We can't define aliases for these concepts, so we use macros instead.
+#if defined(Side) || defined(Blocks)
+#error Side or Blocks are already defined
+#endif
+#define Side QL_CONCEPT_OR_NOTHING(SameAsAny<LeftSide, RightSide>) auto
+#define Blocks QL_CONCEPT_OR_NOTHING(SameAsAny<LeftBlocks, RightBlocks>) auto
+
+  // Helper function to get the number of columns from a row.
+  static size_t numColumns(const value_type& row) {
+    if constexpr (requires { row.size(); }) {
+      return row.size();
+    } else if constexpr (requires { row.numColumns(); }) {
+      return row.numColumns();
+    } else {
+      static_assert(ad_utility::alwaysFalse<value_type>,
+                    "Row type must have either size() or numColumns() method.");
+    }
+  }
+
+  // Helper function to get a column from a block as a span.
+  static auto getColumn(const auto& block, size_t columnIndex) {
+    if constexpr (requires { block.getColumn(columnIndex); }) {
+      return block.getColumn(columnIndex);
+    } else {
+      // For blocks that don't have getColumn, we create a view manually.
+      using RowType = std::decay_t<decltype(block[0])>;
+      using ColumnType = std::decay_t<decltype(block[0][columnIndex])>;
+      std::vector<ColumnType> column;
+      column.reserve(block.size());
+      for (const auto& row : block) {
+        column.push_back(row[columnIndex]);
+      }
+      return column;
+    }
+  }
+
+  // A predicate that compares two rows lexicographically but ignores the last
+  // column.
+  static bool compareAllButLast(const value_type& a, const value_type& b) {
+    size_t cols = numColumns(a);
+    AD_CONTRACT_CHECK(cols == numColumns(b));
+    for (size_t i = 0; i < cols - 1; ++i) {
+      if (a[i] != b[i]) {
+        return a[i] < b[i];
+      }
+    }
+    return false;
+  }
+
+  // Similar to the previous function, but checks for equality.
+  static bool compareEqButLast(const value_type& a, const value_type& b) {
+    size_t cols = numColumns(a);
+    AD_CONTRACT_CHECK(cols == numColumns(b));
+    for (size_t i = 0; i < cols - 1; ++i) {
+      if (a[i] != b[i]) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  // Fill the side with at least one block if available.
+  void fillWithAtLeastOne(Side& side) {
+    auto& targetBuffer = side.currentBlocks_;
+    auto& it = side.it_;
+    const auto& end = side.end_;
+    while (targetBuffer.empty() && it != end) {
+      auto& el = *it;
+      if (!el.empty()) {
+        targetBuffer.emplace_back(std::move(el));
+      }
+      ++it;
+    }
+  }
+
+  // Process a pair of blocks where the all-but-last columns match.
+  void processMatchingBlockPair(const LeftBlocks& leftBlocks,
+                                const RightBlocks& rightBlocks) {
+    if (leftBlocks.empty() || rightBlocks.empty()) {
+      return;
+    }
+
+    // For each pair of blocks, perform the last-column join.
+    for (const auto& leftBlock : leftBlocks) {
+      for (const auto& rightBlock : rightBlocks) {
+        const auto& leftFull = leftBlock.fullBlock();
+        const auto& rightFull = rightBlock.fullBlock();
+
+        // Get the ranges of rows in these blocks.
+        auto leftSubrange = leftBlock.subrange();
+        auto rightSubrange = rightBlock.subrange();
+
+        if (leftSubrange.empty() || rightSubrange.empty()) {
+          continue;
+        }
+
+        // Extract the last columns.
+        size_t cols = numColumns(*leftSubrange.begin());
+        auto leftLastCol = getColumn(leftFull, cols - 1);
+        auto rightLastCol = getColumn(rightFull, cols - 1);
+
+        // Create sub-ranges for the last column.
+        auto leftBegin = leftBlock.getIndices().first;
+        auto leftEnd = leftBlock.getIndices().second;
+        auto rightBegin = rightBlock.getIndices().first;
+        auto rightEnd = rightBlock.getIndices().second;
+
+        // TODO: This is where we need to extract the last column properly and
+        // perform the 1-column join.
+        // For now, we implement a simplified version that iterates through
+        // matching rows.
+
+        auto it1 = leftSubrange.begin();
+        auto end1 = leftSubrange.end();
+        auto it2 = rightSubrange.begin();
+        auto end2 = rightSubrange.end();
+
+        compatibleRowAction_.setInput(leftFull, rightFull);
+
+        while (it1 < end1 && it2 < end2) {
+          checkCancellation_();
+
+          const auto& row1 = *it1;
+          const auto& row2 = *it2;
+
+          // Find rows where all-but-last columns are equal.
+          if (compareAllButLast(row1, row2)) {
+            ++it2;
+            continue;
+          }
+          if (compareAllButLast(row2, row1)) {
+            // Left row has no match, add optional row.
+            notFoundAction_(it1);
+            ++it1;
+            continue;
+          }
+
+          // All-but-last columns are equal, find the range.
+          auto endSame1 = std::find_if_not(it1, end1, [&](const auto& r) {
+            return compareEqButLast(r, *it2);
+          });
+          auto endSame2 = std::find_if_not(it2, end2, [&](const auto& r) {
+            return compareEqButLast(*it1, r);
+          });
+
+          // Perform last-column join on these matching rows.
+          auto leftIdx1 = it1 - leftSubrange.begin() + leftBegin;
+          auto leftIdx2 = endSame1 - leftSubrange.begin() + leftBegin;
+          auto rightIdx1 = it2 - rightSubrange.begin() + rightBegin;
+          auto rightIdx2 = endSame2 - rightSubrange.begin() + rightBegin;
+
+          // Extract last column sub-ranges.
+          ql::span<const Id> leftSub{&leftLastCol[leftIdx1],
+                                     &leftLastCol[leftIdx2]};
+          ql::span<const Id> rightSub{&rightLastCol[rightIdx1],
+                                      &rightLastCol[rightIdx2]};
+
+          // Set up the generator for UNDEF values (at the beginning of
+          // leftSub).
+          auto endOfUndef = ql::ranges::find_if_not(leftSub, &Id::isUndefined);
+          auto findSmallerUndefRangeLeft = [leftSub, endOfUndef](auto&&...) {
+            return ad_utility::IteratorRange{leftSub.begin(), endOfUndef};
+          };
+
+          // Set up actions for the last-column join.
+          auto compAction = [&, leftIdx1, rightIdx1](const auto& itL,
+                                                     const auto& itR) {
+            compatibleRowAction_(
+                leftSubrange.begin() + (itL - leftSub.begin()),
+                rightSubrange.begin() + (itR - rightSub.begin()));
+          };
+          auto notFoundActionLocal = [&, leftIdx1,
+                                      begin = leftSub.begin()](const auto& it) {
+            notFoundAction_(leftSubrange.begin() + (it - begin));
+          };
+
+          // Perform the join on the last column.
+          [[maybe_unused]] size_t numOutOfOrder =
+              ad_utility::zipperJoinWithUndef(
+                  leftSub, rightSub, std::less<>{}, compAction,
+                  findSmallerUndefRangeLeft, noop, notFoundActionLocal,
+                  checkCancellation_);
+          AD_CORRECTNESS_CHECK(numOutOfOrder == 0);
+
+          it1 = endSame1;
+          it2 = endSame2;
+        }
+
+        // Handle remaining left rows with no matches.
+        for (; it1 != end1; ++it1) {
+          notFoundAction_(it1);
+        }
+
+        compatibleRowAction_.flush();
+      }
+    }
+  }
+
+  // Main join algorithm.
+  void runJoin() {
+    fillWithAtLeastOne(leftSide_);
+    fillWithAtLeastOne(rightSide_);
+
+    // If either side is empty, all left rows are non-matching.
+    if (rightSide_.currentBlocks_.empty()) {
+      // Add all remaining left rows as non-matching.
+      for (const auto& block : leftSide_.currentBlocks_) {
+        compatibleRowAction_.setOnlyLeftInputForOptionalJoin(block.fullBlock());
+        for (size_t idx : block.getIndexRange()) {
+          notFoundAction_(block.fullBlock().begin() + idx);
+        }
+      }
+      while (leftSide_.it_ != leftSide_.end_) {
+        auto& block = *leftSide_.it_;
+        if (!block.empty()) {
+          compatibleRowAction_.setOnlyLeftInputForOptionalJoin(block);
+          for (size_t idx = 0; idx < block.size(); ++idx) {
+            notFoundAction_(block.begin() + idx);
+          }
+        }
+        ++leftSide_.it_;
+      }
+      compatibleRowAction_.flush();
+      return;
+    }
+
+    while (!leftSide_.currentBlocks_.empty() &&
+           !rightSide_.currentBlocks_.empty()) {
+      checkCancellation_();
+
+      processMatchingBlockPair(leftSide_.currentBlocks_,
+                               rightSide_.currentBlocks_);
+
+      // Move to next blocks.
+      leftSide_.currentBlocks_.clear();
+      rightSide_.currentBlocks_.clear();
+      fillWithAtLeastOne(leftSide_);
+      fillWithAtLeastOne(rightSide_);
+    }
+
+    // Handle any remaining left rows.
+    while (leftSide_.it_ != leftSide_.end_) {
+      auto& block = *leftSide_.it_;
+      if (!block.empty()) {
+        compatibleRowAction_.setOnlyLeftInputForOptionalJoin(block);
+        for (size_t idx = 0; idx < block.size(); ++idx) {
+          notFoundAction_(block.begin() + idx);
+        }
+      }
+      compatibleRowAction_.flush();
+      ++leftSide_.it_;
+    }
+  }
+
+#undef Side
+#undef Blocks
+};
+
+// Deduction guides for SpecialOptionalJoinImpl.
+template <typename LHS, typename RHS, typename CompatibleRowAction,
+          typename NotFoundAction>
+SpecialOptionalJoinImpl(LHS&, RHS&, CompatibleRowAction&, NotFoundAction&)
+    -> SpecialOptionalJoinImpl<LHS, RHS, CompatibleRowAction, NotFoundAction>;
+template <typename LHS, typename RHS, typename CompatibleRowAction,
+          typename NotFoundAction, typename CheckCancellation>
+SpecialOptionalJoinImpl(LHS&, RHS&, CompatibleRowAction&, NotFoundAction&,
+                        CheckCancellation)
+    -> SpecialOptionalJoinImpl<LHS, RHS, CompatibleRowAction, NotFoundAction,
+                               CheckCancellation>;
+
 }  // namespace detail
 
 /**
@@ -1577,6 +1871,42 @@ void zipperJoinForBlocksWithPotentialUndef(
       leftSide, rightSide, lessThan, compatibleRowAction,
       [](const Id& id) { return id.isUndefined(); }};
   impl.template runJoin<joinType>();
+}
+
+/**
+ * @brief Perform a special optional join for the following case: The `right`
+ * input contains no UNDEF values in any of its join columns, the `left` input
+ * contains UNDEF values only in its least significant join column. This is an
+ * extended version that works with input ranges of blocks instead of single
+ * materialized tables.
+ * @param leftBlocks The left input range of blocks. Must only contain UNDEF
+ * values in the least significant join column.
+ * @param rightBlocks The right input range of blocks. Must not contain UNDEF
+ * values in the join columns.
+ * @param compatibleRowAction Needs to have member functions:
+ * `setInput(leftBlock, rightBlock)`, `addRow(size_t, size_t)`,
+ * `setOnlyLeftInputForOptionalJoin(leftBlock)`, and `flush()`. Called for
+ * each pair of matching rows or for non-matching left rows.
+ * @param elFromFirstNotFoundAction Called for each iterator in `left` for
+ * which no corresponding match in `right` was found.
+ * @param checkCancellation Is called many times during processing to allow
+ * cancelling this join operation at arbitrary times.
+ */
+template <typename LeftBlocks, typename RightBlocks,
+          typename CompatibleRowAction, typename NotFoundAction,
+          typename CheckCancellation = Noop>
+void specialOptionalJoinForBlocks(LeftBlocks&& leftBlocks,
+                                  RightBlocks&& rightBlocks,
+                                  CompatibleRowAction& compatibleRowAction,
+                                  NotFoundAction& elFromFirstNotFoundAction,
+                                  CheckCancellation checkCancellation = {}) {
+  auto leftSide = detail::makeJoinSide(leftBlocks, ql::identity{});
+  auto rightSide = detail::makeJoinSide(rightBlocks, ql::identity{});
+
+  detail::SpecialOptionalJoinImpl impl{leftSide, rightSide, compatibleRowAction,
+                                       elFromFirstNotFoundAction,
+                                       checkCancellation};
+  impl.runJoin();
 }
 
 }  // namespace ad_utility

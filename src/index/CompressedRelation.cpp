@@ -667,6 +667,241 @@ auto CompressedRelationReader::getBlocksForJoin(
   }
 }
 
+// Helper function to extract up to 3 relevant IDs from a PermutedTriple based
+// on the scan specification. Returns a tuple of IDs for multi-column
+// comparison.
+namespace {
+std::array<Id, 3> getRelevantIdsFromTriple(
+    const CompressedBlockMetadata::PermutedTriple& triple,
+    const CompressedRelationReader::ScanSpecAndBlocksAndBounds&
+        metadataAndBlocks) {
+  const auto& scanSpec = metadataAndBlocks.scanSpec_;
+
+  // Determine which columns are variable (not fixed by the scan spec)
+  std::array<Id, 3> result{Id::makeUndefined(), Id::makeUndefined(),
+                           Id::makeUndefined()};
+  size_t idx = 0;
+
+  if (!scanSpec.col0Id().has_value()) {
+    result[idx++] = triple.col0Id_;
+  }
+  if (!scanSpec.col1Id().has_value()) {
+    result[idx++] = triple.col1Id_;
+  }
+  if (!scanSpec.col2Id().has_value()) {
+    result[idx++] = triple.col2Id_;
+  }
+
+  return result;
+}
+}  // namespace
+
+// _____________________________________________________________________________
+auto CompressedRelationReader::getBlocksForJoinMultiColumn(
+    ql::span<const Id> joinColumn1, ql::span<const Id> joinColumn2,
+    const ScanSpecAndBlocksAndBounds& metadataAndBlocks)
+    -> GetBlocksForJoinResult {
+  if (joinColumn1.empty() || joinColumn2.empty() ||
+      metadataAndBlocks.getBlockMetadataView().empty()) {
+    return {};
+  }
+
+  AD_CONTRACT_CHECK(joinColumn1.size() == joinColumn2.size(),
+                    "Join columns must have the same size");
+
+  // For 2-column comparison: compare tuples (col1[i], col2[i]) with block
+  // ranges
+  auto tupleLessThanBlock = [&metadataAndBlocks](
+                                const Id& id1, const Id& id2,
+                                const CompressedBlockMetadata& block) {
+    auto blockIds =
+        getRelevantIdsFromTriple(block.firstTriple_, metadataAndBlocks);
+    return std::tie(id1, id2) < std::tie(blockIds[0], blockIds[1]);
+  };
+
+  auto blockLessThanTuple = [&metadataAndBlocks](
+                                const CompressedBlockMetadata& block,
+                                const Id& id1, const Id& id2) {
+    auto blockIds =
+        getRelevantIdsFromTriple(block.lastTriple_, metadataAndBlocks);
+    return std::tie(blockIds[0], blockIds[1]) < std::tie(id1, id2);
+  };
+
+  const auto& mdView = metadataAndBlocks.getBlockMetadataView();
+  auto [blockIt, blockEnd] = getBeginAndEnd(mdView);
+  GetBlocksForJoinResult res;
+  auto& blockIdx = res.numHandledBlocks;
+
+  // Iterate through join column tuples
+  for (size_t i = 0; i < joinColumn1.size(); ++i) {
+    Id id1 = joinColumn1[i];
+    Id id2 = joinColumn2[i];
+
+    // Skip to first block that might contain this tuple
+    while (blockIt != blockEnd && blockLessThanTuple(*blockIt, id1, id2)) {
+      ++blockIt;
+      ++blockIdx;
+    }
+    if (blockIt == blockEnd) {
+      return res;
+    }
+
+    // Add all blocks that might contain this tuple
+    auto currentBlockIt = blockIt;
+    while (currentBlockIt != blockEnd &&
+           !tupleLessThanBlock(id1, id2, *currentBlockIt)) {
+      // Only add if not already added (avoid duplicates)
+      if (res.matchingBlocks_.empty() ||
+          !(res.matchingBlocks_.back() == *currentBlockIt)) {
+        res.matchingBlocks_.push_back(*currentBlockIt);
+      }
+      ++currentBlockIt;
+    }
+  }
+
+  return res;
+}
+
+// _____________________________________________________________________________
+auto CompressedRelationReader::getBlocksForJoinMultiColumn(
+    ql::span<const Id> joinColumn1, ql::span<const Id> joinColumn2,
+    ql::span<const Id> joinColumn3,
+    const ScanSpecAndBlocksAndBounds& metadataAndBlocks)
+    -> GetBlocksForJoinResult {
+  if (joinColumn1.empty() || joinColumn2.empty() || joinColumn3.empty() ||
+      metadataAndBlocks.getBlockMetadataView().empty()) {
+    return {};
+  }
+
+  AD_CONTRACT_CHECK(joinColumn1.size() == joinColumn2.size() &&
+                        joinColumn1.size() == joinColumn3.size(),
+                    "Join columns must have the same size");
+
+  // For 3-column comparison: compare tuples (col1[i], col2[i], col3[i])
+  auto tupleLessThanBlock = [&metadataAndBlocks](
+                                const Id& id1, const Id& id2, const Id& id3,
+                                const CompressedBlockMetadata& block) {
+    auto blockIds =
+        getRelevantIdsFromTriple(block.firstTriple_, metadataAndBlocks);
+    return std::tie(id1, id2, id3) <
+           std::tie(blockIds[0], blockIds[1], blockIds[2]);
+  };
+
+  auto blockLessThanTuple = [&metadataAndBlocks](
+                                const CompressedBlockMetadata& block,
+                                const Id& id1, const Id& id2, const Id& id3) {
+    auto blockIds =
+        getRelevantIdsFromTriple(block.lastTriple_, metadataAndBlocks);
+    return std::tie(blockIds[0], blockIds[1], blockIds[2]) <
+           std::tie(id1, id2, id3);
+  };
+
+  const auto& mdView = metadataAndBlocks.getBlockMetadataView();
+  auto [blockIt, blockEnd] = getBeginAndEnd(mdView);
+  GetBlocksForJoinResult res;
+  auto& blockIdx = res.numHandledBlocks;
+
+  // Iterate through join column tuples
+  for (size_t i = 0; i < joinColumn1.size(); ++i) {
+    Id id1 = joinColumn1[i];
+    Id id2 = joinColumn2[i];
+    Id id3 = joinColumn3[i];
+
+    // Skip to first block that might contain this tuple
+    while (blockIt != blockEnd && blockLessThanTuple(*blockIt, id1, id2, id3)) {
+      ++blockIt;
+      ++blockIdx;
+    }
+    if (blockIt == blockEnd) {
+      return res;
+    }
+
+    // Add all blocks that might contain this tuple
+    auto currentBlockIt = blockIt;
+    while (currentBlockIt != blockEnd &&
+           !tupleLessThanBlock(id1, id2, id3, *currentBlockIt)) {
+      // Only add if not already added (avoid duplicates)
+      if (res.matchingBlocks_.empty() ||
+          !(res.matchingBlocks_.back() == *currentBlockIt)) {
+        res.matchingBlocks_.push_back(*currentBlockIt);
+      }
+      ++currentBlockIt;
+    }
+  }
+
+  return res;
+}
+
+// _____________________________________________________________________________
+std::array<std::vector<CompressedBlockMetadata>, 2>
+CompressedRelationReader::getBlocksForJoinMultiColumn(
+    const ScanSpecAndBlocksAndBounds& metadataAndBlocks1,
+    const ScanSpecAndBlocksAndBounds& metadataAndBlocks2,
+    size_t numJoinColumns) {
+  AD_CONTRACT_CHECK(numJoinColumns >= 1 && numJoinColumns <= 3);
+
+  // Helper struct to store block with extracted IDs for all columns
+  struct BlockWithIds {
+    const CompressedBlockMetadata& block_;
+    std::array<Id, 3> firstIds_;
+    std::array<Id, 3> lastIds_;
+  };
+
+  // Compare blocks based on numJoinColumns
+  auto blockLessThanBlock = [numJoinColumns](const BlockWithIds& block1,
+                                             const BlockWithIds& block2) {
+    if (numJoinColumns == 1) {
+      return block1.lastIds_[0] < block2.firstIds_[0];
+    } else if (numJoinColumns == 2) {
+      return std::tie(block1.lastIds_[0], block1.lastIds_[1]) <
+             std::tie(block2.firstIds_[0], block2.firstIds_[1]);
+    } else {  // numJoinColumns == 3
+      return std::tie(block1.lastIds_[0], block1.lastIds_[1],
+                      block1.lastIds_[2]) < std::tie(block2.firstIds_[0],
+                                                     block2.firstIds_[1],
+                                                     block2.firstIds_[2]);
+    }
+  };
+
+  // Transform blocks to BlockWithIds
+  auto getBlocksWithIds =
+      [&blockLessThanBlock](
+          const ScanSpecAndBlocksAndBounds& metadataAndBlocks) {
+        auto getSingleBlock =
+            [&metadataAndBlocks](
+                const CompressedBlockMetadata& block) -> BlockWithIds {
+          return {
+              block,
+              getRelevantIdsFromTriple(block.firstTriple_, metadataAndBlocks),
+              getRelevantIdsFromTriple(block.lastTriple_, metadataAndBlocks)};
+        };
+        auto result = metadataAndBlocks.getBlockMetadataView() |
+                      ql::views::transform(getSingleBlock);
+        AD_CORRECTNESS_CHECK(ql::ranges::is_sorted(result, blockLessThanBlock));
+        return result;
+      };
+
+  auto blocksWithIds1 = getBlocksWithIds(metadataAndBlocks1);
+  auto blocksWithIds2 = getBlocksWithIds(metadataAndBlocks2);
+
+  // Find matching blocks using binary search
+  auto findMatchingBlocks = [&blockLessThanBlock](const auto& blocks,
+                                                  const auto& otherBlocks) {
+    std::vector<CompressedBlockMetadata> result;
+    for (const auto& block : blocks) {
+      if (!ql::ranges::equal_range(otherBlocks, block, blockLessThanBlock)
+               .empty()) {
+        result.push_back(block.block_);
+      }
+    }
+    AD_CORRECTNESS_CHECK(std::unique(result.begin(), result.end()) ==
+                         result.end());
+    return result;
+  };
+
+  return {findMatchingBlocks(blocksWithIds1, blocksWithIds2),
+          findMatchingBlocks(blocksWithIds2, blocksWithIds1)};
+}
 // _____________________________________________________________________________
 std::array<std::vector<CompressedBlockMetadata>, 2>
 CompressedRelationReader::getBlocksForJoin(

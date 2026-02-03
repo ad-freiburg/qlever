@@ -8,7 +8,9 @@
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/CallFixedSize.h"
 #include "engine/Engine.h"
+#include "engine/IndexScan.h"
 #include "engine/JoinHelpers.h"
+#include "engine/JoinWithIndexScanHelpers.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
 #include "util/Algorithm.h"
@@ -573,4 +575,66 @@ OptionalJoin::makeTreeWithStrippedColumns(
   return ad_utility::makeExecutionTree<OptionalJoin>(
       getExecutionContext(), std::move(left), std::move(right),
       keepJoinColumns);
+}
+
+// _____________________________________________________________________________
+Result OptionalJoin::computeResultForIndexScanOnRight(
+    bool requestLaziness, std::shared_ptr<const Result> leftRes,
+    IndexScan& rightScan) const {
+  using namespace qlever::joinWithIndexScanHelpers;
+
+  AD_CORRECTNESS_CHECK(leftRes->isFullyMaterialized());
+
+  ad_utility::Timer timer{ad_utility::timer::Timer::InitialStatus::Started};
+
+  const IdTable& leftTable = leftRes->idTable();
+
+  // Get prefiltered blocks from the right IndexScan
+  CompressedRelationReader::IdTableGeneratorInputRange rightBlocks;
+  if (!firstRowHasUndef(leftTable, _joinColumns, 0)) {
+    rightBlocks = getBlocksForJoinOfColumnsWithScan(leftTable, _joinColumns,
+                                                    rightScan, 0);
+  } else {
+    // Cannot prefilter with UNDEF, scan everything
+    rightBlocks = rightScan.getLazyScan(std::nullopt);
+    auto metaBlocks = rightScan.getMetadataForScan();
+    if (metaBlocks.has_value()) {
+      rightBlocks.details().numBlocksAll_ =
+          metaBlocks.value().sizeBlockMetadata_;
+    }
+  }
+
+  runtimeInfo().addDetail("time-for-filtering-blocks", timer.msecs());
+
+  auto action =
+      [this, leftRes = std::move(leftRes), rightBlocks = std::move(rightBlocks),
+       &rightScan](
+          std::function<void(IdTable&, LocalVocab&)> yieldTable) mutable {
+        using namespace qlever::joinWithIndexScanHelpers;
+
+        auto rowAdder =
+            getRowAdderForJoin(*this, _joinColumns.size(), keepJoinColumns_,
+                               std::move(yieldTable));
+
+        // Create view of left table for the join
+        const IdTable& leftTable = leftRes->idTable();
+        std::vector<ColumnIndex> identityPerm(leftTable.numColumns());
+        std::iota(identityPerm.begin(), identityPerm.end(), 0);
+        auto leftBlock = std::array{ad_utility::IdTableAndFirstCol{
+            leftTable.asColumnSubsetView(identityPerm),
+            leftRes->getCopyOfLocalVocab()}};
+        auto rightConverted =
+            convertGenerator(std::move(rightBlocks), rightScan);
+
+        ad_utility::zipperJoinForBlocksWithPotentialUndef(
+            leftBlock, rightConverted, std::less{}, rowAdder, {}, {},
+            ad_utility::OptionalJoinTag{});
+
+        setScanStatusToLazilyCompleted(rightScan);
+
+        return std::move(rowAdder).toIdTableVocabPair();
+      };
+
+  return createResultFromAction(requestLaziness, std::move(action),
+                                [this] { return resultSortedOn(); });
 }
