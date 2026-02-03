@@ -15,7 +15,7 @@
 // hash and equality operators.
 
 // TODO<ullingerc> This could be extended to support `std::tuple` or
-// `std::array`, not only `std::pair`, and other transparently
+// `std::array`, not only `std::pair`, and other transparently comparable types.
 
 // _____________________________________________________________________________
 namespace ad_utility {
