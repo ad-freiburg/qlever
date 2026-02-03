@@ -29,3 +29,34 @@ TEST(StringPairHashMapTest, InsertAndLookup) {
   EXPECT_EQ(map.count(StringViewPair{"foo", "bar"}), 1u);
   EXPECT_EQ(map.count(StringViewPair{"does not", "exist"}), 0u);
 }
+
+// _____________________________________________________________________________
+TEST(StringPairHashMapTest, StringPairEq) {
+  using ad_utility::detail::StringPair;
+  using ad_utility::detail::StringViewPair;
+  ad_utility::detail::StringPairEq eq;
+
+  StringPair a{"a", "b"};
+  StringPair b{"x", "y"};
+  StringPair c{"x", "g"};
+
+  EXPECT_TRUE(eq(a, a));
+  EXPECT_FALSE(eq(a, b));
+  EXPECT_FALSE(eq(a, c));
+
+  StringViewPair aEq{"a", "b"};
+  StringViewPair aNe{"a", "c"};
+  StringViewPair bNe{"f", "g"};
+
+  EXPECT_TRUE(eq(a, aEq));
+  EXPECT_FALSE(eq(a, aNe));
+  EXPECT_FALSE(eq(b, bNe));
+
+  EXPECT_TRUE(eq(aEq, a));
+  EXPECT_FALSE(eq(aNe, a));
+  EXPECT_FALSE(eq(bNe, b));
+
+  StringViewPair aSv{"a", "b"};
+
+  EXPECT_TRUE(eq(a, aSv));
+}
