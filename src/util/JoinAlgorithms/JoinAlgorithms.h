@@ -1584,6 +1584,153 @@ template <typename LHS, typename RHS, typename LessThan,
 BlockZipperJoinImpl(LHS&, RHS&, const LessThan&, CompatibleRowAction&, IsUndef)
     -> BlockZipperJoinImpl<LHS, RHS, LessThan, CompatibleRowAction, IsUndef>;
 
+// CRTP-based implementation for special optional join on blocks.
+// This implementation compares all-but-last columns in the outer join logic,
+// and then performs a one-column join on the last column for matching groups.
+// Preconditions:
+// - Right input contains no UNDEF values
+// - Left input only contains UNDEF in the last column
+// - Both inputs are sorted lexicographically
+
+// TODO<joka921> Get the number of columns in advance...
+struct CompareAllButLast {
+  template <typename A, typename B>
+  bool operator()(const A& a, const B& b) const {
+    // TODO<Joka921> get this in advance...
+    auto numColumns = a.size();
+    for (size_t i = 0; i < numColumns - 1; ++i) {
+      if (a[i] != b[i]) {
+        return a[i] < b[i];
+      }
+    }
+    return false;
+  };
+};
+CPP_template(typename LeftSide, typename RightSide,
+             typename CompatibleRowAction)(
+    requires IsJoinSide<LeftSide> CPP_and
+        IsJoinSide<RightSide>) struct BlockZipperJoinImplForSpecialOptionalJoin
+    : BlockZipperJoinImplCRTP<BlockZipperJoinImplForSpecialOptionalJoin<
+                                  LeftSide, RightSide, CompatibleRowAction>,
+                              LeftSide, RightSide, CompareAllButLast,
+                              CompatibleRowAction, AlwaysFalse> {
+  using Base = BlockZipperJoinImplCRTP<
+      BlockZipperJoinImplForSpecialOptionalJoin<LeftSide, RightSide,
+                                                CompatibleRowAction>,
+      LeftSide, RightSide, CompareAllButLast, CompatibleRowAction, AlwaysFalse>;
+  using typename Base::LeftBlocks;
+  using typename Base::RightBlocks;
+
+  // Inherit constructors from base class.
+  using Base::Base;
+
+  // Implement addCartesianProduct customization point for special optional
+  // join. For each pair of blocks with matching all-but-last columns,
+  // materialize the rows and perform a one-column join on the last column.
+  void addCartesianProductImpl(const LeftBlocks& blocksLeft,
+                               const RightBlocks& blocksRight) {
+    // For now, materialize the blocks. This is a simple initial version.
+    // TODO: Optimize to avoid full materialization.
+
+    auto isEmpty = [](const auto& side) {
+      return side.empty() || side.front().fullBlock().empty();
+    };
+    // Nothing to do if one of the left or right sides is empty.
+    if (isEmpty(blocksLeft) || isEmpty(blocksRight)) {
+      return;
+    }
+
+    // Get allocator and number of columns from the first block.
+    auto allocator = blocksLeft.front().fullBlock().getAllocator();
+    size_t numCols = blocksLeft.front().fullBlock().numColumns();
+
+    // TODO<joka921> This can be much more efficient, in particular it could use
+    // zero copying.
+    // Concatenate all rows from blocksLeft into a single IdTable.
+    IdTable leftTable(numCols, allocator);
+    for (const auto& block : blocksLeft) {
+      for (size_t idx : block.getIndexRange()) {
+        leftTable.push_back(block.fullBlock()[idx]);
+      }
+    }
+
+    // Concatenate all rows from blocksRight into a single IdTable.
+    IdTable rightTable(numCols, allocator);
+    for (const auto& block : blocksRight) {
+      for (size_t idx : block.getIndexRange()) {
+        rightTable.push_back(block.fullBlock()[idx]);
+      }
+    }
+
+    // If either table is empty, we don't have to do anything.
+    if (leftTable.empty() || rightTable.empty()) {
+      return;
+    }
+
+    // Extract the last columns.
+    auto lastColLeft = leftTable.getColumn(numCols - 1);
+    auto lastColRight = rightTable.getColumn(numCols - 1);
+
+    this->compatibleRowAction_.setInput(leftTable, rightTable);
+    // Set up actions for the single-column join on the last column.
+    auto compAction = [this, &leftTable, &rightTable](const auto& itL,
+                                                      const auto& itR) {
+      size_t leftIdx =
+          itL - leftTable.getColumn(leftTable.numColumns() - 1).begin();
+      size_t rightIdx =
+          itR - rightTable.getColumn(rightTable.numColumns() - 1).begin();
+      // Call the row adder with the full rows.
+      this->compatibleRowAction_.addRow(leftIdx, rightIdx);
+    };
+
+    // Set up the generator for UNDEF values in the left last column.
+    auto endOfUndef = ql::ranges::find_if_not(lastColLeft, &Id::isUndefined);
+    auto findSmallerUndefRangeLeft = [&lastColLeft, endOfUndef](auto&&...) {
+      return ad_utility::IteratorRange{lastColLeft.begin(), endOfUndef};
+    };
+
+    auto notFoundAction = [this, &leftTable](const auto& it) {
+      size_t leftIdx =
+          it - leftTable.getColumn(leftTable.numColumns() - 1).begin();
+      this->compatibleRowAction_.addOptionalRow(leftIdx);
+    };
+
+    // Perform the join on the last column only.
+    [[maybe_unused]] auto res = zipperJoinWithUndef(
+        lastColLeft, lastColRight, std::less<>{}, compAction,
+        findSmallerUndefRangeLeft, noop, notFoundAction, noop);
+
+    this->compatibleRowAction_.flush();
+  }
+
+  // Implement joinSubranges customization point by forwarding to
+  // specialOptionalJoin (the non-block version).
+  template <typename SubrangeLeft, typename SubrangeRight,
+            typename RowIndexAdder, typename FindSmallerUndefRangesLeft,
+            typename FindSmallerUndefRangesRight,
+            typename ElFromFirstNotFoundAction, typename CheckCancellation,
+            typename CoverUndefRanges>
+  void joinSubranges(const SubrangeLeft& subrangeLeft,
+                     const SubrangeRight& subrangeRight,
+                     const RowIndexAdder& rowIndexAdder,
+                     [[maybe_unused]] const FindSmallerUndefRangesLeft&
+                         findSmallerUndefRangesLeft,
+                     [[maybe_unused]] const FindSmallerUndefRangesRight&
+                         findSmallerUndefRangesRight,
+                     ElFromFirstNotFoundAction elFromFirstNotFoundAction,
+                     CheckCancellation checkCancellation,
+                     [[maybe_unused]] CoverUndefRanges coverUndefRanges) {
+    // Call specialOptionalJoin without the findSmallerUndefRanges arguments.
+    // Extract the callable parts from rowIndexAdder.
+    auto compatAction = [&rowIndexAdder](auto itL, auto itR) {
+      rowIndexAdder(itL, itR);
+    };
+
+    specialOptionalJoin(subrangeLeft, subrangeRight, compatAction,
+                        elFromFirstNotFoundAction, checkCancellation);
+  }
+};
+
 }  // namespace detail
 
 /**
