@@ -200,40 +200,36 @@ void ConstructTripleGenerator::evaluateVariablesForBatch(
   const size_t numRows = rowIndices.size();
   auto& cacheStats = statsLogger.stats();
 
-  // Initialize variable string pointers: [varIdx][rowInBatch]
-  // We store pointers directly into idCache to avoid a second hash lookup
-  // during template triple instantiation. Pointers are stable within a batch
-  // since we don't modify idCache between evaluation and instantiation (no
-  // rehashing).
-  batchCache.variableStringPtrs_.resize(variablesToEvaluate_.size());
-  for (auto& column : batchCache.variableStringPtrs_) {
-    column.resize(numRows, nullptr);
+  // Initialize variable strings: [varIdx][rowInBatch]
+  // We copy strings from the IdCache into the batch cache. This provides
+  // clear ownership semantics - the batch cache owns its strings and they
+  // remain valid for the entire batch lifetime.
+  batchCache.variableStrings_.resize(variablesToEvaluate_.size());
+  for (auto& column : batchCache.variableStrings_) {
+    column.resize(numRows, std::nullopt);
   }
 
   // Evaluate variables column-by-column for better cache locality.
   // The IdTable is accessed sequentially for each column.
   for (size_t varIdx = 0; varIdx < variablesToEvaluate_.size(); ++varIdx) {
     const auto& varInfo = variablesToEvaluate_[varIdx];
-    auto& columnPtrs = batchCache.variableStringPtrs_[varIdx];
+    auto& columnStrings = batchCache.variableStrings_[varIdx];
 
     if (!varInfo.columnIndex_.has_value()) {
-      // Variable not in result - all pointers are nullptr (already default)
+      // Variable not in result - all values are nullopt (already default)
       continue;
     }
 
     const size_t colIdx = varInfo.columnIndex_.value();
 
     // Read all IDs from this column for all rows in the batch,
-    // ensure their string values are in the cache, and store pointers directly.
+    // look up their string values in the cache, and copy them into the batch.
     for (size_t rowInBatch = 0; rowInBatch < numRows; ++rowInBatch) {
       const uint64_t rowIdx = rowIndices[rowInBatch];
       Id id = idTable(rowIdx, colIdx);
 
       // Use LRU cache's getOrCompute: returns cached value or computes and
       // caches it. The compute lambda is only called on cache miss.
-      // Pointers are stable within a batch because:
-      // 1. LRU only evicts entries not accessed in the current batch
-      // 2. Cache capacity >= batch_size * num_variables (ensured in creation)
       size_t missesBefore = cacheStats.misses_;
       const VariableToColumnMap& varCols = variableColumns_.get();
       const Index& idx = index_.get();
@@ -253,8 +249,10 @@ void ConstructTripleGenerator::evaluateVariablesForBatch(
         ++cacheStats.hits_;
       }
 
-      // Store pointer directly (empty string means UNDEF)
-      columnPtrs[rowInBatch] = cachedValue.empty() ? nullptr : &cachedValue;
+      // Copy string into batch cache (empty string means UNDEF)
+      if (!cachedValue.empty()) {
+        columnStrings[rowInBatch] = cachedValue;
+      }
     }
   }
 }
@@ -443,9 +441,8 @@ ConstructTripleGenerator::IdCacheStatsLogger::~IdCacheStatsLogger() {
 std::pair<std::shared_ptr<ConstructTripleGenerator::IdCache>,
           std::shared_ptr<ConstructTripleGenerator::IdCacheStatsLogger>>
 ConstructTripleGenerator::createIdCacheWithStats(size_t numRows) const {
-  // Ensure cache capacity is large enough to hold the working set of a single
-  // batch (batch_size * num_variables) to guarantee pointer stability within
-  // a batch. Add headroom for cross-batch cache hits_ on repeated values.
+  // Cache capacity is sized to maximize cross-batch cache hits on repeated
+  // values (e.g., predicates that appear in many rows).
   const size_t numVars = variablesToEvaluate_.size();
   const size_t minCapacityForBatch =
       getBatchSize() * std::max(numVars, size_t{1}) * 2;
@@ -460,8 +457,8 @@ void ConstructTripleGenerator::lookupVariableStrings(
     const BatchEvaluationCache& batchCache, size_t rowInBatch,
     [[maybe_unused]] const IdCache& idCache,
     std::vector<const std::string*>& variableStrings) const {
-  // String pointers are already stored in the batch cache during evaluation,
-  // eliminating the need for hash lookups here. Just copy the pointers.
+  // Get pointers to strings owned by the batch cache. The strings remain valid
+  // for the entire batch lifetime since they're stored directly in the cache.
   for (size_t varIdx = 0; varIdx < variablesToEvaluate_.size(); ++varIdx) {
     variableStrings[varIdx] = batchCache.getVariableString(varIdx, rowInBatch);
   }

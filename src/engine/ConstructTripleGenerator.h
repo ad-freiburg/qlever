@@ -91,13 +91,12 @@ class ConstructTripleGenerator {
   // when the same ID appears multiple times across rows.
   // Uses LRU eviction to bound memory usage for queries with many unique IDs.
   // Empty string represents UNDEF values (no valid RDF term is empty).
-  // Uses `StableLRUCache` to guarantee pointer stability for
-  // `BatchEvaluationCache`.
+  // Note: We use StableLRUCache for its LRU semantics; pointer stability is
+  // not required since strings are copied into BatchEvaluationCache.
   using IdCache = ad_utility::StableLRUCache<Id, std::string>;
 
-  // Minimum capacity for the LRU cache. The working set of a single batch
-  // (batch_size * num_variables) plus headroom for cross-batch cache hits on
-  // repeated values (e.g., predicates).
+  // Minimum capacity for the LRU cache. Sized to maximize cross-batch cache
+  // hits on repeated values (e.g., predicates that appear in many rows).
   static constexpr size_t MIN_CACHE_CAPACITY = 100'000;
 
   // Statistics for ID cache performance analysis
@@ -148,29 +147,31 @@ class ConstructTripleGenerator {
   static size_t getBatchSize();
 
   // Batch evaluation cache organized for column-oriented access.
-  // variableStringPtrs_[varIdx][rowInBatch] stores pointers directly into the
-  // `IdCache`, eliminating the need for a second hash lookup during triple
-  // instantiation. Pointers are stable within a batch because we don't modify
-  // `IdCache` between evaluation and instantiation.
+  // variableStrings_[varIdx][rowInBatch] stores the string values directly,
+  // providing clear ownership semantics. The IdCache is still used to
+  // deduplicate vocabulary lookups, but strings are copied into this cache
+  // for safe access during triple instantiation.
   // blankNodeValues_[blankNodeIdx][rowInBatch] stores strings directly since
   // blank nodes can't be cached across result table rows (the blank node
   // values include the row number).
   struct BatchEvaluationCache {
-    // Store pointers to strings in IdCache. Nullptr for UNDEF or missing.
-    // maps: variable idx -> idx of row in batch -> pointer to string in
-    // `IdCache`, which the variable corresponding to the variable idx for the
+    // Store string values directly. Empty optional for UNDEF or missing.
+    // maps: variable idx -> idx of row in batch -> string value (or nullopt)
+    // which the variable corresponding to the variable idx for the
     // specific row of the batch evaluates to.
-    std::vector<std::vector<const std::string*>> variableStringPtrs_;
+    std::vector<std::vector<std::optional<std::string>>> variableStrings_;
     // Store string values for blank nodes (can't be cached by `Id`)
     // maps: blank node idx -> idx of row in batch -> string object representing
     // the corresponding `BlankNode` object.
     std::vector<std::vector<std::string>> blankNodeValues_;
     size_t numRows_ = 0;
 
-    // Get string pointer for a specific variable at a row in the batch
+    // Get string pointer for a specific variable at a row in the batch.
+    // Returns nullptr if the value is UNDEF or missing.
     const std::string* getVariableString(size_t varIdx,
                                          size_t rowInBatch) const {
-      return variableStringPtrs_[varIdx][rowInBatch];
+      const auto& opt = variableStrings_[varIdx][rowInBatch];
+      return opt.has_value() ? &opt.value() : nullptr;
     }
 
     // Get value for a specific blank node at a row in the batch
