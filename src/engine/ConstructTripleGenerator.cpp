@@ -22,8 +22,8 @@ using enum PositionInTriple;
 using StringTriple = ConstructTripleGenerator::StringTriple;
 
 namespace {
-// Parse QLEVER_CONSTRUCT_BATCH_SIZE environment variable.
-// Returns the configured value if valid, or DEFAULT_BATCH_SIZE otherwise.
+// Parse `QLEVER_CONSTRUCT_BATCH_SIZE` environment variable.
+// Returns the configured value if valid, or `DEFAULT_BATCH_SIZE` otherwise.
 size_t parseBatchSizeFromEnv() {
   const char* envVal = std::getenv("QLEVER_CONSTRUCT_BATCH_SIZE");
   if (envVal == nullptr) {

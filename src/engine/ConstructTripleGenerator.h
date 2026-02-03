@@ -25,44 +25,26 @@
 // Output format for CONSTRUCT query results.
 enum class ConstructOutputFormat { TURTLE, CSV, TSV };
 
-// =============================================================================
-// ConstructTripleGenerator
-// =============================================================================
+// _____________________________________________________________________________
 // Generates triples from CONSTRUCT query results by instantiating triple
 // patterns (from the CONSTRUCT clause) with values from the result table
 // (produced by the WHERE clause).
-//
-// ARCHITECTURE OVERVIEW
-// -----------------------------------------------------------------------------
 // The generator transforms: Result Table -> Rows -> Triple Patterns -> Output.
 // For each row in the result table, we instantiate each triple pattern by
 // substituting variables with their values from that row. The output is either
-// StringTriple objects or pre-formatted strings (Turtle/CSV/TSV).
-//
-// PERFORMANCE OPTIMIZATIONS
-// -----------------------------------------------------------------------------
-// 1. PRECOMPUTATION (`analyzeTemplate`):
-// Constants (IRIs, Literals) are evaluated once at construction time. Variable
-// column indices in `IdTable` are pre-computed. Blank node format strings are
-// pre-built (only row number varies).
-//
-// 2. BATCH PROCESSING (`getBatchSize`, `evaluateBatchColumnOriented`):
-// Rows are processed in batches (default 64) for better cache locality.
-// Column-oriented access: for each variable, we read all `Id`s from its
-// column in the `IdTable` across all rows in the batch before moving to
-// the next variable. Since `IdTable` uses column-major storage, this
-// creates sequential memory access patterns that benefit from CPU
-// prefetching.
-//
-// 3. ID CACHING (`IdCache`):
-// ID-to-string conversions are cached across rows within a table
-// High hit rates when the same entity appears in multiple result rows
-// Avoids redundant vocabulary lookups and string allocations
-//
-// 4. DIRECT FORMATTING (`generateFormattedTriples`):
-// For streaming output, we directly yield formatted strings. This Avoids
-// intermediate `StringTriple` object allocations
-// =============================================================================
+// `StringTriple` objects or pre-formatted strings (Turtle/CSV/TSV).
+// Constants (IRIs, Literals) are evaluated once at construction of the
+// `ConstructTripleGenerator`. `Variable` column indices in `IdTable` are
+// pre-computed. `BlankNode` format strings are pre-built (only row number
+// varies). Rows of the result-table are processed in batches (default 64) for
+// better cache locality. For each variable, we read all `Id`s from its column
+// in the `IdTable` across all rows in the batch before moving to the next
+// variable. Since `IdTable` uses column-major storage, this creates sequential
+// memory access patterns that benefit from CPU prefetching. ID-to-string
+// conversions are cached across rows within a table. For streaming output, we
+// directly yield formatted strings. This Avoids intermediate `StringTriple`
+// object allocations
+// _____________________________________________________________________________
 // Forward declaration for friend access
 class FormattedTripleIterator;
 class ConstructTripleGenerator {
@@ -83,7 +65,7 @@ class ConstructTripleGenerator {
   // Resolution info for a single term position
   struct TermResolution {
     TermSource source;
-    size_t index;  // Index into the appropriate cache (constants/vars/blanks)
+    size_t index;  // index into the appropriate cache (constants/vars/blanks)
   };
 
   // Pre-analyzed info for a triple pattern to enable fast instantiation
@@ -95,10 +77,10 @@ class ConstructTripleGenerator {
   struct VariableWithColumnIndex {
     Variable variable_;
     // idx of the column for the variable in the `IdTable`.
-    std::optional<size_t> columnIndex_;  // nullopt if variable not in result
+    std::optional<size_t> columnIndex_;
   };
 
-  // BlankNode with precomputed prefix and suffix for fast evaluation.
+  // `BlankNode` with precomputed prefix and suffix for fast evaluation.
   // The blank node format is: prefix + rowNumber + suffix
   // where prefix is "_:g" or "_:u" and suffix_ is "_" + label.
   // This avoids recomputing these constant parts for every result table row.
@@ -115,10 +97,9 @@ class ConstructTripleGenerator {
   // `BatchEvaluationCache`.
   using IdCache = ad_utility::StableLRUCache<Id, std::string>;
 
-  // Minimum capacity for the LRU cache. This should be large enough to hold
-  // the working set of a single batch (batch_size * num_variables) plus
-  // headroom for cross-batch cache hits_ on repeated values (e.g., predicates).
-  // 100k entries = 10-20MB depending on average string length.
+  // Minimum capacity for the LRU cache. The working set of a single batch
+  // (batch_size * num_variables) plus headroom for cross-batch cache hits on
+  // repeated values (e.g., predicates).
   static constexpr size_t MIN_CACHE_CAPACITY = 100'000;
 
   // Statistics for ID cache performance analysis
@@ -161,30 +142,6 @@ class ConstructTripleGenerator {
     size_t cacheCapacity_;
   };
 
-  // ---------------------------------------------------------------------------
-  // Batch Processing Configuration
-  // We process rows in batches to enable column-oriented memory access. For
-  // each variable, we read its column from the `IdTable` across all rows in the
-  // batch before moving to the next variable. This creates sequential memory
-  // access patterns (`IdTable` has column-major memory layout) that benefit
-  // from CPU prefetching.
-  //
-  // Trade-off: Larger batches increase the chance of cache hits_ when the same
-  // id appears multiple times within the batch (common for predicates).
-  // However, if the batch is too large, the working set (batch_size *
-  // num_variables * pointer_size for variableStringPtrs_, plus cached strings
-  // in `IdCache`) may exceed L1/L2 cache capacity, causing cache thrashing. The
-  // value 64 was determined empirically. It provides good cache locality while
-  // keeping the working set small enough to fit in typical L2 caches. With a
-  // batch size of 64 and 4 distinct variables in the template triples, the
-  // `variableStringPtrs_` array (which is populated using the sequential access
-  // pattern to the `IdTable`) uses 64 rows x 4 variables x 8 bytes per pointer
-  // = 2048 bytes. My CPU has, per core, L1d 32 KiB + L2 512KiB available.
-  //
-  // TODO<ms2144>: Use more principled approach: maybe compute batch size
-  // dynamically based on the number of variables and available cache size,
-  // rather than using a fixed value. And also monitor how much of the L2 cache
-  // is used when a batch is being processed.
   static constexpr size_t DEFAULT_BATCH_SIZE = 64;
 
   // Get the batch size, configurable via QLEVER_CONSTRUCT_BATCH_SIZE env var.
@@ -235,14 +192,13 @@ class ConstructTripleGenerator {
   // ___________________________________________________________________________
   // This generator has to be called for each table contained in the result of
   // `ExportQueryExecutionTrees::getRowIndices` IN ORDER (because of
-  // rowOffsset).
-  //
-  // For each row of the result table (the table that is created as result of
-  // processing the WHERE-clause of a CONSTRUCT-query) it creates the resulting
-  // triples by instantiating the triple-patterns with the values of the
-  // result-table row (triple-patterns are the triples in the CONSTRUCT-clause
-  // of a CONSTRUCT-query). The following pipeline takes place conceptually:
-  // result-table -> processing batches -> result-table rows -> triple patterns
+  // rowOffsset). For each row of the result table (the table that is created as
+  // result of processing the WHERE-clause of a CONSTRUCT-query) it creates the
+  // resulting triples by instantiating the triple-patterns with the values of
+  // the result-table row (triple-patterns are the triples in the
+  // CONSTRUCT-clause of a CONSTRUCT-query). The following pipeline takes place
+  // conceptually: result-table -> processing batches -> result-table rows ->
+  // triple patterns
   // -> `StringTriples`
   ad_utility::InputRangeTypeErased<StringTriple>
   generateStringTriplesForResultTable(const TableWithRange& table);
@@ -276,30 +232,29 @@ class ConstructTripleGenerator {
   TermResolution analyzeTerm(const GraphTerm& term, size_t tripleIdx,
                              size_t pos, PositionInTriple role);
 
-  // Analyzes an IRI term: precomputes the string value.
+  // Analyzes a `Iri` term: precomputes the string value.
   TermResolution analyzeIriTerm(const Iri& iri, size_t tripleIdx, size_t pos);
 
-  // Analyzes a Literal term: precomputes the string value.
+  // Analyzes a `Literal` term: precomputes the string value.
   TermResolution analyzeLiteralTerm(const Literal& literal, size_t tripleIdx,
                                     size_t pos, PositionInTriple role);
 
-  // Analyzes a Variable term: registers it and precomputes column index.
+  // Analyzes a `Variable` term: registers it and precomputes column index.
   TermResolution analyzeVariableTerm(const Variable& var);
 
-  // Analyzes a BlankNode term: registers it and precomputes format strings.
+  // Analyzes a `BlankNode` term: registers it and precomputes format strings.
   TermResolution analyzeBlankNodeTerm(const BlankNode& blankNode);
 
-  // Evaluates all Variables and BlankNodes for a batch of rows using
-  // column-oriented access for better cache locality.
-  // Delegates to evaluateVariablesForBatch() and evaluateBlankNodesForBatch().
+  // Evaluates all `Variables` and `BlankNodes` for a batch of result-table
+  // rows.
   BatchEvaluationCache evaluateBatchColumnOriented(
       const IdTable& idTable, const LocalVocab& localVocab,
       ql::span<const uint64_t> rowIndices, size_t currentRowOffset,
       IdCache& idCache, IdCacheStatsLogger& statsLogger) const;
 
-  // Evaluates all variables for a batch of rows using column-oriented access.
-  // For each variable, reads all IDs from its column across all batch rows,
-  // converts them to strings (using the cache), and stores pointers.
+  // For each `Variable`, reads all IDs from its column across all batch rows,
+  // converts them to strings (using the cache), and stores pointers to those
+  // strings in `BatchEvaluationCache`.
   void evaluateVariablesForBatch(BatchEvaluationCache& batchCache,
                                  const IdTable& idTable,
                                  const LocalVocab& localVocab,
@@ -307,15 +262,15 @@ class ConstructTripleGenerator {
                                  size_t currentRowOffset, IdCache& idCache,
                                  IdCacheStatsLogger& statsLogger) const;
 
-  // Evaluates all blank nodes for a batch of rows.
-  // Uses precomputed prefix/suffix_, only concatenating the row number per row.
+  // Evaluates all `BlankNodes` for a batch of rows. Uses precomputed
+  // prefix/suffix, only concatenating the row number per row.
   void evaluateBlankNodesForBatch(BatchEvaluationCache& batchCache,
                                   ql::span<const uint64_t> rowIndices,
                                   size_t currentRowOffset) const;
 
   // Instantiates a single triple using the precomputed constants and
   // the batch evaluation cache for a specific row. Returns an empty
-  // StringTriple if any component is UNDEF. Variable string values are
+  // `StringTriple` if any component is UNDEF. `Variable` string values are
   // provided via the precomputed variableStrings cache (one lookup per
   // variable per row, reused across all triples in the row).
   StringTriple instantiateTripleFromBatch(
@@ -361,7 +316,7 @@ class ConstructTripleGenerator {
   CancellationHandle cancellationHandle_;
   size_t rowOffset_ = 0;
 
-  // Precomputed constant values for IRIs and Literals
+  // Precomputed constant values for iri's and Literals
   // [tripleIdx][position] -> evaluated constant (or nullopt if not a constant)
   std::vector<std::array<std::optional<std::string>, NUM_TRIPLE_POSITIONS>>
       precomputedConstants_;
