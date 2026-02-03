@@ -285,8 +285,8 @@ int main(int argc, char** argv) {
       "Do not delete temporary files from index creation for debugging.");
   add("write-materialized-views", po::value(&materializedViewsJson),
       "Write materialized views after index building. Takes a JSON object "
-      "mapping view names to SPARQL queries, e.g., "
-      R"({"view1":"SELECT ?s ?p WHERE { ?s ?p ?o }", "view2":"SELECT ..."})");
+      "mapping view names to SELECT queries for writing the view, for example: "
+      R"({"view1": "SELECT ...", "view2": "SELECT ..."})");
 
   // Process command line arguments.
   po::variables_map optionsMap;
