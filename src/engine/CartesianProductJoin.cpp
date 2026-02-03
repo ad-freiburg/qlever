@@ -377,8 +377,7 @@ Result::LazyResult CartesianProductJoin::createLazyConsumer(
   }
   // Placeholder, will be replaced with the current `IdTable` from the lazy
   // result.
-  idTables.emplace_back(
-      std::make_shared<const IdTable>(IdTable{0, allocator()}));
+  idTables.emplace_back(std::make_shared<IdTable>(IdTable{0, allocator()}));
 
   auto generatedTables = lazyResult->idTables();
 
@@ -396,7 +395,10 @@ Result::LazyResult CartesianProductJoin::createLazyConsumer(
     producedTableSize = 0;
 
     auto& [idTable, localVocab] = idTableVocabPair;
-    idTables.back() = std::make_shared<const IdTable>(std::move(idTable));
+    // We know that the last id table is mutable (we inserted it ourselves), so
+    // we can replace it without paying the cost of creating and destroying a
+    // shared pointer.
+    const_cast<IdTable&>(*idTables.back()) = std::move(idTable);
     if (idTables.back()->empty()) {
       return Result::IdTableLoopControl::makeContinue();
     }
