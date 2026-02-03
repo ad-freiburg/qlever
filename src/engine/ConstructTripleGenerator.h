@@ -20,10 +20,8 @@
 #include "util/CancellationHandle.h"
 #include "util/HashMap.h"
 #include "util/StableLruCache.h"
+#include "util/http/MediaTypes.h"
 #include "util/stream_generator.h"
-
-// Output format for CONSTRUCT query results.
-enum class ConstructOutputFormat { TURTLE, CSV, TSV };
 
 // _____________________________________________________________________________
 // Generates triples from CONSTRUCT query results by instantiating triple
@@ -208,7 +206,7 @@ class ConstructTripleGenerator {
   // This is the main entry point for streaming CONSTRUCT results.
   // Yields formatted strings directly, avoiding `StringTriple` allocation.
   ad_utility::InputRangeTypeErased<std::string> generateFormattedTriples(
-      const TableWithRange& table, ConstructOutputFormat format);
+      const TableWithRange& table, ad_utility::MediaType mediaType);
 
   // ___________________________________________________________________________
   // Helper function that generates the result of a CONSTRUCT query as a range
@@ -302,7 +300,7 @@ class ConstructTripleGenerator {
   std::string formatTriple(const std::string* subject,
                            const std::string* predicate,
                            const std::string* object,
-                           ConstructOutputFormat format) const;
+                           ad_utility::MediaType format) const;
 
   // Processes a single batch and returns the resulting StringTriples.
   // Used by generateStringTriplesForResultTable to lazily process batches.

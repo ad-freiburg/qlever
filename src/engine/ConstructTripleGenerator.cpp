@@ -471,20 +471,16 @@ void ConstructTripleGenerator::lookupVariableStrings(
 // Formats triples for different output formats without intermediate
 // `StringTriple` allocations.
 // Row -> formatTriple(s*,p*,o*) -> yield string (single allocation)
-// Format-specific handling:
-//   TURTLE: Subject Predicate Object .\n (with literal escaping)
-//   CSV:    "s","p","o"\n (RFC 4180 escaping)
-//   TSV:    s\tp\to\n (minimal escaping)
 // _____________________________________________________________________________
 std::string ConstructTripleGenerator::formatTriple(
     const std::string* subject, const std::string* predicate,
-    const std::string* object, ConstructOutputFormat format) const {
+    const std::string* object, ad_utility::MediaType format) const {
   if (!subject || !predicate || !object) {
     return {};
   }
 
   switch (format) {
-    case ConstructOutputFormat::TURTLE: {
+    case ad_utility::MediaType::turtle: {
       // Only escape literals (strings starting with "). IRIs and blank nodes
       // are used as-is, avoiding an unnecessary string copy.
       if (ql::starts_with(*object, "\"")) {
@@ -494,29 +490,29 @@ std::string ConstructTripleGenerator::formatTriple(
       }
       return absl::StrCat(*subject, " ", *predicate, " ", *object, " .\n");
     }
-    case ConstructOutputFormat::CSV: {
+    case ad_utility::MediaType::csv: {
       return absl::StrCat(RdfEscaping::escapeForCsv(*subject), ",",
                           RdfEscaping::escapeForCsv(*predicate), ",",
                           RdfEscaping::escapeForCsv(*object), "\n");
     }
-    case ConstructOutputFormat::TSV: {
+    case ad_utility::MediaType::tsv: {
       return absl::StrCat(RdfEscaping::escapeForTsv(*subject), "\t",
                           RdfEscaping::escapeForTsv(*predicate), "\t",
                           RdfEscaping::escapeForTsv(*object), "\n");
     }
+    default:
+      return {};  // TODO<ms2144>: add proper error throwing here?
   }
-  return {};  // Unreachable
 }
 
 // _____________________________________________________________________________
-// FormattedTripleIterator
 // Iterator that yields formatted triples (Turtle/CSV/TSV) one at a time.
 // Implements the `InputRangeFromGet` interface for lazy evaluation.
 //
 // Iteration proceeds in three nested loops:
-//   1. Batches: Groups of rows processed together for cache locality
-//   2. Rows: Individual result rows within a batch
-//   3. Triples: Triple patterns instantiated for each row
+// 1. Batches: Groups of rows processed together for cache locality
+// 2. Rows: Individual result rows within a batch
+// 3. Triples: Triple patterns instantiated for each row
 // _____________________________________________________________________________
 class FormattedTripleIterator
     : public ad_utility::InputRangeFromGet<std::string> {
@@ -527,7 +523,7 @@ class FormattedTripleIterator
 
   FormattedTripleIterator(const ConstructTripleGenerator& generator,
                           const TableWithRange& table,
-                          ConstructOutputFormat format, size_t currentRowOffset)
+                          ad_utility::MediaType format, size_t currentRowOffset)
       : generator_(generator),
         format_(format),
         tableWithVocab_(table.tableWithVocab_),
@@ -630,7 +626,7 @@ class FormattedTripleIterator
 
   // References to generator state (const, generator outlives iterator)
   const ConstructTripleGenerator& generator_;
-  ConstructOutputFormat format_;
+  ad_utility::MediaType format_;
 
   // Table data (copied/referenced for iteration lifetime)
   TableConstRefWithVocab tableWithVocab_;
@@ -693,11 +689,11 @@ ConstructTripleGenerator::generateStringTriples(
 // `StringTriple` allocations).
 ad_utility::InputRangeTypeErased<std::string>
 ConstructTripleGenerator::generateFormattedTriples(
-    const TableWithRange& table, ConstructOutputFormat format) {
+    const TableWithRange& table, ad_utility::MediaType mediaType) {
   const size_t currentRowOffset = rowOffset_;
   rowOffset_ += table.tableWithVocab_.idTable().numRows();
 
   return ad_utility::InputRangeTypeErased<std::string>{
-      std::make_unique<FormattedTripleIterator>(*this, table, format,
+      std::make_unique<FormattedTripleIterator>(*this, table, mediaType,
                                                 currentRowOffset)};
 }
