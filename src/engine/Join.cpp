@@ -592,9 +592,9 @@ Result Join::computeResultForTwoIndexScans(bool requestLaziness) const {
         // of the child. If we serialize it whenever the join operation yields a
         // table that's frequent enough and reduces the overhead.
         auto leftBlocks =
-            convertGenerator(std::move(leftBlocksInternal), *leftScan);
-        auto rightBlocks =
-            convertGenerator(std::move(rightBlocksInternal), *rightScan);
+            convertGeneratorFromScan(std::move(leftBlocksInternal), *leftScan);
+        auto rightBlocks = convertGeneratorFromScan(
+            std::move(rightBlocksInternal), *rightScan);
 
         ad_utility::zipperJoinForBlocksWithoutUndef(leftBlocks, rightBlocks,
                                                     std::less{}, rowAdder);
@@ -652,7 +652,8 @@ Result Join::computeResultForIndexScanAndIdTable(
           } else {
             auto rightBlocksInternal =
                 scan->lazyScanForJoinOfColumnWithScan(permutationIdTable.col());
-            return convertGenerator(std::move(rightBlocksInternal), *scan);
+            return convertGeneratorFromScan(std::move(rightBlocksInternal),
+                                            *scan);
           }
         }();
 

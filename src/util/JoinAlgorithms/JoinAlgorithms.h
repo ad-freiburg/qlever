@@ -1154,8 +1154,6 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
         getFirstBlock(currentBlocksRight, currentEl);
 
     compatibleRowAction_.setInput(fullBlockLeft, fullBlockRight);
-    // TODO<joka921> this is wrong and only for debugging.
-
     auto begL = fullBlockLeft.begin();
     auto begR = fullBlockRight.begin();
 

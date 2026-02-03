@@ -602,7 +602,7 @@ Result OptionalJoin::materializedOptionalJoinWithIndexScan(
       auto firstJoinColLeft = _joinColumns.at(0).at(0);
       auto rightBlocksInternal = rightScan->lazyScanForJoinOfColumnWithScan(
           left->idTable().getColumn(firstJoinColLeft));
-      auto rightRange = convertGenerator<numJoinCols>(
+      auto rightRange = convertGeneratorFromScan<numJoinCols>(
           std::move(rightBlocksInternal), *rightScan);
       // TODO<joka921> unnecessary copy, debug what is going wrong...
       auto permutationIdTable =
@@ -618,7 +618,7 @@ Result OptionalJoin::materializedOptionalJoinWithIndexScan(
                 .asColumnSubsetView(joinColMap.permutationLeft())
                 ,
             left->getCopyOfLocalVocab()};
-      */
+            */
       auto leftRange = std::array{std::move(permutationIdTable)};
 
       return std::pair{std::move(leftRange), std::move(rightRange)};

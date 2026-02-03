@@ -76,7 +76,7 @@ using IteratorWithSingleCol =
 // in the join columns below. This also makes sure the runtime information of
 // the passed `IndexScan` is updated properly as the range is consumed.
 template <size_t numJoinColumns = 1>
-IteratorWithSingleCol<numJoinColumns> convertGenerator(
+IteratorWithSingleCol<numJoinColumns> convertGeneratorFromScan(
     CompressedRelationReader::IdTableGeneratorInputRange gen, IndexScan& scan) {
   // Store the generator in a wrapper so we can access its details after moving
   auto generatorStorage =
