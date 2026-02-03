@@ -414,7 +414,7 @@ void updatePassedTimes(const Date& date1, const Date& date2, long& daysPassed,
   }
 }
 
-DateYearOrDuration DateYearOrDuration::operator-(
+std::optional<DateYearOrDuration> DateYearOrDuration::operator-(
     const DateYearOrDuration& rhs) const {
   if (isDate() && rhs.isDate()) {
     // Date - Date => Duration | getting time between the two Dates
@@ -458,20 +458,19 @@ DateYearOrDuration DateYearOrDuration::operator-(
   if (isDayTimeDuration() && rhs.isDayTimeDuration()) {
     // Duration - Duration => Duration | getting new duration that is
     // rhs.duration-time smaller return;
-    // TODO: implement
+    // TODO: can be implemented
   }
 
   if (isDate() && rhs.isDayTimeDuration()) {
     // Date - Duration => Date | getting new Date from rhs.duration-time earlier
-    // return;
-    // TODO: implement
+    // TODO: can be implemented
   }
 
-  if (isDayTimeDuration() && rhs.isDate()) {
-    // Duration - Date |  not implemented
-  }
+  // TODO: subtraction with large year can also be implemented
+
+  // Duration - Date is not implemented
 
   // no viable subtraction
-  throw std::invalid_argument("No Subtraction possible!");
+  return std::nullopt;
 }
 #endif

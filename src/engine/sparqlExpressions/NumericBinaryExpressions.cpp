@@ -68,8 +68,15 @@ struct SubtractImpl {
       }
     } else if constexpr (std::is_same_v<T1, DateYearOrDuration> &&
                          std::is_same_v<T2, DateYearOrDuration>) {
+#ifndef REDUCED_FEATURE_SET_FOR_CPP17
       // Using - operator implementation in DateYearOrDuration.
-      return Id::makeFromDate(lhs - rhs);
+      auto difference = lhs - rhs;
+      if (difference.has_value()) {
+        return Id::makeFromDate(difference.value());
+      } else {
+        return Id::makeUndefined();
+      }
+#endif
     }
     // For all other operations returning Undefined
     // It is not allowed to use subtractionn between Date and NumericValue

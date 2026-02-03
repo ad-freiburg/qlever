@@ -84,6 +84,12 @@ class DateYearOrDuration {
   // True iff a complete `Date` is stored and not only a large year.
   bool isDate() const { return bits_ >> numPayloadDateBits == datetime; }
 
+  // True iff a large year is stored.
+  bool isLongYear() const {
+    return (bits_ >> numPayloadDateBits == negativeYear) ||
+           (bits_ >> numPayloadDateBits == positiveYear);
+  }
+
   // True iff constructed with `DayTimeDuration`.
   bool isDayTimeDuration() const {
     return bits_ >> numPayloadDurationBits == daytimeDuration;
@@ -206,9 +212,12 @@ class DateYearOrDuration {
   static std::optional<DateYearOrDuration> convertToXsdDate(
       const DateYearOrDuration& dateValue);
 
+#ifndef REDUCED_FEATURE_SET_FOR_CPP17
   // Subtraction of two DateYearOrDuration Objects.
-  [[nodiscard]] DateYearOrDuration operator-(
+  // For undefined subtractions `std::nullopt` is returned.
+  [[nodiscard]] std::optional<DateYearOrDuration> operator-(
       const DateYearOrDuration& rhs) const;
+#endif
 };
 #ifdef QLEVER_CPP_17
 static_assert(std::is_default_constructible_v<DateYearOrDuration>);

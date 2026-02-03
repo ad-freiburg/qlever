@@ -576,6 +576,7 @@ TEST(DateYearOrDuration, Hashing) {
   EXPECT_THAT(set, ::testing::UnorderedElementsAre(d1, d2));
 }
 
+#ifndef REDUCED_FEATURE_SET_FOR_CPP17
 // _____________________________________________________________________________
 TEST(DateYearOrDuration, Subtraction) {
   {
@@ -583,12 +584,12 @@ TEST(DateYearOrDuration, Subtraction) {
     DateYearOrDuration test1 = DateYearOrDuration(Date(2012, 12, 24));
     DateYearOrDuration test2 = DateYearOrDuration(Date(2012, 12, 1));
 
-    DateYearOrDuration result = test1 - test2;
+    DateYearOrDuration result = (test1 - test2).value();
     ASSERT_EQ(true, result.isDayTimeDuration());
     ASSERT_EQ(DateYearOrDuration(
                   DayTimeDuration(DayTimeDuration::Type::Positive, 23)),
               result);
-    result = test2 - test1;
+    result = (test2 - test1).value();
     ASSERT_EQ(true, result.isDayTimeDuration());
     ASSERT_EQ(DateYearOrDuration(
                   DayTimeDuration(DayTimeDuration::Type::Positive, 23)),
@@ -596,26 +597,26 @@ TEST(DateYearOrDuration, Subtraction) {
 
     test1 = DateYearOrDuration(Date(2012, 12, 24));
     test2 = DateYearOrDuration(Date(2010, 12, 24));
-    result = test1 - test2;
+    result = (test1 - test2).value();
     ASSERT_EQ(true, result.isDayTimeDuration());
     ASSERT_EQ(DateYearOrDuration(
                   DayTimeDuration(DayTimeDuration::Type::Positive, 731)),
-              test1 - test2);
-    result = test2 - test1;
+              result);
+    result = (test2 - test1).value();
     ASSERT_EQ(true, result.isDayTimeDuration());
     ASSERT_EQ(DateYearOrDuration(
                   DayTimeDuration(DayTimeDuration::Type::Positive, 731)),
               result);
 
     test2 = DateYearOrDuration(Date(1979, 3, 13));
-    result = test1 - test2;
+    result = (test1 - test2).value();
     ASSERT_EQ(true, result.isDayTimeDuration());
     ASSERT_EQ(DateYearOrDuration(
                   DayTimeDuration(DayTimeDuration::Type::Positive, 12340)),
               result);
 
     test1 = DateYearOrDuration(Date(1868, 5, 16));
-    result = test1 - test2;
+    result = (test1 - test2).value();
     ASSERT_EQ(true, result.isDayTimeDuration());
     ASSERT_EQ(DateYearOrDuration(
                   DayTimeDuration(DayTimeDuration::Type::Positive, 40477)),
@@ -629,18 +630,18 @@ TEST(DateYearOrDuration, Subtraction) {
     DateYearOrDuration date2 =
         DateYearOrDuration(Date(2012, 12, 20, 15, 15, 59));
     // expected duration of 1d20h50min13sec
-    DateYearOrDuration result = date1 - date2;
+    DateYearOrDuration result = (date1 - date2).value();
     ASSERT_EQ(DateYearOrDuration(DayTimeDuration(
                   DayTimeDuration::Type::Positive, 1, 20, 50, 13)),
               result);
-    result = date2 - date1;
+    result = (date2 - date1).value();
     ASSERT_EQ(DateYearOrDuration(DayTimeDuration(
                   DayTimeDuration::Type::Positive, 1, 20, 50, 13)),
               result);
 
     date2 = DateYearOrDuration(Date(2010, 1, 13, 10, 32, 15));
     // expected duration of 1074d1h33min57sec
-    result = date1 - date2;
+    result = (date1 - date2).value();
     ASSERT_EQ(DateYearOrDuration(DayTimeDuration(
                   DayTimeDuration::Type::Positive, 1074, 1, 33, 57)),
               result);
@@ -649,11 +650,11 @@ TEST(DateYearOrDuration, Subtraction) {
     date1 = DateYearOrDuration(Date(2012, 12, 22));
     date2 = DateYearOrDuration(Date(2012, 12, 20, 13, 50, 59));
     // expected duration of 1d10h9min1sec
-    result = date1 - date2;
+    result = (date1 - date2).value();
     ASSERT_EQ(DateYearOrDuration(DayTimeDuration(
                   DayTimeDuration::Type::Positive, 1, 10, 9, 1)),
               result);
-    result = date2 - date1;
+    result = (date2 - date1).value();
     ASSERT_EQ(DateYearOrDuration(DayTimeDuration(
                   DayTimeDuration::Type::Positive, 1, 10, 9, 1)),
               result);
@@ -664,7 +665,7 @@ TEST(DateYearOrDuration, Subtraction) {
     DateYearOrDuration date1 = DateYearOrDuration(Date(2021, 01, 23, 21, 0, 0));
     DateYearOrDuration date2 = DateYearOrDuration(Date(2021, 01, 23, 23, 0, 0));
     // expected duration of 0d2h0min0sec
-    DateYearOrDuration result = date1 - date2;
+    DateYearOrDuration result = (date1 - date2).value();
     ASSERT_EQ(DateYearOrDuration(
                   DayTimeDuration(DayTimeDuration::Type::Positive, 0, 2, 0, 0)),
               result);
@@ -673,7 +674,7 @@ TEST(DateYearOrDuration, Subtraction) {
     date1 = DateYearOrDuration(Date(2021, 01, 23, 22, 10, 0));
     date2 = DateYearOrDuration(Date(2021, 01, 23, 22, 30, 0));
     // expected duration of 0d0h20min0sec
-    result = date1 - date2;
+    result = (date1 - date2).value();
     ASSERT_EQ(DateYearOrDuration(DayTimeDuration(
                   DayTimeDuration::Type::Positive, 0, 0, 20, 0)),
               result);
@@ -682,9 +683,10 @@ TEST(DateYearOrDuration, Subtraction) {
     date1 = DateYearOrDuration(Date(2021, 01, 23, 22, 10, 03));
     date2 = DateYearOrDuration(Date(2021, 01, 23, 22, 10, 43));
     // expected duration of 0d0h0min40sec
-    result = date1 - date2;
+    result = (date1 - date2).value();
     ASSERT_EQ(DateYearOrDuration(DayTimeDuration(
                   DayTimeDuration::Type::Positive, 0, 0, 0, 40)),
               result);
   }
 }
+#endif
