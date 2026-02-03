@@ -118,7 +118,9 @@ Result OptionalJoin::computeResult(bool requestLaziness) {
     return std::move(res).value();
   }
 
-  if (getRuntimeParameter<&RuntimeParameters::prefilteredOptionalJoin_>()) {
+  if (getRuntimeParameter<&RuntimeParameters::prefilteredOptionalJoin_>() &&
+      implementation_ == Implementation::OnlyUndefInLastJoinColumnOfLeft &&
+      _joinColumns.size() == 2) {
     if (auto indexScan =
             std::dynamic_pointer_cast<IndexScan>(_right->getRootOperation())) {
       auto leftRes = _left->getResult(true);
