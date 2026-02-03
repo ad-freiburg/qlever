@@ -34,18 +34,11 @@ void runAsyncTest(Func innerRun, size_t numThreads) {
     if constexpr (TestableCoroutine<Func>) {
       return net::co_spawn(*ioContext, innerRun(*ioContext), net::use_future);
     } else {
-      // Use std::promise instead of std::packaged_task to work around
-      // AppleClang/LLVM Clang compiler crash with packaged_task + Boost.Asio
-      auto promise = std::make_shared<std::promise<void>>();
-      auto fut = promise->get_future();
-      net::post(*ioContext, [&innerRun, ioContext, promise]() {
-        try {
-          innerRun(*ioContext);
-          promise->set_value();
-        } catch (...) {
-          promise->set_exception(std::current_exception());
-        }
-      });
+      // Use a named variable to work around AppleClang compiler crash when
+      // passing a temporary packaged_task directly to net::post.
+      std::packaged_task<void()> task{[&] { innerRun(*ioContext); }};
+      auto fut = task.get_future();
+      net::post(*ioContext, std::move(task));
       return fut;
     }
   }();
