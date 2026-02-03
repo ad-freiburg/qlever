@@ -317,7 +317,7 @@ int main(int argc, char** argv) {
     config.inputFiles_ = getFileSpecifications(filetype, inputFile,
                                                defaultGraphs, parseParallel);
     config.writeMaterializedViews_ =
-        parseMaterializedViewsJson(materializedViewsJson);
+        parseMaterializedViewsJson(std::move(materializedViewsJson));
     config.validate();
     qlever::Qlever::buildIndex(config);
   } catch (std::exception& e) {
