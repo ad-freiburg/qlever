@@ -11,6 +11,7 @@
 #include <optional>
 #include <vector>
 
+#include "engine/AddCombinedRowToTable.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/Result.h"
@@ -101,7 +102,7 @@ CPP_template_2(typename ActionT)(
   return generatorFromActionWithCallback<Result::IdTableVocabPair>(
       [runLazyJoin = std::move(runLazyJoin),
        permutation = std::move(permutation)](
-          std::function<void(Result::IdTableVocabPair)> callback) {
+          std::function<void(Result::IdTableVocabPair)> callback) mutable {
         auto yieldValue = [&permutation,
                            &callback](Result::IdTableVocabPair value) {
           if (value.idTable_.empty()) {

@@ -567,13 +567,61 @@ TEST(JoinAlgorithm, DefaultIsUndefinedFunctionAlwaysReturnsFalse) {
 // _____________________________________________________________________________
 
 namespace {
+// Helper types for testing special optional join with Id values.
+using IdBlock = std::vector<std::array<Id, 2>>;
+using IdNestedBlock = std::vector<IdBlock>;
+using IdJoinResult = std::vector<std::array<Id, 3>>;
+
+// RowAdder for Id-based blocks.
+struct IdRowAdder {
+  const IdBlock* left_{};
+  const IdBlock* right_{};
+  IdJoinResult* target_{};
+
+  void setInput(const IdBlock& left, const IdBlock& right) {
+    left_ = &left;
+    right_ = &right;
+  }
+
+  void setOnlyLeftInputForOptionalJoin(const IdBlock& left) { left_ = &left; }
+
+  void addRow(size_t leftIndex, size_t rightIndex) {
+    auto [x1, x2] = (*left_)[leftIndex];
+    auto [y1, y2] = (*right_)[rightIndex];
+    AD_CONTRACT_CHECK(x1 == y1);
+    target_->push_back(std::array{x1, x2, y2});
+  }
+
+  void addOptionalRow(size_t leftIndex) {
+    auto [x1, x2] = (*left_)[leftIndex];
+    target_->emplace_back(std::array{x1, x2, Id::makeUndefined()});
+  }
+
+  // Operator() for iterator-based interface.
+  template <typename LeftIt, typename RightIt>
+  void operator()(LeftIt leftIt, RightIt rightIt) {
+    auto [x1, x2] = *leftIt;
+    auto [y1, y2] = *rightIt;
+    AD_CONTRACT_CHECK(x1 == y1);
+    target_->push_back(std::array{x1, x2, y2});
+  }
+
+  void flush() const {
+    // Does nothing, but is required for the interface.
+  }
+};
+
+auto makeIdRowAdder(IdJoinResult& target) {
+  return IdRowAdder{nullptr, nullptr, &target};
+}
+
 // Helper function to test the special optional join with blocks.
-void testSpecialOptionalJoin(const NestedBlock& a, const NestedBlock& b,
-                             JoinResult expected,
+void testSpecialOptionalJoin(const IdNestedBlock& a, const IdNestedBlock& b,
+                             IdJoinResult expected,
                              source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
-  JoinResult result;
-  auto adder = makeRowAdder(result);
+  IdJoinResult result;
+  auto adder = makeIdRowAdder(result);
 
   auto addOptionalRow = [&adder](const auto& it) {
     adder.addOptionalRow(it - adder.left_->begin());
@@ -593,96 +641,140 @@ void testSpecialOptionalJoin(const NestedBlock& a, const NestedBlock& b,
 TEST(JoinAlgorithms, SpecialOptionalJoinEmptyInputs) {
   testSpecialOptionalJoin({}, {}, {});
 
-  testSpecialOptionalJoin({{{13, 0}}}, {}, {{13, 0, U}});
+  testSpecialOptionalJoin({{{I(13), I(0)}}}, {},
+                          {{I(13), I(0), Id::makeUndefined()}});
 
-  testSpecialOptionalJoin({{}, {{13, 0}}, {}}, {{}}, {{13, 0, U}});
+  testSpecialOptionalJoin({{}, {{I(13), I(0)}}, {}}, {{}},
+                          {{I(13), I(0), Id::makeUndefined()}});
 }
 
 // _____________________________________________________________________________
 TEST(JoinAlgorithms, SpecialOptionalJoinSingleBlock) {
-  NestedBlock a{{{1, 11}, {4, 12}, {18, 13}, {42, 14}}};
-  NestedBlock b{{{0, 24}, {4, 25}, {5, 25}, {19, 26}, {42, 27}}};
-  JoinResult expectedResult{{1, 11, U}, {4, 12, 25}, {18, 13, U}, {42, 14, 27}};
+  IdNestedBlock a{
+      {{I(1), I(11)}, {I(4), I(12)}, {I(18), I(13)}, {I(42), I(14)}}};
+  IdNestedBlock b{{{I(0), I(24)},
+                   {I(4), I(25)},
+                   {I(5), I(25)},
+                   {I(19), I(26)},
+                   {I(42), I(27)}}};
+  IdJoinResult expectedResult{{I(1), I(11), Id::makeUndefined()},
+                              {I(4), I(12), I(25)},
+                              {I(18), I(13), Id::makeUndefined()},
+                              {I(42), I(14), I(27)}};
   testSpecialOptionalJoin(a, b, expectedResult);
 }
 
 // _____________________________________________________________________________
 TEST(JoinAlgorithms, SpecialOptionalJoinMultipleBlocks) {
-  NestedBlock a{{{1, 10}, {4, 11}, {18, 12}, {42, 13}},
-                {{54, 14}, {57, 15}, {59, 16}},
-                {{60, 17}, {67, 18}}};
-  NestedBlock b{{{0, 20}, {4, 21}, {5, 22}, {19, 23}, {42, 24}, {54, 25}},
-                {{56, 26}, {57, 27}, {58, 28}, {59, 29}},
-                {{61, 30}, {67, 30}}};
-  JoinResult expectedResult{{1, 10, U},   {4, 11, 21},  {18, 12, U},
-                            {42, 13, 24}, {54, 14, 25}, {57, 15, 27},
-                            {59, 16, 29}, {60, 17, U},  {67, 18, 30}};
+  IdNestedBlock a{
+      {{I(1), I(10)}, {I(4), I(11)}, {I(18), I(12)}, {I(42), I(13)}},
+      {{I(54), I(14)}, {I(57), I(15)}, {I(59), I(16)}},
+      {{I(60), I(17)}, {I(67), I(18)}}};
+  IdNestedBlock b{
+      {{I(0), I(20)},
+       {I(4), I(21)},
+       {I(5), I(22)},
+       {I(19), I(23)},
+       {I(42), I(24)},
+       {I(54), I(25)}},
+      {{I(56), I(26)}, {I(57), I(27)}, {I(58), I(28)}, {I(59), I(29)}},
+      {{I(61), I(30)}, {I(67), I(30)}}};
+  IdJoinResult expectedResult{{I(1), I(10), Id::makeUndefined()},
+                              {I(4), I(11), I(21)},
+                              {I(18), I(12), Id::makeUndefined()},
+                              {I(42), I(13), I(24)},
+                              {I(54), I(14), I(25)},
+                              {I(57), I(15), I(27)},
+                              {I(59), I(16), I(29)},
+                              {I(60), I(17), Id::makeUndefined()},
+                              {I(67), I(18), I(30)}};
   testSpecialOptionalJoin(a, b, expectedResult);
 }
 
 // _____________________________________________________________________________
 TEST(JoinAlgorithms, SpecialOptionalJoinWithUndefInLastColumn) {
-  NestedBlock a{{{1, U}, {4, 12}, {18, U}, {42, 14}}};
-  NestedBlock b{{{4, 12}, {42, 14}}};
-  JoinResult expectedResult{{1, U, U}, {4, 12, 12}, {18, U, U}, {42, 14, 14}};
+  auto U = Id::makeUndefined();
+  IdNestedBlock a{{{I(1), U}, {I(4), I(12)}, {I(18), U}, {I(42), I(14)}}};
+  IdNestedBlock b{{{I(4), I(12)}, {I(42), I(14)}}};
+  IdJoinResult expectedResult{
+      {I(1), U, U}, {I(4), I(12), I(12)}, {I(18), U, U}, {I(42), I(14), I(14)}};
   testSpecialOptionalJoin(a, b, expectedResult);
 }
 
 // _____________________________________________________________________________
 TEST(JoinAlgorithms, SpecialOptionalJoinAllRowsMatch) {
-  NestedBlock a{{{1, 10}, {4, 11}, {42, 13}}};
-  NestedBlock b{{{1, 10}, {4, 11}, {42, 13}}};
-  JoinResult expectedResult{{1, 10, 10}, {4, 11, 11}, {42, 13, 13}};
+  IdNestedBlock a{{{I(1), I(10)}, {I(4), I(11)}, {I(42), I(13)}}};
+  IdNestedBlock b{{{I(1), I(10)}, {I(4), I(11)}, {I(42), I(13)}}};
+  IdJoinResult expectedResult{
+      {I(1), I(10), I(10)}, {I(4), I(11), I(11)}, {I(42), I(13), I(13)}};
   testSpecialOptionalJoin(a, b, expectedResult);
 }
 
 // _____________________________________________________________________________
 TEST(JoinAlgorithms, SpecialOptionalJoinNoRowsMatch) {
-  NestedBlock a{{{1, 10}, {2, 11}, {3, 12}}};
-  NestedBlock b{{{10, 20}, {20, 21}, {30, 22}}};
-  JoinResult expectedResult{{1, 10, U}, {2, 11, U}, {3, 12, U}};
+  IdNestedBlock a{{{I(1), I(10)}, {I(2), I(11)}, {I(3), I(12)}}};
+  IdNestedBlock b{{{I(10), I(20)}, {I(20), I(21)}, {I(30), I(22)}}};
+  IdJoinResult expectedResult{{I(1), I(10), Id::makeUndefined()},
+                              {I(2), I(11), Id::makeUndefined()},
+                              {I(3), I(12), Id::makeUndefined()}};
   testSpecialOptionalJoin(a, b, expectedResult);
 }
 
 // _____________________________________________________________________________
 TEST(JoinAlgorithms, SpecialOptionalJoinMixedMatching) {
-  NestedBlock a{{{1, 10}, {2, 11}, {3, 12}, {4, 13}, {5, 14}}};
-  NestedBlock b{{{2, 11}, {4, 13}}};
-  JoinResult expectedResult{
-      {1, 10, U}, {2, 11, 11}, {3, 12, U}, {4, 13, 13}, {5, 14, U}};
+  IdNestedBlock a{{{I(1), I(10)},
+                   {I(2), I(11)},
+                   {I(3), I(12)},
+                   {I(4), I(13)},
+                   {I(5), I(14)}}};
+  IdNestedBlock b{{{I(2), I(11)}, {I(4), I(13)}}};
+  IdJoinResult expectedResult{{I(1), I(10), Id::makeUndefined()},
+                              {I(2), I(11), I(11)},
+                              {I(3), I(12), Id::makeUndefined()},
+                              {I(4), I(13), I(13)},
+                              {I(5), I(14), Id::makeUndefined()}};
   testSpecialOptionalJoin(a, b, expectedResult);
 }
 
 // _____________________________________________________________________________
 TEST(JoinAlgorithms, SpecialOptionalJoinMultipleBlocksPerElement) {
-  NestedBlock a{{{1, 0}, {42, 0}},
-                {{42, 1}, {42, 2}},
-                {{42, 3}, {48, 5}, {67, 0}},
-                {{96, 32}},
-                {{96, 33}}};
-  NestedBlock b{{{2, 0}, {42, 12}, {43, 1}}, {{67, 13}, {69, 14}}};
-  JoinResult expectedResult{{1, 0, U},   {42, 0, 12}, {42, 1, 12},
-                            {42, 2, 12}, {42, 3, 12}, {48, 5, U},
-                            {67, 0, 13}, {96, 32, U}, {96, 33, U}};
+  IdNestedBlock a{{{I(1), I(0)}, {I(42), I(0)}},
+                  {{I(42), I(1)}, {I(42), I(2)}},
+                  {{I(42), I(3)}, {I(48), I(5)}, {I(67), I(0)}},
+                  {{I(96), I(32)}},
+                  {{I(96), I(33)}}};
+  IdNestedBlock b{{{I(2), I(0)}, {I(42), I(12)}, {I(43), I(1)}},
+                  {{I(67), I(13)}, {I(69), I(14)}}};
+  IdJoinResult expectedResult{{I(1), I(0), Id::makeUndefined()},
+                              {I(42), I(0), I(12)},
+                              {I(42), I(1), I(12)},
+                              {I(42), I(2), I(12)},
+                              {I(42), I(3), I(12)},
+                              {I(48), I(5), Id::makeUndefined()},
+                              {I(67), I(0), I(13)},
+                              {I(96), I(32), Id::makeUndefined()},
+                              {I(96), I(33), Id::makeUndefined()}};
   testSpecialOptionalJoin(a, b, expectedResult);
 }
 
 // _____________________________________________________________________________
 TEST(JoinAlgorithms, SpecialOptionalJoinLargeBlocks) {
-  NestedBlock a;
-  NestedBlock b;
-  JoinResult expectedResult;
+  IdNestedBlock a;
+  IdNestedBlock b;
+  IdJoinResult expectedResult;
 
   // Create many blocks with some matching and non-matching elements.
   for (int blockIdx = 0; blockIdx < 10; ++blockIdx) {
-    Block aBlock;
-    Block bBlock;
+    IdBlock aBlock;
+    IdBlock bBlock;
     for (int i = 0; i < 10; ++i) {
       size_t val = blockIdx * 10 + i;
-      aBlock.push_back({val, val * 2});
-      expectedResult.push_back({val, val * 2, (val % 2 == 0) ? val * 2 : U});
+      aBlock.push_back({I(val), I(val * 2)});
+      expectedResult.push_back(
+          {I(val), I(val * 2),
+           (val % 2 == 0) ? I(val * 2) : Id::makeUndefined()});
       if (val % 2 == 0) {
-        bBlock.push_back({val, val * 2});
+        bBlock.push_back({I(val), I(val * 2)});
       }
     }
     a.push_back(aBlock);
