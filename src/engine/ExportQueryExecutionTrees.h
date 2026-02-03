@@ -166,7 +166,22 @@ class ExportQueryExecutionTrees {
   convertStreamGeneratorForChunkedTransfer(
       STREAMABLE_GENERATOR_TYPE streamGenerator);
 #endif
-
+  // Generate the result in "blocks" and, when iterating over the generator
+  // from beginning to end, return the total number of rows in the result
+  // in `totalResultSize`.
+  //
+  // Blocks, where all rows are before OFFSET, are requested (and hence
+  // computed), but skipped.
+  //
+  // Blocks, where at least one row is after OFFSET but before the effective
+  // export limit (minimum of the LIMIT and the value of the `send` parameter),
+  // are requested and yielded (together with the corresponding `LocalVocab`
+  // and the range from that `IdTable` that belongs to the result).
+  //
+  // Blocks after the effective export limit until the LIMIT are requested, and
+  // counted towards the `totalResultSize`, but not yielded.
+  //
+  // Blocks after the LIMIT are not even requested.
   static ad_utility::InputRangeTypeErased<TableWithRange> getRowIndices(
       const LimitOffsetClause& limitOffset, const Result& result,
       uint64_t& resutSizeTotal, uint64_t resultSizeMultiplicator = 1);
