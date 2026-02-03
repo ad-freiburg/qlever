@@ -17,6 +17,9 @@
 #include "util/http/MediaTypes.h"
 #include "util/stream_generator.h"
 
+// Class for computing the result of an already parsed and planned query and
+// exporting it in different formats (TSV, CSV, Turtle, JSON, Binary).
+//
 // TODO<joka921> Also implement a streaming JSON serializer to reduce the RAM
 // consumption of large JSON exports and to make this interface even simpler.
 class ExportQueryExecutionTrees {
