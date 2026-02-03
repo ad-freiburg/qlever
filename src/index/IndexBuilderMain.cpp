@@ -20,6 +20,7 @@
 #include "libqlever/Qlever.h"
 #include "util/ProgramOptionsHelpers.h"
 #include "util/ReadableNumberFacet.h"
+#include "util/json.h"
 
 using std::string;
 
@@ -159,6 +160,7 @@ int main(int argc, char** argv) {
   std::vector<string> inputFile;
   std::vector<string> defaultGraphs;
   std::vector<bool> parseParallel;
+  std::string materializedViewsJson;
 
   boost::program_options::options_description boostOptions(
       "Options for qlever-index");
@@ -251,6 +253,10 @@ int main(int argc, char** argv) {
       "large enough to hold a single input triple. Default: 10 MB.");
   add("keep-temporary-files,k", po::bool_switch(&config.keepTemporaryFiles_),
       "Do not delete temporary files from index creation for debugging.");
+  add("write-materialized-views", po::value(&materializedViewsJson),
+      "Write materialized views after index building. Takes a JSON object "
+      "mapping view names to SPARQL queries, e.g., "
+      R"({"view1":"SELECT ?s ?p WHERE { ?s ?p ?o }", "view2":"SELECT ..."})");
 
   // Process command line arguments.
   po::variables_map optionsMap;
@@ -282,6 +288,42 @@ int main(int argc, char** argv) {
                                                defaultGraphs, parseParallel);
     config.validate();
     qlever::Qlever::buildIndex(config);
+
+    // TODO move into libqlever
+    // Write materialized views if specified.
+    if (!materializedViewsJson.empty()) {
+      AD_LOG_INFO << "Writing materialized views..." << std::endl;
+      try {
+        auto viewsJson = nlohmann::json::parse(materializedViewsJson);
+        if (!viewsJson.is_object()) {
+          throw std::runtime_error(
+              "The --write-materialized-views option must be a JSON object "
+              "mapping view names to SPARQL queries.");
+        }
+
+        // Create a Qlever instance to write the materialized views.
+        qlever::EngineConfig engineConfig(config);
+        qlever::Qlever qlever(engineConfig);
+
+        // Write each materialized view.
+        for (auto& [viewName, query] : viewsJson.items()) {
+          if (!query.is_string()) {
+            throw std::runtime_error(absl::StrCat(
+                "Query for materialized view '", viewName,
+                "' must be a string, but got type: ", jsonToTypeString(query)));
+          }
+          AD_LOG_INFO << "Writing materialized view: " << viewName << std::endl;
+          qlever.writeMaterializedView(viewName, query.get<std::string>());
+          AD_LOG_INFO << "Successfully wrote materialized view: " << viewName
+                      << std::endl;
+        }
+        AD_LOG_INFO << "All materialized views written successfully."
+                    << std::endl;
+      } catch (const nlohmann::json::exception& e) {
+        throw std::runtime_error(absl::StrCat(
+            "Failed to parse materialized views JSON: ", e.what()));
+      }
+    }
 
   } catch (std::exception& e) {
     AD_LOG_ERROR << "Creating the index for QLever failed with the following "
