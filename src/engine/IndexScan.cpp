@@ -785,6 +785,46 @@ std::pair<Result::LazyResult, Result::LazyResult> IndexScan::prefilterTables(
 }
 
 // _____________________________________________________________________________
+Result::LazyResult IndexScan::createPrefilteredJoinSideForOptional(
+    std::shared_ptr<SharedGeneratorState> innerState) {
+  using LoopControl = ad_utility::LoopControl<Result::IdTableVocabPair>;
+
+  auto range = ad_utility::InputRangeFromLoopControlGet{
+      [state = std::move(innerState)]() mutable {
+        // For OPTIONAL, we always re-yield ALL input, never filter anything
+        // This is the key difference from regular JOIN
+        if (!state->iterator_.has_value()) {
+          state->iterator_ = state->generator_.begin();
+        }
+
+        // Just pass through the entire input stream
+        return LoopControl::breakWithYieldAll(ql::ranges::subrange(
+            state->iterator_.value(), state->generator_.end()));
+      }};
+  return Result::LazyResult{std::move(range)};
+}
+
+// _____________________________________________________________________________
+std::pair<Result::LazyResult, Result::LazyResult>
+IndexScan::prefilterTablesForOptional(Result::LazyResult input,
+                                      ColumnIndex joinColumn) {
+  AD_CORRECTNESS_CHECK(numVariables_ <= 3 && numVariables_ > 0);
+  auto metaBlocks = getMetadataForScan();
+
+  if (!metaBlocks.has_value()) {
+    // Return empty results
+    return {Result::LazyResult{}, Result::LazyResult{}};
+  }
+
+  auto state = std::make_shared<SharedGeneratorState>(SharedGeneratorState{
+      std::move(input), joinColumn, std::move(metaBlocks.value())});
+  // Use the OPTIONAL version for the left side (never filters)
+  // and the regular version for the right side (still prefilters)
+  return {createPrefilteredJoinSideForOptional(state),
+          createPrefilteredIndexScanSide(state)};
+}
+
+// _____________________________________________________________________________
 std::unique_ptr<Operation> IndexScan::cloneImpl() const {
   return std::make_unique<IndexScan>(
       _executionContext, permutation_, locatedTriplesSharedState_, subject_,

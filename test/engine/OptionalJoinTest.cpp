@@ -10,6 +10,7 @@
 #include "../util/IdTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
+#include "../util/RuntimeParametersTestHelpers.h"
 #include "./ValuesForTesting.h"
 #include "engine/CallFixedSize.h"
 #include "engine/IndexScan.h"
@@ -23,6 +24,9 @@ using ad_utility::testing::makeAllocator;
 using namespace ad_utility::testing;
 namespace {
 auto V = VocabId;
+auto iri = [](std::string_view s) {
+  return TripleComponent::Iri::fromIriref(s);
+};
 constexpr auto U = Id::makeUndefined();
 using JoinColumns = std::vector<std::array<ColumnIndex, 2>>;
 
@@ -768,4 +772,117 @@ TEST(OptionalJoin, columnOriginatesFromGraphOrUndef) {
   testWithTrees(index1, index2, true, true, true);
   testWithTrees(index3, index2, true, true, true);
   testWithTrees(index3, values1, false, false, true);
+}
+
+// _____________________________________________________________________________
+TEST(OptionalJoin, prefilteringWithTwoIndexScans) {
+  // Create a dataset where not all subjects from p1 appear in p2.
+  // This tests that the right IndexScan is prefiltered based on left's data.
+  std::string kg;
+  for (size_t i = 0; i < 20; ++i) {
+    kg += absl::StrCat("<s", i, "> <p1> <o", i, "> .\n");
+  }
+  // Only subjects s5-s14 appear in p2 (10 out of 20)
+  for (size_t i = 5; i < 15; ++i) {
+    kg += absl::StrCat("<s", i, "> <p2> <o2_", i, "> .\n");
+  }
+
+  auto qec = ad_utility::testing::getQec(kg);
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>(1);
+  qec->getQueryTreeCache().clearAll();
+
+  using V = Variable;
+  auto scan1 = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::PSO,
+      SparqlTripleSimple{V{"?s"}, iri("<p1>"), V{"?o1"}});
+  auto scan2 = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::PSO,
+      SparqlTripleSimple{V{"?s"}, iri("<p2>"), V{"?o2"}});
+
+  auto optJoin = ad_utility::makeExecutionTree<OptionalJoin>(qec, scan1, scan2);
+
+  auto result = optJoin->getResult();
+
+  // Verify result correctness: 20 rows (all from left)
+  ASSERT_TRUE(result->isFullyMaterialized());
+  EXPECT_EQ(result->idTable().size(), 20);
+
+  const auto& table = result->idTable();
+
+  // Count how many rows have defined vs undefined values in the o2 column
+  size_t definedCount = 0;
+  size_t undefCount = 0;
+  for (size_t i = 0; i < table.size(); ++i) {
+    if (table(i, 2).isUndefined()) {
+      undefCount++;
+    } else {
+      definedCount++;
+    }
+  }
+
+  // We expect 10 subjects to match (s5-s14) and 10 to not match
+  EXPECT_EQ(definedCount, 10);
+  EXPECT_EQ(undefCount, 10);
+
+  // Verify that the operation was recognized as using IndexScans by checking
+  // runtime info exists
+  const auto& scan1Rti = scan1->getRootOperation()->getRuntimeInfoPointer();
+  const auto& scan2Rti = scan2->getRootOperation()->getRuntimeInfoPointer();
+  ASSERT_NE(scan1Rti, nullptr);
+  ASSERT_NE(scan2Rti, nullptr);
+}
+
+// _____________________________________________________________________________
+TEST(OptionalJoin, prefilteringWithLazyLeftAndIndexScanRight) {
+  // Create a dataset where not all subjects from p1 appear in p2.
+  // This tests that the right IndexScan is prefiltered based on lazy left's
+  // data.
+  std::string kg;
+  for (size_t i = 0; i < 20; ++i) {
+    kg += absl::StrCat("<s", i, "> <p1> <o", i, "> .\n");
+  }
+  // Only subjects s5-s14 appear in p2 (10 out of 20)
+  for (size_t i = 5; i < 15; ++i) {
+    kg += absl::StrCat("<s", i, "> <p2> <o2_", i, "> .\n");
+  }
+
+  auto qec = ad_utility::testing::getQec(kg);
+  // Set threshold to force lazy execution
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>(1);
+  qec->getQueryTreeCache().clearAll();
+
+  using V = Variable;
+  auto scan1 = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::PSO,
+      SparqlTripleSimple{V{"?s"}, iri("<p1>"), V{"?o1"}});
+  auto scan2 = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::PSO,
+      SparqlTripleSimple{V{"?s"}, iri("<p2>"), V{"?o2"}});
+
+  auto optJoin = ad_utility::makeExecutionTree<OptionalJoin>(qec, scan1, scan2);
+
+  auto result = optJoin->getResult();
+
+  // Verify result correctness: 20 rows (all from left)
+  ASSERT_TRUE(result->isFullyMaterialized());
+  EXPECT_EQ(result->idTable().size(), 20);
+
+  const auto& table = result->idTable();
+
+  // Count how many rows have defined vs undefined values in the o2 column
+  size_t definedCount = 0;
+  size_t undefCount = 0;
+  for (size_t i = 0; i < table.size(); ++i) {
+    if (table(i, 2).isUndefined()) {
+      undefCount++;
+    } else {
+      definedCount++;
+    }
+  }
+
+  // We expect 10 subjects to match (s5-s14) and 10 to not match
+  EXPECT_EQ(definedCount, 10);
+  EXPECT_EQ(undefCount, 10);
 }

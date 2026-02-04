@@ -4,15 +4,21 @@
 
 #include "engine/Minus.h"
 
+#include <numeric>
+
 #include "engine/CallFixedSize.h"
+#include "engine/IndexScan.h"
 #include "engine/JoinHelpers.h"
+#include "engine/JoinWithIndexScanHelpers.h"
 #include "engine/MinusRowHandler.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
+#include "global/RuntimeParameters.h"
 #include "util/Algorithm.h"
 #include "util/Exception.h"
 #include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
+#include "util/MemoryHelpers.h"
 
 using std::endl;
 using std::string;
@@ -39,6 +45,156 @@ string Minus::getCacheKeyImpl() const {
 string Minus::getDescriptor() const { return "Minus"; }
 
 // _____________________________________________________________________________
+Result Minus::computeResultForTwoIndexScans(bool requestLaziness,
+                                            IndexScan& leftScan,
+                                            IndexScan& rightScan) const {
+  using namespace qlever::joinWithIndexScanHelpers;
+
+  // For MINUS, only the right child can be prefiltered.
+  // Get unfiltered blocks for left, filtered blocks for right.
+  auto [leftBlocksPtr, rightBlocksPtr] =
+      getUnfilteredLeftAndFilteredRightSideFromIndexScans(
+          leftScan, rightScan, _matchedColumns.size());
+
+  std::vector<ColumnIndex> permutation;
+  permutation.resize(_left->getResultWidth());
+  ql::ranges::copy(ad_utility::integerRange(permutation.size()),
+                   permutation.begin());
+  ColumnIndex leftJoinColumn = _matchedColumns.at(0).at(0);
+  std::swap(permutation.at(0), permutation.at(leftJoinColumn));
+
+  auto action = [this, leftBlocksPtr, rightBlocksPtr, &leftScan, &rightScan,
+                 permutation](
+                    std::function<void(IdTable&, LocalVocab&)> yieldTable) {
+    using namespace qlever::joinWithIndexScanHelpers;
+
+    ad_utility::MinusRowHandler rowAdder{
+        _matchedColumns.size(), IdTable{getResultWidth(), allocator()},
+        cancellationHandle_, std::move(yieldTable)};
+    auto leftConverted = convertGenerator(std::move(*leftBlocksPtr), leftScan);
+    auto rightConverted =
+        convertGenerator(std::move(*rightBlocksPtr), rightScan);
+    ad_utility::zipperJoinForBlocksWithPotentialUndef(
+        leftConverted, rightConverted, std::less{}, rowAdder, {}, {},
+        ad_utility::MinusJoinTag{});
+    return std::move(rowAdder).toIdTableVocabPair();
+  };
+
+  return qlever::joinHelpers::createResultFromAction(
+      requestLaziness, std::move(action), [this] { return resultSortedOn(); },
+      permutation);
+}
+
+// _____________________________________________________________________________
+Result Minus::computeResultForIndexScanOnRight(
+    bool requestLaziness, std::shared_ptr<const Result> leftRes,
+    IndexScan& rightScan) const {
+  using namespace qlever::joinWithIndexScanHelpers;
+
+  AD_CORRECTNESS_CHECK(leftRes->isFullyMaterialized());
+
+  const IdTable& leftTable = leftRes->idTable();
+
+  // Get filtered blocks for right based on left's data.
+  auto rightBlocks = getBlocksForJoinOfColumnsWithScan(
+      leftTable, _matchedColumns, rightScan, _matchedColumns.at(0).at(1));
+
+  std::vector<ColumnIndex> permutation;
+  permutation.resize(_left->getResultWidth());
+  ql::ranges::copy(ad_utility::integerRange(permutation.size()),
+                   permutation.begin());
+  ColumnIndex leftJoinColumn = _matchedColumns.at(0).at(0);
+  std::swap(permutation.at(0), permutation.at(leftJoinColumn));
+
+  auto action = [this, leftRes = std::move(leftRes),
+                 rightBlocks = std::move(rightBlocks), &rightScan, permutation](
+                    std::function<void(IdTable&, LocalVocab&)> yieldTable) {
+    using namespace qlever::joinWithIndexScanHelpers;
+
+    ad_utility::MinusRowHandler rowAdder{
+        _matchedColumns.size(), IdTable{getResultWidth(), allocator()},
+        cancellationHandle_, std::move(yieldTable)};
+
+    // Create view of left table for the join
+    const IdTable& leftTable = leftRes->idTable();
+    std::vector<ColumnIndex> identityPerm(leftTable.numColumns());
+    std::iota(identityPerm.begin(), identityPerm.end(), 0);
+    auto leftBlock = std::array{ad_utility::IdTableAndFirstCol{
+        leftTable.asColumnSubsetView(identityPerm),
+        leftRes->getCopyOfLocalVocab()}};
+
+    auto rightConverted = convertGenerator(std::move(rightBlocks), rightScan);
+    ad_utility::zipperJoinForBlocksWithPotentialUndef(
+        leftBlock, rightConverted, std::less{}, rowAdder, {}, {},
+        ad_utility::MinusJoinTag{});
+    return std::move(rowAdder).toIdTableVocabPair();
+  };
+
+  return qlever::joinHelpers::createResultFromAction(
+      requestLaziness, std::move(action), [this] { return resultSortedOn(); },
+      permutation);
+}
+
+// _____________________________________________________________________________
+Result Minus::computeResultForIndexScanOnRightLazy(
+    bool requestLaziness, std::shared_ptr<const Result> leftRes,
+    IndexScan& rightScan) const {
+  using namespace qlever::joinWithIndexScanHelpers;
+
+  AD_CORRECTNESS_CHECK(!leftRes->isFullyMaterialized());
+
+  // Only support single join column for now
+  if (_matchedColumns.size() != 1) {
+    return lazyMinusJoin(std::move(leftRes),
+                         const_cast<IndexScan&>(rightScan).getResult(
+                             true, ComputationMode::LAZY_IF_SUPPORTED),
+                         requestLaziness);
+  }
+
+  // For MINUS semantics, we must process ALL left input (similar to OPTIONAL).
+  // We use prefilterTablesForOptional which passes through all left rows
+  // while still prefiltering the right IndexScan.
+  auto [leftSide, rightSide] = rightScan.prefilterTablesForOptional(
+      leftRes->idTables(), _matchedColumns.at(0).at(0));
+
+  std::vector<ColumnIndex> permutation;
+  permutation.resize(_left->getResultWidth());
+  ql::ranges::copy(ad_utility::integerRange(permutation.size()),
+                   permutation.begin());
+  ColumnIndex leftJoinColumn = _matchedColumns.at(0).at(0);
+  std::swap(permutation.at(0), permutation.at(leftJoinColumn));
+
+  auto action = [this, leftSide = std::move(leftSide),
+                 rightSide = std::move(rightSide), &rightScan, permutation](
+                    std::function<void(IdTable&, LocalVocab&)> yieldTable) {
+    using namespace qlever::joinWithIndexScanHelpers;
+
+    ad_utility::MinusRowHandler rowAdder{
+        _matchedColumns.size(), IdTable{getResultWidth(), allocator()},
+        cancellationHandle_, std::move(yieldTable)};
+
+    // Convert generators to the right format
+    auto leftSidePtr = ad_utility::toSharedPtr(std::move(leftSide));
+    auto rightSidePtr = ad_utility::toSharedPtr(std::move(rightSide));
+    auto [leftRange, rightRange] = convertPrefilteredGenerators(
+        leftSidePtr, rightSidePtr, _left->getResultWidth(),
+        _matchedColumns.at(0).at(1));
+
+    ad_utility::zipperJoinForBlocksWithPotentialUndef(
+        leftRange, rightRange, std::less{}, rowAdder, {}, {},
+        ad_utility::MinusJoinTag{});
+
+    setScanStatusToLazilyCompleted(rightScan);
+
+    return std::move(rowAdder).toIdTableVocabPair();
+  };
+
+  return qlever::joinHelpers::createResultFromAction(
+      requestLaziness, std::move(action), [this] { return resultSortedOn(); },
+      permutation);
+}
+
+// _____________________________________________________________________________
 Result Minus::computeResult(bool requestLaziness) {
   AD_LOG_DEBUG << "Minus result computation..." << endl;
 
@@ -52,6 +208,35 @@ Result Minus::computeResult(bool requestLaziness) {
     return std::move(res).value();
   }
 
+  // Check for IndexScan children to enable prefiltering.
+  auto leftIndexScan =
+      std::dynamic_pointer_cast<IndexScan>(_left->getRootOperation());
+  auto rightIndexScan =
+      std::dynamic_pointer_cast<IndexScan>(_right->getRootOperation());
+
+  // Case 1: Both children are IndexScans
+  if (leftIndexScan && rightIndexScan && _matchedColumns.size() == 1) {
+    return computeResultForTwoIndexScans(requestLaziness, *leftIndexScan,
+                                         *rightIndexScan);
+  }
+
+  // Case 2: Only right child is IndexScan
+  if (rightIndexScan && _matchedColumns.size() == 1) {
+    // The lazy minus implementation does only work if there's just a single
+    // join column. This might be extended in the future.
+    bool lazyJoinIsSupported = _matchedColumns.size() == 1;
+    auto leftResult = _left->getResult(lazyJoinIsSupported);
+
+    if (leftResult->isFullyMaterialized()) {
+      return computeResultForIndexScanOnRight(
+          requestLaziness, std::move(leftResult), *rightIndexScan);
+    } else {
+      return computeResultForIndexScanOnRightLazy(
+          requestLaziness, std::move(leftResult), *rightIndexScan);
+    }
+  }
+
+  // Fall back to regular minus computation
   // The lazy minus implementation does only work if there's just a single
   // join column. This might be extended in the future.
   bool lazyJoinIsSupported = _matchedColumns.size() == 1;
@@ -269,7 +454,7 @@ bool Minus::columnOriginatesFromGraphOrUndef(const Variable& variable) const {
 // _____________________________________________________________________________
 Result Minus::lazyMinusJoin(std::shared_ptr<const Result> left,
                             std::shared_ptr<const Result> right,
-                            bool requestLaziness) {
+                            bool requestLaziness) const {
   // If both inputs are fully materialized, we can join them more
   // efficiently.
   AD_CONTRACT_CHECK(!left->isFullyMaterialized() ||

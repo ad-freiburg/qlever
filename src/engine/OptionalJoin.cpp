@@ -5,15 +5,20 @@
 
 #include "engine/OptionalJoin.h"
 
+#include <numeric>
+
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/CallFixedSize.h"
 #include "engine/Engine.h"
 #include "engine/JoinHelpers.h"
+#include "engine/JoinWithIndexScanHelpers.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
+#include "global/RuntimeParameters.h"
 #include "util/Algorithm.h"
 #include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
+#include "util/MemoryHelpers.h"
 
 using namespace qlever::joinHelpers;
 
@@ -102,6 +107,158 @@ string OptionalJoin::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
+Result OptionalJoin::computeResultForTwoIndexScans(bool requestLaziness,
+                                                   IndexScan& leftScan,
+                                                   IndexScan& rightScan) const {
+  using namespace qlever::joinWithIndexScanHelpers;
+
+  // For OPTIONAL joins, we cannot prefilter the left side (it must be
+  // complete). We can only prefilter the right side based on the left's block
+  // ranges.
+
+  ad_utility::Timer timer{ad_utility::timer::Timer::InitialStatus::Started};
+
+  // Get unfiltered blocks for left and filtered blocks for right
+  auto [leftBlocksPtr, rightBlocksPtr] =
+      getUnfilteredLeftAndFilteredRightSideFromIndexScans(leftScan, rightScan,
+                                                          _joinColumns.size());
+
+  runtimeInfo().addDetail("time-for-filtering-blocks", timer.msecs());
+
+  auto action = [this, leftBlocksPtr, rightBlocksPtr, &leftScan, &rightScan](
+                    std::function<void(IdTable&, LocalVocab&)> yieldTable) {
+    using namespace qlever::joinWithIndexScanHelpers;
+
+    auto rowAdder = getRowAdderForJoin(*this, _joinColumns.size(),
+                                       keepJoinColumns_, std::move(yieldTable));
+
+    auto leftConverted = convertGenerator(std::move(*leftBlocksPtr), leftScan);
+    auto rightConverted =
+        convertGenerator(std::move(*rightBlocksPtr), rightScan);
+
+    ad_utility::zipperJoinForBlocksWithPotentialUndef(
+        leftConverted, rightConverted, std::less{}, rowAdder, {}, {},
+        ad_utility::OptionalJoinTag{});
+
+    setScanStatusToLazilyCompleted(leftScan, rightScan);
+
+    return std::move(rowAdder).toIdTableVocabPair();
+  };
+
+  return createResultFromAction(requestLaziness, std::move(action),
+                                [this] { return resultSortedOn(); });
+}
+
+// _____________________________________________________________________________
+Result OptionalJoin::computeResultForIndexScanOnRight(
+    bool requestLaziness, std::shared_ptr<const Result> leftRes,
+    IndexScan& rightScan) const {
+  using namespace qlever::joinWithIndexScanHelpers;
+
+  AD_CORRECTNESS_CHECK(leftRes->isFullyMaterialized());
+
+  ad_utility::Timer timer{ad_utility::timer::Timer::InitialStatus::Started};
+
+  const IdTable& leftTable = leftRes->idTable();
+
+  // Get prefiltered blocks from the right IndexScan
+  CompressedRelationReader::IdTableGeneratorInputRange rightBlocks;
+  if (!firstRowHasUndef(leftTable, _joinColumns, 0)) {
+    rightBlocks = getBlocksForJoinOfColumnsWithScan(leftTable, _joinColumns,
+                                                    rightScan, 0);
+  } else {
+    // Cannot prefilter with UNDEF, scan everything
+    rightBlocks = rightScan.getLazyScan(std::nullopt);
+    auto metaBlocks = rightScan.getMetadataForScan();
+    if (metaBlocks.has_value()) {
+      rightBlocks.details().numBlocksAll_ =
+          metaBlocks.value().sizeBlockMetadata_;
+    }
+  }
+
+  runtimeInfo().addDetail("time-for-filtering-blocks", timer.msecs());
+
+  auto action = [this, leftRes = std::move(leftRes),
+                 rightBlocks = std::move(rightBlocks), &rightScan](
+                    std::function<void(IdTable&, LocalVocab&)> yieldTable) {
+    using namespace qlever::joinWithIndexScanHelpers;
+
+    auto rowAdder = getRowAdderForJoin(*this, _joinColumns.size(),
+                                       keepJoinColumns_, std::move(yieldTable));
+
+    // Create view of left table for the join
+    const IdTable& leftTable = leftRes->idTable();
+    std::vector<ColumnIndex> identityPerm(leftTable.numColumns());
+    std::iota(identityPerm.begin(), identityPerm.end(), 0);
+    auto leftBlock = std::array{ad_utility::IdTableAndFirstCol{
+        leftTable.asColumnSubsetView(identityPerm),
+        leftRes->getCopyOfLocalVocab()}};
+    auto rightConverted = convertGenerator(std::move(rightBlocks), rightScan);
+
+    ad_utility::zipperJoinForBlocksWithPotentialUndef(
+        leftBlock, rightConverted, std::less{}, rowAdder, {}, {},
+        ad_utility::OptionalJoinTag{});
+
+    setScanStatusToLazilyCompleted(rightScan);
+
+    return std::move(rowAdder).toIdTableVocabPair();
+  };
+
+  return createResultFromAction(requestLaziness, std::move(action),
+                                [this] { return resultSortedOn(); });
+}
+
+// _____________________________________________________________________________
+Result OptionalJoin::computeResultForIndexScanOnRightLazy(
+    bool requestLaziness, std::shared_ptr<const Result> leftRes,
+    IndexScan& rightScan) const {
+  using namespace qlever::joinWithIndexScanHelpers;
+
+  AD_CORRECTNESS_CHECK(!leftRes->isFullyMaterialized());
+
+  // Only support single join column for now
+  if (_joinColumns.size() != 1) {
+    return lazyOptionalJoin(std::move(leftRes),
+                            const_cast<IndexScan&>(rightScan).getResult(
+                                true, ComputationMode::LAZY_IF_SUPPORTED),
+                            requestLaziness);
+  }
+
+  // For OPTIONAL semantics, we must re-yield ALL left input (never filter it).
+  // We use prefilterTables which gives us filtered right blocks, but we need
+  // to ensure the left side always re-yields everything.
+  auto [leftSide, rightSide] = rightScan.prefilterTablesForOptional(
+      leftRes->idTables(), _joinColumns.at(0).at(0));
+
+  auto action = [this, leftSide = std::move(leftSide),
+                 rightSide = std::move(rightSide), &rightScan](
+                    std::function<void(IdTable&, LocalVocab&)> yieldTable) {
+    using namespace qlever::joinWithIndexScanHelpers;
+
+    auto rowAdder = getRowAdderForJoin(*this, _joinColumns.size(),
+                                       keepJoinColumns_, std::move(yieldTable));
+
+    // Convert generators to the right format
+    auto leftSidePtr = ad_utility::toSharedPtr(std::move(leftSide));
+    auto rightSidePtr = ad_utility::toSharedPtr(std::move(rightSide));
+    auto [leftRange, rightRange] = convertPrefilteredGenerators(
+        leftSidePtr, rightSidePtr, _left->getResultWidth(),
+        _joinColumns.at(0).at(1));
+
+    ad_utility::zipperJoinForBlocksWithPotentialUndef(
+        leftRange, rightRange, std::less{}, rowAdder, {}, {},
+        ad_utility::OptionalJoinTag{});
+
+    setScanStatusToLazilyCompleted(rightScan);
+
+    return std::move(rowAdder).toIdTableVocabPair();
+  };
+
+  return createResultFromAction(requestLaziness, std::move(action),
+                                [this] { return resultSortedOn(); });
+}
+
+// _____________________________________________________________________________
 Result OptionalJoin::computeResult(bool requestLaziness) {
   AD_LOG_DEBUG << "OptionalJoin result computation..." << endl;
 
@@ -115,6 +272,58 @@ Result OptionalJoin::computeResult(bool requestLaziness) {
     return std::move(res).value();
   }
 
+  // Check if the right child is an IndexScan (prefiltering optimization)
+  auto rightIndexScan =
+      std::dynamic_pointer_cast<IndexScan>(_right->getRootOperation());
+
+  // Try prefiltering with IndexScans
+  if (rightIndexScan) {
+    auto leftIndexScan =
+        std::dynamic_pointer_cast<IndexScan>(_left->getRootOperation());
+
+    // Case 1: Both children are IndexScans
+    if (leftIndexScan) {
+      if (auto res = computeResultForTwoIndexScans(
+              requestLaziness, *leftIndexScan, *rightIndexScan);
+          !res.idTable().empty() || res.idTable().numColumns() > 0) {
+        return res;
+      }
+      // If prefiltering failed (e.g., no metadata), fall through to regular
+      // path
+    }
+
+    // Case 2: Right is IndexScan, left might be materialized or lazy
+    // Try to get left result (prefer cached/small)
+    bool leftIsSmall =
+        _left->getRootOperation()->getSizeEstimate() <
+        getRuntimeParameter<
+            &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>();
+    auto leftResIfCached = _left->getRootOperation()->getResult(
+        false, leftIsSmall ? ComputationMode::FULLY_MATERIALIZED
+                           : ComputationMode::ONLY_IF_CACHED);
+
+    if (leftResIfCached && leftResIfCached->isFullyMaterialized()) {
+      // Left is materialized, use prefiltering
+      return computeResultForIndexScanOnRight(
+          requestLaziness, std::move(leftResIfCached), *rightIndexScan);
+    }
+
+    // Get the full left result (might be lazy)
+    bool lazyJoinIsSupported = _joinColumns.size() == 1;
+    auto leftResult = _left->getResult(lazyJoinIsSupported);
+
+    if (leftResult->isFullyMaterialized()) {
+      // Left became materialized, use prefiltering
+      return computeResultForIndexScanOnRight(
+          requestLaziness, std::move(leftResult), *rightIndexScan);
+    } else {
+      // Left is lazy, use lazy prefiltering
+      return computeResultForIndexScanOnRightLazy(
+          requestLaziness, std::move(leftResult), *rightIndexScan);
+    }
+  }
+
+  // Regular path: no IndexScan optimization possible
   IdTable idTable{getResultWidth(), getExecutionContext()->getAllocator()};
 
   AD_CONTRACT_CHECK(idTable.numColumns() >= _joinColumns.size() ||
@@ -450,7 +659,7 @@ void OptionalJoin::optionalJoin(
 // _____________________________________________________________________________
 Result OptionalJoin::lazyOptionalJoin(std::shared_ptr<const Result> left,
                                       std::shared_ptr<const Result> right,
-                                      bool requestLaziness) {
+                                      bool requestLaziness) const {
   // If both inputs are fully materialized, we can join them more
   // efficiently.
   AD_CONTRACT_CHECK(!left->isFullyMaterialized() ||

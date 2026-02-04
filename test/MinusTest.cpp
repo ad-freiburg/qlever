@@ -18,10 +18,14 @@
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
+#include "util/RuntimeParametersTestHelpers.h"
 
 namespace {
 auto V = ad_utility::testing::VocabId;
 constexpr auto U = Id::makeUndefined();
+auto iri = [](std::string_view s) {
+  return TripleComponent::Iri::fromIriref(s);
+};
 
 // Helper function to test minus implementations.
 void testMinus(std::vector<IdTable> leftTables,
@@ -649,4 +653,89 @@ TEST(Minus, MinusRowHandlerKeepsLeftLocalVocabAfterFlush) {
   EXPECT_THAT(handler.localVocab().getAllWordsForTesting(),
               ::testing::ElementsAre(testLiteral));
   EXPECT_TRUE(std::move(handler).resultTable().empty());
+}
+
+// _____________________________________________________________________________
+TEST(Minus, prefilteringWithTwoIndexScans) {
+  // Create a dataset where some subjects from p1 also appear in p2.
+  // MINUS should remove those subjects from the result.
+  // This tests that the right IndexScan is prefiltered based on left's data.
+  std::string kg;
+  for (size_t i = 0; i < 20; ++i) {
+    kg += absl::StrCat("<s", i, "> <p1> <o", i, "> .\n");
+  }
+  // Subjects s5-s14 also appear in p2 (these should be removed)
+  for (size_t i = 5; i < 15; ++i) {
+    kg += absl::StrCat("<s", i, "> <p2> <o2_", i, "> .\n");
+  }
+
+  auto qec = ad_utility::testing::getQec(kg);
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>(1);
+  qec->getQueryTreeCache().clearAll();
+
+  using V = Variable;
+  auto scan1 = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::PSO,
+      SparqlTripleSimple{V{"?s"}, iri("<p1>"), V{"?o1"}});
+  auto scan2 = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::PSO,
+      SparqlTripleSimple{V{"?s"}, iri("<p2>"), V{"?o2"}});
+
+  auto minusOp = ad_utility::makeExecutionTree<Minus>(qec, scan1, scan2);
+
+  auto result = minusOp->getResult();
+
+  // Verify result correctness: 10 rows (20 - 10 removed)
+  ASSERT_TRUE(result->isFullyMaterialized());
+  EXPECT_EQ(result->idTable().size(), 10);
+
+  // Verify that the operation was recognized as using IndexScans by checking
+  // runtime info exists
+  const auto& scan1Rti = scan1->getRootOperation()->getRuntimeInfoPointer();
+  const auto& scan2Rti = scan2->getRootOperation()->getRuntimeInfoPointer();
+  ASSERT_NE(scan1Rti, nullptr);
+  ASSERT_NE(scan2Rti, nullptr);
+}
+
+// _____________________________________________________________________________
+TEST(Minus, prefilteringWithLazyLeftAndIndexScanRight) {
+  // Create a dataset where some subjects from p1 also appear in p2.
+  // MINUS should remove those subjects from the result.
+  std::string kg;
+  for (size_t i = 0; i < 20; ++i) {
+    kg += absl::StrCat("<s", i, "> <p1> <o", i, "> .\n");
+  }
+  // Subjects s5-s14 also appear in p2 (these should be removed by MINUS)
+  for (size_t i = 5; i < 15; ++i) {
+    kg += absl::StrCat("<s", i, "> <p2> <o2_", i, "> .\n");
+  }
+
+  auto qec = ad_utility::testing::getQec(kg);
+  // Set threshold to force lazy execution
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>(1);
+  qec->getQueryTreeCache().clearAll();
+
+  using V = Variable;
+  auto scan1 = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::PSO,
+      SparqlTripleSimple{V{"?s"}, iri("<p1>"), V{"?o1"}});
+  auto scan2 = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::PSO,
+      SparqlTripleSimple{V{"?s"}, iri("<p2>"), V{"?o2"}});
+
+  auto minusOp = ad_utility::makeExecutionTree<Minus>(qec, scan1, scan2);
+  auto result = minusOp->getResult();
+
+  // Verify result correctness: 10 rows (s0-s4 and s15-s19, excluding s5-s14)
+  ASSERT_TRUE(result->isFullyMaterialized());
+  EXPECT_EQ(result->idTable().size(), 10);
+
+  // All rows should be defined (no UNDEFs in MINUS results)
+  const auto& table = result->idTable();
+  for (size_t i = 0; i < table.size(); ++i) {
+    EXPECT_FALSE(table(i, 0).isUndefined());
+    EXPECT_FALSE(table(i, 1).isUndefined());
+  }
 }
