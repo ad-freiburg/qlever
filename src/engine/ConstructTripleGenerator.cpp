@@ -99,6 +99,7 @@ ConstructTripleGenerator::TermResolution ConstructTripleGenerator::analyzeTerm(
 ConstructTripleGenerator::TermResolution
 ConstructTripleGenerator::analyzeIriTerm(const Iri& iri, size_t tripleIdx,
                                          size_t pos) {
+  // evaluate(Iri) always returns a valid string
   precomputedConstants_[tripleIdx][pos] =
       ConstructQueryEvaluator::evaluate(iri);
   return {TermSource::CONSTANT, tripleIdx};
@@ -109,8 +110,11 @@ ConstructTripleGenerator::TermResolution
 ConstructTripleGenerator::analyzeLiteralTerm(const Literal& literal,
                                              size_t tripleIdx, size_t pos,
                                              PositionInTriple role) {
-  precomputedConstants_[tripleIdx][pos] =
-      ConstructQueryEvaluator::evaluate(literal, role);
+  // evaluate(Literal) returns optional - only store if valid
+  auto value = ConstructQueryEvaluator::evaluate(literal, role);
+  if (value.has_value()) {
+    precomputedConstants_[tripleIdx][pos] = std::move(*value);
+  }
   return {TermSource::CONSTANT, tripleIdx};
 }
 
@@ -201,12 +205,10 @@ void ConstructTripleGenerator::evaluateVariablesForBatch(
   auto& cacheStats = statsLogger.stats();
 
   // Initialize variable strings: [varIdx][rowInBatch]
-  // We copy strings from the IdCache into the batch cache. This provides
-  // clear ownership semantics - the batch cache owns its strings and they
-  // remain valid for the entire batch lifetime.
+  // shared_ptr defaults to nullptr, representing UNDEF values.
   batchCache.variableStrings_.resize(variablesToEvaluate_.size());
   for (auto& column : batchCache.variableStrings_) {
-    column.resize(numRows, std::nullopt);
+    column.resize(numRows);
   }
 
   // Evaluate variables column-by-column for better cache locality.
@@ -216,43 +218,44 @@ void ConstructTripleGenerator::evaluateVariablesForBatch(
     auto& columnStrings = batchCache.variableStrings_[varIdx];
 
     if (!varInfo.columnIndex_.has_value()) {
-      // Variable not in result - all values are nullopt (already default)
+      // Variable not in result - all values are nullptr (already default)
       continue;
     }
 
     const size_t colIdx = varInfo.columnIndex_.value();
 
     // Read all IDs from this column for all rows in the batch,
-    // look up their string values in the cache, and copy them into the batch.
+    // look up their string values in the cache, and share them with the batch.
     for (size_t rowInBatch = 0; rowInBatch < numRows; ++rowInBatch) {
       const uint64_t rowIdx = rowIndices[rowInBatch];
       Id id = idTable(rowIdx, colIdx);
 
       // Use LRU cache's getOrCompute: returns cached value or computes and
-      // caches it. The compute lambda is only called on cache miss.
+      // caches it.
       size_t missesBefore = cacheStats.misses_;
       const VariableToColumnMap& varCols = variableColumns_.get();
       const Index& idx = index_.get();
-      std::optional<size_t> colIdx = varInfo.columnIndex_;
-      const std::string& cachedValue = idCache.getOrCompute(
-          id, [&cacheStats, &varCols, &idx, &colIdx, rowIdx, &idTable,
-               &localVocab, currentRowOffset](const Id&) {
+      const std::shared_ptr<const std::string>& cachedValue =
+          idCache.getOrCompute(id, [&cacheStats, &varCols, &idx, &colIdx,
+                                    rowIdx, &idTable, &localVocab,
+                                    currentRowOffset](const Id&) {
             ++cacheStats.misses_;
             ConstructQueryExportContext context{
                 rowIdx, idTable, localVocab, varCols, idx, currentRowOffset};
             auto value = ConstructQueryEvaluator::evaluateWithColumnIndex(
                 colIdx, context);
-            return value.value_or(std::string{});
+            if (value.has_value()) {
+              return std::make_shared<const std::string>(std::move(*value));
+            }
+            return std::shared_ptr<const std::string>{};
           });
 
       if (cacheStats.misses_ == missesBefore) {
         ++cacheStats.hits_;
       }
 
-      // Copy string into batch cache (empty string means UNDEF)
-      if (!cachedValue.empty()) {
-        columnStrings[rowInBatch] = cachedValue;
-      }
+      // Share ownership with IdCache (no string copy)
+      columnStrings[rowInBatch] = cachedValue;
     }
   }
 }
@@ -303,17 +306,18 @@ void ConstructTripleGenerator::evaluateBlankNodesForBatch(
 // _____________________________________________________________________________
 StringTriple ConstructTripleGenerator::instantiateTripleFromBatch(
     size_t tripleIdx, const BatchEvaluationCache& batchCache, size_t rowInBatch,
-    const std::vector<const std::string*>& variableStrings) const {
-  // Get pointers to all components, returning early if any is UNDEF
-  const std::string* subject =
+    const std::vector<std::shared_ptr<const std::string>>& variableStrings)
+    const {
+  // Get shared_ptr to all components, returning early if any is UNDEF
+  auto subject =
       getTermStringPtr(tripleIdx, 0, batchCache, rowInBatch, variableStrings);
   if (!subject) return StringTriple{};
 
-  const std::string* predicate =
+  auto predicate =
       getTermStringPtr(tripleIdx, 1, batchCache, rowInBatch, variableStrings);
   if (!predicate) return StringTriple{};
 
-  const std::string* object =
+  auto object =
       getTermStringPtr(tripleIdx, 2, batchCache, rowInBatch, variableStrings);
   if (!object) return StringTriple{};
 
@@ -370,10 +374,11 @@ ConstructTripleGenerator::processBatchForStringTriples(
   std::vector<StringTriple> batchTriples;
   batchTriples.reserve(batchCache.numRows_ * templateTriples_.size());
 
-  std::vector<const std::string*> variableStrings(variablesToEvaluate_.size());
+  std::vector<std::shared_ptr<const std::string>> variableStrings(
+      variablesToEvaluate_.size());
 
   for (size_t rowInBatch = 0; rowInBatch < batchCache.numRows_; ++rowInBatch) {
-    lookupVariableStrings(batchCache, rowInBatch, idCache, variableStrings);
+    lookupVariableStrings(batchCache, rowInBatch, variableStrings);
 
     for (size_t tripleIdx = 0; tripleIdx < templateTriples_.size();
          ++tripleIdx) {
@@ -389,27 +394,29 @@ ConstructTripleGenerator::processBatchForStringTriples(
 }
 
 // _____________________________________________________________________________
-const std::string* ConstructTripleGenerator::getTermStringPtr(
+std::shared_ptr<const std::string> ConstructTripleGenerator::getTermStringPtr(
     size_t tripleIdx, size_t pos, const BatchEvaluationCache& batchCache,
     size_t rowInBatch,
-    const std::vector<const std::string*>& variableStrings) const {
+    const std::vector<std::shared_ptr<const std::string>>& variableStrings)
+    const {
   const TriplePatternInfo& info = triplePatternInfos_[tripleIdx];
   const TermResolution& resolution = info.resolutions_[pos];
 
   using enum ConstructTripleGenerator::TermSource;
   switch (resolution.source) {
     case CONSTANT: {
-      const auto& opt = precomputedConstants_[tripleIdx][pos];
-      return opt.has_value() ? &opt.value() : nullptr;
+      return std::make_shared<std::string>(
+          precomputedConstants_[tripleIdx][pos]);
     }
     case VARIABLE: {
-      // Variable string pointers are already stored directly in the batch
+      // Variable shared_ptr are already stored directly in the batch
       // cache, eliminating hash lookups during instantiation
       return variableStrings[resolution.index];
     }
     case BLANK_NODE: {
       // Blank node values are always valid (computed for each row)
-      return &batchCache.getBlankNodeValue(resolution.index, rowInBatch);
+      return std::make_shared<const std::string>(
+          batchCache.getBlankNodeValue(resolution.index, rowInBatch));
     }
   }
 
@@ -455,10 +462,8 @@ ConstructTripleGenerator::createIdCacheWithStats(size_t numRows) const {
 // _____________________________________________________________________________
 void ConstructTripleGenerator::lookupVariableStrings(
     const BatchEvaluationCache& batchCache, size_t rowInBatch,
-    [[maybe_unused]] const IdCache& idCache,
-    std::vector<const std::string*>& variableStrings) const {
-  // Get pointers to strings owned by the batch cache. The strings remain valid
-  // for the entire batch lifetime since they're stored directly in the cache.
+    std::vector<std::shared_ptr<const std::string>>& variableStrings) const {
+  // Get shared_ptr from the batch cache. Ownership is shared with IdCache.
   for (size_t varIdx = 0; varIdx < variablesToEvaluate_.size(); ++varIdx) {
     variableStrings[varIdx] = batchCache.getVariableString(varIdx, rowInBatch);
   }
@@ -470,8 +475,10 @@ void ConstructTripleGenerator::lookupVariableStrings(
 // Row -> formatTriple(s*,p*,o*) -> yield string (single allocation)
 // _____________________________________________________________________________
 std::string ConstructTripleGenerator::formatTriple(
-    const std::string* subject, const std::string* predicate,
-    const std::string* object, ad_utility::MediaType format) const {
+    const std::shared_ptr<const std::string>& subject,
+    const std::shared_ptr<const std::string>& predicate,
+    const std::shared_ptr<const std::string>& object,
+    ad_utility::MediaType format) const {
   if (!subject || !predicate || !object) {
     return {};
   }
@@ -505,12 +512,6 @@ std::string ConstructTripleGenerator::formatTriple(
 // _____________________________________________________________________________
 // Iterator that yields formatted triples (Turtle/CSV/TSV) one at a time.
 // Implements the `InputRangeFromGet` interface for lazy evaluation.
-//
-// Iteration proceeds in three nested loops:
-// 1. Batches: Groups of rows processed together for cache locality
-// 2. Rows: Individual result rows within a batch
-// 3. Triples: Triple patterns instantiated for each row
-// _____________________________________________________________________________
 class FormattedTripleIterator
     : public ad_utility::InputRangeFromGet<std::string> {
  public:
@@ -586,17 +587,17 @@ class FormattedTripleIterator
   std::optional<std::string> processCurrentRow() {
     // Lookup variable strings once per row (reused across all triple patterns)
     if (tripleIdx_ == 0) {
-      generator_.lookupVariableStrings(*batchCache_, rowInBatch_, *idCache_,
+      generator_.lookupVariableStrings(*batchCache_, rowInBatch_,
                                        variableStrings_);
     }
 
     while (tripleIdx_ < generator_.templateTriples_.size()) {
-      const std::string* subject = generator_.getTermStringPtr(
-          tripleIdx_, 0, *batchCache_, rowInBatch_, variableStrings_);
-      const std::string* predicate = generator_.getTermStringPtr(
+      auto subject = generator_.getTermStringPtr(tripleIdx_, 0, *batchCache_,
+                                                 rowInBatch_, variableStrings_);
+      auto predicate = generator_.getTermStringPtr(
           tripleIdx_, 1, *batchCache_, rowInBatch_, variableStrings_);
-      const std::string* object = generator_.getTermStringPtr(
-          tripleIdx_, 2, *batchCache_, rowInBatch_, variableStrings_);
+      auto object = generator_.getTermStringPtr(tripleIdx_, 2, *batchCache_,
+                                                rowInBatch_, variableStrings_);
 
       ++tripleIdx_;
 
@@ -640,7 +641,7 @@ class FormattedTripleIterator
   size_t rowInBatch_ = 0;
   size_t tripleIdx_ = 0;
   std::optional<BatchEvaluationCache> batchCache_;
-  std::vector<const std::string*> variableStrings_;
+  std::vector<std::shared_ptr<const std::string>> variableStrings_;
 };
 
 // _____________________________________________________________________________

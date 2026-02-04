@@ -8,6 +8,7 @@
 #define QLEVER_SRC_ENGINE_CONSTRUCTTRIPLEGENERATOR_H
 
 #include <functional>
+#include <memory>
 
 #include "backports/span.h"
 #include "engine/ConstructQueryEvaluator.h"
@@ -90,10 +91,10 @@ class ConstructTripleGenerator {
   // Cache for ID-to-string conversions to avoid redundant vocabulary lookups
   // when the same ID appears multiple times across rows.
   // Uses LRU eviction to bound memory usage for queries with many unique IDs.
-  // Empty string represents UNDEF values (no valid RDF term is empty).
-  // Note: We use StableLRUCache for its LRU semantics; pointer stability is
-  // not required since strings are copied into BatchEvaluationCache.
-  using IdCache = ad_utility::StableLRUCache<Id, std::string>;
+  // Stores shared_ptr to enable zero-copy sharing with BatchEvaluationCache.
+  // nullptr represents UNDEF values (variables not bound in a result row).
+  using IdCache =
+      ad_utility::StableLRUCache<Id, std::shared_ptr<const std::string>>;
 
   // Minimum capacity for the LRU cache. Sized to maximize cross-batch cache
   // hits on repeated values (e.g., predicates that appear in many rows).
@@ -147,34 +148,24 @@ class ConstructTripleGenerator {
   static size_t getBatchSize();
 
   // Batch evaluation cache organized for column-oriented access.
-  // variableStrings_[varIdx][rowInBatch] stores the string values directly,
-  // providing clear ownership semantics. The IdCache is still used to
-  // deduplicate vocabulary lookups, but strings are copied into this cache
-  // for safe access during triple instantiation.
-  // blankNodeValues_[blankNodeIdx][rowInBatch] stores strings directly since
-  // blank nodes can't be cached across result table rows (the blank node
-  // values include the row number).
+  // All string values are stored as shared_ptr for zero-copy sharing.
+  // Variables share ownership with IdCache; blank nodes are owned by this
+  // cache (since they include row numbers and can't be deduplicated).
   struct BatchEvaluationCache {
-    // Store string values directly. Empty optional for UNDEF or missing.
-    // maps: variable idx -> idx of row in batch -> string value (or nullopt)
-    // which the variable corresponding to the variable idx for the
-    // specific row of the batch evaluates to.
-    std::vector<std::vector<std::optional<std::string>>> variableStrings_;
-    // Store string values for blank nodes (can't be cached by `Id`)
-    // maps: blank node idx -> idx of row in batch -> string object representing
-    // the corresponding `BlankNode` object.
+    // maps: variable idx -> idx of row in batch -> shared_ptr<string>
+    std::vector<std::vector<std::shared_ptr<const std::string>>>
+        variableStrings_;
+    // maps: blank node idx -> idx of row in batch -> shared_ptr<string>
     std::vector<std::vector<std::string>> blankNodeValues_;
     size_t numRows_ = 0;
 
-    // Get string pointer for a specific variable at a row in the batch.
-    // Returns nullptr if the value is UNDEF or missing.
-    const std::string* getVariableString(size_t varIdx,
-                                         size_t rowInBatch) const {
-      const auto& opt = variableStrings_[varIdx][rowInBatch];
-      return opt.has_value() ? &opt.value() : nullptr;
+    // Get shared_ptr for a specific variable at a row in the batch.
+    const std::shared_ptr<const std::string>& getVariableString(
+        size_t varIdx, size_t rowInBatch) const {
+      return variableStrings_[varIdx][rowInBatch];
     }
 
-    // Get value for a specific blank node at a row in the batch
+    // Get shared_ptr for a specific blank node at a row in the batch.
     const std::string& getBlankNodeValue(size_t blankNodeIdx,
                                          size_t rowInBatch) const {
       return blankNodeValues_[blankNodeIdx][rowInBatch];
@@ -275,32 +266,34 @@ class ConstructTripleGenerator {
   StringTriple instantiateTripleFromBatch(
       size_t tripleIdx, const BatchEvaluationCache& batchCache,
       size_t rowInBatch,
-      const std::vector<const std::string*>& variableStrings) const;
+      const std::vector<std::shared_ptr<const std::string>>& variableStrings)
+      const;
 
-  // Helper to get string pointer for a term in a triple.
+  // Helper to get shared_ptr for a term in a triple.
   // Returns nullptr if the term is UNDEF.
-  const std::string* getTermStringPtr(
+  std::shared_ptr<const std::string> getTermStringPtr(
       size_t tripleIdx, size_t pos, const BatchEvaluationCache& batchCache,
       size_t rowInBatch,
-      const std::vector<const std::string*>& variableStrings) const;
+      const std::vector<std::shared_ptr<const std::string>>& variableStrings)
+      const;
 
   // Creates an ID cache with a statistics logger that logs at INFO level
   // when destroyed (after query execution completes).
   std::pair<std::shared_ptr<IdCache>, std::shared_ptr<IdCacheStatsLogger>>
   createIdCacheWithStats(size_t numRows) const;
 
-  // Populates variableStrings with pointers to cached string values for a row.
-  // Sets nullptr for variables that are not in the result or have UNDEF values.
+  // Populates variableStrings with shared_ptr to cached string values for a
+  // row. Sets nullptr for variables that are not in the result or have UNDEF
+  // values.
   void lookupVariableStrings(
       const BatchEvaluationCache& batchCache, size_t rowInBatch,
-      const IdCache& idCache,
-      std::vector<const std::string*>& variableStrings) const;
+      std::vector<std::shared_ptr<const std::string>>& variableStrings) const;
 
   // Formats a single triple according to the output format.
   // Returns empty string if any component is UNDEF.
-  std::string formatTriple(const std::string* subject,
-                           const std::string* predicate,
-                           const std::string* object,
+  std::string formatTriple(const std::shared_ptr<const std::string>& subject,
+                           const std::shared_ptr<const std::string>& predicate,
+                           const std::shared_ptr<const std::string>& object,
                            ad_utility::MediaType format) const;
 
   // Processes a single batch and returns the resulting StringTriples.
@@ -322,9 +315,9 @@ class ConstructTripleGenerator {
   CancellationHandle cancellationHandle_;
   size_t rowOffset_ = 0;
 
-  // Precomputed constant values for iri's and Literals
-  // [tripleIdx][position] -> evaluated constant (or nullopt if not a constant)
-  std::vector<std::array<std::optional<std::string>, NUM_TRIPLE_POSITIONS>>
+  // Precomputed constant values for IRIs and Literals.
+  // [tripleIdx][position] -> shared_ptr to constant (nullptr if not a constant)
+  std::vector<std::array<std::string, NUM_TRIPLE_POSITIONS>>
       precomputedConstants_;
 
   // Pre-analyzed info for each triple pattern (resolutions_ + skip flag)

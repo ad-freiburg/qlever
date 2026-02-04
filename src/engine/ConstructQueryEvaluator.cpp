@@ -10,7 +10,7 @@
 #include "util/TypeTraits.h"
 
 // _____________________________________________________________________________
-std::optional<std::string> ConstructQueryEvaluator::evaluate(const Iri& iri) {
+std::string ConstructQueryEvaluator::evaluate(const Iri& iri) {
   return iri.iri();
 }
 

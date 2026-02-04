@@ -15,12 +15,10 @@
 #include "parser/data/Literal.h"
 
 class ConstructQueryEvaluator {
-  using StringTriple = QueryExecutionTree::StringTriple;
-
  public:
   // Helper method for `evaluateTerm`. Evaluates an `Iri` (which is part of a
   // CONSTRUCT triple pattern).
-  static std::optional<std::string> evaluate(const Iri& iri);
+  static std::string evaluate(const Iri& iri);
 
   // Helper method for `evaluateTerm`. Evaluates a `Literal` (which is part of
   // a CONSTRUCT triple pattern) using the position of the literal in the
