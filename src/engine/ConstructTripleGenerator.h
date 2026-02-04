@@ -10,8 +10,6 @@
 #include <functional>
 #include <memory>
 
-#include "backports/span.h"
-#include "engine/ConstructIdCache.h"
 #include "engine/ConstructQueryEvaluator.h"
 #include "engine/InstantiationBlueprint.h"
 #include "engine/QueryExecutionTree.h"
@@ -47,10 +45,6 @@ class ConstructTripleGenerator {
   using CancellationHandle = ad_utility::SharedCancellationHandle;
   using StringTriple = QueryExecutionTree::StringTriple;
   using Triples = ad_utility::sparql_types::Triples;
-
-  // Type aliases for ID cache types (defined in ConstructIdCache.h)
-  using IdCache = ConstructIdCache;
-  using IdCacheStatsLogger = ConstructIdCacheStatsLogger;
 
   // ___________________________________________________________________________
   ConstructTripleGenerator(Triples constructTriples,
@@ -122,54 +116,6 @@ class ConstructTripleGenerator {
   TriplePatternInfo::TermLookupInfo analyzeBlankNodeTerm(
       const BlankNode& blankNode);
 
-  // Instantiates a single triple using the precomputed constants and
-  // the batch evaluation cache for a specific row. Returns an empty
-  // `StringTriple` if any component is UNDEF.
-  StringTriple instantiateTripleFromBatch(
-      size_t tripleIdx, const BatchEvaluationCache& batchCache,
-      size_t rowInBatch) const;
-
-  // Helper to get shared_ptr for a term in a triple.
-  // Returns nullptr if the term is UNDEF.
-  std::shared_ptr<const std::string> getTermStringPtr(
-      size_t tripleIdx, size_t pos, const BatchEvaluationCache& batchCache,
-      size_t rowInBatch) const;
-
-  // Creates an `Id` cache with a statistics logger that logs at INFO level
-  // when destroyed (after query execution completes).
-  std::pair<std::shared_ptr<IdCache>, std::shared_ptr<IdCacheStatsLogger>>
-  createIdCacheWithStats(size_t numRows) const;
-
-  // Evaluates all `Variables` and `BlankNodes` for a batch of result-table
-  // rows.
-  BatchEvaluationCache evaluateBatchColumnOriented(
-      const IdTable& idTable, const LocalVocab& localVocab,
-      ql::span<const uint64_t> rowIndices, size_t currentRowOffset,
-      IdCache& idCache, IdCacheStatsLogger& statsLogger) const;
-
-  // For each `Variable`, reads all `Id`s from its column across all batch rows,
-  // converts them to strings (using the cache), and stores pointers to those
-  // strings in `BatchEvaluationCache`.
-  void evaluateVariablesForBatch(BatchEvaluationCache& batchCache,
-                                 const IdTable& idTable,
-                                 const LocalVocab& localVocab,
-                                 ql::span<const uint64_t> rowIndices,
-                                 size_t currentRowOffset, IdCache& idCache,
-                                 IdCacheStatsLogger& statsLogger) const;
-
-  // Evaluates all `BlankNodes` for a batch of rows. Uses precomputed
-  // prefix/suffix, only concatenating the row number per row.
-  void evaluateBlankNodesForBatch(BatchEvaluationCache& batchCache,
-                                  ql::span<const uint64_t> rowIndices,
-                                  size_t currentRowOffset) const;
-
-  // Processes a single batch and returns the resulting `StringTriple` objects.
-  // Used by `generateStringTriplesForResultTable` to lazily process batches.
-  std::vector<StringTriple> processBatchForStringTriples(
-      const TableConstRefWithVocab& tableWithVocab, size_t currentRowOffset,
-      IdCache& idCache, IdCacheStatsLogger& statsLogger,
-      ql::span<const uint64_t> batchRowIndices);
-
   // triple templates contained in the graph template of the CONSTRUCT-query.
   Triples templateTriples_;
   // wrapper around the result-table obtained from processing the
@@ -182,9 +128,9 @@ class ConstructTripleGenerator {
   CancellationHandle cancellationHandle_;
   size_t rowOffset_ = 0;
 
-  // Blueprint containing preprocessed template data. Created once by
-  // preprocessTemplate() and shared (immutably) with ConstructBatchProcessor.
-  std::shared_ptr<InstantiationBlueprint> blueprint_;
+  // Blueprint containing preprocessed template data.
+  // Created once by `preprocessTemplate()`.
+  std::shared_ptr<InstantiationBlueprint> instantiationBlueprint_;
 
   // Mapping from variable to index in the per-row variable cache
   // `variablesToEvaluate_`.

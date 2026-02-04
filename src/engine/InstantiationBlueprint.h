@@ -25,7 +25,6 @@ inline constexpr size_t NUM_TRIPLE_POSITIONS = 3;
 
 // Pre-analyzed info for a triple pattern to enable fast instantiation.
 struct TriplePatternInfo {
-  // Identifies the source of a term's value during triple instantiation.
   enum class TermType { CONSTANT, VARIABLE, BLANK_NODE };
 
   // Describes how to look up the value for a single term position (subject,
@@ -85,9 +84,10 @@ struct BatchEvaluationCache {
 
 // Blueprint for instantiating triples from CONSTRUCT template patterns.
 struct InstantiationBlueprint {
-  InstantiationBlueprint(
-      const Index& index, const VariableToColumnMap& variableColumns,
-      ad_utility::SharedCancellationHandle cancellationHandle)
+  using CancellationHandle = ad_utility::SharedCancellationHandle;
+  InstantiationBlueprint(const Index& index,
+                         const VariableToColumnMap& variableColumns,
+                         CancellationHandle cancellationHandle)
       : index_(index),
         variableColumns_(variableColumns),
         cancellationHandle_(std::move(cancellationHandle)) {}
@@ -96,7 +96,7 @@ struct InstantiationBlueprint {
   std::vector<TriplePatternInfo> triplePatternInfos_;
 
   // Precomputed constant values for `Iri` objects and `Literal` objects.
-  // [tripleIdx][position] -> constant string (empty if not a constant)
+  // [tripleIdx][positionInTriple] -> constant string (empty if not a constant)
   std::vector<std::array<std::string, NUM_TRIPLE_POSITIONS>>
       precomputedConstants_;
 
@@ -115,7 +115,7 @@ struct InstantiationBlueprint {
   std::reference_wrapper<const VariableToColumnMap> variableColumns_;
 
   // Handle for checking query cancellation.
-  ad_utility::SharedCancellationHandle cancellationHandle_;
+  CancellationHandle cancellationHandle_;
 
   // Number of template triples.
   size_t numTemplateTriples() const { return triplePatternInfos_.size(); }

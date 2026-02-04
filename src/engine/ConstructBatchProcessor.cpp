@@ -101,6 +101,70 @@ std::optional<std::string> ConstructBatchProcessor::processCurrentRow() {
 }
 
 // _____________________________________________________________________________
+std::optional<ConstructBatchProcessor::StringTriple>
+ConstructBatchProcessor::getStringTriple() {
+  while (batchStart_ < rowIndicesVec_.size()) {
+    blueprint_->cancellationHandle_->throwIfCancelled();
+
+    loadBatchIfNeeded();
+
+    if (auto result = processCurrentBatchAsStringTriple()) {
+      return result;
+    }
+
+    advanceToNextBatch();
+  }
+
+  return std::nullopt;
+}
+
+// _____________________________________________________________________________
+std::optional<ConstructBatchProcessor::StringTriple>
+ConstructBatchProcessor::processCurrentBatchAsStringTriple() {
+  while (rowInBatchIdx_ < batchCache_->numRows_) {
+    if (auto result = processCurrentRowAsStringTriple()) {
+      return result;
+    }
+    advanceToNextRow();
+  }
+  return std::nullopt;
+}
+
+// _____________________________________________________________________________
+std::optional<ConstructBatchProcessor::StringTriple>
+ConstructBatchProcessor::processCurrentRowAsStringTriple() {
+  while (tripleIdx_ < blueprint_->numTemplateTriples()) {
+    auto subject =
+        getTermStringPtr(tripleIdx_, 0, *batchCache_, rowInBatchIdx_);
+    auto predicate =
+        getTermStringPtr(tripleIdx_, 1, *batchCache_, rowInBatchIdx_);
+    auto object = getTermStringPtr(tripleIdx_, 2, *batchCache_, rowInBatchIdx_);
+
+    ++tripleIdx_;
+
+    StringTriple triple = instantiateTriple(subject, predicate, object);
+    if (!triple.isEmpty()) {
+      return triple;
+    }
+    // Triple was UNDEF (incomplete), continue to next triple pattern.
+  }
+
+  return std::nullopt;
+}
+
+// _____________________________________________________________________________
+ConstructBatchProcessor::StringTriple
+ConstructBatchProcessor::instantiateTriple(
+    const std::shared_ptr<const std::string>& subject,
+    const std::shared_ptr<const std::string>& predicate,
+    const std::shared_ptr<const std::string>& object) const {
+  if (!subject || !predicate || !object) {
+    return StringTriple{};
+  }
+  return StringTriple{*subject, *predicate, *object};
+}
+
+// _____________________________________________________________________________
 void ConstructBatchProcessor::advanceToNextRow() {
   ++rowInBatchIdx_;
   tripleIdx_ = 0;
