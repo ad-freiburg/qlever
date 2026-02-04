@@ -24,8 +24,7 @@ ConstructBatchProcessor::ConstructBatchProcessor(
       rowIndicesVec_(ql::ranges::begin(table.view_),
                      ql::ranges::end(table.view_)),
       currentRowOffset_(currentRowOffset),
-      batchSize_(ConstructBatchProcessor::getBatchSize()),
-      variableStrings_(blueprint_->variablesToEvaluate_.size()) {
+      batchSize_(ConstructBatchProcessor::getBatchSize()) {
   auto [cache, logger] = createIdCacheWithStats(rowIndicesVec_.size());
   idCache_ = std::move(cache);
   statsLogger_ = std::move(logger);
@@ -82,18 +81,12 @@ std::optional<std::string> ConstructBatchProcessor::processCurrentBatch() {
 
 // _____________________________________________________________________________
 std::optional<std::string> ConstructBatchProcessor::processCurrentRow() {
-  // Lookup variable strings once per row (reused across all triple patterns).
-  if (tripleIdx_ == 0) {
-    lookupVariableStrings(*batchCache_, rowInBatchIdx_, variableStrings_);
-  }
-
   while (tripleIdx_ < blueprint_->numTemplateTriples()) {
-    auto subject = getTermStringPtr(tripleIdx_, 0, *batchCache_, rowInBatchIdx_,
-                                    variableStrings_);
-    auto predicate = getTermStringPtr(tripleIdx_, 1, *batchCache_,
-                                      rowInBatchIdx_, variableStrings_);
-    auto object = getTermStringPtr(tripleIdx_, 2, *batchCache_, rowInBatchIdx_,
-                                   variableStrings_);
+    auto subject =
+        getTermStringPtr(tripleIdx_, 0, *batchCache_, rowInBatchIdx_);
+    auto predicate =
+        getTermStringPtr(tripleIdx_, 1, *batchCache_, rowInBatchIdx_);
+    auto object = getTermStringPtr(tripleIdx_, 2, *batchCache_, rowInBatchIdx_);
 
     ++tripleIdx_;
 
@@ -240,9 +233,7 @@ void ConstructBatchProcessor::evaluateBlankNodesForBatch(
 // _____________________________________________________________________________
 std::shared_ptr<const std::string> ConstructBatchProcessor::getTermStringPtr(
     size_t tripleIdx, size_t pos, const BatchEvaluationCache& batchCache,
-    size_t rowIdxInBatch,
-    const std::vector<std::shared_ptr<const std::string>>& variableStrings)
-    const {
+    size_t rowIdxInBatch) const {
   const TriplePatternInfo& info = blueprint_->triplePatternInfos_[tripleIdx];
   const TriplePatternInfo::TermLookupInfo& lookup = info.lookups_[pos];
 
@@ -252,9 +243,9 @@ std::shared_ptr<const std::string> ConstructBatchProcessor::getTermStringPtr(
           blueprint_->precomputedConstants_[tripleIdx][pos]);
     }
     case TriplePatternInfo::TermType::VARIABLE: {
-      // Variable shared_ptr are already stored directly in the batch
-      // cache, eliminating hash lookups during instantiation.
-      return variableStrings[lookup.index];
+      // Variable shared_ptr are stored in the batch cache, eliminating
+      // hash lookups during instantiation.
+      return batchCache.getVariableString(lookup.index, rowIdxInBatch);
     }
     case TriplePatternInfo::TermType::BLANK_NODE: {
       // Blank node values are always valid (computed for each row).
@@ -281,17 +272,6 @@ ConstructBatchProcessor::createIdCacheWithStats(size_t numRows) const {
   auto idCache = std::make_shared<IdCache>(capacity);
   auto statsLogger = std::make_shared<IdCacheStatsLogger>(numRows, capacity);
   return {std::move(idCache), std::move(statsLogger)};
-}
-
-// _____________________________________________________________________________
-void ConstructBatchProcessor::lookupVariableStrings(
-    const BatchEvaluationCache& batchCache, size_t rowInBatch,
-    std::vector<std::shared_ptr<const std::string>>& variableStrings) const {
-  // Get shared_ptr from the batch cache. Ownership is shared with IdCache.
-  for (size_t varIdx = 0; varIdx < blueprint_->variablesToEvaluate_.size();
-       ++varIdx) {
-    variableStrings[varIdx] = batchCache.getVariableString(varIdx, rowInBatch);
-  }
 }
 
 // _____________________________________________________________________________

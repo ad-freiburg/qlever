@@ -72,24 +72,14 @@ class ConstructBatchProcessor
   // specified by `tripleIdx` (idx of the triple in the template triples) and
   // `pos` (position of the term in said template triple) on the row of the
   // result table specified by `rowIdxInBatch`.
-  // TODO<ms2144>: What does `variableStrings` contain, exactly? And why is it
-  // passed as argument here?
   std::shared_ptr<const std::string> getTermStringPtr(
       size_t tripleIdx, size_t pos, const BatchEvaluationCache& batchCache,
-      size_t rowIdxInBatch,
-      const std::vector<std::shared_ptr<const std::string>>& variableStrings)
-      const;
+      size_t rowIdxInBatch) const;
 
   // Creates an `Id` cache with a statistics logger that logs at INFO level
   // when destroyed (after query execution completes).
   std::pair<std::shared_ptr<IdCache>, std::shared_ptr<IdCacheStatsLogger>>
   createIdCacheWithStats(size_t numRows) const;
-
-  // Populates `variableStrings` with shared_ptr to cached string values for a
-  // row.
-  void lookupVariableStrings(
-      const BatchEvaluationCache& batchCache, size_t rowInBatch,
-      std::vector<std::shared_ptr<const std::string>>& variableStrings) const;
 
   // Formats a single triple according to the output format. Returns empty
   // string if any component is UNDEF.
@@ -134,7 +124,6 @@ class ConstructBatchProcessor
   size_t rowInBatchIdx_ = 0;
   size_t tripleIdx_ = 0;
   std::optional<BatchEvaluationCache> batchCache_;
-  std::vector<std::shared_ptr<const std::string>> variableStrings_;
 };
 
 #endif  // QLEVER_SRC_ENGINE_CONSTRUCTBATCHPROCESSOR_H

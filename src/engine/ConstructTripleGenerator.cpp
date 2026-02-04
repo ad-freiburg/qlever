@@ -274,20 +274,16 @@ void ConstructTripleGenerator::evaluateBlankNodesForBatch(
 // not included in the output.
 // _____________________________________________________________________________
 StringTriple ConstructTripleGenerator::instantiateTripleFromBatch(
-    size_t tripleIdx, const BatchEvaluationCache& batchCache, size_t rowInBatch,
-    const std::vector<std::shared_ptr<const std::string>>& variableStrings)
-    const {
+    size_t tripleIdx, const BatchEvaluationCache& batchCache,
+    size_t rowInBatch) const {
   // Get shared_ptr to all components, returning early if any is UNDEF
-  auto subject =
-      getTermStringPtr(tripleIdx, 0, batchCache, rowInBatch, variableStrings);
+  auto subject = getTermStringPtr(tripleIdx, 0, batchCache, rowInBatch);
   if (!subject) return StringTriple{};
 
-  auto predicate =
-      getTermStringPtr(tripleIdx, 1, batchCache, rowInBatch, variableStrings);
+  auto predicate = getTermStringPtr(tripleIdx, 1, batchCache, rowInBatch);
   if (!predicate) return StringTriple{};
 
-  auto object =
-      getTermStringPtr(tripleIdx, 2, batchCache, rowInBatch, variableStrings);
+  auto object = getTermStringPtr(tripleIdx, 2, batchCache, rowInBatch);
   if (!object) return StringTriple{};
 
   return StringTriple{*subject, *predicate, *object};
@@ -344,16 +340,11 @@ ConstructTripleGenerator::processBatchForStringTriples(
   std::vector<StringTriple> batchTriples;
   batchTriples.reserve(batchCache.numRows_ * templateTriples_.size());
 
-  std::vector<std::shared_ptr<const std::string>> variableStrings(
-      blueprint_->variablesToEvaluate_.size());
-
   for (size_t rowInBatch = 0; rowInBatch < batchCache.numRows_; ++rowInBatch) {
-    lookupVariableStrings(batchCache, rowInBatch, variableStrings);
-
     for (size_t tripleIdx = 0; tripleIdx < templateTriples_.size();
          ++tripleIdx) {
-      auto triple = instantiateTripleFromBatch(tripleIdx, batchCache,
-                                               rowInBatch, variableStrings);
+      auto triple =
+          instantiateTripleFromBatch(tripleIdx, batchCache, rowInBatch);
       if (!triple.isEmpty()) {
         batchTriples.push_back(std::move(triple));
       }
@@ -366,9 +357,7 @@ ConstructTripleGenerator::processBatchForStringTriples(
 // _____________________________________________________________________________
 std::shared_ptr<const std::string> ConstructTripleGenerator::getTermStringPtr(
     size_t tripleIdx, size_t pos, const BatchEvaluationCache& batchCache,
-    size_t rowInBatch,
-    const std::vector<std::shared_ptr<const std::string>>& variableStrings)
-    const {
+    size_t rowInBatch) const {
   const TriplePatternInfo& info = blueprint_->triplePatternInfos_[tripleIdx];
   const TriplePatternInfo::TermLookupInfo& lookup = info.lookups_[pos];
 
@@ -378,9 +367,9 @@ std::shared_ptr<const std::string> ConstructTripleGenerator::getTermStringPtr(
           blueprint_->precomputedConstants_[tripleIdx][pos]);
     }
     case TriplePatternInfo::TermType::VARIABLE: {
-      // Variable shared_ptr are already stored directly in the batch
-      // cache, eliminating hash lookups during instantiation
-      return variableStrings[lookup.index];
+      // Variable shared_ptr are stored in the batch cache, eliminating
+      // hash lookups during instantiation.
+      return batchCache.getVariableString(lookup.index, rowInBatch);
     }
     case TriplePatternInfo::TermType::BLANK_NODE: {
       // Blank node values are always valid (computed for each row)
@@ -407,17 +396,6 @@ ConstructTripleGenerator::createIdCacheWithStats(size_t numRows) const {
   auto idCache = std::make_shared<IdCache>(capacity);
   auto statsLogger = std::make_shared<IdCacheStatsLogger>(numRows, capacity);
   return {std::move(idCache), std::move(statsLogger)};
-}
-
-// _____________________________________________________________________________
-void ConstructTripleGenerator::lookupVariableStrings(
-    const BatchEvaluationCache& batchCache, size_t rowInBatch,
-    std::vector<std::shared_ptr<const std::string>>& variableStrings) const {
-  // Get shared_ptr from the batch cache. Ownership is shared with IdCache.
-  for (size_t varIdx = 0; varIdx < blueprint_->variablesToEvaluate_.size();
-       ++varIdx) {
-    variableStrings[varIdx] = batchCache.getVariableString(varIdx, rowInBatch);
-  }
 }
 
 // _____________________________________________________________________________

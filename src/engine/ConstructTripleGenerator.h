@@ -124,33 +124,21 @@ class ConstructTripleGenerator {
 
   // Instantiates a single triple using the precomputed constants and
   // the batch evaluation cache for a specific row. Returns an empty
-  // `StringTriple` if any component is UNDEF. `Variable` string values are
-  // provided via the precomputed variableStrings cache (one lookup per
-  // variable per row, reused across all triples in the result-table row).
+  // `StringTriple` if any component is UNDEF.
   StringTriple instantiateTripleFromBatch(
       size_t tripleIdx, const BatchEvaluationCache& batchCache,
-      size_t rowInBatch,
-      const std::vector<std::shared_ptr<const std::string>>& variableStrings)
-      const;
+      size_t rowInBatch) const;
 
   // Helper to get shared_ptr for a term in a triple.
   // Returns nullptr if the term is UNDEF.
   std::shared_ptr<const std::string> getTermStringPtr(
       size_t tripleIdx, size_t pos, const BatchEvaluationCache& batchCache,
-      size_t rowInBatch,
-      const std::vector<std::shared_ptr<const std::string>>& variableStrings)
-      const;
+      size_t rowInBatch) const;
 
   // Creates an `Id` cache with a statistics logger that logs at INFO level
   // when destroyed (after query execution completes).
   std::pair<std::shared_ptr<IdCache>, std::shared_ptr<IdCacheStatsLogger>>
   createIdCacheWithStats(size_t numRows) const;
-
-  // Populates `variableStrings` with shared_ptr to cached string values for a
-  // row.
-  void lookupVariableStrings(
-      const BatchEvaluationCache& batchCache, size_t rowInBatch,
-      std::vector<std::shared_ptr<const std::string>>& variableStrings) const;
 
   // Evaluates all `Variables` and `BlankNodes` for a batch of result-table
   // rows.
