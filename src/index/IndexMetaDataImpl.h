@@ -112,4 +112,15 @@ void IndexMetaData<MapType>::calculateStatistics(size_t numDistinctCol0) {
   }
 }
 
+// _____________________________________________________________________________
+template <class MapType>
+void IndexMetaData<MapType>::exchangeMultiplicities(IndexMetaData& other) {
+  AD_CONTRACT_CHECK(data_.size() == other.data_.size());
+  for (auto& [md1, md2] : ql::ranges::zip_view{data_, other.data_}) {
+    AD_CORRECTNESS_CHECK(md1.col0Id_.getBits() == md2.col0Id_.getBits());
+    md1.multiplicityCol2_ = md2.multiplicityCol1_;
+    md2.multiplicityCol2_ = md1.multiplicityCol1_;
+  }
+}
+
 #endif  // QLEVER_SRC_INDEX_INDEXMETADATAIMPL_H
