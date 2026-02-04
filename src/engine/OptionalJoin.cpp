@@ -538,7 +538,7 @@ Result OptionalJoin::lazyOptionalJoinWithIndexScan(
     auto getLeftAndRightRange = [&]<size_t numJoinCols>() {
       auto firstJoinColLeft = _joinColumns.at(0).at(0);
       auto [leftJoinSide, indexScanSide] =
-          rightScan->prefilterTables(left->idTables(), firstJoinColLeft);
+          rightScan->prefilterTables(left->idTables(), firstJoinColLeft, false);
       auto leftRange =
           convertGenerator<std::decay_t<decltype(leftJoinSide)>, numJoinCols>(
               std::move(leftJoinSide), joinColMap.permutationLeft());

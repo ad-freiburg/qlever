@@ -586,6 +586,9 @@ struct IndexScan::SharedGeneratorState {
   bool hasUndef_ = false;
   // Indicates if the generator has been fully consumed.
   bool doneFetching_ = false;
+  // If true, filter the left side (skip non-matching inputs). If false, pass
+  // through all inputs even if they don't match any blocks.
+  bool filterLeftSide_ = true;
 
   // Advance the `iterator` to the next non-empty table. Set `hasUndef_` to true
   // if the first table is undefined. Also set `doneFetching_` if the generator
@@ -643,13 +646,59 @@ struct IndexScan::SharedGeneratorState {
           // We have seen entries in the join column that are larger than the
           // largest block in the index scan, which means that there will be no
           // more matches.
+          if (!filterLeftSide_) {
+            // Case B: Push current table before marking as done.
+            prefetchedValues_.push_back(std::move(*iterator_.value()));
+          }
           doneFetching_ = true;
           return;
         }
-        // The current `joinColumn` has no matching block in the index, we can
-        // safely skip appending it to `prefetchedValues_`, but future values
-        // might require later blocks from the index.
-        continue;
+        // Case A: The current `joinColumn` has no matching block in the index.
+        if (filterLeftSide_) {
+          // We can safely skip appending it to `prefetchedValues_`, but future
+          // values might require later blocks from the index.
+          continue;
+        } else {
+          // When not filtering, push the table to prefetchedValues.
+          prefetchedValues_.push_back(std::move(*iterator_.value()));
+          // If buffer grows too large, find a dummy block to add.
+          if (prefetchedValues_.size() > 5) {
+            // Find the last value in the join column of the last prefetched
+            // table.
+            const auto& lastPrefetched = prefetchedValues_.back();
+            auto lastJoinColumn =
+                lastPrefetched.idTable_.getColumn(joinColumn_);
+            AD_CORRECTNESS_CHECK(!lastJoinColumn.empty());
+            Id lastValue = lastJoinColumn.back();
+            // Find the smallest block whose first entry is larger than
+            // lastValue.
+            // TODO<joka921> This should always be the first block that is still
+            // available. also remove code duplication with the above code.
+            bool foundBlock = false;
+            size_t numBlocksHandled = 0;
+            for (const auto& block : metaBlocks_.getBlockMetadataView()) {
+              ++numBlocksHandled;
+              if (CompressedRelationReader::getRelevantIdFromTriple(
+                      block.firstTriple_, metaBlocks_) > lastValue) {
+                // Found a suitable block, add it to pendingBlocks.
+                pendingBlocks_.push_back(block);
+                lastEntryInBlocks_ =
+                    CompressedRelationReader::getRelevantIdFromTriple(
+                        block.lastTriple_, metaBlocks_);
+                AD_CORRECTNESS_CHECK(numBlocksHandled == 1);
+                metaBlocks_.removePrefix(numBlocksHandled);
+                foundBlock = true;
+                break;
+              }
+            }
+            if (!foundBlock) {
+              // No more blocks available, mark as done.
+              doneFetching_ = true;
+              return;
+            }
+          }
+          continue;
+        }
       }
       prefetchedValues_.push_back(std::move(*iterator_.value()));
       ql::ranges::move(newBlocks, std::back_inserter(pendingBlocks_));
@@ -690,7 +739,19 @@ Result::LazyResult IndexScan::createPrefilteredJoinSide(
 
         if (prefetched.empty()) {
           AD_CORRECTNESS_CHECK(state->doneFetching_);
-          return LoopControl::makeBreak();
+          // If not filtering left side, yield all remaining elements.
+          AD_CORRECTNESS_CHECK(state->iterator_.has_value());
+          auto it = state->iterator_.value();
+          if (!state->filterLeftSide_ && it != state->generator_.end()) {
+            // Advance the iterator past the last value we already yielded.
+            ++it;
+            return LoopControl::breakWithYieldAll(
+                ql::ranges::subrange(it, state->generator_.end()) |
+                ql::views::filter(
+                    [](const auto& block) { return !block.idTable_.empty(); }));
+          } else {
+            return LoopControl::makeBreak();
+          }
         }
 
         // Make a defensive copy of the values to avoid modification during
@@ -769,7 +830,7 @@ Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
 
 // _____________________________________________________________________________
 std::pair<Result::LazyResult, Result::LazyResult> IndexScan::prefilterTables(
-    Result::LazyResult input, ColumnIndex joinColumn) {
+    Result::LazyResult input, ColumnIndex joinColumn, bool filterLeftSide) {
   AD_CORRECTNESS_CHECK(numVariables_ <= 3 && numVariables_ > 0);
   auto metaBlocks = getMetadataForScan();
 
@@ -778,8 +839,17 @@ std::pair<Result::LazyResult, Result::LazyResult> IndexScan::prefilterTables(
     return {Result::LazyResult{}, Result::LazyResult{}};
   }
 
-  auto state = std::make_shared<SharedGeneratorState>(SharedGeneratorState{
-      std::move(input), joinColumn, std::move(metaBlocks.value())});
+  auto state = std::make_shared<SharedGeneratorState>(
+      SharedGeneratorState{std::move(input),
+                           joinColumn,
+                           std::move(metaBlocks.value()),
+                           std::nullopt,
+                           {},
+                           {},
+                           std::nullopt,
+                           false,
+                           false,
+                           filterLeftSide});
   return {createPrefilteredJoinSide(state),
           createPrefilteredIndexScanSide(state)};
 }
