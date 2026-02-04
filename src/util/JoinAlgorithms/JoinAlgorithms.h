@@ -1715,12 +1715,12 @@ CPP_template(typename LeftSide, typename RightSide,
 
     this->compatibleRowAction_.setInput(leftTable, rightTable);
     // Set up actions for the single-column join on the last column.
-    auto compAction = [this, &leftTable, &rightTable](const auto& itL,
-                                                      const auto& itR) {
-      size_t leftIdx =
-          itL - leftTable.getColumn(leftTable.numColumns() - 1).begin();
-      size_t rightIdx =
-          itR - rightTable.getColumn(rightTable.numColumns() - 1).begin();
+    auto compAction = [this,
+                       begL = leftTable.getColumn(numJoinCols - 1).begin(),
+                       begR = rightTable.getColumn(numJoinCols - 1).begin()](
+                          const auto& itL, const auto& itR) {
+      size_t leftIdx = itL - begL;
+      size_t rightIdx = itR - begR;
       // Call the row adder with the full rows.
       this->compatibleRowAction_.addRow(leftIdx, rightIdx);
     };
