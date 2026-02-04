@@ -836,7 +836,8 @@ std::pair<Result::LazyResult, Result::LazyResult> IndexScan::prefilterTables(
 
   if (!metaBlocks.has_value()) {
     // Return empty results
-    return {Result::LazyResult{}, Result::LazyResult{}};
+    return {filterLeftSide ? Result::LazyResult{} : std::move(input),
+            Result::LazyResult{}};
   }
 
   auto state = std::make_shared<SharedGeneratorState>(
