@@ -1731,11 +1731,12 @@ CPP_template(typename LeftSide, typename RightSide,
       return ad_utility::IteratorRange{lastColLeft.begin(), endOfUndef};
     };
 
-    auto notFoundAction = [this, &leftTable](const auto& it) {
-      size_t leftIdx =
-          it - leftTable.getColumn(leftTable.numColumns() - 1).begin();
-      this->compatibleRowAction_.addOptionalRow(leftIdx);
-    };
+    auto notFoundAction =
+        [this,
+         begL = leftTable.getColumn(numJoinCols - 1).begin()](const auto& it) {
+          size_t leftIdx = it - begL;
+          this->compatibleRowAction_.addOptionalRow(leftIdx);
+        };
 
     // Perform the join on the last column only.
     [[maybe_unused]] auto res = zipperJoinWithUndef(
