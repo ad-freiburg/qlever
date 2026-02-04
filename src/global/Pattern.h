@@ -71,17 +71,12 @@ class CompactVectorOfStrings {
 
   virtual ~CompactVectorOfStrings() = default;
 
-  /**
-   * @brief Fills this CompactVectorOfStrings with input.
-   * @param The input from which to build the vector.
-   * Note: In C++20 mode we use a `requires clause`, in C++17 mode we use a
-   * static assert. Both work, as there is only one overload of `build`.
-   */
-  template <typename T>
-  QL_CONCEPT_OR_NOTHING(
-      requires ad_utility::SimilarTo<
-          ql::ranges::range_value_t<ql::ranges::range_value_t<T>>, data_type>)
-  void build(const T& input) {
+  // Append the elements from `input` to this `CompactVectorOfStrings`.
+  CPP_template(typename T)(
+      requires ql::ranges::forward_range<T>&& ql::ranges::sized_range<T>&&
+          ql::ranges::sized_range<ql::ranges::range_value_t<T>>&& ad_utility::
+              SimilarTo<ql::ranges::range_value_t<ql::ranges::range_value_t<T>>,
+                        data_type>) void build(const T& input) {
     // Also make room for the end offset of the last element.
     offsets_.reserve(input.size() + 1);
     size_t dataSize = 0;
