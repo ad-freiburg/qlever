@@ -20,7 +20,6 @@
 using std::string;
 using LazyScanMetadata = CompressedRelationReader::LazyScanMetadata;
 
-// _____________________________________________________________________________
 // Return the number of `Variables` given the `TripleComponent` values for
 // `subject_`, `predicate` and `object`.
 static size_t getNumberOfVariables(const TripleComponent& subject,
@@ -201,11 +200,17 @@ std::vector<ColumnIndex> IndexScan::resultSortedOn() const {
 std::optional<std::shared_ptr<QueryExecutionTree>>
 IndexScan::getUpdatedQueryExecutionTreeWithPrefilterApplied(
     const std::vector<PrefilterVariablePair>& prefilterVariablePairs) const {
+  // If there is a LIMIT or OFFSET clause that constrains the scan, we cannot
+  // apply prefiltering. Also, if there is no block metadata, there is nothing
+  // to prefilter.
   if (!getLimitOffset().isUnconstrained() ||
       scanSpecAndBlocks_.sizeBlockMetadata_ == 0) {
     return std::nullopt;
   }
 
+  // Get the variable by which this `IndexScan` is sorted, and its
+  // corresponding column index. If there is no variable, we cannot apply
+  // prefiltering (and there typically is no need to).
   auto sortedVarAndColIndex =
       getSortedVariableAndMetadataColumnIndexForPrefiltering();
   if (!sortedVarAndColIndex.has_value()) {
@@ -214,7 +219,7 @@ IndexScan::getUpdatedQueryExecutionTreeWithPrefilterApplied(
 
   // Return a new `IndexScan` with updated `scanSpecAndBlocks_`, by
   // intersecting its block ranges with the block ranges from the applicable
-  // prefilters. If no prefilter applies, return `std::nullopt`.
+  // prefilters.
   const auto& [sortedVar, colIndex] = sortedVarAndColIndex.value();
   auto it =
       ql::ranges::find(prefilterVariablePairs, sortedVar, ad_utility::second);
@@ -229,6 +234,8 @@ IndexScan::getUpdatedQueryExecutionTreeWithPrefilterApplied(
     return makeCopyWithPrefilteredScanSpecAndBlocks(
         {scanSpecAndBlocks_.scanSpec_, blockMetadataRanges});
   }
+
+  // If no prefilter applies, return `std::nullopt`.
   return std::nullopt;
 }
 
@@ -261,12 +268,19 @@ VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
 std::shared_ptr<QueryExecutionTree>
 IndexScan::makeCopyWithPrefilteredScanSpecAndBlocks(
     ScanSpecAndBlocks scanSpecAndBlocks) const {
+  // Make a (cheap) copy of this `IndexScan`. The size estimates (last two
+  // args) are computed next, so just set them to dummy values in this call.
   auto copy = ad_utility::makeExecutionTree<IndexScan>(
       getExecutionContext(), permutation_, locatedTriplesSharedState_, subject_,
       predicate_, object_, additionalColumns_, additionalVariables_,
       graphsToFilter_, std::move(scanSpecAndBlocks), true, varsToKeep_, false,
       size_t{0});
-  // Recompute size estimates for the new prefilter `scanSpecAndBlocks`.
+
+  // Compute the size estimate for the prefiltered `scanSpecAndBlocks`.
+  //
+  // NOTE: This function is only called when prefiltering actually happened.
+  // The code in this functions avoids that the size estimate is computed
+  // twice, as it happened in a previous implementation.
   auto indexScan =
       std::dynamic_pointer_cast<IndexScan>(copy->getRootOperation());
   AD_CORRECTNESS_CHECK(indexScan != nullptr);
@@ -319,26 +333,26 @@ const LocatedTriplesState& IndexScan::locatedTriplesState() const {
 // _____________________________________________________________________________
 std::pair<bool, size_t> IndexScan::computeSizeEstimate() const {
   AD_CORRECTNESS_CHECK(_executionContext);
-  // For a full scan summing up rough estimates for all blocks is insanely
-  // expensive. So instead we just use the total amount of changes and assume
-  // half of them are insertions and the other half deletions.
+
+  // For a full index scan (think `?s ?p ?o`), simply use the total number
+  // of triples (read from `<basename>.meta-data.json`) as estimate. See the
+  // comment before the declaration of this function for details.
   if (numVariables() == 3 && additionalVariables().empty() &&
       !scanSpecAndBlocksIsPrefiltered_) {
-    // We don't do full scans for internal triples, so this is always correct.
     size_t numTriples = _executionContext->getIndex().numTriples().normal;
     size_t numChanges =
         permutation()
             .getLocatedTriplesForPermutation(locatedTriplesState())
             .numTriples();
-
-    // Since we don't know how many triples have been inserted vs deleted, we
-    // assume that they are roughly evenly split, so the estimate stays the
-    // same.
     return {numChanges == 0, numTriples};
   }
+
+  // For other scans, sum up the size estimates for each block.
+  //
+  // NOTE: Starting from C++20, we could use `std::midpoint` to compute the
+  // mean of `lower` and `upper` in a safe way.
   auto [lower, upper] = permutation().getSizeEstimateForScan(
       scanSpecAndBlocks_, locatedTriplesState());
-  // NOTE: Starting from C++20 we could use `std::midpoint` here
   return {lower == upper, lower + (upper - lower) / 2};
 }
 
