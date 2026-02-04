@@ -14,8 +14,8 @@
 
 #include "backports/span.h"
 #include "engine/ConstructIdCache.h"
+#include "engine/InstantiationBlueprint.h"
 #include "engine/QueryExportTypes.h"
-#include "engine/TripleInstantiationContext.h"
 #include "util/http/MediaTypes.h"
 #include "util/stream_generator.h"
 
@@ -28,13 +28,18 @@ class ConstructBatchProcessor
   using IdCache = ConstructIdCache;
   using IdCacheStatsLogger = ConstructIdCacheStatsLogger;
 
+  // Default batch size for processing rows.
+  static constexpr size_t DEFAULT_BATCH_SIZE = 64;
+
+  static size_t getBatchSize() { return DEFAULT_BATCH_SIZE; }
+
   // Constructor takes all data needed for processing.
-  // - context: shared, immutable template analysis data
+  // - blueprint: shared, immutable preprocessing data
   // - table: the table data to process
   // - format: output format (Turtle/CSV/TSV)
   // - currentRowOffset: offset for blank node numbering
   ConstructBatchProcessor(
-      std::shared_ptr<const TripleInstantiationContext> context,
+      std::shared_ptr<const InstantiationBlueprint> blueprint,
       const TableWithRange& table, ad_utility::MediaType format,
       size_t currentRowOffset);
 
@@ -49,7 +54,7 @@ class ConstructBatchProcessor
       ql::span<const uint64_t> rowIndices, size_t currentRowOffset);
 
   // For each `Variable`, reads all `Id`s from its column across all batch
-  // rows, converts them to strings (using the cache), and stores pointers to
+  // rows, converts them to strings (using `IdCache`), and stores pointers to
   // those strings in `BatchEvaluationCache`.
   void evaluateVariablesForBatch(BatchEvaluationCache& batchCache,
                                  const IdTable& idTable,
@@ -63,11 +68,15 @@ class ConstructBatchProcessor
                                   ql::span<const uint64_t> rowIndices,
                                   size_t currentRowOffset) const;
 
-  // Helper to get shared_ptr for a term in a triple.
-  // Returns nullptr if the term is UNDEF.
+  // Helper to get shared_ptr to the string resulting from evaluating the term
+  // specified by `tripleIdx` (idx of the triple in the template triples) and
+  // `pos` (position of the term in said template triple) on the row of the
+  // result table specified by `rowIdxInBatch`.
+  // TODO<ms2144>: What does `variableStrings` contain, exactly? And why is it
+  // passed as argument here?
   std::shared_ptr<const std::string> getTermStringPtr(
       size_t tripleIdx, size_t pos, const BatchEvaluationCache& batchCache,
-      size_t rowInBatch,
+      size_t rowIdxInBatch,
       const std::vector<std::shared_ptr<const std::string>>& variableStrings)
       const;
 
@@ -104,8 +113,8 @@ class ConstructBatchProcessor
   // Advance to next batch.
   void advanceToNextBatch();
 
-  // Shared context containing template analysis data (immutable).
-  std::shared_ptr<const TripleInstantiationContext> context_;
+  // Blueprint containing preprocessed template data (immutable).
+  std::shared_ptr<const InstantiationBlueprint> blueprint_;
 
   // Output format (Turtle/CSV/TSV).
   ad_utility::MediaType format_;

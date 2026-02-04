@@ -4,8 +4,8 @@
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
-#ifndef QLEVER_SRC_ENGINE_TRIPLEINSTANTIATIONCONTEXT_H
-#define QLEVER_SRC_ENGINE_TRIPLEINSTANTIATIONCONTEXT_H
+#ifndef QLEVER_SRC_ENGINE_INSTANTIATIONBLUEPRINT_H
+#define QLEVER_SRC_ENGINE_INSTANTIATIONBLUEPRINT_H
 
 #include <functional>
 #include <memory>
@@ -23,25 +23,24 @@ class Index;
 // Number of positions in a triple: subject, predicate, object.
 inline constexpr size_t NUM_TRIPLE_POSITIONS = 3;
 
-// Identifies the source of a term's value during triple instantiation.
-enum class TermType { CONSTANT, VARIABLE, BLANK_NODE };
-
-// Describes how to look up the value for a single term position (subject,
-// predicate, or object) during triple instantiation.
-//
-// - `type`: Indicates whether the term is a CONSTANT (precomputed IRI/Literal),
-//   VARIABLE (looked up from IdTable), or BLANK_NODE (generated per row).
-// - `index`: The index into the corresponding cache:
-//   - For CONSTANT: index into `precomputedConstants_[tripleIdx]`
-//   - For VARIABLE: index into `variablesToEvaluate_` / `variableStrings_`
-//   - For BLANK_NODE: index into `blankNodesToEvaluate_` / `blankNodeValues_`
-struct TermLookupInfo {
-  TermType type;
-  size_t index;
-};
-
 // Pre-analyzed info for a triple pattern to enable fast instantiation.
 struct TriplePatternInfo {
+  // Identifies the source of a term's value during triple instantiation.
+  enum class TermType { CONSTANT, VARIABLE, BLANK_NODE };
+
+  // Describes how to look up the value for a single term position (subject,
+  // predicate, or object) during triple instantiation.
+  // `type`: Indicates whether the term is a CONSTANT (precomputed IRI/Literal),
+  // VARIABLE (looked up from `IdTable`), or BLANK_NODE (generated per row).
+  // `index`: The index into the corresponding cache:
+  // For CONSTANT: index into `precomputedConstants_[tripleIdx]`
+  // For VARIABLE: index into `variablesToEvaluate_` / `variableStrings_`
+  // For BLANK_NODE: index into `blankNodesToEvaluate_` / `blankNodeValues_`
+  struct TermLookupInfo {
+    TermType type;
+    size_t index;
+  };
+
   std::array<TermLookupInfo, NUM_TRIPLE_POSITIONS> lookups_;
 };
 
@@ -84,19 +83,16 @@ struct BatchEvaluationCache {
   }
 };
 
-// Bundles all pre-analyzed template data needed for batch processing.
-// This context is created once by ConstructTripleGenerator during template
-// analysis and shared (immutably) with all ConstructBatchProcessor instances.
-struct TripleInstantiationContext {
-  // Constructor taking required references.
-  TripleInstantiationContext(
+// Blueprint for instantiating triples from CONSTRUCT template patterns.
+struct InstantiationBlueprint {
+  InstantiationBlueprint(
       const Index& index, const VariableToColumnMap& variableColumns,
       ad_utility::SharedCancellationHandle cancellationHandle)
       : index_(index),
         variableColumns_(variableColumns),
         cancellationHandle_(std::move(cancellationHandle)) {}
 
-  // Pre-analyzed info for each triple pattern (resolutions + skip flag).
+  // Lookup info for each triple pattern.
   std::vector<TriplePatternInfo> triplePatternInfos_;
 
   // Precomputed constant values for `Iri` objects and `Literal` objects.
@@ -121,13 +117,8 @@ struct TripleInstantiationContext {
   // Handle for checking query cancellation.
   ad_utility::SharedCancellationHandle cancellationHandle_;
 
-  // Default batch size for processing rows.
-  static constexpr size_t DEFAULT_BATCH_SIZE = 64;
-
-  static size_t getBatchSize() { return DEFAULT_BATCH_SIZE; }
-
   // Number of template triples.
   size_t numTemplateTriples() const { return triplePatternInfos_.size(); }
 };
 
-#endif  // QLEVER_SRC_ENGINE_TRIPLEINSTANTIATIONCONTEXT_H
+#endif  // QLEVER_SRC_ENGINE_INSTANTIATIONBLUEPRINT_H

@@ -13,9 +13,9 @@
 #include "backports/span.h"
 #include "engine/ConstructIdCache.h"
 #include "engine/ConstructQueryEvaluator.h"
+#include "engine/InstantiationBlueprint.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryExportTypes.h"
-#include "engine/TripleInstantiationContext.h"
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "parser/data/BlankNode.h"
@@ -90,30 +90,37 @@ class ConstructTripleGenerator {
       CancellationHandle cancellationHandle);
 
  private:
-  // Scans the template triples to identify all unique `Variables` and
-  // `BlankNodes`, precomputes constants (IRIs/Literals).
-  // Builds the "resolution map" (which maps each position of the graph
-  // template to how the term at this position is to be resolved).
-  void analyzeTemplate();
+  // Preprocesses the template triples to create the InstantiationBlueprint.
+  // For each term position, determines how to obtain its value:
+  // - Constants (IRIs/Literals): evaluates and stores the string
+  // - Variables: precomputes column indices for IdTable lookup
+  // - Blank nodes: precomputes format prefix/suffix
+  void preprocessTemplate();
 
   // Analyzes a single term and returns its resolution info.
   // Dispatches to the appropriate type-specific handler based on term type.
-  TermLookupInfo analyzeTerm(const GraphTerm& term, size_t tripleIdx,
-                             size_t pos, PositionInTriple role);
+  TriplePatternInfo::TermLookupInfo analyzeTerm(const GraphTerm& term,
+                                                size_t tripleIdx, size_t pos,
+                                                PositionInTriple role);
 
   // Analyzes a `Iri` term: precomputes the string value.
-  TermLookupInfo analyzeIriTerm(const Iri& iri, size_t tripleIdx, size_t pos);
+  TriplePatternInfo::TermLookupInfo analyzeIriTerm(const Iri& iri,
+                                                   size_t tripleIdx,
+                                                   size_t pos);
 
   // Analyzes a `Literal` term: precomputes the string value.
-  TermLookupInfo analyzeLiteralTerm(const Literal& literal, size_t tripleIdx,
-                                    size_t pos, PositionInTriple role);
+  TriplePatternInfo::TermLookupInfo analyzeLiteralTerm(const Literal& literal,
+                                                       size_t tripleIdx,
+                                                       size_t pos,
+                                                       PositionInTriple role);
 
   // Analyzes a `Variable` term: registers it and precomputes `IdTable` column
   // index.
-  TermLookupInfo analyzeVariableTerm(const Variable& var);
+  TriplePatternInfo::TermLookupInfo analyzeVariableTerm(const Variable& var);
 
   // Analyzes a `BlankNode` term: registers it and precomputes format strings.
-  TermLookupInfo analyzeBlankNodeTerm(const BlankNode& blankNode);
+  TriplePatternInfo::TermLookupInfo analyzeBlankNodeTerm(
+      const BlankNode& blankNode);
 
   // Instantiates a single triple using the precomputed constants and
   // the batch evaluation cache for a specific row. Returns an empty
@@ -187,10 +194,9 @@ class ConstructTripleGenerator {
   CancellationHandle cancellationHandle_;
   size_t rowOffset_ = 0;
 
-  // Shared context containing all pre-analyzed template data needed for batch
-  // processing. Created once during template analysis and shared (immutably)
-  // with all ConstructBatchProcessor instances.
-  std::shared_ptr<TripleInstantiationContext> context_;
+  // Blueprint containing preprocessed template data. Created once by
+  // preprocessTemplate() and shared (immutably) with ConstructBatchProcessor.
+  std::shared_ptr<InstantiationBlueprint> blueprint_;
 
   // Mapping from variable to index in the per-row variable cache
   // `variablesToEvaluate_`.
