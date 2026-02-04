@@ -625,7 +625,8 @@ Result OptionalJoin::materializedOptionalJoinWithIndexScan(
       auto [leftRange, rightRange] =
           getLeftAndRightRange.template operator()<1>();
       zipperJoinForBlocksWithPotentialUndef(
-          std::move(leftRange), std::move(rightRange), std::less{}, rowAdder);
+          std::move(leftRange), std::move(rightRange), std::less{}, rowAdder,
+          {}, {}, ad_utility::OptionalJoinTag{});
     } else {
       AD_CORRECTNESS_CHECK(implementation_ ==
                            Implementation::OnlyUndefInLastJoinColumnOfLeft);
