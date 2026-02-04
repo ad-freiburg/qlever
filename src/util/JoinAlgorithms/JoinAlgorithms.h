@@ -38,11 +38,11 @@ CPP_concept UnaryIteratorFunction =
     ql::concepts::invocable<F, ql::ranges::iterator_t<Range>>;
 
 // A  function `F` fulfills `BinaryIteratorFunction` if it can be called with
-// two arguments of the `Range`'s iterator type (NOT value type).
-template <typename F, typename Range>
+// two arguments of the `Range1/2`'s iterator types (NOT value type).
+template <typename F, typename Range1, typename Range2>
 CPP_concept BinaryIteratorFunction =
-    ql::concepts::invocable<F, ql::ranges::iterator_t<Range>,
-                            ql::ranges::iterator_t<Range>>;
+    ql::concepts::invocable<F, ql::ranges::iterator_t<Range1>,
+                            ql::ranges::iterator_t<Range2>>;
 
 // Helper type to indicate the different join modes.
 enum class JoinType { JOIN, OPTIONAL, MINUS };
@@ -490,20 +490,20 @@ CPP_template(typename LeftTableLike, typename RightTableLike,
              typename CompatibleActionT, typename NotFoundActionT,
              typename CancellationFuncT)(
     // TODO<joka921> Do we need different left and right types for now?
-    requires /*BinaryIteratorFunction<CompatibleActionT, LeftTableLike>
-                CPP_and*/
-    UnaryIteratorFunction<NotFoundActionT, LeftTableLike>
-        CPP_and ql::concepts::invocable<
-            CancellationFuncT>) void specialOptionalJoin(const LeftTableLike&
-                                                             left,
-                                                         const RightTableLike&
-                                                             right,
-                                                         const CompatibleActionT&
-                                                             compatibleRowAction,
-                                                         const NotFoundActionT&
-                                                             elFromFirstNotFoundAction,
-                                                         const CancellationFuncT&
-                                                             checkCancellation) {
+    requires BinaryIteratorFunction<CompatibleActionT, LeftTableLike,
+                                    RightTableLike>
+        CPP_and UnaryIteratorFunction<NotFoundActionT, LeftTableLike>
+            CPP_and ql::concepts::invocable<
+                CancellationFuncT>) void specialOptionalJoin(const LeftTableLike&
+                                                                 left,
+                                                             const RightTableLike&
+                                                                 right,
+                                                             const CompatibleActionT&
+                                                                 compatibleRowAction,
+                                                             const NotFoundActionT&
+                                                                 elFromFirstNotFoundAction,
+                                                             const CancellationFuncT&
+                                                                 checkCancellation) {
   auto it1 = std::begin(left);
   auto end1 = std::end(left);
   auto it2 = std::begin(right);
