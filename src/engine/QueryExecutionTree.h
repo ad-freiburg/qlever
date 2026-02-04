@@ -108,11 +108,11 @@ class QueryExecutionTree {
   }
 
   // The implementation of this method calls
-  // `Operation::setPrefilterGetUpdatedQueryExecutionTree()` for the root
-  // operation. Only `<PrefilterExpression, Variable>` pairs are passed, where
-  // the corresponding `Variable` is visible in the `VariableToColumnMap`.
+  // `Operation::getUpdatedQueryExecutionTreeWithPrefilterApplied()` for the
+  // root operation. Only `<PrefilterExpression, Variable>` pairs are passed,
+  // where the corresponding `Variable` is visible in the `VariableToColumnMap`.
   std::optional<std::shared_ptr<QueryExecutionTree>>
-  setPrefilterGetUpdatedQueryExecutionTree(
+  getUpdatedQueryExecutionTreeWithPrefilterApplied(
       std::vector<Operation::PrefilterVariablePair> prefilterPairs) const;
 
   size_t getDistinctEstimate(size_t col) const {
