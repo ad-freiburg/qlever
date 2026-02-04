@@ -54,7 +54,7 @@ class ConstructBatchProcessor
 
  private:
   // Evaluates all `Variables` and `BlankNodes` for a batch of result-table
-  // rows. Column-oriented access pattern for variables.
+  // rows.
   BatchEvaluationCache evaluateBatchColumnOriented(
       const IdTable& idTable, const LocalVocab& localVocab,
       ql::span<const uint64_t> rowIndices, size_t currentRowOffset);
