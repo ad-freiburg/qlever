@@ -556,6 +556,16 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
                                                 ::testing::Eq(V{"?o"})));
   }
 
+  // Test internal constructor.
+  {
+    ViewQuery query{"testView", ViewQuery::RequestedColumns{
+                                    {V{"?s"}, V{"?s2"}}, {V{"?o"}, V{"?o2"}}}};
+    EXPECT_EQ(query.viewName_, "testView");
+    EXPECT_THAT(query.getVarsToKeep(),
+                ::testing::UnorderedElementsAre(::testing::Eq(V{"?s2"}),
+                                                ::testing::Eq(V{"?o2"})));
+  }
+
   // Unsupported format version.
   {
     auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);

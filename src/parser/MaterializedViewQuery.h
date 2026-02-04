@@ -47,7 +47,8 @@ struct MaterializedViewQuery : MagicServiceQuery {
   // column names in the query result or literals/IRIs to restrict the column
   // on. This can be used for filtering the results and reading any number of
   // payload columns from the materialized view.
-  ad_utility::HashMap<Variable, TripleComponent> requestedColumns_;
+  using RequestedColumns = ad_utility::HashMap<Variable, TripleComponent>;
+  RequestedColumns requestedColumns_;
 
   // This constructor takes an IRI consisting of the magic service IRI for
   // materialized views with the view name as a suffix. If this is used, add the
@@ -57,6 +58,9 @@ struct MaterializedViewQuery : MagicServiceQuery {
   // Alternative: Initialize using magic predicate. No calls to `addParameter`
   // are necessary in this case.
   explicit MaterializedViewQuery(const SparqlTriple& triple);
+
+  // For query rewriting: Initialize directly using name and requested columns.
+  MaterializedViewQuery(std::string name, RequestedColumns requestedColumns);
 
   void addParameter(const SparqlTriple& triple) override;
 
