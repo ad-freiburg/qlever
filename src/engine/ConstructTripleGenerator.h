@@ -11,16 +11,17 @@
 #include <memory>
 
 #include "backports/span.h"
+#include "engine/ConstructIdCache.h"
 #include "engine/ConstructQueryEvaluator.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryExportTypes.h"
+#include "engine/TripleInstantiationContext.h"
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "parser/data/BlankNode.h"
 #include "parser/data/ConstructQueryExportContext.h"
 #include "util/CancellationHandle.h"
 #include "util/HashMap.h"
-#include "util/StableLruCache.h"
 #include "util/http/MediaTypes.h"
 #include "util/stream_generator.h"
 
@@ -30,147 +31,26 @@
 // (produced by the WHERE clause).
 // The generator transforms: Result Table -> Rows -> Triple Patterns -> Output.
 // For each row in the result table, we instantiate each triple pattern by
-// substituting variables with their values from that row. The output is either
-// `StringTriple` objects or pre-formatted strings (Turtle/CSV/TSV).
+// substituting variables with their values from that row.
 // Constants (IRIs, Literals) are evaluated once at construction of the
 // `ConstructTripleGenerator`. `Variable` column indices in `IdTable` are
 // pre-computed. `BlankNode` format strings are pre-built (only row number
-// varies). Rows of the result-table are processed in batches (default 64) for
-// better cache locality. For each variable, we read all `Id`s from its column
-// in the `IdTable` across all rows in the batch before moving to the next
-// variable. Since `IdTable` uses column-major storage, this creates sequential
-// memory access patterns that benefit from CPU prefetching. ID-to-string
+// varies). Rows of the result-table are processed in batches. For each
+// variable , we read all `Id`s from its column in the `IdTable` across all
+// rows in the batch before moving to the next variable. ID-to-string
 // conversions are cached across rows within a table. For streaming output, we
 // directly yield formatted strings. This Avoids intermediate `StringTriple`
 // object allocations
 // _____________________________________________________________________________
-// Forward declaration for friend access
-class FormattedTripleIterator;
 class ConstructTripleGenerator {
-  // Allow FormattedTripleIterator to access private members for iteration
-  friend class FormattedTripleIterator;
-
  public:
   using CancellationHandle = ad_utility::SharedCancellationHandle;
   using StringTriple = QueryExecutionTree::StringTriple;
   using Triples = ad_utility::sparql_types::Triples;
 
-  // Number of positions in a triple: subject, predicate, object.
-  static constexpr size_t NUM_TRIPLE_POSITIONS = 3;
-
-  // Identifies the source of a term's value during triple instantiation
-  enum class TermSource { CONSTANT, VARIABLE, BLANK_NODE };
-
-  // Resolution info for a single term position
-  struct TermResolution {
-    TermSource source;
-    size_t index;  // index into the appropriate cache (constants/vars/blanks)
-  };
-
-  // Pre-analyzed info for a triple pattern to enable fast instantiation
-  struct TriplePatternInfo {
-    std::array<TermResolution, NUM_TRIPLE_POSITIONS> resolutions_;
-  };
-
-  // Variable with pre-computed column index for `IdTable`.
-  struct VariableWithColumnIndex {
-    Variable variable_;
-    // idx of the column for the variable in the `IdTable`.
-    std::optional<size_t> columnIndex_;
-  };
-
-  // `BlankNode` with precomputed prefix and suffix for fast evaluation.
-  // The blank node format is: prefix + rowNumber + suffix
-  // where prefix is "_:g" or "_:u" and suffix_ is "_" + label.
-  // This avoids recomputing these constant parts for every result table row.
-  struct BlankNodeFormatInfo {
-    std::string prefix_;  // "_:g" or "_:u"
-    std::string suffix_;  // "_" + label
-  };
-
-  // Cache for ID-to-string conversions to avoid redundant vocabulary lookups
-  // when the same ID appears multiple times across rows.
-  // Uses LRU eviction to bound memory usage for queries with many unique IDs.
-  // Stores shared_ptr to enable zero-copy sharing with BatchEvaluationCache.
-  // nullptr represents UNDEF values (variables not bound in a result row).
-  using IdCache =
-      ad_utility::StableLRUCache<Id, std::shared_ptr<const std::string>>;
-
-  // Minimum capacity for the LRU cache. Sized to maximize cross-batch cache
-  // hits on repeated values (e.g., predicates that appear in many rows).
-  static constexpr size_t MIN_CACHE_CAPACITY = 100'000;
-
-  // Statistics for ID cache performance analysis
-  struct IdCacheStats {
-    size_t hits_ = 0;
-    size_t misses_ = 0;
-    size_t totalLookups() const { return hits_ + misses_; }
-    double hitRate() const {
-      return totalLookups() > 0 ? static_cast<double>(hits_) /
-                                      static_cast<double>(totalLookups())
-                                : 0.0;
-    }
-  };
-
-  // RAII logger for IdCache statistics. Logs stats at INFO level when
-  // destroyed (i.e., after query execution completes). Only logs if there
-  // were a meaningful number of lookups (> 1000).
-  class IdCacheStatsLogger {
-   public:
-    IdCacheStatsLogger(size_t numRows, size_t cacheCapacity)
-        : numRows_(numRows), cacheCapacity_(cacheCapacity) {}
-
-    ~IdCacheStatsLogger();
-
-    // Non-copyable: copying would cause duplicate logging on destruction.
-    IdCacheStatsLogger(const IdCacheStatsLogger&) = delete;
-    IdCacheStatsLogger& operator=(const IdCacheStatsLogger&) = delete;
-
-    // Non-movable: this logger is used in-place and should not be moved.
-    IdCacheStatsLogger(IdCacheStatsLogger&&) = delete;
-    IdCacheStatsLogger& operator=(IdCacheStatsLogger&&) = delete;
-
-    // Accessors for the stats (used during cache operations)
-    IdCacheStats& stats() { return stats_; }
-    const IdCacheStats& stats() const { return stats_; }
-
-   private:
-    IdCacheStats stats_;
-    size_t numRows_;
-    size_t cacheCapacity_;
-  };
-
-  static constexpr size_t DEFAULT_BATCH_SIZE = 64;
-
-  // Get the batch size, configurable via QLEVER_CONSTRUCT_BATCH_SIZE env var.
-  // Example: QLEVER_CONSTRUCT_BATCH_SIZE=256 ./qlever-server -i index -p 7001
-  // The value is read once at first call and cached for the process lifetime.
-  static size_t getBatchSize();
-
-  // Batch evaluation cache organized for column-oriented access.
-  // All string values are stored as shared_ptr for zero-copy sharing.
-  // Variables share ownership with IdCache; blank nodes are owned by this
-  // cache (since they include row numbers and can't be deduplicated).
-  struct BatchEvaluationCache {
-    // maps: variable idx -> idx of row in batch -> shared_ptr<string>
-    std::vector<std::vector<std::shared_ptr<const std::string>>>
-        variableStrings_;
-    // maps: blank node idx -> idx of row in batch -> shared_ptr<string>
-    std::vector<std::vector<std::string>> blankNodeValues_;
-    size_t numRows_ = 0;
-
-    // Get shared_ptr for a specific variable at a row in the batch.
-    const std::shared_ptr<const std::string>& getVariableString(
-        size_t varIdx, size_t rowInBatch) const {
-      return variableStrings_[varIdx][rowInBatch];
-    }
-
-    // Get shared_ptr for a specific blank node at a row in the batch.
-    const std::string& getBlankNodeValue(size_t blankNodeIdx,
-                                         size_t rowInBatch) const {
-      return blankNodeValues_[blankNodeIdx][rowInBatch];
-    }
-  };
+  // Type aliases for ID cache types (defined in ConstructIdCache.h)
+  using IdCache = ConstructIdCache;
+  using IdCacheStatsLogger = ConstructIdCacheStatsLogger;
 
   // ___________________________________________________________________________
   ConstructTripleGenerator(Triples constructTriples,
@@ -188,8 +68,7 @@ class ConstructTripleGenerator {
   // the result-table row (triple-patterns are the triples in the
   // CONSTRUCT-clause of a CONSTRUCT-query). The following pipeline takes place
   // conceptually: result-table -> processing batches -> result-table rows ->
-  // triple patterns
-  // -> `StringTriples`
+  // triple patterns -> `StringTriples`
   ad_utility::InputRangeTypeErased<StringTriple>
   generateStringTriplesForResultTable(const TableWithRange& table);
 
@@ -212,28 +91,59 @@ class ConstructTripleGenerator {
 
  private:
   // Scans the template triples to identify all unique `Variables` and
-  // `BlankNodes`, precomputes constants (IRIs/Literals),
-  // and builds the resolution map (which maps each position of the graph
+  // `BlankNodes`, precomputes constants (IRIs/Literals).
+  // Builds the "resolution map" (which maps each position of the graph
   // template to how the term at this position is to be resolved).
   void analyzeTemplate();
 
   // Analyzes a single term and returns its resolution info.
   // Dispatches to the appropriate type-specific handler based on term type.
-  TermResolution analyzeTerm(const GraphTerm& term, size_t tripleIdx,
+  TermLookupInfo analyzeTerm(const GraphTerm& term, size_t tripleIdx,
                              size_t pos, PositionInTriple role);
 
   // Analyzes a `Iri` term: precomputes the string value.
-  TermResolution analyzeIriTerm(const Iri& iri, size_t tripleIdx, size_t pos);
+  TermLookupInfo analyzeIriTerm(const Iri& iri, size_t tripleIdx, size_t pos);
 
   // Analyzes a `Literal` term: precomputes the string value.
-  TermResolution analyzeLiteralTerm(const Literal& literal, size_t tripleIdx,
+  TermLookupInfo analyzeLiteralTerm(const Literal& literal, size_t tripleIdx,
                                     size_t pos, PositionInTriple role);
 
-  // Analyzes a `Variable` term: registers it and precomputes column index.
-  TermResolution analyzeVariableTerm(const Variable& var);
+  // Analyzes a `Variable` term: registers it and precomputes `IdTable` column
+  // index.
+  TermLookupInfo analyzeVariableTerm(const Variable& var);
 
   // Analyzes a `BlankNode` term: registers it and precomputes format strings.
-  TermResolution analyzeBlankNodeTerm(const BlankNode& blankNode);
+  TermLookupInfo analyzeBlankNodeTerm(const BlankNode& blankNode);
+
+  // Instantiates a single triple using the precomputed constants and
+  // the batch evaluation cache for a specific row. Returns an empty
+  // `StringTriple` if any component is UNDEF. `Variable` string values are
+  // provided via the precomputed variableStrings cache (one lookup per
+  // variable per row, reused across all triples in the result-table row).
+  StringTriple instantiateTripleFromBatch(
+      size_t tripleIdx, const BatchEvaluationCache& batchCache,
+      size_t rowInBatch,
+      const std::vector<std::shared_ptr<const std::string>>& variableStrings)
+      const;
+
+  // Helper to get shared_ptr for a term in a triple.
+  // Returns nullptr if the term is UNDEF.
+  std::shared_ptr<const std::string> getTermStringPtr(
+      size_t tripleIdx, size_t pos, const BatchEvaluationCache& batchCache,
+      size_t rowInBatch,
+      const std::vector<std::shared_ptr<const std::string>>& variableStrings)
+      const;
+
+  // Creates an `Id` cache with a statistics logger that logs at INFO level
+  // when destroyed (after query execution completes).
+  std::pair<std::shared_ptr<IdCache>, std::shared_ptr<IdCacheStatsLogger>>
+  createIdCacheWithStats(size_t numRows) const;
+
+  // Populates `variableStrings` with shared_ptr to cached string values for a
+  // row.
+  void lookupVariableStrings(
+      const BatchEvaluationCache& batchCache, size_t rowInBatch,
+      std::vector<std::shared_ptr<const std::string>>& variableStrings) const;
 
   // Evaluates all `Variables` and `BlankNodes` for a batch of result-table
   // rows.
@@ -242,7 +152,7 @@ class ConstructTripleGenerator {
       ql::span<const uint64_t> rowIndices, size_t currentRowOffset,
       IdCache& idCache, IdCacheStatsLogger& statsLogger) const;
 
-  // For each `Variable`, reads all IDs from its column across all batch rows,
+  // For each `Variable`, reads all `Id`s from its column across all batch rows,
   // converts them to strings (using the cache), and stores pointers to those
   // strings in `BatchEvaluationCache`.
   void evaluateVariablesForBatch(BatchEvaluationCache& batchCache,
@@ -258,46 +168,8 @@ class ConstructTripleGenerator {
                                   ql::span<const uint64_t> rowIndices,
                                   size_t currentRowOffset) const;
 
-  // Instantiates a single triple using the precomputed constants and
-  // the batch evaluation cache for a specific row. Returns an empty
-  // `StringTriple` if any component is UNDEF. `Variable` string values are
-  // provided via the precomputed variableStrings cache (one lookup per
-  // variable per row, reused across all triples in the row).
-  StringTriple instantiateTripleFromBatch(
-      size_t tripleIdx, const BatchEvaluationCache& batchCache,
-      size_t rowInBatch,
-      const std::vector<std::shared_ptr<const std::string>>& variableStrings)
-      const;
-
-  // Helper to get shared_ptr for a term in a triple.
-  // Returns nullptr if the term is UNDEF.
-  std::shared_ptr<const std::string> getTermStringPtr(
-      size_t tripleIdx, size_t pos, const BatchEvaluationCache& batchCache,
-      size_t rowInBatch,
-      const std::vector<std::shared_ptr<const std::string>>& variableStrings)
-      const;
-
-  // Creates an ID cache with a statistics logger that logs at INFO level
-  // when destroyed (after query execution completes).
-  std::pair<std::shared_ptr<IdCache>, std::shared_ptr<IdCacheStatsLogger>>
-  createIdCacheWithStats(size_t numRows) const;
-
-  // Populates variableStrings with shared_ptr to cached string values for a
-  // row. Sets nullptr for variables that are not in the result or have UNDEF
-  // values.
-  void lookupVariableStrings(
-      const BatchEvaluationCache& batchCache, size_t rowInBatch,
-      std::vector<std::shared_ptr<const std::string>>& variableStrings) const;
-
-  // Formats a single triple according to the output format.
-  // Returns empty string if any component is UNDEF.
-  std::string formatTriple(const std::shared_ptr<const std::string>& subject,
-                           const std::shared_ptr<const std::string>& predicate,
-                           const std::shared_ptr<const std::string>& object,
-                           ad_utility::MediaType format) const;
-
-  // Processes a single batch and returns the resulting StringTriples.
-  // Used by generateStringTriplesForResultTable to lazily process batches.
+  // Processes a single batch and returns the resulting `StringTriple` objects.
+  // Used by `generateStringTriplesForResultTable` to lazily process batches.
   std::vector<StringTriple> processBatchForStringTriples(
       const TableConstRefWithVocab& tableWithVocab, size_t currentRowOffset,
       IdCache& idCache, IdCacheStatsLogger& statsLogger,
@@ -315,13 +187,10 @@ class ConstructTripleGenerator {
   CancellationHandle cancellationHandle_;
   size_t rowOffset_ = 0;
 
-  // Precomputed constant values for IRIs and Literals.
-  // [tripleIdx][position] -> shared_ptr to constant (nullptr if not a constant)
-  std::vector<std::array<std::string, NUM_TRIPLE_POSITIONS>>
-      precomputedConstants_;
-
-  // Pre-analyzed info for each triple pattern (resolutions_ + skip flag)
-  std::vector<TriplePatternInfo> triplePatternInfos_;
+  // Shared context containing all pre-analyzed template data needed for batch
+  // processing. Created once during template analysis and shared (immutably)
+  // with all ConstructBatchProcessor instances.
+  std::shared_ptr<TripleInstantiationContext> context_;
 
   // Mapping from variable to index in the per-row variable cache
   // `variablesToEvaluate_`.
@@ -329,13 +198,6 @@ class ConstructTripleGenerator {
 
   // Mapping from blank node label to index in the per-row blank node cache
   ad_utility::HashMap<std::string, size_t> blankNodeLabelToIndex_;
-
-  // Ordered list of `Variables` with pre-computed column indices for evaluation
-  std::vector<VariableWithColumnIndex> variablesToEvaluate_;
-
-  // Ordered list of `BlankNodes` with precomputed format info for evaluation
-  // (index corresponds to cache index)
-  std::vector<BlankNodeFormatInfo> blankNodesToEvaluate_;
 };
 
 #endif  // QLEVER_SRC_ENGINE_CONSTRUCTTRIPLEGENERATOR_H

@@ -8,10 +8,8 @@
 
 #include <absl/strings/str_cat.h>
 
-#include <cstdlib>
-#include <iomanip>
-
 #include "backports/StartsWithAndEndsWith.h"
+#include "engine/ConstructBatchProcessor.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "parser/data/ConstructQueryExportContext.h"
 #include "rdfTypes/RdfEscaping.h"
@@ -21,41 +19,6 @@ using ad_utility::InputRangeTypeErased;
 using enum PositionInTriple;
 using StringTriple = ConstructTripleGenerator::StringTriple;
 
-namespace {
-// Parse `QLEVER_CONSTRUCT_BATCH_SIZE` environment variable.
-// Returns the configured value if valid, or `DEFAULT_BATCH_SIZE` otherwise.
-size_t parseBatchSizeFromEnv() {
-  const char* envVal = std::getenv("QLEVER_CONSTRUCT_BATCH_SIZE");
-  if (envVal == nullptr) {
-    AD_LOG_INFO << "CONSTRUCT batch size: "
-                << ConstructTripleGenerator::DEFAULT_BATCH_SIZE
-                << " (default)\n";
-    return ConstructTripleGenerator::DEFAULT_BATCH_SIZE;
-  }
-  try {
-    size_t val = std::stoull(envVal);
-    if (val > 0) {
-      AD_LOG_INFO << "CONSTRUCT batch size from environment: " << val << "\n";
-      return val;
-    }
-    AD_LOG_WARN << "QLEVER_CONSTRUCT_BATCH_SIZE must be > 0, got: " << envVal
-                << ", using default: "
-                << ConstructTripleGenerator::DEFAULT_BATCH_SIZE << "\n";
-  } catch (const std::exception& e) {
-    AD_LOG_WARN << "Invalid QLEVER_CONSTRUCT_BATCH_SIZE value: " << envVal
-                << " (" << e.what() << "), using default: "
-                << ConstructTripleGenerator::DEFAULT_BATCH_SIZE << "\n";
-  }
-  return ConstructTripleGenerator::DEFAULT_BATCH_SIZE;
-}
-}  // namespace
-
-// _____________________________________________________________________________
-size_t ConstructTripleGenerator::getBatchSize() {
-  static const size_t batchSize = parseBatchSizeFromEnv();
-  return batchSize;
-}
-
 // Called once at construction to analyze the CONSTRUCT triple patterns.
 // For each pattern, we determine how each term (subject, predicate, object)
 // will be resolved:
@@ -63,24 +26,31 @@ size_t ConstructTripleGenerator::getBatchSize() {
 // - VARIABLE: Column index is pre-computed for O(1) access per row
 // - BLANK_NODE: Format prefix/suffix are pre-built (row number varies)
 void ConstructTripleGenerator::analyzeTemplate() {
-  precomputedConstants_.resize(templateTriples_.size());
-  triplePatternInfos_.resize(templateTriples_.size());
+  // Create the context that will be shared with ConstructBatchProcessor
+  // instances.
+  context_ = std::make_shared<TripleInstantiationContext>(
+      index_.get(), variableColumns_.get(), cancellationHandle_);
+
+  // Resize context arrays for template analysis.
+  context_->precomputedConstants_.resize(templateTriples_.size());
+  context_->triplePatternInfos_.resize(templateTriples_.size());
 
   for (size_t tripleIdx = 0; tripleIdx < templateTriples_.size(); ++tripleIdx) {
     const auto& triple = templateTriples_[tripleIdx];
-    TriplePatternInfo& info = triplePatternInfos_[tripleIdx];
+    TriplePatternInfo& info = context_->triplePatternInfos_[tripleIdx];
 
     for (size_t pos = 0; pos < NUM_TRIPLE_POSITIONS; ++pos) {
       auto role = static_cast<PositionInTriple>(pos);
-      info.resolutions_[pos] = analyzeTerm(triple[pos], tripleIdx, pos, role);
+      info.lookups_[pos] = analyzeTerm(triple[pos], tripleIdx, pos, role);
     }
   }
 }
 
 // _____________________________________________________________________________
-ConstructTripleGenerator::TermResolution ConstructTripleGenerator::analyzeTerm(
-    const GraphTerm& term, size_t tripleIdx, size_t pos,
-    PositionInTriple role) {
+TermLookupInfo ConstructTripleGenerator::analyzeTerm(const GraphTerm& term,
+                                                     size_t tripleIdx,
+                                                     size_t pos,
+                                                     PositionInTriple role) {
   if (std::holds_alternative<Iri>(term)) {
     return analyzeIriTerm(std::get<Iri>(term), tripleIdx, pos);
   } else if (std::holds_alternative<Literal>(term)) {
@@ -92,37 +62,36 @@ ConstructTripleGenerator::TermResolution ConstructTripleGenerator::analyzeTerm(
   }
   // Unreachable for valid GraphTerm
   // TODO<ms2144> add compile time error throw here.
-  return {TermSource::CONSTANT, 0};
+  return {TermType::CONSTANT, 0};
 }
 
 // _____________________________________________________________________________
-ConstructTripleGenerator::TermResolution
-ConstructTripleGenerator::analyzeIriTerm(const Iri& iri, size_t tripleIdx,
-                                         size_t pos) {
+TermLookupInfo ConstructTripleGenerator::analyzeIriTerm(const Iri& iri,
+                                                        size_t tripleIdx,
+                                                        size_t pos) {
   // evaluate(Iri) always returns a valid string
-  precomputedConstants_[tripleIdx][pos] =
+  context_->precomputedConstants_[tripleIdx][pos] =
       ConstructQueryEvaluator::evaluate(iri);
-  return {TermSource::CONSTANT, tripleIdx};
+  return {TermType::CONSTANT, tripleIdx};
 }
 
 // _____________________________________________________________________________
-ConstructTripleGenerator::TermResolution
-ConstructTripleGenerator::analyzeLiteralTerm(const Literal& literal,
-                                             size_t tripleIdx, size_t pos,
-                                             PositionInTriple role) {
+TermLookupInfo ConstructTripleGenerator::analyzeLiteralTerm(
+    const Literal& literal, size_t tripleIdx, size_t pos,
+    PositionInTriple role) {
   // evaluate(Literal) returns optional - only store if valid
   auto value = ConstructQueryEvaluator::evaluate(literal, role);
   if (value.has_value()) {
-    precomputedConstants_[tripleIdx][pos] = std::move(*value);
+    context_->precomputedConstants_[tripleIdx][pos] = std::move(*value);
   }
-  return {TermSource::CONSTANT, tripleIdx};
+  return {TermType::CONSTANT, tripleIdx};
 }
 
 // _____________________________________________________________________________
-ConstructTripleGenerator::TermResolution
-ConstructTripleGenerator::analyzeVariableTerm(const Variable& var) {
+TermLookupInfo ConstructTripleGenerator::analyzeVariableTerm(
+    const Variable& var) {
   if (!variableToIndex_.contains(var)) {
-    size_t idx = variablesToEvaluate_.size();
+    size_t idx = context_->variablesToEvaluate_.size();
     variableToIndex_[var] = idx;
     // Pre-compute the column index corresponding to the variable in the
     // `IdTable`.
@@ -130,26 +99,27 @@ ConstructTripleGenerator::analyzeVariableTerm(const Variable& var) {
     if (variableColumns_.get().contains(var)) {
       columnIndex = variableColumns_.get().at(var).columnIndex_;
     }
-    variablesToEvaluate_.emplace_back(var, columnIndex);
+    context_->variablesToEvaluate_.emplace_back(
+        VariableWithColumnIndex{var, columnIndex});
   }
-  return {TermSource::VARIABLE, variableToIndex_[var]};
+  return {TermType::VARIABLE, variableToIndex_[var]};
 }
 
 // _____________________________________________________________________________
-ConstructTripleGenerator::TermResolution
-ConstructTripleGenerator::analyzeBlankNodeTerm(const BlankNode& blankNode) {
+TermLookupInfo ConstructTripleGenerator::analyzeBlankNodeTerm(
+    const BlankNode& blankNode) {
   const std::string& label = blankNode.label();
   if (!blankNodeLabelToIndex_.contains(label)) {
-    size_t idx = blankNodesToEvaluate_.size();
+    size_t idx = context_->blankNodesToEvaluate_.size();
     blankNodeLabelToIndex_[label] = idx;
     // Precompute prefix ("_:g" or "_:u") and suffix ("_" + label)
     // so we only need to concatenate the row number per row
     BlankNodeFormatInfo formatInfo;
     formatInfo.prefix_ = blankNode.isGenerated() ? "_:g" : "_:u";
     formatInfo.suffix_ = absl::StrCat("_", label);
-    blankNodesToEvaluate_.push_back(std::move(formatInfo));
+    context_->blankNodesToEvaluate_.push_back(std::move(formatInfo));
   }
-  return {TermSource::BLANK_NODE, blankNodeLabelToIndex_[label]};
+  return {TermType::BLANK_NODE, blankNodeLabelToIndex_[label]};
 }
 
 // _____________________________________________________________________________
@@ -180,8 +150,7 @@ ConstructTripleGenerator::ConstructTripleGenerator(
 //
 // Note: BlankNodes are evaluated row-by-row because their values include
 // the row number and cannot be cached across rows.
-ConstructTripleGenerator::BatchEvaluationCache
-ConstructTripleGenerator::evaluateBatchColumnOriented(
+BatchEvaluationCache ConstructTripleGenerator::evaluateBatchColumnOriented(
     const IdTable& idTable, const LocalVocab& localVocab,
     ql::span<const uint64_t> rowIndices, size_t currentRowOffset,
     IdCache& idCache, IdCacheStatsLogger& statsLogger) const {
@@ -203,18 +172,19 @@ void ConstructTripleGenerator::evaluateVariablesForBatch(
     IdCacheStatsLogger& statsLogger) const {
   const size_t numRows = rowIndices.size();
   auto& cacheStats = statsLogger.stats();
+  const auto& variablesToEvaluate = context_->variablesToEvaluate_;
 
   // Initialize variable strings: [varIdx][rowInBatch]
   // shared_ptr defaults to nullptr, representing UNDEF values.
-  batchCache.variableStrings_.resize(variablesToEvaluate_.size());
+  batchCache.variableStrings_.resize(variablesToEvaluate.size());
   for (auto& column : batchCache.variableStrings_) {
     column.resize(numRows);
   }
 
   // Evaluate variables column-by-column for better cache locality.
   // The IdTable is accessed sequentially for each column.
-  for (size_t varIdx = 0; varIdx < variablesToEvaluate_.size(); ++varIdx) {
-    const auto& varInfo = variablesToEvaluate_[varIdx];
+  for (size_t varIdx = 0; varIdx < variablesToEvaluate.size(); ++varIdx) {
+    const auto& varInfo = variablesToEvaluate[varIdx];
     auto& columnStrings = batchCache.variableStrings_[varIdx];
 
     if (!varInfo.columnIndex_.has_value()) {
@@ -265,9 +235,10 @@ void ConstructTripleGenerator::evaluateBlankNodesForBatch(
     BatchEvaluationCache& batchCache, ql::span<const uint64_t> rowIndices,
     size_t currentRowOffset) const {
   const size_t numRows = rowIndices.size();
+  const auto& blankNodesToEvaluate = context_->blankNodesToEvaluate_;
 
   // Initialize blank node values: [blankNodeIdx][rowInBatch]
-  batchCache.blankNodeValues_.resize(blankNodesToEvaluate_.size());
+  batchCache.blankNodeValues_.resize(blankNodesToEvaluate.size());
   for (auto& column : batchCache.blankNodeValues_) {
     column.resize(numRows);
   }
@@ -275,9 +246,9 @@ void ConstructTripleGenerator::evaluateBlankNodesForBatch(
   // Evaluate blank nodes using precomputed prefix and suffix_.
   // Only the row number needs to be concatenated per row.
   // Format: prefix + (currentRowOffset + rowIdx) + suffix_
-  for (size_t blankIdx = 0; blankIdx < blankNodesToEvaluate_.size();
+  for (size_t blankIdx = 0; blankIdx < blankNodesToEvaluate.size();
        ++blankIdx) {
-    const BlankNodeFormatInfo& formatInfo = blankNodesToEvaluate_[blankIdx];
+    const BlankNodeFormatInfo& formatInfo = blankNodesToEvaluate[blankIdx];
     auto& columnValues = batchCache.blankNodeValues_[blankIdx];
 
     for (size_t rowInBatch = 0; rowInBatch < numRows; ++rowInBatch) {
@@ -292,7 +263,7 @@ void ConstructTripleGenerator::evaluateBlankNodesForBatch(
 // _____________________________________________________________________________
 // Converts precomputed term values into concrete `StringTriples` or formatted
 // strings. Each term position (subject, predicate, object) is resolved based
-// on its TermSource:
+// on its TermType:
 //   CONSTANT    -> Use precomputed string (evaluated once at construction)
 //   VARIABLE    -> Lookup in variableStrings (pointer into IdCache)
 //   BLANK_NODE  -> Use batch cache (row-specific, includes row number)
@@ -339,14 +310,15 @@ ConstructTripleGenerator::generateStringTriplesForResultTable(
       ql::ranges::begin(table.view_), ql::ranges::end(table.view_));
 
   const size_t totalRows = rowIndicesVec->size();
-  const size_t numBatches = (totalRows + getBatchSize() - 1) / getBatchSize();
+  const size_t batchSize = TripleInstantiationContext::getBatchSize();
+  const size_t numBatches = (totalRows + batchSize - 1) / batchSize;
 
   // Process batches lazily, calling processBatchForStringTriples for each.
   auto processBatch = [this, tableWithVocab, currentRowOffset, idCache,
-                       statsLogger, rowIndicesVec,
-                       totalRows](size_t batchIdx) mutable {
-    const size_t batchStart = batchIdx * getBatchSize();
-    const size_t batchEnd = std::min(batchStart + getBatchSize(), totalRows);
+                       statsLogger, rowIndicesVec, totalRows,
+                       batchSize](size_t batchIdx) mutable {
+    const size_t batchStart = batchIdx * batchSize;
+    const size_t batchEnd = std::min(batchStart + batchSize, totalRows);
     ql::span<const uint64_t> batchRowIndices(rowIndicesVec->data() + batchStart,
                                              batchEnd - batchStart);
     return processBatchForStringTriples(tableWithVocab, currentRowOffset,
@@ -375,7 +347,7 @@ ConstructTripleGenerator::processBatchForStringTriples(
   batchTriples.reserve(batchCache.numRows_ * templateTriples_.size());
 
   std::vector<std::shared_ptr<const std::string>> variableStrings(
-      variablesToEvaluate_.size());
+      context_->variablesToEvaluate_.size());
 
   for (size_t rowInBatch = 0; rowInBatch < batchCache.numRows_; ++rowInBatch) {
     lookupVariableStrings(batchCache, rowInBatch, variableStrings);
@@ -399,49 +371,28 @@ std::shared_ptr<const std::string> ConstructTripleGenerator::getTermStringPtr(
     size_t rowInBatch,
     const std::vector<std::shared_ptr<const std::string>>& variableStrings)
     const {
-  const TriplePatternInfo& info = triplePatternInfos_[tripleIdx];
-  const TermResolution& resolution = info.resolutions_[pos];
+  const TriplePatternInfo& info = context_->triplePatternInfos_[tripleIdx];
+  const TermLookupInfo& lookup = info.lookups_[pos];
 
-  using enum ConstructTripleGenerator::TermSource;
-  switch (resolution.source) {
-    case CONSTANT: {
+  switch (lookup.type) {
+    case TermType::CONSTANT: {
       return std::make_shared<std::string>(
-          precomputedConstants_[tripleIdx][pos]);
+          context_->precomputedConstants_[tripleIdx][pos]);
     }
-    case VARIABLE: {
+    case TermType::VARIABLE: {
       // Variable shared_ptr are already stored directly in the batch
       // cache, eliminating hash lookups during instantiation
-      return variableStrings[resolution.index];
+      return variableStrings[lookup.index];
     }
-    case BLANK_NODE: {
+    case TermType::BLANK_NODE: {
       // Blank node values are always valid (computed for each row)
       return std::make_shared<const std::string>(
-          batchCache.getBlankNodeValue(resolution.index, rowInBatch));
+          batchCache.getBlankNodeValue(lookup.index, rowInBatch));
     }
   }
-
+  // TODO<ms2144>: I do not think it is good to ever return a nullptr.
+  // we should probably throw an exception here or sth.
   return nullptr;  // Unreachable
-}
-
-// _____________________________________________________________________________
-// ID Cache Helpers.
-// The ID cache maps `Id` values to their string representations, avoiding
-// redundant vocabulary lookups when the same entity appears multiple times
-// in the result set. High cache hit rates are common for queries with
-// repeated values (e.g., same predicate or shared subjects).
-// Statistics logging helps identify queries where caching is effective
-// (high hit rate) vs. queries with mostly unique values (low hit rate).
-// _____________________________________________________________________________
-ConstructTripleGenerator::IdCacheStatsLogger::~IdCacheStatsLogger() {
-  // Only log if there were a meaningful number of lookups
-  if (stats_.totalLookups() > 1000) {
-    AD_LOG_INFO << "CONSTRUCT IdCache stats - Rows: " << numRows_
-                << ", Capacity: " << cacheCapacity_
-                << ", Lookups: " << stats_.totalLookups()
-                << ", Hits: " << stats_.hits_ << ", Misses: " << stats_.misses_
-                << ", Hit rate: " << std::fixed << std::setprecision(1)
-                << (stats_.hitRate() * 100.0) << "%" << std::endl;
-  }
 }
 
 // _____________________________________________________________________________
@@ -450,10 +401,12 @@ std::pair<std::shared_ptr<ConstructTripleGenerator::IdCache>,
 ConstructTripleGenerator::createIdCacheWithStats(size_t numRows) const {
   // Cache capacity is sized to maximize cross-batch cache hits on repeated
   // values (e.g., predicates that appear in many rows).
-  const size_t numVars = variablesToEvaluate_.size();
+  const size_t numVars = context_->variablesToEvaluate_.size();
   const size_t minCapacityForBatch =
-      getBatchSize() * std::max(numVars, size_t{1}) * 2;
-  const size_t capacity = std::max(MIN_CACHE_CAPACITY, minCapacityForBatch);
+      TripleInstantiationContext::getBatchSize() *
+      std::max(numVars, size_t{1}) * 2;
+  const size_t capacity =
+      std::max(CONSTRUCT_ID_CACHE_MIN_CAPACITY, minCapacityForBatch);
   auto idCache = std::make_shared<IdCache>(capacity);
   auto statsLogger = std::make_shared<IdCacheStatsLogger>(numRows, capacity);
   return {std::move(idCache), std::move(statsLogger)};
@@ -464,185 +417,11 @@ void ConstructTripleGenerator::lookupVariableStrings(
     const BatchEvaluationCache& batchCache, size_t rowInBatch,
     std::vector<std::shared_ptr<const std::string>>& variableStrings) const {
   // Get shared_ptr from the batch cache. Ownership is shared with IdCache.
-  for (size_t varIdx = 0; varIdx < variablesToEvaluate_.size(); ++varIdx) {
+  for (size_t varIdx = 0; varIdx < context_->variablesToEvaluate_.size();
+       ++varIdx) {
     variableStrings[varIdx] = batchCache.getVariableString(varIdx, rowInBatch);
   }
 }
-
-// _____________________________________________________________________________
-// Formats triples for different output formats without intermediate
-// `StringTriple` allocations.
-// Row -> formatTriple(s*,p*,o*) -> yield string (single allocation)
-// _____________________________________________________________________________
-std::string ConstructTripleGenerator::formatTriple(
-    const std::shared_ptr<const std::string>& subject,
-    const std::shared_ptr<const std::string>& predicate,
-    const std::shared_ptr<const std::string>& object,
-    ad_utility::MediaType format) const {
-  if (!subject || !predicate || !object) {
-    return {};
-  }
-
-  switch (format) {
-    case ad_utility::MediaType::turtle: {
-      // Only escape literals (strings starting with "). IRIs and blank nodes
-      // are used as-is, avoiding an unnecessary string copy.
-      if (ql::starts_with(*object, "\"")) {
-        return absl::StrCat(*subject, " ", *predicate, " ",
-                            RdfEscaping::validRDFLiteralFromNormalized(*object),
-                            " .\n");
-      }
-      return absl::StrCat(*subject, " ", *predicate, " ", *object, " .\n");
-    }
-    case ad_utility::MediaType::csv: {
-      return absl::StrCat(RdfEscaping::escapeForCsv(*subject), ",",
-                          RdfEscaping::escapeForCsv(*predicate), ",",
-                          RdfEscaping::escapeForCsv(*object), "\n");
-    }
-    case ad_utility::MediaType::tsv: {
-      return absl::StrCat(RdfEscaping::escapeForTsv(*subject), "\t",
-                          RdfEscaping::escapeForTsv(*predicate), "\t",
-                          RdfEscaping::escapeForTsv(*object), "\n");
-    }
-    default:
-      return {};  // TODO<ms2144>: add proper error throwing here?
-  }
-}
-
-// _____________________________________________________________________________
-// Iterator that yields formatted triples (Turtle/CSV/TSV) one at a time.
-// Implements the `InputRangeFromGet` interface for lazy evaluation.
-class FormattedTripleIterator
-    : public ad_utility::InputRangeFromGet<std::string> {
- public:
-  using IdCache = ConstructTripleGenerator::IdCache;
-  using IdCacheStatsLogger = ConstructTripleGenerator::IdCacheStatsLogger;
-  using BatchEvaluationCache = ConstructTripleGenerator::BatchEvaluationCache;
-
-  FormattedTripleIterator(const ConstructTripleGenerator& generator,
-                          const TableWithRange& table,
-                          ad_utility::MediaType format, size_t currentRowOffset)
-      : generator_(generator),
-        format_(format),
-        tableWithVocab_(table.tableWithVocab_),
-        rowIndicesVec_(ql::ranges::begin(table.view_),
-                       ql::ranges::end(table.view_)),
-        currentRowOffset_(currentRowOffset),
-        variableStrings_(generator.variablesToEvaluate_.size()) {
-    auto [cache, logger] =
-        generator_.createIdCacheWithStats(rowIndicesVec_.size());
-    idCache_ = std::move(cache);
-    statsLogger_ = std::move(logger);
-  }
-
-  std::optional<std::string> get() override {
-    while (batchStart_ < rowIndicesVec_.size()) {
-      generator_.cancellationHandle_->throwIfCancelled();
-
-      loadBatchIfNeeded();
-
-      if (auto result = processCurrentBatch()) {
-        return result;
-      }
-
-      advanceToNextBatch();
-    }
-
-    return std::nullopt;
-  }
-
- private:
-  // Load a new batch of rows for evaluation if we don't have one.
-  void loadBatchIfNeeded() {
-    if (batchCache_.has_value()) {
-      return;
-    }
-
-    const size_t batchEnd =
-        std::min(batchStart_ + batchSize_, rowIndicesVec_.size());
-    ql::span<const uint64_t> batchRowIndices(
-        rowIndicesVec_.data() + batchStart_, batchEnd - batchStart_);
-
-    batchCache_ = generator_.evaluateBatchColumnOriented(
-        tableWithVocab_.idTable(), tableWithVocab_.localVocab(),
-        batchRowIndices, currentRowOffset_, *idCache_, *statsLogger_);
-    rowInBatch_ = 0;
-    tripleIdx_ = 0;
-  }
-
-  // Process rows in the current batch, returning the next formatted triple.
-  // Returns nullopt when the batch is exhausted (caller should advance).
-  std::optional<std::string> processCurrentBatch() {
-    while (rowInBatch_ < batchCache_->numRows_) {
-      if (auto result = processCurrentRow()) {
-        return result;
-      }
-      advanceToNextRow();
-    }
-    return std::nullopt;
-  }
-
-  // Process triples for the current row, returning the next formatted triple.
-  // Returns nullopt when all triples for this row are processed.
-  std::optional<std::string> processCurrentRow() {
-    // Lookup variable strings once per row (reused across all triple patterns)
-    if (tripleIdx_ == 0) {
-      generator_.lookupVariableStrings(*batchCache_, rowInBatch_,
-                                       variableStrings_);
-    }
-
-    while (tripleIdx_ < generator_.templateTriples_.size()) {
-      auto subject = generator_.getTermStringPtr(tripleIdx_, 0, *batchCache_,
-                                                 rowInBatch_, variableStrings_);
-      auto predicate = generator_.getTermStringPtr(
-          tripleIdx_, 1, *batchCache_, rowInBatch_, variableStrings_);
-      auto object = generator_.getTermStringPtr(tripleIdx_, 2, *batchCache_,
-                                                rowInBatch_, variableStrings_);
-
-      ++tripleIdx_;
-
-      std::string formatted =
-          generator_.formatTriple(subject, predicate, object, format_);
-      if (!formatted.empty()) {
-        return formatted;
-      }
-      // Triple was UNDEF (incomplete), continue to next pattern
-    }
-
-    return std::nullopt;
-  }
-
-  void advanceToNextRow() {
-    ++rowInBatch_;
-    tripleIdx_ = 0;
-  }
-
-  void advanceToNextBatch() {
-    batchStart_ += batchSize_;
-    batchCache_.reset();
-  }
-
-  // References to generator state (const, generator outlives iterator)
-  const ConstructTripleGenerator& generator_;
-  ad_utility::MediaType format_;
-
-  // Table data (copied/referenced for iteration lifetime)
-  TableConstRefWithVocab tableWithVocab_;
-  std::vector<uint64_t> rowIndicesVec_;
-  size_t currentRowOffset_;
-
-  // ID cache for avoiding redundant vocabulary lookups
-  std::shared_ptr<IdCache> idCache_;
-  std::shared_ptr<IdCacheStatsLogger> statsLogger_;
-
-  // Iteration state
-  size_t batchSize_ = ConstructTripleGenerator::getBatchSize();
-  size_t batchStart_ = 0;
-  size_t rowInBatch_ = 0;
-  size_t tripleIdx_ = 0;
-  std::optional<BatchEvaluationCache> batchCache_;
-  std::vector<std::shared_ptr<const std::string>> variableStrings_;
-};
 
 // _____________________________________________________________________________
 // Entry point for generating CONSTRUCT query output.
@@ -692,6 +471,6 @@ ConstructTripleGenerator::generateFormattedTriples(
   rowOffset_ += table.tableWithVocab_.idTable().numRows();
 
   return ad_utility::InputRangeTypeErased<std::string>{
-      std::make_unique<FormattedTripleIterator>(*this, table, mediaType,
+      std::make_unique<ConstructBatchProcessor>(context_, table, mediaType,
                                                 currentRowOffset)};
 }
