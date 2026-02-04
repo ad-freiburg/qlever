@@ -7,6 +7,7 @@
 #include "global/Constants.h"
 #include "global/RuntimeParameters.h"
 #include "util/GTestHelpers.h"
+#include "util/RuntimeParametersTestHelpers.h"
 
 using namespace ad_utility;
 using namespace std::chrono_literals;
@@ -15,6 +16,9 @@ using ::testing::AllOf;
 using ::testing::HasSubstr;
 
 TEST(Constants, testDefaultQueryTimeoutIsStriclyPositive) {
+  auto reset =
+      setRuntimeParameterForTest<&RuntimeParameters::defaultQueryTimeout_>(
+          1337s);
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       setRuntimeParameter<&RuntimeParameters::defaultQueryTimeout_>(0s),
       AllOf(HasSubstr("default-query-timeout"), HasSubstr("0s")),
@@ -25,6 +29,17 @@ TEST(Constants, testDefaultQueryTimeoutIsStriclyPositive) {
       std::runtime_error);
   EXPECT_NO_THROW(
       setRuntimeParameter<&RuntimeParameters::defaultQueryTimeout_>(1s));
+}
+
+// _____________________________________________________________________________
+TEST(Constants, testThreadsForPermutationWriterIsStriclyPositive) {
+  auto reset = setRuntimeParameterForTest<
+      &RuntimeParameters::threadsForPermutationWriter_>(1337);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      setRuntimeParameter<&RuntimeParameters::threadsForPermutationWriter_>(0),
+      HasSubstr("threads-for-permutation-writer"), std::runtime_error);
+  EXPECT_NO_THROW(
+      setRuntimeParameter<&RuntimeParameters::threadsForPermutationWriter_>(1));
 }
 
 namespace {

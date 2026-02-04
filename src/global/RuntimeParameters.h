@@ -135,6 +135,10 @@ struct RuntimeParameters {
   MemorySizeParameter sortInMemoryThreshold_{
       ad_utility::MemorySize::gigabytes(5), "sort-in-memory-threshold"};
 
+  // Configure the amount of threads to compress and write blocks per
+  // permutation.
+  SizeT threadsForPermutationWriter_{10, "threads-for-permutation-writer"};
+
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE
   // CONSTRUCTOR, S.T. THEY CAN ALSO BE ACCESSED VIA THE RUNTIME INTERFACE.
