@@ -20,17 +20,17 @@ BatchEvaluationResult ConstructBatchEvaluator::evaluateBatch(
   BatchEvaluationResult batchResult;
   batchResult.numRows_ = rowIndices.size();
 
-  evaluateVariablesForBatch(batchResult, preprocessedConstructTemplate, idTable,
-                            localVocab, rowIndices, currentRowOffset, idCache,
-                            statsLogger);
-  evaluateBlankNodesForBatch(batchResult, preprocessedConstructTemplate,
-                             rowIndices, currentRowOffset);
+  instantiatesVariablesForBatch(batchResult, preprocessedConstructTemplate,
+                                idTable, localVocab, rowIndices,
+                                currentRowOffset, idCache, statsLogger);
+  instantiateBlankNodesForBatch(batchResult, preprocessedConstructTemplate,
+                                rowIndices, currentRowOffset);
 
   return batchResult;
 }
 
 // _____________________________________________________________________________
-void ConstructBatchEvaluator::evaluateVariablesForBatch(
+void ConstructBatchEvaluator::instantiatesVariablesForBatch(
     BatchEvaluationResult& batchResult,
     const PreprocessedConstructTemplate& preprocessedConstructTemplate,
     const IdTable& idTable, const LocalVocab& localVocab,
@@ -40,12 +40,11 @@ void ConstructBatchEvaluator::evaluateVariablesForBatch(
   const auto& variablesToInstantiate =
       preprocessedConstructTemplate.variablesToInstantiate_;
 
-  // Initialize `variableInstantiationResultStrings_`: [varIdx][rowInBatch]
-  // shared_ptr defaults to nullptr, representing UNDEF values.
-  batchResult.variableInstantiationResultStrings_.resize(
-      variablesToInstantiate.size());
-  for (auto& column : batchResult.variableInstantiationResultStrings_) {
-    column.resize(numRows);
+  // Initialize `instantiatedVariables_`: [varIdx][rowInBatch]
+  // Default value is Undef{}, representing unbound variables.
+  batchResult.instantiatedVariables_.resize(variablesToInstantiate.size());
+  for (auto& column : batchResult.instantiatedVariables_) {
+    column.resize(numRows, Undef{});
   }
 
   const VariableToColumnMap& varCols =
@@ -58,21 +57,22 @@ void ConstructBatchEvaluator::evaluateVariablesForBatch(
     const auto& varInfo = variablesToInstantiate[varIdx];
 
     if (!varInfo.columnIndex_.has_value()) {
-      // Variable not in result - all values are nullptr (already default).
+      // variable not in result table: all values of that variable in the
+      // result triple remain Undef.
       continue;
     }
 
-    evaluateSingleVariableForBatch(
-        batchResult.variableInstantiationResultStrings_[varIdx],
-        varInfo.columnIndex_.value(), idTable, localVocab, rowIndices,
-        currentRowOffset, varCols, idx, idCache, cacheStats);
+    evaluateSingleVariableForBatch(batchResult.instantiatedVariables_[varIdx],
+                                   varInfo.columnIndex_.value(), idTable,
+                                   localVocab, rowIndices, currentRowOffset,
+                                   varCols, idx, idCache, cacheStats);
   }
 }
 
 // _____________________________________________________________________________
 void ConstructBatchEvaluator::evaluateSingleVariableForBatch(
-    std::vector<std::shared_ptr<const std::string>>& columnStrings,
-    size_t colIdx, const IdTable& idTable, const LocalVocab& localVocab,
+    std::vector<InstantiatedVariable>& columnResults, size_t colIdx,
+    const IdTable& idTable, const LocalVocab& localVocab,
     ql::span<const uint64_t> rowIndices, size_t currentRowOffset,
     const VariableToColumnMap& varCols, const Index& idx, IdCache& idCache,
     ConstructIdCacheStats& cacheStats) {
@@ -96,8 +96,8 @@ void ConstructBatchEvaluator::evaluateSingleVariableForBatch(
           ConstructQueryExportContext context{
               rowIdx, idTable, localVocab, varCols, idx, currentRowOffset};
 
-          auto value =
-              ConstructQueryEvaluator::evaluateWithColumnIndex(colIdx, context);
+          auto value = ConstructQueryEvaluator::evaluateVariableWithColumnIndex(
+              colIdx, context);
 
           if (value.has_value()) {
             return std::make_shared<const std::string>(std::move(*value));
@@ -109,12 +109,16 @@ void ConstructBatchEvaluator::evaluateSingleVariableForBatch(
       ++cacheStats.hits_;
     }
 
-    columnStrings[rowIdxInBatch] = cachedValue;
+    if (cachedValue) {
+      columnResults[rowIdxInBatch] = cachedValue;
+    } else {
+      columnResults[rowIdxInBatch] = Undef{};
+    }
   }
 }
 
 // _____________________________________________________________________________
-void ConstructBatchEvaluator::evaluateBlankNodesForBatch(
+void ConstructBatchEvaluator::instantiateBlankNodesForBatch(
     BatchEvaluationResult& batchResult,
     const PreprocessedConstructTemplate& blueprint,
     ql::span<const uint64_t> rowIndices, size_t currentRowOffset) {

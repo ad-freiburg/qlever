@@ -44,8 +44,9 @@ class StringTripleAdapter : public ad_utility::InputRangeFromGet<StringTriple> {
   std::optional<StringTriple> get() override {
     auto triple = processor_->get();
     if (!triple) return std::nullopt;
-    return StringTriple{*triple->subject_, *triple->predicate_,
-                        *triple->object_};
+    return StringTriple{InstantiatedTriple::getValue(triple->subject_),
+                        InstantiatedTriple::getValue(triple->predicate_),
+                        InstantiatedTriple::getValue(triple->object_)};
   }
 
  private:

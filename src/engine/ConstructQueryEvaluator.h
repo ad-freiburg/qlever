@@ -41,7 +41,7 @@ class ConstructQueryEvaluator {
   // This avoids the hash lookup in variableColumns during evaluation.
   // If columnIndex is nullopt, the variable is not in the result and
   // nullopt is returned.
-  static std::optional<std::string> evaluateWithColumnIndex(
+  static std::optional<std::string> evaluateVariableWithColumnIndex(
       std::optional<size_t> columnIndex,
       const ConstructQueryExportContext& context);
 

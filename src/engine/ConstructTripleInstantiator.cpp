@@ -10,9 +10,10 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "rdfTypes/RdfEscaping.h"
+#include "util/Exception.h"
 
 // _____________________________________________________________________________
-std::shared_ptr<const std::string> ConstructTripleInstantiator::instantiateTerm(
+InstantiatedVariable ConstructTripleInstantiator::instantiateTerm(
     size_t tripleIdx, size_t pos,
     const PreprocessedConstructTemplate& preprocessedTemplate,
     const BatchEvaluationResult& batchResult, size_t rowIdxInBatch) {
@@ -27,9 +28,9 @@ std::shared_ptr<const std::string> ConstructTripleInstantiator::instantiateTerm(
           preprocessedTemplate.precomputedConstants_[tripleIdx][pos]);
     }
     case TemplateTripleLookupSpec::TermType::VARIABLE: {
-      // Variable shared_ptr are stored in the batch cache, eliminating
-      // hash lookups during instantiation.
-      return batchResult.getVariableString(lookup.index, rowIdxInBatch);
+      // Variable values are stored in the batch result.
+      // May be Undef if the variable is unbound.
+      return batchResult.getEvaluatedVariable(lookup.index, rowIdxInBatch);
     }
     case TemplateTripleLookupSpec::TermType::BLANK_NODE: {
       // Blank node values are always valid (computed for each row).
@@ -37,43 +38,49 @@ std::shared_ptr<const std::string> ConstructTripleInstantiator::instantiateTerm(
           batchResult.getBlankNodeValue(lookup.index, rowIdxInBatch));
     }
   }
-  // TODO<ms2144>: I do not think it is good to ever return a nullptr.
-  // We should probably throw an exception here or sth.
-  return nullptr;  // Unreachable
+  AD_FAIL();  // Unreachable: all enum cases handled above.
 }
 
 // _____________________________________________________________________________
 std::string ConstructTripleInstantiator::formatTriple(
-    const std::shared_ptr<const std::string>& subject,
-    const std::shared_ptr<const std::string>& predicate,
-    const std::shared_ptr<const std::string>& object,
-    ad_utility::MediaType format) {
-  if (!subject || !predicate || !object) {
+    const InstantiatedVariable& subject, const InstantiatedVariable& predicate,
+    const InstantiatedVariable& object, ad_utility::MediaType format) {
+  // Return empty string if any component is Undef.
+  if (std::holds_alternative<Undef>(subject) ||
+      std::holds_alternative<Undef>(predicate) ||
+      std::holds_alternative<Undef>(object)) {
     return {};
   }
+
+  const auto& subjectStr =
+      *std::get<std::shared_ptr<const std::string>>(subject);
+  const auto& predicateStr =
+      *std::get<std::shared_ptr<const std::string>>(predicate);
+  const auto& objectStr = *std::get<std::shared_ptr<const std::string>>(object);
 
   switch (format) {
     case ad_utility::MediaType::turtle: {
       // Only escape literals (strings starting with "). IRIs and blank nodes
       // are used as-is, avoiding an unnecessary string copy.
-      if (ql::starts_with(*object, "\"")) {
-        return absl::StrCat(*subject, " ", *predicate, " ",
-                            RdfEscaping::validRDFLiteralFromNormalized(*object),
-                            " .\n");
+      if (ql::starts_with(objectStr, "\"")) {
+        return absl::StrCat(
+            subjectStr, " ", predicateStr, " ",
+            RdfEscaping::validRDFLiteralFromNormalized(objectStr), " .\n");
       }
-      return absl::StrCat(*subject, " ", *predicate, " ", *object, " .\n");
+      return absl::StrCat(subjectStr, " ", predicateStr, " ", objectStr,
+                          " .\n");
     }
     case ad_utility::MediaType::csv: {
-      return absl::StrCat(RdfEscaping::escapeForCsv(*subject), ",",
-                          RdfEscaping::escapeForCsv(*predicate), ",",
-                          RdfEscaping::escapeForCsv(*object), "\n");
+      return absl::StrCat(RdfEscaping::escapeForCsv(subjectStr), ",",
+                          RdfEscaping::escapeForCsv(predicateStr), ",",
+                          RdfEscaping::escapeForCsv(objectStr), "\n");
     }
     case ad_utility::MediaType::tsv: {
-      return absl::StrCat(RdfEscaping::escapeForTsv(*subject), "\t",
-                          RdfEscaping::escapeForTsv(*predicate), "\t",
-                          RdfEscaping::escapeForTsv(*object), "\n");
+      return absl::StrCat(RdfEscaping::escapeForTsv(subjectStr), "\t",
+                          RdfEscaping::escapeForTsv(predicateStr), "\t",
+                          RdfEscaping::escapeForTsv(objectStr), "\n");
     }
     default:
-      return {};  // TODO<ms2144>: add proper error throwing here?
+      AD_FAIL();  // Unsupported format.
   }
 }

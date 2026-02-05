@@ -42,7 +42,7 @@ class ConstructBatchEvaluator {
   // For each `Variable`, reads all `Id`s from its column across all batch
   // rows, converts them to strings (using `IdCache`), and stores pointers to
   // those strings in `BatchEvaluationResult`.
-  static void evaluateVariablesForBatch(
+  static void instantiatesVariablesForBatch(
       BatchEvaluationResult& batchResult,
       const PreprocessedConstructTemplate& preprocessedConstructTemplate,
       const IdTable& idTable, const LocalVocab& localVocab,
@@ -52,15 +52,15 @@ class ConstructBatchEvaluator {
   // Evaluates a single variable column across all batch rows.
   // Reads IDs from the column, looks up/computes string values via cache.
   static void evaluateSingleVariableForBatch(
-      std::vector<std::shared_ptr<const std::string>>& columnStrings,
-      size_t colIdx, const IdTable& idTable, const LocalVocab& localVocab,
+      std::vector<InstantiatedVariable>& columnResults, size_t colIdx,
+      const IdTable& idTable, const LocalVocab& localVocab,
       ql::span<const uint64_t> rowIndices, size_t currentRowOffset,
       const VariableToColumnMap& varCols, const Index& idx, IdCache& idCache,
       ConstructIdCacheStats& cacheStats);
 
   // Evaluates all `BlankNode` objects for a batch of rows. Uses precomputed
   // prefix/suffix, only concatenating the row number per row.
-  static void evaluateBlankNodesForBatch(
+  static void instantiateBlankNodesForBatch(
       BatchEvaluationResult& batchResult,
       const PreprocessedConstructTemplate& blueprint,
       ql::span<const uint64_t> rowIndices, size_t currentRowOffset);

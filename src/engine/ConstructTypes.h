@@ -11,9 +11,18 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <variant>
 #include <vector>
 
 #include "rdfTypes/Variable.h"
+
+// Tag type representing an unbound variable (UNDEF in SPARQL).
+struct Undef {};
+
+// Result of instantiation a variable for a specific result table row.
+// Either the variable is unbound (Undef) or has a string value.
+using InstantiatedVariable =
+    std::variant<Undef, std::shared_ptr<const std::string>>;
 
 // Number of positions in a triple: subject, predicate, object.
 inline constexpr size_t NUM_TRIPLE_POSITIONS = 3;
@@ -21,18 +30,18 @@ inline constexpr size_t NUM_TRIPLE_POSITIONS = 3;
 // This struct specifies how to instantiate a template triple of the construct
 // graph template. In more detail: This struct contains a
 // `TermInstantiationSpec`, which specifies where the corresponding value which
-// the term is to be instantiated with, has to be looked up.
+// the term is to be instantiated with.
 struct TemplateTripleLookupSpec {
   enum class TermType { CONSTANT, VARIABLE, BLANK_NODE };
 
   // Describes how to look up the value for a term position
   // during triple instantiation.
   // `type`: Indicates whether the term is a CONSTANT, VARIABLE, or BLANK_NODE.
-  // `index`: The idx into the corresponding cache:
-  // For CONSTANT: idx into `precomputedConstants_[tripleIdx]`
-  // For VARIABLE: idx into `variablesToInstantiate_` /
-  // `variableInstantiationResultStrings_` For BLANK_NODE: index into
-  // `blankNodesToEvaluate_` / `blankNodeValues_`
+  // `index`: The index into the corresponding storage:
+  // For CONSTANT: index into `precomputedConstants_[tripleIdx]`
+  // For VARIABLE: index into `variablesToInstantiate_` /
+  // `instantiatedVariables_` For BLANK_NODE: index into `blankNodesToEvaluate_`
+  // / `blankNodeValues_`
   struct TermInstantiationSpec {
     TermType type;
     size_t index;
@@ -59,31 +68,39 @@ struct BlankNodeFormatInfo {
 
 // Result of instantiating a single template triple for a specific row.
 // Contains the resolved string values for subject, predicate, and object.
-// A null shared_ptr indicates UNDEF (variable not bound in the result).
+// Each component is either Undef (variable unbound) or a valid string.
 struct InstantiatedTriple {
-  std::shared_ptr<const std::string> subject_;
-  std::shared_ptr<const std::string> predicate_;
-  std::shared_ptr<const std::string> object_;
+  InstantiatedVariable subject_;
+  InstantiatedVariable predicate_;
+  InstantiatedVariable object_;
 
-  // Returns true if all three components are valid (non-null).
-  bool isComplete() const { return subject_ && predicate_ && object_; }
+  // Returns true if all three components have values (not Undef).
+  bool isComplete() const {
+    return !std::holds_alternative<Undef>(subject_) &&
+           !std::holds_alternative<Undef>(predicate_) &&
+           !std::holds_alternative<Undef>(object_);
+  }
+
+  // Get string value for a component. Precondition: component is not Undef.
+  static const std::string& getValue(const InstantiatedVariable& var) {
+    return *std::get<std::shared_ptr<const std::string>>(var);
+  }
 };
 
-// Cache for batch-evaluated `Variable` objects and `BlankNode` objects.
+// Result of batch-evaluating `Variable` objects and `BlankNode` objects.
 // This stores the results of evaluating all variables and blank nodes
 // for a batch of rows, enabling efficient lookup during triple instantiation.
 struct BatchEvaluationResult {
-  // maps: variable idx -> idx of row in batch -> shared_ptr<string>
-  std::vector<std::vector<std::shared_ptr<const std::string>>>
-      variableInstantiationResultStrings_;
+  // maps: variable idx -> idx of row in batch -> InstantiatedVariable
+  std::vector<std::vector<InstantiatedVariable>> instantiatedVariables_;
   // maps: blank node idx -> idx of row in batch -> string value
   std::vector<std::vector<std::string>> blankNodeValues_;
   size_t numRows_ = 0;
 
-  // Get shared_ptr for a specific variable at a row in the batch.
-  const std::shared_ptr<const std::string>& getVariableString(
-      size_t varIdx, size_t rowInBatch) const {
-    return variableInstantiationResultStrings_[varIdx][rowInBatch];
+  // Get the evaluated variable for a specific variable at a row in the batch.
+  const InstantiatedVariable& getEvaluatedVariable(size_t varIdx,
+                                                   size_t rowInBatch) const {
+    return instantiatedVariables_[varIdx][rowInBatch];
   }
 
   // Get string for a specific blank node at a row in the batch.
