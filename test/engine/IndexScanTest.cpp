@@ -2036,20 +2036,19 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesEventuallyPushDummyBlock) {
       P{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}},
       P{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}},
       P{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}},
-      P{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}},
       P{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}}};
 
   auto [joinSideResults, scanResults] = consumeRanges(
       scan.prefilterTables(LazyResult{std::move(joinSide)}, 0, false));
 
   ASSERT_EQ(scanResults.size(), 1);
-  ASSERT_EQ(joinSideResults.size(), 7);
+  ASSERT_EQ(joinSideResults.size(), 6);
 
   EXPECT_TRUE(scanResults.at(0).localVocab_.empty());
-
   EXPECT_EQ(
       scanResults.at(0).idTable_,
       tableFromTriples({{iri("<a>"), iri("<A>")}, {iri("<b>"), iri("<B>")}}));
+
   for (const auto& [idTable, localVocab] : joinSideResults) {
     EXPECT_TRUE(localVocab.empty());
     EXPECT_EQ(idTable, makeIdTableFromVector({{Id::makeFromBool(true)}}));
