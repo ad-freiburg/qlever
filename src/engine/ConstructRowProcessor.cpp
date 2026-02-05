@@ -16,9 +16,10 @@ ConstructRowProcessor::ConstructRowProcessor(
                      ql::ranges::end(table.view_)),
       currentRowOffset_(currentRowOffset),
       batchSize_(ConstructRowProcessor::getBatchSize()) {
-  auto [cache, logger] = createIdCacheWithStats(rowIndicesVec_.size());
-  idCache_ = std::move(cache);
-  statsLogger_ = std::move(logger);
+  idCache_ = createIdCache();
+  // Logger references the cache's stats; logs when destroyed.
+  statsLogger_ =
+      std::make_unique<IdCacheStatsLogger>(rowIndicesVec_.size(), *idCache_);
 }
 
 // _____________________________________________________________________________
@@ -52,7 +53,7 @@ void ConstructRowProcessor::loadBatchIfNeeded() {
   batchEvaluationResult_ = ConstructBatchEvaluator::evaluateBatch(
       *preprocessedConstructTemplate_, tableWithVocab_.idTable(),
       tableWithVocab_.localVocab(), batchRowIndices, currentRowOffset_,
-      *idCache_, *statsLogger_);
+      *idCache_);
 
   // After we are done processing the batch, reset the indices for iterating
   // over the rows/triples of the batch.
@@ -113,17 +114,14 @@ void ConstructRowProcessor::advanceToNextBatch() {
 }
 
 // _____________________________________________________________________________
-std::pair<std::shared_ptr<ConstructRowProcessor::IdCache>,
-          std::shared_ptr<ConstructRowProcessor::IdCacheStatsLogger>>
-ConstructRowProcessor::createIdCacheWithStats(size_t numRows) const {
-  // TODO<ms2144>: wtf is going on here...
+std::shared_ptr<ConstructRowProcessor::IdCache>
+ConstructRowProcessor::createIdCache() const {
   const size_t numVars =
       preprocessedConstructTemplate_->variablesToInstantiate_.size();
+  // Capacity: at least batch_size * num_vars * 2, or minimum capacity.
   const size_t minCapacityForBatch =
       ConstructRowProcessor::getBatchSize() * std::max(numVars, size_t{1}) * 2;
   const size_t capacity =
       std::max(CONSTRUCT_ID_CACHE_MIN_CAPACITY, minCapacityForBatch);
-  auto idCache = std::make_shared<IdCache>(capacity);
-  auto statsLogger = std::make_shared<IdCacheStatsLogger>(numRows, capacity);
-  return {std::move(idCache), std::move(statsLogger)};
+  return std::make_shared<IdCache>(capacity);
 }

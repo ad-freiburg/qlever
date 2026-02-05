@@ -36,7 +36,7 @@ class ConstructBatchEvaluator {
       const PreprocessedConstructTemplate& preprocessedConstructTemplate,
       const IdTable& idTable, const LocalVocab& localVocab,
       ql::span<const uint64_t> rowIndices, size_t currentRowOffset,
-      IdCache& idCache, ConstructIdCacheStatsLogger& statsLogger);
+      IdCache& idCache);
 
  private:
   // For each `Variable`, reads all `Id`s from its column across all batch
@@ -47,7 +47,7 @@ class ConstructBatchEvaluator {
       const PreprocessedConstructTemplate& preprocessedConstructTemplate,
       const IdTable& idTable, const LocalVocab& localVocab,
       ql::span<const uint64_t> rowIndices, size_t currentRowOffset,
-      IdCache& idCache, ConstructIdCacheStatsLogger& statsLogger);
+      IdCache& idCache);
 
   // Evaluates a single variable column across all batch rows.
   // Reads IDs from the column, looks up/computes string values via cache.
@@ -55,8 +55,14 @@ class ConstructBatchEvaluator {
       std::vector<InstantiatedVariable>& columnResults, size_t colIdx,
       const IdTable& idTable, const LocalVocab& localVocab,
       ql::span<const uint64_t> rowIndices, size_t currentRowOffset,
-      const VariableToColumnMap& varCols, const Index& idx, IdCache& idCache,
-      ConstructIdCacheStats& cacheStats);
+      const VariableToColumnMap& varCols, const Index& idx, IdCache& idCache);
+
+  // Computes the string value for an Id at a given position in the IdTable.
+  // Returns nullptr if the Id represents an undefined value.
+  static std::shared_ptr<const std::string> computeIdString(
+      size_t colIdx, size_t rowIdx, const IdTable& idTable,
+      const LocalVocab& localVocab, size_t currentRowOffset,
+      const VariableToColumnMap& varCols, const Index& idx);
 
   // Evaluates all `BlankNode` objects for a batch of rows. Uses precomputed
   // prefix/suffix, only concatenating the row number per row.

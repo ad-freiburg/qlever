@@ -16,13 +16,13 @@ BatchEvaluationResult ConstructBatchEvaluator::evaluateBatch(
     const PreprocessedConstructTemplate& preprocessedConstructTemplate,
     const IdTable& idTable, const LocalVocab& localVocab,
     ql::span<const uint64_t> rowIndices, size_t currentRowOffset,
-    IdCache& idCache, ConstructIdCacheStatsLogger& statsLogger) {
+    IdCache& idCache) {
   BatchEvaluationResult batchResult;
   batchResult.numRows_ = rowIndices.size();
 
   instantiatesVariablesForBatch(batchResult, preprocessedConstructTemplate,
                                 idTable, localVocab, rowIndices,
-                                currentRowOffset, idCache, statsLogger);
+                                currentRowOffset, idCache);
   instantiateBlankNodesForBatch(batchResult, preprocessedConstructTemplate,
                                 rowIndices, currentRowOffset);
 
@@ -35,7 +35,7 @@ void ConstructBatchEvaluator::instantiatesVariablesForBatch(
     const PreprocessedConstructTemplate& preprocessedConstructTemplate,
     const IdTable& idTable, const LocalVocab& localVocab,
     ql::span<const uint64_t> rowIndices, size_t currentRowOffset,
-    IdCache& idCache, ConstructIdCacheStatsLogger& statsLogger) {
+    IdCache& idCache) {
   const size_t numRows = rowIndices.size();
   const auto& variablesToInstantiate =
       preprocessedConstructTemplate.variablesToInstantiate_;
@@ -50,22 +50,20 @@ void ConstructBatchEvaluator::instantiatesVariablesForBatch(
   const VariableToColumnMap& varCols =
       preprocessedConstructTemplate.variableColumns_.get();
   const Index& idx = preprocessedConstructTemplate.index_.get();
-  auto& cacheStats = statsLogger.stats();
 
   // Evaluate variables column-by-column for better cache locality.
   for (size_t varIdx = 0; varIdx < variablesToInstantiate.size(); ++varIdx) {
     const auto& varInfo = variablesToInstantiate[varIdx];
 
     if (!varInfo.columnIndex_.has_value()) {
-      // variable not in result table: all values of that variable in the
-      // result triple remain Undef.
+      // Variable not in result table: all values remain Undef.
       continue;
     }
 
     evaluateSingleVariableForBatch(batchResult.instantiatedVariables_[varIdx],
                                    varInfo.columnIndex_.value(), idTable,
                                    localVocab, rowIndices, currentRowOffset,
-                                   varCols, idx, idCache, cacheStats);
+                                   varCols, idx, idCache);
   }
 }
 
@@ -74,47 +72,42 @@ void ConstructBatchEvaluator::evaluateSingleVariableForBatch(
     std::vector<InstantiatedVariable>& columnResults, size_t colIdx,
     const IdTable& idTable, const LocalVocab& localVocab,
     ql::span<const uint64_t> rowIndices, size_t currentRowOffset,
-    const VariableToColumnMap& varCols, const Index& idx, IdCache& idCache,
-    ConstructIdCacheStats& cacheStats) {
+    const VariableToColumnMap& varCols, const Index& idx, IdCache& idCache) {
   // Read all IDs from this column for all rows in the batch,
-  // look up their string values in the cache, and share them with the batch.
+  // and look up their string values in the cache.
   for (size_t rowIdxInBatch = 0; rowIdxInBatch < rowIndices.size();
        ++rowIdxInBatch) {
     const uint64_t rowIdx = rowIndices[rowIdxInBatch];
     Id id = idTable(rowIdx, colIdx);
 
-    // Use LRU cache's getOrCompute: returns cached value or computes and
-    // caches it.
-    size_t missesBefore = cacheStats.misses_;
-
+    // Cache handles statistics tracking internally.
     const std::shared_ptr<const std::string>& cachedValue =
-        idCache.getOrCompute(id, [&cacheStats, &varCols, &idx, &colIdx, rowIdx,
-                                  &idTable, &localVocab,
-                                  currentRowOffset](const Id&) {
-          ++cacheStats.misses_;
-
-          ConstructQueryExportContext context{
-              rowIdx, idTable, localVocab, varCols, idx, currentRowOffset};
-
-          auto value = ConstructQueryEvaluator::evaluateVariableWithColumnIndex(
-              colIdx, context);
-
-          if (value.has_value()) {
-            return std::make_shared<const std::string>(std::move(*value));
-          }
-          return std::shared_ptr<const std::string>{};
+        idCache.getOrCompute(id, [&](const Id&) {
+          return computeIdString(colIdx, rowIdx, idTable, localVocab,
+                                 currentRowOffset, varCols, idx);
         });
 
-    if (cacheStats.misses_ == missesBefore) {
-      ++cacheStats.hits_;
-    }
-
-    if (cachedValue) {
-      columnResults[rowIdxInBatch] = cachedValue;
-    } else {
-      columnResults[rowIdxInBatch] = Undef{};
-    }
+    columnResults[rowIdxInBatch] = cachedValue
+                                       ? InstantiatedVariable{cachedValue}
+                                       : InstantiatedVariable{Undef{}};
   }
+}
+
+// _____________________________________________________________________________
+std::shared_ptr<const std::string> ConstructBatchEvaluator::computeIdString(
+    size_t colIdx, size_t rowIdx, const IdTable& idTable,
+    const LocalVocab& localVocab, size_t currentRowOffset,
+    const VariableToColumnMap& varCols, const Index& idx) {
+  ConstructQueryExportContext context{rowIdx,  idTable, localVocab,
+                                      varCols, idx,     currentRowOffset};
+
+  auto value =
+      ConstructQueryEvaluator::evaluateVariableWithColumnIndex(colIdx, context);
+
+  if (value.has_value()) {
+    return std::make_shared<const std::string>(std::move(*value));
+  }
+  return nullptr;
 }
 
 // _____________________________________________________________________________

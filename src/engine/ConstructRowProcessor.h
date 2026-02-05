@@ -44,10 +44,8 @@ class ConstructRowProcessor
   std::optional<InstantiatedTriple> get() override;
 
  private:
-  // Creates an `Id` cache with a statistics logger that logs at INFO level
-  // when destroyed (after query execution completes).
-  std::pair<std::shared_ptr<IdCache>, std::shared_ptr<IdCacheStatsLogger>>
-  createIdCacheWithStats(size_t numRows) const;
+  // Creates an `Id` cache with appropriate capacity.
+  std::shared_ptr<IdCache> createIdCache() const;
 
   // Load a new batch of rows for evaluation if we don't have one.
   void loadBatchIfNeeded();
@@ -73,8 +71,10 @@ class ConstructRowProcessor
   size_t currentRowOffset_;
 
   // `Id` cache for avoiding redundant vocabulary lookups.
+  // Note: statsLogger_ must be destroyed before idCache_ (declared after it)
+  // because the logger references the cache's stats.
   std::shared_ptr<IdCache> idCache_;
-  std::shared_ptr<IdCacheStatsLogger> statsLogger_;
+  std::unique_ptr<IdCacheStatsLogger> statsLogger_;
 
   // Iteration state.
   size_t batchSize_;

@@ -12,13 +12,14 @@
 
 // _____________________________________________________________________________
 ConstructIdCacheStatsLogger::~ConstructIdCacheStatsLogger() {
+  const auto& stats = cache_.stats();
   // Only log if there were a meaningful number of lookups
-  if (stats_.totalLookups() > 1000) {
+  if (stats.totalLookups() > 1000) {
     AD_LOG_INFO << "CONSTRUCT IdCache stats - Rows: " << numRows_
-                << ", Capacity: " << cacheCapacity_
-                << ", Lookups: " << stats_.totalLookups()
-                << ", Hits: " << stats_.hits_ << ", Misses: " << stats_.misses_
+                << ", Capacity: " << cache_.capacity()
+                << ", Lookups: " << stats.totalLookups()
+                << ", Hits: " << stats.hits_ << ", Misses: " << stats.misses_
                 << ", Hit rate: " << std::fixed << std::setprecision(1)
-                << (stats_.hitRate() * 100.0) << "%" << std::endl;
+                << (stats.hitRate() * 100.0) << "%" << std::endl;
   }
 }

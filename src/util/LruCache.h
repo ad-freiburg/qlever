@@ -62,6 +62,8 @@ class LRUCache {
     AD_CORRECTNESS_CHECK(result.second);
     return result.first->second.first;
   }
+
+  size_t capacity() const { return capacity_; }
 };
 
 }  // namespace ad_utility::util
