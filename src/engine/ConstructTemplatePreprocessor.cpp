@@ -121,14 +121,14 @@ ConstructTemplatePreprocessor::preprocessBlankNodeTerm(
     ad_utility::HashMap<std::string, size_t>& blankNodeLabelToIndex) {
   const std::string& label = blankNode.label();
   if (!blankNodeLabelToIndex.contains(label)) {
-    size_t idx = result.blankNodesToEvaluate_.size();
+    size_t idx = result.blankNodesToInstantiate_.size();
     blankNodeLabelToIndex[label] = idx;
     // Precompute prefix ("_:g" or "_:u") and suffix ("_" + label)
     // so we only need to concatenate the row number per row
     BlankNodeFormatInfo formatInfo;
     formatInfo.prefix_ = blankNode.isGenerated() ? "_:g" : "_:u";
     formatInfo.suffix_ = absl::StrCat("_", label);
-    result.blankNodesToEvaluate_.push_back(std::move(formatInfo));
+    result.blankNodesToInstantiate_.push_back(std::move(formatInfo));
   }
   return {TemplateTripleLookupSpec::TermType::BLANK_NODE,
           blankNodeLabelToIndex[label]};

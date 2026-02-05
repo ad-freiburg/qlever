@@ -42,7 +42,7 @@ class ConstructBatchEvaluator {
   // For each `Variable`, reads all `Id`s from its column across all batch
   // rows, converts them to strings (using `IdCache`), and stores pointers to
   // those strings in `BatchEvaluationResult`.
-  static void instantiatesVariablesForBatch(
+  static void instantiateVariablesForBatch(
       BatchEvaluationResult& batchResult,
       const PreprocessedConstructTemplate& preprocessedConstructTemplate,
       const IdTable& idTable, const LocalVocab& localVocab,
@@ -51,15 +51,15 @@ class ConstructBatchEvaluator {
 
   // Evaluates a single variable column across all batch rows.
   // Reads IDs from the column, looks up/computes string values via cache.
-  static void evaluateSingleVariableForBatch(
-      std::vector<InstantiatedVariable>& columnResults, size_t colIdx,
+  static void instantiateSingleVariableForBatch(
+      std::vector<InstantiatedTerm>& columnResults, size_t colIdx,
       const IdTable& idTable, const LocalVocab& localVocab,
       ql::span<const uint64_t> rowIndices, size_t currentRowOffset,
       const VariableToColumnMap& varCols, const Index& idx, IdCache& idCache);
 
-  // Computes the string value for an Id at a given position in the IdTable.
-  // Returns nullptr if the Id represents an undefined value.
-  static std::shared_ptr<const std::string> computeIdString(
+  // Computes the InstantiatedTerm for an Id at a given position.
+  // Returns Undef if the Id represents an undefined value.
+  static InstantiatedTerm computeVariableInstantiation(
       size_t colIdx, size_t rowIdx, const IdTable& idTable,
       const LocalVocab& localVocab, size_t currentRowOffset,
       const VariableToColumnMap& varCols, const Index& idx);

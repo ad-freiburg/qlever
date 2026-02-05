@@ -14,7 +14,7 @@ using StringTriple = ConstructTripleGenerator::StringTriple;
 using CancellationHandle = ad_utility::SharedCancellationHandle;
 
 // _____________________________________________________________________________
-// Adapter that transforms InstantiatedTriple to formatted strings.
+// Adapter that transforms `InstantiatedTriple` to formatted strings.
 class FormattedTripleAdapter
     : public ad_utility::InputRangeFromGet<std::string> {
  public:
@@ -35,7 +35,7 @@ class FormattedTripleAdapter
 };
 
 // _____________________________________________________________________________
-// Adapter that transforms InstantiatedTriple to StringTriple.
+// Adapter that transforms `InstantiatedTriple` to `StringTriple`.
 class StringTripleAdapter : public ad_utility::InputRangeFromGet<StringTriple> {
  public:
   explicit StringTripleAdapter(std::unique_ptr<ConstructRowProcessor> processor)

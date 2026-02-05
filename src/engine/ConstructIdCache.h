@@ -10,6 +10,7 @@
 #include <memory>
 #include <string>
 
+#include "engine/ConstructTypes.h"
 #include "global/Id.h"
 #include "util/LruCache.h"
 
@@ -29,8 +30,8 @@ struct ConstructIdCacheStats {
   }
 };
 
-// Cache for ID-to-string conversions to avoid redundant vocabulary lookups
-// when the same ID appears multiple times across rows.
+// Cache for ID-to-InstantiatedTerm conversions to avoid redundant
+// vocabulary lookups when the same ID appears multiple times across rows.
 // Uses LRU eviction to bound memory usage for queries with many unique IDs.
 // Statistics (hits/misses) are tracked internally.
 class ConstructIdCache {
@@ -40,8 +41,7 @@ class ConstructIdCache {
   // Look up the value for a key, computing it if not present.
   // Statistics are tracked automatically.
   template <typename ComputeFunc>
-  const std::shared_ptr<const std::string>& getOrCompute(
-      const Id& key, ComputeFunc&& compute) {
+  const InstantiatedTerm& getOrCompute(const Id& key, ComputeFunc&& compute) {
     bool wasHit = true;
     const auto& result = cache_.getOrCompute(key, [&](const Id& k) {
       wasHit = false;
@@ -59,7 +59,7 @@ class ConstructIdCache {
   size_t capacity() const { return cache_.capacity(); }
 
  private:
-  ad_utility::util::LRUCache<Id, std::shared_ptr<const std::string>> cache_;
+  ad_utility::util::LRUCache<Id, InstantiatedTerm> cache_;
   ConstructIdCacheStats stats_;
 };
 

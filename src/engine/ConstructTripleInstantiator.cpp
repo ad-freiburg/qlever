@@ -13,7 +13,7 @@
 #include "util/Exception.h"
 
 // _____________________________________________________________________________
-InstantiatedVariable ConstructTripleInstantiator::instantiateTerm(
+InstantiatedTerm ConstructTripleInstantiator::instantiateTerm(
     size_t tripleIdx, size_t pos,
     const PreprocessedConstructTemplate& preprocessedTemplate,
     const BatchEvaluationResult& batchResult, size_t rowIdxInBatch) {
@@ -43,8 +43,8 @@ InstantiatedVariable ConstructTripleInstantiator::instantiateTerm(
 
 // _____________________________________________________________________________
 std::string ConstructTripleInstantiator::formatTriple(
-    const InstantiatedVariable& subject, const InstantiatedVariable& predicate,
-    const InstantiatedVariable& object, ad_utility::MediaType format) {
+    const InstantiatedTerm& subject, const InstantiatedTerm& predicate,
+    const InstantiatedTerm& object, ad_utility::MediaType format) {
   // Return empty string if any component is Undef.
   if (std::holds_alternative<Undef>(subject) ||
       std::holds_alternative<Undef>(predicate) ||

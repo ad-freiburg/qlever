@@ -8,9 +8,10 @@
 
 // _____________________________________________________________________________
 ConstructRowProcessor::ConstructRowProcessor(
-    std::shared_ptr<const PreprocessedConstructTemplate> blueprint,
+    std::shared_ptr<const PreprocessedConstructTemplate>
+        preprocessedConstructTemplate,
     const TableWithRange& table, size_t currentRowOffset)
-    : preprocessedConstructTemplate_(std::move(blueprint)),
+    : preprocessedConstructTemplate_(std::move(preprocessedConstructTemplate)),
       tableWithVocab_(table.tableWithVocab_),
       rowIndicesVec_(ql::ranges::begin(table.view_),
                      ql::ranges::end(table.view_)),

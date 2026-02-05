@@ -24,16 +24,16 @@ class ConstructTripleInstantiator {
   // `tripleIdx`: index of the triple in the template
   // `pos`: position within the triple (0=subject, 1=predicate, 2=object)
   // `rowIdxInBatch`: which row in the current batch
-  static InstantiatedVariable instantiateTerm(
+  static InstantiatedTerm instantiateTerm(
       size_t tripleIdx, size_t pos,
       const PreprocessedConstructTemplate& preprocessedTemplate,
       const BatchEvaluationResult& batchResult, size_t rowIdxInBatch);
 
   // Formats a triple (subject, predicate, object) according to the output
   // format. Returns empty string if any component is Undef.
-  static std::string formatTriple(const InstantiatedVariable& subject,
-                                  const InstantiatedVariable& predicate,
-                                  const InstantiatedVariable& object,
+  static std::string formatTriple(const InstantiatedTerm& subject,
+                                  const InstantiatedTerm& predicate,
+                                  const InstantiatedTerm& object,
                                   ad_utility::MediaType format);
 };
 
