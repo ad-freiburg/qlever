@@ -20,11 +20,10 @@
 #include "util/stream_generator.h"
 
 // _____________________________________________________________________________
-// Batch processor that iterates through result table rows and yields
-// instantiated triples. Handles batch loading, evaluation, and iteration.
-// Yields InstantiatedTriple structs; callers transform to desired output
-// format.
-class ConstructBatchProcessor
+// Processes the rows of the result table and yields instantiated triples.
+// This is done in batches of rows of the result table. Handles batch loading,
+// evaluation, and iteration.
+class ConstructRowProcessor
     : public ad_utility::InputRangeFromGet<InstantiatedTriple> {
  public:
   using IdCache = ConstructIdCache;
@@ -36,7 +35,7 @@ class ConstructBatchProcessor
   static size_t getBatchSize() { return DEFAULT_BATCH_SIZE; }
 
   // Constructor takes all data needed for processing.
-  ConstructBatchProcessor(
+  ConstructRowProcessor(
       std::shared_ptr<const PreprocessedConstructTemplate> blueprint,
       const TableWithRange& table, size_t currentRowOffset);
 

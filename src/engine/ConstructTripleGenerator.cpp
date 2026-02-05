@@ -6,7 +6,7 @@
 
 #include "engine/ConstructTripleGenerator.h"
 
-#include "engine/ConstructBatchProcessor.h"
+#include "engine/ConstructRowProcessor.h"
 #include "engine/ExportQueryExecutionTrees.h"
 
 using ad_utility::InputRangeTypeErased;
@@ -18,7 +18,7 @@ using CancellationHandle = ad_utility::SharedCancellationHandle;
 class FormattedTripleAdapter
     : public ad_utility::InputRangeFromGet<std::string> {
  public:
-  FormattedTripleAdapter(std::unique_ptr<ConstructBatchProcessor> processor,
+  FormattedTripleAdapter(std::unique_ptr<ConstructRowProcessor> processor,
                          ad_utility::MediaType format)
       : processor_(std::move(processor)), format_(format) {}
 
@@ -30,7 +30,7 @@ class FormattedTripleAdapter
   }
 
  private:
-  std::unique_ptr<ConstructBatchProcessor> processor_;
+  std::unique_ptr<ConstructRowProcessor> processor_;
   ad_utility::MediaType format_;
 };
 
@@ -38,8 +38,7 @@ class FormattedTripleAdapter
 // Adapter that transforms InstantiatedTriple to StringTriple.
 class StringTripleAdapter : public ad_utility::InputRangeFromGet<StringTriple> {
  public:
-  explicit StringTripleAdapter(
-      std::unique_ptr<ConstructBatchProcessor> processor)
+  explicit StringTripleAdapter(std::unique_ptr<ConstructRowProcessor> processor)
       : processor_(std::move(processor)) {}
 
   std::optional<StringTriple> get() override {
@@ -50,7 +49,7 @@ class StringTripleAdapter : public ad_utility::InputRangeFromGet<StringTriple> {
   }
 
  private:
-  std::unique_ptr<ConstructBatchProcessor> processor_;
+  std::unique_ptr<ConstructRowProcessor> processor_;
 };
 
 // _____________________________________________________________________________
@@ -76,7 +75,7 @@ ConstructTripleGenerator::generateStringTriplesForResultTable(
   const size_t currentRowOffset = rowOffset_;
   rowOffset_ += table.tableWithVocab_.idTable().numRows();
 
-  auto processor = std::make_unique<ConstructBatchProcessor>(
+  auto processor = std::make_unique<ConstructRowProcessor>(
       preprocessedConstructTemplate_, table, currentRowOffset);
 
   return ad_utility::InputRangeTypeErased<StringTriple>{
@@ -130,7 +129,7 @@ ConstructTripleGenerator::generateFormattedTriples(
   const size_t currentRowOffset = rowOffset_;
   rowOffset_ += table.tableWithVocab_.idTable().numRows();
 
-  auto processor = std::make_unique<ConstructBatchProcessor>(
+  auto processor = std::make_unique<ConstructRowProcessor>(
       preprocessedConstructTemplate_, table, currentRowOffset);
 
   return ad_utility::InputRangeTypeErased<std::string>{

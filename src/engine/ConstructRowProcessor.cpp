@@ -4,10 +4,10 @@
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
-#include "engine/ConstructBatchProcessor.h"
+#include "engine/ConstructRowProcessor.h"
 
 // _____________________________________________________________________________
-ConstructBatchProcessor::ConstructBatchProcessor(
+ConstructRowProcessor::ConstructRowProcessor(
     std::shared_ptr<const PreprocessedConstructTemplate> blueprint,
     const TableWithRange& table, size_t currentRowOffset)
     : preprocessedConstructTemplate_(std::move(blueprint)),
@@ -15,14 +15,14 @@ ConstructBatchProcessor::ConstructBatchProcessor(
       rowIndicesVec_(ql::ranges::begin(table.view_),
                      ql::ranges::end(table.view_)),
       currentRowOffset_(currentRowOffset),
-      batchSize_(ConstructBatchProcessor::getBatchSize()) {
+      batchSize_(ConstructRowProcessor::getBatchSize()) {
   auto [cache, logger] = createIdCacheWithStats(rowIndicesVec_.size());
   idCache_ = std::move(cache);
   statsLogger_ = std::move(logger);
 }
 
 // _____________________________________________________________________________
-std::optional<InstantiatedTriple> ConstructBatchProcessor::get() {
+std::optional<InstantiatedTriple> ConstructRowProcessor::get() {
   while (batchStart_ < rowIndicesVec_.size()) {
     preprocessedConstructTemplate_->cancellationHandle_->throwIfCancelled();
 
@@ -39,7 +39,7 @@ std::optional<InstantiatedTriple> ConstructBatchProcessor::get() {
 }
 
 // _____________________________________________________________________________
-void ConstructBatchProcessor::loadBatchIfNeeded() {
+void ConstructRowProcessor::loadBatchIfNeeded() {
   if (batchCache_.has_value()) {
     return;
   }
@@ -61,8 +61,7 @@ void ConstructBatchProcessor::loadBatchIfNeeded() {
 }
 
 // _____________________________________________________________________________
-std::optional<InstantiatedTriple>
-ConstructBatchProcessor::processCurrentBatch() {
+std::optional<InstantiatedTriple> ConstructRowProcessor::processCurrentBatch() {
   while (rowInBatchIdx_ < batchCache_->numRows_) {
     if (auto result = processCurrentRow()) {
       return result;
@@ -73,7 +72,7 @@ ConstructBatchProcessor::processCurrentBatch() {
 }
 
 // _____________________________________________________________________________
-std::optional<InstantiatedTriple> ConstructBatchProcessor::processCurrentRow() {
+std::optional<InstantiatedTriple> ConstructRowProcessor::processCurrentRow() {
   while (tripleIdx_ < preprocessedConstructTemplate_->numTemplateTriples()) {
     auto subject = ConstructTripleInstantiator::instantiateTerm(
         tripleIdx_, 0, *preprocessedConstructTemplate_, *batchCache_,
@@ -101,27 +100,26 @@ std::optional<InstantiatedTriple> ConstructBatchProcessor::processCurrentRow() {
 }
 
 // _____________________________________________________________________________
-void ConstructBatchProcessor::advanceToNextRow() {
+void ConstructRowProcessor::advanceToNextRow() {
   ++rowInBatchIdx_;
   tripleIdx_ = 0;
 }
 
 // _____________________________________________________________________________
-void ConstructBatchProcessor::advanceToNextBatch() {
+void ConstructRowProcessor::advanceToNextBatch() {
   batchStart_ += batchSize_;
   batchCache_.reset();
 }
 
 // _____________________________________________________________________________
-std::pair<std::shared_ptr<ConstructBatchProcessor::IdCache>,
-          std::shared_ptr<ConstructBatchProcessor::IdCacheStatsLogger>>
-ConstructBatchProcessor::createIdCacheWithStats(size_t numRows) const {
-  // Cache capacity is sized to maximize cross-batch cache hits on repeated
-  // values (e.g., predicates that appear in many rows).
+std::pair<std::shared_ptr<ConstructRowProcessor::IdCache>,
+          std::shared_ptr<ConstructRowProcessor::IdCacheStatsLogger>>
+ConstructRowProcessor::createIdCacheWithStats(size_t numRows) const {
+  // TODO<ms2144>: wtf is going on here...
   const size_t numVars =
       preprocessedConstructTemplate_->variablesToEvaluate_.size();
-  const size_t minCapacityForBatch = ConstructBatchProcessor::getBatchSize() *
-                                     std::max(numVars, size_t{1}) * 2;
+  const size_t minCapacityForBatch =
+      ConstructRowProcessor::getBatchSize() * std::max(numVars, size_t{1}) * 2;
   const size_t capacity =
       std::max(CONSTRUCT_ID_CACHE_MIN_CAPACITY, minCapacityForBatch);
   auto idCache = std::make_shared<IdCache>(capacity);

@@ -24,7 +24,6 @@ class LocalVocab;
 class ConstructBatchEvaluator {
  public:
   using IdCache = ConstructIdCache;
-  using IdCacheStatsLogger = ConstructIdCacheStatsLogger;
 
   // Main entry point: evaluates all Variables and BlankNodes for a batch.
   // Column-oriented access pattern for variables:
