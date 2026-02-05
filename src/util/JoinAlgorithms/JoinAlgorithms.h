@@ -907,7 +907,7 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
   LeftSide leftSide_;
   RightSide rightSide_;
   // The used comparison.
-  const LessThan& lessThan_;
+  LessThan lessThan_;
   // The callback that is called for each pair of matching rows.
   CompatibleRowAction& compatibleRowAction_;
   [[no_unique_address]] IsUndef isUndefined_{};
