@@ -6,124 +6,12 @@
 
 #include "engine/ConstructTripleGenerator.h"
 
-#include <absl/strings/str_cat.h>
-
-#include "backports/StartsWithAndEndsWith.h"
 #include "engine/ConstructBatchProcessor.h"
 #include "engine/ExportQueryExecutionTrees.h"
-#include "engine/PreprocessedConstructTemplate.h"
-#include "parser/data/ConstructQueryExportContext.h"
-#include "rdfTypes/RdfEscaping.h"
 
 using ad_utility::InputRangeTypeErased;
-using enum PositionInTriple;
 using StringTriple = ConstructTripleGenerator::StringTriple;
 using CancellationHandle = ad_utility::SharedCancellationHandle;
-
-// Called once at construction to preprocess the CONSTRUCT triple patterns.
-// For each term, we precompute the following, based on the `TermType`:
-// - CONSTANT: `Iri`s and `Literal`s are evaluated once and stored
-// - VARIABLE: Column index of variable in `IdTable` is precomputed.
-// - BLANK_NODE: Format prefix/suffix are pre-built (row number varies)
-void ConstructTripleGenerator::preprocessTemplate() {
-  // Create the context that will be shared with ConstructBatchProcessor
-  // instances.
-  instantiationBlueprint_ = std::make_shared<PreprocessedConstructTemplate>(
-      index_.get(), variableColumns_.get(), cancellationHandle_);
-
-  // Resize context arrays for template analysis.
-  instantiationBlueprint_->precomputedConstants_.resize(
-      templateTriples_.size());
-  instantiationBlueprint_->triplePatternInfos_.resize(templateTriples_.size());
-
-  for (size_t tripleIdx = 0; tripleIdx < templateTriples_.size(); ++tripleIdx) {
-    const auto& triple = templateTriples_[tripleIdx];
-    TriplePatternInfo& info =
-        instantiationBlueprint_->triplePatternInfos_[tripleIdx];
-
-    for (size_t pos = 0; pos < NUM_TRIPLE_POSITIONS; ++pos) {
-      auto role = static_cast<PositionInTriple>(pos);
-      info.lookups_[pos] = analyzeTerm(triple[pos], tripleIdx, pos, role);
-    }
-  }
-}
-
-// _____________________________________________________________________________
-TriplePatternInfo::TermLookupInfo ConstructTripleGenerator::analyzeTerm(
-    const GraphTerm& term, size_t tripleIdx, size_t pos,
-    PositionInTriple role) {
-  if (std::holds_alternative<Iri>(term)) {
-    return analyzeIriTerm(std::get<Iri>(term), tripleIdx, pos);
-  } else if (std::holds_alternative<Literal>(term)) {
-    return analyzeLiteralTerm(std::get<Literal>(term), tripleIdx, pos, role);
-  } else if (std::holds_alternative<Variable>(term)) {
-    return analyzeVariableTerm(std::get<Variable>(term));
-  } else if (std::holds_alternative<BlankNode>(term)) {
-    return analyzeBlankNodeTerm(std::get<BlankNode>(term));
-  }
-  // Unreachable for valid GraphTerm
-  // TODO<ms2144> add compile time error throw here.
-  return {TriplePatternInfo::TermType::CONSTANT, 0};
-}
-
-// _____________________________________________________________________________
-TriplePatternInfo::TermLookupInfo ConstructTripleGenerator::analyzeIriTerm(
-    const Iri& iri, size_t tripleIdx, size_t pos) {
-  // evaluate(Iri) always returns a valid string
-  instantiationBlueprint_->precomputedConstants_[tripleIdx][pos] =
-      ConstructQueryEvaluator::evaluate(iri);
-  return {TriplePatternInfo::TermType::CONSTANT, tripleIdx};
-}
-
-// _____________________________________________________________________________
-TriplePatternInfo::TermLookupInfo ConstructTripleGenerator::analyzeLiteralTerm(
-    const Literal& literal, size_t tripleIdx, size_t pos,
-    PositionInTriple role) {
-  // evaluate(Literal) returns optional - only store if valid
-  auto value = ConstructQueryEvaluator::evaluate(literal, role);
-  if (value.has_value()) {
-    instantiationBlueprint_->precomputedConstants_[tripleIdx][pos] =
-        std::move(*value);
-  }
-  return {TriplePatternInfo::TermType::CONSTANT, tripleIdx};
-}
-
-// _____________________________________________________________________________
-TriplePatternInfo::TermLookupInfo ConstructTripleGenerator::analyzeVariableTerm(
-    const Variable& var) {
-  if (!variableToIndex_.contains(var)) {
-    size_t idx = instantiationBlueprint_->variablesToEvaluate_.size();
-    variableToIndex_[var] = idx;
-    // Pre-compute the column index corresponding to the variable in the
-    // `IdTable`.
-    std::optional<size_t> columnIndex;
-    if (variableColumns_.get().contains(var)) {
-      columnIndex = variableColumns_.get().at(var).columnIndex_;
-    }
-    instantiationBlueprint_->variablesToEvaluate_.emplace_back(
-        VariableWithColumnIndex{var, columnIndex});
-  }
-  return {TriplePatternInfo::TermType::VARIABLE, variableToIndex_[var]};
-}
-
-// _____________________________________________________________________________
-TriplePatternInfo::TermLookupInfo
-ConstructTripleGenerator::analyzeBlankNodeTerm(const BlankNode& blankNode) {
-  const std::string& label = blankNode.label();
-  if (!blankNodeLabelToIndex_.contains(label)) {
-    size_t idx = instantiationBlueprint_->blankNodesToEvaluate_.size();
-    blankNodeLabelToIndex_[label] = idx;
-    // Precompute prefix ("_:g" or "_:u") and suffix ("_" + label)
-    // so we only need to concatenate the row number per row
-    BlankNodeFormatInfo formatInfo;
-    formatInfo.prefix_ = blankNode.isGenerated() ? "_:g" : "_:u";
-    formatInfo.suffix_ = absl::StrCat("_", label);
-    instantiationBlueprint_->blankNodesToEvaluate_.push_back(
-        std::move(formatInfo));
-  }
-  return {TriplePatternInfo::TermType::BLANK_NODE,
-          blankNodeLabelToIndex_[label]};
-}
 
 // _____________________________________________________________________________
 ConstructTripleGenerator::ConstructTripleGenerator(
@@ -136,7 +24,9 @@ ConstructTripleGenerator::ConstructTripleGenerator(
       index_(index),
       cancellationHandle_(std::move(cancellationHandle)) {
   // Analyze template: precompute constants and identify variables/blank nodes.
-  preprocessTemplate();
+  preprocessedConstructTemplate_ = ConstructTemplatePreprocessor::preprocess(
+      templateTriples_, index_.get(), variableColumns_.get(),
+      cancellationHandle_);
 }
 
 // _____________________________________________________________________________
@@ -149,7 +39,7 @@ ConstructTripleGenerator::generateStringTriplesForResultTable(
   // Use ConstructBatchProcessor for batch evaluation, wrapped in
   // StringTripleBatchProcessor adapter for the StringTriple interface.
   auto processor = std::make_unique<ConstructBatchProcessor>(
-      instantiationBlueprint_, table, ad_utility::MediaType::turtle,
+      preprocessedConstructTemplate_, table, ad_utility::MediaType::turtle,
       currentRowOffset);
 
   return ad_utility::InputRangeTypeErased<StringTriple>{
@@ -204,6 +94,6 @@ ConstructTripleGenerator::generateFormattedTriples(
   rowOffset_ += table.tableWithVocab_.idTable().numRows();
 
   return ad_utility::InputRangeTypeErased<std::string>{
-      std::make_unique<ConstructBatchProcessor>(instantiationBlueprint_, table,
-                                                mediaType, currentRowOffset)};
+      std::make_unique<ConstructBatchProcessor>(
+          preprocessedConstructTemplate_, table, mediaType, currentRowOffset)};
 }

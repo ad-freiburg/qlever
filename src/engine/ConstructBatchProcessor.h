@@ -12,9 +12,10 @@
 #include <string>
 #include <vector>
 
-#include "backports/span.h"
+#include "engine/ConstructBatchEvaluator.h"
 #include "engine/ConstructIdCache.h"
-#include "engine/PreprocessedConstructTemplate.h"
+#include "engine/ConstructTemplatePreprocessor.h"
+#include "engine/ConstructTripleInstantiator.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryExportTypes.h"
 #include "util/http/MediaTypes.h"
@@ -49,53 +50,10 @@ class ConstructBatchProcessor
   std::optional<StringTriple> getStringTriple();
 
  private:
-  // Evaluates all `Variables` and `BlankNodes` for a batch of result-table
-  // rows.
-  BatchEvaluationCache evaluateBatchColumnOriented(
-      const IdTable& idTable, const LocalVocab& localVocab,
-      ql::span<const uint64_t> rowIndices, size_t currentRowOffset);
-
-  // For each `Variable`, reads all `Id`s from its column across all batch
-  // rows, converts them to strings (using `IdCache`), and stores pointers to
-  // those strings in `BatchEvaluationCache`.
-  void evaluateVariablesForBatch(BatchEvaluationCache& batchCache,
-                                 const IdTable& idTable,
-                                 const LocalVocab& localVocab,
-                                 ql::span<const uint64_t> rowIndices,
-                                 size_t currentRowOffset);
-
-  // Evaluates all `BlankNodes` for a batch of rows. Uses precomputed
-  // prefix/suffix, only concatenating the row number per row.
-  void evaluateBlankNodesForBatch(BatchEvaluationCache& batchCache,
-                                  ql::span<const uint64_t> rowIndices,
-                                  size_t currentRowOffset) const;
-
-  // Helper to get shared_ptr to the string resulting from evaluating the term
-  // specified by `tripleIdx` (idx of the triple in the template triples) and
-  // `pos` (position of the term in said template triple) on the row of the
-  // result table specified by `rowIdxInBatch`.
-  std::shared_ptr<const std::string> getTermStringPtr(
-      size_t tripleIdx, size_t pos, const BatchEvaluationCache& batchCache,
-      size_t rowIdxInBatch) const;
-
   // Creates an `Id` cache with a statistics logger that logs at INFO level
   // when destroyed (after query execution completes).
   std::pair<std::shared_ptr<IdCache>, std::shared_ptr<IdCacheStatsLogger>>
   createIdCacheWithStats(size_t numRows) const;
-
-  // Formats a single triple according to the output format. Returns empty
-  // string if any component is UNDEF.
-  std::string formatTriple(
-      const std::shared_ptr<const std::string>& subject,
-      const std::shared_ptr<const std::string>& predicate,
-      const std::shared_ptr<const std::string>& object) const;
-
-  // Instantiates a single triple as StringTriple. Returns empty `StringTriple`
-  // if any component is UNDEF.
-  StringTriple instantiateTriple(
-      const std::shared_ptr<const std::string>& subject,
-      const std::shared_ptr<const std::string>& predicate,
-      const std::shared_ptr<const std::string>& object) const;
 
   // Load a new batch of rows for evaluation if we don't have one.
   void loadBatchIfNeeded();

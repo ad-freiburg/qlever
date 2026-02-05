@@ -6,13 +6,6 @@
 
 #include "engine/ConstructBatchProcessor.h"
 
-#include <absl/strings/str_cat.h>
-
-#include "backports/StartsWithAndEndsWith.h"
-#include "engine/ConstructQueryEvaluator.h"
-#include "parser/data/ConstructQueryExportContext.h"
-#include "rdfTypes/RdfEscaping.h"
-
 // _____________________________________________________________________________
 ConstructBatchProcessor::ConstructBatchProcessor(
     std::shared_ptr<const PreprocessedConstructTemplate> blueprint,
@@ -58,9 +51,10 @@ void ConstructBatchProcessor::loadBatchIfNeeded() {
   auto batchRowIndices = ql::span<const uint64_t>(
       rowIndicesVec_.data() + batchStart_, batchEnd - batchStart_);
 
-  batchCache_ = evaluateBatchColumnOriented(tableWithVocab_.idTable(),
-                                            tableWithVocab_.localVocab(),
-                                            batchRowIndices, currentRowOffset_);
+  batchCache_ = ConstructBatchEvaluator::evaluateBatch(
+      *preprocessedConstructTemplate, tableWithVocab_.idTable(),
+      tableWithVocab_.localVocab(), batchRowIndices, currentRowOffset_,
+      *idCache_, *statsLogger_);
 
   // After we are done processing the batch, reset the indices for iterating
   // over the rows/triples of the batch.
@@ -82,15 +76,20 @@ std::optional<std::string> ConstructBatchProcessor::processCurrentBatch() {
 // _____________________________________________________________________________
 std::optional<std::string> ConstructBatchProcessor::processCurrentRow() {
   while (tripleIdx_ < preprocessedConstructTemplate->numTemplateTriples()) {
-    auto subject =
-        getTermStringPtr(tripleIdx_, 0, *batchCache_, rowInBatchIdx_);
-    auto predicate =
-        getTermStringPtr(tripleIdx_, 1, *batchCache_, rowInBatchIdx_);
-    auto object = getTermStringPtr(tripleIdx_, 2, *batchCache_, rowInBatchIdx_);
+    auto subject = ConstructTripleInstantiator::instantiateTerm(
+        tripleIdx_, 0, *preprocessedConstructTemplate, *batchCache_,
+        rowInBatchIdx_);
+    auto predicate = ConstructTripleInstantiator::instantiateTerm(
+        tripleIdx_, 1, *preprocessedConstructTemplate, *batchCache_,
+        rowInBatchIdx_);
+    auto object = ConstructTripleInstantiator::instantiateTerm(
+        tripleIdx_, 2, *preprocessedConstructTemplate, *batchCache_,
+        rowInBatchIdx_);
 
     ++tripleIdx_;
 
-    std::string formatted = formatTriple(subject, predicate, object);
+    std::string formatted = ConstructTripleInstantiator::formatTriple(
+        subject, predicate, object, format_);
     if (!formatted.empty()) {
       return formatted;
     }
@@ -134,15 +133,20 @@ ConstructBatchProcessor::processCurrentBatchAsStringTriple() {
 std::optional<ConstructBatchProcessor::StringTriple>
 ConstructBatchProcessor::processCurrentRowAsStringTriple() {
   while (tripleIdx_ < preprocessedConstructTemplate->numTemplateTriples()) {
-    auto subject =
-        getTermStringPtr(tripleIdx_, 0, *batchCache_, rowInBatchIdx_);
-    auto predicate =
-        getTermStringPtr(tripleIdx_, 1, *batchCache_, rowInBatchIdx_);
-    auto object = getTermStringPtr(tripleIdx_, 2, *batchCache_, rowInBatchIdx_);
+    auto subject = ConstructTripleInstantiator::instantiateTerm(
+        tripleIdx_, 0, *preprocessedConstructTemplate, *batchCache_,
+        rowInBatchIdx_);
+    auto predicate = ConstructTripleInstantiator::instantiateTerm(
+        tripleIdx_, 1, *preprocessedConstructTemplate, *batchCache_,
+        rowInBatchIdx_);
+    auto object = ConstructTripleInstantiator::instantiateTerm(
+        tripleIdx_, 2, *preprocessedConstructTemplate, *batchCache_,
+        rowInBatchIdx_);
 
     ++tripleIdx_;
 
-    StringTriple triple = instantiateTriple(subject, predicate, object);
+    StringTriple triple = ConstructTripleInstantiator::instantiateTriple(
+        subject, predicate, object);
     if (!triple.isEmpty()) {
       return triple;
     }
@@ -150,18 +154,6 @@ ConstructBatchProcessor::processCurrentRowAsStringTriple() {
   }
 
   return std::nullopt;
-}
-
-// _____________________________________________________________________________
-ConstructBatchProcessor::StringTriple
-ConstructBatchProcessor::instantiateTriple(
-    const std::shared_ptr<const std::string>& subject,
-    const std::shared_ptr<const std::string>& predicate,
-    const std::shared_ptr<const std::string>& object) const {
-  if (!subject || !predicate || !object) {
-    return StringTriple{};
-  }
-  return StringTriple{*subject, *predicate, *object};
 }
 
 // _____________________________________________________________________________
@@ -174,156 +166,6 @@ void ConstructBatchProcessor::advanceToNextRow() {
 void ConstructBatchProcessor::advanceToNextBatch() {
   batchStart_ += batchSize_;
   batchCache_.reset();
-}
-
-// _____________________________________________________________________________
-// Batch Evaluation (Column-Oriented Processing of multiple result-table rows)
-//
-// Evaluates Variables and BlankNodes for a batch of rows.
-// Column-oriented access pattern for variables:
-//   for each variable V occurring in the template triples:
-//     for each row R in batch:
-//       read idTable[column(V)][R]    <-- Sequential reads within a column
-//
-// This is more cache-friendly than row-oriented access, because the memory
-// layout of `IdTable` is column-major.
-BatchEvaluationCache ConstructBatchProcessor::evaluateBatchColumnOriented(
-    const IdTable& idTable, const LocalVocab& localVocab,
-    ql::span<const uint64_t> rowIndices, size_t currentRowOffset) {
-  BatchEvaluationCache batchCache;
-  batchCache.numRows_ = rowIndices.size();
-
-  evaluateVariablesForBatch(batchCache, idTable, localVocab, rowIndices,
-                            currentRowOffset);
-  evaluateBlankNodesForBatch(batchCache, rowIndices, currentRowOffset);
-
-  return batchCache;
-}
-
-// _____________________________________________________________________________
-void ConstructBatchProcessor::evaluateVariablesForBatch(
-    BatchEvaluationCache& batchCache, const IdTable& idTable,
-    const LocalVocab& localVocab, ql::span<const uint64_t> rowIndices,
-    size_t currentRowOffset) {
-  const size_t numRows = rowIndices.size();
-  auto& cacheStats = statsLogger_->stats();
-  const auto& variablesToEvaluate =
-      preprocessedConstructTemplate->variablesToEvaluate_;
-
-  // Initialize variable strings: [varIdx][rowInBatch]
-  // shared_ptr defaults to nullptr, representing UNDEF values.
-  batchCache.variableStrings_.resize(variablesToEvaluate.size());
-  for (auto& column : batchCache.variableStrings_) {
-    column.resize(numRows);
-  }
-
-  // Evaluate variables column-by-column for better cache locality.
-  // The IdTable is accessed sequentially for each column.
-  for (size_t varIdx = 0; varIdx < variablesToEvaluate.size(); ++varIdx) {
-    const auto& varInfo = variablesToEvaluate[varIdx];
-    auto& columnStrings = batchCache.variableStrings_[varIdx];
-
-    if (!varInfo.columnIndex_.has_value()) {
-      // Variable not in result - all values are nullptr (already default).
-      continue;
-    }
-
-    const size_t colIdx = varInfo.columnIndex_.value();
-
-    // Read all IDs from this column for all rows in the batch,
-    // look up their string values in the cache, and share them with the batch.
-    for (size_t rowInBatch = 0; rowInBatch < numRows; ++rowInBatch) {
-      const uint64_t rowIdx = rowIndices[rowInBatch];
-      Id id = idTable(rowIdx, colIdx);
-
-      // Use LRU cache's getOrCompute: returns cached value or computes and
-      // caches it.
-      size_t missesBefore = cacheStats.misses_;
-      const VariableToColumnMap& varCols =
-          preprocessedConstructTemplate->variableColumns_.get();
-      const Index& idx = preprocessedConstructTemplate->index_.get();
-      const std::shared_ptr<const std::string>& cachedValue =
-          idCache_->getOrCompute(id, [&cacheStats, &varCols, &idx, &colIdx,
-                                      rowIdx, &idTable, &localVocab,
-                                      currentRowOffset](const Id&) {
-            ++cacheStats.misses_;
-            ConstructQueryExportContext context{
-                rowIdx, idTable, localVocab, varCols, idx, currentRowOffset};
-            auto value = ConstructQueryEvaluator::evaluateWithColumnIndex(
-                colIdx, context);
-            if (value.has_value()) {
-              return std::make_shared<const std::string>(std::move(*value));
-            }
-            return std::shared_ptr<const std::string>{};
-          });
-
-      if (cacheStats.misses_ == missesBefore) {
-        ++cacheStats.hits_;
-      }
-
-      columnStrings[rowInBatch] = cachedValue;
-    }
-  }
-}
-
-// _____________________________________________________________________________
-void ConstructBatchProcessor::evaluateBlankNodesForBatch(
-    BatchEvaluationCache& batchCache, ql::span<const uint64_t> rowIndices,
-    size_t currentRowOffset) const {
-  const size_t numRows = rowIndices.size();
-  const auto& blankNodesToEvaluate =
-      preprocessedConstructTemplate->blankNodesToEvaluate_;
-
-  // Initialize blank node values: [blankNodeIdx][rowInBatch]
-  batchCache.blankNodeValues_.resize(blankNodesToEvaluate.size());
-  for (auto& column : batchCache.blankNodeValues_) {
-    column.resize(numRows);
-  }
-
-  // Evaluate blank nodes using precomputed prefix and suffix.
-  // Only the row number needs to be concatenated per row.
-  // Format: prefix + (currentRowOffset + rowIdx) + suffix
-  for (size_t blankIdx = 0; blankIdx < blankNodesToEvaluate.size();
-       ++blankIdx) {
-    const BlankNodeFormatInfo& formatInfo = blankNodesToEvaluate[blankIdx];
-    auto& columnValues = batchCache.blankNodeValues_[blankIdx];
-
-    for (size_t rowInBatch = 0; rowInBatch < numRows; ++rowInBatch) {
-      const uint64_t rowIdx = rowIndices[rowInBatch];
-      // Use precomputed prefix and suffix, only concatenate row number.
-      columnValues[rowInBatch] = absl::StrCat(
-          formatInfo.prefix_, currentRowOffset + rowIdx, formatInfo.suffix_);
-    }
-  }
-}
-
-// _____________________________________________________________________________
-std::shared_ptr<const std::string> ConstructBatchProcessor::getTermStringPtr(
-    size_t tripleIdx, size_t pos, const BatchEvaluationCache& batchCache,
-    size_t rowIdxInBatch) const {
-  const TriplePatternInfo& info =
-      preprocessedConstructTemplate->triplePatternInfos_[tripleIdx];
-  const TriplePatternInfo::TermLookupInfo& lookup = info.lookups_[pos];
-
-  switch (lookup.type) {
-    case TriplePatternInfo::TermType::CONSTANT: {
-      return std::make_shared<std::string>(
-          preprocessedConstructTemplate->precomputedConstants_[tripleIdx][pos]);
-    }
-    case TriplePatternInfo::TermType::VARIABLE: {
-      // Variable shared_ptr are stored in the batch cache, eliminating
-      // hash lookups during instantiation.
-      return batchCache.getVariableString(lookup.index, rowIdxInBatch);
-    }
-    case TriplePatternInfo::TermType::BLANK_NODE: {
-      // Blank node values are always valid (computed for each row).
-      return std::make_shared<const std::string>(
-          batchCache.getBlankNodeValue(lookup.index, rowIdxInBatch));
-    }
-  }
-  // TODO<ms2144>: I do not think it is good to ever return a nullptr.
-  // We should probably throw an exception here or sth.
-  return nullptr;  // Unreachable
 }
 
 // _____________________________________________________________________________
@@ -341,41 +183,4 @@ ConstructBatchProcessor::createIdCacheWithStats(size_t numRows) const {
   auto idCache = std::make_shared<IdCache>(capacity);
   auto statsLogger = std::make_shared<IdCacheStatsLogger>(numRows, capacity);
   return {std::move(idCache), std::move(statsLogger)};
-}
-
-// _____________________________________________________________________________
-// Formats triples for different output formats without intermediate
-// `StringTriple` allocations.
-std::string ConstructBatchProcessor::formatTriple(
-    const std::shared_ptr<const std::string>& subject,
-    const std::shared_ptr<const std::string>& predicate,
-    const std::shared_ptr<const std::string>& object) const {
-  if (!subject || !predicate || !object) {
-    return {};
-  }
-
-  switch (format_) {
-    case ad_utility::MediaType::turtle: {
-      // Only escape literals (strings starting with "). IRIs and blank nodes
-      // are used as-is, avoiding an unnecessary string copy.
-      if (ql::starts_with(*object, "\"")) {
-        return absl::StrCat(*subject, " ", *predicate, " ",
-                            RdfEscaping::validRDFLiteralFromNormalized(*object),
-                            " .\n");
-      }
-      return absl::StrCat(*subject, " ", *predicate, " ", *object, " .\n");
-    }
-    case ad_utility::MediaType::csv: {
-      return absl::StrCat(RdfEscaping::escapeForCsv(*subject), ",",
-                          RdfEscaping::escapeForCsv(*predicate), ",",
-                          RdfEscaping::escapeForCsv(*object), "\n");
-    }
-    case ad_utility::MediaType::tsv: {
-      return absl::StrCat(RdfEscaping::escapeForTsv(*subject), "\t",
-                          RdfEscaping::escapeForTsv(*predicate), "\t",
-                          RdfEscaping::escapeForTsv(*object), "\n");
-    }
-    default:
-      return {};  // TODO<ms2144>: add proper error throwing here?
-  }
 }
