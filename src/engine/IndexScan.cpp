@@ -670,32 +670,17 @@ struct IndexScan::SharedGeneratorState {
                 lastPrefetched.idTable_.getColumn(joinColumn_);
             AD_CORRECTNESS_CHECK(!lastJoinColumn.empty());
             Id lastValue = lastJoinColumn.back();
-            // Find the smallest block whose first entry is larger than
-            // lastValue.
-            // TODO<joka921> This should always be the first block that is still
-            // available. also remove code duplication with the above code.
-            bool foundBlock = false;
-            size_t numBlocksHandled = 0;
-            for (const auto& block : metaBlocks_.getBlockMetadataView()) {
-              ++numBlocksHandled;
-              if (CompressedRelationReader::getRelevantIdFromTriple(
-                      block.firstTriple_, metaBlocks_) > lastValue) {
-                // Found a suitable block, add it to pendingBlocks.
-                pendingBlocks_.push_back(block);
-                lastEntryInBlocks_ =
-                    CompressedRelationReader::getRelevantIdFromTriple(
-                        block.lastTriple_, metaBlocks_);
-                AD_CORRECTNESS_CHECK(numBlocksHandled == 1);
-                metaBlocks_.removePrefix(numBlocksHandled);
-                foundBlock = true;
-                break;
-              }
-            }
-            if (!foundBlock) {
-              // No more blocks available, mark as done.
-              doneFetching_ = true;
-              return;
-            }
+            // TODO<joka921> Remove code duplication with the above code.
+            const auto& block = *metaBlocks_.getBlockMetadataView().begin();
+            AD_CORRECTNESS_CHECK(
+                CompressedRelationReader::getRelevantIdFromTriple(
+                    block.firstTriple_, metaBlocks_) > lastValue);
+            // Found a suitable block, add it to pendingBlocks.
+            pendingBlocks_.push_back(block);
+            lastEntryInBlocks_ =
+                CompressedRelationReader::getRelevantIdFromTriple(
+                    block.lastTriple_, metaBlocks_);
+            metaBlocks_.removePrefix(1);
           }
           continue;
         }
