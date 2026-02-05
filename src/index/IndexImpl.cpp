@@ -49,9 +49,12 @@ constexpr std::string_view BLANK_NODE_ALLOCATION_START =
     "num-blank-nodes-total";
 
 // _____________________________________________________________________________
-IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator)
+IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator,
+                     bool registerSingleton)
     : allocator_{std::move(allocator)} {
-  globalSingletonIndex_ = this;
+  if (registerSingleton) {
+    globalSingletonIndex_ = this;
+  }
   deltaTriples_.emplace(*this);
 }
 
@@ -943,7 +946,8 @@ void IndexImpl::writeMetaData(IndexMetaDataMmapDispatcher::WriteType& metaData,
 }
 
 // _____________________________________________________________________________
-size_t IndexImpl::createPermutation(
+std::pair<size_t, IndexImpl::IndexMetaDataMmapDispatcher::WriteType>
+IndexImpl::createPermutationWithoutMetadata(
     size_t numColumns,
     ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
     const Permutation& permutation, bool internal) {
@@ -958,8 +962,16 @@ size_t IndexImpl::createPermutation(
   AD_LOG_INFO << "Statistics for " << permutation.readableName() << ": "
               << meta.statistics() << std::endl;
 
+  return std::make_pair(numDistinctCol0, std::move(meta));
+}
+
+// _____________________________________________________________________________
+void IndexImpl::finalizePermutation(
+    IndexMetaDataMmapDispatcher::WriteType& meta,
+    const Permutation& permutation, bool internal) const {
+  std::string fileName = getFilenameForPermutation(permutation, internal);
+
   writeMetaData(meta, fileName);
-  return numDistinctCol0;
 }
 
 // ________________________________________________________________________
@@ -1137,6 +1149,9 @@ void IndexImpl::setKeepTempFiles(bool keepTempFiles) {
 
 // _____________________________________________________________________________
 bool& IndexImpl::usePatterns() { return usePatterns_; }
+
+// _____________________________________________________________________________
+bool IndexImpl::usePatterns() const { return usePatterns_; }
 
 // _____________________________________________________________________________
 bool& IndexImpl::loadAllPermutations() { return loadAllPermutations_; }
@@ -1898,6 +1913,22 @@ void IndexImpl::writePatternsToFile() const {
       avgNumDistinctPredicatesPerSubject_;
   PatternCreator::writePatternsToFile(getPatternFilename(), patterns_,
                                       statistics);
+}
+
+// _____________________________________________________________________________
+void IndexImpl::loadConfigFromOldIndex(const std::string& newName,
+                                       const IndexImpl& other,
+                                       const nlohmann::json& newStats) {
+  setOnDiskBase(newName);
+  setKbName(other.getKbName());
+  blocksizePermutationPerColumn() = other.blocksizePermutationPerColumn();
+  configurationJson_ = newStats;
+  numTriples_ = static_cast<NumNormalAndInternal>(newStats["num-triples"]);
+  numPredicates_ =
+      static_cast<NumNormalAndInternal>(newStats["num-predicates"]);
+  numSubjects_ = static_cast<NumNormalAndInternal>(newStats["num-subjects"]);
+  numObjects_ = static_cast<NumNormalAndInternal>(newStats["num-objects"]);
+  writeConfiguration();
 }
 
 // _____________________________________________________________________________
