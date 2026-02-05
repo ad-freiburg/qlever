@@ -43,6 +43,8 @@ class OptionalJoin : public Operation {
  private:
   std::string getCacheKeyImpl() const override;
 
+  void onLimitOffsetChanged(const LimitOffsetClause&) const override;
+
  public:
   std::string getDescriptor() const override;
 
