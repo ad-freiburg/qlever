@@ -11,7 +11,7 @@
 #include <memory>
 
 #include "engine/ConstructQueryEvaluator.h"
-#include "engine/InstantiationBlueprint.h"
+#include "engine/PreprocessedConstructTemplate.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryExportTypes.h"
 #include "global/Constants.h"
@@ -84,8 +84,9 @@ class ConstructTripleGenerator {
       CancellationHandle cancellationHandle);
 
  private:
-  // Preprocesses the template triples to create the InstantiationBlueprint.
-  // For each term position, determines how to obtain its value:
+  // Preprocesses the template triples to create the
+  // PreprocessedConstructTemplate. For each term position, determines how to
+  // obtain its value:
   // - Constants (IRIs/Literals): evaluates and stores the string
   // - Variables: precomputes column indices for IdTable lookup
   // - Blank nodes: precomputes format prefix/suffix
@@ -130,7 +131,7 @@ class ConstructTripleGenerator {
 
   // Blueprint containing preprocessed template data.
   // Created once by `preprocessTemplate()`.
-  std::shared_ptr<InstantiationBlueprint> instantiationBlueprint_;
+  std::shared_ptr<PreprocessedConstructTemplate> instantiationBlueprint_;
 
   // Mapping from variable to index in the per-row variable cache
   // `variablesToEvaluate_`.

@@ -23,17 +23,16 @@ class Index;
 // Number of positions in a triple: subject, predicate, object.
 inline constexpr size_t NUM_TRIPLE_POSITIONS = 3;
 
-// Pre-analyzed info for a triple pattern to enable fast instantiation.
+// TODO<ms2144>: add comment: what is this?
 struct TriplePatternInfo {
   enum class TermType { CONSTANT, VARIABLE, BLANK_NODE };
 
-  // Describes how to look up the value for a single term position (subject,
-  // predicate, or object) during triple instantiation.
-  // `type`: Indicates whether the term is a CONSTANT (precomputed IRI/Literal),
-  // VARIABLE (looked up from `IdTable`), or BLANK_NODE (generated per row).
-  // `index`: The index into the corresponding cache:
-  // For CONSTANT: index into `precomputedConstants_[tripleIdx]`
-  // For VARIABLE: index into `variablesToEvaluate_` / `variableStrings_`
+  // Describes how to look up the value for a term position
+  // during triple instantiation.
+  // `type`: Indicates whether the term is a CONSTANT, VARIABLE, or BLANK_NODE.
+  // `index`: The idx into the corresponding cache:
+  // For CONSTANT: idx into `precomputedConstants_[tripleIdx]`
+  // For VARIABLE: idx into `variablesToEvaluate_` / `variableStrings_`
   // For BLANK_NODE: index into `blankNodesToEvaluate_` / `blankNodeValues_`
   struct TermLookupInfo {
     TermType type;
@@ -43,7 +42,7 @@ struct TriplePatternInfo {
   std::array<TermLookupInfo, NUM_TRIPLE_POSITIONS> lookups_;
 };
 
-// Variable with pre-computed column index into the `IdTable`.
+// Variable with column index into the `IdTable`.
 struct VariableWithColumnIndex {
   Variable variable_;
   // idx of the column for the variable in the `IdTable`.
@@ -82,12 +81,13 @@ struct BatchEvaluationCache {
   }
 };
 
-// Blueprint for instantiating triples from CONSTRUCT template patterns.
-struct InstantiationBlueprint {
+// Result of preprocessing the construct template triples.
+struct PreprocessedConstructTemplate {
   using CancellationHandle = ad_utility::SharedCancellationHandle;
-  InstantiationBlueprint(const Index& index,
-                         const VariableToColumnMap& variableColumns,
-                         CancellationHandle cancellationHandle)
+
+  PreprocessedConstructTemplate(const Index& index,
+                                const VariableToColumnMap& variableColumns,
+                                CancellationHandle cancellationHandle)
       : index_(index),
         variableColumns_(variableColumns),
         cancellationHandle_(std::move(cancellationHandle)) {}
@@ -101,7 +101,7 @@ struct InstantiationBlueprint {
       precomputedConstants_;
 
   // Ordered list of `Variable` objects with pre-computed column indices for
-  // evaluation.
+  // evaluation which are to be evaluated on the result table rows.
   std::vector<VariableWithColumnIndex> variablesToEvaluate_;
 
   // Ordered list of `BlankNode` objects with precomputed format info for

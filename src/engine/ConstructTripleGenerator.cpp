@@ -11,7 +11,7 @@
 #include "backports/StartsWithAndEndsWith.h"
 #include "engine/ConstructBatchProcessor.h"
 #include "engine/ExportQueryExecutionTrees.h"
-#include "engine/InstantiationBlueprint.h"
+#include "engine/PreprocessedConstructTemplate.h"
 #include "parser/data/ConstructQueryExportContext.h"
 #include "rdfTypes/RdfEscaping.h"
 
@@ -28,7 +28,7 @@ using CancellationHandle = ad_utility::SharedCancellationHandle;
 void ConstructTripleGenerator::preprocessTemplate() {
   // Create the context that will be shared with ConstructBatchProcessor
   // instances.
-  instantiationBlueprint_ = std::make_shared<InstantiationBlueprint>(
+  instantiationBlueprint_ = std::make_shared<PreprocessedConstructTemplate>(
       index_.get(), variableColumns_.get(), cancellationHandle_);
 
   // Resize context arrays for template analysis.

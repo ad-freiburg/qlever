@@ -14,7 +14,7 @@
 
 #include "backports/span.h"
 #include "engine/ConstructIdCache.h"
-#include "engine/InstantiationBlueprint.h"
+#include "engine/PreprocessedConstructTemplate.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryExportTypes.h"
 #include "util/http/MediaTypes.h"
@@ -36,12 +36,8 @@ class ConstructBatchProcessor
   static size_t getBatchSize() { return DEFAULT_BATCH_SIZE; }
 
   // Constructor takes all data needed for processing.
-  // - blueprint: shared, immutable preprocessing data
-  // - table: the table data to process
-  // - format: output format (Turtle/CSV/TSV)
-  // - currentRowOffset: offset for blank node numbering
   ConstructBatchProcessor(
-      std::shared_ptr<const InstantiationBlueprint> blueprint,
+      std::shared_ptr<const PreprocessedConstructTemplate> blueprint,
       const TableWithRange& table, ad_utility::MediaType format,
       size_t currentRowOffset);
 
@@ -94,7 +90,7 @@ class ConstructBatchProcessor
       const std::shared_ptr<const std::string>& predicate,
       const std::shared_ptr<const std::string>& object) const;
 
-  // Instantiates a single triple as StringTriple. Returns empty StringTriple
+  // Instantiates a single triple as StringTriple. Returns empty `StringTriple`
   // if any component is UNDEF.
   StringTriple instantiateTriple(
       const std::shared_ptr<const std::string>& subject,
@@ -122,8 +118,8 @@ class ConstructBatchProcessor
   // Advance to next batch.
   void advanceToNextBatch();
 
-  // Blueprint containing preprocessed template data (immutable).
-  std::shared_ptr<const InstantiationBlueprint> blueprint_;
+  std::shared_ptr<const PreprocessedConstructTemplate>
+      preprocessedConstructTemplate;
 
   // Output format (Turtle/CSV/TSV).
   ad_utility::MediaType format_;
