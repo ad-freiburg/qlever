@@ -10,6 +10,7 @@
 #include "./ValuesForTesting.h"
 #include "engine/Bind.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/NaryExpression.h"
 
 using namespace sparqlExpression;
 using Vars = std::vector<std::optional<Variable>>;
@@ -172,4 +173,138 @@ TEST(Bind, limitIsPropagated) {
   const auto& idTable = result.idTable();
 
   EXPECT_EQ(idTable, makeIdTableFromVector({{1, 42}}, &Id::makeFromInt));
+}
+
+// _____________________________________________________________________________
+TEST(Bind, undefStatusForConstantInteger) {
+  auto* qec = ad_utility::testing::getQec();
+  Variable inputVar{"?x"};
+  Variable targetVar{"?newCol"};
+
+  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{42}}, &Id::makeFromInt), Vars{inputVar});
+
+  // Create BIND(3 AS ?newCol)
+  auto constantExpr = std::make_unique<IdExpression>(Id::makeFromInt(3));
+  SparqlExpressionPimpl pimpl{std::move(constantExpr), "3"};
+  Bind bind{qec, std::move(valuesTree), {std::move(pimpl), targetVar}};
+
+  // Check that the variable to column map has the correct undef status
+  auto varColMap = bind.getExternallyVisibleVariableColumns();
+
+  ASSERT_TRUE(varColMap.contains(targetVar));
+  auto& colInfo = varColMap.at(targetVar);
+
+  // The constant 3 should always be defined
+  EXPECT_EQ(colInfo.mightContainUndef_,
+            ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined);
+}
+
+// _____________________________________________________________________________
+TEST(Bind, undefStatusForDivisionByZero) {
+  auto* qec = ad_utility::testing::getQec();
+  Variable inputVar{"?x"};
+  Variable targetVar{"?newCol"};
+
+  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{42}}, &Id::makeFromInt), Vars{inputVar});
+
+  // Create BIND(1/0 AS ?newCol)
+  auto oneExpr = std::make_unique<IdExpression>(Id::makeFromInt(1));
+  auto zeroExpr = std::make_unique<IdExpression>(Id::makeFromInt(0));
+  auto divExpr = makeDivideExpression(std::move(oneExpr), std::move(zeroExpr));
+  SparqlExpressionPimpl pimpl{std::move(divExpr), "1/0"};
+  Bind bind{qec, std::move(valuesTree), {std::move(pimpl), targetVar}};
+
+  // Check that the variable to column map has the correct undef status
+  auto varColMap = bind.getExternallyVisibleVariableColumns();
+
+  ASSERT_TRUE(varColMap.contains(targetVar));
+  auto& colInfo = varColMap.at(targetVar);
+
+  // Division by zero can produce undefined, so it should be PossiblyUndefined
+  EXPECT_EQ(colInfo.mightContainUndef_,
+            ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined);
+}
+
+// _____________________________________________________________________________
+TEST(Bind, undefStatusForAlwaysDefinedVariable) {
+  auto* qec = ad_utility::testing::getQec();
+  Variable inputVar{"?x"};
+  Variable targetVar{"?y"};
+
+  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{42}}, &Id::makeFromInt), Vars{inputVar});
+
+  // Create BIND(?x AS ?y) where ?x is AlwaysDefined
+  auto varExpr = std::make_unique<VariableExpression>(inputVar);
+  SparqlExpressionPimpl pimpl{std::move(varExpr), inputVar.name()};
+  Bind bind{qec, std::move(valuesTree), {std::move(pimpl), targetVar}};
+
+  // Check that the variable to column map has the correct undef status
+  auto varColMap = bind.getExternallyVisibleVariableColumns();
+
+  ASSERT_TRUE(varColMap.contains(targetVar));
+  auto& colInfo = varColMap.at(targetVar);
+
+  // Since ?x is AlwaysDefined (from ValuesForTesting), ?y should be too
+  EXPECT_EQ(colInfo.mightContainUndef_,
+            ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined);
+}
+
+// _____________________________________________________________________________
+TEST(Bind, undefStatusForStringLiteral) {
+  auto* qec = ad_utility::testing::getQec();
+  Variable inputVar{"?x"};
+  Variable targetVar{"?str"};
+
+  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{42}}, &Id::makeFromInt), Vars{inputVar});
+
+  // Create BIND("hello" AS ?str)
+  auto literal =
+      ad_utility::triple_component::Literal::literalWithoutQuotes("hello");
+  auto literalExpr = std::make_unique<StringLiteralExpression>(literal);
+  SparqlExpressionPimpl pimpl{std::move(literalExpr), "\"hello\""};
+  Bind bind{qec, std::move(valuesTree), {std::move(pimpl), targetVar}};
+
+  // Check that the variable to column map has the correct undef status
+  auto varColMap = bind.getExternallyVisibleVariableColumns();
+
+  ASSERT_TRUE(varColMap.contains(targetVar));
+  auto& colInfo = varColMap.at(targetVar);
+
+  // String literals should always be defined
+  EXPECT_EQ(colInfo.mightContainUndef_,
+            ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined);
+}
+
+// _____________________________________________________________________________
+TEST(Bind, undefStatusForArithmeticOnConstants) {
+  auto* qec = ad_utility::testing::getQec();
+  Variable inputVar{"?x"};
+  Variable targetVar{"?result"};
+
+  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{42}}, &Id::makeFromInt), Vars{inputVar});
+
+  // Create BIND(2 * 3 AS ?result)
+  auto twoExpr = std::make_unique<IdExpression>(Id::makeFromInt(2));
+  auto threeExpr = std::make_unique<IdExpression>(Id::makeFromInt(3));
+  auto mulExpr =
+      makeMultiplyExpression(std::move(twoExpr), std::move(threeExpr));
+  SparqlExpressionPimpl pimpl{std::move(mulExpr), "2*3"};
+  Bind bind{qec, std::move(valuesTree), {std::move(pimpl), targetVar}};
+
+  // Check that the variable to column map has the correct undef status
+  auto varColMap = bind.getExternallyVisibleVariableColumns();
+
+  ASSERT_TRUE(varColMap.contains(targetVar));
+  auto& colInfo = varColMap.at(targetVar);
+
+  // Arithmetic expressions don't have isResultAlwaysDefined implemented yet,
+  // so they default to PossiblyUndefined. This will change once NaryExpression
+  // implements isResultAlwaysDefined.
+  EXPECT_EQ(colInfo.mightContainUndef_,
+            ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined);
 }

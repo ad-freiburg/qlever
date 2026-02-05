@@ -128,6 +128,30 @@ class LiteralExpression : public SparqlExpression {
     return !std::is_same_v<T, ::Variable>;
   }
 
+  // ___________________________________________________________________________
+  bool isResultAlwaysDefined(
+      const VariableToColumnMap& varColMap) const override {
+    if constexpr (std::is_same_v<T, ::Variable>) {
+      // For variables, check if they are in the map and always defined
+      auto it = varColMap.find(_value);
+      if (it == varColMap.end()) {
+        return false;
+      }
+      return it->second.mightContainUndef_ ==
+             ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+    } else if constexpr (std::is_same_v<T, ValueId>) {
+      // ValueId is defined if it's not undefined
+      return !_value.isUndefined();
+    } else if constexpr (std::is_same_v<T, TripleComponent::Literal> ||
+                         std::is_same_v<T, TripleComponent::Iri>) {
+      // Literals and IRIs are always defined
+      return true;
+    } else {
+      // All other constant types (numeric, etc.) are always defined
+      return true;
+    }
+  }
+
  protected:
   // ___________________________________________________________________________
   std::optional<::Variable> getVariableOrNullopt() const override {

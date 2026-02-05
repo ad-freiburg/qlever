@@ -86,13 +86,12 @@ std::string Bind::getCacheKeyImpl() const {
 VariableToColumnMap Bind::computeVariableToColumnMap() const {
   auto res = _subtree->getVariableColumns();
   // The new variable is always appended at the end.
-  // TODO<joka921> This currently pessimistically assumes that all (aggregate)
-  // expressions can produce undefined values. This might impact the
-  // performance when the result of this GROUP BY is joined on one or more of
-  // the aggregating columns. Implement an interface in the expressions that
-  // allows to check, whether an expression can never produce an undefined
-  // value.
-  res[_bind._target] = makePossiblyUndefinedColumn(getResultWidth() - 1);
+  auto columnIndex = getResultWidth() - 1;
+  if (_bind._expression.isResultAlwaysDefined(res)) {
+    res[_bind._target] = makeAlwaysDefinedColumn(columnIndex);
+  } else {
+    res[_bind._target] = makePossiblyUndefinedColumn(columnIndex);
+  }
   return res;
 }
 
