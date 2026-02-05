@@ -14,6 +14,46 @@ using StringTriple = ConstructTripleGenerator::StringTriple;
 using CancellationHandle = ad_utility::SharedCancellationHandle;
 
 // _____________________________________________________________________________
+// Adapter that transforms InstantiatedTriple to formatted strings.
+class FormattedTripleAdapter
+    : public ad_utility::InputRangeFromGet<std::string> {
+ public:
+  FormattedTripleAdapter(std::unique_ptr<ConstructBatchProcessor> processor,
+                         ad_utility::MediaType format)
+      : processor_(std::move(processor)), format_(format) {}
+
+  std::optional<std::string> get() override {
+    auto triple = processor_->get();
+    if (!triple) return std::nullopt;
+    return ConstructTripleInstantiator::formatTriple(
+        triple->subject_, triple->predicate_, triple->object_, format_);
+  }
+
+ private:
+  std::unique_ptr<ConstructBatchProcessor> processor_;
+  ad_utility::MediaType format_;
+};
+
+// _____________________________________________________________________________
+// Adapter that transforms InstantiatedTriple to StringTriple.
+class StringTripleAdapter : public ad_utility::InputRangeFromGet<StringTriple> {
+ public:
+  explicit StringTripleAdapter(
+      std::unique_ptr<ConstructBatchProcessor> processor)
+      : processor_(std::move(processor)) {}
+
+  std::optional<StringTriple> get() override {
+    auto triple = processor_->get();
+    if (!triple) return std::nullopt;
+    return StringTriple{*triple->subject_, *triple->predicate_,
+                        *triple->object_};
+  }
+
+ private:
+  std::unique_ptr<ConstructBatchProcessor> processor_;
+};
+
+// _____________________________________________________________________________
 ConstructTripleGenerator::ConstructTripleGenerator(
     Triples constructTriples, std::shared_ptr<const Result> result,
     const VariableToColumnMap& variableColumns, const Index& index,
@@ -36,14 +76,11 @@ ConstructTripleGenerator::generateStringTriplesForResultTable(
   const size_t currentRowOffset = rowOffset_;
   rowOffset_ += table.tableWithVocab_.idTable().numRows();
 
-  // Use ConstructBatchProcessor for batch evaluation, wrapped in
-  // StringTripleBatchProcessor adapter for the StringTriple interface.
   auto processor = std::make_unique<ConstructBatchProcessor>(
-      preprocessedConstructTemplate_, table, ad_utility::MediaType::turtle,
-      currentRowOffset);
+      preprocessedConstructTemplate_, table, currentRowOffset);
 
   return ad_utility::InputRangeTypeErased<StringTriple>{
-      std::make_unique<StringTripleBatchProcessor>(std::move(processor))};
+      std::make_unique<StringTripleAdapter>(std::move(processor))};
 }
 
 // _____________________________________________________________________________
@@ -93,7 +130,10 @@ ConstructTripleGenerator::generateFormattedTriples(
   const size_t currentRowOffset = rowOffset_;
   rowOffset_ += table.tableWithVocab_.idTable().numRows();
 
+  auto processor = std::make_unique<ConstructBatchProcessor>(
+      preprocessedConstructTemplate_, table, currentRowOffset);
+
   return ad_utility::InputRangeTypeErased<std::string>{
-      std::make_unique<ConstructBatchProcessor>(
-          preprocessedConstructTemplate_, table, mediaType, currentRowOffset)};
+      std::make_unique<FormattedTripleAdapter>(std::move(processor),
+                                               mediaType)};
 }

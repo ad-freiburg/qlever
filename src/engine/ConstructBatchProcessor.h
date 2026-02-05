@@ -16,20 +16,19 @@
 #include "engine/ConstructIdCache.h"
 #include "engine/ConstructTemplatePreprocessor.h"
 #include "engine/ConstructTripleInstantiator.h"
-#include "engine/QueryExecutionTree.h"
 #include "engine/QueryExportTypes.h"
-#include "util/http/MediaTypes.h"
 #include "util/stream_generator.h"
 
 // _____________________________________________________________________________
-// Self-contained batch processor for generating formatted triples.
-// Implements the `InputRangeFromGet` interface for lazy evaluation.
+// Batch processor that iterates through result table rows and yields
+// instantiated triples. Handles batch loading, evaluation, and iteration.
+// Yields InstantiatedTriple structs; callers transform to desired output
+// format.
 class ConstructBatchProcessor
-    : public ad_utility::InputRangeFromGet<std::string> {
+    : public ad_utility::InputRangeFromGet<InstantiatedTriple> {
  public:
   using IdCache = ConstructIdCache;
   using IdCacheStatsLogger = ConstructIdCacheStatsLogger;
-  using StringTriple = QueryExecutionTree::StringTriple;
 
   // Default batch size for processing rows.
   static constexpr size_t DEFAULT_BATCH_SIZE = 64;
@@ -39,15 +38,11 @@ class ConstructBatchProcessor
   // Constructor takes all data needed for processing.
   ConstructBatchProcessor(
       std::shared_ptr<const PreprocessedConstructTemplate> blueprint,
-      const TableWithRange& table, ad_utility::MediaType format,
-      size_t currentRowOffset);
+      const TableWithRange& table, size_t currentRowOffset);
 
-  // Returns the next formatted triple, or nullopt when exhausted.
-  std::optional<std::string> get() override;
-
-  // Returns the next triple as StringTriple, or nullopt when exhausted.
-  // Use either get() OR getStringTriple(), not both on the same instance.
-  std::optional<StringTriple> getStringTriple();
+  // Returns the next instantiated triple, or nullopt when exhausted.
+  // Incomplete triples (with UNDEF components) are filtered out.
+  std::optional<InstantiatedTriple> get() override;
 
  private:
   // Creates an `Id` cache with a statistics logger that logs at INFO level
@@ -58,17 +53,11 @@ class ConstructBatchProcessor
   // Load a new batch of rows for evaluation if we don't have one.
   void loadBatchIfNeeded();
 
-  // Process rows in the current batch, returning the next formatted triple.
-  std::optional<std::string> processCurrentBatch();
+  // Process rows in the current batch, returning the next complete triple.
+  std::optional<InstantiatedTriple> processCurrentBatch();
 
-  // Process triples for the current row, returning the next formatted triple.
-  std::optional<std::string> processCurrentRow();
-
-  // Process rows in the current batch, returning the next `StringTriple`.
-  std::optional<StringTriple> processCurrentBatchAsStringTriple();
-
-  // Process triples for the current row, returning the next `StringTriple`.
-  std::optional<StringTriple> processCurrentRowAsStringTriple();
+  // Process triples for the current row, returning the next complete triple.
+  std::optional<InstantiatedTriple> processCurrentRow();
 
   // Advance to next row in batch.
   void advanceToNextRow();
@@ -77,10 +66,7 @@ class ConstructBatchProcessor
   void advanceToNextBatch();
 
   std::shared_ptr<const PreprocessedConstructTemplate>
-      preprocessedConstructTemplate;
-
-  // Output format (Turtle/CSV/TSV).
-  ad_utility::MediaType format_;
+      preprocessedConstructTemplate_;
 
   // Table data (copied/referenced for iteration lifetime).
   TableConstRefWithVocab tableWithVocab_;
@@ -97,25 +83,6 @@ class ConstructBatchProcessor
   size_t rowInBatchIdx_ = 0;
   size_t tripleIdx_ = 0;
   std::optional<BatchEvaluationCache> batchCache_;
-};
-
-// _____________________________________________________________________________
-// Adapter to use ConstructBatchProcessor::getStringTriple() with
-// InputRangeTypeErased<StringTriple>. This is a thin wrapper that delegates
-// to the batch processor's getStringTriple() method.
-class StringTripleBatchProcessor : public ad_utility::InputRangeFromGet<
-                                       ConstructBatchProcessor::StringTriple> {
- public:
-  explicit StringTripleBatchProcessor(
-      std::unique_ptr<ConstructBatchProcessor> processor)
-      : processor_(std::move(processor)) {}
-
-  std::optional<ConstructBatchProcessor::StringTriple> get() override {
-    return processor_->getStringTriple();
-  }
-
- private:
-  std::unique_ptr<ConstructBatchProcessor> processor_;
 };
 
 #endif  // QLEVER_SRC_ENGINE_CONSTRUCTBATCHPROCESSOR_H

@@ -9,10 +9,8 @@
 // _____________________________________________________________________________
 ConstructBatchProcessor::ConstructBatchProcessor(
     std::shared_ptr<const PreprocessedConstructTemplate> blueprint,
-    const TableWithRange& table, ad_utility::MediaType format,
-    size_t currentRowOffset)
-    : preprocessedConstructTemplate(std::move(blueprint)),
-      format_(format),
+    const TableWithRange& table, size_t currentRowOffset)
+    : preprocessedConstructTemplate_(std::move(blueprint)),
       tableWithVocab_(table.tableWithVocab_),
       rowIndicesVec_(ql::ranges::begin(table.view_),
                      ql::ranges::end(table.view_)),
@@ -24,9 +22,9 @@ ConstructBatchProcessor::ConstructBatchProcessor(
 }
 
 // _____________________________________________________________________________
-std::optional<std::string> ConstructBatchProcessor::get() {
+std::optional<InstantiatedTriple> ConstructBatchProcessor::get() {
   while (batchStart_ < rowIndicesVec_.size()) {
-    preprocessedConstructTemplate->cancellationHandle_->throwIfCancelled();
+    preprocessedConstructTemplate_->cancellationHandle_->throwIfCancelled();
 
     loadBatchIfNeeded();
 
@@ -52,7 +50,7 @@ void ConstructBatchProcessor::loadBatchIfNeeded() {
       rowIndicesVec_.data() + batchStart_, batchEnd - batchStart_);
 
   batchCache_ = ConstructBatchEvaluator::evaluateBatch(
-      *preprocessedConstructTemplate, tableWithVocab_.idTable(),
+      *preprocessedConstructTemplate_, tableWithVocab_.idTable(),
       tableWithVocab_.localVocab(), batchRowIndices, currentRowOffset_,
       *idCache_, *statsLogger_);
 
@@ -63,7 +61,8 @@ void ConstructBatchProcessor::loadBatchIfNeeded() {
 }
 
 // _____________________________________________________________________________
-std::optional<std::string> ConstructBatchProcessor::processCurrentBatch() {
+std::optional<InstantiatedTriple>
+ConstructBatchProcessor::processCurrentBatch() {
   while (rowInBatchIdx_ < batchCache_->numRows_) {
     if (auto result = processCurrentRow()) {
       return result;
@@ -74,85 +73,30 @@ std::optional<std::string> ConstructBatchProcessor::processCurrentBatch() {
 }
 
 // _____________________________________________________________________________
-std::optional<std::string> ConstructBatchProcessor::processCurrentRow() {
-  while (tripleIdx_ < preprocessedConstructTemplate->numTemplateTriples()) {
+std::optional<InstantiatedTriple> ConstructBatchProcessor::processCurrentRow() {
+  while (tripleIdx_ < preprocessedConstructTemplate_->numTemplateTriples()) {
     auto subject = ConstructTripleInstantiator::instantiateTerm(
-        tripleIdx_, 0, *preprocessedConstructTemplate, *batchCache_,
+        tripleIdx_, 0, *preprocessedConstructTemplate_, *batchCache_,
         rowInBatchIdx_);
+
     auto predicate = ConstructTripleInstantiator::instantiateTerm(
-        tripleIdx_, 1, *preprocessedConstructTemplate, *batchCache_,
+        tripleIdx_, 1, *preprocessedConstructTemplate_, *batchCache_,
         rowInBatchIdx_);
     auto object = ConstructTripleInstantiator::instantiateTerm(
-        tripleIdx_, 2, *preprocessedConstructTemplate, *batchCache_,
+        tripleIdx_, 2, *preprocessedConstructTemplate_, *batchCache_,
         rowInBatchIdx_);
+
+    auto triple = InstantiatedTriple{subject, predicate, object};
 
     ++tripleIdx_;
 
-    std::string formatted = ConstructTripleInstantiator::formatTriple(
-        subject, predicate, object, format_);
-    if (!formatted.empty()) {
-      return formatted;
-    }
-    // Triple was UNDEF (incomplete), continue to next triple pattern.
-  }
-
-  return std::nullopt;
-}
-
-// _____________________________________________________________________________
-std::optional<ConstructBatchProcessor::StringTriple>
-ConstructBatchProcessor::getStringTriple() {
-  while (batchStart_ < rowIndicesVec_.size()) {
-    preprocessedConstructTemplate->cancellationHandle_->throwIfCancelled();
-
-    loadBatchIfNeeded();
-
-    if (auto result = processCurrentBatchAsStringTriple()) {
-      return result;
-    }
-
-    advanceToNextBatch();
-  }
-
-  return std::nullopt;
-}
-
-// _____________________________________________________________________________
-std::optional<ConstructBatchProcessor::StringTriple>
-ConstructBatchProcessor::processCurrentBatchAsStringTriple() {
-  while (rowInBatchIdx_ < batchCache_->numRows_) {
-    if (auto result = processCurrentRowAsStringTriple()) {
-      return result;
-    }
-    advanceToNextRow();
-  }
-  return std::nullopt;
-}
-
-// _____________________________________________________________________________
-std::optional<ConstructBatchProcessor::StringTriple>
-ConstructBatchProcessor::processCurrentRowAsStringTriple() {
-  while (tripleIdx_ < preprocessedConstructTemplate->numTemplateTriples()) {
-    auto subject = ConstructTripleInstantiator::instantiateTerm(
-        tripleIdx_, 0, *preprocessedConstructTemplate, *batchCache_,
-        rowInBatchIdx_);
-    auto predicate = ConstructTripleInstantiator::instantiateTerm(
-        tripleIdx_, 1, *preprocessedConstructTemplate, *batchCache_,
-        rowInBatchIdx_);
-    auto object = ConstructTripleInstantiator::instantiateTerm(
-        tripleIdx_, 2, *preprocessedConstructTemplate, *batchCache_,
-        rowInBatchIdx_);
-
-    ++tripleIdx_;
-
-    StringTriple triple = ConstructTripleInstantiator::instantiateTriple(
-        subject, predicate, object);
-    if (!triple.isEmpty()) {
+    if (triple.isComplete()) {
       return triple;
     }
-    // Triple was UNDEF (incomplete), continue to next triple pattern.
+    // Triple was incomplete (has UNDEF components), continue to next pattern.
   }
 
+  // TODO<ms2144> what does this return mean?
   return std::nullopt;
 }
 
@@ -175,7 +119,7 @@ ConstructBatchProcessor::createIdCacheWithStats(size_t numRows) const {
   // Cache capacity is sized to maximize cross-batch cache hits on repeated
   // values (e.g., predicates that appear in many rows).
   const size_t numVars =
-      preprocessedConstructTemplate->variablesToEvaluate_.size();
+      preprocessedConstructTemplate_->variablesToEvaluate_.size();
   const size_t minCapacityForBatch = ConstructBatchProcessor::getBatchSize() *
                                      std::max(numVars, size_t{1}) * 2;
   const size_t capacity =

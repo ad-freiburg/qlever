@@ -12,39 +12,29 @@
 
 #include "engine/ConstructTemplatePreprocessor.h"
 #include "engine/ConstructTypes.h"
-#include "engine/QueryExecutionTree.h"
 #include "util/http/MediaTypes.h"
 
 // _____________________________________________________________________________
-// Creates output triples from evaluated batch data.
-// Provides methods for both formatted string output and StringTriple output.
+// Provides methods for instantiating terms and formatting triples.
 class ConstructTripleInstantiator {
  public:
-  using StringTriple = QueryExecutionTree::StringTriple;
-
-  // Gets the shared_ptr to the string resulting from evaluating the term
-  // specified by `tripleIdx` (idx of the triple in the template triples) and
-  // `pos` (position of the term in said template triple) on the row of the
-  // WHERE-clause result table specified by `rowIdxInBatch`.
+  // Instantiates a single term from the template triple, returning its string
+  // value. Uses the preprocessed template data and batch evaluation cache.
+  // `tripleIdx`: index of the triple in the template
+  // `pos`: position within the triple (0=subject, 1=predicate, 2=object)
+  // `rowIdxInBatch`: which row in the current batch
   static std::shared_ptr<const std::string> instantiateTerm(
       size_t tripleIdx, size_t pos,
       const PreprocessedConstructTemplate& preprocessedTemplate,
       const BatchEvaluationCache& batchCache, size_t rowIdxInBatch);
 
-  // Formats a single triple according to the output format. Returns empty
-  // string if any component is UNDEF.
+  // Formats a triple (subject, predicate, object) according to the output
+  // format. Returns empty string if any component is null.
   static std::string formatTriple(
       const std::shared_ptr<const std::string>& subject,
       const std::shared_ptr<const std::string>& predicate,
       const std::shared_ptr<const std::string>& object,
       ad_utility::MediaType format);
-
-  // Instantiates a single triple as StringTriple. Returns empty `StringTriple`
-  // if any component is UNDEF.
-  static StringTriple instantiateTriple(
-      const std::shared_ptr<const std::string>& subject,
-      const std::shared_ptr<const std::string>& predicate,
-      const std::shared_ptr<const std::string>& object);
 };
 
 #endif  // QLEVER_SRC_ENGINE_CONSTRUCTTRIPLEINSTANTIATOR_H

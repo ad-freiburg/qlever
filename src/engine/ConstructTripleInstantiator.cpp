@@ -77,15 +77,3 @@ std::string ConstructTripleInstantiator::formatTriple(
       return {};  // TODO<ms2144>: add proper error throwing here?
   }
 }
-
-// _____________________________________________________________________________
-ConstructTripleInstantiator::StringTriple
-ConstructTripleInstantiator::instantiateTriple(
-    const std::shared_ptr<const std::string>& subject,
-    const std::shared_ptr<const std::string>& predicate,
-    const std::shared_ptr<const std::string>& object) {
-  if (!subject || !predicate || !object) {
-    return StringTriple{};
-  }
-  return StringTriple{*subject, *predicate, *object};
-}

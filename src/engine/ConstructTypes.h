@@ -56,6 +56,18 @@ struct BlankNodeFormatInfo {
   std::string suffix_;  // "_" + label
 };
 
+// Result of instantiating a single template triple for a specific row.
+// Contains the resolved string values for subject, predicate, and object.
+// A null shared_ptr indicates UNDEF (variable not bound in the result).
+struct InstantiatedTriple {
+  std::shared_ptr<const std::string> subject_;
+  std::shared_ptr<const std::string> predicate_;
+  std::shared_ptr<const std::string> object_;
+
+  // Returns true if all three components are valid (non-null).
+  bool isComplete() const { return subject_ && predicate_ && object_; }
+};
+
 // Cache for batch-evaluated `Variable` objects and `BlankNode` objects.
 // This stores the results of evaluating all variables and blank nodes
 // for a batch of rows, enabling efficient lookup during triple instantiation.
