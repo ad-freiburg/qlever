@@ -40,7 +40,7 @@ std::optional<InstantiatedTriple> ConstructRowProcessor::get() {
 
 // _____________________________________________________________________________
 void ConstructRowProcessor::loadBatchIfNeeded() {
-  if (batchCache_.has_value()) {
+  if (batchEvaluationResult_.has_value()) {
     return;
   }
   const size_t batchEnd =
@@ -49,7 +49,7 @@ void ConstructRowProcessor::loadBatchIfNeeded() {
   auto batchRowIndices = ql::span<const uint64_t>(
       rowIndicesVec_.data() + batchStart_, batchEnd - batchStart_);
 
-  batchCache_ = ConstructBatchEvaluator::evaluateBatch(
+  batchEvaluationResult_ = ConstructBatchEvaluator::evaluateBatch(
       *preprocessedConstructTemplate_, tableWithVocab_.idTable(),
       tableWithVocab_.localVocab(), batchRowIndices, currentRowOffset_,
       *idCache_, *statsLogger_);
@@ -62,12 +62,13 @@ void ConstructRowProcessor::loadBatchIfNeeded() {
 
 // _____________________________________________________________________________
 std::optional<InstantiatedTriple> ConstructRowProcessor::processCurrentBatch() {
-  while (rowInBatchIdx_ < batchCache_->numRows_) {
+  while (rowInBatchIdx_ < batchEvaluationResult_->numRows_) {
     if (auto result = processCurrentRow()) {
       return result;
     }
     advanceToNextRow();
   }
+  // TODO<ms2144>: why do we return std::nullopt here?
   return std::nullopt;
 }
 
@@ -75,14 +76,14 @@ std::optional<InstantiatedTriple> ConstructRowProcessor::processCurrentBatch() {
 std::optional<InstantiatedTriple> ConstructRowProcessor::processCurrentRow() {
   while (tripleIdx_ < preprocessedConstructTemplate_->numTemplateTriples()) {
     auto subject = ConstructTripleInstantiator::instantiateTerm(
-        tripleIdx_, 0, *preprocessedConstructTemplate_, *batchCache_,
+        tripleIdx_, 0, *preprocessedConstructTemplate_, *batchEvaluationResult_,
         rowInBatchIdx_);
 
     auto predicate = ConstructTripleInstantiator::instantiateTerm(
-        tripleIdx_, 1, *preprocessedConstructTemplate_, *batchCache_,
+        tripleIdx_, 1, *preprocessedConstructTemplate_, *batchEvaluationResult_,
         rowInBatchIdx_);
     auto object = ConstructTripleInstantiator::instantiateTerm(
-        tripleIdx_, 2, *preprocessedConstructTemplate_, *batchCache_,
+        tripleIdx_, 2, *preprocessedConstructTemplate_, *batchEvaluationResult_,
         rowInBatchIdx_);
 
     auto triple = InstantiatedTriple{subject, predicate, object};
@@ -108,7 +109,7 @@ void ConstructRowProcessor::advanceToNextRow() {
 // _____________________________________________________________________________
 void ConstructRowProcessor::advanceToNextBatch() {
   batchStart_ += batchSize_;
-  batchCache_.reset();
+  batchEvaluationResult_.reset();
 }
 
 // _____________________________________________________________________________
@@ -117,7 +118,7 @@ std::pair<std::shared_ptr<ConstructRowProcessor::IdCache>,
 ConstructRowProcessor::createIdCacheWithStats(size_t numRows) const {
   // TODO<ms2144>: wtf is going on here...
   const size_t numVars =
-      preprocessedConstructTemplate_->variablesToEvaluate_.size();
+      preprocessedConstructTemplate_->variablesToInstantiate_.size();
   const size_t minCapacityForBatch =
       ConstructRowProcessor::getBatchSize() * std::max(numVars, size_t{1}) * 2;
   const size_t capacity =

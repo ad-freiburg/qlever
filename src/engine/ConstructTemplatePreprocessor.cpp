@@ -100,7 +100,7 @@ ConstructTemplatePreprocessor::preprocessVariableTerm(
     ad_utility::HashMap<Variable, size_t>& variableToIndex,
     const VariableToColumnMap& variableColumns) {
   if (!variableToIndex.contains(var)) {
-    size_t idx = result.variablesToEvaluate_.size();
+    size_t idx = result.variablesToInstantiate_.size();
     variableToIndex[var] = idx;
     // Pre-compute the column index corresponding to the variable in the
     // `IdTable`.
@@ -108,7 +108,7 @@ ConstructTemplatePreprocessor::preprocessVariableTerm(
     if (variableColumns.contains(var)) {
       columnIndex = variableColumns.at(var).columnIndex_;
     }
-    result.variablesToEvaluate_.emplace_back(
+    result.variablesToInstantiate_.emplace_back(
         VariableWithColumnIndex{var, columnIndex});
   }
   return {TemplateTripleLookupSpec::TermType::VARIABLE, variableToIndex[var]};

@@ -26,7 +26,7 @@ class ConstructTripleInstantiator {
   static std::shared_ptr<const std::string> instantiateTerm(
       size_t tripleIdx, size_t pos,
       const PreprocessedConstructTemplate& preprocessedTemplate,
-      const BatchEvaluationCache& batchCache, size_t rowIdxInBatch);
+      const BatchEvaluationResult& batchResult, size_t rowIdxInBatch);
 
   // Formats a triple (subject, predicate, object) according to the output
   // format. Returns empty string if any component is null.

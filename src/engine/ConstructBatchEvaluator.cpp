@@ -12,99 +12,118 @@
 #include "parser/data/ConstructQueryExportContext.h"
 
 // _____________________________________________________________________________
-BatchEvaluationCache ConstructBatchEvaluator::evaluateBatch(
-    const PreprocessedConstructTemplate& blueprint, const IdTable& idTable,
-    const LocalVocab& localVocab, ql::span<const uint64_t> rowIndices,
-    size_t currentRowOffset, IdCache& idCache,
-    ConstructIdCacheStatsLogger& statsLogger) {
-  BatchEvaluationCache batchCache;
-  batchCache.numRows_ = rowIndices.size();
+BatchEvaluationResult ConstructBatchEvaluator::evaluateBatch(
+    const PreprocessedConstructTemplate& preprocessedConstructTemplate,
+    const IdTable& idTable, const LocalVocab& localVocab,
+    ql::span<const uint64_t> rowIndices, size_t currentRowOffset,
+    IdCache& idCache, ConstructIdCacheStatsLogger& statsLogger) {
+  BatchEvaluationResult batchResult;
+  batchResult.numRows_ = rowIndices.size();
 
-  evaluateVariablesForBatch(batchCache, blueprint, idTable, localVocab,
-                            rowIndices, currentRowOffset, idCache, statsLogger);
-  evaluateBlankNodesForBatch(batchCache, blueprint, rowIndices,
-                             currentRowOffset);
+  evaluateVariablesForBatch(batchResult, preprocessedConstructTemplate, idTable,
+                            localVocab, rowIndices, currentRowOffset, idCache,
+                            statsLogger);
+  evaluateBlankNodesForBatch(batchResult, preprocessedConstructTemplate,
+                             rowIndices, currentRowOffset);
 
-  return batchCache;
+  return batchResult;
 }
 
 // _____________________________________________________________________________
 void ConstructBatchEvaluator::evaluateVariablesForBatch(
-    BatchEvaluationCache& batchCache,
-    const PreprocessedConstructTemplate& blueprint, const IdTable& idTable,
-    const LocalVocab& localVocab, ql::span<const uint64_t> rowIndices,
-    size_t currentRowOffset, IdCache& idCache,
-    ConstructIdCacheStatsLogger& statsLogger) {
+    BatchEvaluationResult& batchResult,
+    const PreprocessedConstructTemplate& preprocessedConstructTemplate,
+    const IdTable& idTable, const LocalVocab& localVocab,
+    ql::span<const uint64_t> rowIndices, size_t currentRowOffset,
+    IdCache& idCache, ConstructIdCacheStatsLogger& statsLogger) {
   const size_t numRows = rowIndices.size();
-  auto& cacheStats = statsLogger.stats();
-  const auto& variablesToEvaluate = blueprint.variablesToEvaluate_;
+  const auto& variablesToInstantiate =
+      preprocessedConstructTemplate.variablesToInstantiate_;
 
-  // Initialize variable strings: [varIdx][rowInBatch]
+  // Initialize `variableInstantiationResultStrings_`: [varIdx][rowInBatch]
   // shared_ptr defaults to nullptr, representing UNDEF values.
-  batchCache.variableStrings_.resize(variablesToEvaluate.size());
-  for (auto& column : batchCache.variableStrings_) {
+  batchResult.variableInstantiationResultStrings_.resize(
+      variablesToInstantiate.size());
+  for (auto& column : batchResult.variableInstantiationResultStrings_) {
     column.resize(numRows);
   }
 
+  const VariableToColumnMap& varCols =
+      preprocessedConstructTemplate.variableColumns_.get();
+  const Index& idx = preprocessedConstructTemplate.index_.get();
+  auto& cacheStats = statsLogger.stats();
+
   // Evaluate variables column-by-column for better cache locality.
-  // The IdTable is accessed sequentially for each column.
-  for (size_t varIdx = 0; varIdx < variablesToEvaluate.size(); ++varIdx) {
-    const auto& varInfo = variablesToEvaluate[varIdx];
-    auto& columnStrings = batchCache.variableStrings_[varIdx];
+  for (size_t varIdx = 0; varIdx < variablesToInstantiate.size(); ++varIdx) {
+    const auto& varInfo = variablesToInstantiate[varIdx];
 
     if (!varInfo.columnIndex_.has_value()) {
       // Variable not in result - all values are nullptr (already default).
       continue;
     }
 
-    const size_t colIdx = varInfo.columnIndex_.value();
+    evaluateSingleVariableForBatch(
+        batchResult.variableInstantiationResultStrings_[varIdx],
+        varInfo.columnIndex_.value(), idTable, localVocab, rowIndices,
+        currentRowOffset, varCols, idx, idCache, cacheStats);
+  }
+}
 
-    // Read all IDs from this column for all rows in the batch,
-    // look up their string values in the cache, and share them with the batch.
-    for (size_t rowInBatch = 0; rowInBatch < numRows; ++rowInBatch) {
-      const uint64_t rowIdx = rowIndices[rowInBatch];
-      Id id = idTable(rowIdx, colIdx);
+// _____________________________________________________________________________
+void ConstructBatchEvaluator::evaluateSingleVariableForBatch(
+    std::vector<std::shared_ptr<const std::string>>& columnStrings,
+    size_t colIdx, const IdTable& idTable, const LocalVocab& localVocab,
+    ql::span<const uint64_t> rowIndices, size_t currentRowOffset,
+    const VariableToColumnMap& varCols, const Index& idx, IdCache& idCache,
+    ConstructIdCacheStats& cacheStats) {
+  // Read all IDs from this column for all rows in the batch,
+  // look up their string values in the cache, and share them with the batch.
+  for (size_t rowIdxInBatch = 0; rowIdxInBatch < rowIndices.size();
+       ++rowIdxInBatch) {
+    const uint64_t rowIdx = rowIndices[rowIdxInBatch];
+    Id id = idTable(rowIdx, colIdx);
 
-      // Use LRU cache's getOrCompute: returns cached value or computes and
-      // caches it.
-      size_t missesBefore = cacheStats.misses_;
-      const VariableToColumnMap& varCols = blueprint.variableColumns_.get();
-      const Index& idx = blueprint.index_.get();
-      const std::shared_ptr<const std::string>& cachedValue =
-          idCache.getOrCompute(id, [&cacheStats, &varCols, &idx, &colIdx,
-                                    rowIdx, &idTable, &localVocab,
-                                    currentRowOffset](const Id&) {
-            ++cacheStats.misses_;
-            ConstructQueryExportContext context{
-                rowIdx, idTable, localVocab, varCols, idx, currentRowOffset};
-            auto value = ConstructQueryEvaluator::evaluateWithColumnIndex(
-                colIdx, context);
-            if (value.has_value()) {
-              return std::make_shared<const std::string>(std::move(*value));
-            }
-            return std::shared_ptr<const std::string>{};
-          });
+    // Use LRU cache's getOrCompute: returns cached value or computes and
+    // caches it.
+    size_t missesBefore = cacheStats.misses_;
 
-      if (cacheStats.misses_ == missesBefore) {
-        ++cacheStats.hits_;
-      }
+    const std::shared_ptr<const std::string>& cachedValue =
+        idCache.getOrCompute(id, [&cacheStats, &varCols, &idx, &colIdx, rowIdx,
+                                  &idTable, &localVocab,
+                                  currentRowOffset](const Id&) {
+          ++cacheStats.misses_;
 
-      columnStrings[rowInBatch] = cachedValue;
+          ConstructQueryExportContext context{
+              rowIdx, idTable, localVocab, varCols, idx, currentRowOffset};
+
+          auto value =
+              ConstructQueryEvaluator::evaluateWithColumnIndex(colIdx, context);
+
+          if (value.has_value()) {
+            return std::make_shared<const std::string>(std::move(*value));
+          }
+          return std::shared_ptr<const std::string>{};
+        });
+
+    if (cacheStats.misses_ == missesBefore) {
+      ++cacheStats.hits_;
     }
+
+    columnStrings[rowIdxInBatch] = cachedValue;
   }
 }
 
 // _____________________________________________________________________________
 void ConstructBatchEvaluator::evaluateBlankNodesForBatch(
-    BatchEvaluationCache& batchCache,
+    BatchEvaluationResult& batchResult,
     const PreprocessedConstructTemplate& blueprint,
     ql::span<const uint64_t> rowIndices, size_t currentRowOffset) {
   const size_t numRows = rowIndices.size();
   const auto& blankNodesToEvaluate = blueprint.blankNodesToEvaluate_;
 
   // Initialize blank node values: [blankNodeIdx][rowInBatch]
-  batchCache.blankNodeValues_.resize(blankNodesToEvaluate.size());
-  for (auto& column : batchCache.blankNodeValues_) {
+  batchResult.blankNodeValues_.resize(blankNodesToEvaluate.size());
+  for (auto& column : batchResult.blankNodeValues_) {
     column.resize(numRows);
   }
 
@@ -114,7 +133,7 @@ void ConstructBatchEvaluator::evaluateBlankNodesForBatch(
   for (size_t blankIdx = 0; blankIdx < blankNodesToEvaluate.size();
        ++blankIdx) {
     const BlankNodeFormatInfo& formatInfo = blankNodesToEvaluate[blankIdx];
-    auto& columnValues = batchCache.blankNodeValues_[blankIdx];
+    auto& columnValues = batchResult.blankNodeValues_[blankIdx];
 
     for (size_t rowInBatch = 0; rowInBatch < numRows; ++rowInBatch) {
       const uint64_t rowIdx = rowIndices[rowInBatch];

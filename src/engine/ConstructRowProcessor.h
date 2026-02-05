@@ -81,7 +81,7 @@ class ConstructRowProcessor
   size_t batchStart_ = 0;
   size_t rowInBatchIdx_ = 0;
   size_t tripleIdx_ = 0;
-  std::optional<BatchEvaluationCache> batchCache_;
+  std::optional<BatchEvaluationResult> batchEvaluationResult_;
 };
 
 #endif  // QLEVER_SRC_ENGINE_CONSTRUCTBATCHPROCESSOR_H

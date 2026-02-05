@@ -30,8 +30,9 @@ struct TemplateTripleLookupSpec {
   // `type`: Indicates whether the term is a CONSTANT, VARIABLE, or BLANK_NODE.
   // `index`: The idx into the corresponding cache:
   // For CONSTANT: idx into `precomputedConstants_[tripleIdx]`
-  // For VARIABLE: idx into `variablesToEvaluate_` / `variableStrings_`
-  // For BLANK_NODE: index into `blankNodesToEvaluate_` / `blankNodeValues_`
+  // For VARIABLE: idx into `variablesToInstantiate_` /
+  // `variableInstantiationResultStrings_` For BLANK_NODE: index into
+  // `blankNodesToEvaluate_` / `blankNodeValues_`
   struct TermInstantiationSpec {
     TermType type;
     size_t index;
@@ -71,9 +72,10 @@ struct InstantiatedTriple {
 // Cache for batch-evaluated `Variable` objects and `BlankNode` objects.
 // This stores the results of evaluating all variables and blank nodes
 // for a batch of rows, enabling efficient lookup during triple instantiation.
-struct BatchEvaluationCache {
+struct BatchEvaluationResult {
   // maps: variable idx -> idx of row in batch -> shared_ptr<string>
-  std::vector<std::vector<std::shared_ptr<const std::string>>> variableStrings_;
+  std::vector<std::vector<std::shared_ptr<const std::string>>>
+      variableInstantiationResultStrings_;
   // maps: blank node idx -> idx of row in batch -> string value
   std::vector<std::vector<std::string>> blankNodeValues_;
   size_t numRows_ = 0;
@@ -81,7 +83,7 @@ struct BatchEvaluationCache {
   // Get shared_ptr for a specific variable at a row in the batch.
   const std::shared_ptr<const std::string>& getVariableString(
       size_t varIdx, size_t rowInBatch) const {
-    return variableStrings_[varIdx][rowInBatch];
+    return variableInstantiationResultStrings_[varIdx][rowInBatch];
   }
 
   // Get string for a specific blank node at a row in the batch.

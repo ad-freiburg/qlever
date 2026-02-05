@@ -15,7 +15,7 @@
 std::shared_ptr<const std::string> ConstructTripleInstantiator::instantiateTerm(
     size_t tripleIdx, size_t pos,
     const PreprocessedConstructTemplate& preprocessedTemplate,
-    const BatchEvaluationCache& batchCache, size_t rowIdxInBatch) {
+    const BatchEvaluationResult& batchResult, size_t rowIdxInBatch) {
   const TemplateTripleLookupSpec& info =
       preprocessedTemplate.triplePatternInfos_[tripleIdx];
   const TemplateTripleLookupSpec::TermInstantiationSpec& lookup =
@@ -29,12 +29,12 @@ std::shared_ptr<const std::string> ConstructTripleInstantiator::instantiateTerm(
     case TemplateTripleLookupSpec::TermType::VARIABLE: {
       // Variable shared_ptr are stored in the batch cache, eliminating
       // hash lookups during instantiation.
-      return batchCache.getVariableString(lookup.index, rowIdxInBatch);
+      return batchResult.getVariableString(lookup.index, rowIdxInBatch);
     }
     case TemplateTripleLookupSpec::TermType::BLANK_NODE: {
       // Blank node values are always valid (computed for each row).
       return std::make_shared<const std::string>(
-          batchCache.getBlankNodeValue(lookup.index, rowIdxInBatch));
+          batchResult.getBlankNodeValue(lookup.index, rowIdxInBatch));
     }
   }
   // TODO<ms2144>: I do not think it is good to ever return a nullptr.

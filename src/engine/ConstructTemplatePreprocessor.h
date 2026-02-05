@@ -47,7 +47,7 @@ struct PreprocessedConstructTemplate {
 
   // Ordered list of `Variable` objects with pre-computed column indices which
   // are later needed for evaluation.
-  std::vector<VariableWithColumnIndex> variablesToEvaluate_;
+  std::vector<VariableWithColumnIndex> variablesToInstantiate_;
 
   // Ordered list of `BlankNode` objects with precomputed format info for
   // evaluation (index corresponds to cache index).
