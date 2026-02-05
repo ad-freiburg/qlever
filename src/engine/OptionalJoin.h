@@ -83,7 +83,7 @@ class OptionalJoin : public Operation {
                           std::shared_ptr<const Result> right,
                           bool requestLaziness);
 
-  // Compute the result for the *materialized* result from the `left` subtree
+  // Compute the result for the result from the `left` subtree
   // and the `rightScan`. This function applied block prefiltering for the
   // `rightScan`. This function currently only supports single-column OPTIONAL
   // joins, or OPTIONAL joins on two columns where UNDEF values are only in the
@@ -91,16 +91,9 @@ class OptionalJoin : public Operation {
   // obtained from the members `_left` and `_right` respectively, as those
   // members will be used to get additional required metadata for the arguments
   // `left` and `rightScan`.
-  Result materializedOptionalJoinWithIndexScan(
-      std::shared_ptr<const Result> left, std::shared_ptr<IndexScan> rightScan,
-      bool requestLaziness);
-
-  // Same as `materializedOptionalJoinWithIndexScan` directly above (same
-  // functionality and preconditions), except that it expects a *lazily
-  // computed* `Result` for the `left` argument from the `_left` subtree.
-  Result lazyOptionalJoinWithIndexScan(std::shared_ptr<const Result> left,
-                                       std::shared_ptr<IndexScan> rightScan,
-                                       bool requestLaziness);
+  Result optionalJoinWithIndexScan(std::shared_ptr<const Result> left,
+                                   std::shared_ptr<IndexScan> rightScan,
+                                   bool requestLaziness);
 
  private:
   std::unique_ptr<Operation> cloneImpl() const override;

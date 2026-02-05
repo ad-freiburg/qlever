@@ -125,14 +125,8 @@ Result OptionalJoin::computeResult(bool requestLaziness) {
         _joinColumns.size() == 2))) {
     if (auto indexScan =
             std::dynamic_pointer_cast<IndexScan>(_right->getRootOperation())) {
-      auto leftRes = _left->getResult(true);
-      if (leftRes->isFullyMaterialized()) {
-        return materializedOptionalJoinWithIndexScan(
-            std::move(leftRes), std::move(indexScan), requestLaziness);
-      } else {
-        return lazyOptionalJoinWithIndexScan(
-            std::move(leftRes), std::move(indexScan), requestLaziness);
-      }
+      return optionalJoinWithIndexScan(_left->getResult(true),
+                                       std::move(indexScan), requestLaziness);
     }
   }
 
@@ -506,10 +500,9 @@ Result OptionalJoin::lazyOptionalJoin(std::shared_ptr<const Result> left,
                                 resultSortedOn(), std::move(resultPermutation));
 }
 // _____________________________________________________________________________
-Result OptionalJoin::lazyOptionalJoinWithIndexScan(
+Result OptionalJoin::optionalJoinWithIndexScan(
     std::shared_ptr<const Result> left, std::shared_ptr<IndexScan> rightScan,
     bool requestLaziness) {
-  AD_CONTRACT_CHECK(!left->isFullyMaterialized());
   // Currently only supports a single join column.
   AD_CORRECTNESS_CHECK(_joinColumns.size() == 1 ||
                        implementation_ ==
@@ -520,108 +513,73 @@ Result OptionalJoin::lazyOptionalJoinWithIndexScan(
 
   auto resultPermutation = joinColMap.permutationResult();
 
-  auto action = [this, left = std::move(left), rightScan = std::move(rightScan),
-                 joinColMap = std::move(joinColMap)](
-                    std::function<void(IdTable&, LocalVocab&)> yieldTable) {
-    auto rowAdder = getRowAdderForJoin(*this, _joinColumns.size(),
-                                       keepJoinColumns_, std::move(yieldTable));
-    auto getLeftAndRightRange = [&]<size_t numJoinCols>() {
-      auto firstJoinColLeft = _joinColumns.at(0).at(0);
-      auto [leftJoinSide, indexScanSide] =
-          rightScan->prefilterTables(left->idTables(), firstJoinColLeft, false);
-      auto leftRange =
-          convertGenerator<std::decay_t<decltype(leftJoinSide)>, numJoinCols>(
-              std::move(leftJoinSide), joinColMap.permutationLeft());
-      auto rightRange =
-          convertGenerator<std::decay_t<decltype(indexScanSide)>, numJoinCols>(
-              std::move(indexScanSide), joinColMap.permutationRight());
-      return std::pair{std::move(leftRange), std::move(rightRange)};
+  using namespace ad_utility::use_value_identity;
+  auto getAction = [&](auto leftIsMaterializedV) {
+    static constexpr bool leftIsMaterialized = leftIsMaterializedV;
+    return [this, left = std::move(left), rightScan = std::move(rightScan),
+            joinColMap = std::move(joinColMap)](
+               std::function<void(IdTable&, LocalVocab&)> yieldTable) {
+      auto rowAdder = getRowAdderForJoin(
+          *this, _joinColumns.size(), keepJoinColumns_, std::move(yieldTable));
+      auto getLeftAndRightRange = [&]<size_t numJoinCols>() {
+        auto firstJoinColLeft = _joinColumns.at(0).at(0);
+        if constexpr (leftIsMaterialized) {
+          auto rightBlocksInternal = rightScan->lazyScanForJoinOfColumnWithScan(
+              left->idTable().getColumn(firstJoinColLeft));
+          auto rightRange = convertGeneratorFromScan<numJoinCols>(
+              std::move(rightBlocksInternal), *rightScan);
+          auto permutationIdTable =
+              ad_utility::IdTableAndFirstCols<numJoinCols, IdTableView<0>>{
+                  left->idTable().asColumnSubsetView(
+                      joinColMap.permutationLeft()),
+                  left->getCopyOfLocalVocab()};
+          auto leftRange = std::array{std::move(permutationIdTable)};
+
+          return std::pair{std::move(leftRange), std::move(rightRange)};
+        } else {
+          auto [leftJoinSide, indexScanSide] = rightScan->prefilterTables(
+              left->idTables(), firstJoinColLeft, false);
+          auto leftRange =
+              convertGenerator<std::decay_t<decltype(leftJoinSide)>,
+                               numJoinCols>(std::move(leftJoinSide),
+                                            joinColMap.permutationLeft());
+          auto rightRange =
+              convertGenerator<std::decay_t<decltype(indexScanSide)>,
+                               numJoinCols>(std::move(indexScanSide),
+                                            joinColMap.permutationRight());
+          return std::pair{std::move(leftRange), std::move(rightRange)};
+        }
+      };
+      if (_joinColumns.size() == 1) {
+        // Note: The `zipperJoinForBlocksWithPotentialUndef` automatically
+        // switches to a more efficient implementation if there are no UNDEF
+        // values in any of the inputs.
+        auto [leftRange, rightRange] =
+            getLeftAndRightRange.template operator()<1>();
+        zipperJoinForBlocksWithPotentialUndef(
+            std::move(leftRange), std::move(rightRange), std::less{}, rowAdder,
+            {}, {}, ad_utility::OptionalJoinTag{});
+      } else {
+        AD_CORRECTNESS_CHECK(implementation_ ==
+                             Implementation::OnlyUndefInLastJoinColumnOfLeft);
+        auto [leftRange, rightRange] =
+            getLeftAndRightRange.template operator()<2>();
+        specialOptionalJoinForBlocks(
+            std::move(leftRange), std::move(rightRange),
+            std::integral_constant<size_t, 2>{}, rowAdder);
+      }
+      setScanStatusToLazilyCompleted(*rightScan);
+      return std::move(rowAdder).toIdTableVocabPair();
     };
-    if (_joinColumns.size() == 1) {
-      // Note: The `zipperJoinForBlocksWithPotentialUndef` automatically
-      // switches to a more efficient implementation if there are no UNDEF
-      // values in any of the inputs.
-      auto [leftRange, rightRange] =
-          getLeftAndRightRange.template operator()<1>();
-      zipperJoinForBlocksWithPotentialUndef(
-          std::move(leftRange), std::move(rightRange), std::less{}, rowAdder,
-          {}, {}, ad_utility::OptionalJoinTag{});
-    } else {
-      AD_CORRECTNESS_CHECK(implementation_ ==
-                           Implementation::OnlyUndefInLastJoinColumnOfLeft);
-      auto [leftRange, rightRange] =
-          getLeftAndRightRange.template operator()<2>();
-      specialOptionalJoinForBlocks(std::move(leftRange), std::move(rightRange),
-                                   std::integral_constant<size_t, 2>{},
-                                   rowAdder);
-    }
-    setScanStatusToLazilyCompleted(*rightScan);
-    return std::move(rowAdder).toIdTableVocabPair();
   };
 
-  return createResultFromAction(requestLaziness, std::move(action),
-                                resultSortedOn(), std::move(resultPermutation));
-}
-
-// _____________________________________________________________________________
-Result OptionalJoin::materializedOptionalJoinWithIndexScan(
-    std::shared_ptr<const Result> left, std::shared_ptr<IndexScan> rightScan,
-    bool requestLaziness) {
-  AD_CONTRACT_CHECK(left->isFullyMaterialized());
-  // Currently only supports a single join column.
-  AD_CORRECTNESS_CHECK(_joinColumns.size() == 1 ||
-                       implementation_ ==
-                           Implementation::OnlyUndefInLastJoinColumnOfLeft);
-  ad_utility::JoinColumnMapping joinColMap{
-      _joinColumns, _left->getResultWidth(), _right->getResultWidth(),
-      keepJoinColumns_};
-
-  auto resultPermutation = joinColMap.permutationResult();
-
-  auto action = [this, left = std::move(left), rightScan = std::move(rightScan),
-                 joinColMap = std::move(joinColMap)](
-                    std::function<void(IdTable&, LocalVocab&)> yieldTable) {
-    using namespace qlever::joinHelpers;
-    auto rowAdder = getRowAdderForJoin(*this, _joinColumns.size(),
-                                       keepJoinColumns_, std::move(yieldTable));
-    auto getLeftAndRightRange = [&]<size_t numJoinCols>() {
-      auto firstJoinColLeft = _joinColumns.at(0).at(0);
-      auto rightBlocksInternal = rightScan->lazyScanForJoinOfColumnWithScan(
-          left->idTable().getColumn(firstJoinColLeft));
-      auto rightRange = convertGeneratorFromScan<numJoinCols>(
-          std::move(rightBlocksInternal), *rightScan);
-      auto permutationIdTable =
-          ad_utility::IdTableAndFirstCols<numJoinCols, IdTableView<0>>{
-              left->idTable().asColumnSubsetView(joinColMap.permutationLeft()),
-              left->getCopyOfLocalVocab()};
-      auto leftRange = std::array{std::move(permutationIdTable)};
-
-      return std::pair{std::move(leftRange), std::move(rightRange)};
-    };
-    if (_joinColumns.size() == 1) {
-      // Note: The `zipperJoinForBlocksWithPotentialUndef` automatically
-      // switches to a more efficient implementation if there are no UNDEF
-      // values in any of the inputs.
-      auto [leftRange, rightRange] =
-          getLeftAndRightRange.template operator()<1>();
-      zipperJoinForBlocksWithPotentialUndef(
-          std::move(leftRange), std::move(rightRange), std::less{}, rowAdder,
-          {}, {}, ad_utility::OptionalJoinTag{});
-    } else {
-      AD_CORRECTNESS_CHECK(implementation_ ==
-                           Implementation::OnlyUndefInLastJoinColumnOfLeft);
-      auto [leftRange, rightRange] =
-          getLeftAndRightRange.template operator()<2>();
-      specialOptionalJoinForBlocks(std::move(leftRange), std::move(rightRange),
-                                   std::integral_constant<size_t, 2>{},
-                                   rowAdder);
-    }
-    setScanStatusToLazilyCompleted(*rightScan);
-    return std::move(rowAdder).toIdTableVocabPair();
+  auto createResult = [&](auto isMaterialized) {
+    return createResultFromAction(requestLaziness, getAction(isMaterialized),
+                                  resultSortedOn(),
+                                  std::move(resultPermutation));
   };
-
-  return createResultFromAction(requestLaziness, std::move(action),
-                                resultSortedOn(), std::move(resultPermutation));
+  return left->isFullyMaterialized() ? createResult(vi<true>)
+                                     : createResult(vi<false>);
 }
 
 // _____________________________________________________________________________
