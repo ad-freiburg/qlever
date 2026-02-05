@@ -9,6 +9,7 @@
 
 #include <cstdint>
 #include <tuple>
+#include <utility>
 #include <vector>
 
 #include "engine/idTable/IdTable.h"
@@ -70,6 +71,15 @@ std::packaged_task<void()> createPermutationWriterTask(
     const std::vector<VocabIndex>& insertionPositions,
     const std::vector<uint64_t>& blankNodeBlocks, uint64_t minBlankNodeIndex,
     const ad_utility::SharedCancellationHandle& cancellationHandle);
+
+// Analyze how many columns the new permutation will have and which additional
+// columns it will have based on the given `blockMetadataRanges`. The number of
+// columns is determined by the number of offsets in the metadata of the first
+// block. The additional columns are determined by the number of columns and
+// just filled in increasing order starting from `ADDITIONAL_COLUMN_GRAPH_ID`.
+std::pair<size_t, std::vector<ColumnIndex>>
+getNumberOfColumnsAndAdditionalColumns(
+    const BlockMetadataRanges& blockMetadataRanges);
 
 }  // namespace qlever::indexRebuilder
 

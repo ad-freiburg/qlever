@@ -5,6 +5,13 @@
 #include "index/IndexRebuilder.h"
 
 #include <array>
+#include <boost/asio/awaitable.hpp>
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/detached.hpp>
+#include <boost/asio/post.hpp>
+#include <boost/asio/this_coro.hpp>
+#include <boost/asio/thread_pool.hpp>
+#include <boost/asio/use_awaitable.hpp>
 #include <cstdint>
 #include <fstream>
 #include <string>
@@ -24,7 +31,6 @@
 #include "util/HashMap.h"
 #include "util/InputRangeUtils.h"
 #include "util/Log.h"
-#include "util/ParallelExecutor.h"
 
 namespace qlever::indexRebuilder {
 // _____________________________________________________________________________
@@ -203,15 +209,9 @@ size_t getNumColumns(const BlockMetadataRanges& blockMetadataRanges) {
 }
 
 // _____________________________________________________________________________
-std::packaged_task<void()> createPermutationWriterTask(
-    IndexImpl& newIndex, const Permutation& permutation, bool isInternal,
-    const LocatedTriplesSharedState& locatedTriplesSharedState,
-    const ad_utility::HashMap<Id::T, Id>& localVocabMapping,
-    const std::vector<VocabIndex>& insertionPositions,
-    const std::vector<uint64_t>& blankNodeBlocks, uint64_t minBlankNodeIndex,
-    const ad_utility::SharedCancellationHandle& cancellationHandle) {
-  auto blockMetadataRanges = permutation.getAugmentedMetadataForPermutation(
-      *locatedTriplesSharedState);
+std::pair<size_t, std::vector<ColumnIndex>>
+getNumberOfColumnsAndAdditionalColumns(
+    const BlockMetadataRanges& blockMetadataRanges) {
   size_t numColumns = getNumColumns(blockMetadataRanges);
   std::vector<ColumnIndex> additionalColumns;
   additionalColumns.push_back(ADDITIONAL_COLUMN_GRAPH_ID);
@@ -223,22 +223,72 @@ std::packaged_task<void()> createPermutationWriterTask(
     additionalColumns.push_back(col);
   }
   AD_CORRECTNESS_CHECK(additionalColumns.size() == numColumns - 3);
-  return std::packaged_task{
-      [numColumns, blockMetadataRanges = std::move(blockMetadataRanges),
-       &newIndex, &permutation, isInternal, &locatedTriplesSharedState,
-       &localVocabMapping, &insertionPositions, &blankNodeBlocks,
-       minBlankNodeIndex, &cancellationHandle,
-       additionalColumns = std::move(additionalColumns)]() {
-        // TODO<RobinTF> exchange the multiplicities of col1 and col2 for
-        // matching permutations before writing the metadata.
-        newIndex.createPermutation(
-            numColumns,
-            readIndexAndRemap(
-                permutation, blockMetadataRanges, locatedTriplesSharedState,
-                localVocabMapping, insertionPositions, blankNodeBlocks,
-                minBlankNodeIndex, cancellationHandle, additionalColumns),
-            permutation, isInternal);
-      }};
+  return std::make_pair(numColumns, additionalColumns);
+}
+
+namespace {
+template <typename Func>
+boost::asio::awaitable<std::invoke_result_t<Func>> asCoroutine(Func func) {
+  co_return std::invoke(func);
+}
+}  // namespace
+
+// _____________________________________________________________________________
+boost::asio::awaitable<void> createPermutationWriterTask(
+    IndexImpl& newIndex, const Permutation& permutationA,
+    const Permutation& permutationB, bool isInternal,
+    const LocatedTriplesSharedState& locatedTriplesSharedState,
+    const ad_utility::HashMap<Id::T, Id>& localVocabMapping,
+    const std::vector<VocabIndex>& insertionPositions,
+    const std::vector<uint64_t>& blankNodeBlocks, uint64_t minBlankNodeIndex,
+    const ad_utility::SharedCancellationHandle& cancellationHandle) {
+  namespace net = boost::asio;
+  auto ex = co_await net::this_coro::executor;
+  auto makeTaskForPermutation = [&](const Permutation& permutation) {
+    return [&newIndex, &permutation, isInternal, &locatedTriplesSharedState,
+            &localVocabMapping, &insertionPositions, &blankNodeBlocks,
+            minBlankNodeIndex, &cancellationHandle]() {
+      auto blockMetadataRanges = permutation.getAugmentedMetadataForPermutation(
+          *locatedTriplesSharedState);
+      auto [numColumns, additionalColumns] =
+          getNumberOfColumnsAndAdditionalColumns(blockMetadataRanges);
+      return newIndex.createPermutationWithoutMetadata(
+          numColumns,
+          readIndexAndRemap(
+              permutation, blockMetadataRanges, locatedTriplesSharedState,
+              localVocabMapping, insertionPositions, blankNodeBlocks,
+              minBlankNodeIndex, cancellationHandle, additionalColumns),
+          permutation, isInternal);
+    };
+  };
+  auto taskA =
+      net::co_spawn(ex, asCoroutine(makeTaskForPermutation(permutationA)),
+                    net::use_awaitable);
+  auto taskB =
+      net::co_spawn(ex, asCoroutine(makeTaskForPermutation(permutationB)),
+                    net::use_awaitable);
+
+  auto [_, metaA] = co_await std::move(taskA);
+  auto [__, metaB] = co_await std::move(taskB);
+  metaA.exchangeMultiplicities(metaB);
+
+  auto makeFinalizerTasks =
+      [&newIndex, isInternal](
+          IndexImpl::IndexMetaDataMmapDispatcher::WriteType& meta,
+          const Permutation& permutation) {
+        return [&newIndex, &meta, &permutation, isInternal]() {
+          return newIndex.finalizePermutation(meta, permutation, isInternal);
+        };
+      };
+  auto taskC =
+      net::co_spawn(ex, asCoroutine(makeFinalizerTasks(metaA, permutationA)),
+                    net::use_awaitable);
+  auto taskD =
+      net::co_spawn(ex, asCoroutine(makeFinalizerTasks(metaB, permutationB)),
+                    net::use_awaitable);
+
+  co_await std::move(taskC);
+  co_await std::move(taskD);
 }
 }  // namespace qlever::indexRebuilder
 
@@ -290,44 +340,57 @@ void materializeToIndex(
 
   REBUILD_LOG_INFO << "Writing new permutations ..." << std::endl;
 
-  std::vector<std::packaged_task<void()>> tasks;
+  size_t patternThreads = static_cast<size_t>(index.usePatterns());
+  size_t numberOfPermutations = index.hasAllPermutations() ? 6 : 2;
+  namespace net = boost::asio;
+  net::thread_pool threadPool{patternThreads + numberOfPermutations};
 
   if (index.usePatterns()) {
-    tasks.push_back(
-        std::packaged_task{[&newIndex, &index, &insertionPositions]() {
-          newIndex.getPatterns() = index.getPatterns().cloneAndRemap(
-              [&insertionPositions](const Id& oldId) {
-                return remapVocabId(oldId, insertionPositions);
-              });
-          newIndex.writePatternsToFile();
-        }});
+    net::post(threadPool, [&newIndex, &index, &insertionPositions]() {
+      newIndex.getPatterns() = index.getPatterns().cloneAndRemap(
+          [&insertionPositions](const Id& oldId) {
+            return remapVocabId(oldId, insertionPositions);
+          });
+      newIndex.writePatternsToFile();
+    });
   }
 
   if (index.hasAllPermutations()) {
     using enum Permutation::Enum;
-    for (auto permutation : {SPO, SOP, OPS, OSP}) {
-      const auto& actualPermutation = index.getPermutation(permutation);
-      tasks.push_back(createPermutationWriterTask(
-          newIndex, actualPermutation, false, locatedTriplesSharedState,
-          localVocabMapping, insertionPositions, blankNodeBlocks,
-          minBlankNodeIndex, cancellationHandle));
+    for (auto [permutationA, permutationB] :
+         {std::pair{SPO, SOP}, std::pair{OPS, OSP}}) {
+      const auto& actualPermutationA = index.getPermutation(permutationA);
+      const auto& actualPermutationB = index.getPermutation(permutationB);
+      net::co_spawn(
+          threadPool,
+          createPermutationWriterTask(
+              newIndex, actualPermutationA, actualPermutationB, false,
+              locatedTriplesSharedState, localVocabMapping, insertionPositions,
+              blankNodeBlocks, minBlankNodeIndex, cancellationHandle),
+          net::detached);
     }
   }
 
-  for (auto permutation : Permutation::INTERNAL) {
-    const auto& actualPermutation = index.getPermutation(permutation);
-    const auto& internalPermutation = actualPermutation.internalPermutation();
-    tasks.push_back(createPermutationWriterTask(
-        newIndex, internalPermutation, true, locatedTriplesSharedState,
-        localVocabMapping, insertionPositions, blankNodeBlocks,
-        minBlankNodeIndex, cancellationHandle));
-    tasks.push_back(createPermutationWriterTask(
-        newIndex, actualPermutation, false, locatedTriplesSharedState,
-        localVocabMapping, insertionPositions, blankNodeBlocks,
-        minBlankNodeIndex, cancellationHandle));
-  }
+  const auto& actualPermutationA = index.getPermutation(Permutation::PSO);
+  const auto& internalPermutationA = actualPermutationA.internalPermutation();
+  const auto& actualPermutationB = index.getPermutation(Permutation::POS);
+  const auto& internalPermutationB = actualPermutationB.internalPermutation();
+  net::co_spawn(
+      threadPool,
+      createPermutationWriterTask(
+          newIndex, internalPermutationA, internalPermutationB, true,
+          locatedTriplesSharedState, localVocabMapping, insertionPositions,
+          blankNodeBlocks, minBlankNodeIndex, cancellationHandle),
+      net::detached);
+  net::co_spawn(
+      threadPool,
+      createPermutationWriterTask(
+          newIndex, actualPermutationA, actualPermutationB, false,
+          locatedTriplesSharedState, localVocabMapping, insertionPositions,
+          blankNodeBlocks, minBlankNodeIndex, cancellationHandle),
+      net::detached);
 
-  ad_utility::runTasksInParallel(std::move(tasks));
+  threadPool.join();
 
   REBUILD_LOG_INFO << "Index rebuild completed" << std::endl;
 

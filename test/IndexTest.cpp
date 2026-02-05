@@ -780,18 +780,23 @@ TEST(IndexImpl, createPermutation) {
 
   Permutation permutation{Permutation::PSO,
                           ad_utility::makeUnlimitedAllocator<Id>()};
-  size_t uniquePredicates = index.createPermutation(
+  auto [uniquePredicates, meta] = index.createPermutationWithoutMetadata(
       4,
       ad_utility::InputRangeTypeErased{std::array<IdTableStatic<0>, 2>{
           tables.at(0).clone(), tables.at(1).clone()}},
       permutation, false);
+  index.finalizePermutation(meta, permutation, false);
+
   EXPECT_EQ(uniquePredicates, 3);
   EXPECT_TRUE(std::filesystem::exists(onDiskBase + ".index.pso"));
   EXPECT_TRUE(std::filesystem::exists(onDiskBase + ".index.pso.meta"));
 
-  size_t uniqueInternalPredicates = index.createPermutation(
-      4, ad_utility::InputRangeTypeErased{std::move(tables)}, permutation,
-      true);
+  auto [uniqueInternalPredicates, internalMeta] =
+      index.createPermutationWithoutMetadata(
+          4, ad_utility::InputRangeTypeErased{std::move(tables)}, permutation,
+          true);
+  index.finalizePermutation(internalMeta, permutation, true);
+
   EXPECT_EQ(uniqueInternalPredicates, 3);
   EXPECT_TRUE(std::filesystem::exists(onDiskBase + ".internal.index.pso"));
   EXPECT_TRUE(std::filesystem::exists(onDiskBase + ".internal.index.pso.meta"));

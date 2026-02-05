@@ -13,6 +13,8 @@
 
 using namespace qlever::indexRebuilder;
 
+// TODO<RobinTF> Add materialize test for empty vocab.
+
 // _____________________________________________________________________________
 TEST(IndexRebuilder, materializeLocalVocab) {
   auto oldIndex = ad_utility::testing::makeTestIndex(

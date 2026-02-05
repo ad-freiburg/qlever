@@ -946,7 +946,8 @@ void IndexImpl::writeMetaData(IndexMetaDataMmapDispatcher::WriteType& metaData,
 }
 
 // _____________________________________________________________________________
-size_t IndexImpl::createPermutation(
+std::pair<size_t, IndexImpl::IndexMetaDataMmapDispatcher::WriteType>
+IndexImpl::createPermutationWithoutMetadata(
     size_t numColumns,
     ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
     const Permutation& permutation, bool internal) {
@@ -961,8 +962,16 @@ size_t IndexImpl::createPermutation(
   AD_LOG_INFO << "Statistics for " << permutation.readableName() << ": "
               << meta.statistics() << std::endl;
 
+  return std::make_pair(numDistinctCol0, std::move(meta));
+}
+
+// _____________________________________________________________________________
+void IndexImpl::finalizePermutation(
+    IndexMetaDataMmapDispatcher::WriteType& meta,
+    const Permutation& permutation, bool internal) const {
+  std::string fileName = getFilenameForPermutation(permutation, internal);
+
   writeMetaData(meta, fileName);
-  return numDistinctCol0;
 }
 
 // ________________________________________________________________________

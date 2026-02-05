@@ -636,6 +636,9 @@ class IndexImpl {
  public:
   // Write a single permutation to disk. `numColumns` specifies the number of
   // columns in the relation (usually 4, sometimes 6 with patterns).
+  // This does not write the final metadata. This has to be done by calling
+  // `finalizePermutation` after the multiplicities of the sibling permutations
+  // have been exchanged.
   // `sortedTriples` is an input range that provides the triples in the correct
   // order.
   // `permutation` specifies which permutation to write.
@@ -643,11 +646,17 @@ class IndexImpl {
   // the filename of the generated file on disk accordingly.
   // Return the number of distinct values on the first column of the written
   // permutation. (Predicates for PSO/POS, Subjects for SPO/SOP, Objects for
-  // OSP/OPS).
-  size_t createPermutation(
+  // OSP/OPS) and the metadata for the written permutation.
+  std::pair<size_t, IndexMetaDataMmapDispatcher::WriteType>
+  createPermutationWithoutMetadata(
       size_t numColumns,
       ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
       const Permutation& permutation, bool internal);
+
+  // Finalize the writing of a permutation by appending the metadata to
+  // the corresponding file on disk.
+  void finalizePermutation(IndexMetaDataMmapDispatcher::WriteType& meta,
+                           const Permutation& permutation, bool internal) const;
 
  protected:
   void openTextFileHandle();
