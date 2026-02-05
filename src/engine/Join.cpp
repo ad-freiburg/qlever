@@ -11,6 +11,7 @@
 #include <sstream>
 #include <vector>
 
+#include "JoinWithIndexScanHelpers.h"
 #include "backports/functional.h"
 #include "backports/type_traits.h"
 #include "engine/AddCombinedRowToTable.h"
@@ -29,7 +30,7 @@
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 
 using namespace qlever::joinHelpers;
-
+using namespace qlever::joinWithIndexScanHelpers;
 using std::endl;
 using std::string;
 
@@ -598,11 +599,7 @@ Result Join::computeResultForTwoIndexScans(bool requestLaziness) const {
 
         ad_utility::zipperJoinForBlocksWithoutUndef(leftBlocks, rightBlocks,
                                                     std::less{}, rowAdder);
-        leftScan->runtimeInfo().status_ =
-            RuntimeInformation::Status::lazilyMaterializedCompleted;
-        rightScan->runtimeInfo().status_ =
-            RuntimeInformation::Status::lazilyMaterializedCompleted;
-
+        setScanStatusToLazilyCompleted(*leftScan, *rightScan);
         auto localVocab = std::move(rowAdder.localVocab());
         return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
                                         std::move(localVocab)};
@@ -627,11 +624,12 @@ Result Join::computeResultForIndexScanAndIdTable(
         const IdTable& idTable = resultWithIdTable->idTable();
         auto rowAdder = makeRowAdder(std::move(yieldTable));
 
-        auto permutationIdTable = ad_utility::IdTableAndFirstCol{
-            idTable.asColumnSubsetView(idTableIsRightInput
-                                           ? joinColMap.permutationRight()
-                                           : joinColMap.permutationLeft()),
-            resultWithIdTable->getCopyOfLocalVocab()};
+        auto permutationIdTable =
+            ad_utility::IdTableAndFirstCols<1, IdTableView<0>>{
+                idTable.asColumnSubsetView(idTableIsRightInput
+                                               ? joinColMap.permutationRight()
+                                               : joinColMap.permutationLeft()),
+                resultWithIdTable->getCopyOfLocalVocab()};
 
         ad_utility::Timer timer{
             ad_utility::timer::Timer::InitialStatus::Started};
@@ -671,8 +669,7 @@ Result Join::computeResultForIndexScanAndIdTable(
         } else {
           doJoin(blockForIdTable, rightBlocks);
         }
-        scan->runtimeInfo().status_ =
-            RuntimeInformation::Status::lazilyMaterializedCompleted;
+        setScanStatusToLazilyCompleted(*scan);
 
         auto localVocab = std::move(rowAdder.localVocab());
         return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
@@ -708,8 +705,7 @@ Result Join::computeResultForIndexScanAndLazyOperation(
             convertGenerator(std::move(indexScanSide),
                              joinColMap.permutationRight()),
             std::less{}, rowAdder);
-        scan->runtimeInfo().status_ =
-            RuntimeInformation::Status::lazilyMaterializedCompleted;
+        setScanStatusToLazilyCompleted(*scan);
 
         auto localVocab = std::move(rowAdder.localVocab());
         return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),

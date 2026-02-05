@@ -101,7 +101,8 @@ IteratorWithSingleCol<numJoinColumns> convertGeneratorFromScan(
   return IteratorWithSingleCol<numJoinColumns>{std::move(range)};
 }
 
-using MaterializedInputView = std::array<IdTableAndFirstCol<IdTableView<0>>, 1>;
+using MaterializedInputView =
+    std::array<IdTableAndFirstCols<1, IdTableView<0>>, 1>;
 
 // Wrap a fully materialized result in a `IdTableAndFirstCol` and an array. It
 // then fulfills the concept `view<IdTableAndFirstCol>` which is required by the
@@ -109,9 +110,9 @@ using MaterializedInputView = std::array<IdTableAndFirstCol<IdTableView<0>>, 1>;
 // conceptually does exactly the same for lazy inputs.
 inline MaterializedInputView asSingleTableView(
     const Result& result, const std::vector<ColumnIndex>& permutation) {
-  return std::array{
-      IdTableAndFirstCol{result.idTable().asColumnSubsetView(permutation),
-                         result.getCopyOfLocalVocab()}};
+  return {IdTableAndFirstCols<1, IdTableView<0>>{
+      result.idTable().asColumnSubsetView(permutation),
+      result.getCopyOfLocalVocab()}};
 }
 
 // Wrap a result either in an array with a single element or in a range wrapping
@@ -169,18 +170,19 @@ CPP_template_2(typename ActionT)(
 // materialized depending on the requestLaziness parameter. The action is
 // expected to be a callable that takes a callback and returns an
 // IdTableVocabPair. An optional permutation can be applied to the result.
-template <typename Action, typename GetSortedOn>
+template <typename Action>
 inline Result createResultFromAction(bool requestLaziness, Action&& action,
-                                     GetSortedOn&& getSortedOn,
+                                     std::vector<ColumnIndex> resultSortedOn,
                                      OptionalPermutation permutation = {}) {
   if (requestLaziness) {
     return {runLazyJoinAndConvertToGenerator(std::forward<Action>(action),
                                              std::move(permutation)),
-            getSortedOn()};
+            std::move(resultSortedOn)};
   } else {
     auto [idTable, localVocab] = action(ad_utility::noop);
     applyPermutation(idTable, permutation);
-    return {std::move(idTable), getSortedOn(), std::move(localVocab)};
+    return {std::move(idTable), std::move(resultSortedOn),
+            std::move(localVocab)};
   }
 }
 

@@ -654,13 +654,14 @@ auto U2() { return Id::makeUndefined(); }
 // Helper function to test the special optional join with blocks.
 // TODO<joka921> We have to fix the semantics for move-only IdTables...
 void testSpecialOptionalJoin(IdNestedBlock a, IdNestedBlock b,
-                             IdJoinResult expected,
+                             IdJoinResult expected, size_t numJoinColumns = 2,
                              source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
   IdJoinResult result;
   auto adder = makeIdRowAdder(result);
 
-  ad_utility::specialOptionalJoinForBlocks(std::move(a), std::move(b), adder);
+  ad_utility::specialOptionalJoinForBlocks(std::move(a), std::move(b),
+                                           numJoinColumns, adder);
 
   // The result must be sorted on the first column.
   EXPECT_TRUE(ql::ranges::is_sorted(result, std::less<>{}, ad_utility::first));
@@ -763,7 +764,7 @@ std::vector<std::vector<size_t>> generateSplitConfigurations(
 void testSpecialOptionalJoinWithSplits(
     const IdTable& leftTable, const IdTable& rightTable,
     const IdJoinResult& expected, int numRandomSplits = 10,
-    source_location l = AD_CURRENT_SOURCE_LOC()) {
+    size_t numJoinColumns = 2, source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
 
   // Generate split configurations for both sides.
@@ -779,7 +780,7 @@ void testSpecialOptionalJoinWithSplits(
       auto rightBlocks = splitIdTable(rightTable, rightConfigs[rightIdx]);
 
       testSpecialOptionalJoin(std::move(leftBlocks), std::move(rightBlocks),
-                              expected, l);
+                              expected, numJoinColumns, l);
     }
   }
 }

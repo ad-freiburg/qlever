@@ -19,6 +19,7 @@
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 
 using namespace qlever::joinHelpers;
+using namespace qlever::joinWithIndexScanHelpers;
 
 using std::endl;
 using std::string;
@@ -486,10 +487,8 @@ Result OptionalJoin::lazyOptionalJoin(std::shared_ptr<const Result> left,
   auto action = [this, left = std::move(left), right = std::move(right),
                  joinColMap = std::move(joinColMap)](
                     std::function<void(IdTable&, LocalVocab&)> yieldTable) {
-    ad_utility::AddCombinedRowToIdTable rowAdder{
-        _joinColumns.size(), IdTable{getResultWidth(), allocator()},
-        cancellationHandle_, keepJoinColumns_,
-        CHUNK_SIZE,          std::move(yieldTable)};
+    auto rowAdder = getRowAdderForJoin(*this, _joinColumns.size(),
+                                       keepJoinColumns_, std::move(yieldTable));
     auto leftRange = resultToView(*left, joinColMap.permutationLeft());
     auto rightRange = resultToView(*right, joinColMap.permutationRight());
     std::visit(
@@ -503,16 +502,8 @@ Result OptionalJoin::lazyOptionalJoin(std::shared_ptr<const Result> left,
     return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
                                     std::move(localVocab)};
   };
-
-  if (requestLaziness) {
-    return {runLazyJoinAndConvertToGenerator(std::move(action),
-                                             std::move(resultPermutation)),
-            resultSortedOn()};
-  } else {
-    auto [idTable, localVocab] = action(ad_utility::noop);
-    applyPermutation(idTable, resultPermutation);
-    return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
-  }
+  return createResultFromAction(requestLaziness, std::move(action),
+                                resultSortedOn(), std::move(resultPermutation));
 }
 // _____________________________________________________________________________
 Result OptionalJoin::lazyOptionalJoinWithIndexScan(
@@ -532,10 +523,8 @@ Result OptionalJoin::lazyOptionalJoinWithIndexScan(
   auto action = [this, left = std::move(left), rightScan = std::move(rightScan),
                  joinColMap = std::move(joinColMap)](
                     std::function<void(IdTable&, LocalVocab&)> yieldTable) {
-    ad_utility::AddCombinedRowToIdTable rowAdder{
-        _joinColumns.size(), IdTable{getResultWidth(), allocator()},
-        cancellationHandle_, keepJoinColumns_,
-        CHUNK_SIZE,          std::move(yieldTable)};
+    auto rowAdder = getRowAdderForJoin(*this, _joinColumns.size(),
+                                       keepJoinColumns_, std::move(yieldTable));
     auto getLeftAndRightRange = [&]<size_t numJoinCols>() {
       auto firstJoinColLeft = _joinColumns.at(0).at(0);
       auto [leftJoinSide, indexScanSide] =
@@ -548,7 +537,6 @@ Result OptionalJoin::lazyOptionalJoinWithIndexScan(
               std::move(indexScanSide), joinColMap.permutationRight());
       return std::pair{std::move(leftRange), std::move(rightRange)};
     };
-    using namespace qlever::joinHelpers;
     if (_joinColumns.size() == 1) {
       // Note: The `zipperJoinForBlocksWithPotentialUndef` automatically
       // switches to a more efficient implementation if there are no UNDEF
@@ -564,22 +552,15 @@ Result OptionalJoin::lazyOptionalJoinWithIndexScan(
       auto [leftRange, rightRange] =
           getLeftAndRightRange.template operator()<2>();
       specialOptionalJoinForBlocks(std::move(leftRange), std::move(rightRange),
+                                   std::integral_constant<size_t, 2>{},
                                    rowAdder);
     }
-    auto localVocab = std::move(rowAdder.localVocab());
-    return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
-                                    std::move(localVocab)};
+    setScanStatusToLazilyCompleted(*rightScan);
+    return std::move(rowAdder).toIdTableVocabPair();
   };
 
-  if (requestLaziness) {
-    return {runLazyJoinAndConvertToGenerator(std::move(action),
-                                             std::move(resultPermutation)),
-            resultSortedOn()};
-  } else {
-    auto [idTable, localVocab] = action(ad_utility::noop);
-    applyPermutation(idTable, resultPermutation);
-    return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
-  }
+  return createResultFromAction(requestLaziness, std::move(action),
+                                resultSortedOn(), std::move(resultPermutation));
 }
 
 // _____________________________________________________________________________
@@ -600,10 +581,9 @@ Result OptionalJoin::materializedOptionalJoinWithIndexScan(
   auto action = [this, left = std::move(left), rightScan = std::move(rightScan),
                  joinColMap = std::move(joinColMap)](
                     std::function<void(IdTable&, LocalVocab&)> yieldTable) {
-    ad_utility::AddCombinedRowToIdTable rowAdder{
-        _joinColumns.size(), IdTable{getResultWidth(), allocator()},
-        cancellationHandle_, keepJoinColumns_,
-        CHUNK_SIZE,          std::move(yieldTable)};
+    using namespace qlever::joinHelpers;
+    auto rowAdder = getRowAdderForJoin(*this, _joinColumns.size(),
+                                       keepJoinColumns_, std::move(yieldTable));
     auto getLeftAndRightRange = [&]<size_t numJoinCols>() {
       auto firstJoinColLeft = _joinColumns.at(0).at(0);
       auto rightBlocksInternal = rightScan->lazyScanForJoinOfColumnWithScan(
@@ -618,7 +598,6 @@ Result OptionalJoin::materializedOptionalJoinWithIndexScan(
 
       return std::pair{std::move(leftRange), std::move(rightRange)};
     };
-    using namespace qlever::joinHelpers;
     if (_joinColumns.size() == 1) {
       // Note: The `zipperJoinForBlocksWithPotentialUndef` automatically
       // switches to a more efficient implementation if there are no UNDEF
@@ -634,22 +613,15 @@ Result OptionalJoin::materializedOptionalJoinWithIndexScan(
       auto [leftRange, rightRange] =
           getLeftAndRightRange.template operator()<2>();
       specialOptionalJoinForBlocks(std::move(leftRange), std::move(rightRange),
+                                   std::integral_constant<size_t, 2>{},
                                    rowAdder);
     }
-    auto localVocab = std::move(rowAdder.localVocab());
-    return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
-                                    std::move(localVocab)};
+    setScanStatusToLazilyCompleted(*rightScan);
+    return std::move(rowAdder).toIdTableVocabPair();
   };
 
-  if (requestLaziness) {
-    return {runLazyJoinAndConvertToGenerator(std::move(action),
-                                             std::move(resultPermutation)),
-            resultSortedOn()};
-  } else {
-    auto [idTable, localVocab] = action(ad_utility::noop);
-    applyPermutation(idTable, resultPermutation);
-    return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
-  }
+  return createResultFromAction(requestLaziness, std::move(action),
+                                resultSortedOn(), std::move(resultPermutation));
 }
 
 // _____________________________________________________________________________
