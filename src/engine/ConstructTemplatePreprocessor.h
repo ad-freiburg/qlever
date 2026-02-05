@@ -68,11 +68,11 @@ struct PreprocessedConstructTemplate {
 
 // _____________________________________________________________________________
 // Preprocesses CONSTRUCT template triples to create a
-// PreprocessedConstructTemplate. For each term position, determines how to
+// `PreprocessedConstructTemplate`. For each term position, determines how to
 // obtain its value:
-// - Constants (IRIs/Literals): evaluates and stores the string
-// - Variables: precomputes column indices for IdTable lookup
-// - Blank nodes: precomputes format prefix/suffix
+// - Constants (`Iri`s/`Literal`s): evaluates and stores the string
+// - `Variables`: precomputes column indices for `IdTable` lookup.
+// - `BlankNode`s: precomputes format prefix/suffix
 class ConstructTemplatePreprocessor {
  public:
   using CancellationHandle = ad_utility::SharedCancellationHandle;
