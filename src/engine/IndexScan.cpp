@@ -523,15 +523,22 @@ IndexScan::lazyScanForJoinOfColumnWithScan(
     ql::span<const Id> joinColumn) const {
   AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(joinColumn));
   AD_CORRECTNESS_CHECK(numVariables_ <= 3 && numVariables_ > 0);
-  AD_CONTRACT_CHECK(joinColumn.empty() || !joinColumn[0].isUndefined());
 
   auto metaBlocks = getMetadataForScan();
-  if (!metaBlocks.has_value()) {
+  if (!metaBlocks.has_value() || joinColumn.empty()) {
     return {};
   }
-  auto blocks = CompressedRelationReader::getBlocksForJoin(joinColumn,
-                                                           metaBlocks.value());
-  auto result = getLazyScan(std::move(blocks.matchingBlocks_));
+  auto matchingBlocks =
+      [&]() -> std::optional<std::vector<CompressedBlockMetadata>> {
+    bool hasUndef = joinColumn.front().isUndefined();
+    if (hasUndef) {
+      return std::nullopt;
+    }
+    auto blocks = CompressedRelationReader::getBlocksForJoin(
+        joinColumn, metaBlocks.value());
+    return std::move(blocks.matchingBlocks_);
+  }();
+  auto result = getLazyScan(std::move(matchingBlocks));
   result.details().numBlocksAll_ = metaBlocks.value().sizeBlockMetadata_;
   return result;
 }
