@@ -619,25 +619,31 @@ struct IndexScan::SharedGeneratorState {
     }
   }
 
-  // If buffer grows too large, find a dummy block to add.
+  // If (in the case of the left side not being filtered), the buffer for tables
+  // from the left side grows too large, find a dummy block (a block from the
+  // index scan, that might match nothing on the left side) to the result. This
+  // is used in `fetch()` to enforce the invariant, that it always returns with
+  // nonempty next values for both the left and right side.
   void pushDummyBlockIfBufferTooLarge() {
     constexpr int maxBufferSize = 5;
-    if (prefetchedValues_.size() > maxBufferSize) {
-      // Find the last value in the join column of the last prefetched table.
-      const auto& lastPrefetched = prefetchedValues_.back();
-      auto lastJoinColumn = lastPrefetched.idTable_.getColumn(joinColumn_);
-      AD_CORRECTNESS_CHECK(!lastJoinColumn.empty());
-      Id lastValue = lastJoinColumn.back();
-      // TODO<joka921> Remove code duplication with the above code.
-      const auto& block = *metaBlocks_.getBlockMetadataView().begin();
-      AD_CORRECTNESS_CHECK(CompressedRelationReader::getRelevantIdFromTriple(
-                               block.firstTriple_, metaBlocks_) > lastValue);
-      // Found a suitable block, add it to pendingBlocks.
-      pendingBlocks_.push_back(block);
-      lastEntryInBlocks_ = CompressedRelationReader::getRelevantIdFromTriple(
-          block.lastTriple_, metaBlocks_);
-      metaBlocks_.removePrefix(1);
+    if (prefetchedValues_.size() <= maxBufferSize) {
+      return;
     }
+    // Find the last value in the join column of the last prefetched table.
+    const auto& lastPrefetched = prefetchedValues_.back();
+    auto lastJoinColumn = lastPrefetched.idTable_.getColumn(joinColumn_);
+    AD_CORRECTNESS_CHECK(!lastJoinColumn.empty());
+    Id lastValue = lastJoinColumn.back();
+    const auto& metaBlockView = metaBlocks_.getBlockMetadataView();
+    AD_CORRECTNESS_CHECK(!ql::ranges::empty(metaBlockView));
+    const auto& block = *metaBlockView.begin();
+    AD_CORRECTNESS_CHECK(CompressedRelationReader::getRelevantIdFromTriple(
+                             block.firstTriple_, metaBlocks_) > lastValue);
+    // Found a suitable block, add it to pendingBlocks.
+    pendingBlocks_.push_back(block);
+    lastEntryInBlocks_ = CompressedRelationReader::getRelevantIdFromTriple(
+        block.lastTriple_, metaBlocks_);
+    metaBlocks_.removePrefix(1);
   }
 
   // Consume the next non-empty table from the generator and calculate the next
@@ -665,6 +671,41 @@ struct IndexScan::SharedGeneratorState {
       // `newBlocks` or can never match any entry that is larger than the
       // entries in `joinColumn` and thus can be ignored from now on.
       metaBlocks_.removePrefix(numBlocksCompletelyHandled);
+
+      const bool newBlockWasFound = !newBlocks.empty();
+      const bool joinColumnMatchesPreviouslyYieldedBlock =
+          joinColumn[0] <= lastEntryInBlocks_.value_or(Id::makeUndefined());
+
+      const bool leftBlockWillBeYielded =
+          !filterLeftSide_ || newBlockWasFound ||
+          joinColumnMatchesPreviouslyYieldedBlock;
+      bool rightSideExhausted = metaBlocks_.blockMetadata_.empty();
+
+      if (newBlockWasFound) {
+        lastEntryInBlocks_ = CompressedRelationReader::getRelevantIdFromTriple(
+            newBlocks.back().lastTriple_, metaBlocks_);
+        ql::ranges::move(newBlocks, std::back_inserter(pendingBlocks_));
+      }
+      if (leftBlockWillBeYielded) {
+        prefetchedValues_.push_back(std::move(*iterator_.value()));
+      }
+
+      // The second  and third part of the condition are important, because
+      // following `joinColumns` from the left might still match the last block
+      // that we previously have yielded. Note: If we don't filter the left
+      // side, then its left elements still have to be yielded, but this is done
+      // by the generator for the left side.
+      if (rightSideExhausted &&
+          !(newBlockWasFound || joinColumnMatchesPreviouslyYieldedBlock)) {
+        doneFetching_ = true;
+        return;
+      }
+      if (!newBlockWasFound && leftBlockWillBeYielded) {
+        pushDummyBlockIfBufferTooLarge();
+      }
+    }
+
+    /*
       if (!newBlocks.empty()) {
         lastEntryInBlocks_ = CompressedRelationReader::getRelevantIdFromTriple(
             newBlocks.back().lastTriple_, metaBlocks_);
@@ -696,6 +737,7 @@ struct IndexScan::SharedGeneratorState {
       prefetchedValues_.push_back(std::move(*iterator_.value()));
       ql::ranges::move(newBlocks, std::back_inserter(pendingBlocks_));
     }
+    */
   }
 
   // Check if there are any undefined values yielded by the original generator.
