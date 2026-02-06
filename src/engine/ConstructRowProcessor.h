@@ -30,6 +30,10 @@ class ConstructRowProcessor
   // Default batch size for processing rows.
   static constexpr size_t DEFAULT_BATCH_SIZE = 64;
 
+  // Multiplier for computing ID cache capacity from batch size and variable
+  // count. Provides headroom for cross-batch cache hits on repeated values.
+  static constexpr size_t CACHE_CAPACITY_FACTOR = 32;
+
   static size_t getBatchSize() { return DEFAULT_BATCH_SIZE; }
 
   // Constructor takes all data needed for processing.

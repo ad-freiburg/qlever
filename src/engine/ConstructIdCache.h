@@ -14,15 +14,6 @@
 #include "global/Id.h"
 #include "util/LruCache.h"
 
-// Minimum capacity for the LRU cache. This was chosen arbitrarily. This should
-// be large enough to hold the working set of a single batch (batch_size *
-// num_variables_in_construct_clause + num_constants_in_construt_clause)
-// plus headroom for cross-batch cache hits_ on repeated values (e.g.,
-// predicates).
-// TODO<ms2144>: Choose this at runtime, depending on # of variables in
-// construct clause.
-inline constexpr size_t CONSTRUCT_ID_CACHE_MIN_CAPACITY = 100'000;
-
 // Statistics for ID cache performance analysis
 struct ConstructIdCacheStats {
   size_t hits_ = 0;
