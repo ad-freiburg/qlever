@@ -87,11 +87,15 @@ VariableToColumnMap Bind::computeVariableToColumnMap() const {
   auto res = _subtree->getVariableColumns();
   // The new variable is always appended at the end.
   auto columnIndex = getResultWidth() - 1;
-  if (_bind._expression.isResultAlwaysDefined(res)) {
-    res[_bind._target] = makeAlwaysDefinedColumn(columnIndex);
-  } else {
-    res[_bind._target] = makePossiblyUndefinedColumn(columnIndex);
-  }
+  // Determine whether the added column might contain UNDEF values.
+  using enum ColumnIndexAndTypeInfo::UndefStatus;
+  auto statusOfNewColumn = _bind._expression.isResultAlwaysDefined(res)
+                               ? AlwaysDefined
+                               : PossiblyUndefined;
+
+  auto [it, wasNew] =
+      res.insert({_bind._target, {columnIndex, statusOfNewColumn}});
+  AD_CORRECTNESS_CHECK(wasNew);
   return res;
 }
 

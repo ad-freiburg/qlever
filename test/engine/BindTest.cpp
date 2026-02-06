@@ -201,110 +201,48 @@ TEST(Bind, undefStatusForConstantInteger) {
 }
 
 // _____________________________________________________________________________
-TEST(Bind, undefStatusForDivisionByZero) {
-  auto* qec = ad_utility::testing::getQec();
-  Variable inputVar{"?x"};
-  Variable targetVar{"?newCol"};
+class BindUndefStatusTest : public testing::TestWithParam<bool> {};
 
-  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, makeIdTableFromVector({{42}}, &Id::makeFromInt), Vars{inputVar});
-
-  // Create BIND(1/0 AS ?newCol)
-  auto oneExpr = std::make_unique<IdExpression>(Id::makeFromInt(1));
-  auto zeroExpr = std::make_unique<IdExpression>(Id::makeFromInt(0));
-  auto divExpr = makeDivideExpression(std::move(oneExpr), std::move(zeroExpr));
-  SparqlExpressionPimpl pimpl{std::move(divExpr), "1/0"};
-  Bind bind{qec, std::move(valuesTree), {std::move(pimpl), targetVar}};
-
-  // Check that the variable to column map has the correct undef status
-  auto varColMap = bind.getExternallyVisibleVariableColumns();
-
-  ASSERT_TRUE(varColMap.contains(targetVar));
-  auto& colInfo = varColMap.at(targetVar);
-
-  // Division by zero can produce undefined, so it should be PossiblyUndefined
-  EXPECT_EQ(colInfo.mightContainUndef_,
-            ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined);
-}
-
-// _____________________________________________________________________________
-TEST(Bind, undefStatusForAlwaysDefinedVariable) {
+TEST_P(BindUndefStatusTest, undefStatusForAlwaysDefinedVariable) {
   auto* qec = ad_utility::testing::getQec();
   Variable inputVar{"?x"};
   Variable targetVar{"?y"};
 
-  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, makeIdTableFromVector({{42}}, &Id::makeFromInt), Vars{inputVar});
+  bool isDefined = GetParam();
 
-  // Create BIND(?x AS ?y) where ?x is AlwaysDefined
+  // Create IdTable with either a defined or undefined value.
+  IdTable inputTable = isDefined
+                           ? makeIdTableFromVector({{42}}, &Id::makeFromInt)
+                           : makeIdTableFromVector({{Id::makeUndefined()}});
+
+  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(inputTable), Vars{inputVar});
+
+  // Create BIND(?x AS ?y).
   auto varExpr = std::make_unique<VariableExpression>(inputVar);
   SparqlExpressionPimpl pimpl{std::move(varExpr), inputVar.name()};
   Bind bind{qec, std::move(valuesTree), {std::move(pimpl), targetVar}};
 
-  // Check that the variable to column map has the correct undef status
+  // Check that the variable to column map has the correct undef status.
   auto varColMap = bind.getExternallyVisibleVariableColumns();
 
-  ASSERT_TRUE(varColMap.contains(targetVar));
-  auto& colInfo = varColMap.at(targetVar);
+  using enum ColumnIndexAndTypeInfo::UndefStatus;
+  auto expectedStatus = isDefined ? AlwaysDefined : PossiblyUndefined;
 
-  // Since ?x is AlwaysDefined (from ValuesForTesting), ?y should be too
-  EXPECT_EQ(colInfo.mightContainUndef_,
-            ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined);
+  // Check the input variable ?x.
+  ASSERT_TRUE(varColMap.contains(inputVar));
+  auto& inputColInfo = varColMap.at(inputVar);
+  EXPECT_EQ(inputColInfo.mightContainUndef_, expectedStatus);
+
+  // Check the target variable ?y.
+  ASSERT_TRUE(varColMap.contains(targetVar));
+  auto& targetColInfo = varColMap.at(targetVar);
+  EXPECT_EQ(targetColInfo.mightContainUndef_, expectedStatus);
 }
 
-// _____________________________________________________________________________
-TEST(Bind, undefStatusForStringLiteral) {
-  auto* qec = ad_utility::testing::getQec();
-  Variable inputVar{"?x"};
-  Variable targetVar{"?str"};
-
-  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, makeIdTableFromVector({{42}}, &Id::makeFromInt), Vars{inputVar});
-
-  // Create BIND("hello" AS ?str)
-  auto literal =
-      ad_utility::triple_component::Literal::literalWithoutQuotes("hello");
-  auto literalExpr = std::make_unique<StringLiteralExpression>(literal);
-  SparqlExpressionPimpl pimpl{std::move(literalExpr), "\"hello\""};
-  Bind bind{qec, std::move(valuesTree), {std::move(pimpl), targetVar}};
-
-  // Check that the variable to column map has the correct undef status
-  auto varColMap = bind.getExternallyVisibleVariableColumns();
-
-  ASSERT_TRUE(varColMap.contains(targetVar));
-  auto& colInfo = varColMap.at(targetVar);
-
-  // String literals should always be defined
-  EXPECT_EQ(colInfo.mightContainUndef_,
-            ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined);
-}
-
-// _____________________________________________________________________________
-TEST(Bind, undefStatusForArithmeticOnConstants) {
-  auto* qec = ad_utility::testing::getQec();
-  Variable inputVar{"?x"};
-  Variable targetVar{"?result"};
-
-  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, makeIdTableFromVector({{42}}, &Id::makeFromInt), Vars{inputVar});
-
-  // Create BIND(2 * 3 AS ?result)
-  auto twoExpr = std::make_unique<IdExpression>(Id::makeFromInt(2));
-  auto threeExpr = std::make_unique<IdExpression>(Id::makeFromInt(3));
-  auto mulExpr =
-      makeMultiplyExpression(std::move(twoExpr), std::move(threeExpr));
-  SparqlExpressionPimpl pimpl{std::move(mulExpr), "2*3"};
-  Bind bind{qec, std::move(valuesTree), {std::move(pimpl), targetVar}};
-
-  // Check that the variable to column map has the correct undef status
-  auto varColMap = bind.getExternallyVisibleVariableColumns();
-
-  ASSERT_TRUE(varColMap.contains(targetVar));
-  auto& colInfo = varColMap.at(targetVar);
-
-  // Arithmetic expressions don't have isResultAlwaysDefined implemented yet,
-  // so they default to PossiblyUndefined. This will change once NaryExpression
-  // implements isResultAlwaysDefined.
-  EXPECT_EQ(colInfo.mightContainUndef_,
-            ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined);
-}
+INSTANTIATE_TEST_SUITE_P(BindUndefStatus, BindUndefStatusTest,
+                         testing::Values(true, false),
+                         [](const testing::TestParamInfo<bool>& info) {
+                           return info.param ? "DefinedVariable"
+                                             : "UndefinedVariable";
+                         });

@@ -31,11 +31,15 @@ struct IfImpl {
     return IdOrLiteralOrIri{Id::makeUndefined()};
   }
 };
+
+// This macro implements an expression that evaluates the `IF()` function, but
+// will be extended below by additional member functions.
 NARY_EXPRESSION(IfExpressionImpl, 3,
                 FV<IfImpl, EffectiveBooleanValueGetter, ActualValueGetter,
                    ActualValueGetter>);
 
-// The actual IfExpression class that adds isResultAlwaysDefined override
+// The actual `IfExpression` class that adds an override for
+// `isResultAlwaysDefined`.
 class IfExpression : public IfExpressionImpl {
  public:
   using IfExpressionImpl::IfExpressionImpl;
@@ -53,8 +57,8 @@ class IfExpression : public IfExpressionImpl {
     // In this case, the result is always defined iff someOtherExpr is always
     // defined.
 
-    // Check if condition is a BOUND expression using RTTI
-    // Create a dummy expression to get the typeid
+    // Check if condition is a `BOUND()` expression using RTTI.
+    // Create a dummy expression to get the typeid.
     static const auto& dummyBoundExprRef = []() -> const SparqlExpression& {
       static auto expr = makeBoundExpression(
           std::make_unique<VariableExpression>(Variable{"?dummy"}));
@@ -63,15 +67,15 @@ class IfExpression : public IfExpressionImpl {
     if (typeid(*condition) == typeid(dummyBoundExprRef)) {
       // condition is a BOUND expression, get its argument
       const auto& boundChildren = condition->children();
-      if (boundChildren.size() == 1) {
-        const SparqlExpression* boundArg = boundChildren[0].get();
-        // Check if thenBranch is the same as boundArg by comparing cache keys
-        if (thenBranch->getCacheKey(varColMap) ==
-            boundArg->getCacheKey(varColMap)) {
-          // Pattern matches: IF(BOUND(someExpr), someExpr, someOtherExpr)
-          // Result is always defined iff elseBranch is always defined
-          return elseBranch->isResultAlwaysDefined(varColMap);
-        }
+      AD_CORRECTNESS_CHECK(boundChildren.size() == 1);
+      auto boundVar = boundChildren[0]->getVariableOrNullopt();
+      auto thenVar = thenBranch->getVariableOrNullopt();
+      if (boundVar.has_value() && boundVar == thenVar) {
+        // Pattern matches: `IF(BOUND(?someVar), ?someVar, someOtherExpr)`
+        // Result is then always defined iff any of the if or else branch are
+        // always defined.
+        return elseBranch->isResultAlwaysDefined(varColMap) ||
+               thenBranch->isResultAlwaysDefined(varColMap);
       }
     }
 
@@ -92,13 +96,11 @@ class CoalesceExpression : public VariadicExpression {
   // _____________________________________________________________
   bool isResultAlwaysDefined(
       const VariableToColumnMap& varColMap) const override {
-    // COALESCE is always defined if any of its children is always defined
-    for (const auto& child : childrenVec()) {
-      if (child->isResultAlwaysDefined(varColMap)) {
-        return true;
-      }
-    }
-    return false;
+    // COALESCE is always defined if any of its children is always defined.
+    return ql::ranges::any_of(
+        childrenVec(), [&varColMap](const auto& childPtr) {
+          return childPtr->isResultAlwaysDefined(varColMap);
+        });
   }
 
   // _____________________________________________________________
