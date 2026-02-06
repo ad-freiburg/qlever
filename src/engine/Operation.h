@@ -288,14 +288,19 @@ class Operation {
   // its result.
   [[nodiscard]] virtual bool supportsLimitOffset() const { return false; }
 
+  // Laxer variant of `supportsLimitOffset` that also returns `true` for
+  // operations that don't support `LIMIT`/`OFFSET` natively but can still
+  // benefit from applying a `LIMIT`/`OFFSET` clause on their result because
+  // they might propagate it to their children.
+  virtual bool benefitsFromApplyingLimitOrOffset() const {
+    return supportsLimitOffset();
+  }
+
  private:
   // This function is called each time `applyLimitOffset` is called. It can be
   // overridden by subclasses to e.g. implement the LIMIT in a more efficient
-  // way
-  virtual void onLimitOffsetChanged(const LimitOffsetClause&) const {
-    // If `supportsLimitOffset()` returns `false`, this function has to be
-    // no-op.
-  }
+  // way.
+  virtual void onLimitOffsetChanged(const LimitOffsetClause&) const {}
 
   // This function is called when the operation's result is requested to be
   // cached and pinned to a name.

@@ -175,7 +175,7 @@ class ExportQueryExecutionTrees {
   // result (it is already applied by the root operation in the query
   // execution tree). Note that we don't need this for the limit because
   // applying a fixed limit is idempotent. This only works because the query
-  // planner does the exact same `supportsLimit()` check.
+  // planner does the exact same `benefitsFromLimitOrOffset()` check.
   static void compensateForLimitOffsetClause(
       LimitOffsetClause& limitOffsetClause, const QueryExecutionTree& qet);
 

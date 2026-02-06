@@ -90,6 +90,26 @@ string OptionalJoin::getCacheKeyImpl() const {
 }
 
 // _____________________________________________________________________________
+void OptionalJoin::onLimitOffsetChanged(
+    const LimitOffsetClause& limitOffset) const {
+  if (limitOffset._limit.has_value()) {
+    std::optional<uint64_t> safeLimit = std::nullopt;
+    auto limit = limitOffset._limit.value();
+    auto offset = limitOffset._offset;
+    // We have to be careful to not cause an overflow when adding the offset and
+    // the limit.
+    if (limit <= std::numeric_limits<uint64_t>::max() - offset) {
+      safeLimit = limit + offset;
+    }
+    // If we have a limit + offset, we can apply the limit + offset to the left
+    // side, since the result of the optional join is at least as large as the
+    // left side. This can significantly speed up the query if the left side is
+    // large and the limit is small.
+    _left->applyLimit(LimitOffsetClause{safeLimit});
+  }
+}
+
+// _____________________________________________________________________________
 string OptionalJoin::getDescriptor() const {
   std::string joinVars;
   for (auto [leftCol, rightCol] : _joinColumns) {

@@ -224,8 +224,10 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
   // that a lot of the time the limit is only artificially applied during
   // export, allowing the cache to reuse the same operation for different
   // limits and offsets.
-  if (!supportsLimitOffset()) {
+  if (!benefitsFromApplyingLimitOrOffset()) {
     runtimeInfo().addLimitOffsetRow(limitOffset_, true);
+  }
+  if (!supportsLimitOffset()) {
     AD_CONTRACT_CHECK(!externalLimitApplied_);
     externalLimitApplied_ = !limitOffset_.isUnconstrained();
     result.applyLimitOffset(
