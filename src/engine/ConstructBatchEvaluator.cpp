@@ -74,10 +74,13 @@ void ConstructBatchEvaluator::instantiateSingleVariableForBatch(
     const uint64_t rowIdx = evaluationContext.rowIndicesOfBatch_[rowIdxInBatch];
     Id id = evaluationContext.idTable_(rowIdx, colIdx);
 
-    columnResults[rowIdxInBatch] = idCache.getOrCompute(id, [&](const Id&) {
+    auto computeValue = [&colIdx, &rowIdx, &evaluationContext, &varCols,
+                         &idx](const Id&) {
       return computeVariableInstantiation(colIdx, rowIdx, evaluationContext,
                                           varCols, idx);
-    });
+    };
+
+    columnResults[rowIdxInBatch] = idCache.getOrCompute(id, computeValue);
   }
 }
 
