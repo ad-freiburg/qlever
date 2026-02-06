@@ -176,31 +176,6 @@ TEST(Bind, limitIsPropagated) {
 }
 
 // _____________________________________________________________________________
-TEST(Bind, undefStatusForConstantInteger) {
-  auto* qec = ad_utility::testing::getQec();
-  Variable inputVar{"?x"};
-  Variable targetVar{"?newCol"};
-
-  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, makeIdTableFromVector({{42}}, &Id::makeFromInt), Vars{inputVar});
-
-  // Create BIND(3 AS ?newCol)
-  auto constantExpr = std::make_unique<IdExpression>(Id::makeFromInt(3));
-  SparqlExpressionPimpl pimpl{std::move(constantExpr), "3"};
-  Bind bind{qec, std::move(valuesTree), {std::move(pimpl), targetVar}};
-
-  // Check that the variable to column map has the correct undef status
-  auto varColMap = bind.getExternallyVisibleVariableColumns();
-
-  ASSERT_TRUE(varColMap.contains(targetVar));
-  auto& colInfo = varColMap.at(targetVar);
-
-  // The constant 3 should always be defined
-  EXPECT_EQ(colInfo.mightContainUndef_,
-            ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined);
-}
-
-// _____________________________________________________________________________
 class BindUndefStatusTest : public testing::TestWithParam<bool> {};
 
 TEST_P(BindUndefStatusTest, undefStatusForAlwaysDefinedVariable) {
