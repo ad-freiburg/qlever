@@ -113,12 +113,12 @@ std::shared_ptr<ConstructRowProcessor::IdCache>
 ConstructRowProcessor::createIdCache() const {
   // Size the cache proportionally to the query shape: each batch touches at
   // most `batchSize * numVars` distinct IDs (remember that we only process
-  // `Variables` and `BlankNodes`, and that `BlankNodes` are generated and not
-  // looked up in the `IdTable`), and `CACHE_CAPACITY_FACTOR`
-  // provides headroom so that frequently repeated values (e.g., predicates)
-  // survive across batches instead of being evicted immediately.  We use
-  // `max(numVars, 1)` to guarantee a positive capacity (a zero-capacity LRU
-  // cache would be degenerate).
+  // `Variables` and `BlankNodes` per batch, and that `BlankNodes` are generated
+  // and not looked up in the `IdTable` and therefore are not cached), and
+  // `CACHE_CAPACITY_FACTOR` provides headroom so that frequently repeated
+  // values (e.g., predicates) survive across batches instead of being evicted
+  // immediately.  We use `max(numVars, 1)` to guarantee a positive capacity
+  // (a zero-capacity LRU cache would be degenerate).
   const size_t numVars =
       preprocessedConstructTemplate_->variablesToInstantiate_.size();
   const size_t capacity =
