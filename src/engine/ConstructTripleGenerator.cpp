@@ -139,6 +139,21 @@ ConstructTripleGenerator::generateFormattedTriples(
       std::make_unique<FormattedTripleAdapter<format>>(std::move(processor))};
 }
 
+// _____________________________________________________________________________
+template <ad_utility::MediaType format>
+ad_utility::InputRangeTypeErased<std::string>
+ConstructTripleGenerator::generateAllFormattedTriples(
+    ad_utility::InputRangeTypeErased<TableWithRange> rowIndices) {
+  auto tableTriples =
+      ql::views::transform(ad_utility::OwningView{std::move(rowIndices)},
+                           [this](const TableWithRange& table) {
+                             return generateFormattedTriples<format>(table);
+                           });
+
+  return InputRangeTypeErased<std::string>(
+      ql::views::join(std::move(tableTriples)));
+}
+
 // Explicit instantiations.
 template ad_utility::InputRangeTypeErased<std::string>
 ConstructTripleGenerator::generateFormattedTriples<
@@ -149,3 +164,15 @@ ConstructTripleGenerator::generateFormattedTriples<ad_utility::MediaType::csv>(
 template ad_utility::InputRangeTypeErased<std::string>
 ConstructTripleGenerator::generateFormattedTriples<ad_utility::MediaType::tsv>(
     const TableWithRange&);
+template ad_utility::InputRangeTypeErased<std::string>
+    ConstructTripleGenerator::generateAllFormattedTriples<
+        ad_utility::MediaType::turtle>(
+        ad_utility::InputRangeTypeErased<TableWithRange>);
+template ad_utility::InputRangeTypeErased<std::string>
+    ConstructTripleGenerator::generateAllFormattedTriples<
+        ad_utility::MediaType::csv>(
+        ad_utility::InputRangeTypeErased<TableWithRange>);
+template ad_utility::InputRangeTypeErased<std::string>
+    ConstructTripleGenerator::generateAllFormattedTriples<
+        ad_utility::MediaType::tsv>(
+        ad_utility::InputRangeTypeErased<TableWithRange>);

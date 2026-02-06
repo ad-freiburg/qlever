@@ -53,23 +53,30 @@ class ConstructTripleGenerator {
   // ___________________________________________________________________________
   // This generator has to be called for each table contained in the result of
   // `ExportQueryExecutionTrees::getRowIndices` IN ORDER (because of
-  // rowOffsset). For each row of the result table (the table that is created as
-  // result of processing the WHERE-clause of a CONSTRUCT-query) it creates the
-  // resulting triples by instantiating the triple-patterns with the values of
-  // the result-table row (triple-patterns are the triples in the
+  // `rowOffsset_`). For each row of the result table (the table that is created
+  // as result of processing the WHERE-clause of a CONSTRUCT-query) it creates
+  // the resulting triples by instantiating the triple-patterns with the values
+  // of the result-table row (triple-patterns are the triples in the
   // CONSTRUCT-clause of a CONSTRUCT-query). The following pipeline takes place
   // conceptually: result-table -> processing batches -> result-table rows ->
-  // triple patterns -> `StringTriples`
+  // triple patterns -> `StringTriples`.
   ad_utility::InputRangeTypeErased<StringTriple>
   generateStringTriplesForResultTable(const TableWithRange& table);
 
   // ___________________________________________________________________________
   // Generate triples as formatted strings for the given output format.
-  // This is the main entry point for streaming CONSTRUCT results.
   // Yields formatted strings directly, avoiding `StringTriple` allocation.
   template <ad_utility::MediaType format>
   ad_utility::InputRangeTypeErased<std::string> generateFormattedTriples(
       const TableWithRange& table);
+
+  // ___________________________________________________________________________
+  // Generate formatted triples for all tables in the given range.
+  // Transforms each table via `generateFormattedTriples` and flattens the
+  // results into a single range.
+  template <ad_utility::MediaType format>
+  ad_utility::InputRangeTypeErased<std::string> generateAllFormattedTriples(
+      ad_utility::InputRangeTypeErased<TableWithRange> rowIndices);
 
   // ___________________________________________________________________________
   // Helper function that generates the result of a CONSTRUCT query as a range

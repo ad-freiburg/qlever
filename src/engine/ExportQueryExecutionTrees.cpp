@@ -1115,13 +1115,8 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
       constructTriples, std::move(result), qet.getVariableColumns(),
       qet.getQec()->getIndex(), std::move(cancellationHandle));
 
-  auto formattedTriples =
-      rowIndices | ql::views::transform([&generator](const auto& table) {
-        return generator.generateFormattedTriples<format>(table);
-      }) |
-      ql::views::join;
-
-  for (const auto& tripleString : formattedTriples) {
+  for (const auto& tripleString :
+       generator.generateAllFormattedTriples<format>(std::move(rowIndices))) {
     STREAMABLE_YIELD(tripleString);
   }
 }
