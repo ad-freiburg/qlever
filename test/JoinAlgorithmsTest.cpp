@@ -666,9 +666,9 @@ void testSpecialOptionalJoin(IdNestedBlock a, IdNestedBlock b,
       std::move(wrappedA), std::move(wrappedB), numJoinColumns, adder);
 
   // The result must be sorted on the first two columns (the join columns).
-  EXPECT_TRUE(ql::ranges::is_sorted(result, std::less<>{}, [](auto array) {
-    return std::tie(array[0], array[1]);
-  }));
+  EXPECT_TRUE(ql::ranges::is_sorted(
+      result, std::less<>{},
+      [](const auto& array) { return std::tie(array[0], array[1]); }));
   // The exact order of the elements with the same first column is not important
   // and depends on implementation details. We therefore do not enforce it here.
   EXPECT_THAT(result, ::testing::UnorderedElementsAreArray(expected));

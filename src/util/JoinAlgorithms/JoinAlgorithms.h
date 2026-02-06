@@ -1809,17 +1809,15 @@ CPP_template(typename NumJoinColumnsT, typename LeftSide, typename RightSide,
 
 }  // namespace detail
 
-/*
- *  Perform a special optional join for input ranges of blocks.
- * This is a simplified implementation that works on blocks of row-like data.
- * Preconditions:
- * - Right input contains no UNDEF values in the join columns.
- * - Left input only contains UNDEF in the last join column
- * - Both inputs are sorted lexicographically.
- * - numJoinColumns must be equal to the number of columns in `leftBlocks` and
- * `rightBlocks`. The join matches on all-but-last columns, then performs a join
- * on the last column within matching groups.
- */
+// Perform a special optional join for input ranges of blocks.
+// This is a simplified implementation that works on blocks of row-like data.
+// Preconditions:
+// - Right input contains no UNDEF values in the join columns.
+// - Left input only contains UNDEF in the last join column
+// - Both inputs are sorted lexicographically.
+// - numJoinColumns must be equal to the number of columns in `leftBlocks` and
+// `rightBlocks`. The join matches on all-but-last columns, then performs a join
+// on the last column within matching groups.
 template <typename LeftBlocks, typename RightBlocks,
           typename CompatibleRowAction>
 void specialOptionalJoinForBlocks(LeftBlocks&& leftBlocks,

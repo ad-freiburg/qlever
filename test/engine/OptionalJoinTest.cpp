@@ -10,8 +10,6 @@
 
 #include <gmock/gmock.h>
 
-#include <boost/geometry/strategies/concepts/within_concept.hpp>
-
 #include "../util/AllocatorTestHelpers.h"
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
