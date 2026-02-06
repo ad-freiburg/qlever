@@ -34,14 +34,13 @@ inline constexpr size_t NUM_TRIPLE_POSITIONS = 3;
 struct TripleInstantitationRecipe {
   enum class TermType { CONSTANT, VARIABLE, BLANK_NODE };
 
-  // Specifies how to look up the value for a term position
-  // during triple instantiation.
+  // Specifies how to look up the value for a term position during triple
+  // instantiation.
   // `type`: Indicates whether the term is a CONSTANT, VARIABLE, or BLANK_NODE.
-  // `index`: The idx into the corresponding storage:
-  // type=CONSTANT: idx into `precomputedConstants_[tripleIdx]`
-  // type=VARIABLE: idx into `variablesToInstantiate_` /
-  // `variableInstantiations_` type=BLANK_NODE: idx into
-  // `blankNodesToInstantiate_` / `blankNodeInstantiations_`.
+  // `index`: The idx into the corresponding storage depending on `type`
+  // CONSTANT: `precomputedConstants_[tripleIdx]`
+  // VARIABLE: `variablesToInstantiate_` / `variableInstantiations_`
+  // BLANK_NODE: `blankNodesToInstantiate_` / `blankNodeInstantiations_`.
   struct TermInstantitationRecipe {
     TermType type_;
     size_t index_;
