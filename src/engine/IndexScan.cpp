@@ -700,6 +700,7 @@ struct IndexScan::SharedGeneratorState {
         doneFetching_ = true;
         return;
       }
+
       if (!newBlockWasFound && leftBlockWillBeYielded) {
         pushDummyBlockIfBufferTooLarge();
       }

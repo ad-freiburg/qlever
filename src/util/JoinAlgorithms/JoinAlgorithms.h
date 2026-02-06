@@ -570,6 +570,7 @@ CPP_template(typename LeftTableLike, typename RightTableLike,
   // types passed in here (in particular, we are using
   // `ql::ranges::subrange<IdTable>` etc.
   auto getLastJoinColum = [numJoinCols](const auto& row) {
+    AD_EXPENSIVE_CHECK(numJoinCols > 0 && numJoinCols <= row.size());
     return row[numJoinCols - 1];
   };
   auto lastColumnLeft = left | ql::views::transform(getLastJoinColum);
