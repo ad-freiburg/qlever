@@ -54,19 +54,27 @@ ConstructTemplatePreprocessor::preprocessTerm(
     ad_utility::HashMap<std::string, size_t>& blankNodeLabelToIndex,
     const VariableToColumnMap& variableColumns) {
   const auto pos = static_cast<size_t>(role);
-  if (std::holds_alternative<Iri>(term)) {
-    return preprocessIriTerm(std::get<Iri>(term), tripleIdx, pos, result);
-  } else if (std::holds_alternative<Literal>(term)) {
-    return preprocessLiteralTerm(std::get<Literal>(term), tripleIdx, role,
-                                 result);
-  } else if (std::holds_alternative<Variable>(term)) {
-    return preprocessVariableTerm(std::get<Variable>(term), result,
-                                  variableToIndex, variableColumns);
-  } else if (std::holds_alternative<BlankNode>(term)) {
-    return preprocessBlankNodeTerm(std::get<BlankNode>(term), result,
-                                   blankNodeLabelToIndex);
-  }
-  AD_FAIL();  // Unreachable for valid GraphTerm
+
+  return std::visit(
+      [&tripleIdx, &pos, &result, &role, &variableToIndex, &variableColumns,
+       &blankNodeLabelToIndex](const auto& term)
+          -> TripleInstantitationRecipe::TermInstantitationRecipe {
+        using T = std::decay_t<decltype(term)>;
+
+        if constexpr (std::is_same_v<T, Iri>) {
+          return preprocessIriTerm(term, tripleIdx, pos, result);
+        } else if constexpr (std::is_same_v<T, Literal>) {
+          return preprocessLiteralTerm(term, tripleIdx, role, result);
+        } else if constexpr (std::is_same_v<T, Variable>) {
+          return preprocessVariableTerm(term, result, variableToIndex,
+                                        variableColumns);
+        } else if constexpr (std::is_same_v<T, BlankNode>) {
+          return preprocessBlankNodeTerm(term, result, blankNodeLabelToIndex);
+        } else {
+          static_assert(ad_utility::alwaysFalse<T>);
+        }
+      },
+      term);
 }
 
 // _____________________________________________________________________________
