@@ -89,8 +89,8 @@ class ConstructTemplatePreprocessor {
   // Analyzes a single term and returns its resolution info.
   // Dispatches to the appropriate type-specific handler based on term type.
   static TemplateTripleLookupSpec::TermInstantiationSpec preprocessTerm(
-      const GraphTerm& term, size_t tripleIdx, size_t pos,
-      PositionInTriple role, PreprocessedConstructTemplate& result,
+      const GraphTerm& term, size_t tripleIdx, PositionInTriple role,
+      PreprocessedConstructTemplate& result,
       ad_utility::HashMap<Variable, size_t>& variableToIndex,
       ad_utility::HashMap<std::string, size_t>& blankNodeLabelToIndex,
       const VariableToColumnMap& variableColumns);
@@ -102,8 +102,8 @@ class ConstructTemplatePreprocessor {
 
   // Analyzes a `Literal` term: precomputes the string value.
   static TemplateTripleLookupSpec::TermInstantiationSpec preprocessLiteralTerm(
-      const Literal& literal, size_t tripleIdx, size_t pos,
-      PositionInTriple role, PreprocessedConstructTemplate& result);
+      const Literal& literal, size_t tripleIdx, PositionInTriple role,
+      PreprocessedConstructTemplate& result);
 
   // Analyzes a `Variable` term: registers it and precomputes `IdTable` column
   // index.

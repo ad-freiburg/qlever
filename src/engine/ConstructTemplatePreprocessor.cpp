@@ -35,9 +35,9 @@ ConstructTemplatePreprocessor::preprocess(
 
     for (size_t pos = 0; pos < NUM_TRIPLE_POSITIONS; ++pos) {
       auto role = static_cast<PositionInTriple>(pos);
-      info.lookups_[pos] = preprocessTerm(
-          triple[pos], tripleIdx, pos, role, *result, variableToIndex,
-          blankNodeLabelToIndex, variableColumns);
+      info.lookups_[pos] =
+          preprocessTerm(triple[pos], tripleIdx, role, *result, variableToIndex,
+                         blankNodeLabelToIndex, variableColumns);
     }
   }
 
@@ -47,15 +47,16 @@ ConstructTemplatePreprocessor::preprocess(
 // _____________________________________________________________________________
 TemplateTripleLookupSpec::TermInstantiationSpec
 ConstructTemplatePreprocessor::preprocessTerm(
-    const GraphTerm& term, size_t tripleIdx, size_t pos, PositionInTriple role,
+    const GraphTerm& term, size_t tripleIdx, PositionInTriple role,
     PreprocessedConstructTemplate& result,
     ad_utility::HashMap<Variable, size_t>& variableToIndex,
     ad_utility::HashMap<std::string, size_t>& blankNodeLabelToIndex,
     const VariableToColumnMap& variableColumns) {
+  const size_t pos = static_cast<size_t>(role);
   if (std::holds_alternative<Iri>(term)) {
     return preprocessIriTerm(std::get<Iri>(term), tripleIdx, pos, result);
   } else if (std::holds_alternative<Literal>(term)) {
-    return preprocessLiteralTerm(std::get<Literal>(term), tripleIdx, pos, role,
+    return preprocessLiteralTerm(std::get<Literal>(term), tripleIdx, role,
                                  result);
   } else if (std::holds_alternative<Variable>(term)) {
     return preprocessVariableTerm(std::get<Variable>(term), result,
@@ -83,8 +84,9 @@ ConstructTemplatePreprocessor::preprocessIriTerm(
 // _____________________________________________________________________________
 TemplateTripleLookupSpec::TermInstantiationSpec
 ConstructTemplatePreprocessor::preprocessLiteralTerm(
-    const Literal& literal, size_t tripleIdx, size_t pos, PositionInTriple role,
+    const Literal& literal, size_t tripleIdx, PositionInTriple role,
     PreprocessedConstructTemplate& result) {
+  const size_t pos = static_cast<size_t>(role);
   // evaluate(Literal) returns optional - only store if valid
   auto value = ConstructQueryEvaluator::evaluate(literal, role);
   if (value.has_value()) {
