@@ -477,7 +477,7 @@ CPP_template(typename RangeSmaller, typename RangeLarger, typename LessThan,
 template <typename ComparisonImpl>
 struct CompareAllButLastImpl {
   size_t numColumns_;
-  [[no_unique_address]] ComparisonImpl comparisonImpl_;
+  [[no_unique_address]] ComparisonImpl comparisonImpl_{};
   explicit CompareAllButLastImpl(size_t numColumns) : numColumns_(numColumns) {}
 
   template <typename A, typename B>
