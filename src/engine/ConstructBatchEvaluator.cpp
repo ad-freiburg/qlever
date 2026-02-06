@@ -97,7 +97,7 @@ InstantiatedTerm ConstructBatchEvaluator::computeVariableInstantiation(
                                       evaluationContext.currentRowOffset_};
 
   auto value =
-      ConstructQueryEvaluator::evaluateVariableWithColumnIndex(colIdx, context);
+      ConstructQueryEvaluator::evaluateVariableByColumnIndex(colIdx, context);
 
   if (value.has_value()) {
     return std::make_shared<const std::string>(std::move(*value));

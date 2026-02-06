@@ -46,7 +46,8 @@ struct PreprocessedConstructTemplate {
       precomputedConstants_;
 
   // Ordered list of `Variable` objects with pre-computed column indices which
-  // are later needed for evaluation.
+  // are later needed for instantiation of the `Variable` objects with actual
+  // values from the result table rows.
   std::vector<VariableWithColumnIndex> variablesToInstantiate_;
 
   // Ordered list of `BlankNode` objects with precomputed format info.

@@ -37,11 +37,15 @@ class ConstructQueryEvaluator {
   static std::optional<std::string> evaluate(
       const Variable& var, const ConstructQueryExportContext& context);
 
-  // Optimized variable evaluation using a pre-computed column index.
-  // This avoids the hash lookup in variableColumns during evaluation.
-  // If columnIndex is nullopt, the variable is not in the result and
-  // nullopt is returned.
-  static std::optional<std::string> evaluateVariableWithColumnIndex(
+  // Evaluates a `Variable` on the given `ConstructQueryExportContext`.
+  // The `Variable` is given implicitly by the `columnIndex`, that is, the idx
+  // of the column in the `IdTable` which the `Variable` is uniquely identified
+  // by. The necessary context for doing said evaluation is contained in
+  // `ConstructQueryExportContext`, such as the idx specifying the row of the
+  // result table which this variable should be evaluated for and the vocabulary
+  // for looking up the actual string value that the `Id`, which the variable is
+  // mapped to for the given result table row, resolves to.
+  static std::optional<std::string> evaluateVariableByColumnIndex(
       std::optional<size_t> columnIndex,
       const ConstructQueryExportContext& context);
 

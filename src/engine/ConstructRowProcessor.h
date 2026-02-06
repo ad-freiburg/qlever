@@ -26,7 +26,6 @@ class ConstructRowProcessor
     : public ad_utility::InputRangeFromGet<InstantiatedTriple> {
  public:
   using IdCache = ConstructIdCache;
-  using IdCacheStatsLogger = ConstructIdCacheStatsLogger;
 
   // Default batch size for processing rows.
   static constexpr size_t DEFAULT_BATCH_SIZE = 64;
@@ -70,13 +69,10 @@ class ConstructRowProcessor
   size_t currentRowOffset_;
 
   // `Id` cache for avoiding redundant vocabulary lookups.
-  // Note: statsLogger_ must be destroyed before idCache_ (declared after it)
-  // because the logger references the cache's stats.
-  std::shared_ptr<IdCache> idCache_;
-  std::unique_ptr<IdCacheStatsLogger> statsLogger_;
+  std::shared_ptr<IdCache> idCache_ = ConstructRowProcessor::createIdCache();
 
   // Iteration state.
-  size_t batchSize_;
+  size_t batchSize_ = ConstructRowProcessor::getBatchSize();
   size_t batchStart_ = 0;
   size_t rowInBatchIdx_ = 0;
   size_t tripleIdx_ = 0;

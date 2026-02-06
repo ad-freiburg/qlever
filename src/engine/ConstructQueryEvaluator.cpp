@@ -25,7 +25,7 @@ std::optional<std::string> ConstructQueryEvaluator::evaluate(
 
 // _____________________________________________________________________________
 std::optional<std::string>
-ConstructQueryEvaluator::evaluateVariableWithColumnIndex(
+ConstructQueryEvaluator::evaluateVariableByColumnIndex(
     std::optional<size_t> columnIndex,
     const ConstructQueryExportContext& context) {
   if (!columnIndex.has_value()) {
@@ -64,8 +64,8 @@ std::optional<std::string> ConstructQueryEvaluator::evaluate(
     const Variable& var, const ConstructQueryExportContext& context) {
   const auto& variableColumns = context._variableColumns;
   if (variableColumns.contains(var)) {
-    return evaluateVariableWithColumnIndex(variableColumns.at(var).columnIndex_,
-                                           context);
+    return evaluateVariableByColumnIndex(variableColumns.at(var).columnIndex_,
+                                         context);
   }
   return std::nullopt;
 }

@@ -15,13 +15,7 @@ ConstructRowProcessor::ConstructRowProcessor(
       tableWithVocab_(table.tableWithVocab_),
       rowIndicesVec_(ql::ranges::begin(table.view_),
                      ql::ranges::end(table.view_)),
-      currentRowOffset_(currentRowOffset),
-      batchSize_(ConstructRowProcessor::getBatchSize()) {
-  idCache_ = createIdCache();
-  // Logger references the cache's stats; logs when destroyed.
-  statsLogger_ =
-      std::make_unique<IdCacheStatsLogger>(rowIndicesVec_.size(), *idCache_);
-}
+      currentRowOffset_(currentRowOffset) {}
 
 // _____________________________________________________________________________
 std::optional<InstantiatedTriple> ConstructRowProcessor::get() {
@@ -71,7 +65,6 @@ std::optional<InstantiatedTriple> ConstructRowProcessor::processCurrentBatch() {
     }
     advanceToNextRow();
   }
-  // TODO<ms2144>: why do we return std::nullopt here?
   return std::nullopt;
 }
 
@@ -99,7 +92,7 @@ std::optional<InstantiatedTriple> ConstructRowProcessor::processCurrentRow() {
     // Triple was incomplete (has UNDEF components), continue to next pattern.
   }
 
-  // TODO<ms2144> what does this return mean?
+  // return nullopt of any of the terms in the tripe are `Undef`.
   return std::nullopt;
 }
 

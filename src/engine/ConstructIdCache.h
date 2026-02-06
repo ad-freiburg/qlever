@@ -14,8 +14,8 @@
 #include "global/Id.h"
 #include "util/LruCache.h"
 
-// Minimum capacity for the LRU cache. Sized to maximize cross-batch cache
-// hits on repeated values (e.g., predicates that appear in many rows).
+// Minimum capacity for the LRU cache. This was chosen arbitrarily.
+// TODO<ms2144>: How do we choose this...?
 inline constexpr size_t CONSTRUCT_ID_CACHE_MIN_CAPACITY = 100'000;
 
 // Statistics for ID cache performance analysis
