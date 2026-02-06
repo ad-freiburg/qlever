@@ -592,7 +592,7 @@ TEST(DateYearOrDuration, Subtraction) {
     result = (test2 - test1).value();
     ASSERT_EQ(true, result.isDayTimeDuration());
     ASSERT_EQ(DateYearOrDuration(
-                  DayTimeDuration(DayTimeDuration::Type::Positive, 23)),
+                  DayTimeDuration(DayTimeDuration::Type::Negative, 23)),
               result);
 
     test1 = DateYearOrDuration(Date(2012, 12, 24));
@@ -605,7 +605,7 @@ TEST(DateYearOrDuration, Subtraction) {
     result = (test2 - test1).value();
     ASSERT_EQ(true, result.isDayTimeDuration());
     ASSERT_EQ(DateYearOrDuration(
-                  DayTimeDuration(DayTimeDuration::Type::Positive, 731)),
+                  DayTimeDuration(DayTimeDuration::Type::Negative, 731)),
               result);
 
     test2 = DateYearOrDuration(Date(1979, 3, 13));
@@ -619,7 +619,7 @@ TEST(DateYearOrDuration, Subtraction) {
     result = (test1 - test2).value();
     ASSERT_EQ(true, result.isDayTimeDuration());
     ASSERT_EQ(DateYearOrDuration(
-                  DayTimeDuration(DayTimeDuration::Type::Positive, 40477)),
+                  DayTimeDuration(DayTimeDuration::Type::Negative, 40477)),
               result);
   }
   {
@@ -636,7 +636,7 @@ TEST(DateYearOrDuration, Subtraction) {
               result);
     result = (date2 - date1).value();
     ASSERT_EQ(DateYearOrDuration(DayTimeDuration(
-                  DayTimeDuration::Type::Positive, 1, 20, 50, 13)),
+                  DayTimeDuration::Type::Negative, 1, 20, 50, 13)),
               result);
 
     date2 = DateYearOrDuration(Date(2010, 1, 13, 10, 32, 15));
@@ -656,7 +656,7 @@ TEST(DateYearOrDuration, Subtraction) {
               result);
     result = (date2 - date1).value();
     ASSERT_EQ(DateYearOrDuration(DayTimeDuration(
-                  DayTimeDuration::Type::Positive, 1, 10, 9, 1)),
+                  DayTimeDuration::Type::Negative, 1, 10, 9, 1)),
               result);
   }
   {

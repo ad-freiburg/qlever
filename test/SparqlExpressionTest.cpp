@@ -466,10 +466,10 @@ TEST(SparqlExpression, arithmeticOperators) {
   testMultiply(times13, mixed, D(1.3));
 
   // Test for DateTime - DateTime
-  V<Id> minus2000{{createDat("P32954DT13H48M37S", false),
+  V<Id> minus2000{{createDat("-P32954DT13H48M37S", false),
                    createDat("P3553DT1H1M59S", false),
-                   createDat("P14903DT10H46M47S", false),
-                   createDat("P40239DT23H47M30S", false)},
+                   createDat("-P14903DT10H46M47S", false),
+                   createDat("-P40239DT23H47M30S", false)},
                   alloc};
   testMinus(minus2000, dat, createDat("2000-01-01T00:00:00Z"));
 

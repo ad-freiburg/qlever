@@ -421,13 +421,39 @@ std::optional<DateYearOrDuration> DateYearOrDuration::operator-(
     const Date& ownDate = getDateUnchecked();
     const Date& otherDate = rhs.getDateUnchecked();
 
+    const int ownMonth = ownDate.getMonth();
+    const int ownDay = ownDate.getDay();
+
+    const int otherMonth = otherDate.getMonth();
+    const int otherDay = otherDate.getDay();
+
+    // Need to check if dates are valid
+    auto checkDate = [](const int& month, const int& day) {
+      if (day > 31) {
+        return false;
+      } else if (day == 31) {
+        if (((month % 2) == 0) && (month <= 7)) {
+          // Feb, Apr, Jun
+          return false;
+        } else if (((month % 2) == 1) && (month >= 8)) {
+          // Sep, Nov
+          return false;
+        } else {
+          return true;
+        }
+      }
+      return true;
+    };
+    if ((!checkDate(ownMonth, ownDay)) || (!checkDate(otherMonth, otherDay))) {
+      // at least one date was invalid
+      return std::nullopt;
+    }
+
     // Calculate number of days between the two Dates
-    auto date1 =
-        std::chrono::year_month_day{std::chrono::year(ownDate.getYear()) /
-                                    ownDate.getMonth() / ownDate.getDay()};
-    auto date2 =
-        std::chrono::year_month_day{std::chrono::year(otherDate.getYear()) /
-                                    otherDate.getMonth() / otherDate.getDay()};
+    auto date1 = std::chrono::year_month_day{
+        std::chrono::year(ownDate.getYear()) / ownMonth / ownDay};
+    auto date2 = std::chrono::year_month_day{
+        std::chrono::year(otherDate.getYear()) / otherMonth / otherDay};
 
     long daysPassed =
         (std::chrono::sys_days{date1} - std::chrono::sys_days{date2}).count();
@@ -443,16 +469,17 @@ std::optional<DateYearOrDuration> DateYearOrDuration::operator-(
     }
     // Calculate time passed between the two Dates if at least one of them has a
     // Time.
+    DayTimeDuration::Type durationType = DayTimeDuration::Type::Positive;
     if (isDaysPassedPos) {
       updatePassedTimes(ownDate, otherDate, daysPassed, hoursPassed,
                         minutesPassed, secondsPassed);
     } else {
       updatePassedTimes(otherDate, ownDate, daysPassed, hoursPassed,
                         minutesPassed, secondsPassed);
+      durationType = DayTimeDuration::Type::Negative;
     }
-    return DateYearOrDuration(DayTimeDuration(DayTimeDuration::Type::Positive,
-                                              daysPassed, hoursPassed,
-                                              minutesPassed, secondsPassed));
+    return DateYearOrDuration(DayTimeDuration(
+        durationType, daysPassed, hoursPassed, minutesPassed, secondsPassed));
   }
 
   if (isDayTimeDuration() && rhs.isDayTimeDuration()) {
