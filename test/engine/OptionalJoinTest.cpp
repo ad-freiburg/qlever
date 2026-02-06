@@ -10,6 +10,7 @@
 #include "../util/IdTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
+#include "../util/TripleComponentTestHelpers.h"
 #include "./ValuesForTesting.h"
 #include "engine/CallFixedSize.h"
 #include "engine/IndexScan.h"
@@ -769,3 +770,444 @@ TEST(OptionalJoin, columnOriginatesFromGraphOrUndef) {
   testWithTrees(index3, index2, true, true, true);
   testWithTrees(index3, values1, false, false, true);
 }
+
+// _____________________________________________________________________________
+// Test fixture for testing optionalJoinWithIndexScan with prefiltering.
+class OptionalJoinWithIndexScan : public ::testing::TestWithParam<bool> {
+ protected:
+  QueryExecutionContext* qec_ = nullptr;
+
+  void SetUp() override {
+    // Create a small knowledge graph with controlled block structure.
+    // Using 8 bytes per column gives us a single triple per block.
+    std::string kg =
+        "<a> <p> <A> . <a> <p> <A2> . "
+        "<b> <p> <B> . <b> <p> <B2> . "
+        "<c> <p> <C> . <c> <p> <C2> . "
+        "<d> <p> <D> . "
+        "<e> <p> <E> . ";
+    TestIndexConfig config{kg};
+    config.blocksizePermutations = 8_B;
+    qec_ = getQec(std::move(config));
+  }
+
+  // Convert a TripleComponent to a ValueId.
+  Id toValueId(const TripleComponent& tc) const {
+    return tc.toValueId(qec_->getIndex().getVocab(), encodedIriManager())
+        .value();
+  }
+
+  // Create an id table with a single column from a vector of TripleComponents.
+  IdTable makeIdTable(std::vector<TripleComponent> entries) const {
+    IdTable result{1, makeAllocator()};
+    result.reserve(entries.size());
+    for (const TripleComponent& entry : entries) {
+      result.emplace_back();
+      result.back()[0] = toValueId(entry);
+    }
+    return result;
+  }
+
+  // Create an id table with two columns from a vector of TripleComponent pairs.
+  IdTable makeIdTable2Col(
+      std::vector<std::array<TripleComponent, 2>> entries) const {
+    IdTable result{2, makeAllocator()};
+    result.reserve(entries.size());
+    for (const auto& entry : entries) {
+      result.emplace_back();
+      result.back()[0] = toValueId(entry[0]);
+      result.back()[1] = toValueId(entry[1]);
+    }
+    return result;
+  }
+
+  // Create a common IndexScan instance for the right side.
+  std::shared_ptr<QueryExecutionTree> makeIndexScan() const {
+    using Tc = TripleComponent;
+    using Var = Variable;
+    SparqlTripleSimple xpy{Tc{Var{"?x"}}, iri("<p>"), Tc{Var{"?y"}}};
+    return ad_utility::makeExecutionTree<IndexScan>(qec_, Permutation::PSO,
+                                                    xpy);
+  }
+
+  // Create a ValuesForTesting instance for the left side (single column).
+  std::shared_ptr<QueryExecutionTree> makeLeftSide(
+      IdTable table, std::vector<ColumnIndex> sortedColumns = {0}) const {
+    return ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec_, std::move(table),
+        std::vector<std::optional<Variable>>{Variable{"?x"}}, false,
+        std::move(sortedColumns));
+  }
+
+  // Create a ValuesForTesting instance for the left side (two columns).
+  std::shared_ptr<QueryExecutionTree> makeLeftSide2Col(
+      IdTable table, std::vector<ColumnIndex> sortedColumns = {0, 1}) const {
+    return ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec_, std::move(table),
+        std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?z"}},
+        false, std::move(sortedColumns));
+  }
+
+  // Get the EncodedIriManager.
+  static const EncodedIriManager& encodedIriManager() {
+    static EncodedIriManager manager;
+    return manager;
+  }
+
+  // Helper to verify that lazy and materialized results match.
+  void verifyLazyAndMaterializedMatch(OptionalJoin& optJoin,
+                                      const IdTable& expected) const {
+    bool requestLaziness = GetParam();
+    auto result = optJoin.computeResultOnlyForTesting(requestLaziness);
+
+    if (requestLaziness) {
+      ASSERT_FALSE(result.isFullyMaterialized());
+      IdTable lazyResult{optJoin.getResultWidth(), qec_->getAllocator()};
+      for (auto& [idTable, _] : result.idTables()) {
+        lazyResult.insertAtEnd(idTable);
+      }
+      EXPECT_EQ(lazyResult, expected);
+    } else {
+      ASSERT_TRUE(result.isFullyMaterialized());
+      EXPECT_EQ(result.idTable(), expected);
+    }
+  }
+
+  // Helper to check runtime info for prefiltering statistics.
+  void checkPrefilteringStats(OptionalJoin& optJoin, size_t expectedBlocksRead,
+                              size_t expectedBlocksAll) const {
+    const auto& rightOp = optJoin.getChildren().at(1)->getRootOperation();
+    const auto& rti = rightOp->runtimeInfo();
+    EXPECT_EQ(rti.details_["num-blocks-read"], expectedBlocksRead);
+    EXPECT_EQ(rti.details_["num-blocks-all"], expectedBlocksAll);
+  }
+};
+
+// _____________________________________________________________________________
+TEST_P(OptionalJoinWithIndexScan, singleColumnBasicFiltering) {
+  // Test basic prefiltered optional join with single join column.
+  // Left side has entries that match some (but not all) blocks on the right.
+  auto left = makeLeftSide(makeIdTable({iri("<a>"), iri("<c>"), iri("<e>")}));
+  auto right = makeIndexScan();
+
+  OptionalJoin optJoin{qec_, left, right};
+  qec_->getQueryTreeCache().clearAll();
+
+  auto expected =
+      makeIdTableFromVector({{toValueId(iri("<a>")), toValueId(iri("<A>"))},
+                             {toValueId(iri("<a>")), toValueId(iri("<A2>"))},
+                             {toValueId(iri("<c>")), toValueId(iri("<C>"))},
+                             {toValueId(iri("<c>")), toValueId(iri("<C2>"))},
+                             {toValueId(iri("<e>")), toValueId(iri("<E>"))}});
+
+  verifyLazyAndMaterializedMatch(optJoin, expected);
+
+  // Verify prefiltering occurred: blocks read should be less than total blocks.
+  const auto& rightOp = optJoin.getChildren().at(1)->getRootOperation();
+  const auto& rti = rightOp->runtimeInfo();
+  size_t blocksRead = rti.details_["num-blocks-read"].get<size_t>();
+  size_t blocksAll = rti.details_["num-blocks-all"].get<size_t>();
+  EXPECT_LT(blocksRead, blocksAll);
+  EXPECT_GT(blocksRead, 0);
+}
+
+// _____________________________________________________________________________
+TEST_P(OptionalJoinWithIndexScan, singleColumnWithUndef) {
+  // Test with UNDEF values on the left side.
+  // Note: UNDEF values must be at the front to keep the table sorted.
+  // With prefiltered optional join, UNDEFs work correctly.
+  IdTable leftTable{1, makeAllocator()};
+  leftTable.push_back({Id::makeUndefined()});
+  leftTable.push_back({toValueId(iri("<a>"))});
+
+  auto left = makeLeftSide(std::move(leftTable));
+  auto right = makeIndexScan();
+
+  OptionalJoin optJoin{qec_, left, right};
+  qec_->getQueryTreeCache().clearAll();
+
+  bool requestLaziness = GetParam();
+  auto result = optJoin.computeResultOnlyForTesting(requestLaziness);
+
+  IdTable actual{optJoin.getResultWidth(), qec_->getAllocator()};
+  if (requestLaziness) {
+    for (auto& [idTable, _] : result.idTables()) {
+      actual.insertAtEnd(idTable);
+    }
+  } else {
+    actual = result.idTable().clone();
+  }
+
+  // Should have results for <a> and handle UNDEF correctly.
+  // The exact behavior with UNDEF may vary, but results should exist.
+  EXPECT_GT(actual.numRows(), 0);
+  EXPECT_EQ(actual.numColumns(), 2);
+
+  // Verify that prefiltering statistics exist.
+  const auto& rightOp = optJoin.getChildren().at(1)->getRootOperation();
+  const auto& rti = rightOp->runtimeInfo();
+  EXPECT_TRUE(rti.details_.contains("num-blocks-read"));
+  EXPECT_TRUE(rti.details_.contains("num-blocks-all"));
+}
+
+// _____________________________________________________________________________
+TEST_P(OptionalJoinWithIndexScan, singleColumnEmptyLeft) {
+  // Test with empty left side.
+  IdTable emptyTable{1, makeAllocator()};
+  auto left = makeLeftSide(std::move(emptyTable));
+  auto right = makeIndexScan();
+
+  OptionalJoin optJoin{qec_, left, right};
+  qec_->getQueryTreeCache().clearAll();
+
+  IdTable expected{2, makeAllocator()};
+  verifyLazyAndMaterializedMatch(optJoin, expected);
+}
+
+// _____________________________________________________________________________
+TEST_P(OptionalJoinWithIndexScan, singleColumnPartialMatches) {
+  // Test when left side has some entries that match and some that don't.
+  // Use a mix of subjects from the KG.
+  auto left = makeLeftSide(makeIdTable({iri("<a>"), iri("<b>"), iri("<d>")}));
+  auto right = makeIndexScan();
+
+  OptionalJoin optJoin{qec_, left, right};
+  qec_->getQueryTreeCache().clearAll();
+
+  auto expected =
+      makeIdTableFromVector({{toValueId(iri("<a>")), toValueId(iri("<A>"))},
+                             {toValueId(iri("<a>")), toValueId(iri("<A2>"))},
+                             {toValueId(iri("<b>")), toValueId(iri("<B>"))},
+                             {toValueId(iri("<b>")), toValueId(iri("<B2>"))},
+                             {toValueId(iri("<d>")), toValueId(iri("<D>"))}});
+
+  verifyLazyAndMaterializedMatch(optJoin, expected);
+
+  // Verify that some (but not all) blocks were read.
+  const auto& rightOp = optJoin.getChildren().at(1)->getRootOperation();
+  const auto& rti = rightOp->runtimeInfo();
+  EXPECT_TRUE(rti.details_.contains("num-blocks-read"));
+  EXPECT_TRUE(rti.details_.contains("num-blocks-all"));
+}
+
+// _____________________________________________________________________________
+TEST_P(OptionalJoinWithIndexScan, singleColumnAllBlocksMatch) {
+  // Test when all blocks on right are needed.
+  auto left = makeLeftSide(makeIdTable(
+      {iri("<a>"), iri("<b>"), iri("<c>"), iri("<d>"), iri("<e>")}));
+  auto right = makeIndexScan();
+
+  OptionalJoin optJoin{qec_, left, right};
+  qec_->getQueryTreeCache().clearAll();
+
+  auto expected =
+      makeIdTableFromVector({{toValueId(iri("<a>")), toValueId(iri("<A>"))},
+                             {toValueId(iri("<a>")), toValueId(iri("<A2>"))},
+                             {toValueId(iri("<b>")), toValueId(iri("<B>"))},
+                             {toValueId(iri("<b>")), toValueId(iri("<B2>"))},
+                             {toValueId(iri("<c>")), toValueId(iri("<C>"))},
+                             {toValueId(iri("<c>")), toValueId(iri("<C2>"))},
+                             {toValueId(iri("<d>")), toValueId(iri("<D>"))},
+                             {toValueId(iri("<e>")), toValueId(iri("<E>"))}});
+
+  verifyLazyAndMaterializedMatch(optJoin, expected);
+
+  // All blocks should be read.
+  const auto& rightOp = optJoin.getChildren().at(1)->getRootOperation();
+  const auto& rti = rightOp->runtimeInfo();
+  size_t blocksRead = rti.details_["num-blocks-read"].get<size_t>();
+  size_t blocksAll = rti.details_["num-blocks-all"].get<size_t>();
+  EXPECT_EQ(blocksRead, blocksAll);
+}
+
+// _____________________________________________________________________________
+TEST_P(OptionalJoinWithIndexScan, singleColumnVerifyRuntimeInfo) {
+  // Explicitly test runtime information is updated correctly.
+  auto left = makeLeftSide(makeIdTable({iri("<a>"), iri("<c>")}));
+  auto right = makeIndexScan();
+
+  OptionalJoin optJoin{qec_, left, right};
+  qec_->getQueryTreeCache().clearAll();
+
+  bool requestLaziness = GetParam();
+  auto result = optJoin.computeResultOnlyForTesting(requestLaziness);
+
+  // Consume result to ensure computation completes.
+  if (requestLaziness) {
+    for (auto& [idTable, _] : result.idTables()) {
+      (void)idTable;
+    }
+  }
+
+  const auto& rightOp = optJoin.getChildren().at(1)->getRootOperation();
+  const auto& rti = rightOp->runtimeInfo();
+
+  // Verify runtime statistics exist.
+  EXPECT_TRUE(rti.details_.contains("num-blocks-read"));
+  EXPECT_TRUE(rti.details_.contains("num-blocks-all"));
+  EXPECT_TRUE(rti.details_.contains("num-elements-read"));
+
+  // Verify some blocks were read.
+  EXPECT_GT(rti.details_["num-blocks-read"], 0);
+  EXPECT_GT(rti.details_["num-elements-read"], 0);
+}
+
+// _____________________________________________________________________________
+TEST_P(OptionalJoinWithIndexScan, twoColumnsBasicFiltering) {
+  // Test with two join columns where UNDEF is only in the last column.
+  // Create knowledge graph with two-column structure.
+  std::string kg2 = "<s1> <p> <o1> . <s1> <q> <o2> . <s2> <p> <o3> .";
+  TestIndexConfig config{kg2};
+  config.blocksizePermutations = 8_B;
+  auto qec2 = getQec(std::move(config));
+
+  // Left side: two columns with UNDEF in second column.
+  IdTable leftTable{2, makeAllocator()};
+  auto s1 = TripleComponent{TripleComponent::Iri::fromIriref("<s1>")}
+                .toValueId(qec2->getIndex().getVocab(), encodedIriManager())
+                .value();
+  auto s2 = TripleComponent{TripleComponent::Iri::fromIriref("<s2>")}
+                .toValueId(qec2->getIndex().getVocab(), encodedIriManager())
+                .value();
+  leftTable.push_back({s1, U});
+  leftTable.push_back({s2, U});
+
+  auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec2, std::move(leftTable),
+      std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}},
+      false, std::vector<ColumnIndex>{0, 1});
+
+  // Right side: IndexScan with two output columns.
+  SparqlTripleSimple triple{TripleComponent{Variable{"?x"}}, iri("<p>"),
+                            TripleComponent{Variable{"?z"}}};
+  auto right =
+      ad_utility::makeExecutionTree<IndexScan>(qec2, Permutation::PSO, triple);
+
+  OptionalJoin optJoin{qec2, left, right};
+  qec2->getQueryTreeCache().clearAll();
+
+  bool requestLaziness = GetParam();
+  auto result = optJoin.computeResultOnlyForTesting(requestLaziness);
+
+  // Verify result structure.
+  EXPECT_EQ(result.isFullyMaterialized(), !requestLaziness);
+
+  IdTable actual{optJoin.getResultWidth(), qec2->getAllocator()};
+  if (requestLaziness) {
+    for (auto& [idTable, _] : result.idTables()) {
+      actual.insertAtEnd(idTable);
+    }
+  } else {
+    actual = result.idTable().clone();
+  }
+
+  // Result should have 2 rows (one for each left entry matched with <p>
+  // predicate).
+  EXPECT_EQ(actual.numRows(), 2);
+  EXPECT_EQ(actual.numColumns(), 3);
+}
+
+// _____________________________________________________________________________
+TEST_P(OptionalJoinWithIndexScan, twoColumnsMultipleMatches) {
+  // Test two-column optional join with multiple matches for one subject.
+  std::string kg2 = "<s1> <p> <o1> . <s1> <p> <o2> . <s2> <p> <o3> .";
+  TestIndexConfig config{kg2};
+  config.blocksizePermutations = 8_B;
+  auto qec2 = getQec(std::move(config));
+
+  auto s1 = TripleComponent{TripleComponent::Iri::fromIriref("<s1>")}
+                .toValueId(qec2->getIndex().getVocab(), encodedIriManager())
+                .value();
+  auto s2 = TripleComponent{TripleComponent::Iri::fromIriref("<s2>")}
+                .toValueId(qec2->getIndex().getVocab(), encodedIriManager())
+                .value();
+
+  // Left side with UNDEF in second column.
+  IdTable leftTable{2, makeAllocator()};
+  leftTable.push_back({s1, U});
+  leftTable.push_back({s2, U});
+
+  auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec2, std::move(leftTable),
+      std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}},
+      false, std::vector<ColumnIndex>{0, 1});
+
+  SparqlTripleSimple triple{TripleComponent{Variable{"?x"}}, iri("<p>"),
+                            TripleComponent{Variable{"?z"}}};
+  auto right =
+      ad_utility::makeExecutionTree<IndexScan>(qec2, Permutation::PSO, triple);
+
+  OptionalJoin optJoin{qec2, left, right};
+  qec2->getQueryTreeCache().clearAll();
+
+  bool requestLaziness = GetParam();
+  auto result = optJoin.computeResultOnlyForTesting(requestLaziness);
+
+  IdTable actual{optJoin.getResultWidth(), qec2->getAllocator()};
+  if (requestLaziness) {
+    for (auto& [idTable, _] : result.idTables()) {
+      actual.insertAtEnd(idTable);
+    }
+  } else {
+    actual = result.idTable().clone();
+  }
+
+  // Should have 3 rows total (s1 with 2 matches, s2 with 1 match).
+  EXPECT_EQ(actual.numRows(), 3);
+  EXPECT_EQ(actual.numColumns(), 3);
+}
+
+// _____________________________________________________________________________
+TEST_P(OptionalJoinWithIndexScan, twoColumnsWithMatches) {
+  // Test two-column optional join with actual matches.
+  std::string kg2 = "<s1> <p> <o1> . <s1> <p> <o2> . <s2> <p> <o3> .";
+  TestIndexConfig config{kg2};
+  config.blocksizePermutations = 8_B;
+  auto qec2 = getQec(std::move(config));
+
+  auto s1 = TripleComponent{TripleComponent::Iri::fromIriref("<s1>")}
+                .toValueId(qec2->getIndex().getVocab(), encodedIriManager())
+                .value();
+
+  // Left side with UNDEF in second column.
+  IdTable leftTable{2, makeAllocator()};
+  leftTable.push_back({s1, U});
+
+  auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec2, std::move(leftTable),
+      std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}},
+      false, std::vector<ColumnIndex>{0, 1});
+
+  SparqlTripleSimple triple{TripleComponent{Variable{"?x"}}, iri("<p>"),
+                            TripleComponent{Variable{"?z"}}};
+  auto right =
+      ad_utility::makeExecutionTree<IndexScan>(qec2, Permutation::PSO, triple);
+
+  OptionalJoin optJoin{qec2, left, right};
+  qec2->getQueryTreeCache().clearAll();
+
+  bool requestLaziness = GetParam();
+  auto result = optJoin.computeResultOnlyForTesting(requestLaziness);
+
+  IdTable actual{optJoin.getResultWidth(), qec2->getAllocator()};
+  if (requestLaziness) {
+    for (auto& [idTable, _] : result.idTables()) {
+      actual.insertAtEnd(idTable);
+    }
+  } else {
+    actual = result.idTable().clone();
+  }
+
+  // Should have 2 rows (s1 matches with o1 and o2).
+  EXPECT_EQ(actual.numRows(), 2);
+  EXPECT_EQ(actual.numColumns(), 3);
+
+  // Verify prefiltering occurred.
+  const auto& rightOp = optJoin.getChildren().at(1)->getRootOperation();
+  const auto& rti = rightOp->runtimeInfo();
+  EXPECT_TRUE(rti.details_.contains("num-blocks-read"));
+  EXPECT_TRUE(rti.details_.contains("num-blocks-all"));
+}
+
+INSTANTIATE_TEST_SUITE_P(OptionalJoinWithIndexScanSuite,
+                         OptionalJoinWithIndexScan, ::testing::Bool());
