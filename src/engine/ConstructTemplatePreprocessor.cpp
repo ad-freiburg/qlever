@@ -107,8 +107,8 @@ ConstructTemplatePreprocessor::preprocessVariableTerm(
     // Pre-compute the column index corresponding to the variable in the
     // `IdTable`.
     std::optional<size_t> columnIndex;
-    if (variableColumns.contains(var)) {
-      columnIndex = variableColumns.at(var).columnIndex_;
+    if (auto opt = ad_utility::getOptionalFromHashMap(variableColumns, var)) {
+      columnIndex = opt->columnIndex_;
     }
     result.variablesToInstantiate_.emplace_back(
         VariableWithColumnIndex{var, columnIndex});
