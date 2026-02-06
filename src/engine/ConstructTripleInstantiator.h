@@ -18,19 +18,19 @@
 // Provides methods for instantiating terms and formatting triples.
 class ConstructTripleInstantiator {
  public:
-  // Instantiates a single term from the template triple.
-  // Returns `Undef` if the term is a variable that is unbound.
-  // Uses the preprocessed template data and batch evaluation result.
-  // `tripleIdx`: index of the triple in the template
-  // `pos`: position within the triple (0=subject, 1=predicate, 2=object)
-  // `rowIdxInBatch`: which row in the current batch
+  // Instantiates a single term from the template triple. Returns `Undef` if the
+  // term is a variable that is unbound. Uses the preprocessed template data and
+  // batch evaluation result.
+  // `tripleIdx`: index of the triple in the template.
+  // `pos`: position within the triple (0=subject, 1=predicate, 2=object).
+  // `rowIdxInBatch`: which row in the current batch.
   static InstantiatedTerm instantiateTerm(
       size_t tripleIdx, size_t pos,
       const PreprocessedConstructTemplate& preprocessedTemplate,
       const BatchEvaluationResult& batchResult, size_t rowIdxInBatch);
 
   // Formats a triple (subject, predicate, object) according to the output
-  // format. Returns empty string if any component is Undef.
+  // format. Returns empty string if any component is `Undef`.
   template <ad_utility::MediaType format>
   static std::string formatTriple(const InstantiatedTerm& subject,
                                   const InstantiatedTerm& predicate,

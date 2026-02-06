@@ -37,10 +37,8 @@ void ConstructBatchEvaluator::instantiateVariablesForBatch(
 
   // Initialize `variableInstantiations_`: [varIdx][rowInBatch]
   // Default value is Undef{}, representing unbound variables.
-  batchResult.variableInstantiations_.resize(variablesToInstantiate.size());
-  for (auto& column : batchResult.variableInstantiations_) {
-    column.resize(numRows, Undef{});
-  }
+  batchResult.variableInstantiations_.resize(variablesToInstantiate.size(),
+                                             numRows, Undef{});
 
   const VariableToColumnMap& varCols =
       preprocessedConstructTemplate.variableColumns_.get();
@@ -115,10 +113,8 @@ void ConstructBatchEvaluator::instantiateBlankNodesForBatch(
       preprocessedConstructTemplate.blankNodesToInstantiate_;
 
   // Initialize blank node values: [blankNodeIdx][rowInBatch]
-  batchResult.instantiatedBlankNodes.resize(blankNodesToInstantiate.size());
-  for (auto& column : batchResult.instantiatedBlankNodes) {
-    column.resize(numRows);
-  }
+  batchResult.blankNodeInstantiations_.resize(blankNodesToInstantiate.size(),
+                                              numRows);
 
   // Evaluate blank nodes using precomputed prefix and suffix.
   // Only the row number needs to be concatenated per row.
@@ -126,7 +122,7 @@ void ConstructBatchEvaluator::instantiateBlankNodesForBatch(
   for (size_t blankIdx = 0; blankIdx < blankNodesToInstantiate.size();
        ++blankIdx) {
     const BlankNodeFormatInfo& formatInfo = blankNodesToInstantiate[blankIdx];
-    auto& columnValues = batchResult.instantiatedBlankNodes[blankIdx];
+    auto& columnValues = batchResult.blankNodeInstantiations_[blankIdx];
 
     for (size_t rowInBatch = 0; rowInBatch < numRows; ++rowInBatch) {
       const uint64_t rowIdx = evaluationContext.rowIndicesOfBatch_[rowInBatch];
