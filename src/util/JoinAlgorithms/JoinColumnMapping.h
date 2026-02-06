@@ -255,6 +255,7 @@ IdTableAndFirstCols<NumCols, std::decay_t<Table>> makeIdTableAndFirstCols(
     Table&& table, LocalVocab localVocab) {
   return {AD_FWD(table), std::move(localVocab)};
 }
+
 }  // namespace ad_utility
 
 #endif  // QLEVER_SRC_UTIL_JOINALGORITHMS_JOINCOLUMNMAPPING_H

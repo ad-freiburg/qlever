@@ -517,6 +517,9 @@ struct CompareEqButLast {
  * This algorithms can also be used to implement a MINUS operation for inputs
  * with the same preconditions by specifying an appropriate
  * `elFromFirstNotFoundAction`.
+ * @param numJoinColumnsArg the number of join columns in the input.
+ * Deliberately `auto`, so it is possible to pass in `std::integral_constant`,
+ * to make this number known at compile time.
  * @param left The left input of the optional join. Must not contain UNDEF
  * values in the join columns.
  * @param right The right input of the optional join. Must only contain UNDEF
@@ -531,7 +534,9 @@ CPP_template(typename LeftTableLike, typename RightTableLike,
                                     RightTableLike>
         CPP_and UnaryIteratorFunction<NotFoundActionT, LeftTableLike>
             CPP_and ql::concepts::invocable<
-                CancellationFuncT>) void specialOptionalJoin(const LeftTableLike&
+                CancellationFuncT>) void specialOptionalJoin(auto
+                                                                 numJoinColumnsArg,
+                                                             const LeftTableLike&
                                                                  left,
                                                              const RightTableLike&
                                                                  right,
@@ -550,15 +555,13 @@ CPP_template(typename LeftTableLike, typename RightTableLike,
     return;
   }
 
-  // TODO<joka921> this argument should be passed in in a way that allows us to
-  // easily move it to compile time whenever possible.
-  size_t numColumns = (*it1).size();
+  auto numJoinCols = static_cast<size_t>(numJoinColumnsArg);
   // A predicate that compares two rows lexicographically but ignores the last
   // column.
-  auto compareAllButLast = CompareAllButLast{numColumns};
+  auto compareAllButLast = CompareAllButLast{numJoinCols};
 
   // Similar to the previous lambda, but checks for equality.
-  auto compareEqButLast = CompareEqButLast{numColumns};
+  auto compareEqButLast = CompareEqButLast{numJoinCols};
 
   // The last columns from the left and right input. Those will be dealt with
   // separately.
@@ -566,8 +569,8 @@ CPP_template(typename LeftTableLike, typename RightTableLike,
   // column based interface, but that requires refactoring of all the
   // types passed in here (in particular, we are using
   // `ql::ranges::subrange<IdTable>` etc.
-  auto getLastJoinColum = [numColumns](const auto& row) {
-    return row[numColumns - 1];
+  auto getLastJoinColum = [numJoinCols](const auto& row) {
+    return row[numJoinCols - 1];
   };
   auto lastColumnLeft = left | ql::views::transform(getLastJoinColum);
   auto lastColumnRight = right | ql::views::transform(getLastJoinColum);
@@ -773,7 +776,7 @@ struct JoinSide {
   [[no_unique_address]] const End end_;
   const Projection& projection_;
   // Dummy, only required for a better interface of `makeJoinSide` below.
-  std::type_identity<ProjectedElT> projectedElT_{};
+  [[no_unique_address]] std::type_identity<ProjectedElT> projectedElT_{};
   CurrentBlocks currentBlocks_{};
   CurrentBlocks undefBlocks_{};
 
@@ -1144,9 +1147,6 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
       compatibleRowAction_.setInput(fullBlockLeft, fullBlockRight);
     };
 
-    // TODO<joka921> improve the `CachingTransformInputRange` to make it movable
-    // without having to specify `makeAssignableLambda`.
-    // TODO<joka921> Down with `OwningView`.
     return ad_utility::CallbackOnEndView{
         ql::views::join(
             ad_utility::OwningView{ad_utility::CachingTransformInputRange(

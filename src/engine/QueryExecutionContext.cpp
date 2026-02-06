@@ -55,7 +55,7 @@ void QueryExecutionContext::signalQueryUpdate(
     // would be more intuitive), because it would overflow in the first step.
     // The current code only overflows if we are near the end of (representable)
     // time.
-    return (lastWebsocketUpdate_ + websocketUpdateInterval()) >= now;
+    return (lastWebsocketUpdate_ + websocketUpdateInterval()) <= now;
   };
 
   if (sendPriority == RuntimeInformation::SendPriority::Always ||

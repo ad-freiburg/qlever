@@ -414,7 +414,7 @@ Result Join::lazyJoin(std::shared_ptr<const Result> a,
         return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
                                         std::move(localVocab)};
       },
-      std::move(resultPermutation));
+      resultSortedOn(), std::move(resultPermutation));
 }
 
 // ______________________________________________________________________________
@@ -584,7 +584,8 @@ Result Join::computeResultForTwoIndexScans(bool requestLaziness) const {
         auto localVocab = std::move(rowAdder.localVocab());
         return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
                                         std::move(localVocab)};
-      });
+      },
+      resultSortedOn(), {});
 }
 
 // ______________________________________________________________________________________________________
@@ -621,7 +622,7 @@ Result Join::computeResultForIndexScanAndIdTable(
         std::optional<std::shared_ptr<const Result>> indexScanResult =
             std::nullopt;
         auto rightBlocks = [&scan, idTableHasUndef, &permutationIdTable,
-                            &indexScanResult]() -> LazyInputView<1> {
+                            &indexScanResult]() {
           if (idTableHasUndef) {
             indexScanResult =
                 scan->getResult(false, ComputationMode::LAZY_IF_SUPPORTED);
@@ -656,7 +657,7 @@ Result Join::computeResultForIndexScanAndIdTable(
         return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
                                         std::move(localVocab)};
       },
-      std::move(resultPermutation));
+      resultSortedOn(), std::move(resultPermutation));
 }
 
 // ______________________________________________________________________________________________________
@@ -692,7 +693,7 @@ Result Join::computeResultForIndexScanAndLazyOperation(
         return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
                                         std::move(localVocab)};
       },
-      std::move(resultPermutation));
+      resultSortedOn(), std::move(resultPermutation));
 }
 // _____________________________________________________________________________
 Result Join::computeResultForTwoMaterializedInputs(

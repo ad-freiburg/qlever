@@ -38,8 +38,8 @@ inline IteratorWithSingleCol convertGenerator(
         sendPriority = SendPriority::IfDue;
         // IndexScans don't have a local vocabulary, so we can just use an empty
         // one.
-        return ad_utility::IdTableAndFirstCols<1, IdTable>{std::move(table),
-                                                           LocalVocab{}};
+        return ad_utility::makeIdTableAndFirstCols<1>(std::move(table),
+                                                      LocalVocab{});
       });
 
   return IteratorWithSingleCol{std::move(range)};

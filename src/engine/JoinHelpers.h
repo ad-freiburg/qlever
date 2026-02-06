@@ -7,6 +7,8 @@
 #ifndef JOINHELPERS_H
 #define JOINHELPERS_H
 
+#include <absl/functional/function_ref.h>
+
 #include <array>
 #include <optional>
 #include <vector>
@@ -33,6 +35,7 @@ static constexpr size_t CHUNK_SIZE = 100'000;
 using namespace ad_utility;
 
 // Forward declaration for `getRowAdderForJoin`.
+
 using OptionalPermutation = std::optional<std::vector<ColumnIndex>>;
 
 // _____________________________________________________________________________
@@ -59,8 +62,8 @@ CPP_template(typename Input, size_t numJoinColumns = 1)(
     applyPermutation(table, permutation);
     // Make sure to actually move the table into the wrapper so that the tables
     // live as long as the wrapper.
-    return IdTableAndFirstCols<numJoinColumns, std::decay_t<decltype(table)>>{
-        std::move(table), std::move(localVocab)};
+    return makeIdTableAndFirstCols<numJoinColumns>(std::move(table),
+                                                   std::move(localVocab));
   };
   return InputRangeTypeErased{
       CachingTransformInputRange(std::move(gen), std::move(transformer))};
@@ -94,8 +97,8 @@ IteratorWithSingleCol<numJoinColumns> convertGeneratorFromScan(
         sendPriority = SendPriority::IfDue;
         // IndexScans don't have a local vocabulary, so we can just use an empty
         // one.
-        return IdTableAndFirstCols<numJoinColumns, IdTable>{std::move(table),
-                                                            LocalVocab{}};
+        return makeIdTableAndFirstCols<numJoinColumns>(std::move(table),
+                                                       LocalVocab{});
       });
 
   return IteratorWithSingleCol<numJoinColumns>{std::move(range)};
@@ -110,9 +113,9 @@ using MaterializedInputView =
 // conceptually does exactly the same for lazy inputs.
 inline MaterializedInputView asSingleTableView(
     const Result& result, const std::vector<ColumnIndex>& permutation) {
-  return {IdTableAndFirstCols<1, IdTableView<0>>{
+  return {makeIdTableAndFirstCols<1>(
       result.idTable().asColumnSubsetView(permutation),
-      result.getCopyOfLocalVocab()}};
+      result.getCopyOfLocalVocab())};
 }
 
 // Wrap a result either in an array with a single element or in a range wrapping
@@ -142,7 +145,7 @@ CPP_template_2(typename ActionT)(
   return generatorFromActionWithCallback<Result::IdTableVocabPair>(
       [runLazyJoin = std::move(runLazyJoin),
        permutation = std::move(permutation)](
-          std::function<void(Result::IdTableVocabPair)> callback) mutable {
+          absl::FunctionRef<void(Result::IdTableVocabPair)> callback) mutable {
         auto yieldValue = [&permutation,
                            &callback](Result::IdTableVocabPair value) {
           if (value.idTable_.empty()) {
@@ -173,7 +176,7 @@ CPP_template_2(typename ActionT)(
 template <typename Action>
 inline Result createResultFromAction(bool requestLaziness, Action&& action,
                                      std::vector<ColumnIndex> resultSortedOn,
-                                     OptionalPermutation permutation = {}) {
+                                     OptionalPermutation permutation) {
   if (requestLaziness) {
     return {runLazyJoinAndConvertToGenerator(std::forward<Action>(action),
                                              std::move(permutation)),
