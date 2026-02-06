@@ -341,3 +341,163 @@ std::optional<DateYearOrDuration> DateYearOrDuration::convertToXsdDate(
   return DateYearOrDuration(
       Date(date.getYear(), date.getMonth(), date.getDay()));
 }
+
+// _____________________________________________________________________________
+#ifndef REDUCED_FEATURE_SET_FOR_CPP17
+void updatePassedTimes(const Date& date1, const Date& date2, long& daysPassed,
+                       int& hoursPassed, int& minutesPassed,
+                       double& secondsPassed) {
+  // helper function for Subtraction
+  // this function allows to swap the dates, if daysPassed was negative before
+  // applying abs. updating daysPassed, hoursPassed, minutesPassed,
+  // secondsPassed accordingly
+  if (date1.hasTime()) {
+    int hour1 = date1.getHour();
+    int minute1 = date1.getMinute();
+    double second1 = date1.getSecond();
+    if (date2.hasTime()) {
+      int hour2 = date2.getHour();
+      int minute2 = date2.getMinute();
+      double second2 = date2.getSecond();
+      if (hour1 <= hour2) {
+        if (daysPassed > 0) {
+          daysPassed--;  // counted one day to much
+          hoursPassed =
+              24 - (hour2 - hour1);  // total hours of a day - difference
+        } else {
+          hoursPassed = (hour2 - hour1);
+        }
+      } else {
+        hoursPassed = (hour1 - hour2);
+      }
+      if (minute1 <= minute2) {
+        if (hoursPassed > 0) {
+          hoursPassed--;  // same as above just one level down
+          minutesPassed = 60 - (minute2 - minute1);
+        } else {
+          minutesPassed = (minute2 - minute1);
+        }
+      } else {
+        minutesPassed = (minute1 - minute2);
+      }
+      if (second1 <= second2) {
+        if (minutesPassed > 0) {
+          minutesPassed--;
+          secondsPassed = 60 - (second2 - second1);
+        } else {
+          secondsPassed = (second2 - second1);
+        }
+      } else {
+        secondsPassed = (second1 - second2);
+      }
+    } else {
+      // if there is no time given, assume 00:00h 0seconds
+      hoursPassed = hour1;
+      minutesPassed = minute1;
+      secondsPassed = second1;
+    }
+  } else {
+    // date1 has no time, therefore we are assuming time 00:00:00
+    if (date2.hasTime()) {
+      int hour2 = date2.getHour();
+      int minute2 = date2.getMinute();
+      double second2 = date2.getSecond();
+      daysPassed--;
+      secondsPassed = 60.0 - second2;
+      minutesPassed =
+          60 -
+          (minute2 + (secondsPassed > 0.0
+                          ? 1
+                          : 0));  // we add 1 because the seconds added a minute
+      hoursPassed = 24 - (hour2 + (minutesPassed > 0 ? 1 : 0));
+    }
+  }
+}
+
+std::optional<DateYearOrDuration> DateYearOrDuration::operator-(
+    const DateYearOrDuration& rhs) const {
+  if (isDate() && rhs.isDate()) {
+    // Date - Date => Duration | getting time between the two Dates
+    const Date& ownDate = getDateUnchecked();
+    const Date& otherDate = rhs.getDateUnchecked();
+
+    const int ownMonth = ownDate.getMonth();
+    const int ownDay = ownDate.getDay();
+
+    const int otherMonth = otherDate.getMonth();
+    const int otherDay = otherDate.getDay();
+
+    // Need to check if dates are valid
+    auto checkDate = [](const int& month, const int& day) {
+      if (day > 31) {
+        return false;
+      } else if (day == 31) {
+        if (((month % 2) == 0) && (month <= 7)) {
+          // Feb, Apr, Jun
+          return false;
+        } else if (((month % 2) == 1) && (month >= 8)) {
+          // Sep, Nov
+          return false;
+        } else {
+          return true;
+        }
+      }
+      return true;
+    };
+    if ((!checkDate(ownMonth, ownDay)) || (!checkDate(otherMonth, otherDay))) {
+      // at least one date was invalid
+      return std::nullopt;
+    }
+
+    // Calculate number of days between the two Dates
+    auto date1 = std::chrono::year_month_day{
+        std::chrono::year(ownDate.getYear()) / ownMonth / ownDay};
+    auto date2 = std::chrono::year_month_day{
+        std::chrono::year(otherDate.getYear()) / otherMonth / otherDay};
+
+    long daysPassed =
+        (std::chrono::sys_days{date1} - std::chrono::sys_days{date2}).count();
+    int hoursPassed = 0;
+    int minutesPassed = 0;
+    double secondsPassed = 0.0;
+
+    bool isDaysPassedPos = true;
+
+    if (daysPassed < 0) {
+      isDaysPassedPos = false;
+      daysPassed = abs(daysPassed);
+    }
+    // Calculate time passed between the two Dates if at least one of them has a
+    // Time.
+    DayTimeDuration::Type durationType = DayTimeDuration::Type::Positive;
+    if (isDaysPassedPos) {
+      updatePassedTimes(ownDate, otherDate, daysPassed, hoursPassed,
+                        minutesPassed, secondsPassed);
+    } else {
+      updatePassedTimes(otherDate, ownDate, daysPassed, hoursPassed,
+                        minutesPassed, secondsPassed);
+      durationType = DayTimeDuration::Type::Negative;
+    }
+    return DateYearOrDuration(DayTimeDuration(
+        durationType, daysPassed, hoursPassed, minutesPassed, secondsPassed));
+  }
+
+  if (isDayTimeDuration() && rhs.isDayTimeDuration()) {
+    // Duration - Duration => Duration | getting new duration that is
+    // rhs.duration-time smaller return;
+    // TODO: can be implemented
+  }
+
+  if (isDate() && rhs.isDayTimeDuration()) {
+    // Date - Duration => Date | getting new Date from rhs.duration-time earlier
+    // TODO: can be implemented
+  }
+
+  // TODO: subtraction with large year can also be implemented
+
+  // Duration - Date is not implemented
+
+  // no viable subtraction
+  return std::nullopt;
+}
+#endif
