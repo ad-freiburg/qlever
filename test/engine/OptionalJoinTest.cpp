@@ -11,6 +11,7 @@
 #include "../util/IndexTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
+#include "./LazyJoinTestHelpers.h"
 #include "./ValuesForTesting.h"
 #include "engine/CallFixedSize.h"
 #include "engine/IndexScan.h"
@@ -773,10 +774,10 @@ TEST(OptionalJoin, columnOriginatesFromGraphOrUndef) {
 
 // _____________________________________________________________________________
 // Test fixture for testing optionalJoinWithIndexScan with prefiltering.
-class OptionalJoinWithIndexScan : public ::testing::TestWithParam<bool> {
+class OptionalJoinWithIndexScan
+    : public ::testing::TestWithParam<bool>,
+      public ad_utility::testing::LazyJoinTestHelper {
  protected:
-  QueryExecutionContext* qec_ = nullptr;
-
   void SetUp() override {
     // Create a small knowledge graph with controlled block structure.
     // Using 8 bytes per column gives us a single triple per block.
@@ -786,39 +787,7 @@ class OptionalJoinWithIndexScan : public ::testing::TestWithParam<bool> {
         "<c> <p> <C> . <c> <p> <C2> . "
         "<d> <p> <D> . "
         "<e> <p> <E> . ";
-    TestIndexConfig config{kg};
-    config.blocksizePermutations = 8_B;
-    qec_ = getQec(std::move(config));
-  }
-
-  // Convert a TripleComponent to a ValueId.
-  Id toValueId(const TripleComponent& tc) const {
-    return tc.toValueId(qec_->getIndex().getVocab(), encodedIriManager())
-        .value();
-  }
-
-  // Create an id table with a single column from a vector of TripleComponents.
-  IdTable makeIdTable(std::vector<TripleComponent> entries) const {
-    IdTable result{1, makeAllocator()};
-    result.reserve(entries.size());
-    for (const TripleComponent& entry : entries) {
-      result.emplace_back();
-      result.back()[0] = toValueId(entry);
-    }
-    return result;
-  }
-
-  // Create an id table with two columns from a vector of TripleComponent pairs.
-  IdTable makeIdTable2Col(
-      std::vector<std::array<TripleComponent, 2>> entries) const {
-    IdTable result{2, makeAllocator()};
-    result.reserve(entries.size());
-    for (const auto& entry : entries) {
-      result.emplace_back();
-      result.back()[0] = toValueId(entry[0]);
-      result.back()[1] = toValueId(entry[1]);
-    }
-    return result;
+    setupQecWithKnowledgeGraph(kg, 8_B);
   }
 
   // Create a common IndexScan instance for the right side.
@@ -846,12 +815,6 @@ class OptionalJoinWithIndexScan : public ::testing::TestWithParam<bool> {
         qec_, std::move(table),
         std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?z"}},
         false, std::move(sortedColumns));
-  }
-
-  // Get the EncodedIriManager.
-  static const EncodedIriManager& encodedIriManager() {
-    static EncodedIriManager manager;
-    return manager;
   }
 
   // Helper to verify that lazy and materialized results match.

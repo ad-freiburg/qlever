@@ -387,25 +387,6 @@ void Join::join(const IdTable& a, const IdTable& b, IdTable* result) const {
                << ", size = " << result->size() << "\n";
 }
 
-// _____________________________________________________________________________
-CPP_template_def(typename ActionT)(
-    requires ad_utility::InvocableWithExactReturnType<
-        ActionT, Result::IdTableVocabPair,
-        std::function<void(IdTable&, LocalVocab&)>>)
-    Result Join::createResult(
-        bool requestedLaziness, ActionT action,
-        std::optional<std::vector<ColumnIndex>> permutation) const {
-  if (requestedLaziness) {
-    return {runLazyJoinAndConvertToGenerator(std::move(action),
-                                             std::move(permutation)),
-            resultSortedOn()};
-  } else {
-    auto [idTable, localVocab] = action(ad_utility::noop);
-    applyPermutation(idTable, permutation);
-    return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
-  }
-}
-
 // ______________________________________________________________________________
 Result Join::lazyJoin(std::shared_ptr<const Result> a,
                       std::shared_ptr<const Result> b,
@@ -415,7 +396,7 @@ Result Join::lazyJoin(std::shared_ptr<const Result> a,
   AD_CONTRACT_CHECK(!a->isFullyMaterialized() || !b->isFullyMaterialized());
   ad_utility::JoinColumnMapping joinColMap = getJoinColumnMapping();
   auto resultPermutation = joinColMap.permutationResult();
-  return createResult(
+  return createResultFromAction(
       requestLaziness,
       [this, a = std::move(a), b = std::move(b),
        joinColMap = std::move(joinColMap)](
@@ -569,7 +550,7 @@ void Join::addCombinedRowToIdTable(const ROW_A& rowA, const ROW_B& rowB,
 
 // ______________________________________________________________________________________________________
 Result Join::computeResultForTwoIndexScans(bool requestLaziness) const {
-  return createResult(
+  return createResultFromAction(
       requestLaziness,
       [this](std::function<void(IdTable&, LocalVocab&)> yieldTable) {
         auto leftScan =
@@ -615,7 +596,7 @@ Result Join::computeResultForIndexScanAndIdTable(
                        0);
   ad_utility::JoinColumnMapping joinColMap = getJoinColumnMapping();
   auto resultPermutation = joinColMap.permutationResult();
-  return createResult(
+  return createResultFromAction(
       requestLaziness,
       [this, scan = std::move(scan),
        resultWithIdTable = std::move(resultWithIdTable),
@@ -686,7 +667,7 @@ Result Join::computeResultForIndexScanAndLazyOperation(
 
   ad_utility::JoinColumnMapping joinColMap = getJoinColumnMapping();
   auto resultPermutation = joinColMap.permutationResult();
-  return createResult(
+  return createResultFromAction(
       requestLaziness,
       [this, scan = std::move(scan),
        resultWithIdTable = std::move(resultWithIdTable),

@@ -247,6 +247,14 @@ struct IdTableAndFirstCols<1, Table> {
 
   const LocalVocab& getLocalVocab() const { return localVocab_; }
 };
+
+// Helper function to create an `IdTableAndFirstCols` with explicitly stated
+// `numCols`, but deduce type of the table.
+template <size_t NumCols, typename Table>
+IdTableAndFirstCols<NumCols, std::decay_t<Table>> makeIdTableAndFirstCols(
+    Table&& table, LocalVocab localVocab) {
+  return {AD_FWD(table), std::move(localVocab)};
+}
 }  // namespace ad_utility
 
 #endif  // QLEVER_SRC_UTIL_JOINALGORITHMS_JOINCOLUMNMAPPING_H

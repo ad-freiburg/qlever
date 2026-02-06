@@ -11,6 +11,7 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
+#include "./LazyJoinTestHelpers.h"
 #include "engine/IndexScan.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
@@ -915,48 +916,16 @@ TEST(IndexScan, checkEvaluationWithPrefiltering) {
       {I(10), I(12), I(18), I(22), I(25), I(147), I(189), I(194)}, true);
 }
 
-class IndexScanWithLazyJoin : public ::testing::TestWithParam<bool> {
+class IndexScanWithLazyJoin : public ::testing::TestWithParam<bool>,
+                              public ad_utility::testing::LazyJoinTestHelper {
  protected:
-  QueryExecutionContext* qec_ = nullptr;
-
   void SetUp() override {
     std::string kg =
         "<a> <p> <A> . <a> <p> <A2> . "
         "<b> <p> <B> . <b> <p> <B2> . "
         "<c> <p> <C> . <c> <p> <C2> . "
         "<b> <q> <xb> . <b> <q> <xb2> .";
-    qec_ = getQec(std::move(kg));
-  }
-
-  // Convert a TripleComponent to a ValueId.
-  Id toValueId(const TripleComponent& tc) const {
-    return tc.toValueId(qec_->getIndex().getVocab(), *encodedIriManager())
-        .value();
-  }
-
-  // Create an id table with a single column from a vector of
-  // `TripleComponent`s.
-  IdTable makeIdTable(std::vector<TripleComponent> entries) const {
-    IdTable result{1, makeAllocator()};
-    result.reserve(entries.size());
-    for (const TripleComponent& entry : entries) {
-      result.emplace_back();
-      result.back()[0] = toValueId(entry);
-    }
-    return result;
-  }
-
-  // Convert a vector of a tuple of triples to an id table.
-  IdTable tableFromTriples(
-      std::vector<std::array<TripleComponent, 2>> triples) const {
-    IdTable result{2, makeAllocator()};
-    result.reserve(triples.size());
-    for (const auto& triple : triples) {
-      result.emplace_back();
-      result.back()[0] = toValueId(triple.at(0));
-      result.back()[1] = toValueId(triple.at(1));
-    }
-    return result;
+    setupQecWithKnowledgeGraph(kg);
   }
 
   // Create a common `IndexScan` instance.

@@ -704,40 +704,6 @@ struct IndexScan::SharedGeneratorState {
         pushDummyBlockIfBufferTooLarge();
       }
     }
-
-    /*
-      if (!newBlocks.empty()) {
-        lastEntryInBlocks_ = CompressedRelationReader::getRelevantIdFromTriple(
-            newBlocks.back().lastTriple_, metaBlocks_);
-      } else if (joinColumn[0] >
-                 lastEntryInBlocks_.value_or(Id::makeUndefined())) {
-        if (metaBlocks_.blockMetadata_.empty()) {
-          // We have seen entries in the join column that are larger than the
-          // largest block in the index scan, which means that there will be no
-          // more matches.
-          if (!filterLeftSide_) {
-            // Case B: Push current table before marking as done.
-            prefetchedValues_.push_back(std::move(*iterator_.value()));
-          }
-          doneFetching_ = true;
-          return;
-        }
-        // Case A: The current `joinColumn` has no matching block in the index.
-        if (filterLeftSide_) {
-          // We can safely skip appending it to `prefetchedValues_`, but future
-          // values might require later blocks from the index.
-          continue;
-        } else {
-          // When not filtering, push the table to prefetchedValues.
-          prefetchedValues_.push_back(std::move(*iterator_.value()));
-          pushDummyBlockIfBufferTooLarge();
-          continue;
-        }
-      }
-      prefetchedValues_.push_back(std::move(*iterator_.value()));
-      ql::ranges::move(newBlocks, std::back_inserter(pendingBlocks_));
-    }
-    */
   }
 
   // Check if there are any undefined values yielded by the original generator.

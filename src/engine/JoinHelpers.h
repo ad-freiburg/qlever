@@ -32,7 +32,7 @@ static constexpr size_t CHUNK_SIZE = 100'000;
 
 using namespace ad_utility;
 
-// Forward declaration for getRowAdderForJoin
+// Forward declaration for `getRowAdderForJoin`.
 using OptionalPermutation = std::optional<std::vector<ColumnIndex>>;
 
 // _____________________________________________________________________________

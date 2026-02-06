@@ -15,11 +15,6 @@
 
 namespace qlever::joinWithIndexScanHelpers {
 
-// Tag types to indicate the join semantics
-struct InnerJoinTag {};
-struct OptionalJoinTag {};
-struct MinusTag {};
-
 // Helper to convert generators to the format expected by join algorithms
 using IteratorWithSingleCol = ad_utility::InputRangeTypeErased<
     ad_utility::IdTableAndFirstCols<1, IdTable>>;

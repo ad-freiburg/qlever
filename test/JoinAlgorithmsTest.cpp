@@ -574,7 +574,7 @@ namespace {
 // Helper types for testing special optional join with Id values.
 using IdBlock = IdTable;
 using IdNestedBlock = std::vector<IdBlock>;
-using IdJoinResult = std::vector<std::array<Id, 2>>;
+using IdJoinResult = std::vector<std::array<Id, 4>>;
 
 auto makeVec = [](const auto&... tables) {
   std::vector<IdTable> result;
@@ -586,32 +586,84 @@ auto makeTable = [](const VectorTable& table) {
   return makeIdTableFromVector(table);
 };
 
-// RowAdder for Id-based blocks.
+// RowAdder for Id-based blocks with payload columns.
 struct IdRowAdder {
-  const IdBlock* left_{};
-  const IdBlock* right_{};
+  using TableWithJoinCols = ad_utility::IdTableAndFirstCols<2, IdTable>;
+  const IdTable* leftTable_{};
+  const IdTable* rightTable_{};
+  // For non-cartesian paths, store the wrapped tables to access payloads.
+  const TableWithJoinCols* leftWrapped_{};
+  const TableWithJoinCols* rightWrapped_{};
   IdJoinResult* target_{};
 
-  void setInput(const IdBlock& left, const IdBlock& right) {
-    left_ = &left;
-    right_ = &right;
+  // Called by cartesian product path with materialized tables.
+  void setInput(const IdTable& left, const IdTable& right) {
+    leftTable_ = &left;
+    rightTable_ = &right;
+    leftWrapped_ = nullptr;
+    rightWrapped_ = nullptr;
   }
 
-  void setOnlyLeftInputForOptionalJoin(const IdBlock& left) { left_ = &left; }
+  // Called by non-cartesian paths with wrapped tables.
+  void setInput(const TableWithJoinCols& left, const TableWithJoinCols& right) {
+    leftWrapped_ = &left;
+    rightWrapped_ = &right;
+    leftTable_ = nullptr;
+    rightTable_ = nullptr;
+  }
+
+  void setOnlyLeftInputForOptionalJoin(const IdTable& left) {
+    leftTable_ = &left;
+    leftWrapped_ = nullptr;
+  }
+
+  void setOnlyLeftInputForOptionalJoin(const TableWithJoinCols& left) {
+    leftWrapped_ = &left;
+    leftTable_ = nullptr;
+  }
 
   void addRow(size_t leftIndex, size_t rightIndex) {
-    auto x1 = (*left_)[leftIndex][0];
-    auto x2 = (*left_)[leftIndex][1];
-    auto y1 = (*right_)[rightIndex][0];
-    auto y2 = (*right_)[rightIndex][1];
+    Id x1, x2, y1, y2, leftPayload, rightPayload;
+    if (leftTable_) {
+      // Cartesian path: use materialized tables.
+      x1 = (*leftTable_)(leftIndex, 0);
+      x2 = (*leftTable_)(leftIndex, 1);
+      y1 = (*rightTable_)(rightIndex, 0);
+      y2 = (*rightTable_)(rightIndex, 1);
+      leftPayload = (*leftTable_)(leftIndex, 2);
+      rightPayload = (*rightTable_)(rightIndex, 2);
+    } else {
+      // Non-cartesian path: use wrapped tables.
+      auto [x1_tmp, x2_tmp] = (*leftWrapped_)[leftIndex];
+      auto [y1_tmp, y2_tmp] = (*rightWrapped_)[rightIndex];
+      x1 = x1_tmp;
+      x2 = x2_tmp;
+      y1 = y1_tmp;
+      y2 = y2_tmp;
+      leftPayload = leftWrapped_->asStaticView()(leftIndex, 2);
+      rightPayload = rightWrapped_->asStaticView()(rightIndex, 2);
+    }
     AD_CONTRACT_CHECK(x1 == y1);
-    target_->push_back(std::array{x1, x2.isUndefined() ? y2 : x2});
+    AD_CONTRACT_CHECK(x2.isUndefined() || x2 == y2);
+    target_->push_back(
+        std::array{x1, x2.isUndefined() ? y2 : x2, leftPayload, rightPayload});
   }
 
   void addOptionalRow(size_t leftIndex) {
-    auto x1 = (*left_)[leftIndex][0];
-    auto x2 = (*left_)[leftIndex][1];
-    target_->emplace_back(std::array{x1, x2});
+    Id x1, x2, leftPayload;
+    if (leftTable_) {
+      // Cartesian path: use materialized table.
+      x1 = (*leftTable_)(leftIndex, 0);
+      x2 = (*leftTable_)(leftIndex, 1);
+      leftPayload = (*leftTable_)(leftIndex, 2);
+    } else {
+      // Non-cartesian path: use wrapped table.
+      auto [x1_tmp, x2_tmp] = (*leftWrapped_)[leftIndex];
+      x1 = x1_tmp;
+      x2 = x2_tmp;
+      leftPayload = leftWrapped_->asStaticView()(leftIndex, 2);
+    }
+    target_->emplace_back(std::array{x1, x2, leftPayload, Id::makeUndefined()});
   }
 
   template <typename R1, typename R2>
@@ -623,29 +675,13 @@ struct IdRowAdder {
     }
   }
 
-  // Operator() for iterator-based interface (matches).
-  template <typename LeftIt, typename RightIt>
-  void operator()(LeftIt leftIt, RightIt rightIt) {
-    auto [x1, x2] = *leftIt;
-    auto [y1, y2] = *rightIt;
-    AD_CONTRACT_CHECK(x1 == y1);
-    target_->push_back(std::array{x1, x2, y2});
-  }
-
-  // Operator() for iterator-based interface (non-matches).
-  template <typename LeftIt>
-  void operator()(LeftIt leftIt) {
-    auto [x1, x2] = *leftIt;
-    target_->push_back(std::array{x1, x2, Id::makeUndefined()});
-  }
-
   void flush() const {
     // Does nothing, but is required for the interface.
   }
 };
 
 auto makeIdRowAdder(IdJoinResult& target) {
-  return IdRowAdder{nullptr, nullptr, &target};
+  return IdRowAdder{nullptr, nullptr, nullptr, nullptr, &target};
 }
 
 // Helper function for creating undefined Ids.
@@ -660,8 +696,19 @@ void testSpecialOptionalJoin(IdNestedBlock a, IdNestedBlock b,
   IdJoinResult result;
   auto adder = makeIdRowAdder(result);
 
-  ad_utility::specialOptionalJoinForBlocks(std::move(a), std::move(b),
-                                           numJoinColumns, adder);
+  // Wrap IdTables in IdTableAndFirstCols to expose only the join columns.
+  using TableWithJoinCols = ad_utility::IdTableAndFirstCols<2, IdTable>;
+  std::vector<TableWithJoinCols> wrappedA;
+  std::vector<TableWithJoinCols> wrappedB;
+  for (auto& table : a) {
+    wrappedA.emplace_back(std::move(table), LocalVocab{});
+  }
+  for (auto& table : b) {
+    wrappedB.emplace_back(std::move(table), LocalVocab{});
+  }
+
+  ad_utility::specialOptionalJoinForBlocks(
+      std::move(wrappedA), std::move(wrappedB), numJoinColumns, adder);
 
   // The result must be sorted on the first column.
   EXPECT_TRUE(ql::ranges::is_sorted(result, std::less<>{}, ad_utility::first));
@@ -790,41 +837,53 @@ void testSpecialOptionalJoinWithSplits(
 TEST(JoinAlgorithms, SpecialOptionalJoinEmptyInputs) {
   testSpecialOptionalJoin({}, {}, {});
 
-  auto emptyTable = IdTable(2, makeUnlimitedAllocator<Id>());
-  auto nonEmpty = makeIdTableFromVector({{I(13), I(0)}});
+  auto emptyTable = IdTable(3, makeUnlimitedAllocator<Id>());
+  auto nonEmpty = makeIdTableFromVector({{I(13), I(0), I(100)}});
   testSpecialOptionalJoin(makeVec(nonEmpty), makeVec(emptyTable),
-                          {{I(13), I(0)}});
+                          {{I(13), I(0), I(100), Id::makeUndefined()}});
 
   testSpecialOptionalJoin(makeVec(emptyTable), makeVec(nonEmpty), {});
 }
 
 // _____________________________________________________________________________
 TEST(JoinAlgorithms, SpecialOptionalJoinSingleBlock) {
-  IdNestedBlock a = makeVec(
-      makeTable({{I(1), I(11)}, {I(4), I(12)}, {I(4), I(12)}, {I(42), I(14)}}));
-  IdNestedBlock b = makeVec(makeTable({{{I(0), I(24)},
-                                        {I(4), I(12)},
-                                        {I(4), I(12)},
-                                        {I(5), I(25)},
-                                        {I(19), I(26)},
-                                        {I(42), I(27)}}}));
-  IdJoinResult expectedResult{{I(1), I(11)}, {I(4), I(12)}, {I(4), I(12)},
-                              {I(4), I(12)}, {I(4), I(12)}, {I(42), I(14)}};
+  IdNestedBlock a = makeVec(makeTable({{I(1), I(11), I(101)},
+                                       {I(4), I(12), I(102)},
+                                       {I(4), I(12), I(103)},
+                                       {I(42), I(14), I(104)}}));
+  IdNestedBlock b = makeVec(makeTable({{{I(0), I(24), I(200)},
+                                        {I(4), I(12), I(201)},
+                                        {I(4), I(12), I(202)},
+                                        {I(5), I(25), I(203)},
+                                        {I(19), I(26), I(204)},
+                                        {I(42), I(27), I(205)}}}));
+  IdJoinResult expectedResult{{I(1), I(11), I(101), Id::makeUndefined()},
+                              {I(4), I(12), I(102), I(201)},
+                              {I(4), I(12), I(102), I(202)},
+                              {I(4), I(12), I(103), I(201)},
+                              {I(4), I(12), I(103), I(202)},
+                              {I(42), I(14), I(104), Id::makeUndefined()}};
   testSpecialOptionalJoin(std::move(a), std::move(b), expectedResult);
 }
 
 // _____________________________________________________________________________
 TEST(JoinAlgorithms, SpecialOptionalJoinSingleBlockWithSplits) {
-  auto leftTable =
-      makeTable({{I(1), I(11)}, {I(4), I(12)}, {I(4), I(12)}, {I(42), I(14)}});
-  auto rightTable = makeTable({{I(0), I(24)},
-                               {I(4), I(12)},
-                               {I(4), I(12)},
-                               {I(5), I(25)},
-                               {I(19), I(26)},
-                               {I(42), I(27)}});
-  IdJoinResult expectedResult{{I(1), I(11)}, {I(4), I(12)}, {I(4), I(12)},
-                              {I(4), I(12)}, {I(4), I(12)}, {I(42), I(14)}};
+  auto leftTable = makeTable({{I(1), I(11), I(101)},
+                              {I(4), I(12), I(102)},
+                              {I(4), I(12), I(103)},
+                              {I(42), I(14), I(104)}});
+  auto rightTable = makeTable({{I(0), I(24), I(200)},
+                               {I(4), I(12), I(201)},
+                               {I(4), I(12), I(202)},
+                               {I(5), I(25), I(203)},
+                               {I(19), I(26), I(204)},
+                               {I(42), I(27), I(205)}});
+  IdJoinResult expectedResult{{I(1), I(11), I(101), Id::makeUndefined()},
+                              {I(4), I(12), I(102), I(201)},
+                              {I(4), I(12), I(102), I(202)},
+                              {I(4), I(12), I(103), I(201)},
+                              {I(4), I(12), I(103), I(202)},
+                              {I(42), I(14), I(104), Id::makeUndefined()}};
   testSpecialOptionalJoinWithSplits(leftTable, rightTable, expectedResult);
 }
 
@@ -832,73 +891,107 @@ TEST(JoinAlgorithms, SpecialOptionalJoinSingleBlockWithSplits) {
 TEST(JoinAlgorithms, SpecialOptionalJoinWithUndefsOnLeft) {
   // Test that left entries with undefined in second column match right entries
   // on first column only, and the result contains the right's second column.
-  auto leftTable = makeTable({{I(1), U2()}, {I(4), U2()}, {I(5), I(50)}});
-  auto rightTable = makeTable({{I(1), I(10)}, {I(4), I(40)}, {I(5), I(50)}});
-  IdJoinResult expectedResult{{I(1), I(10)}, {I(4), I(40)}, {I(5), I(50)}};
+  auto leftTable = makeTable(
+      {{I(1), U2(), I(101)}, {I(4), U2(), I(102)}, {I(5), I(50), I(103)}});
+  auto rightTable = makeTable(
+      {{I(1), I(10), I(201)}, {I(4), I(40), I(202)}, {I(5), I(50), I(203)}});
+  IdJoinResult expectedResult{{I(1), I(10), I(101), I(201)},
+                              {I(4), I(40), I(102), I(202)},
+                              {I(5), I(50), I(103), I(203)}};
   testSpecialOptionalJoinWithSplits(leftTable, rightTable, expectedResult);
 }
 
 // _____________________________________________________________________________
 TEST(JoinAlgorithms, SpecialOptionalJoinMultipleUndefsForSameFirstColumn) {
   // Test multiple left entries with same first column and undefined second
-  // column. Each should match all right entries with that first column.
-  auto leftTable =
-      makeTable({{I(5), U2()}, {I(5), U2()}, {I(5), U2()}, {I(10), I(100)}});
-  auto rightTable = makeTable({{I(5), I(50)}, {I(5), I(51)}, {I(10), I(100)}});
-  IdJoinResult expectedResult{{I(5), I(50)},  {I(5), I(50)},
-                              {I(5), I(50)},  // 3 undefs match I(5), I(50)
-                              {I(5), I(51)},  {I(5), I(51)},
-                              {I(5), I(51)},  // 3 undefs match I(5), I(51)
-                              {I(10), I(100)}};
+  // column. Each should match all right entries with that first column
+  // (cartesian product).
+  auto leftTable = makeTable({{I(5), U2(), I(101)},
+                              {I(5), U2(), I(102)},
+                              {I(5), U2(), I(103)},
+                              {I(10), I(100), I(104)}});
+  auto rightTable = makeTable(
+      {{I(5), I(50), I(201)}, {I(5), I(51), I(202)}, {I(10), I(100), I(203)}});
+  IdJoinResult expectedResult{
+      {I(5), I(50), I(101), I(201)},  {I(5), I(50), I(102), I(201)},
+      {I(5), I(50), I(103), I(201)},  // 3 left undefs match I(5), I(50)
+      {I(5), I(51), I(101), I(202)},  {I(5), I(51), I(102), I(202)},
+      {I(5), I(51), I(103), I(202)},  // 3 left undefs match I(5), I(51)
+      {I(10), I(100), I(104), I(203)}};
   testSpecialOptionalJoinWithSplits(leftTable, rightTable, expectedResult);
 }
 
 // _____________________________________________________________________________
 TEST(JoinAlgorithms, SpecialOptionalJoinMultipleEntriesSameFirstColumn) {
-  // Test multiple entries with same first column but different second columns
-  // on both sides. Tests the cartesian product behavior.
-  auto leftTable =
-      makeTable({{I(3), I(30)}, {I(3), I(31)}, {I(3), I(32)}, {I(7), I(70)}});
-  auto rightTable = makeTable({{I(3), I(130)}, {I(3), I(131)}, {I(7), I(170)}});
+  // Test multiple entries with same first and second columns but different
+  // payloads. Tests the cartesian product behavior.
+  auto leftTable = makeTable({{I(3), I(30), I(101)},
+                              {I(3), I(30), I(102)},
+                              {I(3), I(30), I(103)},
+                              {I(7), I(70), I(104)}});
+  auto rightTable = makeTable(
+      {{I(3), I(30), I(201)}, {I(3), I(30), I(202)}, {I(7), I(70), I(203)}});
   IdJoinResult expectedResult{
-      {I(3), I(30)}, {I(3), I(31)}, {I(3), I(32)}, {I(7), I(70)}};
+      {I(3), I(30), I(101), I(201)},
+      {I(3), I(30), I(101), I(202)},
+      {I(3), I(30), I(102), I(201)},
+      {I(3), I(30), I(102), I(202)},
+      {I(3), I(30), I(103), I(201)},
+      {I(3), I(30), I(103), I(202)},  // 3x2 = 6 cartesian results.
+      {I(7), I(70), I(104), I(203)}};
   testSpecialOptionalJoinWithSplits(leftTable, rightTable, expectedResult);
 }
 
-// TODO<joka921> Currently a duplicate....
 // _____________________________________________________________________________
 TEST(JoinAlgorithms, SpecialOptionalJoinMultipleEntriesCartesian) {
-  // Test multiple entries with same first column but different second columns
-  // on both sides. Tests the cartesian product behavior.
-  auto leftTable =
-      makeTable({{I(3), I(30)}, {I(3), I(31)}, {I(3), I(32)}, {I(7), I(70)}});
-  auto rightTable = makeTable({{I(3), I(130)}, {I(3), I(131)}, {I(7), I(170)}});
+  // Test cartesian product via UNDEF matching: multiple left entries with same
+  // first column and UNDEF in second column should match all right entries
+  // with same first column.
+  auto leftTable = makeTable({{I(3), U2(), I(101)},
+                              {I(3), U2(), I(102)},
+                              {I(3), U2(), I(103)},
+                              {I(7), I(70), I(104)}});
+  auto rightTable = makeTable(
+      {{I(3), I(30), I(201)}, {I(3), I(31), I(202)}, {I(7), I(70), I(203)}});
   IdJoinResult expectedResult{
-      {I(3), I(30)}, {I(3), I(31)}, {I(3), I(32)}, {I(7), I(70)}};
+      {I(3), I(30), I(101), I(201)}, {I(3), I(30), I(102), I(201)},
+      {I(3), I(30), I(103), I(201)},  // 3 left undefs match I(3), I(30)
+      {I(3), I(31), I(101), I(202)}, {I(3), I(31), I(102), I(202)},
+      {I(3), I(31), I(103), I(202)},  // 3 left undefs match I(3), I(31)
+      {I(7), I(70), I(104), I(203)}};
   testSpecialOptionalJoinWithSplits(leftTable, rightTable, expectedResult);
 }
 
 // _____________________________________________________________________________
 TEST(JoinAlgorithms, SpecialOptionalJoinNoMatches) {
   // Test when left entries have no matching right entries.
-  // All left entries should appear in result with their original values.
-  auto leftTable = makeTable({{I(1), I(10)}, {I(2), I(20)}, {I(3), I(30)}});
-  auto rightTable = makeTable({{I(5), I(50)}, {I(6), I(60)}, {I(7), I(70)}});
-  IdJoinResult expectedResult{{I(1), I(10)}, {I(2), I(20)}, {I(3), I(30)}};
+  // All left entries should appear in result with their payloads and undefined
+  // right payloads.
+  auto leftTable = makeTable(
+      {{I(1), I(10), I(101)}, {I(2), I(20), I(102)}, {I(3), I(30), I(103)}});
+  auto rightTable = makeTable(
+      {{I(5), I(50), I(201)}, {I(6), I(60), I(202)}, {I(7), I(70), I(203)}});
+  IdJoinResult expectedResult{{I(1), I(10), I(101), Id::makeUndefined()},
+                              {I(2), I(20), I(102), Id::makeUndefined()},
+                              {I(3), I(30), I(103), Id::makeUndefined()}};
   testSpecialOptionalJoinWithSplits(leftTable, rightTable, expectedResult);
 }
 
 // _____________________________________________________________________________
 TEST(JoinAlgorithms, SpecialOptionalJoinPartialMatches) {
   // Test mix of matching and non-matching left entries.
-  auto leftTable =
-      makeTable({{I(1), I(10)}, {I(2), I(20)}, {I(3), U2()}, {I(4), I(40)}});
-  auto rightTable = makeTable({{I(2), I(20)}, {I(3), I(30)}, {I(5), I(50)}});
+  auto leftTable = makeTable({{I(1), I(10), I(101)},
+                              {I(2), I(20), I(102)},
+                              {I(3), U2(), I(103)},
+                              {I(4), I(40), I(104)}});
+  auto rightTable = makeTable(
+      {{I(2), I(20), I(201)}, {I(3), I(30), I(202)}, {I(5), I(50), I(203)}});
   IdJoinResult expectedResult{
-      {I(1), I(10)},  // No match, keep original.
-      {I(2), I(20)},  // Exact match.
-      {I(3), I(30)},  // Left has U2(), matches right on first column.
-      {I(4), I(40)}   // No match, keep original.
+      {I(1), I(10), I(101), Id::makeUndefined()},  // No match, keep original.
+      {I(2), I(20), I(102), I(201)},               // Exact match.
+      {I(3), I(30), I(103),
+       I(202)},  // Left has U2(), matches right on first column.
+      {I(4), I(40), I(104), Id::makeUndefined()}  // No match, keep original.
   };
   testSpecialOptionalJoinWithSplits(leftTable, rightTable, expectedResult);
 }
@@ -906,32 +999,39 @@ TEST(JoinAlgorithms, SpecialOptionalJoinPartialMatches) {
 // _____________________________________________________________________________
 TEST(JoinAlgorithms, SpecialOptionalJoinComplexCombination) {
   // Comprehensive test combining all scenarios: undefs, multiples,
-  // matches/non-matches.
-  auto leftTable = makeTable({{I(1), U2()},
-                              {I(1), U2()},
-                              {I(2), I(20)},
-                              {I(3), I(30)},
-                              {I(3), I(31)},
-                              {I(4), U2()},
-                              {I(5), I(50)},
-                              {I(6), I(60)}});
-  auto rightTable = makeTable({{I(1), I(10)},
-                               {I(1), I(11)},
-                               {I(2), I(20)},
-                               {I(3), I(30)},
-                               {I(4), I(40)},
-                               {I(7), I(70)}});
+  // matches/non-matches, and cartesian products.
+  auto leftTable = makeTable({{I(1), U2(), I(101)},
+                              {I(1), U2(), I(102)},
+                              {I(2), I(20), I(103)},
+                              {I(3), I(30), I(104)},
+                              {I(3), I(31), I(105)},
+                              {I(4), U2(), I(106)},
+                              {I(5), I(50), I(107)},
+                              {I(6), I(60), I(108)}});
+  auto rightTable = makeTable({{I(1), I(10), I(201)},
+                               {I(1), I(11), I(202)},
+                               {I(2), I(20), I(203)},
+                               {I(3), I(30), I(204)},
+                               {I(4), I(40), I(205)},
+                               {I(7), I(70), I(206)}});
   IdJoinResult expectedResult{
-      {I(1), I(10)},  // Left I(1), U2() matches right I(1), I(10).
-      {I(1), I(10)},  // Second left I(1), U2() also matches.
-      {I(1), I(11)},  // Left I(1), U2() matches right I(1), I(11).
-      {I(1), I(11)},  // Second left I(1), U2() also matches.
-      {I(2), I(20)},  // Exact match.
-      {I(3), I(30)},  // Exact match on both columns.
-      {I(3), I(31)},  // Left I(3), I(31) doesn't match, keep original.
-      {I(4), I(40)},  // Left I(4), U2() matches right I(4), I(40).
-      {I(5), I(50)},  // No match on right, keep original.
-      {I(6), I(60)}   // No match on right, keep original.
+      {I(1), I(10), I(101),
+       I(201)},  // Left I(1), U2() matches right I(1), I(10).
+      {I(1), I(10), I(102), I(201)},  // Second left I(1), U2() also matches.
+      {I(1), I(11), I(101),
+       I(202)},  // Left I(1), U2() matches right I(1), I(11).
+      {I(1), I(11), I(102),
+       I(202)},  // Second left I(1), U2() also matches (cartesian: 2x2=4).
+      {I(2), I(20), I(103), I(203)},  // Exact match.
+      {I(3), I(30), I(104), I(204)},  // Exact match on both columns.
+      {I(3), I(31), I(105),
+       Id::makeUndefined()},  // Left I(3), I(31) doesn't match, keep original.
+      {I(4), I(40), I(106),
+       I(205)},  // Left I(4), U2() matches right I(4), I(40).
+      {I(5), I(50), I(107),
+       Id::makeUndefined()},  // No match on right, keep original.
+      {I(6), I(60), I(108),
+       Id::makeUndefined()}  // No match on right, keep original.
   };
   testSpecialOptionalJoinWithSplits(leftTable, rightTable, expectedResult);
 }
