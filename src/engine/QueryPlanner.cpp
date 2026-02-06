@@ -221,7 +221,7 @@ std::vector<SubtreePlan> QueryPlanner::createExecutionTrees(ParsedQuery& pq,
     // not natively supported by the `Operation`. Check the documentation of
     // `ExportQueryExecutionTrees::compensateForLimitOffsetClause to see `how
     // this is comphandled in the exporter.
-    if (plan._qet->getRootOperation()->supportsLimitOffset() && !isSubquery) {
+    if (plan._qet->benefitsFromLimitOrOffset() && !isSubquery) {
       plan._qet->applyLimit(pq._limitOffset);
     }
   }
