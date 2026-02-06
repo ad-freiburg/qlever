@@ -119,10 +119,18 @@ Result OptionalJoin::computeResult(bool requestLaziness) {
     return std::move(res).value();
   }
 
+  // We can currently use a prefiltered version if all of the following are
+  // true:
+  // 1. It is allowed by the `RuntimeParameters`.
+  // 2. The right child is an `IndexScan`.
+  // 3. There either is a single join columns, or there are 2 join columns, and
+  // only the second join column in the left input can have
+  //    UNDEF values.
+  const bool isTwoColumnSpecialOptionalJoin =
+      implementation_ == Implementation::OnlyUndefInLastJoinColumnOfLeft &&
+      _joinColumns.size() == 2;
   if (getRuntimeParameter<&RuntimeParameters::prefilteredOptionalJoin_>() &&
-      (_joinColumns.size() == 1 ||
-       (implementation_ == Implementation::OnlyUndefInLastJoinColumnOfLeft &&
-        _joinColumns.size() == 2))) {
+      (_joinColumns.size() == 1 || isTwoColumnSpecialOptionalJoin)) {
     if (auto indexScan =
             std::dynamic_pointer_cast<IndexScan>(_right->getRootOperation())) {
       return optionalJoinWithIndexScan(_left->getResult(true),

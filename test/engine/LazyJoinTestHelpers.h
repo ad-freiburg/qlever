@@ -1,6 +1,11 @@
-//  Copyright 2025, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Claude (Anthropic AI)
+// Copyright 2026 The QLever Authors, in particular:
+//
+// 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_TEST_ENGINE_LAZYJOINTESTHELPERS_H
 #define QLEVER_TEST_ENGINE_LAZYJOINTESTHELPERS_H
@@ -60,13 +65,11 @@ class LazyJoinTestHelper {
   void setupQecWithKnowledgeGraph(
       const std::string& kg,
       std::optional<ad_utility::MemorySize> blockSize = std::nullopt) {
+    TestIndexConfig config{kg};
     if (blockSize.has_value()) {
-      TestIndexConfig config{kg};
       config.blocksizePermutations = blockSize.value();
-      qec_ = getQec(std::move(config));
-    } else {
-      qec_ = getQec(kg);
     }
+    qec_ = getQec(std::move(config));
   }
 };
 

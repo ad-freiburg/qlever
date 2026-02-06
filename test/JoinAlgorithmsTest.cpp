@@ -589,60 +589,28 @@ auto makeTable = [](const VectorTable& table) {
 // RowAdder for Id-based blocks with payload columns.
 struct IdRowAdder {
   using TableWithJoinCols = ad_utility::IdTableAndFirstCols<2, IdTable>;
-  const IdTable* leftTable_{};
-  const IdTable* rightTable_{};
-  // For non-cartesian paths, store the wrapped tables to access payloads.
-  const TableWithJoinCols* leftWrapped_{};
-  const TableWithJoinCols* rightWrapped_{};
   IdJoinResult* target_{};
+  IdTableView<0> leftTable_{2, ad_utility::testing::makeAllocator()};
+  IdTableView<0> rightTable_{2, ad_utility::testing::makeAllocator()};
 
   // Called by cartesian product path with materialized tables.
-  void setInput(const IdTable& left, const IdTable& right) {
-    leftTable_ = &left;
-    rightTable_ = &right;
-    leftWrapped_ = nullptr;
-    rightWrapped_ = nullptr;
+  void setInput(const auto& left, const auto& right) {
+    leftTable_ = left.template asStaticView<0>();
+    rightTable_ = right.template asStaticView<0>();
   }
 
-  // Called by non-cartesian paths with wrapped tables.
-  void setInput(const TableWithJoinCols& left, const TableWithJoinCols& right) {
-    leftWrapped_ = &left;
-    rightWrapped_ = &right;
-    leftTable_ = nullptr;
-    rightTable_ = nullptr;
-  }
-
-  void setOnlyLeftInputForOptionalJoin(const IdTable& left) {
-    leftTable_ = &left;
-    leftWrapped_ = nullptr;
-  }
-
-  void setOnlyLeftInputForOptionalJoin(const TableWithJoinCols& left) {
-    leftWrapped_ = &left;
-    leftTable_ = nullptr;
+  void setOnlyLeftInputForOptionalJoin(const auto& left) {
+    leftTable_ = left.template asStaticView<0>();
   }
 
   void addRow(size_t leftIndex, size_t rightIndex) {
-    Id x1, x2, y1, y2, leftPayload, rightPayload;
-    if (leftTable_) {
-      // Cartesian path: use materialized tables.
-      x1 = (*leftTable_)(leftIndex, 0);
-      x2 = (*leftTable_)(leftIndex, 1);
-      y1 = (*rightTable_)(rightIndex, 0);
-      y2 = (*rightTable_)(rightIndex, 1);
-      leftPayload = (*leftTable_)(leftIndex, 2);
-      rightPayload = (*rightTable_)(rightIndex, 2);
-    } else {
-      // Non-cartesian path: use wrapped tables.
-      auto [x1_tmp, x2_tmp] = (*leftWrapped_)[leftIndex];
-      auto [y1_tmp, y2_tmp] = (*rightWrapped_)[rightIndex];
-      x1 = x1_tmp;
-      x2 = x2_tmp;
-      y1 = y1_tmp;
-      y2 = y2_tmp;
-      leftPayload = leftWrapped_->asStaticView()(leftIndex, 2);
-      rightPayload = rightWrapped_->asStaticView()(rightIndex, 2);
-    }
+    // Cartesian path: use materialized tables.
+    auto x1 = leftTable_(leftIndex, 0);
+    auto x2 = leftTable_(leftIndex, 1);
+    auto y1 = rightTable_(rightIndex, 0);
+    auto y2 = rightTable_(rightIndex, 1);
+    auto leftPayload = leftTable_(leftIndex, 2);
+    auto rightPayload = rightTable_(rightIndex, 2);
     AD_CONTRACT_CHECK(x1 == y1);
     AD_CONTRACT_CHECK(x2.isUndefined() || x2 == y2);
     target_->push_back(
@@ -650,19 +618,9 @@ struct IdRowAdder {
   }
 
   void addOptionalRow(size_t leftIndex) {
-    Id x1, x2, leftPayload;
-    if (leftTable_) {
-      // Cartesian path: use materialized table.
-      x1 = (*leftTable_)(leftIndex, 0);
-      x2 = (*leftTable_)(leftIndex, 1);
-      leftPayload = (*leftTable_)(leftIndex, 2);
-    } else {
-      // Non-cartesian path: use wrapped table.
-      auto [x1_tmp, x2_tmp] = (*leftWrapped_)[leftIndex];
-      x1 = x1_tmp;
-      x2 = x2_tmp;
-      leftPayload = leftWrapped_->asStaticView()(leftIndex, 2);
-    }
+    auto x1 = leftTable_(leftIndex, 0);
+    auto x2 = leftTable_(leftIndex, 1);
+    auto leftPayload = leftTable_(leftIndex, 2);
     target_->emplace_back(std::array{x1, x2, leftPayload, Id::makeUndefined()});
   }
 
@@ -680,15 +638,12 @@ struct IdRowAdder {
   }
 };
 
-auto makeIdRowAdder(IdJoinResult& target) {
-  return IdRowAdder{nullptr, nullptr, nullptr, nullptr, &target};
-}
+auto makeIdRowAdder(IdJoinResult& target) { return IdRowAdder{&target}; }
 
 // Helper function for creating undefined Ids.
 auto U2() { return Id::makeUndefined(); }
 
 // Helper function to test the special optional join with blocks.
-// TODO<joka921> We have to fix the semantics for move-only IdTables...
 void testSpecialOptionalJoin(IdNestedBlock a, IdNestedBlock b,
                              IdJoinResult expected, size_t numJoinColumns = 2,
                              source_location l = AD_CURRENT_SOURCE_LOC()) {
@@ -710,8 +665,10 @@ void testSpecialOptionalJoin(IdNestedBlock a, IdNestedBlock b,
   ad_utility::specialOptionalJoinForBlocks(
       std::move(wrappedA), std::move(wrappedB), numJoinColumns, adder);
 
-  // The result must be sorted on the first column.
-  EXPECT_TRUE(ql::ranges::is_sorted(result, std::less<>{}, ad_utility::first));
+  // The result must be sorted on the first two columns (the join columns).
+  EXPECT_TRUE(ql::ranges::is_sorted(result, std::less<>{}, [](auto array) {
+    return std::tie(array[0], array[1]);
+  }));
   // The exact order of the elements with the same first column is not important
   // and depends on implementation details. We therefore do not enforce it here.
   EXPECT_THAT(result, ::testing::UnorderedElementsAreArray(expected));
@@ -846,27 +803,6 @@ TEST(JoinAlgorithms, SpecialOptionalJoinEmptyInputs) {
 }
 
 // _____________________________________________________________________________
-TEST(JoinAlgorithms, SpecialOptionalJoinSingleBlock) {
-  IdNestedBlock a = makeVec(makeTable({{I(1), I(11), I(101)},
-                                       {I(4), I(12), I(102)},
-                                       {I(4), I(12), I(103)},
-                                       {I(42), I(14), I(104)}}));
-  IdNestedBlock b = makeVec(makeTable({{{I(0), I(24), I(200)},
-                                        {I(4), I(12), I(201)},
-                                        {I(4), I(12), I(202)},
-                                        {I(5), I(25), I(203)},
-                                        {I(19), I(26), I(204)},
-                                        {I(42), I(27), I(205)}}}));
-  IdJoinResult expectedResult{{I(1), I(11), I(101), Id::makeUndefined()},
-                              {I(4), I(12), I(102), I(201)},
-                              {I(4), I(12), I(102), I(202)},
-                              {I(4), I(12), I(103), I(201)},
-                              {I(4), I(12), I(103), I(202)},
-                              {I(42), I(14), I(104), Id::makeUndefined()}};
-  testSpecialOptionalJoin(std::move(a), std::move(b), expectedResult);
-}
-
-// _____________________________________________________________________________
 TEST(JoinAlgorithms, SpecialOptionalJoinSingleBlockWithSplits) {
   auto leftTable = makeTable({{I(1), I(11), I(101)},
                               {I(4), I(12), I(102)},
@@ -970,10 +906,10 @@ TEST(JoinAlgorithms, SpecialOptionalJoinNoMatches) {
   auto leftTable = makeTable(
       {{I(1), I(10), I(101)}, {I(2), I(20), I(102)}, {I(3), I(30), I(103)}});
   auto rightTable = makeTable(
-      {{I(5), I(50), I(201)}, {I(6), I(60), I(202)}, {I(7), I(70), I(203)}});
-  IdJoinResult expectedResult{{I(1), I(10), I(101), Id::makeUndefined()},
-                              {I(2), I(20), I(102), Id::makeUndefined()},
-                              {I(3), I(30), I(103), Id::makeUndefined()}};
+      {{I(1), I(50), I(201)}, {I(6), I(60), I(202)}, {I(7), I(70), I(203)}});
+  IdJoinResult expectedResult{{I(1), I(10), I(101), U2()},
+                              {I(2), I(20), I(102), U2()},
+                              {I(3), I(30), I(103), U2()}};
   testSpecialOptionalJoinWithSplits(leftTable, rightTable, expectedResult);
 }
 
@@ -987,11 +923,11 @@ TEST(JoinAlgorithms, SpecialOptionalJoinPartialMatches) {
   auto rightTable = makeTable(
       {{I(2), I(20), I(201)}, {I(3), I(30), I(202)}, {I(5), I(50), I(203)}});
   IdJoinResult expectedResult{
-      {I(1), I(10), I(101), Id::makeUndefined()},  // No match, keep original.
-      {I(2), I(20), I(102), I(201)},               // Exact match.
+      {I(1), I(10), I(101), U2()},    // No match, keep original.
+      {I(2), I(20), I(102), I(201)},  // Exact match.
       {I(3), I(30), I(103),
        I(202)},  // Left has U2(), matches right on first column.
-      {I(4), I(40), I(104), Id::makeUndefined()}  // No match, keep original.
+      {I(4), I(40), I(104), U2()}  // No match, keep original.
   };
   testSpecialOptionalJoinWithSplits(leftTable, rightTable, expectedResult);
 }
@@ -1025,13 +961,11 @@ TEST(JoinAlgorithms, SpecialOptionalJoinComplexCombination) {
       {I(2), I(20), I(103), I(203)},  // Exact match.
       {I(3), I(30), I(104), I(204)},  // Exact match on both columns.
       {I(3), I(31), I(105),
-       Id::makeUndefined()},  // Left I(3), I(31) doesn't match, keep original.
+       U2()},  // Left I(3), I(31) doesn't match, keep original.
       {I(4), I(40), I(106),
        I(205)},  // Left I(4), U2() matches right I(4), I(40).
-      {I(5), I(50), I(107),
-       Id::makeUndefined()},  // No match on right, keep original.
-      {I(6), I(60), I(108),
-       Id::makeUndefined()}  // No match on right, keep original.
+      {I(5), I(50), I(107), U2()},  // No match on right, keep original.
+      {I(6), I(60), I(108), U2()}   // No match on right, keep original.
   };
   testSpecialOptionalJoinWithSplits(leftTable, rightTable, expectedResult);
 }

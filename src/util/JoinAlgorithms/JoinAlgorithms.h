@@ -474,39 +474,24 @@ CPP_template(typename RangeSmaller, typename RangeLarger, typename LessThan,
 // `numColumns - 1` entries of the column. This is used by the
 // `specialOptionalJoin`, where the last join column has special semantics, as
 // it might contain undef values.
-struct CompareAllButLast {
+template <typename ComparisonImpl>
+struct CompareAllButLastImpl {
   size_t numColumns_;
-  explicit CompareAllButLast(size_t numColumns) : numColumns_(numColumns) {}
+  [[no_unique_address]] ComparisonImpl comparisonImpl_;
+  explicit CompareAllButLastImpl(size_t numColumns) : numColumns_(numColumns) {}
 
   template <typename A, typename B>
   bool operator()(const A& a, const B& b) const {
-    for (size_t i = 0; i < numColumns_ - 1; ++i) {
-      const Id& aId = a[i];
-      const Id& bId = b[i];
-      if (aId != bId) {
-        return aId < bId;
-      }
-    }
-    return false;
+    auto dropLast = [&](const auto& row) {
+      return row | ql::views::take(numColumns_ - 1);
+    };
+    return comparisonImpl_(dropLast(a), dropLast(b));
   };
 };
-// Same as `CompareAllButLast`, but checks for equality.
-struct CompareEqButLast {
-  size_t numColumns_;
-  explicit CompareEqButLast(size_t numColumns) : numColumns_(numColumns) {}
 
-  template <typename A, typename B>
-  bool operator()(const A& a, const B& b) const {
-    for (size_t i = 0; i < numColumns_ - 1; ++i) {
-      const Id& aId = a[i];
-      const Id& bId = b[i];
-      if (aId != bId) {
-        return false;
-      }
-    }
-    return true;
-  };
-};
+using CompareAllButLast =
+    CompareAllButLastImpl<decltype(ql::ranges::lexicographical_compare)>;
+using CompareEqButLast = CompareAllButLastImpl<decltype(ql::ranges::equal)>;
 
 /**
  * @brief Perform an OPTIONAL join for the following special case: The `right`
@@ -894,7 +879,7 @@ static constexpr size_t FETCH_BLOCKS = 3;
 // `currentEl` (5 in this example). New blocks are added to one of the buffers
 // if they become empty at one point in the algorithm.
 //
-// NOTE: This class is implemented as a generic, CRTP-style framework with two
+// Note: This class is implemented as a generic, CRTP-style framework with two
 // customization points: The actual join algorithm on materialized (sub-)blocks.
 // (called `joinSubranges`), and the algorithm used to perform the Cartesian
 // product of matching elements across block boundaries (called
@@ -1751,11 +1736,12 @@ CPP_template(typename NumJoinColumnsT, typename LeftSide, typename RightSide,
 
     // If either table is empty, we don't have to do anything (same as above).
     // TODO<joka921> Check if this case can happen at all, or whether we can
+    // simply put an assertion here.
     if (leftTable.empty() || rightTable.empty()) {
       return;
     }
 
-    // Extract the last join columns, on which we have to perform the join..
+    // Extract the last join columns, on which we have to perform the join.
     auto lastColLeft = leftTable.getColumn(numJoinColumns_ - 1);
     auto lastColRight = rightTable.getColumn(numJoinColumns_ - 1);
 
@@ -1786,12 +1772,16 @@ CPP_template(typename NumJoinColumnsT, typename LeftSide, typename RightSide,
     [[maybe_unused]] auto res = zipperJoinWithUndef(
         lastColLeft, lastColRight, std::less<>{}, compAction,
         findSmallerUndefRangeLeft, noop, notFoundAction, noop);
+    AD_EXPENSIVE_CHECK(res == 0);
 
     this->compatibleRowAction_.flush();
   }
 
   // Implement joinSubranges customization point by forwarding to
   // specialOptionalJoin (the non-block version).
+  // Note The two arguments `FindSmallerUndefRanges...` are not used, but are
+  // needed for the CRTP interface. We know already (by the
+  // preconditions), where the possibly undefined values are located.
   template <typename SubrangeLeft, typename SubrangeRight,
             typename RowIndexAdder, typename FindSmallerUndefRangesLeft,
             typename FindSmallerUndefRangesRight,
@@ -1808,7 +1798,7 @@ CPP_template(typename NumJoinColumnsT, typename LeftSide, typename RightSide,
                      CheckCancellation checkCancellation,
                      [[maybe_unused]] CoverUndefRanges coverUndefRanges) {
     // Forward the arguments to the `specialOptionalJoin`.
-    // Note:: The `FindSmallerUndefRanges...` arguments are ignored dummys which
+    // Note: The `FindSmallerUndefRanges...` arguments are ignored dummys which
     // are required by the interface, but the undef handling is hardcoded in the
     // `specialOptionalJoin`.
     specialOptionalJoin(numJoinColumns_, subrangeLeft, subrangeRight,
@@ -1819,8 +1809,8 @@ CPP_template(typename NumJoinColumnsT, typename LeftSide, typename RightSide,
 
 }  // namespace detail
 
-/**
- * @brief Perform a special optional join for input ranges of blocks.
+/*
+ *  Perform a special optional join for input ranges of blocks.
  * This is a simplified implementation that works on blocks of row-like data.
  * Preconditions:
  * - Right input contains no UNDEF values in the join columns.

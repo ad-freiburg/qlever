@@ -198,10 +198,11 @@ struct IdTableAndFirstCols {
 };
 
 // Specialization of `IdTableAndFirstCol` for only a single column where we
-// don't need to copy into an `array`, but directly return single `Id&`. Note:
-// this changes the interface (in particular the single rows can't be iterated
-// over), but currently this is used by the `Join` class, which expects this
-// interface.
+// don't need to copy into an `array`, but directly return single `Id&`.
+
+// Note: this changes the interface (in particular the single rows can't be
+// iterated over), but currently this is used by the `Join` class, which expects
+// this interface.
 template <typename Table>
 struct IdTableAndFirstCols<1, Table> {
  private:

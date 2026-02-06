@@ -690,13 +690,14 @@ struct IndexScan::SharedGeneratorState {
         prefetchedValues_.push_back(std::move(*iterator_.value()));
       }
 
-      // The second  and third part of the condition are important, because
+      // The `leftSideMatches` condition is important, because
       // following `joinColumns` from the left might still match the last block
       // that we previously have yielded. Note: If we don't filter the left
       // side, then its left elements still have to be yielded, but this is done
       // by the generator for the left side.
-      if (rightSideExhausted &&
-          !(newBlockWasFound || joinColumnMatchesPreviouslyYieldedBlock)) {
+      bool leftSideMatches =
+          newBlockWasFound || joinColumnMatchesPreviouslyYieldedBlock;
+      if (rightSideExhausted && !leftSideMatches) {
         doneFetching_ = true;
         return;
       }
