@@ -26,27 +26,27 @@ using InstantiatedTerm =
 // Number of positions in a triple: subject, predicate, object.
 inline constexpr size_t NUM_TRIPLE_POSITIONS = 3;
 
-// This struct specifies how to instantiate a template triple of the construct
-// graph template. In more detail: This struct contains a
-// `TermInstantiationSpec`, which specifies where the corresponding value which
-// the term is to be instantiated with.
-struct TemplateTripleLookupSpec {
+// Recipe for instantiating one template triple from the CONSTRUCT clause.
+// For each of the three positions (subject, predicate, object), a
+// `TermInstantitationRecipe` specifies the term's type (CONSTANT, VARIABLE,
+// or BLANK_NODE) and an index into the corresponding storage where its value
+// can be found (or computed from).
+struct TripleInstantitationRecipe {
   enum class TermType { CONSTANT, VARIABLE, BLANK_NODE };
 
   // Specifies how to look up the value for a term position
   // during triple instantiation.
   // `type`: Indicates whether the term is a CONSTANT, VARIABLE, or BLANK_NODE.
-  // `index`: The index into the corresponding storage:
-  // For CONSTANT: index into `precomputedConstants_[tripleIdx]`
-  // For VARIABLE: index into `variablesToInstantiate_` /
-  // `variableInstantiations_` For BLANK_NODE: index into
-  // `blankNodesToInstantiate_` / `instantiatedBlankNodes`
-  struct TermInstantiationSpec {
-    TermType type;
-    size_t index;
+  // `index`: The idx into the corresponding storage:
+  // CONSTANT: idx into `precomputedConstants_[tripleIdx]`
+  // VARIABLE: idx into `variablesToInstantiate_` / `variableInstantiations_`
+  // BLANK_NODE: idx into `blankNodesToInstantiate_` / `instantiatedBlankNodes`
+  struct TermInstantitationRecipe {
+    TermType type_;
+    size_t index_;
   };
 
-  std::array<TermInstantiationSpec, NUM_TRIPLE_POSITIONS> lookups_;
+  std::array<TermInstantitationRecipe, NUM_TRIPLE_POSITIONS> lookups_;
 };
 
 // Variable with column index into the `IdTable`.

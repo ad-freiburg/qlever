@@ -31,7 +31,7 @@ ConstructTemplatePreprocessor::preprocess(
 
   for (size_t tripleIdx = 0; tripleIdx < templateTriples.size(); ++tripleIdx) {
     const auto& triple = templateTriples[tripleIdx];
-    TemplateTripleLookupSpec& info = result->triplePatternInfos_[tripleIdx];
+    TripleInstantitationRecipe& info = result->triplePatternInfos_[tripleIdx];
 
     for (size_t pos = 0; pos < NUM_TRIPLE_POSITIONS; ++pos) {
       auto role = static_cast<PositionInTriple>(pos);
@@ -45,7 +45,7 @@ ConstructTemplatePreprocessor::preprocess(
 }
 
 // _____________________________________________________________________________
-TemplateTripleLookupSpec::TermInstantiationSpec
+TripleInstantitationRecipe::TermInstantitationRecipe
 ConstructTemplatePreprocessor::preprocessTerm(
     const GraphTerm& term, size_t tripleIdx, PositionInTriple role,
     PreprocessedConstructTemplate& result,
@@ -67,22 +67,22 @@ ConstructTemplatePreprocessor::preprocessTerm(
   }
   // Unreachable for valid GraphTerm
   // TODO<ms2144> add error throw here.
-  return {TemplateTripleLookupSpec::TermType::CONSTANT, 0};
+  return {TripleInstantitationRecipe::TermType::CONSTANT, 0};
 }
 
 // _____________________________________________________________________________
-TemplateTripleLookupSpec::TermInstantiationSpec
+TripleInstantitationRecipe::TermInstantitationRecipe
 ConstructTemplatePreprocessor::preprocessIriTerm(
     const Iri& iri, size_t tripleIdx, size_t pos,
     PreprocessedConstructTemplate& result) {
   // evaluate(Iri) always returns a valid string
   result.precomputedConstants_[tripleIdx][pos] =
       ConstructQueryEvaluator::evaluate(iri);
-  return {TemplateTripleLookupSpec::TermType::CONSTANT, tripleIdx};
+  return {TripleInstantitationRecipe::TermType::CONSTANT, tripleIdx};
 }
 
 // _____________________________________________________________________________
-TemplateTripleLookupSpec::TermInstantiationSpec
+TripleInstantitationRecipe::TermInstantitationRecipe
 ConstructTemplatePreprocessor::preprocessLiteralTerm(
     const Literal& literal, size_t tripleIdx, PositionInTriple role,
     PreprocessedConstructTemplate& result) {
@@ -92,11 +92,11 @@ ConstructTemplatePreprocessor::preprocessLiteralTerm(
   if (value.has_value()) {
     result.precomputedConstants_[tripleIdx][pos] = std::move(*value);
   }
-  return {TemplateTripleLookupSpec::TermType::CONSTANT, tripleIdx};
+  return {TripleInstantitationRecipe::TermType::CONSTANT, tripleIdx};
 }
 
 // _____________________________________________________________________________
-TemplateTripleLookupSpec::TermInstantiationSpec
+TripleInstantitationRecipe::TermInstantitationRecipe
 ConstructTemplatePreprocessor::preprocessVariableTerm(
     const Variable& var, PreprocessedConstructTemplate& result,
     ad_utility::HashMap<Variable, size_t>& variableToIndex,
@@ -113,11 +113,11 @@ ConstructTemplatePreprocessor::preprocessVariableTerm(
     result.variablesToInstantiate_.emplace_back(
         VariableWithColumnIndex{var, columnIndex});
   }
-  return {TemplateTripleLookupSpec::TermType::VARIABLE, variableToIndex[var]};
+  return {TripleInstantitationRecipe::TermType::VARIABLE, variableToIndex[var]};
 }
 
 // _____________________________________________________________________________
-TemplateTripleLookupSpec::TermInstantiationSpec
+TripleInstantitationRecipe::TermInstantitationRecipe
 ConstructTemplatePreprocessor::preprocessBlankNodeTerm(
     const BlankNode& blankNode, PreprocessedConstructTemplate& result,
     ad_utility::HashMap<std::string, size_t>& blankNodeLabelToIndex) {
@@ -132,6 +132,6 @@ ConstructTemplatePreprocessor::preprocessBlankNodeTerm(
     formatInfo.suffix_ = absl::StrCat("_", label);
     result.blankNodesToInstantiate_.push_back(std::move(formatInfo));
   }
-  return {TemplateTripleLookupSpec::TermType::BLANK_NODE,
+  return {TripleInstantitationRecipe::TermType::BLANK_NODE,
           blankNodeLabelToIndex[label]};
 }

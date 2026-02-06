@@ -17,25 +17,25 @@ InstantiatedTerm ConstructTripleInstantiator::instantiateTerm(
     size_t tripleIdx, size_t pos,
     const PreprocessedConstructTemplate& preprocessedTemplate,
     const BatchEvaluationResult& batchResult, size_t rowIdxInBatch) {
-  const TemplateTripleLookupSpec& info =
+  const TripleInstantitationRecipe& info =
       preprocessedTemplate.triplePatternInfos_[tripleIdx];
-  const TemplateTripleLookupSpec::TermInstantiationSpec& lookup =
+  const TripleInstantitationRecipe::TermInstantitationRecipe& lookup =
       info.lookups_[pos];
 
-  switch (lookup.type) {
-    case TemplateTripleLookupSpec::TermType::CONSTANT: {
+  switch (lookup.type_) {
+    case TripleInstantitationRecipe::TermType::CONSTANT: {
       return std::make_shared<std::string>(
           preprocessedTemplate.precomputedConstants_[tripleIdx][pos]);
     }
-    case TemplateTripleLookupSpec::TermType::VARIABLE: {
+    case TripleInstantitationRecipe::TermType::VARIABLE: {
       // Variable values are stored in the batch result.
       // May be Undef if the variable is unbound.
-      return batchResult.getEvaluatedVariable(lookup.index, rowIdxInBatch);
+      return batchResult.getEvaluatedVariable(lookup.index_, rowIdxInBatch);
     }
-    case TemplateTripleLookupSpec::TermType::BLANK_NODE: {
+    case TripleInstantitationRecipe::TermType::BLANK_NODE: {
       // Blank node values are always valid (computed for each row).
       return std::make_shared<const std::string>(
-          batchResult.getBlankNodeValue(lookup.index, rowIdxInBatch));
+          batchResult.getBlankNodeValue(lookup.index_, rowIdxInBatch));
     }
   }
   AD_FAIL();  // Unreachable: all enum cases handled above.
@@ -72,15 +72,17 @@ std::string ConstructTripleInstantiator::formatTriple(
                           " .\n");
     }
     return absl::StrCat(subjectStr, " ", predicateStr, " ", objectStr, " .\n");
+
   } else if constexpr (format == ad_utility::MediaType::csv) {
     return absl::StrCat(RdfEscaping::escapeForCsv(subjectStr), ",",
                         RdfEscaping::escapeForCsv(predicateStr), ",",
                         RdfEscaping::escapeForCsv(objectStr), "\n");
-  } else {
-    // format == tsv (guaranteed by static_assert above).
+  } else if constexpr (format == ad_utility::MediaType::tsv) {
     return absl::StrCat(RdfEscaping::escapeForTsv(subjectStr), "\t",
                         RdfEscaping::escapeForTsv(predicateStr), "\t",
                         RdfEscaping::escapeForTsv(objectStr), "\n");
+  } else {
+    AD_FAIL();  // unreachable
   }
 }
 

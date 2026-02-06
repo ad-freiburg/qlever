@@ -38,7 +38,7 @@ struct PreprocessedConstructTemplate {
         cancellationHandle_(std::move(cancellationHandle)) {}
 
   // Lookup info for each triple pattern.
-  std::vector<TemplateTripleLookupSpec> triplePatternInfos_;
+  std::vector<TripleInstantitationRecipe> triplePatternInfos_;
 
   // Precomputed constant values for `Iri` objects and `Literal` objects.
   // [tripleIdx][positionInTriple] -> constant string (empty if not a constant)
@@ -88,7 +88,7 @@ class ConstructTemplatePreprocessor {
  private:
   // Analyzes a single term and returns its resolution info.
   // Dispatches to the appropriate type-specific handler based on term type.
-  static TemplateTripleLookupSpec::TermInstantiationSpec preprocessTerm(
+  static TripleInstantitationRecipe::TermInstantitationRecipe preprocessTerm(
       const GraphTerm& term, size_t tripleIdx, PositionInTriple role,
       PreprocessedConstructTemplate& result,
       ad_utility::HashMap<Variable, size_t>& variableToIndex,
@@ -96,24 +96,26 @@ class ConstructTemplatePreprocessor {
       const VariableToColumnMap& variableColumns);
 
   // Analyzes a `Iri` term: precomputes the string value.
-  static TemplateTripleLookupSpec::TermInstantiationSpec preprocessIriTerm(
+  static TripleInstantitationRecipe::TermInstantitationRecipe preprocessIriTerm(
       const Iri& iri, size_t tripleIdx, size_t pos,
       PreprocessedConstructTemplate& result);
 
   // Analyzes a `Literal` term: precomputes the string value.
-  static TemplateTripleLookupSpec::TermInstantiationSpec preprocessLiteralTerm(
-      const Literal& literal, size_t tripleIdx, PositionInTriple role,
-      PreprocessedConstructTemplate& result);
+  static TripleInstantitationRecipe::TermInstantitationRecipe
+  preprocessLiteralTerm(const Literal& literal, size_t tripleIdx,
+                        PositionInTriple role,
+                        PreprocessedConstructTemplate& result);
 
   // Analyzes a `Variable` term: registers it and precomputes `IdTable` column
   // index.
-  static TemplateTripleLookupSpec::TermInstantiationSpec preprocessVariableTerm(
-      const Variable& var, PreprocessedConstructTemplate& result,
-      ad_utility::HashMap<Variable, size_t>& variableToIndex,
-      const VariableToColumnMap& variableColumns);
+  static TripleInstantitationRecipe::TermInstantitationRecipe
+  preprocessVariableTerm(const Variable& var,
+                         PreprocessedConstructTemplate& result,
+                         ad_utility::HashMap<Variable, size_t>& variableToIndex,
+                         const VariableToColumnMap& variableColumns);
 
   // Analyzes a `BlankNode` term: registers it and precomputes format strings.
-  static TemplateTripleLookupSpec::TermInstantiationSpec
+  static TripleInstantitationRecipe::TermInstantitationRecipe
   preprocessBlankNodeTerm(
       const BlankNode& blankNode, PreprocessedConstructTemplate& result,
       ad_utility::HashMap<std::string, size_t>& blankNodeLabelToIndex);
