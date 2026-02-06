@@ -1665,14 +1665,15 @@ BlockZipperJoinImpl(LHS&, RHS&, const LessThan&, CompatibleRowAction&, IsUndef)
 // - Right input contains no UNDEF values
 // - Left input only contains UNDEF in the last column
 // - Both inputs are sorted lexicographically
-CPP_template(typename LeftSide, typename RightSide,
+CPP_template(typename NumJoinColumnsT, typename LeftSide, typename RightSide,
              typename CompatibleRowAction)(
     requires IsJoinSide<LeftSide> CPP_and
         IsJoinSide<RightSide>) struct BlockZipperJoinImplForSpecialOptionalJoin
-    : BlockZipperJoinImplCRTP<BlockZipperJoinImplForSpecialOptionalJoin<
-                                  LeftSide, RightSide, CompatibleRowAction>,
-                              LeftSide, RightSide, CompareAllButLast,
-                              CompatibleRowAction, AlwaysFalse> {
+    : BlockZipperJoinImplCRTP<
+          BlockZipperJoinImplForSpecialOptionalJoin<
+              NumJoinColumnsT, LeftSide, RightSide, CompatibleRowAction>,
+          LeftSide, RightSide, CompareAllButLast, CompatibleRowAction,
+          AlwaysFalse> {
   using Base =
       BlockZipperJoinImplCRTP<BlockZipperJoinImplForSpecialOptionalJoin,
                               LeftSide, RightSide, CompareAllButLast,
@@ -1683,8 +1684,19 @@ CPP_template(typename LeftSide, typename RightSide,
   template <typename NewIsUndef>
   using Rebind = BlockZipperJoinImplForSpecialOptionalJoin;
 
-  // Inherit constructors from base class.
-  using Base::Base;
+  // Store the number of join columns.
+  NumJoinColumnsT numJoinColumns_;
+
+  // Constructor that accepts numJoinColumns as a templated parameter.
+  // This allows passing either std::integral_constant<size_t, N> for
+  // compile-time optimization or plain size_t for runtime flexibility.
+  BlockZipperJoinImplForSpecialOptionalJoin(
+      NumJoinColumnsT numJoinColumns, LeftSide leftSide, RightSide rightSide,
+      const CompareAllButLast& lessThan,
+      CompatibleRowAction& compatibleRowAction)
+      : Base(std::move(leftSide), std::move(rightSide), lessThan,
+             compatibleRowAction),
+        numJoinColumns_(numJoinColumns) {}
 
   // Implement addCartesianProduct customization point for special optional
   // join. As the base class ensures, that those are equal up to the last join
@@ -1742,14 +1754,9 @@ CPP_template(typename LeftSide, typename RightSide,
       return;
     }
 
-    // TODO<joka921> A little wonky, is always a constant, pass it into this
-    // class!
-    AD_CORRECTNESS_CHECK(!blocksLeft.front().fullBlock().empty());
-    size_t numJoinCols = blocksLeft.front().fullBlock()[0].size();
-
     // Extract the last join columns, on which we have to perform the join..
-    auto lastColLeft = leftTable.getColumn(numJoinCols - 1);
-    auto lastColRight = rightTable.getColumn(numJoinCols - 1);
+    auto lastColLeft = leftTable.getColumn(numJoinColumns_ - 1);
+    auto lastColRight = rightTable.getColumn(numJoinColumns_ - 1);
 
     this->compatibleRowAction_.setInput(leftTable, rightTable);
     // Set up actions for the single-column join on the last column.
@@ -1803,8 +1810,9 @@ CPP_template(typename LeftSide, typename RightSide,
     // Note:: The `FindSmallerUndefRanges...` arguments are ignored dummys which
     // are required by the interface, but the undef handling is hardcoded in the
     // `specialOptionalJoin`.
-    specialOptionalJoin(subrangeLeft, subrangeRight, rowIndexAdder,
-                        elFromFirstNotFoundAction, checkCancellation);
+    specialOptionalJoin(numJoinColumns_, subrangeLeft, subrangeRight,
+                        rowIndexAdder, elFromFirstNotFoundAction,
+                        checkCancellation);
   }
 };
 
@@ -1838,9 +1846,9 @@ void specialOptionalJoinForBlocks(LeftBlocks&& leftBlocks,
                                         std::type_identity<ProjectedLeft>{});
   using LeftSide = decltype(leftSide);
   using RightSide = decltype(rightSide);
-  detail::BlockZipperJoinImplForSpecialOptionalJoin<LeftSide, RightSide,
-                                                    CompatibleRowAction>
-      impl{leftSide, rightSide,
+  detail::BlockZipperJoinImplForSpecialOptionalJoin<
+      decltype(numJoinColumns), LeftSide, RightSide, CompatibleRowAction>
+      impl{numJoinColumns, leftSide, rightSide,
            CompareAllButLast{static_cast<size_t>(numJoinColumns)},
            compatibleRowAction};
   impl.template runJoin<JoinType::OPTIONAL>();
