@@ -1090,21 +1090,20 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
     CancellationHandle cancellationHandle,
     [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
-  static_assert(
-      format == MediaType::octetStream || format == MediaType::csv ||
-      format == MediaType::tsv || format == MediaType::sparqlXml ||
-      format == MediaType::sparqlJson || format == MediaType::qleverJson ||
-      format == MediaType::binaryQleverExport || format == MediaType::turtle);
+  using enum MediaType;
+  static constexpr std::array supportedFormats{
+      octetStream,        csv,   tsv, sparqlXml, sparqlJson, qleverJson,
+      binaryQleverExport, turtle};
+  static_assert(ad_utility::contains(supportedFormats, format));
 
-  if constexpr (format == MediaType::octetStream ||
-                format == MediaType::binaryQleverExport) {
+  if constexpr (format == octetStream || format == binaryQleverExport) {
     AD_THROW("Binary export is not supported for CONSTRUCT queries");
-  } else if constexpr (format == MediaType::sparqlXml) {
+  } else if constexpr (format == sparqlXml) {
     AD_THROW("XML export is currently not supported for CONSTRUCT queries");
-  } else if constexpr (format == MediaType::sparqlJson) {
+  } else if constexpr (format == sparqlJson) {
     AD_THROW("SparqlJSON export is not supported for CONSTRUCT queries");
   }
-  AD_CONTRACT_CHECK(format != MediaType::qleverJson);
+  AD_CONTRACT_CHECK(format != qleverJson);
 
   result->logResultSize();
 
