@@ -317,7 +317,11 @@ SparqlExpression::Estimates getEstimatesForFilterExpressionImpl(
   // the following line is a noop. For the `IN` expression we expect to have
   // more results if we have more arguments on the right side that can possibly
   // match, so we reduce the `reductionFactor`.
-  reductionFactor /= children.size() - 1;
+  if (children.size() > 1) {
+    reductionFactor /= children.size() - 1;
+  } else {
+    reductionFactor = std::numeric_limits<uint64_t>::max();
+  }
   auto sizeEstimate = inputSizeEstimate / reductionFactor;
 
   // By default, we have to linearly scan over the input and write the output.
