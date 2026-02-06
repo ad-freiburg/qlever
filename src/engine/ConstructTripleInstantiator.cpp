@@ -17,22 +17,24 @@ InstantiatedTerm ConstructTripleInstantiator::instantiateTerm(
     size_t tripleIdx, size_t pos,
     const PreprocessedConstructTemplate& preprocessedTemplate,
     const BatchEvaluationResult& batchResult, size_t rowIdxInBatch) {
+  using enum TripleInstantitationRecipe::TermType;
+
   const TripleInstantitationRecipe& info =
       preprocessedTemplate.triplePatternInfos_[tripleIdx];
   const TripleInstantitationRecipe::TermInstantitationRecipe& lookup =
       info.lookups_[pos];
 
   switch (lookup.type_) {
-    case TripleInstantitationRecipe::TermType::CONSTANT: {
+    case CONSTANT: {
       return std::make_shared<std::string>(
           preprocessedTemplate.precomputedConstants_[tripleIdx][pos]);
     }
-    case TripleInstantitationRecipe::TermType::VARIABLE: {
+    case VARIABLE: {
       // Variable values are stored in the batch result.
       // May be Undef if the variable is unbound.
       return batchResult.getEvaluatedVariable(lookup.index_, rowIdxInBatch);
     }
-    case TripleInstantitationRecipe::TermType::BLANK_NODE: {
+    case BLANK_NODE: {
       // Blank node values are always valid (computed for each row).
       return std::make_shared<const std::string>(
           batchResult.getBlankNodeValue(lookup.index_, rowIdxInBatch));

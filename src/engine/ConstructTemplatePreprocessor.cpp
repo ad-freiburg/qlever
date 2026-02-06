@@ -9,6 +9,7 @@
 #include <absl/strings/str_cat.h>
 
 #include "engine/ConstructQueryEvaluator.h"
+#include "util/Exception.h"
 
 using enum PositionInTriple;
 
@@ -52,7 +53,7 @@ ConstructTemplatePreprocessor::preprocessTerm(
     ad_utility::HashMap<Variable, size_t>& variableToIndex,
     ad_utility::HashMap<std::string, size_t>& blankNodeLabelToIndex,
     const VariableToColumnMap& variableColumns) {
-  const size_t pos = static_cast<size_t>(role);
+  const auto pos = static_cast<size_t>(role);
   if (std::holds_alternative<Iri>(term)) {
     return preprocessIriTerm(std::get<Iri>(term), tripleIdx, pos, result);
   } else if (std::holds_alternative<Literal>(term)) {
@@ -65,9 +66,7 @@ ConstructTemplatePreprocessor::preprocessTerm(
     return preprocessBlankNodeTerm(std::get<BlankNode>(term), result,
                                    blankNodeLabelToIndex);
   }
-  // Unreachable for valid GraphTerm
-  // TODO<ms2144> add error throw here.
-  return {TripleInstantitationRecipe::TermType::CONSTANT, 0};
+  AD_FAIL();  // Unreachable for valid GraphTerm
 }
 
 // _____________________________________________________________________________
