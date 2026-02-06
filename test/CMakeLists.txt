@@ -264,6 +264,8 @@ addLinkAndDiscoverTestNoLibs(TypeTraitsTest)
 
 addLinkAndDiscoverTestSerial(SparqlExpressionTest sparqlExpressions index engine)
 
+addLinkAndDiscoverTestSerial(SparqlExpressionMemberFunctionsTest sparqlExpressions index engine)
+
 addLinkAndDiscoverTest(StreamableBodyTest http)
 
 addLinkAndDiscoverTest(StreamableGeneratorTest)
