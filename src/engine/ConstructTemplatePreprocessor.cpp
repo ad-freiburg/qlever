@@ -85,7 +85,7 @@ TripleInstantitationRecipe::TermInstantitationRecipe
 ConstructTemplatePreprocessor::preprocessLiteralTerm(
     const Literal& literal, size_t tripleIdx, PositionInTriple role,
     PreprocessedConstructTemplate& result) {
-  const size_t pos = static_cast<size_t>(role);
+  const auto pos = static_cast<size_t>(role);
   // evaluate(Literal) returns optional - only store if valid
   auto value = ConstructQueryEvaluator::evaluate(literal, role);
   if (value.has_value()) {
@@ -109,8 +109,7 @@ ConstructTemplatePreprocessor::preprocessVariableTerm(
     if (auto opt = ad_utility::getOptionalFromHashMap(variableColumns, var)) {
       columnIndex = opt->columnIndex_;
     }
-    result.variablesToInstantiate_.emplace_back(
-        VariableWithColumnIndex{var, columnIndex});
+    result.variablesToInstantiate_.emplace_back(var, columnIndex);
   }
   return {TripleInstantitationRecipe::TermType::VARIABLE, variableToIndex[var]};
 }
