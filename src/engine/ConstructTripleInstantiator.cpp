@@ -42,9 +42,14 @@ InstantiatedTerm ConstructTripleInstantiator::instantiateTerm(
 }
 
 // _____________________________________________________________________________
+template <ad_utility::MediaType format>
 std::string ConstructTripleInstantiator::formatTriple(
     const InstantiatedTerm& subject, const InstantiatedTerm& predicate,
-    const InstantiatedTerm& object, ad_utility::MediaType format) {
+    const InstantiatedTerm& object) {
+  static_assert(format == ad_utility::MediaType::turtle ||
+                format == ad_utility::MediaType::csv ||
+                format == ad_utility::MediaType::tsv);
+
   // Return empty string if any component is Undef.
   if (std::holds_alternative<Undef>(subject) ||
       std::holds_alternative<Undef>(predicate) ||
@@ -58,29 +63,34 @@ std::string ConstructTripleInstantiator::formatTriple(
       *std::get<std::shared_ptr<const std::string>>(predicate);
   const auto& objectStr = *std::get<std::shared_ptr<const std::string>>(object);
 
-  switch (format) {
-    case ad_utility::MediaType::turtle: {
-      // Only escape literals (strings starting with "). IRIs and blank nodes
-      // are used as-is, avoiding an unnecessary string copy.
-      if (ql::starts_with(objectStr, "\"")) {
-        return absl::StrCat(
-            subjectStr, " ", predicateStr, " ",
-            RdfEscaping::validRDFLiteralFromNormalized(objectStr), " .\n");
-      }
-      return absl::StrCat(subjectStr, " ", predicateStr, " ", objectStr,
+  if constexpr (format == ad_utility::MediaType::turtle) {
+    // Only escape literals (strings starting with "). IRIs and blank nodes
+    // are used as-is, avoiding an unnecessary string copy.
+    if (ql::starts_with(objectStr, "\"")) {
+      return absl::StrCat(subjectStr, " ", predicateStr, " ",
+                          RdfEscaping::validRDFLiteralFromNormalized(objectStr),
                           " .\n");
     }
-    case ad_utility::MediaType::csv: {
-      return absl::StrCat(RdfEscaping::escapeForCsv(subjectStr), ",",
-                          RdfEscaping::escapeForCsv(predicateStr), ",",
-                          RdfEscaping::escapeForCsv(objectStr), "\n");
-    }
-    case ad_utility::MediaType::tsv: {
-      return absl::StrCat(RdfEscaping::escapeForTsv(subjectStr), "\t",
-                          RdfEscaping::escapeForTsv(predicateStr), "\t",
-                          RdfEscaping::escapeForTsv(objectStr), "\n");
-    }
-    default:
-      AD_FAIL();  // Unsupported format.
+    return absl::StrCat(subjectStr, " ", predicateStr, " ", objectStr, " .\n");
+  } else if constexpr (format == ad_utility::MediaType::csv) {
+    return absl::StrCat(RdfEscaping::escapeForCsv(subjectStr), ",",
+                        RdfEscaping::escapeForCsv(predicateStr), ",",
+                        RdfEscaping::escapeForCsv(objectStr), "\n");
+  } else {
+    // format == tsv (guaranteed by static_assert above).
+    return absl::StrCat(RdfEscaping::escapeForTsv(subjectStr), "\t",
+                        RdfEscaping::escapeForTsv(predicateStr), "\t",
+                        RdfEscaping::escapeForTsv(objectStr), "\n");
   }
 }
+
+// Explicit instantiations.
+template std::string
+ConstructTripleInstantiator::formatTriple<ad_utility::MediaType::turtle>(
+    const InstantiatedTerm&, const InstantiatedTerm&, const InstantiatedTerm&);
+template std::string
+ConstructTripleInstantiator::formatTriple<ad_utility::MediaType::csv>(
+    const InstantiatedTerm&, const InstantiatedTerm&, const InstantiatedTerm&);
+template std::string
+ConstructTripleInstantiator::formatTriple<ad_utility::MediaType::tsv>(
+    const InstantiatedTerm&, const InstantiatedTerm&, const InstantiatedTerm&);

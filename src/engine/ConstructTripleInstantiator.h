@@ -19,7 +19,7 @@
 class ConstructTripleInstantiator {
  public:
   // Instantiates a single term from the template triple.
-  // Returns Undef if the term is a variable that is unbound.
+  // Returns `Undef` if the term is a variable that is unbound.
   // Uses the preprocessed template data and batch evaluation result.
   // `tripleIdx`: index of the triple in the template
   // `pos`: position within the triple (0=subject, 1=predicate, 2=object)
@@ -31,10 +31,10 @@ class ConstructTripleInstantiator {
 
   // Formats a triple (subject, predicate, object) according to the output
   // format. Returns empty string if any component is Undef.
+  template <ad_utility::MediaType format>
   static std::string formatTriple(const InstantiatedTerm& subject,
                                   const InstantiatedTerm& predicate,
-                                  const InstantiatedTerm& object,
-                                  ad_utility::MediaType format);
+                                  const InstantiatedTerm& object);
 };
 
 #endif  // QLEVER_SRC_ENGINE_CONSTRUCTTRIPLEINSTANTIATOR_H

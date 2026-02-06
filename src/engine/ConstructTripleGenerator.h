@@ -67,8 +67,9 @@ class ConstructTripleGenerator {
   // Generate triples as formatted strings for the given output format.
   // This is the main entry point for streaming CONSTRUCT results.
   // Yields formatted strings directly, avoiding `StringTriple` allocation.
+  template <ad_utility::MediaType format>
   ad_utility::InputRangeTypeErased<std::string> generateFormattedTriples(
-      const TableWithRange& table, ad_utility::MediaType mediaType);
+      const TableWithRange& table);
 
   // ___________________________________________________________________________
   // Helper function that generates the result of a CONSTRUCT query as a range

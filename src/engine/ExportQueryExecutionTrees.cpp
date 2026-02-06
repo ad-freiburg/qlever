@@ -1118,7 +1118,7 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
 
   auto formattedTriples =
       rowIndices | ql::views::transform([&generator](const auto& table) {
-        return generator.generateFormattedTriples(table, format);
+        return generator.generateFormattedTriples<format>(table);
       }) |
       ql::views::join;
 

@@ -15,23 +15,23 @@ using CancellationHandle = ad_utility::SharedCancellationHandle;
 
 // _____________________________________________________________________________
 // Adapter that transforms `InstantiatedTriple` to formatted strings.
+template <ad_utility::MediaType format>
 class FormattedTripleAdapter
     : public ad_utility::InputRangeFromGet<std::string> {
  public:
-  FormattedTripleAdapter(std::unique_ptr<ConstructRowProcessor> processor,
-                         ad_utility::MediaType format)
-      : processor_(std::move(processor)), format_(format) {}
+  explicit FormattedTripleAdapter(
+      std::unique_ptr<ConstructRowProcessor> processor)
+      : processor_(std::move(processor)) {}
 
   std::optional<std::string> get() override {
     auto triple = processor_->get();
     if (!triple) return std::nullopt;
-    return ConstructTripleInstantiator::formatTriple(
-        triple->subject_, triple->predicate_, triple->object_, format_);
+    return ConstructTripleInstantiator::formatTriple<format>(
+        triple->subject_, triple->predicate_, triple->object_);
   }
 
  private:
   std::unique_ptr<ConstructRowProcessor> processor_;
-  ad_utility::MediaType format_;
 };
 
 // _____________________________________________________________________________
@@ -117,6 +117,7 @@ ConstructTripleGenerator::generateStringTriples(
         // triples
         return generator.generateStringTriplesForResultTable(table);
       });
+
   return InputRangeTypeErased(ql::views::join(std::move(tableTriples)));
 }
 
@@ -124,9 +125,10 @@ ConstructTripleGenerator::generateStringTriples(
 // Entry point for generating CONSTRUCT query output.
 // More efficient for streaming output than `generateStringTriples` (avoids
 // `StringTriple` allocations).
+template <ad_utility::MediaType format>
 ad_utility::InputRangeTypeErased<std::string>
 ConstructTripleGenerator::generateFormattedTriples(
-    const TableWithRange& table, ad_utility::MediaType mediaType) {
+    const TableWithRange& table) {
   const size_t currentRowOffset = rowOffset_;
   rowOffset_ += table.tableWithVocab_.idTable().numRows();
 
@@ -134,6 +136,16 @@ ConstructTripleGenerator::generateFormattedTriples(
       preprocessedConstructTemplate_, table, currentRowOffset);
 
   return ad_utility::InputRangeTypeErased<std::string>{
-      std::make_unique<FormattedTripleAdapter>(std::move(processor),
-                                               mediaType)};
+      std::make_unique<FormattedTripleAdapter<format>>(std::move(processor))};
 }
+
+// Explicit instantiations.
+template ad_utility::InputRangeTypeErased<std::string>
+ConstructTripleGenerator::generateFormattedTriples<
+    ad_utility::MediaType::turtle>(const TableWithRange&);
+template ad_utility::InputRangeTypeErased<std::string>
+ConstructTripleGenerator::generateFormattedTriples<ad_utility::MediaType::csv>(
+    const TableWithRange&);
+template ad_utility::InputRangeTypeErased<std::string>
+ConstructTripleGenerator::generateFormattedTriples<ad_utility::MediaType::tsv>(
+    const TableWithRange&);
