@@ -64,7 +64,9 @@ class IndexScan final : public Operation {
             Graphs graphsToFilter = Graphs::All(),
             std::optional<ScanSpecAndBlocks> scanSpecAndBlocks = std::nullopt);
 
-  // Constructor to simplify copy creation of an `IndexScan`.
+  // Constructor that takes all members explicitly. In particular, the last two
+  // arguments avoid that we have to recompute the size estimate (which can be
+  // expensive for many blocks) when we already know it.
   IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
             LocatedTriplesSharedState locatedTriplesSharedState,
             const TripleComponent& s, const TripleComponent& p,
@@ -72,7 +74,8 @@ class IndexScan final : public Operation {
             std::vector<ColumnIndex> additionalColumns,
             std::vector<Variable> additionalVariables, Graphs graphsToFilter,
             ScanSpecAndBlocks scanSpecAndBlocks,
-            bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep);
+            bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep,
+            bool sizeEstimateIsExact, size_t sizeEstimate);
 
   ~IndexScan() override = default;
 
@@ -94,10 +97,11 @@ class IndexScan final : public Operation {
 
   std::vector<ColumnIndex> resultSortedOn() const override;
 
-  // Set `PrefilterExpression`s and return updated `QueryExecutionTree` pointer
-  // if necessary.
+  // Return a new `QueryExecutionTree` with prefiltered `scanSpecAndBlocks`. If
+  // none of the prefilters in `prefilterVariablePairs` applies, return
+  // `std::nullopt`.
   std::optional<std::shared_ptr<QueryExecutionTree>>
-  setPrefilterGetUpdatedQueryExecutionTree(
+  getUpdatedQueryExecutionTreeWithPrefilterApplied(
       const std::vector<PrefilterVariablePair>& prefilterVariablePairs)
       const override;
 
@@ -164,6 +168,9 @@ class IndexScan final : public Operation {
     return multiplicity_[col];
   }
 
+  // Return the internal flag for testing purposes.
+  bool sizeEstimateIsExactForTesting() const { return sizeEstimateIsExact_; }
+
   bool knownEmptyResult() override {
     return sizeEstimateIsExact_ && sizeEstimate_ == 0;
   }
@@ -219,6 +226,14 @@ class IndexScan final : public Operation {
   // the `queryExecutionContext_`) into account. The `bool` is true iff the
   // estimate is exact. If not, the estimate is the mean of the lower and upper
   // bound.
+  //
+  // NOTE: For full index scans (think `?s ?p ?o`), we simply take the total
+  // number of triples from the `<basename>.meta-data.json` as estimate,
+  // because summing up all the block sizes and numbers of located triples per
+  // block is expensive for large datasets (with millions of blocks). The
+  // estimate is exact if there are no delta triples. Otherwise, it's an
+  // approximation, but a reasonably good one when the number of delta
+  // triples is small compared to the total number of triples.
   std::pair<bool, size_t> computeSizeEstimate() const;
 
   std::string getCacheKeyImpl() const override;
@@ -230,10 +245,8 @@ class IndexScan final : public Operation {
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
-  // Return an updated QueryExecutionTree containing the new IndexScan which is
-  // a copy of this (`IndexScan`), but with added corresponding
-  // `PrefilterExpression` (`PrefilterIndexPair`). This method is called in the
-  // implementation part of `setPrefilterGetUpdatedQueryExecutionTree()`.
+  // Return a new `QueryExecutionTree` with prefiltered `scanSpecAndBlocks`. If
+  // no prefiltering is applied, return `std::nullopt`.
   std::shared_ptr<QueryExecutionTree> makeCopyWithPrefilteredScanSpecAndBlocks(
       ScanSpecAndBlocks scanSpecAndBlocks) const;
 
@@ -243,9 +256,9 @@ class IndexScan final : public Operation {
   IdTable materializedIndexScan() const;
 
   // Returns the first sorted 'Variable' with corresponding `ColumnIndex`. If
-  // `numVariables_` is 0, `std::nullopt` is returned.
-  // The returned `ColumnIndex` corresponds to the `CompressedBlockMetadata`
-  // blocks, NOT to a column of the resulting `IdTable`.
+  // `numVariables_` is 0, `std::nullopt` is returned. The returned
+  // `ColumnIndex` corresponds to the `CompressedBlockMetadata` blocks, NOT to a
+  // column of the resulting `IdTable`.
   std::optional<std::pair<Variable, ColumnIndex>>
   getSortedVariableAndMetadataColumnIndexForPrefiltering() const;
 
