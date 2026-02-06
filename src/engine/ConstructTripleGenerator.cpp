@@ -6,57 +6,93 @@
 
 #include "engine/ConstructTripleGenerator.h"
 
+#include "engine/ConstructRowProcessor.h"
 #include "engine/ExportQueryExecutionTrees.h"
 
 using ad_utility::InputRangeTypeErased;
+using StringTriple = ConstructTripleGenerator::StringTriple;
+using CancellationHandle = ad_utility::SharedCancellationHandle;
 
 // _____________________________________________________________________________
-auto ConstructTripleGenerator::generateStringTriplesForResultTable(
-    const TableWithRange& table) {
-  const auto tableWithVocab = table.tableWithVocab_;
-  size_t currentRowOffset = rowOffset_;
-  rowOffset_ += tableWithVocab.idTable().numRows();
+// Adapter that transforms `InstantiatedTriple` to formatted strings.
+template <ad_utility::MediaType format>
+class FormattedTripleAdapter
+    : public ad_utility::InputRangeFromGet<std::string> {
+ public:
+  explicit FormattedTripleAdapter(
+      std::unique_ptr<ConstructRowProcessor> processor)
+      : processor_(std::move(processor)) {}
 
-  // For a single row from the WHERE clause (specified by `idTable` and
-  // `rowIdx` stored in the `context`), evaluate all triples in the CONSTRUCT
-  // template.
-  auto outerTransformer = [this, tableWithVocab,
-                           currentRowOffset](uint64_t rowIdx) {
-    ConstructQueryExportContext context{rowIdx,
-                                        tableWithVocab.idTable(),
-                                        tableWithVocab.localVocab(),
-                                        variableColumns_.get(),
-                                        index_.get(),
-                                        currentRowOffset};
+  std::optional<std::string> get() override {
+    auto triple = processor_->get();
+    if (!triple) return std::nullopt;
+    return ConstructTripleInstantiator::formatTriple<format>(
+        triple->subject_, triple->predicate_, triple->object_);
+  }
 
-    // Transform a single template triple from the CONSTRUCT-template into
-    // a `StringTriple` for a single row of the WHERE clause (specified by
-    // `idTable` and `rowIdx` stored in `context`).
-    auto evaluateConstructTripleForRowFromWhereClause =
-        [this, context = std::move(context)](const auto& templateTriple) {
-          cancellationHandle_->throwIfCancelled();
-          return ConstructQueryEvaluator::evaluateTriple(templateTriple,
-                                                         context);
-        };
+ private:
+  std::unique_ptr<ConstructRowProcessor> processor_;
+};
 
-    // Apply the transformer from above and filter out invalid evaluations
-    // (which are returned as empty `StringTriples` from
-    // `evaluateConstructTripleForRowFromWhereClause`).
-    return templateTriples_ |
-           ql::views::transform(evaluateConstructTripleForRowFromWhereClause) |
-           ql::views::filter(std::not_fn(&StringTriple::isEmpty));
-  };
-  return table.view_ | ql::views::transform(outerTransformer) | ql::views::join;
+// _____________________________________________________________________________
+// Adapter that transforms `InstantiatedTriple` to `StringTriple`.
+class StringTripleAdapter : public ad_utility::InputRangeFromGet<StringTriple> {
+ public:
+  explicit StringTripleAdapter(std::unique_ptr<ConstructRowProcessor> processor)
+      : processor_(std::move(processor)) {}
+
+  std::optional<StringTriple> get() override {
+    auto triple = processor_->get();
+    if (!triple) return std::nullopt;
+    return StringTriple{InstantiatedTriple::getValue(triple->subject_),
+                        InstantiatedTriple::getValue(triple->predicate_),
+                        InstantiatedTriple::getValue(triple->object_)};
+  }
+
+ private:
+  std::unique_ptr<ConstructRowProcessor> processor_;
+};
+
+// _____________________________________________________________________________
+ConstructTripleGenerator::ConstructTripleGenerator(
+    Triples constructTriples, std::shared_ptr<const Result> result,
+    const VariableToColumnMap& variableColumns, const Index& index,
+    CancellationHandle cancellationHandle)
+    : templateTriples_(std::move(constructTriples)),
+      result_(std::move(result)),
+      variableColumns_(variableColumns),
+      index_(index),
+      cancellationHandle_(std::move(cancellationHandle)) {
+  // Analyze template: precompute constants and identify variables/blank nodes.
+  preprocessedConstructTemplate_ = ConstructTemplatePreprocessor::preprocess(
+      templateTriples_, index_.get(), variableColumns_.get(),
+      cancellationHandle_);
 }
 
 // _____________________________________________________________________________
+ad_utility::InputRangeTypeErased<StringTriple>
+ConstructTripleGenerator::generateStringTriplesForResultTable(
+    const TableWithRange& table) {
+  const size_t currentRowOffset = rowOffset_;
+  rowOffset_ += table.tableWithVocab_.idTable().numRows();
+
+  auto processor = std::make_unique<ConstructRowProcessor>(
+      preprocessedConstructTemplate_, table, currentRowOffset);
+
+  return ad_utility::InputRangeTypeErased<StringTriple>{
+      std::make_unique<StringTripleAdapter>(std::move(processor))};
+}
+
+// _____________________________________________________________________________
+// Entry point for generating CONSTRUCT query output.
+// Used when caller needs structured access to triple components.
 ad_utility::InputRangeTypeErased<QueryExecutionTree::StringTriple>
 ConstructTripleGenerator::generateStringTriples(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples,
     const LimitOffsetClause& limitAndOffset,
     std::shared_ptr<const Result> result, uint64_t& resultSize,
-    ad_utility::SharedCancellationHandle cancellationHandle) {
+    CancellationHandle cancellationHandle) {
   // The `resultSizeMultiplicator`(last argument of `getRowIndices`) is
   // explained by the following: For each result from the WHERE clause, we
   // produce up to `constructTriples.size()` triples. We do not account for
@@ -76,9 +112,67 @@ ConstructTripleGenerator::generateStringTriples(
   auto tableTriples = ql::views::transform(
       ad_utility::OwningView{std::move(rowIndices)},
       [generator = std::move(generator)](const TableWithRange& table) mutable {
-        // The generator now handles the:
-        // Table -> Rows -> Triple Patterns -> StringTriples
+        // conceptually, the generator now handles the following pipeline:
+        // table -> processing batch -> table rows -> triple patterns -> string
+        // triples
         return generator.generateStringTriplesForResultTable(table);
       });
+
   return InputRangeTypeErased(ql::views::join(std::move(tableTriples)));
 }
+
+// _____________________________________________________________________________
+// Entry point for generating CONSTRUCT query output.
+// More efficient for streaming output than `generateStringTriples` (avoids
+// `StringTriple` allocations).
+template <ad_utility::MediaType format>
+ad_utility::InputRangeTypeErased<std::string>
+ConstructTripleGenerator::generateFormattedTriples(
+    const TableWithRange& table) {
+  const size_t currentRowOffset = rowOffset_;
+  rowOffset_ += table.tableWithVocab_.idTable().numRows();
+
+  auto processor = std::make_unique<ConstructRowProcessor>(
+      preprocessedConstructTemplate_, table, currentRowOffset);
+
+  return ad_utility::InputRangeTypeErased<std::string>{
+      std::make_unique<FormattedTripleAdapter<format>>(std::move(processor))};
+}
+
+// _____________________________________________________________________________
+template <ad_utility::MediaType format>
+ad_utility::InputRangeTypeErased<std::string>
+ConstructTripleGenerator::generateAllFormattedTriples(
+    ad_utility::InputRangeTypeErased<TableWithRange> rowIndices) {
+  auto tableTriples =
+      ql::views::transform(ad_utility::OwningView{std::move(rowIndices)},
+                           [this](const TableWithRange& table) {
+                             return generateFormattedTriples<format>(table);
+                           });
+
+  return InputRangeTypeErased<std::string>(
+      ql::views::join(std::move(tableTriples)));
+}
+
+// Explicit instantiations.
+template ad_utility::InputRangeTypeErased<std::string>
+ConstructTripleGenerator::generateFormattedTriples<
+    ad_utility::MediaType::turtle>(const TableWithRange&);
+template ad_utility::InputRangeTypeErased<std::string>
+ConstructTripleGenerator::generateFormattedTriples<ad_utility::MediaType::csv>(
+    const TableWithRange&);
+template ad_utility::InputRangeTypeErased<std::string>
+ConstructTripleGenerator::generateFormattedTriples<ad_utility::MediaType::tsv>(
+    const TableWithRange&);
+template ad_utility::InputRangeTypeErased<std::string>
+    ConstructTripleGenerator::generateAllFormattedTriples<
+        ad_utility::MediaType::turtle>(
+        ad_utility::InputRangeTypeErased<TableWithRange>);
+template ad_utility::InputRangeTypeErased<std::string>
+    ConstructTripleGenerator::generateAllFormattedTriples<
+        ad_utility::MediaType::csv>(
+        ad_utility::InputRangeTypeErased<TableWithRange>);
+template ad_utility::InputRangeTypeErased<std::string>
+    ConstructTripleGenerator::generateAllFormattedTriples<
+        ad_utility::MediaType::tsv>(
+        ad_utility::InputRangeTypeErased<TableWithRange>);

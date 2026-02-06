@@ -1,0 +1,86 @@
+// Copyright 2025 The QLever Authors, in particular:
+//
+// 2025 Marvin Stoetzel <marvin.stoetzel@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+#ifndef QLEVER_SRC_ENGINE_CONSTRUCTBATCHPROCESSOR_H
+#define QLEVER_SRC_ENGINE_CONSTRUCTBATCHPROCESSOR_H
+
+#include <memory>
+#include <optional>
+#include <string>
+#include <vector>
+
+#include "engine/ConstructBatchEvaluator.h"
+#include "engine/ConstructIdCache.h"
+#include "engine/ConstructTemplatePreprocessor.h"
+#include "engine/ConstructTripleInstantiator.h"
+#include "engine/QueryExportTypes.h"
+#include "util/stream_generator.h"
+
+// _____________________________________________________________________________
+// Processes the rows of the result table and yields `InstantiatedTriple`
+// objects. This is done in batches of rows of the result table.
+class ConstructRowProcessor
+    : public ad_utility::InputRangeFromGet<InstantiatedTriple> {
+ public:
+  using IdCache = ConstructIdCache;
+
+  // Default batch size for processing rows.
+  static constexpr size_t DEFAULT_BATCH_SIZE = 64;
+
+  // Multiplier for computing ID cache capacity from batch size and variable
+  // count. Provides headroom for cross-batch cache hits on repeated values.
+  static constexpr size_t CACHE_CAPACITY_FACTOR = 32;
+
+  static size_t getBatchSize() { return DEFAULT_BATCH_SIZE; }
+
+  // Constructor takes all data needed for processing.
+  ConstructRowProcessor(std::shared_ptr<const PreprocessedConstructTemplate>
+                            preprocessedConstructTemplate,
+                        const TableWithRange& table, size_t currentRowOffset);
+
+  // Returns the next instantiated triple, or nullopt when exhausted.
+  // Incomplete triples (with UNDEF components) are filtered out.
+  std::optional<InstantiatedTriple> get() override;
+
+ private:
+  // Creates an `Id` cache with appropriate capacity.
+  std::shared_ptr<IdCache> createIdCache() const;
+
+  // Load a new batch of rows for evaluation if we don't have one.
+  void loadBatchIfNeeded();
+
+  // Process rows in the current batch, returning the next complete triple.
+  std::optional<InstantiatedTriple> processCurrentBatch();
+
+  // Process triples for the current row, returning the next complete triple.
+  std::optional<InstantiatedTriple> processCurrentRow();
+
+  // Advance to next row in batch.
+  void advanceToNextRow();
+
+  // Advance to next batch.
+  void advanceToNextBatch();
+
+  std::shared_ptr<const PreprocessedConstructTemplate>
+      preprocessedConstructTemplate_;
+
+  // Table data (copied/referenced for iteration lifetime).
+  TableConstRefWithVocab tableWithVocab_;
+  std::vector<uint64_t> rowIndicesVec_;
+  size_t currentRowOffset_;
+
+  // `Id` cache for avoiding redundant vocabulary lookups.
+  std::shared_ptr<IdCache> idCache_ = ConstructRowProcessor::createIdCache();
+
+  // Iteration state.
+  size_t batchSize_ = ConstructRowProcessor::getBatchSize();
+  size_t batchStart_ = 0;
+  size_t rowInBatchIdx_ = 0;
+  size_t tripleIdx_ = 0;
+  std::optional<BatchEvaluationResult> batchEvaluationResult_;
+};
+
+#endif  // QLEVER_SRC_ENGINE_CONSTRUCTBATCHPROCESSOR_H

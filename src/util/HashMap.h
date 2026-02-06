@@ -8,6 +8,7 @@
 
 #include <absl/container/flat_hash_map.h>
 
+#include <boost/optional.hpp>
 #include <unordered_map>
 
 #include "util/AllocatorWithLimit.h"
@@ -28,6 +29,18 @@ template <class K, class V,
           class Alloc = ad_utility::AllocatorWithLimit<std::pair<const K, V>>>
 using HashMapWithMemoryLimit =
     std::unordered_map<K, V, HashFct, EqualElem, Alloc>;
+
+// Look up `key` in `map`. Returns a `boost::optional` reference to the mapped
+// value if found, or `boost::none` otherwise.
+template <typename Map, typename Key>
+auto getOptionalFromHashMap(const Map& map, const Key& key)
+    -> boost::optional<const typename Map::mapped_type&> {
+  auto it = map.find(key);
+  if (it != map.end()) {
+    return it->second;
+  }
+  return {};
+}
 }  // namespace ad_utility
 
 #endif  // QLEVER_SRC_UTIL_HASHMAP_H
