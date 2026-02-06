@@ -147,8 +147,11 @@ class LiteralExpression : public SparqlExpression {
       // Literals and IRIs are always defined
       return true;
     } else {
-      // All other constant types (numeric, etc.) are always defined
-      return true;
+      static_assert(std::is_same_v<T, VectorWithMemoryLimit<ValueId>>);
+      // We could iterate through the vector, but as this expression is
+      // currently only used as an implementation detail of `GroupBy` and this
+      // interface is never used there, we save the complexity for now.
+      return false;
     }
   }
 

@@ -67,6 +67,15 @@ TEST(SparqlExpressionMemberFunctions, isResultAlwaysDefined) {
     EXPECT_TRUE(iriExpr->isResultAlwaysDefined(varColMap));
   }
 
+  // Test LiteralExpression with vector of IDs (currently always undefined
+  // pessimistically).
+  {
+    auto vecExpr =
+        std::make_unique<VectorIdExpression>(VectorWithMemoryLimit<ValueId>(
+            0U, ad_utility::testing::makeAllocator()));
+    EXPECT_FALSE(vecExpr->isResultAlwaysDefined(varColMap));
+  }
+
   // Test CoalesceExpression
   {
     // COALESCE with one always-defined child -> always defined
