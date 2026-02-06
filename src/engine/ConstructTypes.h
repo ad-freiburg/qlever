@@ -33,14 +33,14 @@ inline constexpr size_t NUM_TRIPLE_POSITIONS = 3;
 struct TemplateTripleLookupSpec {
   enum class TermType { CONSTANT, VARIABLE, BLANK_NODE };
 
-  // Describes how to look up the value for a term position
+  // Specifies how to look up the value for a term position
   // during triple instantiation.
   // `type`: Indicates whether the term is a CONSTANT, VARIABLE, or BLANK_NODE.
   // `index`: The index into the corresponding storage:
   // For CONSTANT: index into `precomputedConstants_[tripleIdx]`
   // For VARIABLE: index into `variablesToInstantiate_` /
   // `variableInstantiations_` For BLANK_NODE: index into
-  // `blankNodesToInstantiate_` / `blankNodeValues_`
+  // `blankNodesToInstantiate_` / `instantiatedBlankNodes`
   struct TermInstantiationSpec {
     TermType type;
     size_t index;
@@ -93,7 +93,7 @@ struct BatchEvaluationResult {
   // maps: variable idx -> idx of row in batch -> InstantiatedTerm
   std::vector<std::vector<InstantiatedTerm>> variableInstantiations_;
   // maps: blank node idx -> idx of row in batch -> string value
-  std::vector<std::vector<std::string>> blankNodeValues_;
+  std::vector<std::vector<std::string>> instantiatedBlankNodes;
   size_t numRows_ = 0;
 
   // Get the evaluated variable for a specific variable at a row in the batch.
@@ -105,7 +105,7 @@ struct BatchEvaluationResult {
   // Get string for a specific blank node at a row in the batch.
   const std::string& getBlankNodeValue(size_t blankNodeIdx,
                                        size_t rowInBatch) const {
-    return blankNodeValues_[blankNodeIdx][rowInBatch];
+    return instantiatedBlankNodes[blankNodeIdx][rowInBatch];
   }
 };
 

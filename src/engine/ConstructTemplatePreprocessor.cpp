@@ -65,7 +65,7 @@ ConstructTemplatePreprocessor::preprocessTerm(
                                    blankNodeLabelToIndex);
   }
   // Unreachable for valid GraphTerm
-  // TODO<ms2144> add compile time error throw here.
+  // TODO<ms2144> add error throw here.
   return {TemplateTripleLookupSpec::TermType::CONSTANT, 0};
 }
 

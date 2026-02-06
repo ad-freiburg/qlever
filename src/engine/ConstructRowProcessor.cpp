@@ -51,10 +51,11 @@ void ConstructRowProcessor::loadBatchIfNeeded() {
   auto batchRowIndices = ql::span<const uint64_t>(
       rowIndicesVec_.data() + batchStart_, batchEnd - batchStart_);
 
+  BatchEvaluationContext batchContext{tableWithVocab_.idTable(),
+                                      tableWithVocab_.localVocab(),
+                                      batchRowIndices, currentRowOffset_};
   batchEvaluationResult_ = ConstructBatchEvaluator::evaluateBatch(
-      *preprocessedConstructTemplate_, tableWithVocab_.idTable(),
-      tableWithVocab_.localVocab(), batchRowIndices, currentRowOffset_,
-      *idCache_);
+      *preprocessedConstructTemplate_, batchContext, *idCache_);
 
   // After we are done processing the batch, reset the indices for iterating
   // over the rows/triples of the batch.

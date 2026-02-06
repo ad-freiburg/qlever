@@ -14,17 +14,14 @@
 // _____________________________________________________________________________
 BatchEvaluationResult ConstructBatchEvaluator::evaluateBatch(
     const PreprocessedConstructTemplate& preprocessedConstructTemplate,
-    const IdTable& idTable, const LocalVocab& localVocab,
-    ql::span<const uint64_t> rowIndices, size_t currentRowOffset,
-    IdCache& idCache) {
+    const BatchEvaluationContext& evaluationContext, IdCache& idCache) {
   BatchEvaluationResult batchResult;
-  batchResult.numRows_ = rowIndices.size();
+  batchResult.numRows_ = evaluationContext.rowIndicesOfBatch_.size();
 
   instantiateVariablesForBatch(batchResult, preprocessedConstructTemplate,
-                               idTable, localVocab, rowIndices,
-                               currentRowOffset, idCache);
+                               evaluationContext, idCache);
   instantiateBlankNodesForBatch(batchResult, preprocessedConstructTemplate,
-                                rowIndices, currentRowOffset);
+                                evaluationContext);
 
   return batchResult;
 }
@@ -33,10 +30,8 @@ BatchEvaluationResult ConstructBatchEvaluator::evaluateBatch(
 void ConstructBatchEvaluator::instantiateVariablesForBatch(
     BatchEvaluationResult& batchResult,
     const PreprocessedConstructTemplate& preprocessedConstructTemplate,
-    const IdTable& idTable, const LocalVocab& localVocab,
-    ql::span<const uint64_t> rowIndices, size_t currentRowOffset,
-    IdCache& idCache) {
-  const size_t numRows = rowIndices.size();
+    const BatchEvaluationContext& evaluationContext, IdCache& idCache) {
+  const size_t numRows = evaluationContext.rowIndicesOfBatch_.size();
   const auto& variablesToInstantiate =
       preprocessedConstructTemplate.variablesToInstantiate_;
 
@@ -62,38 +57,41 @@ void ConstructBatchEvaluator::instantiateVariablesForBatch(
 
     instantiateSingleVariableForBatch(
         batchResult.variableInstantiations_[varIdx],
-        varInfo.columnIndex_.value(), idTable, localVocab, rowIndices,
-        currentRowOffset, varCols, idx, idCache);
+        varInfo.columnIndex_.value(), evaluationContext, varCols, idx, idCache);
   }
 }
 
 // _____________________________________________________________________________
 void ConstructBatchEvaluator::instantiateSingleVariableForBatch(
     std::vector<InstantiatedTerm>& columnResults, size_t colIdx,
-    const IdTable& idTable, const LocalVocab& localVocab,
-    ql::span<const uint64_t> rowIndices, size_t currentRowOffset,
+    const BatchEvaluationContext& evaluationContext,
     const VariableToColumnMap& varCols, const Index& idx, IdCache& idCache) {
   // Read all IDs from this column for all rows in the batch,
   // and look up their values in the cache.
-  for (size_t rowIdxInBatch = 0; rowIdxInBatch < rowIndices.size();
+  for (size_t rowIdxInBatch = 0;
+       rowIdxInBatch < evaluationContext.rowIndicesOfBatch_.size();
        ++rowIdxInBatch) {
-    const uint64_t rowIdx = rowIndices[rowIdxInBatch];
-    Id id = idTable(rowIdx, colIdx);
+    const uint64_t rowIdx = evaluationContext.rowIndicesOfBatch_[rowIdxInBatch];
+    Id id = evaluationContext.idTable_(rowIdx, colIdx);
 
     columnResults[rowIdxInBatch] = idCache.getOrCompute(id, [&](const Id&) {
-      return computeVariableInstantiation(colIdx, rowIdx, idTable, localVocab,
-                                          currentRowOffset, varCols, idx);
+      return computeVariableInstantiation(colIdx, rowIdx, evaluationContext,
+                                          varCols, idx);
     });
   }
 }
 
 // _____________________________________________________________________________
 InstantiatedTerm ConstructBatchEvaluator::computeVariableInstantiation(
-    size_t colIdx, size_t rowIdx, const IdTable& idTable,
-    const LocalVocab& localVocab, size_t currentRowOffset,
+    size_t colIdx, size_t rowIdx,
+    const BatchEvaluationContext& evaluationContext,
     const VariableToColumnMap& varCols, const Index& idx) {
-  ConstructQueryExportContext context{rowIdx,  idTable, localVocab,
-                                      varCols, idx,     currentRowOffset};
+  ConstructQueryExportContext context{rowIdx,
+                                      evaluationContext.idTable_,
+                                      evaluationContext.localVocab_,
+                                      varCols,
+                                      idx,
+                                      evaluationContext.currentRowOffset_};
 
   auto value =
       ConstructQueryEvaluator::evaluateVariableWithColumnIndex(colIdx, context);
@@ -107,30 +105,32 @@ InstantiatedTerm ConstructBatchEvaluator::computeVariableInstantiation(
 // _____________________________________________________________________________
 void ConstructBatchEvaluator::instantiateBlankNodesForBatch(
     BatchEvaluationResult& batchResult,
-    const PreprocessedConstructTemplate& blueprint,
-    ql::span<const uint64_t> rowIndices, size_t currentRowOffset) {
-  const size_t numRows = rowIndices.size();
-  const auto& blankNodesToEvaluate = blueprint.blankNodesToInstantiate_;
+    const PreprocessedConstructTemplate& preprocessedConstructTemplate,
+    const BatchEvaluationContext& evaluationContext) {
+  const size_t numRows = evaluationContext.rowIndicesOfBatch_.size();
+  const auto& blankNodesToInstantiate =
+      preprocessedConstructTemplate.blankNodesToInstantiate_;
 
   // Initialize blank node values: [blankNodeIdx][rowInBatch]
-  batchResult.blankNodeValues_.resize(blankNodesToEvaluate.size());
-  for (auto& column : batchResult.blankNodeValues_) {
+  batchResult.instantiatedBlankNodes.resize(blankNodesToInstantiate.size());
+  for (auto& column : batchResult.instantiatedBlankNodes) {
     column.resize(numRows);
   }
 
   // Evaluate blank nodes using precomputed prefix and suffix.
   // Only the row number needs to be concatenated per row.
   // Format: prefix + (currentRowOffset + rowIdx) + suffix
-  for (size_t blankIdx = 0; blankIdx < blankNodesToEvaluate.size();
+  for (size_t blankIdx = 0; blankIdx < blankNodesToInstantiate.size();
        ++blankIdx) {
-    const BlankNodeFormatInfo& formatInfo = blankNodesToEvaluate[blankIdx];
-    auto& columnValues = batchResult.blankNodeValues_[blankIdx];
+    const BlankNodeFormatInfo& formatInfo = blankNodesToInstantiate[blankIdx];
+    auto& columnValues = batchResult.instantiatedBlankNodes[blankIdx];
 
     for (size_t rowInBatch = 0; rowInBatch < numRows; ++rowInBatch) {
-      const uint64_t rowIdx = rowIndices[rowInBatch];
+      const uint64_t rowIdx = evaluationContext.rowIndicesOfBatch_[rowInBatch];
       // Use precomputed prefix and suffix, only concatenate row number.
       columnValues[rowInBatch] = absl::StrCat(
-          formatInfo.prefix_, currentRowOffset + rowIdx, formatInfo.suffix_);
+          formatInfo.prefix_, evaluationContext.currentRowOffset_ + rowIdx,
+          formatInfo.suffix_);
     }
   }
 }

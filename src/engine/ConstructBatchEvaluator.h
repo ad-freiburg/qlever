@@ -19,6 +19,15 @@
 // Forward declarations
 class LocalVocab;
 
+// Groups the table data needed for batch evaluation:
+// the IdTable, LocalVocab, row indices for the batch, and the row offset.
+struct BatchEvaluationContext {
+  const IdTable& idTable_;
+  const LocalVocab& localVocab_;
+  ql::span<const uint64_t> rowIndicesOfBatch_;
+  size_t currentRowOffset_;
+};
+
 // _____________________________________________________________________________
 // Evaluates Variables and BlankNodes for a batch of result-table rows.
 // Uses column-oriented access pattern for variables for better cache locality.
@@ -34,9 +43,7 @@ class ConstructBatchEvaluator {
   //       read idTable[column(V)][R]
   static BatchEvaluationResult evaluateBatch(
       const PreprocessedConstructTemplate& preprocessedConstructTemplate,
-      const IdTable& idTable, const LocalVocab& localVocab,
-      ql::span<const uint64_t> rowIndices, size_t currentRowOffset,
-      IdCache& idCache);
+      const BatchEvaluationContext& evaluationContext, IdCache& idCache);
 
  private:
   // For each `Variable`, reads all `Id`s from its column across all batch
@@ -45,31 +52,28 @@ class ConstructBatchEvaluator {
   static void instantiateVariablesForBatch(
       BatchEvaluationResult& batchResult,
       const PreprocessedConstructTemplate& preprocessedConstructTemplate,
-      const IdTable& idTable, const LocalVocab& localVocab,
-      ql::span<const uint64_t> rowIndices, size_t currentRowOffset,
-      IdCache& idCache);
+      const BatchEvaluationContext& evaluationContext, IdCache& idCache);
 
   // Evaluates a single variable column across all batch rows.
   // Reads IDs from the column, looks up/computes string values via cache.
   static void instantiateSingleVariableForBatch(
       std::vector<InstantiatedTerm>& columnResults, size_t colIdx,
-      const IdTable& idTable, const LocalVocab& localVocab,
-      ql::span<const uint64_t> rowIndices, size_t currentRowOffset,
+      const BatchEvaluationContext& evaluationContext,
       const VariableToColumnMap& varCols, const Index& idx, IdCache& idCache);
 
   // Computes the InstantiatedTerm for an Id at a given position.
   // Returns Undef if the Id represents an undefined value.
   static InstantiatedTerm computeVariableInstantiation(
-      size_t colIdx, size_t rowIdx, const IdTable& idTable,
-      const LocalVocab& localVocab, size_t currentRowOffset,
+      size_t colIdx, size_t rowIdx,
+      const BatchEvaluationContext& evaluationContext,
       const VariableToColumnMap& varCols, const Index& idx);
 
   // Evaluates all `BlankNode` objects for a batch of rows. Uses precomputed
   // prefix/suffix, only concatenating the row number per row.
   static void instantiateBlankNodesForBatch(
       BatchEvaluationResult& batchResult,
-      const PreprocessedConstructTemplate& blueprint,
-      ql::span<const uint64_t> rowIndices, size_t currentRowOffset);
+      const PreprocessedConstructTemplate& preprocessedConstructTemplate,
+      const BatchEvaluationContext& evaluationContext);
 };
 
 #endif  // QLEVER_SRC_ENGINE_CONSTRUCTBATCHEVALUATOR_H
