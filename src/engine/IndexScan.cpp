@@ -635,7 +635,11 @@ struct IndexScan::SharedGeneratorState {
     AD_CORRECTNESS_CHECK(!lastJoinColumn.empty());
     Id lastValue = lastJoinColumn.back();
     const auto& metaBlockView = metaBlocks_.getBlockMetadataView();
-    AD_CORRECTNESS_CHECK(!ql::ranges::empty(metaBlockView));
+    // If there are no more blocks left in the index scan, we can't push a
+    // dummy block. This can happen when all blocks have been consumed.
+    if (ql::ranges::empty(metaBlockView)) {
+      return;
+    }
     const auto& block = *metaBlockView.begin();
     AD_CORRECTNESS_CHECK(CompressedRelationReader::getRelevantIdFromTriple(
                              block.firstTriple_, metaBlocks_) > lastValue);
