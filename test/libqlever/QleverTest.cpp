@@ -36,7 +36,12 @@ TEST(LibQlever, buildIndexAndRunQuery) {
                                ::testing::HasSubstr("buffer size"));
 
   c.parserBufferSize_ = std::nullopt;
+
+  // Test materialized views to be written at index build time.
+  c.writeMaterializedViews_ = {{"demoView", "SELECT ?s { ?s <p> <o> }"}};
+
   EXPECT_NO_THROW(Qlever::buildIndex(c));
+
   {
     EngineConfig ec{c};
     Qlever engine{ec};
@@ -78,6 +83,9 @@ TEST(LibQlever, buildIndexAndRunQuery) {
     engine.clearNamedResultCache();
     AD_EXPECT_THROW_WITH_MESSAGE(engine.query(serviceQuery), notPinned);
     AD_EXPECT_THROW_WITH_MESSAGE(engine.query(serviceQuery2), notPinned);
+
+    // Test that the requested materialized view exists.
+    EXPECT_NO_THROW(engine.loadMaterializedView("demoView"));
   }
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
