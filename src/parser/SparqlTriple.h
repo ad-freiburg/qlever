@@ -135,15 +135,18 @@ class SparqlTriple
   }
 
   // Call a function for every variable contained in the triple.
-  void forEachVariable(auto function) const {
+  CPP_template(typename Function)(
+      requires std::is_invocable_v<
+          Function, const Variable&>) void forEachVariable(Function function)
+      const {
     if (s_.isVariable()) {
-      function(s_.getVariable());
+      std::invoke(function, s_.getVariable());
     }
     if (auto predicate = getPredicateVariable()) {
-      function(predicate.value());
+      std::invoke(function, predicate.value());
     }
     if (o_.isVariable()) {
-      function(o_.getVariable());
+      std::invoke(function, o_.getVariable());
     }
   }
 };
