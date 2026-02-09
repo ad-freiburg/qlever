@@ -1993,6 +1993,53 @@ TEST_P(IndexScanWithLazyJoin,
 }
 
 // _____________________________________________________________________________
+TEST_P(IndexScanWithLazyJoin,
+       prefilterTablesDoesStreamLastTablesAfterExhaustedIndex) {
+  std::string kg = "<a> <p> <A> . <b> <p> <B>. ";
+  qec_ = getQec(std::move(kg));
+  IndexScan scan = makeScan();
+
+  using P = Result::IdTableVocabPair;
+  std::array joinSide{
+      P{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}},
+      P{makeIdTable({iri("<a>")}), LocalVocab{}},
+      P{makeIdTableFromVector(
+            {{Id::makeFromBlankNodeIndex(BlankNodeIndex::make(0))}}),
+        LocalVocab{}},
+      P{makeIdTableFromVector(
+            {{Id::makeFromBlankNodeIndex(BlankNodeIndex::make(1))}}),
+        LocalVocab{}}};
+
+  auto [joinSideResults, scanResults] = consumeRanges(
+      scan.prefilterTables(LazyResult{std::move(joinSide)}, 0, false));
+
+  ASSERT_EQ(scanResults.size(), 1);
+  ASSERT_EQ(joinSideResults.size(), 4);
+
+  EXPECT_TRUE(scanResults.at(0).localVocab_.empty());
+  EXPECT_TRUE(joinSideResults.at(0).localVocab_.empty());
+  EXPECT_TRUE(joinSideResults.at(1).localVocab_.empty());
+  EXPECT_TRUE(joinSideResults.at(2).localVocab_.empty());
+  EXPECT_TRUE(joinSideResults.at(3).localVocab_.empty());
+
+  EXPECT_EQ(
+      scanResults.at(0).idTable_,
+      tableFromTriples({{iri("<a>"), iri("<A>")}, {iri("<b>"), iri("<B>")}}));
+  EXPECT_EQ(joinSideResults.at(0).idTable_,
+            makeIdTableFromVector({{Id::makeFromBool(true)}}));
+
+  EXPECT_EQ(joinSideResults.at(1).idTable_, makeIdTable({iri("<a>")}));
+
+  EXPECT_EQ(joinSideResults.at(2).idTable_,
+            makeIdTableFromVector(
+                {{Id::makeFromBlankNodeIndex(BlankNodeIndex::make(0))}}));
+
+  EXPECT_EQ(joinSideResults.at(3).idTable_,
+            makeIdTableFromVector(
+                {{Id::makeFromBlankNodeIndex(BlankNodeIndex::make(1))}}));
+}
+
+// _____________________________________________________________________________
 TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesEventuallyPushDummyBlock) {
   std::string kg = "<a> <p> <A> . <b> <p> <B>. ";
   qec_ = getQec(std::move(kg));
