@@ -146,7 +146,7 @@ auto getFileSpecifications = [](const auto& filetype, auto& inputFile,
 // Helper to convert the JSON given for writing materialized views to a proper
 // `WriteMaterializedViews` vector.
 qlever::IndexBuilderConfig::WriteMaterializedViews parseMaterializedViewsJson(
-    std::string materializedViewsJson) {
+    std::string_view materializedViewsJson) {
   qlever::IndexBuilderConfig::WriteMaterializedViews views;
   if (!materializedViewsJson.empty()) {
     AD_LOG_INFO << "Writing materialized views..." << std::endl;
@@ -317,7 +317,7 @@ int main(int argc, char** argv) {
     config.inputFiles_ = getFileSpecifications(filetype, inputFile,
                                                defaultGraphs, parseParallel);
     config.writeMaterializedViews_ =
-        parseMaterializedViewsJson(std::move(materializedViewsJson));
+        parseMaterializedViewsJson(materializedViewsJson);
     config.validate();
     qlever::Qlever::buildIndex(config);
   } catch (std::exception& e) {
