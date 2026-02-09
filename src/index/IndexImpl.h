@@ -270,8 +270,6 @@ class IndexImpl {
   const auto& getVocab() const { return vocab_; };
   auto& getNonConstVocabForTesting() { return vocab_; }
 
-  const auto& getTextVocab() const { return textVocab_; };
-
   const ad_utility::AllocatorWithLimit<Id>& allocator() const {
     return allocator_;
   };
