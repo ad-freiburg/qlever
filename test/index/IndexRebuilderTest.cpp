@@ -10,17 +10,98 @@
 #include "../util/TripleComponentTestHelpers.h"
 #include "index/IndexRebuilder.h"
 #include "index/IndexRebuilderImpl.h"
+#include "index/vocabulary/VocabularyType.h"
 
 using namespace qlever::indexRebuilder;
+using namespace std::string_literals;
 
-// TODO<RobinTF> Add materialize test for empty vocab.
+namespace {
+// Read a file into a buffer.
+std::vector<char> fileToBuffer(const std::string& filename) {
+  std::ifstream f{filename, std::ios::binary};
+  EXPECT_TRUE(f.is_open()) << "Could not open file " << filename;
+  return std::vector(std::istreambuf_iterator<char>(f),
+                     std::istreambuf_iterator<char>());
+}
+
+// Select the correct suffixes.
+std::vector<std::string> getVocabSuffixesForType(
+    ad_utility::VocabularyType::Enum type) {
+  using enum ad_utility::VocabularyType::Enum;
+  switch (type) {
+    case InMemoryUncompressed:
+      return {""};
+    case OnDiskUncompressed:
+      return {".external", ".external.offsets", ".internal", ".internal.ids"};
+    case InMemoryCompressed:
+      return {".codebooks", ".words"};
+    case OnDiskCompressed:
+      return {".codebooks", ".words.external", ".words.external.offsets",
+              ".words.internal", ".words.internal.ids"};
+    case OnDiskCompressedGeoSplit:
+      return {".codebooks",
+              ".words.external",
+              ".words.external.offsets",
+              ".words.internal",
+              ".words.internal.ids",
+              ".geometry.codebooks",
+              ".geometry.geoinfo",
+              ".geometry.words.external",
+              ".geometry.words.external.offsets",
+              ".geometry.words.internal",
+              ".geometry.words.internal.ids"};
+    default:
+      AD_FAIL();
+  }
+}
+
+// Helper function to clean up all vocabulary related files.
+void deleteVocabFiles(const std::string& vocabBasename,
+                      ad_utility::VocabularyType::Enum type) {
+  for (const auto& suffix : getVocabSuffixesForType(type)) {
+    ad_utility::deleteFile(vocabBasename + suffix);
+  }
+}
+}  // namespace
+
+// _____________________________________________________________________________
+TEST(IndexRebuilder, materializeEmptyLocalVocab) {
+  auto type = ad_utility::VocabularyType::random();
+  ad_utility::testing::TestIndexConfig config{"<a> <c> <e> . <g> <i> <k> ."};
+  config.vocabularyType = type;
+  auto oldIndex = ad_utility::testing::makeTestIndex(
+      "materializeEmptyLocalVocab", std::move(config));
+  std::string vocabPrefix = "/tmp/materializeEmptyLocalVocab";
+  std::string vocabFileName = vocabPrefix + VOCAB_SUFFIX;
+  absl::Cleanup removeVocabFiles{[&vocabFileName, &type] {
+    deleteVocabFiles(vocabFileName, type.value());
+  }};
+
+  auto getId = ad_utility::testing::makeGetId(oldIndex);
+  auto [insertionPositions, localVocabMapping, flatBlockIndices] =
+      materializeLocalVocab({}, {}, oldIndex.getVocab(), vocabPrefix);
+  EXPECT_THAT(insertionPositions, ::testing::ElementsAre());
+  EXPECT_THAT(localVocabMapping, ::testing::UnorderedElementsAre());
+  EXPECT_THAT(flatBlockIndices, ::testing::ElementsAre());
+
+  for (const auto& suffix : getVocabSuffixesForType(type.value())) {
+    EXPECT_EQ(
+        fileToBuffer("materializeEmptyLocalVocab"s + VOCAB_SUFFIX + suffix),
+        fileToBuffer(vocabFileName + suffix));
+  }
+}
 
 // _____________________________________________________________________________
 TEST(IndexRebuilder, materializeLocalVocab) {
-  auto oldIndex = ad_utility::testing::makeTestIndex(
-      "materializeLocalVocab", "<a> <c> <e> . <g> <i> <k> .");
+  auto type = ad_utility::VocabularyType::random();
+  ad_utility::testing::TestIndexConfig config{"<a> <c> <e> . <g> <i> <k> ."};
+  config.vocabularyType = type;
+  auto oldIndex = ad_utility::testing::makeTestIndex("materializeLocalVocab",
+                                                     std::move(config));
   std::string vocabPrefix = "/tmp/materializeLocalVocab";
-  // TODO<RobinTF> Cleanup generated test files.
+  absl::Cleanup removeVocabFiles{[&vocabPrefix, &type] {
+    deleteVocabFiles(vocabPrefix + VOCAB_SUFFIX, type.value());
+  }};
 
   auto makeVocabEntry = [](std::string_view str) {
     return LocalVocabEntry{ad_utility::testing::iri(str)};
@@ -71,7 +152,27 @@ TEST(IndexRebuilder, materializeLocalVocab) {
                                                 VocabIndex::make(16)))));
   EXPECT_THAT(flatBlockIndices, ::testing::ElementsAre(4, 7, 42, 77));
 
-  // TODO<RobinTF> Add tests that the created vocabulary on disk is correct
+  Index::Vocab newVocab;
+  newVocab.resetToType(type);
+  newVocab.readFromFile(vocabPrefix + VOCAB_SUFFIX);
+
+  EXPECT_EQ(newVocab[VocabIndex::make(0)], "<a>");
+  EXPECT_EQ(newVocab[VocabIndex::make(1)], "<b>");
+  EXPECT_EQ(newVocab[VocabIndex::make(2)], "<c>");
+  EXPECT_EQ(newVocab[VocabIndex::make(3)], "<d>");
+  EXPECT_EQ(newVocab[VocabIndex::make(4)], "<e>");
+  EXPECT_EQ(newVocab[VocabIndex::make(5)], "<f>");
+  EXPECT_EQ(newVocab[VocabIndex::make(6)], "<g>");
+  EXPECT_EQ(newVocab[VocabIndex::make(7)], "<h>");
+  EXPECT_EQ(newVocab[VocabIndex::make(8)], DEFAULT_GRAPH_IRI);
+  EXPECT_EQ(newVocab[VocabIndex::make(9)], HAS_PATTERN_PREDICATE);
+  EXPECT_EQ(newVocab[VocabIndex::make(10)], HAS_PREDICATE_PREDICATE);
+  EXPECT_EQ(newVocab[VocabIndex::make(11)], QLEVER_INTERNAL_GRAPH_IRI);
+  EXPECT_EQ(newVocab[VocabIndex::make(12)], LANGUAGE_PREDICATE);
+  EXPECT_EQ(newVocab[VocabIndex::make(13)], "<i>");
+  EXPECT_EQ(newVocab[VocabIndex::make(14)], "<j>");
+  EXPECT_EQ(newVocab[VocabIndex::make(15)], "<k>");
+  EXPECT_EQ(newVocab[VocabIndex::make(16)], "<l>");
 }
 
 // _____________________________________________________________________________
@@ -91,6 +192,11 @@ TEST(IndexRebuilder, readIndexAndRemap) {
 
 // _____________________________________________________________________________
 TEST(IndexRebuilder, getNumColumns) {
+  // TODO<RobinTF> Add unit tests
+}
+
+// _____________________________________________________________________________
+TEST(IndexRebuilder, getNumberOfColumnsAndAdditionalColumns) {
   // TODO<RobinTF> Add unit tests
 }
 

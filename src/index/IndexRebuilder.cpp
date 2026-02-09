@@ -62,7 +62,7 @@ materializeLocalVocab(
            std::tie(std::get<VocabIndex>(tupleB).get(), std::get<Id>(tupleB));
   });
 
-  auto vocabWriter = vocab.makeWordWriterPtr(newIndexName + ".vocabulary");
+  auto vocabWriter = vocab.makeWordWriterPtr(newIndexName + VOCAB_SUFFIX);
   for (size_t vocabIndex = 0; vocabIndex < vocab.size(); ++vocabIndex) {
     auto actualIndex = VocabIndex::make(vocabIndex);
     while (insertInfo.size() > newWordCount &&
