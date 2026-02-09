@@ -272,8 +272,6 @@ class IndexImpl {
 
   const auto& getTextVocab() const { return textVocab_; };
 
-  const auto& getScoreData() const { return scoreData_; }
-
   const ad_utility::AllocatorWithLimit<Id>& allocator() const {
     return allocator_;
   };
