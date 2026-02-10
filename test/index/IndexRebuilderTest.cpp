@@ -6,6 +6,11 @@
 
 #include <gmock/gmock.h>
 
+#include <boost/asio/awaitable.hpp>
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/detached.hpp>
+#include <boost/asio/thread_pool.hpp>
+
 #include "../util/IdTableHelpers.h"
 #include "../util/IdTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
@@ -379,10 +384,102 @@ TEST(IndexRebuilder, getNumberOfColumnsAndAdditionalColumns) {
 
 // _____________________________________________________________________________
 TEST(IndexRebuilder, createPermutationWriterTask) {
-  // TODO<RobinTF> Add unit tests
+  auto* qec = ad_utility::testing::getQec("<a> <b> <c> . <d> <e> _:f .");
+  const auto& index = qec->getIndex();
+  IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>(), false};
+  std::string prefix = "/tmp/createPermutationWriterTask";
+  std::array<std::string_view, 4> suffixes{".index.pos", ".index.pos.meta",
+                                           ".index.pso", ".index.pso.meta"};
+  newIndex.setOnDiskBase(prefix);
+  auto cancellationHandle =
+      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+  auto task = createPermutationWriterTask(
+      newIndex, index.getImpl().getPermutation(Permutation::Enum::PSO),
+      index.getImpl().getPermutation(Permutation::Enum::POS), false,
+      index.deltaTriplesManager().getCurrentLocatedTriplesSharedState(), {}, {},
+      {}, 1, cancellationHandle);
+
+  // Assert nothing has happened yet
+  for (std::string_view suffix : suffixes) {
+    EXPECT_FALSE(std::filesystem::exists(prefix + suffix))
+        << "File " << prefix + suffix
+        << " should not exist before the task is executed.";
+  }
+
+  absl::Cleanup removePermutationFiles{[&prefix, &suffixes] {
+    for (std::string_view suffix : suffixes) {
+      ad_utility::deleteFile(prefix + suffix);
+    }
+  }};
+
+  namespace net = boost::asio;
+  net::thread_pool threadPool{1};
+
+  net::co_spawn(threadPool, std::move(task), net::detached);
+  threadPool.join();
+  for (std::string_view suffix : suffixes) {
+    EXPECT_TRUE(std::filesystem::exists(prefix + suffix));
+    EXPECT_EQ(fileToBuffer(index.getOnDiskBase() + suffix),
+              fileToBuffer(prefix + suffix));
+  }
 }
 
 // _____________________________________________________________________________
 TEST(IndexRebuilder, materializeToIndex) {
-  // TODO<RobinTF> Add unit tests
+  auto cancellationHandle =
+      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+  std::string baseFolder = "/tmp/materializeToIndex";
+  std::string newIndexName = baseFolder + "/index";
+  std::string logFile = newIndexName + ".log";
+
+  for (auto [usePatterns, loadAllPermutations] :
+       {std::pair{false, false}, std::pair{false, true},
+        std::pair{true, true}}) {
+    ad_utility::testing::TestIndexConfig config;
+    config.turtleInput = "<a> <b> <c> . <d> <e> _:f .";
+    config.loadAllPermutations = loadAllPermutations;
+    config.usePatterns = usePatterns;
+    auto index = ad_utility::testing::makeTestIndex("materializeToIndex",
+                                                    std::move(config));
+    index.deltaTriplesManager().modify<void>([&cancellationHandle, &index](
+                                                 DeltaTriples& deltaTriples) {
+      auto g = TripleComponent{ad_utility::triple_component::Iri::fromIriref(
+                                   DEFAULT_GRAPH_IRI)}
+                   .toValueId(index.getVocab(), index.encodedIriManager())
+                   .value();
+      deltaTriples.insertTriples(
+          cancellationHandle, {IdTriple<0>{std::array{V(2), V(1), V(0), g}},
+                               IdTriple<0>{std::array{B(1), B(2), B(3), g}}});
+    });
+
+    auto [state, vocab, blankNodes] =
+        index.deltaTriplesManager()
+            .getCurrentLocatedTriplesSharedStateWithVocab();
+
+    std::filesystem::create_directory(baseFolder);
+    absl::Cleanup removeIndexFiles{
+        [&baseFolder] { std::filesystem::remove_all(baseFolder); }};
+
+    qlever::materializeToIndex(index.getImpl(), newIndexName, state, vocab,
+                               blankNodes, cancellationHandle, logFile);
+    EXPECT_TRUE(std::filesystem::exists(logFile));
+
+    IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>(), false};
+    newIndex.usePatterns() = usePatterns;
+    newIndex.loadAllPermutations() = loadAllPermutations;
+    newIndex.createFromOnDiskIndex(newIndexName, false);
+    EXPECT_EQ(newIndex.getBlankNodeManager()->minIndex_,
+              index.getBlankNodeManager()->minIndex_ +
+                  ad_utility::BlankNodeManager::blockSize_);
+    EXPECT_EQ(newIndex.numTriples().normal, 4);
+    EXPECT_EQ(newIndex.numTriples().internal, usePatterns ? 2 : 0);
+    EXPECT_EQ(newIndex.numDistinctPredicates().normal, 3);
+    EXPECT_EQ(newIndex.numDistinctPredicates().internal, usePatterns ? 1 : 0);
+    if (newIndex.loadAllPermutations()) {
+      EXPECT_EQ(newIndex.numDistinctSubjects().normal, 4);
+      EXPECT_EQ(newIndex.numDistinctSubjects().internal, 0);
+      EXPECT_EQ(newIndex.numDistinctObjects().normal, 4);
+      EXPECT_EQ(newIndex.numDistinctObjects().internal, 0);
+    }
+  }
 }

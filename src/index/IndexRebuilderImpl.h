@@ -62,10 +62,12 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
 // be determined, return 4 as a safe default.
 size_t getNumColumns(const BlockMetadataRanges& blockMetadataRanges);
 
-// Create a `std::packaged_task` that writes a new permutation according to the
-// settings of `newIndex`, based on the data of the current index.
-std::packaged_task<void()> createPermutationWriterTask(
-    IndexImpl& newIndex, const Permutation& permutation, bool isInternal,
+// Create a `boost::asio::awaitable<void>` that writes a pair of new
+// permutations according to the settings of `newIndex`, based on the data of
+// the current index.
+boost::asio::awaitable<void> createPermutationWriterTask(
+    IndexImpl& newIndex, const Permutation& permutationA,
+    const Permutation& permutationB, bool isInternal,
     const LocatedTriplesSharedState& locatedTriplesSharedState,
     const ad_utility::HashMap<Id::T, Id>& localVocabMapping,
     const std::vector<VocabIndex>& insertionPositions,

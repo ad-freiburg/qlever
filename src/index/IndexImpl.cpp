@@ -1923,11 +1923,11 @@ void IndexImpl::loadConfigFromOldIndex(const std::string& newName,
   setKbName(other.getKbName());
   blocksizePermutationPerColumn() = other.blocksizePermutationPerColumn();
   configurationJson_ = newStats;
-  numTriples_ = static_cast<NumNormalAndInternal>(newStats["num-triples"]);
+  numTriples_ = static_cast<NumNormalAndInternal>(newStats.at("num-triples"));
   numPredicates_ =
-      static_cast<NumNormalAndInternal>(newStats["num-predicates"]);
-  numSubjects_ = static_cast<NumNormalAndInternal>(newStats["num-subjects"]);
-  numObjects_ = static_cast<NumNormalAndInternal>(newStats["num-objects"]);
+      static_cast<NumNormalAndInternal>(newStats.at("num-predicates"));
+  numSubjects_ = newStats.value("num-subjects", NumNormalAndInternal{});
+  numObjects_ = newStats.value("num-objects", NumNormalAndInternal{});
   writeConfiguration();
 }
 
