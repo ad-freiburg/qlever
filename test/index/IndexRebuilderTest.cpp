@@ -244,6 +244,13 @@ TEST(IndexRebuilder, remapBlankNodeId) {
   EXPECT_EQ(remapBlankNodeId(B(77 * s + o), blankNodeBlocks, o), B(2 * s + o));
   EXPECT_EQ(remapBlankNodeId(B(77 * s + 1 + o), blankNodeBlocks, o),
             B(2 * s + 1 + o));
+
+  if constexpr (ad_utility::areExpensiveChecksEnabled) {
+    EXPECT_THROW(remapBlankNodeId(B(0), blankNodeBlocks, 0),
+                 ad_utility::Exception);
+    EXPECT_THROW(remapBlankNodeId(B(100000), blankNodeBlocks, 0),
+                 ad_utility::Exception);
+  }
 }
 
 // _____________________________________________________________________________
@@ -491,4 +498,22 @@ TEST(IndexRebuilder, materializeToIndex) {
       EXPECT_EQ(newIndex.numDistinctObjects().internal, 0);
     }
   }
+}
+
+// _____________________________________________________________________________
+TEST(IndexRebuilder, materializeToIndexNoLogFileName) {
+  auto cancellationHandle =
+      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+
+  auto qec = ad_utility::testing::getQec();
+  const auto& index = qec->getIndex();
+
+  auto [state, vocab, blankNodes] =
+      index.deltaTriplesManager()
+          .getCurrentLocatedTriplesSharedStateWithVocab();
+
+  EXPECT_THROW(
+      qlever::materializeToIndex(index.getImpl(), "nexIndex", state, vocab,
+                                 blankNodes, cancellationHandle, ""),
+      ad_utility::Exception);
 }
