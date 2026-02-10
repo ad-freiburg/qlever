@@ -86,9 +86,15 @@ struct BasicGraphPattern {
   void collectAllContainedVariables(ad_utility::HashSet<Variable>& vars) const;
 };
 
-// Extract all variables present in a the first `BasicGraphPattern` contained in
-// a vector of `GraphPatternOperation`s. It is used for skipping some graph
-// patterns in `MaterializedViewQueryAnalysis.cpp`.
+// Helper for a special use case: Extract all variables present in the first
+// `BasicGraphPattern` contained in a vector of `GraphPatternOperation`s.
+//
+// For example: If the vector contains a `BIND`, followed by two
+// `BasicGraphPattern`s, this would return the variables from the first of the
+// two `BasicGraphPattern`s.
+//
+// It is used for skipping some graph patterns in
+// `MaterializedViewQueryAnalysis.cpp`.
 //
 // IMPORTANT: This function does not consider variables that are contained in
 // other types of `GraphPatternOperation`s.

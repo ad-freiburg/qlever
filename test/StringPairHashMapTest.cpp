@@ -18,6 +18,7 @@ TEST(StringPairHashMapTest, InsertAndLookup) {
   // Insert using `std::string` pairs.
   map[StringPair{"hello", "world"}] = 7;
   map[StringPair{"foo", "bar"}] = 42;
+  StringPair x{StringViewPair{"a", "b"}};
 
   ASSERT_EQ(map.size(), 2u);
 
