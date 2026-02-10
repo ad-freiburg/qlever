@@ -91,6 +91,19 @@ https://github.com/google/googletest/blob/main/docs/reference/matchers.md#matche
 }
 
 // _____________________________________________________________________________
+// Some tests require a certain log level, e.g. but not only because they
+// capture log output and make assertions about it. This macro can be used to
+// skip such tests if the log level is too low.
+#define SKIP_IF_LOGLEVEL_IS_LOWER(level)                        \
+  if (LOGLEVEL < level) {                                       \
+    GTEST_SKIP() << "This test requires log level of at least " \
+                 << ad_utility::Log::getLevel<level>()          \
+                 << ", but the current log level is "           \
+                 << ad_utility::Log::getLevel<LOGLEVEL>();      \
+  }                                                             \
+  EXPECT_GE(LOGLEVEL, level);
+
+// _____________________________________________________________________________
 
 // Helper matcher that allows to use matchers for strings that represent json
 // objects.
