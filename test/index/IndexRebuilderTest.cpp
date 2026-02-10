@@ -6,6 +6,8 @@
 
 #include <gmock/gmock.h>
 
+#include "../util/IdTableHelpers.h"
+#include "../util/IdTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
 #include "index/IndexRebuilder.h"
@@ -16,6 +18,9 @@ using namespace qlever::indexRebuilder;
 using namespace std::string_literals;
 
 namespace {
+auto V = ad_utility::testing::VocabId;
+auto B = ad_utility::testing::BlankNodeId;
+
 // Read a file into a buffer.
 std::vector<char> fileToBuffer(const std::string& filename) {
   std::ifstream f{filename, std::ios::binary};
@@ -118,7 +123,8 @@ TEST(IndexRebuilder, materializeLocalVocab) {
   auto j = makeVocabEntry("<j>");
   auto k = getId("<k>");
   auto l = makeVocabEntry("<l>");
-  std::vector<LocalVocabIndex> entries{&b, &d, &f, &h, &j, &l};
+  auto m = makeVocabEntry("<m>");
+  std::vector<LocalVocabIndex> entries{&b, &d, &f, &h, &j, &l, &m};
   using OBE =
       ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry;
   std::vector ownedBlocks{OBE{{}, {4, 42}}, OBE{{}, {7, 77}}};
@@ -132,6 +138,7 @@ TEST(IndexRebuilder, materializeLocalVocab) {
           c.getVocabIndex(), e.getVocabIndex(), g.getVocabIndex(),
           Id::fromBits(h.positionInVocab().upperBound_.get()).getVocabIndex(),
           k.getVocabIndex(),
+          Id::fromBits(l.positionInVocab().upperBound_.get()).getVocabIndex(),
           Id::fromBits(l.positionInVocab().upperBound_.get()).getVocabIndex()));
   auto toBits = [](const LocalVocabEntry& entry) {
     return Id::makeFromLocalVocabIndex(&entry).getBits();
@@ -148,8 +155,10 @@ TEST(IndexRebuilder, materializeLocalVocab) {
                                  Id::makeFromVocabIndex(VocabIndex::make(7))),
                   std::make_pair(toBits(j),
                                  Id::makeFromVocabIndex(VocabIndex::make(14))),
-                  std::make_pair(toBits(l), Id::makeFromVocabIndex(
-                                                VocabIndex::make(16)))));
+                  std::make_pair(toBits(l),
+                                 Id::makeFromVocabIndex(VocabIndex::make(16))),
+                  std::make_pair(toBits(m), Id::makeFromVocabIndex(
+                                                VocabIndex::make(17)))));
   EXPECT_THAT(flatBlockIndices, ::testing::ElementsAre(4, 7, 42, 77));
 
   Index::Vocab newVocab;
@@ -173,16 +182,63 @@ TEST(IndexRebuilder, materializeLocalVocab) {
   EXPECT_EQ(newVocab[VocabIndex::make(14)], "<j>");
   EXPECT_EQ(newVocab[VocabIndex::make(15)], "<k>");
   EXPECT_EQ(newVocab[VocabIndex::make(16)], "<l>");
+  EXPECT_EQ(newVocab[VocabIndex::make(17)], "<m>");
 }
 
 // _____________________________________________________________________________
 TEST(IndexRebuilder, remapVocabId) {
-  // TODO<RobinTF> Add unit tests
+  std::vector insertionPositionsA{VocabIndex::make(3), VocabIndex::make(5),
+                                  VocabIndex::make(7)};
+
+  EXPECT_EQ(remapVocabId(V(0), insertionPositionsA), V(0));
+  EXPECT_EQ(remapVocabId(V(1), insertionPositionsA), V(1));
+  EXPECT_EQ(remapVocabId(V(2), insertionPositionsA), V(2));
+  EXPECT_EQ(remapVocabId(V(3), insertionPositionsA), V(4));
+  EXPECT_EQ(remapVocabId(V(4), insertionPositionsA), V(5));
+  EXPECT_EQ(remapVocabId(V(5), insertionPositionsA), V(7));
+  EXPECT_EQ(remapVocabId(V(6), insertionPositionsA), V(8));
+  EXPECT_EQ(remapVocabId(V(7), insertionPositionsA), V(10));
+  EXPECT_EQ(remapVocabId(V(8), insertionPositionsA), V(11));
+
+  std::vector insertionPositionsB{VocabIndex::make(0), VocabIndex::make(1)};
+  EXPECT_EQ(remapVocabId(V(0), insertionPositionsB), V(1));
+  EXPECT_EQ(remapVocabId(V(1), insertionPositionsB), V(3));
+  EXPECT_EQ(remapVocabId(V(2), insertionPositionsB), V(4));
 }
 
 // _____________________________________________________________________________
 TEST(IndexRebuilder, remapBlankNodeId) {
-  // TODO<RobinTF> Add unit tests
+  std::vector<uint64_t> blankNodeBlocks{4, 42, 77};
+  auto s = ad_utility::BlankNodeManager::blockSize_;
+
+  EXPECT_EQ(remapBlankNodeId(B(4 * s), blankNodeBlocks, 0), B(0));
+  EXPECT_EQ(remapBlankNodeId(B(4 * s + 1), blankNodeBlocks, 0), B(1));
+  EXPECT_EQ(remapBlankNodeId(B(42 * s), blankNodeBlocks, 0), B(s));
+  EXPECT_EQ(remapBlankNodeId(B(42 * s + 1), blankNodeBlocks, 0), B(s + 1));
+  EXPECT_EQ(remapBlankNodeId(B(77 * s), blankNodeBlocks, 0), B(2 * s));
+  EXPECT_EQ(remapBlankNodeId(B(77 * s + 1), blankNodeBlocks, 0), B(2 * s + 1));
+
+  EXPECT_EQ(remapBlankNodeId(B(4 * s), blankNodeBlocks, 100000), B(4 * s));
+  EXPECT_EQ(remapBlankNodeId(B(4 * s + 1), blankNodeBlocks, 100000),
+            B(4 * s + 1));
+  EXPECT_EQ(remapBlankNodeId(B(42 * s), blankNodeBlocks, 100000), B(42 * s));
+  EXPECT_EQ(remapBlankNodeId(B(42 * s + 1), blankNodeBlocks, 100000),
+            B(42 * s + 1));
+  EXPECT_EQ(remapBlankNodeId(B(77 * s), blankNodeBlocks, 100000), B(77 * s));
+  EXPECT_EQ(remapBlankNodeId(B(77 * s + 1), blankNodeBlocks, 100000),
+            B(77 * s + 1));
+
+  uint64_t o = 1337;
+  EXPECT_EQ(remapBlankNodeId(B(0), blankNodeBlocks, o), B(0));
+  EXPECT_EQ(remapBlankNodeId(B(o - 1), blankNodeBlocks, o), B(o - 1));
+  EXPECT_EQ(remapBlankNodeId(B(4 * s + o), blankNodeBlocks, o), B(0 + o));
+  EXPECT_EQ(remapBlankNodeId(B(4 * s + 1 + o), blankNodeBlocks, o), B(1 + o));
+  EXPECT_EQ(remapBlankNodeId(B(42 * s + o), blankNodeBlocks, o), B(s + o));
+  EXPECT_EQ(remapBlankNodeId(B(42 * s + 1 + o), blankNodeBlocks, o),
+            B(s + 1 + o));
+  EXPECT_EQ(remapBlankNodeId(B(77 * s + o), blankNodeBlocks, o), B(2 * s + o));
+  EXPECT_EQ(remapBlankNodeId(B(77 * s + 1 + o), blankNodeBlocks, o),
+            B(2 * s + 1 + o));
 }
 
 // _____________________________________________________________________________
@@ -192,12 +248,63 @@ TEST(IndexRebuilder, readIndexAndRemap) {
 
 // _____________________________________________________________________________
 TEST(IndexRebuilder, getNumColumns) {
-  // TODO<RobinTF> Add unit tests
+  EXPECT_EQ(getNumColumns({}), 4);
+  ql::span<const CompressedBlockMetadata> emptySpan;
+  EXPECT_EQ(
+      getNumColumns({ql::ranges::subrange{emptySpan.begin(), emptySpan.end()}}),
+      4);
+  using C = CompressedBlockMetadataNoBlockIndex;
+  std::array metadata{
+      CompressedBlockMetadata{
+          C{std::optional{std::vector<C::OffsetAndCompressedSize>(4)}, 0,
+            C::PermutedTriple{}, C::PermutedTriple{}, std::nullopt, false},
+          0},
+      CompressedBlockMetadata{
+          C{std::optional{std::vector<C::OffsetAndCompressedSize>(6)}, 0,
+            C::PermutedTriple{}, C::PermutedTriple{}, std::nullopt, false},
+          0},
+      CompressedBlockMetadata{C{std::nullopt, 0, C::PermutedTriple{},
+                                C::PermutedTriple{}, std::nullopt, false},
+                              0}};
+  EXPECT_EQ(getNumColumns(
+                {ql::ranges::subrange{metadata.begin(), metadata.begin() + 1}}),
+            4);
+  EXPECT_EQ(getNumColumns({ql::ranges::subrange{metadata.begin() + 1,
+                                                metadata.begin() + 2}}),
+            6);
+  EXPECT_EQ(getNumColumns({ql::ranges::subrange{metadata.begin() + 2,
+                                                metadata.begin() + 3}}),
+            4);
+  EXPECT_EQ(getNumColumns({ql::ranges::subrange{metadata.begin() + 1,
+                                                metadata.begin() + 3}}),
+            6);
+  EXPECT_EQ(
+      getNumColumns(
+          {ql::ranges::subrange{emptySpan.begin(), emptySpan.end()},
+           ql::ranges::subrange{metadata.begin() + 1, metadata.begin() + 2}}),
+      4);
 }
 
 // _____________________________________________________________________________
 TEST(IndexRebuilder, getNumberOfColumnsAndAdditionalColumns) {
-  // TODO<RobinTF> Add unit tests
+  using C = CompressedBlockMetadataNoBlockIndex;
+  std::array metadata{CompressedBlockMetadata{
+      C{std::optional{std::vector<C::OffsetAndCompressedSize>(6)}, 0,
+        C::PermutedTriple{}, C::PermutedTriple{}, std::nullopt, false},
+      0}};
+
+  auto result = getNumberOfColumnsAndAdditionalColumns({});
+  EXPECT_EQ(result.first, 4);
+  EXPECT_EQ(result.second,
+            (std::vector<ColumnIndex>{ADDITIONAL_COLUMN_GRAPH_ID}));
+
+  result = getNumberOfColumnsAndAdditionalColumns(
+      {ql::ranges::subrange{metadata.begin(), metadata.end()}});
+  EXPECT_EQ(result.first, 6);
+  EXPECT_EQ(result.second,
+            (std::vector<ColumnIndex>{ADDITIONAL_COLUMN_GRAPH_ID,
+                                      ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN,
+                                      ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN}));
 }
 
 // _____________________________________________________________________________
