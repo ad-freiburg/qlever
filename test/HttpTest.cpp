@@ -277,8 +277,8 @@ TEST(HttpServer, ErrorHandlingInSession) {
   // Thrown object that is not a `std::exception`.
   if constexpr (LOGLEVEL >= ERROR) {
     s = throwAndCaptureLog(47);
-    EXPECT_THAT(s,
-                HasSubstr("Weird exception not inheriting from std::exception"));
+    EXPECT_THAT(
+        s, HasSubstr("Weird exception not inheriting from std::exception"));
   }
 }
 
