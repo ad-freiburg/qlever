@@ -397,11 +397,16 @@ TEST(IndexRebuilder, createPermutationWriterTask) {
   newIndex.setOnDiskBase(prefix);
   auto cancellationHandle =
       std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+  auto state =
+      index.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
+  ad_utility::HashMap<Id::T, Id> localVocabMapping;
+  std::vector<VocabIndex> insertionPositions;
+  std::vector<uint64_t> blankNodeBlocks;
   auto task = createPermutationWriterTask(
       newIndex, index.getImpl().getPermutation(Permutation::Enum::PSO),
-      index.getImpl().getPermutation(Permutation::Enum::POS), false,
-      index.deltaTriplesManager().getCurrentLocatedTriplesSharedState(), {}, {},
-      {}, 1, cancellationHandle);
+      index.getImpl().getPermutation(Permutation::Enum::POS), false, state,
+      localVocabMapping, insertionPositions, blankNodeBlocks, 1,
+      cancellationHandle);
 
   // Assert nothing has happened yet
   for (std::string_view suffix : suffixes) {
