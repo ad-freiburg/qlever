@@ -243,7 +243,77 @@ TEST(IndexRebuilder, remapBlankNodeId) {
 
 // _____________________________________________________________________________
 TEST(IndexRebuilder, readIndexAndRemap) {
-  // TODO<RobinTF> Add unit tests
+  auto index = ad_utility::testing::makeTestIndex(
+      "readIndexAndRemap", "<a> <b> <c> . <d> <e> _:f .");
+  const auto& permutation =
+      index.getImpl().getPermutation(Permutation::Enum::PSO);
+  auto cancellationHandle =
+      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+
+  auto g = TripleComponent{ad_utility::triple_component::Iri::fromIriref(
+                               DEFAULT_GRAPH_IRI)}
+               .toValueId(index.getVocab(), index.encodedIriManager())
+               .value();
+
+  index.deltaTriplesManager().modify<void>([&cancellationHandle,
+                                            g](DeltaTriples& deltaTriples) {
+    LocalVocabEntry entry1{
+        ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
+            "<a2>")};
+    LocalVocabEntry entry2{
+        ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
+            "<d2>")};
+    auto a2 = Id::makeFromLocalVocabIndex(&entry1);
+    auto d2 = Id::makeFromLocalVocabIndex(&entry2);
+    deltaTriples.insertTriples(
+        cancellationHandle,
+        {IdTriple<0>{std::array{V(0), a2, Id::makeFromInt(1337), g}},
+         IdTriple<0>{std::array{V(0), d2, B(1), g}}});
+  });
+
+  auto [state, vocabEntries, rawBlocks] =
+      index.deltaTriplesManager()
+          .getCurrentLocatedTriplesSharedStateWithVocab();
+  auto blockMetadataRanges =
+      permutation.getAugmentedMetadataForPermutation(*state);
+
+  ql::ranges::sort(vocabEntries, {}, [](const LocalVocabEntry* entry) {
+    return Id::makeFromLocalVocabIndex(entry);
+  });
+
+  ad_utility::HashMap<Id::T, Id> localVocabMapping{
+      {Id::makeFromLocalVocabIndex(vocabEntries.at(0)).getBits(),
+       Id::makeFromVocabIndex(VocabIndex::make(1))},
+      {Id::makeFromLocalVocabIndex(vocabEntries.at(1)).getBits(),
+       Id::makeFromVocabIndex(VocabIndex::make(5))}};
+
+  std::vector<VocabIndex> insertionPositions{VocabIndex::make(1),
+                                             VocabIndex::make(4)};
+  std::vector<uint64_t> blankNodeBlocks{rawBlocks.at(0).blockIndices_.at(0)};
+  uint64_t minBlankNodeIndex = 1;
+  std::vector<ColumnIndex> additionalColumns{
+      ADDITIONAL_COLUMN_GRAPH_ID, ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN,
+      ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN};
+
+  auto range = readIndexAndRemap(permutation, blockMetadataRanges, state,
+                                 localVocabMapping, insertionPositions,
+                                 blankNodeBlocks, minBlankNodeIndex,
+                                 cancellationHandle, additionalColumns);
+
+  std::vector<IdTableStatic<0>> idTables =
+      range | ql::ranges::to<std::vector>();
+
+  auto U = Id::makeUndefined();
+  auto patternId = Id::makeFromInt(std::numeric_limits<int32_t>::max());
+  auto newG = remapVocabId(g, insertionPositions);
+
+  ASSERT_EQ(idTables.size(), 1);
+  EXPECT_EQ(idTables.at(0),
+            makeIdTableFromVector(
+                {{V(1), V(0), Id::makeFromInt(1337), newG, U, U},
+                 {V(2), V(0), V(3), newG, Id::makeFromInt(0), patternId},
+                 {V(5), V(0), B(1), newG, U, U},
+                 {V(6), V(4), B(0), newG, Id::makeFromInt(1), patternId}}));
 }
 
 // _____________________________________________________________________________
