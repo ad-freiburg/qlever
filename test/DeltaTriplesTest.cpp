@@ -443,6 +443,10 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
            "<a> <other> \"def\"@de", "<a> <other> \"def\"@es"}));
   auto a = iri("<a>");
   auto b = iri("<b>");
+  auto lp = iri(LANGUAGE_PREDICATE);
+  auto de = TripleComponent{ad_utility::convertLangtagToEntityUri("de")};
+  auto en = TripleComponent{ad_utility::convertLangtagToEntityUri("en")};
+  auto es = TripleComponent{ad_utility::convertLangtagToEntityUri("es")};
   EXPECT_THAT(deltaTriples,
               TriplesAre({{a, b, TripleComponent{1}},
                           {a, b, lit("\"abc\"")},
@@ -453,7 +457,11 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
                           {a, iri("<other>"), lit("\"def\"@de")},
                           {a, iri("<other>"), lit("\"def\"@es")}},
                          {},
-                         {{a, iri("@de@<b>"), lit("\"abc\"@de")},
+                         {{lit("\"abc\"@de"), lp, de},
+                          {lit("\"abc\"@en"), lp, en},
+                          {lit("\"def\"@de"), lp, de},
+                          {lit("\"def\"@es"), lp, es},
+                          {a, iri("@de@<b>"), lit("\"abc\"@de")},
                           {a, iri("@en@<b>"), lit("\"abc\"@en")},
                           {a, iri("@de@<other>"), lit("\"def\"@de")},
                           {a, iri("@es@<other>"), lit("\"def\"@es")}},
@@ -477,7 +485,10 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
                           {a, b, iri("<abc>")},
                           {a, iri("<other>"), lit("\"def\"@de")},
                           {a, iri("<other>"), lit("\"def\"@es")}},
-                         {},
+                         {{lit("\"abc\"@de"), lp, de},
+                          {lit("\"abc\"@en"), lp, en},
+                          {lit("\"def\"@de"), lp, de},
+                          {lit("\"def\"@es"), lp, es}},
                          {{a, iri("@de@<b>"), lit("\"abc\"@de")},
                           {a, iri("@en@<b>"), lit("\"abc\"@en")},
                           {a, iri("@de@<other>"), lit("\"def\"@de")},
