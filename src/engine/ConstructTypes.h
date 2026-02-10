@@ -19,28 +19,23 @@
 // Tag type representing an unbound variable (UNDEF in SPARQL).
 struct Undef {};
 
-// Result of instantiation a term.
+// Result of evaluating a term.
 using InstantiatedTerm =
     std::variant<Undef, std::shared_ptr<const std::string>>;
 
 // Number of positions in a triple: subject, predicate, object.
 inline constexpr size_t NUM_TRIPLE_POSITIONS = 3;
 
-// Recipe for instantiating one template triple from the CONSTRUCT clause. For
-// each of the three positions (subject, predicate, object), a
-// `TermInstantitationRecipe` specifies the term's type (CONSTANT, VARIABLE, or
-// BLANK_NODE) and an idx into the corresponding storage where its value can be
-// found (or computed from).
+// Specifies how to look up the value for each term position in a triple during
+// triple instantiation.
+// `type`: Indicates whether the term is a CONSTANT, VARIABLE, or BLANK_NODE.
+// `index`: The idx into the corresponding storage depending on `type`
+// CONSTANT: `precomputedConstants_[tripleIdx]`
+// VARIABLE: `variablesToInstantiate_` / `variableInstantiations_`
+// BLANK_NODE: `blankNodesToInstantiate_` / `blankNodeInstantiations_`.
 struct TripleInstantitationRecipe {
   enum class TermType { CONSTANT, VARIABLE, BLANK_NODE };
 
-  // Specifies how to look up the value for a term position during triple
-  // instantiation.
-  // `type`: Indicates whether the term is a CONSTANT, VARIABLE, or BLANK_NODE.
-  // `index`: The idx into the corresponding storage depending on `type`
-  // CONSTANT: `precomputedConstants_[tripleIdx]`
-  // VARIABLE: `variablesToInstantiate_` / `variableInstantiations_`
-  // BLANK_NODE: `blankNodesToInstantiate_` / `blankNodeInstantiations_`.
   struct TermInstantitationRecipe {
     TermType type_;
     size_t index_;
