@@ -305,8 +305,8 @@ TEST(IndexRebuilder, readIndexAndRemap) {
                                  blankNodeBlocks, minBlankNodeIndex,
                                  cancellationHandle, additionalColumns);
 
-  std::vector<IdTableStatic<0>> idTables =
-      range | ql::ranges::to<std::vector>();
+  std::vector<IdTableStatic<0>> idTables = ::ranges::to<std::vector>(
+      ql::views::transform(range, ad_utility::staticCast<IdTableStatic<0>&&>));
 
   auto U = Id::makeUndefined();
   auto patternId = Id::makeFromInt(std::numeric_limits<int32_t>::max());
@@ -341,32 +341,36 @@ TEST(IndexRebuilder, getNumColumns) {
       CompressedBlockMetadata{C{std::nullopt, 0, C::PermutedTriple{},
                                 C::PermutedTriple{}, std::nullopt, false},
                               0}};
+  ql::span<const CompressedBlockMetadata> metaSpan{metadata};
+
   EXPECT_EQ(getNumColumns(
-                {ql::ranges::subrange{metadata.begin(), metadata.begin() + 1}}),
+                {ql::ranges::subrange{metaSpan.begin(), metaSpan.begin() + 1}}),
             4);
-  EXPECT_EQ(getNumColumns({ql::ranges::subrange{metadata.begin() + 1,
-                                                metadata.begin() + 2}}),
+  EXPECT_EQ(getNumColumns({ql::ranges::subrange{metaSpan.begin() + 1,
+                                                metaSpan.begin() + 2}}),
             6);
-  EXPECT_EQ(getNumColumns({ql::ranges::subrange{metadata.begin() + 2,
-                                                metadata.begin() + 3}}),
+  EXPECT_EQ(getNumColumns({ql::ranges::subrange{metaSpan.begin() + 2,
+                                                metaSpan.begin() + 3}}),
             4);
-  EXPECT_EQ(getNumColumns({ql::ranges::subrange{metadata.begin() + 1,
-                                                metadata.begin() + 3}}),
+  EXPECT_EQ(getNumColumns({ql::ranges::subrange{metaSpan.begin() + 1,
+                                                metaSpan.begin() + 3}}),
             6);
   EXPECT_EQ(
       getNumColumns(
           {ql::ranges::subrange{emptySpan.begin(), emptySpan.end()},
-           ql::ranges::subrange{metadata.begin() + 1, metadata.begin() + 2}}),
+           ql::ranges::subrange{metaSpan.begin() + 1, metaSpan.begin() + 2}}),
       4);
 }
 
 // _____________________________________________________________________________
 TEST(IndexRebuilder, getNumberOfColumnsAndAdditionalColumns) {
   using C = CompressedBlockMetadataNoBlockIndex;
-  std::array metadata{CompressedBlockMetadata{
+  CompressedBlockMetadata metadata{
       C{std::optional{std::vector<C::OffsetAndCompressedSize>(6)}, 0,
         C::PermutedTriple{}, C::PermutedTriple{}, std::nullopt, false},
-      0}};
+      0};
+
+  ql::span<const CompressedBlockMetadata> metaSpan{&metadata, 1};
 
   auto result = getNumberOfColumnsAndAdditionalColumns({});
   EXPECT_EQ(result.first, 4);
@@ -374,7 +378,7 @@ TEST(IndexRebuilder, getNumberOfColumnsAndAdditionalColumns) {
             (std::vector<ColumnIndex>{ADDITIONAL_COLUMN_GRAPH_ID}));
 
   result = getNumberOfColumnsAndAdditionalColumns(
-      {ql::ranges::subrange{metadata.begin(), metadata.end()}});
+      {ql::ranges::subrange{metaSpan.begin(), metaSpan.end()}});
   EXPECT_EQ(result.first, 6);
   EXPECT_EQ(result.second,
             (std::vector<ColumnIndex>{ADDITIONAL_COLUMN_GRAPH_ID,
