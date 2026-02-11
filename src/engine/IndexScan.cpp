@@ -345,7 +345,7 @@ std::pair<bool, size_t> IndexScan::computeSizeEstimate() const {
         permutation()
             .getLocatedTriplesForPermutation(locatedTriplesState())
             .numTriples();
-    return {numChanges == 0, numTriples};
+    return {numChanges == 0 && !additionalColumns().empty(), numTriples};
   }
 
   // For other scans, sum up the size estimates for each block.
