@@ -471,7 +471,12 @@ TEST(SparqlExpression, arithmeticOperators) {
                    createDat("-P14903DT10H46M47S", false),
                    createDat("-P40239DT23H47M30S", false)},
                   alloc};
+#ifndef REDUCED_FEATURE_SET_FOR_CPP17
   testMinus(minus2000, dat, createDat("2000-01-01T00:00:00Z"));
+#else
+  V<Id> undefined{{U, U, U, U}, alloc};
+  testMinus(undefined, dat, createDat("2000-01-01T00:00:00Z"));
+#endif
 
   V<Id> mixed2{{B(true), I(250), D(-113.2), Voc(4)}, alloc};
   V<Id> mixed2MinusDat{{U, U, U, U}, alloc};
