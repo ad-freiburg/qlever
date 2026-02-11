@@ -1,4 +1,4 @@
-//   Copyright 2026 The QLever Authors, in particular:
+//  Copyright 2026 The QLever Authors, in particular:
 //
 //  2026 Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>, UFR
 //
@@ -10,11 +10,14 @@
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/thread_pool.hpp>
+#include <boost/asio/use_future.hpp>
 
+#include "../util/HttpRequestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IdTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
+#include "engine/Server.h"
 #include "index/IndexRebuilder.h"
 #include "index/IndexRebuilderImpl.h"
 #include "index/vocabulary/VocabularyType.h"
@@ -516,4 +519,62 @@ TEST(IndexRebuilder, materializeToIndexNoLogFileName) {
       qlever::materializeToIndex(index.getImpl(), "nexIndex", state, vocab,
                                  blankNodes, cancellationHandle, ""),
       ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
+TEST(IndexRebuilder, serverIntegration) {
+  namespace net = boost::asio;
+  net::thread_pool threadPool{1};
+
+  std::string indexName = "IndexRebuilder_serverIntegration";
+  ad_utility::testing::makeTestIndex(indexName, "<a> <b> <c> .");
+
+  Server server{4321, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
+  server.initialize(indexName, false);
+  auto performRequest = [&threadPool, &server](auto& request) {
+    namespace http = boost::beast::http;
+    using ResT = std::optional<http::response<http::string_body>>;
+    auto task =
+        server.template onlyForTestingProcess<std::decay_t<decltype(request)>,
+                                              ResT>(request);
+    return net::co_spawn(threadPool, std::move(task), net::use_future);
+  };
+
+  // Without access token this operation is not allowed!
+  auto request0 = ad_utility::testing::makeGetRequest(
+      "/?cmd=rebuild-index&index-name=my-name");
+  AD_EXPECT_THROW_WITH_MESSAGE(performRequest(request0).get(),
+                               ::testing::HasSubstr("access token"));
+
+  auto request1 = ad_utility::testing::makeGetRequest(
+      "/?cmd=rebuild-index&index-name=my-name&access-token="
+      "accessToken");
+  auto future1 = performRequest(request1);
+  auto request2 = ad_utility::testing::makeGetRequest(
+      "/?cmd=rebuild-index&index-name=my-name&access-token="
+      "accessToken");
+  auto future2 = performRequest(request2);
+
+  auto response1 = future1.get();
+  auto response2 = future2.get();
+
+  ASSERT_TRUE(response1.has_value());
+  ASSERT_TRUE(response2.has_value());
+  EXPECT_EQ(response1.value().base().result(), boost::beast::http::status::ok);
+  EXPECT_EQ(response2.value().base().result(),
+            boost::beast::http::status::too_many_requests);
+
+  // We use this config as a proxy for the index rebuilder having finished
+  // successfully.
+  EXPECT_TRUE(std::filesystem::exists("my-name.meta-data.json"));
+
+  auto request3 = ad_utility::testing::makeGetRequest(
+      "/?cmd=rebuild-index&access-token=accessToken");
+  auto response3 = performRequest(request3).get();
+  ASSERT_TRUE(response3.has_value());
+  EXPECT_EQ(response3.value().base().result(), boost::beast::http::status::ok);
+  // By default QLever should assign a default name for the new index.
+  EXPECT_TRUE(std::filesystem::exists("new_index.meta-data.json"));
+
+  threadPool.join();
 }
