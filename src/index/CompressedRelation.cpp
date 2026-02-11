@@ -332,8 +332,7 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphs::
 // _____________________________________________________________________________
 bool CompressedRelationReader::FilterDuplicatesAndGraphs::
     filterDuplicatesIfNecessary(
-        IdTable& block,
-        const CompressedBlockMetadata& blockMetadata) const {
+        IdTable& block, const CompressedBlockMetadata& blockMetadata) const {
   if (!deduplicateOnScan_) {
     return false;
   }
@@ -1716,9 +1715,9 @@ auto CompressedRelationReader::getScanConfig(
     }
     return {ql::ranges::distance(columnIndices.begin(), it), false};
   }();
-  FilterDuplicatesAndGraphs graphFilter{
-      scanSpec.graphFilter(), graphColumnIndex, deleteGraphColumn,
-      deduplicateOnScan_};
+  FilterDuplicatesAndGraphs graphFilter{scanSpec.graphFilter(),
+                                        graphColumnIndex, deleteGraphColumn,
+                                        deduplicateOnScan_};
   return {std::move(columnIndices), std::move(graphFilter), locatedTriples};
 }
 
