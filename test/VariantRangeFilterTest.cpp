@@ -7,6 +7,7 @@
 #include <gmock/gmock.h>
 
 #include "./util/GTestHelpers.h"
+#include "gmock/gmock.h"
 #include "util/VariantRangeFilter.h"
 
 namespace {
@@ -33,6 +34,19 @@ TEST(VariantRangeFilterTest, Test) {
   expectFilteredRange<V, char>(vec, {'c', 'f'});
   expectFilteredRange<V, bool>(vec, {true, false, true});
   expectFilteredRange<V, double>(vec, {});
+
+  // Temporary vector doesn't leak.
+  EXPECT_THAT(ad_utility::filterRangeOfVariantsByType<bool>(
+                  std::vector<std::variant<bool, int>>{true, 5}) |
+                  ::ranges::to<std::vector<bool>>,
+              ::testing::ElementsAre(true));
+
+  // Mutable reference can be used.
+  std::vector<std::variant<bool, int>> vec2{true, 5};
+  auto& vec2Ref = vec2;
+  EXPECT_THAT(ad_utility::filterRangeOfVariantsByType<bool>(vec2Ref) |
+                  ::ranges::to<std::vector<bool>>,
+              ::testing::ElementsAre(true));
 }
 
 }  // namespace

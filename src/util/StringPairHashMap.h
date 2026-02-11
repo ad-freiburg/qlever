@@ -12,7 +12,11 @@
 // This module provides a modified version of `ad_utility::HashMap` that uses
 // pairs of strings as keys. Unlike the default hash map it allows looking up
 // values with pairs of string views as keys. This is implemented using custom
-// hash and equality operators.
+// transparent hash and equality operators.
+//
+// NOTE: Since `StringViewPair` does not convert to `StringPair` implicitly,
+// insertion can only use `StringPair` where lookup can use both `StringPair`
+// and `StringViewPair`.
 
 // TODO<ullingerc> This could be extended to support `std::tuple` or
 // `std::array`, not only `std::pair`, and other transparently comparable types.
@@ -25,6 +29,10 @@ namespace detail {
 
 using StringPair = std::pair<std::string, std::string>;
 using StringViewPair = std::pair<std::string_view, std::string_view>;
+
+static_assert(std::is_convertible_v<StringPair, StringViewPair>);
+static_assert(!std::is_convertible_v<StringViewPair, StringPair>);
+static_assert(std::is_constructible_v<StringViewPair, StringPair>);
 
 // _____________________________________________________________________________
 struct StringPairHash {
