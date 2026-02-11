@@ -789,17 +789,20 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
 
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, NoDuplicateRemovalOnScan) {
-  // Test that materialized views are NOT implicitly deduplicated when scanning.
-  // If the first three columns have duplicates (differing only in additional
-  // column), all rows should be returned.
+  // Test that rows from materialized views are not implicitly deduplicated when
+  // scanning. If the first three columns have duplicates (differing only in an
+  // unselected additional column), all rows should be returned.
 
-  // Write a view where each (s,p,o) triple is duplicated with two different
-  // values of the 4th column `?x`.
-  qlv().writeMaterializedView(
-      "dupView", "SELECT ?s ?p ?o ?x { ?s ?p ?o . VALUES ?x { 1 2 } }");
+  // Write a view where each row is duplicated with two different values of
+  // the fourth column `?x`.
+  const std::string dupQuery =
+      "SELECT ?s ?p ?o ?g { ?s ?p ?o . VALUES ?g { 1 2 } }";
+  qlv().writeMaterializedView("dupView", dupQuery);
   qlv().loadMaterializedView("dupView");
 
-  // Query the view selecting all 4 columns: expect 8 rows (4 triples * 2).
+  // Base case: Query the view selecting all 4 columns: we expect exactly the
+  // original result.
+  auto allColsExpected = getQueryResultAsIdTable(dupQuery);
   auto allColsResult = getQueryResultAsIdTable(R"(
     PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
     SELECT * {
@@ -807,15 +810,18 @@ TEST_F(MaterializedViewsTest, NoDuplicateRemovalOnScan) {
         _:config view:column-s ?s ;
                  view:column-p ?p ;
                  view:column-o ?o ;
-                 view:column-x ?x .
+                 view:column-g ?g .
       }
     }
   )");
-  EXPECT_EQ(allColsResult.numRows(), 8);
+  EXPECT_THAT(allColsResult, matchesIdTable(allColsExpected));
 
-  // Query the view selecting only the first 3 columns (not the 4th column).
-  // Without the dedup flag fix, this would return only 4 rows due to implicit
-  // deduplication. With the fix, all 8 rows must be returned.
+  // No-deduplication case: Select only the first 3 columns, but expect each of
+  // them twice.
+  auto numRowsDedup =
+      getQueryResultAsIdTable("SELECT ?s ?p ?o { ?s ?p ?o }").numRows();
+  auto threeColsExpected = getQueryResultAsIdTable(
+      "SELECT ?s ?p ?o { ?s ?p ?o . VALUES ?g { 1 2 } }");
   auto threeColsResult = getQueryResultAsIdTable(R"(
     PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
     SELECT * {
@@ -826,5 +832,6 @@ TEST_F(MaterializedViewsTest, NoDuplicateRemovalOnScan) {
       }
     }
   )");
-  EXPECT_EQ(threeColsResult.numRows(), 8);
+  EXPECT_EQ(threeColsResult.numRows(), 2 * numRowsDedup);
+  EXPECT_THAT(threeColsResult, matchesIdTable(threeColsExpected));
 }
