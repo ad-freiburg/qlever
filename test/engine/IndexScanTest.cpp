@@ -12,6 +12,8 @@
 #include "../util/IndexTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
 #include "engine/IndexScan.h"
+#include "engine/MaterializedViews.h"
+#include "engine/NamedResultCache.h"
 #include "index/IndexImpl.h"
 #include "parser/ParsedQuery.h"
 
@@ -209,15 +211,17 @@ const auto testSetAndMakeScanWithPrefilterExpr =
       auto t = generateLocationTrace(l);
       IndexScan scan{getQec(kg), permutation, triple};
       auto variable = pr1.second;
-      auto optUpdatedQet = scan.setPrefilterGetUpdatedQueryExecutionTree(
-          makeFilterExpression::filterHelper::makePrefilterVec(std::move(pr1)));
+      auto optUpdatedQet =
+          scan.getUpdatedQueryExecutionTreeWithPrefilterApplied(
+              makeFilterExpression::filterHelper::makePrefilterVec(
+                  std::move(pr1)));
       if (pr2.has_value() && optUpdatedQet.has_value()) {
         // Testing with a second `PrefilterExpression`s only makes sense if the
         // first `PrefilterExpression` was successfully applied.
         ASSERT_TRUE(optUpdatedQet.has_value());
         optUpdatedQet =
             optUpdatedQet.value()
-                ->setPrefilterGetUpdatedQueryExecutionTree(
+                ->getUpdatedQueryExecutionTreeWithPrefilterApplied(
                     makeFilterExpression::filterHelper::makePrefilterVec(
                         std::move(pr2.value())))
                 .value_or(optUpdatedQet.value());
@@ -497,14 +501,10 @@ TEST(IndexScan, namedGraphs) {
               Eq(IndexScan::Graphs::Blacklist(defaultGraph)));
 }
 
+// _____________________________________________________________________________
 TEST(IndexScan, getResultSizeOfScan) {
   auto qec = getQec("<x> <p> <s1>, <s2>. <x> <p2> <s1>.");
   auto getId = makeGetId(qec->getIndex());
-  [[maybe_unused]] auto x = getId("<x>");
-  [[maybe_unused]] auto p = getId("<p>");
-  [[maybe_unused]] auto s1 = getId("<s1>");
-  [[maybe_unused]] auto s2 = getId("<s2>");
-  [[maybe_unused]] auto p2 = getId("<p2>");
   using V = Variable;
   using I = TripleComponent::Iri;
 
@@ -512,23 +512,27 @@ TEST(IndexScan, getResultSizeOfScan) {
     SparqlTripleSimple scanTriple{V{"?x"}, V("?y"), V{"?z"}};
     IndexScan scan{qec, Permutation::Enum::PSO, scanTriple};
     EXPECT_EQ(scan.getSizeEstimate(), 3);
+    EXPECT_TRUE(scan.sizeEstimateIsExactForTesting());
   }
   {
     SparqlTripleSimple scanTriple{V{"?x"}, I::fromIriref("<p>"), V{"?y"}};
     IndexScan scan{qec, Permutation::Enum::PSO, scanTriple};
     EXPECT_EQ(scan.getSizeEstimate(), 2);
+    EXPECT_TRUE(scan.sizeEstimateIsExactForTesting());
   }
   {
     SparqlTripleSimple scanTriple{I::fromIriref("<x>"), I::fromIriref("<p>"),
                                   V{"?y"}};
     IndexScan scan{qec, Permutation::Enum::PSO, scanTriple};
     EXPECT_EQ(scan.getSizeEstimate(), 2);
+    EXPECT_TRUE(scan.sizeEstimateIsExactForTesting());
   }
   {
     SparqlTripleSimple scanTriple{V("?x"), I::fromIriref("<p>"),
                                   I::fromIriref("<s1>")};
     IndexScan scan{qec, Permutation::Enum::POS, scanTriple};
     EXPECT_EQ(scan.getSizeEstimate(), 1);
+    EXPECT_TRUE(scan.sizeEstimateIsExactForTesting());
   }
   // 0 variables
   {
@@ -540,6 +544,7 @@ TEST(IndexScan, getResultSizeOfScan) {
     auto res = scan.computeResultOnlyForTesting();
     ASSERT_EQ(res.idTable().numRows(), 1);
     ASSERT_EQ(res.idTable().numColumns(), 0);
+    EXPECT_TRUE(scan.sizeEstimateIsExactForTesting());
   }
   {
     SparqlTripleSimple scanTriple{I::fromIriref("<x2>"), I::fromIriref("<p>"),
@@ -547,6 +552,7 @@ TEST(IndexScan, getResultSizeOfScan) {
     IndexScan scan{qec, Permutation::Enum::POS, scanTriple};
     EXPECT_EQ(scan.getSizeEstimate(), 1);
     EXPECT_EQ(scan.getExactSize(), 0);
+    EXPECT_TRUE(scan.sizeEstimateIsExactForTesting());
   }
   {
     SparqlTripleSimple scanTriple{I::fromIriref("<x>"), I::fromIriref("<p>"),
@@ -557,6 +563,68 @@ TEST(IndexScan, getResultSizeOfScan) {
     auto res = scan.computeResultOnlyForTesting();
     ASSERT_EQ(res.idTable().numRows(), 0);
     ASSERT_EQ(res.idTable().numColumns(), 0);
+    EXPECT_TRUE(scan.sizeEstimateIsExactForTesting());
+  }
+}
+
+// _____________________________________________________________________________
+TEST(IndexScan, getResultSizeOfScanWithDeltaTriples) {
+  auto index = makeTestIndex("getResultSizeOfScanWithDeltaTriples",
+                             "<a> <a> <a> . <b> <b> <b> . <c> <c> <c> .");
+  auto getId = makeGetId(index);
+  auto g = qlever::specialIds().at(QLEVER_INTERNAL_GRAPH_IRI);
+  auto a = getId("<a>");
+  auto b = getId("<b>");
+  using V = Variable;
+
+  QueryResultCache cache;
+  NamedResultCache namedCache;
+  MaterializedViewsManager materializedViewsManager;
+  std::unique_ptr<QueryExecutionContext> qec = nullptr;
+
+  auto makeScan = [&]() {
+    qec = std::make_unique<QueryExecutionContext>(
+        index, &cache, makeAllocator(ad_utility::MemorySize::megabytes(100)),
+        SortPerformanceEstimator{}, &namedCache, &materializedViewsManager);
+
+    SparqlTripleSimple scanTriple{V{"?x"}, V("?y"), V{"?z"}};
+    return IndexScan{qec.get(), Permutation::Enum::PSO, scanTriple};
+  };
+
+  auto cancellationHandle =
+      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+  // Since the rough estimate doesn't know if the delta triples are inserts or
+  // deletions, the estimate remains the same regardless of the delta triples.
+  {
+    index.deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
+      deltaTriples.insertTriples(cancellationHandle,
+                                 {IdTriple<0>{std::array{a, a, a, g}}});
+      deltaTriples.deleteTriples(cancellationHandle,
+                                 {IdTriple<0>{std::array{b, b, b, g}}});
+    });
+    auto scan = makeScan();
+    EXPECT_EQ(scan.getSizeEstimate(), 3);
+    EXPECT_FALSE(scan.sizeEstimateIsExactForTesting());
+  }
+  {
+    index.deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
+      deltaTriples.insertTriples(cancellationHandle,
+                                 {IdTriple<0>{std::array{b, b, b, g}}});
+    });
+    auto scan = makeScan();
+    EXPECT_EQ(scan.getSizeEstimate(), 3);
+    EXPECT_FALSE(scan.sizeEstimateIsExactForTesting());
+  }
+  {
+    index.deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
+      deltaTriples.deleteTriples(cancellationHandle,
+                                 {IdTriple<0>{std::array{a, a, a, g}}});
+      deltaTriples.deleteTriples(cancellationHandle,
+                                 {IdTriple<0>{std::array{b, b, b, g}}});
+    });
+    auto scan = makeScan();
+    EXPECT_EQ(scan.getSizeEstimate(), 3);
+    EXPECT_FALSE(scan.sizeEstimateIsExactForTesting());
   }
 }
 
@@ -673,8 +741,9 @@ TEST(IndexScan, getSizeEstimateAndExactSizeWithAppliedPrefilter) {
                                         IndexScan::PrefilterVariablePair pair,
                                         const size_t estimateSize,
                                         const size_t exactSize) {
-    auto optUpdatedQet = indexScan.setPrefilterGetUpdatedQueryExecutionTree(
-        makePrefilterVec(std::move(pair)));
+    auto optUpdatedQet =
+        indexScan.getUpdatedQueryExecutionTreeWithPrefilterApplied(
+            makePrefilterVec(std::move(pair)));
     ASSERT_TRUE(optUpdatedQet.has_value());
     auto updatedQet = optUpdatedQet.value();
     ASSERT_EQ(updatedQet->getSizeEstimate(), estimateSize);
@@ -727,8 +796,8 @@ TEST(IndexScan, verifyThatPrefilteredIndexScanResultIsNotCacheable) {
   auto qet =
       ad_utility::makeExecutionTree<IndexScan>(qec, Permutation::PSO, triple);
   EXPECT_TRUE(qet->getRootOperation()->canResultBeCached());
-  auto updatedQet =
-      qet->setPrefilterGetUpdatedQueryExecutionTree(std::move(prefilterPairs));
+  auto updatedQet = qet->getUpdatedQueryExecutionTreeWithPrefilterApplied(
+      std::move(prefilterPairs));
   // We have a corresponding column for ?x (at ColumnIndex 1), which is also the
   // first sorted variable column. Thus, we expect that the PrefilterExpression
   // (< 5, ?x) is applied for this `IndexScan`, resulting in prefiltered
@@ -743,8 +812,8 @@ TEST(IndexScan, verifyThatPrefilteredIndexScanResultIsNotCacheable) {
                                     pr(gt(DoubleId(22)), V{"?z"}),
                                     pr(gt(IntId(10)), V{"?b"}));
   EXPECT_TRUE(qet->getRootOperation()->canResultBeCached());
-  updatedQet =
-      qet->setPrefilterGetUpdatedQueryExecutionTree(std::move(prefilterPairs));
+  updatedQet = qet->getUpdatedQueryExecutionTreeWithPrefilterApplied(
+      std::move(prefilterPairs));
   // No `PrefilterExpression` should be applied for this `IndexScan`, we don't
   // expect an updated QueryExecutionTree. The `IndexScan` should remain
   // unchanged, containing no prefiltered `BlockMetadataRanges`. Thus, it should
@@ -1319,7 +1388,7 @@ TEST(IndexScan, clone) {
     ASSERT_TRUE(cloneReference.getRootOperation()->canResultBeCached());
     auto prefilterPairs =
         makePrefilterVec(pr(eq(IntId(10)), Variable{"?price"}));
-    auto optUpdatedQet = qet->setPrefilterGetUpdatedQueryExecutionTree(
+    auto optUpdatedQet = qet->getUpdatedQueryExecutionTreeWithPrefilterApplied(
         std::move(prefilterPairs));
     ASSERT_TRUE(optUpdatedQet.has_value());
     const auto& updatedQet = optUpdatedQet.value();
@@ -1748,7 +1817,8 @@ TEST(IndexScanTest, StripColumnsWithPrefiltering) {
     auto prefilteredThenStripped = [&]() {
       auto prefilteredQet =
           makeBaseScan()
-              ->setPrefilterGetUpdatedQueryExecutionTree(prefilterPairs())
+              ->getUpdatedQueryExecutionTreeWithPrefilterApplied(
+                  prefilterPairs())
               .value_or(makeBaseScan());
       std::set<Variable> varsSet(varsToKeep.begin(), varsToKeep.end());
       return QueryExecutionTree::makeTreeWithStrippedColumns(
@@ -1761,7 +1831,7 @@ TEST(IndexScanTest, StripColumnsWithPrefiltering) {
       auto strippedFirst = QueryExecutionTree::makeTreeWithStrippedColumns(
           makeBaseScan(), varsSet);
       return strippedFirst
-          ->setPrefilterGetUpdatedQueryExecutionTree(prefilterPairs())
+          ->getUpdatedQueryExecutionTreeWithPrefilterApplied(prefilterPairs())
           .value_or(strippedFirst);
     }();
 
@@ -1788,7 +1858,7 @@ TEST(IndexScanTest, StripColumnsWithPrefiltering) {
     // First get the full prefiltered result (without column stripping)
     auto fullPrefilteredQet =
         makeBaseScan()
-            ->setPrefilterGetUpdatedQueryExecutionTree(prefilterPairs())
+            ->getUpdatedQueryExecutionTreeWithPrefilterApplied(prefilterPairs())
             .value_or(makeBaseScan());
 
     qec->clearCacheUnpinnedOnly();
