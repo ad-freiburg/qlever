@@ -331,8 +331,12 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphs::
 
 // _____________________________________________________________________________
 bool CompressedRelationReader::FilterDuplicatesAndGraphs::
-    filterDuplicatesIfNecessary(IdTable& block,
-                                const CompressedBlockMetadata& blockMetadata) {
+    filterDuplicatesIfNecessary(
+        IdTable& block,
+        const CompressedBlockMetadata& blockMetadata) const {
+  if (!deduplicateOnScan_) {
+    return false;
+  }
   if (!blockMetadata.containsDuplicatesWithDifferentGraphs_) {
     AD_EXPENSIVE_CHECK(std::unique(block.begin(), block.end()) == block.end());
     return false;
@@ -1692,7 +1696,7 @@ CompressedRelationReader::getMetadataForSmallRelation(
 // _____________________________________________________________________________
 auto CompressedRelationReader::getScanConfig(
     const ScanSpecification& scanSpec, ColumnIndicesRef additionalColumns,
-    const LocatedTriplesPerBlock& locatedTriples) -> ScanImplConfig {
+    const LocatedTriplesPerBlock& locatedTriples) const -> ScanImplConfig {
   auto columnIndices = prepareColumnIndices(scanSpec, additionalColumns);
   // Determine the index of the graph column (which we need either for
   // filtering or for the output or both) and whether we we need it for
@@ -1712,8 +1716,9 @@ auto CompressedRelationReader::getScanConfig(
     }
     return {ql::ranges::distance(columnIndices.begin(), it), false};
   }();
-  FilterDuplicatesAndGraphs graphFilter{scanSpec.graphFilter(),
-                                        graphColumnIndex, deleteGraphColumn};
+  FilterDuplicatesAndGraphs graphFilter{
+      scanSpec.graphFilter(), graphColumnIndex, deleteGraphColumn,
+      deduplicateOnScan_};
   return {std::move(columnIndices), std::move(graphFilter), locatedTriples};
 }
 

@@ -363,6 +363,7 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
 
   // Read permutation
   permutation_->loadFromDisk(filename, false);
+  permutation_->setDeduplicateOnScan(false);
   AD_CORRECTNESS_CHECK(permutation_->isLoaded());
 }
 

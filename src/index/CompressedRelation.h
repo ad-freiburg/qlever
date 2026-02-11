@@ -546,6 +546,9 @@ class CompressedRelationReader {
     ScanSpecification::GraphFilter graphFilter_;
     ColumnIndex graphColumn_;
     bool deleteGraphColumn_;
+    // If false, duplicate rows are not removed during scanning. This is
+    // used for materialized views where repeated rows are meaningful.
+    bool deduplicateOnScan_ = true;
     // Filter `block` such that it contains only the specified graphs and no
     // duplicates. The `blockMetadata` of `block` is used for possible shortcuts
     // (for example, if we know that there are no duplicates, we do not have to
@@ -574,8 +577,8 @@ class CompressedRelationReader {
     // returns `true` iff filtering the block was necessary.
     bool filterByGraphIfNecessary(
         IdTable& block, const CompressedBlockMetadata& blockMetadata) const;
-    static bool filterDuplicatesIfNecessary(
-        IdTable& block, const CompressedBlockMetadata& blockMetadata);
+    bool filterDuplicatesIfNecessary(
+        IdTable& block, const CompressedBlockMetadata& blockMetadata) const;
   };
 
   // Classes holding various subsets of parameters relevant for a scan of a
@@ -697,9 +700,16 @@ class CompressedRelationReader {
   // The file that stores the actual permutations.
   ad_utility::File file_;
 
+  // If false, duplicate rows are not removed during scanning. This is
+  // used for materialized views where repeated rows are meaningful.
+  bool deduplicateOnScan_ = true;
+
  public:
   explicit CompressedRelationReader(Allocator allocator, ad_utility::File file)
       : allocator_{std::move(allocator)}, file_{std::move(file)} {}
+
+  // Set whether duplicate rows should be removed during scanning.
+  void setDeduplicateOnScan(bool v) { deduplicateOnScan_ = v; }
 
   // Helper function that enables a comparison of a triple with an `Id` in the
   // function `getBlocksForJoin` below.  If the given triple matches `col0Id` of
@@ -932,9 +942,9 @@ class CompressedRelationReader {
   static std::vector<ColumnIndex> prepareColumnIndices(
       const ScanSpecification& scanSpec, ColumnIndicesRef additionalColumns);
 
-  static ScanImplConfig getScanConfig(
+  ScanImplConfig getScanConfig(
       const ScanSpecification& scanSpec, ColumnIndicesRef additionalColumns,
-      const LocatedTriplesPerBlock& locatedTriples);
+      const LocatedTriplesPerBlock& locatedTriples) const;
 
   // The common implementation for `getDistinctCol0IdsAndCounts` and
   // `getCol1IdsAndCounts`.

@@ -764,7 +764,7 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
       ++numBlocks;
     }
 
-    EXPECT_EQ(numRows, 2 * numFakeSubjects_);
+    EXPECT_EQ(numRows, 20 * numFakeSubjects_);
     AD_LOG_INFO << "Lazy scan had " << numRows << " rows from " << numBlocks
                 << " block(s)" << std::endl;
 
@@ -783,6 +783,48 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
     auto col = qet->getVariableColumn(Variable{"?cnt"});
     auto count = res->idTable().at(0, col);
     ASSERT_TRUE(count.getDatatype() == Datatype::Int);
-    EXPECT_EQ(count.getInt(), 2 * numFakeSubjects_);
+    EXPECT_EQ(count.getInt(), 20 * numFakeSubjects_);
   }
+}
+
+// _____________________________________________________________________________
+TEST_F(MaterializedViewsTest, NoDuplicateRemovalOnScan) {
+  // Test that materialized views are NOT implicitly deduplicated when scanning.
+  // If the first three columns have duplicates (differing only in additional
+  // column), all rows should be returned.
+
+  // Write a view where each (s,p,o) triple is duplicated with two different
+  // values of the 4th column `?x`.
+  qlv().writeMaterializedView(
+      "dupView", "SELECT ?s ?p ?o ?x { ?s ?p ?o . VALUES ?x { 1 2 } }");
+  qlv().loadMaterializedView("dupView");
+
+  // Query the view selecting all 4 columns: expect 8 rows (4 triples * 2).
+  auto allColsResult = getQueryResultAsIdTable(R"(
+    PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+    SELECT * {
+      SERVICE view:dupView {
+        _:config view:column-s ?s ;
+                 view:column-p ?p ;
+                 view:column-o ?o ;
+                 view:column-x ?x .
+      }
+    }
+  )");
+  EXPECT_EQ(allColsResult.numRows(), 8);
+
+  // Query the view selecting only the first 3 columns (not the 4th column).
+  // Without the dedup flag fix, this would return only 4 rows due to implicit
+  // deduplication. With the fix, all 8 rows must be returned.
+  auto threeColsResult = getQueryResultAsIdTable(R"(
+    PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+    SELECT * {
+      SERVICE view:dupView {
+        _:config view:column-s ?s ;
+                 view:column-p ?p ;
+                 view:column-o ?o .
+      }
+    }
+  )");
+  EXPECT_EQ(threeColsResult.numRows(), 8);
 }
