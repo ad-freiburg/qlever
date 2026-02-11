@@ -228,7 +228,7 @@ class IndexScan final : public Operation {
   // bound.
   //
   // NOTE: For full index scans (think `?s ?p ?o`), we simply take the total
-  // number of triples from the `<basename>.meta-data.json` as estimate,
+  // number of triples from the permutation's metadata as an estimate,
   // because summing up all the block sizes and numbers of located triples per
   // block is expensive for large datasets (with millions of blocks). The
   // estimate is exact if there are no delta triples. Otherwise, it's an
