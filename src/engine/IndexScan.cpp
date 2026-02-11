@@ -339,8 +339,7 @@ std::pair<bool, size_t> IndexScan::computeSizeEstimate() const {
   // estimate. Note that this is not always the same as the index' number of
   // triples, because the permutation could be a materialized view. See the
   // comment before the declaration of this function for details.
-  if (numVariables() == 3 && additionalVariables().empty() &&
-      !scanSpecAndBlocksIsPrefiltered_) {
+  if (numVariables() == 3 && !scanSpecAndBlocksIsPrefiltered_) {
     size_t numTriples = permutation().numTriples();
     size_t numChanges =
         permutation()
