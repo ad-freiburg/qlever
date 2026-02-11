@@ -55,9 +55,6 @@ NumericOrDateValue NumericOrDateValueGetter::operator()(
     case Datatype::Int:
       return id.getInt();
     case Datatype::Bool:
-      // TODO<joka921> Check in the specification what the correct behavior is
-      // here. They probably should be UNDEF as soon as we have conversion
-      // functions.
       return static_cast<int64_t>(id.getBool());
     case Datatype::Undefined:
     case Datatype::EncodedVal:

@@ -47,37 +47,31 @@ struct SubtractImpl {
     return std::visit(SubtractImpl{}, lhs, rhs);
   }
 
-  CPP_template(typename L, typename R)(
-      requires(!std::is_same_v<L, NumericOrDateValue>
-                   CPP_and !std::is_same_v<R, NumericOrDateValue>)) ValueId
-  operator()(L lhs, R rhs) const {
-    using T1 = std::decay_t<decltype(lhs)>;
-    using T2 = std::decay_t<decltype(rhs)>;
-
-    if constexpr (std::is_same_v<T1, double>) {
-      if constexpr (std::is_same_v<T2, double>) {
-        return Id::makeFromDouble(lhs - rhs);
-      } else if constexpr (std::is_same_v<T2, int64_t>) {
-        return Id::makeFromDouble(lhs - static_cast<double>(rhs));
-      }
-    } else if constexpr (std::is_same_v<T1, int64_t>) {
-      if constexpr (std::is_same_v<T2, double>) {
-        return Id::makeFromDouble(static_cast<double>(lhs) - rhs);
-      } else if constexpr (std::is_same_v<T2, int64_t>) {
-        return Id::makeFromInt(lhs - rhs);
-      }
-    } else if constexpr (std::is_same_v<T1, DateYearOrDuration> &&
-                         std::is_same_v<T2, DateYearOrDuration>) {
+  ValueId operator()(int64_t lhs, int64_t rhs) const {
+    return Id::makeFromInt(lhs - rhs);
+  }
+  ValueId operator()(int64_t lhs, double rhs) const {
+    return Id::makeFromDouble(static_cast<double>(lhs) - rhs);
+  }
+  ValueId operator()(double lhs, double rhs) const {
+    return Id::makeFromDouble(lhs - rhs);
+  }
+  ValueId operator()(double lhs, int64_t rhs) const {
+    return Id::makeFromDouble(lhs - static_cast<double>(rhs));
+  }
 #ifndef REDUCED_FEATURE_SET_FOR_CPP17
-      // Using - operator implementation in DateYearOrDuration.
-      auto difference = lhs - rhs;
-      if (difference.has_value()) {
-        return Id::makeFromDate(difference.value());
-      } else {
-        return Id::makeUndefined();
-      }
-#endif
+  ValueId operator()(DateYearOrDuration lhs, DateYearOrDuration rhs) const {
+    // Using - operator implementation in DateYearOrDuration.
+    auto difference = lhs - rhs;
+    if (difference.has_value()) {
+      return Id::makeFromDate(difference.value());
+    } else {
+      return Id::makeUndefined();
     }
+  }
+#endif
+  template <typename L, typename R>
+  ValueId operator()(L lhs, R rhs) const {
     // For all other operations returning Undefined
     // It is not allowed to use subtractionn between Date and NumericValue
     return Id::makeUndefined();

@@ -305,11 +305,11 @@ TEST(NumericOrDateValueGetterTest, OperatorWithId) {
           DayTimeDuration(DayTimeDuration::Type::Positive, 102))),
       Eq(sparqlExpression::detail::NumericOrDateValue(DateYearOrDuration(
           DayTimeDuration(DayTimeDuration::Type::Positive, 102)))));
-  t.checkFromValueId(ValueId::makeUndefined(),
-                     Eq(sparqlExpression::detail::NumericOrDateValue(
-                         sparqlExpression::detail::NotNumeric{})));
-  t.checkFromValueId(ValueId::makeFromGeoPoint({3, 4}),
-                     Eq(sparqlExpression::detail::NumericOrDateValue(
-                         sparqlExpression::detail::NotNumeric{})));
+  t.checkFromValueId(
+      ValueId::makeUndefined(),
+      Optional(VariantWith<sparqlExpression::detail::NotNumeric>(_)));
+  t.checkFromValueId(
+      ValueId::makeFromGeoPoint({3, 4}),
+      Optional(VariantWith<sparqlExpression::detail::NotNumeric>(_)));
 }
 };  // namespace
