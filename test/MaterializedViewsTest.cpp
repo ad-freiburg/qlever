@@ -802,7 +802,8 @@ TEST_F(MaterializedViewsTest, NoDuplicateRemovalOnScan) {
 
   // Base case: Query the view selecting all 4 columns: we expect exactly the
   // original result.
-  auto allColsExpected = getQueryResultAsIdTable(dupQuery);
+  auto allColsExpected =
+      getQueryResultAsIdTable(dupQuery + " INTERNAL SORT BY ?s ?p ?o ?g");
   auto allColsResult = getQueryResultAsIdTable(R"(
     PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
     SELECT * {
@@ -821,7 +822,8 @@ TEST_F(MaterializedViewsTest, NoDuplicateRemovalOnScan) {
   auto numRowsDedup =
       getQueryResultAsIdTable("SELECT ?s ?p ?o { ?s ?p ?o }").numRows();
   auto threeColsExpected = getQueryResultAsIdTable(
-      "SELECT ?s ?p ?o { ?s ?p ?o . VALUES ?g { 1 2 } }");
+      "SELECT ?s ?p ?o { ?s ?p ?o . VALUES ?g { 1 2 } } "
+      "INTERNAL SORT BY ?s ?p ?o");
   auto threeColsResult = getQueryResultAsIdTable(R"(
     PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
     SELECT * {
