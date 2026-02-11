@@ -810,9 +810,11 @@ auto QueryPlanner::seedWithScansAndText(
       seeds.emplace_back(newIdPlan);
     }
     idShift++;
+    checkCancellation();
   }
 
   for (size_t i = 0; i < tg._nodeMap.size(); ++i) {
+    checkCancellation();
     const TripleGraph::Node& node = *tg._nodeMap.find(i)->second;
 
     auto pushPlan = [&seeds, i](SubtreePlan plan) {
@@ -921,6 +923,7 @@ auto QueryPlanner::seedWithScansAndText(
         }
         additionalColumns.emplace_back(ADDITIONAL_COLUMN_GRAPH_ID,
                                        std::move(internalVariable));
+        checkCancellation();
       }
 
       auto actualPermutation = qlever::getPermutationForTriple(
@@ -945,6 +948,7 @@ auto QueryPlanner::seedWithScansAndText(
     textLimits.erase(var);
   }
 
+  checkCancellation();
   return result;
 }
 
@@ -1221,8 +1225,8 @@ std::vector<SubtreePlan> QueryPlanner::merge(
       for (auto& plan : createJoinCandidates(ai, bj, tg)) {
         candidates[getPruningKey(plan, plan._qet->resultSortedOn())]
             .emplace_back(std::move(plan));
+        checkCancellation();
       }
-      checkCancellation();
     }
   }
 
@@ -1392,6 +1396,7 @@ void QueryPlanner::applyFiltersIfPossible(
   for (auto& plan : row) {
     for (const auto& [i, filterAndSubst] :
          ::ranges::views::enumerate(filters)) {
+      checkCancellation();
       if (((plan._idsOfIncludedFilters >> i) & 1) != 0) {
         continue;
       }
@@ -1556,11 +1561,13 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
       dpTab[k - 1].reserve(dpTab[k - 1].size() + newPlans.size());
       dpTab[k - 1].insert(dpTab[k - 1].end(), newPlans.begin(), newPlans.end());
     }
+    checkCancellation();
   }
   auto& result = dpTab.back();
   applyFiltersIfPossible<FilterMode::ReplaceUnfilteredNoSubstitutes>(result,
                                                                      filters);
   applyTextLimitsIfPossible(result, textLimits, true);
+  checkCancellation();
   return std::move(result);
 }
 
@@ -2158,6 +2165,7 @@ void QueryPlanner::setEnablePatternTrick(bool enablePatternTrick) {
 size_t QueryPlanner::findCheapestExecutionTree(
     const std::vector<SubtreePlan>& lastRow) const {
   AD_CONTRACT_CHECK(!lastRow.empty());
+  checkCancellation();
   auto compare = [this](const auto& a, const auto& b) {
     auto aCost = a.getCostEstimate(), bCost = b.getCostEstimate();
     if (aCost == bCost && isInTestMode()) {
@@ -2209,6 +2217,7 @@ std::vector<SubtreePlan> QueryPlanner::createJoinCandidatesAllowEmpty(
 std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
     const SubtreePlan& ain, const SubtreePlan& bin,
     const JoinColumns& jcs) const {
+  checkCancellation();
   bool swapForTesting = isInTestMode() && bin.type != SubtreePlan::OPTIONAL &&
                         ain._qet->getCacheKey() < bin._qet->getCacheKey();
   const auto& a = !swapForTesting ? ain : bin;
@@ -3015,6 +3024,7 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
 template <typename Arg>
 void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
   using T = std::decay_t<Arg>;
+  planner_.checkCancellation();
   if constexpr (std::is_same_v<T, p::Optional> ||
                 std::is_same_v<T, p::GroupGraphPattern>) {
     // If this is a `GRAPH <graph> {...}` clause, then we have to overwrite the
@@ -3138,6 +3148,7 @@ void QueryPlanner::GraphPatternPlanner::visitBasicGraphPattern(
       ql::ranges::move(children._filters,
                        std::back_inserter(rootPattern_->_filters));
     }
+    planner_.checkCancellation();
   }
 }
 
