@@ -335,11 +335,13 @@ std::pair<bool, size_t> IndexScan::computeSizeEstimate() const {
   AD_CORRECTNESS_CHECK(_executionContext);
 
   // For a full index scan (think `?s ?p ?o`), simply use the total number
-  // of triples (read from `<basename>.meta-data.json`) as estimate. See the
+  // of triples in the selected permutation (from the permutation's metadata) as
+  // estimate. Note that this is not always the same as the index' number of
+  // triples, because the permutation could be a materialized view. See the
   // comment before the declaration of this function for details.
   if (numVariables() == 3 && additionalVariables().empty() &&
       !scanSpecAndBlocksIsPrefiltered_) {
-    size_t numTriples = _executionContext->getIndex().numTriples().normal;
+    size_t numTriples = permutation().numTriples();
     size_t numChanges =
         permutation()
             .getLocatedTriplesForPermutation(locatedTriplesState())
