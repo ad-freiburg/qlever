@@ -168,4 +168,12 @@ class MaterializedViewsQueryRewriteTest
 
 }  // namespace materializedViewsTestHelpers
 
+// _____________________________________________________________________________
+inline void PrintTo(const materializedViewsTestHelpers::RewriteTestParams& p,
+                    std::ostream* os) {
+  auto& s = *os;
+  s << "write query = '" << p.writeQuery_
+    << "', budget = " << p.queryPlanningBudget_;
+}
+
 #endif  // QLEVER_TEST_MATERIALIZEDVIEWSTESTHELPERS_H_
