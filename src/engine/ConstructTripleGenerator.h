@@ -50,7 +50,7 @@ class ConstructTripleGenerator {
   ad_utility::InputRangeTypeErased<std::string> generateAllFormattedTriples(
       ad_utility::InputRangeTypeErased<TableWithRange> rowIndices);
 
-  // Helper that generates StringTriples for a full CONSTRUCT query.
+  // Helper that generates `StringTriple`s for a full CONSTRUCT query.
   static ad_utility::InputRangeTypeErased<StringTriple> generateStringTriples(
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructTriples,

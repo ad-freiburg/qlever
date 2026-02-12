@@ -73,8 +73,8 @@ std::optional<InstantiatedTriple> ConstructRowProcessor::processCurrentBatch() {
 std::optional<InstantiatedTriple> ConstructRowProcessor::processCurrentRow() {
   const size_t blankNodeRowId = currentBlankNodeRowId();
 
-  while (tripleIdx_ < preprocessedTemplate_.triples_.size()) {
-    const auto& triple = preprocessedTemplate_.triples_[tripleIdx_];
+  while (tripleIdx_ < preprocessedTemplate_.preprocessedTriples_.size()) {
+    const auto& triple = preprocessedTemplate_.preprocessedTriples_[tripleIdx_];
 
     auto subject = ConstructTripleInstantiator::instantiateTerm(
         triple[0], *batchEvaluationResult_, rowInBatchIdx_, blankNodeRowId);

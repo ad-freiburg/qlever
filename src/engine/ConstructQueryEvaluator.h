@@ -7,6 +7,7 @@
 #ifndef QLEVER_CONSTRUCTQUERYEVALUATOR_H
 #define QLEVER_CONSTRUCTQUERYEVALUATOR_H
 
+#include "engine/ConstructTypes.h"
 #include "engine/QueryExecutionTree.h"
 #include "parser/data/BlankNode.h"
 #include "parser/data/ConstructQueryExportContext.h"
@@ -15,6 +16,8 @@
 #include "parser/data/Literal.h"
 
 class ConstructQueryEvaluator {
+  using StringTriple = QueryExecutionTree::StringTriple;
+
  public:
   // Helper method for `evaluateTerm`. Evaluates an `Iri` (which is part of a
   // CONSTRUCT triple pattern).
@@ -62,6 +65,32 @@ class ConstructQueryEvaluator {
   static std::optional<std::string> evaluateTerm(
       const GraphTerm& term, const ConstructQueryExportContext& context,
       PositionInTriple posInTriple);
+
+  // --- Methods operating on preprocessed types ---
+
+  // Evaluates a `PrecomputedConstant` by returning its precomputed value.
+  static std::string evaluatePreprocessed(const PrecomputedConstant& constant);
+
+  // Evaluates a `PrecomputedVariable` using the precomputed column index.
+  static std::optional<std::string> evaluatePreprocessed(
+      const PrecomputedVariable& variable,
+      const ConstructQueryExportContext& context);
+
+  // Evaluates a `PrecomputedBlankNode` using the precomputed prefix/suffix.
+  static std::optional<std::string> evaluatePreprocessed(
+      const PrecomputedBlankNode& blankNode,
+      const ConstructQueryExportContext& context);
+
+  // Evaluates a `PreprocessedTerm` by dispatching to the appropriate
+  // `evaluatePreprocessed` overload based on the variant type.
+  static std::optional<std::string> evaluatePreprocessedTerm(
+      const PreprocessedTerm& term, const ConstructQueryExportContext& context);
+
+  // Evaluates a `PreprocessedTriple` using the provided context. If any
+  // component evaluates to `std::nullopt`, an empty `StringTriple` is returned.
+  static StringTriple evaluatePreprocessedTriple(
+      const PreprocessedTriple& triple,
+      const ConstructQueryExportContext& context);
 };
 
 #endif  // QLEVER_CONSTRUCTQUERYEVALUATOR_H
