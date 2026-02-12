@@ -12,6 +12,14 @@
 #include "util/HashMap.h"
 #include "util/TypeTraits.h"
 
+using PreprocessedConstructTemplate =
+    qlever::constructExport::PreprocessedConstructTemplate;
+using PreprocessedTerm = qlever::constructExport::PreprocessedTerm;
+using PrecomputedConstant = qlever::constructExport::PrecomputedConstant;
+using PrecomputedVariable = qlever::constructExport::PrecomputedVariable;
+using PrecomputedBlankNode = qlever::constructExport::PrecomputedBlankNode;
+using qlever::constructExport::NUM_TRIPLE_POSITIONS;
+
 // _____________________________________________________________________________
 PreprocessedConstructTemplate ConstructTemplatePreprocessor::preprocess(
     const Triples& templateTriples,
@@ -40,8 +48,8 @@ PreprocessedConstructTemplate ConstructTemplatePreprocessor::preprocess(
               return PrecomputedConstant{value.value_or("")};
             } else if constexpr (std::is_same_v<T, Variable>) {
               std::optional<size_t> columnIndex;
-              if (auto opt = ad_utility::getOptionalFromHashMap(variableColumns,
-                                                                term)) {
+              if (auto opt = ad_utility::findOptionalFromHashMap(
+                      variableColumns, term)) {
                 columnIndex = opt->columnIndex_;
                 uniqueColumnsSet.insert(*columnIndex);
               }

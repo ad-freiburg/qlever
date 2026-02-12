@@ -24,6 +24,9 @@ class ConstructTripleGenerator {
  public:
   using CancellationHandle = ad_utility::SharedCancellationHandle;
   using StringTriple = QueryExecutionTree::StringTriple;
+  using PreprocessedConstructTemplate =
+      qlever::constructExport::PreprocessedConstructTemplate;
+  using PreprocessedTriple = qlever::constructExport::PreprocessedTriple;
 
   // _____________________________________________________________________________
   ConstructTripleGenerator(

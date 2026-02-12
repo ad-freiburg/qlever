@@ -17,7 +17,11 @@
 
 class ConstructQueryEvaluator {
   using StringTriple = QueryExecutionTree::StringTriple;
-  using PrecomputedConstant = ad_utility::constructExport::PrecomputedConstant;
+  using PrecomputedConstant = qlever::constructExport::PrecomputedConstant;
+  using PreprocessedTriple = qlever::constructExport::PreprocessedTriple;
+  using PrecomputedVariable = qlever::constructExport::PrecomputedVariable;
+  using PrecomputedBlankNode = qlever::constructExport::PrecomputedBlankNode;
+  using PreprocessedTerm = qlever::constructExport::PreprocessedTerm;
 
  public:
   // --- Methods operating on raw SPARQL types (used by existing code) ---

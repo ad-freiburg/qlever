@@ -21,6 +21,8 @@
 class ConstructTemplatePreprocessor {
  public:
   using Triples = ad_utility::sparql_types::Triples;
+  using PreprocessedConstructTemplate =
+      qlever::constructExport::PreprocessedConstructTemplate;
 
   // Preprocess template triples. Returns the preprocessed triples together
   // with the unique variable column indices needed at query time.

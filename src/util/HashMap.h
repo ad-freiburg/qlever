@@ -33,7 +33,7 @@ using HashMapWithMemoryLimit =
 // Look up `key` in `map`. Returns a `boost::optional` reference to the mapped
 // value if found, or `boost::none` otherwise.
 template <typename Map, typename Key>
-auto getOptionalFromHashMap(const Map& map, const Key& key)
+auto findOptionalFromHashMap(const Map& map, const Key& key)
     -> boost::optional<const typename Map::mapped_type&> {
   auto it = map.find(key);
   if (it != map.end()) {

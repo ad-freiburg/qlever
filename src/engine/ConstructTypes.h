@@ -21,10 +21,10 @@ struct PrecomputedConstant {
   std::string value_;
 };
 
-// A variable: we precompute which `IdTable` column to look up at construct
-// query triple instantitation time. `columnIndex_` is `std::nullopt` if the
-// variable does not appear in the result table (i.e., the variable is used in
-// the CONSTRUCT template but not bound by the WHERE clause).
+// We precompute which `IdTable` column to look up at construct query triple
+// instantitation time. `columnIndex_` is `std::nullopt` if the
+// variable does not appear in the result table (`IdTable`) (i.e., the variable
+// is used in the CONSTRUCT template but not bound by the WHERE clause).
 struct PrecomputedVariable {
   std::optional<size_t> columnIndex_;
 };
