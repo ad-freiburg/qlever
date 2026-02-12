@@ -7,6 +7,7 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include "index/IndexRebuilder.h"
 
 #include <array>
@@ -403,3 +404,5 @@ void materializeToIndex(
 }
 
 }  // namespace qlever
+
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
