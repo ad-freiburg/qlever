@@ -35,7 +35,7 @@ class ConstructTripleGenerator {
       const VariableToColumnMap& variableColumns, const Index& index,
       CancellationHandle cancellationHandle)
       : preprocessedTemplateTriples(
-            std::move(preprocessedTemplateTriples.triples_)),
+            std::move(preprocessedTemplateTriples.preprocessedTriples_)),
         result_(std::move(result)),
         variableColumns_(variableColumns),
         index_(index),

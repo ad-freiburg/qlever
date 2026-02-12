@@ -467,7 +467,7 @@ CPP_template(typename Parser)(requires ql::concepts::derived_from<
       this->raise(absl::StrCat(
           "Parsing failed before end of input, remaining bytes: ", d.size()));
     }
-    return std::move(this->triples_);
+    return std::move(this->preprocessedTriples_);
   }
 
   // Parse only a single object.
@@ -477,8 +477,8 @@ CPP_template(typename Parser)(requires ql::concepts::derived_from<
     RdfStringParser parser{&encodedIriManager};
     parser.setInputStream(objectString);
     parser.object();
-    AD_CONTRACT_CHECK(parser.triples_.size() == 1);
-    return std::move(parser.triples_[0].object_);
+    AD_CONTRACT_CHECK(parser.preprocessedTriples_.size() == 1);
+    return std::move(parser.preprocessedTriples_[0].object_);
   }
 
   std::string_view getUnparsedRemainder() const { return this->tok_.view(); }

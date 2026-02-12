@@ -25,7 +25,7 @@ PreprocessedConstructTemplate ConstructTemplatePreprocessor::preprocess(
     const Triples& templateTriples,
     const VariableToColumnMap& variableColumns) {
   PreprocessedConstructTemplate result;
-  result.triples_.resize(templateTriples.size());
+  result.preprocessedTriples_.resize(templateTriples.size());
 
   ad_utility::HashSet<size_t> uniqueColumnsSet;
 
@@ -35,7 +35,7 @@ PreprocessedConstructTemplate ConstructTemplatePreprocessor::preprocess(
     for (size_t pos = 0; pos < NUM_TRIPLE_POSITIONS; ++pos) {
       auto role = static_cast<PositionInTriple>(pos);
 
-      result.triples_[tripleIdx][pos] = std::visit(
+      result.preprocessedTriples_[tripleIdx][pos] = std::visit(
           [&role, &variableColumns,
            &uniqueColumnsSet](const auto& term) -> PreprocessedTerm {
             using T = std::decay_t<decltype(term)>;

@@ -54,7 +54,7 @@ using PreprocessedTriple = std::array<PreprocessedTerm, NUM_TRIPLE_POSITIONS>;
 // preprocessed triples and the unique variable column indices that need to be
 // evaluated at query time.
 struct PreprocessedConstructTemplate {
-  std::vector<PreprocessedTriple> triples_;
+  std::vector<PreprocessedTriple> preprocessedTriples_;
   std::vector<size_t> uniqueVariableColumns_;
 };
 }  // namespace qlever::constructExport

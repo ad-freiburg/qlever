@@ -379,7 +379,7 @@ TEST(RdfParserTest, blankNodePropertyList) {
     p.setInputStream(blankNodeL);
     p.setBlankNodePrefixOnlyForTesting(5);
     ASSERT_TRUE(p.object());
-    ASSERT_EQ(p.triples_, exp);
+    ASSERT_EQ(p.preprocessedTriples_, exp);
     ASSERT_EQ(p.getPosition(), blankNodeL.size());
 
     blankNodeL = "[<2> <ob2>; \"invalidPred\" <ob3>]";
@@ -398,7 +398,7 @@ TEST(RdfParserTest, blankNodePropertyList) {
     p.setInputStream(blankNodeL);
     p.setBlankNodePrefixOnlyForTesting(5);
     ASSERT_TRUE(p.triples());
-    ASSERT_EQ(p.triples_, exp);
+    ASSERT_EQ(p.preprocessedTriples_, exp);
     ASSERT_EQ(p.getPosition(), blankNodeL.size());
 
     blankNodeL = "[<2> <ob2>; \"invalidPred\" <ob3>]";
@@ -453,14 +453,14 @@ TEST(RdfParserTest, object) {
     ASSERT_TRUE(p.object());
     ASSERT_EQ(p.lastParseResult_, iri("<bla/input>"));
     auto exp = TurtleTriple{sub, pred, iri("<bla/input>")};
-    ASSERT_EQ(p.triples_.back(), exp);
+    ASSERT_EQ(p.preprocessedTriples_.back(), exp);
 
     string literal = "\"literal\"";
     p.setInputStream(literal);
     ASSERT_TRUE(p.object());
     ASSERT_EQ(p.lastParseResult_, lit(literal));
     exp = TurtleTriple{sub, pred, lit(literal)};
-    ASSERT_EQ(p.triples_.back(), exp);
+    ASSERT_EQ(p.preprocessedTriples_.back(), exp);
 
     // Blank node labels include the parser prefix (99) for cross-file
     // uniqueness.
@@ -470,7 +470,7 @@ TEST(RdfParserTest, object) {
     ASSERT_EQ(p.lastParseResult_, "_:u_99_someblank");
 
     exp = TurtleTriple{sub, pred, "_:u_99_someblank"};
-    ASSERT_EQ(p.triples_.back(), exp);
+    ASSERT_EQ(p.preprocessedTriples_.back(), exp);
   };
   runCommonTests(re2Parser());
   runCommonTests(ctreParser());
@@ -487,7 +487,7 @@ TEST(RdfParserTest, objectList) {
     exp.push_back({iri("<s>"), iri("<p>"), iri("<ob3>")});
     parser.setInputStream(objectL);
     ASSERT_TRUE(parser.objectList());
-    ASSERT_EQ(parser.triples_, exp);
+    ASSERT_EQ(parser.preprocessedTriples_, exp);
     ASSERT_EQ(parser.getPosition(), objectL.size());
 
     parser.setInputStream("@noObject");
@@ -510,7 +510,7 @@ TEST(RdfParserTest, predicateObjectList) {
     exp.push_back({iri("<s>"), iri("<p2>"), iri("<ob3>")});
     parser.setInputStream(predL);
     ASSERT_TRUE(parser.predicateObjectList());
-    ASSERT_EQ(parser.triples_, exp);
+    ASSERT_EQ(parser.preprocessedTriples_, exp);
     ASSERT_EQ(parser.getPosition(), predL.size());
   };
   runCommonTests(re2Parser());
