@@ -35,16 +35,52 @@
 #include "util/Log.h"
 
 namespace qlever::indexRebuilder {
+
+namespace {
+// Merge the local vocab entries with the original vocab and write a new
+// vocabulary. Returns a mapping from the old local vocab `Id`s bit
+// representation (for cheaper hash functions) to new `Id`s.
+ad_utility::HashMap<Id::T, Id> mergeVocabs(
+    const std::string& vocabularyName, const Index::Vocab& vocab,
+    const std::vector<std::tuple<VocabIndex, std::string_view, Id>>&
+        insertInfo) {
+  auto vocabWriter = vocab.makeWordWriterPtr(vocabularyName);
+  ad_utility::HashMap<Id::T, Id> localVocabMapping;
+  ad_utility::OverloadCallOperator writer{
+      [&vocab, &vocabWriter](VocabIndex vocabIndex) {
+        auto word = vocab[vocabIndex];
+        (*vocabWriter)(word, vocab.shouldBeExternalized(word));
+      },
+      [&vocab, &vocabWriter, &localVocabMapping](
+          const std::tuple<VocabIndex, std::string_view, Id>& tuple) {
+        const auto& [_, word, originalId] = tuple;
+        auto newIndex = (*vocabWriter)(word, vocab.shouldBeExternalized(word));
+        localVocabMapping.emplace(
+            originalId.getBits(),
+            Id::makeFromVocabIndex(VocabIndex::make(newIndex)));
+      }};
+  ql::ranges::merge(
+      ad_utility::integerRange(vocab.size()) |
+          ql::views::transform(&VocabIndex::make),
+      insertInfo, ad_utility::IteratorForAssigmentOperator{writer}, {},
+      // The tags ensure that the local vocab entries are sorted before all the
+      // original vocab entries, even if they share the same vocab index as
+      // insertion position.
+      [tag = 1](const VocabIndex& index) { return std::tie(index, tag); },
+      [tag = 0](const std::tuple<VocabIndex, std::string_view, Id>& tuple) {
+        return std::tie(std::get<VocabIndex>(tuple), tag);
+      });
+  return localVocabMapping;
+}
+}  // namespace
+
 // _____________________________________________________________________________
 std::tuple<std::vector<VocabIndex>, ad_utility::HashMap<Id::T, Id>>
 materializeLocalVocab(const std::vector<LocalVocabIndex>& entries,
                       const Index::Vocab& vocab,
                       const std::string& newIndexName) {
-  size_t newWordCount = 0;
   std::vector<std::tuple<VocabIndex, std::string_view, Id>> insertInfo;
   insertInfo.reserve(entries.size());
-
-  ad_utility::HashMap<Id::T, Id> localVocabMapping;
 
   for (auto* entry : entries) {
     const auto& [lower, upper] = entry->positionInVocab();
@@ -60,30 +96,8 @@ materializeLocalVocab(const std::vector<LocalVocabIndex>& entries,
            std::tie(std::get<VocabIndex>(tupleB).get(), std::get<Id>(tupleB));
   });
 
-  auto vocabWriter = vocab.makeWordWriterPtr(newIndexName + VOCAB_SUFFIX);
-  for (size_t vocabIndex = 0; vocabIndex < vocab.size(); ++vocabIndex) {
-    auto actualIndex = VocabIndex::make(vocabIndex);
-    while (insertInfo.size() > newWordCount &&
-           std::get<VocabIndex>(insertInfo.at(newWordCount)) == actualIndex) {
-      AD_CORRECTNESS_CHECK(std::get<Id>(insertInfo.at(newWordCount)) <
-                           Id::makeFromVocabIndex(actualIndex));
-      auto word = std::get<std::string_view>(insertInfo.at(newWordCount));
-      auto newIndex = (*vocabWriter)(word, vocab.shouldBeExternalized(word));
-      localVocabMapping.emplace(
-          std::get<Id>(insertInfo.at(newWordCount)).getBits(),
-          Id::makeFromVocabIndex(VocabIndex::make(newIndex)));
-      newWordCount++;
-    }
-    auto word = vocab[actualIndex];
-    auto newIndex = (*vocabWriter)(word, vocab.shouldBeExternalized(word));
-    AD_CORRECTNESS_CHECK(newIndex == vocabIndex + newWordCount);
-  }
-
-  for (const auto& [_, word, id] : insertInfo | ql::views::drop(newWordCount)) {
-    auto newIndex = (*vocabWriter)(word, vocab.shouldBeExternalized(word));
-    localVocabMapping.emplace(
-        id.getBits(), Id::makeFromVocabIndex(VocabIndex::make(newIndex)));
-  }
+  ad_utility::HashMap<Id::T, Id> localVocabMapping =
+      mergeVocabs(newIndexName + VOCAB_SUFFIX, vocab, insertInfo);
   std::vector<VocabIndex> insertionPositions;
   insertionPositions.reserve(insertInfo.size());
   for (const auto& [vocabIndex, _, __] : insertInfo) {
