@@ -74,7 +74,8 @@ class Permutation {
 
   // everything that has to be done when reading an index from disk
   void loadFromDisk(const std::string& onDiskBase,
-                    bool loadInternalPermutation = false);
+                    bool loadInternalPermutation = false,
+                    bool useGraphPostProcessing = true);
 
   // Set the original metadata for the delta triples. This also sets the
   // metadata for internal permutation if present.
