@@ -354,7 +354,7 @@ void materializeToIndex(
   REBUILD_LOG_INFO << "Writing new permutations ..." << std::endl;
 
   auto patternThreads = static_cast<size_t>(index.usePatterns());
-  size_t numberOfPermutations = index.hasAllPermutations() ? 8 : 2;
+  size_t numberOfPermutations = index.hasAllPermutations() ? 8 : 4;
   namespace net = boost::asio;
   net::thread_pool threadPool{patternThreads + numberOfPermutations};
 
