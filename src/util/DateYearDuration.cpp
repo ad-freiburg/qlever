@@ -427,33 +427,16 @@ std::optional<DateYearOrDuration> DateYearOrDuration::operator-(
     const int otherMonth = otherDate.getMonth();
     const int otherDay = otherDate.getDay();
 
-    // Need to check if dates are valid
-    auto checkDate = [](const int& month, const int& day) {
-      if (day > 31) {
-        return false;
-      } else if (day == 31) {
-        if (((month % 2) == 0) && (month <= 7)) {
-          // Feb, Apr, Jun
-          return false;
-        } else if (((month % 2) == 1) && (month >= 8)) {
-          // Sep, Nov
-          return false;
-        } else {
-          return true;
-        }
-      }
-      return true;
-    };
-    if ((!checkDate(ownMonth, ownDay)) || (!checkDate(otherMonth, otherDay))) {
-      // at least one date was invalid
-      return std::nullopt;
-    }
-
     // Calculate number of days between the two Dates
     auto date1 = std::chrono::year_month_day{
         std::chrono::year(ownDate.getYear()) / ownMonth / ownDay};
     auto date2 = std::chrono::year_month_day{
         std::chrono::year(otherDate.getYear()) / otherMonth / otherDay};
+
+    if (!date1.ok() || !date2.ok()) {
+      // at least one date was invalid
+      return std::nullopt;
+    }
 
     long daysPassed =
         (std::chrono::sys_days{date1} - std::chrono::sys_days{date2}).count();
