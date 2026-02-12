@@ -33,9 +33,7 @@ using Iri = ad_utility::triple_component::Iri;
 
 // An empty struct to represent a non-numeric value in a context where only
 // numeric values make sense.
-struct NotNumeric {
-  bool operator==(const NotNumeric&) const noexcept = default;
-};
+struct NotNumeric {};
 // The input to an expression that expects a numeric value.
 using NumericValue = std::variant<NotNumeric, double, int64_t>;
 using IntOrDouble = std::variant<double, int64_t>;
@@ -114,6 +112,8 @@ struct NumericValueGetter : Mixin<NumericValueGetter> {
 struct NumericOrDateValueGetter : Mixin<NumericOrDateValueGetter> {
   using Mixin<NumericOrDateValueGetter>::operator();
   // same as in `NumericValueGetter`
+  // Here a `LiteralOrIri` can never be of type bool, int, double or date.
+  // These types were already folded into ValueIds.
   NumericOrDateValue operator()(const LiteralOrIri&,
                                 const EvaluationContext*) const {
     return NotNumeric{};
