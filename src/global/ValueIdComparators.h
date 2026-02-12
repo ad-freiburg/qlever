@@ -512,7 +512,9 @@ ComparisonResult compareIdsImpl(ValueId a, ValueId b, Comparator comparator) {
   // If any of the entries is a `LocalVocabIndex`, then the ordinary comparison
   // on ValueIds already does the right thing.
   if (a.getDatatype() == Datatype::LocalVocabIndex ||
-      b.getDatatype() == Datatype::LocalVocabIndex) {
+      b.getDatatype() == Datatype::LocalVocabIndex ||
+      a.getDatatype() == Datatype::EncodedVal ||
+      b.getDatatype() == Datatype::EncodedVal) {
     return fromBool(std::invoke(comparator, a, b));
   }
 
