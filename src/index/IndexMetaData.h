@@ -172,6 +172,8 @@ class IndexMetaData {
     return blockData_;
   }
 
+  size_t totalElements() const { return totalElements_; }
+
   // Symmetric serialization function for the ad_utility::serialization module.
   AD_SERIALIZE_FRIEND_FUNCTION(IndexMetaData) {
     // The binary format of an IndexMetaData start with an 8-byte magicNumber.

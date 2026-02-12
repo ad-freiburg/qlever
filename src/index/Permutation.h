@@ -187,6 +187,10 @@ class Permutation {
   // _______________________________________________________
   const MetaData& metaData() const { return meta_; }
 
+  // Returns the number of triples in the permutation excluding updates (located
+  // triples).
+  size_t numTriples() const { return metaData().totalElements(); }
+
   // From the given snapshot, get the located triples for this permutation.
   const LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
       const LocatedTriplesState& locatedTriplesState) const;
