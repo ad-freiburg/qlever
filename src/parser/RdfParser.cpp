@@ -923,7 +923,7 @@ typename RdfStreamParser<T>::TurtleParserBackupState
 RdfStreamParser<T>::backupState() const {
   TurtleParserBackupState b;
   b.numBlankNodes_ = this->numBlankNodes_;
-  b.numTriples_ = this->preprocessedTriples_.size();
+  b.numTriples_ = this->triples_.size();
   b.tokenizerPosition_ = this->tok_.data().begin();
   b.tokenizerSize_ = this->tok_.data().size();
   return b;
@@ -946,8 +946,8 @@ bool RdfStreamParser<T>::resetStateAndRead(
 
   // return to the state of the last backup
   this->numBlankNodes_ = b.numBlankNodes_;
-  AD_CONTRACT_CHECK(this->preprocessedTriples_.size() >= b.numTriples_);
-  this->preprocessedTriples_.resize(b.numTriples_);
+  AD_CONTRACT_CHECK(this->triples_.size() >= b.numTriples_);
+  this->triples_.resize(b.numTriples_);
   this->tok_.reset(b.tokenizerPosition_, b.tokenizerSize_);
 
   ParallelBuffer::BufferType buf;
@@ -1222,7 +1222,7 @@ void RdfParallelParser<T>::initialize(const std::string& filename,
 // _____________________________________________________________________________
 template <class T>
 bool RdfParallelParser<T>::processTriples() {
-  // If the current batch is out of preprocessedTriples_ get the next batch of
+  // If the current batch is out of triples_ get the next batch of
   // triples. We need a while loop instead of a simple if in case there is a
   // batch that contains no triples. (Theoretically this might happen, and it is
   // safer this way)
@@ -1249,7 +1249,7 @@ bool RdfParallelParser<T>::processTriples() {
       // Everything has been parsed
       return false;
     }
-    // OptionalTripleTask fills the preprocessedTriples_ vector
+    // OptionalTripleTask fills the triples_ vector
     (*optionalTripleTask)();
   }
   return true;
