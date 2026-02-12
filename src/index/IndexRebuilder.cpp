@@ -98,13 +98,13 @@ std::vector<uint64_t> flattenBlankNodeBlocks(
     const std::vector<
         ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>&
         ownedBlocks) {
-  std::vector<uint64_t> flatBlockIndices;
-  for (const auto& ownedBlockEntry : ownedBlocks) {
-    ql::ranges::copy(ownedBlockEntry.blockIndices_,
-                     std::back_inserter(flatBlockIndices));
-  }
-  ql::ranges::sort(flatBlockIndices);
-  return flatBlockIndices;
+  auto result = ownedBlocks |
+                ql::views::transform(
+                    &ad_utility::BlankNodeManager::LocalBlankNodeManager::
+                        OwnedBlocksEntry::blockIndices_) |
+                ql::views::join | ::ranges::to<std::vector>;
+  ql::ranges::sort(result);
+  return result;
 }
 
 // _____________________________________________________________________________
@@ -311,10 +311,7 @@ void materializeToIndex(
   using namespace indexRebuilder;
   AD_CONTRACT_CHECK(!logFileName.empty(), "Log file name must not be empty");
 
-  // Set up logging to file
-  std::ofstream logFile{logFileName};
-  AD_CORRECTNESS_CHECK(logFile.is_open(),
-                       "Failed to open log file: " + logFileName);
+  auto logFile = ad_utility::makeOfstream(logFileName);
 
   // Macro for rebuild-specific logging with the same syntax as AD_LOG_INFO
 #define REBUILD_LOG_INFO \
