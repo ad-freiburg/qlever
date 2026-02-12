@@ -19,16 +19,7 @@ class ConstructQueryEvaluator {
   using StringTriple = QueryExecutionTree::StringTriple;
 
  public:
-  static std::string evaluate(const PrecomputedConstant& constant);
-  static std::optional<std::string> evaluate(
-      const PrecomputedVariable& variable,
-      const ConstructQueryExportContext& context);
-
-  // Evaluates a `PrecomputedBlankNode` for a specific given result table row
-  // contained in the `ConstructQueryExportContext`.
-  static std::optional<std::string> evaluate(
-      const PrecomputedBlankNode& blankNode,
-      const ConstructQueryExportContext& context);
+  // --- Methods operating on raw SPARQL types (used by existing code) ---
 
   // Helper method for `evaluateTerm`. Evaluates an `Iri` (which is part of a
   // CONSTRUCT triple pattern).
@@ -41,35 +32,21 @@ class ConstructQueryEvaluator {
   static std::optional<std::string> evaluate(const Literal& literal,
                                              PositionInTriple role);
 
+  // Helper method for `evaluateTerm`. Evaluates a `BlankNode` (which is part of
+  // a CONSTRUCT triple pattern) using the provided context.
+  static std::optional<std::string> evaluate(
+      const BlankNode& node, const ConstructQueryExportContext& context);
+
   // Helper method for `evaluateTerm`. Evaluates a `Variable` (which is part of
   // a CONSTRUCT triple pattern) using the provided context.
   static std::optional<std::string> evaluate(
       const Variable& var, const ConstructQueryExportContext& context);
 
-  // Evaluates a `Variable` on the given `ConstructQueryExportContext`.
-  // The `Variable` is given implicitly by the `columnIndex`, that is, the idx
-  // of the column in the `IdTable` which the `Variable` is uniquely identified
-  // by. The necessary context for doing said evaluation is contained in
-  // `ConstructQueryExportContext`, such as the idx specifying the row of the
-  // result table which this variable should be evaluated for and the vocabulary
-  // for looking up the actual string value that the `Id`, which the variable is
-  // mapped to for the given result table row, resolves to.
-  static std::optional<std::string> evaluateVariableByColumnIndex(
-      std::optional<size_t> columnIndex,
-      const ConstructQueryExportContext& context);
-
-  // Evaluates an `Id` to a formatted string using the given `Index` and
-  // `LocalVocab` for vocabulary lookup. Returns `std::nullopt` for undefined
-  // values. This is the core evaluation logic used by
-  // `evaluateVariableByColumnIndex`.
-  static std::optional<std::string> evaluateId(Id id, const Index& index,
-                                               const LocalVocab& localVocab);
-
   // Evaluates a `GraphTerm` (which is part of a CONSTRUCT triple pattern) using
   // the provided context and the position of the `GraphTerm` in the template
   // triple. If the `GraphTerm` can't be evaluated, `std::nullopt` is returned.
   static std::optional<std::string> evaluateTerm(
-      const PreprocessedTerm& term, const ConstructQueryExportContext& context,
+      const GraphTerm& term, const ConstructQueryExportContext& context,
       PositionInTriple posInTriple);
 
   // Evaluates a single CONSTRUCT triple pattern using the provided context. If
@@ -77,8 +54,47 @@ class ConstructQueryEvaluator {
   // is returned. (meaning that all three member variables `subject_` ,
   // `predicate_`, `object_` of the `StringTriple` are set to the empty string).
   static StringTriple evaluateTriple(
+      const std::array<GraphTerm, 3>& triple,
+      const ConstructQueryExportContext& context);
+
+  // --- Methods operating on preprocessed types ---
+
+  // Evaluates a `PrecomputedConstant` by returning its precomputed value.
+  static std::string evaluatePreprocessed(const PrecomputedConstant& constant);
+
+  // Evaluates a `PrecomputedVariable` using the precomputed column index.
+  static std::optional<std::string> evaluatePreprocessed(
+      const PrecomputedVariable& variable,
+      const ConstructQueryExportContext& context);
+
+  // Evaluates a `PrecomputedBlankNode` using the precomputed prefix/suffix.
+  static std::optional<std::string> evaluatePreprocessed(
+      const PrecomputedBlankNode& blankNode,
+      const ConstructQueryExportContext& context);
+
+  // Evaluates a `PreprocessedTerm` by dispatching to the appropriate
+  // `evaluatePreprocessed` overload based on the variant type.
+  static std::optional<std::string> evaluatePreprocessedTerm(
+      const PreprocessedTerm& term, const ConstructQueryExportContext& context);
+
+  // Evaluates a `PreprocessedTriple` using the provided context. If any
+  // component evaluates to `std::nullopt`, an empty `StringTriple` is returned.
+  static StringTriple evaluatePreprocessedTriple(
       const PreprocessedTriple& triple,
       const ConstructQueryExportContext& context);
+
+  // --- Core evaluation helpers ---
+
+  // Evaluates a `Variable` by its column index in the `IdTable`.
+  static std::optional<std::string> evaluateVariableByColumnIndex(
+      std::optional<size_t> columnIndex,
+      const ConstructQueryExportContext& context);
+
+  // Evaluates an `Id` to a formatted string using the given `Index` and
+  // `LocalVocab` for vocabulary lookup. Returns `std::nullopt` for undefined
+  // values.
+  static std::optional<std::string> evaluateId(Id id, const Index& index,
+                                               const LocalVocab& localVocab);
 };
 
 #endif  // QLEVER_CONSTRUCTQUERYEVALUATOR_H

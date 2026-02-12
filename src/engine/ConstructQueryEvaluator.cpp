@@ -10,6 +10,8 @@
 #include "util/HashMap.h"
 #include "util/TypeTraits.h"
 
+// --- Methods operating on raw SPARQL types ---
+
 // _____________________________________________________________________________
 std::string ConstructQueryEvaluator::evaluate(const Iri& iri) {
   return iri.iri();
@@ -23,6 +25,131 @@ std::optional<std::string> ConstructQueryEvaluator::evaluate(
   }
   return std::nullopt;
 }
+
+// _____________________________________________________________________________
+std::optional<std::string> ConstructQueryEvaluator::evaluate(
+    const Variable& var, const ConstructQueryExportContext& context) {
+  const auto& variableColumns = context._variableColumns;
+  if (auto opt = ad_utility::getOptionalFromHashMap(variableColumns, var)) {
+    return evaluateVariableByColumnIndex(opt->columnIndex_, context);
+  }
+  return std::nullopt;
+}
+
+// _____________________________________________________________________________
+std::optional<std::string> ConstructQueryEvaluator::evaluate(
+    const BlankNode& node, const ConstructQueryExportContext& context) {
+  // Use absl::StrCat for efficient string concatenation (single allocation)
+  // instead of std::ostringstream which has significant overhead.
+  // Note: absl::StrCat doesn't accept single chars, so we use string literals.
+  return absl::StrCat("_:", (node.isGenerated() ? "g" : "u"),
+                      context._rowOffset + context.resultTableRowIndex_, "_",
+                      node.label());
+}
+
+// _____________________________________________________________________________
+std::optional<std::string> ConstructQueryEvaluator::evaluateTerm(
+    const GraphTerm& term, const ConstructQueryExportContext& context,
+    PositionInTriple posInTriple) {
+  return std::visit(
+      [&context, &posInTriple](const auto& arg) -> std::optional<std::string> {
+        using T = std::decay_t<decltype(arg)>;
+
+        if constexpr (std::is_same_v<T, Variable>) {
+          return evaluate(arg, context);
+        } else if constexpr (std::is_same_v<T, BlankNode>) {
+          return evaluate(arg, context);
+        } else if constexpr (std::is_same_v<T, Iri>) {
+          return evaluate(arg);
+        } else if constexpr (std::is_same_v<T, Literal>) {
+          return evaluate(arg, posInTriple);
+        } else {
+          static_assert(ad_utility::alwaysFalse<T>);
+        }
+      },
+      term);
+}
+
+// _____________________________________________________________________________
+ConstructQueryEvaluator::StringTriple ConstructQueryEvaluator::evaluateTriple(
+    const std::array<GraphTerm, 3>& triple,
+    const ConstructQueryExportContext& context) {
+  using enum PositionInTriple;
+
+  auto subject = evaluateTerm(triple[0], context, SUBJECT);
+  auto predicate = evaluateTerm(triple[1], context, PREDICATE);
+  auto object = evaluateTerm(triple[2], context, OBJECT);
+
+  if (!subject.has_value() || !predicate.has_value() || !object.has_value()) {
+    return StringTriple();
+  }
+
+  return StringTriple(std::move(subject.value()), std::move(predicate.value()),
+                      std::move(object.value()));
+}
+
+// --- Methods operating on preprocessed types ---
+
+// _____________________________________________________________________________
+std::string ConstructQueryEvaluator::evaluatePreprocessed(
+    const PrecomputedConstant& constant) {
+  return constant.value_;
+}
+
+// _____________________________________________________________________________
+std::optional<std::string> ConstructQueryEvaluator::evaluatePreprocessed(
+    const PrecomputedVariable& variable,
+    const ConstructQueryExportContext& context) {
+  return evaluateVariableByColumnIndex(variable.columnIndex_, context);
+}
+
+// _____________________________________________________________________________
+std::optional<std::string> ConstructQueryEvaluator::evaluatePreprocessed(
+    const PrecomputedBlankNode& node,
+    const ConstructQueryExportContext& context) {
+  return absl::StrCat(node.prefix_,
+                      context._rowOffset + context.resultTableRowIndex_,
+                      node.suffix_);
+}
+
+// _____________________________________________________________________________
+std::optional<std::string> ConstructQueryEvaluator::evaluatePreprocessedTerm(
+    const PreprocessedTerm& term, const ConstructQueryExportContext& context) {
+  return std::visit(
+      [&context](const auto& arg) -> std::optional<std::string> {
+        using T = std::decay_t<decltype(arg)>;
+
+        if constexpr (std::is_same_v<T, PrecomputedVariable>) {
+          return evaluatePreprocessed(arg, context);
+        } else if constexpr (std::is_same_v<T, PrecomputedBlankNode>) {
+          return evaluatePreprocessed(arg, context);
+        } else if constexpr (std::is_same_v<T, PrecomputedConstant>) {
+          return evaluatePreprocessed(arg);
+        } else {
+          static_assert(ad_utility::alwaysFalse<T>);
+        }
+      },
+      term);
+}
+
+// _____________________________________________________________________________
+ConstructQueryEvaluator::StringTriple
+ConstructQueryEvaluator::evaluatePreprocessedTriple(
+    const PreprocessedTriple& triple,
+    const ConstructQueryExportContext& context) {
+  auto subject = evaluatePreprocessedTerm(triple[0], context);
+  auto predicate = evaluatePreprocessedTerm(triple[1], context);
+  auto object = evaluatePreprocessedTerm(triple[2], context);
+
+  if (!subject.has_value() || !predicate.has_value() || !object.has_value()) {
+    return StringTriple();
+  }
+
+  return StringTriple(std::move(subject.value()), std::move(predicate.value()),
+                      std::move(object.value()));
+}
+
+// --- Core evaluation helpers ---
 
 // _____________________________________________________________________________
 std::optional<std::string> ConstructQueryEvaluator::evaluateId(
@@ -60,83 +187,4 @@ ConstructQueryEvaluator::evaluateVariableByColumnIndex(
 
   auto id = context.idTable_(context.resultTableRowIndex_, columnIndex.value());
   return evaluateId(id, context._qecIndex, context.localVocab_);
-}
-
-// _____________________________________________________________________________
-std::optional<std::string> ConstructQueryEvaluator::evaluate(
-    const Variable& var, const ConstructQueryExportContext& context) {
-  const auto& variableColumns = context._variableColumns;
-  if (auto opt = ad_utility::getOptionalFromHashMap(variableColumns, var)) {
-    return evaluateVariableByColumnIndex(opt->columnIndex_, context);
-  }
-  return std::nullopt;
-}
-
-// _____________________________________________________________________________
-std::optional<std::string> ConstructQueryEvaluator::evaluateTerm(
-    const PreprocessedTerm& term, const ConstructQueryExportContext& context,
-    PositionInTriple posInTriple) {
-  return std::visit(
-      [&context, &posInTriple](const auto& arg) -> std::optional<std::string> {
-        // strips reference/const qualifiers
-        using T = std::decay_t<decltype(arg)>;
-
-        if constexpr (std::is_same_v<T, PrecomputedVariable>) {
-          return evaluate(arg, context);
-        } else if constexpr (std::is_same_v<T, PrecomputedBlankNode>) {
-          return evaluate(arg, context);
-        } else if constexpr (std::is_same_v<T, PrecomputedConstant>) {
-          return evaluate(arg);
-        } else {
-          static_assert(ad_utility::alwaysFalse<T>);
-        }
-      },
-      term);
-}
-
-// _____________________________________________________________________________
-ConstructQueryEvaluator::StringTriple ConstructQueryEvaluator::evaluateTriple(
-    const PreprocessedTriple& triple,
-    const ConstructQueryExportContext& context) {
-  // We specify the position to the evaluator so it knows how to handle
-  // special cases (like blank node generation or IRI escaping).
-  using enum PositionInTriple;
-
-  auto subject = evaluateTerm(triple[0], context, SUBJECT);
-  auto predicate = evaluateTerm(triple[1], context, PREDICATE);
-  auto object = evaluateTerm(triple[2], context, OBJECT);
-
-  // In SPARQL CONSTRUCT, if any part of the triple (S, P, or O) evaluates
-  // to UNDEF, the entire triple is omitted from the result.
-  if (!subject.has_value() || !predicate.has_value() || !object.has_value()) {
-    return StringTriple();  // Returns an empty triple which is filtered out
-    // later
-  }
-
-  return StringTriple(std::move(subject.value()), std::move(predicate.value()),
-                      std::move(object.value()));
-}
-
-// _____________________________________________________________________________
-std::optional<std::string> ConstructQueryEvaluator::evaluate(
-    const PrecomputedVariable& variable,
-    const ConstructQueryExportContext& context) {
-  std::optional<size_t> colIdx = variable.columnIndex_;
-  if (colIdx.has_value()) {
-    return evaluateVariableByColumnIndex(variable.columnIndex_, context);
-  }
-  return std::nullopt;
-}
-
-// _____________________________________________________________________________
-std::string ConstructQueryEvaluator::evaluate(
-    const PrecomputedConstant& constant) {
-  return constant.value_;
-}
-
-// _____________________________________________________________________________
-std::optional<std::string> ConstructQueryEvaluator::evaluate(
-    const PrecomputedBlankNode& node,
-    const ConstructQueryExportContext& context) {
-  return absl::StrCat(node.prefix_, context.resultTableRowIndex_, node.suffix_);
 }
