@@ -12,6 +12,8 @@
 #include "rdfTypes/RdfEscaping.h"
 #include "util/Exception.h"
 
+using namespace qlever::constructExport;
+
 // _____________________________________________________________________________
 EvaluatedTerm ConstructTripleInstantiator::instantiateTerm(
     const PreprocessedTerm& term, const BatchEvaluationResult& batchResult,

@@ -8,6 +8,8 @@
 
 #include "engine/ConstructQueryEvaluator.h"
 
+using namespace qlever::constructExport;
+
 // _____________________________________________________________________________
 BatchEvaluationResult ConstructBatchEvaluator::evaluateBatch(
     const std::vector<size_t>& uniqueVariableColumns,

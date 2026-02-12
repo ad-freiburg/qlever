@@ -6,6 +6,8 @@
 
 #include "engine/ConstructRowProcessor.h"
 
+using namespace qlever::constructExport;
+
 // _____________________________________________________________________________
 ConstructRowProcessor::ConstructRowProcessor(
     const PreprocessedConstructTemplate& preprocessedTemplate,

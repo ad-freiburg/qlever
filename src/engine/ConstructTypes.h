@@ -16,6 +16,8 @@
 
 #include "util/HashMap.h"
 
+namespace qlever::constructExport {
+
 // --- Preprocessing types ---
 
 // A constant (`Iri` or `Literal`) whose string value is fully known at
@@ -24,10 +26,10 @@ struct PrecomputedConstant {
   std::string value_;
 };
 
-// A variable: we precompute which `IdTable` column to look up at query time.
-// `columnIndex_` is `std::nullopt` if the variable does not appear in the
-// result table (`IdTable`). (i.e., the variable is used in the CONSTRUCT
-// template but not bound by the WHERE clause).
+// We precompute which `IdTable` column to look up at construct query triple
+// instantitation time. `columnIndex_` is `std::nullopt` if the
+// variable does not appear in the result table (`IdTable`) (i.e., the variable
+// is used in the CONSTRUCT template but not bound by the WHERE clause).
 struct PrecomputedVariable {
   std::optional<size_t> columnIndex_;
 };
@@ -95,7 +97,7 @@ struct InstantiatedTriple {
 // triple instantiation.
 struct BatchEvaluationResult {
   // Map from `IdTable` column index to evaluated values for each row in batch.
-  ad_utility::HashMap<size_t, std::vector<EvaluatedTerm>> variablesByColumn_;
+  ::ad_utility::HashMap<size_t, std::vector<EvaluatedTerm>> variablesByColumn_;
   size_t numRows_ = 0;
 
   const EvaluatedTerm& getVariable(size_t columnIndex,
@@ -103,5 +105,7 @@ struct BatchEvaluationResult {
     return variablesByColumn_.at(columnIndex).at(rowInBatch);
   }
 };
+
+}  // namespace qlever::constructExport
 
 #endif  // QLEVER_SRC_ENGINE_CONSTRUCTTYPES_H

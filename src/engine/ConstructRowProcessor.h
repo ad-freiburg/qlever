@@ -21,11 +21,15 @@
 
 // Processes the rows of the result table and yields `InstantiatedTriple`
 // objects. This is done in batches of rows of the result table.
-class ConstructRowProcessor
-    : public ad_utility::InputRangeFromGet<InstantiatedTriple> {
+class ConstructRowProcessor : public ad_utility::InputRangeFromGet<
+                                  qlever::constructExport::InstantiatedTriple> {
  public:
   using IdCache = ConstructIdCache;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
+  using InstantiatedTriple = qlever::constructExport::InstantiatedTriple;
+  using PreprocessedConstructTemplate =
+      qlever::constructExport::PreprocessedConstructTemplate;
+  using BatchEvaluationResult = qlever::constructExport::BatchEvaluationResult;
 
   // Default batch size for processing rows.
   static constexpr size_t DEFAULT_BATCH_SIZE = 64;

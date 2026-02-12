@@ -16,6 +16,9 @@
 // Provides methods for instantiating terms and formatting triples.
 class ConstructTripleInstantiator {
  public:
+  using EvaluatedTerm = qlever::constructExport::EvaluatedTerm;
+  using PreprocessedTerm = qlever::constructExport::PreprocessedTerm;
+  using BatchEvaluationResult = qlever::constructExport::BatchEvaluationResult;
   // Instantiates a single preprocessed term for a specific row.
   // For constants: returns the precomputed string.
   // For variables: looks up the batch-evaluated value.

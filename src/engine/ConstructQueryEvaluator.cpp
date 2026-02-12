@@ -65,7 +65,7 @@ ConstructQueryEvaluator::evaluateVariableByColumnIndex(
 std::optional<std::string> ConstructQueryEvaluator::evaluate(
     const Variable& var, const ConstructQueryExportContext& context) {
   const auto& variableColumns = context._variableColumns;
-  if (auto opt = ad_utility::getOptionalFromHashMap(variableColumns, var)) {
+  if (auto opt = ad_utility::findOptionalFromHashMap(variableColumns, var)) {
     return evaluateVariableByColumnIndex(opt->columnIndex_, context);
   }
   return std::nullopt;

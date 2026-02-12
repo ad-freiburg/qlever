@@ -13,6 +13,7 @@
 using ad_utility::InputRangeTypeErased;
 using StringTriple = ConstructTripleGenerator::StringTriple;
 using CancellationHandle = ad_utility::SharedCancellationHandle;
+using InstantiatedTriple = qlever::constructExport::InstantiatedTriple;
 
 // _____________________________________________________________________________
 // Adapter that transforms `InstantiatedTriple` to formatted strings.

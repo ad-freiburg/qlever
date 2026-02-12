@@ -32,6 +32,7 @@ struct ConstructIdCacheStats {
 // Statistics (hits/misses) are tracked internally.
 class ConstructIdCache {
  public:
+  using EvaluatedTerm = qlever::constructExport::EvaluatedTerm;
   explicit ConstructIdCache(size_t capacity) : cache_(capacity) {}
 
   // Look up the value for a key, computing it if not present.

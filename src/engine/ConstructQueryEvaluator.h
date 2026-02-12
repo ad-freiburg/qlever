@@ -17,6 +17,11 @@
 
 class ConstructQueryEvaluator {
   using StringTriple = QueryExecutionTree::StringTriple;
+  using PrecomputedConstant = qlever::constructExport::PrecomputedConstant;
+  using PreprocessedTriple = qlever::constructExport::PreprocessedTriple;
+  using PrecomputedVariable = qlever::constructExport::PrecomputedVariable;
+  using PrecomputedBlankNode = qlever::constructExport::PrecomputedBlankNode;
+  using PreprocessedTerm = qlever::constructExport::PreprocessedTerm;
 
  public:
   // Helper method for `evaluateTerm`. Evaluates an `Iri` (which is part of a

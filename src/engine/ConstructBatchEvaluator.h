@@ -32,6 +32,8 @@ struct BatchEvaluationContext {
 class ConstructBatchEvaluator {
  public:
   using IdCache = ConstructIdCache;
+  using BatchEvaluationResult = qlever::constructExport::BatchEvaluationResult;
+  using EvaluatedTerm = qlever::constructExport::EvaluatedTerm;
 
   // Main entry point: evaluates all variables for a batch.
   // Uses the pre-collected unique column indices to evaluate each variable
