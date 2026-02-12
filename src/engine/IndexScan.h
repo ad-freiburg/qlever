@@ -231,9 +231,9 @@ class IndexScan final : public Operation {
   // number of triples from the permutation's metadata as an estimate,
   // because summing up all the block sizes and numbers of located triples per
   // block is expensive for large datasets (with millions of blocks). The
-  // estimate is exact if there are no delta triples. Otherwise, it's an
-  // approximation, but a reasonably good one when the number of delta
-  // triples is small compared to the total number of triples.
+  // estimate is an approximation, but a reasonably good one when the number of
+  // delta triples is small compared to the total number of triples and there
+  // is not a lot of redundant triples in different graphs in the data set.
   std::pair<bool, size_t> computeSizeEstimate() const;
 
   std::string getCacheKeyImpl() const override;
