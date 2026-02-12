@@ -1,4 +1,4 @@
-//   Copyright 2026 The QLever Authors, in particular:
+//  Copyright 2026 The QLever Authors, in particular:
 //
 //  2026 Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>, UFR
 //
@@ -26,14 +26,18 @@ namespace qlever::indexRebuilder {
 // positions (the `VocabIndex` of the `LocalVocabEntry`s position in the old
 // `vocab`) and a mapping from old local vocab `Id`s bit representation (for
 // cheaper hash functions) to new vocab `Id`s.
-std::tuple<std::vector<VocabIndex>, ad_utility::HashMap<Id::T, Id>,
-           std::vector<uint64_t>>
-materializeLocalVocab(
-    const std::vector<LocalVocabIndex>& entries,
+std::tuple<std::vector<VocabIndex>, ad_utility::HashMap<Id::T, Id>>
+materializeLocalVocab(const std::vector<LocalVocabIndex>& entries,
+                      const Index::Vocab& vocab,
+                      const std::string& newIndexName);
+
+// Turn a vector of `BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry`s
+// into a vector of `uint64_t`s representing the block ids of the generated
+// blocks.
+std::vector<uint64_t> flattenBlankNodeBlocks(
     const std::vector<
         ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>&
-        ownedBlocks,
-    const Index::Vocab& vocab, const std::string& newIndexName);
+        ownedBlocks);
 
 // Map old vocab `Id`s to new vocab `Id`s according to the given
 // `insertionPositions`. This is the  most performance critical code of the

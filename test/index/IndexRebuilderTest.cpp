@@ -91,11 +91,10 @@ TEST(IndexRebuilder, materializeEmptyLocalVocab) {
   }};
 
   auto getId = ad_utility::testing::makeGetId(oldIndex);
-  auto [insertionPositions, localVocabMapping, flatBlockIndices] =
-      materializeLocalVocab({}, {}, oldIndex.getVocab(), vocabPrefix);
+  auto [insertionPositions, localVocabMapping] =
+      materializeLocalVocab({}, oldIndex.getVocab(), vocabPrefix);
   EXPECT_THAT(insertionPositions, ::testing::ElementsAre());
   EXPECT_THAT(localVocabMapping, ::testing::UnorderedElementsAre());
-  EXPECT_THAT(flatBlockIndices, ::testing::ElementsAre());
 
   for (const auto& suffix : getVocabSuffixesForType(type.value())) {
     EXPECT_EQ(
@@ -133,13 +132,9 @@ TEST(IndexRebuilder, materializeLocalVocab) {
   auto l = makeVocabEntry("<l>");
   auto m = makeVocabEntry("<m>");
   std::vector<LocalVocabIndex> entries{&b, &d, &f, &h, &j, &l, &m};
-  using OBE =
-      ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry;
-  std::vector ownedBlocks{OBE{{}, {4, 42}}, OBE{{}, {7, 77}}};
 
-  auto [insertionPositions, localVocabMapping, flatBlockIndices] =
-      materializeLocalVocab(entries, ownedBlocks, oldIndex.getVocab(),
-                            vocabPrefix);
+  auto [insertionPositions, localVocabMapping] =
+      materializeLocalVocab(entries, oldIndex.getVocab(), vocabPrefix);
   EXPECT_THAT(
       insertionPositions,
       ::testing::ElementsAre(
@@ -167,7 +162,6 @@ TEST(IndexRebuilder, materializeLocalVocab) {
                                  Id::makeFromVocabIndex(VocabIndex::make(16))),
                   std::make_pair(toBits(m), Id::makeFromVocabIndex(
                                                 VocabIndex::make(17)))));
-  EXPECT_THAT(flatBlockIndices, ::testing::ElementsAre(4, 7, 42, 77));
 
   Index::Vocab newVocab;
   newVocab.resetToType(type);
@@ -191,6 +185,16 @@ TEST(IndexRebuilder, materializeLocalVocab) {
   EXPECT_EQ(newVocab[VocabIndex::make(15)], "<k>");
   EXPECT_EQ(newVocab[VocabIndex::make(16)], "<l>");
   EXPECT_EQ(newVocab[VocabIndex::make(17)], "<m>");
+}
+
+// _____________________________________________________________________________
+TEST(IndexRebuilder, flattenBlankNodeBlocks) {
+  using OBE =
+      ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry;
+  std::vector ownedBlocks{OBE{{}, {4, 42}}, OBE{{}, {7, 77}}};
+
+  auto flatBlockIndices = flattenBlankNodeBlocks(ownedBlocks);
+  EXPECT_THAT(flatBlockIndices, ::testing::ElementsAre(4, 7, 42, 77));
 }
 
 // _____________________________________________________________________________

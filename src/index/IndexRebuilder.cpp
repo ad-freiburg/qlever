@@ -1,6 +1,8 @@
-// Copyright 2025, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
+//  Copyright 2026 The QLever Authors, in particular:
+//
+//  2026 Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>, UFR
+//
+//  UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #include "index/IndexRebuilder.h"
 
@@ -34,14 +36,10 @@
 
 namespace qlever::indexRebuilder {
 // _____________________________________________________________________________
-std::tuple<std::vector<VocabIndex>, ad_utility::HashMap<Id::T, Id>,
-           std::vector<uint64_t>>
-materializeLocalVocab(
-    const std::vector<LocalVocabIndex>& entries,
-    const std::vector<
-        ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>&
-        ownedBlocks,
-    const Index::Vocab& vocab, const std::string& newIndexName) {
+std::tuple<std::vector<VocabIndex>, ad_utility::HashMap<Id::T, Id>>
+materializeLocalVocab(const std::vector<LocalVocabIndex>& entries,
+                      const Index::Vocab& vocab,
+                      const std::string& newIndexName) {
   size_t newWordCount = 0;
   std::vector<std::tuple<VocabIndex, std::string_view, Id>> insertInfo;
   insertInfo.reserve(entries.size());
@@ -91,15 +89,22 @@ materializeLocalVocab(
   for (const auto& [vocabIndex, _, __] : insertInfo) {
     insertionPositions.push_back(vocabIndex);
   }
+  return std::make_tuple(std::move(insertionPositions),
+                         std::move(localVocabMapping));
+}
+
+// _____________________________________________________________________________
+std::vector<uint64_t> flattenBlankNodeBlocks(
+    const std::vector<
+        ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>&
+        ownedBlocks) {
   std::vector<uint64_t> flatBlockIndices;
   for (const auto& ownedBlockEntry : ownedBlocks) {
     ql::ranges::copy(ownedBlockEntry.blockIndices_,
                      std::back_inserter(flatBlockIndices));
   }
   ql::ranges::sort(flatBlockIndices);
-  return std::make_tuple(std::move(insertionPositions),
-                         std::move(localVocabMapping),
-                         std::move(flatBlockIndices));
+  return flatBlockIndices;
 }
 
 // _____________________________________________________________________________
@@ -320,9 +325,9 @@ void materializeToIndex(
 
   REBUILD_LOG_INFO << "Writing new vocabulary ..." << std::endl;
 
-  const auto& [insertionPositions, localVocabMapping, blankNodeBlocks] =
-      materializeLocalVocab(entries, ownedBlocks, index.getVocab(),
-                            newIndexName);
+  auto blankNodeBlocks = flattenBlankNodeBlocks(ownedBlocks);
+  const auto& [insertionPositions, localVocabMapping] =
+      materializeLocalVocab(entries, index.getVocab(), newIndexName);
 
   REBUILD_LOG_INFO << "Recomputing statistics ..." << std::endl;
 
