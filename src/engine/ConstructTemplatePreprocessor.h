@@ -13,18 +13,18 @@
 #include "engine/VariableToColumnMap.h"
 #include "parser/data/Types.h"
 
-// Preprocesses CONSTRUCT template triples. For each term position, precomputes
-// everything possible:
-// - Constants (IRIs/literals): evaluates and stores the string value.
-// - Variables: precomputes the column index into the IdTable.
-// - Blank nodes: precomputes the format prefix/suffix.
+// Preprocesses CONSTRUCT template triples. For each term, precomputes
+// the following:
+// - constants (IRIs/literals): evaluates and stores the string value.
+// - variables: precomputes the column index into the `IdTable`.
+// - blank nodes: precomputes the format prefix/suffix.
 class ConstructTemplatePreprocessor {
  public:
   using Triples = ad_utility::sparql_types::Triples;
   using PreprocessedConstructTemplate =
       qlever::constructExport::PreprocessedConstructTemplate;
 
-  // Preprocess template triples. Returns the preprocessed triples together
+  // Preprocess the template triples. Returns the preprocessed triples together
   // with the unique variable column indices needed when evaluating the template
   // triples for specific result-table rows.
   static PreprocessedConstructTemplate preprocess(
