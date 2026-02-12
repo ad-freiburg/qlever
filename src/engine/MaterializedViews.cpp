@@ -361,9 +361,9 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
     originalQuery_ = viewInfoJson.at("query").get<std::string>();
   }
 
-  // Read permutation
-  permutation_->loadFromDisk(filename, false);
-  permutation_->setDeduplicateOnScan(false);
+  // Read permutation, and deactivate automatic deduplication on any of the
+  // additional columns (starting for the fourth).
+  permutation_->loadFromDisk(filename, false, false);
   AD_CORRECTNESS_CHECK(permutation_->isLoaded());
 }
 

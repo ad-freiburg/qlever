@@ -331,11 +331,8 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphs::
 
 // _____________________________________________________________________________
 bool CompressedRelationReader::FilterDuplicatesAndGraphs::
-    filterDuplicatesIfNecessary(
-        IdTable& block, const CompressedBlockMetadata& blockMetadata) const {
-  if (!deduplicateOnScan_) {
-    return false;
-  }
+    filterDuplicatesIfNecessary(IdTable& block,
+                                const CompressedBlockMetadata& blockMetadata) {
   if (!blockMetadata.containsDuplicatesWithDifferentGraphs_) {
     AD_EXPENSIVE_CHECK(std::unique(block.begin(), block.end()) == block.end());
     return false;
@@ -1174,8 +1171,11 @@ CompressedRelationReader::decompressAndPostprocessBlock(
         includeGraphColumn);
     hasUpdates = true;
   }
-  bool wasPostprocessed =
-      scanConfig.graphFilter_.postprocessBlock(decompressedBlock, metadata);
+  bool wasPostprocessed = false;
+  if (deduplicateOnScan_) {
+    wasPostprocessed =
+        scanConfig.graphFilter_.postprocessBlock(decompressedBlock, metadata);
+  }
   return {std::move(decompressedBlock), wasPostprocessed, hasUpdates};
 }
 
@@ -1695,7 +1695,7 @@ CompressedRelationReader::getMetadataForSmallRelation(
 // _____________________________________________________________________________
 auto CompressedRelationReader::getScanConfig(
     const ScanSpecification& scanSpec, ColumnIndicesRef additionalColumns,
-    const LocatedTriplesPerBlock& locatedTriples) const -> ScanImplConfig {
+    const LocatedTriplesPerBlock& locatedTriples) -> ScanImplConfig {
   auto columnIndices = prepareColumnIndices(scanSpec, additionalColumns);
   // Determine the index of the graph column (which we need either for
   // filtering or for the output or both) and whether we we need it for
@@ -1716,8 +1716,7 @@ auto CompressedRelationReader::getScanConfig(
     return {ql::ranges::distance(columnIndices.begin(), it), false};
   }();
   FilterDuplicatesAndGraphs graphFilter{scanSpec.graphFilter(),
-                                        graphColumnIndex, deleteGraphColumn,
-                                        deduplicateOnScan_};
+                                        graphColumnIndex, deleteGraphColumn};
   return {std::move(columnIndices), std::move(graphFilter), locatedTriples};
 }
 

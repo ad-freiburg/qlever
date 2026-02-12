@@ -31,7 +31,8 @@ CompressedRelationReader::ScanSpecAndBlocks Permutation::getScanSpecAndBlocks(
 
 // _____________________________________________________________________
 void Permutation::loadFromDisk(const std::string& onDiskBase,
-                               bool loadInternalPermutation) {
+                               bool loadInternalPermutation,
+                               bool deduplicateOnScan) {
   onDiskBase_ = onDiskBase;
   if (loadInternalPermutation) {
     internalPermutation_ =
@@ -58,8 +59,9 @@ void Permutation::loadFromDisk(const std::string& onDiskBase,
   meta_.readFromFile(&file);
   reader_.emplace(allocator_, std::move(file));
   // Tell the `CompressedRelationReader` whether it should deduplicate triples.
-  // This is overwritten in the setter later if the flag is updated.
-  reader_->setDeduplicateOnScan(deduplicateOnScan_);
+  // This usually happens when the same triple exists in multiple graphs but we
+  // are not interested in the graph.
+  reader_->setDeduplicateOnScan(deduplicateOnScan);
   AD_LOG_INFO << "Registered " << readableName_
               << " permutation: " << meta_.statistics() << std::endl;
   isLoaded_ = true;

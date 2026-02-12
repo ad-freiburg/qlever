@@ -546,9 +546,6 @@ class CompressedRelationReader {
     ScanSpecification::GraphFilter graphFilter_;
     ColumnIndex graphColumn_;
     bool deleteGraphColumn_;
-    // If false, duplicate rows are not removed during scanning. This is
-    // used for materialized views where repeated rows are meaningful.
-    bool deduplicateOnScan_ = true;
     // Filter `block` such that it contains only the specified graphs and no
     // duplicates. The `blockMetadata` of `block` is used for possible shortcuts
     // (for example, if we know that there are no duplicates, we do not have to
@@ -577,8 +574,8 @@ class CompressedRelationReader {
     // returns `true` iff filtering the block was necessary.
     bool filterByGraphIfNecessary(
         IdTable& block, const CompressedBlockMetadata& blockMetadata) const;
-    bool filterDuplicatesIfNecessary(
-        IdTable& block, const CompressedBlockMetadata& blockMetadata) const;
+    static bool filterDuplicatesIfNecessary(
+        IdTable& block, const CompressedBlockMetadata& blockMetadata);
   };
 
   // Classes holding various subsets of parameters relevant for a scan of a
@@ -942,9 +939,9 @@ class CompressedRelationReader {
   static std::vector<ColumnIndex> prepareColumnIndices(
       const ScanSpecification& scanSpec, ColumnIndicesRef additionalColumns);
 
-  ScanImplConfig getScanConfig(
+  static ScanImplConfig getScanConfig(
       const ScanSpecification& scanSpec, ColumnIndicesRef additionalColumns,
-      const LocatedTriplesPerBlock& locatedTriples) const;
+      const LocatedTriplesPerBlock& locatedTriples);
 
   // The common implementation for `getDistinctCol0IdsAndCounts` and
   // `getCol1IdsAndCounts`.

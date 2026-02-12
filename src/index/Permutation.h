@@ -74,7 +74,8 @@ class Permutation {
 
   // everything that has to be done when reading an index from disk
   void loadFromDisk(const std::string& onDiskBase,
-                    bool loadInternalPermutation = false);
+                    bool loadInternalPermutation = false,
+                    bool deduplicateOnScan = true);
 
   // Set the original metadata for the delta triples. This also sets the
   // metadata for internal permutation if present.
@@ -200,15 +201,6 @@ class Permutation {
 
   Enum permutation() const { return permutation_; }
 
-  // Set whether duplicate rows should be removed during scanning. This also
-  // propagates the flag to the underlying `CompressedRelationReader`.
-  void setDeduplicateOnScan(bool v) {
-    deduplicateOnScan_ = v;
-    if (reader_.has_value()) {
-      reader_->setDeduplicateOnScan(v);
-    }
-  }
-
   // Provide const access to a linked internal permutation. If no internal
   // permutation is available, this function throws an exception.
   const Permutation& internalPermutation() const;
@@ -232,10 +224,6 @@ class Permutation {
   Allocator allocator_;
 
   bool isLoaded_ = false;
-
-  // If false, duplicate rows are not removed during scanning. This is
-  // used for materialized views where repeated rows are meaningful.
-  bool deduplicateOnScan_ = true;
 
   Enum permutation_;
   std::unique_ptr<Permutation> internalPermutation_ = nullptr;
