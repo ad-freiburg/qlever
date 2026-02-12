@@ -1172,7 +1172,7 @@ CompressedRelationReader::decompressAndPostprocessBlock(
     hasUpdates = true;
   }
   bool wasPostprocessed = false;
-  if (deduplicateOnScan_) {
+  if (useGraphPostProcessing_) {
     wasPostprocessed =
         scanConfig.graphFilter_.postprocessBlock(decompressedBlock, metadata);
   }

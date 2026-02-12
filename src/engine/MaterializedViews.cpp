@@ -361,8 +361,9 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
     originalQuery_ = viewInfoJson.at("query").get<std::string>();
   }
 
-  // Read permutation, and deactivate automatic deduplication on any of the
-  // additional columns (starting for the fourth).
+  // Read permutation, and deactivate the graph post-processing of
+  // `CompressedRelationReader`, including row deduplication, which is not the
+  // intended behavior for materialized views.
   permutation_->loadFromDisk(filename, false, false);
   AD_CORRECTNESS_CHECK(permutation_->isLoaded());
 }
