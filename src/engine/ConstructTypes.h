@@ -11,17 +11,18 @@
 #include <optional>
 #include <string>
 #include <variant>
+#include <vector>
 
-// A constant (IRI or literal) whose string value is fully known at
+// A constant (`Iri` or `Literal`) whose string value is fully known at
 // preprocessing time.
 struct PrecomputedConstant {
   std::string value_;
 };
 
-// A variable: we precompute which IdTable column to look up at query time.
-// `columnIndex_` is `std::nullopt` if the variable does not appear in the
-// result table (i.e., the variable is used in the CONSTRUCT template but not
-// bound by the WHERE clause).
+// A variable: we precompute which `IdTable` column to look up at construct
+// query triple instantitation time. `columnIndex_` is `std::nullopt` if the
+// variable does not appear in the result table (i.e., the variable is used in
+// the CONSTRUCT template but not bound by the WHERE clause).
 struct PrecomputedVariable {
   std::optional<size_t> columnIndex_;
 };
@@ -46,5 +47,13 @@ inline constexpr size_t NUM_TRIPLE_POSITIONS = 3;
 
 // A single preprocessed CONSTRUCT template triple.
 using PreprocessedTriple = std::array<PreprocessedTerm, NUM_TRIPLE_POSITIONS>;
+
+// Result of preprocessing all CONSTRUCT template triples. Contains the
+// preprocessed triples and the unique variable column indices that need to be
+// evaluated at query time.
+struct PreprocessedConstructTemplate {
+  std::vector<PreprocessedTriple> triples_;
+  std::vector<size_t> uniqueVariableColumns_;
+};
 
 #endif  // QLEVER_SRC_ENGINE_CONSTRUCTTYPES_H

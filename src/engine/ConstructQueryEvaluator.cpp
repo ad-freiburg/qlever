@@ -25,21 +25,10 @@ std::optional<std::string> ConstructQueryEvaluator::evaluate(
 }
 
 // _____________________________________________________________________________
-std::optional<std::string>
-ConstructQueryEvaluator::evaluateVariableByColumnIndex(
-    std::optional<size_t> columnIndex,
-    const ConstructQueryExportContext& context) {
-  if (!columnIndex.has_value()) {
-    return std::nullopt;
-  }
-
-  size_t resultTableRow = context.resultTableRowIndex_;
-  const Index& qecIndex = context._qecIndex;
-  const IdTable& idTable = context.idTable_;
-
-  auto id = idTable(resultTableRow, columnIndex.value());
-  auto optionalStringAndType = ExportQueryExecutionTrees::idToStringAndType(
-      qecIndex, id, context.localVocab_);
+std::optional<std::string> ConstructQueryEvaluator::evaluateId(
+    Id id, const Index& index, const LocalVocab& localVocab) {
+  auto optionalStringAndType =
+      ExportQueryExecutionTrees::idToStringAndType(index, id, localVocab);
 
   if (!optionalStringAndType.has_value()) {
     return std::nullopt;
@@ -61,6 +50,19 @@ ConstructQueryEvaluator::evaluateVariableByColumnIndex(
 }
 
 // _____________________________________________________________________________
+std::optional<std::string>
+ConstructQueryEvaluator::evaluateVariableByColumnIndex(
+    std::optional<size_t> columnIndex,
+    const ConstructQueryExportContext& context) {
+  if (!columnIndex.has_value()) {
+    return std::nullopt;
+  }
+
+  auto id = context.idTable_(context.resultTableRowIndex_, columnIndex.value());
+  return evaluateId(id, context._qecIndex, context.localVocab_);
+}
+
+// _____________________________________________________________________________
 std::optional<std::string> ConstructQueryEvaluator::evaluate(
     const Variable& var, const ConstructQueryExportContext& context) {
   const auto& variableColumns = context._variableColumns;
@@ -71,33 +73,20 @@ std::optional<std::string> ConstructQueryEvaluator::evaluate(
 }
 
 // _____________________________________________________________________________
-std::optional<std::string> ConstructQueryEvaluator::evaluate(
-    const BlankNode& node, const ConstructQueryExportContext& context) {
-  // Use absl::StrCat for efficient string concatenation (single allocation)
-  // instead of std::ostringstream which has significant overhead.
-  // Note: absl::StrCat doesn't accept single chars, so we use string literals.
-  return absl::StrCat("_:", (node.isGenerated() ? "g" : "u"),
-                      context._rowOffset + context.resultTableRowIndex_, "_",
-                      node.label());
-}
-
-// _____________________________________________________________________________
 std::optional<std::string> ConstructQueryEvaluator::evaluateTerm(
-    const GraphTerm& term, const ConstructQueryExportContext& context,
+    const PreprocessedTerm& term, const ConstructQueryExportContext& context,
     PositionInTriple posInTriple) {
   return std::visit(
       [&context, &posInTriple](const auto& arg) -> std::optional<std::string> {
         // strips reference/const qualifiers
         using T = std::decay_t<decltype(arg)>;
 
-        if constexpr (std::is_same_v<T, Variable>) {
+        if constexpr (std::is_same_v<T, PrecomputedVariable>) {
           return evaluate(arg, context);
-        } else if constexpr (std::is_same_v<T, BlankNode>) {
+        } else if constexpr (std::is_same_v<T, PrecomputedBlankNode>) {
           return evaluate(arg, context);
-        } else if constexpr (std::is_same_v<T, Iri>) {
+        } else if constexpr (std::is_same_v<T, PrecomputedConstant>) {
           return evaluate(arg);
-        } else if constexpr (std::is_same_v<T, Literal>) {
-          return evaluate(arg, posInTriple);
         } else {
           static_assert(ad_utility::alwaysFalse<T>);
         }
@@ -107,7 +96,7 @@ std::optional<std::string> ConstructQueryEvaluator::evaluateTerm(
 
 // _____________________________________________________________________________
 ConstructQueryEvaluator::StringTriple ConstructQueryEvaluator::evaluateTriple(
-    const std::array<GraphTerm, 3>& triple,
+    const PreprocessedTriple& triple,
     const ConstructQueryExportContext& context) {
   // We specify the position to the evaluator so it knows how to handle
   // special cases (like blank node generation or IRI escaping).
@@ -126,4 +115,28 @@ ConstructQueryEvaluator::StringTriple ConstructQueryEvaluator::evaluateTriple(
 
   return StringTriple(std::move(subject.value()), std::move(predicate.value()),
                       std::move(object.value()));
+}
+
+// _____________________________________________________________________________
+std::optional<std::string> ConstructQueryEvaluator::evaluate(
+    const PrecomputedVariable& variable,
+    const ConstructQueryExportContext& context) {
+  std::optional<size_t> colIdx = variable.columnIndex_;
+  if (colIdx.has_value()) {
+    return evaluateVariableByColumnIndex(variable.columnIndex_, context);
+  }
+  return std::nullopt;
+}
+
+// _____________________________________________________________________________
+std::string ConstructQueryEvaluator::evaluate(
+    const PrecomputedConstant& constant) {
+  return constant.value_;
+}
+
+// _____________________________________________________________________________
+std::optional<std::string> ConstructQueryEvaluator::evaluate(
+    const PrecomputedBlankNode& node,
+    const ConstructQueryExportContext& context) {
+  return absl::StrCat(node.prefix_, context.resultTableRowIndex_, node.suffix_);
 }

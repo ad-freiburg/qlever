@@ -7,6 +7,7 @@
 #ifndef QLEVER_CONSTRUCTQUERYEVALUATOR_H
 #define QLEVER_CONSTRUCTQUERYEVALUATOR_H
 
+#include "engine/ConstructTypes.h"
 #include "engine/QueryExecutionTree.h"
 #include "parser/data/BlankNode.h"
 #include "parser/data/ConstructQueryExportContext.h"
@@ -18,6 +19,17 @@ class ConstructQueryEvaluator {
   using StringTriple = QueryExecutionTree::StringTriple;
 
  public:
+  static std::string evaluate(const PrecomputedConstant& constant);
+  static std::optional<std::string> evaluate(
+      const PrecomputedVariable& variable,
+      const ConstructQueryExportContext& context);
+
+  // Evaluates a `PrecomputedBlankNode` for a specific given result table row
+  // contained in the `ConstructQueryExportContext`.
+  static std::optional<std::string> evaluate(
+      const PrecomputedBlankNode& blankNode,
+      const ConstructQueryExportContext& context);
+
   // Helper method for `evaluateTerm`. Evaluates an `Iri` (which is part of a
   // CONSTRUCT triple pattern).
   static std::string evaluate(const Iri& iri);
@@ -28,11 +40,6 @@ class ConstructQueryEvaluator {
   // of a triple).
   static std::optional<std::string> evaluate(const Literal& literal,
                                              PositionInTriple role);
-
-  // Helper method for `evaluateTerm`. Evaluates a `BlankNode` (which is part of
-  // a CONSTRUCT triple pattern) using the provided context.
-  static std::optional<std::string> evaluate(
-      const BlankNode& node, const ConstructQueryExportContext& context);
 
   // Helper method for `evaluateTerm`. Evaluates a `Variable` (which is part of
   // a CONSTRUCT triple pattern) using the provided context.
@@ -51,11 +58,18 @@ class ConstructQueryEvaluator {
       std::optional<size_t> columnIndex,
       const ConstructQueryExportContext& context);
 
+  // Evaluates an `Id` to a formatted string using the given `Index` and
+  // `LocalVocab` for vocabulary lookup. Returns `std::nullopt` for undefined
+  // values. This is the core evaluation logic used by
+  // `evaluateVariableByColumnIndex`.
+  static std::optional<std::string> evaluateId(Id id, const Index& index,
+                                               const LocalVocab& localVocab);
+
   // Evaluates a `GraphTerm` (which is part of a CONSTRUCT triple pattern) using
   // the provided context and the position of the `GraphTerm` in the template
   // triple. If the `GraphTerm` can't be evaluated, `std::nullopt` is returned.
   static std::optional<std::string> evaluateTerm(
-      const GraphTerm& term, const ConstructQueryExportContext& context,
+      const PreprocessedTerm& term, const ConstructQueryExportContext& context,
       PositionInTriple posInTriple);
 
   // Evaluates a single CONSTRUCT triple pattern using the provided context. If
@@ -63,7 +77,7 @@ class ConstructQueryEvaluator {
   // is returned. (meaning that all three member variables `subject_` ,
   // `predicate_`, `object_` of the `StringTriple` are set to the empty string).
   static StringTriple evaluateTriple(
-      const std::array<GraphTerm, 3>& triple,
+      const PreprocessedTriple& triple,
       const ConstructQueryExportContext& context);
 };
 

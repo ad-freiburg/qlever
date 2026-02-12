@@ -22,9 +22,9 @@ class ConstructTemplatePreprocessor {
  public:
   using Triples = ad_utility::sparql_types::Triples;
 
-  // Preprocess template triples and return one `PreprocessedTriple` per
-  // template triple.
-  static std::vector<PreprocessedTriple> preprocess(
+  // Preprocess template triples. Returns the preprocessed triples together
+  // with the unique variable column indices needed at query time.
+  static PreprocessedConstructTemplate preprocess(
       const Triples& templateTriples,
       const VariableToColumnMap& variableColumns);
 };

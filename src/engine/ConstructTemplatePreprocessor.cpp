@@ -13,10 +13,13 @@
 #include "util/TypeTraits.h"
 
 // _____________________________________________________________________________
-std::vector<PreprocessedTriple> ConstructTemplatePreprocessor::preprocess(
+PreprocessedConstructTemplate ConstructTemplatePreprocessor::preprocess(
     const Triples& templateTriples,
     const VariableToColumnMap& variableColumns) {
-  std::vector<PreprocessedTriple> result(templateTriples.size());
+  PreprocessedConstructTemplate result;
+  result.triples_.resize(templateTriples.size());
+
+  ad_utility::HashSet<size_t> uniqueColumnsSet;
 
   for (size_t tripleIdx = 0; tripleIdx < templateTriples.size(); ++tripleIdx) {
     const auto& triple = templateTriples[tripleIdx];
@@ -24,8 +27,9 @@ std::vector<PreprocessedTriple> ConstructTemplatePreprocessor::preprocess(
     for (size_t pos = 0; pos < NUM_TRIPLE_POSITIONS; ++pos) {
       auto role = static_cast<PositionInTriple>(pos);
 
-      result[tripleIdx][pos] = std::visit(
-          [&role, &variableColumns](const auto& term) -> PreprocessedTerm {
+      result.triples_[tripleIdx][pos] = std::visit(
+          [&role, &variableColumns,
+           &uniqueColumnsSet](const auto& term) -> PreprocessedTerm {
             using T = std::decay_t<decltype(term)>;
 
             if constexpr (std::is_same_v<T, Iri>) {
@@ -39,6 +43,7 @@ std::vector<PreprocessedTriple> ConstructTemplatePreprocessor::preprocess(
               if (auto opt = ad_utility::getOptionalFromHashMap(variableColumns,
                                                                 term)) {
                 columnIndex = opt->columnIndex_;
+                uniqueColumnsSet.insert(*columnIndex);
               }
               return PrecomputedVariable{columnIndex};
             } else if constexpr (std::is_same_v<T, BlankNode>) {
@@ -52,5 +57,7 @@ std::vector<PreprocessedTriple> ConstructTemplatePreprocessor::preprocess(
     }
   }
 
+  result.uniqueVariableColumns_.assign(uniqueColumnsSet.begin(),
+                                       uniqueColumnsSet.end());
   return result;
 }
