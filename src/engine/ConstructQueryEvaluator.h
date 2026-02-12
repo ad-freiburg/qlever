@@ -20,7 +20,7 @@ class ConstructQueryEvaluator {
  public:
   // Helper method for `evaluateTerm`. Evaluates an `Iri` (which is part of a
   // CONSTRUCT triple pattern).
-  static std::optional<std::string> evaluate(const Iri& iri);
+  static std::string evaluate(const Iri& iri);
 
   // Helper method for `evaluateTerm`. Evaluates a `Literal` (which is part of
   // a CONSTRUCT triple pattern) using the position of the literal in the
@@ -38,6 +38,18 @@ class ConstructQueryEvaluator {
   // a CONSTRUCT triple pattern) using the provided context.
   static std::optional<std::string> evaluate(
       const Variable& var, const ConstructQueryExportContext& context);
+
+  // Evaluates a `Variable` on the given `ConstructQueryExportContext`.
+  // The `Variable` is given implicitly by the `columnIndex`, that is, the idx
+  // of the column in the `IdTable` which the `Variable` is uniquely identified
+  // by. The necessary context for doing said evaluation is contained in
+  // `ConstructQueryExportContext`, such as the idx specifying the row of the
+  // result table which this variable should be evaluated for and the vocabulary
+  // for looking up the actual string value that the `Id`, which the variable is
+  // mapped to for the given result table row, resolves to.
+  static std::optional<std::string> evaluateVariableByColumnIndex(
+      std::optional<size_t> columnIndex,
+      const ConstructQueryExportContext& context);
 
   // Evaluates a `GraphTerm` (which is part of a CONSTRUCT triple pattern) using
   // the provided context and the position of the `GraphTerm` in the template

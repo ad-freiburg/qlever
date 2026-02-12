@@ -7,10 +7,11 @@
 #include "engine/ConstructQueryEvaluator.h"
 
 #include "engine/ExportQueryExecutionTrees.h"
+#include "util/HashMap.h"
 #include "util/TypeTraits.h"
 
 // _____________________________________________________________________________
-std::optional<std::string> ConstructQueryEvaluator::evaluate(const Iri& iri) {
+std::string ConstructQueryEvaluator::evaluate(const Iri& iri) {
   return iri.iri();
 }
 
@@ -24,36 +25,47 @@ std::optional<std::string> ConstructQueryEvaluator::evaluate(
 }
 
 // _____________________________________________________________________________
-std::optional<std::string> ConstructQueryEvaluator::evaluate(
-    const Variable& var, const ConstructQueryExportContext& context) {
+std::optional<std::string>
+ConstructQueryEvaluator::evaluateVariableByColumnIndex(
+    std::optional<size_t> columnIndex,
+    const ConstructQueryExportContext& context) {
+  if (!columnIndex.has_value()) {
+    return std::nullopt;
+  }
+
   size_t resultTableRow = context.resultTableRowIndex_;
-  const auto& variableColumns = context._variableColumns;
   const Index& qecIndex = context._qecIndex;
   const IdTable& idTable = context.idTable_;
 
-  if (variableColumns.contains(var)) {
-    size_t index = variableColumns.at(var).columnIndex_;
-    auto id = idTable(resultTableRow, index);
-    auto optionalStringAndType = ExportQueryExecutionTrees::idToStringAndType(
-        qecIndex, id, context.localVocab_);
+  auto id = idTable(resultTableRow, columnIndex.value());
+  auto optionalStringAndType = ExportQueryExecutionTrees::idToStringAndType(
+      qecIndex, id, context.localVocab_);
 
-    if (!optionalStringAndType.has_value()) {
-      return std::nullopt;
-    }
+  if (!optionalStringAndType.has_value()) {
+    return std::nullopt;
+  }
 
-    auto& [literal, type] = optionalStringAndType.value();
-    const char* i = XSD_INT_TYPE;
-    const char* d = XSD_DECIMAL_TYPE;
-    const char* b = XSD_BOOLEAN_TYPE;
+  auto& [literal, type] = optionalStringAndType.value();
+  const char* i = XSD_INT_TYPE;
+  const char* d = XSD_DECIMAL_TYPE;
+  const char* b = XSD_BOOLEAN_TYPE;
 
-    // Note: If `type` is `XSD_DOUBLE_TYPE`, `literal` is always "NaN", "INF" or
-    // "-INF", which doesn't have a short form notation.
-    if (type == nullptr || type == i || type == d ||
-        (type == b && literal.length() > 1)) {
-      return std::move(literal);
-    } else {
-      return absl::StrCat("\"", literal, "\"^^<", type, ">");
-    }
+  // Note: If `type` is `XSD_DOUBLE_TYPE`, `literal` is always "NaN", "INF" or
+  // "-INF", which doesn't have a short form notation.
+  if (type == nullptr || type == i || type == d ||
+      (type == b && literal.length() > 1)) {
+    return std::move(literal);
+  } else {
+    return absl::StrCat("\"", literal, "\"^^<", type, ">");
+  }
+}
+
+// _____________________________________________________________________________
+std::optional<std::string> ConstructQueryEvaluator::evaluate(
+    const Variable& var, const ConstructQueryExportContext& context) {
+  const auto& variableColumns = context._variableColumns;
+  if (auto opt = ad_utility::getOptionalFromHashMap(variableColumns, var)) {
+    return evaluateVariableByColumnIndex(opt->columnIndex_, context);
   }
   return std::nullopt;
 }
@@ -61,12 +73,12 @@ std::optional<std::string> ConstructQueryEvaluator::evaluate(
 // _____________________________________________________________________________
 std::optional<std::string> ConstructQueryEvaluator::evaluate(
     const BlankNode& node, const ConstructQueryExportContext& context) {
-  std::ostringstream stream;
-  stream << "_:";
-  stream << (node.isGenerated() ? 'g' : 'u');  // generated or user-defined
-  stream << context._rowOffset + context.resultTableRowIndex_ << '_';
-  stream << node.label();
-  return stream.str();
+  // Use absl::StrCat for efficient string concatenation (single allocation)
+  // instead of std::ostringstream which has significant overhead.
+  // Note: absl::StrCat doesn't accept single chars, so we use string literals.
+  return absl::StrCat("_:", (node.isGenerated() ? "g" : "u"),
+                      context._rowOffset + context.resultTableRowIndex_, "_",
+                      node.label());
 }
 
 // _____________________________________________________________________________
