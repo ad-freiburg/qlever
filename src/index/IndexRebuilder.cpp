@@ -40,12 +40,12 @@ namespace {
 // Merge the local vocab entries with the original vocab and write a new
 // vocabulary. Returns a mapping from the old local vocab `Id`s bit
 // representation (for cheaper hash functions) to new `Id`s.
-ad_utility::HashMap<Id::T, Id> mergeVocabs(
+LocalVocabMapping mergeVocabs(
     const std::string& vocabularyName, const Index::Vocab& vocab,
     const std::vector<std::tuple<VocabIndex, std::string_view, Id>>&
         insertInfo) {
   auto vocabWriter = vocab.makeWordWriterPtr(vocabularyName);
-  ad_utility::HashMap<Id::T, Id> localVocabMapping;
+  LocalVocabMapping localVocabMapping;
   ad_utility::OverloadCallOperator writer{
       [&vocab, &vocabWriter](VocabIndex vocabIndex) {
         auto word = vocab[vocabIndex];
@@ -75,10 +75,9 @@ ad_utility::HashMap<Id::T, Id> mergeVocabs(
 }  // namespace
 
 // _____________________________________________________________________________
-std::tuple<std::vector<VocabIndex>, ad_utility::HashMap<Id::T, Id>>
-materializeLocalVocab(const std::vector<LocalVocabIndex>& entries,
-                      const Index::Vocab& vocab,
-                      const std::string& newIndexName) {
+std::tuple<InsertionPositions, LocalVocabMapping> materializeLocalVocab(
+    const std::vector<LocalVocabIndex>& entries, const Index::Vocab& vocab,
+    const std::string& newIndexName) {
   std::vector<std::tuple<VocabIndex, std::string_view, Id>> insertInfo;
   insertInfo.reserve(entries.size());
 
@@ -96,7 +95,7 @@ materializeLocalVocab(const std::vector<LocalVocabIndex>& entries,
            std::tie(std::get<VocabIndex>(tupleB).get(), std::get<Id>(tupleB));
   });
 
-  ad_utility::HashMap<Id::T, Id> localVocabMapping =
+  LocalVocabMapping localVocabMapping =
       mergeVocabs(newIndexName + VOCAB_SUFFIX, vocab, insertInfo);
   auto denseInfo = insertInfo |
                    ql::views::transform(ad_utility::get<VocabIndex>) |
@@ -105,22 +104,17 @@ materializeLocalVocab(const std::vector<LocalVocabIndex>& entries,
 }
 
 // _____________________________________________________________________________
-std::vector<uint64_t> flattenBlankNodeBlocks(
-    const std::vector<
-        ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>&
-        ownedBlocks) {
+BlankNodeBlocks flattenBlankNodeBlocks(const OwnedBlocks& ownedBlocks) {
   auto result = ownedBlocks |
-                ql::views::transform(
-                    &ad_utility::BlankNodeManager::LocalBlankNodeManager::
-                        OwnedBlocksEntry::blockIndices_) |
+                ql::views::transform(&OwnedBlocksEntry::blockIndices_) |
                 ql::views::join | ::ranges::to<std::vector>;
   ql::ranges::sort(result);
   return result;
 }
 
 // _____________________________________________________________________________
-AD_ALWAYS_INLINE Id
-remapVocabId(Id original, const std::vector<VocabIndex>& insertionPositions) {
+AD_ALWAYS_INLINE Id remapVocabId(Id original,
+                                 const InsertionPositions& insertionPositions) {
   AD_EXPENSIVE_CHECK(
       original.getDatatype() == Datatype::VocabIndex,
       "Only ids resembling a vocab index can be remapped with this function.");
@@ -133,7 +127,7 @@ remapVocabId(Id original, const std::vector<VocabIndex>& insertionPositions) {
 }
 
 // _____________________________________________________________________________
-Id remapBlankNodeId(Id original, const std::vector<uint64_t>& blankNodeBlocks,
+Id remapBlankNodeId(Id original, const BlankNodeBlocks& blankNodeBlocks,
                     uint64_t minBlankNodeIndex) {
   AD_EXPENSIVE_CHECK(
       original.getDatatype() == Datatype::BlankNodeIndex,
@@ -160,9 +154,9 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
     const Permutation& permutation,
     const BlockMetadataRanges& blockMetadataRanges,
     const LocatedTriplesSharedState& locatedTriplesSharedState,
-    const ad_utility::HashMap<Id::T, Id>& localVocabMapping,
-    const std::vector<VocabIndex>& insertionPositions,
-    const std::vector<uint64_t>& blankNodeBlocks, uint64_t minBlankNodeIndex,
+    const LocalVocabMapping& localVocabMapping,
+    const InsertionPositions& insertionPositions,
+    const BlankNodeBlocks& blankNodeBlocks, uint64_t minBlankNodeIndex,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
     ql::span<const ColumnIndex> additionalColumns) {
   AD_CORRECTNESS_CHECK(ql::ranges::is_sorted(insertionPositions));
@@ -254,9 +248,9 @@ boost::asio::awaitable<void> createPermutationWriterTask(
     IndexImpl& newIndex, const Permutation& permutationA,
     const Permutation& permutationB, bool isInternal,
     const LocatedTriplesSharedState& locatedTriplesSharedState,
-    const ad_utility::HashMap<Id::T, Id>& localVocabMapping,
-    const std::vector<VocabIndex>& insertionPositions,
-    const std::vector<uint64_t>& blankNodeBlocks, uint64_t minBlankNodeIndex,
+    const LocalVocabMapping& localVocabMapping,
+    const InsertionPositions& insertionPositions,
+    const BlankNodeBlocks& blankNodeBlocks, uint64_t minBlankNodeIndex,
     const ad_utility::SharedCancellationHandle& cancellationHandle) {
   namespace net = boost::asio;
   auto ex = co_await net::this_coro::executor;
@@ -314,9 +308,7 @@ void materializeToIndex(
     const IndexImpl& index, const std::string& newIndexName,
     const LocatedTriplesSharedState& locatedTriplesSharedState,
     const std::vector<LocalVocabIndex>& entries,
-    const std::vector<
-        ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>&
-        ownedBlocks,
+    const indexRebuilder::OwnedBlocks& ownedBlocks,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
     const std::string& logFileName) {
   using namespace indexRebuilder;

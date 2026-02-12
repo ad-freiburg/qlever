@@ -21,31 +21,33 @@
 
 namespace qlever::indexRebuilder {
 
+using OwnedBlocksEntry =
+    ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry;
+using OwnedBlocks = std::vector<OwnedBlocksEntry>;
+using InsertionPositions = std::vector<VocabIndex>;
+using LocalVocabMapping = ad_utility::HashMap<Id::T, Id>;
+using BlankNodeBlocks = std::vector<uint64_t>;
+
 // Write a new vocabulary that contains all words from `vocab` plus all
 // entries in `entries`. Returns a pair consisting of a vector insertion
 // positions (the `VocabIndex` of the `LocalVocabEntry`s position in the old
 // `vocab`) and a mapping from old local vocab `Id`s bit representation (for
 // cheaper hash functions) to new vocab `Id`s.
-std::tuple<std::vector<VocabIndex>, ad_utility::HashMap<Id::T, Id>>
-materializeLocalVocab(const std::vector<LocalVocabIndex>& entries,
-                      const Index::Vocab& vocab,
-                      const std::string& newIndexName);
+std::tuple<InsertionPositions, LocalVocabMapping> materializeLocalVocab(
+    const std::vector<LocalVocabIndex>& entries, const Index::Vocab& vocab,
+    const std::string& newIndexName);
 
-// Turn a vector of `BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry`s
-// into a vector of `uint64_t`s representing the block ids of the generated
-// blocks.
-std::vector<uint64_t> flattenBlankNodeBlocks(
-    const std::vector<
-        ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>&
-        ownedBlocks);
+// Turn a vector of `OwnedBlocksEntry`s into a vector of `uint64_t`s
+// representing the block ids of the generated blocks.
+BlankNodeBlocks flattenBlankNodeBlocks(const OwnedBlocks& ownedBlocks);
 
 // Map old vocab `Id`s to new vocab `Id`s according to the given
 // `insertionPositions`. This is the  most performance critical code of the
 // rebuild.
-Id remapVocabId(Id original, const std::vector<VocabIndex>& insertionPositions);
+Id remapVocabId(Id original, const InsertionPositions& insertionPositions);
 
 // Remaps a blank node `Id` to another id that's more dense.
-Id remapBlankNodeId(Id original, const std::vector<uint64_t>& blankNodeBlocks,
+Id remapBlankNodeId(Id original, const BlankNodeBlocks& blankNodeBlocks,
                     uint64_t minBlankNodeIndex);
 
 // Create a copy of the given `permutation` scanned according to `scanSpec`,
@@ -56,9 +58,9 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
     const Permutation& permutation,
     const BlockMetadataRanges& blockMetadataRanges,
     const LocatedTriplesSharedState& locatedTriplesSharedState,
-    const ad_utility::HashMap<Id::T, Id>& localVocabMapping,
-    const std::vector<VocabIndex>& insertionPositions,
-    const std::vector<uint64_t>& blankNodeBlocks, uint64_t minBlankNodeIndex,
+    const LocalVocabMapping& localVocabMapping,
+    const InsertionPositions& insertionPositions,
+    const BlankNodeBlocks& blankNodeBlocks, uint64_t minBlankNodeIndex,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
     ql::span<const ColumnIndex> additionalColumns);
 
@@ -73,9 +75,9 @@ boost::asio::awaitable<void> createPermutationWriterTask(
     IndexImpl& newIndex, const Permutation& permutationA,
     const Permutation& permutationB, bool isInternal,
     const LocatedTriplesSharedState& locatedTriplesSharedState,
-    const ad_utility::HashMap<Id::T, Id>& localVocabMapping,
-    const std::vector<VocabIndex>& insertionPositions,
-    const std::vector<uint64_t>& blankNodeBlocks, uint64_t minBlankNodeIndex,
+    const LocalVocabMapping& localVocabMapping,
+    const InsertionPositions& insertionPositions,
+    const BlankNodeBlocks& blankNodeBlocks, uint64_t minBlankNodeIndex,
     const ad_utility::SharedCancellationHandle& cancellationHandle);
 
 // Analyze how many columns the new permutation will have and which additional
