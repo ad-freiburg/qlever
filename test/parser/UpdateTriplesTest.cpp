@@ -34,7 +34,7 @@ TEST(UpdateTriples, ConstructorsAndAssignments) {
   auto testTriples = [&](auto&& tr, ad_utility::source_location loc =
                                         AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(loc);
-    EXPECT_EQ(tr.preprocessedTriples_, triples);
+    EXPECT_EQ(tr.triples_, triples);
     EXPECT_THAT(tr.localVocab_.getAllWordsForTesting(),
                 ::testing::ElementsAre(iri));
     ;
