@@ -98,13 +98,10 @@ materializeLocalVocab(const std::vector<LocalVocabIndex>& entries,
 
   ad_utility::HashMap<Id::T, Id> localVocabMapping =
       mergeVocabs(newIndexName + VOCAB_SUFFIX, vocab, insertInfo);
-  std::vector<VocabIndex> insertionPositions;
-  insertionPositions.reserve(insertInfo.size());
-  for (const auto& [vocabIndex, _, __] : insertInfo) {
-    insertionPositions.push_back(vocabIndex);
-  }
-  return std::make_tuple(std::move(insertionPositions),
-                         std::move(localVocabMapping));
+  auto denseInfo = insertInfo |
+                   ql::views::transform(ad_utility::get<VocabIndex>) |
+                   ::ranges::to<std::vector>;
+  return std::make_tuple(std::move(denseInfo), std::move(localVocabMapping));
 }
 
 // _____________________________________________________________________________
