@@ -117,6 +117,8 @@ template <class MapType>
 void IndexMetaData<MapType>::exchangeMultiplicities(IndexMetaData& other) {
   AD_CONTRACT_CHECK(data_.size() == other.data_.size(),
                     "Both IndexMetaData objects must have the same length.");
+  // This is conceptually `::ranges::zip_view`, but the `data_` objects to not
+  // satisfy the necessary concepts for it, so we do the zipping manually here.
   auto otherIt = other.data_.begin();
   for (auto it = data_.begin(); it != data_.end(); ++it, ++otherIt) {
     AD_CORRECTNESS_CHECK(otherIt != other.data_.end());

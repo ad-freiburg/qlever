@@ -1919,6 +1919,8 @@ void IndexImpl::writePatternsToFile() const {
 void IndexImpl::loadConfigFromOldIndex(const std::string& newName,
                                        const IndexImpl& other,
                                        const nlohmann::json& newStats) {
+  // Copy the relevant information from an existing index to rebuild the new
+  // index and write a fresh configuration file for a new index.
   setOnDiskBase(newName);
   setKbName(other.getKbName());
   blocksizePermutationPerColumn() = other.blocksizePermutationPerColumn();

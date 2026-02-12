@@ -4,6 +4,9 @@
 //
 //  UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
+
 #ifndef QLEVER_SRC_INDEX_INDEXREBUILDERIMPL_H
 #define QLEVER_SRC_INDEX_INDEXREBUILDERIMPL_H
 
@@ -46,7 +49,8 @@ BlankNodeBlocks flattenBlankNodeBlocks(const OwnedBlocks& ownedBlocks);
 // rebuild.
 Id remapVocabId(Id original, const InsertionPositions& insertionPositions);
 
-// Remaps a blank node `Id` to another id that's more dense.
+// Remaps a blank node `Id` to another blank node `Id` to reduce the gaps in the
+// id space left by random allocation of blank node ids.
 Id remapBlankNodeId(Id original, const BlankNodeBlocks& blankNodeBlocks,
                     uint64_t minBlankNodeIndex);
 
@@ -65,7 +69,11 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
     ql::span<const ColumnIndex> additionalColumns);
 
 // Get the number of columns in the given `blockMetadataRanges`. If this cannot
-// be determined, return 4 as a safe default.
+// be determined, return 4 as a "safe" default, representing subject + predicate
+// + object + graph. Additional columns other than graph are only used for
+// patterns, which are currently not updated for index rebuilds. So it doesn't
+// matter if the columns are actually missing, or present but filled with
+// `Id::makeUndefined()`.
 size_t getNumColumns(const BlockMetadataRanges& blockMetadataRanges);
 
 // Create a `boost::asio::awaitable<void>` that writes a pair of new

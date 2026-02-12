@@ -487,23 +487,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       logCommand(cmd, "rebuilding index");
       auto fileName =
           checkParameter("index-name", std::nullopt).value_or("new_index");
-      // There is no mechanism to actually cancel the handle.
-      auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
-      // We don't directly `co_await` because of lifetime issues (bugs) in the
-      // Conan setup.
-      auto coroutine = computeInNewThread(
-          queryThreadPool_,
-          [this, &handle, fileName = std::move(fileName)] {
-            auto logFileName = fileName + ".rebuild-index-log.txt";
-            auto [currentSnapshot, localVocabCopy, ownedBlocks] =
-                index_.deltaTriplesManager()
-                    .getCurrentLocatedTriplesSharedStateWithVocab();
-            qlever::materializeToIndex(index_.getImpl(), fileName,
-                                       currentSnapshot, localVocabCopy,
-                                       ownedBlocks, handle, logFileName);
-          },
-          handle);
-      co_await std::move(coroutine);
+      co_await rebuildIndex(fileName);
       response =
           createOkResponse("Done writing", request, MediaType::textPlain);
     }
@@ -1450,6 +1434,27 @@ void Server::writeMaterializedView(
       getRuntimeParameter<&RuntimeParameters::materializedViewWriterMemory_>();
   materializedViewsManager_.writeViewToDisk(
       name, {qet, qec, std::move(plan.parsedQuery_)}, memoryLimit);
+}
+
+// _____________________________________________________________________________
+Awaitable<void> Server::rebuildIndex(const std::string& indexBaseName) {
+  // There is no mechanism to actually cancel the handle.
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  // We don't directly `co_await` because of lifetime issues (bugs) in the
+  // Conan setup.
+  auto coroutine = computeInNewThread(
+      queryThreadPool_,
+      [this, &handle, &indexBaseName] {
+        auto logFileName = indexBaseName + ".rebuild-index-log.txt";
+        auto [currentSnapshot, localVocabCopy, ownedBlocks] =
+            index_.deltaTriplesManager()
+                .getCurrentLocatedTriplesSharedStateWithVocab();
+        qlever::materializeToIndex(index_.getImpl(), indexBaseName,
+                                   currentSnapshot, localVocabCopy, ownedBlocks,
+                                   handle, logFileName);
+      },
+      handle);
+  co_await std::move(coroutine);
 }
 
 // For helper function `Server::onlyForTestingProcess`

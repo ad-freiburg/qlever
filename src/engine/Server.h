@@ -354,6 +354,11 @@ class Server {
       ad_utility::SharedCancellationHandle cancellationHandle,
       TimeLimit timeLimit);
   FRIEND_TEST(MaterializedViewsTest, serverIntegration);
+
+  // Trigger an index rebuild with `indexBaseName` as the base name for the new
+  // index. This assumes that the access token has already been checked and no
+  // other build is currently in progress.
+  Awaitable<void> rebuildIndex(const std::string& indexBaseName);
 };
 
 #endif  // QLEVER_SRC_ENGINE_SERVER_H

@@ -4,6 +4,9 @@
 //
 //  UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
+
 #include "index/IndexRebuilder.h"
 
 #include <array>
@@ -90,9 +93,11 @@ std::tuple<InsertionPositions, LocalVocabMapping> materializeLocalVocab(
                             entry->asLiteralOrIri().toStringRepresentation(),
                             Id::makeFromLocalVocabIndex(entry));
   }
-  ql::ranges::sort(insertInfo, [](const auto& tupleA, const auto& tupleB) {
-    return std::tie(std::get<VocabIndex>(tupleA).get(), std::get<Id>(tupleA)) <
-           std::tie(std::get<VocabIndex>(tupleB).get(), std::get<Id>(tupleB));
+  // Sort by insertion position, then by the original `Id`. It would probably
+  // suffice to just sort by `Id`, but it is faster to check the two numbers
+  // first that we already computed.
+  ql::ranges::sort(insertInfo, {}, [](const auto& tuple) {
+    return std::tie(std::get<VocabIndex>(tuple), std::get<Id>(tuple));
   });
 
   LocalVocabMapping localVocabMapping =
@@ -142,11 +147,11 @@ Id remapBlankNodeId(Id original, const BlankNodeBlocks& blankNodeBlocks,
   auto it = ql::ranges::lower_bound(blankNodeBlocks, blockIndex);
   AD_EXPENSIVE_CHECK(it != blankNodeBlocks.end() && *it == blockIndex,
                      "Could not find block index of blank node.");
-  return Id::makeFromBlankNodeIndex(BlankNodeIndex::make(
-      (normalizedId % ad_utility::BlankNodeManager::blockSize_) +
-      ql::ranges::distance(blankNodeBlocks.begin(), it) *
-          ad_utility::BlankNodeManager::blockSize_ +
-      minBlankNodeIndex));
+  auto relativeId = normalizedId % ad_utility::BlankNodeManager::blockSize_;
+  auto blockOffset = ql::ranges::distance(blankNodeBlocks.begin(), it) *
+                     ad_utility::BlankNodeManager::blockSize_;
+  return Id::makeFromBlankNodeIndex(
+      BlankNodeIndex::make(relativeId + blockOffset + minBlankNodeIndex));
 }
 
 // _____________________________________________________________________________
@@ -168,11 +173,24 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
       scanSpecAndBlocks, std::nullopt, additionalColumns, cancellationHandle,
       *locatedTriplesSharedState, LimitOffsetClause{});
 
+  auto remapId = [&insertionPositions, &localVocabMapping, &blankNodeBlocks,
+                  minBlankNodeIndex](Id& id) {
+    // TODO<RobinTF> Experiment with caching the last remapped id
+    // and reusing it if the same id appears again. See if that
+    // improves performance or if it makes it worse.
+    if (id.getDatatype() == Datatype::VocabIndex) [[likely]] {
+      id = remapVocabId(id, insertionPositions);
+    } else if (id.getDatatype() == Datatype::LocalVocabIndex) {
+      id = localVocabMapping.at(id.getBits());
+    } else if (id.getDatatype() == Datatype::BlankNodeIndex) {
+      id = remapBlankNodeId(id, blankNodeBlocks, minBlankNodeIndex);
+    }
+  };
+
   return ad_utility::InputRangeTypeErased{
       ad_utility::CachingTransformInputRange{
           std::move(fullScan),
-          [&localVocabMapping, &insertionPositions, &blankNodeBlocks,
-           minBlankNodeIndex](IdTable& idTable) {
+          [remapId = std::move(remapId)](IdTable& idTable) {
             // TODO<RobinTF> process columns in parallel.
             auto allCols = idTable.getColumns();
             // Extra columns beyond the graph column only contain integers (or
@@ -180,20 +198,9 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
             // remapped.
             constexpr size_t REGULAR_COLUMNS = 4;
             for (auto col : allCols | ::ranges::views::take(REGULAR_COLUMNS)) {
-              for (Id& id : col) {
-                // TODO<RobinTF> Experiment with caching the last remapped id
-                // and reusing it if the same id appears again. See if that
-                // improves performance or if it makes it worse.
-                if (id.getDatatype() == Datatype::VocabIndex) [[likely]] {
-                  id = remapVocabId(id, insertionPositions);
-                } else if (id.getDatatype() == Datatype::LocalVocabIndex) {
-                  id = localVocabMapping.at(id.getBits());
-                } else if (id.getDatatype() == Datatype::BlankNodeIndex) {
-                  id = remapBlankNodeId(id, blankNodeBlocks, minBlankNodeIndex);
-                }
-              }
+              ql::ranges::for_each(col, remapId);
             }
-            AD_EXPENSIVE_CHECK(ql::ranges::all_of(
+            AD_CORRECTNESS_CHECK(ql::ranges::all_of(
                 allCols | ::ranges::views::drop(REGULAR_COLUMNS), [](auto col) {
                   return ql::ranges::all_of(col, [](Id id) {
                     return id.getDatatype() == Datatype::Int ||
@@ -346,7 +353,7 @@ void materializeToIndex(
   REBUILD_LOG_INFO << "Writing new permutations ..." << std::endl;
 
   auto patternThreads = static_cast<size_t>(index.usePatterns());
-  size_t numberOfPermutations = index.hasAllPermutations() ? 6 : 2;
+  size_t numberOfPermutations = index.hasAllPermutations() ? 8 : 2;
   namespace net = boost::asio;
   net::thread_pool threadPool{patternThreads + numberOfPermutations};
 
@@ -360,40 +367,33 @@ void materializeToIndex(
     });
   }
 
+  using enum Permutation::Enum;
+
+  std::vector<std::pair<std::pair<Permutation::Enum, Permutation::Enum>, bool>>
+      permutationSettings{{{PSO, POS}, false}, {{PSO, POS}, true}};
+
   if (index.hasAllPermutations()) {
-    using enum Permutation::Enum;
-    for (auto [permutationA, permutationB] :
-         {std::pair{SPO, SOP}, std::pair{OPS, OSP}}) {
-      const auto& actualPermutationA = index.getPermutation(permutationA);
-      const auto& actualPermutationB = index.getPermutation(permutationB);
-      net::co_spawn(
-          threadPool,
-          createPermutationWriterTask(
-              newIndex, actualPermutationA, actualPermutationB, false,
-              locatedTriplesSharedState, localVocabMapping, insertionPositions,
-              blankNodeBlocks, minBlankNodeIndex, cancellationHandle),
-          net::detached);
-    }
+    permutationSettings.push_back({{SPO, SOP}, false});
+    permutationSettings.push_back({{OPS, OSP}, false});
   }
 
-  const auto& actualPermutationA = index.getPermutation(Permutation::PSO);
-  const auto& internalPermutationA = actualPermutationA.internalPermutation();
-  const auto& actualPermutationB = index.getPermutation(Permutation::POS);
-  const auto& internalPermutationB = actualPermutationB.internalPermutation();
-  net::co_spawn(
-      threadPool,
-      createPermutationWriterTask(
-          newIndex, internalPermutationA, internalPermutationB, true,
-          locatedTriplesSharedState, localVocabMapping, insertionPositions,
-          blankNodeBlocks, minBlankNodeIndex, cancellationHandle),
-      net::detached);
-  net::co_spawn(
-      threadPool,
-      createPermutationWriterTask(
-          newIndex, actualPermutationA, actualPermutationB, false,
-          locatedTriplesSharedState, localVocabMapping, insertionPositions,
-          blankNodeBlocks, minBlankNodeIndex, cancellationHandle),
-      net::detached);
+  for (const auto& [permutationEnums, isInternal] : permutationSettings) {
+    auto [a, b] = permutationEnums;
+    const auto& permutationA = index.getPermutation(a);
+    const auto& permutationB = index.getPermutation(b);
+    const auto& actualPermutationA =
+        isInternal ? permutationA.internalPermutation() : permutationA;
+    const auto& actualPermutationB =
+        isInternal ? permutationB.internalPermutation() : permutationB;
+
+    net::co_spawn(
+        threadPool,
+        createPermutationWriterTask(
+            newIndex, actualPermutationA, actualPermutationB, isInternal,
+            locatedTriplesSharedState, localVocabMapping, insertionPositions,
+            blankNodeBlocks, minBlankNodeIndex, cancellationHandle),
+        net::detached);
+  }
 
   threadPool.join();
 
