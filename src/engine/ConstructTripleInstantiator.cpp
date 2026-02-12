@@ -13,41 +13,35 @@
 #include "util/Exception.h"
 
 // _____________________________________________________________________________
-InstantiatedTerm ConstructTripleInstantiator::instantiateTerm(
-    size_t tripleIdx, size_t pos,
-    const PreprocessedConstructTemplate& preprocessedTemplate,
-    const BatchEvaluationResult& batchResult, size_t rowIdxInBatch) {
-  using enum TripleInstantitationRecipe::TermType;
+EvaluatedTerm ConstructTripleInstantiator::instantiateTerm(
+    const PreprocessedTerm& term, const BatchEvaluationResult& batchResult,
+    size_t rowInBatch, size_t blankNodeRowId) {
+  return std::visit(
+      [&](const auto& t) -> EvaluatedTerm {
+        using T = std::decay_t<decltype(t)>;
 
-  const TripleInstantitationRecipe& info =
-      preprocessedTemplate.triplePatternInfos_[tripleIdx];
-  const TripleInstantitationRecipe::TermInstantitationRecipe& lookup =
-      info.lookups_[pos];
-
-  switch (lookup.type_) {
-    case CONSTANT: {
-      return std::make_shared<std::string>(
-          preprocessedTemplate.precomputedConstants_[tripleIdx][pos]);
-    }
-    case VARIABLE: {
-      // Variable values are stored in the batch result.
-      // May be Undef if the variable is unbound.
-      return batchResult.getEvaluatedVariable(lookup.index_, rowIdxInBatch);
-    }
-    case BLANK_NODE: {
-      // Blank node values are always valid (computed for each row).
-      return std::make_shared<const std::string>(
-          batchResult.getBlankNodeValue(lookup.index_, rowIdxInBatch));
-    }
-  }
-  AD_FAIL();  // Unreachable: all enum cases handled above.
+        if constexpr (std::is_same_v<T, PrecomputedConstant>) {
+          return std::make_shared<const std::string>(t.value_);
+        } else if constexpr (std::is_same_v<T, PrecomputedVariable>) {
+          if (!t.columnIndex_.has_value()) {
+            return Undef{};
+          }
+          return batchResult.getVariable(*t.columnIndex_, rowInBatch);
+        } else if constexpr (std::is_same_v<T, PrecomputedBlankNode>) {
+          return std::make_shared<const std::string>(
+              absl::StrCat(t.prefix_, blankNodeRowId, t.suffix_));
+        } else {
+          static_assert(false, "Unhandled variant type");
+        }
+      },
+      term);
 }
 
 // _____________________________________________________________________________
 template <ad_utility::MediaType format>
 std::string ConstructTripleInstantiator::formatTriple(
-    const InstantiatedTerm& subject, const InstantiatedTerm& predicate,
-    const InstantiatedTerm& object) {
+    const EvaluatedTerm& subject, const EvaluatedTerm& predicate,
+    const EvaluatedTerm& object) {
   static_assert(format == ad_utility::MediaType::turtle ||
                 format == ad_utility::MediaType::csv ||
                 format == ad_utility::MediaType::tsv);
@@ -91,10 +85,10 @@ std::string ConstructTripleInstantiator::formatTriple(
 // Explicit instantiations.
 template std::string
 ConstructTripleInstantiator::formatTriple<ad_utility::MediaType::turtle>(
-    const InstantiatedTerm&, const InstantiatedTerm&, const InstantiatedTerm&);
+    const EvaluatedTerm&, const EvaluatedTerm&, const EvaluatedTerm&);
 template std::string
 ConstructTripleInstantiator::formatTriple<ad_utility::MediaType::csv>(
-    const InstantiatedTerm&, const InstantiatedTerm&, const InstantiatedTerm&);
+    const EvaluatedTerm&, const EvaluatedTerm&, const EvaluatedTerm&);
 template std::string
 ConstructTripleInstantiator::formatTriple<ad_utility::MediaType::tsv>(
-    const InstantiatedTerm&, const InstantiatedTerm&, const InstantiatedTerm&);
+    const EvaluatedTerm&, const EvaluatedTerm&, const EvaluatedTerm&);

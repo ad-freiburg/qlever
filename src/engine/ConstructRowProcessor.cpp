@@ -8,10 +8,12 @@
 
 // _____________________________________________________________________________
 ConstructRowProcessor::ConstructRowProcessor(
-    std::shared_ptr<const PreprocessedConstructTemplate>
-        preprocessedConstructTemplate,
+    const PreprocessedConstructTemplate& preprocessedTemplate,
+    const Index& index, CancellationHandle cancellationHandle,
     const TableWithRange& table, size_t currentRowOffset)
-    : preprocessedConstructTemplate_(std::move(preprocessedConstructTemplate)),
+    : preprocessedTemplate_(preprocessedTemplate),
+      index_(index),
+      cancellationHandle_(std::move(cancellationHandle)),
       tableWithVocab_(table.tableWithVocab_),
       rowIndicesVec_(ql::ranges::begin(table.view_),
                      ql::ranges::end(table.view_)),
@@ -20,7 +22,7 @@ ConstructRowProcessor::ConstructRowProcessor(
 // _____________________________________________________________________________
 std::optional<InstantiatedTriple> ConstructRowProcessor::get() {
   while (batchStart_ < rowIndicesVec_.size()) {
-    preprocessedConstructTemplate_->cancellationHandle_->throwIfCancelled();
+    cancellationHandle_->throwIfCancelled();
 
     loadBatchIfNeeded();
 
@@ -49,10 +51,9 @@ void ConstructRowProcessor::loadBatchIfNeeded() {
                                       tableWithVocab_.localVocab(),
                                       batchRowIndices, currentRowOffset_};
   batchEvaluationResult_ = ConstructBatchEvaluator::evaluateBatch(
-      *preprocessedConstructTemplate_, batchContext, *idCache_);
+      preprocessedTemplate_.uniqueVariableColumns_, batchContext, index_.get(),
+      *idCache_);
 
-  // After we are done processing the batch, reset the indices for iterating
-  // over the rows/triples of the batch.
   rowInBatchIdx_ = 0;
   tripleIdx_ = 0;
 }
@@ -70,29 +71,27 @@ std::optional<InstantiatedTriple> ConstructRowProcessor::processCurrentBatch() {
 
 // _____________________________________________________________________________
 std::optional<InstantiatedTriple> ConstructRowProcessor::processCurrentRow() {
-  while (tripleIdx_ < preprocessedConstructTemplate_->numTemplateTriples()) {
+  const size_t blankNodeRowId = currentBlankNodeRowId();
+
+  while (tripleIdx_ < preprocessedTemplate_.triples_.size()) {
+    const auto& triple = preprocessedTemplate_.triples_[tripleIdx_];
+
     auto subject = ConstructTripleInstantiator::instantiateTerm(
-        tripleIdx_, 0, *preprocessedConstructTemplate_, *batchEvaluationResult_,
-        rowInBatchIdx_);
-
+        triple[0], *batchEvaluationResult_, rowInBatchIdx_, blankNodeRowId);
     auto predicate = ConstructTripleInstantiator::instantiateTerm(
-        tripleIdx_, 1, *preprocessedConstructTemplate_, *batchEvaluationResult_,
-        rowInBatchIdx_);
+        triple[1], *batchEvaluationResult_, rowInBatchIdx_, blankNodeRowId);
     auto object = ConstructTripleInstantiator::instantiateTerm(
-        tripleIdx_, 2, *preprocessedConstructTemplate_, *batchEvaluationResult_,
-        rowInBatchIdx_);
+        triple[2], *batchEvaluationResult_, rowInBatchIdx_, blankNodeRowId);
 
-    auto triple = InstantiatedTriple{subject, predicate, object};
+    auto instantiatedTriple = InstantiatedTriple{subject, predicate, object};
 
     ++tripleIdx_;
 
-    if (triple.isComplete()) {
-      return triple;
+    if (instantiatedTriple.isComplete()) {
+      return instantiatedTriple;
     }
-    // Triple was incomplete (has UNDEF components), continue to next pattern.
   }
 
-  // return nullopt of any of the terms in the tripe are `Undef`.
   return std::nullopt;
 }
 
@@ -109,20 +108,15 @@ void ConstructRowProcessor::advanceToNextBatch() {
 }
 
 // _____________________________________________________________________________
+size_t ConstructRowProcessor::currentBlankNodeRowId() const {
+  return currentRowOffset_ + rowIndicesVec_[batchStart_ + rowInBatchIdx_];
+}
+
+// _____________________________________________________________________________
 std::shared_ptr<ConstructRowProcessor::IdCache>
 ConstructRowProcessor::createIdCache() const {
-  // Size the cache proportionally to the query shape: each batch touches at
-  // most `batchSize * numVars` distinct IDs (remember that we only process
-  // `Variables` and `BlankNodes` per batch, and that `BlankNodes` are generated
-  // and not looked up in the `IdTable` and therefore are not cached), and
-  // `CACHE_CAPACITY_FACTOR` provides headroom so that frequently repeated
-  // values (e.g., predicates) survive across batches instead of being evicted
-  // immediately.  We use `max(numVars, 1)` to guarantee a positive capacity
-  // (a zero-capacity LRU cache would be degenerate).
-  const size_t numVars =
-      preprocessedConstructTemplate_->variablesToInstantiate_.size();
+  const size_t numVars = preprocessedTemplate_.uniqueVariableColumns_.size();
   const size_t capacity =
       getBatchSize() * std::max(numVars, size_t{1}) * CACHE_CAPACITY_FACTOR;
-  AD_CORRECTNESS_CHECK(capacity >= getBatchSize() * numVars);
   return std::make_shared<IdCache>(capacity);
 }

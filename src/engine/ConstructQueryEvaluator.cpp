@@ -24,21 +24,10 @@ std::optional<std::string> ConstructQueryEvaluator::evaluate(
 }
 
 // _____________________________________________________________________________
-std::optional<std::string>
-ConstructQueryEvaluator::evaluateVariableByColumnIndex(
-    std::optional<size_t> columnIndex,
-    const ConstructQueryExportContext& context) {
-  if (!columnIndex.has_value()) {
-    return std::nullopt;
-  }
-
-  size_t resultTableRow = context.resultTableRowIndex_;
-  const Index& qecIndex = context._qecIndex;
-  const IdTable& idTable = context.idTable_;
-
-  auto id = idTable(resultTableRow, columnIndex.value());
-  auto optionalStringAndType = ExportQueryExecutionTrees::idToStringAndType(
-      qecIndex, id, context.localVocab_);
+std::optional<std::string> ConstructQueryEvaluator::evaluateId(
+    Id id, const Index& index, const LocalVocab& localVocab) {
+  auto optionalStringAndType =
+      ExportQueryExecutionTrees::idToStringAndType(index, id, localVocab);
 
   if (!optionalStringAndType.has_value()) {
     return std::nullopt;
@@ -57,6 +46,18 @@ ConstructQueryEvaluator::evaluateVariableByColumnIndex(
   } else {
     return absl::StrCat("\"", literal, "\"^^<", type, ">");
   }
+}
+
+// _____________________________________________________________________________
+std::optional<std::string>
+ConstructQueryEvaluator::evaluateVariableByColumnIndex(
+    std::optional<size_t> columnIndex,
+    const ConstructQueryExportContext& context) {
+  if (!columnIndex.has_value()) {
+    return std::nullopt;
+  }
+  auto id = context.idTable_(context.resultTableRowIndex_, columnIndex.value());
+  return evaluateId(id, context._qecIndex, context.localVocab_);
 }
 
 // _____________________________________________________________________________

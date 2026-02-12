@@ -10,31 +10,28 @@
 #include <memory>
 #include <string>
 
-#include "engine/ConstructTemplatePreprocessor.h"
 #include "engine/ConstructTypes.h"
 #include "util/http/MediaTypes.h"
 
-// _____________________________________________________________________________
 // Provides methods for instantiating terms and formatting triples.
 class ConstructTripleInstantiator {
  public:
-  // Instantiates a single term from the template triple. Returns `Undef` if the
-  // term is a variable that is unbound. Uses the preprocessed template data and
-  // batch evaluation result.
-  // `tripleIdx`: index of the triple in the template.
-  // `pos`: position within the triple (0=subject, 1=predicate, 2=object).
-  // `rowIdxInBatch`: which row in the current batch.
-  static InstantiatedTerm instantiateTerm(
-      size_t tripleIdx, size_t pos,
-      const PreprocessedConstructTemplate& preprocessedTemplate,
-      const BatchEvaluationResult& batchResult, size_t rowIdxInBatch);
+  // Instantiates a single preprocessed term for a specific row.
+  // For constants: returns the precomputed string.
+  // For variables: looks up the batch-evaluated value.
+  // For blank nodes: computes the value on the fly using precomputed
+  //   prefix/suffix and the blank node row id (rowOffset + actualRowIdx).
+  static EvaluatedTerm instantiateTerm(const PreprocessedTerm& term,
+                                       const BatchEvaluationResult& batchResult,
+                                       size_t rowInBatch,
+                                       size_t blankNodeRowId);
 
   // Formats a triple (subject, predicate, object) according to the output
   // format. Returns empty string if any component is `Undef`.
   template <ad_utility::MediaType format>
-  static std::string formatTriple(const InstantiatedTerm& subject,
-                                  const InstantiatedTerm& predicate,
-                                  const InstantiatedTerm& object);
+  static std::string formatTriple(const EvaluatedTerm& subject,
+                                  const EvaluatedTerm& predicate,
+                                  const EvaluatedTerm& object);
 };
 
 #endif  // QLEVER_SRC_ENGINE_CONSTRUCTTRIPLEINSTANTIATOR_H

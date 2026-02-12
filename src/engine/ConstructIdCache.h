@@ -26,7 +26,7 @@ struct ConstructIdCacheStats {
   }
 };
 
-// Cache for ID-to-InstantiatedTerm conversions to avoid redundant
+// Cache for ID-to-EvaluatedTerm conversions to avoid redundant
 // vocabulary lookups when the same ID appears multiple times across rows.
 // Uses LRU eviction to bound memory usage for queries with many unique IDs.
 // Statistics (hits/misses) are tracked internally.
@@ -37,7 +37,7 @@ class ConstructIdCache {
   // Look up the value for a key, computing it if not present.
   // Statistics are tracked automatically.
   template <typename ComputeFunc>
-  const InstantiatedTerm& getOrCompute(const Id& key, ComputeFunc&& compute) {
+  const EvaluatedTerm& getOrCompute(const Id& key, ComputeFunc&& compute) {
     bool wasHit = true;
     const auto& result =
         cache_.getOrCompute(key, [&wasHit, &compute](const Id& k) {
@@ -56,7 +56,7 @@ class ConstructIdCache {
   size_t capacity() const { return cache_.capacity(); }
 
  private:
-  ad_utility::util::LRUCache<Id, InstantiatedTerm> cache_;
+  ad_utility::util::LRUCache<Id, EvaluatedTerm> cache_;
   ConstructIdCacheStats stats_;
 };
 

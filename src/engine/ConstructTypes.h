@@ -14,59 +14,68 @@
 #include <variant>
 #include <vector>
 
-#include "rdfTypes/Variable.h"
+#include "util/HashMap.h"
+
+// --- Preprocessing types ---
+
+// A constant (`Iri` or `Literal`) whose string value is fully known at
+// preprocessing time.
+struct PrecomputedConstant {
+  std::string value_;
+};
+
+// A variable: we precompute which `IdTable` column to look up at query time.
+// `columnIndex_` is `std::nullopt` if the variable does not appear in the
+// result table (`IdTable`). (i.e., the variable is used in the CONSTRUCT
+// template but not bound by the WHERE clause).
+struct PrecomputedVariable {
+  std::optional<size_t> columnIndex_;
+};
+
+// A blank node with precomputed prefix and suffix for fast evaluation. The
+// blank node format is: prefix + rowNumber + suffix, where prefix is "_:g" or
+// "_:u" (generated or user-defined) and suffix is "_" + label. This avoids
+// recomputing these constant parts for every result table row.
+struct PrecomputedBlankNode {
+  std::string prefix_;  // "_:g" or "_:u"
+  std::string suffix_;  // "_" + label
+};
+
+// A single preprocessed term position in a CONSTRUCT template triple. The
+// variant type encodes what kind of term it is and holds all precomputed data
+// needed for later evaluation.
+using PreprocessedTerm = std::variant<PrecomputedConstant, PrecomputedVariable,
+                                      PrecomputedBlankNode>;
+
+// Number of positions in a triple: subject, predicate, object.
+inline constexpr size_t NUM_TRIPLE_POSITIONS = 3;
+
+// A single preprocessed CONSTRUCT template triple.
+using PreprocessedTriple = std::array<PreprocessedTerm, NUM_TRIPLE_POSITIONS>;
+
+// Result of preprocessing all CONSTRUCT template triples. Contains the
+// preprocessed triples and the unique variable column indices that need to be
+// evaluated at query time.
+struct PreprocessedConstructTemplate {
+  std::vector<PreprocessedTriple> triples_;
+  std::vector<size_t> uniqueVariableColumns_;
+};
+
+// --- Evaluation types ---
 
 // Tag type representing an unbound variable (UNDEF in SPARQL).
 struct Undef {};
 
 // Result of evaluating a term.
-using InstantiatedTerm =
-    std::variant<Undef, std::shared_ptr<const std::string>>;
-
-// Number of positions in a triple: subject, predicate, object.
-inline constexpr size_t NUM_TRIPLE_POSITIONS = 3;
-
-// Specifies how to look up the value for each term position in a triple during
-// triple instantiation.
-// `type`: Indicates whether the term is a CONSTANT, VARIABLE, or BLANK_NODE.
-// `index`: The idx into the corresponding storage depending on `type`
-// CONSTANT: `precomputedConstants_[tripleIdx]`
-// VARIABLE: `variablesToInstantiate_` / `variableInstantiations_`
-// BLANK_NODE: `blankNodesToInstantiate_` / `blankNodeInstantiations_`.
-struct TripleInstantitationRecipe {
-  enum class TermType { CONSTANT, VARIABLE, BLANK_NODE };
-
-  struct TermInstantitationRecipe {
-    TermType type_;
-    size_t index_;
-  };
-
-  std::array<TermInstantitationRecipe, NUM_TRIPLE_POSITIONS> lookups_;
-};
-
-// Variable with column index into the `IdTable`.
-struct VariableWithColumnIndex {
-  Variable variable_;
-  // idx of the column for the variable in the `IdTable`.
-  std::optional<size_t> columnIndex_;
-};
-
-// `BlankNode` with precomputed prefix and suffix for fast evaluation. The blank
-// node format is: prefix + rowNumber + suffix where prefix is "_:g" or "_:u"
-// and suffix_ is "_" + label. This avoids recomputing these constant parts for
-// every result table row.
-struct BlankNodeFormatInfo {
-  std::string prefix_;  // "_:g" or "_:u"
-  std::string suffix_;  // "_" + label
-};
+using EvaluatedTerm = std::variant<Undef, std::shared_ptr<const std::string>>;
 
 // Result of instantiating a single template triple for a specific row. Contains
 // the resolved string values for subject, predicate, and object. Each component
 // is either Undef (variable unbound) or a valid string.
 struct InstantiatedTriple {
-  InstantiatedTerm subject_;
-  InstantiatedTerm predicate_;
-  InstantiatedTerm object_;
+  EvaluatedTerm subject_;
+  EvaluatedTerm predicate_;
+  EvaluatedTerm object_;
 
   // Returns true if all three components have values (not Undef).
   bool isComplete() const {
@@ -76,65 +85,22 @@ struct InstantiatedTriple {
   }
 
   // Get string value for a component. Precondition: component is not Undef.
-  static const std::string& getValue(const InstantiatedTerm& var) {
+  static const std::string& getValue(const EvaluatedTerm& var) {
     return *std::get<std::shared_ptr<const std::string>>(var);
   }
 };
 
-// Column-major storage for batch instantiation results. Each column holds the
-// instantiated values for one entity (a particular variable or blank node)
-// across all rows in the batch.
-template <typename T>
-class BatchInstantiations {
- public:
-  // Resize to `numColumns` columns, each with `numRows` default-constructed
-  // elements.
-  void resize(size_t numColumns, size_t numRows) {
-    columns_.resize(numColumns);
-    for (auto& column : columns_) {
-      column.resize(numRows);
-    }
-  }
-
-  // Resize to `numColumns` columns, each with `numRows` elements initialized
-  // to `defaultValue`.
-  void resize(size_t numColumns, size_t numRows, const T& defaultValue) {
-    columns_.resize(numColumns);
-    for (auto& column : columns_) {
-      column.resize(numRows, defaultValue);
-    }
-  }
-
-  // Access a specific column for writing.
-  std::vector<T>& operator[](size_t columnIdx) { return columns_[columnIdx]; }
-
-  // Read a specific element.
-  const T& get(size_t columnIdx, size_t rowInBatch) const {
-    return columns_[columnIdx][rowInBatch];
-  }
-
- private:
-  std::vector<std::vector<T>> columns_;
-};
-
-// Result of batch-evaluating `Variable` objects and `BlankNode` objects. This
-// stores the results of evaluating all variables and blank nodes for a batch of
-// rows, enabling efficient lookup during triple instantiation.
+// Result of batch-evaluating variables for a batch of rows. Stores evaluated
+// values indexed by `IdTable` column index, enabling efficient lookup during
+// triple instantiation.
 struct BatchEvaluationResult {
-  BatchInstantiations<InstantiatedTerm> variableInstantiations_;
-  BatchInstantiations<std::string> blankNodeInstantiations_;
+  // Map from `IdTable` column index to evaluated values for each row in batch.
+  ad_utility::HashMap<size_t, std::vector<EvaluatedTerm>> variablesByColumn_;
   size_t numRows_ = 0;
 
-  // Get the evaluated variable for a specific variable at a row in the batch.
-  const InstantiatedTerm& getEvaluatedVariable(size_t varIdx,
-                                               size_t rowInBatch) const {
-    return variableInstantiations_.get(varIdx, rowInBatch);
-  }
-
-  // Get string for a specific blank node at a row in the batch.
-  const std::string& getBlankNodeValue(size_t blankNodeIdx,
-                                       size_t rowInBatch) const {
-    return blankNodeInstantiations_.get(blankNodeIdx, rowInBatch);
+  const EvaluatedTerm& getVariable(size_t columnIndex,
+                                   size_t rowInBatch) const {
+    return variablesByColumn_.at(columnIndex).at(rowInBatch);
   }
 };
 

@@ -7,6 +7,7 @@
 #include "engine/ConstructTripleGenerator.h"
 
 #include "engine/ConstructRowProcessor.h"
+#include "engine/ConstructTemplatePreprocessor.h"
 #include "engine/ExportQueryExecutionTrees.h"
 
 using ad_utility::InputRangeTypeErased;
@@ -60,13 +61,10 @@ ConstructTripleGenerator::ConstructTripleGenerator(
     CancellationHandle cancellationHandle)
     : templateTriples_(std::move(constructTriples)),
       result_(std::move(result)),
-      variableColumns_(variableColumns),
       index_(index),
       cancellationHandle_(std::move(cancellationHandle)) {
-  // Analyze template: precompute constants and identify variables/blank nodes.
-  preprocessedConstructTemplate_ = ConstructTemplatePreprocessor::preprocess(
-      templateTriples_, index_.get(), variableColumns_.get(),
-      cancellationHandle_);
+  preprocessedTemplate_ = ConstructTemplatePreprocessor::preprocess(
+      templateTriples_, variableColumns);
 }
 
 // _____________________________________________________________________________
@@ -77,15 +75,14 @@ ConstructTripleGenerator::generateStringTriplesForResultTable(
   rowOffset_ += table.tableWithVocab_.idTable().numRows();
 
   auto processor = std::make_unique<ConstructRowProcessor>(
-      preprocessedConstructTemplate_, table, currentRowOffset);
+      preprocessedTemplate_, index_.get(), cancellationHandle_, table,
+      currentRowOffset);
 
   return ad_utility::InputRangeTypeErased<StringTriple>{
       std::make_unique<StringTripleAdapter>(std::move(processor))};
 }
 
 // _____________________________________________________________________________
-// Entry point for generating CONSTRUCT query output.
-// Used when caller needs structured access to triple components.
 ad_utility::InputRangeTypeErased<QueryExecutionTree::StringTriple>
 ConstructTripleGenerator::generateStringTriples(
     const QueryExecutionTree& qet,
@@ -93,11 +90,6 @@ ConstructTripleGenerator::generateStringTriples(
     const LimitOffsetClause& limitAndOffset,
     std::shared_ptr<const Result> result, uint64_t& resultSize,
     CancellationHandle cancellationHandle) {
-  // The `resultSizeMultiplicator`(last argument of `getRowIndices`) is
-  // explained by the following: For each result from the WHERE clause, we
-  // produce up to `constructTriples.size()` triples. We do not account for
-  // triples that are filtered out because one of the components is UNDEF (it
-  // would require materializing the whole result)
   auto rowIndices = ExportQueryExecutionTrees::getRowIndices(
       limitAndOffset, *result, resultSize, constructTriples.size());
 
@@ -105,16 +97,9 @@ ConstructTripleGenerator::generateStringTriples(
       constructTriples, std::move(result), qet.getVariableColumns(),
       qet.getQec()->getIndex(), std::move(cancellationHandle));
 
-  // Transform the range of tables into a flattened range of triples.
-  // We move the generator into the transformation lambda to extend its
-  // lifetime. Because the transformation is stateful (it tracks rowOffset_),
-  // the lambda must be marked 'mutable'.
   auto tableTriples = ql::views::transform(
       ad_utility::OwningView{std::move(rowIndices)},
       [generator = std::move(generator)](const TableWithRange& table) mutable {
-        // conceptually, the generator now handles the following pipeline:
-        // table -> processing batch -> table rows -> triple patterns -> string
-        // triples
         return generator.generateStringTriplesForResultTable(table);
       });
 
@@ -122,9 +107,6 @@ ConstructTripleGenerator::generateStringTriples(
 }
 
 // _____________________________________________________________________________
-// Entry point for generating CONSTRUCT query output.
-// More efficient for streaming output than `generateStringTriples` (avoids
-// `StringTriple` allocations).
 template <ad_utility::MediaType format>
 ad_utility::InputRangeTypeErased<std::string>
 ConstructTripleGenerator::generateFormattedTriples(
@@ -133,7 +115,8 @@ ConstructTripleGenerator::generateFormattedTriples(
   rowOffset_ += table.tableWithVocab_.idTable().numRows();
 
   auto processor = std::make_unique<ConstructRowProcessor>(
-      preprocessedConstructTemplate_, table, currentRowOffset);
+      preprocessedTemplate_, index_.get(), cancellationHandle_, table,
+      currentRowOffset);
 
   return ad_utility::InputRangeTypeErased<std::string>{
       std::make_unique<FormattedTripleAdapter<format>>(std::move(processor))};

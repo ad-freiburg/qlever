@@ -14,18 +14,18 @@
 
 #include "engine/ConstructBatchEvaluator.h"
 #include "engine/ConstructIdCache.h"
-#include "engine/ConstructTemplatePreprocessor.h"
 #include "engine/ConstructTripleInstantiator.h"
 #include "engine/QueryExportTypes.h"
+#include "util/CancellationHandle.h"
 #include "util/stream_generator.h"
 
-// _____________________________________________________________________________
 // Processes the rows of the result table and yields `InstantiatedTriple`
 // objects. This is done in batches of rows of the result table.
 class ConstructRowProcessor
     : public ad_utility::InputRangeFromGet<InstantiatedTriple> {
  public:
   using IdCache = ConstructIdCache;
+  using CancellationHandle = ad_utility::SharedCancellationHandle;
 
   // Default batch size for processing rows.
   static constexpr size_t DEFAULT_BATCH_SIZE = 64;
@@ -36,43 +36,36 @@ class ConstructRowProcessor
 
   static size_t getBatchSize() { return DEFAULT_BATCH_SIZE; }
 
-  // Constructor takes all data needed for processing.
-  ConstructRowProcessor(std::shared_ptr<const PreprocessedConstructTemplate>
-                            preprocessedConstructTemplate,
-                        const TableWithRange& table, size_t currentRowOffset);
+  ConstructRowProcessor(
+      const PreprocessedConstructTemplate& preprocessedTemplate,
+      const Index& index, CancellationHandle cancellationHandle,
+      const TableWithRange& table, size_t currentRowOffset);
 
   // Returns the next instantiated triple, or nullopt when exhausted.
   // Incomplete triples (with UNDEF components) are filtered out.
   std::optional<InstantiatedTriple> get() override;
 
  private:
-  // Creates an `Id` cache with appropriate capacity.
   std::shared_ptr<IdCache> createIdCache() const;
-
-  // Load a new batch of rows for evaluation if we don't have one.
   void loadBatchIfNeeded();
-
-  // Process rows in the current batch, returning the next complete triple.
   std::optional<InstantiatedTriple> processCurrentBatch();
-
-  // Process triples for the current row, returning the next complete triple.
   std::optional<InstantiatedTriple> processCurrentRow();
-
-  // Advance to next row in batch.
   void advanceToNextRow();
-
-  // Advance to next batch.
   void advanceToNextBatch();
 
-  std::shared_ptr<const PreprocessedConstructTemplate>
-      preprocessedConstructTemplate_;
+  // Compute the blank node row id for the current row.
+  size_t currentBlankNodeRowId() const;
 
-  // Table data (copied/referenced for iteration lifetime).
+  const PreprocessedConstructTemplate& preprocessedTemplate_;
+  std::reference_wrapper<const Index> index_;
+  CancellationHandle cancellationHandle_;
+
+  // Table data.
   TableConstRefWithVocab tableWithVocab_;
   std::vector<uint64_t> rowIndicesVec_;
   size_t currentRowOffset_;
 
-  // `Id` cache for avoiding redundant vocabulary lookups.
+  // Id cache for avoiding redundant vocabulary lookups.
   std::shared_ptr<IdCache> idCache_ = ConstructRowProcessor::createIdCache();
 
   // Iteration state.

@@ -49,6 +49,13 @@ class ConstructQueryEvaluator {
       std::optional<size_t> columnIndex,
       const ConstructQueryExportContext& context);
 
+  // Evaluates an `Id` to a formatted string using the given `Index` and
+  // `LocalVocab` for vocabulary lookup. Returns `std::nullopt` for undefined
+  // values. This is the core evaluation logic used by
+  // `evaluateVariableByColumnIndex`.
+  static std::optional<std::string> evaluateId(Id id, const Index& index,
+                                               const LocalVocab& localVocab);
+
   // Evaluates a `GraphTerm` (which is part of a CONSTRUCT triple pattern) using
   // the provided context and the position of the `GraphTerm` in the template
   // triple. If the `GraphTerm` can't be evaluated, `std::nullopt` is returned.
