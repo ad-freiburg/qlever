@@ -17,6 +17,7 @@
 
 class ConstructQueryEvaluator {
   using StringTriple = QueryExecutionTree::StringTriple;
+  using PrecomputedConstant = ad_utility::constructExport::PrecomputedConstant;
 
  public:
   // --- Methods operating on raw SPARQL types (used by existing code) ---

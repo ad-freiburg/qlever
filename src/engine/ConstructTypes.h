@@ -13,6 +13,8 @@
 #include <variant>
 #include <vector>
 
+namespace qlever::constructExport {
+
 // A constant (`Iri` or `Literal`) whose string value is fully known at
 // preprocessing time.
 struct PrecomputedConstant {
@@ -55,5 +57,6 @@ struct PreprocessedConstructTemplate {
   std::vector<PreprocessedTriple> triples_;
   std::vector<size_t> uniqueVariableColumns_;
 };
+}  // namespace qlever::constructExport
 
 #endif  // QLEVER_SRC_ENGINE_CONSTRUCTTYPES_H

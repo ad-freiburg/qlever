@@ -81,7 +81,7 @@ ConstructQueryEvaluator::StringTriple ConstructQueryEvaluator::evaluateTriple(
   auto object = evaluateTerm(triple[2], context, OBJECT);
 
   if (!subject.has_value() || !predicate.has_value() || !object.has_value()) {
-    return StringTriple();
+    return StringTriple();  // return empty `StringTriple`
   }
 
   return StringTriple(std::move(subject.value()), std::move(predicate.value()),
