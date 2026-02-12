@@ -25,7 +25,8 @@ class ConstructTemplatePreprocessor {
       qlever::constructExport::PreprocessedConstructTemplate;
 
   // Preprocess template triples. Returns the preprocessed triples together
-  // with the unique variable column indices needed at query time.
+  // with the unique variable column indices needed when evaluating the template
+  // triples for specific result-table rows.
   static PreprocessedConstructTemplate preprocess(
       const Triples& templateTriples,
       const VariableToColumnMap& variableColumns);
