@@ -6,6 +6,7 @@
 
 #include "engine/ConstructTripleGenerator.h"
 
+#include "engine/ConstructTemplatePreprocessor.h"
 #include "engine/ExportQueryExecutionTrees.h"
 
 using ad_utility::InputRangeTypeErased;
@@ -35,14 +36,14 @@ auto ConstructTripleGenerator::generateStringTriplesForResultTable(
     auto evaluateConstructTripleForRowFromWhereClause =
         [this, context = std::move(context)](const auto& templateTriple) {
           cancellationHandle_->throwIfCancelled();
-          return ConstructQueryEvaluator::evaluateTriple(templateTriple,
-                                                         context);
+          return ConstructQueryEvaluator::evaluatePreprocessedTriple(
+              templateTriple, context);
         };
 
     // Apply the transformer from above and filter out invalid evaluations
     // (which are returned as empty `StringTriples` from
     // `evaluateConstructTripleForRowFromWhereClause`).
-    return templateTriples_ |
+    return preprocessedTemplateTriples |
            ql::views::transform(evaluateConstructTripleForRowFromWhereClause) |
            ql::views::filter(std::not_fn(&StringTriple::isEmpty));
   };
@@ -65,9 +66,13 @@ ConstructTripleGenerator::generateStringTriples(
   auto rowIndices = ExportQueryExecutionTrees::getRowIndices(
       limitAndOffset, *result, resultSize, constructTriples.size());
 
+  auto preprocessedTemplate = ConstructTemplatePreprocessor::preprocess(
+      constructTriples, qet.getVariableColumns());
+
   ConstructTripleGenerator generator(
-      constructTriples, std::move(result), qet.getVariableColumns(),
-      qet.getQec()->getIndex(), std::move(cancellationHandle));
+      std::move(preprocessedTemplate), std::move(result),
+      qet.getVariableColumns(), qet.getQec()->getIndex(),
+      std::move(cancellationHandle));
 
   // Transform the range of tables into a flattened range of triples.
   // We move the generator into the transformation lambda to extend its

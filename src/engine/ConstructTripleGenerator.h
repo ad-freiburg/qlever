@@ -10,6 +10,7 @@
 #include <functional>
 
 #include "engine/ConstructQueryEvaluator.h"
+#include "engine/ConstructTypes.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryExportTypes.h"
 #include "global/Constants.h"
@@ -23,15 +24,18 @@ class ConstructTripleGenerator {
  public:
   using CancellationHandle = ad_utility::SharedCancellationHandle;
   using StringTriple = QueryExecutionTree::StringTriple;
-  using Triples = ad_utility::sparql_types::Triples;
+  using PreprocessedConstructTemplate =
+      qlever::constructExport::PreprocessedConstructTemplate;
+  using PreprocessedTriple = qlever::constructExport::PreprocessedTriple;
 
   // _____________________________________________________________________________
-  ConstructTripleGenerator(Triples constructTriples,
-                           std::shared_ptr<const Result> result,
-                           const VariableToColumnMap& variableColumns,
-                           const Index& index,
-                           CancellationHandle cancellationHandle)
-      : templateTriples_(std::move(constructTriples)),
+  ConstructTripleGenerator(
+      PreprocessedConstructTemplate preprocessedTemplateTriples,
+      std::shared_ptr<const Result> result,
+      const VariableToColumnMap& variableColumns, const Index& index,
+      CancellationHandle cancellationHandle)
+      : preprocessedTemplateTriples(
+            std::move(preprocessedTemplateTriples.preprocessedTriples_)),
         result_(std::move(result)),
         variableColumns_(variableColumns),
         index_(index),
@@ -63,7 +67,7 @@ class ConstructTripleGenerator {
  private:
   // triple templates contained in the graph template
   // (the CONSTRUCT-clause of the CONSTRUCt-query) of the CONSTRUCT-query.
-  Triples templateTriples_;
+  std::vector<PreprocessedTriple> preprocessedTemplateTriples;
   // wrapper around the result-table obtained from processing the
   // WHERE-clause of the CONSTRUCT-query.
   std::shared_ptr<const Result> result_;
