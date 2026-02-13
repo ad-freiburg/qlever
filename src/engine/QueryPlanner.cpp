@@ -1394,6 +1394,7 @@ void QueryPlanner::applyFiltersIfPossible(
   // in one go. Changing `row` inside the loop would invalidate the iterators.
   std::vector<SubtreePlan> addedPlans;
   for (auto& plan : row) {
+    bool filteredPlanPushed = false;
     for (const auto& [i, filterAndSubst] :
          ::ranges::views::enumerate(filters)) {
       checkCancellation();
@@ -1431,16 +1432,26 @@ void QueryPlanner::applyFiltersIfPossible(
               [&plan](const auto& variable) {
                 return plan._qet->isVariableCovered(*variable);
               })) {
+        AD_CORRECTNESS_CHECK(!filteredPlanPushed || !addedPlans.empty());
+        bool accumulateFilters = mode == FilterMode::KeepUnfiltered &&
+                                 filteredPlanPushed &&
+                                 !addedPlans.back().containsFilterSubstitute_;
         // Apply this filter regularly.
         SubtreePlan newPlan = makeSubtreePlan<Filter>(
-            _qec, plan._qet, filterAndSubst.filter_.expression_);
+            _qec, accumulateFilters ? addedPlans.back()._qet : plan._qet,
+            filterAndSubst.filter_.expression_);
         mergeSubtreePlanIds(newPlan, newPlan, plan);
         newPlan._idsOfIncludedFilters |= (size_t(1) << i);
         newPlan.type = plan.type;
         if constexpr (mode != FilterMode::KeepUnfiltered) {
           plan = std::move(newPlan);
         } else {
-          addedPlans.push_back(std::move(newPlan));
+          if (accumulateFilters) {
+            addedPlans.back() = std::move(newPlan);
+          } else {
+            addedPlans.push_back(std::move(newPlan));
+            filteredPlanPushed = true;
+          }
         }
       }
     }
