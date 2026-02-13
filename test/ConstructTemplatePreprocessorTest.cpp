@@ -21,7 +21,7 @@ using namespace qlever::constructExport;
 using Triples = ad_utility::sparql_types::Triples;
 
 namespace {
-// Minimal context wrapper for tests (mirrors SparqlDataTypesTest).
+// Minimal context wrapper for tests
 struct ContextWrapper {
   Index index_{ad_utility::makeUnlimitedAllocator<Id>()};
   Result resultTable_{
