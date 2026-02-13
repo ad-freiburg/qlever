@@ -7,7 +7,7 @@
 #include "engine/ConstructQueryEvaluator.h"
 
 #include "engine/ExportQueryExecutionTrees.h"
-#include "util/HashMap.h"
+#include "util/Algorithm.h"
 #include "util/TypeTraits.h"
 
 // --- Methods operating on raw SPARQL types ---
@@ -30,7 +30,7 @@ std::optional<std::string> ConstructQueryEvaluator::evaluate(
 std::optional<std::string> ConstructQueryEvaluator::evaluate(
     const Variable& var, const ConstructQueryExportContext& context) {
   const auto& variableColumns = context._variableColumns;
-  if (auto opt = ad_utility::findOptionalFromHashMap(variableColumns, var)) {
+  if (auto opt = ad_utility::findOptional(variableColumns, var)) {
     return evaluateVariableByColumnIndex(opt->columnIndex_, context);
   }
   return std::nullopt;

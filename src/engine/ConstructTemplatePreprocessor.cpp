@@ -9,7 +9,7 @@
 #include <absl/strings/str_cat.h>
 
 #include "engine/ConstructQueryEvaluator.h"
-#include "util/HashMap.h"
+#include "util/Algorithm.h"
 #include "util/TypeTraits.h"
 
 using PreprocessedConstructTemplate =
@@ -48,8 +48,7 @@ PreprocessedConstructTemplate ConstructTemplatePreprocessor::preprocess(
               return PrecomputedConstant{value.value_or("")};
             } else if constexpr (std::is_same_v<T, Variable>) {
               std::optional<size_t> columnIndex;
-              if (auto opt = ad_utility::findOptionalFromHashMap(
-                      variableColumns, term)) {
+              if (auto opt = ad_utility::findOptional(variableColumns, term)) {
                 columnIndex = opt->columnIndex_;
                 uniqueColumnsSet.insert(*columnIndex);
               }
