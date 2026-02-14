@@ -290,21 +290,30 @@ TEST(IntValueGetterTest, OperatorWithLit) {
 // _____________________________________________________________________________
 TEST(NumericOrDateValueGetterTest, OperatorWithId) {
   NumericOrDateValueGetterTester t;
-  t.checkFromValueId(ValueId::makeFromInt(-42),
-                     Optional(VariantWith<int64_t>(Eq(-42))));
-  t.checkFromValueId(ValueId::makeFromDouble(50.2),
-                     Optional(VariantWith<double>(DoubleNear(50.2, 0.01))));
-  t.checkFromValueId(ValueId::makeFromBool(true),
-                     Optional(VariantWith<int64_t>(Eq(1))));
+  auto expectDouble = [](double value)
+      -> Matcher<std::optional<sparqlExpression::detail::NumericOrDateValue>> {
+    return Optional(VariantWith<double>(DoubleNear(value, 0.01)));
+  };
+  auto expectInt = [](int64_t value)
+      -> Matcher<std::optional<sparqlExpression::detail::NumericOrDateValue>> {
+    return Optional(VariantWith<int64_t>(Eq(value)));
+  };
+  auto expectDateYearOrDuration = [](DateYearOrDuration value)
+      -> Matcher<std::optional<sparqlExpression::detail::NumericOrDateValue>> {
+    return Optional(VariantWith<DateYearOrDuration>(Eq(value)));
+  };
+
+  t.checkFromValueId(ValueId::makeFromInt(-42), expectInt(-42));
+  t.checkFromValueId(ValueId::makeFromDouble(50.2), expectDouble(50.2));
+  t.checkFromValueId(ValueId::makeFromBool(true), expectInt(1));
   t.checkFromValueId(
       ValueId::makeFromDate(DateYearOrDuration(Date(2013, 5, 16))),
-      Optional(VariantWith<DateYearOrDuration>(
-          Eq(DateYearOrDuration(Date(2013, 5, 16))))));
+      expectDateYearOrDuration(DateYearOrDuration(Date(2013, 5, 16))));
   t.checkFromValueId(
       ValueId::makeFromDate(DateYearOrDuration(
           DayTimeDuration(DayTimeDuration::Type::Positive, 102))),
-      Optional(VariantWith<DateYearOrDuration>(Eq(DateYearOrDuration(
-          DayTimeDuration(DayTimeDuration::Type::Positive, 102))))));
+      expectDateYearOrDuration(DateYearOrDuration(
+          DayTimeDuration(DayTimeDuration::Type::Positive, 102))));
   auto isNotNumeric =
       Optional(VariantWith<sparqlExpression::detail::NotNumeric>(_));
   t.checkFromValueId(ValueId::makeUndefined(), isNotNumeric);

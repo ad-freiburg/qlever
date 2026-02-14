@@ -465,20 +465,14 @@ std::optional<DateYearOrDuration> DateYearOrDuration::operator-(
         durationType, daysPassed, hoursPassed, minutesPassed, secondsPassed));
   }
 
-  if (isDayTimeDuration() && rhs.isDayTimeDuration()) {
-    // Duration - Duration => Duration | getting new duration that is
-    // rhs.duration-time smaller return;
-    // TODO: can be implemented
-  }
+  // TODO: The following subtractions should be implemented next:
+  //  DayTimeDuration - DayTimeDuration
+  //  Date - DayTimeDuration
+  //  LargeYear - LargeYear
 
-  if (isDate() && rhs.isDayTimeDuration()) {
-    // Date - Duration => Date | getting new Date from rhs.duration-time earlier
-    // TODO: can be implemented
-  }
-
-  // TODO: subtraction with large year can also be implemented
-
-  // Duration - Date is not implemented
+  // The following will not be implemented (not viable):
+  //  DayTimeDuration - Date
+  //  DayTimeDuration - LargeYear
 
   // no viable subtraction
   return std::nullopt;
