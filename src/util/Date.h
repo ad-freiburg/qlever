@@ -9,9 +9,11 @@
 
 #include <absl/strings/str_cat.h>
 
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <exception>
+#include <optional>
 #include <sstream>
 #include <variant>
 
@@ -335,6 +337,10 @@ class Date {
   // Acquire the year, but padded up to 4 digits with a leading `-` if negative.
   // For example: 100 -> "0100" and -100 -> "-0100".
   std::string getFormattedYear() const;
+
+  // If date is valid, converting it to Unix Epoch timestamp.
+  std::optional<std::chrono::sys_time<std::chrono::nanoseconds>> toEpoch()
+      const;
 };
 #ifdef QLEVER_CPP_17
 static_assert(std::is_default_constructible_v<Date>);

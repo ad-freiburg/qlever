@@ -521,6 +521,47 @@ TEST(Date, parseErrors) {
   ASSERT_THROW(D::parseXsdDate("Kartoffelsalat"), E);
 }
 
+TEST(Date, toEpoch) {
+  using namespace std::chrono;
+  Date date = Date(1970, 1, 1, 0, 0, 0);
+  sys_time<std::chrono::nanoseconds> timestamp =
+      sys_time<std::chrono::nanoseconds>{nanoseconds{0}};
+  auto result = date.toEpoch();
+  ASSERT_TRUE(result);
+  ASSERT_EQ(timestamp, result.value());
+
+  date = Date(1969, 12, 31, 23, 59, 20);
+  timestamp = sys_time<nanoseconds>{seconds{-40}};
+  ASSERT_TRUE(date.toEpoch());
+  ASSERT_EQ(timestamp, date.toEpoch().value());
+
+  date = Date(1970, 1, 1, 1, 1, 1);
+  timestamp = sys_time<nanoseconds>{seconds{3661}};
+  ASSERT_TRUE(date.toEpoch());
+  ASSERT_EQ(timestamp, date.toEpoch().value());
+
+  date = Date(1970, 1, 1, 0, 0, 20.235);
+  auto second = duration<double>{20.235};
+  timestamp = sys_time<nanoseconds>{duration_cast<nanoseconds>(second)};
+  ASSERT_TRUE(date.toEpoch());
+  ASSERT_NEAR(timestamp.time_since_epoch().count(),
+              date.toEpoch().value().time_since_epoch().count(), 500000);
+
+  date = Date(1999, 2, 1, 8, 15, 13.098);
+  second = duration<double>{13.098};
+  timestamp = sys_time<nanoseconds>{seconds{917856900}} +
+              duration_cast<nanoseconds>(second);
+  ASSERT_TRUE(date.toEpoch());
+  ASSERT_NEAR(timestamp.time_since_epoch().count(),
+              date.toEpoch().value().time_since_epoch().count(), 500000);
+
+  // Test invalid date
+  date = Date(1970, 11, 31, 13, 24, 24);
+  ASSERT_FALSE(date.toEpoch());
+  date = Date(2021, 2, 29, 9, 1, 23);
+  ASSERT_FALSE(date.toEpoch());
+}
+
 TEST(DateYearOrDuration, AssertionFailures) {
   // These values are out of range.
   ASSERT_ANY_THROW(DateYearOrDuration(std::numeric_limits<int64_t>::min(),

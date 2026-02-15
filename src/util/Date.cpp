@@ -64,3 +64,21 @@ std::string Date::getFormattedYear() const {
   return getYear() >= 0 ? absl::StrFormat("%04d", getYear())
                         : absl::StrFormat("%05d", getYear());
 }
+
+// _____________________________________________________________________________
+std::optional<std::chrono::sys_time<std::chrono::nanoseconds>> Date::toEpoch()
+    const {
+  using namespace std::chrono;
+  auto date = year_month_day{year(getYear()) / getMonth() / getDay()};
+  if (date.ok()) {
+    // Build timestamp from date
+    auto second = duration<double>{getSecond()};
+    std::chrono::sys_time<std::chrono::nanoseconds> result =
+        sys_days(date) + hours{getHour()} + minutes{getMinute()} +
+        duration_cast<nanoseconds>(second);
+    return result;
+  } else {
+    // Invalid date does not have Unix Epoch time.
+    return std::nullopt;
+  }
+}
