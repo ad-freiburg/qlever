@@ -592,7 +592,7 @@ struct StrIriDtTag {
       if (id.has_value()) {
         return id.value();
       }
-    } catch (...) {
+    } catch (const ParseException&) {
       // Parse failure for the given datatype, return a `LiteralOrIri`.
     }
     literal.value().addDatatype(inputIri.value());
