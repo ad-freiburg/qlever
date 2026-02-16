@@ -414,6 +414,24 @@ void updatePassedTimes(const Date& date1, const Date& date2, long& daysPassed,
   }
 }
 
+// Helper function for operator-. This function calculates the duration between
+// to Epoch times and casts the duration into a 'DayTimeDuration'.
+DayTimeDuration getDurationBetween(
+    const std::chrono::sys_time<std::chrono::nanoseconds> date1,
+    const std::chrono::sys_time<std::chrono::nanoseconds> date2) {
+  DayTimeDuration::Type durationType = DayTimeDuration::Type::Positive;
+  auto difference = date1 - date2;
+  if (date1 < date2) {
+    durationType = DayTimeDuration::Type::Negative;
+    difference = -difference;
+  }
+  // Get total nanoseconds and convert them so a seconds double.
+  double second =
+      std::chrono::duration_cast<std::chrono::nanoseconds>(difference).count() /
+      1000000000;
+  return DayTimeDuration(durationType, 0, 0, 0, second);
+}
+
 std::optional<DateYearOrDuration> DateYearOrDuration::operator-(
     const DateYearOrDuration& rhs) const {
   if (isDate() && rhs.isDate()) {
@@ -421,48 +439,17 @@ std::optional<DateYearOrDuration> DateYearOrDuration::operator-(
     const Date& ownDate = getDateUnchecked();
     const Date& otherDate = rhs.getDateUnchecked();
 
-    const int ownMonth = ownDate.getMonth();
-    const int ownDay = ownDate.getDay();
+    std::optional<std::chrono::sys_time<std::chrono::nanoseconds>> epoch1 =
+        ownDate.toEpoch();
+    std::optional<std::chrono::sys_time<std::chrono::nanoseconds>> epoch2 =
+        otherDate.toEpoch();
 
-    const int otherMonth = otherDate.getMonth();
-    const int otherDay = otherDate.getDay();
-
-    // Calculate number of days between the two Dates
-    auto date1 = std::chrono::year_month_day{
-        std::chrono::year(ownDate.getYear()) / ownMonth / ownDay};
-    auto date2 = std::chrono::year_month_day{
-        std::chrono::year(otherDate.getYear()) / otherMonth / otherDay};
-
-    if (!date1.ok() || !date2.ok()) {
-      // at least one date was invalid
+    if (!epoch1.has_value() || !epoch2.has_value()) {
       return std::nullopt;
     }
 
-    long daysPassed =
-        (std::chrono::sys_days{date1} - std::chrono::sys_days{date2}).count();
-    int hoursPassed = 0;
-    int minutesPassed = 0;
-    double secondsPassed = 0.0;
-
-    bool isDaysPassedPos = true;
-
-    if (daysPassed < 0) {
-      isDaysPassedPos = false;
-      daysPassed = abs(daysPassed);
-    }
-    // Calculate time passed between the two Dates if at least one of them has a
-    // Time.
-    DayTimeDuration::Type durationType = DayTimeDuration::Type::Positive;
-    if (isDaysPassedPos) {
-      updatePassedTimes(ownDate, otherDate, daysPassed, hoursPassed,
-                        minutesPassed, secondsPassed);
-    } else {
-      updatePassedTimes(otherDate, ownDate, daysPassed, hoursPassed,
-                        minutesPassed, secondsPassed);
-      durationType = DayTimeDuration::Type::Negative;
-    }
-    return DateYearOrDuration(DayTimeDuration(
-        durationType, daysPassed, hoursPassed, minutesPassed, secondsPassed));
+    return DateYearOrDuration(
+        getDurationBetween(epoch1.value(), epoch2.value()));
   }
 
   // TODO: The following subtractions should be implemented next:

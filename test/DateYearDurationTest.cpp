@@ -688,13 +688,15 @@ TEST(DateYearOrDuration, Subtraction) {
               result);
 
     // Date - DateTime
-    date1 = DateYearOrDuration(Date(2012, 12, 22));
+    date1 = DateYearOrDuration(Date(2012, 12, 22, 0, 0, 0, 0));
     date2 = DateYearOrDuration(Date(2012, 12, 20, 13, 50, 59));
     // expected duration of 1d10h9min1sec
+    ASSERT_TRUE(date1 - date2);
     result = (date1 - date2).value();
-    ASSERT_EQ(DateYearOrDuration(DayTimeDuration(
-                  DayTimeDuration::Type::Positive, 1, 10, 9, 1)),
-              result);
+    ASSERT_EQ(DateYearOrDuration(
+                  DayTimeDuration(DayTimeDuration::Type::Positive, 1, 10, 9, 1))
+                  .toStringAndType(),
+              result.toStringAndType());
     result = (date2 - date1).value();
     ASSERT_EQ(DateYearOrDuration(DayTimeDuration(
                   DayTimeDuration::Type::Negative, 1, 10, 9, 1)),
@@ -708,7 +710,7 @@ TEST(DateYearOrDuration, Subtraction) {
     // expected duration of 0d2h0min0sec
     DateYearOrDuration result = (date1 - date2).value();
     ASSERT_EQ(DateYearOrDuration(
-                  DayTimeDuration(DayTimeDuration::Type::Positive, 0, 2, 0, 0)),
+                  DayTimeDuration(DayTimeDuration::Type::Negative, 0, 2, 0, 0)),
               result);
 
     // hoursPassed < 0
@@ -716,9 +718,10 @@ TEST(DateYearOrDuration, Subtraction) {
     date2 = DateYearOrDuration(Date(2021, 01, 23, 22, 30, 0));
     // expected duration of 0d0h20min0sec
     result = (date1 - date2).value();
-    ASSERT_EQ(DateYearOrDuration(DayTimeDuration(
-                  DayTimeDuration::Type::Positive, 0, 0, 20, 0)),
-              result);
+    ASSERT_EQ(DateYearOrDuration(
+                  DayTimeDuration(DayTimeDuration::Type::Negative, 0, 0, 20, 0))
+                  .toStringAndType(),
+              result.toStringAndType());
 
     // minutesPassed < 0
     date1 = DateYearOrDuration(Date(2021, 01, 23, 22, 10, 03));
@@ -726,7 +729,7 @@ TEST(DateYearOrDuration, Subtraction) {
     // expected duration of 0d0h0min40sec
     result = (date1 - date2).value();
     ASSERT_EQ(DateYearOrDuration(DayTimeDuration(
-                  DayTimeDuration::Type::Positive, 0, 0, 0, 40)),
+                  DayTimeDuration::Type::Negative, 0, 0, 0, 40)),
               result);
   }
 }
