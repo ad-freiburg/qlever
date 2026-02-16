@@ -472,6 +472,8 @@ addLinkAndDiscoverTest(ValueGetterTest engine)
 
 addLinkAndDiscoverTest(LruCacheTest)
 
+addLinkAndDiscoverTest(LruCacheWithStatisticsTest)
+
 addLinkAndDiscoverTestNoLibs(InputRangeUtilsTest)
 
 addLinkAndDiscoverTest(TripleSerializerTest)
