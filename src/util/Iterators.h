@@ -603,10 +603,9 @@ class IteratorForAssigmentOperator {
    public:
     Proxy(Func& func) : func_{func} {}
 
-    CPP_template(typename T)(requires ql::concepts::invocable<Func, T&&>)
-        std::invoke_result_t<Func, T&&>
-        operator=(T&& value) const {
-      return std::invoke(func_, AD_FWD(value));
+    CPP_template(typename T)(requires ql::concepts::invocable<Func, T&&>) void
+    operator=(T&& value) const {
+      std::invoke(func_, AD_FWD(value));
     }
   };
 
