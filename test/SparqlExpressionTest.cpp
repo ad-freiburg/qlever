@@ -913,15 +913,49 @@ TEST(SparqlExpression, strIriDtTagged) {
   auto U = Id::makeUndefined();
   auto checkStrIriTag =
       std::bind_front(testNaryExpression, &makeStrIriDtExpression);
-  checkStrIriTag(IdOrLiteralOrIriVec{lit(
-                     "123", "^^<http://www.w3.org/2001/XMLSchema#integer>")},
-                 IdOrLiteralOrIriVec{lit("123")},
+  // Integer encoding: STRDT("123", xsd:integer) -> I:123
+  checkStrIriTag(IdOrLiteralOrIriVec{I(123)}, IdOrLiteralOrIriVec{lit("123")},
                  IdOrLiteralOrIriVec{
                      iriref("<http://www.w3.org/2001/XMLSchema#integer>")});
+  // Negative integer encoding.
+  checkStrIriTag(IdOrLiteralOrIriVec{I(-42)}, IdOrLiteralOrIriVec{lit("-42")},
+                 IdOrLiteralOrIriVec{
+                     iriref("<http://www.w3.org/2001/XMLSchema#integer>")});
+  // Boolean encoding: STRDT("true", xsd:boolean) -> B(true)
+  checkStrIriTag(IdOrLiteralOrIriVec{B(true)}, IdOrLiteralOrIriVec{lit("true")},
+                 IdOrLiteralOrIriVec{
+                     iriref("<http://www.w3.org/2001/XMLSchema#boolean>")});
+  checkStrIriTag(IdOrLiteralOrIriVec{B(false)},
+                 IdOrLiteralOrIriVec{lit("false")},
+                 IdOrLiteralOrIriVec{
+                     iriref("<http://www.w3.org/2001/XMLSchema#boolean>")});
+  // Double encoding: STRDT("3.14", xsd:double) -> D(3.14)
+  checkStrIriTag(
+      IdOrLiteralOrIriVec{D(3.14)}, IdOrLiteralOrIriVec{lit("3.14")},
+      IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#double>")});
+  // Decimal encoding: STRDT("2.5", xsd:decimal) -> D(2.5)
+  checkStrIriTag(IdOrLiteralOrIriVec{D(2.5)}, IdOrLiteralOrIriVec{lit("2.5")},
+                 IdOrLiteralOrIriVec{
+                     iriref("<http://www.w3.org/2001/XMLSchema#decimal>")});
+  // TODO Date, GeoPoint, etc..
+  // Unknown datatype: still returns a literal with datatype.
   checkStrIriTag(
       IdOrLiteralOrIriVec{lit("iiii", "^^<http://example/romanNumeral>")},
       IdOrLiteralOrIriVec{lit("iiii")},
       IdOrLiteralOrIriVec{iriref("<http://example/romanNumeral>")});
+  // Invalid integer content: falls back to literal with datatype.
+  checkStrIriTag(IdOrLiteralOrIriVec{lit(
+                     "abc", "^^<http://www.w3.org/2001/XMLSchema#integer>")},
+                 IdOrLiteralOrIriVec{lit("abc")},
+                 IdOrLiteralOrIriVec{
+                     iriref("<http://www.w3.org/2001/XMLSchema#integer>")});
+  // Invalid boolean content: falls back to literal with datatype.
+  checkStrIriTag(IdOrLiteralOrIriVec{lit(
+                     "abc", "^^<http://www.w3.org/2001/XMLSchema#boolean>")},
+                 IdOrLiteralOrIriVec{lit("abc")},
+                 IdOrLiteralOrIriVec{
+                     iriref("<http://www.w3.org/2001/XMLSchema#boolean>")});
+  // Undefined cases.
   checkStrIriTag(IdOrLiteralOrIriVec{U},
                  IdOrLiteralOrIriVec{iriref("<http://example/romanNumeral>")},
                  IdOrLiteralOrIriVec{U});

@@ -11,6 +11,8 @@
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/StringExpressionsHelper.h"
 #include "engine/sparqlExpressions/VariadicExpression.h"
+#include "index/EncodedIriManager.h"
+#include "parser/RdfParser.h"
 #include "util/StringUtils.h"
 
 namespace sparqlExpression {
@@ -576,6 +578,22 @@ struct StrIriDtTag {
         !literal.value().isPlain()) {
       return Id::makeUndefined();
     } else {
+      // Try to encode the literal directly as a ValueId if the datatype
+      // supports it (e.g., integer, boolean, double, date).
+      try {
+        std::string_view content =
+            asStringViewUnsafe(literal.value().getContent());
+        EncodedIriManager ev;
+        auto tc =
+            TurtleParser<TokenizerCtre>::literalAndDatatypeToTripleComponent(
+                content, inputIri.value(), ev);
+        auto id = tc.toValueIdIfNotString(nullptr);
+        if (id.has_value()) {
+          return id.value();
+        }
+      } catch (...) {
+        // Parse failure for the given datatype, fall through.
+      }
       literal.value().addDatatype(inputIri.value());
       return LiteralOrIri{std::move(literal.value())};
     }
