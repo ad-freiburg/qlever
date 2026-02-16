@@ -22,9 +22,7 @@ struct PrecomputedConstant {
 };
 
 // We precompute which `IdTable` column to look up at construct query triple
-// instantitation time. `columnIndex_` is `std::nullopt` if the
-// variable does not appear in the result table (`IdTable`) (i.e., the variable
-// is used in the CONSTRUCT template but not bound by the WHERE clause).
+// instantitation time.
 struct PrecomputedVariable {
   std::optional<size_t> columnIndex_;
 };

@@ -10,6 +10,8 @@
 #include "util/Algorithm.h"
 #include "util/TypeTraits.h"
 
+namespace qlever::constructExport {
+
 // --- Methods operating on raw SPARQL types ---
 
 // _____________________________________________________________________________
@@ -39,8 +41,6 @@ std::optional<std::string> ConstructQueryEvaluator::evaluate(
 // _____________________________________________________________________________
 std::optional<std::string> ConstructQueryEvaluator::evaluate(
     const BlankNode& node, const ConstructQueryExportContext& context) {
-  // Use absl::StrCat for efficient string concatenation (single allocation)
-  // instead of std::ostringstream which has significant overhead.
   // Note: absl::StrCat doesn't accept single chars, so we use string literals.
   return absl::StrCat("_:", (node.isGenerated() ? "g" : "u"),
                       context._rowOffset + context.resultTableRowIndex_, "_",
@@ -71,7 +71,7 @@ std::optional<std::string> ConstructQueryEvaluator::evaluateTerm(
 }
 
 // _____________________________________________________________________________
-ConstructQueryEvaluator::StringTriple ConstructQueryEvaluator::evaluateTriple(
+StringTriple ConstructQueryEvaluator::evaluateTriple(
     const std::array<GraphTerm, 3>& triple,
     const ConstructQueryExportContext& context) {
   using enum PositionInTriple;
@@ -100,11 +100,14 @@ std::string ConstructQueryEvaluator::evaluatePreprocessed(
 std::optional<std::string> ConstructQueryEvaluator::evaluatePreprocessed(
     const PrecomputedVariable& variable,
     const ConstructQueryExportContext& context) {
-  return evaluateVariableByColumnIndex(variable.columnIndex_, context);
+  if (!variable.columnIndex_.has_value()) {
+    return std::nullopt;
+  }
+  return evaluateVariableByColumnIndex(*variable.columnIndex_, context);
 }
 
 // _____________________________________________________________________________
-std::optional<std::string> ConstructQueryEvaluator::evaluatePreprocessed(
+std::string ConstructQueryEvaluator::evaluatePreprocessed(
     const PrecomputedBlankNode& node,
     const ConstructQueryExportContext& context) {
   return absl::StrCat(node.prefix_,
@@ -133,8 +136,7 @@ std::optional<std::string> ConstructQueryEvaluator::evaluatePreprocessedTerm(
 }
 
 // _____________________________________________________________________________
-ConstructQueryEvaluator::StringTriple
-ConstructQueryEvaluator::evaluatePreprocessedTriple(
+StringTriple ConstructQueryEvaluator::evaluatePreprocessedTriple(
     const PreprocessedTriple& triple,
     const ConstructQueryExportContext& context) {
   auto subject = evaluatePreprocessedTerm(triple[0], context);
@@ -179,12 +181,9 @@ std::optional<std::string> ConstructQueryEvaluator::evaluateId(
 // _____________________________________________________________________________
 std::optional<std::string>
 ConstructQueryEvaluator::evaluateVariableByColumnIndex(
-    std::optional<size_t> columnIndex,
-    const ConstructQueryExportContext& context) {
-  if (!columnIndex.has_value()) {
-    return std::nullopt;
-  }
-
-  auto id = context.idTable_(context.resultTableRowIndex_, columnIndex.value());
+    size_t columnIndex, const ConstructQueryExportContext& context) {
+  auto id = context.idTable_(context.resultTableRowIndex_, columnIndex);
   return evaluateId(id, context._qecIndex, context.localVocab_);
 }
+
+}  // namespace qlever::constructExport

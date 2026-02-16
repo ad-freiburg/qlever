@@ -17,6 +17,8 @@
 #include "parser/data/ConstructQueryExportContext.h"
 #include "util/CancellationHandle.h"
 
+namespace qlever::constructExport {
+
 // ConstructTripleGenerator: generates StringTriples from
 // query results. It manages the global row offset and transforms result tables
 // and rows into a single continuous range of triples.
@@ -78,5 +80,7 @@ class ConstructTripleGenerator {
   CancellationHandle cancellationHandle_;
   size_t rowOffset_ = 0;
 };
+
+}  // namespace qlever::constructExport
 
 #endif  // QLEVER_SRC_ENGINE_CONSTRUCTTRIPLEGENERATOR_H

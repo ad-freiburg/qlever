@@ -15,14 +15,10 @@
 #include "parser/data/Iri.h"
 #include "parser/data/Literal.h"
 
-class ConstructQueryEvaluator {
-  using StringTriple = QueryExecutionTree::StringTriple;
-  using PrecomputedConstant = qlever::constructExport::PrecomputedConstant;
-  using PreprocessedTriple = qlever::constructExport::PreprocessedTriple;
-  using PrecomputedVariable = qlever::constructExport::PrecomputedVariable;
-  using PrecomputedBlankNode = qlever::constructExport::PrecomputedBlankNode;
-  using PreprocessedTerm = qlever::constructExport::PreprocessedTerm;
+namespace qlever::constructExport {
+using StringTriple = QueryExecutionTree::StringTriple;
 
+class ConstructQueryEvaluator {
  public:
   // --- Methods operating on raw SPARQL types (used by existing code) ---
 
@@ -73,7 +69,7 @@ class ConstructQueryEvaluator {
       const ConstructQueryExportContext& context);
 
   // Evaluates a `PrecomputedBlankNode` using the precomputed prefix/suffix.
-  static std::optional<std::string> evaluatePreprocessed(
+  static std::string evaluatePreprocessed(
       const PrecomputedBlankNode& blankNode,
       const ConstructQueryExportContext& context);
 
@@ -92,8 +88,7 @@ class ConstructQueryEvaluator {
 
   // Evaluates a `Variable` by its column index in the `IdTable`.
   static std::optional<std::string> evaluateVariableByColumnIndex(
-      std::optional<size_t> columnIndex,
-      const ConstructQueryExportContext& context);
+      size_t columnIndex, const ConstructQueryExportContext& context);
 
   // Evaluates an `Id` to a formatted string using the given `Index` and
   // `LocalVocab` for vocabulary lookup. Returns `std::nullopt` for undefined
@@ -101,5 +96,7 @@ class ConstructQueryEvaluator {
   static std::optional<std::string> evaluateId(Id id, const Index& index,
                                                const LocalVocab& localVocab);
 };
+
+}  // namespace qlever::constructExport
 
 #endif  // QLEVER_CONSTRUCTQUERYEVALUATOR_H

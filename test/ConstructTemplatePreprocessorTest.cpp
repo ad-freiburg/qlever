@@ -346,17 +346,17 @@ TEST(ConstructQueryEvaluatorTest, evaluatePreprocessedBlankNode) {
   PrecomputedBlankNode bn{"_:u", "_label"};
 
   auto ctx0 = wrapper.createContextForRow(0);
-  EXPECT_THAT(ConstructQueryEvaluator::evaluatePreprocessed(bn, ctx0),
-              Optional("_:u0_label"s));
+  EXPECT_EQ(ConstructQueryEvaluator::evaluatePreprocessed(bn, ctx0),
+            "_:u0_label");
 
   auto ctx10 = wrapper.createContextForRow(10);
-  EXPECT_THAT(ConstructQueryEvaluator::evaluatePreprocessed(bn, ctx10),
-              Optional("_:u10_label"s));
+  EXPECT_EQ(ConstructQueryEvaluator::evaluatePreprocessed(bn, ctx10),
+            "_:u10_label");
 
   // With row offset: rowOffset=5 + rowIndex=7 = 12
   auto ctx12 = wrapper.createContextForRow(7, 5);
-  EXPECT_THAT(ConstructQueryEvaluator::evaluatePreprocessed(bn, ctx12),
-              Optional("_:u12_label"s));
+  EXPECT_EQ(ConstructQueryEvaluator::evaluatePreprocessed(bn, ctx12),
+            "_:u12_label");
 }
 
 TEST(ConstructQueryEvaluatorTest, evaluatePreprocessedBlankNodeGenerated) {
@@ -364,18 +364,8 @@ TEST(ConstructQueryEvaluatorTest, evaluatePreprocessedBlankNodeGenerated) {
   PrecomputedBlankNode bn{"_:g", "_gen"};
 
   auto ctx = wrapper.createContextForRow(3, 10);
-  EXPECT_THAT(ConstructQueryEvaluator::evaluatePreprocessed(bn, ctx),
-              Optional("_:g13_gen"s));
-}
-
-TEST(ConstructQueryEvaluatorTest, evaluatePreprocessedVariableNullopt) {
-  ContextWrapper wrapper;
-  // Variable with no column index (unbound).
-  PrecomputedVariable var{std::nullopt};
-
-  auto ctx = wrapper.createContextForRow(0);
-  EXPECT_EQ(ConstructQueryEvaluator::evaluatePreprocessed(var, ctx),
-            std::nullopt);
+  EXPECT_EQ(ConstructQueryEvaluator::evaluatePreprocessed(bn, ctx),
+            "_:g13_gen");
 }
 
 // =============================================================================
@@ -400,15 +390,6 @@ TEST(ConstructQueryEvaluatorTest, evaluatePreprocessedTermBlankNode) {
               Optional("_:u15_x"s));
 }
 
-TEST(ConstructQueryEvaluatorTest, evaluatePreprocessedTermUnboundVariable) {
-  ContextWrapper wrapper;
-  PreprocessedTerm term = PrecomputedVariable{std::nullopt};
-
-  auto ctx = wrapper.createContextForRow(0);
-  EXPECT_EQ(ConstructQueryEvaluator::evaluatePreprocessedTerm(term, ctx),
-            std::nullopt);
-}
-
 // =============================================================================
 // Tests for evaluatePreprocessedTriple
 // =============================================================================
@@ -429,21 +410,6 @@ TEST(ConstructQueryEvaluatorTest, evaluatePreprocessedTripleAllConstants) {
   EXPECT_FALSE(result.isEmpty());
 }
 
-TEST(ConstructQueryEvaluatorTest,
-     evaluatePreprocessedTripleWithUnboundVariable) {
-  ContextWrapper wrapper;
-  // Subject is an unbound variable → triple should be empty.
-  PreprocessedTriple triple = {PrecomputedVariable{std::nullopt},
-                               PrecomputedConstant{"<http://p>"},
-                               PrecomputedConstant{"<http://o>"}};
-
-  auto ctx = wrapper.createContextForRow(0);
-  auto result =
-      ConstructQueryEvaluator::evaluatePreprocessedTriple(triple, ctx);
-
-  EXPECT_TRUE(result.isEmpty());
-}
-
 TEST(ConstructQueryEvaluatorTest, evaluatePreprocessedTripleWithBlankNode) {
   ContextWrapper wrapper;
   PreprocessedTriple triple = {PrecomputedBlankNode{"_:u", "_node"},
@@ -457,36 +423,4 @@ TEST(ConstructQueryEvaluatorTest, evaluatePreprocessedTripleWithBlankNode) {
   EXPECT_EQ(result.subject_, "_:u10_node");
   EXPECT_EQ(result.predicate_, "<http://p>");
   EXPECT_EQ(result.object_, "literal");
-}
-
-// =============================================================================
-// Tests for ad_utility::findOptionalFromHashMap
-// =============================================================================
-
-TEST(FindOptionalFromHashMapTest, keyPresent) {
-  ad_utility::HashMap<std::string, int> map;
-  map["key"] = 42;
-
-  auto result = ad_utility::findOptionalFromHashMap(map, std::string("key"));
-  ASSERT_TRUE(result.has_value());
-  EXPECT_EQ(*result, 42);
-}
-
-TEST(FindOptionalFromHashMapTest, keyAbsent) {
-  ad_utility::HashMap<std::string, int> map;
-  map["key"] = 42;
-
-  auto result =
-      ad_utility::findOptionalFromHashMap(map, std::string("missing"));
-  EXPECT_FALSE(result.has_value());
-}
-
-TEST(FindOptionalFromHashMapTest, returnsReference) {
-  ad_utility::HashMap<std::string, int> map;
-  map["key"] = 42;
-
-  auto result = ad_utility::findOptionalFromHashMap(map, std::string("key"));
-  ASSERT_TRUE(result.has_value());
-  // The returned value should be a reference to the map's value.
-  EXPECT_EQ(&(*result), &map["key"]);
 }

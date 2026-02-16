@@ -11,6 +11,8 @@
 
 using ad_utility::InputRangeTypeErased;
 
+namespace qlever::constructExport {
+
 // _____________________________________________________________________________
 auto ConstructTripleGenerator::generateStringTriplesForResultTable(
     const TableWithRange& table) {
@@ -87,3 +89,5 @@ ConstructTripleGenerator::generateStringTriples(
       });
   return InputRangeTypeErased(ql::views::join(std::move(tableTriples)));
 }
+
+}  // namespace qlever::constructExport

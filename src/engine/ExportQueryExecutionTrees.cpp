@@ -30,9 +30,7 @@
 
 using ad_utility::InputRangeTypeErased;
 
-namespace {
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
-using Literal = ad_utility::triple_component::Literal;
 
 // _____________________________________________________________________________
 // Return true iff the `result` is nonempty.
@@ -98,7 +96,6 @@ STREAMABLE_GENERATOR_TYPE computeResultForAsk(
           "ASK queries are not supported for TSV or CSV or binary format."};
   }
 }
-}  // namespace
 
 // __________________________________________________________________________
 InputRangeTypeErased<TableConstRefWithVocab>
@@ -265,9 +262,10 @@ auto ExportQueryExecutionTrees::constructQueryResultToTriples(
     const ad_utility::sparql_types::Triples& constructTriples,
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
     uint64_t& resultSize, CancellationHandle cancellationHandle) {
-  return ConstructTripleGenerator::generateStringTriples(
-      qet, constructTriples, limitAndOffset, std::move(result), resultSize,
-      std::move(cancellationHandle));
+  return qlever::constructExport::ConstructTripleGenerator::
+      generateStringTriples(qet, constructTriples, limitAndOffset,
+                            std::move(result), resultSize,
+                            std::move(cancellationHandle));
 }
 
 // _____________________________________________________________________________
@@ -667,8 +665,7 @@ ExportQueryExecutionTrees::idToLiteralOrIriForEncodedValue(Id id) {
 }
 
 // _____________________________________________________________________________
-std::optional<LiteralOrIri>
-ExportQueryExecutionTrees::getLiteralOrIriFromWordVocabIndex(
+LiteralOrIri ExportQueryExecutionTrees::getLiteralOrIriFromWordVocabIndex(
     const IndexImpl& index, Id id) {
   return LiteralOrIri{
       ad_utility::triple_component::Literal::literalWithoutQuotes(
