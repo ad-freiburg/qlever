@@ -332,6 +332,73 @@ TEST(ConstructTemplatePreprocessorTest, mixedTermTypesAcrossTriples) {
 }
 
 // =============================================================================
+// Tests for ConstructTemplatePreprocessor::preprocessTerm()
+// =============================================================================
+
+TEST(ConstructTemplatePreprocessorTest, preprocessTermIri) {
+  VariableToColumnMap varMap;
+  auto result = ConstructTemplatePreprocessor::preprocessTerm(
+      GraphTerm{Iri{"<http://s>"}}, SUBJECT, varMap);
+  ASSERT_TRUE(std::holds_alternative<PrecomputedConstant>(result));
+  EXPECT_EQ(std::get<PrecomputedConstant>(result).value_, "<http://s>");
+}
+
+TEST(ConstructTemplatePreprocessorTest, preprocessTermLiteralObject) {
+  VariableToColumnMap varMap;
+  auto result = ConstructTemplatePreprocessor::preprocessTerm(
+      GraphTerm{Literal{"hello"}}, OBJECT, varMap);
+  ASSERT_TRUE(std::holds_alternative<PrecomputedConstant>(result));
+  EXPECT_EQ(std::get<PrecomputedConstant>(result).value_, "hello");
+}
+
+TEST(ConstructTemplatePreprocessorTest, preprocessTermLiteralSubject) {
+  // Literals in subject position are invalid; evaluate returns nullopt,
+  // so preprocessTerm stores empty string.
+  VariableToColumnMap varMap;
+  auto result = ConstructTemplatePreprocessor::preprocessTerm(
+      GraphTerm{Literal{"invalid"}}, SUBJECT, varMap);
+  ASSERT_TRUE(std::holds_alternative<PrecomputedConstant>(result));
+  EXPECT_EQ(std::get<PrecomputedConstant>(result).value_, "");
+}
+
+TEST(ConstructTemplatePreprocessorTest, preprocessTermVariableBound) {
+  VariableToColumnMap varMap;
+  varMap[Variable{"?x"}] = makeAlwaysDefinedColumn(3);
+  auto result = ConstructTemplatePreprocessor::preprocessTerm(
+      GraphTerm{Variable{"?x"}}, SUBJECT, varMap);
+  ASSERT_TRUE(std::holds_alternative<PrecomputedVariable>(result));
+  EXPECT_EQ(std::get<PrecomputedVariable>(result).columnIndex_, 3);
+}
+
+TEST(ConstructTemplatePreprocessorTest, preprocessTermVariableUnbound) {
+  VariableToColumnMap varMap;
+  auto result = ConstructTemplatePreprocessor::preprocessTerm(
+      GraphTerm{Variable{"?unbound"}}, SUBJECT, varMap);
+  ASSERT_TRUE(std::holds_alternative<PrecomputedVariable>(result));
+  EXPECT_EQ(std::get<PrecomputedVariable>(result).columnIndex_, std::nullopt);
+}
+
+TEST(ConstructTemplatePreprocessorTest, preprocessTermBlankNodeUser) {
+  VariableToColumnMap varMap;
+  auto result = ConstructTemplatePreprocessor::preprocessTerm(
+      GraphTerm{BlankNode{false, "myNode"}}, SUBJECT, varMap);
+  ASSERT_TRUE(std::holds_alternative<PrecomputedBlankNode>(result));
+  const auto& bn = std::get<PrecomputedBlankNode>(result);
+  EXPECT_EQ(bn.prefix_, "_:u");
+  EXPECT_EQ(bn.suffix_, "_myNode");
+}
+
+TEST(ConstructTemplatePreprocessorTest, preprocessTermBlankNodeGenerated) {
+  VariableToColumnMap varMap;
+  auto result = ConstructTemplatePreprocessor::preprocessTerm(
+      GraphTerm{BlankNode{true, "gen"}}, SUBJECT, varMap);
+  ASSERT_TRUE(std::holds_alternative<PrecomputedBlankNode>(result));
+  const auto& bn = std::get<PrecomputedBlankNode>(result);
+  EXPECT_EQ(bn.prefix_, "_:g");
+  EXPECT_EQ(bn.suffix_, "_gen");
+}
+
+// =============================================================================
 // Tests for ConstructQueryEvaluator::evaluatePreprocessed()
 // =============================================================================
 

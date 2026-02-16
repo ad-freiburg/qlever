@@ -11,7 +11,10 @@
 
 #include "engine/ConstructTypes.h"
 #include "engine/VariableToColumnMap.h"
+#include "parser/data/ConstructQueryExportContext.h"
 #include "parser/data/Types.h"
+
+namespace qlever::constructExport {
 
 // Preprocesses CONSTRUCT template triples. For each term, precomputes
 // the following:
@@ -30,6 +33,14 @@ class ConstructTemplatePreprocessor {
   static PreprocessedConstructTemplate preprocess(
       const Triples& templateTriples,
       const VariableToColumnMap& variableColumns);
+
+  // Preprocess a single `GraphTerm` into a `PreprocessedTerm`. This is a pure
+  // function that does not track column uniqueness.
+  static PreprocessedTerm preprocessTerm(
+      const GraphTerm& term, PositionInTriple role,
+      const VariableToColumnMap& variableColumns);
 };
+
+}  // namespace qlever::constructExport
 
 #endif  // QLEVER_SRC_ENGINE_CONSTRUCTTEMPLATEPREPROCESSOR_H
