@@ -41,28 +41,38 @@
 namespace qlever::indexRebuilder {
 
 namespace {
+
+// Helper struct that stores where a local vocab entry should be inserted into
+// the original vocab and what the original `Id` of the local vocab entry was
+// (so that we can create the mapping from old.
+struct InsertionInfo {
+  VocabIndex insertionPosition_;
+  std::string_view word_;
+  Id originalId_;
+};
+
 // Merge the local vocab entries with the original vocab and write a new
 // vocabulary. Returns a mapping from the old local vocab `Id`s bit
 // representation (for cheaper hash functions) to new `Id`s.
-LocalVocabMapping mergeVocabs(
-    const std::string& vocabularyName, const Index::Vocab& vocab,
-    const std::vector<std::tuple<VocabIndex, std::string_view, Id>>&
-        insertInfo) {
+LocalVocabMapping mergeVocabs(const std::string& vocabularyName,
+                              const Index::Vocab& vocab,
+                              const std::vector<InsertionInfo>& insertInfo) {
   auto vocabWriter = vocab.makeWordWriterPtr(vocabularyName);
   LocalVocabMapping localVocabMapping;
-  ad_utility::OverloadCallOperator writer{
-      [&vocab, &vocabWriter](VocabIndex vocabIndex) {
-        auto word = vocab[vocabIndex];
-        (*vocabWriter)(word, vocab.shouldBeExternalized(word));
-      },
-      [&vocab, &vocabWriter, &localVocabMapping](
-          const std::tuple<VocabIndex, std::string_view, Id>& tuple) {
-        const auto& [_, word, originalId] = tuple;
+  auto writeWordFromVocab = [&vocab, &vocabWriter](VocabIndex vocabIndex) {
+    auto word = vocab[vocabIndex];
+    (*vocabWriter)(word, vocab.shouldBeExternalized(word));
+  };
+  auto writeWordFromLocalVocab =
+      [&vocab, &vocabWriter, &localVocabMapping](const InsertionInfo& info) {
+        const auto& [_, word, originalId] = info;
         auto newIndex = (*vocabWriter)(word, vocab.shouldBeExternalized(word));
         localVocabMapping.emplace(
             originalId.getBits(),
             Id::makeFromVocabIndex(VocabIndex::make(newIndex)));
-      }};
+      };
+  ad_utility::OverloadCallOperator writer{std::move(writeWordFromVocab),
+                                          std::move(writeWordFromLocalVocab)};
   ql::ranges::merge(
       ad_utility::integerRange(vocab.size()) |
           ql::views::transform(&VocabIndex::make),
@@ -71,8 +81,8 @@ LocalVocabMapping mergeVocabs(
       // original vocab entries, even if they share the same vocab index as
       // insertion position.
       [tag = 1](const VocabIndex& index) { return std::tie(index, tag); },
-      [tag = 0](const std::tuple<VocabIndex, std::string_view, Id>& tuple) {
-        return std::tie(std::get<VocabIndex>(tuple), tag);
+      [tag = 0](const InsertionInfo& info) {
+        return std::tie(info.insertionPosition_, tag);
       });
   return localVocabMapping;
 }
@@ -82,7 +92,7 @@ LocalVocabMapping mergeVocabs(
 std::tuple<InsertionPositions, LocalVocabMapping> materializeLocalVocab(
     const std::vector<LocalVocabIndex>& entries, const Index::Vocab& vocab,
     const std::string& newIndexName) {
-  std::vector<std::tuple<VocabIndex, std::string_view, Id>> insertInfo;
+  std::vector<InsertionInfo> insertInfo;
   insertInfo.reserve(entries.size());
 
   for (auto* entry : entries) {
@@ -97,14 +107,14 @@ std::tuple<InsertionPositions, LocalVocabMapping> materializeLocalVocab(
   // Sort by insertion position, then by the original `Id`. It would probably
   // suffice to just sort by `Id`, but it is faster to check the two numbers
   // first that we already computed.
-  ql::ranges::sort(insertInfo, {}, [](const auto& tuple) {
-    return std::tie(std::get<VocabIndex>(tuple), std::get<Id>(tuple));
+  ql::ranges::sort(insertInfo, {}, [](const InsertionInfo& info) {
+    return std::tie(info.insertionPosition_, info.originalId_);
   });
 
   LocalVocabMapping localVocabMapping =
       mergeVocabs(newIndexName + VOCAB_SUFFIX, vocab, insertInfo);
   auto denseInfo = insertInfo |
-                   ql::views::transform(ad_utility::get<VocabIndex>) |
+                   ql::views::transform(&InsertionInfo::insertionPosition_) |
                    ::ranges::to<std::vector>;
   return std::make_tuple(std::move(denseInfo), std::move(localVocabMapping));
 }
@@ -179,11 +189,13 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
     // TODO<RobinTF> Experiment with caching the last remapped id
     // and reusing it if the same id appears again. See if that
     // improves performance or if it makes it worse.
-    if (id.getDatatype() == Datatype::VocabIndex) [[likely]] {
+    using enum Datatype;
+    auto datatype = id.getDatatype();
+    if (datatype == VocabIndex) [[likely]] {
       id = remapVocabId(id, insertionPositions);
-    } else if (id.getDatatype() == Datatype::LocalVocabIndex) {
+    } else if (datatype == LocalVocabIndex) {
       id = localVocabMapping.at(id.getBits());
-    } else if (id.getDatatype() == Datatype::BlankNodeIndex) {
+    } else if (datatype == BlankNodeIndex) {
       id = remapBlankNodeId(id, blankNodeBlocks, minBlankNodeIndex);
     }
   };
@@ -370,6 +382,8 @@ void materializeToIndex(
 
   using enum Permutation::Enum;
 
+  // List of permutation pairs, with the information whether the attached
+  // internal permutation should be used.
   std::vector<std::pair<std::pair<Permutation::Enum, Permutation::Enum>, bool>>
       permutationSettings{{{PSO, POS}, false}, {{PSO, POS}, true}};
 
@@ -380,17 +394,16 @@ void materializeToIndex(
 
   for (const auto& [permutationEnums, isInternal] : permutationSettings) {
     auto [a, b] = permutationEnums;
-    const auto& permutationA = index.getPermutation(a);
-    const auto& permutationB = index.getPermutation(b);
-    const auto& actualPermutationA =
-        isInternal ? permutationA.internalPermutation() : permutationA;
-    const auto& actualPermutationB =
-        isInternal ? permutationB.internalPermutation() : permutationB;
+    auto getPermutation =
+        [&index, isInternal](Permutation::Enum permEnum) -> const Permutation& {
+      const auto& perm = index.getPermutation(permEnum);
+      return isInternal ? perm.internalPermutation() : perm;
+    };
 
     net::co_spawn(
         threadPool,
         createPermutationWriterTask(
-            newIndex, actualPermutationA, actualPermutationB, isInternal,
+            newIndex, getPermutation(a), getPermutation(b), isInternal,
             locatedTriplesSharedState, localVocabMapping, insertionPositions,
             blankNodeBlocks, minBlankNodeIndex, cancellationHandle),
         net::detached);
