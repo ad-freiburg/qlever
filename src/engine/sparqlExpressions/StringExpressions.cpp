@@ -594,6 +594,8 @@ struct StrIriDtTag {
       }
     } catch (const ParseException&) {
       // Parse failure for the given datatype, return a `LiteralOrIri`.
+      // NOTE: This behavior differs from the parsing at index build time, where
+      // invalid integers throw an exception.
     }
     literal.value().addDatatype(inputIri.value());
     return LiteralOrIri{std::move(literal.value())};

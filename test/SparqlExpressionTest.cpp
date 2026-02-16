@@ -918,18 +918,20 @@ TEST(SparqlExpression, strIriDtTagged) {
 
   // Test the correct encoding of literals to `ValueId`s.
   checkStrIriTag(
-      IdOrLiteralOrIriVec{I(123), I(-42), B(true), B(false), D(3.14), D(2.5),
-                          date, geoPoint},
-      IdOrLiteralOrIriVec{lit("123"), lit("-42"), lit("true"), lit("false"),
-                          lit("3.14"), lit("2.5"), lit("2026-02-16"),
-                          lit("POINT(0.0 0.0)")},
+      IdOrLiteralOrIriVec{I(123), I(-42), I(-42), B(true), B(false), D(3.14),
+                          D(2.5), D(2.5), date, geoPoint},
+      IdOrLiteralOrIriVec{lit("123"), lit("-42"), lit("-42"), lit("true"),
+                          lit("false"), lit("3.14"), lit("2.5"), lit("2.5"),
+                          lit("2026-02-16"), lit("POINT(0.0 0.0)")},
       IdOrLiteralOrIriVec{
           iriref("<http://www.w3.org/2001/XMLSchema#integer>"),
           iriref("<http://www.w3.org/2001/XMLSchema#integer>"),
+          iriref("<http://www.w3.org/2001/XMLSchema#int>"),
           iriref("<http://www.w3.org/2001/XMLSchema#boolean>"),
           iriref("<http://www.w3.org/2001/XMLSchema#boolean>"),
           iriref("<http://www.w3.org/2001/XMLSchema#double>"),
           iriref("<http://www.w3.org/2001/XMLSchema#decimal>"),
+          iriref("<http://www.w3.org/2001/XMLSchema#float>"),
           iriref("<http://www.w3.org/2001/XMLSchema#date>"),
           iriref("<http://www.opengis.net/ont/geosparql#wktLiteral>")});
 
