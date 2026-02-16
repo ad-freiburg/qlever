@@ -1222,10 +1222,10 @@ void RdfParallelParser<T>::initialize(const std::string& filename,
 // _____________________________________________________________________________
 template <class T>
 bool RdfParallelParser<T>::processTriples() {
-  // If the current batch is out of triples_ get the next batch of
-  // triples. We need a while loop instead of a simple if in case there is a
-  // batch that contains no triples. (Theoretically this might happen, and it is
-  // safer this way)
+  // If the current batch is out of triples_ get the next batch of triples.
+  // We need a while loop instead of a simple if in case there is a batch that
+  // contains no triples. (Theoretically this might happen, and it is safer this
+  // way)
   while (triples_.empty()) {
     auto optionalTripleTask = [&]() {
       try {
