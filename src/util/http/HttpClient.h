@@ -29,6 +29,7 @@
 struct HttpOrHttpsResponse {
   boost::beast::http::status status_;
   std::string contentType_;
+  std::string location_;
   cppcoro::generator<ql::span<std::byte>> body_;
 
   // Return the first `length` bytes of the response body as a string.
@@ -109,19 +110,21 @@ using SendRequestType = std::function<HttpOrHttpsResponse(
     const ad_utility::httpUtils::Url&,
     ad_utility::SharedCancellationHandle handle,
     const boost::beast::http::verb&, std::string_view, std::string_view,
-    std::string_view)>;
+    std::string_view, size_t)>;
 
 // Global convenience function for sending a request (default: GET) to the given
 // URL and obtaining the result as a `cppcoro::generator<ql::span<std::byte>>`.
 // The protocol (HTTP or HTTPS) is chosen automatically based on the URL. The
-// `requestBody` is the payload sent for POST requests (default: empty).
+// `requestBody` is the payload sent for POST requests (default: empty). If
+// `maxRedirects` is greater than 0, the function will automatically follow
+// redirects (301, 302, 307, 308) up to the specified limit.
 HttpOrHttpsResponse sendHttpOrHttpsRequest(
     const ad_utility::httpUtils::Url& url,
     ad_utility::SharedCancellationHandle handle,
     const boost::beast::http::verb& method = boost::beast::http::verb::get,
     std::string_view postData = "",
     std::string_view contentTypeHeader = "text/plain",
-    std::string_view acceptHeader = "text/plain");
+    std::string_view acceptHeader = "text/plain", size_t maxRedirects = 0);
 
 #endif
 #endif  // QLEVER_SRC_UTIL_HTTP_HTTPCLIENT_H
