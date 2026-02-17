@@ -11,9 +11,11 @@
 #include "engine/ExportQueryExecutionTrees.h"
 
 using ad_utility::InputRangeTypeErased;
-using StringTriple = ConstructTripleGenerator::StringTriple;
+using StringTriple =
+    qlever::constructExport::ConstructTripleGenerator::StringTriple;
 using CancellationHandle = ad_utility::SharedCancellationHandle;
-using InstantiatedTriple = qlever::constructExport::EvaluatedTriple;
+
+namespace qlever::constructExport {
 
 // _____________________________________________________________________________
 // Adapter that transforms `EvaluatedTriple` to formatted strings.
@@ -46,9 +48,9 @@ class StringTripleAdapter : public ad_utility::InputRangeFromGet<StringTriple> {
   std::optional<StringTriple> get() override {
     auto triple = processor_->get();
     if (!triple) return std::nullopt;
-    return StringTriple{InstantiatedTriple::getValue(triple->subject_),
-                        InstantiatedTriple::getValue(triple->predicate_),
-                        InstantiatedTriple::getValue(triple->object_)};
+    return StringTriple{EvaluatedTriple::getValue(triple->subject_),
+                        EvaluatedTriple::getValue(triple->predicate_),
+                        EvaluatedTriple::getValue(triple->object_)};
   }
 
  private:
@@ -160,3 +162,5 @@ template ad_utility::InputRangeTypeErased<std::string>
     ConstructTripleGenerator::generateAllFormattedTriples<
         ad_utility::MediaType::tsv>(
         ad_utility::InputRangeTypeErased<TableWithRange>);
+
+}  // namespace qlever::constructExport

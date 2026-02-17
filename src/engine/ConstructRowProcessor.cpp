@@ -6,7 +6,7 @@
 
 #include "engine/ConstructRowProcessor.h"
 
-using namespace qlever::constructExport;
+namespace qlever::constructExport {
 
 // _____________________________________________________________________________
 ConstructRowProcessor::ConstructRowProcessor(
@@ -22,7 +22,7 @@ ConstructRowProcessor::ConstructRowProcessor(
       currentRowOffset_(currentRowOffset) {}
 
 // _____________________________________________________________________________
-std::optional<InstantiatedTriple> ConstructRowProcessor::get() {
+std::optional<EvaluatedTriple> ConstructRowProcessor::get() {
   while (batchStart_ < rowIndicesVec_.size()) {
     cancellationHandle_->throwIfCancelled();
 
@@ -61,7 +61,7 @@ void ConstructRowProcessor::loadBatchIfNeeded() {
 }
 
 // _____________________________________________________________________________
-std::optional<InstantiatedTriple> ConstructRowProcessor::processCurrentBatch() {
+std::optional<EvaluatedTriple> ConstructRowProcessor::processCurrentBatch() {
   while (rowInBatchIdx_ < batchEvaluationResult_->numRows_) {
     if (auto result = processCurrentRow()) {
       return result;
@@ -72,7 +72,7 @@ std::optional<InstantiatedTriple> ConstructRowProcessor::processCurrentBatch() {
 }
 
 // _____________________________________________________________________________
-std::optional<InstantiatedTriple> ConstructRowProcessor::processCurrentRow() {
+std::optional<EvaluatedTriple> ConstructRowProcessor::processCurrentRow() {
   const size_t blankNodeRowId = currentBlankNodeRowId();
 
   while (tripleIdx_ < preprocessedTemplate_.preprocessedTriples_.size()) {
@@ -85,13 +85,14 @@ std::optional<InstantiatedTriple> ConstructRowProcessor::processCurrentRow() {
     auto object = ConstructTripleInstantiator::instantiateTerm(
         triple[2], *batchEvaluationResult_, rowInBatchIdx_, blankNodeRowId);
 
-    auto instantiatedTriple = InstantiatedTriple{subject, predicate, object};
-
     ++tripleIdx_;
 
-    if (instantiatedTriple.isComplete()) {
-      return instantiatedTriple;
+    // Skip triples where any term is undefined.
+    if (!subject.has_value() || !predicate.has_value() || !object.has_value()) {
+      continue;
     }
+
+    return InstantiatedTriple{*subject, *predicate, *object};
   }
 
   return std::nullopt;
@@ -122,3 +123,5 @@ ConstructRowProcessor::createIdCache() const {
       getBatchSize() * std::max(numVars, size_t{1}) * CACHE_CAPACITY_FACTOR;
   return std::make_shared<IdCache>(capacity);
 }
+
+}  // namespace qlever::constructExport

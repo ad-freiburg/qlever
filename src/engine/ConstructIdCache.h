@@ -38,7 +38,8 @@ class ConstructIdCache {
   // Look up the value for a key, computing it if not present.
   // Statistics are tracked automatically.
   template <typename ComputeFunc>
-  const EvaluatedTerm& getOrCompute(const Id& key, ComputeFunc&& compute) {
+  const std::optional<EvaluatedTerm>& getOrCompute(const Id& key,
+                                                   ComputeFunc&& compute) {
     bool wasHit = true;
     const auto& result =
         cache_.getOrCompute(key, [&wasHit, &compute](const Id& k) {
@@ -57,7 +58,7 @@ class ConstructIdCache {
   size_t capacity() const { return cache_.capacity(); }
 
  private:
-  ad_utility::util::LRUCache<Id, EvaluatedTerm> cache_;
+  ad_utility::util::LRUCache<Id, std::optional<EvaluatedTerm>> cache_;
   ConstructIdCacheStats stats_;
 };
 

@@ -19,6 +19,8 @@
 #include "util/CancellationHandle.h"
 #include "util/stream_generator.h"
 
+namespace qlever::constructExport {
+
 // Processes the rows of the result table and yields `EvaluatedTriple`
 // objects. This is done in batches of rows of the result table.
 class ConstructRowProcessor : public ad_utility::InputRangeFromGet<
@@ -79,5 +81,7 @@ class ConstructRowProcessor : public ad_utility::InputRangeFromGet<
   size_t tripleIdx_ = 0;
   std::optional<BatchEvaluationResult> batchEvaluationResult_;
 };
+
+}  // namespace qlever::constructExport
 
 #endif  // QLEVER_SRC_ENGINE_CONSTRUCTBATCHPROCESSOR_H

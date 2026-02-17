@@ -21,7 +21,8 @@ BatchEvaluationResult ConstructBatchEvaluator::evaluateBatch(
   // Evaluate each unique variable across all batch rows.
   for (size_t variableColumnIdx : uniqueVariableColumns) {
     auto& columnResults = batchResult.variablesByColumn_[variableColumnIdx];
-    columnResults.resize(batchResult.numRows_, Undef{});
+    columnResults.resize(batchResult.numRows_);
+
     evaluateVariableByColumn(columnResults, variableColumnIdx,
                              evaluationContext, index, idCache);
   }
@@ -31,22 +32,22 @@ BatchEvaluationResult ConstructBatchEvaluator::evaluateBatch(
 
 // _____________________________________________________________________________
 void ConstructBatchEvaluator::evaluateVariableByColumn(
-    std::vector<EvaluatedTerm>& columnResults, size_t idTableColumnIdx,
-    const BatchEvaluationContext& evaluationContext, const Index& index,
-    IdCache& idCache) {
+    std::vector<std::optional<EvaluatedTerm>>& columnResults,
+    size_t idTableColumnIdx, const BatchEvaluationContext& evaluationContext,
+    const Index& index, IdCache& idCache) {
   for (size_t rowInBatch = 0;
        rowInBatch < evaluationContext.rowIndicesOfBatch_.size(); ++rowInBatch) {
     const uint64_t rowIdx = evaluationContext.rowIndicesOfBatch_[rowInBatch];
     Id id = evaluationContext.idTable_(rowIdx, idTableColumnIdx);
 
-    auto computeValue = [&index, &evaluationContext](const Id& id) {
+    auto computeValue = [&index, &evaluationContext](
+                            const Id& id) -> std::optional<EvaluatedTerm> {
       auto value = ConstructQueryEvaluator::evaluateId(
           id, index, evaluationContext.localVocab_);
       if (value.has_value()) {
-        return EvaluatedTerm{
-            std::make_shared<const std::string>(std::move(*value))};
+        return std::make_shared<const std::string>(std::move(*value));
       }
-      return EvaluatedTerm{Undef{}};
+      return std::nullopt;
     };
 
     columnResults[rowInBatch] = idCache.getOrCompute(id, computeValue);

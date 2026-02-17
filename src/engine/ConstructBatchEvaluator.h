@@ -46,9 +46,9 @@ class ConstructBatchEvaluator {
  private:
   // Evaluates a single variable column across all batch rows.
   static void evaluateVariableByColumn(
-      std::vector<EvaluatedTerm>& columnResults, size_t idTableColumnIdx,
-      const BatchEvaluationContext& evaluationContext, const Index& index,
-      IdCache& idCache);
+      std::vector<std::optional<EvaluatedTerm>>& columnResults,
+      size_t idTableColumnIdx, const BatchEvaluationContext& evaluationContext,
+      const Index& index, IdCache& idCache);
 };
 
 #endif  // QLEVER_SRC_ENGINE_CONSTRUCTBATCHEVALUATOR_H

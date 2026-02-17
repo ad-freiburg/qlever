@@ -24,10 +24,9 @@ class ConstructTripleInstantiator {
   // For variables: looks up the batch-evaluated value.
   // For blank nodes: computes the value on the fly using precomputed
   //   prefix/suffix and the blank node row id (rowOffset + actualRowIdx).
-  static EvaluatedTerm instantiateTerm(const PreprocessedTerm& term,
-                                       const BatchEvaluationResult& batchResult,
-                                       size_t rowInBatch,
-                                       size_t blankNodeRowId);
+  static std::optional<EvaluatedTerm> instantiateTerm(
+      const PreprocessedTerm& term, const BatchEvaluationResult& batchResult,
+      size_t rowInBatch, size_t blankNodeRowId);
 
   // Formats a triple (subject, predicate, object) according to the output
   // format. Returns empty string if any component is `Undef`.

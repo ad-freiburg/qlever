@@ -21,6 +21,8 @@
 #include "util/http/MediaTypes.h"
 #include "util/stream_generator.h"
 
+namespace qlever::constructExport {
+
 // Generates triples from CONSTRUCT query results by instantiating triple
 // patterns (from the CONSTRUCT clause) with values from the result table
 // (produced by the WHERE clause).
@@ -71,5 +73,7 @@ class ConstructTripleGenerator {
   // Preprocessed template with triples and unique variable columns.
   PreprocessedConstructTemplate preprocessedTemplate_;
 };
+
+}  // namespace qlever::constructExport
 
 #endif  // QLEVER_SRC_ENGINE_CONSTRUCTTRIPLEGENERATOR_H

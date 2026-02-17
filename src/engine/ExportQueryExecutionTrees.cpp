@@ -1108,7 +1108,7 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
   auto rowIndices = ExportQueryExecutionTrees::getRowIndices(
       limitAndOffset, *result, resultSize, constructTriples.size());
 
-  ConstructTripleGenerator generator(
+  qlever::constructExport::ConstructTripleGenerator generator(
       constructTriples, std::move(result), qet.getVariableColumns(),
       qet.getQec()->getIndex(), std::move(cancellationHandle));
 
