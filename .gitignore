@@ -1,5 +1,7 @@
 # Build directory
 build/
+build-gcc-9/
+build-gcc-8/
 cmake-build*
 
 # End-to-End data

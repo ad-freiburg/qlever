@@ -1,0 +1,69 @@
+# Dockerfile for building QLever with GCC8 for C++17 compatibility testing
+FROM ubuntu:22.04
+
+# Prevent interactive prompts during installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install basic build tools
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    wget \
+    git \
+    pkg-config \
+    python3 \
+    python3-yaml \
+    python3-icu \
+    unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install CMake 3.27
+RUN wget https://cmake.org/files/v3.27/cmake-3.27.0-linux-x86_64.tar.gz && \
+    tar -xzvf cmake-3.27.0-linux-x86_64.tar.gz && \
+    mv cmake-3.27.0-linux-x86_64 /opt/cmake && \
+    rm cmake-3.27.0-linux-x86_64.tar.gz
+ENV PATH="/opt/cmake/bin:$PATH"
+
+# Install third-party libraries
+RUN apt-get update && apt-get install -y \
+    libicu-dev \
+    tzdata \
+    libzstd-dev \
+    libjemalloc-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install boost from PPA
+RUN apt-get update && apt-get install -y software-properties-common && \
+    add-apt-repository -y ppa:mhier/libboost-latest && \
+    apt-get update && \
+    apt-get install -y \
+    libboost1.81-all-dev \
+    libboost-url1.81-dev \
+    libboost-container1.81-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install GCC-8 by temporarily enabling the Focal (20.04) repositories
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y software-properties-common; \
+    echo "deb [arch=amd64] http://archive.ubuntu.com/ubuntu focal main universe" > /etc/apt/sources.list.d/focal.list; \
+    apt-get update; \
+    apt-get install -y gcc-8 g++-8; \
+    apt-mark hold gcc-8 g++-8 libgcc-8-dev libstdc++-8-dev || true; \
+    rm /etc/apt/sources.list.d/focal.list; \
+    apt-get update; \
+    apt-get clean; \
+    rm -rf /var/lib/apt/lists/*
+
+# Verify installation
+RUN gcc-8 --version && g++-8 --version
+
+# Install mold linker
+RUN apt-get update && apt-get install -y mold && rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update && apt-get install -y libssl-dev
+
+# Set working directory
+WORKDIR /qlever
+
+# Default command (can be overridden)
+CMD ["/bin/bash"]
