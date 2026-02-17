@@ -8,17 +8,12 @@
 #define QLEVER_SRC_ENGINE_CONSTRUCTTYPES_H
 
 #include <array>
-#include <memory>
 #include <optional>
 #include <string>
 #include <variant>
 #include <vector>
 
-#include "util/HashMap.h"
-
 namespace qlever::constructExport {
-
-// --- Preprocessing types ---
 
 // A constant (`Iri` or `Literal`) whose string value is fully known at
 // preprocessing time.
@@ -27,11 +22,9 @@ struct PrecomputedConstant {
 };
 
 // We precompute which `IdTable` column to look up at construct query triple
-// instantitation time. `columnIndex_` is `std::nullopt` if the
-// variable does not appear in the result table (`IdTable`) (i.e., the variable
-// is used in the CONSTRUCT template but not bound by the WHERE clause).
+// instantitation time.
 struct PrecomputedVariable {
-  std::optional<size_t> columnIndex_;
+  size_t columnIndex_;
 };
 
 // A blank node with precomputed prefix and suffix for fast evaluation. The
@@ -57,55 +50,11 @@ using PreprocessedTriple = std::array<PreprocessedTerm, NUM_TRIPLE_POSITIONS>;
 
 // Result of preprocessing all CONSTRUCT template triples. Contains the
 // preprocessed triples and the unique variable column indices that need to be
-// evaluated at query time.
+// evaluated for each row of the result-table.
 struct PreprocessedConstructTemplate {
   std::vector<PreprocessedTriple> preprocessedTriples_;
   std::vector<size_t> uniqueVariableColumns_;
 };
-
-// --- Evaluation types ---
-
-// Tag type representing an unbound variable (UNDEF in SPARQL).
-struct Undef {};
-
-// Result of evaluating a term.
-using EvaluatedTerm = std::variant<Undef, std::shared_ptr<const std::string>>;
-
-// Result of instantiating a single template triple for a specific row. Contains
-// the resolved string values for subject, predicate, and object. Each component
-// is either Undef (variable unbound) or a valid string.
-struct InstantiatedTriple {
-  EvaluatedTerm subject_;
-  EvaluatedTerm predicate_;
-  EvaluatedTerm object_;
-
-  // Returns true if all three components have values (not Undef).
-  bool isComplete() const {
-    return !std::holds_alternative<Undef>(subject_) &&
-           !std::holds_alternative<Undef>(predicate_) &&
-           !std::holds_alternative<Undef>(object_);
-  }
-
-  // Get string value for a component. Precondition: component is not Undef.
-  static const std::string& getValue(const EvaluatedTerm& var) {
-    return *std::get<std::shared_ptr<const std::string>>(var);
-  }
-};
-
-// Result of batch-evaluating variables for a batch of rows. Stores evaluated
-// values indexed by `IdTable` column index, enabling efficient lookup during
-// triple instantiation.
-struct BatchEvaluationResult {
-  // Map from `IdTable` column index to evaluated values for each row in batch.
-  ::ad_utility::HashMap<size_t, std::vector<EvaluatedTerm>> variablesByColumn_;
-  size_t numRows_ = 0;
-
-  const EvaluatedTerm& getVariable(size_t columnIndex,
-                                   size_t rowInBatch) const {
-    return variablesByColumn_.at(columnIndex).at(rowInBatch);
-  }
-};
-
 }  // namespace qlever::constructExport
 
 #endif  // QLEVER_SRC_ENGINE_CONSTRUCTTYPES_H

@@ -11,24 +11,36 @@
 
 #include "engine/ConstructTypes.h"
 #include "engine/VariableToColumnMap.h"
+#include "parser/data/ConstructQueryExportContext.h"
 #include "parser/data/Types.h"
 
-// Preprocesses CONSTRUCT template triples. For each term position, precomputes
-// everything possible:
-// - Constants (IRIs/literals): evaluates and stores the string value.
-// - Variables: precomputes the column index into the IdTable.
-// - Blank nodes: precomputes the format prefix/suffix.
+namespace qlever::constructExport {
+
+// Preprocesses CONSTRUCT template triples. For each term, precomputes
+// the following:
+// - constants (IRIs/literals): evaluates and stores the string value.
+// - variables: precomputes the column index into the `IdTable`.
+// - blank nodes: precomputes the format prefix/suffix.
 class ConstructTemplatePreprocessor {
  public:
   using Triples = ad_utility::sparql_types::Triples;
   using PreprocessedConstructTemplate =
       qlever::constructExport::PreprocessedConstructTemplate;
 
-  // Preprocess template triples. Returns the preprocessed triples together
-  // with the unique variable column indices needed at query time.
+  // Preprocess the template triples. Returns the preprocessed triples together
+  // with the unique variable column indices needed when evaluating the template
+  // triples for specific result-table rows.
   static PreprocessedConstructTemplate preprocess(
       const Triples& templateTriples,
       const VariableToColumnMap& variableColumns);
+
+  // Preprocess a single `GraphTerm` into a `PreprocessedTerm`. Returns
+  // `std::nullopt` if the term is undefined (e.g. an unbound variable).
+  static std::optional<PreprocessedTerm> preprocessTerm(
+      const GraphTerm& term, PositionInTriple role,
+      const VariableToColumnMap& variableColumns);
 };
+
+}  // namespace qlever::constructExport
 
 #endif  // QLEVER_SRC_ENGINE_CONSTRUCTTEMPLATEPREPROCESSOR_H
