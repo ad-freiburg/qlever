@@ -90,7 +90,7 @@ TEST(LRUCacheWithStatistics, lruEvictionWorksThrough) {
   int recomputed = cache.getOrCompute<F>(2, [](int i) { return i * 100; });
   EXPECT_EQ(recomputed, 200);
 
-  // Key 1 should still be present (hit).
   EXPECT_EQ(cache.stats().misses_, 4);  // keys 1, 2, 3, 2-again
-  EXPECT_EQ(cache.stats().hits_, 2);    // key 1 twice (access + still present)
+  EXPECT_EQ(cache.stats().hits_, 1);    // key 1 was inserted and had 1 cache
+  // hit.
 }
