@@ -1,6 +1,6 @@
 //   Copyright 2025, University of Freiburg,
 //   Chair of Algorithms and Data Structures.
-//   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
+//   Author: Marvin Stoetzel <stoetzem@informatik.uni-freiburg.de>
 
 #ifndef QLEVER_SRC_UTIL_LRUCACHEWITHSTATISTICS_H
 #define QLEVER_SRC_UTIL_LRUCACHEWITHSTATISTICS_H

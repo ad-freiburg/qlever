@@ -15,15 +15,13 @@ using namespace qlever::constructExport;
 namespace {
 
 // =============================================================================
-// Test fixture
-// =============================================================================
-//
+// Test fixture.
 // Builds a small index from:
 //   <s> <p> <o> .
 //   <s> <q> "hello" .
 //
 // This gives us five vocabulary entries: the IRIs <s>, <p>, <o>, <q> and the
-// literal "hello". The fixture provides helpers to build IdTables and run the
+// literal "hello". The fixture provides helpers to build `IdTable`s and run the
 // batch evaluator against them.
 class ConstructBatchEvaluatorTest : public ::testing::Test {
  protected:
@@ -34,8 +32,8 @@ class ConstructBatchEvaluatorTest : public ::testing::Test {
       ad_utility::testing::makeGetId(index_);
   LocalVocab localVocab_;
 
-  // Build an IdTable from explicit rows of Ids. Each inner vector is one row;
-  // all rows must have the same number of columns.
+  // Build an `IdTable` from explicit rows of `Id`s. Each inner vector is one
+  // row; all rows must have the same number of columns.
   IdTable makeIdTable(const std::vector<std::vector<Id>>& rows) {
     size_t numCols = rows.empty() ? 0 : rows[0].size();
     IdTable table{numCols, ad_utility::testing::makeAllocator()};
@@ -48,7 +46,8 @@ class ConstructBatchEvaluatorTest : public ::testing::Test {
     return table;
   }
 
-  // Evaluate the full IdTable (all rows) with the given variable columns.
+  // Evaluate the full `IdTable` (all rows) with the given variable columns in
+  // one single batch.
   BatchEvaluationResult evaluateFullTable(
       const std::vector<size_t>& uniqueVariableColumns, const IdTable& idTable,
       ConstructBatchEvaluator::IdCache& idCache) {
@@ -57,7 +56,7 @@ class ConstructBatchEvaluatorTest : public ::testing::Test {
                                                   index_, idCache);
   }
 
-  // Evaluate a sub-range [firstRow, endRow) of the IdTable.
+  // Evaluate a sub-range [`firstRow`, `endRow`) of the `IdTable`.
   BatchEvaluationResult evaluateRowRange(
       const std::vector<size_t>& uniqueVariableColumns, const IdTable& idTable,
       size_t firstRow, size_t endRow,
@@ -68,13 +67,9 @@ class ConstructBatchEvaluatorTest : public ::testing::Test {
   }
 };
 
-// =============================================================================
-// Basic evaluation: single column, single row
-// =============================================================================
-
 // The simplest case: one variable column, one row. Verify that the evaluator
-// resolves the Id to the expected IRI string and that the result structure is
-// correctly shaped (one column entry, one row).
+// resolves the id to the expected IRI string and that the result structure
+// (`BatchEvaluationResult`) is correctly shaped (one column entry, one row).
 TEST_F(ConstructBatchEvaluatorTest, singleVariableSingleRow) {
   auto idTable = makeIdTable({{getId_("<s>")}});
   ConstructBatchEvaluator::IdCache idCache{1024};
