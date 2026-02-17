@@ -24,7 +24,7 @@ struct PrecomputedConstant {
 // We precompute which `IdTable` column to look up at construct query triple
 // instantitation time.
 struct PrecomputedVariable {
-  std::optional<size_t> columnIndex_;
+  size_t columnIndex_;
 };
 
 // A blank node with precomputed prefix and suffix for fast evaluation. The

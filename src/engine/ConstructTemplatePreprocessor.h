@@ -34,9 +34,9 @@ class ConstructTemplatePreprocessor {
       const Triples& templateTriples,
       const VariableToColumnMap& variableColumns);
 
-  // Preprocess a single `GraphTerm` into a `PreprocessedTerm`. This is a pure
-  // function that does not track column uniqueness.
-  static PreprocessedTerm preprocessTerm(
+  // Preprocess a single `GraphTerm` into a `PreprocessedTerm`. Returns
+  // `std::nullopt` if the term is undefined (e.g. an unbound variable).
+  static std::optional<PreprocessedTerm> preprocessTerm(
       const GraphTerm& term, PositionInTriple role,
       const VariableToColumnMap& variableColumns);
 };

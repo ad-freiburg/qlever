@@ -14,27 +14,35 @@
 
 namespace qlever::constructExport {
 // _____________________________________________________________________________
-PreprocessedTerm ConstructTemplatePreprocessor::preprocessTerm(
+std::optional<PreprocessedTerm> ConstructTemplatePreprocessor::preprocessTerm(
     const GraphTerm& term, PositionInTriple role,
     const VariableToColumnMap& variableColumns) {
   return std::visit(
-      [&role, &variableColumns](const auto& t) -> PreprocessedTerm {
+      [&role,
+       &variableColumns](const auto& t) -> std::optional<PreprocessedTerm> {
         using T = std::decay_t<decltype(t)>;
 
         if constexpr (std::is_same_v<T, Iri>) {
           return PrecomputedConstant{ConstructQueryEvaluator::evaluate(t)};
+
         } else if constexpr (std::is_same_v<T, Literal>) {
-          auto value = ConstructQueryEvaluator::evaluate(t, role);
-          return PrecomputedConstant{value.value_or("")};
-        } else if constexpr (std::is_same_v<T, Variable>) {
-          std::optional<size_t> columnIndex;
-          if (auto opt = ad_utility::findOptional(variableColumns, t)) {
-            columnIndex = opt->columnIndex_;
+          auto opt = ConstructQueryEvaluator::evaluate(t, role);
+          if (opt) {
+            return PrecomputedConstant(std::move(*opt));
           }
-          return PrecomputedVariable{columnIndex};
+          return std::nullopt;
+
+        } else if constexpr (std::is_same_v<T, Variable>) {
+          if (auto opt = ad_utility::findOptional(variableColumns, t)) {
+            size_t columnIndex = opt->columnIndex_;
+            return PrecomputedVariable{columnIndex};
+          }
+          return std::nullopt;
+
         } else if constexpr (std::is_same_v<T, BlankNode>) {
           return PrecomputedBlankNode{t.isGenerated() ? "_:g" : "_:u",
                                       absl::StrCat("_", t.label())};
+
         } else {
           static_assert(ad_utility::alwaysFalse<T>);
         }
@@ -47,21 +55,33 @@ PreprocessedConstructTemplate ConstructTemplatePreprocessor::preprocess(
     const Triples& templateTriples,
     const VariableToColumnMap& variableColumns) {
   PreprocessedConstructTemplate result;
-  result.preprocessedTriples_.resize(templateTriples.size());
 
   ad_utility::HashSet<size_t> uniqueColumnsSet;
 
-  for (auto&& [triple, preprocessedTriple] :
-       ::ranges::views::zip(templateTriples, result.preprocessedTriples_)) {
+  for (const auto& triple : templateTriples) {
+    PreprocessedTriple preprocessedTriple;
+    bool valid = true;
+
     for (size_t pos = 0; pos < NUM_TRIPLE_POSITIONS; ++pos) {
       auto role = static_cast<PositionInTriple>(pos);
       auto preprocessed = preprocessTerm(triple[pos], role, variableColumns);
-      if (auto* var = std::get_if<PrecomputedVariable>(&preprocessed)) {
-        if (var->columnIndex_.has_value()) {
-          uniqueColumnsSet.insert(*var->columnIndex_);
+      if (!preprocessed) {
+        valid = false;
+        break;
+      }
+      preprocessedTriple[pos] = std::move(*preprocessed);
+    }
+
+    if (valid) {
+      // only now add the column indices of `PrecomputedVariable`s to the
+      // `uniqueColumnsSet`, since only now we can be sure that the triple is
+      // indeed valid.
+      for (const auto& term : preprocessedTriple) {
+        if (auto* var = std::get_if<PrecomputedVariable>(&term)) {
+          uniqueColumnsSet.insert(var->columnIndex_);
         }
       }
-      preprocessedTriple[pos] = std::move(preprocessed);
+      result.preprocessedTriples_.push_back(std::move(preprocessedTriple));
     }
   }
 

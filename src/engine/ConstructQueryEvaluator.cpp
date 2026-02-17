@@ -100,10 +100,7 @@ std::string ConstructQueryEvaluator::evaluatePreprocessed(
 std::optional<std::string> ConstructQueryEvaluator::evaluatePreprocessed(
     const PrecomputedVariable& variable,
     const ConstructQueryExportContext& context) {
-  if (!variable.columnIndex_.has_value()) {
-    return std::nullopt;
-  }
-  return evaluateVariableByColumnIndex(*variable.columnIndex_, context);
+  return evaluateVariableByColumnIndex(variable.columnIndex_, context);
 }
 
 // _____________________________________________________________________________
