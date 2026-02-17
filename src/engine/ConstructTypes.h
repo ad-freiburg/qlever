@@ -8,10 +8,13 @@
 #define QLEVER_SRC_ENGINE_CONSTRUCTTYPES_H
 
 #include <array>
+#include <memory>
 #include <optional>
 #include <string>
 #include <variant>
 #include <vector>
+
+#include "util/HashMap.h"
 
 namespace qlever::constructExport {
 
@@ -55,6 +58,28 @@ struct PreprocessedConstructTemplate {
   std::vector<PreprocessedTriple> preprocessedTriples_;
   std::vector<size_t> uniqueVariableColumns_;
 };
+// --- Evaluation types ---
+
+// Result of evaluating a term.
+using EvaluatedTerm = std::shared_ptr<const std::string>;
+
+// Result of batch-evaluating variables for a batch of rows. Stores evaluated
+// values indexed by `IdTable` column index, enabling efficient lookup during
+// triple instantiation.
+struct BatchEvaluationResult {
+  // Map from `IdTable` column index to evaluated values for each row in batch.
+  // Each entry is `std::nullopt` if the variable evaluation failed for that
+  // row.
+  ::ad_utility::HashMap<size_t, std::vector<std::optional<EvaluatedTerm>>>
+      variablesByColumn_;
+  size_t numRows_ = 0;
+
+  const std::optional<EvaluatedTerm>& getVariable(size_t columnIndex,
+                                                  size_t rowInBatch) const {
+    return variablesByColumn_.at(columnIndex).at(rowInBatch);
+  }
+};
+
 }  // namespace qlever::constructExport
 
 #endif  // QLEVER_SRC_ENGINE_CONSTRUCTTYPES_H

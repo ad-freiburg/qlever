@@ -497,3 +497,5 @@ addLinkAndDiscoverTestNoLibs(ConstexprMapTest)
 addLinkAndDiscoverTestNoLibs(ParallelExecutorTest)
 
 addLinkAndDiscoverTest(ConstructTemplatePreprocessorTest engine)
+
+addLinkAndDiscoverTest(ConstructBatchEvaluatorTest engine)

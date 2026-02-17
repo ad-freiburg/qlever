@@ -21,8 +21,8 @@ auto ConstructTripleGenerator::generateStringTriplesForResultTable(
   rowOffset_ += tableWithVocab.idTable().numRows();
 
   // For a single row from the WHERE clause (specified by `idTable` and
-  // `rowIdx` stored in the `context`), evaluate all triples in the CONSTRUCT
-  // template.
+  // `rowIdx` stored in the `context`), createAndEvaluateBatch all triples in
+  // the CONSTRUCT template.
   auto outerTransformer = [this, tableWithVocab,
                            currentRowOffset](uint64_t rowIdx) {
     ConstructQueryExportContext context{rowIdx,
