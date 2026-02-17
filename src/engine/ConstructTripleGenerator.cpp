@@ -13,10 +13,10 @@
 using ad_utility::InputRangeTypeErased;
 using StringTriple = ConstructTripleGenerator::StringTriple;
 using CancellationHandle = ad_utility::SharedCancellationHandle;
-using InstantiatedTriple = qlever::constructExport::InstantiatedTriple;
+using InstantiatedTriple = qlever::constructExport::EvaluatedTriple;
 
 // _____________________________________________________________________________
-// Adapter that transforms `InstantiatedTriple` to formatted strings.
+// Adapter that transforms `EvaluatedTriple` to formatted strings.
 template <ad_utility::MediaType format>
 class FormattedTripleAdapter
     : public ad_utility::InputRangeFromGet<std::string> {
@@ -37,7 +37,7 @@ class FormattedTripleAdapter
 };
 
 // _____________________________________________________________________________
-// Adapter that transforms `InstantiatedTriple` to `StringTriple`.
+// Adapter that transforms `EvaluatedTriple` to `StringTriple`.
 class StringTripleAdapter : public ad_utility::InputRangeFromGet<StringTriple> {
  public:
   explicit StringTripleAdapter(std::unique_ptr<ConstructRowProcessor> processor)

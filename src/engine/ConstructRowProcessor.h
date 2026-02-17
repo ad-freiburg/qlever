@@ -19,14 +19,14 @@
 #include "util/CancellationHandle.h"
 #include "util/stream_generator.h"
 
-// Processes the rows of the result table and yields `InstantiatedTriple`
+// Processes the rows of the result table and yields `EvaluatedTriple`
 // objects. This is done in batches of rows of the result table.
 class ConstructRowProcessor : public ad_utility::InputRangeFromGet<
-                                  qlever::constructExport::InstantiatedTriple> {
+                                  qlever::constructExport::EvaluatedTriple> {
  public:
   using IdCache = ConstructIdCache;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
-  using InstantiatedTriple = qlever::constructExport::InstantiatedTriple;
+  using InstantiatedTriple = qlever::constructExport::EvaluatedTriple;
   using PreprocessedConstructTemplate =
       qlever::constructExport::PreprocessedConstructTemplate;
   using BatchEvaluationResult = qlever::constructExport::BatchEvaluationResult;
