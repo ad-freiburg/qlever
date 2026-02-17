@@ -166,14 +166,13 @@ class MaterializedViewsQueryRewriteTest
   void TearDown() override { ad_utility::setGlobalLoggingStream(&std::cout); }
 };
 
-}  // namespace materializedViewsTestHelpers
-
 // _____________________________________________________________________________
-inline void PrintTo(const materializedViewsTestHelpers::RewriteTestParams& p,
-                    std::ostream* os) {
+inline void PrintTo(const RewriteTestParams& p, std::ostream* os) {
   auto& s = *os;
   s << "write query = '" << p.writeQuery_
     << "', budget = " << p.queryPlanningBudget_;
 }
+
+}  // namespace materializedViewsTestHelpers
 
 #endif  // QLEVER_TEST_MATERIALIZEDVIEWSTESTHELPERS_H_
