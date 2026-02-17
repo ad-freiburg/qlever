@@ -13,7 +13,6 @@
 #include <vector>
 
 #include "engine/ConstructBatchEvaluator.h"
-#include "engine/ConstructIdCache.h"
 #include "engine/ConstructTripleInstantiator.h"
 #include "engine/QueryExportTypes.h"
 #include "util/CancellationHandle.h"
@@ -26,7 +25,9 @@ namespace qlever::constructExport {
 class ConstructRowProcessor : public ad_utility::InputRangeFromGet<
                                   qlever::constructExport::EvaluatedTriple> {
  public:
-  using IdCache = ConstructIdCache;
+  using IdCache =
+      ad_utility::util::LRUCacheWithStatistics<Id,
+                                               std::optional<EvaluatedTerm>>;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
   using InstantiatedTriple = qlever::constructExport::EvaluatedTriple;
   using PreprocessedConstructTemplate =

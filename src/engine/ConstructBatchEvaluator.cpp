@@ -8,7 +8,7 @@
 
 #include "engine/ConstructQueryEvaluator.h"
 
-using namespace qlever::constructExport;
+namespace qlever::constructExport {
 
 // _____________________________________________________________________________
 BatchEvaluationResult ConstructBatchEvaluator::evaluateBatch(
@@ -53,3 +53,5 @@ void ConstructBatchEvaluator::evaluateVariableByColumn(
     columnResults[rowInBatch] = idCache.getOrCompute(id, computeValue);
   }
 }
+
+}  // namespace qlever::constructExport

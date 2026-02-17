@@ -7,16 +7,15 @@
 #ifndef QLEVER_SRC_ENGINE_CONSTRUCTBATCHEVALUATOR_H
 #define QLEVER_SRC_ENGINE_CONSTRUCTBATCHEVALUATOR_H
 
+#include <util/LruCacheWithStatistics.h>
+
 #include <vector>
 
 #include "backports/span.h"
-#include "engine/ConstructIdCache.h"
 #include "engine/ConstructTypes.h"
 #include "engine/idTable/IdTable.h"
 
-// Forward declarations
-class Index;
-class LocalVocab;
+namespace qlever::constructExport {
 
 // Groups the table data needed for batch evaluation:
 // the IdTable, LocalVocab, row indices for the batch, and the row offset.
@@ -31,7 +30,9 @@ struct BatchEvaluationContext {
 // Uses column-oriented access pattern for better cache locality.
 class ConstructBatchEvaluator {
  public:
-  using IdCache = ConstructIdCache;
+  using IdCache =
+      ad_utility::util::LRUCacheWithStatistics<Id,
+                                               std::optional<EvaluatedTerm>>;
   using BatchEvaluationResult = qlever::constructExport::BatchEvaluationResult;
   using EvaluatedTerm = qlever::constructExport::EvaluatedTerm;
 
@@ -50,5 +51,7 @@ class ConstructBatchEvaluator {
       size_t idTableColumnIdx, const BatchEvaluationContext& evaluationContext,
       const Index& index, IdCache& idCache);
 };
+
+}  // namespace qlever::constructExport
 
 #endif  // QLEVER_SRC_ENGINE_CONSTRUCTBATCHEVALUATOR_H

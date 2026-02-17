@@ -10,12 +10,12 @@
 #include "engine/ConstructTemplatePreprocessor.h"
 #include "engine/ExportQueryExecutionTrees.h"
 
+namespace qlever::constructExport {
+
 using ad_utility::InputRangeTypeErased;
 using StringTriple =
     qlever::constructExport::ConstructTripleGenerator::StringTriple;
 using CancellationHandle = ad_utility::SharedCancellationHandle;
-
-namespace qlever::constructExport {
 
 // _____________________________________________________________________________
 // Adapter that transforms `EvaluatedTriple` to formatted strings.
