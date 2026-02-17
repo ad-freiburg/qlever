@@ -96,7 +96,7 @@ https://github.com/google/googletest/blob/main/docs/reference/matchers.md#matche
 // skip such tests if the log level is too low.
 #define SKIP_IF_LOGLEVEL_IS_LOWER(level)                        \
   if (LOGLEVEL < level) {                                       \
-    GTEST_SKIP() << "This test requires log level higher than " \
+    GTEST_SKIP() << "This test requires log level of at least " \
                  << ad_utility::Log::getLevel<level>()          \
                  << ", but the current log level is "           \
                  << ad_utility::Log::getLevel<LOGLEVEL>();      \
