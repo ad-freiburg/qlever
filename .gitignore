@@ -49,3 +49,6 @@ sourcelist
 
 /cmake-build*
 /localIndices
+
+# Local copyright hook script
+scripts/ensure-copyright-author.sh
