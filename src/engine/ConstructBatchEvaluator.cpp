@@ -16,7 +16,7 @@ BatchEvaluationResult ConstructBatchEvaluator::evaluateBatch(
     const BatchEvaluationContext& evaluationContext, const Index& index,
     IdCache& idCache) {
   BatchEvaluationResult batchResult;
-  batchResult.numRows_ = evaluationContext.rowIndicesOfBatch_.size();
+  batchResult.numRows_ = evaluationContext.numRows();
 
   // Evaluate each unique variable across all batch rows.
   for (size_t variableColumnIdx : uniqueVariableColumns) {
@@ -35,9 +35,9 @@ void ConstructBatchEvaluator::evaluateVariableByColumn(
     std::vector<std::optional<EvaluatedTerm>>& columnResults,
     size_t idTableColumnIdx, const BatchEvaluationContext& evaluationContext,
     const Index& index, IdCache& idCache) {
-  for (size_t rowInBatch = 0;
-       rowInBatch < evaluationContext.rowIndicesOfBatch_.size(); ++rowInBatch) {
-    const uint64_t rowIdx = evaluationContext.rowIndicesOfBatch_[rowInBatch];
+  for (size_t rowInBatch = 0; rowInBatch < evaluationContext.numRows();
+       ++rowInBatch) {
+    size_t rowIdx = evaluationContext.firstRow_ + rowInBatch;
 
     const Id& id = evaluationContext.idTable_(rowIdx, idTableColumnIdx);
 
