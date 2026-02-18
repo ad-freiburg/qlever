@@ -15,6 +15,22 @@
 #include "parser/data/ConstructQueryExportContext.h"
 #include "parser/data/Types.h"
 
+namespace qlever::constructExport {
+
+// `PrintTo` overloads so gmock shows human-readable output instead of raw
+// bytes.
+void PrintTo(const PrecomputedConstant& c, std::ostream* os) {
+  *os << "PrecomputedConstant{\"" << c.value_ << "\"}";
+}
+void PrintTo(const PrecomputedVariable& v, std::ostream* os) {
+  *os << "PrecomputedVariable{" << v.columnIndex_ << "}";
+}
+void PrintTo(const PrecomputedBlankNode& b, std::ostream* os) {
+  *os << "PrecomputedBlankNode{\"" << b.prefix_ << "\", \"" << b.suffix_
+      << "\"}";
+}
+}  // namespace qlever::constructExport
+
 namespace {
 
 using namespace std::string_literals;
@@ -53,30 +69,24 @@ static constexpr auto matchesPrecomputedVariable(const auto& columnIdx) {
       AD_FIELD(PrecomputedVariable, columnIndex_, columnIdx));
 }
 
-static constexpr auto matchesPrecomputedBlankNode(const auto& prefix,
-                                                  const auto& suffix) {
+static constexpr auto matchPrecomputedBlankNode(const auto& prefix,
+                                                const auto& suffix) {
   return ::testing::VariantWith<PrecomputedBlankNode>(::testing::AllOf(
       AD_FIELD(PrecomputedBlankNode, prefix_, std::string(prefix)),
       AD_FIELD(PrecomputedBlankNode, suffix_, std::string(suffix))));
 }
-}  // namespace
 
-namespace qlever::constructExport {
+auto matchConst = [](const auto& value) {
+  return matchesPrecomputedConstant(value);
+};
 
-// PrintTo overloads so gmock shows human-readable output instead of raw bytes.
-void PrintTo(const PrecomputedConstant& c, std::ostream* os) {
-  *os << "PrecomputedConstant{\"" << c.value_ << "\"}";
-}
-void PrintTo(const PrecomputedVariable& v, std::ostream* os) {
-  *os << "PrecomputedVariable{" << v.columnIndex_ << "}";
-}
-void PrintTo(const PrecomputedBlankNode& b, std::ostream* os) {
-  *os << "PrecomputedBlankNode{\"" << b.prefix_ << "\", \"" << b.suffix_
-      << "\"}";
-}
-}  // namespace qlever::constructExport
+auto matchVar = [](const auto& value) {
+  return matchesPrecomputedVariable(value);
+};
 
-namespace {
+auto matchBnode = [](const auto& prefix, const auto& suffix) {
+  return matchPrecomputedBlankNode(prefix, suffix);
+};
 
 TEST(ConstructTemplatePreprocessorTest, preprocessIri) {
   Triples triples;
@@ -90,9 +100,8 @@ TEST(ConstructTemplatePreprocessorTest, preprocessIri) {
 
   EXPECT_THAT(result.preprocessedTriples_,
               ::testing::ElementsAre(::testing::ElementsAre(
-                  matchesPrecomputedConstant("<http://s>"),
-                  matchesPrecomputedConstant("<http://p>"),
-                  matchesPrecomputedConstant("<http://o>"))));
+                  matchConst("<http://s>"), matchConst("<http://p>"),
+                  matchConst("<http://o>"))));
 
   EXPECT_TRUE(result.uniqueVariableColumns_.empty());
 }
@@ -106,13 +115,11 @@ TEST(ConstructTemplatePreprocessorTest, preprocessLiteralInObjectPosition) {
   auto result = ConstructTemplatePreprocessor::preprocess(triples, varMap);
 
   ASSERT_EQ(result.preprocessedTriples_.size(), 1);
-  const auto& triple = result.preprocessedTriples_[0];
 
   EXPECT_THAT(result.preprocessedTriples_,
               ::testing::ElementsAre(::testing::ElementsAre(
-                  matchesPrecomputedConstant("<http://s>"),
-                  matchesPrecomputedConstant("<http://p>"),
-                  matchesPrecomputedConstant("hello"))));
+                  matchConst("<http://s>"), matchConst("<http://p>"),
+                  matchConst("hello"))));
 }
 
 TEST(ConstructTemplatePreprocessorTest, preprocessLiteralInSubjectPosition) {
@@ -141,13 +148,11 @@ TEST(ConstructTemplatePreprocessorTest, preprocessVariableBound) {
   auto result = ConstructTemplatePreprocessor::preprocess(triples, varMap);
 
   ASSERT_EQ(result.preprocessedTriples_.size(), 1);
-  const auto& triple = result.preprocessedTriples_[0];
 
-  EXPECT_THAT(result.preprocessedTriples_,
-              ::testing::ElementsAre(::testing::ElementsAre(
-                  matchesPrecomputedVariable(3),
-                  matchesPrecomputedConstant("<http://p>"),
-                  matchesPrecomputedConstant("<http://o>"))));
+  EXPECT_THAT(
+      result.preprocessedTriples_,
+      ::testing::ElementsAre(::testing::ElementsAre(
+          matchVar(3), matchConst("<http://p>"), matchConst("<http://o>"))));
 
   // The unique variable columns should contain column 3.
   ASSERT_EQ(result.uniqueVariableColumns_.size(), 1);
@@ -182,9 +187,8 @@ TEST(ConstructTemplatePreprocessorTest, preprocessBlankNodeUserDefined) {
 
   EXPECT_THAT(result.preprocessedTriples_,
               ::testing::ElementsAre(::testing::ElementsAre(
-                  matchesPrecomputedBlankNode("_:u", "_myNode"),
-                  matchesPrecomputedConstant("<http://p>"),
-                  matchesPrecomputedConstant("<http://o>"))));
+                  matchBnode("_:u", "_myNode"), matchConst("<http://p>"),
+                  matchConst("<http://o>"))));
 }
 
 TEST(ConstructTemplatePreprocessorTest, preprocessBlankNodeGenerated) {
@@ -199,11 +203,10 @@ TEST(ConstructTemplatePreprocessorTest, preprocessBlankNodeGenerated) {
   ASSERT_EQ(result.preprocessedTriples_.size(), 1);
   ASSERT_TRUE(result.uniqueVariableColumns_.empty());
 
-  const auto& triple = result.preprocessedTriples_[0];
-
-  EXPECT_THAT(triple[0], matchesPrecomputedBlankNode("_:g", "_gen"));
-  EXPECT_THAT(triple[1], matchesPrecomputedConstant("<http://p>"));
-  EXPECT_THAT(triple[2], matchesPrecomputedConstant("<http://o>"));
+  EXPECT_THAT(result.preprocessedTriples_,
+              ::testing::ElementsAre(::testing::ElementsAre(
+                  matchBnode("_:g", "_gen"), matchConst("<http://p>"),
+                  matchConst("<http://o>"))));
 }
 
 TEST(ConstructTemplatePreprocessorTest, emptyTriples) {
@@ -230,10 +233,10 @@ TEST(ConstructTemplatePreprocessorTest,
   EXPECT_EQ(result.uniqueVariableColumns_[0], 5);
 
   ASSERT_EQ(result.preprocessedTriples_.size(), 1);
-  const auto& triple = result.preprocessedTriples_[0];
-  EXPECT_THAT(triple[0], matchesPrecomputedVariable(5));
-  EXPECT_THAT(triple[1], matchesPrecomputedConstant("<http://p>"));
-  EXPECT_THAT(triple[2], matchesPrecomputedVariable(5));
+
+  EXPECT_THAT(result.preprocessedTriples_,
+              ::testing::ElementsAre(::testing::ElementsAre(
+                  matchVar(5), matchConst("<http://p>"), matchVar(5))));
 }
 
 TEST(ConstructTemplatePreprocessorTest,
@@ -253,15 +256,16 @@ TEST(ConstructTemplatePreprocessorTest,
   EXPECT_EQ(result.uniqueVariableColumns_[0], 2);
 
   ASSERT_EQ(result.preprocessedTriples_.size(), 2);
+
   const auto& triple1 = result.preprocessedTriples_[0];
-  EXPECT_THAT(triple1[0], matchesPrecomputedVariable(2));
-  EXPECT_THAT(triple1[1], matchesPrecomputedConstant("<http://p1>"));
-  EXPECT_THAT(triple1[2], matchesPrecomputedConstant("<http://o1>"));
+  EXPECT_THAT(triple1,
+              ::testing::ElementsAre(matchVar(2), matchConst("<http://p1>"),
+                                     matchConst("<http://o1>")));
 
   const auto& triple2 = result.preprocessedTriples_[1];
-  EXPECT_THAT(triple2[0], matchesPrecomputedConstant("<http://s2>"));
-  EXPECT_THAT(triple2[1], matchesPrecomputedConstant("<http://p2>"));
-  EXPECT_THAT(triple2[2], matchesPrecomputedVariable(2));
+  EXPECT_THAT(triple2,
+              ::testing::ElementsAre(matchConst("<http://s2>"),
+                                     matchConst("<http://p2>"), matchVar(2)));
 }
 
 TEST(ConstructTemplatePreprocessorTest,
@@ -282,10 +286,10 @@ TEST(ConstructTemplatePreprocessorTest,
               ::testing::UnorderedElementsAre(0, 1));
 
   ASSERT_EQ(result.preprocessedTriples_.size(), 1);
-  const auto& triple = result.preprocessedTriples_[0];
-  EXPECT_THAT(triple[0], matchesPrecomputedVariable(0));
-  EXPECT_THAT(triple[1], matchesPrecomputedConstant("<http://p>"));
-  EXPECT_THAT(triple[2], matchesPrecomputedVariable(1));
+
+  EXPECT_THAT(result.preprocessedTriples_,
+              ::testing::ElementsAre(::testing::ElementsAre(
+                  matchVar(0), matchConst("<http://p>"), matchVar(1))));
 }
 
 TEST(ConstructTemplatePreprocessorTest,
@@ -312,20 +316,21 @@ TEST(ConstructTemplatePreprocessorTest,
               ::testing::UnorderedElementsAre(0, 1, 2));
 
   ASSERT_EQ(result.preprocessedTriples_.size(), 3);
+
   auto& triple1 = result.preprocessedTriples_[0];
-  EXPECT_THAT(triple1[0], matchesPrecomputedVariable(0));
-  EXPECT_THAT(triple1[1], matchesPrecomputedConstant("<http://p1>"));
-  EXPECT_THAT(triple1[2], matchesPrecomputedVariable(1));
+  EXPECT_THAT(triple1,
+              ::testing::ElementsAre(matchVar(0), matchConst("<http://p1>"),
+                                     matchVar(1)));
 
   auto& triple2 = result.preprocessedTriples_[1];
-  EXPECT_THAT(triple2[0], matchesPrecomputedVariable(0));
-  EXPECT_THAT(triple2[1], matchesPrecomputedConstant("<http://p2>"));
-  EXPECT_THAT(triple2[2], matchesPrecomputedVariable(2));
+  EXPECT_THAT(triple2,
+              ::testing::ElementsAre(matchVar(0), matchConst("<http://p2>"),
+                                     matchVar(2)));
 
   auto& triple3 = result.preprocessedTriples_[2];
-  EXPECT_THAT(triple3[0], matchesPrecomputedVariable(1));
-  EXPECT_THAT(triple3[1], matchesPrecomputedConstant("<http://p3>"));
-  EXPECT_THAT(triple3[2], matchesPrecomputedVariable(2));
+  EXPECT_THAT(triple3,
+              ::testing::ElementsAre(matchVar(1), matchConst("<http://p3>"),
+                                     matchVar(2)));
 }
 
 TEST(ConstructTemplatePreprocessorTest, unboundVariableDropsTriple) {
@@ -362,10 +367,11 @@ TEST(ConstructTemplatePreprocessorTest,
   EXPECT_EQ(result.uniqueVariableColumns_[0], 0);
 
   ASSERT_EQ(result.preprocessedTriples_.size(), 1);
-  auto& triple = result.preprocessedTriples_[0];
-  EXPECT_THAT(triple[0], matchesPrecomputedVariable(0));
-  EXPECT_THAT(triple[1], matchesPrecomputedConstant("<http://p>"));
-  EXPECT_THAT(triple[2], matchesPrecomputedConstant("<http://o>"));
+
+  EXPECT_THAT(
+      result.preprocessedTriples_,
+      ::testing::ElementsAre(::testing::ElementsAre(
+          matchVar(0), matchConst("<http://p>"), matchConst("<http://o>"))));
 }
 
 TEST(ConstructTemplatePreprocessorTest, multipleTriplesConstantsOnly) {
@@ -384,15 +390,16 @@ TEST(ConstructTemplatePreprocessorTest, multipleTriplesConstantsOnly) {
   EXPECT_TRUE(result.uniqueVariableColumns_.empty());
 
   ASSERT_EQ(result.preprocessedTriples_.size(), 2);
+
   auto& triple1 = result.preprocessedTriples_[0];
-  EXPECT_THAT(triple1[0], matchesPrecomputedConstant("<http://s1>"));
-  EXPECT_THAT(triple1[1], matchesPrecomputedConstant("<http://p1>"));
-  EXPECT_THAT(triple1[2], matchesPrecomputedConstant("<http://o1>"));
+  EXPECT_THAT(triple1, ::testing::ElementsAre(matchConst("<http://s1>"),
+                                              matchConst("<http://p1>"),
+                                              matchConst("<http://o1>")));
 
   auto& triple2 = result.preprocessedTriples_[1];
-  EXPECT_THAT(triple2[0], matchesPrecomputedConstant("<http://s2>"));
-  EXPECT_THAT(triple2[1], matchesPrecomputedConstant("<http://p2>"));
-  EXPECT_THAT(triple2[2], matchesPrecomputedConstant("<http://o2>"));
+  EXPECT_THAT(triple2, ::testing::ElementsAre(matchConst("<http://s2>"),
+                                              matchConst("<http://p2>"),
+                                              matchConst("<http://o2>")));
 }
 
 TEST(ConstructTemplatePreprocessorTest, mixedTermTypesAcrossTriples) {
@@ -411,14 +418,14 @@ TEST(ConstructTemplatePreprocessorTest, mixedTermTypesAcrossTriples) {
   ASSERT_EQ(result.preprocessedTriples_.size(), 2);
 
   auto& triple1 = result.preprocessedTriples_[0];
-  EXPECT_THAT(triple1[0], matchesPrecomputedConstant("<http://s>"));
-  EXPECT_THAT(triple1[1], matchesPrecomputedConstant("<http://p>"));
-  EXPECT_THAT(triple1[2], matchesPrecomputedVariable(4));
+  EXPECT_THAT(triple1,
+              ::testing::ElementsAre(matchConst("<http://s>"),
+                                     matchConst("<http://p>"), matchVar(4)));
 
   auto& triple2 = result.preprocessedTriples_[1];
-  EXPECT_THAT(triple2[0], matchesPrecomputedBlankNode("_:u", "_b1"));
-  EXPECT_THAT(triple2[1], matchesPrecomputedConstant("<http://q>"));
-  EXPECT_THAT(triple2[2], matchesPrecomputedConstant("text"));
+  EXPECT_THAT(triple2, ::testing::ElementsAre(matchBnode("_:u", "_b1"),
+                                              matchConst("<http://q>"),
+                                              matchConst("text")));
 
   ASSERT_EQ(result.uniqueVariableColumns_.size(), 1);
   EXPECT_EQ(result.uniqueVariableColumns_[0], 4);
@@ -434,7 +441,7 @@ TEST(ConstructTemplatePreprocessorTest, preprocessTermIri) {
       GraphTerm{Iri{"<http://s>"}}, SUBJECT, varMap);
   ASSERT_TRUE(result.has_value());
 
-  EXPECT_THAT(result.value(), matchesPrecomputedConstant("<http://s>"));
+  EXPECT_THAT(result.value(), matchConst("<http://s>"));
 }
 
 TEST(ConstructTemplatePreprocessorTest, preprocessTermLiteralObject) {
@@ -443,7 +450,7 @@ TEST(ConstructTemplatePreprocessorTest, preprocessTermLiteralObject) {
       GraphTerm{Literal{"hello"}}, OBJECT, varMap);
   ASSERT_TRUE(result.has_value());
 
-  EXPECT_THAT(result.value(), matchesPrecomputedConstant("hello"));
+  EXPECT_THAT(result.value(), matchConst("hello"));
 }
 
 TEST(ConstructTemplatePreprocessorTest, preprocessTermLiteralSubject) {
@@ -462,7 +469,7 @@ TEST(ConstructTemplatePreprocessorTest, preprocessTermVariableBound) {
       GraphTerm{Variable{"?x"}}, SUBJECT, varMap);
   ASSERT_TRUE(result.has_value());
 
-  EXPECT_THAT(result.value(), matchesPrecomputedVariable(3));
+  EXPECT_THAT(result.value(), matchVar(3));
 }
 
 TEST(ConstructTemplatePreprocessorTest, preprocessTermVariableUnbound) {
@@ -478,7 +485,7 @@ TEST(ConstructTemplatePreprocessorTest, preprocessTermBlankNodeUser) {
       GraphTerm{BlankNode{false, "myNode"}}, SUBJECT, varMap);
   ASSERT_TRUE(result.has_value());
 
-  EXPECT_THAT(result.value(), matchesPrecomputedBlankNode("_:u", "_myNode"));
+  EXPECT_THAT(result.value(), matchBnode("_:u", "_myNode"));
 }
 
 TEST(ConstructTemplatePreprocessorTest, preprocessTermBlankNodeGenerated) {
@@ -487,6 +494,6 @@ TEST(ConstructTemplatePreprocessorTest, preprocessTermBlankNodeGenerated) {
       GraphTerm{BlankNode{true, "gen"}}, SUBJECT, varMap);
   ASSERT_TRUE(result.has_value());
 
-  EXPECT_THAT(result.value(), matchesPrecomputedBlankNode("_:g", "_gen"));
+  EXPECT_THAT(result.value(), matchBnode("_:g", "_gen"));
 }
 }  // namespace
