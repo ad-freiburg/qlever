@@ -2,9 +2,9 @@ name: "Native build to WebAssembly using Conan and Emscripten"
 
 on:
   push:
-    branches: [ master ]
+    branches: [ masterX ]
   pull_request:
-    branches: [ master ]
+    branches: [ masterX ]
 
 jobs:
   build:
