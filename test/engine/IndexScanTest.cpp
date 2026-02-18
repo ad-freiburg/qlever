@@ -2040,6 +2040,39 @@ TEST_P(IndexScanWithLazyJoin,
 }
 
 // _____________________________________________________________________________
+TEST_P(IndexScanWithLazyJoin,
+       prefilterTablesDoesStreamManyMatchingTablesAfterIndexIsExhausted) {
+  std::string kg = "<a> <p> <A> . <b> <p> <B>. ";
+  qec_ = getQec(std::move(kg));
+  IndexScan scan = makeScan();
+
+  using P = Result::IdTableVocabPair;
+  std::vector<P> joinSide;
+  // The left side contains many entries that match the last block in the index
+  // that is yielded. There previously was an assertion bug for this case,
+  // because the prefilter tried to push noexisting dummy blocks to the right
+  // hand side. This should now be fixed.
+  for (size_t i = 0; i < 20; ++i) {
+    joinSide.push_back(P{makeIdTable({iri("<a>")}), LocalVocab{}});
+  };
+  auto [joinSideResults, scanResults] = consumeRanges(
+      scan.prefilterTables(LazyResult{std::move(joinSide)}, 0, true));
+
+  ASSERT_EQ(scanResults.size(), 1);
+  ASSERT_EQ(joinSideResults.size(), 20);
+
+  EXPECT_TRUE(scanResults.at(0).localVocab_.empty());
+
+  EXPECT_EQ(
+      scanResults.at(0).idTable_,
+      tableFromTriples({{iri("<a>"), iri("<A>")}, {iri("<b>"), iri("<B>")}}));
+
+  for (const auto& [idTable, localVocab] : joinSideResults) {
+    EXPECT_EQ(idTable, makeIdTable({iri("<a>")}));
+  }
+}
+
+// _____________________________________________________________________________
 TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesEventuallyPushDummyBlock) {
   std::string kg = "<a> <p> <A> . <b> <p> <B>. ";
   qec_ = getQec(std::move(kg));

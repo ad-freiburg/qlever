@@ -595,11 +595,16 @@ struct IndexScan::SharedGeneratorState {
   // Indicates if the generator has yielded any undefined values.
   bool hasUndef_ = false;
   // Indicates if the generator has been fully consumed.
-  bool doneFetching_ = false;
+
+  // Note: If the right input is completely exhausted, we still might see
+  // matching blocks from the left input that match a previously yielded block
+  // from right, hence the necessity of the `RightExhausted` status.
+  enum struct Status { Running, RightExhausted, Exhausted };
+  Status status_ = Status::Running;
 
   // Advance the `iterator` to the next non-empty table. Set `hasUndef_` to true
-  // if the first table is undefined. Also set `doneFetching_` if the generator
-  // has been fully consumed.
+  // if the first table is undefined. Also set `status_` to `Exhausted` if the
+  // generator has been fully consumed.
   void advanceInputToNextNonEmptyTable() {
     bool firstStep = !iterator_.has_value();
     if (iterator_.has_value()) {
@@ -611,11 +616,14 @@ struct IndexScan::SharedGeneratorState {
     while (iterator != generator_.end() && iterator->idTable_.empty()) {
       ++iterator;
     }
-    doneFetching_ = iterator_ == generator_.end();
+    bool isEmpty = iterator_ == generator_.end();
+    if (isEmpty) {
+      status_ = Status::Exhausted;
+    }
     // Set the undef flag if the first table is undefined.
     if (firstStep) {
       hasUndef_ =
-          !doneFetching_ && iterator->idTable_.at(0, joinColumn_).isUndefined();
+          !isEmpty && iterator->idTable_.at(0, joinColumn_).isUndefined();
     }
   }
 
@@ -635,11 +643,12 @@ struct IndexScan::SharedGeneratorState {
     AD_CORRECTNESS_CHECK(!lastJoinColumn.empty());
     Id lastValue = lastJoinColumn.back();
     const auto& metaBlockView = metaBlocks_.getBlockMetadataView();
+
     // If there are no more blocks left in the index scan, we can't push a
-    // dummy block. This can happen when all blocks have been consumed.
-    if (ql::ranges::empty(metaBlockView)) {
-      return;
-    }
+    // dummy block. This should never happen, as `pushDummyBlock...` is never
+    // called under these conditions.
+    AD_CORRECTNESS_CHECK(!ql::ranges::empty(metaBlockView));
+
     const auto& block = *metaBlockView.begin();
     AD_CORRECTNESS_CHECK(CompressedRelationReader::getRelevantIdFromTriple(
                              block.firstTriple_, metaBlocks_) > lastValue);
@@ -655,9 +664,10 @@ struct IndexScan::SharedGeneratorState {
   // it returns, both `prefetchedValues` and `pendingBlocks` contain at least
   // one element.
   void fetch() {
-    while (prefetchedValues_.empty() || pendingBlocks_.empty()) {
+    while (prefetchedValues_.empty() ||
+           (pendingBlocks_.empty() && status_ == Status::Running)) {
       advanceInputToNextNonEmptyTable();
-      if (doneFetching_) {
+      if (status_ == Status::Exhausted) {
         return;
       }
       auto& idTable = iterator_.value()->idTable_;
@@ -685,6 +695,10 @@ struct IndexScan::SharedGeneratorState {
       bool leftBlockWillBeYielded = !filterLeftSide_ || leftSideMatches;
       bool rightSideExhausted = metaBlocks_.blockMetadata_.empty();
 
+      if (rightSideExhausted) {
+        status_ = Status::RightExhausted;
+      }
+
       if (newBlockWasFound) {
         lastEntryInBlocks_ = CompressedRelationReader::getRelevantIdFromTriple(
             newBlocks.back().lastTriple_, metaBlocks_);
@@ -694,17 +708,17 @@ struct IndexScan::SharedGeneratorState {
         prefetchedValues_.push_back(std::move(*iterator_.value()));
       }
 
-      // The `leftSideMatches` condition is important, because following
+      // The `!leftSideMatches` condition is important, because following
       // `joinColumns` from the left might still match the last block that we
       // previously have yielded. Note: If we don't filter the left side, then
       // its left elements still have to be yielded, but this is done by the
       // generator for the left side.
       if (rightSideExhausted && !leftSideMatches) {
-        doneFetching_ = true;
+        status_ = Status::Exhausted;
         return;
       }
 
-      if (!newBlockWasFound && leftBlockWillBeYielded) {
+      if (!newBlockWasFound && leftBlockWillBeYielded && !rightSideExhausted) {
         pushDummyBlockIfBufferTooLarge();
       }
     }
@@ -738,12 +752,14 @@ Result::LazyResult IndexScan::createPrefilteredJoinSide(
 
         auto& prefetched = state->prefetchedValues_;
 
-        if (prefetched.empty() && !state->doneFetching_) {
+        if (prefetched.empty() &&
+            state->status_ != SharedGeneratorState::Status::Exhausted) {
           state->fetch();
         }
 
         if (prefetched.empty()) {
-          AD_CORRECTNESS_CHECK(state->doneFetching_);
+          AD_CORRECTNESS_CHECK(state->status_ ==
+                               SharedGeneratorState::Status::Exhausted);
           // If not filtering left side, yield all remaining elements.
           AD_CORRECTNESS_CHECK(state->iterator_.has_value());
           auto it = state->iterator_.value();
@@ -800,7 +816,9 @@ Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
         auto& pendingBlocks = state->pendingBlocks_;
 
         while (pendingBlocks.empty()) {
-          if (state->doneFetching_) {
+          // This generator also breaks when only the right side is exhausted,
+          // as it represents the right side!
+          if (state->status_ != SharedGeneratorState::Status::Running) {
             metadata.numBlocksAll_ = state->metaBlocks_.sizeBlockMetadata_;
             updateRuntimeInfoForLazyScan(metadata, Always);
             return LoopControl::makeBreak();
