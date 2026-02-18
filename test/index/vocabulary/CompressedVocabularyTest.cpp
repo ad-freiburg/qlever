@@ -186,4 +186,23 @@ TYPED_TEST(CompressedVocabularyF, WriteAndReadWithSerializer) {
   ad_utility::deleteFile(filename);
 }
 
+// _______________________________________________________
+TYPED_TEST(CompressedVocabularyF, LookupBatch) {
+  const std::vector<std::string> words{"alpha", "delta", "beta", "42"};
+  auto createVocab = this->createCompressedVocabulary("lookupBatchFsst");
+  auto vocab = createVocab(words);
+
+  // Batch lookup in non-sequential order.
+  std::array<size_t, 3> indices{2, 0, 3};
+  auto result = vocab.lookupBatch(indices);
+  ASSERT_EQ(result->size(), 3);
+  EXPECT_EQ((*result)[0], "beta");
+  EXPECT_EQ((*result)[1], "alpha");
+  EXPECT_EQ((*result)[2], "42");
+
+  // Empty batch.
+  auto emptyResult = vocab.lookupBatch(ql::span<const size_t>{});
+  EXPECT_EQ(emptyResult->size(), 0);
+}
+
 }  // namespace

@@ -79,6 +79,23 @@ TEST(VocabularyInMemory, EmptyVocabulary) {
   testEmptyVocabulary(createVocabulary);
 }
 
+TEST(VocabularyInMemory, LookupBatch) {
+  const std::vector<std::string> words{"alpha", "delta", "beta", "42"};
+  const auto vocab = createVocabulary(words);
+
+  // Batch lookup in non-sequential order.
+  std::array<size_t, 3> indices{2, 0, 3};
+  auto result = vocab.lookupBatch(indices);
+  ASSERT_EQ(result->size(), 3);
+  EXPECT_EQ((*result)[0], "beta");
+  EXPECT_EQ((*result)[1], "alpha");
+  EXPECT_EQ((*result)[2], "42");
+
+  // Empty batch.
+  auto emptyResult = vocab.lookupBatch(ql::span<const size_t>{});
+  EXPECT_EQ(emptyResult->size(), 0);
+}
+
 // _____________________________________________________________________________
 TEST(VocabularyInMemory, WordWriterDestructorBehavior) {
   const std::string filename = "VocabInMemoryWordWriterDestructorBehavior.tmp";

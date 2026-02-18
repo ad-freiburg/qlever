@@ -50,6 +50,14 @@ void testForVocabType(VocabularyType::Enum vocabType) {
 
   EXPECT_EQ(vocab.isGeoInfoAvailable(),
             vocabType == VocabularyType::Enum::OnDiskCompressedGeoSplit);
+
+  // Test lookupBatch.
+  std::array<size_t, 3> indices{2, 0, 1};
+  auto result = vocab.lookupBatch(indices);
+  ASSERT_EQ(result->size(), 3);
+  EXPECT_EQ((*result)[0], "gamma");
+  EXPECT_EQ((*result)[1], "alpha");
+  EXPECT_EQ((*result)[2], "beta");
 }
 }  // namespace
 
