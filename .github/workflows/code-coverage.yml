@@ -87,8 +87,7 @@ jobs:
         --ignore-filename-regex="/test/"
         --ignore-filename-regex="/benchmark/"
         > ./coverage_raw.lcov;
-        python3 ${{github.workspace}}/misc/merge_lcov_branches.py
-        ./coverage_raw.lcov -o ./coverage.lcov
+        python3 ${{github.workspace}}/misc/merge_lcov_branches.py ./coverage_raw.lcov -o ./coverage.lcov
 
 # Only upload the coverage directly if this is not a pull request. In this
 # case we are on the master branch and have access to the Codecov token.

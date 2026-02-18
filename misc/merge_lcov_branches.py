@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Merge LCOV branch data across template instantiations.
 
+NOTE: This script was written by Claude Opus 4.6. It has thoroughly been tested
+and behaves as expected.
+
 When llvm-cov exports coverage with --format=lcov, template instantiations
 produce separate "blocks" of branch data (BRDA entries with different block
 IDs) for the same source line.  Codecov treats each block's branches
-independently, so if instantiation A takes the true branch and instantiation
-B takes the false branch, neither gets full coverage.
-
+independently, so a branch will only get full coverage, if ALL instantiations
+take the true branch as well as the false branch.
 This script merges branch data across blocks by positional index: for each
 source line, all blocks' branches are aligned by their position within the
 block, and the maximum hit count is taken.  The result is a single block
