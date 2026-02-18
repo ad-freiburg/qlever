@@ -67,10 +67,14 @@ class Permutation {
   // `PSO` is converted to [1, 0, 2].
   static KeyOrder toKeyOrder(Enum permutation);
 
-  explicit Permutation(Enum permutation, Allocator allocator);
+  // Construct a `Permutation`. If the `readableName` is not set,
+  // `toString(permutation)` is used.
+  explicit Permutation(Enum permutation, Allocator allocator,
+                       std::optional<std::string> readableName = std::nullopt);
 
   // everything that has to be done when reading an index from disk
-  void loadFromDisk(const std::string& onDiskBase, bool loadAdditional = false);
+  void loadFromDisk(const std::string& onDiskBase,
+                    bool loadInternalPermutation = false);
 
   // Set the original metadata for the delta triples. This also sets the
   // metadata for internal permutation if present.
