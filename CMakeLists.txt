@@ -25,6 +25,15 @@ endif ()
 # developers.
 add_compile_definitions(BOOST_ASIO_DISABLE_AWAITABLE_FRAME_RECYCLING)
 
+# By default, build shared instead of static libraries. This is useful in
+# particular for Debug or RelWithDebugInfo builds, where the individual
+# libraries are rather large because of the debug symbols and are linked
+# into almost every test binary.
+# Note: This option magically influences the beahvior of `add_library`, see
+# https://cmake.org/cmake/help/latest/variable/BUILD_SHARED_LIBS.html for
+# details.
+option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
+
 # By default, QLever uses precompiled headers for widely used modules. However when heavily modifying the headers that
 # contribute to the precompiled headers, then it might be beneficial to deactivate precompiled headers.
 option(USE_PRECOMPILED_HEADERS "Use precompiled headers to reduce compile times" ON)
