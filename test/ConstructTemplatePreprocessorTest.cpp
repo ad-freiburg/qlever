@@ -347,8 +347,6 @@ TEST(ConstructTemplatePreprocessorTest, multipleTriplesConstantsOnly) {
       ElementsAre(ElementsAre(Const("<http://s1>"), Const("<http://p1>"),
                               Const("<http://o1>")),
                   ElementsAre(Const("<http://s2>"), Const("<http://p2>"),
-                              Const("<http://o2>")),
-                  ElementsAre(Const("<http://s2>"), Const("<http://p2>"),
                               Const("<http://o2>"))));
 
   EXPECT_TRUE(result.uniqueVariableColumns_.empty());
@@ -369,11 +367,9 @@ TEST(ConstructTemplatePreprocessorTest, mixedTermTypesAcrossTriples) {
 
   EXPECT_THAT(
       result.preprocessedTriples_,
-      ElementsAre(
-          ElementsAre(Const("<http://s>"), Const("<http://p>"), Var(4)),
-          ElementsAre(Bnode("_:u", "_b1"), Const("<http://q>"), Const("text")),
-          ElementsAre(Bnode("_:u", "_b1"), Const("<http://q>"),
-                      Const("text"))));
+      ElementsAre(ElementsAre(Const("<http://s>"), Const("<http://p>"), Var(4)),
+                  ElementsAre(Bnode("_:u", "_b1"), Const("<http://q>"),
+                              Const("text"))));
 
   ASSERT_EQ(result.uniqueVariableColumns_.size(), 1);
   EXPECT_EQ(result.uniqueVariableColumns_[0], 4);
