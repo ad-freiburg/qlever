@@ -6,12 +6,47 @@
 #define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYTYPES_H
 
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
+#include <vector>
 
+#include "backports/span.h"
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
+
+// The result type for batch vocabulary lookups. It is a shared_ptr to a span
+// of string_views, using the aliasing constructor to keep the underlying data
+// alive.
+using VocabBatchLookupResult = std::shared_ptr<ql::span<std::string_view>>;
+
+// Helper struct for batch lookup results. Holds the materialized string data
+// and the views into it. Use `finalize()` after filling `views` to set up the
+// span, then use `asResult()` to get a VocabBatchLookupResult via aliasing
+// shared_ptr.
+struct VocabBatchLookupData {
+  // Buffer for materialized string data (used by disk-based vocabularies).
+  std::string buffer;
+  // The individual string_views, one per looked-up index.
+  std::vector<std::string_view> views;
+  // The span over `views`, set by `finalize()`.
+  ql::span<std::string_view> span;
+
+  // Call after filling `views` to set up the span.
+  void finalize() { span = ql::span<std::string_view>{views}; }
+
+  // Create a VocabBatchLookupResult using aliasing shared_ptr.
+  // `self` must be a shared_ptr to `this`.
+  static VocabBatchLookupResult asResult(
+      std::shared_ptr<VocabBatchLookupData> self) {
+    self->finalize();
+    auto* spanPtr = &self->span;
+    return std::shared_ptr<ql::span<std::string_view>>(std::move(self),
+                                                        spanPtr);
+  }
+};
 
 // A word and its index in the vocabulary from which it was obtained. Also
 // contains a special state `end()` which can be queried by the `isEnd()`

@@ -49,6 +49,12 @@ class VocabularyInternalExternal {
   /// Return the `i-th` word. The behavior is undefined if `i >= size()`
   std::string operator[](uint64_t i) const;
 
+  // Look up multiple words by index in a single batch. First checks the
+  // internal (RAM) vocabulary, then falls back to the external (disk)
+  // vocabulary for indices not found in RAM. Returns a shared_ptr to a span
+  // of string_views, where result[i] = vocab[indices[i]].
+  VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const;
+
   /// Return a `WordAndIndex` that points to the first entry that is equal or
   /// greater than `word` wrt. to the `comparator`. Only works correctly if the
   /// `words_` are sorted according to the comparator (exactly like in

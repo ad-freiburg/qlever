@@ -73,6 +73,9 @@ class PolymorphicVocabulary {
   // Return the `i`-th word, throw if `i` is out of bounds.
   std::string operator[](uint64_t i) const;
 
+  // Look up multiple words by index in a single batch call.
+  VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const;
+
   // Return a reference to currently underlying vocabulary, as a variant of the
   // possible types.
   Variant& getUnderlyingVocabulary() { return vocab_; }

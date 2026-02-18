@@ -75,6 +75,12 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   // size`.
   std::string operator[](uint64_t idx) const;
 
+  // Look up multiple words by index in a single batch. Returns a shared_ptr
+  // to a span of string_views, where result[i] = vocab[indices[i]]. The
+  // underlying buffer is kept alive by the shared_ptr. Reads are performed in
+  // file-offset order for sequential I/O, with optional io_uring support.
+  VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const;
+
   /// Get the number of words in the vocabulary.
   size_t size() const { return size_; }
 

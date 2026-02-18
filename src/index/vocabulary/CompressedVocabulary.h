@@ -58,6 +58,41 @@ CPP_template(typename UnderlyingVocabulary,
         toStringView(underlyingVocabulary_[idx]), getDecoderIdx(idx));
   }
 
+  // Look up multiple words by index in a single batch call. Each compressed
+  // word is decompressed using the appropriate per-block decoder.
+  VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
+    auto data = std::make_shared<VocabBatchLookupData>();
+    auto& views = data->views;
+    auto& buffer = data->buffer;
+
+    // Get all compressed words from the underlying vocabulary.
+    auto compressedResult = underlyingVocabulary_.lookupBatch(indices);
+    auto& compressedViews = *compressedResult;
+
+    // Decompress all words, computing total buffer size.
+    std::vector<std::string> decompressed;
+    decompressed.reserve(indices.size());
+    size_t totalSize = 0;
+    for (size_t i = 0; i < indices.size(); ++i) {
+      decompressed.push_back(compressionWrapper_.decompress(
+          compressedViews[i], getDecoderIdx(indices[i])));
+      totalSize += decompressed.back().size();
+    }
+
+    // Concatenate into buffer (pre-reserved so no reallocation) and set up
+    // views.
+    buffer.reserve(totalSize);
+    views.resize(indices.size());
+    for (size_t i = 0; i < indices.size(); ++i) {
+      size_t offset = buffer.size();
+      buffer.append(decompressed[i]);
+      views[i] =
+          std::string_view(buffer.data() + offset, decompressed[i].size());
+    }
+
+    return VocabBatchLookupData::asResult(std::move(data));
+  }
+
   [[nodiscard]] uint64_t size() const { return underlyingVocabulary_.size(); }
 
   // From a `comparator` that can compare two strings, make a new comparator,

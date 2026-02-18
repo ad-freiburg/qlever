@@ -166,6 +166,11 @@ class SplitVocabulary {
         underlying_[marker]);
   }
 
+  // Look up multiple words by index in a single batch call. Indices must
+  // include marker bits. Partitions indices by marker, performs batch lookups
+  // on each underlying vocabulary, and merges results back in input order.
+  VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const;
+
   // The size of a SplitVocabulary is the sum of the sizes of the underlying
   // vocabularies.
   [[nodiscard]] uint64_t size() const {
