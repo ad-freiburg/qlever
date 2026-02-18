@@ -328,7 +328,7 @@ VacuumStatistics LocatedTriplesPerBlock::vacuumBlock(size_t blockIndex,
                                                      size_t numIndexColumns,
                                                      bool includeGraphColumn) {
   // Early exit if there are no updates for this block.
-  if (!hasUpdates(blockIndex)) {
+  if (!getUpdatesIfPresent(blockIndex).has_value()) {
     return VacuumStatistics{0, 0, 0, 0};
   }
 
