@@ -59,34 +59,26 @@ struct ContextWrapper {
 
 // Composable matchers for `PreprocessedTerm` variants.
 // see https://github.com/google/googletest/blob/main/docs/reference/matchers.md
-static constexpr auto matchesPrecomputedConstant(const auto& value) {
+static constexpr auto matchesPrecomputedConstant = [](const auto& value) {
   return ::testing::VariantWith<PrecomputedConstant>(
       AD_FIELD(PrecomputedConstant, value_, std::string(value)));
-}
+};
 
-static constexpr auto matchesPrecomputedVariable(const auto& columnIdx) {
+static constexpr auto matchesPrecomputedVariable = [](const auto& columnIdx) {
   return ::testing::VariantWith<PrecomputedVariable>(
       AD_FIELD(PrecomputedVariable, columnIndex_, columnIdx));
-}
+};
 
-static constexpr auto matchPrecomputedBlankNode(const auto& prefix,
-                                                const auto& suffix) {
+static constexpr auto matchesPrecomputedBlankNode = [](const auto& prefix,
+                                                       const auto& suffix) {
   return ::testing::VariantWith<PrecomputedBlankNode>(::testing::AllOf(
       AD_FIELD(PrecomputedBlankNode, prefix_, std::string(prefix)),
       AD_FIELD(PrecomputedBlankNode, suffix_, std::string(suffix))));
-}
-
-auto matchConst = [](const auto& value) {
-  return matchesPrecomputedConstant(value);
 };
 
-auto matchVar = [](const auto& value) {
-  return matchesPrecomputedVariable(value);
-};
-
-auto matchBnode = [](const auto& prefix, const auto& suffix) {
-  return matchPrecomputedBlankNode(prefix, suffix);
-};
+auto matchConst = matchesPrecomputedConstant;
+auto matchVar = matchesPrecomputedVariable;
+auto matchBnode = matchesPrecomputedBlankNode;
 
 TEST(ConstructTemplatePreprocessorTest, preprocessIri) {
   Triples triples;
