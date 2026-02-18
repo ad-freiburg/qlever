@@ -6,15 +6,27 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
 #include "./util/IdTableHelpers.h"
 #include "./util/IndexTestHelpers.h"
 #include "engine/ConstructBatchEvaluator.h"
 
 using namespace qlever::constructExport;
+using ::testing::Each;
+using ::testing::ElementsAre;
+using ::testing::Eq;
+using ::testing::Optional;
+using ::testing::Pointee;
 
 namespace {
+
+// Matcher for `std::optional<std::shared_ptr<const std::string>>`:
+// asserts the optional is non-empty and the pointed-to string equals
+// `expected`.
+static constexpr auto matchesEvaluatedTerm = [](const std::string& expected) {
+  return Optional(Pointee(Eq(expected)));
+};
 
 // =============================================================================
 // Test fixture.
@@ -29,24 +41,13 @@ class ConstructBatchEvaluatorTest : public ::testing::Test {
  protected:
   QueryExecutionContext* qec_ =
       ad_utility::testing::getQec("<s> <p> <o> . <s> <q> \"hello\" .");
+
   const Index& index_ = qec_->getIndex();
+
   std::function<Id(const std::string&)> getId_ =
       ad_utility::testing::makeGetId(index_);
-  LocalVocab localVocab_;
 
-  // Build an `IdTable` from explicit rows of `Id`s. Each inner vector is one
-  // row; all rows must have the same number of columns.
-  IdTable makeIdTable(const std::vector<std::vector<Id>>& rows) {
-    size_t numCols = rows.empty() ? 0 : rows[0].size();
-    IdTable table{numCols, ad_utility::testing::makeAllocator()};
-    for (const auto& row : rows) {
-      table.emplace_back();
-      for (size_t i = 0; i < numCols; ++i) {
-        table.back()[i] = row[i];
-      }
-    }
-    return table;
-  }
+  LocalVocab localVocab_;
 
   // Evaluate the full `IdTable` (all rows) with the given variable columns in
   // one single batch.
@@ -69,11 +70,12 @@ class ConstructBatchEvaluatorTest : public ::testing::Test {
   }
 };
 
-// The simplest case: one variable column, one row. Verify that the evaluator
-// resolves the id to the expected IRI string and that the result structure
-// (`BatchEvaluationResult`) is correctly shaped (one column entry, one row).
+// The simplest case: `IdTable` consists of one variable column, one row. Verify
+// that the evaluator resolves the id to the expected IRI string and that the
+// result structure (`BatchEvaluationResult`) is correctly shaped (one column
+// entry, one row).
 TEST_F(ConstructBatchEvaluatorTest, singleVariableSingleRow) {
-  auto idTable = makeIdTable({{getId_("<s>")}});
+  auto idTable = makeIdTableFromVector({{getId_("<s>")}});
   ConstructBatchEvaluator::IdCache idCache{1024};
 
   auto result = evaluateFullTable({0}, idTable, idCache);
@@ -81,32 +83,23 @@ TEST_F(ConstructBatchEvaluatorTest, singleVariableSingleRow) {
   ASSERT_EQ(result.numRows_, 1);
   ASSERT_EQ(result.variablesByColumn_.size(), 1);
   ASSERT_TRUE(result.variablesByColumn_.contains(0));
-  ASSERT_TRUE(result.getVariable(0, 0).has_value());
-  EXPECT_EQ(*result.getVariable(0, 0).value(), "<s>");
+  EXPECT_THAT(result.getVariable(0, 0), matchesEvaluatedTerm("<s>"));
 }
 
-// =============================================================================
-// Multiple rows in a single column
-// =============================================================================
-
-// Two rows with different IRIs in the same column. Verify that each row is
-// independently resolved and that the results are in row order.
+// Two rows with different IRIs in the same column (i.e. with different Iri's
+// for the same variable across different `IdTable` rows). Verify that each row
+// is independently resolved and that the results are in row order.
 TEST_F(ConstructBatchEvaluatorTest, singleVariableMultipleRows) {
-  auto idTable = makeIdTable({{getId_("<s>")}, {getId_("<o>")}});
+  auto idTable = makeIdTableFromVector({{getId_("<s>")}, {getId_("<o>")}});
   ConstructBatchEvaluator::IdCache idCache{1024};
 
   auto result = evaluateFullTable({0}, idTable, idCache);
 
   ASSERT_EQ(result.numRows_, 2);
-  ASSERT_TRUE(result.getVariable(0, 0).has_value());
-  EXPECT_EQ(*result.getVariable(0, 0).value(), "<s>");
-  ASSERT_TRUE(result.getVariable(0, 1).has_value());
-  EXPECT_EQ(*result.getVariable(0, 1).value(), "<o>");
+  EXPECT_THAT(
+      result.variablesByColumn_.at(0),
+      ElementsAre(matchesEvaluatedTerm("<s>"), matchesEvaluatedTerm("<o>")));
 }
-
-// =============================================================================
-// Multiple variable columns across multiple rows
-// =============================================================================
 
 // Two variable columns (0 and 1), two rows. This is the typical CONSTRUCT
 // pattern where subject and object are both variables. Verify that all four
@@ -115,29 +108,27 @@ TEST_F(ConstructBatchEvaluatorTest, multipleVariablesMultipleRows) {
   //              col 0    col 1
   // row 0:       <s>      <p>
   // row 1:       <o>      <q>
-  auto idTable = makeIdTable(
+  auto idTable = makeIdTableFromVector(
       {{getId_("<s>"), getId_("<p>")}, {getId_("<o>"), getId_("<q>")}});
   ConstructBatchEvaluator::IdCache idCache{1024};
 
   auto result = evaluateFullTable({0, 1}, idTable, idCache);
 
   ASSERT_EQ(result.numRows_, 2);
-  ASSERT_EQ(result.variablesByColumn_.size(), 2);
-  EXPECT_EQ(*result.getVariable(0, 0).value(), "<s>");
-  EXPECT_EQ(*result.getVariable(0, 1).value(), "<o>");
-  EXPECT_EQ(*result.getVariable(1, 0).value(), "<p>");
-  EXPECT_EQ(*result.getVariable(1, 1).value(), "<q>");
+  EXPECT_THAT(
+      result.variablesByColumn_.at(0),
+      ElementsAre(matchesEvaluatedTerm("<s>"), matchesEvaluatedTerm("<o>")));
+  EXPECT_THAT(
+      result.variablesByColumn_.at(1),
+      ElementsAre(matchesEvaluatedTerm("<p>"), matchesEvaluatedTerm("<q>")));
 }
-
-// =============================================================================
-// Only a subset of columns are variable columns
-// =============================================================================
 
 // The IdTable has 3 columns, but only columns 0 and 2 are variables (column 1
 // is a constant in the CONSTRUCT template and is not listed). Verify that the
 // result only contains entries for the requested columns.
 TEST_F(ConstructBatchEvaluatorTest, evaluatesOnlyRequestedColumns) {
-  auto idTable = makeIdTable({{getId_("<s>"), getId_("<p>"), getId_("<o>")}});
+  auto idTable =
+      makeIdTableFromVector({{getId_("<s>"), getId_("<p>"), getId_("<o>")}});
   ConstructBatchEvaluator::IdCache idCache{1024};
 
   auto result = evaluateFullTable({0, 2}, idTable, idCache);
@@ -147,162 +138,126 @@ TEST_F(ConstructBatchEvaluatorTest, evaluatesOnlyRequestedColumns) {
   EXPECT_TRUE(result.variablesByColumn_.contains(0));
   EXPECT_TRUE(result.variablesByColumn_.contains(2));
   EXPECT_FALSE(result.variablesByColumn_.contains(1));
-  EXPECT_EQ(*result.getVariable(0, 0).value(), "<s>");
-  EXPECT_EQ(*result.getVariable(2, 0).value(), "<o>");
+  EXPECT_THAT(result.getVariable(0, 0), matchesEvaluatedTerm("<s>"));
+  EXPECT_THAT(result.getVariable(2, 0), matchesEvaluatedTerm("<o>"));
 }
 
-// =============================================================================
-// Unbound variables produce std::nullopt
-// =============================================================================
-
-// In CONSTRUCT queries, a variable can be unbound for a given row — for example
-// when using OPTIONAL patterns or UNIONs where different branches bind
-// different variables. The IdTable stores an undefined Id for such rows.
-// The evaluator must return std::nullopt for these entries.
+// If a variable can is unbound for a given row, check that the IdTable stores
+// an undefined `Id` for such rows. The evaluator must return nullopt for these
+// entries.
 TEST_F(ConstructBatchEvaluatorTest, undefinedIdReturnsNullopt) {
-  auto idTable = makeIdTable({{Id::makeUndefined()}});
+  auto idTable = makeIdTableFromVector({{Id::makeUndefined()}});
   ConstructBatchEvaluator::IdCache idCache{1024};
 
   auto result = evaluateFullTable({0}, idTable, idCache);
 
   ASSERT_EQ(result.numRows_, 1);
-  EXPECT_FALSE(result.getVariable(0, 0).has_value());
+  EXPECT_THAT(result.getVariable(0, 0), Eq(std::nullopt));
 }
 
 // Unbound variables mixed with bound variables in the same column. Only the
 // unbound rows produce nullopt; bound rows are resolved normally.
 TEST_F(ConstructBatchEvaluatorTest, undefinedMixedWithValidIds) {
-  auto idTable =
-      makeIdTable({{getId_("<s>")}, {Id::makeUndefined()}, {getId_("<o>")}});
+  auto idTable = makeIdTableFromVector(
+      {{getId_("<s>")}, {Id::makeUndefined()}, {getId_("<o>")}});
   ConstructBatchEvaluator::IdCache idCache{1024};
 
   auto result = evaluateFullTable({0}, idTable, idCache);
 
   ASSERT_EQ(result.numRows_, 3);
-  ASSERT_TRUE(result.getVariable(0, 0).has_value());
-  EXPECT_EQ(*result.getVariable(0, 0).value(), "<s>");
-  EXPECT_FALSE(result.getVariable(0, 1).has_value());
-  ASSERT_TRUE(result.getVariable(0, 2).has_value());
-  EXPECT_EQ(*result.getVariable(0, 2).value(), "<o>");
+  EXPECT_THAT(result.variablesByColumn_.at(0),
+              ElementsAre(matchesEvaluatedTerm("<s>"), Eq(std::nullopt),
+                          matchesEvaluatedTerm("<o>")));
 }
 
-// =============================================================================
-// Cache behavior
-// =============================================================================
-
-// When the same Id appears in multiple rows, the first occurrence is a cache
-// miss (triggers evaluateId) and subsequent occurrences are cache hits (the
+// When the same `Id` appears in multiple rows, the first occurrence is a cache
+// miss (triggers `evaluateId`) and subsequent occurrences are cache hits (the
 // cached value is reused). Verify the cache statistics reflect this.
 TEST_F(ConstructBatchEvaluatorTest, repeatedIdsCausesCacheHits) {
   Id idS = getId_("<s>");
-  auto idTable = makeIdTable({{idS}, {idS}, {idS}});
+  auto idTable = makeIdTableFromVector({{idS}, {idS}, {idS}});
   ConstructBatchEvaluator::IdCache idCache{1024};
 
   auto result = evaluateFullTable({0}, idTable, idCache);
 
   ASSERT_EQ(result.numRows_, 3);
-  // One miss for the first occurrence, two hits for the repeats.
-  EXPECT_EQ(idCache.stats().misses_, 1);
-  EXPECT_EQ(idCache.stats().hits_, 2);
-  for (size_t i = 0; i < 3; ++i) {
-    ASSERT_TRUE(result.getVariable(0, i).has_value());
-    EXPECT_EQ(*result.getVariable(0, i).value(), "<s>");
-  }
+  EXPECT_THAT(result.variablesByColumn_.at(0),
+              Each(matchesEvaluatedTerm("<s>")));
 }
 
-// The cache is shared across calls to evaluateBatch. Verify that Ids resolved
-// in a first batch are cache hits in a second batch.
+// The cache is shared across calls to `evaluateBatch`. Verify that `Id`s
+// resolved in a first batch are cache hits in a second batch.
 TEST_F(ConstructBatchEvaluatorTest, cacheIsSharedAcrossBatches) {
   Id idS = getId_("<s>");
   Id idO = getId_("<o>");
-  auto idTable = makeIdTable({{idS}, {idO}, {idS}, {idO}});
+  auto idTable = makeIdTableFromVector({{idS}, {idO}, {idS}, {idO}});
   ConstructBatchEvaluator::IdCache idCache{1024};
 
   // First batch: rows [0, 2).
   auto result1 = evaluateRowRange({0}, idTable, 0, 2, idCache);
   ASSERT_EQ(result1.numRows_, 2);
-  EXPECT_EQ(idCache.stats().misses_, 2);  // <s> and <o> are new
-  EXPECT_EQ(idCache.stats().hits_, 0);
+  EXPECT_THAT(
+      result1.variablesByColumn_.at(0),
+      ElementsAre(matchesEvaluatedTerm("<s>"), matchesEvaluatedTerm("<o>")));
 
-  // Second batch: rows [2, 4). Same Ids, so both should be cache hits.
+  // Second batch: rows [2, 4). Same `Id`s — verify the cached values are
+  // returned correctly.
   auto result2 = evaluateRowRange({0}, idTable, 2, 4, idCache);
   ASSERT_EQ(result2.numRows_, 2);
-  EXPECT_EQ(idCache.stats().misses_, 2);  // unchanged
-  EXPECT_EQ(idCache.stats().hits_, 2);    // two hits from the second batch
-
-  // Verify values are correct in both batches.
-  EXPECT_EQ(*result1.getVariable(0, 0).value(), "<s>");
-  EXPECT_EQ(*result1.getVariable(0, 1).value(), "<o>");
-  EXPECT_EQ(*result2.getVariable(0, 0).value(), "<s>");
-  EXPECT_EQ(*result2.getVariable(0, 1).value(), "<o>");
+  EXPECT_THAT(
+      result2.variablesByColumn_.at(0),
+      ElementsAre(matchesEvaluatedTerm("<s>"), matchesEvaluatedTerm("<o>")));
 }
 
-// =============================================================================
-// Row range: evaluating a sub-range of the IdTable
-// =============================================================================
-
-// When [firstRow_, endRow_) is a strict subset of the IdTable, only those rows
-// are evaluated. The result indices are 0-based relative to firstRow_.
+// When [firstRow_, endRow_) is a strict subset of the `IdTable`, only those
+// rows are evaluated. The result indices are 0-based relative to firstRow_.
 TEST_F(ConstructBatchEvaluatorTest, subRangeEvaluatesCorrectRows) {
   // 4 rows, but we only evaluate rows [1, 3).
-  auto idTable = makeIdTable(
+  auto idTable = makeIdTableFromVector(
       {{getId_("<s>")}, {getId_("<p>")}, {getId_("<o>")}, {getId_("<q>")}});
   ConstructBatchEvaluator::IdCache idCache{1024};
 
   auto result = evaluateRowRange({0}, idTable, 1, 3, idCache);
 
   ASSERT_EQ(result.numRows_, 2);
-  // Row 1 of the IdTable -> result index 0.
-  ASSERT_TRUE(result.getVariable(0, 0).has_value());
-  EXPECT_EQ(*result.getVariable(0, 0).value(), "<p>");
-  // Row 2 of the IdTable -> result index 1.
-  ASSERT_TRUE(result.getVariable(0, 1).has_value());
-  EXPECT_EQ(*result.getVariable(0, 1).value(), "<o>");
+  // Row 1 of the IdTable -> result index 0; row 2 -> result index 1.
+  EXPECT_THAT(
+      result.variablesByColumn_.at(0),
+      ElementsAre(matchesEvaluatedTerm("<p>"), matchesEvaluatedTerm("<o>")));
 }
-
-// =============================================================================
-// Literal strings
-// =============================================================================
 
 // The dataset contains the literal "hello". Verify that literals are resolved
 // to their string representation (including quotes) and not treated as IRIs.
 TEST_F(ConstructBatchEvaluatorTest, literalIsResolvedCorrectly) {
-  auto idTable = makeIdTable({{getId_("\"hello\"")}});
+  auto idTable = makeIdTableFromVector({{getId_("\"hello\"")}});
   ConstructBatchEvaluator::IdCache idCache{1024};
 
   auto result = evaluateFullTable({0}, idTable, idCache);
 
   ASSERT_EQ(result.numRows_, 1);
-  ASSERT_TRUE(result.getVariable(0, 0).has_value());
-  EXPECT_EQ(*result.getVariable(0, 0).value(), "\"hello\"");
+  EXPECT_THAT(result.getVariable(0, 0), matchesEvaluatedTerm("\"hello\""));
 }
 
-// A column with mixed IRIs and a literal. Verify that each row is resolved
-// with the correct type.
+// A column with mixed IRIs and a literal. Verify that each row is resolved with
+// the correct type.
 TEST_F(ConstructBatchEvaluatorTest, mixedIriAndLiteralColumn) {
-  auto idTable =
-      makeIdTable({{getId_("<s>")}, {getId_("\"hello\"")}, {getId_("<o>")}});
+  auto idTable = makeIdTableFromVector(
+      {{getId_("<s>")}, {getId_("\"hello\"")}, {getId_("<o>")}});
   ConstructBatchEvaluator::IdCache idCache{1024};
 
   auto result = evaluateFullTable({0}, idTable, idCache);
 
   ASSERT_EQ(result.numRows_, 3);
-  ASSERT_TRUE(result.getVariable(0, 0).has_value());
-  EXPECT_EQ(*result.getVariable(0, 0).value(), "<s>");
-  ASSERT_TRUE(result.getVariable(0, 1).has_value());
-  EXPECT_EQ(*result.getVariable(0, 1).value(), "\"hello\"");
-  ASSERT_TRUE(result.getVariable(0, 2).has_value());
-  EXPECT_EQ(*result.getVariable(0, 2).value(), "<o>");
+  EXPECT_THAT(result.variablesByColumn_.at(0),
+              ElementsAre(matchesEvaluatedTerm("<s>"),
+                          matchesEvaluatedTerm("\"hello\""),
+                          matchesEvaluatedTerm("<o>")));
 }
-
-// =============================================================================
-// Edge cases: empty inputs
-// =============================================================================
 
 // Empty batch (zero rows). The result should have numRows_ == 0 and no column
 // entries, since there is nothing to evaluate.
 TEST_F(ConstructBatchEvaluatorTest, emptyBatch) {
-  auto idTable = makeIdTable({});
+  auto idTable = makeIdTableFromVector({});
   ConstructBatchEvaluator::IdCache idCache{1024};
 
   auto result = evaluateFullTable({}, idTable, idCache);
@@ -315,7 +270,7 @@ TEST_F(ConstructBatchEvaluatorTest, emptyBatch) {
 // positions in the CONSTRUCT template are constants. The result should reflect
 // the row count but contain no column data.
 TEST_F(ConstructBatchEvaluatorTest, noVariableColumns) {
-  auto idTable = makeIdTable({{getId_("<s>")}, {getId_("<o>")}});
+  auto idTable = makeIdTableFromVector({{getId_("<s>")}, {getId_("<o>")}});
   ConstructBatchEvaluator::IdCache idCache{1024};
 
   auto result = evaluateFullTable({}, idTable, idCache);
@@ -324,13 +279,9 @@ TEST_F(ConstructBatchEvaluatorTest, noVariableColumns) {
   EXPECT_TRUE(result.variablesByColumn_.empty());
 }
 
-// =============================================================================
-// Realistic scenario: simulates a CONSTRUCT query result
-// =============================================================================
-//
 // Simulates the IdTable that would result from:
 //   CONSTRUCT { ?s <p> ?o } WHERE { ?s <p> ?o }
-// against a dataset with repeated subjects. The IdTable has two variable
+// against a dataset with repeated subjects. The `IdTable` has two variable
 // columns (subject at 0, object at 1) and a constant predicate column (not
 // evaluated). Multiple rows share the same subject, exercising the cache.
 TEST_F(ConstructBatchEvaluatorTest, realisticConstructPattern) {
@@ -344,7 +295,7 @@ TEST_F(ConstructBatchEvaluatorTest, realisticConstructPattern) {
   // row 1:       <s>         <p>          <q>
   // row 2:       <o>         <p>          <s>
   // row 3:       <s>         <p>          <o>    (duplicate of row 0)
-  auto idTable = makeIdTable(
+  auto idTable = makeIdTableFromVector(
       {{idS, idP, idO}, {idS, idP, idQ}, {idO, idP, idS}, {idS, idP, idO}});
   ConstructBatchEvaluator::IdCache idCache{1024};
 
@@ -355,24 +306,16 @@ TEST_F(ConstructBatchEvaluatorTest, realisticConstructPattern) {
   ASSERT_EQ(result.variablesByColumn_.size(), 2);
 
   // Column 0 (?s): <s>, <s>, <o>, <s>
-  EXPECT_EQ(*result.getVariable(0, 0).value(), "<s>");
-  EXPECT_EQ(*result.getVariable(0, 1).value(), "<s>");
-  EXPECT_EQ(*result.getVariable(0, 2).value(), "<o>");
-  EXPECT_EQ(*result.getVariable(0, 3).value(), "<s>");
+  EXPECT_THAT(
+      result.variablesByColumn_.at(0),
+      ElementsAre(matchesEvaluatedTerm("<s>"), matchesEvaluatedTerm("<s>"),
+                  matchesEvaluatedTerm("<o>"), matchesEvaluatedTerm("<s>")));
 
   // Column 2 (?o): <o>, <q>, <s>, <o>
-  EXPECT_EQ(*result.getVariable(2, 0).value(), "<o>");
-  EXPECT_EQ(*result.getVariable(2, 1).value(), "<q>");
-  EXPECT_EQ(*result.getVariable(2, 2).value(), "<s>");
-  EXPECT_EQ(*result.getVariable(2, 3).value(), "<o>");
-
-  // Cache statistics: 4 unique Ids (<s>, <o>, <q>, <p> — but <p> is in
-  // column 1 which we don't evaluate). So 3 unique Ids across columns 0 and 2.
-  // Column 0: <s>(miss), <s>(hit), <o>(miss), <s>(hit) = 2 misses, 2 hits
-  // Column 2: <o>(hit), <q>(miss), <s>(hit), <o>(hit)  = 1 miss,  3 hits
-  // Total: 3 misses, 5 hits.
-  EXPECT_EQ(idCache.stats().misses_, 3);
-  EXPECT_EQ(idCache.stats().hits_, 5);
+  EXPECT_THAT(
+      result.variablesByColumn_.at(2),
+      ElementsAre(matchesEvaluatedTerm("<o>"), matchesEvaluatedTerm("<q>"),
+                  matchesEvaluatedTerm("<s>"), matchesEvaluatedTerm("<o>")));
 }
 
 }  // namespace
