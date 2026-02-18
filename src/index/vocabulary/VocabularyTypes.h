@@ -13,6 +13,7 @@
 #include <utility>
 #include <vector>
 
+#include "backports/memory_resource.h"
 #include "backports/span.h"
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
@@ -41,6 +42,28 @@ struct VocabBatchLookupData {
   // `self` must be a shared_ptr to `this`.
   static VocabBatchLookupResult asResult(
       std::shared_ptr<VocabBatchLookupData> self) {
+    self->finalize();
+    auto* spanPtr = &self->span;
+    return std::shared_ptr<ql::span<std::string_view>>(std::move(self),
+                                                        spanPtr);
+  }
+};
+
+// A batch lookup result backed by a PMR monotonic_buffer_resource.
+// Each decompressed word is individually allocated from the resource;
+// all allocations remain valid until this struct is destroyed.
+// Used by CompressedVocabulary::lookupBatch to avoid per-word heap allocations.
+struct PmrVocabBatchLookupData {
+  // The resource must be destroyed AFTER views (declared first = destroyed
+  // last).
+  std::unique_ptr<ql::pmr::monotonic_buffer_resource> resource;
+  std::vector<std::string_view> views;
+  ql::span<std::string_view> span;
+
+  void finalize() { span = ql::span<std::string_view>{views}; }
+
+  static VocabBatchLookupResult asResult(
+      std::shared_ptr<PmrVocabBatchLookupData> self) {
     self->finalize();
     auto* spanPtr = &self->span;
     return std::shared_ptr<ql::span<std::string_view>>(std::move(self),

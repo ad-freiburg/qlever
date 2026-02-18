@@ -4,6 +4,8 @@
 
 #include <gtest/gtest.h>
 
+#include <cstring>
+
 #include "VocabularyTestHelpers.h"
 #include "backports/algorithm.h"
 #include "index/vocabulary/CompressedVocabulary.h"
@@ -24,6 +26,18 @@ struct DummyDecoder {
       c -= 2;
     }
     return result;
+  }
+  // Decompress into a caller-provided buffer. Returns the number of bytes
+  // written.
+  static size_t decompressInto(std::string_view compressed, char* output,
+                               [[maybe_unused]] size_t outputCapacity,
+                               [[maybe_unused]] char* scratch = nullptr,
+                               [[maybe_unused]] size_t scratchCapacity = 0) {
+    std::memcpy(output, compressed.data(), compressed.size());
+    for (size_t i = 0; i < compressed.size(); ++i) {
+      output[i] -= 2;
+    }
+    return compressed.size();
   }
   // This class has no state, but it still needs to be serialized.
   template <typename T>

@@ -6,13 +6,9 @@
 
 #include <algorithm>
 #include <fstream>
-#include <numeric>
-
-#ifdef QLEVER_HAS_IO_URING
-#include <liburing.h>
-#endif
 
 #include "util/Generator.h"
+#include "util/IoUringHelpers.h"
 #include "util/StringUtils.h"
 
 using OffsetAndSize = VocabularyOnDisk::OffsetAndSize;
@@ -57,92 +53,28 @@ VocabBatchLookupResult VocabularyOnDisk::lookupBatch(
   data->buffer.resize(totalSize);
   data->views.resize(n);
 
-  // Step 3: Compute each view's position in the buffer and build a permutation
-  // sorted by file offset for sequential I/O.
-  std::vector<size_t> bufferOffsets(n);
+  // Step 3: Compute each view's position in the buffer and prepare arrays
+  // for the batch read.
+  std::vector<size_t> sizes(n);
+  std::vector<uint64_t> fileOffsets(n);
+  std::vector<char*> targetPointers(n);
   {
-    size_t offset = 0;
+    size_t bufferOffset = 0;
     for (size_t i = 0; i < n; ++i) {
-      bufferOffsets[i] = offset;
-      offset += offsetsAndSizes[i].size_;
+      sizes[i] = offsetsAndSizes[i].size_;
+      fileOffsets[i] = offsetsAndSizes[i].offset_;
+      targetPointers[i] = data->buffer.data() + bufferOffset;
+      bufferOffset += sizes[i];
     }
   }
 
-  std::vector<size_t> perm(n);
-  std::iota(perm.begin(), perm.end(), size_t{0});
-  std::sort(perm.begin(), perm.end(), [&](size_t a, size_t b) {
-    return offsetsAndSizes[a].offset_ < offsetsAndSizes[b].offset_;
-  });
+  // Step 4: Read data from disk (sorts by offset internally, uses io_uring
+  // if available).
+  ad_utility::readBatch(file_.fd(), sizes, fileOffsets, targetPointers);
 
-  // Step 4: Read data from disk.
-  // Helper lambda for synchronous reads in sorted order.
-  auto readSynchronously = [&]() {
-    for (size_t pi = 0; pi < n; ++pi) {
-      size_t i = perm[pi];
-      file_.read(data->buffer.data() + bufferOffsets[i],
-                 offsetsAndSizes[i].size_, offsetsAndSizes[i].offset_);
-    }
-  };
-
-#ifdef QLEVER_HAS_IO_URING
-  [&]() {
-    struct io_uring ring;
-    // Initialize ring with enough entries for all reads.
-    int ret = io_uring_queue_init(static_cast<unsigned>(n), &ring, 0);
-    if (ret < 0) {
-      readSynchronously();
-      return;
-    }
-
-    // Submit read SQEs in sorted order.
-    for (size_t pi = 0; pi < n; ++pi) {
-      size_t i = perm[pi];
-      struct io_uring_sqe* sqe = io_uring_get_sqe(&ring);
-      if (!sqe) {
-        // Not enough SQEs, submit what we have and get more.
-        io_uring_submit(&ring);
-        sqe = io_uring_get_sqe(&ring);
-      }
-      if (!sqe) {
-        io_uring_queue_exit(&ring);
-        readSynchronously();
-        return;
-      }
-      io_uring_prep_read(sqe, file_.fd(),
-                         data->buffer.data() + bufferOffsets[i],
-                         static_cast<unsigned>(offsetsAndSizes[i].size_),
-                         static_cast<__u64>(offsetsAndSizes[i].offset_));
-      io_uring_sqe_set_data(sqe, reinterpret_cast<void*>(i));
-    }
-
-    ret = io_uring_submit(&ring);
-    if (ret < 0) {
-      io_uring_queue_exit(&ring);
-      readSynchronously();
-      return;
-    }
-
-    // Reap all CQEs.
-    for (size_t completed = 0; completed < n; ++completed) {
-      struct io_uring_cqe* cqe;
-      ret = io_uring_wait_cqe(&ring, &cqe);
-      if (ret < 0) {
-        io_uring_queue_exit(&ring);
-        throw std::runtime_error(
-            "io_uring_wait_cqe failed during vocabulary batch lookup");
-      }
-      io_uring_cqe_seen(&ring, cqe);
-    }
-
-    io_uring_queue_exit(&ring);
-  }();
-#else
-  readSynchronously();
-#endif
   // Step 5: Build string_views pointing into the buffer.
   for (size_t i = 0; i < n; ++i) {
-    data->views[i] = std::string_view(
-        data->buffer.data() + bufferOffsets[i], offsetsAndSizes[i].size_);
+    data->views[i] = std::string_view(targetPointers[i], sizes[i]);
   }
 
   return VocabBatchLookupData::asResult(std::move(data));
