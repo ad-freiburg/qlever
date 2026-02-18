@@ -4,6 +4,8 @@
 //          Robin Textor-Falconi <textorr@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "engine/ExportQueryExecutionTrees.h"
 
@@ -29,6 +31,8 @@
 #include "util/views/TakeUntilInclusiveView.h"
 
 using ad_utility::InputRangeTypeErased;
+
+namespace {
 
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 
@@ -96,6 +100,7 @@ STREAMABLE_GENERATOR_TYPE computeResultForAsk(
           "ASK queries are not supported for TSV or CSV or binary format."};
   }
 }
+}  // namespace
 
 // __________________________________________________________________________
 InputRangeTypeErased<TableConstRefWithVocab>
