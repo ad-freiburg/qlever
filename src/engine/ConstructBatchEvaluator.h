@@ -35,13 +35,12 @@ struct BatchEvaluationContext {
 // Resolves `Id` values in variable columns to their string representations
 // (IRI, literal, etc.) via `ConstructQueryEvaluator::evaluateId`.
 //
-// The evaluation is column-oriented: for each variable column, all rows in the
-// batch are evaluated before moving to the next column.
+// The evaluation is column-oriented: for each variable (identified by their
+// `IdTable` column), all rows in the batch are evaluated before moving to the
+// next column.
 //
 // An `IdCache` (LRU cache keyed by `Id`) avoids redundant evaluation of the
 // same `Id` across rows and batches.
-//
-// An entry in the result is `std::nullopt` when the `Id` is undefined.
 class ConstructBatchEvaluator {
  public:
   using IdCache =
@@ -60,7 +59,7 @@ class ConstructBatchEvaluator {
 
  private:
   // Evaluate a single variable column across all rows in the batch. For each
-  // row, the `Id` at `(rowIdx, idTableColumnIdx)` is looked up in `idCache`;
+  // row, the `Id` at `(rowIdx, idTableColumnIdx)` is looked up in `IdCache`;
   // on a cache miss, `ConstructQueryEvaluator::evaluateId` is called and the
   // result is cached.
   static std::vector<std::optional<EvaluatedTerm>> evaluateVariableByColumn(
