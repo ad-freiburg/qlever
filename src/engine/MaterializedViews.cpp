@@ -397,9 +397,12 @@ void MaterializedViewsManager::loadView(const std::string& name) const {
 // _____________________________________________________________________________
 void MaterializedViewsManager::unloadViewIfLoaded(
     const std::string& name) const {
-  // `HashMap::erase` is a no-op for nonexisting keys.
-  loadedViews_.wlock()->erase(name);
-  // TODO<ullingerc> Query pattern cache unload.
+  auto lock = loadedViews_.wlock();
+  if (!lock->contains(name)) {
+    return;
+  }
+  queryPatternCache_.wlock()->removeView(lock->at(name));
+  lock->erase(name);
 }
 
 // _____________________________________________________________________________

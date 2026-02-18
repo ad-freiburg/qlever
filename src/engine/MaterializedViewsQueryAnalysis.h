@@ -59,10 +59,18 @@ class QueryPatternCache {
   ad_utility::HashMap<std::string, std::vector<ViewPtr>> predicateInView_;
 
   // TODO<ullinger> Data structure for join stars.
+
+  // NOTE: When a new data structure for caching is added here, the unloading
+  // should also be implemented in the `removeView` method.
  public:
   // Given a materialized view, analyze its write query and populate the cache.
   // This is called from `MaterializedViewsManager::loadView`.
   bool analyzeView(ViewPtr view);
+
+  // Remove all pointers to a view from this `QueryPatternCache`. This is
+  // required for unloading materialized views. A call to this function with a
+  // `ViewPtr` that is not cached is a no-op.
+  void removeView(ViewPtr view);
 
   // Given a set of triples, check if a subset of necessary join operations can
   // be replaced by scans on materialized views.

@@ -9,6 +9,7 @@
 #include <optional>
 #include <variant>
 
+#include "backports/algorithm.h"
 #include "engine/IndexScan.h"
 #include "engine/MaterializedViews.h"
 #include "parser/GraphPatternOperation.h"
@@ -260,6 +261,20 @@ QueryPatternCache::graphPatternInvariantFilter(const ParsedQuery& parsed) {
                                      return !std::visit(invariantCheck,
                                                         pattern);
                                    }));
+}
+
+// _____________________________________________________________________________
+void QueryPatternCache::removeView(ViewPtr view) {
+  // Remove `view` from chain cache.
+  for (auto& [chain, views] : simpleChainCache_) {
+    ql::erase_if(*views,
+                 [&view](const ChainInfo& info) { return info.view_ == view; });
+  }
+
+  // Remove `view` from predicate cache.
+  for (auto& [pred, views] : predicateInView_) {
+    ql::erase_if(views, [&view](ViewPtr pView) { return pView == view; });
+  }
 }
 
 }  // namespace materializedViewsQueryAnalysis
