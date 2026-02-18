@@ -1,8 +1,10 @@
 // Copyright 2025 The QLever Authors, in particular:
-//
 // 2025 Marvin Stoetzel <marvin.stoetzel@email.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <gtest/gtest.h>
 
@@ -256,6 +258,41 @@ TEST_F(ConstructBatchEvaluatorTest, subRangeEvaluatesCorrectRows) {
   // Row 2 of the IdTable -> result index 1.
   ASSERT_TRUE(result.getVariable(0, 1).has_value());
   EXPECT_EQ(*result.getVariable(0, 1).value(), "<o>");
+}
+
+// =============================================================================
+// Literal strings
+// =============================================================================
+
+// The dataset contains the literal "hello". Verify that literals are resolved
+// to their string representation (including quotes) and not treated as IRIs.
+TEST_F(ConstructBatchEvaluatorTest, literalIsResolvedCorrectly) {
+  auto idTable = makeIdTable({{getId_("\"hello\"")}});
+  ConstructBatchEvaluator::IdCache idCache{1024};
+
+  auto result = evaluateFullTable({0}, idTable, idCache);
+
+  ASSERT_EQ(result.numRows_, 1);
+  ASSERT_TRUE(result.getVariable(0, 0).has_value());
+  EXPECT_EQ(*result.getVariable(0, 0).value(), "\"hello\"");
+}
+
+// A column with mixed IRIs and a literal. Verify that each row is resolved
+// with the correct type.
+TEST_F(ConstructBatchEvaluatorTest, mixedIriAndLiteralColumn) {
+  auto idTable =
+      makeIdTable({{getId_("<s>")}, {getId_("\"hello\"")}, {getId_("<o>")}});
+  ConstructBatchEvaluator::IdCache idCache{1024};
+
+  auto result = evaluateFullTable({0}, idTable, idCache);
+
+  ASSERT_EQ(result.numRows_, 3);
+  ASSERT_TRUE(result.getVariable(0, 0).has_value());
+  EXPECT_EQ(*result.getVariable(0, 0).value(), "<s>");
+  ASSERT_TRUE(result.getVariable(0, 1).has_value());
+  EXPECT_EQ(*result.getVariable(0, 1).value(), "\"hello\"");
+  ASSERT_TRUE(result.getVariable(0, 2).has_value());
+  EXPECT_EQ(*result.getVariable(0, 2).value(), "<o>");
 }
 
 // =============================================================================
