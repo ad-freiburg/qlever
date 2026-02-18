@@ -118,8 +118,8 @@ TEST(ConstructTemplatePreprocessorTest, preprocessLiteralInObjectPosition) {
 }
 
 TEST(ConstructTemplatePreprocessorTest, preprocessLiteralInSubjectPosition) {
-  // Literals in subject position are invalid; createAndEvaluateBatch returns
-  // nullopt, so the preprocessor throws away that triple entirely, that is, the
+  // Literals in subject position are invalid; evaluate returns nullopt,
+  // so the preprocessor throws away that triple entirely, that is, the
   // preprocessedTriples do not contain that template triple.
   Triples triples;
   triples.push_back({GraphTerm{Literal{"invalid"}},
@@ -398,8 +398,8 @@ TEST(ConstructTemplatePreprocessorTest, preprocessTermLiteralObject) {
 }
 
 TEST(ConstructTemplatePreprocessorTest, preprocessTermLiteralSubject) {
-  // Literals in subject position are invalid; createAndEvaluateBatch returns
-  // empty string, so preprocessTerm returns nullopt.
+  // Literals in subject position are invalid; evaluate returns empty string,
+  // so preprocessTerm returns nullopt.
   VariableToColumnMap varMap;
   auto result = ConstructTemplatePreprocessor::preprocessTerm(
       GraphTerm{Literal{"invalid"}}, SUBJECT, varMap);
