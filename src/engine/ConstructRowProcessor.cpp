@@ -46,12 +46,9 @@ void ConstructRowProcessor::loadBatchIfNeeded() {
   const size_t batchEnd =
       std::min(batchStart_ + batchSize_, rowIndicesVec_.size());
 
-  auto batchRowIndices = ql::span<const uint64_t>(
-      rowIndicesVec_.data() + batchStart_, batchEnd - batchStart_);
-
-  BatchEvaluationContext batchContext{tableWithVocab_.idTable(),
-                                      tableWithVocab_.localVocab(),
-                                      batchRowIndices, currentRowOffset_};
+  BatchEvaluationContext batchContext{
+      tableWithVocab_.idTable(), tableWithVocab_.localVocab(),
+      rowIndicesVec_[batchStart_], rowIndicesVec_[batchEnd - 1] + 1};
   batchEvaluationResult_ = ConstructBatchEvaluator::evaluateBatch(
       preprocessedTemplate_.uniqueVariableColumns_, batchContext, index_.get(),
       *idCache_);
