@@ -4,6 +4,8 @@ if (POLICY CMP0167)
 endif ()
 project(QLever C CXX)
 
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 # C/C++ Versions
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -224,21 +226,89 @@ include_directories(${Boost_INCLUDE_DIR})
 find_package(OpenSSL REQUIRED)
 
 ##############################################
-# Define a set of common third-party and self made libraries that are used almost
-# as frequently as the standard library or as a  drop-in replacement for some of
-# its functionality.To enable the usage in all parts of QLever, call the following
-# function `qlever_target_link_libraries` for all libraries and executables. It
-# is a drop-in replacement for `target_link_libraries` that additionally links
-# against the common libraries.
-function(qlever_target_link_libraries target)
-    target_link_libraries(${target} ${ARGN} absl::compare absl::flat_hash_map
-            absl::flat_hash_set absl::strings absl::str_format ICU::uc
-            ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock fsst nlohmann_json::nlohmann_json Boost::container)
+# Pre-register all QLever library names that will have shared variants.
+set_property(GLOBAL PROPERTY QLEVER_LIBRARIES_WITH_SHARED
+    global rdfEscaping parserData sparqlParser util memorySize configManager
+    mediaTypes httpParser http rdfTypes vocabulary index sparqlExpressions
+    SortPerformanceEstimator parser engine server qlever testUtil benchmark benchmarkWithMain)
 
-    # memorySize is a utility library for defining memory sizes.
-    if (NOT ${target} STREQUAL "memorySize")
-        target_link_libraries(${target} memorySize)
-    endif ()
+# qlever_add_library: Creates OBJECT, STATIC, and SHARED targets.
+function(qlever_add_library name)
+    add_library(${name}_objects OBJECT ${ARGN})
+    add_library(${name} STATIC $<TARGET_OBJECTS:${name}_objects>)
+    add_library(${name}_shared SHARED $<TARGET_OBJECTS:${name}_objects>)
+endfunction()
+
+# Helper: map library names to their _shared counterparts.
+function(qlever_map_to_shared out_var)
+    get_property(_qlever_shared_libs GLOBAL PROPERTY QLEVER_LIBRARIES_WITH_SHARED)
+    set(_result "")
+    foreach(_lib ${ARGN})
+        if ("${_lib}" IN_LIST _qlever_shared_libs AND TARGET ${_lib}_shared)
+            list(APPEND _result ${_lib}_shared)
+        else()
+            list(APPEND _result ${_lib})
+        endif()
+    endforeach()
+    set(${out_var} ${_result} PARENT_SCOPE)
+endfunction()
+
+##############################################
+# qlever_target_link_libraries: Drop-in replacement for target_link_libraries
+# that additionally links against common third-party libraries.
+# Also sets up _objects and _shared target dependencies automatically.
+function(qlever_target_link_libraries target)
+    set(_extra_libs ${ARGN})
+    set(_common_third_party absl::compare absl::flat_hash_map
+            absl::flat_hash_set absl::strings absl::str_format ICU::uc
+            ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock
+            fsst nlohmann_json::nlohmann_json Boost::container)
+    get_property(_qlever_shared_libs GLOBAL PROPERTY QLEVER_LIBRARIES_WITH_SHARED)
+
+    # --- Primary target ---
+    target_link_libraries(${target} ${_extra_libs} ${_common_third_party})
+    if (NOT "${target}" STREQUAL "memorySize" AND NOT "${target}" STREQUAL "memorySize_objects")
+        set(_use_shared_memsize FALSE)
+        foreach(_dep ${_extra_libs})
+            if ("${_dep}" MATCHES "_shared$")
+                set(_use_shared_memsize TRUE)
+                break()
+            endif()
+        endforeach()
+        if (_use_shared_memsize AND TARGET memorySize_shared)
+            target_link_libraries(${target} memorySize_shared)
+        else()
+            target_link_libraries(${target} memorySize)
+        endif()
+    endif()
+
+    # --- Objects target ---
+    if (TARGET ${target}_objects)
+        target_link_libraries(${target}_objects ${_extra_libs} ${_common_third_party})
+        if (NOT "${target}" STREQUAL "memorySize")
+            target_link_libraries(${target}_objects memorySize)
+        endif()
+    endif()
+
+    # --- Shared target ---
+    if (TARGET ${target}_shared)
+        set(_shared_extra_libs "")
+        foreach(_lib ${_extra_libs})
+            if ("${_lib}" IN_LIST _qlever_shared_libs AND TARGET ${_lib}_shared)
+                list(APPEND _shared_extra_libs ${_lib}_shared)
+            else()
+                list(APPEND _shared_extra_libs ${_lib})
+            endif()
+        endforeach()
+        target_link_libraries(${target}_shared ${_shared_extra_libs} ${_common_third_party})
+        if (NOT "${target}" STREQUAL "memorySize")
+            if (TARGET memorySize_shared)
+                target_link_libraries(${target}_shared memorySize_shared)
+            else()
+                target_link_libraries(${target}_shared memorySize)
+            endif()
+        endif()
+    endif()
 endfunction()
 
 
@@ -459,8 +529,8 @@ set(PRECOMPILED_HEADER_FILES_PARSER src/engine/sparqlExpressions/AggregateExpres
 add_subdirectory(src/parser)
 add_subdirectory(src/engine)
 if (USE_PRECOMPILED_HEADERS)
-    target_precompile_headers(parser PRIVATE ${PRECOMPILED_HEADER_FILES_PARSER})
-    target_precompile_headers(engine PRIVATE ${PRECOMPILED_HEADER_FILES_ENGINE})
+    target_precompile_headers(parser_objects PRIVATE ${PRECOMPILED_HEADER_FILES_PARSER})
+    target_precompile_headers(engine_objects PRIVATE ${PRECOMPILED_HEADER_FILES_ENGINE})
 endif ()
 add_subdirectory(src/index)
 add_subdirectory(src/util)
@@ -487,7 +557,7 @@ if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
     add_executable(qlever-server src/ServerMain.cpp)
     qlever_target_link_libraries(qlever-server engine server ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
     if (USE_PRECOMPILED_HEADERS)
-        target_precompile_headers(qlever-server REUSE_FROM engine)
+        target_precompile_headers(qlever-server REUSE_FROM engine_objects)
     endif()
 endif()
 

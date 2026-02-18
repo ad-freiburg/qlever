@@ -1,4 +1,4 @@
-add_library(httpParser AcceptHeaderQleverVisitor.h AcceptHeaderQleverVisitor.cpp
+qlever_add_library(httpParser AcceptHeaderQleverVisitor.h AcceptHeaderQleverVisitor.cpp
         generated/AcceptHeaderBaseListener.h generated/AcceptHeaderBaseListener.cpp
         generated/AcceptHeaderLexer.h generated/AcceptHeaderLexer.cpp
         generated/AcceptHeaderListener.h generated/AcceptHeaderListener.cpp
@@ -7,5 +7,5 @@ add_library(httpParser AcceptHeaderQleverVisitor.h AcceptHeaderQleverVisitor.cpp
 qlever_target_link_libraries(httpParser antlr4_static util)
 
 if (USE_PRECOMPILED_HEADERS)
-  target_precompile_headers(httpParser PRIVATE "${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src/antlr4-runtime.h")
+  target_precompile_headers(httpParser_objects PRIVATE "${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src/antlr4-runtime.h")
 endif()

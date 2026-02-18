@@ -1,7 +1,7 @@
 add_subdirectory(sparqlExpressions)
-add_library(SortPerformanceEstimator SortPerformanceEstimator.cpp)
+qlever_add_library(SortPerformanceEstimator SortPerformanceEstimator.cpp)
 qlever_target_link_libraries(SortPerformanceEstimator parser)
-add_library(engine
+qlever_add_library(engine
         Engine.cpp QueryExecutionTree.cpp Operation.cpp Result.cpp LocalVocab.cpp
         IndexScan.cpp Join.cpp Sort.cpp
         Distinct.cpp OrderBy.cpp Filter.cpp
@@ -28,7 +28,11 @@ qlever_target_link_libraries(engine util index parser global sparqlExpressions S
 # `REDUCED_FEATURE_SET_FOR_CPP17` is set.
 if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
     target_link_libraries(engine http)
+    target_link_libraries(engine_objects http)
+    if (TARGET engine_shared AND TARGET http_shared)
+        target_link_libraries(engine_shared http_shared)
+    endif()
 endif()
 
-add_library(server Server.cpp)
+qlever_add_library(server Server.cpp)
 qlever_target_link_libraries(server engine util index parser global http SortPerformanceEstimator)

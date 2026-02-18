@@ -19,10 +19,20 @@ template <typename ValueGetterWithStr, typename ValueGetterWithoutStr, size_t N,
           typename Function, typename... AdditionalNonStringValueGetters>
 class StringExpressionImplImpl : public SparqlExpression {
  private:
-  using ExpressionWithStr = NARY<
-      N, FV<Function, ValueGetterWithStr, AdditionalNonStringValueGetters...>>;
-  using ExpressionWithoutStr = NARY<N, FV<Function, ValueGetterWithoutStr,
-                                          AdditionalNonStringValueGetters...>>;
+  using OpWithStr =
+      Operation<N,
+                FV<Function, ValueGetterWithStr,
+                   AdditionalNonStringValueGetters...>>;
+  using OpWithoutStr =
+      Operation<N,
+                FV<Function, ValueGetterWithoutStr,
+                   AdditionalNonStringValueGetters...>>;
+  using ExpressionWithStr = NaryExpression<OpWithStr>;
+  using ExpressionWithoutStr = NaryExpression<OpWithoutStr>;
+
+#ifdef _QLEVER_FASTER_COMPILATION
+  using TypeErasedExpr = NaryExpression<TypeErasedOperation<N>>;
+#endif
 
   Ptr impl_;
 
@@ -33,6 +43,23 @@ class StringExpressionImplImpl : public SparqlExpression {
                   N)) explicit StringExpressionImplImpl(Ptr child,
                                                         C... children) {
     AD_CORRECTNESS_CHECK(child != nullptr);
+#ifdef _QLEVER_FASTER_COMPILATION
+    if (child->isStrExpression()) {
+      auto childrenOfStr = std::move(*child).moveChildrenOut();
+      AD_CORRECTNESS_CHECK(childrenOfStr.size() == 1);
+      auto op = makeTypeErasedOperation<OpWithStr>();
+      typename TypeErasedExpr::Children childArray{
+          std::move(childrenOfStr.at(0)), std::move(children)...};
+      impl_ = std::make_unique<TypeErasedExpr>(std::move(op),
+                                               std::move(childArray));
+    } else {
+      auto op = makeTypeErasedOperation<OpWithoutStr>();
+      typename TypeErasedExpr::Children childArray{std::move(child),
+                                                   std::move(children)...};
+      impl_ = std::make_unique<TypeErasedExpr>(std::move(op),
+                                               std::move(childArray));
+    }
+#else
     if (child->isStrExpression()) {
       auto childrenOfStr = std::move(*child).moveChildrenOut();
       AD_CORRECTNESS_CHECK(childrenOfStr.size() == 1);
@@ -42,6 +69,7 @@ class StringExpressionImplImpl : public SparqlExpression {
       impl_ = std::make_unique<ExpressionWithoutStr>(std::move(child),
                                                      std::move(children)...);
     }
+#endif
   }
 
   ExpressionResult evaluate(EvaluationContext* context) const override {

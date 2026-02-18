@@ -1,4 +1,4 @@
-add_library(sparqlExpressions
+qlever_add_library(sparqlExpressions
         SparqlExpressionValueGetters.cpp
         SetOfIntervals.cpp
         SparqlExpressionPimpl.cpp
