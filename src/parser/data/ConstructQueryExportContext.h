@@ -13,8 +13,7 @@
 class Index;
 enum struct PositionInTriple : int { SUBJECT, PREDICATE, OBJECT };
 
-// All the data that is needed to createAndEvaluateBatch an element in a
-// construct query.
+// All the data that is needed to evaluate an element in a construct query.
 struct ConstructQueryExportContext {
   // idx of row of result table for WHERE-clause
   const size_t resultTableRowIndex_;
