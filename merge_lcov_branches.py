@@ -1,10 +1,19 @@
 #!/usr/bin/env python3
-"""Merge LCOV records for the same source file.
+"""Merge LCOV branch data across template instantiations.
 
 When llvm-cov exports coverage with --format=lcov, template instantiations
-produce separate SF blocks for the same file.  This script merges those
-blocks so that branch / line / function coverage is the union across all
-instantiations.
+produce separate "blocks" of branch data (BRDA entries with different block
+IDs) for the same source line.  Codecov treats each block's branches
+independently, so if instantiation A takes the true branch and instantiation
+B takes the false branch, neither gets full coverage.
+
+This script merges branch data across blocks by positional index: for each
+source line, all blocks' branches are aligned by their position within the
+block, and the maximum hit count is taken.  The result is a single block
+(block 0) per source line with coverage that reflects the union of all
+template instantiations.
+
+It also merges duplicate SF records (if any) and recomputes summary lines.
 
 Usage:
     python3 merge_lcov_branches.py input.lcov -o output.lcov
@@ -17,7 +26,7 @@ from collections import defaultdict
 
 
 def parse_records(lines):
-    """Yield (source_file, raw_lines) for each SF…end_of_record block."""
+    """Yield (source_file, raw_lines) for each SF...end_of_record block."""
     current_sf = None
     current_lines = []
     for line in lines:
@@ -38,12 +47,13 @@ def parse_records(lines):
 def merge_records(groups):
     """Merge multiple record line-lists for the same file.
 
-    Returns a list of output lines (without trailing newlines).
+    Returns (da, merged_branches, fn_start, fnda).
     """
     # DA:  line,count  -> max count per line
     da = defaultdict(int)
-    # BRDA: line,block,branch,count -> max count per key
-    brda = defaultdict(int)
+    # BRDA: collect per (line, block) -> list of (branch, count) in order
+    # Then merge across blocks by positional index
+    brda_raw = defaultdict(lambda: defaultdict(list))
     # FN: start_line,name  -> keep earliest start line per name
     fn_start = {}
     # FNDA: count,name -> max count per name
@@ -58,10 +68,12 @@ def merge_records(groups):
                 da[lineno] = max(da[lineno], count)
             elif line.startswith("BRDA:"):
                 parts = line[5:].split(",", 3)
-                key = (parts[0], parts[1], parts[2])
+                src_line = parts[0]
+                block = parts[1]
+                branch = int(parts[2])
                 count_str = parts[3]
                 count = 0 if count_str == "-" else int(count_str)
-                brda[key] = max(brda[key], count)
+                brda_raw[src_line][block].append((branch, count))
             elif line.startswith("FN:"):
                 # FN:start_line,function_name  (name may contain commas)
                 parts = line[3:].split(",", 1)
@@ -77,10 +89,37 @@ def merge_records(groups):
                 fnda[name] = max(fnda[name], count)
             # Skip summary lines (LF, LH, BRF, BRH, FNF, FNH) — recomputed.
 
-    return da, brda, fn_start, fnda
+    # Merge branches across template instantiations by positional index.
+    #
+    # llvm-cov represents instantiations as separate "blocks" at the same
+    # source line, each with the same number of branches.  We align branches
+    # by their position within each block and take the max hit count.
+    #
+    # When multiple SF records for the same file are merged, a single block
+    # may accumulate entries from several records (duplicate branch numbers).
+    # We detect this by checking for repeated branch numbers and split into
+    # sub-groups (cycles) of size = number of unique branch numbers.
+    merged_branches = {}  # src_line -> list of max counts (one per position)
+    for src_line in sorted(brda_raw, key=int):
+        blocks = brda_raw[src_line]
+        position_counts = defaultdict(int)
+        for block_id, entries in blocks.items():
+            unique_branches = len(set(b for b, c in entries))
+            cycle_len = unique_branches
+            # Split into instantiation sub-groups of cycle_len entries each
+            for i in range(0, len(entries), cycle_len):
+                group = entries[i:i + cycle_len]
+                group.sort(key=lambda x: x[0])
+                for pos, (branch, count) in enumerate(group):
+                    position_counts[pos] = max(position_counts[pos], count)
+        merged_branches[src_line] = [
+            position_counts[i] for i in range(len(position_counts))
+        ]
+
+    return da, merged_branches, fn_start, fnda
 
 
-def format_record(sf, da, brda, fn_start, fnda):
+def format_record(sf, da, merged_branches, fn_start, fnda):
     """Format a single merged record as a list of lines."""
     out = [f"SF:{sf}"]
 
@@ -95,13 +134,17 @@ def format_record(sf, da, brda, fn_start, fnda):
     out.append(f"FNF:{fnf}")
     out.append(f"FNH:{fnh}")
 
-    # Branches
-    for key in sorted(brda, key=lambda k: (int(k[0]), int(k[1]), int(k[2]))):
-        count = brda[key]
-        count_str = "-" if count == 0 else str(count)
-        out.append(f"BRDA:{key[0]},{key[1]},{key[2]},{count_str}")
-    brf = len(brda)
-    brh = sum(1 for c in brda.values() if c > 0)
+    # Branches — one block (block 0) per source line
+    brf = 0
+    brh = 0
+    for src_line in sorted(merged_branches, key=int):
+        counts = merged_branches[src_line]
+        for branch, count in enumerate(counts):
+            count_str = "-" if count == 0 else str(count)
+            out.append(f"BRDA:{src_line},0,{branch},{count_str}")
+            brf += 1
+            if count > 0:
+                brh += 1
     out.append(f"BRF:{brf}")
     out.append(f"BRH:{brh}")
 
@@ -119,7 +162,7 @@ def format_record(sf, da, brda, fn_start, fnda):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Merge LCOV records for the same source file."
+        description="Merge LCOV branch data across template instantiations."
     )
     parser.add_argument(
         "input", nargs="?", default="-",
@@ -149,8 +192,10 @@ def main():
     # Merge and output
     output_lines = []
     for sf in file_order:
-        da, brda, fn_start, fnda = merge_records(file_records[sf])
-        output_lines.extend(format_record(sf, da, brda, fn_start, fnda))
+        da, merged_branches, fn_start, fnda = merge_records(file_records[sf])
+        output_lines.extend(
+            format_record(sf, da, merged_branches, fn_start, fnda)
+        )
 
     output_text = "\n".join(output_lines) + "\n"
 
