@@ -58,10 +58,11 @@ class ConstructBatchEvaluator {
       IdCache& idCache);
 
  private:
-  // Evaluate a single variable column across all rows in the batch. For each
-  // row, the `Id` at `(rowIdx, idTableColumnIdx)` is looked up in `IdCache`;
-  // on a cache miss, `ConstructQueryEvaluator::evaluateId` is called and the
-  // result is cached.
+  // Evaluate a single variable across all rows in the batch. A variable is
+  // identified by its column in the `IdTable` (which is contained in
+  // `BatchEvaluationContext`). For each row, the `Id` at
+  // `(rowIdx, idTableColumnIdx)` is looked up in `IdCache`; on a cache miss,
+  // `ConstructQueryEvaluator::evaluateId` is called and the result is cached.
   static std::vector<std::optional<EvaluatedTerm>> evaluateVariableByColumn(
       size_t idTableColumnIdx, const BatchEvaluationContext& evaluationContext,
       const Index& index, IdCache& idCache);
