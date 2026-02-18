@@ -63,16 +63,17 @@ constexpr bool contains(Container&& container, const T& element) {
 }
 
 /**
- * Looks up `key` in a map-like container and returns an optional reference
- * to the mapped value if found, or `boost::none` otherwise.
+ * Looks up `key` in a map-like container and returns an optional reference to
+ * the mapped value if found, or `boost::none` otherwise.
  *
- * Uses `boost::optional` rather than `std::optional` because the latter
- * does not support reference types.
+ * Uses `boost::optional` rather than `std::optional` because the latter does
+ * not support reference types.
  *
- * @param map The map-like container to search in (must have a `find` member
- *            that returns an iterator to a key-value pair)
- * @param key The key to look up
- * @return boost::optional<const mapped_type&>
+ * Parameters:
+ * map: The map-like container to search in (must have a `find` member that
+ * returns an iterator to a key-value pair)
+ * key: The key to look up
+ * return: boost::optional<const mapped_type&>
  */
 template <typename Map, typename Key>
 auto findOptional(const Map& map, const Key& key)
