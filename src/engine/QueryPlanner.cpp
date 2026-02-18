@@ -2586,6 +2586,8 @@ auto QueryPlanner::createMaterializedViewJoinReplacements(
   ReplacementPlans plans;
 
   // Check if the user allows query rewriting.
+  // TODO<ullingerc> Do we want to forcefully disable query rewriting if delta
+  // triples are present in the current index to prevent diverging results?
   if (!getRuntimeParameter<
           &RuntimeParameters::enableMaterializedViewQueryRewrite_>()) {
     return plans;
