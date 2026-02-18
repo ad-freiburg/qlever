@@ -70,7 +70,7 @@ class ExportQueryExecutionTrees {
   // holds the `Undefined` value, then `std::nullopt` is returned.
   //
   // Note: This function currently has to be public because the
-  // `Variable::createAndEvaluateBatch` function calls it for evaluating
+  // `Variable::evaluate` function calls it for evaluating
   // CONSTRUCT queries.
   //
   // TODO<joka921> Make it private again as soon as the evaluation of construct
