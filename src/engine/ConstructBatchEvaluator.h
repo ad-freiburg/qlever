@@ -63,8 +63,7 @@ class ConstructBatchEvaluator {
   // row, the `Id` at `(rowIdx, idTableColumnIdx)` is looked up in `idCache`;
   // on a cache miss, `ConstructQueryEvaluator::evaluateId` is called and the
   // result is cached.
-  static void evaluateVariableByColumn(
-      std::vector<std::optional<EvaluatedTerm>>& columnResults,
+  static std::vector<std::optional<EvaluatedTerm>> evaluateVariableByColumn(
       size_t idTableColumnIdx, const BatchEvaluationContext& evaluationContext,
       const Index& index, IdCache& idCache);
 };
