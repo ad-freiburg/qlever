@@ -9,6 +9,7 @@
 #include "engine/ConstructBatchEvaluator.h"
 
 #include "engine/ConstructQueryEvaluator.h"
+#include "util/Views.h"
 
 namespace qlever::constructExport {
 
@@ -31,27 +32,23 @@ BatchEvaluationResult ConstructBatchEvaluator::evaluateBatch(
 
 // _____________________________________________________________________________
 EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
-    size_t idTableColumnIdx, const BatchEvaluationContext& evaluationContext,
+    size_t idTableColumnIdx, const BatchEvaluationContext& ctx,
     const LocalVocab& localVocab, const Index& index, IdCache& idCache) {
-  EvaluatedVariableValues columnResults(evaluationContext.numRows());
+  EvaluatedVariableValues columnResults;
+  columnResults.reserve(ctx.numRows());
 
-  for (size_t rowInBatch = 0; rowInBatch < evaluationContext.numRows();
-       ++rowInBatch) {
-    size_t rowIdx = evaluationContext.firstRow_ + rowInBatch;
+  auto computeValue =
+      [&index, &localVocab](const Id& id) -> std::optional<EvaluatedTerm> {
+    auto value = ConstructQueryEvaluator::evaluateId(id, index, localVocab);
+    if (value.has_value()) {
+      return std::make_shared<const std::string>(std::move(*value));
+    }
+    return std::nullopt;
+  };
 
-    const Id& id = evaluationContext.idTable_(rowIdx, idTableColumnIdx);
-
-    auto computeValue =
-        [&index, &localVocab](const Id& id) -> std::optional<EvaluatedTerm> {
-      auto value = ConstructQueryEvaluator::evaluateId(id, index, localVocab);
-
-      if (value.has_value()) {
-        return std::make_shared<const std::string>(std::move(*value));
-      }
-      return std::nullopt;
-    };
-
-    columnResults[rowInBatch] = idCache.getOrCompute(id, computeValue);
+  for (size_t rowIdx : ql::views::iota(ctx.firstRow_, ctx.endRow_)) {
+    const Id& id = ctx.idTable_(rowIdx, idTableColumnIdx);
+    columnResults.push_back(idCache.getOrCompute(id, computeValue));
   }
 
   return columnResults;

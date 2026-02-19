@@ -75,7 +75,7 @@ class ConstructBatchEvaluator {
   // Evaluate a single variable (identified by its `IdTable` column index)
   // across all rows in the batch.
   static EvaluatedVariableValues evaluateVariableByColumn(
-      size_t idTableColumnIdx, const BatchEvaluationContext& evaluationContext,
+      size_t idTableColumnIdx, const BatchEvaluationContext& ctx,
       const LocalVocab& localVocab, const Index& index, IdCache& idCache);
 };
 
