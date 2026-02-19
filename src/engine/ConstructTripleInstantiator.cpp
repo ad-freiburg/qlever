@@ -40,6 +40,7 @@ std::optional<EvaluatedTerm> ConstructTripleInstantiator::instantiateTerm(
       term);
 }
 
+// TODO<ms2144>: take the format as runtime parameter (code review comment).
 // _____________________________________________________________________________
 template <ad_utility::MediaType format>
 std::string ConstructTripleInstantiator::formatTriple(

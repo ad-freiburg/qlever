@@ -58,6 +58,12 @@ void ConstructRowProcessor::loadBatchIfNeeded() {
 }
 
 // _____________________________________________________________________________
+// TODO<ms2144>: comment from code review: "This gets much simpler,
+// if you synchronously create a batch (as a vector of instantiated triple etc.)
+// and then on the outside somewhere sprinkle in a views::join . The callback
+// hell on the level of rows is unnecessary. Then we can see, how we can get
+// the interface even nicer." I dont really get it. Think about what that means
+// and try to implement it.
 std::optional<EvaluatedTriple> ConstructRowProcessor::processCurrentBatch() {
   while (rowInBatchIdx_ < batchEvaluationResult_->numRows_) {
     if (auto result = processCurrentRow()) {

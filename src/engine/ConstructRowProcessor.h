@@ -69,6 +69,9 @@ class ConstructRowProcessor : public ad_utility::InputRangeFromGet<
 
   // Table data.
   TableConstRefWithVocab tableWithVocab_;
+  // TODO<ms2144>: comment from code review: "why do we use a vector here,
+  // aren't the row indices contiguous? Just use 2 ints, lower and upper bound"
+  // Resolve this comment.
   std::vector<uint64_t> rowIndicesVec_;
   size_t currentRowOffset_;
 
