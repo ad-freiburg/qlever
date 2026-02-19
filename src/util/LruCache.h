@@ -22,7 +22,7 @@ template <typename K, typename V>
 class LRUCache {
  private:
   size_t capacity_;
-  // Stores keys in order of usage (MRU at front)
+  // Stores keys in order of usage (MRU at front).
   std::list<K> keys_;
   absl::flat_hash_map<K, std::pair<V, typename std::list<K>::iterator>> cache_;
 
@@ -30,6 +30,8 @@ class LRUCache {
   explicit LRUCache(size_t capacity) : capacity_{capacity} {
     AD_CONTRACT_CHECK(capacity > 0, "Capacity must be greater than 0");
   }
+
+  size_t capacity() const { return capacity_; }
 
   // Check if `key` is in the cache and return a reference to the value if it is
   // found. Otherwise, compute the value using `computeFunction` and store it in
@@ -42,20 +44,20 @@ class LRUCache {
     auto it = cache_.find(key);
     if (it != cache_.end()) {
       const auto& [value, listIterator] = it->second;
-      // Move accessed key to front (most recently used)
+      // Move accessed key to front (most recently used).
       keys_.splice(keys_.begin(), keys_, listIterator);
 
       return value;
     }
-    // Evict LRU if cache is full
+    // Evict LRU if cache is full.
     if (cache_.size() >= capacity_) {
       K& lruKey = keys_.back();
       cache_.erase(lruKey);
-      // Reuse allocated memory by moving node and reassigning key
+      // Reuse allocated memory by moving node and reassigning key.
       keys_.splice(keys_.begin(), keys_, std::prev(keys_.end()));
       lruKey = key;
     } else {
-      // Push new element if not full
+      // Push new element if not full.
       keys_.push_front(key);
     }
     auto result = cache_.try_emplace(key, computeFunction(key), keys_.begin());

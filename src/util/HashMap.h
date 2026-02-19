@@ -28,6 +28,7 @@ template <class K, class V,
           class Alloc = ad_utility::AllocatorWithLimit<std::pair<const K, V>>>
 using HashMapWithMemoryLimit =
     std::unordered_map<K, V, HashFct, EqualElem, Alloc>;
+
 }  // namespace ad_utility
 
 #endif  // QLEVER_SRC_UTIL_HASHMAP_H
