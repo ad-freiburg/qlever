@@ -72,38 +72,39 @@ std::optional<PreprocessedTerm> ConstructTemplatePreprocessor::preprocessTerm(
 }
 
 // _____________________________________________________________________________
+std::optional<PreprocessedTriple>
+ConstructTemplatePreprocessor::preprocessTriple(
+    const std::array<GraphTerm, NUM_TRIPLE_POSITIONS>& triple,
+    const VariableToColumnMap& variableColumns) {
+  PreprocessedTriple preprocessedTriple;
+  for (size_t pos = 0; pos < NUM_TRIPLE_POSITIONS; ++pos) {
+    auto role = static_cast<PositionInTriple>(pos);
+    auto preprocessed = preprocessTerm(triple[pos], role, variableColumns);
+    if (!preprocessed) return std::nullopt;
+    preprocessedTriple[pos] = std::move(*preprocessed);
+  }
+  return preprocessedTriple;
+}
+
+// _____________________________________________________________________________
 PreprocessedConstructTemplate ConstructTemplatePreprocessor::preprocess(
     const Triples& templateTriples,
     const VariableToColumnMap& variableColumns) {
   PreprocessedConstructTemplate result;
-
   ad_utility::HashSet<size_t> uniqueColumnsSet;
 
   for (const auto& triple : templateTriples) {
-    PreprocessedTriple preprocessedTriple;
-    bool valid = true;
+    auto preprocessedTriple = preprocessTriple(triple, variableColumns);
+    if (!preprocessedTriple) continue;
 
-    for (size_t pos = 0; pos < NUM_TRIPLE_POSITIONS; ++pos) {
-      auto role = static_cast<PositionInTriple>(pos);
-      auto preprocessed = preprocessTerm(triple[pos], role, variableColumns);
-      if (!preprocessed) {
-        valid = false;
-        break;
+    // Only collect variable column indices once the triple is known to be
+    // valid.
+    for (const auto& term : *preprocessedTriple) {
+      if (auto* var = std::get_if<PrecomputedVariable>(&term)) {
+        uniqueColumnsSet.insert(var->columnIndex_);
       }
-      preprocessedTriple[pos] = std::move(*preprocessed);
     }
-
-    if (valid) {
-      // only now add the column indices of `PrecomputedVariable`s to the
-      // `uniqueColumnsSet`, since only now we can be sure that the triple is
-      // indeed valid.
-      for (const auto& term : preprocessedTriple) {
-        if (auto* var = std::get_if<PrecomputedVariable>(&term)) {
-          uniqueColumnsSet.insert(var->columnIndex_);
-        }
-      }
-      result.preprocessedTriples_.push_back(std::move(preprocessedTriple));
-    }
+    result.preprocessedTriples_.push_back(std::move(*preprocessedTriple));
   }
 
   result.uniqueVariableColumns_.assign(uniqueColumnsSet.begin(),
