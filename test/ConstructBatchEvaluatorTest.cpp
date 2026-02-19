@@ -46,12 +46,13 @@ class ConstructBatchEvaluatorTest : public ::testing::Test {
 
   const Index& index_ = qec_->getIndex();
 
-  std::function<Id(const std::string&)> getId_ =
-      ad_utility::testing::makeGetId(index_);
+  Id getId_(const std::string& s) const {
+    return ad_utility::testing::makeGetId(index_)(s);
+  }
 
   LocalVocab localVocab_;
 
-  // Evaluate the full `IdTable` (all rows) with the given variable columns in
+  // Evaluate all rows of the `IdTable` with the given variable columns in
   // one single batch.
   BatchEvaluationResult evaluateFullTable(
       const std::vector<size_t>& variableColumnIndices, const IdTable& idTable,
