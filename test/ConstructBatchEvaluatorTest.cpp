@@ -13,6 +13,7 @@
 #include "engine/ConstructBatchEvaluator.h"
 
 namespace {
+
 using namespace qlever::constructExport;
 using ::testing::Each;
 using ::testing::ElementsAre;
@@ -26,6 +27,8 @@ using ::testing::Pointee;
 static constexpr auto matchesEvaluatedTerm = [](const std::string& expected) {
   return Optional(Pointee(Eq(expected)));
 };
+
+auto evalTerm = matchesEvaluatedTerm;
 
 // =============================================================================
 // Test fixture.
@@ -81,7 +84,7 @@ TEST_F(ConstructBatchEvaluatorTest, singleVariableSingleRow) {
   ASSERT_EQ(result.numRows_, 1);
   ASSERT_EQ(result.variablesByColumn_.size(), 1);
   ASSERT_TRUE(result.variablesByColumn_.contains(0));
-  EXPECT_THAT(result.getVariable(0, 0), matchesEvaluatedTerm("<s>"));
+  EXPECT_THAT(result.getVariable(0, 0), evalTerm("<s>"));
 }
 
 // Two rows with different IRIs in the same column (i.e. with different Iri's
@@ -94,9 +97,8 @@ TEST_F(ConstructBatchEvaluatorTest, singleVariableMultipleRows) {
   auto result = evaluateFullTable({0}, idTable, idCache);
 
   ASSERT_EQ(result.numRows_, 2);
-  EXPECT_THAT(
-      result.variablesByColumn_.at(0),
-      ElementsAre(matchesEvaluatedTerm("<s>"), matchesEvaluatedTerm("<o>")));
+  EXPECT_THAT(result.variablesByColumn_.at(0),
+              ElementsAre(evalTerm("<s>"), evalTerm("<o>")));
 }
 
 // Two variable columns (0 and 1), two rows. This is the typical CONSTRUCT
@@ -113,12 +115,10 @@ TEST_F(ConstructBatchEvaluatorTest, multipleVariablesMultipleRows) {
   auto result = evaluateFullTable({0, 1}, idTable, idCache);
 
   ASSERT_EQ(result.numRows_, 2);
-  EXPECT_THAT(
-      result.variablesByColumn_.at(0),
-      ElementsAre(matchesEvaluatedTerm("<s>"), matchesEvaluatedTerm("<o>")));
-  EXPECT_THAT(
-      result.variablesByColumn_.at(1),
-      ElementsAre(matchesEvaluatedTerm("<p>"), matchesEvaluatedTerm("<q>")));
+  EXPECT_THAT(result.variablesByColumn_.at(0),
+              ElementsAre(evalTerm("<s>"), evalTerm("<o>")));
+  EXPECT_THAT(result.variablesByColumn_.at(1),
+              ElementsAre(evalTerm("<p>"), evalTerm("<q>")));
 }
 
 // The IdTable has 3 columns, but only columns 0 and 2 are variables (column 1
@@ -136,8 +136,8 @@ TEST_F(ConstructBatchEvaluatorTest, evaluatesOnlyRequestedColumns) {
   EXPECT_TRUE(result.variablesByColumn_.contains(0));
   EXPECT_TRUE(result.variablesByColumn_.contains(2));
   EXPECT_FALSE(result.variablesByColumn_.contains(1));
-  EXPECT_THAT(result.getVariable(0, 0), matchesEvaluatedTerm("<s>"));
-  EXPECT_THAT(result.getVariable(2, 0), matchesEvaluatedTerm("<o>"));
+  EXPECT_THAT(result.getVariable(0, 0), evalTerm("<s>"));
+  EXPECT_THAT(result.getVariable(2, 0), evalTerm("<o>"));
 }
 
 // If a variable can is unbound for a given row, check that the IdTable stores
@@ -164,8 +164,7 @@ TEST_F(ConstructBatchEvaluatorTest, undefinedMixedWithValidIds) {
 
   ASSERT_EQ(result.numRows_, 3);
   EXPECT_THAT(result.variablesByColumn_.at(0),
-              ElementsAre(matchesEvaluatedTerm("<s>"), Eq(std::nullopt),
-                          matchesEvaluatedTerm("<o>")));
+              ElementsAre(evalTerm("<s>"), Eq(std::nullopt), evalTerm("<o>")));
 }
 
 // When the same `Id` appears in multiple rows, the first occurrence is a cache
@@ -179,8 +178,7 @@ TEST_F(ConstructBatchEvaluatorTest, repeatedIdsCausesCacheHits) {
   auto result = evaluateFullTable({0}, idTable, idCache);
 
   ASSERT_EQ(result.numRows_, 3);
-  EXPECT_THAT(result.variablesByColumn_.at(0),
-              Each(matchesEvaluatedTerm("<s>")));
+  EXPECT_THAT(result.variablesByColumn_.at(0), Each(evalTerm("<s>")));
 }
 
 // The cache is shared across calls to `evaluateBatch`. Verify that `Id`s
@@ -194,17 +192,15 @@ TEST_F(ConstructBatchEvaluatorTest, cacheIsSharedAcrossBatches) {
   // First batch: rows [0, 2).
   auto result1 = evaluateRowRange({0}, idTable, 0, 2, idCache);
   ASSERT_EQ(result1.numRows_, 2);
-  EXPECT_THAT(
-      result1.variablesByColumn_.at(0),
-      ElementsAre(matchesEvaluatedTerm("<s>"), matchesEvaluatedTerm("<o>")));
+  EXPECT_THAT(result1.variablesByColumn_.at(0),
+              ElementsAre(evalTerm("<s>"), evalTerm("<o>")));
 
   // Second batch: rows [2, 4). Same `Id`s — verify the cached values are
   // returned correctly.
   auto result2 = evaluateRowRange({0}, idTable, 2, 4, idCache);
   ASSERT_EQ(result2.numRows_, 2);
-  EXPECT_THAT(
-      result2.variablesByColumn_.at(0),
-      ElementsAre(matchesEvaluatedTerm("<s>"), matchesEvaluatedTerm("<o>")));
+  EXPECT_THAT(result2.variablesByColumn_.at(0),
+              ElementsAre(evalTerm("<s>"), evalTerm("<o>")));
 }
 
 // When [firstRow_, endRow_) is a strict subset of the `IdTable`, only those
@@ -219,9 +215,8 @@ TEST_F(ConstructBatchEvaluatorTest, subRangeEvaluatesCorrectRows) {
 
   ASSERT_EQ(result.numRows_, 2);
   // Row 1 of the IdTable -> result index 0; row 2 -> result index 1.
-  EXPECT_THAT(
-      result.variablesByColumn_.at(0),
-      ElementsAre(matchesEvaluatedTerm("<p>"), matchesEvaluatedTerm("<o>")));
+  EXPECT_THAT(result.variablesByColumn_.at(0),
+              ElementsAre(evalTerm("<p>"), evalTerm("<o>")));
 }
 
 // The dataset contains the literal "hello". Verify that literals are resolved
@@ -233,7 +228,7 @@ TEST_F(ConstructBatchEvaluatorTest, literalIsResolvedCorrectly) {
   auto result = evaluateFullTable({0}, idTable, idCache);
 
   ASSERT_EQ(result.numRows_, 1);
-  EXPECT_THAT(result.getVariable(0, 0), matchesEvaluatedTerm("\"hello\""));
+  EXPECT_THAT(result.getVariable(0, 0), evalTerm("\"hello\""));
 }
 
 // A column with mixed IRIs and a literal. Verify that each row is resolved with
@@ -246,10 +241,9 @@ TEST_F(ConstructBatchEvaluatorTest, mixedIriAndLiteralColumn) {
   auto result = evaluateFullTable({0}, idTable, idCache);
 
   ASSERT_EQ(result.numRows_, 3);
-  EXPECT_THAT(result.variablesByColumn_.at(0),
-              ElementsAre(matchesEvaluatedTerm("<s>"),
-                          matchesEvaluatedTerm("\"hello\""),
-                          matchesEvaluatedTerm("<o>")));
+  EXPECT_THAT(
+      result.variablesByColumn_.at(0),
+      ElementsAre(evalTerm("<s>"), evalTerm("\"hello\""), evalTerm("<o>")));
 }
 
 // Empty batch (zero rows). The result should have numRows_ == 0 and no column
@@ -304,16 +298,46 @@ TEST_F(ConstructBatchEvaluatorTest, realisticConstructPattern) {
   ASSERT_EQ(result.variablesByColumn_.size(), 2);
 
   // Column 0 (?s): <s>, <s>, <o>, <s>
-  EXPECT_THAT(
-      result.variablesByColumn_.at(0),
-      ElementsAre(matchesEvaluatedTerm("<s>"), matchesEvaluatedTerm("<s>"),
-                  matchesEvaluatedTerm("<o>"), matchesEvaluatedTerm("<s>")));
+  EXPECT_THAT(result.variablesByColumn_.at(0),
+              ElementsAre(evalTerm("<s>"), evalTerm("<s>"), evalTerm("<o>"),
+                          evalTerm("<s>")));
 
   // Column 2 (?o): <o>, <q>, <s>, <o>
-  EXPECT_THAT(
-      result.variablesByColumn_.at(2),
-      ElementsAre(matchesEvaluatedTerm("<o>"), matchesEvaluatedTerm("<q>"),
-                  matchesEvaluatedTerm("<s>"), matchesEvaluatedTerm("<o>")));
+  EXPECT_THAT(result.variablesByColumn_.at(2),
+              ElementsAre(evalTerm("<o>"), evalTerm("<q>"), evalTerm("<s>"),
+                          evalTerm("<o>")));
+}
+
+// With a cache of size 1, every access to a different `Id` evicts the previous
+// entry. Verify that the evaluator still resolves all rows correctly despite
+// constant evictions.
+TEST_F(ConstructBatchEvaluatorTest, cacheOfSizeOneStillProducesCorrectResults) {
+  auto idTable = makeIdTableFromVector(
+      {{getId_("<s>")}, {getId_("<o>")}, {getId_("<p>")}, {getId_("<q>")}});
+  IdCache idCache{1};
+
+  auto result = evaluateFullTable({0}, idTable, idCache);
+
+  ASSERT_EQ(result.numRows_, 4);
+  EXPECT_THAT(result.variablesByColumn_.at(0),
+              ElementsAre(evalTerm("<s>"), evalTerm("<o>"), evalTerm("<p>"),
+                          evalTerm("<q>")));
+}
+
+// With a cache of size 0, nothing is ever cached. Verify that the evaluator
+// still resolves all rows correctly by re-evaluating every `Id` on each access.
+TEST_F(ConstructBatchEvaluatorTest,
+       cacheOfSizeZeroStillProducesCorrectResults) {
+  auto idTable = makeIdTableFromVector(
+      {{getId_("<s>")}, {getId_("<o>")}, {getId_("<p>")}, {getId_("<q>")}});
+  IdCache idCache{0};
+
+  auto result = evaluateFullTable({0}, idTable, idCache);
+
+  ASSERT_EQ(result.numRows_, 4);
+  EXPECT_THAT(result.variablesByColumn_.at(0),
+              ElementsAre(evalTerm("<s>"), evalTerm("<o>"), evalTerm("<p>"),
+                          evalTerm("<q>")));
 }
 
 }  // namespace
