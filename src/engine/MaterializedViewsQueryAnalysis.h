@@ -55,7 +55,8 @@ class QueryPatternCache {
   // Simple chains can be found by direct access into a hash map.
   SimpleChainCache simpleChainCache_;
 
-  // Cache for predicates appearing in a materialized view.
+  // Cache for predicates appearing in a materialized view. The `ViewPtr`s are
+  // kept sorted.
   ad_utility::HashMap<std::string, std::vector<ViewPtr>> predicateInView_;
 
   // TODO<ullinger> Data structure for join stars.

@@ -235,7 +235,11 @@ bool QueryPatternCache::analyzeView(ViewPtr view) {
     for (const auto& triple : triples) {
       auto predicate = triple.getSimplePredicate();
       if (predicate.has_value()) {
-        predicateInView_[predicate.value()].push_back(view);
+        auto& vec = predicateInView_[predicate.value()];
+        // Sort-preserving insert into the vector s.t. we can later merge
+        // multiple vectors of views.
+        auto it = std::lower_bound(vec.begin(), vec.end(), view);
+        vec.insert(it, view);
       }
     }
   }
