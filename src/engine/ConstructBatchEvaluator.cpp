@@ -12,21 +12,19 @@
 
 namespace qlever::constructExport {
 
-using EvaluatedTerm = ConstructBatchEvaluator::EvaluatedTerm;
-
 // _____________________________________________________________________________
 BatchEvaluationResult ConstructBatchEvaluator::evaluateBatch(
     const std::vector<size_t>& uniqueVariableColumns,
-    const BatchEvaluationContext& evaluationContext, const Index& index,
-    IdCache& idCache) {
+    const BatchEvaluationContext& evaluationContext,
+    const LocalVocab& localVocab, const Index& index, IdCache& idCache) {
   BatchEvaluationResult batchResult;
   batchResult.numRows_ = evaluationContext.numRows();
 
   // Evaluate each unique variable across all batch rows.
   for (size_t variableColumnIdx : uniqueVariableColumns) {
     batchResult.variablesByColumn_[variableColumnIdx] =
-        evaluateVariableByColumn(variableColumnIdx, evaluationContext, index,
-                                 idCache);
+        evaluateVariableByColumn(variableColumnIdx, evaluationContext,
+                                 localVocab, index, idCache);
   }
 
   return batchResult;
@@ -36,7 +34,7 @@ BatchEvaluationResult ConstructBatchEvaluator::evaluateBatch(
 std::vector<std::optional<EvaluatedTerm>>
 ConstructBatchEvaluator::evaluateVariableByColumn(
     size_t idTableColumnIdx, const BatchEvaluationContext& evaluationContext,
-    const Index& index, IdCache& idCache) {
+    const LocalVocab& localVocab, const Index& index, IdCache& idCache) {
   std::vector<std::optional<EvaluatedTerm>> columnResults(
       evaluationContext.numRows());
 
@@ -46,10 +44,9 @@ ConstructBatchEvaluator::evaluateVariableByColumn(
 
     const Id& id = evaluationContext.idTable_(rowIdx, idTableColumnIdx);
 
-    auto computeValue = [&index, &evaluationContext](
-                            const Id& id) -> std::optional<EvaluatedTerm> {
-      auto value = ConstructQueryEvaluator::evaluateId(
-          id, index, evaluationContext.localVocab_);
+    auto computeValue =
+        [&index, &localVocab](const Id& id) -> std::optional<EvaluatedTerm> {
+      auto value = ConstructQueryEvaluator::evaluateId(id, index, localVocab);
 
       if (value.has_value()) {
         return std::make_shared<const std::string>(std::move(*value));

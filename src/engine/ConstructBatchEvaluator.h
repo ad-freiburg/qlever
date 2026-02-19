@@ -18,14 +18,12 @@
 
 namespace qlever::constructExport {
 
-// Groups the data needed for batch evaluation: the `IdTable` containing the
-// result rows, the `LocalVocab` (needed because some `Id`s may reference values
-// created at query runtime that are not in the global index vocabulary), and
-// the contiguous half-open row range [firstRow_, endRow_) that defines which
-// rows belong to this batch.
+using IdCache =
+    ad_utility::util::LRUCacheWithStatistics<Id, std::optional<EvaluatedTerm>>;
+
+// Identifies a contiguous sub-range of an `IdTable` that forms one batch.
 struct BatchEvaluationContext {
   const IdTable& idTable_;
-  const LocalVocab& localVocab_;
   size_t firstRow_;
   size_t endRow_;  // exclusive
 
@@ -43,19 +41,13 @@ struct BatchEvaluationContext {
 // same `Id` across rows and batches.
 class ConstructBatchEvaluator {
  public:
-  using IdCache =
-      ad_utility::util::LRUCacheWithStatistics<Id,
-                                               std::optional<EvaluatedTerm>>;
-  using BatchEvaluationResult = qlever::constructExport::BatchEvaluationResult;
-  using EvaluatedTerm = qlever::constructExport::EvaluatedTerm;
-
   // Evaluate all `uniqueVariableColumns` for the rows in `evaluationContext`.
   // Results are indexed by column and then by row-within-batch (0-based
   // relative to `firstRow_`).
   static BatchEvaluationResult evaluateBatch(
       const std::vector<size_t>& uniqueVariableColumns,
-      const BatchEvaluationContext& evaluationContext, const Index& index,
-      IdCache& idCache);
+      const BatchEvaluationContext& evaluationContext,
+      const LocalVocab& localVocab, const Index& index, IdCache& idCache);
 
  private:
   // Evaluate a single variable across all rows in the batch. A variable is
@@ -65,7 +57,7 @@ class ConstructBatchEvaluator {
   // `ConstructQueryEvaluator::evaluateId` is called and the result is cached.
   static std::vector<std::optional<EvaluatedTerm>> evaluateVariableByColumn(
       size_t idTableColumnIdx, const BatchEvaluationContext& evaluationContext,
-      const Index& index, IdCache& idCache);
+      const LocalVocab& localVocab, const Index& index, IdCache& idCache);
 };
 
 }  // namespace qlever::constructExport
