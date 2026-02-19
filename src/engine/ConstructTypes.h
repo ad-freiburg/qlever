@@ -9,12 +9,9 @@
 
 #include <array>
 #include <memory>
-#include <optional>
 #include <string>
 #include <variant>
 #include <vector>
-
-#include "util/HashMap.h"
 
 namespace qlever::constructExport {
 
@@ -58,27 +55,10 @@ struct PreprocessedConstructTemplate {
   std::vector<PreprocessedTriple> preprocessedTriples_;
   std::vector<size_t> uniqueVariableColumns_;
 };
-// --- Evaluation types ---
 
-// Result of evaluating a term.
+// Result of evaluating a term (IRI, literal, etc.) to its string
+// representation.
 using EvaluatedTerm = std::shared_ptr<const std::string>;
-
-// Evaluated values of one variable across all rows in a batch. The element at
-// index `i` corresponds to the value of the evaluated variable for row `i` of
-// the batch (0-based relative to `BatchEvaluationContext::firstRow_`).
-using EvaluatedVariableValues = std::vector<std::optional<EvaluatedTerm>>;
-
-// Result of batch-evaluating variables for a batch of rows.
-struct BatchEvaluationResult {
-  // Map from `IdTable` column index to evaluated values for each row in batch.
-  ::ad_utility::HashMap<size_t, EvaluatedVariableValues> variablesByColumn_;
-  size_t numRows_ = 0;
-
-  const std::optional<EvaluatedTerm>& getVariable(size_t columnIndex,
-                                                  size_t rowInBatch) const {
-    return variablesByColumn_.at(columnIndex).at(rowInBatch);
-  }
-};
 
 }  // namespace qlever::constructExport
 

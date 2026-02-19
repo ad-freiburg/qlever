@@ -9,14 +9,35 @@
 #ifndef QLEVER_SRC_ENGINE_CONSTRUCTBATCHEVALUATOR_H
 #define QLEVER_SRC_ENGINE_CONSTRUCTBATCHEVALUATOR_H
 
+#include <util/HashMap.h>
 #include <util/LruCacheWithStatistics.h>
 
+#include <optional>
 #include <vector>
 
 #include "engine/ConstructTypes.h"
 #include "engine/idTable/IdTable.h"
 
 namespace qlever::constructExport {
+
+// Evaluated values of one variable across all rows in a batch. The element at
+// index `i` corresponds to the value of the evaluated variable for row `i` of
+// the batch (0-based relative to `BatchEvaluationContext::firstRow_`). An
+// element is `std::nullopt` if the variable was unbound for that row.
+using EvaluatedVariableValues = std::vector<std::optional<EvaluatedTerm>>;
+
+// Result of batch-evaluating all variables for a batch of rows. Stores the
+// evaluated values per variable column and the number of rows in the batch.
+struct BatchEvaluationResult {
+  // Map from `IdTable` column index to evaluated values for each row in batch.
+  ::ad_utility::HashMap<size_t, EvaluatedVariableValues> variablesByColumn_;
+  size_t numRows_ = 0;
+
+  const std::optional<EvaluatedTerm>& getVariable(size_t columnIndex,
+                                                  size_t rowInBatch) const {
+    return variablesByColumn_.at(columnIndex).at(rowInBatch);
+  }
+};
 
 using IdCache =
     ad_utility::util::LRUCacheWithStatistics<Id, std::optional<EvaluatedTerm>>;
@@ -52,10 +73,7 @@ class ConstructBatchEvaluator {
 
  private:
   // Evaluate a single variable (identified by its `IdTable` column index)
-  // across all rows in the batch. Returns an `EvaluatedVariableValues` vector
-  // where element i is the resolved string for the specified variable for batch
-  // row i. On a cache miss, `ConstructQueryEvaluator::evaluateId` is called and
-  // the result is cached.
+  // across all rows in the batch.
   static EvaluatedVariableValues evaluateVariableByColumn(
       size_t idTableColumnIdx, const BatchEvaluationContext& evaluationContext,
       const LocalVocab& localVocab, const Index& index, IdCache& idCache);
