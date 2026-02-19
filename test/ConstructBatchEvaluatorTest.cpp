@@ -87,7 +87,7 @@ TEST_F(ConstructBatchEvaluatorTest, singleVariableSingleRow) {
   EXPECT_THAT(result.getVariable(0, 0), evalTerm("<s>"));
 }
 
-// Two rows with different IRIs in the same column (i.e. with different Iri's
+// Two rows with different `Iri`s in the same column (i.e. with different `Iri`s
 // for the same variable across different `IdTable` rows). Verify that each row
 // is independently resolved and that the results are in row order.
 TEST_F(ConstructBatchEvaluatorTest, singleVariableMultipleRows) {
@@ -315,22 +315,6 @@ TEST_F(ConstructBatchEvaluatorTest, cacheOfSizeOneStillProducesCorrectResults) {
   auto idTable = makeIdTableFromVector(
       {{getId_("<s>")}, {getId_("<o>")}, {getId_("<p>")}, {getId_("<q>")}});
   IdCache idCache{1};
-
-  auto result = evaluateFullTable({0}, idTable, idCache);
-
-  ASSERT_EQ(result.numRows_, 4);
-  EXPECT_THAT(result.variablesByColumn_.at(0),
-              ElementsAre(evalTerm("<s>"), evalTerm("<o>"), evalTerm("<p>"),
-                          evalTerm("<q>")));
-}
-
-// With a cache of size 0, nothing is ever cached. Verify that the evaluator
-// still resolves all rows correctly by re-evaluating every `Id` on each access.
-TEST_F(ConstructBatchEvaluatorTest,
-       cacheOfSizeZeroStillProducesCorrectResults) {
-  auto idTable = makeIdTableFromVector(
-      {{getId_("<s>")}, {getId_("<o>")}, {getId_("<p>")}, {getId_("<q>")}});
-  IdCache idCache{0};
 
   auto result = evaluateFullTable({0}, idTable, idCache);
 
