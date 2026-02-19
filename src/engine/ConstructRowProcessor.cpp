@@ -49,6 +49,7 @@ void ConstructRowProcessor::loadBatchIfNeeded() {
   BatchEvaluationContext batchContext{
       tableWithVocab_.idTable(), tableWithVocab_.localVocab(),
       rowIndicesVec_[batchStart_], rowIndicesVec_[batchEnd - 1] + 1};
+
   batchEvaluationResult_ = ConstructBatchEvaluator::evaluateBatch(
       preprocessedTemplate_.uniqueVariableColumns_, batchContext, index_.get(),
       *idCache_);
