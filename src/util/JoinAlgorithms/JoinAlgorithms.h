@@ -1375,7 +1375,17 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
       addCartesianProduct(leftSide_.currentBlocks_, rightSide_.undefBlocks_);
       consumeRemainingBlocks<false>(leftSide_, rightSide_.undefBlocks_);
 
-      addCartesianProduct(leftSide_.undefBlocks_, rightSide_.currentBlocks_);
+      // Basically `addCartesianProduct`, but the order is reversed.
+      for (const auto& rBlock : rightSide_.currentBlocks_) {
+        for (const auto& lBlock : leftSide_.undefBlocks_) {
+          compatibleRowAction_.setInput(lBlock.fullBlock(), rBlock.fullBlock());
+          for (size_t j : rBlock.getIndexRange()) {
+            for (size_t i : lBlock.getIndexRange()) {
+              compatibleRowAction_.addRow(i, j);
+            }
+          }
+        }
+      }
       consumeRemainingBlocks<true>(rightSide_, leftSide_.undefBlocks_);
 
       compatibleRowAction_.flush();
