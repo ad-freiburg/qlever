@@ -23,100 +23,46 @@ ConstructRowProcessor::ConstructRowProcessor(
 
 // _____________________________________________________________________________
 std::optional<EvaluatedTriple> ConstructRowProcessor::get() {
-  while (batchStart_ < rowIndicesVec_.size()) {
-    cancellationHandle_->throwIfCancelled();
-
-    loadBatchIfNeeded();
-
-    if (auto result = processCurrentBatch()) {
-      return result;
+  while (true) {
+    if (tripleIdx_ < currentBatchTriples_.size()) {
+      return std::move(currentBatchTriples_[tripleIdx_++]);
     }
-
-    advanceToNextBatch();
+    if (batchStart_ >= rowIndicesVec_.size()) return std::nullopt;
+    cancellationHandle_->throwIfCancelled();
+    currentBatchTriples_ = computeBatch();
+    batchStart_ += batchSize_;
+    tripleIdx_ = 0;
   }
-
-  return std::nullopt;
 }
 
 // _____________________________________________________________________________
-void ConstructRowProcessor::loadBatchIfNeeded() {
-  if (batchEvaluationResult_.has_value()) {
-    return;
-  }
+std::vector<EvaluatedTriple> ConstructRowProcessor::computeBatch() {
   const size_t batchEnd =
       std::min(batchStart_ + batchSize_, rowIndicesVec_.size());
-
   BatchEvaluationContext batchContext{
       tableWithVocab_.idTable(), tableWithVocab_.localVocab(),
       rowIndicesVec_[batchStart_], rowIndicesVec_[batchEnd - 1] + 1};
-
-  batchEvaluationResult_ = ConstructBatchEvaluator::evaluateBatch(
+  auto batchResult = ConstructBatchEvaluator::evaluateBatch(
       preprocessedTemplate_.uniqueVariableColumns_, batchContext, index_.get(),
       *idCache_);
 
-  rowInBatchIdx_ = 0;
-  tripleIdx_ = 0;
-}
-
-// _____________________________________________________________________________
-// TODO<ms2144>: comment from code review: "This gets much simpler,
-// if you synchronously create a batch (as a vector of instantiated triple etc.)
-// and then on the outside somewhere sprinkle in a views::join . The callback
-// hell on the level of rows is unnecessary. Then we can see, how we can get
-// the interface even nicer." I dont really get it. Think about what that means
-// and try to implement it.
-std::optional<EvaluatedTriple> ConstructRowProcessor::processCurrentBatch() {
-  while (rowInBatchIdx_ < batchEvaluationResult_->numRows_) {
-    if (auto result = processCurrentRow()) {
-      return result;
+  std::vector<EvaluatedTriple> triples;
+  for (size_t rowInBatch = 0; rowInBatch < batchResult.numRows_; ++rowInBatch) {
+    const size_t blankNodeRowId =
+        currentRowOffset_ + rowIndicesVec_[batchStart_ + rowInBatch];
+    for (const auto& triple : preprocessedTemplate_.preprocessedTriples_) {
+      auto subject = ConstructTripleInstantiator::instantiateTerm(
+          triple[0], batchResult, rowInBatch, blankNodeRowId);
+      auto predicate = ConstructTripleInstantiator::instantiateTerm(
+          triple[1], batchResult, rowInBatch, blankNodeRowId);
+      auto object = ConstructTripleInstantiator::instantiateTerm(
+          triple[2], batchResult, rowInBatch, blankNodeRowId);
+      if (subject && predicate && object) {
+        triples.push_back(InstantiatedTriple{*subject, *predicate, *object});
+      }
     }
-    advanceToNextRow();
   }
-  return std::nullopt;
-}
-
-// _____________________________________________________________________________
-std::optional<EvaluatedTriple> ConstructRowProcessor::processCurrentRow() {
-  const size_t blankNodeRowId = currentBlankNodeRowId();
-
-  while (tripleIdx_ < preprocessedTemplate_.preprocessedTriples_.size()) {
-    const auto& triple = preprocessedTemplate_.preprocessedTriples_[tripleIdx_];
-
-    auto subject = ConstructTripleInstantiator::instantiateTerm(
-        triple[0], *batchEvaluationResult_, rowInBatchIdx_, blankNodeRowId);
-    auto predicate = ConstructTripleInstantiator::instantiateTerm(
-        triple[1], *batchEvaluationResult_, rowInBatchIdx_, blankNodeRowId);
-    auto object = ConstructTripleInstantiator::instantiateTerm(
-        triple[2], *batchEvaluationResult_, rowInBatchIdx_, blankNodeRowId);
-
-    ++tripleIdx_;
-
-    // Skip triples where any term is undefined.
-    if (!subject.has_value() || !predicate.has_value() || !object.has_value()) {
-      continue;
-    }
-
-    return InstantiatedTriple{*subject, *predicate, *object};
-  }
-
-  return std::nullopt;
-}
-
-// _____________________________________________________________________________
-void ConstructRowProcessor::advanceToNextRow() {
-  ++rowInBatchIdx_;
-  tripleIdx_ = 0;
-}
-
-// _____________________________________________________________________________
-void ConstructRowProcessor::advanceToNextBatch() {
-  batchStart_ += batchSize_;
-  batchEvaluationResult_.reset();
-}
-
-// _____________________________________________________________________________
-size_t ConstructRowProcessor::currentBlankNodeRowId() const {
-  return currentRowOffset_ + rowIndicesVec_[batchStart_ + rowInBatchIdx_];
+  return triples;
 }
 
 // _____________________________________________________________________________

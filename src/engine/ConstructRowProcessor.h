@@ -20,8 +20,19 @@
 
 namespace qlever::constructExport {
 
-// Processes the rows of the result table (`IdTable`) in batches using
-// `ConstructBatchEvaluator` and yields `EvaluatedTriple` objects.
+// A stateful iterator that yields one `EvaluatedTriple` at a time via `get()`,
+// consuming one result-table row range (`TableWithRange`) given at
+// construction.
+//
+// Internally, rows are processed in batches: `ConstructBatchEvaluator`
+// evaluates all variables in the batch at once (with LRU caching across
+// batches), and `ConstructTripleInstantiator` then instantiates each
+// preprocessed template triple for each row. Triples where any term is
+// undefined (unbound variable) are silently skipped.
+//
+// The iteration state is two-dimensional: `batchStart_` tracks which batch is
+// current, and `tripleIdx_` indexes into `currentBatchTriples_`, the
+// materialised result of the current batch.
 class ConstructRowProcessor : public ad_utility::InputRangeFromGet<
                                   qlever::constructExport::EvaluatedTriple> {
  public:
@@ -54,14 +65,10 @@ class ConstructRowProcessor : public ad_utility::InputRangeFromGet<
 
  private:
   std::shared_ptr<IdCache> createIdCache() const;
-  void loadBatchIfNeeded();
-  std::optional<InstantiatedTriple> processCurrentBatch();
-  std::optional<InstantiatedTriple> processCurrentRow();
-  void advanceToNextRow();
-  void advanceToNextBatch();
 
-  // Compute the blank node row id for the current row.
-  size_t currentBlankNodeRowId() const;
+  // Evaluate all variables for the current batch and instantiate all template
+  // triples for every row. Triples with any undefined term are omitted.
+  std::vector<EvaluatedTriple> computeBatch();
 
   const PreprocessedConstructTemplate& preprocessedTemplate_;
   std::reference_wrapper<const Index> index_;
@@ -69,9 +76,6 @@ class ConstructRowProcessor : public ad_utility::InputRangeFromGet<
 
   // Table data.
   TableConstRefWithVocab tableWithVocab_;
-  // TODO<ms2144>: comment from code review: "why do we use a vector here,
-  // aren't the row indices contiguous? Just use 2 ints, lower and upper bound"
-  // Resolve this comment.
   std::vector<uint64_t> rowIndicesVec_;
   size_t currentRowOffset_;
 
@@ -81,9 +85,8 @@ class ConstructRowProcessor : public ad_utility::InputRangeFromGet<
   // Iteration state.
   size_t batchSize_ = ConstructRowProcessor::getBatchSize();
   size_t batchStart_ = 0;
-  size_t rowInBatchIdx_ = 0;
   size_t tripleIdx_ = 0;
-  std::optional<BatchEvaluationResult> batchEvaluationResult_;
+  std::vector<EvaluatedTriple> currentBatchTriples_;
 };
 
 }  // namespace qlever::constructExport
