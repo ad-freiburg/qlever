@@ -39,6 +39,21 @@ class ConstructTemplatePreprocessor {
   static std::optional<PreprocessedTerm> preprocessTerm(
       const GraphTerm& term, PositionInTriple role,
       const VariableToColumnMap& variableColumns);
+
+ private:
+  static std::optional<PreprocessedTerm> preprocessIri(const Iri& iri);
+  static std::optional<PreprocessedTerm> preprocessLiteral(
+      const Literal& literal, PositionInTriple role);
+  static std::optional<PreprocessedTerm> preprocessVariable(
+      const Variable& variable, const VariableToColumnMap& variableColumns);
+  static std::optional<PreprocessedTerm> preprocessBlankNode(
+      const BlankNode& blankNode);
+
+  // Preprocess all three terms of a single template triple. Returns
+  // `std::nullopt` if any term fails to preprocess (e.g. an unbound variable).
+  static std::optional<PreprocessedTriple> preprocessTriple(
+      const std::array<GraphTerm, NUM_TRIPLE_POSITIONS>& triple,
+      const VariableToColumnMap& variableColumns);
 };
 
 }  // namespace qlever::constructExport

@@ -24,7 +24,8 @@ struct LRUCacheStats {
 
   double hitRate() const {
     auto total = totalLookups();
-    return total == 0 ? 0.0 : static_cast<double>(hits_) / total;
+    return total == 0 ? 0.0
+                      : static_cast<double>(hits_) / static_cast<double>(total);
   }
 };
 

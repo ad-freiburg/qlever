@@ -45,7 +45,7 @@ auto ConstructTripleGenerator::generateStringTriplesForResultTable(
     // Apply the transformer from above and filter out invalid evaluations
     // (which are returned as empty `StringTriples` from
     // `evaluateConstructTripleForRowFromWhereClause`).
-    return preprocessedTemplateTriples |
+    return preprocessedTemplateTriples_ |
            ql::views::transform(evaluateConstructTripleForRowFromWhereClause) |
            ql::views::filter(std::not_fn(&StringTriple::isEmpty));
   };

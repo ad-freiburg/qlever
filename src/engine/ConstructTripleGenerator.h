@@ -37,7 +37,7 @@ class ConstructTripleGenerator {
       std::shared_ptr<const Result> result,
       const VariableToColumnMap& variableColumns, const Index& index,
       CancellationHandle cancellationHandle)
-      : preprocessedTemplateTriples(
+      : preprocessedTemplateTriples_(
             std::move(preprocessedTemplateTriples.preprocessedTriples_)),
         result_(std::move(result)),
         variableColumns_(variableColumns),
@@ -68,14 +68,13 @@ class ConstructTripleGenerator {
       CancellationHandle cancellationHandle);
 
  private:
-  // triple templates contained in the graph template
-  // (the CONSTRUCT-clause of the CONSTRUCt-query) of the CONSTRUCT-query.
-  std::vector<PreprocessedTriple> preprocessedTemplateTriples;
+  // triple templates contained in the graph template of the CONSTRUCT-query.
+  std::vector<PreprocessedTriple> preprocessedTemplateTriples_;
   // wrapper around the result-table obtained from processing the
   // WHERE-clause of the CONSTRUCT-query.
   std::shared_ptr<const Result> result_;
   // map from Variables to the column idx of the `IdTable` (needed for fetching
-  // the value of a Variable for a specific row of the `IdTable`).
+  // the value of a `Variable` for a specific row of the `IdTable`).
   std::reference_wrapper<const VariableToColumnMap> variableColumns_;
   std::reference_wrapper<const Index> index_;
   CancellationHandle cancellationHandle_;
