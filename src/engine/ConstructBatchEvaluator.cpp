@@ -14,14 +14,13 @@ namespace qlever::constructExport {
 
 // _____________________________________________________________________________
 BatchEvaluationResult ConstructBatchEvaluator::evaluateBatch(
-    const std::vector<size_t>& uniqueVariableColumns,
+    const std::vector<size_t>& variableColumnIndices,
     const BatchEvaluationContext& evaluationContext,
     const LocalVocab& localVocab, const Index& index, IdCache& idCache) {
   BatchEvaluationResult batchResult;
   batchResult.numRows_ = evaluationContext.numRows();
 
-  // Evaluate each unique variable across all batch rows.
-  for (size_t variableColumnIdx : uniqueVariableColumns) {
+  for (size_t variableColumnIdx : variableColumnIndices) {
     batchResult.variablesByColumn_[variableColumnIdx] =
         evaluateVariableByColumn(variableColumnIdx, evaluationContext,
                                  localVocab, index, idCache);

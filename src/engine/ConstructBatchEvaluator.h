@@ -63,11 +63,13 @@ struct BatchEvaluationContext {
 // same `Id` across rows and batches.
 class ConstructBatchEvaluator {
  public:
-  // Evaluate all `uniqueVariableColumns` for the rows in `evaluationContext`.
-  // Results are indexed by column and then by row-within-batch (0-based
-  // relative to `firstRow_`).
+  // Evaluates the variables identified by `variableColumnIndices` for all rows
+  // in `evaluationContext`. Each entry in `variableColumnIndices` is an
+  // `IdTable` column index representing a variable in the CONSTRUCT template.
+  // The result maps each column index to an `EvaluatedVariableValues` vector
+  // (the vector has one entry per batch row, 0-based relative to `firstRow_`).
   static BatchEvaluationResult evaluateBatch(
-      const std::vector<size_t>& uniqueVariableColumns,
+      const std::vector<size_t>& variableColumnIndices,
       const BatchEvaluationContext& evaluationContext,
       const LocalVocab& localVocab, const Index& index, IdCache& idCache);
 
