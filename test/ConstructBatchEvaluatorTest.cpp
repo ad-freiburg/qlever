@@ -12,15 +12,13 @@
 #include "./util/IndexTestHelpers.h"
 #include "engine/ConstructBatchEvaluator.h"
 
+namespace {
 using namespace qlever::constructExport;
 using ::testing::Each;
 using ::testing::ElementsAre;
 using ::testing::Eq;
 using ::testing::Optional;
 using ::testing::Pointee;
-
-namespace {
-using namespace qlever::constructExport;
 
 // Matcher for `std::optional<std::shared_ptr<const std::string>>`:
 // asserts the optional is non-empty and the pointed-to string equals
