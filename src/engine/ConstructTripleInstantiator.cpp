@@ -14,6 +14,10 @@
 
 using namespace qlever::constructExport;
 
+// TODO<ms2144>: think about whether we can cache the escaped/formatted
+// form directly (alywyas, the same export format is used for the same result).
+// I don't really undserstand the comment above, think about what it means.
+
 // _____________________________________________________________________________
 std::optional<EvaluatedTerm> ConstructTripleInstantiator::instantiateTerm(
     const PreprocessedTerm& term, const BatchEvaluationResult& batchResult,
