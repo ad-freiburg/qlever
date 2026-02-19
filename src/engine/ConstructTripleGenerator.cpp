@@ -93,6 +93,11 @@ ConstructTripleGenerator::generateStringTriples(
     const LimitOffsetClause& limitAndOffset,
     std::shared_ptr<const Result> result, uint64_t& resultSize,
     CancellationHandle cancellationHandle) {
+  // The `resultSizeMultiplicator`(last argument of `getRowIndices`) is
+  // explained by the following: For each result from the WHERE clause, we
+  // produce up to `constructTriples.size()` triples. We do not account for
+  // triples that are filtered out because one of the components is UNDEF (it
+  // would require materializing the whole result).
   auto rowIndices = ExportQueryExecutionTrees::getRowIndices(
       limitAndOffset, *result, resultSize, constructTriples.size());
 
