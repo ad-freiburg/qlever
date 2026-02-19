@@ -20,8 +20,8 @@
 
 namespace qlever::constructExport {
 
-// Processes the rows of the result table and yields `EvaluatedTriple`
-// objects. This is done in batches of rows of the result table.
+// Processes the rows of the result table (`IdTable`) in batches using
+// `ConstructBatchEvaluator` and yields `EvaluatedTriple` objects.
 class ConstructRowProcessor : public ad_utility::InputRangeFromGet<
                                   qlever::constructExport::EvaluatedTriple> {
  public:
