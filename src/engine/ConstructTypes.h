@@ -63,12 +63,15 @@ struct PreprocessedConstructTemplate {
 // Result of evaluating a term.
 using EvaluatedTerm = std::shared_ptr<const std::string>;
 
+// Evaluated values of one variable across all rows in a batch. The element at
+// index `i` corresponds to the value of the evaluated variable for row `i` of
+// the batch (0-based relative to `BatchEvaluationContext::firstRow_`).
+using EvaluatedVariableValues = std::vector<std::optional<EvaluatedTerm>>;
+
 // Result of batch-evaluating variables for a batch of rows.
 struct BatchEvaluationResult {
   // Map from `IdTable` column index to evaluated values for each row in batch.
-  // Entries are `std::nullopt` if the variable evaluation failed for that row.
-  ::ad_utility::HashMap<size_t, std::vector<std::optional<EvaluatedTerm>>>
-      variablesByColumn_;
+  ::ad_utility::HashMap<size_t, EvaluatedVariableValues> variablesByColumn_;
   size_t numRows_ = 0;
 
   const std::optional<EvaluatedTerm>& getVariable(size_t columnIndex,

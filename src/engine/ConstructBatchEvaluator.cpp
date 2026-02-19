@@ -31,12 +31,10 @@ BatchEvaluationResult ConstructBatchEvaluator::evaluateBatch(
 }
 
 // _____________________________________________________________________________
-std::vector<std::optional<EvaluatedTerm>>
-ConstructBatchEvaluator::evaluateVariableByColumn(
+EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
     size_t idTableColumnIdx, const BatchEvaluationContext& evaluationContext,
     const LocalVocab& localVocab, const Index& index, IdCache& idCache) {
-  std::vector<std::optional<EvaluatedTerm>> columnResults(
-      evaluationContext.numRows());
+  EvaluatedVariableValues columnResults(evaluationContext.numRows());
 
   for (size_t rowInBatch = 0; rowInBatch < evaluationContext.numRows();
        ++rowInBatch) {
