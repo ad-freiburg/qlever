@@ -13,6 +13,41 @@
 #include "util/TypeTraits.h"
 
 namespace qlever::constructExport {
+
+// _____________________________________________________________________________
+std::optional<PreprocessedTerm> ConstructTemplatePreprocessor::preprocessIri(
+    const Iri& iri) {
+  return PrecomputedConstant{ConstructQueryEvaluator::evaluate(iri)};
+}
+
+// _____________________________________________________________________________
+std::optional<PreprocessedTerm>
+ConstructTemplatePreprocessor::preprocessLiteral(const Literal& literal,
+                                                 PositionInTriple role) {
+  auto opt = ConstructQueryEvaluator::evaluate(literal, role);
+  if (opt) {
+    return PrecomputedConstant(std::move(*opt));
+  }
+  return std::nullopt;
+}
+
+// _____________________________________________________________________________
+std::optional<PreprocessedTerm>
+ConstructTemplatePreprocessor::preprocessVariable(
+    const Variable& variable, const VariableToColumnMap& variableColumns) {
+  if (auto opt = ad_utility::findOptional(variableColumns, variable)) {
+    return PrecomputedVariable{opt->columnIndex_};
+  }
+  return std::nullopt;
+}
+
+// _____________________________________________________________________________
+std::optional<PreprocessedTerm>
+ConstructTemplatePreprocessor::preprocessBlankNode(const BlankNode& blankNode) {
+  return PrecomputedBlankNode{blankNode.isGenerated() ? "_:g" : "_:u",
+                              absl::StrCat("_", blankNode.label())};
+}
+
 // _____________________________________________________________________________
 std::optional<PreprocessedTerm> ConstructTemplatePreprocessor::preprocessTerm(
     const GraphTerm& term, PositionInTriple role,
@@ -21,28 +56,14 @@ std::optional<PreprocessedTerm> ConstructTemplatePreprocessor::preprocessTerm(
       [&role,
        &variableColumns](const auto& t) -> std::optional<PreprocessedTerm> {
         using T = std::decay_t<decltype(t)>;
-
         if constexpr (std::is_same_v<T, Iri>) {
-          return PrecomputedConstant{ConstructQueryEvaluator::evaluate(t)};
-
+          return preprocessIri(t);
         } else if constexpr (std::is_same_v<T, Literal>) {
-          auto opt = ConstructQueryEvaluator::evaluate(t, role);
-          if (opt) {
-            return PrecomputedConstant(std::move(*opt));
-          }
-          return std::nullopt;
-
+          return preprocessLiteral(t, role);
         } else if constexpr (std::is_same_v<T, Variable>) {
-          if (auto opt = ad_utility::findOptional(variableColumns, t)) {
-            size_t columnIndex = opt->columnIndex_;
-            return PrecomputedVariable{columnIndex};
-          }
-          return std::nullopt;
-
+          return preprocessVariable(t, variableColumns);
         } else if constexpr (std::is_same_v<T, BlankNode>) {
-          return PrecomputedBlankNode{t.isGenerated() ? "_:g" : "_:u",
-                                      absl::StrCat("_", t.label())};
-
+          return preprocessBlankNode(t);
         } else {
           static_assert(ad_utility::alwaysFalse<T>);
         }
