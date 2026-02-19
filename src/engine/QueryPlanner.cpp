@@ -1394,7 +1394,11 @@ void QueryPlanner::applyFiltersIfPossible(
   // in one go. Changing `row` inside the loop would invalidate the iterators.
   std::vector<SubtreePlan> addedPlans;
   for (auto& plan : row) {
-    bool filteredPlanPushed = false;
+    // If `mode == FilterMode::KeepUnfiltered`, we still want to stack filters
+    // on top of each other, but we don't want to modify the original plan.
+    // So we store which plan in `addedPlans` contains the filters that we have
+    // applied so far and stack new filters on top of that.
+    std::optional<size_t> filteredPlanIndex = std::nullopt;
     for (const auto& [i, filterAndSubst] :
          ::ranges::views::enumerate(filters)) {
       checkCancellation();
@@ -1432,13 +1436,12 @@ void QueryPlanner::applyFiltersIfPossible(
               [&plan](const auto& variable) {
                 return plan._qet->isVariableCovered(*variable);
               })) {
-        AD_CORRECTNESS_CHECK(!filteredPlanPushed || !addedPlans.empty());
-        bool accumulateFilters = mode == FilterMode::KeepUnfiltered &&
-                                 filteredPlanPushed &&
-                                 !addedPlans.back().containsFilterSubstitute_;
         // Apply this filter regularly.
         SubtreePlan newPlan = makeSubtreePlan<Filter>(
-            _qec, accumulateFilters ? addedPlans.back()._qet : plan._qet,
+            _qec,
+            filteredPlanIndex.has_value()
+                ? addedPlans.at(filteredPlanIndex.value())._qet
+                : plan._qet,
             filterAndSubst.filter_.expression_);
         mergeSubtreePlanIds(newPlan, newPlan, plan);
         newPlan._idsOfIncludedFilters |= (size_t(1) << i);
@@ -1446,11 +1449,11 @@ void QueryPlanner::applyFiltersIfPossible(
         if constexpr (mode != FilterMode::KeepUnfiltered) {
           plan = std::move(newPlan);
         } else {
-          if (accumulateFilters) {
-            addedPlans.back() = std::move(newPlan);
+          if (filteredPlanIndex.has_value()) {
+            addedPlans.at(filteredPlanIndex.value()) = std::move(newPlan);
           } else {
+            filteredPlanIndex = addedPlans.size();
             addedPlans.push_back(std::move(newPlan));
-            filteredPlanPushed = true;
           }
         }
       }
