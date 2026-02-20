@@ -3962,3 +3962,45 @@ GROUP BY ?p
 )",
             h::_);
 }
+
+// Regression test for https://github.com/ad-freiburg/qlever/issues/2667
+// This query would previously consume huge amounts of memory and time out.
+TEST(QueryPlanner, RegressionTest2667) {
+  auto query = R"(
+PREFIX dct: <http://purl.org/dc/terms/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX wikibase: <http://wikiba.se/ontology#>
+PREFIX schema: <http://schema.org/>
+PREFIX wd: <http://www.wikidata.org/entity/>
+PREFIX wdt: <http://www.wikidata.org/prop/direct/>
+SELECT ?lexeme ?item ?lemma ?desc ?cat ?genus WHERE {
+  ?lexeme dct:language wd:Q9035 .
+  ?lexeme wikibase:lemma ?lemma .
+  ?item rdfs:label ?lemma .
+  ?item schema:description ?desc .
+  FILTER(LANG(?desc) = LANG(?lemma))
+  ?lexeme wikibase:lexicalCategory ?cat .
+  OPTIONAL { ?lexeme wdt:P5185 ?genus }
+  FILTER NOT EXISTS { ?item a wikibase:Property }
+  FILTER NOT EXISTS { ?item wdt:P131 [] }
+  FILTER NOT EXISTS { ?lexeme wdt:P5402 [] }
+  FILTER NOT EXISTS { ?item wdt:P31/wdt:P279* wd:Q494452 }
+  FILTER NOT EXISTS { ?item wdt:P279* wd:Q494452 }
+  FILTER NOT EXISTS { ?item wdt:P31/wdt:P279* wd:Q1406161 }
+  FILTER NOT EXISTS { ?item wdt:P361 wd:Q18336 }
+  FILTER NOT EXISTS { ?item wdt:P31/wdt:P279* wd:Q11446 }
+  FILTER NOT EXISTS { ?item wdt:P31/wdt:P279* wd:Q452237 }
+  FILTER NOT EXISTS { ?item wdt:P31/wdt:P279* wd:Q7302866 }
+  FILTER NOT EXISTS { ?item wdt:P31/wdt:P279* wd:Q14897293 }
+  FILTER NOT EXISTS { ?item wdt:P31/wdt:P279* wd:Q23010327 }
+  FILTER NOT EXISTS { ?item wdt:P136 [] }
+  FILTER NOT EXISTS { ?item wdt:P31/wdt:P279* wd:Q4167410 }
+  FILTER NOT EXISTS { ?item wdt:P31/wdt:P279* wd:Q17537576 }
+  FILTER NOT EXISTS { ?item wdt:P31/wdt:P279* wd:Q35872 }
+  FILTER NOT EXISTS { ?item a wikibase:Property }
+  FILTER NOT EXISTS { ?item wdt:P1269 wd:Q14659 }
+  FILTER NOT EXISTS { ?item wdt:P1269 wd:Q18336 }
+}
+)";
+  h::expect(query, ::testing::_);
+}
