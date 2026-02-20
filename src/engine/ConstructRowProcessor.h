@@ -25,19 +25,13 @@ namespace qlever::constructExport {
 
 // A stateful iterator over the CONSTRUCT results for a single `TableWithRange`
 // given at construction. For each result row from the WHERE clause, every
-// template triple in the CONSTRUCT clause is instantiated — producing up to
-// `numRows x numTemplateTriples` output triples. Triples with any undefined
-// term are silently skipped. The iterator yields one `EvaluatedTriple` at a
-// time via `get()`.
+// template triple in the CONSTRUCT clause is instantiated. The iterator yields
+// one `EvaluatedTriple` at a time via `get()`.
 //
 // Internally, rows are processed in batches: `ConstructBatchEvaluator`
 // evaluates all variables in the batch at once (with LRU caching across
 // batches), and `ConstructTripleInstantiator` then instantiates each
 // preprocessed template triple for each row.
-//
-// The iteration state is two-dimensional: `batchStart_` tracks which batch is
-// current, and `tripleIdx_` indexes into `currentBatchTriples_`, the
-// materialised result of the current batch.
 class ConstructRowProcessor : public ad_utility::InputRangeFromGet<
                                   qlever::constructExport::EvaluatedTriple> {
  public:
