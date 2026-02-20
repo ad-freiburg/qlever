@@ -219,8 +219,8 @@ QueryExecutionTree::makeTreeWithStrippedColumns(
   // correctly.
   resultTree->getRootOperation()->limitOffset_ =
       rootOperation->getLimitOffset();
-  resultTree->cacheKey_ = rootOperation->getCacheKey();
-  resultTree->sizeEstimate_ = rootOperation->getSizeEstimate();
+  resultTree->cacheKey_ = resultTree->getRootOperation()->getCacheKey();
+  resultTree->sizeEstimate_ = resultTree->getRootOperation()->getSizeEstimate();
   // Only store stripped variables if `hideStrippedColumns` is `False`
   if (hideStrippedColumns == HideStrippedColumns::False) {
     // Calculate the variables that will be stripped (present in the input, but
