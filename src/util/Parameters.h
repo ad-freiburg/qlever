@@ -8,6 +8,8 @@
 #define QLEVER_SRC_UTIL_PARAMETERS_H
 
 #include <optional>
+#include <sstream>
+#include <vector>
 
 #include "backports/concepts.h"
 #include "util/HashMap.h"
@@ -199,6 +201,29 @@ struct MemorySizeFromString {
   }
 };
 
+// To/from string for `vector<string>` (space-separated).
+struct VectorOfStringsToString {
+  std::string operator()(const std::vector<std::string>& v) const {
+    std::string result;
+    for (size_t i = 0; i < v.size(); ++i) {
+      if (i > 0) result += ' ';
+      result += v[i];
+    }
+    return result;
+  }
+};
+struct VectorOfStringsFromString {
+  std::vector<std::string> operator()(const std::string& s) const {
+    std::vector<std::string> result;
+    std::istringstream stream(s);
+    std::string token;
+    while (stream >> token) {
+      result.push_back(std::move(token));
+    }
+    return result;
+  }
+};
+
 }  // namespace detail::parameterSerializers
 
 namespace detail::parameterShortNames {
@@ -221,6 +246,9 @@ template <typename DurationType>
 using DurationParameter = Parameter<ParseableDuration<DurationType>,
                                     n::durationFromString<DurationType>,
                                     n::durationToString<DurationType>>;
+using VectorOfStrings =
+    Parameter<std::vector<std::string>, n::VectorOfStringsFromString,
+              n::VectorOfStringsToString>;
 }  // namespace detail::parameterShortNames
 }  // namespace ad_utility
 

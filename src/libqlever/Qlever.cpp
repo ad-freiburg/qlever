@@ -33,6 +33,12 @@ Qlever::Qlever(const EngineConfig& config)
         cache_.setMaxSizeSingleEntry(newValue);
       });
 
+  // Set the SERVICE URL whitelist from the config.
+  if (!config.serviceAllowedUrlPrefixes_.empty()) {
+    setRuntimeParameter<&RuntimeParameters::serviceAllowedUrlPrefixes_>(
+        config.serviceAllowedUrlPrefixes_);
+  }
+
   // Load the index from disk.
   index_.usePatterns() = enablePatternTrick_;
   index_.loadAllPermutations() = !config.onlyPsoAndPos_;

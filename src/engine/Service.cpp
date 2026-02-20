@@ -143,6 +143,26 @@ Result Service::computeResultImpl(bool requestLaziness) {
   if (getRuntimeParameter<&RuntimeParameters::syntaxTestMode_>()) {
     return makeNeutralElementResultForSilentFail();
   }
+
+  // Check that the service URL is allowed by the whitelist. If the whitelist
+  // is empty (the default), all URLs are allowed.
+  auto allowedPrefixes =
+      getRuntimeParameter<&RuntimeParameters::serviceAllowedUrlPrefixes_>();
+  if (!allowedPrefixes.empty()) {
+    auto iriContent =
+        asStringViewUnsafe(parsedServiceClause_.serviceIri_.getContent());
+    bool allowed = ql::ranges::any_of(allowedPrefixes, [&](const auto& prefix) {
+      return ql::starts_with(iriContent, prefix);
+    });
+    if (!allowed) {
+      throw std::runtime_error(absl::StrCat(
+          "SERVICE request to <", iriContent,
+          "> is not allowed because it does not match any of the allowed URL "
+          "prefixes set via the \"service-allowed-url-prefixes\" "
+          "runtime parameter"));
+    }
+  }
+
   ad_utility::httpUtils::Url serviceUrl{
       asStringViewUnsafe(parsedServiceClause_.serviceIri_.getContent())};
 
