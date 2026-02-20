@@ -9,14 +9,13 @@
 #ifndef QLEVER_SRC_ENGINE_CONSTRUCTBATCHEVALUATOR_H
 #define QLEVER_SRC_ENGINE_CONSTRUCTBATCHEVALUATOR_H
 
-#include <util/HashMap.h>
-#include <util/LruCacheWithStatistics.h>
-
 #include <optional>
 #include <vector>
 
 #include "engine/ConstructTypes.h"
 #include "engine/idTable/IdTable.h"
+#include "util/HashMap.h"
+#include "util/LruCacheWithStatistics.h"
 
 namespace qlever::constructExport {
 
