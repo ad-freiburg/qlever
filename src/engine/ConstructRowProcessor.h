@@ -45,10 +45,6 @@ class ConstructRowProcessor : public ad_utility::InputRangeFromGet<
       ad_utility::util::LRUCacheWithStatistics<Id,
                                                std::optional<EvaluatedTerm>>;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
-  using InstantiatedTriple = qlever::constructExport::EvaluatedTriple;
-  using PreprocessedConstructTemplate =
-      qlever::constructExport::PreprocessedConstructTemplate;
-  using BatchEvaluationResult = qlever::constructExport::BatchEvaluationResult;
 
   // Default batch size for processing rows.
   static constexpr size_t DEFAULT_BATCH_SIZE = 64;
@@ -66,7 +62,7 @@ class ConstructRowProcessor : public ad_utility::InputRangeFromGet<
 
   // Returns the next instantiated triple, or nullopt when exhausted.
   // Incomplete triples (with UNDEF components) are filtered out.
-  std::optional<InstantiatedTriple> get() override;
+  std::optional<EvaluatedTriple> get() override;
 
  private:
   std::shared_ptr<IdCache> createIdCache() const;

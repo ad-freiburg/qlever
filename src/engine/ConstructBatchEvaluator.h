@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "engine/ConstructTypes.h"
+#include "engine/QueryExportTypes.h"
 #include "engine/idTable/IdTable.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
@@ -45,17 +46,16 @@ struct BatchEvaluationResult {
 using IdCache =
     ad_utility::util::LRUCacheWithStatistics<Id, std::optional<EvaluatedTerm>>;
 
-// Identifies a contiguous sub-range of rows of an `IdTable` that forms one
-// batch.
+// The row range [firstRow_, endRow_) of a batch within an `IdTable`. Only
+// the batch-specific bounds are stored here; the table and vocabulary are
+// passed separately as `TableConstRefWithVocab`.
 struct BatchEvaluationContext {
-  const IdTable& idTable_;
   size_t firstRow_;
   size_t endRow_;  // exclusive
 
-  BatchEvaluationContext(const IdTable& idTable, size_t firstRow, size_t endRow)
-      : idTable_(idTable), firstRow_(firstRow), endRow_(endRow) {
+  BatchEvaluationContext(size_t firstRow, size_t endRow)
+      : firstRow_(firstRow), endRow_(endRow) {
     AD_CONTRACT_CHECK(firstRow <= endRow);
-    AD_CONTRACT_CHECK(endRow <= idTable.numRows());
   }
 
   size_t numRows() const { return endRow_ - firstRow_; }
@@ -77,15 +77,16 @@ class ConstructBatchEvaluator {
   // `IdTable` column index representing a variable in the CONSTRUCT template.
   static BatchEvaluationResult evaluateBatch(
       ql::span<const size_t> variableColumnIndices,
-      const BatchEvaluationContext& evaluationContext,
-      const LocalVocab& localVocab, const Index& index, IdCache& idCache);
+      const TableConstRefWithVocab& tableWithVocab,
+      const BatchEvaluationContext& evaluationContext, const Index& index,
+      IdCache& idCache);
 
  private:
   // Evaluate a single variable (identified by its `IdTable` column index)
   // across all rows in the batch.
   static EvaluatedVariableValues evaluateVariableByColumn(
-      size_t idTableColumnIdx, const BatchEvaluationContext& ctx,
-      const LocalVocab& localVocab, const Index& index, IdCache& idCache);
+      size_t idTableColumnIdx, const TableConstRefWithVocab& tableWithVocab,
+      const BatchEvaluationContext& ctx, const Index& index, IdCache& idCache);
 };
 
 }  // namespace qlever::constructExport
