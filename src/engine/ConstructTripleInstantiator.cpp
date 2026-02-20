@@ -52,7 +52,7 @@ std::string ConstructTripleInstantiator::formatTriple(
   // TODO<ms2144>: use a list or sth to check if the format is one of the legal
   // formats in the list etc. Already used it somewhere.
 
-  using ad_utility::MediaType;
+  using enum ad_utility::MediaType;
   static constexpr std::array supportedFormats{turtle, csv, tsv};
   static_assert(ad_utility::contains(supportedFormats, format));
 
