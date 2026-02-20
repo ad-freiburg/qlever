@@ -32,8 +32,7 @@ class Bind : public Operation {
   std::vector<QueryExecutionTree*> getChildren() override;
   size_t getCostEstimate() override;
   bool supportsLimitOffset() const override;
-  void onLimitOffsetChanged(
-      const LimitOffsetClause& limitOffset) const override;
+  void onLimitOffsetChanged(const LimitOffsetClause& limitOffset) override;
 
  private:
   std::unique_ptr<Operation> cloneImpl() const override;

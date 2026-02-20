@@ -90,8 +90,7 @@ string OptionalJoin::getCacheKeyImpl() const {
 }
 
 // _____________________________________________________________________________
-void OptionalJoin::onLimitOffsetChanged(
-    const LimitOffsetClause& limitOffset) const {
+void OptionalJoin::onLimitOffsetChanged(const LimitOffsetClause& limitOffset) {
   if (limitOffset._limit.has_value()) {
     std::optional<uint64_t> safeLimit = std::nullopt;
     auto limit = limitOffset._limit.value();
@@ -105,6 +104,7 @@ void OptionalJoin::onLimitOffsetChanged(
     // side, since the result of the optional join is at least as large as the
     // left side. This can significantly speed up the query if the left side is
     // large and the limit is small.
+    _left = _left->clone();
     _left->applyLimitOffset(LimitOffsetClause{safeLimit});
   }
 }

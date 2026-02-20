@@ -43,7 +43,8 @@ size_t Bind::getCostEstimate() {
 bool Bind::supportsLimitOffset() const { return true; }
 
 // _____________________________________________________________________________
-void Bind::onLimitOffsetChanged(const LimitOffsetClause& limitOffset) const {
+void Bind::onLimitOffsetChanged(const LimitOffsetClause& limitOffset) {
+  _subtree = _subtree->clone();
   _subtree->applyLimitOffset(limitOffset);
 }
 

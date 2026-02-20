@@ -300,7 +300,7 @@ class Operation {
   // This function is called each time `applyLimitOffset` is called. It can be
   // overridden by subclasses to e.g. implement the LIMIT in a more efficient
   // way.
-  virtual void onLimitOffsetChanged(const LimitOffsetClause&) const {}
+  virtual void onLimitOffsetChanged(const LimitOffsetClause&) {}
 
   // This function is called when the operation's result is requested to be
   // cached and pinned to a name.
