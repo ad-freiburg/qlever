@@ -769,3 +769,30 @@ TEST(OptionalJoin, columnOriginatesFromGraphOrUndef) {
   testWithTrees(index3, index2, true, true, true);
   testWithTrees(index3, values1, false, false, true);
 }
+
+// _____________________________________________________________________________
+TEST(Sort, limitOffsetIsPropagated) {
+  auto qec = ad_utility::testing::getQec();
+  auto inputTable = makeIdTableFromVector({{1}, {2}, {3}});
+
+  std::vector<std::optional<Variable>> vars = {Variable{"?x"}};
+  auto subtree1 = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, inputTable.clone(), vars);
+  auto subtree2 = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(inputTable), vars);
+
+  OptionalJoin optionalJoin{qec, subtree1, subtree2};
+  optionalJoin.applyLimitOffset({2, 1});
+
+  EXPECT_EQ(
+      optionalJoin.getChildren().at(0)->getRootOperation()->getLimitOffset(),
+      LimitOffsetClause(3, 0));
+  EXPECT_TRUE(optionalJoin.getChildren()
+                  .at(1)
+                  ->getRootOperation()
+                  ->getLimitOffset()
+                  .isUnconstrained());
+  // We expect that the original subtree is unchanged.
+  EXPECT_TRUE(subtree1->getRootOperation()->getLimitOffset().isUnconstrained());
+  EXPECT_TRUE(subtree2->getRootOperation()->getLimitOffset().isUnconstrained());
+}
