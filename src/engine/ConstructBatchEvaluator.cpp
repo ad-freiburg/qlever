@@ -17,16 +17,16 @@ namespace qlever::constructExport {
 // _____________________________________________________________________________
 BatchEvaluationResult ConstructBatchEvaluator::evaluateBatch(
     ql::span<const size_t> variableColumnIndices,
-    const BatchEvaluationContext& evaluationContext, const Index& index,
-    IdCache& idCache) {
+    const BatchEvaluationContext& evaluationContext,
+    const LocalVocab& localVocab, const Index& index, IdCache& idCache) {
   BatchEvaluationResult batchResult;
   batchResult.numRows_ = evaluationContext.numRows();
 
   for (size_t variableColumnIdx : variableColumnIndices) {
     auto [it, wasNew] = batchResult.variablesByColumn_.emplace(
         variableColumnIdx,
-        evaluateVariableByColumn(variableColumnIdx, evaluationContext, index,
-                                 idCache));
+        evaluateVariableByColumn(variableColumnIdx, evaluationContext,
+                                 localVocab, index, idCache));
     AD_CORRECTNESS_CHECK(wasNew);
   }
 
@@ -36,10 +36,10 @@ BatchEvaluationResult ConstructBatchEvaluator::evaluateBatch(
 // _____________________________________________________________________________
 EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
     size_t idTableColumnIdx, const BatchEvaluationContext& ctx,
-    const Index& index, IdCache& idCache) {
-  auto resolveId = [&index, &ctx](Id id) -> std::optional<EvaluatedTerm> {
-    auto value =
-        ConstructQueryEvaluator::evaluateId(id, index, ctx.localVocab_);
+    const LocalVocab& localVocab, const Index& index, IdCache& idCache) {
+  auto resolveId = [&index,
+                    &localVocab](Id id) -> std::optional<EvaluatedTerm> {
+    auto value = ConstructQueryEvaluator::evaluateId(id, index, localVocab);
     if (value.has_value()) {
       return std::make_shared<const std::string>(std::move(*value));
     }

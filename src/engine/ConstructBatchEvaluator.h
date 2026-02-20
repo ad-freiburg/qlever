@@ -45,21 +45,15 @@ struct BatchEvaluationResult {
 using IdCache =
     ad_utility::util::LRUCacheWithStatistics<Id, std::optional<EvaluatedTerm>>;
 
-// Everything needed to evaluate one batch: the table and vocabulary (constant
-// across all batches for a given query) together with the row range
-// [firstRow_, endRow_) that defines this batch.
+// Identifies a contiguous sub-range of rows of an `IdTable` that forms one
+// batch.
 struct BatchEvaluationContext {
   const IdTable& idTable_;
-  const LocalVocab& localVocab_;
   size_t firstRow_;
   size_t endRow_;  // exclusive
 
-  BatchEvaluationContext(const IdTable& idTable, const LocalVocab& localVocab,
-                         size_t firstRow, size_t endRow)
-      : idTable_(idTable),
-        localVocab_(localVocab),
-        firstRow_(firstRow),
-        endRow_(endRow) {
+  BatchEvaluationContext(const IdTable& idTable, size_t firstRow, size_t endRow)
+      : idTable_(idTable), firstRow_(firstRow), endRow_(endRow) {
     AD_CONTRACT_CHECK(firstRow <= endRow);
     AD_CONTRACT_CHECK(endRow <= idTable.numRows());
   }
@@ -83,15 +77,15 @@ class ConstructBatchEvaluator {
   // `IdTable` column index representing a variable in the CONSTRUCT template.
   static BatchEvaluationResult evaluateBatch(
       ql::span<const size_t> variableColumnIndices,
-      const BatchEvaluationContext& evaluationContext, const Index& index,
-      IdCache& idCache);
+      const BatchEvaluationContext& evaluationContext,
+      const LocalVocab& localVocab, const Index& index, IdCache& idCache);
 
  private:
   // Evaluate a single variable (identified by its `IdTable` column index)
   // across all rows in the batch.
   static EvaluatedVariableValues evaluateVariableByColumn(
       size_t idTableColumnIdx, const BatchEvaluationContext& ctx,
-      const Index& index, IdCache& idCache);
+      const LocalVocab& localVocab, const Index& index, IdCache& idCache);
 };
 
 }  // namespace qlever::constructExport
