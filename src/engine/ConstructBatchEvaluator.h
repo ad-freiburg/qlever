@@ -29,7 +29,7 @@ using EvaluatedVariableValues = std::vector<std::optional<EvaluatedTerm>>;
 // evaluated values per variable column and the number of rows in the batch.
 struct BatchEvaluationResult {
   // Map from `IdTable` column index to evaluated values for each row in batch.
-  ::ad_utility::HashMap<size_t, EvaluatedVariableValues> variablesByColumn_;
+  ad_utility::HashMap<size_t, EvaluatedVariableValues> variablesByColumn_;
   size_t numRows_ = 0;
 
   const std::optional<EvaluatedTerm>& getVariable(size_t columnIndex,
