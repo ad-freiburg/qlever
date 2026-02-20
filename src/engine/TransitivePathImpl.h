@@ -200,16 +200,15 @@ class TransitivePathImpl : public TransitivePathBase {
   }
 
   /**
-   * @brief Depth-first search to find connected nodes in the graph.
+   * @brief Depth-first search to find given target in the graph.
    * @param edges The adjacency lists, mapping Ids (nodes) to their connected
    * Ids.
    * @param startNode The node to start the search from.
-   * @param target Optional target Id. If supplied, only paths which end in this
-   * Id are added to the result.
-   * @return A set of connected nodes in the graph.
+   * @param target The target node that the algorithm searches for.
+   * @return A set containing the target node, if such path exists. Else an
+   * empty set.
    */
-  Set findConnectedNodes(const T& edges, Id startNode,
-                         const std::optional<Id>& target) const {
+  Set findConnectedNodes(const T& edges, Id startNode, const Id& target) const {
     std::vector<std::pair<Id, size_t>> stack;
     ad_utility::HashSetWithMemoryLimit<Id> marks{allocator()};
     Set connectedNodes{allocator()};
@@ -223,15 +222,62 @@ class TransitivePathImpl : public TransitivePathBase {
       if (steps <= maxDist_ && !marks.contains(node)) {
         if (steps >= minDist_) {
           marks.insert(node);
-          if (!target.has_value() || node == target.value()) {
+          if (node == target) {
             connectedNodes.insert(node);
+            // Stop the DFS once target found, no further processing necessary.
+            break;
           }
         }
 
         const auto& successors = edges.successors(node);
         for (auto successor : successors) {
-          stack.emplace_back(successor, steps + 1);
+          if (!marks.contains(successor)) stack.emplace_back(successor, steps + 1);
         }
+      }
+    }
+    return connectedNodes;
+  }
+
+  /**
+   * @brief Breadth-first search to find connected nodes in graph for
+   * when no target was given.
+   * @param edges The adjacency lists, mapping Ids (nodes) to their connected
+   * Ids.
+   * @param startNode The node to start the search from.
+   * @param target Optional target Id. If supplied, only paths which end in this
+   * Id are added to the result.
+   * @return A set of connected nodes in the graph.
+   */
+  Set findConnectedNodes(const T& edges, Id startNode) const {
+    size_t traversalDepth = 0;
+    size_t nodesUntilNextDepthIncrease = 1;
+    std::queue<Id> queue;
+    Set connectedNodes{allocator()};
+
+    queue.push(startNode);
+    while (!queue.empty() && traversalDepth <= maxDist_ &&
+           nodesUntilNextDepthIncrease > 0) {
+      checkCancellation();
+
+      // Get next node from queue.
+      auto node = queue.front();
+      queue.pop();
+      if (traversalDepth >= minDist_) connectedNodes.insert(node);
+      nodesUntilNextDepthIncrease--;
+
+      // Enqueue all successors of currently handled node.
+      const auto& successors = edges.successors(node);
+      for (auto successor : successors) {
+        // Do not re-add already discovered nodes (skip loops).
+        if (!connectedNodes.contains(successor)) queue.push(successor);
+      }
+
+      // Another layer has been fully discovered.
+      if (nodesUntilNextDepthIncrease == 0) {
+        traversalDepth++;
+        // At this point, the queue contains exactly all
+        // undiscovered nodes from the next layer.
+        nodesUntilNextDepthIncrease = queue.size();
       }
     }
     return connectedNodes;
@@ -296,7 +342,12 @@ class TransitivePathImpl : public TransitivePathBase {
             targetId = graphId;
           }
           edges.setGraphId(graphId);
-          Set connectedNodes = findConnectedNodes(edges, startNode, targetId);
+
+          // Do DFS if target has value, BFS if no target given.
+          Set connectedNodes =
+              targetId.has_value()
+                  ? findConnectedNodes(edges, startNode, targetId.value())
+                  : findConnectedNodes(edges, startNode);
           if (!connectedNodes.empty()) {
             runtimeInfo().addDetail("Hull time", timer.msecs());
             timer.stop();
