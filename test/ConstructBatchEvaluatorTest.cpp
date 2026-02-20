@@ -24,11 +24,9 @@ using ::testing::Pointee;
 // Matcher for `std::optional<std::shared_ptr<const std::string>>`:
 // asserts the optional is non-empty and the pointed-to string equals
 // `expected`.
-static constexpr auto matchesEvaluatedTerm = [](const std::string& expected) {
+static constexpr auto evalTerm = [](const std::string& expected) {
   return Optional(Pointee(Eq(expected)));
 };
-
-auto evalTerm = matchesEvaluatedTerm;
 
 // =============================================================================
 // Test fixture.
