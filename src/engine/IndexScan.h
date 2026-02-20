@@ -133,7 +133,7 @@ class IndexScan final : public Operation {
   // scan.
   std::pair<Result::LazyResult, Result::LazyResult> prefilterTables(
       Result::LazyResult input, ColumnIndex joinColumn,
-      bool filterLeftSide = true);
+      bool filterJoinSide = true);
 
  private:
   // Implementation detail that allows to consume a lazy range from two other

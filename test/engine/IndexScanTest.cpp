@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 
+#include <boost/asio/post.hpp>
 #include <memory>
 
 #include "../test/PrefilterExpressionTestHelpers.h"
@@ -2052,11 +2053,38 @@ TEST_P(IndexScanWithLazyJoin,
   // that is yielded. There previously was an assertion bug for this case,
   // because the prefilter tried to push noexisting dummy blocks to the right
   // hand side. This should now be fixed.
-  for (size_t i = 0; i < 20; ++i) {
+  static constexpr size_t numBlocksJoinSide = 20;
+  for (size_t i = 0; i < numBlocksJoinSide; ++i) {
     joinSide.push_back(P{makeIdTable({iri("<a>")}), LocalVocab{}});
   };
+
+  // Assert that, because we don't have new blocks on the scan side, we
+  // immediately re-yield the left side if it is consumed first.
+  size_t numBlocksReadJoinSide = 0;
+  auto joinSideWithCounter =
+      ad_utility::OwningView{std::move(joinSide)} |
+      ql::views::transform([&numBlocksReadJoinSide](P& block) {
+        ++numBlocksReadJoinSide;
+        return std::move(block);
+      });
+  auto postCondition = [&numBlocksReadJoinSide,
+                        numBlocksExported = 0ul]() mutable {
+    bool rightFirst = GetParam();
+    if (rightFirst) {
+      return;
+    }
+    ++numBlocksExported;
+    // The second half of the `||` is because `numBlocksExported` also accounts
+    // for the single block of the scan side which is consumed after the join
+    // side has been fully exhausted due to the mechanics of `consumeRanges`
+    // with `rightFirst == false`.
+    EXPECT_TRUE((numBlocksReadJoinSide == numBlocksExported) ||
+                (numBlocksReadJoinSide == numBlocksJoinSide &&
+                 numBlocksExported == numBlocksJoinSide + 1));
+  };
   auto [joinSideResults, scanResults] = consumeRanges(
-      scan.prefilterTables(LazyResult{std::move(joinSide)}, 0, true));
+      scan.prefilterTables(LazyResult{std::move(joinSideWithCounter)}, 0, true),
+      postCondition);
 
   ASSERT_EQ(scanResults.size(), 1);
   ASSERT_EQ(joinSideResults.size(), 20);

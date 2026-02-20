@@ -578,9 +578,9 @@ struct IndexScan::SharedGeneratorState {
   ColumnIndex joinColumn_;
   // Metadata and blocks of this index scan.
   Permutation::MetadataAndBlocks metaBlocks_;
-  // If true, filter the left side (skip non-matching inputs). If false, pass
+  // If true, filter the join side (skip non-matching inputs). If false, pass
   // through all inputs even if they don't match any blocks.
-  bool filterLeftSide_ = true;
+  bool filterJoinSide_ = true;
   // The iterator of the generator that is currently being consumed.
   std::optional<Result::LazyResult::iterator> iterator_ = std::nullopt;
   // Values returned by the generator that have not been re-yielded yet.
@@ -596,10 +596,10 @@ struct IndexScan::SharedGeneratorState {
   bool hasUndef_ = false;
   // Indicates if the generator has been fully consumed.
 
-  // Note: If the right input is completely exhausted, we still might see
-  // matching blocks from the left input that match a previously yielded block
-  // from right, hence the necessity of the `RightExhausted` status.
-  enum struct Status { Running, RightExhausted, Exhausted };
+  // Note: If the scan side is completely exhausted, we still might see
+  // matching blocks from the join side that match a previously yielded block
+  // from the scan side, hence the necessity of the `ScanExhausted` status.
+  enum struct Status { Running, ScanSideExhausted, BothSidesExhausted };
   Status status_ = Status::Running;
 
   // Advance the `iterator` to the next non-empty table. Set `hasUndef_` to true
@@ -613,25 +613,25 @@ struct IndexScan::SharedGeneratorState {
       iterator_ = generator_.begin();
     }
     auto& iterator = iterator_.value();
-    while (iterator != generator_.end() && iterator->idTable_.empty()) {
-      ++iterator;
-    }
-    bool isEmpty = iterator_ == generator_.end();
-    if (isEmpty) {
-      status_ = Status::Exhausted;
+    iterator = ql::ranges::find_if(
+        iterator, generator_.end(),
+        [](const auto& pair) { return !pair.idTable_.empty(); });
+    bool foundNonEmptyTable = iterator_ != generator_.end();
+    if (!foundNonEmptyTable) {
+      status_ = Status::BothSidesExhausted;
     }
     // Set the undef flag if the first table is undefined.
     if (firstStep) {
-      hasUndef_ =
-          !isEmpty && iterator->idTable_.at(0, joinColumn_).isUndefined();
+      hasUndef_ = foundNonEmptyTable &&
+                  iterator->idTable_.at(0, joinColumn_).isUndefined();
     }
   }
 
-  // If (in the case of the left side not being filtered), the buffer for tables
-  // from the left side grows too large, find a dummy block (a block from the
-  // index scan, that might match nothing on the left side) to the result. This
+  // If (in the case of the join side not being filtered), the buffer for tables
+  // from the join side grows too large, find a dummy block (a block from the
+  // index scan, that might match nothing on the join side) to the result. This
   // is used in `fetch()` to enforce the invariant, that it always returns with
-  // nonempty next values for both the left and right side.
+  // nonempty next values for both the join and scan side.
   void pushDummyBlockIfBufferTooLarge() {
     constexpr int maxBufferSize = 5;
     if (prefetchedValues_.size() <= maxBufferSize) {
@@ -667,7 +667,7 @@ struct IndexScan::SharedGeneratorState {
     while (prefetchedValues_.empty() ||
            (pendingBlocks_.empty() && status_ == Status::Running)) {
       advanceInputToNextNonEmptyTable();
-      if (status_ == Status::Exhausted) {
+      if (status_ == Status::BothSidesExhausted) {
         return;
       }
       auto& idTable = iterator_.value()->idTable_;
@@ -690,35 +690,35 @@ struct IndexScan::SharedGeneratorState {
       const bool joinColumnMatchesPreviouslyYieldedBlock =
           joinColumn[0] <= lastEntryInBlocks_.value_or(Id::makeUndefined());
 
-      bool leftSideMatches =
+      bool joinSideMatches =
           newBlockWasFound || joinColumnMatchesPreviouslyYieldedBlock;
-      bool leftBlockWillBeYielded = !filterLeftSide_ || leftSideMatches;
-      bool rightSideExhausted = metaBlocks_.blockMetadata_.empty();
-
-      if (rightSideExhausted) {
-        status_ = Status::RightExhausted;
-      }
+      bool joinSideBlockWillBeYielded = !filterJoinSide_ || joinSideMatches;
+      bool scanSideExhausted = metaBlocks_.blockMetadata_.empty();
 
       if (newBlockWasFound) {
         lastEntryInBlocks_ = CompressedRelationReader::getRelevantIdFromTriple(
             newBlocks.back().lastTriple_, metaBlocks_);
         ql::ranges::move(newBlocks, std::back_inserter(pendingBlocks_));
       }
-      if (leftBlockWillBeYielded) {
+      if (joinSideBlockWillBeYielded) {
         prefetchedValues_.push_back(std::move(*iterator_.value()));
       }
 
-      // The `!leftSideMatches` condition is important, because following
-      // `joinColumns` from the left might still match the last block that we
-      // previously have yielded. Note: If we don't filter the left side, then
-      // its left elements still have to be yielded, but this is done by the
-      // generator for the left side.
-      if (rightSideExhausted && !leftSideMatches) {
-        status_ = Status::Exhausted;
-        return;
+      if (scanSideExhausted) {
+        // The `!joinSideMatches` condition is important, because following
+        // `joinColumns` from the join side might still match the last block
+        // that we previously have yielded. Note: If we don't filter the join
+        // side, then its remaining elements still have to be yielded, but this
+        // is done by the generator for the join side.
+        if (!joinSideMatches) {
+          status_ = Status::BothSidesExhausted;
+          return;
+        }
+        status_ = Status::ScanSideExhausted;
       }
 
-      if (!newBlockWasFound && leftBlockWillBeYielded && !rightSideExhausted) {
+      if (!newBlockWasFound && joinSideBlockWillBeYielded &&
+          !scanSideExhausted) {
         pushDummyBlockIfBufferTooLarge();
       }
     }
@@ -753,17 +753,19 @@ Result::LazyResult IndexScan::createPrefilteredJoinSide(
         auto& prefetched = state->prefetchedValues_;
 
         if (prefetched.empty() &&
-            state->status_ != SharedGeneratorState::Status::Exhausted) {
+            state->status_ !=
+                SharedGeneratorState::Status::BothSidesExhausted) {
           state->fetch();
         }
 
         if (prefetched.empty()) {
-          AD_CORRECTNESS_CHECK(state->status_ ==
-                               SharedGeneratorState::Status::Exhausted);
-          // If not filtering left side, yield all remaining elements.
+          AD_CORRECTNESS_CHECK(
+              state->status_ ==
+              SharedGeneratorState::Status::BothSidesExhausted);
+          // If not filtering join side, yield all remaining elements.
           AD_CORRECTNESS_CHECK(state->iterator_.has_value());
           auto it = state->iterator_.value();
-          if (!state->filterLeftSide_ && it != state->generator_.end()) {
+          if (!state->filterJoinSide_ && it != state->generator_.end()) {
             // Advance the iterator past the last value we already yielded.
             ++it;
             return LoopControl::breakWithYieldAll(
@@ -816,8 +818,8 @@ Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
         auto& pendingBlocks = state->pendingBlocks_;
 
         while (pendingBlocks.empty()) {
-          // This generator also breaks when only the right side is exhausted,
-          // as it represents the right side!
+          // This generator also breaks when only the scan side is exhausted,
+          // as it represents the scan side!
           if (state->status_ != SharedGeneratorState::Status::Running) {
             metadata.numBlocksAll_ = state->metaBlocks_.sizeBlockMetadata_;
             updateRuntimeInfoForLazyScan(metadata, Always);
@@ -853,19 +855,19 @@ Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
 
 // _____________________________________________________________________________
 std::pair<Result::LazyResult, Result::LazyResult> IndexScan::prefilterTables(
-    Result::LazyResult input, ColumnIndex joinColumn, bool filterLeftSide) {
+    Result::LazyResult input, ColumnIndex joinColumn, bool filterJoinSide) {
   AD_CORRECTNESS_CHECK(numVariables_ <= 3 && numVariables_ > 0);
   auto metaBlocks = getMetadataForScan();
 
   if (!metaBlocks.has_value()) {
     // Return empty results
-    return {filterLeftSide ? Result::LazyResult{} : std::move(input),
+    return {filterJoinSide ? Result::LazyResult{} : std::move(input),
             Result::LazyResult{}};
   }
 
   auto state = std::make_shared<SharedGeneratorState>(
       SharedGeneratorState{std::move(input), joinColumn,
-                           std::move(metaBlocks.value()), filterLeftSide});
+                           std::move(metaBlocks.value()), filterJoinSide});
   return {createPrefilteredJoinSide(state),
           createPrefilteredIndexScanSide(state)};
 }
