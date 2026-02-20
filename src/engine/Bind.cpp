@@ -76,11 +76,12 @@ bool Bind::knownEmptyResult() { return _subtree->knownEmptyResult(); }
 
 // _____________________________________________________________________________
 std::string Bind::getCacheKeyImpl() const {
-  std::ostringstream os;
-  os << "BIND ";
-  os << _bind._expression.getCacheKey(_subtree->getVariableColumns());
-  os << "\n" << _subtree->getCacheKey();
-  return std::move(os).str();
+  if (expressionCacheKey_.empty()) {
+    expressionCacheKey_ =
+        _bind._expression.getCacheKey(_subtree->getVariableColumns());
+  }
+  return absl::StrCat("BIND ", expressionCacheKey_, "\n",
+                      _subtree->getCacheKey());
 }
 
 // _____________________________________________________________________________
@@ -238,5 +239,8 @@ IdTable Bind::computeExpressionBind(
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Bind::cloneImpl() const {
-  return std::make_unique<Bind>(_executionContext, _subtree->clone(), _bind);
+  auto bind =
+      std::make_unique<Bind>(_executionContext, _subtree->clone(), _bind);
+  bind->expressionCacheKey_ = expressionCacheKey_;
+  return bind;
 }

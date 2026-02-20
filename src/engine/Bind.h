@@ -21,6 +21,7 @@ class Bind : public Operation {
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;
   parsedQuery::Bind _bind;
+  mutable std::string expressionCacheKey_ = "";
   // For the documentation of the overridden members, see Operation.h
  protected:
   [[nodiscard]] std::string getCacheKeyImpl() const override;
