@@ -68,7 +68,7 @@ struct LimitOffsetClause {
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(LimitOffsetClause, _limit,
                                               textLimit_, exportLimit_)
 
-  // Merge two clauses together. This adds the offsets, substracts the new
+  // Merge two clauses together. This adds the offsets, subtracts the new
   // offset from the current limit (if present) and takes the minimum of both
   // limits after that. If the other limit is not set, the current limit is
   // kept.
