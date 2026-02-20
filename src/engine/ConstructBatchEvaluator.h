@@ -14,6 +14,7 @@
 
 #include "engine/ConstructTypes.h"
 #include "engine/idTable/IdTable.h"
+#include "util/Exception.h"
 #include "util/HashMap.h"
 #include "util/LruCacheWithStatistics.h"
 
@@ -50,6 +51,12 @@ struct BatchEvaluationContext {
   const IdTable& idTable_;
   size_t firstRow_;
   size_t endRow_;  // exclusive
+
+  BatchEvaluationContext(const IdTable& idTable, size_t firstRow, size_t endRow)
+      : idTable_(idTable), firstRow_(firstRow), endRow_(endRow) {
+    AD_CONTRACT_CHECK(firstRow <= endRow);
+    AD_CONTRACT_CHECK(endRow <= idTable.numRows());
+  }
 
   size_t numRows() const { return endRow_ - firstRow_; }
 };

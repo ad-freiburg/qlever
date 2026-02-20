@@ -235,6 +235,17 @@ TEST_F(ConstructBatchEvaluatorTest, subRangeEvaluatesCorrectRows) {
               ElementsAre(evalTerm("<p>"), evalTerm("<o>")));
 }
 
+// `BatchEvaluationContext` must reject out-of-range row bounds.
+TEST_F(ConstructBatchEvaluatorTest, outOfRangeRowBoundsViolateContract) {
+  auto idTable = makeIdTableFromVector({{idS_}, {idO_}});  // 2 rows
+  IdCache idCache{1024};
+
+  // endRow beyond the table size.
+  EXPECT_ANY_THROW(evaluateRowRange({0}, idTable, 0, 5, idCache));
+  // firstRow beyond endRow.
+  EXPECT_ANY_THROW(evaluateRowRange({0}, idTable, 3, 1, idCache));
+}
+
 // The dataset contains the literal "hello". Verify that literals are resolved
 // to their string representation (including quotes) and not treated as IRIs.
 TEST_F(ConstructBatchEvaluatorTest, literalIsResolvedCorrectly) {
