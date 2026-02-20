@@ -28,6 +28,11 @@ static constexpr auto evalTerm = [](const std::string& expected) {
   return Optional(Pointee(Eq(expected)));
 };
 
+static const EvaluatedVariableValues& getColumn(
+    const BatchEvaluationResult& result, size_t variableColumnIdx) {
+  return result.variablesByColumn_.at(variableColumnIdx);
+}
+
 // =============================================================================
 // Test fixture.
 // Builds a small index from:
@@ -102,7 +107,7 @@ TEST_F(ConstructBatchEvaluatorTest, singleVariableMultipleRows) {
   auto result = evaluateIdTable({0}, idTable, idCache);
 
   ASSERT_EQ(result.numRows_, 2);
-  EXPECT_THAT(result.variablesByColumn_.at(0),
+  EXPECT_THAT(getColumn(result, 0),
               ElementsAre(evalTerm("<s>"), evalTerm("<o>")));
 }
 
@@ -119,9 +124,9 @@ TEST_F(ConstructBatchEvaluatorTest, multipleVariablesMultipleRows) {
   auto result = evaluateIdTable({0, 1}, idTable, idCache);
 
   ASSERT_EQ(result.numRows_, 2);
-  EXPECT_THAT(result.variablesByColumn_.at(0),
+  EXPECT_THAT(getColumn(result, 0),
               ElementsAre(evalTerm("<s>"), evalTerm("<o>")));
-  EXPECT_THAT(result.variablesByColumn_.at(1),
+  EXPECT_THAT(getColumn(result, 1),
               ElementsAre(evalTerm("<p>"), evalTerm("<q>")));
 }
 
@@ -165,7 +170,7 @@ TEST_F(ConstructBatchEvaluatorTest, undefinedMixedWithValidIds) {
   auto result = evaluateIdTable({0}, idTable, idCache);
 
   ASSERT_EQ(result.numRows_, 3);
-  EXPECT_THAT(result.variablesByColumn_.at(0),
+  EXPECT_THAT(getColumn(result, 0),
               ElementsAre(evalTerm("<s>"), Eq(std::nullopt), evalTerm("<o>")));
 }
 
@@ -179,27 +184,40 @@ TEST_F(ConstructBatchEvaluatorTest, repeatedIdsProduceConsistentResults) {
   auto result = evaluateIdTable({0}, idTable, idCache);
 
   ASSERT_EQ(result.numRows_, 3);
-  EXPECT_THAT(result.variablesByColumn_.at(0), Each(evalTerm("<s>")));
+  // Because the same `Id` appears in every row, the cache returns the same
+  // `shared_ptr` each time: no new string is constructed per row. Assert
+  // pointer equality (shared_ptr::operator== compares raw pointers) to verify
+  // this.
+  const auto& firstTerm = getColumn(result, 0).at(0);
+  EXPECT_THAT(getColumn(result, 0), Each(Eq(firstTerm)));
+  // check that the shared_ptr holds the correct result.
+  EXPECT_THAT(getColumn(result, 0), Each(evalTerm("<s>")));
 }
 
 // The same `IdCache` instance is passed to multiple `evaluateBatch` calls.
 // Verify that the evaluator produces correct results across both batches.
 TEST_F(ConstructBatchEvaluatorTest,
        correctResultsWhenSameIdCacheUsedAcrossBatches) {
+  // 1 column, 4  rows.
   auto idTable = makeIdTableFromVector({{idS_}, {idO_}, {idS_}, {idO_}});
   IdCache idCache{1024};
 
   // First batch: rows [0, 2).
   auto result1 = evaluateRowRange({0}, idTable, 0, 2, idCache);
   ASSERT_EQ(result1.numRows_, 2);
-  EXPECT_THAT(result1.variablesByColumn_.at(0),
+  EXPECT_THAT(getColumn(result1, 0),
               ElementsAre(evalTerm("<s>"), evalTerm("<o>")));
 
   // Second batch: rows [2, 4).
   auto result2 = evaluateRowRange({0}, idTable, 2, 4, idCache);
   ASSERT_EQ(result2.numRows_, 2);
-  EXPECT_THAT(result2.variablesByColumn_.at(0),
+  EXPECT_THAT(getColumn(result2, 0),
               ElementsAre(evalTerm("<s>"), evalTerm("<o>")));
+
+  // Because the same cache is shared across both batches, each Id that appears
+  // in both batches must resolve to the same shared_ptr (pointer equality).
+  EXPECT_EQ(getColumn(result1, 0).at(0), getColumn(result2, 0).at(0));  // idS_
+  EXPECT_EQ(getColumn(result1, 0).at(1), getColumn(result2, 0).at(1));  // idO_
 }
 
 // When [firstRow_, endRow_) is a strict subset of the `IdTable`, only those
@@ -213,7 +231,7 @@ TEST_F(ConstructBatchEvaluatorTest, subRangeEvaluatesCorrectRows) {
 
   ASSERT_EQ(result.numRows_, 2);
   // Row 1 of the IdTable -> result index 0; row 2 -> result index 1.
-  EXPECT_THAT(result.variablesByColumn_.at(0),
+  EXPECT_THAT(getColumn(result, 0),
               ElementsAre(evalTerm("<p>"), evalTerm("<o>")));
 }
 
@@ -239,7 +257,7 @@ TEST_F(ConstructBatchEvaluatorTest, mixedIriAndLiteralColumn) {
 
   ASSERT_EQ(result.numRows_, 3);
   EXPECT_THAT(
-      result.variablesByColumn_.at(0),
+      getColumn(result, 0),
       ElementsAre(evalTerm("<s>"), evalTerm("\"hello\""), evalTerm("<o>")));
 }
 
@@ -289,12 +307,12 @@ TEST_F(ConstructBatchEvaluatorTest, realisticConstructPattern) {
   ASSERT_EQ(result.variablesByColumn_.size(), 2);
 
   // Column 0 (?s): <s>, <s>, <o>, <s>
-  EXPECT_THAT(result.variablesByColumn_.at(0),
+  EXPECT_THAT(getColumn(result, 0),
               ElementsAre(evalTerm("<s>"), evalTerm("<s>"), evalTerm("<o>"),
                           evalTerm("<s>")));
 
   // Column 2 (?o): <o>, <q>, <s>, <o>
-  EXPECT_THAT(result.variablesByColumn_.at(2),
+  EXPECT_THAT(getColumn(result, 2),
               ElementsAre(evalTerm("<o>"), evalTerm("<q>"), evalTerm("<s>"),
                           evalTerm("<o>")));
 }
@@ -310,7 +328,7 @@ TEST_F(ConstructBatchEvaluatorTest, cacheOfSizeOneStillProducesCorrectResults) {
   auto result = evaluateIdTable({0}, idTable, idCache);
 
   ASSERT_EQ(result.numRows_, 4);
-  EXPECT_THAT(result.variablesByColumn_.at(0),
+  EXPECT_THAT(getColumn(result, 0),
               ElementsAre(evalTerm("<s>"), evalTerm("<o>"), evalTerm("<p>"),
                           evalTerm("<q>")));
 }
