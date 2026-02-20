@@ -26,7 +26,7 @@ ConstructTemplatePreprocessor::preprocessLiteral(const Literal& literal,
                                                  PositionInTriple role) {
   auto opt = ConstructQueryEvaluator::evaluate(literal, role);
   if (opt) {
-    return PrecomputedConstant(std::move(*opt));
+    return PrecomputedConstant{std::move(*opt)};
   }
   return std::nullopt;
 }
