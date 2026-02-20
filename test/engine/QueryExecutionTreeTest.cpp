@@ -133,3 +133,47 @@ TEST(QueryExecutionTree, limitAndOffsetIsPropagatedWhenStrippingColumns) {
                 ->getLimitOffset(),
             limitOffset);
 }
+
+// _____________________________________________________________________________
+TEST(QueryExecutionTree,
+     limitAndOffsetIsNotPropagatedRecursivelyWhenStrippingColumns) {
+  using TC = TripleComponent;
+  auto* qec = getQec();
+
+  LimitOffsetClause limitOffset{2, 3};
+
+  auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::Enum::PSO,
+      SparqlTripleSimple{TC{Variable{"?s"}}, TC{Variable{"?p"}},
+                         TC{Variable{"?o"}}});
+
+  auto sort = ad_utility::makeExecutionTree<Sort>(qec, indexScan,
+                                                  std::vector<ColumnIndex>{0});
+
+  sort->applyLimitOffset(limitOffset);
+  EXPECT_TRUE(
+      indexScan->getRootOperation()->getLimitOffset().isUnconstrained());
+  EXPECT_EQ(sort->getRootOperation()
+                ->getChildren()
+                .at(0)
+                ->getRootOperation()
+                ->getLimitOffset(),
+            limitOffset);
+
+  auto strippedValues =
+      QueryExecutionTree::makeTreeWithStrippedColumns(sort, {Variable{"?s"}});
+  EXPECT_TRUE(
+      indexScan->getRootOperation()->getLimitOffset().isUnconstrained());
+
+  // The test only makes sense if `Sort´ can handle stripping columns itself.
+  EXPECT_TRUE(
+      std::dynamic_pointer_cast<Sort>(strippedValues->getRootOperation()));
+  EXPECT_EQ(strippedValues->getRootOperation()->getLimitOffset(), limitOffset);
+
+  auto childOperation = strippedValues->getRootOperation()
+                            ->getChildren()
+                            .at(0)
+                            ->getRootOperation();
+  EXPECT_TRUE(std::dynamic_pointer_cast<IndexScan>(childOperation));
+  EXPECT_EQ(childOperation->getLimitOffset(), limitOffset);
+}
