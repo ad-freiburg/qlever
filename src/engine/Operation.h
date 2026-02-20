@@ -518,6 +518,8 @@ class Operation {
   template <typename F>
   void forAllDescendants(F f) const;
 
+  friend QueryExecutionTree;
+
   FRIEND_TEST(Operation, updateRuntimeStatsWorksCorrectly);
   FRIEND_TEST(Operation, verifyRuntimeInformationIsUpdatedForLazyOperations);
   FRIEND_TEST(Operation, ensureFailedStatusIsSetWhenGeneratorThrowsException);
