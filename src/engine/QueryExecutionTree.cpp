@@ -187,6 +187,10 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
 
   if (sortedQet.has_value()) {
     AD_CORRECTNESS_CHECK(sortedQet.value() != nullptr);
+    AD_CORRECTNESS_CHECK(qet->getVariableColumns() ==
+                         sortedQet.value()->getVariableColumns());
+    AD_CORRECTNESS_CHECK(
+        sortedQet.value()->getRootOperation()->isSortedBy(sortColumns));
     return std::move(sortedQet).value();
   }
 
