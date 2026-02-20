@@ -200,6 +200,12 @@ QueryExecutionTree::makeTreeWithStrippedColumns(
     std::shared_ptr<QueryExecutionTree> qet,
     const std::set<Variable>& variables,
     HideStrippedColumns hideStrippedColumns) {
+  if (ql::ranges::all_of(qet->getVariableColumns() | ql::views::keys,
+                         [&variables](const Variable& variable) {
+                           return variables.contains(variable);
+                         })) {
+    return qet;
+  }
   const auto& rootOperation = qet->getRootOperation();
   auto optTree = rootOperation->makeTreeWithStrippedColumns(variables);
   if (!optTree.has_value()) {
