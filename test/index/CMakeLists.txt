@@ -1,5 +1,5 @@
 add_subdirectory(vocabulary)
-addLinkAndDiscoverTest(PatternCreatorTest index)
-addLinkAndDiscoverTestSerial(ScanSpecificationTest index)
+addLinkAndDiscoverTest(PatternCreatorTest)
+addLinkAndDiscoverTestSerial(ScanSpecificationTest)
 addLinkAndDiscoverTestNoLibs(KeyOrderTest)
 addLinkAndDiscoverTestNoLibs(EncodedIriManagerTest)
