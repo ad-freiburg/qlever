@@ -1,9 +1,9 @@
 add_subdirectory(sparqlExpressions)
 add_library(SortPerformanceEstimator SortPerformanceEstimator.cpp)
-qlever_target_link_libraries(SortPerformanceEstimator parser)
+qlever_target_link_libraries(SortPerformanceEstimator index)
 add_library(engine
         Engine.cpp QueryExecutionTree.cpp Operation.cpp
-        IndexScan.cpp Join.cpp Sort.cpp
+        IndexScan.cpp Join.cpp Sort.cpp ExportQueryExecutionTrees.cpp
         Distinct.cpp OrderBy.cpp Filter.cpp
         QueryPlanner.cpp QueryPlanningCostFactors.cpp QueryRewriteUtils.cpp
         OptionalJoin.cpp CountAvailablePredicates.cpp GroupByImpl.cpp GroupBy.cpp HasPredicateScan.cpp

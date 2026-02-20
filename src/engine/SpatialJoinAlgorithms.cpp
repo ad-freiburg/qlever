@@ -21,11 +21,11 @@
 #include <set>
 
 #include "backports/three_way_comparison.h"
-#include "engine/ExportQueryExecutionTrees.h"
 #include "engine/NamedResultCache.h"
 #include "engine/SpatialJoin.h"
 #include "engine/SpatialJoinParser.h"
 #include "global/RuntimeParameters.h"
+#include "index/ExportIds.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/ChunkedForLoop.h"
 #include "util/Exception.h"
@@ -153,7 +153,7 @@ std::optional<S2Polyline> SpatialJoinAlgorithms::getPolyline(
     const IdTable& restable, size_t row, ColumnIndex col, const Index& index) {
   using namespace util::geo;
   auto id = restable.at(row, col);
-  auto str = ExportQueryExecutionTrees::idToStringAndType(index, id, {});
+  auto str = ExportIds::idToStringAndType(index, id, {});
   if (!str.has_value()) {
     return std::nullopt;
   }
@@ -202,10 +202,10 @@ std::optional<size_t> SpatialJoinAlgorithms::getAnyGeometry(
   // is needed, one could store it in an ID similar to GeoPoint (but with less
   // precision), and then the full geometry would only need to be read, when
   // the exact distance is wanted
-  std::string str(betweenQuotes(ExportQueryExecutionTrees::idToStringAndType(
-                                    qec_->getIndex(), idtable->at(row, col), {})
-                                    .value()
-                                    .first));
+  std::string str(betweenQuotes(
+      ExportIds::idToStringAndType(qec_->getIndex(), idtable->at(row, col), {})
+          .value()
+          .first));
   AnyGeometry geometry;
   try {
     bg::read_wkt(str, geometry);

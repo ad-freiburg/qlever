@@ -16,7 +16,7 @@
 
 #include "backports/algorithm.h"
 #include "engine/ExecuteUpdate.h"
-#include "engine/ExportQueryExecutionTrees.h"
+#include "index/ExportIds.h"
 #include "index/Index.h"
 #include "index/IndexImpl.h"
 #include "index/LocatedTriples.h"
@@ -180,8 +180,8 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(
   for (const auto& triple : triples) {
     const auto& ids = triple.ids();
     Id objectId = ids.at(2);
-    auto optionalLiteralOrIri = ExportQueryExecutionTrees::idToLiteralOrIri(
-        index_, objectId, localVocab_, true);
+    auto optionalLiteralOrIri =
+        ExportIds::idToLiteralOrIri(index_, objectId, localVocab_, true);
     if (!optionalLiteralOrIri.has_value() ||
         !optionalLiteralOrIri.value().isLiteral() ||
         !optionalLiteralOrIri.value().hasLanguageTag()) {
@@ -189,7 +189,7 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(
     }
     const auto& predicate =
         predicateCache.getOrCompute(ids.at(1).getBits(), [this](Id::T bits) {
-          auto optionalPredicate = ExportQueryExecutionTrees::idToLiteralOrIri(
+          auto optionalPredicate = ExportIds::idToLiteralOrIri(
               index_, Id::fromBits(bits), localVocab_, true);
           AD_CORRECTNESS_CHECK(optionalPredicate.has_value());
           AD_CORRECTNESS_CHECK(optionalPredicate.value().isIri());

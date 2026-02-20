@@ -36,7 +36,7 @@ class StringMapping {
  public:
   // Create a vector with `stringMapping_.size()` entries as follows: For each
   // of the unique `IDs` in the `stringMapping_` resolve the ID to a string via
-  // `ExportQueryExecutionTrees::idToLiteralOrIri`. the result will be stored at
+  // `ExportIds::idToLiteralOrIri`. the result will be stored at
   // position `stringMapping_[ID]` in the result, so the vector will be sorted
   // by the order in which `remapId` was called for the IDs.
   // Calling `flush` also clears the `stringMapping_`, which means that the

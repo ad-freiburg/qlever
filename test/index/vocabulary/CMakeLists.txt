@@ -1,6 +1,6 @@
 addLinkAndDiscoverTestNoLibs(VocabularyInMemoryTest vocabulary)
 
-addLinkAndDiscoverTest(VocabularyOnDiskTest)
+addLinkAndDiscoverTestNoLibs(VocabularyOnDiskTest index)
 
 addLinkAndDiscoverTest(CompressedVocabularyTest vocabulary)
 
@@ -16,6 +16,6 @@ addLinkAndDiscoverTestNoLibs(VocabularyTypeTest)
 
 addLinkAndDiscoverTest(GeoVocabularyTest vocabulary parser util)
 
-addLinkAndDiscoverTest(SplitVocabularyTest)
+addLinkAndDiscoverTest(SplitVocabularyTest index)
 
 addLinkAndDiscoverTestNoLibs(VocabularyTypesTest)

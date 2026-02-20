@@ -23,7 +23,6 @@ add_library(parser
         SelectClause.cpp
         GraphPatternOperation.cpp
         GraphPattern.cpp
-        LiteralOrIri.cpp
         DatasetClauses.cpp
         TextSearchQuery.cpp
         MaterializedViewQuery.cpp
