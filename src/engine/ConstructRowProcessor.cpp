@@ -44,13 +44,13 @@ std::vector<EvaluatedTriple> ConstructRowProcessor::computeBatch() {
   const size_t batchEnd =
       std::min(batchStart_ + batchSize_, rowIndicesVec_.size());
 
-  BatchEvaluationContext batchContext{
-      tableWithVocab_.idTable(), tableWithVocab_.localVocab(),
-      rowIndicesVec_[batchStart_], rowIndicesVec_[batchEnd - 1] + 1};
+  BatchEvaluationContext batchContext{tableWithVocab_.idTable(),
+                                      rowIndicesVec_[batchStart_],
+                                      rowIndicesVec_[batchEnd - 1] + 1};
 
   auto batchResult = ConstructBatchEvaluator::evaluateBatch(
-      preprocessedTemplate_.uniqueVariableColumns_, batchContext, index_.get(),
-      *idCache_);
+      preprocessedTemplate_.uniqueVariableColumns_, batchContext,
+      tableWithVocab_.localVocab(), index_.get(), *idCache_);
 
   std::vector<EvaluatedTriple> triples;
   for (size_t rowInBatch = 0; rowInBatch < batchResult.numRows_; ++rowInBatch) {

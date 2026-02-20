@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "engine/ConstructTypes.h"
+#include "engine/LocalVocab.h"
 #include "engine/idTable/IdTable.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
