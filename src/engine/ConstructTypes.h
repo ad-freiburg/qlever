@@ -56,8 +56,8 @@ struct PreprocessedConstructTemplate {
   std::vector<size_t> uniqueVariableColumns_;
 };
 
-// Result of evaluating a term (IRI, literal, etc.) to its string
-// representation.
+// Result of evaluating a term (`Iri`, `Literal`, `Variable`, `BlankNode`) to
+// its string representation.
 using EvaluatedTerm = std::shared_ptr<const std::string>;
 
 }  // namespace qlever::constructExport
