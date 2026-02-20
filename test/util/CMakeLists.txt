@@ -1,4 +1,4 @@
-add_library(testUtil SHARED IdTableHelpers.cpp ValidatorHelpers.cpp RandomTestHelpers.cpp BenchmarkMeasurementContainerHelpers.cpp IndexTestHelpers.cpp)
+add_library(testUtil IdTableHelpers.cpp ValidatorHelpers.cpp RandomTestHelpers.cpp BenchmarkMeasurementContainerHelpers.cpp IndexTestHelpers.cpp)
 # Bundle the large engine and index static libraries into testUtil.so so that
 # each test binary only needs to link against this single shared library.
 # $<LINK_LIBRARY:WHOLE_ARCHIVE,...> both establishes the build dependency on
