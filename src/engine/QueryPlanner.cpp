@@ -1436,21 +1436,20 @@ void QueryPlanner::applyFiltersIfPossible(
               [&plan](const auto& variable) {
                 return plan._qet->isVariableCovered(*variable);
               })) {
+        auto& planToReplace = filteredPlanIndex.has_value()
+                                  ? addedPlans.at(filteredPlanIndex.value())
+                                  : plan;
         // Apply this filter regularly.
         SubtreePlan newPlan = makeSubtreePlan<Filter>(
-            _qec,
-            filteredPlanIndex.has_value()
-                ? addedPlans.at(filteredPlanIndex.value())._qet
-                : plan._qet,
-            filterAndSubst.filter_.expression_);
-        mergeSubtreePlanIds(newPlan, newPlan, plan);
+            _qec, planToReplace._qet, filterAndSubst.filter_.expression_);
+        mergeSubtreePlanIds(newPlan, newPlan, planToReplace);
         newPlan._idsOfIncludedFilters |= (size_t(1) << i);
-        newPlan.type = plan.type;
+        newPlan.type = planToReplace.type;
         if constexpr (mode != FilterMode::KeepUnfiltered) {
           plan = std::move(newPlan);
         } else {
           if (filteredPlanIndex.has_value()) {
-            addedPlans.at(filteredPlanIndex.value()) = std::move(newPlan);
+            planToReplace = std::move(newPlan);
           } else {
             filteredPlanIndex = addedPlans.size();
             addedPlans.push_back(std::move(newPlan));
