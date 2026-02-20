@@ -13,15 +13,15 @@
 #include <memory>
 #include <string>
 
+#include "engine/ConstructBatchEvaluator.h"
 #include "engine/ConstructTypes.h"
 #include "util/http/MediaTypes.h"
+
+namespace qlever::constructExport {
 
 // Provides methods for instantiating terms and formatting triples.
 class ConstructTripleInstantiator {
  public:
-  using EvaluatedTerm = qlever::constructExport::EvaluatedTerm;
-  using PreprocessedTerm = qlever::constructExport::PreprocessedTerm;
-  using BatchEvaluationResult = qlever::constructExport::BatchEvaluationResult;
   // Instantiates a single preprocessed term for a specific row.
   // For constants: returns the precomputed string.
   // For variables: looks up the batch-evaluated value.
@@ -38,5 +38,7 @@ class ConstructTripleInstantiator {
                                   const EvaluatedTerm& predicate,
                                   const EvaluatedTerm& object);
 };
+
+}  // namespace qlever::constructExport
 
 #endif  // QLEVER_SRC_ENGINE_CONSTRUCTTRIPLEINSTANTIATOR_H
