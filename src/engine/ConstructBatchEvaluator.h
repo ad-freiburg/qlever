@@ -31,8 +31,8 @@ using EvaluatedVariableValues = std::vector<std::optional<EvaluatedTerm>>;
 struct BatchEvaluationResult {
   // Map from `IdTable` column index to evaluated values for each row in batch.
   // A hash map is used because the set of evaluated columns may be sparse:
-  // only columns corresponding to variables in the CONSTRUCT template are
-  // evaluated; columns for constants and blank nodes are never requested.
+  // some variables from the WHERE-clause (in the `IdTable`) may not appear in
+  // the CONSTRUCT template and are thus not evaluated.
   ad_utility::HashMap<size_t, EvaluatedVariableValues> variablesByColumn_;
   size_t numRows_ = 0;
 
