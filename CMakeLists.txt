@@ -29,7 +29,7 @@ add_compile_definitions(BOOST_ASIO_DISABLE_AWAITABLE_FRAME_RECYCLING)
 # particular for Debug or RelWithDebugInfo builds, where the individual
 # libraries are rather large because of the debug symbols and are linked
 # into almost every test binary.
-# Note: This option magically influences the beahvior of `add_library`, see
+# Note: This option magically influences the behavior of `add_library`, see
 # https://cmake.org/cmake/help/latest/variable/BUILD_SHARED_LIBS.html for
 # details.
 option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
@@ -141,7 +141,6 @@ FetchContent_Declare(
 # ANTLR CPP RUNTIME FOR THE SPARQL PARSER
 ###############################
 set(ANTLR_BUILD_CPP_TESTS OFF CACHE BOOL "don't try to build googletest twice")
-#set(ANTLR_BUILD_SHARED OFF CACHE BOOL "We're only interested in the static library")
 FetchContent_Declare(
         antlr
         GIT_REPOSITORY https://github.com/antlr/antlr4.git
@@ -245,7 +244,7 @@ find_package(OpenSSL REQUIRED)
 # is a drop-in replacement for `target_link_libraries` that additionally links
 # against the common libraries.
 function(qlever_target_link_libraries target)
-    target_link_libraries(${target} PUBLIC ${ARGN} absl_shared
+    target_link_libraries(${target} PUBLIC ${ARGN} absl_umbrella re2
             ICU::uc
             ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock fsst nlohmann_json::nlohmann_json Boost::container)
 
@@ -395,10 +394,10 @@ FetchContent_Declare(
 ################################
 set(_QLEVER_SAVED_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
 set(BUILD_SHARED_LIBS OFF)
-FetchContent_MakeAvailable(abseil re2)
+FetchContent_MakeAvailable(abseil)
 set(BUILD_SHARED_LIBS ${_QLEVER_SAVED_BUILD_SHARED_LIBS})
 
-FetchContent_MakeAvailable(googletest ctre fsst nlohmann-json antlr range-v3 spatialjoin s2)
+FetchContent_MakeAvailable(googletest ctre fsst nlohmann-json antlr range-v3 spatialjoin s2 re2)
 
 IF (BUILD_SHARED_LIBS)
     add_library(antlr4_umbrella ALIAS antlr4_shared)
@@ -423,9 +422,10 @@ target_compile_options(antlr4_shared PRIVATE -fPIC -Wno-all -Wno-extra -Wno-erro
 include_directories(SYSTEM "${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src")
 
 #Umbrella libraries from static to shared.
+if (BUILD_SHARED_LIBS)
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/dummy.cpp "")
-add_library (absl_shared SHARED ${CMAKE_CURRENT_BINARY_DIR}/dummy.cpp)
-target_link_libraries(absl_shared
+add_library (absl_umbrella SHARED ${CMAKE_CURRENT_BINARY_DIR}/dummy.cpp)
+target_link_libraries(absl_umbrella
         PRIVATE
         $<LINK_LIBRARY:WHOLE_ARCHIVE,
         absl::base,
@@ -437,20 +437,29 @@ target_link_libraries(absl_shared
         absl::synchronization
         >
 )
-target_link_libraries(absl_shared
+target_include_directories(absl_umbrella
         INTERFACE
-        absl::base
-        absl::strings
-        absl::str_format
-        absl::status
-        absl::statusor
-        absl::log
-        absl::time
-        absl::hash
-        absl::flat_hash_map
-        absl::flat_hash_set
-        absl::synchronization
+        $<TARGET_PROPERTY:absl::base,INTERFACE_INCLUDE_DIRECTORIES>
+        $<TARGET_PROPERTY:absl::strings,INTERFACE_INCLUDE_DIRECTORIES>
+        $<TARGET_PROPERTY:absl::status,INTERFACE_INCLUDE_DIRECTORIES>
+        $<TARGET_PROPERTY:absl::statusor,INTERFACE_INCLUDE_DIRECTORIES>
+        $<TARGET_PROPERTY:absl::time,INTERFACE_INCLUDE_DIRECTORIES>
+        $<TARGET_PROPERTY:absl::hash,INTERFACE_INCLUDE_DIRECTORIES>
+        $<TARGET_PROPERTY:absl::synchronization,INTERFACE_INCLUDE_DIRECTORIES>
 )
+else()
+    add_library(absl_umbrella INTERFACE)
+    target_link_libraries(absl_umbrella
+            INTERFACE
+            absl::base
+            absl::strings
+            absl::status
+            absl::statusor
+            absl::time
+            absl::hash
+            absl::synchronization
+    )
+endif()
 
 message(STATUS ---)
 message(STATUS "CXX_FLAGS are : " ${CMAKE_CXX_FLAGS})
@@ -535,32 +544,24 @@ add_subdirectory(test)
 add_library(compilationInfo ${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp)
 qlever_target_link_libraries(compilationInfo)
 
-# A shared library that contains virtually the whole QLever codebase, and that can be used to link
-# binaries and unit tests that depend on a large portion of QLever (typically the engine/parser/index which cyclicly depend on each other anyway).
-# Generate an empty dummy source
-
-add_library(qlever-shared-complete SHARED ${CMAKE_CURRENT_BINARY_DIR}/dummy.cpp)
-#qlever_target_link_libraries(qlever-shared-complete PUBLIC $<LINK_LIBRARY:WHOLE_ARCHIVE,engine,index, util, parser, sparqlExpressions, vocabulary, server, qlever, http, re2>)
-qlever_target_link_libraries(qlever-shared-complete PUBLIC engine index util parser sparqlExpressions vocabulary server qlever http re2 )
-target_link_libraries(qlever-shared-complete INTERFACE re2 s2 spatialjoin-dev pb_util pb_util_geo)
 OPTION(_EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER "Don't build some targets when compiling with Emscripten." OFF)
 
 if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
     add_executable(qlever-index src/index/IndexBuilderMain.cpp)
-    qlever_target_link_libraries(qlever-index qlever-shared-complete ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo)
+    qlever_target_link_libraries(qlever-index qlever index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
 
     add_executable(qlever-server src/ServerMain.cpp)
-    qlever_target_link_libraries(qlever-server qlever-shared-complete ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo)
+    qlever_target_link_libraries(qlever-server engine server ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo)
     if (USE_PRECOMPILED_HEADERS)
         target_precompile_headers(qlever-server REUSE_FROM engine)
     endif()
 endif()
 
 add_executable(LibQLeverExample src/libqlever/LibQLeverExample.cpp)
-qlever_target_link_libraries(LibQLeverExample qlever-shared-complete)
+qlever_target_link_libraries(LibQLeverExample parser engine util index qlever)
 
 add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
-qlever_target_link_libraries(VocabularyMergerMain qlever-shared-complete ${CMAKE_THREAD_LIBS_INIT})
+qlever_target_link_libraries(VocabularyMergerMain index parser ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
 qlever_target_link_libraries(PrintIndexVersionMain util)

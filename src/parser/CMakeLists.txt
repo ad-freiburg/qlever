@@ -8,7 +8,6 @@ add_library(parser
         ParsedQuery.cpp
         RdfParser.cpp
         Tokenizer.cpp
-        WordsAndDocsFileParser.cpp
         ParallelBuffer.cpp
         SparqlParserHelpers.cpp
         TripleComponent.cpp
