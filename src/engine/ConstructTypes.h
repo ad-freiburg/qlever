@@ -24,7 +24,7 @@ struct PrecomputedConstant {
 };
 
 // We precompute which `IdTable` column to look up at template triple
-// instantitation time.
+// evaluation time.
 struct PrecomputedVariable {
   size_t columnIndex_;
 };
