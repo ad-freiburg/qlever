@@ -17,19 +17,16 @@ namespace qlever::constructExport {
 // _____________________________________________________________________________
 BatchEvaluationResult ConstructBatchEvaluator::evaluateBatch(
     ql::span<const size_t> variableColumnIndices,
-    const TableConstRefWithVocab& tableWithVocab,
     const BatchEvaluationContext& evaluationContext, const Index& index,
     IdCache& idCache) {
-  AD_CONTRACT_CHECK(evaluationContext.endRow_ <=
-                    tableWithVocab.idTable().numRows());
   BatchEvaluationResult batchResult;
   batchResult.numRows_ = evaluationContext.numRows();
 
   for (size_t variableColumnIdx : variableColumnIndices) {
     auto [it, wasNew] = batchResult.variablesByColumn_.emplace(
         variableColumnIdx,
-        evaluateVariableByColumn(variableColumnIdx, tableWithVocab,
-                                 evaluationContext, index, idCache));
+        evaluateVariableByColumn(variableColumnIdx, evaluationContext, index,
+                                 idCache));
     AD_CORRECTNESS_CHECK(wasNew);
   }
 
@@ -38,21 +35,20 @@ BatchEvaluationResult ConstructBatchEvaluator::evaluateBatch(
 
 // _____________________________________________________________________________
 EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
-    size_t idTableColumnIdx, const TableConstRefWithVocab& tableWithVocab,
-    const BatchEvaluationContext& ctx, const Index& index, IdCache& idCache) {
-  auto resolveId = [&index,
-                    &tableWithVocab](Id id) -> std::optional<EvaluatedTerm> {
-    auto value = ConstructQueryEvaluator::evaluateId(
-        id, index, tableWithVocab.localVocab());
+    size_t idTableColumnIdx, const BatchEvaluationContext& ctx,
+    const Index& index, IdCache& idCache) {
+  auto resolveId = [&index, &ctx](Id id) -> std::optional<EvaluatedTerm> {
+    auto value =
+        ConstructQueryEvaluator::evaluateId(id, index, ctx.localVocab_);
     if (value.has_value()) {
       return std::make_shared<const std::string>(std::move(*value));
     }
     return std::nullopt;
   };
 
-  auto evaluateRow = [&idCache, &tableWithVocab, idTableColumnIdx,
+  auto evaluateRow = [&idCache, &ctx, idTableColumnIdx,
                       &resolveId](size_t rowIdx) {
-    Id id = tableWithVocab.idTable()(rowIdx, idTableColumnIdx);
+    Id id = ctx.idTable_(rowIdx, idTableColumnIdx);
     return idCache.getOrCompute(id, resolveId);
   };
 

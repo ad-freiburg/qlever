@@ -11,7 +11,6 @@
 #include "./util/IdTableHelpers.h"
 #include "./util/IndexTestHelpers.h"
 #include "engine/ConstructBatchEvaluator.h"
-#include "engine/QueryExportTypes.h"
 
 namespace {
 
@@ -66,20 +65,18 @@ class ConstructBatchEvaluatorTest : public ::testing::Test {
   BatchEvaluationResult evaluateIdTable(
       const std::vector<size_t>& variableColumnIndices, const IdTable& idTable,
       IdCache& idCache) {
-    TableConstRefWithVocab tableWithVocab{idTable, localVocab_};
-    BatchEvaluationContext ctx{0, idTable.numRows()};
-    return ConstructBatchEvaluator::evaluateBatch(
-        variableColumnIndices, tableWithVocab, ctx, index_, idCache);
+    BatchEvaluationContext ctx{idTable, localVocab_, 0, idTable.numRows()};
+    return ConstructBatchEvaluator::evaluateBatch(variableColumnIndices, ctx,
+                                                  index_, idCache);
   }
 
   // Evaluate a sub-range [`firstRow`, `endRow`) of the `IdTable`.
   BatchEvaluationResult evaluateRowRange(
       const std::vector<size_t>& variableColumnIndices, const IdTable& idTable,
       size_t firstRow, size_t endRow, IdCache& idCache) {
-    TableConstRefWithVocab tableWithVocab{idTable, localVocab_};
-    BatchEvaluationContext ctx{firstRow, endRow};
-    return ConstructBatchEvaluator::evaluateBatch(
-        variableColumnIndices, tableWithVocab, ctx, index_, idCache);
+    BatchEvaluationContext ctx{idTable, localVocab_, firstRow, endRow};
+    return ConstructBatchEvaluator::evaluateBatch(variableColumnIndices, ctx,
+                                                  index_, idCache);
   }
 };
 
