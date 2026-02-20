@@ -289,20 +289,25 @@ TEST_F(ConstructBatchEvaluatorTest, realisticConstructPattern) {
   EXPECT_THAT(idOTerms, Each(Eq(firstO)));
 }
 
-// With a cache of size 1, every access to a different `Id` evicts the previous
-// entry. Verify that the evaluator still resolves all rows correctly despite
-// constant evictions.
-TEST_F(ConstructBatchEvaluatorTest, cacheOfSizeOneStillProducesCorrectResults) {
-  // table with 1 column and 4 rows.
-  auto idTable = makeIdTableFromVector({{idS_}, {idO_}, {idP_}, {idQ_}});
+// With a cache of size 1, accessing a different `Id` evicts the current entry.
+// Use idS_, idO_, idS_: the second access to idS_ (row 2) is a cache miss
+// because idO_ (row 1) evicted it, a new string is allocated.
+TEST_F(ConstructBatchEvaluatorTest, cacheOfSizeOneEvictsAndRecomputesOnAccess) {
+  auto idTable = makeIdTableFromVector({{idS_}, {idO_}, {idS_}});
   IdCache idCache{1};
 
   auto result = evaluateIdTable({0}, idTable, idCache);
 
-  ASSERT_EQ(result.numRows_, 4);
+  ASSERT_EQ(result.numRows_, 3);
+
+  // Correct string values despite eviction.
   EXPECT_THAT(getColumn(result, 0),
-              ElementsAre(evalTerm("<s>"), evalTerm("<o>"), evalTerm("<p>"),
-                          evalTerm("<q>")));
+              ElementsAre(evalTerm("<s>"), evalTerm("<o>"), evalTerm("<s>")));
+
+  // The two idS_ accesses must yield different shared_ptrs: the first was
+  // evicted by idO_, forcing recomputation and a new allocation for row 2.
+  // (The string content is still correct, as verified above.)
+  EXPECT_NE(getColumn(result, 0).at(0), getColumn(result, 0).at(2));
 }
 
 }  // namespace
