@@ -189,8 +189,11 @@ class DeltaTriples {
   // structures.
   void clear();
 
-  // Vacuum all blocks with more than 100k updates across all permutations,
-  // removing redundant operations. Returns per-permutation statistics as JSON.
+  // Vacuum all blocks with more than 10k updates using PSO as the single source
+  // of truth for identifying redundant operations. Removes redundant insertions
+  // (triples already in the index) and redundant deletions (triples not in the
+  // index) consistently across all permutations. Returns aggregated statistics
+  // as JSON with "external" and "internal" sections.
   nlohmann::json vacuum();
 
   // The number of delta triples added and subtracted.
@@ -337,6 +340,26 @@ class DeltaTriples {
   template <bool isInternal>
   void eraseTripleInAllPermutations(
       typename TriplesToHandles<isInternal>::LocatedTripleHandles& handles);
+
+  // New vacuum helper methods for cross-permutation consistency
+
+  // Result structure for vacuum operations
+  struct TriplesToVacuum {
+    std::vector<IdTriple<0>> deletionsToRemove;
+    std::vector<IdTriple<0>> insertionsToRemove;
+    VacuumStatistics stats;
+  };
+
+  template <bool isInternal>
+  TriplesToVacuum identifyTriplesToVacuum();
+
+  template <bool isInternal>
+  TriplesToVacuum identifyTriplesToRemoveFromBlock(size_t blockIndex,
+                                                   const IdTable& block);
+
+  template <bool isInternal>
+  void removeIdentifiedTriples(const std::vector<IdTriple<0>>& deletionsToRemove,
+                               const std::vector<IdTriple<0>>& insertionsToRemove);
 
   friend class DeltaTriplesManager;
 };
