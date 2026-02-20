@@ -37,8 +37,8 @@ EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
   EvaluatedVariableValues columnResults;
   columnResults.reserve(ctx.numRows());
 
-  auto computeValue =
-      [&index, &localVocab](const Id& id) -> std::optional<EvaluatedTerm> {
+  auto computeValue = [&index,
+                       &localVocab](Id id) -> std::optional<EvaluatedTerm> {
     auto value = ConstructQueryEvaluator::evaluateId(id, index, localVocab);
     if (value.has_value()) {
       return std::make_shared<const std::string>(std::move(*value));
