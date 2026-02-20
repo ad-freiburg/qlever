@@ -37,11 +37,8 @@ BatchEvaluationResult ConstructBatchEvaluator::evaluateBatch(
 EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
     size_t idTableColumnIdx, const BatchEvaluationContext& ctx,
     const LocalVocab& localVocab, const Index& index, IdCache& idCache) {
-  EvaluatedVariableValues columnResults;
-  columnResults.reserve(ctx.numRows());
-
-  auto computeValue = [&index,
-                       &localVocab](Id id) -> std::optional<EvaluatedTerm> {
+  auto resolveId = [&index,
+                    &localVocab](Id id) -> std::optional<EvaluatedTerm> {
     auto value = ConstructQueryEvaluator::evaluateId(id, index, localVocab);
     if (value.has_value()) {
       return std::make_shared<const std::string>(std::move(*value));
@@ -49,12 +46,14 @@ EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
     return std::nullopt;
   };
 
-  for (size_t rowIdx : ql::views::iota(ctx.firstRow_, ctx.endRow_)) {
-    const Id& id = ctx.idTable_(rowIdx, idTableColumnIdx);
-    columnResults.push_back(idCache.getOrCompute(id, computeValue));
-  }
+  auto evaluateRow = [&idCache, &ctx, idTableColumnIdx,
+                      &resolveId](size_t rowIdx) {
+    Id id = ctx.idTable_(rowIdx, idTableColumnIdx);
+    return idCache.getOrCompute(id, resolveId);
+  };
 
-  return columnResults;
+  return ql::views::iota(ctx.firstRow_, ctx.endRow_) |
+         ql::views::transform(evaluateRow) | ::ranges::to<std::vector>();
 }
 
 }  // namespace qlever::constructExport
