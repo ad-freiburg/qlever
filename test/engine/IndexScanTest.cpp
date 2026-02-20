@@ -4,7 +4,6 @@
 
 #include <gtest/gtest.h>
 
-#include <boost/asio/post.hpp>
 #include <memory>
 
 #include "../test/PrefilterExpressionTestHelpers.h"
