@@ -211,7 +211,7 @@ class TransitivePathImpl : public TransitivePathBase {
    * @return A set containing the target node, if such path exists. Else an
    * empty set.
    */
-  Set findConnectedNodes(const T& edges, Id startNode,
+  Set runConnectedNodesSearch(const T& edges, Id startNode,
                          std::optional<Id>& target) const {
     // Call version of BFS/DFS which adhere to the minDist_/maxDist_ properties
     // of the TransitivePathBase class.
@@ -440,7 +440,7 @@ class TransitivePathImpl : public TransitivePathBase {
           }
           edges.setGraphId(graphId);
 
-          Set connectedNodes = findConnectedNodes(edges, startNode, targetId);
+          Set connectedNodes = runConnectedNodesSearch(edges, startNode, targetId);
           if (!connectedNodes.empty()) {
             runtimeInfo().addDetail("Hull time", timer.msecs());
             timer.stop();
