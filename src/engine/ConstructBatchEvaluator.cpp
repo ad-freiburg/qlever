@@ -46,10 +46,10 @@ EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
     return std::nullopt;
   };
 
-  auto evaluateRow = [&idCache, &ctx, idTableColumnIdx,
-                      &resolveId](size_t rowIdx) {
-    Id id = ctx.idTable_(rowIdx, idTableColumnIdx);
-    return idCache.getOrCompute(id, resolveId);
+  decltype(auto) col = ctx.idTable_.getColumn(idTableColumnIdx);
+
+  auto evaluateRow = [&col, &idCache, &resolveId](size_t rowIdx) {
+    return idCache.getOrCompute(col[rowIdx], resolveId);
   };
 
   return ql::views::iota(ctx.firstRow_, ctx.endRow_) |
