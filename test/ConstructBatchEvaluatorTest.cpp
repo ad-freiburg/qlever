@@ -48,6 +48,11 @@ class ConstructBatchEvaluatorTest : public ::testing::Test {
     return ad_utility::testing::makeGetId(index_)(s);
   }
 
+  Id idS_ = getId_("<s>");
+  Id idP_ = getId_("<p>");
+  Id idO_ = getId_("<o>");
+  Id idQ_ = getId_("<q>");
+
   LocalVocab localVocab_;
 
   // Evaluate all rows of the `IdTable` with the given variable columns in
@@ -75,7 +80,7 @@ class ConstructBatchEvaluatorTest : public ::testing::Test {
 // result structure (`BatchEvaluationResult`) is correctly shaped (one column
 // entry, one row).
 TEST_F(ConstructBatchEvaluatorTest, singleVariableSingleRow) {
-  auto idTable = makeIdTableFromVector({{getId_("<s>")}});
+  auto idTable = makeIdTableFromVector({{idS_}});
   IdCache idCache{1024};
 
   auto result = evaluateIdTable({0}, idTable, idCache);
@@ -91,7 +96,7 @@ TEST_F(ConstructBatchEvaluatorTest, singleVariableSingleRow) {
 // is independently resolved and that the results for a specific variable are in
 // row order.
 TEST_F(ConstructBatchEvaluatorTest, singleVariableMultipleRows) {
-  auto idTable = makeIdTableFromVector({{getId_("<s>")}, {getId_("<o>")}});
+  auto idTable = makeIdTableFromVector({{idS_}, {idO_}});
   IdCache idCache{1024};
 
   auto result = evaluateIdTable({0}, idTable, idCache);
@@ -108,8 +113,7 @@ TEST_F(ConstructBatchEvaluatorTest, multipleVariablesMultipleRows) {
   //              col 0    col 1
   // row 0:       <s>      <p>
   // row 1:       <o>      <q>
-  auto idTable = makeIdTableFromVector(
-      {{getId_("<s>"), getId_("<p>")}, {getId_("<o>"), getId_("<q>")}});
+  auto idTable = makeIdTableFromVector({{idS_, idP_}, {idO_, idQ_}});
   IdCache idCache{1024};
 
   auto result = evaluateIdTable({0, 1}, idTable, idCache);
@@ -125,8 +129,7 @@ TEST_F(ConstructBatchEvaluatorTest, multipleVariablesMultipleRows) {
 // is a constant in the CONSTRUCT template and is not listed). Verify that the
 // result only contains entries for the requested columns.
 TEST_F(ConstructBatchEvaluatorTest, evaluatesOnlyRequestedColumns) {
-  auto idTable =
-      makeIdTableFromVector({{getId_("<s>"), getId_("<p>"), getId_("<o>")}});
+  auto idTable = makeIdTableFromVector({{idS_, idP_, idO_}});
   IdCache idCache{1024};
 
   auto result = evaluateIdTable({0, 2}, idTable, idCache);
@@ -156,8 +159,7 @@ TEST_F(ConstructBatchEvaluatorTest, undefinedIdReturnsNullopt) {
 // holds an undefined `Id`. Verify that only the undefined row produces nullopt,
 // = while the defined rows are resolved normally.
 TEST_F(ConstructBatchEvaluatorTest, undefinedMixedWithValidIds) {
-  auto idTable = makeIdTableFromVector(
-      {{getId_("<s>")}, {Id::makeUndefined()}, {getId_("<o>")}});
+  auto idTable = makeIdTableFromVector({{idS_}, {Id::makeUndefined()}, {idO_}});
   IdCache idCache{1024};
 
   auto result = evaluateIdTable({0}, idTable, idCache);
@@ -171,8 +173,7 @@ TEST_F(ConstructBatchEvaluatorTest, undefinedMixedWithValidIds) {
 // all rows must resolve to the same string. Verify that repeated `Id`s produce
 // consistent results.
 TEST_F(ConstructBatchEvaluatorTest, repeatedIdsProduceConsistentResults) {
-  Id idS = getId_("<s>");
-  auto idTable = makeIdTableFromVector({{idS}, {idS}, {idS}});
+  auto idTable = makeIdTableFromVector({{idS_}, {idS_}, {idS_}});
   IdCache idCache{1024};
 
   auto result = evaluateIdTable({0}, idTable, idCache);
@@ -185,9 +186,7 @@ TEST_F(ConstructBatchEvaluatorTest, repeatedIdsProduceConsistentResults) {
 // Verify that the evaluator produces correct results across both batches.
 TEST_F(ConstructBatchEvaluatorTest,
        correctResultsWhenSameIdCacheUsedAcrossBatches) {
-  Id idS = getId_("<s>");
-  Id idO = getId_("<o>");
-  auto idTable = makeIdTableFromVector({{idS}, {idO}, {idS}, {idO}});
+  auto idTable = makeIdTableFromVector({{idS_}, {idO_}, {idS_}, {idO_}});
   IdCache idCache{1024};
 
   // First batch: rows [0, 2).
@@ -207,8 +206,7 @@ TEST_F(ConstructBatchEvaluatorTest,
 // rows are evaluated. The result indices are 0-based relative to firstRow_.
 TEST_F(ConstructBatchEvaluatorTest, subRangeEvaluatesCorrectRows) {
   // 4 rows, but we only evaluate rows [1, 3).
-  auto idTable = makeIdTableFromVector(
-      {{getId_("<s>")}, {getId_("<p>")}, {getId_("<o>")}, {getId_("<q>")}});
+  auto idTable = makeIdTableFromVector({{idS_}, {idP_}, {idO_}, {idQ_}});
   IdCache idCache{1024};
 
   auto result = evaluateRowRange({0}, idTable, 1, 3, idCache);
@@ -234,8 +232,7 @@ TEST_F(ConstructBatchEvaluatorTest, literalIsResolvedCorrectly) {
 // A column with mixed IRIs and a literal. Verify that each row is resolved with
 // the correct type.
 TEST_F(ConstructBatchEvaluatorTest, mixedIriAndLiteralColumn) {
-  auto idTable = makeIdTableFromVector(
-      {{getId_("<s>")}, {getId_("\"hello\"")}, {getId_("<o>")}});
+  auto idTable = makeIdTableFromVector({{idS_}, {getId_("\"hello\"")}, {idO_}});
   IdCache idCache{1024};
 
   auto result = evaluateIdTable({0}, idTable, idCache);
@@ -249,7 +246,7 @@ TEST_F(ConstructBatchEvaluatorTest, mixedIriAndLiteralColumn) {
 // Empty batch (zero rows). The result should have `numRows_` == 0 and no column
 // entries, since there is nothing to evaluate.
 TEST_F(ConstructBatchEvaluatorTest, emptyBatch) {
-  auto idTable = makeIdTableFromVector({});
+  auto idTable = makeIdTableFromVector({});  // empty
   IdCache idCache{1024};
 
   auto result = evaluateIdTable({}, idTable, idCache);
@@ -262,7 +259,7 @@ TEST_F(ConstructBatchEvaluatorTest, emptyBatch) {
 // positions in the CONSTRUCT template are constants. The result should reflect
 // the row count but contain no column data.
 TEST_F(ConstructBatchEvaluatorTest, noVariableColumns) {
-  auto idTable = makeIdTableFromVector({{getId_("<s>")}, {getId_("<o>")}});
+  auto idTable = makeIdTableFromVector({{idS_}, {idO_}});
   IdCache idCache{1024};
 
   auto result = evaluateIdTable({}, idTable, idCache);
@@ -277,18 +274,12 @@ TEST_F(ConstructBatchEvaluatorTest, noVariableColumns) {
 // columns (subject at 0, object at 1) and a constant predicate column (not
 // evaluated). Multiple rows share the same subject, exercising the cache.
 TEST_F(ConstructBatchEvaluatorTest, realisticConstructPattern) {
-  Id idS = getId_("<s>");
-  Id idP = getId_("<p>");
-  Id idO = getId_("<o>");
-  Id idQ = getId_("<q>");
-
-  //              col 0 (?s)  col 1 (<p>)  col 2 (?o)
-  // row 0:       <s>         <p>          <o>
-  // row 1:       <s>         <p>          <q>
-  // row 2:       <o>         <p>          <s>
-  // row 3:       <s>         <p>          <o>    (duplicate of row 0)
-  auto idTable = makeIdTableFromVector(
-      {{idS, idP, idO}, {idS, idP, idQ}, {idO, idP, idS}, {idS, idP, idO}});
+  auto idTable = makeIdTableFromVector({
+      {idS_, idP_, idO_},
+      {idS_, idP_, idQ_},
+      {idO_, idP_, idS_},
+      {idS_, idP_, idO_}  // duplicate of row 0
+  });
   IdCache idCache{1024};
 
   // Only columns 0 and 2 are variables; column 1 is the constant predicate.
@@ -313,8 +304,7 @@ TEST_F(ConstructBatchEvaluatorTest, realisticConstructPattern) {
 // constant evictions.
 TEST_F(ConstructBatchEvaluatorTest, cacheOfSizeOneStillProducesCorrectResults) {
   // table with 1 column and 4 rows.
-  auto idTable = makeIdTableFromVector(
-      {{getId_("<s>")}, {getId_("<o>")}, {getId_("<p>")}, {getId_("<q>")}});
+  auto idTable = makeIdTableFromVector({{idS_}, {idO_}, {idP_}, {idQ_}});
   IdCache idCache{1};
 
   auto result = evaluateIdTable({0}, idTable, idCache);
