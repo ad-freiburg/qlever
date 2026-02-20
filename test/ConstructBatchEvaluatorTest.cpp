@@ -80,19 +80,18 @@ class ConstructBatchEvaluatorTest : public ::testing::Test {
   }
 };
 
-// Two rows with different `Iri`s in the same column (i.e. with different `Iri`s
-// for the same variable across different `IdTable` rows). Verify that each row
-// is independently resolved and that the results for a specific variable are in
-// row order.
-TEST_F(ConstructBatchEvaluatorTest, singleVariableMultipleRows) {
-  auto idTable = makeIdTableFromVector({{idS_}, {idO_}});
+// A column with mixed IRIs and a literal. Verify that each row is resolved with
+// the correct type (IRI vs. quoted literal string).
+TEST_F(ConstructBatchEvaluatorTest, mixedIriAndLiteralColumn) {
+  auto idTable = makeIdTableFromVector({{idS_}, {getId_("\"hello\"")}, {idO_}});
   IdCache idCache{1024};
 
   auto result = evaluateIdTable({0}, idTable, idCache);
 
-  ASSERT_EQ(result.numRows_, 2);
-  EXPECT_THAT(getColumn(result, 0),
-              ElementsAre(evalTerm("<s>"), evalTerm("<o>")));
+  ASSERT_EQ(result.numRows_, 3);
+  EXPECT_THAT(
+      getColumn(result, 0),
+      ElementsAre(evalTerm("<s>"), evalTerm("\"hello\""), evalTerm("<o>")));
 }
 
 // Two variable columns (0 and 1), two rows. This is the typical CONSTRUCT
@@ -121,12 +120,14 @@ TEST_F(ConstructBatchEvaluatorTest, evaluatesOnlyRequestedColumns) {
   auto idTable = makeIdTableFromVector({{idS_, idP_, idO_}});
   IdCache idCache{1024};
 
+  // only {0, 2} are passed as column Indices.
   auto result = evaluateIdTable({0, 2}, idTable, idCache);
 
   ASSERT_EQ(result.numRows_, 1);
   ASSERT_EQ(result.variablesByColumn_.size(), 2);
   EXPECT_TRUE(result.variablesByColumn_.contains(0));
   EXPECT_TRUE(result.variablesByColumn_.contains(2));
+  // false
   EXPECT_FALSE(result.variablesByColumn_.contains(1));
   EXPECT_THAT(result.getVariable(0, 0), evalTerm("<s>"));
   EXPECT_THAT(result.getVariable(2, 0), evalTerm("<o>"));
@@ -216,20 +217,6 @@ TEST_F(ConstructBatchEvaluatorTest, outOfRangeRowBoundsViolateContract) {
   EXPECT_ANY_THROW(evaluateRowRange({0}, idTable, 0, 5, idCache));
   // firstRow beyond endRow.
   EXPECT_ANY_THROW(evaluateRowRange({0}, idTable, 3, 1, idCache));
-}
-
-// A column with mixed IRIs and a literal. Verify that each row is resolved with
-// the correct type (IRI vs. quoted literal string).
-TEST_F(ConstructBatchEvaluatorTest, mixedIriAndLiteralColumn) {
-  auto idTable = makeIdTableFromVector({{idS_}, {getId_("\"hello\"")}, {idO_}});
-  IdCache idCache{1024};
-
-  auto result = evaluateIdTable({0}, idTable, idCache);
-
-  ASSERT_EQ(result.numRows_, 3);
-  EXPECT_THAT(
-      getColumn(result, 0),
-      ElementsAre(evalTerm("<s>"), evalTerm("\"hello\""), evalTerm("<o>")));
 }
 
 // Empty batch (zero rows). The result should have `numRows_` == 0 and no column
