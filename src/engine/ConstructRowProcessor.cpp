@@ -24,7 +24,8 @@ ConstructRowProcessor::ConstructRowProcessor(
                      ql::ranges::end(table.view_)),
       currentRowOffset_(currentRowOffset) {}
 
-// _____________________________________________________________________________
+// TODO<ms2144>: The while (true) looks suspicious here.
+//  _____________________________________________________________________________
 std::optional<EvaluatedTriple> ConstructRowProcessor::get() {
   while (true) {
     if (tripleIdx_ < currentBatchTriples_.size()) {
