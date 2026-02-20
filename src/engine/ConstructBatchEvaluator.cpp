@@ -16,7 +16,7 @@ namespace qlever::constructExport {
 
 // _____________________________________________________________________________
 BatchEvaluationResult ConstructBatchEvaluator::evaluateBatch(
-    const std::vector<size_t>& variableColumnIndices,
+    ql::span<const size_t> variableColumnIndices,
     const BatchEvaluationContext& evaluationContext,
     const LocalVocab& localVocab, const Index& index, IdCache& idCache) {
   BatchEvaluationResult batchResult;

@@ -66,7 +66,7 @@ class ConstructBatchEvaluator {
   // in `evaluationContext`. Each entry in `variableColumnIndices` is an
   // `IdTable` column index representing a variable in the CONSTRUCT template.
   static BatchEvaluationResult evaluateBatch(
-      const std::vector<size_t>& variableColumnIndices,
+      ql::span<const size_t> variableColumnIndices,
       const BatchEvaluationContext& evaluationContext,
       const LocalVocab& localVocab, const Index& index, IdCache& idCache);
 
