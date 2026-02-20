@@ -289,6 +289,7 @@ DeltaTriples::TriplesToVacuum DeltaTriples::identifyTriplesToVacuum() {
     if (blockIndex == blockMetadata.size()) {
       // return identifyTriplesToRemoveFromBlock<isInternal>(blockIndex,
       // IdTable(4, allocator_);
+      continue;
     }
     const auto& blockMeta = blockMetadata[blockIndex];
     AD_CORRECTNESS_CHECK(blockMeta.offsetsAndCompressedSize_.has_value());
