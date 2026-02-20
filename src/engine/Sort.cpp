@@ -71,7 +71,7 @@ void Sort::onLimitOffsetChanged(const LimitOffsetClause& limitOffset) const {
   // TODO<RobinTF> find out if we need to clone the operation in this case.
   // This is only okay, because outside `ORDER BY`, which is a different
   // operation, the order of the results has no semanting meaning in SPARQL.
-  subtree_->applyLimit(limitOffset);
+  subtree_->applyLimitOffset(limitOffset);
 }
 
 // _____________________________________________________________________________

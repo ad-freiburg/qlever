@@ -44,7 +44,7 @@ bool Bind::supportsLimitOffset() const { return true; }
 
 // _____________________________________________________________________________
 void Bind::onLimitOffsetChanged(const LimitOffsetClause& limitOffset) const {
-  _subtree->applyLimit(limitOffset);
+  _subtree->applyLimitOffset(limitOffset);
 }
 
 float Bind::getMultiplicity(size_t col) {

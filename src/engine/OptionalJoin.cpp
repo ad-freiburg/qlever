@@ -105,7 +105,7 @@ void OptionalJoin::onLimitOffsetChanged(
     // side, since the result of the optional join is at least as large as the
     // left side. This can significantly speed up the query if the left side is
     // large and the limit is small.
-    _left->applyLimit(LimitOffsetClause{safeLimit});
+    _left->applyLimitOffset(LimitOffsetClause{safeLimit});
   }
 }
 

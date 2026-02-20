@@ -244,9 +244,9 @@ class QueryExecutionTree {
     return getRootOperation()->benefitsFromApplyingLimitOrOffset();
   }
 
-  // Set the value of the `LIMIT` clause that will be applied to the result of
-  // this operation.
-  void applyLimit(const LimitOffsetClause& limitOffsetClause) {
+  // Set the value of the `LIMIT`/`OFFSET` clause that will be applied to the
+  // result of this operation.
+  void applyLimitOffset(const LimitOffsetClause& limitOffsetClause) {
     getRootOperation()->applyLimitOffset(limitOffsetClause);
     // Setting the limit invalidates the `cacheKey` as well as the
     // `sizeEstimate`.
