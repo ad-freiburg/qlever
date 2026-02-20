@@ -282,10 +282,24 @@ TEST_F(ConstructBatchEvaluatorTest, realisticConstructPattern) {
               ElementsAre(evalTerm("<s>"), evalTerm("<s>"), evalTerm("<o>"),
                           evalTerm("<s>")));
 
+  // idS_ appears in col0[0,1,3] and col2[2]: all must share the same
+  // shared_ptr.
+  const auto& firstS = getColumn(result, 0).at(0);
+  auto idSTerms =
+      std::vector{getColumn(result, 0).at(1), getColumn(result, 0).at(3),
+                  getColumn(result, 2).at(2)};
+  EXPECT_THAT(idSTerms, Each(Eq(firstS)));
+
   // Column 2 (?o): <o>, <q>, <s>, <o>
   EXPECT_THAT(getColumn(result, 2),
               ElementsAre(evalTerm("<o>"), evalTerm("<q>"), evalTerm("<s>"),
                           evalTerm("<o>")));
+
+  // idO_ appears in col2[0,3] and col0[2]: all must share the same shared_ptr.
+  const auto& firstO = getColumn(result, 2).at(0);
+  auto idOTerms =
+      std::vector{getColumn(result, 2).at(3), getColumn(result, 0).at(2)};
+  EXPECT_THAT(idOTerms, Each(Eq(firstO)));
 }
 
 // With a cache of size 1, every access to a different `Id` evicts the previous
