@@ -9,6 +9,7 @@
 #include "engine/ConstructBatchEvaluator.h"
 
 #include "engine/ConstructQueryEvaluator.h"
+#include "util/Exception.h"
 #include "util/Views.h"
 
 namespace qlever::constructExport {
@@ -22,9 +23,11 @@ BatchEvaluationResult ConstructBatchEvaluator::evaluateBatch(
   batchResult.numRows_ = evaluationContext.numRows();
 
   for (size_t variableColumnIdx : variableColumnIndices) {
-    batchResult.variablesByColumn_[variableColumnIdx] =
+    auto [it, wasNew] = batchResult.variablesByColumn_.emplace(
+        variableColumnIdx,
         evaluateVariableByColumn(variableColumnIdx, evaluationContext,
-                                 localVocab, index, idCache);
+                                 localVocab, index, idCache));
+    AD_CORRECTNESS_CHECK(wasNew);
   }
 
   return batchResult;
