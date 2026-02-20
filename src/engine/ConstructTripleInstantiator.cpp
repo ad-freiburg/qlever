@@ -51,9 +51,10 @@ std::string ConstructTripleInstantiator::formatTriple(
     const EvaluatedTerm& object) {
   // TODO<ms2144>: use a list or sth to check if the format is one of the legal
   // formats in the list etc. Already used it somewhere.
-  static_assert(format == ad_utility::MediaType::turtle ||
-                format == ad_utility::MediaType::csv ||
-                format == ad_utility::MediaType::tsv);
+
+  using ad_utility::MediaType;
+  static constexpr std::array supportedFormats{turtle, csv, tsv};
+  static_assert(ad_utility::contains(supportedFormats, format));
 
   if constexpr (format == ad_utility::MediaType::turtle) {
     // Only escape literals (strings starting with "). IRIs and blank nodes
