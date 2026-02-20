@@ -19,7 +19,6 @@
 #include "engine/ConstructTripleInstantiator.h"
 #include "engine/QueryExportTypes.h"
 #include "util/CancellationHandle.h"
-#include "util/stream_generator.h"
 
 namespace qlever::constructExport {
 
