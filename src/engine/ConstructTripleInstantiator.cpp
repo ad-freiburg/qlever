@@ -46,6 +46,8 @@ template <ad_utility::MediaType format>
 std::string ConstructTripleInstantiator::formatTriple(
     const EvaluatedTerm& subject, const EvaluatedTerm& predicate,
     const EvaluatedTerm& object) {
+  // TODO<ms2144>: use a list or sth to check if the format is one of the legal
+  // formats in the list etc. Already used it somewhere.
   static_assert(format == ad_utility::MediaType::turtle ||
                 format == ad_utility::MediaType::csv ||
                 format == ad_utility::MediaType::tsv);

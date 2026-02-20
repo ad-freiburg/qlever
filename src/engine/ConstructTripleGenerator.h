@@ -44,14 +44,13 @@ class ConstructTripleGenerator {
   generateStringTriplesForResultTable(const TableWithRange& table);
 
   // Generate formatted strings for a single result table.
-  template <ad_utility::MediaType format>
   ad_utility::InputRangeTypeErased<std::string> generateFormattedTriples(
-      const TableWithRange& table);
+      const TableWithRange& table, ad_utility::MediaType format);
 
   // Generate formatted strings for all tables in a range.
-  template <ad_utility::MediaType format>
   ad_utility::InputRangeTypeErased<std::string> generateAllFormattedTriples(
-      ad_utility::InputRangeTypeErased<TableWithRange> rowIndices);
+      ad_utility::InputRangeTypeErased<TableWithRange> rowIndices,
+      ad_utility::MediaType format);
 
   // Helper that generates `StringTriple`s for a full CONSTRUCT query.
   static ad_utility::InputRangeTypeErased<StringTriple> generateStringTriples(

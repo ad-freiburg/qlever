@@ -21,24 +21,37 @@ using StringTriple =
 using CancellationHandle = ad_utility::SharedCancellationHandle;
 
 // _____________________________________________________________________________
-// Adapter that transforms `EvaluatedTriple` to formatted strings.
-template <ad_utility::MediaType format>
+// Adapter that transforms `EvaluatedTriple` to a formatted string.
+// The output format is selected at runtime via `format_`.
 class FormattedTripleAdapter
     : public ad_utility::InputRangeFromGet<std::string> {
  public:
-  explicit FormattedTripleAdapter(
-      std::unique_ptr<ConstructRowProcessor> processor)
-      : processor_(std::move(processor)) {}
+  FormattedTripleAdapter(std::unique_ptr<ConstructRowProcessor> processor,
+                         ad_utility::MediaType format)
+      : processor_{std::move(processor)}, format_{format} {}
 
   std::optional<std::string> get() override {
     auto triple = processor_->get();
     if (!triple) return std::nullopt;
-    return ConstructTripleInstantiator::formatTriple<format>(
-        triple->subject_, triple->predicate_, triple->object_);
+    using ad_utility::MediaType;
+    switch (format_) {
+      case MediaType::turtle:
+        return ConstructTripleInstantiator::formatTriple<MediaType::turtle>(
+            triple->subject_, triple->predicate_, triple->object_);
+      case MediaType::csv:
+        return ConstructTripleInstantiator::formatTriple<MediaType::csv>(
+            triple->subject_, triple->predicate_, triple->object_);
+      case MediaType::tsv:
+        return ConstructTripleInstantiator::formatTriple<MediaType::tsv>(
+            triple->subject_, triple->predicate_, triple->object_);
+      default:
+        AD_THROW("Unsupported media type for CONSTRUCT query formatting.");
+    }
   }
 
  private:
   std::unique_ptr<ConstructRowProcessor> processor_;
+  ad_utility::MediaType format_;
 };
 
 // _____________________________________________________________________________
@@ -118,10 +131,9 @@ ConstructTripleGenerator::generateStringTriples(
 }
 
 // _____________________________________________________________________________
-template <ad_utility::MediaType format>
 ad_utility::InputRangeTypeErased<std::string>
 ConstructTripleGenerator::generateFormattedTriples(
-    const TableWithRange& table) {
+    const TableWithRange& table, ad_utility::MediaType format) {
   const size_t currentRowOffset = rowOffset_;
   rowOffset_ += table.tableWithVocab_.idTable().numRows();
 
@@ -130,45 +142,22 @@ ConstructTripleGenerator::generateFormattedTriples(
       currentRowOffset);
 
   return ad_utility::InputRangeTypeErased<std::string>{
-      std::make_unique<FormattedTripleAdapter<format>>(std::move(processor))};
+      std::make_unique<FormattedTripleAdapter>(std::move(processor), format)};
 }
 
 // _____________________________________________________________________________
-template <ad_utility::MediaType format>
 ad_utility::InputRangeTypeErased<std::string>
 ConstructTripleGenerator::generateAllFormattedTriples(
-    ad_utility::InputRangeTypeErased<TableWithRange> rowIndices) {
+    ad_utility::InputRangeTypeErased<TableWithRange> rowIndices,
+    ad_utility::MediaType format) {
   auto tableTriples =
       ql::views::transform(ad_utility::OwningView{std::move(rowIndices)},
-                           [this](const TableWithRange& table) {
-                             return generateFormattedTriples<format>(table);
+                           [this, format](const TableWithRange& table) {
+                             return generateFormattedTriples(table, format);
                            });
 
   return InputRangeTypeErased<std::string>(
       ql::views::join(std::move(tableTriples)));
 }
-
-// Explicit instantiations.
-template ad_utility::InputRangeTypeErased<std::string>
-ConstructTripleGenerator::generateFormattedTriples<
-    ad_utility::MediaType::turtle>(const TableWithRange&);
-template ad_utility::InputRangeTypeErased<std::string>
-ConstructTripleGenerator::generateFormattedTriples<ad_utility::MediaType::csv>(
-    const TableWithRange&);
-template ad_utility::InputRangeTypeErased<std::string>
-ConstructTripleGenerator::generateFormattedTriples<ad_utility::MediaType::tsv>(
-    const TableWithRange&);
-template ad_utility::InputRangeTypeErased<std::string>
-    ConstructTripleGenerator::generateAllFormattedTriples<
-        ad_utility::MediaType::turtle>(
-        ad_utility::InputRangeTypeErased<TableWithRange>);
-template ad_utility::InputRangeTypeErased<std::string>
-    ConstructTripleGenerator::generateAllFormattedTriples<
-        ad_utility::MediaType::csv>(
-        ad_utility::InputRangeTypeErased<TableWithRange>);
-template ad_utility::InputRangeTypeErased<std::string>
-    ConstructTripleGenerator::generateAllFormattedTriples<
-        ad_utility::MediaType::tsv>(
-        ad_utility::InputRangeTypeErased<TableWithRange>);
 
 }  // namespace qlever::constructExport

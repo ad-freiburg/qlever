@@ -1118,7 +1118,7 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
       qet.getQec()->getIndex(), std::move(cancellationHandle));
 
   for (const auto& tripleString :
-       generator.generateAllFormattedTriples<format>(std::move(rowIndices))) {
+       generator.generateAllFormattedTriples(std::move(rowIndices), format)) {
     STREAMABLE_YIELD(tripleString);
   }
 }
