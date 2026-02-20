@@ -65,7 +65,6 @@ using EvaluatedTerm = std::shared_ptr<const std::string>;
 
 // Result of instantiating a single template triple for a specific result table
 // row. Contains the resolved string values for subject, predicate, and object.
-// Each component is either Undef (variable unbound) or a valid string.
 struct EvaluatedTriple {
   EvaluatedTerm subject_;
   EvaluatedTerm predicate_;
