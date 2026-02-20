@@ -65,18 +65,18 @@ class ConstructBatchEvaluatorTest : public ::testing::Test {
   BatchEvaluationResult evaluateIdTable(
       const std::vector<size_t>& variableColumnIndices, const IdTable& idTable,
       IdCache& idCache) {
-    BatchEvaluationContext ctx{idTable, localVocab_, 0, idTable.numRows()};
+    BatchEvaluationContext ctx{idTable, 0, idTable.numRows()};
     return ConstructBatchEvaluator::evaluateBatch(variableColumnIndices, ctx,
-                                                  index_, idCache);
+                                                  localVocab_, index_, idCache);
   }
 
   // Evaluate a sub-range [`firstRow`, `endRow`) of the `IdTable`.
   BatchEvaluationResult evaluateRowRange(
       const std::vector<size_t>& variableColumnIndices, const IdTable& idTable,
       size_t firstRow, size_t endRow, IdCache& idCache) {
-    BatchEvaluationContext ctx{idTable, localVocab_, firstRow, endRow};
+    BatchEvaluationContext ctx{idTable, firstRow, endRow};
     return ConstructBatchEvaluator::evaluateBatch(variableColumnIndices, ctx,
-                                                  index_, idCache);
+                                                  localVocab_, index_, idCache);
   }
 };
 
