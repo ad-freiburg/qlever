@@ -4,17 +4,18 @@
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
+
+// TODO<ms2144>: add apache copyright notice here.
+
 #ifndef QLEVER_SRC_ENGINE_CONSTRUCTTYPES_H
 #define QLEVER_SRC_ENGINE_CONSTRUCTTYPES_H
 
 #include <array>
 #include <memory>
-#include <optional>
-#include <string>
 #include <variant>
 #include <vector>
-
-#include "util/HashMap.h"
 
 namespace qlever::constructExport {
 
@@ -24,7 +25,7 @@ struct PrecomputedConstant {
   std::string value_;
 };
 
-// We precompute which `IdTable` column to look up at construct query triple
+// We precompute which `IdTable` column to look up at template triple
 // instantitation time.
 struct PrecomputedVariable {
   size_t columnIndex_;
@@ -58,10 +59,10 @@ struct PreprocessedConstructTemplate {
   std::vector<PreprocessedTriple> preprocessedTriples_;
   std::vector<size_t> uniqueVariableColumns_;
 };
-
 // --- Evaluation types ---
 
-// Result of evaluating a term.
+// Result of evaluating a term (`Iri`, `Literal`, `Variable`, `BlankNode`) to
+// its string representation.
 using EvaluatedTerm = std::shared_ptr<const std::string>;
 
 // Result of instantiating a single template triple for a specific result table
@@ -74,23 +75,6 @@ struct EvaluatedTriple {
 
   // Get string value for a component.
   static const std::string& getValue(const EvaluatedTerm& var) { return *var; }
-};
-
-// Result of batch-evaluating variables for a batch of rows. Stores evaluated
-// values indexed by `IdTable` column index, enabling efficient lookup during
-// triple instantiation.
-struct BatchEvaluationResult {
-  // Map from `IdTable` column index to evaluated values for each row in batch.
-  // Each entry is `std::nullopt` if the variable evaluation failed for that
-  // row.
-  ::ad_utility::HashMap<size_t, std::vector<std::optional<EvaluatedTerm>>>
-      variablesByColumn_;
-  size_t numRows_ = 0;
-
-  const std::optional<EvaluatedTerm>& getVariable(size_t columnIndex,
-                                                  size_t rowInBatch) const {
-    return variablesByColumn_.at(columnIndex).at(rowInBatch);
-  }
 };
 
 }  // namespace qlever::constructExport

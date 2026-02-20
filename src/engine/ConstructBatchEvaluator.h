@@ -1,5 +1,5 @@
-// Copyright 2025 The QLever Authors, in particular:
-// 2025 Marvin Stoetzel <marvin.stoetzel@email.uni-freiburg.de>, UFR
+// Copyright 2026 The QLever Authors, in particular:
+// 2026 Marvin Stoetzel <marvin.stoetzel@email.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
@@ -9,25 +9,54 @@
 #ifndef QLEVER_SRC_ENGINE_CONSTRUCTBATCHEVALUATOR_H
 #define QLEVER_SRC_ENGINE_CONSTRUCTBATCHEVALUATOR_H
 
-#include <util/LruCacheWithStatistics.h>
-
+#include <optional>
 #include <vector>
 
 #include "engine/ConstructTypes.h"
 #include "engine/idTable/IdTable.h"
+#include "util/Exception.h"
+#include "util/HashMap.h"
+#include "util/LruCacheWithStatistics.h"
 
 namespace qlever::constructExport {
 
-// Groups the data needed for batch evaluation: the `IdTable` containing the
-// result rows, the `LocalVocab` (needed because some `Id`s may reference values
-// created at query runtime that are not in the global index vocabulary), and
-// the contiguous half-open row range [firstRow_, endRow_) that defines which
-// rows belong to this batch.
+// Evaluated values of one variable across all rows in a batch. The element at
+// index `i` corresponds to the value of the evaluated variable for row `i` of
+// the batch (0-based relative to `BatchEvaluationContext::firstRow_`). An
+// element is `std::nullopt` if the variable was unbound for that row.
+using EvaluatedVariableValues = std::vector<std::optional<EvaluatedTerm>>;
+
+// Result of batch-evaluating all variables for a batch of rows. Stores the
+// evaluated values per variable column and the number of rows in the batch.
+struct BatchEvaluationResult {
+  // Map from `IdTable` column index to evaluated values for each row in batch.
+  // A hash map is used because the set of evaluated columns may be sparse:
+  // only columns corresponding to variables in the CONSTRUCT template are
+  // evaluated; columns for constants and blank nodes are never requested.
+  ad_utility::HashMap<size_t, EvaluatedVariableValues> variablesByColumn_;
+  size_t numRows_ = 0;
+
+  const std::optional<EvaluatedTerm>& getVariable(size_t columnIndex,
+                                                  size_t rowInBatch) const {
+    return variablesByColumn_.at(columnIndex).at(rowInBatch);
+  }
+};
+
+using IdCache =
+    ad_utility::util::LRUCacheWithStatistics<Id, std::optional<EvaluatedTerm>>;
+
+// Identifies a contiguous sub-range of rows of an `IdTable` that forms one
+// batch.
 struct BatchEvaluationContext {
   const IdTable& idTable_;
-  const LocalVocab& localVocab_;
   size_t firstRow_;
   size_t endRow_;  // exclusive
+
+  BatchEvaluationContext(const IdTable& idTable, size_t firstRow, size_t endRow)
+      : idTable_(idTable), firstRow_(firstRow), endRow_(endRow) {
+    AD_CONTRACT_CHECK(firstRow <= endRow);
+    AD_CONTRACT_CHECK(endRow <= idTable.numRows());
+  }
 
   size_t numRows() const { return endRow_ - firstRow_; }
 };
@@ -43,29 +72,20 @@ struct BatchEvaluationContext {
 // same `Id` across rows and batches.
 class ConstructBatchEvaluator {
  public:
-  using IdCache =
-      ad_utility::util::LRUCacheWithStatistics<Id,
-                                               std::optional<EvaluatedTerm>>;
-  using BatchEvaluationResult = qlever::constructExport::BatchEvaluationResult;
-  using EvaluatedTerm = qlever::constructExport::EvaluatedTerm;
-
-  // Evaluate all `uniqueVariableColumns` for the rows in `evaluationContext`.
-  // Results are indexed by column and then by row-within-batch (0-based
-  // relative to `firstRow_`).
+  // Evaluates the variables identified by `variableColumnIndices` for all rows
+  // in `evaluationContext`. Each entry in `variableColumnIndices` is an
+  // `IdTable` column index representing a variable in the CONSTRUCT template.
   static BatchEvaluationResult evaluateBatch(
-      const std::vector<size_t>& uniqueVariableColumns,
-      const BatchEvaluationContext& evaluationContext, const Index& index,
-      IdCache& idCache);
+      ql::span<const size_t> variableColumnIndices,
+      const BatchEvaluationContext& evaluationContext,
+      const LocalVocab& localVocab, const Index& index, IdCache& idCache);
 
  private:
-  // Evaluate a single variable across all rows in the batch. A variable is
-  // identified by its column in the `IdTable` (which is contained in
-  // `BatchEvaluationContext`). For each row, the `Id` at
-  // `(rowIdx, idTableColumnIdx)` is looked up in `IdCache`; on a cache miss,
-  // `ConstructQueryEvaluator::evaluateId` is called and the result is cached.
-  static std::vector<std::optional<EvaluatedTerm>> evaluateVariableByColumn(
-      size_t idTableColumnIdx, const BatchEvaluationContext& evaluationContext,
-      const Index& index, IdCache& idCache);
+  // Evaluate a single variable (identified by its `IdTable` column index)
+  // across all rows in the batch.
+  static EvaluatedVariableValues evaluateVariableByColumn(
+      size_t idTableColumnIdx, const BatchEvaluationContext& ctx,
+      const LocalVocab& localVocab, const Index& index, IdCache& idCache);
 };
 
 }  // namespace qlever::constructExport
