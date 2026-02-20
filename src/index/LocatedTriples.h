@@ -53,7 +53,7 @@ struct VacuumStatistics {
   friend std::ostream& operator<<(std::ostream& os,
                                   const VacuumStatistics& stats);
 
-  /// Output as json. The signature of this function is mandated by the json
+  /// Output as JSON. The signature of this function is mandated by the JSON
   /// library to allow for implicit conversion.
   friend void to_json(nlohmann::json& j, const VacuumStatistics& stats);
 };
@@ -130,6 +130,22 @@ class LocatedTriplesPerBlock {
   template <size_t numIndexColumns, bool includeGraphColumn>
   VacuumStatistics vacuumBlockImpl(size_t blockIndex, const IdTable& block);
 
+  // Vacuum updates for a specific block, removing redundant operations.
+  // This removes:
+  // - Deletions of triples that don't exist in the original dataset
+  // - Insertions of triples that already exist in the original dataset
+  //
+  // `numIndexColumns` is the number of columns in `block`, except the graph
+  // column and payload if any, that is, a number from `{1, 2, 3}`.
+  // `includeGraphColumn` specifies whether `block` contains the graph column.
+  //
+  // Returns statistics about the vacuum operation.
+  //
+  // NOTE: After calling this function, `updateAugmentedMetadata()` should be
+  // called to maintain metadata consistency.
+  VacuumStatistics vacuumBlock(size_t blockIndex, const IdTable& block,
+                               size_t numIndexColumns, bool includeGraphColumn);
+
   // Stores the block metadata where the block borders have been adjusted for
   // the updated triples.
   std::optional<std::vector<CompressedBlockMetadata>> augmentedMetadata_;
@@ -184,22 +200,6 @@ class LocatedTriplesPerBlock {
   // located triple will have values for OSG and UNDEF for X and Y.
   IdTable mergeTriples(size_t blockIndex, const IdTable& block,
                        size_t numIndexColumns, bool includeGraphColumn) const;
-
-  // Vacuum updates for a specific block, removing redundant operations.
-  // This removes:
-  // - Deletions of triples that don't exist in the original dataset
-  // - Insertions of triples that already exist in the original dataset
-  //
-  // `numIndexColumns` is the number of columns in `block`, except the graph
-  // column and payload if any, that is, a number from `{1, 2, 3}`.
-  // `includeGraphColumn` specifies whether `block` contains the graph column.
-  //
-  // Returns statistics about the vacuum operation.
-  //
-  // NOTE: After calling this function, `updateAugmentedMetadata()` should be
-  // called to maintain metadata consistency.
-  VacuumStatistics vacuumBlock(size_t blockIndex, const IdTable& block,
-                               size_t numIndexColumns, bool includeGraphColumn);
 
   // Vacuum all blocks with more than 100k updates, removing redundant
   // operations by comparing with original block data read from the permutation.

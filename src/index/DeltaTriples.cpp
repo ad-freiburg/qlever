@@ -102,14 +102,14 @@ nlohmann::json DeltaTriples::vacuum() {
   nlohmann::json result = nlohmann::json::object();
 
   // Lambda to vacuum all permutations and add stats to JSON result
-  auto vacuumImpl = [this, &result](const auto& allPermutations,
-                                     auto& locatedTriples,
-                                     bool isInternal) {
-    size_t i = 0;
-    for (auto permutation : allPermutations) {
+  auto vacuumAll = [this, &result](const auto& allPermutations,
+                                   auto& locatedTriplesPerPermutation,
+                                   bool isInternal) {
+    for (auto&& [permutation, locatedTriples] :
+         ranges::views::zip(allPermutations, locatedTriplesPerPermutation)) {
       const auto& perm = index_.getPermutation(permutation);
 
-      auto stats = locatedTriples[i].vacuum(perm);
+      auto stats = locatedTriples.vacuum(perm);
 
       // Get permutation name and append "I" suffix for internal
       std::string permName = std::string(Permutation::toString(permutation));
@@ -117,22 +117,19 @@ nlohmann::json DeltaTriples::vacuum() {
         permName += "I";
       }
 
-      // Add per-permutation stats to result (uses existing to_json for VacuumStatistics)
+      // Add per-permutation stats to result (uses existing to_json for
+      // VacuumStatistics)
       result[permName] = stats;
-
-      ++i;
     }
   };
 
   // Process external permutations (PSO, POS, SPO, SOP, OPS, OSP)
-  vacuumImpl(Permutation::all<false>(),
-             locatedTriples_->getLocatedTriples<false>(),
-             false);
+  vacuumAll(Permutation::all<false>(),
+            locatedTriples_->getLocatedTriples<false>(), false);
 
   // Process internal permutations (PSOI, POSI)
-  vacuumImpl(Permutation::all<true>(),
-             locatedTriples_->getLocatedTriples<true>(),
-             true);
+  vacuumAll(Permutation::all<true>(),
+            locatedTriples_->getLocatedTriples<true>(), true);
 
   return result;
 }
