@@ -322,18 +322,19 @@ class TransitivePathImpl : public TransitivePathBase {
       Id node = stack.back();
       stack.pop_back();
 
-      if (!marks.contains(node)) {
-        marks.insert(node);
-        if (node == target) {
-          connectedNodes.insert(node);
-          // Stop the DFS once target found, no further processing necessary.
-          break;
-        }
+      if (marks.contains(node)) continue;
 
-        const auto& successors = edges.successors(node);
-        for (auto successor : successors) {
-          if (!marks.contains(successor)) stack.emplace_back(successor);
-        }
+      marks.insert(node);
+      if (node == target) {
+        connectedNodes.insert(node);
+        // Stop the DFS once target found, no further processing necessary.
+        break;
+      }
+
+      const auto& successors = edges.successors(node);
+      for (auto successor : successors) {
+        // Only add unmarked/new nodes.
+        if (!marks.contains(successor)) stack.emplace_back(successor);
       }
     }
     return connectedNodes;
@@ -360,21 +361,23 @@ class TransitivePathImpl : public TransitivePathBase {
       auto [node, steps] = stack.back();
       stack.pop_back();
 
-      if (steps <= maxDist_ && !marks.contains(node)) {
-        if (steps >= minDist_) {
-          marks.insert(node);
-          if (node == target) {
-            connectedNodes.insert(node);
-            // Stop the DFS once target found, no further processing necessary.
-            break;
-          }
-        }
+      if (!(steps <= maxDist_) || marks.contains(node)) continue;
 
-        const auto& successors = edges.successors(node);
-        for (auto successor : successors) {
-          if (!marks.contains(successor))
-            stack.emplace_back(successor, steps + 1);
+      if (steps >= minDist_) {
+        // Marked nodes are guaranteed to be reachable inside the distance
+        // constraints.
+        marks.insert(node);
+        if (node == target) {
+          connectedNodes.insert(node);
+          // Stop the DFS once target found, no further processing necessary.
+          break;
         }
+      }
+
+      const auto& successors = edges.successors(node);
+      for (auto successor : successors) {
+        if (!marks.contains(successor))
+          stack.emplace_back(successor, steps + 1);
       }
     }
     return connectedNodes;
