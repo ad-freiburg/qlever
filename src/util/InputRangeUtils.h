@@ -54,14 +54,22 @@ CPP_class_template(typename View, typename F,
 
   // The input view, the function, and the current iterator into the `view_`.
   // The iterator is `nullopt` before the first call to `get`.
+  //
+  // NOTE: We deliberately declare `view_` before `transformation_` so that
+  // `transformation_` is destroyed after `view_`. That way, a `transformation_`
+  // may own resources that `view_` depends on. For example, the transformation
+  // in `Sort::computeResultExternal` owns a `sorter`, to which the view also
+  // has a reference. Destroying the transformation (and hence the `sorter`)
+  // first might then lead to a segmentation fault when the view is still busy
+  // and tries to access the `sorter`.
+  ::ranges::semiregular_box_t<F> transformation_;
   View view_;
-  ::ranges::semiregular_box_t<F> transfomation_;
   std::optional<ql::ranges::iterator_t<View>> it_;
 
  public:
   // Constructor.
   explicit CachingTransformInputRange(View view, F transformation = {})
-      : view_{std::move(view)}, transfomation_(std::move(transformation)) {
+      : transformation_(std::move(transformation)), view_{std::move(view)} {
     if constexpr (!std::is_same_v<Details, NoDetails>) {
       static_cast<Base*>(this)->setDetailsPointer(&view_.base().details());
     }
@@ -82,7 +90,7 @@ CPP_class_template(typename View, typename F,
     if (*it_ == view_.end()) {
       return std::nullopt;
     }
-    return std::invoke(transfomation_, *it_.value());
+    return std::invoke(transformation_, *it_.value());
   }
 
   // Get access to the underlying view.

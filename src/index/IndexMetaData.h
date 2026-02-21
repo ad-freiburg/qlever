@@ -172,6 +172,14 @@ class IndexMetaData {
     return blockData_;
   }
 
+  // Exchange the multiplicities for two permutations that are "twins" (e.g. PSO
+  // and POS). This is needed because the multiplicity of the last column is
+  // stored in the metadata of the other permutation. The `PairMetadataWriter`
+  // already does this for the `PermutationWriter<true>` but when both
+  // permutations are written individually, we need to exchange the
+  // multiplicities of col 1 and col2 in post processing.
+  void exchangeMultiplicities(IndexMetaData& other);
+
   // Symmetric serialization function for the ad_utility::serialization module.
   AD_SERIALIZE_FRIEND_FUNCTION(IndexMetaData) {
     // The binary format of an IndexMetaData start with an 8-byte magicNumber.

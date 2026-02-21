@@ -17,6 +17,7 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
+#include "engine/ConstructTripleGenerator.h"
 #include "global/RuntimeParameters.h"
 #include "index/EncodedIriManager.h"
 #include "index/IndexImpl.h"
@@ -27,9 +28,13 @@
 #include "util/json.h"
 #include "util/views/TakeUntilInclusiveView.h"
 
+using ad_utility::InputRangeTypeErased;
+
 namespace {
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+using Literal = ad_utility::triple_component::Literal;
 
+// _____________________________________________________________________________
 // Return true iff the `result` is nonempty.
 bool getResultForAsk(const std::shared_ptr<const Result>& result) {
   if (result->isFullyMaterialized()) {
@@ -41,6 +46,7 @@ bool getResultForAsk(const std::shared_ptr<const Result>& result) {
   }
 }
 
+// _____________________________________________________________________________
 LiteralOrIri encodedIdToLiteralOrIri(Id id, const IndexImpl& index) {
   const auto& mgr = index.encodedIriManager();
   return LiteralOrIri::fromStringRepresentation(mgr.toString(id));
@@ -95,8 +101,7 @@ STREAMABLE_GENERATOR_TYPE computeResultForAsk(
 }  // namespace
 
 // __________________________________________________________________________
-ad_utility::InputRangeTypeErased<
-    ExportQueryExecutionTrees::TableConstRefWithVocab>
+InputRangeTypeErased<TableConstRefWithVocab>
 ExportQueryExecutionTrees::getIdTables(const Result& result) {
   using namespace ad_utility;
   if (result.isFullyMaterialized()) {
@@ -112,11 +117,9 @@ ExportQueryExecutionTrees::getIdTables(const Result& result) {
 }
 
 // _____________________________________________________________________________
-ad_utility::InputRangeTypeErased<ExportQueryExecutionTrees::TableWithRange>
-ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
-                                         const Result& result,
-                                         uint64_t& resultSize,
-                                         uint64_t resultSizeMultiplicator) {
+InputRangeTypeErased<TableWithRange> ExportQueryExecutionTrees::getRowIndices(
+    const LimitOffsetClause& limitOffset, const Result& result,
+    uint64_t& resultSize, uint64_t resultSizeMultiplicator) {
   using namespace ad_utility;
   // The first call initializes the `resultSize` to zero (no need to
   // initialize it outside of the function).
@@ -143,7 +146,7 @@ ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
 
   // An `IdTable` of which a certain subrange becomes part of the result,
   // together with a bool that indicates whether this is the last `IdTable` (to
-  // stop the computation of possibly expensive results as soon as possible.
+  // stop the computation of possibly expensive results as soon as possible.)
   struct Export {
     TableWithRange tableWithRange_;
     bool isLast_;
@@ -256,69 +259,15 @@ ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
         })};
 }
 
-namespace {
-// Evaluate a `ConstructTriple` on the `context`. If the evaluation fails (e.g.
-// because an entry of the triple would be invalid), return an empty
-// `StringTriple`.
-auto evaluateTripleForConstruct =
-    [](const auto& triple, const ConstructQueryExportContext& context) {
-      using enum PositionInTriple;
-      auto subject = triple[0].evaluate(context, SUBJECT);
-      auto predicate = triple[1].evaluate(context, PREDICATE);
-      auto object = triple[2].evaluate(context, OBJECT);
-      if (!subject.has_value() || !predicate.has_value() ||
-          !object.has_value()) {
-        return QueryExecutionTree::StringTriple();
-      }
-      return QueryExecutionTree::StringTriple(std::move(subject.value()),
-                                              std::move(predicate.value()),
-                                              std::move(object.value()));
-    };
-
-}  // namespace
 // _____________________________________________________________________________
 auto ExportQueryExecutionTrees::constructQueryResultToTriples(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples,
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
     uint64_t& resultSize, CancellationHandle cancellationHandle) {
-  // The `resultSizeMultiplicator`(last argument of `getRowIndices`) is
-  // explained by the following: For each result from the WHERE clause, we
-  // produce up to `constructTriples.size()` triples. We do not account for
-  // triples that are filtered out because one of the components is UNDEF (it
-  // would require materializing the whole result)
-  auto rowIndices = getRowIndices(limitAndOffset, *result, resultSize,
-                                  constructTriples.size());
-  return ad_utility::InputRangeTypeErased(
-      ad_utility::OwningView{std::move(rowIndices)} |
-      ql::views::transform(
-          [&qet, &constructTriples, result = std::move(result),
-           cancellationHandle = std::move(cancellationHandle),
-           rowOffset = size_t{0}](const auto& tableWithView) mutable {
-            // NOTE: This reference is captured in the following lambda.
-            // Normally it would be dangling, but as the `idTable` is not owned
-            // by the `tableWithView`, but backed by the outermost range, This
-            // is fine.
-            auto& idTable = tableWithView.tableWithVocab_.idTable();
-            auto currentRowOffset = rowOffset;
-            rowOffset += idTable.size();
-            return ql::ranges::transform_view(
-                tableWithView.view_, [&, currentRowOffset](uint64_t i) {
-                  auto& localVocab = tableWithView.tableWithVocab_.localVocab();
-                  return ql::ranges::transform_view(
-                      constructTriples,
-                      [&cancellationHandle,
-                       context = ConstructQueryExportContext{
-                           i, idTable, localVocab, qet.getVariableColumns(),
-                           qet.getQec()->getIndex(),
-                           currentRowOffset}](const auto& triple) mutable {
-                        cancellationHandle->throwIfCancelled();
-                        return evaluateTripleForConstruct(triple, context);
-                      });
-                });
-          }) |
-      ql::views::join | ql::views::join |
-      ql::views::filter([](const auto& triple) { return !triple.isEmpty(); }));
+  return ConstructTripleGenerator::generateStringTriples(
+      qet, constructTriples, limitAndOffset, std::move(result), resultSize,
+      std::move(cancellationHandle));
 }
 
 // _____________________________________________________________________________
@@ -359,7 +308,7 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::
 }
 
 // _____________________________________________________________________________
-ad_utility::InputRangeTypeErased<std::string>
+InputRangeTypeErased<std::string>
 ExportQueryExecutionTrees::constructQueryResultBindingsToQLeverJSON(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples,
@@ -370,14 +319,13 @@ ExportQueryExecutionTrees::constructQueryResultBindingsToQLeverJSON(
       qet, constructTriples, limitAndOffset, std::move(result), resultSize,
       std::move(cancellationHandle));
 
-  return ad_utility::InputRangeTypeErased<std::string>(
-      ad_utility::CachingTransformInputRange(
-          std::move(generator), [](QueryExecutionTree::StringTriple& triple) {
-            auto binding = nlohmann::json::array({std::move(triple.subject_),
-                                                  std::move(triple.predicate_),
-                                                  std::move(triple.object_)});
-            return binding.dump();
-          }));
+  return InputRangeTypeErased(ad_utility::CachingTransformInputRange(
+      std::move(generator), [](QueryExecutionTree::StringTriple& triple) {
+        auto binding = nlohmann::json::array({std::move(triple.subject_),
+                                              std::move(triple.predicate_),
+                                              std::move(triple.object_)});
+        return binding.dump();
+      }));
 }
 
 // _____________________________________________________________________________
@@ -438,7 +386,7 @@ auto ExportQueryExecutionTrees::idTableToQLeverJSONBindings(
                    });
              }) |
          ql::views::join;
-}
+};
 
 // _____________________________________________________________________________
 std::optional<std::pair<std::string, const char*>>
@@ -516,8 +464,7 @@ ExportQueryExecutionTrees::idToLiteralForEncodedValue(
     return std::nullopt;
   }
 
-  return ad_utility::triple_component::Literal::literalWithoutQuotes(
-      optionalStringAndType->first);
+  return Literal::literalWithoutQuotes(optionalStringAndType->first);
 }
 
 // _____________________________________________________________________________
@@ -834,9 +781,9 @@ static nlohmann::json stringAndTypeToBinding(std::string_view entitystr,
 }
 
 // _____________________________________________________________________________
-ad_utility::InputRangeTypeErased<std::string> askQueryResultToQLeverJSON(
+InputRangeTypeErased<std::string> askQueryResultToQLeverJSON(
     std::shared_ptr<const Result> result) {
-  return ad_utility::InputRangeTypeErased(
+  return InputRangeTypeErased(
       ad_utility::lazySingleValueRange([result = std::move(result)]() {
         AD_CORRECTNESS_CHECK(result != nullptr);
         std::string_view value = getResultForAsk(result) ? "true" : "false";
@@ -848,7 +795,7 @@ ad_utility::InputRangeTypeErased<std::string> askQueryResultToQLeverJSON(
 }
 
 // _____________________________________________________________________________
-ad_utility::InputRangeTypeErased<std::string>
+InputRangeTypeErased<std::string>
 ExportQueryExecutionTrees::selectQueryResultBindingsToQLeverJSON(
     const QueryExecutionTree& qet,
     const parsedQuery::SelectClause& selectClause,
@@ -860,7 +807,7 @@ ExportQueryExecutionTrees::selectQueryResultBindingsToQLeverJSON(
   QueryExecutionTree::ColumnIndicesAndTypes selectedColumnIndices =
       qet.selectedVariablesToColumnIndices(selectClause, true);
 
-  return ad_utility::InputRangeTypeErased(idTableToQLeverJSONBindings(
+  return InputRangeTypeErased(idTableToQLeverJSONBindings(
       qet, limitAndOffset, std::move(selectedColumnIndices), std::move(result),
       resultSize, std::move(cancellationHandle)));
 }
@@ -952,6 +899,7 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream(
   AD_LOG_DEBUG << "Done creating readable result.\n";
 }
 
+// _____________________________________________________________________________
 // Convert a single ID to an XML binding of the given `variable`.
 template <typename IndexType, typename LocalVocabType>
 static std::string idToXMLBinding(std::string_view variable, Id id,
@@ -1064,9 +1012,9 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
        getRowIndices(limitAndOffset, *result, resultSize)) {
     for (uint64_t i : range) {
       STREAMABLE_YIELD("\n  <result>");
-      for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
-        if (selectedColumnIndices[j].has_value()) {
-          const auto& val = selectedColumnIndices[j].value();
+      for (auto& selectedColIdx : selectedColumnIndices) {
+        if (selectedColIdx.has_value()) {
+          const auto& val = selectedColIdx.value();
           Id id = pair.idTable()(i, val.columnIndex_);
           STREAMABLE_YIELD(idToXMLBinding(
               val.variable_, id, qet.getQec()->getIndex(), pair.localVocab()));
@@ -1215,7 +1163,7 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 // _____________________________________________________________________________
-ad_utility::InputRangeTypeErased<std::string>
+InputRangeTypeErased<std::string>
 ExportQueryExecutionTrees::convertStreamGeneratorForChunkedTransfer(
     STREAMABLE_GENERATOR_TYPE streamGenerator) {
   using namespace ad_utility;
@@ -1422,45 +1370,3 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
 
   STREAMABLE_YIELD(absl::StrCat("],", jsonSuffix.dump().substr(1)));
 }
-
-// This function evaluates a `Variable` in the context of the `CONSTRUCT`
-// export.
-[[nodiscard]] static std::optional<std::string> evaluateVariableForConstruct(
-    const Variable& var, const ConstructQueryExportContext& context,
-    [[maybe_unused]] PositionInTriple positionInTriple) {
-  size_t row = context._row;
-  const auto& variableColumns = context._variableColumns;
-  const Index& qecIndex = context._qecIndex;
-  const auto& idTable = context.idTable_;
-  if (variableColumns.contains(var)) {
-    size_t index = variableColumns.at(var).columnIndex_;
-    auto id = idTable(row, index);
-    auto optionalStringAndType = ExportQueryExecutionTrees::idToStringAndType(
-        qecIndex, id, context.localVocab_);
-    if (!optionalStringAndType.has_value()) {
-      return std::nullopt;
-    }
-    auto& [literal, type] = optionalStringAndType.value();
-    const char* i = XSD_INT_TYPE;
-    const char* d = XSD_DECIMAL_TYPE;
-    const char* b = XSD_BOOLEAN_TYPE;
-    // Note: If `type` is `XSD_DOUBLE_TYPE`, `literal` is always "NaN", "INF" or
-    // "-INF", which doesn't have a short form notation.
-    if (type == nullptr || type == i || type == d ||
-        (type == b && literal.length() > 1)) {
-      return std::move(literal);
-    } else {
-      return absl::StrCat("\"", literal, "\"^^<", type, ">");
-    }
-  }
-  return std::nullopt;
-}
-
-// The following trick has the effect that `Variable::evaluate()` calls the
-// above function, without `Variable` having to link against the (heavy) export
-// module. This is a bit of a hack and will be removed in the future when we
-// improve the CONSTRUCT module for better performance.
-[[maybe_unused]] static const int initializeVariableEvaluationDummy = []() {
-  Variable::decoupledEvaluateFuncPtr() = &evaluateVariableForConstruct;
-  return 42;
-}();
