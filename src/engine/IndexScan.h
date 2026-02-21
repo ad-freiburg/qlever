@@ -132,7 +132,8 @@ class IndexScan final : public Operation {
   // there are undef values, the second generator represents the full index
   // scan.
   std::pair<Result::LazyResult, Result::LazyResult> prefilterTables(
-      Result::LazyResult input, ColumnIndex joinColumn);
+      Result::LazyResult input, ColumnIndex joinColumn,
+      bool filterJoinSide = true);
 
  private:
   // Implementation detail that allows to consume a lazy range from two other

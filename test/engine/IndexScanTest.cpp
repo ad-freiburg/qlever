@@ -11,6 +11,7 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
+#include "./LazyJoinTestHelpers.h"
 #include "engine/IndexScan.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
@@ -915,48 +916,16 @@ TEST(IndexScan, checkEvaluationWithPrefiltering) {
       {I(10), I(12), I(18), I(22), I(25), I(147), I(189), I(194)}, true);
 }
 
-class IndexScanWithLazyJoin : public ::testing::TestWithParam<bool> {
+class IndexScanWithLazyJoin : public ::testing::TestWithParam<bool>,
+                              public ad_utility::testing::LazyJoinTestHelper {
  protected:
-  QueryExecutionContext* qec_ = nullptr;
-
   void SetUp() override {
     std::string kg =
         "<a> <p> <A> . <a> <p> <A2> . "
         "<b> <p> <B> . <b> <p> <B2> . "
         "<c> <p> <C> . <c> <p> <C2> . "
         "<b> <q> <xb> . <b> <q> <xb2> .";
-    qec_ = getQec(std::move(kg));
-  }
-
-  // Convert a TripleComponent to a ValueId.
-  Id toValueId(const TripleComponent& tc) const {
-    return tc.toValueId(qec_->getIndex().getVocab(), *encodedIriManager())
-        .value();
-  }
-
-  // Create an id table with a single column from a vector of
-  // `TripleComponent`s.
-  IdTable makeIdTable(std::vector<TripleComponent> entries) const {
-    IdTable result{1, makeAllocator()};
-    result.reserve(entries.size());
-    for (const TripleComponent& entry : entries) {
-      result.emplace_back();
-      result.back()[0] = toValueId(entry);
-    }
-    return result;
-  }
-
-  // Convert a vector of a tuple of triples to an id table.
-  IdTable tableFromTriples(
-      std::vector<std::array<TripleComponent, 2>> triples) const {
-    IdTable result{2, makeAllocator()};
-    result.reserve(triples.size());
-    for (const auto& triple : triples) {
-      result.emplace_back();
-      result.back()[0] = toValueId(triple.at(0));
-      result.back()[1] = toValueId(triple.at(1));
-    }
-    return result;
+    setupQecWithKnowledgeGraph(kg);
   }
 
   // Create a common `IndexScan` instance.
@@ -1014,22 +983,19 @@ class IndexScanWithLazyJoin : public ::testing::TestWithParam<bool> {
 TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesFilterCorrectly) {
   IndexScan scan = makeScan();
 
-  auto makeJoinSide = [](auto* self) -> Result::Generator {
+  auto makeJoinSide = [this]() {
     using P = Result::IdTableVocabPair;
-    P p1{self->makeIdTable({iri("<a>"), iri("<c>")}), LocalVocab{}};
-    co_yield p1;
-    P p2{self->makeIdTable({iri("<c>")}), LocalVocab{}};
-    co_yield p2;
     LocalVocab vocab;
     vocab.getIndexAndAddIfNotContained(LocalVocabEntry{
         ad_utility::triple_component::Literal::literalWithoutQuotes("Test")});
-    P p3{self->makeIdTable({iri("<c>"), iri("<q>"), iri("<xb>")}),
-         std::move(vocab)};
-    co_yield p3;
+    return std::array{P{makeIdTable({iri("<a>"), iri("<c>")}), LocalVocab{}},
+                      P{makeIdTable({iri("<c>")}), LocalVocab{}},
+                      P{makeIdTable({iri("<c>"), iri("<q>"), iri("<xb>")}),
+                        std::move(vocab)}};
   };
 
   auto [joinSideResults, scanResults] = consumeRanges(
-      scan.prefilterTables(LazyResult{makeJoinSide(this)}, 0),
+      scan.prefilterTables(LazyResult{makeJoinSide()}, 0),
       [&scan, counter = 0]() mutable {
         bool rightFirst = GetParam();
         // If the left side is being consumed first, then we observe the effects
@@ -1090,16 +1056,44 @@ TEST_P(IndexScanWithLazyJoin,
   qec_ = getQec(std::move(kg));
   IndexScan scan = makeScan();
 
-  auto makeJoinSide = [](auto* self) -> Result::Generator {
+  auto makeJoinSide = [this]() {
     using P = Result::IdTableVocabPair;
-    P p1{self->makeIdTable({iri("<a>")}), LocalVocab{}};
-    co_yield p1;
-    P p2{self->makeIdTable({iri("<b>")}), LocalVocab{}};
-    co_yield p2;
+    return std::array{P{makeIdTable({iri("<a>")}), LocalVocab{}},
+                      P{makeIdTable({iri("<b>")}), LocalVocab{}}};
   };
 
   auto [joinSideResults, scanResults] =
-      consumeRanges(scan.prefilterTables(LazyResult{makeJoinSide(this)}, 0));
+      consumeRanges(scan.prefilterTables(LazyResult{makeJoinSide()}, 0));
+
+  ASSERT_EQ(scanResults.size(), 1);
+  ASSERT_EQ(joinSideResults.size(), 2);
+
+  EXPECT_TRUE(scanResults.at(0).localVocab_.empty());
+  EXPECT_TRUE(joinSideResults.at(0).localVocab_.empty());
+  EXPECT_TRUE(joinSideResults.at(1).localVocab_.empty());
+
+  EXPECT_EQ(
+      scanResults.at(0).idTable_,
+      tableFromTriples({{iri("<a>"), iri("<A>")}, {iri("<b>"), iri("<B>")}}));
+  EXPECT_EQ(joinSideResults.at(0).idTable_, makeIdTable({iri("<a>")}));
+
+  EXPECT_EQ(joinSideResults.at(1).idTable_, makeIdTable({iri("<b>")}));
+}
+
+// _____________________________________________________________________________
+TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesSkipNonMatchingTables) {
+  std::string kg = "<a> <p> <A> . <b> <p> <B>. ";
+  qec_ = getQec(std::move(kg));
+  IndexScan scan = makeScan();
+
+  using P = Result::IdTableVocabPair;
+  std::array joinSide{
+      P{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}},
+      P{makeIdTable({iri("<a>")}), LocalVocab{}},
+      P{makeIdTable({iri("<b>")}), LocalVocab{}}};
+
+  auto [joinSideResults, scanResults] =
+      consumeRanges(scan.prefilterTables(LazyResult{std::move(joinSide)}, 0));
 
   ASSERT_EQ(scanResults.size(), 1);
   ASSERT_EQ(joinSideResults.size(), 2);
@@ -1123,12 +1117,11 @@ TEST_P(IndexScanWithLazyJoin,
   qec_ = getQec(std::move(kg));
   IndexScan scan = makeScan();
 
-  auto makeJoinSide = []() -> Result::Generator {
+  auto makeJoinSide = []() {
     using P = Result::IdTableVocabPair;
-    P p1{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}};
-    co_yield p1;
-    P p2{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}};
-    co_yield p2;
+    return std::array{
+        P{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}},
+        P{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}}};
   };
 
   auto [joinSideResults, scanResults] =
@@ -1891,5 +1884,249 @@ TEST(IndexScanTest, StripColumnsWithPrefiltering) {
     EXPECT_THAT(result2, matchesIdTable(expectedResult.clone()))
         << "Approach 2 (strip-then-prefilter) should match expected result for "
         << varsToKeep.size() << " variables";
+  }
+}
+
+// _____________________________________________________________________________
+TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesFilterCorrectlyOptionalJoin) {
+  IndexScan scan = makeScan();
+
+  auto makeJoinSide = [this]() {
+    using P = Result::IdTableVocabPair;
+    LocalVocab vocab;
+    vocab.getIndexAndAddIfNotContained(LocalVocabEntry{
+        ad_utility::triple_component::Literal::literalWithoutQuotes("Test")});
+    return std::array{P{makeIdTable({iri("<a>"), iri("<c>")}), LocalVocab{}},
+                      P{makeIdTable({iri("<c>")}), LocalVocab{}},
+                      P{makeIdTable({iri("<c>"), iri("<q>"), iri("<xb>")}),
+                        std::move(vocab)}};
+  };
+
+  auto [joinSideResults, scanResults] = consumeRanges(
+      scan.prefilterTables(LazyResult{makeJoinSide()}, 0, false),
+      [&scan, counter = 0]() mutable {
+        bool rightFirst = GetParam();
+        // If the left side is being consumed first, then we observe the effects
+        // 3 calls later. This is an implementation detail and might change in
+        // the future.
+        int sideOffset = rightFirst ? 0 : 3;
+        const auto& rti = scan.runtimeInfo();
+        if (counter >= sideOffset) {
+          EXPECT_EQ(rti.status_,
+                    RuntimeInformation::Status::lazilyMaterializedInProgress);
+        }
+        if (counter >= 2 + sideOffset) {
+          EXPECT_GT(rti.numRows_, 0);
+        }
+        counter++;
+      });
+
+  ASSERT_EQ(scanResults.size(), 2);
+  ASSERT_EQ(joinSideResults.size(), 3);
+
+  EXPECT_TRUE(scanResults.at(0).localVocab_.empty());
+  EXPECT_TRUE(joinSideResults.at(0).localVocab_.empty());
+
+  EXPECT_TRUE(scanResults.at(1).localVocab_.empty());
+  EXPECT_TRUE(joinSideResults.at(1).localVocab_.empty());
+
+  EXPECT_FALSE(joinSideResults.at(2).localVocab_.empty());
+
+  EXPECT_EQ(
+      scanResults.at(0).idTable_,
+      tableFromTriples({{iri("<a>"), iri("<A>")}, {iri("<a>"), iri("<A2>")}}));
+  EXPECT_EQ(joinSideResults.at(0).idTable_,
+            makeIdTable({iri("<a>"), iri("<c>")}));
+
+  EXPECT_EQ(
+      scanResults.at(1).idTable_,
+      tableFromTriples({{iri("<c>"), iri("<C>")}, {iri("<c>"), iri("<C2>")}}));
+  EXPECT_EQ(joinSideResults.at(1).idTable_, makeIdTable({iri("<c>")}));
+
+  EXPECT_EQ(joinSideResults.at(2).idTable_,
+            makeIdTable({iri("<c>"), iri("<q>"), iri("<xb>")}));
+
+  const auto& rti = scan.runtimeInfo();
+  EXPECT_EQ(rti.status_,
+            RuntimeInformation::Status::lazilyMaterializedInProgress);
+  EXPECT_EQ(rti.numRows_, 4);
+  // Note: In the code the `totalTime_` is also set, but the actual code runs
+  // faster than a single millisecond, so it won't show up in the data.
+  EXPECT_EQ(rti.details_["num-blocks-read"], 2);
+  EXPECT_EQ(rti.details_["num-blocks-all"], 3);
+  EXPECT_EQ(rti.details_["num-elements-read"], 4);
+}
+
+// _____________________________________________________________________________
+TEST_P(IndexScanWithLazyJoin,
+       prefilterTablesDoesNotSkipNonMatchingTablesOptionalJoin) {
+  std::string kg = "<a> <p> <A> . <b> <p> <B>. ";
+  qec_ = getQec(std::move(kg));
+  IndexScan scan = makeScan();
+
+  using P = Result::IdTableVocabPair;
+  std::array joinSide{
+      P{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}},
+      P{makeIdTable({iri("<a>")}), LocalVocab{}},
+      P{makeIdTable({iri("<b>")}), LocalVocab{}}};
+
+  auto [joinSideResults, scanResults] = consumeRanges(
+      scan.prefilterTables(LazyResult{std::move(joinSide)}, 0, false));
+
+  ASSERT_EQ(scanResults.size(), 1);
+  ASSERT_EQ(joinSideResults.size(), 3);
+
+  EXPECT_TRUE(scanResults.at(0).localVocab_.empty());
+  EXPECT_TRUE(joinSideResults.at(0).localVocab_.empty());
+  EXPECT_TRUE(joinSideResults.at(1).localVocab_.empty());
+  EXPECT_TRUE(joinSideResults.at(2).localVocab_.empty());
+
+  EXPECT_EQ(
+      scanResults.at(0).idTable_,
+      tableFromTriples({{iri("<a>"), iri("<A>")}, {iri("<b>"), iri("<B>")}}));
+  EXPECT_EQ(joinSideResults.at(0).idTable_,
+            makeIdTableFromVector({{Id::makeFromBool(true)}}));
+
+  EXPECT_EQ(joinSideResults.at(1).idTable_, makeIdTable({iri("<a>")}));
+
+  EXPECT_EQ(joinSideResults.at(2).idTable_, makeIdTable({iri("<b>")}));
+}
+
+// _____________________________________________________________________________
+TEST_P(IndexScanWithLazyJoin,
+       prefilterTablesDoesStreamLastTablesAfterExhaustedIndex) {
+  std::string kg = "<a> <p> <A> . <b> <p> <B>. ";
+  qec_ = getQec(std::move(kg));
+  IndexScan scan = makeScan();
+
+  using P = Result::IdTableVocabPair;
+  std::array joinSide{
+      P{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}},
+      P{makeIdTable({iri("<a>")}), LocalVocab{}},
+      P{makeIdTableFromVector(
+            {{Id::makeFromBlankNodeIndex(BlankNodeIndex::make(0))}}),
+        LocalVocab{}},
+      P{makeIdTableFromVector(
+            {{Id::makeFromBlankNodeIndex(BlankNodeIndex::make(1))}}),
+        LocalVocab{}}};
+
+  auto [joinSideResults, scanResults] = consumeRanges(
+      scan.prefilterTables(LazyResult{std::move(joinSide)}, 0, false));
+
+  ASSERT_EQ(scanResults.size(), 1);
+  ASSERT_EQ(joinSideResults.size(), 4);
+
+  EXPECT_TRUE(scanResults.at(0).localVocab_.empty());
+  EXPECT_TRUE(joinSideResults.at(0).localVocab_.empty());
+  EXPECT_TRUE(joinSideResults.at(1).localVocab_.empty());
+  EXPECT_TRUE(joinSideResults.at(2).localVocab_.empty());
+  EXPECT_TRUE(joinSideResults.at(3).localVocab_.empty());
+
+  EXPECT_EQ(
+      scanResults.at(0).idTable_,
+      tableFromTriples({{iri("<a>"), iri("<A>")}, {iri("<b>"), iri("<B>")}}));
+  EXPECT_EQ(joinSideResults.at(0).idTable_,
+            makeIdTableFromVector({{Id::makeFromBool(true)}}));
+
+  EXPECT_EQ(joinSideResults.at(1).idTable_, makeIdTable({iri("<a>")}));
+
+  EXPECT_EQ(joinSideResults.at(2).idTable_,
+            makeIdTableFromVector(
+                {{Id::makeFromBlankNodeIndex(BlankNodeIndex::make(0))}}));
+
+  EXPECT_EQ(joinSideResults.at(3).idTable_,
+            makeIdTableFromVector(
+                {{Id::makeFromBlankNodeIndex(BlankNodeIndex::make(1))}}));
+}
+
+// _____________________________________________________________________________
+TEST_P(IndexScanWithLazyJoin,
+       prefilterTablesDoesStreamManyMatchingTablesAfterIndexIsExhausted) {
+  std::string kg = "<a> <p> <A> . <b> <p> <B>. ";
+  qec_ = getQec(std::move(kg));
+  IndexScan scan = makeScan();
+
+  using P = Result::IdTableVocabPair;
+  std::vector<P> joinSide;
+  // The left side contains many entries that match the last block in the index
+  // that is yielded. There previously was an assertion bug for this case,
+  // because the prefilter tried to push noexisting dummy blocks to the right
+  // hand side. This should now be fixed.
+  static constexpr size_t numBlocksJoinSide = 20;
+  for (size_t i = 0; i < numBlocksJoinSide; ++i) {
+    joinSide.push_back(P{makeIdTable({iri("<a>")}), LocalVocab{}});
+  };
+
+  // Assert that, because we don't have new blocks on the scan side, we
+  // immediately re-yield the left side if it is consumed first.
+  size_t numBlocksReadJoinSide = 0;
+  auto joinSideWithCounter =
+      ad_utility::OwningView{std::move(joinSide)} |
+      ql::views::transform([&numBlocksReadJoinSide](P& block) {
+        ++numBlocksReadJoinSide;
+        return std::move(block);
+      });
+  auto postCondition = [&numBlocksReadJoinSide,
+                        numBlocksExported = 0ul]() mutable {
+    bool rightFirst = GetParam();
+    if (rightFirst) {
+      return;
+    }
+    ++numBlocksExported;
+    // The second half of the `||` is because `numBlocksExported` also accounts
+    // for the single block of the scan side which is consumed after the join
+    // side has been fully exhausted due to the mechanics of `consumeRanges`
+    // with `rightFirst == false`.
+    EXPECT_TRUE((numBlocksReadJoinSide == numBlocksExported) ||
+                (numBlocksReadJoinSide == numBlocksJoinSide &&
+                 numBlocksExported == numBlocksJoinSide + 1));
+  };
+  auto [joinSideResults, scanResults] = consumeRanges(
+      scan.prefilterTables(LazyResult{std::move(joinSideWithCounter)}, 0, true),
+      postCondition);
+
+  ASSERT_EQ(scanResults.size(), 1);
+  ASSERT_EQ(joinSideResults.size(), 20);
+
+  EXPECT_TRUE(scanResults.at(0).localVocab_.empty());
+
+  EXPECT_EQ(
+      scanResults.at(0).idTable_,
+      tableFromTriples({{iri("<a>"), iri("<A>")}, {iri("<b>"), iri("<B>")}}));
+
+  for (const auto& [idTable, localVocab] : joinSideResults) {
+    EXPECT_EQ(idTable, makeIdTable({iri("<a>")}));
+  }
+}
+
+// _____________________________________________________________________________
+TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesEventuallyPushDummyBlock) {
+  std::string kg = "<a> <p> <A> . <b> <p> <B>. ";
+  qec_ = getQec(std::move(kg));
+  IndexScan scan = makeScan();
+
+  using P = Result::IdTableVocabPair;
+  std::array joinSide{
+      P{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}},
+      P{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}},
+      P{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}},
+      P{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}},
+      P{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}},
+      P{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}}};
+
+  auto [joinSideResults, scanResults] = consumeRanges(
+      scan.prefilterTables(LazyResult{std::move(joinSide)}, 0, false));
+
+  ASSERT_EQ(scanResults.size(), 1);
+  ASSERT_EQ(joinSideResults.size(), 6);
+
+  EXPECT_TRUE(scanResults.at(0).localVocab_.empty());
+  EXPECT_EQ(
+      scanResults.at(0).idTable_,
+      tableFromTriples({{iri("<a>"), iri("<A>")}, {iri("<b>"), iri("<B>")}}));
+
+  for (const auto& [idTable, localVocab] : joinSideResults) {
+    EXPECT_TRUE(localVocab.empty());
+    EXPECT_EQ(idTable, makeIdTableFromVector({{Id::makeFromBool(true)}}));
   }
 }
