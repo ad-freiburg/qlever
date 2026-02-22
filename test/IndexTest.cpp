@@ -14,7 +14,9 @@
 #include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
+#include "CompilationInfo.h"
 #include "index/Index.h"
+#include "index/IndexFormatVersion.h"
 #include "index/IndexImpl.h"
 #include "util/IndexTestHelpers.h"
 
@@ -738,7 +740,7 @@ TEST(IndexImpl, recomputeStatistics) {
     auto newStats = indexImpl.recomputeStatistics(
         index.deltaTriplesManager().getCurrentLocatedTriplesSharedState());
     EXPECT_NE(newStats, indexImpl.configurationJson_);
-    EXPECT_EQ(newStats["num-triples"], NNAI(5, 6));
+    EXPECT_EQ(newStats["num-triples"], NNAI(6, 6));
     EXPECT_EQ(newStats["num-predicates"], NNAI(2, 4));
     if (loadAllPermutations) {
       EXPECT_EQ(newStats["num-subjects"], NNAI(4, 0));
@@ -778,18 +780,23 @@ TEST(IndexImpl, createPermutation) {
 
   Permutation permutation{Permutation::PSO,
                           ad_utility::makeUnlimitedAllocator<Id>()};
-  size_t uniquePredicates = index.createPermutation(
+  auto [uniquePredicates, meta] = index.createPermutationWithoutMetadata(
       4,
       ad_utility::InputRangeTypeErased{std::array<IdTableStatic<0>, 2>{
           tables.at(0).clone(), tables.at(1).clone()}},
       permutation, false);
+  index.finalizePermutation(meta, permutation, false);
+
   EXPECT_EQ(uniquePredicates, 3);
   EXPECT_TRUE(std::filesystem::exists(onDiskBase + ".index.pso"));
   EXPECT_TRUE(std::filesystem::exists(onDiskBase + ".index.pso.meta"));
 
-  size_t uniqueInternalPredicates = index.createPermutation(
-      4, ad_utility::InputRangeTypeErased{std::move(tables)}, permutation,
-      true);
+  auto [uniqueInternalPredicates, internalMeta] =
+      index.createPermutationWithoutMetadata(
+          4, ad_utility::InputRangeTypeErased{std::move(tables)}, permutation,
+          true);
+  index.finalizePermutation(internalMeta, permutation, true);
+
   EXPECT_EQ(uniqueInternalPredicates, 3);
   EXPECT_TRUE(std::filesystem::exists(onDiskBase + ".internal.index.pso"));
   EXPECT_TRUE(std::filesystem::exists(onDiskBase + ".internal.index.pso.meta"));
@@ -861,4 +868,46 @@ TEST(IndexImpl, writePatternsToFile) {
             numDistinctSubjectPredicatePairs);
   EXPECT_TRUE(ql::ranges::equal(CompactVectorOfStrings{data}, result,
                                 ql::ranges::equal));
+}
+
+// _____________________________________________________________________________
+TEST(IndexImpl, loadConfigFromOldIndex) {
+  auto [directory, cleanup] = makeTemporaryDirectory("loadConfigFromOldIndex");
+  auto onDiskBase = directory + "/index";
+  IndexImpl other{ad_utility::makeUnlimitedAllocator<Id>()};
+  other.blocksizePermutationPerColumn() = 1337_B;
+  nlohmann::json stats;
+
+  Index::NumNormalAndInternal numTriples{42, 1337};
+  Index::NumNormalAndInternal numPredicates{9999, 1010};
+  Index::NumNormalAndInternal numSubjects{8888, 2020};
+  Index::NumNormalAndInternal numObjects{7777, 3030};
+
+  stats["num-triples"] = numTriples;
+  stats["num-predicates"] = numPredicates;
+  stats["num-subjects"] = numSubjects;
+  stats["num-objects"] = numObjects;
+  stats["i-just-invented-this"] = "🤠";
+
+  IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
+  index.loadConfigFromOldIndex(onDiskBase, other, stats);
+  EXPECT_EQ(index.getOnDiskBase(), onDiskBase);
+  EXPECT_EQ(index.getKbName(), other.getKbName());
+  EXPECT_EQ(index.numTriples(), numTriples);
+  EXPECT_EQ(index.numDistinctPredicates(), numPredicates);
+  EXPECT_EQ(index.numSubjects_, numSubjects);
+  EXPECT_EQ(index.numObjects_, numObjects);
+  EXPECT_EQ(index.blocksizePermutationPerColumn(),
+            other.blocksizePermutationPerColumn());
+  EXPECT_EQ(index.configurationJson_, stats);
+
+  // The version written to disk will also have these fields.
+  stats["git-hash"] = *qlever::version::gitShortHashWithoutLinking.wlock();
+  stats["index-format-version"] = qlever::indexFormatVersion;
+
+  std::string jsonFile = onDiskBase + CONFIGURATION_FILE;
+  std::ifstream in{jsonFile};
+  nlohmann::json jsonFromFile;
+  in >> jsonFromFile;
+  EXPECT_EQ(stats, jsonFromFile);
 }

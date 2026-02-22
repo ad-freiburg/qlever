@@ -199,6 +199,10 @@ class Operation {
 
   virtual uint64_t getSizeEstimate() final;
 
+  const SharedCancellationHandle& getCancellationHandle() const {
+    return cancellationHandle_;
+  }
+
  private:
   virtual uint64_t getSizeEstimateBeforeLimit() = 0;
 
