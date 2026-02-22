@@ -65,6 +65,14 @@ class SparqlExpression {
   virtual std::string getCacheKey(
       const VariableToColumnMap& varColMap) const = 0;
 
+  // Return true if we statically (without evaluating the expression) can
+  // determine that its result will never contain undefined values / expression
+  // errors.
+  virtual bool isResultAlwaysDefined(
+      [[maybe_unused]] const VariableToColumnMap& varColMap) const {
+    return false;
+  }
+
   // Get a short, human-readable identifier for this expression.
   virtual const std::string& descriptor() const final;
   virtual std::string& descriptor() final;
