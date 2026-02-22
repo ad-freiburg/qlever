@@ -181,6 +181,7 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
             .toValueId(index_.getVocab(), localVocab_,
                        index_.encodedIriManager());
   }
+  ad_utility::HashSet<Id> addedObjects;
   for (const auto& triple : triples) {
     const auto& ids = triple.ids();
     Id objectId = ids.at(2);
@@ -207,7 +208,12 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
         index_.getVocab(), localVocab_, index_.encodedIriManager());
     // Extra triple `<subject> @language@<predicate> "object"@language`.
     internalTriples.push_back(
-        IdTriple<0>{std::array{ids.at(0), specialId, ids.at(2), ids.at(3)}});
+        IdTriple<0>{std::array{ids.at(0), specialId, objectId, ids.at(3)}});
+    // If we have already added the triple for this object with its langtag we
+    // can't add it a second time.
+    if (addedObjects.contains(objectId)) {
+      continue;
+    }
     Id langtagId =
         languageTagCache_.getOrCompute(langtag, [this](const std::string& tag) {
           return TripleComponent{ad_utility::convertLangtagToEntityUri(tag)}
@@ -223,7 +229,8 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
     if (insertion) {
       // Extra triple `"object"@language ql:langtag <@language>`.
       internalTriples.push_back(IdTriple<0>{
-          std::array{ids.at(2), languagePredicate_, langtagId, ids.at(3)}});
+          std::array{objectId, languagePredicate_, langtagId, ids.at(3)}});
+      addedObjects.emplace(objectId);
     }
   }
   // Because of the special predicates, we need to re-sort the triples.
@@ -359,11 +366,7 @@ void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
   tracer.beginTrace("rewriteLocalVocabEntries");
   rewriteLocalVocabEntriesAndBlankNodes(triples);
   tracer.endTrace("rewriteLocalVocabEntries");
-  // TODO<joka921> Once the migration is finished, check whether we can remove
-  // the `ifndef` here again.
-#ifndef QLEVER_CPP_17
   AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(triples));
-#endif
   AD_EXPENSIVE_CHECK(std::unique(triples.begin(), triples.end()) ==
                      triples.end());
   tracer.beginTrace("removeExistingTriples");
