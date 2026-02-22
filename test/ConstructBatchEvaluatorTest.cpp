@@ -1,0 +1,313 @@
+// Copyright 2026 The QLever Authors, in particular:
+// 2026 Marvin Stoetzel <marvin.stoetzel@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
+
+#include <gmock/gmock.h>
+
+#include "./util/IdTableHelpers.h"
+#include "./util/IndexTestHelpers.h"
+#include "engine/ConstructBatchEvaluator.h"
+
+namespace {
+
+using namespace qlever::constructExport;
+using ::testing::Each;
+using ::testing::ElementsAre;
+using ::testing::Eq;
+using ::testing::Optional;
+using ::testing::Pointee;
+
+// Matcher for `std::optional<std::shared_ptr<const std::string>>`:
+// asserts the optional is non-empty and the pointed-to string equals
+// `expected`.
+static constexpr auto evalTerm = [](const std::string& expected) {
+  return Optional(Pointee(Eq(expected)));
+};
+
+static const EvaluatedVariableValues& getColumn(
+    const BatchEvaluationResult& result, size_t variableColumnIdx) {
+  return result.variablesByColumn_.at(variableColumnIdx);
+}
+
+// =============================================================================
+// Test fixture.
+// Builds a small index from:
+//   <s> <p> <o> .
+//   <s> <q> "hello" .
+//
+// This gives us five vocabulary entries: the IRIs <s>, <p>, <o>, <q> and the
+// literal "hello". The fixture provides helpers to build `IdTable`s and run the
+// batch evaluator against them.
+class ConstructBatchEvaluatorTest : public ::testing::Test {
+ protected:
+  QueryExecutionContext* qec_ =
+      ad_utility::testing::getQec("<s> <p> <o> . <s> <q> \"hello\" .");
+
+  const Index& index_ = qec_->getIndex();
+
+  Id getId_(const std::string& s) const {
+    return ad_utility::testing::makeGetId(index_)(s);
+  }
+
+  Id idS_ = getId_("<s>");
+  Id idP_ = getId_("<p>");
+  Id idO_ = getId_("<o>");
+  Id idQ_ = getId_("<q>");
+
+  LocalVocab localVocab_;
+
+  // Evaluate all rows of the `IdTable` with the given variable columns in
+  // one single batch.
+  BatchEvaluationResult evaluateIdTable(
+      const std::vector<size_t>& variableColumnIndices, const IdTable& idTable,
+      IdCache& idCache) {
+    BatchEvaluationContext ctx{idTable, 0, idTable.numRows()};
+    return ConstructBatchEvaluator::evaluateBatch(variableColumnIndices, ctx,
+                                                  localVocab_, index_, idCache);
+  }
+
+  // Evaluate a sub-range [`firstRow`, `endRow`) of the `IdTable`.
+  BatchEvaluationResult evaluateRowRange(
+      const std::vector<size_t>& variableColumnIndices, const IdTable& idTable,
+      size_t firstRow, size_t endRow, IdCache& idCache) {
+    BatchEvaluationContext ctx{idTable, firstRow, endRow};
+    return ConstructBatchEvaluator::evaluateBatch(variableColumnIndices, ctx,
+                                                  localVocab_, index_, idCache);
+  }
+};
+
+// A column with mixed IRIs and a literal. Verify that each row is resolved with
+// the correct type (IRI vs. quoted literal string).
+TEST_F(ConstructBatchEvaluatorTest, mixedIriAndLiteralColumn) {
+  auto idTable = makeIdTableFromVector({{idS_}, {getId_("\"hello\"")}, {idO_}});
+  IdCache idCache{1024};
+
+  auto result = evaluateIdTable({0}, idTable, idCache);
+
+  ASSERT_EQ(result.numRows_, 3);
+  EXPECT_THAT(
+      getColumn(result, 0),
+      ElementsAre(evalTerm("<s>"), evalTerm("\"hello\""), evalTerm("<o>")));
+}
+
+// Two variable columns (0 and 1), two rows. This is the typical CONSTRUCT
+// pattern where subject and object are both variables. Verify that all four
+// (column, row) combinations are correctly resolved.
+TEST_F(ConstructBatchEvaluatorTest, multipleVariablesMultipleRows) {
+  //              col 0    col 1
+  // row 0:       <s>      <p>
+  // row 1:       <o>      <q>
+  auto idTable = makeIdTableFromVector({{idS_, idP_}, {idO_, idQ_}});
+  IdCache idCache{1024};
+
+  auto result = evaluateIdTable({0, 1}, idTable, idCache);
+
+  ASSERT_EQ(result.numRows_, 2);
+  EXPECT_THAT(getColumn(result, 0),
+              ElementsAre(evalTerm("<s>"), evalTerm("<o>")));
+  EXPECT_THAT(getColumn(result, 1),
+              ElementsAre(evalTerm("<p>"), evalTerm("<q>")));
+}
+
+// The IdTable has 3 columns, but only columns 0 and 2 are variables (column 1
+// is a constant in the CONSTRUCT template and is not listed). Verify that the
+// result only contains entries for the requested columns.
+TEST_F(ConstructBatchEvaluatorTest, evaluatesOnlyRequestedColumns) {
+  auto idTable = makeIdTableFromVector({{idS_, idP_, idO_}});
+  IdCache idCache{1024};
+
+  // only {0, 2} are passed as column Indices.
+  auto result = evaluateIdTable({0, 2}, idTable, idCache);
+
+  ASSERT_EQ(result.numRows_, 1);
+  ASSERT_EQ(result.variablesByColumn_.size(), 2);
+  EXPECT_TRUE(result.variablesByColumn_.contains(0));
+  EXPECT_TRUE(result.variablesByColumn_.contains(2));
+  // false
+  EXPECT_FALSE(result.variablesByColumn_.contains(1));
+  EXPECT_THAT(result.getVariable(0, 0), evalTerm("<s>"));
+  EXPECT_THAT(result.getVariable(2, 0), evalTerm("<o>"));
+}
+
+// A single variable column where some rows hold a defined `Id` and one row
+// holds an undefined `Id`. Verify that only the undefined row produces nullopt,
+// while the defined rows are resolved normally.
+TEST_F(ConstructBatchEvaluatorTest, undefinedMixedWithValidIds) {
+  auto idTable = makeIdTableFromVector({{idS_}, {Id::makeUndefined()}, {idO_}});
+  IdCache idCache{1024};
+
+  auto result = evaluateIdTable({0}, idTable, idCache);
+
+  ASSERT_EQ(result.numRows_, 3);
+  EXPECT_THAT(getColumn(result, 0),
+              ElementsAre(evalTerm("<s>"), Eq(std::nullopt), evalTerm("<o>")));
+}
+
+// When the same `Id` appears in multiple rows of a single variable column,
+// all rows must resolve to the same string. Verify that repeated `Id`s produce
+// consistent results.
+TEST_F(ConstructBatchEvaluatorTest, repeatedIdsProduceConsistentResults) {
+  auto idTable = makeIdTableFromVector({{idS_}, {idS_}, {idS_}});
+  IdCache idCache{1024};
+
+  auto result = evaluateIdTable({0}, idTable, idCache);
+
+  ASSERT_EQ(result.numRows_, 3);
+  // Because the same `Id` appears in every row, the cache returns the same
+  // `shared_ptr` each time: no new string is constructed per row. Assert
+  // pointer equality (shared_ptr::operator== compares raw pointers) to verify
+  // this.
+  const auto& firstTerm = getColumn(result, 0).at(0);
+  EXPECT_THAT(getColumn(result, 0), Each(Eq(firstTerm)));
+  // check that the shared_ptr holds the correct result.
+  EXPECT_THAT(getColumn(result, 0), Each(evalTerm("<s>")));
+}
+
+// The same `IdCache` instance is passed to multiple `evaluateBatch` calls.
+// Verify that the evaluator produces correct results across both batches.
+TEST_F(ConstructBatchEvaluatorTest,
+       correctResultsWhenSameIdCacheUsedAcrossBatches) {
+  // 1 column, 4  rows.
+  auto idTable = makeIdTableFromVector({{idS_}, {idO_}, {idS_}, {idO_}});
+  IdCache idCache{1024};
+
+  // First batch: rows [0, 2).
+  auto result1 = evaluateRowRange({0}, idTable, 0, 2, idCache);
+  ASSERT_EQ(result1.numRows_, 2);
+  EXPECT_THAT(getColumn(result1, 0),
+              ElementsAre(evalTerm("<s>"), evalTerm("<o>")));
+
+  // Second batch: rows [2, 4).
+  auto result2 = evaluateRowRange({0}, idTable, 2, 4, idCache);
+  ASSERT_EQ(result2.numRows_, 2);
+  EXPECT_THAT(getColumn(result2, 0),
+              ElementsAre(evalTerm("<s>"), evalTerm("<o>")));
+
+  // Because the same cache is shared across both batches, each Id that appears
+  // in both batches must resolve to the same shared_ptr (pointer equality).
+  EXPECT_EQ(getColumn(result1, 0).at(0), getColumn(result2, 0).at(0));  // idS_
+  EXPECT_EQ(getColumn(result1, 0).at(1), getColumn(result2, 0).at(1));  // idO_
+}
+
+// When [firstRow_, endRow_) is a strict subset of the `IdTable`, only those
+// rows are evaluated. The result indices are 0-based relative to firstRow_.
+TEST_F(ConstructBatchEvaluatorTest, subRangeEvaluatesCorrectRows) {
+  // 4 rows, but we only evaluate rows [1, 3).
+  auto idTable = makeIdTableFromVector({{idS_}, {idP_}, {idO_}, {idQ_}});
+  IdCache idCache{1024};
+
+  auto result = evaluateRowRange({0}, idTable, 1, 3, idCache);
+
+  ASSERT_EQ(result.numRows_, 2);
+  // Row 1 of the IdTable -> result index 0; row 2 -> result index 1.
+  EXPECT_THAT(getColumn(result, 0),
+              ElementsAre(evalTerm("<p>"), evalTerm("<o>")));
+}
+
+// `BatchEvaluationContext` must reject out-of-range row bounds.
+TEST_F(ConstructBatchEvaluatorTest, outOfRangeRowBoundsViolateContract) {
+  auto idTable = makeIdTableFromVector({{idS_}, {idO_}});  // 2 rows
+  IdCache idCache{1024};
+
+  // endRow beyond the table size.
+  EXPECT_ANY_THROW(evaluateRowRange({0}, idTable, 0, 5, idCache));
+  // firstRow beyond endRow.
+  EXPECT_ANY_THROW(evaluateRowRange({0}, idTable, 3, 1, idCache));
+}
+
+// Empty batch (zero rows). The result should have `numRows_` == 0 and no column
+// entries, since there is nothing to evaluate.
+TEST_F(ConstructBatchEvaluatorTest, emptyBatch) {
+  auto idTable = makeIdTableFromVector({});  // empty
+  IdCache idCache{1024};
+
+  auto result = evaluateIdTable({}, idTable, idCache);
+
+  EXPECT_EQ(result.numRows_, 0);
+  EXPECT_TRUE(result.variablesByColumn_.empty());
+}
+
+// Non-empty `IdTable` but no variable columns requested. This happens when all
+// positions in the CONSTRUCT template are constants. The result should reflect
+// the row count but contain no column data.
+TEST_F(ConstructBatchEvaluatorTest, noVariableColumns) {
+  auto idTable = makeIdTableFromVector({{idS_}, {idO_}});
+  IdCache idCache{1024};
+
+  auto result = evaluateIdTable({}, idTable, idCache);
+
+  EXPECT_EQ(result.numRows_, 2);
+  EXPECT_TRUE(result.variablesByColumn_.empty());
+}
+
+// Simulates the `IdTable` that would result from:
+//   CONSTRUCT { ?s <p> ?o } WHERE { ?s <p> ?o }
+// against a dataset with repeated subjects. The `IdTable` has two variable
+// columns (subject at 0, object at 1) and a constant predicate column (not
+// evaluated). Multiple rows share the same subject, exercising the cache.
+TEST_F(ConstructBatchEvaluatorTest, realisticConstructPattern) {
+  auto idTable = makeIdTableFromVector({
+      {idS_, idP_, idO_},
+      {idS_, idP_, idQ_},
+      {idO_, idP_, idS_},
+      {idS_, idP_, idO_}  // duplicate of row 0
+  });
+  IdCache idCache{1024};
+
+  // Only columns 0 and 2 are variables; column 1 is the constant predicate.
+  auto result = evaluateIdTable({0, 2}, idTable, idCache);
+
+  ASSERT_EQ(result.numRows_, 4);
+  ASSERT_EQ(result.variablesByColumn_.size(), 2);
+
+  // Column 0 (?s): <s>, <s>, <o>, <s>
+  EXPECT_THAT(getColumn(result, 0),
+              ElementsAre(evalTerm("<s>"), evalTerm("<s>"), evalTerm("<o>"),
+                          evalTerm("<s>")));
+
+  // idS_ appears in col0[0,1,3] and col2[2]: all must share the same
+  // shared_ptr.
+  const auto& firstS = getColumn(result, 0).at(0);
+  auto idSTerms =
+      std::vector{getColumn(result, 0).at(1), getColumn(result, 0).at(3),
+                  getColumn(result, 2).at(2)};
+  EXPECT_THAT(idSTerms, Each(Eq(firstS)));
+
+  // Column 2 (?o): <o>, <q>, <s>, <o>
+  EXPECT_THAT(getColumn(result, 2),
+              ElementsAre(evalTerm("<o>"), evalTerm("<q>"), evalTerm("<s>"),
+                          evalTerm("<o>")));
+
+  // idO_ appears in col2[0,3] and col0[2]: all must share the same shared_ptr.
+  const auto& firstO = getColumn(result, 2).at(0);
+  auto idOTerms =
+      std::vector{getColumn(result, 2).at(3), getColumn(result, 0).at(2)};
+  EXPECT_THAT(idOTerms, Each(Eq(firstO)));
+}
+
+// With a cache of size 1, accessing a different `Id` evicts the current entry.
+// Use idS_, idO_, idS_: the second access to idS_ (row 2) is a cache miss
+// because idO_ (row 1) evicted it, a new string is allocated.
+TEST_F(ConstructBatchEvaluatorTest, cacheOfSizeOneEvictsAndRecomputesOnAccess) {
+  auto idTable = makeIdTableFromVector({{idS_}, {idO_}, {idS_}});
+  IdCache idCache{1};
+
+  auto result = evaluateIdTable({0}, idTable, idCache);
+
+  ASSERT_EQ(result.numRows_, 3);
+
+  // Correct string values despite eviction.
+  EXPECT_THAT(getColumn(result, 0),
+              ElementsAre(evalTerm("<s>"), evalTerm("<o>"), evalTerm("<s>")));
+
+  // The two idS_ accesses must yield different shared_ptrs: the first was
+  // evicted by idO_, forcing recomputation and a new allocation for row 2.
+  // (The string content is still correct, as verified above.)
+  EXPECT_NE(getColumn(result, 0).at(0), getColumn(result, 0).at(2));
+}
+
+}  // namespace

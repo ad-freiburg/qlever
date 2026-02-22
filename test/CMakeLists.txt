@@ -474,6 +474,8 @@ addLinkAndDiscoverTest(ValueGetterTest engine)
 
 addLinkAndDiscoverTest(LruCacheTest)
 
+addLinkAndDiscoverTest(LruCacheWithStatisticsTest)
+
 addLinkAndDiscoverTestNoLibs(InputRangeUtilsTest)
 
 addLinkAndDiscoverTest(TripleSerializerTest)
@@ -495,3 +497,7 @@ addLinkAndDiscoverTest(MaterializedViewsTest qlever engine server)
 addLinkAndDiscoverTestNoLibs(ConstexprMapTest)
 
 addLinkAndDiscoverTestNoLibs(ParallelExecutorTest)
+
+addLinkAndDiscoverTest(ConstructTemplatePreprocessorTest engine)
+
+addLinkAndDiscoverTest(ConstructBatchEvaluatorTest engine)
