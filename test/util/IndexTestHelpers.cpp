@@ -160,6 +160,25 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
   // these tests.
   static std::ostringstream ignoreLogStream;
   ad_utility::setGlobalLoggingStream(&ignoreLogStream);
+  // Remove previous index files. This is necessary because if we previously
+  // built the same index without patterns or all 6 permutations, we wouldn't
+  // overwrite the patterns or the missing permutations. This would lead to a
+  // false positive when we later check that the patterns or the missing
+  // permutations are not present, because they would actually be present from
+  // the previous index build.
+  namespace fs = std::filesystem;
+  for (const auto& entry : fs::directory_iterator(fs::current_path())) {
+    if (!entry.is_regular_file()) continue;
+
+    std::string name = entry.path().filename().string();
+
+    if (ql::starts_with(name, indexBasename + VOCAB_SUFFIX) ||
+        ql::starts_with(name, indexBasename + ".index") ||
+        ql::starts_with(name, indexBasename + ".internal.index") ||
+        ql::starts_with(name, indexBasename + CONFIGURATION_FILE)) {
+      ad_utility::deleteFile(entry.path());
+    }
+  }
   std::string inputFilename = indexBasename + ".ttl";
   if (!c.turtleInput.has_value()) {
     c.turtleInput =

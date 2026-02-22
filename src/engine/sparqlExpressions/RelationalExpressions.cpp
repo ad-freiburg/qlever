@@ -313,6 +313,10 @@ SparqlExpression::Estimates getEstimatesForFilterExpressionImpl(
     uint64_t inputSizeEstimate, uint64_t reductionFactor, const auto& children,
     const std::optional<Variable>& firstSortedVariable) {
   AD_CORRECTNESS_CHECK(children.size() >= 1);
+  // Prevent division by zero.
+  if (children.size() <= 1) {
+    return {0, 0};
+  }
   // For the binary expressions `=` `<=`, etc., we have exactly two children, so
   // the following line is a noop. For the `IN` expression we expect to have
   // more results if we have more arguments on the right side that can possibly

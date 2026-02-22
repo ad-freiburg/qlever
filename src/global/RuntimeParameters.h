@@ -135,6 +135,8 @@ struct RuntimeParameters {
   MemorySizeParameter sortInMemoryThreshold_{
       ad_utility::MemorySize::gigabytes(5), "sort-in-memory-threshold"};
 
+  Bool prefilteredOptionalJoin_{true, "prefiltered-optional-join"};
+
   // If set to `true`, skip updating graph metadata for delta triples.
   // This can improve performance when graph metadata is not needed.
   Bool disableUpdateGraphMetadata_{false, "disable-update-graph-metadata"};

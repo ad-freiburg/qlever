@@ -35,9 +35,9 @@ class LRUCache {
   // found. Otherwise, compute the value using `computeFunction` and store it in
   // the cache. If the cache is already at maximum capacity, evict the least
   // recently used element.
-  CPP_template(typename Func)(
+  CPP_template(typename Key, typename Func)(
       requires ad_utility::InvocableWithConvertibleReturnType<
-          Func, V, const K&>) const V& getOrCompute(const K& key,
+          Func, V, const K&>) const V& getOrCompute(Key&& key,
                                                     Func computeFunction) {
     auto it = cache_.find(key);
     if (it != cache_.end()) {
@@ -56,9 +56,10 @@ class LRUCache {
       lruKey = key;
     } else {
       // Push new element if not full
-      keys_.push_front(key);
+      keys_.push_front(K{key});
     }
-    auto result = cache_.try_emplace(key, computeFunction(key), keys_.begin());
+    auto result = cache_.try_emplace(
+        AD_FWD(key), computeFunction(keys_.front()), keys_.begin());
     AD_CORRECTNESS_CHECK(result.second);
     return result.first->second.first;
   }

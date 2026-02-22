@@ -88,10 +88,15 @@ TEST_F(MaterializedViewsTest, Basic) {
 
   for (const auto& query : equivalentQueries) {
     auto [qet, qec, parsed] = qlv().parseAndPlanQuery(query);
-    auto res = qet->getResult(false);
 
     EXPECT_THAT(qet->getRootOperation()->getCacheKey(),
                 ::testing::HasSubstr("testView1"));
+    // For a full scan on a materialized view, the size estimate should be
+    // exactly the number of rows in the view. This is also a regression test
+    // for a bug introduced in #2680.
+    EXPECT_EQ(qet->getSizeEstimate(), expectedResult.numRows());
+
+    auto res = qet->getResult(false);
     ASSERT_TRUE(res->isFullyMaterialized());
     EXPECT_THAT(res->idTable(), matchesIdTable(expectedResult));
   }
@@ -554,6 +559,16 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
     EXPECT_THAT(query.getVarsToKeep(),
                 ::testing::UnorderedElementsAre(::testing::Eq(V{"?s"}),
                                                 ::testing::Eq(V{"?o"})));
+  }
+
+  // Test internal constructor.
+  {
+    ViewQuery query{"testView", ViewQuery::RequestedColumns{
+                                    {V{"?s"}, V{"?s2"}}, {V{"?o"}, V{"?o2"}}}};
+    EXPECT_EQ(query.viewName_, "testView");
+    EXPECT_THAT(query.getVarsToKeep(),
+                ::testing::UnorderedElementsAre(::testing::Eq(V{"?s2"}),
+                                                ::testing::Eq(V{"?o2"})));
   }
 
   // Unsupported format version.
