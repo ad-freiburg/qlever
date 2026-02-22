@@ -135,6 +135,8 @@ struct RuntimeParameters {
   MemorySizeParameter sortInMemoryThreshold_{
       ad_utility::MemorySize::gigabytes(5), "sort-in-memory-threshold"};
 
+  Bool prefilteredOptionalJoin_{true, "prefiltered-optional-join"};
+
   // Configure the amount of threads to compress and write blocks per
   // permutation.
   SizeT threadsForPermutationWriter_{10, "threads-for-permutation-writer"};

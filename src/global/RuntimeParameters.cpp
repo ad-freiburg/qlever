@@ -51,6 +51,7 @@ RuntimeParameters::RuntimeParameters() {
   add(materializedViewWriterMemory_);
   add(defaultQueryTimeout_);
   add(sortInMemoryThreshold_);
+  add(prefilteredOptionalJoin_);
   add(threadsForPermutationWriter_);
 
   defaultQueryTimeout_.setParameterConstraint(
