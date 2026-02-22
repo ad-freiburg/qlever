@@ -9,6 +9,7 @@
 #include "./util/IdTestHelpers.h"
 #include "index/IndexMetaData.h"
 #include "util/File.h"
+#include "util/GTestHelpers.h"
 #include "util/Serializer/FileSerializer.h"
 
 namespace {
@@ -77,10 +78,9 @@ TEST(IndexMetaDataTest, writeReadTest2Mmap) {
   }
 
   {
-    ad_utility::File in(imdFilename, "r");
     IndexMetaDataMmap imd2;
     imd2.setup(mmapFilename, ad_utility::ReuseTag());
-    imd2.readFromFile(&in);
+    imd2.readFromFile(imdFilename);
 
     auto rmdFn = imd2.getMetaData(V(1));
     auto rmdFn2 = imd2.getMetaData(V(2));
@@ -92,4 +92,78 @@ TEST(IndexMetaDataTest, writeReadTest2Mmap) {
   }
   ad_utility::deleteFile(imdFilename);
   ad_utility::deleteFile(mmapFilename);
+}
+
+// _____________________________________________________________________________
+TEST(IndexMetaDataTest, exchangeMultiplicities) {
+  std::string mmapFilenameA = "exchangeMultiplicities_tmp.imda.mmap";
+  std::string mmapFilenameB = "exchangeMultiplicities_tmp.imdb.mmap";
+  absl::Cleanup cleanup{[&mmapFilenameA, &mmapFilenameB]() {
+    ad_utility::deleteFile(mmapFilenameA);
+    ad_utility::deleteFile(mmapFilenameB);
+  }};
+  CompressedRelationMetadata crm1a{V(1), 3, 2.0, 2.0, 16};
+  CompressedRelationMetadata crm1b{V(1), 3, 3.0, 3.0, 16};
+  CompressedRelationMetadata crm2a{V(2), 5, 4.0, 4.0, 10};
+  CompressedRelationMetadata crm2b{V(2), 5, 5.0, 5.0, 10};
+
+  IndexMetaDataMmap imda;
+  imda.setup(mmapFilenameA, ad_utility::CreateTag{});
+  imda.add(crm1a);
+  imda.add(crm2a);
+
+  IndexMetaDataMmap imdb;
+  imdb.setup(mmapFilenameB, ad_utility::CreateTag{});
+  imdb.add(crm1b);
+  imdb.add(crm2b);
+
+  imda.exchangeMultiplicities(imdb);
+
+  EXPECT_FLOAT_EQ(imda.getMetaData(V(1)).multiplicityCol1_, 2.0);
+  EXPECT_FLOAT_EQ(imda.getMetaData(V(1)).multiplicityCol2_, 3.0);
+  EXPECT_FLOAT_EQ(imda.getMetaData(V(2)).multiplicityCol1_, 4.0);
+  EXPECT_FLOAT_EQ(imda.getMetaData(V(2)).multiplicityCol2_, 5.0);
+
+  EXPECT_FLOAT_EQ(imdb.getMetaData(V(1)).multiplicityCol1_, 3.0);
+  EXPECT_FLOAT_EQ(imdb.getMetaData(V(1)).multiplicityCol2_, 2.0);
+  EXPECT_FLOAT_EQ(imdb.getMetaData(V(2)).multiplicityCol1_, 5.0);
+  EXPECT_FLOAT_EQ(imdb.getMetaData(V(2)).multiplicityCol2_, 4.0);
+}
+
+// _____________________________________________________________________________
+TEST(IndexMetaDataTest, exchangeMultiplicitiesFailsWhenIncompatible) {
+  std::string mmapFilenameA =
+      "exchangeMultiplicitiesFailsWhenIncompatible_tmp.imda.mmap";
+  std::string mmapFilenameB =
+      "exchangeMultiplicitiesFailsWhenIncompatible_tmp.imdb.mmap";
+  std::string mmapFilenameC =
+      "exchangeMultiplicitiesFailsWhenIncompatible_tmp.imdc.mmap";
+  absl::Cleanup cleanup{[&mmapFilenameA, &mmapFilenameB, &mmapFilenameC]() {
+    ad_utility::deleteFile(mmapFilenameA);
+    ad_utility::deleteFile(mmapFilenameB);
+    ad_utility::deleteFile(mmapFilenameC);
+  }};
+  CompressedRelationMetadata crm1{V(1), 3, 2.0, 2.0, 16};
+  CompressedRelationMetadata crm2{V(1), 3, 3.0, 3.0, 16};
+  CompressedRelationMetadata crm3{V(2), 5, 4.0, 4.0, 10};
+
+  IndexMetaDataMmap imda;
+  imda.setup(mmapFilenameA, ad_utility::CreateTag{});
+  imda.add(crm1);
+
+  IndexMetaDataMmap imdb;
+  imdb.setup(mmapFilenameB, ad_utility::CreateTag{});
+  imdb.add(crm3);
+
+  IndexMetaDataMmap imdc;
+  imdc.setup(mmapFilenameC, ad_utility::CreateTag{});
+  imdc.add(crm2);
+  imdc.add(crm3);
+
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(imda.exchangeMultiplicities(imdb),
+                                        ::testing::HasSubstr("same ids"),
+                                        ad_utility::Exception);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(imda.exchangeMultiplicities(imdc),
+                                        ::testing::HasSubstr("length"),
+                                        ad_utility::Exception);
 }
