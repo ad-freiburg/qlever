@@ -193,6 +193,8 @@ addLinkAndDiscoverTestSerial(QueryPlannerSpatialJoinTest engine)
 
 addLinkAndDiscoverTestNoLibs(HashMapTest)
 
+addLinkAndDiscoverTestNoLibs(StringPairHashMapTest)
+
 addLinkAndDiscoverTest(HashSetTest)
 
 addLinkAndDiscoverTestSerial(GroupByTest engine)
@@ -495,3 +497,5 @@ addLinkAndDiscoverTest(MaterializedViewsTest qlever engine server)
 addLinkAndDiscoverTestNoLibs(ConstexprMapTest)
 
 addLinkAndDiscoverTestNoLibs(ParallelExecutorTest)
+
+addLinkAndDiscoverTestNoLibs(VariantRangeFilterTest)
