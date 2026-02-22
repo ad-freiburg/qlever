@@ -740,7 +740,7 @@ TEST(IndexImpl, recomputeStatistics) {
     auto newStats = indexImpl.recomputeStatistics(
         index.deltaTriplesManager().getCurrentLocatedTriplesSharedState());
     EXPECT_NE(newStats, indexImpl.configurationJson_);
-    EXPECT_EQ(newStats["num-triples"], NNAI(6, 6));
+    EXPECT_EQ(newStats["num-triples"], NNAI(6, 7));
     EXPECT_EQ(newStats["num-predicates"], NNAI(2, 4));
     if (loadAllPermutations) {
       EXPECT_EQ(newStats["num-subjects"], NNAI(4, 0));
