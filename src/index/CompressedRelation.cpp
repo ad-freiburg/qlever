@@ -213,7 +213,9 @@ CompressedRelationReader::asyncParallelBlockGenerator(
       auto myIndex = static_cast<size_t>(blockMetadataIterator_ - beginBlock_);
       ++blockMetadataIterator_;
       if (scanConfig_.graphFilter_.canBlockBeSkipped(blockMetadata)) {
-        return std::pair{myIndex, std::nullopt};
+        return std::pair{myIndex,
+                         reader_->processSkippedBlockWithLocatedTriples(
+                             blockMetadata, scanConfig_)};
       }
       // Note: the reading of the blockMetadata could also happen without
       // holding the lock. We still perform it inside the lock to avoid
@@ -1190,11 +1192,38 @@ void CompressedRelationReader::decompressColumn(
 
 // ____________________________________________________________________________
 std::optional<DecompressedBlockAndMetadata>
+CompressedRelationReader::processSkippedBlockWithLocatedTriples(
+    const CompressedBlockMetadata& blockMetaData,
+    const ScanImplConfig& scanConfig) const {
+  if (!scanConfig.locatedTriples_.containsTriples(blockMetaData.blockIndex_)) {
+    return std::nullopt;
+  }
+  auto [numIndexColumns, includeGraphColumn] =
+      prepareLocatedTriples(scanConfig.scanColumns_);
+  // Create an empty block with the right number of columns (0 rows).
+  DecompressedBlock emptyBlock{scanConfig.scanColumns_.size(), allocator_};
+  // Merging with an empty block gives us only the insertions from located
+  // triples.
+  auto mergedBlock = scanConfig.locatedTriples_.mergeTriples(
+      blockMetaData.blockIndex_, emptyBlock, numIndexColumns,
+      includeGraphColumn);
+  // Apply graph filter (and optional graph-column deletion / duplicate
+  // removal). blockMetaData.graphInfo_ is non-nullopt here (required by
+  // canBlockBeSkipped), so blockNeedsFilteringByGraph correctly returns true
+  // and filters are applied.
+  bool wasPostprocessed =
+      scanConfig.graphFilter_.postprocessBlock(mergedBlock, blockMetaData);
+  return DecompressedBlockAndMetadata{std::move(mergedBlock), wasPostprocessed,
+                                      true};
+}
+
+// ____________________________________________________________________________
+std::optional<DecompressedBlockAndMetadata>
 CompressedRelationReader::readAndDecompressBlock(
     const CompressedBlockMetadata& blockMetaData,
     const ScanImplConfig& scanConfig) const {
   if (scanConfig.graphFilter_.canBlockBeSkipped(blockMetaData)) {
-    return std::nullopt;
+    return processSkippedBlockWithLocatedTriples(blockMetaData, scanConfig);
   }
   CompressedBlock compressedColumns =
       readCompressedBlockFromFile(blockMetaData, scanConfig.scanColumns_);
