@@ -7,6 +7,7 @@
 #ifndef QLEVER_SRC_UTIL_PARAMETERS_H
 #define QLEVER_SRC_UTIL_PARAMETERS_H
 
+#include <absl/strings/str_join.h>
 #include <absl/strings/str_split.h>
 
 #include <optional>
