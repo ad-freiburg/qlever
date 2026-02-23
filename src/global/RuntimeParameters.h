@@ -137,13 +137,15 @@ struct RuntimeParameters {
   MemorySizeParameter sortInMemoryThreshold_{
       ad_utility::MemorySize::gigabytes(5), "sort-in-memory-threshold"};
 
+  Bool prefilteredOptionalJoin_{true, "prefiltered-optional-join"};
+
   // A list of URL prefixes that are allowed as SERVICE endpoints. If empty
   // (the default), all URLs are allowed. If non-empty, SERVICE requests to
   // URLs that do not start with any of the given prefixes are rejected. Magic
   // services (e.g. SpatialSearch, PathSearch) are never affected by this
   // setting.
   VectorOfStrings serviceAllowedUrlPrefixes_{{},
-                                              "service-allowed-url-prefixes"};
+                                             "service-allowed-url-prefixes"};
 
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE

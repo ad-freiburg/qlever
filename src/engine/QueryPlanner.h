@@ -65,15 +65,8 @@ class QueryPlanner {
       Node(size_t id, SparqlTriple t,
            std::optional<Variable> graphVariable = std::nullopt)
           : id_(id), triple_(std::move(t)) {
-        if (triple_.s_.isVariable()) {
-          _variables.insert(triple_.s_.getVariable());
-        }
-        if (auto predicate = triple_.getPredicateVariable()) {
-          _variables.insert(predicate.value());
-        }
-        if (triple_.o_.isVariable()) {
-          _variables.insert(triple_.o_.getVariable());
-        }
+        triple_.forEachVariable(
+            [this](const auto& var) { _variables.insert(var); });
         if (graphVariable.has_value()) {
           _variables.insert(std::move(graphVariable).value());
         }

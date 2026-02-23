@@ -40,7 +40,7 @@ inline bool operator==(const SpatialJoinParseJob& a,
 class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
  public:
   WKTParser(sj::Sweeper* sweeper, size_t numThreads, bool usePrefiltering,
-            const std::optional<util::geo::DBox>& prefilterLatLngBox,
+            const std::optional<::util::geo::DBox>& prefilterLatLngBox,
             const Index& index);
 
   // Enqueue a new row from the input table (given the `ValueId` of the
@@ -69,7 +69,7 @@ class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
 
   // Configure prefiltering geometries by bounding box.
   bool _usePrefiltering;
-  std::optional<util::geo::DBox> _prefilterLatLngBox;
+  std::optional<::util::geo::DBox> _prefilterLatLngBox;
 
   // A reference to QLever's index is needed to access precomputed geometry
   // bounding boxes and to resolve `ValueId`s into WKT literals.
