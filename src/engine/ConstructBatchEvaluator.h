@@ -15,6 +15,7 @@
 #include "engine/ConstructTypes.h"
 #include "engine/LocalVocab.h"
 #include "engine/idTable/IdTable.h"
+#include "index/Index.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
 #include "util/LruCacheWithStatistics.h"
@@ -63,7 +64,7 @@ struct BatchEvaluationContext {
 };
 
 // Resolves `Id` values in variable columns to their string representations
-// (IRI, literal, etc.) via `ConstructQueryEvaluator::evaluateId`.
+// (IRI, literal, etc.) via `ExportQueryExecutionTrees::idToStringAndType`.
 //
 // The evaluation is column-oriented: for each variable (identified by their
 // `IdTable` column), all rows in the batch are evaluated before moving to the
