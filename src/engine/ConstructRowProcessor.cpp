@@ -12,34 +12,54 @@
 namespace qlever::constructExport {
 
 // _____________________________________________________________________________
+ConstructRowProcessor::RowRange ConstructRowProcessor::extractRowRange(
+    const TableWithRange& table) {
+  const size_t numRows = static_cast<size_t>(ql::ranges::distance(table.view_));
+  const size_t firstRow =
+      numRows > 0 ? static_cast<size_t>(*ql::ranges::begin(table.view_)) : 0;
+  return {numRows, firstRow};
+}
+
+// _____________________________________________________________________________
+ConstructRowProcessor::IdCache ConstructRowProcessor::makeIdCache(
+    const PreprocessedConstructTemplate& tmpl) {
+  return IdCache(DEFAULT_BATCH_SIZE *
+                 std::max(tmpl.uniqueVariableColumns_.size(), size_t{1}) *
+                 CACHE_CAPACITY_FACTOR);
+}
+
+// _____________________________________________________________________________
 ConstructRowProcessor::ConstructRowProcessor(
     const PreprocessedConstructTemplate& preprocessedTemplate,
     const Index& index, CancellationHandle cancellationHandle,
     const TableWithRange& table, size_t currentRowOffset)
+    : ConstructRowProcessor(preprocessedTemplate, index,
+                            std::move(cancellationHandle), table,
+                            currentRowOffset, extractRowRange(table)) {}
+
+// _____________________________________________________________________________
+ConstructRowProcessor::ConstructRowProcessor(
+    const PreprocessedConstructTemplate& preprocessedTemplate,
+    const Index& index, CancellationHandle cancellationHandle,
+    const TableWithRange& table, size_t currentRowOffset, RowRange rowRange)
     : preprocessedTemplate_(preprocessedTemplate),
       index_(index),
       cancellationHandle_(std::move(cancellationHandle)),
       tableWithVocab_(table.tableWithVocab_),
-      numRows_(static_cast<size_t>(ql::ranges::distance(table.view_))),
-      firstRow_(numRows_ > 0
-                    ? static_cast<size_t>(*ql::ranges::begin(table.view_))
-                    : 0),
+      numRows_(rowRange.numRows),
+      firstRow_(rowRange.firstRow),
       currentRowOffset_(currentRowOffset),
-      idCache_(DEFAULT_BATCH_SIZE *
-               std::max(preprocessedTemplate.uniqueVariableColumns_.size(),
-                        size_t{1}) *
-               CACHE_CAPACITY_FACTOR) {
-  const size_t numBatches =
-      (numRows_ + DEFAULT_BATCH_SIZE - 1) / DEFAULT_BATCH_SIZE;
-  innerRange_ = ad_utility::InputRangeTypeErased<EvaluatedTriple>{
-      ad_utility::CachingContinuableTransformInputRange(
-          ql::views::iota(size_t{0}, numBatches),
-          [this](size_t batchIdx) -> ad_utility::LoopControl<EvaluatedTriple> {
-            cancellationHandle_->throwIfCancelled();
-            return ad_utility::LoopControl<EvaluatedTriple>::yieldAll(
-                computeBatch(batchIdx * DEFAULT_BATCH_SIZE));
-          })};
-}
+      idCache_(makeIdCache(preprocessedTemplate)),
+      innerRange_(ad_utility::InputRangeTypeErased<EvaluatedTriple>{
+          ad_utility::CachingContinuableTransformInputRange(
+              ql::views::iota(size_t{0}, (numRows_ + DEFAULT_BATCH_SIZE - 1) /
+                                             DEFAULT_BATCH_SIZE),
+              [this](
+                  size_t batchIdx) -> ad_utility::LoopControl<EvaluatedTriple> {
+                cancellationHandle_->throwIfCancelled();
+                return ad_utility::LoopControl<EvaluatedTriple>::yieldAll(
+                    computeBatch(batchIdx * DEFAULT_BATCH_SIZE));
+              })}) {}
 
 // _____________________________________________________________________________
 std::optional<EvaluatedTriple> ConstructRowProcessor::get() {

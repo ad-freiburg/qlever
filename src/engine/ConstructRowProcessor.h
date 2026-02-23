@@ -52,9 +52,29 @@ class ConstructRowProcessor : public ad_utility::InputRangeFromGet<
   std::optional<EvaluatedTriple> get() override;
 
  private:
+  // Pre-computed row-range information extracted from a `TableWithRange`.
+  struct RowRange {
+    size_t numRows;   // Number of rows in the view.
+    size_t firstRow;  // Index of the first row in the IdTable.
+  };
+
+  // Delegating constructor used by the public constructor. Accepts a
+  // pre-computed `RowRange` so the member initializer list stays flat.
+  ConstructRowProcessor(
+      const PreprocessedConstructTemplate& preprocessedTemplate,
+      const Index& index, CancellationHandle cancellationHandle,
+      const TableWithRange& table, size_t currentRowOffset, RowRange rowRange);
+
   // Evaluate all variables for the current batch and instantiate all template
-  // triples for every row. Triples with any undefined term are omitted.
+  // triples for every row of that batch.
   std::vector<EvaluatedTriple> computeBatch(size_t batchStart);
+
+  // Extract the row range (first row index and total count) from `table`.
+  static RowRange extractRowRange(const TableWithRange& table);
+
+  // Compute the ID cache capacity: one slot per variable per row in a batch,
+  // times `CACHE_CAPACITY_FACTOR` for cross-batch headroom.
+  static IdCache makeIdCache(const PreprocessedConstructTemplate& tmpl);
 
   const PreprocessedConstructTemplate& preprocessedTemplate_;
   std::reference_wrapper<const Index> index_;
@@ -69,8 +89,7 @@ class ConstructRowProcessor : public ad_utility::InputRangeFromGet<
   // LRU cache for avoiding redundant vocabulary lookups across batches.
   IdCache idCache_;
 
-  // Lazy range driving the batch iteration. Initialized in the constructor
-  // body after all other members are ready.
+  // Lazy range driving the batch iteration.
   ad_utility::InputRangeTypeErased<EvaluatedTriple> innerRange_;
 };
 
