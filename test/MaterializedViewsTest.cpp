@@ -782,7 +782,7 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
       ++numBlocks;
     }
 
-    EXPECT_EQ(numRows, 2 * numFakeSubjects_);
+    EXPECT_EQ(numRows, 20 * numFakeSubjects_);
     AD_LOG_INFO << "Lazy scan had " << numRows << " rows from " << numBlocks
                 << " block(s)" << std::endl;
 
@@ -801,6 +801,57 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
     auto col = qet->getVariableColumn(Variable{"?cnt"});
     auto count = res->idTable().at(0, col);
     ASSERT_TRUE(count.getDatatype() == Datatype::Int);
-    EXPECT_EQ(count.getInt(), 2 * numFakeSubjects_);
+    EXPECT_EQ(count.getInt(), 20 * numFakeSubjects_);
   }
+}
+
+// _____________________________________________________________________________
+TEST_F(MaterializedViewsTest, NoDuplicateRemovalOnScan) {
+  // Test that rows from materialized views are not implicitly deduplicated when
+  // scanning. If the first three columns have duplicates (differing only in an
+  // unselected additional column), all rows should be returned.
+
+  // Write a view where each row is duplicated with two different values of
+  // the fourth column `?x`.
+  const std::string dupQuery =
+      "SELECT ?s ?p ?o ?g { ?s ?p ?o . VALUES ?g { 1 2 } }";
+  qlv().writeMaterializedView("dupView", dupQuery);
+  qlv().loadMaterializedView("dupView");
+
+  // Base case: Query the view selecting all 4 columns: we expect exactly the
+  // original result.
+  auto allColsExpected =
+      getQueryResultAsIdTable(dupQuery + " INTERNAL SORT BY ?s ?p ?o ?g");
+  auto allColsResult = getQueryResultAsIdTable(R"(
+    PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+    SELECT * {
+      SERVICE view:dupView {
+        _:config view:column-s ?s ;
+                 view:column-p ?p ;
+                 view:column-o ?o ;
+                 view:column-g ?g .
+      }
+    }
+  )");
+  EXPECT_THAT(allColsResult, matchesIdTable(allColsExpected));
+
+  // No-deduplication case: Select only the first 3 columns, but expect each of
+  // them twice.
+  auto numRowsDedup =
+      getQueryResultAsIdTable("SELECT ?s ?p ?o { ?s ?p ?o }").numRows();
+  auto threeColsExpected = getQueryResultAsIdTable(
+      "SELECT ?s ?p ?o { ?s ?p ?o . VALUES ?g { 1 2 } } "
+      "INTERNAL SORT BY ?s ?p ?o");
+  auto threeColsResult = getQueryResultAsIdTable(R"(
+    PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+    SELECT * {
+      SERVICE view:dupView {
+        _:config view:column-s ?s ;
+                 view:column-p ?p ;
+                 view:column-o ?o .
+      }
+    }
+  )");
+  EXPECT_EQ(threeColsResult.numRows(), 2 * numRowsDedup);
+  EXPECT_THAT(threeColsResult, matchesIdTable(threeColsExpected));
 }
