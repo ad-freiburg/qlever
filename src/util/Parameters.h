@@ -7,6 +7,8 @@
 #ifndef QLEVER_SRC_UTIL_PARAMETERS_H
 #define QLEVER_SRC_UTIL_PARAMETERS_H
 
+#include <absl/strings/str_split.h>
+
 #include <optional>
 #include <sstream>
 #include <vector>
@@ -201,26 +203,15 @@ struct MemorySizeFromString {
   }
 };
 
-// To/from string for `vector<string>` (space-separated).
-struct VectorOfStringsToString {
+// Space-separated string to/from `std::vector<std::string>`.
+struct VectorToSpaceSeparatedStrings {
   std::string operator()(const std::vector<std::string>& v) const {
-    std::string result;
-    for (size_t i = 0; i < v.size(); ++i) {
-      if (i > 0) result += ' ';
-      result += v[i];
-    }
-    return result;
+    return absl::StrJoin(v, " ");
   }
 };
-struct VectorOfStringsFromString {
+struct SpaceSeparatedStringsToVector {
   std::vector<std::string> operator()(const std::string& s) const {
-    std::vector<std::string> result;
-    std::istringstream stream(s);
-    std::string token;
-    while (stream >> token) {
-      result.push_back(std::move(token));
-    }
-    return result;
+    return absl::StrSplit(s, " ");
   }
 };
 
@@ -246,9 +237,9 @@ template <typename DurationType>
 using DurationParameter = Parameter<ParseableDuration<DurationType>,
                                     n::durationFromString<DurationType>,
                                     n::durationToString<DurationType>>;
-using VectorOfStrings =
-    Parameter<std::vector<std::string>, n::VectorOfStringsFromString,
-              n::VectorOfStringsToString>;
+using SpaceSeparatedStrings =
+    Parameter<std::vector<std::string>, n::SpaceSeparatedStringsToVector,
+              n::VectorToSpaceSeparatedStrings>;
 }  // namespace detail::parameterShortNames
 }  // namespace ad_utility
 
