@@ -43,20 +43,15 @@ std::optional<EvaluatedTerm> ConstructTripleInstantiator::instantiateTerm(
       term);
 }
 
-// TODO<ms2144>: take the format as runtime parameter (code review comment).
 // _____________________________________________________________________________
-template <ad_utility::MediaType format>
 std::string ConstructTripleInstantiator::formatTriple(
     const EvaluatedTerm& subject, const EvaluatedTerm& predicate,
-    const EvaluatedTerm& object) {
-  // TODO<ms2144>: use a list or sth to check if the format is one of the legal
-  // formats in the list etc. Already used it somewhere.
-
+    const EvaluatedTerm& object, const ad_utility::MediaType format) {
   using enum ad_utility::MediaType;
   static constexpr std::array supportedFormats{turtle, csv, tsv};
-  static_assert(ad_utility::contains(supportedFormats, format));
+  assert(ad_utility::contains(supportedFormats, format));
 
-  if constexpr (format == ad_utility::MediaType::turtle) {
+  if (format == ad_utility::MediaType::turtle) {
     // Only escape literals (strings starting with "). IRIs and blank nodes
     // are used as-is, avoiding an unnecessary string copy.
     if (ql::starts_with(*object, "\"")) {
@@ -66,11 +61,11 @@ std::string ConstructTripleInstantiator::formatTriple(
     }
     return absl::StrCat(*subject, " ", *predicate, " ", *object, " .\n");
 
-  } else if constexpr (format == ad_utility::MediaType::csv) {
+  } else if (format == ad_utility::MediaType::csv) {
     return absl::StrCat(RdfEscaping::escapeForCsv(*subject), ",",
                         RdfEscaping::escapeForCsv(*predicate), ",",
                         RdfEscaping::escapeForCsv(*object), "\n");
-  } else if constexpr (format == ad_utility::MediaType::tsv) {
+  } else if (format == ad_utility::MediaType::tsv) {
     return absl::StrCat(RdfEscaping::escapeForTsv(*subject), "\t",
                         RdfEscaping::escapeForTsv(*predicate), "\t",
                         RdfEscaping::escapeForTsv(*object), "\n");
@@ -78,14 +73,3 @@ std::string ConstructTripleInstantiator::formatTriple(
     AD_FAIL();  // unreachable
   }
 }
-
-// Explicit instantiations.
-template std::string
-ConstructTripleInstantiator::formatTriple<ad_utility::MediaType::turtle>(
-    const EvaluatedTerm&, const EvaluatedTerm&, const EvaluatedTerm&);
-template std::string
-ConstructTripleInstantiator::formatTriple<ad_utility::MediaType::csv>(
-    const EvaluatedTerm&, const EvaluatedTerm&, const EvaluatedTerm&);
-template std::string
-ConstructTripleInstantiator::formatTriple<ad_utility::MediaType::tsv>(
-    const EvaluatedTerm&, const EvaluatedTerm&, const EvaluatedTerm&);

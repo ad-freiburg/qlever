@@ -33,10 +33,10 @@ class ConstructTripleInstantiator {
 
   // Formats a triple (subject, predicate, object) according to the output
   // format. Returns empty string if any component is `Undef`.
-  template <ad_utility::MediaType format>
   static std::string formatTriple(const EvaluatedTerm& subject,
                                   const EvaluatedTerm& predicate,
-                                  const EvaluatedTerm& object);
+                                  const EvaluatedTerm& object,
+                                  const ad_utility::MediaType format);
 };
 
 }  // namespace qlever::constructExport

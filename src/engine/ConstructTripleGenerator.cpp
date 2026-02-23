@@ -33,20 +33,8 @@ class FormattedTripleAdapter
   std::optional<std::string> get() override {
     auto triple = processor_->get();
     if (!triple) return std::nullopt;
-    using ad_utility::MediaType;
-    switch (format_) {
-      case MediaType::turtle:
-        return ConstructTripleInstantiator::formatTriple<MediaType::turtle>(
-            triple->subject_, triple->predicate_, triple->object_);
-      case MediaType::csv:
-        return ConstructTripleInstantiator::formatTriple<MediaType::csv>(
-            triple->subject_, triple->predicate_, triple->object_);
-      case MediaType::tsv:
-        return ConstructTripleInstantiator::formatTriple<MediaType::tsv>(
-            triple->subject_, triple->predicate_, triple->object_);
-      default:
-        AD_THROW("Unsupported media type for CONSTRUCT query formatting.");
-    }
+    return ConstructTripleInstantiator::formatTriple(
+        triple->subject_, triple->predicate_, triple->object_, format_);
   }
 
  private:
