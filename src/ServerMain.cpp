@@ -54,7 +54,6 @@ int main(int argc, char** argv) {
   bool onlyPsoAndPosPermutations;
   bool persistUpdates;
   std::vector<std::string> preloadMaterializedViews;
-  std::vector<std::string> serviceAllowedUrlPrefixes;
 
   ad_utility::MemorySize memoryMaxSize;
 
@@ -183,15 +182,15 @@ int main(int argc, char** argv) {
           ->multitoken(),
       "The names of materialized views to be loaded automatically on server "
       "start (this option takes an arbitrary number of arguments).");
-  add("service-allowed-url-prefixes",
-      po::value<std::vector<std::string>>(&serviceAllowedUrlPrefixes)
-          ->multitoken()
-          ->default_value(std::vector<std::string>{}, ""),
-      "URL prefixes that are allowed as SERVICE endpoints (this option takes "
+  add("service-allowed-iri-prefixes",
+      optionFactory
+          .getProgramOption<&RuntimeParameters::serviceAllowedIriPrefixes_>()
+          ->multitoken(),
+      "IRI prefixes that are allowed as SERVICE endpoints (this option takes "
       "an arbitrary number of arguments). If none are given (the default), all "
-      "URLs are allowed. If given, SERVICE requests to URLs not matching any "
-      "prefix are rejected. Magic services (e.g. SpatialSearch, PathSearch) "
-      "are never affected.");
+      "IRIs are allowed. If given, SERVICE requests to IRIs not matching any "
+      "prefix are rejected. Magic services (for example spatial search or "
+      "materialized views) are never affected.");
   po::variables_map optionsMap;
 
   try {
@@ -209,12 +208,6 @@ int main(int argc, char** argv) {
     std::cerr << "Error in command-line argument: " << e.what() << '\n';
     std::cerr << options << '\n';
     return EXIT_FAILURE;
-  }
-
-  // Set the SERVICE URL whitelist runtime parameter from the CLI option.
-  if (!serviceAllowedUrlPrefixes.empty()) {
-    setRuntimeParameter<&RuntimeParameters::serviceAllowedUrlPrefixes_>(
-        serviceAllowedUrlPrefixes);
   }
 
   AD_LOG_INFO << EMPH_ON << "QLever server, compiled on "
