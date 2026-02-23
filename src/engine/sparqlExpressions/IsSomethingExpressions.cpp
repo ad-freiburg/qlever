@@ -77,7 +77,16 @@ using isGeoPointExpression =
 struct BoolToId {
   Id operator()(bool b) const { return Id::makeFromBool(b); }
 };
-using boundExpression = NARY<1, FV<BoolToId, IsValidValueGetter>>;
+
+class boundExpression : public NARY<1, FV<BoolToId, IsValidValueGetter>> {
+ public:
+  using NARY<1, FV<BoolToId, IsValidValueGetter>>::NARY;
+
+  // The result of `BOUND` is always a valid bool.
+  bool isResultAlwaysDefined(const VariableToColumnMap&) const override {
+    return true;
+  }
+};
 
 }  // namespace detail
 

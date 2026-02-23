@@ -70,7 +70,8 @@ class SparqlExpression {
   // errors.
   virtual bool isResultAlwaysDefined(
       [[maybe_unused]] const VariableToColumnMap& varColMap) const {
-    return false;
+    // All SPARQL functions without any children are always defined.
+    return children().empty();
   }
 
   // Get a short, human-readable identifier for this expression.

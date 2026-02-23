@@ -567,6 +567,13 @@ InExpression::getLanguageFilterExpression() const {
   return LangFilterData{std::move(optVar.value()), std::move(languages)};
 }
 
+// _____________________________________________________________________________
+bool InExpression::isResultAlwaysDefined(const VariableToColumnMap& map) const {
+  return ql::ranges::all_of(children(), [&map](const auto& child) {
+    return child->isResultAlwaysDefined(map);
+  });
+}
+
 // Explicit instantiations
 template class RelationalExpression<Comparison::LT>;
 template class RelationalExpression<Comparison::LE>;

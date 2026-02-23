@@ -364,6 +364,24 @@ CPP_template(typename BinaryPrefilterExpr, typename NaryOperation)(
     }
     return std::nullopt;
   }
+
+  // _____________________________________________________________________________
+  bool isResultAlwaysDefined(const VariableToColumnMap& map) const override {
+    auto isAlwaysDefined = [&map](const auto& child) {
+      return child->isResultAlwaysDefined(map);
+    };
+    if constexpr (std::is_same_v<BinaryPrefilterExpr,
+                                 prefilterExpressions::OrExpression>) {
+      // For an OR expression, it is sufficient that one child is always
+      // defined.
+      return ql::ranges::any_of(this->children(), isAlwaysDefined);
+    } else {
+      static_assert(std::is_same_v<BinaryPrefilterExpr,
+                                   prefilterExpressions::AndExpression>);
+      // For an AND expression, both children must be always defined.
+      return ql::ranges::all_of(this->children(), isAlwaysDefined);
+    }
+  }
 };
 
 }  //  namespace constructPrefilterExpr
