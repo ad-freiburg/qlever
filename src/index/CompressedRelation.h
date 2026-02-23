@@ -531,8 +531,8 @@ class CompressedRelationReader {
   template <typename T>
   using vector = std::vector<T>;
 
-  // Allow DeltaTriples to access private methods for vacuum operation
-  friend class DeltaTriples;
+  // Allow LocatedTriplesPerBlock to access private methods for vacuum operation
+  friend class LocatedTriplesPerBlock;
 
  public:
   using Allocator = ad_utility::AllocatorWithLimit<Id>;

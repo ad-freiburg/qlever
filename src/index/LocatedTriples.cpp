@@ -235,6 +235,130 @@ IdTable LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
 }
 
 // ____________________________________________________________________________
+TriplesToVacuum LocatedTriplesPerBlock::identifyTriplesToVacuum(
+    const Permutation& perm) const {
+  constexpr size_t VACUUM_THRESHOLD = 10000;
+
+  // Step 1: Collect blocks needing vacuum by iterating map_ directly.
+  std::vector<size_t> blocksToVacuum;
+  for (const auto& [blockIndex, locatedTriples] : map_) {
+    if (locatedTriples.size() > VACUUM_THRESHOLD) {
+      blocksToVacuum.push_back(blockIndex);
+    }
+  }
+
+  VacuumStatistics totalStats{0, 0, 0, 0};
+  std::vector<IdTriple<0>> allDeletionsToRemove;
+  std::vector<IdTriple<0>> allInsertionsToRemove;
+
+  if (blocksToVacuum.empty()) {
+    return {std::move(allDeletionsToRemove), std::move(allInsertionsToRemove),
+            totalStats};
+  }
+
+  // Step 2: Compute inverse key order to convert permuted triples to SPO.
+  auto& keys = perm.keyOrder().keys();
+  qlever::KeyOrder::Array inverseKeys{};
+  for (size_t i = 0; i < 4; ++i) inverseKeys[keys[i]] = i;
+
+  // Step 3: Get reader and block metadata.
+  const auto& reader = perm.reader();
+  const auto& blockMetadata = perm.metaData().blockData();
+
+  // Step 4: Process each block.
+  for (size_t blockIndex : blocksToVacuum) {
+    AD_CORRECTNESS_CHECK(blockIndex <= blockMetadata.size());
+    if (blockIndex == blockMetadata.size()) {
+      continue;
+    }
+    const auto& blockMeta = blockMetadata[blockIndex];
+    AD_CORRECTNESS_CHECK(blockMeta.offsetsAndCompressedSize_.has_value());
+    AD_CORRECTNESS_CHECK(blockMeta.blockIndex_ == blockIndex);
+
+    // Determine columns (all 4).
+    std::vector<ColumnIndex> columnIndices;
+    for (size_t col = 0; col < 4; ++col) {
+      const auto& colData = blockMeta.offsetsAndCompressedSize_.value()[col];
+      AD_CORRECTNESS_CHECK(colData.compressedSize_ > 0);
+      columnIndices.push_back(col);
+    }
+
+    // Read and decompress the block.
+    auto compressedBlock =
+        reader.readCompressedBlockFromFile(blockMeta, columnIndices);
+    auto decompressedBlock =
+        reader.decompressBlock(compressedBlock, blockMeta.numRows_);
+
+    auto [numIndexColumns, includeGraphColumn] =
+        CompressedRelationReader::prepareLocatedTriples(columnIndices);
+    AD_CORRECTNESS_CHECK(numIndexColumns == 3);
+    AD_CORRECTNESS_CHECK(includeGraphColumn);
+
+    // Convert a located triple from permutation order to SPO-canonical form.
+    auto toSpo = [&inverseKeys](const LocatedTriples::iterator& lt) {
+      const auto& ids = lt->triple_.ids();
+      std::array<Id, 4> spo{};
+      for (size_t i = 0; i < 4; ++i) spo[inverseKeys[i]] = ids[i];
+      return IdTriple<0>{spo};
+    };
+
+    auto lessThan = [](const auto& lt, const auto& row) {
+      return tieLocatedTriple<3, true>(lt) < tieIdTableRow<3, true>(row);
+    };
+    auto equal = [](const auto& lt, const auto& row) {
+      return tieLocatedTriple<3, true>(lt) == tieIdTableRow<3, true>(row);
+    };
+
+    // Two-pointer merge to identify redundant updates.
+    const auto& locatedTriples = map_.at(blockIndex);
+    auto rowIt = decompressedBlock.begin();
+    auto updateIt = locatedTriples.begin();
+
+    while (updateIt != locatedTriples.end() &&
+           rowIt != decompressedBlock.end()) {
+      if (lessThan(updateIt, *rowIt)) {
+        if (updateIt->insertOrDelete_) {
+          // Valid insertion of a new triple – keep it.
+          totalStats.numInsertionsKept_++;
+        } else {
+          // Redundant deletion of a non-existent triple – remove it.
+          allDeletionsToRemove.push_back(toSpo(updateIt));
+          totalStats.numDeletionsRemoved_++;
+        }
+        updateIt++;
+      } else if (equal(updateIt, *rowIt)) {
+        if (updateIt->insertOrDelete_) {
+          // Redundant insertion of an existing triple – remove it.
+          allInsertionsToRemove.push_back(toSpo(updateIt));
+          totalStats.numInsertionsRemoved_++;
+        } else {
+          // Valid deletion of an existing triple – keep it.
+          totalStats.numDeletionsKept_++;
+        }
+        updateIt++;
+      } else {
+        // Row is less than update, advance row iterator.
+        rowIt++;
+      }
+    }
+
+    // Handle remaining updates after block is exhausted.
+    while (updateIt != locatedTriples.end()) {
+      if (updateIt->insertOrDelete_) {
+        totalStats.numInsertionsKept_++;
+      } else {
+        allDeletionsToRemove.push_back(toSpo(updateIt));
+        totalStats.numDeletionsRemoved_++;
+      }
+      updateIt++;
+    }
+  }
+
+  return {std::move(allDeletionsToRemove), std::move(allInsertionsToRemove),
+          totalStats};
+}
+
+// ____________________________________________________________________________
 std::vector<LocatedTriples::iterator> LocatedTriplesPerBlock::add(
     ql::span<const LocatedTriple> locatedTriples,
     ad_utility::timer::TimeTracer& tracer) {

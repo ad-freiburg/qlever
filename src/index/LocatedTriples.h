@@ -58,6 +58,13 @@ struct VacuumStatistics {
   friend void to_json(nlohmann::json& j, const VacuumStatistics& stats);
 };
 
+// Triples identified for removal during a VACUUM operation.
+struct TriplesToVacuum {
+  std::vector<IdTriple<0>> deletionsToRemove;
+  std::vector<IdTriple<0>> insertionsToRemove;
+  VacuumStatistics stats;
+};
+
 // A triple and its block in a particular permutation. For a detailed definition
 // of all border cases, see the definition at the end of this file.
 struct LocatedTriple {
@@ -119,7 +126,6 @@ class LocatedTriplesPerBlock {
   ad_utility::HashMap<size_t, LocatedTriples> map_;
 
   FRIEND_TEST(LocatedTriplesTest, numTriplesInBlock);
-  friend class DeltaTriples;
 
   // Implementation of the `mergeTriples` function (which has `numIndexColumns`
   // as a normal argument, and translates it into a template argument).
@@ -239,6 +245,13 @@ class LocatedTriplesPerBlock {
     numTriples_ = 0;
     augmentedMetadata_.reset();
   }
+
+  // Identify, for all blocks whose number of located triples exceeds
+  // VACUUM_THRESHOLD, the redundant insertions (triple already in index) and
+  // invalid deletions (triple not in index). Returns their SPO-canonical keys.
+  // `perm` must be the permutation that this `LocatedTriplesPerBlock` belongs
+  // to.
+  TriplesToVacuum identifyTriplesToVacuum(const Permutation& perm) const;
 
   // Return `true` iff one of the blocks contains `triple` with the given
   // `insertOrDelete` status (`true` for inserted, `false` for deleted).

@@ -343,19 +343,8 @@ class DeltaTriples {
 
   // New vacuum helper methods for cross-permutation consistency
 
-  // Result structure for vacuum operations
-  struct TriplesToVacuum {
-    std::vector<IdTriple<0>> deletionsToRemove;
-    std::vector<IdTriple<0>> insertionsToRemove;
-    VacuumStatistics stats;
-  };
-
   template <bool isInternal>
   TriplesToVacuum identifyTriplesToVacuum();
-
-  template <bool isInternal>
-  TriplesToVacuum identifyTriplesToRemoveFromBlock(size_t blockIndex,
-                                                   const IdTable& block);
 
   template <bool isInternal>
   void removeIdentifiedTriples(const std::vector<IdTriple<0>>& deletionsToRemove,

@@ -116,25 +116,6 @@ nlohmann::json DeltaTriples::vacuum() {
   return result;
 }
 
-namespace {
-IdTriple<0> convertPSOToSPO(const IdTriple<0>& psoTriple) {
-  const auto& ids = psoTriple.ids();
-  // PSO: [P, S, O, G] → SPO: [S, P, O, G]
-  return IdTriple<0>{std::array{ids[1], ids[0], ids[2], ids[3]}};
-}
-
-// Helper to create a tie from an IdTable row (S, P, O, G)
-auto tieIdTableRow(auto& row) {
-  return std::tie(row[0], row[1], row[2], row[3]);
-}
-
-// Helper to create a tie from a located triple (S, P, O, G)
-auto tieLocatedTriple(auto& lt) {
-  auto& ids = lt->triple_.ids();
-  return std::tie(ids[0], ids[1], ids[2], ids[3]);
-}
-}  // namespace
-
 // ____________________________________________________________________________
 template <bool isInternal>
 void DeltaTriples::removeIdentifiedTriples(
@@ -164,184 +145,18 @@ template void DeltaTriples::removeIdentifiedTriples<false>(
 
 // ____________________________________________________________________________
 template <bool isInternal>
-DeltaTriples::TriplesToVacuum DeltaTriples::identifyTriplesToRemoveFromBlock(
-    size_t blockIndex, const IdTable& block) {
-  // Get the located triples for this block from PSO permutation
-  const auto& locatedTriplesPerBlock =
-      locatedTriples_->getLocatedTriplesForPermutation<isInternal>(
-          Permutation::PSO);
-
-  // Check if this block has any located triples
-  auto optUpdates = locatedTriplesPerBlock.getUpdatesIfPresent(blockIndex);
-  if (!optUpdates.has_value()) {
-    return {std::vector<IdTriple<0>>{}, std::vector<IdTriple<0>>{},
-            VacuumStatistics{0, 0, 0, 0}};
-  }
-
-  const auto& locatedTriples = optUpdates.value();
-  std::vector<IdTriple<0>> deletionsToRemove;
-  std::vector<IdTriple<0>> insertionsToRemove;
-  VacuumStatistics stats{0, 0, 0, 0};
-
-  auto lessThan = [](const auto& lt, const auto& row) {
-    return tieLocatedTriple(lt) < tieIdTableRow(row);
-  };
-  auto equal = [](const auto& lt, const auto& row) {
-    return tieLocatedTriple(lt) == tieIdTableRow(row);
-  };
-
-  auto rowIt = block.begin();
-  auto updateIt = locatedTriples.begin();
-
-  // Two-pointer merge to identify redundant updates
-  while (updateIt != locatedTriples.end() && rowIt != block.end()) {
-    if (lessThan(updateIt, *rowIt)) {
-      // Update is for a triple not in the original dataset.
-      if (updateIt->insertOrDelete_) {
-        // Valid insertion of a new triple - keep it
-        stats.numInsertionsKept_++;
-      } else {
-        // Redundant deletion of a non-existent triple - remove it
-        deletionsToRemove.push_back(convertPSOToSPO(updateIt->triple_));
-        stats.numDeletionsRemoved_++;
-      }
-      updateIt++;
-    } else if (equal(updateIt, *rowIt)) {
-      // Update matches an existing triple in the dataset.
-      if (updateIt->insertOrDelete_) {
-        // Redundant insertion of an existing triple - remove it
-        insertionsToRemove.push_back(convertPSOToSPO(updateIt->triple_));
-        stats.numInsertionsRemoved_++;
-      } else {
-        // Valid deletion of an existing triple - keep it
-        stats.numDeletionsKept_++;
-      }
-      updateIt++;
-    } else {
-      // Row is less than update, advance row iterator.
-      rowIt++;
-    }
-  }
-
-  // Handle remaining updates after block is exhausted
-  while (updateIt != locatedTriples.end()) {
-    if (updateIt->insertOrDelete_) {
-      // Valid insertion (triple not in dataset) - keep it
-      stats.numInsertionsKept_++;
-    } else {
-      // Redundant deletion (triple not in dataset) - remove it
-      deletionsToRemove.push_back(convertPSOToSPO(updateIt->triple_));
-      stats.numDeletionsRemoved_++;
-    }
-    updateIt++;
-  }
-
-  return TriplesToVacuum{std::move(deletionsToRemove),
-                         std::move(insertionsToRemove), stats};
-}
-
-// Explicit template instantiations
-template DeltaTriples::TriplesToVacuum
-DeltaTriples::identifyTriplesToRemoveFromBlock<true>(size_t, const IdTable&);
-template DeltaTriples::TriplesToVacuum
-DeltaTriples::identifyTriplesToRemoveFromBlock<false>(size_t, const IdTable&);
-
-// ____________________________________________________________________________
-template <bool isInternal>
-DeltaTriples::TriplesToVacuum DeltaTriples::identifyTriplesToVacuum() {
-  VacuumStatistics totalStats{0, 0, 0, 0};
-  std::vector<IdTriple<0>> allDeletionsToRemove;
-  std::vector<IdTriple<0>> allInsertionsToRemove;
-
-  // Threshold for vacuuming a block
-  constexpr size_t VACUUM_THRESHOLD = 10000;
-
-  // Step 1: Get PSO permutation data
-  const auto& locatedTriplesPerBlock =
-      locatedTriples_->getLocatedTriplesForPermutation<isInternal>(
-          Permutation::PSO);
+TriplesToVacuum DeltaTriples::identifyTriplesToVacuum() {
   auto& basePerm = index_.getPermutation(Permutation::PSO);
   const auto& perm = isInternal ? basePerm.internalPermutation() : basePerm;
-
-  // Step 2: Collect blocks needing vacuum
-  std::vector<size_t> blocksToVacuum;
-  // TODO: here we require the LocatedTriplesPerBlock -> this is especially easy to remove
-  for (const auto& [blockIndex, locatedTriples] : locatedTriplesPerBlock.map_) {
-    if (locatedTriples.size() > VACUUM_THRESHOLD) {
-      blocksToVacuum.push_back(blockIndex);
-    }
-  }
-
-  // Early exit if nothing to vacuum
-  if (blocksToVacuum.empty()) {
-    return {std::move(allDeletionsToRemove), std::move(allInsertionsToRemove),
-            totalStats};
-  }
-
-  // Step 3: Get reader and metadata
-  const auto& reader = perm.reader();
-  const auto& blockMetadata = perm.metaData().blockData();
-
-  // Step 4: Process each block
-  for (size_t blockIndex : blocksToVacuum) {
-    // 4a: Validate
-    AD_CORRECTNESS_CHECK(blockIndex <= blockMetadata.size());
-    if (blockIndex == blockMetadata.size()) {
-      // return identifyTriplesToRemoveFromBlock<isInternal>(blockIndex,
-      // IdTable(4, allocator_);
-      continue;
-    }
-    const auto& blockMeta = blockMetadata[blockIndex];
-    AD_CORRECTNESS_CHECK(blockMeta.offsetsAndCompressedSize_.has_value());
-    AD_CORRECTNESS_CHECK(blockMeta.blockIndex_ == blockIndex);
-
-    // 4b: Determine columns
-    std::vector<ColumnIndex> columnIndices;
-    for (size_t col = 0; col < 4; ++col) {
-      const auto& colData = blockMeta.offsetsAndCompressedSize_.value()[col];
-      AD_CORRECTNESS_CHECK(colData.compressedSize_ > 0);
-      columnIndices.push_back(col);
-    }
-
-    // 4c: Read and decompress
-    // TODO: here we require the CompressRelationReader friend
-    auto compressedBlock =
-        reader.readCompressedBlockFromFile(blockMeta, columnIndices);
-    auto decompressedBlock =
-        reader.decompressBlock(compressedBlock, blockMeta.numRows_);
-
-    // 4d: Determine parameters
-    auto [numIndexColumns, includeGraphColumn] =
-        CompressedRelationReader::prepareLocatedTriples(columnIndices);
-    AD_CORRECTNESS_CHECK(numIndexColumns == 3);
-    AD_CORRECTNESS_CHECK(includeGraphColumn);
-
-    // 4e: Identify triples to remove and accumulate statistics
-    auto result = identifyTriplesToRemoveFromBlock<isInternal>(
-        blockIndex, decompressedBlock);
-
-    // 4f: Accumulate results
-    allDeletionsToRemove.insert(allDeletionsToRemove.end(),
-                                result.deletionsToRemove.begin(),
-                                result.deletionsToRemove.end());
-    allInsertionsToRemove.insert(allInsertionsToRemove.end(),
-                                 result.insertionsToRemove.begin(),
-                                 result.insertionsToRemove.end());
-    totalStats.numInsertionsRemoved_ += result.stats.numInsertionsRemoved_;
-    totalStats.numDeletionsRemoved_ += result.stats.numDeletionsRemoved_;
-    totalStats.numInsertionsKept_ += result.stats.numInsertionsKept_;
-    totalStats.numDeletionsKept_ += result.stats.numDeletionsKept_;
-  }
-
-  return {std::move(allDeletionsToRemove), std::move(allInsertionsToRemove),
-          totalStats};
+  const auto& ltpb =
+      locatedTriples_->getLocatedTriplesForPermutation<isInternal>(
+          Permutation::PSO);
+  return ltpb.identifyTriplesToVacuum(perm);
 }
 
 // Explicit template instantiations
-template DeltaTriples::TriplesToVacuum
-DeltaTriples::identifyTriplesToVacuum<true>();
-template DeltaTriples::TriplesToVacuum
-DeltaTriples::identifyTriplesToVacuum<false>();
+template TriplesToVacuum DeltaTriples::identifyTriplesToVacuum<true>();
+template TriplesToVacuum DeltaTriples::identifyTriplesToVacuum<false>();
 
 // ____________________________________________________________________________
 template <bool isInternal>
