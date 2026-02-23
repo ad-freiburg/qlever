@@ -3430,6 +3430,12 @@ QueryPlanner::findApplicableReplacementPlans(
     bool useGreedyPlanning) {
   // TODO<ullingerc> This could be hash-map based if we would return the
   // indices in the create helper and pass them as part of `replacementPlans`.
+
+  // Extract the subset of replacement plans that is applicable to the connected
+  // component given by `coveredNodeIds`. If a basic graph pattern contains
+  // multiple disjunctive connected components, each of them may contain sets of
+  // triples that can be rewritten. This extracts the replacement plans for the
+  // component that is currently being planned.
   bool hasApplicableReplacementPlans = false;
   ReplacementPlans applicableReplacementPlans;
   for (auto& rPlans : allReplacementPlans) {
