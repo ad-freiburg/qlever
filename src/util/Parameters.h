@@ -237,6 +237,9 @@ template <typename DurationType>
 using DurationParameter = Parameter<ParseableDuration<DurationType>,
                                     n::durationFromString<DurationType>,
                                     n::durationToString<DurationType>>;
+
+// Simple type for space-separated strings, used for IRIs which do not contain
+// spaces.
 using SpaceSeparatedStrings =
     Parameter<std::vector<std::string>, n::SpaceSeparatedStringsToVector,
               n::VectorToSpaceSeparatedStrings>;
