@@ -197,6 +197,8 @@ addLinkAndDiscoverTestSerial(QueryPlannerSpatialJoinTest engine)
 
 addLinkAndDiscoverTestNoLibs(HashMapTest)
 
+addLinkAndDiscoverTestNoLibs(StringPairHashMapTest)
+
 addLinkAndDiscoverTest(HashSetTest)
 
 addLinkAndDiscoverTestSerial(GroupByTest engine)
@@ -267,6 +269,8 @@ addLinkAndDiscoverTest(SetOfIntervalsTest sparqlExpressions)
 addLinkAndDiscoverTestNoLibs(TypeTraitsTest)
 
 addLinkAndDiscoverTestSerial(SparqlExpressionTest sparqlExpressions index engine)
+
+addLinkAndDiscoverTestSerial(SparqlExpressionMemberFunctionsTest sparqlExpressions index engine)
 
 addLinkAndDiscoverTest(StreamableBodyTest http)
 
@@ -497,3 +501,5 @@ addLinkAndDiscoverTest(MaterializedViewsTest qlever engine server)
 addLinkAndDiscoverTestNoLibs(ConstexprMapTest)
 
 addLinkAndDiscoverTestNoLibs(ParallelExecutorTest)
+
+addLinkAndDiscoverTestNoLibs(VariantRangeFilterTest)

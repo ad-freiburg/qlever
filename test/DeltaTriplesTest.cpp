@@ -435,14 +435,18 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
 
   deltaTriples.insertTriples(
       cancellationHandle,
-      makeIdTriples(
-          vocab, localVocab,
-          {"<a> <b> 1", "<a> <b> \"abc\"", "<a> <b> \"abc\"@de",
-           "<a> <b> \"abc\"@en",
-           "<a> <b> \"abc\"^^<http://example.com/datatype>", "<a> <b> <abc>",
-           "<a> <other> \"def\"@de", "<a> <other> \"def\"@es"}));
+      makeIdTriples(vocab, localVocab,
+                    {"<a> <b> 1", "<a> <b> \"abc\"", "<a> <b> \"abc\"@de",
+                     "<a> <b> \"abc\"@en",
+                     "<a> <b> \"abc\"^^<http://example.com/datatype>",
+                     "<a> <b> <abc>", "<a> <other> \"def\"@de",
+                     "<a> <other> \"def\"@es", "<other> <a> \"def\"@es"}));
   auto a = iri("<a>");
   auto b = iri("<b>");
+  auto lp = iri(LANGUAGE_PREDICATE);
+  auto de = TripleComponent{ad_utility::convertLangtagToEntityUri("de")};
+  auto en = TripleComponent{ad_utility::convertLangtagToEntityUri("en")};
+  auto es = TripleComponent{ad_utility::convertLangtagToEntityUri("es")};
   EXPECT_THAT(deltaTriples,
               TriplesAre({{a, b, TripleComponent{1}},
                           {a, b, lit("\"abc\"")},
@@ -451,37 +455,49 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
                           {a, b, lit("\"abc\"^^<http://example.com/datatype>")},
                           {a, b, iri("<abc>")},
                           {a, iri("<other>"), lit("\"def\"@de")},
-                          {a, iri("<other>"), lit("\"def\"@es")}},
+                          {a, iri("<other>"), lit("\"def\"@es")},
+                          {iri("<other>"), a, lit("\"def\"@es")}},
                          {},
-                         {{a, iri("@de@<b>"), lit("\"abc\"@de")},
+                         {{lit("\"abc\"@de"), lp, de},
+                          {lit("\"abc\"@en"), lp, en},
+                          {lit("\"def\"@de"), lp, de},
+                          {lit("\"def\"@es"), lp, es},
+                          {a, iri("@de@<b>"), lit("\"abc\"@de")},
                           {a, iri("@en@<b>"), lit("\"abc\"@en")},
                           {a, iri("@de@<other>"), lit("\"def\"@de")},
-                          {a, iri("@es@<other>"), lit("\"def\"@es")}},
+                          {a, iri("@es@<other>"), lit("\"def\"@es")},
+                          {iri("<other>"), iri("@es@<a>"), lit("\"def\"@es")}},
                          {}));
 
   deltaTriples.deleteTriples(
       cancellationHandle,
-      makeIdTriples(
-          vocab, localVocab,
-          {"<a> <b> 1", "<a> <b> \"abc\"", "<a> <b> \"abc\"@de",
-           "<a> <b> \"abc\"@en",
-           "<a> <b> \"abc\"^^<http://example.com/datatype>", "<a> <b> <abc>",
-           "<a> <other> \"def\"@de", "<a> <other> \"def\"@es"}));
-  EXPECT_THAT(deltaTriples,
-              TriplesAre({},
-                         {{a, b, TripleComponent{1}},
-                          {a, b, lit("\"abc\"")},
-                          {a, b, lit("\"abc\"@de")},
-                          {a, b, lit("\"abc\"@en")},
-                          {a, b, lit("\"abc\"^^<http://example.com/datatype>")},
-                          {a, b, iri("<abc>")},
-                          {a, iri("<other>"), lit("\"def\"@de")},
-                          {a, iri("<other>"), lit("\"def\"@es")}},
-                         {},
-                         {{a, iri("@de@<b>"), lit("\"abc\"@de")},
-                          {a, iri("@en@<b>"), lit("\"abc\"@en")},
-                          {a, iri("@de@<other>"), lit("\"def\"@de")},
-                          {a, iri("@es@<other>"), lit("\"def\"@es")}}));
+      makeIdTriples(vocab, localVocab,
+                    {"<a> <b> 1", "<a> <b> \"abc\"", "<a> <b> \"abc\"@de",
+                     "<a> <b> \"abc\"@en",
+                     "<a> <b> \"abc\"^^<http://example.com/datatype>",
+                     "<a> <b> <abc>", "<a> <other> \"def\"@de",
+                     "<a> <other> \"def\"@es", "<other> <a> \"def\"@es"}));
+  EXPECT_THAT(
+      deltaTriples,
+      TriplesAre({},
+                 {{a, b, TripleComponent{1}},
+                  {a, b, lit("\"abc\"")},
+                  {a, b, lit("\"abc\"@de")},
+                  {a, b, lit("\"abc\"@en")},
+                  {a, b, lit("\"abc\"^^<http://example.com/datatype>")},
+                  {a, b, iri("<abc>")},
+                  {a, iri("<other>"), lit("\"def\"@de")},
+                  {a, iri("<other>"), lit("\"def\"@es")},
+                  {iri("<other>"), a, lit("\"def\"@es")}},
+                 {{lit("\"abc\"@de"), lp, de},
+                  {lit("\"abc\"@en"), lp, en},
+                  {lit("\"def\"@de"), lp, de},
+                  {lit("\"def\"@es"), lp, es}},
+                 {{a, iri("@de@<b>"), lit("\"abc\"@de")},
+                  {a, iri("@en@<b>"), lit("\"abc\"@en")},
+                  {a, iri("@de@<other>"), lit("\"def\"@de")},
+                  {a, iri("@es@<other>"), lit("\"def\"@es")},
+                  {iri("<other>"), iri("@es@<a>"), lit("\"def\"@es")}}));
 }
 
 // Test the rewriting of local vocab entries and blank nodes.
