@@ -30,47 +30,56 @@ QueryPatternCache::makeJoinReplacementIndexScans(
 
   // All triples of the form `anything <iri> ?variable` where `<iri>` is covered
   // by a materialized view, stored by `?variable` for finding chains.
-  ad_utility::HashMap<Variable, std::vector<size_t>> chainLeft;
+  ChainSideCandidates chainLeft;
 
   // All triples of the form `?variable <iri> ?otherVariable` where `<iri>` is
   // covered by a materialized view, where `?variable` is different from
   // `?otherVariable`, stored by `?variable` for finding chains.
-  ad_utility::HashMap<Variable, std::vector<size_t>> chainRight;
+  ChainSideCandidates chainRight;
 
   // TODO<ullingerc> Optimizations for stars.
 
   for (const auto& [tripleIdx, triple] :
        ::ranges::views::enumerate(triples._triples)) {
-    if (std::holds_alternative<PropertyPath>(triple.p_)) {
-      const auto& path = std::get<PropertyPath>(triple.p_);
-      if (path.isIri()) {
-        const auto& iri = path.getIri().toStringRepresentation();
-        // If no view that we know of contains this predicate so we can ignore
-        // this triple altogether.
-        if (!predicateInView_.contains(iri)) {
-          continue;
-        }
-        // Check for potential join chain triple.
-        if (triple.o_.isVariable()) {
-          if (triple.s_.isVariable()) {
-            // This triple could be the right side of a chain join.
-            chainRight[triple.s_.getVariable()].push_back(tripleIdx);
-          }
-          if (triple.s_ != triple.o_) {
-            // This triple could be the left side of a chain join.
-            chainLeft[triple.o_.getVariable()].push_back(tripleIdx);
-          }
-        }
-      } else if (path.isSequence()) {
-        AD_THROW(
-            "Sequence property paths are expected to be replaced by joins "
-            "during earlier stages of query planning.");
-      }
+    const auto iri = triple.getSimplePredicate();
+    // Variables as predicate are not supported by query rewriting and sequence
+    // property paths are expected to be replaced by joins during earlier stages
+    // of query planning.
+    if (!iri.has_value()) {
+      continue;
+    }
+    // If no view that we know of contains this predicate so we can ignore
+    // this triple altogether.
+    if (!predicateInView_.contains(iri)) {
+      continue;
+    }
+    // Check for potential join chain triple.
+    if (!triple.o_.isVariable()) {
+      continue;
+    }
+    if (triple.s_.isVariable()) {
+      // This triple could be the right side of a chain join.
+      chainRight[triple.s_.getVariable()].push_back(tripleIdx);
+    }
+    if (triple.s_ != triple.o_) {
+      // This triple could be the left side of a chain join.
+      chainLeft[triple.o_.getVariable()].push_back(tripleIdx);
     }
   }
 
   // Using the information collected by the pass over all triples, assemble all
   // chains that can potentially be rewritten.
+  makeScansFromChainCandidates(qec, triples, result, chainLeft, chainRight);
+
+  return result;
+}
+
+// _____________________________________________________________________________
+void QueryPatternCache::makeScansFromChainCandidates(
+    QueryExecutionContext* qec, const parsedQuery::BasicGraphPattern& triples,
+    std::vector<MaterializedViewJoinReplacement>& result,
+    const ChainSideCandidates& chainLeft,
+    const ChainSideCandidates& chainRight) const {
   for (const auto& [varLeft, triplesLeft] : chainLeft) {
     // No triples for the right side on the same variable have been collected.
     if (!chainRight.contains(varLeft)) {
@@ -85,13 +94,9 @@ QueryPatternCache::makeJoinReplacementIndexScans(
         const auto& right = triples._triples.at(tripleIdxRight);
 
         // We have already checked that this holds the correct alternative
-        // above.
+        // above. It must be guaranteed that these are single IRIs.
         const auto& leftP = std::get<PropertyPath>(left.p_);
         const auto& rightP = std::get<PropertyPath>(right.p_);
-
-        if (!leftP.isIri() || !rightP.isIri()) {
-          continue;
-        }
 
         // Lookup key based on `std::string_view` avoids copying the IRIs.
         ChainedPredicatesForLookup key{
@@ -100,22 +105,21 @@ QueryPatternCache::makeJoinReplacementIndexScans(
 
         // Lookup if there are matching views. There could potentially be
         // multiple (e.g. with different sorting).
-        if (auto it = simpleChainCache_.find(key);
-            it != simpleChainCache_.end()) {
-          for (const auto& chainInfo : *(it->second)) {
-            // We have found a materialized view for this chain. Construct an
-            // `IndexScan`.
-            result.push_back(
-                {makeScanForSingleChain(qec, chainInfo, left.s_, varLeft,
-                                        right.o_.getVariable()),
-                 {tripleIdxLeft, tripleIdxRight}});
-          }
+        auto it = simpleChainCache_.find(key);
+        if (it == simpleChainCache_.end()) {
+          continue;
+        }
+        for (const auto& chainInfo : *(it->second)) {
+          // We have found a materialized view for this chain. Construct an
+          // `IndexScan`.
+          result.push_back(
+              {makeScanForSingleChain(qec, chainInfo, left.s_, varLeft,
+                                      right.o_.getVariable()),
+               {tripleIdxLeft, tripleIdxRight}});
         }
       }
     }
   }
-
-  return result;
 }
 
 // _____________________________________________________________________________
@@ -223,11 +227,8 @@ bool QueryPatternCache::analyzeView(ViewPtr view) {
   if (triples.size() == 2) {
     const auto& a = triples.at(0);
     const auto& b = triples.at(1);
-    if (!analyzeSimpleChain(view, a, b)) {
-      patternFound = patternFound || analyzeSimpleChain(view, b, a);
-    } else {
-      patternFound = true;
-    }
+    patternFound =
+        analyzeSimpleChain(view, a, b) || analyzeSimpleChain(view, b, a);
   }
 
   // TODO<ullingerc> Add support for other patterns, in particular, stars.
@@ -263,11 +264,11 @@ QueryPatternCache::graphPatternInvariantFilter(const ParsedQuery& parsed) {
 
   // Filter out graph patterns that do not change the result of the basic graph
   // pattern analyzed.
-  return ::ranges::to<std::vector>(parsed._rootGraphPattern._graphPatterns |
-                                   ql::views::filter([&](const auto& pattern) {
-                                     return !std::visit(invariantCheck,
-                                                        pattern);
-                                   }));
+  return parsed._rootGraphPattern._graphPatterns |
+         ql::views::filter([&](const auto& pattern) {
+           return !std::visit(invariantCheck, pattern);
+         }) |
+         ::ranges::to<std::vector>();
 }
 
 // _____________________________________________________________________________

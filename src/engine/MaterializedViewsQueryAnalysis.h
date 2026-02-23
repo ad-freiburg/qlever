@@ -39,6 +39,7 @@ struct ChainInfo {
 };
 using SimpleChainCache =
     ad_utility::StringPairHashMap<std::shared_ptr<std::vector<ChainInfo>>>;
+using ChainSideCandidates = ad_utility::HashMap<Variable, std::vector<size_t>>;
 
 // Helper class that represents a possible join replacement and indicates the
 // subset of triples it handles.
@@ -67,8 +68,9 @@ class QueryPatternCache {
   // NOTE: When a new data structure for caching is added here, the unloading
   // should also be implemented in the `removeView` method.
  public:
-  // Given a materialized view, analyze its write query and populate the cache.
-  // This is called from `MaterializedViewsManager::loadView`.
+  // Given a materialized view, analyze the query it was created from and
+  // populate the cache. This is called from
+  // `MaterializedViewsManager::loadView`.
   bool analyzeView(ViewPtr view);
 
   // Remove all pointers to a view from this `QueryPatternCache`. This is
@@ -101,6 +103,13 @@ class QueryPatternCache {
   // helper.
   static std::vector<parsedQuery::GraphPatternOperation>
   graphPatternInvariantFilter(const ParsedQuery& parsed);
+
+  //
+  void makeScansFromChainCandidates(
+      QueryExecutionContext* qec, const parsedQuery::BasicGraphPattern& triples,
+      std::vector<MaterializedViewJoinReplacement>& result,
+      const ChainSideCandidates& chainLeft,
+      const ChainSideCandidates& chainRight) const;
 };
 
 }  // namespace materializedViewsQueryAnalysis
