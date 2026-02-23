@@ -149,12 +149,12 @@ qlever::IndexBuilderConfig::WriteMaterializedViews parseMaterializedViewsJson(
     std::string_view materializedViewsJson) {
   qlever::IndexBuilderConfig::WriteMaterializedViews views;
   if (!materializedViewsJson.empty()) {
-    AD_LOG_INFO << "Writing materialized views..." << std::endl;
+    AD_LOG_DEBUG << "Parsing materialized views configuration ..." << std::endl;
     try {
       auto viewsJson = nlohmann::json::parse(materializedViewsJson);
       if (!viewsJson.is_object()) {
         throw std::runtime_error(
-            "The --write-materialized-views option must be a JSON object "
+            "The --materialized-views option must be a JSON object "
             "mapping view names to SPARQL queries.");
       }
       for (auto& [viewName, query] : viewsJson.items()) {
@@ -283,8 +283,8 @@ int main(int argc, char** argv) {
       "large enough to hold a single input triple. Default: 10 MB.");
   add("keep-temporary-files,k", po::bool_switch(&config.keepTemporaryFiles_),
       "Do not delete temporary files from index creation for debugging.");
-  add("write-materialized-views", po::value(&materializedViewsJson),
-      "Write materialized views after index building. Takes a JSON object "
+  add("materialized-views", po::value(&materializedViewsJson),
+      "create materialized views after index building. Takes a JSON object "
       "mapping view names to SELECT queries for writing the view, for example: "
       R"({"view1": "SELECT ...", "view2": "SELECT ..."})");
 

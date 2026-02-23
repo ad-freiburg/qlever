@@ -108,14 +108,15 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
 
   // Build materialized views if requested.
   if (!config.writeMaterializedViews_.empty()) {
-    AD_LOG_INFO
-        << "Loading the new index to execute materialized view write queries..."
-        << std::endl;
+    std::cout << std::endl;
+    AD_LOG_INFO << "Loading the new index to execute materialized view write "
+                   "queries ..."
+                << std::endl;
     Qlever engine{EngineConfig{config}};
     for (auto& [viewName, query] : config.writeMaterializedViews_) {
       engine.writeMaterializedView(viewName, query);
     }
-    AD_LOG_INFO << "All materialized views written successfully." << std::endl;
+    AD_LOG_INFO << "All materialized views written successfully" << std::endl;
   }
 }
 
