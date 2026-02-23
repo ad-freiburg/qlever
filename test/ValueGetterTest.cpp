@@ -191,8 +191,6 @@ TEST(GeometryInfoValueGetterTest, OperatorWithVocabIdOrLiteral) {
                                               getAreaForTesting(polygon)}));
   t.checkFromLocalAndNormalVocabAndLiteral("\"someType\"^^<someType>",
                                            noGeoInfo);
-  t.checkFromLocalAndNormalVocabAndLiteral(
-      "\"anXsdString\"^^<http://www.w3.org/2001/XMLSchema#string>", noGeoInfo);
   t.checkFromLocalAndNormalVocabAndLiteral("\"noType\"", noGeoInfo);
   t.checkFromLocalAndNormalVocabAndLiteral("<https://example.com/test>",
                                            noGeoInfo);
@@ -257,9 +255,6 @@ TEST(GeoPointOrWktValueGetterTest, OperatorWithLit) {
   auto noGeoInfoOrWkt = geoPointOrWktMatcher(std::nullopt);
   t.checkFromLocalAndNormalVocabAndLiteral("\"someType\"^^<someType>",
                                            noGeoInfoOrWkt);
-  t.checkFromLocalAndNormalVocabAndLiteral(
-      "\"anXsdString\"^^<http://www.w3.org/2001/XMLSchema#string>",
-      noGeoInfoOrWkt);
   t.checkFromLocalAndNormalVocabAndLiteral("\"noType\"", noGeoInfoOrWkt);
   t.checkFromLocalAndNormalVocabAndLiteral("<https://example.com/test>",
                                            noGeoInfoOrWkt);
@@ -281,8 +276,6 @@ TEST(IntValueGetterTest, OperatorWithLit) {
   IntValueGetterTester t;
   auto noInt = Eq(std::nullopt);
   t.checkFromLocalAndNormalVocabAndLiteral("\"someType\"^^<someType>", noInt);
-  t.checkFromLocalAndNormalVocabAndLiteral(
-      "\"anXsdString\"^^<http://www.w3.org/2001/XMLSchema#string>", noInt);
   t.checkFromLocalAndNormalVocabAndLiteral("\"noType\"", noInt);
   t.checkFromLocalAndNormalVocabAndLiteral("<https://example.com/test>", noInt);
 }

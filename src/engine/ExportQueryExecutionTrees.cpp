@@ -468,14 +468,6 @@ ExportQueryExecutionTrees::idToLiteralForEncodedValue(
 }
 
 // _____________________________________________________________________________
-bool ExportQueryExecutionTrees::isPlainLiteralOrLiteralWithXsdString(
-    const LiteralOrIri& word) {
-  AD_CORRECTNESS_CHECK(word.isLiteral());
-  return !word.hasDatatype() ||
-         asStringViewUnsafe(word.getDatatype()) == XSD_STRING;
-}
-
-// _____________________________________________________________________________
 std::string ExportQueryExecutionTrees::replaceAnglesByQuotes(
     std::string iriString) {
   AD_CORRECTNESS_CHECK(ql::starts_with(iriString, '<'));
@@ -499,13 +491,10 @@ ExportQueryExecutionTrees::handleIriOrLiteral(
   }
   AD_CORRECTNESS_CHECK(word.isLiteral());
   if (onlyReturnLiteralsWithXsdString) {
-    if (isPlainLiteralOrLiteralWithXsdString(word)) {
-      if (word.hasDatatype()) {
-        word.getLiteral().removeDatatypeOrLanguageTag();
-      }
-      return std::move(word.getLiteral());
+    if (word.hasDatatype()) {
+      return std::nullopt;
     }
-    return std::nullopt;
+    return std::move(word.getLiteral());
   }
   // Note: `removeDatatypeOrLanguageTag` also correctly works if the literal has
   // neither a datatype nor a language tag, hence we don't need an `if` here.
