@@ -76,6 +76,10 @@ class ConstructRowProcessor : public ad_utility::InputRangeFromGet<
   // times `CACHE_CAPACITY_FACTOR` for cross-batch headroom.
   static IdCache makeIdCache(const PreprocessedConstructTemplate& tmpl);
 
+  // Build the lazy batch-iteration range over all batches. Called from the
+  // private constructor's MIL after all other members are initialised.
+  ad_utility::InputRangeTypeErased<EvaluatedTriple> makeInnerRange();
+
   const PreprocessedConstructTemplate& preprocessedTemplate_;
   std::reference_wrapper<const Index> index_;
   CancellationHandle cancellationHandle_;

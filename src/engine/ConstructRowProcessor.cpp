@@ -21,7 +21,7 @@ ConstructRowProcessor::RowRange ConstructRowProcessor::extractRowRange(
 }
 
 // _____________________________________________________________________________
-ConstructRowProcessor::IdCache ConstructRowProcessor::makeIdCache(
+IdCache ConstructRowProcessor::makeIdCache(
     const PreprocessedConstructTemplate& tmpl) {
   return IdCache(DEFAULT_BATCH_SIZE *
                  std::max(tmpl.uniqueVariableColumns_.size(), size_t{1}) *
@@ -38,6 +38,21 @@ ConstructRowProcessor::ConstructRowProcessor(
                             currentRowOffset, extractRowRange(table)) {}
 
 // _____________________________________________________________________________
+ad_utility::InputRangeTypeErased<EvaluatedTriple>
+ConstructRowProcessor::makeInnerRange() {
+  const size_t numBatches =
+      (numRows_ + DEFAULT_BATCH_SIZE - 1) / DEFAULT_BATCH_SIZE;
+  return ad_utility::InputRangeTypeErased<EvaluatedTriple>{
+      ad_utility::CachingContinuableTransformInputRange(
+          ql::views::iota(size_t{0}, numBatches),
+          [this](size_t batchIdx) -> ad_utility::LoopControl<EvaluatedTriple> {
+            cancellationHandle_->throwIfCancelled();
+            return ad_utility::LoopControl<EvaluatedTriple>::yieldAll(
+                computeBatch(batchIdx * DEFAULT_BATCH_SIZE));
+          })};
+}
+
+// _____________________________________________________________________________
 ConstructRowProcessor::ConstructRowProcessor(
     const PreprocessedConstructTemplate& preprocessedTemplate,
     const Index& index, CancellationHandle cancellationHandle,
@@ -50,16 +65,7 @@ ConstructRowProcessor::ConstructRowProcessor(
       firstRow_(rowRange.firstRow),
       currentRowOffset_(currentRowOffset),
       idCache_(makeIdCache(preprocessedTemplate)),
-      innerRange_(ad_utility::InputRangeTypeErased<EvaluatedTriple>{
-          ad_utility::CachingContinuableTransformInputRange(
-              ql::views::iota(size_t{0}, (numRows_ + DEFAULT_BATCH_SIZE - 1) /
-                                             DEFAULT_BATCH_SIZE),
-              [this](
-                  size_t batchIdx) -> ad_utility::LoopControl<EvaluatedTriple> {
-                cancellationHandle_->throwIfCancelled();
-                return ad_utility::LoopControl<EvaluatedTriple>::yieldAll(
-                    computeBatch(batchIdx * DEFAULT_BATCH_SIZE));
-              })}) {}
+      innerRange_(makeInnerRange()) {}
 
 // _____________________________________________________________________________
 std::optional<EvaluatedTriple> ConstructRowProcessor::get() {

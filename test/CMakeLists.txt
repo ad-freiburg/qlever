@@ -499,3 +499,5 @@ addLinkAndDiscoverTestNoLibs(ParallelExecutorTest)
 addLinkAndDiscoverTest(ConstructTemplatePreprocessorTest engine)
 
 addLinkAndDiscoverTest(ConstructBatchEvaluatorTest engine)
+
+addLinkAndDiscoverTest(ConstructRowProcessorTest engine)
