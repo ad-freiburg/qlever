@@ -189,8 +189,9 @@ int main(int argc, char** argv) {
       "IRI prefixes that are allowed as SERVICE endpoints (this option takes "
       "an arbitrary number of arguments). If none are given (the default), all "
       "IRIs are allowed. If given, SERVICE requests to IRIs not matching any "
-      "prefix are rejected. Magic services (for example spatial search or "
-      "materialized views) are never affected.");
+      "prefix are rejected. To disable all federated queries, set this option "
+      "to an invalid IRI prefix like `-`. Magic services (for example spatial "
+      "search or materialized views) are never affected.");
   po::variables_map optionsMap;
 
   try {
