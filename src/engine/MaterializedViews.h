@@ -235,12 +235,14 @@ using materializedViewsQueryAnalysis::MaterializedViewJoinReplacement;
 class MaterializedViewsManager {
  private:
   std::string onDiskBase_;
-  mutable ad_utility::Synchronized<
-      ad_utility::HashMap<std::string, std::shared_ptr<MaterializedView>>>
-      loadedViews_;
-  mutable ad_utility::Synchronized<
-      materializedViewsQueryAnalysis::QueryPatternCache>
-      queryPatternCache_;
+
+  // Helper struct to unify the locking of loaded views and `QueryPatternCache`.
+  struct LoadedViews {
+    ad_utility::HashMap<std::string, std::shared_ptr<MaterializedView>> views_;
+    materializedViewsQueryAnalysis::QueryPatternCache queryPatternCache_;
+  };
+
+  mutable ad_utility::Synchronized<LoadedViews> loadedViews_;
 
  public:
   MaterializedViewsManager() = default;

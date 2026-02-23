@@ -382,16 +382,15 @@ std::shared_ptr<const Permutation> MaterializedView::permutation() const {
 // _____________________________________________________________________________
 void MaterializedViewsManager::loadView(const std::string& name) const {
   auto lock = loadedViews_.wlock();
-  auto patternLock = queryPatternCache_.wlock();
-  if (lock->contains(name)) {
+  if (lock->views_.contains(name)) {
     return;
   }
   auto view = std::make_shared<MaterializedView>(onDiskBase_, name);
-  lock->insert({name, view});
+  lock->views_.insert({name, view});
   // Analyzing the view when loading instead of (de)serializing an analysis
   // result has the benefit that query analysis can be extended without needing
   // to rewrite views.
-  if (patternLock->analyzeView(view)) {
+  if (lock->queryPatternCache_.analyzeView(view)) {
     AD_LOG_INFO << "The materialized view '" << name
                 << "' was added to the query pattern cache." << std::endl;
   }
@@ -401,23 +400,23 @@ void MaterializedViewsManager::loadView(const std::string& name) const {
 void MaterializedViewsManager::unloadViewIfLoaded(
     const std::string& name) const {
   auto lock = loadedViews_.wlock();
-  if (!lock->contains(name)) {
+  if (!lock->views_.contains(name)) {
     return;
   }
-  queryPatternCache_.wlock()->removeView(lock->at(name));
-  lock->erase(name);
+  lock->queryPatternCache_.removeView(lock->views_.at(name));
+  lock->views_.erase(name);
 }
 
 // _____________________________________________________________________________
 std::shared_ptr<const MaterializedView> MaterializedViewsManager::getView(
     const std::string& name) const {
   loadView(name);
-  return loadedViews_.rlock()->at(name);
+  return loadedViews_.rlock()->views_.at(name);
 }
 
 // _____________________________________________________________________________
 bool MaterializedViewsManager::isViewLoaded(const std::string& name) const {
-  return loadedViews_.rlock()->contains(name);
+  return loadedViews_.rlock()->views_.contains(name);
 }
 
 // _____________________________________________________________________________
@@ -574,8 +573,9 @@ void MaterializedView::throwIfInvalidName(std::string_view name) {
 
 // _____________________________________________________________________________
 void MaterializedViewsManager::setOnDiskBase(const std::string& onDiskBase) {
-  AD_CORRECTNESS_CHECK(onDiskBase_ == "" && loadedViews_.rlock()->empty(),
-                       "Changing the on disk basename is not allowed.");
+  AD_CORRECTNESS_CHECK(
+      onDiskBase_ == "" && loadedViews_.rlock()->views_.empty(),
+      "Changing the on disk basename is not allowed.");
   onDiskBase_ = onDiskBase;
 }
 
@@ -622,8 +622,8 @@ std::vector<MaterializedViewJoinReplacement>
 MaterializedViewsManager::makeJoinReplacementIndexScans(
     QueryExecutionContext* qec,
     const parsedQuery::BasicGraphPattern& triples) const {
-  return queryPatternCache_.rlock()->makeJoinReplacementIndexScans(qec,
-                                                                   triples);
+  return loadedViews_.rlock()->queryPatternCache_.makeJoinReplacementIndexScans(
+      qec, triples);
 }
 
 // _____________________________________________________________________________
