@@ -82,4 +82,6 @@ TEST(Parameters, SpaceSeparatedStrings) {
   EXPECT_EQ(s.toString(), "abc def");
   s.setFromString("bla bli blu");
   EXPECT_THAT(s.get(), ::testing::ElementsAre("bla", "bli", "blu"));
+  s.setFromString("");
+  EXPECT_EQ(s.get().size(), 0);
 }
