@@ -48,37 +48,31 @@ class ConstructRowProcessor : public ad_utility::InputRangeFromGet<
       const TableWithRange& table, size_t currentRowOffset);
 
   // Returns the next instantiated triple, or nullopt when exhausted.
-  // Incomplete triples (with UNDEF components) are filtered out.
+  // Incomplete triples are filtered out.
   std::optional<EvaluatedTriple> get() override;
 
  private:
-  // Pre-computed row-range information extracted from a `TableWithRange`.
-  struct RowRange {
-    size_t numRows;   // Number of rows in the view.
-    size_t firstRow;  // Index of the first row in the IdTable.
-  };
-
-  // Delegating constructor used by the public constructor. Accepts a
-  // pre-computed `RowRange` so the member initializer list stays flat.
-  ConstructRowProcessor(
-      const PreprocessedConstructTemplate& preprocessedTemplate,
-      const Index& index, CancellationHandle cancellationHandle,
-      const TableWithRange& table, size_t currentRowOffset, RowRange rowRange);
-
   // Evaluate all variables for the current batch and instantiate all template
-  // triples for every row of that batch.
+  // triples for every row of that batch. `batchStart` is a view-relative row
+  // offset (0-based within the view) for the current batch.
   std::vector<EvaluatedTriple> computeBatch(size_t batchStart);
 
-  // Extract the row range (first row index and total count) from `table`.
-  static RowRange extractRowRange(const TableWithRange& table);
-
-  // Compute the ID cache capacity: one slot per variable per row in a batch,
-  // times `CACHE_CAPACITY_FACTOR` for cross-batch headroom.
+  // Compute the ID cache capacity.
   static IdCache makeIdCache(const PreprocessedConstructTemplate& tmpl);
 
-  // Build the lazy batch-iteration range over all batches. Called from the
-  // private constructor's MIL after all other members are initialised.
+  // Build the lazy batch-iteration range over all batches.
   ad_utility::InputRangeTypeErased<EvaluatedTriple> makeInnerRange();
+
+  // Number of row indices to process.
+  size_t numRows() const {
+    return static_cast<size_t>(ql::ranges::distance(rowIndices_));
+  }
+
+  // Absolute `IdTable` index of the first row to process, or 0 if empty.
+  size_t firstRow() const {
+    return numRows() > 0 ? static_cast<size_t>(*ql::ranges::begin(rowIndices_))
+                         : 0;
+  }
 
   const PreprocessedConstructTemplate& preprocessedTemplate_;
   std::reference_wrapper<const Index> index_;
@@ -86,8 +80,8 @@ class ConstructRowProcessor : public ad_utility::InputRangeFromGet<
 
   // Table data.
   TableConstRefWithVocab tableWithVocab_;
-  size_t numRows_;   // Total number of rows to process.
-  size_t firstRow_;  // Index of the first row in the IdTable.
+  ql::ranges::iota_view<uint64_t, uint64_t>
+      rowIndices_;  // IdTable row indices to process
   size_t currentRowOffset_;
 
   // LRU cache for avoiding redundant vocabulary lookups across batches.

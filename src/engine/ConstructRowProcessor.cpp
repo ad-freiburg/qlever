@@ -12,15 +12,6 @@
 namespace qlever::constructExport {
 
 // _____________________________________________________________________________
-ConstructRowProcessor::RowRange ConstructRowProcessor::extractRowRange(
-    const TableWithRange& table) {
-  const size_t numRows = static_cast<size_t>(ql::ranges::distance(table.view_));
-  const size_t firstRow =
-      numRows > 0 ? static_cast<size_t>(*ql::ranges::begin(table.view_)) : 0;
-  return {numRows, firstRow};
-}
-
-// _____________________________________________________________________________
 IdCache ConstructRowProcessor::makeIdCache(
     const PreprocessedConstructTemplate& tmpl) {
   return IdCache(DEFAULT_BATCH_SIZE *
@@ -33,16 +24,22 @@ ConstructRowProcessor::ConstructRowProcessor(
     const PreprocessedConstructTemplate& preprocessedTemplate,
     const Index& index, CancellationHandle cancellationHandle,
     const TableWithRange& table, size_t currentRowOffset)
-    : ConstructRowProcessor(preprocessedTemplate, index,
-                            std::move(cancellationHandle), table,
-                            currentRowOffset, extractRowRange(table)) {}
+    : preprocessedTemplate_(preprocessedTemplate),
+      index_(index),
+      cancellationHandle_(std::move(cancellationHandle)),
+      tableWithVocab_(table.tableWithVocab_),
+      rowIndices_(table.view_),
+      currentRowOffset_(currentRowOffset),
+      idCache_(makeIdCache(preprocessedTemplate)),
+      innerRange_(makeInnerRange()) {}
 
 // _____________________________________________________________________________
 ad_utility::InputRangeTypeErased<EvaluatedTriple>
 ConstructRowProcessor::makeInnerRange() {
   const size_t numBatches =
-      (numRows_ + DEFAULT_BATCH_SIZE - 1) / DEFAULT_BATCH_SIZE;
-  return ad_utility::InputRangeTypeErased<EvaluatedTriple>{
+      (numRows() + DEFAULT_BATCH_SIZE - 1) / DEFAULT_BATCH_SIZE;
+
+  return ad_utility::InputRangeTypeErased{
       ad_utility::CachingContinuableTransformInputRange(
           ql::views::iota(size_t{0}, numBatches),
           [this](size_t batchIdx) -> ad_utility::LoopControl<EvaluatedTriple> {
@@ -53,21 +50,6 @@ ConstructRowProcessor::makeInnerRange() {
 }
 
 // _____________________________________________________________________________
-ConstructRowProcessor::ConstructRowProcessor(
-    const PreprocessedConstructTemplate& preprocessedTemplate,
-    const Index& index, CancellationHandle cancellationHandle,
-    const TableWithRange& table, size_t currentRowOffset, RowRange rowRange)
-    : preprocessedTemplate_(preprocessedTemplate),
-      index_(index),
-      cancellationHandle_(std::move(cancellationHandle)),
-      tableWithVocab_(table.tableWithVocab_),
-      numRows_(rowRange.numRows),
-      firstRow_(rowRange.firstRow),
-      currentRowOffset_(currentRowOffset),
-      idCache_(makeIdCache(preprocessedTemplate)),
-      innerRange_(makeInnerRange()) {}
-
-// _____________________________________________________________________________
 std::optional<EvaluatedTriple> ConstructRowProcessor::get() {
   return innerRange_.get();
 }
@@ -75,10 +57,11 @@ std::optional<EvaluatedTriple> ConstructRowProcessor::get() {
 // _____________________________________________________________________________
 std::vector<EvaluatedTriple> ConstructRowProcessor::computeBatch(
     size_t batchStart) {
-  const size_t batchEnd = std::min(batchStart + DEFAULT_BATCH_SIZE, numRows_);
+  const size_t batchEnd = std::min(batchStart + DEFAULT_BATCH_SIZE, numRows());
 
-  BatchEvaluationContext batchContext{
-      tableWithVocab_.idTable(), firstRow_ + batchStart, firstRow_ + batchEnd};
+  BatchEvaluationContext batchContext{tableWithVocab_.idTable(),
+                                      firstRow() + batchStart,
+                                      firstRow() + batchEnd};
 
   auto batchResult = ConstructBatchEvaluator::evaluateBatch(
       preprocessedTemplate_.uniqueVariableColumns_, batchContext,
@@ -87,9 +70,11 @@ std::vector<EvaluatedTriple> ConstructRowProcessor::computeBatch(
   std::vector<EvaluatedTriple> triples;
   triples.reserve(batchResult.numRows_ *
                   preprocessedTemplate_.preprocessedTriples_.size());
-  for (size_t rowInBatch = 0; rowInBatch < batchResult.numRows_; ++rowInBatch) {
-    const size_t blankNodeRowId =
-        currentRowOffset_ + firstRow_ + batchStart + rowInBatch;
+
+  const size_t blankNodeBaseId = currentRowOffset_ + firstRow() + batchStart;
+  for (size_t rowInBatch : ql::views::iota(size_t{0}, batchResult.numRows_)) {
+    const size_t blankNodeRowId = blankNodeBaseId + rowInBatch;
+
     for (const auto& triple : preprocessedTemplate_.preprocessedTriples_) {
       auto subject = ConstructTripleInstantiator::instantiateTerm(
           triple[0], batchResult, rowInBatch, blankNodeRowId);
