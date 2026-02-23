@@ -24,7 +24,9 @@ endfunction()
 # if a test binary requires multiple sources
 function(linkAndDiscoverTest basename)
     linkTest(${basename} ${ARGN})
-    gtest_discover_tests(${basename} ${basename} DISCOVERY_TIMEOUT 600 PROPERTIES LABELS "${basename}")
+    #TODO<joka921> hide this behind a flag for cmake/ctest.
+    add_test(NAME ${basename} COMMAND ${basename})
+    #gtest_discover_tests(${basename} ${basename} DISCOVERY_TIMEOUT 600 PROPERTIES LABELS "${basename}")
 endfunction()
 
 # Usage: `linkAndDiscoverTestSerial(basename, [additionalLibraries...]`
@@ -33,8 +35,10 @@ endfunction()
 # required e.g. if several tests cases write to the same file.
 function(linkAndDiscoverTestSerial basename)
     linkTest(${basename} ${ARGN})
-    gtest_discover_tests(${basename} ${basename} DISCOVERY_TIMEOUT 600 PROPERTIES RUN_SERIAL
-            TRUE LABELS "${basename}")
+    #gtest_discover_tests(${basename} ${basename} DISCOVERY_TIMEOUT 600 PROPERTIES RUN_SERIAL
+    #        TRUE LABELS "${basename}")
+    #TODO<joka921> hide this behind a flag for cmake/ctest.
+    add_test(NAME ${basename} COMMAND ${basename} PROPERTIES RUN_SERIAL)
 endfunction()
 
 if (SINGLE_TEST_BINARY)
@@ -210,13 +214,13 @@ addLinkAndDiscoverTest(UnionTest engine)
 
 if (SINGLE_TEST_BINARY)
     target_sources(QLeverAllUnitTestsMain PUBLIC TokenTest.cpp TokenTestCtreHelper.cpp)
-    qlever_target_link_libraries(QLeverAllUnitTestsMain parser re2 util)
+    qlever_target_link_libraries(QLeverAllUnitTestsMain parser util)
 else ()
     add_executable(TokenTest TokenTest.cpp TokenTestCtreHelper.cpp)
-    linkAndDiscoverTest(TokenTest parser re2 util)
+    linkAndDiscoverTest(TokenTest parser util)
 endif ()
 
-addLinkAndDiscoverTestSerial(RdfParserTest parser re2)
+addLinkAndDiscoverTestSerial(RdfParserTest parser)
 
 addLinkAndDiscoverTest(MultiColumnJoinTest engine)
 

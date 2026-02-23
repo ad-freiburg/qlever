@@ -244,7 +244,7 @@ find_package(OpenSSL REQUIRED)
 # is a drop-in replacement for `target_link_libraries` that additionally links
 # against the common libraries.
 function(qlever_target_link_libraries target)
-    target_link_libraries(${target} PUBLIC ${ARGN} absl_umbrella re2
+    target_link_libraries(${target} PUBLIC ${ARGN} absl_umbrella
             ICU::uc
             ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock fsst nlohmann_json::nlohmann_json Boost::container)
 
@@ -393,11 +393,11 @@ FetchContent_Declare(
 # Apply FetchContent
 ################################
 set(_QLEVER_SAVED_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
-set(BUILD_SHARED_LIBS OFF)
-FetchContent_MakeAvailable(abseil)
+#set(BUILD_SHARED_LIBS OFF)
+FetchContent_MakeAvailable(abseil re2)
 set(BUILD_SHARED_LIBS ${_QLEVER_SAVED_BUILD_SHARED_LIBS})
 
-FetchContent_MakeAvailable(googletest ctre fsst nlohmann-json antlr range-v3 spatialjoin s2 re2)
+FetchContent_MakeAvailable(googletest ctre fsst nlohmann-json antlr range-v3 spatialjoin s2)
 
 IF (BUILD_SHARED_LIBS)
     add_library(antlr4_umbrella ALIAS antlr4_shared)
@@ -422,7 +422,8 @@ target_compile_options(antlr4_shared PRIVATE -fPIC -Wno-all -Wno-extra -Wno-erro
 include_directories(SYSTEM "${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src")
 
 #Umbrella libraries from static to shared.
-if (BUILD_SHARED_LIBS)
+#if (BUILD_SHARED_LIBS)
+if (daldsfiefasddfelk)
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/dummy.cpp "")
 add_library (absl_umbrella SHARED ${CMAKE_CURRENT_BINARY_DIR}/dummy.cpp)
 target_link_libraries(absl_umbrella
@@ -435,6 +436,7 @@ target_link_libraries(absl_umbrella
         absl::time,
         absl::hash,
         absl::synchronization
+        re2::re2
         >
 )
 target_include_directories(absl_umbrella
@@ -446,6 +448,7 @@ target_include_directories(absl_umbrella
         $<TARGET_PROPERTY:absl::time,INTERFACE_INCLUDE_DIRECTORIES>
         $<TARGET_PROPERTY:absl::hash,INTERFACE_INCLUDE_DIRECTORIES>
         $<TARGET_PROPERTY:absl::synchronization,INTERFACE_INCLUDE_DIRECTORIES>
+        $<TARGET_PROPERTY:re2::re2,INTERFACE_INCLUDE_DIRECTORIES>
 )
 else()
     add_library(absl_umbrella INTERFACE)
@@ -458,6 +461,7 @@ else()
             absl::time
             absl::hash
             absl::synchronization
+            re2::re2
     )
 endif()
 
