@@ -439,17 +439,12 @@ std::optional<DateYearOrDuration> DateYearOrDuration::operator-(
     const Date& ownDate = getDateUnchecked();
     const Date& otherDate = rhs.getDateUnchecked();
 
-    std::optional<std::chrono::sys_time<std::chrono::nanoseconds>> epoch1 =
-        ownDate.toEpoch();
-    std::optional<std::chrono::sys_time<std::chrono::nanoseconds>> epoch2 =
-        otherDate.toEpoch();
-
-    if (!epoch1.has_value() || !epoch2.has_value()) {
+    std::optional<DayTimeDuration> difference = ownDate - otherDate;
+    if (!difference.has_value()) {
       return std::nullopt;
+    } else {
+      return DateYearOrDuration(difference.value());
     }
-
-    return DateYearOrDuration(
-        getDurationBetween(epoch1.value(), epoch2.value()));
   }
 
   // TODO: The following subtractions should be implemented next:

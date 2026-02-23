@@ -521,46 +521,78 @@ TEST(Date, parseErrors) {
   ASSERT_THROW(D::parseXsdDate("Kartoffelsalat"), E);
 }
 
+#ifndef REDUCED_FEATURE_SET_FOR_CPP17
 TEST(Date, toEpoch) {
-  using namespace std::chrono;
-  Date date = Date(1970, 1, 1, 0, 0, 0);
-  sys_time<std::chrono::nanoseconds> timestamp =
-      sys_time<std::chrono::nanoseconds>{nanoseconds{0}};
-  auto result = date.toEpoch();
-  ASSERT_TRUE(result);
-  ASSERT_EQ(timestamp, result.value());
+  {
+    using namespace std::chrono;
+    Date date = Date(1970, 1, 1, 0, 0, 0);
+    sys_time<std::chrono::nanoseconds> timestamp =
+        sys_time<std::chrono::nanoseconds>{nanoseconds{0}};
+    auto result = date.toEpoch();
+    ASSERT_TRUE(result);
+    ASSERT_EQ(timestamp, result.value());
 
-  date = Date(1969, 12, 31, 23, 59, 20);
-  timestamp = sys_time<nanoseconds>{seconds{-40}};
-  ASSERT_TRUE(date.toEpoch());
-  ASSERT_EQ(timestamp, date.toEpoch().value());
+    date = Date(1969, 12, 31, 23, 59, 20);
+    timestamp = sys_time<nanoseconds>{seconds{-40}};
+    ASSERT_TRUE(date.toEpoch());
+    ASSERT_EQ(timestamp, date.toEpoch().value());
 
-  date = Date(1970, 1, 1, 1, 1, 1);
-  timestamp = sys_time<nanoseconds>{seconds{3661}};
-  ASSERT_TRUE(date.toEpoch());
-  ASSERT_EQ(timestamp, date.toEpoch().value());
+    date = Date(1970, 1, 1, 1, 1, 1);
+    timestamp = sys_time<nanoseconds>{seconds{3661}};
+    ASSERT_TRUE(date.toEpoch());
+    ASSERT_EQ(timestamp, date.toEpoch().value());
 
-  date = Date(1970, 1, 1, 0, 0, 20.235);
-  auto second = duration<double>{20.235};
-  timestamp = sys_time<nanoseconds>{duration_cast<nanoseconds>(second)};
-  ASSERT_TRUE(date.toEpoch());
-  ASSERT_NEAR(timestamp.time_since_epoch().count(),
-              date.toEpoch().value().time_since_epoch().count(), 500000);
+    date = Date(1970, 1, 1, 0, 0, 20.235);
+    auto second = duration<double>{20.235};
+    timestamp = sys_time<nanoseconds>{duration_cast<nanoseconds>(second)};
+    ASSERT_TRUE(date.toEpoch());
+    ASSERT_NEAR(timestamp.time_since_epoch().count(),
+                date.toEpoch().value().time_since_epoch().count(), 500000);
 
-  date = Date(1999, 2, 1, 8, 15, 13.098);
-  second = duration<double>{13.098};
-  timestamp = sys_time<nanoseconds>{seconds{917856900}} +
-              duration_cast<nanoseconds>(second);
-  ASSERT_TRUE(date.toEpoch());
-  ASSERT_NEAR(timestamp.time_since_epoch().count(),
-              date.toEpoch().value().time_since_epoch().count(), 500000);
+    date = Date(1999, 2, 1, 8, 15, 13.098);
+    second = duration<double>{13.098};
+    timestamp = sys_time<nanoseconds>{seconds{917856900}} +
+                duration_cast<nanoseconds>(second);
+    ASSERT_TRUE(date.toEpoch());
+    ASSERT_NEAR(timestamp.time_since_epoch().count(),
+                date.toEpoch().value().time_since_epoch().count(), 500000);
 
-  // Test invalid date
-  date = Date(1970, 11, 31, 13, 24, 24);
-  ASSERT_FALSE(date.toEpoch());
-  date = Date(2021, 2, 29, 9, 1, 23);
-  ASSERT_FALSE(date.toEpoch());
+    // Test invalid date
+    date = Date(1970, 11, 31, 13, 24, 24);
+    ASSERT_FALSE(date.toEpoch());
+    date = Date(2021, 2, 29, 9, 1, 23);
+    ASSERT_FALSE(date.toEpoch());
+  }
+  {
+    using namespace std::chrono;
+    // Test different timezones
+    Date date1 = Date(1999, 10, 11, 10, 5, 30);  // UTC
+    for (int i = 1; i < 23; i++) {
+      Date date2 = Date(1999, 10, 11, 10, 5, 30, i);  // UTC + i
+      // Difference in hours is converted to ns to be compared.
+      ASSERT_EQ(-i * 3600000000000,
+                (date1.toEpoch().value() - date2.toEpoch().value()).count());
+      date2 = Date(1999, 10, 11, 10, 5, 30, -i);  // UTC - i
+      ASSERT_EQ(i * 3600000000000,
+                (date1.toEpoch().value() - date2.toEpoch().value()).count());
+    }
+  }
 }
+
+TEST(Date, getTimeZoneOffsetToUTCInHours) {
+  Date date = Date(1970, 1, 1, 0, 0, 0);  // Not TimeZone given
+  ASSERT_EQ(0, date.getTimeZoneOffsetToUTCInHours());
+  date = Date(1989, 2, 3, 14, 4, 5, Date::TimeZoneZ{});  // UTC
+  ASSERT_EQ(0, date.getTimeZoneOffsetToUTCInHours());
+
+  for (int i = 1; i < 24; i++) {
+    date = Date(1989, 2, 3, 14, 4, 5, i);  // UTC + i
+    ASSERT_EQ(i, date.getTimeZoneOffsetToUTCInHours());
+    date = Date(1989, 2, 3, 14, 4, 5, -i);  // UTC - i
+    ASSERT_EQ(-i, date.getTimeZoneOffsetToUTCInHours());
+  }
+}
+#endif
 
 TEST(DateYearOrDuration, AssertionFailures) {
   // These values are out of range.

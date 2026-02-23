@@ -65,6 +65,32 @@ std::string Date::getFormattedYear() const {
                         : absl::StrFormat("%05d", getYear());
 }
 
+#ifndef REDUCED_FEATURE_SET_FOR_CPP17
+// _____________________________________________________________________________
+std::optional<DayTimeDuration> Date::operator-(const Date& rhs) const {
+  auto epoch1 = toEpoch();
+  auto epoch2 = rhs.toEpoch();
+
+  if (!epoch1.has_value() || !epoch2.has_value()) {
+    return std::nullopt;
+  }
+
+  std::chrono::sys_time<std::chrono::nanoseconds> date1 = epoch1.value();
+  std::chrono::sys_time<std::chrono::nanoseconds> date2 = epoch2.value();
+
+  DayTimeDuration::Type durationType = DayTimeDuration::Type::Positive;
+  auto difference = date1 - date2;
+  if (date1 < date2) {
+    durationType = DayTimeDuration::Type::Negative;
+    difference = -difference;
+  }
+  // Get total nanoseconds and convert them so a seconds double.
+  double second =
+      std::chrono::duration_cast<std::chrono::nanoseconds>(difference).count() /
+      1000000000;
+  return DayTimeDuration(durationType, 0, 0, 0, second);
+}
+
 // _____________________________________________________________________________
 std::optional<std::chrono::sys_time<std::chrono::nanoseconds>> Date::toEpoch()
     const {
@@ -74,11 +100,32 @@ std::optional<std::chrono::sys_time<std::chrono::nanoseconds>> Date::toEpoch()
     // Build timestamp from date
     auto second = duration<double>{getSecond()};
     std::chrono::sys_time<std::chrono::nanoseconds> result =
-        sys_days(date) + hours{getHour()} + minutes{getMinute()} +
-        duration_cast<nanoseconds>(second);
+        sys_days(date) + hours{getHour() + getTimeZoneOffsetToUTCInHours()} +
+        minutes{getMinute()} +
+        duration_cast<nanoseconds>(
+            second);  // Here all times are converted to a UTC time.
     return result;
   } else {
     // Invalid date does not have Unix Epoch time.
     return std::nullopt;
   }
 }
+
+// _____________________________________________________________________________
+int8_t Date::getTimeZoneOffsetToUTCInHours() const {
+  TimeZone tz = getTimeZone();
+  return std::visit(
+      [](auto& value) {
+        using T = std::decay_t<decltype(value)>;
+
+        if constexpr (std::is_same_v<T, NoTimeZone>) {
+          return 0;  // Assume UTC time zone
+        } else if constexpr (std::is_same_v<T, TimeZoneZ>) {
+          return 0;
+        } else if constexpr (std::is_same_v<T, int>) {
+          return value;
+        }
+      },
+      tz);
+}
+#endif

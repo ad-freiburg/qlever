@@ -19,6 +19,7 @@
 
 #include "backports/keywords.h"
 #include "backports/three_way_comparison.h"
+#include "util/Duration.h"
 
 // Exception that is thrown when a value for a component of the `Date`, `Time`
 // or `Datetime` classes below is out of range (e.g. the month 13, or the hour
@@ -338,9 +339,16 @@ class Date {
   // For example: 100 -> "0100" and -100 -> "-0100".
   std::string getFormattedYear() const;
 
+#ifndef REDUCED_FEATURE_SET_FOR_CPP17
+  // Calculates duration between the two Dates using Epoch time.
+  std::optional<DayTimeDuration> operator-(const Date& rhs) const;
+
   // If date is valid, converting it to Unix Epoch timestamp.
   std::optional<std::chrono::sys_time<std::chrono::nanoseconds>> toEpoch()
       const;
+
+  int8_t getTimeZoneOffsetToUTCInHours() const;
+#endif
 };
 #ifdef QLEVER_CPP_17
 static_assert(std::is_default_constructible_v<Date>);
