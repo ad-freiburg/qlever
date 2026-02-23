@@ -1108,3 +1108,41 @@ TEST(InExpression, getEstimatesForFilterExpression) {
   EXPECT_EQ(sizeEstimate, 0);
   EXPECT_EQ(costEstimate, 0);
 }
+
+// _____________________________________________________________________________
+TEST(InExpression, isResultAlwaysDefined) {
+  using namespace ::testing;
+  auto makeDefined = []() {
+    return std::make_unique<IdExpression>(ValueId::makeFromInt(42));
+  };
+  auto makeUndefined = []() {
+    return std::make_unique<IdExpression>(ValueId::makeUndefined());
+  };
+  auto makeVector = []<typename... T>(T&&... child) {
+    std::vector<SparqlExpression::Ptr> children;
+    (children.push_back(AD_FWD(child)), ...);
+    return children;
+  };
+  EXPECT_TRUE(
+      InExpression(makeDefined(), makeVector()).isResultAlwaysDefined({}));
+  EXPECT_TRUE(InExpression(makeDefined(), makeVector(makeDefined()))
+                  .isResultAlwaysDefined({}));
+  EXPECT_TRUE(
+      InExpression(makeDefined(), makeVector(makeDefined(), makeDefined()))
+          .isResultAlwaysDefined({}));
+  EXPECT_FALSE(
+      InExpression(makeUndefined(), makeVector()).isResultAlwaysDefined({}));
+  EXPECT_FALSE(InExpression(makeUndefined(), makeVector(makeDefined()))
+                   .isResultAlwaysDefined({}));
+  EXPECT_FALSE(InExpression(makeDefined(), makeVector(makeUndefined()))
+                   .isResultAlwaysDefined({}));
+  EXPECT_FALSE(
+      InExpression(makeDefined(), makeVector(makeUndefined(), makeDefined()))
+          .isResultAlwaysDefined({}));
+  EXPECT_FALSE(
+      InExpression(makeDefined(), makeVector(makeDefined(), makeUndefined()))
+          .isResultAlwaysDefined({}));
+  EXPECT_FALSE(
+      InExpression(makeUndefined(), makeVector(makeDefined(), makeDefined()))
+          .isResultAlwaysDefined({}));
+}

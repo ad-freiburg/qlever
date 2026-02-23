@@ -150,3 +150,8 @@ TEST(UuidExpression, evaluateUuidExpression) {
   ASSERT_TRUE(std::holds_alternative<LocalVocabEntry>(litOrIriUuid));
   ASSERT_TRUE(std::get<LocalVocabEntry>(litOrIriUuid).isIri());
 }
+
+// _____________________________________________________________________________
+TEST(UuidExpression, isResultAlwaysDefined) {
+  EXPECT_TRUE(UuidExpression{}.isResultAlwaysDefined({}));
+}
