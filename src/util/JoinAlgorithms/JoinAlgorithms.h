@@ -1441,14 +1441,16 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
       addCartesianProduct(leftSide_.currentBlocks_, rightSide_.undefBlocks_);
       consumeRemainingBlocks<false>(leftSide_, rightSide_.undefBlocks_);
 
-      // Basically `addCartesianProduct`, but the order is reversed.
-      for (const auto& rBlock : rightSide_.currentBlocks_) {
-        for (const auto& lBlock : leftSide_.undefBlocks_) {
-          compatibleRowAction_.setInput(lBlock.fullBlock(), rBlock.fullBlock());
-          for (size_t j : rBlock.getIndexRange()) {
-            for (size_t i : lBlock.getIndexRange()) {
-              compatibleRowAction_.addRow(i, j);
-            }
+      // Basically `addCartesianProduct`, but the order is reversed. This is
+      // important because otherwise the elements in `rightSide_.currentBlocks_`
+      // will be repeated in whole blocks instead of element-wise, which would
+      // result in an invalid order.
+      for (const auto& [rBlock, lBlock] : ::ranges::views::cartesian_product(
+               rightSide_.currentBlocks_, leftSide_.undefBlocks_)) {
+        compatibleRowAction_.setInput(lBlock.fullBlock(), rBlock.fullBlock());
+        for (size_t j : rBlock.getIndexRange()) {
+          for (size_t i : lBlock.getIndexRange()) {
+            compatibleRowAction_.addRow(i, j);
           }
         }
       }
