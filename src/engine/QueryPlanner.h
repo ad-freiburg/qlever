@@ -450,7 +450,7 @@ class QueryPlanner {
   //
   // For example, at index 1 there is a vector of query plans that should be
   // added in round 1 of the dynamic programming algorithm. For the greedy
-  // algorithm, the `useReplacementPlansForGreedyPlanner` helper handles the
+  // algorithm, the `prepareReplacementPlansForGreedyPlanner` helper handles the
   // necessary steps.
   using ReplacementPlans = std::vector<std::vector<SubtreePlan>>;
   ReplacementPlans createMaterializedViewJoinReplacements(
@@ -592,7 +592,7 @@ class QueryPlanner {
       std::vector<SubtreePlan> connectedComponent,
       const FiltersAndOptionalSubstitutes& filters,
       const TextLimitVec& textLimits, const TripleGraph& tg,
-      const ReplacementPlans& replacementPlans) const;
+      ReplacementPlans& replacementPlans) const;
 
   // Same as `runDynamicProgrammingOnConnectedComponent`, but uses a greedy
   // algorithm that always greedily chooses the smallest result of the possible
@@ -601,7 +601,7 @@ class QueryPlanner {
       std::vector<SubtreePlan> connectedComponent,
       const FiltersAndOptionalSubstitutes& filters,
       const TextLimitVec& textLimits, const TripleGraph& tg,
-      const ReplacementPlans& replacementPlans) const;
+      ReplacementPlans& replacementPlans) const;
 
   // Return the number of connected subgraphs is the `graph`, or `budget + 1`,
   // if the number of subgraphs is `> budget`. This is used to analyze the
@@ -757,7 +757,7 @@ class QueryPlanner {
   //
   // NOTE: For this to work correctly the nodes covered by the replacement plans
   // must be disjunctive.
-  static void useReplacementPlansForGreedyPlanner(
+  static void prepareReplacementPlansForGreedyPlanner(
       ReplacementPlans& applicableReplacementPlans,
       std::vector<SubtreePlan>& connectedComponent);
 

@@ -1532,8 +1532,8 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
     std::vector<SubtreePlan> connectedComponent,
     const FiltersAndOptionalSubstitutes& filters,
     const TextLimitVec& textLimits, const TripleGraph& tg,
-    const ReplacementPlans& replacementPlans) const {
-  vector<vector<SubtreePlan>> dpTab;
+    ReplacementPlans& replacementPlans) const {
+  std::vector<std::vector<SubtreePlan>> dpTab;
   // find the unique number of nodes in the current connected component
   // (there might be duplicates because we already have multiple candidates
   // for each index scan with different permutations.
@@ -1546,20 +1546,27 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
     applyFiltersIfPossible<FilterMode::KeepUnfiltered>(dpTab.back(), filters);
     applyTextLimitsIfPossible(dpTab.back(), textLimits, false);
     dpTab.emplace_back();
+
+    // Helper to add plans new plans to the current round.
+    auto& dpRow = dpTab[k - 1];
+    auto extendDpRow = [&dpRow](std::vector<SubtreePlan>& newPlans) {
+      dpRow.reserve(dpRow.size() + newPlans.size());
+      std::move(newPlans.begin(), newPlans.end(), std::back_inserter(dpRow));
+    };
+
+    // Regular query planning round for connected component.
     for (size_t i = 1; i * 2 <= k; ++i) {
       checkCancellation();
       auto newPlans = merge(dpTab[i - 1], dpTab[k - i - 1], tg);
-      dpTab[k - 1].insert(dpTab[k - 1].end(), newPlans.begin(), newPlans.end());
+      extendDpRow(newPlans);
     }
     // As we only passed in connected components, we expect the result to always
     // be nonempty.
-    AD_CORRECTNESS_CHECK(!dpTab[k - 1].empty());
-    // If we have replacement plans for this level, we add them now, s.t. the
+    AD_CORRECTNESS_CHECK(!dpRow.empty());
+    // If we have replacement plans for this round, we add them now, s.t. the
     // next level can make use of them.
     if (replacementPlans.size() > k - 1) {
-      const auto& newPlans = replacementPlans[k - 1];
-      dpTab[k - 1].reserve(dpTab[k - 1].size() + newPlans.size());
-      dpTab[k - 1].insert(dpTab[k - 1].end(), newPlans.begin(), newPlans.end());
+      extendDpRow(replacementPlans[k - 1]);
     }
     checkCancellation();
   }
@@ -1648,7 +1655,7 @@ std::vector<SubtreePlan> QueryPlanner::runGreedyPlanningOnConnectedComponent(
     std::vector<SubtreePlan> connectedComponent,
     const FiltersAndOptionalSubstitutes& filters,
     const TextLimitVec& textLimits, const TripleGraph& tg,
-    const ReplacementPlans& replacementPlans) const {
+    ReplacementPlans& replacementPlans) const {
   applyFiltersIfPossible<FilterMode::ReplaceUnfiltered>(connectedComponent,
                                                         filters);
   applyTextLimitsIfPossible(connectedComponent, textLimits, true);
@@ -1807,17 +1814,19 @@ std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
                 std::back_inserter(lastDpRow));
     };
 
+    // Greedy planning needs special logic to properly handle replacement plans.
     if (useGreedyPlanning && hasApplicableReplacementPlans) {
       // Plan once with a copy of `components` and without replacements to have
       // a baseline plan. This plan may be better than the replacement if a
-      // certain sorting is required, that the replacement doesn't provide.
+      // certain sorting is required that the replacement doesn't provide.
+      ReplacementPlans noReplacementPlans;
       addCandidates(std::invoke(impl, this, component, filtersAndOptSubstitutes,
-                                textLimitVec, tg, ReplacementPlans{}));
+                                textLimitVec, tg, noReplacementPlans));
 
       // Then remove the plans for the nodes covered by replacement plans and
       // insert the replacement plans.
-      useReplacementPlansForGreedyPlanner(applicableReplacementPlans,
-                                          component);
+      prepareReplacementPlansForGreedyPlanner(applicableReplacementPlans,
+                                              component);
     }
 
     addCandidates(std::invoke(impl, this, std::move(component),
@@ -3455,7 +3464,7 @@ QueryPlanner::findApplicableReplacementPlans(
 }
 
 // _______________________________________________________________
-void QueryPlanner::useReplacementPlansForGreedyPlanner(
+void QueryPlanner::prepareReplacementPlansForGreedyPlanner(
     ReplacementPlans& applicableReplacementPlans,
     std::vector<SubtreePlan>& connectedComponent) {
   // Remove nodes from the `connectedComponent` that are covered by replacement
