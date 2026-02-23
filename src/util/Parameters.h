@@ -211,7 +211,7 @@ struct VectorToSpaceSeparatedStrings {
 };
 struct SpaceSeparatedStringsToVector {
   std::vector<std::string> operator()(const std::string& s) const {
-    return absl::StrSplit(s, " ");
+    return absl::StrSplit(s, " ", absl::SkipWhitespace());
   }
 };
 
