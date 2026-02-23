@@ -87,6 +87,9 @@ class MetaDataWrapperDense {
   // __________________________________________________________________
   ConstIterator begin() const { return _vec.begin(); }
 
+  // __________________________________________________________________
+  Iterator begin() { return _vec.begin(); }
+
   // __________________________________________________________________________
   ConstOrderedIterator ordered_begin() const { return begin(); }
 
@@ -95,6 +98,9 @@ class MetaDataWrapperDense {
 
   // __________________________________________________________________________
   ConstIterator end() const { return _vec.end(); }
+
+  // __________________________________________________________________________
+  Iterator end() { return _vec.end(); }
 
   // __________________________________________________________________________
   ConstOrderedIterator ordered_end() const { return end(); }
