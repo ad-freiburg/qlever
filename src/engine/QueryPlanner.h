@@ -592,7 +592,7 @@ class QueryPlanner {
       std::vector<SubtreePlan> connectedComponent,
       const FiltersAndOptionalSubstitutes& filters,
       const TextLimitVec& textLimits, const TripleGraph& tg,
-      ReplacementPlans& replacementPlans) const;
+      ReplacementPlans&& replacementPlans) const;
 
   // Same as `runDynamicProgrammingOnConnectedComponent`, but uses a greedy
   // algorithm that always greedily chooses the smallest result of the possible
@@ -601,7 +601,7 @@ class QueryPlanner {
       std::vector<SubtreePlan> connectedComponent,
       const FiltersAndOptionalSubstitutes& filters,
       const TextLimitVec& textLimits, const TripleGraph& tg,
-      ReplacementPlans& replacementPlans) const;
+      ReplacementPlans&& replacementPlans) const;
 
   // Return the number of connected subgraphs is the `graph`, or `budget + 1`,
   // if the number of subgraphs is `> budget`. This is used to analyze the

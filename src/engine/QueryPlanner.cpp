@@ -1532,7 +1532,7 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
     std::vector<SubtreePlan> connectedComponent,
     const FiltersAndOptionalSubstitutes& filters,
     const TextLimitVec& textLimits, const TripleGraph& tg,
-    ReplacementPlans& replacementPlans) const {
+    ReplacementPlans&& replacementPlans) const {
   std::vector<std::vector<SubtreePlan>> dpTab;
   // find the unique number of nodes in the current connected component
   // (there might be duplicates because we already have multiple candidates
@@ -1551,7 +1551,7 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
     auto& dpRow = dpTab[k - 1];
     auto extendDpRow = [&dpRow](std::vector<SubtreePlan>& newPlans) {
       dpRow.reserve(dpRow.size() + newPlans.size());
-      std::move(newPlans.begin(), newPlans.end(), std::back_inserter(dpRow));
+      ql::ranges::move(newPlans, std::back_inserter(dpRow));
     };
 
     // Regular query planning round for connected component.
@@ -1655,7 +1655,7 @@ std::vector<SubtreePlan> QueryPlanner::runGreedyPlanningOnConnectedComponent(
     std::vector<SubtreePlan> connectedComponent,
     const FiltersAndOptionalSubstitutes& filters,
     const TextLimitVec& textLimits, const TripleGraph& tg,
-    ReplacementPlans& replacementPlans) const {
+    ReplacementPlans&& replacementPlans) const {
   applyFiltersIfPossible<FilterMode::ReplaceUnfiltered>(connectedComponent,
                                                         filters);
   applyTextLimitsIfPossible(connectedComponent, textLimits, true);
@@ -1819,9 +1819,8 @@ std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
       // Plan once with a copy of `components` and without replacements to have
       // a baseline plan. This plan may be better than the replacement if a
       // certain sorting is required that the replacement doesn't provide.
-      ReplacementPlans noReplacementPlans;
       addCandidates(std::invoke(impl, this, component, filtersAndOptSubstitutes,
-                                textLimitVec, tg, noReplacementPlans));
+                                textLimitVec, tg, ReplacementPlans{}));
 
       // Then remove the plans for the nodes covered by replacement plans and
       // insert the replacement plans.
@@ -1831,7 +1830,7 @@ std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
 
     addCandidates(std::invoke(impl, this, std::move(component),
                               filtersAndOptSubstitutes, textLimitVec, tg,
-                              applicableReplacementPlans));
+                              std::move(applicableReplacementPlans)));
     lastDpRowFromComponents.push_back(std::move(lastDpRow));
     checkCancellation();
   }
