@@ -7,5 +7,5 @@ add_library(index
         PrefixHeuristic.cpp CompressedRelation.cpp
         PatternCreator.cpp ScanSpecification.cpp
         DeltaTriples.cpp LocalVocabEntry.cpp TextScoring.cpp TextScoringEnum.cpp TextIndexReadWrite.cpp
-        TextIndexBuilder.cpp GraphFilter.cpp IndexRebuilder.cpp ExportIds.cpp ../engine/LocalVocab.cpp ../engine/Result.cpp ../engine/Engine.cpp ../parser/WordsAndDocsFileParser.cpp)
+        TextIndexBuilder.cpp GraphFilter.cpp IndexRebuilder.cpp ExportIds.cpp ../engine/LocalVocab.cpp ../engine/Result.cpp ../engine/Engine.cpp ../parser/WordsAndDocsFileParser.cpp ../parser/LiteralOrIri.cpp)
 qlever_target_link_libraries(index util vocabulary global)
