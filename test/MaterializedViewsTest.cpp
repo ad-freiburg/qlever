@@ -39,12 +39,14 @@ TEST_F(MaterializedViewsTest, Basic) {
   // Write a simple view.
   clearLog();
   qlv().writeMaterializedView("testView1", simpleWriteQuery_);
-  EXPECT_THAT(log_.str(), ::testing::HasSubstr(
-                              "Materialized view testView1 written to disk"));
+  EXPECT_THAT(
+      log_.str(),
+      ::testing::HasSubstr("Materialized view \"testView1\" written to disk"));
   EXPECT_FALSE(qlv().isMaterializedViewLoaded("testView1"));
   qlv().loadMaterializedView("testView1");
-  EXPECT_THAT(log_.str(), ::testing::HasSubstr(
-                              "Loading materialized view testView1 from disk"));
+  EXPECT_THAT(log_.str(),
+              ::testing::HasSubstr(
+                  "Loading materialized view \"testView1\" from disk"));
   EXPECT_TRUE(qlv().isMaterializedViewLoaded("testView1"));
 
   // Overwriting a materialized view automatically unloads it first.
@@ -346,7 +348,7 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
                             qlv().parseAndPlanQuery(presortedQuery));
     EXPECT_THAT(log_.str(),
                 ::testing::HasSubstr("Query result rows for materialized view "
-                                     "testView4 are already sorted"));
+                                     "\"testView4\" are already sorted"));
     MaterializedView view{testIndexBase_, "testView4"};
     EXPECT_EQ(columnNames(view).at(0), V{"?p"});
     auto res = qlv().query(
@@ -654,7 +656,7 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
     // Check correct logging.
     EXPECT_THAT(log_.str(),
                 ::testing::HasSubstr(
-                    "Materialized view testViewFromHTTP written to disk"));
+                    "Materialized view \"testViewFromHTTP\" written to disk"));
   }
 
   // Write a materialized view through a simulated HTTP GET request.
@@ -676,7 +678,7 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
     // Check correct logging.
     EXPECT_THAT(log_.str(),
                 ::testing::HasSubstr(
-                    "Materialized view testViewFromHTTP2 written to disk"));
+                    "Materialized view \"testViewFromHTTP2\" written to disk"));
   }
 
   // Load a materialized view through a simulated HTTP GET request.
@@ -694,9 +696,10 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
               "testViewFromHTTP2");
 
     // Check correct logging.
-    EXPECT_THAT(log_.str(),
-                ::testing::HasSubstr(
-                    "Loading materialized view testViewFromHTTP2 from disk"));
+    EXPECT_THAT(
+        log_.str(),
+        ::testing::HasSubstr(
+            "Loading materialized view \"testViewFromHTTP2\" from disk"));
   }
 
   // Test error message for wrong query type.
