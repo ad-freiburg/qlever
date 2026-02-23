@@ -7,18 +7,17 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_ENGINE_CONSTRUCTBATCHPROCESSOR_H
-#define QLEVER_SRC_ENGINE_CONSTRUCTBATCHPROCESSOR_H
+#ifndef QLEVER_SRC_ENGINE_CONSTRUCTROWPROCESSOR_H
+#define QLEVER_SRC_ENGINE_CONSTRUCTROWPROCESSOR_H
 
-#include <memory>
 #include <optional>
-#include <string>
 #include <vector>
 
 #include "engine/ConstructBatchEvaluator.h"
 #include "engine/ConstructTripleInstantiator.h"
 #include "engine/QueryExportTypes.h"
 #include "util/CancellationHandle.h"
+#include "util/InputRangeUtils.h"
 
 namespace qlever::constructExport {
 
@@ -34,9 +33,6 @@ namespace qlever::constructExport {
 class ConstructRowProcessor : public ad_utility::InputRangeFromGet<
                                   qlever::constructExport::EvaluatedTriple> {
  public:
-  using IdCache =
-      ad_utility::util::LRUCacheWithStatistics<Id,
-                                               std::optional<EvaluatedTerm>>;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
 
   // Default batch size for processing rows.
@@ -45,8 +41,6 @@ class ConstructRowProcessor : public ad_utility::InputRangeFromGet<
   // Multiplier for computing ID cache capacity from batch size and variable
   // count. Provides headroom for cross-batch cache hits on repeated values.
   static constexpr size_t CACHE_CAPACITY_FACTOR = 32;
-
-  static size_t getBatchSize() { return DEFAULT_BATCH_SIZE; }
 
   ConstructRowProcessor(
       const PreprocessedConstructTemplate& preprocessedTemplate,
@@ -58,11 +52,9 @@ class ConstructRowProcessor : public ad_utility::InputRangeFromGet<
   std::optional<EvaluatedTriple> get() override;
 
  private:
-  std::shared_ptr<IdCache> createIdCache() const;
-
   // Evaluate all variables for the current batch and instantiate all template
   // triples for every row. Triples with any undefined term are omitted.
-  std::vector<EvaluatedTriple> computeBatch();
+  std::vector<EvaluatedTriple> computeBatch(size_t batchStart);
 
   const PreprocessedConstructTemplate& preprocessedTemplate_;
   std::reference_wrapper<const Index> index_;
@@ -70,19 +62,18 @@ class ConstructRowProcessor : public ad_utility::InputRangeFromGet<
 
   // Table data.
   TableConstRefWithVocab tableWithVocab_;
-  std::vector<uint64_t> rowIndicesVec_;
+  size_t numRows_;   // Total number of rows to process.
+  size_t firstRow_;  // Index of the first row in the IdTable.
   size_t currentRowOffset_;
 
-  // Id cache for avoiding redundant vocabulary lookups.
-  std::shared_ptr<IdCache> idCache_ = ConstructRowProcessor::createIdCache();
+  // LRU cache for avoiding redundant vocabulary lookups across batches.
+  IdCache idCache_;
 
-  // Iteration state.
-  size_t batchSize_ = ConstructRowProcessor::getBatchSize();
-  size_t batchStart_ = 0;
-  size_t tripleIdx_ = 0;
-  std::vector<EvaluatedTriple> currentBatchTriples_;
+  // Lazy range driving the batch iteration. Initialized in the constructor
+  // body after all other members are ready.
+  ad_utility::InputRangeTypeErased<EvaluatedTriple> innerRange_;
 };
 
 }  // namespace qlever::constructExport
 
-#endif  // QLEVER_SRC_ENGINE_CONSTRUCTBATCHPROCESSOR_H
+#endif  // QLEVER_SRC_ENGINE_CONSTRUCTROWPROCESSOR_H

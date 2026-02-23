@@ -20,42 +20,50 @@ ConstructRowProcessor::ConstructRowProcessor(
       index_(index),
       cancellationHandle_(std::move(cancellationHandle)),
       tableWithVocab_(table.tableWithVocab_),
-      rowIndicesVec_(ql::ranges::begin(table.view_),
-                     ql::ranges::end(table.view_)),
-      currentRowOffset_(currentRowOffset) {}
-
-// TODO<ms2144>: The while (true) looks suspicious here.
-//  _____________________________________________________________________________
-std::optional<EvaluatedTriple> ConstructRowProcessor::get() {
-  while (true) {
-    if (tripleIdx_ < currentBatchTriples_.size()) {
-      return std::move(currentBatchTriples_[tripleIdx_++]);
-    }
-    if (batchStart_ >= rowIndicesVec_.size()) return std::nullopt;
-    cancellationHandle_->throwIfCancelled();
-    currentBatchTriples_ = computeBatch();
-    batchStart_ += batchSize_;
-    tripleIdx_ = 0;
-  }
+      numRows_(static_cast<size_t>(ql::ranges::distance(table.view_))),
+      firstRow_(numRows_ > 0
+                    ? static_cast<size_t>(*ql::ranges::begin(table.view_))
+                    : 0),
+      currentRowOffset_(currentRowOffset),
+      idCache_(DEFAULT_BATCH_SIZE *
+               std::max(preprocessedTemplate.uniqueVariableColumns_.size(),
+                        size_t{1}) *
+               CACHE_CAPACITY_FACTOR) {
+  const size_t numBatches =
+      (numRows_ + DEFAULT_BATCH_SIZE - 1) / DEFAULT_BATCH_SIZE;
+  innerRange_ = ad_utility::InputRangeTypeErased<EvaluatedTriple>{
+      ad_utility::CachingContinuableTransformInputRange(
+          ql::views::iota(size_t{0}, numBatches),
+          [this](size_t batchIdx) -> ad_utility::LoopControl<EvaluatedTriple> {
+            cancellationHandle_->throwIfCancelled();
+            return ad_utility::LoopControl<EvaluatedTriple>::yieldAll(
+                computeBatch(batchIdx * DEFAULT_BATCH_SIZE));
+          })};
 }
 
 // _____________________________________________________________________________
-std::vector<EvaluatedTriple> ConstructRowProcessor::computeBatch() {
-  const size_t batchEnd =
-      std::min(batchStart_ + batchSize_, rowIndicesVec_.size());
+std::optional<EvaluatedTriple> ConstructRowProcessor::get() {
+  return innerRange_.get();
+}
 
-  BatchEvaluationContext batchContext{tableWithVocab_.idTable(),
-                                      rowIndicesVec_[batchStart_],
-                                      rowIndicesVec_[batchEnd - 1] + 1};
+// _____________________________________________________________________________
+std::vector<EvaluatedTriple> ConstructRowProcessor::computeBatch(
+    size_t batchStart) {
+  const size_t batchEnd = std::min(batchStart + DEFAULT_BATCH_SIZE, numRows_);
+
+  BatchEvaluationContext batchContext{
+      tableWithVocab_.idTable(), firstRow_ + batchStart, firstRow_ + batchEnd};
 
   auto batchResult = ConstructBatchEvaluator::evaluateBatch(
       preprocessedTemplate_.uniqueVariableColumns_, batchContext,
-      tableWithVocab_.localVocab(), index_.get(), *idCache_);
+      tableWithVocab_.localVocab(), index_.get(), idCache_);
 
   std::vector<EvaluatedTriple> triples;
+  triples.reserve(batchResult.numRows_ *
+                  preprocessedTemplate_.preprocessedTriples_.size());
   for (size_t rowInBatch = 0; rowInBatch < batchResult.numRows_; ++rowInBatch) {
     const size_t blankNodeRowId =
-        currentRowOffset_ + rowIndicesVec_[batchStart_ + rowInBatch];
+        currentRowOffset_ + firstRow_ + batchStart + rowInBatch;
     for (const auto& triple : preprocessedTemplate_.preprocessedTriples_) {
       auto subject = ConstructTripleInstantiator::instantiateTerm(
           triple[0], batchResult, rowInBatch, blankNodeRowId);
@@ -69,15 +77,6 @@ std::vector<EvaluatedTriple> ConstructRowProcessor::computeBatch() {
     }
   }
   return triples;
-}
-
-// _____________________________________________________________________________
-std::shared_ptr<ConstructRowProcessor::IdCache>
-ConstructRowProcessor::createIdCache() const {
-  const size_t numVars = preprocessedTemplate_.uniqueVariableColumns_.size();
-  const size_t capacity =
-      getBatchSize() * std::max(numVars, size_t{1}) * CACHE_CAPACITY_FACTOR;
-  return std::make_shared<IdCache>(capacity);
 }
 
 }  // namespace qlever::constructExport
