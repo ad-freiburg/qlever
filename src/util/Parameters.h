@@ -11,7 +11,6 @@
 #include <absl/strings/str_split.h>
 
 #include <optional>
-#include <sstream>
 #include <vector>
 
 #include "backports/concepts.h"
