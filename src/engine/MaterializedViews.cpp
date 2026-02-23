@@ -1,8 +1,11 @@
-// Copyright 2025 The QLever Authors, in particular:
+// Copyright 2025 - 2026 The QLever Authors, in particular:
 //
-// 2025 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+// 2025 - 2026 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "engine/MaterializedViews.h"
 
@@ -387,9 +390,9 @@ void MaterializedViewsManager::loadView(const std::string& name) const {
   }
   auto view = std::make_shared<MaterializedView>(onDiskBase_, name);
   lock->views_.insert({name, view});
-  // Analyzing the view when loading instead of (de)serializing an analysis
-  // result has the benefit that query analysis can be extended without needing
-  // to rewrite views.
+  // If we would analyze the view at the time of writing and (de)serialize an
+  // analysis result here, we could not extend query analysis without rewriting
+  // all views. Therefore query analysis is performed when loading views.
   if (lock->queryPatternCache_.analyzeView(view)) {
     AD_LOG_INFO << "The materialized view '" << name
                 << "' was added to the query pattern cache." << std::endl;
