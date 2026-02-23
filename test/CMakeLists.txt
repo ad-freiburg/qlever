@@ -496,4 +496,4 @@ addLinkAndDiscoverTestNoLibs(ParallelExecutorTest)
 
 addLinkAndDiscoverTestNoLibs(IoUringHelpersTest)
 
-addLinkAndDiscoverTestNoLibs(IoUringManagerTest)
+addLinkAndDiscoverTestNoLibs(IoUringManagerTest util)

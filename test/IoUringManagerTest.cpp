@@ -37,9 +37,25 @@ static FILE* openFile(const TempFile& tmp) {
 }
 
 // ---------------------------------------------------------------------------
+// Typed test fixture — runs all tests against both manager types when
+// io_uring is present, or only SyncIoManager when it is not.
+// ---------------------------------------------------------------------------
+template <typename T>
+class IoUringManagerTest : public ::testing::Test {};
+
+#ifdef QLEVER_HAS_IO_URING
+using ManagerTypes =
+    ::testing::Types<ad_utility::IoUringManager, ad_utility::SyncIoManager>;
+#else
+using ManagerTypes = ::testing::Types<ad_utility::SyncIoManager>;
+#endif
+
+TYPED_TEST_SUITE(IoUringManagerTest, ManagerTypes);
+
+// ---------------------------------------------------------------------------
 // SingleBatch: addBatch + wait for one batch, verify data.
 // ---------------------------------------------------------------------------
-TEST(IoUringManager, SingleBatch) {
+TYPED_TEST(IoUringManagerTest, SingleBatch) {
   std::string content = "AAAABBBBCCCCDDDD";
   TempFile tmp(content);
   FILE* f = openFile(tmp);
@@ -50,7 +66,7 @@ TEST(IoUringManager, SingleBatch) {
   std::vector<char> buf0(4), buf1(4), buf2(4);
   std::vector<char*> ptrs{buf0.data(), buf1.data(), buf2.data()};
 
-  ad_utility::IoUringManager mgr(64);
+  TypeParam mgr(64);
   auto handle = mgr.addBatch(fd, sizes, offsets, ptrs);
   mgr.wait(handle);
   std::fclose(f);
@@ -63,8 +79,8 @@ TEST(IoUringManager, SingleBatch) {
 // ---------------------------------------------------------------------------
 // EmptyBatch: addBatch with 0 reads → wait is a no-op.
 // ---------------------------------------------------------------------------
-TEST(IoUringManager, EmptyBatch) {
-  ad_utility::IoUringManager mgr(64);
+TYPED_TEST(IoUringManagerTest, EmptyBatch) {
+  TypeParam mgr(64);
   auto handle = mgr.addBatch(-1, {}, {}, {});
   // Should not block or throw.
   mgr.wait(handle);
@@ -73,13 +89,13 @@ TEST(IoUringManager, EmptyBatch) {
 // ---------------------------------------------------------------------------
 // MultipleBatchesSequential: 3 batches submitted and waited in order.
 // ---------------------------------------------------------------------------
-TEST(IoUringManager, MultipleBatchesSequential) {
+TYPED_TEST(IoUringManagerTest, MultipleBatchesSequential) {
   std::string content = "AAAABBBBCCCCDDDDEEEEFFFFGGGG";
   TempFile tmp(content);
   FILE* f = openFile(tmp);
   int fd = fileno(f);
 
-  ad_utility::IoUringManager mgr(64);
+  TypeParam mgr(64);
 
   auto makeAndWait = [&](uint64_t offset, size_t sz,
                          const std::string& expected) {
@@ -102,13 +118,13 @@ TEST(IoUringManager, MultipleBatchesSequential) {
 // ---------------------------------------------------------------------------
 // WaitOutOfOrder: submit batch A then B, wait(B) first, then wait(A).
 // ---------------------------------------------------------------------------
-TEST(IoUringManager, WaitOutOfOrder) {
+TYPED_TEST(IoUringManagerTest, WaitOutOfOrder) {
   std::string content = "AAAABBBB";
   TempFile tmp(content);
   FILE* f = openFile(tmp);
   int fd = fileno(f);
 
-  ad_utility::IoUringManager mgr(64);
+  TypeParam mgr(64);
 
   std::vector<char> bufA(4), bufB(4);
   std::vector<size_t> sizesA{4}, sizesB{4};
@@ -129,7 +145,7 @@ TEST(IoUringManager, WaitOutOfOrder) {
 // ---------------------------------------------------------------------------
 // BatchLargerThanRing: batch with 400 reads, ring size 64 → drip-fed.
 // ---------------------------------------------------------------------------
-TEST(IoUringManager, BatchLargerThanRing) {
+TYPED_TEST(IoUringManagerTest, BatchLargerThanRing) {
   constexpr size_t N = 400;
   constexpr size_t CHUNK = 4;
 
@@ -152,7 +168,7 @@ TEST(IoUringManager, BatchLargerThanRing) {
     ptrs[i] = bufs[i].data();
   }
 
-  ad_utility::IoUringManager mgr(64);
+  TypeParam mgr(64);
   auto h = mgr.addBatch(fd, sizes, offsets, ptrs);
   mgr.wait(h);
   std::fclose(f);
@@ -168,7 +184,7 @@ TEST(IoUringManager, BatchLargerThanRing) {
 // ---------------------------------------------------------------------------
 // MultipleSmallBatchesPipelined: submit many batches before waiting on any.
 // ---------------------------------------------------------------------------
-TEST(IoUringManager, MultipleSmallBatchesPipelined) {
+TYPED_TEST(IoUringManagerTest, MultipleSmallBatchesPipelined) {
   constexpr size_t M = 20;
   std::string content(M * 4, '\0');
   for (size_t i = 0; i < M; ++i) {
@@ -178,10 +194,10 @@ TEST(IoUringManager, MultipleSmallBatchesPipelined) {
   FILE* f = openFile(tmp);
   int fd = fileno(f);
 
-  ad_utility::IoUringManager mgr(64);
+  TypeParam mgr(64);
 
   std::vector<std::vector<char>> bufs(M, std::vector<char>(4));
-  std::vector<ad_utility::IoUringManager::BatchHandle> handles(M);
+  std::vector<typename TypeParam::BatchHandle> handles(M);
 
   for (size_t i = 0; i < M; ++i) {
     std::vector<size_t> sizes{4};
@@ -202,15 +218,21 @@ TEST(IoUringManager, MultipleSmallBatchesPipelined) {
 
 // ---------------------------------------------------------------------------
 // InvalidFdThrows: addBatch with fd=-1, wait() → std::runtime_error.
+// Both addBatch and wait are wrapped so the test passes regardless of
+// whether the throw occurs in addBatch (sync) or wait (async).
 // ---------------------------------------------------------------------------
-TEST(IoUringManager, InvalidFdThrows) {
-  ad_utility::IoUringManager mgr(64);
+TYPED_TEST(IoUringManagerTest, InvalidFdThrows) {
+  TypeParam mgr(64);
   std::vector<char> buf(4);
   std::vector<size_t> sizes{4};
   std::vector<uint64_t> offsets{0};
   std::vector<char*> ptrs{buf.data()};
-  auto h = mgr.addBatch(-1, sizes, offsets, ptrs);
-  EXPECT_THROW(mgr.wait(h), std::runtime_error);
+  EXPECT_THROW(
+      {
+        auto h = mgr.addBatch(-1, sizes, offsets, ptrs);
+        mgr.wait(h);
+      },
+      std::runtime_error);
 }
 
 }  // namespace
