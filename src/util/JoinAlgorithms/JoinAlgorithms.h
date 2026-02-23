@@ -38,11 +38,11 @@ CPP_concept UnaryIteratorFunction =
     ql::concepts::invocable<F, ql::ranges::iterator_t<Range>>;
 
 // A  function `F` fulfills `BinaryIteratorFunction` if it can be called with
-// two arguments of the `Range`'s iterator type (NOT value type).
-template <typename F, typename Range>
+// two arguments of the `Range1/2`'s iterator types (NOT value type).
+template <typename F, typename Range1, typename Range2>
 CPP_concept BinaryIteratorFunction =
-    ql::concepts::invocable<F, ql::ranges::iterator_t<Range>,
-                            ql::ranges::iterator_t<Range>>;
+    ql::concepts::invocable<F, ql::ranges::iterator_t<Range1>,
+                            ql::ranges::iterator_t<Range2>>;
 
 // Helper type to indicate the different join modes.
 enum class JoinType { JOIN, OPTIONAL, MINUS };
@@ -470,6 +470,29 @@ CPP_template(typename RangeSmaller, typename RangeLarger, typename LessThan,
   }
 }
 
+// Struct that compares two row-like types lexicographically, but only the first
+// `numColumns - 1` entries of the column. This is used by the
+// `specialOptionalJoin`, where the last join column has special semantics, as
+// it might contain undef values.
+template <typename ComparisonImpl>
+struct CompareAllButLastImpl {
+  size_t numColumns_;
+  [[no_unique_address]] ComparisonImpl comparisonImpl_{};
+  explicit CompareAllButLastImpl(size_t numColumns) : numColumns_(numColumns) {}
+
+  template <typename A, typename B>
+  bool operator()(const A& a, const B& b) const {
+    auto dropLast = [&](const auto& row) {
+      return row | ql::views::take(numColumns_ - 1);
+    };
+    return comparisonImpl_(dropLast(a), dropLast(b));
+  };
+};
+
+using CompareAllButLast =
+    CompareAllButLastImpl<decltype(ql::ranges::lexicographical_compare)>;
+using CompareEqButLast = CompareAllButLastImpl<decltype(ql::ranges::equal)>;
+
 /**
  * @brief Perform an OPTIONAL join for the following special case: The `right`
  * input contains no UNDEF values in any of its join columns, the `left`
@@ -479,6 +502,9 @@ CPP_template(typename RangeSmaller, typename RangeLarger, typename LessThan,
  * This algorithms can also be used to implement a MINUS operation for inputs
  * with the same preconditions by specifying an appropriate
  * `elFromFirstNotFoundAction`.
+ * @param numJoinColumnsArg the number of join columns in the input.
+ * Deliberately `auto`, so it is possible to pass in `std::integral_constant`,
+ * to make this number known at compile time.
  * @param left The left input of the optional join. Must not contain UNDEF
  * values in the join columns.
  * @param right The right input of the optional join. Must only contain UNDEF
@@ -486,21 +512,25 @@ CPP_template(typename RangeSmaller, typename RangeLarger, typename LessThan,
  * @param compatibleRowAction Same as in `zipperJoinWithUndef`
  * @param elFromFirstNotFoundAction Same as in `zipperJoinWithUndef`
  */
-CPP_template(typename CompatibleActionT, typename NotFoundActionT,
+CPP_template(typename LeftTableLike, typename RightTableLike,
+             typename CompatibleActionT, typename NotFoundActionT,
              typename CancellationFuncT)(
-    requires BinaryIteratorFunction<CompatibleActionT, IdTableView<0>> CPP_and UnaryIteratorFunction<
-        NotFoundActionT, IdTableView<0>>
-        CPP_and ql::concepts::invocable<
-            CancellationFuncT>) void specialOptionalJoin(const IdTableView<0>&
-                                                             left,
-                                                         const IdTableView<0>&
-                                                             right,
-                                                         const CompatibleActionT&
-                                                             compatibleRowAction,
-                                                         const NotFoundActionT&
-                                                             elFromFirstNotFoundAction,
-                                                         const CancellationFuncT&
-                                                             checkCancellation) {
+    requires BinaryIteratorFunction<CompatibleActionT, LeftTableLike,
+                                    RightTableLike>
+        CPP_and UnaryIteratorFunction<NotFoundActionT, LeftTableLike>
+            CPP_and ql::concepts::invocable<
+                CancellationFuncT>) void specialOptionalJoin(auto
+                                                                 numJoinColumnsArg,
+                                                             const LeftTableLike&
+                                                                 left,
+                                                             const RightTableLike&
+                                                                 right,
+                                                             const CompatibleActionT&
+                                                                 compatibleRowAction,
+                                                             const NotFoundActionT&
+                                                                 elFromFirstNotFoundAction,
+                                                             const CancellationFuncT&
+                                                                 checkCancellation) {
   auto it1 = std::begin(left);
   auto end1 = std::end(left);
   auto it2 = std::begin(right);
@@ -510,32 +540,26 @@ CPP_template(typename CompatibleActionT, typename NotFoundActionT,
     return;
   }
 
-  size_t numColumns = (*it1).size();
+  auto numJoinCols = static_cast<size_t>(numJoinColumnsArg);
   // A predicate that compares two rows lexicographically but ignores the last
   // column.
-  auto compareAllButLast = [numColumns](const auto& a, const auto& b) {
-    for (size_t i = 0; i < numColumns - 1; ++i) {
-      if (a[i] != b[i]) {
-        return a[i] < b[i];
-      }
-    }
-    return false;
-  };
+  auto compareAllButLast = CompareAllButLast{numJoinCols};
 
   // Similar to the previous lambda, but checks for equality.
-  auto compareEqButLast = [numColumns](const auto& a, const auto& b) {
-    for (size_t i = 0; i < numColumns - 1; ++i) {
-      if (a[i] != b[i]) {
-        return false;
-      }
-    }
-    return true;
-  };
+  auto compareEqButLast = CompareEqButLast{numJoinCols};
 
   // The last columns from the left and right input. Those will be dealt with
   // separately.
-  ql::span<const Id> lastColumnLeft = left.getColumn(left.numColumns() - 1);
-  ql::span<const Id> lastColumnRight = right.getColumn(right.numColumns() - 1);
+  // TODO<joka921> This is a little inefficient, should be a getColumn on a
+  // column based interface, but that requires refactoring of all the
+  // types passed in here (in particular, we are using
+  // `ql::ranges::subrange<IdTable>` etc.
+  auto getLastJoinColum = [numJoinCols](const auto& row) {
+    AD_EXPENSIVE_CHECK(numJoinCols > 0 && numJoinCols <= row.size());
+    return row[numJoinCols - 1];
+  };
+  auto lastColumnLeft = left | ql::views::transform(getLastJoinColum);
+  auto lastColumnRight = right | ql::views::transform(getLastJoinColum);
 
   while (it1 < end1 && it2 < end2) {
     checkCancellation();
@@ -584,12 +608,12 @@ CPP_template(typename CompatibleActionT, typename NotFoundActionT,
     // Set up the corresponding sub-ranges of the last columns.
     auto beg = it1 - left.begin();
     auto end = endSame1 - left.begin();
-    ql::span<const Id> leftSub{lastColumnLeft.begin() + beg,
-                               lastColumnLeft.begin() + end};
+    ql::ranges::subrange leftSub{lastColumnLeft.begin() + beg,
+                                 lastColumnLeft.begin() + end};
     beg = it2 - right.begin();
     end = endSame2 - right.begin();
-    ql::span<const Id> rightSub{lastColumnRight.begin() + beg,
-                                lastColumnRight.begin() + end};
+    ql::ranges::subrange rightSub{lastColumnRight.begin() + beg,
+                                  lastColumnRight.begin() + end};
 
     // Set up the generator for the UNDEF values.
     // TODO<joka921> We could probably also apply this optimization if both
@@ -723,29 +747,42 @@ class BlockAndSubrange {
 };
 
 // A helper struct for the zipper join on blocks algorithm (see below). It
-// combines the current iterator, then end iterator, the relevant projection to
+// combines the current iterator, the end iterator, the relevant projection to
 // obtain the input to the comparison, and a buffer for blocks that are
 // currently required by the join algorithm for one side of the join.
-template <typename Iterator, typename End, typename Projection>
+// It also stores a typedef `ProjectedEl` which is used to store a projection
+// result. This must have value semantics, as it is stored permanently.
+// The default is `decay_t<decltype(projection(*it_))>`;
+template <typename Iterator, typename End, typename Projection,
+          typename ProjectedElT = std::monostate>
 struct JoinSide {
   using CurrentBlocks =
       std::vector<detail::BlockAndSubrange<ql::iter_value_t<Iterator>>>;
   Iterator it_;
   [[no_unique_address]] const End end_;
   const Projection& projection_;
+  // Dummy, only required for a better interface of `makeJoinSide` below.
+  [[no_unique_address]] std::type_identity<ProjectedElT> projectedElT_{};
   CurrentBlocks currentBlocks_{};
   CurrentBlocks undefBlocks_{};
 
   // Type aliases for a single element from a block from the left/right input.
   using value_type = ql::ranges::range_value_t<ql::iter_value_t<Iterator>>;
   // Type alias for the result of the projection.
-  using ProjectedEl =
-      std::decay_t<std::invoke_result_t<const Projection&, value_type>>;
+  using ProjectedEl = std::conditional_t<
+      std::is_same_v<ProjectedElT, std::monostate>,
+      std::decay_t<std::invoke_result_t<const Projection&, value_type>>,
+      ProjectedElT>;
 };
 
-// Deduction guide required by the `makeJoinSide` function.
+// Deduction guides required by the `makeJoinSide` function, with and without
+// explicitly specified `ProjectedEl`.
 template <typename It, typename End, typename Projection>
 JoinSide(It, End, const Projection&) -> JoinSide<It, End, Projection>;
+
+template <typename It, typename End, typename Projection, typename ProjectedElT>
+JoinSide(It, End, const Projection&, std::type_identity<ProjectedElT>)
+    -> JoinSide<It, End, Projection, ProjectedElT>;
 
 // Create a `JoinSide` object from a range of `blocks` and a `projection`. Note
 // that the `blocks` are stored as a reference, so the caller is responsible for
@@ -754,6 +791,15 @@ template <typename Blocks, typename Projection>
 auto makeJoinSide(Blocks& blocks, const Projection& projection) {
   return JoinSide{ql::ranges::begin(blocks), ql::ranges::end(blocks),
                   projection};
+}
+
+// Overload for `makeJoinSide` that also specified the `ProjectedEl` type
+// explicitly.
+template <typename Blocks, typename Projection, typename ProjectedEl>
+auto makeJoinSide(Blocks& blocks, const Projection& projection,
+                  std::type_identity<ProjectedEl> tg) {
+  return JoinSide{ql::ranges::begin(blocks), ql::ranges::end(blocks),
+                  projection, tg};
 }
 
 // A concept to identify instantiations of the `JoinSide` template.
@@ -832,20 +878,39 @@ static constexpr size_t FETCH_BLOCKS = 3;
 // After adding the Cartesian product we start a new round with a new
 // `currentEl` (5 in this example). New blocks are added to one of the buffers
 // if they become empty at one point in the algorithm.
-CPP_template(typename LeftSide, typename RightSide, typename LessThan,
-             typename CompatibleRowAction, typename IsUndef = AlwaysFalse)(
+//
+// Note: This class is implemented as a generic, CRTP-style framework with two
+// customization points: The actual join algorithm on materialized (sub-)blocks.
+// (called `joinSubranges`), and the algorithm used to perform the Cartesian
+// product of matching elements across block boundaries (called
+// `cartesianProductImpl`). This framework allows us to also implement certain
+// cases of `OptionalJoin` that contain UNDEF values (see below).
+CPP_template(typename Derived, typename LeftSide, typename RightSide,
+             typename LessThan, typename CompatibleRowAction,
+             typename IsUndef = AlwaysFalse)(
     requires IsJoinSide<LeftSide> CPP_and IsJoinSide<RightSide> CPP_and
         InvocableWithExactReturnType<
             IsUndef, bool,
-            typename LeftSide::ProjectedEl>) struct BlockZipperJoinImpl {
+            typename LeftSide::ProjectedEl>) struct BlockZipperJoinImplCRTP {
   // The left and right inputs of the join
   LeftSide leftSide_;
   RightSide rightSide_;
   // The used comparison.
-  const LessThan& lessThan_;
+  LessThan lessThan_;
   // The callback that is called for each pair of matching rows.
   CompatibleRowAction& compatibleRowAction_;
   [[no_unique_address]] IsUndef isUndefined_{};
+
+  // Constructor.
+  BlockZipperJoinImplCRTP(LeftSide leftSide, RightSide rightSide,
+                          const LessThan& lessThan,
+                          CompatibleRowAction& compatibleRowAction,
+                          IsUndef isUndefined = {})
+      : leftSide_{std::move(leftSide)},
+        rightSide_{std::move(rightSide)},
+        lessThan_{lessThan},
+        compatibleRowAction_{compatibleRowAction},
+        isUndefined_{std::move(isUndefined)} {}
 
   using LeftBlocks = typename LeftSide::CurrentBlocks;
   using RightBlocks = typename RightSide::CurrentBlocks;
@@ -874,7 +939,7 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
   // Recompute the `currentEl`. It is the minimum of the last element in the
   // first block of either of the join sides.
   ProjectedEl getCurrentEl() {
-    auto getFirst = [](const Side& side) {
+    auto getFirst = [](const Side& side) -> ProjectedEl {
       return side.projection_(side.currentBlocks_.front().back());
     };
     return std::min(getFirst(leftSide_), getFirst(rightSide_), lessThan_);
@@ -985,14 +1050,8 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
   // blocks on the right and add them to the result.
   void addCartesianProduct(const LeftBlocks& blocksLeft,
                            const RightBlocks& blocksRight) {
-    // TODO<C++23> use `ql::views::cartesian_product`.
-    for (const auto& lBlock : blocksLeft) {
-      for (const auto& rBlock : blocksRight) {
-        compatibleRowAction_.setInput(lBlock.fullBlock(), rBlock.fullBlock());
-        compatibleRowAction_.addRows(lBlock.getIndexRange(),
-                                     rBlock.getIndexRange());
-      }
-    }
+    static_cast<Derived*>(this)->addCartesianProductImpl(blocksLeft,
+                                                         blocksRight);
   }
 
   // Handle non-matching rows from the left side for an optional join or a minus
@@ -1074,9 +1133,6 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
       compatibleRowAction_.setInput(fullBlockLeft, fullBlockRight);
     };
 
-    // TODO<joka921> improve the `CachingTransformInputRange` to make it movable
-    // without having to specify `makeAssignableLambda`.
-    // TODO<joka921> Down with `OwningView`.
     return ad_utility::CallbackOnEndView{
         ql::views::join(
             ad_utility::OwningView{ad_utility::CachingTransformInputRange(
@@ -1157,26 +1213,36 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
     // All undefined values should already be processed at this point.
     AD_CORRECTNESS_CHECK(!isUndefined_(subrangeLeft.front()));
     AD_CORRECTNESS_CHECK(!isUndefined_(subrangeRight.front()));
+
+    // Lambda that binds the common arguments for the various calls below
+    // (the inputs and the `rowAdder` are always the same, it is just the
+    // UNDEF configuration that is different.
+    auto doJoin = [&](auto&&... args) {
+      return static_cast<Derived*>(this)->joinSubranges(
+          ql::ranges::subrange{subrangeLeft.begin(), currentElItL},
+          ql::ranges::subrange{subrangeRight.begin(), currentElItR},
+          RowIndexAdder{addRowIndex, addRowIndices}, AD_FWD(args)...);
+    };
     // If we have undefined values stored, we need to provide a generator that
     // yields iterators to the individual undefined values.
     if constexpr (potentiallyHasUndef) {
-      // We pass `std::false_type`, to disable coverage checks for the undefined
-      // values that are stored in `side.undefBlocks_`, which we already have
-      // processed ourselves and don't lie within the passed subrange, which
-      // this function assumes otherwise.
-      [[maybe_unused]] auto res = zipperJoinWithUndef(
-          ql::ranges::subrange{subrangeLeft.begin(), currentElItL},
-          ql::ranges::subrange{subrangeRight.begin(), currentElItR}, lessThan_,
-          RowIndexAdder{addRowIndex, addRowIndices},
-          findUndefValues<true>(fullBlockLeft, fullBlockRight, begL, begR),
-          findUndefValues<false>(fullBlockLeft, fullBlockRight, begL, begR),
-          addNotFoundRowIndex, noop, std::false_type{});
+      // Check at runtime if we actually have UNDEF blocks. If not, we should
+      // use the simpler code path (with std::true_type for coverage).
+      if (!hasUndef(leftSide_) && !hasUndef(rightSide_)) {
+        // No UNDEFs found at runtime, use the simpler code path.
+        doJoin(noop, noop, addNotFoundRowIndex, noop, std::true_type{});
+      } else {
+        // We pass `std::false_type`, to disable coverage checks for the
+        // undefined values that are stored in `side.undefBlocks_`, which we
+        // already have processed ourselves and don't lie within the passed
+        // subrange, which this function assumes otherwise.
+        doJoin(
+            findUndefValues<true>(fullBlockLeft, fullBlockRight, begL, begR),
+            findUndefValues<false>(fullBlockLeft, fullBlockRight, begL, begR),
+            addNotFoundRowIndex, noop, std::false_type{});
+      }
     } else {
-      [[maybe_unused]] auto res = zipperJoinWithUndef(
-          ql::ranges::subrange{subrangeLeft.begin(), currentElItL},
-          ql::ranges::subrange{subrangeRight.begin(), currentElItR}, lessThan_,
-          RowIndexAdder{addRowIndex, addRowIndices}, noop, noop,
-          addNotFoundRowIndex);
+      doJoin(noop, noop, addNotFoundRowIndex, noop, std::true_type{});
     }
     compatibleRowAction_.flush();
 
@@ -1469,12 +1535,17 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
     } else {
       fetchAndProcessUndefinedBlocks(joinType == JoinType::OPTIONAL);
     }
+
     if (potentiallyHasUndef && !hasUndef(leftSide_) && !hasUndef(rightSide_)) {
       // Run the join without UNDEF values if there are none. No need to move
       // since LeftSide and RightSide are references.
-      BlockZipperJoinImpl<LeftSide, RightSide, LessThan, CompatibleRowAction,
-                          AlwaysFalse>{leftSide_, rightSide_, lessThan_,
-                                       compatibleRowAction_, AlwaysFalse{}}
+      // We need to also rebind the `Derived` class to the changed last template
+      // parameter, otherwise we will get errors because the new `CRTP` class we
+      // create below doesn't directly inherit from `Derived` anymore.
+      BlockZipperJoinImplCRTP<typename Derived::template Rebind<AlwaysFalse>,
+                              LeftSide, RightSide, LessThan,
+                              CompatibleRowAction, AlwaysFalse>{
+          leftSide_, rightSide_, lessThan_, compatibleRowAction_, AlwaysFalse{}}
           .template runJoin<joinType>();
       return;
     }
@@ -1502,6 +1573,66 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
 #undef Blocks
 };
 
+// Concrete implementation of BlockZipperJoinImpl that provides the default
+// behavior for `addCartesianProduct` and `joinSubranges`.
+CPP_template(typename LeftSide, typename RightSide, typename LessThan,
+             typename CompatibleRowAction, typename IsUndef = AlwaysFalse)(
+    requires IsJoinSide<LeftSide> CPP_and IsJoinSide<RightSide> CPP_and
+        InvocableWithExactReturnType<
+            IsUndef, bool,
+            typename LeftSide::ProjectedEl>) struct BlockZipperJoinImpl
+    : BlockZipperJoinImplCRTP<BlockZipperJoinImpl<LeftSide, RightSide, LessThan,
+                                                  CompatibleRowAction, IsUndef>,
+                              LeftSide, RightSide, LessThan,
+                              CompatibleRowAction, IsUndef> {
+  using Base = BlockZipperJoinImplCRTP<BlockZipperJoinImpl, LeftSide, RightSide,
+                                       LessThan, CompatibleRowAction, IsUndef>;
+  using typename Base::LeftBlocks;
+  using typename Base::RightBlocks;
+
+  // Helper for rebinding this class to a new value for the `IsUndef` template
+  // parameter.
+  template <typename NewIsUndef>
+  using Rebind = BlockZipperJoinImpl<LeftSide, RightSide, LessThan,
+                                     CompatibleRowAction, NewIsUndef>;
+
+  // Inherit constructors from the base class.
+  using Base::Base;
+
+  // Implement the `addCartesianProduct` customization point with the default
+  // behavior.
+  void addCartesianProductImpl(const LeftBlocks& blocksLeft,
+                               const RightBlocks& blocksRight) {
+    for (const auto& [lBlock, rBlock] :
+         ::ranges::views::cartesian_product(blocksLeft, blocksRight)) {
+      this->compatibleRowAction_.setInput(lBlock.fullBlock(),
+                                          rBlock.fullBlock());
+      this->compatibleRowAction_.addRows(lBlock.getIndexRange(),
+                                         rBlock.getIndexRange());
+    }
+  }
+
+  // Implement the `joinSubranges` customization point by forwarding to
+  // `zipperJoinWithUndef`.
+  template <typename SubrangeLeft, typename SubrangeRight,
+            typename RowIndexAdder, typename FindSmallerUndefRangesLeft,
+            typename FindSmallerUndefRangesRight,
+            typename ElFromFirstNotFoundAction, typename CheckCancellation,
+            typename CoverUndefRanges>
+  void joinSubranges(
+      const SubrangeLeft& subrangeLeft, const SubrangeRight& subrangeRight,
+      const RowIndexAdder& rowIndexAdder,
+      const FindSmallerUndefRangesLeft& findSmallerUndefRangesLeft,
+      const FindSmallerUndefRangesRight& findSmallerUndefRangesRight,
+      ElFromFirstNotFoundAction elFromFirstNotFoundAction,
+      CheckCancellation checkCancellation, CoverUndefRanges coverUndefRanges) {
+    [[maybe_unused]] auto res = zipperJoinWithUndef(
+        subrangeLeft, subrangeRight, this->lessThan_, rowIndexAdder,
+        findSmallerUndefRangesLeft, findSmallerUndefRangesRight,
+        elFromFirstNotFoundAction, checkCancellation, coverUndefRanges);
+  }
+};
+
 // Deduction guide for the above struct.
 template <typename LHS, typename RHS, typename LessThan,
           typename CompatibleRowAction>
@@ -1512,7 +1643,205 @@ template <typename LHS, typename RHS, typename LessThan,
 BlockZipperJoinImpl(LHS&, RHS&, const LessThan&, CompatibleRowAction&, IsUndef)
     -> BlockZipperJoinImpl<LHS, RHS, LessThan, CompatibleRowAction, IsUndef>;
 
+// CRTP-based implementation for the special optional join on blocks, where the
+// only column that may contain UNDEF is the last join column of the left input.
+// This implementation compares all-but-last (always defined!) columns in the
+// outer join logic, and then performs a one-column join on the last column for
+// matching groups. Preconditions:
+// - Right input contains no UNDEF values
+// - Left input only contains UNDEF in the last column
+// - Both inputs are sorted lexicographically
+CPP_template(typename NumJoinColumnsT, typename LeftSide, typename RightSide,
+             typename CompatibleRowAction)(
+    requires IsJoinSide<LeftSide> CPP_and
+        IsJoinSide<RightSide>) struct BlockZipperJoinImplForSpecialOptionalJoin
+    : BlockZipperJoinImplCRTP<
+          BlockZipperJoinImplForSpecialOptionalJoin<
+              NumJoinColumnsT, LeftSide, RightSide, CompatibleRowAction>,
+          LeftSide, RightSide, CompareAllButLast, CompatibleRowAction,
+          AlwaysFalse> {
+  using Base =
+      BlockZipperJoinImplCRTP<BlockZipperJoinImplForSpecialOptionalJoin,
+                              LeftSide, RightSide, CompareAllButLast,
+                              CompatibleRowAction, AlwaysFalse>;
+  using typename Base::LeftBlocks;
+  using typename Base::RightBlocks;
+
+  template <typename NewIsUndef>
+  using Rebind = BlockZipperJoinImplForSpecialOptionalJoin;
+
+  // Store the number of join columns.
+  NumJoinColumnsT numJoinColumns_;
+
+  // Constructor that accepts numJoinColumns as a templated parameter.
+  // This allows passing either std::integral_constant<size_t, N> for
+  // compile-time optimization or plain size_t for runtime flexibility.
+  BlockZipperJoinImplForSpecialOptionalJoin(
+      NumJoinColumnsT numJoinColumns, LeftSide leftSide, RightSide rightSide,
+      const CompareAllButLast& lessThan,
+      CompatibleRowAction& compatibleRowAction)
+      : Base(std::move(leftSide), std::move(rightSide), lessThan,
+             compatibleRowAction),
+        numJoinColumns_(numJoinColumns) {}
+
+  // Implement addCartesianProduct customization point for special optional
+  // join. As the base class ensures, that those are equal up to the last join
+  // column, it suffices to perform a single column join on the last column.
+  // Note: We currently copy all the contents of `blocksLeft` and `blocksRight`,
+  // because the interfaces we are using currently requires the interface of a
+  // single IdTable-like thing.
+  // TODO<joka921> mitigate this requirement, or at least assess how expensive
+  // it is.
+  void addCartesianProductImpl(const LeftBlocks& blocksLeft,
+                               const RightBlocks& blocksRight) {
+    auto isEmpty = [](const auto& side) {
+      return side.empty() || side.front().fullBlock().empty();
+    };
+    // Nothing to do if one of the left or right sides is empty.
+    // Note: In this case the base class (in the `addCartesianProductImpl`
+    // function) has already added the rows from left to the result as per the
+    // OPTIONAL semanntics.
+    if (isEmpty(blocksLeft) || isEmpty(blocksRight)) {
+      return;
+    }
+
+    // Get allocator and number of columns from the first block.
+    // TODO<joka921> pass in a proper allocator here.
+    auto allocator = makeUnlimitedAllocator<Id>();
+    AD_CORRECTNESS_CHECK(!blocksLeft.empty() && !blocksRight.empty());
+
+    // TODO<joka921> This can be much more efficient, in particular it could use
+    // zero copying.
+    // Concatenate all rows from blocksLeft into a single IdTable.
+
+    auto materializeBlocksAsTable = [&allocator](const auto& blocks) {
+      // Note: It is crucial that we go through the `asStaticView` interface of
+      // the `IdTableAndFirstCols` interface, because we need to copy ALL the
+      // columns, not only the join columns, because the resultAdder needs them.
+      size_t numCols =
+          blocks.front().fullBlock().template asStaticView<0>().numColumns();
+      IdTable table(numCols, allocator);
+
+      // TODO<joka921> preallocate the sum of the index-range sizes.
+      for (const auto& block : blocks) {
+        const auto& staticView = block.fullBlock().template asStaticView<0>();
+        for (size_t idx : block.getIndexRange()) {
+          table.push_back(staticView[idx]);
+        }
+      }
+      return table;
+    };
+    IdTable leftTable = materializeBlocksAsTable(blocksLeft);
+    IdTable rightTable = materializeBlocksAsTable(blocksRight);
+
+    // If either table is empty, we don't have to do anything (same as above).
+    // TODO<joka921> Check if this case can happen at all, or whether we can
+    // simply put an assertion here.
+    if (leftTable.empty() || rightTable.empty()) {
+      return;
+    }
+
+    // Extract the last join columns, on which we have to perform the join.
+    auto lastColLeft = leftTable.getColumn(numJoinColumns_ - 1);
+    auto lastColRight = rightTable.getColumn(numJoinColumns_ - 1);
+
+    this->compatibleRowAction_.setInput(leftTable, rightTable);
+    // Set up actions for the single-column join on the last column.
+    auto compAction = [this, begL = lastColLeft.begin(),
+                       begR = lastColRight.begin()](const auto& itL,
+                                                    const auto& itR) {
+      size_t leftIdx = itL - begL;
+      size_t rightIdx = itR - begR;
+      // Call the row adder with the full rows.
+      this->compatibleRowAction_.addRow(leftIdx, rightIdx);
+    };
+
+    // Set up the generator for UNDEF values in the left last column.
+    // TODO<joka921> Could optimize the case that there is no UNDEF at all.
+    auto endOfUndef = ql::ranges::find_if_not(lastColLeft, &Id::isUndefined);
+    auto findSmallerUndefRangeLeft = [&lastColLeft, endOfUndef](auto&&...) {
+      return ad_utility::IteratorRange{lastColLeft.begin(), endOfUndef};
+    };
+
+    auto notFoundAction = [this, begL = lastColLeft.begin()](const auto& it) {
+      size_t leftIdx = it - begL;
+      this->compatibleRowAction_.addOptionalRow(leftIdx);
+    };
+
+    // Perform the join on the last column only.
+    [[maybe_unused]] auto res = zipperJoinWithUndef(
+        lastColLeft, lastColRight, std::less<>{}, compAction,
+        findSmallerUndefRangeLeft, noop, notFoundAction, noop);
+    AD_EXPENSIVE_CHECK(res == 0);
+
+    this->compatibleRowAction_.flush();
+  }
+
+  // Implement joinSubranges customization point by forwarding to
+  // specialOptionalJoin (the non-block version).
+  // Note The two arguments `FindSmallerUndefRanges...` are not used, but are
+  // needed for the CRTP interface. We know already (by the
+  // preconditions), where the possibly undefined values are located.
+  template <typename SubrangeLeft, typename SubrangeRight,
+            typename RowIndexAdder, typename FindSmallerUndefRangesLeft,
+            typename FindSmallerUndefRangesRight,
+            typename ElFromFirstNotFoundAction, typename CheckCancellation,
+            typename CoverUndefRanges>
+  void joinSubranges(const SubrangeLeft& subrangeLeft,
+                     const SubrangeRight& subrangeRight,
+                     const RowIndexAdder& rowIndexAdder,
+                     [[maybe_unused]] const FindSmallerUndefRangesLeft&
+                         findSmallerUndefRangesLeft,
+                     [[maybe_unused]] const FindSmallerUndefRangesRight&
+                         findSmallerUndefRangesRight,
+                     ElFromFirstNotFoundAction elFromFirstNotFoundAction,
+                     CheckCancellation checkCancellation,
+                     [[maybe_unused]] CoverUndefRanges coverUndefRanges) {
+    // Forward the arguments to the `specialOptionalJoin`.
+    // Note: The `FindSmallerUndefRanges...` arguments are ignored dummys which
+    // are required by the interface, but the undef handling is hardcoded in the
+    // `specialOptionalJoin`.
+    specialOptionalJoin(numJoinColumns_, subrangeLeft, subrangeRight,
+                        rowIndexAdder, elFromFirstNotFoundAction,
+                        checkCancellation);
+  }
+};
+
 }  // namespace detail
+
+// Perform a special optional join for input ranges of blocks.
+// This is a simplified implementation that works on blocks of row-like data.
+// Preconditions:
+// - Right input contains no UNDEF values in the join columns.
+// - Left input only contains UNDEF in the last join column
+// - Both inputs are sorted lexicographically.
+// - numJoinColumns must be equal to the number of columns in `leftBlocks` and
+// `rightBlocks`. The join matches on all-but-last columns, then performs a join
+// on the last column within matching groups.
+template <typename LeftBlocks, typename RightBlocks,
+          typename CompatibleRowAction>
+void specialOptionalJoinForBlocks(LeftBlocks&& leftBlocks,
+                                  RightBlocks&& rightBlocks,
+                                  auto numJoinColumns,
+                                  CompatibleRowAction& compatibleRowAction) {
+  using ProjectedLeft = ql::ranges::range_value_t<
+      ql::ranges::range_value_t<std::decay_t<LeftBlocks>>>;
+  using ProjectedRight = ql::ranges::range_value_t<
+      ql::ranges::range_value_t<std::decay_t<RightBlocks>>>;
+  static_assert(std::is_same_v<ProjectedLeft, ProjectedRight>);
+  auto leftSide = detail::makeJoinSide(leftBlocks, ql::identity{},
+                                       std::type_identity<ProjectedLeft>{});
+  auto rightSide = detail::makeJoinSide(rightBlocks, ql::identity{},
+                                        std::type_identity<ProjectedLeft>{});
+  using LeftSide = decltype(leftSide);
+  using RightSide = decltype(rightSide);
+  detail::BlockZipperJoinImplForSpecialOptionalJoin<
+      decltype(numJoinColumns), LeftSide, RightSide, CompatibleRowAction>
+      impl{numJoinColumns, leftSide, rightSide,
+           CompareAllButLast{static_cast<size_t>(numJoinColumns)},
+           compatibleRowAction};
+  impl.template runJoin<JoinType::OPTIONAL>();
+}
 
 /**
  * @brief Perform a zipper/merge join between two sorted inputs that are given

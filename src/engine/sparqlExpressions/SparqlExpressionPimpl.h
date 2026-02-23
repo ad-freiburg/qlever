@@ -80,6 +80,13 @@ class SparqlExpressionPimpl {
   // declared.
   [[nodiscard]] std::string getCacheKey(
       const VariableToColumnMap& variableToColumnMap) const;
+
+  // Return true if we statically (without evaluating the expression) can
+  // determine that its result will never contain undefined values / expression
+  // errors.
+  [[nodiscard]] bool isResultAlwaysDefined(
+      const VariableToColumnMap& variableToColumnMap) const;
+
   SparqlExpressionPimpl(std::shared_ptr<SparqlExpression>&& pimpl,
                         std::string descriptor);
   ~SparqlExpressionPimpl();
