@@ -50,7 +50,7 @@ QueryPatternCache::makeJoinReplacementIndexScans(
     }
     // If no view that we know of contains this predicate so we can ignore
     // this triple altogether.
-    if (!predicateInView_.contains(iri)) {
+    if (!predicateInView_.contains(iri.value())) {
       continue;
     }
     // Check for potential join chain triple.
@@ -93,15 +93,10 @@ void QueryPatternCache::makeScansFromChainCandidates(
         const auto& left = triples._triples.at(tripleIdxLeft);
         const auto& right = triples._triples.at(tripleIdxRight);
 
-        // We have already checked that this holds the correct alternative
-        // above. It must be guaranteed that these are single IRIs.
-        const auto& leftP = std::get<PropertyPath>(left.p_);
-        const auto& rightP = std::get<PropertyPath>(right.p_);
-
-        // Lookup key based on `std::string_view` avoids copying the IRIs.
-        ChainedPredicatesForLookup key{
-            leftP.getIri().toStringRepresentation(),
-            rightP.getIri().toStringRepresentation()};
+        // Lookup key based on `std::string_view` avoids copying the IRIs. We
+        // have already checked that the triples have single IRIs as predicates.
+        ChainedPredicatesForLookup key{left.getSimplePredicate().value(),
+                                       right.getSimplePredicate().value()};
 
         // Lookup if there are matching views. There could potentially be
         // multiple (e.g. with different sorting).
