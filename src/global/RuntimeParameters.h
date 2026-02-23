@@ -135,6 +135,8 @@ struct RuntimeParameters {
   MemorySizeParameter sortInMemoryThreshold_{
       ad_utility::MemorySize::gigabytes(5), "sort-in-memory-threshold"};
 
+  Bool prefilteredOptionalJoin_{true, "prefiltered-optional-join"};
+
   // If set, the query planner checks if suitable materialized views are loaded
   // to substitute more expensive query plans.
   Bool enableMaterializedViewQueryRewrite_{

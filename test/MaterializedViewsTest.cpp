@@ -41,12 +41,14 @@ TEST_F(MaterializedViewsTest, Basic) {
   // Write a simple view.
   clearLog();
   qlv().writeMaterializedView("testView1", simpleWriteQuery_);
-  EXPECT_THAT(log_.str(), ::testing::HasSubstr(
-                              "Materialized view testView1 written to disk"));
+  EXPECT_THAT(
+      log_.str(),
+      ::testing::HasSubstr("Materialized view \"testView1\" written to disk"));
   EXPECT_FALSE(qlv().isMaterializedViewLoaded("testView1"));
   qlv().loadMaterializedView("testView1");
-  EXPECT_THAT(log_.str(), ::testing::HasSubstr(
-                              "Loading materialized view testView1 from disk"));
+  EXPECT_THAT(log_.str(),
+              ::testing::HasSubstr(
+                  "Loading materialized view \"testView1\" from disk"));
   EXPECT_TRUE(qlv().isMaterializedViewLoaded("testView1"));
 
   // Overwriting a materialized view automatically unloads it first.
@@ -348,7 +350,7 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
                             qlv().parseAndPlanQuery(presortedQuery));
     EXPECT_THAT(log_.str(),
                 ::testing::HasSubstr("Query result rows for materialized view "
-                                     "testView4 are already sorted"));
+                                     "\"testView4\" are already sorted"));
     MaterializedView view{testIndexBase_, "testView4"};
     EXPECT_EQ(columnNames(view).at(0), V{"?p"});
     auto res = qlv().query(
@@ -656,7 +658,7 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
     // Check correct logging.
     EXPECT_THAT(log_.str(),
                 ::testing::HasSubstr(
-                    "Materialized view testViewFromHTTP written to disk"));
+                    "Materialized view \"testViewFromHTTP\" written to disk"));
   }
 
   // Write a materialized view through a simulated HTTP GET request.
@@ -678,7 +680,7 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
     // Check correct logging.
     EXPECT_THAT(log_.str(),
                 ::testing::HasSubstr(
-                    "Materialized view testViewFromHTTP2 written to disk"));
+                    "Materialized view \"testViewFromHTTP2\" written to disk"));
   }
 
   // Load a materialized view through a simulated HTTP GET request.
@@ -696,9 +698,10 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
               "testViewFromHTTP2");
 
     // Check correct logging.
-    EXPECT_THAT(log_.str(),
-                ::testing::HasSubstr(
-                    "Loading materialized view testViewFromHTTP2 from disk"));
+    EXPECT_THAT(
+        log_.str(),
+        ::testing::HasSubstr(
+            "Loading materialized view \"testViewFromHTTP2\" from disk"));
   }
 
   // Test error message for wrong query type.
@@ -781,7 +784,7 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
       ++numBlocks;
     }
 
-    EXPECT_EQ(numRows, 2 * numFakeSubjects_);
+    EXPECT_EQ(numRows, 20 * numFakeSubjects_);
     AD_LOG_INFO << "Lazy scan had " << numRows << " rows from " << numBlocks
                 << " block(s)" << std::endl;
 
@@ -800,8 +803,59 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
     auto col = qet->getVariableColumn(Variable{"?cnt"});
     auto count = res->idTable().at(0, col);
     ASSERT_TRUE(count.getDatatype() == Datatype::Int);
-    EXPECT_EQ(count.getInt(), 2 * numFakeSubjects_);
+    EXPECT_EQ(count.getInt(), 20 * numFakeSubjects_);
   }
+}
+
+// _____________________________________________________________________________
+TEST_F(MaterializedViewsTest, NoDuplicateRemovalOnScan) {
+  // Test that rows from materialized views are not implicitly deduplicated when
+  // scanning. If the first three columns have duplicates (differing only in an
+  // unselected additional column), all rows should be returned.
+
+  // Write a view where each row is duplicated with two different values of
+  // the fourth column `?x`.
+  const std::string dupQuery =
+      "SELECT ?s ?p ?o ?g { ?s ?p ?o . VALUES ?g { 1 2 } }";
+  qlv().writeMaterializedView("dupView", dupQuery);
+  qlv().loadMaterializedView("dupView");
+
+  // Base case: Query the view selecting all 4 columns: we expect exactly the
+  // original result.
+  auto allColsExpected =
+      getQueryResultAsIdTable(dupQuery + " INTERNAL SORT BY ?s ?p ?o ?g");
+  auto allColsResult = getQueryResultAsIdTable(R"(
+    PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+    SELECT * {
+      SERVICE view:dupView {
+        _:config view:column-s ?s ;
+                 view:column-p ?p ;
+                 view:column-o ?o ;
+                 view:column-g ?g .
+      }
+    }
+  )");
+  EXPECT_THAT(allColsResult, matchesIdTable(allColsExpected));
+
+  // No-deduplication case: Select only the first 3 columns, but expect each of
+  // them twice.
+  auto numRowsDedup =
+      getQueryResultAsIdTable("SELECT ?s ?p ?o { ?s ?p ?o }").numRows();
+  auto threeColsExpected = getQueryResultAsIdTable(
+      "SELECT ?s ?p ?o { ?s ?p ?o . VALUES ?g { 1 2 } } "
+      "INTERNAL SORT BY ?s ?p ?o");
+  auto threeColsResult = getQueryResultAsIdTable(R"(
+    PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+    SELECT * {
+      SERVICE view:dupView {
+        _:config view:column-s ?s ;
+                 view:column-p ?p ;
+                 view:column-o ?o .
+      }
+    }
+  )");
+  EXPECT_EQ(threeColsResult.numRows(), 2 * numRowsDedup);
+  EXPECT_THAT(threeColsResult, matchesIdTable(threeColsExpected));
 }
 
 // Example queries for testing query rewriting.

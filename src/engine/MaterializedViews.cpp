@@ -104,9 +104,10 @@ MaterializedViewWriter::getIdTableColumnNamesAndPermutation() const {
   // Add dummy columns such that the view has at least four columns in total.
   uint8_t numAddEmptyCols = 0;
   if (numCols < 4) {
-    AD_LOG_INFO << "The query to write the materialized view '" << name_
-                << "' selects only " << numCols << " column(s). " << 4 - numCols
-                << " empty column(s) will be appended." << std::endl;
+    AD_LOG_INFO << "The query to write the materialized view \"" << name_
+                << "\" selects only " << numCols << " column(s), "
+                << 4 - numCols << " empty column(s) will be appended"
+                << std::endl;
     numAddEmptyCols = 4 - numCols;
   }
 
@@ -160,8 +161,8 @@ MaterializedViewWriter::getBlocksForAlreadySortedResult(
   // external sorter, but we still need to permute the `IdTable`s to the
   // desired column ordering and construct a range for the
   // `CompressedRelationWriter` from them.
-  AD_LOG_INFO << "Query result rows for materialized view " << name_
-              << " are already sorted." << std::endl;
+  AD_LOG_INFO << "Query result rows for materialized view \"" << name_
+              << "\" are already sorted" << std::endl;
 
   if (result->isFullyMaterialized()) {
     // If we have a fully materialized result, we need to copy it for the
@@ -190,8 +191,8 @@ MaterializedViewWriter::getBlocksForUnsortedResult(
     Sorter& spoSorter, std::shared_ptr<const Result> result) const {
   // Results are not yet sorted by the required columns. Sort results
   // externally.
-  AD_LOG_INFO << "Sorting query result rows for materialized view " << name_
-              << " ..." << std::endl;
+  AD_LOG_INFO << "Sorting query result rows for materialized view \"" << name_
+              << "\" ..." << std::endl;
   size_t totalTriples = 0;
   ad_utility::ProgressBar progressBar{totalTriples, "Triples sorted: "};
 
@@ -298,8 +299,8 @@ void MaterializedViewWriter::writeViewMetadata() const {
 // _____________________________________________________________________________
 void MaterializedViewWriter::computeResultAndWritePermutation() const {
   // Run query and sort the result externally (only if necessary).
-  AD_LOG_INFO << "Computing query result for materialized view '" << name_
-              << "': " << parsedQuery_._originalString.substr(0, 80) << "..."
+  AD_LOG_INFO << "Computing query result for materialized view \"" << name_
+              << "\": " << parsedQuery_._originalString.substr(0, 80) << " ..."
               << std::endl;
   auto result = qet_->getResult(true);
 
@@ -308,14 +309,14 @@ void MaterializedViewWriter::computeResultAndWritePermutation() const {
   RangeOfIdTables sortedBlocksSPO = getSortedBlocks(spoSorter, result);
 
   // Write compressed relation to disk.
-  AD_LOG_INFO << "Writing materialized view " << name_ << " to disk ..."
+  AD_LOG_INFO << "Writing materialized view \"" << name_ << "\" to disk ..."
               << std::endl;
   auto spoMetaData = writePermutation(std::move(sortedBlocksSPO));
   writeViewMetadata();
 
-  AD_LOG_INFO << "Statistics for view " << name_ << ": "
-              << spoMetaData.statistics() << std::endl;
-  AD_LOG_INFO << "Materialized view " << name_ << " written to disk."
+  AD_LOG_INFO << "Statistics for view \"" << name_
+              << "\": " << spoMetaData.statistics() << std::endl;
+  AD_LOG_INFO << "Materialized view \"" << name_ << "\" written to disk"
               << std::endl;
 }
 
@@ -327,7 +328,7 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
   AD_CORRECTNESS_CHECK(onDiskBase_ != "",
                        "The index base filename was not set.");
   throwIfInvalidName(name_);
-  AD_LOG_INFO << "Loading materialized view " << name_ << " from disk..."
+  AD_LOG_INFO << "Loading materialized view \"" << name_ << "\" from disk ..."
               << std::endl;
   auto filename = getFilenameBase(onDiskBase_, name_);
 
@@ -365,8 +366,10 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
     originalQuery_ = viewInfoJson.at("query").get<std::string>();
   }
 
-  // Read permutation
-  permutation_->loadFromDisk(filename, false);
+  // Read permutation, and deactivate the graph post-processing of
+  // `CompressedRelationReader`, including row deduplication, which is not the
+  // intended behavior for materialized views.
+  permutation_->loadFromDisk(filename, false, false);
   AD_CORRECTNESS_CHECK(permutation_->isLoaded());
 }
 
