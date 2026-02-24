@@ -53,7 +53,7 @@ class DistExpression
                      GeoPointOrWktValueGetter, GeoPointOrWktValueGetter>;
 
  public:
-  using Base::TypeErasedNaryExpression;
+  using Base::Base;
 };
 
 class MetricDistExpression
@@ -65,7 +65,7 @@ class MetricDistExpression
                      GeoPointOrWktValueGetter, GeoPointOrWktValueGetter>;
 
  public:
-  using Base::TypeErasedNaryExpression;
+  using Base::Base;
 };
 
 class DistWithUnitExpression
@@ -78,7 +78,7 @@ class DistWithUnitExpression
                      UnitOfMeasurementValueGetter>;
 
  public:
-  using Base::TypeErasedNaryExpression;
+  using Base::Base;
 };
 
 static constexpr auto distExpression = namedExpressionFactory<
