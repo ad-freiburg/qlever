@@ -249,7 +249,7 @@ addLinkAndDiscoverTest(MinusTest engine)
 # this test runs for quite some time and might have spurious failures!
 # Therefore it is compiled, but not run. If you want to run it,
 # change the following two lines.
-addAndLinkTest(SortPerformanceEstimatorTest SortPerformanceEstimator)
+addAndLinkTest(SortPerformanceEstimatorTest SortPerformanceEstimator parser)
 #addLinkAndDiscoverTest(SortPerformanceEstimatorTest SortPerformanceEstimator)
 
 # The SerializerTest uses temporary files. The tests fail when multiple test
