@@ -9,6 +9,7 @@
 
 #include "./util/AllocatorTestHelpers.h"
 #include "./util/GTestHelpers.h"
+#include "engine/ConstructQueryEvaluator.h"
 #include "engine/ConstructTemplatePreprocessor.h"
 #include "index/Index.h"
 #include "parser/data/ConstructQueryExportContext.h"
