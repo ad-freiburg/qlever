@@ -46,10 +46,10 @@ std::optional<EvaluatedTerm> ConstructTripleInstantiator::instantiateTerm(
 // _____________________________________________________________________________
 std::string ConstructTripleInstantiator::formatTriple(
     const EvaluatedTerm& subject, const EvaluatedTerm& predicate,
-    const EvaluatedTerm& object, const ad_utility::MediaType format) {
+    const EvaluatedTerm& object, const ad_utility::MediaType& format) {
   using enum ad_utility::MediaType;
   static constexpr std::array supportedFormats{turtle, csv, tsv};
-  assert(ad_utility::contains(supportedFormats, format));
+  AD_CONTRACT_CHECK(ad_utility::contains(supportedFormats, format));
 
   if (format == ad_utility::MediaType::turtle) {
     // Only escape literals (strings starting with "). IRIs and blank nodes

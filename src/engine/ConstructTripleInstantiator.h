@@ -36,7 +36,7 @@ class ConstructTripleInstantiator {
   static std::string formatTriple(const EvaluatedTerm& subject,
                                   const EvaluatedTerm& predicate,
                                   const EvaluatedTerm& object,
-                                  const ad_utility::MediaType format);
+                                  const ad_utility::MediaType& format);
 };
 
 }  // namespace qlever::constructExport
