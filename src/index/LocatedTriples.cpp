@@ -11,6 +11,7 @@
 #include "index/LocatedTriples.h"
 
 #include "backports/algorithm.h"
+#include "global/RuntimeParameters.h"
 #include "index/CompressedRelation.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/Permutation.h"
@@ -237,12 +238,10 @@ IdTable LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
 // ____________________________________________________________________________
 TriplesToVacuum LocatedTriplesPerBlock::identifyTriplesToVacuum(
     const Permutation& perm) const {
-  constexpr size_t VACUUM_THRESHOLD = 10000;
-
   // Step 1: Collect blocks needing vacuum by iterating map_ directly.
   std::vector<size_t> blocksToVacuum;
   for (const auto& [blockIndex, locatedTriples] : map_) {
-    if (locatedTriples.size() > VACUUM_THRESHOLD) {
+    if (locatedTriples.size() > getRuntimeParameter<&RuntimeParameters::vacuumMinimumBlockSize_>()) {
       blocksToVacuum.push_back(blockIndex);
     }
   }
@@ -269,30 +268,29 @@ TriplesToVacuum LocatedTriplesPerBlock::identifyTriplesToVacuum(
   for (size_t blockIndex : blocksToVacuum) {
     AD_CORRECTNESS_CHECK(blockIndex <= blockMetadata.size());
     if (blockIndex == blockMetadata.size()) {
+      // Ok because we just create an empty IdTable.
+      ad_utility::AllocatorWithLimit<Id> allocator =
+          ad_utility::makeUnlimitedAllocator<Id>();
+      IdTable idTable(4, allocator);
       continue;
     }
     const auto& blockMeta = blockMetadata[blockIndex];
     AD_CORRECTNESS_CHECK(blockMeta.offsetsAndCompressedSize_.has_value());
     AD_CORRECTNESS_CHECK(blockMeta.blockIndex_ == blockIndex);
 
-    // Determine columns (all 4).
-    std::vector<ColumnIndex> columnIndices;
-    for (size_t col = 0; col < 4; ++col) {
-      const auto& colData = blockMeta.offsetsAndCompressedSize_.value()[col];
-      AD_CORRECTNESS_CHECK(colData.compressedSize_ > 0);
-      columnIndices.push_back(col);
-    }
-
-    // Read and decompress the block.
-    auto compressedBlock =
-        reader.readCompressedBlockFromFile(blockMeta, columnIndices);
-    auto decompressedBlock =
-        reader.decompressBlock(compressedBlock, blockMeta.numRows_);
-
-    auto [numIndexColumns, includeGraphColumn] =
-        CompressedRelationReader::prepareLocatedTriples(columnIndices);
-    AD_CORRECTNESS_CHECK(numIndexColumns == 3);
-    AD_CORRECTNESS_CHECK(includeGraphColumn);
+    ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
+    auto blockMetadataForSingleBlock =
+        [&blockMetadata](size_t index) -> BlockMetadataRanges {
+      std::span blockMetaSpan(blockMetadata);
+      return {blockMetaSpan.subspan(index, 1)};
+    };
+    CompressedRelationReader::ScanSpecAndBlocks scanSpecAndBlocks(
+        scanSpec, blockMetadataForSingleBlock(blockIndex));
+    auto cancellationHandle =
+        std::make_shared<ad_utility::CancellationHandle<>>();
+    std::vector<ColumnIndex> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
+    auto idTable = reader.scan(scanSpecAndBlocks, additionalColumns,
+                               cancellationHandle, {});
 
     // Convert a located triple from permutation order to SPO-canonical form.
     auto toSpo = [&inverseKeys](const LocatedTriples::iterator& lt) {
@@ -311,11 +309,11 @@ TriplesToVacuum LocatedTriplesPerBlock::identifyTriplesToVacuum(
 
     // Two-pointer merge to identify redundant updates.
     const auto& locatedTriples = map_.at(blockIndex);
-    auto rowIt = decompressedBlock.begin();
+    auto rowIt = idTable.begin();
     auto updateIt = locatedTriples.begin();
 
     while (updateIt != locatedTriples.end() &&
-           rowIt != decompressedBlock.end()) {
+           rowIt != idTable.end()) {
       if (lessThan(updateIt, *rowIt)) {
         if (updateIt->insertOrDelete_) {
           // Valid insertion of a new triple – keep it.
@@ -498,13 +496,12 @@ std::ostream& operator<<(std::ostream& os, const VacuumStatistics& stats) {
 
 // ____________________________________________________________________________
 void to_json(nlohmann::json& j, const VacuumStatistics& stats) {
-  j = nlohmann::json{
-      {"insertionsRemoved", stats.numInsertionsRemoved_},
-      {"deletionsRemoved", stats.numDeletionsRemoved_},
-      {"insertionsKept", stats.numInsertionsKept_},
-      {"deletionsKept", stats.numDeletionsKept_},
-      {"totalRemoved", stats.totalRemoved()},
-      {"totalKept", stats.totalKept()}};
+  j = nlohmann::json{{"insertionsRemoved", stats.numInsertionsRemoved_},
+                     {"deletionsRemoved", stats.numDeletionsRemoved_},
+                     {"insertionsKept", stats.numInsertionsKept_},
+                     {"deletionsKept", stats.numDeletionsKept_},
+                     {"totalRemoved", stats.totalRemoved()},
+                     {"totalKept", stats.totalKept()}};
 }
 
 // ____________________________________________________________________________

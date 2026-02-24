@@ -13,9 +13,14 @@
 #include "./util/AllocatorTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/IndexTestHelpers.h"
+#include "./util/RuntimeParametersTestHelpers.h"
 #include "index/CompressedRelation.h"
+#include "index/DeltaTriples.h"
+#include "index/IndexImpl.h"
 #include "index/LocatedTriples.h"
 #include "index/Permutation.h"
+#include "parser/RdfParser.h"
+#include "parser/Tokenizer.h"
 
 namespace {
 auto V = ad_utility::testing::VocabId;
@@ -971,5 +976,99 @@ TEST_F(LocatedTriplesTest, debugPrints) {
     EXPECT_THAT(idts, InsertIntoStream(testing::StrEq(
                           "IdTriple(V:0, V:0, V:0, V:123948, ), IdTriple(V:1, "
                           "V:2, V:3, V:123948, ), ")));
+  }
+}
+
+// _____________________________________________________________________________
+TEST_F(LocatedTriplesTest, identifyTriplesToVacuum) {
+  // Build a test index with 3 triples, all sharing predicate <upp>.
+  // Use a large block size so they all land in one PSO block.
+  static constexpr const char* testTurtle =
+      "<a> <upp> <A> . <b> <upp> <B> . <c> <upp> <C> .";
+  auto config = ad_utility::testing::TestIndexConfig{testTurtle};
+  config.blocksizePermutations = 1_kB;
+  auto* qec = ad_utility::testing::getQec(config);
+
+  const auto& index = qec->getIndex().getImpl();
+  auto& perm = index.getPermutation(Permutation::PSO);
+
+  LocalVocab lv;
+  constexpr auto encodedIriManager = []() -> const EncodedIriManager* {
+    static EncodedIriManager mgr;
+    return &mgr;
+  };
+  using TC = TripleComponent;
+  auto Iri = ad_utility::triple_component::Iri::fromIriref;
+  auto getId = [&lv, &qec, &encodedIriManager](TC&& tc) {
+    return std::move(tc).toValueId(qec->getIndex().getVocab(), lv,
+                                   *encodedIriManager());
+  };
+  auto defaultGraph = getId(Iri(DEFAULT_GRAPH_IRI));
+  auto makeTriple = [&getId, &defaultGraph](TC&& s, TC&& p,
+                                            TC&& o) -> IdTriple<0> {
+    return IdTriple<0>{{getId(std::move(s)), getId(std::move(p)),
+                        getId(std::move(o)), defaultGraph}};
+  };
+
+  // Triples that exist in the index.
+  auto tInIdx1 = makeTriple(Iri("<a>"), Iri("<upp>"), Iri("<A>"));
+  auto tInIdx2 = makeTriple(Iri("<b>"), Iri("<upp>"), Iri("<B>"));
+  // Triples that do NOT exist in the index.
+  auto tNotIdx1 = makeTriple(Iri("<a>"), Iri("<upp>"), Iri("<b>"));
+  auto tNotIdx2 = makeTriple(Iri("<b>"), Iri("<upp>"), Iri("<a>"));
+  auto tNotIdx3 = makeTriple(Iri("<d>"), Iri("<upp>"), Iri("<f>"));
+  auto tNotIdx4 = makeTriple(Iri("<d>"), Iri("<upp>"), Iri("<g>"));
+  auto tNotIdx5 = makeTriple(Iri("<d>"), Iri("<upp>"), Iri("<h>"));
+
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+
+  DeltaTriples dt(index);
+  dt.insertTriples(handle, {tInIdx1, tInIdx2});
+  const auto& ltpb = dt.getLocatedTriplesForPermutation(Permutation::PSO);
+
+  {
+    // Block has exactly the threshold -> ignored.
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::vacuumMinimumBlockSize_>(
+            2ul);
+    auto result = ltpb.identifyTriplesToVacuum(perm);
+    EXPECT_THAT(result.insertionsToRemove, testing::IsEmpty());
+    EXPECT_THAT(result.deletionsToRemove, testing::IsEmpty());
+    EXPECT_EQ(result.stats.totalRemoved(), 0u);
+    EXPECT_EQ(result.stats.totalKept(), 0u);
+  }
+
+  {
+    // Block has more than the threshold.
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::vacuumMinimumBlockSize_>(
+            1ul);
+    auto result = ltpb.identifyTriplesToVacuum(perm);
+    EXPECT_THAT(result.insertionsToRemove,
+                testing::UnorderedElementsAre(tInIdx1, tInIdx2));
+    EXPECT_THAT(result.deletionsToRemove, testing::IsEmpty());
+    EXPECT_EQ(result.stats.numInsertionsRemoved_, 2u);
+    EXPECT_EQ(result.stats.numDeletionsRemoved_, 0u);
+    EXPECT_EQ(result.stats.numInsertionsKept_, 0u);
+    EXPECT_EQ(result.stats.numDeletionsKept_, 0u);
+  }
+
+  DeltaTriples dt4(index);
+  dt4.insertTriples(handle, {tInIdx1, tNotIdx1, tNotIdx3, tNotIdx5});
+  dt4.deleteTriples(handle, {tNotIdx2, tInIdx2, tNotIdx4});
+  const auto& ltpb4 = dt4.getLocatedTriplesForPermutation(Permutation::PSO);
+  {
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::vacuumMinimumBlockSize_>(
+            2ul);
+    auto result = ltpb4.identifyTriplesToVacuum(perm);
+    EXPECT_THAT(result.insertionsToRemove,
+                testing::UnorderedElementsAre(tInIdx1));
+    EXPECT_THAT(result.deletionsToRemove,
+                testing::UnorderedElementsAre(tNotIdx2, tNotIdx4));
+    EXPECT_EQ(result.stats.numInsertionsRemoved_, 1u);
+    EXPECT_EQ(result.stats.numDeletionsRemoved_, 2u);
+    EXPECT_EQ(result.stats.numInsertionsKept_, 3u);
+    EXPECT_EQ(result.stats.numDeletionsKept_, 1u);
   }
 }
