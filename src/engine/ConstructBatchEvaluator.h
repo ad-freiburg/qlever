@@ -13,7 +13,9 @@
 #include <vector>
 
 #include "engine/ConstructTypes.h"
+#include "engine/LocalVocab.h"
 #include "engine/idTable/IdTable.h"
+#include "index/Index.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
 #include "util/LruCacheWithStatistics.h"
@@ -62,7 +64,7 @@ struct BatchEvaluationContext {
 };
 
 // Resolves `Id` values in variable columns to their string representations
-// (IRI, literal, etc.) via `ConstructQueryEvaluator::evaluateId`.
+// (IRI, literal, etc.) via `ExportQueryExecutionTrees::idToStringAndType`.
 //
 // The evaluation is column-oriented: for each variable (identified by their
 // `IdTable` column), all rows in the batch are evaluated before moving to the
@@ -86,6 +88,11 @@ class ConstructBatchEvaluator {
   static EvaluatedVariableValues evaluateVariableByColumn(
       size_t idTableColumnIdx, const BatchEvaluationContext& ctx,
       const LocalVocab& localVocab, const Index& index, IdCache& idCache);
+
+  // Convert a single `Id` to its `EvaluatedTerm` string representation.
+  // Returns `std::nullopt` if the `Id` has no string representation.
+  static std::optional<EvaluatedTerm> idToEvaluatedTerm(
+      const Index& index, Id id, const LocalVocab& localVocab);
 };
 
 }  // namespace qlever::constructExport
