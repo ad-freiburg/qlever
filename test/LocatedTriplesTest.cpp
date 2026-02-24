@@ -1022,45 +1022,46 @@ TEST_F(LocatedTriplesTest, identifyTriplesToVacuum) {
 
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
 
-  DeltaTriples dt(index);
-  dt.insertTriples(handle, {tInIdx1, tInIdx2});
-  const auto& ltpb = dt.getLocatedTriplesForPermutation(Permutation::PSO);
-
   {
-    // Block has exactly the threshold -> ignored.
-    auto cleanup =
-        setRuntimeParameterForTest<&RuntimeParameters::vacuumMinimumBlockSize_>(
-            2ul);
-    auto result = ltpb.identifyTriplesToVacuum(perm);
-    EXPECT_THAT(result.insertionsToRemove, testing::IsEmpty());
-    EXPECT_THAT(result.deletionsToRemove, testing::IsEmpty());
-    EXPECT_EQ(result.stats.totalRemoved(), 0u);
-    EXPECT_EQ(result.stats.totalKept(), 0u);
+    DeltaTriples dt(index);
+    dt.insertTriples(handle, {tInIdx1, tInIdx2});
+    const auto& ltpb = dt.getLocatedTriplesForPermutation(Permutation::PSO);
+
+    {
+      // Block has exactly the threshold -> ignored.
+      auto cleanup = setRuntimeParameterForTest<
+          &RuntimeParameters::vacuumMinimumBlockSize_>(2ul);
+      auto result = ltpb.identifyTriplesToVacuum(perm);
+      EXPECT_THAT(result.insertionsToRemove, testing::IsEmpty());
+      EXPECT_THAT(result.deletionsToRemove, testing::IsEmpty());
+      EXPECT_EQ(result.stats.totalRemoved(), 0u);
+      EXPECT_EQ(result.stats.totalKept(), 0u);
+    }
+
+    {
+      // Block has more than the threshold.
+      auto cleanup = setRuntimeParameterForTest<
+          &RuntimeParameters::vacuumMinimumBlockSize_>(1ul);
+      auto result = ltpb.identifyTriplesToVacuum(perm);
+      EXPECT_THAT(result.insertionsToRemove,
+                  testing::UnorderedElementsAre(tInIdx1, tInIdx2));
+      EXPECT_THAT(result.deletionsToRemove, testing::IsEmpty());
+      EXPECT_EQ(result.stats.numInsertionsRemoved_, 2u);
+      EXPECT_EQ(result.stats.numDeletionsRemoved_, 0u);
+      EXPECT_EQ(result.stats.numInsertionsKept_, 0u);
+      EXPECT_EQ(result.stats.numDeletionsKept_, 0u);
+    }
   }
 
   {
-    // Block has more than the threshold.
-    auto cleanup =
-        setRuntimeParameterForTest<&RuntimeParameters::vacuumMinimumBlockSize_>(
-            1ul);
-    auto result = ltpb.identifyTriplesToVacuum(perm);
-    EXPECT_THAT(result.insertionsToRemove,
-                testing::UnorderedElementsAre(tInIdx1, tInIdx2));
-    EXPECT_THAT(result.deletionsToRemove, testing::IsEmpty());
-    EXPECT_EQ(result.stats.numInsertionsRemoved_, 2u);
-    EXPECT_EQ(result.stats.numDeletionsRemoved_, 0u);
-    EXPECT_EQ(result.stats.numInsertionsKept_, 0u);
-    EXPECT_EQ(result.stats.numDeletionsKept_, 0u);
-  }
-
-  DeltaTriples dt4(index);
-  dt4.insertTriples(handle, {tInIdx1, tNotIdx1, tNotIdx3, tNotIdx5});
-  dt4.deleteTriples(handle, {tNotIdx2, tInIdx2, tNotIdx4});
-  const auto& ltpb4 = dt4.getLocatedTriplesForPermutation(Permutation::PSO);
-  {
+    // Also has inserts and deletes past the last block with index triples.
     auto cleanup =
         setRuntimeParameterForTest<&RuntimeParameters::vacuumMinimumBlockSize_>(
             2ul);
+    DeltaTriples dt(index);
+    dt.insertTriples(handle, {tInIdx1, tNotIdx1, tNotIdx3, tNotIdx5});
+    dt.deleteTriples(handle, {tNotIdx2, tInIdx2, tNotIdx4});
+    const auto& ltpb4 = dt.getLocatedTriplesForPermutation(Permutation::PSO);
     auto result = ltpb4.identifyTriplesToVacuum(perm);
     EXPECT_THAT(result.insertionsToRemove,
                 testing::UnorderedElementsAre(tInIdx1));
