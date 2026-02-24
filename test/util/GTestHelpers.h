@@ -101,7 +101,7 @@ https://github.com/google/googletest/blob/main/docs/reference/matchers.md#matche
                  << ", but the current log level is "           \
                  << ad_utility::Log::getLevel<LOGLEVEL>();      \
   }                                                             \
-  EXPECT_GE(LOGLEVEL, level);
+  ASSERT_GE(LOGLEVEL, level);
 
 // _____________________________________________________________________________
 
