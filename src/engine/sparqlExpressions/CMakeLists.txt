@@ -24,4 +24,6 @@ add_library(sparqlExpressions
         BlankNodeExpression.cpp
         GroupConcatExpression.cpp)
 
+add_library(geoExpressionOnly GeoExpression.cpp)
+qlever_target_link_libraries(geoExpressionOnly)
 qlever_target_link_libraries(sparqlExpressions util index Boost::url)

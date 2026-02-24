@@ -255,6 +255,7 @@ struct DateValueGetter : Mixin<DateValueGetter> {
 struct GeoPointValueGetter : Mixin<GeoPointValueGetter> {
   using Mixin<GeoPointValueGetter>::operator();
   using Opt = std::optional<GeoPoint>;
+  using Value = Opt;
 
   Opt operator()(ValueId id, const EvaluationContext*) const {
     if (id.getDatatype() == Datatype::GeoPoint) {
