@@ -37,32 +37,35 @@ BatchEvaluationResult ConstructBatchEvaluator::evaluateBatch(
 }
 
 // _____________________________________________________________________________
+std::optional<EvaluatedTerm> ConstructBatchEvaluator::idToEvaluatedTerm(
+    const Index& index, Id id, const LocalVocab& localVocab) {
+  auto optStringAndType =
+      ExportQueryExecutionTrees::idToStringAndType(index, id, localVocab);
+  if (!optStringAndType.has_value()) return std::nullopt;
+  auto& [str, type] = optStringAndType.value();
+  const char* i = XSD_INT_TYPE;
+  const char* d = XSD_DECIMAL_TYPE;
+  const char* b = XSD_BOOLEAN_TYPE;
+  // Note: If `type` is `XSD_DOUBLE_TYPE`, `str` is always "NaN", "INF" or
+  // "-INF", which doesn't have a short form notation.
+  if (type == nullptr || type == i || type == d ||
+      (type == b && str.length() > 1)) {
+    return std::make_shared<const std::string>(std::move(str));
+  }
+  return std::make_shared<const std::string>(
+      absl::StrCat("\"", str, "\"^^<", type, ">"));
+}
+
+// _____________________________________________________________________________
 EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
     size_t idTableColumnIdx, const BatchEvaluationContext& ctx,
     const LocalVocab& localVocab, const Index& index, IdCache& idCache) {
-  auto resolveId = [&index,
-                    &localVocab](Id id) -> std::optional<EvaluatedTerm> {
-    auto optStringAndType =
-        ExportQueryExecutionTrees::idToStringAndType(index, id, localVocab);
-    if (!optStringAndType.has_value()) return std::nullopt;
-    auto& [str, type] = optStringAndType.value();
-    const char* i = XSD_INT_TYPE;
-    const char* d = XSD_DECIMAL_TYPE;
-    const char* b = XSD_BOOLEAN_TYPE;
-    // Note: If `type` is `XSD_DOUBLE_TYPE`, `str` is always "NaN", "INF" or
-    // "-INF", which doesn't have a short form notation.
-    if (type == nullptr || type == i || type == d ||
-        (type == b && str.length() > 1)) {
-      return std::make_shared<const std::string>(std::move(str));
-    }
-    return std::make_shared<const std::string>(
-        absl::StrCat("\"", str, "\"^^<", type, ">"));
-  };
-
   decltype(auto) col = ctx.idTable_.getColumn(idTableColumnIdx);
 
-  auto evaluateRow = [&col, &idCache, &resolveId](size_t rowIdx) {
-    return idCache.getOrCompute(col[rowIdx], resolveId);
+  auto evaluateRow = [&](size_t rowIdx) {
+    return idCache.getOrCompute(col[rowIdx], [&](Id id) {
+      return idToEvaluatedTerm(index, id, localVocab);
+    });
   };
 
   return ql::views::iota(ctx.firstRow_, ctx.endRow_) |
