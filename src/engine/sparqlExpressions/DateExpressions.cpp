@@ -120,9 +120,9 @@ NARY_EXPRESSION(SecondsExpression, 1, FV<ExtractSeconds, DateValueGetter>);
 // provided as a `SparqlExpression*` object.
 CPP_class_template(typename NaryOperation)(
     requires(isOperation<NaryOperation>)) class YearExpressionImpl
-    : public NaryExpression<NaryOperation> {
+    : public NaryExpressionStronglyTyped<NaryOperation> {
  public:
-  using NaryExpression<NaryOperation>::NaryExpression;
+  using NaryExpressionStronglyTyped<NaryOperation>::NaryExpressionStronglyTyped;
   bool isYearExpression() const override { return true; }
 };
 
@@ -164,4 +164,5 @@ SparqlExpression::Ptr makeMinutesExpression(SparqlExpression::Ptr child) {
 SparqlExpression::Ptr makeSecondsExpression(SparqlExpression::Ptr child) {
   return std::make_unique<SecondsExpression>(std::move(child));
 }
+
 }  // namespace sparqlExpression
