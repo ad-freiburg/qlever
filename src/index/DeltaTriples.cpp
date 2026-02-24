@@ -98,64 +98,48 @@ void DeltaTriples::clear() {
 
 // ____________________________________________________________________________
 nlohmann::json DeltaTriples::vacuum() {
+  auto identifyTriplesToVacuum =
+      CPP_template_lambda(this)(bool isInternal)()() {
+    auto& basePerm = index_.getPermutation(Permutation::PSO);
+    const auto& perm = isInternal ? basePerm.internalPermutation() : basePerm;
+    const auto& ltpb =
+        locatedTriples_->getLocatedTriplesForPermutation<isInternal>(
+            Permutation::PSO);
+    return ltpb.identifyTriplesToVacuum(perm);
+  };
+  auto removeIdentifiedTriples = CPP_template_lambda(this)(bool isInternal)(
+      const std::vector<IdTriple<0>>& deletionsToRemove,
+      const std::vector<IdTriple<0>>& insertionsToRemove)() {
+    auto& state = getState<isInternal>();
+    auto removeTriples = [this](const std::vector<IdTriple<0>>& triples,
+                                auto& triplesToHandlesMap) {
+      for (const auto& triple : triples) {
+        auto it = triplesToHandlesMap.find(triple);
+        AD_CORRECTNESS_CHECK(it != triplesToHandlesMap.end());
+        this->eraseTripleInAllPermutations<isInternal>(it->second);
+        triplesToHandlesMap.erase(it);
+      }
+    };
+
+    removeTriples(deletionsToRemove, state.triplesDeleted_);
+    removeTriples(insertionsToRemove, state.triplesInserted_);
+  };
+
   nlohmann::json result = nlohmann::json::object();
+  auto toRemoveInExternal = identifyTriplesToVacuum.operator()<false>();
+  removeIdentifiedTriples.operator()<false>(
+      toRemoveInExternal.deletionsToRemove,
+      toRemoveInExternal.insertionsToRemove);
+  result["external"] = toRemoveInExternal.stats;
 
-  // Phase 1: Process external permutations (6 permutations)
-  auto externalResult = identifyTriplesToVacuum<false>();
-  removeIdentifiedTriples<false>(externalResult.deletionsToRemove,
-                                 externalResult.insertionsToRemove);
-  result["external"] = externalResult.stats;
-
-  // Phase 2: Process internal permutations (2 permutations)
-  auto internalResult = identifyTriplesToVacuum<true>();
-  removeIdentifiedTriples<true>(internalResult.deletionsToRemove,
-                                internalResult.insertionsToRemove);
-  result["internal"] = internalResult.stats;
+  auto toRemoveInInternal = identifyTriplesToVacuum.operator()<true>();
+  removeIdentifiedTriples.operator()<true>(
+      toRemoveInInternal.deletionsToRemove,
+      toRemoveInInternal.insertionsToRemove);
+  result["internal"] = toRemoveInInternal.stats;
 
   return result;
 }
-
-// ____________________________________________________________________________
-template <bool isInternal>
-void DeltaTriples::removeIdentifiedTriples(
-    const std::vector<IdTriple<0>>& deletionsToRemove,
-    const std::vector<IdTriple<0>>& insertionsToRemove) {
-  auto& state = getState<isInternal>();
-
-  auto removeTriples = [this](const std::vector<IdTriple<0>>& triples,
-                              auto& triplesToHandlesMap) {
-    for (const auto& triple : triples) {
-      auto it = triplesToHandlesMap.find(triple);
-      AD_CORRECTNESS_CHECK(it != triplesToHandlesMap.end());
-      this->eraseTripleInAllPermutations<isInternal>(it->second);
-      triplesToHandlesMap.erase(it);
-    }
-  };
-
-  removeTriples(deletionsToRemove, state.triplesDeleted_);
-  removeTriples(insertionsToRemove, state.triplesInserted_);
-}
-
-// Explicit template instantiations
-template void DeltaTriples::removeIdentifiedTriples<true>(
-    const std::vector<IdTriple<0>>&, const std::vector<IdTriple<0>>&);
-template void DeltaTriples::removeIdentifiedTriples<false>(
-    const std::vector<IdTriple<0>>&, const std::vector<IdTriple<0>>&);
-
-// ____________________________________________________________________________
-template <bool isInternal>
-TriplesToVacuum DeltaTriples::identifyTriplesToVacuum() {
-  auto& basePerm = index_.getPermutation(Permutation::PSO);
-  const auto& perm = isInternal ? basePerm.internalPermutation() : basePerm;
-  const auto& ltpb =
-      locatedTriples_->getLocatedTriplesForPermutation<isInternal>(
-          Permutation::PSO);
-  return ltpb.identifyTriplesToVacuum(perm);
-}
-
-// Explicit template instantiations
-template TriplesToVacuum DeltaTriples::identifyTriplesToVacuum<true>();
-template TriplesToVacuum DeltaTriples::identifyTriplesToVacuum<false>();
 
 // ____________________________________________________________________________
 template <bool isInternal>

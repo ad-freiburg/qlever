@@ -981,8 +981,6 @@ TEST_F(LocatedTriplesTest, debugPrints) {
 
 // _____________________________________________________________________________
 TEST_F(LocatedTriplesTest, identifyTriplesToVacuum) {
-  // Build a test index with 3 triples, all sharing predicate <upp>.
-  // Use a large block size so they all land in one PSO block.
   static constexpr const char* testTurtle =
       "<a> <upp> <A> . <b> <upp> <B> . <c> <upp> <C> .";
   auto config = ad_utility::testing::TestIndexConfig{testTurtle};

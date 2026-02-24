@@ -235,8 +235,11 @@ IdTable LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
   }
 }
 
-// Helper: run the two-pointer merge for one block and return statistics.
-static VacuumStatistics processBlockForVacuum(
+namespace {
+// Identify the triples to vacuum for a single block by comparing the
+// `locatedTriples` with the `idTable` of the block (which has no updates
+// applied).
+VacuumStatistics processBlockForVacuum(
     const IdTable& idTable, const LocatedTriples& locatedTriples,
     const qlever::KeyOrder::Array& inverseKeys,
     std::vector<IdTriple<0>>& allDeletionsToRemove,
@@ -294,14 +297,15 @@ static VacuumStatistics processBlockForVacuum(
 
   return stats;
 }
+}  // namespace
 
 // ____________________________________________________________________________
 TriplesToVacuum LocatedTriplesPerBlock::identifyTriplesToVacuum(
     const Permutation& perm) const {
-  // Step 1: Collect blocks needing vacuum by iterating map_ directly.
   std::vector<size_t> blocksToVacuum;
   for (const auto& [blockIndex, locatedTriples] : map_) {
-    if (locatedTriples.size() > getRuntimeParameter<&RuntimeParameters::vacuumMinimumBlockSize_>()) {
+    if (locatedTriples.size() >
+        getRuntimeParameter<&RuntimeParameters::vacuumMinimumBlockSize_>()) {
       blocksToVacuum.push_back(blockIndex);
     }
   }
@@ -315,36 +319,35 @@ TriplesToVacuum LocatedTriplesPerBlock::identifyTriplesToVacuum(
             totalStats};
   }
 
-  // Step 2: Compute inverse key order to convert permuted triples to SPO.
-  auto& keys = perm.keyOrder().keys();
+  // The identified triples are output in `SPO` so we need to invert the
+  // permutation.
   qlever::KeyOrder::Array inverseKeys{};
-  for (size_t i = 0; i < 4; ++i) inverseKeys[keys[i]] = i;
+  for (size_t i = 0; i < 4; ++i) inverseKeys[perm.keyOrder().keys()[i]] = i;
 
-  // Step 3: Get reader and block metadata.
   const auto& reader = perm.reader();
   const auto& blockMetadata = perm.metaData().blockData();
 
-  // Step 4: Process each block.
   for (size_t blockIndex : blocksToVacuum) {
     AD_CORRECTNESS_CHECK(blockIndex <= blockMetadata.size());
+    // This is one past the last block with index triples. This block always
+    // only has updates.
     if (blockIndex == blockMetadata.size()) {
       ad_utility::AllocatorWithLimit<Id> allocator =
           ad_utility::makeUnlimitedAllocator<Id>();
       IdTable idTable(4, allocator);
-      totalStats += processBlockForVacuum(idTable, map_.at(blockIndex),
-                                          inverseKeys, allDeletionsToRemove,
-                                          allInsertionsToRemove);
+      totalStats +=
+          processBlockForVacuum(idTable, map_.at(blockIndex), inverseKeys,
+                                allDeletionsToRemove, allInsertionsToRemove);
       continue;
     }
-    const auto& blockMeta = blockMetadata[blockIndex];
-    AD_CORRECTNESS_CHECK(blockMeta.offsetsAndCompressedSize_.has_value());
-    AD_CORRECTNESS_CHECK(blockMeta.blockIndex_ == blockIndex);
 
     ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
     auto blockMetadataForSingleBlock =
-        [&blockMetadata](size_t index) -> BlockMetadataRanges {
+        [&blockMetadata](size_t blockIndex) -> BlockMetadataRanges {
       std::span blockMetaSpan(blockMetadata);
-      return {blockMetaSpan.subspan(index, 1)};
+      AD_CORRECTNESS_CHECK(blockMetaSpan.size() == 1);
+      AD_CORRECTNESS_CHECK(blockMetaSpan[0].blockIndex_ == blockIndex);
+      return {blockMetaSpan.subspan(blockIndex, 1)};
     };
     CompressedRelationReader::ScanSpecAndBlocks scanSpecAndBlocks(
         scanSpec, blockMetadataForSingleBlock(blockIndex));
@@ -354,9 +357,9 @@ TriplesToVacuum LocatedTriplesPerBlock::identifyTriplesToVacuum(
     auto idTable = reader.scan(scanSpecAndBlocks, additionalColumns,
                                cancellationHandle, {});
 
-    totalStats += processBlockForVacuum(idTable, map_.at(blockIndex),
-                                        inverseKeys, allDeletionsToRemove,
-                                        allInsertionsToRemove);
+    totalStats +=
+        processBlockForVacuum(idTable, map_.at(blockIndex), inverseKeys,
+                              allDeletionsToRemove, allInsertionsToRemove);
   }
 
   return {std::move(allDeletionsToRemove), std::move(allInsertionsToRemove),
@@ -488,17 +491,6 @@ void LocatedTriplesPerBlock::updateAugmentedMetadata() {
         CompressedBlockMetadata::checkInvariantsForSortedBlocks(
             *augmentedMetadata_));
   }
-}
-
-// ____________________________________________________________________________
-std::ostream& operator<<(std::ostream& os, const VacuumStatistics& stats) {
-  os << "VacuumStatistics{removed: " << stats.totalRemoved()
-     << " (insertions: " << stats.numInsertionsRemoved_
-     << ", deletions: " << stats.numDeletionsRemoved_
-     << "), kept: " << stats.totalKept()
-     << " (insertions: " << stats.numInsertionsKept_
-     << ", deletions: " << stats.numDeletionsKept_ << ")}";
-  return os;
 }
 
 // ____________________________________________________________________________

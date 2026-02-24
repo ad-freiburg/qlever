@@ -39,10 +39,12 @@ struct NumAddedAndDeleted {
 
 // Statistics collected during a VACUUM operation on a block.
 struct VacuumStatistics {
-  size_t numDeletionsRemoved_;   // Invalid deletions removed
-  size_t numInsertionsRemoved_;  // Redundant insertions removed
-  size_t numDeletionsKept_;      // Valid deletions kept
-  size_t numInsertionsKept_;     // Valid insertions kept
+  // Only updates that have an effect are kept. Inserts that already exist
+  // and deletes that don't exist are removed.
+  size_t numDeletionsRemoved_;
+  size_t numInsertionsRemoved_;
+  size_t numDeletionsKept_;
+  size_t numInsertionsKept_;
 
   size_t totalRemoved() const {
     return numDeletionsRemoved_ + numInsertionsRemoved_;
@@ -58,11 +60,6 @@ struct VacuumStatistics {
     return *this;
   }
 
-  friend std::ostream& operator<<(std::ostream& os,
-                                  const VacuumStatistics& stats);
-
-  /// Output as JSON. The signature of this function is mandated by the JSON
-  /// library to allow for implicit conversion.
   friend void to_json(nlohmann::json& j, const VacuumStatistics& stats);
 };
 
