@@ -14,6 +14,7 @@
 #include "util/CryptographicHashUtils.h"
 
 namespace sparqlExpression::detail {
+
 template <typename NaryOperation>
 class NaryExpression : public SparqlExpression {
   CPP_assert(isOperation<NaryOperation>);

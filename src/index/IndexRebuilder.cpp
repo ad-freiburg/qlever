@@ -65,11 +65,13 @@ LocalVocabMapping mergeVocabs(const std::string& vocabularyName,
   LocalVocabMapping localVocabMapping;
   auto writeWordFromVocab = [&vocab, &vocabWriter](VocabIndex vocabIndex) {
     auto word = vocab[vocabIndex];
+    std::cerr << "Writing word \"" << word << "\"\n";
     (*vocabWriter)(word, vocab.shouldBeExternalized(word));
   };
   auto writeWordFromLocalVocab =
       [&vocab, &vocabWriter, &localVocabMapping](const InsertionInfo& info) {
         const auto& [_, word, originalId] = info;
+        std::cerr << "Writing word \"" << word << "\"\n";
         auto newIndex = (*vocabWriter)(word, vocab.shouldBeExternalized(word));
         localVocabMapping.emplace(
             originalId.getBits(),

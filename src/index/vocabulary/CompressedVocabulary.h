@@ -183,6 +183,7 @@ CPP_template(typename UnderlyingVocabulary,
       underlyingWriter_.finish();
       ad_utility::serialization::FileWriteSerializer decoderWriter(
           filenameDecoders_);
+      std::cerr << "writing " << decoders_.size() << " decoders" << std::endl;
       decoderWriter << decoders_;
       auto compressionRatio =
           (100ULL * std::max(compressedSize_.getBytes(), size_t(1))) /
