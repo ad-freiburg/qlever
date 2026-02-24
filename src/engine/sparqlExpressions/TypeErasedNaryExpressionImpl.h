@@ -19,6 +19,14 @@ namespace sparqlExpression::detail {
 template <typename T>
 class TypeErasedNaryExpression;
 
+inline bool isConstantExpressionResult(const ExpressionResult& res) {
+  return std::visit(
+      [](const auto& el) {
+        return isConstantResult<std::decay_t<decltype(el)>>;
+      },
+      res);
+}
+
 // Type erased version of the `NaryExpression` class. Much cheaper to compile,
 // but also slower in the execution. It is only template on the signature of its
 // core implementation function, all other implementation (the actual function,
@@ -90,6 +98,10 @@ class TypeErasedNaryExpression<Ret(Args...)> : public SparqlExpression {
     // produce.
     auto targetSize = context->size();
 
+    if ((... && isConstantExpressionResult(operands))) {
+      targetSize = 1;
+    }
+
     // A `zip_view` of the result of all the value getters applied to their
     // respective child result.
     auto zipper = std::apply(
@@ -103,11 +115,11 @@ class TypeErasedNaryExpression<Ret(Args...)> : public SparqlExpression {
     // tuples as value and reference type).
     auto onTuple = [&](auto&& tuple) {
       return std::apply(
-          [&](auto&&... args) { return function_(AD_FWD(args)...); },
+          [this](auto&&... args) { return function_(AD_FWD(args)...); },
           AD_FWD(tuple));
     };
-    auto resultGenerator = ::ranges::views::transform(
-        ad_utility::OwningView{std::move(zipper)}, onTuple);
+    auto resultGenerator =
+        ql::views::transform(ql::ranges::ref_view(zipper), onTuple);
     // Compute the result.
     VectorWithMemoryLimit<Ret> result{context->_allocator};
     result.reserve(targetSize);
@@ -132,7 +144,8 @@ struct TypeErasedValueGetter {
     /// Generate `numItems` many values from the `input` and apply the
     /// `valueGetter` to each of the values.
     return std::visit(
-        [&](auto&& input) {
+        [&](auto&& input)
+            -> ad_utility::InputRangeTypeErased<typename ValueGetter::Value> {
           return ad_utility::InputRangeTypeErased{valueGetterGenerator(
               size, context, std::move(input), ValueGetter{})};
         },
@@ -150,9 +163,8 @@ using NaryExpression = TypeErasedNaryExpression<
         typename ValueGetters::Value...)>;
 #else
 template <typename Operation, typename... ValueGetters>
-using NaryExpression =
-    NaryExpression<detail::Operation<sizeof...(ValueGetters),
-                                     FV<Operation, ValueGetters...> > >;
+using NaryExpression = NaryExpressionStronglyTyped<
+    detail::Operation<sizeof...(ValueGetters), FV<Operation, ValueGetters...>>>;
 #endif
 
 // Create a lambda that takes the children of an expression (as
@@ -165,7 +177,7 @@ static constexpr auto namedExpressionFactory() {
   using Impl = NaryExpression<Operation, ValueGetters...>;
   static_assert(std::is_base_of_v<Impl, SubClass>);
 #ifdef _QLEVER_TYPE_ERASED_EXPRESSIONS
-  return [](auto... childPtrs) -> SparqlExpression::Ptr {
+  return [](auto... childPtrs) {
     return std::make_unique<SubClass>(
         Operation{}, std::tuple<TypeErasedValueGetter<ValueGetters>...>{},
         std::array{std::move(childPtrs)...});

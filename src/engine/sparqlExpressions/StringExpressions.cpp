@@ -65,15 +65,11 @@ class StrExpressionImpl : public NaryExpression<StrImpl, StringValueGetter> {
  public:
   using Base::Base;
 };
-static constexpr auto strExpressionImplFactory =
-    namedExpressionFactory<StrExpressionImpl, StrImpl, StringValueGetter>();
 
 class StrExpression : public StrExpressionImpl {
   using StrExpressionImpl::StrExpressionImpl;
   bool isStrExpression() const override { return true; }
 };
-static constexpr auto strExpressionFactory =
-    namedExpressionFactory<StrExpression, StrImpl, StringValueGetter>();
 
 // Lift a `Function` that takes one or multiple `std::string`s (possibly via
 // references) and returns an `Id` or `std::string` to a function that takes the
@@ -135,10 +131,6 @@ struct ApplyBaseIfPresent {
         baseIri.getBaseIri(true))};
   }
 };
-static constexpr auto iriOrUriExpressionFactory =
-    expressionFactory<ApplyBaseIfPresent, IriOrUriValueGetter,
-                      IriOrUriValueGetter>();
-
 // STRLEN
 struct Strlen {
   Id operator()(std::string_view s) const {
@@ -270,11 +262,6 @@ class StrStartsExpression
     return prefilterVec;
   }
 };
-static constexpr auto strStartsExpressionFactory =
-    namedExpressionFactory<StrStartsExpression,
-                           LiftStringFunction<StrStartsImpl>, StringValueGetter,
-                           StringValueGetter>();
-
 // STRENDS
 struct StrEndsImpl {
   Id operator()(std::string_view text, std::string_view pattern) const {
@@ -626,12 +613,17 @@ CPP_template(typename T,
     make(C&... children) {
   return std::make_unique<T>(std::move(children)...);
 }
+
+using namespace sparqlExpression::detail;
 Expr makeStrExpression(Expr child) {
-  return strExpressionFactory(std::move(child));
+  return namedExpressionFactory<StrExpression, StrImpl, StringValueGetter>()(
+      std::move(child));
 }
 
 Expr makeIriOrUriExpression(Expr child, SparqlExpression::Ptr baseIri) {
-  return iriOrUriExpressionFactory(std::move(child), std::move(baseIri));
+  return expressionFactory<ApplyBaseIfPresent, IriOrUriValueGetter,
+                           IriOrUriValueGetter>()(std::move(child),
+                                                  std::move(baseIri));
 }
 
 Expr makeStrlenExpression(Expr child) { return make<StrlenExpression>(child); }
@@ -641,7 +633,10 @@ Expr makeSubstrExpression(Expr string, Expr start, Expr length) {
 }
 
 Expr makeStrStartsExpression(Expr child1, Expr child2) {
-  return strStartsExpressionFactory(std::move(child1), std::move(child2));
+  return namedExpressionFactory<StrStartsExpression,
+                                LiftStringFunction<StrStartsImpl>,
+                                StringValueGetter, StringValueGetter>()(
+      std::move(child1), std::move(child2));
 }
 
 Expr makeLowercaseExpression(Expr child) {
@@ -705,7 +700,8 @@ Expr makeSHA384Expression(Expr child) { return make<SHA384Expression>(child); }
 Expr makeSHA512Expression(Expr child) { return make<SHA512Expression>(child); }
 
 Expr makeConvertToStringExpression(Expr child) {
-  return strExpressionImplFactory(std::move(child));
+  return namedExpressionFactory<StrExpressionImpl, StrImpl,
+                                StringValueGetter>()(std::move(child));
 }
 
 }  // namespace sparqlExpression
