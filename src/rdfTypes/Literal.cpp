@@ -145,7 +145,9 @@ Literal Literal::fromStringRepresentation(std::string internal) {
   auto endIdx = internal.rfind('"');
   AD_CORRECTNESS_CHECK(endIdx > 0);
   Literal literal{std::move(internal), endIdx + 1};
-  // Remove redundant `XSD_STRING` datatype.
+  // Remove redundant `XSD_STRING` datatype. If vocabularies normalize strings
+  // like this in the future, this could get replaced by an assertion if all the
+  // other callers are updated accordingly.
   if (literal.hasDatatype() &&
       asStringViewUnsafe(literal.getDatatype()) == XSD_STRING) {
     literal.removeDatatypeOrLanguageTag();
