@@ -79,7 +79,7 @@ class TransPathExecutionParams {
   }
 };
 
-// A class containint only static members which run DFS/BFS search
+// A class containing only static members which run DFS/BFS search
 // algorithms for finding the connected nodes of a transitive path operation.
 template <typename T>
 class TransitivePathGraphSearch {
@@ -125,7 +125,7 @@ class TransitivePathGraphSearch {
     Set connectedNodes{ep.allocator()};
 
     queue.push(gsp.startNode);
-    while (!queue.empty() && traversalDepth <= gsp.maxDist ) {
+    while (!queue.empty() && traversalDepth <= gsp.maxDist) {
       ep.checkCancellation();
 
       // Get next node from queue.
