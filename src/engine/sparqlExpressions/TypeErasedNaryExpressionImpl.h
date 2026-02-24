@@ -144,7 +144,8 @@ struct TypeErasedValueGetter {
     /// Generate `numItems` many values from the `input` and apply the
     /// `valueGetter` to each of the values.
     return std::visit(
-        [&](auto&& input) {
+        [&](auto&& input)
+            -> ad_utility::InputRangeTypeErased<typename ValueGetter::Value> {
           return ad_utility::InputRangeTypeErased{valueGetterGenerator(
               size, context, std::move(input), ValueGetter{})};
         },
