@@ -567,13 +567,13 @@ TEST(Date, toEpoch) {
     using namespace std::chrono;
     // Test different timezones
     Date date1 = Date(1999, 10, 11, 10, 5, 30);  // UTC
-    for (int i = 1; i < 23; i++) {
+    for (int i = 1; i < 24; i++) {
       Date date2 = Date(1999, 10, 11, 10, 5, 30, i);  // UTC + i
       // Difference in hours is converted to ns to be compared.
-      ASSERT_EQ(-i * 3600000000000,
+      ASSERT_EQ(i * 3600000000000,
                 (date1.toEpoch().value() - date2.toEpoch().value()).count());
       date2 = Date(1999, 10, 11, 10, 5, 30, -i);  // UTC - i
-      ASSERT_EQ(i * 3600000000000,
+      ASSERT_EQ(-i * 3600000000000,
                 (date1.toEpoch().value() - date2.toEpoch().value()).count());
     }
   }
@@ -725,10 +725,9 @@ TEST(DateYearOrDuration, Subtraction) {
     // expected duration of 1d10h9min1sec
     ASSERT_TRUE(date1 - date2);
     result = (date1 - date2).value();
-    ASSERT_EQ(DateYearOrDuration(
-                  DayTimeDuration(DayTimeDuration::Type::Positive, 1, 10, 9, 1))
-                  .toStringAndType(),
-              result.toStringAndType());
+    ASSERT_EQ(DateYearOrDuration(DayTimeDuration(
+                  DayTimeDuration::Type::Positive, 1, 10, 9, 1)),
+              result);
     result = (date2 - date1).value();
     ASSERT_EQ(DateYearOrDuration(DayTimeDuration(
                   DayTimeDuration::Type::Negative, 1, 10, 9, 1)),
@@ -750,10 +749,9 @@ TEST(DateYearOrDuration, Subtraction) {
     date2 = DateYearOrDuration(Date(2021, 01, 23, 22, 30, 0));
     // expected duration of 0d0h20min0sec
     result = (date1 - date2).value();
-    ASSERT_EQ(DateYearOrDuration(
-                  DayTimeDuration(DayTimeDuration::Type::Negative, 0, 0, 20, 0))
-                  .toStringAndType(),
-              result.toStringAndType());
+    ASSERT_EQ(DateYearOrDuration(DayTimeDuration(
+                  DayTimeDuration::Type::Negative, 0, 0, 20, 0)),
+              result);
 
     // minutesPassed < 0
     date1 = DateYearOrDuration(Date(2021, 01, 23, 22, 10, 03));
@@ -762,6 +760,54 @@ TEST(DateYearOrDuration, Subtraction) {
     result = (date1 - date2).value();
     ASSERT_EQ(DateYearOrDuration(DayTimeDuration(
                   DayTimeDuration::Type::Negative, 0, 0, 0, 40)),
+              result);
+  }
+  {
+    // Test durations between UTC and other TimeZones.
+    for (int i = 0; i < 24; i++) {
+      DateYearOrDuration date1 =
+          DateYearOrDuration(Date(2021, 01, 23, 20, 10, 33));
+      DateYearOrDuration date2 =
+          DateYearOrDuration(Date(2021, 01, 23, 20, 10, 33, i));
+      // expected positive/negative duration of i hours
+      DateYearOrDuration result = (date1 - date2).value();
+      ASSERT_EQ(DateYearOrDuration(DayTimeDuration(
+                    DayTimeDuration::Type::Positive, 0, i, 0, 0)),
+                result);
+      date2 = DateYearOrDuration(Date(2021, 01, 23, 20, 10, 33, -i));
+      result = (date1 - date2).value();
+      ASSERT_EQ(DateYearOrDuration(DayTimeDuration(
+                    DayTimeDuration::Type::Negative, 0, i, 0, 0)),
+                result);
+    }
+    // Same time, different TimeZones.
+    DateYearOrDuration date1 =
+        DateYearOrDuration(Date(1989, 01, 23, 20, 10, 33, 2));
+    DateYearOrDuration date2 =
+        DateYearOrDuration(Date(1989, 01, 23, 15, 10, 33, -3));
+    DateYearOrDuration result = (date1 - date2).value();
+    ASSERT_EQ(DateYearOrDuration(
+                  DayTimeDuration(DayTimeDuration::Type::Positive, 0, 0, 0, 0)),
+              result);
+
+    // TimeZones causing different days.
+    date1 = DateYearOrDuration(Date(1989, 01, 23, 20, 10, 33, -1));
+    date2 = DateYearOrDuration(Date(1989, 01, 24, 3, 10, 33, 2));
+    result = (date1 - date2).value();
+    ASSERT_EQ(DateYearOrDuration(
+                  DayTimeDuration(DayTimeDuration::Type::Negative, 0, 4, 0, 0)),
+              result);
+
+    date1 = DateYearOrDuration(Date(1989, 01, 26, 0, 0, 0, -10));
+    date2 = DateYearOrDuration(Date(1989, 01, 26, 0, 0, 0, 12));
+    result = (date1 - date2).value();
+    ASSERT_EQ(DateYearOrDuration(DayTimeDuration(
+                  DayTimeDuration::Type::Positive, 0, 22, 0, 0)),
+              result);
+    date2 = DateYearOrDuration(Date(1989, 01, 26, 0, 0, 0, 14));
+    result = (date1 - date2).value();
+    ASSERT_EQ(DateYearOrDuration(
+                  DayTimeDuration(DayTimeDuration::Type::Positive, 1, 0, 0, 0)),
               result);
   }
 }

@@ -100,7 +100,7 @@ std::optional<std::chrono::sys_time<std::chrono::nanoseconds>> Date::toEpoch()
     // Build timestamp from date
     auto second = duration<double>{getSecond()};
     std::chrono::sys_time<std::chrono::nanoseconds> result =
-        sys_days(date) + hours{getHour() + getTimeZoneOffsetToUTCInHours()} +
+        sys_days(date) + hours{getHour() - getTimeZoneOffsetToUTCInHours()} +
         minutes{getMinute()} +
         duration_cast<nanoseconds>(
             second);  // Here all times are converted to a UTC time.
@@ -114,6 +114,7 @@ std::optional<std::chrono::sys_time<std::chrono::nanoseconds>> Date::toEpoch()
 // _____________________________________________________________________________
 int8_t Date::getTimeZoneOffsetToUTCInHours() const {
   TimeZone tz = getTimeZone();
+  // Handle different types contained in variant TimeZone.
   return std::visit(
       [](auto& value) {
         using T = std::decay_t<decltype(value)>;
