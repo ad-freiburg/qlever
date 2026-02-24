@@ -15,7 +15,7 @@
 
 namespace sparqlExpression::detail {
 template <typename NaryOperation>
-class NaryExpression : public SparqlExpression {
+class NaryExpressionStronglyTyped : public SparqlExpression {
   CPP_assert(isOperation<NaryOperation>);
 
  public:
@@ -27,14 +27,15 @@ class NaryExpression : public SparqlExpression {
 
  public:
   // Construct from an array of `N` child expressions.
-  explicit NaryExpression(Children&& children);
+  explicit NaryExpressionStronglyTyped(Children&& children);
 
   // Construct from `N` child expressions. Each of the children must have a type
   // `std::unique_ptr<SubclassOfSparqlExpression>`.
   CPP_template(typename... C)(
       requires(concepts::convertible_to<C, SparqlExpression::Ptr>&&...)
-          CPP_and(sizeof...(C) == N)) explicit NaryExpression(C... children)
-      : NaryExpression{Children{std::move(children)...}} {}
+          CPP_and(sizeof...(C) ==
+                  N)) explicit NaryExpressionStronglyTyped(C... children)
+      : NaryExpressionStronglyTyped{Children{std::move(children)...}} {}
 
   // __________________________________________________________________________
   ExpressionResult evaluate(EvaluationContext* context) const override;
@@ -130,7 +131,7 @@ template <typename... T>
 using FV = FunctionAndValueGetters<T...>;
 
 template <size_t N, typename X, typename... T>
-using NARY = NaryExpression<Operation<N, X, T...>>;
+using NARY = NaryExpressionStronglyTyped<Operation<N, X, T...>>;
 
 // True iff all types `Ts` are `SetOfIntervals`.
 struct AreAllSetOfIntervals {
@@ -151,13 +152,14 @@ using TernaryBool = EffectiveBooleanValueGetter::Result;
 
 // _____________________________________________________________________________
 template <typename Op>
-NaryExpression<Op>::NaryExpression(Children&& children)
+NaryExpressionStronglyTyped<Op>::NaryExpressionStronglyTyped(
+    Children&& children)
     : children_{std::move(children)} {}
 
 // _____________________________________________________________________________
 
 template <typename NaryOperation>
-ExpressionResult NaryExpression<NaryOperation>::evaluate(
+ExpressionResult NaryExpressionStronglyTyped<NaryOperation>::evaluate(
     EvaluationContext* context) const {
   auto resultsOfChildren = ad_utility::applyFunctionToEachElementOfTuple(
       [context](const auto& child) { return child->evaluate(context); },
@@ -179,13 +181,14 @@ ExpressionResult NaryExpression<NaryOperation>::evaluate(
 
 // _____________________________________________________________________________
 template <typename Op>
-ql::span<SparqlExpression::Ptr> NaryExpression<Op>::childrenImpl() {
+ql::span<SparqlExpression::Ptr>
+NaryExpressionStronglyTyped<Op>::childrenImpl() {
   return {children_.data(), children_.size()};
 }
 
 // __________________________________________________________________________
 template <typename Op>
-[[nodiscard]] std::string NaryExpression<Op>::getCacheKey(
+[[nodiscard]] std::string NaryExpressionStronglyTyped<Op>::getCacheKey(
     const VariableToColumnMap& varColMap) const {
   std::string key = typeid(*this).name();
   key += ad_utility::lazyStrJoin(
@@ -200,10 +203,11 @@ template <typename Op>
 // `NaryExpresssion<N, X, ...>`. The strong typedef (vs. a simple `using`
 // declaration) is used to improve compiler messages as the resulting class has
 // a short and descriptive name.
-#define NARY_EXPRESSION(Name, N, X, ...)                                     \
-  class Name : public NaryExpression<detail::Operation<N, X, __VA_ARGS__>> { \
-    using Base = NaryExpression<Operation<N, X, __VA_ARGS__>>;               \
-    using Base::Base;                                                        \
+#define NARY_EXPRESSION(Name, N, X, ...)                                    \
+  class Name : public NaryExpressionStronglyTyped<                          \
+                   detail::Operation<N, X, __VA_ARGS__>> {                  \
+    using Base = NaryExpressionStronglyTyped<Operation<N, X, __VA_ARGS__>>; \
+    using Base::Base;                                                       \
   };
 
 }  // namespace sparqlExpression::detail

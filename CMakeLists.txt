@@ -29,6 +29,14 @@ add_compile_definitions(BOOST_ASIO_DISABLE_AWAITABLE_FRAME_RECYCLING)
 # contribute to the precompiled headers, then it might be beneficial to deactivate precompiled headers.
 option(USE_PRECOMPILED_HEADERS "Use precompiled headers to reduce compile times" ON)
 
+option(CHEAPER_COMPILATION "Use type erasure in several places, this reduces the compile time, but decreasese the performance. Can be used for local development" OFF)
+if (CHEAPER_COMPILATION)
+    add_compile_definitions(_QLEVER_TYPE_ERASED_EXPRESSIONS)
+    # The backports are cheaper to compile, as they do not use coroutines, which have an inherent compile time overhead
+    # even with debug builds.
+    add_compile_definitions(QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17)
+endif()
+
 # Coroutines require an additional compiler flag that is called differently
 # on clang and g++
 option(COMPILER_VERSION_CHECK_DEACTIVATED "Disable compiler version check" OFF)

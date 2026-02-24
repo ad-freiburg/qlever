@@ -141,6 +141,7 @@ struct EffectiveBooleanValueGetter : Mixin<EffectiveBooleanValueGetter> {
 // This class can be used as the `ValueGetter` argument of Expression
 // templates. It produces a string value.
 struct StringValueGetter : Mixin<StringValueGetter> {
+  using Value = std::optional<std::string>;
   using Mixin<StringValueGetter>::operator();
   std::optional<std::string> operator()(ValueId,
                                         const EvaluationContext*) const;
@@ -412,6 +413,7 @@ struct LanguageTagValueGetter : Mixin<LanguageTagValueGetter> {
 
 // Value getter for implementing the expressions `IRI()`/`URI()`.
 struct IriOrUriValueGetter : Mixin<IriOrUriValueGetter> {
+  using Value = IdOrLiteralOrIri;
   using Mixin<IriOrUriValueGetter>::operator();
   IdOrLiteralOrIri operator()(ValueId id,
                               const EvaluationContext* context) const;

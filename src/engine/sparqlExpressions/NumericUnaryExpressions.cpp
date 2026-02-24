@@ -28,9 +28,9 @@ struct UnaryNegate {
 
 CPP_template(typename NaryOperation)(
     requires isOperation<NaryOperation>) class UnaryNegateExpressionImpl
-    : public NaryExpression<NaryOperation> {
+    : public NaryExpressionStronglyTyped<NaryOperation> {
  public:
-  using NaryExpression<NaryOperation>::NaryExpression;
+  using NaryExpressionStronglyTyped<NaryOperation>::NaryExpressionStronglyTyped;
 
   std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
       bool isNegated) const override {
