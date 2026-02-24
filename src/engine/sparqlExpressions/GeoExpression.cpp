@@ -21,19 +21,10 @@
 namespace sparqlExpression {
 namespace detail {
 
-/* originally:
-NARY_EXPRESSION(
-    LongitudeExpression, 1,
-    FV<NumericIdWrapper<ad_utility::WktLongitude, true>, GeoPointValueGetter>);
-    */
 static constexpr auto longitudeExpression =
     expressionFactory<NumericIdWrapper<ad_utility::WktLongitude, true>,
                       GeoPointValueGetter>();
-/* originally
-NARY_EXPRESSION(
-    LatitudeExpression, 1,
-    FV<NumericIdWrapper<ad_utility::WktLatitude, true>, GeoPointValueGetter>);
-    */
+
 static constexpr auto latitudeExpression =
     expressionFactory<NumericIdWrapper<ad_utility::WktLatitude, true>,
                       GeoPointValueGetter>();
@@ -42,7 +33,7 @@ static constexpr auto centroidExpression =
     expressionFactory<ad_utility::WktCentroid,
                       GeometryInfoValueGetter<ad_utility::Centroid>>();
 
-// Named subclasses of `NaryExpression2` for the distance expressions, required
+// Named subclasses of `NaryExpression` for the distance expressions, required
 // so that `dynamic_cast` works in `getGeoDistanceExpressionParameters`.
 class DistExpression
     : public NaryExpression<NumericIdWrapper<ad_utility::WktDist, true>,

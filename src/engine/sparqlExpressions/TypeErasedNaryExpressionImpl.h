@@ -115,11 +115,10 @@ class TypeErasedNaryExpression<Ret(Args...)> : public SparqlExpression {
     // tuples as value and reference type).
     auto onTuple = [&](auto&& tuple) {
       return std::apply(
-          [&](auto&&... args) { return function_(AD_FWD(args)...); },
+          [this](auto&&... args) { return function_(AD_FWD(args)...); },
           AD_FWD(tuple));
     };
-    auto resultGenerator = ::ranges::views::transform(
-        ad_utility::OwningView{std::move(zipper)}, onTuple);
+    auto resultGenerator = ::ranges::views::transform(zipper, onTuple);
     // Compute the result.
     VectorWithMemoryLimit<Ret> result{context->_allocator};
     result.reserve(targetSize);
@@ -177,7 +176,7 @@ static constexpr auto namedExpressionFactory() {
   using Impl = NaryExpression<Operation, ValueGetters...>;
   static_assert(std::is_base_of_v<Impl, SubClass>);
 #ifdef _QLEVER_TYPE_ERASED_EXPRESSIONS
-  return [](auto... childPtrs) -> SparqlExpression::Ptr {
+  return [](auto... childPtrs) {
     return std::make_unique<SubClass>(
         Operation{}, std::tuple<TypeErasedValueGetter<ValueGetters>...>{},
         std::array{std::move(childPtrs)...});
