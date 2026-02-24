@@ -118,7 +118,8 @@ class TypeErasedNaryExpression<Ret(Args...)> : public SparqlExpression {
           [this](auto&&... args) { return function_(AD_FWD(args)...); },
           AD_FWD(tuple));
     };
-    auto resultGenerator = ::ranges::views::transform(zipper, onTuple);
+    auto resultGenerator =
+        ql::views::transform(ql::ranges::ref_view(zipper), onTuple);
     // Compute the result.
     VectorWithMemoryLimit<Ret> result{context->_allocator};
     result.reserve(targetSize);

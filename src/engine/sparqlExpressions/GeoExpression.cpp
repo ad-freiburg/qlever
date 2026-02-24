@@ -21,18 +21,6 @@
 namespace sparqlExpression {
 namespace detail {
 
-static constexpr auto longitudeExpression =
-    expressionFactory<NumericIdWrapper<ad_utility::WktLongitude, true>,
-                      GeoPointValueGetter>();
-
-static constexpr auto latitudeExpression =
-    expressionFactory<NumericIdWrapper<ad_utility::WktLatitude, true>,
-                      GeoPointValueGetter>();
-
-static constexpr auto centroidExpression =
-    expressionFactory<ad_utility::WktCentroid,
-                      GeometryInfoValueGetter<ad_utility::Centroid>>();
-
 // Named subclasses of `NaryExpression` for the distance expressions, required
 // so that `dynamic_cast` works in `getGeoDistanceExpressionParameters`.
 class DistExpression
@@ -72,54 +60,6 @@ class DistWithUnitExpression
   using Base::Base;
 };
 
-static constexpr auto distExpression = namedExpressionFactory<
-    DistExpression, NumericIdWrapper<ad_utility::WktDist, true>,
-    GeoPointOrWktValueGetter, GeoPointOrWktValueGetter>();
-
-static constexpr auto metricDistExpression = namedExpressionFactory<
-    MetricDistExpression, NumericIdWrapper<ad_utility::WktMetricDist, true>,
-    GeoPointOrWktValueGetter, GeoPointOrWktValueGetter>();
-
-static constexpr auto distWithUnitExpression =
-    namedExpressionFactory<DistWithUnitExpression,
-                           NumericIdWrapper<ad_utility::WktDist, true>,
-                           GeoPointOrWktValueGetter, GeoPointOrWktValueGetter,
-                           UnitOfMeasurementValueGetter>();
-
-static constexpr auto areaExpression =
-    expressionFactory<ad_utility::WktArea,
-                      GeometryInfoValueGetter<ad_utility::MetricArea>,
-                      UnitOfMeasurementValueGetter>();
-
-static constexpr auto metricAreaExpression =
-    expressionFactory<ad_utility::WktMetricArea,
-                      GeometryInfoValueGetter<ad_utility::MetricArea>>();
-
-static constexpr auto envelopeExpression =
-    expressionFactory<ad_utility::WktEnvelope,
-                      GeometryInfoValueGetter<ad_utility::BoundingBox>>();
-
-static constexpr auto geometryTypeExpression =
-    expressionFactory<ad_utility::WktGeometryType,
-                      GeometryInfoValueGetter<ad_utility::GeometryType>>();
-
-static constexpr auto lengthExpression =
-    expressionFactory<ad_utility::WktLength,
-                      GeometryInfoValueGetter<ad_utility::MetricLength>,
-                      UnitOfMeasurementValueGetter>();
-
-static constexpr auto metricLengthExpression =
-    expressionFactory<ad_utility::WktMetricLength,
-                      GeometryInfoValueGetter<ad_utility::MetricLength>>();
-
-static constexpr auto geometryNExpression =
-    expressionFactory<ad_utility::WktGeometryN, GeoPointOrWktValueGetter,
-                      IntValueGetter>();
-
-static constexpr auto numGeometriesExpression =
-    expressionFactory<ad_utility::WktNumGeometries,
-                      GeometryInfoValueGetter<ad_utility::NumGeometries>>();
-
 // Named subclass for geo relation expressions, required so that `dynamic_cast`
 // works in `getGeoRelationExpressionParameters`.
 template <SpatialJoinType Relation>
@@ -133,43 +73,37 @@ class GeoRelationExpression
   using Base::Base;
 };
 
-template <SpatialJoinType Relation>
-static constexpr auto geoRelationExpressionFactory() {
-  return namedExpressionFactory<GeoRelationExpression<Relation>,
-                                ad_utility::WktGeometricRelation<Relation>,
-                                GeoPointValueGetter, GeoPointValueGetter>();
-}
-
-template <ad_utility::BoundingCoordinate RequestedCoordinate>
-static constexpr auto boundingCoordinateExpressionFactory() {
-  return expressionFactory<
-      ad_utility::WktBoundingCoordinate<RequestedCoordinate>,
-      GeometryInfoValueGetter<ad_utility::BoundingBox>>();
-}
-
 }  // namespace detail
 
 using namespace detail;
 
 SparqlExpression::Ptr makeLatitudeExpression(SparqlExpression::Ptr child) {
-  return latitudeExpression(std::move(child));
+  return expressionFactory<NumericIdWrapper<ad_utility::WktLatitude, true>,
+                           GeoPointValueGetter>()(std::move(child));
 }
 
 // _____________________________________________________________________________
 SparqlExpression::Ptr makeLongitudeExpression(SparqlExpression::Ptr child) {
-  return longitudeExpression(std::move(child));
+  return expressionFactory<NumericIdWrapper<ad_utility::WktLongitude, true>,
+                           GeoPointValueGetter>()(std::move(child));
 }
 
 // _____________________________________________________________________________
 SparqlExpression::Ptr makeDistExpression(SparqlExpression::Ptr child1,
                                          SparqlExpression::Ptr child2) {
-  return distExpression(std::move(child1), std::move(child2));
+  return namedExpressionFactory<
+      DistExpression, NumericIdWrapper<ad_utility::WktDist, true>,
+      GeoPointOrWktValueGetter, GeoPointOrWktValueGetter>()(std::move(child1),
+                                                            std::move(child2));
 }
 
 // _____________________________________________________________________________
 SparqlExpression::Ptr makeMetricDistExpression(SparqlExpression::Ptr child1,
                                                SparqlExpression::Ptr child2) {
-  return metricDistExpression(std::move(child1), std::move(child2));
+  return namedExpressionFactory<
+      MetricDistExpression, NumericIdWrapper<ad_utility::WktMetricDist, true>,
+      GeoPointOrWktValueGetter, GeoPointOrWktValueGetter>()(std::move(child1),
+                                                            std::move(child2));
 }
 
 // _____________________________________________________________________________
@@ -178,75 +112,104 @@ SparqlExpression::Ptr makeDistWithUnitExpression(
     std::optional<SparqlExpression::Ptr> child3) {
   // Unit is optional.
   if (child3.has_value()) {
-    return distWithUnitExpression(std::move(child1), std::move(child2),
-                                  std::move(child3.value()));
+    return namedExpressionFactory<
+        DistWithUnitExpression, NumericIdWrapper<ad_utility::WktDist, true>,
+        GeoPointOrWktValueGetter, GeoPointOrWktValueGetter,
+        UnitOfMeasurementValueGetter>()(std::move(child1), std::move(child2),
+                                        std::move(child3.value()));
   } else {
-    return distExpression(std::move(child1), std::move(child2));
+    return namedExpressionFactory<
+        DistExpression, NumericIdWrapper<ad_utility::WktDist, true>,
+        GeoPointOrWktValueGetter, GeoPointOrWktValueGetter>()(
+        std::move(child1), std::move(child2));
   }
 }
 
 // _____________________________________________________________________________
 SparqlExpression::Ptr makeAreaExpression(SparqlExpression::Ptr child1,
                                          SparqlExpression::Ptr child2) {
-  return areaExpression(std::move(child1), std::move(child2));
+  return expressionFactory<ad_utility::WktArea,
+                           GeometryInfoValueGetter<ad_utility::MetricArea>,
+                           UnitOfMeasurementValueGetter>()(std::move(child1),
+                                                           std::move(child2));
 }
 
 // _____________________________________________________________________________
 SparqlExpression::Ptr makeMetricAreaExpression(SparqlExpression::Ptr child1) {
-  return metricAreaExpression(std::move(child1));
+  return expressionFactory<ad_utility::WktMetricArea,
+                           GeometryInfoValueGetter<ad_utility::MetricArea>>()(
+      std::move(child1));
 }
 
 // _____________________________________________________________________________
 SparqlExpression::Ptr makeCentroidExpression(SparqlExpression::Ptr child) {
-  return centroidExpression(std::move(child));
+  return expressionFactory<ad_utility::WktCentroid,
+                           GeometryInfoValueGetter<ad_utility::Centroid>>()(
+      std::move(child));
 }
 
 // _____________________________________________________________________________
 SparqlExpression::Ptr makeEnvelopeExpression(SparqlExpression::Ptr child) {
-  return envelopeExpression(std::move(child));
+  return expressionFactory<ad_utility::WktEnvelope,
+                           GeometryInfoValueGetter<ad_utility::BoundingBox>>()(
+      std::move(child));
 }
 
 // _____________________________________________________________________________
 SparqlExpression::Ptr makeGeometryTypeExpression(SparqlExpression::Ptr child) {
-  return geometryTypeExpression(std::move(child));
+  return expressionFactory<ad_utility::WktGeometryType,
+                           GeometryInfoValueGetter<ad_utility::GeometryType>>()(
+      std::move(child));
 }
 
 // _____________________________________________________________________________
 SparqlExpression::Ptr makeLengthExpression(SparqlExpression::Ptr child1,
                                            SparqlExpression::Ptr child2) {
-  return lengthExpression(std::move(child1), std::move(child2));
+  return expressionFactory<ad_utility::WktLength,
+                           GeometryInfoValueGetter<ad_utility::MetricLength>,
+                           UnitOfMeasurementValueGetter>()(std::move(child1),
+                                                           std::move(child2));
 }
 
 // _____________________________________________________________________________
 SparqlExpression::Ptr makeMetricLengthExpression(SparqlExpression::Ptr child1) {
-  return metricLengthExpression(std::move(child1));
+  return expressionFactory<ad_utility::WktMetricLength,
+                           GeometryInfoValueGetter<ad_utility::MetricLength>>()(
+      std::move(child1));
 }
 
 // _____________________________________________________________________________
 SparqlExpression::Ptr makeGeometryNExpression(SparqlExpression::Ptr child1,
                                               SparqlExpression::Ptr child2) {
-  return geometryNExpression(std::move(child1), std::move(child2));
+  return expressionFactory<ad_utility::WktGeometryN, GeoPointOrWktValueGetter,
+                           IntValueGetter>()(std::move(child1),
+                                             std::move(child2));
 }
 
 // _____________________________________________________________________________
 SparqlExpression::Ptr makeNumGeometriesExpression(SparqlExpression::Ptr child) {
-  return numGeometriesExpression(std::move(child));
+  return expressionFactory<
+      ad_utility::WktNumGeometries,
+      GeometryInfoValueGetter<ad_utility::NumGeometries>>()(std::move(child));
 }
 
 // _____________________________________________________________________________
 template <SpatialJoinType Relation>
 SparqlExpression::Ptr makeGeoRelationExpression(SparqlExpression::Ptr child1,
                                                 SparqlExpression::Ptr child2) {
-  return geoRelationExpressionFactory<Relation>()(std::move(child1),
-                                                  std::move(child2));
+  return namedExpressionFactory<GeoRelationExpression<Relation>,
+                                ad_utility::WktGeometricRelation<Relation>,
+                                GeoPointValueGetter, GeoPointValueGetter>()(
+      std::move(child1), std::move(child2));
 }
 
 // _____________________________________________________________________________
 template <ad_utility::BoundingCoordinate RequestedCoordinate>
 SparqlExpression::Ptr makeBoundingCoordinateExpression(
     SparqlExpression::Ptr child) {
-  return boundingCoordinateExpressionFactory<RequestedCoordinate>()(
-      std::move(child));
+  return expressionFactory<
+      ad_utility::WktBoundingCoordinate<RequestedCoordinate>,
+      GeometryInfoValueGetter<ad_utility::BoundingBox>>()(std::move(child));
 }
 
 namespace {
