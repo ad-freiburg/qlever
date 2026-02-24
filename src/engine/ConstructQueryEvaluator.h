@@ -7,7 +7,6 @@
 #ifndef QLEVER_CONSTRUCTQUERYEVALUATOR_H
 #define QLEVER_CONSTRUCTQUERYEVALUATOR_H
 
-#include "engine/ConstructTypes.h"
 #include "engine/QueryExecutionTree.h"
 #include "parser/data/BlankNode.h"
 #include "parser/data/ConstructQueryExportContext.h"
@@ -56,32 +55,6 @@ class ConstructQueryEvaluator {
   // `predicate_`, `object_` of the `StringTriple` are set to the empty string).
   static StringTriple evaluateTriple(
       const std::array<GraphTerm, 3>& triple,
-      const ConstructQueryExportContext& context);
-
-  // --- Methods operating on preprocessed types ---
-
-  // Evaluates a `PrecomputedConstant` by returning its precomputed value.
-  static std::string evaluatePreprocessed(const PrecomputedConstant& constant);
-
-  // Evaluates a `PrecomputedVariable` using the precomputed column index.
-  static std::optional<std::string> evaluatePreprocessed(
-      const PrecomputedVariable& variable,
-      const ConstructQueryExportContext& context);
-
-  // Evaluates a `PrecomputedBlankNode` using the precomputed prefix/suffix.
-  static std::string evaluatePreprocessed(
-      const PrecomputedBlankNode& blankNode,
-      const ConstructQueryExportContext& context);
-
-  // Evaluates a `PreprocessedTerm` by dispatching to the appropriate
-  // `evaluatePreprocessed` overload based on the variant type.
-  static std::optional<std::string> evaluatePreprocessedTerm(
-      const PreprocessedTerm& term, const ConstructQueryExportContext& context);
-
-  // Evaluates a `PreprocessedTriple` using the provided context. If any
-  // component evaluates to `std::nullopt`, an empty `StringTriple` is returned.
-  static StringTriple evaluatePreprocessedTriple(
-      const PreprocessedTriple& triple,
       const ConstructQueryExportContext& context);
 
   // --- Core evaluation helpers ---

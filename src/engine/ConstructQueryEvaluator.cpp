@@ -88,66 +88,6 @@ StringTriple ConstructQueryEvaluator::evaluateTriple(
                       std::move(object.value()));
 }
 
-// --- Methods operating on preprocessed types ---
-
-// _____________________________________________________________________________
-std::string ConstructQueryEvaluator::evaluatePreprocessed(
-    const PrecomputedConstant& constant) {
-  return constant.value_;
-}
-
-// _____________________________________________________________________________
-std::optional<std::string> ConstructQueryEvaluator::evaluatePreprocessed(
-    const PrecomputedVariable& variable,
-    const ConstructQueryExportContext& context) {
-  return evaluateVariableByColumnIndex(variable.columnIndex_, context);
-}
-
-// _____________________________________________________________________________
-std::string ConstructQueryEvaluator::evaluatePreprocessed(
-    const PrecomputedBlankNode& node,
-    const ConstructQueryExportContext& context) {
-  return absl::StrCat(node.prefix_,
-                      context._rowOffset + context.resultTableRowIndex_,
-                      node.suffix_);
-}
-
-// _____________________________________________________________________________
-std::optional<std::string> ConstructQueryEvaluator::evaluatePreprocessedTerm(
-    const PreprocessedTerm& term, const ConstructQueryExportContext& context) {
-  return std::visit(
-      [&context](const auto& arg) -> std::optional<std::string> {
-        using T = std::decay_t<decltype(arg)>;
-
-        if constexpr (std::is_same_v<T, PrecomputedVariable>) {
-          return evaluatePreprocessed(arg, context);
-        } else if constexpr (std::is_same_v<T, PrecomputedBlankNode>) {
-          return evaluatePreprocessed(arg, context);
-        } else if constexpr (std::is_same_v<T, PrecomputedConstant>) {
-          return evaluatePreprocessed(arg);
-        } else {
-          static_assert(ad_utility::alwaysFalse<T>);
-        }
-      },
-      term);
-}
-
-// _____________________________________________________________________________
-StringTriple ConstructQueryEvaluator::evaluatePreprocessedTriple(
-    const PreprocessedTriple& triple,
-    const ConstructQueryExportContext& context) {
-  auto subject = evaluatePreprocessedTerm(triple[0], context);
-  auto predicate = evaluatePreprocessedTerm(triple[1], context);
-  auto object = evaluatePreprocessedTerm(triple[2], context);
-
-  if (!subject.has_value() || !predicate.has_value() || !object.has_value()) {
-    return StringTriple();
-  }
-
-  return StringTriple(std::move(subject.value()), std::move(predicate.value()),
-                      std::move(object.value()));
-}
-
 // --- Core evaluation helpers ---
 
 // _____________________________________________________________________________

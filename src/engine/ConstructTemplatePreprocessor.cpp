@@ -11,7 +11,6 @@
 
 #include <absl/strings/str_cat.h>
 
-#include "engine/ConstructQueryEvaluator.h"
 #include "util/Algorithm.h"
 #include "util/TypeTraits.h"
 
@@ -20,16 +19,15 @@ namespace qlever::constructExport {
 // _____________________________________________________________________________
 std::optional<PreprocessedTerm> ConstructTemplatePreprocessor::preprocessIri(
     const Iri& iri) {
-  return PrecomputedConstant{ConstructQueryEvaluator::evaluate(iri)};
+  return PrecomputedConstant{iri.iri()};
 }
 
 // _____________________________________________________________________________
 std::optional<PreprocessedTerm>
 ConstructTemplatePreprocessor::preprocessLiteral(const Literal& literal,
                                                  PositionInTriple role) {
-  auto opt = ConstructQueryEvaluator::evaluate(literal, role);
-  if (opt) {
-    return PrecomputedConstant{std::move(*opt)};
+  if (role == PositionInTriple::OBJECT) {
+    return PrecomputedConstant{literal.literal()};
   }
   return std::nullopt;
 }
