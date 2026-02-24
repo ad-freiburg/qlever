@@ -1048,10 +1048,11 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
 
   // Combine all elements from all blocks on the left with all elements from all
   // blocks on the right and add them to the result.
+  template <bool reversed = false>
   void addCartesianProduct(const LeftBlocks& blocksLeft,
                            const RightBlocks& blocksRight) {
-    static_cast<Derived*>(this)->addCartesianProductImpl(blocksLeft,
-                                                         blocksRight);
+    static_cast<Derived*>(this)->template addCartesianProductImpl<reversed>(
+        blocksLeft, blocksRight);
   }
 
   // Handle non-matching rows from the left side for an optional join or a minus
@@ -1438,22 +1439,12 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
   // left.
   void addRemainingUndefPairs() {
     if constexpr (potentiallyHasUndef) {
-      addCartesianProduct(leftSide_.currentBlocks_, rightSide_.undefBlocks_);
+      addCartesianProduct<false>(leftSide_.currentBlocks_,
+                                 rightSide_.undefBlocks_);
       consumeRemainingBlocks<false>(leftSide_, rightSide_.undefBlocks_);
 
-      // Basically `addCartesianProduct`, but the order is reversed. This is
-      // important because otherwise the elements in `rightSide_.currentBlocks_`
-      // will be repeated in whole blocks instead of element-wise, which would
-      // result in an invalid order.
-      for (const auto& [rBlock, lBlock] : ::ranges::views::cartesian_product(
-               rightSide_.currentBlocks_, leftSide_.undefBlocks_)) {
-        compatibleRowAction_.setInput(lBlock.fullBlock(), rBlock.fullBlock());
-        for (size_t j : rBlock.getIndexRange()) {
-          for (size_t i : lBlock.getIndexRange()) {
-            compatibleRowAction_.addRow(i, j);
-          }
-        }
-      }
+      addCartesianProduct<true>(leftSide_.undefBlocks_,
+                                rightSide_.currentBlocks_);
       consumeRemainingBlocks<true>(rightSide_, leftSide_.undefBlocks_);
 
       compatibleRowAction_.flush();
@@ -1612,15 +1603,32 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
   using Base::Base;
 
   // Implement the `addCartesianProduct` customization point with the default
-  // behavior.
+  // behavior. If `reversed` is false, we assume that the Cartesian product is
+  // added not by matching iterating over the right side for every row of the
+  // left side, but by matching iterating over the left side for every row of
+  // the right side.
+  template <bool reversed>
   void addCartesianProductImpl(const LeftBlocks& blocksLeft,
                                const RightBlocks& blocksRight) {
-    for (const auto& [lBlock, rBlock] :
-         ::ranges::views::cartesian_product(blocksLeft, blocksRight)) {
-      this->compatibleRowAction_.setInput(lBlock.fullBlock(),
-                                          rBlock.fullBlock());
-      this->compatibleRowAction_.addRows(lBlock.getIndexRange(),
-                                         rBlock.getIndexRange());
+    if constexpr (reversed) {
+      for (const auto& [rBlock, lBlock] :
+           ::ranges::views::cartesian_product(blocksRight, blocksLeft)) {
+        this->compatibleRowAction_.setInput(lBlock.fullBlock(),
+                                            rBlock.fullBlock());
+        for (size_t j : rBlock.getIndexRange()) {
+          for (size_t i : lBlock.getIndexRange()) {
+            this->compatibleRowAction_.addRow(i, j);
+          }
+        }
+      }
+    } else {
+      for (const auto& [lBlock, rBlock] :
+           ::ranges::views::cartesian_product(blocksLeft, blocksRight)) {
+        this->compatibleRowAction_.setInput(lBlock.fullBlock(),
+                                            rBlock.fullBlock());
+        this->compatibleRowAction_.addRows(lBlock.getIndexRange(),
+                                           rBlock.getIndexRange());
+      }
     }
   }
 
@@ -1704,8 +1712,10 @@ CPP_template(typename NumJoinColumnsT, typename LeftSide, typename RightSide,
   // single IdTable-like thing.
   // TODO<joka921> mitigate this requirement, or at least assess how expensive
   // it is.
+  template <bool reversed>
   void addCartesianProductImpl(const LeftBlocks& blocksLeft,
                                const RightBlocks& blocksRight) {
+    static_assert(!reversed, "Not implemented.");
     auto isEmpty = [](const auto& side) {
       return side.empty() || side.front().fullBlock().empty();
     };
