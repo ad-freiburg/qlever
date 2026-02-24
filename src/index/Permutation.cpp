@@ -31,7 +31,8 @@ CompressedRelationReader::ScanSpecAndBlocks Permutation::getScanSpecAndBlocks(
 
 // _____________________________________________________________________
 void Permutation::loadFromDisk(const std::string& onDiskBase,
-                               bool loadInternalPermutation) {
+                               bool loadInternalPermutation,
+                               bool useGraphPostProcessing) {
   onDiskBase_ = onDiskBase;
   if (loadInternalPermutation) {
     internalPermutation_ =
@@ -56,7 +57,7 @@ void Permutation::loadFromDisk(const std::string& onDiskBase,
              e.what());
   }
   meta_.readFromFile(&file);
-  reader_.emplace(allocator_, std::move(file));
+  reader_.emplace(allocator_, std::move(file), useGraphPostProcessing);
   AD_LOG_INFO << "Registered " << readableName_
               << " permutation: " << meta_.statistics() << std::endl;
   isLoaded_ = true;
