@@ -4,7 +4,6 @@
 //
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#include <limits>
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 #ifndef QLEVER_SRC_ENGINE_TRANSITIVEPATHIMPL_H
@@ -13,6 +12,7 @@
 #include <utility>
 
 #include "engine/TransitivePathBase.h"
+#include "engine/TransitivePathGraphSearch.h"
 #include "util/Iterators.h"
 #include "util/Timer.h"
 
@@ -201,189 +201,6 @@ class TransitivePathImpl : public TransitivePathBase {
   }
 
   /**
-   * @brief Decide which graph search algorithm shall be called for traversal
-   * (DFS or BFS, with or without size limit constraints) and dispatch to that
-   * algorithm.
-   * @param edges The adjacency lists, mapping Ids (nodes) to their connected
-   * Ids.
-   * @param startNode The node to start the search from.
-   * @param target The target node that the algorithm searches for.
-   * @return A set containing the target node, if such path exists. Else an
-   * empty set.
-   */
-  Set runConnectedNodesSearch(const T& edges, Id startNode,
-                              std::optional<Id>& target) const {
-    // Call version of BFS/DFS which adhere to the minDist_/maxDist_ properties
-    // of the TransitivePathBase class.
-    if (minDist_ != 0 || maxDist_ != std::numeric_limits<size_t>::max()) {
-      return target.has_value()
-                 ? depthFirstSearchWithLimit(edges, startNode, target.value())
-                 : breadthFirstSearchWithLimit(edges, startNode);
-    }
-    // Call unlimited versions (will traverse the whole graph).
-    return target.has_value()
-               ? depthFirstSearch(edges, startNode, target.value())
-               : breadthFirstSearch(edges, startNode);
-  }
-
-  /**
-   * @brief Breadth-first search to find all nodes connected to startNode.
-   * @param edges The adjacency lists, mapping Ids (nodes) to their connected
-   * Ids.
-   * @param startNode The node to start the search from.
-   * @return A set of connected nodes in the graph.
-   */
-  Set breadthFirstSearch(const T& edges, Id startNode) const {
-    std::queue<Id> queue;
-    Set connectedNodes{allocator()};
-
-    queue.push(startNode);
-
-    while (!queue.empty()) {
-      checkCancellation();
-
-      // Get next node from queue.
-      auto node = queue.front();
-      queue.pop();
-      connectedNodes.insert(node);
-
-      // Enqueue all successors of currently handled node.
-      const auto& successors = edges.successors(node);
-      for (auto successor : successors) {
-        // Do not re-add already discovered nodes (skip loops).
-        if (!connectedNodes.contains(successor)) queue.push(successor);
-      }
-    }
-    return connectedNodes;
-  }
-
-  /**
-   * @brief Breadth-first search to find all connected nodes inside the
-   * transitive paths' minDist/maxDist limits.
-   * @param edges The adjacency lists, mapping Ids (nodes) to their connected
-   * Ids.
-   * @param startNode The node to start the search from.
-   * @return A set of connected nodes in the graph which are inside the
-   * transitive paths' distance constraints.
-   */
-  Set breadthFirstSearchWithLimit(const T& edges, Id startNode) const {
-    size_t traversalDepth = 0;
-    size_t nodesUntilNextDepthIncrease = 1;
-    std::queue<Id> queue;
-    Set connectedNodes{allocator()};
-
-    queue.push(startNode);
-    while (!queue.empty() && traversalDepth <= maxDist_ &&
-           nodesUntilNextDepthIncrease > 0) {
-      checkCancellation();
-
-      // Get next node from queue.
-      auto node = queue.front();
-      queue.pop();
-      if (traversalDepth >= minDist_) connectedNodes.insert(node);
-      nodesUntilNextDepthIncrease--;
-
-      // Enqueue all successors of currently handled node.
-      const auto& successors = edges.successors(node);
-      for (auto successor : successors) {
-        // Do not re-add already discovered nodes (skip loops).
-        if (!connectedNodes.contains(successor)) queue.push(successor);
-      }
-
-      // Another layer has been fully discovered.
-      if (nodesUntilNextDepthIncrease == 0) {
-        traversalDepth++;
-        // At this point, the queue contains exactly all
-        // undiscovered nodes from the next layer.
-        nodesUntilNextDepthIncrease = queue.size();
-      }
-    }
-    return connectedNodes;
-  }
-
-  /**
-   * @brief Depth-first search to find given target in the graph.
-   * @param edges The adjacency lists, mapping Ids (nodes) to their connected
-   * Ids.
-   * @param startNode The node to start the search from.
-   * @param target The target node that the algorithm searches for.
-   * @return A set containing the target node, if such path exists. Else an
-   * empty set.
-   */
-  Set depthFirstSearch(const T& edges, Id startNode, Id target) const {
-    std::vector<Id> stack;
-    ad_utility::HashSetWithMemoryLimit<Id> marks{allocator()};
-    Set connectedNodes{allocator()};
-
-    stack.emplace_back(startNode);
-
-    while (!stack.empty()) {
-      checkCancellation();
-      Id node = stack.back();
-      stack.pop_back();
-
-      if (marks.contains(node)) continue;
-
-      marks.insert(node);
-      if (node == target) {
-        connectedNodes.insert(node);
-        // Stop the DFS once target found, no further processing necessary.
-        break;
-      }
-
-      const auto& successors = edges.successors(node);
-      for (auto successor : successors) {
-        // Only add unmarked/new nodes.
-        if (!marks.contains(successor)) stack.emplace_back(successor);
-      }
-    }
-    return connectedNodes;
-  }
-
-  /**
-   * @brief Depth-first search to find given target in the graph, inside the
-   * minDist and maxDist constraints.
-   * @param edges The adjacency lists, mapping Ids (nodes) to their connected
-   * Ids.
-   * @param startNode The node to start the search from.
-   * @param target The target node that the algorithm searches for.
-   * @return A set containing the target node, if such path exists. Else an
-   * empty set.
-   */
-  Set depthFirstSearchWithLimit(const T& edges, Id startNode, Id target) const {
-    std::vector<std::pair<Id, size_t>> stack;
-    ad_utility::HashSetWithMemoryLimit<Id> marks{allocator()};
-    Set connectedNodes{allocator()};
-    stack.emplace_back(startNode, 0);
-
-    while (!stack.empty()) {
-      checkCancellation();
-      auto [node, steps] = stack.back();
-      stack.pop_back();
-
-      if (!(steps <= maxDist_) || marks.contains(node)) continue;
-
-      if (steps >= minDist_) {
-        // Marked nodes are guaranteed to be reachable inside the distance
-        // constraints.
-        marks.insert(node);
-        if (node == target) {
-          connectedNodes.insert(node);
-          // Stop the DFS once target found, no further processing necessary.
-          break;
-        }
-      }
-
-      const auto& successors = edges.successors(node);
-      for (auto successor : successors) {
-        if (!marks.contains(successor))
-          stack.emplace_back(successor, steps + 1);
-      }
-    }
-    return connectedNodes;
-  }
-
-  /**
    * @brief Compute the transitive hull starting at the given nodes,
    * using the given Map.
    *
@@ -443,8 +260,14 @@ class TransitivePathImpl : public TransitivePathBase {
           }
           edges.setGraphId(graphId);
 
+          // Pick the appropriate graph search strategy (BFS/DFS) and run it.
+          GraphSearchProblem<T> gsp(edges, startNode, targetId, minDist_,
+                                    maxDist_);
+          TransPathExecutionParams ep(cancellationHandle_, allocator(),
+                                      getDescriptor());
           Set connectedNodes =
-              runConnectedNodesSearch(edges, startNode, targetId);
+              TransitivePathGraphSearch<T>::runOptimalGraphSearch(gsp, ep);
+
           if (!connectedNodes.empty()) {
             runtimeInfo().addDetail("Hull time", timer.msecs());
             timer.stop();
