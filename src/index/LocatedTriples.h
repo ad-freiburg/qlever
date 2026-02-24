@@ -50,6 +50,14 @@ struct VacuumStatistics {
 
   size_t totalKept() const { return numDeletionsKept_ + numInsertionsKept_; }
 
+  VacuumStatistics& operator+=(const VacuumStatistics& other) {
+    numDeletionsRemoved_ += other.numDeletionsRemoved_;
+    numInsertionsRemoved_ += other.numInsertionsRemoved_;
+    numDeletionsKept_ += other.numDeletionsKept_;
+    numInsertionsKept_ += other.numInsertionsKept_;
+    return *this;
+  }
+
   friend std::ostream& operator<<(std::ostream& os,
                                   const VacuumStatistics& stats);
 

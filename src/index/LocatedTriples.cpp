@@ -235,6 +235,66 @@ IdTable LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
   }
 }
 
+// Helper: run the two-pointer merge for one block and return statistics.
+static VacuumStatistics processBlockForVacuum(
+    const IdTable& idTable, const LocatedTriples& locatedTriples,
+    const qlever::KeyOrder::Array& inverseKeys,
+    std::vector<IdTriple<0>>& allDeletionsToRemove,
+    std::vector<IdTriple<0>>& allInsertionsToRemove) {
+  VacuumStatistics stats{0, 0, 0, 0};
+
+  auto toSpo = [&inverseKeys](const LocatedTriples::iterator& lt) {
+    const auto& ids = lt->triple_.ids();
+    std::array<Id, 4> spo{};
+    for (size_t i = 0; i < 4; ++i) spo[inverseKeys[i]] = ids[i];
+    return IdTriple<0>{spo};
+  };
+
+  auto lessThan = [](const auto& lt, const auto& row) {
+    return tieLocatedTriple<3, true>(lt) < tieIdTableRow<3, true>(row);
+  };
+  auto equal = [](const auto& lt, const auto& row) {
+    return tieLocatedTriple<3, true>(lt) == tieIdTableRow<3, true>(row);
+  };
+
+  auto rowIt = idTable.begin();
+  auto updateIt = locatedTriples.begin();
+
+  while (updateIt != locatedTriples.end() && rowIt != idTable.end()) {
+    if (lessThan(updateIt, *rowIt)) {
+      if (updateIt->insertOrDelete_) {
+        stats.numInsertionsKept_++;
+      } else {
+        allDeletionsToRemove.push_back(toSpo(updateIt));
+        stats.numDeletionsRemoved_++;
+      }
+      ++updateIt;
+    } else if (equal(updateIt, *rowIt)) {
+      if (updateIt->insertOrDelete_) {
+        allInsertionsToRemove.push_back(toSpo(updateIt));
+        stats.numInsertionsRemoved_++;
+      } else {
+        stats.numDeletionsKept_++;
+      }
+      ++updateIt;
+    } else {
+      ++rowIt;
+    }
+  }
+
+  while (updateIt != locatedTriples.end()) {
+    if (updateIt->insertOrDelete_) {
+      stats.numInsertionsKept_++;
+    } else {
+      allDeletionsToRemove.push_back(toSpo(updateIt));
+      stats.numDeletionsRemoved_++;
+    }
+    ++updateIt;
+  }
+
+  return stats;
+}
+
 // ____________________________________________________________________________
 TriplesToVacuum LocatedTriplesPerBlock::identifyTriplesToVacuum(
     const Permutation& perm) const {
@@ -268,10 +328,12 @@ TriplesToVacuum LocatedTriplesPerBlock::identifyTriplesToVacuum(
   for (size_t blockIndex : blocksToVacuum) {
     AD_CORRECTNESS_CHECK(blockIndex <= blockMetadata.size());
     if (blockIndex == blockMetadata.size()) {
-      // Ok because we just create an empty IdTable.
       ad_utility::AllocatorWithLimit<Id> allocator =
           ad_utility::makeUnlimitedAllocator<Id>();
       IdTable idTable(4, allocator);
+      totalStats += processBlockForVacuum(idTable, map_.at(blockIndex),
+                                          inverseKeys, allDeletionsToRemove,
+                                          allInsertionsToRemove);
       continue;
     }
     const auto& blockMeta = blockMetadata[blockIndex];
@@ -292,64 +354,9 @@ TriplesToVacuum LocatedTriplesPerBlock::identifyTriplesToVacuum(
     auto idTable = reader.scan(scanSpecAndBlocks, additionalColumns,
                                cancellationHandle, {});
 
-    // Convert a located triple from permutation order to SPO-canonical form.
-    auto toSpo = [&inverseKeys](const LocatedTriples::iterator& lt) {
-      const auto& ids = lt->triple_.ids();
-      std::array<Id, 4> spo{};
-      for (size_t i = 0; i < 4; ++i) spo[inverseKeys[i]] = ids[i];
-      return IdTriple<0>{spo};
-    };
-
-    auto lessThan = [](const auto& lt, const auto& row) {
-      return tieLocatedTriple<3, true>(lt) < tieIdTableRow<3, true>(row);
-    };
-    auto equal = [](const auto& lt, const auto& row) {
-      return tieLocatedTriple<3, true>(lt) == tieIdTableRow<3, true>(row);
-    };
-
-    // Two-pointer merge to identify redundant updates.
-    const auto& locatedTriples = map_.at(blockIndex);
-    auto rowIt = idTable.begin();
-    auto updateIt = locatedTriples.begin();
-
-    while (updateIt != locatedTriples.end() &&
-           rowIt != idTable.end()) {
-      if (lessThan(updateIt, *rowIt)) {
-        if (updateIt->insertOrDelete_) {
-          // Valid insertion of a new triple – keep it.
-          totalStats.numInsertionsKept_++;
-        } else {
-          // Redundant deletion of a non-existent triple – remove it.
-          allDeletionsToRemove.push_back(toSpo(updateIt));
-          totalStats.numDeletionsRemoved_++;
-        }
-        updateIt++;
-      } else if (equal(updateIt, *rowIt)) {
-        if (updateIt->insertOrDelete_) {
-          // Redundant insertion of an existing triple – remove it.
-          allInsertionsToRemove.push_back(toSpo(updateIt));
-          totalStats.numInsertionsRemoved_++;
-        } else {
-          // Valid deletion of an existing triple – keep it.
-          totalStats.numDeletionsKept_++;
-        }
-        updateIt++;
-      } else {
-        // Row is less than update, advance row iterator.
-        rowIt++;
-      }
-    }
-
-    // Handle remaining updates after block is exhausted.
-    while (updateIt != locatedTriples.end()) {
-      if (updateIt->insertOrDelete_) {
-        totalStats.numInsertionsKept_++;
-      } else {
-        allDeletionsToRemove.push_back(toSpo(updateIt));
-        totalStats.numDeletionsRemoved_++;
-      }
-      updateIt++;
-    }
+    totalStats += processBlockForVacuum(idTable, map_.at(blockIndex),
+                                        inverseKeys, allDeletionsToRemove,
+                                        allInsertionsToRemove);
   }
 
   return {std::move(allDeletionsToRemove), std::move(allInsertionsToRemove),
