@@ -133,6 +133,22 @@ class SparqlTriple
     auto ptr = std::get_if<Variable>(&p_);
     return (ptr != nullptr && *ptr == variable);
   }
+
+  // Call a function for every variable contained in the triple.
+  CPP_template(typename Function)(
+      requires std::is_invocable_v<
+          Function, const Variable&>) void forEachVariable(Function function)
+      const {
+    if (s_.isVariable()) {
+      std::invoke(function, s_.getVariable());
+    }
+    if (auto predicate = getPredicateVariable()) {
+      std::invoke(function, predicate.value());
+    }
+    if (o_.isVariable()) {
+      std::invoke(function, o_.getVariable());
+    }
+  }
 };
 
 #endif  // QLEVER_SRC_PARSER_SPARQLTRIPLE_H
