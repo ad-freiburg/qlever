@@ -158,6 +158,28 @@ static constexpr auto expressionFactory() {
   };
 }
 
+// Alias for the specific `NaryExpression2` instantiation that corresponds to a
+// given `Operation` and `ValueGetters`.
+template <typename Operation, typename... ValueGetters>
+using NaryExpression2For = NaryExpression2<
+    std::invoke_result_t<Operation, typename ValueGetters::Value...>(
+        typename ValueGetters::Value...)>;
+
+// Like `expressionFactory`, but creates an instance of `SubClass` (which must
+// inherit from the appropriate `NaryExpression2For` instantiation) instead of a
+// plain `NaryExpression2`. This allows `dynamic_cast` to the named subclass.
+template <typename SubClass, typename Operation, typename... ValueGetters>
+static constexpr auto namedExpressionFactory() {
+  return [](auto... childPtrs) -> SparqlExpression::Ptr {
+    using Res =
+        std::invoke_result_t<Operation, typename ValueGetters::Value...>;
+    using Sig2 = Res(typename ValueGetters::Value...);
+    return std::make_unique<SubClass>(
+        Operation{}, std::tuple<TypeErasedValueGetter<ValueGetters>...>{},
+        typename NaryExpression2<Sig2>::Children{std::move(childPtrs)...});
+  };
+}
+
 /* originally:
 NARY_EXPRESSION(
     LongitudeExpression, 1,
@@ -179,18 +201,58 @@ static constexpr auto centroidExpression =
     expressionFactory<ad_utility::WktCentroid,
                       GeometryInfoValueGetter<ad_utility::Centroid>>();
 
-static constexpr auto distExpression =
-    expressionFactory<NumericIdWrapper<ad_utility::WktDist, true>,
-                      GeoPointOrWktValueGetter, GeoPointOrWktValueGetter>();
+// Named subclasses of `NaryExpression2` for the distance expressions, required
+// so that `dynamic_cast` works in `getGeoDistanceExpressionParameters`.
+class DistExpression
+    : public NaryExpression2For<NumericIdWrapper<ad_utility::WktDist, true>,
+                                GeoPointOrWktValueGetter,
+                                GeoPointOrWktValueGetter> {
+  using Base =
+      NaryExpression2For<NumericIdWrapper<ad_utility::WktDist, true>,
+                         GeoPointOrWktValueGetter, GeoPointOrWktValueGetter>;
 
-static constexpr auto metricDistExpression =
-    expressionFactory<NumericIdWrapper<ad_utility::WktMetricDist, true>,
-                      GeoPointOrWktValueGetter, GeoPointOrWktValueGetter>();
+ public:
+  using Base::Base;
+};
+
+class MetricDistExpression
+    : public NaryExpression2For<
+          NumericIdWrapper<ad_utility::WktMetricDist, true>,
+          GeoPointOrWktValueGetter, GeoPointOrWktValueGetter> {
+  using Base =
+      NaryExpression2For<NumericIdWrapper<ad_utility::WktMetricDist, true>,
+                         GeoPointOrWktValueGetter, GeoPointOrWktValueGetter>;
+
+ public:
+  using Base::Base;
+};
+
+class DistWithUnitExpression
+    : public NaryExpression2For<
+          NumericIdWrapper<ad_utility::WktDist, true>, GeoPointOrWktValueGetter,
+          GeoPointOrWktValueGetter, UnitOfMeasurementValueGetter> {
+  using Base =
+      NaryExpression2For<NumericIdWrapper<ad_utility::WktDist, true>,
+                         GeoPointOrWktValueGetter, GeoPointOrWktValueGetter,
+                         UnitOfMeasurementValueGetter>;
+
+ public:
+  using Base::Base;
+};
+
+static constexpr auto distExpression = namedExpressionFactory<
+    DistExpression, NumericIdWrapper<ad_utility::WktDist, true>,
+    GeoPointOrWktValueGetter, GeoPointOrWktValueGetter>();
+
+static constexpr auto metricDistExpression = namedExpressionFactory<
+    MetricDistExpression, NumericIdWrapper<ad_utility::WktMetricDist, true>,
+    GeoPointOrWktValueGetter, GeoPointOrWktValueGetter>();
 
 static constexpr auto distWithUnitExpression =
-    expressionFactory<NumericIdWrapper<ad_utility::WktDist, true>,
-                      GeoPointOrWktValueGetter, GeoPointOrWktValueGetter,
-                      UnitOfMeasurementValueGetter>();
+    namedExpressionFactory<DistWithUnitExpression,
+                           NumericIdWrapper<ad_utility::WktDist, true>,
+                           GeoPointOrWktValueGetter, GeoPointOrWktValueGetter,
+                           UnitOfMeasurementValueGetter>();
 
 static constexpr auto areaExpression =
     expressionFactory<ad_utility::WktArea,
@@ -226,10 +288,24 @@ static constexpr auto numGeometriesExpression =
     expressionFactory<ad_utility::WktNumGeometries,
                       GeometryInfoValueGetter<ad_utility::NumGeometries>>();
 
+// Named subclass for geo relation expressions, required so that `dynamic_cast`
+// works in `getGeoRelationExpressionParameters`.
+template <SpatialJoinType Relation>
+class GeoRelationExpression
+    : public NaryExpression2For<ad_utility::WktGeometricRelation<Relation>,
+                                GeoPointValueGetter, GeoPointValueGetter> {
+  using Base = NaryExpression2For<ad_utility::WktGeometricRelation<Relation>,
+                                  GeoPointValueGetter, GeoPointValueGetter>;
+
+ public:
+  using Base::Base;
+};
+
 template <SpatialJoinType Relation>
 static constexpr auto geoRelationExpressionFactory() {
-  return expressionFactory<ad_utility::WktGeometricRelation<Relation>,
-                           GeoPointValueGetter, GeoPointValueGetter>();
+  return namedExpressionFactory<GeoRelationExpression<Relation>,
+                                ad_utility::WktGeometricRelation<Relation>,
+                                GeoPointValueGetter, GeoPointValueGetter>();
 }
 
 template <ad_utility::BoundingCoordinate RequestedCoordinate>
@@ -339,6 +415,141 @@ SparqlExpression::Ptr makeBoundingCoordinateExpression(
     SparqlExpression::Ptr child) {
   return boundingCoordinateExpressionFactory<RequestedCoordinate>()(
       std::move(child));
+}
+
+namespace {
+
+// Helper to check if `expr` is a `SparqlExpression` on the `geof:sf[Relation]`
+// function, given the templated `Relation`.
+template <SpatialJoinType Relation>
+std::optional<GeoFunctionCall> getGeoRelationExpressionParameters(
+    const SparqlExpression& expr) {
+  // Is this `expr` a call to `geof:sf[Relation](?x, ?y)`?
+  auto geoRelExpr = dynamic_cast<const GeoRelationExpression<Relation>*>(&expr);
+  if (geoRelExpr == nullptr) {
+    return std::nullopt;
+  }
+
+  // Extract variables.
+  auto p1 = geoRelExpr->children()[0]->getVariableOrNullopt();
+  if (!p1.has_value()) {
+    return std::nullopt;
+  }
+  auto p2 = geoRelExpr->children()[1]->getVariableOrNullopt();
+  if (!p2.has_value()) {
+    return std::nullopt;
+  }
+
+  return GeoFunctionCall{Relation, p1.value(), p2.value()};
+}
+
+}  // namespace
+
+// _____________________________________________________________________________
+std::optional<GeoFunctionCall> getGeoFunctionExpressionParameters(
+    const SparqlExpression& expr) {
+  // Check against all possible geo relation types.
+  std::optional<GeoFunctionCall> res;
+  using enum SpatialJoinType;
+
+  // TODO<C++26 reflection> get all values of `SpatialJoinType` enum.
+  if ((res = getGeoRelationExpressionParameters<INTERSECTS>(expr))) {
+    return res;
+  } else if ((res = getGeoRelationExpressionParameters<CONTAINS>(expr))) {
+    return res;
+  } else if ((res = getGeoRelationExpressionParameters<COVERS>(expr))) {
+    return res;
+  } else if ((res = getGeoRelationExpressionParameters<CROSSES>(expr))) {
+    return res;
+  } else if ((res = getGeoRelationExpressionParameters<TOUCHES>(expr))) {
+    return res;
+  } else if ((res = getGeoRelationExpressionParameters<EQUALS>(expr))) {
+    return res;
+  } else if ((res = getGeoRelationExpressionParameters<OVERLAPS>(expr))) {
+    return res;
+  } else if ((res = getGeoRelationExpressionParameters<WITHIN>(expr))) {
+    return res;
+  }
+  return std::nullopt;
+}
+
+// _____________________________________________________________________________
+std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
+    const SparqlExpression& expr) {
+  using namespace ad_utility::use_type_identity;
+  using DistArgs = std::tuple<Variable, Variable, UnitOfMeasurement>;
+
+  // Helper lambda to extract a unit of measurement from a SparqlExpression
+  // (IRI or literal with xsd:anyURI datatype).
+  auto extractUnit =
+      [&](const SparqlExpression* ptr) -> std::optional<UnitOfMeasurement> {
+    // Unit given as IRI.
+    auto unitExpr = dynamic_cast<const IriExpression*>(ptr);
+    if (unitExpr != nullptr) {
+      return UnitOfMeasurementValueGetter::litOrIriToUnit(
+          LiteralOrIri{unitExpr->value()});
+    }
+
+    // Unit given as literal expression.
+    auto unitExpr2 = dynamic_cast<const StringLiteralExpression*>(ptr);
+    if (unitExpr2 != nullptr) {
+      return UnitOfMeasurementValueGetter::litOrIriToUnit(
+          LiteralOrIri{unitExpr2->value()});
+    }
+
+    return std::nullopt;
+  };
+
+  // Helper lambda to extract the variables and the distance unit from a
+  // distance function call.
+  auto extractArguments = [&](auto ti) -> std::optional<DistArgs> {
+    // Check if the argument is a distance function expression.
+    using T = typename decltype(ti)::type;
+    auto distExpr = dynamic_cast<const T*>(&expr);
+    if (distExpr == nullptr) {
+      return std::nullopt;
+    }
+
+    // Extract variables.
+    auto p1 = distExpr->children()[0]->getVariableOrNullopt();
+    if (!p1.has_value()) {
+      return std::nullopt;
+    }
+    auto p2 = distExpr->children()[1]->getVariableOrNullopt();
+    if (!p2.has_value()) {
+      return std::nullopt;
+    }
+
+    // Extract unit.
+    auto unit = UnitOfMeasurement::KILOMETERS;
+    if constexpr (std::is_same_v<T, MetricDistExpression>) {
+      unit = UnitOfMeasurement::METERS;
+    } else if constexpr (std::is_same_v<T, DistWithUnitExpression>) {
+      // If the unit is not fixed, derive it from the user-specified IRI.
+      auto unitOrNullopt = extractUnit(distExpr->children()[2].get());
+      if (!unitOrNullopt.has_value()) {
+        return std::nullopt;
+      }
+      unit = unitOrNullopt.value();
+    }
+
+    return DistArgs{p1.value(), p2.value(), unit};
+  };
+
+  // Try all possible distance expression types.
+  auto distVars = extractArguments(ti<DistExpression>);
+  if (!distVars.has_value()) {
+    distVars = extractArguments(ti<MetricDistExpression>);
+  }
+  if (!distVars.has_value()) {
+    distVars = extractArguments(ti<DistWithUnitExpression>);
+  }
+  if (!distVars.has_value()) {
+    return std::nullopt;
+  }
+
+  const auto& [v1, v2, unit] = distVars.value();
+  return GeoDistanceCall{{SpatialJoinType::WITHIN_DIST, v1, v2}, unit};
 }
 
 }  // namespace sparqlExpression
