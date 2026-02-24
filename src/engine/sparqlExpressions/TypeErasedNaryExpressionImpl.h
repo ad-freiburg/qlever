@@ -19,6 +19,14 @@ namespace sparqlExpression::detail {
 template <typename T>
 class TypeErasedNaryExpression;
 
+inline bool isConstantExpressionResult(const ExpressionResult& res) {
+  return std::visit(
+      [](const auto& el) {
+        return isConstantResult<std::decay_t<decltype(el)>>;
+      },
+      res);
+}
+
 // Type erased version of the `NaryExpression` class. Much cheaper to compile,
 // but also slower in the execution. It is only template on the signature of its
 // core implementation function, all other implementation (the actual function,
@@ -90,6 +98,10 @@ class TypeErasedNaryExpression<Ret(Args...)> : public SparqlExpression {
     // produce.
     auto targetSize = context->size();
 
+    if ((... && isConstantExpressionResult(operands))) {
+      targetSize = 1;
+    }
+
     // A `zip_view` of the result of all the value getters applied to their
     // respective child result.
     auto zipper = std::apply(
@@ -150,9 +162,8 @@ using NaryExpression = TypeErasedNaryExpression<
         typename ValueGetters::Value...)>;
 #else
 template <typename Operation, typename... ValueGetters>
-using NaryExpression =
-    NaryExpression<detail::Operation<sizeof...(ValueGetters),
-                                     FV<Operation, ValueGetters...> > >;
+using NaryExpression = NaryExpression<
+    detail::Operation<sizeof...(ValueGetters), FV<Operation, ValueGetters...>>>;
 #endif
 
 // Create a lambda that takes the children of an expression (as
