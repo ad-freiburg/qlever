@@ -306,9 +306,9 @@ addLinkAndDiscoverTest(BitUtilsTest)
 
 addLinkAndDiscoverTest(NBitIntegerTest)
 
-addLinkAndDiscoverTest(GeoPointTest)
+addLinkAndDiscoverTestNoLibs(GeoPointTest rdfTypes)
 
-addLinkAndDiscoverTest(GeoSparqlHelpersTest util)
+addLinkAndDiscoverTest(GeoSparqlHelpersTest rdfTypes)
 
 addLinkAndDiscoverTest(HttpUtilsTest util http)
 
