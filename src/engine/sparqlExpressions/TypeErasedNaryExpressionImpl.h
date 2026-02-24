@@ -163,7 +163,7 @@ using NaryExpression = TypeErasedNaryExpression<
         typename ValueGetters::Value...)>;
 #else
 template <typename Operation, typename... ValueGetters>
-using NaryExpression = NaryExpression<
+using NaryExpression = NaryExpressionStronglyTyped<
     detail::Operation<sizeof...(ValueGetters), FV<Operation, ValueGetters...>>>;
 #endif
 
