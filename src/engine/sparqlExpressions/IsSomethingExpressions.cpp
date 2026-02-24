@@ -78,7 +78,7 @@ struct BoolToId {
   Id operator()(bool b) const { return Id::makeFromBool(b); }
 };
 
-class boundExpression : public NARY<1, FV<BoolToId, IsValidValueGetter>> {
+class BoundExpression : public NARY<1, FV<BoolToId, IsValidValueGetter>> {
  public:
   using NARY<1, FV<BoolToId, IsValidValueGetter>>::NARY;
 
@@ -106,7 +106,7 @@ SparqlExpression::Ptr makeIsGeoPointExpression(SparqlExpression::Ptr arg) {
   return std::make_unique<detail::isGeoPointExpression>(std::move(arg));
 }
 SparqlExpression::Ptr makeBoundExpression(SparqlExpression::Ptr arg) {
-  return std::make_unique<detail::boundExpression>(std::move(arg));
+  return std::make_unique<detail::BoundExpression>(std::move(arg));
 }
 
 }  // namespace sparqlExpression

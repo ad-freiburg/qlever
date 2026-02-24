@@ -68,6 +68,11 @@ class UuidExpressionImpl : public SparqlExpression {
     return FuncKey(randId_);
   }
 
+  // The result of `UUID`/`STRUUID` is always a defined value.
+  bool isResultAlwaysDefined(const VariableToColumnMap&) const override {
+    return true;
+  }
+
  private:
   ql::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
 };

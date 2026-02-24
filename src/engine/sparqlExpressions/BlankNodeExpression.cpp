@@ -175,6 +175,11 @@ class BlankNodeExpression : public SparqlExpression {
                         cacheBreaker_++);
   }
 
+  // The version of `BNODE()` without arguments always returns a defined value.
+  bool isResultAlwaysDefined(const VariableToColumnMap&) const override {
+    return !label_.has_value();
+  }
+
  private:
   ql::span<Ptr> childrenImpl() override {
     if (label_.has_value()) {

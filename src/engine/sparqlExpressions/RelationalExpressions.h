@@ -91,8 +91,6 @@ class InExpression : public SparqlExpression {
 
   std::optional<LangFilterData> getLanguageFilterExpression() const override;
 
-  bool isResultAlwaysDefined(const VariableToColumnMap&) const override;
-
  private:
   ql::span<SparqlExpression::Ptr> childrenImpl() override;
 };

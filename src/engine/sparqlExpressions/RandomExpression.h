@@ -47,6 +47,11 @@ class RandomExpression : public SparqlExpression {
     return "RAND " + std::to_string(randId);
   }
 
+  // `RAND()` is always defined.
+  bool isResultAlwaysDefined(const VariableToColumnMap&) const override {
+    return true;
+  }
+
  private:
   // Get the direct child expressions.
   ql::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
