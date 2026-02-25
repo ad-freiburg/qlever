@@ -190,9 +190,6 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
 
   auto remapId = [&insertionPositions, &localVocabMapping, &blankNodeBlocks,
                   minBlankNodeIndex](Id& id) {
-    // TODO<RobinTF> Experiment with caching the last remapped id
-    // and reusing it if the same id appears again. See if that
-    // improves performance or if it makes it worse.
     using enum Datatype;
     auto datatype = id.getDatatype();
     if (datatype == VocabIndex) [[likely]] {
@@ -208,7 +205,6 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
       ad_utility::CachingTransformInputRange{
           std::move(fullScan),
           [remapId = std::move(remapId)](IdTable& idTable) {
-            // TODO<RobinTF> process columns in parallel.
             auto allCols = idTable.getColumns();
             // Extra columns beyond the graph column only contain integers (or
             // undefined for triples added via UPDATE) and thus don't need to be
