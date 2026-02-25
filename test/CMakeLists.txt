@@ -498,8 +498,6 @@ addLinkAndDiscoverTestNoLibs(ConstexprMapTest)
 
 addLinkAndDiscoverTestNoLibs(ParallelExecutorTest)
 
-addLinkAndDiscoverTestNoLibs(IoUringHelpersTest)
-
 addLinkAndDiscoverTestNoLibs(IoUringManagerTest util)
 
 addLinkAndDiscoverTestNoLibs(VariantRangeFilterTest)

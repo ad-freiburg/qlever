@@ -6,8 +6,6 @@
 
 #include <unistd.h>
 
-#include <algorithm>
-#include <numeric>
 #include <stdexcept>
 
 namespace ad_utility {
@@ -51,72 +49,38 @@ IoUringManager::BatchHandle IoUringManager::addBatch(
   BatchHandle handle = nextHandle_++;
   const size_t n = sizes.size();
 
-  // Build ReadRequest list sorted by file offset for sequential I/O.
-  std::vector<size_t> perm(n);
-  std::iota(perm.begin(), perm.end(), size_t{0});
-  std::sort(perm.begin(), perm.end(), [&](size_t a, size_t b) {
-    return fileOffsets[a] < fileOffsets[b];
-  });
-
-  Batch batch;
-  batch.id = handle;
-  batch.fd = fd;
-  batch.reads.reserve(n);
-  for (size_t pi = 0; pi < n; ++pi) {
-    size_t i = perm[pi];
-    batch.reads.push_back({sizes[i], fileOffsets[i], targetPointers[i]});
-  }
-
   if (n == 0) {
-    // Empty batch: mark as immediately done.
-    pending_.push_back(std::move(batch));
-    cleanupFront();
     return handle;
   }
 
-  pending_.push_back(std::move(batch));
-  submitFromPending();
+  remaining_[handle] = n;
+
+  for (size_t i = 0; i < n; ++i) {
+    // When the ring is full, submit pending SQEs and drain CQEs to free space.
+    if (inFlight_ >= ringSize_) {
+      io_uring_submit(&ring_);
+      while (inFlight_ >= ringSize_) {
+        drainOneCqe();
+      }
+    }
+
+    struct io_uring_sqe* sqe = io_uring_get_sqe(&ring_);
+    io_uring_prep_read(sqe, fd, targetPointers[i],
+                       static_cast<unsigned>(sizes[i]),
+                       static_cast<__u64>(fileOffsets[i]));
+    io_uring_sqe_set_data64(sqe, handle);
+    inFlight_++;
+  }
+
+  io_uring_submit(&ring_);
   return handle;
 }
 
 void IoUringManager::wait(BatchHandle handle) {
-  // Find the batch; if absent it was already completed and cleaned up.
-  Batch* b = findBatch(handle);
-  if (b == nullptr) {
-    return;
-  }
-  while (!b->isDone()) {
+  while (remaining_.count(handle) && remaining_[handle] > 0) {
     drainOneCqe();
-    submitFromPending();
-    // Re-fetch pointer since deque may have been modified (but only
-    // cleanupFront removes from front; our batch is still there until done).
-    b = findBatch(handle);
-    if (b == nullptr) {
-      return;  // completed inside drainOneCqe
-    }
   }
-  cleanupFront();
-}
-
-void IoUringManager::submitFromPending() {
-  bool submitted = false;
-  for (auto& b : pending_) {
-    while (inFlight_ < ringSize_ && b.submitted < b.reads.size()) {
-      struct io_uring_sqe* sqe = io_uring_get_sqe(&ring_);
-      if (!sqe) break;
-      const auto& r = b.reads[b.submitted];
-      io_uring_prep_read(sqe, b.fd, r.target, static_cast<unsigned>(r.size),
-                         static_cast<__u64>(r.fileOffset));
-      io_uring_sqe_set_data64(sqe, b.id);
-      b.submitted++;
-      inFlight_++;
-      submitted = true;
-    }
-    if (inFlight_ >= ringSize_) break;
-  }
-  if (submitted) {
-    io_uring_submit(&ring_);
-  }
+  remaining_.erase(handle);
 }
 
 void IoUringManager::drainOneCqe() {
@@ -133,23 +97,9 @@ void IoUringManager::drainOneCqe() {
   io_uring_cqe_seen(&ring_, cqe);
   inFlight_--;
 
-  Batch* b = findBatch(batchId);
-  if (b != nullptr) {
-    b->completed++;
+  if (remaining_.count(batchId)) {
+    remaining_[batchId]--;
   }
-}
-
-void IoUringManager::cleanupFront() {
-  while (!pending_.empty() && pending_.front().isDone()) {
-    pending_.pop_front();
-  }
-}
-
-IoUringManager::Batch* IoUringManager::findBatch(BatchHandle handle) {
-  for (auto& b : pending_) {
-    if (b.id == handle) return &b;
-  }
-  return nullptr;
 }
 
 #endif  // QLEVER_HAS_IO_URING

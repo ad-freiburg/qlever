@@ -8,7 +8,6 @@
 #include <fstream>
 
 #include "util/Generator.h"
-#include "util/IoUringHelpers.h"
 #include "util/StringUtils.h"
 
 using OffsetAndSize = VocabularyOnDisk::OffsetAndSize;
@@ -68,9 +67,14 @@ VocabBatchLookupResult VocabularyOnDisk::lookupBatch(
     }
   }
 
-  // Step 4: Read data from disk (sorts by offset internally, uses io_uring
-  // if available).
-  ad_utility::readBatch(file_.fd(), sizes, fileOffsets, targetPointers);
+  // Step 4: Read data from disk using a pooled BatchIoManager.
+  {
+    auto manager = ioManagers_->pop().value();
+    auto handle =
+        manager->addBatch(file_.fd(), sizes, fileOffsets, targetPointers);
+    manager->wait(handle);
+    ioManagers_->push(std::move(manager));
+  }
 
   // Step 5: Build string_views pointing into the buffer.
   for (size_t i = 0; i < n; ++i) {
@@ -151,4 +155,12 @@ void VocabularyOnDisk::open(const std::string& filename) {
   offsets_.open(filename + offsetSuffix_);
   AD_CORRECTNESS_CHECK(offsets_.size() > 0);
   size_ = offsets_.size() - 1;
+
+  // Initialize pool of persistent BatchIoManagers for lookupBatch.
+  static constexpr size_t kNumManagers = 8;
+  ioManagers_ = std::make_unique<ad_utility::data_structures::ThreadSafeQueue<
+      std::unique_ptr<ad_utility::BatchIoManager>>>(kNumManagers);
+  for (size_t i = 0; i < kNumManagers; ++i) {
+    ioManagers_->push(std::make_unique<ad_utility::BatchIoManager>());
+  }
 }
