@@ -222,7 +222,7 @@ else ()
     linkAndDiscoverTest(TokenTest parser util)
 endif ()
 
-addLinkAndDiscoverTestSerial(RdfParserTest parser)
+addLinkAndDiscoverTestNoLibs(RdfParserTest index)
 
 addLinkAndDiscoverTest(MultiColumnJoinTest engine)
 

@@ -2,8 +2,8 @@
 add_subdirectory(sparqlParser)
 add_subdirectory(data)
 
-add_library(basicParser RdfParser.cpp ParallelBuffer.cpp Tokenizer.cpp)
-qlever_target_link_libraries(basicParser util rdfTypes)
+add_library(basicParser ParallelBuffer.cpp Tokenizer.cpp)
+qlever_target_link_libraries(basicParser util rdfTypes parserData)
 
 add_library(parser
         sparqlParser/SparqlQleverVisitor.cpp
