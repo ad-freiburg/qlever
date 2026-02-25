@@ -1,8 +1,14 @@
+// Copyright 2021 - 2026 The QLever Authors, in particular:
 //
-// Created by johannes on 07.06.21.
+// 2021 -  Johannes Kalmbach <kalmbacj@informatik.uni-freiburg.de>, UFR
+// 2026 -  Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
 //
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
-#include <gtest/gtest.h>
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
+
+#include <gmock/gmock.h>
 
 #include "util/MemorySize/MemorySize.h"
 #include "util/Parameters.h"
@@ -67,4 +73,15 @@ TEST(Parameter, verifyDurationParameterSerializationWorks) {
 
   durationParameter.setFromString("10s");
   EXPECT_EQ(durationParameter.get(), 10s);
+}
+
+// _____________________________________________________________________________
+TEST(Parameters, SpaceSeparatedStrings) {
+  SpaceSeparatedStrings s{{"abc", "def"}, "example"};
+  EXPECT_THAT(s.get(), ::testing::ElementsAre("abc", "def"));
+  EXPECT_EQ(s.toString(), "abc def");
+  s.setFromString("bla bli blu");
+  EXPECT_THAT(s.get(), ::testing::ElementsAre("bla", "bli", "blu"));
+  s.setFromString("");
+  EXPECT_EQ(s.get().size(), 0);
 }

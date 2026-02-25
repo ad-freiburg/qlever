@@ -138,11 +138,38 @@ Result Service::computeResult(bool requestLaziness) {
 }
 
 // ____________________________________________________________________________
+void Service::throwIfIriNotWhitelisted() {
+  // Check that the service IRI is allowed by the whitelist. If the whitelist
+  // is empty (the default), all IRIs are allowed.
+  const auto& allowedPrefixes =
+      getRuntimeParameter<&RuntimeParameters::serviceAllowedIriPrefixes_>();
+
+  if (!allowedPrefixes.empty()) {
+    auto iri =
+        asStringViewUnsafe(parsedServiceClause_.serviceIri_.getContent());
+
+    bool allowed = ql::ranges::any_of(allowedPrefixes, [&](const auto& prefix) {
+      return ql::starts_with(iri, prefix);
+    });
+    if (!allowed) {
+      throw std::runtime_error(absl::StrCat(
+          "SERVICE request to <", iri,
+          "> is not allowed because IRI does not match any of the allowed IRI "
+          "prefixes. To change the whitelist, set the "
+          "\"service-allowed-iri-prefixes\" runtime parameter"));
+    }
+  }
+}
+
+// ____________________________________________________________________________
 Result Service::computeResultImpl(bool requestLaziness) {
   // Get the URL of the SPARQL endpoint.
   if (getRuntimeParameter<&RuntimeParameters::syntaxTestMode_>()) {
     return makeNeutralElementResultForSilentFail();
   }
+
+  throwIfIriNotWhitelisted();
+
   ad_utility::httpUtils::Url serviceUrl{
       asStringViewUnsafe(parsedServiceClause_.serviceIri_.getContent())};
 

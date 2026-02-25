@@ -175,6 +175,11 @@ struct EngineConfig : CommonConfig {
   // that only rely on the `NamedQueryCache` which can be populated
   // separately).
   bool doNotLoadPermutations_ = false;
+
+  // A list of IRI prefixes that are allowed as `SERVICE` endpoints. If empty
+  // (the default), all IRIs are allowed. If non-empty, `SERVICE` requests to
+  // IRIs that do not start with any of the given prefixes are rejected.
+  std::vector<std::string> serviceAllowedIriPrefixes_;
 };
 
 // Class to use QLever as an embedded database, without the HTTP server. See
