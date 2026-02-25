@@ -189,7 +189,13 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
       *locatedTriplesSharedState, LimitOffsetClause{});
 
   auto remapId = [&insertionPositions, &localVocabMapping, &blankNodeBlocks,
-                  minBlankNodeIndex](Id& id) {
+                  minBlankNodeIndex, lastId = Id::makeUndefined(),
+                  mappedId = Id::makeUndefined()](Id& id) mutable {
+    if (lastId.getBits() == id.getBits()) {
+      id = mappedId;
+      return;
+    }
+    lastId = id;
     using enum Datatype;
     auto datatype = id.getDatatype();
     if (datatype == VocabIndex) [[likely]] {
@@ -199,6 +205,7 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
     } else if (datatype == BlankNodeIndex) {
       id = remapBlankNodeId(id, blankNodeBlocks, minBlankNodeIndex);
     }
+    mappedId = id;
   };
 
   return ad_utility::InputRangeTypeErased{
