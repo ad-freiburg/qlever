@@ -135,8 +135,8 @@ BlankNodeBlocks flattenBlankNodeBlocks(const OwnedBlocks& ownedBlocks) {
 }
 
 // _____________________________________________________________________________
-AD_ALWAYS_INLINE Id remapVocabId(Id original,
-                                 const InsertionPositions& insertionPositions) {
+AD_ALWAYS_INLINE static Id remapVocabId(
+    Id original, const InsertionPositions& insertionPositions) {
   AD_EXPENSIVE_CHECK(
       original.getDatatype() == Datatype::VocabIndex,
       "Only ids resembling a vocab index can be remapped with this function.");

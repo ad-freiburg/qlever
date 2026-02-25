@@ -33,23 +33,16 @@ add_compile_definitions(BOOST_ASIO_DISABLE_AWAITABLE_FRAME_RECYCLING)
 # https://cmake.org/cmake/help/latest/variable/BUILD_SHARED_LIBS.html for
 # details.
 option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
-#if(BUILD_SHARED_LIBS)
+if(BUILD_SHARED_LIBS)
     set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-    add_compile_options(-fPIC)
+    add_compile_options(-fPIC -fno-semantic-interposition)
+
     add_link_options(-fPIC)
-#endif()
+endif()
 
 # By default, QLever uses precompiled headers for widely used modules. However when heavily modifying the headers that
 # contribute to the precompiled headers, then it might be beneficial to deactivate precompiled headers.
 option(USE_PRECOMPILED_HEADERS "Use precompiled headers to reduce compile times" ON)
-
-option(CHEAPER_COMPILATION "Use type erasure in several places, this reduces the compile time, but decreasese the performance. Can be used for local development" OFF)
-if (CHEAPER_COMPILATION)
-    add_compile_definitions(_QLEVER_TYPE_ERASED_EXPRESSIONS)
-    # The backports are cheaper to compile, as they do not use coroutines, which have an inherent compile time overhead
-    # even with debug builds.
-    add_compile_definitions(QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17)
-endif()
 
 # Coroutines require an additional compiler flag that is called differently
 # on clang and g++
@@ -252,7 +245,7 @@ find_package(OpenSSL REQUIRED)
 # is a drop-in replacement for `target_link_libraries` that additionally links
 # against the common libraries.
 function(qlever_target_link_libraries target)
-    target_link_libraries(${target} PUBLIC ${ARGN} absl_umbrella
+    target_link_libraries(${target} PUBLIC ${ARGN} absl_umbrella re2
             ICU::uc
             ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock fsst nlohmann_json::nlohmann_json Boost::container)
 
@@ -401,11 +394,11 @@ FetchContent_Declare(
 # Apply FetchContent
 ################################
 set(_QLEVER_SAVED_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
-#set(BUILD_SHARED_LIBS OFF)
-FetchContent_MakeAvailable(abseil re2)
+set(BUILD_SHARED_LIBS OFF)
+FetchContent_MakeAvailable(abseil)
 set(BUILD_SHARED_LIBS ${_QLEVER_SAVED_BUILD_SHARED_LIBS})
 
-FetchContent_MakeAvailable(googletest ctre fsst nlohmann-json antlr range-v3 spatialjoin s2)
+FetchContent_MakeAvailable(googletest ctre fsst nlohmann-json antlr range-v3 spatialjoin s2 re2)
 
 IF (BUILD_SHARED_LIBS)
     add_library(antlr4_umbrella ALIAS antlr4_shared)
@@ -430,8 +423,7 @@ target_compile_options(antlr4_shared PRIVATE -fPIC -Wno-all -Wno-extra -Wno-erro
 include_directories(SYSTEM "${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src")
 
 #Umbrella libraries from static to shared.
-#if (BUILD_SHARED_LIBS)
-if (daldsfiefasddfelk)
+if (BUILD_SHARED_LIBS)
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/dummy.cpp "")
 add_library (absl_umbrella SHARED ${CMAKE_CURRENT_BINARY_DIR}/dummy.cpp)
 target_link_libraries(absl_umbrella
@@ -444,7 +436,6 @@ target_link_libraries(absl_umbrella
         absl::time,
         absl::hash,
         absl::synchronization
-        re2::re2
         >
 )
 target_include_directories(absl_umbrella
@@ -456,7 +447,6 @@ target_include_directories(absl_umbrella
         $<TARGET_PROPERTY:absl::time,INTERFACE_INCLUDE_DIRECTORIES>
         $<TARGET_PROPERTY:absl::hash,INTERFACE_INCLUDE_DIRECTORIES>
         $<TARGET_PROPERTY:absl::synchronization,INTERFACE_INCLUDE_DIRECTORIES>
-        $<TARGET_PROPERTY:re2::re2,INTERFACE_INCLUDE_DIRECTORIES>
 )
 else()
     add_library(absl_umbrella INTERFACE)
@@ -469,7 +459,6 @@ else()
             absl::time
             absl::hash
             absl::synchronization
-            re2::re2
     )
 endif()
 

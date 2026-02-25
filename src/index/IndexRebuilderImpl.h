@@ -44,10 +44,13 @@ std::tuple<InsertionPositions, LocalVocabMapping> materializeLocalVocab(
 // representing the block ids of the generated blocks.
 BlankNodeBlocks flattenBlankNodeBlocks(const OwnedBlocks& ownedBlocks);
 
+/*
 // Map old vocab `Id`s to new vocab `Id`s according to the given
 // `insertionPositions`. This is the  most performance critical code of the
 // rebuild.
-Id remapVocabId(Id original, const InsertionPositions& insertionPositions);
+__attribute__((visibility("hidden"))) Id remapVocabId(Id original, const
+InsertionPositions& insertionPositions);
+*/
 
 // Remaps a blank node `Id` to another blank node `Id` to reduce the gaps in the
 // id space left by random allocation of blank node ids.
