@@ -1027,9 +1027,9 @@ TEST_F(LocatedTriplesTest, identifyTriplesToVacuum) {
     const auto& ltpb = dt.getLocatedTriplesForPermutation(Permutation::PSO);
 
     {
-      // Block has exactly the threshold -> ignored.
+      // Block has less than the threshold.
       auto cleanup = setRuntimeParameterForTest<
-          &RuntimeParameters::vacuumMinimumBlockSize_>(2ul);
+          &RuntimeParameters::vacuumMinimumBlockSize_>(3ul);
       auto result = ltpb.identifyTriplesToVacuum(perm, cancellationHandle);
       EXPECT_THAT(result.insertionsToRemove, testing::IsEmpty());
       EXPECT_THAT(result.deletionsToRemove, testing::IsEmpty());

@@ -100,6 +100,8 @@ void DeltaTriples::clear() {
 // ____________________________________________________________________________
 nlohmann::json DeltaTriples::vacuum(
     ad_utility::SharedCancellationHandle cancellationHandle) {
+  // When the cancellation handle stops the execution this results in the state
+  // that only a part of the triples have been vacuumed, which is valid.
   auto identifyTriplesToVacuum =
       CPP_template_lambda(this, &cancellationHandle)(bool isInternal)()() {
     auto& basePerm = index_.getPermutation(Permutation::PSO);

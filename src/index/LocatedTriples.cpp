@@ -304,7 +304,7 @@ TriplesToVacuum LocatedTriplesPerBlock::identifyTriplesToVacuum(
     const Permutation& perm, ad_utility::SharedCancellationHandle cancellationHandle) const {
   std::vector<size_t> blocksToVacuum;
   for (const auto& [blockIndex, locatedTriples] : map_) {
-    if (locatedTriples.size() >
+    if (locatedTriples.size() >=
         getRuntimeParameter<&RuntimeParameters::vacuumMinimumBlockSize_>()) {
       blocksToVacuum.push_back(blockIndex);
     }

@@ -252,11 +252,13 @@ class LocatedTriplesPerBlock {
   }
 
   // Identify, for all blocks whose number of located triples exceeds
-  // VACUUM_THRESHOLD, the redundant insertions (triple already in index) and
-  // invalid deletions (triple not in index). Returns their SPO-canonical keys.
-  // `perm` must be the permutation that this `LocatedTriplesPerBlock` belongs
-  // to.
-  TriplesToVacuum identifyTriplesToVacuum(const Permutation& perm, ad_utility::SharedCancellationHandle cancellationHandle) const;
+  // `vacuum-minimum-block-size`, the redundant insertions (triple already in
+  // index) and invalid deletions (triple not in index). Returns their
+  // SPO-canonical keys. `perm` must be the permutation that this
+  // `LocatedTriplesPerBlock` belongs to.
+  TriplesToVacuum identifyTriplesToVacuum(
+      const Permutation& perm,
+      ad_utility::SharedCancellationHandle cancellationHandle) const;
 
   // Return `true` iff one of the blocks contains `triple` with the given
   // `insertOrDelete` status (`true` for inserted, `false` for deleted).
