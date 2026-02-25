@@ -20,6 +20,7 @@
 #include "libqlever/Qlever.h"
 #include "util/ProgramOptionsHelpers.h"
 #include "util/ReadableNumberFacet.h"
+#include "util/json.h"
 
 using std::string;
 
@@ -142,6 +143,36 @@ auto getFileSpecifications = [](const auto& filetype, auto& inputFile,
   return fileSpecs;
 };
 
+// Helper to convert the JSON given for writing materialized views to a proper
+// `WriteMaterializedViews` vector.
+qlever::IndexBuilderConfig::WriteMaterializedViews parseMaterializedViewsJson(
+    std::string_view materializedViewsJson) {
+  qlever::IndexBuilderConfig::WriteMaterializedViews views;
+  if (!materializedViewsJson.empty()) {
+    AD_LOG_DEBUG << "Parsing materialized views configuration ..." << std::endl;
+    try {
+      auto viewsJson = nlohmann::json::parse(materializedViewsJson);
+      if (!viewsJson.is_object()) {
+        throw std::runtime_error(
+            "The --materialized-views option must be a JSON object "
+            "mapping view names to SPARQL queries.");
+      }
+      for (auto& [viewName, query] : viewsJson.items()) {
+        if (!query.is_string()) {
+          throw std::runtime_error(absl::StrCat(
+              "Query for materialized view '", viewName,
+              "' must be a string, but got type: ", jsonToTypeString(query)));
+        }
+        views.push_back({std::move(viewName), query.get<std::string>()});
+      }
+    } catch (const nlohmann::json::exception& e) {
+      throw std::runtime_error(
+          absl::StrCat("Failed to parse materialized views JSON: ", e.what()));
+    }
+  }
+  return views;
+}
+
 // Main function.
 int main(int argc, char** argv) {
   // Copy the git hash and datetime of compilation (which require relinking)
@@ -159,13 +190,15 @@ int main(int argc, char** argv) {
   std::vector<string> inputFile;
   std::vector<string> defaultGraphs;
   std::vector<bool> parseParallel;
+  std::string materializedViewsJson;
 
   boost::program_options::options_description boostOptions(
-      "Options for IndexBuilderMain");
+      "Options for qlever-index");
   auto add = [&boostOptions](auto&&... args) {
     boostOptions.add_options()(AD_FWD(args)...);
   };
   add("help,h", "Produce this help message.");
+  add("version,v", "Print version information.");
   add("index-basename,i", po::value(&config.baseName_)->required(),
       "The basename of the output files (required).");
   add("kg-input-file,f", po::value(&inputFile),
@@ -250,6 +283,10 @@ int main(int argc, char** argv) {
       "large enough to hold a single input triple. Default: 10 MB.");
   add("keep-temporary-files,k", po::bool_switch(&config.keepTemporaryFiles_),
       "Do not delete temporary files from index creation for debugging.");
+  add("materialized-views", po::value(&materializedViewsJson),
+      "create materialized views after index building. Takes a JSON object "
+      "mapping view names to SELECT queries for writing the view, for example: "
+      R"({"view1": "SELECT ...", "view2": "SELECT ..."})");
 
   // Process command line arguments.
   po::variables_map optionsMap;
@@ -257,26 +294,32 @@ int main(int argc, char** argv) {
   try {
     po::store(po::parse_command_line(argc, argv, boostOptions), optionsMap);
     if (optionsMap.count("help")) {
-      std::cout << boostOptions << '\n';
+      std::cout << boostOptions << std::endl;
+      return EXIT_SUCCESS;
+    }
+    if (optionsMap.count("version")) {
+      std::cout << argv[0] << " " << qlever::version::ProjectVersion
+                << std::endl;
       return EXIT_SUCCESS;
     }
     po::notify(optionsMap);
   } catch (const std::exception& e) {
-    std::cerr << "Error in command-line argument: " << e.what() << '\n';
-    std::cerr << boostOptions << '\n';
+    std::cerr << "Error in command-line argument: " << e.what() << std::endl;
+    std::cerr << boostOptions << std::endl;
     return EXIT_FAILURE;
   }
 
-  AD_LOG_INFO << EMPH_ON << "QLever IndexBuilder, compiled on "
+  AD_LOG_INFO << EMPH_ON << "QLever index builder, compiled on "
               << qlever::version::DatetimeOfCompilation << " using git hash "
               << qlever::version::GitShortHash << EMPH_OFF << std::endl;
 
   try {
     config.inputFiles_ = getFileSpecifications(filetype, inputFile,
                                                defaultGraphs, parseParallel);
+    config.writeMaterializedViews_ =
+        parseMaterializedViewsJson(materializedViewsJson);
     config.validate();
     qlever::Qlever::buildIndex(config);
-
   } catch (std::exception& e) {
     AD_LOG_ERROR << "Creating the index for QLever failed with the following "
                     "exception: "

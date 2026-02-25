@@ -110,7 +110,6 @@ class Index {
   Vocab& getNonConstVocabForTesting();
 
   using TextVocab = TextVocabulary;
-  [[nodiscard]] const TextVocab& getTextVocab() const;
 
   // Get a (non-owning) pointer to the BlankNodeManager of this Index.
   ad_utility::BlankNodeManager* getBlankNodeManager() const;
@@ -185,6 +184,8 @@ class Index {
   bool& usePatterns();
 
   bool& loadAllPermutations();
+
+  bool& doNotLoadPermutations();
 
   void setKeepTempFiles(bool keepTempFiles);
 

@@ -48,6 +48,7 @@ class Server {
   FRIEND_TEST(ServerTest, createMessageSender);
   FRIEND_TEST(ServerTest, adjustParsedQueryLimitOffset);
   FRIEND_TEST(ServerTest, configurePinnedResultWithName);
+  FRIEND_TEST(IndexRebuilder, serverIntegration);
   friend serverTestHelpers::SimulateHttpRequest;
 
  public:
@@ -61,14 +62,16 @@ class Server {
   //! Initialize the server.
   void initialize(const std::string& indexBaseName, bool useText,
                   bool usePatterns = true, bool loadAllPermutations = true,
-                  bool persistUpdates = false);
+                  bool persistUpdates = false,
+                  std::vector<std::string> preloadMaterializedViews = {});
 
  public:
   // First initialize the server. Then loop, wait for requests and trigger
   // processing. This method never returns except when throwing an exception.
   void run(const std::string& indexBaseName, bool useText,
            bool usePatterns = true, bool loadAllPermutations = true,
-           bool persistUpdates = false);
+           bool persistUpdates = false,
+           std::vector<std::string> preloadMaterializedViews = {});
 
   Index& index() { return index_; }
   const Index& index() const { return index_; }
@@ -110,6 +113,10 @@ class Server {
 
   /// Executor with a single thread that is used to run timers asynchronously.
   boost::asio::static_thread_pool timerExecutor_{1};
+
+  // Indicates if an index rebuild is currently in progress so that we prevent
+  // triggering this twice.
+  std::atomic_bool rebuildInProgress_{false};
 
   template <typename T>
   using Awaitable = boost::asio::awaitable<T>;
@@ -347,6 +354,11 @@ class Server {
       ad_utility::SharedCancellationHandle cancellationHandle,
       TimeLimit timeLimit);
   FRIEND_TEST(MaterializedViewsTest, serverIntegration);
+
+  // Trigger an index rebuild with `indexBaseName` as the base name for the new
+  // index. This assumes that the access token has already been checked and no
+  // other build is currently in progress.
+  Awaitable<void> rebuildIndex(const std::string& indexBaseName);
 };
 
 #endif  // QLEVER_SRC_ENGINE_SERVER_H

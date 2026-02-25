@@ -11,9 +11,12 @@
 #include "util/StringUtils.h"
 
 // _____________________________________________________________________
-Permutation::Permutation(Enum permutation, Allocator allocator)
-    : readableName_(toString(permutation)),
-      fileSuffix_(absl::StrCat(".", ad_utility::utf8ToLower(readableName_))),
+Permutation::Permutation(Enum permutation, Allocator allocator,
+                         std::optional<std::string> readableName)
+    : readableName_{std::move(readableName)
+                        .value_or(std::string{toString(permutation)})},
+      fileSuffix_(
+          absl::StrCat(".", ad_utility::utf8ToLower(toString(permutation)))),
       keyOrder_(toKeyOrder(permutation)),
       allocator_{std::move(allocator)},
       permutation_{permutation} {}
@@ -28,7 +31,8 @@ CompressedRelationReader::ScanSpecAndBlocks Permutation::getScanSpecAndBlocks(
 
 // _____________________________________________________________________
 void Permutation::loadFromDisk(const std::string& onDiskBase,
-                               bool loadInternalPermutation) {
+                               bool loadInternalPermutation,
+                               bool useGraphPostProcessing) {
   onDiskBase_ = onDiskBase;
   if (loadInternalPermutation) {
     internalPermutation_ =
@@ -53,7 +57,7 @@ void Permutation::loadFromDisk(const std::string& onDiskBase,
              e.what());
   }
   meta_.readFromFile(&file);
-  reader_.emplace(allocator_, std::move(file));
+  reader_.emplace(allocator_, std::move(file), useGraphPostProcessing);
   AD_LOG_INFO << "Registered " << readableName_
               << " permutation: " << meta_.statistics() << std::endl;
   isLoaded_ = true;

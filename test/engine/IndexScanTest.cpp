@@ -11,7 +11,10 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
+#include "./LazyJoinTestHelpers.h"
 #include "engine/IndexScan.h"
+#include "engine/MaterializedViews.h"
+#include "engine/NamedResultCache.h"
 #include "index/IndexImpl.h"
 #include "parser/ParsedQuery.h"
 
@@ -209,15 +212,17 @@ const auto testSetAndMakeScanWithPrefilterExpr =
       auto t = generateLocationTrace(l);
       IndexScan scan{getQec(kg), permutation, triple};
       auto variable = pr1.second;
-      auto optUpdatedQet = scan.setPrefilterGetUpdatedQueryExecutionTree(
-          makeFilterExpression::filterHelper::makePrefilterVec(std::move(pr1)));
+      auto optUpdatedQet =
+          scan.getUpdatedQueryExecutionTreeWithPrefilterApplied(
+              makeFilterExpression::filterHelper::makePrefilterVec(
+                  std::move(pr1)));
       if (pr2.has_value() && optUpdatedQet.has_value()) {
         // Testing with a second `PrefilterExpression`s only makes sense if the
         // first `PrefilterExpression` was successfully applied.
         ASSERT_TRUE(optUpdatedQet.has_value());
         optUpdatedQet =
             optUpdatedQet.value()
-                ->setPrefilterGetUpdatedQueryExecutionTree(
+                ->getUpdatedQueryExecutionTreeWithPrefilterApplied(
                     makeFilterExpression::filterHelper::makePrefilterVec(
                         std::move(pr2.value())))
                 .value_or(optUpdatedQet.value());
@@ -497,14 +502,10 @@ TEST(IndexScan, namedGraphs) {
               Eq(IndexScan::Graphs::Blacklist(defaultGraph)));
 }
 
+// _____________________________________________________________________________
 TEST(IndexScan, getResultSizeOfScan) {
   auto qec = getQec("<x> <p> <s1>, <s2>. <x> <p2> <s1>.");
   auto getId = makeGetId(qec->getIndex());
-  [[maybe_unused]] auto x = getId("<x>");
-  [[maybe_unused]] auto p = getId("<p>");
-  [[maybe_unused]] auto s1 = getId("<s1>");
-  [[maybe_unused]] auto s2 = getId("<s2>");
-  [[maybe_unused]] auto p2 = getId("<p2>");
   using V = Variable;
   using I = TripleComponent::Iri;
 
@@ -512,23 +513,28 @@ TEST(IndexScan, getResultSizeOfScan) {
     SparqlTripleSimple scanTriple{V{"?x"}, V("?y"), V{"?z"}};
     IndexScan scan{qec, Permutation::Enum::PSO, scanTriple};
     EXPECT_EQ(scan.getSizeEstimate(), 3);
+    // Full scan uses an estimate (number of total triples).
+    EXPECT_FALSE(scan.sizeEstimateIsExactForTesting());
   }
   {
     SparqlTripleSimple scanTriple{V{"?x"}, I::fromIriref("<p>"), V{"?y"}};
     IndexScan scan{qec, Permutation::Enum::PSO, scanTriple};
     EXPECT_EQ(scan.getSizeEstimate(), 2);
+    EXPECT_TRUE(scan.sizeEstimateIsExactForTesting());
   }
   {
     SparqlTripleSimple scanTriple{I::fromIriref("<x>"), I::fromIriref("<p>"),
                                   V{"?y"}};
     IndexScan scan{qec, Permutation::Enum::PSO, scanTriple};
     EXPECT_EQ(scan.getSizeEstimate(), 2);
+    EXPECT_TRUE(scan.sizeEstimateIsExactForTesting());
   }
   {
     SparqlTripleSimple scanTriple{V("?x"), I::fromIriref("<p>"),
                                   I::fromIriref("<s1>")};
     IndexScan scan{qec, Permutation::Enum::POS, scanTriple};
     EXPECT_EQ(scan.getSizeEstimate(), 1);
+    EXPECT_TRUE(scan.sizeEstimateIsExactForTesting());
   }
   // 0 variables
   {
@@ -540,6 +546,7 @@ TEST(IndexScan, getResultSizeOfScan) {
     auto res = scan.computeResultOnlyForTesting();
     ASSERT_EQ(res.idTable().numRows(), 1);
     ASSERT_EQ(res.idTable().numColumns(), 0);
+    EXPECT_TRUE(scan.sizeEstimateIsExactForTesting());
   }
   {
     SparqlTripleSimple scanTriple{I::fromIriref("<x2>"), I::fromIriref("<p>"),
@@ -547,6 +554,7 @@ TEST(IndexScan, getResultSizeOfScan) {
     IndexScan scan{qec, Permutation::Enum::POS, scanTriple};
     EXPECT_EQ(scan.getSizeEstimate(), 1);
     EXPECT_EQ(scan.getExactSize(), 0);
+    EXPECT_TRUE(scan.sizeEstimateIsExactForTesting());
   }
   {
     SparqlTripleSimple scanTriple{I::fromIriref("<x>"), I::fromIriref("<p>"),
@@ -557,6 +565,68 @@ TEST(IndexScan, getResultSizeOfScan) {
     auto res = scan.computeResultOnlyForTesting();
     ASSERT_EQ(res.idTable().numRows(), 0);
     ASSERT_EQ(res.idTable().numColumns(), 0);
+    EXPECT_TRUE(scan.sizeEstimateIsExactForTesting());
+  }
+}
+
+// _____________________________________________________________________________
+TEST(IndexScan, getResultSizeOfScanWithDeltaTriples) {
+  auto index = makeTestIndex("getResultSizeOfScanWithDeltaTriples",
+                             "<a> <a> <a> . <b> <b> <b> . <c> <c> <c> .");
+  auto getId = makeGetId(index);
+  auto g = qlever::specialIds().at(QLEVER_INTERNAL_GRAPH_IRI);
+  auto a = getId("<a>");
+  auto b = getId("<b>");
+  using V = Variable;
+
+  QueryResultCache cache;
+  NamedResultCache namedCache;
+  MaterializedViewsManager materializedViewsManager;
+  std::unique_ptr<QueryExecutionContext> qec = nullptr;
+
+  auto makeScan = [&]() {
+    qec = std::make_unique<QueryExecutionContext>(
+        index, &cache, makeAllocator(ad_utility::MemorySize::megabytes(100)),
+        SortPerformanceEstimator{}, &namedCache, &materializedViewsManager);
+
+    SparqlTripleSimple scanTriple{V{"?x"}, V("?y"), V{"?z"}};
+    return IndexScan{qec.get(), Permutation::Enum::PSO, scanTriple};
+  };
+
+  auto cancellationHandle =
+      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+  // Since the rough estimate doesn't know if the delta triples are inserts or
+  // deletions, the estimate remains the same regardless of the delta triples.
+  {
+    index.deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
+      deltaTriples.insertTriples(cancellationHandle,
+                                 {IdTriple<0>{std::array{a, a, a, g}}});
+      deltaTriples.deleteTriples(cancellationHandle,
+                                 {IdTriple<0>{std::array{b, b, b, g}}});
+    });
+    auto scan = makeScan();
+    EXPECT_EQ(scan.getSizeEstimate(), 3);
+    EXPECT_FALSE(scan.sizeEstimateIsExactForTesting());
+  }
+  {
+    index.deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
+      deltaTriples.insertTriples(cancellationHandle,
+                                 {IdTriple<0>{std::array{b, b, b, g}}});
+    });
+    auto scan = makeScan();
+    EXPECT_EQ(scan.getSizeEstimate(), 3);
+    EXPECT_FALSE(scan.sizeEstimateIsExactForTesting());
+  }
+  {
+    index.deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
+      deltaTriples.deleteTriples(cancellationHandle,
+                                 {IdTriple<0>{std::array{a, a, a, g}}});
+      deltaTriples.deleteTriples(cancellationHandle,
+                                 {IdTriple<0>{std::array{b, b, b, g}}});
+    });
+    auto scan = makeScan();
+    EXPECT_EQ(scan.getSizeEstimate(), 3);
+    EXPECT_FALSE(scan.sizeEstimateIsExactForTesting());
   }
 }
 
@@ -673,8 +743,9 @@ TEST(IndexScan, getSizeEstimateAndExactSizeWithAppliedPrefilter) {
                                         IndexScan::PrefilterVariablePair pair,
                                         const size_t estimateSize,
                                         const size_t exactSize) {
-    auto optUpdatedQet = indexScan.setPrefilterGetUpdatedQueryExecutionTree(
-        makePrefilterVec(std::move(pair)));
+    auto optUpdatedQet =
+        indexScan.getUpdatedQueryExecutionTreeWithPrefilterApplied(
+            makePrefilterVec(std::move(pair)));
     ASSERT_TRUE(optUpdatedQet.has_value());
     auto updatedQet = optUpdatedQet.value();
     ASSERT_EQ(updatedQet->getSizeEstimate(), estimateSize);
@@ -727,8 +798,8 @@ TEST(IndexScan, verifyThatPrefilteredIndexScanResultIsNotCacheable) {
   auto qet =
       ad_utility::makeExecutionTree<IndexScan>(qec, Permutation::PSO, triple);
   EXPECT_TRUE(qet->getRootOperation()->canResultBeCached());
-  auto updatedQet =
-      qet->setPrefilterGetUpdatedQueryExecutionTree(std::move(prefilterPairs));
+  auto updatedQet = qet->getUpdatedQueryExecutionTreeWithPrefilterApplied(
+      std::move(prefilterPairs));
   // We have a corresponding column for ?x (at ColumnIndex 1), which is also the
   // first sorted variable column. Thus, we expect that the PrefilterExpression
   // (< 5, ?x) is applied for this `IndexScan`, resulting in prefiltered
@@ -743,8 +814,8 @@ TEST(IndexScan, verifyThatPrefilteredIndexScanResultIsNotCacheable) {
                                     pr(gt(DoubleId(22)), V{"?z"}),
                                     pr(gt(IntId(10)), V{"?b"}));
   EXPECT_TRUE(qet->getRootOperation()->canResultBeCached());
-  updatedQet =
-      qet->setPrefilterGetUpdatedQueryExecutionTree(std::move(prefilterPairs));
+  updatedQet = qet->getUpdatedQueryExecutionTreeWithPrefilterApplied(
+      std::move(prefilterPairs));
   // No `PrefilterExpression` should be applied for this `IndexScan`, we don't
   // expect an updated QueryExecutionTree. The `IndexScan` should remain
   // unchanged, containing no prefiltered `BlockMetadataRanges`. Thus, it should
@@ -846,48 +917,16 @@ TEST(IndexScan, checkEvaluationWithPrefiltering) {
       {I(10), I(12), I(18), I(22), I(25), I(147), I(189), I(194)}, true);
 }
 
-class IndexScanWithLazyJoin : public ::testing::TestWithParam<bool> {
+class IndexScanWithLazyJoin : public ::testing::TestWithParam<bool>,
+                              public ad_utility::testing::LazyJoinTestHelper {
  protected:
-  QueryExecutionContext* qec_ = nullptr;
-
   void SetUp() override {
     std::string kg =
         "<a> <p> <A> . <a> <p> <A2> . "
         "<b> <p> <B> . <b> <p> <B2> . "
         "<c> <p> <C> . <c> <p> <C2> . "
         "<b> <q> <xb> . <b> <q> <xb2> .";
-    qec_ = getQec(std::move(kg));
-  }
-
-  // Convert a TripleComponent to a ValueId.
-  Id toValueId(const TripleComponent& tc) const {
-    return tc.toValueId(qec_->getIndex().getVocab(), *encodedIriManager())
-        .value();
-  }
-
-  // Create an id table with a single column from a vector of
-  // `TripleComponent`s.
-  IdTable makeIdTable(std::vector<TripleComponent> entries) const {
-    IdTable result{1, makeAllocator()};
-    result.reserve(entries.size());
-    for (const TripleComponent& entry : entries) {
-      result.emplace_back();
-      result.back()[0] = toValueId(entry);
-    }
-    return result;
-  }
-
-  // Convert a vector of a tuple of triples to an id table.
-  IdTable tableFromTriples(
-      std::vector<std::array<TripleComponent, 2>> triples) const {
-    IdTable result{2, makeAllocator()};
-    result.reserve(triples.size());
-    for (const auto& triple : triples) {
-      result.emplace_back();
-      result.back()[0] = toValueId(triple.at(0));
-      result.back()[1] = toValueId(triple.at(1));
-    }
-    return result;
+    setupQecWithKnowledgeGraph(kg);
   }
 
   // Create a common `IndexScan` instance.
@@ -945,22 +984,19 @@ class IndexScanWithLazyJoin : public ::testing::TestWithParam<bool> {
 TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesFilterCorrectly) {
   IndexScan scan = makeScan();
 
-  auto makeJoinSide = [](auto* self) -> Result::Generator {
+  auto makeJoinSide = [this]() {
     using P = Result::IdTableVocabPair;
-    P p1{self->makeIdTable({iri("<a>"), iri("<c>")}), LocalVocab{}};
-    co_yield p1;
-    P p2{self->makeIdTable({iri("<c>")}), LocalVocab{}};
-    co_yield p2;
     LocalVocab vocab;
     vocab.getIndexAndAddIfNotContained(LocalVocabEntry{
         ad_utility::triple_component::Literal::literalWithoutQuotes("Test")});
-    P p3{self->makeIdTable({iri("<c>"), iri("<q>"), iri("<xb>")}),
-         std::move(vocab)};
-    co_yield p3;
+    return std::array{P{makeIdTable({iri("<a>"), iri("<c>")}), LocalVocab{}},
+                      P{makeIdTable({iri("<c>")}), LocalVocab{}},
+                      P{makeIdTable({iri("<c>"), iri("<q>"), iri("<xb>")}),
+                        std::move(vocab)}};
   };
 
   auto [joinSideResults, scanResults] = consumeRanges(
-      scan.prefilterTables(LazyResult{makeJoinSide(this)}, 0),
+      scan.prefilterTables(LazyResult{makeJoinSide()}, 0),
       [&scan, counter = 0]() mutable {
         bool rightFirst = GetParam();
         // If the left side is being consumed first, then we observe the effects
@@ -1021,16 +1057,44 @@ TEST_P(IndexScanWithLazyJoin,
   qec_ = getQec(std::move(kg));
   IndexScan scan = makeScan();
 
-  auto makeJoinSide = [](auto* self) -> Result::Generator {
+  auto makeJoinSide = [this]() {
     using P = Result::IdTableVocabPair;
-    P p1{self->makeIdTable({iri("<a>")}), LocalVocab{}};
-    co_yield p1;
-    P p2{self->makeIdTable({iri("<b>")}), LocalVocab{}};
-    co_yield p2;
+    return std::array{P{makeIdTable({iri("<a>")}), LocalVocab{}},
+                      P{makeIdTable({iri("<b>")}), LocalVocab{}}};
   };
 
   auto [joinSideResults, scanResults] =
-      consumeRanges(scan.prefilterTables(LazyResult{makeJoinSide(this)}, 0));
+      consumeRanges(scan.prefilterTables(LazyResult{makeJoinSide()}, 0));
+
+  ASSERT_EQ(scanResults.size(), 1);
+  ASSERT_EQ(joinSideResults.size(), 2);
+
+  EXPECT_TRUE(scanResults.at(0).localVocab_.empty());
+  EXPECT_TRUE(joinSideResults.at(0).localVocab_.empty());
+  EXPECT_TRUE(joinSideResults.at(1).localVocab_.empty());
+
+  EXPECT_EQ(
+      scanResults.at(0).idTable_,
+      tableFromTriples({{iri("<a>"), iri("<A>")}, {iri("<b>"), iri("<B>")}}));
+  EXPECT_EQ(joinSideResults.at(0).idTable_, makeIdTable({iri("<a>")}));
+
+  EXPECT_EQ(joinSideResults.at(1).idTable_, makeIdTable({iri("<b>")}));
+}
+
+// _____________________________________________________________________________
+TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesSkipNonMatchingTables) {
+  std::string kg = "<a> <p> <A> . <b> <p> <B>. ";
+  qec_ = getQec(std::move(kg));
+  IndexScan scan = makeScan();
+
+  using P = Result::IdTableVocabPair;
+  std::array joinSide{
+      P{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}},
+      P{makeIdTable({iri("<a>")}), LocalVocab{}},
+      P{makeIdTable({iri("<b>")}), LocalVocab{}}};
+
+  auto [joinSideResults, scanResults] =
+      consumeRanges(scan.prefilterTables(LazyResult{std::move(joinSide)}, 0));
 
   ASSERT_EQ(scanResults.size(), 1);
   ASSERT_EQ(joinSideResults.size(), 2);
@@ -1054,12 +1118,11 @@ TEST_P(IndexScanWithLazyJoin,
   qec_ = getQec(std::move(kg));
   IndexScan scan = makeScan();
 
-  auto makeJoinSide = []() -> Result::Generator {
+  auto makeJoinSide = []() {
     using P = Result::IdTableVocabPair;
-    P p1{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}};
-    co_yield p1;
-    P p2{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}};
-    co_yield p2;
+    return std::array{
+        P{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}},
+        P{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}}};
   };
 
   auto [joinSideResults, scanResults] =
@@ -1319,7 +1382,7 @@ TEST(IndexScan, clone) {
     ASSERT_TRUE(cloneReference.getRootOperation()->canResultBeCached());
     auto prefilterPairs =
         makePrefilterVec(pr(eq(IntId(10)), Variable{"?price"}));
-    auto optUpdatedQet = qet->setPrefilterGetUpdatedQueryExecutionTree(
+    auto optUpdatedQet = qet->getUpdatedQueryExecutionTreeWithPrefilterApplied(
         std::move(prefilterPairs));
     ASSERT_TRUE(optUpdatedQet.has_value());
     const auto& updatedQet = optUpdatedQet.value();
@@ -1748,7 +1811,8 @@ TEST(IndexScanTest, StripColumnsWithPrefiltering) {
     auto prefilteredThenStripped = [&]() {
       auto prefilteredQet =
           makeBaseScan()
-              ->setPrefilterGetUpdatedQueryExecutionTree(prefilterPairs())
+              ->getUpdatedQueryExecutionTreeWithPrefilterApplied(
+                  prefilterPairs())
               .value_or(makeBaseScan());
       std::set<Variable> varsSet(varsToKeep.begin(), varsToKeep.end());
       return QueryExecutionTree::makeTreeWithStrippedColumns(
@@ -1761,7 +1825,7 @@ TEST(IndexScanTest, StripColumnsWithPrefiltering) {
       auto strippedFirst = QueryExecutionTree::makeTreeWithStrippedColumns(
           makeBaseScan(), varsSet);
       return strippedFirst
-          ->setPrefilterGetUpdatedQueryExecutionTree(prefilterPairs())
+          ->getUpdatedQueryExecutionTreeWithPrefilterApplied(prefilterPairs())
           .value_or(strippedFirst);
     }();
 
@@ -1788,7 +1852,7 @@ TEST(IndexScanTest, StripColumnsWithPrefiltering) {
     // First get the full prefiltered result (without column stripping)
     auto fullPrefilteredQet =
         makeBaseScan()
-            ->setPrefilterGetUpdatedQueryExecutionTree(prefilterPairs())
+            ->getUpdatedQueryExecutionTreeWithPrefilterApplied(prefilterPairs())
             .value_or(makeBaseScan());
 
     qec->clearCacheUnpinnedOnly();
@@ -1821,5 +1885,249 @@ TEST(IndexScanTest, StripColumnsWithPrefiltering) {
     EXPECT_THAT(result2, matchesIdTable(expectedResult.clone()))
         << "Approach 2 (strip-then-prefilter) should match expected result for "
         << varsToKeep.size() << " variables";
+  }
+}
+
+// _____________________________________________________________________________
+TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesFilterCorrectlyOptionalJoin) {
+  IndexScan scan = makeScan();
+
+  auto makeJoinSide = [this]() {
+    using P = Result::IdTableVocabPair;
+    LocalVocab vocab;
+    vocab.getIndexAndAddIfNotContained(LocalVocabEntry{
+        ad_utility::triple_component::Literal::literalWithoutQuotes("Test")});
+    return std::array{P{makeIdTable({iri("<a>"), iri("<c>")}), LocalVocab{}},
+                      P{makeIdTable({iri("<c>")}), LocalVocab{}},
+                      P{makeIdTable({iri("<c>"), iri("<q>"), iri("<xb>")}),
+                        std::move(vocab)}};
+  };
+
+  auto [joinSideResults, scanResults] = consumeRanges(
+      scan.prefilterTables(LazyResult{makeJoinSide()}, 0, false),
+      [&scan, counter = 0]() mutable {
+        bool rightFirst = GetParam();
+        // If the left side is being consumed first, then we observe the effects
+        // 3 calls later. This is an implementation detail and might change in
+        // the future.
+        int sideOffset = rightFirst ? 0 : 3;
+        const auto& rti = scan.runtimeInfo();
+        if (counter >= sideOffset) {
+          EXPECT_EQ(rti.status_,
+                    RuntimeInformation::Status::lazilyMaterializedInProgress);
+        }
+        if (counter >= 2 + sideOffset) {
+          EXPECT_GT(rti.numRows_, 0);
+        }
+        counter++;
+      });
+
+  ASSERT_EQ(scanResults.size(), 2);
+  ASSERT_EQ(joinSideResults.size(), 3);
+
+  EXPECT_TRUE(scanResults.at(0).localVocab_.empty());
+  EXPECT_TRUE(joinSideResults.at(0).localVocab_.empty());
+
+  EXPECT_TRUE(scanResults.at(1).localVocab_.empty());
+  EXPECT_TRUE(joinSideResults.at(1).localVocab_.empty());
+
+  EXPECT_FALSE(joinSideResults.at(2).localVocab_.empty());
+
+  EXPECT_EQ(
+      scanResults.at(0).idTable_,
+      tableFromTriples({{iri("<a>"), iri("<A>")}, {iri("<a>"), iri("<A2>")}}));
+  EXPECT_EQ(joinSideResults.at(0).idTable_,
+            makeIdTable({iri("<a>"), iri("<c>")}));
+
+  EXPECT_EQ(
+      scanResults.at(1).idTable_,
+      tableFromTriples({{iri("<c>"), iri("<C>")}, {iri("<c>"), iri("<C2>")}}));
+  EXPECT_EQ(joinSideResults.at(1).idTable_, makeIdTable({iri("<c>")}));
+
+  EXPECT_EQ(joinSideResults.at(2).idTable_,
+            makeIdTable({iri("<c>"), iri("<q>"), iri("<xb>")}));
+
+  const auto& rti = scan.runtimeInfo();
+  EXPECT_EQ(rti.status_,
+            RuntimeInformation::Status::lazilyMaterializedInProgress);
+  EXPECT_EQ(rti.numRows_, 4);
+  // Note: In the code the `totalTime_` is also set, but the actual code runs
+  // faster than a single millisecond, so it won't show up in the data.
+  EXPECT_EQ(rti.details_["num-blocks-read"], 2);
+  EXPECT_EQ(rti.details_["num-blocks-all"], 3);
+  EXPECT_EQ(rti.details_["num-elements-read"], 4);
+}
+
+// _____________________________________________________________________________
+TEST_P(IndexScanWithLazyJoin,
+       prefilterTablesDoesNotSkipNonMatchingTablesOptionalJoin) {
+  std::string kg = "<a> <p> <A> . <b> <p> <B>. ";
+  qec_ = getQec(std::move(kg));
+  IndexScan scan = makeScan();
+
+  using P = Result::IdTableVocabPair;
+  std::array joinSide{
+      P{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}},
+      P{makeIdTable({iri("<a>")}), LocalVocab{}},
+      P{makeIdTable({iri("<b>")}), LocalVocab{}}};
+
+  auto [joinSideResults, scanResults] = consumeRanges(
+      scan.prefilterTables(LazyResult{std::move(joinSide)}, 0, false));
+
+  ASSERT_EQ(scanResults.size(), 1);
+  ASSERT_EQ(joinSideResults.size(), 3);
+
+  EXPECT_TRUE(scanResults.at(0).localVocab_.empty());
+  EXPECT_TRUE(joinSideResults.at(0).localVocab_.empty());
+  EXPECT_TRUE(joinSideResults.at(1).localVocab_.empty());
+  EXPECT_TRUE(joinSideResults.at(2).localVocab_.empty());
+
+  EXPECT_EQ(
+      scanResults.at(0).idTable_,
+      tableFromTriples({{iri("<a>"), iri("<A>")}, {iri("<b>"), iri("<B>")}}));
+  EXPECT_EQ(joinSideResults.at(0).idTable_,
+            makeIdTableFromVector({{Id::makeFromBool(true)}}));
+
+  EXPECT_EQ(joinSideResults.at(1).idTable_, makeIdTable({iri("<a>")}));
+
+  EXPECT_EQ(joinSideResults.at(2).idTable_, makeIdTable({iri("<b>")}));
+}
+
+// _____________________________________________________________________________
+TEST_P(IndexScanWithLazyJoin,
+       prefilterTablesDoesStreamLastTablesAfterExhaustedIndex) {
+  std::string kg = "<a> <p> <A> . <b> <p> <B>. ";
+  qec_ = getQec(std::move(kg));
+  IndexScan scan = makeScan();
+
+  using P = Result::IdTableVocabPair;
+  std::array joinSide{
+      P{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}},
+      P{makeIdTable({iri("<a>")}), LocalVocab{}},
+      P{makeIdTableFromVector(
+            {{Id::makeFromBlankNodeIndex(BlankNodeIndex::make(0))}}),
+        LocalVocab{}},
+      P{makeIdTableFromVector(
+            {{Id::makeFromBlankNodeIndex(BlankNodeIndex::make(1))}}),
+        LocalVocab{}}};
+
+  auto [joinSideResults, scanResults] = consumeRanges(
+      scan.prefilterTables(LazyResult{std::move(joinSide)}, 0, false));
+
+  ASSERT_EQ(scanResults.size(), 1);
+  ASSERT_EQ(joinSideResults.size(), 4);
+
+  EXPECT_TRUE(scanResults.at(0).localVocab_.empty());
+  EXPECT_TRUE(joinSideResults.at(0).localVocab_.empty());
+  EXPECT_TRUE(joinSideResults.at(1).localVocab_.empty());
+  EXPECT_TRUE(joinSideResults.at(2).localVocab_.empty());
+  EXPECT_TRUE(joinSideResults.at(3).localVocab_.empty());
+
+  EXPECT_EQ(
+      scanResults.at(0).idTable_,
+      tableFromTriples({{iri("<a>"), iri("<A>")}, {iri("<b>"), iri("<B>")}}));
+  EXPECT_EQ(joinSideResults.at(0).idTable_,
+            makeIdTableFromVector({{Id::makeFromBool(true)}}));
+
+  EXPECT_EQ(joinSideResults.at(1).idTable_, makeIdTable({iri("<a>")}));
+
+  EXPECT_EQ(joinSideResults.at(2).idTable_,
+            makeIdTableFromVector(
+                {{Id::makeFromBlankNodeIndex(BlankNodeIndex::make(0))}}));
+
+  EXPECT_EQ(joinSideResults.at(3).idTable_,
+            makeIdTableFromVector(
+                {{Id::makeFromBlankNodeIndex(BlankNodeIndex::make(1))}}));
+}
+
+// _____________________________________________________________________________
+TEST_P(IndexScanWithLazyJoin,
+       prefilterTablesDoesStreamManyMatchingTablesAfterIndexIsExhausted) {
+  std::string kg = "<a> <p> <A> . <b> <p> <B>. ";
+  qec_ = getQec(std::move(kg));
+  IndexScan scan = makeScan();
+
+  using P = Result::IdTableVocabPair;
+  std::vector<P> joinSide;
+  // The left side contains many entries that match the last block in the index
+  // that is yielded. There previously was an assertion bug for this case,
+  // because the prefilter tried to push noexisting dummy blocks to the right
+  // hand side. This should now be fixed.
+  static constexpr size_t numBlocksJoinSide = 20;
+  for (size_t i = 0; i < numBlocksJoinSide; ++i) {
+    joinSide.push_back(P{makeIdTable({iri("<a>")}), LocalVocab{}});
+  };
+
+  // Assert that, because we don't have new blocks on the scan side, we
+  // immediately re-yield the left side if it is consumed first.
+  size_t numBlocksReadJoinSide = 0;
+  auto joinSideWithCounter =
+      ad_utility::OwningView{std::move(joinSide)} |
+      ql::views::transform([&numBlocksReadJoinSide](P& block) {
+        ++numBlocksReadJoinSide;
+        return std::move(block);
+      });
+  auto postCondition = [&numBlocksReadJoinSide,
+                        numBlocksExported = 0ul]() mutable {
+    bool rightFirst = GetParam();
+    if (rightFirst) {
+      return;
+    }
+    ++numBlocksExported;
+    // The second half of the `||` is because `numBlocksExported` also accounts
+    // for the single block of the scan side which is consumed after the join
+    // side has been fully exhausted due to the mechanics of `consumeRanges`
+    // with `rightFirst == false`.
+    EXPECT_TRUE((numBlocksReadJoinSide == numBlocksExported) ||
+                (numBlocksReadJoinSide == numBlocksJoinSide &&
+                 numBlocksExported == numBlocksJoinSide + 1));
+  };
+  auto [joinSideResults, scanResults] = consumeRanges(
+      scan.prefilterTables(LazyResult{std::move(joinSideWithCounter)}, 0, true),
+      postCondition);
+
+  ASSERT_EQ(scanResults.size(), 1);
+  ASSERT_EQ(joinSideResults.size(), 20);
+
+  EXPECT_TRUE(scanResults.at(0).localVocab_.empty());
+
+  EXPECT_EQ(
+      scanResults.at(0).idTable_,
+      tableFromTriples({{iri("<a>"), iri("<A>")}, {iri("<b>"), iri("<B>")}}));
+
+  for (const auto& [idTable, localVocab] : joinSideResults) {
+    EXPECT_EQ(idTable, makeIdTable({iri("<a>")}));
+  }
+}
+
+// _____________________________________________________________________________
+TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesEventuallyPushDummyBlock) {
+  std::string kg = "<a> <p> <A> . <b> <p> <B>. ";
+  qec_ = getQec(std::move(kg));
+  IndexScan scan = makeScan();
+
+  using P = Result::IdTableVocabPair;
+  std::array joinSide{
+      P{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}},
+      P{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}},
+      P{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}},
+      P{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}},
+      P{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}},
+      P{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}}};
+
+  auto [joinSideResults, scanResults] = consumeRanges(
+      scan.prefilterTables(LazyResult{std::move(joinSide)}, 0, false));
+
+  ASSERT_EQ(scanResults.size(), 1);
+  ASSERT_EQ(joinSideResults.size(), 6);
+
+  EXPECT_TRUE(scanResults.at(0).localVocab_.empty());
+  EXPECT_EQ(
+      scanResults.at(0).idTable_,
+      tableFromTriples({{iri("<a>"), iri("<A>")}, {iri("<b>"), iri("<B>")}}));
+
+  for (const auto& [idTable, localVocab] : joinSideResults) {
+    EXPECT_TRUE(localVocab.empty());
+    EXPECT_EQ(idTable, makeIdTableFromVector({{Id::makeFromBool(true)}}));
   }
 }

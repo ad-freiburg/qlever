@@ -42,11 +42,6 @@ auto Index::getNonConstVocabForTesting() -> Vocab& {
 }
 
 // ____________________________________________________________________________
-auto Index::getTextVocab() const -> const TextVocab& {
-  return pimpl_->getTextVocab();
-}
-
-// ____________________________________________________________________________
 ad_utility::BlankNodeManager* Index::getBlankNodeManager() const {
   return pimpl_->getBlankNodeManager();
 }
@@ -155,6 +150,9 @@ bool& Index::usePatterns() { return pimpl_->usePatterns(); }
 
 // ____________________________________________________________________________
 bool& Index::loadAllPermutations() { return pimpl_->loadAllPermutations(); }
+
+// ____________________________________________________________________________
+bool& Index::doNotLoadPermutations() { return pimpl_->doNotLoadPermutations(); }
 
 // ____________________________________________________________________________
 void Index::setKeepTempFiles(bool keepTempFiles) {

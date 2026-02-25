@@ -150,16 +150,12 @@ class Operation {
   }
 
   // Get an updated `QueryExecutionTree` that applies as many of the given
-  // `PrefilterExpression`s over `IndexScan` as possible. Returns `nullopt`
-  // if no `PrefilterExpression` is applicable and thus the `QueryExecutionTree`
-  // is not changed.
-  // Note: The default implementation always returns `nullopt` while this
-  // function is currently only overridden for `IndexScan`. In the future also
-  // other operations could pass on the `PrefilterExpressions` to the
-  // `IndexScan` in their subtree.
+  // `prefilters` as possible. If none of them applies, return `std::nullopt`,
+  // signaling that the `QueryExecutionTree` will not be changed. This is the
+  // default implementation.
   virtual std::optional<std::shared_ptr<QueryExecutionTree>>
-  setPrefilterGetUpdatedQueryExecutionTree(
-      [[maybe_unused]] const std::vector<PrefilterVariablePair>& prefilterPairs)
+  getUpdatedQueryExecutionTreeWithPrefilterApplied(
+      [[maybe_unused]] const std::vector<PrefilterVariablePair>& prefilters)
       const {
     return std::nullopt;
   };
@@ -202,6 +198,10 @@ class Operation {
   virtual size_t getCostEstimate() = 0;
 
   virtual uint64_t getSizeEstimate() final;
+
+  const SharedCancellationHandle& getCancellationHandle() const {
+    return cancellationHandle_;
+  }
 
  private:
   virtual uint64_t getSizeEstimateBeforeLimit() = 0;

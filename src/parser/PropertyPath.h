@@ -134,6 +134,13 @@ class PropertyPath {
   // otherwise.
   bool isIri() const;
 
+  // If the path is a sequence, return the children (that is, the parts of the
+  // sequence). If the path is not a sequence this will throw.
+  const std::vector<PropertyPath>& getSequence() const;
+
+  // Check if the path is a sequence.
+  bool isSequence() const;
+
   // If the path is a modified path with an inverse modifier, return the pointer
   // to its only child. Otherwise, return nullptr.
   std::optional<std::reference_wrapper<const PropertyPath>>

@@ -19,6 +19,7 @@
 #include "index/IndexBuilderTypes.h"
 #include "index/LocatedTriples.h"
 #include "index/Permutation.h"
+#include "util/LruCache.h"
 #include "util/Synchronized.h"
 #include "util/TimeTracer.h"
 
@@ -128,6 +129,23 @@ class DeltaTriples {
   // See the documentation of `setPersist()` below.
   std::optional<std::string> filenameForPersisting_;
 
+  // Store the id of the `ql:langtag` predicate to avoid repeated disk lookups.
+  // This is initialized on first use.
+  Id languagePredicate_ = Id::makeUndefined();
+
+  // Store commonly used language tags of the form `<@lang>` to avoid repeated
+  // disk lookups.
+  static constexpr size_t languageTagCacheSize_ = 1000;
+  ad_utility::util::LRUCache<std::string, Id> languageTagCache_{
+      languageTagCacheSize_};
+
+  // Cache commonly used predicates and their IRI representation between calls
+  // of `makeInternalTriples`. For example in wikidata `wdt:P31`, or `wdt:P279`
+  // are frequently used, so we try to avoid an expensive lookup from disk.
+  static constexpr size_t predicateCacheSize_ = 1000;
+  ad_utility::util::LRUCache<Id::T, ad_utility::triple_component::Iri>
+      predicateCache_{predicateCacheSize_};
+
   // Assert that the Permutation Enum values have the expected int values.
   // This is used to store and lookup items that exist for permutation in an
   // array.
@@ -167,7 +185,7 @@ class DeltaTriples {
  public:
   // Construct for given index.
   explicit DeltaTriples(const Index& index);
-  explicit DeltaTriples(const IndexImpl& index) : index_{index} {}
+  explicit DeltaTriples(const IndexImpl& index);
 
   // Disable accidental copying.
   DeltaTriples(const DeltaTriples&) = delete;
@@ -213,8 +231,11 @@ class DeltaTriples {
   // bunch of triples to be inserted into the internal permutation to make
   // things like efficient language filters work. This currently performs a
   // lookup from disk to check the language tag, but in the future this may be
-  // implemented more efficiently.
-  Triples makeInternalTriples(const Triples& triples);
+  // implemented more efficiently. If `insertion` is false, this indicates that
+  // the triples are meant for deletion. In that case no triples are returned
+  // that may be unsafe to delete. In particular this refers to triples of the
+  // form `<object> ql:langtag <@language>`.
+  Triples makeInternalTriples(const Triples& triples, bool insertion);
 
   // Insert triples.
   void insertTriples(CancellationHandle cancellationHandle, Triples triples,
@@ -274,6 +295,14 @@ class DeltaTriples {
 
   // Update the block metadata.
   void updateAugmentedMetadata();
+
+  // Create a shallow copy of the local vocab such that it can be processed
+  // without holding the lock. You have to make sure separately that the
+  // pointers that the returned `LocalVocabIndex`es represent are still valid.
+  std::pair<std::vector<LocalVocabIndex>,
+            std::vector<ad_utility::BlankNodeManager::LocalBlankNodeManager::
+                            OwnedBlocksEntry>>
+  copyLocalVocab() const;
 
  private:
   // The proper state according to the template parameter. This will either
@@ -365,6 +394,17 @@ class DeltaTriplesManager {
   // This can be safely used to execute a query without interfering with future
   // updates.
   LocatedTriplesSharedState getCurrentLocatedTriplesSharedState() const;
+
+  // In addition to the located triples shared state, also acquire a copy of the
+  // local vocab indices and the local blank node blocks owned by the local
+  // vocab. As long as the returned `LocatedTriplesSharedState` is alive, the
+  // local vocab entries and blank nodes will remain valid. So the return value
+  // basically acts as a complete shallow copy of the current state of the
+  // `DeltaTriples`.
+  std::tuple<LocatedTriplesSharedState, std::vector<LocalVocabIndex>,
+             std::vector<ad_utility::BlankNodeManager::LocalBlankNodeManager::
+                             OwnedBlocksEntry>>
+  getCurrentLocatedTriplesSharedStateWithVocab() const;
 };
 
 #endif  // QLEVER_SRC_INDEX_DELTATRIPLES_H

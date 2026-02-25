@@ -137,6 +137,11 @@ struct IndexBuilderConfig : CommonConfig {
   float bScoringParam_ = 0.75;
   float kScoringParam_ = 1.75;
 
+  // Materialized views to be written after normal index build is complete.
+  using WriteMaterializedViews =
+      std::vector<std::pair<std::string, std::string>>;
+  WriteMaterializedViews writeMaterializedViews_;
+
   // Assert that the given configuration is valid.
   void validate() const;
 
@@ -163,6 +168,13 @@ struct EngineConfig : CommonConfig {
   // after a restart). To revert to the state of the index without updates,
   // simply delete this file.
   bool persistUpdates_ = true;
+
+  // If set to true, no permutations will be loaded from disk. This is useful
+  // when only queries that don't require accessing the permutations need to be
+  // executed (e.g., queries that only compute constant expressions, or query
+  // that only rely on the `NamedQueryCache` which can be populated
+  // separately).
+  bool doNotLoadPermutations_ = false;
 };
 
 // Class to use QLever as an embedded database, without the HTTP server. See
@@ -244,6 +256,9 @@ class Qlever {
   // to load the view.
   void loadMaterializedView(std::string name) const;
 
+  // Check if a materialized view with the given name is currently loaded.
+  bool isMaterializedViewLoaded(const std::string& name) const;
+
   // Write the contents of the `NamedResultCache` to disk.
   template <typename Serializer>
   void writeNamedResultCacheToSerializer(Serializer& serializer) const {
@@ -256,6 +271,9 @@ class Qlever {
     namedResultCache_.readFromSerializer(serializer, allocator_,
                                          *index_.getBlankNodeManager());
   }
+
+  // Low-level access to the QLever API, use with care.
+  Index& index() { return index_; }
 };
 }  // namespace qlever
 

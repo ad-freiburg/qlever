@@ -168,16 +168,17 @@ compressedRelationTestWriteCompressedRelations(
   };
 
   // First create the on-disk permutation.
-  CompressedRelationWriter writer{numColumns, ad_utility::File{filename, "w"},
-                                  blocksize};
+  auto writer = std::make_unique<CompressedRelationWriter>(
+      numColumns, ad_utility::File{filename, "w"}, blocksize);
   std::vector<CompressedRelationMetadata> metaData;
   CompressedRelationWriter::WriterAndCallback wc1{
-      writer, [&](ql::span<const CompressedRelationMetadata> metadata) {
+      std::move(writer),
+      [&](ql::span<const CompressedRelationMetadata> metadata) {
         metaData.insert(metaData.end(), metadata.begin(), metadata.end());
       }};
 
   auto res = CompressedRelationWriter::createPermutation(
-      wc1, ad_utility::InputRangeTypeErased{generator(5)},
+      std::move(wc1), ad_utility::InputRangeTypeErased{generator(5)},
       qlever::KeyOrder{0, 1, 2, 3}, {});
   auto& blocks = res.blockMetadata_;
   // Test the serialization of the blocks and the metaData.
@@ -1153,6 +1154,38 @@ TEST(CompressedRelationReader, ensureDummyBlockWith6ColumnsDoesntCauseIssues) {
       }
       additionalColumns.pop_back();
     }
+  }
+}
+
+// _____________________________________________________________________________
+TEST(CompressedRelationReader, onlyRequestingObjectPatternsWorks) {
+  // Regression test for an issue introduced in
+  // https://github.com/ad-freiburg/qlever/pull/2632
+  auto* qec = ad_utility::testing::getQec();
+  auto& index = qec->getIndex();
+  auto sharedLocatedTriplesSnapshot =
+      index.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
+  auto permutationEnum = Permutation::Enum::PSO;
+  const auto& permutation = index.getImpl().getPermutation(permutationEnum);
+
+  ScanSpecification scanSpecification{std::nullopt, std::nullopt, std::nullopt};
+  CompressedRelationReader::ScanSpecAndBlocks metadataAndBlocks{
+      std::move(scanSpecification),
+      permutation.getAugmentedMetadataForPermutation(
+          *sharedLocatedTriplesSnapshot)};
+
+  std::vector<ColumnIndex> additionalColumns{
+      ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN};
+
+  auto cancellationHandle =
+      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+  auto blocks =
+      index.getImpl()
+          .getPermutation(permutationEnum)
+          .lazyScan(metadataAndBlocks, std::nullopt, additionalColumns,
+                    cancellationHandle, *sharedLocatedTriplesSnapshot);
+  for (const IdTable& block : blocks) {
+    EXPECT_EQ(block.numColumns(), 4);
   }
 }
 

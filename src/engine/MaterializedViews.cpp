@@ -46,22 +46,23 @@ MaterializedViewWriter::MaterializedViewWriter(
   qet_ = qet;
   qec_ = qec;
   parsedQuery_ = std::move(parsedQuery);
-  auto columnNamesAndPermutation = getIdTableColumnNamesAndPermutation();
+  auto [columnNamesAndPermutation, numAddEmptyColumns] =
+      getIdTableColumnNamesAndPermutation();
   columnNames_ = ::ranges::to<std::vector<Variable>>(columnNamesAndPermutation |
                                                      ql::views::keys);
   columnPermutation_ = ::ranges::to<std::vector<ColumnIndex>>(
       columnNamesAndPermutation | ql::views::values);
+  numAddEmptyColumns_ = numAddEmptyColumns;
 }
 
 // _____________________________________________________________________________
-void MaterializedViewWriter::writeViewToDisk(
-    std::string onDiskBase, std::string name,
-    const qlever::Qlever::QueryPlan& queryPlan,
+void MaterializedViewsManager::writeViewToDisk(
+    std::string name, const qlever::Qlever::QueryPlan& queryPlan,
     ad_utility::MemorySize memoryLimit,
-    ad_utility::AllocatorWithLimit<Id> allocator) {
-  MaterializedViewWriter writer{std::move(onDiskBase), std::move(name),
-                                queryPlan, std::move(memoryLimit),
-                                std::move(allocator)};
+    ad_utility::AllocatorWithLimit<Id> allocator) const {
+  unloadViewIfLoaded(name);
+  MaterializedViewWriter writer{onDiskBase_, std::move(name), queryPlan,
+                                std::move(memoryLimit), std::move(allocator)};
   writer.computeResultAndWritePermutation();
 }
 
@@ -86,16 +87,27 @@ MaterializedViewWriter::getIdTableColumnNamesAndPermutation() const {
 
   auto targetVarsAndCols =
       qet_->selectedVariablesToColumnIndices(parsedQuery_.selectClause());
-  AD_CONTRACT_CHECK(targetVarsAndCols.size() >= 4,
-                    "Currently the query used to write a materialized view "
-                    "needs to have at least four columns.");
+  const size_t numCols = targetVarsAndCols.size();
 
-  return ::ranges::to<ColumnNamesAndPermutation>(
+  // Column information for the columns selected by the user's query.
+  auto existingCols = ::ranges::to<std::vector<ColumnNameAndIndex>>(
       targetVarsAndCols | ql::views::transform([](const auto& opt) {
         AD_CONTRACT_CHECK(opt.has_value());
         return ColumnNameAndIndex{opt.value().variable_,
                                   opt.value().columnIndex_};
       }));
+
+  // Add dummy columns such that the view has at least four columns in total.
+  uint8_t numAddEmptyCols = 0;
+  if (numCols < 4) {
+    AD_LOG_INFO << "The query to write the materialized view \"" << name_
+                << "\" selects only " << numCols << " column(s), "
+                << 4 - numCols << " empty column(s) will be appended"
+                << std::endl;
+    numAddEmptyCols = 4 - numCols;
+  }
+
+  return {std::move(existingCols), numAddEmptyCols};
 }
 
 // _____________________________________________________________________________
@@ -106,6 +118,17 @@ void MaterializedViewWriter::permuteIdTableAndCheckNoLocalVocabEntries(
   // ordering we want to have in our materialized view. In
   // particular, the indexed column should be the first.
   block.setColumnSubset(columnPermutation_);
+
+  // Add empty columns such that the view has at least four columns.
+  for (uint8_t i = 0; i < numAddEmptyColumns_; ++i) {
+    block.addEmptyColumn();
+    // Initialize the new empty column to `UNDEF` (all bits zero) such that it
+    // can be compressed optimally.
+    const size_t col = block.numColumns() - 1;
+    for (size_t row = 0; row < block.numRows(); ++row) {
+      block.at(row, col) = ValueId::makeUndefined();
+    }
+  }
 
   // Check that there are no values of type `LocalVocabIndex` in the selected
   // columns of the `IdTable` as materialized views do not support them as of
@@ -134,8 +157,8 @@ MaterializedViewWriter::getBlocksForAlreadySortedResult(
   // external sorter, but we still need to permute the `IdTable`s to the
   // desired column ordering and construct a range for the
   // `CompressedRelationWriter` from them.
-  AD_LOG_INFO << "Query result rows for materialized view " << name_
-              << " are already sorted." << std::endl;
+  AD_LOG_INFO << "Query result rows for materialized view \"" << name_
+              << "\" are already sorted" << std::endl;
 
   if (result->isFullyMaterialized()) {
     // If we have a fully materialized result, we need to copy it for the
@@ -164,8 +187,8 @@ MaterializedViewWriter::getBlocksForUnsortedResult(
     Sorter& spoSorter, std::shared_ptr<const Result> result) const {
   // Results are not yet sorted by the required columns. Sort results
   // externally.
-  AD_LOG_INFO << "Sorting query result rows for materialized view " << name_
-              << " ..." << std::endl;
+  AD_LOG_INFO << "Sorting query result rows for materialized view \"" << name_
+              << "\" ..." << std::endl;
   size_t totalTriples = 0;
   ad_utility::ProgressBar progressBar{totalTriples, "Triples sorted: "};
 
@@ -222,11 +245,9 @@ MaterializedViewWriter::RangeOfIdTables MaterializedViewWriter::getSortedBlocks(
 IndexMetaDataMmap MaterializedViewWriter::writePermutation(
     RangeOfIdTables sortedBlocksSPO) const {
   std::string spoFilename = getFilenameBase() + ".index.spo";
-  CompressedRelationWriter spoWriter{
-      numCols(),
-      ad_utility::File{spoFilename, "w"},
-      UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN,
-  };
+  auto spoWriter = std::make_unique<CompressedRelationWriter>(
+      numCols(), ad_utility::File{spoFilename, "w"},
+      UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN);
 
   qlever::KeyOrder spoKeyOrder{0, 1, 2, 3};
   IndexMetaDataMmap spoMetaData;
@@ -240,7 +261,7 @@ IndexMetaDataMmap MaterializedViewWriter::writePermutation(
 
   auto [numDistinctPredicates, blockData] =
       CompressedRelationWriter::createPermutation(
-          {spoWriter, spoCallback},
+          {std::move(spoWriter), spoCallback},
           ad_utility::InputRangeTypeErased{std::move(sortedBlocksSPO)},
           spoKeyOrder, {});
 
@@ -258,37 +279,40 @@ IndexMetaDataMmap MaterializedViewWriter::writePermutation(
 
 // _____________________________________________________________________________
 void MaterializedViewWriter::writeViewMetadata() const {
-  // Export column names to view info JSON file
+  // Export column names to view info JSON file.
   nlohmann::json viewInfo = {
       {"version", MATERIALIZED_VIEWS_VERSION},
       {"columns", (columnNames_ | ql::views::transform([](const Variable& v) {
                      return v.name();
                    }) |
-                   ::ranges::to<std::vector<std::string>>())}};
+                   ::ranges::to<std::vector<std::string>>())},
+      {"query", parsedQuery_._originalString},
+  };
   ad_utility::makeOfstream(getFilenameBase() + ".viewinfo.json")
       << viewInfo.dump() << std::endl;
 }
 
 // _____________________________________________________________________________
 void MaterializedViewWriter::computeResultAndWritePermutation() const {
-  // Run query and sort the result externally (only if necessary)
-  AD_LOG_INFO << "Computing result for materialized view query " << name_
-              << "..." << std::endl;
+  // Run query and sort the result externally (only if necessary).
+  AD_LOG_INFO << "Computing query result for materialized view \"" << name_
+              << "\": " << parsedQuery_._originalString.substr(0, 80) << " ..."
+              << std::endl;
   auto result = qet_->getResult(true);
 
   Sorter spoSorter{getFilenameBase() + ".spo-sorter.dat", numCols(),
                    memoryLimit_, allocator_};
   RangeOfIdTables sortedBlocksSPO = getSortedBlocks(spoSorter, result);
 
-  // Write compressed relation to disk
-  AD_LOG_INFO << "Writing materialized view " << name_ << " to disk ..."
+  // Write compressed relation to disk.
+  AD_LOG_INFO << "Writing materialized view \"" << name_ << "\" to disk ..."
               << std::endl;
   auto spoMetaData = writePermutation(std::move(sortedBlocksSPO));
   writeViewMetadata();
 
-  AD_LOG_INFO << "Statistics for view " << name_ << ": "
-              << spoMetaData.statistics() << std::endl;
-  AD_LOG_INFO << "Materialized view " << name_ << " written to disk."
+  AD_LOG_INFO << "Statistics for view \"" << name_
+              << "\": " << spoMetaData.statistics() << std::endl;
+  AD_LOG_INFO << "Materialized view \"" << name_ << "\" written to disk"
               << std::endl;
 }
 
@@ -300,7 +324,7 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
   AD_CORRECTNESS_CHECK(onDiskBase_ != "",
                        "The index base filename was not set.");
   throwIfInvalidName(name_);
-  AD_LOG_INFO << "Loading materialized view " << name_ << " from disk..."
+  AD_LOG_INFO << "Loading materialized view \"" << name_ << "\" from disk ..."
               << std::endl;
   auto filename = getFilenameBase(onDiskBase_, name_);
 
@@ -316,13 +340,16 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
 
   // Check version of view and restore column names
   auto version = viewInfoJson.at("version").get<size_t>();
-  AD_CORRECTNESS_CHECK(version == MATERIALIZED_VIEWS_VERSION);
+  if (version != MATERIALIZED_VIEWS_VERSION) {
+    throw std::runtime_error{absl::StrCat(
+        "The materialized view '", name_, "' is saved with format version ",
+        version, ", however this version of QLever expects format version ",
+        MATERIALIZED_VIEWS_VERSION,
+        ". Please re-write the materialized view.")};
+  }
 
   // Make variable to column map
   auto columnNames = viewInfoJson.at("columns").get<std::vector<std::string>>();
-  AD_CORRECTNESS_CHECK(
-      columnNames.size() >= 4,
-      "Expected at least four columns in materialized view metadata");
   for (const auto& [index, columnName] :
        ::ranges::views::enumerate(columnNames)) {
     varToColMap_.insert({Variable{columnName},
@@ -330,8 +357,15 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
                           ColumnIndexAndTypeInfo::PossiblyUndefined}});
   }
 
-  // Read permutation
-  permutation_->loadFromDisk(filename, false);
+  // Restore original query string.
+  if (viewInfoJson.contains("query")) {
+    originalQuery_ = viewInfoJson.at("query").get<std::string>();
+  }
+
+  // Read permutation, and deactivate the graph post-processing of
+  // `CompressedRelationReader`, including row deduplication, which is not the
+  // intended behavior for materialized views.
+  permutation_->loadFromDisk(filename, false, false);
   AD_CORRECTNESS_CHECK(permutation_->isLoaded());
 }
 
@@ -351,10 +385,22 @@ void MaterializedViewsManager::loadView(const std::string& name) const {
 };
 
 // _____________________________________________________________________________
+void MaterializedViewsManager::unloadViewIfLoaded(
+    const std::string& name) const {
+  // `HashMap::erase` is a no-op for nonexisting keys.
+  loadedViews_.wlock()->erase(name);
+}
+
+// _____________________________________________________________________________
 std::shared_ptr<const MaterializedView> MaterializedViewsManager::getView(
     const std::string& name) const {
   loadView(name);
   return loadedViews_.rlock()->at(name);
+}
+
+// _____________________________________________________________________________
+bool MaterializedViewsManager::isViewLoaded(const std::string& name) const {
+  return loadedViews_.rlock()->contains(name);
 }
 
 // _____________________________________________________________________________
