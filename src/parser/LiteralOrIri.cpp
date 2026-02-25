@@ -11,86 +11,78 @@
 #include "index/IndexImpl.h"
 
 namespace ad_utility::triple_component {
-// __________________________________________
-LiteralOrIri::LiteralOrIri(Iri iri) : data_{std::move(iri)} {}
 
 // __________________________________________
-LiteralOrIri::LiteralOrIri(Literal literal) : data_{std::move(literal)} {}
+template <bool isOwning>
+bool BasicLiteralOrIri<isOwning>::isIri() const {
+  return std::holds_alternative<BasicIri<isOwning>>(data_);
+}
 
 // __________________________________________
-bool LiteralOrIri::isIri() const { return std::holds_alternative<Iri>(data_); }
-
-// __________________________________________
-const Iri& LiteralOrIri::getIri() const {
+template <bool isOwning>
+const BasicIri<isOwning>& BasicLiteralOrIri<isOwning>::getIri() const {
   if (!isIri()) {
     AD_THROW(
         "LiteralOrIri object does not contain an Iri object and thus "
         "cannot return it");
   }
-  return std::get<Iri>(data_);
+  return std::get<BasicIri<isOwning>>(data_);
 }
 
 // __________________________________________
-Iri& LiteralOrIri::getIri() {
-  if (!isIri()) {
-    AD_CONTRACT_CHECK(isIri(),
-                      "LiteralOrIri object does not contain an Iri object and "
-                      "thus cannot return it");
-  }
-  return std::get<Iri>(data_);
-}
-
-// __________________________________________
-NormalizedStringView LiteralOrIri::getIriContent() const {
+template <bool isOwning>
+NormalizedStringView BasicLiteralOrIri<isOwning>::getIriContent() const {
   return getIri().getContent();
 }
 
 // __________________________________________
-bool LiteralOrIri::isLiteral() const {
-  return std::holds_alternative<Literal>(data_);
+template <bool isOwning>
+bool BasicLiteralOrIri<isOwning>::isLiteral() const {
+  return std::holds_alternative<BasicLiteral<isOwning>>(data_);
 }
 
 // __________________________________________
-const Literal& LiteralOrIri::getLiteral() const {
+template <bool isOwning>
+const BasicLiteral<isOwning>& BasicLiteralOrIri<isOwning>::getLiteral() const {
   AD_CONTRACT_CHECK(isLiteral(),
                     "LiteralOrIri object does not contain a Literal object and "
                     "thus cannot return it");
-  return std::get<Literal>(data_);
+  return std::get<BasicLiteral<isOwning>>(data_);
 }
 
 // __________________________________________
-Literal& LiteralOrIri::getLiteral() {
-  AD_CONTRACT_CHECK(isLiteral(),
-                    "LiteralOrIri object does not contain a Literal object and "
-                    "thus cannot return it");
-  return std::get<Literal>(data_);
-}
-
-// __________________________________________
-bool LiteralOrIri::hasLanguageTag() const {
+template <bool isOwning>
+bool BasicLiteralOrIri<isOwning>::hasLanguageTag() const {
   return getLiteral().hasLanguageTag();
 }
 
 // __________________________________________
-bool LiteralOrIri::hasDatatype() const { return getLiteral().hasDatatype(); }
+template <bool isOwning>
+bool BasicLiteralOrIri<isOwning>::hasDatatype() const {
+  return getLiteral().hasDatatype();
+}
 
 // __________________________________________
-NormalizedStringView LiteralOrIri::getLiteralContent() const {
+template <bool isOwning>
+NormalizedStringView BasicLiteralOrIri<isOwning>::getLiteralContent() const {
   return getLiteral().getContent();
 }
 
 // __________________________________________
-NormalizedStringView LiteralOrIri::getLanguageTag() const {
+template <bool isOwning>
+NormalizedStringView BasicLiteralOrIri<isOwning>::getLanguageTag() const {
   return getLiteral().getLanguageTag();
 }
 
 // __________________________________________
-NormalizedStringView LiteralOrIri::getDatatype() const {
+template <bool isOwning>
+NormalizedStringView BasicLiteralOrIri<isOwning>::getDatatype() const {
   return getLiteral().getDatatype();
 }
 
 // __________________________________________
-NormalizedStringView LiteralOrIri::getContent() const {
+template <bool isOwning>
+NormalizedStringView BasicLiteralOrIri<isOwning>::getContent() const {
   if (isLiteral())
     return getLiteralContent();
   else if (isIri())
@@ -99,36 +91,10 @@ NormalizedStringView LiteralOrIri::getContent() const {
     AD_THROW("LiteralOrIri object contains neither Iri not Literal");
 }
 
-// __________________________________________
-LiteralOrIri LiteralOrIri::iriref(const std::string& stringWithBrackets) {
-  return LiteralOrIri{Iri::fromIriref(stringWithBrackets)};
-}
-
-// __________________________________________
-LiteralOrIri LiteralOrIri::prefixedIri(const Iri& prefix,
-                                       std::string_view suffix) {
-  return LiteralOrIri{Iri::fromPrefixAndSuffix(prefix, suffix)};
-}
-
-// __________________________________________
-LiteralOrIri LiteralOrIri::literalWithQuotes(
-    std::string_view rdfContentWithQuotes,
-    std::optional<std::variant<Iri, std::string>> descriptor) {
-  return LiteralOrIri(Literal::fromEscapedRdfLiteral(rdfContentWithQuotes,
-                                                     std::move(descriptor)));
-}
-
-// __________________________________________
-LiteralOrIri LiteralOrIri::literalWithoutQuotes(
-    std::string_view rdfContentWithoutQuotes,
-    std::optional<std::variant<Iri, std::string>> descriptor) {
-  return LiteralOrIri(Literal::literalWithoutQuotes(rdfContentWithoutQuotes,
-                                                    std::move(descriptor)));
-}
-
 // ___________________________________________
-ql::strong_ordering LiteralOrIri::compareThreeWay(
-    const LiteralOrIri& rhs) const {
+template <bool isOwning>
+ql::strong_ordering BasicLiteralOrIri<isOwning>::compareThreeWay(
+    const BasicLiteralOrIri& rhs) const {
   int i = IndexImpl::staticGlobalSingletonComparator().compare(
       toStringRepresentation(), rhs.toStringRepresentation(),
       LocaleManager::Level::TOTAL);
@@ -140,4 +106,8 @@ ql::strong_ordering LiteralOrIri::compareThreeWay(
     return ql::strong_ordering::equal;
   }
 }
+
+template class BasicLiteralOrIri<true>;
+template class BasicLiteralOrIri<false>;
+
 }  // namespace ad_utility::triple_component
