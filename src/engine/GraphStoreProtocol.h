@@ -8,7 +8,6 @@
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include <gtest/gtest_prod.h>
 
-#include "engine/GraphManager.h"
 #include "engine/HttpError.h"
 #include "parser/ParsedQuery.h"
 #include "parser/Quads.h"
@@ -97,51 +96,20 @@ class GraphStoreProtocol {
       Quads::BlankNodeAdder& blankNodeAdder);
   FRIEND_TEST(GraphStoreProtocolTest, convertTriples);
 
-  static ResponseMiddleware makePostNewGraphMiddleware(
-      const ad_utility::triple_component::Iri& newGraph);
-
-  // Generates a random graph IRI. The IRI is generated randomly with an
-  // internal prefix. NOTE: It is not guaranteed that the IRI does not exist.
-  static ad_utility::triple_component::Iri generateGraphIri();
-
   // Transform a SPARQL Graph Store Protocol POST to an equivalent ParsedQuery
   // which is an SPARQL Update.
   CPP_template_2(typename RequestT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>) static ParsedQuery
-      transformPost(GraphManager& graphManager, const RequestT& rawRequest,
-                    const GraphOrDefault& graph, const Index& index) {
+      transformPost(const RequestT& rawRequest, const GraphOrDefault& graph,
+                    const Index& index) {
     throwIfRequestBodyEmpty(rawRequest);
-    // For a `POST` when the graph identifies the QLever instance itself then
-    // the data must be stored in a newly generated graph which is returned in
-    // the response.
-    // TODO: test this with jena
-    bool generateNewGraph = [&rawRequest, &graph]() {
-      if (std::holds_alternative<GraphRef>(graph) &&
-          rawRequest.find(boost::beast::http::field::host) !=
-              rawRequest.end()) {
-        return std::get<GraphRef>(graph) ==
-               ad_utility::triple_component::Iri::fromIriref(
-                   "<http://" +
-                   std::string(rawRequest[boost::beast::http::field::host]) +
-                   "/" + GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX + ">");
-      }
-      return false;
-    }();
-    const GraphOrDefault effectiveGraph =
-        generateNewGraph ? graphManager.getNewInternalGraph() : graph;
     auto triples =
         parseTriples(rawRequest.body(), extractMediatype(rawRequest));
     Quads::BlankNodeAdder bn{{}, {}, index.getBlankNodeManager()};
-    auto convertedTriples =
-        convertTriples(effectiveGraph, std::move(triples), bn);
+    auto convertedTriples = convertTriples(graph, std::move(triples), bn);
     updateClause::GraphUpdate up{std::move(convertedTriples), {}};
     ParsedQuery res;
-    parsedQuery::UpdateClause clause{std::move(up)};
-    if (generateNewGraph) {
-      res.responseMiddleware_ = makePostNewGraphMiddleware(
-          std::get<ad_utility::triple_component::Iri>(effectiveGraph));
-    }
-    res._clause = std::move(clause);
+    res._clause = parsedQuery::UpdateClause{std::move(up)};
     // Graph store protocol POST requests might have a very large body. Limit
     // the length used for the string representation.
     res._originalString = truncatedStringRepresentation("POST", rawRequest);
@@ -250,8 +218,7 @@ class GraphStoreProtocol {
       vector<ParsedQuery> transformGraphStoreProtocol(
           ad_utility::url_parser::sparqlOperation::GraphStoreOperation
               operation,
-          GraphManager& graphManager, const RequestT& rawRequest,
-          const Index& index) {
+          const RequestT& rawRequest, const Index& index) {
     ad_utility::url_parser::ParsedUrl parsedUrl =
         ad_utility::url_parser::parseRequestTarget(rawRequest.target());
     using enum boost::beast::http::verb;
@@ -263,7 +230,7 @@ class GraphStoreProtocol {
     } else if (method == "DELETE") {
       return {transformDelete(operation.graph_, index)};
     } else if (method == "POST") {
-      return {transformPost(graphManager, rawRequest, operation.graph_, index)};
+      return {transformPost(rawRequest, operation.graph_, index)};
     } else if (method == "TSOP") {
       // TSOP (`POST` backwards) does the inverse of `POST`. It does a `DELETE
       // DATA` of the payload.

@@ -98,12 +98,6 @@ void Server::initialize(const std::string& indexBaseName, bool useText,
       allocator_, index_.numTriples().normalAndInternal_() *
                       PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE / 100);
 
-  graphManager_.initializeFromIndex(
-      &index_.encodedIriManager(),
-      QueryExecutionContext(index_, &cache_, allocator_,
-                            sortPerformanceEstimator_, &namedResultCache_,
-                            &materializedViewsManager_));
-
   if (noAccessCheck_) {
     AD_LOG_INFO << "No access token required for restricted API calls"
                 << std::endl;
@@ -657,8 +651,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     auto tracer = std::make_shared<ad_utility::timer::TimeTracer>("update");
     tracer->beginTrace("parsing");
     std::vector<ParsedQuery> parsedOperations =
-        GraphStoreProtocol::transformGraphStoreProtocol(
-            std::move(operation), graphManager_, request, index_);
+        GraphStoreProtocol::transformGraphStoreProtocol(std::move(operation),
+                                                        request, index_);
     tracer->endTrace("parsing");
 
     if (ql::ranges::any_of(parsedOperations, &ParsedQuery::hasUpdateClause)) {

@@ -86,26 +86,6 @@ updateClause::GraphUpdate::Triples GraphStoreProtocol::convertTriples(
 }
 
 // ____________________________________________________________________________
-ResponseMiddleware GraphStoreProtocol::makePostNewGraphMiddleware(
-    const ad_utility::triple_component::Iri& newGraph) {
-  namespace http = boost::beast::http;
-  std::string location(asStringViewUnsafe(newGraph.getContent()));
-  return ResponseMiddleware(
-      [location](ResponseMiddleware::ResponseT response, auto) {
-        response.result(http::status::created);
-        response.set(http::field::location, location);
-        return response;
-      });
-}
-
-// ____________________________________________________________________________
-ad_utility::triple_component::Iri GraphStoreProtocol::generateGraphIri() {
-  ad_utility::SlowRandomIntGenerator<uint64_t> randGraphIriSuffix;
-  return ad_utility::triple_component::Iri::fromIriref(
-      QLEVER_NEW_GRAPH_PREFIX + std::to_string(randGraphIriSuffix()) + ">");
-}
-
-// ____________________________________________________________________________
 ParsedQuery GraphStoreProtocol::transformGet(
     const GraphOrDefault& graph, const EncodedIriManager* encodedIriManager) {
   // Construct the parsed query from its short equivalent SPARQL Update
