@@ -64,8 +64,6 @@ class Engine {
   // be used to implement a cancellation mechanism that throws on cancellation.
   static size_t countDistinct(const IdTable& input,
                               const std::function<void()>& checkCancellation);
-  static size_t countDistinct(IdTableView<0> input,
-                              const std::function<void()>& checkCancellation);
 };
 
 #endif  // QLEVER_SRC_ENGINE_ENGINE_H

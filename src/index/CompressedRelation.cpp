@@ -1229,10 +1229,10 @@ static std::pair<bool, std::optional<std::vector<Id>>> getGraphInfo(
   auto hasDuplicates = [&block]() {
     using C = ColumnIndex;
     auto withoutGraphAndAdditionalPayload =
-        block.asColumnSubsetView(std::array{C{0}, C{1}, C{2}});
-    size_t numDistinct = Engine::countDistinct(withoutGraphAndAdditionalPayload,
-                                               ad_utility::noop);
-    return numDistinct != block.numRows();
+        block.asColumnSubsetView(std::array{C{0}, C{1}, C{2}})
+            .asStaticView<3>();
+    return ql::ranges::adjacent_find(withoutGraphAndAdditionalPayload) !=
+           ql::ranges::end(withoutGraphAndAdditionalPayload);
   };
 
   // Return the contained graphs, or  `nullopt` if there are too many of them.
