@@ -211,7 +211,7 @@ class DeltaTriples {
   // deletions (triples not in the index). The triples to be removed are taken
   // from the blocks in PSO that have more than `vacuum-minimum-block-size`
   // triples. Returns aggregated statistics.
-  nlohmann::json vacuum();
+  nlohmann::json vacuum(ad_utility::SharedCancellationHandle cancellationHandle);
 
   // The number of delta triples added and subtracted.
   int64_t numInserted() const {

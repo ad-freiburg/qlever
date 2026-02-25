@@ -301,7 +301,7 @@ VacuumStatistics processBlockForVacuum(
 
 // ____________________________________________________________________________
 TriplesToVacuum LocatedTriplesPerBlock::identifyTriplesToVacuum(
-    const Permutation& perm) const {
+    const Permutation& perm, ad_utility::SharedCancellationHandle cancellationHandle) const {
   std::vector<size_t> blocksToVacuum;
   for (const auto& [blockIndex, locatedTriples] : map_) {
     if (locatedTriples.size() >
@@ -351,8 +351,6 @@ TriplesToVacuum LocatedTriplesPerBlock::identifyTriplesToVacuum(
     };
     CompressedRelationReader::ScanSpecAndBlocks scanSpecAndBlocks(
         scanSpec, blockMetadataForSingleBlock(blockIndex));
-    auto cancellationHandle =
-        std::make_shared<ad_utility::CancellationHandle<>>();
     std::vector<ColumnIndex> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
     auto idTable = reader.scan(scanSpecAndBlocks, additionalColumns,
                                cancellationHandle, {});
@@ -360,6 +358,7 @@ TriplesToVacuum LocatedTriplesPerBlock::identifyTriplesToVacuum(
     totalStats +=
         processBlockForVacuum(idTable, map_.at(blockIndex), inverseKeys,
                               allDeletionsToRemove, allInsertionsToRemove);
+    cancellationHandle->throwIfCancelled();
   }
 
   return {std::move(allDeletionsToRemove), std::move(allInsertionsToRemove),

@@ -406,7 +406,11 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
         vocab, localVocab, testQec->getIndex().encodedIriManager());
   };
 
-  Id graphId = qlever::specialIds().at(DEFAULT_GRAPH_IRI);
+  Id graphId = [&vocab]() {
+    auto graphOpt = TripleComponent(TripleComponent::Iri::fromIriref(DEFAULT_GRAPH_IRI)).toValueId(vocab, *encodedIriManager());
+    AD_CORRECTNESS_CHECK(graphOpt.has_value());
+    return graphOpt.value();
+  }();
   auto keysMatch =
       [&toId,
        graphId](std::vector<std::array<TripleComponent, 3>> tripleComponents) {
@@ -1035,7 +1039,7 @@ TEST_F(DeltaTriplesTest, vacuum) {
       setRuntimeParameterForTest<&RuntimeParameters::vacuumMinimumBlockSize_>(
           0ul);
 
-  auto result = deltaTriples.vacuum();
+  auto result = deltaTriples.vacuum(cancellationHandle);
 
   EXPECT_THAT(deltaTriples, NumTriples(1, 1, 2));
   EXPECT_EQ(result["external"]["insertionsRemoved"], 2);

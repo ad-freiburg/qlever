@@ -991,6 +991,7 @@ TEST_F(LocatedTriplesTest, identifyTriplesToVacuum) {
   auto& perm = index.getPermutation(Permutation::PSO);
 
   LocalVocab lv;
+  auto cancellationHandle = std::make_shared<ad_utility::CancellationHandle<>>();
   constexpr auto encodedIriManager = []() -> const EncodedIriManager* {
     static EncodedIriManager mgr;
     return &mgr;
@@ -1029,7 +1030,7 @@ TEST_F(LocatedTriplesTest, identifyTriplesToVacuum) {
       // Block has exactly the threshold -> ignored.
       auto cleanup = setRuntimeParameterForTest<
           &RuntimeParameters::vacuumMinimumBlockSize_>(2ul);
-      auto result = ltpb.identifyTriplesToVacuum(perm);
+      auto result = ltpb.identifyTriplesToVacuum(perm, cancellationHandle);
       EXPECT_THAT(result.insertionsToRemove, testing::IsEmpty());
       EXPECT_THAT(result.deletionsToRemove, testing::IsEmpty());
       EXPECT_EQ(result.stats.totalRemoved(), 0u);
@@ -1040,7 +1041,7 @@ TEST_F(LocatedTriplesTest, identifyTriplesToVacuum) {
       // Block has more than the threshold.
       auto cleanup = setRuntimeParameterForTest<
           &RuntimeParameters::vacuumMinimumBlockSize_>(1ul);
-      auto result = ltpb.identifyTriplesToVacuum(perm);
+      auto result = ltpb.identifyTriplesToVacuum(perm, cancellationHandle);
       EXPECT_THAT(result.insertionsToRemove,
                   testing::UnorderedElementsAre(tInIdx1, tInIdx2));
       EXPECT_THAT(result.deletionsToRemove, testing::IsEmpty());
@@ -1060,7 +1061,7 @@ TEST_F(LocatedTriplesTest, identifyTriplesToVacuum) {
     dt.insertTriples(handle, {tInIdx1, tNotIdx1, tNotIdx3, tNotIdx5});
     dt.deleteTriples(handle, {tNotIdx2, tInIdx2, tNotIdx4});
     const auto& ltpb4 = dt.getLocatedTriplesForPermutation(Permutation::PSO);
-    auto result = ltpb4.identifyTriplesToVacuum(perm);
+    auto result = ltpb4.identifyTriplesToVacuum(perm, cancellationHandle);
     EXPECT_THAT(result.insertionsToRemove,
                 testing::UnorderedElementsAre(tInIdx1));
     EXPECT_THAT(result.deletionsToRemove,

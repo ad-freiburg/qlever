@@ -256,7 +256,7 @@ class LocatedTriplesPerBlock {
   // invalid deletions (triple not in index). Returns their SPO-canonical keys.
   // `perm` must be the permutation that this `LocatedTriplesPerBlock` belongs
   // to.
-  TriplesToVacuum identifyTriplesToVacuum(const Permutation& perm) const;
+  TriplesToVacuum identifyTriplesToVacuum(const Permutation& perm, ad_utility::SharedCancellationHandle cancellationHandle) const;
 
   // Return `true` iff one of the blocks contains `triple` with the given
   // `insertOrDelete` status (`true` for inserted, `false` for deleted).

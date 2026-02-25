@@ -20,6 +20,7 @@
 #include "index/Index.h"
 #include "index/IndexImpl.h"
 #include "index/LocatedTriples.h"
+#include "util/ChunkedForLoop.h"
 #include "util/Serializer/TripleSerializer.h"
 
 // ____________________________________________________________________________
@@ -97,28 +98,33 @@ void DeltaTriples::clear() {
 }
 
 // ____________________________________________________________________________
-nlohmann::json DeltaTriples::vacuum() {
+nlohmann::json DeltaTriples::vacuum(
+    ad_utility::SharedCancellationHandle cancellationHandle) {
   auto identifyTriplesToVacuum =
-      CPP_template_lambda(this)(bool isInternal)()() {
+      CPP_template_lambda(this, &cancellationHandle)(bool isInternal)()() {
     auto& basePerm = index_.getPermutation(Permutation::PSO);
     const auto& perm = isInternal ? basePerm.internalPermutation() : basePerm;
     const auto& ltpb =
         locatedTriples_->getLocatedTriplesForPermutation<isInternal>(
             Permutation::PSO);
-    return ltpb.identifyTriplesToVacuum(perm);
+    return ltpb.identifyTriplesToVacuum(perm, cancellationHandle);
   };
-  auto removeIdentifiedTriples = CPP_template_lambda(this)(bool isInternal)(
-      const std::vector<IdTriple<0>>& deletionsToRemove,
-      const std::vector<IdTriple<0>>& insertionsToRemove)() {
+  auto removeIdentifiedTriples = CPP_template_lambda(this, &cancellationHandle)(
+      bool isInternal)(const std::vector<IdTriple<0>>& deletionsToRemove,
+                       const std::vector<IdTriple<0>>& insertionsToRemove)() {
     auto& state = getState<isInternal>();
-    auto removeTriples = [this](const std::vector<IdTriple<0>>& triples,
-                                auto& triplesToHandlesMap) {
-      for (const auto& triple : triples) {
-        auto it = triplesToHandlesMap.find(triple);
-        AD_CORRECTNESS_CHECK(it != triplesToHandlesMap.end());
-        this->eraseTripleInAllPermutations<isInternal>(it->second);
-        triplesToHandlesMap.erase(it);
-      }
+    auto removeTriples = [this, &cancellationHandle](
+                             const std::vector<IdTriple<0>>& triples,
+                             auto& triplesToHandlesMap) {
+      ad_utility::chunkedForLoop<10'000>(
+          0, triples.size(),
+          [&triples, &triplesToHandlesMap, this](size_t i) {
+            auto it = triplesToHandlesMap.find(triples[i]);
+            AD_CORRECTNESS_CHECK(it != triplesToHandlesMap.end());
+            this->eraseTripleInAllPermutations<isInternal>(it->second);
+            triplesToHandlesMap.erase(it);
+          },
+          [&cancellationHandle]() { cancellationHandle->throwIfCancelled(); });
     };
 
     removeTriples(deletionsToRemove, state.triplesDeleted_);

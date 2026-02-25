@@ -467,11 +467,11 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 
     auto coroutine = computeInNewThread(
         updateThreadPool_,
-        [this] {
+        [this, &handle] {
           // Use `this` explicitly to silence false-positive errors on the
           // captured `this` being unused.
           return this->index_.deltaTriplesManager().modify<nlohmann::json>(
-              [](auto& deltaTriples) { return deltaTriples.vacuum(); });
+              [&handle](auto& deltaTriples) { return deltaTriples.vacuum(handle); });
         },
         handle);
     auto vacuumStats = co_await std::move(coroutine);
