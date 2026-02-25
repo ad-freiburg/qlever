@@ -1610,22 +1610,23 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
   template <bool reversed>
   void addCartesianProductImpl(const LeftBlocks& blocksLeft,
                                const RightBlocks& blocksRight) {
+    auto setInput = [this](const auto& lBlock, const auto& rBlock) {
+      this->compatibleRowAction_.setInput(lBlock.fullBlock(),
+                                          rBlock.fullBlock());
+    };
     if constexpr (reversed) {
       for (const auto& [rBlock, lBlock] :
            ::ranges::views::cartesian_product(blocksRight, blocksLeft)) {
-        this->compatibleRowAction_.setInput(lBlock.fullBlock(),
-                                            rBlock.fullBlock());
-        for (size_t j : rBlock.getIndexRange()) {
-          for (size_t i : lBlock.getIndexRange()) {
-            this->compatibleRowAction_.addRow(i, j);
-          }
+        setInput(lBlock, rBlock);
+        for (const auto& [j, i] : ::ranges::views::cartesian_product(
+                 rBlock.getIndexRange(), lBlock.getIndexRange())) {
+          this->compatibleRowAction_.addRow(i, j);
         }
       }
     } else {
       for (const auto& [lBlock, rBlock] :
            ::ranges::views::cartesian_product(blocksLeft, blocksRight)) {
-        this->compatibleRowAction_.setInput(lBlock.fullBlock(),
-                                            rBlock.fullBlock());
+        setInput(lBlock, rBlock);
         this->compatibleRowAction_.addRows(lBlock.getIndexRange(),
                                            rBlock.getIndexRange());
       }
