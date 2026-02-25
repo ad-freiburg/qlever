@@ -1243,7 +1243,8 @@ static std::pair<bool, std::optional<std::vector<Id>>> getGraphInfo(
     std::array<Id, MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA> graphs;
     for (Id graph : block.getColumn(ADDITIONAL_COLUMN_GRAPH_ID)) {
       auto actualEnd = graphs.begin() + foundGraphs;
-      if (ql::ranges::find(graphs.begin(), actualEnd, graph) != actualEnd) {
+      if (ql::ranges::find(graphs.begin(), actualEnd, graph.getBits(),
+                           &Id::getBits) != actualEnd) {
         continue;
       }
       if (foundGraphs == MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA) {
