@@ -16,6 +16,7 @@
 #include "parser/TripleComponent.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
+#include "util/VariantRangeFilter.h"
 
 namespace parsedQuery {
 
@@ -81,4 +82,26 @@ void BasicGraphPattern::appendTriples(BasicGraphPattern other) {
   auto inner = _expression.getDescriptor();
   return "BIND (" + inner + " AS " + _target.name() + ")";
 }
+
+// ____________________________________________________________________________
+void BasicGraphPattern::collectAllContainedVariables(
+    ad_utility::HashSet<Variable>& vars) const {
+  for (const SparqlTriple& t : _triples) {
+    t.forEachVariable([&vars](const auto& var) { vars.insert(var); });
+  }
+}
+
+// _____________________________________________________________________________
+ad_utility::HashSet<Variable> getVariablesPresentInFirstBasicGraphPattern(
+    const std::vector<parsedQuery::GraphPatternOperation>& graphPatterns) {
+  ad_utility::HashSet<Variable> vars;
+  auto basicGraphPatterns =
+      ad_utility::filterRangeOfVariantsByType<parsedQuery::BasicGraphPattern>(
+          graphPatterns);
+  if (!ql::ranges::empty(basicGraphPatterns)) {
+    (*basicGraphPatterns.begin()).collectAllContainedVariables(vars);
+  }
+  return vars;
+}
+
 }  // namespace parsedQuery
