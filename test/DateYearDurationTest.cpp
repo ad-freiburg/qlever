@@ -521,6 +521,7 @@ TEST(Date, parseErrors) {
   ASSERT_THROW(D::parseXsdDate("Kartoffelsalat"), E);
 }
 
+// _____________________________________________________________________________
 #ifndef REDUCED_FEATURE_SET_FOR_CPP17
 TEST(Date, toEpoch) {
   {
@@ -570,15 +571,18 @@ TEST(Date, toEpoch) {
     for (int i = 1; i < 24; i++) {
       Date date2 = Date(1999, 10, 11, 10, 5, 30, i);  // UTC + i
       // Difference in hours is converted to ns to be compared.
-      ASSERT_EQ(i * 3600000000000,
+      long long expected = static_cast<long long>(i) * 60 * 60 * 1'000'000'000;
+      ASSERT_EQ(expected,
                 (date1.toEpoch().value() - date2.toEpoch().value()).count());
       date2 = Date(1999, 10, 11, 10, 5, 30, -i);  // UTC - i
-      ASSERT_EQ(-i * 3600000000000,
+      ASSERT_EQ(-expected,
                 (date1.toEpoch().value() - date2.toEpoch().value()).count());
     }
   }
 }
+#endif
 
+// _____________________________________________________________________________
 TEST(Date, getTimeZoneOffsetToUTCInHours) {
   Date date = Date(1970, 1, 1, 0, 0, 0);  // Not TimeZone given
   ASSERT_EQ(0, date.getTimeZoneOffsetToUTCInHours());
@@ -592,7 +596,6 @@ TEST(Date, getTimeZoneOffsetToUTCInHours) {
     ASSERT_EQ(-i, date.getTimeZoneOffsetToUTCInHours());
   }
 }
-#endif
 
 TEST(DateYearOrDuration, AssertionFailures) {
   // These values are out of range.
@@ -649,8 +652,8 @@ TEST(DateYearOrDuration, Hashing) {
   EXPECT_THAT(set, ::testing::UnorderedElementsAre(d1, d2));
 }
 
-#ifndef REDUCED_FEATURE_SET_FOR_CPP17
 // _____________________________________________________________________________
+#ifndef REDUCED_FEATURE_SET_FOR_CPP17
 TEST(DateYearOrDuration, Subtraction) {
   {
     // Test for Date Subtraction

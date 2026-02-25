@@ -71,7 +71,7 @@ struct SubtractImpl {
   }
 #endif
   template <typename L, typename R>
-  ValueId operator()(L lhs, R rhs) const {
+  ValueId operator()(L, R) const {
     // For all other operations returning Undefined
     // It is not allowed to use subtractionn between Date and NumericValue
     return Id::makeUndefined();

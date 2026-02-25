@@ -75,8 +75,8 @@ std::optional<DayTimeDuration> Date::operator-(const Date& rhs) const {
     return std::nullopt;
   }
 
-  std::chrono::sys_time<std::chrono::nanoseconds> date1 = epoch1.value();
-  std::chrono::sys_time<std::chrono::nanoseconds> date2 = epoch2.value();
+  Date::Nanoseconds date1 = epoch1.value();
+  Date::Nanoseconds date2 = epoch2.value();
 
   DayTimeDuration::Type durationType = DayTimeDuration::Type::Positive;
   auto difference = date1 - date2;
@@ -87,19 +87,20 @@ std::optional<DayTimeDuration> Date::operator-(const Date& rhs) const {
   // Get total nanoseconds and convert them so a seconds double.
   double second =
       std::chrono::duration_cast<std::chrono::nanoseconds>(difference).count() /
-      1000000000;
+      1'000'000'000;
+  // Only passing seconds to DayTimeDuration. The object itself will convert the
+  // input to days, hours, minutes and seconds.
   return DayTimeDuration(durationType, 0, 0, 0, second);
 }
 
 // _____________________________________________________________________________
-std::optional<std::chrono::sys_time<std::chrono::nanoseconds>> Date::toEpoch()
-    const {
+std::optional<Date::Nanoseconds> Date::toEpoch() const {
   using namespace std::chrono;
   auto date = year_month_day{year(getYear()) / getMonth() / getDay()};
   if (date.ok()) {
     // Build timestamp from date
     auto second = duration<double>{getSecond()};
-    std::chrono::sys_time<std::chrono::nanoseconds> result =
+    Date::Nanoseconds result =
         sys_days(date) + hours{getHour() - getTimeZoneOffsetToUTCInHours()} +
         minutes{getMinute()} +
         duration_cast<nanoseconds>(
@@ -110,7 +111,7 @@ std::optional<std::chrono::sys_time<std::chrono::nanoseconds>> Date::toEpoch()
     return std::nullopt;
   }
 }
-
+#endif
 // _____________________________________________________________________________
 int8_t Date::getTimeZoneOffsetToUTCInHours() const {
   TimeZone tz = getTimeZone();
@@ -129,4 +130,3 @@ int8_t Date::getTimeZoneOffsetToUTCInHours() const {
       },
       tz);
 }
-#endif

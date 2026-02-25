@@ -178,6 +178,9 @@ class Date {
     QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(TimeZoneZ)
   };
   using TimeZone = std::variant<NoTimeZone, TimeZoneZ, int>;
+#ifndef REDUCED_FEATURE_SET_FOR_CPP17
+  using Nanoseconds = std::chrono::sys_time<std::chrono::nanoseconds>;
+#endif
   /// Construct a `Date` from values for the different components. If any of the
   /// components is out of range, a `DateOutOfRangeException` is thrown.
   constexpr Date(int year, int month, int day, int hour = -1, int minute = 0,
@@ -343,12 +346,11 @@ class Date {
   // Calculates duration between the two Dates using Epoch time.
   std::optional<DayTimeDuration> operator-(const Date& rhs) const;
 
-  // If date is valid, converting it to Unix Epoch timestamp.
-  std::optional<std::chrono::sys_time<std::chrono::nanoseconds>> toEpoch()
-      const;
-
-  int8_t getTimeZoneOffsetToUTCInHours() const;
+  // If date is valid, converting it to Unix Epoch timestamp. ToEpoch always
+  // returns a UTC timestamp.
+  std::optional<Nanoseconds> toEpoch() const;
 #endif
+  int8_t getTimeZoneOffsetToUTCInHours() const;
 };
 #ifdef QLEVER_CPP_17
 static_assert(std::is_default_constructible_v<Date>);

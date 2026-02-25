@@ -465,13 +465,13 @@ TEST(SparqlExpression, arithmeticOperators) {
   testMultiply(times2, mixed, I(2));
   testMultiply(times13, mixed, D(1.3));
 
+#ifndef REDUCED_FEATURE_SET_FOR_CPP17
   // Test for DateTime - DateTime
   V<Id> minus2000{{createDat("-P32954DT13H48M37S", false),
                    createDat("P3553DT1H1M59S", false),
                    createDat("-P14903DT10H46M47S", false),
                    createDat("-P40239DT23H47M30S", false)},
                   alloc};
-#ifndef REDUCED_FEATURE_SET_FOR_CPP17
   testMinus(minus2000, dat, createDat("2000-01-01T00:00:00Z"));
 #else
   V<Id> undefined{{U, U, U, U}, alloc};
