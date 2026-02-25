@@ -8,8 +8,8 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/StringExpressionsHelper.h"
-#include "engine/sparqlExpressions/TypeErasedNaryExpressionImpl.h"
 #include "engine/sparqlExpressions/VariadicExpression.h"
 #include "util/StringUtils.h"
 
@@ -59,12 +59,7 @@ struct StrImpl {
     }
   }
 };
-class StrExpressionImpl : public NaryExpression<StrImpl, StringValueGetter> {
-  using Base = NaryExpression<StrImpl, StringValueGetter>;
-
- public:
-  using Base::Base;
-};
+NARY_EXPRESSION(StrExpressionImpl, 1, FV<StrImpl, StringValueGetter>);
 
 class StrExpression : public StrExpressionImpl {
   using StrExpressionImpl::StrExpressionImpl;
@@ -131,6 +126,8 @@ struct ApplyBaseIfPresent {
         baseIri.getBaseIri(true))};
   }
 };
+using IriOrUriExpression = NARY<2, FV<ApplyBaseIfPresent, IriOrUriValueGetter>>;
+
 // STRLEN
 struct Strlen {
   Id operator()(std::string_view s) const {
@@ -232,14 +229,13 @@ struct StrStartsImpl {
   }
 };
 
-class StrStartsExpression
-    : public NaryExpression<LiftStringFunction<StrStartsImpl>,
-                            StringValueGetter, StringValueGetter> {
-  using Base = NaryExpression<LiftStringFunction<StrStartsImpl>,
-                              StringValueGetter, StringValueGetter>;
+namespace {
 
+CPP_template(typename NaryOperation)(
+    requires isOperation<NaryOperation>) class StrStartsExpressionImpl
+    : public NaryExpression<NaryOperation> {
  public:
-  using Base::Base;
+  using NaryExpression<NaryOperation>::NaryExpression;
   std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
       [[maybe_unused]] bool isNegated) const override {
     std::vector<PrefilterExprVariablePair> prefilterVec;
@@ -262,6 +258,12 @@ class StrStartsExpression
     return prefilterVec;
   }
 };
+
+}  // namespace
+
+using StrStartsExpression = StrStartsExpressionImpl<
+    Operation<2, FV<LiftStringFunction<StrStartsImpl>, StringValueGetter>>>;
+
 // STRENDS
 struct StrEndsImpl {
   Id operator()(std::string_view text, std::string_view pattern) const {
@@ -613,17 +615,10 @@ CPP_template(typename T,
     make(C&... children) {
   return std::make_unique<T>(std::move(children)...);
 }
-
-using namespace sparqlExpression::detail;
-Expr makeStrExpression(Expr child) {
-  return namedExpressionFactory<StrExpression, StrImpl, StringValueGetter>()(
-      std::move(child));
-}
+Expr makeStrExpression(Expr child) { return make<StrExpression>(child); }
 
 Expr makeIriOrUriExpression(Expr child, SparqlExpression::Ptr baseIri) {
-  return expressionFactory<ApplyBaseIfPresent, IriOrUriValueGetter,
-                           IriOrUriValueGetter>()(std::move(child),
-                                                  std::move(baseIri));
+  return make<IriOrUriExpression>(child, baseIri);
 }
 
 Expr makeStrlenExpression(Expr child) { return make<StrlenExpression>(child); }
@@ -633,10 +628,7 @@ Expr makeSubstrExpression(Expr string, Expr start, Expr length) {
 }
 
 Expr makeStrStartsExpression(Expr child1, Expr child2) {
-  return namedExpressionFactory<StrStartsExpression,
-                                LiftStringFunction<StrStartsImpl>,
-                                StringValueGetter, StringValueGetter>()(
-      std::move(child1), std::move(child2));
+  return make<StrStartsExpression>(child1, child2);
 }
 
 Expr makeLowercaseExpression(Expr child) {
@@ -700,8 +692,7 @@ Expr makeSHA384Expression(Expr child) { return make<SHA384Expression>(child); }
 Expr makeSHA512Expression(Expr child) { return make<SHA512Expression>(child); }
 
 Expr makeConvertToStringExpression(Expr child) {
-  return namedExpressionFactory<StrExpressionImpl, StrImpl,
-                                StringValueGetter>()(std::move(child));
+  return std::make_unique<StrExpressionImpl>(std::move(child));
 }
 
 }  // namespace sparqlExpression

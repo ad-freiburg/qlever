@@ -94,6 +94,7 @@ struct Mixin {
 
 // Return `NumericValue` which is then used as the input to numeric expressions.
 struct NumericValueGetter : Mixin<NumericValueGetter> {
+  using Value = NumericValue;
   using Mixin<NumericValueGetter>::operator();
   NumericValue operator()(const LiteralOrIri&, const EvaluationContext*) const {
     return NotNumeric{};
@@ -115,6 +116,7 @@ struct ActualValueGetter {
 /// Returns true iff the valid is not a NULL/UNDEF value (from optional) and
 /// not a nan (signalling an error in a previous calculation).
 struct IsValidValueGetter : Mixin<IsValidValueGetter> {
+  using Value = bool;
   using Mixin<IsValidValueGetter>::operator();
   // check for NULL/UNDEF values.
   bool operator()(ValueId id, const EvaluationContext*) const;
@@ -129,6 +131,7 @@ struct IsValidValueGetter : Mixin<IsValidValueGetter> {
 struct EffectiveBooleanValueGetter : Mixin<EffectiveBooleanValueGetter> {
   using Mixin<EffectiveBooleanValueGetter>::operator();
   enum struct Result { False, True, Undef };
+  using Value = Result;
 
   Result operator()(ValueId id, const EvaluationContext*) const;
 
@@ -160,6 +163,7 @@ struct StringValueGetter : Mixin<StringValueGetter> {
 // see `ExportQueryExecutionTrees::idToLiteral` for details.
 struct LiteralValueGetterWithStrFunction
     : Mixin<LiteralValueGetterWithStrFunction> {
+  using Value = std::optional<ad_utility::triple_component::Literal>;
   using Mixin<LiteralValueGetterWithStrFunction>::operator();
 
   std::optional<ad_utility::triple_component::Literal> operator()(
@@ -173,6 +177,7 @@ struct LiteralValueGetterWithStrFunction
 // returned. This is used in the string expressions in `StringExpressions.cpp`.
 struct LiteralValueGetterWithoutStrFunction
     : Mixin<LiteralValueGetterWithoutStrFunction> {
+  using Value = std::optional<ad_utility::triple_component::Literal>;
   using Mixin<LiteralValueGetterWithoutStrFunction>::operator();
 
   std::optional<ad_utility::triple_component::Literal> operator()(
@@ -185,6 +190,7 @@ struct LiteralValueGetterWithoutStrFunction
 // given `datatype`.
 template <Datatype datatype>
 struct IsValueIdValueGetter : Mixin<IsValueIdValueGetter<datatype>> {
+  using Value = Id;
   using Mixin<IsValueIdValueGetter>::operator();
   Id operator()(Id id, const EvaluationContext*) const {
     return Id::makeFromBool(id.getDatatype() == datatype);
@@ -198,6 +204,7 @@ struct IsValueIdValueGetter : Mixin<IsValueIdValueGetter<datatype>> {
 // Boolean value getter for `isNumeric`. Regarding which datatypes count as
 // numeric, see https://www.w3.org/TR/sparql11-query/#operandDataTypes .
 struct IsNumericValueGetter : Mixin<IsNumericValueGetter> {
+  using Value = Id;
   using Mixin<IsNumericValueGetter>::operator();
   Id operator()(ValueId id, const EvaluationContext*) const {
     Datatype datatype = id.getDatatype();
@@ -214,6 +221,7 @@ template <auto isSomethingFunction, const auto& isLiteralOrIriSomethingFunction>
 struct IsSomethingValueGetter
     : Mixin<IsSomethingValueGetter<isSomethingFunction,
                                    isLiteralOrIriSomethingFunction>> {
+  using Value = Id;
   using Mixin<IsSomethingValueGetter>::operator();
   Id operator()(ValueId id, const EvaluationContext* context) const;
 
@@ -237,6 +245,7 @@ using IsLiteralValueGetter =
 struct DateValueGetter : Mixin<DateValueGetter> {
   using Mixin<DateValueGetter>::operator();
   using Opt = std::optional<DateYearOrDuration>;
+  using Value = Opt;
 
   Opt operator()(ValueId id, const EvaluationContext*) const {
     if (id.getDatatype() == Datatype::Date) {
@@ -276,6 +285,7 @@ struct GeoPointValueGetter : Mixin<GeoPointValueGetter> {
 // `std::nullopt`. This is used for expressions that work on strings, but for
 // the input of which the `STR()` function was not used in a query.
 struct LiteralFromIdGetter : Mixin<LiteralFromIdGetter> {
+  using Value = std::optional<std::string>;
   using Mixin<LiteralFromIdGetter>::operator();
   std::optional<std::string> operator()(ValueId id,
                                         const EvaluationContext* context) const;
@@ -293,6 +303,7 @@ struct LiteralFromIdGetter : Mixin<LiteralFromIdGetter> {
 // '\1 \\abc $', where the former variant is valid in the SPARQL standard and
 // the latter represents the format that re2 expects.
 struct ReplacementStringGetter : Mixin<ReplacementStringGetter> {
+  using Value = std::optional<std::string>;
   using Mixin<ReplacementStringGetter>::operator();
   std::optional<std::string> operator()(ValueId,
                                         const EvaluationContext*) const;
@@ -327,6 +338,7 @@ struct RegexValueGetter {
 // `ToNumericValueGetter` returns `IntDoubleStr` a `std::variant` object which
 // can contain: `int64_t`, `double`, `std::string` or `std::monostate`(empty).
 struct ToNumericValueGetter : Mixin<ToNumericValueGetter> {
+  using Value = IntDoubleStr;
   using Mixin<ToNumericValueGetter>::operator();
   IntDoubleStr operator()(ValueId id, const EvaluationContext*) const;
   IntDoubleStr operator()(const LiteralOrIri& s,
@@ -337,6 +349,7 @@ struct ToNumericValueGetter : Mixin<ToNumericValueGetter> {
 // Returns an object of type std::variant<std::monostate,
 // ad_utility::triple_component::Literal, std::string> object.
 struct DatatypeValueGetter : Mixin<DatatypeValueGetter> {
+  using Value = OptIri;
   using Mixin<DatatypeValueGetter>::operator();
   OptIri operator()(ValueId id, const EvaluationContext* context) const;
   OptIri operator()(const LiteralOrIri& litOrIri,
@@ -349,6 +362,7 @@ struct DatatypeValueGetter : Mixin<DatatypeValueGetter> {
 // ValueGetter is currently used in `StringExpressions.cpp` within the
 // implementation of `STRDT()`.
 struct IriValueGetter : Mixin<IriValueGetter> {
+  using Value = OptIri;
   using Mixin<IriValueGetter>::operator();
   OptIri operator()([[maybe_unused]] ValueId id,
                     const EvaluationContext*) const {
@@ -392,6 +406,7 @@ struct GeoPointOrWktValueGetter : Mixin<GeoPointOrWktValueGetter> {
 // `LangExpression.cpp` for the (simple) implementation of the
 // `LANG()`-expression.
 struct LanguageTagValueGetter : Mixin<LanguageTagValueGetter> {
+  using Value = std::optional<std::string>;
   using Mixin<LanguageTagValueGetter>::operator();
   std::optional<std::string> operator()(ValueId id,
                                         const EvaluationContext* context) const;
@@ -453,6 +468,7 @@ using OptStringOrDate =
 // This value-getter retrieves `DateYearOrDuration` or `std::string`
 // (from literal) values.
 struct StringOrDateGetter : Mixin<StringOrDateGetter> {
+  using Value = OptStringOrDate;
   using Mixin<StringOrDateGetter>::operator();
   // Remark: We use only LiteralFromIdGetter because Iri values should never
   // contain date-related string values.
