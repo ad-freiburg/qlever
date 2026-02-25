@@ -187,9 +187,10 @@ class GraphStoreProtocol {
     // existed before in our model of implicit graph existence.
     drop.responseMiddleware_ =
         ResponseMiddleware([](ResponseMiddleware::ResponseT response,
-                              std::vector<UpdateMetadata> updateMetadata) {
-          AD_CORRECTNESS_CHECK(updateMetadata.size() == 2 &&
-                               updateMetadata.at(0).inUpdate_.has_value());
+                              const std::vector<UpdateMetadata>& updateMetadata) {
+          AD_CORRECTNESS_CHECK(updateMetadata.size() == 2);
+          const auto& dropMeta = updateMetadata.at(0);
+          AD_CORRECTNESS_CHECK(dropMeta.inUpdate_.has_value());
           if (updateMetadata.at(0).inUpdate_.value().triplesDeleted_ > 0) {
             response.result(boost::beast::http::status::ok);
           } else {

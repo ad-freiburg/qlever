@@ -4,8 +4,8 @@
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
-#ifndef QLEVER_SRC_ENGINE_UPDATETYPES_H
-#define QLEVER_SRC_ENGINE_UPDATETYPES_H
+#ifndef QLEVER_SRC_ENGINE_UPDATEMETADATA_H
+#define QLEVER_SRC_ENGINE_UPDATEMETADATA_H
 
 #include "index/DeltaTriples.h"
 
@@ -17,4 +17,4 @@ struct UpdateMetadata {
   std::optional<DeltaTriplesCount> countAfter_;
 };
 
-#endif  // QLEVER_SRC_ENGINE_UPDATETYPES_H
+#endif  // QLEVER_SRC_ENGINE_UPDATEMETADATA_H

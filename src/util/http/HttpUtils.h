@@ -145,7 +145,7 @@ CPP_template(typename RequestType)(requires HttpRequest<RequestType>) ResponseT
 }
 
 namespace detail {
-static cppcoro::generator<std::string> toGenerator(std::string str) {
+inline cppcoro::generator<std::string> toGenerator(std::string str) {
   co_yield std::move(str);
 }
 }  // namespace detail

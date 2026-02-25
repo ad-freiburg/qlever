@@ -1245,7 +1245,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       std::move(responseJson), request);
   if (!responseMiddlewares.empty()) {
     for (auto& middleware : responseMiddlewares) {
-      response = middleware.apply(std::move(response), std::move(metadatas));
+      response = middleware.apply(std::move(response), metadatas);
     }
   }
   co_await send(std::move(response));

@@ -137,9 +137,11 @@ ParsedQuery GraphStoreProtocol::transformDelete(const GraphOrDefault& graph,
   // With implicit graph existence a graph existed iff triples were actually
   // deleted.
   update.responseMiddleware_ = ResponseMiddleware(
-      [](ResponseMiddleware::ResponseT response, auto result) {
+      [](ResponseMiddleware::ResponseT response, const auto& result) {
         AD_CORRECTNESS_CHECK(result.size() == 1);
-        if (result.at(0).inUpdate_->triplesDeleted_ == 0) {
+        const auto& updateMeta = result.at(0);
+        AD_CORRECTNESS_CHECK(updateMeta.inUpdate_.has_value());
+        if (updateMeta.inUpdate_->triplesDeleted_ == 0) {
           response.result(boost::beast::http::status::not_found);
         } else {
           response.result(boost::beast::http::status::ok);

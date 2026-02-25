@@ -117,10 +117,8 @@ TEST(GraphStoreProtocolTest, transformPostAndTsop) {
   auto index = ad_utility::testing::makeTestIndex("GraphStoreProtocolTest",
                                                   TestIndexConfig{});
   runTests(
-      [&index](http::request<http::string_body> request,
-                              GraphOrDefault graph) {
-        return GraphStoreProtocol::transformPost(request, graph,
-                                                 index);
+      [&index](http::request<http::string_body> request, GraphOrDefault graph) {
+        return GraphStoreProtocol::transformPost(request, graph, index);
       },
       true);
   runTests(
@@ -285,10 +283,9 @@ TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
                   index),
               testing::ElementsAre(
                   testing::AllOf(GetGraph(iri("<foo>")), HasMiddleware)));
-  auto expectUnsupportedMethod = [&index](
-                                     const http::verb method,
-                                     ad_utility::source_location l =
-                                         AD_CURRENT_SOURCE_LOC()) {
+  auto expectUnsupportedMethod = [&index](const http::verb method,
+                                          ad_utility::source_location l =
+                                              AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
     AD_EXPECT_THROW_WITH_MESSAGE(
         GraphStoreProtocol::transformGraphStoreProtocol(
@@ -446,16 +443,14 @@ TEST(GraphStoreProtocolTest, EncodedIriManagerUsage) {
 
   // Test transformPost with IRIs that would be encoded if the feature were
   // enabled
-  auto expectTransformPost =
-      CPP_template_lambda(&index)(typename RequestT)(
-          const RequestT& request, const GraphOrDefault& graph,
-          const testing::Matcher<const ParsedQuery&>& matcher,
-          ad_utility::source_location l = AD_CURRENT_SOURCE_LOC())(
-          requires ad_utility::httpUtils::HttpRequest<RequestT>) {
+  auto expectTransformPost = CPP_template_lambda(&index)(typename RequestT)(
+      const RequestT& request, const GraphOrDefault& graph,
+      const testing::Matcher<const ParsedQuery&>& matcher,
+      ad_utility::source_location l = AD_CURRENT_SOURCE_LOC())(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>) {
     auto trace = generateLocationTrace(l);
-    EXPECT_THAT(
-        GraphStoreProtocol::transformPost(request, graph, index),
-        matcher);
+    EXPECT_THAT(GraphStoreProtocol::transformPost(request, graph, index),
+                matcher);
   };
 
   // Test with encodable IRIs - they should remain as IRIs since the index
