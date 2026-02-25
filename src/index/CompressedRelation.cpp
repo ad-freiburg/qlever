@@ -1237,22 +1237,22 @@ static std::pair<bool, std::optional<std::vector<Id>>> getGraphInfo(
 
   // Return the contained graphs, or  `nullopt` if there are too many of them.
   auto graphInfo = [&block]() -> std::optional<std::vector<Id>> {
-    std::vector<Id> graphColumn;
-    ql::ranges::copy(block.getColumn(ADDITIONAL_COLUMN_GRAPH_ID),
-                     std::back_inserter(graphColumn));
-    ql::ranges::sort(graphColumn);
-    auto endOfUnique = std::unique(graphColumn.begin(), graphColumn.end());
-    size_t numGraphs = endOfUnique - graphColumn.begin();
-    if (numGraphs > MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA) {
-      return std::nullopt;
+    size_t foundGraphs = 0;
+    // O(MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA * n), but good for cache
+    // efficiency.
+    std::array<Id, MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA> graphs;
+    for (Id graph : block.getColumn(ADDITIONAL_COLUMN_GRAPH_ID)) {
+      auto actualEnd = graphs.begin() + foundGraphs;
+      if (ql::ranges::find(graphs.begin(), actualEnd, graph) != actualEnd) {
+        continue;
+      }
+      if (foundGraphs == MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA) {
+        return std::nullopt;
+      }
+      graphs.at(foundGraphs) = graph;
+      ++foundGraphs;
     }
-    // Note: we cannot simply resize `graphColumn`, as this doesn't free
-    // the memory that is not needed anymore. We can do either `resize +
-    // shrink_to_fit`, which is not guaranteed by the standard, but works in
-    // practice. We choose the alternative of simply returning a new vector
-    // with the correct capacity.
-    return std::vector<Id>(graphColumn.begin(),
-                           graphColumn.begin() + numGraphs);
+    return std::vector<Id>(graphs.begin(), graphs.begin() + foundGraphs);
   };
   return {hasDuplicates(), graphInfo()};
 }
