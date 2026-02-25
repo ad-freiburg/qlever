@@ -496,6 +496,16 @@ struct IntValueGetter : Mixin<IntValueGetter> {
   std::optional<int64_t> operator()(ValueId id, const EvaluationContext*) const;
 };
 
+// A struct that converts one of the overloaded `value getters` from
+// `SparqlExpressionValueGetters.h` into a callable that takes an
+// `ExpressionResult` variant, and returns a `TypeErasedInputRange`. This is
+// exactly the signature that the `TypeErasedNaryExpression` above requires.
+template <typename ValueGetter>
+struct TypeErasedValueGetter {
+  ad_utility::InputRangeTypeErased<typename ValueGetter::Value> operator()(
+      ExpressionResult res, EvaluationContext* context, size_t size) const;
+};
+
 }  // namespace sparqlExpression::detail
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONVALUEGETTERS_H

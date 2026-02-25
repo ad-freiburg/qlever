@@ -335,6 +335,19 @@ std::optional<ExpressionResult> evaluateOnSpecializedFunctionsIfPossible(
   return result;
 }
 
+template <size_t N, typename>
+struct ValueGetterPackImpl;
+
+template <size_t N, typename... ValueGetters>
+struct ValueGetterPackImpl<N, std::tuple<ValueGetters...>> {
+  using type = std::conditional_t<
+      sizeof...(ValueGetters) != 1, std::tuple<ValueGetters...>,
+      boost::mp11::mp_repeat_c<std::tuple<ValueGetters...>, N>>;
+};
+
+template <size_t N, typename T>
+using ValueGetterPack = typename ValueGetterPackImpl<N, T>::type;
+
 // Class for an operation used in a `SparqlExpression`, consisting of the
 // function for computing the operation and the value getters for the operands.
 // The number of operands is fixed.
@@ -365,9 +378,7 @@ struct Operation {
  public:
   constexpr static size_t N = NumOperands;
   using Function = typename FunctionAndValueGettersT::Function;
-  using ValueGetters = std::conditional_t<
-      NV == 1, std::array<std::tuple_element_t<0, OriginalValueGetters>, N>,
-      OriginalValueGetters>;
+  using ValueGetters = ValueGetterPack<N, OriginalValueGetters>;
   Function _function;
   ValueGetters _valueGetters{};
   std::tuple<SpecializedFunctions...> _specializedFunctions{};
