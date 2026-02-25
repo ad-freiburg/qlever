@@ -220,7 +220,7 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
             for (auto col : allCols | ::ranges::views::take(REGULAR_COLUMNS)) {
               ql::ranges::for_each(col, remapId);
             }
-            AD_CORRECTNESS_CHECK(ql::ranges::all_of(
+            AD_EXPENSIVE_CHECK(ql::ranges::all_of(
                 allCols | ::ranges::views::drop(REGULAR_COLUMNS), [](auto col) {
                   return ql::ranges::all_of(col, [](Id id) {
                     return id.getDatatype() == Datatype::Int ||
