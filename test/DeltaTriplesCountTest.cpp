@@ -9,7 +9,7 @@
 
 #include <gmock/gmock.h>
 
-#include "index/DeltaTriples.h"
+#include "engine/UpdateMetadata.h"
 
 // _____________________________________________________________________________
 TEST(DeltaTriplesCountTest, toJson) {

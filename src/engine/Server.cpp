@@ -26,6 +26,7 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryPlanner.h"
 #include "engine/SparqlProtocol.h"
+#include "engine/UpdateMetadata.h"
 #include "global/RuntimeParameters.h"
 #include "index/IndexImpl.h"
 #include "index/IndexRebuilder.h"
@@ -1243,9 +1244,10 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   // successful update request is implementation defined."
   auto response = ad_utility::httpUtils::createJsonResponse(
       std::move(responseJson), request);
+  auto metadatasOpt = std::optional(std::move(metadatas));
   if (!responseMiddlewares.empty()) {
     for (auto& middleware : responseMiddlewares) {
-      response = middleware.apply(std::move(response), metadatas);
+      response = middleware.apply(std::move(response), metadatasOpt);
     }
   }
   co_await send(std::move(response));

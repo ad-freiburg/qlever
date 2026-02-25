@@ -185,13 +185,13 @@ class GraphStoreProtocol {
     // - 200 Ok or 204 No Content if an existing graph is modified
     // When the drop (first operation) deletes triples then the graph has
     // existed before in our model of implicit graph existence.
-    drop.responseMiddleware_ =
-        ResponseMiddleware([](ResponseMiddleware::ResponseT response,
-                              const std::vector<UpdateMetadata>& updateMetadata) {
+    drop.responseMiddleware_ = ResponseMiddleware(
+        [](ResponseMiddleware::ResponseT response,
+           const std::vector<UpdateMetadata>& updateMetadata) {
           AD_CORRECTNESS_CHECK(updateMetadata.size() == 2);
           const auto& dropMeta = updateMetadata.at(0);
           AD_CORRECTNESS_CHECK(dropMeta.inUpdate_.has_value());
-          if (updateMetadata.at(0).inUpdate_.value().triplesDeleted_ > 0) {
+          if (dropMeta.inUpdate_.value().triplesDeleted_ > 0) {
             response.result(boost::beast::http::status::ok);
           } else {
             response.result(boost::beast::http::status::created);

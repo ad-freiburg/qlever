@@ -8,6 +8,7 @@
 
 #include "engine/QueryPlanner.h"
 #include "engine/Server.h"
+#include "engine/UpdateMetadata.h"
 #include "parser/SparqlParser.h"
 #include "util/GTestHelpers.h"
 #include "util/HttpRequestHelpers.h"
