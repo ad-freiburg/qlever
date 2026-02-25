@@ -316,7 +316,7 @@ addLinkAndDiscoverTestSerial(DateYearDurationTest util parser)
 
 addLinkAndDiscoverTest(DurationTest util)
 
-addLinkAndDiscoverTest(TripleComponentTest parser)
+addLinkAndDiscoverTest(TripleComponentTest)
 
 addLinkAndDiscoverTest(ValueIdTest util)
 

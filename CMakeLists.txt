@@ -394,7 +394,7 @@ FetchContent_Declare(
 # Apply FetchContent
 ################################
 set(_QLEVER_SAVED_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
-set(BUILD_SHARED_LIBS OFF)
+#set(BUILD_SHARED_LIBS OFF)
 FetchContent_MakeAvailable(abseil)
 set(BUILD_SHARED_LIBS ${_QLEVER_SAVED_BUILD_SHARED_LIBS})
 

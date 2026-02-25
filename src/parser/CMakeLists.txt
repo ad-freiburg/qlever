@@ -2,15 +2,15 @@
 add_subdirectory(sparqlParser)
 add_subdirectory(data)
 
+add_library(basicParser RdfParser.cpp ParallelBuffer.cpp Tokenizer.cpp)
+qlever_target_link_libraries(basicParser util rdfTypes)
+
 add_library(parser
         sparqlParser/SparqlQleverVisitor.cpp
         SparqlParser.cpp
         ParsedQuery.cpp
-        RdfParser.cpp
-        Tokenizer.cpp
-        ParallelBuffer.cpp
         SparqlParserHelpers.cpp
-        TripleComponent.cpp
+#        TripleComponent.cpp
         GraphPatternOperation.cpp
         MagicServiceQuery.cpp
         NamedCachedResult.cpp
@@ -30,4 +30,4 @@ add_library(parser
         MaterializedViewQuery.cpp
         GraphPatternAnalysis.cpp
 )
-qlever_target_link_libraries(parser sparqlParser parserData sparqlExpressions rdfEscaping global util index rdfTypes)
+qlever_target_link_libraries(parser basicParser sparqlParser parserData sparqlExpressions rdfEscaping global util index rdfTypes)
