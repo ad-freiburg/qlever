@@ -1255,7 +1255,11 @@ static std::pair<bool, std::optional<std::vector<Id>>> getGraphInfo(
     }
     return std::vector<Id>(graphs.begin(), graphs.begin() + foundGraphs);
   };
-  return {hasDuplicates(), graphInfo()};
+  auto info = graphInfo();
+  // If there's only one graph, we know that there are no duplicates across
+  // different graphs.
+  bool onlyOneGraph = info.has_value() && info.value().size() == 1;
+  return {!onlyOneGraph && hasDuplicates(), graphInfo()};
 }
 
 // _____________________________________________________________________________
