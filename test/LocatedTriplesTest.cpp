@@ -991,7 +991,8 @@ TEST_F(LocatedTriplesTest, identifyTriplesToVacuum) {
   auto& perm = index.getPermutation(Permutation::PSO);
 
   LocalVocab lv;
-  auto cancellationHandle = std::make_shared<ad_utility::CancellationHandle<>>();
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
   constexpr auto encodedIriManager = []() -> const EncodedIriManager* {
     static EncodedIriManager mgr;
     return &mgr;

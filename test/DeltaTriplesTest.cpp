@@ -407,7 +407,9 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
   };
 
   Id graphId = [&vocab]() {
-    auto graphOpt = TripleComponent(TripleComponent::Iri::fromIriref(DEFAULT_GRAPH_IRI)).toValueId(vocab, *encodedIriManager());
+    auto graphOpt =
+        TripleComponent(TripleComponent::Iri::fromIriref(DEFAULT_GRAPH_IRI))
+            .toValueId(vocab, *encodedIriManager());
     AD_CORRECTNESS_CHECK(graphOpt.has_value());
     return graphOpt.value();
   }();

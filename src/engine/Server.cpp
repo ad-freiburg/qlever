@@ -471,7 +471,9 @@ CPP_template_def(typename RequestT, typename ResponseT)(
           // Use `this` explicitly to silence false-positive errors on the
           // captured `this` being unused.
           return this->index_.deltaTriplesManager().modify<nlohmann::json>(
-              [handle](auto& deltaTriples) { return deltaTriples.vacuum(handle); });
+              [handle](auto& deltaTriples) {
+                return deltaTriples.vacuum(handle);
+              });
         },
         handle);
     auto vacuumStats = co_await std::move(coroutine);

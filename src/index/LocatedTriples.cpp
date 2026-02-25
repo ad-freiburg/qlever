@@ -301,7 +301,8 @@ VacuumStatistics processBlockForVacuum(
 
 // ____________________________________________________________________________
 TriplesToVacuum LocatedTriplesPerBlock::identifyTriplesToVacuum(
-    const Permutation& perm, ad_utility::SharedCancellationHandle cancellationHandle) const {
+    const Permutation& perm,
+    ad_utility::SharedCancellationHandle cancellationHandle) const {
   std::vector<size_t> blocksToVacuum;
   for (const auto& [blockIndex, locatedTriples] : map_) {
     if (locatedTriples.size() >=
