@@ -15,6 +15,7 @@
 #include "./DeltaTriplesTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
+#include "./util/RuntimeParametersTestHelpers.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "index/DeltaTriples.h"
 #include "index/IndexImpl.h"
@@ -81,6 +82,13 @@ class DeltaTriplesTest : public ::testing::Test {
       const Index::Vocab& vocab, LocalVocab& localVocab,
       const std::vector<std::string>& turtles) {
     auto toID = [&localVocab, &vocab](TurtleTriple triple) {
+      // The RdfStringParser returns temporary internal IDs for the default
+      // graph. Detect this and overwrite with the Iri which gets looked up for
+      // the correct ID.
+      if (triple.graphIri_ == qlever::specialIds().at(DEFAULT_GRAPH_IRI)) {
+        triple.graphIri_ = TripleComponent(
+            TripleComponent::Iri::fromIriref(DEFAULT_GRAPH_IRI));
+      }
       std::array<Id, 4> ids{
           std::move(triple.subject_)
               .toValueId(vocab, localVocab, *encodedIriManager()),
@@ -996,4 +1004,45 @@ TEST_F(DeltaTriplesTest, getCurrentLocatedTriplesSharedStateWithVocab) {
                                       Eq(iri2)))));
 
   EXPECT_THAT(ownedBlocks, ElementsAre());
+}
+
+// _____________________________________________________________________________
+TEST_F(DeltaTriplesTest, vacuum) {
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  DeltaTriples deltaTriples(testQec->getIndex());
+  auto& vocab = testQec->getIndex().getVocab();
+  LocalVocab localVocab;
+
+  // Insertions of triples in the index
+  deltaTriples.insertTriples(
+      cancellationHandle,
+      makeIdTriples(vocab, localVocab, {"<a> <upp> <A>", "<b> <upp> <B>"}));
+  // Deletions of triples not in the index
+  deltaTriples.deleteTriples(cancellationHandle,
+                             makeIdTriples(vocab, localVocab, {"<X> <Y> <Z>"}));
+  // Insertions of triples not in the index
+  deltaTriples.insertTriples(
+      cancellationHandle,
+      makeIdTriples(vocab, localVocab, {"<a> <upp> <newval>"}));
+  // Deletions of triples in the index
+  deltaTriples.deleteTriples(
+      cancellationHandle, makeIdTriples(vocab, localVocab, {"<a> <next> <b>"}));
+
+  EXPECT_THAT(deltaTriples, NumTriples(3, 2, 5));
+
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::vacuumMinimumBlockSize_>(
+          0ul);
+
+  auto result = deltaTriples.vacuum();
+
+  EXPECT_THAT(deltaTriples, NumTriples(1, 1, 2));
+  EXPECT_EQ(result["external"]["insertionsRemoved"], 2);
+  EXPECT_EQ(result["external"]["deletionsRemoved"], 1);
+  EXPECT_EQ(result["external"]["insertionsKept"], 1);
+  EXPECT_EQ(result["external"]["deletionsKept"], 1);
+  // Had no updates to begin with.
+  EXPECT_EQ(result["internal"]["totalRemoved"], 0);
+  EXPECT_EQ(result["internal"]["totalKept"], 0);
 }
