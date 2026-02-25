@@ -348,7 +348,7 @@ TriplesToVacuum LocatedTriplesPerBlock::identifyTriplesToVacuum(
       std::span blockMetaSpan = std::span(blockMetadata).subspan(blockIndex, 1);
       AD_CORRECTNESS_CHECK(blockMetaSpan.size() == 1);
       AD_CORRECTNESS_CHECK(blockMetaSpan[0].blockIndex_ == blockIndex);
-      return {blockMetaSpan};
+      return {{blockMetaSpan.begin(), blockMetaSpan.end()}};
     };
     CompressedRelationReader::ScanSpecAndBlocks scanSpecAndBlocks(
         scanSpec, blockMetadataForSingleBlock(blockIndex));
