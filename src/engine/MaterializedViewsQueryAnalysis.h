@@ -104,7 +104,9 @@ class QueryPatternCache {
   static std::vector<parsedQuery::GraphPatternOperation>
   graphPatternInvariantFilter(const ParsedQuery& parsed);
 
-  //
+  // Given potential left and right sides of simple chains, check for available
+  // replacement index scans, construct them and insert them into the `result`
+  // vector.
   void makeScansFromChainCandidates(
       QueryExecutionContext* qec, const parsedQuery::BasicGraphPattern& triples,
       std::vector<MaterializedViewJoinReplacement>& result,
