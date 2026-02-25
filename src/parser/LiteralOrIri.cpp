@@ -110,4 +110,57 @@ ql::strong_ordering BasicLiteralOrIri<isOwning>::compareThreeWay(
 template class BasicLiteralOrIri<true>;
 template class BasicLiteralOrIri<false>;
 
+// ____________________________________________________________________________
+// LiteralOrIri (owning) method implementations.
+// ____________________________________________________________________________
+
+LiteralOrIri LiteralOrIri::fromStringRepresentation(std::string internal) {
+  return BasicLiteralOrIri<true>::fromStringRepresentation(std::move(internal));
+}
+
+// ____________________________________________________________________________
+Iri& LiteralOrIri::getIri() {
+  if (!isIri()) {
+    AD_CONTRACT_CHECK(isIri(),
+                      "LiteralOrIri object does not contain an Iri object "
+                      "and thus cannot return it");
+  }
+  return static_cast<Iri&>(std::get<BasicIri<true>>(data_));
+}
+
+// ____________________________________________________________________________
+Literal& LiteralOrIri::getLiteral() {
+  AD_CONTRACT_CHECK(isLiteral(),
+                    "LiteralOrIri object does not contain a Literal object "
+                    "and thus cannot return it");
+  return static_cast<Literal&>(std::get<BasicLiteral<true>>(data_));
+}
+
+// ____________________________________________________________________________
+LiteralOrIri LiteralOrIri::literalWithQuotes(
+    std::string_view rdfContentWithQuotes,
+    std::optional<std::variant<Iri, std::string>> descriptor) {
+  return LiteralOrIri(Literal::fromEscapedRdfLiteral(rdfContentWithQuotes,
+                                                     std::move(descriptor)));
+}
+
+// ____________________________________________________________________________
+LiteralOrIri LiteralOrIri::literalWithoutQuotes(
+    std::string_view rdfContentWithoutQuotes,
+    std::optional<std::variant<Iri, std::string>> descriptor) {
+  return LiteralOrIri(Literal::literalWithoutQuotes(rdfContentWithoutQuotes,
+                                                    std::move(descriptor)));
+}
+
+// ____________________________________________________________________________
+LiteralOrIri LiteralOrIri::iriref(const std::string& stringWithBrackets) {
+  return LiteralOrIri{Iri::fromIriref(stringWithBrackets)};
+}
+
+// ____________________________________________________________________________
+LiteralOrIri LiteralOrIri::prefixedIri(const Iri& prefix,
+                                       std::string_view suffix) {
+  return LiteralOrIri{Iri::fromPrefixAndSuffix(prefix, suffix)};
+}
+
 }  // namespace ad_utility::triple_component
