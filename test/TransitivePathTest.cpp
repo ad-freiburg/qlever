@@ -13,8 +13,13 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/TransitivePathBase.h"
 #include "engine/TransitivePathBinSearch.h"
+#include "engine/TransitivePathGraphSearch.h"
 #include "engine/TransitivePathHashMap.h"
 #include "engine/ValuesForTesting.h"
+#include "gtest/gtest.h"
+#include "util/AllocatorTestHelpers.h"
+#include "util/AllocatorWithLimit.h"
+#include "util/CancellationHandle.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
@@ -2078,5 +2083,158 @@ TEST(TransitivePathHashMap, getEquivalentIdAndMatchingGraphsWithGraphs) {
                 UnorderedElementsAre(Pair(V(3), V(101))));
     EXPECT_THAT(hashMapWrapper.getEquivalentIdAndMatchingGraphs(V(4)),
                 UnorderedElementsAre());
+  }
+}
+
+// Test fixture which prepares TransitivePathGraphSearch testing.
+class GraphSearchTest : public Test {
+ protected:
+  using AdjacencyList = std::unordered_map<size_t, std::vector<size_t>>;
+
+  const ad_utility::AllocatorWithLimit<Id> allocator_ =
+      ad_utility::testing::makeAllocator();
+  qlever::graphSearch::GraphSearchExecutionParams ep_ = {
+      std::make_shared<ad_utility::CancellationHandle<>>(), allocator_};
+
+  // The `GraphSearch` functions are templated and work with e.g.
+  // `HashMapWrapper` as well as `BinarySearchWrapper`. Those themselves are
+  // tested in other tests, so we can assume they are working correctly and
+  // just one here for testing the `GraphSearch` functions.
+  // We pre-initialize a graph since every test of this fixture will need
+  // one.
+  std::vector<HashMapWrapper> graphs_;
+
+  // Create a set that contains some Ids with the given size_t values.
+  Set initializeSet(std::vector<size_t> values) {
+    Set returned{allocator_};
+    for (size_t idx : values) {
+      returned.insert(Id::makeFromEncodedVal(idx));
+    }
+    return returned;
+  }
+
+  GraphSearchTest() {
+    // Initialize the list of Graphs we want to test with.
+    const std::vector<AdjacencyList> graphsAdjListRepresentation = {
+        // Empty graph.
+        {},
+        // Single node, no edges.
+        {{0, {}}},
+        // Minimal loop
+        {{0, {0}}},
+        // Loop using two nodes.
+        {{0, {1}}, {1, {0}}},
+        // Two disconnected nodes, each one looping with itself.
+        {{0, {0}}, {1, {1}}},
+        // "Regular" connected graph with some loops and some not reachable
+        // (from 0) nodes.
+        {{0, {1}},
+         {1, {3, 4}},
+         {2, {1}},
+         {3, {5}},
+         {4, {1, 6}},
+         {5, {2}},
+         {6, {5, 7}},
+         {7, {7}},
+         {8, {1}}}};
+    for (AdjacencyList adjList : graphsAdjListRepresentation) {
+      HashMapWrapper::Map map(allocator_);
+      for (const auto& pair : adjList) {
+        map.insert_or_assign(Id::makeFromEncodedVal(pair.first),
+                             initializeSet(pair.second));
+      }
+      graphs_.push_back(HashMapWrapper(map, allocator_));
+    }
+  }
+};
+
+TEST_F(GraphSearchTest, binaryFirstSearch) {
+  // For all graph examples, construct the expected returned sets.
+  const std::vector<std::vector<size_t>> expected = {
+      {0}, {0}, {0}, {0, 1}, {0}, {0, 1, 2, 3, 4, 5, 6, 7}};
+
+  // Constructing the base graph search problem with the parameters set to make
+  // it eligible for BFS.
+  GraphSearchProblem gsp(graphs_[0], Id::makeFromEncodedVal(0),
+                         std::optional<Id>(), 0,
+                         std::numeric_limits<size_t>::max());
+
+  // Iterate over all graphs and check if binarySearch will return the right
+  // values.
+  for (size_t i = 0; i < expected.size(); i++) {
+    gsp.edges_ = graphs_.at(i);
+    EXPECT_THAT(qlever::graphSearch::runOptimalGraphSearch(gsp, ep_),
+                initializeSet(expected.at(i)));
+  }
+}
+
+TEST_F(GraphSearchTest, binaryFirstSearchWithLimit) {
+  // For some graphs, we want to test them multiple times with different limits.
+  const std::vector<size_t> graphsOrder = {0, 1, 1, 2, 2, 3, 3, 4, 5, 5};
+  const std::vector<std::pair<size_t, size_t>> limits = {
+      {0, 100}, {0, 100}, {1, 10},  {0, 10}, {10, 11},
+      {0, 1},   {1, 1},   {0, 100}, {1, 2},  {10, 100}};
+  const std::vector<std::vector<size_t>> expected = {
+      {0},    {0}, {},  {0},       {0},
+      {1, 0}, {1}, {0}, {1, 4, 3}, {1, 2, 3, 4, 5, 6, 7}};
+
+  GraphSearchProblem gsp(graphs_[0], Id::makeFromEncodedVal(0),
+                         std::optional<Id>(), 0,
+                         std::numeric_limits<size_t>::max());
+
+  for (size_t i = 0; i < graphsOrder.size(); i++) {
+    gsp.edges_ = graphs_.at(graphsOrder.at(i));
+    gsp.minDist_ = limits.at(i).first;
+    gsp.maxDist_ = limits.at(i).second;
+
+    EXPECT_THAT(qlever::graphSearch::runOptimalGraphSearch(gsp, ep_),
+                initializeSet(expected.at(i)));
+  }
+}
+
+TEST_F(GraphSearchTest, depthFirstSearch) {
+  const std::vector<size_t> graphsOrder = {0, 0, 1, 1, 2, 3, 3, 4, 5, 5};
+  const std::vector<size_t> targets = {0, 1, 0, 1, 0, 0, 1, 1, 7, 8};
+  const std::vector<std::vector<size_t>> expected = {{0}, {},  {0}, {},  {0},
+                                                     {0}, {1}, {},  {7}, {}};
+
+  GraphSearchProblem gsp(graphs_.at(0), Id::makeFromEncodedVal(0),
+                         std::optional<Id>(), 0,
+                         std::numeric_limits<size_t>::max());
+  for (size_t i = 0; i < graphsOrder.size(); i++) {
+    gsp.edges_ = graphs_.at(graphsOrder.at(i));
+    gsp.targetNode_ = Id::makeFromEncodedVal(targets.at(i));
+
+    EXPECT_THAT(qlever::graphSearch::runOptimalGraphSearch(gsp, ep_),
+                initializeSet(expected.at(i)))
+        << "Failure at graph " << graphsOrder.at(i) << ",cannot find node "
+        << targets.at(i) << ".";
+  }
+}
+
+TEST_F(GraphSearchTest, depthFirstSearchWithLimit) {
+  const std::vector<size_t> graphsOrder = {0, 0, 1, 1, 2, 3, 3, 4, 5, 5, 5, 5};
+  const std::vector<size_t> targets = {0, 0, 0, 1, 0, 1, 0, 1, 8, 7, 0, 4};
+  const std::vector<std::pair<size_t, size_t>> limits = {
+      {0, 10},    {10, 100}, {0, 100},   {0, 100},   {100, 200}, {0, 0},
+      {100, 100}, {0, 1000}, {0, 10000}, {100, 999}, {1, 100},   {5, 1000}};
+  const std::vector<std::vector<size_t>> expected = {
+      {0}, {}, {0}, {}, {0}, {}, {0}, {}, {}, {7}, {}, {4}};
+
+  GraphSearchProblem gsp(graphs_[0], Id::makeFromEncodedVal(0),
+                         std::optional<Id>(), 0,
+                         std::numeric_limits<size_t>::max());
+
+  for (size_t i = 0; i < graphsOrder.size(); i++) {
+    gsp.edges_ = graphs_.at(graphsOrder.at(i));
+    gsp.minDist_ = limits.at(i).first;
+    gsp.maxDist_ = limits.at(i).second;
+    gsp.targetNode_ = Id::makeFromEncodedVal(targets.at(i));
+
+    EXPECT_THAT(qlever::graphSearch::runOptimalGraphSearch(gsp, ep_),
+                initializeSet(expected.at(i)))
+        << "Failure at graph " << graphsOrder.at(i) << ",cannot find node "
+        << targets.at(i) << " in distance limits" << limits.at(i).first
+        << " to " << limits.at(i).second << ".";
   }
 }

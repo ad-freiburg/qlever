@@ -17,7 +17,7 @@
 #include "util/Timer.h"
 
 using IdWithGraphs = absl::InlinedVector<std::pair<Id, Id>, 1>;
-
+using namespace qlever::graphSearch;
 namespace detail {
 
 // Helper struct that allows to group a read-only view of a column of a table
@@ -263,10 +263,8 @@ class TransitivePathImpl : public TransitivePathBase {
           // Pick the appropriate graph search strategy (BFS/DFS) and run it.
           GraphSearchProblem<T> gsp(edges, startNode, targetId, minDist_,
                                     maxDist_);
-          TransPathExecutionParams ep(cancellationHandle_, allocator(),
-                                      getDescriptor());
-          Set connectedNodes =
-              TransitivePathGraphSearch<T>::runOptimalGraphSearch(gsp, ep);
+          GraphSearchExecutionParams ep(cancellationHandle_, allocator());
+          Set connectedNodes = runOptimalGraphSearch(gsp, ep);
 
           if (!connectedNodes.empty()) {
             runtimeInfo().addDetail("Hull time", timer.msecs());
