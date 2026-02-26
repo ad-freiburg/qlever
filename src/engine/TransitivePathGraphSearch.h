@@ -117,7 +117,7 @@ static Set breadthFirstSearchWithLimit(GraphSearchProblem<T>& gsp,
 
   queue.push_back(gsp.startNode_);
   while (!queue.empty() && traversalDepth <= gsp.maxDist_) {
-    ep.checkCancellation("Breadth first search (limted version)");
+    ep.checkCancellation("Breadth first search (limited version)");
 
     // Get next node from queue.
     auto node = queue.front();
@@ -202,7 +202,7 @@ static Set depthFirstSearchWithLimit(GraphSearchProblem<T>& gsp,
   stack.emplace_back(gsp.startNode_, 0);
 
   while (!stack.empty()) {
-    ep.checkCancellation("Depth first search (limted version)");
+    ep.checkCancellation("Depth first search (limited version)");
     auto [node, steps] = stack.back();
     stack.pop_back();
 
