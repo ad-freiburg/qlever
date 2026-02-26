@@ -8,8 +8,10 @@
 #include <gmock/gmock.h>
 
 #include "./MaterializedViewsTestHelpers.h"
+#include "./QueryPlannerTestHelpers.h"
 #include "./ServerTestHelpers.h"
 #include "./util/HttpRequestHelpers.h"
+#include "./util/RuntimeParametersTestHelpers.h"
 #include "engine/IndexScan.h"
 #include "engine/MaterializedViews.h"
 #include "engine/QueryExecutionContext.h"
@@ -855,3 +857,92 @@ TEST_F(MaterializedViewsTest, NoDuplicateRemovalOnScan) {
   EXPECT_EQ(threeColsResult.numRows(), 2 * numRowsDedup);
   EXPECT_THAT(threeColsResult, matchesIdTable(threeColsExpected));
 }
+
+// Example queries for testing query rewriting.
+constexpr std::string_view simpleChain = "SELECT * { ?s <p1> ?m . ?m <p2> ?o }";
+constexpr std::string_view simpleChainRenamed =
+    "SELECT * { ?b <p2> ?c . ?a <p1> ?b }";
+constexpr std::string_view simpleChainFixed =
+    "SELECT * {  <s2> <p1>/<p2> ?c . }";
+constexpr std::string_view simpleChainPlusJoin =
+    "SELECT * { ?s <p1>/<p2> ?o . ?s <p3> ?o2 }";
+constexpr std::string_view simpleChainRenamedPlusBind =
+    "SELECT ?a ?b ?c ?x { ?b <p2> ?c . ?a <p1> ?b . BIND(5 AS ?x) }";
+
+// _____________________________________________________________________________
+TEST_P(MaterializedViewsQueryRewriteTest, simpleChain) {
+  namespace h = queryPlannerTestHelpers;
+
+  RewriteTestParams p = GetParam();
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::queryPlanningBudget_>(
+          p.queryPlanningBudget_);
+
+  // Test dataset and query.
+  const std::string chainTtl =
+      " <s1> <p1> <m2> . \n"
+      " <m1> <p2> <o1> . \n"
+      " <s2> <p1> <m2> . \n"
+      " <m2> <p2> <http://example.com/> . \n"
+      " <m2> <p3> \"abc\" . \n"
+      " <s2> <p3> <o3> . \n";
+  const std::string onDiskBase = "_materializedViewRewriteChain";
+  const std::string viewName = "testViewChain";
+
+  // Initialized libqlever.
+  materializedViewsTestHelpers::makeTestIndex(onDiskBase, chainTtl);
+  auto cleanUp = absl::MakeCleanup(
+      [&]() { materializedViewsTestHelpers::removeTestIndex(onDiskBase); });
+  qlever::EngineConfig config;
+  config.baseName_ = onDiskBase;
+  qlever::Qlever qlv{config};
+
+  // Without the materialized view, a regular join is executed.
+  h::expect(std::string{simpleChain},
+            h::Join(h::IndexScanFromStrings("?s", "<p1>", "?m"),
+                    h::IndexScanFromStrings("?m", "<p2>", "?o")));
+
+  // Write a chain structure to the materialized view.
+  MaterializedViewsManager manager{onDiskBase};
+  manager.writeViewToDisk(viewName, qlv.parseAndPlanQuery(p.writeQuery_));
+  qlv.loadMaterializedView(viewName);
+
+  // With the materialized view loaded, an index scan on the view is performed
+  // instead of a regular join.
+  auto qpExpect = [](qlever::Qlever& qlv, const auto& query,
+                     ::testing::Matcher<const QueryExecutionTree&> matcher,
+                     source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+    auto l = generateLocationTrace(sourceLocation);
+    auto [qet, qec, parsed] = qlv.parseAndPlanQuery(std::string{query});
+    EXPECT_THAT(*qet, matcher);
+  };
+  auto viewScan = [](std::string a, std::string b, std::string c) {
+    return h::IndexScanFromStrings(std::move(a), std::move(b), std::move(c),
+                                   {Permutation::Enum::SPO});
+  };
+
+  qpExpect(qlv, simpleChain, viewScan("?s", "?m", "?o"));
+  qpExpect(qlv, simpleChainRenamed, viewScan("?a", "?b", "?c"));
+  qpExpect(qlv, simpleChainFixed,
+           viewScan("<s2>", "?_QLever_internal_variable_qp_0", "?c"));
+  qpExpect(qlv, simpleChainPlusJoin,
+           h::Join(viewScan("?s", "?_QLever_internal_variable_qp_0", "?o"),
+                   h::IndexScanFromStrings("?s", "<p3>", "?o2")));
+
+  // TODO<ullingerc> Test overlapping view plans.
+}
+
+// _____________________________________________________________________________
+INSTANTIATE_TEST_SUITE_P(
+    MaterializedViewsTest, MaterializedViewsQueryRewriteTest,
+    ::testing::Values(
+        // Default case.
+        RewriteTestParams{std::string{simpleChain}, 1500},
+
+        // Default query for writing the materialized view, but forced greedy
+        // planning.
+        RewriteTestParams{std::string{simpleChain}, 1},
+
+        // An additional `BIND` is ignored and the view can still be used for
+        // query rewriting. Also uses a different sorting.
+        RewriteTestParams{std::string{simpleChainRenamedPlusBind}, 1500}));
