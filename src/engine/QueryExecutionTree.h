@@ -209,7 +209,7 @@ class QueryExecutionTree {
   // `True`.
   static std::shared_ptr<QueryExecutionTree> makeTreeWithStrippedColumns(
       std::shared_ptr<QueryExecutionTree> qet,
-      const std::set<Variable>& variables,
+      const std::set<Variable>& variablesToKeep,
       HideStrippedColumns hideStrippedColumns = HideStrippedColumns::False);
 
   // Return the column pairs where the two `QueryExecutionTree`s have the
@@ -240,7 +240,7 @@ class QueryExecutionTree {
     s << tree.getRootOperation()->getDescriptor();
   }
 
-  bool benefitsFromLimitOrOffset() const {
+  bool benefitsFromApplyingLimitOrOffset() const {
     return getRootOperation()->benefitsFromApplyingLimitOrOffset();
   }
 

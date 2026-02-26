@@ -202,19 +202,21 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
 std::shared_ptr<QueryExecutionTree>
 QueryExecutionTree::makeTreeWithStrippedColumns(
     std::shared_ptr<QueryExecutionTree> qet,
-    const std::set<Variable>& variables,
+    const std::set<Variable>& variablesToKeep,
     HideStrippedColumns hideStrippedColumns) {
+  // If all variables of this tree are part of `variablesToKeep`, we can simply
+  // return the original tree, without stripping any columns.
   if (ql::ranges::all_of(qet->getVariableColumns() | ql::views::keys,
-                         [&variables](const Variable& variable) {
-                           return variables.contains(variable);
+                         [&variablesToKeep](const Variable& variable) {
+                           return variablesToKeep.contains(variable);
                          })) {
     return qet;
   }
   const auto& rootOperation = qet->getRootOperation();
-  auto optTree = rootOperation->makeTreeWithStrippedColumns(variables);
+  auto optTree = rootOperation->makeTreeWithStrippedColumns(variablesToKeep);
   if (!optTree.has_value()) {
     return ad_utility::makeExecutionTree<StripColumns>(
-        rootOperation->getExecutionContext(), std::move(qet), variables);
+        rootOperation->getExecutionContext(), std::move(qet), variablesToKeep);
   }
 
   auto& resultTree = optTree.value();
@@ -225,8 +227,9 @@ QueryExecutionTree::makeTreeWithStrippedColumns(
       "`QueryExecutionTree::makeTreeWithStrippedColumns` not by the individual "
       "implementations.");
   // We cannot use `applyLimitOffset` here, because this might get propagated to
-  // children of this operation, where the limit/offset would already be set
-  // correctly.
+  // children of this operation, where the limit/offset has already been set
+  // correctly. We just reapply a previously set limit which was removed by the
+  // column stripping.
   resultTree->getRootOperation()->limitOffset_ =
       rootOperation->getLimitOffset();
   resultTree->cacheKey_ = resultTree->getRootOperation()->getCacheKey();
@@ -238,7 +241,7 @@ QueryExecutionTree::makeTreeWithStrippedColumns(
     ad_utility::HashSet<Variable> strippedVariables;
     const auto& originalVariableColumns = qet->getVariableColumns();
     for (const auto& [var, colInfo] : originalVariableColumns) {
-      if (!ad_utility::contains(variables, var)) {
+      if (!ad_utility::contains(variablesToKeep, var)) {
         strippedVariables.insert(var);
       }
     }
