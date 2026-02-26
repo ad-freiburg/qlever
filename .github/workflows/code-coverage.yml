@@ -41,13 +41,15 @@ jobs:
       with:
         submodules: "recursive"
 
-    - name: Install dependencies
-      uses: ./.github/workflows/install-dependencies-ubuntu
+    - name: Free disk space
+      uses: ./.github/workflows/free-disk-space
     - name: Install compiler
       uses: ./.github/workflows/install-compiler-ubuntu
       with:
         compiler: "clang"
         compiler-version: "16"
+    - name: Install dependencies
+      uses: ./.github/workflows/install-dependencies-ubuntu
     - name: Install coverage tools
       run: |
         sudo apt install -y llvm-16

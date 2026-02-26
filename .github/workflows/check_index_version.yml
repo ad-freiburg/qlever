@@ -37,13 +37,15 @@ jobs:
         path: 'master'
         ref: 'master'
 
-    - name: Install dependencies
-      uses: ./pr/.github/workflows/install-dependencies-ubuntu
+    - name: Free disk space
+      uses: ./pr/.github/workflows/free-disk-space
     - name: Install compiler
       uses: ./pr/.github/workflows/install-compiler-ubuntu
       with:
         compiler: ${{matrix.compiler}}
         compiler-version: ${{matrix.compiler-version}}
+    - name: Install dependencies
+      uses: ./pr/.github/workflows/install-dependencies-ubuntu
     - name: Configure CMake Master
       working-directory: ${{github.workspace}}/master
       run:  cmake -B build -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{matrix.compiler}}${{matrix.compiler-version}}.cmake" -DADDITIONAL_COMPILER_FLAGS="${{matrix.warnings}} ${{matrix.asan-flags}} ${{matrix.ubsan-flags}}" -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=true -DENABLE_EXPENSIVE_CHECKS=true
