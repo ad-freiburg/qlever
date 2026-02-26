@@ -137,6 +137,11 @@ struct RuntimeParameters {
 
   Bool prefilteredOptionalJoin_{true, "prefiltered-optional-join"};
 
+  // If set, the query planner checks if suitable materialized views are loaded
+  // to substitute more expensive query plans.
+  Bool enableMaterializedViewQueryRewrite_{
+      true, "enable-materialized-view-query-rewrite"};
+
   // Configure the amount of threads to compress and write blocks per
   // permutation.
   SizeT threadsForPermutationWriter_{10, "threads-for-permutation-writer"};

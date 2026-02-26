@@ -1171,8 +1171,11 @@ CompressedRelationReader::decompressAndPostprocessBlock(
         includeGraphColumn);
     hasUpdates = true;
   }
-  bool wasPostprocessed =
-      scanConfig.graphFilter_.postprocessBlock(decompressedBlock, metadata);
+  bool wasPostprocessed = false;
+  if (useGraphPostProcessing_) {
+    wasPostprocessed =
+        scanConfig.graphFilter_.postprocessBlock(decompressedBlock, metadata);
+  }
   return {std::move(decompressedBlock), wasPostprocessed, hasUpdates};
 }
 

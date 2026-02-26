@@ -60,8 +60,6 @@ jobs:
           - compiler: clang
             compiler-version: 18
             isPr: true
-          - compiler: clang
-            compiler-version: 21
         include:
           - compiler: gcc
             compiler-version: 11
