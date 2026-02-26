@@ -2156,8 +2156,8 @@ TEST_F(GraphSearchTest, binaryFirstSearch) {
   // Constructing the base graph search problem with the parameters set to make
   // it eligible for BFS.
   GraphSearchProblem<HashMapWrapper> gsp(graphs_[0], Id::makeFromEncodedVal(0),
-                         std::optional<Id>(), 0,
-                         std::numeric_limits<size_t>::max());
+                                         std::optional<Id>(), 0,
+                                         std::numeric_limits<size_t>::max());
 
   // Iterate over all graphs and check if binarySearch will return the right
   // values.
@@ -2179,8 +2179,8 @@ TEST_F(GraphSearchTest, binaryFirstSearchWithLimit) {
       {1, 0}, {1}, {0}, {1, 4, 3}, {1, 2, 3, 4, 5, 6, 7}};
 
   GraphSearchProblem<HashMapWrapper> gsp(graphs_[0], Id::makeFromEncodedVal(0),
-                         std::optional<Id>(), 0,
-                         std::numeric_limits<size_t>::max());
+                                         std::optional<Id>(), 0,
+                                         std::numeric_limits<size_t>::max());
 
   for (size_t i = 0; i < graphsOrder.size(); i++) {
     gsp.edges_ = graphs_.at(graphsOrder.at(i));
@@ -2198,9 +2198,9 @@ TEST_F(GraphSearchTest, depthFirstSearch) {
   const std::vector<std::vector<size_t>> expected = {{0}, {},  {0}, {},  {0},
                                                      {0}, {1}, {},  {7}, {}};
 
-  GraphSearchProblem<HashMapWrapper> gsp(graphs_.at(0), Id::makeFromEncodedVal(0),
-                         std::optional<Id>(), 0,
-                         std::numeric_limits<size_t>::max());
+  GraphSearchProblem<HashMapWrapper> gsp(
+      graphs_.at(0), Id::makeFromEncodedVal(0), std::optional<Id>(), 0,
+      std::numeric_limits<size_t>::max());
   for (size_t i = 0; i < graphsOrder.size(); i++) {
     gsp.edges_ = graphs_.at(graphsOrder.at(i));
     gsp.targetNode_ = Id::makeFromEncodedVal(targets.at(i));
@@ -2222,8 +2222,8 @@ TEST_F(GraphSearchTest, depthFirstSearchWithLimit) {
       {0}, {}, {0}, {}, {0}, {}, {0}, {}, {}, {7}, {}, {4}};
 
   GraphSearchProblem<HashMapWrapper> gsp(graphs_[0], Id::makeFromEncodedVal(0),
-                         std::optional<Id>(), 0,
-                         std::numeric_limits<size_t>::max());
+                                         std::optional<Id>(), 0,
+                                         std::numeric_limits<size_t>::max());
 
   for (size_t i = 0; i < graphsOrder.size(); i++) {
     gsp.edges_ = graphs_.at(graphsOrder.at(i));
