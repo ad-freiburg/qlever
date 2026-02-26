@@ -11,6 +11,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoinCachedIndex.h"
 #include "global/RuntimeParameters.h"
+#include "parser/GraphPatternOperation.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/TransparentFunctors.h"
 
@@ -781,6 +782,66 @@ std::optional<std::shared_ptr<QueryExecutionTree>> Operation::makeSortedTree(
 std::optional<std::shared_ptr<QueryExecutionTree>>
 Operation::makeTreeWithStrippedColumns(
     [[maybe_unused]] const std::set<Variable>& variables) const {
+  return std::nullopt;
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Operation::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+  auto children = getChildren();
+  if (children.empty()) {
+    return std::nullopt;
+  }
+
+  // Get the variables used in the bind expression (not the target).
+  auto exprVarPtrs = bind._expression.containedVariables();
+
+  // Check if a given child covers all expression variables.
+  auto childCoversAllVars = [&](size_t idx) {
+    const auto& childVars = children[idx]->getVariableColumns();
+    return std::all_of(exprVarPtrs.begin(), exprVarPtrs.end(),
+                       [&](const Variable* v) {
+                         return childVars.contains(*v);
+                       });
+  };
+
+  // Try pushing the bind down to a specific child. If successful, clone this
+  // operation and replace the modified child in the clone.
+  auto tryPushDown =
+      [&](size_t idx)
+      -> std::optional<std::shared_ptr<QueryExecutionTree>> {
+    auto result =
+        children[idx]->getRootOperation()->makeTreeWithBindColumn(bind);
+    if (!result) {
+      return std::nullopt;
+    }
+
+    // Clone this operation (deep-clones all children via cloneImpl).
+    auto cloned = cloneImpl();
+    // Replace the modified child in-place via move assignment.
+    auto clonedChildren = cloned->getChildren();
+    AD_CORRECTNESS_CHECK(clonedChildren.size() == children.size());
+    *clonedChildren[idx] = std::move(**result);
+    cloned->invalidateCachedVariableColumns();
+    return std::make_shared<QueryExecutionTree>(getExecutionContext(),
+                                                std::move(cloned));
+  };
+
+  // First, try the child that covers all expression variables.
+  for (size_t i = 0; i < children.size(); ++i) {
+    if (childCoversAllVars(i)) {
+      return tryPushDown(i);
+    }
+  }
+
+  // No child covers all vars; try each child one by one.
+  for (size_t i = 0; i < children.size(); ++i) {
+    auto result = tryPushDown(i);
+    if (result) {
+      return result;
+    }
+  }
+
   return std::nullopt;
 }
 
