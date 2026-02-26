@@ -36,8 +36,6 @@ option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
 if(BUILD_SHARED_LIBS)
     set(CMAKE_POSITION_INDEPENDENT_CODE ON)
     add_compile_options(-fPIC -fno-semantic-interposition)
-
-    add_link_options(-fPIC)
 endif()
 
 # By default, QLever uses precompiled headers for widely used modules. However when heavily modifying the headers that
@@ -141,6 +139,12 @@ FetchContent_Declare(
 ###############################
 # ANTLR CPP RUNTIME FOR THE SPARQL PARSER
 ###############################
+if (BUILD_SHARED_LIBS)
+  set(ANTLR_BUILD_STATIC OFF CACHE BOOL "Only build shared antlr4 library")
+else()
+  set(ANTLR_BUILD_SHARED OFF CACHE BOOL "Only build static antlr4 library")
+endif()
+
 set(ANTLR_BUILD_CPP_TESTS OFF CACHE BOOL "don't try to build googletest twice")
 FetchContent_Declare(
         antlr
@@ -306,7 +310,7 @@ FetchContent_Declare(
 # ABSEIL
 ################################
 set(ABSL_ENABLE_INSTALL ON)
-set(ABSL_USE_SYSTEM_INCLUDES OFF)
+set(ABSL_USE_SYSTEM_INCLUDES ON CACHE BOOL "Treat `abseil` headers as system headers, i.e. don't emit warnings from them" FORCE)
 set(ABSL_PROPAGATE_CXX_STD ON)
 FetchContent_Declare(
         abseil
@@ -401,10 +405,12 @@ set(BUILD_SHARED_LIBS ${_QLEVER_SAVED_BUILD_SHARED_LIBS})
 FetchContent_MakeAvailable(googletest ctre fsst nlohmann-json antlr range-v3 spatialjoin s2 re2)
 
 IF (BUILD_SHARED_LIBS)
+    target_compile_options(antlr4_shared PRIVATE -fPIC -Wno-all -Wno-extra -Wno-error -Wno-deprecated-declarations)
     add_library(antlr4_umbrella ALIAS antlr4_shared)
-else()
+else ()
+    target_compile_options(antlr4_static PRIVATE -Wno-all -Wno-extra -Wno-error -Wno-deprecated-declarations)
     add_library(antlr4_umbrella ALIAS antlr4_static)
-endif()
+endif ()
 
 # Disable some warnings in RE2 and GTEST
 target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-class-memaccess -Wno-unused-but-set-variable -Wno-unused-function)
@@ -417,50 +423,21 @@ target_compile_options(fsst PRIVATE -Wno-extra -Wno-all -Wno-error)
 target_compile_options(fsst12 PRIVATE -Wno-extra -Wno-all -Wno-error)
 include_directories(${fsst_SOURCE_DIR})
 include_directories(${range-v3_SOURCE_DIR}/include)
-target_compile_options(antlr4_static PRIVATE -fPIC -Wno-all -Wno-extra -Wno-error -Wno-deprecated-declarations)
-target_compile_options(antlr4_shared PRIVATE -fPIC -Wno-all -Wno-extra -Wno-error -Wno-deprecated-declarations)
 # Only required because a lot of classes that do not explicitly link against antlr4_static use the headers.
 include_directories(SYSTEM "${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src")
 
-#Umbrella libraries from static to shared.
-if (BUILD_SHARED_LIBS)
-file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/dummy.cpp "")
-add_library (absl_umbrella SHARED ${CMAKE_CURRENT_BINARY_DIR}/dummy.cpp)
+# A single library for all abseil targets (probably not required once everything works).
+add_library(absl_umbrella INTERFACE)
 target_link_libraries(absl_umbrella
-        PRIVATE
-        $<LINK_LIBRARY:WHOLE_ARCHIVE,
-        absl::base,
-        absl::strings,
-        absl::status,
-        absl::statusor,
-        absl::time,
-        absl::hash,
-        absl::synchronization
-        >
-)
-target_include_directories(absl_umbrella
         INTERFACE
-        $<TARGET_PROPERTY:absl::base,INTERFACE_INCLUDE_DIRECTORIES>
-        $<TARGET_PROPERTY:absl::strings,INTERFACE_INCLUDE_DIRECTORIES>
-        $<TARGET_PROPERTY:absl::status,INTERFACE_INCLUDE_DIRECTORIES>
-        $<TARGET_PROPERTY:absl::statusor,INTERFACE_INCLUDE_DIRECTORIES>
-        $<TARGET_PROPERTY:absl::time,INTERFACE_INCLUDE_DIRECTORIES>
-        $<TARGET_PROPERTY:absl::hash,INTERFACE_INCLUDE_DIRECTORIES>
-        $<TARGET_PROPERTY:absl::synchronization,INTERFACE_INCLUDE_DIRECTORIES>
+        absl::base
+        absl::strings
+        absl::status
+        absl::statusor
+        absl::time
+        absl::hash
+        absl::synchronization
 )
-else()
-    add_library(absl_umbrella INTERFACE)
-    target_link_libraries(absl_umbrella
-            INTERFACE
-            absl::base
-            absl::strings
-            absl::status
-            absl::statusor
-            absl::time
-            absl::hash
-            absl::synchronization
-    )
-endif()
 
 message(STATUS ---)
 message(STATUS "CXX_FLAGS are : " ${CMAKE_CXX_FLAGS})
