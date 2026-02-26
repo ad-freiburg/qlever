@@ -1306,8 +1306,8 @@ void IndexImpl::readConfiguration() {
 
   loadDataMember("encoded-iri-prefixes", encodedIriManager_,
                  EncodedIriManager{});
-  loadDataMember("existing-graphs", graphManager_, GraphManager());
-  AD_LOG_INFO << "Graph manager initialized: " << graphManager_ << std::endl;
+  // TODO: as is we don't need it to be an optional. but we can have it as nullopt and then backfill from Server::initialize once
+  loadDataMember("existing-graphs", graphManager_);
 
   // Compute unique ID for this index.
   //
@@ -1793,20 +1793,7 @@ CPP_template_def(typename... NextSorter)(requires(
       NumNormalAndInternal::fromNormal(numPredicates);
   configurationJson_["num-triples"] =
       NumNormalAndInternal::fromNormal(numTriples);
-  // TODO: Maybe defer the resolution of the IDs to strings to after building
-  // the index. How is the memory consumption through from the index building?
-  {
-    auto manager = GraphManager::fromExistingGraphs(graphs);
-    // TODO: hardcoded index name, because we fail when running on the internal
-    // permutations
-    vocab_.readFromFile("olympics" + std::string(VOCAB_SUFFIX));
-    manager.initializeNamespaceManager(std::string(QLEVER_NEW_GRAPH_PREFIX),
-                                       manager, vocab_);
-    // Unload the vocabulary again.
-    vocab_.resetToType(vocabularyTypeForIndexBuilding_);
-    configurationJson_["existing-graphs"] = manager;
-    AD_LOG_INFO << "Graph manager initialized: " << manager << std::endl;
-  }
+  graphManager_ = GraphManager::fromExistingGraphs(graphs);
   if (doWriteConfiguration) {
     writeConfiguration();
   }
@@ -1820,6 +1807,15 @@ CPP_template_def(typename... NextSorter)(
                                                  NextSorter&&... nextSorter) {
   createPSOAndPOSImpl(numColumns, std::move(sortedTriples), true,
                       AD_FWD(nextSorter)...);
+
+  AD_CORRECTNESS_CHECK(graphManager_.has_value());
+  vocab_.readFromFile(onDiskBase_ + std::string(VOCAB_SUFFIX));
+  graphManager_.value().initializeNamespaceManager(
+      std::string(QLEVER_NEW_GRAPH_PREFIX), graphManager_.value(), vocab_);
+  // Unload the vocabulary again.
+  vocab_.resetToType(vocabularyTypeForIndexBuilding_);
+  configurationJson_["existing-graphs"] = graphManager_.value();
+  writeConfiguration();
 }
 
 // _____________________________________________________________________________

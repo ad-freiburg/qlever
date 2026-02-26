@@ -120,20 +120,20 @@ void Server::initialize(const std::string& indexBaseName, bool useText,
                 << "\"" << std::endl;
   }
 
-  //AD_LOG_INFO << "Backfilling GraphManager from index. This is a one-time "
-  //               "action and should not take longer than a couple of minutes."
-  //            << std::endl;
-  //qec = QueryExecutionContext(
-  //    index_, &cache_, allocator_, sortPerformanceEstimator_,
-  //    &namedResultCache_, &materializedViewsManager_);
-  // auto graphManager =
-  //     GraphManager::fillFromIndex(&index().encodedIriManager(), qec);
-  // auto man = GraphManager::GraphNamespaceManager::fromGraphManager(
-  //     std::string(QLEVER_NEW_GRAPH_PREFIX), graphManager,
-  //     index().getVocab());
-  index().graphManager().initializeNamespaceManager(
-      std::string(QLEVER_NEW_GRAPH_PREFIX), index().graphManager(),
-      index().getVocab());
+  if (index().graphManagerNotInitialized()) {
+    AD_LOG_INFO << "Backfilling GraphManager from index. This is a one-time "
+                   "action and should not take longer than a couple of minutes."
+                << std::endl;
+    auto qec = QueryExecutionContext(
+        index_, &cache_, allocator_, sortPerformanceEstimator_,
+        &namedResultCache_, &materializedViewsManager_);
+    auto graphManager =
+        GraphManager::fillFromIndex(&index().encodedIriManager(), qec);
+    graphManager.initializeNamespaceManager(
+        std::string(QLEVER_NEW_GRAPH_PREFIX), index().graphManager(),
+        index().getVocab());
+    index().initializeGraphManager(std::move(graphManager));
+  }
 }
 
 // _____________________________________________________________________________

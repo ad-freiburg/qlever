@@ -300,6 +300,12 @@ DeltaTriplesManager& Index::deltaTriplesManager() {
 const GraphManager& Index::graphManager() const {
   return pimpl_->graphManager();
 }
+bool Index::graphManagerNotInitialized() const {
+  return pimpl_->graphManagerNotInitialized();
+}
+void Index::initializeGraphManager(GraphManager&& manager) {
+  pimpl_->initializeGraphManager(std::move(manager));
+}
 
 // ____________________________________________________________________________
 GraphManager& Index::graphManager() { return pimpl_->graphManager(); }

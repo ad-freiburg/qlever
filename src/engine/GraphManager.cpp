@@ -13,10 +13,7 @@
 
 // _____________________________________________________________________________
 GraphManager::GraphManager(ad_utility::HashSet<Id> graphs)
-    : graphs_(std::move(graphs)) {
-  AD_LOG_INFO << "GraphManager initialized with " << graphs_.rlock()->size()
-              << " graphs." << std::endl;
-}
+    : graphs_(std::move(graphs)) {}
 
 // _____________________________________________________________________________
 GraphManager GraphManager::fillFromIndex(
@@ -157,7 +154,8 @@ void from_json(const nlohmann::json& j, GraphManager& graphManager) {
   graphManager.graphs_.withWriteLock([&graphs](auto& graphsMember) {
     graphsMember = ad_utility::HashSet<Id>(graphs.begin(), graphs.end());
   });
-  graphManager.namespaceManager_ = j["namespaces"]["new-graphs"].get<GraphManager::GraphNamespaceManager>();
+  graphManager.namespaceManager_ =
+      j["namespaces"]["new-graphs"].get<GraphManager::GraphNamespaceManager>();
 }
 
 // _____________________________________________________________________________

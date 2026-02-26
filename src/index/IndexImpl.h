@@ -124,7 +124,7 @@ class IndexImpl {
   Index::Vocab vocab_;
   Index::TextVocab textVocab_;
   EncodedIriManager encodedIriManager_;
-  GraphManager graphManager_;
+  std::optional<GraphManager> graphManager_;
   ScoreData scoreData_;
 
   TextMetaData textMeta_;
@@ -283,8 +283,21 @@ class IndexImpl {
     return deltaTriples_.value();
   }
 
-  GraphManager& graphManager() { return graphManager_; }
-  const GraphManager& graphManager() const { return graphManager_; }
+  GraphManager& graphManager() {
+    AD_CONTRACT_CHECK(graphManager_.has_value());
+    return graphManager_.value();
+  }
+  const GraphManager& graphManager() const {
+    AD_CONTRACT_CHECK(graphManager_.has_value());
+    return graphManager_.value();
+  }
+  bool graphManagerNotInitialized() const {
+    return !graphManager_.has_value();
+  }
+  void initializeGraphManager(GraphManager&& manager) {
+    AD_CONTRACT_CHECK(graphManagerNotInitialized());
+    graphManager_ = std::move(manager);
+  }
 
   const auto& encodedIriManager() const { return encodedIriManager_; }
 
