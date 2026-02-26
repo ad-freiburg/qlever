@@ -61,7 +61,7 @@ struct GraphSearchExecutionParams {
   // algorithm.
   void checkCancellation(
       const std::string& algorithmName,
-      ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) const  {
+      ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) const {
     cancellationHandle_->throwIfCancelled(location, [algorithmName]() {
       return absl::StrCat(
           "The ", algorithmName,
