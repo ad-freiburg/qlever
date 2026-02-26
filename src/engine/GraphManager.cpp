@@ -12,12 +12,10 @@
 #include "parser/SparqlParser.h"
 
 // _____________________________________________________________________________
-GraphManager::GraphManager(std::vector<std::string> graphs,
-                           uint64_t allocatedGraphs)
-    : graphs_(std::move(graphs)), allocatedGraphs_(allocatedGraphs) {
-  AD_LOG_INFO << "GraphManager initialized with " << graphs_.size()
-              << " graphs and " << allocatedGraphs_
-              << " already allocated graphs." << std::endl;
+GraphManager::GraphManager(ad_utility::HashSet<Id> graphs)
+    : graphs_(std::move(graphs)) {
+  AD_LOG_INFO << "GraphManager initialized with " << graphs_.rlock()->size()
+              << " graphs." << std::endl;
 }
 
 // _____________________________________________________________________________
@@ -38,20 +36,47 @@ GraphManager GraphManager::fillFromIndex(
   QueryPlanner qp(&qec, std::make_shared<ad_utility::CancellationHandle<>>());
   auto executionTree = qp.createExecutionTree(query);
   auto result = executionTree.getResult(false);
-  std::vector<std::string> existingGraphs;
+  ad_utility::HashSet<Id> existingGraphs;
   for (const auto& row : result->idTable()) {
     AD_CORRECTNESS_CHECK(row[0].getDatatype() == Datatype::VocabIndex);
-    auto graph = qec.getIndex().indexToString(row[0].getVocabIndex());
-    existingGraphs.push_back(std::move(graph));
+    existingGraphs.insert(row[0]);
   }
 
   return fromExistingGraphs(std::move(existingGraphs));
 }
 
 // _____________________________________________________________________________
-GraphManager GraphManager::fromExistingGraphs(std::vector<std::string> graphs) {
+GraphManager GraphManager::fromExistingGraphs(ad_utility::HashSet<Id> graphs) {
+  return GraphManager(std::move(graphs));
+}
+
+// _____________________________________________________________________________
+void GraphManager::addGraphs(ad_utility::HashSet<Id> graphs) {
+  graphs_.wlock()->insert(graphs.begin(), graphs.end());
+}
+
+// _____________________________________________________________________________
+bool GraphManager::graphExists(const Id& graph) const {
+  auto graphs = graphs_.rlock();
+  return graphs->find(graph) != graphs->end();
+}
+
+// _____________________________________________________________________________
+GraphNamespaceManager::GraphNamespaceManager(std::string prefix,
+                                             uint64_t allocatedGraphs)
+    : prefix_(std::move(prefix)), allocatedGraphs_(allocatedGraphs) {}
+
+// _____________________________________________________________________________
+GraphNamespaceManager GraphNamespaceManager::fromGraphManager(
+    std::string prefix, const GraphManager& graphManager,
+    const Index::Vocab& vocab) {
+  auto graphs = graphManager.getGraphs();
   auto alreadyCreatedGraphs =
-      graphs | ql::views::filter([](const auto& graph) {
+      *graphs | ql::views::transform([&vocab](const auto& graphId) {
+        AD_CORRECTNESS_CHECK(graphId.getDatatype() == Datatype::VocabIndex);
+        return vocab[graphId.getVocabIndex()];
+      }) |
+      ql::views::filter([](const auto& graph) {
         return graph.starts_with(QLEVER_NEW_GRAPH_PREFIX);
       }) |
       ql::views::transform([](const auto& graph) {
@@ -60,10 +85,12 @@ GraphManager GraphManager::fromExistingGraphs(std::vector<std::string> graphs) {
       }) |
       ql::views::transform([](const auto& suffix) -> uint64_t {
         try {
-          return std::stoul(suffix);
+          return std::stoull(suffix);
         } catch (const std::invalid_argument&) {
           AD_LOG_WARN << "Internal graph with invalid suffix " << suffix
                       << std::endl;
+          // This wastes 1 graph in the case that all graphs have non-numeric
+          // (considered invalid) IDs. This is negligible.
           return 0;
         }
       });
@@ -72,43 +99,71 @@ GraphManager GraphManager::fromExistingGraphs(std::vector<std::string> graphs) {
           ? 0
           : ql::ranges::max(alreadyCreatedGraphs) + 1;
 
-  return GraphManager(std::move(graphs), allocatedGraphs);
+  return GraphNamespaceManager(std::move(prefix), allocatedGraphs);
 }
 
 // _____________________________________________________________________________
-void GraphManager::addGraphs(std::vector<std::string> graphs) {
-  auto internalGraphSuffixes =
-      graphs | ql::views::filter([](const auto& graph) {
-        return graph.starts_with(QLEVER_NEW_GRAPH_PREFIX);
-      }) |
-      ql::views::transform([](const auto& graph) {
-        return graph.substr(QLEVER_NEW_GRAPH_PREFIX.size(),
-                            graph.size() - QLEVER_NEW_GRAPH_PREFIX.size() - 1);
-      });
-  ql::ranges::for_each(internalGraphSuffixes, [this](const auto& suffix) {
-    try {
-      auto graphId = std::stoul(suffix);
-      AD_CORRECTNESS_CHECK(graphId < allocatedGraphs_);
-    } catch (const std::invalid_argument&) {
-      AD_LOG_WARN << "Invalid graph suffix " << suffix
-                  << " from internal namespace being inserted." << std::endl;
-    }
-  });
-  ql::ranges::move(std::move(graphs), std::back_inserter(graphs_));
-  ql::ranges::sort(graphs_);
-  graphs_.erase(std::ranges::unique(graphs_).begin(), graphs_.end());
-  AD_LOG_INFO << "We now have " << graphs_.size() << " unique graphs."
-              << std::endl;
-}
-
-// _____________________________________________________________________________
-bool GraphManager::graphExists(const std::string& graph) const {
-  return ql::ranges::binary_search(graphs_, graph);
-}
-
-// _____________________________________________________________________________
-ad_utility::triple_component::Iri GraphManager::getNewInternalGraph() {
-  auto graphId = allocatedGraphs_++;
+ad_utility::triple_component::Iri GraphNamespaceManager::allocateNewGraph() {
+  auto graphId = allocatedGraphs_.withWriteLock(
+      [](auto& allocatedGraphs) { return allocatedGraphs++; });
   return ad_utility::triple_component::Iri::fromIriref(
-      QLEVER_NEW_GRAPH_PREFIX + std::to_string(graphId) + ">");
+      prefix_ + std::to_string(graphId) + ">");
+}
+
+// _____________________________________________________________________________
+void to_json(nlohmann::json& j, const GraphManager& graphManager) {
+  auto graphs = graphManager.graphs_.rlock();
+  j["graphs"] = *graphs |
+                ql::views::transform([](const auto& id) -> std::string {
+                  return std::to_string(id.getBits());
+                }) |
+                ::ranges::to<std::vector>();
+}
+
+// _____________________________________________________________________________
+void from_json(const nlohmann::json& j, GraphManager& graphManager) {
+  auto graphs = static_cast<std::vector<std::string>>(j["graphs"]) |
+                ql::views::transform([](const auto& idStr) -> Id {
+                  return Id::fromBits(std::stoull(idStr));
+                });
+  graphManager.graphs_.withWriteLock([&graphs](auto& graphsMember) {
+    graphsMember = ad_utility::HashSet<Id>(graphs.begin(), graphs.end());
+  });
+}
+// _____________________________________________________________________________
+std::ostream& operator<<(std::ostream& os, const GraphManager& graphManager) {
+  os << "GraphManager(graphs=[";
+  auto graphs = graphManager.graphs_.rlock();
+  os << absl::StrJoin(*graphs | ql::views::transform([](const auto& id) {
+    std::ostringstream os;
+    os << id;
+    return os.str();
+  }),
+                      ", ");
+  os << "])";
+  return os;
+}
+
+// _____________________________________________________________________________
+void to_json(nlohmann::json& j, const GraphNamespaceManager& namespaceManager) {
+  j["prefix"] = namespaceManager.prefix_;
+  j["allocatedGraphs"] = *namespaceManager.allocatedGraphs_.rlock();
+}
+
+// _____________________________________________________________________________
+void from_json(const nlohmann::json& j,
+               GraphNamespaceManager& namespaceManager) {
+  namespaceManager.prefix_ = j["prefix"].get<std::string>();
+  namespaceManager.allocatedGraphs_.withWriteLock([&j](auto& allocatedGraphs) {
+    allocatedGraphs = j["allocatedGraphs"].get<uint64_t>();
+  });
+}
+
+// _____________________________________________________________________________
+std::ostream& operator<<(std::ostream& os,
+                         const GraphNamespaceManager& namespaceManager) {
+  os << "GraphNamespaceManager(prefix=\"" << namespaceManager.prefix_
+     << "\", allocatedGraphs=" << *namespaceManager.allocatedGraphs_.rlock()
+     << ")" << std::endl;
+  return os;
 }

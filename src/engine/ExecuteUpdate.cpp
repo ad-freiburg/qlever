@@ -218,7 +218,7 @@ void ExecuteUpdate::computeAndAddQuadsForResultRow(
 // _____________________________________________________________________________
 // TODO: might want to have a struct for this type
 std::tuple<ExecuteUpdate::IdTriplesAndLocalVocab,
-           ExecuteUpdate::IdTriplesAndLocalVocab, std::vector<std::string>>
+           ExecuteUpdate::IdTriplesAndLocalVocab, ad_utility::HashSet<Id>>
 ExecuteUpdate::computeGraphUpdateQuads(
     const Index& index, const ParsedQuery& query, const Result& result,
     const VariableToColumnMap& variableColumns,
@@ -279,18 +279,7 @@ ExecuteUpdate::computeGraphUpdateQuads(
   toDelete = setMinus(toDelete, toInsert);
   tracer.endTrace("deduplication");
   tracer.beginTrace("uniqueGraphs");
-  auto uniqueInsertedGraphIds = uniqueGraphs(toInsert);
-  auto uniqueInsertedGraphs =
-      ad_utility::transform(uniqueInsertedGraphIds, [&index](const Id& id) {
-        AD_CORRECTNESS_CHECK(id.getDatatype() == Datatype::VocabIndex ||
-                             id.getDatatype() == Datatype::LocalVocabIndex);
-        if (id.getDatatype() == Datatype::VocabIndex) {
-          return index.indexToString(id.getVocabIndex());
-        } else {
-          AD_CORRECTNESS_CHECK(id.getLocalVocabIndex()->isIri());
-          return id.getLocalVocabIndex()->getIri().toStringRepresentation();
-        }
-      });
+  auto uniqueInsertedGraphs = uniqueGraphs(toInsert);
   tracer.endTrace("uniqueGraphs");
   tracer.endTrace("computeIds");
 
@@ -318,11 +307,11 @@ std::vector<IdTriple<>> ExecuteUpdate::setMinus(
 }
 
 // _____________________________________________________________________________
-std::vector<Id> ExecuteUpdate::uniqueGraphs(const std::vector<IdTriple<>>& triples) {
-  ad_utility::HashSet<Id> uniqueGraphs_;
+ad_utility::HashSet<Id> ExecuteUpdate::uniqueGraphs(
+    const std::vector<IdTriple<>>& triples) {
+  ad_utility::HashSet<Id> uniqueGraphs;
   for (const auto& triple : triples) {
-    uniqueGraphs_.insert(triple.ids().at(3));
+    uniqueGraphs.insert(triple.ids()[3]);
   }
-  return std::vector(std::move_iterator(uniqueGraphs_.begin()),
-                     std::move_iterator(uniqueGraphs_.end()));
+  return uniqueGraphs;
 }

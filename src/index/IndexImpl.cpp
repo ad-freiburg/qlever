@@ -1798,14 +1798,10 @@ CPP_template_def(typename... NextSorter)(requires(
   {
     // TODO: hardcoded index name, because we fail when running on the internal
     // permutations
-    vocab_.readFromFile("dblp" + std::string(VOCAB_SUFFIX));
-    auto graphStrs = ad_utility::transform(
-        graphs, [this](const Id& id) { return vocab_[id.getVocabIndex()]; });
+    //vocab_.readFromFile("dblp" + std::string(VOCAB_SUFFIX));
+    auto manager = GraphManager::fromExistingGraphs(graphs);
     // Unload the vocabulary again.
-    vocab_.resetToType(vocabularyTypeForIndexBuilding_);
-    auto manager = GraphManager::fromExistingGraphs(graphStrs);
-    AD_LOG_INFO << "Distinct graphs in the input: "
-                << absl::StrJoin(graphStrs, ", ") << std::endl;
+    //vocab_.resetToType(vocabularyTypeForIndexBuilding_);
     configurationJson_["existing-graphs"] = manager;
     AD_LOG_INFO << "Graph manager initialized: " << manager << std::endl;
   }

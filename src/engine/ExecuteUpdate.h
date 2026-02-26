@@ -71,7 +71,7 @@ class ExecuteUpdate {
   // ParsedQuery's clause must be an UpdateClause. The UpdateClause's operation
   // must be a GraphUpdate.
   static std::tuple<IdTriplesAndLocalVocab, IdTriplesAndLocalVocab,
-                    std::vector<std::string>>
+                    ad_utility::HashSet<Id>>
   computeGraphUpdateQuads(const Index& index, const ParsedQuery& query,
                           const Result& result,
                           const VariableToColumnMap& variableColumns,
@@ -93,7 +93,7 @@ class ExecuteUpdate {
                                           const std::vector<IdTriple<>>& b);
   FRIEND_TEST(ExecuteUpdate, setMinus);
 
-  static std::vector<Id> uniqueGraphs(const std::vector<IdTriple<>>& triples);
+  static ad_utility::HashSet<Id> uniqueGraphs(const std::vector<IdTriple<>>& triples);
 };
 
 #endif  // QLEVER_SRC_ENGINE_EXECUTEUPDATE_H
