@@ -14,6 +14,7 @@
 #include <optional>
 #include <unordered_set>
 
+#include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "global/Id.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/CancellationHandle.h"
@@ -47,9 +48,8 @@ struct GraphSearchProblem {
   size_t maxDist_;
 };
 
-// Helper struct which allows extracting the minimal parts of an
-// `Operation`s inheritor to be used in external algorithms which do not inherit
-// from `Operation` by recreating the necessary member function's behavior.
+// Store allocator and cancellationHandle which need to be passed to the graph
+// search algorithms by their caller.
 struct GraphSearchExecutionParams {
   // Used to communicate cancellation signals between objects.
   ad_utility::SharedCancellationHandle cancellationHandle_;
@@ -57,23 +57,24 @@ struct GraphSearchExecutionParams {
   const ad_utility::AllocatorWithLimit<Id>& allocator_;
 
   // Check if a signal to cancel computation was sent, and if yes, throw
-  // an CancellationException.
+  // a CancellationException containing info about the currently running
+  // algorithm.
   void checkCancellation(
       std::string algorithmName,
       ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) {
     cancellationHandle_->throwIfCancelled(location, [algorithmName]() {
-      return std::string(
-          "The " + algorithmName +
+      return absl::StrCat(
+          "The ", algorithmName,
           " graph search algorithm received a cancellation signal.");
     });
   }
 };
 
-// Breadth first search without any distance constraints.
+// Breadth-first search without any distance constraints.
 // Returns the set of all nodes connected to the startNode as given in `gsp`.
 template <typename T>
-static Set breadthFirstSearch(GraphSearchProblem<T>& gsp,
-                              GraphSearchExecutionParams& ep) {
+Set breadthFirstSearch(GraphSearchProblem<T>& gsp,
+                       GraphSearchExecutionParams& ep) {
   // TODO<schaetzr>: Check if there are advantages to making our own minimal
   // implementation of a FIFO queue.
   Queue queue{ep.allocator_};
@@ -82,7 +83,7 @@ static Set breadthFirstSearch(GraphSearchProblem<T>& gsp,
   queue.push_back(gsp.startNode_);
 
   while (!queue.empty()) {
-    ep.checkCancellation("Breadth first search");
+    ep.checkCancellation("Breadth-first search");
 
     // Get next node from queue.
     auto node = queue.front();
@@ -101,13 +102,13 @@ static Set breadthFirstSearch(GraphSearchProblem<T>& gsp,
   return connectedNodes;
 }
 
-// Breadth first search respecting the minimum and maximum distance
+// Breadth-first search respecting the minimum and maximum distance
 // constraints from the `gsp` parameter.
-// Returns The set of all nodes connected to the startNode as given in `gsp`,
+// Returns the set of all nodes connected to the startNode as given in `gsp`,
 // with respect to the limit.
 template <typename T>
-static Set breadthFirstSearchWithLimit(GraphSearchProblem<T>& gsp,
-                                       GraphSearchExecutionParams& ep) {
+Set breadthFirstSearchWithLimit(GraphSearchProblem<T>& gsp,
+                                GraphSearchExecutionParams& ep) {
   size_t traversalDepth = 0;
   size_t nodesUntilNextDepthIncrease = 1;
   // TODO<schaetzr>: Check if there are advantages to making our own minimal
@@ -117,7 +118,7 @@ static Set breadthFirstSearchWithLimit(GraphSearchProblem<T>& gsp,
 
   queue.push_back(gsp.startNode_);
   while (!queue.empty() && traversalDepth <= gsp.maxDist_) {
-    ep.checkCancellation("Breadth first search (limited version)");
+    ep.checkCancellation("Breadth-first search (with limit)");
 
     // Get next node from queue.
     auto node = queue.front();
@@ -147,30 +148,35 @@ static Set breadthFirstSearchWithLimit(GraphSearchProblem<T>& gsp,
   return connectedNodes;
 }
 
-// Depth first search for a given target node inside the given graph.
-// Returns a set containing the target node, if a path from the startNode to
+// Depth-first search for a given target node inside the given graph.
+// Returns a set containing the target node, if a path from the start node to
 // it was found in the graph.
 template <typename T>
-static Set depthFirstSearch(GraphSearchProblem<T>& gsp,
-                            GraphSearchExecutionParams& ep) {
+Set depthFirstSearch(GraphSearchProblem<T>& gsp,
+                     GraphSearchExecutionParams& ep) {
   Set connectedNodes{ep.allocator_};
 
-  std::vector<Id, ad_utility::AllocatorWithLimit<Id>> stack{ep.allocator_};
+  // Ensure the target node is actually given. If not, we can skip graph search
+  // altogether. Also improves performance since no has_value() check is
+  // necessary each iteration.
+  Id targetNode{};
+  if (gsp.targetNode_.has_value()) {
+    targetNode = gsp.targetNode_.value();
+  } else {
+    return connectedNodes;
+  }
+  sparqlExpression::VectorWithMemoryLimit<Id> stack{ep.allocator_};
   ad_utility::HashSetWithMemoryLimit<Id> marks{ep.allocator_};
 
   stack.emplace_back(gsp.startNode_);
 
   while (!stack.empty()) {
-    ep.checkCancellation("Depth first search");
+    ep.checkCancellation("Depth-first search");
     Id node = stack.back();
     stack.pop_back();
 
-    if (marks.contains(node)) {
-      continue;
-    }
-
     marks.insert(node);
-    if (node == gsp.targetNode_.value()) {
+    if (node == targetNode) {
       connectedNodes.insert(node);
       // Stop the DFS once target found, no further processing necessary.
       break;
@@ -187,26 +193,37 @@ static Set depthFirstSearch(GraphSearchProblem<T>& gsp,
   return connectedNodes;
 }
 
-// Depth first search for a given target node inside the given graph,
+// Depth-first search for a given target node inside the given graph,
 // respecting minimum and maximum distance constraints.
 // Returns a set containing the target node, if the graph contains a path
-// from the start node to it and which fits inside the distance constraints..
+// from the start node to it and which fits inside the distance constraints.
 template <typename T>
-static Set depthFirstSearchWithLimit(GraphSearchProblem<T>& gsp,
-                                     GraphSearchExecutionParams& ep) {
+Set depthFirstSearchWithLimit(GraphSearchProblem<T>& gsp,
+                              GraphSearchExecutionParams& ep) {
   Set connectedNodes{ep.allocator_};
-  // TODO<rs505> Find out how to correctly use the allocator for std::pair.
-  std::vector<std::pair<Id, size_t>> stack;
+
+  // Ensure the target node is actually given. If not, we can skip graph search
+  // altogether. Also improves performance since no has_value() check is
+  // necessary each iteration.
+  Id targetNode{};
+  if (gsp.targetNode_.has_value()) {
+    targetNode = gsp.targetNode_.value();
+  } else {
+    return connectedNodes;
+  }
+
+  sparqlExpression::VectorWithMemoryLimit<std::pair<Id, size_t>> stack{
+      ep.allocator_.as<std::pair<Id, size_t>>()};
   ad_utility::HashSetWithMemoryLimit<Id> marks{ep.allocator_};
 
   stack.emplace_back(gsp.startNode_, 0);
 
   while (!stack.empty()) {
-    ep.checkCancellation("Depth first search (limited version)");
+    ep.checkCancellation("Depth-first search (with limit)");
     auto [node, steps] = stack.back();
     stack.pop_back();
 
-    if (steps > gsp.maxDist_ || marks.contains(node)) {
+    if (steps > gsp.maxDist_) {
       continue;
     }
 
@@ -214,7 +231,7 @@ static Set depthFirstSearchWithLimit(GraphSearchProblem<T>& gsp,
       // Marked nodes are guaranteed to be reachable inside the distance
       // constraints.
       marks.insert(node);
-      if (node == gsp.targetNode_) {
+      if (node == targetNode) {
         connectedNodes.insert(node);
         // Stop the DFS once target found, no further processing necessary.
         break;
@@ -232,13 +249,13 @@ static Set depthFirstSearchWithLimit(GraphSearchProblem<T>& gsp,
 }
 
 // Check the given graph search problem and run the appropriate
-// algorithm (BFS/DFS, with or without limits.).
-// Returns a set containing the target node, if it was given and is
-// reachable. Otherwise, all reachable nodes. If limits were given, only
+// algorithm (BFS/DFS, with or without limits).
+// Return a set containing the target node, if it was given and is
+// reachable. Otherwise, return all reachable nodes. If limits were given, only
 // nodes inside that limit are contained.
 template <typename T>
-static Set runOptimalGraphSearch(GraphSearchProblem<T>& gsp,
-                                 GraphSearchExecutionParams& ep) {
+Set runOptimalGraphSearch(GraphSearchProblem<T>& gsp,
+                          GraphSearchExecutionParams& ep) {
   // Select limited versions of graph search algorithms if limits
   // are not size limits of size_t (as used when parsing input).
   bool usesLimits =

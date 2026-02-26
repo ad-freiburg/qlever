@@ -17,7 +17,6 @@
 #include "util/Timer.h"
 
 using IdWithGraphs = absl::InlinedVector<std::pair<Id, Id>, 1>;
-using namespace qlever::graphSearch;
 namespace detail {
 
 // Helper struct that allows to group a read-only view of a column of a table
@@ -224,6 +223,7 @@ class TransitivePathImpl : public TransitivePathBase {
       transitiveHull(T edges, LocalVocab edgesVocab, Node startNodes,
                      TripleComponent start, TripleComponent target,
                      bool yieldOnce) const {
+    using namespace qlever::graphSearch;
     ad_utility::Timer timer{ad_utility::Timer::Stopped};
     // `targetId` is only ever used for comparisons, and never stored in the
     // result, so we use a separate local vocabulary.
