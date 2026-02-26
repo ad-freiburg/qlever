@@ -858,11 +858,11 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
     locatedTriplesPerBlock.updateAugmentedMetadata();
 
     // All the blocks have updates, so their value of `containsDuplicates..` is
-    // set to `true`.
+    // set to `true` if triples from new graphs are added.
     expectedAugmentedMetadata[0] =
         CBM(T1.toPermutedTriple(), T2.toPermutedTriple());
     expectedAugmentedMetadata[0].containsDuplicatesWithDifferentGraphs_ = true;
-    expectedAugmentedMetadata[1].containsDuplicatesWithDifferentGraphs_ = true;
+    expectedAugmentedMetadata[1].containsDuplicatesWithDifferentGraphs_ = false;
 
     // Note: the GraphInfo hasn't changed, because the new triples all were
     // deleted.
