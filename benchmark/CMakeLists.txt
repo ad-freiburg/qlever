@@ -5,12 +5,12 @@ OPTION(_NO_BENCHMARK "Disable benchmark targets, for example when building with 
 
 if (NOT _NO_BENCHMARK)
     # This part compiles 'just' the benchmark infrastructure and doesn't provide a main function.
-    add_library(benchmark infrastructure/Benchmark.cpp infrastructure/BenchmarkMeasurementContainer.cpp
+    qlever_add_library(benchmark infrastructure/Benchmark.cpp infrastructure/BenchmarkMeasurementContainer.cpp
         infrastructure/BenchmarkToJson.cpp infrastructure/BenchmarkToString.cpp)
     qlever_target_link_libraries(benchmark Boost::program_options absl::str_format parser util configManager)
 
     # This provides the library of the benchmark infrastructure together with its default main function.
-    add_library(benchmarkWithMain infrastructure/BenchmarkMain.cpp)
+    qlever_add_library(benchmarkWithMain infrastructure/BenchmarkMain.cpp)
     qlever_target_link_libraries(benchmarkWithMain benchmark)
 
     # Link binary ${basename} against the benchmark library,

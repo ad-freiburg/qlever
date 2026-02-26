@@ -8,6 +8,7 @@
 #ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONTYPES_H
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONTYPES_H
 
+#include <functional>
 #include <vector>
 
 #include "backports/keywords.h"
@@ -380,6 +381,26 @@ constexpr bool isOperation = false;
 
 template <size_t NumOperations, typename... Ts>
 constexpr bool isOperation<Operation<NumOperations, Ts...>> = true;
+
+#ifdef _QLEVER_FASTER_COMPILATION
+// A type-erased operation that stores its evaluate logic in a std::function.
+// This avoids instantiating the full NaryExpression class template for each
+// concrete Operation type, reducing compile time.
+template <size_t NumOperands>
+struct TypeErasedOperation {
+  static constexpr size_t N = NumOperands;
+  std::function<ExpressionResult(EvaluationContext*,
+                                 std::array<ExpressionResult, N>)>
+      evaluateImpl_;
+  std::string cacheKeyPrefix_;
+};
+
+template <typename T>
+constexpr bool isTypeErasedOperation = false;
+
+template <size_t N>
+constexpr bool isTypeErasedOperation<TypeErasedOperation<N>> = true;
+#endif
 
 // Return the common logical size of the `SingleExpressionResults`.
 // This is either 1 (in case all the `inputs` are constants) or the

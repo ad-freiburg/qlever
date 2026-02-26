@@ -2,7 +2,7 @@
 add_subdirectory(sparqlParser)
 add_subdirectory(data)
 
-add_library(parser
+qlever_add_library(parser
         sparqlParser/SparqlQleverVisitor.cpp
         SparqlParser.cpp
         ParsedQuery.cpp

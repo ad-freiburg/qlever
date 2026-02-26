@@ -14,9 +14,58 @@
 #include "util/CryptographicHashUtils.h"
 
 namespace sparqlExpression::detail {
+
+// Free function that evaluates an N-ary operation on concrete operands.
+// Extracted from NaryExpression so that type-erased factories can call it.
+CPP_template(typename NaryOp, typename... Operands)(
+    requires(SingleExpressionResult<Operands>&&...))
+    ExpressionResult evaluateNaryOnOperands(NaryOp naryOperation,
+                                            EvaluationContext* context,
+                                            Operands&&... operands) {
+  // Perform a more efficient calculation if a specialized function exists
+  // that matches all operands.
+  if (isAnySpecializedFunctionPossible(naryOperation._specializedFunctions,
+                                       operands...)) {
+    auto optionalResult = evaluateOnSpecializedFunctionsIfPossible(
+        naryOperation._specializedFunctions,
+        std::forward<Operands>(operands)...);
+    AD_CORRECTNESS_CHECK(optionalResult);
+    return std::move(optionalResult.value());
+  }
+
+  // We have to first determine the number of results we will produce.
+  auto targetSize = getResultSize(*context, operands...);
+
+  // The result is a constant iff all the results are constants.
+  constexpr static bool resultIsConstant =
+      (... && isConstantResult<Operands>);
+
+  // The generator for the result of the operation.
+  auto resultGenerator =
+      applyOperation(targetSize, naryOperation, context, AD_FWD(operands)...);
+
+  // Compute the result.
+  using ResultType = ql::ranges::range_value_t<decltype(resultGenerator)>;
+  VectorWithMemoryLimit<ResultType> result{context->_allocator};
+  result.reserve(targetSize);
+  ql::ranges::move(resultGenerator, std::back_inserter(result));
+
+  if constexpr (resultIsConstant) {
+    AD_CORRECTNESS_CHECK(result.size() == 1);
+    return std::move(result[0]);
+  } else {
+    return result;
+  }
+}
+
 template <typename NaryOperation>
 class NaryExpression : public SparqlExpression {
+#ifdef _QLEVER_FASTER_COMPILATION
+  CPP_assert(isOperation<NaryOperation> ||
+             isTypeErasedOperation<NaryOperation>);
+#else
   CPP_assert(isOperation<NaryOperation>);
+#endif
 
  public:
   static constexpr size_t N = NaryOperation::N;
@@ -24,10 +73,18 @@ class NaryExpression : public SparqlExpression {
 
  private:
   Children children_;
+  NaryOperation operation_;
 
  public:
   // Construct from an array of `N` child expressions.
   explicit NaryExpression(Children&& children);
+
+#ifdef _QLEVER_FASTER_COMPILATION
+  // Construct from an operation and an array of `N` child expressions.
+  // Used for type-erased operations that can't be default-constructed.
+  explicit NaryExpression(NaryOperation operation, Children&& children)
+      : children_(std::move(children)), operation_(std::move(operation)) {}
+#endif
 
   // Construct from `N` child expressions. Each of the children must have a type
   // `std::unique_ptr<SubclassOfSparqlExpression>`.
@@ -46,48 +103,6 @@ class NaryExpression : public SparqlExpression {
  private:
   // _________________________________________________________________________
   ql::span<SparqlExpression::Ptr> childrenImpl() override;
-
-  // Evaluate the `naryOperation` on the `operands` using the `context`.
-  CPP_template(typename... Operands)(
-      requires(SingleExpressionResult<Operands>&&...)) static ExpressionResult
-      evaluateOnChildrenOperands(NaryOperation naryOperation,
-                                 EvaluationContext* context,
-                                 Operands&&... operands) {
-    // Perform a more efficient calculation if a specialized function exists
-    // that matches all operands.
-    if (isAnySpecializedFunctionPossible(naryOperation._specializedFunctions,
-                                         operands...)) {
-      auto optionalResult = evaluateOnSpecializedFunctionsIfPossible(
-          naryOperation._specializedFunctions,
-          std::forward<Operands>(operands)...);
-      AD_CORRECTNESS_CHECK(optionalResult);
-      return std::move(optionalResult.value());
-    }
-
-    // We have to first determine the number of results we will produce.
-    auto targetSize = getResultSize(*context, operands...);
-
-    // The result is a constant iff all the results are constants.
-    constexpr static bool resultIsConstant =
-        (... && isConstantResult<Operands>);
-
-    // The generator for the result of the operation.
-    auto resultGenerator =
-        applyOperation(targetSize, naryOperation, context, AD_FWD(operands)...);
-
-    // Compute the result.
-    using ResultType = ql::ranges::range_value_t<decltype(resultGenerator)>;
-    VectorWithMemoryLimit<ResultType> result{context->_allocator};
-    result.reserve(targetSize);
-    ql::ranges::move(resultGenerator, std::back_inserter(result));
-
-    if constexpr (resultIsConstant) {
-      AD_CORRECTNESS_CHECK(result.size() == 1);
-      return std::move(result[0]);
-    } else {
-      return result;
-    }
-  }
 };
 
 // Takes a `Function` that returns a numeric value (integral or floating point)
@@ -159,22 +174,35 @@ NaryExpression<Op>::NaryExpression(Children&& children)
 template <typename NaryOperation>
 ExpressionResult NaryExpression<NaryOperation>::evaluate(
     EvaluationContext* context) const {
-  auto resultsOfChildren = ad_utility::applyFunctionToEachElementOfTuple(
-      [context](const auto& child) { return child->evaluate(context); },
-      children_);
+#ifdef _QLEVER_FASTER_COMPILATION
+  if constexpr (isTypeErasedOperation<NaryOperation>) {
+    std::array<ExpressionResult, N> results;
+    for (size_t i = 0; i < N; ++i) {
+      results[i] = children_[i]->evaluate(context);
+    }
+    return operation_.evaluateImpl_(context, std::move(results));
+  } else {
+#endif
+    auto resultsOfChildren = ad_utility::applyFunctionToEachElementOfTuple(
+        [context](const auto& child) { return child->evaluate(context); },
+        children_);
 
-  // Bind the `evaluateOnChildrenOperands` to a lambda.
-  auto evaluateOnChildOperandsAsLambda = [](auto&&... args) {
-    return evaluateOnChildrenOperands(AD_FWD(args)...);
-  };
+    // Bind the `evaluateNaryOnOperands` to a lambda.
+    auto evaluateOnChildOperandsAsLambda = [](auto&&... args) {
+      return evaluateNaryOnOperands(AD_FWD(args)...);
+    };
 
-  // A function that only takes several `ExpressionResult`s,
-  // and evaluates the expression.
-  auto evaluateOnChildrenResults = absl::bind_front(
-      ad_utility::visitWithVariantsAndParameters,
-      evaluateOnChildOperandsAsLambda, NaryOperation{}, context);
+    // A function that only takes several `ExpressionResult`s,
+    // and evaluates the expression.
+    auto evaluateOnChildrenResults = absl::bind_front(
+        ad_utility::visitWithVariantsAndParameters,
+        evaluateOnChildOperandsAsLambda, NaryOperation{}, context);
 
-  return std::apply(evaluateOnChildrenResults, std::move(resultsOfChildren));
+    return std::apply(evaluateOnChildrenResults,
+                      std::move(resultsOfChildren));
+#ifdef _QLEVER_FASTER_COMPILATION
+  }
+#endif
 }
 
 // _____________________________________________________________________________
@@ -187,7 +215,16 @@ ql::span<SparqlExpression::Ptr> NaryExpression<Op>::childrenImpl() {
 template <typename Op>
 [[nodiscard]] std::string NaryExpression<Op>::getCacheKey(
     const VariableToColumnMap& varColMap) const {
+#ifdef _QLEVER_FASTER_COMPILATION
+  std::string key;
+  if constexpr (isTypeErasedOperation<Op>) {
+    key = operation_.cacheKeyPrefix_;
+  } else {
+    key = typeid(*this).name();
+  }
+#else
   std::string key = typeid(*this).name();
+#endif
   key += ad_utility::lazyStrJoin(
       children_ | ql::views::transform([&varColMap](const auto& child) {
         return child->getCacheKey(varColMap);
@@ -195,6 +232,35 @@ template <typename Op>
       "");
   return key;
 }
+
+#ifdef _QLEVER_FASTER_COMPILATION
+// Create a TypeErasedOperation from a concrete Operation type. The concrete
+// Operation's evaluate logic is captured in a std::function, so that
+// NaryExpression only needs to be instantiated for TypeErasedOperation<N>.
+template <typename ConcreteOp>
+TypeErasedOperation<ConcreteOp::N> makeTypeErasedOperation() {
+  return {
+      [](EvaluationContext* ctx,
+         std::array<ExpressionResult, ConcreteOp::N> results)
+          -> ExpressionResult {
+        // Convert array to tuple for visitWithVariantsAndParameters.
+        auto resultsTuple = std::apply(
+            [](auto&&... elts) {
+              return std::make_tuple(std::move(elts)...);
+            },
+            std::move(results));
+
+        auto evalLambda = [](auto&&... args) {
+          return evaluateNaryOnOperands(AD_FWD(args)...);
+        };
+        auto evalWithOp = absl::bind_front(
+            ad_utility::visitWithVariantsAndParameters, evalLambda,
+            ConcreteOp{}, ctx);
+        return std::apply(evalWithOp, std::move(resultsTuple));
+      },
+      typeid(NaryExpression<ConcreteOp>).name()};
+}
+#endif
 
 // Define a class `Name` that is a strong typedef (via inheritance) from
 // `NaryExpresssion<N, X, ...>`. The strong typedef (vs. a simple `using`
