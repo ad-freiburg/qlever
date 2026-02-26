@@ -889,6 +889,15 @@ class CompressedRelationReader {
       const CompressedBlockMetadata& blockMetaData,
       const ScanImplConfig& scanConfig) const;
 
+  // If `canBlockBeSkipped` would skip a block, but there are located triples
+  // for it, create an empty block, merge the located triples into it, apply
+  // graph filtering, and return the result.  Returns std::nullopt if there
+  // are no located triples for this block.
+  std::optional<DecompressedBlockAndMetadata>
+  processSkippedBlockWithLocatedTriples(
+      const CompressedBlockMetadata& blockMetaData,
+      const ScanImplConfig& scanConfig) const;
+
   // Like `readAndDecompressBlock`, and postprocess by merging the located
   // triples (if any) and applying the graph filters (if any), both specified
   // as part of the `scanConfig`.
