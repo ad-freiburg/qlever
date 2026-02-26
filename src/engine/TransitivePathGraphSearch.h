@@ -60,8 +60,8 @@ struct GraphSearchExecutionParams {
   // a CancellationException containing info about the currently running
   // algorithm.
   void checkCancellation(
-      std::string algorithmName,
-      ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) {
+      const std::string& algorithmName,
+      ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) const  {
     cancellationHandle_->throwIfCancelled(location, [algorithmName]() {
       return absl::StrCat(
           "The ", algorithmName,
