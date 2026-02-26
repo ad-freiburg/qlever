@@ -179,27 +179,25 @@ ExpressionPtr Visitor::processIriFunctionCall(
 
   using namespace sparqlExpression;
   // Create `SparqlExpression` with one child.
-  auto createUnary =
-      CPP_template_lambda(&argList, &checkNumArgs)(typename F)(F function)(
-          requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr>) {
+  auto createUnary = CPP_template_lambda(&argList, &checkNumArgs)(typename F)(
+      F function)(requires std::is_invocable_r_v<ExpressionPtr, F,
+                                                 ExpressionPtr>) {
     checkNumArgs(1);  // Check is unary.
     return function(std::move(argList[0]));
   };
   // Create `SparqlExpression` with two children.
-  auto createBinary =
-      CPP_template_lambda(&argList, &checkNumArgs)(typename F)(F function)(
-          requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr,
-                                         ExpressionPtr>) {
+  auto createBinary = CPP_template_lambda(&argList, &checkNumArgs)(typename F)(
+      F function)(requires std::is_invocable_r_v<
+                  ExpressionPtr, F, ExpressionPtr, ExpressionPtr>) {
     checkNumArgs(2);  // Check is binary.
     return function(std::move(argList[0]), std::move(argList[1]));
   };
   // Create `SparqlExpression` with two or three children (currently used for
   // backward-compatible geof:distance function)
-  auto createBinaryOrTernary =
-      CPP_template_lambda(&argList)(typename F)(F function)(
-          requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr,
-                                         ExpressionPtr,
-                                         std::optional<ExpressionPtr>>) {
+  auto createBinaryOrTernary = CPP_template_lambda(&argList)(typename F)(
+      F function)(requires std::is_invocable_r_v<
+                  ExpressionPtr, F, ExpressionPtr, ExpressionPtr,
+                  std::optional<ExpressionPtr>>) {
     if (argList.size() == 2) {
       return function(std::move(argList[0]), std::move(argList[1]),
                       std::nullopt);
@@ -1289,6 +1287,37 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
     return visitMagicServiceQuery<parsedQuery::MaterializedViewQuery>(
         ctx, serviceIri);
   }
+
+  // Check for no longer supported legacy IRIs of magic service queries.
+  auto reportRemovedMagicServiceIri = [&](std::string_view used,
+                                          std::string_view replacement) {
+    reportError(ctx, absl::StrCat(
+                         "The magic service IRI '", used,
+                         "' is no longer supported by QLever. You should use '",
+                         replacement, "' instead."));
+  };
+  auto checkLegacyMagicServiceIri = [&]() {
+    using namespace string_constants::legacy_magic_service_iris;
+    if (serviceIri.toStringRepresentation() == PATH_SEARCH_LEGACY_IRI) {
+      reportRemovedMagicServiceIri(serviceIri.toStringRepresentation(),
+                                   PATH_SEARCH_IRI);
+    } else if (serviceIri.toStringRepresentation() ==
+               SPATIAL_SEARCH_LEGACY_IRI) {
+      reportRemovedMagicServiceIri(serviceIri.toStringRepresentation(),
+                                   SPATIAL_SEARCH_IRI);
+    } else if (serviceIri.toStringRepresentation() == TEXT_SEARCH_LEGACY_IRI) {
+      reportRemovedMagicServiceIri(serviceIri.toStringRepresentation(),
+                                   TEXT_SEARCH_IRI);
+    }
+    // TODO CACHED_RESULT_WITH_NAME_PREFIX
+    else if (ql::starts_with(asStringViewUnsafe(serviceIri.getContent()),
+                             MATERIALIZED_VIEW_LEGACY_IRI_WITHOUT_BRACKETS)) {
+      reportRemovedMagicServiceIri(asStringViewUnsafe(serviceIri.getContent()),
+                                   MATERIALIZED_VIEW_IRI_WITHOUT_BRACKETS);
+    }
+  };
+  checkLegacyMagicServiceIri();
+
   // Parse the body of the SERVICE query. Add the visible variables from the
   // SERVICE clause to the visible variables so far, but also remember them
   // separately (with duplicates removed) because we need them in `Service.cpp`
@@ -2629,22 +2658,24 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   using namespace sparqlExpression;
   // Create the expression using the matching factory function from
   // `NaryExpression.h`.
-  auto createUnary = CPP_template_lambda(&argList)(typename F)(F function)(
-      requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr>) {
+  auto createUnary = CPP_template_lambda(&argList)(typename F)(
+      F function)(requires std::is_invocable_r_v<ExpressionPtr, F,
+                                                 ExpressionPtr>) {
     AD_CORRECTNESS_CHECK(argList.size() == 1, argList.size());
     return function(std::move(argList[0]));
   };
 
-  auto createBinary = CPP_template_lambda(&argList)(typename F)(F function)(
-      requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr,
-                                     ExpressionPtr>) {
+  auto createBinary = CPP_template_lambda(&argList)(typename F)(
+      F function)(requires std::is_invocable_r_v<
+                  ExpressionPtr, F, ExpressionPtr, ExpressionPtr>) {
     AD_CORRECTNESS_CHECK(argList.size() == 2);
     return function(std::move(argList[0]), std::move(argList[1]));
   };
 
-  auto createTernary = CPP_template_lambda(&argList)(typename F)(F function)(
-      requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr,
-                                     ExpressionPtr, ExpressionPtr>) {
+  auto createTernary = CPP_template_lambda(&argList)(typename F)(
+      F function)(requires std::is_invocable_r_v<ExpressionPtr, F,
+                                                 ExpressionPtr, ExpressionPtr,
+                                                 ExpressionPtr>) {
     AD_CORRECTNESS_CHECK(argList.size() == 3);
     return function(std::move(argList[0]), std::move(argList[1]),
                     std::move(argList[2]));
