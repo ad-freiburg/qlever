@@ -513,7 +513,8 @@ TEST(IndexScan, getResultSizeOfScan) {
     SparqlTripleSimple scanTriple{V{"?x"}, V("?y"), V{"?z"}};
     IndexScan scan{qec, Permutation::Enum::PSO, scanTriple};
     EXPECT_EQ(scan.getSizeEstimate(), 3);
-    EXPECT_TRUE(scan.sizeEstimateIsExactForTesting());
+    // Full scan uses an estimate (number of total triples).
+    EXPECT_FALSE(scan.sizeEstimateIsExactForTesting());
   }
   {
     SparqlTripleSimple scanTriple{V{"?x"}, I::fromIriref("<p>"), V{"?y"}};

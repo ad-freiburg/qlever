@@ -172,6 +172,8 @@ class IndexMetaData {
     return blockData_;
   }
 
+  size_t totalElements() const { return totalElements_; }
+
   // Exchange the multiplicities for two permutations that are "twins" (e.g. PSO
   // and POS). This is needed because the multiplicity of the last column is
   // stored in the metadata of the other permutation. The `PairMetadataWriter`
