@@ -799,17 +799,15 @@ Operation::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   // Check if a given child covers all expression variables.
   auto childCoversAllVars = [&](size_t idx) {
     const auto& childVars = children[idx]->getVariableColumns();
-    return std::all_of(exprVarPtrs.begin(), exprVarPtrs.end(),
-                       [&](const Variable* v) {
-                         return childVars.contains(*v);
-                       });
+    return std::all_of(
+        exprVarPtrs.begin(), exprVarPtrs.end(),
+        [&](const Variable* v) { return childVars.contains(*v); });
   };
 
   // Try pushing the bind down to a specific child. If successful, clone this
   // operation and replace the modified child in the clone.
   auto tryPushDown =
-      [&](size_t idx)
-      -> std::optional<std::shared_ptr<QueryExecutionTree>> {
+      [&](size_t idx) -> std::optional<std::shared_ptr<QueryExecutionTree>> {
     auto result =
         children[idx]->getRootOperation()->makeTreeWithBindColumn(bind);
     if (!result) {
@@ -828,6 +826,7 @@ Operation::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   };
 
   // First, try the child that covers all expression variables.
+  // TODO what about operations where both children share the variables?
   for (size_t i = 0; i < children.size(); ++i) {
     if (childCoversAllVars(i)) {
       return tryPushDown(i);
