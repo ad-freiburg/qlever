@@ -52,7 +52,18 @@ GraphManager GraphManager::fromExistingGraphs(ad_utility::HashSet<Id> graphs) {
 
 // _____________________________________________________________________________
 void GraphManager::addGraphs(ad_utility::HashSet<Id> graphs) {
-  graphs_.wlock()->insert(graphs.begin(), graphs.end());
+  // The IDs may be temporary LVIs. Rewrite them to our own LocalVOc
+  auto localGraphs =
+      graphs | ql::views::transform([this](const auto& graph) {
+        if (graph.getDatatype() == Datatype::LocalVocabIndex) {
+          return Id::makeFromLocalVocabIndex(
+              graphLocalVocab_.getIndexAndAddIfNotContained(
+                  *graph.getLocalVocabIndex()));
+        }
+        AD_CORRECTNESS_CHECK(graph.getDatatype() == Datatype::VocabIndex);
+        return graph;
+      });
+  graphs_.wlock()->insert(localGraphs.begin(), localGraphs.end());
 }
 
 // _____________________________________________________________________________
@@ -62,12 +73,27 @@ bool GraphManager::graphExists(const Id& graph) const {
 }
 
 // _____________________________________________________________________________
-GraphNamespaceManager::GraphNamespaceManager(std::string prefix,
-                                             uint64_t allocatedGraphs)
+GraphManager::GraphNamespaceManager& GraphManager::getNamespaceManager() {
+  AD_CORRECTNESS_CHECK(namespaceManager_.has_value());
+  return namespaceManager_.value();
+}
+
+// _____________________________________________________________________________
+void GraphManager::initializeNamespaceManager(std::string prefix,
+                                              const GraphManager& graphManager,
+                                              const Index::Vocab& vocab) {
+  namespaceManager_ = GraphNamespaceManager::fromGraphManager(
+      std::move(prefix), graphManager, vocab);
+}
+
+// _____________________________________________________________________________
+GraphManager::GraphNamespaceManager::GraphNamespaceManager(
+    std::string prefix, uint64_t allocatedGraphs)
     : prefix_(std::move(prefix)), allocatedGraphs_(allocatedGraphs) {}
 
 // _____________________________________________________________________________
-GraphNamespaceManager GraphNamespaceManager::fromGraphManager(
+GraphManager::GraphNamespaceManager
+GraphManager::GraphNamespaceManager::fromGraphManager(
     std::string prefix, const GraphManager& graphManager,
     const Index::Vocab& vocab) {
   auto graphs = graphManager.getGraphs();
@@ -103,7 +129,8 @@ GraphNamespaceManager GraphNamespaceManager::fromGraphManager(
 }
 
 // _____________________________________________________________________________
-ad_utility::triple_component::Iri GraphNamespaceManager::allocateNewGraph() {
+ad_utility::triple_component::Iri
+GraphManager::GraphNamespaceManager::allocateNewGraph() {
   auto graphId = allocatedGraphs_.withWriteLock(
       [](auto& allocatedGraphs) { return allocatedGraphs++; });
   return ad_utility::triple_component::Iri::fromIriref(
@@ -145,14 +172,15 @@ std::ostream& operator<<(std::ostream& os, const GraphManager& graphManager) {
 }
 
 // _____________________________________________________________________________
-void to_json(nlohmann::json& j, const GraphNamespaceManager& namespaceManager) {
+void to_json(nlohmann::json& j,
+             const GraphManager::GraphNamespaceManager& namespaceManager) {
   j["prefix"] = namespaceManager.prefix_;
   j["allocatedGraphs"] = *namespaceManager.allocatedGraphs_.rlock();
 }
 
 // _____________________________________________________________________________
 void from_json(const nlohmann::json& j,
-               GraphNamespaceManager& namespaceManager) {
+               GraphManager::GraphNamespaceManager& namespaceManager) {
   namespaceManager.prefix_ = j["prefix"].get<std::string>();
   namespaceManager.allocatedGraphs_.withWriteLock([&j](auto& allocatedGraphs) {
     allocatedGraphs = j["allocatedGraphs"].get<uint64_t>();
@@ -160,8 +188,9 @@ void from_json(const nlohmann::json& j,
 }
 
 // _____________________________________________________________________________
-std::ostream& operator<<(std::ostream& os,
-                         const GraphNamespaceManager& namespaceManager) {
+std::ostream& operator<<(
+    std::ostream& os,
+    const GraphManager::GraphNamespaceManager& namespaceManager) {
   os << "GraphNamespaceManager(prefix=\"" << namespaceManager.prefix_
      << "\", allocatedGraphs=" << *namespaceManager.allocatedGraphs_.rlock()
      << ")" << std::endl;

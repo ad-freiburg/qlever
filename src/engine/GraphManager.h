@@ -22,6 +22,7 @@ class QueryExecutionContext;
 class GraphManager {
   // A superset of all graphs that are currently in use.
   ad_utility::Synchronized<ad_utility::HashSet<Id>> graphs_;
+  LocalVocab graphLocalVocab_;
 
  public:
   GraphManager() = default;
@@ -37,39 +38,43 @@ class GraphManager {
   void addGraphs(ad_utility::HashSet<Id> graphs);
   // TODO: the name is bad
   bool graphExists(const Id& graph) const;
-  auto getGraphs() const {
-    return graphs_.rlock();
-  }
+  auto getGraphs() const { return graphs_.rlock(); }
 
   friend std::ostream& operator<<(std::ostream& os,
                                   const GraphManager& graphManager);
-};
 
-// Manages the allocated (but not necessarily used or existing) graphs from a
-// graph namespace (defined by having the same prefix in the IRI).
-class GraphNamespaceManager {
-  // TODO: note: this seems broadly similar to the BlankNodeManager
-  std::string prefix_ = std::string(QLEVER_INTERNAL_GRAPH_IRI);
-  ad_utility::Synchronized<uint64_t> allocatedGraphs_ =
-      ad_utility::Synchronized<uint64_t>(0ul);
+  // Manages the allocated (but not necessarily used or existing) graphs from a
+  // graph namespace (defined by having the same prefix in the IRI).
+  class GraphNamespaceManager {
+    // TODO: note: this seems broadly similar to the BlankNodeManager
+    std::string prefix_ = std::string(QLEVER_INTERNAL_GRAPH_IRI);
+    ad_utility::Synchronized<uint64_t> allocatedGraphs_ =
+        ad_utility::Synchronized<uint64_t>(0ul);
 
- public:
-  GraphNamespaceManager() = default;
-  GraphNamespaceManager(std::string prefix, uint64_t allocatedGraphs);
+   public:
+    GraphNamespaceManager() = default;
+    GraphNamespaceManager(std::string prefix, uint64_t allocatedGraphs);
 
-  static GraphNamespaceManager fromGraphManager(
-      std::string prefix, const GraphManager& graphManager,
-      const Index::Vocab& vocab);
+    static GraphNamespaceManager fromGraphManager(
+        std::string prefix, const GraphManager& graphManager,
+        const Index::Vocab& vocab);
 
-  ad_utility::triple_component::Iri allocateNewGraph();
+    ad_utility::triple_component::Iri allocateNewGraph();
 
-  friend void to_json(nlohmann::json& j,
-                      const GraphNamespaceManager& namespaceManager);
-  friend void from_json(const nlohmann::json& j,
-                        GraphNamespaceManager& namespaceManager);
+    friend void to_json(nlohmann::json& j,
+                        const GraphNamespaceManager& namespaceManager);
+    friend void from_json(const nlohmann::json& j,
+                          GraphNamespaceManager& namespaceManager);
 
-  friend std::ostream& operator<<(
-      std::ostream& os, const GraphNamespaceManager& namespaceManager);
+    friend std::ostream& operator<<(
+        std::ostream& os, const GraphNamespaceManager& namespaceManager);
+  };
+
+private:
+  std::optional<GraphNamespaceManager> namespaceManager_;
+public:
+  GraphNamespaceManager& getNamespaceManager();
+  void initializeNamespaceManager(std::string prefix, const GraphManager& graphManager, const Index::Vocab& vocab);
 };
 
 #endif  // QLEVER_GRAPHMANAGER_H
