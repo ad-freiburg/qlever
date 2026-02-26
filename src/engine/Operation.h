@@ -376,22 +376,11 @@ class Operation {
   makeTreeWithStrippedColumns(const std::set<Variable>& variables) const;
 
   // Try to create a version of this operation with an additional column from a
-  // BIND pushed down into the tree. The default implementation tries to push
-  // the bind into the correct child (determined by which child covers the
-  // bind's expression variables). Returns `std::nullopt` if the bind cannot be
-  // pushed down.
+  // `BIND` pushed down into the tree. The default implementation tries to push
+  // the `BIND` into each child which covers the `BIND`'s expression variables.
+  // Returns `std::nullopt` if the `BIND` cannot be pushed down.
   virtual std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithBindColumn(const parsedQuery::Bind& bind) const;
-
- protected:
-  // Invalidate the cached VariableToColumnMap so it will be recomputed on the
-  // next access. Must be called when an operation's children change after
-  // construction (e.g., during bind push-down).
-  void invalidateCachedVariableColumns() {
-    variableToColumnMap_ = std::nullopt;
-    externallyVisibleVariableToColumnMap_ = std::nullopt;
-    _resultSortedColumns = std::nullopt;
-  }
 
  protected:
   // The QueryExecutionContext for this particular element.
@@ -431,6 +420,15 @@ class Operation {
   // in case of a subquery.
   virtual const VariableToColumnMap& getInternallyVisibleVariableColumns()
       const final;
+
+  // Invalidate the cached `VariableToColumnMap` so it will be recomputed on the
+  // next access. Must be called when an operation's children change after
+  // construction (e.g., during bind push-down).
+  void invalidateCachedVariableColumns() {
+    variableToColumnMap_ = std::nullopt;
+    externallyVisibleVariableToColumnMap_ = std::nullopt;
+    _resultSortedColumns = std::nullopt;
+  }
 
  private:
   //! Compute the result of the query-subtree rooted at this element..

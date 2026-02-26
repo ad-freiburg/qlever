@@ -88,21 +88,20 @@ std::unique_ptr<Operation> StripColumns::cloneImpl() const {
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 StripColumns::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
-  // Push the bind down to the child. If successful, create a new StripColumns
-  // that also keeps the bind target variable.
-  auto result = child_->getRootOperation()->makeTreeWithBindColumn(bind);
-  if (!result) {
+  // Push `bind` down to the child. If successful, create a new `StripColumns`
+  // that also keeps the bound target variable.
+  auto newChild = child_->getRootOperation()->makeTreeWithBindColumn(bind);
+  if (!newChild) {
     return std::nullopt;
   }
-  // Reconstruct the set of kept variables from varToCol_ and add the bind
-  // target.
-  std::set<Variable> keepVars;
-  for (const auto& [var, _] : varToCol_) {
-    keepVars.insert(var);
-  }
+
+  // Add the bind target to the variables to keep.
+  auto view = varToCol_ | ql::ranges::views::keys;
+  std::set<Variable> keepVars{view.begin(), view.end()};
   keepVars.insert(bind._target);
+
   return ad_utility::makeExecutionTree<StripColumns>(
-      getExecutionContext(), std::move(*result), keepVars);
+      getExecutionContext(), std::move(*newChild), keepVars);
 }
 
 // _____________________________________________________________________________

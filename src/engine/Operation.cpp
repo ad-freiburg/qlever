@@ -788,54 +788,55 @@ Operation::makeTreeWithStrippedColumns(
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 Operation::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
-  auto children = getChildren();
+  const auto& children = getChildren();
   if (children.empty()) {
     return std::nullopt;
   }
 
   // Get the variables used in the bind expression (not the target).
-  auto exprVarPtrs = bind._expression.containedVariables();
+  const auto& bindExpressionVars = bind._expression.containedVariables();
 
   // Check if a given child covers all expression variables.
-  auto childCoversAllVars = [&](size_t idx) {
-    const auto& childVars = children[idx]->getVariableColumns();
-    return std::all_of(
-        exprVarPtrs.begin(), exprVarPtrs.end(),
-        [&](const Variable* v) { return childVars.contains(*v); });
+  auto childCoversAllVars = [&bindExpressionVars](const auto& child) {
+    const auto& childVars = child->getVariableColumns();
+    return ql::ranges::all_of(bindExpressionVars, [&childVars](const auto v) {
+      return childVars.contains(*v);
+    });
   };
 
   // Try pushing the bind down to a specific child. If successful, clone this
   // operation and replace the modified child in the clone.
-  auto tryPushDown =
-      [&](size_t idx) -> std::optional<std::shared_ptr<QueryExecutionTree>> {
-    auto result =
-        children[idx]->getRootOperation()->makeTreeWithBindColumn(bind);
-    if (!result) {
+  auto tryPushDown = [&](size_t idx, const auto& child)
+      -> std::optional<std::shared_ptr<QueryExecutionTree>> {
+    // Recursively push down.
+    auto result = child->getRootOperation()->makeTreeWithBindColumn(bind);
+    if (!result.has_value()) {
       return std::nullopt;
     }
 
-    // Clone this operation (deep-clones all children via cloneImpl).
+    // Clone this operation.
     auto cloned = cloneImpl();
+
     // Replace the modified child in-place via move assignment.
     auto clonedChildren = cloned->getChildren();
     AD_CORRECTNESS_CHECK(clonedChildren.size() == children.size());
-    *clonedChildren[idx] = std::move(**result);
+    *clonedChildren[idx] = std::move(*(result.value()));
+
+    // Since the new child has a different `VariableToColumnMap`, we must
+    // invalidate the `VariableToColumnMap` of this operation too.
     cloned->invalidateCachedVariableColumns();
+
     return std::make_shared<QueryExecutionTree>(getExecutionContext(),
                                                 std::move(cloned));
   };
 
-  // First, try the child that covers all expression variables.
-  // TODO what about operations where both children share the variables?
-  for (size_t i = 0; i < children.size(); ++i) {
-    if (childCoversAllVars(i)) {
-      return tryPushDown(i);
+  // For each child that covers all expression variables, check whether the bind
+  // can be pushed down into the child.
+  for (const auto& [idx, child] : ::ranges::views::enumerate(children)) {
+    if (!childCoversAllVars(child)) {
+      continue;
     }
-  }
-
-  // No child covers all vars; try each child one by one.
-  for (size_t i = 0; i < children.size(); ++i) {
-    auto result = tryPushDown(i);
+    auto result = tryPushDown(idx, child);
     if (result) {
       return result;
     }
