@@ -8,6 +8,7 @@
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_NARYEXPRESSIONIMPL_H
 
 #include <absl/functional/bind_front.h>
+#include <absl/strings/str_join.h>
 
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
@@ -50,46 +51,49 @@ class NaryExpressionStronglyTyped : public SparqlExpression {
   ql::span<SparqlExpression::Ptr> childrenImpl() override;
 
   // Evaluate the `naryOperation` on the `operands` using the `context`.
-  CPP_template(typename... Operands)(
-      requires(SingleExpressionResult<Operands>&&...)) static ExpressionResult
-      evaluateOnChildrenOperands(NaryOperation naryOperation,
-                                 EvaluationContext* context,
-                                 Operands&&... operands) {
-    // Perform a more efficient calculation if a specialized function exists
-    // that matches all operands.
-    if (isAnySpecializedFunctionPossible(naryOperation._specializedFunctions,
-                                         operands...)) {
-      auto optionalResult = evaluateOnSpecializedFunctionsIfPossible(
-          naryOperation._specializedFunctions,
-          std::forward<Operands>(operands)...);
-      AD_CORRECTNESS_CHECK(optionalResult);
-      return std::move(optionalResult.value());
+  // Is deliberately a functor, s.t. we can pass it to `bind_front` etc,
+  // although the call operator is overloaded.
+  struct EvaluateOnChildOperands {
+    CPP_template(typename... Operands)(
+        requires(SingleExpressionResult<Operands>&&...)) ExpressionResult
+    operator()(NaryOperation naryOperation, EvaluationContext* context,
+               Operands&&... operands) const {
+      // Perform a more efficient calculation if a specialized function exists
+      // that matches all operands.
+      if (isAnySpecializedFunctionPossible(naryOperation._specializedFunctions,
+                                           operands...)) {
+        auto optionalResult = evaluateOnSpecializedFunctionsIfPossible(
+            naryOperation._specializedFunctions,
+            std::forward<Operands>(operands)...);
+        AD_CORRECTNESS_CHECK(optionalResult);
+        return std::move(optionalResult.value());
+      }
+
+      // We have to first determine the number of results we will produce.
+      auto targetSize = getResultSize(*context, operands...);
+
+      // The result is a constant iff all the results are constants.
+      constexpr static bool resultIsConstant =
+          (... && isConstantResult<Operands>);
+
+      // The generator for the result of the operation.
+      auto resultGenerator = applyOperation(targetSize, naryOperation, context,
+                                            AD_FWD(operands)...);
+
+      // Compute the result.
+      using ResultType = ql::ranges::range_value_t<decltype(resultGenerator)>;
+      VectorWithMemoryLimit<ResultType> result{context->_allocator};
+      result.reserve(targetSize);
+      ql::ranges::move(resultGenerator, std::back_inserter(result));
+
+      if constexpr (resultIsConstant) {
+        AD_CORRECTNESS_CHECK(result.size() == 1);
+        return std::move(result[0]);
+      } else {
+        return result;
+      }
     }
-
-    // We have to first determine the number of results we will produce.
-    auto targetSize = getResultSize(*context, operands...);
-
-    // The result is a constant iff all the results are constants.
-    constexpr static bool resultIsConstant =
-        (... && isConstantResult<Operands>);
-
-    // The generator for the result of the operation.
-    auto resultGenerator =
-        applyOperation(targetSize, naryOperation, context, AD_FWD(operands)...);
-
-    // Compute the result.
-    using ResultType = ql::ranges::range_value_t<decltype(resultGenerator)>;
-    VectorWithMemoryLimit<ResultType> result{context->_allocator};
-    result.reserve(targetSize);
-    ql::ranges::move(resultGenerator, std::back_inserter(result));
-
-    if constexpr (resultIsConstant) {
-      AD_CORRECTNESS_CHECK(result.size() == 1);
-      return std::move(result[0]);
-    } else {
-      return result;
-    }
-  }
+  };
 };
 
 // _____________________________________________________________________________
@@ -107,16 +111,11 @@ ExpressionResult NaryExpressionStronglyTyped<NaryOperation>::evaluate(
       [context](const auto& child) { return child->evaluate(context); },
       children_);
 
-  // Bind the `evaluateOnChildrenOperands` to a lambda.
-  auto evaluateOnChildOperandsAsLambda = [](auto&&... args) {
-    return evaluateOnChildrenOperands(AD_FWD(args)...);
-  };
-
   // A function that only takes several `ExpressionResult`s,
   // and evaluates the expression.
-  auto evaluateOnChildrenResults = absl::bind_front(
-      ad_utility::visitWithVariantsAndParameters,
-      evaluateOnChildOperandsAsLambda, NaryOperation{}, context);
+  auto evaluateOnChildrenResults =
+      absl::bind_front(ad_utility::visitWithVariantsAndParameters,
+                       EvaluateOnChildOperands{}, NaryOperation{}, context);
 
   return std::apply(evaluateOnChildrenResults, std::move(resultsOfChildren));
 }
@@ -133,7 +132,7 @@ template <typename Op>
 [[nodiscard]] std::string NaryExpressionStronglyTyped<Op>::getCacheKey(
     const VariableToColumnMap& varColMap) const {
   std::string key = typeid(*this).name();
-  key += ad_utility::lazyStrJoin(
+  key += absl::StrJoin(
       children_ | ql::views::transform([&varColMap](const auto& child) {
         return child->getCacheKey(varColMap);
       }),
