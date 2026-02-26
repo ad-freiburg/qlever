@@ -697,9 +697,17 @@ class CompressedRelationReader {
   // The file that stores the actual permutations.
   ad_utility::File file_;
 
+  // This setting controls whether filtering on the graph column and
+  // deduplication of rows is performed during scanning. Deactivating this is
+  // used for materialized views where repeated rows are meaningful.
+  bool useGraphPostProcessing_;
+
  public:
-  explicit CompressedRelationReader(Allocator allocator, ad_utility::File file)
-      : allocator_{std::move(allocator)}, file_{std::move(file)} {}
+  explicit CompressedRelationReader(Allocator allocator, ad_utility::File file,
+                                    bool useGraphPostProcessing = true)
+      : allocator_{std::move(allocator)},
+        file_{std::move(file)},
+        useGraphPostProcessing_{useGraphPostProcessing} {}
 
   // Helper function that enables a comparison of a triple with an `Id` in the
   // function `getBlocksForJoin` below.  If the given triple matches `col0Id` of

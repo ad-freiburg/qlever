@@ -135,6 +135,8 @@ struct RuntimeParameters {
   MemorySizeParameter sortInMemoryThreshold_{
       ad_utility::MemorySize::gigabytes(5), "sort-in-memory-threshold"};
 
+  Bool prefilteredOptionalJoin_{true, "prefiltered-optional-join"};
+
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE
   // CONSTRUCTOR, S.T. THEY CAN ALSO BE ACCESSED VIA THE RUNTIME INTERFACE.
