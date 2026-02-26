@@ -1306,6 +1306,8 @@ void IndexImpl::readConfiguration() {
 
   loadDataMember("encoded-iri-prefixes", encodedIriManager_,
                  EncodedIriManager{});
+  loadDataMember("existing-graphs", graphManager_, GraphManager());
+  AD_LOG_INFO << "Graph manager initialized: " << graphManager_ << std::endl;
 
   // Compute unique ID for this index.
   //
@@ -1780,13 +1782,33 @@ CPP_template_def(typename... NextSorter)(requires(
                                             NextSorter&&... nextSorter) {
   size_t numTriples = 0;
   auto countTriples = [&numTriples](const auto&) mutable { ++numTriples; };
-  size_t numPredicates =
-      createPermutationPair(numColumns, AD_FWD(sortedTriples), *pso_, *pos_,
-                            nextSorter.makePushCallback()..., countTriples);
+  ad_utility::HashSet<Id> graphs;
+  auto collectDistinctGraphs = [&graphs](const auto& triple) mutable {
+    graphs.insert(triple[3]);
+  };
+  size_t numPredicates = createPermutationPair(
+      numColumns, AD_FWD(sortedTriples), *pso_, *pos_,
+      nextSorter.makePushCallback()..., countTriples, collectDistinctGraphs);
   configurationJson_["num-predicates"] =
       NumNormalAndInternal::fromNormal(numPredicates);
   configurationJson_["num-triples"] =
       NumNormalAndInternal::fromNormal(numTriples);
+  // TODO: Maybe defer the resolution of the IDs to strings to after building
+  // the index. How is the memory consumption through from the index building?
+  {
+    // TODO: hardcoded index name, because we fail when running on the internal
+    // permutations
+    vocab_.readFromFile("dblp" + std::string(VOCAB_SUFFIX));
+    auto graphStrs = ad_utility::transform(
+        graphs, [this](const Id& id) { return vocab_[id.getVocabIndex()]; });
+    // Unload the vocabulary again.
+    vocab_.resetToType(vocabularyTypeForIndexBuilding_);
+    auto manager = GraphManager::fromExistingGraphs(graphStrs);
+    AD_LOG_INFO << "Distinct graphs in the input: "
+                << absl::StrJoin(graphStrs, ", ") << std::endl;
+    configurationJson_["existing-graphs"] = manager;
+    AD_LOG_INFO << "Graph manager initialized: " << manager << std::endl;
+  }
   if (doWriteConfiguration) {
     writeConfiguration();
   }

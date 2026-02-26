@@ -7,6 +7,7 @@
 
 #include <gtest/gtest_prod.h>
 
+#include "GraphManager.h"
 #include "index/Index.h"
 #include "parser/ParsedQuery.h"
 #include "util/CancellationHandle.h"
@@ -31,7 +32,7 @@ class ExecuteUpdate {
   static UpdateMetadata executeUpdate(
       const Index& index, const ParsedQuery& query,
       const QueryExecutionTree& qet, DeltaTriples& deltaTriples,
-      const CancellationHandle& cancellationHandle,
+      GraphManager& graphManager, const CancellationHandle& cancellationHandle,
       ad_utility::timer::TimeTracer& tracer =
           ad_utility::timer::DEFAULT_TIME_TRACER);
 
@@ -69,7 +70,8 @@ class ExecuteUpdate {
   // Compute the set of quads to insert and delete for the given update. The
   // ParsedQuery's clause must be an UpdateClause. The UpdateClause's operation
   // must be a GraphUpdate.
-  static std::pair<IdTriplesAndLocalVocab, IdTriplesAndLocalVocab>
+  static std::tuple<IdTriplesAndLocalVocab, IdTriplesAndLocalVocab,
+                    std::vector<std::string>>
   computeGraphUpdateQuads(const Index& index, const ParsedQuery& query,
                           const Result& result,
                           const VariableToColumnMap& variableColumns,
@@ -90,6 +92,8 @@ class ExecuteUpdate {
   static std::vector<IdTriple<>> setMinus(const std::vector<IdTriple<>>& a,
                                           const std::vector<IdTriple<>>& b);
   FRIEND_TEST(ExecuteUpdate, setMinus);
+
+  static std::vector<Id> uniqueGraphs(const std::vector<IdTriple<>>& triples);
 };
 
 #endif  // QLEVER_SRC_ENGINE_EXECUTEUPDATE_H
