@@ -13,6 +13,7 @@
 #include "backports/algorithm.h"
 #include "index/CompressedRelation.h"
 #include "index/ConstantsIndexBuilding.h"
+#include "index/GraphComputation.h"
 #include "util/ChunkedForLoop.h"
 #include "util/ValueIdentity.h"
 
@@ -277,41 +278,26 @@ void LocatedTriplesPerBlock::setOriginalMetadata(
 // which at least one triple is inserted become part of the graph info, and if
 // the number of total graphs becomes larger than the configured threshold, then
 // the graph info is set to `nullopt`, which means that there is no info.
-static auto updateGraphMetadata(CompressedBlockMetadata& blockMetadata,
-                                const LocatedTriples& locatedTriples) {
-  // We do not know anything about the triples contained in the block, so we
-  // also cannot know if the `locatedTriples` introduces duplicates. We thus
-  // have to be conservative and assume that there are duplicates.
-  blockMetadata.containsDuplicatesWithDifferentGraphs_ = true;
+void updateGraphMetadata(CompressedBlockMetadata& blockMetadata,
+                         const LocatedTriples& locatedTriples) {
   auto& graphs = blockMetadata.graphInfo_;
-  if (!graphs.has_value()) {
-    // The original block already contains too many graphs, don't store any
-    // graph info.
-    return;
+  // We only insert graphs, never delete them, so if `graphs` is already
+  // `nullopt`, then it will stay `nullopt`.
+  if (graphs.has_value()) {
+    graphs = computeDistinctGraphs(
+        locatedTriples | ql::views::filter(&LocatedTriple::insertOrDelete_) |
+            ql::views::transform([](const LocatedTriple& lt) {
+              return lt.triple_.ids().at(ADDITIONAL_COLUMN_GRAPH_ID);
+            }),
+        graphs.value());
   }
 
-  // Compute a hash set of all graphs that are originally contained in the block
-  // and all the graphs that are added via the `locatedTriples`.
-  ad_utility::HashSet<Id> newGraphs(graphs.value().begin(),
-                                    graphs.value().end());
-  for (auto& lt : locatedTriples) {
-    if (!lt.insertOrDelete_) {
-      // Don't update the graph info for triples that are deleted.
-      continue;
-    }
-    newGraphs.insert(lt.triple_.ids().at(ADDITIONAL_COLUMN_GRAPH_ID));
-    // Handle the case that with the newly added triples we have too many
-    // distinct graphs to store them in the graph info.
-    if (newGraphs.size() > MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA) {
-      graphs.reset();
-      return;
-    }
+  if (!hasOnlyOneGraph(graphs)) {
+    // We do not know anything about the triples contained in the block, so we
+    // also cannot know if the `locatedTriples` introduces duplicates. We thus
+    // have to be conservative and assume that there are duplicates.
+    blockMetadata.containsDuplicatesWithDifferentGraphs_ = true;
   }
-  graphs.emplace(newGraphs.begin(), newGraphs.end());
-
-  // Sort the stored graphs. Note: this is currently not expected by the code
-  // that uses the graph info, but makes testing much easier.
-  ql::ranges::sort(graphs.value());
 }
 
 // ____________________________________________________________________________

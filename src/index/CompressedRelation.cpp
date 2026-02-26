@@ -13,6 +13,7 @@
 #include "index/CompressedRelationHelpersImpl.h"
 #include "index/CompressedRelationPermutationWriterImpl.h"
 #include "index/ConstantsIndexBuilding.h"
+#include "index/GraphComputation.h"
 #include "index/LocatedTriples.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/Iterators.h"
@@ -1212,50 +1213,6 @@ CompressedRelationWriter::compressAndWriteColumn(ql::span<const Id> column) {
   auto offsetInFile = file->tell();
   file->write(compressedBlock.data(), compressedBlock.size());
   return {offsetInFile, compressedSize};
-};
-
-// Find out whether the sorted `block` contains duplicates and whether it
-// contains only a few distinct graphs such that we can store this information
-// in the block metadata.
-static std::pair<bool, std::optional<std::vector<Id>>> getGraphInfo(
-    const IdTable& block) {
-  AD_CORRECTNESS_CHECK(block.numColumns() > ADDITIONAL_COLUMN_GRAPH_ID);
-  // Return true iff the block contains duplicates when only considering the
-  // actual triple of S, P, and O.
-  auto hasDuplicates = [&block]() {
-    using C = ColumnIndex;
-    auto withoutGraphAndAdditionalPayload =
-        block.asColumnSubsetView(std::array{C{0}, C{1}, C{2}})
-            .asStaticView<3>();
-    return ql::ranges::adjacent_find(withoutGraphAndAdditionalPayload) !=
-           ql::ranges::end(withoutGraphAndAdditionalPayload);
-  };
-
-  // Return the contained graphs, or  `nullopt` if there are too many of them.
-  auto graphInfo = [&block]() -> std::optional<std::vector<Id>> {
-    size_t foundGraphs = 0;
-    // O(MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA * n), but good for cache
-    // efficiency.
-    std::array<Id, MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA> graphs;
-    for (Id graph : block.getColumn(ADDITIONAL_COLUMN_GRAPH_ID)) {
-      auto actualEnd = graphs.begin() + foundGraphs;
-      if (ql::ranges::find(graphs.begin(), actualEnd, graph.getBits(),
-                           &Id::getBits) != actualEnd) {
-        continue;
-      }
-      if (foundGraphs == MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA) {
-        return std::nullopt;
-      }
-      graphs.at(foundGraphs) = graph;
-      ++foundGraphs;
-    }
-    return std::vector<Id>(graphs.begin(), graphs.begin() + foundGraphs);
-  };
-  auto info = graphInfo();
-  // If there's only one graph, we know that there are no duplicates across
-  // different graphs.
-  bool onlyOneGraph = info.has_value() && info.value().size() == 1;
-  return {!onlyOneGraph && hasDuplicates(), std::move(info)};
 }
 
 // _____________________________________________________________________________
