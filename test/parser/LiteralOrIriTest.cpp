@@ -19,7 +19,10 @@ namespace {
 
 using namespace ad_utility::triple_component;
 using Iri = ad_utility::triple_component::Iri;
+using IriView = ad_utility::triple_component::IriView;
 using Literal = ad_utility::triple_component::Literal;
+using LiteralView = ad_utility::triple_component::LiteralView;
+using LiteralOrIriView = ad_utility::triple_component::LiteralOrIriView;
 
 TEST(IriTest, IriCreation) {
   Iri iri = Iri::fromIriref("<http://www.wikidata.org/entity/Q3138>");
@@ -473,6 +476,56 @@ TEST(LiteralOrIri, toStringRepresentation) {
     EXPECT_EQ(res, expected);
     EXPECT_TRUE(lit.toStringRepresentation().empty());
   }
+}
+
+TEST(NonOwningTest, IriView) {
+  std::string s = "<http://example.org/foo>";
+  IriView v = IriView::fromStringRepresentation(s);
+  static_assert(
+      std::is_same_v<decltype(v.toStringRepresentation()), std::string_view>);
+  EXPECT_EQ(v.toStringRepresentation(), s);
+  EXPECT_THAT("http://example.org/foo", asStringViewUnsafe(v.getContent()));
+  EXPECT_FALSE(v.empty());
+  EXPECT_TRUE(IriView{}.empty());
+  ad_utility::HashSet<IriView> set{v};
+  EXPECT_THAT(set, ::testing::UnorderedElementsAre(v));
+}
+
+TEST(NonOwningTest, LiteralView) {
+  std::string s = "\"Hello\"@en";
+  LiteralView v = LiteralView::fromStringRepresentation(s);
+  static_assert(
+      std::is_same_v<decltype(v.toStringRepresentation()), std::string_view>);
+  EXPECT_EQ(v.toStringRepresentation(), s);
+  EXPECT_TRUE(v.hasLanguageTag());
+  EXPECT_FALSE(v.hasDatatype());
+  EXPECT_THAT("Hello", asStringViewUnsafe(v.getContent()));
+  EXPECT_THAT("en", asStringViewUnsafe(v.getLanguageTag()));
+  EXPECT_THROW(v.getDatatype(), ad_utility::Exception);
+  EXPECT_TRUE(LiteralView::fromStringRepresentation("\"plain\"").isPlain());
+}
+
+TEST(NonOwningTest, LiteralOrIriView) {
+  std::string iriStr = "<http://example.org/>";
+  LiteralOrIriView iv = LiteralOrIriView::fromStringRepresentation(iriStr);
+  static_assert(
+      std::is_same_v<decltype(iv.toStringRepresentation()), std::string_view>);
+  EXPECT_TRUE(iv.isIri());
+  EXPECT_FALSE(iv.isLiteral());
+  EXPECT_THAT("http://example.org/", asStringViewUnsafe(iv.getIriContent()));
+
+  std::string litStr = "\"42\"^^<http://www.w3.org/2001/XMLSchema#integer>";
+  LiteralOrIriView lv = LiteralOrIriView::fromStringRepresentation(litStr);
+  EXPECT_FALSE(lv.isIri());
+  EXPECT_TRUE(lv.isLiteral());
+  EXPECT_FALSE(lv.hasLanguageTag());
+  EXPECT_TRUE(lv.hasDatatype());
+  EXPECT_THAT("42", asStringViewUnsafe(lv.getLiteralContent()));
+  EXPECT_THAT("http://www.w3.org/2001/XMLSchema#integer",
+              asStringViewUnsafe(lv.getDatatype()));
+
+  ad_utility::HashSet<LiteralOrIriView> set{iv, lv};
+  EXPECT_THAT(set, ::testing::UnorderedElementsAre(iv, lv));
 }
 
 }  // namespace
