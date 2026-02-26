@@ -6,7 +6,7 @@
 
 #include "engine/ConstructQueryEvaluator.h"
 
-#include "engine/ExportQueryExecutionTrees.h"
+#include "index/ExportIds.h"
 #include "util/TypeTraits.h"
 
 // _____________________________________________________________________________
@@ -34,8 +34,8 @@ std::optional<std::string> ConstructQueryEvaluator::evaluate(
   if (variableColumns.contains(var)) {
     size_t index = variableColumns.at(var).columnIndex_;
     auto id = idTable(resultTableRow, index);
-    auto optionalStringAndType = ExportQueryExecutionTrees::idToStringAndType(
-        qecIndex, id, context.localVocab_);
+    auto optionalStringAndType =
+        ExportIds::idToStringAndType(qecIndex, id, context.localVocab_);
 
     if (!optionalStringAndType.has_value()) {
       return std::nullopt;

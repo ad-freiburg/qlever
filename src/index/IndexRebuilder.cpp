@@ -65,11 +65,13 @@ LocalVocabMapping mergeVocabs(const std::string& vocabularyName,
   LocalVocabMapping localVocabMapping;
   auto writeWordFromVocab = [&vocab, &vocabWriter](VocabIndex vocabIndex) {
     auto word = vocab[vocabIndex];
+    std::cerr << "Writing word \"" << word << "\"\n";
     (*vocabWriter)(word, vocab.shouldBeExternalized(word));
   };
   auto writeWordFromLocalVocab =
       [&vocab, &vocabWriter, &localVocabMapping](const InsertionInfo& info) {
         const auto& [_, word, originalId] = info;
+        std::cerr << "Writing word \"" << word << "\"\n";
         auto newIndex = (*vocabWriter)(word, vocab.shouldBeExternalized(word));
         localVocabMapping.emplace(
             originalId.getBits(),
@@ -130,20 +132,6 @@ BlankNodeBlocks flattenBlankNodeBlocks(const OwnedBlocks& ownedBlocks) {
                 ql::views::join | ::ranges::to<std::vector>;
   ql::ranges::sort(result);
   return result;
-}
-
-// _____________________________________________________________________________
-AD_ALWAYS_INLINE Id remapVocabId(Id original,
-                                 const InsertionPositions& insertionPositions) {
-  AD_EXPENSIVE_CHECK(
-      original.getDatatype() == Datatype::VocabIndex,
-      "Only ids resembling a vocab index can be remapped with this function.");
-  size_t offset = ql::ranges::distance(
-      insertionPositions.begin(),
-      ql::ranges::upper_bound(insertionPositions, original.getVocabIndex(),
-                              std::less{}));
-  return Id::makeFromVocabIndex(
-      VocabIndex::make(original.getVocabIndex().get() + offset));
 }
 
 // _____________________________________________________________________________

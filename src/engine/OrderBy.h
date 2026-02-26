@@ -64,8 +64,8 @@ class OrderBy : public Operation {
   size_t getCostEstimate() override {
     size_t size = getSizeEstimateBeforeLimit();
     size_t logSize = std::max(
-        size_t(1), static_cast<size_t>(logb(
-                       static_cast<double>(getSizeEstimateBeforeLimit()))));
+        size_t(1), static_cast<size_t>(logb(static_cast<double>(
+                       std::max(uint64_t(1), getSizeEstimateBeforeLimit())))));
     size_t nlogn = size * logSize;
     size_t subcost = subtree_->getCostEstimate();
     return nlogn + subcost;

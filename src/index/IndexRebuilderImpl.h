@@ -47,7 +47,23 @@ BlankNodeBlocks flattenBlankNodeBlocks(const OwnedBlocks& ownedBlocks);
 // Map old vocab `Id`s to new vocab `Id`s according to the given
 // `insertionPositions`. This is the  most performance critical code of the
 // rebuild.
-Id remapVocabId(Id original, const InsertionPositions& insertionPositions);
+// Note: Currently in the header because otherwise in shared libraries we
+// sometimes get in trouble with the ALWAYS_INLINE attribute, but once we have a
+// clean build there we might move it back to the .cpp with the
+// `-fno-semantic-interposition` fl
+// _____________________________________________________________________________
+AD_ALWAYS_INLINE static Id remapVocabId(
+    Id original, const InsertionPositions& insertionPositions) {
+  AD_EXPENSIVE_CHECK(
+      original.getDatatype() == Datatype::VocabIndex,
+      "Only ids resembling a vocab index can be remapped with this function.");
+  size_t offset = ql::ranges::distance(
+      insertionPositions.begin(),
+      ql::ranges::upper_bound(insertionPositions, original.getVocabIndex(),
+                              std::less{}));
+  return Id::makeFromVocabIndex(
+      VocabIndex::make(original.getVocabIndex().get() + offset));
+}
 
 // Remaps a blank node `Id` to another blank node `Id` to reduce the gaps in the
 // id space left by random allocation of blank node ids.

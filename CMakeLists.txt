@@ -25,6 +25,19 @@ endif ()
 # developers.
 add_compile_definitions(BOOST_ASIO_DISABLE_AWAITABLE_FRAME_RECYCLING)
 
+# By default, build shared instead of static libraries. This is useful in
+# particular for Debug or RelWithDebugInfo builds, where the individual
+# libraries are rather large because of the debug symbols and are linked
+# into almost every test binary.
+# Note: This option magically influences the behavior of `add_library`, see
+# https://cmake.org/cmake/help/latest/variable/BUILD_SHARED_LIBS.html for
+# details.
+option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
+if(BUILD_SHARED_LIBS)
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+    add_compile_options(-fPIC -fno-semantic-interposition)
+endif()
+
 # By default, QLever uses precompiled headers for widely used modules. However when heavily modifying the headers that
 # contribute to the precompiled headers, then it might be beneficial to deactivate precompiled headers.
 option(USE_PRECOMPILED_HEADERS "Use precompiled headers to reduce compile times" ON)
@@ -126,8 +139,13 @@ FetchContent_Declare(
 ###############################
 # ANTLR CPP RUNTIME FOR THE SPARQL PARSER
 ###############################
+if (BUILD_SHARED_LIBS)
+  set(ANTLR_BUILD_STATIC OFF CACHE BOOL "Only build shared antlr4 library")
+else()
+  set(ANTLR_BUILD_SHARED OFF CACHE BOOL "Only build static antlr4 library")
+endif()
+
 set(ANTLR_BUILD_CPP_TESTS OFF CACHE BOOL "don't try to build googletest twice")
-set(ANTLR_BUILD_SHARED OFF CACHE BOOL "We're only interested in the static library")
 FetchContent_Declare(
         antlr
         GIT_REPOSITORY https://github.com/antlr/antlr4.git
@@ -231,13 +249,13 @@ find_package(OpenSSL REQUIRED)
 # is a drop-in replacement for `target_link_libraries` that additionally links
 # against the common libraries.
 function(qlever_target_link_libraries target)
-    target_link_libraries(${target} ${ARGN} absl::compare absl::flat_hash_map
-            absl::flat_hash_set absl::strings absl::str_format ICU::uc
+    target_link_libraries(${target} PUBLIC ${ARGN} absl_umbrella re2
+            ICU::uc
             ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock fsst nlohmann_json::nlohmann_json Boost::container)
 
     # memorySize is a utility library for defining memory sizes.
     if (NOT ${target} STREQUAL "memorySize")
-        target_link_libraries(${target} memorySize)
+        target_link_libraries(${target} PUBLIC memorySize)
     endif ()
 endfunction()
 
@@ -292,7 +310,7 @@ FetchContent_Declare(
 # ABSEIL
 ################################
 set(ABSL_ENABLE_INSTALL ON)
-set(ABSL_USE_SYSTEM_INCLUDES ON)
+set(ABSL_USE_SYSTEM_INCLUDES ON CACHE BOOL "Treat `abseil` headers as system headers, i.e. don't emit warnings from them" FORCE)
 set(ABSL_PROPAGATE_CXX_STD ON)
 FetchContent_Declare(
         abseil
@@ -379,7 +397,21 @@ FetchContent_Declare(
 ################################
 # Apply FetchContent
 ################################
-FetchContent_MakeAvailable(googletest ctre abseil re2 fsst s2 nlohmann-json antlr range-v3 spatialjoin)
+set(_QLEVER_SAVED_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
+#set(BUILD_SHARED_LIBS OFF)
+FetchContent_MakeAvailable(abseil)
+set(BUILD_SHARED_LIBS ${_QLEVER_SAVED_BUILD_SHARED_LIBS})
+
+FetchContent_MakeAvailable(googletest ctre fsst nlohmann-json antlr range-v3 spatialjoin s2 re2)
+
+IF (BUILD_SHARED_LIBS)
+    target_compile_options(antlr4_shared PRIVATE -fPIC -Wno-all -Wno-extra -Wno-error -Wno-deprecated-declarations)
+    add_library(antlr4_umbrella ALIAS antlr4_shared)
+else ()
+    target_compile_options(antlr4_static PRIVATE -Wno-all -Wno-extra -Wno-error -Wno-deprecated-declarations)
+    add_library(antlr4_umbrella ALIAS antlr4_static)
+endif ()
+
 # Disable some warnings in RE2 and GTEST
 target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-class-memaccess -Wno-unused-but-set-variable -Wno-unused-function)
 target_compile_options(re2 PRIVATE -Wno-unused-parameter)
@@ -391,9 +423,21 @@ target_compile_options(fsst PRIVATE -Wno-extra -Wno-all -Wno-error)
 target_compile_options(fsst12 PRIVATE -Wno-extra -Wno-all -Wno-error)
 include_directories(${fsst_SOURCE_DIR})
 include_directories(${range-v3_SOURCE_DIR}/include)
-target_compile_options(antlr4_static PRIVATE -Wno-all -Wno-extra -Wno-error -Wno-deprecated-declarations)
 # Only required because a lot of classes that do not explicitly link against antlr4_static use the headers.
 include_directories(SYSTEM "${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src")
+
+# A single library for all abseil targets (probably not required once everything works).
+add_library(absl_umbrella INTERFACE)
+target_link_libraries(absl_umbrella
+        INTERFACE
+        absl::base
+        absl::strings
+        absl::status
+        absl::statusor
+        absl::time
+        absl::hash
+        absl::synchronization
+)
 
 message(STATUS ---)
 message(STATUS "CXX_FLAGS are : " ${CMAKE_CXX_FLAGS})
@@ -485,14 +529,14 @@ if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
     qlever_target_link_libraries(qlever-index qlever index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
 
     add_executable(qlever-server src/ServerMain.cpp)
-    qlever_target_link_libraries(qlever-server engine server ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
+    qlever_target_link_libraries(qlever-server engine server ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo)
     if (USE_PRECOMPILED_HEADERS)
         target_precompile_headers(qlever-server REUSE_FROM engine)
     endif()
 endif()
 
 add_executable(LibQLeverExample src/libqlever/LibQLeverExample.cpp)
-qlever_target_link_libraries(LibQLeverExample parser engine util index qlever absl::strings)
+qlever_target_link_libraries(LibQLeverExample parser engine util index qlever)
 
 add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
 qlever_target_link_libraries(VocabularyMergerMain index parser ${CMAKE_THREAD_LIBS_INIT})

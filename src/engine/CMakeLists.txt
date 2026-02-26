@@ -1,16 +1,16 @@
 add_subdirectory(sparqlExpressions)
 add_library(SortPerformanceEstimator SortPerformanceEstimator.cpp)
-qlever_target_link_libraries(SortPerformanceEstimator parser)
+qlever_target_link_libraries(SortPerformanceEstimator index)
 add_library(engine
-        Engine.cpp QueryExecutionTree.cpp Operation.cpp Result.cpp LocalVocab.cpp
-        IndexScan.cpp Join.cpp Sort.cpp
+        Engine.cpp QueryExecutionTree.cpp Operation.cpp
+        IndexScan.cpp Join.cpp Sort.cpp ExportQueryExecutionTrees.cpp
         Distinct.cpp OrderBy.cpp Filter.cpp
         QueryPlanner.cpp QueryPlanningCostFactors.cpp QueryRewriteUtils.cpp
         OptionalJoin.cpp CountAvailablePredicates.cpp GroupByImpl.cpp GroupBy.cpp HasPredicateScan.cpp
         Union.cpp MultiColumnJoin.cpp TransitivePathBase.cpp
         TransitivePathHashMap.cpp TransitivePathBinSearch.cpp Service.cpp
         Values.cpp Bind.cpp Minus.cpp RuntimeInformation.cpp CheckUsePatternTrick.cpp
-        VariableToColumnMap.cpp ExportQueryExecutionTrees.cpp
+        VariableToColumnMap.cpp
         CartesianProductJoin.cpp TextIndexScanForWord.cpp TextIndexScanForEntity.cpp
         TextLimit.cpp LazyGroupBy.cpp GroupByHashMapOptimization.cpp SpatialJoin.cpp
         CountConnectedSubgraphs.cpp SpatialJoinAlgorithms.cpp PathSearch.cpp ExecuteUpdate.cpp
@@ -28,7 +28,7 @@ qlever_target_link_libraries(engine util index parser global sparqlExpressions S
 # in two operations, `Service` and `Load`, which we disable when
 # `REDUCED_FEATURE_SET_FOR_CPP17` is set.
 if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
-    target_link_libraries(engine http)
+    target_link_libraries(engine PUBLIC http)
 endif()
 
 add_library(server Server.cpp)

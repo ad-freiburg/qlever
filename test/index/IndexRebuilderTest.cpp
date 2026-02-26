@@ -79,27 +79,36 @@ void deleteVocabFiles(const std::string& vocabBasename,
 
 // _____________________________________________________________________________
 TEST(IndexRebuilder, materializeEmptyLocalVocab) {
-  auto type = ad_utility::VocabularyType::random();
-  ad_utility::testing::TestIndexConfig config{"<a> <c> <e> . <g> <i> <k> ."};
-  config.vocabularyType = type;
-  auto oldIndex = ad_utility::testing::makeTestIndex(
-      "materializeEmptyLocalVocab", std::move(config));
-  std::string vocabPrefix = "/tmp/materializeEmptyLocalVocab";
-  std::string vocabFileName = vocabPrefix + VOCAB_SUFFIX;
-  absl::Cleanup removeVocabFiles{[&vocabFileName, &type] {
-    deleteVocabFiles(vocabFileName, type.value());
-  }};
+  for (const auto& typeEnum : ad_utility::VocabularyType::all()) {
+    ad_utility::testing::TestIndexConfig config{"<a> <c> <e> . <g> <i> <k> ."};
+    auto type = ad_utility::VocabularyType{typeEnum};
+    std::cerr << "testing " << type.toString() << std::endl;
+    config.vocabularyType = type;
+    auto oldIndex = ad_utility::testing::makeTestIndex(
+        "materializeEmptyLocalVocab", std::move(config));
+    std::string vocabPrefix = "/tmp/materializeEmptyLocalVocab";
+    std::string vocabFileName = vocabPrefix + VOCAB_SUFFIX;
+    absl::Cleanup removeVocabFiles{[&vocabFileName, &type] {
+      deleteVocabFiles(vocabFileName, type.value());
+    }};
 
-  auto getId = ad_utility::testing::makeGetId(oldIndex);
-  auto [insertionPositions, localVocabMapping] =
-      materializeLocalVocab({}, oldIndex.getVocab(), vocabPrefix);
-  EXPECT_THAT(insertionPositions, ::testing::ElementsAre());
-  EXPECT_THAT(localVocabMapping, ::testing::UnorderedElementsAre());
+    auto getId = ad_utility::testing::makeGetId(oldIndex);
+    auto [insertionPositions, localVocabMapping] =
+        materializeLocalVocab({}, oldIndex.getVocab(), vocabPrefix);
+    EXPECT_THAT(insertionPositions, ::testing::ElementsAre());
+    EXPECT_THAT(localVocabMapping, ::testing::UnorderedElementsAre());
 
-  for (const auto& suffix : getVocabSuffixesForType(type.value())) {
-    EXPECT_EQ(
-        fileToBuffer("materializeEmptyLocalVocab"s + VOCAB_SUFFIX + suffix),
-        fileToBuffer(vocabFileName + suffix));
+    for (const auto& suffix : getVocabSuffixesForType(type.value())) {
+      std::cout << "comparing \""
+                << "materializeEmptyLocalVocab"s + VOCAB_SUFFIX + suffix << '\n'
+                << "with " << vocabFileName + suffix << std::endl;
+      EXPECT_EQ(
+          fileToBuffer("materializeEmptyLocalVocab"s + VOCAB_SUFFIX + suffix),
+          fileToBuffer(vocabFileName + suffix))
+          << suffix << " for type " << type.toString();
+      std::cout << std::endl;
+    }
+    break;
   }
 }
 

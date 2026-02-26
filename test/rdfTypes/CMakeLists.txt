@@ -1,2 +1,2 @@
-addLinkAndDiscoverTestNoLibs(VariableTest rdfTypes)
+addLinkAndDiscoverTestNoLibs(VariableTest rdfTypes util)
 addLinkAndDiscoverTestNoLibs(RdfEscapingTest rdfTypes)

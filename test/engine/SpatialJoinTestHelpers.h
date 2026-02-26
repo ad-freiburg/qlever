@@ -297,8 +297,8 @@ inline std::vector<std::string> printTable(const QueryExecutionContext* qec,
   for (size_t i = 0; i < table->idTable().numRows(); i++) {
     std::string line = "";
     for (size_t k = 0; k < table->idTable().numColumns(); k++) {
-      auto test = ExportQueryExecutionTrees::idToStringAndType(
-          qec->getIndex(), table->idTable().at(i, k), {});
+      auto test = ExportIds::idToStringAndType(qec->getIndex(),
+                                               table->idTable().at(i, k), {});
       line += test.value().first;
       line += " ";
     }

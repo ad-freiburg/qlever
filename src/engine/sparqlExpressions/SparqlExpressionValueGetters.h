@@ -141,6 +141,7 @@ struct EffectiveBooleanValueGetter : Mixin<EffectiveBooleanValueGetter> {
 // This class can be used as the `ValueGetter` argument of Expression
 // templates. It produces a string value.
 struct StringValueGetter : Mixin<StringValueGetter> {
+  using Value = std::optional<std::string>;
   using Mixin<StringValueGetter>::operator();
   std::optional<std::string> operator()(ValueId,
                                         const EvaluationContext*) const;
@@ -156,7 +157,7 @@ struct StringValueGetter : Mixin<StringValueGetter> {
 // This class can be used as the `ValueGetter` argument of Expression
 // templates. It implicitly applies the STR() function. In particular,
 // all datatypes are removed, language tags are preserved,
-// see `ExportQueryExecutionTrees::idToLiteral` for details.
+// see `ExportIds::idToLiteral` for details.
 struct LiteralValueGetterWithStrFunction
     : Mixin<LiteralValueGetterWithStrFunction> {
   using Mixin<LiteralValueGetterWithStrFunction>::operator();
@@ -255,6 +256,7 @@ struct DateValueGetter : Mixin<DateValueGetter> {
 struct GeoPointValueGetter : Mixin<GeoPointValueGetter> {
   using Mixin<GeoPointValueGetter>::operator();
   using Opt = std::optional<GeoPoint>;
+  using Value = Opt;
 
   Opt operator()(ValueId id, const EvaluationContext*) const {
     if (id.getDatatype() == Datatype::GeoPoint) {
@@ -359,6 +361,7 @@ struct IriValueGetter : Mixin<IriValueGetter> {
 struct UnitOfMeasurementValueGetter : Mixin<UnitOfMeasurementValueGetter> {
   // Set the size of this cache to at least the number of supported units.
   mutable ad_utility::util::LRUCache<ValueId, UnitOfMeasurement> cache_{10};
+  using Value = UnitOfMeasurement;
   using Mixin<UnitOfMeasurementValueGetter>::operator();
   UnitOfMeasurement operator()(ValueId id, const EvaluationContext*) const;
   UnitOfMeasurement operator()(const LiteralOrIri& s,
@@ -375,6 +378,7 @@ struct UnitOfMeasurementValueGetter : Mixin<UnitOfMeasurementValueGetter> {
 // This value getter retrieves geometries: `GeoPoints` or literals with
 // `geo:wktLiteral` datatype.
 struct GeoPointOrWktValueGetter : Mixin<GeoPointOrWktValueGetter> {
+  using Value = std::optional<ad_utility::GeoPointOrWkt>;
   using Mixin<GeoPointOrWktValueGetter>::operator();
   std::optional<ad_utility::GeoPointOrWkt> operator()(
       ValueId id, const EvaluationContext*) const;
@@ -409,6 +413,7 @@ struct LanguageTagValueGetter : Mixin<LanguageTagValueGetter> {
 
 // Value getter for implementing the expressions `IRI()`/`URI()`.
 struct IriOrUriValueGetter : Mixin<IriOrUriValueGetter> {
+  using Value = IdOrLiteralOrIri;
   using Mixin<IriOrUriValueGetter>::operator();
   IdOrLiteralOrIri operator()(ValueId id,
                               const EvaluationContext* context) const;
@@ -428,6 +433,7 @@ CPP_template(typename RequestedInfo = ad_utility::GeometryInfo)(
     requires ad_utility::RequestedInfoT<
         RequestedInfo>) struct GeometryInfoValueGetter
     : Mixin<GeometryInfoValueGetter<RequestedInfo>> {
+  using Value = std::optional<RequestedInfo>;
   using Mixin<GeometryInfoValueGetter<RequestedInfo>>::operator();
   std::optional<RequestedInfo> operator()(
       ValueId id, const EvaluationContext* context) const;
@@ -466,6 +472,7 @@ struct StringOrDateGetter : Mixin<StringOrDateGetter> {
 // Value getter that returns only integer values (unlike `NumericValueGetter`
 // which returns double or int).
 struct IntValueGetter : Mixin<IntValueGetter> {
+  using Value = std::optional<int64_t>;
   using Mixin<IntValueGetter>::operator();
   std::optional<int64_t> operator()(const LiteralOrIri& litOrIri,
                                     const EvaluationContext*) const;
