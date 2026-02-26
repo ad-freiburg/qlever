@@ -3095,6 +3095,17 @@ void QueryPlanner::GraphPatternPlanner::visitBind(const parsedQuery::Bind& v) {
   auto lastRow = std::move(candidatePlans_.at(0));
   candidatePlans_.at(0).clear();
   for (const auto& a : lastRow) {
+    // Consider pushing down the `BIND` into the subtree.
+    auto pushedDownPlan = a._qet->getRootOperation()->makeTreeWithBindColumn(v);
+    if (pushedDownPlan.has_value()) {
+      // We can replace this `BIND` with a plan that contains an additional scan
+      // column with equivalent values, for example from a materialized view.
+      auto plan = a;
+      plan._qet = pushedDownPlan.value();
+      candidatePlans_.back().push_back(std::move(plan));
+      continue;
+    }
+
     // Add the query plan for the BIND.
     SubtreePlan plan = makeSubtreePlan<Bind>(qec_, a._qet, v);
     plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
