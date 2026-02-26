@@ -16,12 +16,8 @@
 #include "index/LocatedTriples.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/Iterators.h"
-#include "util/OnDestructionDontThrowDuringStackUnwinding.h"
-#include "util/OverloadCallOperator.h"
-#include "util/ProgressBar.h"
 #include "util/ThreadSafeQueue.h"
 #include "util/Timer.h"
-#include "util/TransparentFunctors.h"
 #include "util/TypeTraits.h"
 
 using namespace std::chrono_literals;
