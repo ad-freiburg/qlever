@@ -19,7 +19,7 @@ UpdateMetadata ExecuteUpdate::executeUpdate(
   tracer.beginTrace("evaluateWhere");
   auto result = qet.getResult(false);
   tracer.endTrace("evaluateWhere");
-  auto [toInsert, toDelete, uniqueGraphs] =
+  auto [toInsert, toDelete, uniqueInsertedGraphs] =
       computeGraphUpdateQuads(index, query, *result, qet.getVariableColumns(),
                               cancellationHandle, metadata, tracer);
 
@@ -38,7 +38,7 @@ UpdateMetadata ExecuteUpdate::executeUpdate(
   }
   tracer.endTrace("insertTriples");
   tracer.beginTrace("recordGraphs");
-  graphManager.addGraphs(uniqueGraphs);
+  graphManager.addGraphs(uniqueInsertedGraphs);
   tracer.endTrace("recordGraphs");
   return metadata;
 }
@@ -216,6 +216,7 @@ void ExecuteUpdate::computeAndAddQuadsForResultRow(
 }
 
 // _____________________________________________________________________________
+// TODO: might want to have a struct for this type
 std::tuple<ExecuteUpdate::IdTriplesAndLocalVocab,
            ExecuteUpdate::IdTriplesAndLocalVocab, std::vector<std::string>>
 ExecuteUpdate::computeGraphUpdateQuads(
@@ -284,14 +285,12 @@ ExecuteUpdate::computeGraphUpdateQuads(
         AD_CORRECTNESS_CHECK(id.getDatatype() == Datatype::VocabIndex ||
                              id.getDatatype() == Datatype::LocalVocabIndex);
         if (id.getDatatype() == Datatype::VocabIndex) {
-          return index.getVocab()[id.getVocabIndex()];
+          return index.indexToString(id.getVocabIndex());
         } else {
           AD_CORRECTNESS_CHECK(id.getLocalVocabIndex()->isIri());
           return id.getLocalVocabIndex()->getIri().toStringRepresentation();
         }
       });
-  AD_LOG_INFO << "Unique graphs in insert template: "
-              << uniqueInsertedGraphs.size() << std::endl;
   tracer.endTrace("uniqueGraphs");
   tracer.endTrace("computeIds");
 

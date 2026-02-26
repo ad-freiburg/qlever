@@ -36,6 +36,7 @@ class GraphManager {
   }
 
   void addGraphs(std::vector<std::string> graphs);
+  // TODO: the name is bad
   bool graphExists(const std::string& graph) const;
   ad_utility::triple_component::Iri getNewInternalGraph();
 

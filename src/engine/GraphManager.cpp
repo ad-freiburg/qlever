@@ -77,20 +77,23 @@ GraphManager GraphManager::fromExistingGraphs(std::vector<std::string> graphs) {
 
 // _____________________________________________________________________________
 void GraphManager::addGraphs(std::vector<std::string> graphs) {
-  for (const std::string& graph : graphs) {
-    if (graph.starts_with(QLEVER_NEW_GRAPH_PREFIX)) {
-      auto suffix =
-          graph.substr(QLEVER_NEW_GRAPH_PREFIX.size(),
-                       graph.size() - QLEVER_NEW_GRAPH_PREFIX.size() - 1);
-      try {
-        auto graphId = std::stoul(suffix);
-        AD_CORRECTNESS_CHECK(graphId < allocatedGraphs_);
-      } catch (const std::invalid_argument&) {
-        AD_LOG_WARN << "Invalid graph " << graph
-                    << " from internal namespace being inserted." << std::endl;
-      }
+  auto internalGraphSuffixes =
+      graphs | ql::views::filter([](const auto& graph) {
+        return graph.starts_with(QLEVER_NEW_GRAPH_PREFIX);
+      }) |
+      ql::views::transform([](const auto& graph) {
+        return graph.substr(QLEVER_NEW_GRAPH_PREFIX.size(),
+                            graph.size() - QLEVER_NEW_GRAPH_PREFIX.size() - 1);
+      });
+  ql::ranges::for_each(internalGraphSuffixes, [this](const auto& suffix) {
+    try {
+      auto graphId = std::stoul(suffix);
+      AD_CORRECTNESS_CHECK(graphId < allocatedGraphs_);
+    } catch (const std::invalid_argument&) {
+      AD_LOG_WARN << "Invalid graph suffix " << suffix
+                  << " from internal namespace being inserted." << std::endl;
     }
-  }
+  });
   ql::ranges::move(std::move(graphs), std::back_inserter(graphs_));
   ql::ranges::sort(graphs_);
   graphs_.erase(std::ranges::unique(graphs_).begin(), graphs_.end());
