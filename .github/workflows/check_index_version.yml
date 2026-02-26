@@ -2,9 +2,9 @@ name: Check index version
 
 on:
   push:
-    branches: [ master ]
+    branches: [ masterX ]
   pull_request:
-    branches: [ master ]
+    branches: [ masterX ]
   merge_group:
 
 concurrency:
