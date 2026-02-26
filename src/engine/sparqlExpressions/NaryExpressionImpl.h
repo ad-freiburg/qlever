@@ -92,65 +92,6 @@ class NaryExpressionStronglyTyped : public SparqlExpression {
   }
 };
 
-// Takes a `Function` that returns a numeric value (integral or floating point)
-// and converts it to a function, that takes the same arguments and returns the
-// same result, but the return type is the `NumericValue` variant.
-template <typename Function, bool nanToUndef = false>
-struct NumericIdWrapper {
-  // Note: Sonarcloud suggests `[[no_unique_address]]` for the following member,
-  // but adding it causes an internal compiler error in Clang 16.
-  Function function_{};
-  template <typename... Args>
-  Id operator()(Args&&... args) const {
-    return makeNumericId<nanToUndef>(function_(AD_FWD(args)...));
-  }
-};
-
-// Takes a `Function` that takes and returns numeric values (integral or
-// floating point) and converts it to a function, that takes the same arguments
-// and returns the same result, but the arguments and the return type are the
-// `NumericValue` variant.
-template <typename Function, bool NanOrInfToUndef = false>
-struct MakeNumericExpression {
-  template <typename... Args>
-  Id operator()(const Args&... args) const {
-    CPP_assert((concepts::same_as<std::decay_t<Args>, NumericValue> && ...));
-    auto visitor = [](const auto&... t) {
-      if constexpr ((... ||
-                     std::is_same_v<NotNumeric, std::decay_t<decltype(t)>>)) {
-        return Id::makeUndefined();
-      } else {
-        return makeNumericId<NanOrInfToUndef>(Function{}(t...));
-      }
-    };
-    return std::visit(visitor, args...);
-  }
-};
-
-// Two short aliases to make the instantiations more readable.
-template <typename... T>
-using FV = FunctionAndValueGetters<T...>;
-
-template <size_t N, typename X, typename... T>
-using NARY = NaryExpressionStronglyTyped<Operation<N, X, T...>>;
-
-// True iff all types `Ts` are `SetOfIntervals`.
-struct AreAllSetOfIntervals {
-  template <typename... Ts>
-  constexpr bool operator()(const Ts&... t) const {
-    return (... && ad_utility::isSimilar<std::decay_t<decltype(t)>,
-                                         ad_utility::SetOfIntervals>);
-  }
-};
-
-template <typename F>
-using SET = SpecializedFunction<F, AreAllSetOfIntervals>;
-
-using ad_utility::SetOfIntervals;
-
-// The types for the concrete MultiBinaryExpressions and UnaryExpressions.
-using TernaryBool = EffectiveBooleanValueGetter::Result;
-
 // _____________________________________________________________________________
 template <typename Op>
 NaryExpressionStronglyTyped<Op>::NaryExpressionStronglyTyped(
@@ -389,6 +330,65 @@ using NaryExpression = NaryExpressionStronglyTyped<Args...>;
     using Base = NaryExpression<Operation<N, X, __VA_ARGS__>>;               \
     using Base::Base;                                                        \
   };
+
+// Takes a `Function` that returns a numeric value (integral or floating point)
+// and converts it to a function, that takes the same arguments and returns the
+// same result, but the return type is the `NumericValue` variant.
+template <typename Function, bool nanToUndef = false>
+struct NumericIdWrapper {
+  // Note: Sonarcloud suggests `[[no_unique_address]]` for the following member,
+  // but adding it causes an internal compiler error in Clang 16.
+  Function function_{};
+  template <typename... Args>
+  Id operator()(Args&&... args) const {
+    return makeNumericId<nanToUndef>(function_(AD_FWD(args)...));
+  }
+};
+
+// Takes a `Function` that takes and returns numeric values (integral or
+// floating point) and converts it to a function, that takes the same arguments
+// and returns the same result, but the arguments and the return type are the
+// `NumericValue` variant.
+template <typename Function, bool NanOrInfToUndef = false>
+struct MakeNumericExpression {
+  template <typename... Args>
+  Id operator()(const Args&... args) const {
+    CPP_assert((concepts::same_as<std::decay_t<Args>, NumericValue> && ...));
+    auto visitor = [](const auto&... t) {
+      if constexpr ((... ||
+                     std::is_same_v<NotNumeric, std::decay_t<decltype(t)>>)) {
+        return Id::makeUndefined();
+      } else {
+        return makeNumericId<NanOrInfToUndef>(Function{}(t...));
+      }
+    };
+    return std::visit(visitor, args...);
+  }
+};
+
+// Two short aliases to make the instantiations more readable.
+template <typename... T>
+using FV = FunctionAndValueGetters<T...>;
+
+template <size_t N, typename X, typename... T>
+using NARY = NaryExpression<Operation<N, X, T...>>;
+
+// True iff all types `Ts` are `SetOfIntervals`.
+struct AreAllSetOfIntervals {
+  template <typename... Ts>
+  constexpr bool operator()(const Ts&... t) const {
+    return (... && ad_utility::isSimilar<std::decay_t<decltype(t)>,
+                                         ad_utility::SetOfIntervals>);
+  }
+};
+
+template <typename F>
+using SET = SpecializedFunction<F, AreAllSetOfIntervals>;
+
+using ad_utility::SetOfIntervals;
+
+// The types for the concrete MultiBinaryExpressions and UnaryExpressions.
+using TernaryBool = EffectiveBooleanValueGetter::Result;
 }  // namespace sparqlExpression::detail
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_NARYEXPRESSIONIMPL_H

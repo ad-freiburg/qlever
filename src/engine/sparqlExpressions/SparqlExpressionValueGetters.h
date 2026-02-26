@@ -321,11 +321,11 @@ struct ReplacementStringGetter : Mixin<ReplacementStringGetter> {
 struct RegexValueGetter {
   mutable ad_utility::util::LRUCache<std::string, std::shared_ptr<RE2>> cache_{
       100};
+  using Value = std::shared_ptr<RE2>;
   template <typename S>
   auto operator()(S&& input, const EvaluationContext* context) const
-      -> CPP_ret(std::shared_ptr<RE2>)(
-          requires SingleExpressionResult<S>&& ranges::invocable<
-              LiteralFromIdGetter, S&&, const EvaluationContext*>) {
+      -> CPP_ret(Value)(requires SingleExpressionResult<S>&& ranges::invocable<
+                        LiteralFromIdGetter, S&&, const EvaluationContext*>) {
     auto str = LiteralFromIdGetter{}(AD_FWD(input), context);
     if (!str.has_value()) {
       return nullptr;

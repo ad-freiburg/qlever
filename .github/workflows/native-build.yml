@@ -123,7 +123,7 @@ jobs:
       - name: Configure CMake
         env:
           USE_PCH: ${{ matrix.compiler-version == 21 && 'ON' || 'OFF' }}
-          CHEAPER_COMPILATION: ${{ matrix.compiler-version == 11 && 'OFF' || 'ON' }}
+          CHEAPER_COMPILATION: ${{ matrix.compiler-version == 11 && 'ON' || 'OFF' }}
         # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
         # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
         run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{matrix.compiler}}${{matrix.compiler-version}}.cmake" -DADDITIONAL_COMPILER_FLAGS="${{matrix.warnings}} ${{matrix.asan-flags}} ${{matrix.ubsan-flags}}" -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=${{matrix.expensive-tests}} -DENABLE_EXPENSIVE_CHECKS=true ${{matrix.additional-cmake-options}} -DADDITIONAL_LINKER_FLAGS="-B /usr/bin/mold" -DSINGLE_TEST_BINARY=ON -DUSE_PRECOMPILED_HEADERS=${{env.USE_PCH}} -DCHEAPER_COMPILATION=${{env.CHEAPER_COMPILATION}}

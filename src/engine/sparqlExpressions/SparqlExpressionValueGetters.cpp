@@ -667,5 +667,6 @@ template struct TypeErasedValueGetter<
     GeometryInfoValueGetter<ad_utility::MetricArea>>;
 template struct TypeErasedValueGetter<StringOrDateGetter>;
 template struct TypeErasedValueGetter<IntValueGetter>;
+template struct TypeErasedValueGetter<RegexValueGetter>;
 
 }  // namespace sparqlExpression::detail
