@@ -2155,7 +2155,7 @@ TEST_F(GraphSearchTest, binaryFirstSearch) {
 
   // Constructing the base graph search problem with the parameters set to make
   // it eligible for BFS.
-  GraphSearchProblem gsp(graphs_[0], Id::makeFromEncodedVal(0),
+  GraphSearchProblem<HashMapWrapper> gsp(graphs_[0], Id::makeFromEncodedVal(0),
                          std::optional<Id>(), 0,
                          std::numeric_limits<size_t>::max());
 
@@ -2178,7 +2178,7 @@ TEST_F(GraphSearchTest, binaryFirstSearchWithLimit) {
       {0},    {0}, {},  {0},       {0},
       {1, 0}, {1}, {0}, {1, 4, 3}, {1, 2, 3, 4, 5, 6, 7}};
 
-  GraphSearchProblem gsp(graphs_[0], Id::makeFromEncodedVal(0),
+  GraphSearchProblem<HashMapWrapper> gsp(graphs_[0], Id::makeFromEncodedVal(0),
                          std::optional<Id>(), 0,
                          std::numeric_limits<size_t>::max());
 
@@ -2198,7 +2198,7 @@ TEST_F(GraphSearchTest, depthFirstSearch) {
   const std::vector<std::vector<size_t>> expected = {{0}, {},  {0}, {},  {0},
                                                      {0}, {1}, {},  {7}, {}};
 
-  GraphSearchProblem gsp(graphs_.at(0), Id::makeFromEncodedVal(0),
+  GraphSearchProblem<HashMapWrapper> gsp(graphs_.at(0), Id::makeFromEncodedVal(0),
                          std::optional<Id>(), 0,
                          std::numeric_limits<size_t>::max());
   for (size_t i = 0; i < graphsOrder.size(); i++) {
@@ -2221,7 +2221,7 @@ TEST_F(GraphSearchTest, depthFirstSearchWithLimit) {
   const std::vector<std::vector<size_t>> expected = {
       {0}, {}, {0}, {}, {0}, {}, {0}, {}, {}, {7}, {}, {4}};
 
-  GraphSearchProblem gsp(graphs_[0], Id::makeFromEncodedVal(0),
+  GraphSearchProblem<HashMapWrapper> gsp(graphs_[0], Id::makeFromEncodedVal(0),
                          std::optional<Id>(), 0,
                          std::numeric_limits<size_t>::max());
 
