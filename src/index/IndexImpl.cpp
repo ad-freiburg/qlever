@@ -1796,12 +1796,14 @@ CPP_template_def(typename... NextSorter)(requires(
   // TODO: Maybe defer the resolution of the IDs to strings to after building
   // the index. How is the memory consumption through from the index building?
   {
+    auto manager = GraphManager::fromExistingGraphs(graphs);
     // TODO: hardcoded index name, because we fail when running on the internal
     // permutations
-    //vocab_.readFromFile("dblp" + std::string(VOCAB_SUFFIX));
-    auto manager = GraphManager::fromExistingGraphs(graphs);
+    vocab_.readFromFile("olympics" + std::string(VOCAB_SUFFIX));
+    manager.initializeNamespaceManager(std::string(QLEVER_NEW_GRAPH_PREFIX),
+                                       manager, vocab_);
     // Unload the vocabulary again.
-    //vocab_.resetToType(vocabularyTypeForIndexBuilding_);
+    vocab_.resetToType(vocabularyTypeForIndexBuilding_);
     configurationJson_["existing-graphs"] = manager;
     AD_LOG_INFO << "Graph manager initialized: " << manager << std::endl;
   }

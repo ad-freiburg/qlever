@@ -145,6 +145,7 @@ void to_json(nlohmann::json& j, const GraphManager& graphManager) {
                   return std::to_string(id.getBits());
                 }) |
                 ::ranges::to<std::vector>();
+  j["namespaces"]["new-graphs"] = graphManager.namespaceManager_.value();
 }
 
 // _____________________________________________________________________________
@@ -156,7 +157,9 @@ void from_json(const nlohmann::json& j, GraphManager& graphManager) {
   graphManager.graphs_.withWriteLock([&graphs](auto& graphsMember) {
     graphsMember = ad_utility::HashSet<Id>(graphs.begin(), graphs.end());
   });
+  graphManager.namespaceManager_ = j["namespaces"]["new-graphs"].get<GraphManager::GraphNamespaceManager>();
 }
+
 // _____________________________________________________________________________
 std::ostream& operator<<(std::ostream& os, const GraphManager& graphManager) {
   os << "GraphManager(graphs=[";
