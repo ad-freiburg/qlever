@@ -27,9 +27,9 @@ namespace detail {
 CPP_class_template(typename NaryOperation,
                    prefilterExpressions::IsDatatype Datatype)(
     requires(isOperation<NaryOperation>)) class IsDatatypeExpressionImpl
-    : public NaryExpressionStronglyTyped<NaryOperation> {
+    : public NaryExpression<NaryOperation> {
  public:
-  using NaryExpressionStronglyTyped<NaryOperation>::NaryExpressionStronglyTyped;
+  using NaryExpression<NaryOperation>::NaryExpression;
   std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
       [[maybe_unused]] bool isNegated) const override {
     using namespace prefilterExpressions;

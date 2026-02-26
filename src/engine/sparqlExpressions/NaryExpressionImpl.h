@@ -276,7 +276,8 @@ class NaryExpressionTypeErasedImpl : public SparqlExpression {
     // We have to first determine the number of results the expression will
     // produce.
     auto targetSize = context->size();
-    if ((... && isConstantExpressionResult(operands))) {
+    bool resultIsConstant = (... && isConstantExpressionResult(operands));
+    if (resultIsConstant) {
       targetSize = 1;
     }
 
@@ -299,12 +300,13 @@ class NaryExpressionTypeErasedImpl : public SparqlExpression {
     auto resultGenerator =
         ql::views::transform(ql::ranges::ref_view(zipper), onTuple);
     // Compute the result.
-    VectorWithMemoryLimit<Ret> result{context->_allocator};
+    VectorWithMemoryLimit<std::decay_t<Ret>> result{context->_allocator};
     result.reserve(targetSize);
     ql::ranges::move(resultGenerator, std::back_inserter(result));
 
-    if (result.size() == 1) {
-      return std::move(result.at(0));
+    if (resultIsConstant) {
+      AD_CORRECTNESS_CHECK(result.size() == 1);
+      return std::move(result[0]);
     } else {
       return result;
     }

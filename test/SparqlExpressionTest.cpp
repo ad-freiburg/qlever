@@ -212,6 +212,9 @@ auto testNaryExpressionImpl = [](auto&& makeExpression, auto const& expected,
     using T = std::decay_t<decltype(operand)>;
     if constexpr (isVectorResult<T>) {
       return operand.size();
+    } else if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
+      return operand._intervals.empty() ? 0ul
+                                        : operand._intervals.back().second;
     }
     return 1;
   };
@@ -298,37 +301,39 @@ auto testDivide = std::bind_front(testNaryExpression, &makeDivideExpression);
 // _____________________________________________________________________________________
 TEST(SparqlExpression, logicalOperators) {
   // Test `AndExpression` and `OrExpression`.
-  V<Id> b{{B(false), B(true), B(true), B(false)}, alloc};
+  constexpr auto t = B(true);
+  constexpr auto f = B(false);
+  V<Id> b{{f, t, t, f}, alloc};
   V<Id> d{{D(1.0), D(2.0), D(std::numeric_limits<double>::quiet_NaN()), D(0.0)},
           alloc};
-  V<Id> dAsBool{{B(true), B(true), B(false), B(false)}, alloc};
+  V<Id> dAsBool{{t, t, f, f}, alloc};
 
   V<IdOrLiteralOrIri> s{{lit("true"), lit(""), lit("false"), lit("")}, alloc};
-  V<Id> sAsBool{{B(true), B(false), B(true), B(false)}, alloc};
+  V<Id> sAsBool{{t, f, t, f}, alloc};
 
   V<Id> i{{I(32), I(-42), I(0), I(5)}, alloc};
-  V<Id> iAsId{{B(true), B(true), B(false), B(true)}, alloc};
+  V<Id> iAsId{{t, t, f, t}, alloc};
 
-  V<Id> bOrD{{B(true), B(true), B(true), B(false)}, alloc};
-  V<Id> bAndD{{B(false), B(true), B(false), B(false)}, alloc};
+  V<Id> bOrD{{t, t, t, f}, alloc};
+  V<Id> bAndD{{f, t, f, f}, alloc};
 
-  V<Id> bOrS{{B(true), B(true), B(true), B(false)}, alloc};
-  V<Id> bAndS{{B(false), B(false), B(true), B(false)}, alloc};
+  V<Id> bOrS{{t, t, t, f}, alloc};
+  V<Id> bAndS{{f, f, t, f}, alloc};
 
-  V<Id> bOrI{{B(true), B(true), B(true), B(true)}, alloc};
-  V<Id> bAndI{{B(false), B(true), B(false), B(false)}, alloc};
+  V<Id> bOrI{{t, t, t, t}, alloc};
+  V<Id> bAndI{{f, t, f, f}, alloc};
 
-  V<Id> dOrS{{B(true), B(true), B(true), B(false)}, alloc};
-  V<Id> dAndS{{B(true), B(false), B(false), B(false)}, alloc};
+  V<Id> dOrS{{t, t, t, f}, alloc};
+  V<Id> dAndS{{t, f, f, f}, alloc};
 
-  V<Id> dOrI{{B(true), B(true), B(false), B(true)}, alloc};
-  V<Id> dAndI{{B(true), B(true), B(false), B(false)}, alloc};
+  V<Id> dOrI{{t, t, f, t}, alloc};
+  V<Id> dAndI{{t, t, f, f}, alloc};
 
-  V<Id> sOrI{{B(true), B(true), B(true), B(true)}, alloc};
-  V<Id> sAndI{{B(true), B(false), B(false), B(false)}, alloc};
+  V<Id> sOrI{{t, t, t, t}, alloc};
+  V<Id> sAndI{{t, f, f, f}, alloc};
 
-  V<Id> allTrue{{B(true), B(true), B(true), B(true)}, alloc};
-  V<Id> allFalse{{B(false), B(false), B(false), B(false)}, alloc};
+  V<Id> allTrue{{t, t, t, t}, alloc};
+  V<Id> allFalse{{f, f, f, f}, alloc};
 
   testOr(b, b, allFalse);
   testOr(allTrue, b, allTrue);
@@ -341,7 +346,19 @@ TEST(SparqlExpression, logicalOperators) {
   testOr(sOrI, i, s);
 
   using S = ad_utility::SetOfIntervals;
-  testOr(S{{{0, 6}}}, S{{{0, 4}}}, S{{{3, 6}}});
+  {
+    auto s1 = S{{{0, 4}}};
+    auto s2 = S{{{3, 6}}};
+    // The type erased expressions don't use the optimizations between
+    // set-of-interval, but always return a fully materialized vector.
+#ifdef _QLEVER_TYPE_ERASED_EXPRESSIONS
+    V<Id> resultAsVec{{t, t, t, t, t, t}, alloc};
+    testOr(resultAsVec, s1, s2);
+#else
+    S resultAsSet = S{{{0, 6}}};
+    testOr(resultAsSet, s1, s2);
+#endif
+  }
 
   testAnd(b, b, allTrue);
   testAnd(dAsBool, d, allTrue);
@@ -352,12 +369,26 @@ TEST(SparqlExpression, logicalOperators) {
   testAnd(dAndI, d, i);
   testAnd(dAndS, d, s);
   testAnd(sAndI, s, i);
-  testAnd(S{{{3, 4}}}, S{{{0, 4}}}, S{{{3, 6}}});
 
-  testOr(allTrue, b, B(true));
-  testOr(b, b, B(false));
-  testAnd(allFalse, b, B(false));
-  testAnd(b, b, B(true));
+  using S = ad_utility::SetOfIntervals;
+  {
+    auto s1 = S{{{0, 4}}};
+    auto s2 = S{{{3, 6}}};
+    // The type erased expressions don't use the optimizations between
+    // set-of-interval, but always return a fully materialized vector.
+#ifdef _QLEVER_TYPE_ERASED_EXPRESSIONS
+    V<Id> resultAsVec{{f, f, f, t, f, f}, alloc};
+    testAnd(resultAsVec, s1, s2);
+#else
+    S resultAsSet = S{{{3, 4}}};
+    testAnd(resultAsSet, s1, s2);
+#endif
+  }
+
+  testOr(allTrue, b, t);
+  testOr(b, b, f);
+  testAnd(allFalse, b, f);
+  testAnd(b, b, t);
 
   testOr(allTrue, b, I(-42));
   testOr(b, b, I(0));
@@ -378,8 +409,6 @@ TEST(SparqlExpression, logicalOperators) {
   testAnd(b, b, IdOrLiteralOrIri(lit("yellow")));
 
   // Test the behavior in the presence of UNDEF values.
-  Id t = B(true);
-  Id f = B(false);
   {
     V<Id> allValues1{{t, t, t, f, f, f, U, U, U}, alloc};
     V<Id> allValues2{{t, f, U, t, f, U, t, f, U}, alloc};

@@ -33,9 +33,9 @@ struct IfImpl {
 };
 
 // This class implements an expression that evaluates the `IF()` function, but
-// will be extended below by additional member functions. It always uses the
-// strongly-typed `NaryExpression` because `ActualValueGetter` is polymorphic
-// and cannot be type-erased.
+// will be extended below by additional member functions. It always uses
+// `NaryExpressionStronglyTyped` explicitly because `ActualValueGetter` is
+// polymorphic and cannot be type-erased.
 class IfExpressionImpl
     : public NaryExpressionStronglyTyped<
           detail::Operation<3, FV<IfImpl, EffectiveBooleanValueGetter,
