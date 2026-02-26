@@ -83,6 +83,20 @@ class ExistsExpression : public SparqlExpression {
     argument_.selectClause().setSelected(intersection);
   }
 
+  // The result of `EXISTS` is always a valid bool.
+  bool isResultAlwaysDefined(const VariableToColumnMap& map) const override {
+    AD_CORRECTNESS_CHECK(
+        map.contains(variable_),
+        "This indicates that the corresponding `ExistsJoin` has "
+        "not been set up correctly.");
+    AD_CORRECTNESS_CHECK(
+        map.at(variable_).mightContainUndef_ ==
+            ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined,
+        "The underlying `ExistsJoin` should guarantee that the column computed "
+        "for this does not contain UNDEF values.");
+    return true;
+  }
+
  private:
   ql::span<Ptr> childrenImpl() override { return {}; }
 };

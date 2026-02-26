@@ -174,3 +174,12 @@ TEST(BlankNodeExpression, consistentCounterWithUndefined) {
                       StrEq("<http://qlever.cs.uni-freiburg.de/"
                             "builtin-functions/blank-node/_:unT2_2>"))))));
 }
+
+// _____________________________________________________________________________
+TEST(BlankNodeExpression, isResultAlwaysDefined) {
+  EXPECT_FALSE(makeBlankNodeExpression(
+                   std::make_unique<IdExpression>(Id::makeFromInt(42)))
+                   ->isResultAlwaysDefined({}));
+
+  EXPECT_TRUE(makeUniqueBlankNodeExpression()->isResultAlwaysDefined({}));
+}
