@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
+#include "engine/IndexScan.h"
+
 #include <absl/container/inlined_vector.h>
 #include <absl/strings/str_join.h>
 
@@ -9,7 +11,6 @@
 #include <string>
 #include <utility>
 
-#include "engine/IndexScan.h"
 #include "engine/QueryExecutionTree.h"
 #include "index/IndexImpl.h"
 #include "parser/ParsedQuery.h"
