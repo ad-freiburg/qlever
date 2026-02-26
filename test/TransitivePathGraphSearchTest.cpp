@@ -9,9 +9,12 @@
 
 #include <gmock/gmock.h>
 
+#include <memory>
+
 #include "engine/TransitivePathGraphSearch.h"
 #include "engine/TransitivePathHashMap.h"
 #include "util/AllocatorTestHelpers.h"
+#include "util/CancellationHandle.h"
 
 using namespace qlever::graphSearch;
 using namespace ::testing;
@@ -211,4 +214,19 @@ TEST(GraphSearchTestExtraTests, wronglyCalledDFSWithNoTarget) {
     Set actual = qlever::graphSearch::depthFirstSearchWithLimit(gsp, ep);
     EXPECT_EQ(actual, Set{allocator});
   }
+}
+
+// ___________________________________________________________________________
+TEST(GraphSearchTestExtraTests, cancellationCheck) {
+  // Test that the cancellation test from the GraphSearchExecutionParams struct
+  // really does its job.
+  const ad_utility::AllocatorWithLimit<Id> allocator =
+      ad_utility::testing::makeAllocator();
+  GraphSearchExecutionParams ep(
+      std::make_shared<ad_utility::CancellationHandle<>>(), allocator);
+
+  ep.cancellationHandle_->cancel(ad_utility::CancellationState::MANUAL);
+
+  EXPECT_THROW(ep.checkCancellation("Testing cancellation"),
+               ad_utility::CancellationException);
 }
