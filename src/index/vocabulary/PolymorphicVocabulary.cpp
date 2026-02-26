@@ -34,6 +34,14 @@ std::string PolymorphicVocabulary::operator[](uint64_t i) const {
 }
 
 // _____________________________________________________________________________
+VocabBatchLookupResult PolymorphicVocabulary::lookupBatch(
+    ql::span<const size_t> indices) const {
+  return std::visit(
+      [&indices](const auto& vocab) { return vocab.lookupBatch(indices); },
+      vocab_);
+}
+
+// _____________________________________________________________________________
 auto PolymorphicVocabulary::makeDiskWriterPtr(const std::string& filename) const
     -> std::unique_ptr<WordWriterBase> {
   return std::visit(

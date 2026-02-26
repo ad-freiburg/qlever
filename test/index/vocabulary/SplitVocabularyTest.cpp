@@ -212,6 +212,23 @@ TEST(Vocabulary, SplitVocabularyCustomWithTwoVocabs) {
   ASSERT_FALSE(sv.getGeoInfo(1ULL << 59).has_value());
   ASSERT_FALSE(sv.getGeoInfo((1ULL << 59) | 1).has_value());
 
+  // Test lookupBatch with marked indices, mixing both vocabs.
+  {
+    std::array<size_t, 3> indices{
+        static_cast<size_t>(sv.addMarker(1, 0)),   // "\"xyz\""
+        static_cast<size_t>(sv.addMarker(0, 1)),    // "\"abc\""
+        static_cast<size_t>(sv.addMarker(0, 0))};   // "\"\""
+    auto result = sv.lookupBatch(indices);
+    ASSERT_EQ(result->size(), 3);
+    EXPECT_EQ((*result)[0], "\"xyz\"");
+    EXPECT_EQ((*result)[1], "\"abc\"");
+    EXPECT_EQ((*result)[2], "\"\"");
+
+    // Empty batch.
+    auto emptyResult = sv.lookupBatch(ql::span<const size_t>{});
+    EXPECT_EQ(emptyResult->size(), 0);
+  }
+
   sv.close();
 }
 

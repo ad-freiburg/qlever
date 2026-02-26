@@ -80,6 +80,17 @@ struct DecoderMultiplexer {
     return decoders_.at(decoderIndex).decompress(compressed);
     ENABLE_CLANG_WARNINGS
   }
+
+  // Decompress into a caller-provided buffer. Extra arguments (e.g., scratch
+  // buffer pointers) are forwarded to the decoder's `decompressInto`.
+  template <typename... Args>
+  size_t decompressInto(std::string_view compressed, size_t decoderIndex,
+                        char* output, size_t outputCapacity,
+                        Args&&... args) const {
+    return decoders_.at(decoderIndex).decompressInto(
+        compressed, output, outputCapacity, std::forward<Args>(args)...);
+  }
+
   size_t numDecoders() const { return decoders_.size(); }
   const Decoders& getDecoders() const { return decoders_; }
 };

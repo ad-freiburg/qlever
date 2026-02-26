@@ -97,6 +97,12 @@ class File {
   //! checks if the file is open.
   [[nodiscard]] bool isOpen() const { return (file_ != NULL); }
 
+  //! Return the underlying file descriptor.
+  [[nodiscard]] int fd() const {
+    assert(file_);
+    return fileno(file_);
+  }
+
   //! Close file.
   bool close() {
     if (not isOpen()) {
