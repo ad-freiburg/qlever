@@ -14,8 +14,9 @@
 #include "util/CryptographicHashUtils.h"
 
 namespace sparqlExpression::detail {
+
 template <typename NaryOperation>
-class NaryExpression : public SparqlExpression {
+class NaryExpressionStronglyTyped : public SparqlExpression {
   CPP_assert(isOperation<NaryOperation>);
 
  public:
@@ -27,14 +28,15 @@ class NaryExpression : public SparqlExpression {
 
  public:
   // Construct from an array of `N` child expressions.
-  explicit NaryExpression(Children&& children);
+  explicit NaryExpressionStronglyTyped(Children&& children);
 
   // Construct from `N` child expressions. Each of the children must have a type
   // `std::unique_ptr<SubclassOfSparqlExpression>`.
   CPP_template(typename... C)(
       requires(concepts::convertible_to<C, SparqlExpression::Ptr>&&...)
-          CPP_and(sizeof...(C) == N)) explicit NaryExpression(C... children)
-      : NaryExpression{Children{std::move(children)...}} {}
+          CPP_and(sizeof...(C) ==
+                  N)) explicit NaryExpressionStronglyTyped(C... children)
+      : NaryExpressionStronglyTyped{Children{std::move(children)...}} {}
 
   // __________________________________________________________________________
   ExpressionResult evaluate(EvaluationContext* context) const override;
@@ -130,7 +132,7 @@ template <typename... T>
 using FV = FunctionAndValueGetters<T...>;
 
 template <size_t N, typename X, typename... T>
-using NARY = NaryExpression<Operation<N, X, T...>>;
+using NARY = NaryExpressionStronglyTyped<Operation<N, X, T...>>;
 
 // True iff all types `Ts` are `SetOfIntervals`.
 struct AreAllSetOfIntervals {
@@ -151,13 +153,14 @@ using TernaryBool = EffectiveBooleanValueGetter::Result;
 
 // _____________________________________________________________________________
 template <typename Op>
-NaryExpression<Op>::NaryExpression(Children&& children)
+NaryExpressionStronglyTyped<Op>::NaryExpressionStronglyTyped(
+    Children&& children)
     : children_{std::move(children)} {}
 
 // _____________________________________________________________________________
 
 template <typename NaryOperation>
-ExpressionResult NaryExpression<NaryOperation>::evaluate(
+ExpressionResult NaryExpressionStronglyTyped<NaryOperation>::evaluate(
     EvaluationContext* context) const {
   auto resultsOfChildren = ad_utility::applyFunctionToEachElementOfTuple(
       [context](const auto& child) { return child->evaluate(context); },
@@ -179,13 +182,14 @@ ExpressionResult NaryExpression<NaryOperation>::evaluate(
 
 // _____________________________________________________________________________
 template <typename Op>
-ql::span<SparqlExpression::Ptr> NaryExpression<Op>::childrenImpl() {
+ql::span<SparqlExpression::Ptr>
+NaryExpressionStronglyTyped<Op>::childrenImpl() {
   return {children_.data(), children_.size()};
 }
 
 // __________________________________________________________________________
 template <typename Op>
-[[nodiscard]] std::string NaryExpression<Op>::getCacheKey(
+[[nodiscard]] std::string NaryExpressionStronglyTyped<Op>::getCacheKey(
     const VariableToColumnMap& varColMap) const {
   std::string key = typeid(*this).name();
   key += ad_utility::lazyStrJoin(
@@ -200,26 +204,13 @@ template <typename Op>
 // Type-erased expression support.
 // ============================================================================
 
-// Helper to check if an `ExpressionResult` variant holds a constant.
-inline bool isConstantExpressionResult(const ExpressionResult& res) {
-  return std::visit(
-      [](const auto& el) {
-        return isConstantResult<std::decay_t<decltype(el)>>;
-      },
-      res);
-}
-
-// Base declaration.
-template <typename T>
-class TypeErasedNaryExpression;
-
 // Type-erased version of the `NaryExpression` class. Much cheaper to compile,
 // but also slower in the execution. It is only templated on the signature of
 // its core implementation function; all other implementation details (the
 // actual function, as well as the value getters used to create the inputs)
 // are type-erased.
 template <typename Ret, typename... Args>
-class TypeErasedNaryExpression<Ret(Args...)> : public SparqlExpression {
+class NaryExpressionTypeErasedImpl : public SparqlExpression {
  public:
   static constexpr size_t N = sizeof...(Args);
   using Children = std::array<SparqlExpression::Ptr, N>;
@@ -228,12 +219,12 @@ class TypeErasedNaryExpression<Ret(Args...)> : public SparqlExpression {
   // Type-erased `std::function` that converts the `ExpressionResult` variant
   // into a type-erased range of `Args`s.
   template <typename Arg>
-  using Getter = std::function<ad_utility::InputRangeTypeErased<Arg>(
+  using TypeErasedGetter = std::function<ad_utility::InputRangeTypeErased<Arg>(
       ExpressionResult, EvaluationContext*, size_t)>;
 
   // Tuple of type-erased value-getters, one for each argument of this
   // function.
-  using Getters = std::tuple<Getter<Args>...>;
+  using Getters = std::tuple<TypeErasedGetter<Args>...>;
 
  private:
   Children children_;
@@ -243,8 +234,8 @@ class TypeErasedNaryExpression<Ret(Args...)> : public SparqlExpression {
  public:
   // Construct from an array of `N` child expressions, as well as the
   // `function` and `getters`.
-  explicit TypeErasedNaryExpression(Function function, Getters getters,
-                                    Children&& children)
+  explicit NaryExpressionTypeErasedImpl(Function function, Getters getters,
+                                        Children&& children)
       : children_{std::move(children)},
         function_{std::move(function)},
         getters_{std::move(getters)} {}
@@ -285,7 +276,6 @@ class TypeErasedNaryExpression<Ret(Args...)> : public SparqlExpression {
     // We have to first determine the number of results the expression will
     // produce.
     auto targetSize = context->size();
-
     if ((... && isConstantExpressionResult(operands))) {
       targetSize = 1;
     }
@@ -322,43 +312,49 @@ class TypeErasedNaryExpression<Ret(Args...)> : public SparqlExpression {
 };
 
 // ============================================================================
-// NaryExpressionTypeErased: same template argument as NaryExpression, but
-// uses type erasure for the function and value getters.
+// Implementation of `NaryExpressionTypeErased` using the
+// `NaryExpressionTypeErasedImpl` from above: It has the same template argument
+// as `NaryExpression`, but uses type erasure for the function and value
+// getters.
 // ============================================================================
 
-// Forward declaration.
-template <typename NaryOperation>
-class NaryExpressionTypeErased;
-
-// Helper: given a Function type and a tuple of ValueGetters, compute the
-// base `TypeErasedNaryExpression` type and provide a factory for the
-// type-erased getters.
+// Helper: given a Function type and a tuple of (strongly typed) function
+// getters, compute the corresponding `NaryExpressionTypeErasedImpl` type and
+// provide a helper function to create the tuple of type-erased value getters.
 template <typename Func, typename VGTuple>
-struct TypeErasedNaryBase;
+struct TypeErasedNaryHelper;
 
 template <typename Func, typename... VGs>
-struct TypeErasedNaryBase<Func, std::tuple<VGs...>> {
-  using Signature = std::invoke_result_t<Func, typename VGs::Value...>(
-      typename VGs::Value...);
-  using BaseType = TypeErasedNaryExpression<Signature>;
+struct TypeErasedNaryHelper<Func, std::tuple<VGs...>> {
+  using Res = std::invoke_result_t<Func, typename VGs::Value...>;
+  using BaseType = NaryExpressionTypeErasedImpl<Res, typename VGs::Value...>;
   static auto makeGetters() {
     return typename BaseType::Getters{TypeErasedValueGetter<VGs>{}...};
   }
 };
 
-// Partial specialization for `Operation<N, FV<Func, VGs...>, SFs...>`.
-template <size_t NumOps, typename Function, typename... ValueGetters,
+// Forward declaration, because we implement pattern matching using partial
+// specializtion below.
+template <typename NaryOperation>
+class NaryExpressionTypeErased;
+
+// Partial specialization for `Operation<N, FV<Function, ValueGetters...>,
+// SpecializedFunctions...>` As that is exactly the pattern the strongly typed
+// `NaryExpression` uses. Note: The `SpezializedFunctions` (which implement more
+// efficient evaluation in some circumstances, but are not required for
+// correctness) are ignored in the type-erased case, which is only used during
+// development for cheaper compilation.
+template <size_t N, typename Function, typename... ValueGetters,
           typename... SFs>
-class NaryExpressionTypeErased<Operation<
-    NumOps, FunctionAndValueGetters<Function, ValueGetters...>, SFs...>>
-    : public TypeErasedNaryBase<
-          Function,
-          ValueGetterPack<NumOps, std::tuple<ValueGetters...>>>::BaseType {
+class NaryExpressionTypeErased<
+    Operation<N, FunctionAndValueGetters<Function, ValueGetters...>, SFs...>>
+    : public TypeErasedNaryHelper<
+          Function, ValueGetterPack<N, std::tuple<ValueGetters...>>>::BaseType {
   using Helper =
-      TypeErasedNaryBase<Function,
-                         ValueGetterPack<NumOps, std::tuple<ValueGetters...>>>;
+      TypeErasedNaryHelper<Function,
+                           ValueGetterPack<N, std::tuple<ValueGetters...>>>;
   using Base = Helper::BaseType;
-  using Children = std::array<SparqlExpression::Ptr, NumOps>;
+  using Children = std::array<SparqlExpression::Ptr, N>;
 
  public:
   // Construct from an array of `N` child expressions.
@@ -369,27 +365,27 @@ class NaryExpressionTypeErased<Operation<
   CPP_template(typename... C)(
       requires(concepts::convertible_to<C, SparqlExpression::Ptr>&&...)
           CPP_and(sizeof...(C) ==
-                  NumOps)) explicit NaryExpressionTypeErased(C... children)
+                  N)) explicit NaryExpressionTypeErased(C... children)
       : NaryExpressionTypeErased{Children{std::move(children)...}} {}
 };
 
+// A unified alias for either the type-erased or the strongly-typed expressions.
 #ifdef _QLEVER_TYPE_ERASED_EXPRESSIONS
 template <typename... Args>
-using NaryExpressionActualImpl = NaryExpressionTypeErased<Args...>;
+using NaryExpression = NaryExpressionTypeErased<Args...>;
 #else
 template <typename... Args>
-using NaryExpressionActualImpl = NaryExpression<Args...>;
+using NaryExpression = NaryExpressionStronglyTyped<Args...>;
 #endif
 
 // Define a class `Name` that is a strong typedef (via inheritance) from
-// `NaryExpression<N, X, ...>` or `NaryExpressionTypeErased<N, X, ...>`.
+// `NaryExpression<N, X, ...>`.
 // The strong typedef (vs. a simple `using` declaration) is used to improve
 // compiler messages as the resulting class has a short and descriptive name.
-#define NARY_EXPRESSION(Name, N, X, ...)                                 \
-  class Name : public NaryExpressionActualImpl<                          \
-                   detail::Operation<N, X, __VA_ARGS__>> {               \
-    using Base = NaryExpressionTypeErased<Operation<N, X, __VA_ARGS__>>; \
-    using Base::Base;                                                    \
+#define NARY_EXPRESSION(Name, N, X, ...)                                     \
+  class Name : public NaryExpression<detail::Operation<N, X, __VA_ARGS__>> { \
+    using Base = NaryExpression<Operation<N, X, __VA_ARGS__>>;               \
+    using Base::Base;                                                        \
   };
 }  // namespace sparqlExpression::detail
 

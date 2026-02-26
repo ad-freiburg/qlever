@@ -233,9 +233,9 @@ namespace {
 
 CPP_template(typename NaryOperation)(
     requires isOperation<NaryOperation>) class StrStartsExpressionImpl
-    : public NaryExpression<NaryOperation> {
+    : public NaryExpressionStronglyTyped<NaryOperation> {
  public:
-  using NaryExpression<NaryOperation>::NaryExpression;
+  using NaryExpressionStronglyTyped<NaryOperation>::NaryExpressionStronglyTyped;
   std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
       [[maybe_unused]] bool isNegated) const override {
     std::vector<PrefilterExprVariablePair> prefilterVec;

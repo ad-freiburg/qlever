@@ -19,6 +19,7 @@
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "util/ConstexprSmallString.h"
+#include "util/Iterators.h"
 #include "util/LruCache.h"
 #include "util/TypeTraits.h"
 #include "util/UnitOfMeasurement.h"
@@ -499,7 +500,13 @@ struct IntValueGetter : Mixin<IntValueGetter> {
 // A struct that converts one of the overloaded `value getters` from
 // `SparqlExpressionValueGetters.h` into a callable that takes an
 // `ExpressionResult` variant, and returns a `TypeErasedInputRange`. This is
-// exactly the signature that the `TypeErasedNaryExpression` above requires.
+// exactly the signature that the type erased expression implementation in
+// `NaryExpressionImpl` requires.
+// NOTE: As this is used only in the cheaper compilation mode, we have
+// deliberately moved the definition of the `operator()` into the `.cpp` file.
+// When adding a new value getter above, an explicit instantiation for this
+// class thus has to be added there.
+
 template <typename ValueGetter>
 struct TypeErasedValueGetter {
   ad_utility::InputRangeTypeErased<typename ValueGetter::Value> operator()(

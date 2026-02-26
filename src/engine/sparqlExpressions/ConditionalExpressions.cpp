@@ -37,13 +37,13 @@ struct IfImpl {
 // strongly-typed `NaryExpression` because `ActualValueGetter` is polymorphic
 // and cannot be type-erased.
 class IfExpressionImpl
-    : public NaryExpression<
+    : public NaryExpressionStronglyTyped<
           detail::Operation<3, FV<IfImpl, EffectiveBooleanValueGetter,
                                   ActualValueGetter, ActualValueGetter>>> {
-  using Base =
-      NaryExpression<Operation<3, FV<IfImpl, EffectiveBooleanValueGetter,
-                                     ActualValueGetter, ActualValueGetter>>>;
-  using Base::Base;
+  using Base = NaryExpressionStronglyTyped<
+      Operation<3, FV<IfImpl, EffectiveBooleanValueGetter, ActualValueGetter,
+                      ActualValueGetter>>>;
+  using Base::NaryExpressionStronglyTyped;
 };
 
 // The actual `IfExpression` class that adds an override for

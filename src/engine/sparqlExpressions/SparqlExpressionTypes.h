@@ -335,18 +335,30 @@ std::optional<ExpressionResult> evaluateOnSpecializedFunctionsIfPossible(
   return result;
 }
 
+// Implementation of the `ValueGetterPack` (see below).
+namespace valueGetterPack::detail {
 template <size_t N, typename>
 struct ValueGetterPackImpl;
 
 template <size_t N, typename... ValueGetters>
 struct ValueGetterPackImpl<N, std::tuple<ValueGetters...>> {
+  static_assert(sizeof...(ValueGetters) == 1 || N == sizeof...(ValueGetters));
   using type = std::conditional_t<
       sizeof...(ValueGetters) != 1, std::tuple<ValueGetters...>,
       boost::mp11::mp_repeat_c<std::tuple<ValueGetters...>, N>>;
 };
+}  // namespace valueGetterPack::detail
 
+// In the SPARQL expression module, an N-ary operation can either specify `N`
+// different value getters (one for each argument), or a single value getter
+// (the same for each arguments). The following helper function takes the `N` as
+// well as a `std::tuple<ValueGetters...>` where either there have to be `N`
+// value getters in the tuple, or only a single value getter. The result is then
+// always a tuple of `N` value getters, (created by repeating the single value
+// getter n-times if necessary).
 template <size_t N, typename T>
-using ValueGetterPack = typename ValueGetterPackImpl<N, T>::type;
+using ValueGetterPack =
+    typename valueGetterPack::detail::ValueGetterPackImpl<N, T>::type;
 
 // Class for an operation used in a `SparqlExpression`, consisting of the
 // function for computing the operation and the value getters for the operands.
@@ -398,6 +410,16 @@ constexpr bool isOperation<Operation<NumOperations, Ts...>> = true;
 CPP_template(typename... Inputs)(requires(SingleExpressionResult<Inputs>&&...))
     size_t getResultSize(const EvaluationContext& context, const Inputs&...) {
   return (... && isConstantResult<Inputs>) ? 1ul : context.size();
+}
+
+// Helper to check if an `ExpressionResult` variant holds a constant.
+// Used by the type erased expression.
+inline bool isConstantExpressionResult(const ExpressionResult& res) {
+  return std::visit(
+      [](const auto& el) {
+        return isConstantResult<std::decay_t<decltype(el)>>;
+      },
+      res);
 }
 
 }  // namespace detail
