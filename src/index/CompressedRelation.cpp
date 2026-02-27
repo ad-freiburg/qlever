@@ -13,15 +13,12 @@
 #include "index/CompressedRelationHelpersImpl.h"
 #include "index/CompressedRelationPermutationWriterImpl.h"
 #include "index/ConstantsIndexBuilding.h"
+#include "index/GraphComputation.h"
 #include "index/LocatedTriples.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/Iterators.h"
-#include "util/OnDestructionDontThrowDuringStackUnwinding.h"
-#include "util/OverloadCallOperator.h"
-#include "util/ProgressBar.h"
 #include "util/ThreadSafeQueue.h"
 #include "util/Timer.h"
-#include "util/TransparentFunctors.h"
 #include "util/TypeTraits.h"
 
 using namespace std::chrono_literals;
@@ -1216,45 +1213,6 @@ CompressedRelationWriter::compressAndWriteColumn(ql::span<const Id> column) {
   auto offsetInFile = file->tell();
   file->write(compressedBlock.data(), compressedBlock.size());
   return {offsetInFile, compressedSize};
-};
-
-// Find out whether the sorted `block` contains duplicates and whether it
-// contains only a few distinct graphs such that we can store this information
-// in the block metadata.
-static std::pair<bool, std::optional<std::vector<Id>>> getGraphInfo(
-    const IdTable& block) {
-  AD_CORRECTNESS_CHECK(block.numColumns() > ADDITIONAL_COLUMN_GRAPH_ID);
-  // Return true iff the block contains duplicates when only considering the
-  // actual triple of S, P, and O.
-  auto hasDuplicates = [&block]() {
-    using C = ColumnIndex;
-    auto withoutGraphAndAdditionalPayload =
-        block.asColumnSubsetView(std::array{C{0}, C{1}, C{2}});
-    size_t numDistinct = Engine::countDistinct(withoutGraphAndAdditionalPayload,
-                                               ad_utility::noop);
-    return numDistinct != block.numRows();
-  };
-
-  // Return the contained graphs, or  `nullopt` if there are too many of them.
-  auto graphInfo = [&block]() -> std::optional<std::vector<Id>> {
-    std::vector<Id> graphColumn;
-    ql::ranges::copy(block.getColumn(ADDITIONAL_COLUMN_GRAPH_ID),
-                     std::back_inserter(graphColumn));
-    ql::ranges::sort(graphColumn);
-    auto endOfUnique = std::unique(graphColumn.begin(), graphColumn.end());
-    size_t numGraphs = endOfUnique - graphColumn.begin();
-    if (numGraphs > MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA) {
-      return std::nullopt;
-    }
-    // Note: we cannot simply resize `graphColumn`, as this doesn't free
-    // the memory that is not needed anymore. We can do either `resize +
-    // shrink_to_fit`, which is not guaranteed by the standard, but works in
-    // practice. We choose the alternative of simply returning a new vector
-    // with the correct capacity.
-    return std::vector<Id>(graphColumn.begin(),
-                           graphColumn.begin() + numGraphs);
-  };
-  return {hasDuplicates(), graphInfo()};
 }
 
 // _____________________________________________________________________________
