@@ -17,13 +17,15 @@ GraphManager::GraphManager(ad_utility::HashSet<Id> graphs)
 
 // _____________________________________________________________________________
 GraphManager GraphManager::fromExistingGraphs(ad_utility::HashSet<Id> graphs) {
-  // TODO: might want to check here that all are LocalVocab
+  AD_CORRECTNESS_CHECK(ql::ranges::all_of(graphs, [](const auto& id) {
+    return id.getDatatype() == Datatype::VocabIndex;
+  }));
   return GraphManager(std::move(graphs));
 }
 
 // _____________________________________________________________________________
 void GraphManager::addGraphs(ad_utility::HashSet<Id> graphs) {
-  // The IDs may be temporary LVIs. Rewrite them to our own LocalVOc
+  // The IDs may be temporary LVIs. Rewrite them to our own LocalVocab
   auto localGraphs =
       graphs | ql::views::transform([this](const auto& graph) {
         if (graph.getDatatype() == Datatype::LocalVocabIndex) {
@@ -38,9 +40,9 @@ void GraphManager::addGraphs(ad_utility::HashSet<Id> graphs) {
 }
 
 // _____________________________________________________________________________
-bool GraphManager::graphExists(const Id& graph) const {
+bool GraphManager::graphDoesntExist(const Id& graph) const {
   auto graphs = graphs_.rlock();
-  return graphs->find(graph) != graphs->end();
+  return graphs->find(graph) == graphs->end();
 }
 
 // _____________________________________________________________________________
@@ -51,10 +53,11 @@ GraphManager::GraphNamespaceManager& GraphManager::getNamespaceManager() {
 
 // _____________________________________________________________________________
 void GraphManager::initializeNamespaceManager(std::string prefix,
-                                              const GraphManager& graphManager,
                                               const Index::Vocab& vocab) {
-  namespaceManager_ = GraphNamespaceManager::fromGraphManager(
-      std::move(prefix), graphManager, vocab);
+  graphs_.withReadLock([this, &prefix, &vocab](const auto& graphs) {
+    namespaceManager_ = GraphNamespaceManager::fromGraphManager(
+        std::move(prefix), graphs, vocab);
+  });
 }
 
 // _____________________________________________________________________________
@@ -65,11 +68,10 @@ GraphManager::GraphNamespaceManager::GraphNamespaceManager(
 // _____________________________________________________________________________
 GraphManager::GraphNamespaceManager
 GraphManager::GraphNamespaceManager::fromGraphManager(
-    std::string prefix, const GraphManager& graphManager,
+    std::string prefix, const ad_utility::HashSet<Id>& graphs,
     const Index::Vocab& vocab) {
-  auto graphs = graphManager.getGraphs();
   auto alreadyCreatedGraphs =
-      *graphs | ql::views::transform([&vocab](const auto& graphId) {
+      graphs | ql::views::transform([&vocab](const auto& graphId) {
         if (graphId.getDatatype() == Datatype::VocabIndex) {
           return vocab[graphId.getVocabIndex()];
         }

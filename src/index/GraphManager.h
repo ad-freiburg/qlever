@@ -34,8 +34,9 @@ class GraphManager {
   friend void from_json(const nlohmann::json& j, GraphManager& graphManager);
 
   void addGraphs(ad_utility::HashSet<Id> graphs);
-  // TODO: the name is bad
-  bool graphExists(const Id& graph) const;
+  // Returns whether a graph definitely does not exist. If this returns false,
+  // the graph may or may not exist.
+  bool graphDoesntExist(const Id& graph) const;
   auto getGraphs() const { return graphs_.rlock(); }
 
   friend std::ostream& operator<<(std::ostream& os,
@@ -44,7 +45,6 @@ class GraphManager {
   // Manages the allocated (but not necessarily used or existing) graphs from a
   // graph namespace (defined by having the same prefix in the IRI).
   class GraphNamespaceManager {
-    // TODO: note: this seems broadly similar to the BlankNodeManager
     std::string prefix_ = std::string(QLEVER_INTERNAL_GRAPH_IRI);
     ad_utility::Synchronized<uint64_t> allocatedGraphs_ =
         ad_utility::Synchronized<uint64_t>(0ul);
@@ -54,7 +54,7 @@ class GraphManager {
     GraphNamespaceManager(std::string prefix, uint64_t allocatedGraphs);
 
     static GraphNamespaceManager fromGraphManager(
-        std::string prefix, const GraphManager& graphManager,
+        std::string prefix, const ad_utility::HashSet<Id>& graphs,
         const Index::Vocab& vocab);
 
     ad_utility::triple_component::Iri allocateNewGraph();
@@ -74,7 +74,6 @@ class GraphManager {
  public:
   GraphNamespaceManager& getNamespaceManager();
   void initializeNamespaceManager(std::string prefix,
-                                  const GraphManager& graphManager,
                                   const Index::Vocab& vocab);
 };
 

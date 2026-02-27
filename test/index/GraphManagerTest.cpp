@@ -34,40 +34,40 @@ TEST_F(GraphManagerTest, FromExistingGraphs) {
   ad_utility::HashSet<Id> graphs{getId("<x>"), getId("<y>"), getId("<z>")};
   auto gm = GraphManager::fromExistingGraphs(graphs);
 
-  EXPECT_TRUE(gm.graphExists(getId("<x>")));
-  EXPECT_TRUE(gm.graphExists(getId("<x>")));
-  EXPECT_TRUE(gm.graphExists(getId("<z>")));
-  EXPECT_FALSE(gm.graphExists(getId("<zz>")));
+  EXPECT_FALSE(gm.graphDoesntExist(getId("<x>")));
+  EXPECT_FALSE(gm.graphDoesntExist(getId("<x>")));
+  EXPECT_FALSE(gm.graphDoesntExist(getId("<z>")));
+  EXPECT_TRUE(gm.graphDoesntExist(getId("<zz>")));
 }
 
 TEST_F(GraphManagerTest, AddGraphsWithVocabIndex) {
-  GraphManager gm;
-  EXPECT_FALSE(gm.graphExists(getId("<x>")));
+  auto gm = GraphManager::fromExistingGraphs({});
+  EXPECT_TRUE(gm.graphDoesntExist(getId("<x>")));
 
   gm.addGraphs({getId("<x>"), getId("<y>")});
 
-  EXPECT_TRUE(gm.graphExists(getId("<x>")));
-  EXPECT_TRUE(gm.graphExists(getId("<y>")));
-  EXPECT_FALSE(gm.graphExists(getId("<z>")));
+  EXPECT_FALSE(gm.graphDoesntExist(getId("<x>")));
+  EXPECT_FALSE(gm.graphDoesntExist(getId("<y>")));
+  EXPECT_TRUE(gm.graphDoesntExist(getId("<z>")));
 }
 
 TEST_F(GraphManagerTest, GraphExists) {
   auto lvi1 = lvIri("<bar>");
 
-  GraphManager gm;
-  EXPECT_FALSE(gm.graphExists(getId("<x>")));
-  EXPECT_FALSE(gm.graphExists(getId("<y>")));
-  EXPECT_FALSE(gm.graphExists(lvi1));
+  auto gm = GraphManager::fromExistingGraphs({});
+  EXPECT_TRUE(gm.graphDoesntExist(getId("<x>")));
+  EXPECT_TRUE(gm.graphDoesntExist(getId("<y>")));
+  EXPECT_TRUE(gm.graphDoesntExist(lvi1));
 
   gm.addGraphs({getId("<x>")});
-  EXPECT_TRUE(gm.graphExists(getId("<x>")));
-  EXPECT_FALSE(gm.graphExists(getId("<y>")));
-  EXPECT_FALSE(gm.graphExists(lvi1));
+  EXPECT_FALSE(gm.graphDoesntExist(getId("<x>")));
+  EXPECT_TRUE(gm.graphDoesntExist(getId("<y>")));
+  EXPECT_TRUE(gm.graphDoesntExist(lvi1));
 
   gm.addGraphs({lvi1});
-  EXPECT_TRUE(gm.graphExists(getId("<x>")));
-  EXPECT_FALSE(gm.graphExists(getId("<y>")));
-  EXPECT_TRUE(gm.graphExists(lvi1));
+  EXPECT_FALSE(gm.graphDoesntExist(getId("<x>")));
+  EXPECT_TRUE(gm.graphDoesntExist(getId("<y>")));
+  EXPECT_FALSE(gm.graphDoesntExist(lvi1));
 }
 
 TEST_F(GraphManagerTest, GetGraphs) {
@@ -79,7 +79,7 @@ TEST_F(GraphManagerTest, GetGraphs) {
 }
 
 TEST_F(GraphManagerTest, GetNamespaceManagerUninitialized) {
-  GraphManager gm;
+  auto gm = GraphManager::fromExistingGraphs({});
   EXPECT_ANY_THROW(gm.getNamespaceManager());
 }
 
@@ -126,12 +126,12 @@ TEST(GraphNamespaceManager, JsonRoundTrip) {
 TEST_F(GraphManagerTest, JsonRoundTrip) {
   ad_utility::HashSet<Id> graphs{getId("<x>"), getId("<y>")};
   auto gm = GraphManager::fromExistingGraphs(graphs);
-  gm.initializeNamespaceManager("<http://example.org/ns/", gm, index.getVocab());
+  gm.initializeNamespaceManager("<http://example.org/ns/", index.getVocab());
 
   nlohmann::json j;
   to_json(j, gm);
 
-  GraphManager restored;
+  auto restored = GraphManager::fromExistingGraphs({});
   from_json(j, restored);
 
   EXPECT_EQ(*restored.getGraphs(), graphs);
@@ -140,4 +140,3 @@ TEST_F(GraphManagerTest, JsonRoundTrip) {
                 .toStringRepresentation(),
             "<http://example.org/ns/0>");
 }
-

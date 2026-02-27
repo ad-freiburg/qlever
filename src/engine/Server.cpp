@@ -1126,21 +1126,12 @@ UpdateMetadata Server::processUpdateImpl(
   const auto& qet = plannedUpdate.queryExecutionTree_;
   AD_CORRECTNESS_CHECK(plannedUpdate.parsedQuery_.hasUpdateClause());
 
-  auto& man = index().graphManager().getNamespaceManager();
-  AD_LOG_INFO << man << std::endl;
-  AD_LOG_INFO << man.allocateNewGraph().toStringRepresentation() << std::endl;
-  AD_LOG_INFO << man.allocateNewGraph().toStringRepresentation() << std::endl;
-
-  AD_LOG_INFO << man << std::endl;
-
   DeltaTriplesCount countBefore = deltaTriples.getCounts();
   UpdateMetadata updateMetadata = ExecuteUpdate::executeUpdate(
       index_, plannedUpdate.parsedQuery_, qet, deltaTriples,
       index_.graphManager(), cancellationHandle, tracer);
   updateMetadata.countBefore_ = countBefore;
   updateMetadata.countAfter_ = deltaTriples.getCounts();
-
-  AD_LOG_INFO << man << std::endl;
 
   tracer.beginTrace("clearCache");
   // Clear the cache, because all cache entries have been invalidated by

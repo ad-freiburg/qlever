@@ -1075,7 +1075,7 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
 
     graphManager_.addGraphs(uniqueGraphs.graphs);
     graphManager_.initializeNamespaceManager(
-        std::string(QLEVER_NEW_GRAPH_PREFIX), graphManager_, vocab_);
+        std::string(QLEVER_NEW_GRAPH_PREFIX), vocab_);
     AD_LOG_INFO << "Initialized GraphManager: " << graphManager_ << std::endl;
   }
 }
@@ -1817,7 +1817,7 @@ CPP_template_def(typename... NextSorter)(
 
   vocab_.readFromFile(onDiskBase_ + std::string(VOCAB_SUFFIX));
   graphManager_.initializeNamespaceManager(std::string(QLEVER_NEW_GRAPH_PREFIX),
-                                           graphManager_, vocab_);
+                                           vocab_);
   // Unload the vocabulary again.
   vocab_.resetToType(vocabularyTypeForIndexBuilding_);
   configurationJson_["existing-graphs"] = graphManager_;

@@ -216,10 +216,7 @@ void ExecuteUpdate::computeAndAddQuadsForResultRow(
 }
 
 // _____________________________________________________________________________
-// TODO: might want to have a struct for this type
-std::tuple<ExecuteUpdate::IdTriplesAndLocalVocab,
-           ExecuteUpdate::IdTriplesAndLocalVocab, ad_utility::HashSet<Id>>
-ExecuteUpdate::computeGraphUpdateQuads(
+ExecuteUpdate::ComputedUpdates ExecuteUpdate::computeGraphUpdateQuads(
     const Index& index, const ParsedQuery& query, const Result& result,
     const VariableToColumnMap& variableColumns,
     const CancellationHandle& cancellationHandle, UpdateMetadata& metadata,
