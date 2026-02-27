@@ -70,11 +70,14 @@ class GraphManager {
         std::ostream& os, const GraphNamespaceManager& namespaceManager);
   };
 
-private:
+ private:
   std::optional<GraphNamespaceManager> namespaceManager_;
-public:
+
+ public:
   GraphNamespaceManager& getNamespaceManager();
-  void initializeNamespaceManager(std::string prefix, const GraphManager& graphManager, const Index::Vocab& vocab);
+  void initializeNamespaceManager(std::string prefix,
+                                  const GraphManager& graphManager,
+                                  const Index::Vocab& vocab);
 };
 
 #endif  // QLEVER_GRAPHMANAGER_H

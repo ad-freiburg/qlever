@@ -93,7 +93,8 @@ class ExecuteUpdate {
                                           const std::vector<IdTriple<>>& b);
   FRIEND_TEST(ExecuteUpdate, setMinus);
 
-  static ad_utility::HashSet<Id> uniqueGraphs(const std::vector<IdTriple<>>& triples);
+  static ad_utility::HashSet<Id> uniqueGraphs(
+      const std::vector<IdTriple<>>& triples);
 };
 
 #endif  // QLEVER_SRC_ENGINE_EXECUTEUPDATE_H

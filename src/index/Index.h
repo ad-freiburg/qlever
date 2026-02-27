@@ -123,7 +123,6 @@ class Index {
   GraphManager& graphManager();
   const GraphManager& graphManager() const;
 
-
   // --------------------------------------------------------------------------
   // RDF RETRIEVAL
   // --------------------------------------------------------------------------
