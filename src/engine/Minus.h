@@ -84,6 +84,8 @@ class Minus : public Operation {
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
+  void invalidateCachedVariableColumns() override;
+
   // Nested loop join optimization than can apply when a memory intensive sort
   // can be avoided this way.
   std::optional<Result> tryIndexNestedLoopJoinIfSuitable();

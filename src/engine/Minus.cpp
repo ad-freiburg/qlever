@@ -93,6 +93,12 @@ std::vector<ColumnIndex> Minus::resultSortedOn() const {
 }
 
 // _____________________________________________________________________________
+void Minus::invalidateCachedVariableColumns() {
+  Operation::invalidateCachedVariableColumns();
+  _matchedColumns = QueryExecutionTree::getJoinColumns(*_left, *_right);
+}
+
+// _____________________________________________________________________________
 float Minus::getMultiplicity(size_t col) {
   // This is an upper bound on the multiplicity as an arbitrary number
   // of rows might be deleted in this operation.

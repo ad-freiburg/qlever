@@ -390,6 +390,26 @@ std::unique_ptr<Operation> Union::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
+void Union::invalidateCachedVariableColumns() {
+  Operation::invalidateCachedVariableColumns();
+  // Recompute `_columnOrigins` from the children's `VariableToColumnMap`s.
+  const VariableToColumnMap variableColumns = computeVariableToColumnMap();
+  _columnOrigins.assign(variableColumns.size(), {NO_COLUMN, NO_COLUMN});
+  const auto& t1VarCols = _subtrees[0]->getVariableColumns();
+  const auto& t2VarCols = _subtrees[1]->getVariableColumns();
+  for (const auto& [var, colInfo] : variableColumns) {
+    auto it1 = t1VarCols.find(var);
+    if (it1 != t1VarCols.end()) {
+      _columnOrigins[colInfo.columnIndex_][0] = it1->second.columnIndex_;
+    }
+    auto it2 = t2VarCols.find(var);
+    if (it2 != t2VarCols.end()) {
+      _columnOrigins[colInfo.columnIndex_][1] = it2->second.columnIndex_;
+    }
+  }
+}
+
+// _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>> Union::makeSortedTree(
     const std::vector<ColumnIndex>& sortColumns) const {
   AD_CONTRACT_CHECK(!isSortedBy(sortColumns));

@@ -424,7 +424,7 @@ class Operation {
   // Invalidate the cached `VariableToColumnMap` so it will be recomputed on the
   // next access. Must be called when an operation's children change after
   // construction (e.g., during bind push-down).
-  void invalidateCachedVariableColumns() {
+  virtual void invalidateCachedVariableColumns() {
     variableToColumnMap_ = std::nullopt;
     externallyVisibleVariableToColumnMap_ = std::nullopt;
     _resultSortedColumns = std::nullopt;

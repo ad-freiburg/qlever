@@ -116,6 +116,14 @@ std::vector<ColumnIndex> MultiColumnJoin::resultSortedOn() const {
 }
 
 // _____________________________________________________________________________
+void MultiColumnJoin::invalidateCachedVariableColumns() {
+  Operation::invalidateCachedVariableColumns();
+  _multiplicities.clear();
+  _multiplicitiesComputed = false;
+  _joinColumns = QueryExecutionTree::getJoinColumns(*_left, *_right);
+}
+
+// _____________________________________________________________________________
 float MultiColumnJoin::getMultiplicity(size_t col) {
   if (!_multiplicitiesComputed) {
     computeSizeEstimateAndMultiplicities();

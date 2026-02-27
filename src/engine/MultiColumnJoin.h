@@ -72,6 +72,8 @@ class MultiColumnJoin : public Operation {
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
+  void invalidateCachedVariableColumns() override;
+
   Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;

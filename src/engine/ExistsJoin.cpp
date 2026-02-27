@@ -76,6 +76,12 @@ std::vector<ColumnIndex> ExistsJoin::resultSortedOn() const {
 }
 
 // ____________________________________________________________________________
+void ExistsJoin::invalidateCachedVariableColumns() {
+  Operation::invalidateCachedVariableColumns();
+  joinColumns_ = QueryExecutionTree::getJoinColumns(*left_, *right_);
+}
+
+// ____________________________________________________________________________
 float ExistsJoin::getMultiplicity(size_t col) {
   // The multiplicities of all columns except the last one are the same as in
   // `left_`.

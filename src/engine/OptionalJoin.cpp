@@ -36,15 +36,24 @@ OptionalJoin::OptionalJoin(QueryExecutionContext* qec,
       keepJoinColumns_{keepJoinColumns} {
   AD_CORRECTNESS_CHECK(!_joinColumns.empty());
 
+  recomputeJoinColumnsAndImplementation();
+
+  // The inputs must be sorted by the join columns.
+  std::tie(_left, _right) = QueryExecutionTree::createSortedTrees(
+      std::move(_left), std::move(_right), _joinColumns);
+}
+
+// _____________________________________________________________________________
+void OptionalJoin::recomputeJoinColumnsAndImplementation() {
   // If `_right` contains no UNDEF in the join columns and at most one column in
   // `_left` contains UNDEF values, and that column is the last join column,
   // then a cheaper implementation can be used. The following code determines
   // whether only one join column in `_left` can contain UNDEF values and makes
   // this join column the last one.
+  implementation_ = Implementation::GeneralCase;
   bool rightHasUndefColumn = false;
   size_t numUndefColumnsLeft = 0;
   ColumnIndex undefColumnLeftIndex = 0;
-  std::vector<bool> leftUndefJoinCols;
   for (size_t i = 0; i < _joinColumns.size(); ++i) {
     auto [leftCol, rightCol] = _joinColumns.at(i);
     auto leftIt = _left->getVariableAndInfoByColumnIndex(leftCol);
@@ -65,10 +74,16 @@ OptionalJoin::OptionalJoin(QueryExecutionContext* qec,
     std::swap(_joinColumns.at(undefColumnLeftIndex), _joinColumns.back());
     implementation_ = Implementation::OnlyUndefInLastJoinColumnOfLeft;
   }
+}
 
-  // The inputs must be sorted by the join columns.
-  std::tie(_left, _right) = QueryExecutionTree::createSortedTrees(
-      std::move(_left), std::move(_right), _joinColumns);
+// _____________________________________________________________________________
+void OptionalJoin::invalidateCachedVariableColumns() {
+  Operation::invalidateCachedVariableColumns();
+  _multiplicities.clear();
+  _multiplicitiesComputed = false;
+  _costEstimate.reset();
+  _joinColumns = QueryExecutionTree::getJoinColumns(*_left, *_right);
+  recomputeJoinColumnsAndImplementation();
 }
 
 // _____________________________________________________________________________

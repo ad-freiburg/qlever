@@ -118,6 +118,8 @@ class Join : public Operation {
  protected:
   virtual std::string getCacheKeyImpl() const override;
 
+  void invalidateCachedVariableColumns() override;
+
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
