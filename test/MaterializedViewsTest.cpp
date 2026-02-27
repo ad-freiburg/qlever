@@ -125,6 +125,34 @@ TEST_F(MaterializedViewsTest, Basic) {
     auto res = qet->getResult(false);
     EXPECT_EQ(res->idTable().numRows(), 1);
   }
+
+  // Graph column regression from #2708: Previously the graph column would
+  // overwrite an additional column if it was not selected.
+  {
+    qlv().writeMaterializedView("graphColRegression", R"(
+      SELECT ?a ?b ?c ?d ?e {
+        VALUES (?a ?b ?c ?d ?e) {
+          (1 2 3 4 5)
+          (11 12 13 14 15)
+        }
+      }
+    )");
+    auto res = getQueryResultAsIdTable(R"(
+    PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT ?e {
+        SERVICE view:graphColRegression {
+          [
+            view:column-a 1 ;
+            view:column-e ?e
+          ]
+        }
+      }
+    )");
+    // If we always select the graph column, but do not read it into a dummy
+    // variable, we would get `4` instead of `5` here.
+    auto expected = getQueryResultAsIdTable("SELECT (5 AS ?e) {}");
+    EXPECT_THAT(res, matchesIdTable(expected));
+  }
 }
 
 // _____________________________________________________________________________
@@ -432,6 +460,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
 
   const V placeholderP{"?_ql_materialized_view_p"};
   const V placeholderO{"?_ql_materialized_view_o"};
+  const V placeholderG{"?_ql_materialized_view_g"};
 
   // Request for reading an extra payload column.
   {
@@ -471,7 +500,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
         V{"?o"}}};
 
     auto t = view->makeScanConfig(query);
-    Triple expected{V{"?s"}, placeholderP, V{"?o"}};
+    Triple expected{V{"?s"}, placeholderP, V{"?o"}, {{3, placeholderG}}};
     EXPECT_EQ(t, expected);
     std::vector<Variable> expectedVars{V{"?s"}, V{"?o"}};
     EXPECT_THAT(query.getVarsToKeep(),
@@ -485,7 +514,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
         iri("<https://qlever.cs.uni-freiburg.de/materializedView/testView1-p>"),
         V{"?p"}}};
     auto t = view->makeScanConfig(query);
-    Triple expected{iri("<s1>"), V{"?p"}, placeholderO};
+    Triple expected{iri("<s1>"), V{"?p"}, placeholderO, {{3, placeholderG}}};
     EXPECT_EQ(t, expected);
     std::vector<Variable> expectedVars{V{"?p"}};
     EXPECT_THAT(query.getVarsToKeep(),
@@ -916,17 +945,19 @@ TEST_P(MaterializedViewsQueryRewriteTest, simpleChain) {
     auto [qet, qec, parsed] = qlv.parseAndPlanQuery(std::string{query});
     EXPECT_THAT(*qet, matcher);
   };
-  auto viewScan = [](std::string a, std::string b, std::string c) {
-    return h::IndexScanFromStrings(std::move(a), std::move(b), std::move(c),
-                                   {Permutation::Enum::SPO});
+  auto viewScan = [](std::string a, std::string b, std::string c,
+                     size_t numVars) {
+    return h::IndexScanFromStrings(
+        std::move(a), std::move(b), std::move(c), {Permutation::Enum::SPO},
+        std::monostate{}, {V{"?_ql_materialized_view_g"}}, {3}, numVars);
   };
 
-  qpExpect(qlv, simpleChain, viewScan("?s", "?m", "?o"));
-  qpExpect(qlv, simpleChainRenamed, viewScan("?a", "?b", "?c"));
+  qpExpect(qlv, simpleChain, viewScan("?s", "?m", "?o", 3));
+  qpExpect(qlv, simpleChainRenamed, viewScan("?a", "?b", "?c", 3));
   qpExpect(qlv, simpleChainFixed,
-           viewScan("<s2>", "?_QLever_internal_variable_qp_0", "?c"));
+           viewScan("<s2>", "?_QLever_internal_variable_qp_0", "?c", 2));
   qpExpect(qlv, simpleChainPlusJoin,
-           h::Join(viewScan("?s", "?_QLever_internal_variable_qp_0", "?o"),
+           h::Join(viewScan("?s", "?_QLever_internal_variable_qp_0", "?o", 3),
                    h::IndexScanFromStrings("?s", "<p3>", "?o2")));
 
   // TODO<ullingerc> Test overlapping view plans.
