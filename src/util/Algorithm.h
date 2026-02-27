@@ -6,6 +6,7 @@
 #ifndef QLEVER_ALGORITHM_H
 #define QLEVER_ALGORITHM_H
 
+#include <boost/optional.hpp>
 #include <numeric>
 #include <string>
 #include <string_view>
@@ -59,6 +60,29 @@ constexpr bool contains(Container&& container, const T& element) {
     return ql::ranges::find(std::begin(container), std::end(container),
                             element) != std::end(container);
   }
+}
+
+/**
+ * Looks up `key` in a map-like container and returns an optional reference to
+ * the mapped value if found, or `boost::none` otherwise.
+ *
+ * Uses `boost::optional` rather than `std::optional` because the latter does
+ * not support reference types.
+ *
+ * Parameters:
+ * map: The map-like container to search in (must have a `find` member that
+ * returns an iterator to a key-value pair)
+ * key: The key to look up
+ * return: boost::optional<const mapped_type&>
+ */
+template <typename Map, typename Key>
+auto findOptional(const Map& map, const Key& key)
+    -> boost::optional<const typename Map::mapped_type&> {
+  auto it = map.find(key);
+  if (it != map.end()) {
+    return it->second;
+  }
+  return {};
 }
 
 /**

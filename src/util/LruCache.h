@@ -31,6 +31,8 @@ class LRUCache {
     AD_CONTRACT_CHECK(capacity > 0, "Capacity must be greater than 0");
   }
 
+  size_t capacity() const { return capacity_; }
+
   // Check if `key` is in the cache and return a reference to the value if it is
   // found. Otherwise, compute the value using `computeFunction` and store it in
   // the cache. If the cache is already at maximum capacity, evict the least
