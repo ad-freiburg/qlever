@@ -49,6 +49,7 @@ auto D = ad_utility::testing::DoubleId;
 auto B = ad_utility::testing::BoolId;
 auto I = ad_utility::testing::IntId;
 auto Voc = ad_utility::testing::VocabId;
+auto Dat = ad_utility::testing::DateId;
 auto U = Id::makeUndefined();
 
 using Ids = std::vector<Id>;
@@ -396,12 +397,23 @@ TEST(SparqlExpression, arithmeticOperators) {
   // `DivideExpression`.
   //
   // TODO: Also test `UnaryMinusExpression`.
+  auto createDat = [](std::string timeString, bool fromDateTime = true) {
+    return Dat((fromDateTime ? DateYearOrDuration::parseXsdDatetime
+                             : DateYearOrDuration::parseXsdDayTimeDuration),
+               timeString);
+  };
+
   V<Id> b{{B(true), B(false), B(false), B(true)}, alloc};
   V<Id> bAsInt{{I(1), I(0), I(0), I(1)}, alloc};
 
   V<Id> d{{D(1.0), D(-2.0), D(naN), D(0.0)}, alloc};
 
   V<std::string> s{{"true", "", "false", ""}, alloc};
+
+  V<Id> dat{
+      {createDat("1909-10-10T10:11:23Z"), createDat("2009-09-23T01:01:59Z"),
+       createDat("1959-03-13T13:13:13Z"), createDat("1889-10-29T00:12:30Z")},
+      alloc};
 
   V<Id> allNan{{D(naN), D(naN), D(naN), D(naN)}, alloc};
 
@@ -411,6 +423,8 @@ TEST(SparqlExpression, arithmeticOperators) {
   V<Id> bPlusD{{D(2.0), D(-2.0), D(naN), D(1.0)}, alloc};
   V<Id> bMinusD{{D(0), D(2.0), D(naN), D(1)}, alloc};
   V<Id> dMinusB{{D(0), D(-2.0), D(naN), D(-1)}, alloc};
+  V<Id> dMinusDat{{U, U, U, U}, alloc};
+  V<Id> datMinusD{{U, U, U, U}, alloc};
   V<Id> bTimesD{{D(1.0), D(-0.0), D(naN), D(0.0)}, alloc};
   // Division by zero is `UNDEF`, to change this behavior a runtime parameter
   // can be set. This is tested explicitly below.
@@ -420,6 +434,8 @@ TEST(SparqlExpression, arithmeticOperators) {
   testPlus(bPlusD, b, d);
   testMinus(bMinusD, b, d);
   testMinus(dMinusB, d, b);
+  testMinus(dMinusDat, d, dat);
+  testMinus(datMinusD, dat, d);
   testMultiply(bTimesD, b, d);
   testDivide(bByD, b, d);
   testDivide(dByB, d, b);
@@ -448,6 +464,24 @@ TEST(SparqlExpression, arithmeticOperators) {
 
   testMultiply(times2, mixed, I(2));
   testMultiply(times13, mixed, D(1.3));
+
+#ifndef REDUCED_FEATURE_SET_FOR_CPP17
+  // Test for DateTime - DateTime
+  V<Id> minus2000{{createDat("-P32954DT13H48M37S", false),
+                   createDat("P3553DT1H1M59S", false),
+                   createDat("-P14903DT10H46M47S", false),
+                   createDat("-P40239DT23H47M30S", false)},
+                  alloc};
+  testMinus(minus2000, dat, createDat("2000-01-01T00:00:00Z"));
+#else
+  V<Id> undefined{{U, U, U, U}, alloc};
+  testMinus(undefined, dat, createDat("2000-01-01T00:00:00Z"));
+#endif
+
+  V<Id> mixed2{{B(true), I(250), D(-113.2), Voc(4)}, alloc};
+  V<Id> mixed2MinusDat{{U, U, U, U}, alloc};
+  testMinus(mixed2MinusDat, dat, mixed2);
+  testMinus(mixed2MinusDat, mixed2, dat);
 
   // For division, all results are doubles, so there is no difference between
   // int and double inputs.

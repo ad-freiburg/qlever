@@ -9,14 +9,17 @@
 
 #include <absl/strings/str_cat.h>
 
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <exception>
+#include <optional>
 #include <sstream>
 #include <variant>
 
 #include "backports/keywords.h"
 #include "backports/three_way_comparison.h"
+#include "util/Duration.h"
 
 // Exception that is thrown when a value for a component of the `Date`, `Time`
 // or `Datetime` classes below is out of range (e.g. the month 13, or the hour
@@ -175,6 +178,9 @@ class Date {
     QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(TimeZoneZ)
   };
   using TimeZone = std::variant<NoTimeZone, TimeZoneZ, int>;
+#ifndef REDUCED_FEATURE_SET_FOR_CPP17
+  using Nanoseconds = std::chrono::sys_time<std::chrono::nanoseconds>;
+#endif
   /// Construct a `Date` from values for the different components. If any of the
   /// components is out of range, a `DateOutOfRangeException` is thrown.
   constexpr Date(int year, int month, int day, int hour = -1, int minute = 0,
@@ -335,6 +341,16 @@ class Date {
   // Acquire the year, but padded up to 4 digits with a leading `-` if negative.
   // For example: 100 -> "0100" and -100 -> "-0100".
   std::string getFormattedYear() const;
+
+#ifndef REDUCED_FEATURE_SET_FOR_CPP17
+  // Calculates duration between the two Dates using Epoch time.
+  std::optional<DayTimeDuration> operator-(const Date& rhs) const;
+
+  // If date is valid, converting it to Unix Epoch timestamp. ToEpoch always
+  // returns a UTC timestamp.
+  std::optional<Nanoseconds> toEpoch() const;
+#endif
+  int8_t getTimeZoneOffsetToUTCInHours() const;
 };
 #ifdef QLEVER_CPP_17
 static_assert(std::is_default_constructible_v<Date>);

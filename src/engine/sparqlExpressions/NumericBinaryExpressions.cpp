@@ -40,8 +40,45 @@ NARY_EXPRESSION(DivideExpressionByZeroIsNan, 2,
 using Add = MakeNumericExpression<std::plus<>>;
 NARY_EXPRESSION(AddExpression, 2, FV<Add, NumericValueGetter>);
 
-using Subtract = MakeNumericExpression<std::minus<>>;
-NARY_EXPRESSION(SubtractExpression, 2, FV<Subtract, NumericValueGetter>);
+// _____________________________________________________________________________
+// Subtract.
+struct SubtractImpl {
+  ValueId operator()(NumericOrDateValue lhs, NumericOrDateValue rhs) const {
+    return std::visit(SubtractImpl{}, lhs, rhs);
+  }
+
+  ValueId operator()(int64_t lhs, int64_t rhs) const {
+    return Id::makeFromInt(lhs - rhs);
+  }
+  ValueId operator()(int64_t lhs, double rhs) const {
+    return Id::makeFromDouble(static_cast<double>(lhs) - rhs);
+  }
+  ValueId operator()(double lhs, double rhs) const {
+    return Id::makeFromDouble(lhs - rhs);
+  }
+  ValueId operator()(double lhs, int64_t rhs) const {
+    return Id::makeFromDouble(lhs - static_cast<double>(rhs));
+  }
+#ifndef REDUCED_FEATURE_SET_FOR_CPP17
+  ValueId operator()(DateYearOrDuration lhs, DateYearOrDuration rhs) const {
+    // Using - operator implementation in DateYearOrDuration.
+    auto difference = lhs - rhs;
+    if (difference.has_value()) {
+      return Id::makeFromDate(difference.value());
+    } else {
+      return Id::makeUndefined();
+    }
+  }
+#endif
+  template <typename L, typename R>
+  ValueId operator()(L, R) const {
+    // For all other operations returning Undefined
+    // It is not allowed to use subtractionn between Date and NumericValue
+    return Id::makeUndefined();
+  }
+};
+NARY_EXPRESSION(SubtractExpression, 2,
+                FV<SubtractImpl, NumericOrDateValueGetter>);
 
 // _____________________________________________________________________________
 // Power.

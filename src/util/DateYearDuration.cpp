@@ -341,3 +341,34 @@ std::optional<DateYearOrDuration> DateYearOrDuration::convertToXsdDate(
   return DateYearOrDuration(
       Date(date.getYear(), date.getMonth(), date.getDay()));
 }
+
+// _____________________________________________________________________________
+#ifndef REDUCED_FEATURE_SET_FOR_CPP17
+std::optional<DateYearOrDuration> DateYearOrDuration::operator-(
+    const DateYearOrDuration& rhs) const {
+  if (isDate() && rhs.isDate()) {
+    // Date - Date => Duration | getting time between the two Dates
+    const Date& ownDate = getDateUnchecked();
+    const Date& otherDate = rhs.getDateUnchecked();
+
+    std::optional<DayTimeDuration> difference = ownDate - otherDate;
+    if (!difference.has_value()) {
+      return std::nullopt;
+    } else {
+      return DateYearOrDuration(difference.value());
+    }
+  }
+
+  // TODO: The following subtractions should be implemented next:
+  //  DayTimeDuration - DayTimeDuration
+  //  Date - DayTimeDuration
+  //  LargeYear - LargeYear
+
+  // The following will not be implemented (not viable):
+  //  DayTimeDuration - Date
+  //  DayTimeDuration - LargeYear
+
+  // no viable subtraction
+  return std::nullopt;
+}
+#endif
