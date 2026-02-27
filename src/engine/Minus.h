@@ -101,6 +101,11 @@ class Minus : public Operation {
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
+  // Only the left child's columns appear in the result, so we need special
+  // treatment of the `MINUS` operation for `BIND` push down.
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
+      const parsedQuery::Bind& bind) const override;
+
   std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithStrippedColumns(
       const std::set<Variable>& variables) const override;

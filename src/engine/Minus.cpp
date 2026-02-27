@@ -9,6 +9,7 @@
 #include "engine/MinusRowHandler.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
+#include "parser/GraphPatternOperation.h"
 #include "util/Algorithm.h"
 #include "util/Exception.h"
 #include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
@@ -96,6 +97,22 @@ std::vector<ColumnIndex> Minus::resultSortedOn() const {
 void Minus::invalidateCachedVariableColumns() {
   Operation::invalidateCachedVariableColumns();
   _matchedColumns = QueryExecutionTree::getJoinColumns(*_left, *_right);
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Minus::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+  // The BIND can only be pushed into the left child.
+  auto result = _left->getRootOperation()->makeTreeWithBindColumn(bind);
+  if (!result.has_value()) {
+    return std::nullopt;
+  }
+  auto cloned = cloneImpl();
+  auto children = cloned->getChildren();
+  *children[0] = std::move(*(result.value()));
+  cloned->invalidateCachedVariableColumns();
+  return std::make_shared<QueryExecutionTree>(getExecutionContext(),
+                                              std::move(cloned));
 }
 
 // _____________________________________________________________________________

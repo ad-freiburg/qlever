@@ -786,6 +786,14 @@ Operation::makeTreeWithStrippedColumns(
 }
 
 // _____________________________________________________________________________
+bool Operation::coversVariables(
+    const std::vector<const Variable*>& variables) const {
+  const auto& varToCol = getExternallyVisibleVariableColumns();
+  return ql::ranges::all_of(
+      variables, [&varToCol](const auto v) { return varToCol.contains(*v); });
+}
+
+// _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 Operation::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   const auto& children = getChildren();
@@ -795,14 +803,6 @@ Operation::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
 
   // Get the variables used in the bind expression (not the target).
   const auto& bindExpressionVars = bind._expression.containedVariables();
-
-  // Check if a given child covers all expression variables.
-  auto childCoversAllVars = [&bindExpressionVars](const auto& child) {
-    const auto& childVars = child->getVariableColumns();
-    return ql::ranges::all_of(bindExpressionVars, [&childVars](const auto v) {
-      return childVars.contains(*v);
-    });
-  };
 
   // Try pushing the bind down to a specific child. If successful, clone this
   // operation and replace the modified child in the clone.
@@ -833,7 +833,7 @@ Operation::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   // For each child that covers all expression variables, check whether the bind
   // can be pushed down into the child.
   for (const auto& [idx, child] : ::ranges::views::enumerate(children)) {
-    if (!childCoversAllVars(child)) {
+    if (!child->getRootOperation()->coversVariables(bindExpressionVars)) {
       continue;
     }
     auto result = tryPushDown(idx, child);

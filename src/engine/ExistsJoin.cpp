@@ -12,6 +12,7 @@
 #include "engine/Sort.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "parser/GraphPatternOperation.h"
 #include "util/ChunkedForLoop.h"
 #include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
@@ -79,6 +80,22 @@ std::vector<ColumnIndex> ExistsJoin::resultSortedOn() const {
 void ExistsJoin::invalidateCachedVariableColumns() {
   Operation::invalidateCachedVariableColumns();
   joinColumns_ = QueryExecutionTree::getJoinColumns(*left_, *right_);
+}
+
+// ____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+ExistsJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+  // The BIND can only be pushed into the left child.
+  auto result = left_->getRootOperation()->makeTreeWithBindColumn(bind);
+  if (!result.has_value()) {
+    return std::nullopt;
+  }
+  auto cloned = cloneImpl();
+  auto children = cloned->getChildren();
+  *children[0] = std::move(*(result.value()));
+  cloned->invalidateCachedVariableColumns();
+  return std::make_shared<QueryExecutionTree>(getExecutionContext(),
+                                              std::move(cloned));
 }
 
 // ____________________________________________________________________________

@@ -10,6 +10,7 @@
 #include "backports/span.h"
 #include "engine/CallFixedSize.h"
 #include "engine/SortedUnionImpl.h"
+#include "parser/GraphPatternOperation.h"
 #include "util/ChunkedForLoop.h"
 
 const size_t Union::NO_COLUMN = std::numeric_limits<size_t>::max();
@@ -407,6 +408,49 @@ void Union::invalidateCachedVariableColumns() {
       _columnOrigins[colInfo.columnIndex_][1] = it2->second.columnIndex_;
     }
   }
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Union::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+  // For a `UNION`, the `BIND` must be pushed into all children that cover the
+  // expression variables. Otherwise rows from children without the `BIND` would
+  // have `UNDEF`s for the target variable.
+  const auto& bindExpressionVars = bind._expression.containedVariables();
+
+  // Try to push the `BIND` into each child that covers all expression
+  // variables.
+  std::array<std::optional<std::shared_ptr<QueryExecutionTree>>, 2> results;
+  bool anyChildCoversVars = false;
+  for (size_t i = 0; i < _subtrees.size(); ++i) {
+    if (!_subtrees[i]->getRootOperation()->coversVariables(
+            bindExpressionVars)) {
+      continue;
+    }
+    anyChildCoversVars = true;
+    auto result =
+        _subtrees[i]->getRootOperation()->makeTreeWithBindColumn(bind);
+    if (!result.has_value()) {
+      return std::nullopt;
+    }
+    results[i] = std::move(result);
+  }
+  if (!anyChildCoversVars) {
+    return std::nullopt;
+  }
+
+  // All relevant children have the `BIND` target column added. Make a
+  // `UNION` with the new children.
+  auto cloned = cloneImpl();
+  auto children = cloned->getChildren();
+  for (size_t i = 0; i < results.size(); ++i) {
+    if (results[i].has_value()) {
+      *children[i] = std::move(*(results[i].value()));
+    }
+  }
+  cloned->invalidateCachedVariableColumns();
+  return std::make_shared<QueryExecutionTree>(getExecutionContext(),
+                                              std::move(cloned));
 }
 
 // _____________________________________________________________________________
