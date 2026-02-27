@@ -383,12 +383,19 @@ std::shared_ptr<const Permutation> MaterializedView::permutation() const {
 }
 
 // _____________________________________________________________________________
+void MaterializedView::connectPermutationBackReference() {
+  AD_CORRECTNESS_CHECK(permutation_ != nullptr);
+  permutation_->setMaterializedView(shared_from_this());
+}
+
+// _____________________________________________________________________________
 void MaterializedViewsManager::loadView(const std::string& name) const {
   auto lock = loadedViews_.wlock();
   if (lock->views_.contains(name)) {
     return;
   }
   auto view = std::make_shared<MaterializedView>(onDiskBase_, name);
+  view->connectPermutationBackReference();
   lock->views_.insert({name, view});
   // If we would analyze the view at the time of writing and (de)serialize an
   // analysis result here, we could not extend query analysis without rewriting

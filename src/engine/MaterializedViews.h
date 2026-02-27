@@ -142,7 +142,8 @@ class MaterializedViewWriter {
 
 // This class represents a single loaded `MaterializedView`. It can be used for
 // `IndexScan`s.
-class MaterializedView {
+class MaterializedView
+    : public std::enable_shared_from_this<MaterializedView> {
  private:
   std::string onDiskBase_;
   std::string name_;
@@ -163,6 +164,10 @@ class MaterializedView {
   // constructor will throw an exception if the name is invalid or the view does
   // not exist.
   MaterializedView(std::string onDiskBase, std::string name);
+
+  // Connect the permutation's back-reference to this view. Must be called
+  // after the `MaterializedView` is managed by a `shared_ptr`.
+  void connectPermutationBackReference();
 
   // Get the name of the view.
   const std::string& name() const { return name_; }

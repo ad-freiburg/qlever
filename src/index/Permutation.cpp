@@ -30,9 +30,11 @@ CompressedRelationReader::ScanSpecAndBlocks Permutation::getScanSpecAndBlocks(
 }
 
 // _____________________________________________________________________
-void Permutation::loadFromDisk(const std::string& onDiskBase,
-                               bool loadInternalPermutation,
-                               bool useGraphPostProcessing) {
+void Permutation::loadFromDisk(
+    const std::string& onDiskBase, bool loadInternalPermutation,
+    bool useGraphPostProcessing,
+    std::weak_ptr<const MaterializedView> materializedView) {
+  materializedView_ = std::move(materializedView);
   onDiskBase_ = onDiskBase;
   if (loadInternalPermutation) {
     internalPermutation_ =
@@ -235,4 +237,15 @@ BlockMetadataRanges Permutation::getAugmentedMetadataForPermutation(
 const Permutation& Permutation::internalPermutation() const {
   AD_CONTRACT_CHECK(internalPermutation_ != nullptr);
   return *internalPermutation_;
+}
+
+// ______________________________________________________________________
+void Permutation::setMaterializedView(
+    std::weak_ptr<const MaterializedView> view) {
+  materializedView_ = std::move(view);
+}
+
+// ______________________________________________________________________
+std::shared_ptr<const MaterializedView> Permutation::materializedView() const {
+  return materializedView_.lock();
 }
