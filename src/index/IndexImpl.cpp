@@ -1306,7 +1306,8 @@ void IndexImpl::readConfiguration() {
 
   loadDataMember("encoded-iri-prefixes", encodedIriManager_,
                  EncodedIriManager{});
-  // TODO: as is we don't need it to be an optional. but we can have it as nullopt and then backfill from Server::initialize once
+  // TODO: as is we don't need it to be an optional. but we can have it as
+  // nullopt and then backfill from Server::initialize once
   loadDataMember("existing-graphs", graphManager_);
 
   // Compute unique ID for this index.
@@ -1808,13 +1809,12 @@ CPP_template_def(typename... NextSorter)(
   createPSOAndPOSImpl(numColumns, std::move(sortedTriples), true,
                       AD_FWD(nextSorter)...);
 
-  AD_CORRECTNESS_CHECK(graphManager_.has_value());
   vocab_.readFromFile(onDiskBase_ + std::string(VOCAB_SUFFIX));
-  graphManager_.value().initializeNamespaceManager(
-      std::string(QLEVER_NEW_GRAPH_PREFIX), graphManager_.value(), vocab_);
+  graphManager_.initializeNamespaceManager(std::string(QLEVER_NEW_GRAPH_PREFIX),
+                                           graphManager_, vocab_);
   // Unload the vocabulary again.
   vocab_.resetToType(vocabularyTypeForIndexBuilding_);
-  configurationJson_["existing-graphs"] = graphManager_.value();
+  configurationJson_["existing-graphs"] = graphManager_;
   writeConfiguration();
 }
 

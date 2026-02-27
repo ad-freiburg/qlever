@@ -122,8 +122,6 @@ class Index {
   // Get a reference to the GraphManager of this Index.
   GraphManager& graphManager();
   const GraphManager& graphManager() const;
-  bool graphManagerNotInitialized() const;
-  void initializeGraphManager(GraphManager&& manager);
 
 
   // --------------------------------------------------------------------------
