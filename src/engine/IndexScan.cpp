@@ -950,17 +950,24 @@ IndexScan::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   auto newAdditionalVariables = additionalVariables_;
   AD_CORRECTNESS_CHECK(additionalColumns_.size() ==
                        additionalVariables_.size());
-  auto it = std::lower_bound(newAdditionalColumns.begin(),
-                             newAdditionalColumns.end(), targetCol.value());
-  std::size_t index = std::distance(newAdditionalColumns.begin(), it);
-  bool exists = (it != newAdditionalColumns.end() && *it == targetCol.value());
-  if (exists) {
-    // We cannot bind the same column to two different variables.
+  auto insertNewCol = [&](size_t colIdx, Variable v) -> bool {
+    auto it = std::lower_bound(newAdditionalColumns.begin(),
+                               newAdditionalColumns.end(), colIdx);
+    std::size_t index = std::distance(newAdditionalColumns.begin(), it);
+    bool exists = (it != newAdditionalColumns.end() && *it == colIdx);
+    if (exists) {
+      // We cannot bind the same column to two different variables.
+      return false;
+    }
+    newAdditionalColumns.insert(it, colIdx);
+    newAdditionalVariables.insert(newAdditionalVariables.begin() + index, v);
+    return true;
+  };
+  if (!insertNewCol(targetCol.value(), bind._target)) {
     return std::nullopt;
   }
-  newAdditionalColumns.insert(it, targetCol.value());
-  newAdditionalVariables.insert(newAdditionalVariables.begin() + index,
-                                bind._target);
+  // Add graph column placeholder if now required.
+  insertNewCol(3, Variable{"?_ql_materialized_view_g"});
 
   // Add the `BIND` target to the variables to keep during column stripping.
   auto newVariables = varsToKeep_;
