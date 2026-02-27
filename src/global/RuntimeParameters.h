@@ -137,6 +137,11 @@ struct RuntimeParameters {
 
   Bool prefilteredOptionalJoin_{true, "prefiltered-optional-join"};
 
+  // If set, the query planner checks if suitable materialized views are loaded
+  // to substitute more expensive query plans.
+  Bool enableMaterializedViewQueryRewrite_{
+    true, "enable-materialized-view-query-rewrite"};
+
   // Only blocks of this size or larger will be considered for vacuuming.
   SizeT vacuumMinimumBlockSize_{10'000, "vacuum-minimum-block-size"};
 

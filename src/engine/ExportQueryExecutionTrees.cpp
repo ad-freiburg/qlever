@@ -4,6 +4,8 @@
 //          Robin Textor-Falconi <textorr@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "engine/ExportQueryExecutionTrees.h"
 
@@ -31,8 +33,8 @@
 using ad_utility::InputRangeTypeErased;
 
 namespace {
+
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
-using Literal = ad_utility::triple_component::Literal;
 
 // _____________________________________________________________________________
 // Return true iff the `result` is nonempty.
@@ -265,9 +267,10 @@ auto ExportQueryExecutionTrees::constructQueryResultToTriples(
     const ad_utility::sparql_types::Triples& constructTriples,
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
     uint64_t& resultSize, CancellationHandle cancellationHandle) {
-  return ConstructTripleGenerator::generateStringTriples(
-      qet, constructTriples, limitAndOffset, std::move(result), resultSize,
-      std::move(cancellationHandle));
+  return qlever::constructExport::ConstructTripleGenerator::
+      generateStringTriples(qet, constructTriples, limitAndOffset,
+                            std::move(result), resultSize,
+                            std::move(cancellationHandle));
 }
 
 // _____________________________________________________________________________
@@ -667,8 +670,7 @@ ExportQueryExecutionTrees::idToLiteralOrIriForEncodedValue(Id id) {
 }
 
 // _____________________________________________________________________________
-std::optional<LiteralOrIri>
-ExportQueryExecutionTrees::getLiteralOrIriFromWordVocabIndex(
+LiteralOrIri ExportQueryExecutionTrees::getLiteralOrIriFromWordVocabIndex(
     const IndexImpl& index, Id id) {
   return LiteralOrIri{
       ad_utility::triple_component::Literal::literalWithoutQuotes(

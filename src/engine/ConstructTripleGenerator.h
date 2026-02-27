@@ -1,8 +1,9 @@
-// Copyright 2025 The QLever Authors, in particular:
-//
-// 2025 Marvin Stoetzel <marvin.stoetzel@email.uni-freiburg.de>, UFR
-//
+// Copyright 2026 The QLever Authors, in particular:
+// 2026 Marvin Stoetzel <marvin.stoetzel@email.uni-freiburg.de>, UFR
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_ENGINE_CONSTRUCTTRIPLEGENERATOR_H
 #define QLEVER_SRC_ENGINE_CONSTRUCTTRIPLEGENERATOR_H
@@ -10,11 +11,14 @@
 #include <functional>
 
 #include "engine/ConstructQueryEvaluator.h"
+#include "engine/ConstructTypes.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryExportTypes.h"
 #include "global/Constants.h"
 #include "parser/data/ConstructQueryExportContext.h"
 #include "util/CancellationHandle.h"
+
+namespace qlever::constructExport {
 
 // ConstructTripleGenerator: generates StringTriples from
 // query results. It manages the global row offset and transforms result tables
@@ -23,15 +27,18 @@ class ConstructTripleGenerator {
  public:
   using CancellationHandle = ad_utility::SharedCancellationHandle;
   using StringTriple = QueryExecutionTree::StringTriple;
-  using Triples = ad_utility::sparql_types::Triples;
+  using PreprocessedConstructTemplate =
+      qlever::constructExport::PreprocessedConstructTemplate;
+  using PreprocessedTriple = qlever::constructExport::PreprocessedTriple;
 
   // _____________________________________________________________________________
-  ConstructTripleGenerator(Triples constructTriples,
-                           std::shared_ptr<const Result> result,
-                           const VariableToColumnMap& variableColumns,
-                           const Index& index,
-                           CancellationHandle cancellationHandle)
-      : templateTriples_(std::move(constructTriples)),
+  ConstructTripleGenerator(
+      PreprocessedConstructTemplate preprocessedTemplateTriples,
+      std::shared_ptr<const Result> result,
+      const VariableToColumnMap& variableColumns, const Index& index,
+      CancellationHandle cancellationHandle)
+      : preprocessedTemplateTriples_(
+            std::move(preprocessedTemplateTriples.preprocessedTriples_)),
         result_(std::move(result)),
         variableColumns_(variableColumns),
         index_(index),
@@ -61,18 +68,19 @@ class ConstructTripleGenerator {
       CancellationHandle cancellationHandle);
 
  private:
-  // triple templates contained in the graph template
-  // (the CONSTRUCT-clause of the CONSTRUCt-query) of the CONSTRUCT-query.
-  Triples templateTriples_;
+  // triple templates contained in the graph template of the CONSTRUCT-query.
+  std::vector<PreprocessedTriple> preprocessedTemplateTriples_;
   // wrapper around the result-table obtained from processing the
   // WHERE-clause of the CONSTRUCT-query.
   std::shared_ptr<const Result> result_;
   // map from Variables to the column idx of the `IdTable` (needed for fetching
-  // the value of a Variable for a specific row of the `IdTable`).
+  // the value of a `Variable` for a specific row of the `IdTable`).
   std::reference_wrapper<const VariableToColumnMap> variableColumns_;
   std::reference_wrapper<const Index> index_;
   CancellationHandle cancellationHandle_;
   size_t rowOffset_ = 0;
 };
+
+}  // namespace qlever::constructExport
 
 #endif  // QLEVER_SRC_ENGINE_CONSTRUCTTRIPLEGENERATOR_H
