@@ -102,8 +102,9 @@ nlohmann::json DeltaTriples::vacuum(
     ad_utility::SharedCancellationHandle cancellationHandle) {
   // When the cancellation handle stops the execution this results in the state
   // that only a part of the triples have been vacuumed, which is valid.
-  auto identifyTriplesToVacuum =
-      CPP_template_lambda(this, &cancellationHandle)(bool isInternal)()() {
+  using namespace ad_utility::use_value_identity;
+  auto identifyTriplesToVacuum = CPP_template_lambda(this, &cancellationHandle)(
+      bool isInternal)(VI<isInternal>)(requires true) {
     auto& basePerm = index_.getPermutation(Permutation::PSO);
     const auto& perm = isInternal ? basePerm.internalPermutation() : basePerm;
     const auto& ltpb =
@@ -111,9 +112,10 @@ nlohmann::json DeltaTriples::vacuum(
             Permutation::PSO);
     return ltpb.identifyTriplesToVacuum(perm, cancellationHandle);
   };
-  auto removeIdentifiedTriples = CPP_template_lambda(this, &cancellationHandle)(
-      bool isInternal)(const std::vector<IdTriple<0>>& deletionsToRemove,
-                       const std::vector<IdTriple<0>>& insertionsToRemove)() {
+  auto removeIdentifiedTriples =
+      CPP_template_lambda(this, &cancellationHandle)(bool isInternal)(
+          VI<isInternal>, const std::vector<IdTriple<0>>& deletionsToRemove,
+          const std::vector<IdTriple<0>>& insertionsToRemove)(requires true) {
     auto& state = getState<isInternal>();
     auto removeTriples = [this, &cancellationHandle](
                              const std::vector<IdTriple<0>>& triples,
@@ -134,16 +136,14 @@ nlohmann::json DeltaTriples::vacuum(
   };
 
   nlohmann::json result = nlohmann::json::object();
-  auto toRemoveInExternal = identifyTriplesToVacuum.operator()<false>();
-  removeIdentifiedTriples.operator()<false>(
-      toRemoveInExternal.deletionsToRemove,
-      toRemoveInExternal.insertionsToRemove);
+  auto toRemoveInExternal = identifyTriplesToVacuum(vi<false>);
+  removeIdentifiedTriples(vi<false>, toRemoveInExternal.deletionsToRemove,
+                          toRemoveInExternal.insertionsToRemove);
   result["external"] = toRemoveInExternal.stats;
 
-  auto toRemoveInInternal = identifyTriplesToVacuum.operator()<true>();
-  removeIdentifiedTriples.operator()<true>(
-      toRemoveInInternal.deletionsToRemove,
-      toRemoveInInternal.insertionsToRemove);
+  auto toRemoveInInternal = identifyTriplesToVacuum(vi<true>);
+  removeIdentifiedTriples(vi<true>, toRemoveInInternal.deletionsToRemove,
+                          toRemoveInInternal.insertionsToRemove);
   result["internal"] = toRemoveInInternal.stats;
 
   return result;
