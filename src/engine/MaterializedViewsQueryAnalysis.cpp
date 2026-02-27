@@ -286,6 +286,9 @@ BindExpressionAndTargetCol extractBindExpressions(
            parsed._rootGraphPattern._graphPatterns)) {
     // Check that the `VariableToColumnMap` covers both all variables from the
     // `BIND` expression as well as the target variable.
+    // IMPORTANT: This is not the `VariableToColumnMap` that we would get from
+    // the parsed query, but the one which represents the final permuted column
+    // ordering in the view.
     bool exprVarsCovered = ql::ranges::all_of(
         bind._expression.containedVariables(),
         [&varToColMap](const auto* v) { return varToColMap.contains(*v); });
