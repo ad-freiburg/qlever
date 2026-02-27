@@ -552,7 +552,7 @@ SparqlTripleSimple MaterializedView::makeScanConfig(
 
   // Because we disable the graph processing for materialized views, we must
   // select a dummy variable for the graph column.
-  if (!graphColumnSelected) {
+  if (!graphColumnSelected && !additionalCols.empty()) {
     additionalCols.emplace_back(3, Variable{"?_ql_materialized_view_g"});
   }
 
