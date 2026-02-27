@@ -18,6 +18,7 @@
 #include "parser/GraphPatternOperation.h"
 #include "parser/PropertyPath.h"
 #include "parser/SparqlParser.h"
+#include "util/VariantRangeFilter.h"
 
 namespace materializedViewsQueryAnalysis {
 
@@ -180,11 +181,6 @@ bool QueryPatternCache::analyzeSimpleChain(ViewPtr view, const SparqlTriple& a,
 
 // _____________________________________________________________________________
 bool QueryPatternCache::analyzeView(ViewPtr view) {
-  const auto& query = view->originalQuery();
-  if (!query.has_value()) {
-    return false;
-  }
-
   auto explainIgnore = [&](const std::string& reason) {
     AD_LOG_INFO << "Materialized view '" << view->name()
                 << "' will not be added to the query pattern cache for query "
@@ -192,13 +188,14 @@ bool QueryPatternCache::analyzeView(ViewPtr view) {
                 << reason << "." << std::endl;
   };
 
-  // We do not need the `EncodedIriManager` because we are only interested in
-  // analyzing the query structure, not in converting its components to
-  // `ValueId`s.
-  EncodedIriManager e;
-  auto parsed = SparqlParser::parseQuery(&e, query.value(), {});
+  const auto& parsed = view->parsedQuery();
+  if (!parsed.has_value()) {
+    explainIgnore(
+        "The view was built without remembering the original query string.");
+    return false;
+  }
 
-  auto graphPatternsFiltered = graphPatternInvariantFilter(parsed);
+  auto graphPatternsFiltered = graphPatternInvariantFilter(parsed.value());
   if (graphPatternsFiltered.size() != 1) {
     explainIgnore(
         "The view has more than one graph pattern (even after skipping ignored "
@@ -278,6 +275,29 @@ void QueryPatternCache::removeView(ViewPtr view) {
   for (auto& [pred, views] : predicateInView_) {
     ql::erase_if(views, [&view](ViewPtr pView) { return pView == view; });
   }
+}
+
+// _____________________________________________________________________________
+BindExpressionAndTargetCol extractBindExpressions(
+    const ParsedQuery& parsed, const VariableToColumnMap& varToColMap) {
+  BindExpressionAndTargetCol map;
+  for (const auto& bind :
+       ad_utility::filterRangeOfVariantsByType<parsedQuery::Bind>(
+           parsed._rootGraphPattern._graphPatterns)) {
+    // Check that the `VariableToColumnMap` covers both all variables from the
+    // `BIND` expression as well as the target variable.
+    bool exprVarsCovered = ql::ranges::all_of(
+        bind._expression.containedVariables(),
+        [&varToColMap](const auto* v) { return varToColMap.contains(*v); });
+    if (!exprVarsCovered || !varToColMap.contains(bind._target)) {
+      continue;
+    }
+
+    // Store the target variable column index.
+    map.insert({bind._expression.getCacheKey(varToColMap),
+                varToColMap.at(bind._target).columnIndex_});
+  }
+  return map;
 }
 
 }  // namespace materializedViewsQueryAnalysis
