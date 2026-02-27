@@ -202,9 +202,9 @@ TEST(GraphSearchTestExtraTests, wronglyCalledDFSWithNoTarget) {
   qlever::graphSearch::GraphSearchExecutionParams ep(
       std::make_shared<ad_utility::CancellationHandle<>>(), allocator);
 
-  auto graph = HashMapWrapper{HashMapWrapper::Map(allocator), allocator};
-  qlever::graphSearch::GraphSearchProblem gsp(graph, Id::makeFromInt(0),
-                                              std::optional<Id>(), 0, 100);
+  HashMapWrapper graph{HashMapWrapper::Map(allocator), allocator};
+  GraphSearchProblem<HashMapWrapper> gsp(graph, Id::makeFromInt(0),
+                                         std::optional<Id>(), 0, 100);
 
   {  // Unlimited DFS.
     Set actual = qlever::graphSearch::depthFirstSearch(gsp, ep);
