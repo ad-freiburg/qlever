@@ -905,15 +905,10 @@ IndexScan::makeTreeWithStrippedColumns(
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 IndexScan::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
-  // TODO Actual logic here
-  // TODO Add `bind._target` to `varsToKeep_` of new scan tree.
-  AD_LOG_INFO << "IndexScan::makeTreeWithBindColumn called with bind: "
-              << bind.getDescriptor() << std::endl;
-  //         return ad_utility::makeExecutionTree<IndexScan>(
-  // _executionContext, permutation_, locatedTriplesSharedState_, subject_,
-  // predicate_, object_, additionalColumns_, additionalVariables_,
-  // graphsToFilter_, scanSpecAndBlocks_, scanSpecAndBlocksIsPrefiltered_,
-  // VarsToKeep{std::move(newVariables)}, sizeEstimateIsExact_, sizeEstimate_);
+  // Dummy implementation (always returns that the BIND cannot be rewritten).
+  // To be implemented in a later PR.
+  AD_LOG_DEBUG << "IndexScan::makeTreeWithBindColumn called with bind: "
+               << bind.getDescriptor() << std::endl;
   return std::nullopt;
 }
 
