@@ -622,9 +622,15 @@ DeltaTriples::UniqueGraphs DeltaTriples::readFromDisk() {
   UniqueGraphs graphs;
   auto collectGraphs = [&graphs](const std::vector<IdTriple<>>& triples) {
     for (const auto& triple : triples) {
-      graphs.graphs.insert(Id::makeFromLocalVocabIndex(
-          graphs.localVocab.getIndexAndAddIfNotContained(
-              *triple.ids()[3].getLocalVocabIndex())));
+      auto graph = triple.ids()[3];
+      AD_CORRECTNESS_CHECK(graph.getDatatype() == Datatype::LocalVocabIndex ||
+                           graph.getDatatype() == Datatype::VocabIndex);
+      if (graph.getDatatype() == Datatype::LocalVocabIndex) {
+        graph = Id::makeFromLocalVocabIndex(
+            graphs.localVocab.getIndexAndAddIfNotContained(
+                *triple.ids()[3].getLocalVocabIndex()));
+      }
+      graphs.graphs.insert(graph);
     }
   };
 

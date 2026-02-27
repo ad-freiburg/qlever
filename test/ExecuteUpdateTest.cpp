@@ -62,7 +62,7 @@ TEST(ExecuteUpdate, executeUpdate) {
                 deltaTriples.updateAugmentedMetadata();
                 QueryPlanner qp{&qec, sharedHandle};
                 const auto qet = qp.createExecutionTree(pq);
-                ExecuteUpdate::executeUpdate(index, pq, qet, deltaTriples,
+                ExecuteUpdate::executeUpdate(index, pq, qet, deltaTriples, index.graphManager(),
                                              sharedHandle);
               }
             });
@@ -233,12 +233,13 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
     const auto sharedHandle =
         std::make_shared<ad_utility::CancellationHandle<>>();
     const std::vector<DatasetClause> datasets = {};
-    auto& index = qec->getIndex();
+    auto& index = const_cast<Index&>(qec->getIndex());
     DeltaTriples deltaTriples{index};
     ad_utility::BlankNodeManager bnm;
     auto pqs = SparqlParser::parseUpdate(&bnm, encodedIriManager(), update);
-    std::vector<std::pair<ExecuteUpdate::IdTriplesAndLocalVocab,
-                          ExecuteUpdate::IdTriplesAndLocalVocab>>
+    std::vector<std::tuple<ExecuteUpdate::IdTriplesAndLocalVocab,
+                           ExecuteUpdate::IdTriplesAndLocalVocab,
+                           ad_utility::HashSet<Id>>>
         results;
     for (auto& pq : pqs) {
       QueryPlanner qp{qec, sharedHandle};
@@ -248,7 +249,8 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
       results.push_back(ExecuteUpdate::computeGraphUpdateQuads(
           index, pq, *result, qet.getVariableColumns(), sharedHandle,
           metadata));
-      ExecuteUpdate::executeUpdate(index, pq, qet, deltaTriples, sharedHandle);
+      ExecuteUpdate::executeUpdate(index, pq, qet, deltaTriples,
+                                   index.graphManager(), sharedHandle);
     }
     return results;
   };
@@ -265,18 +267,20 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
         ASSERT_THAT(toInsertMatchers, testing::SizeIs(toDeleteMatchers.size()));
         auto graphUpdateQuads = executeComputeGraphUpdateQuads(update);
         ASSERT_THAT(graphUpdateQuads, testing::SizeIs(toInsertMatchers.size()));
-        std::vector<Matcher<std::pair<ExecuteUpdate::IdTriplesAndLocalVocab,
-                                      ExecuteUpdate::IdTriplesAndLocalVocab>>>
+        std::vector<Matcher<std::tuple<ExecuteUpdate::IdTriplesAndLocalVocab,
+                                       ExecuteUpdate::IdTriplesAndLocalVocab,
+                                       ad_utility::HashSet<Id>>>>
             transformedMatchers;
         ql::ranges::transform(
             toInsertMatchers, toDeleteMatchers,
             std::back_inserter(transformedMatchers),
             [](auto insertMatcher, auto deleteMatcher) {
-              return testing::Pair(
+              return testing::FieldsAre(
                   AD_FIELD(ExecuteUpdate::IdTriplesAndLocalVocab, idTriples_,
                            insertMatcher),
                   AD_FIELD(ExecuteUpdate::IdTriplesAndLocalVocab, idTriples_,
-                           deleteMatcher));
+                           deleteMatcher),
+                  testing::_);
             });
         EXPECT_THAT(graphUpdateQuads,
                     testing::ElementsAreArray(transformedMatchers));

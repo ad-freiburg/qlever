@@ -7,40 +7,13 @@
 #include "GraphManager.h"
 
 #include "../../test/util/RuntimeParametersTestHelpers.h"
-#include "QueryPlanner.h"
+#include "../engine/QueryPlanner.h"
 #include "global/RuntimeParameters.h"
 #include "parser/SparqlParser.h"
 
 // _____________________________________________________________________________
 GraphManager::GraphManager(ad_utility::HashSet<Id> graphs)
     : graphs_(std::move(graphs)) {}
-
-// _____________________________________________________________________________
-GraphManager GraphManager::fillFromIndex(
-    const EncodedIriManager* encodedIriManager, QueryExecutionContext& qec) {
-  // TODO: set and restore the runtime parameters differently or move it from
-  // testing folder
-  auto groupByHashmap =
-      setRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled_>(
-          true);
-  auto defaultIsNamed = setRuntimeParameterForTest<
-      &RuntimeParameters::treatDefaultGraphAsNamedGraph_>(true);
-
-  auto query = SparqlParser::parseQuery(encodedIriManager,
-                                        "SELECT ?g WHERE { GRAPH "
-                                        "?g { ?s ?p ?o } } GROUP BY ?g");
-
-  QueryPlanner qp(&qec, std::make_shared<ad_utility::CancellationHandle<>>());
-  auto executionTree = qp.createExecutionTree(query);
-  auto result = executionTree.getResult(false);
-  ad_utility::HashSet<Id> existingGraphs;
-  for (const auto& row : result->idTable()) {
-    AD_CORRECTNESS_CHECK(row[0].getDatatype() == Datatype::VocabIndex);
-    existingGraphs.insert(row[0]);
-  }
-
-  return fromExistingGraphs(std::move(existingGraphs));
-}
 
 // _____________________________________________________________________________
 GraphManager GraphManager::fromExistingGraphs(ad_utility::HashSet<Id> graphs) {

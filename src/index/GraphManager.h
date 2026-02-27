@@ -28,8 +28,6 @@ class GraphManager {
   GraphManager() = default;
   explicit GraphManager(ad_utility::HashSet<Id> graphs);
 
-  static GraphManager fillFromIndex(const EncodedIriManager* encodedIriManager,
-                                    QueryExecutionContext& qec);
   static GraphManager fromExistingGraphs(ad_utility::HashSet<Id> graphs);
 
   friend void to_json(nlohmann::json& j, const GraphManager& graphManager);

@@ -15,7 +15,6 @@
 #include <vector>
 
 #include "backports/algorithm.h"
-#include "engine/GraphManager.h"
 #include "engine/Result.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/Pattern.h"
@@ -26,6 +25,7 @@
 #include "index/DocsDB.h"
 #include "index/EncodedIriManager.h"
 #include "index/ExternalSortFunctors.h"
+#include "index/GraphManager.h"
 #include "index/Index.h"
 #include "index/IndexBuilderTypes.h"
 #include "index/IndexMetaData.h"

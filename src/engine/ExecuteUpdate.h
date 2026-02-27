@@ -7,7 +7,7 @@
 
 #include <gtest/gtest_prod.h>
 
-#include "GraphManager.h"
+#include "../index/GraphManager.h"
 #include "index/Index.h"
 #include "parser/ParsedQuery.h"
 #include "util/CancellationHandle.h"
