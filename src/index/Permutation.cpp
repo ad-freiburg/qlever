@@ -30,11 +30,9 @@ CompressedRelationReader::ScanSpecAndBlocks Permutation::getScanSpecAndBlocks(
 }
 
 // _____________________________________________________________________
-void Permutation::loadFromDisk(
-    const std::string& onDiskBase, bool loadInternalPermutation,
-    bool useGraphPostProcessing,
-    std::weak_ptr<const MaterializedView> materializedView) {
-  materializedView_ = std::move(materializedView);
+void Permutation::loadFromDisk(const std::string& onDiskBase,
+                               bool loadInternalPermutation,
+                               bool useGraphPostProcessing) {
   onDiskBase_ = onDiskBase;
   if (loadInternalPermutation) {
     internalPermutation_ =
