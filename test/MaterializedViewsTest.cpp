@@ -125,6 +125,34 @@ TEST_F(MaterializedViewsTest, Basic) {
     auto res = qet->getResult(false);
     EXPECT_EQ(res->idTable().numRows(), 1);
   }
+
+  // Graph column regression from #2708: Previously the graph column would
+  // overwrite an additional column if it was not selected.
+  {
+    qlv().writeMaterializedView("graphColRegression", R"(
+      SELECT ?a ?b ?c ?d ?e {
+        VALUES (?a ?b ?c ?d ?e) {
+          (1 2 3 4 5)
+          (11 12 13 14 15)
+        }
+      }
+    )");
+    auto res = getQueryResultAsIdTable(R"(
+    PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT ?e {
+        SERVICE view:graphColRegression {
+          [
+            view:column-a 1 ;
+            view:column-e ?e
+          ]
+        }
+      }
+    )");
+    // If we always select the graph column, but do not read it into a dummy
+    // variable, we would get `4` instead of `5` here.
+    auto expected = getQueryResultAsIdTable("SELECT (5 AS ?e) {}");
+    EXPECT_THAT(res, matchesIdTable(expected));
+  }
 }
 
 // _____________________________________________________________________________

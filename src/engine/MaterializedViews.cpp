@@ -536,6 +536,7 @@ SparqlTripleSimple MaterializedView::makeScanConfig(
   // contains multiple instances of `MaterializedViewQuery`.
   TripleComponent p{Variable{"?_ql_materialized_view_p"}};
   TripleComponent o{Variable{"?_ql_materialized_view_o"}};
+  bool graphColumnSelected = false;
   AdditionalScanColumns additionalCols;
 
   // Assemble which columns should be bound to which variables
@@ -555,6 +556,7 @@ SparqlTripleSimple MaterializedView::makeScanConfig(
       o = target;
     } else {
       AD_CORRECTNESS_CHECK(colIdx > 2);
+      graphColumnSelected = graphColumnSelected || colIdx == 3;
       throwIfAdditionalColumnIsNotVariable(viewVar, target);
       additionalCols.emplace_back(colIdx, target.getVariable());
     }
@@ -566,6 +568,12 @@ SparqlTripleSimple MaterializedView::makeScanConfig(
 
   throwIfScanColumnMissing(s);
   throwIfColumnsHaveIllegalFixedValues(s, p, o);
+
+  // Because we disable the graph processing for materialized views, we must
+  // select a dummy variable for the graph column.
+  if (!graphColumnSelected && !additionalCols.empty()) {
+    additionalCols.emplace_back(3, Variable{"?_ql_materialized_view_g"});
+  }
 
   // Additional columns must be sorted (required by internals of `IndexScan`)
   std::sort(additionalCols.begin(), additionalCols.end(),
