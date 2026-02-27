@@ -345,7 +345,8 @@ TriplesToVacuum LocatedTriplesPerBlock::identifyTriplesToVacuum(
     ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
     auto blockMetadataForSingleBlock =
         [&blockMetadata](size_t blockIndex) -> BlockMetadataRanges {
-      BlockMetadataSpan blockMetaSpan = std::span(blockMetadata).subspan(blockIndex, 1);
+      BlockMetadataSpan blockMetaSpan =
+          std::span(blockMetadata).subspan(blockIndex, 1);
       AD_CORRECTNESS_CHECK(blockMetaSpan.size() == 1);
       AD_CORRECTNESS_CHECK(blockMetaSpan[0].blockIndex_ == blockIndex);
       return {BlockMetadataRange{blockMetaSpan.begin(), blockMetaSpan.end()}};
