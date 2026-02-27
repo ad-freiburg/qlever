@@ -97,8 +97,13 @@ GraphManager::GraphNamespaceManager::fromGraphManager(
   auto graphs = graphManager.getGraphs();
   auto alreadyCreatedGraphs =
       *graphs | ql::views::transform([&vocab](const auto& graphId) {
-        AD_CORRECTNESS_CHECK(graphId.getDatatype() == Datatype::VocabIndex);
-        return vocab[graphId.getVocabIndex()];
+        if (graphId.getDatatype() == Datatype::VocabIndex) {
+          return vocab[graphId.getVocabIndex()];
+        }
+        AD_CORRECTNESS_CHECK(graphId.getDatatype() ==
+                             Datatype::LocalVocabIndex);
+        AD_CORRECTNESS_CHECK(graphId.getLocalVocabIndex()->isIri());
+        return graphId.getLocalVocabIndex()->toStringRepresentation();
       }) |
       ql::views::filter([](const auto& graph) {
         return graph.starts_with(QLEVER_NEW_GRAPH_PREFIX);
@@ -169,7 +174,13 @@ std::ostream& operator<<(std::ostream& os, const GraphManager& graphManager) {
     return os.str();
   }),
                       ", ");
-  os << "])";
+  os << "], namespaceManager=";
+  if (graphManager.namespaceManager_.has_value()) {
+    os << graphManager.namespaceManager_.value();
+  } else {
+    os << "<Not Initialized>";
+  }
+  os << ")";
   return os;
 }
 
@@ -195,6 +206,6 @@ std::ostream& operator<<(
     const GraphManager::GraphNamespaceManager& namespaceManager) {
   os << "GraphNamespaceManager(prefix=\"" << namespaceManager.prefix_
      << "\", allocatedGraphs=" << *namespaceManager.allocatedGraphs_.rlock()
-     << ")" << std::endl;
+     << ")";
   return os;
 }

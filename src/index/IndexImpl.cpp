@@ -1069,8 +1069,14 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
     }
   }
   if (persistUpdatesOnDisk) {
-    deltaTriples_.value().setFilenameForPersistentUpdatesAndReadFromDisk(
-        onDiskBase + ".update-triples");
+    auto uniqueGraphs =
+        deltaTriples_.value().setFilenameForPersistentUpdatesAndReadFromDisk(
+            onDiskBase + ".update-triples");
+
+    graphManager_.addGraphs(uniqueGraphs.graphs);
+    graphManager_.initializeNamespaceManager(
+        std::string(QLEVER_NEW_GRAPH_PREFIX), graphManager_, vocab_);
+    AD_LOG_INFO << "Initialized GraphManager: " << graphManager_ << std::endl;
   }
 }
 

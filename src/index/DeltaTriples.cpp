@@ -518,6 +518,11 @@ template nlohmann::json DeltaTriplesManager::modify<nlohmann::json>(
     const std::function<nlohmann::json(DeltaTriples&)>&,
     bool writeToDiskAfterRequest, bool updateMetadataAfterRequest,
     ad_utility::timer::TimeTracer&);
+template DeltaTriples::UniqueGraphs
+DeltaTriplesManager::modify<DeltaTriples::UniqueGraphs>(
+    const std::function<DeltaTriples::UniqueGraphs(DeltaTriples&)>&,
+    bool writeToDiskAfterRequest, bool updateMetadataAfterRequest,
+    ad_utility::timer::TimeTracer&);
 
 // _____________________________________________________________________________
 void DeltaTriplesManager::clear() { modify<void>(&DeltaTriples::clear); }
@@ -590,15 +595,15 @@ void DeltaTriples::writeToDisk() const {
 }
 
 // _____________________________________________________________________________
-void DeltaTriples::readFromDisk() {
+DeltaTriples::UniqueGraphs DeltaTriples::readFromDisk() {
   if (!filenameForPersisting_.has_value()) {
-    return;
+    return {};
   }
   AD_CONTRACT_CHECK(localVocab_.empty());
   auto [vocab, idRanges] = ad_utility::deserializeIds(
       filenameForPersisting_.value(), index_.getBlankNodeManager());
   if (idRanges.empty()) {
-    return;
+    return {};
   }
   AD_CORRECTNESS_CHECK(idRanges.size() == 2);
   auto toTriples = [](const std::vector<Id>& ids) {
@@ -613,12 +618,26 @@ void DeltaTriples::readFromDisk() {
     }
     return triples;
   };
+
+  UniqueGraphs graphs;
+  auto collectGraphs = [&graphs](const std::vector<IdTriple<>>& triples) {
+    for (const auto& triple : triples) {
+      graphs.graphs.insert(Id::makeFromLocalVocabIndex(
+          graphs.localVocab.getIndexAndAddIfNotContained(
+              *triple.ids()[3].getLocalVocabIndex())));
+    }
+  };
+
   auto cancellationHandle =
       std::make_shared<CancellationHandle::element_type>();
-  insertTriples(cancellationHandle, toTriples(idRanges.at(1)));
+  auto triplesToInsert = toTriples(idRanges.at(1));
+  collectGraphs(triplesToInsert);
+  insertTriples(cancellationHandle, std::move(triplesToInsert));
   deleteTriples(cancellationHandle, toTriples(idRanges.at(0)));
   AD_LOG_INFO << "Done, #inserted triples = " << idRanges.at(1).size()
               << ", #deleted triples = " << idRanges.at(0).size() << std::endl;
+
+  return graphs;
 }
 
 // _____________________________________________________________________________
@@ -627,12 +646,13 @@ void DeltaTriples::setPersists(std::optional<std::string> filename) {
 }
 
 // _____________________________________________________________________________
-void DeltaTriplesManager::setFilenameForPersistentUpdatesAndReadFromDisk(
+DeltaTriples::UniqueGraphs
+DeltaTriplesManager::setFilenameForPersistentUpdatesAndReadFromDisk(
     std::string filename) {
-  modify<void>(
+  return modify<DeltaTriples::UniqueGraphs>(
       [&filename](DeltaTriples& deltaTriples) {
         deltaTriples.setPersists(std::move(filename));
-        deltaTriples.readFromDisk();
+        return deltaTriples.readFromDisk();
       },
       false);
 }
