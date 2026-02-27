@@ -300,9 +300,13 @@ DeltaTriplesManager& Index::deltaTriplesManager() {
 const GraphManager& Index::graphManager() const {
   return pimpl_->graphManager();
 }
+
+// ____________________________________________________________________________
 bool Index::graphManagerNotInitialized() const {
   return pimpl_->graphManagerNotInitialized();
 }
+
+// ____________________________________________________________________________
 void Index::initializeGraphManager(GraphManager&& manager) {
   pimpl_->initializeGraphManager(std::move(manager));
 }

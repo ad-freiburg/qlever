@@ -44,7 +44,7 @@ GraphManager GraphManager::fillFromIndex(
 
 // _____________________________________________________________________________
 GraphManager GraphManager::fromExistingGraphs(ad_utility::HashSet<Id> graphs) {
-  // TODO: might want to check here that all
+  // TODO: might want to check here that all are LocalVocab
   return GraphManager(std::move(graphs));
 }
 
