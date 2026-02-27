@@ -34,7 +34,10 @@ ExistsJoin::ExistsJoin(QueryExecutionContext* qec,
     // For non-lazy results applying the limit introduces some overhead, but for
     // lazy results it ensures that we don't have to compute the whole result,
     // so we consider this a tradeoff worth to make.
-    right_->applyLimit({1});
+    // Defensive copy to avoid modifying other trees that share the same subtree
+    // as `right_`.
+    right_ = right_->clone();
+    right_->applyLimitOffset({1});
   }
 }
 

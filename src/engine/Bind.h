@@ -21,6 +21,7 @@ class Bind : public Operation {
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;
   parsedQuery::Bind _bind;
+  mutable std::string expressionCacheKey_ = "";
   // For the documentation of the overridden members, see Operation.h
  protected:
   [[nodiscard]] std::string getCacheKeyImpl() const override;
@@ -32,8 +33,7 @@ class Bind : public Operation {
   std::vector<QueryExecutionTree*> getChildren() override;
   size_t getCostEstimate() override;
   bool supportsLimitOffset() const override;
-  void onLimitOffsetChanged(
-      const LimitOffsetClause& limitOffset) const override;
+  void onLimitOffsetChanged(const LimitOffsetClause& limitOffset) override;
 
  private:
   std::unique_ptr<Operation> cloneImpl() const override;

@@ -67,6 +67,12 @@ std::string Sort::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
+void Sort::onLimitOffsetChanged(const LimitOffsetClause& limitOffset) {
+  subtree_ = subtree_->clone();
+  subtree_->applyLimitOffset(limitOffset);
+}
+
+// _____________________________________________________________________________
 Result Sort::computeResult(bool requestLaziness) {
   size_t numColumns = subtree_->getResultWidth();
   // Maximum number of rows that can be sorted in memory.

@@ -292,14 +292,19 @@ class Operation {
   // its result.
   [[nodiscard]] virtual bool supportsLimitOffset() const { return false; }
 
+  // Laxer variant of `supportsLimitOffset` that also returns `true` for
+  // operations that don't support `LIMIT`/`OFFSET` natively but can still
+  // benefit from applying a `LIMIT`/`OFFSET` clause on their result because
+  // they might propagate it to their children.
+  virtual bool benefitsFromApplyingLimitOrOffset() const {
+    return supportsLimitOffset();
+  }
+
  private:
   // This function is called each time `applyLimitOffset` is called. It can be
   // overridden by subclasses to e.g. implement the LIMIT in a more efficient
-  // way
-  virtual void onLimitOffsetChanged(const LimitOffsetClause&) const {
-    // If `supportsLimitOffset()` returns `false`, this function has to be
-    // no-op.
-  }
+  // way.
+  virtual void onLimitOffsetChanged(const LimitOffsetClause&) {}
 
   // This function is called when the operation's result is requested to be
   // cached and pinned to a name.
@@ -516,6 +521,8 @@ class Operation {
   // Recursively call a function on all children.
   template <typename F>
   void forAllDescendants(F f) const;
+
+  friend QueryExecutionTree;
 
   FRIEND_TEST(Operation, updateRuntimeStatsWorksCorrectly);
   FRIEND_TEST(Operation, verifyRuntimeInformationIsUpdatedForLazyOperations);

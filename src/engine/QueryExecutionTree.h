@@ -209,7 +209,7 @@ class QueryExecutionTree {
   // `True`.
   static std::shared_ptr<QueryExecutionTree> makeTreeWithStrippedColumns(
       std::shared_ptr<QueryExecutionTree> qet,
-      const std::set<Variable>& variables,
+      const std::set<Variable>& variablesToKeep,
       HideStrippedColumns hideStrippedColumns = HideStrippedColumns::False);
 
   // Return the column pairs where the two `QueryExecutionTree`s have the
@@ -240,13 +240,13 @@ class QueryExecutionTree {
     s << tree.getRootOperation()->getDescriptor();
   }
 
-  bool supportsLimit() const {
-    return getRootOperation()->supportsLimitOffset();
+  bool benefitsFromApplyingLimitOrOffset() const {
+    return getRootOperation()->benefitsFromApplyingLimitOrOffset();
   }
 
-  // Set the value of the `LIMIT` clause that will be applied to the result of
-  // this operation.
-  void applyLimit(const LimitOffsetClause& limitOffsetClause) {
+  // Set the value of the `LIMIT`/`OFFSET` clause that will be applied to the
+  // result of this operation.
+  void applyLimitOffset(const LimitOffsetClause& limitOffsetClause) {
     getRootOperation()->applyLimitOffset(limitOffsetClause);
     // Setting the limit invalidates the `cacheKey` as well as the
     // `sizeEstimate`.
