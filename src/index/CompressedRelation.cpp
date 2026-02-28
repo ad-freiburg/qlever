@@ -343,13 +343,18 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphs::
 }
 
 // _____________________________________________________________________________
-bool CompressedRelationReader::FilterDuplicatesAndGraphs::postprocessBlock(
-    IdTable& block, const CompressedBlockMetadata& blockMetadata) const {
-  bool filteredByGraph = filterByGraphIfNecessary(block, blockMetadata);
+void CompressedRelationReader::FilterDuplicatesAndGraphs::
+    deleteGraphColumnIfNecessary(IdTable& block) const {
   if (deleteGraphColumn_) {
     block.deleteColumn(graphColumn_);
   }
+}
 
+// _____________________________________________________________________________
+bool CompressedRelationReader::FilterDuplicatesAndGraphs::postprocessBlock(
+    IdTable& block, const CompressedBlockMetadata& blockMetadata) const {
+  bool filteredByGraph = filterByGraphIfNecessary(block, blockMetadata);
+  deleteGraphColumnIfNecessary(block);
   bool filteredByDuplicates = filterDuplicatesIfNecessary(block, blockMetadata);
   return filteredByGraph || filteredByDuplicates;
 }
@@ -1175,6 +1180,10 @@ CompressedRelationReader::decompressAndPostprocessBlock(
   if (useGraphPostProcessing_) {
     wasPostprocessed =
         scanConfig.graphFilter_.postprocessBlock(decompressedBlock, metadata);
+  } else {
+    // If we do not use graph postprocessing, we might still need to remove the
+    // extra column.
+    scanConfig.graphFilter_.deleteGraphColumnIfNecessary(decompressedBlock);
   }
   return {std::move(decompressedBlock), wasPostprocessed, hasUpdates};
 }

@@ -24,6 +24,9 @@
 
 // forward declaration needed to break dependencies
 class QueryExecutionTree;
+namespace parsedQuery {
+struct Bind;
+}
 
 enum class ComputationMode {
   FULLY_MATERIALIZED,
@@ -226,6 +229,9 @@ class Operation {
     return false;
   }
 
+  // Check whether all variables given are covered by this `Operation`.
+  bool coversVariables(const std::vector<const Variable*>& variables) const;
+
   // See the member variable with the same name below for documentation.
   std::optional<std::shared_ptr<const Result>>&
   precomputedResultBecauseSiblingOfService() {
@@ -371,6 +377,22 @@ class Operation {
   // operation? The the result wouldn't have to be `optional`.
   virtual std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithStrippedColumns(const std::set<Variable>& variables) const;
+
+  // Try to create a version of this operation with an additional column from a
+  // `BIND` pushed down into the tree. The default implementation tries to push
+  // the `BIND` into each child which covers the `BIND`'s expression variables.
+  // Returns `std::nullopt` if the `BIND` cannot be pushed down.
+  virtual std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithBindColumn(const parsedQuery::Bind& bind) const;
+
+  // Invalidate the cached `VariableToColumnMap` so it will be recomputed on the
+  // next access. Must be called when an operation's children change after
+  // construction (e.g., during bind push-down).
+  virtual void invalidateCachedVariableColumns() {
+    variableToColumnMap_ = std::nullopt;
+    externallyVisibleVariableToColumnMap_ = std::nullopt;
+    _resultSortedColumns = std::nullopt;
+  }
 
  protected:
   // The QueryExecutionContext for this particular element.

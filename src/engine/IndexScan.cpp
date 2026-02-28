@@ -11,9 +11,11 @@
 #include <string>
 #include <utility>
 
+#include "engine/MaterializedViews.h"
 #include "engine/QueryExecutionTree.h"
 #include "index/IndexImpl.h"
 #include "parser/ParsedQuery.h"
+#include "util/Exception.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
 
@@ -58,6 +60,7 @@ IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
     additionalColumns_.push_back(idx);
     additionalVariables_.push_back(variable);
   }
+  // todo sort additionalVariables_
   std::tie(sizeEstimateIsExact_, sizeEstimate_) = computeSizeEstimate();
 
   // Check the following invariant: All the variables must be at the end of the
@@ -111,6 +114,7 @@ IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
   AD_CONTRACT_CHECK(qec != nullptr);
   AD_CONTRACT_CHECK(permutation_ != nullptr);
   AD_CONTRACT_CHECK(locatedTriplesSharedState_ != nullptr);
+  // todo check sorted additionalVariables_
   determineMultiplicities();
 }
 
@@ -251,6 +255,7 @@ VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
       return;
     }
     // All the columns of an index scan only contain defined values.
+    // TODO this is not true for materialized views
     variableToColumnMap[var] = makeAlwaysDefinedColumn(nextColIdx);
     ++nextColIdx;
   };
@@ -900,6 +905,82 @@ IndexScan::makeTreeWithStrippedColumns(
       predicate_, object_, additionalColumns_, additionalVariables_,
       graphsToFilter_, scanSpecAndBlocks_, scanSpecAndBlocksIsPrefiltered_,
       VarsToKeep{std::move(newVariables)}, sizeEstimateIsExact_, sizeEstimate_);
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+IndexScan::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+  // TODO Actual logic here
+  // TODO Add `bind._target` to `varsToKeep_` of new scan tree.
+  AD_LOG_INFO << "IndexScan::makeTreeWithBindColumn called with bind: "
+              << bind.getDescriptor() << std::endl;
+
+  // Currently only materialized views can provide precomputed `BIND`s.
+  auto view = permutation().materializedView();
+  if (!view) {
+    return std::nullopt;
+  }
+
+  // Check if all variables required for the `BIND` expression are covered by
+  // this `IndexScan`.
+  const auto& visibleVars = getExternallyVisibleVariableColumns();
+  bool allVarsCovered = ql::ranges::all_of(
+      bind._expression.containedVariables(),
+      [&visibleVars](const auto* v) { return visibleVars.contains(*v); });
+  if (!allVarsCovered) {
+    return std::nullopt;
+  }
+
+  // Check the `BIND` cache of the underlying `MaterializedView` for the `BIND`
+  // expression's cache key.
+  auto targetCol =
+      view->lookupBindTargetColumn(bind._expression.getCacheKey(visibleVars));
+  if (!targetCol.has_value()) {
+    return std::nullopt;
+  }
+
+  // TODO<ullingerc> Deal with `BIND` in first three cols.
+  if (targetCol.value() < 3) {
+    return std::nullopt;
+  }
+
+  // Extend the additional columns of the scan (and keep them sorted as
+  // required).
+  auto newAdditionalColumns = additionalColumns_;
+  auto newAdditionalVariables = additionalVariables_;
+  AD_CORRECTNESS_CHECK(additionalColumns_.size() ==
+                       additionalVariables_.size());
+  auto insertNewCol = [&](size_t colIdx, Variable v) -> bool {
+    auto it = std::lower_bound(newAdditionalColumns.begin(),
+                               newAdditionalColumns.end(), colIdx);
+    std::size_t index = std::distance(newAdditionalColumns.begin(), it);
+    bool exists = (it != newAdditionalColumns.end() && *it == colIdx);
+    if (exists) {
+      // We cannot bind the same column to two different variables.
+      return false;
+    }
+    newAdditionalColumns.insert(it, colIdx);
+    newAdditionalVariables.insert(newAdditionalVariables.begin() + index, v);
+    return true;
+  };
+  if (!insertNewCol(targetCol.value(), bind._target)) {
+    return std::nullopt;
+  }
+  // Add graph column placeholder if now required.
+  insertNewCol(3, Variable{"?_ql_materialized_view_g"});
+
+  // Add the `BIND` target to the variables to keep during column stripping.
+  auto newVariables = varsToKeep_;
+  if (newVariables.has_value()) {
+    newVariables.value().insert(bind._target);
+  }
+
+  return ad_utility::makeExecutionTree<IndexScan>(
+      _executionContext, permutation_, locatedTriplesSharedState_, subject_,
+      predicate_, object_, std::move(newAdditionalColumns),
+      std::move(newAdditionalVariables), graphsToFilter_, scanSpecAndBlocks_,
+      scanSpecAndBlocksIsPrefiltered_, VarsToKeep{std::move(newVariables)},
+      sizeEstimateIsExact_, sizeEstimate_);
 }
 
 // _____________________________________________________________________________

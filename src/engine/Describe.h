@@ -47,6 +47,12 @@ class Describe : public Operation {
   float getMultiplicity(size_t col) override;
   bool knownEmptyResult() override;
 
+  // The result is always three fixed columns, independent of child columns.
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
+      const parsedQuery::Bind&) const override {
+    return std::nullopt;
+  };
+
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
   [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override;

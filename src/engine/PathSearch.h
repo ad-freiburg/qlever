@@ -253,6 +253,12 @@ class PathSearch : public Operation {
   Result computeResult([[maybe_unused]] bool requestLaziness) override;
   VariableToColumnMap computeVariableToColumnMap() const override;
 
+  // `BIND` push down through `PathSearch` is not allowed.
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
+      const parsedQuery::Bind&) const override {
+    return std::nullopt;
+  };
+
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 

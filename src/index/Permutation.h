@@ -6,6 +6,7 @@
 #define QLEVER_SRC_INDEX_PERMUTATION_H
 
 #include <array>
+#include <memory>
 #include <string>
 
 #include "global/Constants.h"
@@ -23,6 +24,8 @@ class IdTable;
 class LocatedTriplesPerBlock;
 struct LocatedTriplesState;
 class DeltaTriples;
+// Forward declaration for reference to owning `MaterializedView`.
+class MaterializedView;
 
 // Helper class to store static properties of the different permutations to
 // avoid code duplication.
@@ -209,6 +212,14 @@ class Permutation {
   // permutation is available, this function throws an exception.
   const Permutation& internalPermutation() const;
 
+  // Set a back-reference to the `MaterializedView` that owns this permutation.
+  void setMaterializedView(std::weak_ptr<const MaterializedView> view);
+
+  // If this permutation is owned by a `MaterializedView`, return a shared
+  // pointer to it. Returns `nullptr` if no view is connected or if the view
+  // has already been destroyed.
+  std::shared_ptr<const MaterializedView> materializedView() const;
+
  private:
   // The base filename of the permutation without the suffix below
   std::string onDiskBase_;
@@ -233,6 +244,10 @@ class Permutation {
   std::unique_ptr<Permutation> internalPermutation_ = nullptr;
 
   bool isInternalPermutation_ = false;
+
+  // If this permutation is owned by a `MaterializedView`, store a reference
+  // back to the view.
+  std::weak_ptr<const MaterializedView> materializedView_;
 };
 
 #endif  // QLEVER_SRC_INDEX_PERMUTATION_H

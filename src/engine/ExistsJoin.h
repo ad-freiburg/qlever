@@ -82,6 +82,8 @@ class ExistsJoin : public Operation {
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
+  void invalidateCachedVariableColumns() override;
+
   // Nested loop join optimization than can apply when a memory intensive sort
   // can be avoided this way.
   std::optional<Result> tryIndexNestedLoopJoinIfSuitable();
@@ -94,6 +96,11 @@ class ExistsJoin : public Operation {
   Result lazyExistsJoin(std::shared_ptr<const Result> left,
                         std::shared_ptr<const Result> right,
                         bool requestLaziness);
+
+  // Only the left child's columns appear in the result, so we need special
+  // treatment of the `EXISTS` operation for `BIND` push down.
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
+      const parsedQuery::Bind& bind) const override;
 
   FRIEND_TEST(Exists, addExistsJoinsToSubtreeDoesntCollideForHiddenVariables);
 };

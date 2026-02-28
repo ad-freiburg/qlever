@@ -10,6 +10,7 @@
 #ifndef QLEVER_SRC_ENGINE_MATERIALIZEDVIEWSQUERYANALYSIS_H_
 #define QLEVER_SRC_ENGINE_MATERIALIZEDVIEWSQUERYANALYSIS_H_
 
+#include "engine/VariableToColumnMap.h"
 #include "parser/GraphPatternAnalysis.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/SparqlTriple.h"
@@ -113,6 +114,14 @@ class QueryPatternCache {
       const ChainSideCandidates& chainLeft,
       const ChainSideCandidates& chainRight) const;
 };
+
+// Hash map for `BIND` cache.
+using BindExpressionAndTargetCol = ad_utility::HashMap<std::string, size_t>;
+
+// Extract all `BIND` statements from a `ParsedQuery` and create a hash map
+// mapping `BIND` expression cache keys to target variable column index.
+BindExpressionAndTargetCol extractBindExpressions(
+    const ParsedQuery& parsed, const VariableToColumnMap& varToColMap);
 
 }  // namespace materializedViewsQueryAnalysis
 

@@ -48,6 +48,9 @@ class StripColumns : public Operation {
 
   size_t getCostEstimate() override;
 
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithBindColumn(const parsedQuery::Bind& bind) const override;
+
  private:
   uint64_t getSizeEstimateBeforeLimit() override;
 

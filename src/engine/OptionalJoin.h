@@ -98,6 +98,12 @@ class OptionalJoin : public Operation {
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
+  void invalidateCachedVariableColumns() override;
+
+  // Recompute `_joinColumns` from the children's `VariableToColumnMap`s and
+  // determine the `implementation_` based on UNDEF column status.
+  void recomputeJoinColumnsAndImplementation();
+
   // Helper function for `tryIndexNestedLoopJoinIfSuitable` which makes the
   // logic reusable.
   bool isIndexNestedLoopJoinSuitable() const;

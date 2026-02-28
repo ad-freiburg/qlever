@@ -204,6 +204,15 @@ std::vector<ColumnIndex> Join::resultSortedOn() const {
 }
 
 // _____________________________________________________________________________
+void Join::invalidateCachedVariableColumns() {
+  Operation::invalidateCachedVariableColumns();
+  _multiplicities.clear();
+  _sizeEstimateComputed = false;
+  _leftJoinCol = _left->getVariableColumns().at(_joinVar).columnIndex_;
+  _rightJoinCol = _right->getVariableColumns().at(_joinVar).columnIndex_;
+}
+
+// _____________________________________________________________________________
 float Join::getMultiplicity(size_t col) {
   if (_multiplicities.empty()) {
     computeSizeEstimateAndMultiplicities();

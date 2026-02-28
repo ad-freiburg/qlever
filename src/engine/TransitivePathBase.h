@@ -354,6 +354,11 @@ class TransitivePathBase : public Operation {
 
   std::vector<QueryExecutionTree*> getChildren() override;
 
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
+      const parsedQuery::Bind&) const override {
+    return std::nullopt;
+  };
+
   VariableToColumnMap computeVariableToColumnMap() const override;
 
   bool columnOriginatesFromGraphOrUndef(

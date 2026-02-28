@@ -63,6 +63,12 @@ class CountAvailablePredicates : public Operation {
 
   float getMultiplicity(size_t col) override;
 
+  // The result is always two fixed columns, independent of child columns.
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
+      const parsedQuery::Bind&) const override {
+    return std::nullopt;
+  };
+
  private:
   uint64_t getSizeEstimateBeforeLimit() override;
 

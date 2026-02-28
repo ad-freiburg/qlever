@@ -84,6 +84,8 @@ class Minus : public Operation {
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
+  void invalidateCachedVariableColumns() override;
+
   // Nested loop join optimization than can apply when a memory intensive sort
   // can be avoided this way.
   std::optional<Result> tryIndexNestedLoopJoinIfSuitable();
@@ -98,6 +100,11 @@ class Minus : public Operation {
   Result computeResult(bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
+
+  // Only the left child's columns appear in the result, so we need special
+  // treatment of the `MINUS` operation for `BIND` push down.
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
+      const parsedQuery::Bind& bind) const override;
 
   std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithStrippedColumns(
