@@ -903,6 +903,16 @@ IndexScan::makeTreeWithStrippedColumns(
 }
 
 // _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+IndexScan::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+  // Dummy implementation (always returns that the BIND cannot be rewritten).
+  // To be implemented in a later PR.
+  AD_LOG_DEBUG << "IndexScan::makeTreeWithBindColumn called with bind: "
+               << bind.getDescriptor() << std::endl;
+  return std::nullopt;
+}
+
+// _____________________________________________________________________________
 std::vector<ColumnIndex> IndexScan::getSubsetForStrippedColumns() const {
   AD_CORRECTNESS_CHECK(varsToKeep_.has_value());
   const auto& v = varsToKeep_.value();
