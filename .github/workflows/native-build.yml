@@ -94,7 +94,7 @@ jobs:
             additional-cmake-options: "-D_NO_TIMING_TESTS=ON"
             skipIfPr: false
 
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
 
 
     steps:
