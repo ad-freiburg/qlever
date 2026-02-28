@@ -1532,6 +1532,12 @@ CompressedRelationMetadata CompressedRelationWriter::finishLargeRelation(
 }
 
 // _____________________________________________________________________________
+uint32_t CompressedRelationWriter::numThreadsForWriting() {
+  return static_cast<uint32_t>(
+      getRuntimeParameter<&RuntimeParameters::threadsForPermutationWriter_>());
+}
+
+// _____________________________________________________________________________
 void CompressedRelationWriter::addBlockForLargeRelation(Id col0Id,
                                                         IdTable relation) {
   AD_CORRECTNESS_CHECK(!relation.empty());

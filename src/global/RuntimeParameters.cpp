@@ -53,6 +53,7 @@ RuntimeParameters::RuntimeParameters() {
   add(sortInMemoryThreshold_);
   add(prefilteredOptionalJoin_);
   add(enableMaterializedViewQueryRewrite_);
+  add(threadsForPermutationWriter_);
 
   defaultQueryTimeout_.setParameterConstraint(
       [](std::chrono::seconds value, std::string_view parameterName) {
@@ -60,6 +61,14 @@ RuntimeParameters::RuntimeParameters() {
           throw std::runtime_error{absl::StrCat(
               "Parameter ", parameterName, " must be strictly positive, was ",
               value.count(), "s")};
+        }
+      });
+
+  threadsForPermutationWriter_.setParameterConstraint(
+      [](size_t value, std::string_view parameterName) {
+        if (value == 0) {
+          throw std::runtime_error{
+              absl::StrCat("Parameter ", parameterName, " must be non-zero")};
         }
       });
 }
