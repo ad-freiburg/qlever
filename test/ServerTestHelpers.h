@@ -56,14 +56,13 @@ struct SimulateHttpRequest {
       }
     }
 
+    // The range overload doesn't work because it takes a const Range& but
+    // begin/end on the generator are not const. absl::StrJoin furthermore also
+    // only accepts common iterators.
+    auto respWithCommonIterators = response.body() | ql::views::common;
     // Parse the JSON body.
-    return std::optional{nlohmann::json::parse([&response]() -> std::string {
-      std::string r;
-      for (auto& part : response.body()) {
-        r.append(part);
-      }
-      return r;
-    }())};
+    return std::optional{nlohmann::json::parse(absl::StrJoin(
+        respWithCommonIterators.begin(), respWithCommonIterators.end(), ""))};
   };
 };
 

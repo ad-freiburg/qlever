@@ -40,7 +40,7 @@ auto GetGraph = [](ad_utility::triple_component::Iri graph) {
   return m::ConstructQuery(
       {{Var{"?s"}, Var{"?p"}, Var{"?o"}}},
       m::GraphPattern(m::GroupGraphPatternWithGraph(
-          graph, m::Triples({SparqlTriple(TC(Var{"?s"}), Var{"?p"},
+          std::move(graph), m::Triples({SparqlTriple(TC(Var{"?s"}), Var{"?p"},
                                           TC(Var{"?o"}))}))));
 };
 

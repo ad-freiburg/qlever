@@ -1245,10 +1245,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   auto response = ad_utility::httpUtils::createJsonResponse(
       std::move(responseJson), request);
   auto metadatasOpt = std::optional(std::move(metadatas));
-  if (!responseMiddlewares.empty()) {
-    for (auto& middleware : responseMiddlewares) {
-      response = middleware.apply(std::move(response), metadatasOpt);
-    }
+  for (auto& middleware : responseMiddlewares) {
+    response = middleware.apply(std::move(response), metadatasOpt);
   }
   co_await send(std::move(response));
   co_return;

@@ -142,7 +142,7 @@ class GraphStoreProtocol {
                                   const EncodedIriManager* encodedIriManager);
   FRIEND_TEST(GraphStoreProtocolTest, transformGet);
 
-  // Transform a SPARQL Graph Store Protocol HEAD to an equivalent ParsedQuery.
+  // Transform a SPARQL Graph Store Protocol HEAD to an equivalent `ParsedQuery`.
   // The response is the same as for GET but without the body.
   static ParsedQuery transformHead(const GraphOrDefault& graph,
                                    const EncodedIriManager* encodedIriManager);
