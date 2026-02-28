@@ -171,6 +171,10 @@ ql::span<SparqlExpression::Ptr> PrefixRegexExpression::childrenImpl() {
 ExpressionResult PrefixRegexExpression::evaluate(
     EvaluationContext* context) const {
   // This function must only be called if we have a simple prefix regex.
+  auto optColumn = context->getColumnIndexForVariable(variable_);
+  if (!optColumn.has_value()) {
+    return Id::makeUndefined();
+  }
 
   // If the expression is enclosed in `STR()`, we have two ranges: for the
   // prefix with and without leading "<".
@@ -209,13 +213,10 @@ ExpressionResult PrefixRegexExpression::evaluate(
   // In this function, the expression is a simple variable. If the input is
   // sorted by that variable, the result can be computed by a constant number
   // of binary searches and the result is a set of intervals.
-  if (context->isResultSortedBy(variable_)) {
+  const auto& column = optColumn.value();
+  if (context->isResultSortedBy(variable_) &&
+      (beg == end || !(*beg)[column].isUndefined())) {
     std::vector<ad_utility::SetOfIntervals> resultSetOfIntervals;
-    auto optColumn = context->getColumnIndexForVariable(variable_);
-    AD_CORRECTNESS_CHECK(optColumn.has_value(),
-                         "We have previously asserted that the input is sorted "
-                         "by the variable, so we expect it to exist");
-    const auto& column = optColumn.value();
     for (auto [lowerId, upperId] : lowerAndUpperIds) {
       // Two binary searches to find the lower and upper bounds of the range.
       auto lower = std::lower_bound(
@@ -247,11 +248,15 @@ ExpressionResult PrefixRegexExpression::evaluate(
   VectorWithMemoryLimit<Id> result{context->_allocator};
   result.reserve(resultSize);
   for (auto id : detail::makeGenerator(variable_, resultSize, context)) {
-    result.push_back(Id::makeFromBool(
-        ql::ranges::any_of(lowerAndUpperIds, [&](const auto& lowerUpper) {
-          return !valueIdComparators::compareByBits(id, lowerUpper.first) &&
-                 valueIdComparators::compareByBits(id, lowerUpper.second);
-        })));
+    if (id.isUndefined()) {
+      result.push_back(Id::makeUndefined());
+    } else {
+      result.push_back(Id::makeFromBool(
+          ql::ranges::any_of(lowerAndUpperIds, [&](const auto& lowerUpper) {
+            return !valueIdComparators::compareByBits(id, lowerUpper.first) &&
+                   valueIdComparators::compareByBits(id, lowerUpper.second);
+          })));
+    }
     checkCancellation(context);
   }
   return result;
