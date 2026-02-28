@@ -32,6 +32,7 @@
 #include "util/GeoConverters.h"
 #include "util/Log.h"
 #include "util/TypeTraits.h"
+#include "util/Views.h"
 
 // This file contains functions used for parsing and processing WKT geometries
 // using `pb_util`. To avoid unnecessarily compiling expensive modules, this
@@ -338,7 +339,9 @@ struct MetricLengthVisitor {
     static_assert(ad_utility::similarToInstantiation<T, std::vector>);
 
     return ::ranges::accumulate(
-        ::ranges::transform_view(multiGeom, MetricLengthVisitor{}), 0);
+        ::ranges::transform_view(ad_utility::allView(multiGeom),
+                                 MetricLengthVisitor{}),
+        0);
   }
 
   // Compute the length for the custom container type `AnyGeometry` from

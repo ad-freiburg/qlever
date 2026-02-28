@@ -4,6 +4,25 @@ if (POLICY CMP0167)
 endif ()
 project(QLever C CXX)
 
+if (APPLE)
+    # Dynamically detect Homebrew prefix
+    execute_process(
+        COMMAND brew --prefix
+        OUTPUT_VARIABLE HOMEBREW_PREFIX
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        RESULT_VARIABLE BREW_RESULT
+        ERROR_QUIET
+    )
+    if (BREW_RESULT EQUAL 0 AND HOMEBREW_PREFIX)
+        message(STATUS "Found Homebrew at: ${HOMEBREW_PREFIX}")
+        list(APPEND CMAKE_PREFIX_PATH "${HOMEBREW_PREFIX}")
+        link_directories(${HOMEBREW_PREFIX}/lib)
+        include_directories(${HOMEBREW_PREFIX}/include)
+    else()
+        message(WARNING "Homebrew not found. You may need to manually set CMAKE_PREFIX_PATH to locate dependencies (Boost, ICU, OpenSSL, etc.)")
+    endif()
+endif ()
+
 # C/C++ Versions
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -51,7 +70,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         add_compile_options(-fcoroutines)
     endif ()
 
-elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang" )
     if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.0.0" AND NOT COMPILER_VERSION_CHECK_DEACTIVATED)
         MESSAGE(FATAL_ERROR "Clang++ versions older than 16.0 are not supported by QLever")
     endif ()
@@ -62,7 +81,7 @@ elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         set(RANGE_V3_REQUIRED_BY_COMPILER ON)
     endif ()
 else ()
-    MESSAGE(FATAL_ERROR "QLever currently only supports the G++ or LLVM-Clang++ compilers. Found ${CMAKE_CXX_COMPILER_ID}")
+    MESSAGE(FATAL_ERROR "QLever currently only supports the G++, LLVM-Clang++ or AppleClang compilers. Found ${CMAKE_CXX_COMPILER_ID}")
 endif ()
 
 ## Build targets for address sanitizer
@@ -80,7 +99,7 @@ set(CMAKE_CXX_FLAGS_ASAN
 if ("${CMAKE_GENERATOR}" STREQUAL "Ninja")
     if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
         add_compile_options(-fdiagnostics-color=always)
-    elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+    elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang" OR "${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang")
         add_compile_options(-fcolor-diagnostics)
     endif ()
 endif ()
@@ -271,9 +290,7 @@ if (${ALLOW_SHUTDOWN})
     message(STATUS "Adding -DALLOW_SHUTDOWN")
 endif ()
 
-
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
-
 
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
@@ -433,7 +450,6 @@ set(LOG_LEVEL_INFO INFO)
 set(LOG_LEVEL_DEBUG DEBUG)
 set(LOG_LEVEL_TIMING TIMING)
 set(LOG_LEVEL_TRACE TRACE)
-
 
 if (CMAKE_BUILD_TYPE MATCHES DEBUG)
     set(LOGLEVEL DEBUG CACHE STRING "The loglevel")
