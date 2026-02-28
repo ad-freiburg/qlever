@@ -37,6 +37,39 @@ struct NumAddedAndDeleted {
   }
 };
 
+// Statistics collected during a vacuum operation on a block.
+struct VacuumStatistics {
+  // Only updates that have an effect are kept. Inserts that already exist
+  // and deletes that don't exist are removed.
+  size_t numDeletionsRemoved_;
+  size_t numInsertionsRemoved_;
+  size_t numDeletionsKept_;
+  size_t numInsertionsKept_;
+
+  size_t totalRemoved() const {
+    return numDeletionsRemoved_ + numInsertionsRemoved_;
+  }
+
+  size_t totalKept() const { return numDeletionsKept_ + numInsertionsKept_; }
+
+  VacuumStatistics& operator+=(const VacuumStatistics& other) {
+    numDeletionsRemoved_ += other.numDeletionsRemoved_;
+    numInsertionsRemoved_ += other.numInsertionsRemoved_;
+    numDeletionsKept_ += other.numDeletionsKept_;
+    numInsertionsKept_ += other.numInsertionsKept_;
+    return *this;
+  }
+
+  friend void to_json(nlohmann::json& j, const VacuumStatistics& stats);
+};
+
+// Triples identified for removal during a vacuum operation.
+struct TriplesToVacuum {
+  std::vector<IdTriple<0>> deletionsToRemove;
+  std::vector<IdTriple<0>> insertionsToRemove;
+  VacuumStatistics stats;
+};
+
 // A triple and its block in a particular permutation. For a detailed definition
 // of all border cases, see the definition at the end of this file.
 struct LocatedTriple {
@@ -217,6 +250,15 @@ class LocatedTriplesPerBlock {
     numTriples_ = 0;
     augmentedMetadata_.reset();
   }
+
+  // Identify, for all blocks whose number of located triples exceeds
+  // `vacuum-minimum-block-size`, the redundant insertions (triple already in
+  // index) and invalid deletions (triple not in index). Returns their
+  // SPO-canonical keys. `perm` must be the permutation that this
+  // `LocatedTriplesPerBlock` belongs to.
+  TriplesToVacuum identifyTriplesToVacuum(
+      const Permutation& perm,
+      ad_utility::SharedCancellationHandle cancellationHandle) const;
 
   // Return `true` iff one of the blocks contains `triple` with the given
   // `insertOrDelete` status (`true` for inserted, `false` for deleted).

@@ -11,9 +11,12 @@
 #include "index/LocatedTriples.h"
 
 #include "backports/algorithm.h"
+#include "global/RuntimeParameters.h"
 #include "index/CompressedRelation.h"
 #include "index/ConstantsIndexBuilding.h"
+#include "index/Permutation.h"
 #include "util/ChunkedForLoop.h"
+#include "util/Log.h"
 #include "util/ValueIdentity.h"
 
 // ____________________________________________________________________________
@@ -232,6 +235,138 @@ IdTable LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
   }
 }
 
+namespace {
+// Identify the triples to vacuum for a single block by comparing the
+// `locatedTriples` with the `idTable` of the block (which has no updates
+// applied).
+VacuumStatistics processBlockForVacuum(
+    const IdTable& idTable, const LocatedTriples& locatedTriples,
+    const qlever::KeyOrder::Array& inverseKeys,
+    std::vector<IdTriple<0>>& allDeletionsToRemove,
+    std::vector<IdTriple<0>>& allInsertionsToRemove) {
+  VacuumStatistics stats{0, 0, 0, 0};
+
+  auto toSpo = [&inverseKeys](const LocatedTriples::iterator& lt) {
+    const auto& ids = lt->triple_.ids();
+    std::array<Id, 4> spo{};
+    for (size_t i = 0; i < 4; ++i) {
+      spo[inverseKeys[i]] = ids[i];
+    }
+    return IdTriple<0>{spo};
+  };
+
+  auto lessThan = [](const auto& lt, const auto& row) {
+    return tieLocatedTriple<3, true>(lt) < tieIdTableRow<3, true>(row);
+  };
+  auto equal = [](const auto& lt, const auto& row) {
+    return tieLocatedTriple<3, true>(lt) == tieIdTableRow<3, true>(row);
+  };
+
+  auto rowIt = idTable.begin();
+  auto updateIt = locatedTriples.begin();
+
+  while (updateIt != locatedTriples.end() && rowIt != idTable.end()) {
+    if (lessThan(updateIt, *rowIt)) {
+      if (updateIt->insertOrDelete_) {
+        stats.numInsertionsKept_++;
+      } else {
+        allDeletionsToRemove.push_back(toSpo(updateIt));
+        stats.numDeletionsRemoved_++;
+      }
+      ++updateIt;
+    } else if (equal(updateIt, *rowIt)) {
+      if (updateIt->insertOrDelete_) {
+        allInsertionsToRemove.push_back(toSpo(updateIt));
+        stats.numInsertionsRemoved_++;
+      } else {
+        stats.numDeletionsKept_++;
+      }
+      ++updateIt;
+    } else {
+      ++rowIt;
+    }
+  }
+
+  while (updateIt != locatedTriples.end()) {
+    if (updateIt->insertOrDelete_) {
+      stats.numInsertionsKept_++;
+    } else {
+      allDeletionsToRemove.push_back(toSpo(updateIt));
+      stats.numDeletionsRemoved_++;
+    }
+    ++updateIt;
+  }
+
+  return stats;
+}
+}  // namespace
+
+// ____________________________________________________________________________
+TriplesToVacuum LocatedTriplesPerBlock::identifyTriplesToVacuum(
+    const Permutation& perm,
+    ad_utility::SharedCancellationHandle cancellationHandle) const {
+  std::vector<size_t> blocksToVacuum;
+  size_t minimumBlockSize =
+      getRuntimeParameter<&RuntimeParameters::vacuumMinimumBlockSize_>();
+  for (const auto& [blockIndex, locatedTriples] : map_) {
+    if (locatedTriples.size() >= minimumBlockSize) {
+      blocksToVacuum.push_back(blockIndex);
+    }
+  }
+
+  VacuumStatistics totalStats{0, 0, 0, 0};
+  std::vector<IdTriple<0>> allDeletionsToRemove;
+  std::vector<IdTriple<0>> allInsertionsToRemove;
+
+  // TODO: still strange, just pass in const KeyOrder&?
+  // The identified triples are output in `SPO` so we need to invert the
+  // permutation.
+  qlever::KeyOrder::Array inverseKeys{};
+  for (size_t i = 0; i < 4; ++i) {
+    inverseKeys[perm.keyOrder().keys()[i]] = i;
+  }
+
+  const auto& reader = perm.reader();
+  const auto& blockMetadata = perm.metaData().blockData();
+  AD_CORRECTNESS_CHECK(!blockMetadata.empty());
+
+  for (size_t blockIndex : blocksToVacuum) {
+    AD_CORRECTNESS_CHECK(blockIndex <= blockMetadata.size());
+    // This is one past the last block with index triples. This block always
+    // only has updates but no index triples. Pass in an empty `IdTable`.
+    if (blockIndex == blockMetadata.size()) {
+      ad_utility::AllocatorWithLimit<Id> allocator =
+          ad_utility::makeUnlimitedAllocator<Id>();
+      IdTable idTable(4, allocator);
+      totalStats +=
+          processBlockForVacuum(idTable, map_.at(blockIndex), inverseKeys,
+                                allDeletionsToRemove, allInsertionsToRemove);
+      continue;
+    }
+
+    ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
+    auto blockMetadataForSingleBlock =
+        [&blockMetadata](
+            size_t blockIndex) -> std::vector<CompressedBlockMetadata> {
+      CompressedBlockMetadata block = blockMetadata.at(blockIndex);
+      AD_CORRECTNESS_CHECK(block.blockIndex_ == blockIndex);
+      return {block};
+    };
+    std::vector<ColumnIndex> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
+    auto idTable = ad_utility::getSingleElement(
+        reader.lazyScan(scanSpec, blockMetadataForSingleBlock(blockIndex),
+                        additionalColumns, cancellationHandle, {}));
+
+    totalStats +=
+        processBlockForVacuum(idTable, map_.at(blockIndex), inverseKeys,
+                              allDeletionsToRemove, allInsertionsToRemove);
+    cancellationHandle->throwIfCancelled();
+  }
+
+  return {std::move(allDeletionsToRemove), std::move(allInsertionsToRemove),
+          totalStats};
+}
+
 // ____________________________________________________________________________
 std::vector<LocatedTriples::iterator> LocatedTriplesPerBlock::add(
     ql::span<const LocatedTriple> locatedTriples,
@@ -257,7 +392,7 @@ void LocatedTriplesPerBlock::erase(size_t blockIndex,
                                    LocatedTriples::iterator iter) {
   auto blockIter = map_.find(blockIndex);
   AD_CONTRACT_CHECK(blockIter != map_.end(), "Block ", blockIndex,
-                    " is not contained.");
+                    " is not contained");
   auto& block = blockIter->second;
   block.erase(iter);
   numTriples_--;
@@ -357,6 +492,16 @@ void LocatedTriplesPerBlock::updateAugmentedMetadata() {
         CompressedBlockMetadata::checkInvariantsForSortedBlocks(
             *augmentedMetadata_));
   }
+}
+
+// ____________________________________________________________________________
+void to_json(nlohmann::json& j, const VacuumStatistics& stats) {
+  j = nlohmann::json{{"insertionsRemoved", stats.numInsertionsRemoved_},
+                     {"deletionsRemoved", stats.numDeletionsRemoved_},
+                     {"insertionsKept", stats.numInsertionsKept_},
+                     {"deletionsKept", stats.numDeletionsKept_},
+                     {"totalRemoved", stats.totalRemoved()},
+                     {"totalKept", stats.totalKept()}};
 }
 
 // ____________________________________________________________________________

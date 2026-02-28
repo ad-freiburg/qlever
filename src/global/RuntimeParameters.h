@@ -142,6 +142,9 @@ struct RuntimeParameters {
   Bool enableMaterializedViewQueryRewrite_{
       true, "enable-materialized-view-query-rewrite"};
 
+  // Only blocks of this size or larger will be considered for vacuuming.
+  SizeT vacuumMinimumBlockSize_{10'000, "vacuum-minimum-block-size"};
+
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE
   // CONSTRUCTOR, S.T. THEY CAN ALSO BE ACCESSED VIA THE RUNTIME INTERFACE.
