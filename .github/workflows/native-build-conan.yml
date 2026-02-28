@@ -30,6 +30,8 @@ jobs:
       with:
         submodules: 'recursive'
 
+    - name: Free disk space
+      uses: ./.github/workflows/free-disk-space
     - name: Install dependencies
       uses: ./.github/workflows/install-dependencies-ubuntu
       with:

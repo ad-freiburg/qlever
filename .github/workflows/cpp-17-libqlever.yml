@@ -43,13 +43,15 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: 'recursive'
-      - name: Install dependencies
-        uses: ./.github/workflows/install-dependencies-ubuntu
+      - name: Free disk space
+        uses: ./.github/workflows/free-disk-space
       - name: Install compiler
         uses: ./.github/workflows/install-compiler-ubuntu
         with:
           compiler: ${{env.compiler}}
           compiler-version: ${{matrix.compiler-version}}
+      - name: Install dependencies
+        uses: ./.github/workflows/install-dependencies-ubuntu
       - name: Configure CMake
         # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
         # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type

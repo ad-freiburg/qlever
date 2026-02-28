@@ -104,13 +104,15 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: 'recursive'
-      - name: Install dependencies
-        uses: ./.github/workflows/install-dependencies-ubuntu
+      - name: Free disk space
+        uses: ./.github/workflows/free-disk-space
       - name: Install compiler
         uses: ./.github/workflows/install-compiler-ubuntu
         with:
           compiler: ${{matrix.compiler}}
           compiler-version: ${{matrix.compiler-version}}
+      - name: Install dependencies
+        uses: ./.github/workflows/install-dependencies-ubuntu
       - name: Reduce address randomization to make sanitizers work
         # For details see for example `https://stackoverflow.com/questions/77850769/fatal-threadsanitizer-unexpected-memory-mapping-when-running-on-linux-kernels`
         run: |
