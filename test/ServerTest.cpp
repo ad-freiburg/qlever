@@ -225,7 +225,7 @@ TEST(ServerTest, createResponseMetadata) {
   const ad_utility::Timer requestTimer{
       ad_utility::Timer::InitialStatus::Stopped};
   QueryExecutionContext* qec = ad_utility::testing::getQec("<a> <b> <c>");
-  const Index& index = qec->getIndex();
+  Index& index = const_cast<Index&>(qec->getIndex());
   DeltaTriples deltaTriples{index};
   const std::string update = "INSERT DATA { <b> <c> <d> }";
   ad_utility::BlankNodeManager bnm;
@@ -240,7 +240,7 @@ TEST(ServerTest, createResponseMetadata) {
   DeltaTriplesCount countBefore = deltaTriples.getCounts();
   UpdateMetadata updateMetadata = ExecuteUpdate::executeUpdate(
       index, plannedQuery.parsedQuery_, plannedQuery.queryExecutionTree_,
-      deltaTriples, handle);
+      deltaTriples, index.graphManager(), handle);
   updateMetadata.countBefore_ = countBefore;
   updateMetadata.countAfter_ = deltaTriples.getCounts();
 

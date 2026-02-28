@@ -28,6 +28,7 @@ class TextBlockMetaData;
 class IndexImpl;
 struct LocatedTriplesState;
 class DeltaTriplesManager;
+class GraphManager;
 
 class Index {
  private:
@@ -117,6 +118,10 @@ class Index {
   // Get a reference to the DeltaTriplesManager of this Index.
   DeltaTriplesManager& deltaTriplesManager();
   const DeltaTriplesManager& deltaTriplesManager() const;
+
+  // Get a reference to the GraphManager of this Index.
+  GraphManager& graphManager();
+  const GraphManager& graphManager() const;
 
   // --------------------------------------------------------------------------
   // RDF RETRIEVAL

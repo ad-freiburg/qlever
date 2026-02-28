@@ -844,6 +844,11 @@ TEST_F(DeltaTriplesTest, storeAndRestoreData) {
   // Make sure no file like this exists
   std::filesystem::remove(tmpFile);
   absl::Cleanup cleanup{[&tmpFile]() { std::filesystem::remove(tmpFile); }};
+  auto defaultGraph =
+      TripleComponent(TripleComponent::Iri::fromIriref(DEFAULT_GRAPH_IRI))
+          .toValueId(testQec->getIndex().getVocab(),
+                     testQec->getIndex().encodedIriManager())
+          .value();
   {
     DeltaTriples deltaTriples{testQec->getIndex()};
     deltaTriples.setPersists(tmpFile);
@@ -855,12 +860,12 @@ TEST_F(DeltaTriplesTest, storeAndRestoreData) {
     deltaTriples.insertTriples(
         cancellationHandle,
         {IdTriple<>{{Id::makeFromInt(1), Id::makeFromLocalVocabIndex(&entry1),
-                     Id::makeFromBool(true)}}});
+                     Id::makeFromBool(true), defaultGraph}}});
     LocalVocabEntry entry2{LiteralOrIri::fromStringRepresentation("<other>")};
     deltaTriples.deleteTriples(
         cancellationHandle,
         {IdTriple<>{{Id::makeFromInt(2), Id::makeFromLocalVocabIndex(&entry2),
-                     Id::makeFromBool(false)}}});
+                     Id::makeFromBool(false), defaultGraph}}});
 
     deltaTriples.writeToDisk();
   }
@@ -897,7 +902,7 @@ TEST_F(DeltaTriplesTest, storeAndRestoreData) {
                      .getIndexOrNullopt(LocalVocabEntry{
                          LiteralOrIri::fromStringRepresentation("<test>")})
                      .value()),
-             Id::makeFromBool(true)}})));
+             Id::makeFromBool(true), defaultGraph}})));
     std::vector<IdTriple<>> deletedTriples;
     ql::ranges::copy(
         deltaTriples.triplesToHandlesNormal_.triplesDeleted_ | ql::views::keys,
@@ -911,7 +916,7 @@ TEST_F(DeltaTriplesTest, storeAndRestoreData) {
                      .getIndexOrNullopt(LocalVocabEntry{
                          LiteralOrIri::fromStringRepresentation("<other>")})
                      .value()),
-             Id::makeFromBool(false)}})));
+             Id::makeFromBool(false), defaultGraph}})));
   }
 }
 

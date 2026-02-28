@@ -7,6 +7,7 @@
 
 #include <gtest/gtest_prod.h>
 
+#include "../index/GraphManager.h"
 #include "index/Index.h"
 #include "parser/ParsedQuery.h"
 #include "util/CancellationHandle.h"
@@ -31,7 +32,7 @@ class ExecuteUpdate {
   static UpdateMetadata executeUpdate(
       const Index& index, const ParsedQuery& query,
       const QueryExecutionTree& qet, DeltaTriples& deltaTriples,
-      const CancellationHandle& cancellationHandle,
+      GraphManager& graphManager, const CancellationHandle& cancellationHandle,
       ad_utility::timer::TimeTracer& tracer =
           ad_utility::timer::DEFAULT_TIME_TRACER);
 
@@ -66,17 +67,20 @@ class ExecuteUpdate {
     std::vector<IdTriple<>> idTriples_;
     LocalVocab localVocab_;
   };
+  struct ComputedUpdates {
+    IdTriplesAndLocalVocab quadsToInsert_;
+    IdTriplesAndLocalVocab quadsToDelete_;
+    ad_utility::HashSet<Id> uniqueInsertedGraphs_;
+  };
   // Compute the set of quads to insert and delete for the given update. The
   // ParsedQuery's clause must be an UpdateClause. The UpdateClause's operation
   // must be a GraphUpdate.
-  static std::pair<IdTriplesAndLocalVocab, IdTriplesAndLocalVocab>
-  computeGraphUpdateQuads(const Index& index, const ParsedQuery& query,
-                          const Result& result,
-                          const VariableToColumnMap& variableColumns,
-                          const CancellationHandle& cancellationHandle,
-                          UpdateMetadata& metadata,
-                          ad_utility::timer::TimeTracer& tracer =
-                              ad_utility::timer::DEFAULT_TIME_TRACER);
+  static ComputedUpdates computeGraphUpdateQuads(
+      const Index& index, const ParsedQuery& query, const Result& result,
+      const VariableToColumnMap& variableColumns,
+      const CancellationHandle& cancellationHandle, UpdateMetadata& metadata,
+      ad_utility::timer::TimeTracer& tracer =
+          ad_utility::timer::DEFAULT_TIME_TRACER);
   FRIEND_TEST(ExecuteUpdate, computeGraphUpdateQuads);
 
   // After the operation the vector is sorted and contains no duplicate
@@ -90,6 +94,9 @@ class ExecuteUpdate {
   static std::vector<IdTriple<>> setMinus(const std::vector<IdTriple<>>& a,
                                           const std::vector<IdTriple<>>& b);
   FRIEND_TEST(ExecuteUpdate, setMinus);
+
+  static ad_utility::HashSet<Id> uniqueGraphs(
+      const std::vector<IdTriple<>>& triples);
 };
 
 #endif  // QLEVER_SRC_ENGINE_EXECUTEUPDATE_H

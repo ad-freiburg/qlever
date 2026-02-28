@@ -272,7 +272,11 @@ class DeltaTriples {
   void writeToDisk() const;
 
   // Read the delta triples from disk to restore them after a restart.
-  void readFromDisk();
+  struct UniqueGraphs {
+    ad_utility::HashSet<Id> graphs;
+    LocalVocab localVocab;
+  };
+  UniqueGraphs readFromDisk();
 
   // Return a deep copy of the `LocatedTriples` and the corresponding
   // `LocalVocab` which form an unchanging snapshot of the current state of
@@ -384,7 +388,8 @@ class DeltaTriplesManager {
                     ad_utility::timer::TimeTracer& tracer =
                         ad_utility::timer::DEFAULT_TIME_TRACER);
 
-  void setFilenameForPersistentUpdatesAndReadFromDisk(std::string filename);
+  DeltaTriples::UniqueGraphs setFilenameForPersistentUpdatesAndReadFromDisk(
+      std::string filename);
 
   // Reset the updates represented by the underlying `DeltaTriples` and then
   // update the current snapshot.
