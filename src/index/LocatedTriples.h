@@ -37,7 +37,7 @@ struct NumAddedAndDeleted {
   }
 };
 
-// Statistics collected during a VACUUM operation on a block.
+// Statistics collected during a vacuum operation on a block.
 struct VacuumStatistics {
   // Only updates that have an effect are kept. Inserts that already exist
   // and deletes that don't exist are removed.
@@ -63,7 +63,7 @@ struct VacuumStatistics {
   friend void to_json(nlohmann::json& j, const VacuumStatistics& stats);
 };
 
-// Triples identified for removal during a VACUUM operation.
+// Triples identified for removal during a vacuum operation.
 struct TriplesToVacuum {
   std::vector<IdTriple<0>> deletionsToRemove;
   std::vector<IdTriple<0>> insertionsToRemove;

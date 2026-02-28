@@ -249,7 +249,9 @@ VacuumStatistics processBlockForVacuum(
   auto toSpo = [&inverseKeys](const LocatedTriples::iterator& lt) {
     const auto& ids = lt->triple_.ids();
     std::array<Id, 4> spo{};
-    for (size_t i = 0; i < 4; ++i) spo[inverseKeys[i]] = ids[i];
+    for (size_t i = 0; i < 4; ++i) {
+      spo[inverseKeys[i]] = ids[i];
+    }
     return IdTriple<0>{spo};
   };
 
@@ -304,9 +306,10 @@ TriplesToVacuum LocatedTriplesPerBlock::identifyTriplesToVacuum(
     const Permutation& perm,
     ad_utility::SharedCancellationHandle cancellationHandle) const {
   std::vector<size_t> blocksToVacuum;
+  size_t minimumBlockSize =
+      getRuntimeParameter<&RuntimeParameters::vacuumMinimumBlockSize_>();
   for (const auto& [blockIndex, locatedTriples] : map_) {
-    if (locatedTriples.size() >=
-        getRuntimeParameter<&RuntimeParameters::vacuumMinimumBlockSize_>()) {
+    if (locatedTriples.size() >= minimumBlockSize) {
       blocksToVacuum.push_back(blockIndex);
     }
   }
@@ -315,23 +318,22 @@ TriplesToVacuum LocatedTriplesPerBlock::identifyTriplesToVacuum(
   std::vector<IdTriple<0>> allDeletionsToRemove;
   std::vector<IdTriple<0>> allInsertionsToRemove;
 
-  if (blocksToVacuum.empty()) {
-    return {std::move(allDeletionsToRemove), std::move(allInsertionsToRemove),
-            totalStats};
-  }
-
+  // TODO: still strange, just pass in const KeyOrder&?
   // The identified triples are output in `SPO` so we need to invert the
   // permutation.
   qlever::KeyOrder::Array inverseKeys{};
-  for (size_t i = 0; i < 4; ++i) inverseKeys[perm.keyOrder().keys()[i]] = i;
+  for (size_t i = 0; i < 4; ++i) {
+    inverseKeys[perm.keyOrder().keys()[i]] = i;
+  }
 
   const auto& reader = perm.reader();
   const auto& blockMetadata = perm.metaData().blockData();
+  AD_CORRECTNESS_CHECK(!blockMetadata.empty());
 
   for (size_t blockIndex : blocksToVacuum) {
     AD_CORRECTNESS_CHECK(blockIndex <= blockMetadata.size());
     // This is one past the last block with index triples. This block always
-    // only has updates.
+    // only has updates but no index triples. Pass in an empty `IdTable`.
     if (blockIndex == blockMetadata.size()) {
       ad_utility::AllocatorWithLimit<Id> allocator =
           ad_utility::makeUnlimitedAllocator<Id>();
@@ -346,7 +348,7 @@ TriplesToVacuum LocatedTriplesPerBlock::identifyTriplesToVacuum(
     auto blockMetadataForSingleBlock =
         [&blockMetadata](size_t blockIndex) -> BlockMetadataRanges {
       BlockMetadataSpan blockMetaSpan =
-          std::span(blockMetadata).subspan(blockIndex, 1);
+          ql::span(blockMetadata).subspan(blockIndex, 1);
       AD_CORRECTNESS_CHECK(blockMetaSpan.size() == 1);
       AD_CORRECTNESS_CHECK(blockMetaSpan[0].blockIndex_ == blockIndex);
       return {BlockMetadataRange{blockMetaSpan.begin(), blockMetaSpan.end()}};

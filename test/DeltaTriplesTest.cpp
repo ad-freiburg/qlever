@@ -1020,18 +1020,18 @@ TEST_F(DeltaTriplesTest, vacuum) {
   auto& vocab = testQec->getIndex().getVocab();
   LocalVocab localVocab;
 
-  // Insertions of triples in the index
+  // Insertions of triples in the index.
   deltaTriples.insertTriples(
       cancellationHandle,
       makeIdTriples(vocab, localVocab, {"<a> <upp> <A>", "<b> <upp> <B>"}));
-  // Deletions of triples not in the index
+  // Deletions of triples not in the index.
   deltaTriples.deleteTriples(cancellationHandle,
                              makeIdTriples(vocab, localVocab, {"<X> <Y> <Z>"}));
-  // Insertions of triples not in the index
+  // Insertions of triples not in the index.
   deltaTriples.insertTriples(
       cancellationHandle,
       makeIdTriples(vocab, localVocab, {"<a> <upp> <newval>"}));
-  // Deletions of triples in the index
+  // Deletions of triples in the index.
   deltaTriples.deleteTriples(
       cancellationHandle, makeIdTriples(vocab, localVocab, {"<a> <next> <b>"}));
 
