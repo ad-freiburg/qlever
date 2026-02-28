@@ -346,18 +346,16 @@ TriplesToVacuum LocatedTriplesPerBlock::identifyTriplesToVacuum(
 
     ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
     auto blockMetadataForSingleBlock =
-        [&blockMetadata](size_t blockIndex) -> BlockMetadataRanges {
-      BlockMetadataSpan blockMetaSpan =
-          ql::span(blockMetadata).subspan(blockIndex, 1);
-      AD_CORRECTNESS_CHECK(blockMetaSpan.size() == 1);
-      AD_CORRECTNESS_CHECK(blockMetaSpan[0].blockIndex_ == blockIndex);
-      return {BlockMetadataRange{blockMetaSpan.begin(), blockMetaSpan.end()}};
+        [&blockMetadata](
+            size_t blockIndex) -> std::vector<CompressedBlockMetadata> {
+      CompressedBlockMetadata block = blockMetadata.at(blockIndex);
+      AD_CORRECTNESS_CHECK(block.blockIndex_ == blockIndex);
+      return {block};
     };
-    CompressedRelationReader::ScanSpecAndBlocks scanSpecAndBlocks(
-        scanSpec, blockMetadataForSingleBlock(blockIndex));
     std::vector<ColumnIndex> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
-    auto idTable = reader.scan(scanSpecAndBlocks, additionalColumns,
-                               cancellationHandle, {});
+    auto idTable = ad_utility::getSingleElement(
+        reader.lazyScan(scanSpec, blockMetadataForSingleBlock(blockIndex),
+                        additionalColumns, cancellationHandle, {}));
 
     totalStats +=
         processBlockForVacuum(idTable, map_.at(blockIndex), inverseKeys,
