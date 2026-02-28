@@ -269,13 +269,17 @@ TEST(HttpServer, ErrorHandlingInSession) {
   }
 
   // Handling of `std::exception`.
-  s = throwAndCaptureLog(std::runtime_error{"The runtime error for testing"});
-  EXPECT_THAT(s, HasSubstr("The runtime error for testing"));
+  if constexpr (LOGLEVEL >= ERROR) {
+    s = throwAndCaptureLog(std::runtime_error{"The runtime error for testing"});
+    EXPECT_THAT(s, HasSubstr("The runtime error for testing"));
+  }
 
   // Thrown object that is not a `std::exception`.
-  s = throwAndCaptureLog(47);
-  EXPECT_THAT(s,
-              HasSubstr("Weird exception not inheriting from std::exception"));
+  if constexpr (LOGLEVEL >= ERROR) {
+    s = throwAndCaptureLog(47);
+    EXPECT_THAT(
+        s, HasSubstr("Weird exception not inheriting from std::exception"));
+  }
 }
 
 // Test the request body size limit
