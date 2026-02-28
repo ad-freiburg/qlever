@@ -41,7 +41,7 @@ auto GetGraph = [](ad_utility::triple_component::Iri graph) {
       {{Var{"?s"}, Var{"?p"}, Var{"?o"}}},
       m::GraphPattern(m::GroupGraphPatternWithGraph(
           std::move(graph), m::Triples({SparqlTriple(TC(Var{"?s"}), Var{"?p"},
-                                          TC(Var{"?o"}))}))));
+                                                     TC(Var{"?o"}))}))));
 };
 
 auto lit = ad_utility::testing::tripleComponentLiteral;
