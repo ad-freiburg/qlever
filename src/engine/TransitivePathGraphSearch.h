@@ -7,8 +7,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_ENGINE_TRANSITIVEPATHSEARCHSTRATEGY_H
-#define QLEVER_SRC_ENGINE_TRANSITIVEPATHSEARCHSTRATEGY_H
+#ifndef QLEVER_SRC_ENGINE_TRANSITIVEPATHGRAPHSEARCH_H
+#define QLEVER_SRC_ENGINE_TRANSITIVEPATHGRAPHSEARCH_H
 
 #include <limits>
 #include <optional>
@@ -73,8 +73,8 @@ struct GraphSearchExecutionParams {
 // Breadth-first search without any distance constraints.
 // Returns the set of all nodes connected to the startNode as given in `gsp`.
 template <typename T>
-Set breadthFirstSearch(GraphSearchProblem<T>& gsp,
-                       GraphSearchExecutionParams& ep) {
+Set breadthFirstSearch(const GraphSearchProblem<T>& gsp,
+                       const GraphSearchExecutionParams& ep) {
   // TODO<schaetzr>: Check if there are advantages to making our own minimal
   // implementation of a FIFO queue.
   Queue queue{ep.allocator_};
@@ -107,8 +107,8 @@ Set breadthFirstSearch(GraphSearchProblem<T>& gsp,
 // Returns the set of all nodes connected to the startNode as given in `gsp`,
 // with respect to the limit.
 template <typename T>
-Set breadthFirstSearchWithLimit(GraphSearchProblem<T>& gsp,
-                                GraphSearchExecutionParams& ep) {
+Set breadthFirstSearchWithLimit(const GraphSearchProblem<T>& gsp,
+                                const GraphSearchExecutionParams& ep) {
   size_t traversalDepth = 0;
   size_t nodesUntilNextDepthIncrease = 1;
   // TODO<schaetzr>: Check if there are advantages to making our own minimal
@@ -152,19 +152,15 @@ Set breadthFirstSearchWithLimit(GraphSearchProblem<T>& gsp,
 // Returns a set containing the target node, if a path from the start node to
 // it was found in the graph.
 template <typename T>
-Set depthFirstSearch(GraphSearchProblem<T>& gsp,
-                     GraphSearchExecutionParams& ep) {
+Set depthFirstSearch(const GraphSearchProblem<T>& gsp,
+                     const GraphSearchExecutionParams& ep) {
   Set connectedNodes{ep.allocator_};
 
-  // Ensure the target node is actually given. If not, we can skip graph search
-  // altogether. Also improves performance since no has_value() check is
-  // necessary each iteration.
-  Id targetNode{};
-  if (gsp.targetNode_.has_value()) {
-    targetNode = gsp.targetNode_.value();
-  } else {
-    return connectedNodes;
-  }
+  // Saving the value of gsp.targetNode_ removes the .has_value() check each
+  // iteration and therefore improves runtime.
+  AD_CORRECTNESS_CHECK(gsp.targetNode_.has_value());
+  Id targetNode = gsp.targetNode_.value();
+
   sparqlExpression::VectorWithMemoryLimit<Id> stack{ep.allocator_};
   ad_utility::HashSetWithMemoryLimit<Id> marks{ep.allocator_};
 
@@ -198,19 +194,14 @@ Set depthFirstSearch(GraphSearchProblem<T>& gsp,
 // Returns a set containing the target node, if the graph contains a path
 // from the start node to it and which fits inside the distance constraints.
 template <typename T>
-Set depthFirstSearchWithLimit(GraphSearchProblem<T>& gsp,
-                              GraphSearchExecutionParams& ep) {
+Set depthFirstSearchWithLimit(const GraphSearchProblem<T>& gsp,
+                              const GraphSearchExecutionParams& ep) {
   Set connectedNodes{ep.allocator_};
 
-  // Ensure the target node is actually given. If not, we can skip graph search
-  // altogether. Also improves performance since no has_value() check is
-  // necessary each iteration.
-  Id targetNode{};
-  if (gsp.targetNode_.has_value()) {
-    targetNode = gsp.targetNode_.value();
-  } else {
-    return connectedNodes;
-  }
+  // Saving the value of gsp.targetNode_ removes the .has_value() check each
+  // iteration and therefore improves runtime.
+  AD_CORRECTNESS_CHECK(gsp.targetNode_.has_value());
+  Id targetNode = gsp.targetNode_.value();
 
   sparqlExpression::VectorWithMemoryLimit<std::pair<Id, size_t>> stack{
       ep.allocator_.as<std::pair<Id, size_t>>()};
@@ -254,8 +245,8 @@ Set depthFirstSearchWithLimit(GraphSearchProblem<T>& gsp,
 // reachable. Otherwise, return all reachable nodes. If limits were given, only
 // nodes inside that limit are contained.
 template <typename T>
-Set runOptimalGraphSearch(GraphSearchProblem<T>& gsp,
-                          GraphSearchExecutionParams& ep) {
+Set runOptimalGraphSearch(const GraphSearchProblem<T>& gsp,
+                          const GraphSearchExecutionParams& ep) {
   // Select limited versions of graph search algorithms if limits
   // are not size limits of size_t (as used when parsing input).
   bool usesLimits =
@@ -275,4 +266,4 @@ Set runOptimalGraphSearch(GraphSearchProblem<T>& gsp,
 }
 };  // namespace qlever::graphSearch
 
-#endif  // QLEVER_SRC_ENGINE_TRANSITIVEPATHSEARCHSTRATEGY_H
+#endif  // QLEVER_SRC_ENGINE_TRANSITIVEPATHGRAPHSEARCH_H
