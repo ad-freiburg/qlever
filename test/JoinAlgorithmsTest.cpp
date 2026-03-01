@@ -483,6 +483,22 @@ TEST(JoinAlgorithms, JoinWithBlocksOneSideSingleUndef) {
 }
 
 // _____________________________________________________________________________
+TEST(JoinAlgorithms, JoinWithBlocksOneSideDoubleUndef) {
+  // Regression test for https://github.com/ad-freiburg/qlever/issues/2606
+  auto U = Id::makeUndefined();
+  std::vector<std::vector<FakeId>> a{{{U, "a0"}, {U, "a1"}}};
+  std::vector<std::vector<FakeId>> b{{{I(1), "b0"}, {I(2), "b1"}}};
+
+  std::vector<std::array<FakeId, 2>> expectedResult{
+      {F{U, "a0"}, F{I(1), "b0"}},
+      {F{U, "a1"}, F{I(1), "b0"}},
+      {F{U, "a0"}, F{I(2), "b1"}},
+      {F{U, "a1"}, F{I(2), "b1"}},
+  };
+  testDynamicJoinWithUndef(a, b, expectedResult);
+}
+
+// _____________________________________________________________________________
 TEST(JoinAlgorithms, JoinWithBlocksOneUndefinedValueMixedWithOtherValues) {
   auto U = Id::makeUndefined();
   std::vector<std::vector<FakeId>> a{{{U, "a0"}, {I(1), "a1"}, {I(2), "a2"}}};
