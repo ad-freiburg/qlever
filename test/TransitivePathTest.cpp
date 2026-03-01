@@ -15,6 +15,8 @@
 #include "engine/TransitivePathBinSearch.h"
 #include "engine/TransitivePathHashMap.h"
 #include "engine/ValuesForTesting.h"
+#include "util/AllocatorTestHelpers.h"
+#include "util/AllocatorWithLimit.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"

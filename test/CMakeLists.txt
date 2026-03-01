@@ -226,6 +226,8 @@ addLinkAndDiscoverTest(IdTableTest util)
 
 addLinkAndDiscoverTest(TransitivePathTest engine)
 
+addLinkAndDiscoverTest(TransitivePathGraphSearchTest engine)
+
 addLinkAndDiscoverTest(PathSearchTest engine)
 
 addLinkAndDiscoverTest(BatchedPipelineTest)
