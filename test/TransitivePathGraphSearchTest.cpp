@@ -9,14 +9,20 @@
 
 #include <gmock/gmock.h>
 
+#include <chrono>
+#include <exception>
 #include <memory>
+#include <string>
+#include <thread>
 
 #include "engine/TransitivePathBinSearch.h"
 #include "engine/TransitivePathGraphSearch.h"
 #include "engine/TransitivePathHashMap.h"
+#include "global/Constants.h"
 #include "util/AllocatorTestHelpers.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/CancellationHandle.h"
+#include "util/Log.h"
 
 using namespace qlever::graphSearch;
 using namespace ::testing;
@@ -237,16 +243,24 @@ TYPED_TEST(GraphSearchTest, depthFirstSearchWithLimit) {
 
 // ___________________________________________________________________________
 TEST(GraphSearchTestExtraTests, cancellationCheck) {
-  // TODO<schaetzr>: Re-do to actually work (codecov says it doesn't).
-  // Test that the cancellation test from the GraphSearchExecutionParams struct
-  // really does its job.
+  // Test that the log message created in
+  // GraphSearchExecutionParams.checkCancellation() when a cancellation is
+  // received will be logged.
+
   const ad_utility::AllocatorWithLimit<Id> allocator =
       ad_utility::testing::makeAllocator();
   GraphSearchExecutionParams ep(
       std::make_shared<ad_utility::CancellationHandle<>>(), allocator);
 
-  ep.cancellationHandle_->cancel(ad_utility::CancellationState::MANUAL);
+  std::stringstream stream;
+  ad_utility::setGlobalLoggingStream(&stream);
 
-  EXPECT_THROW(ep.checkCancellation("Testing cancellation"),
-               ad_utility::CancellationException);
+  ep.cancellationHandle_->startWatchDog();
+  std::this_thread::sleep_for(2 * DESIRED_CANCELLATION_CHECK_INTERVAL);
+  ep.checkCancellation("TEST");
+
+  EXPECT_THAT(
+      stream.str().c_str(),
+      HasSubstr(
+          "The TEST graph search algorithm received a cancellation signal."));
 }
