@@ -128,7 +128,7 @@ void to_json(nlohmann::json& j, const GraphManager& graphManager) {
 
 // _____________________________________________________________________________
 void from_json(const nlohmann::json& j, GraphManager& graphManager) {
-  auto graphs = static_cast<std::vector<std::string>>(j["graphs"]) |
+  auto graphs = j.at("graphs").get<std::vector<std::string>>() |
                 ql::views::transform([](const auto& idStr) -> Id {
                   return Id::fromBits(std::stoull(idStr));
                 });
@@ -136,7 +136,9 @@ void from_json(const nlohmann::json& j, GraphManager& graphManager) {
     graphsMember = ad_utility::HashSet<Id>(graphs.begin(), graphs.end());
   });
   graphManager.namespaceManager_ =
-      j["namespaces"]["new-graphs"].get<GraphManager::GraphNamespaceManager>();
+      j.at("namespaces")
+          .at("new-graphs")
+          .get<GraphManager::GraphNamespaceManager>();
 }
 
 // _____________________________________________________________________________
@@ -169,10 +171,11 @@ void to_json(nlohmann::json& j,
 // _____________________________________________________________________________
 void from_json(const nlohmann::json& j,
                GraphManager::GraphNamespaceManager& namespaceManager) {
-  namespaceManager.prefix_ = j["prefix"].get<std::string>();
-  namespaceManager.allocatedGraphs_.withWriteLock([&j](auto& allocatedGraphs) {
-    allocatedGraphs = j["allocatedGraphs"].get<uint64_t>();
-  });
+  j.at("prefix").get_to(namespaceManager.prefix_);
+  namespaceManager.allocatedGraphs_.withWriteLock(
+      [&j](uint64_t& allocatedGraphs) {
+        j.at("allocatedGraphs").get_to(allocatedGraphs);
+      });
 }
 
 // _____________________________________________________________________________

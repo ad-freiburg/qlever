@@ -25,23 +25,6 @@ class GraphManager {
   LocalVocab graphLocalVocab_;
 
  public:
-  GraphManager() = default;
-  explicit GraphManager(ad_utility::HashSet<Id> graphs);
-
-  static GraphManager fromExistingGraphs(ad_utility::HashSet<Id> graphs);
-
-  friend void to_json(nlohmann::json& j, const GraphManager& graphManager);
-  friend void from_json(const nlohmann::json& j, GraphManager& graphManager);
-
-  void addGraphs(ad_utility::HashSet<Id> graphs);
-  // Returns whether a graph definitely does not exist. If this returns false,
-  // the graph may or may not exist.
-  bool graphDoesntExist(const Id& graph) const;
-  auto getGraphs() const { return graphs_.rlock(); }
-
-  friend std::ostream& operator<<(std::ostream& os,
-                                  const GraphManager& graphManager);
-
   // Manages the allocated (but not necessarily used or existing) graphs from a
   // graph namespace (defined by having the same prefix in the IRI).
   class GraphNamespaceManager {
@@ -67,6 +50,23 @@ class GraphManager {
     friend std::ostream& operator<<(
         std::ostream& os, const GraphNamespaceManager& namespaceManager);
   };
+
+  GraphManager() = default;
+  explicit GraphManager(ad_utility::HashSet<Id> graphs);
+
+  static GraphManager fromExistingGraphs(ad_utility::HashSet<Id> graphs);
+
+  friend void to_json(nlohmann::json& j, const GraphManager& graphManager);
+  friend void from_json(const nlohmann::json& j, GraphManager& graphManager);
+
+  void addGraphs(ad_utility::HashSet<Id> graphs);
+  // Returns whether a graph definitely does not exist. If this returns false,
+  // the graph may or may not exist.
+  bool graphDoesntExist(const Id& graph) const;
+  auto getGraphs() const { return graphs_.rlock(); }
+
+  friend std::ostream& operator<<(std::ostream& os,
+                                  const GraphManager& graphManager);
 
  private:
   std::optional<GraphNamespaceManager> namespaceManager_;
