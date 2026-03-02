@@ -9,10 +9,7 @@
 
 #include <gmock/gmock.h>
 
-#include <chrono>
-#include <exception>
 #include <memory>
-#include <string>
 #include <thread>
 
 #include "engine/TransitivePathBinSearch.h"
@@ -41,12 +38,12 @@ class GraphSearchTest : public Test {
   std::vector<T> graphs_;
   // When testing using BinSearchMap, store the data for the startIds and
   // targetIds spans here.
-  std::vector<std::unique_ptr<std::vector<Id>>> binSearchMapStartIds_;
-  std::vector<std::unique_ptr<std::vector<Id>>> binSearchMapTargetIds_;
+  std::vector<std::vector<Id>> binSearchMapStartIds_;
+  std::vector<std::vector<Id>> binSearchMapTargetIds_;
 
   // Easy-to-read-and-change representation of the graphs that will be tested
-  // on. Will be converted to template type T and stored in graphs_ in the
-  // initializeGraphWrappers() method.
+  // on. Will be converted to template type T and stored in `graphs_` in the
+  // `initializeGraphWrappers()` method.
   const std::vector<AdjacencyList> graphsAdjListRepresentation_ = {
       // Empty graph.
       {},
@@ -89,34 +86,37 @@ class GraphSearchTest : public Test {
   GraphSearchTest() { initializeGraphsWrappers(); }
 
  private:
-  // Initialize the graphs_ list, depending on which type is currently used for
-  // template T.
+  // Initialize the `graphs_` list, depending on which type is currently used
+  // for template T.
   void initializeGraphsWrappers() {
-    // If a third wrapper (next to HashMapWrapper and BinSearchMap) is
+    // If a third wrapper (next to `HashMapWrapper` and `BinSearchMap`) is
     // introduced, specialized creation thereof will be necessary here.
     if constexpr (std::is_same_v<T, HashMapWrapper>) {
       for (const AdjacencyList& adjList : graphsAdjListRepresentation_) {
         HashMapWrapper::Map map(allocator_);
-        for (const std::pair<size_t, std::vector<size_t>> pair : adjList) {
+        for (const auto& pair : adjList) {
           map.insert_or_assign(Id::makeFromInt(pair.first),
                                this->initializeSet(pair.second));
         }
         graphs_.push_back(HashMapWrapper(map, allocator_));
       }
-    } else {  // BinSearchMap
+    } else {
+      static_assert(std::is_same_v<T, BinSearchMap>);
+
+      binSearchMapStartIds_.reserve(graphsAdjListRepresentation_.size());
+      binSearchMapTargetIds_.reserve(graphsAdjListRepresentation_.size());
+
       for (const AdjacencyList& adjList : graphsAdjListRepresentation_) {
         // Create new storage on the heap for a new BinSearchMap's startId and
         // targetId spans.
-        binSearchMapStartIds_.push_back(std::make_unique<std::vector<Id>>());
-        binSearchMapTargetIds_.push_back(std::make_unique<std::vector<Id>>());
-        auto& startIds = *binSearchMapStartIds_.back();
-        auto& targetIds = *binSearchMapTargetIds_.back();
+        binSearchMapStartIds_.push_back(std::vector<Id>());
+        binSearchMapTargetIds_.push_back(std::vector<Id>());
+        auto& startIds = binSearchMapStartIds_.back();
+        auto& targetIds = binSearchMapTargetIds_.back();
 
-        std::vector<size_t> keys;
-        for (const std::pair<size_t, std::vector<size_t>> pair : adjList) {
-          keys.emplace_back(pair.first);
-        }
-        std::sort(keys.begin(), keys.end());
+        auto keys = ::ranges::to_vector(
+            adjList | ql::views::transform(ad_utility::first));
+        ql::ranges::sort(keys);
 
         for (const size_t startNode : keys) {
           for (const size_t targetNode : adjList.at(startNode)) {
@@ -244,7 +244,7 @@ TYPED_TEST(GraphSearchTest, depthFirstSearchWithLimit) {
 // ___________________________________________________________________________
 TEST(GraphSearchTestExtraTests, cancellationCheck) {
   // Test that the log message created in
-  // GraphSearchExecutionParams.checkCancellation() when a cancellation is
+  // `GraphSearchExecutionParams.checkCancellation()` when a cancellation is
   // received will be logged.
 
   const ad_utility::AllocatorWithLimit<Id> allocator =
@@ -268,7 +268,7 @@ TEST(GraphSearchTestExtraTests, cancellationCheck) {
   ep.checkCancellation("TEST");
 
   EXPECT_THAT(
-      stream.str().c_str(),
+      stream.str(),
       HasSubstr(
           "The TEST graph search algorithm received a cancellation signal."));
 }

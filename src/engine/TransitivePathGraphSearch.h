@@ -25,7 +25,7 @@ using Set = std::unordered_set<Id, absl::Hash<Id>, std::equal_to<Id>,
 using Queue = std::deque<Id, ad_utility::AllocatorWithLimit<Id>>;
 
 // Helper struct that combines all possible values necessary for the
-// Graph search algorithms contained in this namespace. Improves
+// graph search algorithms contained in this namespace. Improves
 // readability of functions' signatures.
 template <typename T>
 struct GraphSearchProblem {
@@ -35,16 +35,16 @@ struct GraphSearchProblem {
   // The node where the graph search shall start from.
   Id startNode_;
 
-  // Optional object which may contain a target to which a transitive path shall
+  // Optional `Id` which may contain a target to which a transitive path shall
   // be found.
   std::optional<Id> targetNode_;
 
-  // The minimum distance which shall be between startNode and targetNode
+  // The minimum distance which shall be between `startNode_` and `targetNode_`
   // (inclusive).
   size_t minDist_;
 
-  // The maximum distance which shall be between startNode and
-  // targetNode (inclusive).
+  // The maximum distance which shall be between `startNode_` and
+  // `targetNode_` (inclusive).
   size_t maxDist_;
 };
 
@@ -60,7 +60,7 @@ struct GraphSearchExecutionParams {
   // a CancellationException containing info about the currently running
   // algorithm.
   void checkCancellation(
-      const std::string& algorithmName,
+      const std::string_view& algorithmName,
       ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) const {
     cancellationHandle_->throwIfCancelled(location, [algorithmName]() {
       return absl::StrCat(
@@ -155,6 +155,7 @@ template <typename T>
 Set depthFirstSearch(const GraphSearchProblem<T>& gsp,
                      const GraphSearchExecutionParams& ep) {
   Set connectedNodes{ep.allocator_};
+  connectedNodes.reserve(1);
 
   // Saving the value of gsp.targetNode_ removes the .has_value() check each
   // iteration and therefore improves runtime.
@@ -197,6 +198,7 @@ template <typename T>
 Set depthFirstSearchWithLimit(const GraphSearchProblem<T>& gsp,
                               const GraphSearchExecutionParams& ep) {
   Set connectedNodes{ep.allocator_};
+  connectedNodes.reserve(1);
 
   // Saving the value of gsp.targetNode_ removes the .has_value() check each
   // iteration and therefore improves runtime.
