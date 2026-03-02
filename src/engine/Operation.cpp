@@ -804,6 +804,15 @@ Operation::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   // Get the variables used in the bind expression (not the target).
   const auto& bindExpressionVars = bind._expression.containedVariables();
 
+  // Invalidate the cached `VariableToColumnMap` so it will be recomputed on the
+  // next access. Must be called when an operation's children change after
+  // construction.
+  auto invalidateCachedVariableColumns = [](Operation& op) {
+    op.variableToColumnMap_ = std::nullopt;
+    op.externallyVisibleVariableToColumnMap_ = std::nullopt;
+    op._resultSortedColumns = std::nullopt;
+  };
+
   // Try pushing the bind down to a specific child. If successful, clone this
   // operation and replace the modified child in the clone.
   auto tryPushDown = [&](size_t idx, const auto& child)
@@ -824,7 +833,7 @@ Operation::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
 
     // Since the new child has a different `VariableToColumnMap`, we must
     // invalidate the `VariableToColumnMap` of this operation too.
-    cloned->invalidateCachedVariableColumns();
+    invalidateCachedVariableColumns(*cloned);
 
     return std::make_shared<QueryExecutionTree>(getExecutionContext(),
                                                 std::move(cloned));

@@ -98,8 +98,6 @@ class OptionalJoin : public Operation {
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
-  void invalidateCachedVariableColumns() override;
-
   // Recompute `_joinColumns` from the children's `VariableToColumnMap`s and
   // determine the `implementation_` based on UNDEF column status.
   void recomputeJoinColumnsAndImplementation();
@@ -115,6 +113,9 @@ class OptionalJoin : public Operation {
   std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithStrippedColumns(
       const std::set<Variable>& variables) const override;
+
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
+      const parsedQuery::Bind& bind) const override;
 
   void computeSizeEstimateAndMultiplicities();
 

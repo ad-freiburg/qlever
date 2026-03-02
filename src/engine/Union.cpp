@@ -391,26 +391,6 @@ std::unique_ptr<Operation> Union::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
-void Union::invalidateCachedVariableColumns() {
-  Operation::invalidateCachedVariableColumns();
-  // Recompute `_columnOrigins` from the children's `VariableToColumnMap`s.
-  const VariableToColumnMap variableColumns = computeVariableToColumnMap();
-  _columnOrigins.assign(variableColumns.size(), {NO_COLUMN, NO_COLUMN});
-  const auto& t1VarCols = _subtrees[0]->getVariableColumns();
-  const auto& t2VarCols = _subtrees[1]->getVariableColumns();
-  for (const auto& [var, colInfo] : variableColumns) {
-    auto it1 = t1VarCols.find(var);
-    if (it1 != t1VarCols.end()) {
-      _columnOrigins[colInfo.columnIndex_][0] = it1->second.columnIndex_;
-    }
-    auto it2 = t2VarCols.find(var);
-    if (it2 != t2VarCols.end()) {
-      _columnOrigins[colInfo.columnIndex_][1] = it2->second.columnIndex_;
-    }
-  }
-}
-
-// _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 Union::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   // For a `UNION`, the `BIND` must be pushed into all children that cover the
@@ -420,37 +400,31 @@ Union::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
 
   // Try to push the `BIND` into each child that covers all expression
   // variables.
-  std::array<std::optional<std::shared_ptr<QueryExecutionTree>>, 2> results;
+  std::array<std::shared_ptr<QueryExecutionTree>, 2> results;
+  // This also guarantees equality of `std::tuple_size<T>::value`, because the
+  // size is a template parameter.
+  static_assert(std::is_same_v<decltype(_subtrees), decltype(results)>);
+
   bool anyChildCoversVars = false;
-  for (size_t i = 0; i < _subtrees.size(); ++i) {
-    if (!_subtrees[i]->getRootOperation()->coversVariables(
-            bindExpressionVars)) {
+  for (const auto& [i, subtree] : ::ranges::views::enumerate(_subtrees)) {
+    if (!subtree->getRootOperation()->coversVariables(bindExpressionVars)) {
       continue;
     }
     anyChildCoversVars = true;
-    auto result =
-        _subtrees[i]->getRootOperation()->makeTreeWithBindColumn(bind);
+    auto result = subtree->getRootOperation()->makeTreeWithBindColumn(bind);
     if (!result.has_value()) {
       return std::nullopt;
     }
-    results[i] = std::move(result);
+    results[i] = std::move(result.value());
   }
   if (!anyChildCoversVars) {
     return std::nullopt;
   }
 
-  // All relevant children have the `BIND` target column added. Make a
-  // `UNION` with the new children.
-  auto cloned = cloneImpl();
-  auto children = cloned->getChildren();
-  for (size_t i = 0; i < results.size(); ++i) {
-    if (results[i].has_value()) {
-      *children[i] = std::move(*(results[i].value()));
-    }
-  }
-  cloned->invalidateCachedVariableColumns();
-  return std::make_shared<QueryExecutionTree>(getExecutionContext(),
-                                              std::move(cloned));
+  // All relevant children have the `BIND` target column added. Make a new
+  // `UNION` object with the new children.
+  return ad_utility::makeExecutionTree<Union>(
+      getExecutionContext(), std::move(results[0]), std::move(results[1]));
 }
 
 // _____________________________________________________________________________

@@ -204,15 +204,6 @@ std::vector<ColumnIndex> Join::resultSortedOn() const {
 }
 
 // _____________________________________________________________________________
-void Join::invalidateCachedVariableColumns() {
-  Operation::invalidateCachedVariableColumns();
-  _multiplicities.clear();
-  _sizeEstimateComputed = false;
-  _leftJoinCol = _left->getVariableColumns().at(_joinVar).columnIndex_;
-  _rightJoinCol = _right->getVariableColumns().at(_joinVar).columnIndex_;
-}
-
-// _____________________________________________________________________________
 float Join::getMultiplicity(size_t col) {
   if (_multiplicities.empty()) {
     computeSizeEstimateAndMultiplicities();
@@ -780,4 +771,34 @@ Join::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
   return ad_utility::makeExecutionTree<Join>(
       getExecutionContext(), std::move(left), std::move(right), leftCol,
       rightCol, ad_utility::contains(variables, _joinVar));
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>> Join::makeTreeWithBindColumn(
+    const parsedQuery::Bind& bind) const {
+  // Try pushing down the `BIND` into any of the children.
+  auto tryPushDown = [&bind](
+                         std::shared_ptr<QueryExecutionTree>& target,
+                         const std::shared_ptr<QueryExecutionTree>& source) {
+    if (source->getRootOperation()->coversVariables(
+            bind._expression.containedVariables())) {
+      if (auto newTree =
+              source->getRootOperation()->makeTreeWithBindColumn(bind)) {
+        target = std::move(newTree.value());
+        return true;
+      }
+    }
+    return false;
+  };
+
+  auto left = _left;
+  auto right = _right;
+  if (tryPushDown(left, _left) || tryPushDown(right, _right)) {
+    auto leftCol = left->getVariableColumn(_joinVar);
+    auto rightCol = right->getVariableColumn(_joinVar);
+    return ad_utility::makeExecutionTree<Join>(
+        getExecutionContext(), std::move(left), std::move(right), leftCol,
+        rightCol);
+  }
+  return std::nullopt;
 }

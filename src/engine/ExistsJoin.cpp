@@ -77,25 +77,17 @@ std::vector<ColumnIndex> ExistsJoin::resultSortedOn() const {
 }
 
 // ____________________________________________________________________________
-void ExistsJoin::invalidateCachedVariableColumns() {
-  Operation::invalidateCachedVariableColumns();
-  joinColumns_ = QueryExecutionTree::getJoinColumns(*left_, *right_);
-}
-
-// ____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 ExistsJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
-  // The BIND can only be pushed into the left child.
-  auto result = left_->getRootOperation()->makeTreeWithBindColumn(bind);
-  if (!result.has_value()) {
+  // The `BIND` can only be pushed into the left child.
+  auto newLeft = left_->getRootOperation()->makeTreeWithBindColumn(bind);
+  if (!newLeft.has_value()) {
     return std::nullopt;
   }
-  auto cloned = cloneImpl();
-  auto children = cloned->getChildren();
-  *children[0] = std::move(*(result.value()));
-  cloned->invalidateCachedVariableColumns();
-  return std::make_shared<QueryExecutionTree>(getExecutionContext(),
-                                              std::move(cloned));
+
+  return ad_utility::makeExecutionTree<ExistsJoin>(getExecutionContext(),
+                                                   std::move(newLeft.value()),
+                                                   right_, existsVariable_);
 }
 
 // ____________________________________________________________________________

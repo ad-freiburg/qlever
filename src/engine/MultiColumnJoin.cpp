@@ -116,14 +116,6 @@ std::vector<ColumnIndex> MultiColumnJoin::resultSortedOn() const {
 }
 
 // _____________________________________________________________________________
-void MultiColumnJoin::invalidateCachedVariableColumns() {
-  Operation::invalidateCachedVariableColumns();
-  _multiplicities.clear();
-  _multiplicitiesComputed = false;
-  _joinColumns = QueryExecutionTree::getJoinColumns(*_left, *_right);
-}
-
-// _____________________________________________________________________________
 float MultiColumnJoin::getMultiplicity(size_t col) {
   if (!_multiplicitiesComputed) {
     computeSizeEstimateAndMultiplicities();
@@ -315,3 +307,31 @@ bool MultiColumnJoin::columnOriginatesFromGraphOrUndef(
   }
   return Operation::columnOriginatesFromGraphOrUndef(variable);
 }
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+MultiColumnJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+  // TODO<ullingerc> Can we avoid this code duplication with `Join`?
+  // Try pushing down the `BIND` into any of the children.
+  auto tryPushDown = [&bind](
+                         std::shared_ptr<QueryExecutionTree>& target,
+                         const std::shared_ptr<QueryExecutionTree>& source) {
+    if (source->getRootOperation()->coversVariables(
+            bind._expression.containedVariables())) {
+      if (auto newTree =
+              source->getRootOperation()->makeTreeWithBindColumn(bind)) {
+        target = std::move(newTree.value());
+        return true;
+      }
+    }
+    return false;
+  };
+
+  auto left = _left;
+  auto right = _right;
+  if (tryPushDown(left, _left) || tryPushDown(right, _right)) {
+    return ad_utility::makeExecutionTree<MultiColumnJoin>(
+        getExecutionContext(), std::move(left), std::move(right));
+  }
+  return std::nullopt;
+};

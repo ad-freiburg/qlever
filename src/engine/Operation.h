@@ -382,17 +382,11 @@ class Operation {
   // `BIND` pushed down into the tree. The default implementation tries to push
   // the `BIND` into each child which covers the `BIND`'s expression variables.
   // Returns `std::nullopt` if the `BIND` cannot be pushed down.
+  //
+  // IMPORTANT: This must be overridden in every subclass of `Operation` that
+  // contains own member variables depending on column indices, like `Join`.
   virtual std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithBindColumn(const parsedQuery::Bind& bind) const;
-
-  // Invalidate the cached `VariableToColumnMap` so it will be recomputed on the
-  // next access. Must be called when an operation's children change after
-  // construction (e.g., during bind push-down).
-  virtual void invalidateCachedVariableColumns() {
-    variableToColumnMap_ = std::nullopt;
-    externallyVisibleVariableToColumnMap_ = std::nullopt;
-    _resultSortedColumns = std::nullopt;
-  }
 
  protected:
   // The QueryExecutionContext for this particular element.

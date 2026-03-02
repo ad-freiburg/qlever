@@ -69,10 +69,11 @@ class MultiColumnJoin : public Operation {
       const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
       IdTable* resultMightBeUnsorted);
 
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
+      const parsedQuery::Bind& bind) const override;
+
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
-
-  void invalidateCachedVariableColumns() override;
 
   Result computeResult([[maybe_unused]] bool requestLaziness) override;
 

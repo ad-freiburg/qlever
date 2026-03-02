@@ -77,16 +77,6 @@ void OptionalJoin::recomputeJoinColumnsAndImplementation() {
 }
 
 // _____________________________________________________________________________
-void OptionalJoin::invalidateCachedVariableColumns() {
-  Operation::invalidateCachedVariableColumns();
-  _multiplicities.clear();
-  _multiplicitiesComputed = false;
-  _costEstimate.reset();
-  _joinColumns = QueryExecutionTree::getJoinColumns(*_left, *_right);
-  recomputeJoinColumnsAndImplementation();
-}
-
-// _____________________________________________________________________________
 string OptionalJoin::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "OPTIONAL_JOIN\n";
@@ -683,4 +673,17 @@ OptionalJoin::makeTreeWithStrippedColumns(
   return ad_utility::makeExecutionTree<OptionalJoin>(
       getExecutionContext(), std::move(left), std::move(right),
       keepJoinColumns);
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+OptionalJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+  // TODO<ullingerc> What is the correct semantics here?
+  // The `BIND` can only be pushed into the left child.
+  auto newLeft = _left->getRootOperation()->makeTreeWithBindColumn(bind);
+  if (!newLeft.has_value()) {
+    return std::nullopt;
+  }
+  return ad_utility::makeExecutionTree<OptionalJoin>(
+      getExecutionContext(), std::move(newLeft.value()), _right);
 }

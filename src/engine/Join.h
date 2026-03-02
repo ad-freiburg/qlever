@@ -118,8 +118,6 @@ class Join : public Operation {
  protected:
   virtual std::string getCacheKeyImpl() const override;
 
-  void invalidateCachedVariableColumns() override;
-
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
@@ -130,6 +128,9 @@ class Join : public Operation {
   std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithStrippedColumns(
       const std::set<Variable>& variables) const override;
+
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
+      const parsedQuery::Bind& bind) const override;
 
   // A special implementation that is called when both children are
   // `IndexScan`s. Uses the lazy scans to only retrieve the subset of the
