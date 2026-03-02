@@ -38,52 +38,49 @@ const std::string QUERY = "application/sparql-query";
 const std::string UPDATE = "application/sparql-update";
 const std::string TURTLE = "text/turtle";
 
-auto testAccessTokenCombinations = [](auto parse, const http::verb& method,
-                                      std::string_view pathBase,
-                                      const Operation& expectedOperation,
-                                      const ad_utility::HashMap<http::field,
-                                                                std::string>&
-                                          headers = {},
-                                      const std::optional<std::string>& body =
-                                          std::nullopt,
-                                      ad_utility::source_location l =
-                                          AD_CURRENT_SOURCE_LOC()) {
-  auto t = generateLocationTrace(l);
-  // Test the cases:
-  // 1. No access token
-  // 2. Access token in query
-  // 3. Access token in `Authorization` header
-  // 4. Different access tokens
-  // 5. Same access token
-  boost::urls::url pathWithAccessToken{pathBase};
-  pathWithAccessToken.params().append({"access-token", "foo"});
-  ad_utility::HashMap<http::field, std::string> headersWithDifferentAccessToken{
-      headers};
-  headersWithDifferentAccessToken.insert(
-      {http::field::authorization, "Bearer bar"});
-  ad_utility::HashMap<http::field, std::string> headersWithSameAccessToken{
-      headers};
-  headersWithSameAccessToken.insert({http::field::authorization, "Bearer foo"});
-  EXPECT_THAT(parse(makeRequest(method, pathBase, headers, body)),
-              ParsedRequestIs("/", std::nullopt, {}, expectedOperation));
-  EXPECT_THAT(
-      parse(makeRequest(method, pathWithAccessToken.buffer(), headers, body)),
-      ParsedRequestIs("/", "foo", {{"access-token", {"foo"}}},
-                      expectedOperation));
-  EXPECT_THAT(parse(makeRequest(method, pathBase,
-                                headersWithDifferentAccessToken, body)),
-              ParsedRequestIs("/", "bar", {}, expectedOperation));
-  EXPECT_THAT(parse(makeRequest(method, pathWithAccessToken.buffer(),
-                                headersWithSameAccessToken, body)),
-              ParsedRequestIs("/", "foo", {{"access-token", {"foo"}}},
-                              expectedOperation));
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      parse(makeRequest(method, pathWithAccessToken.buffer(),
-                        headersWithDifferentAccessToken, body)),
-      testing::HasSubstr("Access token is specified both in the "
-                         "`Authorization` header and by the `access-token` "
-                         "parameter, but they are not the same"));
-};
+auto testAccessTokenCombinations =
+    [](auto parse, const http::verb& method, std::string_view pathBase,
+       const Operation& expectedOperation,
+       const ad_utility::HashMap<http::field, std::string>& headers = {},
+       const std::optional<std::string>& body = std::nullopt,
+       ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+      auto t = generateLocationTrace(l);
+      // Test the cases:
+      // 1. No access token
+      // 2. Access token in query
+      // 3. Access token in `Authorization` header
+      // 4. Different access tokens
+      // 5. Same access token
+      boost::urls::url pathWithAccessToken{pathBase};
+      pathWithAccessToken.params().append({"access-token", "foo"});
+      ad_utility::HashMap<http::field, std::string>
+          headersWithDifferentAccessToken{headers};
+      headersWithDifferentAccessToken.insert(
+          {http::field::authorization, "Bearer bar"});
+      ad_utility::HashMap<http::field, std::string> headersWithSameAccessToken{
+          headers};
+      headersWithSameAccessToken.insert(
+          {http::field::authorization, "Bearer foo"});
+      EXPECT_THAT(parse(makeRequest(method, pathBase, headers, body)),
+                  ParsedRequestIs("/", std::nullopt, {}, expectedOperation));
+      EXPECT_THAT(parse(makeRequest(method, pathWithAccessToken.buffer(),
+                                    headers, body)),
+                  ParsedRequestIs("/", "foo", {{"access-token", {"foo"}}},
+                                  expectedOperation));
+      EXPECT_THAT(parse(makeRequest(method, pathBase,
+                                    headersWithDifferentAccessToken, body)),
+                  ParsedRequestIs("/", "bar", {}, expectedOperation));
+      EXPECT_THAT(parse(makeRequest(method, pathWithAccessToken.buffer(),
+                                    headersWithSameAccessToken, body)),
+                  ParsedRequestIs("/", "foo", {{"access-token", {"foo"}}},
+                                  expectedOperation));
+      AD_EXPECT_THROW_WITH_MESSAGE(
+          parse(makeRequest(method, pathWithAccessToken.buffer(),
+                            headersWithDifferentAccessToken, body)),
+          testing::HasSubstr("Access token is specified both in the "
+                             "`Authorization` header and by the `access-token` "
+                             "parameter, but they are not the same"));
+    };
 auto testAccessTokenCombinationsUrlEncoded = [](auto parse,
                                                 const std::string& bodyBase,
                                                 const Operation&
@@ -474,8 +471,8 @@ TEST(SparqlProtocolTest, parsePOST) {
 
 // _____________________________________________________________________________________________
 TEST(SparqlProtocolTest, parseHttpRequest) {
-  auto parse = CPP_template_lambda()(typename RequestT)(RequestT request)(
-      requires ad_utility::httpUtils::HttpRequest<RequestT>) {
+  auto parse = CPP_template_lambda()(typename RequestT)(
+      RequestT request)(requires ad_utility::httpUtils::HttpRequest<RequestT>) {
     return SparqlProtocol::parseHttpRequest(request);
   };
 
@@ -509,6 +506,9 @@ TEST(SparqlProtocolTest, parseHttpRequest) {
   EXPECT_THAT(parse(makeGetRequest("/?graph=foo")),
               ParsedRequestIs("/", std::nullopt, {{"graph", {"foo"}}},
                               GraphStoreOperation{Iri("<foo>")}));
+  EXPECT_THAT(parse(makeRequest(http::verb::head, "/?graph=foo")),
+              ParsedRequestIs("/", std::nullopt, {{"graph", {"foo"}}},
+                              GraphStoreOperation{Iri("<foo>")}));
   EXPECT_THAT(parse(makeRequest(http::verb::delete_, "/?graph=foo")),
               ParsedRequestIs("/", std::nullopt, {{"graph", {"foo"}}},
                               GraphStoreOperation{Iri("<foo>")}));
@@ -520,8 +520,8 @@ TEST(SparqlProtocolTest, parseHttpRequest) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse(makeRequest(http::verb::patch, "/")),
       testing::StrEq("Request method \"PATCH\" not supported (GET, POST, TSOP, "
-                     "PUT and DELETE are supported; HEAD and PATCH for graph "
-                     "store protocol are not yet supported)"));
+                     "PUT and DELETE are supported; PATCH for graph "
+                     "store protocol is not yet supported)"));
   AD_EXPECT_THROW_WITH_MESSAGE(parse(makeGetRequest(" ")),
                                testing::StrEq("Failed to parse URL: \"/ \"."));
 }

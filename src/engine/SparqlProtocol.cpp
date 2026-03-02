@@ -223,6 +223,6 @@ ad_utility::url_parser::ParsedRequest SparqlProtocol::parseHttpRequest(
       absl::StrCat(
           "Request method \"", methodStr,
           "\" not supported (GET, POST, TSOP, PUT and DELETE are supported; "
-          "HEAD and PATCH for graph store protocol are not yet supported)"));
+          "PATCH for graph store protocol is not yet supported)"));
 }
 #endif
