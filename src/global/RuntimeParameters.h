@@ -19,6 +19,8 @@ struct RuntimeParameters {
   using MemorySizeParameter =
       ad_utility::detail::parameterShortNames::MemorySizeParameter;
   using SizeT = ad_utility::detail::parameterShortNames::SizeT;
+  using SpaceSeparatedStrings =
+      ad_utility::detail::parameterShortNames::SpaceSeparatedStrings;
 
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS BELOW, ALSO REGISTER THEM IN THE
@@ -141,6 +143,12 @@ struct RuntimeParameters {
   // to substitute more expensive query plans.
   Bool enableMaterializedViewQueryRewrite_{
       true, "enable-materialized-view-query-rewrite"};
+
+  // A list of IRI prefixes that are allowed as `SERVICE` endpoints. If empty
+  // (the default), all IRIs are allowed. If non-empty, `SERVICE` requests to
+  // IRIs that do not start with any of the given prefixes are rejected.
+  SpaceSeparatedStrings serviceAllowedIriPrefixes_{
+        {}, "service-allowed-iri-prefixes"};
 
   // Only blocks of this size or larger will be considered for vacuuming.
   SizeT vacuumMinimumBlockSize_{10'000, "vacuum-minimum-block-size"};

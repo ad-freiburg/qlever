@@ -967,3 +967,86 @@ TEST_F(ServiceTest, clone) {
   EXPECT_THAT(service, IsDeepCopy(*clone));
   EXPECT_EQ(clone->getDescriptor(), service.getDescriptor());
 }
+
+// _____________________________________________________________________________
+TEST_F(ServiceTest, serviceAllowedIriPrefixes) {
+  parsedQuery::Service parsedServiceClause{
+      {Variable{"?x"}, Variable{"?y"}},
+      TripleComponent::Iri::fromIriref("<http://localhost/api>"),
+      "PREFIX doof: <http://doof.org>",
+      "{ }",
+      false};
+  parsedQuery::Service parsedServiceClauseSilent{
+      {Variable{"?x"}, Variable{"?y"}},
+      TripleComponent::Iri::fromIriref("<http://localhost/api>"),
+      "PREFIX doof: <http://doof.org>",
+      "{ }",
+      true};
+
+  std::string_view expectedUrl = "http://localhost:80/api";
+  std::string_view expectedSparqlQuery =
+      "PREFIX doof: <http://doof.org> SELECT ?x ?y { }";
+  auto result = genJsonResult({"x", "y"}, {{"a", "b"}});
+
+  auto makeService = [&](const parsedQuery::Service& clause) {
+    return Service{
+        testQec, clause,
+        getResultFunctionFactory(expectedUrl, expectedSparqlQuery, result)};
+  };
+
+  // With an empty whitelist (default), all URLs should be allowed.
+  {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::serviceAllowedIriPrefixes_>(
+        std::vector<std::string>{});
+    auto s = makeService(parsedServiceClause);
+    EXPECT_NO_THROW(s.computeResultOnlyForTesting());
+  }
+
+  // With a matching prefix, the IRI should be allowed.
+  {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::serviceAllowedIriPrefixes_>(
+        std::vector<std::string>{"http://localhost/"});
+    auto s = makeService(parsedServiceClause);
+    EXPECT_NO_THROW(s.computeResultOnlyForTesting());
+  }
+
+  // With a non-matching prefix, the IRI should be rejected.
+  {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::serviceAllowedIriPrefixes_>(
+        std::vector<std::string>{"http://example.org/"});
+    auto s = makeService(parsedServiceClause);
+    AD_EXPECT_THROW_WITH_MESSAGE(s.computeResultOnlyForTesting(),
+                                 ::testing::HasSubstr("not allowed"));
+  }
+
+  // With SILENT keyword, the rejected URL should be silenced.
+  {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::serviceAllowedIriPrefixes_>(
+        std::vector<std::string>{"http://example.org/"});
+    auto s = makeService(parsedServiceClauseSilent);
+    EXPECT_NO_THROW(s.computeResultOnlyForTesting());
+  }
+
+  // With multiple prefixes, matching any should allow.
+  {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::serviceAllowedIriPrefixes_>(
+        std::vector<std::string>{"http://example.org/", "http://localhost/"});
+    auto s = makeService(parsedServiceClause);
+    EXPECT_NO_THROW(s.computeResultOnlyForTesting());
+  }
+
+  // With multiple prefixes, none matching should reject.
+  {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::serviceAllowedIriPrefixes_>(
+        std::vector<std::string>{"http://example.org/", "http://other.org/"});
+    auto s = makeService(parsedServiceClause);
+    AD_EXPECT_THROW_WITH_MESSAGE(s.computeResultOnlyForTesting(),
+                                 ::testing::HasSubstr("not allowed"));
+  }
+}

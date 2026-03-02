@@ -1058,7 +1058,7 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
   ql::erase(columns, std::nullopt);
 
   auto getBinding = [&](const TableConstRefWithVocab& pair, const uint64_t& i) {
-    nlohmann::ordered_json binding = {};
+    auto binding = nlohmann::ordered_json::object();
     for (const auto& column : columns) {
       auto optionalStringAndType = idToStringAndType(
           qet.getQec()->getIndex(), pair.idTable()(i, column->columnIndex_),
