@@ -138,13 +138,13 @@ nlohmann::json DeltaTriples::vacuum(
   nlohmann::json result = nlohmann::json::object();
   auto toRemoveInExternal = identifyTriplesToVacuum(vi<false>);
   removeIdentifiedTriples(vi<false>, toRemoveInExternal.deletionsToRemove,
-                          toRemoveInExternal.insertionsToRemove);
-  result["external"] = toRemoveInExternal.stats;
+                          toRemoveInExternal.insertionsToRemove_);
+  result["external"] = toRemoveInExternal.stats_;
 
   auto toRemoveInInternal = identifyTriplesToVacuum(vi<true>);
   removeIdentifiedTriples(vi<true>, toRemoveInInternal.deletionsToRemove,
-                          toRemoveInInternal.insertionsToRemove);
-  result["internal"] = toRemoveInInternal.stats;
+                          toRemoveInInternal.insertionsToRemove_);
+  result["internal"] = toRemoveInInternal.stats_;
 
   return result;
 }

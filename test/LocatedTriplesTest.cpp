@@ -1028,10 +1028,10 @@ TEST_F(LocatedTriplesTest, identifyTriplesToVacuum) {
       auto cleanup = setRuntimeParameterForTest<
           &RuntimeParameters::vacuumMinimumBlockSize_>(3ul);
       auto result = ltpb.identifyTriplesToVacuum(perm, cancellationHandle);
-      EXPECT_THAT(result.insertionsToRemove, testing::IsEmpty());
-      EXPECT_THAT(result.deletionsToRemove, testing::IsEmpty());
-      EXPECT_EQ(result.stats.totalRemoved(), 0u);
-      EXPECT_EQ(result.stats.totalKept(), 0u);
+      EXPECT_THAT(result.insertionsToRemove_, testing::IsEmpty());
+      EXPECT_THAT(result.deletionsToRemove_, testing::IsEmpty());
+      EXPECT_EQ(result.stats_.totalRemoved(), 0u);
+      EXPECT_EQ(result.stats_.totalKept(), 0u);
     }
 
     {
@@ -1039,13 +1039,13 @@ TEST_F(LocatedTriplesTest, identifyTriplesToVacuum) {
       auto cleanup = setRuntimeParameterForTest<
           &RuntimeParameters::vacuumMinimumBlockSize_>(1ul);
       auto result = ltpb.identifyTriplesToVacuum(perm, cancellationHandle);
-      EXPECT_THAT(result.insertionsToRemove,
+      EXPECT_THAT(result.insertionsToRemove_,
                   testing::UnorderedElementsAre(tInIdx1, tInIdx2));
-      EXPECT_THAT(result.deletionsToRemove, testing::IsEmpty());
-      EXPECT_EQ(result.stats.numInsertionsRemoved_, 2u);
-      EXPECT_EQ(result.stats.numDeletionsRemoved_, 0u);
-      EXPECT_EQ(result.stats.numInsertionsKept_, 0u);
-      EXPECT_EQ(result.stats.numDeletionsKept_, 0u);
+      EXPECT_THAT(result.deletionsToRemove_, testing::IsEmpty());
+      EXPECT_EQ(result.stats_.numInsertionsRemoved_, 2u);
+      EXPECT_EQ(result.stats_.numDeletionsRemoved_, 0u);
+      EXPECT_EQ(result.stats_.numInsertionsKept_, 0u);
+      EXPECT_EQ(result.stats_.numDeletionsKept_, 0u);
     }
   }
 
@@ -1059,13 +1059,13 @@ TEST_F(LocatedTriplesTest, identifyTriplesToVacuum) {
     dt.deleteTriples(handle, {tNotIdx2, tInIdx2, tNotIdx4});
     const auto& ltpb4 = dt.getLocatedTriplesForPermutation(Permutation::PSO);
     auto result = ltpb4.identifyTriplesToVacuum(perm, cancellationHandle);
-    EXPECT_THAT(result.insertionsToRemove,
+    EXPECT_THAT(result.insertionsToRemove_,
                 testing::UnorderedElementsAre(tInIdx1));
-    EXPECT_THAT(result.deletionsToRemove,
+    EXPECT_THAT(result.deletionsToRemove_,
                 testing::UnorderedElementsAre(tNotIdx2, tNotIdx4));
-    EXPECT_EQ(result.stats.numInsertionsRemoved_, 1u);
-    EXPECT_EQ(result.stats.numDeletionsRemoved_, 2u);
-    EXPECT_EQ(result.stats.numInsertionsKept_, 3u);
-    EXPECT_EQ(result.stats.numDeletionsKept_, 1u);
+    EXPECT_EQ(result.stats_.numInsertionsRemoved_, 1u);
+    EXPECT_EQ(result.stats_.numDeletionsRemoved_, 2u);
+    EXPECT_EQ(result.stats_.numInsertionsKept_, 3u);
+    EXPECT_EQ(result.stats_.numDeletionsKept_, 1u);
   }
 }

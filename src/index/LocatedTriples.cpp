@@ -318,11 +318,10 @@ TriplesToVacuum LocatedTriplesPerBlock::identifyTriplesToVacuum(
   std::vector<IdTriple<0>> allDeletionsToRemove;
   std::vector<IdTriple<0>> allInsertionsToRemove;
 
-  // TODO: still strange, just pass in const KeyOrder&?
   // The identified triples are output in `SPO` so we need to invert the
   // permutation.
   qlever::KeyOrder::Array inverseKeys{};
-  for (size_t i = 0; i < 4; ++i) {
+  for (uint8_t i = 0; i < 4; ++i) {
     inverseKeys[perm.keyOrder().keys()[i]] = i;
   }
 

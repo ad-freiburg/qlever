@@ -65,9 +65,9 @@ struct VacuumStatistics {
 
 // Triples identified for removal during a vacuum operation.
 struct TriplesToVacuum {
-  std::vector<IdTriple<0>> deletionsToRemove;
-  std::vector<IdTriple<0>> insertionsToRemove;
-  VacuumStatistics stats;
+  std::vector<IdTriple<0>> deletionsToRemove_;
+  std::vector<IdTriple<0>> insertionsToRemove_;
+  VacuumStatistics stats_;
 };
 
 // A triple and its block in a particular permutation. For a detailed definition
