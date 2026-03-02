@@ -380,11 +380,14 @@ class Operation {
 
   // Try to create a version of this operation with an additional column from a
   // `BIND` pushed down into the tree. The default implementation tries to push
-  // the `BIND` into each child which covers the `BIND`'s expression variables.
+  // the `BIND` into each child which covers the `BIND`'s expression variables,
+  // and accepts the result if one of the children can handle the `BIND`.
   // Returns `std::nullopt` if the `BIND` cannot be pushed down.
   //
   // IMPORTANT: This must be overridden in every subclass of `Operation` that
   // contains own member variables depending on column indices, like `Join`.
+  // This function must also be overridden when the default semantics explained
+  // above are not applicable to the operation, like for `MINUS`.
   virtual std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithBindColumn(const parsedQuery::Bind& bind) const;
 
