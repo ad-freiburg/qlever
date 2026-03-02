@@ -7,6 +7,8 @@
 #include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
 
+#include <functional>
+
 #include "./MaterializedViewsTestHelpers.h"
 #include "./QueryPlannerTestHelpers.h"
 #include "./ServerTestHelpers.h"
@@ -902,8 +904,6 @@ constexpr std::string_view simpleChainRenamedPlusBind =
 
 // _____________________________________________________________________________
 TEST_P(MaterializedViewsQueryRewriteTest, simpleChain) {
-  namespace h = queryPlannerTestHelpers;
-
   RewriteTestParams p = GetParam();
   auto cleanup =
       setRuntimeParameterForTest<&RuntimeParameters::queryPlanningBudget_>(
@@ -937,27 +937,16 @@ TEST_P(MaterializedViewsQueryRewriteTest, simpleChain) {
   MaterializedViewsManager manager{onDiskBase};
   manager.writeViewToDisk(viewName, qlv.parseAndPlanQuery(p.writeQuery_));
   qlv.loadMaterializedView(viewName);
+  auto chainView = std::bind_front(&viewScanSimple, viewName);
 
   // With the materialized view loaded, an index scan on the view is performed
   // instead of a regular join.
-  auto qpExpect = [](qlever::Qlever& qlv, const auto& query,
-                     ::testing::Matcher<const QueryExecutionTree&> matcher,
-                     source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-    auto l = generateLocationTrace(sourceLocation);
-    auto [qet, qec, parsed] = qlv.parseAndPlanQuery(std::string{query});
-    EXPECT_THAT(*qet, matcher);
-  };
-  auto viewScan = [](std::string a, std::string b, std::string c) {
-    return h::IndexScanFromStrings(std::move(a), std::move(b), std::move(c),
-                                   {Permutation::Enum::SPO});
-  };
-
-  qpExpect(qlv, simpleChain, viewScan("?s", "?m", "?o"));
-  qpExpect(qlv, simpleChainRenamed, viewScan("?a", "?b", "?c"));
+  qpExpect(qlv, simpleChain, chainView("?s", "?m", "?o"));
+  qpExpect(qlv, simpleChainRenamed, chainView("?a", "?b", "?c"));
   qpExpect(qlv, simpleChainFixed,
-           viewScan("<s2>", "?_QLever_internal_variable_qp_0", "?c"));
+           chainView("<s2>", "?_QLever_internal_variable_qp_0", "?c"));
   qpExpect(qlv, simpleChainPlusJoin,
-           h::Join(viewScan("?s", "?_QLever_internal_variable_qp_0", "?o"),
+           h::Join(chainView("?s", "?_QLever_internal_variable_qp_0", "?o"),
                    h::IndexScanFromStrings("?s", "<p3>", "?o2")));
 
   // TODO<ullingerc> Test overlapping view plans.

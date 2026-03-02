@@ -24,6 +24,7 @@
 #include "engine/GroupBy.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
+#include "engine/MaterializedViews.h"
 #include "engine/Minus.h"
 #include "engine/MultiColumnJoin.h"
 #include "engine/NeutralElementOperation.h"
@@ -129,7 +130,9 @@ constexpr auto IndexScan =
        const IndexScan::Graphs& graphs = IndexScan::Graphs::All(),
        const std::vector<Variable>& additionalVariables = {},
        const std::vector<ColumnIndex>& additionalColumns = {},
-       const std::optional<size_t>& strippedSize = std::nullopt) -> QetMatcher {
+       const std::optional<size_t>& strippedSize = std::nullopt,
+       const std::optional<std::string>& materializedView =
+           std::nullopt) -> QetMatcher {
   // TODO<RobinTF> The matcher should be changed so that numVariables can
   // properly account for stripped columns. Also `strippedSize` should be
   // replaced by an explicit listing of the variables that are kept instead of
@@ -141,18 +144,27 @@ constexpr auto IndexScan =
   auto permutationMatcher = allowedPermutations.empty()
                                 ? ::testing::A<Permutation::Enum>()
                                 : AnyOfArray(allowedPermutations);
-  return RootOperation<::IndexScan>(AllOf(
-      AD_PROPERTY(IndexScan, permutation,
-                  AD_PROPERTY(Permutation, permutation, permutationMatcher)),
-      AD_PROPERTY(IndexScan, getResultWidth, Eq(numVariables)),
-      AD_PROPERTY(IndexScan, subject, Eq(subject)),
-      AD_PROPERTY(IndexScan, predicate, Eq(predicate)),
-      AD_PROPERTY(IndexScan, object, Eq(object)),
-      AD_PROPERTY(IndexScan, additionalVariables,
-                  ElementsAreArray(additionalVariables)),
-      AD_PROPERTY(IndexScan, additionalColumns,
-                  ElementsAreArray(additionalColumns)),
-      AD_PROPERTY(IndexScan, graphsToFilter, Eq(graphs))));
+  Matcher<Permutation> materializedViewMatcher =
+      materializedView.has_value()
+          ? AD_PROPERTY(Permutation, materializedView, Eq(nullptr))
+          : AD_PROPERTY(
+                Permutation, materializedView,
+                AllOf(Ne(nullptr), Pointee(AD_PROPERTY(MaterializedView, name,
+                                                       Eq(materializedView)))));
+  return RootOperation<::IndexScan>(
+      AllOf(AD_PROPERTY(
+                IndexScan, permutation,
+                AllOf(AD_PROPERTY(Permutation, permutation, permutationMatcher),
+                      materializedViewMatcher)),
+            AD_PROPERTY(IndexScan, getResultWidth, Eq(numVariables)),
+            AD_PROPERTY(IndexScan, subject, Eq(subject)),
+            AD_PROPERTY(IndexScan, predicate, Eq(predicate)),
+            AD_PROPERTY(IndexScan, object, Eq(object)),
+            AD_PROPERTY(IndexScan, additionalVariables,
+                        ElementsAreArray(additionalVariables)),
+            AD_PROPERTY(IndexScan, additionalColumns,
+                        ElementsAreArray(additionalColumns)),
+            AD_PROPERTY(IndexScan, graphsToFilter, Eq(graphs))));
 };
 
 // Match the `NeutralElementOperation`.
@@ -269,7 +281,9 @@ inline auto IndexScanFromStrings =
            graphs = std::monostate{},
        const std::vector<Variable>& additionalVariables = {},
        const std::vector<ColumnIndex>& additionalColumns = {},
-       const std::optional<size_t>& strippedSize = std::nullopt) -> QetMatcher {
+       const std::optional<size_t>& strippedSize = std::nullopt,
+       const std::optional<std::string>& materializedView =
+           std::nullopt) -> QetMatcher {
   auto strToComp = [](std::string_view s) -> TripleComponent {
     if (ql::starts_with(s, "?")) {
       return ::Variable{std::string{s}};
@@ -293,7 +307,7 @@ inline auto IndexScanFromStrings =
   }
   return IndexScan(strToComp(subject), strToComp(predicate), strToComp(object),
                    allowedPermutations, graphsOut, additionalVariables,
-                   additionalColumns, strippedSize);
+                   additionalColumns, strippedSize, materializedView);
 };
 
 // For the following Join algorithms the order of the children is not
