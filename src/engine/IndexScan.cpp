@@ -966,8 +966,6 @@ IndexScan::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   if (!insertNewCol(targetCol.value(), bind._target)) {
     return std::nullopt;
   }
-  // Add graph column placeholder if now required.
-  insertNewCol(3, Variable{"?_ql_materialized_view_g"});
 
   // Add the `BIND` target to the variables to keep during column stripping.
   auto newVariables = varsToKeep_;
