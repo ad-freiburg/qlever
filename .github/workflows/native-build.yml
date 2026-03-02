@@ -27,7 +27,7 @@ jobs:
         build-type: [Release]
         expensive-tests: [true]
         additional-cmake-options: [""]
-        runners: [ubuntu-24.04]
+        runner: [ubuntu-24.04]
         isPr:
           - ${{github.event_name == 'pull_request'}}  # some checks are only run in the master.
         skipIfPr: [false]
@@ -66,13 +66,13 @@ jobs:
             compiler-version: 16
             asan-flags: "-fsanitize=address -fno-omit-frame-pointer"
             build-type: RelWithDebInfo
-            runners: ubuntu-22.04
+            runner: ubuntu-22.04
             expensive-tests: false
           - compiler: clang
             compiler-version: 16
             ubsan-flags: " -fsanitize=undefined"
             build-type: RelWithDebInfo
-            runners: ubuntu-22.04
+            runner: ubuntu-22.04
             expensive-tests: false
             skipIfPr: false
           - compiler: clang
@@ -83,8 +83,7 @@ jobs:
             additional-cmake-options: "-D_NO_TIMING_TESTS=ON"
             skipIfPr: false
 
-    runs-on: ubuntu-24.04
-
+    runs-on: $${matrix.runner}
 
     steps:
       - name: Skip early if conditions are not met
