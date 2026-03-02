@@ -294,10 +294,7 @@ TEST(CancellationHandle, verifyCheckDoesNotOverrideCancelledState) {
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyCheckAfterDeadlineMissDoesReportProperly) {
-  if constexpr (LOGLEVEL < WARN) {
-    GTEST_SKIP() << "This test requires log level of at least INFO.";
-  }
-  EXPECT_GE(LOGLEVEL, WARN);
+  SKIP_IF_LOGLEVEL_IS_LOWER(WARN);
   auto& choice = ad_utility::LogstreamChoice::get();
   CancellationHandle<ENABLED> handle;
 
