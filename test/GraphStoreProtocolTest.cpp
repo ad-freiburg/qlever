@@ -4,6 +4,7 @@
 
 #include <gmock/gmock.h>
 
+#include "./ServerTestHelpers.h"
 #include "./parser/SparqlAntlrParserTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/HttpRequestHelpers.h"

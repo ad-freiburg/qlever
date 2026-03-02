@@ -6,6 +6,7 @@
 
 #include <boost/beast/http.hpp>
 
+#include "ServerTestHelpers.h"
 #include "engine/QueryPlanner.h"
 #include "engine/Server.h"
 #include "engine/UpdateMetadata.h"
@@ -381,4 +382,119 @@ TEST(ServerTest, checkAccessToken) {
 
   Server server2{1234, 1, ad_utility::MemorySize::megabytes(1), "", true};
   EXPECT_TRUE(server2.checkAccessToken(std::nullopt));
+}
+
+MATCHER_P(ContentTypeIs, contentType,
+          absl::StrCat("Content-Type is ", negation ? "not " : "",
+                       contentType)) {
+  auto it = arg.find(http::field::content_type);
+  if (it == arg.end()) {
+    *result_listener << "which has no Content-Type header";
+    return false;
+  }
+  auto actualContentType = it->value();
+  *result_listener << "which has Content-Type " << actualContentType;
+  return actualContentType == contentType;
+}
+
+MATCHER_P(StatusIs, status,
+          absl::StrCat("status is ", negation ? "not " : "",
+                       testing::PrintToString(status))) {
+  auto actualStatus = arg.base().result();
+  *result_listener << "which has Status " << actualStatus;
+  return actualStatus == status;
+}
+
+using namespace serverTestHelpers;
+
+TEST(ServerTest, gspHead) {
+  auto qec = getQec(TestIndexConfig{"<a> <b> <c> . <a> <b> <d> ."});
+  SimulateHttpRequest simulateHttpRequest{qec->getIndex().getOnDiskBase()};
+
+  auto testHead = [&simulateHttpRequest](
+                      const std::optional<std::string>& accept,
+                      ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    auto head = makeRequest(http::verb::head, "/?default");
+    if (accept.has_value()) {
+      head.set(http::field::accept, accept.value());
+    }
+    auto response = simulateHttpRequest.processRaw(head);
+    EXPECT_THAT(response, ContentTypeIs(accept.value_or("text/turtle")));
+    EXPECT_THAT(SimulateHttpRequest::bodyToString(std::move(response.body())),
+                testing::IsEmpty());
+  };
+  testHead(std::nullopt);
+  testHead("text/csv");
+  testHead("text/tab-separated-values");
+  testHead("text/turtle");
+  testHead("application/qlever-results+json");
+}
+
+TEST(ServerTest, gspGet) {
+  auto qec = getQec(TestIndexConfig{"<a> <b> <c> . <a> <b> <d> ."});
+  SimulateHttpRequest simulateHttpRequest{qec->getIndex().getOnDiskBase()};
+
+  auto testGet = [&simulateHttpRequest](
+                     const std::optional<std::string>& accept,
+                     const testing::Matcher<const std::string&>& bodyMatcher,
+                     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    auto get = makeGetRequest("/?default");
+    if (accept.has_value()) {
+      get.set(http::field::accept, accept.value());
+    }
+    auto response = simulateHttpRequest.processRaw(get);
+    EXPECT_THAT(response, ContentTypeIs(accept.value_or("text/turtle")));
+    EXPECT_THAT(SimulateHttpRequest::bodyToString(std::move(response.body())),
+                bodyMatcher);
+  };
+  testGet(std::nullopt, testing::Eq("<a> <b> <c> .\n<a> <b> <d> .\n"));
+  testGet("text/csv", testing::Eq("<a>,<b>,<c>\n<a>,<b>,<d>\n"));
+  testGet("text/tab-separated-values",
+          testing::Eq("<a>\t<b>\t<c>\n<a>\t<b>\t<d>\n"));
+  testGet("text/turtle", testing::Eq("<a> <b> <c> .\n<a> <b> <d> .\n"));
+}
+
+TEST(ServerTest, gspPut) {
+  auto qec = getQec(TestIndexConfig{"<a> <b> <c> . <a> <b> <d> ."});
+  SimulateHttpRequest simulateHttpRequest{qec->getIndex().getOnDiskBase()};
+
+  auto testPut = [&simulateHttpRequest](
+                     const std::string& contentType, const std::string& body,
+                     const std::string& graph, const auto& bodyMatcher,
+                     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+
+    auto request =
+        makeRequest(http::verb::put, "/?" + graph,
+                    {{http::field::authorization, "Bearer accessToken"}}, body);
+    request.set(http::field::content_type, contentType);
+    auto response = simulateHttpRequest.processRaw(request);
+    EXPECT_THAT(response, bodyMatcher);
+  };
+  testPut("text/turtle", "<a> <b> <c> .", "default",
+          StatusIs(http::status::ok));
+  testPut("text/turtle", "<a> <b> <c> .", "graph=foo",
+          StatusIs(http::status::created));
+}
+
+TEST(ServerTest, gspDelete) {
+  auto qec = getQec(TestIndexConfig{"<a> <b> <c> . <a> <b> <d> ."});
+  SimulateHttpRequest simulateHttpRequest{qec->getIndex().getOnDiskBase()};
+
+  auto testDelete = [&simulateHttpRequest](const std::string& graph,
+                                           const auto& bodyMatcher,
+                                           ad_utility::source_location l =
+                                               AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+
+    auto request =
+        makeRequest(http::verb::delete_, "/?" + graph,
+                    {{http::field::authorization, "Bearer accessToken"}});
+    auto response = simulateHttpRequest.processRaw(request);
+    EXPECT_THAT(response, bodyMatcher);
+  };
+  testDelete("default", StatusIs(http::status::ok));
+  testDelete("graph=foo", StatusIs(http::status::not_found));
 }

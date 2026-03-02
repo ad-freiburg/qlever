@@ -39,21 +39,18 @@ struct ResponseMiddleware {
   ResponseT apply(
       ResponseT response,
       const std::optional<std::vector<UpdateMetadata>>& metadataOpt) const {
-    return std::visit(
-        ad_utility::OverloadCallOperator{
-            [&metadataOpt, &response](const UpdateMiddleware& func) {
-              AD_CONTRACT_CHECK(
-                  metadataOpt.has_value(),
-                  "Missing `UpdateMetadata` argument for update middleware.");
-              return func(std::move(response), metadataOpt.value());
-            },
-            [&metadataOpt, &response](const QueryMiddleware& func) {
-              AD_CONTRACT_CHECK(
-                  !metadataOpt.has_value(),
-                  "Got unexpected `UpdateMetadata` for query middleware.");
-              return func(std::move(response));
-            }},
-        func_);
+    if (metadataOpt.has_value()) {
+      AD_CONTRACT_CHECK(
+          std::holds_alternative<UpdateMiddleware>(func_),
+          "Got `UpdateMetadata` for but middleware takes no metadata.");
+      const auto& updateMiddleware = std::get<UpdateMiddleware>(func_);
+      return updateMiddleware(std::move(response), metadataOpt.value());
+    }
+    AD_CONTRACT_CHECK(
+        std::holds_alternative<QueryMiddleware>(func_),
+        "Got no `UpdateMetadata` for but middleware expects metadata.");
+    const auto& queryMiddleware = std::get<QueryMiddleware>(func_);
+    return queryMiddleware(std::move(response));
   }
 };
 

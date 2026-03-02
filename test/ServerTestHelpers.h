@@ -22,18 +22,29 @@ using ResT = http::response<ad_utility::httpUtils::streamable_body>;
 struct SimulateHttpRequest {
   std::string indexBaseName_;
 
-  // Given an HTTP request, apply the `Server::process` method on this request
-  // and if the response is a non-streamed JSON, parse and return it. Otherwise
-  // `std::nullopt` is returned.
-  std::optional<nlohmann::json> operator()(const ReqT& request) const {
+  static std::string bodyToString(
+      ad_utility::httpUtils::streamable_body::value_type body) {
+    // The range overload doesn't work because it takes a const Range& but
+    // begin/end on the generator are not const. absl::StrJoin furthermore also
+    // only accepts common iterators.
+    auto respWithCommonIterators = body | ql::views::common;
+    return absl::StrJoin(respWithCommonIterators.begin(),
+                         respWithCommonIterators.end(), "");
+  }
+
+  // Apply `Server::process` on the given request and return the raw
+  // `http::response`.
+  ResT processRaw(const ReqT& request) const {
     boost::asio::io_context io;
     std::future<ResT> fut = co_spawn(
         io,
-        [](auto request, auto indexName) -> boost::asio::awaitable<ResT> {
+        [&io](auto request, auto indexName) -> boost::asio::awaitable<ResT> {
           // Initialize but do not start a `Server` instance on our test index.
           Server server{4321, 1, ad_utility::MemorySize::megabytes(1),
                         "accessToken"};
           server.initialize(indexName, false);
+          auto queryHub = std::make_shared<ad_utility::websocket::QueryHub>(io);
+          server.queryHub_ = queryHub;
 
           // Simulate receiving the HTTP request.
           auto result =
@@ -44,7 +55,14 @@ struct SimulateHttpRequest {
         }(request, indexBaseName_),
         boost::asio::use_future);
     io.run();
-    auto response = fut.get();
+    return fut.get();
+  }
+
+  // Given an HTTP request, apply the `Server::process` method on this request
+  // and if the response is a JSON, parse and return it. Otherwise
+  // `std::nullopt` is returned.
+  std::optional<nlohmann::json> operator()(const ReqT& request) const {
+    auto response = processRaw(request);
 
     // Check `Content-type`: currently only `application/json` is supported.
     auto it = response.find(http::field::content_type);
@@ -56,14 +74,17 @@ struct SimulateHttpRequest {
       }
     }
 
-    // The range overload doesn't work because it takes a const Range& but
-    // begin/end on the generator are not const. absl::StrJoin furthermore also
-    // only accepts common iterators.
-    auto respWithCommonIterators = response.body() | ql::views::common;
     // Parse the JSON body.
-    return std::optional{nlohmann::json::parse(absl::StrJoin(
-        respWithCommonIterators.begin(), respWithCommonIterators.end(), ""))};
-  };
+    return std::optional{
+        nlohmann::json::parse(bodyToString(std::move(response.body())))};
+  }
+
+  // Apply `Server::process` on the given request and return the body of the
+  // response as a string.
+  std::string processAsString(const ReqT& request) const {
+    auto response = processRaw(request);
+    return bodyToString(std::move(response.body()));
+  }
 };
 
 }  // namespace serverTestHelpers
