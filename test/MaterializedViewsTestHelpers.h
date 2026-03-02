@@ -169,6 +169,10 @@ class MaterializedViewsQueryRewriteTest
   void TearDown() override { ad_utility::setGlobalLoggingStream(&std::cout); }
 };
 
+// ___________________________________________________________________________
+class MaterializedViewsChainRewriteTest
+    : public MaterializedViewsQueryRewriteTest {};
+
 // _____________________________________________________________________________
 inline void PrintTo(const RewriteTestParams& p, std::ostream* os) {
   auto& s = *os;
@@ -188,6 +192,7 @@ inline void qpExpect(qlever::Qlever& qlv, const auto& query,
 // _____________________________________________________________________________
 inline auto viewScan(
     std::string viewName, std::string a, std::string b, std::string c,
+    std::optional<size_t> strippedSize = std::nullopt,
     std::vector<std::pair<ColumnIndex, Variable>> additionalColumns = {}) {
   return h::IndexScanFromStrings(std::move(a), std::move(b), std::move(c),
                                  {Permutation::Enum::SPO}, std::monostate{},
@@ -195,7 +200,7 @@ inline auto viewScan(
                                      ::ranges::to<std::vector<Variable>>(),
                                  additionalColumns | ql::views::keys |
                                      ::ranges::to<std::vector<ColumnIndex>>(),
-                                 std::nullopt, viewName);
+                                 strippedSize, viewName);
 };
 
 // _____________________________________________________________________________

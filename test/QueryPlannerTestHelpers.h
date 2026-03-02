@@ -146,11 +146,11 @@ constexpr auto IndexScan =
                                 : AnyOfArray(allowedPermutations);
   Matcher<Permutation> materializedViewMatcher =
       materializedView.has_value()
-          ? AD_PROPERTY(Permutation, materializedView, Eq(nullptr))
-          : AD_PROPERTY(
+          ? AD_PROPERTY(
                 Permutation, materializedView,
                 AllOf(Ne(nullptr), Pointee(AD_PROPERTY(MaterializedView, name,
-                                                       Eq(materializedView)))));
+                                                       Eq(materializedView)))))
+          : AD_PROPERTY(Permutation, materializedView, Eq(nullptr));
   return RootOperation<::IndexScan>(
       AllOf(AD_PROPERTY(
                 IndexScan, permutation,
