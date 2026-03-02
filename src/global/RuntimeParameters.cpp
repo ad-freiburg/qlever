@@ -53,6 +53,7 @@ RuntimeParameters::RuntimeParameters() {
   add(sortInMemoryThreshold_);
   add(prefilteredOptionalJoin_);
   add(enableMaterializedViewQueryRewrite_);
+  add(serviceAllowedIriPrefixes_);
   add(threadsForPermutationWriter_);
 
   defaultQueryTimeout_.setParameterConstraint(

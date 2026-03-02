@@ -126,8 +126,8 @@ class ExportQueryExecutionTrees {
 
   // Helper for the `idToLiteralOrIri` function: Retrieves a string literal for
   // a word in the vocabulary.
-  static std::optional<LiteralOrIri> getLiteralOrIriFromWordVocabIndex(
-      const IndexImpl& index, Id id);
+  static LiteralOrIri getLiteralOrIriFromWordVocabIndex(const IndexImpl& index,
+                                                        Id id);
 
   // Helper for the `idToLiteralOrIri` function: Retrieves a string literal for
   // a word in the text index.
