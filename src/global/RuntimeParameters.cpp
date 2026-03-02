@@ -52,6 +52,7 @@ RuntimeParameters::RuntimeParameters() {
   add(defaultQueryTimeout_);
   add(sortInMemoryThreshold_);
   add(prefilteredOptionalJoin_);
+  add(enableMaterializedViewQueryRewrite_);
   add(serviceAllowedIriPrefixes_);
 
   defaultQueryTimeout_.setParameterConstraint(

@@ -182,6 +182,11 @@ int main(int argc, char** argv) {
           ->multitoken(),
       "The names of materialized views to be loaded automatically on server "
       "start (this option takes an arbitrary number of arguments).");
+  add("enable-materialized-view-query-rewrite",
+      optionFactory.getProgramOption<
+          &RuntimeParameters::enableMaterializedViewQueryRewrite_>(),
+      "If set to true, loaded materialized views will be considered as "
+      "alternative query plans for certain supported query patterns.");
   add("service-allowed-iri-prefixes",
       optionFactory
           .getProgramOption<&RuntimeParameters::serviceAllowedIriPrefixes_>()
@@ -211,9 +216,10 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
 
-  AD_LOG_INFO << EMPH_ON << "QLever server, compiled on "
-              << qlever::version::DatetimeOfCompilation << " using git hash "
-              << qlever::version::GitShortHash << EMPH_OFF << std::endl;
+  AD_LOG_INFO << EMPH_ON << "QLever server " << qlever::version::ProjectVersion
+              << ", compiled on " << qlever::version::DatetimeOfCompilation
+              << " using git hash " << qlever::version::GitShortHash << EMPH_OFF
+              << std::endl;
 
   try {
     Server server(port, numSimultaneousQueries, memoryMaxSize,
