@@ -21,6 +21,10 @@ Bind::Bind(QueryExecutionContext* qec,
   _subtree = ExistsJoin::addExistsJoinsToSubtree(
       _bind._expression, std::move(_subtree), getExecutionContext(),
       cancellationHandle_);
+  // If the cache key is deterministic, this `Bind` expression can be cached.
+  isExpressionCacheable_ =
+      _bind._expression.getCacheKey(_subtree->getVariableColumns()) ==
+      _bind._expression.getCacheKey(_subtree->getVariableColumns());
 }
 
 // BIND adds exactly one new column
@@ -76,12 +80,11 @@ bool Bind::knownEmptyResult() { return _subtree->knownEmptyResult(); }
 
 // _____________________________________________________________________________
 std::string Bind::getCacheKeyImpl() const {
-  if (expressionCacheKey_.empty()) {
-    expressionCacheKey_ =
-        _bind._expression.getCacheKey(_subtree->getVariableColumns());
-  }
-  return absl::StrCat("BIND ", expressionCacheKey_, "\n",
-                      _subtree->getCacheKey());
+  std::ostringstream os;
+  os << "BIND ";
+  os << _bind._expression.getCacheKey(_subtree->getVariableColumns());
+  os << "\n" << _subtree->getCacheKey();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________
@@ -242,8 +245,5 @@ IdTable Bind::computeExpressionBind(
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Bind::cloneImpl() const {
-  auto bind =
-      std::make_unique<Bind>(_executionContext, _subtree->clone(), _bind);
-  bind->expressionCacheKey_ = expressionCacheKey_;
-  return bind;
+  return std::make_unique<Bind>(_executionContext, _subtree->clone(), _bind);
 }

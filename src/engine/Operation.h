@@ -304,7 +304,13 @@ class Operation {
   // This function is called each time `applyLimitOffset` is called. It can be
   // overridden by subclasses to e.g. implement the LIMIT in a more efficient
   // way.
-  virtual void onLimitOffsetChanged(const LimitOffsetClause&) {}
+  virtual void onLimitOffsetChanged(const LimitOffsetClause&) {
+    // By default, do nothing. The `LIMIT`/`OFFSET` will be applied externally
+    // after the computation of the result. Make sure to also override
+    // `benefitsFromApplyingLimitOrOffset()` or `supportsLimitOffset()` if this
+    // function is overridden, otherwise the `LIMIT`/`OFFSET` might not be
+    // applied correctly.
+  }
 
   // This function is called when the operation's result is requested to be
   // cached and pinned to a name.

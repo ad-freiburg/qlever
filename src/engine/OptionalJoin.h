@@ -48,9 +48,10 @@ class OptionalJoin : public Operation {
   void onLimitOffsetChanged(const LimitOffsetClause&) override;
 
  public:
-  // We propagate part of the `LimitOffsetClause` to the child operation, but we
-  // still need to apply the limit and offset to the result of this operation,
-  // so we still benefit from applying the limit and offset early.
+  // We propagate part of the `LimitOffsetClause` to the child operation to
+  // potentially speed it up and save memory, but `OptionalJoin` does not
+  // actually apply its own `LimitOffsetClause` to itself, this still needs to
+  // be done by the `Operation` base class.
   bool benefitsFromApplyingLimitOrOffset() const override { return true; }
 
   std::string getDescriptor() const override;
