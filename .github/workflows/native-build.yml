@@ -83,7 +83,7 @@ jobs:
             additional-cmake-options: "-D_NO_TIMING_TESTS=ON"
             skipIfPr: false
 
-    runs-on: ${matrix.runner}
+    runs-on: ${{matrix.runner}}
 
     steps:
       - name: Skip early if conditions are not met
