@@ -408,6 +408,7 @@ message(STATUS ---)
 ###############################################################################
 
 include_directories(src)
+include_directories(include)
 
 # Run the script `CompilationInfo.cmake` that creates the file `CompilationInfo.cpp`
 # with the current git hash and the current time and date. When specifying
@@ -463,11 +464,11 @@ if (USE_PRECOMPILED_HEADERS)
     target_precompile_headers(engine PRIVATE ${PRECOMPILED_HEADER_FILES_ENGINE})
 endif ()
 add_subdirectory(src/index)
-add_subdirectory(src/storage)
 add_subdirectory(src/util)
 add_subdirectory(src/rdfTypes)
 add_subdirectory(src/global)
 add_subdirectory(src/libqlever)
+add_subdirectory(src/duckdb/common)
 add_subdirectory(benchmark)
 
 enable_testing()
