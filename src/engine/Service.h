@@ -143,6 +143,9 @@ class Service : public Operation {
       std::string_view msg, std::string_view first100,
       std::string_view last100 = ""sv) const;
 
+  // Throws if the IRI is forbidden by the IRI prefix whitelist.
+  void throwIfIriNotWhitelisted();
+
   // Write the given JSON result to the given result object. The `I` is the
   // width of the result table.
   //

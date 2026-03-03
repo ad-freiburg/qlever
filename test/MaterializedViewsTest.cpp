@@ -38,6 +38,7 @@ using V = Variable;
 
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, Basic) {
+  SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
   // Write a simple view.
   clearLog();
   qlv().writeMaterializedView("testView1", simpleWriteQuery_);
@@ -308,6 +309,7 @@ TEST_F(MaterializedViewsTest, MetadataDependentConfigChecks) {
 
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, ColumnPermutation) {
+  SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
   MaterializedViewsManager manager{testIndexBase_};
 
   // Helper to get all column names from a view via its `VariableToColumnMap`.
@@ -596,6 +598,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
 
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, serverIntegration) {
+  SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
   using namespace serverTestHelpers;
   SimulateHttpRequest simulateHttpRequest{testIndexBase_};
 
@@ -856,6 +859,34 @@ TEST_F(MaterializedViewsTest, NoDuplicateRemovalOnScan) {
   )");
   EXPECT_EQ(threeColsResult.numRows(), 2 * numRowsDedup);
   EXPECT_THAT(threeColsResult, matchesIdTable(threeColsExpected));
+
+  // Graph column regression from #2708: Previously the graph column would
+  // overwrite an additional column if it was not selected.
+  {
+    qlv().writeMaterializedView("graphColRegression", R"(
+      SELECT ?a ?b ?c ?d ?e {
+        VALUES (?a ?b ?c ?d ?e) {
+          (1 2 3 4 5)
+          (11 12 13 14 15)
+        }
+      }
+    )");
+    auto res = getQueryResultAsIdTable(R"(
+    PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT ?e {
+        SERVICE view:graphColRegression {
+          [
+            view:column-a 1 ;
+            view:column-e ?e
+          ]
+        }
+      }
+    )");
+    // If we always select the graph column, but do not read it into a dummy
+    // variable, we would get `4` instead of `5` here.
+    auto expected = getQueryResultAsIdTable("SELECT (5 AS ?e) {}");
+    EXPECT_THAT(res, matchesIdTable(expected));
+  }
 }
 
 // Example queries for testing query rewriting.
