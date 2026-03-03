@@ -521,8 +521,8 @@ TEST(Date, parseErrors) {
   ASSERT_THROW(D::parseXsdDate("Kartoffelsalat"), E);
 }
 
-// _____________________________________________________________________________
 #ifndef REDUCED_FEATURE_SET_FOR_CPP17
+// _____________________________________________________________________________
 TEST(Date, toEpoch) {
   {
     using namespace std::chrono;
@@ -579,6 +579,28 @@ TEST(Date, toEpoch) {
                 (date1.toEpoch().value() - date2.toEpoch().value()).count());
     }
   }
+}
+
+// _____________________________________________________________________________
+TEST(Date, Subtraction) {
+  // Invalid Dates
+  Date date1 = Date(1970, 11, 31);
+  Date date2 = Date(2021, 2, 29);
+
+  // Valid Dates
+  Date date3 = Date(1986, 6, 24);
+  Date date4 = Date(1986, 6, 22);
+
+  ASSERT_FALSE(date1 - date2);
+  ASSERT_FALSE(date1 - date3);
+  ASSERT_FALSE(date4 - date2);
+
+  ASSERT_TRUE((date3 - date4).has_value());
+  ASSERT_TRUE((date4 - date3).has_value());
+  ASSERT_EQ(DayTimeDuration(DayTimeDuration::Type::Positive, 2),
+            (date3 - date4).value());
+  ASSERT_EQ(DayTimeDuration(DayTimeDuration::Type::Negative, 2),
+            (date4 - date3).value());
 }
 #endif
 
@@ -697,6 +719,16 @@ TEST(DateYearOrDuration, Subtraction) {
     ASSERT_EQ(DateYearOrDuration(
                   DayTimeDuration(DayTimeDuration::Type::Negative, 40477)),
               result);
+  }
+  {
+    // Test invalid Dates
+    DateYearOrDuration date1 = DateYearOrDuration(Date(1970, 11, 31));
+    DateYearOrDuration date2 = DateYearOrDuration(Date(2021, 2, 29));
+    ASSERT_FALSE(date1 - date2);
+
+    DateYearOrDuration date3 = DateYearOrDuration(Date(1980, 9, 13));
+    ASSERT_FALSE(date1 - date3);
+    ASSERT_FALSE(date2 - date3);
   }
   {
     // Test for DateTime Subtraction
