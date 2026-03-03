@@ -22,6 +22,7 @@
 #include "backports/type_traits.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/NamedResultCache.h"
+#include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoinAlgorithms.h"
 #include "engine/SpatialJoinConfig.h"
 #include "engine/VariableToColumnMap.h"
@@ -574,4 +575,21 @@ std::unique_ptr<Operation> SpatialJoin::cloneImpl() const {
       _executionContext, config_,
       childLeft_ ? std::optional{childLeft_->clone()} : std::nullopt,
       childRight_ ? std::optional{childRight_->clone()} : std::nullopt);
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+SpatialJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+  // TODO<ullingerc> how can we avoid redundancy in this code but still not do
+  // the clone and replace?
+  auto pushDown = pushDownBindToAnyChild(bind);
+  if (!pushDown.has_value()) {
+    return std::nullopt;
+  }
+  auto& [idx, child] = pushDown.value();
+  AD_CORRECTNESS_CHECK(idx == 0 || idx == 1);
+  auto left = idx == 0 ? child : childLeft_;
+  auto right = idx == 1 ? child : childRight_;
+  return ad_utility::makeExecutionTree<SpatialJoin>(
+      _executionContext, config_, std::move(left), std::move(right));
 }

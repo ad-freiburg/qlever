@@ -431,9 +431,9 @@ class Operation {
   // `Operation` iff any of its children accepts the `BIND` push down. This is
   // the correct behavior for various operations, which make use of this
   // function for their `makeTreeWithBindColumn` override.
-  // TODO<ullingerc> Should return children, not cloned tree?
-  std::optional<std::shared_ptr<QueryExecutionTree>> pushDownBindToAnyChild(
-      const parsedQuery::Bind& bind) const;
+  // Returns the index of the replaced child and its new `QueryExecutionTree`.
+  std::optional<std::pair<size_t, std::shared_ptr<QueryExecutionTree>>>
+  pushDownBindToAnyChild(const parsedQuery::Bind& bind) const;
 
  private:
   //! Compute the result of the query-subtree rooted at this element..

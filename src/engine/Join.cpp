@@ -776,29 +776,17 @@ Join::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>> Join::makeTreeWithBindColumn(
     const parsedQuery::Bind& bind) const {
-  // Try pushing down the `BIND` into any of the children.
-  auto tryPushDown = [&bind](
-                         std::shared_ptr<QueryExecutionTree>& target,
-                         const std::shared_ptr<QueryExecutionTree>& source) {
-    if (source->getRootOperation()->coversVariables(
-            bind._expression.containedVariables())) {
-      if (auto newTree =
-              source->getRootOperation()->makeTreeWithBindColumn(bind)) {
-        target = std::move(newTree.value());
-        return true;
-      }
-    }
-    return false;
-  };
-
-  auto left = _left;
-  auto right = _right;
-  if (tryPushDown(left, _left) || tryPushDown(right, _right)) {
-    auto leftCol = left->getVariableColumn(_joinVar);
-    auto rightCol = right->getVariableColumn(_joinVar);
-    return ad_utility::makeExecutionTree<Join>(
-        getExecutionContext(), std::move(left), std::move(right), leftCol,
-        rightCol);
+  auto pushDown = pushDownBindToAnyChild(bind);
+  if (!pushDown.has_value()) {
+    return std::nullopt;
   }
-  return std::nullopt;
+  auto& [idx, child] = pushDown.value();
+  AD_CORRECTNESS_CHECK(idx == 0 || idx == 1);
+  auto left = idx == 0 ? child : _left;
+  auto right = idx == 1 ? child : _right;
+  auto leftCol = left->getVariableColumn(_joinVar);
+  auto rightCol = right->getVariableColumn(_joinVar);
+  return ad_utility::makeExecutionTree<Join>(getExecutionContext(),
+                                             std::move(left), std::move(right),
+                                             leftCol, rightCol);
 }
