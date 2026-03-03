@@ -23,7 +23,7 @@ class GraphNamespaceManager {
   ad_utility::Synchronized<uint64_t> allocatedGraphs_ =
       ad_utility::Synchronized<uint64_t>(0ul);
 
-public:
+ public:
   GraphNamespaceManager() = default;
   GraphNamespaceManager(std::string prefix, uint64_t allocatedGraphs);
 

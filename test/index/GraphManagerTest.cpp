@@ -88,14 +88,14 @@ TEST_F(GraphManagerTest, GetNamespaceManagerUninitialized) {
 // ============================================================================
 
 TEST(GraphNamespaceManager, AllocateNewGraph) {
-  GraphManager::GraphNamespaceManager nsm("<http://example.org/graph/", 0);
+  GraphNamespaceManager nsm("<http://example.org/graph/", 0);
 
   auto iri = nsm.allocateNewGraph();
   EXPECT_EQ(iri.toStringRepresentation(), "<http://example.org/graph/0>");
 }
 
 TEST(GraphNamespaceManager, AllocateMultipleGraphs) {
-  GraphManager::GraphNamespaceManager nsm("<http://example.org/g/", 0);
+  GraphNamespaceManager nsm("<http://example.org/g/", 0);
 
   auto iri0 = nsm.allocateNewGraph();
   auto iri1 = nsm.allocateNewGraph();
@@ -111,12 +111,12 @@ TEST(GraphNamespaceManager, AllocateMultipleGraphs) {
 // ============================================================================
 
 TEST(GraphNamespaceManager, JsonRoundTrip) {
-  GraphManager::GraphNamespaceManager original("<http://example.org/ns/", 42);
+  GraphNamespaceManager original("<http://example.org/ns/", 42);
 
   nlohmann::json j;
   to_json(j, original);
 
-  GraphManager::GraphNamespaceManager restored;
+  GraphNamespaceManager restored;
   from_json(j, restored);
 
   auto iri = restored.allocateNewGraph();
