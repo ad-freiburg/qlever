@@ -772,3 +772,33 @@ Join::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
       getExecutionContext(), std::move(left), std::move(right), leftCol,
       rightCol, ad_utility::contains(variables, _joinVar));
 }
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>> Join::makeTreeWithBindColumn(
+    const parsedQuery::Bind& bind) const {
+  // Try pushing down the `BIND` into any of the children.
+  auto tryPushDown = [&bind](
+                         std::shared_ptr<QueryExecutionTree>& target,
+                         const std::shared_ptr<QueryExecutionTree>& source) {
+    if (source->getRootOperation()->coversVariables(
+            bind._expression.containedVariables())) {
+      if (auto newTree =
+              source->getRootOperation()->makeTreeWithBindColumn(bind)) {
+        target = std::move(newTree.value());
+        return true;
+      }
+    }
+    return false;
+  };
+
+  auto left = _left;
+  auto right = _right;
+  if (tryPushDown(left, _left) || tryPushDown(right, _right)) {
+    auto leftCol = left->getVariableColumn(_joinVar);
+    auto rightCol = right->getVariableColumn(_joinVar);
+    return ad_utility::makeExecutionTree<Join>(
+        getExecutionContext(), std::move(left), std::move(right), leftCol,
+        rightCol);
+  }
+  return std::nullopt;
+}

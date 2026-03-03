@@ -306,8 +306,8 @@ class IndexScan final : public Operation {
   makeTreeWithStrippedColumns(
       const std::set<Variable>& variables) const override;
 
-  std::optional<std::shared_ptr<QueryExecutionTree>>
-  makeTreeWithBindColumn(const parsedQuery::Bind& bind) const override;
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
+      const parsedQuery::Bind& bind) const override;
 };
 
 #endif  // QLEVER_SRC_ENGINE_INDEXSCAN_H

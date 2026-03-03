@@ -786,6 +786,14 @@ Operation::makeTreeWithStrippedColumns(
 }
 
 // _____________________________________________________________________________
+bool Operation::coversVariables(
+    const std::vector<const Variable*>& variables) const {
+  const auto& varToCol = getExternallyVisibleVariableColumns();
+  return ql::ranges::all_of(
+      variables, [&varToCol](const auto v) { return varToCol.contains(*v); });
+}
+
+// _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 Operation::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   const auto& children = getChildren();
@@ -796,12 +804,13 @@ Operation::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   // Get the variables used in the bind expression (not the target).
   const auto& bindExpressionVars = bind._expression.containedVariables();
 
-  // Check if a given child covers all expression variables.
-  auto childCoversAllVars = [&bindExpressionVars](const auto& child) {
-    const auto& childVars = child->getVariableColumns();
-    return ql::ranges::all_of(bindExpressionVars, [&childVars](const auto v) {
-      return childVars.contains(*v);
-    });
+  // Invalidate the cached `VariableToColumnMap` so it will be recomputed on the
+  // next access. Must be called when an operation's children change after
+  // construction.
+  auto invalidateCachedVariableColumns = [](Operation& op) {
+    op.variableToColumnMap_ = std::nullopt;
+    op.externallyVisibleVariableToColumnMap_ = std::nullopt;
+    op._resultSortedColumns = std::nullopt;
   };
 
   // Try pushing the bind down to a specific child. If successful, clone this
@@ -824,7 +833,7 @@ Operation::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
 
     // Since the new child has a different `VariableToColumnMap`, we must
     // invalidate the `VariableToColumnMap` of this operation too.
-    cloned->invalidateCachedVariableColumns();
+    invalidateCachedVariableColumns(*cloned);
 
     return std::make_shared<QueryExecutionTree>(getExecutionContext(),
                                                 std::move(cloned));
@@ -833,7 +842,7 @@ Operation::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   // For each child that covers all expression variables, check whether the bind
   // can be pushed down into the child.
   for (const auto& [idx, child] : ::ranges::views::enumerate(children)) {
-    if (!childCoversAllVars(child)) {
+    if (!child->getRootOperation()->coversVariables(bindExpressionVars)) {
       continue;
     }
     auto result = tryPushDown(idx, child);

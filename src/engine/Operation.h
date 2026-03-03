@@ -229,6 +229,9 @@ class Operation {
     return false;
   }
 
+  // Check whether all variables given are covered by this `Operation`.
+  bool coversVariables(const std::vector<const Variable*>& variables) const;
+
   // See the member variable with the same name below for documentation.
   std::optional<std::shared_ptr<const Result>>&
   precomputedResultBecauseSiblingOfService() {
@@ -377,8 +380,14 @@ class Operation {
 
   // Try to create a version of this operation with an additional column from a
   // `BIND` pushed down into the tree. The default implementation tries to push
-  // the `BIND` into each child which covers the `BIND`'s expression variables.
+  // the `BIND` into each child which covers the `BIND`'s expression variables,
+  // and accepts the result if one of the children can handle the `BIND`.
   // Returns `std::nullopt` if the `BIND` cannot be pushed down.
+  //
+  // IMPORTANT: This must be overridden in every subclass of `Operation` that
+  // contains own member variables depending on column indices, like `Join`.
+  // This function must also be overridden when the default semantics explained
+  // above are not applicable to the operation, like for `MINUS`.
   virtual std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithBindColumn(const parsedQuery::Bind& bind) const;
 
@@ -420,15 +429,6 @@ class Operation {
   // in case of a subquery.
   virtual const VariableToColumnMap& getInternallyVisibleVariableColumns()
       const final;
-
-  // Invalidate the cached `VariableToColumnMap` so it will be recomputed on the
-  // next access. Must be called when an operation's children change after
-  // construction (e.g., during bind push-down).
-  void invalidateCachedVariableColumns() {
-    variableToColumnMap_ = std::nullopt;
-    externallyVisibleVariableToColumnMap_ = std::nullopt;
-    _resultSortedColumns = std::nullopt;
-  }
 
  private:
   //! Compute the result of the query-subtree rooted at this element..

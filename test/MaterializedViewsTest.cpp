@@ -7,6 +7,8 @@
 #include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
 
+#include <functional>
+
 #include "./MaterializedViewsTestHelpers.h"
 #include "./QueryPlannerTestHelpers.h"
 #include "./ServerTestHelpers.h"
@@ -889,6 +891,43 @@ TEST_F(MaterializedViewsTest, NoDuplicateRemovalOnScan) {
   }
 }
 
+// Queries for testing `BIND` rewriting.
+constexpr std::string_view bindWriteQuery =
+    R"(
+      PREFIX math: <http://www.w3.org/2005/xpath-functions/math#>
+      SELECT ?s ?o ?b1 ?b2 ?b3 {
+        ?s <p2> ?o .
+        BIND(15 AS ?b1)
+        BIND(2 * ?o + 1 AS ?b2)
+        BIND(math:cos(?o - 1) + 4 AS ?b3)
+      }
+    )";
+
+// _____________________________________________________________________________
+TEST_F(MaterializedViewsTest, BindRewrite) {
+  qlv().writeMaterializedView("bindView", std::string{bindWriteQuery});
+  qlv().loadMaterializedView("bindView");
+
+  // We fix the first columns of the `IndexScan` matcher because we are only
+  // interested in the additional columns. The number of columns after stripping
+  // is 3, for S, P and one additional column.
+  auto bindView = std::bind_front(&viewScan, "bindView", "?s", "?o",
+                                  "?_ql_materialized_view_o", 3);
+  using AC = std::vector<std::pair<ColumnIndex, Variable>>;
+
+  // Simple `BIND` rewrites.
+  qpExpect(qlv(), R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT ?bind {
+        ?s view:bindView-o ?o .
+        BIND(2 * ?o + 1 AS ?bind)
+      }
+    )",
+           bindView(AC{{3, V{"?bind"}}}));
+
+  // TODO<ullingerc> Test more advanced cases: Join, Exists, Minus, Union, ...
+}
+
 // Example queries for testing query rewriting.
 constexpr std::string_view simpleChain = "SELECT * { ?s <p1> ?m . ?m <p2> ?o }";
 constexpr std::string_view simpleChainRenamed =
@@ -901,9 +940,7 @@ constexpr std::string_view simpleChainRenamedPlusBind =
     "SELECT ?a ?b ?c ?x { ?b <p2> ?c . ?a <p1> ?b . BIND(5 AS ?x) }";
 
 // _____________________________________________________________________________
-TEST_P(MaterializedViewsQueryRewriteTest, simpleChain) {
-  namespace h = queryPlannerTestHelpers;
-
+TEST_P(MaterializedViewsChainRewriteTest, simpleChain) {
   RewriteTestParams p = GetParam();
   auto cleanup =
       setRuntimeParameterForTest<&RuntimeParameters::queryPlanningBudget_>(
@@ -937,27 +974,16 @@ TEST_P(MaterializedViewsQueryRewriteTest, simpleChain) {
   MaterializedViewsManager manager{onDiskBase};
   manager.writeViewToDisk(viewName, qlv.parseAndPlanQuery(p.writeQuery_));
   qlv.loadMaterializedView(viewName);
+  auto chainView = std::bind_front(&viewScanSimple, viewName);
 
   // With the materialized view loaded, an index scan on the view is performed
   // instead of a regular join.
-  auto qpExpect = [](qlever::Qlever& qlv, const auto& query,
-                     ::testing::Matcher<const QueryExecutionTree&> matcher,
-                     source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-    auto l = generateLocationTrace(sourceLocation);
-    auto [qet, qec, parsed] = qlv.parseAndPlanQuery(std::string{query});
-    EXPECT_THAT(*qet, matcher);
-  };
-  auto viewScan = [](std::string a, std::string b, std::string c) {
-    return h::IndexScanFromStrings(std::move(a), std::move(b), std::move(c),
-                                   {Permutation::Enum::SPO});
-  };
-
-  qpExpect(qlv, simpleChain, viewScan("?s", "?m", "?o"));
-  qpExpect(qlv, simpleChainRenamed, viewScan("?a", "?b", "?c"));
+  qpExpect(qlv, simpleChain, chainView("?s", "?m", "?o"));
+  qpExpect(qlv, simpleChainRenamed, chainView("?a", "?b", "?c"));
   qpExpect(qlv, simpleChainFixed,
-           viewScan("<s2>", "?_QLever_internal_variable_qp_0", "?c"));
+           chainView("<s2>", "?_QLever_internal_variable_qp_0", "?c"));
   qpExpect(qlv, simpleChainPlusJoin,
-           h::Join(viewScan("?s", "?_QLever_internal_variable_qp_0", "?o"),
+           h::Join(chainView("?s", "?_QLever_internal_variable_qp_0", "?o"),
                    h::IndexScanFromStrings("?s", "<p3>", "?o2")));
 
   // TODO<ullingerc> Test overlapping view plans.
@@ -965,7 +991,7 @@ TEST_P(MaterializedViewsQueryRewriteTest, simpleChain) {
 
 // _____________________________________________________________________________
 INSTANTIATE_TEST_SUITE_P(
-    MaterializedViewsTest, MaterializedViewsQueryRewriteTest,
+    MaterializedViewsTest, MaterializedViewsChainRewriteTest,
     ::testing::Values(
         // Default case.
         RewriteTestParams{std::string{simpleChain}, 1500},
