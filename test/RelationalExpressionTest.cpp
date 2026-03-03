@@ -1095,3 +1095,16 @@ TEST(InExpression, getLanguageFilterExpression) {
 // because the relational expressions do not work properly with the current
 // limited implementation of the local vocabularies. Add those tests, as soon as
 // the local vocabularies are implemented properly.
+
+// _____________________________________________________________________________
+TEST(InExpression, getEstimatesForFilterExpression) {
+  // Regression test for https://github.com/ad-freiburg/qlever/issues/2701
+  // it checks if no division by zero is done.
+  using namespace ::testing;
+  InExpression ie{std::make_unique<VariableExpression>(Variable{"?x"}), {}};
+  auto [sizeEstimate, costEstimate] =
+      ie.getEstimatesForFilterExpression(1337, std::nullopt);
+
+  EXPECT_EQ(sizeEstimate, 0);
+  EXPECT_EQ(costEstimate, 0);
+}

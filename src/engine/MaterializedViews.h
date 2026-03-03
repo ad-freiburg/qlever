@@ -1,22 +1,28 @@
-// Copyright 2025 The QLever Authors, in particular:
+// Copyright 2025 - 2026 The QLever Authors, in particular:
 //
-// 2025 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+// 2025 - 2026 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_ENGINE_MATERIALIZEDVIEWS_H_
 #define QLEVER_SRC_ENGINE_MATERIALIZEDVIEWS_H_
 
+#include "engine/MaterializedViewsQueryAnalysis.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/DeltaTriples.h"
 #include "index/ExternalSortFunctors.h"
 #include "index/Permutation.h"
 #include "libqlever/QleverTypes.h"
+#include "parser/GraphPatternOperation.h"
 #include "parser/MaterializedViewQuery.h"
 #include "parser/ParsedQuery.h"
 #include "parser/SparqlTriple.h"
 #include "util/HashMap.h"
+#include "util/Synchronized.h"
 
 // Forward declarations
 class QueryExecutionContext;
@@ -223,15 +229,23 @@ class MaterializedView {
       const parsedQuery::MaterializedViewQuery& viewQuery) const;
 };
 
+// Shorthand for query rewriting helper class.
+using materializedViewsQueryAnalysis::MaterializedViewJoinReplacement;
+
 // The `MaterializedViewsManager` is part of the `QueryExecutionContext` and is
 // used to manage the currently loaded `MaterializedViews` in a `Server` or
 // `Qlever` instance.
 class MaterializedViewsManager {
  private:
   std::string onDiskBase_;
-  mutable ad_utility::Synchronized<
-      ad_utility::HashMap<std::string, std::shared_ptr<MaterializedView>>>
-      loadedViews_;
+
+  // Helper struct to unify the locking of loaded views and `QueryPatternCache`.
+  struct LoadedViews {
+    ad_utility::HashMap<std::string, std::shared_ptr<MaterializedView>> views_;
+    materializedViewsQueryAnalysis::QueryPatternCache queryPatternCache_;
+  };
+
+  mutable ad_utility::Synchronized<LoadedViews> loadedViews_;
 
  public:
   MaterializedViewsManager() = default;
@@ -265,6 +279,14 @@ class MaterializedViewsManager {
   std::shared_ptr<IndexScan> makeIndexScan(
       QueryExecutionContext* qec,
       const parsedQuery::MaterializedViewQuery& viewQuery) const;
+
+  // Given a set of triples, check if some join operations that would be
+  // required when evaluating them can be replaced by scans on materialized
+  // views that are currently loaded. This is implemented using the
+  // `queryPatternCache_`.
+  std::vector<MaterializedViewJoinReplacement> makeJoinReplacementIndexScans(
+      QueryExecutionContext* qec,
+      const parsedQuery::BasicGraphPattern& triples) const;
 
   // Write a `MaterializedView` given a valid `name` (consisting only of
   // alphanumerics and hyphens) and a `queryPlan` to be executed. The query's

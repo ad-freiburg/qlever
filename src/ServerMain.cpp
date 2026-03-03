@@ -182,6 +182,21 @@ int main(int argc, char** argv) {
           ->multitoken(),
       "The names of materialized views to be loaded automatically on server "
       "start (this option takes an arbitrary number of arguments).");
+  add("enable-materialized-view-query-rewrite",
+      optionFactory.getProgramOption<
+          &RuntimeParameters::enableMaterializedViewQueryRewrite_>(),
+      "If set to true, loaded materialized views will be considered as "
+      "alternative query plans for certain supported query patterns.");
+  add("service-allowed-iri-prefixes",
+      optionFactory
+          .getProgramOption<&RuntimeParameters::serviceAllowedIriPrefixes_>()
+          ->multitoken(),
+      "IRI prefixes that are allowed as SERVICE endpoints (this option takes "
+      "an arbitrary number of arguments). If none are given (the default), all "
+      "IRIs are allowed. If given, SERVICE requests to IRIs not matching any "
+      "prefix are rejected. To disable all federated queries, set this option "
+      "to an invalid IRI prefix like `-`. Magic services (for example spatial "
+      "search or materialized views) are never affected.");
   po::variables_map optionsMap;
 
   try {
@@ -201,9 +216,10 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
 
-  AD_LOG_INFO << EMPH_ON << "QLever server, compiled on "
-              << qlever::version::DatetimeOfCompilation << " using git hash "
-              << qlever::version::GitShortHash << EMPH_OFF << std::endl;
+  AD_LOG_INFO << EMPH_ON << "QLever server " << qlever::version::ProjectVersion
+              << ", compiled on " << qlever::version::DatetimeOfCompilation
+              << " using git hash " << qlever::version::GitShortHash << EMPH_OFF
+              << std::endl;
 
   try {
     Server server(port, numSimultaneousQueries, memoryMaxSize,

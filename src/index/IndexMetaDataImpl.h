@@ -112,4 +112,24 @@ void IndexMetaData<MapType>::calculateStatistics(size_t numDistinctCol0) {
   }
 }
 
+// _____________________________________________________________________________
+template <class MapType>
+void IndexMetaData<MapType>::exchangeMultiplicities(IndexMetaData& other) {
+  AD_CONTRACT_CHECK(data_.size() == other.data_.size(),
+                    "Both IndexMetaData objects must have the same length.");
+  // This is conceptually `::ranges::zip_view`, but the `data_` objects to not
+  // satisfy the necessary concepts for it, so we do the zipping manually here.
+  auto otherIt = other.data_.begin();
+  for (auto it = data_.begin(); it != data_.end(); ++it, ++otherIt) {
+    AD_CORRECTNESS_CHECK(otherIt != other.data_.end());
+    auto& md1 = *it;
+    auto& md2 = *otherIt;
+    AD_CONTRACT_CHECK(md1.col0Id_.getBits() == md2.col0Id_.getBits(),
+                      "The ids must be in the same order and the same ids must "
+                      "be present in both IndexMetaData objects.");
+    md1.multiplicityCol2_ = md2.multiplicityCol1_;
+    md2.multiplicityCol2_ = md1.multiplicityCol1_;
+  }
+}
+
 #endif  // QLEVER_SRC_INDEX_INDEXMETADATAIMPL_H

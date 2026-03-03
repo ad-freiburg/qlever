@@ -32,6 +32,7 @@
 #include "util/GeoConverters.h"
 #include "util/Log.h"
 #include "util/TypeTraits.h"
+#include "util/Views.h"
 
 // This file contains functions used for parsing and processing WKT geometries
 // using `pb_util`. To avoid unnecessarily compiling expensive modules, this
@@ -46,7 +47,7 @@ using ParsedWkt =
                  MultiPoint<CoordType>, MultiLine<CoordType>,
                  MultiPolygon<CoordType>, Collection<CoordType>>;
 using ParseResult = std::pair<WKTType, std::optional<ParsedWkt>>;
-using DAnyGeometry = util::geo::AnyGeometry<CoordType>;
+using DAnyGeometry = AnyGeometry<CoordType>;
 
 template <typename T>
 CPP_concept WktSingleGeometryType =
@@ -245,19 +246,16 @@ inline std::optional<std::string_view> wktTypeToIri(uint8_t type) {
 
 // Reverse projection applied by `sj::WKTParser`: convert coordinates from web
 // mercator int32 to normal lat-long double coordinates.
-inline util::geo::DPoint projectInt32WebMercToDoubleLatLng(
-    const util::geo::I32Point& p) {
-  return util::geo::webMercToLatLng<double>(
-      static_cast<double>(p.getX()) / PREC,
-      static_cast<double>(p.getY()) / PREC);
-};
+inline DPoint projectInt32WebMercToDoubleLatLng(const I32Point& p) {
+  return webMercToLatLng<double>(static_cast<double>(p.getX()) / PREC,
+                                 static_cast<double>(p.getY()) / PREC);
+}
 
 // Same as above, but for a bounding box.
-inline util::geo::DBox projectInt32WebMercToDoubleLatLng(
-    const util::geo::I32Box& box) {
+inline DBox projectInt32WebMercToDoubleLatLng(const I32Box& box) {
   return {projectInt32WebMercToDoubleLatLng(box.getLowerLeft()),
           projectInt32WebMercToDoubleLatLng(box.getUpperRight())};
-};
+}
 
 // Counts the number of geometries in a geometry collection.
 inline uint32_t countChildGeometries(const ParsedWkt& geom) {
@@ -341,7 +339,9 @@ struct MetricLengthVisitor {
     static_assert(ad_utility::similarToInstantiation<T, std::vector>);
 
     return ::ranges::accumulate(
-        ::ranges::transform_view(multiGeom, MetricLengthVisitor{}), 0);
+        ::ranges::transform_view(ad_utility::allView(multiGeom),
+                                 MetricLengthVisitor{}),
+        0);
   }
 
   // Compute the length for the custom container type `AnyGeometry` from
@@ -657,7 +657,7 @@ struct MetricDistanceVisitor {
   // Delegate the actual distance computation to `pb_util`.
   CPP_template(typename T, typename U)(requires IsPairOfUtilGeoms<T, U>) double
   operator()(const T& a, const U& b) const {
-    return util::geo::webMercMeterDist<T, U>(a, b);
+    return webMercMeterDist<T, U>(a, b);
   }
 
   // Handle optional geometries that may be contained in a `ParseResult`.

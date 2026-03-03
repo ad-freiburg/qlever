@@ -49,9 +49,12 @@ constexpr std::string_view BLANK_NODE_ALLOCATION_START =
     "num-blank-nodes-total";
 
 // _____________________________________________________________________________
-IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator)
+IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator,
+                     bool registerSingleton)
     : allocator_{std::move(allocator)} {
-  globalSingletonIndex_ = this;
+  if (registerSingleton) {
+    globalSingletonIndex_ = this;
+  }
   deltaTriples_.emplace(*this);
 }
 
@@ -943,7 +946,8 @@ void IndexImpl::writeMetaData(IndexMetaDataMmapDispatcher::WriteType& metaData,
 }
 
 // _____________________________________________________________________________
-size_t IndexImpl::createPermutation(
+std::pair<size_t, IndexImpl::IndexMetaDataMmapDispatcher::WriteType>
+IndexImpl::createPermutationWithoutMetadata(
     size_t numColumns,
     ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
     const Permutation& permutation, bool internal) {
@@ -958,8 +962,16 @@ size_t IndexImpl::createPermutation(
   AD_LOG_INFO << "Statistics for " << permutation.readableName() << ": "
               << meta.statistics() << std::endl;
 
+  return std::make_pair(numDistinctCol0, std::move(meta));
+}
+
+// _____________________________________________________________________________
+void IndexImpl::finalizePermutation(
+    IndexMetaDataMmapDispatcher::WriteType& meta,
+    const Permutation& permutation, bool internal) const {
+  std::string fileName = getFilenameForPermutation(permutation, internal);
+
   writeMetaData(meta, fileName);
-  return numDistinctCol0;
 }
 
 // ________________________________________________________________________
@@ -1137,6 +1149,9 @@ void IndexImpl::setKeepTempFiles(bool keepTempFiles) {
 
 // _____________________________________________________________________________
 bool& IndexImpl::usePatterns() { return usePatterns_; }
+
+// _____________________________________________________________________________
+bool IndexImpl::usePatterns() const { return usePatterns_; }
 
 // _____________________________________________________________________________
 bool& IndexImpl::loadAllPermutations() { return loadAllPermutations_; }
@@ -1901,6 +1916,24 @@ void IndexImpl::writePatternsToFile() const {
 }
 
 // _____________________________________________________________________________
+void IndexImpl::loadConfigFromOldIndex(const std::string& newName,
+                                       const IndexImpl& other,
+                                       const nlohmann::json& newStats) {
+  // Copy the relevant information from an existing index to rebuild the new
+  // index and write a fresh configuration file for a new index.
+  setOnDiskBase(newName);
+  setKbName(other.getKbName());
+  blocksizePermutationPerColumn() = other.blocksizePermutationPerColumn();
+  configurationJson_ = newStats;
+  numTriples_ = static_cast<NumNormalAndInternal>(newStats.at("num-triples"));
+  numPredicates_ =
+      static_cast<NumNormalAndInternal>(newStats.at("num-predicates"));
+  numSubjects_ = newStats.value("num-subjects", NumNormalAndInternal{});
+  numObjects_ = newStats.value("num-objects", NumNormalAndInternal{});
+  writeConfiguration();
+}
+
+// _____________________________________________________________________________
 void IndexImpl::countDistinct(std::optional<Id>& lastId, size_t& counter,
                               const IdTable& table) {
   AD_CORRECTNESS_CHECK(
@@ -1930,10 +1963,11 @@ std::packaged_task<void()> computeStatistics(
     auto cancellationHandle =
         std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
     ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
+    std::array<ColumnIndex, 1> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
     auto tables = permutation.lazyScan(
         permutation.getScanSpecAndBlocks(scanSpec, *locatedTriplesSharedState),
-        std::nullopt, CompressedRelationReader::ColumnIndicesRef{},
-        cancellationHandle, *locatedTriplesSharedState);
+        std::nullopt, additionalColumns, cancellationHandle,
+        *locatedTriplesSharedState);
     std::optional<Id> lastCol0 = std::nullopt;
     for (const auto& table : tables) {
       std::invoke(customAction, table);
