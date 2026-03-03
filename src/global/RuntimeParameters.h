@@ -148,7 +148,7 @@ struct RuntimeParameters {
   // (the default), all IRIs are allowed. If non-empty, `SERVICE` requests to
   // IRIs that do not start with any of the given prefixes are rejected.
   SpaceSeparatedStrings serviceAllowedIriPrefixes_{
-        {}, "service-allowed-iri-prefixes"};
+      {}, "service-allowed-iri-prefixes"};
 
   // Only blocks of this size or larger will be considered for vacuuming.
   SizeT vacuumMinimumBlockSize_{10'000, "vacuum-minimum-block-size"};

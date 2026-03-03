@@ -464,6 +464,10 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     logCommand(cmd, "vacuum (remove redundant) delta triples");
 
     auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+    auto defaultTimeout =
+        getRuntimeParameter<&RuntimeParameters::defaultQueryTimeout_>();
+    cancelAfterDeadline(handle, std::chrono::duration_cast<TimeLimit>(
+                                    std::chrono::seconds{defaultTimeout}));
 
     auto coroutine = computeInNewThread(
         updateThreadPool_,

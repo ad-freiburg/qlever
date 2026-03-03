@@ -255,18 +255,15 @@ VacuumStatistics processBlockForVacuum(
     return IdTriple<0>{spo};
   };
 
-  auto lessThan = [](const auto& lt, const auto& row) {
-    return tieLocatedTriple<3, true>(lt) < tieIdTableRow<3, true>(row);
-  };
-  auto equal = [](const auto& lt, const auto& row) {
-    return tieLocatedTriple<3, true>(lt) == tieIdTableRow<3, true>(row);
+  auto cmp = [](const auto& lt, const auto& row) {
+    return tieLocatedTriple<3, true>(lt) <=> tieIdTableRow<3, true>(row);
   };
 
   auto rowIt = idTable.begin();
   auto updateIt = locatedTriples.begin();
 
   while (updateIt != locatedTriples.end() && rowIt != idTable.end()) {
-    if (lessThan(updateIt, *rowIt)) {
+    if (cmp(updateIt, *rowIt) < 0) {
       if (updateIt->insertOrDelete_) {
         stats.numInsertionsKept_++;
       } else {
@@ -274,7 +271,7 @@ VacuumStatistics processBlockForVacuum(
         stats.numDeletionsRemoved_++;
       }
       ++updateIt;
-    } else if (equal(updateIt, *rowIt)) {
+    } else if (cmp(updateIt, *rowIt) == 0) {
       if (updateIt->insertOrDelete_) {
         allInsertionsToRemove.push_back(toSpo(updateIt));
         stats.numInsertionsRemoved_++;
@@ -329,13 +326,14 @@ TriplesToVacuum LocatedTriplesPerBlock::identifyTriplesToVacuum(
   const auto& blockMetadata = perm.metaData().blockData();
   AD_CORRECTNESS_CHECK(!blockMetadata.empty());
 
+  AD_LOG_INFO << "Blocks: " << absl::StrJoin(blocksToVacuum, ", ") << std::endl;
   for (size_t blockIndex : blocksToVacuum) {
     AD_CORRECTNESS_CHECK(blockIndex <= blockMetadata.size());
     // This is one past the last block with index triples. This block always
     // only has updates but no index triples. Pass in an empty `IdTable`.
     if (blockIndex == blockMetadata.size()) {
       ad_utility::AllocatorWithLimit<Id> allocator =
-          ad_utility::makeUnlimitedAllocator<Id>();
+          ad_utility::makeAllocatorWithLimit<Id>(0_B);
       IdTable idTable(4, allocator);
       totalStats +=
           processBlockForVacuum(idTable, map_.at(blockIndex), inverseKeys,
