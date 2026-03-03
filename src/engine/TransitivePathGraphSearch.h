@@ -75,8 +75,6 @@ struct GraphSearchExecutionParams {
 template <typename T>
 Set breadthFirstSearch(const GraphSearchProblem<T>& gsp,
                        const GraphSearchExecutionParams& ep) {
-  // TODO<schaetzr>: Check if there are advantages to making our own minimal
-  // implementation of a FIFO queue.
   Queue queue{ep.allocator_};
   Set connectedNodes{ep.allocator_};
 
@@ -111,8 +109,6 @@ Set breadthFirstSearchWithLimit(const GraphSearchProblem<T>& gsp,
                                 const GraphSearchExecutionParams& ep) {
   size_t traversalDepth = 0;
   size_t nodesUntilNextDepthIncrease = 1;
-  // TODO<schaetzr>: Check if there are advantages to making our own minimal
-  // implementations of a FIFO queue.
   Queue queue{ep.allocator_};
   Set connectedNodes{ep.allocator_};
 
