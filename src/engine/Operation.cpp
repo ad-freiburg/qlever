@@ -807,7 +807,8 @@ Operation::pushDownBindToAnyChild(const parsedQuery::Bind& bind) const {
   // For each child that covers all expression variables, check whether the bind
   // can be pushed down into that child.
   for (const auto& [idx, child] : ::ranges::views::enumerate(children)) {
-    if (!child->getRootOperation()->coversVariables(bindExpressionVars)) {
+    if (!child->getRootOperation()->coversVariables(bindExpressionVars) ||
+        child->isVariableCovered(bind._target)) {
       continue;
     }
     auto result = child->getRootOperation()->makeTreeWithBindColumn(bind);
