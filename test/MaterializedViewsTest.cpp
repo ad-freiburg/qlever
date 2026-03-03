@@ -889,7 +889,6 @@ TEST_F(MaterializedViewsTest, NoDuplicateRemovalOnScan) {
     auto expected = getQueryResultAsIdTable("SELECT (5 AS ?e) {}");
     EXPECT_THAT(res, matchesIdTable(expected));
   }
-<<<<<<< HEAD
 }
 
 // Queries for testing `BIND` rewriting.
@@ -927,8 +926,6 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
            bindView(AC{{3, V{"?bind"}}}));
 
   // TODO<ullingerc> Test more advanced cases: Join, Exists, Minus, Union, ...
-=======
->>>>>>> c21e686ca36bb4d25dcddcb1332857f653d41bb8
 }
 
 // Example queries for testing query rewriting.
