@@ -104,10 +104,10 @@ void OptionalJoin::onLimitOffsetChanged(const LimitOffsetClause& limitOffset) {
     if (limit <= std::numeric_limits<uint64_t>::max() - offset) {
       safeLimit = limit + offset;
     }
-    // If we have a limit applied, we can apply limit + offset as a limit to the left
-    // side, since the result of the optional join is at least as large as the
-    // left side. This can significantly speed up the query if the left side is
-    // large and the limit is small.
+    // If we have a limit applied, we can apply limit + offset as a limit to the
+    // left side, since the result of the optional join is at least as large as
+    // the left side. This can significantly speed up the query if the left side
+    // is large and the limit is small.
     _left = _left->clone();
     _left->applyLimitOffset(LimitOffsetClause{safeLimit});
   }

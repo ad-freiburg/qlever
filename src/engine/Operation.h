@@ -31,6 +31,17 @@ enum class ComputationMode {
   LAZY_IF_SUPPORTED
 };
 
+enum class LimitOffsetSupport {
+  // `LIMIT` and `OFFSET` have to be applied externally and cannot be used to
+  // optimize child operations.
+  NO,
+  // `LIMIT` and `OFFSET` have to be applied externally but the operation can
+  // also optimize child operations if they support it.
+  PARTIAL,
+  // `LIMIT` and `OFFSET` are applied directly to this operation.
+  YES
+};
+
 class Operation {
  private:
   using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
@@ -288,16 +299,13 @@ class Operation {
     return false;
   }
 
-  // True iff this operation directly implement a `OFFSET` and `LIMIT` clause on
-  // its result.
-  [[nodiscard]] virtual bool supportsLimitOffset() const { return false; }
-
-  // Laxer variant of `supportsLimitOffset` that also returns `true` for
-  // operations that don't support `LIMIT`/`OFFSET` natively but can still
-  // benefit from applying a `LIMIT`/`OFFSET` clause on their result because
-  // they might propagate it to their children.
-  virtual bool benefitsFromApplyingLimitOrOffset() const {
-    return supportsLimitOffset();
+  // Return the level of support this operation has for `LIMIT` and `OFFSET`.
+  // `YES` means the operation directly applies `LIMIT`/`OFFSET` to its result.
+  // `PARTIAL` means the operation can propagate `LIMIT`/`OFFSET` to its
+  // children for optimization, but does not apply it itself.
+  // `NO` means the operation does not support `LIMIT`/`OFFSET` at all.
+  [[nodiscard]] virtual LimitOffsetSupport supportsLimitOffset() const {
+    return LimitOffsetSupport::NO;
   }
 
  private:
@@ -307,9 +315,8 @@ class Operation {
   virtual void onLimitOffsetChanged(const LimitOffsetClause&) {
     // By default, do nothing. The `LIMIT`/`OFFSET` will be applied externally
     // after the computation of the result. Make sure to also override
-    // `benefitsFromApplyingLimitOrOffset()` or `supportsLimitOffset()` if this
-    // function is overridden, otherwise the `LIMIT`/`OFFSET` might not be
-    // applied correctly.
+    // `supportsLimitOffset()` if this function is overridden, otherwise the
+    // `LIMIT`/`OFFSET` might not be applied correctly.
   }
 
   // This function is called when the operation's result is requested to be
@@ -431,7 +438,7 @@ class Operation {
   // was replaced by calling `RuntimeInformation::addLimitOffsetRow`.
   // `applyToLimit` indicates if the stats should be applied to the runtime
   // information of the limit, or the runtime information of the actual
-  // operation. If `supportsLimitOffset() == true`, then the operation does
+  // operation. If `supportsLimitOffset() == LimitOffsetSupport::YES`, then the
   // already track the limit stats correctly and there's no need to keep track
   // of both. Otherwise `externalLimitApplied_` decides how stat tracking should
   // be handled.

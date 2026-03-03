@@ -276,7 +276,7 @@ CartesianProductJoin::calculateSubResults(bool requestLaziness) {
   // Get all child results (possibly with limit, see above).
   for (std::shared_ptr<QueryExecutionTree>& childTree : children_) {
     if (limitIfPresent.has_value() &&
-        childTree->benefitsFromApplyingLimitOrOffset()) {
+        childTree->supportsLimitOffset() != LimitOffsetSupport::NO) {
       childTree->applyLimitOffset(limitIfPresent.value());
       forbiddenToRecompute_ = true;
     }

@@ -240,8 +240,8 @@ class QueryExecutionTree {
     s << tree.getRootOperation()->getDescriptor();
   }
 
-  bool benefitsFromApplyingLimitOrOffset() const {
-    return getRootOperation()->benefitsFromApplyingLimitOrOffset();
+  LimitOffsetSupport supportsLimitOffset() const {
+    return getRootOperation()->supportsLimitOffset();
   }
 
   // Set the value of the `LIMIT`/`OFFSET` clause that will be applied to the

@@ -72,7 +72,9 @@ class Sort : public Operation {
   // The sort operation never has a semantic meaning. It's just a mean to an end
   // to sort an input to make another operation more efficient. That's why we
   // can propagate limits and offsets right through it.
-  bool supportsLimitOffset() const override { return true; }
+  LimitOffsetSupport supportsLimitOffset() const override {
+    return LimitOffsetSupport::YES;
+  }
 
   [[nodiscard]] size_t getResultWidth() const override;
 

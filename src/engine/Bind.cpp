@@ -44,7 +44,9 @@ size_t Bind::getCostEstimate() {
 }
 
 // We delegate the limit to the child operation, so we always support it.
-bool Bind::supportsLimitOffset() const { return true; }
+LimitOffsetSupport Bind::supportsLimitOffset() const {
+  return LimitOffsetSupport::YES;
+}
 
 // _____________________________________________________________________________
 void Bind::onLimitOffsetChanged(const LimitOffsetClause& limitOffset) {
