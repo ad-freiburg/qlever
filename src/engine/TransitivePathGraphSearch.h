@@ -74,11 +74,18 @@ struct GraphSearchExecutionParams {
 // Returns the set of all nodes connected to the startNode as given in `gsp`.
 template <typename T>
 Set breadthFirstSearch(const GraphSearchProblem<T>& gsp,
-                       const GraphSearchExecutionParams& ep) {
+                       const GraphSearchExecutionParams& ep,
+                      bool skipStartNodeInitially) {
   Queue queue{ep.allocator_};
   Set connectedNodes{ep.allocator_};
 
-  queue.push_back(gsp.startNode_);
+  if (skipStartNodeInitially) {
+    for (const Id& successor : gsp.edges_.successors(gsp.startNode_)) {
+      queue.push_back(successor);
+    }
+  } else {
+    queue.push_back(gsp.startNode_);
+  }
 
   while (!queue.empty()) {
     ep.checkCancellation("Breadth-first search");
@@ -149,7 +156,8 @@ Set breadthFirstSearchWithLimit(const GraphSearchProblem<T>& gsp,
 // it was found in the graph.
 template <typename T>
 Set depthFirstSearch(const GraphSearchProblem<T>& gsp,
-                     const GraphSearchExecutionParams& ep) {
+                     const GraphSearchExecutionParams& ep,
+                     bool skipStartNodeInitially = false) {
   Set connectedNodes{ep.allocator_};
   connectedNodes.reserve(1);
 
@@ -161,7 +169,13 @@ Set depthFirstSearch(const GraphSearchProblem<T>& gsp,
   sparqlExpression::VectorWithMemoryLimit<Id> stack{ep.allocator_};
   ad_utility::HashSetWithMemoryLimit<Id> marks{ep.allocator_};
 
-  stack.emplace_back(gsp.startNode_);
+  if (skipStartNodeInitially) {
+    for (const Id& successor : gsp.edges_.successors(gsp.startNode_)) {
+      stack.emplace_back(successor);
+    }
+  } else {
+    stack.emplace_back(gsp.startNode_);
+  }
 
   while (!stack.empty()) {
     ep.checkCancellation("Depth-first search");
@@ -250,6 +264,8 @@ Set runOptimalGraphSearch(const GraphSearchProblem<T>& gsp,
   bool usesLimits =
       gsp.minDist_ != 0 || gsp.maxDist_ != std::numeric_limits<size_t>::max();
   bool targetHasValue = gsp.targetNode_.has_value();
+  bool skipStartNodeInitially =
+      gsp.minDist_ == 1 && gsp.maxDist_ == std::numeric_limits<size_t>::max();
 
   if (usesLimits) {
     if (targetHasValue) {
@@ -258,9 +274,9 @@ Set runOptimalGraphSearch(const GraphSearchProblem<T>& gsp,
     return breadthFirstSearchWithLimit(gsp, ep);
   }
   if (targetHasValue) {
-    return depthFirstSearch(gsp, ep);
+    return depthFirstSearch(gsp, ep, skipStartNodeInitially);
   }
-  return breadthFirstSearch(gsp, ep);
+  return breadthFirstSearch(gsp, ep, skipStartNodeInitially);
 }
 };  // namespace qlever::graphSearch
 

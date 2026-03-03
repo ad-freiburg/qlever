@@ -9,6 +9,7 @@
 
 #include <gmock/gmock.h>
 
+#include <limits>
 #include <memory>
 #include <thread>
 
@@ -162,17 +163,16 @@ TYPED_TEST(GraphSearchTest, binaryFirstSearchWithLimit) {
     size_t maxDist_;
     std::vector<size_t> expected_;
   };
-  std::array<TestVal, 11> tests = {TestVal(0, 0, 100, {0}),
-                                   TestVal(1, 0, 100, {0}),
-                                   TestVal(1, 1, 10, {}),
-                                   TestVal(2, 0, 10, {0}),
-                                   TestVal(2, 10, 11, {0}),
-                                   TestVal(3, 0, 1, {1, 0}),
-                                   TestVal(3, 1, 1, {1}),
-                                   TestVal(4, 0, 100, {0}),
-                                   TestVal(5, 1, 2, {1, 4, 3}),
-                                   TestVal(5, 10, 100, {1, 2, 3, 4, 5, 6, 7}),
-                                   TestVal(2, 10001, 1000001, {0})};
+  std::array<TestVal, 13> tests = {
+      TestVal(0, 0, 100, {0}), TestVal(1, 0, 100, {0}), TestVal(1, 1, 10, {}),
+      TestVal(2, 0, 10, {0}), TestVal(2, 10, 11, {0}), TestVal(3, 0, 1, {1, 0}),
+      TestVal(3, 1, 1, {1}), TestVal(4, 0, 100, {0}),
+      TestVal(5, 1, 2, {1, 4, 3}), TestVal(5, 10, 100, {1, 2, 3, 4, 5, 6, 7}),
+      TestVal(2, 10001, 1000001, {0}),
+      // The following will set the `skipStartNodeInitially` flag and call BFS
+      // without limits.
+      TestVal(3, 1, std::numeric_limits<size_t>::max(), {0, 1}),
+      TestVal(7, 1, std::numeric_limits<size_t>::max(), {1, 2, 3, 4})};
 
   for (const TestVal& test : tests) {
     GraphSearchProblem<TypeParam> gsp(this->graphs_.at(test.graphNumber_),
@@ -218,15 +218,19 @@ TYPED_TEST(GraphSearchTest, depthFirstSearchWithLimit) {
     size_t maxDist_;
     std::vector<size_t> expected_;
   };
-  std::array<TestVal, 16> tests = {
-      TestVal(0, 0, 0, 10, {0}),    TestVal(0, 0, 10, 100, {}),
-      TestVal(1, 0, 0, 100, {0}),   TestVal(1, 1, 0, 100, {}),
+  std::array<TestVal, 18> tests = {
+      TestVal(0, 0, 0, 10, {0}), TestVal(0, 0, 10, 100, {}),
+      TestVal(1, 0, 0, 100, {0}), TestVal(1, 1, 0, 100, {}),
       TestVal(2, 0, 100, 200, {0}), TestVal(3, 1, 0, 0, {}),
       TestVal(3, 0, 100, 100, {0}), TestVal(4, 1, 0, 1000, {}),
-      TestVal(5, 8, 0, 10000, {}),  TestVal(5, 7, 100, 999, {7}),
-      TestVal(5, 0, 1, 100, {}),    TestVal(5, 4, 5, 1000, {4}),
-      TestVal(6, 2, 0, 1, {2}),     TestVal(7, 3, 0, 2, {3}),
-      TestVal(2, 0, 100, 100, {0}), TestVal(8, 3, 0, 2, {3})};
+      TestVal(5, 8, 0, 10000, {}), TestVal(5, 7, 100, 999, {7}),
+      TestVal(5, 0, 1, 100, {}), TestVal(5, 4, 5, 1000, {4}),
+      TestVal(6, 2, 0, 1, {2}), TestVal(7, 3, 0, 2, {3}),
+      TestVal(2, 0, 100, 100, {0}), TestVal(8, 3, 0, 2, {3}),
+      // The following will set the `skipStartNodeInitially` flag and call BFS
+      // without limits.
+      TestVal(2, 0, 1, std::numeric_limits<size_t>::max(), {0}),
+      TestVal(5, 0, 1, std::numeric_limits<size_t>::max(), {})};
 
   for (const TestVal& test : tests) {
     GraphSearchProblem<TypeParam> gsp(
