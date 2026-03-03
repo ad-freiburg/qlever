@@ -187,6 +187,10 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
 
   if (sortedQet.has_value()) {
     AD_CORRECTNESS_CHECK(sortedQet.value() != nullptr);
+    AD_CORRECTNESS_CHECK(qet->getVariableColumns() ==
+                         sortedQet.value()->getVariableColumns());
+    AD_CORRECTNESS_CHECK(
+        sortedQet.value()->getRootOperation()->isSortedBy(sortColumns));
     return std::move(sortedQet).value();
   }
 
@@ -198,13 +202,21 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
 std::shared_ptr<QueryExecutionTree>
 QueryExecutionTree::makeTreeWithStrippedColumns(
     std::shared_ptr<QueryExecutionTree> qet,
-    const std::set<Variable>& variables,
+    const std::set<Variable>& variablesToKeep,
     HideStrippedColumns hideStrippedColumns) {
+  // If all variables of this tree are part of `variablesToKeep`, we can simply
+  // return the original tree, without stripping any columns.
+  if (ql::ranges::all_of(qet->getVariableColumns() | ql::views::keys,
+                         [&variablesToKeep](const Variable& variable) {
+                           return variablesToKeep.contains(variable);
+                         })) {
+    return qet;
+  }
   const auto& rootOperation = qet->getRootOperation();
-  auto optTree = rootOperation->makeTreeWithStrippedColumns(variables);
+  auto optTree = rootOperation->makeTreeWithStrippedColumns(variablesToKeep);
   if (!optTree.has_value()) {
     return ad_utility::makeExecutionTree<StripColumns>(
-        rootOperation->getExecutionContext(), std::move(qet), variables);
+        rootOperation->getExecutionContext(), std::move(qet), variablesToKeep);
   }
 
   auto& resultTree = optTree.value();
@@ -222,7 +234,7 @@ QueryExecutionTree::makeTreeWithStrippedColumns(
     ad_utility::HashSet<Variable> strippedVariables;
     const auto& originalVariableColumns = qet->getVariableColumns();
     for (const auto& [var, colInfo] : originalVariableColumns) {
-      if (!ad_utility::contains(variables, var)) {
+      if (!ad_utility::contains(variablesToKeep, var)) {
         strippedVariables.insert(var);
       }
     }
