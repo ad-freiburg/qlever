@@ -230,10 +230,8 @@ QueryExecutionTree::makeTreeWithStrippedColumns(
   // children of this operation, where the limit/offset has already been set
   // correctly. We just reapply a previously set limit which was removed by the
   // column stripping.
-  resultTree->getRootOperation()->limitOffset_ =
-      rootOperation->getLimitOffset();
-  resultTree->cacheKey_ = resultTree->getRootOperation()->getCacheKey();
-  resultTree->sizeEstimate_ = resultTree->getRootOperation()->getSizeEstimate();
+  resultTree->setLimitOffsetDirectlyWithoutTriggeringHooks(
+      rootOperation->getLimitOffset());
   // Only store stripped variables if `hideStrippedColumns` is `False`
   if (hideStrippedColumns == HideStrippedColumns::False) {
     // Calculate the variables that will be stripped (present in the input, but
