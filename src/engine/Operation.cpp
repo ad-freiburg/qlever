@@ -795,7 +795,7 @@ bool Operation::coversVariables(
 
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
-Operation::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+Operation::pushDownBindToAnyChild(const parsedQuery::Bind& bind) const {
   const auto& children = getChildren();
   if (children.empty()) {
     return std::nullopt;

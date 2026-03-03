@@ -379,17 +379,13 @@ class Operation {
   makeTreeWithStrippedColumns(const std::set<Variable>& variables) const;
 
   // Try to create a version of this operation with an additional column from a
-  // `BIND` pushed down into the tree. The default implementation tries to push
-  // the `BIND` into each child which covers the `BIND`'s expression variables,
-  // and accepts the result if one of the children can handle the `BIND`.
-  // Returns `std::nullopt` if the `BIND` cannot be pushed down.
-  //
-  // IMPORTANT: This must be overridden in every subclass of `Operation` that
-  // contains own member variables depending on column indices, like `Join`.
-  // This function must also be overridden when the default semantics explained
-  // above are not applicable to the operation, like for `MINUS`.
+  // `BIND` pushed down into the tree. The default is to disallow push down. All
+  // operations where a `BIND` push down is semantically possible should
+  // override this method.
   virtual std::optional<std::shared_ptr<QueryExecutionTree>>
-  makeTreeWithBindColumn(const parsedQuery::Bind& bind) const;
+  makeTreeWithBindColumn(const parsedQuery::Bind&) const {
+    return std::nullopt;
+  };
 
  protected:
   // The QueryExecutionContext for this particular element.
@@ -429,6 +425,15 @@ class Operation {
   // in case of a subquery.
   virtual const VariableToColumnMap& getInternallyVisibleVariableColumns()
       const final;
+
+  // Internal default implementation for `makeTreeWithBindColumn`. This
+  // implementation makes the assumption that a `BIND` can be pushed into this
+  // `Operation` iff any of its children accepts the `BIND` push down. This is
+  // the correct behavior for various operations, which make use of this
+  // function for their `makeTreeWithBindColumn` override.
+  // TODO<ullingerc> Should return children, not cloned tree?
+  std::optional<std::shared_ptr<QueryExecutionTree>> pushDownBindToAnyChild(
+      const parsedQuery::Bind& bind) const;
 
  private:
   //! Compute the result of the query-subtree rooted at this element..

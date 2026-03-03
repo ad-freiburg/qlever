@@ -153,6 +153,8 @@ class SpatialJoin : public Operation {
     checkCancellation();
   }
 
+  // TODO<ullingerc> Override makeTreeWithBindColumn
+
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
