@@ -74,6 +74,7 @@ class PrefixRegexExpression : public SparqlExpression {
   static std::optional<std::string> getPrefixRegex(std::string regex);
 
   FRIEND_TEST(RegexExpression, getPrefixRegex);
+  FRIEND_TEST(RegexExpression, makeSimilarPrefixExpression);
 };
 
 SparqlExpression::Ptr makeRegexExpression(SparqlExpression::Ptr string,

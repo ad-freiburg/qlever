@@ -318,6 +318,32 @@ TEST(RegexExpression, getPrefixRegex) {
   ASSERT_THROW(PrefixRegexExpression::getPrefixRegex(R"(^\")"),
                std::runtime_error);
 }
+
+// _____________________________________________________________________________
+TEST(RegexExpression, makeSimilarPrefixExpression) {
+  auto hasPrefixAndVariableMatcher = [](std::string variableName,
+                                        std::string_view prefix) {
+    using namespace ::testing;
+    return Pointee(WhenDynamicCastTo<const PrefixRegexExpression&>(
+        AllOf(AD_FIELD(PrefixRegexExpression, prefixRegex_, Eq(prefix)),
+              AD_FIELD(PrefixRegexExpression, variable_,
+                       Eq(Variable{std::move(variableName)})))));
+  };
+  EXPECT_THAT(makeSimilarPrefixExpression(variable("?x"), literal("Prefix")),
+              hasPrefixAndVariableMatcher("?x", "Prefix"));
+  EXPECT_THAT(makeSimilarPrefixExpression(makeStrExpression(variable("?x")),
+                                          literal("Prefix")),
+              hasPrefixAndVariableMatcher("?x", "Prefix"));
+  EXPECT_THROW(makeSimilarPrefixExpression(makeStrExpression(variable("?x")),
+                                           literal("Prefix", "@en")),
+               std::runtime_error);
+  EXPECT_THROW(
+      makeSimilarPrefixExpression(literal("Not a variable"), literal("Prefix")),
+      std::runtime_error);
+  EXPECT_THROW(
+      makeSimilarPrefixExpression(variable("?x"), variable("?not_a_constant")),
+      std::runtime_error);
+}
 }  // namespace sparqlExpression
 
 // _____________________________________________________________________________

@@ -324,6 +324,17 @@ TEST(SparqlParser, FunctionCall) {
                      matchUnary(&makeCentroidExpression));
   expectFunctionCall(absl::StrCat(ql, "isGeoPoint>(?x)"),
                      matchUnary(&makeIsGeoPointExpression));
+  expectFunctionCall(
+      absl::StrCat(ql,
+                   "similar-prefix>(?x, \"Prefix\""
+                   ")"),
+      matchUnary([](auto&& expression) {
+        return makeSimilarPrefixExpression(
+            AD_FWD(expression),
+            std::make_unique<StringLiteralExpression>(
+                TripleComponent::Literal::fromStringRepresentation(
+                    "\"Prefix\"")));
+      }));
   expectFunctionCall(absl::StrCat(geof, "envelope>(?x)"),
                      matchUnary(&makeEnvelopeExpression));
   expectFunctionCall(absl::StrCat(geof, "geometryType>(?x)"),
