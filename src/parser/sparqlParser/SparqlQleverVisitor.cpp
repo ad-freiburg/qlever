@@ -297,6 +297,8 @@ ExpressionPtr Visitor::processIriFunctionCall(
   if (checkPrefix(QL_PREFIX)) {
     if (functionName == "isGeoPoint") {
       return createUnary(&makeIsGeoPointExpression);
+    } else if (functionName == "similar-prefix") {
+      return createBinary(&makeSimilarPrefixExpression);
     }
   }
 
@@ -2603,7 +2605,7 @@ ExpressionPtr Visitor::visit(Parser::BrackettedExpressionContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
+ExpressionPtr Visitor::visit(Parser::BuiltInCallContext* ctx) {
   if (ctx->aggregate()) {
     return visit(ctx->aggregate());
   } else if (ctx->regexExpression()) {
