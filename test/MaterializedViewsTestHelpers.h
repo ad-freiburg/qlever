@@ -143,6 +143,36 @@ class MaterializedViewsTestLarge : public MaterializedViewsTest {
   }
 };
 
+// _____________________________________________________________________________
+struct RewriteTestParams {
+  // Query to write the test view.
+  std::string writeQuery_;
+
+  // Enforce a query planning budget to allow testing the greedy query planner
+  // with toy examples.
+  size_t queryPlanningBudget_;
+};
+
+// _____________________________________________________________________________
+class MaterializedViewsQueryRewriteTest
+    : public ::testing::TestWithParam<RewriteTestParams> {
+ protected:
+  std::stringstream log_;
+
+  // ___________________________________________________________________________
+  void SetUp() override { ad_utility::setGlobalLoggingStream(&log_); }
+
+  // ___________________________________________________________________________
+  void TearDown() override { ad_utility::setGlobalLoggingStream(&std::cout); }
+};
+
+// _____________________________________________________________________________
+inline void PrintTo(const RewriteTestParams& p, std::ostream* os) {
+  auto& s = *os;
+  s << "write query = '" << p.writeQuery_
+    << "', budget = " << p.queryPlanningBudget_;
+}
+
 }  // namespace materializedViewsTestHelpers
 
 #endif  // QLEVER_TEST_MATERIALIZEDVIEWSTESTHELPERS_H_

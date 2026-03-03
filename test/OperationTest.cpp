@@ -82,10 +82,10 @@ TEST(OperationTest, limitAndOffsetAreStacked) {
   EXPECT_EQ(n.getLimitOffset(), LimitOffsetClause(20, 3));
 
   n.applyLimitOffset({std::nullopt, 4});
-  EXPECT_EQ(n.getLimitOffset(), LimitOffsetClause(20, 7));
+  EXPECT_EQ(n.getLimitOffset(), LimitOffsetClause(16, 7));
 
-  n.applyLimitOffset({10, 8});
-  EXPECT_EQ(n.getLimitOffset(), LimitOffsetClause(10, 15));
+  n.applyLimitOffset({6, 7});
+  EXPECT_EQ(n.getLimitOffset(), LimitOffsetClause(6, 14));
 }
 
 // ________________________________________________
