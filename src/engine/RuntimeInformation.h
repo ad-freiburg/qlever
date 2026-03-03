@@ -4,18 +4,15 @@
 //   2019      Florian Kramer (florian.kramer@neptun.uni-freiburg.de)
 //   2022-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_RUNTIMEINFORMATION_H
+#define QLEVER_SRC_ENGINE_RUNTIMEINFORMATION_H
 
-#include <iostream>
 #include <string>
 #include <vector>
 
-#include "absl/strings/str_join.h"
 #include "engine/VariableToColumnMap.h"
 #include "parser/data/LimitOffsetClause.h"
-#include "parser/data/Variable.h"
 #include "util/ConcurrentCache.h"
-#include "util/HashMap.h"
 #include "util/json.h"
 
 /// A class to store information about the status of an operation (result size,
@@ -34,15 +31,21 @@ class RuntimeInformation {
   /// The computation status of an operation.
   enum struct Status {
     notStarted,
-    inProgress,
-    fullyMaterialized,
-    lazilyMaterialized,
+    fullyMaterializedInProgress,
+    fullyMaterializedCompleted,
+    lazilyMaterializedInProgress,
+    lazilyMaterializedCompleted,
     optimizedOut,
     failed,
     failedBecauseChildFailed,
     cancelled
   };
   using enum Status;
+
+  // The priority with which to send updated runtime information. With `IfDue`,
+  // the update is only sent if a certain amount of time has passed since the
+  // last update. With `Always`, the update is always sent.
+  enum class SendPriority { IfDue, Always };
 
   // Public members
 
@@ -156,3 +159,5 @@ struct RuntimeInformationWholeQuery {
   friend void to_json(nlohmann::ordered_json& j,
                       const RuntimeInformationWholeQuery& rti);
 };
+
+#endif  // QLEVER_SRC_ENGINE_RUNTIMEINFORMATION_H

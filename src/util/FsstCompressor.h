@@ -9,10 +9,10 @@
 #include <fsst.h>
 
 #include <memory>
-#include <ranges>
 #include <string>
 #include <vector>
 
+#include "util/Concepts.h"
 #include "util/Exception.h"
 #include "util/Log.h"
 #include "util/TypeTraits.h"
@@ -22,12 +22,16 @@ namespace detail {
 // `const unsigned char*` which is used below because FSST always works on
 // unsigned character types. Note that this is one of the few cases where a
 // `reinterpret_cast` is safe.
-constexpr auto castToUnsignedPtr =
-    []<ad_utility::SameAsAny<char*, const char*> T>(T ptr) {
-      using Res = std::conditional_t<std::same_as<T, const char*>,
-                                     const unsigned char*, unsigned char*>;
-      return reinterpret_cast<Res>(ptr);
-    };
+struct CastToUnsignedPtr {
+  CPP_template(typename T)(
+      requires ad_utility::SameAsAny<T, char*, const char*>) auto
+  operator()(T ptr) const {
+    using Res = std::conditional_t<ql::concepts::same_as<T, const char*>,
+                                   const unsigned char*, unsigned char*>;
+    return reinterpret_cast<Res>(ptr);
+  };
+};
+constexpr CastToUnsignedPtr castToUnsignedPtr{};
 }  // namespace detail
 
 // A simple C++ wrapper around the C-API of the `FSST` library. It consists of
@@ -60,8 +64,11 @@ class FsstDecoder {
     return output;
   }
   // Allow this type to be trivially serializable,
-  friend std::true_type allowTrivialSerialization(
-      std::same_as<FsstDecoder> auto, auto);
+  CPP_template(typename T, typename U)(
+      requires ql::concepts::same_as<T, FsstDecoder>) friend std::true_type
+      allowTrivialSerialization(T, U&&) {
+    return {};
+  }
 };
 
 // A sequence of `N` `FsstDecoder` s that are chained in inverted order (the
@@ -95,12 +102,13 @@ class FsstRepeatedDecoder {
       nextInput = result;
     };
 
-    std::ranges::for_each(std::views::reverse(decoders_), decompressSingle);
+    ql::ranges::for_each(ql::views::reverse(decoders_), decompressSingle);
     return result;
   }
   // Allow this type to be trivially serializable,
-  [[maybe_unused]] friend std::true_type allowTrivialSerialization(
-      std::same_as<FsstRepeatedDecoder> auto, auto) {
+  CPP_template_2(typename T, typename U)(
+      requires ql::concepts::same_as<T, FsstRepeatedDecoder>)
+      [[maybe_unused]] friend std::true_type allowTrivialSerialization(T, U) {
     return {};
   }
 };
@@ -154,15 +162,16 @@ class FsstEncoder {
   // strings again.
   using BulkResult = std::tuple<std::shared_ptr<std::string>,
                                 std::vector<std::string_view>, FsstDecoder>;
-  static BulkResult compressAll(const auto& strings) {
+  template <typename T>
+  static BulkResult compressAll(const T& strings) {
     return makeEncoder<true>(strings);
   }
 
  private:
   // The implementation of the constructor and of `compressAll`.
-  template <bool alsoCompressAll = false>
+  template <bool alsoCompressAll = false, typename Strings>
   static std::conditional_t<alsoCompressAll, BulkResult, Encoder> makeEncoder(
-      const auto& strings) {
+      const Strings& strings) {
     std::vector<size_t> lengths;
     std::vector<const unsigned char*> pointers;
     [[maybe_unused]] size_t totalSize = 0;
@@ -194,9 +203,9 @@ class FsstEncoder {
         if (numCompressed == strings.size()) {
           break;
         }
-        LOG(DEBUG) << "FSST compression of a block of strings made the input "
-                      "larger instead of smaller"
-                   << std::endl;
+        AD_LOG_DEBUG << "FSST compression of a block of strings made the input "
+                        "larger instead of smaller"
+                     << std::endl;
         output.resize(2 * output.size());
       }
       // Convert the result pointers to `string_views` for easier handling.
@@ -205,7 +214,7 @@ class FsstEncoder {
       for (size_t i = 0; i < strings.size(); ++i) {
         stringViews.emplace_back(outputPtrs.at(i), outputLengths.at(i));
       }
-      return std::tuple{std::move(outputPtr), std::move(stringViews),
+      return BulkResult{std::move(outputPtr), std::move(stringViews),
                         FsstDecoder(fsst_decoder(encoder))};
     }
   }

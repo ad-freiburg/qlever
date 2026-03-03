@@ -1,9 +1,12 @@
 //  Copyright 2021, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#include "MediaTypes.h"
+#include "util/http/MediaTypes.h"
 
+#include "util/Algorithm.h"
 #include "util/StringUtils.h"
 #include "util/antlr/ANTLRErrorHandling.h"
 #include "util/http/HttpParser/AcceptHeaderQleverVisitor.h"
@@ -18,7 +21,8 @@ using enum MediaType;
 // specified in the request. It's "application/sparql-results+json", as
 // required by the SPARQL standard.
 constexpr std::array SUPPORTED_MEDIA_TYPES{
-    sparqlJson, sparqlXml, qleverJson, tsv, csv, turtle, octetStream};
+    sparqlJson, sparqlXml,   qleverJson,        tsv, csv, turtle,
+    ntriples,   octetStream, binaryQleverExport};
 
 // _____________________________________________________________
 const ad_utility::HashMap<MediaType, MediaTypeImpl>& getAllMediaTypes() {
@@ -40,7 +44,9 @@ const ad_utility::HashMap<MediaType, MediaTypeImpl>& getAllMediaTypes() {
     add(sparqlXml, "application", "sparql-results+xml", {});
     add(qleverJson, "application", "qlever-results+json", {});
     add(turtle, "text", "turtle", {".ttl"});
+    add(ntriples, "application", "n-triples", {".nt"});
     add(octetStream, "application", "octet-stream", {});
+    add(binaryQleverExport, "application", "qlever-export+octet-stream", {});
     return t;
   }();
   return types;
@@ -134,51 +140,57 @@ std::vector<MediaTypeWithQuality> parseAcceptHeader(
 }
 
 // ___________________________________________________________________________
-std::optional<MediaType> getMediaTypeFromAcceptHeader(
+std::vector<MediaType> getMediaTypesFromAcceptHeader(
     std::string_view acceptHeader) {
+  // TODO: make this function not throwing by changing
+  // `AcceptHeaderQleverVisitor`
   static_assert(!detail::SUPPORTED_MEDIA_TYPES.empty());
-  // empty accept Header means "any type is allowed", so simply choose one.
+
+  // Empty header means the same as no header.
   if (acceptHeader.empty()) {
-    return detail::SUPPORTED_MEDIA_TYPES.at(0);
+    return {};
   }
 
   auto orderedMediaTypes = parseAcceptHeader(acceptHeader);
 
-  auto getMediaTypeFromPart =
-      []<typename T>(const T& part) -> std::optional<MediaType> {
-    static constexpr std::optional<MediaType> noValue = std::nullopt;
-    if constexpr (ad_utility::isSimilar<T, MediaTypeWithQuality::Wildcard>) {
-      return detail::SUPPORTED_MEDIA_TYPES.at(0);
-    } else if constexpr (ad_utility::isSimilar<
-                             T, MediaTypeWithQuality::TypeWithWildcard>) {
-      auto it = std::ranges::find_if(
-          detail::SUPPORTED_MEDIA_TYPES,
-          [&part](const auto& el) { return getType(el) == part._type; });
-      return it == detail::SUPPORTED_MEDIA_TYPES.end() ? noValue : *it;
-    } else if constexpr (ad_utility::isSimilar<T, MediaType>) {
-      auto it = std::ranges::find(detail::SUPPORTED_MEDIA_TYPES, part);
-      return it != detail::SUPPORTED_MEDIA_TYPES.end() ? part : noValue;
-    } else {
-      static_assert(ad_utility::alwaysFalse<T>);
-    }
-  };
+  std::vector<MediaType> result;
 
   for (const auto& mediaType : orderedMediaTypes) {
-    auto match = std::visit(getMediaTypeFromPart, mediaType._mediaType);
-    if (match.has_value()) {
-      return match.value();
-    }
+    std::visit(
+        [&result](const auto& part) {
+          using T = std::decay_t<decltype(part)>;
+          if constexpr (ad_utility::isSimilar<T,
+                                              MediaTypeWithQuality::Wildcard>) {
+            // Nothing to do in this case.
+            (void)part;
+          } else if constexpr (ad_utility::isSimilar<
+                                   T, MediaTypeWithQuality::TypeWithWildcard>) {
+            for (MediaType supportedType :
+                 detail::SUPPORTED_MEDIA_TYPES |
+                     ql::views::filter([&part](const auto& el) {
+                       return getType(el) == part._type;
+                     })) {
+              result.push_back(supportedType);
+            }
+          } else if constexpr (ad_utility::isSimilar<T, MediaType>) {
+            if (ad_utility::contains(detail::SUPPORTED_MEDIA_TYPES, part)) {
+              result.push_back(part);
+            }
+          } else {
+            static_assert(ad_utility::alwaysFalse<T>);
+          }
+        },
+        mediaType._mediaType);
   }
 
-  // No supported `MediaType` was found, return std::nullopt.
-  return std::nullopt;
+  return result;
 }
 
 // ______________________________________________________________________
 std::string getErrorMessageForSupportedMediaTypes() {
   return "Currently the following media types are supported: " +
          lazyStrJoin(
-             detail::SUPPORTED_MEDIA_TYPES | std::views::transform(toString),
+             detail::SUPPORTED_MEDIA_TYPES | ql::views::transform(toString),
              ", ");
 }
 

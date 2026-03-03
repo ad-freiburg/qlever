@@ -5,7 +5,6 @@
 
 #pragma once
 
-#include <functional>
 #include <memory>
 #include <string>
 #include <utility>
@@ -14,6 +13,8 @@
 
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "../benchmark/infrastructure/BenchmarkMetadata.h"
+#include "backports/concepts.h"
+#include "backports/functional.h"
 #include "util/ConfigManager/ConfigManager.h"
 #include "util/CopyableUniquePtr.h"
 #include "util/Exception.h"
@@ -67,10 +68,12 @@ class BenchmarkResults {
   @param constructorArgs Arguments to pass to the constructor of the object,
   that the new `CopyableUniquePtr` will own.
   */
-  template <
-      ad_utility::SameAsAny<ResultTable, ResultEntry, ResultGroup> EntryType>
+  template <QL_CONCEPT_OR_TYPENAME(
+                ad_utility::SameAsAny<ResultTable, ResultEntry, ResultGroup>)
+                EntryType,
+            typename... Args>
   static EntryType& addEntryToContainerVector(
-      PointerVector<EntryType>& targetVector, auto&&... constructorArgs) {
+      PointerVector<EntryType>& targetVector, Args&&... constructorArgs) {
     targetVector.push_back(ad_utility::make_copyable_unique<EntryType>(
         AD_FWD(constructorArgs)...));
     return (*targetVector.back());
@@ -90,9 +93,9 @@ class BenchmarkResults {
    *  Most of the time a lambda, that calls the actual function to benchmark
    *  with the needed parameters.
    */
-  template <std::invocable Function>
-  ResultEntry& addMeasurement(const std::string& descriptor,
-                              const Function& functionToMeasure) {
+  CPP_template(typename Function)(requires(ql::concepts::invocable<Function>))
+      ResultEntry& addMeasurement(const std::string& descriptor,
+                                  const Function& functionToMeasure) {
     return addEntryToContainerVector(singleMeasurements_, descriptor,
                                      functionToMeasure);
   }

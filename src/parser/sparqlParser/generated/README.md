@@ -10,12 +10,14 @@ the workflow is as follows:
   
 * Inside this directory, Download the ANTLR parser generator
 ```
-wget http://www.antlr.org/download/antlr-4.11.1-complete.jar
+wget http://www.antlr.org/download/antlr-4.13.2-complete.jar
 ```
 * Inside this directory, Run ANTLR
 ```
-java -Xmx500M -cp "./antlr-4.11.1-complete.jar:$CLASSPATH" org.antlr.v4.Tool -Dlanguage=Cpp SparqlAutomatic.g4 -visitor
+java -jar ./antlr-4.13.2-complete.jar -Dlanguage=Cpp SparqlAutomatic.g4
 ```
 
 * If necessary, adapt the `SparqlQleverVisitor.h/.cpp` (one folder above)
+* Format the generated files using clang-format (we suggest the pre-commit hook that is shipped with the QLever repository)
+* Replace `#pragma once` in the generated files by proper header guards using the `replace_pragma_once.py` script.
 * Commit all the changed files (except the `antlr.jar`)

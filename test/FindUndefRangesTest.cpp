@@ -25,7 +25,8 @@ using Arr = std::array<Id, I>;
 // converts a list of iterators that are yielded by the `generator` to indices
 // in the `range` by subtracting `range.begin()`. Requires that the `generator`
 // yields iterators that point into the `range`.
-std::vector<int64_t> toPositions(auto generator, const auto& range) {
+template <typename G, typename R>
+std::vector<int64_t> toPositions(G generator, const R& range) {
   std::vector<int64_t> foundPositions;
   for (auto it : generator) {
     foundPositions.push_back(it - range.begin());
@@ -41,9 +42,9 @@ std::vector<int64_t> toPositions(auto generator, const auto& range) {
 // point to the elements from `range` at indices 3 and 7.
 template <size_t I>
 void testSmallerUndefRangesForArbitraryRows(
-    std::array<Id, I> row, const std::vector<std::array<Id, I>>& range,
+    Arr<I> row, const std::vector<Arr<I>>& range,
     const std::vector<size_t>& expectedPositions,
-    source_location l = source_location::current()) {
+    source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   // TODO<joka921> also actually test the bool;
   [[maybe_unused]] bool outOfOrder;
@@ -61,11 +62,11 @@ void testSmallerUndefRangesForArbitraryRows(
 // `findSmallerUndefRangesForRowsWithoutUndef`.
 template <size_t I>
 void testSmallerUndefRangesForRowsWithoutUndef(
-    std::array<Id, I> row, const std::vector<std::array<Id, I>>& range,
+    Arr<I> row, const std::vector<Arr<I>>& range,
     const std::vector<size_t>& positions,
-    source_location l = source_location::current()) {
+    source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
-  ASSERT_TRUE(std::ranges::is_sorted(range));
+  ASSERT_TRUE(ql::ranges::is_sorted(range));
   std::vector<int64_t> foundPositions;
   // TODO<joka921> also actually test the bool;
   [[maybe_unused]] bool outOfOrder;
@@ -85,9 +86,10 @@ TEST(JoinAlgorithms, findSmallerUndefRangesForRowsWithoutUndef) {
   testSmallerUndefRangesForRowsWithoutUndef<1>({V(3)}, oneCol, {0, 1});
 
   // (3, 19) is compatible to (U, U), (U, 19), and (3, U);
-  std::vector<Arr<2>> twoCols{{U, U},       {U, V(1)},     {U, V(2)}, {U, V(3)},
-                              {U, V(3)},    {U, V(19)},    {V(1), U}, {V(3), U},
-                              {V(3), V(3)}, {V(7), V(12)}, {V(8), U}};
+  std::vector<Arr<2>> twoCols{{U, U},        {U, V(1)},     {U, V(2)},
+                              {U, V(3)},     {U, V(3)},     {U, V(19)},
+                              {V(1), U},     {V(3), U},     {V(3), V(3)},
+                              {V(3), V(19)}, {V(7), V(12)}, {V(8), U}};
   testSmallerUndefRangesForRowsWithoutUndef<2>({V(3), V(19)}, twoCols,
                                                {0, 5, 7});
 
@@ -110,9 +112,9 @@ template <size_t I>
 void testSmallerUndefRangesForRowsWithUndefInLastColumns(
     Arr<I> row, const std::vector<Arr<I>>& range, size_t numLastUndef,
     const std::vector<size_t>& positions,
-    source_location l = source_location::current()) {
+    source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
-  ASSERT_TRUE(std::ranges::is_sorted(range));
+  ASSERT_TRUE(ql::ranges::is_sorted(range));
   std::vector<int64_t> foundPositions;
   // TODO<joka921> also actually test the bool;
   [[maybe_unused]] bool outOfOrder;

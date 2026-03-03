@@ -1,6 +1,8 @@
 //  Copyright 2021, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_TUPLEFOREACH_H
 #define QLEVER_TUPLEFOREACH_H
@@ -10,8 +12,8 @@
 namespace ad_utility {
 template <typename Tuple, typename Function>
 void forEachInTuple(Tuple&& tuple, Function&& function) {
-  auto forEachInParamPack = [&]<typename... Ts>(Ts&&... parameters) {
-    (..., function(std::forward<Ts>(parameters)));
+  auto forEachInParamPack = [&](auto&&... parameters) {
+    (..., function(AD_FWD(parameters)));
   };
   std::apply(forEachInParamPack, std::forward<Tuple>(tuple));
 }
@@ -24,8 +26,8 @@ void forEachInTuple(Tuple&& tuple, Function&& function) {
 ///                 in the `tuple` and must always return the same type.
 template <typename Tuple, typename Function>
 auto tupleToArray(Tuple&& tuple, Function&& function) {
-  auto paramPackToArray = [&]<typename... Ts>(Ts&&... parameters) {
-    return std::array{function(std::forward<Ts>(parameters))...};
+  auto paramPackToArray = [&](auto&&... parameters) {
+    return std::array{function(AD_FWD(parameters))...};
   };
   return std::apply(paramPackToArray, std::forward<Tuple>(tuple));
 }

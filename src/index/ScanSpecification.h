@@ -2,11 +2,14 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_INDEX_SCANSPECIFICATION_H
+#define QLEVER_SRC_INDEX_SCANSPECIFICATION_H
+
 #include <optional>
 
 #include "engine/LocalVocab.h"
 #include "global/Id.h"
+#include "index/GraphFilter.h"
 #include "parser/TripleComponent.h"
 
 // Forward declaration
@@ -22,7 +25,7 @@ class Index;
 class ScanSpecification {
  public:
   using T = std::optional<Id>;
-  using Graphs = std::optional<ad_utility::HashSet<Id>>;
+  using GraphFilter = qlever::index::GraphFilter<Id>;
 
  private:
   T col0Id_;
@@ -40,28 +43,35 @@ class ScanSpecification {
   // several intrusive changes in other parts of QLever.
   std::shared_ptr<const LocalVocab> localVocab_;
 
-  // If specified (i.e. not `nullopt`) then the result of the scan only consists
-  // of triples that belong to the union of these graphs.
-  Graphs graphsToFilter_{};
+  // Filter specification of which graphs to include and which to omit.
+  GraphFilter graphFilter_;
   friend class ScanSpecificationAsTripleComponent;
 
   void validate() const;
 
  public:
   ScanSpecification(T col0Id, T col1Id, T col2Id, LocalVocab localVocab = {},
-                    Graphs graphsToFilter = std::nullopt)
+                    GraphFilter graphFilter = GraphFilter::All())
       : col0Id_{col0Id},
         col1Id_{col1Id},
         col2Id_{col2Id},
         localVocab_{std::make_shared<LocalVocab>(std::move(localVocab))},
-        graphsToFilter_(std::move(graphsToFilter)) {
+        graphFilter_{std::move(graphFilter)} {
     validate();
   }
   const T& col0Id() const { return col0Id_; }
   const T& col1Id() const { return col1Id_; }
   const T& col2Id() const { return col2Id_; }
 
-  const Graphs& graphsToFilter() const { return graphsToFilter_; }
+  // Get the corresponding index to the first free `colXId_`.
+  size_t firstFreeColIndex() const {
+    if (!col0Id_) return 0;
+    if (!col1Id_) return 1;
+    if (!col2Id_) return 2;
+    return 3;
+  }
+
+  const GraphFilter& graphFilter() const { return graphFilter_; }
 
   // Only used in tests.
   void setCol1Id(T col1Id) {
@@ -75,30 +85,31 @@ class ScanSpecification {
 class ScanSpecificationAsTripleComponent {
  public:
   using T = std::optional<TripleComponent>;
-  using Graphs = std::optional<ad_utility::HashSet<TripleComponent>>;
+  using GraphFilter = qlever::index::GraphFilter<TripleComponent>;
 
  private:
   T col0_;
   T col1_;
   T col2_;
-  Graphs graphsToFilter_{};
+  GraphFilter graphFilter_;
 
  public:
   // Construct from three optional `TripleComponent`s. If any of the three
   // entries is unbound (`nullopt` or of type `Variable`), then all subsequent
   // entries also have to be unbound. For example if `col0` is bound, but `col1`
   // isn't, then `col2` also has to be unbound.
-  ScanSpecificationAsTripleComponent(T col0, T col1, T col2,
-                                     Graphs graphsToFilter = std::nullopt);
+  ScanSpecificationAsTripleComponent(
+      T col0, T col1, T col2, GraphFilter graphFilter = GraphFilter::All());
 
   // Convert to a `ScanSpecification`. The `index` is used to convert the
   // `TripleComponent` to `Id`s by looking them up in the vocabulary.
   ScanSpecification toScanSpecification(const IndexImpl& index) const;
-  ScanSpecification toScanSpecification(const Index& index) const;
 
   // The number of columns that the corresponding index scan will have.
   size_t numColumns() const;
 
   // Getter for testing.
-  const Graphs& graphsToFilter() const { return graphsToFilter_; }
+  const GraphFilter& graphFilter() const { return graphFilter_; }
 };
+
+#endif  // QLEVER_SRC_INDEX_SCANSPECIFICATION_H

@@ -1,7 +1,10 @@
 // Copyright 2022, University of Freiburg
 // Chair of Algorithms and Data Structures
 // Author: Hannah Bast <bast@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include "util/http/HttpClient.h"
 
 #include <absl/strings/str_cat.h>
@@ -11,6 +14,7 @@
 
 #include "global/Constants.h"
 #include "util/AsioHelpers.h"
+#include "util/TypeIdentity.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/beast.h"
 
@@ -104,14 +108,17 @@ HttpOrHttpsResponse HttpClientImpl<StreamType>::sendRequest(
   request.set(http::field::content_length, std::to_string(requestBody.size()));
   request.body() = requestBody;
 
-  auto wait = [&client, &handle]<typename T>(
-                  net::awaitable<T> awaitable,
-                  ad_utility::source_location loc =
-                      ad_utility::source_location::current()) -> T {
-    return ad_utility::runAndWaitForAwaitable(
-        ad_utility::interruptible(std::move(awaitable), handle, std::move(loc)),
-        client->ioContext_);
-  };
+  auto wait = [&client, &handle](
+                  auto awaitable,
+                  ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) ->
+      typename decltype(awaitable)::value_type {
+        static_assert(
+            ad_utility::isInstantiation<decltype(awaitable), net::awaitable>);
+        return ad_utility::runAndWaitForAwaitable(
+            ad_utility::interruptible(std::move(awaitable), handle,
+                                      std::move(loc)),
+            client->ioContext_);
+      };
 
   // Send the request, receive the response (unlimited body size), and return
   // the body as a `std::istringstream`.
@@ -119,7 +126,7 @@ HttpOrHttpsResponse HttpClientImpl<StreamType>::sendRequest(
   beast::flat_buffer buffer;
   auto responseParser =
       std::make_unique<http::response_parser<http::buffer_body>>();
-  responseParser->body_limit(std::numeric_limits<std::uint64_t>::max());
+  responseParser->body_limit(boost::none);
   wait(http::async_read_header(*(client->stream_), buffer, *responseParser,
                                net::use_awaitable));
 
@@ -132,7 +139,7 @@ HttpOrHttpsResponse HttpClientImpl<StreamType>::sendRequest(
                         responseParser,
                     beast::flat_buffer buffer,
                     ad_utility::SharedCancellationHandle handle)
-      -> cppcoro::generator<std::span<std::byte>> {
+      -> cppcoro::generator<ql::span<std::byte>> {
     while (!responseParser->is_done()) {
       std::array<std::byte, 4096> staticBuffer;
       responseParser->get().body().data = staticBuffer.data();
@@ -141,11 +148,11 @@ HttpOrHttpsResponse HttpClientImpl<StreamType>::sendRequest(
           ad_utility::interruptible(
               http::async_read_some(*(client->stream_), buffer, *responseParser,
                                     net::use_awaitable),
-              handle, ad_utility::source_location::current()),
+              handle, AD_CURRENT_SOURCE_LOC()),
           client->ioContext_);
       size_t remainingBytes = responseParser->get().body().size;
-      co_yield std::span{staticBuffer}.first(staticBuffer.size() -
-                                             remainingBytes);
+      co_yield ql::span{staticBuffer}.first(staticBuffer.size() -
+                                            remainingBytes);
     }
   };
 
@@ -198,16 +205,19 @@ HttpOrHttpsResponse sendHttpOrHttpsRequest(
     ad_utility::SharedCancellationHandle handle,
     const boost::beast::http::verb& method, std::string_view requestData,
     std::string_view contentTypeHeader, std::string_view acceptHeader) {
-  auto sendRequest = [&]<typename Client>() -> HttpOrHttpsResponse {
+  auto sendRequest = [&](auto ti) -> HttpOrHttpsResponse {
+    using Client = typename decltype(ti)::type;
     auto client = std::make_unique<Client>(url.host(), url.port());
     return Client::sendRequest(std::move(client), method, url.host(),
                                url.target(), std::move(handle), requestData,
                                contentTypeHeader, acceptHeader);
   };
+  using namespace ad_utility::use_type_identity;
   if (url.protocol() == Url::Protocol::HTTP) {
-    return sendRequest.operator()<HttpClient>();
+    return sendRequest(ti<HttpClient>);
   } else {
     AD_CORRECTNESS_CHECK(url.protocol() == Url::Protocol::HTTPS);
-    return sendRequest.operator()<HttpsClient>();
+    return sendRequest(ti<HttpsClient>);
   }
 }
+#endif

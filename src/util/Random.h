@@ -4,22 +4,24 @@
 
 // Simple interfaces for the random facilities from the STL
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_RANDOM_H
+#define QLEVER_SRC_UTIL_RANDOM_H
 
-#include <algorithm>
 #include <array>
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
 #include <cstring>
 #include <random>
-#include <type_traits>
 #include <vector>
 
+#include "backports/algorithm.h"
+#include "backports/type_traits.h"
 #include "global/TypedIndex.h"
 
 namespace ad_utility {
 // The seed type for random number generators.
-using RandomSeed = ad_utility::TypedIndex<unsigned int, "Seed">;
+inline constexpr IndexTag randomSeedTag = "Seed";
+using RandomSeed = ad_utility::TypedIndex<unsigned int, randomSeedTag>;
 
 /**
  * A simple and fast Pseudo-Random-Number-Generator called Xoroshiro128+,
@@ -31,9 +33,8 @@ using RandomSeed = ad_utility::TypedIndex<unsigned int, "Seed">;
  * match (because of the std::enable_if) and there will be a compile-time
  * error.
  */
-template <typename Int>
-requires(std::is_integral_v<Int> && sizeof(Int) <= sizeof(uint64_t))
-class FastRandomIntGenerator {
+CPP_template(typename Int)(requires std::is_integral_v<Int> CPP_and(
+    sizeof(Int) <= sizeof(uint64_t))) class FastRandomIntGenerator {
  public:
   explicit FastRandomIntGenerator(
       RandomSeed seed = RandomSeed::make(std::random_device{}())) {
@@ -129,3 +130,5 @@ void randomShuffle(RandomIt begin, RandomIt end,
 }
 
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_RANDOM_H

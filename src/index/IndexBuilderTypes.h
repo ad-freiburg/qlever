@@ -4,10 +4,11 @@
 
 // Common classes / Typedefs that are used during Index Creation
 
-#pragma once
+#ifndef QLEVER_SRC_INDEX_INDEXBUILDERTYPES_H
+#define QLEVER_SRC_INDEX_INDEXBUILDERTYPES_H
 
-#include <memory_resource>
-
+#include "backports/StartsWithAndEndsWith.h"
+#include "backports/memory_resource.h"
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "index/ConstantsIndexBuilding.h"
@@ -44,7 +45,7 @@ struct TripleComponentWithIndex {
   [[nodiscard]] auto& isExternal() { return isExternal_; }
   [[nodiscard]] const auto& iriOrLiteral() const { return iriOrLiteral_; }
   [[nodiscard]] auto& iriOrLiteral() { return iriOrLiteral_; }
-  bool isBlankNode() const { return iriOrLiteral_.starts_with("_:"); }
+  bool isBlankNode() const { return ql::starts_with(iriOrLiteral_, "_:"); }
 
   AD_SERIALIZE_FRIEND_FUNCTION(TripleComponentWithIndex) {
     serializer | arg.iriOrLiteral_;
@@ -72,7 +73,7 @@ struct LocalVocabIndexAndSplitVal {
 // single phase at once as soon as we are finished with them.
 
 // Allocator type for the hash map
-using ItemAlloc = std::pmr::polymorphic_allocator<
+using ItemAlloc = ql::pmr::polymorphic_allocator<
     std::pair<const std::string_view, LocalVocabIndexAndSplitVal>>;
 
 // The actual hash map type.
@@ -88,22 +89,22 @@ using ItemVec =
 // A buffer that very efficiently handles a set of strings that is deallocated
 // at once when the buffer goes out of scope.
 class MonotonicBuffer {
-  std::unique_ptr<std::pmr::monotonic_buffer_resource> buffer_ =
-      std::make_unique<std::pmr::monotonic_buffer_resource>();
-  std::unique_ptr<std::pmr::polymorphic_allocator<char>> charAllocator_ =
-      std::make_unique<std::pmr::polymorphic_allocator<char>>(buffer_.get());
+  std::unique_ptr<ql::pmr::monotonic_buffer_resource> buffer_ =
+      std::make_unique<ql::pmr::monotonic_buffer_resource>();
+  std::unique_ptr<ql::pmr::polymorphic_allocator<char>> charAllocator_ =
+      std::make_unique<ql::pmr::polymorphic_allocator<char>>(buffer_.get());
 
  public:
   // Access to the underlying allocator.
-  std::pmr::polymorphic_allocator<char>& charAllocator() {
+  ql::pmr::polymorphic_allocator<char>& charAllocator() {
     return *charAllocator_;
   }
   // Append a string to the buffer and return a `string_view` that points into
   // the buffer.
   std::string_view addString(std::string_view input) {
     auto ptr = charAllocator_->allocate(input.size());
-    std::ranges::copy(input, ptr);
-    return {ptr, ptr + input.size()};
+    ql::ranges::copy(input, ptr);
+    return {ptr, input.size()};
   }
 };
 
@@ -114,10 +115,18 @@ struct ItemMapAndBuffer {
   MonotonicBuffer buffer_;
 
   explicit ItemMapAndBuffer(ItemAlloc alloc) : map_{alloc} {}
-  ItemMapAndBuffer(ItemMapAndBuffer&&) noexcept = default;
+  // Note: For older boost versions + compilers, we unfortunately cannot default
+  // copy constructor because
+  // 1. In older boost versions, the move operations of the polymorphic
+  // allocators were not yet marked `noexcept`
+  // 2. We definitely want this move constructor to be `noexcept`.
+  // 3. GCC 8 complains if we explicitly use `noexcept = default` if the default
+  // implementation wouldn't be noexcept.
+  ItemMapAndBuffer(ItemMapAndBuffer&& rhs) noexcept
+      : map_{std::move(rhs.map_)}, buffer_{std::move(rhs.buffer_)} {}
   // We have to delete the move-assignment as it would have the wrong semantics
   // (the monotonic buffer wouldn't be moved, this is one of the oddities of the
-  // `std::pmr` types.
+  // `ql::pmr` types.
   ItemMapAndBuffer& operator=(ItemMapAndBuffer&&) noexcept = delete;
 };
 
@@ -228,11 +237,11 @@ struct LangtagAndTriple {
  * ranges for the individual HashMaps
  * @return A Tuple of lambda functions (see above)
  */
-template <size_t NumThreads>
+template <size_t NumThreads, typename IndexPtr>
 auto getIdMapLambdas(
     std::array<std::optional<ItemMapManager>, NumThreads>* itemArrayPtr,
     size_t maxNumberOfTriples, const TripleComponentComparator* comp,
-    auto* indexPtr, ItemAlloc alloc) {
+    IndexPtr* indexPtr, ItemAlloc alloc) {
   // that way the different ids won't interfere
   auto& itemArray = *itemArrayPtr;
   for (size_t j = 0; j < NumThreads; ++j) {
@@ -262,11 +271,16 @@ auto getIdMapLambdas(
    * - All Ids are assigned according to itemArray[idx]
    */
   const auto itemMapLamdaCreator = [&itemArray, indexPtr](const size_t idx) {
-    return [&map = *itemArray[idx], indexPtr](ad_utility::Rvalue auto&& tr) {
+    return [&map = *itemArray[idx],
+            indexPtr](QL_CONCEPT_OR_NOTHING(ad_utility::Rvalue) auto&& tr) {
       auto lt = indexPtr->tripleToInternalRepresentation(AD_FWD(tr));
       OptionalIds res;
       // get Ids for the actual triple and store them in the result.
       res[0] = map.getId(lt.triple_);
+      // NOTE: If this logic is ever changed, you need to also change the code
+      // in `DeltaTriples::makeInternalTriples`, which adds the same extra
+      // triples for language tags to the internal triples on every update
+      // operation.
       if (!lt.langtag_.empty()) {  // the object of the triple was a literal
                                    // with a language tag
         // get the Id for the corresponding langtag Entity
@@ -293,7 +307,7 @@ auto getIdMapLambdas(
         auto tripleGraphId = res[0].value()[ADDITIONAL_COLUMN_GRAPH_ID];
         res[1].emplace(
             Arr{spoIds[0], langTaggedPredId, spoIds[2], tripleGraphId});
-        // extra triple <object> ql:language-tag <@language>
+        // extra triple <object> ql:langtag <@language>
         res[2].emplace(Arr{spoIds[2],
                            map.getId(TripleComponent{
                                ad_utility::triple_component::Iri::fromIriref(
@@ -310,3 +324,5 @@ auto getIdMapLambdas(
       ad_tuple_helpers::setupTupleFromCallable<NumThreads>(itemMapLamdaCreator);
   return itemMapLambdaTuple;
 }
+
+#endif  // QLEVER_SRC_INDEX_INDEXBUILDERTYPES_H

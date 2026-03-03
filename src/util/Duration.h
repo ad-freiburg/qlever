@@ -1,25 +1,23 @@
 //  Copyright 2024, University of Freiburg,
 //                  Chair of Algorithms and Data Structures
 //  Author: Hannes Baumann <baumannh@informatik.uni-freiburg.de>
-//
+
 //  Tests for this class can be found in DurationTest.cpp
 
 #ifndef QLEVER_DURATION_H
 #define QLEVER_DURATION_H
 
-#include <inttypes.h>
-#include <util/Exception.h>
+#include <absl/strings/str_cat.h>
 
-#include <bit>
 #include <cmath>
 #include <cstdint>
 #include <exception>
-#include <optional>
-#include <sstream>
 #include <string>
 #include <string_view>
 
-#include "absl/strings/str_cat.h"
+#include "backports/keywords.h"
+#include "backports/three_way_comparison.h"
+#include "util/Exception.h"
 
 //______________________________________________________________________________
 class DurationOverflowException : public std::exception {
@@ -39,7 +37,8 @@ class DurationOverflowException : public std::exception {
 
 //______________________________________________________________________________
 namespace detail {
-constexpr void checkBoundDuration(const auto& value, const auto& max,
+template <typename T>
+constexpr void checkBoundDuration(const T& value, const T& max,
                                   std::string_view className,
                                   std::string_view xsdDatatype) {
   if (value >= max) {
@@ -91,7 +90,7 @@ class DayTimeDuration {
   // into the positive value range to store an unsigned value in
   // totalMilliseconds_.
   static constexpr uint8_t numMillisecondBits =
-      std::bit_width(boundTotalMilliseconds * 2);
+      absl::bit_width(boundTotalMilliseconds * 2);
   static constexpr uint8_t numUnusedBits = 64 - numMillisecondBits;
   static_assert(numUnusedBits == 16,
                 "The number of unused bits for Duration should be 16");
@@ -202,26 +201,27 @@ class DayTimeDuration {
   //____________________________________________________________________________
   // Converts the underlying `dayTimeDuration` representation to a compact
   // bit representation (necessary for the == and <=> implementation).
-  [[nodiscard]] constexpr uint64_t toBits() const {
-    return std::bit_cast<uint64_t>(*this);
+  [[nodiscard]] QL_CONSTEXPR uint64_t toBits() const {
+    return absl::bit_cast<uint64_t>(*this);
   }
 
   // From a given bit representation, retrieve the actual `dayTimeDuration`
   // object again.
-  static constexpr DayTimeDuration fromBits(uint64_t bytes) {
-    return std::bit_cast<DayTimeDuration>(bytes);
+  static QL_CONSTEXPR DayTimeDuration fromBits(uint64_t bytes) {
+    return absl::bit_cast<DayTimeDuration>(bytes);
   }
 
   //____________________________________________________________________________
   // Comparison == on bits
-  [[nodiscard]] constexpr bool operator==(const DayTimeDuration& rhs) const {
+  [[nodiscard]] bool operator==(const DayTimeDuration& rhs) const {
     return toBits() == rhs.toBits();
   }
 
   // Comparison <=> on bits
-  [[nodiscard]] constexpr auto operator<=>(const DayTimeDuration& rhs) const {
-    return toBits() <=> rhs.toBits();
+  [[nodiscard]] auto compareThreeWay(const DayTimeDuration& rhs) const {
+    return ql::compareThreeWay(toBits(), rhs.toBits());
   }
+  [[nodiscard]] QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(DayTimeDuration);
 
   //____________________________________________________________________________
   template <typename H>

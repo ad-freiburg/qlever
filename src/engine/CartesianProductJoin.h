@@ -1,8 +1,16 @@
-//  Copyright 2023, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2024 - 2026 The QLever Authors, in particular:
+//
+// 2023 - 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2026        Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
-#pragma once
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
+
+#ifndef QLEVER_SRC_ENGINE_CARTESIANPRODUCTJOIN_H
+#define QLEVER_SRC_ENGINE_CARTESIANPRODUCTJOIN_H
+
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 
@@ -16,20 +24,24 @@ class CartesianProductJoin : public Operation {
  private:
   Children children_;
   size_t chunkSize_;
+  // If `true` calls to `computeResult` and `cloneImpl` will result in an
+  // exception. This is because this flag indicates that a limit has been
+  // dynamically applied to the children of this operation and we currently have
+  // to mechanism to reverse this.
+  bool forbiddenToRecompute_ = false;
 
   // Access to the actual operations of the children.
   // TODO<joka921> We can move this whole children management into a base class
   // and clean up the implementation of several other children.
   auto childView() {
-    return std::views::transform(children_, [](auto& child) -> Operation& {
+    return ql::views::transform(children_, [](auto& child) -> Operation& {
       return *child->getRootOperation();
     });
   }
   auto childView() const {
-    return std::views::transform(children_,
-                                 [](auto& child) -> const Operation& {
-                                   return *child->getRootOperation();
-                                 });
+    return ql::views::transform(children_, [](auto& child) -> const Operation& {
+      return *child->getRootOperation();
+    });
   }
 
  public:
@@ -47,12 +59,14 @@ class CartesianProductJoin : public Operation {
  private:
   // The individual implementation of `getCacheKey` (see above) that has to be
   // customized by every child class.
-  string getCacheKeyImpl() const override;
+  std::string getCacheKeyImpl() const override;
 
  public:
   // Gets a very short (one line without line ending) descriptor string for
   // this Operation.  This string is used in the RuntimeInformation
-  string getDescriptor() const override { return "Cartesian Product Join"; }
+  std::string getDescriptor() const override {
+    return "Cartesian Product Join";
+  }
   size_t getResultWidth() const override;
 
   size_t getCostEstimate() override;
@@ -62,13 +76,15 @@ class CartesianProductJoin : public Operation {
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
+  std::unique_ptr<Operation> cloneImpl() const override;
+
  public:
   float getMultiplicity([[maybe_unused]] size_t col) override;
 
   bool knownEmptyResult() override;
 
   // The Cartesian product join can efficiently evaluate a limited result.
-  [[nodiscard]] bool supportsLimit() const override { return true; }
+  [[nodiscard]] bool supportsLimitOffset() const override { return true; }
 
  protected:
   // Don't promise any sorting of the result.
@@ -76,18 +92,18 @@ class CartesianProductJoin : public Operation {
   // columns from either the first or the last input, but it is questionable if
   // there would be any real benefit from this and it would only increase the
   // complexity of the query planning and required testing.
-  vector<ColumnIndex> resultSortedOn() const override { return {}; }
+  std::vector<ColumnIndex> resultSortedOn() const override { return {}; }
 
  private:
   //! Compute the result of the query-subtree rooted at this element..
-  ProtoResult computeResult(bool requestLaziness) override;
+  Result computeResult(bool requestLaziness) override;
 
   // Copy each element from the `inputColumn` `groupSize` times to the
   // `targetColumn`. Repeat until the `targetColumn` is completely filled. Skip
   // the first `offset` write operations to the `targetColumn`. Call
   // `checkCancellation` after each write.
-  void writeResultColumn(std::span<Id> targetColumn,
-                         std::span<const Id> inputColumn, size_t groupSize,
+  void writeResultColumn(ql::span<Id> targetColumn,
+                         ql::span<const Id> inputColumn, size_t groupSize,
                          size_t offset) const;
 
   // Write all columns of the subresults into an `IdTable` and return it.
@@ -95,9 +111,9 @@ class CartesianProductJoin : public Operation {
   // rows to write at most. `lastTableOffset` is the offset of the last table,
   // to account for cases where the last table does not cover the whole result
   // and so index 0 of a table does not correspond to row 0 of the result.
-  IdTable writeAllColumns(std::ranges::random_access_range auto idTables,
-                          size_t offset, size_t limit,
-                          size_t lastTableOffset = 0) const;
+  CPP_template(typename R)(requires ql::ranges::random_access_range<R>) IdTable
+      writeAllColumns(R idTables, size_t offset, size_t limit,
+                      size_t lastTableOffset = 0) const;
 
   // Calculate the subresults of the children and store them into a vector. If
   // the rightmost child can produce a lazy result, it will be stored outside of
@@ -115,14 +131,15 @@ class CartesianProductJoin : public Operation {
   // `lastTableOffset` is the offset of the last table in the range. This is
   // used to handle `IdTable`s yielded by generators where the range of indices
   // they represent do not cover the whole result.
-  Result::Generator produceTablesLazily(LocalVocab mergedVocab,
-                                        std::ranges::range auto idTables,
-                                        size_t offset, size_t limit,
-                                        size_t lastTableOffset = 0) const;
+  CPP_template(typename R)(requires ql::ranges::range<R>) Result::LazyResult
+      produceTablesLazily(LocalVocab mergedVocab, R idTables, size_t offset,
+                          size_t limit, size_t lastTableOffset = 0) const;
 
   // Similar to `produceTablesLazily` but can handle a single lazy result.
-  Result::Generator createLazyConsumer(
+  Result::LazyResult createLazyConsumer(
       LocalVocab staticMergedVocab,
       std::vector<std::shared_ptr<const Result>> subresults,
       std::shared_ptr<const Result> lazyResult) const;
 };
+
+#endif  // QLEVER_SRC_ENGINE_CARTESIANPRODUCTJOIN_H

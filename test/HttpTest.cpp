@@ -3,11 +3,13 @@
 // Author: Hannah Bast (bast@cs.uni-freiburg.de)
 
 #include <absl/strings/str_cat.h>
-#include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
 #include <thread>
 
 #include "HttpTestHelpers.h"
+#include "global/RuntimeParameters.h"
+#include "util/GTestHelpers.h"
 #include "util/http/HttpClient.h"
 #include "util/http/HttpServer.h"
 #include "util/http/HttpUtils.h"
@@ -16,13 +18,14 @@
 
 using namespace ad_utility::httpUtils;
 using namespace boost::beast::http;
+using ::testing::HasSubstr;
 
 namespace {
 
 /// Join all of the bytes into a big string.
-std::string toString(cppcoro::generator<std::span<std::byte>> generator) {
+std::string toString(cppcoro::generator<ql::span<std::byte>> generator) {
   std::string result;
-  for (std::byte byte : generator | std::ranges::views::join) {
+  for (std::byte byte : generator | ql::ranges::views::join) {
     result.push_back(static_cast<char>(byte));
   }
   return result;
@@ -266,11 +269,119 @@ TEST(HttpServer, ErrorHandlingInSession) {
   }
 
   // Handling of `std::exception`.
-  s = throwAndCaptureLog(std::runtime_error{"The runtime error for testing"});
-  EXPECT_THAT(s, HasSubstr("The runtime error for testing"));
+  if constexpr (LOGLEVEL >= ERROR) {
+    s = throwAndCaptureLog(std::runtime_error{"The runtime error for testing"});
+    EXPECT_THAT(s, HasSubstr("The runtime error for testing"));
+  }
 
   // Thrown object that is not a `std::exception`.
-  s = throwAndCaptureLog(47);
-  EXPECT_THAT(s,
-              HasSubstr("Weird exception not inheriting from std::exception"));
+  if constexpr (LOGLEVEL >= ERROR) {
+    s = throwAndCaptureLog(47);
+    EXPECT_THAT(
+        s, HasSubstr("Weird exception not inheriting from std::exception"));
+  }
+}
+
+// Test the request body size limit
+TEST(HttpServer, RequestBodySizeLimit) {
+  ad_utility::SharedCancellationHandle handle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+
+  TestHttpServer httpServer([](auto request,
+                               auto&& send) -> boost::asio::awaitable<void> {
+    std::string methodName;
+    switch (request.method()) {
+      case verb::get:
+        methodName = "GET";
+        break;
+      case verb::post:
+        methodName = "POST";
+        break;
+      default:
+        methodName = "OTHER";
+    }
+
+    auto response = [](std::string methodName,
+                       std::string target) -> cppcoro::generator<std::string> {
+      co_yield methodName;
+      co_yield "\n";
+      co_yield target;
+    }(methodName, std::string(toStd(request.target())));
+
+    // Send a response.
+    co_await send(createOkResponse(std::move(response), request,
+                                   ad_utility::MediaType::textPlain));
+  });
+
+  httpServer.runInOwnThread();
+
+  auto ResponseMetadata = [](const status status,
+                             std::string_view content_type) {
+    return AllOf(
+        AD_FIELD(HttpOrHttpsResponse, status_, testing::Eq(status)),
+        AD_FIELD(HttpOrHttpsResponse, contentType_, testing::Eq(content_type)));
+  };
+  auto expectRequestHelper = [&httpServer](
+                                 const ad_utility::MemorySize& requestBodySize,
+                                 const std::string& expectedBody,
+                                 const auto& responseMatcher) {
+    ad_utility::SharedCancellationHandle handle =
+        std::make_shared<ad_utility::CancellationHandle<>>();
+
+    auto httpClient = std::make_unique<HttpClient>(
+        "localhost", std::to_string(httpServer.getPort()));
+
+    const std::string body(requestBodySize.getBytes(), 'f');
+
+    auto response = HttpClient::sendRequest(
+        std::move(httpClient), verb::post, "localhost", "target", handle, body);
+    EXPECT_THAT(response, responseMatcher);
+    EXPECT_THAT(toString(std::move(response.body_)), expectedBody);
+  };
+
+  auto expectRequestFails = [&ResponseMetadata, &expectRequestHelper](
+                                const ad_utility::MemorySize& requestBodySize) {
+    const ad_utility::MemorySize currentLimit =
+        getRuntimeParameter<&RuntimeParameters::requestBodyLimit_>();
+    // For large requests we get an exception while writing to the request
+    // stream when going over the limit. For small requests we get the response
+    // normally. We would need the HttpClient to return the response even
+    // if it couldn't send the request fully in that case.
+    expectRequestHelper(
+        requestBodySize,
+        "Request body size exceeds the allowed size (" +
+            currentLimit.asString() +
+            "), send a smaller request or set the allowed size via the runtime "
+            "parameter `request-body-limit`",
+        ResponseMetadata(status::payload_too_large, "text/plain"));
+  };
+  auto expectRequestSucceeds =
+      [&expectRequestHelper,
+       &ResponseMetadata](const ad_utility::MemorySize requestBodySize) {
+        expectRequestHelper(requestBodySize, "POST\ntarget",
+                            ResponseMetadata(status::ok, "text/plain"));
+      };
+  constexpr auto testingRequestBodyLimit = 50_kB;
+
+  // Set a smaller limit for testing. The default of 100 MB is quite large.
+  setRuntimeParameter<&RuntimeParameters::requestBodyLimit_>(50_kB);
+  // Requests with bodies smaller than the request body limit are processed.
+  expectRequestSucceeds(3_B);
+  // Exactly the limit is allowed.
+  expectRequestSucceeds(testingRequestBodyLimit);
+  // Larger than the limit is forbidden.
+  expectRequestFails(testingRequestBodyLimit + 1_B);
+
+  // Setting a smaller request-body limit.
+  setRuntimeParameter<&RuntimeParameters::requestBodyLimit_>(1_B);
+  expectRequestFails(3_B);
+  // Only the request body size counts. The empty body is allowed even if the
+  // body is limited to 1 byte.
+  expectRequestSucceeds(0_B);
+
+  // Disable the request body limit, by setting it to 0.
+  setRuntimeParameter<&RuntimeParameters::requestBodyLimit_>(0_B);
+  // Arbitrarily large requests are now allowed.
+  expectRequestSucceeds(10_kB);
+  expectRequestSucceeds(5_MB);
 }

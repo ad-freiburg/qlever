@@ -3,18 +3,21 @@
 // Authors: Björn Buchhold <b.buchhold@gmail.com>
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_RESULT_H
+#define QLEVER_SRC_ENGINE_RESULT_H
 
-#include <ranges>
 #include <variant>
 #include <vector>
 
+#include "backports/span.h"
 #include "engine/LocalVocab.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "parser/data/LimitOffsetClause.h"
+#include "util/InputRangeUtils.h"
 
 // The result of an `Operation`. This is the class QLever uses for all
 // intermediate or final results when processing a SPARQL query. The actual data
@@ -23,6 +26,8 @@
 // evaluated.
 class Result {
  public:
+  using IdTablePtr = std::shared_ptr<const IdTable>;
+
   struct IdTableVocabPair {
     IdTable idTable_;
     LocalVocab localVocab_;
@@ -33,26 +38,53 @@ class Result {
         : idTable_{std::move(idTable)}, localVocab_{std::move(localVocab)} {}
   };
 
+  // The lazy result type that is actually stored. It is type-erased and allows
+  // explicit conversion from the `Generator` above.
+  using LazyResult = ad_utility::InputRangeTypeErased<IdTableVocabPair>;
+
+  // The current implementation of some lazy results that have not (yet) been
+  // ported to C++17 .
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   using Generator = cppcoro::generator<IdTableVocabPair>;
+#else
+  // This typedef avoids some ugly `#ifdef`s in the remaining codebase.
+  using Generator = LazyResult;
+#endif
+
+  // A commonly used LoopControl type for CachingContinuableTransformInputRange
+  // generators
+  using IdTableLoopControl =
+      ad_utility::loopControl::LoopControl<IdTableVocabPair>;
 
  private:
   // Needs to be mutable in order to be consumable from a const result.
   struct GenContainer {
-    mutable Generator generator_;
+    mutable LazyResult generator_;
     mutable std::unique_ptr<std::atomic_bool> consumed_ =
         std::make_unique<std::atomic_bool>(false);
-    explicit GenContainer(Generator generator)
+    explicit GenContainer(LazyResult generator)
         : generator_{std::move(generator)} {}
+    CPP_template(typename Range)(
+        requires std::is_constructible_v<
+            LazyResult, Range>) explicit GenContainer(Range range)
+        : generator_{LazyResult{std::move(range)}} {}
   };
 
   using LocalVocabPtr = std::shared_ptr<const LocalVocab>;
 
+  // If this `Result` is fully materialized, then the result can either be
+  // stored as a plain `IdTable` or as a `shared_ptr<const IdTable>`. The former
+  // is useful when the result is still being constructed (because it is
+  // mutable), the latter is useful when the result is read from a cache (e.g.
+  // the named query cache), because the shared ownership doesn't require a copy
+  // of the result.
   struct IdTableSharedLocalVocabPair {
-    IdTable idTable_;
+    std::variant<IdTable, std::shared_ptr<const IdTable>> idTableOrPtr_;
     // The local vocabulary of the result.
     LocalVocabPtr localVocab_;
   };
   using Data = std::variant<IdTableSharedLocalVocabPair, GenContainer>;
+
   // The actual entries.
   Data data_;
 
@@ -62,8 +94,11 @@ class Result {
 
   // Note: If additional members and invariants are added to the class (for
   // example information about the datatypes in each column) make sure that
-  // those remain valid after calling non-const function like
-  // `applyLimitOffset`.
+  // 1. The members and invariants remain valid after calling non-const function
+  // like `applyLimitOffset`.
+  // 2. The generator returned by the `idTables()`method for lazy operations is
+  // valid even after the `Result` object from which it was obtained is
+  // destroyed.
 
   // This class is used to enforce the invariant, that the `localVocab_` (which
   // is stored in a shared_ptr) is only shared between instances of the
@@ -90,10 +125,6 @@ class Result {
               std::make_shared<const LocalVocab>(std::move(localVocab))} {}
   };
 
-  // Check if sort order promised by `sortedBy` is kept within `idTable`.
-  static void assertSortOrderIsRespected(
-      const IdTable& idTable, const std::vector<ColumnIndex>& sortedBy);
-
  public:
   // Construct from the given arguments (see above) and check the following
   // invariants: `localVocab` must not be `nullptr` and each entry of `sortedBy`
@@ -108,8 +139,14 @@ class Result {
          SharedLocalVocabWrapper localVocab);
   Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
          LocalVocab&& localVocab);
+  Result(std::shared_ptr<const IdTable> idTablePtr,
+         std::vector<ColumnIndex> sortedBy, LocalVocab&& localVocab);
   Result(IdTableVocabPair pair, std::vector<ColumnIndex> sortedBy);
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   Result(Generator idTables, std::vector<ColumnIndex> sortedBy);
+#endif
+  Result(LazyResult idTables, std::vector<ColumnIndex> sortedBy);
+
   // Prevent accidental copying of a result table.
   Result(const Result& other) = delete;
   Result& operator=(const Result& other) = delete;
@@ -119,9 +156,9 @@ class Result {
   Result& operator=(Result&& other) = default;
 
   // Wrap the generator stored in `data_` within a new generator that calls
-  // `onNewChunk` every time a new `IdTable` is yielded by the original
-  // generator and passed this new `IdTable` along with microsecond precision
-  // timing information on how long it took to compute this new chunk.
+  // `onNewChunk` every time a new `IdTableVocabPair` is yielded by the original
+  // generator and passed this new `IdTableVocabPair` along with microsecond
+  // precision timing information on how long it took to compute this new chunk.
   // `onGeneratorFinished` is guaranteed to be called eventually as long as the
   // generator is consumed at least partially, with `true` if an exception
   // occurred during consumption or with `false` when the generator is done
@@ -130,7 +167,8 @@ class Result {
   // Throw an `ad_utility::Exception` if the underlying `data_` member holds the
   // wrong variant.
   void runOnNewChunkComputed(
-      std::function<void(const IdTable&, std::chrono::microseconds)> onNewChunk,
+      std::function<void(const IdTableVocabPair&, std::chrono::microseconds)>
+          onNewChunk,
       std::function<void(bool)> onGeneratorFinished);
 
   // Wrap the generator stored in `data_` within a new generator that aggregates
@@ -148,13 +186,17 @@ class Result {
           fitInCache,
       std::function<void(Result)> storeInCache);
 
-  // Const access to the underlying `IdTable`. Throw an `ad_utility::Exception`
-  // if the underlying `data_` member holds the wrong variant.
+  // Const access to the underlying `IdTable`. Throw if this result is not fully
+  // materialized.
   const IdTable& idTable() const;
 
   // Access to the underlying `IdTable`s. Throw an `ad_utility::Exception`
-  // if the underlying `data_` member holds the wrong variant.
-  Generator& idTables() const;
+  // if the underlying `data_` member holds the wrong variant or if the result
+  // has previously already been retrieved.
+  // Note: The returned `LazyResult` is not coupled to the `Result` object, and
+  // thus can be used even after the `Result` object from which it was obtained
+  // was destroyed.
+  LazyResult idTables() const;
 
   // Const access to the columns by which the `idTable()` is sorted.
   const std::vector<ColumnIndex>& sortedBy() const { return sortedBy_; }
@@ -165,8 +207,8 @@ class Result {
   // the name of the function called with the local vocab as argument):
   //
   // ExportQueryExecutionTrees::idTableToQLeverJSONArray (idToStringAndType)
-  // ExportQueryExecutionTrees::selectQueryResultToSparqlJSON (dito)
-  // ExportQueryExecutionTrees::selectQueryResultToStream (dito)
+  // ExportQueryExecutionTrees::selectQueryResultToSparqlJSON (ditto)
+  // ExportQueryExecutionTrees::selectQueryResultToStream (ditto)
   // Filter::computeFilterImpl (evaluationContext)
   // Variable::evaluate (idToStringAndType)
   //
@@ -189,9 +231,11 @@ class Result {
                                                      const Result& result2);
 
   // Overload for more than two `Results`
-  template <std::ranges::forward_range R>
-  requires std::convertible_to<std::ranges::range_value_t<R>, const Result&>
-  static SharedLocalVocabWrapper getMergedLocalVocab(R&& subResults) {
+  CPP_template(typename R)(
+      requires ql::ranges::forward_range<R> CPP_and ql::concepts::
+          convertible_to<ql::ranges::range_value_t<R>,
+                         const Result&>) static SharedLocalVocabWrapper
+      getMergedLocalVocab(R&& subResults) {
     std::vector<const LocalVocab*> vocabs;
     for (const Result& table : subResults) {
       vocabs.push_back(&table.localVocab());
@@ -214,7 +258,7 @@ class Result {
   void logResultSize() const;
 
   // The first rows of the result and its total size (for debugging).
-  string asDebugString() const;
+  std::string asDebugString() const;
 
   // Apply the `limitOffset` clause by shifting and then resizing the `IdTable`.
   // This also applies if `data_` holds a generator yielding `IdTable`s, where
@@ -247,6 +291,4 @@ class Result {
   void checkDefinedness(const VariableToColumnMap& varColMap);
 };
 
-// Class alias to conceptually differentiate between Results that produce
-// values and Results meant to be consumed.
-using ProtoResult = Result;
+#endif  // QLEVER_SRC_ENGINE_RESULT_H

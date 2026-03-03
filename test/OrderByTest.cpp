@@ -11,6 +11,7 @@
 #include "engine/ValuesForTesting.h"
 #include "global/ValueIdComparators.h"
 #include "util/IndexTestHelpers.h"
+#include "util/OperationTestHelpers.h"
 
 using namespace std::string_literals;
 using namespace std::chrono_literals;
@@ -37,7 +38,7 @@ OrderBy makeOrderBy(IdTable input, const OrderBy::SortIndices& sortColumns) {
 // `input` and `expected` accordingly.
 void testOrderBy(IdTable input, const IdTable& expected,
                  std::vector<bool> isDescending,
-                 source_location l = source_location::current()) {
+                 source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
   auto qec = ad_utility::testing::getQec();
 
@@ -61,9 +62,9 @@ void testOrderBy(IdTable input, const IdTable& expected,
     // Apply the current permutation of the `sortColumns` to `expected` and
     // `input`.
     for (size_t i = 0; i < sortColumns.size(); ++i) {
-      std::ranges::copy(input.getColumn(i),
-                        permutedInput.getColumn(sortColumns[i].first).begin());
-      std::ranges::copy(
+      ql::ranges::copy(input.getColumn(i),
+                       permutedInput.getColumn(sortColumns[i].first).begin());
+      ql::ranges::copy(
           expected.getColumn(i),
           permutedExpected.getColumn(sortColumns[i].first).begin());
       // Also put the information which columns are descending into the correct
@@ -192,7 +193,7 @@ TEST(OrderBy, mixedDatatypes) {
   testOrderBy(makeIdTableFromVector(input), makeIdTableFromVector(expected),
               {false});
 
-  std::ranges::reverse(expected);
+  ql::ranges::reverse(expected);
   testOrderBy(makeIdTableFromVector(input), makeIdTableFromVector(expected),
               {true});
 }
@@ -256,4 +257,18 @@ TEST(OrderBy, verifyOperationIsPreemptivelyAbortedWithNoRemainingTime) {
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       orderBy.getResult(true), ::testing::HasSubstr("time estimate exceeded"),
       ad_utility::CancellationException);
+}
+
+// _____________________________________________________________________________
+TEST(OrderBy, clone) {
+  auto* qec = ad_utility::testing::getQec();
+  IdTable permutedInput{2, qec->getAllocator()};
+
+  OrderBy orderBy =
+      makeOrderBy(permutedInput.clone(), OrderBy::SortIndices{{0, true}});
+
+  auto clone = orderBy.clone();
+  ASSERT_TRUE(clone);
+  EXPECT_THAT(orderBy, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), orderBy.getDescriptor());
 }

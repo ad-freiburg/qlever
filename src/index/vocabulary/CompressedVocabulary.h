@@ -2,8 +2,10 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_INDEX_VOCABULARY_COMPRESSEDVOCABULARY_H
+#define QLEVER_SRC_INDEX_VOCABULARY_COMPRESSEDVOCABULARY_H
 
+#include "backports/algorithm.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/PrefixHeuristic.h"
 #include "index/vocabulary/CompressionWrappers.h"
@@ -12,17 +14,32 @@
 #include "util/FsstCompressor.h"
 #include "util/OverloadCallOperator.h"
 #include "util/Serializer/FileSerializer.h"
-#include "util/Serializer/SerializePair.h"
+#include "util/Serializer/SerializeVector.h"
+#include "util/Serializer/Serializer.h"
 #include "util/TaskQueue.h"
+
+namespace detail {
+
+template <typename Vocabulary, typename Iterator>
+CPP_requires(IterableVocabulary_,
+             requires(const Vocabulary& vocabulary,
+                      const Iterator& it)(it - vocabulary.begin()));
+
+template <typename Vocabulary, typename Iterator>
+CPP_concept IterableVocabulary =
+    CPP_requires_ref(IterableVocabulary_, Vocabulary, Iterator);
+
+}  // namespace detail
 
 // A vocabulary in which compression is performed using a customizable
 // compression algorithm, with one dictionary per `NumWordsPerBlock` many words
 // (default 1 million).
-template <typename UnderlyingVocabulary,
-          ad_utility::vocabulary::CompressionWrapper CompressionWrapper =
-              ad_utility::vocabulary::FsstSquaredCompressionWrapper,
-          size_t NumWordsPerBlock = 1UL << 20>
-class CompressedVocabulary {
+CPP_template(typename UnderlyingVocabulary,
+             typename CompressionWrapper =
+                 ad_utility::vocabulary::FsstSquaredCompressionWrapper,
+             size_t NumWordsPerBlock = 1UL << 20)(
+    requires ad_utility::vocabulary::CompressionWrapper<
+        CompressionWrapper>) class CompressedVocabulary {
  private:
   UnderlyingVocabulary underlyingVocabulary_;
   CompressionWrapper compressionWrapper_;
@@ -104,15 +121,13 @@ class CompressedVocabulary {
 
   /// Allows the incremental writing of the words to disk. Uses `WordWriter` of
   /// the underlying vocabulary.
-  class DiskWriterFromUncompressedWords {
+  class DiskWriterFromUncompressedWords : public WordWriterBase {
    private:
     std::vector<std::string> wordBuffer_;
     std::vector<bool> isExternalBuffer_;
     std::vector<typename CompressionWrapper::Decoder> decoders_;
     typename UnderlyingVocabulary::WordWriter underlyingWriter_;
     std::string filenameDecoders_;
-    std::string readableName_ = "";
-    bool isFinished_ = false;
     ad_utility::MemorySize uncompressedSize_ = bytes(0);
     ad_utility::MemorySize compressedSize_ = bytes(0);
     size_t numBlocks_ = 0u;
@@ -126,6 +141,7 @@ class CompressedVocabulary {
     }};
     std::atomic<size_t> queueIndex_ = 0;
     ad_utility::TaskQueue<false> compressQueue_{10, 10};
+    uint64_t counter_ = 0;
 
    public:
     /// Constructor.
@@ -135,24 +151,30 @@ class CompressedVocabulary {
           filenameDecoders_{filenameDecoders} {}
 
     /// Compress the `uncompressedWord` and write it to disk.
-    void operator()(std::string_view uncompressedWord,
-                    bool isExternal = false) {
-      AD_CORRECTNESS_CHECK(!isFinished_);
+    uint64_t operator()(std::string_view uncompressedWord,
+                        bool isExternal) override {
       wordBuffer_.emplace_back(uncompressedWord);
       isExternalBuffer_.push_back(isExternal);
       if (wordBuffer_.size() == NumWordsPerBlock) {
         finishBlock();
       }
+      return counter_++;
     }
 
+    ~DiskWriterFromUncompressedWords() override {
+      if (!finishWasCalled()) {
+        ad_utility::terminateIfThrows([this]() { this->finish(); },
+                                      "Calling `finish` from the destructor of "
+                                      "`DiskWriterFromUncompressedWords`");
+      }
+    }
+
+   private:
     /// Dump all the words that still might be contained in intermediate buffers
     /// to the underlying file and close the file. After calls to `finish()` no
     /// more words can be pushed. `finish()` is implicitly also called by the
     /// destructor.
-    void finish() {
-      if (std::exchange(isFinished_, true)) {
-        return;
-      }
+    void finishImpl() override {
       finishBlock();
       compressQueue_.finish();
       writeQueue_.finish();
@@ -166,29 +188,21 @@ class CompressedVocabulary {
           (100ULL * std::max(compressedSize_.getBytes(), size_t(1))) /
           std::max(uncompressedSize_.getBytes(), size_t(1));
       std::string nameString =
-          readableName_.empty() ? std::string{"vocabulary"} : readableName_;
-      LOG(INFO) << "Finished writing compressed " << nameString
-                << ", size = " << compressedSize_
-                << " [uncompressed = " << uncompressedSize_
-                << ", ratio = " << compressionRatio << "%]" << std::endl;
+          readableName().empty() ? std::string{"vocabulary"} : readableName();
+      AD_LOG_INFO << "Finished writing compressed " << nameString
+                  << ", size = " << compressedSize_
+                  << " [uncompressed = " << uncompressedSize_
+                  << ", ratio = " << compressionRatio << "%]" << std::endl;
       if (numBlocksLargerWhenCompressed_ > 0) {
-        LOG(WARN) << "Number of blocks made larger by the compression instead "
-                     "of smaller: "
-                  << numBlocksLargerWhenCompressed_ << " of " << numBlocks_
-                  << std::endl;
+        AD_LOG_WARN
+            << "Number of blocks made larger by the compression instead "
+               "of smaller: "
+            << numBlocksLargerWhenCompressed_ << " of " << numBlocks_
+            << std::endl;
       }
     }
 
-    // Access the human-readable description for the vocabulary to be written
-    // that will be used in log message.
-    std::string& readableName() { return readableName_; }
-
-    // Call `finish`, does nothing if `finish` has been manually called.
-    ~DiskWriterFromUncompressedWords() noexcept {
-      ad_utility::terminateIfThrows(
-          [this]() { this->finish(); },
-          "The destructor of a DiskWriter of a `CompressedVocabulary`");
-    }
+   public:
     DiskWriterFromUncompressedWords(const DiskWriterFromUncompressedWords&) =
         delete;
     DiskWriterFromUncompressedWords& operator=(
@@ -225,7 +239,8 @@ class CompressedVocabulary {
                   static_cast<size_t>(compressedSize > uncompressedSize);
               size_t i = 0;
               for (auto& word : views) {
-                if constexpr (requires() { underlyingWriter_(word, false); }) {
+                if constexpr (std::is_invocable_v<decltype(underlyingWriter_),
+                                                  decltype(word), bool>) {
                   underlyingWriter_(word, isExternalBuffer.at(i));
                   ++i;
                 } else {
@@ -242,23 +257,12 @@ class CompressedVocabulary {
   };
   using WordWriter = DiskWriterFromUncompressedWords;
 
-  // Return a `DiskWriter` that can be used to create the vocabulary.
-  DiskWriterFromUncompressedWords makeDiskWriter(
-      const std::string& filename) const {
-    return DiskWriterFromUncompressedWords{
+  // Return a `unique_ptr<DiskWriter>` that can be used to create the
+  // vocabulary.
+  static auto makeDiskWriterPtr(const std::string& filename) {
+    return std::make_unique<DiskWriterFromUncompressedWords>(
         absl::StrCat(filename, wordsSuffix),
-        absl::StrCat(filename, decodersSuffix)};
-  }
-  /// Initialize the vocabulary from the given `words`.
-  // TODO<joka921> This can be a generic Mixin...
-  void build(const std::vector<std::string>& words,
-             const std::string& filename) {
-    WordWriter writer = makeDiskWriter(filename);
-    for (const auto& word : words) {
-      writer(word);
-    }
-    writer.finish();
-    open(filename);
+        absl::StrCat(filename, decodersSuffix));
   }
 
   // Access to the underlying vocabulary.
@@ -271,15 +275,31 @@ class CompressedVocabulary {
 
   void close() { underlyingVocabulary_.close(); }
 
+  // Generic serialization support.
+  AD_SERIALIZE_FRIEND_FUNCTION(CompressedVocabulary) {
+    serializer | arg.underlyingVocabulary_;
+    if constexpr (ad_utility::serialization::WriteSerializer<S>) {
+      // Serialize the decoders.
+      const auto& decoders = arg.compressionWrapper_.getDecoders();
+      serializer | decoders;
+    } else {
+      // Deserialize the decoders.
+      std::vector<typename CompressionWrapper::Decoder> decoders;
+      serializer | decoders;
+      arg.compressionWrapper_ = CompressionWrapper{{std::move(decoders)}};
+    }
+  }
+
  private:
   // Get the correct decoder for the given `idx`.
   size_t getDecoderIdx(size_t idx) const { return idx / NumWordsPerBlock; }
 
   // Decompress the word that `it` points to. `it` is an iterator into the
   // underlying vocabulary.
-  auto decompressFromIterator(auto it) const {
+  template <typename It>
+  auto decompressFromIterator(It it) const {
     auto idx = [&]() {
-      if constexpr (requires() { it - underlyingVocabulary_.begin(); }) {
+      if constexpr (detail::IterableVocabulary<UnderlyingVocabulary, It>) {
         return it - underlyingVocabulary_.begin();
       } else {
         return underlyingVocabulary_.iteratorToIndex(it);
@@ -297,7 +317,7 @@ class CompressedVocabulary {
   // _________________________________________________________________
   template <typename T>
   static std::string_view toStringView(const T& el) {
-    if constexpr (std::convertible_to<T, std::string_view>) {
+    if constexpr (ranges::convertible_to<T, std::string_view>) {
       return el;
     } else if constexpr (ad_utility::isInstantiation<T, std::optional>) {
       return toStringView(el.value());
@@ -319,3 +339,5 @@ class CompressedVocabulary {
     return {std::move(decompressedWord), wordAndIndex.index()};
   }
 };
+
+#endif  // QLEVER_SRC_INDEX_VOCABULARY_COMPRESSEDVOCABULARY_H

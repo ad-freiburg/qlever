@@ -1,8 +1,11 @@
 //  Copyright 2023, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_RELATIONALEXPRESSIONHELPERS_H
+#define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_RELATIONALEXPRESSIONHELPERS_H
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "global/ValueIdComparators.h"
@@ -30,20 +33,20 @@ using ValueType =
 
 // Concept that requires that `T` logically stores numeric values.
 template <typename T>
-concept StoresNumeric =
-    std::integral<ValueType<T>> || std::floating_point<ValueType<T>>;
+CPP_concept StoresNumeric = concepts::integral<ValueType<T>> ||
+                            ql::concepts::floating_point<ValueType<T>>;
 
 // Concept that requires that `T` logically stores `std::string`s.
 template <typename T>
-concept StoresStrings = ad_utility::SimilarTo<ValueType<T>, std::string>;
+CPP_concept StoresStrings = ad_utility::SimilarTo<ValueType<T>, std::string>;
 
 // Concept that requires that `T` logically stores boolean values.
 template <typename T>
-concept StoresBoolean = std::is_same_v<T, ad_utility::SetOfIntervals>;
+CPP_concept StoresBoolean = std::is_same_v<T, ad_utility::SetOfIntervals>;
 
 // Concept that requires that `T` logically stores `ValueId`s.
 template <typename T>
-concept StoresValueId =
+CPP_concept StoresValueId =
     ad_utility::SimilarTo<T, Variable> ||
     ad_utility::SimilarTo<T, VectorWithMemoryLimit<ValueId>> ||
     ad_utility::SimilarTo<T, ValueId>;
@@ -51,24 +54,25 @@ concept StoresValueId =
 // When `A` and `B` are `AreIncomparable`, comparisons between them will always
 // yield `not equal`, independent of the concrete values.
 template <typename A, typename B>
-concept AreIncomparable = (StoresNumeric<A> && StoresStrings<B>) ||
-                          (StoresNumeric<B> && StoresStrings<A>);
+CPP_concept AreIncomparable = (StoresNumeric<A> && StoresStrings<B>) ||
+                              (StoresNumeric<B> && StoresStrings<A>);
 
 // True iff any of `A, B` is `StoresBoolean` (see above).
 template <typename A, typename B>
-concept AtLeastOneIsBoolean = StoresBoolean<A> || StoresBoolean<B>;
+CPP_concept AtLeastOneIsBoolean = StoresBoolean<A> || StoresBoolean<B>;
 
 // The types for which comparisons like `<` are supported and not always false.
 template <typename A, typename B>
-concept AreComparable = !AtLeastOneIsBoolean<A, B> && !AreIncomparable<A, B> &&
-                        (StoresValueId<A> || !StoresValueId<B>);
+CPP_concept AreComparable =
+    !AtLeastOneIsBoolean<A, B> && !AreIncomparable<A, B> &&
+    (StoresValueId<A> || !StoresValueId<B>);
 
 // Apply the given `Comparison` to `a` and `b`. For example, if the `Comparison`
 // is `LT`, returns `a < b`. Note that the second template argument `Dummy` is
 // only needed to make the static check for the exhaustiveness of the if-else
 // cascade possible.
-template <Comparison Comp, typename Dummy = int>
-bool applyComparison(const auto& a, const auto& b) {
+template <Comparison Comp, typename Dummy = int, typename A, typename B>
+bool applyComparison(const A& a, const B& b) {
   using enum Comparison;
   if constexpr (Comp == LT) {
     return a < b;
@@ -104,7 +108,9 @@ constexpr Comparison getComparisonForSwappedArguments(Comparison comp) {
     case Comparison::GT:
       return Comparison::LT;
   }
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   AD_FAIL();
+#endif
 }
 
 // Return the ID range `[begin, end)` in which the entries of the vocabulary
@@ -129,7 +135,7 @@ inline std::pair<ValueId, ValueId> getRangeFromVocab(
 // A concept for various types that either represent a string, an ID or a
 // consecutive range of IDs. For its usage see below.
 template <typename S>
-concept StoresStringOrId =
+CPP_concept StoresStringOrId =
     ad_utility::SimilarToAny<S, ValueId, LocalVocabEntry, IdOrLiteralOrIri,
                              std::pair<Id, Id>>;
 // Convert a string or `IdOrLiteralOrIri` value into the (possibly empty) range
@@ -137,8 +143,8 @@ concept StoresStringOrId =
 // `getRangeFromVocab` above for details). This function also takes `ValueId`s
 // and `pair<ValuedId, ValueId>` which are simply returned unchanged. This makes
 // the usage of this function easier.
-template <StoresStringOrId S>
-auto makeValueId(const S& value, const EvaluationContext* context) {
+CPP_template(typename S)(requires StoresStringOrId<S>) auto makeValueId(
+    const S& value, const EvaluationContext* context) {
   if constexpr (ad_utility::SimilarToAny<S, ValueId, std::pair<Id, Id>>) {
     return value;
   } else if constexpr (ad_utility::isSimilar<S, IdOrLiteralOrIri>) {
@@ -162,31 +168,39 @@ template <valueIdComparators::Comparison Comp,
           valueIdComparators::ComparisonForIncompatibleTypes
               comparisonForIncompatibleTypes>
 inline const auto compareIdsOrStrings =
-    []<StoresStringOrId T, StoresStringOrId U>(
-        const T& a, const U& b,
-        const EvaluationContext* ctx) -> valueIdComparators::ComparisonResult {
+    [](const auto& a, const auto& b, const EvaluationContext* ctx)
+    -> CPP_ret(valueIdComparators::ComparisonResult)(
+        requires StoresStringOrId<std::decay_t<decltype(a)>>&&
+            StoresStringOrId<std::decay_t<decltype(a)>>) {
+  using T = std::decay_t<decltype(a)>;
+  using U = std::decay_t<decltype(b)>;
   if constexpr (ad_utility::isSimilar<LocalVocabEntry, T> &&
                 ad_utility::isSimilar<LocalVocabEntry, U>) {
     return valueIdComparators::fromBool(applyComparison<Comp>(a, b));
   } else {
     auto x = makeValueId(a, ctx);
     auto y = makeValueId(b, ctx);
-    if constexpr (requires { valueIdComparators::compareIds(x, y, Comp); }) {
+    if constexpr (ranges::invocable<decltype(valueIdComparators::compareIds<
+                                             comparisonForIncompatibleTypes>),
+                                    decltype(x), decltype(y),
+                                    valueIdComparators::Comparison>) {
       // Compare two `ValueId`s
       return valueIdComparators::compareIds<comparisonForIncompatibleTypes>(
           x, y, Comp);
-    } else if constexpr (requires {
-                           valueIdComparators::compareWithEqualIds(
-                               x, y.first, y.second, Comp);
-                         }) {
+    } else if constexpr (ranges::invocable<
+                             decltype(valueIdComparators::compareWithEqualIds<
+                                      comparisonForIncompatibleTypes>),
+                             decltype(x), decltype(y.first), decltype(y.second),
+                             valueIdComparators::Comparison>) {
       // Compare `ValueId` with range of equal `ValueId`s (used when `value2`
       // is `string` or `vector<string>`.
       return valueIdComparators::compareWithEqualIds<
           comparisonForIncompatibleTypes>(x, y.first, y.second, Comp);
-    } else if constexpr (requires {
-                           valueIdComparators::compareWithEqualIds(
-                               y, x.first, x.second, Comp);
-                         }) {
+    } else if constexpr (ranges::invocable<
+                             decltype(valueIdComparators::compareWithEqualIds<
+                                      comparisonForIncompatibleTypes>),
+                             decltype(y), decltype(x.first), decltype(x.second),
+                             valueIdComparators::Comparison>) {
       // Compare `ValueId` with range of equal `ValueId`s (used when `value2`
       // is `string` or `vector<string>`.
       return valueIdComparators::compareWithEqualIds<
@@ -201,3 +215,5 @@ inline const auto compareIdsOrStrings =
   }
 };
 }  // namespace sparqlExpression
+
+#endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_RELATIONALEXPRESSIONHELPERS_H

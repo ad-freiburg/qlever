@@ -4,7 +4,7 @@
 
 #include <gtest/gtest.h>
 
-#include "../src/util/Simple8bCode.h"
+#include "util/Simple8bCode.h"
 
 using std::string;
 

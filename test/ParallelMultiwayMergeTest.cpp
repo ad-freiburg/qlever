@@ -1,6 +1,8 @@
 //  Copyright 2023, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -14,13 +16,16 @@ using namespace ad_utility::memory_literals;
 
 // Join a range of ranges into a single vector, e.g. `array<generator<size_t>>
 // -> vector<size_t>`.
-auto join = []<typename Range>(Range&& range) {
-  std::vector<std::ranges::range_value_t<std::ranges::range_value_t<Range>>>
-      result;
-  auto view = std::views::join(ad_utility::OwningView{AD_FWD(range)});
-  std::ranges::copy(view, std::back_inserter(result));
-  return result;
-};
+struct Join {
+  template <typename Range>
+  auto operator()(Range&& range) const {
+    std::vector<ql::ranges::range_value_t<ql::ranges::range_value_t<Range>>>
+        result;
+    auto view = ql::views::join(ad_utility::OwningView{AD_FWD(range)});
+    ql::ranges::copy(view, std::back_inserter(result));
+    return result;
+  }
+} join;
 
 // Run a test for a parallel multiway merge with random inputs. The input to the
 // merge are `numVecs` many `vector<size_t>` objects, each of which consists of
@@ -34,22 +39,22 @@ void testRandomInts() {
        numRowsGen = ad_utility::SlowRandomIntGenerator<size_t>(
            minVecSize, maxVecSize)]() mutable {
         std::vector<size_t> res(numRowsGen());
-        std::ranges::generate(res, gen);
-        std::ranges::sort(res);
+        ql::ranges::generate(res, gen);
+        ql::ranges::sort(res);
         return res;
       };
 
   std::vector<std::vector<size_t>> input(numVecs);
-  std::ranges::generate(input, generateRandomVec);
+  ql::ranges::generate(input, generateRandomVec);
 
   auto expected = join(std::vector<std::vector<size_t>>{input});
-  std::ranges::sort(expected);
+  ql::ranges::sort(expected);
 
   std::vector<size_t> result;
-  std::ranges::copy(std::views::join(ad_utility::OwningView{
-                        ad_utility::parallelMultiwayMerge<size_t, false>(
-                            1_GB, input, std::less<>{}, blocksize)}),
-                    std::back_inserter(result));
+  ql::ranges::copy(ql::views::join(ad_utility::OwningView{
+                       ad_utility::parallelMultiwayMerge<size_t, false>(
+                           1_GB, input, std::less<>{}, blocksize)}),
+                   std::back_inserter(result));
 
   EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
 }

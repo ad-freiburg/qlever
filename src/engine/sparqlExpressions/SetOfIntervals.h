@@ -2,12 +2,15 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SETOFINTERVALS_H
+#define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SETOFINTERVALS_H
 
 #include <limits>
 #include <utility>
 #include <vector>
 
+#include "backports/algorithm.h"
+#include "backports/three_way_comparison.h"
 #include "util/Exception.h"
 
 namespace ad_utility {
@@ -22,7 +25,7 @@ struct SetOfIntervals {
   constexpr static size_t upperBound = std::numeric_limits<size_t>::max();
 
   // _________________________________________________________________________
-  bool operator==(const SetOfIntervals&) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(SetOfIntervals, _intervals)
 
   /// Sort the intervals in ascending order and assert that they are indeed
   /// disjoint and nonempty.
@@ -77,9 +80,11 @@ struct SetOfIntervals {
   inline static std::vector<bool> toBitVector(const SetOfIntervals& a,
                                               size_t targetSize) {
     std::vector<bool> result(targetSize, false);
-    toBitVector(a, targetSize, std::ranges::begin(result));
+    toBitVector(a, targetSize, ql::ranges::begin(result));
     return result;
   }
 };
 
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SETOFINTERVALS_H

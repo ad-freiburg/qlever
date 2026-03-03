@@ -2,19 +2,20 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
 
-#pragma once
+#ifndef QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORYBINSEARCH_H
+#define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORYBINSEARCH_H
 
 #include <string>
 #include <string_view>
 
 #include "global/Pattern.h"
-#include "index/CompressedString.h"
 #include "index/vocabulary/VocabularyBinarySearchMixin.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/Algorithm.h"
 #include "util/Exception.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeVector.h"
+#include "util/Serializer/Serializer.h"
 
 // A vocabulary that stores all words in memory. The vocabulary supports
 // "holes", meaning that the indices of the contained words don't have to be
@@ -47,7 +48,7 @@ class VocabularyInMemoryBinSearch
 
   // Read the vocabulary from a file. The file must have been created using a
   // `WordWriter`.
-  void open(const string& fileName);
+  void open(const std::string& fileName);
 
   // Return the total number of words
   [[nodiscard]] size_t size() const {
@@ -60,7 +61,7 @@ class VocabularyInMemoryBinSearch
   std::optional<std::string_view> operator[](uint64_t index) const;
 
   // Convert an iterator to a `WordAndIndex`. Required for the mixin.
-  WordAndIndex iteratorToWordAndIndex(std::ranges::iterator_t<Words> it) const;
+  WordAndIndex iteratorToWordAndIndex(ql::ranges::iterator_t<Words> it) const;
 
   // A helper type that can be used to directly write a vocabulary to disk
   // word-by-word, without having to materialize it in RAM first.
@@ -74,7 +75,7 @@ class VocabularyInMemoryBinSearch
     explicit WordWriter(const std::string& filename);
     // Add the given `word` with the given `idx`. The `idx` must be greater than
     // all previous indices.
-    void operator()(std::string_view word, uint64_t idx);
+    uint64_t operator()(std::string_view word, uint64_t idx);
 
     // Finish writing and dump all contents that still reside in buffers to
     // disk.
@@ -87,4 +88,15 @@ class VocabularyInMemoryBinSearch
   // Const access to the underlying words.
   auto begin() const { return words_.begin(); }
   auto end() const { return words_.end(); }
+
+  // Generic serialization support.
+  AD_SERIALIZE_FRIEND_FUNCTION(VocabularyInMemoryBinSearch) {
+    (void)serializer;
+    (void)arg;
+    throw std::runtime_error(
+        "Generic serialization is not implemented for "
+        "VocabularyInMemoryBinSearch.");
+  }
 };
+
+#endif  // QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORYBINSEARCH_H

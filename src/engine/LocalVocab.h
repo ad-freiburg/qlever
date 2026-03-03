@@ -3,19 +3,20 @@
 // Authors: Hannah Bast <bast@cs.uni-freiburg.de>
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_LOCALVOCAB_H
+#define QLEVER_SRC_ENGINE_LOCALVOCAB_H
 
-#include <algorithm>
+#include <absl/container/flat_hash_set.h>
+#include <absl/container/node_hash_set.h>
+
 #include <cstdlib>
 #include <memory>
-#include <ranges>
-#include <span>
 #include <string>
 #include <vector>
 
-#include "absl/container/node_hash_set.h"
-#include "global/Id.h"
-#include "parser/LiteralOrIri.h"
+#include "backports/algorithm.h"
+#include "backports/span.h"
+#include "index/LocalVocabEntry.h"
 #include "util/BlankNodeManager.h"
 #include "util/Exception.h"
 
@@ -42,16 +43,22 @@ class LocalVocab {
   using Set = absl::node_hash_set<LocalVocabEntry>;
   std::shared_ptr<Set> primaryWordSet_ = std::make_shared<Set>();
 
+  using LocalBlankNodeManager =
+      ad_utility::BlankNodeManager::LocalBlankNodeManager;
+
   // The other sets of `LocalVocabEntry`s, which are static.
-  std::vector<std::shared_ptr<const Set>> otherWordSets_;
+  absl::flat_hash_set<std::shared_ptr<const Set>> otherWordSets_;
 
   // The number of words (so that we can compute `size()` in constant time).
   size_t size_ = 0;
 
   // Each `LocalVocab` has its own `LocalBlankNodeManager` to generate blank
   // nodes when needed (e.g., when parsing the result of a SERVICE query).
-  std::shared_ptr<ad_utility::BlankNodeManager::LocalBlankNodeManager>
-      localBlankNodeManager_;
+  std::shared_ptr<LocalBlankNodeManager> localBlankNodeManager_;
+
+  // Flag to prevent modification after copy.
+  std::unique_ptr<std::atomic_bool> copied_ =
+      std::make_unique<std::atomic_bool>(false);
 
  public:
   // Create a new, empty local vocabulary.
@@ -99,6 +106,9 @@ class LocalVocab {
   // Return true if and only if the local vocabulary is empty.
   bool empty() const { return size() == 0; }
 
+  // The number of set stores (primary set and other sets).
+  size_t numSets() const { return 1 + otherWordSets_.size(); }
+
   // Get the `LocalVocabEntry` corresponding to the given `LocalVocabIndex`.
   //
   // NOTE: This used to be a more complex function but is now a simple
@@ -109,14 +119,26 @@ class LocalVocab {
   // to this local vocab. The purpose is to keep all the contained
   // `LocalVocabEntry`s alive as long as this `LocalVocab` is alive. The
   // primary set of this `LocalVocab` remains unchanged.
-  template <std::ranges::range R>
-  void mergeWith(const R& vocabs) {
-    auto inserter = std::back_inserter(otherWordSets_);
-    using std::views::filter;
-    for (const auto& vocab : vocabs | filter(std::not_fn(&LocalVocab::empty))) {
-      std::ranges::copy(vocab.otherWordSets_, inserter);
-      *inserter = vocab.primaryWordSet_;
-      size_ += vocab.size_;
+  CPP_template(typename R)(requires ql::ranges::range<R>) void mergeWith(
+      const R& vocabs) {
+    using ql::views::filter;
+    auto addWordSet = [this](const std::shared_ptr<const Set>& set) {
+      if (set == primaryWordSet_) {
+        return;
+      }
+      bool added = otherWordSets_.insert(set).second;
+      size_ += static_cast<size_t>(added) * set->size();
+    };
+    // Note: Even though the `otherWordsSet_`is a hash set that filters out
+    // duplicates, we still manually filter out empty sets, because these
+    // typically don't compare equal to each other because of the`shared_ptr`
+    // semantics.
+    for (const LocalVocab& vocab :
+         vocabs | filter(std::not_fn(&LocalVocab::empty))) {
+      // Mark vocab as copied
+      vocab.copied_->store(true);
+      ql::ranges::for_each(vocab.otherWordSets_, addWordSet);
+      addWordSet(vocab.primaryWordSet_);
     }
 
     // Also merge the `vocabs` `LocalBlankNodeManager`s, if they exist.
@@ -124,12 +146,12 @@ class LocalVocab {
         ad_utility::BlankNodeManager::LocalBlankNodeManager;
     auto localManagersView =
         vocabs |
-        std::views::transform([](const LocalVocab& vocab) -> const auto& {
+        ql::views::transform([](const LocalVocab& vocab) -> const auto& {
           return vocab.localBlankNodeManager_;
         });
 
-    auto it = std::ranges::find_if(localManagersView,
-                                   [](const auto& l) { return l != nullptr; });
+    auto it = ql::ranges::find_if(localManagersView,
+                                  [](const auto& l) { return l != nullptr; });
     if (it == localManagersView.end()) {
       return;
     }
@@ -140,13 +162,33 @@ class LocalVocab {
     localBlankNodeManager_->mergeWith(localManagersView);
   }
 
+  // Convenience function for a single `LocalVocab`.
+  void mergeWith(const LocalVocab& other);
+
   // Create a new local vocab with empty set and other sets that are the union
   // of all sets (primary and other) of the given local vocabs.
-  static LocalVocab merge(std::span<const LocalVocab*> vocabs);
+  static LocalVocab merge(ql::span<const LocalVocab*> vocabs);
 
   // Return all the words from all the word sets as a vector. This is useful
   // for testing.
   std::vector<LocalVocabEntry> getAllWordsForTesting() const;
+
+  const Set& primaryWordSet() const { return *primaryWordSet_; }
+  const auto& otherSets() const { return otherWordSets_; }
+
+  // This function returns the required data structure to restore the
+  // `LocalBlankNodeManager`, e.g. when UPDATEs or cached queries are serialized
+  // to disk and the engine is restarted.
+  std::vector<LocalBlankNodeManager::OwnedBlocksEntry>
+  getOwnedLocalBlankNodeBlocks() const;
+
+  // Restore the state of the `LocalBlankNodeManager` from the serialized data
+  // structure obtained from `getOwnedLocalBlankNodeBlocks` above. This must be
+  // called at the engine start before any queries that might create new local
+  // blank nodes are run (see `BlankNodeManager.h` for details).
+  void reserveBlankNodeBlocksFromExplicitIndices(
+      const std::vector<LocalBlankNodeManager::OwnedBlocksEntry>& indices,
+      ad_utility::BlankNodeManager* blankNodeManager);
 
   // Get a new BlankNodeIndex using the LocalBlankNodeManager.
   [[nodiscard]] BlankNodeIndex getBlankNodeIndex(
@@ -156,13 +198,31 @@ class LocalVocab {
   // generated by the blank node manager of this local vocab.
   bool isBlankNodeIndexContained(BlankNodeIndex blankNodeIndex) const;
 
+  // Wrapper around a bunch of word sets without any access provided to them.
+  // This is useful to extend the lifetime of this `LocalVocab` without making
+  // this instance read-only by merging and/or cloning.
+  class QL_NODISCARD(
+      "The sole purpose of this object is to extend "
+      "lifetimes.") LifetimeExtender {
+    friend LocalVocab;
+    std::vector<std::shared_ptr<const Set>> wordSets_;
+
+    explicit LifetimeExtender(std::vector<std::shared_ptr<const Set>> wordSets)
+        : wordSets_{std::move(wordSets)} {}
+  };
+
+  // Return a `LifetimeExtender` for all the words stored by this `LocalVocab`.
+  // You can safely keep writing to this `LocalVocab` after acquiring it.
+  LifetimeExtender getLifetimeExtender() const;
+
  private:
   // Accessors for the primary set.
   Set& primaryWordSet() { return *primaryWordSet_; }
-  const Set& primaryWordSet() const { return *primaryWordSet_; }
 
   // Common implementation for the two methods `getIndexAndAddIfNotContained`
   // and `getIndexOrNullopt` above.
   template <typename WordT>
   LocalVocabIndex getIndexAndAddIfNotContainedImpl(WordT&& word);
 };
+
+#endif  // QLEVER_SRC_ENGINE_LOCALVOCAB_H

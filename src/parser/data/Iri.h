@@ -2,11 +2,12 @@
 // Chair of Algorithms and Data Structures.
 // Author: Robin Textor-Falconi (textorr@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_DATA_IRI_H
+#define QLEVER_SRC_PARSER_DATA_IRI_H
 
 #include <string>
 
-#include "parser/data/ConstructQueryExportContext.h"
+#include "backports/three_way_comparison.h"
 
 // TODO: replace usages of this class with `ad_utility::triple_component::Iri`
 class Iri {
@@ -17,17 +18,12 @@ class Iri {
 
   // ___________________________________________________________________________
   // Used for testing
-  [[nodiscard]] const std::string& iri() const { return _string; }
+  const std::string& iri() const { return _string; }
 
   // ___________________________________________________________________________
-  [[nodiscard]] std::optional<std::string> evaluate(
-      [[maybe_unused]] const ConstructQueryExportContext& context,
-      [[maybe_unused]] PositionInTriple role) const {
-    return _string;
-  }
+  std::string toSparql() const { return _string; }
 
-  // ___________________________________________________________________________
-  [[nodiscard]] std::string toSparql() const { return _string; }
-
-  bool operator==(const Iri& other) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Iri, _string)
 };
+
+#endif  // QLEVER_SRC_PARSER_DATA_IRI_H

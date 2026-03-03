@@ -1,12 +1,21 @@
-// Copyright 2015, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: 2015 - 2017 Björn Buchhold (buchhold@cs.uni-freiburg.de)
-// Author: 2023 -      Johannes Kalmbach (kalmbach@cs.uni-freiburg.de)
+// Copyright 2015 - 2026 The QLever Authors, in particular:
+//
+// 2015 - 2017 Björn Buchhold <buchhold@cs.uni-freiburg.de>, UFR
+// 2023 - 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2025        Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
-#pragma once
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
+#ifndef QLEVER_SRC_ENGINE_SORT_H
+#define QLEVER_SRC_ENGINE_SORT_H
+
+#include "engine/LocalVocab.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/Result.h"
 
 // This operation sorts an `IdTable` by the `internal` order of the IDs. This
 // order is cheap to compute (just a bitwise compare of integers), but is
@@ -26,9 +35,9 @@ class Sort : public Operation {
        std::vector<ColumnIndex> sortColumnIndices);
 
  public:
-  virtual string getDescriptor() const override;
+  virtual std::string getDescriptor() const override;
 
-  virtual vector<ColumnIndex> resultSortedOn() const override {
+  virtual std::vector<ColumnIndex> resultSortedOn() const override {
     return sortColumnIndices_;
   }
 
@@ -41,8 +50,6 @@ class Sort : public Operation {
   virtual float getMultiplicity(size_t col) override {
     return subtree_->getMultiplicity(col);
   }
-
-  std::shared_ptr<QueryExecutionTree> getSubtree() const { return subtree_; }
 
   virtual size_t getCostEstimate() override {
     size_t size = getSizeEstimateBeforeLimit();
@@ -62,18 +69,50 @@ class Sort : public Operation {
 
   [[nodiscard]] size_t getResultWidth() const override;
 
-  vector<QueryExecutionTree*> getChildren() override {
+  std::vector<QueryExecutionTree*> getChildren() override {
     return {subtree_.get()};
   }
 
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeSortedTree(
+      const std::vector<ColumnIndex>& sortColumns) const override;
+
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(
+      const std::set<Variable>& variables) const override;
+
  private:
-  virtual ProtoResult computeResult(
-      [[maybe_unused]] bool requestLaziness) override;
+  std::unique_ptr<Operation> cloneImpl() const override;
+
+  virtual Result computeResult(bool requestLaziness) override;
+
+  // Sort in memory, using `Engine::sort`.
+  Result computeResultInMemory(IdTable idTable, LocalVocab localVocab) const;
+
+  // Sort externally, using `CompressedExternalIdTableSorter`, using the value
+  // of `sort-in-memory-threshold` as memory limit.
+  //
+  // The `collectedBlocks` are the blocks that have already been read from
+  // `input` (until the `sort-in-memory-threshold` was exceeded),
+  // `mergedLocalVocab` is the merged local vocabs for these blocks, and the
+  // remaining blocks to be read are provided via `it` and `end`. The shared
+  // pointer `input` is provided so that its resources can be freed once all
+  // blocks have been pushed to the external sorter.
+  //
+  // NOTE: `Iterator` and `Sentinel` are separate template types because C++20
+  // ranges (like `InputRangeFromGet`) use different types for begin and end.
+  template <typename Iterator, typename Sentinel>
+  Result computeResultExternal(std::vector<IdTable> collectedBlocks,
+                               LocalVocab mergedLocalVocab, Iterator it,
+                               Sentinel end,
+                               std::shared_ptr<const Result> input,
+                               bool requestLaziness) const;
 
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap()
       const override {
     return subtree_->getVariableColumns();
   }
 
-  string getCacheKeyImpl() const override;
+  std::string getCacheKeyImpl() const override;
 };
+
+#endif  // QLEVER_SRC_ENGINE_SORT_H

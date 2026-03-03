@@ -1,18 +1,22 @@
 //  Copyright 2022, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_DATE_H
 #define QLEVER_DATE_H
 
 #include <absl/strings/str_cat.h>
 
-#include <bit>
 #include <cmath>
 #include <cstdint>
 #include <exception>
 #include <sstream>
 #include <variant>
+
+#include "backports/keywords.h"
+#include "backports/three_way_comparison.h"
 
 // Exception that is thrown when a value for a component of the `Date`, `Time`
 // or `Datetime` classes below is out of range (e.g. the month 13, or the hour
@@ -22,7 +26,8 @@ class DateOutOfRangeException : public std::exception {
   std::string message_;
 
  public:
-  DateOutOfRangeException(std::string_view name, const auto& value)
+  template <typename T>
+  DateOutOfRangeException(std::string_view name, const T& value)
       : message_(absl::StrCat(name, " ", value,
                               " is out of range for a DateTime")) {}
   [[nodiscard]] const char* what() const noexcept override {
@@ -40,8 +45,9 @@ class DateParseException : public std::runtime_error {
 namespace detail {
 // Check that `min <= element <= max`. Throw `DateOutOfRangeException` if the
 // check fails.
-constexpr void checkBoundsIncludingMax(const auto& element, const auto& min,
-                                       const auto& max, std::string_view name) {
+template <typename T>
+constexpr void checkBoundsIncludingMax(const T& element, const T& min,
+                                       const T& max, std::string_view name) {
   if (element < min || element > max) {
     throw DateOutOfRangeException{name, element};
   }
@@ -49,8 +55,9 @@ constexpr void checkBoundsIncludingMax(const auto& element, const auto& min,
 
 // Check that `min <= element < max`. Throw `DateOutOfRangeException` if the
 // check fails.
-constexpr void checkBoundsExcludingMax(const auto& element, const auto& min,
-                                       const auto& max, std::string_view name) {
+template <typename T>
+constexpr void checkBoundsExcludingMax(const T& element, const T& min,
+                                       const T& max, std::string_view name) {
   if (element < min || element >= max) {
     throw DateOutOfRangeException{name, element};
   }
@@ -91,30 +98,30 @@ class Date {
   static constexpr int minYear = -9999;
   static constexpr int maxYear = 9999;
   static constexpr uint8_t numBitsYear =
-      std::bit_width(unsigned{maxYear - minYear});
+      absl::bit_width(unsigned{maxYear - minYear});
 
   // The special month value `0` is used to encode "no month was specified" (i.e
   // "This is a `xsd:gYear`).
   static constexpr int minMonth = 0;
   static constexpr unsigned maxMonth = 12;
-  static constexpr uint8_t numBitsMonth = std::bit_width(maxMonth);
+  static constexpr uint8_t numBitsMonth = absl::bit_width(maxMonth);
 
   // The special day value `0` is used to encode "no day was specified" (i.e
   // "This is a `xsd:gYearMonth`).
   static constexpr int minDay = 0;
   static constexpr unsigned maxDay = 31;
-  static constexpr uint8_t numBitsDay = std::bit_width(maxDay);
+  static constexpr uint8_t numBitsDay = absl::bit_width(maxDay);
 
   // The special hour value `-1` is used to encode "no hour was specified" (i.e
   // "This is a `xsd:Date`).
   static constexpr int minHour = -1;
   static constexpr unsigned maxHour = 23;
   static constexpr uint8_t numBitsHour =
-      std::bit_width(unsigned{maxHour - minHour});
+      absl::bit_width(unsigned{maxHour - minHour});
 
   static constexpr int minMinute = 0;
   static constexpr unsigned maxMinute = 59;
-  static constexpr uint8_t numBitsMinute = std::bit_width(maxMinute);
+  static constexpr uint8_t numBitsMinute = absl::bit_width(maxMinute);
 
   // Seconds are imported and exported as double, but internally stored as fixed
   // point decimals with millisecond precision.
@@ -122,7 +129,7 @@ class Date {
   static constexpr double maxSecond = 60.0;
   static constexpr double secondMultiplier = 1024.0;
   static constexpr uint8_t numBitsSecond =
-      std::bit_width(static_cast<unsigned>(maxSecond * secondMultiplier));
+      absl::bit_width(static_cast<unsigned>(maxSecond * secondMultiplier));
 
   // The time zone is an hour in -23..23. It is shifted to the positive range
   // 0..22 (similar to the years). There are two additional "special" time
@@ -133,7 +140,7 @@ class Date {
   static constexpr int maxTimeZoneActually = 25;
   static constexpr int minTimeZone = -23;
   static constexpr int maxTimeZone = 23;
-  static constexpr uint8_t numBitsTimeZone = std::bit_width(
+  static constexpr uint8_t numBitsTimeZone = absl::bit_width(
       static_cast<unsigned>(maxTimeZoneActually - minTimeZoneActually));
 
   // The number of bits that are not needed for the encoding of the Date value.
@@ -162,10 +169,10 @@ class Date {
 
  public:
   struct NoTimeZone {
-    bool operator==(const NoTimeZone&) const = default;
+    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(NoTimeZone)
   };
   struct TimeZoneZ {
-    bool operator==(const TimeZoneZ&) const = default;
+    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(TimeZoneZ)
   };
   using TimeZone = std::variant<NoTimeZone, TimeZoneZ, int>;
   /// Construct a `Date` from values for the different components. If any of the
@@ -183,31 +190,37 @@ class Date {
     (void)unusedBits_;
   }
 
+#ifdef QLEVER_CPP_17
+  // We need the default-constructibility for the C++17 version of `bit_cast`.
+  Date() = default;
+#endif
+
   /// Convert the `Date` to a `uint64_t`. This just casts the underlying
   /// representation.
-  [[nodiscard]] constexpr uint64_t toBits() const {
-    return std::bit_cast<uint64_t>(*this);
+  [[nodiscard]] QL_CONSTEXPR uint64_t toBits() const {
+    return absl::bit_cast<uint64_t>(*this);
   }
 
   /// Convert a `uint64_t` to a `Date`. This is only valid if the `uint64_t` was
   /// obtained via a call to `Date::toBits()`. This just casts the underlying
   /// representation.
-  static constexpr Date fromBits(uint64_t bytes) {
-    return std::bit_cast<Date>(bytes);
+  static QL_CONSTEXPR Date fromBits(uint64_t bytes) {
+    return absl::bit_cast<Date>(bytes);
   }
 
   /// Equality comparison is performed directly on the underlying
   /// representation.
-  [[nodiscard]] constexpr bool operator==(const Date& rhs) const {
+  [[nodiscard]] QL_CONSTEXPR bool operator==(const Date& rhs) const {
     return toBits() == rhs.toBits();
   }
 
   /// Comparison is performed directly on the underlying representation. This is
   /// very efficient but has some caveats concerning the ordering of dates with
   /// different time zone values (see the docstring of this class).
-  [[nodiscard]] constexpr auto operator<=>(const Date& rhs) const {
-    return toBits() <=> rhs.toBits();
+  [[nodiscard]] auto compareThreeWay(const Date& rhs) const {
+    return ql::compareThreeWay(toBits(), rhs.toBits());
   }
+  [[nodiscard]] QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(Date);
 
   template <typename H>
   friend H AbslHashValue(H h, const Date& d) {
@@ -282,7 +295,8 @@ class Date {
   }
 
   constexpr void setTimeZone(TimeZone timeZone) {
-    auto getTimeZone = []<typename T>(const T& value) -> int {
+    auto getTimeZone = [](const auto& value) -> int {
+      using T = std::decay_t<decltype(value)>;
       if constexpr (std::is_same_v<T, NoTimeZone>) {
         return 0;
       } else if constexpr (std::is_same_v<T, TimeZoneZ>) {
@@ -308,7 +322,8 @@ class Date {
   std::string formatTimeZone() const;
 
   // Get the correct `TimeZone` from a regex match for the `timeZoneRegex`.
-  static TimeZone parseTimeZone(const auto& match);
+  template <typename T>
+  static TimeZone parseTimeZone(const T& match);
 
   // Convert to a string (without quotes) that represents the stored date, and a
   // pointer to the IRI of the corresponding datatype (currently always
@@ -316,6 +331,13 @@ class Date {
   // `xsd:dateTime` pointing to the January 1st, 00:00 hours. (This is the
   // format used by Wikidata).
   std::pair<std::string, const char*> toStringAndType() const;
+
+  // Acquire the year, but padded up to 4 digits with a leading `-` if negative.
+  // For example: 100 -> "0100" and -100 -> "-0100".
+  std::string getFormattedYear() const;
 };
+#ifdef QLEVER_CPP_17
+static_assert(std::is_default_constructible_v<Date>);
+#endif
 
 #endif  // QLEVER_DATE_H

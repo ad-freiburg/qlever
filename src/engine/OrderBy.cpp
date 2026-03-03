@@ -20,12 +20,12 @@ size_t OrderBy::getResultWidth() const { return subtree_->getResultWidth(); }
 // _____________________________________________________________________________
 OrderBy::OrderBy(QueryExecutionContext* qec,
                  std::shared_ptr<QueryExecutionTree> subtree,
-                 vector<pair<ColumnIndex, bool>> sortIndices)
+                 std::vector<std::pair<ColumnIndex, bool>> sortIndices)
     : Operation{qec},
       subtree_{std::move(subtree)},
       sortIndices_{std::move(sortIndices)} {
   AD_CONTRACT_CHECK(!sortIndices_.empty());
-  AD_CONTRACT_CHECK(std::ranges::all_of(
+  AD_CONTRACT_CHECK(ql::ranges::all_of(
       sortIndices_,
       [this](ColumnIndex index) { return index < getResultWidth(); },
       ad_utility::first));
@@ -63,9 +63,10 @@ std::string OrderBy::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-ProtoResult OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
+Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
   using std::endl;
-  LOG(DEBUG) << "Getting sub-result for OrderBy result computation..." << endl;
+  AD_LOG_DEBUG << "Getting sub-result for OrderBy result computation..."
+               << endl;
   std::shared_ptr<const Result> subRes = subtree_->getResult();
 
   // TODO<joka921> proper timeout for sorting operations
@@ -74,7 +75,7 @@ ProtoResult OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
       subTable.numRows(), subTable.numColumns(), deadline_,
       "Sort for COUNT(DISTINCT *)");
 
-  LOG(DEBUG) << "OrderBy result computation..." << endl;
+  AD_LOG_DEBUG << "OrderBy result computation..." << endl;
   IdTable idTable = subRes->idTable().clone();
 
   size_t width = idTable.numColumns();
@@ -119,13 +120,13 @@ ProtoResult OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
   // We cannot use the `CALL_FIXED_SIZE` macro here because the `sort` function
   // is templated not only on the integer `I` (which the `callFixedSize`
   // function deals with) but also on the `comparison`.
-  ad_utility::callFixedSize(width, [&idTable, &comparison]<size_t I>() {
+  ad_utility::callFixedSizeVi(width, [&idTable, &comparison](auto I) {
     Engine::sort<I>(&idTable, comparison);
   });
   // We can't check during sort, so reset status here
   cancellationHandle_->resetWatchDogState();
   checkCancellation();
-  LOG(DEBUG) << "OrderBy result computation done." << endl;
+  AD_LOG_DEBUG << "OrderBy result computation done." << endl;
   return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
 }
 
@@ -138,4 +139,10 @@ OrderBy::SortedVariables OrderBy::getSortedVariables() const {
                         isDescending ? Desc : Asc);
   }
   return result;
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> OrderBy::cloneImpl() const {
+  return std::make_unique<OrderBy>(_executionContext, subtree_->clone(),
+                                   sortIndices_);
 }

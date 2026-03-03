@@ -2,7 +2,7 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#include "WebSocketSession.h"
+#include "util/http/websocket/WebSocketSession.h"
 
 #include <boost/asio/experimental/awaitable_operators.hpp>
 #include <ctre-unicode.hpp>
@@ -17,9 +17,14 @@
 namespace ad_utility::websocket {
 using namespace boost::asio::experimental::awaitable_operators;
 
+namespace detail {
+// CTRE regex pattern for C++17 compatibility
+constexpr ctll::fixed_string watchPathRegex = "/watch/([^/?]+)";
+}  // namespace detail
+
 // Extracts the query id from a URL path. Returns the empty string when invalid.
 std::string extractQueryId(std::string_view path) {
-  auto match = ctre::match<"/watch/([^/?]+)">(path);
+  auto match = ctre::match<detail::watchPathRegex>(path);
   if (match) {
     return match.get<1>().to_string();
   }

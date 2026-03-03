@@ -2,10 +2,12 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_INDEX_INDEXFORMATVERSION_H
+#define QLEVER_SRC_INDEX_INDEXFORMATVERSION_H
 
 #include <cstdint>
 
+#include "backports/three_way_comparison.h"
 #include "util/DateYearDuration.h"
 #include "util/json.h"
 
@@ -30,7 +32,9 @@ struct IndexFormatVersion {
     version.prNumber_ = static_cast<uint64_t>(j["pull-request-number"]);
     version.date_ = DateYearOrDuration::parseXsdDate(std::string{j["date"]});
   }
-  bool operator==(const IndexFormatVersion&) const = default;
+
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(IndexFormatVersion, prNumber_,
+                                              date_)
 };
 
 // The actual index version. Change it once the binary format of the index
@@ -38,3 +42,5 @@ struct IndexFormatVersion {
 inline const IndexFormatVersion& indexFormatVersion{
     1572, DateYearOrDuration{Date{2024, 10, 22}}};
 }  // namespace qlever
+
+#endif  // QLEVER_SRC_INDEX_INDEXFORMATVERSION_H

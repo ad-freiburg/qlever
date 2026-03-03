@@ -3,17 +3,19 @@
 // Author:
 //   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2020-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
-#pragma once
+
+#ifndef QLEVER_SRC_ENGINE_FILTER_H
+#define QLEVER_SRC_ENGINE_FILTER_H
 
 #include <utility>
 #include <vector>
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
-#include "parser/ParsedQuery.h"
 
 class Filter : public Operation {
+  using PrefilterVariablePair = sparqlExpression::PrefilterExprVariablePair;
+
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;
   sparqlExpression::SparqlExpressionPimpl _expression;
@@ -27,10 +29,10 @@ class Filter : public Operation {
          sparqlExpression::SparqlExpressionPimpl expression);
 
  private:
-  string getCacheKeyImpl() const override;
+  std::string getCacheKeyImpl() const override;
 
  public:
-  string getDescriptor() const override;
+  std::string getDescriptor() const override;
 
   std::vector<ColumnIndex> resultSortedOn() const override {
     return _subtree->resultSortedOn();
@@ -54,20 +56,34 @@ class Filter : public Operation {
   }
 
  private:
+  std::unique_ptr<Operation> cloneImpl() const override;
+
   VariableToColumnMap computeVariableToColumnMap() const override {
     return _subtree->getVariableColumns();
   }
 
-  ProtoResult computeResult(bool requestLaziness) override;
+  // The method is directly invoked with the construction of this `Filter`
+  // object. Its implementation retrieves <PrefilterExpression, Variable> pairs
+  // from the corresponding `SparqlExpression` and uses them to call
+  // `QueryExecutionTree::getUpdatedQueryExecutionTreeWithPrefilterApplied()` on
+  // the `subtree_`. If necessary the `QueryExecutionTree` for this entity will
+  // be updated.
+  void setPrefilterExpressionForChildren();
+
+  Result computeResult(bool requestLaziness) override;
 
   // Perform the actual filter operation of the data provided.
-  template <int WIDTH>
-  void computeFilterImpl(IdTable& dynamicResultTable, const IdTable& input,
-                         const LocalVocab& localVocab,
-                         std::vector<ColumnIndex> sortedBy) const;
+  CPP_template(int WIDTH, typename Table)(
+      requires ad_utility::SimilarTo<
+          Table, IdTable>) void computeFilterImpl(IdTable& dynamicResultTable,
+                                                  Table&& input,
+                                                  std::vector<ColumnIndex>
+                                                      sortedBy) const;
 
   // Run `computeFilterImpl` on the provided IdTable
-  IdTable filterIdTable(std::vector<ColumnIndex> sortedBy,
-                        const IdTable& idTable,
-                        const LocalVocab& localVocab) const;
+  CPP_template(typename Table)(
+      requires ad_utility::SimilarTo<Table, IdTable>) IdTable
+      filterIdTable(std::vector<ColumnIndex> sortedBy, Table&& idTable) const;
 };
+
+#endif  // QLEVER_SRC_ENGINE_FILTER_H

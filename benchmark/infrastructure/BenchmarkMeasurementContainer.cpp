@@ -1,6 +1,8 @@
 // Copyright 2023, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 
@@ -76,8 +78,7 @@ ResultGroup::operator std::string() const {
   If the given vector is empty, return " None". Else, return the concatenation
   of "\n\n" with the string list representation of the vector.
   */
-  auto vectorToStringListOrNone =
-      []<typename T>(const std::vector<T>& vec) -> std::string {
+  auto vectorToStringListOrNone = [](const auto& vec) -> std::string {
     if (vec.empty()) {
       return " None";
     }
@@ -129,7 +130,7 @@ void ResultTable::init(const std::string& descriptor,
   descriptorForLog_ = std::move(descriptorForLog);
   columnNames_ = columnNames;
   entries_.resize(rowNames.size());
-  std::ranges::fill(entries_, std::vector<EntryType>(columnNames.size()));
+  ql::ranges::fill(entries_, std::vector<EntryType>(columnNames.size()));
 
   // Setting the row names.
   for (size_t row = 0; row < rowNames.size(); row++) {
@@ -172,12 +173,13 @@ ResultTable::operator std::string() const {
 
   // Convert an `EntryType` of `ResultTable` to a screen friendly
   // format.
-  auto entryToStringVisitor = []<typename T>(const T& entry) {
+  auto entryToStringVisitor = [](const auto& entry) {
     /*
     `EntryType` has multiple distinct possible types, that all need different
     handling. Fortunately, we can decide the handling at compile time and
     throw the others away, using `if constexpr(std::is_same<...,...>::value)`.
     */
+    using T = std::decay_t<decltype(entry)>;
     if constexpr (std::is_same_v<T, std::monostate>) {
       // No value, print it as NA.
       return "NA"s;
@@ -287,10 +289,10 @@ ResultTable::operator std::string() const {
         });
 
     // Which of the entries is the longest?
-    columnMaxStringWidth.at(column) = std::ranges::max(stringWidthOfRow);
+    columnMaxStringWidth.at(column) = ql::ranges::max(stringWidthOfRow);
 
     // Is the name of the column bigger?
-    columnMaxStringWidth.at(column) = std::ranges::max(
+    columnMaxStringWidth.at(column) = ql::ranges::max(
         columnMaxStringWidth.at(column), columnNames_.at(column).length());
   }
 
@@ -349,8 +351,9 @@ void to_json(nlohmann::ordered_json& j, const ResultTable& resultTable) {
 
 // The code for the string insertion operator of a class, that can be casted to
 // string.
+template <typename T>
 static std::ostream& streamInserterOperatorImplementation(std::ostream& os,
-                                                          const auto& obj) {
+                                                          const T& obj) {
   os << static_cast<std::string>(obj);
   return os;
 }
@@ -371,20 +374,20 @@ std::ostream& operator<<(std::ostream& os, const ResultGroup& resultGroup) {
 }
 
 // ____________________________________________________________________________
-template <ad_utility::SameAsAny<ResultEntry, ResultTable> T>
+template <typename T>
 void ResultGroup::deleteEntryImpl(T& entry) {
   // The vector, that holds our entries.
   auto& vec = [this]() -> auto& {
-    if constexpr (std::same_as<T, ResultEntry>) {
+    if constexpr (ql::concepts::same_as<T, ResultEntry>) {
       return resultEntries_;
     } else {
-      static_assert(std::same_as<T, ResultTable>);
+      static_assert(ql::concepts::same_as<T, ResultTable>);
       return resultTables_;
     }
   }();
 
   // Delete `entry`.
-  auto entryIterator{std::ranges::find(
+  auto entryIterator{ql::ranges::find(
       vec, &entry, [](const ad_utility::CopyableUniquePtr<T>& pointer) {
         return pointer.get();
       })};

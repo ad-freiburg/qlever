@@ -5,17 +5,16 @@
 #ifndef QLEVER_UNIQUECLEANUP_H
 #define QLEVER_UNIQUECLEANUP_H
 
-#include <concepts>
-#include <functional>
-
+#include "backports/concepts.h"
+#include "backports/functional.h"
 #include "util/ResetWhenMoved.h"
 
 namespace ad_utility::unique_cleanup {
 
 /// Wrapper class that allows to call a function
 /// just before the wrapper value T is destroyed.
-template <std::move_constructible T, typename Func = std::function<void(T&&)>>
-class UniqueCleanup {
+CPP_template(typename T, typename Func = std::function<void(T&&)>)(
+    requires ql::concepts::move_constructible<T>) class UniqueCleanup {
   /// Boolean indicating if object was not moved out of
   ResetWhenMoved<bool, false> active_ = true;
   /// Wrapped value

@@ -8,16 +8,8 @@
 #include "util/http/streamable_body.h"
 
 using namespace ad_utility::httpUtils::httpStreams;
-using ad_utility::streams::basic_stream_generator;
-using ad_utility::streams::stream_generator;
 
 namespace {
-cppcoro::generator<std::string> toGenerator(stream_generator generator) {
-  for (auto& value : generator) {
-    co_yield value;
-  }
-}
-
 std::string_view toStringView(
     const streamable_body::writer::const_buffers_type& buffer) {
   return {static_cast<const char*>(buffer.data()), buffer.size()};
@@ -47,12 +39,9 @@ static std::ostream& operator<<(
 }
 }  // namespace boost
 
-namespace {
-constexpr size_t BUFFER_SIZE = 1u << 20;
-}
-
-TEST(StreamableBodyTest, TestInitReturnsNoErrorCode) {
-  auto generator = toGenerator(stream_generator{});
+// _____________________________________________________________________________
+TEST(StreamableBody, InitReturnsNoErrorCode) {
+  cppcoro::generator<std::string> generator{};
   boost::beast::http::header<false, boost::beast::http::fields> header;
   streamable_body::writer writer{header, generator};
   boost::system::error_code errorCode;
@@ -61,15 +50,12 @@ TEST(StreamableBodyTest, TestInitReturnsNoErrorCode) {
   ASSERT_EQ(errorCode, boost::system::error_code());
 }
 
-namespace {
-stream_generator generateException() {
-  throw std::runtime_error("Test Exception");
-  co_return;
-}
-}  // namespace
-
-TEST(StreamableBodyTest, TestGeneratorExceptionResultsInErrorCode) {
-  auto generator = toGenerator(generateException());
+// _____________________________________________________________________________
+TEST(StreamableBody, GeneratorExceptionResultsInErrorCode) {
+  auto generator = []() -> cppcoro::generator<std::string> {
+    throw std::runtime_error("Test Exception");
+    co_return;
+  }();
   boost::beast::http::header<false, boost::beast::http::fields> header;
   streamable_body::writer writer{header, generator};
   boost::system::error_code errorCode;
@@ -79,12 +65,9 @@ TEST(StreamableBodyTest, TestGeneratorExceptionResultsInErrorCode) {
   ASSERT_EQ(result, boost::none);
 }
 
-namespace {
-stream_generator generateNothing() { co_return; }
-}  // namespace
-
-TEST(StreamableBodyTest, TestEmptyGeneratorReturnsEmptyResult) {
-  auto generator = toGenerator(generateNothing());
+// _____________________________________________________________________________
+TEST(StreamableBody, EmptyGeneratorReturnsEmptyResult) {
+  auto generator = []() -> cppcoro::generator<std::string> { co_return; }();
   boost::beast::http::header<false, boost::beast::http::fields> header;
   streamable_body::writer writer{header, generator};
   boost::system::error_code errorCode;
@@ -94,16 +77,12 @@ TEST(StreamableBodyTest, TestEmptyGeneratorReturnsEmptyResult) {
   ASSERT_EQ(result, boost::none);
 }
 
-namespace {
-stream_generator generateMultipleElements() {
-  co_yield std::string(BUFFER_SIZE, 'A');
-  co_yield 1;
-  co_yield "Abc";
-}
-}  // namespace
-
-TEST(StreamableBodyTest, TestGeneratorReturnsBufferedResults) {
-  auto generator = toGenerator(generateMultipleElements());
+// _____________________________________________________________________________
+TEST(StreamableBody, GeneratorReturnsBufferedResults) {
+  auto generator = []() -> cppcoro::generator<std::string> {
+    co_yield "AAAAAAAAAA";
+    co_yield "1Abc";
+  }();
   boost::beast::http::header<false, boost::beast::http::fields> header;
   streamable_body::writer writer{header, generator};
   boost::system::error_code errorCode;
@@ -111,13 +90,13 @@ TEST(StreamableBodyTest, TestGeneratorReturnsBufferedResults) {
   auto result = writer.get(errorCode);
   ASSERT_EQ(errorCode, boost::system::error_code());
   ASSERT_NE(result, boost::none);
-  ASSERT_EQ(toStringView(result->first), std::string(BUFFER_SIZE, 'A'));
+  ASSERT_EQ(toStringView(result->first), "AAAAAAAAAA");
   ASSERT_TRUE(result->second);
 
   auto result2 = writer.get(errorCode);
   ASSERT_EQ(errorCode, boost::system::error_code());
   ASSERT_NE(result2, boost::none);
-  ASSERT_EQ(toStringView(result2->first), std::string("1Abc"));
+  ASSERT_EQ(toStringView(result2->first), "1Abc");
   ASSERT_TRUE(result2->second);
 
   auto result3 = writer.get(errorCode);

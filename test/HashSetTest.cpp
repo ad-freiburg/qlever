@@ -7,7 +7,7 @@
 #include <utility>
 #include <vector>
 
-#include "../src/util/HashSet.h"
+#include "util/HashSet.h"
 
 // Note: Since the HashSet class is a wrapper for a well tested hash set
 // implementation the following tests only check the API for functionality and

@@ -2,7 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
 
-#include "./VocabularyInMemoryBinSearch.h"
+#include "index/vocabulary/VocabularyInMemoryBinSearch.h"
 
 using std::string;
 
@@ -24,7 +24,7 @@ void VocabularyInMemoryBinSearch::open(const string& fileName) {
 // _____________________________________________________________________________
 std::optional<std::string_view> VocabularyInMemoryBinSearch::operator[](
     uint64_t index) const {
-  auto it = std::ranges::lower_bound(indices_, index);
+  auto it = ql::ranges::lower_bound(indices_, index);
   if (it != indices_.end() && *it == index) {
     return words_[it - indices_.begin()];
   }
@@ -33,7 +33,7 @@ std::optional<std::string_view> VocabularyInMemoryBinSearch::operator[](
 
 // _____________________________________________________________________________
 WordAndIndex VocabularyInMemoryBinSearch::iteratorToWordAndIndex(
-    std::ranges::iterator_t<Words> it) const {
+    ql::ranges::iterator_t<Words> it) const {
   if (it == words_.end()) {
     return WordAndIndex::end();
   }
@@ -56,13 +56,14 @@ VocabularyInMemoryBinSearch::WordWriter::WordWriter(const std::string& filename)
     : writer_{filename}, offsetWriter_{filename + ".ids"} {}
 
 // _____________________________________________________________________________
-void VocabularyInMemoryBinSearch::WordWriter::operator()(std::string_view str,
-                                                         uint64_t idx) {
+uint64_t VocabularyInMemoryBinSearch::WordWriter::operator()(
+    std::string_view str, uint64_t idx) {
   // Check that the indices are ascending.
   AD_CONTRACT_CHECK(!lastIndex_.has_value() || lastIndex_.value() < idx);
   lastIndex_ = idx;
   writer_.push(str.data(), str.size());
   offsetWriter_.push(idx);
+  return idx;
 }
 
 // _____________________________________________________________________________

@@ -2,18 +2,26 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_PARALLELPARSEBUFFER_H
+#define QLEVER_SRC_PARSER_PARALLELPARSEBUFFER_H
 
 #include <array>
 #include <future>
 #include <string>
 #include <vector>
 
-#include "../util/Log.h"
+#include "parser/RdfParser.h"
+#include "util/Log.h"
 
-using std::array;
-using std::string;
-using std::vector;
+namespace ad_utility::detail {
+
+template <typename Parser>
+CPP_requires(ParserGetBatchRequires, requires(Parser& p)(p.getBatch()));
+
+template <typename Parser>
+CPP_concept ParserGetBatch = CPP_requires_ref(ParserGetBatchRequires, Parser);
+
+}  // namespace ad_utility::detail
 
 /**
  * A wrapper to make the different Parsers interfaces compatible with the
@@ -57,11 +65,9 @@ class ParserBatcher {
     }
   }
 
-  // The second requires evaluates to `true` only if the `Parser` type has a
-  // getBatch() member function. The first requires enables this function only
-  // if the second "requires" evaluates to true
-  std::optional<std::vector<TurtleTriple>> getBatch()
-      requires requires(Parser& p) { p.getBatch(); } {
+  CPP_member auto getBatch()
+      -> CPP_ret(std::optional<std::vector<TurtleTriple>>)(
+          requires ad_utility::detail::ParserGetBatch<Parser>) {
     if (m_numTriplesAlreadyParsed >= m_maxNumTriples) {
       return std::nullopt;
     }
@@ -107,7 +113,7 @@ class ParallelParseBuffer {
   // If the buffer is exhausted blocks
   // until the (asynchronous) call to parseBatch has finished. A nullopt
   // the parser has completely parsed the file.
-  std::optional<std::array<string, 3>> getTriple() {
+  std::optional<std::array<std::string, 3>> getTriple() {
     // Return our triple in the order the parser handles them to us.
     // Makes debugging easier.
     if (_buffer.size() == _bufferPosition && _isParserValid) {
@@ -139,25 +145,25 @@ class ParallelParseBuffer {
   // becomes false when the parser is done. In this case we still have to
   // empty our buffer
   bool _isParserValid = true;
-  std::vector<array<string, 3>> _buffer;
+  std::vector<std::array<std::string, 3>> _buffer;
   // this future handles the asynchronous parser calls
-  std::future<std::pair<bool, std::vector<array<string, 3>>>> _fut;
+  std::future<std::pair<bool, std::vector<std::array<std::string, 3>>>> _fut;
 
   // this function extracts bufferSize_ many triples from the parser.
   // If the bool argument is false, the parser is exhausted and further calls
   // to parseBatch are useless. In this case we probably still have some triples
   // that were parsed before the parser was done, so we still have to consider
   // these.
-  std::pair<bool, std::vector<array<string, 3>>> parseBatch() {
-    LOG(TRACE) << "Parsing next batch in parallel" << std::endl;
-    std::vector<array<string, 3>> buf;
+  std::pair<bool, std::vector<std::array<std::string, 3>>> parseBatch() {
+    AD_LOG_TRACE << "Parsing next batch in parallel" << std::endl;
+    std::vector<std::array<std::string, 3>> buf;
     // for small knowledge bases on small systems that fit in one
     // batch (e.g. during tests) the reserve may fail which is not bad in this
     // case
     try {
       buf.reserve(_bufferSize);
-    } catch (const std::bad_alloc& b) {
-      buf = std::vector<array<string, 3>>();
+    } catch (const std::bad_alloc&) {
+      buf = std::vector<std::array<std::string, 3>>();
     }
     while (buf.size() < _bufferSize) {
       buf.emplace_back();
@@ -166,9 +172,11 @@ class ParallelParseBuffer {
         return {false, std::move(buf)};
       }
       if (buf.size() % 10000000 == 0) {
-        LOG(INFO) << "Parsed " << buf.size() << " triples." << std::endl;
+        AD_LOG_INFO << "Parsed " << buf.size() << " triples." << std::endl;
       }
     }
     return {true, std::move(buf)};
   }
 };
+
+#endif  // QLEVER_SRC_PARSER_PARALLELPARSEBUFFER_H

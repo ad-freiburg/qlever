@@ -2,11 +2,17 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_VARIABLETOCOLUMNMAP_H
+#define QLEVER_SRC_ENGINE_VARIABLETOCOLUMNMAP_H
 
+#include "backports/three_way_comparison.h"
 #include "global/Id.h"
-#include "parser/data/Variable.h"
+#include "rdfTypes/Variable.h"
 #include "util/HashMap.h"
+
+// TODO<joka921> We have a cyclic dependency between `Id.h` and
+// `VariableToColumnMap.h`.
+using ColumnIndex = uint64_t;
 
 // Store an index of a column together with additional information about that
 // column which can be inferred from the `QueryExecutionTree` without actually
@@ -32,7 +38,13 @@ struct ColumnIndexAndTypeInfo {
   UndefStatus mightContainUndef_;
 
   // Equality comparison, mostly used for testing.
-  bool operator==(const ColumnIndexAndTypeInfo&) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(ColumnIndexAndTypeInfo,
+                                              columnIndex_, mightContainUndef_)
+  // Serialization for ColumnIndexAndTypeInfo.
+  AD_SERIALIZE_FRIEND_FUNCTION(ColumnIndexAndTypeInfo) {
+    serializer | arg.columnIndex_;
+    serializer | arg.mightContainUndef_;
+  }
 };
 
 // Return a `ColumnIndexAndType` info with the given `columnIndex` that is
@@ -70,9 +82,13 @@ copySortedByColumnIndex(VariableToColumnMap map);
 // columns might contain undefined values. We also need the total width of the
 // left input, because there might be columns that are not represented in the
 // `VariableToColumnMap` (e.g. because they are not visible because of subquery
-// scoping).
+// scoping). If `keepJoinColumns` is `false`, then the join columns will not be
+// included in the result, and all columns that would have a column index `>=`
+// any of the join columns are shifted to the left accordingly.
 enum class BinOpType { Join, OptionalJoin };
 VariableToColumnMap makeVarToColMapForJoinOperation(
     const VariableToColumnMap& leftVars, const VariableToColumnMap& rightVars,
     std::vector<std::array<ColumnIndex, 2>> joinColumns, BinOpType binOpType,
-    size_t leftResultWidth);
+    size_t leftResultWidth, bool keepJoinColumns = true);
+
+#endif  // QLEVER_SRC_ENGINE_VARIABLETOCOLUMNMAP_H

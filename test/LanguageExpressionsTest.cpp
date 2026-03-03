@@ -135,7 +135,9 @@ auto litOrIri = [](const std::string& literal) {
 // ____________________________________________________________________________
 auto assertLangTagValueGetter =
     [](const std::vector<Id>& input, const std::vector<strOpt>& expected,
-       LanguageTagGetter& langTagValueGetter, TestContext& testContext) {
+       LanguageTagGetter& langTagValueGetter, TestContext& testContext,
+       ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
+      auto trace = generateLocationTrace(loc);
       EXPECT_EQ(input.size(), expected.size());
       auto ctx = &testContext.context;
       for (size_t i = 0; i < input.size(); i++) {
@@ -185,7 +187,7 @@ TEST(LanguageTagGetter, testLanguageTagValueGetterWithoutVocabId) {
   // return values w.r.t. LanguageTagValueGetter
   std::vector<Id> in = {dateId1,    dateId2,          F, T,
                         IntId(323), DoubleId(234.23), U};
-  std::vector<strOpt> expected(7, std::nullopt);
+  std::vector<strOpt> expected{"", "", "", "", "", "", std::nullopt};
 
   assertLangTagValueGetter(in, expected, langTagGetter, testContext);
 
@@ -234,19 +236,18 @@ TEST(LangExpression, testLangExpressionOnLiteralColumn) {
 // ____________________________________________________________________________
 TEST(LangExpression, testLangExpressionOnMixedColumn) {
   testLanguageExpressions<getLangExpression, IdOrLiteralOrIri>(
-      {U, U, litOrIri("de"), U, U, U, U, litOrIri("")}, "?mixed");
+      {litOrIri(""), litOrIri(""), litOrIri("de"), U, U, U, U, litOrIri("")},
+      "?mixed");
 }
 
 // ____________________________________________________________________________
 TEST(LangExpression, testSimpleMethods) {
   auto langExpr =
       makeLangExpression(std::make_unique<VariableExpression>(Variable{"?x"}));
-  ASSERT_TRUE(langExpr->containsLangExpression());
   auto optVar = getVariableFromLangExpression(langExpr.get());
   ASSERT_TRUE(optVar.has_value());
   ASSERT_EQ(optVar.value().name(), "?x");
   langExpr = makeLangExpression(std::make_unique<IdExpression>(IntId(1)));
-  ASSERT_TRUE(langExpr->containsLangExpression());
   optVar = getVariableFromLangExpression(langExpr.get());
   ASSERT_TRUE(!optVar.has_value());
 }
@@ -274,13 +275,13 @@ TEST(SparqlExpression, testLangMatchesOnLiteralColumn) {
 // ____________________________________________________________________________
 TEST(SparqlExpression, testLangMatchesOnMixedColumn) {
   testLanguageExpressions<getLangMatchesExpression, Id>(
-      {U, U, T, U, U, U, U, F}, "?mixed", "de");
+      {F, F, T, U, U, U, U, F}, "?mixed", "de");
   testLanguageExpressions<getLangMatchesExpression, Id>(
-      {U, U, T, U, U, U, U, F}, "?mixed", "dE");
+      {F, F, T, U, U, U, U, F}, "?mixed", "dE");
   testLanguageExpressions<getLangMatchesExpression, Id>(
-      {U, U, T, U, U, U, U, F}, "?mixed", "*");
+      {F, F, T, U, U, U, U, F}, "?mixed", "*");
   testLanguageExpressions<getLangMatchesExpression, Id>(
-      {U, U, F, U, U, U, U, F}, "?mixed", "en-US");
+      {F, F, F, U, U, U, U, F}, "?mixed", "en-US");
   testLanguageExpressions<getLangMatchesExpression, Id>(
-      {U, U, F, U, U, U, U, F}, "?mixed", "");
+      {F, F, F, U, U, U, U, F}, "?mixed", "");
 }

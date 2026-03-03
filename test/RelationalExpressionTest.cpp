@@ -1,6 +1,8 @@
 //  Copyright 2021, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <limits>
 #include <string>
@@ -40,9 +42,10 @@ const auto NaN = std::numeric_limits<double>::quiet_NaN();
 
 // Create and return a `RelationalExpression` with the given Comparison and the
 // given operands `leftValue` and `rightValue`.
-template <Comparison comp>
-auto makeExpression(SingleExpressionResult auto leftValue,
-                    SingleExpressionResult auto rightValue) {
+CPP_template(Comparison comp, typename L, typename R)(
+    requires SingleExpressionResult<L> CPP_and
+        SingleExpressionResult<R>) auto makeExpression(L leftValue,
+                                                       R rightValue) {
   auto leftChild = std::make_unique<SingleUseExpression>(std::move(leftValue));
   auto rightChild =
       std::make_unique<SingleUseExpression>(std::move(rightValue));
@@ -51,8 +54,10 @@ auto makeExpression(SingleExpressionResult auto leftValue,
       {std::move(leftChild), std::move(rightChild)});
 }
 
-auto makeInExpression(SingleExpressionResult auto leftValue,
-                      SingleExpressionResult auto... rightValues) {
+CPP_template(typename L,
+             typename... R)(requires SingleExpressionResult<L> CPP_and(
+    SingleExpressionResult<R>&&...)) auto makeInExpression(L leftValue,
+                                                           R... rightValues) {
   auto leftChild = std::make_unique<SingleUseExpression>(std::move(leftValue));
   std::vector<SparqlExpression::Ptr> rightChildren;
   (..., (rightChildren.push_back(
@@ -87,7 +92,8 @@ VectorWithMemoryLimit<ValueId> makeValueIdVector(
 
 // Convert `t` into a `ValueId`. `T` must be `double`, `int64_t`, or a
 // `VectorWithMemoryLimit` of any of those types.
-auto liftToValueId = []<typename T>(const T& t) {
+auto liftToValueId = [](const auto& t) {
+  using T = std::decay_t<decltype(t)>;
   if constexpr (SingleExpressionResult<T>) {
     if constexpr (ad_utility::isInstantiation<T, VectorWithMemoryLimit>) {
       return t.clone();
@@ -122,7 +128,7 @@ VectorWithMemoryLimit<ValueId> makeValueIdVector(
 }
 
 auto expectTrue = [](const ExpressionResult& result,
-                     source_location l = source_location::current()) {
+                     source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   auto id = std::get<Id>(result);
   EXPECT_EQ(id.getDatatype(), Datatype::Bool);
@@ -130,7 +136,7 @@ auto expectTrue = [](const ExpressionResult& result,
 };
 
 auto expectFalse = [](const ExpressionResult& result,
-                      source_location l = source_location::current()) {
+                      source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   auto id = std::get<Id>(result);
   EXPECT_EQ(id.getDatatype(), Datatype::Bool);
@@ -140,7 +146,7 @@ auto expectFalse = [](const ExpressionResult& result,
 // Assert that the given `expression`, when evaluated on the `TestContext` (see
 // above), has a single boolean result that is true.
 auto expectTrueBoolean = [](const SparqlExpression& expression,
-                            source_location l = source_location::current()) {
+                            source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l, "expectTrueBoolean was called here");
   auto result = evaluateOnTestContext(expression);
   auto id = std::get<Id>(result);
@@ -150,7 +156,7 @@ auto expectTrueBoolean = [](const SparqlExpression& expression,
 
 // Similar to `expectTrueBoolean`, but assert that the boolean is `false`.
 auto expectFalseBoolean = [](const SparqlExpression& expression,
-                             source_location l = source_location::current()) {
+                             source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l, "expectFalseBoolean was called here");
   auto result = evaluateOnTestContext(expression);
   auto id = std::get<Id>(result);
@@ -159,7 +165,7 @@ auto expectFalseBoolean = [](const SparqlExpression& expression,
 };
 
 auto expectUndefined = [](const SparqlExpression& expression,
-                          source_location l = source_location::current()) {
+                          source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l, "expectUndefined was called here");
   auto result = evaluateOnTestContext(expression);
   if (std::holds_alternative<Id>(result)) {
@@ -169,7 +175,7 @@ auto expectUndefined = [](const SparqlExpression& expression,
     AD_CORRECTNESS_CHECK(
         (std::holds_alternative<VectorWithMemoryLimit<Id>>(result)));
     const auto& vec = std::get<VectorWithMemoryLimit<Id>>(result);
-    EXPECT_TRUE(std::ranges::all_of(
+    EXPECT_TRUE(ql::ranges::all_of(
         vec, [](Id id) { return id == Id::makeUndefined(); }));
   }
 };
@@ -182,7 +188,7 @@ auto expectUndefined = [](const SparqlExpression& expression,
 template <typename T, typename U>
 auto testLessThanGreaterThanEqualHelper(
     std::pair<T, U> lessThanPair, std::pair<T, U> greaterThanPair,
-    std::pair<T, U> equalPair, source_location l = source_location::current()) {
+    std::pair<T, U> equalPair, source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(
       l, "testLessThanGreaterThanEqualHelper was called here");
   auto True = expectTrueBoolean;
@@ -215,9 +221,10 @@ auto testLessThanGreaterThanEqualHelper(
 // `ValueId` before the call; the second element  is ...; both elements are ...
 // Requires that both `leftValue` and `rightValue` are numeric constants.
 template <typename L, typename R>
-void testLessThanGreaterThanEqual(
-    std::pair<L, R> lessThanPair, std::pair<L, R> greaterThanPair,
-    std::pair<L, R> equalPair, source_location l = source_location::current()) {
+void testLessThanGreaterThanEqual(std::pair<L, R> lessThanPair,
+                                  std::pair<L, R> greaterThanPair,
+                                  std::pair<L, R> equalPair,
+                                  source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace =
       generateLocationTrace(l, "testLessThanGreaterThanEqual was called here");
 
@@ -235,7 +242,7 @@ void testLessThanGreaterThanEqual(
 // single boolean that is false. The only exception is the `not equal`
 // comparison, for which true is expected.
 void testNotEqualHelper(auto leftValueIn, auto rightValueIn,
-                        source_location l = source_location::current()) {
+                        source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto leftValue = liftToValueId(leftValueIn);
   auto rightValue = liftToValueId(rightValueIn);
   auto trace = generateLocationTrace(l, "testNotEqualHelper was called here");
@@ -258,7 +265,7 @@ void testNotEqualHelper(auto leftValueIn, auto rightValueIn,
 }
 
 void testUndefHelper(auto leftValueIn, auto rightValueIn,
-                     source_location l = source_location::current()) {
+                     source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto leftValue = liftToValueId(leftValueIn);
   auto rightValue = liftToValueId(rightValueIn);
   auto trace = generateLocationTrace(l, "testUndefHelper was called here");
@@ -284,7 +291,7 @@ void testUndefHelper(auto leftValueIn, auto rightValueIn,
 // call. `rightValue` "" both values "" Requires that both `leftValue` and
 // `rightValue` are numeric constants.
 void testNotEqual(auto leftValue, auto rightValue,
-                  source_location l = source_location::current()) {
+                  source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l, "testNotEqual was called here");
   testNotEqualHelper(liftToValueId(leftValue), liftToValueId(rightValue));
 }
@@ -346,24 +353,15 @@ TEST(RelationalExpression, NumericAndStringAreNeverEqual) {
   testUndefHelper(doubleVec.clone(), stringVec.clone());
 }
 
-// At least one of `leftValue`, `rightValue` must be a vector, the other one may
-// be a constant or also a vector. The vectors must have 9 elements each. When
-// comparing the `leftValue` and `rightValue` elementwise, the following has to
-// hold: For i in [0, 2] : rightValue[i] < leftValue[i]; For i in [3, 5] :
-// rightValue[i] > leftValue[i]; For i in [6, 8] : rightValue[i] = leftValue[i];
+namespace {
 template <typename T, typename U>
-void testLessThanGreaterThanEqualMultipleValuesHelper(
-    T leftValue, U rightValue, source_location l = source_location::current()) {
-  auto trace = generateLocationTrace(
-      l, "testLessThanGreaterThanEqualMultipleValuesHelper was called here");
+struct ExpressionEvaluator {
+  T& leftValue;
+  U& rightValue;
+  sparqlExpression::EvaluationContext* context;
 
-  TestContext testContext;
-  sparqlExpression::EvaluationContext* context = &testContext.context;
-  AD_CONTRACT_CHECK(rightValue.size() == 9);
-  context->_beginIndex = 0;
-  context->_endIndex = 9;
-
-  auto m = [&]<auto comp>() {
+  template <auto comp>
+  auto operator()() const {
     auto expression =
         makeExpression<comp>(makeCopy(leftValue), makeCopy(rightValue));
     auto resultAsVariant = expression.evaluate(context);
@@ -374,7 +372,28 @@ void testLessThanGreaterThanEqualMultipleValuesHelper(
     auto& resultInverted =
         std::get<VectorWithMemoryLimit<Id>>(resultAsVariantInverted);
     return std::pair{std::move(result), std::move(resultInverted)};
-  };
+  }
+};
+}  // namespace
+
+// At least one of `leftValue`, `rightValue` must be a vector, the other one may
+// be a constant or also a vector. The vectors must have 9 elements each. When
+// comparing the `leftValue` and `rightValue` elementwise, the following has to
+// hold: For i in [0, 2] : rightValue[i] < leftValue[i]; For i in [3, 5] :
+// rightValue[i] > leftValue[i]; For i in [6, 8] : rightValue[i] = leftValue[i];
+template <typename T, typename U>
+void testLessThanGreaterThanEqualMultipleValuesHelper(
+    T leftValue, U rightValue, source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(
+      l, "testLessThanGreaterThanEqualMultipleValuesHelper was called here");
+
+  TestContext testContext;
+  sparqlExpression::EvaluationContext* context = &testContext.context;
+  AD_CONTRACT_CHECK(rightValue.size() == 9);
+  context->_beginIndex = 0;
+  context->_endIndex = 9;
+
+  ExpressionEvaluator<T, U> m{leftValue, rightValue, context};
   auto [resultLT, invertedLT] = m.template operator()<LT>();
   auto [resultLE, invertedLE] = m.template operator()<LE>();
   auto [resultEQ, invertedEQ] = m.template operator()<EQ>();
@@ -440,9 +459,9 @@ void testLessThanGreaterThanEqualMultipleValuesHelper(
 // converted to a ValueID before the call. `rightValue` "" both values ""
 // Requires that both `leftValue` and `rightValue` are either numeric constants
 // or numeric vectors, and that at least one of them is a vector.
+template <typename T1, typename T2>
 void testLessThanGreaterThanEqualMultipleValues(
-    auto leftValue, auto rightValue,
-    source_location l = source_location::current()) {
+    T1 leftValue, T2 rightValue, source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(
       l, "testLessThanGreaterThanEqualMultipleValues was called here");
 
@@ -464,7 +483,7 @@ void testLessThanGreaterThanEqualMultipleValues(
 // equal, greater) must be true.
 template <typename T, typename U>
 auto testNotComparableHelper(T leftValue, U rightValue,
-                             source_location l = source_location::current()) {
+                             source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(
       l, "testLessThanGreaterThanEqualMultipleValuesHelper was called here");
   ad_utility::AllocatorWithLimit<Id> alloc{makeAllocator()};
@@ -483,18 +502,7 @@ auto testNotComparableHelper(T leftValue, U rightValue,
   context._beginIndex = 0;
   context._endIndex = 5;
 
-  auto m = [&]<auto comp>() {
-    auto expression =
-        makeExpression<comp>(makeCopy(leftValue), makeCopy(rightValue));
-    auto resultAsVariant = expression.evaluate(&context);
-    auto expressionInverted =
-        makeExpression<comp>(makeCopy(rightValue), makeCopy(leftValue));
-    auto resultAsVariantInverted = expressionInverted.evaluate(&context);
-    auto& result = std::get<VectorWithMemoryLimit<Id>>(resultAsVariant);
-    auto& resultInverted =
-        std::get<VectorWithMemoryLimit<Id>>(resultAsVariantInverted);
-    return std::pair{std::move(result), std::move(resultInverted)};
-  };
+  ExpressionEvaluator<T, U> m{leftValue, rightValue, &context};
   auto [resultLT, invertedLT] = m.template operator()<LT>();
   auto [resultLE, invertedLE] = m.template operator()<LE>();
   auto [resultEQ, invertedEQ] = m.template operator()<EQ>();
@@ -528,7 +536,7 @@ auto testNotComparableHelper(T leftValue, U rightValue,
 // for the `testNotComparableHelper` function.
 template <typename T, typename U>
 auto testNotComparable(T leftValue, U rightValue,
-                       source_location l = source_location::current()) {
+                       source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l, "testNotComparable was called here");
   /*
   testNotComparableHelper(makeCopy(leftValue), makeCopy(rightValue));
@@ -631,8 +639,9 @@ TEST(RelationalExpression, StringVectorAndStringVector) {
   // is actually supported.
 }
 
-void testInExpressionVector(auto leftValue, auto rightValue, auto& ctx,
-                            const auto& expected) {
+template <typename T1, typename T2, typename Ctx, typename E>
+void testInExpressionVector(T1 leftValue, T2 rightValue, Ctx& ctx,
+                            const E& expected) {
   auto expression =
       makeInExpression(liftToValueId(leftValue), liftToValueId(rightValue));
   auto check = [&]() {
@@ -656,10 +665,10 @@ void testInExpressionVector(auto leftValue, auto rightValue, auto& ctx,
 // Assert that the expression `leftValue Comparator rightValue`, when evaluated
 // on the `TestContext` (see above), yields the `expected` result.
 
-template <Comparison Comp>
-void testWithExplicitIdResult(auto leftValue, auto rightValue,
+template <Comparison Comp, typename T1, typename T2>
+void testWithExplicitIdResult(T1 leftValue, T2 rightValue,
                               std::vector<Id> expected,
-                              source_location l = source_location::current()) {
+                              source_location l = AD_CURRENT_SOURCE_LOC()) {
   static TestContext ctx;
   auto expression =
       makeExpression<Comp>(liftToValueId(leftValue), liftToValueId(rightValue));
@@ -673,14 +682,14 @@ void testWithExplicitIdResult(auto leftValue, auto rightValue,
   }
 }
 
-template <Comparison Comp>
-void testWithExplicitResult(auto leftValue, auto rightValue,
+template <Comparison Comp, typename T1, typename T2>
+void testWithExplicitResult(T1 leftValue, T2 rightValue,
                             std::vector<bool> expectedAsBool,
-                            source_location l = source_location::current()) {
+                            source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   std::vector<Id> expected;
-  std::ranges::transform(expectedAsBool, std::back_inserter(expected),
-                         Id::makeFromBool);
+  ql::ranges::transform(expectedAsBool, std::back_inserter(expected),
+                        Id::makeFromBool);
 
   testWithExplicitIdResult<Comp>(std::move(leftValue), std::move(rightValue),
                                  expected);
@@ -777,10 +786,10 @@ TEST(RelationalExpression, VariableAndVariable) {
 // yields the `expected` result. The type of `expected`, `SetOfIntervals`
 // indicates that the expression was evaluated using binary search on the sorted
 // table.
-template <Comparison Comp>
+template <Comparison Comp, typename T>
 void testSortedVariableAndConstant(
-    Variable leftValue, auto rightValue, ad_utility::SetOfIntervals expected,
-    source_location l = source_location::current()) {
+    Variable leftValue, T rightValue, ad_utility::SetOfIntervals expected,
+    source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(
       l, "test between sorted variable and constant was called here");
   TestContext ctx = TestContext::sortedBy(leftValue);
@@ -895,7 +904,7 @@ TEST(RelationalExpression, InExpressionFilterEstimates) {
 
 namespace {
 template <typename T>
-constexpr std::type_identity<T> TI{};
+constexpr ql::type_identity<T> TI{};
 }
 TEST(RelationalExpression, FilterEstimates) {
   auto makeInt = [](int i) {
@@ -909,9 +918,10 @@ TEST(RelationalExpression, FilterEstimates) {
   };
   // Implementation for testing the size estimates of different relational
   // expressions.
-  auto testImpl = [&]<typename T>(std::type_identity<T>, size_t expectedSize,
-                                  ad_utility::source_location l =
-                                      source_location::current()) {
+  auto testImpl = [&](auto ti, size_t expectedSize,
+                      ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+    using T = typename decltype(ti)::type;
+
     auto tr = generateLocationTrace(l);
 
     auto first = makeVar("?x");
@@ -929,7 +939,7 @@ TEST(RelationalExpression, FilterEstimates) {
     EXPECT_EQ(x.sizeEstimate, expectedSize);
   };
 
-  using std::type_identity;
+  using ql::type_identity;
   // Less is estimated to leave 1/50 of the initial 200'000 values.
   testImpl(TI<LessThanExpression>, 4000);
   // Equal is estimated to leave 1/1000 of the initial 200'000 values.
@@ -938,7 +948,163 @@ TEST(RelationalExpression, FilterEstimates) {
   testImpl(TI<NotEqualExpression>, 200'000);
 }
 
+// _____________________________________________________________________________
+TEST(RelationalExpression, getLanguageFilterExpression) {
+  using LFD = SparqlExpression::LangFilterData;
+  using namespace ::testing;
+  // Regular case
+  {
+    auto sle = std::make_unique<StringLiteralExpression>(
+        tripleComponentLiteral("\"en\""));
+    auto le = makeLangExpression(
+        std::make_unique<VariableExpression>(Variable{"?x"}));
+    EqualExpression ee{{std::move(sle), std::move(le)}};
+    EXPECT_THAT(ee.getLanguageFilterExpression(),
+                Optional(AllOf(AD_FIELD(LFD, variable_, Eq(Variable{"?x"})),
+                               AD_FIELD(LFD, languages_,
+                                        UnorderedElementsAre(Eq("en"))))));
+  }
+  // Commutative case
+  {
+    auto le = makeLangExpression(
+        std::make_unique<VariableExpression>(Variable{"?x"}));
+    auto sle = std::make_unique<StringLiteralExpression>(
+        tripleComponentLiteral("\"en\""));
+    EqualExpression ee{{std::move(le), std::move(sle)}};
+    EXPECT_THAT(ee.getLanguageFilterExpression(),
+                Optional(AllOf(AD_FIELD(LFD, variable_, Eq(Variable{"?x"})),
+                               AD_FIELD(LFD, languages_,
+                                        UnorderedElementsAre(Eq("en"))))));
+  }
+  // Not equality
+  {
+    auto sle = std::make_unique<StringLiteralExpression>(
+        tripleComponentLiteral("\"en\""));
+    auto le = makeLangExpression(
+        std::make_unique<VariableExpression>(Variable{"?x"}));
+    NotEqualExpression nee{{std::move(sle), std::move(le)}};
+    EXPECT_EQ(nee.getLanguageFilterExpression(), std::nullopt);
+  }
+  // No String Literal
+  {
+    auto ve = std::make_unique<VariableExpression>(Variable{"?y"});
+    auto le = makeLangExpression(
+        std::make_unique<VariableExpression>(Variable{"?x"}));
+    EqualExpression ee{{std::move(ve), std::move(le)}};
+    EXPECT_EQ(ee.getLanguageFilterExpression(), std::nullopt);
+  }
+  // No LANG function
+  {
+    auto sle = std::make_unique<StringLiteralExpression>(
+        tripleComponentLiteral("\"en\""));
+    auto ve = std::make_unique<VariableExpression>(Variable{"?x"});
+    EqualExpression ee{{std::move(sle), std::move(ve)}};
+    EXPECT_EQ(ee.getLanguageFilterExpression(), std::nullopt);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(InExpression, getLanguageFilterExpression) {
+  using LFD = SparqlExpression::LangFilterData;
+  using namespace ::testing;
+  std::vector<SparqlExpression::Ptr> children;
+  // Regular case
+  {
+    auto le = makeLangExpression(
+        std::make_unique<VariableExpression>(Variable{"?x"}));
+    auto sle = std::make_unique<StringLiteralExpression>(
+        tripleComponentLiteral("\"en\""));
+    children.push_back(std::move(sle));
+    InExpression ie{std::move(le), std::move(children)};
+    EXPECT_THAT(ie.getLanguageFilterExpression(),
+                Optional(AllOf(AD_FIELD(LFD, variable_, Eq(Variable{"?x"})),
+                               AD_FIELD(LFD, languages_,
+                                        UnorderedElementsAre(Eq("en"))))));
+  }
+  // Empty case
+  {
+    auto le = makeLangExpression(
+        std::make_unique<VariableExpression>(Variable{"?x"}));
+    InExpression ie{std::move(le), {}};
+    EXPECT_EQ(ie.getLanguageFilterExpression(), std::nullopt);
+  }
+  // Multiple values
+  {
+    auto le = makeLangExpression(
+        std::make_unique<VariableExpression>(Variable{"?x"}));
+    auto sle1 = std::make_unique<StringLiteralExpression>(
+        tripleComponentLiteral("\"\""));
+    auto sle2 = std::make_unique<StringLiteralExpression>(
+        tripleComponentLiteral("\"mul\""));
+    auto sle3 = std::make_unique<StringLiteralExpression>(
+        tripleComponentLiteral("\"en\""));
+    children.push_back(std::move(sle1));
+    children.push_back(std::move(sle2));
+    children.push_back(std::move(sle3));
+    InExpression ie{std::move(le), std::move(children)};
+    EXPECT_THAT(ie.getLanguageFilterExpression(),
+                Optional(AllOf(AD_FIELD(LFD, variable_, Eq(Variable{"?x"})),
+                               AD_FIELD(LFD, languages_,
+                                        UnorderedElementsAre(Eq(""), Eq("mul"),
+                                                             Eq("en"))))));
+  }
+  // Duplicate values are deduplicated
+  {
+    auto le = makeLangExpression(
+        std::make_unique<VariableExpression>(Variable{"?x"}));
+    auto sle1 = std::make_unique<StringLiteralExpression>(
+        tripleComponentLiteral("\"en\""));
+    auto sle2 = std::make_unique<StringLiteralExpression>(
+        tripleComponentLiteral("\"mul\""));
+    auto sle3 = std::make_unique<StringLiteralExpression>(
+        tripleComponentLiteral("\"en\""));
+    children.push_back(std::move(sle1));
+    children.push_back(std::move(sle2));
+    children.push_back(std::move(sle3));
+    InExpression ie{std::move(le), std::move(children)};
+    EXPECT_THAT(
+        ie.getLanguageFilterExpression(),
+        Optional(AllOf(AD_FIELD(LFD, variable_, Eq(Variable{"?x"})),
+                       AD_FIELD(LFD, languages_,
+                                UnorderedElementsAre(Eq("en"), Eq("mul"))))));
+  }
+  // Some values are not literals
+  {
+    auto le = makeLangExpression(
+        std::make_unique<VariableExpression>(Variable{"?x"}));
+    auto sle = std::make_unique<StringLiteralExpression>(
+        tripleComponentLiteral("\"\""));
+    auto ve = std::make_unique<VariableExpression>(Variable{"?y"});
+    children.push_back(std::move(sle));
+    children.push_back(std::move(ve));
+    InExpression ie{std::move(le), std::move(children)};
+    EXPECT_EQ(ie.getLanguageFilterExpression(), std::nullopt);
+  }
+  // No LANG function
+  {
+    auto ve = std::make_unique<VariableExpression>(Variable{"?x"});
+    auto sle = std::make_unique<StringLiteralExpression>(
+        tripleComponentLiteral("\"en\""));
+    children.push_back(std::move(sle));
+    InExpression ie{std::move(ve), std::move(children)};
+    EXPECT_EQ(ie.getLanguageFilterExpression(), std::nullopt);
+  }
+}
+
 // TODO<joka921> We currently do not have tests for the `LocalVocab` case,
 // because the relational expressions do not work properly with the current
 // limited implementation of the local vocabularies. Add those tests, as soon as
 // the local vocabularies are implemented properly.
+
+// _____________________________________________________________________________
+TEST(InExpression, getEstimatesForFilterExpression) {
+  // Regression test for https://github.com/ad-freiburg/qlever/issues/2701
+  // it checks if no division by zero is done.
+  using namespace ::testing;
+  InExpression ie{std::make_unique<VariableExpression>(Variable{"?x"}), {}};
+  auto [sizeEstimate, costEstimate] =
+      ie.getEstimatesForFilterExpression(1337, std::nullopt);
+
+  EXPECT_EQ(sizeEstimate, 0);
+  EXPECT_EQ(costEstimate, 0);
+}

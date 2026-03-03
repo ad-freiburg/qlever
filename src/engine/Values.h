@@ -4,10 +4,11 @@
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_VALUES_H
+#define QLEVER_SRC_ENGINE_VALUES_H
 
-#include "../parser/ParsedQuery.h"
-#include "Operation.h"
+#include "engine/Operation.h"
+#include "parser/ParsedQuery.h"
 
 class Values : public Operation {
   using SparqlValues = parsedQuery::SparqlValues;
@@ -23,14 +24,14 @@ class Values : public Operation {
   Values(QueryExecutionContext* qec, SparqlValues parsedValues);
 
  protected:
-  string getCacheKeyImpl() const override;
+  std::string getCacheKeyImpl() const override;
 
  public:
-  virtual string getDescriptor() const override;
+  virtual std::string getDescriptor() const override;
 
   virtual size_t getResultWidth() const override;
 
-  virtual vector<ColumnIndex> resultSortedOn() const override;
+  virtual std::vector<ColumnIndex> resultSortedOn() const override;
 
   virtual bool knownEmptyResult() override {
     return parsedValues_._variables.empty() || parsedValues_._values.empty();
@@ -44,16 +45,17 @@ class Values : public Operation {
  public:
   virtual size_t getCostEstimate() override;
 
-  vector<QueryExecutionTree*> getChildren() override { return {}; }
+  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
 
  public:
   // These two are also used by class `Service`, hence public.
-  virtual ProtoResult computeResult(
-      [[maybe_unused]] bool requestLaziness) override;
+  virtual Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
  private:
+  std::unique_ptr<Operation> cloneImpl() const override;
+
   // Compute the per-column multiplicity of the parsed values.
   void computeMultiplicities();
 
@@ -64,3 +66,5 @@ class Values : public Operation {
   template <size_t I>
   void writeValues(IdTable* idTablePtr, LocalVocab* localVocab);
 };
+
+#endif  // QLEVER_SRC_ENGINE_VALUES_H

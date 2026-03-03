@@ -1,1 +1,1 @@
-addLinkAndDiscoverTest(VariableTest)
+addLinkAndDiscoverTest(GraphTermTest)

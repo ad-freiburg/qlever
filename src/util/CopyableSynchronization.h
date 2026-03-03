@@ -3,7 +3,12 @@
 // Author:
 //   Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_COPYABLESYNCHRONIZATION_H
+#define QLEVER_SRC_UTIL_COPYABLESYNCHRONIZATION_H
+
+#include <atomic>
+#include <mutex>
+#include <shared_mutex>
 
 namespace ad_utility {
 // A mutex that can be "copied". The semantics are that copying will create a
@@ -11,11 +16,17 @@ namespace ad_utility {
 // that modifies a `mutable` member threadsafe. Note that a copy-constructed
 // `CopyableMutex` will be unlocked, even if the source was locked, and that
 // copy assignment is a noop.
-struct CopyableMutex : std::mutex {
-  using std::mutex::mutex;
-  CopyableMutex(const CopyableMutex&) noexcept {}
-  CopyableMutex& operator=(const CopyableMutex&) noexcept { return *this; }
+template <typename Mutex>
+struct CopyableMutexImpl : Mutex {
+  using Mutex::Mutex;
+  CopyableMutexImpl(const CopyableMutexImpl&) noexcept {}
+  CopyableMutexImpl& operator=(const CopyableMutexImpl&) noexcept {
+    return *this;
+  }
 };
+
+using CopyableMutex = CopyableMutexImpl<std::mutex>;
+using CopyableSharedMutex = CopyableMutexImpl<std::shared_mutex>;
 
 // A `std::atomic` that can be "copied". The semantics are, that copying will
 // create a new atomic that is initialized with the value being copied. This is
@@ -40,3 +51,5 @@ class CopyableAtomic : public std::atomic<T> {
   }
 };
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_COPYABLESYNCHRONIZATION_H

@@ -2,20 +2,17 @@
 // Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_STRINGUTILS_H
+#define QLEVER_SRC_UTIL_STRINGUTILS_H
 
-#include <absl/strings/str_replace.h>
-#include <gmock/gmock-spec-builders.h>
-
+#include <string>
 #include <string_view>
 
-#include "util/Algorithm.h"
+#include "backports/algorithm.h"
+#include "backports/iterator.h"
+#include "backports/keywords.h"
 #include "util/Concepts.h"
 #include "util/ConstexprSmallString.h"
-#include "util/CtreHelpers.h"
-
-using std::string;
-using std::string_view;
 
 namespace ad_utility {
 //! Utility functions for string. Can possibly be changed to
@@ -23,29 +20,29 @@ namespace ad_utility {
 //! std::string. However, it is not required so far.
 
 //! Returns the longest prefix that the two arguments have in common
-string_view commonPrefix(string_view a, string_view b);
+std::string_view commonPrefix(std::string_view a, std::string_view b);
 
 //! Case transformations. Should be thread safe.
-string getLowercase(const string& orig);
+std::string getLowercase(const std::string& orig);
 
-string getUppercase(const string& orig);
+std::string getUppercase(const std::string& orig);
 
 // Check if the given string `language tag` is `BPC47` conform.
 // Use the ICU library (unicode/uloc.h) for this procedure.
-bool strIsLangTag(const string& strLangTag);
+bool strIsLangTag(const std::string& strLangTag);
 
 // Implements a case insensitive `language-range` to `language-tag`comparison.
-bool isLanguageMatch(string& languageTag, string& languageRange);
+bool isLanguageMatch(std::string& languageTag, std::string& languageRange);
 
 /*
  * @brief convert a UTF-8 String to lowercase according to the held locale
  * @param s UTF-8 encoded string
  * @return The lowercase version of s, also encoded as UTF-8
  */
-string utf8ToLower(std::string_view s);
+std::string utf8ToLower(std::string_view s);
 
 // Get the uppercase value. For details see `utf8ToLower` above
-string utf8ToUpper(std::string_view s);
+std::string utf8ToUpper(std::string_view s);
 
 /**
  * Get the substring from the UTF8-encoded str that starts at the start-th
@@ -55,12 +52,12 @@ string utf8ToUpper(std::string_view s);
  * behavior is consistent with std::string::substr, but working on UTF-8
  * characters that might have multiple bytes.
  */
-string_view getUTF8Substring(const std::string_view str, size_t start,
-                             size_t size);
+std::string_view getUTF8Substring(const std::string_view str, size_t start,
+                                  size_t size);
 
 // Overload for the above function that creates the substring from the
 // `start`-th codepoint to the end of the string.
-string_view getUTF8Substring(const std::string_view str, size_t start);
+std::string_view getUTF8Substring(const std::string_view str, size_t start);
 
 /**
  * @brief get a prefix of a utf-8 string of a specified length
@@ -83,10 +80,10 @@ std::pair<size_t, std::string_view> getUTF8Prefix(std::string_view s,
 
 // Overload for the above function that creates the substring from the
 // `start`-th codepoint to the end of the string.
-string_view getUTF8Substring(const std::string_view str, size_t start);
+std::string_view getUTF8Substring(const std::string_view str, size_t start);
 
 //! Gets the last part of a string that is somehow split by the given separator.
-string getLastPartOfString(const string& text, const char separator);
+std::string getLastPartOfString(const std::string& text, const char separator);
 
 /**
  * @brief Return the last position where <literalEnd> was found in the <input>
@@ -105,17 +102,18 @@ streams.
 @param separator Will be put between each of the string representations
 of the range elements.
 */
-template <std::ranges::input_range Range>
-requires ad_utility::Streamable<
-    std::iter_reference_t<std::ranges::iterator_t<Range>>>
-void lazyStrJoin(std::ostream* stream, Range&& r, std::string_view separator);
+CPP_template(typename Range)(
+    requires ql::ranges::input_range<Range> CPP_and
+        ad_utility::Streamable<ql::iter_reference_t<ql::ranges::iterator_t<
+            Range>>>) void lazyStrJoin(std::ostream* stream, Range&& r,
+                                       std::string_view separator);
 
 // Similar to the overload of `lazyStrJoin` above, but the result is returned as
 // a string.
-template <std::ranges::input_range Range>
-requires ad_utility::Streamable<
-    std::iter_reference_t<std::ranges::iterator_t<Range>>>
-std::string lazyStrJoin(Range&& r, std::string_view separator);
+CPP_template(typename Range)(
+    requires ql::ranges::input_range<Range> CPP_and ad_utility::Streamable<
+        ql::iter_reference_t<ql::ranges::iterator_t<Range>>>) std::string
+    lazyStrJoin(Range&& r, std::string_view separator);
 
 /*
 @brief Adds indentation before the given string and directly after new line
@@ -137,6 +135,12 @@ number.
 
 @param str The input string.
 @param separatorSymbol What symbol to put between groups of thousands.
+
+Note: To avoid cyclic dependencies, this function is defined in a separate file
+`StringUtilsImpl.h`. This file is then included in the `StringUtils.cpp` with an
+explicit instantiation for the default template argument `.`. The tests include
+the impl file directly to exhaustively test the behavior for other template
+arguments.
 */
 template <const char floatingPointSignifier = '.'>
 std::string insertThousandSeparator(const std::string_view str,
@@ -155,8 +159,8 @@ std::string insertThousandSeparator(const std::string_view str,
 // characters. An equally safe, but slower method to achieve the same thing
 // would be to compute cryptographically secure hashes (like SHA-3 for example)
 // and compare the hashes instead of the actual strings.
-constexpr bool constantTimeEquals(std::string_view view1,
-                                  std::string_view view2) {
+inline QL_CONSTEXPR bool constantTimeEquals(std::string_view view1,
+                                            std::string_view view2) {
   using byte_view = std::basic_string_view<volatile std::byte>;
   auto impl = [](byte_view str1, byte_view str2) {
     if (str1.length() != str2.length()) {
@@ -184,10 +188,11 @@ constexpr bool constantTimeEquals(std::string_view view1,
 }
 
 // _________________________________________________________________________
-template <std::ranges::input_range Range>
-requires ad_utility::Streamable<
-    std::iter_reference_t<std::ranges::iterator_t<Range>>>
-void lazyStrJoin(std::ostream* stream, Range&& r, std::string_view separator) {
+CPP_template_def(typename Range)(
+    requires ql::ranges::input_range<Range> CPP_and_def
+        ad_utility::Streamable<ql::iter_reference_t<ql::ranges::iterator_t<
+            Range>>>) void lazyStrJoin(std::ostream* stream, Range&& r,
+                                       std::string_view separator) {
   auto begin = std::begin(r);
   auto end = std::end(r);
 
@@ -201,157 +206,78 @@ void lazyStrJoin(std::ostream* stream, Range&& r, std::string_view separator) {
 
   // Add the remaining entries.
   ++begin;
-  std::ranges::for_each(begin, end,
-                        [&stream, &separator](const auto& listItem) {
-                          *stream << separator << listItem;
-                        },
-                        {});
+  ql::ranges::for_each(begin, end,
+                       [&stream, &separator](const auto& listItem) {
+                         *stream << separator << listItem;
+                       },
+                       {});
 }
 
 // _________________________________________________________________________
-template <std::ranges::input_range Range>
-requires ad_utility::Streamable<
-    std::iter_reference_t<std::ranges::iterator_t<Range>>>
-std::string lazyStrJoin(Range&& r, std::string_view separator) {
+CPP_template_def(typename Range)(
+    requires ql::ranges::input_range<Range> CPP_and_def ad_utility::Streamable<
+        ql::iter_reference_t<ql::ranges::iterator_t<Range>>>) std::string
+    lazyStrJoin(Range&& r, std::string_view separator) {
   std::ostringstream stream;
   lazyStrJoin(&stream, AD_FWD(r), separator);
   return std::move(stream).str();
 }
 
-// ___________________________________________________________________________
-template <const char floatingPointSignifier>
-std::string insertThousandSeparator(const std::string_view str,
-                                    const char separatorSymbol) {
-  static const auto isDigit = [](const char c) {
-    // `char` is ASCII. So the number symbols are the codes from 48 to 57.
-    return '0' <= c && c <= '9';
-  };
-  AD_CONTRACT_CHECK(!isDigit(separatorSymbol) &&
-                    !isDigit(floatingPointSignifier));
-
-  /*
-  Create a `ctll::fixed_string` of `floatingPointSignifier`, that can be used
-  inside regex character classes, without being confused with one of the
-  reserved characters.
-  */
-  static constexpr auto adjustFloatingPointSignifierForRegex = []() {
-    constexpr ctll::fixed_string floatingPointSignifierAsFixedString(
-        {floatingPointSignifier, '\0'});
-
-    // Inside a regex character class are fewer reserved character.
-    if constexpr (contains(R"--(^-[]\)--", floatingPointSignifier)) {
-      return "\\" + floatingPointSignifierAsFixedString;
-    } else {
-      return floatingPointSignifierAsFixedString;
-    }
-  };
-
-  /*
-  As string view doesn't support the option to insert new values between old
-  values, so we create a new string in the wanted format.
-  */
-  std::ostringstream ostream;
-
-  /*
-  Insert separator into the given string and add it into the `ostream`. Ignores
-  content of the given string, just works based on length.
-  */
-  auto insertSeparator = [&separatorSymbol,
-                          &ostream](const std::string_view s) {
-    // Nothing to do, if the string is to short.
-    AD_CORRECTNESS_CHECK(s.length() > 3);
-
-    /*
-    For walking over the string view.
-    Our initialization value skips the leading digits, so that only the digits
-    remain, where we have to put the separator in front of every three chars.
-    */
-    size_t currentIdx{s.length() % 3 == 0 ? 3 : s.length() % 3};
-    ostream << s.substr(0, currentIdx);
-    for (; currentIdx < s.length(); currentIdx += 3) {
-      ostream << separatorSymbol << s.substr(currentIdx, 3);
-    }
-  };
-
-  /*
-  The pattern finds any digit sequence, that is long enough for inserting
-  thousand separators and is not the fractual part of a floating point.
-  */
-  static constexpr ctll::fixed_string regexPatDigitSequence{
-      "(?:^|[^\\d" + adjustFloatingPointSignifierForRegex() +
-      "])(?<digit>\\d{4,})"};
-  auto parseIterator = std::begin(str);
-  std::ranges::for_each(
-      ctre::range<regexPatDigitSequence>(str),
-      [&parseIterator, &ostream, &insertSeparator](const auto& match) {
-        /*
-        The digit sequence, that must be transformed. Note: The string view
-        iterators point to entries in the `str` string.
-        */
-        const std::string_view& digitSequence{match.template get<"digit">()};
-
-        // Insert the transformed digit sequence, and the string between it and
-        // the `parseIterator`, into the stream.
-        ostream << std::string_view(parseIterator, std::begin(digitSequence));
-        insertSeparator(digitSequence);
-        parseIterator = std::end(digitSequence);
-      });
-  ostream << std::string_view(std::move(parseIterator), std::end(str));
-  return ostream.str();
-}
-
 // The implementation of `constexprStrCat` below.
 namespace detail::constexpr_str_cat_impl {
-// We currently have a fixed upper bound of 100 characters on the inputs.
-// This can be changed once it becomes a problem. It would also be possible
-// to have flexible upper bounds, but this would make the implementation much
-// more complicated.
-using ConstexprString = ad_utility::ConstexprSmallString<100>;
 
-// Concatenate the elements of `arr` into a single array with an additional zero
-// byte at the end. `sz` must be the sum of the sizes in `arr`, else the
+// Concatenate the elements of `arr` into a single array with an additional
+// zero byte at the end. `sz` must be the sum of the sizes in `arr`, else the
 // behavior is undefined.
 template <size_t sz, size_t numStrings>
 constexpr std::array<char, sz + 1> catImpl(
-    const std::array<ConstexprString, numStrings>& arr) {
+    const std::array<const std::string_view*, numStrings>& arr) {
   std::array<char, sz + 1> buf{};
   auto it = buf.begin();
   for (const auto& str : arr) {
-    for (size_t i = 0; i < str.size(); ++i) {
-      *it = str[i];
+    for (size_t i = 0; i < str->size(); ++i) {
+      *it = (*str)[i];
       ++it;
     }
   }
   return buf;
 };
-// Concatenate the `strings` into a single `std::array<char>` with an additional
-// zero byte at the end.
-template <ConstexprString... strings>
+// Concatenate the `strings` into a single `std::array<char>` with an
+// additional zero byte at the end.
+// TODO<joka921>: C++17 doesn't support template values. This needs some
+// refactoring
+template <const std::string_view&... strings>
 constexpr auto constexprStrCatBufferImpl() {
   constexpr size_t sz = (size_t{0} + ... + strings.size());
-  constexpr auto innerResult =
-      catImpl<sz>(std::array<ConstexprString, sizeof...(strings)>{strings...});
+  constexpr auto innerResult = catImpl<sz>(
+      std::array<const std::string_view*, sizeof...(strings)>{&strings...});
   return innerResult;
 }
 
 // A constexpr variable that stores the concatenation of the `strings`.
 // TODO<C++26> This can be a `static constexpr` variable inside the
 // `constexprStrCatBufferImpl()` function above.
-template <ConstexprString... strings>
+template <const std::string_view&... strings>
 constexpr inline auto constexprStrCatBufferVar =
     constexprStrCatBufferImpl<strings...>();
 }  // namespace detail::constexpr_str_cat_impl
 
 // Return the concatenation of the `strings` as a `string_view`. Can be
 // evaluated at compile time. The buffer that backs the returned `string_view`
-// will be zero-terminated, so it is safe to pass pointers into the result into
-// legacy C-APIs.
-template <detail::constexpr_str_cat_impl::ConstexprString... strings>
+// will be zero-terminated, so it is safe to pass pointers into the result
+// into legacy C-APIs.
+template <const std::string_view&... strings>
 constexpr std::string_view constexprStrCat() {
   const auto& b =
       detail::constexpr_str_cat_impl::constexprStrCatBufferVar<strings...>;
   return {b.data(), b.size() - 1};
 }
+
+// Truncates the operation string. The length is computed in codepoints, not in
+// bytes. Strings with a length that exceeds `MAX_LENGTH_OPERATION_ECHO` are
+// truncated to that length and get a "..." suffix appended to it. Shorter
+// strings are returned as-is.
+std::string truncateOperationString(std::string_view operation);
 }  // namespace ad_utility
 
 // A helper function for the `operator+` overloads below.
@@ -384,3 +310,5 @@ template <typename Char>
 std::string operator+(Char c, std::basic_string_view<Char> b) {
   return strCatImpl(std::string_view(&c, 1), b);
 }
+
+#endif  // QLEVER_SRC_UTIL_STRINGUTILS_H

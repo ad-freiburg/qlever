@@ -8,6 +8,9 @@
 #include <boost/program_options.hpp>
 #include <vector>
 
+#include "global/RuntimeParameters.h"
+#include "index/TextScoringEnum.h"
+#include "index/vocabulary/VocabularyType.h"
 #include "util/Concepts.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Parameters.h"
@@ -26,8 +29,9 @@ class NonNegative {
   size_t _value;
 };
 
-template <typename Stream, ad_utility::SimilarTo<NonNegative> NN>
-Stream& operator<<(Stream& stream, NN&& nonNegative) {
+CPP_template(typename Stream, typename NN)(
+    requires ad_utility::SimilarTo<NN, NonNegative>) Stream&
+operator<<(Stream& stream, NN&& nonNegative) {
   return stream << static_cast<size_t>(nonNegative);
 }
 
@@ -54,6 +58,7 @@ void validate(boost::any& v, const std::vector<std::string>& values,
               std::optional<T>*, int) {
   // First parse as a T
   T* dummy = nullptr;
+  using namespace boost::program_options;
   validate(v, values, dummy, 0);
 
   // Wrap the T inside std::optional
@@ -70,7 +75,7 @@ inline void validate(boost::any& v, const std::vector<std::string>& values,
   validators::check_first_occurrence(v);
   // Extract the first string from 'values'. If there is more than
   // one string, it's an error, and exception will be thrown.
-  const string& s = validators::get_single_string(values);
+  const std::string& s = validators::get_single_string(values);
 
   // Convert the string to `MemorySize` and put it into the option.
   v = MemorySize::parse(s);
@@ -98,26 +103,64 @@ class ParameterToProgramOptionFactory {
    * value as the default value. When that value is parsed, the parameter is set
    * to the parsed value.
    */
-  template <ad_utility::ParameterName name>
+  template <auto ParameterPtr>
   auto getProgramOption() {
     // Get the current value of the parameter, it will become the default
     // value of the command-line option.
-    auto defaultValue = _parameters->template get<name>();
+    const auto& param =
+        std::invoke(ParameterPtr, *globalRuntimeParameters.rlock());
+    auto defaultValue = param.get();
+    // This is needed for types that boost can't convert to string.
+    auto defaultValueAsString = param.toString();
 
     // The underlying type for the parameter.
     using Type = decltype(defaultValue);
 
     // The function that is called when the command-line option is called.
     // It sets the parameter to the parsed value.
-    auto setParameterToValue{
-        [this](const Type& value) { _parameters->template set<name>(value); }};
+    auto setParameterToValue{[](const Type& value) {
+      std::invoke(ParameterPtr, *globalRuntimeParameters.wlock()).set(value);
+    }};
 
     return boost::program_options::value<Type>()
-        ->default_value(defaultValue)
+        ->default_value(defaultValue, defaultValueAsString)
         ->notifier(setParameterToValue);
   }
 };
 
+// This function is required  to use `VocabularyEnum` in
+// `boost::program_options`.
+inline void validate(boost::any& v, const std::vector<std::string>& values,
+                     VocabularyType*, int) {
+  using namespace boost::program_options;
+
+  // Make sure no previous assignment to 'v' was made.
+  validators::check_first_occurrence(v);
+  // Extract the first string from 'values'. If there is more than
+  // one string, it's an error, and exception will be thrown.
+  const std::string& s = validators::get_single_string(values);
+
+  // Convert the string to `MemorySize` and put it into the option.
+  v = VocabularyType::fromString(s);
+}
 }  // namespace ad_utility
+
+namespace qlever {
+// This function is required  to use `TextScoringMetric` in
+// `boost::program_options`.
+inline void validate(boost::any& v, const std::vector<std::string>& values,
+                     TextScoringMetric*, int) {
+  using namespace boost::program_options;
+
+  // Make sure no previous assignment to 'v' was made.
+  validators::check_first_occurrence(v);
+  // Extract the first string from 'values'. If there is more than
+  // one string, it's an error, and exception will be thrown.
+  const std::string& s = validators::get_single_string(values);
+
+  // Convert the string to `MemorySize` and put it into the option.
+  v = getTextScoringMetricFromString(s);
+}
+}  // namespace qlever
 
 #endif  // QLEVER_PROGRAMOPTIONSHELPERS_H

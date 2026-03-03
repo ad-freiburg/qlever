@@ -2,22 +2,59 @@
 // Chair of Algorithms and Data Structures
 // Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <map>
 
 #include "util/Algorithm.h"
+#include "util/HashMap.h"
 #include "util/Random.h"
 
 using namespace ad_utility;
+
+namespace {
+template <typename StringLike>
+void testStringLike() {
+  StringLike s{"hal"};
+  {
+    std::vector<std::string> substrings{"h", "a", "l", "ha", "al", "hal"};
+    ASSERT_TRUE(ql::ranges::all_of(
+        substrings, [&s](const auto& el) { return contains(s, el); }));
+    std::vector<std::string> noSubstrings{"x", "hl",
+                                          "hel"};  // codespell-ignore
+    ASSERT_TRUE(ql::ranges::none_of(
+        noSubstrings, [&s](const auto& el) { return contains(s, el); }));
+  }
+  {
+    std::vector<std::string_view> substrings{"h", "a", "l", "ha", "al", "hal"};
+    ASSERT_TRUE(ql::ranges::all_of(
+        substrings, [&s](const auto& el) { return contains(s, el); }));
+    std::vector<std::string_view> noSubstrings{"x", "hl",
+                                               "hel"};  // codespell-ignore
+    ASSERT_TRUE(ql::ranges::none_of(
+        noSubstrings, [&s](const auto& el) { return contains(s, el); }));
+  }
+
+  std::vector<char> subchars{'h', 'a', 'l'};
+  ASSERT_TRUE(ql::ranges::all_of(
+      subchars, [&s](const auto& el) { return contains(s, el); }));
+
+  std::vector<char> noSubchars{'i', 'b', 'm'};
+  ASSERT_TRUE(ql::ranges::none_of(
+      noSubchars, [&s](const auto& el) { return contains(s, el); }));
+}
+}  // namespace
 
 // _____________________________________________________________________________
 TEST(Algorithm, Contains) {
   std::vector v{1, 42, 5, 3};
   ASSERT_TRUE(
-      std::ranges::all_of(v, [&v](const auto& el) { return contains(v, el); }));
-  ASSERT_TRUE(std::ranges::none_of(
+      ql::ranges::all_of(v, [&v](const auto& el) { return contains(v, el); }));
+  ASSERT_TRUE(ql::ranges::none_of(
       std::vector{
           28,
           2,
@@ -25,38 +62,11 @@ TEST(Algorithm, Contains) {
       },
       [&v](const auto& el) { return contains(v, el); }));
 
-  auto testStringLike = []<typename StringLike>() {
-    StringLike s{"hal"};
-    {
-      std::vector<std::string> substrings{"h", "a", "l", "ha", "al", "hal"};
-      ASSERT_TRUE(std::ranges::all_of(
-          substrings, [&s](const auto& el) { return contains(s, el); }));
-      std::vector<std::string> noSubstrings{"x", "hl",
-                                            "hel"};  // codespell-ignore
-      ASSERT_TRUE(std::ranges::none_of(
-          noSubstrings, [&s](const auto& el) { return contains(s, el); }));
-    }
-    {
-      std::vector<std::string_view> substrings{"h",  "a",  "l",
-                                               "ha", "al", "hal"};
-      ASSERT_TRUE(std::ranges::all_of(
-          substrings, [&s](const auto& el) { return contains(s, el); }));
-      std::vector<std::string_view> noSubstrings{"x", "hl",
-                                                 "hel"};  // codespell-ignore
-      ASSERT_TRUE(std::ranges::none_of(
-          noSubstrings, [&s](const auto& el) { return contains(s, el); }));
-    }
+  EXPECT_TRUE(contains((std::unordered_set{3, 4, 5}), 5));
+  EXPECT_TRUE(contains((ad_utility::HashSet<int>{3, 4, 5}), 5));
 
-    std::vector<char> subchars{'h', 'a', 'l'};
-    ASSERT_TRUE(std::ranges::all_of(
-        subchars, [&s](const auto& el) { return contains(s, el); }));
-
-    std::vector<char> noSubchars{'i', 'b', 'm'};
-    ASSERT_TRUE(std::ranges::none_of(
-        noSubchars, [&s](const auto& el) { return contains(s, el); }));
-  };
-  testStringLike.template operator()<std::string>();
-  testStringLike.template operator()<std::string_view>();
+  testStringLike<std::string>();
+  testStringLike<std::string_view>();
 }
 
 // _____________________________________________________________________________
@@ -67,6 +77,54 @@ TEST(Algorithm, ContainsIF) {
 
   ASSERT_FALSE(contains_if(v, [](const auto& el) { return el == 5; }));
   ASSERT_FALSE(contains_if(v, [](const auto& el) { return el < 0; }));
+}
+
+// _____________________________________________________________________________
+TEST(Algorithm, FindOptional) {
+  // Key found in a HashMap returns the mapped value.
+  HashMap<std::string, int> map{{"foo", 42}, {"bar", 7}};
+  {
+    auto result = findOptional(map, std::string{"foo"});
+    ASSERT_TRUE(result.has_value());
+    ASSERT_EQ(result.value(), 42);
+  }
+  {
+    auto result = findOptional(map, std::string{"bar"});
+    ASSERT_TRUE(result.has_value());
+    ASSERT_EQ(result.value(), 7);
+  }
+
+  // Key not found returns boost::none.
+  {
+    auto result = findOptional(map, std::string{"missing"});
+    ASSERT_FALSE(result.has_value());
+  }
+
+  // Empty map always returns boost::none.
+  {
+    HashMap<std::string, int> emptyMap;
+    auto result = findOptional(emptyMap, std::string{"any"});
+    ASSERT_FALSE(result.has_value());
+  }
+
+  // The returned optional holds a reference to the value in the map.
+  {
+    HashMap<std::string, std::string> strMap{{"key", "value"}};
+    auto result = findOptional(strMap, std::string{"key"});
+    ASSERT_TRUE(result.has_value());
+    ASSERT_EQ(&result.value(), &strMap["key"]);
+  }
+
+  // Works with std::map as well.
+  {
+    std::map<int, std::string> stdMap{{1, "one"}, {2, "two"}};
+    auto found = findOptional(stdMap, 2);
+    ASSERT_TRUE(found.has_value());
+    ASSERT_EQ(found.value(), "two");
+
+    auto notFound = findOptional(stdMap, 3);
+    ASSERT_FALSE(notFound.has_value());
+  }
 }
 
 // _____________________________________________________________________________
@@ -104,7 +162,7 @@ TEST(Algorithm, Transform) {
   ASSERT_EQ((std::vector<std::string>{"hix", "byex", "whyx"}), v3);
   ASSERT_EQ(3u, v.size());
   // The individual elements of `v` were moved from.
-  ASSERT_TRUE(std::ranges::all_of(v, &std::string::empty));
+  ASSERT_TRUE(ql::ranges::all_of(v, &std::string::empty));
 }
 
 // _____________________________________________________________________________
@@ -114,8 +172,8 @@ TEST(Algorithm, Flatten) {
   ASSERT_EQ((std::vector<std::string>{"hi", "bye", "why", "me"}), v3);
   ASSERT_EQ(3u, v.size());
   // The individual elements of `v` were moved from.
-  ASSERT_TRUE(std::ranges::all_of(v, [](const auto& inner) {
-    return std::ranges::all_of(inner, &std::string::empty);
+  ASSERT_TRUE(ql::ranges::all_of(v, [](const auto& inner) {
+    return ql::ranges::all_of(inner, &std::string::empty);
   }));
 }
 
@@ -168,8 +226,8 @@ TEST(AlgorithmTest, transformArray) {
 TEST(AlgorithmTest, lowerUpperBoundIterator) {
   std::vector<size_t> input;
   FastRandomIntGenerator<size_t> randomGenerator;
-  std::ranges::generate_n(std::back_inserter(input), 1000,
-                          std::ref(randomGenerator));
+  ql::ranges::generate_n(std::back_inserter(input), 1000,
+                         std::ref(randomGenerator));
 
   auto compForLowerBound = [](auto iterator, size_t value) {
     return *iterator < value;
@@ -180,9 +238,9 @@ TEST(AlgorithmTest, lowerUpperBoundIterator) {
   for (auto value : input) {
     EXPECT_EQ(ad_utility::lower_bound_iterator(input.begin(), input.end(),
                                                value, compForLowerBound),
-              std::ranges::lower_bound(input, value));
+              ql::ranges::lower_bound(input, value));
     EXPECT_EQ(ad_utility::upper_bound_iterator(input.begin(), input.end(),
                                                value, compForUpperBound),
-              std::ranges::upper_bound(input, value));
+              ql::ranges::upper_bound(input, value));
   }
 }

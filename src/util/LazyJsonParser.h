@@ -2,11 +2,14 @@
 // Chair of Algorithms and Data Structures.
 // Author: Moritz Dom (domm@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_LAZYJSONPARSER_H
+#define QLEVER_SRC_UTIL_LAZYJSONPARSER_H
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include <optional>
 #include <variant>
 
+#include "backports/span.h"
 #include "util/Generator.h"
 #include "util/json.h"
 
@@ -38,7 +41,7 @@ class LazyJsonParser {
                          std::vector<std::string> arrayPath);
 
   // Convenient alternative for the function above using bytes.
-  static Generator parse(cppcoro::generator<std::span<std::byte>> partialJson,
+  static Generator parse(cppcoro::generator<ql::span<std::byte>> partialJson,
                          std::vector<std::string> arrayPath);
 
  private:
@@ -113,3 +116,6 @@ class LazyJsonParser {
   const std::string suffixInArray_;
 };
 }  // namespace ad_utility
+
+#endif
+#endif  // QLEVER_SRC_UTIL_LAZYJSONPARSER_H

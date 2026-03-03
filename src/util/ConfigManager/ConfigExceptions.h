@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (June of 2023, schlegea@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_CONFIGMANAGER_CONFIGEXCEPTIONS_H
+#define QLEVER_SRC_UTIL_CONFIGMANAGER_CONFIGEXCEPTIONS_H
 
 #include <exception>
 #include <string>
@@ -175,3 +176,5 @@ class ConfigOptionConstructorNullPointerException
       std::string_view optionIdentifier);
 };
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_CONFIGMANAGER_CONFIGEXCEPTIONS_H

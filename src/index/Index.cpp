@@ -20,19 +20,9 @@ Index::Index(Index&&) noexcept = default;
 Index::~Index() = default;
 
 // ____________________________________________________________________________
-void Index::createFromOnDiskIndex(const std::string& onDiskBase) {
-  pimpl_->createFromOnDiskIndex(onDiskBase);
-}
-
-// ____________________________________________________________________________
-void Index::addTextFromContextFile(const std::string& contextFile,
-                                   bool addWordsFromLiterals) {
-  pimpl_->addTextFromContextFile(contextFile, addWordsFromLiterals);
-}
-
-// ____________________________________________________________________________
-void Index::buildDocsDB(const std::string& docsFile) {
-  pimpl_->buildDocsDB(docsFile);
+void Index::createFromOnDiskIndex(const std::string& onDiskBase,
+                                  bool persistUpdatesOnDisk) {
+  pimpl_->createFromOnDiskIndex(onDiskBase, persistUpdatesOnDisk);
 }
 
 // ____________________________________________________________________________
@@ -42,13 +32,13 @@ void Index::addTextFromOnDiskIndex() { pimpl_->addTextFromOnDiskIndex(); }
 auto Index::getVocab() const -> const Vocab& { return pimpl_->getVocab(); }
 
 // ____________________________________________________________________________
-auto Index::getNonConstVocabForTesting() -> Vocab& {
-  return pimpl_->getNonConstVocabForTesting();
+auto Index::encodedIriManager() const -> const EncodedIriManager& {
+  return pimpl_->encodedIriManager();
 }
 
 // ____________________________________________________________________________
-auto Index::getTextVocab() const -> const TextVocab& {
-  return pimpl_->getTextVocab();
+auto Index::getNonConstVocabForTesting() -> Vocab& {
+  return pimpl_->getNonConstVocabForTesting();
 }
 
 // ____________________________________________________________________________
@@ -59,24 +49,24 @@ ad_utility::BlankNodeManager* Index::getBlankNodeManager() const {
 // ____________________________________________________________________________
 size_t Index::getCardinality(
     const TripleComponent& comp, Permutation::Enum p,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
-  return pimpl_->getCardinality(comp, p, locatedTriplesSnapshot);
+    const LocatedTriplesState& locatedTriplesState) const {
+  return pimpl_->getCardinality(comp, p, locatedTriplesState);
 }
 
 // ____________________________________________________________________________
 size_t Index::getCardinality(
     Id id, Permutation::Enum p,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
-  return pimpl_->getCardinality(id, p, locatedTriplesSnapshot);
+    const LocatedTriplesState& locatedTriplesState) const {
+  return pimpl_->getCardinality(id, p, locatedTriplesState);
 }
 
 // ____________________________________________________________________________
-std::string Index::indexToString(VocabIndex id) const {
+RdfsVocabulary::AccessReturnType Index::indexToString(VocabIndex id) const {
   return pimpl_->indexToString(id);
 }
 
 // ____________________________________________________________________________
-std::string_view Index::indexToString(WordVocabIndex id) const {
+TextVocabulary::AccessReturnType Index::indexToString(WordVocabIndex id) const {
   return pimpl_->indexToString(id);
 }
 
@@ -109,20 +99,10 @@ size_t Index::getNumDistinctSubjectPredicatePairs() const {
 std::string_view Index::wordIdToString(WordIndex wordIndex) const {
   return pimpl_->wordIdToString(wordIndex);
 }
-
 // ____________________________________________________________________________
-size_t Index::getSizeOfTextBlockForWord(const std::string& word) const {
-  return pimpl_->getSizeOfTextBlockForWord(word);
-}
-
-// ____________________________________________________________________________
-size_t Index::getSizeOfTextBlockForEntities(const std::string& word) const {
-  return pimpl_->getSizeOfTextBlockForEntities(word);
-}
-
-// ____________________________________________________________________________
-size_t Index::getSizeEstimate(const std::string& words) const {
-  return pimpl_->getSizeEstimate(words);
+size_t Index::getSizeOfTextBlocksSum(const std::string& word,
+                                     TextScanMode textScanMode) const {
+  return pimpl_->getSizeOfTextBlocksSum(word, textScanMode);
 }
 
 // ____________________________________________________________________________
@@ -134,13 +114,14 @@ IdTable Index::getWordPostingsForTerm(
 
 // ____________________________________________________________________________
 IdTable Index::getEntityMentionsForWord(
-    const string& term,
+    const std::string& term,
     const ad_utility::AllocatorWithLimit<Id>& allocator) const {
   return pimpl_->getEntityMentionsForWord(term, allocator);
 }
 
 // ____________________________________________________________________________
-size_t Index::getIndexOfBestSuitedElTerm(const vector<string>& terms) const {
+size_t Index::getIndexOfBestSuitedElTerm(
+    const std::vector<std::string>& terms) const {
   return pimpl_->getIndexOfBestSuitedElTerm(terms);
 }
 
@@ -171,6 +152,9 @@ bool& Index::usePatterns() { return pimpl_->usePatterns(); }
 bool& Index::loadAllPermutations() { return pimpl_->loadAllPermutations(); }
 
 // ____________________________________________________________________________
+bool& Index::doNotLoadPermutations() { return pimpl_->doNotLoadPermutations(); }
+
+// ____________________________________________________________________________
 void Index::setKeepTempFiles(bool keepTempFiles) {
   return pimpl_->setKeepTempFiles(keepTempFiles);
 }
@@ -181,13 +165,23 @@ ad_utility::MemorySize& Index::memoryLimitIndexBuilding() {
 }
 
 // ____________________________________________________________________________
-ad_utility::MemorySize& Index::blocksizePermutationsPerColumn() {
-  return pimpl_->blocksizePermutationPerColumn();
+const ad_utility::MemorySize& Index::memoryLimitIndexBuilding() const {
+  return std::as_const(*pimpl_).memoryLimitIndexBuilding();
 }
 
 // ____________________________________________________________________________
-const ad_utility::MemorySize& Index::memoryLimitIndexBuilding() const {
-  return std::as_const(*pimpl_).memoryLimitIndexBuilding();
+ad_utility::MemorySize& Index::parserBufferSize() {
+  return pimpl_->parserBufferSize();
+}
+
+// ____________________________________________________________________________
+const ad_utility::MemorySize& Index::parserBufferSize() const {
+  return std::as_const(*pimpl_).parserBufferSize();
+}
+
+// ____________________________________________________________________________
+ad_utility::MemorySize& Index::blocksizePermutationsPerColumn() {
+  return pimpl_->blocksizePermutationPerColumn();
 }
 
 // ____________________________________________________________________________
@@ -212,7 +206,17 @@ const std::string& Index::getTextName() const { return pimpl_->getTextName(); }
 const std::string& Index::getKbName() const { return pimpl_->getKbName(); }
 
 // ____________________________________________________________________________
+const std::string& Index::getOnDiskBase() const {
+  return pimpl_->getOnDiskBase();
+}
+
+// ____________________________________________________________________________
 const std::string& Index::getIndexId() const { return pimpl_->getIndexId(); }
+
+// ____________________________________________________________________________
+const std::string& Index::getGitShortHash() const {
+  return pimpl_->getGitShortHash();
+}
 
 // ____________________________________________________________________________
 Index::NumNormalAndInternal Index::numTriples() const {
@@ -230,6 +234,11 @@ size_t Index::getNofWordPostings() const {
 // ____________________________________________________________________________
 size_t Index::getNofEntityPostings() const {
   return pimpl_->getNofEntityPostings();
+}
+
+// ____________________________________________________________________________
+size_t Index::getNofNonLiteralsInTextIndex() const {
+  return pimpl_->getNofNonLiteralsInTextIndex();
 }
 
 // ____________________________________________________________________________
@@ -251,46 +260,25 @@ Index::NumNormalAndInternal Index::numDistinctPredicates() const {
 bool Index::hasAllPermutations() const { return pimpl_->hasAllPermutations(); }
 
 // ____________________________________________________________________________
-vector<float> Index::getMultiplicities(Permutation::Enum p) const {
-  return pimpl_->getMultiplicities(p);
+std::vector<float> Index::getMultiplicities(
+    const Permutation& permutation) const {
+  return pimpl_->getMultiplicities(permutation);
 }
 
 // ____________________________________________________________________________
-vector<float> Index::getMultiplicities(
-    const TripleComponent& key, Permutation::Enum p,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
-  return pimpl_->getMultiplicities(key, p, locatedTriplesSnapshot);
-}
-
-// ____________________________________________________________________________
-IdTable Index::scan(
-    const ScanSpecificationAsTripleComponent& scanSpecification,
-    Permutation::Enum p, Permutation::ColumnIndicesRef additionalColumns,
-    const ad_utility::SharedCancellationHandle& cancellationHandle,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot,
-    const LimitOffsetClause& limitOffset) const {
-  return pimpl_->scan(scanSpecification, p, additionalColumns,
-                      cancellationHandle, locatedTriplesSnapshot, limitOffset);
-}
-
-// ____________________________________________________________________________
-IdTable Index::scan(
-    const ScanSpecification& scanSpecification, Permutation::Enum p,
-    Permutation::ColumnIndicesRef additionalColumns,
-    const ad_utility::SharedCancellationHandle& cancellationHandle,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot,
-    const LimitOffsetClause& limitOffset) const {
-  return pimpl_->scan(scanSpecification, p, additionalColumns,
-                      cancellationHandle, locatedTriplesSnapshot, limitOffset);
+std::vector<float> Index::getMultiplicities(
+    const TripleComponent& key, const Permutation& p,
+    const LocatedTriplesState& locatedTriplesState) const {
+  return pimpl_->getMultiplicities(key, p, locatedTriplesState);
 }
 
 // ____________________________________________________________________________
 size_t Index::getResultSizeOfScan(
     const ScanSpecification& scanSpecification,
     const Permutation::Enum& permutation,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+    const LocatedTriplesState& locatedTriplesState) const {
   return pimpl_->getResultSizeOfScan(scanSpecification, permutation,
-                                     locatedTriplesSnapshot);
+                                     locatedTriplesState);
 }
 
 // ____________________________________________________________________________

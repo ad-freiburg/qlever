@@ -1,9 +1,11 @@
 //  Copyright 2021, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#include "./SparqlExpressionPimpl.h"
+#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 
+#include "backports/algorithm.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 
@@ -38,8 +40,8 @@ SparqlExpressionPimpl& SparqlExpressionPimpl::operator=(
 std::vector<Variable> SparqlExpressionPimpl::getUnaggregatedVariables(
     const ad_utility::HashSet<Variable>& groupedVariables) const {
   auto vars = _pimpl->getUnaggregatedVariables();
-  std::erase_if(
-      vars, [&](const auto& var) { return groupedVariables.contains(var); });
+  ql::erase_if(vars,
+               [&](const auto& var) { return groupedVariables.contains(var); });
   return vars;
 }
 
@@ -60,6 +62,12 @@ std::string SparqlExpressionPimpl::getCacheKey(
   return _pimpl->getCacheKey(variableToColumnMap);
 }
 
+// ___________________________________________________________________________
+bool SparqlExpressionPimpl::isResultAlwaysDefined(
+    const VariableToColumnMap& variableToColumnMap) const {
+  return _pimpl->isResultAlwaysDefined(variableToColumnMap);
+}
+
 // ____________________________________________________________________________
 const std::string& SparqlExpressionPimpl::getDescriptor() const {
   return _pimpl->descriptor();
@@ -73,7 +81,7 @@ void SparqlExpressionPimpl::setDescriptor(std::string descriptor) {
 // _____________________________________________________________________________
 bool SparqlExpressionPimpl::isVariableContained(
     const Variable& variable) const {
-  return std::ranges::any_of(
+  return ql::ranges::any_of(
       containedVariables(),
       [&variable](const auto* varPtr) { return *varPtr == variable; });
 }
@@ -99,11 +107,6 @@ SparqlExpressionPimpl::getPrefilterExpressionForMetadata() const {
 }
 
 // _____________________________________________________________________________
-bool SparqlExpressionPimpl::containsLangExpression() const {
-  return _pimpl->containsLangExpression();
-}
-
-// _____________________________________________________________________________
 bool SparqlExpressionPimpl::containsAggregate() const {
   return _pimpl->containsAggregate();
 }
@@ -112,5 +115,20 @@ bool SparqlExpressionPimpl::containsAggregate() const {
 SparqlExpressionPimpl SparqlExpressionPimpl::makeVariableExpression(
     const Variable& variable) {
   return {std::make_unique<VariableExpression>(variable), variable.name()};
+}
+
+// _____________________________________________________________________________
+std::vector<const SparqlExpression*>
+SparqlExpressionPimpl::getExistsExpressions() const {
+  std::vector<const SparqlExpression*> result;
+  _pimpl->getExistsExpressions(result);
+  return result;
+}
+
+// _____________________________________________________________________________
+std::vector<SparqlExpression*> SparqlExpressionPimpl::getExistsExpressions() {
+  std::vector<SparqlExpression*> result;
+  _pimpl->getExistsExpressions(result);
+  return result;
 }
 }  // namespace sparqlExpression

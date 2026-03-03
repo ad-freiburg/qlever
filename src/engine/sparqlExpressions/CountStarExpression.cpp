@@ -6,6 +6,7 @@
 
 #include <absl/strings/str_cat.h>
 
+#include "backports/StartsWithAndEndsWith.h"
 #include "engine/CallFixedSize.h"
 #include "engine/Engine.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
@@ -37,30 +38,30 @@ ExpressionResult CountStarExpression::evaluate(
   // part of the DISTINCT computation.
 
   auto varToColNoInternalVariables =
-      ctx->_variableToColumnMap | std::views::filter([](const auto& varAndIdx) {
-        return !varAndIdx.first.name().starts_with(
-            QLEVER_INTERNAL_VARIABLE_PREFIX);
+      ctx->_variableToColumnMap | ql::views::filter([](const auto& varAndIdx) {
+        return !ql::starts_with(varAndIdx.first.name(),
+                                QLEVER_INTERNAL_VARIABLE_PREFIX);
       });
-  table.setNumColumns(std::ranges::distance(varToColNoInternalVariables));
+  table.setNumColumns(ql::ranges::distance(varToColNoInternalVariables));
   table.resize(ctx->size());
   auto checkCancellation = [ctx]() {
     ctx->cancellationHandle_->throwIfCancelled();
   };
   size_t targetColIdx = 0;
   for (const auto& [sourceColIdx, _] :
-       varToColNoInternalVariables | std::views::values) {
+       varToColNoInternalVariables | ql::views::values) {
     const auto& sourceColumn = ctx->_inputTable.getColumn(sourceColIdx);
-    std::ranges::copy(sourceColumn.begin() + ctx->_beginIndex,
-                      sourceColumn.begin() + ctx->_endIndex,
-                      table.getColumn(targetColIdx).begin());
+    ql::ranges::copy(sourceColumn.begin() + ctx->_beginIndex,
+                     sourceColumn.begin() + ctx->_endIndex,
+                     table.getColumn(targetColIdx).begin());
     ++targetColIdx;
     checkCancellation();
   }
   ctx->_qec.getSortPerformanceEstimator().throwIfEstimateTooLong(
       table.numRows(), table.numColumns(), ctx->deadline_,
       "Sort for COUNT(DISTINCT *)");
-  ad_utility::callFixedSize(table.numColumns(), [&table]<int I>() {
-    Engine::sort<I>(&table, std::ranges::lexicographical_compare);
+  ad_utility::callFixedSizeVi(table.numColumns(), [&table](auto i) {
+    Engine::sort<i>(&table, ql::ranges::lexicographical_compare);
   });
   return Id::makeFromInt(
       static_cast<int64_t>(Engine::countDistinct(table, checkCancellation)));
@@ -73,7 +74,7 @@ SparqlExpression::AggregateStatus CountStarExpression::isAggregate() const {
 }
 
 // _____________________________________________________________________________
-string CountStarExpression::getCacheKey(
+std::string CountStarExpression::getCacheKey(
     [[maybe_unused]] const VariableToColumnMap& varColMap) const {
   return absl::StrCat("COUNT * with DISTINCT = ", distinct_);
 }

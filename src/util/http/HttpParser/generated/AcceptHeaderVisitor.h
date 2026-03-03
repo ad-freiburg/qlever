@@ -1,7 +1,8 @@
 
 // Generated from AcceptHeader.g4 by ANTLR 4.11.1
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_HTTP_HTTPPARSER_GENERATED_ACCEPTHEADERVISITOR_H
+#define QLEVER_SRC_UTIL_HTTP_HTTPPARSER_GENERATED_ACCEPTHEADERVISITOR_H
 
 #include "AcceptHeaderParser.h"
 #include "antlr4-runtime.h"
@@ -54,3 +55,5 @@ class AcceptHeaderVisitor : public antlr4::tree::AbstractParseTreeVisitor {
   virtual std::any visitQuoted_pair(
       AcceptHeaderParser::Quoted_pairContext* context) = 0;
 };
+
+#endif  // QLEVER_SRC_UTIL_HTTP_HTTPPARSER_GENERATED_ACCEPTHEADERVISITOR_H

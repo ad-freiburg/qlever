@@ -4,7 +4,7 @@ If you have problems, try rebuilding QLever in debug mode (e.g. by changing the
 `cmake` line in the `Dockerfile` to `cmake -DCMAKE_BUILD_TYPE=Debug
 -DLOGLEVEL=DEBUG` or [building natively](docs/native_setup.md)),
 Then rebuild your index with the newly build docker container and
-`IndexBuilderMain` executable.
+`qlever-index` executable.
 The release build assumes machine written words- and docsfiles and omits sanity
 checks for the sake of speed.
 
@@ -38,7 +38,7 @@ In either case incompatible versions are detected during startup.
 
 For these cases, we provide a converter which only modifies the
 meta data without having to rebuild the index. Run `MetaDataConverterMain
-<index-prefix>` in the same way as as running `IndexBuilderMain`.
+<index-prefix>` in the same way as as running `qlever-index`.
 
 This will not automatically overwrite the old index but copy the permutations
 and create new files with the suffix `.converted` (e.g.
@@ -86,16 +86,3 @@ disk space as is actually used.
 With some systems such as Docker on Mac or when using unsupported file
 systems such as NTFS or APFS, this may lead to problems as these do not
 properly support sparse files.
-
-One possible error may be the following:
-
-    open() error on path=/index/scientists-stxxl.disk flags=16450, retrying without O_DIRECT.
-    Disk '/index/scientists-stxxl.disk' is allocated, space: 500000 MiB, I/O implementation: syscall queue=0 devid=0
-    terminate called after throwing an instance of 'foxxll::io_error'
-      what():  Error in void foxxll::ufs_file_base::_set_size(foxxll::file::offset_type) : ftruncate() path=/index/scientists-stxxl.disk fd=4 : No space left on device: iostream error
-    Aborted
-
-While macOS including Docker on Mac is not supported there are some workarounds.
-You can manually change the constant `static const size_t STXXL_DISK_SIZE_INDEX_BUILDER` 
-in [file](../src/global/Constants.h) or 
-you can try using a named volume instead of a path on the host.

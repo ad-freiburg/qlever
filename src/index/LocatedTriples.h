@@ -1,15 +1,25 @@
-// Copyright 2023 - 2024, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors:
-//    2023 Hannah Bast <bast@cs.uni-freiburg.de>
-//    2024 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
+// Copyright 2023 - 2025 The QLever Authors, in particular:
+//
+// 2023 - 2025 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2024 - 2025 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
-#pragma once
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
+#ifndef QLEVER_SRC_INDEX_LOCATEDTRIPLES_H
+#define QLEVER_SRC_INDEX_LOCATEDTRIPLES_H
+
+#include <boost/optional.hpp>
+
+#include "backports/three_way_comparison.h"
 #include "engine/idTable/IdTable.h"
 #include "global/IdTriple.h"
 #include "index/CompressedRelation.h"
+#include "index/KeyOrder.h"
 #include "util/HashMap.h"
+#include "util/TimeTracer.h"
 
 class Permutation;
 
@@ -17,7 +27,14 @@ struct NumAddedAndDeleted {
   size_t numAdded_;
   size_t numDeleted_;
 
-  bool operator<=>(const NumAddedAndDeleted&) const = default;
+  QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL(NumAddedAndDeleted, numAdded_,
+                                              numDeleted_)
+
+  friend std::ostream& operator<<(std::ostream& str,
+                                  const NumAddedAndDeleted& n) {
+    str << "added " << n.numAdded_ << ", deleted " << n.numDeleted_;
+    return str;
+  }
 };
 
 // A triple and its block in a particular permutation. For a detailed definition
@@ -31,23 +48,24 @@ struct LocatedTriple {
   // and `triple_[3]` is the graph.
   IdTriple<0> triple_;
 
-  // Flag that is true if the given triple is inserted and false if it
-  // is deleted.
-  bool shouldTripleExist_;
+  // If `true`, the triple is inserted, otherwise it is deleted.
+  bool insertOrDelete_;
 
   // Locate the given triples in the given permutation.
   static std::vector<LocatedTriple> locateTriplesInPermutation(
-      std::span<const IdTriple<0>> triples,
-      std::span<const CompressedBlockMetadata> blockMetadata,
-      const std::array<size_t, 3>& keyOrder, bool shouldExist,
+      ql::span<const IdTriple<0>> triples,
+      ql::span<const CompressedBlockMetadata> blockMetadata,
+      const qlever::KeyOrder& keyOrder, bool insertOrDelete,
       ad_utility::SharedCancellationHandle cancellationHandle);
-  bool operator==(const LocatedTriple&) const = default;
+
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(LocatedTriple, blockIndex_,
+                                              triple_, insertOrDelete_)
 
   // This operator is only for debugging and testing. It returns a
   // human-readable representation.
   friend std::ostream& operator<<(std::ostream& os, const LocatedTriple& lt) {
     os << "LT(" << lt.blockIndex_ << " " << lt.triple_ << " "
-       << lt.shouldTripleExist_ << ")";
+       << lt.insertOrDelete_ << ")";
     return os;
   }
 };
@@ -89,23 +107,35 @@ class LocatedTriplesPerBlock {
   // Stores the block metadata where the block borders have been adjusted for
   // the updated triples.
   std::optional<std::vector<CompressedBlockMetadata>> augmentedMetadata_;
-  std::vector<CompressedBlockMetadata> originalMetadata_;
+  std::optional<std::shared_ptr<const std::vector<CompressedBlockMetadata>>>
+      originalMetadata_;
 
  public:
   void updateAugmentedMetadata();
 
  public:
-  // Get upper limits for the number of located triples for the given block. The
-  // return value is a pair of numbers: first, the number of existing triples
-  // ("to be deleted") and second, the number of new triples ("to be inserted").
-  // The numbers are only upper limits because there may be triples that have no
-  // effect (like adding an already existing triple and deleting a non-existent
-  // triple).
+  // Get upper limits for the number of inserted and deleted located triples
+  // for the given block.
+  //
+  // NOTE: This currently returns the total number of triples in the block
+  // twice, in order to avoid counting the triples with `insertOrDelete_ ==
+  // true` and `insertOrDelete_ == false` separately, which turned out to
+  // be very expensive for a `std::set`, which is the underlying data
+  // structure.
+  //
+  // TODO: Since the average number of located triples per block is usually
+  // small, this estimate is usually fine. We could get better estimates in
+  // constant time by maintaining a counter for each of these two numbers in
+  // `LocatedTriplesPerBlock` and update these counters for each update
+  // operatoin. However, note that that would still be an estimate because at
+  // this point we do not know whether an insertion or deletion is actually
+  // effective.
   NumAddedAndDeleted numTriples(size_t blockIndex) const;
 
-  // Returns whether there are updates triples for the block with the index
-  // `blockIndex`.
-  bool hasUpdates(size_t blockIndex) const;
+  // Returns an optional reference to update triples for the block with the
+  // index `blockIndex`. If no such block exists, return `std::nullopt`.
+  boost::optional<const LocatedTriples&> getUpdatesIfPresent(
+      size_t blockIndex) const;
 
   // Merge located triples for `blockIndex_` (there must be at least one,
   // otherwise this function must not be called) with the given input `block`.
@@ -143,8 +173,14 @@ class LocatedTriplesPerBlock {
   // PRECONDITION: The `locatedTriples` must not already exist in
   // `LocatedTriplesPerBlock`.
   std::vector<LocatedTriples::iterator> add(
-      std::span<const LocatedTriple> locatedTriples);
+      ql::span<const LocatedTriple> locatedTriples,
+      ad_utility::timer::TimeTracer& tracer =
+          ad_utility::timer::DEFAULT_TIME_TRACER);
 
+  // Removes the given `LocatedTriple` from the `LocatedTriplesPerBlock`.
+  //
+  // NOTE: `updateAugmentedMetadata()` must be called to update the block
+  // metadata.
   void erase(size_t blockIndex, LocatedTriples::iterator iter);
 
   // Get the total number of `LocatedTriple`s (for all blocks).
@@ -156,28 +192,38 @@ class LocatedTriplesPerBlock {
   // Must be called initially before using the `LocatedTriplesPerBlock` to
   // initialize the original block metadata that is augmented for updated
   // triples. This is currently done in `Permutation::loadFromDisk`.
-  void setOriginalMetadata(std::vector<CompressedBlockMetadata> metadata);
+  void setOriginalMetadata(
+      std::shared_ptr<const std::vector<CompressedBlockMetadata>> metadata);
+  void setOriginalMetadata(std::vector<CompressedBlockMetadata> metadata) {
+    setOriginalMetadata(
+        std::make_shared<const std::vector<CompressedBlockMetadata>>(
+            std::move(metadata)));
+  }
 
   // Returns the block metadata where the block borders have been updated to
   // account for the update triples. All triples (both insert and delete) will
   // enlarge the block borders.
   const std::vector<CompressedBlockMetadata>& getAugmentedMetadata() const {
-    AD_CONTRACT_CHECK(augmentedMetadata_.has_value());
-    return augmentedMetadata_.value();
+    if (augmentedMetadata_.has_value()) {
+      return augmentedMetadata_.value();
+    }
+    AD_CONTRACT_CHECK(originalMetadata_.has_value());
+    return *originalMetadata_.value();
   };
 
   // Remove all located triples.
   void clear() {
     map_.clear();
     numTriples_ = 0;
-    augmentedMetadata_ = originalMetadata_;
+    augmentedMetadata_.reset();
   }
 
-  // Return `true` iff the given triple is one of the located triples with the
-  // given status (inserted or deleted).
+  // Return `true` iff one of the blocks contains `triple` with the given
+  // `insertOrDelete` status (`true` for inserted, `false` for deleted).
   //
-  // NOTE: Only used for testing.
-  bool isLocatedTriple(const IdTriple<0>& triple, bool isInsertion) const;
+  // NOTE: This is expensive because it iterates over all blocks and checks
+  // containment in each. It is only used in our tests, for convenience.
+  bool isLocatedTriple(const IdTriple<0>& triple, bool insertOrDelete) const;
 
   // This operator is only for debugging and testing. It returns a
   // human-readable representation.
@@ -185,9 +231,9 @@ class LocatedTriplesPerBlock {
                                   const LocatedTriplesPerBlock& ltpb) {
     // Get the block indices in sorted order.
     std::vector<size_t> blockIndices;
-    std::ranges::copy(ltpb.map_ | std::views::keys,
-                      std::back_inserter(blockIndices));
-    std::ranges::sort(blockIndices);
+    ql::ranges::copy(ltpb.map_ | ql::views::keys,
+                     std::back_inserter(blockIndices));
+    ql::ranges::sort(blockIndices);
     for (auto blockIndex : blockIndices) {
       os << "LTs in Block #" << blockIndex << ": " << ltpb.map_.at(blockIndex)
          << std::endl;
@@ -211,8 +257,16 @@ std::ostream& operator<<(std::ostream& os, const std::vector<IdTriple<0>>& v);
 // of the previous block is smaller and the first triple of the next block is
 // larger), then the block is the next block.
 //
-// 2.2. In particular, if the triple is smaller than all triples in the
+// 2.2. [Exception to 2.1] triples that are equal to the last triple of a block
+// with only the graph ID being higher, also belong to that block. This enforces
+// the invariant that triples that only differ in their graph are stored in the
+// same block (this is expected and enforced by the
+// `CompressedRelationReader/Writer`).
+//
+// 2.3. In particular, if the triple is smaller than all triples in the
 // permutation, the position is the first position of the first block.
 //
 // 3. If the triple is larger than all triples in the permutation, the block
 // index is one after the largest block index.
+
+#endif  // QLEVER_SRC_INDEX_LOCATEDTRIPLES_H

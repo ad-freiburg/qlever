@@ -1,87 +1,295 @@
-// Copyright 2023 - 2024, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors: Hannah Bast <bast@cs.uni-freiburg.de>
-//          Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
-//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2023 - 2025 The QLever Authors, in particular:
+//
+// 2023 - 2025 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2024 - 2025 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>, UFR
+// 2024 - 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "index/DeltaTriples.h"
 
-#include "absl/strings/str_cat.h"
+#include <absl/strings/str_cat.h>
+
+#include "backports/algorithm.h"
+#include "engine/ExecuteUpdate.h"
+#include "engine/ExportQueryExecutionTrees.h"
 #include "index/Index.h"
 #include "index/IndexImpl.h"
 #include "index/LocatedTriples.h"
+#include "util/Serializer/TripleSerializer.h"
 
 // ____________________________________________________________________________
-LocatedTriples::iterator& DeltaTriples::LocatedTripleHandles::forPermutation(
+template <bool isInternal>
+const LocatedTriplesPerBlock&
+LocatedTriplesState::getLocatedTriplesForPermutation(
+    Permutation::Enum permutation) const {
+  if constexpr (isInternal) {
+    AD_CONTRACT_CHECK(permutation == Permutation::PSO ||
+                      permutation == Permutation::POS);
+  }
+  return getLocatedTriples<isInternal>().at(static_cast<int>(permutation));
+}
+
+template const LocatedTriplesPerBlock&
+LocatedTriplesState::getLocatedTriplesForPermutation<true>(
+    Permutation::Enum permutation) const;
+template const LocatedTriplesPerBlock&
+LocatedTriplesState::getLocatedTriplesForPermutation<false>(
+    Permutation::Enum permutation) const;
+
+// ____________________________________________________________________________
+template <bool isInternal>
+LocatedTriplesPerBlock& LocatedTriplesState::getLocatedTriplesForPermutation(
     Permutation::Enum permutation) {
+  return const_cast<LocatedTriplesPerBlock&>(
+      std::as_const(*this).getLocatedTriplesForPermutation<isInternal>(
+          permutation));
+}
+
+template LocatedTriplesPerBlock&
+LocatedTriplesState::getLocatedTriplesForPermutation<true>(
+    Permutation::Enum permutation);
+template LocatedTriplesPerBlock&
+LocatedTriplesState::getLocatedTriplesForPermutation<false>(
+    Permutation::Enum permutation);
+
+// ____________________________________________________________________________
+template <bool isInternal>
+LocatedTriplesPerBlockAllPermutations<isInternal>&
+LocatedTriplesState::getLocatedTriples() {
+  return const_cast<LocatedTriplesPerBlockAllPermutations<isInternal>&>(
+      std::as_const(*this).getLocatedTriples<isInternal>());
+}
+
+// ____________________________________________________________________________
+template <bool isInternal>
+const LocatedTriplesPerBlockAllPermutations<isInternal>&
+LocatedTriplesState::getLocatedTriples() const {
+  if constexpr (isInternal) {
+    return internalLocatedTriplesPerBlock_;
+  } else {
+    return locatedTriplesPerBlock_;
+  }
+}
+
+// ____________________________________________________________________________
+template <bool isInternal>
+LocatedTriples::iterator& DeltaTriples::TriplesToHandles<isInternal>::
+    LocatedTripleHandles::forPermutation(Permutation::Enum permutation) {
   return handles_[static_cast<size_t>(permutation)];
 }
 
 // ____________________________________________________________________________
 void DeltaTriples::clear() {
-  triplesInserted_.clear();
-  triplesDeleted_.clear();
-  std::ranges::for_each(locatedTriples(), &LocatedTriplesPerBlock::clear);
+  auto clearImpl = [](auto& state, auto& locatedTriples) {
+    state.triplesInserted_.clear();
+    state.triplesDeleted_.clear();
+    ql::ranges::for_each(locatedTriples, &LocatedTriplesPerBlock::clear);
+  };
+  clearImpl(triplesToHandlesNormal_,
+            locatedTriples_->getLocatedTriples<false>());
+  clearImpl(triplesToHandlesInternal_,
+            locatedTriples_->getLocatedTriples<true>());
 }
 
 // ____________________________________________________________________________
-std::vector<DeltaTriples::LocatedTripleHandles>
+template <bool isInternal>
+DeltaTriples::TriplesToHandles<isInternal>& DeltaTriples::getState() {
+  if constexpr (isInternal) {
+    return triplesToHandlesInternal_;
+  } else {
+    return triplesToHandlesNormal_;
+  }
+}
+
+// ____________________________________________________________________________
+template <bool isInternal>
+std::vector<
+    typename DeltaTriples::TriplesToHandles<isInternal>::LocatedTripleHandles>
 DeltaTriples::locateAndAddTriples(CancellationHandle cancellationHandle,
-                                  std::span<const IdTriple<0>> idTriples,
-                                  bool shouldExist) {
-  std::array<std::vector<LocatedTriples::iterator>, Permutation::ALL.size()>
+                                  ql::span<const IdTriple<0>> triples,
+                                  bool insertOrDelete,
+                                  ad_utility::timer::TimeTracer& tracer) {
+  constexpr const auto& allPermutations = Permutation::all<isInternal>();
+  auto& lt = locatedTriples_->getLocatedTriples<isInternal>();
+  std::array<std::vector<LocatedTriples::iterator>, allPermutations.size()>
       intermediateHandles;
-  for (auto permutation : Permutation::ALL) {
-    auto& perm = index_.getPermutation(permutation);
+  for (auto permutation : allPermutations) {
+    tracer.beginTrace(std::string{Permutation::toString(permutation)});
+    tracer.beginTrace("locateTriples");
+    auto& basePerm = index_.getPermutation(permutation);
+    auto& perm = isInternal ? basePerm.internalPermutation() : basePerm;
     auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
-        // TODO<qup42>: replace with `getAugmentedMetadata` once integration
-        //  is done
-        idTriples, perm.metaData().blockData(), perm.keyOrder(), shouldExist,
+        triples, perm.metaData().blockData(), perm.keyOrder(), insertOrDelete,
         cancellationHandle);
     cancellationHandle->throwIfCancelled();
+    tracer.endTrace("locateTriples");
+    tracer.beginTrace("addToLocatedTriples");
     intermediateHandles[static_cast<size_t>(permutation)] =
-        this->locatedTriples()[static_cast<size_t>(permutation)].add(
-            locatedTriples);
+        lt[static_cast<size_t>(permutation)].add(locatedTriples, tracer);
     cancellationHandle->throwIfCancelled();
+    tracer.endTrace("addToLocatedTriples");
+    tracer.endTrace(Permutation::toString(permutation));
   }
-  std::vector<DeltaTriples::LocatedTripleHandles> handles{idTriples.size()};
-  for (auto permutation : Permutation::ALL) {
-    for (size_t i = 0; i < idTriples.size(); i++) {
+  tracer.beginTrace("transformHandles");
+  std::vector<typename TriplesToHandles<isInternal>::LocatedTripleHandles>
+      handles{triples.size()};
+  for (auto permutation : allPermutations) {
+    for (size_t i = 0; i < triples.size(); i++) {
       handles[i].forPermutation(permutation) =
           intermediateHandles[static_cast<size_t>(permutation)][i];
     }
   }
+  tracer.endTrace("transformHandles");
   return handles;
 }
 
 // ____________________________________________________________________________
-void DeltaTriples::eraseTripleInAllPermutations(LocatedTripleHandles& handles) {
+template <bool isInternal>
+void DeltaTriples::eraseTripleInAllPermutations(
+    typename TriplesToHandles<isInternal>::LocatedTripleHandles& handles) {
+  auto& lt = locatedTriples_->getLocatedTriples<isInternal>();
   // Erase for all permutations.
-  for (auto permutation : Permutation::ALL) {
+  for (auto permutation : Permutation::all<isInternal>()) {
     auto ltIter = handles.forPermutation(permutation);
-    locatedTriples()[static_cast<int>(permutation)].erase(ltIter->blockIndex_,
-                                                          ltIter);
+    lt[static_cast<int>(permutation)].erase(ltIter->blockIndex_, ltIter);
   }
 }
 
 // ____________________________________________________________________________
+DeltaTriplesCount DeltaTriples::getCounts() const {
+  return {numInserted(), numDeleted()};
+}
+
+// _____________________________________________________________________________
+DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
+                                                        bool insertion) {
+  // NOTE: If this logic is ever changed, you need to also change the code
+  // in `IndexBuilderTypes.h`, the function `getIdMapLambdas` specifically,
+  // which adds the same extra triples for language tags to the internal triples
+  // on the initial index build.
+  Triples internalTriples;
+  // Initialize on first use.
+  if (languagePredicate_.isUndefined()) {
+    languagePredicate_ =
+        TripleComponent{
+            ad_utility::triple_component::Iri::fromIriref(LANGUAGE_PREDICATE)}
+            .toValueId(index_.getVocab(), localVocab_,
+                       index_.encodedIriManager());
+  }
+  ad_utility::HashSet<Id> addedObjects;
+  for (const auto& triple : triples) {
+    const auto& ids = triple.ids();
+    Id objectId = ids.at(2);
+    auto optionalLiteralOrIri = ExportQueryExecutionTrees::idToLiteralOrIri(
+        index_, objectId, localVocab_, true);
+    if (!optionalLiteralOrIri.has_value() ||
+        !optionalLiteralOrIri.value().isLiteral() ||
+        !optionalLiteralOrIri.value().hasLanguageTag()) {
+      continue;
+    }
+    const auto& predicate =
+        predicateCache_.getOrCompute(ids.at(1).getBits(), [this](Id::T bits) {
+          auto optionalPredicate = ExportQueryExecutionTrees::idToLiteralOrIri(
+              index_, Id::fromBits(bits), localVocab_, true);
+          AD_CORRECTNESS_CHECK(optionalPredicate.has_value());
+          AD_CORRECTNESS_CHECK(optionalPredicate.value().isIri());
+          return std::move(optionalPredicate.value().getIri());
+        });
+    auto langtag =
+        asStringViewUnsafe(optionalLiteralOrIri.value().getLanguageTag());
+    auto specialPredicate =
+        ad_utility::convertToLanguageTaggedPredicate(predicate, langtag);
+    Id specialId = TripleComponent{std::move(specialPredicate)}.toValueId(
+        index_.getVocab(), localVocab_, index_.encodedIriManager());
+    // Extra triple `<subject> @language@<predicate> "object"@language`.
+    internalTriples.push_back(
+        IdTriple<0>{std::array{ids.at(0), specialId, objectId, ids.at(3)}});
+    // If we have already added the triple for this object with its langtag we
+    // can't add it a second time.
+    if (addedObjects.contains(objectId)) {
+      continue;
+    }
+    Id langtagId =
+        languageTagCache_.getOrCompute(langtag, [this](const std::string& tag) {
+          return TripleComponent{ad_utility::convertLangtagToEntityUri(tag)}
+              .toValueId(index_.getVocab(), localVocab_,
+                         index_.encodedIriManager());
+        });
+
+    // Because we don't track the exact counts of existing objects, we just
+    // conservatively add these internal triples on insertion, and never remove
+    // them. This is inefficient, but never wrong because queries that use these
+    // internal triples will always join these internal triples with a regular
+    // index scan.
+    if (insertion) {
+      // Extra triple `"object"@language ql:langtag <@language>`.
+      internalTriples.push_back(IdTriple<0>{
+          std::array{objectId, languagePredicate_, langtagId, ids.at(3)}});
+      addedObjects.emplace(objectId);
+    }
+  }
+  // Because of the special predicates, we need to re-sort the triples.
+  ql::ranges::sort(internalTriples);
+  return internalTriples;
+}
+
+// ____________________________________________________________________________
 void DeltaTriples::insertTriples(CancellationHandle cancellationHandle,
-                                 Triples triples) {
-  LOG(DEBUG) << "Inserting"
-             << " " << triples.size()
-             << " triples (including idempotent triples)." << std::endl;
-  modifyTriplesImpl(std::move(cancellationHandle), std::move(triples), true,
-                    triplesInserted_, triplesDeleted_);
+                                 Triples triples,
+                                 ad_utility::timer::TimeTracer& tracer) {
+  tracer.beginTrace("makeInternalTriples");
+  auto internalTriples = makeInternalTriples(triples, true);
+  tracer.endTrace("makeInternalTriples");
+  tracer.beginTrace("externalPermutation");
+  modifyTriplesImpl<false, true>(cancellationHandle, std::move(triples),
+                                 tracer);
+  tracer.endTrace("externalPermutation");
+  tracer.beginTrace("internalPermutation");
+  modifyTriplesImpl<true, true>(std::move(cancellationHandle),
+                                std::move(internalTriples), tracer);
+  tracer.endTrace("internalPermutation");
+  // Update the index of the located triples to mark that they have changed.
+  locatedTriples_->index_++;
 }
 
 // ____________________________________________________________________________
 void DeltaTriples::deleteTriples(CancellationHandle cancellationHandle,
-                                 Triples triples) {
-  LOG(DEBUG) << "Deleting"
-             << " " << triples.size()
-             << " triples (including idempotent triples)." << std::endl;
-  modifyTriplesImpl(std::move(cancellationHandle), std::move(triples), false,
-                    triplesDeleted_, triplesInserted_);
+                                 Triples triples,
+                                 ad_utility::timer::TimeTracer& tracer) {
+  tracer.beginTrace("makeInternalTriples");
+  auto internalTriples = makeInternalTriples(triples, false);
+  tracer.endTrace("makeInternalTriples");
+  tracer.beginTrace("externalPermutation");
+  modifyTriplesImpl<false, false>(cancellationHandle, std::move(triples),
+                                  tracer);
+  tracer.endTrace("externalPermutation");
+  tracer.beginTrace("internalPermutation");
+  modifyTriplesImpl<true, false>(std::move(cancellationHandle),
+                                 std::move(internalTriples), tracer);
+  tracer.endTrace("internalPermutation");
+  // Update the index of the located triples to mark that they have changed.
+  locatedTriples_->index_++;
+}
+
+// ____________________________________________________________________________
+void DeltaTriples::insertInternalTriplesForTesting(
+    CancellationHandle cancellationHandle, Triples triples,
+    ad_utility::timer::TimeTracer& tracer) {
+  modifyTriplesImpl<true, true>(std::move(cancellationHandle),
+                                std::move(triples), tracer);
+}
+
+// ____________________________________________________________________________
+void DeltaTriples::deleteInternalTriplesForTesting(
+    CancellationHandle cancellationHandle, Triples triples,
+    ad_utility::timer::TimeTracer& tracer) {
+  modifyTriplesImpl<true, false>(std::move(cancellationHandle),
+                                 std::move(triples), tracer);
 }
 
 // ____________________________________________________________________________
@@ -91,8 +299,8 @@ void DeltaTriples::rewriteLocalVocabEntriesAndBlankNodes(Triples& triples) {
   // this class.
   ad_utility::HashMap<Id, Id> blankNodeMap;
   // For the given original blank node `id`, check if it has already been
-  // mapped. If not, map it to a new blank node managed by the `localVocab_` of
-  // this class. Either way, return the (already existing or newly created)
+  // mapped. If not, map it to a new blank node managed by the `localVocab_`
+  // of this class. Either way, return the (already existing or newly created)
   // value.
   auto getLocalBlankNode = [this, &blankNodeMap](Id id) {
     AD_CORRECTNESS_CHECK(id.getDatatype() == Datatype::BlankNodeIndex);
@@ -133,57 +341,94 @@ void DeltaTriples::rewriteLocalVocabEntriesAndBlankNodes(Triples& triples) {
   };
 
   // Convert all local vocab and blank node `Id`s in all `triples`.
-  std::ranges::for_each(triples, [&convertId](IdTriple<0>& triple) {
-    std::ranges::for_each(triple.ids_, convertId);
-    std::ranges::for_each(triple.payload_, convertId);
+  ql::ranges::for_each(triples, [&convertId](IdTriple<0>& triple) {
+    ql::ranges::for_each(triple.ids(), convertId);
+    ql::ranges::for_each(triple.payload(), convertId);
   });
 }
 
 // ____________________________________________________________________________
+template <bool isInternal, bool insertOrDelete>
 void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
-                                     Triples triples, bool shouldExist,
-                                     TriplesToHandlesMap& targetMap,
-                                     TriplesToHandlesMap& inverseMap) {
+                                     Triples triples,
+                                     ad_utility::timer::TimeTracer& tracer) {
+  AD_LOG_DEBUG << (insertOrDelete ? "Inserting" : "Deleting") << " "
+               << triples.size() << (isInternal ? " internal" : "")
+               << " triples (including idempotent triples)." << std::endl;
+  auto [targetMap, inverseMap] = [this]() {
+    auto& state = getState<isInternal>();
+    if constexpr (insertOrDelete) {
+      return std::tie(state.triplesInserted_, state.triplesDeleted_);
+    } else {
+      return std::tie(state.triplesDeleted_, state.triplesInserted_);
+    }
+  }();
+  tracer.beginTrace("rewriteLocalVocabEntries");
   rewriteLocalVocabEntriesAndBlankNodes(triples);
-  std::ranges::sort(triples);
-  auto [first, last] = std::ranges::unique(triples);
-  triples.erase(first, last);
-  std::erase_if(triples, [&targetMap](const IdTriple<0>& triple) {
+  tracer.endTrace("rewriteLocalVocabEntries");
+  AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(triples));
+  AD_EXPENSIVE_CHECK(std::unique(triples.begin(), triples.end()) ==
+                     triples.end());
+  tracer.beginTrace("removeExistingTriples");
+  ql::erase_if(triples, [&targetMap](const IdTriple<0>& triple) {
     return targetMap.contains(triple);
   });
-  std::ranges::for_each(triples,
-                        [this, &inverseMap](const IdTriple<0>& triple) {
-                          auto handle = inverseMap.find(triple);
-                          if (handle != inverseMap.end()) {
-                            eraseTripleInAllPermutations(handle->second);
-                            inverseMap.erase(triple);
-                          }
-                        });
+  tracer.endTrace("removeExistingTriples");
+  tracer.beginTrace("removeInverseTriples");
+  ql::ranges::for_each(triples, [this, &inverseMap](const IdTriple<0>& triple) {
+    auto handle = inverseMap.find(triple);
+    if (handle != inverseMap.end()) {
+      eraseTripleInAllPermutations<isInternal>(handle->second);
+      inverseMap.erase(triple);
+    }
+  });
+  tracer.endTrace("removeInverseTriples");
+  tracer.beginTrace("locatedAndAdd");
 
-  std::vector<LocatedTripleHandles> handles =
-      locateAndAddTriples(std::move(cancellationHandle), triples, shouldExist);
+  auto handles = locateAndAddTriples<isInternal>(
+      std::move(cancellationHandle), triples, insertOrDelete, tracer);
+  tracer.endTrace("locatedAndAdd");
+  tracer.beginTrace("markTriples");
 
   AD_CORRECTNESS_CHECK(triples.size() == handles.size());
-  // TODO<qup42>: replace with std::views::zip in C++23
+  // TODO<qup42>: replace with ql::views::zip in C++23
   for (size_t i = 0; i < triples.size(); i++) {
     targetMap.insert({triples[i], handles[i]});
   }
+  tracer.endTrace("markTriples");
 }
 
 // ____________________________________________________________________________
-const LocatedTriplesPerBlock&
-LocatedTriplesSnapshot::getLocatedTriplesForPermutation(
-    Permutation::Enum permutation) const {
-  return locatedTriplesPerBlock_[static_cast<int>(permutation)];
+LocatedTriplesSharedState DeltaTriples::getLocatedTriplesSharedStateCopy()
+    const {
+  // Create a copy of the `LocatedTriplesState` for use as a constant
+  // snapshot.
+  return LocatedTriplesSharedState{std::make_shared<LocatedTriplesState>(
+      locatedTriples_->locatedTriplesPerBlock_,
+      locatedTriples_->internalLocatedTriplesPerBlock_,
+      localVocab_.getLifetimeExtender(), locatedTriples_->index_)};
 }
 
 // ____________________________________________________________________________
-SharedLocatedTriplesSnapshot DeltaTriples::getSnapshot() const {
-  // NOTE: Both members of the `LocatedTriplesSnapshot` are copied, but the
-  // `localVocab_` has no copy constructor (in order to avoid accidental
-  // copies), hence the explicit `clone`.
-  return SharedLocatedTriplesSnapshot{std::make_shared<LocatedTriplesSnapshot>(
-      locatedTriples(), localVocab_.clone())};
+LocatedTriplesSharedState DeltaTriples::getLocatedTriplesSharedStateReference()
+    const {
+  // Creating a `shared_ptr<const LocatedTriplesState>` from a
+  // `shared_ptr<LocatedTriplesState>` is cheap.
+  return LocatedTriplesSharedState{locatedTriples_};
+}
+
+// ____________________________________________________________________________
+void to_json(nlohmann::json& j, const DeltaTriplesCount& count) {
+  j = nlohmann::json{{"inserted", count.triplesInserted_},
+                     {"deleted", count.triplesDeleted_},
+                     {"total", count.triplesInserted_ + count.triplesDeleted_}};
+}
+
+// ____________________________________________________________________________
+DeltaTriplesCount operator-(const DeltaTriplesCount& lhs,
+                            const DeltaTriplesCount& rhs) {
+  return {lhs.triplesInserted_ - rhs.triplesInserted_,
+          lhs.triplesDeleted_ - rhs.triplesDeleted_};
 }
 
 // ____________________________________________________________________________
@@ -191,31 +436,219 @@ DeltaTriples::DeltaTriples(const Index& index)
     : DeltaTriples(index.getImpl()) {}
 
 // ____________________________________________________________________________
+DeltaTriples::DeltaTriples(const IndexImpl& index) : index_{index} {}
+
+// ____________________________________________________________________________
 DeltaTriplesManager::DeltaTriplesManager(const IndexImpl& index)
     : deltaTriples_{index},
-      currentLocatedTriplesSnapshot_{deltaTriples_.rlock()->getSnapshot()} {}
+      currentLocatedTriplesSharedState_{
+          deltaTriples_.wlock()->getLocatedTriplesSharedStateCopy()} {}
 
 // _____________________________________________________________________________
-void DeltaTriplesManager::modify(
-    const std::function<void(DeltaTriples&)>& function) {
+template <typename ReturnType>
+ReturnType DeltaTriplesManager::modify(
+    const std::function<ReturnType(DeltaTriples&)>& function,
+    bool writeToDiskAfterRequest, bool updateMetadataAfterRequest,
+    ad_utility::timer::TimeTracer& tracer) {
   // While holding the lock for the underlying `DeltaTriples`, perform the
   // actual `function` (typically some combination of insert and delete
   // operations) and (while still holding the lock) update the
   // `currentLocatedTriplesSnapshot_`.
-  deltaTriples_.withWriteLock([this, &function](DeltaTriples& deltaTriples) {
-    function(deltaTriples);
-    auto newSnapshot = deltaTriples.getSnapshot();
-    currentLocatedTriplesSnapshot_.withWriteLock(
-        [&newSnapshot](auto& currentSnapshot) {
-          currentSnapshot = std::move(newSnapshot);
-        });
+  tracer.beginTrace("acquiringDeltaTriplesWriteLock");
+  return deltaTriples_.withWriteLock([this, &function, writeToDiskAfterRequest,
+                                      updateMetadataAfterRequest,
+                                      &tracer](DeltaTriples& deltaTriples) {
+    auto updateSnapshot = [this, &deltaTriples] {
+      auto newSnapshot = deltaTriples.getLocatedTriplesSharedStateCopy();
+      currentLocatedTriplesSharedState_.withWriteLock(
+          [&newSnapshot](auto& currentSnapshot) {
+            currentSnapshot = std::move(newSnapshot);
+          });
+    };
+    auto writeAndUpdateSnapshot = [&updateSnapshot, &deltaTriples, &tracer,
+                                   writeToDiskAfterRequest]() {
+      if (writeToDiskAfterRequest) {
+        tracer.beginTrace("diskWriteback");
+        deltaTriples.writeToDisk();
+        tracer.endTrace("diskWriteback");
+      }
+      tracer.beginTrace("snapshotCreation");
+      updateSnapshot();
+      tracer.endTrace("snapshotCreation");
+    };
+    auto updateMetadata = [&tracer, &deltaTriples,
+                           updateMetadataAfterRequest]() {
+      if (updateMetadataAfterRequest) {
+        tracer.beginTrace("metadataUpdateForSnapshot");
+        deltaTriples.updateAugmentedMetadata();
+        tracer.endTrace("metadataUpdateForSnapshot");
+      }
+    };
+
+    tracer.endTrace("acquiringDeltaTriplesWriteLock");
+    if constexpr (std::is_void_v<ReturnType>) {
+      tracer.beginTrace("operations");
+      function(deltaTriples);
+      tracer.endTrace("operations");
+      updateMetadata();
+      writeAndUpdateSnapshot();
+    } else {
+      tracer.beginTrace("operations");
+      ReturnType returnValue = function(deltaTriples);
+      tracer.endTrace("operations");
+      updateMetadata();
+      writeAndUpdateSnapshot();
+      return returnValue;
+    }
+  });
+}
+// Explicit instantiations
+template void DeltaTriplesManager::modify<void>(
+    std::function<void(DeltaTriples&)> const&, bool writeToDiskAfterRequest,
+    bool updateMetadataAfterRequest, ad_utility::timer::TimeTracer&);
+template UpdateMetadata DeltaTriplesManager::modify<UpdateMetadata>(
+    const std::function<UpdateMetadata(DeltaTriples&)>&,
+    bool writeToDiskAfterRequest, bool updateMetadataAfterRequest,
+    ad_utility::timer::TimeTracer&);
+template DeltaTriplesCount DeltaTriplesManager::modify<DeltaTriplesCount>(
+    const std::function<DeltaTriplesCount(DeltaTriples&)>&,
+    bool writeToDiskAfterRequest, bool updateMetadataAfterRequest,
+    ad_utility::timer::TimeTracer&);
+template nlohmann::json DeltaTriplesManager::modify<nlohmann::json>(
+    const std::function<nlohmann::json(DeltaTriples&)>&,
+    bool writeToDiskAfterRequest, bool updateMetadataAfterRequest,
+    ad_utility::timer::TimeTracer&);
+
+// _____________________________________________________________________________
+void DeltaTriplesManager::clear() { modify<void>(&DeltaTriples::clear); }
+
+// _____________________________________________________________________________
+LocatedTriplesSharedState
+DeltaTriplesManager::getCurrentLocatedTriplesSharedState() const {
+  return *currentLocatedTriplesSharedState_.rlock();
+}
+
+// _____________________________________________________________________________
+std::tuple<
+    LocatedTriplesSharedState, std::vector<LocalVocabIndex>,
+    std::vector<
+        ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>>
+DeltaTriplesManager::getCurrentLocatedTriplesSharedStateWithVocab() const {
+  return deltaTriples_.withReadLock([this](const DeltaTriples& deltaTriples) {
+    auto [indices, ownedBlocks] = deltaTriples.copyLocalVocab();
+    return std::make_tuple(*currentLocatedTriplesSharedState_.rlock(),
+                           std::move(indices), std::move(ownedBlocks));
   });
 }
 
 // _____________________________________________________________________________
-void DeltaTriplesManager::clear() { modify(&DeltaTriples::clear); }
+void DeltaTriples::setOriginalMetadata(
+    Permutation::Enum permutation,
+    std::shared_ptr<const std::vector<CompressedBlockMetadata>> metadata,
+    bool setInternalMetadata) {
+  auto& locatedTriplesPerBlock =
+      setInternalMetadata
+          ? locatedTriples_->getLocatedTriplesForPermutation<true>(permutation)
+          : locatedTriples_->getLocatedTriplesForPermutation<false>(
+                permutation);
+  locatedTriplesPerBlock.setOriginalMetadata(std::move(metadata));
+}
 
 // _____________________________________________________________________________
-SharedLocatedTriplesSnapshot DeltaTriplesManager::getCurrentSnapshot() const {
-  return *currentLocatedTriplesSnapshot_.rlock();
+void DeltaTriples::updateAugmentedMetadata() {
+  auto update = [](auto& lt) {
+    ql::ranges::for_each(lt, &LocatedTriplesPerBlock::updateAugmentedMetadata);
+  };
+  update(locatedTriples_->getLocatedTriples<false>());
+  update(locatedTriples_->getLocatedTriples<true>());
+}
+
+// _____________________________________________________________________________
+void DeltaTriples::writeToDisk() const {
+  if (!filenameForPersisting_.has_value()) {
+    return;
+  }
+  // TODO<RobinTF> Currently this only writes non-internal delta triples to
+  // disk. The internal triples will be regenerated when importing the rest
+  // again. In the future we might to also want to explicitly store the
+  // internal triples.
+  auto toRange = [](const TriplesToHandles<false>::TriplesToHandlesMap& map) {
+    return map | ql::views::keys |
+           ql::views::transform(
+               [](const IdTriple<0>& triple) -> const std::array<Id, 4>& {
+                 return triple.ids();
+               }) |
+           ql::views::join;
+  };
+  std::filesystem::path tempPath = filenameForPersisting_.value();
+  tempPath += ".tmp";
+  ad_utility::serializeIds(
+      tempPath, localVocab_,
+      std::array{toRange(triplesToHandlesNormal_.triplesDeleted_),
+                 toRange(triplesToHandlesNormal_.triplesInserted_)});
+  std::filesystem::rename(tempPath, filenameForPersisting_.value());
+}
+
+// _____________________________________________________________________________
+void DeltaTriples::readFromDisk() {
+  if (!filenameForPersisting_.has_value()) {
+    return;
+  }
+  AD_CONTRACT_CHECK(localVocab_.empty());
+  auto [vocab, idRanges] = ad_utility::deserializeIds(
+      filenameForPersisting_.value(), index_.getBlankNodeManager());
+  if (idRanges.empty()) {
+    return;
+  }
+  AD_CORRECTNESS_CHECK(idRanges.size() == 2);
+  auto toTriples = [](const std::vector<Id>& ids) {
+    Triples triples;
+    static_assert(Triples::value_type::PayloadSize == 0);
+    constexpr size_t cols = Triples::value_type::NumCols;
+    AD_CORRECTNESS_CHECK(ids.size() % cols == 0);
+    triples.reserve(ids.size() / cols);
+    for (size_t i = 0; i < ids.size(); i += cols) {
+      triples.emplace_back(
+          std::array{ids[i], ids[i + 1], ids[i + 2], ids[i + 3]});
+    }
+    return triples;
+  };
+  auto cancellationHandle =
+      std::make_shared<CancellationHandle::element_type>();
+  insertTriples(cancellationHandle, toTriples(idRanges.at(1)));
+  deleteTriples(cancellationHandle, toTriples(idRanges.at(0)));
+  AD_LOG_INFO << "Done, #inserted triples = " << idRanges.at(1).size()
+              << ", #deleted triples = " << idRanges.at(0).size() << std::endl;
+}
+
+// _____________________________________________________________________________
+void DeltaTriples::setPersists(std::optional<std::string> filename) {
+  filenameForPersisting_ = std::move(filename);
+}
+
+// _____________________________________________________________________________
+void DeltaTriplesManager::setFilenameForPersistentUpdatesAndReadFromDisk(
+    std::string filename) {
+  modify<void>(
+      [&filename](DeltaTriples& deltaTriples) {
+        deltaTriples.setPersists(std::move(filename));
+        deltaTriples.readFromDisk();
+      },
+      false);
+}
+
+// _____________________________________________________________________________
+std::pair<
+    std::vector<LocalVocabIndex>,
+    std::vector<
+        ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>>
+DeltaTriples::copyLocalVocab() const {
+  AD_CORRECTNESS_CHECK(localVocab_.otherSets().empty(),
+                       "This function only copies from the primary word set.");
+  std::vector<LocalVocabIndex> entries = ::ranges::to_vector(
+      localVocab_.primaryWordSet() |
+      ql::views::transform(
+          [](const LocalVocabEntry& entry) { return &entry; }));
+  return std::make_pair(std::move(entries),
+                        localVocab_.getOwnedLocalBlankNodeBlocks());
 }

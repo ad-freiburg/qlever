@@ -2,37 +2,28 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_INDEX_INDEXMETADATA_H
+#define QLEVER_SRC_INDEX_INDEXMETADATA_H
 
-#include <stdio.h>
-
-#include <algorithm>
-#include <array>
 #include <cmath>
 #include <exception>
 #include <limits>
 #include <utility>
-#include <vector>
 
+#include "backports/algorithm.h"
 #include "global/Id.h"
 #include "index/CompressedRelation.h"
 #include "index/MetaDataHandler.h"
 #include "util/File.h"
-#include "util/HashMap.h"
 #include "util/MmapVector.h"
-#include "util/ReadableNumberFact.h"
 #include "util/Serializer/Serializer.h"
-
-using std::array;
-using std::pair;
-using std::vector;
 
 // An exception is thrown when we want to construct mmap meta data from hmap
 // meta data or vice versa.
 class WrongFormatException : public std::exception {
  public:
-  WrongFormatException(std::string msg) : msg_(std::move(msg)) {}
-  const char* what() const throw() { return msg_.c_str(); }
+  explicit WrongFormatException(std::string msg) : msg_{std::move(msg)} {}
+  const char* what() const noexcept override { return msg_.c_str(); }
 
  private:
   std::string msg_;
@@ -80,8 +71,8 @@ class IndexMetaData {
  private:
   off_t offsetAfter_ = 0;
 
-  string name_;
-  string filename_;
+  std::string name_;
+  std::string filename_;
 
   // TODO: For each of the following two (data_ and blockData_), both the type
   // name and the variable name are terrible.
@@ -89,7 +80,7 @@ class IndexMetaData {
   // For each relation, its meta data.
   MapType data_;
   // For each compressed block, its meta data.
-  BlocksType blockData_;
+  std::shared_ptr<BlocksType> blockData_ = std::make_shared<BlocksType>();
 
   size_t totalElements_ = 0;
   size_t numDistinctCol0_ = 0;
@@ -97,7 +88,7 @@ class IndexMetaData {
 
   // Public methods.
  public:
-  // Some instantiations of `MapType` (the dense ones using stxxl or mmap)
+  // Some instantiations of `MapType` (the dense ones using mmap)
   // require additional calls to setup() before being fully initialized.
   IndexMetaData() = default;
 
@@ -165,18 +156,31 @@ class IndexMetaData {
 
   // The number of distinct Col0Ids has to be passed in manually, as it cannot
   // be computed.
-  string statistics() const;
+  std::string statistics() const;
 
-  void setName(const string& name) { name_ = name; }
+  void setName(const std::string& name) { name_ = name; }
 
-  const string& getName() const { return name_; }
+  const std::string& getName() const { return name_; }
 
   size_t getVersion() const { return version_; }
 
   const MapType& data() const { return data_; }
 
-  BlocksType& blockData() { return blockData_; }
-  const BlocksType& blockData() const { return blockData_; }
+  BlocksType& blockData() { return *blockData_; }
+  const BlocksType& blockData() const { return *blockData_; }
+  std::shared_ptr<const BlocksType> blockDataShared() const {
+    return blockData_;
+  }
+
+  size_t totalElements() const { return totalElements_; }
+
+  // Exchange the multiplicities for two permutations that are "twins" (e.g. PSO
+  // and POS). This is needed because the multiplicity of the last column is
+  // stored in the metadata of the other permutation. The `PairMetadataWriter`
+  // already does this for the `PermutationWriter<true>` but when both
+  // permutations are written individually, we need to exchange the
+  // multiplicities of col 1 and col2 in post processing.
+  void exchangeMultiplicities(IndexMetaData& other);
 
   // Symmetric serialization function for the ad_utility::serialization module.
   AD_SERIALIZE_FRIEND_FUNCTION(IndexMetaData) {
@@ -207,7 +211,7 @@ class IndexMetaData {
     // Serialize the rest of the data members
     serializer | arg.name_;
     serializer | arg.data_;
-    serializer | arg.blockData_;
+    serializer | arg.blockData();
     serializer | arg.offsetAfter_;
     serializer | arg.totalElements_;
     serializer | arg.numDistinctCol0_;
@@ -228,4 +232,6 @@ using MetaWrapperMmapView = MetaDataWrapperDense<
 using IndexMetaDataMmap = IndexMetaData<MetaWrapperMmap>;
 using IndexMetaDataMmapView = IndexMetaData<MetaWrapperMmapView>;
 
-#include "./IndexMetaDataImpl.h"
+#include "index/IndexMetaDataImpl.h"
+
+#endif  // QLEVER_SRC_INDEX_INDEXMETADATA_H

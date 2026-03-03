@@ -8,17 +8,19 @@
 TextLimit::TextLimit(QueryExecutionContext* qec, const size_t limit,
                      std::shared_ptr<QueryExecutionTree> child,
                      const ColumnIndex& textRecordColumn,
-                     const vector<ColumnIndex>& entityColumns,
-                     const vector<ColumnIndex>& scoreColumns)
+                     const std::vector<ColumnIndex>& entityColumns,
+                     const std::vector<ColumnIndex>& scoreColumns)
     : Operation(qec),
       limit_(limit),
       child_(std::move(child)),
       textRecordColumn_(textRecordColumn),
       entityColumns_(entityColumns),
-      scoreColumns_(scoreColumns) {}
+      scoreColumns_(scoreColumns) {
+  AD_CONTRACT_CHECK(child_);
+}
 
 // _____________________________________________________________________________
-ProtoResult TextLimit::computeResult([[maybe_unused]] bool requestLaziness) {
+Result TextLimit::computeResult([[maybe_unused]] bool requestLaziness) {
   std::shared_ptr<const Result> childRes = child_->getResult();
 
   if (limit_ == 0) {
@@ -34,11 +36,11 @@ ProtoResult TextLimit::computeResult([[maybe_unused]] bool requestLaziness) {
   auto compareScores = [this](const auto& lhs, const auto& rhs) {
     size_t lhsScore = 0;
     size_t rhsScore = 0;
-    std::ranges::for_each(scoreColumns_,
-                          [&lhs, &rhs, &lhsScore, &rhsScore](const auto& col) {
-                            lhsScore += lhs[col].getInt();
-                            rhsScore += rhs[col].getInt();
-                          });
+    ql::ranges::for_each(scoreColumns_,
+                         [&lhs, &rhs, &lhsScore, &rhsScore](const auto& col) {
+                           lhsScore += lhs[col].getInt();
+                           rhsScore += rhs[col].getInt();
+                         });
     if (lhsScore > rhsScore) {
       return 1;
     } else if (lhsScore < rhsScore) {
@@ -49,7 +51,7 @@ ProtoResult TextLimit::computeResult([[maybe_unused]] bool requestLaziness) {
 
   auto compareEntities = [this](const auto& lhs, const auto& rhs) {
     auto it =
-        std::ranges::find_if(entityColumns_, [&lhs, &rhs](const auto& col) {
+        ql::ranges::find_if(entityColumns_, [&lhs, &rhs](const auto& col) {
           return lhs[col] < rhs[col] || lhs[col] > rhs[col];
         });
 
@@ -64,8 +66,8 @@ ProtoResult TextLimit::computeResult([[maybe_unused]] bool requestLaziness) {
     return 0;
   };
 
-  std::ranges::sort(idTable, [this, compareScores, compareEntities](
-                                 const auto& lhs, const auto& rhs) {
+  ql::ranges::sort(idTable, [this, compareScores, compareEntities](
+                                const auto& lhs, const auto& rhs) {
     return compareEntities(lhs, rhs) == 1 ||
            (compareEntities(lhs, rhs) == 0 &&
             (compareScores(lhs, rhs) == 1 ||
@@ -139,8 +141,8 @@ Variable TextLimit::getTextRecordVariable() const {
 }
 
 // _____________________________________________________________________________
-vector<Variable> TextLimit::getEntityVariables() const {
-  vector<Variable> entityVars;
+std::vector<Variable> TextLimit::getEntityVariables() const {
+  std::vector<Variable> entityVars;
   for (auto col : entityColumns_) {
     entityVars.push_back(child_->getVariableAndInfoByColumnIndex(col).first);
   }
@@ -148,8 +150,8 @@ vector<Variable> TextLimit::getEntityVariables() const {
 }
 
 // _____________________________________________________________________________
-vector<Variable> TextLimit::getScoreVariables() const {
-  vector<Variable> scoreVars;
+std::vector<Variable> TextLimit::getScoreVariables() const {
+  std::vector<Variable> scoreVars;
   for (auto col : scoreColumns_) {
     scoreVars.push_back(child_->getVariableAndInfoByColumnIndex(col).first);
   }
@@ -162,17 +164,19 @@ uint64_t TextLimit::getSizeEstimateBeforeLimit() {
 }
 
 // _____________________________________________________________________________
-vector<ColumnIndex> TextLimit::resultSortedOn() const { return entityColumns_; }
+std::vector<ColumnIndex> TextLimit::resultSortedOn() const {
+  return entityColumns_;
+}
 
 // _____________________________________________________________________________
-string TextLimit::getDescriptor() const {
+std::string TextLimit::getDescriptor() const {
   std::ostringstream os;
   os << "TextLimit with limit: " << limit_;
   return os.str();
 }
 
 // _____________________________________________________________________________
-string TextLimit::getCacheKeyImpl() const {
+std::string TextLimit::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "TEXT LIMIT: "
      << " with n: " << limit_ << ", with child: " << child_->getCacheKey()
@@ -187,4 +191,11 @@ string TextLimit::getCacheKeyImpl() const {
   }
   os << "}";
   return std::move(os).str();
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> TextLimit::cloneImpl() const {
+  return std::make_unique<TextLimit>(_executionContext, limit_, child_->clone(),
+                                     textRecordColumn_, entityColumns_,
+                                     scoreColumns_);
 }

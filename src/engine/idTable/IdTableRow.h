@@ -2,14 +2,16 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_IDTABLE_IDTABLEROW_H
+#define QLEVER_SRC_ENGINE_IDTABLE_IDTABLEROW_H
 
 #include <array>
 #include <iostream>
-#include <type_traits>
 #include <variant>
 #include <vector>
 
+#include "backports/three_way_comparison.h"
+#include "backports/type_traits.h"
 #include "global/Id.h"
 #include "util/Enums.h"
 #include "util/Exception.h"
@@ -54,15 +56,21 @@ class Row {
  public:
   // Construct a row for the dynamic case (then the number of columns has to be
   // specified).
-  explicit Row(size_t numCols) requires(isDynamic()) : data_(numCols) {}
+  CPP_template_2(typename = void)(requires(isDynamic())) explicit Row(
+      size_t numCols)
+      : data_(numCols) {}
 
   // Construct a row when the number of columns is statically known. Besides the
   // default constructor, we also keep the constructor that has a `numCols`
   // argument (which is ignored), in order to facilitate generic code that works
   // for both cases.
-  Row() requires(!isDynamic()) = default;
-  explicit Row([[maybe_unused]] size_t numCols) requires(!isDynamic())
-      : Row() {}
+  CPP_template_2(typename = void)(requires(!isDynamic())) Row(){};
+
+  CPP_template_2(typename = void)(requires(!isDynamic())) explicit Row(
+      size_t numCols)
+      : Row() {
+    (void)numCols;
+  }
 
   // Access the i-th element.
   T& operator[](size_t i) { return data_[i]; }
@@ -85,20 +93,21 @@ class Row {
 
   friend void swap(Row& a, Row& b) { std::swap(a.data_, b.data_); }
 
-  bool operator==(const Row& other) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Row, data_)
 
   // Convert from a static `RowReference` to a `std::array` (makes a copy).
-  explicit operator std::array<T, numStaticColumns>() const
-      requires(numStaticColumns != 0) {
+  CPP_template_2(typename = void)(requires(NumColumns != 0)) explicit
+  operator std::array<T, numStaticColumns>() const {
     std::array<T, numStaticColumns> result;
-    std::ranges::copy(*this, result.begin());
+    ql::ranges::copy(*this, result.begin());
     return result;
   }
 
   // This operator is only for debugging and testing. It returns a
   // human-readable representation.
-  friend std::ostream& operator<<(std::ostream& os, const Row& idTableRow)
-      requires(std::is_same_v<T, Id>) {
+  CPP_template_2(typename = void)(
+      requires(std::is_same_v<T, Id>)) friend std::ostream&
+  operator<<(std::ostream& os, const Row& idTableRow) {
     os << "(";
     for (size_t i = 0; i < idTableRow.numColumns(); ++i) {
       os << idTableRow[i] << (i < idTableRow.numColumns() - 1 ? " " : ")");
@@ -172,19 +181,23 @@ class RowReferenceImpl {
 
    protected:
     // The actual implementation of operator[].
-    static T& operatorBracketImpl(auto& self, size_t i)
-        requires(!std::is_const_v<std::remove_reference_t<decltype(self)>> &&
-                 !isConst) {
+    CPP_template(typename SelfType)(
+        requires CPP_NOT(std::is_const_v<std::remove_reference_t<SelfType>>)
+            CPP_and CPP_NOT(
+                isConst)) static T& operatorBracketImpl(SelfType& self,
+                                                        size_t i) {
       return (*self.table_)(self.row_, i);
     }
-    static const T& operatorBracketImpl(const auto& self, size_t i) {
+    template <typename Self>
+    static const T& operatorBracketImpl(const Self& self, size_t i) {
       return (*self.table_)(self.row_, i);
     }
 
    public:
     // Access to the `i`-th columns of this row. Only allowed for const values
     // and for rvalues.
-    T& operator[](size_t i) && requires(!isConst) {
+    CPP_template_2(typename = void)(requires(!isConst)) T& operator[](
+        size_t i) && {
       return operatorBracketImpl(*this, i);
     }
     const T& operator[](size_t i) const& {
@@ -197,7 +210,8 @@ class RowReferenceImpl {
     // Define iterators.
     template <typename RowT>
     struct IteratorHelper {
-      decltype(auto) operator()(auto&& row, size_t colIdx) const {
+      template <typename T>
+      decltype(auto) operator()(T&& row, size_t colIdx) const {
         return std::decay_t<decltype(row)>::operatorBracketImpl(AD_FWD(row),
                                                                 colIdx);
       }
@@ -232,7 +246,8 @@ class RowReferenceImpl {
    protected:
     // The implementation of swapping two `RowReference`s (passed either by
     // value or by reference).
-    static void swapImpl(auto&& a, auto&& b) requires(!isConst) {
+    CPP_template(typename AType, typename BType)(
+        requires(!isConst)) static void swapImpl(AType&& a, BType&& b) {
       for (size_t i = 0; i < a.numColumns(); ++i) {
         std::swap(operatorBracketImpl(a, i), operatorBracketImpl(b, i));
       }
@@ -246,15 +261,18 @@ class RowReferenceImpl {
    public:
     // Swap two `RowReference`s, but only if they are temporaries (rvalues).
     // This modifies the underlying table.
-    friend void swap(This&& a, This&& b) requires(!isConst) {
+    CPP_template(typename = void)(requires CPP_NOT(isConst)) friend void swap(
+        This&& a, This&& b) {
       return swapImpl(a, b);
     }
 
     // Equality comparison. Works between two `RowReference`s, but also between
     // a `RowReference` and a `Row` if the number of columns match.
+    // Note: QCC 8.3 doesn't have access to `U::numStaticColumns`.
     template <typename U>
-    bool operator==(const U& other) const
-        requires(numStaticColumns == U::numStaticColumns) {
+    QL_CONCEPT_OR_NOTHING(requires(numStaticColumns == U::numStaticColumns))
+    bool operator==(const U& other) const {
+      static_assert(numStaticColumns == U::numStaticColumns);
       if constexpr (numStaticColumns == 0) {
         if (numColumns() != other.numColumns()) {
           return false;
@@ -266,6 +284,11 @@ class RowReferenceImpl {
         }
       }
       return true;
+    }
+    template <typename U>
+    QL_CONCEPT_OR_NOTHING(requires(numStaticColumns == U::numStaticColumns))
+    bool operator!=(const U& other) const {
+      return !(*this == other);
     }
 
     // Convert from a `RowReference` to a `Row`.
@@ -279,17 +302,18 @@ class RowReferenceImpl {
     }
 
     // Convert from a static `RowReference` to a `std::array` (makes a copy).
-    explicit operator std::array<T, numStaticColumns>() const
-        requires(numStaticColumns != 0) {
+    CPP_template(typename = void)(requires(numStaticColumns != 0)) explicit
+    operator std::array<T, numStaticColumns>() const {
       std::array<T, numStaticColumns> result;
-      std::ranges::copy(*this, result.begin());
+      ql::ranges::copy(*this, result.begin());
       return result;
     }
 
    protected:
     // Internal implementation of the assignment from a `Row` as well as a
     // `RowReference`. This assignment actually writes to the underlying table.
-    static This& assignmentImpl(auto&& self, const auto& other) {
+    template <typename T1, typename T2>
+    static This& assignmentImpl(T1&& self, const T2& other) {
       if constexpr (numStaticColumns == 0) {
         AD_CONTRACT_CHECK(self.numColumns() == other.numColumns());
       }
@@ -311,25 +335,26 @@ class RowReferenceImpl {
     }
 
     // Assignment from a `const` RowReference to a `mutable` RowReference
-    This& operator=(const RowReferenceWithRestrictedAccess<
-                    Table, ad_utility::IsConst::True>& other) &&
-        requires(!isConst) {
+    CPP_template_2(typename = void)(requires(!isConst)) This& operator=(
+        const RowReferenceWithRestrictedAccess<
+            Table, ad_utility::IsConst::True>& other) && {
       return assignmentImpl(*this, other);
     }
 
     // This strange overload needs to be declared to make `Row` a
     // `std::random_access_range` that can be used e.g. with
-    // `std::ranges::sort`. There is no need to define it, as it is only
+    // `ql::ranges::sort`. There is no need to define it, as it is only
     // needed to fulfill the concept `std::indirectly_writable`. For more
     // details on this "esoteric" overload see the notes at the end of
     // `https://en.cppreference.com/w/cpp/iterator/indirectly_writable`
     This& operator=(const Row<T, numStaticColumns>& other) const&&;
 
-   protected:
     // No need to copy this internal type, but the implementation of the
-    // `RowReference` class below requires it,
-    // so the copy Constructor is protected.
+    // `RowReference` class and the `input_range` concept from `range-v3`
+    // require it.
     RowReferenceWithRestrictedAccess(const RowReferenceWithRestrictedAccess&) =
+        default;
+    RowReferenceWithRestrictedAccess(RowReferenceWithRestrictedAccess&&) =
         default;
   };
 };
@@ -342,10 +367,12 @@ template <typename Table, ad_utility::IsConst isConstTag>
 class RowReference
     : public RowReferenceImpl::RowReferenceWithRestrictedAccess<Table,
                                                                 isConstTag> {
- private:
+ public:
   using Base =
       RowReferenceImpl::RowReferenceWithRestrictedAccess<Table, isConstTag>;
   using Base::numStaticColumns;
+
+ private:
   using TablePtr = typename Base::TablePtr;
   using T = typename Base::T;
   static constexpr bool isConst = isConstTag == ad_utility::IsConst::True;
@@ -364,7 +391,7 @@ class RowReference
   using Base::Base;
 
   // Access to the `i`-th column of this row.
-  T& operator[](size_t i) requires(!isConst) {
+  CPP_template_2(typename = void)(requires(!isConst)) T& operator[](size_t i) {
     return Base::operatorBracketImpl(base(), i);
   }
   const T& operator[](size_t i) const {
@@ -380,17 +407,24 @@ class RowReference
   // The `cbegin` and `cend` functions are implicitly inherited from `Base`.
 
   // __________________________________________________________________________
-  template <ad_utility::SimilarTo<RowReference> R>
-  friend void swap(R&& a, R&& b) requires(!isConst) {
+  CPP_template_2(typename R)(requires ad_utility::SimilarTo<RowReference, R>
+                                 CPP_and_2(!isConst)) friend void swap(R&& a,
+                                                                       R&& b) {
     return Base::swapImpl(AD_FWD(a), AD_FWD(b));
   }
 
   // Equality comparison. Works between two `RowReference`s, but also between
   // a `RowReference` and a `Row` if the number of columns match.
-  template <typename T>
-  bool operator==(const T& other) const
-      requires(numStaticColumns == T::numStaticColumns) {
+  CPP_template_2(typename T)(requires(numStaticColumns ==
+                                      T::numStaticColumns)) bool
+  operator==(const T& other) const {
     return base() == other;
+  }
+
+  CPP_template_2(typename T)(requires(numStaticColumns ==
+                                      T::numStaticColumns)) bool
+  operator!=(const T& other) const {
+    return !(base() == other);
   }
 
  public:
@@ -412,17 +446,23 @@ class RowReference
   }
 
   // Assignment from a `const` RowReference to a `mutable` RowReference
-  RowReference& operator=(
-      const RowReference<Table, ad_utility::IsConst::True>& other)
-      requires(!isConst) {
+  CPP_template_2(typename = void)(requires(!isConst)) RowReference& operator=(
+      const RowReference<Table, ad_utility::IsConst::True>& other) {
     this->assignmentImpl(base(), other);
     return *this;
   }
 
-  // No need to copy `RowReference`s, because that is also most likely a bug.
-  // Currently none of our functions or of the STL-algorithms require it.
-  // If necessary, we can still enable it in the future.
+  // It is technically a bug to copy a row reference, hence we delete the copy
+  // constructor, at least in C++20 mode. However, on older compilers like QCC8,
+  // range-v3 requires not only a declaration, but a definition of the copy
+  // constructor.
+#ifdef QLEVER_CPP_17
+  RowReference(const RowReference&) = default;
+#else
   RowReference(const RowReference&) = delete;
+#endif
 };
 
 }  // namespace columnBasedIdTable
+
+#endif  // QLEVER_SRC_ENGINE_IDTABLE_IDTABLEROW_H

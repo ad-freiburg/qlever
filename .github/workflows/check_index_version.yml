@@ -55,8 +55,8 @@ jobs:
         # Build your program with the given configuration
         # Only build the actually required executables to save space on the device.
       run: |
-        cmake --build ${{github.workspace}}/master/build --config ${{matrix.build-type}} --target IndexBuilderMain -- -j $(nproc)
-        cmake --build ${{github.workspace}}/master/build --config ${{matrix.build-type}} --target ServerMain -- -j $(nproc)
+        cmake --build ${{github.workspace}}/master/build --config ${{matrix.build-type}} --target qlever-index -- -j $(nproc)
+        cmake --build ${{github.workspace}}/master/build --config ${{matrix.build-type}} --target qlever-server -- -j $(nproc)
         cmake --build ${{github.workspace}}/master/build --config ${{matrix.build-type}} --target PrintIndexVersionMain -- -j $(nproc)
 
     - name: E2E on Master
@@ -76,9 +76,9 @@ jobs:
       run:  cmake --build ${{github.workspace}}/master/build --target clean
     - name: BuildPr
       # also only build the required executables here.
-      run: |  
-        cmake --build ${{github.workspace}}/pr/build --config ${{matrix.build-type}} --target IndexBuilderMain -- -j $(nproc)
-        cmake --build ${{github.workspace}}/pr/build --config ${{matrix.build-type}} --target ServerMain -- -j $(nproc)
+      run: |
+        cmake --build ${{github.workspace}}/pr/build --config ${{matrix.build-type}} --target qlever-index -- -j $(nproc)
+        cmake --build ${{github.workspace}}/pr/build --config ${{matrix.build-type}} --target qlever-server -- -j $(nproc)
         cmake --build ${{github.workspace}}/pr/build --config ${{matrix.build-type}} --target PrintIndexVersionMain -- -j $(nproc)
     - name: Get index version PR
       working-directory: ${{github.workspace}}/pr/build

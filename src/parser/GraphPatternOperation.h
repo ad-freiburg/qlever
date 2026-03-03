@@ -2,18 +2,28 @@
 // Chair of Algorithms and Data Structures
 // Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_GRAPHPATTERNOPERATION_H
+#define QLEVER_SRC_PARSER_GRAPHPATTERNOPERATION_H
 
 #include <limits>
 #include <memory>
+#include <vector>
 
+#include "backports/concepts.h"
 #include "engine/PathSearch.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
+#include "parser/DatasetClauses.h"
 #include "parser/GraphPattern.h"
+#include "parser/MaterializedViewQuery.h"
+#include "parser/NamedCachedResult.h"
+#include "parser/PathQuery.h"
+#include "parser/SpatialQuery.h"
+#include "parser/TextSearchQuery.h"
 #include "parser/TripleComponent.h"
-#include "parser/data/Variable.h"
-#include "util/Algorithm.h"
+#include "rdfTypes/Variable.h"
+#include "util/TransparentFunctors.h"
 #include "util/VisitMixin.h"
 
 // First some forward declarations.
@@ -58,12 +68,38 @@ struct Service {
   bool silent_;
 };
 
+/// An internal pattern used in the `LOAD` update operation.
+struct Load {
+ public:
+  TripleComponent::Iri iri_;
+  bool silent_;
+};
+
 /// A `BasicGraphPattern` represents a consecutive block of triples.
 struct BasicGraphPattern {
   std::vector<SparqlTriple> _triples;
   /// Append the triples from `other` to this `BasicGraphPattern`
   void appendTriples(BasicGraphPattern other);
+
+  // Collect all the `Variable`s present in this `BasicGraphPattern` and add
+  // them to a `HashSet`.
+  void collectAllContainedVariables(ad_utility::HashSet<Variable>& vars) const;
 };
+
+// Helper for a special use case: Extract all variables present in the first
+// `BasicGraphPattern` contained in a vector of `GraphPatternOperation`s.
+//
+// For example: If the vector contains a `BIND`, followed by two
+// `BasicGraphPattern`s, this would return the variables from the first of the
+// two `BasicGraphPattern`s.
+//
+// It is used for skipping some graph patterns in
+// `MaterializedViewQueryAnalysis.cpp`.
+//
+// IMPORTANT: This function does not consider variables that are contained in
+// other types of `GraphPatternOperation`s.
+ad_utility::HashSet<Variable> getVariablesPresentInFirstBasicGraphPattern(
+    const std::vector<parsedQuery::GraphPatternOperation>& graphPatterns);
 
 /// A `Values` clause
 struct Values {
@@ -77,11 +113,25 @@ struct Values {
 /// `GraphPattern`.
 struct GroupGraphPattern {
   GraphPattern _child;
+
+  // Flag to indicate if a graph variable should match `ALL` graphs (including
+  // the implicit default graph), or only `NAMED` graphs (excluding the implicit
+  // default graph).
+  enum class GraphVariableBehaviour { ALL, NAMED };
   // If not `monostate`, then this group is a `GRAPH` clause, either with a
   // fixed graph IRI, or with a variable.
-  using GraphSpec =
-      std::variant<std::monostate, TripleComponent::Iri, Variable>;
+  using GraphSpec = std::variant<std::monostate, TripleComponent::Iri,
+                                 std::pair<Variable, GraphVariableBehaviour>>;
   GraphSpec graphSpec_ = std::monostate{};
+
+  // Constructors for all legal constellations.
+  explicit GroupGraphPattern(GraphPattern child) : _child{std::move(child)} {}
+  GroupGraphPattern(GraphPattern child, TripleComponent::Iri graphIri)
+      : _child{std::move(child)}, graphSpec_{std::move(graphIri)} {}
+  GroupGraphPattern(GraphPattern child, Variable graphVariable,
+                    GraphVariableBehaviour behaviour)
+      : _child{std::move(child)},
+        graphSpec_{std::pair{std::move(graphVariable), behaviour}} {}
 };
 
 /// An `OPTIONAL` clause.
@@ -117,18 +167,32 @@ class Subquery {
  public:
   // TODO<joka921> Make this an abstraction `TypeErasingPimpl`.
 
-  // Deliberately not explicit, because semantically those are copy/move
-  // constructors.
+  // NOTE: The first two constructors are deliberately not `explicit` because
+  // we want to used them like copy/move constructors (semantically, a
+  // `Subquery` is like a `ParsedQuery`, just with an own type).
   Subquery(const ParsedQuery&);
-  Subquery(ParsedQuery&&);
+  Subquery(ParsedQuery&&) noexcept;
   Subquery();
   ~Subquery();
   Subquery(const Subquery&);
-  Subquery(Subquery&&);
+  Subquery(Subquery&&) noexcept;
   Subquery& operator=(const Subquery&);
-  Subquery& operator=(Subquery&&);
+  Subquery& operator=(Subquery&&) noexcept;
   ParsedQuery& get();
   const ParsedQuery& get() const;
+};
+
+// A SPARQL `DESCRIBE` query.
+struct Describe {
+  using VarOrIri = std::variant<TripleComponent::Iri, Variable>;
+  // The resources (variables or IRIs) that are to be described, for example
+  // `?x` and `<y>` in `DESCRIBE ?x <y>`.
+  std::vector<VarOrIri> resources_;
+  // The FROM clauses of the DESCRIBE query
+  DatasetClauses datasetClauses_;
+  // The WHERE clause of the DESCRIBE query. It is used to compute the values
+  // for the variables in the DESCRIBE clause.
+  Subquery whereClause_;
 };
 
 struct TransPath {
@@ -144,109 +208,31 @@ struct TransPath {
   GraphPattern _childGraphPattern;
 };
 
-class PathSearchException : public std::exception {
-  std::string message_;
-
- public:
-  explicit PathSearchException(const std::string& message)
-      : message_(message) {}
-  const char* what() const noexcept override { return message_.data(); }
-};
-
-// The PathQuery object holds intermediate information for the PathSearch.
-// The PathSearchConfiguration requires concrete Ids. The vocabulary from the
-// QueryPlanner is needed to translate the TripleComponents to ValueIds.
-// Also, the members of the PathQuery have defaults and can be set after
-// the object creation, simplifying the parsing process. If a required
-// value has not been set during parsing, the method 'toPathSearchConfiguration'
-// will throw an exception.
-// All the error handling for the PathSearch happens in the PathQuery object.
-// Thus, if a PathSearchConfiguration can be constructed, it is valid.
-struct PathQuery {
-  std::vector<TripleComponent> sources_;
-  std::vector<TripleComponent> targets_;
-  std::optional<Variable> start_;
-  std::optional<Variable> end_;
-  std::optional<Variable> pathColumn_;
-  std::optional<Variable> edgeColumn_;
-  std::vector<Variable> edgeProperties_;
-  PathSearchAlgorithm algorithm_;
-
-  GraphPattern childGraphPattern_;
-  bool cartesian_ = true;
-  std::optional<uint64_t> numPathsPerTarget_ = std::nullopt;
-
-  /**
-   * @brief Add a parameter to the PathQuery from the given triple.
-   * The predicate of the triple determines the parameter name and the object
-   * of the triple determines the parameter value. The subject is ignored.
-   * Throws a PathSearchException if an unsupported algorithm is given or if the
-   * predicate contains an unknown parameter name.
-   *
-   * @param triple A SparqlTriple that contains the parameter info
-   */
-  void addParameter(const SparqlTriple& triple);
-
-  /**
-   * @brief Add the parameters from a BasicGraphPattern to the PathQuery
-   *
-   * @param pattern
-   */
-  void addBasicPattern(const BasicGraphPattern& pattern);
-
-  /**
-   * @brief Add a GraphPatternOperation to the PathQuery. The pattern specifies
-   * the edges of the graph that is used by the path search
-   *
-   * @param childGraphPattern
-   */
-  void addGraph(const GraphPatternOperation& childGraphPattern);
-
-  /**
-   * @brief Convert the vector of triple components into a SearchSide
-   * The SeachSide can either be a variable or a list of Ids.
-   * A PathSearchException is thrown if more than one variable is given.
-   *
-   * @param side A vector of TripleComponents, containing either exactly one
-   *             Variable or zero or more ValueIds
-   * @param vocab A Vocabulary containing the Ids of the TripleComponents.
-   *              The Vocab is only used if the given vector contains IRIs.
-   */
-  std::variant<Variable, std::vector<Id>> toSearchSide(
-      std::vector<TripleComponent> side, const Index::Vocab& vocab) const;
-
-  /**
-   * @brief Convert this PathQuery into a PathSearchConfiguration object.
-   * This method checks if all required parameters are set and converts
-   * the PathSearch sources and targets into SearchSides.
-   * A PathSearchException is thrown if required parameters are missing.
-   * The required parameters are start, end, pathColumn and edgeColumn.
-   *
-   * @param vocab A vocab containing the Ids of the IRIs in
-   *              sources_ and targets_
-   * @return A valid PathSearchConfiguration
-   */
-  PathSearchConfiguration toPathSearchConfiguration(
-      const Index::Vocab& vocab) const;
-};
-
 // A SPARQL Bind construct.
 struct Bind {
   sparqlExpression::SparqlExpressionPimpl _expression;
   Variable _target;  // the variable to which the expression will be bound
 
   // Return all the variables that are used in the BIND expression (the target
-  // variable as well as all variables from the expression).
-  cppcoro::generator<const Variable> containedVariables() const;
+  // variable as well as all variables from the expression). The lifetime of the
+  // resulting `view` is bound to the lifetime of this `Bind` instance.
+  auto containedVariables() const {
+    auto result = _expression.containedVariables();
+    result.push_back(&_target);
+    return ad_utility::OwningView{std::move(result)} |
+           ql::views::transform(ad_utility::dereference);
+  }
 
-  [[nodiscard]] string getDescriptor() const;
+  [[nodiscard]] std::string getDescriptor() const;
 };
 
 // TODO<joka921> Further refactor this, s.t. the whole `GraphPatternOperation`
 // class actually becomes `using GraphPatternOperation = std::variant<...>`
 using GraphPatternOperationVariant =
     std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern,
-                 Values, Service, PathQuery, Minus, GroupGraphPattern>;
+                 Values, Service, PathQuery, SpatialQuery, TextSearchQuery,
+                 Minus, GroupGraphPattern, Describe, Load, NamedCachedResult,
+                 MaterializedViewQuery>;
 struct GraphPatternOperation
     : public GraphPatternOperationVariant,
       public VisitMixin<GraphPatternOperation, GraphPatternOperationVariant> {
@@ -259,4 +245,7 @@ struct GraphPatternOperation
     return std::get<BasicGraphPattern>(*this);
   }
 };
+
 }  // namespace parsedQuery
+
+#endif  // QLEVER_SRC_PARSER_GRAPHPATTERNOPERATION_H

@@ -2,11 +2,12 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (November of 2023,
 // schlegea@informatik.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <gtest/gtest.h>
 
 #include <chrono>
-#include <concepts>
 #include <string>
 #include <variant>
 
@@ -14,10 +15,13 @@
 #include "../benchmark/util/ResultTableColumnOperations.h"
 #include "../test/util/BenchmarkMeasurementContainerHelpers.h"
 #include "../test/util/GTestHelpers.h"
+#include "backports/algorithm.h"
 #include "gmock/gmock.h"
 #include "util/Exception.h"
 #include "util/Random.h"
 #include "util/TypeTraits.h"
+
+using ad_utility::use_type_identity::ti;
 
 namespace ad_benchmark {
 // How many rows should the test tables have?
@@ -25,9 +29,8 @@ constexpr size_t NUM_ROWS = 10;
 
 // Does `T` support addition?
 template <typename T>
-concept SupportsAddition = requires(T a, T b) {
-  { a + b } -> std::same_as<T>;
-};
+CPP_concept SupportsAddition =
+    ql::concepts::same_as<decltype(std::declval<T>() + std::declval<T>()), T>;
 
 /*
 @brief Create a table for testing purpose.
@@ -57,14 +60,14 @@ static void compareToColumn(
     const std::vector<T>& expectedContent,
     const ResultTable& tableToCompareAgainst,
     const ColumnNumWithType<T>& columnsToCompareAgainst,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "compareToColumn")};
 
   // Compare every entry with the fitting comparison function.
   AD_CONTRACT_CHECK(expectedContent.size() == tableToCompareAgainst.numRows());
   for (size_t i = 0; i < expectedContent.size(); i++) {
-    if constexpr (std::floating_point<T>) {
+    if constexpr (ql::concepts::floating_point<T>) {
       ASSERT_FLOAT_EQ(expectedContent.at(i),
                       tableToCompareAgainst.getEntry<T>(
                           i, columnsToCompareAgainst.columnNum_));
@@ -91,13 +94,15 @@ for the function, that you want to test. Must have the signature `ResultTable*
 ColumnNumWithType<ColumnInputTypeOne> inputColumnOne, const
 ColumnNumWithType<ColumnInputTypeTwo> inputColumnTwo`.
 */
+template <typename F>
 static void generalExceptionTestTwoInputColumns(
-    const auto& callTransform,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
+    const F& callTransform,
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "generalExceptionTestTwoInputColumns")};
 
-  doForTypeInResultTableEntryType([&callTransform]<typename T>() {
+  doForTypeInResultTableEntryType([&callTransform](auto t) {
+    using T = typename decltype(t)::type;
     // A call with a `ResultTable`, who has no rows, is valid.
     auto table{createTestTable(0, 3, ColumnNumWithType<T>{0},
                                ColumnNumWithType<T>{1})};
@@ -115,7 +120,8 @@ static void generalExceptionTestTwoInputColumns(
     // Exception tests.
     // A column contains more than 1 type.
     table = createTestTable(std::variant_size_v<ResultTable::EntryType> - 1, 3);
-    doForTypeInResultTableEntryType([row = 0, &table]<typename T2>() mutable {
+    doForTypeInResultTableEntryType([row = 0, &table](auto t2) mutable {
+      using T2 = typename decltype(t2)::type;
       table.setEntry(row++, 0, createDummyValueEntryType<T2>());
     });
     ASSERT_ANY_THROW(callTransform(&table, ColumnNumWithType<T>{1},
@@ -125,8 +131,8 @@ static void generalExceptionTestTwoInputColumns(
     // Wrong input column type.
     table = createTestTable(NUM_ROWS, 3, ColumnNumWithType<T>{0},
                             ColumnNumWithType<T>{1});
-    doForTypeInResultTableEntryType([&table,
-                                     &callTransform]<typename WrongType>() {
+    doForTypeInResultTableEntryType([&table, &callTransform](auto wt) {
+      using WrongType = typename decltype(wt)::type;
       if constexpr (!ad_utility::isSimilar<WrongType, T>) {
         ASSERT_ANY_THROW(callTransform(&table, ColumnNumWithType<WrongType>{2},
                                        ColumnNumWithType<WrongType>{1},
@@ -166,9 +172,10 @@ for the function, that you want to test. Must have the signature `ResultTable*
 ,const ColumnNumWithType<ColumnReturnType>& columnToPutResultIn, const
 ColumnNumWithType<ColumnInputTypes>&... inputColumns`.
 */
+template <typename F>
 static void generalExceptionTestUnlimitedInputColumns(
-    const auto& callTransform,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
+    const F& callTransform,
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   // For generating better messages, when failing a test.
   auto trace{
       generateLocationTrace(l, "generalExceptionTestUnlimitedInputColumns")};
@@ -176,7 +183,8 @@ static void generalExceptionTestUnlimitedInputColumns(
   // We can pass a lot to `generalExceptionTestTwoInputColumns`.
   generalExceptionTestTwoInputColumns(callTransform);
 
-  doForTypeInResultTableEntryType([&callTransform]<typename T>() {
+  doForTypeInResultTableEntryType([&callTransform](auto t) {
+    using T = typename decltype(t)::type;
     // Column is outside boundaries.
     ResultTable table{createTestTable(
         NUM_ROWS, 4, ColumnNumWithType<T>{0}, ColumnNumWithType<T>{1},
@@ -203,7 +211,8 @@ TEST(ResultTableColumnOperations, generateColumnWithColumnInput) {
   // A lambda, that copies on column into another.
   auto columnCopyLambda = [](const auto& d) { return d; };
 
-  doForTypeInResultTableEntryType([&NUM_ROWS, &columnCopyLambda]<typename T>() {
+  doForTypeInResultTableEntryType([&NUM_ROWS, &columnCopyLambda](auto t) {
+    using T = typename decltype(t)::type;
     // Single parameter operators.
     // Two columns. Transcribe column 0 into column 1.
     ResultTable table{createTestTable(NUM_ROWS, 2, ColumnNumWithType<T>{0})};
@@ -254,7 +263,8 @@ TEST(ResultTableColumnOperations, generateColumnWithColumnInput) {
 
 TEST(ResultTableColumnOperations, SumUpColumns) {
   // Normal tests.
-  doForTypeInResultTableEntryType([]<typename T>() {
+  doForTypeInResultTableEntryType([](auto t) {
+    using T = typename decltype(t)::type;
     // We only do tests on types, that support addition.
     if constexpr (SupportsAddition<T>) {
       // Minimal amount of columns.
@@ -317,11 +327,11 @@ TEST(ResultTableColumnOperations, calculateSpeedupOfColumn) {
   };
 
   // Test things for a range of speedups.
-  std::ranges::for_each(
+  ql::ranges::for_each(
       std::array{2.f, 16.f, 73.696f, 4.2f},
-      [&fillColumnsForSpeedup](const float wantedSpeedup,
-                               ad_utility::source_location l =
-                                   ad_utility::source_location::current()) {
+      [&fillColumnsForSpeedup](
+          const float wantedSpeedup,
+          ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
         // For generating better messages, when failing a test.
         auto trace{generateLocationTrace(l, "testRangeOfSpeedups")};
         ResultTable table{createTestTable(NUM_ROWS, 10)};
@@ -409,17 +419,19 @@ TEST(ResultTableColumnOperations, calculateSpeedupOfColumn) {
 
   // General exception tests.
   generalExceptionTestTwoInputColumns(
-      []<typename FirstType, typename SecondType>(
-          ResultTable* table, const auto& columnToPutResultIn,
-          const ColumnNumWithType<FirstType>& firstInputColumns,
-          const ColumnNumWithType<SecondType>& secondInputColumns) {
+      [](ResultTable* table, const auto& columnToPutResultIn,
+         const auto& firstInputColumns, const auto& secondInputColumns) {
         /*
         Unlike the other functions, `` only works with measured execution times.
         So, whenever the inputs are not for type `float`, we pass the
         responsibility to a trivial function.
         */
-        if constexpr (std::same_as<FirstType, float> &&
-                      std::same_as<SecondType, float>) {
+        using FirstType =
+            typename std::decay_t<decltype(firstInputColumns)>::ColumnType;
+        using SecondType =
+            typename std::decay_t<decltype(secondInputColumns)>::ColumnType;
+        if constexpr (ql::concepts::same_as<FirstType, float> &&
+                      ql::concepts::same_as<SecondType, float>) {
           calculateSpeedupOfColumn(table, columnToPutResultIn,
                                    firstInputColumns, secondInputColumns);
         } else {

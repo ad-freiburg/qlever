@@ -2,7 +2,8 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_GLOBAL_SPECIALIDS_H
+#define QLEVER_SRC_GLOBAL_SPECIALIDS_H
 
 #include "global/Constants.h"
 #include "global/Id.h"
@@ -32,13 +33,14 @@ inline const ad_utility::HashMap<std::string, Id>& specialIds() {
     // Perform the following checks: All the special IDs are unique, all of them
     // have the `Undefined` datatype, but none of them is equal to the "actual"
     // UNDEF value.
-    auto values = std::views::values(result);
+    auto values = ql::views::values(result);
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
     auto undefTypeButNotUndefValue = [](Id id) {
       return id != Id::makeUndefined() &&
              id.getDatatype() == Datatype::Undefined;
     };
-    AD_CORRECTNESS_CHECK(
-        std::ranges::all_of(values, undefTypeButNotUndefValue));
+    AD_CORRECTNESS_CHECK(ql::ranges::all_of(values, undefTypeButNotUndefValue));
+#endif
     ad_utility::HashSet<Id> uniqueIds(values.begin(), values.end());
     AD_CORRECTNESS_CHECK(uniqueIds.size() == result.size());
     return result;
@@ -56,3 +58,5 @@ static constexpr std::pair<Id, Id> getBoundsForSpecialIds() {
   return {Id::fromBits(1), upperBound};
 }
 }  // namespace qlever
+
+#endif  // QLEVER_SRC_GLOBAL_SPECIALIDS_H

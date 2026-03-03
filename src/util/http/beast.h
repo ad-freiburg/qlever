@@ -2,7 +2,8 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_HTTP_BEAST_H
+#define QLEVER_SRC_UTIL_HTTP_BEAST_H
 
 // A convenience header that includes Boost::Asio and Boost::Beast,
 // and defines several constants to make Boost::Asio compile
@@ -46,3 +47,5 @@ constexpr std::string_view toStd(std::string_view view) { return view; }
 #else
 inline std::string_view toStd(boost::core::string_view view) { return view; }
 #endif
+
+#endif  // QLEVER_SRC_UTIL_HTTP_BEAST_H

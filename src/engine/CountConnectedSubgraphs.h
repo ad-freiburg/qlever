@@ -2,9 +2,12 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_COUNTCONNECTEDSUBGRAPHS_H
+#define QLEVER_SRC_ENGINE_COUNTCONNECTEDSUBGRAPHS_H
 
 #include <cstdint>
+#include <string>
+#include <vector>
 
 // This module implements the efficient counting of the number of connected
 // subgraphs in a given graph. This routine can be used to analyze the
@@ -39,3 +42,5 @@ size_t countSubgraphsRecursively(const Graph& graph, uint64_t nodes,
 std::string toBitsetString(uint64_t x);
 
 }  // namespace countConnectedSubgraphs
+
+#endif  // QLEVER_SRC_ENGINE_COUNTCONNECTEDSUBGRAPHS_H

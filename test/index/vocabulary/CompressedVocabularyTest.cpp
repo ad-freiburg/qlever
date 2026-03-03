@@ -5,10 +5,12 @@
 #include <gtest/gtest.h>
 
 #include "VocabularyTestHelpers.h"
-#include "index/VocabularyOnDisk.h"
+#include "backports/algorithm.h"
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/PrefixCompressor.h"
 #include "index/vocabulary/VocabularyInMemory.h"
+#include "index/vocabulary/VocabularyOnDisk.h"
+#include "util/Serializer/ByteBufferSerializer.h"
 
 namespace {
 
@@ -24,7 +26,8 @@ struct DummyDecoder {
     return result;
   }
   // This class has no state, but it still needs to be serialized.
-  friend std::true_type allowTrivialSerialization(DummyDecoder, auto);
+  template <typename T>
+  friend std::true_type allowTrivialSerialization(DummyDecoder, T);
 };
 
 // A wrapper for the stateless dummy compression.
@@ -57,11 +60,17 @@ TEST(CompressedVocabulary, CompressionIsActuallyApplied) {
                                        "31",    "0",     "al"};
 
   CompressedVocabulary<VocabularyInMemory, DummyCompressionWrapper> v;
-  auto writer = v.makeDiskWriter("vocabtmp.txt");
-  for (const auto& word : words) {
-    writer(word);
+  {
+    auto writerPtr = v.makeDiskWriterPtr("vocabtmp.txt");
+    auto& writer = *writerPtr;
+    for (const auto& [i, word] : ::ranges::views::enumerate(words)) {
+      ASSERT_EQ(writer(word, false), static_cast<uint64_t>(i));
+    }
+    writer.readableName() = "blabb";
+    EXPECT_EQ(writer.readableName(), "blabb");
+    // Test the case that the destructor implicitly calls `finish`.
+    // The other unit tests have
   }
-  writer.finish();
 
   VocabularyInMemory simple;
   simple.open("vocabtmp.txt.words");
@@ -84,8 +93,9 @@ using Compressors =
                      PrefixCompressionWrapper, DummyCompressionWrapper>;
 
 // _________________________________________________________________________
-template <ad_utility::vocabulary::CompressionWrapper Compressor>
+template <typename Compressor>
 struct CompressedVocabularyF : public testing::Test {
+  static_assert(ad_utility::vocabulary::CompressionWrapper<Compressor>);
   // Tests for the FSST-compressed vocabulary. These use the generic testing
   // framework that was set up for all the other vocabularies.
   static constexpr auto createCompressedVocabulary(
@@ -93,9 +103,10 @@ struct CompressedVocabularyF : public testing::Test {
     return [filename](const std::vector<std::string>& words) {
       // We deliberately set the blocksize to a very small number.
       CompressedVocabulary<VocabularyOnDisk, Compressor, 4> vocab;
-      auto writer = vocab.makeDiskWriter(filename);
+      auto writerPtr = vocab.makeDiskWriterPtr(filename);
+      auto& writer = *writerPtr;
       for (const auto& word : words) {
-        writer(word);
+        writer(word, false);
       }
       writer.finish();
       vocab.open(filename);
@@ -126,6 +137,39 @@ TYPED_TEST(CompressedVocabularyF, AccessOperator) {
 // _______________________________________________________
 TYPED_TEST(CompressedVocabularyF, EmptyVocabulary) {
   testEmptyVocabulary(this->createCompressedVocabulary("accessOperatorFsst"));
+}
+
+// _______________________________________________________
+TYPED_TEST(CompressedVocabularyF, WriteAndReadWithSerializer) {
+  const std::vector<std::string> words{"alpha", "delta", "beta", "42",
+                                       "31",    "0",     "al"};
+
+  // Create vocabulary with small block size (4 words per block).
+  // Use VocabularyInMemory as the underlying vocabulary.
+  CompressedVocabulary<VocabularyInMemory, TypeParam, 4> vocab;
+  const std::string filename = "compressedVocabSerializerTest";
+  auto writerPtr = vocab.makeDiskWriterPtr(filename);
+  auto& writer = *writerPtr;
+  for (const auto& word : words) {
+    writer(word, false);
+  }
+  writer.finish();
+  vocab.open(filename);
+
+  // Write using serializer.
+  ad_utility::serialization::ByteBufferWriteSerializer writeSerializer;
+  writeSerializer | vocab;
+  const auto& blob = writeSerializer.data();
+  ASSERT_FALSE(blob.empty());
+
+  // Read using serializer into a different vocabulary.
+  CompressedVocabulary<VocabularyInMemory, TypeParam, 4> readVocab;
+  ad_utility::serialization::ByteBufferReadSerializer readSerializer{blob};
+  readSerializer | readVocab;
+  assertThatRangesAreEqual(vocab, readVocab);
+
+  // Cleanup files.
+  ad_utility::deleteFile(filename);
 }
 
 }  // namespace

@@ -1,20 +1,30 @@
-// Copyright 2022, University of Freiburg,
+// Copyright 2025, University of Freiburg,
 // Chair of Algorithms and Data Structures
-// Authors: Hannah Bast <bast@cs.uni-freiburg.de
+// Authors: Hannah Bast <bast@cs.uni-freiburg.de,
+//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
-#include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
 #include <cmath>
 #include <string>
 
-#include "../src/util/GeoSparqlHelpers.h"
-#include "parser/GeoPoint.h"
+#include "engine/SpatialJoinConfig.h"
+#include "global/Constants.h"
+#include "rdfTypes/GeoPoint.h"
+#include "rdfTypes/Iri.h"
+#include "util/GTestHelpers.h"
+#include "util/GeoSparqlHelpers.h"
 
-using ad_utility::WktDistGeoPoints;
+namespace {
+
+using ad_utility::source_location;
+using ad_utility::WktDist;
+using ad_utility::WktGeometricRelation;
 using ad_utility::WktLatitude;
 using ad_utility::WktLongitude;
 using ad_utility::detail::parseWktPoint;
 
+// _____________________________________________________________________________
 TEST(GeoSparqlHelpers, ParseWktPoint) {
   // Test that the given WKT point parses correctly (with all three of
   // parseWktPoint, wktLatitude, and wktLongitude).
@@ -67,18 +77,73 @@ TEST(GeoSparqlHelpers, ParseWktPoint) {
   testWktPointInvalid("POINT(42e3 7.8)");
 }
 
+// _____________________________________________________________________________
 TEST(GeoSparqlHelpers, WktDist) {
-  // Equal longitude, latitudes with diff 3.0 and mean zero.
-  ASSERT_NEAR(WktDistGeoPoints()(GeoPoint(1.5, 2.0), GeoPoint(-1.5, 2.0)),
-              333.58, 0.01);
+  using enum UnitOfMeasurement;
+  GeoPoint eiffeltower{48.8585, 2.2945};
+  GeoPoint frCathedral{47.9957, 7.8529};
 
-  // Equal latitude zero, longitudes with diff 4.0.
-  ASSERT_NEAR(WktDistGeoPoints()(GeoPoint(0.0, 3.0), GeoPoint(-0.0, 7.0)),
-              444.7804, 0.01);
+  // Equal coordinates: distance 0.
+  EXPECT_NEAR(WktDist()(frCathedral, frCathedral, KILOMETERS), 0, 0.01);
+  EXPECT_NEAR(WktDist()(eiffeltower, eiffeltower, METERS), 0, 0.01);
+  EXPECT_NEAR(WktDist()(eiffeltower, eiffeltower, MILES), 0, 0.01);
 
-  // Distance between the Eiffel tower and the Freibuger Münster (421km
+  // Distance between points: the Eiffel tower and the Freiburg Cathedral (421km
   // according to the distance measurement of Google Maps).
-  GeoPoint eiffeltower = GeoPoint(48.8585, 2.2945);
-  GeoPoint frCathedral = GeoPoint(47.9957, 7.8529);
-  ASSERT_NEAR(WktDistGeoPoints()(eiffeltower, frCathedral), 421.098, 0.01);
+  EXPECT_NEAR(WktDist()(eiffeltower, frCathedral), 421.68, 0.01);
+  EXPECT_NEAR(WktDist()(eiffeltower, frCathedral, KILOMETERS), 421.68, 0.01);
+  EXPECT_NEAR(WktDist()(eiffeltower, frCathedral, METERS), 421676, 1);
+  EXPECT_NEAR(WktDist()(eiffeltower, frCathedral, MILES), 262.02, 0.01);
+  EXPECT_NEAR(ad_utility::WktMetricDist()(eiffeltower, frCathedral), 421676, 1);
+
+  // Distance between WKT non-point literals.
+  EXPECT_NEAR(
+      WktDist()(
+          // Line between Freiburg Central Station and Freiburg University
+          // Library.
+          "\"LINESTRING(7.8412948 47.9977308, 7.8450491 47.9946000)\""
+          "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+          // University building 101.
+          "\"POLYGON((7.8346338 48.0126612,7.8348921 48.0123905,7.8349457 "
+          "48.0124216,7.8349855 48.0124448,7.8353244 48.0126418,7.8354091 "
+          "48.0126911,7.8352246 48.0129047,7.8351623 48.012879,7.8350687 "
+          "48.0128404,7.8347244 48.0126985,7.8346338 48.0126612))\""
+          "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+          KILOMETERS),
+      1.7, 0.01);
+
+  // Invalid WKT literal.
+  EXPECT_TRUE(std::isnan(
+      WktDist()(eiffeltower,
+                // University building 101.
+                "\"POLYGON(bla bli blu)\""
+                "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")));
 }
+
+// _____________________________________________________________________________
+template <SpatialJoinType SJType>
+void checkGeoRelationDummyImpl(
+    source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+  auto l = generateLocationTrace(sourceLocation);
+  const auto geoRelationFunction = WktGeometricRelation<SJType>();
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      geoRelationFunction(GeoPoint{1, 1}, GeoPoint{2, 2}),
+      ::testing::HasSubstr(
+          "currently only implemented for a subset of all possible queries"));
+}
+
+// _____________________________________________________________________________
+TEST(GeoSparqlHelpers, WktGeometricRelation) {
+  // Currently the geometric relation functions are only a dummy implementation
+  using enum SpatialJoinType;
+  checkGeoRelationDummyImpl<INTERSECTS>();
+  checkGeoRelationDummyImpl<CONTAINS>();
+  checkGeoRelationDummyImpl<COVERS>();
+  checkGeoRelationDummyImpl<CROSSES>();
+  checkGeoRelationDummyImpl<TOUCHES>();
+  checkGeoRelationDummyImpl<EQUALS>();
+  checkGeoRelationDummyImpl<OVERLAPS>();
+  checkGeoRelationDummyImpl<WITHIN>();
+}
+
+}  // namespace

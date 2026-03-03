@@ -4,12 +4,14 @@
 
 #include <gtest/gtest.h>
 
+#include "backports/three_way_comparison.h"
 #include "util/Generator.h"
 
 struct Details {
   bool begin_ = false;
   bool end_ = false;
-  bool operator==(const Details&) const = default;
+
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Details, begin_, end_)
 };
 
 // A simple generator that first yields three numbers and then adds a detail
@@ -22,6 +24,10 @@ cppcoro::generator<int, Details> simpleGen() {
   co_yield 43;
   details.end_ = true;
 };
+
+auto blubbBlabb() {
+  return []() -> cppcoro::generator<int> { co_yield 12340; };
+}
 
 // Test the behavior of the `simpleGen` above.
 TEST(Generator, details) {

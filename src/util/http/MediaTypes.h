@@ -13,8 +13,9 @@
 #include <variant>
 #include <vector>
 
-#include "../HashMap.h"
-#include "../HashSet.h"
+#include "backports/three_way_comparison.h"
+#include "util/HashMap.h"
+#include "util/HashSet.h"
 
 namespace ad_utility {
 
@@ -28,7 +29,9 @@ enum class MediaType {
   tsv,
   csv,
   turtle,
-  octetStream
+  ntriples,
+  octetStream,
+  binaryQleverExport
 };
 
 struct MediaTypeWithQuality {
@@ -40,20 +43,23 @@ struct MediaTypeWithQuality {
   };
 
   using Variant = std::variant<Wildcard, TypeWithWildcard, MediaType>;
-  friend std::weak_ordering operator<=>(const Variant& a, const Variant& b) {
-    return a.index() <=> b.index();
+  static ql::weak_ordering compareThreeWay(const Variant& a, const Variant& b) {
+    return ql::compareThreeWay(a.index(), b.index());
   }
+  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR(Variant)
 
   float _qualityValue;
   Variant _mediaType;
 
   // Order first by the qualities, and then by the specificity of the type.
-  std::partial_ordering operator<=>(const MediaTypeWithQuality& rhs) const {
-    if (auto cmp = _qualityValue <=> rhs._qualityValue; cmp != 0) {
+  ql::partial_ordering compareThreeWay(const MediaTypeWithQuality& rhs) const {
+    if (auto cmp = ql::compareThreeWay(_qualityValue, rhs._qualityValue);
+        cmp != 0) {
       return cmp;
     }
-    return _mediaType <=> rhs._mediaType;
+    return ql::compareThreeWay(_mediaType, rhs._mediaType);
   }
+  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(MediaTypeWithQuality)
 };
 
 namespace detail {
@@ -106,16 +112,11 @@ const std::string& getType(MediaType t);
 std::vector<MediaTypeWithQuality> parseAcceptHeader(
     std::string_view acceptHeader);
 
-/// Parse `acceptHeader`, and determine which of the `SUPPORTED_MEDIA_TYPES`
-/// has the highest priority, and return this type. If several mediaTypes have
-/// the same priority (e.g. because of a wildcard in `acceptHeader`) then
-/// media types that appear earlier in the `SUPPORTED_MEDIA_TYPES`. If none of
-/// the `SUPPORTED_MEDIA_TYPES` is accepted by `acceptHeader`, then
-/// `std::nullopt` is returned.
-// TODO: This function never returns `nullopt`, because an exception is thrown
-// if no supported media type is found. Update the docstring and make the return
-// type just `MediaType`.
-std::optional<MediaType> getMediaTypeFromAcceptHeader(
+// Parse `acceptHeader` and create a vector of compatible `MediaType`s from it.
+// Unconstrained wildcards will be ignored, and leave the decision to a
+// different mechanism down the line. The media types will be sorted according
+// to the order created by `parseAcceptHeader`.
+std::vector<MediaType> getMediaTypesFromAcceptHeader(
     std::string_view acceptHeader);
 
 /// Return an error message, which reports that only the `SUPPORTED_MEDIA_TYPES`

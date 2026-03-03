@@ -4,7 +4,11 @@
 
 #include "index/PatternCreator.h"
 
+#include <iomanip>
+
 #include "global/SpecialIds.h"
+
+using PatternId = Pattern::PatternId;
 
 // _________________________________________________________________________
 void PatternCreator::processTriple(
@@ -19,7 +23,7 @@ void PatternCreator::processTriple(
     currentSubject_ = triple[0];
     currentPattern_.clear();
   }
-  tripleBuffer_.emplace_back(triple, ignoreTripleForPatterns);
+  tripleBuffer_.push_back({triple, ignoreTripleForPatterns});
   if (ignoreTripleForPatterns) {
     return;
   }
@@ -30,9 +34,9 @@ void PatternCreator::processTriple(
 }
 
 // _____________________________________________________________________________
-PatternID PatternCreator::finishPattern(const Pattern& pattern) {
+PatternId PatternCreator::finishPattern(const Pattern& pattern) {
   if (pattern.empty()) {
-    return NO_PATTERN;
+    return Pattern::NoPattern;
   }
   numDistinctSubjectPredicatePairs_ += pattern.size();
   auto it = patternToIdAndCount_.find(pattern);
@@ -43,7 +47,7 @@ PatternID PatternCreator::finishPattern(const Pattern& pattern) {
     return it->second.patternId_;
   }
   // This is a new pattern, assign a new pattern ID and a count of 1.
-  auto patternId = static_cast<PatternID>(patternToIdAndCount_.size());
+  auto patternId = static_cast<PatternId>(patternToIdAndCount_.size());
   patternToIdAndCount_[pattern] = PatternIdAndCount{patternId, 1UL};
 
   // Count the total number of distinct predicates that appear in the
@@ -57,7 +61,7 @@ PatternID PatternCreator::finishPattern(const Pattern& pattern) {
 // ________________________________________________________________________________
 void PatternCreator::finishSubject(Id subject, const Pattern& pattern) {
   // Write the pattern to disk and obtain its ID.
-  PatternID patternId = finishPattern(pattern);
+  PatternId patternId = finishPattern(pattern);
 
   // Write the triple `<subject> ql:has-pattern <patternId>`, but only if the
   // subject has a pattern.
@@ -72,7 +76,7 @@ void PatternCreator::finishSubject(Id subject, const Pattern& pattern) {
   // Note: This has to be done for all triples, including those where the
   // subject has no pattern.
   auto curSubject = currentSubject_.value();
-  std::ranges::for_each(
+  ql::ranges::for_each(
       tripleBuffer_, [this, patternId, &curSubject](const auto& t) {
         static_assert(NumColumnsIndexBuilding == 4,
                       "The following lines have to be changed when additional "
@@ -102,21 +106,17 @@ void PatternCreator::finish() {
   PatternStatistics patternStatistics(numDistinctSubjectPredicatePairs_,
                                       numDistinctSubjects_,
                                       distinctPredicates_.size());
-  patternSerializer_ << patternStatistics;
 
   // Store the actual patterns ordered by their pattern ID. They are currently
   // stored in a hash map, so we first have to sort them.
   // TODO<C++23> Use `ranges::to<vector>`.
   std::vector<std::pair<Pattern, PatternIdAndCount>> orderedPatterns{
       patternToIdAndCount_.begin(), patternToIdAndCount_.end()};
-  std::ranges::sort(orderedPatterns, std::less<>{},
-                    [](const auto& a) { return a.second.patternId_; });
-  CompactVectorOfStrings<Pattern::value_type>::Writer patternWriter{
-      std::move(patternSerializer_).file()};
-  for (const auto& pattern : orderedPatterns | std::views::keys) {
-    patternWriter.push(pattern.data(), pattern.size());
-  }
-  patternWriter.finish();
+  ql::ranges::sort(orderedPatterns, std::less<>{},
+                   [](const auto& a) { return a.second.patternId_; });
+  CompactVectorOfStrings<Id> patterns;
+  patterns.build(orderedPatterns | ql::views::keys);
+  writePatternsToFile(filename_, patterns, patternStatistics);
 
   // Print some statistics for the log of the index builder.
   printStatistics(patternStatistics);
@@ -129,7 +129,8 @@ void PatternCreator::readPatternsFromFile(
     uint64_t& numDistinctSubjectPredicatePairs,
     CompactVectorOfStrings<Id>& patterns) {
   // Read the pattern info from the patterns file.
-  LOG(INFO) << "Reading patterns from file " << filename << " ..." << std::endl;
+  AD_LOG_INFO << "Reading patterns from file " << filename << " ..."
+              << std::endl;
 
   // Read the subjectToPatternMap.
   ad_utility::serialization::FileReadSerializer patternReader(filename);
@@ -145,21 +146,31 @@ void PatternCreator::readPatternsFromFile(
   avgNumPredicatesPerSubject = statistics.avgNumDistinctPredicatesPerSubject_;
 }
 
-// ____________________________________________________________________________
+// _____________________________________________________________________________
+void PatternCreator::writePatternsToFile(
+    const std::string& filename,
+    const CompactVectorOfStrings<Pattern::value_type>& patterns,
+    const PatternStatistics& statistics) {
+  ad_utility::serialization::FileWriteSerializer patternWriter{filename};
+  patternWriter << statistics;
+  patternWriter << patterns;
+}
+
+// _____________________________________________________________________________
 void PatternCreator::printStatistics(
     PatternStatistics patternStatistics) const {
-  LOG(INFO) << "Number of distinct patterns: " << patternToIdAndCount_.size()
-            << std::endl;
-  LOG(INFO) << "Number of subjects with pattern: " << numDistinctSubjects_
-            << " [all]" << std::endl;
-  LOG(INFO) << "Total number of distinct subject-predicate pairs: "
-            << numDistinctSubjectPredicatePairs_ << std::endl;
-  LOG(INFO) << "Average number of predicates per subject: " << std::fixed
-            << std::setprecision(1)
-            << patternStatistics.avgNumDistinctPredicatesPerSubject_
-            << std::endl;
-  LOG(INFO) << "Average number of subjects per predicate: " << std::fixed
-            << std::setprecision(0)
-            << patternStatistics.avgNumDistinctSubjectsPerPredicate_
-            << std::endl;
+  AD_LOG_INFO << "Number of distinct patterns: " << patternToIdAndCount_.size()
+              << std::endl;
+  AD_LOG_INFO << "Number of subjects with pattern: " << numDistinctSubjects_
+              << " [all]" << std::endl;
+  AD_LOG_INFO << "Total number of distinct subject-predicate pairs: "
+              << numDistinctSubjectPredicatePairs_ << std::endl;
+  AD_LOG_INFO << "Average number of predicates per subject: " << std::fixed
+              << std::setprecision(1)
+              << patternStatistics.avgNumDistinctPredicatesPerSubject_
+              << std::endl;
+  AD_LOG_INFO << "Average number of subjects per predicate: " << std::fixed
+              << std::setprecision(0)
+              << patternStatistics.avgNumDistinctSubjectsPerPredicate_
+              << std::endl;
 }

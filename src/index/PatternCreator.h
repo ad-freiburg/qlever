@@ -7,13 +7,14 @@
  *       these patterns to disk, and to read them from disk.
  */
 
-#pragma once
+#ifndef QLEVER_SRC_INDEX_PATTERNCREATOR_H
+#define QLEVER_SRC_INDEX_PATTERNCREATOR_H
 
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/Id.h"
 #include "global/Pattern.h"
 #include "index/ConstantsIndexBuilding.h"
-#include "index/StxxlSortFunctors.h"
+#include "index/ExternalSortFunctors.h"
 #include "util/BufferedVector.h"
 #include "util/ExceptionHandling.h"
 #include "util/HashMap.h"
@@ -65,8 +66,8 @@ struct PatternStatistics {
 /// but is also performed implicitly by the destructor.
 /// The mapping from subjects to pattern indices (has-pattern) and the full
 /// mapping from subjects to predicates (has-predicate) is not written to disk,
-/// but stored in a STXXL sorter which then has to be used to build an index for
-/// these predicates.
+/// but stored in an external sorter which then has to be used to build an index
+/// for these predicates.
 class PatternCreator {
  public:
   using PSOSorter =
@@ -88,7 +89,7 @@ class PatternCreator {
   // Store the ID of a pattern, and the number of distinct subjects it occurs
   // with.
   struct PatternIdAndCount {
-    PatternID patternId_ = 0;
+    Pattern::PatternId patternId_ = 0;
     uint64_t count_ = 0;
   };
   using PatternToIdAndCount = ad_utility::HashMap<Pattern, PatternIdAndCount>;
@@ -101,8 +102,6 @@ class PatternCreator {
   // The pattern of `currentSubject_`. This might still be incomplete,
   // because more triples with the same subject might be pushed.
   Pattern currentPattern_;
-
-  ad_utility::serialization::FileWriteSerializer patternSerializer_;
 
   // Store the additional triples that are created by the pattern mechanism for
   // the `has-pattern` and `has-predicate` predicates.
@@ -129,20 +128,19 @@ class PatternCreator {
 
  public:
   // The patterns will be written to files starting with `basename`.
-  explicit PatternCreator(const string& basename, Id idOfHasPattern,
+  explicit PatternCreator(std::string basename, Id idOfHasPattern,
                           ad_utility::MemorySize memoryLimit)
-      : filename_{basename},
-        patternSerializer_{{basename}},
+      : filename_{std::move(basename)},
         tripleBuffer_(100'000, basename + ".tripleBufferForPatterns.dat"),
         tripleSorter_{
             std::make_unique<PSOSorter>(
-                basename + ".additionalTriples.pso.dat", memoryLimit / 2,
+                filename_ + ".additionalTriples.pso.dat", memoryLimit / 2,
                 ad_utility::makeUnlimitedAllocator<Id>()),
             std::make_unique<OSPSorter4Cols>(
-                basename + ".second-sorter.dat", memoryLimit / 2,
+                filename_ + ".second-sorter.dat", memoryLimit / 2,
                 ad_utility::makeUnlimitedAllocator<Id>())},
         idOfHasPattern_{idOfHasPattern} {
-    LOG(DEBUG) << "Computing predicate patterns ..." << std::endl;
+    AD_LOG_DEBUG << "Computing predicate patterns ..." << std::endl;
   }
 
   // This function has to be called for all the triples in the SPO permutation
@@ -174,6 +172,13 @@ class PatternCreator {
                                    uint64_t& numDistinctSubjectPredicatePairs,
                                    CompactVectorOfStrings<Id>& patterns);
 
+  // Write the given patterns and their statistics to files with the given
+  // `filename`.
+  static void writePatternsToFile(
+      const std::string& filename,
+      const CompactVectorOfStrings<Pattern::value_type>& patterns,
+      const PatternStatistics& patternStatistics);
+
   // Move out the sorted triples after finishing creating the patterns.
   TripleSorter&& getTripleSorter() && {
     finish();
@@ -182,7 +187,7 @@ class PatternCreator {
 
  private:
   void finishSubject(Id subject, const Pattern& pattern);
-  PatternID finishPattern(const Pattern& pattern);
+  Pattern::PatternId finishPattern(const Pattern& pattern);
 
   void printStatistics(PatternStatistics patternStatistics) const;
 
@@ -190,3 +195,5 @@ class PatternCreator {
     return *tripleSorter_.triplesWithSubjectPatternsSortedByOsp_;
   }
 };
+
+#endif  // QLEVER_SRC_INDEX_PATTERNCREATOR_H

@@ -2,17 +2,18 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
-#include "./CheckUsePatternTrick.h"
+#include "engine/CheckUsePatternTrick.h"
 
-#include <algorithm>
-#include <ranges>
+#include "backports/algorithm.h"
+#include "backports/type_traits.h"
+#include "parser/GraphPatternOperation.h"
 
 namespace checkUsePatternTrick {
 // __________________________________________________________________________
 bool isVariableContainedInGraphPattern(
     const Variable& variable, const ParsedQuery::GraphPattern& graphPattern,
     const SparqlTriple* tripleToIgnore) {
-  if (std::ranges::any_of(
+  if (ql::ranges::any_of(
           graphPattern._filters, [&variable](const SparqlFilter& filter) {
             return filter.expression_.isVariableContained(variable);
           })) {
@@ -22,7 +23,7 @@ bool isVariableContainedInGraphPattern(
     return isVariableContainedInGraphPatternOperation(variable, op,
                                                       tripleToIgnore);
   };
-  return std::ranges::any_of(graphPattern._graphPatterns, check);
+  return ql::ranges::any_of(graphPattern._graphPatterns, check);
 }
 
 namespace p = parsedQuery;
@@ -56,21 +57,24 @@ bool isVariableContainedInGraphPatternOperation(
             if (&triple == tripleToIgnore) {
               return false;
             }
-            return (triple.s_ == variable ||
-                    // Complex property paths are not allowed to contain
-                    // variables in SPARQL, so this check is sufficient.
-                    // TODO<joka921> Still make the interface of the
-                    // `PropertyPath` class typesafe.
-                    triple.p_.asString() == variable.name() ||
+            return (triple.s_ == variable || triple.predicateIs(variable) ||
                     triple.o_ == variable);
           });
     } else if constexpr (std::is_same_v<T, p::Values>) {
       return ad_utility::contains(arg._inlineValues._variables, variable);
     } else if constexpr (std::is_same_v<T, p::Service>) {
       return ad_utility::contains(arg.visibleVariables_, variable);
+    } else if constexpr (ad_utility::SameAsAny<T, p::PathQuery, p::SpatialQuery,
+                                               p::TextSearchQuery,
+                                               p::NamedCachedResult,
+                                               p::MaterializedViewQuery>) {
+      // For `MagicServiceQuery`s disable the pattern trick. This might slow
+      // things down more than necessary but is never wrong. In the future this
+      // could potentially be enabled for certain magic service queries.
+      return true;
     } else {
-      static_assert(std::is_same_v<T, p::TransPath> ||
-                    std::is_same_v<T, p::PathQuery>);
+      static_assert(
+          ad_utility::SameAsAny<T, p::TransPath, p::Describe, p::Load>);
       // The `TransPath` is set up later in the query planning, when this
       // function should not be called anymore.
       AD_FAIL();
@@ -97,10 +101,10 @@ static void rewriteTriplesForPatternTrick(const PatternTrickTuple& subAndPred,
   auto findAndRewriteMatchingTriple = [&subAndPred, &triples](
                                           auto triplePosition,
                                           size_t additionalScanColumn) {
-    auto matchingTriple = std::ranges::find_if(
+    auto matchingTriple = ql::ranges::find_if(
         triples, [&subAndPred, triplePosition](const SparqlTriple& t) {
           return std::invoke(triplePosition, t) == subAndPred.subject_ &&
-                 t.p_.isIri() && !isVariable(t.p_);
+                 t.getSimplePredicate().has_value();
         });
     if (matchingTriple == triples.end()) {
       return false;
@@ -119,9 +123,10 @@ static void rewriteTriplesForPatternTrick(const PatternTrickTuple& subAndPred,
   } else {
     // We could not find a suitable triple to append the additional column, we
     // therefore add an explicit triple `?s ql:has_pattern ?p`
-    triples.emplace_back(subAndPred.subject_,
-                         std::string{HAS_PATTERN_PREDICATE},
-                         subAndPred.predicate_);
+    triples.emplace_back(
+        subAndPred.subject_,
+        TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE),
+        subAndPred.predicate_);
   }
 }
 
@@ -214,25 +219,27 @@ std::optional<PatternTrickTuple> isTripleSuitableForPatternTrick(
 
   const auto patternTrickDataIfTripleIsPossible =
       [&]() -> std::optional<PatternTrickData> {
-    if ((triple.p_._iri == HAS_PREDICATE_PREDICATE) && isVariable(triple.s_) &&
-        isVariable(triple.o_) && triple.s_ != triple.o_) {
+    if (triple.getSimplePredicate() == HAS_PREDICATE_PREDICATE &&
+        triple.s_.isVariable() && triple.o_.isVariable() &&
+        triple.s_ != triple.o_) {
       Variable predicateVariable{triple.o_.getVariable()};
       return PatternTrickData{predicateVariable,
                               triple.s_.getVariable(),
                               {predicateVariable},
                               true};
-    } else if (isVariable(triple.s_) && isVariable(triple.p_) &&
-               isVariable(triple.o_)) {
+    } else if (auto variable = triple.getPredicateVariable();
+               triple.s_.isVariable() && variable.has_value() &&
+               triple.o_.isVariable()) {
+      const auto& predicateVariable = variable.value();
       // Check that the three variables are pairwise distinct.
-      std::vector<string> variables{triple.s_.getVariable().name(),
-                                    triple.o_.getVariable().name(),
-                                    triple.p_.asString()};
-      std::ranges::sort(variables);
+      std::array variables{triple.s_.getVariable().name(),
+                           triple.o_.getVariable().name(),
+                           predicateVariable.name()};
+      ql::ranges::sort(variables);
       if (std::unique(variables.begin(), variables.end()) != variables.end()) {
         return std::nullopt;
       }
 
-      Variable predicateVariable{triple.p_.getIri()};
       return PatternTrickData{predicateVariable,
                               triple.s_.getVariable(),
                               {predicateVariable, triple.o_.getVariable()},
@@ -266,12 +273,12 @@ std::optional<PatternTrickTuple> isTripleSuitableForPatternTrick(
   // Check that the pattern trick triple is the only place in the query
   // where the predicate variable (and the object variable in the three
   // variables case) occurs.
-  if (std::ranges::any_of(patternTrickData.variablesNotAllowedInRestOfQuery_,
-                          [&](const Variable& variable) {
-                            return isVariableContainedInGraphPattern(
-                                variable, parsedQuery->_rootGraphPattern,
-                                &triple);
-                          })) {
+  if (ql::ranges::any_of(patternTrickData.variablesNotAllowedInRestOfQuery_,
+                         [&](const Variable& variable) {
+                           return isVariableContainedInGraphPattern(
+                               variable, parsedQuery->_rootGraphPattern,
+                               &triple);
+                         })) {
     return std::nullopt;
   }
 

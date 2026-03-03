@@ -1,16 +1,20 @@
 // Copyright 2019, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_CALLFIXEDSIZE_H
+#define QLEVER_SRC_ENGINE_CALLFIXEDSIZE_H
 
-#include <functional>
 #include <optional>
 
+#include "backports/concepts.h"
 #include "global/Constants.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
+#include "util/ValueIdentity.h"
 
 // The functions and macros are able to call functions that take a set of
 // integers as template parameters with integers that are only known at runtime.
@@ -47,60 +51,77 @@
 // the macro and the template function interface, see `CallFixedSizeTest.cpp`.
 
 namespace ad_utility {
+
 namespace detail {
+
+// Call the `lambda` when the correct compile-time `Int`s are given as a
+// `std::integer_sequence`.
+CPP_variadic_template(typename Int, Int... Is, typename F, typename... Args)(
+    requires ql::concepts::integral<
+        Int>) auto applyOnIntegerSequence(ad_utility::ValueSequence<Int, Is...>,
+                                          F&& lambda, Args&&... args) {
+  return lambda.template operator()<Is...>(AD_FWD(args)...);
+};
+
+// An array with `NumValues` entries of type `Int` that has linkage in C++17
+// mode. It is needed below to deduce a return type.
+template <typename Int, size_t NumValues>
+static constexpr std::array<Int, NumValues> DummyArray{};
 
 // Internal helper functions that calls `lambda.template operator()<I,
 // J,...)(args)` where `I, J, ...` are the elements in the `array`. Requires
 // that each element in the `array` is `<= maxValue`.
-template <int maxValue, size_t NumValues, std::integral Int>
-auto callLambdaForIntArray(std::array<Int, NumValues> array, auto&& lambda,
-                           auto&&... args) {
+CPP_variadic_template(int maxValue, size_t NumValues, typename Int, typename F,
+                      typename... Args)(
+    requires(ql::concepts::integral<
+             Int>)) auto callLambdaForIntArray(std::array<Int, NumValues> array,
+                                               F&& lambda, Args&&... args) {
   AD_CONTRACT_CHECK(
-      std::ranges::all_of(array, [](auto el) { return el <= maxValue; }));
-  using ArrayType = std::array<Int, NumValues>;
-
-  // Call the `lambda` when the correct compile-time `Int`s are given as a
-  // `std::integer_sequence`.
-  auto applyOnIntegerSequence =
-      [&]<Int... Is>(ad_utility::ValueSequence<Int, Is...>) {
-        return lambda.template operator()<Is...>(AD_FWD(args)...);
-      };
+      ql::ranges::all_of(array, [](auto el) { return el <= maxValue; }));
+  auto apply = [&](auto integerSequence) {
+    return applyOnIntegerSequence(integerSequence, AD_FWD(lambda),
+                                  AD_FWD(args)...);
+  };
 
   // We store the result of the actual computation in a `std::optional`.
   // If the `lambda` returns void we don't store anything, but we still need
   // a type for the `result` variable. We choose `int` as a dummy for this case.
-  using Result = decltype(applyOnIntegerSequence(
-      ad_utility::toIntegerSequence<ArrayType{}>()));
+  using Result =
+      decltype(apply(toIntegerSequenceRef<DummyArray<Int, NumValues>>()));
   static constexpr bool resultIsVoid = std::is_void_v<Result>;
   using Storage = std::conditional_t<resultIsVoid, int, std::optional<Result>>;
   Storage result;
 
-  // Lambda: If the compile time parameter `I` and the runtime parameter `array`
-  // are equal, then call the `lambda` with `I` as a template parameter and
-  // store the result in `result` (unless it is `void`).
-  auto applyIf = [&]<ArrayType Array>() mutable {
-    if (array == Array) {
+  // Lambda: If the compile time parameter `i` and the runtime parameter `array`
+  // are equal (when the elements of `array` are interpreted as the digits of a
+  // single number), then call the `lambda` with `array` as a template parameter
+  // and store the result in `result` (unless it is `void`).
+  auto applyIf = [&](auto i) {
+    // Get the digits of `i` as a compile-time array.
+    constexpr const auto& arrayConst =
+        integerToArrayStaticVar<Int, NumValues, i.value, maxValue + 1>;
+    if (array == arrayConst) {
+      const auto& seq = toIntegerSequenceRef<arrayConst>();
       if constexpr (resultIsVoid) {
-        applyOnIntegerSequence(ad_utility::toIntegerSequence<Array>());
+        apply(seq);
       } else {
-        result = applyOnIntegerSequence(ad_utility::toIntegerSequence<Array>());
+        result = apply(seq);
       }
     }
   };
 
   // Lambda: call `applyIf` for all the compile-time integers `Is...`. The
   // runtime parameter always is `array`.
-  auto f =
-      [&applyIf]<ArrayType... Is>(ad_utility::ValueSequence<ArrayType, Is...>) {
-        (..., applyIf.template operator()<Is>());
-      };
+  auto f = [&](auto&& valueSequence) {
+    forEachValueInValueSequence(AD_FWD(valueSequence),
+                                ApplyAsValueIdentity{AD_FWD(applyIf)});
+  };
 
-  // Call f for all combinations of compileTimeIntegers in `M x NumValues` where
-  // `M` is `[0, ..., maxValue]` and `x` denotes the cartesian product of sets.
-  // Exactly one of these combinations is equal to `array`, and so the lambda
-  // will be executed exactly once.
-  f(ad_utility::cartesianPowerAsIntegerArray<static_cast<Int>(maxValue + 1),
-                                             NumValues>());
+  // Call `f` for all integers in `[0, (maxValue + 1) ^ NumValues]`, which makes
+  // `applyIf` see all the different arrays consisting of `NumValues` numbers in
+  // the range
+  // `[0, ... maxValue]`, where exactly one of them is equal to the `array`.
+  f(std::make_index_sequence<pow(maxValue + 1, NumValues)>{});
 
   if constexpr (!resultIsVoid) {
     return std::move(result.value());
@@ -108,8 +129,10 @@ auto callLambdaForIntArray(std::array<Int, NumValues> array, auto&& lambda,
 }
 
 // Overload for a single int.
-template <int maxValue, std::integral Int>
-auto callLambdaForIntArray(Int i, auto&& lambda, auto&&... args) {
+CPP_variadic_template(int maxValue, typename Int, typename F,
+                      typename... Args)(requires(
+    ql::concepts::integral<Int>)) auto callLambdaForIntArray(Int i, F&& lambda,
+                                                             Args&&... args) {
   return callLambdaForIntArray<maxValue>(std::array{i}, AD_FWD(lambda),
                                          AD_FWD(args)...);
 }
@@ -124,14 +147,16 @@ constexpr int mapToZeroIfTooLarge(int x, int maxValue) {
 // It calls `functor(INT<f(ints[0])>, INT<f(ints[1])>, ..., args...)`
 // where `INT<N>` is `std::integral_constant<int, N>` and `f` is
 // `mapToZeroIfTooLarge`.
-template <int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE,
-          size_t NumIntegers, std::integral Int>
-decltype(auto) callFixedSize(std::array<Int, NumIntegers> ints, auto&& functor,
-                             auto&&... args) {
+CPP_variadic_template(int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE,
+                      size_t NumIntegers, typename Int, typename F,
+                      typename... Args)(
+    requires std::is_integral_v<Int>) decltype(auto)
+    callFixedSize(std::array<Int, NumIntegers> ints, F&& functor,
+                  Args&&... args) {
   static_assert(NumIntegers > 0);
   // TODO<joka921, C++23> Use `std::bind_back`
   auto p = [](int i) { return detail::mapToZeroIfTooLarge(i, MaxValue); };
-  std::ranges::transform(ints, ints.begin(), p);
+  ql::ranges::transform(ints, ints.begin(), p);
 
   // The only step that remains is to lift our single runtime `value` which
   // is in the range `[0, (MaxValue +1)^ NumIntegers]` to a compile-time
@@ -142,27 +167,35 @@ decltype(auto) callFixedSize(std::array<Int, NumIntegers> ints, auto&& functor,
 }
 
 // Overload for a single integer.
-template <int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE,
-          std::integral Int>
-decltype(auto) callFixedSize(Int i, auto&& functor, auto&&... args) {
+CPP_variadic_template(int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE,
+                      typename Int, typename F, typename... Args)(
+    requires std::is_integral_v<Int>) decltype(auto)
+    callFixedSize(Int i, F&& functor, Args&&... args) {
   return callFixedSize<MaxValue>(std::array{i}, AD_FWD(functor),
                                  AD_FWD(args)...);
 }
 
-}  // namespace ad_utility
+// Template function `callFixedSizeVi` is a wrapper around `callFixedSize`.
+// It wraps the functor in an `ApplyAsValueIdentity`, passing the integers
+// as ValueIdentity objects to the functor rather than as template parameters.
+CPP_variadic_template(int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE,
+                      size_t NumIntegers, typename Int, typename F,
+                      typename... Args)(
+    requires std::is_integral_v<Int>) decltype(auto)
+    callFixedSizeVi(std::array<Int, NumIntegers> ints, F&& functor,
+                    Args&&... args) {
+  return callFixedSize<MaxValue>(ints, ApplyAsValueIdentity{AD_FWD(functor)},
+                                 AD_FWD(args)...);
+}
 
-// The definitions of the macro for an easier syntax.
-// The first argument (an array of integers) has to be put in parentheses if
-// it is directly instantiated in the call, for example
-// `CALL_FIXED_SIZE((std::array{1, 2}), &funcThatTakesTwoIntegers, argument);`
-// This is necessary because macros do not correctly parse the curly braces.
-// TODO<joka921, C++23> In C++23 `std::array` and other aggregates can be
-// initialized with parentheses such that we can write
-// `CALL_FIXED_SIZE(std::array(1, 2), ...`. For a single integer you can also
-// simply write `CALL_FIXED_SIZE(1, function, params)`, this is handled by
-// the corresponding overload of `ad_utility::callFixedSize`.
-#define CALL_FIXED_SIZE(integers, func, ...)                      \
-  ad_utility::callFixedSize(                                      \
-      integers, []<int... Is>(auto&&... args) -> decltype(auto) { \
-        return std::invoke(func<Is...>, AD_FWD(args)...);         \
-      } __VA_OPT__(, ) __VA_ARGS__)
+// Overload for a single integer.
+CPP_variadic_template(int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE,
+                      typename Int, typename F, typename... Args)(
+    requires std::is_integral_v<Int>) decltype(auto)
+    callFixedSizeVi(Int i, F&& functor, Args&&... args) {
+  return callFixedSizeVi<MaxValue>(std::array{i}, AD_FWD(functor),
+                                   AD_FWD(args)...);
+}
+
+}  // namespace ad_utility
+#endif  // QLEVER_SRC_ENGINE_CALLFIXEDSIZE_H

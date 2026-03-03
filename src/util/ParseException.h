@@ -3,7 +3,9 @@
 // Authors:
 //   2014-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2022      Julian Mundhahs (mundhahj@tf.informatik.uni-freiburg.de)
-#pragma once
+
+#ifndef QLEVER_SRC_UTIL_PARSEEXCEPTION_H
+#define QLEVER_SRC_UTIL_PARSEEXCEPTION_H
 
 #include <absl/strings/str_cat.h>
 
@@ -11,6 +13,8 @@
 #include <optional>
 #include <string>
 #include <string_view>
+
+#include "backports/three_way_comparison.h"
 
 // Contains Metadata (position of the faulty clause) about a ParseException that
 // occurred.
@@ -29,7 +33,9 @@ struct ExceptionMetadata {
   size_t line_;
   size_t charPositionInLine_;
 
-  bool operator==(const ExceptionMetadata& rhs) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(ExceptionMetadata, query_,
+                                              startIndex_, stopIndex_, line_,
+                                              charPositionInLine_)
 
   // Return the query with the faulty clause highlighted using ANSI Escape
   // Sequences. The faulty clause is made bold, underlined and red.
@@ -81,3 +87,5 @@ class NotSupportedException : public ParseException {
       std::optional<ExceptionMetadata> metadata = std::nullopt)
       : ParseException{cause, std::move(metadata), "Not supported:"} {}
 };
+
+#endif  // QLEVER_SRC_UTIL_PARSEEXCEPTION_H

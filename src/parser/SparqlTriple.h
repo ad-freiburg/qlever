@@ -3,25 +3,19 @@
 //  Authors: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //           Johannes Kalmbach <johannes.kalmbach@gmail.com>
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_SPARQLTRIPLE_H
+#define QLEVER_SRC_PARSER_SPARQLTRIPLE_H
 
+#include <boost/optional.hpp>
 #include <utility>
 #include <vector>
 
-#include "PropertyPath.h"
-#include "TripleComponent.h"
+#include "backports/three_way_comparison.h"
 #include "global/Id.h"
-#include "parser/data/Variable.h"
-
-inline bool isVariable(const string& elem) { return elem.starts_with("?"); }
-inline bool isVariable(const TripleComponent& elem) {
-  return elem.isVariable();
-}
-
-inline bool isVariable(const PropertyPath& elem) {
-  return elem._operation == PropertyPath::Operation::IRI &&
-         isVariable(elem._iri);
-}
+#include "parser/PropertyPath.h"
+#include "parser/TripleComponent.h"
+#include "parser/data/Types.h"
+#include "rdfTypes/Variable.h"
 
 // Data container for parsed triples from the where clause.
 // It is templated on the predicate type, see the instantiations below.
@@ -36,7 +30,9 @@ class SparqlTripleBase {
         o_(std::move(o)),
         additionalScanColumns_(std::move(additionalScanColumns)) {}
 
-  bool operator==(const SparqlTripleBase& other) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(SparqlTripleBase, s_, p_, o_,
+                                              additionalScanColumns_)
+
   TripleComponent s_;
   Predicate p_;
   TripleComponent o_;
@@ -56,7 +52,7 @@ class SparqlTripleSimple : public SparqlTripleBase<TripleComponent> {
 
 class SparqlTripleSimpleWithGraph : public SparqlTripleSimple {
  public:
-  using Graph = std::variant<std::monostate, Iri, Variable>;
+  using Graph = std::variant<std::monostate, TripleComponent::Iri, Variable>;
 
   SparqlTripleSimpleWithGraph(TripleComponent s, TripleComponent p,
                               TripleComponent o, Graph g,
@@ -66,31 +62,35 @@ class SparqlTripleSimpleWithGraph : public SparqlTripleSimple {
         g_{std::move(g)} {}
   Graph g_;
 
-  bool operator==(const SparqlTripleSimpleWithGraph&) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(SparqlTripleSimpleWithGraph, g_)
 };
 
-// A triple where the predicate is a `PropertyPath` (which technically still
-// might be a variable or fixed entity in the current implementation).
-class SparqlTriple : public SparqlTripleBase<PropertyPath> {
+// A triple where the predicate is a `PropertyPath` or a `Variable`.
+class SparqlTriple
+    : public SparqlTripleBase<ad_utility::sparql_types::VarOrPath> {
  public:
-  using Base = SparqlTripleBase<PropertyPath>;
+  using Base = SparqlTripleBase<ad_utility::sparql_types::VarOrPath>;
   using Base::Base;
 
   // ___________________________________________________________________________
-  SparqlTriple(TripleComponent s, const std::string& iri, TripleComponent o)
-      : Base{std::move(s), PropertyPath::fromIri(iri), std::move(o)} {}
+  SparqlTriple(TripleComponent s, TripleComponent::Iri iri, TripleComponent o)
+      : Base{std::move(s), PropertyPath::fromIri(std::move(iri)),
+             std::move(o)} {}
 
   // ___________________________________________________________________________
-  [[nodiscard]] string asString() const;
+  [[nodiscard]] std::string asString() const;
 
   // Convert to a simple triple. Fails with an exception if the predicate
   // actually is a property path.
   SparqlTripleSimple getSimple() const {
-    AD_CONTRACT_CHECK(p_.isIri());
+    bool holdsVariable = std::holds_alternative<Variable>(p_);
+    auto predicate = getSimplePredicate();
+    AD_CONTRACT_CHECK(holdsVariable || predicate.has_value());
     TripleComponent p =
-        isVariable(p_._iri)
-            ? TripleComponent{Variable{p_._iri}}
-            : TripleComponent(TripleComponent::Iri::fromIriref(p_._iri));
+        holdsVariable
+            ? TripleComponent{std::get<Variable>(p_)}
+            : TripleComponent(ad_utility::triple_component::Iri::fromIriref(
+                  predicate.value()));
     return {s_, p, o_, additionalScanColumns_};
   }
 
@@ -98,10 +98,57 @@ class SparqlTriple : public SparqlTripleBase<PropertyPath> {
   // the predicate is neither a variable nor an iri.
   static SparqlTriple fromSimple(const SparqlTripleSimple& triple) {
     AD_CONTRACT_CHECK(triple.p_.isVariable() || triple.p_.isIri());
-    PropertyPath p = triple.p_.isVariable()
-                         ? PropertyPath::fromVariable(triple.p_.getVariable())
-                         : PropertyPath::fromIri(
-                               triple.p_.getIri().toStringRepresentation());
-    return {triple.s_, p, triple.o_};
+    if (triple.p_.isVariable()) {
+      return {triple.s_, triple.p_.getVariable(), triple.o_};
+    }
+    return {triple.s_, PropertyPath::fromIri(triple.p_.getIri()), triple.o_};
+  }
+
+  // If the predicate of the triple is a simple IRI (neither a variable nor a
+  // complex property path), return it. Else return `nullopt`. Note: the
+  // lifetime of the return value is bound to the lifetime of the triple as the
+  // optional stores a `string_view`.
+  std::optional<std::string_view> getSimplePredicate() const {
+    if (!std::holds_alternative<PropertyPath>(p_)) {
+      return std::nullopt;
+    }
+    const auto& path = std::get<PropertyPath>(p_);
+    return path.isIri()
+               ? std::optional<std::string_view>{path.getIri()
+                                                     .toStringRepresentation()}
+               : std::nullopt;
+  }
+
+  // If the predicate of the triples is a variable, return it. Note:
+  // the lifetime of the return value is bound to the lifetime of the triple,
+  // as the optional stores a reference.
+  boost::optional<const Variable&> getPredicateVariable() const {
+    return std::holds_alternative<Variable>(p_)
+               ? boost::optional<const Variable&>{std::get<Variable>(p_)}
+               : boost::none;
+  }
+
+  // Return true iff the predicate is a variable that is equal to the argument.
+  bool predicateIs(const Variable& variable) const {
+    auto ptr = std::get_if<Variable>(&p_);
+    return (ptr != nullptr && *ptr == variable);
+  }
+
+  // Call a function for every variable contained in the triple.
+  CPP_template(typename Function)(
+      requires std::is_invocable_v<
+          Function, const Variable&>) void forEachVariable(Function function)
+      const {
+    if (s_.isVariable()) {
+      std::invoke(function, s_.getVariable());
+    }
+    if (auto predicate = getPredicateVariable()) {
+      std::invoke(function, predicate.value());
+    }
+    if (o_.isVariable()) {
+      std::invoke(function, o_.getVariable());
+    }
   }
 };
+
+#endif  // QLEVER_SRC_PARSER_SPARQLTRIPLE_H

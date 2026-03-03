@@ -1,24 +1,20 @@
-//  Copyright 2024, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
-//  Author: @Jonathan24680
-//  Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
+// Copyright 2024 - 2025, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Jonathan Zeller github@Jonathan24680
+//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+//          Patrick Brosi <brosi@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_SPATIALJOIN_H
+#define QLEVER_SRC_ENGINE_SPATIALJOIN_H
 
+#include <memory>
 #include <optional>
+#include <variant>
 
 #include "engine/Operation.h"
+#include "engine/SpatialJoinConfig.h"
 #include "global/Id.h"
-#include "parser/ParsedQuery.h"
-
-// Configuration to restrict the results provided by the SpatialJoin
-struct NearestNeighborsConfig {
-  size_t maxResults_;
-  std::optional<size_t> maxDist_ = std::nullopt;
-};
-struct MaxDistanceConfig {
-  size_t maxDist_;
-};
+#include "rdfTypes/Variable.h"
 
 // helper struct to improve readability in prepareJoin()
 struct PreparedSpatialJoinParams {
@@ -28,9 +24,12 @@ struct PreparedSpatialJoinParams {
   std::shared_ptr<const Result> resultRight_;
   ColumnIndex leftJoinCol_;
   ColumnIndex rightJoinCol_;
+  std::vector<ColumnIndex> rightSelectedCols_;
   size_t numColumns_;
-  std::optional<size_t> maxDist_;
+  std::optional<double> maxDist_;
   std::optional<size_t> maxResults_;
+  std::optional<SpatialJoinType> joinType_;
+  std::optional<std::string> rightCacheName_;
 };
 
 // This class is implementing a SpatialJoin operation. This operations joins
@@ -38,18 +37,20 @@ struct PreparedSpatialJoinParams {
 // search as well as search of all points within a given range.
 class SpatialJoin : public Operation {
  public:
-  // creates a SpatialJoin operation. The triple is needed, to get the
-  // variable names. Those are the names of the children, which get added
-  // later. In addition to that, the SpatialJoin operation needs a maximum
-  // distance, which two objects can be apart, which will still be accepted
-  // as a match and therefore be part of the result table. The distance is
-  // parsed from the triple.
-  SpatialJoin(QueryExecutionContext* qec, SparqlTriple triple,
-              std::optional<std::shared_ptr<QueryExecutionTree>> childLeft_,
-              std::optional<std::shared_ptr<QueryExecutionTree>> childRight_);
+  // creates a SpatialJoin operation: the required configuration object
+  // can for example be obtained from the SpatialQuery class. Children are
+  // optional, because they may be added later using the addChild method.
+  // The substitutesFilterOp parameter indicates whether the spatial join
+  // was explicitly requested by the user (false) or has been created to
+  // implicitly rewrite a cartesian product with a geo filter (true).
+  SpatialJoin(QueryExecutionContext* qec, SpatialJoinConfiguration config,
+              std::optional<std::shared_ptr<QueryExecutionTree>> childLeft,
+              std::optional<std::shared_ptr<QueryExecutionTree>> childRight,
+              bool substitutesFilterOp = false);
+
   std::vector<QueryExecutionTree*> getChildren() override;
-  string getCacheKeyImpl() const override;
-  string getDescriptor() const override;
+  std::string getCacheKeyImpl() const override;
+  std::string getDescriptor() const override;
   size_t getResultWidth() const override;
   size_t getCostEstimate() override;
   uint64_t getSizeEstimateBeforeLimit() override;
@@ -65,7 +66,7 @@ class SpatialJoin : public Operation {
   float getMultiplicity(size_t col) override;
 
   bool knownEmptyResult() override;
-  [[nodiscard]] vector<ColumnIndex> resultSortedOn() const override;
+  [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override;
   Result computeResult(bool requestLaziness) override;
 
   // Depending on the amount of children the operation returns a different
@@ -90,18 +91,50 @@ class SpatialJoin : public Operation {
   bool isConstructed() const;
 
   // this function is used to give the maximum distance for internal purposes
-  std::optional<size_t> getMaxDist() const;
+  std::optional<double> getMaxDist() const;
 
-  // this function is used to give the maximum number of results for internal
-  // purposes
+  // this function is used to give the maximum number of results
   std::optional<size_t> getMaxResults() const;
 
-  void selectAlgorithm(bool useBaselineAlgorithm) {
-    useBaselineAlgorithm_ = useBaselineAlgorithm;
+  // switch the algorithm set in the config parameter at construction time
+  void selectAlgorithm(SpatialJoinAlgorithm algo) { config_.algo_ = algo; }
+
+  // retrieve the currently selected algorithm
+  SpatialJoinAlgorithm getAlgorithm() const { return config_.algo_; }
+
+  // retrieve the currently selected spatial join type
+  std::optional<SpatialJoinType> getJoinType() const {
+    return config_.joinType_;
   }
 
-  std::pair<size_t, size_t> onlyForTestingGetConfig() const {
-    return std::pair{getMaxDist().value_or(-1), getMaxResults().value_or(-1)};
+  // retrieve the variables the spatial join is joining on
+  std::pair<Variable, Variable> getSpatialJoinVariables() const {
+    return {config_.left_, config_.right_};
+  }
+
+  // get the boolean flag if this spatial join operation is used to substitute a
+  // GeoSPARQL filter operation
+  bool getSubstitutesFilterOp() const { return substitutesFilterOp_; }
+
+  // Helper functions for unit tests
+  std::pair<double, size_t> onlyForTestingGetTask() const {
+    return std::pair{getMaxDist().value_or(-1.0), getMaxResults().value_or(-1)};
+  }
+
+  const SpatialJoinConfiguration& onlyForTestingGetConfig() const {
+    return config_;
+  }
+
+  std::pair<Variable, Variable> onlyForTestingGetVariables() const {
+    return std::pair{config_.left_, config_.right_};
+  }
+
+  std::optional<Variable> onlyForTestingGetDistanceVariable() const {
+    return config_.distanceVariable_;
+  }
+
+  PayloadVariables onlyForTestingGetPayloadVariables() const {
+    return config_.payloadVariables_;
   }
 
   std::shared_ptr<QueryExecutionTree> onlyForTestingGetLeftChild() const {
@@ -112,28 +145,31 @@ class SpatialJoin : public Operation {
     return childRight_;
   }
 
-  const string& getInternalDistanceName() const {
-    return nameDistanceInternal_;
+  PreparedSpatialJoinParams onlyForTestingGetPrepareJoin() const {
+    return prepareJoin();
+  }
+
+  void checkCancellationWrapperForSpatialJoinAlgorithms() const {
+    checkCancellation();
   }
 
  private:
-  // helper function, which parses a triple and populates config_
-  void parseConfigFromTriple();
+  std::unique_ptr<Operation> cloneImpl() const override;
+
+  // helper function to generate a variable to column map from `childRight_`
+  // that only contains the columns selected by `config_.payloadVariables_`
+  // and (automatically added) the `config_.right_` variable.
+  VariableToColumnMap getVarColMapPayloadVars() const;
 
   // helper function, to initialize various required objects for both algorithms
   PreparedSpatialJoinParams prepareJoin() const;
 
-  SparqlTriple triple_;
-  Variable leftChildVariable_;
-  Variable rightChildVariable_;
   std::shared_ptr<QueryExecutionTree> childLeft_ = nullptr;
   std::shared_ptr<QueryExecutionTree> childRight_ = nullptr;
 
-  std::variant<NearestNeighborsConfig, MaxDistanceConfig> config_;
+  SpatialJoinConfiguration config_;
 
-  // adds an extra column to the result, which contains the actual distance,
-  // between the two objects
-  bool addDistToResult_ = true;
-  const string nameDistanceInternal_ = "?distOfTheTwoObjectsAddedInternally";
-  bool useBaselineAlgorithm_ = false;
+  bool substitutesFilterOp_ = false;
 };
+
+#endif  // QLEVER_SRC_ENGINE_SPATIALJOIN_H

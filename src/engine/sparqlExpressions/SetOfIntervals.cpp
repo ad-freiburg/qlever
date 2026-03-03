@@ -2,9 +2,9 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
 
-#include "SetOfIntervals.h"
+#include "engine/sparqlExpressions/SetOfIntervals.h"
 
-#include <algorithm>
+#include "backports/algorithm.h"
 
 namespace ad_utility {
 // ___________________________________________________________________________

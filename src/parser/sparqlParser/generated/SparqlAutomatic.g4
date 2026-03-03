@@ -38,13 +38,8 @@
 
 grammar SparqlAutomatic;
 
-// query and update are disjoint in the grammar;
-// add a common parent for easier parsing
-queryOrUpdate: (query | update) EOF
-    ;
-
 query
-    : prologue (selectQuery | constructQuery | describeQuery | askQuery) valuesClause
+    : prologue (selectQuery | constructQuery | describeQuery | askQuery) valuesClause EOF
     ;
 
 prologue
@@ -149,7 +144,10 @@ textLimitClause
 
 valuesClause : ( VALUES dataBlock )?;
 
-update: prologue (update1 (';' update)? )? ;
+// We have replaced the original recursive definition with an equivalent
+// non-recursive definition for performance reasons.
+// Original definition: `update: prologue (update1 (';' update)? )? EOF ;`
+update: prologue (update1 (';' prologue update1)* (';' prologue)? )? EOF ;
 
 update1: load | clear | drop | add | move | copy | create | insertData | deleteData | deleteWhere | modify ;
 
@@ -181,7 +179,7 @@ insertClause: INSERT quadPattern ;
 
 usingClause: USING (iri | NAMED iri) ;
 
-graphOrDefault: DEFAULT | GRAPH iri ;
+graphOrDefault: DEFAULT | GRAPH? iri ;
 
 graphRef: GRAPH iri ;
 
@@ -195,7 +193,10 @@ quads: triplesTemplate? ( quadsNotTriples '.'? triplesTemplate? )* ;
 
 quadsNotTriples: GRAPH varOrIri '{' triplesTemplate? '}' ;
 
-triplesTemplate: triplesSameSubject ( '.' triplesTemplate? )?;
+// We have replaced the original recursive definition with an equivalent
+// non-recursive definition for performance reasons.
+// Original definition: `triplesTemplate: triplesSameSubject ( '.' triplesTemplate? )?;`
+triplesTemplate: triplesSameSubject ( '.' triplesSameSubject )* '.'? ;
 
 
 // Corresponds to GraphPattern.
@@ -626,7 +627,6 @@ string
     : STRING_LITERAL1
     | STRING_LITERAL2
     | STRING_LITERAL_LONG1 | STRING_LITERAL_LONG2
-    /* | STRING_LITERAL_LONG('0'..'9') | STRING_LITERAL_LONG('0'..'9')*/
     ;
 
 iri
@@ -771,7 +771,7 @@ SEPARATOR : S E P A R A T O R;
 // LEXER RULES
 
 IRI_REF
-    : '<'  ~('<' | '>' | '"' | '{' | '}' | '|' | '^' | '\\' | '`'| '\u0000'..'\u0020')* '>'
+    : '<'  ~[<>"{}|^\\`\u0000-\u0020]* '>'
     ;
 
 PNAME_NS
@@ -793,7 +793,7 @@ VAR2
     ;
 
 LANGTAG
-    : '@' ('a'..'z' | 'A' .. 'Z')+ ('-' ('a'..'z' | 'A' .. 'Z' | DIGIT)+)*
+    : '@' ([a-zA-Z])+ ('-' ([a-zA-Z] | DIGIT)+)*
     ;
 
 // The PREFIX_LANGTAG is an extension of the SPARQL standard that allows IRIs
@@ -878,7 +878,7 @@ PN_CHARS_U
     ;
 
 VARNAME
-    : ( PN_CHARS_U | DIGIT ) ( PN_CHARS_U | DIGIT | '\u00B7' | ('\u0300'..'\u036F') | ('\u203F'..'\u2040') )*
+    : ( PN_CHARS_U | DIGIT ) ( PN_CHARS_U | DIGIT | '\u00B7' | [\u0300-\u036F] | [\u203F-\u2040] )*
     ;
 
 fragment
@@ -887,8 +887,8 @@ PN_CHARS
     | '-'
     | DIGIT
     | '\u00B7'
-    | '\u0300'..'\u036F'
-    | '\u203F'..'\u2040'
+    | [\u0300-\u036F]
+    | [\u203F-\u2040]
     ;
 
 PN_PREFIX
@@ -906,7 +906,7 @@ PERCENT :
     '%' HEX HEX;
 
 HEX:
-  DIGIT | 'A'..'F' | 'a'..'f';
+  DIGIT | [A-F] | [a-f];
 
 PN_LOCAL_ESC :
     '\\' ( '_' | '~' | '.' | '-' | '!' | '$' | '&' | '\'' | '(' | ')' | '*' | '+' | ',' | ';' | '=' | '/' | '?' | '#' | '@' | '%' );
@@ -916,25 +916,25 @@ PN_LOCAL_ESC :
 
 fragment
 PN_CHARS_BASE
-    : 'A'..'Z'
-    | 'a'..'z'
-    | '\u00C0'..'\u00D6'
-    | '\u00D8'..'\u00F6'
-    | '\u00F8'..'\u02FF'
-    | '\u0370'..'\u037D'
-    | '\u037F'..'\u1FFF'
-    | '\u200C'..'\u200D'
-    | '\u2070'..'\u218F'
-    | '\u2C00'..'\u2FEF'
-    | '\u3001'..'\uD7FF'
-    | '\uF900'..'\uFDCF'
-    | '\uFDF0'..'\uFFFD'
-    // not supported by antlr4 | '\U00010000'..'\U000EFFFF'
+    : [A-Z]
+    | [a-z]
+    | [\u00C0-\u00D6]
+    | [\u00D8-\u00F6]
+    | [\u00F8-\u02FF]
+    | [\u0370-\u037D]
+    | [\u037F-\u1FFF]
+    | [\u200C-\u200D]
+    | [\u2070-\u218F]
+    | [\u2C00-\u2FEF]
+    | [\u3001-\uD7FF]
+    | [\uF900-\uFDCF]
+    | [\uFDF0-\uFFFD]
+    | [\u{00010000}-\u{000EFFFF}]
     ;
 
 fragment
 DIGIT
-    : '0'..'9'
+    : [0-9]
     ;
 
 WS
@@ -947,15 +947,6 @@ WS
 COMMENTS
     : '#' ~( '\r' | '\n')* ->skip
     ;
-
-
-
-
-
-
-
-
-// todo: builtin call
 
 fragment A : ('a' | 'A');
 fragment B : ('b' | 'B');

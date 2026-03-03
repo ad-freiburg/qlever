@@ -1,99 +1,115 @@
-// Copyright 2022, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
-#include "PropertyPath.h"
+//   Copyright 2025, University of Freiburg,
+//   Chair of Algorithms and Data Structures.
+//   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
+
+#include "parser/PropertyPath.h"
 
 // _____________________________________________________________________________
-PropertyPath::PropertyPath(Operation op, std::string iri,
-                           std::initializer_list<PropertyPath> children)
-    : _operation(op), _iri(std::move(iri)), _children(children) {}
+PropertyPath::MinMaxPath& PropertyPath::MinMaxPath::operator=(
+    const MinMaxPath& other) {
+  min_ = other.min_;
+  max_ = other.max_;
+  child_ = std::make_unique<PropertyPath>(*other.child_);
+  return *this;
+}
 
 // _____________________________________________________________________________
-PropertyPath PropertyPath::makeModified(PropertyPath child,
-                                        std::string_view modifier) {
-  if (modifier == "+") {
-    return makeWithChildren({std::move(child)}, Operation::ONE_OR_MORE);
-  } else if (modifier == "*") {
-    return makeWithChildren({std::move(child)}, Operation::ZERO_OR_MORE);
-  } else {
-    AD_CORRECTNESS_CHECK(modifier == "?");
-    return makeWithChildren({std::move(child)}, Operation::ZERO_OR_ONE);
+bool PropertyPath::MinMaxPath::operator==(const MinMaxPath& other) const {
+  return min_ == other.min_ && max_ == other.max_ && *child_ == *other.child_;
+}
+
+// _____________________________________________________________________________
+PropertyPath::PropertyPath(
+    std::variant<ad_utility::triple_component::Iri, ModifiedPath, MinMaxPath>
+        path)
+    : path_{std::move(path)} {}
+
+// _____________________________________________________________________________
+PropertyPath PropertyPath::fromIri(ad_utility::triple_component::Iri iri) {
+  return PropertyPath{std::move(iri)};
+}
+
+// _____________________________________________________________________________
+PropertyPath PropertyPath::makeWithLength(PropertyPath child, size_t min,
+                                          size_t max) {
+  return PropertyPath{
+      MinMaxPath{min, max, std::make_unique<PropertyPath>(std::move(child))}};
+}
+
+// _____________________________________________________________________________
+PropertyPath PropertyPath::makeAlternative(std::vector<PropertyPath> children) {
+  AD_CONTRACT_CHECK(children.size() > 1,
+                    "Alternative paths must have at least two children.");
+  return PropertyPath{ModifiedPath{std::move(children), Modifier::ALTERNATIVE}};
+}
+
+// _____________________________________________________________________________
+PropertyPath PropertyPath::makeSequence(std::vector<PropertyPath> children) {
+  AD_CONTRACT_CHECK(children.size() > 1,
+                    "Sequence paths must have at least two children.");
+  return PropertyPath{ModifiedPath{std::move(children), Modifier::SEQUENCE}};
+}
+
+// _____________________________________________________________________________
+PropertyPath PropertyPath::makeInverse(PropertyPath child) {
+  return PropertyPath{ModifiedPath{{std::move(child)}, Modifier::INVERSE}};
+}
+
+// _____________________________________________________________________________
+PropertyPath PropertyPath::makeNegated(std::vector<PropertyPath> children) {
+  return PropertyPath{ModifiedPath{std::move(children), Modifier::NEGATED}};
+}
+
+// _____________________________________________________________________________
+void PropertyPath::ModifiedPath::writeToStream(std::ostream& out) const {
+  if (modifier_ == Modifier::INVERSE) {
+    out << '^';
+  } else if (modifier_ == Modifier::NEGATED) {
+    out << '!';
+  }
+  if (children_.empty()) {
+    out << "()";
+    return;
+  }
+
+  char separator = modifier_ == Modifier::SEQUENCE ? '/' : '|';
+
+  if (modifier_ == Modifier::NEGATED) {
+    out << '(';
+  }
+  bool firstRun = true;
+  for (const auto& child : children_) {
+    if (!firstRun) {
+      out << separator;
+    }
+    firstRun = false;
+    bool needsBraces = std::holds_alternative<ModifiedPath>(child.path_);
+    if (needsBraces) {
+      out << '(';
+    }
+    child.writeToStream(out);
+    if (needsBraces) {
+      out << ')';
+    }
+  }
+  if (modifier_ == Modifier::NEGATED) {
+    out << ')';
   }
 }
 
 // _____________________________________________________________________________
 void PropertyPath::writeToStream(std::ostream& out) const {
-  switch (_operation) {
-    case Operation::ALTERNATIVE:
-      out << "(";
-      if (!_children.empty()) {
-        _children[0].writeToStream(out);
-      } else {
-        out << "missing" << std::endl;
-      }
-      out << ")|(";
-      if (_children.size() > 1) {
-        _children[1].writeToStream(out);
-      } else {
-        out << "missing" << std::endl;
-      }
-      out << ")";
-      break;
-    case Operation::INVERSE:
-      out << "^(";
-      if (!_children.empty()) {
-        _children[0].writeToStream(out);
-      } else {
-        out << "missing" << std::endl;
-      }
-      out << ")";
-      break;
-    case Operation::IRI:
-      out << _iri;
-      break;
-    case Operation::SEQUENCE:
-      out << "(";
-      if (!_children.empty()) {
-        _children[0].writeToStream(out);
-      } else {
-        out << "missing" << std::endl;
-      }
-      out << ")/(";
-      if (_children.size() > 1) {
-        _children[1].writeToStream(out);
-      } else {
-        out << "missing" << std::endl;
-      }
-      out << ")";
-      break;
-    case Operation::ZERO_OR_MORE:
-      out << "(";
-      if (!_children.empty()) {
-        _children[0].writeToStream(out);
-      } else {
-        out << "missing" << std::endl;
-      }
-      out << ")*";
-      break;
-    case Operation::ONE_OR_MORE:
-      out << "(";
-      if (!_children.empty()) {
-        _children[0].writeToStream(out);
-      } else {
-        out << "missing" << std::endl;
-      }
-      out << ")+";
-      break;
-    case Operation::ZERO_OR_ONE:
-      out << "(";
-      if (!_children.empty()) {
-        _children[0].writeToStream(out);
-      } else {
-        out << "missing" << std::endl;
-      }
-      out << ")?";
-      break;
-  }
+  std::visit(ad_utility::OverloadCallOperator{
+                 [&out](const ad_utility::triple_component::Iri& iri) {
+                   out << iri.toStringRepresentation();
+                 },
+                 [&out](const ModifiedPath& path) { path.writeToStream(out); },
+                 [&out](const MinMaxPath& path) {
+                   out << '(';
+                   path.child_->writeToStream(out);
+                   out << "){" << path.min_ << ',' << path.max_ << '}';
+                 }},
+             path_);
 }
 
 // _____________________________________________________________________________
@@ -104,27 +120,40 @@ std::string PropertyPath::asString() const {
 }
 
 // _____________________________________________________________________________
-void PropertyPath::computeCanBeNull() {
-  can_be_null_ = !_children.empty();
-  for (PropertyPath& p : _children) {
-    p.computeCanBeNull();
-    can_be_null_ &= p.can_be_null_;
-  }
-
-  if (_operation == Operation::ZERO_OR_MORE ||
-      _operation == Operation::ZERO_OR_ONE) {
-    can_be_null_ = true;
-  }
-}
-
-// _____________________________________________________________________________
-const std::string& PropertyPath::getIri() const {
+const ad_utility::triple_component::Iri& PropertyPath::getIri() const {
   AD_CONTRACT_CHECK(isIri());
-  return _iri;
+  return std::get<ad_utility::triple_component::Iri>(path_);
 }
 
 // _____________________________________________________________________________
-bool PropertyPath::isIri() const { return _operation == Operation::IRI; }
+bool PropertyPath::isIri() const {
+  return std::holds_alternative<ad_utility::triple_component::Iri>(path_);
+}
+
+// _____________________________________________________________________________
+const std::vector<PropertyPath>& PropertyPath::getSequence() const {
+  AD_CONTRACT_CHECK(isSequence());
+  return std::get<ModifiedPath>(path_).children_;
+}
+
+// _____________________________________________________________________________
+bool PropertyPath::isSequence() const {
+  return std::holds_alternative<ModifiedPath>(path_) &&
+         std::get<ModifiedPath>(path_).modifier_ == Modifier::SEQUENCE;
+}
+
+// _____________________________________________________________________________
+std::optional<std::reference_wrapper<const PropertyPath>>
+PropertyPath::getChildOfInvertedPath() const {
+  if (std::holds_alternative<ModifiedPath>(path_)) {
+    const auto& path = std::get<ModifiedPath>(path_);
+    if (path.modifier_ == Modifier::INVERSE) {
+      AD_CORRECTNESS_CHECK(path.children_.size() == 1);
+      return path.children_.at(0);
+    }
+  }
+  return std::nullopt;
+}
 
 // _____________________________________________________________________________
 std::ostream& operator<<(std::ostream& out, const PropertyPath& p) {

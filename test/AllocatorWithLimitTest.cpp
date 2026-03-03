@@ -23,8 +23,7 @@ TEST(AllocatorWithLimit, initial) {
   ASSERT_EQ(std::as_const(all).amountMemoryLeft(), 1_MB);
   AD_EXPECT_THROW_WITH_MESSAGE(
       all.allocate(500'000),
-      ::testing::StartsWith(
-          "Tried to allocate 2 MB, but only 1 MB were available."));
+      ::testing::StrEq("Tried to allocate 2 MB, but only 1 MB were available"));
   all.deallocate(ptr, 250'000);
 }
 
@@ -101,7 +100,8 @@ TEST(AllocatorWithLimit, unlikelyExceptionsDuringCopyingAndMoving) {
   };
   // The move operations call the copy operations which throw, but are declared
   // `noexcept`, so the program dies when they are called.
-  ASSERT_DEATH(move(), "The move constructor of `AllocatorWithLimit`");
-  ASSERT_DEATH(moveAssign(),
-               "The move assignment operator of `AllocatorWithLimit`");
+  ASSERT_DEATH_IF_SUPPORTED(move(),
+                            "The move constructor of `AllocatorWithLimit`");
+  ASSERT_DEATH_IF_SUPPORTED(
+      moveAssign(), "The move assignment operator of `AllocatorWithLimit`");
 }

@@ -1,14 +1,13 @@
-// Copyright 2023, University of Freiburg,
+// Copyright 2023 - 2025, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-//
-// Authors: Björn Buchhold <buchhold@gmail.com>
+// Authors: Björn Buchhold <buchhold@gmail.com> [2014 - 2017]
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_GLOBAL_CONSTANTS_H
+#define QLEVER_SRC_GLOBAL_CONSTANTS_H
 
 #include <chrono>
-#include <ctre.hpp>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -21,7 +20,7 @@ using namespace ad_utility::memory_literals;
 
 constexpr inline ad_utility::MemorySize DEFAULT_MEMORY_LIMIT_INDEX_BUILDING =
     5_GB;
-constexpr inline ad_utility::MemorySize STXXL_DISK_SIZE_INDEX_BUILDER = 1_GB;
+constexpr inline ad_utility::MemorySize DEFAULT_PARSER_BUFFER_SIZE = 10_MB;
 
 constexpr inline ad_utility::MemorySize DEFAULT_MEM_FOR_QUERIES = 4_GB;
 
@@ -36,43 +35,90 @@ constexpr inline size_t TEXT_PREDICATE_CARDINALITY_ESTIMATE = 1'000'000'000;
 constexpr inline size_t GALLOP_THRESHOLD = 1000;
 
 constexpr inline char QLEVER_INTERNAL_PREFIX_NAME[] = "ql";
-constexpr inline char QLEVER_INTERNAL_PREFIX_URL[] =
+constexpr inline std::string_view QLEVER_INTERNAL_PREFIX_URL =
     "http://qlever.cs.uni-freiburg.de/builtin-functions/";
 
 // Make a QLever-internal IRI from `QL_INTERNAL_PREFIX_URL` by appending the
 // concatenation of the given `suffixes` and enclosing the result in angle
 // brackets (const and non-const version).
-template <
-    ad_utility::detail::constexpr_str_cat_impl::ConstexprString... suffixes>
+namespace string_constants::detail {
+constexpr inline std::string_view openAngle = "<";
+constexpr inline std::string_view closeAngle = ">";
+}  // namespace string_constants::detail
+template <const std::string_view&... suffixes>
 constexpr std::string_view makeQleverInternalIriConst() {
-  return ad_utility::constexprStrCat<"<", QLEVER_INTERNAL_PREFIX_URL,
-                                     suffixes..., ">">();
+  using namespace string_constants::detail;
+  return ad_utility::constexprStrCat<openAngle, QLEVER_INTERNAL_PREFIX_URL,
+                                     suffixes..., closeAngle>();
 }
-inline std::string makeQleverInternalIri(const auto&... suffixes) {
-  return absl::StrCat("<", std::string_view{QLEVER_INTERNAL_PREFIX_URL},
-                      suffixes..., ">");
+template <typename... T>
+inline std::string makeQleverInternalIri(const T&... suffixes) {
+  return absl::StrCat("<", QLEVER_INTERNAL_PREFIX_URL, suffixes..., ">");
 }
 
+namespace string_constants::detail {
+constexpr inline std::string_view empty = "";
+}  // namespace string_constants::detail
 constexpr inline std::string_view QLEVER_INTERNAL_PREFIX_IRI =
-    makeQleverInternalIriConst<"">();
+    makeQleverInternalIriConst<string_constants::detail::empty>();
 constexpr inline std::string_view
     QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET =
-        ad_utility::constexprStrCat<"<", QLEVER_INTERNAL_PREFIX_URL>();
+        ad_utility::constexprStrCat<string_constants::detail::openAngle,
+                                    QLEVER_INTERNAL_PREFIX_URL>();
+namespace string_constants::detail {
+constexpr inline std::string_view contains_entity = "contains-entity";
+}  // namespace string_constants::detail
 constexpr inline std::string_view CONTAINS_ENTITY_PREDICATE =
-    makeQleverInternalIriConst<"contains-entity">();
+    makeQleverInternalIriConst<string_constants::detail::contains_entity>();
+namespace string_constants::detail {
+constexpr inline std::string_view contains_word = "contains-word";
+}  // namespace string_constants::detail
 constexpr inline std::string_view CONTAINS_WORD_PREDICATE =
-    makeQleverInternalIriConst<"contains-word">();
+    makeQleverInternalIriConst<string_constants::detail::contains_word>();
 
+namespace string_constants::detail {
+constexpr inline std::string_view text = "text";
+}  // namespace string_constants::detail
 constexpr inline std::string_view QLEVER_INTERNAL_TEXT_MATCH_PREDICATE =
-    makeQleverInternalIriConst<"text">();
+    makeQleverInternalIriConst<string_constants::detail::text>();
+namespace string_constants::detail {
+constexpr inline std::string_view has_predicate = "has-predicate";
+}  // namespace string_constants::detail
 constexpr inline std::string_view HAS_PREDICATE_PREDICATE =
-    makeQleverInternalIriConst<"has-predicate">();
+    makeQleverInternalIriConst<string_constants::detail::has_predicate>();
+namespace string_constants::detail {
+constexpr inline std::string_view has_pattern = "has-pattern";
+}  // namespace string_constants::detail
 constexpr inline std::string_view HAS_PATTERN_PREDICATE =
-    makeQleverInternalIriConst<"has-pattern">();
+    makeQleverInternalIriConst<string_constants::detail::has_pattern>();
+namespace string_constants::detail {
+constexpr inline std::string_view default_graph = "default-graph";
+}  // namespace string_constants::detail
 constexpr inline std::string_view DEFAULT_GRAPH_IRI =
-    makeQleverInternalIriConst<"default-graph">();
+    makeQleverInternalIriConst<string_constants::detail::default_graph>();
+namespace string_constants::detail {
+constexpr inline std::string_view internal_graph = "internal-graph";
+}  // namespace string_constants::detail
 constexpr inline std::string_view QLEVER_INTERNAL_GRAPH_IRI =
-    makeQleverInternalIriConst<"internal-graph">();
+    makeQleverInternalIriConst<string_constants::detail::internal_graph>();
+namespace string_constants::detail {
+constexpr inline std::string_view blank_node_prefix = "blank-node/";
+}  // namespace string_constants::detail
+constexpr inline std::string_view QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX =
+    ad_utility::constexprStrCat<string_constants::detail::openAngle,
+                                QLEVER_INTERNAL_PREFIX_URL,
+                                string_constants::detail::blank_node_prefix>();
+
+// The prefix of the SERVICE IRI used for a cached result with a name. Use as
+// in `SERVICE <ql:cached-result-with-name-$query-name$> {}`.
+namespace string_constants::detail {
+constexpr inline std::string_view cachedResultWithNamePrefix =
+    "cached-result-with-name-";
+}  // namespace string_constants::detail
+constexpr inline std::string_view CACHED_RESULT_WITH_NAME_PREFIX =
+    ad_utility::constexprStrCat<
+        QLEVER_INTERNAL_PREFIX_URL,
+        string_constants::detail::cachedResultWithNamePrefix>();
 
 constexpr inline std::pair<std::string_view, std::string_view> GEOF_PREFIX = {
     "geof:", "http://www.opengis.net/def/function/geosparql/"};
@@ -97,34 +143,11 @@ constexpr inline std::string_view SCORE_VARIABLE_PREFIX = "?ql_score_";
 constexpr inline std::string_view MATCHINGWORD_VARIABLE_PREFIX =
     "?ql_matchingword_";
 
+namespace constants::details::strings {
+constexpr inline std::string_view langtag{"langtag"};
+}
 constexpr inline std::string_view LANGUAGE_PREDICATE =
-    makeQleverInternalIriConst<"langtag">();
-
-// this predicate is one of the supported identifiers for the SpatialJoin class.
-// It joins the two objects, if their distance is smaller or equal to the
-// maximum distance, which needs to be given in the predicate as well. The
-// syntax for the predicate needs to be like this:
-// <max-distance-in-meters:XXXX>, where XXXX needs to be replaced by an integer
-// number.
-static const std::string MAX_DIST_IN_METERS = "<max-distance-in-meters:";
-static constexpr auto MAX_DIST_IN_METERS_REGEX =
-    ctll::fixed_string{"<max-distance-in-meters:(?<dist>[0-9]+)>"};
-
-// The spatial join operation without a limit on the maximum number of results
-// can, in the worst case have a square number of results, but usually this is
-// not the case. 1 divided by this constant is the damping factor for the
-// estimated number of results.
-static const size_t SPATIAL_JOIN_MAX_DIST_SIZE_ESTIMATE = 1000;
-
-// This predicate is one of the supported identifiers for the SpatialJoin class.
-// For a given triple of the form ?a <nearest-neighbors:XXXX:YYYY> ?b, it will
-// produce for each value of ?a the nearest neighbors ?b to ?a. The number of
-// nearest neighbors must be limited by replacing the XXXX with an integer.
-// Optionally the search range can be limited by giving YYYY as an integer
-// representing meters.
-static const std::string NEAREST_NEIGHBORS = "<nearest-neighbors:";
-static constexpr auto NEAREST_NEIGHBORS_REGEX = ctll::fixed_string{
-    "<nearest-neighbors:(?<results>[0-9]+)(:(?<dist>[0-9]+))?>"};
+    makeQleverInternalIriConst<constants::details::strings::langtag>();
 
 // TODO<joka921> Move them to their own file, make them strings, remove
 // duplications, etc.
@@ -169,13 +192,24 @@ constexpr inline char XSD_POSITIVE_INTEGER_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#positiveInteger";
 constexpr inline char XSD_BOOLEAN_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#boolean";
+constexpr inline char XSD_ANYURI_TYPE[] =
+    "http://www.w3.org/2001/XMLSchema#anyURI";
 constexpr inline char RDF_PREFIX[] =
     "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
 constexpr inline char RDF_LANGTAG_STRING[] =
     "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString";
 
-constexpr inline char GEO_WKT_LITERAL[] =
+constexpr inline std::string_view GEO_WKT_LITERAL =
     "http://www.opengis.net/ont/geosparql#wktLiteral";
+namespace string_constants::detail {
+constexpr inline std::string_view geo_literal_prefix = "\"^^<";
+}  // namespace string_constants::detail
+static constexpr std::string_view GEO_LITERAL_SUFFIX =
+    ad_utility::constexprStrCat<string_constants::detail::geo_literal_prefix,
+                                GEO_WKT_LITERAL,
+                                string_constants::detail::closeAngle>();
+
+constexpr std::string_view SF_PREFIX = "http://www.opengis.net/ont/sf#";
 
 constexpr inline std::string_view VOCAB_SUFFIX = ".vocabulary";
 constexpr inline std::string_view MMAP_FILE_SUFFIX = ".meta";
@@ -282,3 +316,13 @@ constexpr inline std::string_view EMPH_OFF = "\033[22m";
 // Allowed range for geographical coordinates from WTK Text
 constexpr inline double COORDINATE_LAT_MAX = 90.0;
 constexpr inline double COORDINATE_LNG_MAX = 180.0;
+
+// When operation results are returned as `application/qlever-results+json` the
+// Operation string is echoed. This operation string is truncated to ensure
+// performance.
+constexpr inline size_t MAX_LENGTH_OPERATION_ECHO = 5000;
+
+constexpr inline std::string_view GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX =
+    "http-graph-store";
+
+#endif  // QLEVER_SRC_GLOBAL_CONSTANTS_H

@@ -2,6 +2,8 @@
 //                 Chair of Algorithms and Data Structures
 // Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "engine/sparqlExpressions/AggregateExpression.h"
 
@@ -15,11 +17,12 @@ namespace sparqlExpression::detail {
 // function.
 template <typename AggregateOperation, typename FinalOperation>
 struct EvaluateOnChildOperand {
-  ExpressionResult operator()(const AggregateOperation& aggregateOperation,
-                              ValueId resultForEmptyGroup,
-                              const FinalOperation& finalOperation,
-                              EvaluationContext* context, bool distinct,
-                              SingleExpressionResult auto&& operand) const {
+  template <typename O>
+  auto operator()(const AggregateOperation& aggregateOperation,
+                  ValueId resultForEmptyGroup,
+                  const FinalOperation& finalOperation,
+                  EvaluationContext* context, bool distinct, O&& operand) const
+      -> CPP_ret(ExpressionResult)(requires SingleExpressionResult<O>) {
     // Perform the more efficient calculation on `SetOfInterval`s if it is
     // possible.
     //
@@ -55,9 +58,9 @@ struct EvaluateOnChildOperand {
     // Helper lambda for aggregating two values.
     auto aggregateTwoValues = [&aggregateOperation, context](
                                   auto&& x, auto&& y) -> decltype(auto) {
-      if constexpr (requires {
-                      aggregateOperation._function(AD_FWD(x), AD_FWD(y));
-                    }) {
+      if constexpr (ranges::invocable<decltype(aggregateOperation._function),
+                                      decltype(AD_FWD(x)),
+                                      decltype(AD_FWD(y))>) {
         return aggregateOperation._function(AD_FWD(x), AD_FWD(y));
       } else {
         return aggregateOperation._function(AD_FWD(x), AD_FWD(y), context);
@@ -69,11 +72,10 @@ struct EvaluateOnChildOperand {
     auto operands = makeGenerator(AD_FWD(operand), inputSize, context);
 
     // Set up cancellation handling.
-    auto checkCancellation =
-        [context](ad_utility::source_location location =
-                      ad_utility::source_location::current()) {
-          context->cancellationHandle_->throwIfCancelled(location);
-        };
+    auto checkCancellation = [context](ad_utility::source_location location =
+                                           AD_CURRENT_SOURCE_LOC()) {
+      context->cancellationHandle_->throwIfCancelled(location);
+    };
 
     // Helper lambda that computes the aggregate of the given operands. This
     // requires that `inputs` is not empty.
@@ -117,7 +119,7 @@ struct EvaluateOnChildOperand {
     //
     // TODO<joka921> Check if this is really necessary, or if we can also use
     // IDs in the intermediate steps without loss of efficiency.
-    if constexpr (requires { makeNumericId(result); }) {
+    if constexpr (ValueAsNumericId<decltype(result)>) {
       return makeNumericId(result);
     } else {
       return result;
@@ -153,14 +155,14 @@ AggregateExpression<AggregateOperation, FinalOperation>::evaluate(
 
 // _________________________________________________________________________
 template <typename AggregateOperation, typename FinalOperation>
-std::span<SparqlExpression::Ptr>
+ql::span<SparqlExpression::Ptr>
 AggregateExpression<AggregateOperation, FinalOperation>::childrenImpl() {
   return {&_child, 1};
 }
 
 // __________________________________________________________________________
 template <typename AggregateOperation, typename FinalOperation>
-[[nodiscard]] string
+[[nodiscard]] std::string
 AggregateExpression<AggregateOperation, FinalOperation>::getCacheKey(
     const VariableToColumnMap& varColMap) const {
   return std::string(typeid(*this).name()) + std::to_string(_distinct) + "(" +
@@ -179,19 +181,18 @@ AggregateExpression<AggregateOperation, FinalOperation>::getVariableForCount()
 }
 
 // Explicit instantiation for the AVG expression.
-template class AggregateExpression<AvgOperation, decltype(avgFinalOperation)>;
+template class AggregateExpression<AvgOperation, AvgFinalOperation>;
 
 // Explicit instantiation for the STDEV expression.
-template class AggregateExpression<AvgOperation, decltype(stdevFinalOperation)>;
-template class DeviationAggExpression<AvgOperation,
-                                      decltype(stdevFinalOperation)>;
+template class AggregateExpression<AvgOperation, StdevFinalOperation>;
+template class DeviationAggExpression<AvgOperation, StdevFinalOperation>;
 
 // Explicit instantiations for the other aggregate expressions.
 #define INSTANTIATE_AGG_EXP(Function, ValueGetter) \
   template class AggregateExpression<              \
       Operation<2, FunctionAndValueGetters<Function, ValueGetter>>>;
-INSTANTIATE_AGG_EXP(decltype(addForSum), NumericValueGetter);
-INSTANTIATE_AGG_EXP(decltype(count), IsValidValueGetter);
-INSTANTIATE_AGG_EXP(decltype(minLambdaForAllTypes), ActualValueGetter);
-INSTANTIATE_AGG_EXP(decltype(maxLambdaForAllTypes), ActualValueGetter);
+INSTANTIATE_AGG_EXP(AddForSum, NumericValueGetter);
+INSTANTIATE_AGG_EXP(Count, IsValidValueGetter);
+INSTANTIATE_AGG_EXP(MinLambdaForAllTypes, ActualValueGetter);
+INSTANTIATE_AGG_EXP(MaxLambdaForAllTypes, ActualValueGetter);
 }  // namespace sparqlExpression::detail

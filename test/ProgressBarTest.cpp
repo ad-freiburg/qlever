@@ -1,4 +1,4 @@
-// Copyright 2024, University of Freiburg
+// Copyright 2024 - 2025, University of Freiburg
 // Chair of Algorithms and Data Structures
 // Author: Hannah Bast <bast@cs.uni-freiburg.de>
 
@@ -11,6 +11,7 @@
 #include "../test/util/GTestHelpers.h"
 #include "util/ProgressBar.h"
 #include "util/StringUtils.h"
+#include "util/Timer.h"
 
 using ad_utility::ProgressBar;
 
@@ -63,14 +64,33 @@ TEST(ProgressBar, typicalUsage) {
 
 // Test special case where the number of steps is less than the batch size.
 TEST(ProgressBar, numberOfStepsLessThanBatchSize) {
-  size_t numSteps = 3'000;
-  ProgressBar progressBar(numSteps, "Steps: ", 5'000);
-  std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  size_t numSteps = 30'000;
+  ProgressBar progressBar(numSteps, "Steps: ", 50'000);
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
   std::string expectedUpdateRegex =
 #ifndef _QLEVER_NO_TIMING_TESTS
-      "Steps: 3,000 \\[average speed [234]\\.[0-9] M/s\\] \n";
+      "Steps: 30,000 \\[average speed [234]\\.[0-9] M/s\\] \n";
 #else
-      "Steps: 3,000 \\[average speed [0-9]\\.[0-9] M/s\\] \n";
+      "Steps: 30,000 \\[average speed [0-9]\\.[0-9] M/s\\] \n";
+#endif
+  ASSERT_THAT(progressBar.getFinalProgressString(),
+              ::testing::MatchesRegex(expectedUpdateRegex));
+}
+
+// Test `getTimer` by stopping the timer after 10ms, then sleeping for 10ms
+// more, and checking that these additional 10ms are not considered in the
+// reported average speed.
+TEST(ProgressBar, getTimer) {
+  size_t numSteps = 30'000;
+  ProgressBar progressBar(numSteps, "Steps: ", 50'000);
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  progressBar.getTimer().stop();
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  std::string expectedUpdateRegex =
+#ifndef _QLEVER_NO_TIMING_TESTS
+      "Steps: 30,000 \\[average speed [234]\\.[0-9] M/s\\] \n";
+#else
+      "Steps: 30,000 \\[average speed [0-9]\\.[0-9] M/s\\] \n";
 #endif
   ASSERT_THAT(progressBar.getFinalProgressString(),
               ::testing::MatchesRegex(expectedUpdateRegex));

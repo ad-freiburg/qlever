@@ -2,11 +2,15 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //         Florian Kramer (florian.kramer@netpun.uni-freiburg.de)
-#pragma once
+
+#ifndef QLEVER_SRC_ENGINE_OPTIONALJOIN_H
+#define QLEVER_SRC_ENGINE_OPTIONALJOIN_H
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 
+// Forward declaration
+class IndexScan;
 class OptionalJoin : public Operation {
  private:
   std::shared_ptr<QueryExecutionTree> _left;
@@ -29,20 +33,24 @@ class OptionalJoin : public Operation {
   std::optional<size_t> _costEstimate;
   bool _multiplicitiesComputed = false;
 
+  // Specify whether the join columns should be part of the result.
+  bool keepJoinColumns_ = true;
+
  public:
   OptionalJoin(QueryExecutionContext* qec,
                std::shared_ptr<QueryExecutionTree> t1,
-               std::shared_ptr<QueryExecutionTree> t2);
+               std::shared_ptr<QueryExecutionTree> t2,
+               bool keepJoinColumns = true);
 
  private:
-  string getCacheKeyImpl() const override;
+  std::string getCacheKeyImpl() const override;
 
  public:
-  string getDescriptor() const override;
+  std::string getDescriptor() const override;
 
   size_t getResultWidth() const override;
 
-  vector<ColumnIndex> resultSortedOn() const override;
+  std::vector<ColumnIndex> resultSortedOn() const override;
 
   bool knownEmptyResult() override { return _left->knownEmptyResult(); }
 
@@ -54,28 +62,57 @@ class OptionalJoin : public Operation {
  public:
   size_t getCostEstimate() override;
 
-  vector<QueryExecutionTree*> getChildren() override {
+  std::vector<QueryExecutionTree*> getChildren() override {
     return {_left.get(), _right.get()};
   }
 
-  /**
-   * @brief Joins two result tables on any number of columns, inserting the
-   *        special value ID_NO_VALUE for any entries marked as optional.
-   * @param a
-   * @param b
-   * @param joinColumns
-   * @param result
-   */
+  bool columnOriginatesFromGraphOrUndef(
+      const Variable& variable) const override;
+
+  // Joins two result tables on any number of columns, inserting the special
+  // value `Id::makeUndefined()` for any entries marked as optional.
   void optionalJoin(
       const IdTable& left, const IdTable& right,
       const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
       IdTable* dynResult,
       Implementation implementation = Implementation::GeneralCase);
 
+  // Joins two results on a single join column lazily, inserting the special
+  // value `Id::makeUndefined()` for any entries marked as optional.
+  Result lazyOptionalJoin(std::shared_ptr<const Result> left,
+                          std::shared_ptr<const Result> right,
+                          bool requestLaziness);
+
+  // Compute the result for the result from the `left` subtree
+  // and the `rightScan`. This function applied block prefiltering for the
+  // `rightScan`. This function currently only supports single-column OPTIONAL
+  // joins, or OPTIONAL joins on two columns where UNDEF values are only in the
+  // last (i.e. the second) join column. The `left` and `rightScan` have to be
+  // obtained from the members `_left` and `_right` respectively, as those
+  // members will be used to get additional required metadata for the arguments
+  // `left` and `rightScan`.
+  Result optionalJoinWithIndexScan(std::shared_ptr<const Result> left,
+                                   std::shared_ptr<IndexScan> rightScan,
+                                   bool requestLaziness);
+
  private:
+  std::unique_ptr<Operation> cloneImpl() const override;
+
+  // Helper function for `tryIndexNestedLoopJoinIfSuitable` which makes the
+  // logic reusable.
+  bool isIndexNestedLoopJoinSuitable() const;
+
+  // Nested loop join optimization than can apply when a memory intensive sort
+  // can be avoided this way.
+  std::optional<Result> tryIndexNestedLoopJoinIfSuitable(bool requestLaziness);
+
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(
+      const std::set<Variable>& variables) const override;
+
   void computeSizeEstimateAndMultiplicities();
 
-  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
+  Result computeResult(bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
@@ -85,3 +122,5 @@ class OptionalJoin : public Operation {
       const IdTable& left, const IdTable& right,
       const std::vector<std::array<ColumnIndex, 2>>&);
 };
+
+#endif  // QLEVER_SRC_ENGINE_OPTIONALJOIN_H

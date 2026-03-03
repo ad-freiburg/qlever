@@ -2,7 +2,8 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_TEST_QUERYPLANNERTESTHELPERS_H
+#define QLEVER_TEST_QUERYPLANNERTESTHELPERS_H
 
 #include <gmock/gmock-matchers.h>
 #include <gmock/gmock.h>
@@ -11,9 +12,14 @@
 #include <variant>
 
 #include "./util/GTestHelpers.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"
 #include "engine/CountAvailablePredicates.h"
+#include "engine/Describe.h"
+#include "engine/Distinct.h"
+#include "engine/ExistsJoin.h"
+#include "engine/ExplicitIdTableOperation.h"
 #include "engine/Filter.h"
 #include "engine/GroupBy.h"
 #include "engine/IndexScan.h"
@@ -21,6 +27,7 @@
 #include "engine/Minus.h"
 #include "engine/MultiColumnJoin.h"
 #include "engine/NeutralElementOperation.h"
+#include "engine/NeutralOptional.h"
 #include "engine/OptionalJoin.h"
 #include "engine/OrderBy.h"
 #include "engine/PathSearch.h"
@@ -34,9 +41,14 @@
 #include "engine/TransitivePathBase.h"
 #include "engine/Union.h"
 #include "engine/Values.h"
+#include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "global/RuntimeParameters.h"
 #include "parser/SparqlParser.h"
+#include "rdfTypes/Iri.h"
+#include "util/Exception.h"
 #include "util/IndexTestHelpers.h"
+#include "util/TypeTraits.h"
 
 using ad_utility::source_location;
 
@@ -59,14 +71,17 @@ inline QetMatcher RootOperationBase(Matcher<const Operation&> matcher) {
 /// Returns a matcher that checks that a given `QueryExecutionTree`'s
 /// `rootOperation` can by dynamically cast to `OperationType`, and that
 /// `matcher` matches the result of this cast.
-template <typename OperationType>
-QetMatcher RootOperation(auto matcher) {
+template <typename OperationType, typename M>
+QetMatcher RootOperation(M matcher) {
   return RootOperationBase(WhenDynamicCastTo<const OperationType&>(matcher));
 }
 
 // Match the `getChildren` method of an `Operation`.
-inline Matcher<const ::Operation&> children(
-    const std::same_as<QetMatcher> auto&... childMatchers) {
+CPP_template(typename... ChildArgs)(
+    requires(...&& ql::concepts::same_as<QetMatcher,
+                                         ChildArgs>))  //
+    inline Matcher<const ::Operation&> children(
+        const ChildArgs&... childMatchers) {
   return Property("getChildren", &Operation::getChildren,
                   ElementsAre(Pointee(childMatchers)...));
 }
@@ -75,50 +90,69 @@ inline Matcher<const ::Operation&> children(
 // `OperationType` operation the children of which match the
 // `childMatcher`s. Note that the child matchers are not ordered.
 template <typename OperationType>
-inline auto MatchTypeAndUnorderedChildren =
-    [](const std::same_as<QetMatcher> auto&... childMatchers) {
-      return RootOperation<OperationType>(
-          AllOf(Property("getChildren", &Operation::getChildren,
-                         UnorderedElementsAre(Pointee(childMatchers)...))));
-    };
+struct MatchTypeAndUnorderedChildrenImpl {
+  CPP_template(typename... ChildArgs)(
+      requires(...&& ql::concepts::same_as<QetMatcher, ChildArgs>)) auto
+  operator()(const ChildArgs&... childMatchers) const {
+    return RootOperation<OperationType>(
+        AllOf(Property("getChildren", &Operation::getChildren,
+                       UnorderedElementsAre(Pointee(childMatchers)...))));
+  }
+};
+
+template <typename OperationType>
+auto MatchTypeAndUnorderedChildren =
+    MatchTypeAndUnorderedChildrenImpl<OperationType>{};
 
 // Similar to `MatchTypeAndUnorderedChildren`, but here the children have to
 // appear in exact the correct order.
 template <typename OperationType>
-inline auto MatchTypeAndOrderedChildren =
-    [](const std::same_as<QetMatcher> auto&... childMatchers) {
-      return RootOperation<OperationType>(AllOf(children(childMatchers...)));
-    };
+struct MatchTypeAndOrderedChildrenImpl {
+  CPP_template(typename... ChildArgs)(
+      requires(...&& ql::concepts::same_as<QetMatcher, ChildArgs>)) auto
+  operator()(const ChildArgs&... childMatchers) const {
+    return RootOperation<OperationType>(AllOf(children(childMatchers...)));
+  }
+};
+template <typename OperationType>
+auto MatchTypeAndOrderedChildren =
+    MatchTypeAndOrderedChildrenImpl<OperationType>{};
 
-/// Return a matcher that checks that a given `QueryExecutionTree` consists of a
-/// single `IndexScan` with the given `subject`, `predicate`, and `object`, and
-/// that the `ScanType` of this `IndexScan` is any of the given
-/// `allowedPermutations`.
+/// Return a matcher that checks that a given `QueryExecutionTree` consists
+/// of a single `IndexScan` with the given `subject`, `predicate`, and
+/// `object`, and that the `ScanType` of this `IndexScan` is any of the
+/// given `allowedPermutations`.
 constexpr auto IndexScan =
     [](TripleComponent subject, TripleComponent predicate,
        TripleComponent object,
        const std::vector<Permutation::Enum>& allowedPermutations = {},
-       const ScanSpecificationAsTripleComponent::Graphs& graphs = std::nullopt,
+       const IndexScan::Graphs& graphs = IndexScan::Graphs::All(),
        const std::vector<Variable>& additionalVariables = {},
-       const std::vector<ColumnIndex>& additionalColumns = {}) -> QetMatcher {
-  size_t numVariables = static_cast<size_t>(subject.isVariable()) +
-                        static_cast<size_t>(predicate.isVariable()) +
-                        static_cast<size_t>(object.isVariable()) +
-                        additionalColumns.size();
+       const std::vector<ColumnIndex>& additionalColumns = {},
+       const std::optional<size_t>& strippedSize = std::nullopt) -> QetMatcher {
+  // TODO<RobinTF> The matcher should be changed so that numVariables can
+  // properly account for stripped columns. Also `strippedSize` should be
+  // replaced by an explicit listing of the variables that are kept instead of
+  // just the size.
+  size_t numVariables = strippedSize.value_or(
+      static_cast<size_t>(subject.isVariable()) +
+      static_cast<size_t>(predicate.isVariable()) +
+      static_cast<size_t>(object.isVariable()) + additionalColumns.size());
   auto permutationMatcher = allowedPermutations.empty()
                                 ? ::testing::A<Permutation::Enum>()
                                 : AnyOfArray(allowedPermutations);
-  return RootOperation<::IndexScan>(
-      AllOf(AD_PROPERTY(IndexScan, permutation, permutationMatcher),
-            AD_PROPERTY(IndexScan, getResultWidth, Eq(numVariables)),
-            AD_PROPERTY(IndexScan, subject, Eq(subject)),
-            AD_PROPERTY(IndexScan, predicate, Eq(predicate)),
-            AD_PROPERTY(IndexScan, object, Eq(object)),
-            AD_PROPERTY(IndexScan, additionalVariables,
-                        ElementsAreArray(additionalVariables)),
-            AD_PROPERTY(IndexScan, additionalColumns,
-                        ElementsAreArray(additionalColumns)),
-            AD_PROPERTY(IndexScan, graphsToFilter, Eq(graphs))));
+  return RootOperation<::IndexScan>(AllOf(
+      AD_PROPERTY(IndexScan, permutation,
+                  AD_PROPERTY(Permutation, permutation, permutationMatcher)),
+      AD_PROPERTY(IndexScan, getResultWidth, Eq(numVariables)),
+      AD_PROPERTY(IndexScan, subject, Eq(subject)),
+      AD_PROPERTY(IndexScan, predicate, Eq(predicate)),
+      AD_PROPERTY(IndexScan, object, Eq(object)),
+      AD_PROPERTY(IndexScan, additionalVariables,
+                  ElementsAreArray(additionalVariables)),
+      AD_PROPERTY(IndexScan, additionalColumns,
+                  ElementsAreArray(additionalColumns)),
+      AD_PROPERTY(IndexScan, graphsToFilter, Eq(graphs))));
 };
 
 // Match the `NeutralElementOperation`.
@@ -127,19 +161,25 @@ constexpr auto NeutralElement = []() -> QetMatcher {
 };
 
 constexpr auto TextIndexScanForWord = [](Variable textRecordVar,
-                                         string word) -> QetMatcher {
+                                         std::string word) -> QetMatcher {
   return RootOperation<::TextIndexScanForWord>(AllOf(
       AD_PROPERTY(::TextIndexScanForWord, getResultWidth,
-                  Eq(1 + word.ends_with('*'))),
+                  Eq(2 + ql::ends_with(word, '*'))),
       AD_PROPERTY(::TextIndexScanForWord, textRecordVar, Eq(textRecordVar)),
       AD_PROPERTY(::TextIndexScanForWord, word, word)));
 };
 
+constexpr auto TextIndexScanForWordConf =
+    [](TextIndexScanForWordConfiguration conf) -> QetMatcher {
+  return RootOperation<::TextIndexScanForWord>(
+      AD_PROPERTY(::TextIndexScanForWord, getConfig, conf));
+};
+
 // Matcher for the `TextLimit` Operation.
-constexpr auto TextLimit = [](const size_t n, const QetMatcher& childMatcher,
-                              const Variable& textRecVar,
-                              const vector<Variable>& entityVars,
-                              const vector<Variable>& scoreVars) -> QetMatcher {
+constexpr auto TextLimit =
+    [](const size_t n, const QetMatcher& childMatcher,
+       const Variable& textRecVar, const std::vector<Variable>& entityVars,
+       const std::vector<Variable>& scoreVars) -> QetMatcher {
   return RootOperation<::TextLimit>(AllOf(
       AD_PROPERTY(::TextLimit, getTextLimit, Eq(n)), children(childMatcher),
       AD_PROPERTY(::TextLimit, getTextRecordVariable, Eq(textRecVar)),
@@ -151,7 +191,7 @@ constexpr auto TextLimit = [](const size_t n, const QetMatcher& childMatcher,
 
 inline auto TextIndexScanForEntity =
     [](Variable textRecordVar, std::variant<Variable, std::string> entity,
-       string word) -> QetMatcher {
+       std::string word) -> QetMatcher {
   // TODO: Implement AD_THROWING_PROPERTY(..., Exception matcher) and use it
   // here to test the contract-checks in entityVariable() and fixedEntity().
   if (std::holds_alternative<Variable>(entity)) {
@@ -175,6 +215,12 @@ inline auto TextIndexScanForEntity =
   }
 };
 
+constexpr auto TextIndexScanForEntityConf =
+    [](TextIndexScanForEntityConfiguration conf) -> QetMatcher {
+  return RootOperation<::TextIndexScanForEntity>(
+      AD_PROPERTY(::TextIndexScanForEntity, getConfig, conf));
+};
+
 inline auto Bind = [](const QetMatcher& childMatcher,
                       std::string_view expression,
                       Variable target) -> QetMatcher {
@@ -187,21 +233,29 @@ inline auto Bind = [](const QetMatcher& childMatcher,
       AD_PROPERTY(::Bind, bind, AllOf(innerMatcher)), children(childMatcher)));
 };
 
-// Matcher for a `CountAvailablePredicates` operation. The case of 0 children
-// means that it's a full scan.
-inline auto CountAvailablePredicates =
-    [](size_t subjectColumnIdx, const Variable& predicateVar,
-       const Variable& countVar,
-       const std::same_as<QetMatcher> auto&... childMatchers)
-        requires(sizeof...(childMatchers) <= 1) {
-  return RootOperation<::CountAvailablePredicates>(AllOf(
-      AD_PROPERTY(::CountAvailablePredicates, subjectColumnIndex,
-                  Eq(subjectColumnIdx)),
-      AD_PROPERTY(::CountAvailablePredicates, predicateVariable,
-                  Eq(predicateVar)),
-      AD_PROPERTY(::CountAvailablePredicates, countVariable, Eq(countVar)),
-      children(childMatchers...)));
+// Matcher for a `CountAvailablePredicatesMatcher` operation. The case of 0
+// children means that it's a full scan.
+struct CountAvailablePredicatesMatcher {
+  template <
+      QL_CONCEPT_OR_TYPENAME(ql::concepts::same_as<QetMatcher>)... ChildArgs>
+  auto operator()(size_t subjectColumnIdx, const Variable& predicateVar,
+                  const Variable& countVar,
+                  const ChildArgs&... childMatchers) const
+      QL_CONCEPT_OR_NOTHING(requires(sizeof...(childMatchers) <= 1)) {
+    return RootOperation<::CountAvailablePredicates>(AllOf(
+        AD_PROPERTY(::CountAvailablePredicates, subjectColumnIndex,
+                    Eq(subjectColumnIdx)),
+        AD_PROPERTY(::CountAvailablePredicates, predicateVariable,
+                    Eq(predicateVar)),
+        AD_PROPERTY(::CountAvailablePredicates, countVariable, Eq(countVar)),
+        children(childMatchers...)));
+  }
 };
+constexpr inline CountAvailablePredicatesMatcher countAvailablePredicates;
+
+// Class used to indicate only named graphs are allowed when using
+// `IndexScanFromStrings`.
+class NamedTag {};
 
 // Same as above, but the subject, predicate, and object are passed in as
 // strings. The strings are automatically converted a matching
@@ -210,36 +264,46 @@ inline auto IndexScanFromStrings =
     [](std::string_view subject, std::string_view predicate,
        std::string_view object,
        const std::vector<Permutation::Enum>& allowedPermutations = {},
-       const std::optional<ad_utility::HashSet<std::string>> graphs =
-           std::nullopt,
+       const std::variant<std::monostate, NamedTag,
+                          ad_utility::HashSet<std::string>>
+           graphs = std::monostate{},
        const std::vector<Variable>& additionalVariables = {},
-       const std::vector<ColumnIndex>& additionalColumns = {}) -> QetMatcher {
+       const std::vector<ColumnIndex>& additionalColumns = {},
+       const std::optional<size_t>& strippedSize = std::nullopt) -> QetMatcher {
   auto strToComp = [](std::string_view s) -> TripleComponent {
-    if (s.starts_with("?")) {
+    if (ql::starts_with(s, "?")) {
       return ::Variable{std::string{s}};
-    } else if (s.starts_with('<')) {
+    } else if (ql::starts_with(s, '<')) {
       return TripleComponent::Iri::fromIriref(s);
     }
     return s;
   };
 
-  ScanSpecificationAsTripleComponent::Graphs graphsOut = std::nullopt;
-  if (graphs.has_value()) {
-    graphsOut.emplace();
-    for (const auto& graphIn : graphs.value()) {
-      graphsOut->insert(strToComp(graphIn));
+  IndexScan::Graphs graphsOut = IndexScan::Graphs::All();
+  if (std::holds_alternative<NamedTag>(graphs)) {
+    graphsOut = IndexScan::Graphs::Blacklist(
+        TripleComponent{TripleComponent::Iri::fromIriref(DEFAULT_GRAPH_IRI)});
+  } else if (std::holds_alternative<ad_utility::HashSet<std::string>>(graphs)) {
+    ad_utility::HashSet<TripleComponent> whitelist;
+    for (const auto& graphIn :
+         std::get<ad_utility::HashSet<std::string>>(graphs)) {
+      whitelist.insert(strToComp(graphIn));
     }
+    graphsOut = IndexScan::Graphs::Whitelist(std::move(whitelist));
   }
   return IndexScan(strToComp(subject), strToComp(predicate), strToComp(object),
                    allowedPermutations, graphsOut, additionalVariables,
-                   additionalColumns);
+                   additionalColumns, strippedSize);
 };
 
-// For the following Join algorithms the order of the children is not important.
+// For the following Join algorithms the order of the children is not
+// important.
 inline auto MultiColumnJoin = MatchTypeAndUnorderedChildren<::MultiColumnJoin>;
 inline auto Join = MatchTypeAndUnorderedChildren<::Join>;
 
 constexpr auto OptionalJoin = MatchTypeAndOrderedChildren<::OptionalJoin>;
+
+constexpr auto NeutralOptional = MatchTypeAndOrderedChildren<::NeutralOptional>;
 
 constexpr auto Minus = MatchTypeAndOrderedChildren<::Minus>;
 
@@ -253,9 +317,10 @@ inline auto UnorderedJoins = [](auto&&... children) -> QetMatcher {
     const Operation* operation = tree.getRootOperation().get();
     auto join = dynamic_cast<const ::Join*>(operation);
     auto multiColJoin = dynamic_cast<const ::MultiColumnJoin*>(operation);
-    // Also allow the INTERNAL SORT BY operations that are needed for the joins.
-    // TODO<joka921> is this the right place to also check that those have the
-    // correct columns?
+    // Also allow the INTERNAL SORT BY operations that are needed for the
+    // joins.
+    // TODO<joka921> is this the right place to also check that those have
+    // the correct columns?
     auto sort = dynamic_cast<const ::Sort*>(operation);
     if (!join && !sort && !multiColJoin) {
       children.push_back(tree);
@@ -285,18 +350,23 @@ inline auto TransitivePathSideMatcher = [](TransitivePathSide side) {
 };
 
 // Match a TransitivePath operation
-inline auto TransitivePath =
-    [](TransitivePathSide left, TransitivePathSide right, size_t minDist,
-       size_t maxDist, const std::same_as<QetMatcher> auto&... childMatchers) {
-      return RootOperation<::TransitivePathBase>(
-          AllOf(children(childMatchers...),
-                AD_PROPERTY(TransitivePathBase, getMinDist, Eq(minDist)),
-                AD_PROPERTY(TransitivePathBase, getMaxDist, Eq(maxDist)),
-                AD_PROPERTY(TransitivePathBase, getLeft,
-                            TransitivePathSideMatcher(left)),
-                AD_PROPERTY(TransitivePathBase, getRight,
-                            TransitivePathSideMatcher(right))));
-    };
+struct TransitivePath {
+  template <
+      QL_CONCEPT_OR_TYPENAME(ql::concepts::same_as<QetMatcher>)... ChildArgs>
+  auto operator()(TransitivePathSide left, TransitivePathSide right,
+                  size_t minDist, size_t maxDist,
+                  const ChildArgs&... childMatchers) const {
+    return RootOperation<::TransitivePathBase>(
+        AllOf(children(childMatchers...),
+              AD_PROPERTY(TransitivePathBase, getMinDist, Eq(minDist)),
+              AD_PROPERTY(TransitivePathBase, getMaxDist, Eq(maxDist)),
+              AD_PROPERTY(TransitivePathBase, getLeft,
+                          TransitivePathSideMatcher(left)),
+              AD_PROPERTY(TransitivePathBase, getRight,
+                          TransitivePathSideMatcher(right))));
+  }
+};
+constexpr inline TransitivePath transitivePath;
 
 inline auto PathSearchConfigMatcher = [](PathSearchConfiguration config) {
   auto sourceMatcher =
@@ -315,30 +385,53 @@ inline auto PathSearchConfigMatcher = [](PathSearchConfiguration config) {
 };
 
 // Match a PathSearch operation
-inline auto PathSearch =
-    [](PathSearchConfiguration config, bool sourceBound, bool targetBound,
-       const std::same_as<QetMatcher> auto&... childMatchers) {
-      return RootOperation<::PathSearch>(AllOf(
-          children(childMatchers...),
-          AD_PROPERTY(PathSearch, getConfig, PathSearchConfigMatcher(config)),
-          AD_PROPERTY(PathSearch, isSourceBound, Eq(sourceBound)),
-          AD_PROPERTY(PathSearch, isTargetBound, Eq(targetBound))));
-    };
+struct PathSearch {
+  template <
+      QL_CONCEPT_OR_TYPENAME(ql::concepts::same_as<QetMatcher>)... ChildArgs>
+  auto operator()(PathSearchConfiguration config, bool sourceBound,
+                  bool targetBound, const ChildArgs&... childMatchers) const {
+    return RootOperation<::PathSearch>(AllOf(
+        children(childMatchers...),
+        AD_PROPERTY(::PathSearch, getConfig, PathSearchConfigMatcher(config)),
+        AD_PROPERTY(::PathSearch, isSourceBound, Eq(sourceBound)),
+        AD_PROPERTY(::PathSearch, isTargetBound, Eq(targetBound))));
+  }
+};
+constexpr inline PathSearch pathSearch;
 
-inline auto ValuesClause = [](string cacheKey) {
+inline auto ValuesClause = [](std::string cacheKey) {
   return RootOperation<::Values>(
       AllOf(AD_PROPERTY(Values, getCacheKey, cacheKey)));
 };
 
 // Match a SpatialJoin operation, set arguments to ignore to -1
-inline auto SpatialJoin =
-    [](size_t maxDist, size_t maxResults,
-       const std::same_as<QetMatcher> auto&... childMatchers) {
-      return RootOperation<::SpatialJoin>(
-          AllOf(children(childMatchers...),
-                AD_PROPERTY(SpatialJoin, onlyForTestingGetConfig,
-                            Eq(std::pair(maxDist, maxResults)))));
-    };
+template <bool Substitute = false>
+struct SpatialJoinMatcher {
+  template <
+      QL_CONCEPT_OR_TYPENAME(ql::concepts::same_as<QetMatcher>)... ChildArgs>
+  auto operator()(double maxDist, size_t maxResults, Variable left,
+                  Variable right, std::optional<Variable> distanceVariable,
+                  PayloadVariables payloadVariables,
+                  SpatialJoinAlgorithm algorithm,
+                  std::optional<SpatialJoinType> joinType,
+                  const ChildArgs&... childMatchers) const {
+    return RootOperation<::SpatialJoin>(AllOf(
+        children(childMatchers...),
+        AD_PROPERTY(::SpatialJoin, onlyForTestingGetTask,
+                    Pair(DoubleNear(maxDist, 0.01), Eq(maxResults))),
+        AD_PROPERTY(::SpatialJoin, onlyForTestingGetVariables,
+                    Eq(std::pair(left, right))),
+        AD_PROPERTY(::SpatialJoin, onlyForTestingGetDistanceVariable,
+                    Eq(distanceVariable)),
+        AD_PROPERTY(::SpatialJoin, onlyForTestingGetPayloadVariables,
+                    Eq(payloadVariables)),
+        AD_PROPERTY(::SpatialJoin, getAlgorithm, Eq(algorithm)),
+        AD_PROPERTY(::SpatialJoin, getJoinType, Eq(joinType)),
+        AD_PROPERTY(::SpatialJoin, getSubstitutesFilterOp, Eq(Substitute))));
+  }
+};
+constexpr inline SpatialJoinMatcher spatialJoin;
+constexpr inline SpatialJoinMatcher<true> spatialJoinFilterSubstitute;
 
 // Match a GroupBy operation
 static constexpr auto GroupBy =
@@ -348,8 +441,8 @@ static constexpr auto GroupBy =
   // TODO<joka921> Also test the aliases.
   auto aliasesToStrings = [](const std::vector<Alias>& aliases) {
     std::vector<std::string> result;
-    std::ranges::transform(aliases, std::back_inserter(result),
-                           &Alias::getDescriptor);
+    ql::ranges::transform(aliases, std::back_inserter(result),
+                          &Alias::getDescriptor);
     return result;
   };
 
@@ -361,13 +454,13 @@ static constexpr auto GroupBy =
                         ResultOf(aliasesToStrings, ContainerEq(aliases)))));
 };
 
-// Match a sort operation. Currently, this is only required by the binary search
-// version of the transitive path operation. This matcher checks only the
-// children of the sort operation.
+// Match a sort operation. Currently, this is only required by the binary
+// search version of the transitive path operation. This matcher checks only
+// the children of the sort operation.
 inline auto Sort = MatchTypeAndUnorderedChildren<::Sort>;
 
-// Match a `Filter` operation. The matching of the expression is currently only
-// done via the descriptor.
+// Match a `Filter` operation. The matching of the expression is currently
+// only done via the descriptor.
 constexpr auto Filter = [](std::string_view descriptor,
                            const QetMatcher& childMatcher) {
   return RootOperation<::Filter>(
@@ -386,10 +479,44 @@ constexpr auto OrderBy = [](const ::OrderBy::SortedVariables& sortedVariables,
 // Match a `UNION` operation.
 constexpr auto Union = MatchTypeAndOrderedChildren<::Union>;
 
+// Match a `DISTINCT` operation.
+constexpr auto Distinct = [](const std::vector<ColumnIndex>& distinctColumns,
+                             const QetMatcher& childMatcher) {
+  return RootOperation<::Distinct>(
+      AllOf(children(childMatcher),
+            AD_PROPERTY(::Distinct, getDistinctColumns,
+                        UnorderedElementsAreArray(distinctColumns))));
+};
+
+// Match a `DESCRIBE` operation
+inline QetMatcher Describe(
+    const Matcher<const parsedQuery::Describe&>& describeMatcher,
+    const QetMatcher& childMatcher) {
+  return RootOperation<::Describe>(
+      AllOf(children(childMatcher),
+            AD_PROPERTY(::Describe, getDescribe, describeMatcher)));
+}
+
+// Match an `ExistsJoin`
+inline QetMatcher ExistsJoin(const QetMatcher& leftChild,
+                             const QetMatcher& rightChild) {
+  return RootOperation<::ExistsJoin>(AllOf(children(leftChild, rightChild)));
+}
+
+// Match an `ExplicitIdTableOperation`, but only test its size estimate (which
+// is equal to the actual number of rows in the result). More detailed tests for
+// this operation can be found in `ExplicitIdTableOperationTest.cpp` and
+// `NamedResultCacheTest.cpp`.
+inline QetMatcher ExplicitIdTableOperation(size_t sizeEstimate) {
+  auto p = AD_PROPERTY(::ExplicitIdTableOperation, sizeEstimate,
+                       ::testing::Eq(sizeEstimate));
+  return RootOperation<::ExplicitIdTableOperation>(p);
+}
+
 //
 inline QetMatcher QetWithWarnings(
     const std::vector<std::string>& warningSubstrings,
-    QetMatcher actualMatcher) {
+    const QetMatcher& actualMatcher) {
   auto warningMatchers = ad_utility::transform(
       warningSubstrings,
       [](const std::string& s) { return ::testing::HasSubstr(s); });
@@ -399,70 +526,170 @@ inline QetMatcher QetWithWarnings(
                actualMatcher);
 }
 
-/// Parse the given SPARQL `query`, pass it to a `QueryPlanner` with empty
-/// execution context, and return the resulting `QueryExecutionTree`
-inline QueryExecutionTree parseAndPlan(std::string query,
-                                       QueryExecutionContext* qec) {
-  ParsedQuery pq = SparqlParser::parseQuery(std::move(query));
-  // TODO<joka921> make it impossible to pass `nullptr` here, properly mock a
-  // queryExecutionContext.
-  return QueryPlanner{qec, std::make_shared<ad_utility::CancellationHandle<>>()}
-      .createExecutionTree(pq);
+// Matcher for checking stripped variables in a QueryExecutionTree
+inline QetMatcher HasStrippedVariables(
+    const std::vector<Variable>& expectedStrippedVariables) {
+  return AD_PROPERTY(QueryExecutionTree, getStrippedVariables,
+                     UnorderedElementsAreArray(expectedStrippedVariables));
 }
 
-// Check that the `QueryExecutionTree` that is obtained by parsing and planning
-// the `query` matches the `matcher`. The query planning budget can be
-// controlled to choose between the greedy and the dynamic programming planner.
-// This function only serves as a common implementation, for the actual tests
-// the three functions below should be used.
+// Matcher for checking that a QueryExecutionTree has no stripped variables
+inline QetMatcher HasNoStrippedVariables() {
+  return AD_PROPERTY(QueryExecutionTree, getStrippedVariables, IsEmpty());
+}
+
+// Matcher that asserts that a QueryExecutionTree exposes the correct set of
+// variables, without checking their correct order.
+inline QetMatcher hasVariables(ad_utility::HashSet<std::string> expected) {
+  ad_utility::HashSet<Variable> vars;
+  for (const auto& var : expected) {
+    vars.insert(Variable{var});
+  }
+  auto getVariables = [](const QueryExecutionTree& qet) {
+    ad_utility::HashSet<Variable> res;
+    for (const auto& [var, _] : qet.getVariableColumns()) {
+      res.insert(var);
+    }
+    return res;
+  };
+  return ::testing::ResultOf(getVariables, UnorderedElementsAreArray(vars));
+};
+
+// A query planner class mocking the filter substitute generation for testing
+// the substitution behavior.
+class QueryPlannerWithMockFilterSubstitute : public QueryPlanner {
+  using QueryPlanner::QueryPlanner;
+
+  FiltersAndOptionalSubstitutes seedFilterSubstitutes(
+      const std::vector<SparqlFilter>& filters) const override {
+    FiltersAndOptionalSubstitutes plans;
+    plans.reserve(filters.size());
+
+    const auto equalTo =
+        ad_utility::triple_component::Iri::fromIrirefWithoutBrackets(
+            "equal-to");
+
+    for (const auto& [i, filterExpression] :
+         ::ranges::views::enumerate(filters)) {
+      using namespace sparqlExpression;
+      auto eqExpr = dynamic_cast<const EqualExpression*>(
+          filterExpression.expression_.getPimpl());
+
+      // Substitute `?a = ?b` with `?a <equal-to> ?b`
+      if (eqExpr != nullptr) {
+        auto vars = eqExpr->containedVariables();
+        AD_CORRECTNESS_CHECK(vars.size() == 2);
+
+        // Construct index scan
+        SparqlTripleSimple triple{{*vars[0]}, {equalTo}, {*vars[1]}};
+        SubtreePlan plan{getQec(),
+                         std::make_shared<::IndexScan>(
+                             getQec(), Permutation::Enum::PSO, triple)};
+
+        // Set marker for included filter
+        plan._idsOfIncludedFilters |= 1ull << i;
+        plan.containsFilterSubstitute_ = true;
+
+        plans.emplace_back(filterExpression, plan);
+      } else {
+        plans.emplace_back(filterExpression, std::nullopt);
+      }
+    }
+    return plans;
+  };
+};
+
+/// Parse the given SPARQL `query`, pass it to a `QueryPlanner` with empty
+/// execution context, and return the resulting `QueryExecutionTree`
+template <typename QueryPlannerClass = QueryPlanner>
+inline QueryExecutionTree parseAndPlan(std::string query,
+                                       QueryExecutionContext* qec) {
+  static EncodedIriManager ev;
+  ParsedQuery pq = SparqlParser::parseQuery(&ev, std::move(query));
+  // TODO<joka921> make it impossible to pass `nullptr` here, properly mock
+  // a queryExecutionContext.
+  auto tree =
+      QueryPlannerClass{qec,
+                        std::make_shared<ad_utility::CancellationHandle<>>()}
+          .createExecutionTree(pq);
+  tree.isRoot() = true;
+  return tree;
+}
+
+// Check that the `QueryExecutionTree` that is obtained by parsing and
+// planning the `query` matches the `matcher`. The query planning budget can
+// be controlled to choose between the greedy and the dynamic programming
+// planner. This function only serves as a common implementation, for the
+// actual tests the three functions below should be used.
+template <typename QueryPlannerClass = QueryPlanner>
 void expectWithGivenBudget(std::string query, auto matcher,
                            std::optional<QueryExecutionContext*> optQec,
                            size_t queryPlanningBudget,
-                           source_location l = source_location::current()) {
-  auto budgetBackup = RuntimeParameters().get<"query-planning-budget">();
-  RuntimeParameters().set<"query-planning-budget">(queryPlanningBudget);
+                           source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto budgetBackup =
+      getRuntimeParameter<&RuntimeParameters::queryPlanningBudget_>();
+  setRuntimeParameter<&RuntimeParameters::queryPlanningBudget_>(
+      queryPlanningBudget);
   auto cleanup = absl::Cleanup{[budgetBackup]() {
-    RuntimeParameters().set<"query-planning-budget">(budgetBackup);
+    setRuntimeParameter<&RuntimeParameters::queryPlanningBudget_>(budgetBackup);
   }};
   auto trace = generateLocationTrace(
       l, absl::StrCat("expect with budget ", queryPlanningBudget));
-  QueryExecutionContext* qec = optQec.value_or(ad_utility::testing::getQec());
-  auto qet = parseAndPlan(std::move(query), qec);
+  // Note: we cannot use `value_or` here, because it eagerly evaluates `getQec`
+  // which overwrites the global singleton index. The index is used to check
+  // invariants which require the correct index to be set.
+  // TODO<joka921>: revert to `value_or` with #2476
+  QueryExecutionContext* qec =
+      optQec.has_value() ? *optQec : ad_utility::testing::getQec();
+  auto qet = parseAndPlan<QueryPlannerClass>(std::move(query), qec);
   qet.getRootOperation()->createRuntimeInfoFromEstimates(
       qet.getRootOperation()->getRuntimeInfoPointer());
   EXPECT_THAT(qet, matcher);
 }
 
+// Same as `expectWithGivenBudget` but allows multiple budgets to be tested.
+template <typename QueryPlannerClass = QueryPlanner>
+void expectWithGivenBudgets(std::string query, auto matcher,
+                            std::optional<QueryExecutionContext*> optQec,
+                            std::vector<size_t> queryPlanningBudgets,
+                            source_location l = AD_CURRENT_SOURCE_LOC()) {
+  for (size_t budget : queryPlanningBudgets) {
+    expectWithGivenBudget<QueryPlannerClass>(query, matcher, optQec, budget, l);
+  }
+}
+
 // Same as `expectWithGivenBudget` above, but always use the greedy query
 // planner.
+template <typename QueryPlannerClass = QueryPlanner>
 void expectGreedy(std::string query, auto matcher,
                   std::optional<QueryExecutionContext*> optQec = std::nullopt,
-                  source_location l = source_location::current()) {
-  expectWithGivenBudget(std::move(query), std::move(matcher), optQec, 0, l);
+                  source_location l = AD_CURRENT_SOURCE_LOC()) {
+  expectWithGivenBudget<QueryPlannerClass>(std::move(query), std::move(matcher),
+                                           optQec, 0, l);
 }
-// Same as `expectWithGivenBudget` above, but always use the dynamic programming
-// query planner.
+// Same as `expectWithGivenBudget` above, but always use the dynamic
+// programming query planner.
+template <typename QueryPlannerClass = QueryPlanner>
 void expectDynamicProgramming(
     std::string query, auto matcher,
     std::optional<QueryExecutionContext*> optQec = std::nullopt,
-    source_location l = source_location::current()) {
-  expectWithGivenBudget(std::move(query), std::move(matcher), optQec,
-                        std::numeric_limits<size_t>::max(), l);
+    source_location l = AD_CURRENT_SOURCE_LOC()) {
+  expectWithGivenBudget<QueryPlannerClass>(
+      std::move(query), std::move(matcher), optQec,
+      std::numeric_limits<size_t>::max(), l);
 }
 
-// Same as `expectWithGivenBudget` above, but run the test for different query
-// planning budgets. This is guaranteed to run with both the greedy query
-// planner and the dynamic-programming based query planner.
+// Same as `expectWithGivenBudget` above, but run the test for different
+// query planning budgets. This is guaranteed to run with both the greedy
+// query planner and the dynamic-programming based query planner.
+template <typename QueryPlannerClass = QueryPlanner>
 void expect(std::string query, auto matcher,
             std::optional<QueryExecutionContext*> optQec = std::nullopt,
-            source_location l = source_location::current()) {
-  auto e = [&](size_t budget) {
-    expectWithGivenBudget(query, matcher, optQec, budget, l);
-  };
-  e(0);
-  e(1);
-  e(4);
-  e(16);
-  e(64'000'000);
+            source_location l = AD_CURRENT_SOURCE_LOC()) {
+  expectWithGivenBudgets<QueryPlannerClass>(
+      std::move(query), std::move(matcher), std::move(optQec),
+      {0, 1, 4, 16, 64'000'000}, l);
 }
 }  // namespace queryPlannerTestHelpers
+
+#endif  // QLEVER_TEST_QUERYPLANNERTESTHELPERS_H

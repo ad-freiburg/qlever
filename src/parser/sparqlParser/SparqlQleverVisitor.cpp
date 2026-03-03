@@ -1,20 +1,28 @@
-// Copyright 2021 - 2024, University of Freiburg
+// Copyright 2021 - 2025, University of Freiburg
 // Chair of Algorithms and Data Structures
-// Authors:
-//   2021 -    Hannah Bast <bast@cs.uni-freiburg.de>
-//   2022      Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
-//   2022 -    Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Authors: Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
 
-#include <absl/strings/str_join.h>
+#include <absl/functional/function_ref.h>
 #include <absl/strings/str_split.h>
+#include <absl/time/time.h>
 
+#include <ctre-unicode.hpp>
 #include <string>
+#include <type_traits>
+#include <unordered_map>
 #include <vector>
 
-#include "absl/time/time.h"
+#include "backports/StartsWithAndEndsWith.h"
+#include "engine/SpatialJoinConfig.h"
+#include "engine/sparqlExpressions/BlankNodeExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
+#include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
@@ -23,19 +31,39 @@
 #include "engine/sparqlExpressions/RegexExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
+#include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "engine/sparqlExpressions/UuidExpressions.h"
+#include "generated/SparqlAutomaticParser.h"
+#include "global/Constants.h"
 #include "global/RuntimeParameters.h"
 #include "parser/GraphPatternOperation.h"
+#include "parser/MagicServiceIriConstants.h"
+#include "parser/MagicServiceQuery.h"
+#include "parser/MaterializedViewQuery.h"
+#include "parser/NamedCachedResult.h"
+#include "parser/PathQuery.h"
+#include "parser/Quads.h"
 #include "parser/RdfParser.h"
 #include "parser/SparqlParser.h"
+#include "parser/SpatialQuery.h"
+#include "parser/TextSearchQuery.h"
 #include "parser/TokenizerCtre.h"
-#include "parser/data/Variable.h"
+#include "rdfTypes/GeometryInfo.h"
+#include "rdfTypes/Variable.h"
+#include "util/Algorithm.h"
 #include "util/StringUtils.h"
 #include "util/TransparentFunctors.h"
+#include "util/TypeIdentity.h"
 #include "util/antlr/GenerateAntlrExceptionMetadata.h"
 
+namespace {
+// CTRE regex pattern for C++17 compatibility
+constexpr ctll::fixed_string iriSchemeRegex = "<[A-Za-z]*[A-Za-z0-9+-.]:";
+}  // namespace
+
 using namespace ad_utility::sparql_types;
+using namespace ad_utility::use_type_identity;
 using namespace sparqlExpression;
 using namespace updateClause;
 using ExpressionPtr = sparqlExpression::SparqlExpression::Ptr;
@@ -50,6 +78,49 @@ using SparqlValues = parsedQuery::SparqlValues;
 
 using Visitor = SparqlQleverVisitor;
 using Parser = SparqlAutomaticParser;
+
+namespace {
+const ad_utility::triple_component::Iri a =
+    ad_utility::triple_component::Iri::fromIriref(
+        "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>");
+}  // namespace
+
+// _____________________________________________________________________________
+Variable Visitor::getNewInternalVariable() {
+  return Variable{
+      absl::StrCat(QLEVER_INTERNAL_VARIABLE_PREFIX, numInternalVariables_++)};
+}
+
+// _____________________________________________________________________________
+auto Visitor::makeInternalVariableGenerator() {
+  return [this]() { return getNewInternalVariable(); };
+}
+
+// _____________________________________________________________________________
+BlankNode Visitor::newBlankNode() {
+  std::string label = std::to_string(_blankNodeCounter);
+  _blankNodeCounter++;
+  // true means automatically generated
+  return {true, std::move(label)};
+}
+
+// _____________________________________________________________________________
+GraphTerm Visitor::newBlankNodeOrVariable() {
+  if (treatBlankNodesAs_ == TreatBlankNodesAs::BlankNodes) {
+    return GraphTerm{newBlankNode()};
+  } else {
+    AD_CORRECTNESS_CHECK(treatBlankNodesAs_ ==
+                         TreatBlankNodesAs::InternalVariables);
+    return getNewInternalVariable();
+  }
+}
+
+// _____________________________________________________________________________
+Variable Visitor::blankNodeToInternalVariable(std::string_view blankNode) {
+  AD_CONTRACT_CHECK(ql::starts_with(blankNode, "_:"));
+  return Variable{absl::StrCat(QLEVER_INTERNAL_BLANKNODE_VARIABLE_PREFIX,
+                               blankNode.substr(2))};
+}
 
 // _____________________________________________________________________________
 std::string Visitor::getOriginalInputForContext(
@@ -81,7 +152,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
   // `prefixName` to the short name of the prefix; see `global/Constants.h`.
   auto checkPrefix = [&functionName, &prefixName](
                          std::pair<std::string_view, std::string_view> prefix) {
-    if (functionName.starts_with(prefix.second)) {
+    if (ql::starts_with(functionName, prefix.second)) {
       prefixName = prefix.first;
       functionName.remove_prefix(prefix.second.size());
       return true;
@@ -106,59 +177,118 @@ ExpressionPtr Visitor::processIriFunctionCall(
     }
   };
 
+  using namespace sparqlExpression;
+  // Create `SparqlExpression` with one child.
+  auto createUnary =
+      CPP_template_lambda(&argList, &checkNumArgs)(typename F)(F function)(
+          requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr>) {
+    checkNumArgs(1);  // Check is unary.
+    return function(std::move(argList[0]));
+  };
+  // Create `SparqlExpression` with two children.
+  auto createBinary =
+      CPP_template_lambda(&argList, &checkNumArgs)(typename F)(F function)(
+          requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr,
+                                         ExpressionPtr>) {
+    checkNumArgs(2);  // Check is binary.
+    return function(std::move(argList[0]), std::move(argList[1]));
+  };
+  // Create `SparqlExpression` with two or three children (currently used for
+  // backward-compatible geof:distance function)
+  auto createBinaryOrTernary =
+      CPP_template_lambda(&argList)(typename F)(F function)(
+          requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr,
+                                         ExpressionPtr,
+                                         std::optional<ExpressionPtr>>) {
+    if (argList.size() == 2) {
+      return function(std::move(argList[0]), std::move(argList[1]),
+                      std::nullopt);
+    } else if (argList.size() == 3) {
+      return function(std::move(argList[0]), std::move(argList[1]),
+                      std::move(argList[2]));
+    } else {
+      AD_THROW(
+          "Incorrect number of arguments: two or optionally three required");
+    }
+  };
+
+  using Ptr = sparqlExpression::SparqlExpression::Ptr;
+  using UnaryFuncTable =
+      std::unordered_map<std::string_view, absl::FunctionRef<Ptr(Ptr)>>;
+  using BinaryFuncTable =
+      std::unordered_map<std::string_view, absl::FunctionRef<Ptr(Ptr, Ptr)>>;
+
   // Geo functions.
+  using enum ad_utility::BoundingCoordinate;
+  static const UnaryFuncTable geoUnaryFuncs{
+      {"longitude", &makeLongitudeExpression},
+      {"latitude", &makeLatitudeExpression},
+      {"centroid", &makeCentroidExpression},
+      {"envelope", &makeEnvelopeExpression},
+      {"geometryType", &makeGeometryTypeExpression},
+      {"minX", &makeBoundingCoordinateExpression<MIN_X>},
+      {"minY", &makeBoundingCoordinateExpression<MIN_Y>},
+      {"maxX", &makeBoundingCoordinateExpression<MAX_X>},
+      {"maxY", &makeBoundingCoordinateExpression<MAX_Y>},
+      {"metricArea", &makeMetricAreaExpression},
+      {"numGeometries", &makeNumGeometriesExpression},
+      {"metricLength", &makeMetricLengthExpression},
+  };
+  using enum SpatialJoinType;
+  static const BinaryFuncTable geoBinaryFuncs{
+      {"metricDistance", &makeMetricDistExpression},
+      {"length", &makeLengthExpression},
+      {"area", &makeAreaExpression},
+      {"geometryN", &makeGeometryNExpression},
+      // Geometric relation functions
+      {"sfIntersects", &makeGeoRelationExpression<INTERSECTS>},
+      {"sfContains", &makeGeoRelationExpression<CONTAINS>},
+      {"sfCovers", &makeGeoRelationExpression<COVERS>},
+      {"sfCrosses", &makeGeoRelationExpression<CROSSES>},
+      {"sfTouches", &makeGeoRelationExpression<TOUCHES>},
+      {"sfEquals", &makeGeoRelationExpression<EQUALS>},
+      {"sfOverlaps", &makeGeoRelationExpression<OVERLAPS>},
+      {"sfWithin", &makeGeoRelationExpression<WITHIN>}};
   if (checkPrefix(GEOF_PREFIX)) {
     if (functionName == "distance") {
-      checkNumArgs(2);
-      return sparqlExpression::makeDistExpression(std::move(argList[0]),
-                                                  std::move(argList[1]));
-    } else if (functionName == "longitude") {
-      checkNumArgs(1);
-      return sparqlExpression::makeLongitudeExpression(std::move(argList[0]));
-    } else if (functionName == "latitude") {
-      checkNumArgs(1);
-      return sparqlExpression::makeLatitudeExpression(std::move(argList[0]));
+      return createBinaryOrTernary(&makeDistWithUnitExpression);
+    } else if (ad_utility::contains(geoUnaryFuncs, functionName)) {
+      return createUnary(geoUnaryFuncs.at(functionName));
+    } else if (ad_utility::contains(geoBinaryFuncs, functionName)) {
+      return createBinary(geoBinaryFuncs.at(functionName));
     }
   }
 
   // Math functions.
+  static const UnaryFuncTable mathFuncs{
+      {"log", &makeLogExpression},   {"exp", &makeExpExpression},
+      {"sqrt", &makeSqrtExpression}, {"sin", &makeSinExpression},
+      {"cos", &makeCosExpression},   {"tan", &makeTanExpression},
+  };
   if (checkPrefix(MATH_PREFIX)) {
-    if (functionName == "log") {
-      checkNumArgs(1);
-      return sparqlExpression::makeLogExpression(std::move(argList[0]));
-    } else if (functionName == "exp") {
-      checkNumArgs(1);
-      return sparqlExpression::makeExpExpression(std::move(argList[0]));
-    } else if (functionName == "sqrt") {
-      checkNumArgs(1);
-      return sparqlExpression::makeSqrtExpression(std::move(argList[0]));
-    } else if (functionName == "sin") {
-      checkNumArgs(1);
-      return sparqlExpression::makeSinExpression(std::move(argList[0]));
-    } else if (functionName == "cos") {
-      checkNumArgs(1);
-      return sparqlExpression::makeCosExpression(std::move(argList[0]));
-    } else if (functionName == "tan") {
-      checkNumArgs(1);
-      return sparqlExpression::makeTanExpression(std::move(argList[0]));
+    if (ad_utility::contains(mathFuncs, functionName)) {
+      return createUnary(mathFuncs.at(functionName));
     } else if (functionName == "pow") {
-      checkNumArgs(2);
-      return sparqlExpression::makePowExpression(std::move(argList[0]),
-                                                 std::move(argList[1]));
+      return createBinary(&makePowExpression);
     }
   }
 
   // XSD conversion functions.
-  if (checkPrefix(XSD_PREFIX)) {
-    if (functionName == "integer" || functionName == "int") {
-      checkNumArgs(1);
-      return sparqlExpression::makeConvertToIntExpression(
-          std::move(argList[0]));
-    } else if (functionName == "double" || functionName == "decimal") {
-      checkNumArgs(1);
-      return sparqlExpression::makeConvertToDoubleExpression(
-          std::move(argList[0]));
-    }
+  static const UnaryFuncTable convertFuncs{
+      {"integer", &makeConvertToIntExpression},
+      {"int", &makeConvertToIntExpression},
+      {"decimal", &makeConvertToDecimalExpression},
+      {"double", &makeConvertToDoubleExpression},
+      // We currently don't have a float type, so we just convert to double.
+      {"float", &makeConvertToDoubleExpression},
+      {"boolean", &makeConvertToBooleanExpression},
+      {"string", &makeConvertToStringExpression},
+      {"dateTime", &makeConvertToDateTimeExpression},
+      {"date", &makeConvertToDateExpression},
+  };
+  if (checkPrefix(XSD_PREFIX) &&
+      ad_utility::contains(convertFuncs, functionName)) {
+    return createUnary(convertFuncs.at(functionName));
   }
 
   // QLever-internal functions.
@@ -166,14 +296,20 @@ ExpressionPtr Visitor::processIriFunctionCall(
   // NOTE: Predicates like `ql:has-predicate` etc. are handled elsewhere.
   if (checkPrefix(QL_PREFIX)) {
     if (functionName == "isGeoPoint") {
-      checkNumArgs(1);
-      return sparqlExpression::makeIsGeoPointExpression(std::move(argList[0]));
+      return createUnary(&makeIsGeoPointExpression);
     }
   }
 
-  // If none of the above matched, report unknown function.
-  reportNotSupported(ctx,
-                     "Function \""s + iri.toStringRepresentation() + "\" is");
+  if (getRuntimeParameter<&RuntimeParameters::syntaxTestMode_>()) {
+    // In the syntax test mode we silently create an expression that always
+    // returns `UNDEF`.
+    return std::make_unique<sparqlExpression::IdExpression>(
+        Id::makeUndefined());
+  } else {
+    // If none of the above matched, report unknown function.
+    reportNotSupported(ctx,
+                       "Function \""s + iri.toStringRepresentation() + "\" is");
+  }
 }
 
 void Visitor::addVisibleVariable(Variable var) {
@@ -181,8 +317,9 @@ void Visitor::addVisibleVariable(Variable var) {
 }
 
 // ___________________________________________________________________________
+template <typename List>
 PathObjectPairs joinPredicateAndObject(const VarOrPath& predicate,
-                                       auto objectList) {
+                                       List objectList) {
   PathObjectPairs tuples;
   tuples.reserve(objectList.first.size());
   for (auto& object : objectList.first) {
@@ -192,7 +329,8 @@ PathObjectPairs joinPredicateAndObject(const VarOrPath& predicate,
 }
 
 // ___________________________________________________________________________
-SparqlExpressionPimpl Visitor::visitExpressionPimpl(auto* ctx) {
+template <typename Context>
+SparqlExpressionPimpl Visitor::visitExpressionPimpl(Context* ctx) {
   return {visit(ctx), getOriginalInputForContext(ctx)};
 }
 
@@ -205,24 +343,32 @@ ParsedQuery Visitor::visit(Parser::QueryContext* ctx) {
       visitAlternative<ParsedQuery>(ctx->selectQuery(), ctx->constructQuery(),
                                     ctx->describeQuery(), ctx->askQuery());
 
+  query.postQueryValuesClause_ = visit(ctx->valuesClause());
+
   query._originalString = ctx->getStart()->getInputStream()->toString();
 
   return query;
 }
 
 // ____________________________________________________________________________________
-ParsedQuery Visitor::visit(Parser::QueryOrUpdateContext* ctx) {
-  if (ctx->update() && !ctx->update()->update1()) {
-    // An empty query currently matches the `update()` rule. We handle this
-    // case manually to get a better error message. If an update query doesn't
-    // have an `update1()`, then it consists of a (possibly empty) prologue, but
-    // has not actual content, see the grammar in `SparqlAutomatic.g4` for
-    // details.
-    reportError(ctx->update(),
-                "Empty query (this includes queries that only consist "
-                "of comments or prefix declarations).");
+void SparqlQleverVisitor::resetStateForMultipleUpdates() {
+  // The following fields are not reset:
+  // - prefixMap_ and baseIri_: prefixes carry over between chained updates
+  // - datasetsAreFixed_: set for the whole request which can contain multiple
+  // operations
+  // - activeDatasetClauses_: if `datasetsAreFixed_` is true
+  _blankNodeCounter = 0;
+  numGraphPatterns_ = 0;
+  visibleVariables_ = {};
+  // When fixed datasets are given for a request (see SPARQL Protocol), these
+  // cannot be changed by a SPARQL operation but are also constant for chained
+  // updates.
+  if (!datasetsAreFixed_) {
+    activeDatasetClauses_ = {};
   }
-  return visitAlternative<ParsedQuery>(ctx->query(), ctx->update());
+  prologueString_ = {};
+  parsedQuery_ = {};
+  treatBlankNodesAs_ = TreatBlankNodesAs::InternalVariables;
 }
 
 // ____________________________________________________________________________________
@@ -258,38 +404,162 @@ Alias Visitor::visit(Parser::AliasWithoutBracketsContext* ctx) {
 }
 
 // ____________________________________________________________________________________
+parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
+    const ad_utility::sparql_types::Triples& triples) const {
+  parsedQuery::BasicGraphPattern pattern{};
+  pattern._triples.reserve(triples.size());
+  auto toTripleComponent = [this](const auto& item) {
+    using T = std::decay_t<decltype(item)>;
+    namespace tc = ad_utility::triple_component;
+    if constexpr (ad_utility::SimilarToAny<T, Variable, TripleComponent>) {
+      return TripleComponent{item};
+    } else if constexpr (ad_utility::isSimilar<T, BlankNode>) {
+      // Blank Nodes in the pattern are to be treated as internal variables
+      // inside WHERE.
+      return TripleComponent{blankNodeToInternalVariable(item.toSparql())};
+    } else if constexpr (ad_utility::isSimilar<T, Iri>) {
+      // Try to encode the IRI first, otherwise use the standard conversion
+      auto iriString = item.toSparql();
+      if (auto encodedId = encodedIriManager_->encode(iriString)) {
+        return TripleComponent{*encodedId};
+      }
+      return RdfStringParser<TurtleParser<Tokenizer>>::parseTripleObject(
+          iriString);
+    } else {
+      static_assert(ad_utility::isSimilar<T, Literal>);
+      return RdfStringParser<TurtleParser<Tokenizer>>::parseTripleObject(
+          item.toSparql());
+    }
+  };
+  auto toPredicate = [](const auto& item) -> VarOrPath {
+    using T = std::decay_t<decltype(item)>;
+    if constexpr (ad_utility::isSimilar<T, Variable>) {
+      return item;
+    } else if constexpr (ad_utility::isSimilar<T, Iri>) {
+      return PropertyPath::fromIri(
+          ad_utility::triple_component::Iri::fromStringRepresentation(
+              item.toSparql()));
+    } else {
+      static_assert(ad_utility::SimilarToAny<T, Literal, BlankNode>);
+      // This case can only happen if there's a bug in the SPARQL parser.
+      AD_THROW("Literals or blank nodes are not valid predicates.");
+    }
+  };
+  for (const auto& triple : triples) {
+    auto subject = triple.at(0).visit(toTripleComponent);
+    auto predicate = triple.at(1).visit(toPredicate);
+    auto object = triple.at(2).visit(toTripleComponent);
+    pattern._triples.emplace_back(std::move(subject), std::move(predicate),
+                                  std::move(object));
+  }
+  return pattern;
+}
+
+// ____________________________________________________________________________________
+const parsedQuery::DatasetClauses& SparqlQleverVisitor::setAndGetDatasetClauses(
+    const std::vector<DatasetClause>& clauses) {
+  if (!datasetsAreFixed_) {
+    activeDatasetClauses_ = parsedQuery::DatasetClauses::fromClauses(clauses);
+  }
+  return activeDatasetClauses_;
+}
+
+// ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::ConstructQueryContext* ctx) {
   ParsedQuery query;
-  query.datasetClauses_ = parsedQuery::DatasetClauses::fromClauses(
-      visitVector(ctx->datasetClause()));
+  query.datasetClauses_ =
+      setAndGetDatasetClauses(visitVector(ctx->datasetClause()));
   if (ctx->constructTemplate()) {
     query._clause = visit(ctx->constructTemplate())
                         .value_or(parsedQuery::ConstructClause{});
-    auto [pattern, visibleVariables] = visit(ctx->whereClause());
-    query._rootGraphPattern = std::move(pattern);
-    query.registerVariablesVisibleInQueryBody(visibleVariables);
+    visitWhereClause(ctx->whereClause(), query);
   } else {
+    // For `CONSTRUCT WHERE`, the CONSTRUCT template and the WHERE clause are
+    // syntactically the same, so we keep the blank nodes, and convert them into
+    // variables during `toGraphPattern`.
+    auto cleanup = setBlankNodeTreatmentForScope(TreatBlankNodesAs::BlankNodes);
     query._clause = parsedQuery::ConstructClause{
         visitOptional(ctx->triplesTemplate()).value_or(Triples{})};
+    query._rootGraphPattern._graphPatterns.emplace_back(
+        toGraphPattern(query.constructClause().triples_));
   }
-  query.addSolutionModifiers(visit(ctx->solutionModifier()));
+  query.addSolutionModifiers(visit(ctx->solutionModifier()),
+                             makeInternalVariableGenerator());
 
   return query;
 }
 
 // ____________________________________________________________________________________
-ParsedQuery Visitor::visit(const Parser::DescribeQueryContext* ctx) {
-  reportNotSupported(ctx, "DESCRIBE queries are");
+ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
+  auto describeClause = parsedQuery::Describe{};
+  auto describedResources = visitVector(ctx->varOrIri());
+
+  // Convert the describe resources (variables or IRIs) from the format that the
+  // parser delivers to the one that the `parsedQuery::Describe` struct expects.
+  std::vector<Variable> describedVariables;
+  for (VarOrIri& resource : describedResources) {
+    std::visit(ad_utility::OverloadCallOperator{
+                   [&describeClause, &describedVariables](const Variable& var) {
+                     describeClause.resources_.emplace_back(var);
+                     describedVariables.push_back(var);
+                   },
+                   [&describeClause](const TripleComponent::Iri& iri) {
+                     describeClause.resources_.emplace_back(iri);
+                   }},
+               resource);
+  }
+
+  // Parse the FROM and FROM NAMED clauses.
+  describeClause.datasetClauses_ =
+      setAndGetDatasetClauses(visitVector(ctx->datasetClause()));
+
+  // Parse the WHERE clause and construct a SELECT query from it. For `DESCRIBE
+  // *`, add each visible variable as a resource to describe.
+  visitWhereClause(ctx->whereClause(), parsedQuery_);
+  if (describedResources.empty()) {
+    const auto& visibleVariables =
+        parsedQuery_.selectClause().getVisibleVariables();
+    ql::ranges::copy(visibleVariables,
+                     std::back_inserter(describeClause.resources_));
+    describedVariables = visibleVariables;
+  }
+  auto& selectClause = parsedQuery_.selectClause();
+  selectClause.setSelected(std::move(describedVariables));
+  describeClause.whereClause_ = std::move(parsedQuery_);
+
+  // Set up the final `ParsedQuery` object for the DESCRIBE query. The clause is
+  // a CONSTRUCT query of the form `CONSTRUCT { ?subject ?predicate ?object} {
+  // ... }`, with the `parsedQuery::Describe` object from above as the root
+  // graph pattern. The solution modifiers (in particular ORDER BY) are part of
+  // the CONSTRUCT query.
+  //
+  // NOTE: The dataset clauses are stored once in `parsedQuery_.datasetClauses_`
+  // (which pertains to the CONSTRUCT query that computes the result of the
+  // DESCRIBE), and once in `parsedQuery_.describeClause_.datasetClauses_`
+  // (which pertains to the SELECT query that computes the resources to be
+  // described).
+  parsedQuery_ = ParsedQuery{};
+  parsedQuery_.addSolutionModifiers(visit(ctx->solutionModifier()),
+                                    makeInternalVariableGenerator());
+  parsedQuery_._rootGraphPattern._graphPatterns.emplace_back(
+      std::move(describeClause));
+  parsedQuery_.datasetClauses_ = activeDatasetClauses_;
+  auto constructClause = ParsedQuery::ConstructClause{};
+  using G = GraphTerm;
+  using V = Variable;
+  constructClause.triples_.push_back(
+      std::array{G(V("?subject")), G(V("?predicate")), G(V("?object"))});
+  parsedQuery_._clause = std::move(constructClause);
+
+  return parsedQuery_;
 }
 
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::AskQueryContext* ctx) {
   parsedQuery_._clause = ParsedQuery::AskClause{};
-  parsedQuery_.datasetClauses_ = parsedQuery::DatasetClauses::fromClauses(
-      visitVector(ctx->datasetClause()));
-  auto [pattern, visibleVariables] = visit(ctx->whereClause());
-  parsedQuery_._rootGraphPattern = std::move(pattern);
-  parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables);
+  parsedQuery_.datasetClauses_ =
+      setAndGetDatasetClauses(visitVector(ctx->datasetClause()));
+  visitWhereClause(ctx->whereClause(), parsedQuery_);
   // NOTE: It can make sense to have solution modifiers with an ASK query, for
   // example, a GROUP BY with a HAVING.
   auto getSolutionModifiers = [this, ctx]() {
@@ -303,7 +573,8 @@ ParsedQuery Visitor::visit(Parser::AskQueryContext* ctx) {
     solutionModifiers.limitOffset_._limit = 1;
     return solutionModifiers;
   };
-  parsedQuery_.addSolutionModifiers(getSolutionModifiers());
+  parsedQuery_.addSolutionModifiers(getSolutionModifiers(),
+                                    makeInternalVariableGenerator());
   return parsedQuery_;
 }
 
@@ -377,186 +648,360 @@ std::optional<Values> Visitor::visit(Parser::ValuesClauseContext* ctx) {
   return visitOptional(ctx->dataBlock());
 }
 
-// ____________________________________________________________________________________
-ParsedQuery Visitor::visit(Parser::UpdateContext* ctx) {
-  // The prologue (BASE and PREFIX declarations)  only affects the internal
-  // state of the visitor.
-  visit(ctx->prologue());
+// ____________________________________________________________________________
+std::vector<ParsedQuery> Visitor::visit(Parser::UpdateContext* ctx) {
+  std::vector<ParsedQuery> updates{};
 
-  auto update = visit(ctx->update1());
-
-  if (ctx->update()) {
-    parsedQuery_ = ParsedQuery{};
-    reportNotSupported(ctx->update(), "Multiple updates in one query are");
+  AD_CORRECTNESS_CHECK(ctx->prologue().size() >= ctx->update1().size());
+  for (size_t i = 0; i < ctx->update1().size(); ++i) {
+    // The prologue (BASE and PREFIX declarations) only affects the internal
+    // state of the visitor. The standard mentions that prefixes are shared
+    // between consecutive updates.
+    visit(ctx->prologue(i));
+    auto thisUpdates = visit(ctx->update1(i));
+    // The string representation of the Update is from the beginning of that
+    // updates prologue to the end of the update. The `;` between queries is
+    // ignored in the string representation.
+    const size_t updateStartPos = ctx->prologue(i)->getStart()->getStartIndex();
+    const size_t updateEndPos = ctx->update1(i)->getStop()->getStopIndex();
+    auto updateStringRepr = std::string{ad_utility::getUTF8Substring(
+        ctx->getStart()->getInputStream()->toString(), updateStartPos,
+        updateEndPos - updateStartPos + 1)};
+    // Many graph management operations are desugared into multiple updates. We
+    // set the string representation of the graph management operation for all
+    // the simple update operations.
+    ql::ranges::for_each(thisUpdates, [updateStringRepr](ParsedQuery& update) {
+      update._originalString = updateStringRepr;
+    });
+    ad_utility::appendVector(updates, thisUpdates);
+    resetStateForMultipleUpdates();
   }
 
-  update._originalString = ctx->getStart()->getInputStream()->toString();
-
-  return update;
+  return updates;
 }
 
 // ____________________________________________________________________________________
-ParsedQuery Visitor::visit(Parser::Update1Context* ctx) {
-  if (ctx->deleteWhere() || ctx->modify()) {
-    return visitAlternative<ParsedQuery>(ctx->deleteWhere(), ctx->modify());
-  } else {
-    parsedQuery_._clause = visitAlternative<parsedQuery::UpdateClause>(
-        ctx->load(), ctx->clear(), ctx->drop(), ctx->create(), ctx->add(),
-        ctx->move(), ctx->copy(), ctx->insertData(), ctx->deleteData());
+std::vector<ParsedQuery> Visitor::visit(Parser::Update1Context* ctx) {
+  if (ctx->deleteWhere() || ctx->modify() || ctx->clear() || ctx->drop() ||
+      ctx->create() || ctx->copy() || ctx->move() || ctx->add() ||
+      ctx->load()) {
+    return visitAlternative<std::vector<ParsedQuery>>(
+        ctx->deleteWhere(), ctx->modify(), ctx->clear(), ctx->drop(),
+        ctx->create(), ctx->copy(), ctx->move(), ctx->add(), ctx->load());
   }
+  AD_CORRECTNESS_CHECK(ctx->insertData() || ctx->deleteData());
+  parsedQuery_._clause = visitAlternative<parsedQuery::UpdateClause>(
+      ctx->insertData(), ctx->deleteData());
+  parsedQuery_.datasetClauses_ = activeDatasetClauses_;
+  return {std::move(parsedQuery_)};
+}
 
+// ____________________________________________________________________________________
+ParsedQuery Visitor::visit(Parser::LoadContext* ctx) {
+  AD_CORRECTNESS_CHECK(visibleVariables_.empty());
+  GraphPattern pattern;
+  auto iri = visit(ctx->iri());
+  // The `LOAD` Update operation is translated into something like
+  // `INSERT { ?s ?p ?o } WHERE { LOAD_OP <iri> [SILENT] }`. Where `LOAD_OP` is
+  // an internal operation that binds the result of parsing the given RDF
+  // document into the variables `?s`, `?p`, and `?o`.
+  pattern._graphPatterns.emplace_back(
+      parsedQuery::Load{iri, static_cast<bool>(ctx->SILENT())});
+  parsedQuery_._rootGraphPattern = std::move(pattern);
+  addVisibleVariable(Variable("?s"));
+  addVisibleVariable(Variable("?p"));
+  addVisibleVariable(Variable("?o"));
+  parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables_);
+  visibleVariables_.clear();
+  using Quad = SparqlTripleSimpleWithGraph;
+  std::vector<Quad> toInsert{
+      Quad{Variable("?s"), Variable("?p"), Variable("?o"),
+           ctx->graphRef() ? Quad::Graph(visit(ctx->graphRef()))
+                           : Quad::Graph(std::monostate{})}};
+  parsedQuery_._clause =
+      parsedQuery::UpdateClause{GraphUpdate{{toInsert, LocalVocab{}}, {}}};
+  return parsedQuery_;
+}
+
+// Helper functions for some inner parts of graph management operations.
+namespace {
+// _____________________________________________________________________________
+TripleComponent::Iri transformGraph(const GraphOrDefault& graph) {
+  return std::visit(
+      ad_utility::OverloadCallOperator{
+          [](const ad_utility::triple_component::Iri& iri) { return iri; },
+          [](const DEFAULT&) {
+            return ad_utility::triple_component::Iri::fromIriref(
+                DEFAULT_GRAPH_IRI);
+          }},
+      graph);
+}
+
+// _____________________________________________________________________________
+// Make a `GraphPatternOperation` that matches all triples in the given graph.
+GraphPatternOperation makeAllTripleGraphPattern(TripleComponent::Iri graphIri) {
+  GraphPattern inner;
+  inner._graphPatterns.emplace_back(BasicGraphPattern{
+      {{{Variable("?s")}, Variable("?p"), {Variable("?o")}}}});
+  return {
+      parsedQuery::GroupGraphPattern{std::move(inner), std::move(graphIri)}};
+}
+
+// _____________________________________________________________________________
+// Make a `GraphPatternOperation` that matches all triples in either all graphs,
+// or just named graphs, depending on the value of `behaviour`.
+GraphPatternOperation makeAllTripleGraphPattern(
+    Variable graphVariable,
+    parsedQuery::GroupGraphPattern::GraphVariableBehaviour behaviour) {
+  GraphPattern inner;
+  inner._graphPatterns.emplace_back(BasicGraphPattern{
+      {{{Variable("?s")}, Variable("?p"), {Variable("?o")}}}});
+  return {parsedQuery::GroupGraphPattern{std::move(inner),
+                                         std::move(graphVariable), behaviour}};
+}
+
+// ____________________________________________________________________________________
+// Make a `SparqlTripleSimpleWithGraph` that templates all triples in the graph.
+SparqlTripleSimpleWithGraph makeAllTripleTemplate(
+    SparqlTripleSimpleWithGraph::Graph graph) {
+  return {
+      {Variable("?s")}, {Variable("?p")}, {Variable("?o")}, std::move(graph)};
+}
+}  // namespace
+
+// ____________________________________________________________________________________
+ParsedQuery Visitor::visit(Parser::ClearContext* ctx) {
+  return makeClear(visit(ctx->graphRefAll()));
+}
+
+// ____________________________________________________________________________________
+ParsedQuery Visitor::makeClear(const GraphRefAll& graph) {
+  using GVB = parsedQuery::GroupGraphPattern::GraphVariableBehaviour;
+  using P =
+      std::pair<GraphPatternOperation, SparqlTripleSimpleWithGraph::Graph>;
+  auto [graphPattern, updatePattern] = std::visit(
+      ad_utility::OverloadCallOperator{
+          [](const GraphRef& graph) -> P {
+            return {makeAllTripleGraphPattern(graph), graph};
+          },
+          [](const DEFAULT&) -> P {
+            auto defaultGraph = ad_utility::triple_component::Iri::fromIriref(
+                DEFAULT_GRAPH_IRI);
+            auto copy = defaultGraph;
+            return {makeAllTripleGraphPattern(std::move(defaultGraph)),
+                    std::move(copy)};
+          },
+          [](const NAMED&) -> P {
+            return {makeAllTripleGraphPattern(Variable{"?g"}, GVB::NAMED),
+                    Variable{"?g"}};
+          },
+          [](const ALL&) -> P {
+            return {makeAllTripleGraphPattern(Variable{"?g"}, GVB::ALL),
+                    Variable{"?g"}};
+          }},
+      graph);
+  parsedQuery_._rootGraphPattern._graphPatterns.push_back(
+      std::move(graphPattern));
+  parsedQuery_._clause = parsedQuery::UpdateClause{GraphUpdate{
+      {}, {{makeAllTripleTemplate(std::move(updatePattern))}, LocalVocab{}}}};
+  parsedQuery_.datasetClauses_ = activeDatasetClauses_;
   return parsedQuery_;
 }
 
 // ____________________________________________________________________________________
-Load Visitor::visit(Parser::LoadContext* ctx) {
-  return Load{
-      static_cast<bool>(ctx->SILENT()), visit(ctx->iri()),
-      ctx->graphRef() ? visit(ctx->graphRef()) : std::optional<GraphRef>{}};
+ParsedQuery Visitor::makeAdd(const GraphOrDefault& source,
+                             const GraphOrDefault& target) {
+  parsedQuery_._rootGraphPattern._graphPatterns.push_back(
+      makeAllTripleGraphPattern(transformGraph(source)));
+  parsedQuery_._clause = parsedQuery::UpdateClause{GraphUpdate{
+      {{makeAllTripleTemplate(transformGraph(target))}, LocalVocab{}}, {}}};
+  parsedQuery_.datasetClauses_ = activeDatasetClauses_;
+  return parsedQuery_;
 }
 
 // ____________________________________________________________________________________
-Clear Visitor::visit(Parser::ClearContext* ctx) {
-  return Clear{static_cast<bool>(ctx->SILENT()), visit(ctx->graphRefAll())};
+ParsedQuery Visitor::visit(Parser::DropContext* ctx) {
+  return makeClear(visit(ctx->graphRefAll()));
 }
 
 // ____________________________________________________________________________________
-Drop Visitor::visit(Parser::DropContext* ctx) {
-  return Drop{static_cast<bool>(ctx->SILENT()), visit(ctx->graphRefAll())};
+std::vector<ParsedQuery> Visitor::visit(const Parser::CreateContext*) {
+  // Create is a no-op because we don't explicitly record the existence of empty
+  // graphs.
+  return {};
 }
 
 // ____________________________________________________________________________________
-Create Visitor::visit(Parser::CreateContext* ctx) {
-  return Create{static_cast<bool>(ctx->SILENT()), visit(ctx->graphRef())};
-}
-
-// ____________________________________________________________________________________
-Add Visitor::visit(Parser::AddContext* ctx) {
+std::vector<ParsedQuery> Visitor::visit(Parser::AddContext* ctx) {
   AD_CORRECTNESS_CHECK(ctx->graphOrDefault().size() == 2);
-  return Add{static_cast<bool>(ctx->SILENT()),
-             visit(ctx->graphOrDefault().at(0)),
-             visit(ctx->graphOrDefault().at(1))};
+  auto from = visit(ctx->graphOrDefault()[0]);
+  auto to = visit(ctx->graphOrDefault()[1]);
+
+  if (from == to) {
+    return {};
+  }
+
+  return {makeAdd(from, to)};
+}
+
+// _____________________________________________________________________________
+std::vector<ParsedQuery> Visitor::makeCopy(const GraphOrDefault& from,
+                                           const GraphOrDefault& to) {
+  std::vector<ParsedQuery> updates{makeClear(transformGraph(to))};
+  resetStateForMultipleUpdates();
+  updates.push_back(makeAdd(from, to));
+
+  return updates;
 }
 
 // ____________________________________________________________________________________
-Move Visitor::visit(Parser::MoveContext* ctx) {
-  AD_CORRECTNESS_CHECK(ctx->graphOrDefault().size() == 2);
-  return Move{static_cast<bool>(ctx->SILENT()),
-              visit(ctx->graphOrDefault().at(0)),
-              visit(ctx->graphOrDefault().at(1))};
+std::pair<GraphOrDefault, GraphOrDefault> Visitor::visitFromTo(
+    std::vector<Parser::GraphOrDefaultContext*> ctxs) {
+  AD_CORRECTNESS_CHECK(ctxs.size() == 2);
+  return {visit(ctxs[0]), visit(ctxs[1])};
+};
+
+// ____________________________________________________________________________________
+std::vector<ParsedQuery> Visitor::visit(Parser::MoveContext* ctx) {
+  auto [from, to] = visitFromTo(ctx->graphOrDefault());
+
+  if (from == to) {
+    return {};
+  }
+
+  std::vector<ParsedQuery> updates = makeCopy(from, to);
+  resetStateForMultipleUpdates();
+  updates.push_back(makeClear(transformGraph(from)));
+
+  return updates;
 }
 
 // ____________________________________________________________________________________
-Copy Visitor::visit(Parser::CopyContext* ctx) {
-  return Copy{static_cast<bool>(ctx->SILENT()), visit(ctx->graphOrDefault()[0]),
-              visit(ctx->graphOrDefault()[1])};
+std::vector<ParsedQuery> Visitor::visit(Parser::CopyContext* ctx) {
+  auto [from, to] = visitFromTo(ctx->graphOrDefault());
+
+  if (from == to) {
+    return {};
+  }
+
+  return makeCopy(from, to);
 }
 
 // ____________________________________________________________________________________
 GraphUpdate Visitor::visit(Parser::InsertDataContext* ctx) {
-  return {visit(ctx->quadData()), {}};
+  Quads::BlankNodeAdder bn{{}, {}, blankNodeManager_};
+  return {visit(ctx->quadData()).toTriplesWithGraph(std::monostate{}, bn), {}};
 }
 
 // ____________________________________________________________________________________
 GraphUpdate Visitor::visit(Parser::DeleteDataContext* ctx) {
-  return {{}, visit(ctx->quadData())};
+  Quads::BlankNodeAdder bn{{}, {}, blankNodeManager_};
+  auto cleanup = setBlankNodeTreatmentForScope(TreatBlankNodesAs::Illegal);
+  auto quads = visit(ctx->quadData());
+  return {{}, quads.toTriplesWithGraph(std::monostate{}, bn)};
 }
 
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::DeleteWhereContext* ctx) {
-  auto registerIfVariable = [this](const TripleComponent& component) {
-    if (component.isVariable()) {
-      addVisibleVariable(component.getVariable());
-    }
-  };
-  auto transformAndRegisterTriple =
-      [registerIfVariable](const SparqlTripleSimple& triple) {
-        registerIfVariable(triple.s_);
-        registerIfVariable(triple.p_);
-        registerIfVariable(triple.o_);
-
-        // The predicate comes from a rule in the grammar (`verb`) which only
-        // allows variables and IRIs.
-        AD_CORRECTNESS_CHECK(triple.p_.isVariable() || triple.p_.isIri());
-        return SparqlTriple::fromSimple(triple);
-      };
   AD_CORRECTNESS_CHECK(visibleVariables_.empty());
+  parsedQuery_.datasetClauses_ = activeDatasetClauses_;
   GraphPattern pattern;
+  auto cleanup = setBlankNodeTreatmentForScope(TreatBlankNodesAs::Illegal);
   auto triples = visit(ctx->quadPattern());
-  pattern._graphPatterns.emplace_back(BasicGraphPattern{
-      ad_utility::transform(triples, transformAndRegisterTriple)});
+  pattern._graphPatterns = triples.toGraphPatternOperations();
   parsedQuery_._rootGraphPattern = std::move(pattern);
+  // The query body and template are identical. No need to check that variables
+  // are visible. But they need to be registered.
+  triples.forAllVariables([this](const Variable& v) { addVisibleVariable(v); });
   parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables_);
   visibleVariables_.clear();
-  // The query body and template are identical. Variables will always be visible
-  // - no need to check that.
-  parsedQuery_._clause =
-      parsedQuery::UpdateClause{GraphUpdate{{}, std::move(triples)}};
-
+  Quads::BlankNodeAdder bn{{}, {}, blankNodeManager_};
+  parsedQuery_._clause = parsedQuery::UpdateClause{
+      GraphUpdate{{}, triples.toTriplesWithGraph(std::monostate{}, bn)}};
   return parsedQuery_;
 }
 
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
-  auto isVisibleIfVariable = [this](const TripleComponent& component) {
-    if (component.isVariable()) {
-      return std::ranges::find(parsedQuery_.getVisibleVariables(),
-                               component.getVariable()) !=
-             parsedQuery_.getVisibleVariables().end();
-    } else {
-      return true;
+  auto ensureVariableIsVisible = [&ctx, this](const Variable& v) {
+    if (!ad_utility::contains(parsedQuery_.getVisibleVariables(), v)) {
+      reportError(ctx, absl::StrCat("Variable ", v.name(),
+                                    " was not bound in the query body."));
     }
   };
-  auto isVisibleIfVariableGraph =
-      [this](const SparqlTripleSimpleWithGraph::Graph& graph) {
-        if (std::holds_alternative<Variable>(graph)) {
-          return ad_utility::contains(parsedQuery_.getVisibleVariables(),
-                                      std::get<Variable>(graph));
-        } else {
-          return true;
-        }
-      };
-  auto checkTriples =
-      [&isVisibleIfVariable, &ctx, &isVisibleIfVariableGraph](
-          const std::vector<SparqlTripleSimpleWithGraph>& triples) {
-        for (auto& triple : triples) {
-          if (!(isVisibleIfVariable(triple.s_) &&
-                isVisibleIfVariable(triple.p_) &&
-                isVisibleIfVariable(triple.o_) &&
-                isVisibleIfVariableGraph(triple.g_))) {
-            reportError(ctx,
-                        absl::StrCat("A triple contains a variable that was "
-                                     "not bound in the query body."));
-          }
-        }
-      };
+  auto visitTemplateClause = [&ensureVariableIsVisible, this](
+                                 auto* ctx, auto* target,
+                                 const auto& defaultGraph) {
+    if (ctx) {
+      auto quads = this->visit(ctx);
+      quads.forAllVariables(ensureVariableIsVisible);
+      Quads::BlankNodeAdder bn{{}, {}, blankNodeManager_};
+      *target = quads.toTriplesWithGraph(defaultGraph, bn);
+    }
+  };
+
+  using Iri = TripleComponent::Iri;
+  // The graph specified in the `WITH` clause or `std::monostate{}` if there was
+  // no with clause.
+  auto withGraph = [&ctx, this]() -> SparqlTripleSimpleWithGraph::Graph {
+    std::optional<Iri> with;
+    if (ctx->iri() && datasetsAreFixed_) {
+      reportError(ctx->iri(),
+                  "`WITH` is disallowed in section 2.2.3 of the SPARQL "
+                  "1.1 protocol standard if the `using-graph-uri` or "
+                  "`using-named-graph-uri` http parameters are used");
+    }
+    visitIf(&with, ctx->iri());
+    if (with.has_value()) {
+      return std::move(with.value());
+    }
+    return std::monostate{};
+  }();
+
   AD_CORRECTNESS_CHECK(visibleVariables_.empty());
+  parsedQuery_.datasetClauses_ =
+      setAndGetDatasetClauses(visitVector(ctx->usingClause()));
+
+  // If there is no USING clause, but a WITH clause, then the graph specified in
+  // the WITH clause is used as the default graph in the WHERE clause of this
+  // update.
+  if (const auto* withGraphIri = std::get_if<Iri>(&withGraph);
+      parsedQuery_.datasetClauses_.isUnconstrainedOrWithClause() &&
+      withGraphIri != nullptr) {
+    parsedQuery_.datasetClauses_ =
+        parsedQuery::DatasetClauses::fromWithClause(*withGraphIri);
+  }
+
   auto graphPattern = visit(ctx->groupGraphPattern());
   parsedQuery_._rootGraphPattern = std::move(graphPattern);
   parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables_);
   visibleVariables_.clear();
   auto op = GraphUpdate{};
-  visitIf(&op.toInsert_, ctx->insertClause());
-  checkTriples(op.toInsert_);
-  visitIf(&op.toDelete_, ctx->deleteClause());
-  checkTriples(op.toDelete_);
-  visitIf(&op.with_, ctx->iri());
+
+  // If there was a `WITH` clause, then the specified graph is used for all
+  // triples inside the INSERT/DELETE templates that are outside explicit `GRAPH
+  // {}` clauses.
+  auto cleanup = setBlankNodeTreatmentForScope(TreatBlankNodesAs::BlankNodes);
+  visitTemplateClause(ctx->insertClause(), &op.toInsert_, withGraph);
+  // We use an explicit scope s.t. the restoration of the original
+  // blank node treatment via the `cleanup`s works correctly.
+  {
+    auto innerCleanup =
+        setBlankNodeTreatmentForScope(TreatBlankNodesAs::Illegal);
+    visitTemplateClause(ctx->deleteClause(), &op.toDelete_, withGraph);
+  }
   parsedQuery_._clause = parsedQuery::UpdateClause{op};
-  parsedQuery_.datasetClauses_ =
-      parsedQuery::DatasetClauses::fromClauses(visitVector(ctx->usingClause()));
 
   return parsedQuery_;
 }
 
 // ____________________________________________________________________________________
-vector<SparqlTripleSimpleWithGraph> Visitor::visit(
-    Parser::DeleteClauseContext* ctx) {
+Quads Visitor::visit(Parser::DeleteClauseContext* ctx) {
   return visit(ctx->quadPattern());
 }
 
 // ____________________________________________________________________________________
-vector<SparqlTripleSimpleWithGraph> Visitor::visit(
-    Parser::InsertClauseContext* ctx) {
+Quads Visitor::visit(Parser::InsertClauseContext* ctx) {
   return visit(ctx->quadPattern());
 }
 
@@ -590,86 +1035,57 @@ GraphRefAll Visitor::visit(Parser::GraphRefAllContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-vector<SparqlTripleSimpleWithGraph> Visitor::visit(
-    Parser::QuadPatternContext* ctx) {
+Quads Visitor::visit(Parser::QuadPatternContext* ctx) {
   return visit(ctx->quads());
 }
 
 // ____________________________________________________________________________________
-vector<SparqlTripleSimpleWithGraph> Visitor::visit(
-    Parser::QuadDataContext* ctx) {
+Quads Visitor::visit(Parser::QuadDataContext* ctx) {
+  // Inside the `QuadData` rule, blank nodes are treated as blank nodes,
+  // not as variables.
+  auto cleanup = setBlankNodeTreatmentForScope(TreatBlankNodesAs::BlankNodes);
   auto quads = visit(ctx->quads());
-  auto checkAndReportVar = [&ctx](const TripleComponent& term) {
-    if (term.isVariable()) {
-      reportError(ctx->quads(), "Variables (" + term.getVariable().name() +
-                                    ") are not allowed here.");
-    }
-  };
-
-  for (const auto& quad : quads) {
-    checkAndReportVar(quad.s_);
-    checkAndReportVar(quad.p_);
-    checkAndReportVar(quad.o_);
-    if (std::holds_alternative<Variable>(quad.g_)) {
-      reportError(ctx->quads(), "Variables are not allowed as graph names.");
-    }
-  }
-
+  quads.forAllVariables([&ctx](const Variable& v) {
+    reportError(ctx->quads(),
+                "Variables (" + v.name() + ") are not allowed here.");
+  });
   return quads;
 }
 
 // ____________________________________________________________________________________
-vector<SparqlTripleSimpleWithGraph> Visitor::transformTriplesTemplate(
-    Parser::TriplesTemplateContext* ctx,
-    const SparqlTripleSimpleWithGraph::Graph& graph) {
-  auto convertTriple = [&graph](const std::array<GraphTerm, 3>& triple)
-      -> SparqlTripleSimpleWithGraph {
-    return {visitGraphTerm(triple[0]), visitGraphTerm(triple[1]),
-            visitGraphTerm(triple[2]), graph};
-  };
-
-  return ad_utility::transform(visit(ctx), convertTriple);
-}
-
-// ____________________________________________________________________________________
-vector<SparqlTripleSimpleWithGraph> Visitor::visit(Parser::QuadsContext* ctx) {
+Quads Visitor::visit(Parser::QuadsContext* ctx) {
   // The ordering of the individual triplesTemplate and quadsNotTriples is not
   // relevant and also not known.
-  auto triplesWithGraph = ad_utility::transform(
-      ctx->triplesTemplate(), [this](Parser::TriplesTemplateContext* ctx) {
-        return transformTriplesTemplate(ctx, std::monostate{});
-      });
-  std::ranges::move(visitVector(ctx->quadsNotTriples()),
-                    std::back_inserter(triplesWithGraph));
-  return ad_utility::flatten(std::move(triplesWithGraph));
+  Quads quads;
+  quads.freeTriples_ = ad_utility::flatten(visitVector(ctx->triplesTemplate()));
+  for (auto& [graph, triples] : visitVector(ctx->quadsNotTriples())) {
+    quads.graphTriples_.emplace_back(std::move(graph), std::move(triples));
+  }
+  return quads;
 }
 
 // ____________________________________________________________________________________
-vector<SparqlTripleSimpleWithGraph> Visitor::visit(
-    Parser::QuadsNotTriplesContext* ctx) {
+Quads::GraphBlock Visitor::visit(Parser::QuadsNotTriplesContext* ctx) {
+  auto graph = visit(ctx->varOrIri());
   // Short circuit when the triples section is empty
   if (!ctx->triplesTemplate()) {
-    return {};
+    return {graph, {}};
   }
 
-  auto graphTerm = visit(ctx->varOrIri());
-  SparqlTripleSimpleWithGraph::Graph graph = graphTerm.visit(
-      [&ctx]<typename T>(
-          const T& element) -> SparqlTripleSimpleWithGraph::Graph {
-        if constexpr (std::is_same_v<T, Variable> || std::is_same_v<T, Iri>) {
-          return element;
-        } else {
-          static_assert(std::is_same_v<T, BlankNode> ||
-                        std::is_same_v<T, Literal>);
-          reportError(ctx->varOrIri(),
-                      "Only IRIs and variables are allowed as graph names.");
-        }
-      });
-
-  return transformTriplesTemplate(ctx->triplesTemplate(), graph);
+  return {graph, visit(ctx->triplesTemplate())};
 }
 
-// ____________________________________________________________________________________
+// _____________________________________________________________________________
+void Visitor::selectExistsVariables(SparqlFilter& filter) const {
+  for (SparqlExpression* sparqlExpression :
+       filter.expression_.getExistsExpressions()) {
+    auto* existsExpression = dynamic_cast<ExistsExpression*>(sparqlExpression);
+    AD_CORRECTNESS_CHECK(existsExpression);
+    existsExpression->selectVariables(visibleVariables_);
+  }
+}
+
+// _____________________________________________________________________________
 GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
   GraphPattern pattern;
 
@@ -695,28 +1111,28 @@ GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
     }
     parsedQuery_ = std::move(parsedQuerySoFar);
     return pattern;
-  } else {
-    AD_CORRECTNESS_CHECK(ctx->groupGraphPatternSub());
-    auto [subOps, filters] = visit(ctx->groupGraphPatternSub());
-    pattern._graphPatterns = std::move(subOps);
-    for (auto& filter : filters) {
-      if (auto langFilterData =
-              filter.expression_.getLanguageFilterExpression();
-          langFilterData.has_value()) {
-        const auto& [variable, language] = langFilterData.value();
-        pattern.addLanguageFilter(variable, language);
-      } else {
-        pattern._filters.push_back(std::move(filter));
+  }
+  AD_CORRECTNESS_CHECK(ctx->groupGraphPatternSub());
+  auto [subOps, filters] = visit(ctx->groupGraphPatternSub());
+  pattern._graphPatterns = std::move(subOps);
+  for (auto& filter : filters) {
+    selectExistsVariables(filter);
+    if (auto langFilterData = filter.expression_.getLanguageFilterExpression();
+        langFilterData.has_value()) {
+      const auto& [variable, language] = langFilterData.value();
+      if (pattern.addLanguageFilter(variable, language)) {
+        continue;
       }
     }
-    return pattern;
+    pattern._filters.push_back(std::move(filter));
   }
+  return pattern;
 }
 
 Visitor::OperationsAndFilters Visitor::visit(
     Parser::GroupGraphPatternSubContext* ctx) {
-  vector<GraphPatternOperation> ops;
-  vector<SparqlFilter> filters;
+  std::vector<GraphPatternOperation> ops;
+  std::vector<SparqlFilter> filters;
 
   auto filter = [&filters](SparqlFilter filter) {
     filters.emplace_back(std::move(filter));
@@ -754,32 +1170,21 @@ Visitor::OperationOrFilterAndMaybeTriples Visitor::visit(
 
 // ____________________________________________________________________________________
 BasicGraphPattern Visitor::visit(Parser::TriplesBlockContext* ctx) {
-  auto varToPropertyPath = [](const Variable& var) {
-    return PropertyPath::fromVariable(var);
-  };
-  auto propertyPathIdentity = [](const PropertyPath& path) { return path; };
-  auto visitVarOrPath =
-      [&varToPropertyPath, &propertyPathIdentity](
-          const ad_utility::sparql_types::VarOrPath& varOrPath) {
-        return std::visit(
-            ad_utility::OverloadCallOperator{varToPropertyPath,
-                                             propertyPathIdentity},
-            varOrPath);
-      };
   auto registerIfVariable = [this](const auto& variant) {
-    if (holds_alternative<Variable>(variant)) {
+    if (std::holds_alternative<Variable>(variant)) {
       addVisibleVariable(std::get<Variable>(variant));
     }
   };
   auto convertAndRegisterTriple =
-      [&visitVarOrPath, &registerIfVariable](
-          const TripleWithPropertyPath& triple) -> SparqlTriple {
+      [&registerIfVariable,
+       this](const TripleWithPropertyPath& triple) -> SparqlTriple {
     registerIfVariable(triple.subject_);
     registerIfVariable(triple.predicate_);
     registerIfVariable(triple.object_);
 
-    return {visitGraphTerm(triple.subject_), visitVarOrPath(triple.predicate_),
-            visitGraphTerm(triple.object_)};
+    return {graphTermToTripleComponentWithEncoding(triple.subject_),
+            triple.predicate_,
+            graphTermToTripleComponentWithEncoding(triple.object_)};
   };
 
   BasicGraphPattern triples = {ad_utility::transform(
@@ -805,29 +1210,45 @@ GraphPatternOperation Visitor::visit(Parser::OptionalGraphPatternContext* ctx) {
   return GraphPatternOperation{parsedQuery::Optional{std::move(pattern)}};
 }
 
-GraphPatternOperation Visitor::visitPathQuery(
-    Parser::ServiceGraphPatternContext* ctx) {
-  auto parsePathQuery = [](parsedQuery::PathQuery& pathQuery,
-                           const parsedQuery::GraphPatternOperation& op) {
-    if (std::holds_alternative<parsedQuery::BasicGraphPattern>(op)) {
-      pathQuery.addBasicPattern(std::get<parsedQuery::BasicGraphPattern>(op));
-    } else if (std::holds_alternative<parsedQuery::GroupGraphPattern>(op)) {
-      pathQuery.addGraph(op);
-    } else {
-      throw parsedQuery::PathSearchException(
-          "Unsupported element in pathSearch."
-          "PathQuery may only consist of triples for configuration"
-          "And a { group graph pattern } specifying edges.");
-    }
-  };
+// _____________________________________________________________________________
+CPP_variadic_template_def(typename T, typename... Args)(
+    requires std::is_constructible_v<T, Args...>)
+    parsedQuery::GraphPatternOperation Visitor::visitMagicServiceQuery(
+        Parser::ServiceGraphPatternContext* ctx, Args&&... args) {
+  T target{AD_FWD(args)...};
+  auto parseGraphPattern =
+      [&target](const parsedQuery::GraphPatternOperation& op) {
+        if (std::holds_alternative<parsedQuery::BasicGraphPattern>(op)) {
+          target.addBasicPattern(std::get<parsedQuery::BasicGraphPattern>(op));
+        } else if (std::holds_alternative<parsedQuery::GroupGraphPattern>(op)) {
+          target.addGraph(op);
+        } else {
+          throw std::runtime_error{absl::StrCat(
+              "Unsupported element in a magic service query of type `",
+              target.name(),
+              "`. Only triples and `{ group graph patterns }` are allowed ")};
+        }
+      };
 
   parsedQuery::GraphPattern graphPattern = visit(ctx->groupGraphPattern());
-  parsedQuery::PathQuery pathQuery;
-  for (const auto& op : graphPattern._graphPatterns) {
-    parsePathQuery(pathQuery, op);
+  try {
+    for (const auto& op : graphPattern._graphPatterns) {
+      parseGraphPattern(op);
+    }
+  } catch (const std::exception& e) {
+    // Annotate the occurring exceptions with the correct position inside the
+    // query.
+    reportError(ctx->groupGraphPattern(), e.what());
   }
 
-  return pathQuery;
+  // Check that the configuration is valid and report an error otherwise.
+  try {
+    target.validate();
+  } catch (const std::exception& ex) {
+    reportError(ctx, ex.what());
+  }
+
+  return target;
 }
 
 // Parsing for the `serviceGraphPattern` rule.
@@ -842,17 +1263,31 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
   //
   // TODO: Also support variables. The semantics is to make a connection for
   // each IRI matching the variable and take the union of the results.
-  GraphTerm varOrIri = visit(ctx->varOrIri());
-  if (std::holds_alternative<Variable>(varOrIri)) {
-    reportNotSupported(ctx->varOrIri(), "Variable endpoint in SERVICE is");
-  }
-  AD_CONTRACT_CHECK(std::holds_alternative<Iri>(varOrIri));
+  VarOrIri varOrIri = visit(ctx->varOrIri());
+  using Iri = TripleComponent::Iri;
   auto serviceIri =
-      TripleComponent::Iri::fromIriref(std::get<Iri>(varOrIri).iri());
+      std::visit(ad_utility::OverloadCallOperator{
+                     [&ctx](const Variable&) -> Iri {
+                       reportNotSupported(ctx->varOrIri(),
+                                          "Variable endpoint in SERVICE is");
+                     },
+                     [](const Iri& iri) -> Iri { return iri; }},
+                 varOrIri);
 
-  if (serviceIri.toStringRepresentation() ==
-      "<https://qlever.cs.uni-freiburg.de/pathSearch/>") {
-    return visitPathQuery(ctx);
+  if (serviceIri.toStringRepresentation() == PATH_SEARCH_IRI) {
+    return visitMagicServiceQuery<parsedQuery::PathQuery>(ctx);
+  } else if (serviceIri.toStringRepresentation() == SPATIAL_SEARCH_IRI) {
+    return visitMagicServiceQuery<parsedQuery::SpatialQuery>(ctx);
+  } else if (serviceIri.toStringRepresentation() == TEXT_SEARCH_IRI) {
+    return visitMagicServiceQuery<parsedQuery::TextSearchQuery>(ctx);
+  } else if (ql::starts_with(asStringViewUnsafe(serviceIri.getContent()),
+                             CACHED_RESULT_WITH_NAME_PREFIX)) {
+    return visitMagicServiceQuery<parsedQuery::NamedCachedResult>(ctx,
+                                                                  serviceIri);
+  } else if (ql::starts_with(asStringViewUnsafe(serviceIri.getContent()),
+                             MATERIALIZED_VIEW_IRI_WITHOUT_BRACKETS)) {
+    return visitMagicServiceQuery<parsedQuery::MaterializedViewQuery>(
+        ctx, serviceIri);
   }
   // Parse the body of the SERVICE query. Add the visible variables from the
   // SERVICE clause to the visible variables so far, but also remember them
@@ -880,15 +1315,21 @@ parsedQuery::GraphPatternOperation Visitor::visit(
     Parser::GraphGraphPatternContext* ctx) {
   auto varOrIri = visit(ctx->varOrIri());
   auto group = visit(ctx->groupGraphPattern());
-  if (std::holds_alternative<Variable>(varOrIri)) {
-    const auto& graphVar = std::get<Variable>(varOrIri);
-    addVisibleVariable(graphVar);
-    return parsedQuery::GroupGraphPattern{std::move(group), graphVar};
-  }
-  AD_CORRECTNESS_CHECK(std::holds_alternative<Iri>(varOrIri));
-  auto& iri = std::get<Iri>(varOrIri);
-  return parsedQuery::GroupGraphPattern{
-      std::move(group), TripleComponent::Iri::fromIriref(iri.toSparql())};
+  return std::visit(
+      ad_utility::OverloadCallOperator{
+          [this, &group](const Variable& graphVar) {
+            addVisibleVariable(graphVar);
+            bool includeDefaultGraph = getRuntimeParameter<
+                &RuntimeParameters::treatDefaultGraphAsNamedGraph_>();
+            using GVB = parsedQuery::GroupGraphPattern::GraphVariableBehaviour;
+            return parsedQuery::GroupGraphPattern{
+                std::move(group), graphVar,
+                includeDefaultGraph ? GVB::ALL : GVB::NAMED};
+          },
+          [&group](const TripleComponent::Iri& graphIri) {
+            return parsedQuery::GroupGraphPattern{std::move(group), graphIri};
+          }},
+      varOrIri);
 }
 
 // Parsing for the `expression` rule.
@@ -936,7 +1377,7 @@ LimitOffsetClause Visitor::visit(Parser::LimitOffsetClausesContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-vector<SparqlFilter> Visitor::visit(Parser::HavingClauseContext* ctx) {
+std::vector<SparqlFilter> Visitor::visit(Parser::HavingClauseContext* ctx) {
   return visitVector(ctx->havingCondition());
 }
 
@@ -953,7 +1394,7 @@ OrderClause Visitor::visit(Parser::OrderClauseContext* ctx) {
     auto isDescending = [](const auto& variant) {
       return std::visit([](const auto& k) { return k.isDescending_; }, variant);
     };
-    if (std::ranges::any_of(orderKeys, isDescending)) {
+    if (ql::ranges::any_of(orderKeys, isDescending)) {
       reportError(ctx,
                   "When using the `INTERNAL SORT BY` modifier, all sorted "
                   "variables have to be ascending");
@@ -966,7 +1407,7 @@ OrderClause Visitor::visit(Parser::OrderClauseContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-vector<GroupKey> Visitor::visit(Parser::GroupClauseContext* ctx) {
+std::vector<GroupKey> Visitor::visit(Parser::GroupClauseContext* ctx) {
   return visitVector(ctx->groupCondition());
 }
 
@@ -974,9 +1415,7 @@ vector<GroupKey> Visitor::visit(Parser::GroupClauseContext* ctx) {
 std::optional<parsedQuery::ConstructClause> Visitor::visit(
     Parser::ConstructTemplateContext* ctx) {
   if (ctx->constructTriples()) {
-    isInsideConstructTriples_ = true;
-    auto cleanup =
-        absl::Cleanup{[this]() { isInsideConstructTriples_ = false; }};
+    auto cleanup = setBlankNodeTreatmentForScope(TreatBlankNodesAs::BlankNodes);
     return parsedQuery::ConstructClause{visit(ctx->constructTriples())};
   } else {
     return std::nullopt;
@@ -990,25 +1429,34 @@ RdfEscaping::NormalizedRDFString Visitor::visit(Parser::StringContext* ctx) {
 
 // ____________________________________________________________________________________
 TripleComponent::Iri Visitor::visit(Parser::IriContext* ctx) {
-  string langtag =
+  std::string langtag =
       ctx->PREFIX_LANGTAG() ? ctx->PREFIX_LANGTAG()->getText() : "";
   return TripleComponent::Iri::fromIriref(
-      langtag + visitAlternative<string>(ctx->iriref(), ctx->prefixedName()));
+      langtag +
+      visitAlternative<std::string>(ctx->iriref(), ctx->prefixedName()));
 }
 
 // ____________________________________________________________________________________
-string Visitor::visit(Parser::IrirefContext* ctx) {
-  return RdfEscaping::unescapeIriref(ctx->getText());
+std::string Visitor::visit(Parser::IrirefContext* ctx) const {
+  if (baseIri_.empty()) {
+    return ctx->getText();
+  }
+  // TODO<RobinTF> Avoid unnecessary string copies because of conversion.
+  // Handle IRIs with base IRI.
+  return ad_utility::triple_component::Iri::fromIrirefConsiderBase(
+             ctx->getText(), baseIri_.getBaseIri(false),
+             baseIri_.getBaseIri(true))
+      .toStringRepresentation();
 }
 
 // ____________________________________________________________________________________
-string Visitor::visit(Parser::PrefixedNameContext* ctx) {
+std::string Visitor::visit(Parser::PrefixedNameContext* ctx) {
   return visitAlternative<std::string>(ctx->pnameLn(), ctx->pnameNs());
 }
 
 // ____________________________________________________________________________________
-string Visitor::visit(Parser::PnameLnContext* ctx) {
-  string text = ctx->getText();
+std::string Visitor::visit(Parser::PnameLnContext* ctx) {
+  std::string text = ctx->getText();
   auto pos = text.find(':');
   auto pnameNS = text.substr(0, pos);
   auto pnLocal = text.substr(pos + 1);
@@ -1024,7 +1472,7 @@ string Visitor::visit(Parser::PnameLnContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-string Visitor::visit(Parser::PnameNsContext* ctx) {
+std::string Visitor::visit(Parser::PnameNsContext* ctx) {
   auto text = ctx->getText();
   auto prefix = text.substr(0, text.length() - 1);
   if (!prefixMap_.contains(prefix)) {
@@ -1037,6 +1485,12 @@ string Visitor::visit(Parser::PnameNsContext* ctx) {
 
 // ____________________________________________________________________________________
 DatasetClause SparqlQleverVisitor::visit(Parser::UsingClauseContext* ctx) {
+  if (datasetsAreFixed_) {
+    reportError(ctx,
+                "`USING [NAMED]` is disallowed in section 2.2.3 of the SPARQL "
+                "1.1 protocol standard if the `using-graph-uri` or "
+                "`using-named-graph-uri` http parameters are used");
+  }
   if (ctx->NAMED()) {
     return {.dataset_ = visit(ctx->iri()), .isNamed_ = true};
   } else {
@@ -1046,8 +1500,17 @@ DatasetClause SparqlQleverVisitor::visit(Parser::UsingClauseContext* ctx) {
 
 // ____________________________________________________________________________________
 void Visitor::visit(Parser::PrologueContext* ctx) {
-  visitVector(ctx->baseDecl());
-  visitVector(ctx->prefixDecl());
+  // Process in an interleaved way, so PREFIX statements are processed correctly
+  // to only use the BASE IRIs defined before them, not after them.
+  for (auto* child : ctx->children) {
+    if (auto* baseDecl = dynamic_cast<Parser::BaseDeclContext*>(child)) {
+      visit(baseDecl);
+    } else {
+      auto* prefixDecl = dynamic_cast<Parser::PrefixDeclContext*>(child);
+      AD_CORRECTNESS_CHECK(prefixDecl != nullptr);
+      visit(prefixDecl);
+    }
+  }
   // Remember the whole prologue (we need this when we encounter a SERVICE
   // clause, see `visit(ServiceGraphPatternContext*)` below.
   if (ctx->getStart() && ctx->getStop()) {
@@ -1056,8 +1519,15 @@ void Visitor::visit(Parser::PrologueContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(const Parser::BaseDeclContext* ctx) {
-  reportNotSupported(ctx, "BASE declarations are");
+void Visitor::visit(Parser::BaseDeclContext* ctx) {
+  auto rawIri = ctx->iriref()->getText();
+  bool hasScheme = ctre::starts_with<iriSchemeRegex>(rawIri);
+  if (!hasScheme) {
+    reportError(
+        ctx,
+        "The base IRI must be an absolute IRI with a scheme, was: " + rawIri);
+  }
+  baseIri_ = TripleComponent::Iri::fromIriref(visit(ctx->iriref()));
 }
 
 // ____________________________________________________________________________________
@@ -1072,12 +1542,11 @@ void Visitor::visit(Parser::PrefixDeclContext* ctx) {
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::SelectQueryContext* ctx) {
   parsedQuery_._clause = visit(ctx->selectClause());
-  parsedQuery_.datasetClauses_ = parsedQuery::DatasetClauses::fromClauses(
-      visitVector(ctx->datasetClause()));
-  auto [pattern, visibleVariables] = visit(ctx->whereClause());
-  parsedQuery_._rootGraphPattern = std::move(pattern);
-  parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables);
-  parsedQuery_.addSolutionModifiers(visit(ctx->solutionModifier()));
+  parsedQuery_.datasetClauses_ =
+      setAndGetDatasetClauses(visitVector(ctx->datasetClause()));
+  visitWhereClause(ctx->whereClause(), parsedQuery_);
+  parsedQuery_.addSolutionModifiers(visit(ctx->solutionModifier()),
+                                    makeInternalVariableGenerator());
   return parsedQuery_;
 }
 
@@ -1085,12 +1554,9 @@ ParsedQuery Visitor::visit(Parser::SelectQueryContext* ctx) {
 Visitor::SubQueryAndMaybeValues Visitor::visit(Parser::SubSelectContext* ctx) {
   ParsedQuery& query = parsedQuery_;
   query._clause = visit(ctx->selectClause());
-  auto [pattern, visibleVariables] = visit(ctx->whereClause());
-  query._rootGraphPattern = std::move(pattern);
-  query.setNumInternalVariables(numInternalVariables_);
-  query.registerVariablesVisibleInQueryBody(visibleVariables);
-  query.addSolutionModifiers(visit(ctx->solutionModifier()));
-  numInternalVariables_ = query.getNumInternalVariables();
+  visitWhereClause(ctx->whereClause(), query);
+  query.addSolutionModifiers(visit(ctx->solutionModifier()),
+                             makeInternalVariableGenerator());
   auto values = visit(ctx->valuesClause());
   // Variables that are selected in this query are visible in the parent query.
   for (const auto& variable : query.selectClause().getSelectedVariables()) {
@@ -1184,7 +1650,8 @@ SparqlValues Visitor::visit(Parser::InlineDataFullContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-vector<TripleComponent> Visitor::visit(Parser::DataBlockSingleContext* ctx) {
+std::vector<TripleComponent> Visitor::visit(
+    Parser::DataBlockSingleContext* ctx) {
   if (ctx->NIL()) {
     return {};
   }
@@ -1213,8 +1680,13 @@ TripleComponent Visitor::visit(Parser::DataBlockValueContext* ctx) {
 
 // ____________________________________________________________________________________
 GraphPatternOperation Visitor::visit(Parser::MinusGraphPatternContext* ctx) {
-  return GraphPatternOperation{
+  auto visibleVariables = std::move(visibleVariables_);
+  GraphPatternOperation operation{
       parsedQuery::Minus{visit(ctx->groupGraphPattern())}};
+  // Make sure that the variables from the minus graph pattern are NOT added to
+  // visible variables.
+  visibleVariables_ = std::move(visibleVariables);
+  return operation;
 }
 
 // ____________________________________________________________________________________
@@ -1249,15 +1721,16 @@ GraphPatternOperation Visitor::visit(
 }
 
 // ____________________________________________________________________________________
+template <typename Context>
 void Visitor::warnOrThrowIfUnboundVariables(
-    auto* ctx, const SparqlExpressionPimpl& expression,
+    Context* ctx, const SparqlExpressionPimpl& expression,
     std::string_view clauseName) {
   for (const auto& var : expression.containedVariables()) {
     if (!ad_utility::contains(visibleVariables_, *var)) {
       auto message = absl::StrCat(
           "The variable ", var->name(), " was used in the expression of a ",
           clauseName, " clause but was not previously bound in the query");
-      if (RuntimeParameters().get<"throw-on-unbound-variables">()) {
+      if (getRuntimeParameter<&RuntimeParameters::throwOnUnboundVariables_>()) {
         reportError(ctx, message);
       } else {
         parsedQuery_.addWarning(std::move(message));
@@ -1287,7 +1760,8 @@ ExpressionPtr Visitor::visit(Parser::FunctionCallContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-vector<Visitor::ExpressionPtr> Visitor::visit(Parser::ArgListContext* ctx) {
+std::vector<Visitor::ExpressionPtr> Visitor::visit(
+    Parser::ArgListContext* ctx) {
   // If no arguments, return empty expression vector.
   if (ctx->NIL()) {
     return std::vector<ExpressionPtr>{};
@@ -1312,32 +1786,17 @@ std::vector<ExpressionPtr> Visitor::visit(Parser::ExpressionListContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-template <typename Context>
-Triples Visitor::parseTriplesConstruction(Context* ctx) {
+Triples Visitor::visit(Parser::ConstructTriplesContext* ctx) {
   auto result = visit(ctx->triplesSameSubject());
-  Context* subContext = [](Context* ctx) -> Context* {
-    if constexpr (std::is_same_v<Context, Parser::ConstructTriplesContext>) {
-      return ctx->constructTriples();
-    } else if constexpr (std::is_same_v<Context,
-                                        Parser::TriplesTemplateContext>) {
-      return ctx->triplesTemplate();
-    }
-  }(ctx);
-  if (subContext) {
-    auto newTriples = visit(subContext);
-    ad_utility::appendVector(result, std::move(newTriples));
+  if (ctx->constructTriples()) {
+    ad_utility::appendVector(result, visit(ctx->constructTriples()));
   }
   return result;
 }
 
 // ____________________________________________________________________________________
-Triples Visitor::visit(Parser::ConstructTriplesContext* ctx) {
-  return parseTriplesConstruction(ctx);
-}
-
-// ____________________________________________________________________________________
 Triples Visitor::visit(Parser::TriplesTemplateContext* ctx) {
-  return parseTriplesConstruction(ctx);
+  return ad_utility::flatten(visitVector(ctx->triplesSameSubject()));
 }
 
 // ____________________________________________________________________________________
@@ -1396,11 +1855,17 @@ PredicateObjectPairsAndTriples Visitor::visit(
 // ____________________________________________________________________________________
 GraphTerm Visitor::visit(Parser::VerbContext* ctx) {
   if (ctx->varOrIri()) {
-    return visit(ctx->varOrIri());
+    // This is an artefact of there being two distinct Iri types.
+    return std::visit(ad_utility::OverloadCallOperator{
+                          [](const Variable& v) -> GraphTerm { return v; },
+                          [](const TripleComponent::Iri& i) -> GraphTerm {
+                            return Iri(i.toStringRepresentation());
+                          }},
+                      visit(ctx->varOrIri()));
   } else {
     // Special keyword 'a'
     AD_CORRECTNESS_CHECK(ctx->getText() == "a");
-    return GraphTerm{Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"}};
+    return GraphTerm{Iri{a.toStringRepresentation()}};
   }
 }
 
@@ -1423,6 +1888,7 @@ SubjectOrObjectAndTriples Visitor::visit(Parser::ObjectRContext* ctx) {
 }
 
 // ____________________________________________________________________________________
+template <typename Context>
 void Visitor::setMatchingWordAndScoreVisibleIfPresent(
     // If a triple `?var ql:contains-word "words"` or `?var ql:contains-entity
     // <entity>` is contained in the query, then the variable
@@ -1430,7 +1896,7 @@ void Visitor::setMatchingWordAndScoreVisibleIfPresent(
     // Similarly, if a triple `?var ql:contains-word "words"` is contained in
     // the query, then the variable `ql_matchingword_var` is implicitly created
     // and visible in the query body.
-    auto* ctx, const TripleWithPropertyPath& triple) {
+    Context* ctx, const TripleWithPropertyPath& triple) {
   const auto& [subject, predicate, object] = triple;
 
   auto* var = std::get_if<Variable>(&subject);
@@ -1441,15 +1907,16 @@ void Visitor::setMatchingWordAndScoreVisibleIfPresent(
   }
 
   if (propertyPath->asString() == CONTAINS_WORD_PREDICATE) {
-    string name = object.toSparql();
-    if (!((name.starts_with('"') && name.ends_with('"')) ||
-          (name.starts_with('\'') && name.ends_with('\'')))) {
+    std::string name = object.toSparql();
+    if (!((ql::starts_with(name, '"') && ql::ends_with(name, '"')) ||
+          (ql::starts_with(name, '\'') && ql::ends_with(name, '\'')))) {
       reportError(ctx,
                   "ql:contains-word has to be followed by a string in quotes");
     }
     for (std::string_view s : std::vector<std::string>(
              absl::StrSplit(name.substr(1, name.size() - 2), ' '))) {
-      if (!s.ends_with('*')) {
+      addVisibleVariable(var->getWordScoreVariable(s, ql::ends_with(s, '*')));
+      if (!ql::ends_with(s, '*')) {
         continue;
       }
       addVisibleVariable(var->getMatchingWordVariable(
@@ -1457,15 +1924,15 @@ void Visitor::setMatchingWordAndScoreVisibleIfPresent(
     }
   } else if (propertyPath->asString() == CONTAINS_ENTITY_PREDICATE) {
     if (const auto* entVar = std::get_if<Variable>(&object)) {
-      addVisibleVariable(var->getScoreVariable(*entVar));
+      addVisibleVariable(var->getEntityScoreVariable(*entVar));
     } else {
-      addVisibleVariable(var->getScoreVariable(object.toSparql()));
+      addVisibleVariable(var->getEntityScoreVariable(object.toSparql()));
     }
   }
 }
 
 // ___________________________________________________________________________
-vector<TripleWithPropertyPath> Visitor::visit(
+std::vector<TripleWithPropertyPath> Visitor::visit(
     Parser::TriplesSameSubjectPathContext* ctx) {
   /*
   // If a triple `?var ql:contains-word "words"` or `?var ql:contains-entity
@@ -1485,15 +1952,15 @@ vector<TripleWithPropertyPath> Visitor::visit(
 
         if (propertyPath->asString() == CONTAINS_WORD_PREDICATE) {
           string name = object.toSparql();
-          if (!((name.starts_with('"') && name.ends_with('"')) ||
-                (name.starts_with('\'') && name.ends_with('\'')))) {
+          if (!((ql::starts_with(name, '"') && ql::ends_with(name, '"')) ||
+                (ql::starts_with(name, '\'') && ql::ends_with(name, '\'')))) {
             reportError(
                 ctx,
                 "ql:contains-word has to be followed by a string in quotes");
           }
           for (std::string_view s : std::vector<std::string>(
                    absl::StrSplit(name.substr(1, name.size() - 2), ' '))) {
-            if (!s.ends_with('*')) {
+            if (!ql::ends_with(s, '*')) {
               continue;
             }
             addVisibleVariable(var->getMatchingWordVariable(
@@ -1517,9 +1984,9 @@ vector<TripleWithPropertyPath> Visitor::visit(
                                     PathObjectPairs predicateObjectPairs,
                                     TripleVec additionalTriples) {
     for (auto&& [predicate, object] : std::move(predicateObjectPairs)) {
-      triples.emplace_back(subject, std::move(predicate), std::move(object));
+      triples.push_back({subject, std::move(predicate), std::move(object)});
     }
-    std::ranges::copy(additionalTriples, std::back_inserter(triples));
+    ql::ranges::copy(additionalTriples, std::back_inserter(triples));
     for (const auto& triple : triples) {
       setMatchingWordAndScoreVisibleIfPresent(ctx, triple);
     }
@@ -1555,21 +2022,18 @@ PathObjectPairsAndTriples Visitor::visit(
     Parser::PropertyListPathNotEmptyContext* ctx) {
   PathObjectPairsAndTriples result = visit(ctx->tupleWithPath());
   auto& [pairs, triples] = result;
-  vector<PathObjectPairsAndTriples> pairsAndTriples =
+  std::vector<PathObjectPairsAndTriples> pairsAndTriples =
       visitVector(ctx->tupleWithoutPath());
   for (auto& [newPairs, newTriples] : pairsAndTriples) {
-    std::ranges::move(newPairs, std::back_inserter(pairs));
-    std::ranges::move(newTriples, std::back_inserter(triples));
+    ql::ranges::move(newPairs, std::back_inserter(pairs));
+    ql::ranges::move(newTriples, std::back_inserter(triples));
   }
   return result;
 }
 
 // ____________________________________________________________________________________
 PropertyPath Visitor::visit(Parser::VerbPathContext* ctx) {
-  PropertyPath p = visit(ctx->path());
-  // TODO move computeCanBeNull into PropertyPath constructor.
-  p.computeCanBeNull();
-  return p;
+  return visit(ctx->path());
 }
 
 // ____________________________________________________________________________________
@@ -1587,11 +2051,13 @@ PathObjectPairsAndTriples Visitor::visit(Parser::TupleWithoutPathContext* ctx) {
     if (std::holds_alternative<Variable>(term)) {
       return std::get<Variable>(term);
     } else {
-      return PropertyPath::fromIri(term.toSparql());
+      return PropertyPath::fromIri(
+          ad_utility::triple_component::Iri::fromStringRepresentation(
+              term.toSparql()));
     }
   };
   for (auto& triple : objectList.second) {
-    triples.emplace_back(triple[0], toVarOrPath(triple[1]), triple[2]);
+    triples.push_back({triple[0], toVarOrPath(triple[1]), triple[2]});
   }
   return {std::move(predicateObjectPairs), std::move(triples)};
 }
@@ -1615,16 +2081,16 @@ ObjectsAndPathTriples Visitor::visit(Parser::ObjectListPathContext* ctx) {
   auto objectAndTriplesVec = visitVector(ctx->objectPath());
   // First collect all the objects.
   std::vector<GraphTerm> objects;
-  std::ranges::copy(
-      objectAndTriplesVec | std::views::transform(ad_utility::first),
+  ql::ranges::copy(
+      objectAndTriplesVec | ql::views::transform(ad_utility::first),
       std::back_inserter(objects));
 
   // Collect all the triples. Node: `views::join` flattens the input.
   std::vector<TripleWithPropertyPath> triples;
-  std::ranges::copy(objectAndTriplesVec |
-                        std::views::transform(ad_utility::second) |
-                        std::views::join,
-                    std::back_inserter(triples));
+  ql::ranges::copy(objectAndTriplesVec |
+                       ql::views::transform(ad_utility::second) |
+                       ql::views::join,
+                   std::back_inserter(triples));
   return {std::move(objects), std::move(triples)};
 }
 
@@ -1640,12 +2106,20 @@ PropertyPath Visitor::visit(Parser::PathContext* ctx) {
 
 // ____________________________________________________________________________________
 PropertyPath Visitor::visit(Parser::PathAlternativeContext* ctx) {
-  return PropertyPath::makeAlternative(visitVector(ctx->pathSequence()));
+  auto alternatives = visitVector(ctx->pathSequence());
+  if (alternatives.size() == 1) {
+    return std::move(alternatives.at(0));
+  }
+  return PropertyPath::makeAlternative(std::move(alternatives));
 }
 
 // ____________________________________________________________________________________
 PropertyPath Visitor::visit(Parser::PathSequenceContext* ctx) {
-  return PropertyPath::makeSequence(visitVector(ctx->pathEltOrInverse()));
+  auto sequence = visitVector(ctx->pathEltOrInverse());
+  if (sequence.size() == 1) {
+    return std::move(sequence.at(0));
+  }
+  return PropertyPath::makeSequence(std::move(sequence));
 }
 
 // ____________________________________________________________________________________
@@ -1653,8 +2127,8 @@ PropertyPath Visitor::visit(Parser::PathEltContext* ctx) {
   PropertyPath p = visit(ctx->pathPrimary());
 
   if (ctx->pathMod()) {
-    std::string modifier = ctx->pathMod()->getText();
-    p = PropertyPath::makeModified(p, modifier);
+    auto [min, max] = visit(ctx->pathMod());
+    p = PropertyPath::makeWithLength(std::move(p), min, max);
   }
   return p;
 }
@@ -1671,20 +2145,22 @@ PropertyPath Visitor::visit(Parser::PathEltOrInverseContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::PathModContext*) {
-  // This rule is only used by the `PathElt` rule which should have handled the
-  // content of this rule.
-  AD_FAIL();
+std::pair<size_t, size_t> Visitor::visit(Parser::PathModContext* ctx) {
+  std::string mod = ctx->getText();
+  if (mod == "*") {
+    return {0, std::numeric_limits<size_t>::max()};
+  } else if (mod == "+") {
+    return {1, std::numeric_limits<size_t>::max()};
+  } else {
+    AD_CORRECTNESS_CHECK(mod == "?");
+    return {0, 1};
+  }
 }
 
 // ____________________________________________________________________________________
 PropertyPath Visitor::visit(Parser::PathPrimaryContext* ctx) {
-  // TODO: implement a strong Iri type, s.t. the ctx->iri() case can become a
-  //  simple `return visit(...)`. Then the three cases which are not the
-  //  `special a` case can be merged into a `visitAlternative(...)`.
   if (ctx->iri()) {
-    return PropertyPath::fromIri(
-        std::string{visit(ctx->iri()).toStringRepresentation()});
+    return PropertyPath::fromIri(visit(ctx->iri()));
   } else if (ctx->path()) {
     return visit(ctx->path());
   } else if (ctx->pathNegatedPropertySet()) {
@@ -1692,21 +2168,30 @@ PropertyPath Visitor::visit(Parser::PathPrimaryContext* ctx) {
   } else {
     AD_CORRECTNESS_CHECK(ctx->getText() == "a");
     // Special keyword 'a'
-    return PropertyPath::fromIri(
-        "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>");
+    return PropertyPath::fromIri(a);
   }
 }
 
 // ____________________________________________________________________________________
-PropertyPath Visitor::visit(const Parser::PathNegatedPropertySetContext* ctx) {
-  reportNotSupported(ctx, "\"!\" inside a property path is ");
+PropertyPath Visitor::visit(Parser::PathNegatedPropertySetContext* ctx) {
+  return PropertyPath::makeNegated(visitVector(ctx->pathOneInPropertySet()));
 }
 
 // ____________________________________________________________________________________
-PropertyPath Visitor::visit(Parser::PathOneInPropertySetContext*) {
-  // This rule is only used by the `PathNegatedPropertySet` rule which also is
-  // not supported and should already have thrown an exception.
-  AD_FAIL();
+PropertyPath Visitor::visit(Parser::PathOneInPropertySetContext* ctx) {
+  const std::string& text = ctx->getText();
+  auto iri = [this, &text, ctx]() {
+    if (ctx->iri()) {
+      return visit(ctx->iri());
+    }
+    AD_CORRECTNESS_CHECK(text == "a" || text == "^a");
+    return a;
+  }();
+  auto propertyPath = PropertyPath::fromIri(std::move(iri));
+  if (ql::starts_with(text, "^")) {
+    return PropertyPath::makeInverse(propertyPath);
+  }
+  return propertyPath;
 }
 
 // ____________________________________________________________________________________
@@ -1733,13 +2218,7 @@ SubjectOrObjectAndTriples Visitor::visit(Parser::TriplesNodeContext* ctx) {
 // ____________________________________________________________________________________
 SubjectOrObjectAndTriples Visitor::visit(
     Parser::BlankNodePropertyListContext* ctx) {
-  GraphTerm term = [this]() -> GraphTerm {
-    if (isInsideConstructTriples_) {
-      return GraphTerm{newBlankNode()};
-    } else {
-      return parsedQuery_.getNewInternalVariable();
-    }
-  }();
+  GraphTerm term = newBlankNodeOrVariable();
   Triples triples;
   auto propertyList = visit(ctx->propertyListNotEmpty());
   for (auto& [predicate, object] : propertyList.first) {
@@ -1759,31 +2238,31 @@ SubjectOrObjectAndPathTriples Visitor::visit(
 // ____________________________________________________________________________________
 SubjectOrObjectAndPathTriples Visitor::visit(
     Parser::BlankNodePropertyListPathContext* ctx) {
-  auto subject = parsedQuery_.getNewInternalVariable();
+  auto subject = getNewInternalVariable();
   auto [predicateObjects, triples] = visit(ctx->propertyListPathNotEmpty());
   for (auto& [predicate, object] : predicateObjects) {
-    triples.emplace_back(subject, std::move(predicate), std::move(object));
+    triples.push_back({subject, std::move(predicate), std::move(object)});
   }
   return {std::move(subject), triples};
 }
 
-// ____________________________________________________________________________________
-SubjectOrObjectAndTriples Visitor::visit(Parser::CollectionContext* ctx) {
-  Triples triples;
+// _____________________________________________________________________________
+template <typename TripleType, typename Func>
+TripleType Visitor::toRdfCollection(std::vector<TripleType> elements,
+                                    Func iriStringToPredicate) {
+  typename TripleType::second_type triples;
   GraphTerm nextTerm{Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>"}};
-  auto nodes = ctx->graphNode();
-  for (auto context : Reversed{nodes}) {
-    GraphTerm currentTerm{newBlankNode()};
-    auto graphNode = visit(context);
-
+  for (auto& graphNode : ql::ranges::reverse_view(elements)) {
+    GraphTerm currentTerm = newBlankNodeOrVariable();
     triples.push_back(
         {currentTerm,
-         GraphTerm{Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>"}},
+         iriStringToPredicate(
+             "<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>"),
          std::move(graphNode.first)});
-    triples.push_back(
-        {currentTerm,
-         GraphTerm{Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>"}},
-         std::move(nextTerm)});
+    triples.push_back({currentTerm,
+                       iriStringToPredicate(
+                           "<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>"),
+                       std::move(nextTerm)});
     nextTerm = std::move(currentTerm);
 
     ad_utility::appendVector(triples, std::move(graphNode.second));
@@ -1791,10 +2270,21 @@ SubjectOrObjectAndTriples Visitor::visit(Parser::CollectionContext* ctx) {
   return {std::move(nextTerm), std::move(triples)};
 }
 
-// ____________________________________________________________________________________
+// _____________________________________________________________________________
+SubjectOrObjectAndTriples Visitor::visit(Parser::CollectionContext* ctx) {
+  return toRdfCollection(visitVector(ctx->graphNode()), [](std::string iri) {
+    return GraphTerm{Iri{std::move(iri)}};
+  });
+}
+
+// _____________________________________________________________________________
 SubjectOrObjectAndPathTriples Visitor::visit(
     Parser::CollectionPathContext* ctx) {
-  throwCollectionsNotSupported(ctx);
+  return toRdfCollection(
+      visitVector(ctx->graphNodePath()), [](std::string_view iri) {
+        return PropertyPath::fromIri(
+            ad_utility::triple_component::Iri::fromIriref(iri));
+      });
 }
 
 // ____________________________________________________________________________________
@@ -1824,20 +2314,8 @@ GraphTerm Visitor::visit(Parser::VarOrTermContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-GraphTerm Visitor::visit(Parser::VarOrIriContext* ctx) {
-  if (ctx->var()) {
-    return visit(ctx->var());
-  } else {
-    AD_CORRECTNESS_CHECK(ctx->iri());
-    // TODO<qup42> If `visit` returns an `Iri` and `GraphTerm` can be
-    // constructed from an `Iri`, this whole function becomes
-    // `visitAlternative`.
-    // TODO<joka921> If we unify the two IRI and Literal types (the ones from
-    // the parser and from the `TripleComponent`, then this becomes much
-    // simpler.
-    return GraphTerm{
-        Iri{std::string{visit(ctx->iri()).toStringRepresentation()}}};
-  }
+VarOrIri Visitor::visit(Parser::VarOrIriContext* ctx) {
+  return visitAlternative<VarOrIri>(ctx->var(), ctx->iri());
 }
 
 // ____________________________________________________________________________________
@@ -1910,24 +2388,26 @@ ExpressionPtr Visitor::visit(Parser::RelationalExpressionContext* ctx) {
     return std::move(children[0]);
   }
 
-  auto make = [&]<typename Expr>() {
+  auto make = [&](auto t) {
+    using Expr = typename decltype(t)::type;
     return createExpression<Expr>(std::move(children[0]),
                                   std::move(children[1]));
   };
+
   std::string relation = ctx->children[1]->getText();
   if (relation == "=") {
-    return make.operator()<EqualExpression>();
+    return make(ti<EqualExpression>);
   } else if (relation == "!=") {
-    return make.operator()<NotEqualExpression>();
+    return make(ti<NotEqualExpression>);
   } else if (relation == "<") {
-    return make.operator()<LessThanExpression>();
+    return make(ti<LessThanExpression>);
   } else if (relation == ">") {
-    return make.operator()<GreaterThanExpression>();
+    return make(ti<GreaterThanExpression>);
   } else if (relation == "<=") {
-    return make.operator()<LessEqualExpression>();
+    return make(ti<LessEqualExpression>);
   } else {
     AD_CORRECTNESS_CHECK(relation == ">=");
-    return make.operator()<GreaterEqualExpression>();
+    return make(ti<GreaterEqualExpression>);
   }
 }
 
@@ -2094,7 +2574,7 @@ ExpressionPtr Visitor::visit(Parser::PrimaryExpressionContext* ctx) {
       return make_unique<StringLiteralExpression>(tripleComponent.getLiteral());
     } else {
       return make_unique<IdExpression>(
-          tripleComponent.toValueIdIfNotString().value());
+          tripleComponent.toValueIdIfNotString(encodedIriManager_).value());
     }
   } else if (ctx->numericLiteral()) {
     auto integralWrapper = [](int64_t x) {
@@ -2134,6 +2614,10 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     return visit(ctx->substringExpression());
   } else if (ctx->strReplaceExpression()) {
     return visit(ctx->strReplaceExpression());
+  } else if (ctx->existsFunc()) {
+    return visit(ctx->existsFunc());
+  } else if (ctx->notExistsFunc()) {
+    return visit(ctx->notExistsFunc());
   }
   // Get the function name and the arguments. Note that we do not have to check
   // the number of arguments like for `processIriFunctionCall`, since the number
@@ -2145,20 +2629,22 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   using namespace sparqlExpression;
   // Create the expression using the matching factory function from
   // `NaryExpression.h`.
-  auto createUnary = [&argList]<typename Function>(Function function)
-      requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr> {
+  auto createUnary = CPP_template_lambda(&argList)(typename F)(F function)(
+      requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr>) {
     AD_CORRECTNESS_CHECK(argList.size() == 1, argList.size());
     return function(std::move(argList[0]));
   };
-  auto createBinary = [&argList]<typename Function>(Function function)
-      requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr,
-                                     ExpressionPtr> {
+
+  auto createBinary = CPP_template_lambda(&argList)(typename F)(F function)(
+      requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr,
+                                     ExpressionPtr>) {
     AD_CORRECTNESS_CHECK(argList.size() == 2);
     return function(std::move(argList[0]), std::move(argList[1]));
   };
-  auto createTernary = [&argList]<typename Function>(Function function)
-      requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr,
-                                     ExpressionPtr, ExpressionPtr> {
+
+  auto createTernary = CPP_template_lambda(&argList)(typename F)(F function)(
+      requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr,
+                                     ExpressionPtr, ExpressionPtr>) {
     AD_CORRECTNESS_CHECK(argList.size() == 3);
     return function(std::move(argList[0]), std::move(argList[1]),
                     std::move(argList[2]));
@@ -2166,7 +2652,9 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   if (functionName == "str") {
     return createUnary(&makeStrExpression);
   } else if (functionName == "iri" || functionName == "uri") {
-    return createUnary(&makeIriOrUriExpression);
+    AD_CORRECTNESS_CHECK(argList.size() == 1, argList.size());
+    return makeIriOrUriExpression(std::move(argList[0]),
+                                  std::make_unique<IriExpression>(baseIri_));
   } else if (functionName == "strlang") {
     return createBinary(&makeStrLangTagExpression);
   } else if (functionName == "strdt") {
@@ -2258,6 +2746,12 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   } else if (functionName == "bound") {
     return makeBoundExpression(
         std::make_unique<VariableExpression>(visit(ctx->var())));
+  } else if (functionName == "bnode") {
+    if (ctx->NIL()) {
+      return makeUniqueBlankNodeExpression();
+    } else {
+      return createUnary(&makeBlankNodeExpression);
+    }
   } else {
     reportError(
         ctx,
@@ -2276,8 +2770,8 @@ ExpressionPtr Visitor::visit(Parser::RegexExpressionContext* ctx) {
   AD_CONTRACT_CHECK(numArgs >= 2 && numArgs <= 3);
   auto flags = numArgs == 3 ? visitOptional(exp[2]) : std::nullopt;
   try {
-    return std::make_unique<sparqlExpression::RegexExpression>(
-        visit(exp[0]), visit(exp[1]), std::move(flags));
+    return makeRegexExpression(visit(exp[0]), visit(exp[1]),
+                               std::move(flags).value_or(nullptr));
   } catch (const std::exception& e) {
     reportError(ctx, e.what());
   }
@@ -2308,28 +2802,65 @@ SparqlExpression::Ptr Visitor::visit(Parser::SubstringExpressionContext* ctx) {
 SparqlExpression::Ptr Visitor::visit(Parser::StrReplaceExpressionContext* ctx) {
   auto children = visitVector(ctx->expression());
   AD_CORRECTNESS_CHECK(children.size() == 3 || children.size() == 4);
-  if (children.size() == 4) {
-    reportError(
-        ctx,
-        "REPLACE expressions with four arguments (including regex flags) are "
-        "currently not supported by QLever. You can however incorporate flags "
-        "directly into a regex by prepending `(?<flags>)` to your regex. For "
-        "example `(?i)[ei]` will match the regex `[ei]` in a case-insensitive "
-        "way.");
+  return makeReplaceExpression(
+      std::move(children.at(0)), std::move(children.at(1)),
+      std::move(children.at(2)),
+      children.size() == 4 ? std::move(children.at(3)) : nullptr);
+}
+
+// ____________________________________________________________________________
+ExpressionPtr Visitor::visitExists(Parser::GroupGraphPatternContext* pattern,
+                                   bool negate) {
+  // The argument of 'EXISTS` is a `GroupGraphPattern` that is independent from
+  // the rest of the query (except for the `FROM` and `FROM NAMED` clauses,
+  // which also apply to the argument of `EXISTS`). We therefore have to back up
+  // and restore all global state when parsing `EXISTS`.
+  auto queryBackup = std::exchange(parsedQuery_, ParsedQuery{});
+  auto visibleVariablesBackup = std::move(visibleVariables_);
+  visibleVariables_.clear();
+
+  // Parse the argument of `EXISTS`.
+  auto group = visit(pattern);
+  ParsedQuery argumentOfExists =
+      std::exchange(parsedQuery_, std::move(queryBackup));
+  SelectClause& selectClause = argumentOfExists.selectClause();
+  // Even though we set the `SELECT` clause to `*`, we will limit the visible
+  // variables to a potentially smaller subset when finishing the parsing of the
+  // current group.
+  selectClause.setAsterisk();
+  // `ExistsExpression`s are not parsed like regular `SparqlExpression`s, so
+  // they don't have a proper hierarchy of dependent variables. Because of that,
+  // we need to manually add all variables that are visible after parsing the
+  // body of `EXISTS`.
+  for (const Variable& variable : visibleVariables_) {
+    selectClause.addVisibleVariable(variable);
   }
-  return sparqlExpression::makeReplaceExpression(std::move(children.at(0)),
-                                                 std::move(children.at(1)),
-                                                 std::move(children.at(2)));
+  argumentOfExists._rootGraphPattern = std::move(group);
+
+  // The argument of `EXISTS` inherits the `FROM` and `FROM NAMED` clauses from
+  // the outer query.
+  argumentOfExists.datasetClauses_ = activeDatasetClauses_;
+  visibleVariables_ = std::move(visibleVariablesBackup);
+  auto exists = std::make_unique<sparqlExpression::ExistsExpression>(
+      std::move(argumentOfExists));
+
+  // Handle `NOT EXISTS` (which is syntactically distinct from `! EXISTS`) by
+  // simply negating the `ExistsExpression`.
+  if (negate) {
+    return sparqlExpression::makeUnaryNegateExpression(std::move(exists));
+  } else {
+    return exists;
+  }
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(const Parser::ExistsFuncContext* ctx) {
-  reportNotSupported(ctx, "The EXISTS function is");
+ExpressionPtr Visitor::visit(Parser::ExistsFuncContext* ctx) {
+  return visitExists(ctx->groupGraphPattern(), false);
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(const Parser::NotExistsFuncContext* ctx) {
-  reportNotSupported(ctx, "The NOT EXISTS function is");
+ExpressionPtr Visitor::visit(Parser::NotExistsFuncContext* ctx) {
+  return visitExists(ctx->groupGraphPattern(), true);
 }
 
 // ____________________________________________________________________________________
@@ -2339,7 +2870,7 @@ ExpressionPtr Visitor::visit(Parser::AggregateContext* ctx) {
   std::string functionName =
       ad_utility::getLowercase(children.at(0)->getText());
 
-  const bool distinct = std::ranges::any_of(children, [](auto* child) {
+  const bool distinct = ql::ranges::any_of(children, [](auto* child) {
     return ad_utility::getLowercase(child->getText()) == "distinct";
   });
   // the only case that there is no child expression is COUNT(*), so we can
@@ -2349,7 +2880,8 @@ ExpressionPtr Visitor::visit(Parser::AggregateContext* ctx) {
     return makeCountStarExpression(distinct);
   }
   auto childExpression = visit(ctx->expression());
-  auto makePtr = [&]<typename ExpressionType>(auto&&... additionalArgs) {
+  auto makePtr = [&](auto t, auto&&... additionalArgs) {
+    using ExpressionType = typename decltype(t)::type;
     ExpressionPtr result{std::make_unique<ExpressionType>(
         distinct, std::move(childExpression), AD_FWD(additionalArgs)...)};
     result->descriptor() = ctx->getText();
@@ -2357,23 +2889,23 @@ ExpressionPtr Visitor::visit(Parser::AggregateContext* ctx) {
   };
 
   if (functionName == "count") {
-    return makePtr.operator()<CountExpression>();
+    return makePtr(ti<CountExpression>);
   } else if (functionName == "sum") {
-    return makePtr.operator()<SumExpression>();
+    return makePtr(ti<SumExpression>);
   } else if (functionName == "max") {
-    return makePtr.operator()<MaxExpression>();
+    return makePtr(ti<MaxExpression>);
   } else if (functionName == "min") {
-    return makePtr.operator()<MinExpression>();
+    return makePtr(ti<MinExpression>);
   } else if (functionName == "avg") {
-    return makePtr.operator()<AvgExpression>();
+    return makePtr(ti<AvgExpression>);
   } else if (functionName == "group_concat") {
     // Use a space as a default separator
 
     std::string separator;
     if (ctx->string()) {
       // TODO: The string rule also allow triple quoted strings with different
-      //  escaping rules. These are currently not handled. They should be parsed
-      //  into a typesafe format with a unique representation.
+      //  escaping rules. These are currently not handled. They should be
+      //  parsed into a typesafe format with a unique representation.
       separator = visit(ctx->string()).get();
       // If there was a separator, we have to strip the quotation marks
       AD_CONTRACT_CHECK(separator.size() >= 2);
@@ -2382,12 +2914,12 @@ ExpressionPtr Visitor::visit(Parser::AggregateContext* ctx) {
       separator = " "s;
     }
 
-    return makePtr.operator()<GroupConcatExpression>(std::move(separator));
+    return makePtr(ti<GroupConcatExpression>, std::move(separator));
   } else if (functionName == "stdev") {
-    return makePtr.operator()<StdevExpression>();
+    return makePtr(ti<StdevExpression>);
   } else {
     AD_CORRECTNESS_CHECK(functionName == "sample");
-    return makePtr.operator()<SampleExpression>();
+    return makePtr(ti<SampleExpression>);
   }
 }
 
@@ -2405,12 +2937,12 @@ ExpressionPtr Visitor::visit(Parser::IriOrFunctionContext* ctx) {
 std::string Visitor::visit(Parser::RdfLiteralContext* ctx) {
   // TODO: This should really be an RdfLiteral class that stores a unified
   //  version of the string, and the langtag/datatype separately.
-  string ret = ctx->string()->getText();
+  std::string ret = ctx->string()->getText();
   if (ctx->LANGTAG()) {
     ret += ctx->LANGTAG()->getText();
   } else if (ctx->iri()) {
     // TODO<joka921> Also unify the two Literal classes...
-    ret += ("^^" + std::string{visit(ctx->iri()).toStringRepresentation()});
+    ret += "^^" + visit(ctx->iri()).toStringRepresentation();
   }
   return ret;
 }
@@ -2429,7 +2961,7 @@ template <typename Ctx>
 std::variant<int64_t, double> parseNumericLiteral(Ctx* ctx, bool parseAsInt) {
   try {
     if (parseAsInt) {
-      return std::stoll(ctx->getText());
+      return static_cast<int64_t>(std::stoll(ctx->getText()));
     } else {
       return std::stod(ctx->getText());
     }
@@ -2466,42 +2998,45 @@ bool Visitor::visit(Parser::BooleanLiteralContext* ctx) {
 
 // ____________________________________________________________________________________
 GraphTerm Visitor::visit(Parser::BlankNodeContext* ctx) {
+  const auto& mode = treatBlankNodesAs_;
+  if (mode == TreatBlankNodesAs::Illegal) {
+    reportError(ctx,
+                "Blank nodes are not allowed here according to SPARQL 1.1");
+  }
   if (ctx->ANON()) {
-    if (isInsideConstructTriples_) {
-      return newBlankNode();
-    } else {
-      return parsedQuery_.getNewInternalVariable();
-    }
+    return newBlankNodeOrVariable();
   } else {
     AD_CORRECTNESS_CHECK(ctx->BLANK_NODE_LABEL());
-    if (isInsideConstructTriples_) {
+    if (mode == TreatBlankNodesAs::BlankNodes) {
       // Strip `_:` prefix from string.
       constexpr size_t length = std::string_view{"_:"}.length();
-      const string label = ctx->BLANK_NODE_LABEL()->getText().substr(length);
+      const std::string label =
+          ctx->BLANK_NODE_LABEL()->getText().substr(length);
       // `False` means the blank node is not automatically generated, but
       // explicitly specified in the query.
       return BlankNode{false, label};
     } else {
-      return ParsedQuery::blankNodeToInternalVariable(
-          ctx->BLANK_NODE_LABEL()->getText());
+      AD_CORRECTNESS_CHECK(mode == TreatBlankNodesAs::InternalVariables);
+      return blankNodeToInternalVariable(ctx->BLANK_NODE_LABEL()->getText());
     }
   }
 }
 
 // ____________________________________________________________________________________
-template <typename Ctx>
-void Visitor::visitVector(const std::vector<Ctx*>& childContexts)
-    requires voidWhenVisited<Visitor, Ctx> {
+CPP_template_def(typename Ctx)(
+    requires Visitor::voidWhenVisited<Visitor, Ctx>) void Visitor::
+    visitVector(const std::vector<Ctx*>& childContexts) {
   for (const auto& child : childContexts) {
     visit(child);
   }
 }
 
 // ____________________________________________________________________________________
-template <typename Ctx>
-[[nodiscard]] auto Visitor::visitVector(const std::vector<Ctx*>& childContexts)
-    -> std::vector<decltype(visit(childContexts[0]))>
-    requires(!voidWhenVisited<Visitor, Ctx>) {
+CPP_template_def(typename Ctx)(
+    requires CPP_NOT(Visitor::voidWhenVisited<Visitor, Ctx>))
+    [[nodiscard]] auto Visitor::visitVector(
+        const std::vector<Ctx*>& childContexts)
+        -> std::vector<decltype(visit(childContexts[0]))> {
   std::vector<decltype(visit(childContexts[0]))> children;
   for (const auto& child : childContexts) {
     children.emplace_back(visit(child));
@@ -2518,7 +3053,8 @@ Out Visitor::visitAlternative(Contexts*... ctxs) {
     (..., visitIf(ctxs));
   } else {
     std::optional<Out> out;
-    // Visit the one `context` which is not null and write the result to `out`.
+    // Visit the one `context` which is not null and write the result to
+    // `out`.
     (..., visitIf<std::optional<Out>, Out>(&out, ctxs));
     return std::move(out.value());
   }
@@ -2543,8 +3079,8 @@ void Visitor::visitIf(Target* target, Ctx* ctx) {
 }
 
 // _____________________________________________________________________________
-template <typename Ctx>
-void Visitor::visitIf(Ctx* ctx) requires voidWhenVisited<Visitor, Ctx> {
+CPP_template_def(typename Ctx)(requires Visitor::voidWhenVisited<
+                               Visitor, Ctx>) void Visitor::visitIf(Ctx* ctx) {
   if (ctx) {
     visit(ctx);
   }
@@ -2566,16 +3102,40 @@ void Visitor::reportNotSupported(const antlr4::ParserRuleContext* ctx,
 }
 
 // _____________________________________________________________________________
-TripleComponent SparqlQleverVisitor::visitGraphTerm(
-    const GraphTerm& graphTerm) {
-  return graphTerm.visit([]<typename T>(const T& element) -> TripleComponent {
+void SparqlQleverVisitor::visitWhereClause(
+    Parser::WhereClauseContext* whereClauseContext, ParsedQuery& query) {
+  if (!whereClauseContext) {
+    return;
+  }
+  auto [pattern, visibleVariables] = visit(whereClauseContext);
+  query._rootGraphPattern = std::move(pattern);
+  query.registerVariablesVisibleInQueryBody(visibleVariables);
+}
+
+// _____________________________________________________________________________
+TripleComponent SparqlQleverVisitor::graphTermToTripleComponentWithEncoding(
+    const GraphTerm& graphTerm) const {
+  return graphTerm.visit([this](const auto& element) -> TripleComponent {
+    using T = std::decay_t<decltype(element)>;
     if constexpr (std::is_same_v<T, Variable>) {
       return element;
-    } else if constexpr (std::is_same_v<T, Literal> || std::is_same_v<T, Iri>) {
+    } else if constexpr (std::is_same_v<T, Iri>) {
+      // Try to encode the IRI first, otherwise use the standard conversion
+      auto iriString = element.toSparql();
+      if (auto encodedId = encodedIriManager_->encode(iriString)) {
+        return *encodedId;
+      }
+      return RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
+          iriString);
+    } else if constexpr (std::is_same_v<T, Literal>) {
       return RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
           element.toSparql());
     } else {
-      return element.toSparql();
+      static_assert(std::is_same_v<T, BlankNode>);
+      const auto& blankNode = element.toSparql();
+      AD_CORRECTNESS_CHECK(ql::starts_with(blankNode, "_:"));
+      return Variable{absl::StrCat(QLEVER_INTERNAL_BLANKNODE_VARIABLE_PREFIX,
+                                   blankNode.substr(2))};
     }
   });
 }

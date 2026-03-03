@@ -3,11 +3,14 @@
 // Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2011 - 2017]
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de> [2017 - 2024]
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_QUERYEXECUTIONCONTEXT_H
+#define QLEVER_SRC_ENGINE_QUERYEXECUTIONCONTEXT_H
 
+#include <chrono>
 #include <memory>
 #include <string>
 
+#include "backports/three_way_comparison.h"
 #include "engine/QueryPlanningCostFactors.h"
 #include "engine/Result.h"
 #include "engine/RuntimeInformation.h"
@@ -17,8 +20,9 @@
 #include "index/Index.h"
 #include "util/Cache.h"
 #include "util/ConcurrentCache.h"
-#include "util/Synchronized.h"
 
+// The value of the `QueryResultCache` below. It consists of a `Result` together
+// with its `RuntimeInfo`.
 class CacheValue {
  private:
   std::shared_ptr<Result> result_;
@@ -61,11 +65,34 @@ class CacheValue {
   };
 };
 
+// The key for the `QueryResultCache` below. It consists of a `string` (the
+// actual cache key of a `QueryExecutionTree` and the index of the
+// `LocatedTriplesSnapshot` that was used to create the corresponding value.
+// That way, two identical trees with different snapshot indices will have a
+// different cache key. This has the (desired!) effect that UPDATE requests
+// correctly invalidate preexisting cache results.
+struct QueryCacheKey {
+  std::string key_;
+  size_t locatedTriplesSnapshotIndex_;
+
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(QueryCacheKey, key_,
+                                              locatedTriplesSnapshotIndex_)
+
+  template <typename H>
+  friend H AbslHashValue(H h, const QueryCacheKey& key) {
+    return H::combine(std::move(h), key.key_, key.locatedTriplesSnapshotIndex_);
+  }
+};
+
 // Threadsafe LRU cache for (partial) query results, that
 // checks on insertion, if the result is currently being computed
 // by another query.
 using QueryResultCache = ad_utility::ConcurrentCache<
-    ad_utility::LRUCache<string, CacheValue, CacheValue::SizeGetter>>;
+    ad_utility::LRUCache<QueryCacheKey, CacheValue, CacheValue::SizeGetter>>;
+
+// Forward declaration because of cyclic dependency
+class NamedResultCache;
+class MaterializedViewsManager;
 
 // Execution context for queries.
 // Holds references to index and engine, implements caching.
@@ -75,25 +102,37 @@ class QueryExecutionContext {
       const Index& index, QueryResultCache* const cache,
       ad_utility::AllocatorWithLimit<Id> allocator,
       SortPerformanceEstimator sortPerformanceEstimator,
+      NamedResultCache* namedResultCache,
+      MaterializedViewsManager* materializedViewsManager,
       std::function<void(std::string)> updateCallback =
           [](std::string) { /* No-op by default for testing */ },
-      const bool pinSubtrees = false, const bool pinResult = false)
-      : _pinSubtrees(pinSubtrees),
-        _pinResult(pinResult),
-        _index(index),
-        _subtreeCache(cache),
-        _allocator(std::move(allocator)),
-        _costFactors(),
-        _sortPerformanceEstimator(sortPerformanceEstimator),
-        updateCallback_(std::move(updateCallback)) {}
+      bool pinSubtrees = false, bool pinResult = false);
 
   QueryResultCache& getQueryTreeCache() { return *_subtreeCache; }
 
   [[nodiscard]] const Index& getIndex() const { return _index; }
 
-  const LocatedTriplesSnapshot& locatedTriplesSnapshot() const {
-    AD_CORRECTNESS_CHECK(sharedLocatedTriplesSnapshot_ != nullptr);
-    return *sharedLocatedTriplesSnapshot_;
+  const LocatedTriplesState& locatedTriplesState() const {
+    AD_CORRECTNESS_CHECK(locatedTriplesSharedState_ != nullptr);
+    return *locatedTriplesSharedState_;
+  }
+
+  LocatedTriplesSharedState locatedTriplesSharedState() const {
+    return locatedTriplesSharedState_;
+  }
+
+  // Set the `LocatedTriplesSharesdState` for evaluating queries. The new
+  // state will be used for evaluating queries after this call.
+  //
+  // NOTE: This is a dangerous function. It may only be called if no query with
+  // the context is currently running.
+  //
+  // This function is only needed for chained updates, which have to see the
+  // effect of previous updates but use the same execution context. Chained
+  // updates are processed strictly sequentially, so this use case works.
+  void setLocatedTriplesForEvaluation(
+      LocatedTriplesSharedState locatedTriplesSharedState) {
+    locatedTriplesSharedState_ = std::move(locatedTriplesSharedState);
   }
 
   void clearCacheUnpinnedOnly() { getQueryTreeCache().clearUnpinnedOnly(); }
@@ -107,35 +146,98 @@ class QueryExecutionContext {
     return _costFactors.getCostFactor(key);
   };
 
-  const ad_utility::AllocatorWithLimit<Id>& getAllocator() {
+  const ad_utility::AllocatorWithLimit<Id>& getAllocator() const {
     return _allocator;
   }
 
-  /// Function that serializes the given RuntimeInformation to JSON and
-  /// calls the updateCallback with this JSON string.
-  /// This is used to broadcast updates of any query to a third party
-  /// while it's still running.
-  /// \param runtimeInformation The `RuntimeInformation` to serialize
-  void signalQueryUpdate(const RuntimeInformation& runtimeInformation) const {
-    updateCallback_(nlohmann::ordered_json(runtimeInformation).dump());
-  }
+  // Serialize the given `runtimeInformation` to a JSON string and send it
+  // using `updateCallback_`. If `sendPriority` is set to `IfDue`, this only
+  // happens if the last update was sent more than `websocketUpdateInterval_`
+  // ago; if it is set to `Always`, the update is always sent.
+  void signalQueryUpdate(const RuntimeInformation& runtimeInformation,
+                         RuntimeInformation::SendPriority sendPriority) const;
 
   bool _pinSubtrees;
   bool _pinResult;
 
+  // If false, then no updates of the runtime information should be sent via the
+  // websocket connection for performance reasons.
+  bool areWebsocketUpdatesEnabled() const {
+    return areWebsocketUpdatesEnabled_;
+  }
+
+  // Access the cache for explicitly named query.
+  NamedResultCache& namedResultCache() { return *namedResultCache_; }
+
+  // Get a reference to the `MaterializedViewsManager`.
+  const MaterializedViewsManager& materializedViewsManager() const {
+    return *materializedViewsManager_;
+  };
+
+  // If `pinResultWithName_` is set, then the result of the query that is
+  // executed using this context will be stored in the `namedQueryCache()` using
+  // the string given in `PinResultWithName` as the query name. If
+  // `geoIndexVar_` is also set, a geo index is built and cached in-memory on
+  // the column of this variable. If `pinResultWithName_` is `nullopt`, no
+  // pinning is done.
+  struct PinResultWithName {
+    std::string name_;
+    std::optional<Variable> geoIndexVar_ = std::nullopt;
+  };
+
+  // Accessors; see `pinResultWithName_` for an explanation.
+  auto& pinResultWithName() { return pinResultWithName_; }
+  const auto& pinResultWithName() const { return pinResultWithName_; }
+
  private:
+  // Helper functions to avoid including `global/RuntimeParameters.h` in this
+  // header.
+  static bool areWebSocketUpdatesEnabled();
+  static std::chrono::milliseconds websocketUpdateInterval();
   const Index& _index;
 
   // When the `QueryExecutionContext` is constructed, get a stable read-only
   // snapshot of the current (located) delta triples. These can then be used
   // by the respective query without interfering with further incoming
   // update operations.
-  SharedLocatedTriplesSnapshot sharedLocatedTriplesSnapshot_{
-      _index.deltaTriplesManager().getCurrentSnapshot()};
+  LocatedTriplesSharedState locatedTriplesSharedState_{
+      _index.deltaTriplesManager().getCurrentLocatedTriplesSharedState()};
   QueryResultCache* const _subtreeCache;
   // allocators are copied but hold shared state
   ad_utility::AllocatorWithLimit<Id> _allocator;
   QueryPlanningCostFactors _costFactors;
   SortPerformanceEstimator _sortPerformanceEstimator;
   std::function<void(std::string)> updateCallback_;
+
+  // Cache the state of both runtime parameters to reduce the contention of the
+  // mutex. `areWebsocketUpdatesEnabled_` is exposed so it can be disabled at a
+  // later point in time.
+ public:
+  // Store the value of the `websocketUpdatesEnabled` runtime parameter. This
+  // avoid synchronization overhead on each access and allows us to change the
+  // value during query execution.
+  bool areWebsocketUpdatesEnabled_ = areWebSocketUpdatesEnabled();
+
+ private:
+  // Store the value of the `websocketUpdateInterval` runtime parameter, for
+  // the same reasons as above.
+  std::chrono::milliseconds websocketUpdateInterval_ =
+      websocketUpdateInterval();
+
+  // The cache for named results.
+  NamedResultCache* namedResultCache_;
+
+  // Name (and optional variable for geometry index) under which the result of
+  // the query that is executed using this context should be cached. When
+  // `std::nullopt`, the result is not cached.
+  std::optional<PinResultWithName> pinResultWithName_ = std::nullopt;
+
+  MaterializedViewsManager* materializedViewsManager_;
+
+  // The last point in time when a websocket update was sent. This is used for
+  // limiting the update frequency when `sendPriority` is `IfDue`.
+  mutable std::chrono::steady_clock::time_point lastWebsocketUpdate_ =
+      std::chrono::steady_clock::time_point::min();
 };
+
+#endif  // QLEVER_SRC_ENGINE_QUERYEXECUTIONCONTEXT_H

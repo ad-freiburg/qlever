@@ -1,5 +1,27 @@
 cmake_minimum_required(VERSION 3.27)
+if (POLICY CMP0167)
+    cmake_policy(SET CMP0167 NEW)
+endif ()
 project(QLever C CXX)
+
+if (APPLE)
+    # Dynamically detect Homebrew prefix
+    execute_process(
+        COMMAND brew --prefix
+        OUTPUT_VARIABLE HOMEBREW_PREFIX
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        RESULT_VARIABLE BREW_RESULT
+        ERROR_QUIET
+    )
+    if (BREW_RESULT EQUAL 0 AND HOMEBREW_PREFIX)
+        message(STATUS "Found Homebrew at: ${HOMEBREW_PREFIX}")
+        list(APPEND CMAKE_PREFIX_PATH "${HOMEBREW_PREFIX}")
+        link_directories(${HOMEBREW_PREFIX}/lib)
+        include_directories(${HOMEBREW_PREFIX}/include)
+    else()
+        message(WARNING "Homebrew not found. You may need to manually set CMAKE_PREFIX_PATH to locate dependencies (Boost, ICU, OpenSSL, etc.)")
+    endif()
+endif ()
 
 # C/C++ Versions
 set(CMAKE_C_STANDARD 11)
@@ -20,23 +42,46 @@ endif ()
 # recycling and gets rid of all of those errors and crashes.
 # TODO<joka921> Further analyze and then report this bug to the ASIO
 # developers.
-add_definitions("-DBOOST_ASIO_DISABLE_AWAITABLE_FRAME_RECYCLING")
+add_compile_definitions(BOOST_ASIO_DISABLE_AWAITABLE_FRAME_RECYCLING)
+
+# By default, QLever uses precompiled headers for widely used modules. However when heavily modifying the headers that
+# contribute to the precompiled headers, then it might be beneficial to deactivate precompiled headers.
+option(USE_PRECOMPILED_HEADERS "Use precompiled headers to reduce compile times" ON)
 
 # Coroutines require an additional compiler flag that is called differently
 # on clang and g++
+option(COMPILER_VERSION_CHECK_DEACTIVATED "Disable compiler version check" OFF)
+
+option(REDUCED_FEATURE_SET_FOR_CPP17 "Exclude some features like `SERVICE`, `LOAD`, and transitive property paths, that haven't been migrated to C++17 yet" OFF)
+if (REDUCED_FEATURE_SET_FOR_CPP17)
+    add_compile_definitions(QLEVER_REDUCED_FEATURE_SET_FOR_CPP17 QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17)
+endif()
+
+option(EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17 "Use the C++17 backports inside `SparqlExpressionGenerators.h`. They are currently less efficient than the C++20 implementations. This option is implicitly activated by the `REDUCED_FEATURE_SET_FOR_CPP17` option, but can be activated separately to run the unit tests for the backports of the `ExpressionGenerators`" OFF)
+if (EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17)
+    add_compile_definitions(QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17)
+endif()
+
+set(RANGE_V3_REQUIRED_BY_COMPILER OFF)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "11.0.0")
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "11.0.0" AND NOT COMPILER_VERSION_CHECK_DEACTIVATED)
         MESSAGE(FATAL_ERROR "G++ versions older than 11.0 are not supported by QLever")
-    else ()
+    elseif (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER "11.0.0")
         add_compile_options(-fcoroutines)
     endif ()
 
-elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.0.0")
+elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang" )
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.0.0" AND NOT COMPILER_VERSION_CHECK_DEACTIVATED)
         MESSAGE(FATAL_ERROR "Clang++ versions older than 16.0 are not supported by QLever")
     endif ()
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "17.0.0")
+        # clang-16 doesn't support templated structs without explicit deduction guides, but those are required with
+        # libstdc++13 ranges in some cases.
+        MESSAGE(STATUS "range-v3 is used for clang-16 because of its incompatibility with libstdc++13")
+        set(RANGE_V3_REQUIRED_BY_COMPILER ON)
+    endif ()
 else ()
-    MESSAGE(FATAL_ERROR "QLever currently only supports the G++ or LLVM-Clang++ compilers. Found ${CMAKE_CXX_COMPILER_ID}")
+    MESSAGE(FATAL_ERROR "QLever currently only supports the G++, LLVM-Clang++ or AppleClang compilers. Found ${CMAKE_CXX_COMPILER_ID}")
 endif ()
 
 ## Build targets for address sanitizer
@@ -54,9 +99,20 @@ set(CMAKE_CXX_FLAGS_ASAN
 if ("${CMAKE_GENERATOR}" STREQUAL "Ninja")
     if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
         add_compile_options(-fdiagnostics-color=always)
-    elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+    elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang" OR "${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang")
         add_compile_options(-fcolor-diagnostics)
     endif ()
+endif ()
+
+# Enable the manual usage of the C++ 17 backports (currently `range-v3` instead
+# of `std::ranges` and the `std::enable_if_t` based expansion of the concept
+# macros from `range-v3`.
+option(USE_CPP_17_BACKPORTS "Use the C++17 backports (range-v3 and enable_if_t instead of std::ranges and concepts)" OFF)
+if (${USE_CPP_17_BACKPORTS} OR ${RANGE_V3_REQUIRED_BY_COMPILER})
+    MESSAGE(STATUS "Using the C++17 backports (e.g. range-v3)")
+    add_compile_definitions(QLEVER_CPP_17 CPP_CXX_CONCEPTS=0)
+else ()
+    add_compile_definitions(RANGE_V3_COMBINE_WITH_STD)
 endif ()
 
 ###############################################################################
@@ -70,7 +126,8 @@ include(FetchContent)
 FetchContent_Declare(
         googletest
         GIT_REPOSITORY https://github.com/google/googletest.git
-        GIT_TAG 33af80a883ddc33d9c0fac0a5b4578301efb18de # main branch on 2024/05/16
+        GIT_TAG 7917641ff965959afae189afb5f052524395525c # main branch on 2025/09/11
+        EXCLUDE_FROM_ALL
 )
 
 ################################
@@ -80,8 +137,9 @@ FetchContent_Declare(
 # https://json.nlohmann.me/integration/cmake/#fetchcontent
 FetchContent_Declare(
         nlohmann-json
-        URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz
-        URL_HASH SHA3_224=b9237e8e8242e915de5be631aa944369c38a377c5e79aa505ba741a9
+        URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz
+        URL_HASH SHA3_224=0ad805c53f1769489a9c6bdeefd0a36c19f74239785cdb9c4344e8c1
+        EXCLUDE_FROM_ALL
 )
 
 ###############################
@@ -94,7 +152,34 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/antlr/antlr4.git
         GIT_TAG cc82115a4e7f53d71d9d905caa2c2dfa4da58899 # 4.13.12
         SOURCE_SUBDIR runtime/Cpp
+        EXCLUDE_FROM_ALL
 )
+
+#################################
+# Range v3 (for C++-17 backwards compatibility)
+################################
+
+FetchContent_Declare(
+        range-v3
+        #TODO<joka921> Merge this fork into the `qlever` GitHub organisation as soon as it exists.
+        GIT_REPOSITORY https://github.com/joka921/range-v3
+        # This branch removes some differences in the interface between `range-v3` and `std::ranges` s.t.
+        # the former can be used as an (almost) drop-in replacement for the latter.
+        GIT_TAG 42340ef354f7b4e4660268b788e37008d9cc85aa # branch fork-for-qlever
+        EXCLUDE_FROM_ALL
+)
+
+#################################
+# libspatialjoin
+################################
+FetchContent_Declare(
+        spatialjoin
+        GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
+        GIT_TAG c358e479ebb5f40df99522e69a0b52d73416020b
+        EXCLUDE_FROM_ALL
+)
+# disable bzip2 and zlib support in spatialjoin, we don't need it
+add_compile_definitions(SPATIALJOIN_NO_BZIP2=True SPATIALJOIN_NO_ZLIB=True)
 
 ################################
 # Threading
@@ -148,7 +233,7 @@ endif ()
 ######################################
 # BOOST
 ######################################
-find_package(Boost 1.81 COMPONENTS iostreams program_options url REQUIRED)
+find_package(Boost 1.81 COMPONENTS iostreams program_options url container REQUIRED CONFIG)
 include_directories(${Boost_INCLUDE_DIR})
 
 
@@ -165,9 +250,9 @@ find_package(OpenSSL REQUIRED)
 # is a drop-in replacement for `target_link_libraries` that additionally links
 # against the common libraries.
 function(qlever_target_link_libraries target)
-    target_link_libraries(${target} ${ARGN} absl::flat_hash_map
+    target_link_libraries(${target} ${ARGN} absl::compare absl::flat_hash_map
             absl::flat_hash_set absl::strings absl::str_format ICU::uc
-            ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock stxxl fsst nlohmann_json::nlohmann_json)
+            ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock fsst nlohmann_json::nlohmann_json Boost::container)
 
     # memorySize is a utility library for defining memory sizes.
     if (NOT ${target} STREQUAL "memorySize")
@@ -184,6 +269,12 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -Wall -Wextra")
 # Enable the specification of additional compiler flags manually from the commandline
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ADDITIONAL_COMPILER_FLAGS}")
 
+
+set(VOCAB_UNCOMPRESSED_IN_MEMORY OFF CACHE BOOL "Store QLever's vocabulary uncompressed and completely in RAM")
+if (${VOCAB_UNCOMPRESSED_IN_MEMORY})
+    add_compile_definitions(QLEVER_VOCAB_UNCOMPRESSED_IN_MEMORY)
+endif ()
+
 # Enable the specification of additional linker flags manually from the commandline
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${ADDITIONAL_LINKER_FLAGS}")
 set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${ADDITIONAL_LINKER_FLAGS}")
@@ -199,9 +290,7 @@ if (${ALLOW_SHUTDOWN})
     message(STATUS "Adding -DALLOW_SHUTDOWN")
 endif ()
 
-
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
-
 
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
@@ -212,7 +301,8 @@ set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
 FetchContent_Declare(
         ctre
         GIT_REPOSITORY https://github.com/hanickadot/compile-time-regular-expressions.git
-        GIT_TAG b3d7788b559e34d985c8530c3e0e7260b67505a6 # v3.8.1
+        GIT_TAG e34c26ba149b9fd9c34aa0f678e39739641a0d1e # v3.10.0
+        EXCLUDE_FROM_ALL
 )
 
 ################################
@@ -225,6 +315,7 @@ FetchContent_Declare(
         abseil
         GIT_REPOSITORY https://github.com/abseil/abseil-cpp.git
         GIT_TAG 93ac3a4f9ee7792af399cebd873ee99ce15aed08  # 2024-05-16
+        EXCLUDE_FROM_ALL
 )
 
 ################################
@@ -236,6 +327,7 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/google/s2geometry.git
         GIT_TAG 5b5eccd54a08ae03b4467e79ffbb076d0b5f221e  #version 0.11.1
         SYSTEM
+        EXCLUDE_FROM_ALL
 )
 
 
@@ -245,27 +337,27 @@ if (USE_PARALLEL)
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
         set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
-        add_definitions("-D_PARALLEL_SORT")
+        add_compile_definitions(_PARALLEL_SORT)
     endif ()
 endif ()
 
 OPTION(_NO_TIMING_TESTS "Disable timing tests on platforms where `sleep` is unreliable" OFF)
 if (_NO_TIMING_TESTS)
-    add_definitions("-D_QLEVER_NO_TIMING_TESTS")
+    add_compile_definitions(_QLEVER_NO_TIMING_TESTS)
 endif ()
 
 if (USE_TREE_BASED_CACHE)
-    add_definitions("-D_QLEVER_USE_TREE_BASED_CACHE")
+    add_compile_definitions(_QLEVER_USE_TREE_BASED_CACHE)
 endif ()
 
 if (RUN_EXPENSIVE_TESTS)
     message(STATUS "Running expensive unit tests. This is only recommended in release builds")
-    add_definitions("-DQLEVER_RUN_EXPENSIVE_TESTS")
+    add_compile_definitions(QLEVER_RUN_EXPENSIVE_TESTS)
 endif ()
 
 if (ENABLE_EXPENSIVE_CHECKS)
     message(STATUS "Enabling checks that potentially have a significant runtime overhead")
-    add_definitions("-DAD_ENABLE_EXPENSIVE_CHECKS")
+    add_compile_definitions(AD_ENABLE_EXPENSIVE_CHECKS)
 endif ()
 
 set(QUERY_CANCELLATION_MODE "ENABLED" CACHE STRING "Option to allow disabling cancellation checks partially or completely to reduce the overhead of this mechanism during query computation.")
@@ -275,34 +367,16 @@ set_property(CACHE QUERY_CANCELLATION_MODE PROPERTY STRINGS "ENABLED" "NO_WATCH_
 if (QUERY_CANCELLATION_MODE AND NOT QUERY_CANCELLATION_MODE MATCHES "ENABLED|NO_WATCH_DOG|DISABLED")
     message(FATAL_ERROR "Invalid value for QUERY_CANCELLATION_MODE '${QUERY_CANCELLATION_MODE}'. Please remove the option entirely or change it to ENABLED, NO_WATCH_DOG or DISABLED.")
 endif ()
-add_definitions("-DQUERY_CANCELLATION_MODE=${QUERY_CANCELLATION_MODE}")
-
-################################
-# STXXL
-################################
-# Disable GNU parallel as it prevents build on Ubuntu 14.04
-set(USE_GNU_PARALLEL OFF CACHE BOOL "Don't use gnu parallel" FORCE)
-set(USE_OPENMP OFF CACHE BOOL "Don't use OPENMP as default" FORCE)
-
-set(STXXL_CXX_FLAGS "${STXXL_CXX_FLAGS} -Wno-deprecated-declarations")
-FetchContent_Declare(
-        stxxl
-        GIT_REPOSITORY https://github.com/ad-freiburg/stxxl.git
-        GIT_TAG 449a8fed095ffd5c10560714b446895e54c65486
-)
+add_compile_definitions(QUERY_CANCELLATION_MODE=${QUERY_CANCELLATION_MODE})
 
 ################################
 # FSST
 ################################
 FetchContent_Declare(
         fsst
-        #GIT_REPOSITORY https://github.com/cwida/fsst.git
-        #GIT_TAG c8719ef0aa3740da9685ad2738bb9c8ecc327944
-        #FSST Currently has a struct name `Encoder` that leads to ODR violations with the `Encoder`class of S2.
-        # I (joka921) have filed bug reports for both of them and a PR for fsst, but for now we use our own fork
-        # of Fsst.
-        GIT_REPOSITORY https://github.com/joka921/fsst.git
-        GIT_TAG 43fb2d1756f5a5d0e85e765c7b51f5e3be8cc83f
+        GIT_REPOSITORY https://github.com/cwida/fsst.git
+        GIT_TAG b228af6356196095eaf9f8f5654b0635f969661e # main branch from 27th May 2025
+        EXCLUDE_FROM_ALL
 )
 
 
@@ -316,16 +390,16 @@ FetchContent_Declare(
         GIT_TAG bc0faab533e2b27b85b8ad312abf061e33ed6b5d # v.2023-11-01
         GIT_SHALLOW TRUE
         OVERRIDE_FIND_PACKAGE
+        EXCLUDE_FROM_ALL
 )
 
 ################################
 # Apply FetchContent
 ################################
-FetchContent_MakeAvailable(googletest ctre abseil re2 stxxl fsst s2 nlohmann-json antlr)
-# Disable some warnings in RE2, STXXL, and GTEST
+FetchContent_MakeAvailable(googletest ctre abseil re2 fsst s2 nlohmann-json antlr range-v3 spatialjoin)
+# Disable some warnings in RE2 and GTEST
 target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-class-memaccess -Wno-unused-but-set-variable -Wno-unused-function)
 target_compile_options(re2 PRIVATE -Wno-unused-parameter)
-target_compile_options(stxxl PRIVATE -Wno-deprecated-declarations)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_options(gtest PRIVATE -Wno-maybe-uninitialized)
 endif ()
@@ -333,6 +407,7 @@ include_directories(${ctre_SOURCE_DIR}/single-header)
 target_compile_options(fsst PRIVATE -Wno-extra -Wno-all -Wno-error)
 target_compile_options(fsst12 PRIVATE -Wno-extra -Wno-all -Wno-error)
 include_directories(${fsst_SOURCE_DIR})
+include_directories(${range-v3_SOURCE_DIR}/include)
 target_compile_options(antlr4_static PRIVATE -Wno-all -Wno-extra -Wno-error -Wno-deprecated-declarations)
 # Only required because a lot of classes that do not explicitly link against antlr4_static use the headers.
 include_directories(SYSTEM "${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src")
@@ -376,14 +451,13 @@ set(LOG_LEVEL_DEBUG DEBUG)
 set(LOG_LEVEL_TIMING TIMING)
 set(LOG_LEVEL_TRACE TRACE)
 
-
 if (CMAKE_BUILD_TYPE MATCHES DEBUG)
     set(LOGLEVEL DEBUG CACHE STRING "The loglevel")
 else ()
     set(LOGLEVEL INFO CACHE STRING "The loglevel")
 endif ()
 set_property(CACHE LOGLEVEL PROPERTY STRINGS FATAL ERROR WARN INFO DEBUG TIMING TRACE)
-add_definitions(-DLOGLEVEL=${LOG_LEVEL_${LOGLEVEL}})
+add_compile_definitions(LOGLEVEL=${LOG_LEVEL_${LOGLEVEL}})
 
 
 ##################################################
@@ -399,15 +473,20 @@ set(PRECOMPILED_HEADER_FILES_ENGINE src/util/HashMap.h src/engine/Operation.h sr
 set(PRECOMPILED_HEADER_FILES_PARSER src/engine/sparqlExpressions/AggregateExpression.h ${ctre_SOURCE_DIR}/single-header/ctre-unicode.hpp ${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src/antlr4-runtime.h)
 
 add_subdirectory(src/parser)
-target_precompile_headers(parser PRIVATE ${PRECOMPILED_HEADER_FILES_PARSER})
 add_subdirectory(src/engine)
-target_precompile_headers(engine PRIVATE ${PRECOMPILED_HEADER_FILES_ENGINE})
+if (USE_PRECOMPILED_HEADERS)
+    target_precompile_headers(parser PRIVATE ${PRECOMPILED_HEADER_FILES_PARSER})
+    target_precompile_headers(engine PRIVATE ${PRECOMPILED_HEADER_FILES_ENGINE})
+endif ()
 add_subdirectory(src/index)
 add_subdirectory(src/util)
+add_subdirectory(src/rdfTypes)
+add_subdirectory(src/global)
+add_subdirectory(src/libqlever)
 add_subdirectory(benchmark)
 
 enable_testing()
-option(SINGLE_TEST_BINARY "Link all unit tests into a single binary. This is useful e.g. for code coverage tools" OFF)
+option(SINGLE_TEST_BINARY "Link all unit tests into a single binary. This is useful e.g. for code coverage tools and greatly reduces the total disk space required when building all unit tests with debug symbols" OFF)
 add_subdirectory(test)
 
 # Add the library with the constants declared in `CompilationInfo.h` and defined
@@ -415,15 +494,116 @@ add_subdirectory(test)
 add_library(compilationInfo ${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp)
 qlever_target_link_libraries(compilationInfo)
 
-add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp)
-qlever_target_link_libraries(IndexBuilderMain index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo)
+OPTION(_EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER "Don't build some targets when compiling with Emscripten." OFF)
 
-add_executable(ServerMain src/ServerMain.cpp)
-qlever_target_link_libraries(ServerMain engine ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo)
-target_precompile_headers(ServerMain REUSE_FROM engine)
+if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
+    add_executable(qlever-index src/index/IndexBuilderMain.cpp)
+    qlever_target_link_libraries(qlever-index qlever index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
+
+    add_executable(qlever-server src/ServerMain.cpp)
+    qlever_target_link_libraries(qlever-server engine server ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
+    if (USE_PRECOMPILED_HEADERS)
+        target_precompile_headers(qlever-server REUSE_FROM engine)
+    endif()
+endif()
+
+add_executable(LibQLeverExample src/libqlever/LibQLeverExample.cpp)
+qlever_target_link_libraries(LibQLeverExample parser engine util index qlever absl::strings)
 
 add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
-qlever_target_link_libraries(VocabularyMergerMain index ${CMAKE_THREAD_LIBS_INIT})
+qlever_target_link_libraries(VocabularyMergerMain index parser ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
 qlever_target_link_libraries(PrintIndexVersionMain util)
+
+if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
+    install(TARGETS
+        qlever-index
+        qlever-server
+        RUNTIME DESTINATION bin
+    )
+endif()
+
+###############################################################
+# CPack packaging
+###############################################################
+
+# Get version from git describe for CPack
+include(GitVersion.cmake)
+
+set(CPACK_PACKAGE_NAME "qlever-bin")
+
+# Set CPACK_PACKAGE_VERSION according to Debian packaging naming rules
+# If git describe output begins with v + semver:
+if (PROJECT_VERSION MATCHES "^v([0-9]+\\.[0-9]+\\.[0-9]+)(-[0-9]+)?(-g[0-9a-f]+)?$")
+
+    # CMAKE_MATCH_1 is "major.minor.patch"
+    set(TAG_VERSION "${CMAKE_MATCH_1}")
+
+    # CMAKE_MATCH_2 is "-commits_ahead" (or empty)
+    if (CMAKE_MATCH_2)
+        string(SUBSTRING "${CMAKE_MATCH_2}" 1 -1 COMMITS_AHEAD)
+        set(CPACK_PACKAGE_VERSION "${TAG_VERSION}+${COMMITS_AHEAD}")
+    else()
+        set(CPACK_PACKAGE_VERSION "${TAG_VERSION}")
+    endif()
+
+else()
+    # Fallback for non-tagged builds: Use commit hash
+    if (PROJECT_VERSION MATCHES "-g([0-9a-f]+)$")
+        set(HASH "${CMAKE_MATCH_1}")
+    else()
+        set(HASH "${PROJECT_VERSION}")
+    endif()
+    set(CPACK_PACKAGE_VERSION "0.0.0+${HASH}")
+endif()
+
+# Debian package revision number (e.g., the "1" in "0.5.42-1~plucky~25.04").
+# Override with: cmake -DPACKAGE_REVISION=2
+set(PACKAGE_REVISION "1" CACHE STRING "Debian package revision number")
+
+# Version suffix for distribution-specific packages (e.g., "~plucky~25.04").
+# Auto-detected from /etc/os-release for Ubuntu and Debian.
+# For derived distros, override with: cmake -DVERSION_SUFFIX="~noble~24.04"
+set(DEFAULT_VERSION_SUFFIX "")
+if (EXISTS "/etc/os-release")
+    file(STRINGS "/etc/os-release" OS_RELEASE_CONTENTS)
+
+    set(_OS_ID "")
+    set(_OS_VERSION_ID "")
+    set(_OS_VERSION_CODENAME "")
+
+    foreach(line ${OS_RELEASE_CONTENTS})
+        if (line MATCHES "^ID=\"?([^\"]*)\"?$")
+            set(_OS_ID "${CMAKE_MATCH_1}")
+        elseif (line MATCHES "^VERSION_ID=\"?([^\"]*)\"?$")
+            set(_OS_VERSION_ID "${CMAKE_MATCH_1}")
+        elseif (line MATCHES "^VERSION_CODENAME=\"?([^\"]*)\"?$")
+            set(_OS_VERSION_CODENAME "${CMAKE_MATCH_1}")
+        endif()
+    endforeach()
+
+    if (_OS_VERSION_CODENAME AND _OS_VERSION_ID)
+        if (_OS_ID STREQUAL "ubuntu")
+            set(DEFAULT_VERSION_SUFFIX "~${_OS_VERSION_CODENAME}~${_OS_VERSION_ID}")
+        elseif (_OS_ID STREQUAL "debian")
+            set(DEFAULT_VERSION_SUFFIX "~${_OS_VERSION_CODENAME}~deb${_OS_VERSION_ID}")
+        endif()
+    endif()
+endif()
+
+set(VERSION_SUFFIX "${DEFAULT_VERSION_SUFFIX}" CACHE STRING "Distribution-specific version suffix")
+
+set(CPACK_PACKAGE_VERSION "${CPACK_PACKAGE_VERSION}-${PACKAGE_REVISION}${VERSION_SUFFIX}")
+
+set(CPACK_PACKAGE_CONTACT "mundhahj@tf.uni-freiburg.de")
+set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/ad-freiburg/qlever")
+
+set(CPACK_OUTPUT_FILE_PREFIX "${CMAKE_CURRENT_BINARY_DIR}/packages")
+set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+
+set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
+
+set(CPACK_VERBATIM_VARIABLES YES)
+
+include(CPack)

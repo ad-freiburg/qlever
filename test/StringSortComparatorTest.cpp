@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "./util/GTestHelpers.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "index/StringSortComparator.h"
 using namespace std::literals;
 using ad_utility::source_location;
@@ -116,7 +117,7 @@ TEST(StringSortComparatorTest, TripleComponentComparatorTotal) {
   // result, no matter if it is done on the level of strings or on `SortKey`s.
   auto assertConsistent = [&comparator, &comp](
                               const auto& a, const auto& b,
-                              source_location l = source_location::current()) {
+                              source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto tr = generateLocationTrace(l);
     bool ab = comp(a, b);
     bool ba = comp(b, a);
@@ -125,19 +126,24 @@ TEST(StringSortComparatorTest, TripleComponentComparatorTotal) {
     auto bSplit = comparator.extractAndTransformComparable(
         b, TripleComponentComparator::Level::TOTAL);
     EXPECT_EQ(ab, comp(aSplit, bSplit));
+    EXPECT_EQ(ab, comp(a, bSplit));
+    EXPECT_EQ(ab, comp(aSplit, b));
+
     EXPECT_EQ(ba, comp(bSplit, aSplit));
+    EXPECT_EQ(ba, comp(b, aSplit));
+    EXPECT_EQ(ba, comp(bSplit, a));
   };
 
   auto assertTrue = [&comp, &assertConsistent](
                         const auto& a, const auto& b,
-                        source_location l = source_location::current()) {
+                        source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto tr = generateLocationTrace(l);
     ASSERT_TRUE(comp(a, b));
     assertConsistent(a, b);
   };
   auto assertFalse = [&comp, &assertConsistent](
                          const auto& a, const auto& b,
-                         source_location l = source_location::current()) {
+                         source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto tr = generateLocationTrace(l);
     ASSERT_FALSE(comp(a, b));
     assertConsistent(a, b);
@@ -236,7 +242,7 @@ TEST(LocaleManager, PrefixSortKey) {
     for (size_t i = 0; i < s.size(); ++i) {
       auto [numCodepoints, partial] = loc.getPrefixSortKey(s, i);
       (void)numCodepoints;
-      ASSERT_TRUE(complete.starts_with(partial.get()));
+      ASSERT_TRUE(ql::starts_with(complete, partial.get()));
       print(partial.get());
     }
   };

@@ -3,11 +3,12 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 // Author: Johannes Kalmbach (johannes.kalmbach@gmail.com)
 
-#pragma once
+#ifndef QLEVER_SRC_INDEX_INDEXMETADATAIMPL_H
+#define QLEVER_SRC_INDEX_INDEXMETADATAIMPL_H
 
 #include "index/IndexMetaData.h"
-#include "index/MetaDataHandler.h"
 #include "util/File.h"
+#include "util/ReadableNumberFacet.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeHashMap.h"
@@ -89,14 +90,14 @@ void IndexMetaData<MapType>::readFromFile(ad_utility::File* file) {
 
 // _____________________________________________________________________________
 template <class MapType>
-string IndexMetaData<MapType>::statistics() const {
+std::string IndexMetaData<MapType>::statistics() const {
   std::ostringstream os;
   std::locale loc;
   ad_utility::ReadableNumberFacet facet(1);
   std::locale locWithNumberGrouping(loc, &facet);
   os.imbue(locWithNumberGrouping);
   os << "#relations = " << numDistinctCol0_
-     << ", #blocks = " << blockData_.size()
+     << ", #blocks = " << blockData().size()
      << ", #triples = " << totalElements_;
   return std::move(os).str();
 }
@@ -106,7 +107,29 @@ template <class MapType>
 void IndexMetaData<MapType>::calculateStatistics(size_t numDistinctCol0) {
   totalElements_ = 0;
   numDistinctCol0_ = numDistinctCol0;
-  for (const auto& block : blockData_) {
+  for (const auto& block : blockData()) {
     totalElements_ += block.numRows_;
   }
 }
+
+// _____________________________________________________________________________
+template <class MapType>
+void IndexMetaData<MapType>::exchangeMultiplicities(IndexMetaData& other) {
+  AD_CONTRACT_CHECK(data_.size() == other.data_.size(),
+                    "Both IndexMetaData objects must have the same length.");
+  // This is conceptually `::ranges::zip_view`, but the `data_` objects to not
+  // satisfy the necessary concepts for it, so we do the zipping manually here.
+  auto otherIt = other.data_.begin();
+  for (auto it = data_.begin(); it != data_.end(); ++it, ++otherIt) {
+    AD_CORRECTNESS_CHECK(otherIt != other.data_.end());
+    auto& md1 = *it;
+    auto& md2 = *otherIt;
+    AD_CONTRACT_CHECK(md1.col0Id_.getBits() == md2.col0Id_.getBits(),
+                      "The ids must be in the same order and the same ids must "
+                      "be present in both IndexMetaData objects.");
+    md1.multiplicityCol2_ = md2.multiplicityCol1_;
+    md2.multiplicityCol2_ = md1.multiplicityCol1_;
+  }
+}
+
+#endif  // QLEVER_SRC_INDEX_INDEXMETADATAIMPL_H

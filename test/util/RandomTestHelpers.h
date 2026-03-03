@@ -2,13 +2,15 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (October of 2023, schlegea@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_TEST_UTIL_RANDOMTESTHELPERS_H
+#define QLEVER_TEST_UTIL_RANDOMTESTHELPERS_H
+
 #include <algorithm>
 #include <array>
 #include <cstddef>
-#include <functional>
 #include <random>
 
+#include "backports/functional.h"
 #include "util/Random.h"
 
 // A simple pseudo random generator for instances of `ad_utility::RandomSeed`.
@@ -35,7 +37,9 @@ inline std::array<ad_utility::RandomSeed, NumSeeds> createArrayOfRandomSeeds(
         ad_utility::RandomSeed::make(std::random_device{}())) {
   RandomSeedGenerator generator{std::move(seed)};
   std::array<ad_utility::RandomSeed, NumSeeds> seeds{};
-  std::ranges::generate(seeds,
-                        [&generator]() { return std::invoke(generator); });
+  ql::ranges::generate(seeds,
+                       [&generator]() { return std::invoke(generator); });
   return seeds;
 }
+
+#endif  // QLEVER_TEST_UTIL_RANDOMTESTHELPERS_H

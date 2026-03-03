@@ -6,6 +6,7 @@
 
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/OperationTestHelpers.h"
 #include "engine/Distinct.h"
 #include "engine/NeutralElementOperation.h"
 
@@ -14,7 +15,7 @@ using V = Variable;
 
 namespace {
 // Convert a generator to a vector for easier comparison in assertions
-std::vector<IdTable> toVector(Result::Generator generator) {
+std::vector<IdTable> toVector(Result::LazyResult generator) {
   std::vector<IdTable> result;
   for (auto& [table, vocab] : generator) {
     // IMPORTANT: The `vocab` will go out of scope here, but the tests don't use
@@ -74,7 +75,7 @@ TEST(Distinct, testChunkEdgeCases) {
   {
     input.resize(1);
     row[0] = Id::makeFromInt(0);
-    std::ranges::fill(input, row);
+    ql::ranges::fill(input, row);
     IdTable result = distinct.outOfPlaceDistinct<1>(input);
 
     ASSERT_EQ(makeIdTableFromVector({{0}}, &Id::makeFromInt), result);
@@ -83,7 +84,7 @@ TEST(Distinct, testChunkEdgeCases) {
   {
     input.resize(Distinct::CHUNK_SIZE + 1);
     row[0] = Id::makeFromInt(0);
-    std::ranges::fill(input, row);
+    ql::ranges::fill(input, row);
     IdTable result = distinct.outOfPlaceDistinct<1>(input);
 
     ASSERT_EQ(makeIdTableFromVector({{0}}, &Id::makeFromInt), result);
@@ -92,7 +93,7 @@ TEST(Distinct, testChunkEdgeCases) {
   {
     input.resize(Distinct::CHUNK_SIZE + 1);
     row[0] = Id::makeFromInt(0);
-    std::ranges::fill(input, row);
+    ql::ranges::fill(input, row);
     input.at(Distinct::CHUNK_SIZE, 0) = Id::makeFromInt(1);
     IdTable result = distinct.outOfPlaceDistinct<1>(input);
 
@@ -102,7 +103,7 @@ TEST(Distinct, testChunkEdgeCases) {
   {
     input.resize(2 * Distinct::CHUNK_SIZE);
     row[0] = Id::makeFromInt(0);
-    std::ranges::fill(input, row);
+    ql::ranges::fill(input, row);
     IdTable result = distinct.outOfPlaceDistinct<1>(input);
 
     ASSERT_EQ(makeIdTableFromVector({{0}}, &Id::makeFromInt), result);
@@ -111,7 +112,7 @@ TEST(Distinct, testChunkEdgeCases) {
   {
     input.resize(2 * Distinct::CHUNK_SIZE + 2);
     row[0] = Id::makeFromInt(0);
-    std::ranges::fill(input, row);
+    ql::ranges::fill(input, row);
     input.at(2 * Distinct::CHUNK_SIZE + 1, 0) = Id::makeFromInt(1);
     IdTable result = distinct.outOfPlaceDistinct<1>(input);
 
@@ -215,11 +216,24 @@ TEST(Distinct, lazyWithLazyInputs) {
   auto m = matchesIdTable;
   using ::testing::ElementsAre;
   EXPECT_THAT(
-      toVector(std::move(result->idTables())),
+      toVector(result->idTables()),
       ElementsAre(
           m(makeIdTableFromVector({{1, 1, 3, 7}})),
           m(makeIdTableFromVector({{2, 2, 3, 5}, {3, 6, 5, 4}})),
           m(makeIdTableFromVector(
               {{6, 7, 0, 6}, {2, 7, 1, 5}, {3, 7, 2, 4}, {1, 7, 3, 1}})),
           m(makeIdTableFromVector({{6, 7, 4, 6}}))));
+}
+
+// _____________________________________________________________________________
+TEST(Distinct, clone) {
+  auto qec = ad_utility::testing::getQec();
+  Distinct distinct{ad_utility::testing::getQec(),
+                    ad_utility::makeExecutionTree<NeutralElementOperation>(qec),
+                    std::vector<ColumnIndex>{0, 1}};
+
+  auto clone = distinct.clone();
+  ASSERT_TRUE(clone);
+  EXPECT_THAT(distinct, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), distinct.getDescriptor());
 }

@@ -4,12 +4,14 @@
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_DATA_LIMITOFFSETCLAUSE_H
+#define QLEVER_SRC_PARSER_DATA_LIMITOFFSETCLAUSE_H
 
 #include <cstdint>
 #include <limits>
 #include <optional>
 
+#include "backports/three_way_comparison.h"
 #include "util/Exception.h"
 
 // Represents the data returned by a limitOffsetClause.
@@ -63,5 +65,24 @@ struct LimitOffsetClause {
   // almost always.
   bool isUnconstrained() const { return !_limit.has_value() && _offset == 0; }
 
-  bool operator==(const LimitOffsetClause&) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(LimitOffsetClause, _limit,
+                                              textLimit_, exportLimit_)
+
+  // Merge two clauses together. This adds the offsets and takes the minimum of
+  // both limits. If the other limit is not set, the current limit is kept.
+  // Example:
+  // SELECT * { SELECT * { ... } LIMIT 2 OFFSET 1 } LIMIT 3 OFFSET 1
+  // is equivalent to
+  // SELECT * { ... } LIMIT 1 OFFSET 2
+  void mergeLimitAndOffset(const LimitOffsetClause& other) {
+    _offset += other._offset;
+    if (_limit.has_value()) {
+      _limit.value() -= std::min(other._offset, _limit.value());
+    }
+    if (other._limit.has_value()) {
+      _limit = std::min(limitOrDefault(), other._limit.value());
+    }
+  }
 };
+
+#endif  // QLEVER_SRC_PARSER_DATA_LIMITOFFSETCLAUSE_H

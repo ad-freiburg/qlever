@@ -1,6 +1,8 @@
 //   Copyright 2023, University of Freiburg,
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_PARSEABLEDURATION_H
 #define QLEVER_PARSEABLEDURATION_H
@@ -8,12 +10,23 @@
 #include <absl/strings/str_cat.h>
 
 #include <boost/lexical_cast.hpp>
+#include <chrono>
 #include <ctre-unicode.hpp>
 #include <iostream>
 
+#include "backports/keywords.h"
+#include "backports/three_way_comparison.h"
 #include "util/Exception.h"
+#include "util/TypeIdentity.h"
+#include "util/TypeTraits.h"
 
 namespace ad_utility {
+
+namespace detail {
+// CTRE regex pattern for C++17 compatibility
+constexpr ctll::fixed_string durationPatternRegex =
+    R"(\s*(-?\d+)\s*(ns|us|ms|s|min|h)\s*)";
+}  // namespace detail
 
 // Wrapper type for std::chrono::duration<> to avoid having to declare
 // this in the std::chrono namespace.
@@ -31,24 +44,27 @@ class ParseableDuration {
  public:
   ParseableDuration() = default;
   // Implicit conversion is on purpose!
-  explicit(false) ParseableDuration(DurationType duration)
-      : duration_{duration} {}
-  explicit(false) operator DurationType() const { return duration_; }
+  QL_EXPLICIT(false)
+  ParseableDuration(DurationType duration) : duration_{duration} {}
+  QL_EXPLICIT(false) operator DurationType() const { return duration_; }
 
   // TODO default this implementation (and remove explicit equality) once libc++
   // supports it.
-  auto operator<=>(const ParseableDuration& other) const noexcept {
-    return duration_.count() <=> other.duration_.count();
+  auto compareThreeWay(const ParseableDuration& other) const noexcept {
+    return ql::compareThreeWay(duration_.count(), other.duration_.count());
   }
+  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(ParseableDuration)
 
   template <typename Other>
-  auto operator<=>(const ParseableDuration<Other>& other) const noexcept {
+  auto compareThreeWay(const ParseableDuration<Other>& other) const noexcept {
     using CommonType = std::common_type_t<DurationType, Other>;
-    return CommonType{duration_}.count() <=>
-           CommonType{other.duration_}.count();
+    return ql::compareThreeWay(CommonType{duration_}.count(),
+                               CommonType{other.duration_}.count());
   }
+  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_TEMPLATE(template <typename Other>,
+                                                    ParseableDuration<Other>)
 
-  bool operator==(const ParseableDuration&) const noexcept = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR(ParseableDuration, duration_)
 
   // ___________________________________________________________________________
   template <typename CharT>
@@ -72,29 +88,32 @@ class ParseableDuration {
   // ___________________________________________________________________________
   static ParseableDuration<DurationType> fromString(std::string_view arg) {
     using namespace std::chrono;
-    if (auto m = ctre::match<R"(\s*(-?\d+)\s*(ns|us|ms|s|min|h)\s*)">(arg)) {
+    using ad_utility::use_type_identity::ti;
+
+    if (auto m = ctre::match<detail::durationPatternRegex>(arg)) {
       auto unit = m.template get<2>().to_view();
 
-      auto toDuration = [&m]<typename OriginalDuration>() {
+      auto toDuration = [&m](auto t) {
+        using OriginalDuration = typename decltype(t)::type;
         auto amount = m.template get<1>()
                           .template to_number<typename OriginalDuration::rep>();
         return duration_cast<DurationType>(OriginalDuration{amount});
       };
 
       if (unit == "ns") {
-        return toDuration.template operator()<nanoseconds>();
+        return toDuration(ti<nanoseconds>);
       } else if (unit == "us") {
-        return toDuration.template operator()<microseconds>();
+        return toDuration(ti<microseconds>);
       } else if (unit == "ms") {
-        return toDuration.template operator()<milliseconds>();
+        return toDuration(ti<milliseconds>);
       } else if (unit == "s") {
-        return toDuration.template operator()<seconds>();
+        return toDuration(ti<seconds>);
       } else if (unit == "min") {
-        return toDuration.template operator()<minutes>();
+        return toDuration(ti<minutes>);
       } else {
         // Verify unit was checked exhaustively
         AD_CORRECTNESS_CHECK(unit == "h");
-        return toDuration.template operator()<hours>();
+        return toDuration(ti<hours>);
       }
     }
     throw std::runtime_error{absl::StrCat(
@@ -108,7 +127,7 @@ class ParseableDuration {
       std::basic_ostream<CharT>& os,
       const ParseableDuration<DurationType>& duration) {
     using namespace std::chrono;
-    using period = DurationType::period;
+    using period = typename DurationType::period;
 
     os << duration.duration_.count();
 

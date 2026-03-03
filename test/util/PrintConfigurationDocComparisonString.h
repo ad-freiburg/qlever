@@ -3,7 +3,8 @@
 // Author: Andre Schlegel (December of 2023,
 // schlegea@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_TEST_UTIL_PRINTCONFIGURATIONDOCCOMPARISONSTRING_H
+#define QLEVER_TEST_UTIL_PRINTCONFIGURATIONDOCCOMPARISONSTRING_H
 
 /*
 The comparison strings for the test `PrintConfigurationDocComparison` in file
@@ -1681,3 +1682,5 @@ Sub manager 'subManager'
     
     Required invariants:
         - Validator for configuration options doubleArgumentValidatorFirstArgument, doubleArgumentValidatorSecondArgument.)--");
+
+#endif  // QLEVER_TEST_UTIL_PRINTCONFIGURATIONDOCCOMPARISONSTRING_H

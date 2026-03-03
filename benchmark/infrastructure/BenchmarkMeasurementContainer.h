@@ -7,7 +7,6 @@
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
-#include <concepts>
 #include <memory>
 #include <utility>
 #include <variant>
@@ -26,19 +25,21 @@ namespace ad_benchmark {
 // Helper function for adding time entries to the classes.
 /*
 @brief Return execution time of function in seconds and inserts the progress in
-`LOG(INFO)`.
+`AD_LOG_INFO`.
 
 @tparam Function Best left to type inference.
 
 @param functionToMeasure Must be a function, or callable.
 @param measurementSubjectName A description/name of what is being measured.
 */
-template <std::invocable Function>
-static float measureTimeOfFunction(
-    const Function& functionToMeasure,
-    std::string_view measurementSubjectIdentifier) {
-  LOG(INFO) << "Running measurement \"" << measurementSubjectIdentifier
-            << "\" ..." << std::endl;
+CPP_template(typename Function)(requires(
+    ql::concepts::invocable<
+        Function>)) static float measureTimeOfFunction(const Function&
+                                                           functionToMeasure,
+                                                       std::string_view
+                                                           measurementSubjectIdentifier) {
+  AD_LOG_INFO << "Running measurement \"" << measurementSubjectIdentifier
+              << "\" ..." << std::endl;
 
   // Measuring the time.
   ad_utility::timer::Timer benchmarkTimer(ad_utility::timer::Timer::Started);
@@ -49,7 +50,7 @@ static float measureTimeOfFunction(
   // precision.
   const auto measuredTime = static_cast<float>(
       ad_utility::timer::Timer::toSeconds(benchmarkTimer.value()));
-  LOG(INFO) << "Done in " << measuredTime << " seconds." << std::endl;
+  AD_LOG_INFO << "Done in " << measuredTime << " seconds." << std::endl;
 
   return measuredTime;
 }
@@ -94,8 +95,8 @@ class ResultEntry : public BenchmarkMetadataGetter {
   @param functionToMeasure The function, who's execution time will be
   measured and saved.
   */
-  ResultEntry(const std::string& descriptor,
-              const std::invocable auto& functionToMeasure)
+  CPP_template(typename F)(requires(ql::concepts::invocable<F>))
+      ResultEntry(const std::string& descriptor, const F& functionToMeasure)
       : descriptor_{descriptor},
         measuredTime_{measureTimeOfFunction(functionToMeasure, descriptor)} {}
 
@@ -110,8 +111,9 @@ class ResultEntry : public BenchmarkMetadataGetter {
   @param functionToMeasure The function, who's execution time will be
   measured and saved.
   */
-  ResultEntry(const std::string& descriptor, std::string_view descriptorForLog,
-              const std::invocable auto& functionToMeasure)
+  CPP_template(typename F)(requires(ql::concepts::invocable<F>))
+      ResultEntry(const std::string& descriptor,
+                  std::string_view descriptorForLog, const F& functionToMeasure)
       : descriptor_{descriptor},
         measuredTime_{
             measureTimeOfFunction(functionToMeasure, descriptorForLog)} {}
@@ -141,7 +143,7 @@ class ResultTable : public BenchmarkMetadataGetter {
   // For identification.
   std::string descriptor_;
   /*
-  For identification within `Log(Info)`. This class knows nothing about the
+  For identification within `AD_LOG_INFO`. This class knows nothing about the
   groups, where it is a member, but we want to include this information in
   the log. This is our workaround.
   */
@@ -197,9 +199,11 @@ class ResultTable : public BenchmarkMetadataGetter {
    Starts with `(0,0)`.
   @param functionToMeasure The function, which execution time will be measured.
   */
-  template <std::invocable Function>
-  void addMeasurement(const size_t& row, const size_t& column,
-                      const Function& functionToMeasure) {
+  CPP_template(typename Function)(requires(
+      ql::concepts::invocable<
+          Function>)) void addMeasurement(const size_t& row,
+                                          const size_t& column,
+                                          const Function& functionToMeasure) {
     AD_CONTRACT_CHECK(row < numRows() && column < numColumns());
     entries_.at(row).at(column) = measureTimeOfFunction(
         functionToMeasure,
@@ -227,8 +231,8 @@ class ResultTable : public BenchmarkMetadataGetter {
 
   @param row, column Which table entry to read. Starts with `(0,0)`.
   */
-  template <ad_utility::SameAsAnyTypeIn<EntryType> T>
-  T getEntry(const size_t row, const size_t column) const {
+  CPP_template(typename T)(requires ad_utility::SameAsAnyTypeIn<T, EntryType>) T
+      getEntry(const size_t row, const size_t column) const {
     AD_CONTRACT_CHECK(row < numRows() && column < numColumns());
     static_assert(!ad_utility::isSimilar<T, std::monostate>);
 
@@ -327,9 +331,9 @@ class ResultGroup : public BenchmarkMetadataGetter {
   @param functionToMeasure The function, who's execution time will be
   measured and saved.
   */
-  template <std::invocable Function>
-  ResultEntry& addMeasurement(const std::string& descriptor,
-                              const Function& functionToMeasure) {
+  CPP_template(typename Function)(requires(ql::concepts::invocable<Function>))
+      ResultEntry& addMeasurement(const std::string& descriptor,
+                                  const Function& functionToMeasure) {
     resultEntries_.push_back(ad_utility::make_copyable_unique<ResultEntry>(
         descriptor, absl::StrCat(descriptor, " of group ", descriptor_),
         functionToMeasure));
@@ -375,7 +379,7 @@ class ResultGroup : public BenchmarkMetadataGetter {
 
  private:
   // The implementation for the general deletion of entries.
-  template <ad_utility::SameAsAny<ResultEntry, ResultTable> T>
+  template <typename T>
   void deleteEntryImpl(T& entry);
 };
 

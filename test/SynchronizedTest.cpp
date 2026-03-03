@@ -4,7 +4,7 @@
 
 #include <gtest/gtest.h>
 
-#include "../src/util/Synchronized.h"
+#include "util/Synchronized.h"
 
 using ad_utility::Synchronized;
 
@@ -29,6 +29,25 @@ TEST(Synchronized, Exclusive) {
   const auto& i2 = i;
   auto res = i2.withWriteLock([](const auto& x) { return x; });
   ASSERT_EQ(res, 6);
+}
+
+// Test the move semantics of the `wlock()` objects, a moved from object neither
+// owns the lock, nor does it try to (wrongly) delete it in its destructor.
+TEST(Synchronized, MovingOfLockObjects) {
+  Synchronized<int> i{3};
+  {
+    auto lock = i.wlock();
+    auto lock2 = std::move(lock);
+    {
+      // At this point, `lock3` own the lock, and will release it when
+      // begin destroyed.
+      auto lock3 = std::move(lock2);
+    }
+
+    lock = i.wlock();
+    *lock = 42;
+  }
+  ASSERT_EQ(*i.rlock(), 42);
 }
 
 TEST(Synchronized, Shared) {
@@ -123,6 +142,20 @@ TEST(Synchronized, ToBaseReference) {
   ASSERT_EQ(bSync.rlock()->g(), 6);
 
   // TODO<joka921>: Test, that the locking was indeed successful.
+}
+
+TEST(Synchronized, Copyable) {
+  Synchronized<int> s1{3};
+  Synchronized<int> s2{s1};
+  Synchronized<int> s3{0};
+  s3 = s1;
+  EXPECT_EQ(*s2.wlock(), 3);
+  EXPECT_EQ(*s3.wlock(), 3);
+
+  *s1.wlock() = 42;
+  EXPECT_EQ(*s1.wlock(), 42);
+  EXPECT_EQ(*s2.wlock(), 3);
+  EXPECT_EQ(*s3.wlock(), 3);
 }
 
 template <typename T, typename = void>

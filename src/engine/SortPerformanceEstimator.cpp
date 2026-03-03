@@ -7,6 +7,7 @@
 #include <absl/strings/str_cat.h>
 
 #include <cstdlib>
+#include <iomanip>
 
 #include "engine/CallFixedSize.h"
 #include "engine/Engine.h"
@@ -48,7 +49,9 @@ auto SortPerformanceEstimator::measureSortingTime(
   auto randomTable = createRandomIdTable(numRows, numColumns, allocator);
   ad_utility::Timer timer{ad_utility::Timer::Started};
   // Always sort on the first column for simplicity;
-  CALL_FIXED_SIZE(numColumns, &Engine::sort, &randomTable, 0ull);
+  ad_utility::callFixedSizeVi(numColumns, [&](auto numCols) {
+    Engine::sort<numCols>(&randomTable, 0ull);
+  });
   return timer.value();
 }
 
@@ -63,9 +66,10 @@ auto SortPerformanceEstimator::estimatedSortTime(size_t numRows,
                                                  size_t numCols) const noexcept
     -> Timer::Duration {
   if (!_estimatesWereCalculated) {
-    LOG(WARN) << "The estimates of the SortPerformanceEstimator were never set "
-                 "up, Sorts will thus never time out"
-              << std::endl;
+    AD_LOG_WARN
+        << "The estimates of the SortPerformanceEstimator were never set "
+           "up, Sorts will thus never time out"
+        << std::endl;
     return Timer::Duration::zero();
   }
   // Return the index of the element in the !sorted! `sampleVector`, which is
@@ -94,10 +98,10 @@ auto SortPerformanceEstimator::estimatedSortTime(size_t numRows,
   // start with the closest sample
   Timer::Duration result = _samples[rowIndex][columnIndex];
 
-  LOG(TRACE) << "Closest sample result was " << sampleValuesRows[rowIndex]
-             << " rows with " << sampleValuesCols[columnIndex]
-             << " columns and an estimate of " << Timer::toSeconds(result)
-             << " seconds." << std::endl;
+  AD_LOG_TRACE << "Closest sample result was " << sampleValuesRows[rowIndex]
+               << " rows with " << sampleValuesCols[columnIndex]
+               << " columns and an estimate of " << Timer::toSeconds(result)
+               << " seconds." << std::endl;
 
   auto numRowsInSample = static_cast<double>(sampleValuesRows[rowIndex]);
   double rowRatio = static_cast<double>(numRows) / numRowsInSample;
@@ -118,12 +122,14 @@ auto SortPerformanceEstimator::estimatedSortTime(size_t numRows,
 void SortPerformanceEstimator::computeEstimatesExpensively(
     const ad_utility::AllocatorWithLimit<Id>& allocator,
     size_t maxNumberOfElementsToSort) {
+#ifndef QLEVER_CPP_17
   static_assert(isSorted(sampleValuesCols));
   static_assert(isSorted(sampleValuesRows));
+#endif
 
-  LOG(INFO) << "Sorting random result tables to estimate the sorting "
-               "performance of this machine ..."
-            << std::endl;
+  AD_LOG_INFO << "Sorting random result tables to estimate the sorting "
+                 "performance of this machine ..."
+              << std::endl;
 
   _samples.fill({});
   for (size_t i = 0; i < NUM_SAMPLES_ROWS; ++i) {
@@ -156,9 +162,10 @@ void SortPerformanceEstimator::computeEstimatesExpensively(
       if (estimateSortingTime) {
         // These estimates are not too important, since results of this size
         // cannot be sorted anyway because of the memory limit.
-        LOG(TRACE) << "Creating the table failed because of a lack of memory"
-                   << std::endl;
-        LOG(TRACE) << "Creating an estimate from a smaller result" << std::endl;
+        AD_LOG_TRACE << "Creating the table failed because of a lack of memory"
+                     << std::endl;
+        AD_LOG_TRACE << "Creating an estimate from a smaller result"
+                     << std::endl;
         if (i > 0) {
           // Assume that sorting time grows linearly in the number of rows. For
           // details on the usage of `toDuration()` see its first usage above.
@@ -177,18 +184,18 @@ void SortPerformanceEstimator::computeEstimatesExpensively(
         } else {
           // not even the smallest IdTable could be created, this should never
           // happen.
-          LOG(WARN)
+          AD_LOG_WARN
               << "Could not create any estimate for the sorting performance. "
               << "Setting all estimates to 0. This means that no sort "
               << "operations will be canceled." << std::endl;
         }
-        LOG(TRACE) << "Estimated the sort time to be " << std::fixed
-                   << std::setprecision(3) << Timer::toSeconds(_samples[i][j])
-                   << " seconds." << std::endl;
+        AD_LOG_TRACE << "Estimated the sort time to be " << std::fixed
+                     << std::setprecision(3) << Timer::toSeconds(_samples[i][j])
+                     << " seconds." << std::endl;
       }
     }
   }
-  LOG(DEBUG) << "Done computing sort estimates" << std::endl;
+  AD_LOG_DEBUG << "Done computing sort estimates" << std::endl;
   _estimatesWereCalculated = true;
 }
 // ___________________________________________________________________________
@@ -196,8 +203,8 @@ void SortPerformanceEstimator::throwIfEstimateTooLong(
     size_t numRows, size_t numColumns,
     std::chrono::steady_clock::time_point deadline,
     std::string_view operationDescriptor) const {
-  auto sortEstimateCancellationFactor =
-      RuntimeParameters().get<"sort-estimate-cancellation-factor">();
+  auto sortEstimateCancellationFactor = getRuntimeParameter<
+      &RuntimeParameters::sortEstimateCancellationFactor_>();
   auto now = std::chrono::steady_clock::now();
   if (now > deadline || estimatedSortTime(numRows, numColumns) >
                             (deadline - now) * sortEstimateCancellationFactor) {

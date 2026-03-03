@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_TOKENIZERCTRE_H
+#define QLEVER_SRC_PARSER_TOKENIZERCTRE_H
 
 #include <gtest/gtest_prod.h>
 
@@ -154,6 +155,8 @@ class TokenizerCtre : public SkipWhitespaceAndCommentsMixin<TokenizerCtre> {
    */
   explicit TokenizerCtre(std::string_view data) : _data(data) {}
 
+  static constexpr bool UseRelaxedParsing = true;
+
   /// iterator to the next character that we have not yet consumed
   [[nodiscard]] auto begin() const { return _data.begin(); }
 
@@ -301,7 +304,7 @@ class TokenizerCtre : public SkipWhitespaceAndCommentsMixin<TokenizerCtre> {
   // left, so there's no match.
   template <size_t idx>
   std::tuple<bool, size_t, std::string_view> getNextTokenRecurse() {
-    return std::tuple(false, idx, "");
+    return std::make_tuple(false, idx, std::string_view{""});
   }
 
   /*
@@ -325,8 +328,9 @@ class TokenizerCtre : public SkipWhitespaceAndCommentsMixin<TokenizerCtre> {
     reset(beg, dataSize);
     bool curBetter = currentSuccess && res.size() > content.size();
 
-    return std::tuple(success || currentSuccess, curBetter ? idx : unusedIdx,
-                      curBetter ? res : content);
+    return std::make_tuple(success || currentSuccess,
+                           curBetter ? idx : unusedIdx,
+                           curBetter ? res : content);
   }
 
   /*
@@ -336,6 +340,7 @@ class TokenizerCtre : public SkipWhitespaceAndCommentsMixin<TokenizerCtre> {
    * <true, matchContent> on success and <false, emptyStringView> on failure
    */
   struct Matcher {
+    // TODO<C++17, joka921>: Template-value feature not available in C++17
     template <auto& regex>
     static std::pair<bool, std::string_view> process(
         std::string_view data) noexcept {
@@ -348,3 +353,5 @@ class TokenizerCtre : public SkipWhitespaceAndCommentsMixin<TokenizerCtre> {
     }
   };
 };
+
+#endif  // QLEVER_SRC_PARSER_TOKENIZERCTRE_H

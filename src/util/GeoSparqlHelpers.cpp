@@ -1,8 +1,9 @@
-// Copyright 2022, University of Freiburg,
-// Author: Hannah Bast <bast@cs.uni-freiburg.de>
+// Copyright 2025, University of Freiburg,
 // Chair of Algorithms and Data Structures
+// Authors: Hannah Bast <bast@cs.uni-freiburg.de>,
+//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
-#include "./GeoSparqlHelpers.h"
+#include "util/GeoSparqlHelpers.h"
 
 #include <absl/strings/charconv.h>
 #include <s2/s2earth.h>
@@ -12,10 +13,12 @@
 #include <cmath>
 #include <ctre-unicode.hpp>
 #include <limits>
-#include <numbers>
 #include <string_view>
+#include <type_traits>
 
-#include "parser/GeoPoint.h"
+#include "global/Constants.h"
+#include "rdfTypes/GeoPoint.h"
+#include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/Exception.h"
 
 namespace ad_utility {
@@ -52,6 +55,17 @@ double wktDistImpl(GeoPoint point1, GeoPoint point2) {
   auto p1 = S2Point{S2LatLng::FromDegrees(point1.getLat(), point1.getLng())};
   auto p2 = S2Point{S2LatLng::FromDegrees(point2.getLat(), point2.getLng())};
   return S2Earth::ToKm(S1Angle(p1, p2));
+}
+
+// _____________________________________________________________________________
+std::optional<std::string> geometryNAsWkt(GeoPointOrWkt wkt, int64_t n) {
+  return utilGeomToWkt(getGeometryN(wkt, n));
+}
+
+// _____________________________________________________________________________
+std::optional<double> wktDistLibSpatialJoinImpl(const GeoPointOrWkt& a,
+                                                const GeoPointOrWkt& b) {
+  return computeMetricDistance(projectWebMerc(a), projectWebMerc(b));
 }
 
 }  // namespace detail

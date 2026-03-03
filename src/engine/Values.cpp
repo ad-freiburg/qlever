@@ -4,12 +4,11 @@
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#include "Values.h"
+#include "engine/Values.h"
 
-#include <sstream>
+#include <absl/strings/str_cat.h>
+#include <absl/strings/str_join.h>
 
-#include "absl/strings/str_cat.h"
-#include "absl/strings/str_join.h"
 #include "engine/CallFixedSize.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
@@ -18,19 +17,19 @@
 Values::Values(QueryExecutionContext* qec, SparqlValues parsedValues)
     : Operation(qec), parsedValues_(std::move(parsedValues)) {
   AD_CONTRACT_CHECK(
-      std::ranges::all_of(parsedValues_._values, [&](const auto& row) {
+      ql::ranges::all_of(parsedValues_._values, [&](const auto& row) {
         return row.size() == parsedValues_._variables.size();
       }));
 }
 
 // ____________________________________________________________________________
-string Values::getCacheKeyImpl() const {
+std::string Values::getCacheKeyImpl() const {
   return absl::StrCat("VALUES (", parsedValues_.variablesToString(), ") { ",
                       parsedValues_.valuesToString(), " }");
 }
 
 // ____________________________________________________________________________
-string Values::getDescriptor() const {
+std::string Values::getDescriptor() const {
   return absl::StrCat("Values with variables ",
                       parsedValues_.variablesToString());
 }
@@ -41,7 +40,7 @@ size_t Values::getResultWidth() const {
 }
 
 // ____________________________________________________________________________
-vector<ColumnIndex> Values::resultSortedOn() const { return {}; }
+std::vector<ColumnIndex> Values::resultSortedOn() const { return {}; }
 
 // ____________________________________________________________________________
 VariableToColumnMap Values::computeVariableToColumnMap() const {
@@ -108,7 +107,7 @@ void Values::computeMultiplicities() {
 }
 
 // ____________________________________________________________________________
-ProtoResult Values::computeResult([[maybe_unused]] bool requestLaziness) {
+Result Values::computeResult([[maybe_unused]] bool requestLaziness) {
   // Set basic properties of the result table.
   IdTable idTable{getExecutionContext()->getAllocator()};
   idTable.setNumColumns(getResultWidth());
@@ -117,7 +116,9 @@ ProtoResult Values::computeResult([[maybe_unused]] bool requestLaziness) {
 
   // Fill the result table using the `writeValues` method below.
   size_t resWidth = getResultWidth();
-  CALL_FIXED_SIZE(resWidth, &Values::writeValues, this, &idTable, &localVocab);
+  ad_utility::callFixedSizeVi(resWidth, [&, self = this](auto width) {
+    return self->writeValues<width>(&idTable, &localVocab);
+  });
   return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
 }
 
@@ -133,7 +134,8 @@ void Values::writeValues(IdTable* idTablePtr, LocalVocab* localVocab) {
       const TripleComponent& tc = row[colIdx];
       // TODO<joka921> We don't want to move, but also don't want to
       // unconditionally copy.
-      Id id = TripleComponent{tc}.toValueId(getIndex().getVocab(), *localVocab);
+      Id id = TripleComponent{tc}.toValueId(getIndex().getVocab(), *localVocab,
+                                            getIndex().encodedIriManager());
       idTable(rowIdx, colIdx) = id;
       if (id.getDatatype() == Datatype::LocalVocabIndex) {
         ++numLocalVocabPerColumn[colIdx];
@@ -142,8 +144,13 @@ void Values::writeValues(IdTable* idTablePtr, LocalVocab* localVocab) {
     rowIdx++;
   }
   AD_CORRECTNESS_CHECK(rowIdx == parsedValues_._values.size());
-  LOG(INFO) << "Number of tuples in VALUES clause: " << rowIdx << std::endl;
-  LOG(INFO) << "Number of entries in local vocabulary per column: "
-            << absl::StrJoin(numLocalVocabPerColumn, ", ") << std::endl;
+  AD_LOG_INFO << "Number of tuples in VALUES clause: " << rowIdx << std::endl;
+  AD_LOG_INFO << "Number of entries in local vocabulary per column: "
+              << absl::StrJoin(numLocalVocabPerColumn, ", ") << std::endl;
   *idTablePtr = std::move(idTable).toDynamic();
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Values::cloneImpl() const {
+  return std::make_unique<Values>(*this);
 }

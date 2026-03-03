@@ -2,12 +2,14 @@
 // Chair of Algorithms and Data Structures.
 // Author: Robin Textor-Falconi (textorr@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_DATA_TYPES_H
+#define QLEVER_SRC_PARSER_DATA_TYPES_H
 
 #include <array>
 #include <tuple>
 #include <vector>
 
+#include "backports/three_way_comparison.h"
 #include "parser/Alias.h"
 #include "parser/PropertyPath.h"
 #include "parser/data/GraphTerm.h"
@@ -26,6 +28,7 @@ using ObjectsAndTriples = std::pair<Objects, Triples>;
 using SubjectOrObjectAndTriples = std::pair<GraphTerm, Triples>;
 
 using VarOrPath = std::variant<Variable, PropertyPath>;
+using VarOrIri = std::variant<Variable, ad_utility::triple_component::Iri>;
 using PathObjectPair = std::pair<VarOrPath, GraphTerm>;
 using PathObjectPairs = std::vector<PathObjectPair>;
 struct TripleWithPropertyPath {
@@ -33,7 +36,8 @@ struct TripleWithPropertyPath {
   VarOrPath predicate_;
   GraphTerm object_;
 
-  bool operator==(const TripleWithPropertyPath&) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(TripleWithPropertyPath, subject_,
+                                              predicate_, object_)
 };
 using PathObjectPairsAndTriples =
     std::pair<PathObjectPairs, std::vector<TripleWithPropertyPath>>;
@@ -44,3 +48,5 @@ using ObjectsAndPathTriples =
 
 using VarOrAlias = std::variant<Variable, Alias>;
 }  // namespace ad_utility::sparql_types
+
+#endif  // QLEVER_SRC_PARSER_DATA_TYPES_H

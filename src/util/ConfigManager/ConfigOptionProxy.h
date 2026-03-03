@@ -2,14 +2,15 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_CONFIGMANAGER_CONFIGOPTIONPROXY_H
+#define QLEVER_SRC_UTIL_CONFIGMANAGER_CONFIGOPTIONPROXY_H
 
 #include <absl/strings/str_cat.h>
 
-#include <concepts>
 #include <stdexcept>
-#include <type_traits>
 
+#include "backports/keywords.h"
+#include "backports/type_traits.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/Exception.h"
 #include "util/TypeTraits.h"
@@ -27,10 +28,10 @@ access to the referenced config option.
 @tparam ConfigOptionType The kind of config option, this proxy will reference
 to. Must be `ConfigOption`, or `const ConfigOption`.
 */
-template <
-    SupportedConfigOptionType T,
-    ad_utility::SameAsAny<ConfigOption, const ConfigOption> ConfigOptionType>
-class ConfigOptionProxyImplementation {
+CPP_template(typename T, typename ConfigOptionType)(
+    requires SupportedConfigOptionType<T> CPP_and ad_utility::SameAsAny<
+        ConfigOptionType, ConfigOption,
+        const ConfigOption>) class ConfigOptionProxyImplementation {
   ConfigOptionType* option_;
 
  public:
@@ -43,26 +44,28 @@ class ConfigOptionProxyImplementation {
 
   // Get access to the configuration option, this is a proxy for. Const access
   // only for the const version, to make the usage clearer.
-  ConfigOptionType& getConfigOption() const
-      requires std::is_const_v<ConfigOptionType> {
+  const ConfigOptionType& getConfigOption() const
+      QL_CONCEPT_OR_NOTHING(requires(std::is_const_v<ConfigOptionType>)) {
     AD_CORRECTNESS_CHECK(option_ != nullptr);
     return *option_;
   }
 
   ConfigOptionType& getConfigOption()
-      requires(!std::is_const_v<ConfigOptionType>) {
+      QL_CONCEPT_OR_NOTHING(requires(!std::is_const_v<ConfigOptionType>)) {
     AD_CORRECTNESS_CHECK(option_ != nullptr);
     return *option_;
   }
 
   // (Implicit) conversion to `ConfigOptionType&`.
-  explicit(false) operator ConfigOptionType&() const
-      requires(std::is_const_v<ConfigOptionType>) {
+  QL_EXPLICIT(false)
+  operator ConfigOptionType&() const
+      QL_CONCEPT_OR_NOTHING(requires(std::is_const_v<ConfigOptionType>)) {
     return getConfigOption();
   }
 
-  explicit(false) operator ConfigOptionType&()
-      requires(!std::is_const_v<ConfigOptionType>) {
+  QL_EXPLICIT(false)
+  operator ConfigOptionType&()
+      QL_CONCEPT_OR_NOTHING(requires(!std::is_const_v<ConfigOptionType>)) {
     return getConfigOption();
   }
 };
@@ -101,9 +104,11 @@ class ConfigOptionProxy
   explicit ConfigOptionProxy(ConfigOption& opt) : Base(opt) {}
 
   // Implicit conversion from not const to const is allowed.
-  explicit(false) operator ConstConfigOptionProxy<T>() {
+  QL_EXPLICIT(false) operator ConstConfigOptionProxy<T>() {
     return ConstConfigOptionProxy<T>(Base::getConfigOption());
   }
 };
 
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_CONFIGMANAGER_CONFIGOPTIONPROXY_H

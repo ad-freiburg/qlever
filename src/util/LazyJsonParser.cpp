@@ -2,6 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Moritz Dom (domm@informatik.uni-freiburg.de)
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include "util/LazyJsonParser.h"
 
 #include <absl/strings/ascii.h>
@@ -38,10 +39,10 @@ LazyJsonParser::Generator LazyJsonParser::parse(
 
 // ____________________________________________________________________________
 LazyJsonParser::Generator LazyJsonParser::parse(
-    cppcoro::generator<std::span<std::byte>> partialJson,
+    cppcoro::generator<ql::span<std::byte>> partialJson,
     std::vector<std::string> arrayPath) {
   return parse(
-      [](cppcoro::generator<std::span<std::byte>> partialJson)
+      [](cppcoro::generator<ql::span<std::byte>> partialJson)
           -> cppcoro::generator<std::string_view> {
         for (const auto& bytes : partialJson) {
           co_yield std::string_view(reinterpret_cast<const char*>(bytes.data()),
@@ -299,3 +300,4 @@ void LazyJsonParser::BeforeArrayPath::tryAddKeyToPath(std::string_view input) {
 }
 
 }  // namespace ad_utility
+#endif

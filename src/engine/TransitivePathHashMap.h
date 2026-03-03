@@ -1,45 +1,64 @@
-// Copyright 2019, University of Freiburg,
+// Copyright 2024-2025, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Florian Kramer (florian.kramer@neptun.uni-freiburg.de)
-//         Johannes Herrmann (johannes.r.herrmann(at)gmail.com)
+// Author:
+//   2024      Johannes Herrmann <johannes.r.herrmann(at)gmail.com>
+//   2025-     Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
+#ifndef QLEVER_SRC_ENGINE_TRANSITIVEPATHHASHMAP_H
+#define QLEVER_SRC_ENGINE_TRANSITIVEPATHHASHMAP_H
+
+#include <absl/container/inlined_vector.h>
 
 #include <memory>
 
-#include "engine/Operation.h"
-#include "engine/QueryExecutionTree.h"
 #include "engine/TransitivePathImpl.h"
 #include "engine/idTable/IdTable.h"
+#include "util/AllocatorWithLimit.h"
 
-/**
- * @class HashMapWrapper
- * @brief A wrapper for the Map class from TransitivePathBase. This wrapper
- * implements the successors function, which is used in transitiveHull function.
- *
- */
-struct HashMapWrapper {
-  Map map_;
+// A set of edges of the implicit graph of a transitive path operation together
+// with the graph IRI of the source node of each edge. This is analogous to
+// `BinSearchMap` (see there for more details), but uses a map of maps (with
+// graph IRI as the outer key and source node as the inner key).
+class HashMapWrapper {
+ public:
+  // We deliberately use the `std::` variants of a hash map because `absl`s
+  // types are not exception safe.
+  using Map = std::unordered_map<
+      Id, Set, absl::Hash<Id>, std::equal_to<Id>,
+      ad_utility::AllocatorWithLimit<std::pair<const Id, Set>>>;
+  using MapOfMaps = std::unordered_map<
+      Id, Map, absl::Hash<Id>, std::equal_to<Id>,
+      ad_utility::AllocatorWithLimit<std::pair<const Id, Map>>>;
+
+ private:
+  // The map of maps mentioned above.
+  MapOfMaps graphMap_;
+  // The map of the currently active graph.
+  Map* map_;
+  // Placeholders to return a reference in case no match was found.
   Set emptySet_;
+  Map emptyMap_;
 
-  HashMapWrapper(Map map, ad_utility::AllocatorWithLimit<Id> allocator)
-      : map_(std::move(map)), emptySet_(allocator){};
+ public:
+  // Construct when there is no GRAPH clause.
+  HashMapWrapper(Map map, const ad_utility::AllocatorWithLimit<Id>& allocator);
 
-  /**
-   * @brief Return the successors for the given Id. The successors are all ids,
-   * which are stored under the key 'node'
-   *
-   * @param node The input id
-   * @return A const Set&, consisting of all target ids which have an ingoing
-   * edge from 'node'
-   */
-  const auto& successors(const Id node) const {
-    auto iterator = map_.find(node);
-    if (iterator == map_.end()) {
-      return emptySet_;
-    }
-    return iterator->second;
-  }
+  // Construct when there is a GRAPH clause.
+  HashMapWrapper(MapOfMaps graphMap,
+                 const ad_utility::AllocatorWithLimit<Id>& allocator);
+
+  // Return all target nodes for the given source node in the currently
+  // active graph.
+  const Set& successors(Id node) const;
+
+  // This does the same as `BinSearchMap::getEquivalentIdAndMatchingGraphs`
+  // (see there for details), but uses a hash map instead of binary search.
+  IdWithGraphs getEquivalentIdAndMatchingGraphs(Id node) const;
+
+  // Set `map_` to the map corresponding to the given graph id.
+  void setGraphId(Id graphId);
 };
 
 /**
@@ -47,60 +66,20 @@ struct HashMapWrapper {
  * @brief This class implements the transitive path operation. The
  * implementation uses a hash map to represent the graph and find successors
  * of given nodes.
- *
- *
  */
 class TransitivePathHashMap : public TransitivePathImpl<HashMapWrapper> {
  public:
-  TransitivePathHashMap(QueryExecutionContext* qec,
-                        std::shared_ptr<QueryExecutionTree> child,
-                        TransitivePathSide leftSide,
-                        TransitivePathSide rightSide, size_t minDist,
-                        size_t maxDist);
+  using TransitivePathImpl::TransitivePathImpl;
 
  private:
-  /**
-   * @brief Prepare a Map and a nodes vector for the transitive hull
-   * computation.
-   *
-   * @tparam SUB_WIDTH Number of columns of the sub table
-   * @tparam SIDE_WIDTH Number of columns of the startSideTable
-   * @param sub The sub table result
-   * @param startSide The TransitivePathSide where the edges start
-   * @param targetSide The TransitivePathSide where the edges end
-   * @param startSideTable An IdTable containing the Ids for the startSide
-   * @return std::pair<Map, std::vector<Id>> A Map and Id vector (nodes) for the
-   * transitive hull computation
-   */
-  template <size_t SUB_WIDTH, size_t SIDE_WIDTH>
-  std::pair<Map, std::vector<Id>> setupMapAndNodes(
-      const IdTable& sub, const TransitivePathSide& startSide,
-      const TransitivePathSide& targetSide,
-      const IdTable& startSideTable) const;
+  std::unique_ptr<Operation> cloneImpl() const override;
 
-  /**
-   * @brief Prepare a Map and a nodes vector for the transitive hull
-   * computation.
-   *
-   * @tparam SUB_WIDTH Number of columns of the sub table
-   * @param sub The sub table result
-   * @param startSide The TransitivePathSide where the edges start
-   * @param targetSide The TransitivePathSide where the edges end
-   * @return std::pair<Map, std::vector<Id>> A Map and Id vector (nodes) for the
-   * transitive hull computation
-   */
-  template <size_t SUB_WIDTH>
-  std::pair<Map, std::vector<Id>> setupMapAndNodes(
-      const IdTable& sub, const TransitivePathSide& startSide,
-      const TransitivePathSide& targetSide) const;
-
-  // initialize the map from the subresult
+  // Initialize the map from the subresult.
   HashMapWrapper setupEdgesMap(
-      const IdTable& dynSub, const TransitivePathSide& startSide,
+      const IdTable& sub, const TransitivePathSide& startSide,
       const TransitivePathSide& targetSide) const override;
-
-  template <size_t SUB_WIDTH>
-  HashMapWrapper setupEdgesMap(const IdTable& dynSub,
-                               const TransitivePathSide& startSide,
-                               const TransitivePathSide& targetSide) const;
 };
+
+#endif  // QLEVER_SRC_ENGINE_TRANSITIVEPATHHASHMAP_H
+
+#endif

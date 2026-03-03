@@ -2,7 +2,8 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_CTREHELPERS_H
+#define QLEVER_SRC_UTIL_CTREHELPERS_H
 
 #include <ctre-unicode.hpp>
 
@@ -49,3 +50,5 @@ template <size_t N>
 static constexpr auto cls(const ctll::fixed_string<N>& s) {
   return ctll::fixed_string("[") + s + ctll::fixed_string("]");
 }
+
+#endif  // QLEVER_SRC_UTIL_CTREHELPERS_H

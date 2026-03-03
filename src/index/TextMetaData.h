@@ -1,18 +1,17 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
-#pragma once
+
+#ifndef QLEVER_SRC_INDEX_TEXTMETADATA_H
+#define QLEVER_SRC_INDEX_TEXTMETADATA_H
 
 #include <cstdio>
 #include <vector>
 
-#include "../global/Id.h"
-#include "../util/Exception.h"
-#include "../util/File.h"
-#include "../util/Serializer/Serializer.h"
-#include "../util/TypeTraits.h"
-
-using std::vector;
+#include "global/Id.h"
+#include "util/File.h"
+#include "util/Serializer/Serializer.h"
+#include "util/TypeTraits.h"
 
 class ContextListMetaData {
  public:
@@ -37,7 +36,17 @@ class ContextListMetaData {
   off_t _startScorelist;
   off_t _lastByte;
 
-  bool hasMultipleWords() const { return _startScorelist > _startWordlist; }
+  size_t getByteLengthContextList() const {
+    return static_cast<size_t>(_startWordlist - _startContextlist);
+  }
+
+  size_t getByteLengthWordlist() const {
+    return static_cast<size_t>(_startScorelist - _startWordlist);
+  }
+
+  size_t getByteLengthScorelist() const {
+    return static_cast<size_t>(_lastByte + 1 - _startScorelist);
+  }
 
   static constexpr size_t sizeOnDisk() {
     return sizeof(size_t) + 4 * sizeof(off_t);
@@ -64,21 +73,24 @@ class TextBlockMetaData {
   static constexpr size_t sizeOnDisk() {
     return 2 * sizeof(Id) + 2 * ContextListMetaData::sizeOnDisk();
   }
-  friend std::true_type allowTrivialSerialization(TextBlockMetaData, auto);
+
+  template <typename T>
+  friend std::true_type allowTrivialSerialization(TextBlockMetaData, T);
 };
 
 ad_utility::File& operator<<(ad_utility::File& f, const TextBlockMetaData& md);
 
 class TextMetaData {
  public:
-  //! Get the corresponding block meta data for some word or entity Id range.
-  //! Currently assumes that the range lies in a single block.
-  const TextBlockMetaData& getBlockInfoByWordRange(const uint64_t lower,
-                                                   const uint64_t upper) const;
+  // Get the corresponding block meta data for some word or entity Id range.
+  // Can be multiple blocks. Note: the range is [lower, upper], NOT [lower,
+  // upper)
+  std::vector<std::reference_wrapper<const TextBlockMetaData>>
+  getBlockInfoByWordRange(const uint64_t lower, const uint64_t upper) const;
 
   size_t getBlockCount() const;
 
-  string statistics() const;
+  std::string statistics() const;
 
   void addBlock(const TextBlockMetaData& md);
 
@@ -98,19 +110,19 @@ class TextMetaData {
 
   void setNofEntityPostings(size_t n) { _nofEntityPostings = n; }
 
-  const string& getName() const { return _name; }
+  const std::string& getName() const { return _name; }
 
-  void setName(const string& name) { _name = name; }
+  void setName(const std::string& name) { _name = name; }
 
   float getAverageNofEntityContexts() const { return 1.0f; };
 
  private:
-  vector<uint64_t> _blockUpperBoundWordIds;
+  std::vector<uint64_t> _blockUpperBoundWordIds;
   size_t _nofTextRecords = 0;
   size_t _nofWordPostings = 0;
   size_t _nofEntityPostings = 0;
-  string _name;
-  vector<TextBlockMetaData> _blocks;
+  std::string _name;
+  std::vector<TextBlockMetaData> _blocks;
 
   // ___________________________________________________________________________
   AD_SERIALIZE_FRIEND_FUNCTION(TextMetaData) {
@@ -122,3 +134,5 @@ class TextMetaData {
     serializer | arg._blocks;
   }
 };
+
+#endif  // QLEVER_SRC_INDEX_TEXTMETADATA_H

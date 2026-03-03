@@ -1,7 +1,9 @@
 // Copyright 2023, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
-#pragma once
+
+#ifndef QLEVER_SRC_UTIL_CONFIGMANAGER_CONFIGSHORTHANDVISITOR_H
+#define QLEVER_SRC_UTIL_CONFIGMANAGER_CONFIGSHORTHANDVISITOR_H
 
 // ANTLR runtime uses this as a variable name.
 #ifdef EOF
@@ -54,3 +56,5 @@ class ToJsonConfigShorthandVisitor final {
 
   nlohmann::json visitContent(Parser::ContentContext* context) const;
 };
+
+#endif  // QLEVER_SRC_UTIL_CONFIGMANAGER_CONFIGSHORTHANDVISITOR_H

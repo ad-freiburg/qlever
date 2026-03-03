@@ -2,15 +2,16 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
 //
-#pragma once
+
+#ifndef QLEVER_SRC_PARSER_TOKENIZER_H
+#define QLEVER_SRC_PARSER_TOKENIZER_H
 
 #include <gtest/gtest_prod.h>
 #include <re2/re2.h>
 
-#include <regex>
-
+#include "backports/StartsWithAndEndsWith.h"
 #include "parser/TurtleTokenId.h"
-#include "util/Exception.h"
+#include "util/CompilerWarnings.h"
 #include "util/Log.h"
 
 using re2::RE2;
@@ -238,12 +239,12 @@ struct SkipWhitespaceAndCommentsMixin {
   // _________________________________________________________________________
   bool skipComments() {
     auto v = self().view();
-    if (v.starts_with('#')) {
+    if (ql::starts_with(v, '#')) {
       auto pos = v.find('\n');
-      if (pos == string::npos) {
+      if (pos == std::string::npos) {
         // TODO<joka921>: This should rather yield an error.
-        LOG(INFO) << "Warning, unfinished comment found while parsing"
-                  << std::endl;
+        AD_LOG_INFO << "Warning, unfinished comment found while parsing"
+                    << std::endl;
       } else {
         self()._data.remove_prefix(pos + 1);
       }
@@ -272,6 +273,8 @@ class Tokenizer : public SkipWhitespaceAndCommentsMixin<Tokenizer> {
   // Construct from a std::string_view;
   Tokenizer(std::string_view input)
       : _tokens(), _data(input.data(), input.size()) {}
+
+  static constexpr bool UseRelaxedParsing = false;
 
   // if a prefix of the input stream matches the regex argument,
   // return true and that prefix and move the input stream forward
@@ -309,7 +312,7 @@ class Tokenizer : public SkipWhitespaceAndCommentsMixin<Tokenizer> {
 
   template <size_t idx>
   std::tuple<bool, size_t, std::string_view> getNextTokenRecurse() {
-    return std::tuple(false, idx, "");
+    return std::make_tuple(false, idx, std::string_view{""});
   }
 
   template <size_t idx, TurtleTokenId fst, TurtleTokenId... ids>
@@ -323,8 +326,9 @@ class Tokenizer : public SkipWhitespaceAndCommentsMixin<Tokenizer> {
     reset(beg, dataSize);
     bool curBetter = currentSuccess && res.size() > content.size();
 
-    return std::tuple(success || currentSuccess, curBetter ? idx : unusedIdx,
-                      curBetter ? res : content);
+    return std::make_tuple(success || currentSuccess,
+                           curBetter ? idx : unusedIdx,
+                           curBetter ? res : content);
   }
 
   // If there is a prefix match with the argument, move forward the input stream
@@ -361,3 +365,5 @@ class Tokenizer : public SkipWhitespaceAndCommentsMixin<Tokenizer> {
   FRIEND_TEST(TokenizerTest, WhitespaceAndComments);
   re2::StringPiece _data;
 };
+
+#endif  // QLEVER_SRC_PARSER_TOKENIZER_H

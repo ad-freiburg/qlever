@@ -6,14 +6,13 @@
 
 #include <algorithm>
 #include <array>
-#include <concepts>
 #include <ctre.hpp>
 #include <random>
 #include <ranges>
-#include <type_traits>
 #include <unordered_set>
 
 #include "../test/util/RandomTestHelpers.h"
+#include "backports/type_traits.h"
 #include "util/Exception.h"
 #include "util/GTestHelpers.h"
 #include "util/Random.h"
@@ -29,10 +28,9 @@ numbers for the same seed.
 @param randomNumberGeneratorFactory An invocable object, that should return a
 random number generator, using the given seed.
 */
-template <std::invocable<RandomSeed> T>
-void testSeed(
+CPP_template(typename T)(requires std::invocable<T, RandomSeed>) void testSeed(
     T randomNumberGeneratorFactory,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "testSeed")};
 
@@ -51,7 +49,7 @@ void testSeed(
 
   // For every seed test, if the random number generators return the same
   // numbers.
-  std::ranges::for_each(
+  ql::ranges::for_each(
       createArrayOfRandomSeeds<NUM_SEEDS>(),
       [&randomNumberGeneratorFactory](const RandomSeed seed) {
         // What type of generator does the factory create?
@@ -62,7 +60,7 @@ void testSeed(
 
         // The generators, that should create the same numbers.
         std::array<GeneratorType, NUM_GENERATORS> generators;
-        std::ranges::generate(
+        ql::ranges::generate(
             generators, [&randomNumberGeneratorFactory, &seed]() {
               return std::invoke(randomNumberGeneratorFactory, seed);
             });
@@ -71,10 +69,10 @@ void testSeed(
         for (size_t numCall = 0; numCall < NUM_RANDOM_NUMBER; numCall++) {
           const NumberType expectedNumber = std::invoke(generators.front());
 
-          std::ranges::for_each(std::views::drop(generators, 1),
-                                [&expectedNumber](GeneratorType& g) {
-                                  ASSERT_EQ(std::invoke(g), expectedNumber);
-                                });
+          ql::ranges::for_each(ql::views::drop(generators, 1),
+                               [&expectedNumber](GeneratorType& g) {
+                                 ASSERT_EQ(std::invoke(g), expectedNumber);
+                               });
         }
       });
 }
@@ -105,18 +103,20 @@ random number generator, using the given range and seed. Functionparameters
 should be `RangeNumberType rangeMin, RangeNumberType rangeMax, Seed seed`.
 @param ranges The ranges, that should be used.
 */
-template <typename RangeNumberType,
-          std::invocable<RangeNumberType, RangeNumberType, RandomSeed>
-              GeneratorFactory>
-void testSeedWithRange(
-    GeneratorFactory randomNumberGeneratorFactory,
-    const std::vector<NumericalRange<RangeNumberType>>& ranges,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
+CPP_template(typename RangeNumberType, typename GeneratorFactory)(
+    requires std::invocable<
+        GeneratorFactory, RangeNumberType, RangeNumberType,
+        RandomSeed>) void testSeedWithRange(GeneratorFactory
+                                                randomNumberGeneratorFactory,
+                                            const std::vector<NumericalRange<
+                                                RangeNumberType>>& ranges,
+                                            ad_utility::source_location l =
+                                                AD_CURRENT_SOURCE_LOC()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "testSeedWithRange")};
 
-  std::ranges::for_each(ranges, [&randomNumberGeneratorFactory](
-                                    const NumericalRange<RangeNumberType>& r) {
+  ql::ranges::for_each(ranges, [&randomNumberGeneratorFactory](
+                                   const NumericalRange<RangeNumberType>& r) {
     testSeed([&r, &randomNumberGeneratorFactory](RandomSeed seed) {
       return std::invoke(randomNumberGeneratorFactory, r.minimum_, r.maximum_,
                          seed);
@@ -133,13 +133,16 @@ of the range.
 
 @param ranges The ranges, for which should be tested for.
 */
-template <typename Generator, typename RangeNumberType>
-requires std::constructible_from<Generator, RangeNumberType, RangeNumberType> &&
-         std::invocable<Generator> &&
-         ad_utility::isSimilar<std::invoke_result_t<Generator>, RangeNumberType>
-void testRange(
-    const std::vector<NumericalRange<RangeNumberType>>& ranges,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
+CPP_template(typename Generator, typename RangeNumberType)(
+    requires std::constructible_from<Generator, RangeNumberType,
+                                     RangeNumberType>&&
+        ql::concepts::invocable<Generator>&& ad_utility::isSimilar<
+            std::invoke_result_t<Generator>,
+            RangeNumberType>) void testRange(const std::
+                                                 vector<NumericalRange<
+                                                     RangeNumberType>>& ranges,
+                                             ad_utility::source_location l =
+                                                 AD_CURRENT_SOURCE_LOC()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "testRange")};
 
@@ -147,7 +150,7 @@ void testRange(
   constexpr size_t NUM_RANDOM_NUMBER = 500;
   static_assert(NUM_RANDOM_NUMBER > 1);
 
-  std::ranges::for_each(ranges, [](const NumericalRange<RangeNumberType>& r) {
+  ql::ranges::for_each(ranges, [](const NumericalRange<RangeNumberType>& r) {
     Generator generator(r.minimum_, r.maximum_);
     const auto& generatedNumber = std::invoke(generator);
     ASSERT_LE(generatedNumber, r.maximum_);
@@ -244,25 +247,24 @@ TEST(RandomShuffleTest, Seed) {
   For every random seed test, if the shuffled array is the same, if given
   identical input and seed.
   */
-  std::ranges::for_each(
+  ql::ranges::for_each(
       createArrayOfRandomSeeds<NUM_SEEDS>(), [](const RandomSeed seed) {
         std::array<std::array<int, ARRAY_LENGTH>, NUM_SHUFFLED_ARRAY>
             inputArrays{};
 
         // Fill the first input array with random values, then copy it into the
         // other 'slots'.
-        std::ranges::generate(inputArrays.front(),
-                              FastRandomIntGenerator<int>{});
-        std::ranges::fill(std::views::drop(inputArrays, 1),
-                          inputArrays.front());
+        ql::ranges::generate(inputArrays.front(),
+                             FastRandomIntGenerator<int>{});
+        ql::ranges::fill(ql::views::drop(inputArrays, 1), inputArrays.front());
 
         // Shuffle and compare, if they are all the same.
-        std::ranges::for_each(
+        ql::ranges::for_each(
             inputArrays, [&seed](std::array<int, ARRAY_LENGTH>& inputArray) {
               randomShuffle(inputArray.begin(), inputArray.end(), seed);
             });
-        std::ranges::for_each(
-            std::views::drop(inputArrays, 1),
+        ql::ranges::for_each(
+            ql::views::drop(inputArrays, 1),
             [&inputArrays](const std::array<int, ARRAY_LENGTH>& inputArray) {
               ASSERT_EQ(inputArrays.front(), inputArray);
             });

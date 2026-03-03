@@ -1,6 +1,5 @@
 add_library(sparqlExpressions
         SparqlExpressionValueGetters.cpp
-        NaryExpression.cpp
         SetOfIntervals.cpp
         SparqlExpressionPimpl.cpp
         SampleExpression.cpp
@@ -16,10 +15,13 @@ add_library(sparqlExpressions
         ConditionalExpressions.cpp
         SparqlExpressionTypes.cpp
         SparqlExpression.cpp
-        ConvertToNumericExpression.cpp
+        ConvertToDtypeConstructor.cpp
         RdfTermExpressions.cpp
         LangExpression.cpp
         CountStarExpression.cpp
-        PrefilterExpressionIndex.cpp)
+        PrefilterExpressionIndex.cpp
+        GeoExpression.cpp
+        BlankNodeExpression.cpp
+        GroupConcatExpression.cpp)
 
 qlever_target_link_libraries(sparqlExpressions util index Boost::url)

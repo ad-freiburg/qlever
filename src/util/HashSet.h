@@ -4,14 +4,14 @@
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_HASHSET_H
+#define QLEVER_SRC_UTIL_HASHSET_H
 
-#include <string>
+#include <absl/container/flat_hash_set.h>
 
-#include "absl/container/flat_hash_set.h"
+#include <unordered_set>
+
 #include "util/AllocatorWithLimit.h"
-
-using std::string;
 
 namespace ad_utility {
 // Wrapper for HashSets (with elements of type T) to be used everywhere
@@ -25,11 +25,15 @@ template <class T,
 using HashSet = absl::flat_hash_set<T, HashFct, EqualElem, Alloc>;
 
 // A hash set (with elements of type T) with a memory Limit.
+// Note: We cannot use `absl::flat_hash_set`
+// here, because it is inherently not exception safe, and the
+// `AllocatorWithLimit` uses exceptions.
 template <class T,
           class HashFct = absl::container_internal::hash_default_hash<T>,
           class EqualElem = absl::container_internal::hash_default_eq<T>,
           class Alloc = ad_utility::AllocatorWithLimit<T>>
-using HashSetWithMemoryLimit =
-    absl::flat_hash_set<T, HashFct, EqualElem, Alloc>;
+using HashSetWithMemoryLimit = std::unordered_set<T, HashFct, EqualElem, Alloc>;
 
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_HASHSET_H

@@ -1,19 +1,15 @@
 // Copyright 2011-2023, University of Freiburg, Chair of Algorithms and Data
 // Structures.
 // Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
-#pragma once
 
-#include <sys/time.h>
-#include <sys/types.h>
+#ifndef QLEVER_SRC_UTIL_TIMER_H
+#define QLEVER_SRC_UTIL_TIMER_H
 
+#include <atomic>
 #include <chrono>
-#include <iomanip>
-#include <memory>
-#include <sstream>
 
-#include "absl/strings/str_cat.h"
+#include "backports/keywords.h"
 #include "util/Log.h"
-#include "util/Synchronized.h"
 #include "util/TypeTraits.h"
 
 namespace ad_utility {
@@ -52,8 +48,9 @@ class Timer {
 
   // Convert any `std::chrono::duration` to the underlying `Duration` type
   // of the `Timer` class.
-  template <ad_utility::isInstantiation<chr::duration> T>
-  static Duration toDuration(T duration) {
+  CPP_template(typename T)(
+      requires ad_utility::isInstantiation<T, chr::duration>) static Duration
+      toDuration(T duration) {
     return chr::duration_cast<Duration>(duration);
   }
 
@@ -140,9 +137,9 @@ class ThreadSafeTimer {
   using Rep = Timer::Duration::rep;
   std::atomic<Rep> totalTime_ = 0;
   // The implementation of the single-threaded measurements.
-  class [[nodiscard(
+  class QL_NODISCARD(
       "This class measures the time between its construction and destruction. "
-      "Not binding it to a variable thus is probably a bug")]] TimeMeasurement {
+      "Not binding it to a variable thus is probably a bug") TimeMeasurement {
     Timer measuringTimer_{Timer::Started};
     ThreadSafeTimer* parentTimer_;
     bool isStopped_ = false;
@@ -191,14 +188,16 @@ namespace detail {
 // destruction and logs the time together with a specified message
 // The callback can be used to change the logging mechanism. It must be
 // callable with a `size_t` (the number of milliseconds) and `message`.
-[[maybe_unused]] inline auto defaultLogger = [](chr::milliseconds msecs,
-                                                std::string_view message) {
-  LOG(TIMING) << message << " took " << msecs.count() << "ms" << std::endl;
+struct DefaultLogger {
+  void operator()(chr::milliseconds msecs, std::string_view message) const {
+    AD_LOG_TIMING << message << " took " << msecs.count() << "ms" << std::endl;
+  }
 };
-template <typename Callback = decltype(defaultLogger)>
-struct [[nodiscard(
+
+template <typename Callback = DefaultLogger>
+struct QL_NODISCARD(
     "TimeBlockAndLog objects are RAII types that always have to be bound to a "
-    "variable")]] TimeBlockAndLog {
+    "variable") TimeBlockAndLog {
   Timer t_{Timer::Started};
   std::string message_;
   Callback callback_;
@@ -227,3 +226,5 @@ using detail::TimeBlockAndLog;
 using timer::TimeBlockAndLog;
 using timer::Timer;
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_TIMER_H

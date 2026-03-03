@@ -48,14 +48,48 @@ template struct ExtremumAggregationData<valueIdComparators::Comparison::GT>;
 }
 
 // _____________________________________________________________________________
+void GroupConcatAggregationData::addValueImpl(
+    const std::optional<ad_utility::triple_component::Literal>& val) {
+  if (first_) {
+    first_ = false;
+    sparqlExpression::detail::pushLanguageTag(langTag_, val);
+  } else {
+    currentValue_.append(separator_);
+  }
+  if (val.has_value()) {
+    currentValue_.append(asStringViewUnsafe(val.value().getContent()));
+    sparqlExpression::detail::mergeLanguageTags(langTag_, val.value());
+  } else {
+    undefined_ = true;
+  }
+}
+
+// _____________________________________________________________________________
 [[nodiscard]] ValueId GroupConcatAggregationData::calculateResult(
     LocalVocab* localVocab) const {
+  if (undefined_) {
+    return ValueId::makeUndefined();
+  }
   using namespace ad_utility::triple_component;
-  using Lit = ad_utility::triple_component::Literal;
   auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(
-      LiteralOrIri{Lit::literalWithNormalizedContent(
-          asNormalizedStringViewUnsafe(currentValue_))});
+      sparqlExpression::detail::stringWithOptionalLangTagToLiteral(
+          currentValue_, langTag_));
   return ValueId::makeFromLocalVocabIndex(localVocabIndex);
+}
+
+// _____________________________________________________________________________
+GroupConcatAggregationData::GroupConcatAggregationData(
+    std::string_view separator)
+    : separator_{separator} {
+  currentValue_.reserve(20000);
+}
+
+// _____________________________________________________________________________
+void GroupConcatAggregationData::reset() {
+  undefined_ = false;
+  first_ = true;
+  currentValue_.clear();
+  langTag_.reset();
 }
 
 // _____________________________________________________________________________

@@ -2,25 +2,34 @@
 // Chair of Algorithms and Data Structures
 // Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <gtest/gtest.h>
 
 #include <string>
 
 #include "./SparqlExpressionTestHelpers.h"
+#include "./printers/LocalVocabEntryPrinters.h"
 #include "./util/GTestHelpers.h"
+#include "./util/RuntimeParametersTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
+#include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
-#include "parser/GeoPoint.h"
+#include "rdfTypes/GeoPoint.h"
+#include "rdfTypes/GeometryInfo.h"
 #include "util/AllocatorTestHelpers.h"
 #include "util/Conversions.h"
+#include "util/GeoSparqlHelpers.h"
 
 namespace {
 
@@ -67,6 +76,11 @@ auto idOrLitOrStringVec =
       return result;
     };
 
+auto geoLit = [](std::string_view content) {
+  return IdOrLiteralOrIri{
+      lit(content, "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")};
+};
+
 // All the helper functions `testUnaryExpression` etc. below internally evaluate
 // the given expressions using the `TestContext` class, so it is possible to use
 // IDs from the global and local vocab of this class to test expressions. For
@@ -99,17 +113,17 @@ concept VectorOrExpressionResult =
 
 // Convert a `VectorOrExpressionResult` (see above) to a type that is supported
 // by the expression module.
-template <VectorOrExpressionResult T>
-SingleExpressionResult auto toExpressionResult(T vec) {
+CPP_template(typename T)(
+    requires VectorOrExpressionResult<T>) auto toExpressionResult(T vec) {
   if constexpr (SingleExpressionResult<T>) {
     return vec;
-  } else if constexpr (std::convertible_to<T, std::string_view>) {
+  } else if constexpr (ranges::convertible_to<T, std::string_view>) {
     // TODO<joka921> Make a generic testing utility for the string case...
     return IdOrLiteralOrIri{lit(vec)};
   } else {
     return VectorWithMemoryLimit<typename T::value_type>{
-        std::make_move_iterator(vec.begin()),
-        std::make_move_iterator(vec.end()), alloc};
+        ql::make_move_iterator(vec.begin()), ql::make_move_iterator(vec.end()),
+        alloc};
   }
 }
 
@@ -142,7 +156,8 @@ requires(!isVectorResult<T>) auto nonVectorResultMatcher(const T& expected) {
     return matchId(expected);
   } else if constexpr (std::is_same_v<T, IdOrLiteralOrIri>) {
     return std::visit(
-        []<typename U>(const U& el) {
+        [](const auto& el) {
+          using U = std::decay_t<decltype(el)>;
           return ::testing::MatcherCast<const IdOrLiteralOrIri&>(
               ::testing::VariantWith<U>(nonVectorResultMatcher(el)));
         },
@@ -156,18 +171,19 @@ requires(!isVectorResult<T>) auto nonVectorResultMatcher(const T& expected) {
 // `expected` being a single element or a vector and the case of `expected`
 // storing `Ids` which have to be handled using the `matchId` matcher (see
 // above) are all handled correctly.
-auto sparqlExpressionResultMatcher =
-    []<SingleExpressionResult Expected>(const Expected& expected) {
-      if constexpr (isVectorResult<Expected>) {
-        auto matcherVec =
-            ad_utility::transform(expected, [](const auto& singleExpected) {
-              return nonVectorResultMatcher(singleExpected);
-            });
-        return ::testing::ElementsAreArray(matcherVec);
-      } else {
-        return nonVectorResultMatcher(expected);
-      }
-    };
+auto sparqlExpressionResultMatcher = [](const auto& expected) {
+  using Expected = std::decay_t<decltype(expected)>;
+  CPP_assert(SingleExpressionResult<Expected>);
+  if constexpr (isVectorResult<Expected>) {
+    auto matcherVec =
+        ad_utility::transform(expected, [](const auto& singleExpected) {
+          return nonVectorResultMatcher(singleExpected);
+        });
+    return ::testing::ElementsAreArray(matcherVec);
+  } else {
+    return nonVectorResultMatcher(expected);
+  }
+};
 
 // A generic function that can copy all kinds of `SingleExpressionResult`s. Note
 // that we have disabled the implicit copying of vector results, but for testing
@@ -181,49 +197,51 @@ auto clone = [](const auto& x) {
 };
 
 // The implementation of `testNaryExpression` directly below.
-auto testNaryExpressionImpl =
-    [](auto&& makeExpression, SingleExpressionResult auto const& expected,
-       SingleExpressionResult auto const&... operands) {
-      ad_utility::AllocatorWithLimit<Id> alloc{
-          ad_utility::testing::makeAllocator()};
-      VariableToColumnMap map;
-      LocalVocab localVocab;
-      IdTable table{alloc};
+auto testNaryExpressionImpl = [](auto&& makeExpression, auto const& expected,
+                                 auto const&... operands) {
+  CPP_assert(SingleExpressionResult<decltype(expected)> &&
+             (SingleExpressionResult<decltype(operands)> && ...));
+  ad_utility::AllocatorWithLimit<Id> alloc{
+      ad_utility::testing::makeAllocator()};
+  VariableToColumnMap map;
+  LocalVocab localVocab;
+  IdTable table{alloc};
 
-      // Get the size of `operand`: size for a vector, 1 otherwise.
-      auto getResultSize = []<typename T>(const T& operand) -> size_t {
-        if constexpr (isVectorResult<T>) {
-          return operand.size();
-        }
-        return 1;
-      };
+  // Get the size of `operand`: size for a vector, 1 otherwise.
+  auto getResultSize = [](const auto& operand) -> size_t {
+    using T = std::decay_t<decltype(operand)>;
+    if constexpr (isVectorResult<T>) {
+      return operand.size();
+    }
+    return 1;
+  };
 
-      const auto resultSize = [&operands..., &getResultSize]() {
-        if constexpr (sizeof...(operands) == 0) {
-          (void)getResultSize;
-          return 0ul;
-        } else {
-          return std::max({getResultSize(operands)...});
-        }
-      }();
+  const auto resultSize = [&operands..., &getResultSize]() {
+    if constexpr (sizeof...(operands) == 0) {
+      (void)getResultSize;
+      return 0ul;
+    } else {
+      return std::max({getResultSize(operands)...});
+    }
+  }();
 
-      TestContext outerContext;
-      sparqlExpression::EvaluationContext& context = outerContext.context;
-      context._endIndex = resultSize;
+  TestContext outerContext;
+  sparqlExpression::EvaluationContext& context = outerContext.context;
+  context._endIndex = resultSize;
 
-      std::array<SparqlExpression::Ptr, sizeof...(operands)> children{
-          std::make_unique<SingleUseExpression>(
-              ExpressionResult{clone(operands)})...};
+  std::array<SparqlExpression::Ptr, sizeof...(operands)> children{
+      std::make_unique<SingleUseExpression>(
+          ExpressionResult{clone(operands)})...};
 
-      auto expressionPtr = std::apply(makeExpression, std::move(children));
-      auto& expression = *expressionPtr;
+  auto expressionPtr = std::apply(makeExpression, std::move(children));
+  auto& expression = *expressionPtr;
 
-      ExpressionResult result = expression.evaluate(&context);
+  ExpressionResult result = expression.evaluate(&context);
 
-      using ExpectedType = std::decay_t<decltype(expected)>;
-      ASSERT_THAT(result, ::testing::VariantWith<ExpectedType>(
-                              sparqlExpressionResultMatcher(expected)));
-    };
+  using ExpectedType = std::decay_t<decltype(expected)>;
+  ASSERT_THAT(result, ::testing::VariantWith<ExpectedType>(
+                          sparqlExpressionResultMatcher(expected)));
+};
 
 // Assert that the given `NaryExpression` with the given `operands` has the
 // `expected` result.
@@ -239,10 +257,11 @@ auto testNaryExpression = [](auto&& makeExpression,
 // in both orders of the operands `op1` and `op2`.
 template <auto makeFunction>
 auto testBinaryExpressionCommutative =
-    [](const SingleExpressionResult auto& expected,
-       const SingleExpressionResult auto& op1,
-       const SingleExpressionResult auto& op2,
-       source_location l = source_location::current()) {
+    [](const auto& expected, const auto& op1, const auto& op2,
+       source_location l = AD_CURRENT_SOURCE_LOC()) {
+      CPP_assert(SingleExpressionResult<decltype(expected)> &&
+                 SingleExpressionResult<decltype(op1)> &&
+                 SingleExpressionResult<decltype(op2)>);
       auto t = generateLocationTrace(l);
       testNaryExpression(makeFunction, expected, op1, op2);
       testNaryExpression(makeFunction, expected, op2, op1);
@@ -253,18 +272,19 @@ auto testBinaryExpressionCommutative =
 // the `source_location`. TODO<joka921> Rewrite all the tests to use this
 // facility.
 template <auto makeFunction>
-auto testNaryExpressionVec =
-    []<VectorOrExpressionResult Exp, VectorOrExpressionResult... Ops>(
-        Exp expected, std::tuple<Ops...> ops,
-        source_location l = source_location::current()) {
-      auto t = generateLocationTrace(l, "testBinaryExpressionVec");
+struct TestNaryExpressionVec {
+  template <VectorOrExpressionResult Exp, VectorOrExpressionResult... Ops>
+  void operator()(Exp expected, std::tuple<Ops...> ops,
+                  source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto t = generateLocationTrace(l, "testBinaryExpressionVec");
 
-      std::apply(
-          [&](auto&... args) {
-            testNaryExpression(makeFunction, expected, args...);
-          },
-          ops);
-    };
+    std::apply(
+        [&](auto&... args) {
+          testNaryExpression(makeFunction, expected, args...);
+        },
+        ops);
+  }
+};
 
 auto testOr = testBinaryExpressionCommutative<&makeOrExpression>;
 auto testAnd = testBinaryExpressionCommutative<&makeAndExpression>;
@@ -392,8 +412,10 @@ TEST(SparqlExpression, arithmeticOperators) {
   V<Id> bMinusD{{D(0), D(2.0), D(naN), D(1)}, alloc};
   V<Id> dMinusB{{D(0), D(-2.0), D(naN), D(-1)}, alloc};
   V<Id> bTimesD{{D(1.0), D(-0.0), D(naN), D(0.0)}, alloc};
-  V<Id> bByD{{D(1.0), D(-0.0), D(naN), D(inf)}, alloc};
-  V<Id> dByB{{D(1.0), D(negInf), D(naN), D(0)}, alloc};
+  // Division by zero is `UNDEF`, to change this behavior a runtime parameter
+  // can be set. This is tested explicitly below.
+  V<Id> bByD{{D(1.0), D(-0.0), U, U}, alloc};
+  V<Id> dByB{{D(1.0), U, U, D(0)}, alloc};
 
   testPlus(bPlusD, b, d);
   testMinus(bMinusD, b, d);
@@ -433,6 +455,26 @@ TEST(SparqlExpression, arithmeticOperators) {
   testDivide(by2, mixed, D(2));
   testMultiply(by2, mixed, D(0.5));
   testDivide(times13, mixed, D(1.0 / 1.3));
+
+  // Division by zero is either `UNDEF` or `NaN/infinity`, depending on a
+  // runtime parameter.
+  V<Id> undef{{U, U, U, U}, alloc};
+  V<Id> nanAndInf{{D(naN), D(naN), D(inf), D(negInf)}, alloc};
+  V<Id> divByZeroInputsDouble{{D(-0.0), D(0), D(1.3), D(-1.2)}, alloc};
+  V<Id> divByZeroInputsInt{{I(0), I(0), I(1), I(-1)}, alloc};
+
+  testDivide(undef, divByZeroInputsDouble, I(0));
+  testDivide(undef, divByZeroInputsInt, I(0));
+  testDivide(undef, divByZeroInputsDouble, D(0));
+  testDivide(undef, divByZeroInputsInt, D(0));
+
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::divisionByZeroIsUndef_>(
+          false);
+  testDivide(nanAndInf, divByZeroInputsDouble, I(0));
+  testDivide(nanAndInf, divByZeroInputsInt, I(0));
+  testDivide(nanAndInf, divByZeroInputsDouble, D(0));
+  testDivide(nanAndInf, divByZeroInputsInt, D(0));
 }
 
 // Test that the unary expression that is specified by the `makeFunction` yields
@@ -440,7 +482,7 @@ TEST(SparqlExpression, arithmeticOperators) {
 template <auto makeFunction>
 auto testUnaryExpression = [](VectorOrExpressionResult auto const& operand,
                               VectorOrExpressionResult auto const& expected,
-                              source_location l = source_location::current()) {
+                              source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
   testNaryExpression(makeFunction, expected, operand);
 };
@@ -465,7 +507,7 @@ TEST(SparqlExpression, dateOperators) {
                    std::optional<int> expectedHours = std::nullopt,
                    std::optional<int> expectedMinutes = std::nullopt,
                    std::optional<double> expectedSeconds = std::nullopt,
-                   std::source_location l = std::source_location::current()) {
+                   ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
     auto optToIdInt = [](const auto& opt) {
       if (opt.has_value()) {
@@ -570,13 +612,15 @@ TEST(SparqlExpression, dateOperators) {
 }
 
 // _____________________________________________________________________________________
+namespace {
 auto checkStrlen = testUnaryExpression<&makeStrlenExpression>;
 auto checkStr = testUnaryExpression<&makeStrExpression>;
-auto checkIriOrUri = testUnaryExpression<&makeIriOrUriExpression>;
-static auto makeStrlenWithStr = [](auto arg) {
+auto checkIriOrUri = TestNaryExpressionVec<&makeIriOrUriExpression>{};
+auto makeStrlenWithStr = [](auto arg) {
   return makeStrlenExpression(makeStrExpression(std::move(arg)));
 };
 auto checkStrlenWithStrChild = testUnaryExpression<makeStrlenWithStr>;
+}  // namespace
 TEST(SparqlExpression, stringOperators) {
   // Test `StrlenExpression` and `StrExpression`.
   checkStrlen(
@@ -596,12 +640,21 @@ TEST(SparqlExpression, stringOperators) {
       Ids{I(3), I(1), I(3), I(0)});
   checkStr(Ids{I(1), I(2), I(3)},
            IdOrLiteralOrIriVec{lit("1"), lit("2"), lit("3")});
-  checkStr(Ids{D(-1.0), D(1.0), D(2.34)},
-           IdOrLiteralOrIriVec{lit("-1"), lit("1"), lit("2.34")});
-  checkStr(Ids{B(true), B(false), B(true)},
-           IdOrLiteralOrIriVec{lit("true"), lit("false"), lit("true")});
+  checkStr(Ids{D(-1.0), D(1.0), D(2.34), D(NAN), D(INFINITY), D(-INFINITY)},
+           IdOrLiteralOrIriVec{lit("-1"), lit("1"), lit("2.34"), lit("NaN"),
+                               lit("INF"), lit("-INF")});
+  checkStr(Ids{B(true), B(false), Id::makeBoolFromZeroOrOne(true),
+               Id::makeBoolFromZeroOrOne(false)},
+           IdOrLiteralOrIriVec{lit("true"), lit("false"), lit("true"),
+                               lit("false")});
   checkStr(IdOrLiteralOrIriVec{lit("one"), lit("two"), lit("three")},
            IdOrLiteralOrIriVec{lit("one"), lit("two"), lit("three")});
+  checkStr(IdOrLiteralOrIriVec{iriref("<http://example.org/str>"),
+                               iriref("<http://example.org/int>"),
+                               iriref("<http://example.org/bool>")},
+           IdOrLiteralOrIriVec{lit("http://example.org/str"),
+                               lit("http://example.org/int"),
+                               lit("http://example.org/bool")});
 
   auto T = Id::makeFromBool(true);
   auto F = Id::makeFromBool(false);
@@ -611,20 +664,13 @@ TEST(SparqlExpression, stringOperators) {
       DateYearOrDuration(11853, DateYearOrDuration::Type::Year));
   // Test `iriOrUriExpression`.
   // test invalid
-  checkIriOrUri(IdOrLiteralOrIriVec{U, IntId(2), DoubleId(12.99), dateDate,
-                                    dateLYear, T, F},
-                IdOrLiteralOrIriVec{U, U, U, U, U, U, U});
+  checkIriOrUri(IdOrLiteralOrIriVec{U, U, U, U, U, U, U},
+                std::tuple{IdOrLiteralOrIriVec{U, IntId(2), DoubleId(12.99),
+                                               dateDate, dateLYear, T, F},
+                           IdOrLiteralOrIri{LocalVocabEntry{
+                               ad_utility::triple_component::Iri{}}}});
   // test valid
   checkIriOrUri(
-      IdOrLiteralOrIriVec{
-          lit("bimbim"), iriref("<bambim>"),
-          lit("https://www.bimbimbam/2001/bamString"),
-          lit("http://www.w3.\torg/2001/\nXMLSchema#\runsignedShort"),
-          lit("http://www.w3.org/2001/XMLSchema#string"),
-          iriref("<http://www.w3.org/2001/XMLSchema#string>"),
-          testContext().notInVocabIri, testContext().notInVocabIriLit,
-          lit("http://example/"), iriref("<http://\t\t\nexample/>"),
-          lit("\t\n\r")},
       IdOrLiteralOrIriVec{
           iriref("<bimbim>"), iriref("<bambim>"),
           iriref("<https://www.bimbimbam/2001/bamString>"),
@@ -634,7 +680,35 @@ TEST(SparqlExpression, stringOperators) {
           iriref("<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>"),
           iriref("<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>"),
           iriref("<http://example/>"), iriref("<http://\t\t\nexample/>"),
-          iriref("<\t\n\r>")});
+          iriref("<\t\n\r>")},
+      std::tuple{
+          IdOrLiteralOrIriVec{
+              lit("bimbim"), iriref("<bambim>"),
+              lit("https://www.bimbimbam/2001/bamString"),
+              lit("http://www.w3.\torg/2001/\nXMLSchema#\runsignedShort"),
+              lit("http://www.w3.org/2001/XMLSchema#string"),
+              iriref("<http://www.w3.org/2001/XMLSchema#string>"),
+              testContext().notInVocabIri, testContext().notInVocabIriLit,
+              lit("http://example/"), iriref("<http://\t\t\nexample/>"),
+              lit("\t\n\r")},
+          IdOrLiteralOrIri{
+              LocalVocabEntry{ad_utility::triple_component::Iri{}}}});
+
+  // test with base iri
+  checkIriOrUri(
+      IdOrLiteralOrIriVec{
+          U,
+          iriref("<http://example.com/hi/bimbim>"),
+          iriref("<http://example.com/hi/bambim>"),
+          iriref("<https://www.bimbimbam/2001/bamString>"),
+          iriref("<http://example.com/hello>"),
+          iriref("<http://example.com/hello>"),
+      },
+      std::tuple{
+          IdOrLiteralOrIriVec{U, lit("bimbim"), iriref("<bambim>"),
+                              lit("https://www.bimbimbam/2001/bamString"),
+                              lit("/hello"), iriref("</hello>")},
+          IdOrLiteralOrIri{iriref("<http://example.com/hi>")}});
 
   // A simple test for uniqueness of the cache key.
   auto c1a = makeStrlenExpression(std::make_unique<IriExpression>(iri("<bim>")))
@@ -669,8 +743,18 @@ auto checkLcase = testUnaryExpression<&makeLowercaseExpression>;
 TEST(SparqlExpression, uppercaseAndLowercase) {
   checkLcase(IdOrLiteralOrIriVec{lit("One"), lit("tWÖ"), U, I(12)},
              IdOrLiteralOrIriVec{lit("one"), lit("twö"), U, U});
+  checkLcase(
+      IdOrLiteralOrIriVec{
+          lit("One", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("One", "@en"), U, I(12)},
+      IdOrLiteralOrIriVec{lit("one"), lit("one", "@en"), U, U});
   checkUcase(IdOrLiteralOrIriVec{lit("One"), lit("tWÖ"), U, I(12)},
              IdOrLiteralOrIriVec{lit("ONE"), lit("TWÖ"), U, U});
+  checkUcase(
+      IdOrLiteralOrIriVec{
+          lit("One", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("One", "@en"), U, I(12)},
+      IdOrLiteralOrIriVec{lit("ONE"), lit("ONE", "@en"), U, U});
 }
 
 // _____________________________________________________________________________________
@@ -711,13 +795,43 @@ TEST(SparqlExpression, binaryStringOperations) {
                 S({"", "", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo"}),
                 S({"", "x", "", "ullo", "ll", "Hällo", "Hällox"}));
   checkStrAfter(
-      S({"", "", "Hällo", "", "o", "", "", "lo"}),
-      S({"", "", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo"}),
-      S({"", "x", "", "ullo", "ll", "Hällo", "Hällox", "l"}));
+      S({U, U, "", "", "Hällo", "", "o", "", "", "lo"}),
+      S({U, "", "", "", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo"}),
+      S({"", U, "", "x", "", "ullo", "ll", "Hällo", "Hällox", "l"}));
+  checkStrAfter(
+      IdOrLiteralOrIriVec{lit("bc"), lit("abc"), lit("c", "@en"), lit(""),
+                          lit("abc", "@en"), lit("abc", "@en"), lit(""),
+                          lit("abc", "@en"), U, U},
+      IdOrLiteralOrIriVec{
+          lit("abc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("abc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("abc", "@en"), lit("abc", "@en"), lit("abc", "@en"),
+          lit("abc", "@en"), lit("abc", "@en"), lit("abc", "@en"), lit("abc"),
+          lit("abc", "@en")},
+      IdOrLiteralOrIriVec{
+          lit("a"), lit(""), lit("ab"), lit("z"), lit(""), lit("", "@en"),
+          lit("z", "@en"),
+          lit("", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("a", "@en"), lit("a", "@de")});
+
   checkStrBefore(
-      S({"", "", "Hällo", "", "Hä", "", "", "Hä"}),
-      S({"", "", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo"}),
-      S({"", "x", "", "ullo", "ll", "Hällo", "Hällox", "l"}));
+      S({U, U, "", "", "", "", "Hä", "", "", "Hä"}),
+      S({U, "", "", "", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo"}),
+      S({"", U, "", "x", "", "ullo", "ll", "Hällo", "Hällox", "l"}));
+  checkStrBefore(IdOrLiteralOrIriVec{lit("a"), lit(""), lit("a", "@en"),
+                                     lit(""), lit("", "@en"), lit("", "@en"),
+                                     lit(""), lit("", "@en"), U, U},
+                 IdOrLiteralOrIriVec{
+                     lit("abc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+                     lit("abc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+                     lit("abc", "@en"), lit("abc", "@en"), lit("abc", "@en"),
+                     lit("abc", "@en"), lit("abc", "@en"), lit("abc", "@en"),
+                     lit("abc"), lit("abc", "@en")},
+                 IdOrLiteralOrIriVec{
+                     lit("bc"), lit(""), lit("bc"), lit("z"), lit(""),
+                     lit("", "@en"), lit("z", "@en"),
+                     lit("", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+                     lit("bc", "@en"), lit("bc", "@de")});
 }
 
 // ______________________________________________________________________________
@@ -744,28 +858,23 @@ TEST(SparqlExpression, substr) {
               I(0), I(12));
   checkSubstr(strs({"one", "two", "three"}), strs({"one", "two", "three"}),
               I(-2), I(12));
-
   checkSubstr(strs({"ne", "wo", "hree"}), strs({"one", "two", "three"}), I(2),
               I(12));
   checkSubstr(strs({"ne", "wo", "hree"}), strs({"one", "two", "three"}), D(1.8),
               D(11.7));
   checkSubstr(strs({"ne", "wo", "hree"}), strs({"one", "two", "three"}),
               D(2.449), D(12.449));
-
   // An actual substring from the middle
   checkSubstr(strs({"es", "os", "re"}), strs({"ones", "twos", "threes"}), I(3),
               I(2));
-
   // Subtle corner case if the starting position is negative
   // Only the letters at positions  `p < -3 + 6 = 3` are exported (the first two
   // letters, remember that the positions are 1-based).
   checkSubstr(strs({"on", "tw", "th"}), strs({"ones", "twos", "threes"}), I(-3),
               I(6));
-
   // Correct handling of UTF-8 multibyte characters.
   checkSubstr(strs({"pfel", "pfel", "pfel"}),
               strs({"uApfel", "uÄpfel", "uöpfel"}), I(3), I(18));
-
   // corner cases: 0 or negative length, or invalid numeric parameter
   checkSubstr(strs({"", "", ""}), strs({"ones", "twos", "threes"}), D(naN),
               I(2));
@@ -776,9 +885,8 @@ TEST(SparqlExpression, substr) {
               D(-3.8));
 
   // Invalid datatypes
-  // First must be string.
+  // First must be LiteralOrIri
   auto Ux = IdOrLiteralOrIri{U};
-  checkSubstr(Ux, I(3), I(4), I(7));
   checkSubstr(Ux, U, I(4), I(7));
   checkSubstr(Ux, Ux, I(4), I(7));
   // Second and third must be numeric;
@@ -788,6 +896,16 @@ TEST(SparqlExpression, substr) {
   checkSubstr(Ux, IdOrLiteralOrIri{lit("hello")}, I(4), U);
   checkSubstr(Ux, IdOrLiteralOrIri{lit("hello")}, I(4),
               IdOrLiteralOrIri{lit("bye")});
+  // WithDataType xsd:string
+  checkSubstr(
+      IdOrLiteralOrIriVec{lit("Hello")},
+      IdOrLiteralOrIriVec{
+          lit("Hello World", "^^<http://www.w3.org/2001/XMLSchema#string>")},
+      I(1), I(5));
+
+  // WithLanguageTag
+  checkSubstr(IdOrLiteralOrIriVec{lit("cha", "@en")},
+              IdOrLiteralOrIriVec{lit("chat", "@en")}, I(1), I(3));
 }
 
 // _____________________________________________________________________________________
@@ -795,22 +913,54 @@ TEST(SparqlExpression, strIriDtTagged) {
   auto U = Id::makeUndefined();
   auto checkStrIriTag =
       std::bind_front(testNaryExpression, &makeStrIriDtExpression);
-  checkStrIriTag(IdOrLiteralOrIriVec{lit(
-                     "123", "^^<http://www.w3.org/2001/XMLSchema#integer>")},
-                 IdOrLiteralOrIriVec{lit("123")},
-                 IdOrLiteralOrIriVec{
-                     iriref("<http://www.w3.org/2001/XMLSchema#integer>")});
+  Id geoPoint = Id::makeFromGeoPoint(GeoPoint{0, 0});
+  Id date = Id::makeFromDate(DateYearOrDuration::parseXsdDate("2026-02-16"));
+
+  // Test the correct encoding of literals to `ValueId`s.
+  checkStrIriTag(
+      IdOrLiteralOrIriVec{I(123), I(-42), I(-42), B(true), B(false), D(3.14),
+                          D(2.5), D(2.5), date, geoPoint},
+      IdOrLiteralOrIriVec{lit("123"), lit("-42"), lit("-42"), lit("true"),
+                          lit("false"), lit("3.14"), lit("2.5"), lit("2.5"),
+                          lit("2026-02-16"), lit("POINT(0.0 0.0)")},
+      IdOrLiteralOrIriVec{
+          iriref("<http://www.w3.org/2001/XMLSchema#integer>"),
+          iriref("<http://www.w3.org/2001/XMLSchema#integer>"),
+          iriref("<http://www.w3.org/2001/XMLSchema#int>"),
+          iriref("<http://www.w3.org/2001/XMLSchema#boolean>"),
+          iriref("<http://www.w3.org/2001/XMLSchema#boolean>"),
+          iriref("<http://www.w3.org/2001/XMLSchema#double>"),
+          iriref("<http://www.w3.org/2001/XMLSchema#decimal>"),
+          iriref("<http://www.w3.org/2001/XMLSchema#float>"),
+          iriref("<http://www.w3.org/2001/XMLSchema#date>"),
+          iriref("<http://www.opengis.net/ont/geosparql#wktLiteral>")});
+
+  // Unknown datatype: returns a `Literal` with datatype.
   checkStrIriTag(
       IdOrLiteralOrIriVec{lit("iiii", "^^<http://example/romanNumeral>")},
       IdOrLiteralOrIriVec{lit("iiii")},
       IdOrLiteralOrIriVec{iriref("<http://example/romanNumeral>")});
-  checkStrIriTag(IdOrLiteralOrIriVec{U},
-                 IdOrLiteralOrIriVec{iriref("<http://example/romanNumeral>")},
-                 IdOrLiteralOrIriVec{U});
-  checkStrIriTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{lit("iiii")},
-                 IdOrLiteralOrIriVec{U});
-  checkStrIriTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{lit("XVII")},
-                 IdOrLiteralOrIriVec{lit("<not/a/iriref>")});
+
+  // Invalid content for the given datatype: falls back to `Literal`.
+  checkStrIriTag(
+      IdOrLiteralOrIriVec{
+          lit("abc", "^^<http://www.w3.org/2001/XMLSchema#integer>"),
+          lit("abc", "^^<http://www.w3.org/2001/XMLSchema#boolean>")},
+      IdOrLiteralOrIriVec{lit("abc"), lit("abc")},
+      IdOrLiteralOrIriVec{
+          iriref("<http://www.w3.org/2001/XMLSchema#integer>"),
+          iriref("<http://www.w3.org/2001/XMLSchema#boolean>")});
+
+  // Undefined cases.
+  checkStrIriTag(
+      IdOrLiteralOrIriVec{U, U, U, U, U, U},
+      IdOrLiteralOrIriVec{
+          iriref("<http://example/romanNumeral>"), lit("iiii"), U, lit("XVII"),
+          lit("123", "^^<http://www.w3.org/2001/XMLSchema#integer>"),
+          lit("chat", "@en")},
+      IdOrLiteralOrIriVec{U, U, U, lit("<not/a/iriref>"),
+                          iriref("<http://www.w3.org/2001/XMLSchema#integer>"),
+                          iriref("<http://example/romanNumeral>")});
 }
 
 // _____________________________________________________________________________________
@@ -832,10 +982,18 @@ TEST(SparqlExpression, strLangTagged) {
               IdOrLiteralOrIriVec{lit("@")});
   checkStrTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{lit("chat")},
               IdOrLiteralOrIriVec{lit("")});
+  checkStrTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{lit("chat")},
+              IdOrLiteralOrIriVec{U});
   checkStrTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{U},
               IdOrLiteralOrIriVec{lit("d")});
   checkStrTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{U},
               IdOrLiteralOrIriVec{U});
+  checkStrTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{lit("chat", "@en")},
+              IdOrLiteralOrIriVec{lit("en")});
+  checkStrTag(IdOrLiteralOrIriVec{U},
+              IdOrLiteralOrIriVec{
+                  lit("123", "^^<http://www.w3.org/2001/XMLSchema#integer>")},
+              IdOrLiteralOrIriVec{lit("en")});
 }
 
 // _____________________________________________________________________________________
@@ -921,25 +1079,27 @@ TEST(SparqlExpression, customNumericFunctions) {
 TEST(SparqlExpression, isSomethingFunctions) {
   Id T = Id::makeFromBool(true);
   Id F = Id::makeFromBool(false);
+  Id geo = Id::makeFromGeoPoint(GeoPoint{0, 0});
+  Id date = Id::makeFromDate(DateYearOrDuration::parseXsdDate("2025-06-13"));
   Id iri = testContext().x;
   Id literal = testContext().zz;
   Id blank = testContext().blank;
   Id blank2 = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(12));
   Id localLiteral = testContext().notInVocabA;
 
-  IdOrLiteralOrIriVec testIdOrStrings =
-      IdOrLiteralOrIriVec{iriref("<i>"), lit("\"l\""), blank2, iri,  literal,
-                          blank,         localLiteral, I(42),  D(1), U};
-  testUnaryExpression<makeIsIriExpression>(testIdOrStrings,
-                                           Ids{T, F, F, T, F, F, F, F, F, F});
-  testUnaryExpression<makeIsBlankExpression>(testIdOrStrings,
-                                             Ids{F, F, T, F, F, T, F, F, F, F});
+  IdOrLiteralOrIriVec testIdOrStrings = IdOrLiteralOrIriVec{
+      iriref("<i>"), lit("\"l\""), blank2, iri, literal, blank, localLiteral,
+      I(42),         D(1),         F,      geo, date,    U};
+  testUnaryExpression<makeIsIriExpression>(
+      testIdOrStrings, Ids{T, F, F, T, F, F, F, F, F, F, F, F, F});
+  testUnaryExpression<makeIsBlankExpression>(
+      testIdOrStrings, Ids{F, F, T, F, F, T, F, F, F, F, F, F, F});
   testUnaryExpression<makeIsLiteralExpression>(
-      testIdOrStrings, Ids{F, T, F, F, T, F, T, F, F, F});
+      testIdOrStrings, Ids{F, T, F, F, T, F, T, T, T, T, T, T, F});
   testUnaryExpression<makeIsNumericExpression>(
-      testIdOrStrings, Ids{F, F, F, F, F, F, F, T, T, F});
-  testUnaryExpression<makeBoundExpression>(testIdOrStrings,
-                                           Ids{T, T, T, T, T, T, T, T, T, F});
+      testIdOrStrings, Ids{F, F, F, F, F, F, F, T, T, F, F, F, F});
+  testUnaryExpression<makeBoundExpression>(
+      testIdOrStrings, Ids{T, T, T, T, T, T, T, T, T, T, T, T, F});
 }
 
 // ____________________________________________________________________________
@@ -1090,16 +1250,25 @@ TEST(SparqlExpression, testToNumericExpression) {
   Id G = Id::makeFromGeoPoint(GeoPoint(50.0, 50.0));
   auto checkGetInt = testUnaryExpression<&makeConvertToIntExpression>;
   auto checkGetDouble = testUnaryExpression<&makeConvertToDoubleExpression>;
+  auto chekGetDecimal = testUnaryExpression<&makeConvertToDecimalExpression>;
 
-  checkGetInt(idOrLitOrStringVec({U, "  -1275", "5.97", "-78.97", "-5BoB6",
-                                  "FreBurg1", "", " .", " 42\n", " 0.01 ", "",
-                                  "@", "@?+1", "1", G}),
-              Ids{U, I(-1275), U, U, U, U, U, U, I(42), U, U, U, U, I(1), U});
+  checkGetInt(
+      idOrLitOrStringVec({U, "  -1275", "5.97", "-78.97", "-5BoB6", "FreBurg1",
+                          "", " .", " 42\n", " 0.01 ", "", "@", "@?+1", "1", G,
+                          "+42"}),
+      Ids{U, I(-1275), U, U, U, U, U, U, I(42), U, U, U, U, I(1), U, I(42)});
   checkGetDouble(
       idOrLitOrStringVec({U, "-122.2", "19,96", " 128789334.345 ", "-0.f",
-                          "  0.007 ", " -14.75 ", "Q", "@!+?", "1", G}),
+                          "  0.007 ", " -14.75 ", "Q", "@!+?", "1", G, "+42.0",
+                          " +1E-2", "1e3 ", "1.3E1"}),
       Ids{U, D(-122.2), U, D(128789334.345), U, D(0.007), D(-14.75), U, U,
-          D(1.00), U});
+          D(1.00), U, D(42), D(0.01), D(1000), D(13)});
+  chekGetDecimal(
+      idOrLitOrStringVec({U, "-122.2", "19,96", " 128789334.345 ", "-0.f",
+                          "  0.007 ", " -14.75 ", "Q", "@!+?", "1", G, "+42.0",
+                          " +1E-2", "1e3 ", "1.3E1"}),
+      Ids{U, D(-122.2), U, D(128789334.345), U, D(0.007), D(-14.75), U, U,
+          D(1.00), U, D(42), U, U, U});
   checkGetInt(idOrLitOrStringVec(
                   {U, I(-12475), I(42), I(0), D(-14.57), D(33.0), D(0.00001)}),
               Ids{U, I(-12475), I(42), I(0), I(-14), I(33), I(0)});
@@ -1107,7 +1276,14 @@ TEST(SparqlExpression, testToNumericExpression) {
       idOrLitOrStringVec(
           {U, I(-12475), I(42), I(0), D(-14.57), D(33.0), D(0.00001)}),
       Ids{U, D(-12475.00), D(42.00), D(0.00), D(-14.57), D(33.00), D(0.00001)});
+  chekGetDecimal(
+      idOrLitOrStringVec(
+          {U, I(-12475), I(42), I(0), D(-14.57), D(33.0), D(0.00001)}),
+      Ids{U, D(-12475.00), D(42.00), D(0.00), D(-14.57), D(33.00), D(0.00001)});
   checkGetDouble(IdOrLiteralOrIriVec{lit("."), lit("-12.745"), T, F,
+                                     lit("0.003"), lit("1")},
+                 Ids{U, D(-12.745), D(1.00), D(0.00), D(0.003), D(1.00)});
+  chekGetDecimal(IdOrLiteralOrIriVec{lit("."), lit("-12.745"), T, F,
                                      lit("0.003"), lit("1")},
                  Ids{U, D(-12.745), D(1.00), D(0.00), D(0.003), D(1.00)});
   checkGetInt(IdOrLiteralOrIriVec{lit("."), lit("-12.745"), T, F, lit(".03"),
@@ -1116,11 +1292,82 @@ TEST(SparqlExpression, testToNumericExpression) {
 }
 
 // ____________________________________________________________________________
+TEST(SparqlExpression, testToDateOrDateTimeExpression) {
+  using namespace ad_utility::testing;
+  Id T = Id::makeFromBool(true);
+  Id F = Id::makeFromBool(false);
+  Id G = Id::makeFromGeoPoint(GeoPoint(50.0, 50.0));
+  auto parserDate = DateYearOrDuration::parseXsdDate;
+  auto parserDateTime = DateYearOrDuration::parseXsdDatetime;
+  auto parserDuration = DateYearOrDuration::parseXsdDayTimeDuration;
+  auto checkGetDate = testUnaryExpression<&makeConvertToDateExpression>;
+  auto checkGetDateTime = testUnaryExpression<&makeConvertToDateTimeExpression>;
+
+  checkGetDate(
+      idOrLitOrStringVec(
+          {"---", T, F, G, "2025-02", I(10), D(0.01), "-2025-02-20",
+           "2025-02-20", "2025-1-1", DateId(parserDate, "0000-01-01"),
+           DateId(parserDuration, "-PT5H"),
+           DateId(parserDateTime, "1900-12-13T03:12:00.33Z"),
+           DateId(parserDateTime, "2025-02-20T17:12:00.01-05:00")}),
+      Ids{U, U, U, U, U, U, U, DateId(parserDate, "-2025-02-20"),
+          DateId(parserDate, "2025-02-20"), U, DateId(parserDate, "0000-01-01"),
+          U, DateId(parserDate, "1900-12-13"),
+          DateId(parserDate, "2025-02-20")});
+  checkGetDateTime(
+      idOrLitOrStringVec(
+          {"---", T, F, G, "2025-02", I(10), D(0.01), "-2025-02-20",
+           "2025-02-20", "2025-1-1", "1900-12-13T03:12:00.33Z",
+           "-1900-12-13T03:12:00.33Z", "2025-02-20T17:12:00.01-05:00",
+           DateId(parserDateTime, "2025-02-20T17:12:00.01Z"),
+           DateId(parserDuration, "PT1H4M"), DateId(parserDate, "0000-01-01")}),
+      Ids{U, U, U, U, U, U, U, U, U, U,
+          DateId(parserDateTime, "1900-12-13T03:12:00.33Z"),
+          DateId(parserDateTime, "-1900-12-13T03:12:00.33Z"),
+          DateId(parserDateTime, "2025-02-20T17:12:00.01-05:00"),
+          DateId(parserDateTime, "2025-02-20T17:12:00.01Z"), U,
+          DateId(parserDateTime, "0000-01-01T00:00:00.00")});
+}
+
+// ____________________________________________________________________________
+TEST(SparqlExpression, testToBooleanExpression) {
+  Id T = Id::makeFromBool(true);
+  Id F = Id::makeFromBool(false);
+  auto checkGetBoolean = testUnaryExpression<&makeConvertToBooleanExpression>;
+
+  checkGetBoolean(
+      IdOrLiteralOrIriVec(
+          {sparqlExpression::detail::LiteralOrIri{
+               iri("<http://example.org/z>")},
+           lit("string"), lit("-10.2E3"), lit("+33.3300"), lit("0.0"), lit("0"),
+           lit("0E1"), lit("1.5"), lit("1"), lit("1E0"), lit("13"),
+           lit("2002-10-10T17:00:00Z"), lit("false"), lit("true"), T, F,
+           lit("0", absl::StrCat("^^<", XSD_PREFIX.second, "boolean>")), I(0),
+           I(1), I(-1), D(0.0), D(1.0), D(-1.0),
+           // The SPARQL compliance tests for the boolean conversion functions
+           // mandate that xds:boolean("0E1") is undefined, but
+           // xsd:boolean("0E1"^^xsd:float) is false. The code currently returns
+           // undefined in both cases, which is fine, because the SPARQL parser
+           // converts the latter into an actual float literal.
+           lit("0E1", absl::StrCat("^^<", XSD_PREFIX.second, "float>")),
+           lit("1E0", absl::StrCat("^^<", XSD_PREFIX.second, "float>")),
+           lit("1.25", absl::StrCat("^^<", XSD_PREFIX.second, "float>")),
+           lit("-7.875", absl::StrCat("^^<", XSD_PREFIX.second, "float>"))}),
+      Ids{U, U, U, U, U, F, U, U, T, U, U, U, F, T,
+          T, F, F, F, T, T, F, T, T, U, U, U, U});
+
+  checkGetBoolean(IdOrLiteralOrIriVec({Id::makeUndefined()}), Ids{U});
+}
+
+// ____________________________________________________________________________
 TEST(SparqlExpression, geoSparqlExpressions) {
   auto checkLat = testUnaryExpression<&makeLatitudeExpression>;
   auto checkLong = testUnaryExpression<&makeLongitudeExpression>;
   auto checkIsGeoPoint = testUnaryExpression<&makeIsGeoPointExpression>;
+  auto checkCentroid = testUnaryExpression<&makeCentroidExpression>;
   auto checkDist = std::bind_front(testNaryExpression, &makeDistExpression);
+  auto checkEnvelope = testUnaryExpression<&makeEnvelopeExpression>;
+  auto checkGeometryType = testUnaryExpression<&makeGeometryTypeExpression>;
 
   auto p = GeoPoint(26.8, 24.3);
   auto v = ValueId::makeFromGeoPoint(p);
@@ -1139,27 +1386,201 @@ TEST(SparqlExpression, geoSparqlExpressions) {
 
   checkLat(v, vLat);
   checkLong(v, vLng);
+  checkCentroid(v, v);
   checkIsGeoPoint(v, B(true));
   checkDist(D(0.0), v, v);
   checkLat(idOrLitOrStringVec({"NotAPoint", I(12)}), Ids{U, U});
   checkLong(idOrLitOrStringVec({D(4.2), "NotAPoint"}), Ids{U, U});
   checkIsGeoPoint(IdOrLiteralOrIri{lit("NotAPoint")}, B(false));
+  checkCentroid(IdOrLiteralOrIri{lit("NotAPoint")}, U);
   checkDist(U, v, IdOrLiteralOrIri{I(12)});
   checkDist(U, IdOrLiteralOrIri{I(12)}, v);
   checkDist(U, v, IdOrLiteralOrIri{lit("NotAPoint")});
   checkDist(U, IdOrLiteralOrIri{lit("NotAPoint")}, v);
+
+  auto polygonCentroid = ValueId::makeFromGeoPoint(GeoPoint(3, 3));
+  checkCentroid(IdOrLiteralOrIri{lit(
+                    "\"POLYGON((2 4, 4 4, 4 2, 2 2))\"",
+                    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")},
+                polygonCentroid);
+
+  checkEnvelope(
+      IdOrLiteralOrIriVec{U, D(1.0), ValueId::makeFromGeoPoint({4, 2}),
+                          geoLit("LINESTRING(2 4, 8 8)")},
+      IdOrLiteralOrIriVec{U, U, geoLit("POLYGON((2 4,2 4,2 4,2 4,2 4))"),
+                          geoLit("POLYGON((2 4,8 4,8 8,2 8,2 4))")});
+
+  auto sfGeoType = [](std::string_view type) {
+    return lit(absl::StrCat("http://www.opengis.net/ont/sf#", type),
+               "^^<http://www.w3.org/2001/XMLSchema#anyURI>");
+  };
+  checkGeometryType(
+      IdOrLiteralOrIriVec{U, D(0.0), v, geoLit("LINESTRING(2 2, 4 4)"),
+                          geoLit("POLYGON((2 4, 4 4, 4 2, 2 2))"),
+                          geoLit("BLABLIBLU(1 1, 2 2)")},
+      IdOrLiteralOrIriVec{U, U, sfGeoType("Point"), sfGeoType("LineString"),
+                          sfGeoType("Polygon"), U});
+
+  // Bounding coordinate expressions
+  using enum ad_utility::BoundingCoordinate;
+  auto checkMinX =
+      testUnaryExpression<&makeBoundingCoordinateExpression<MIN_X>>;
+  auto checkMinY =
+      testUnaryExpression<&makeBoundingCoordinateExpression<MIN_Y>>;
+  auto checkMaxX =
+      testUnaryExpression<&makeBoundingCoordinateExpression<MAX_X>>;
+  auto checkMaxY =
+      testUnaryExpression<&makeBoundingCoordinateExpression<MAX_Y>>;
+
+  const IdOrLiteralOrIriVec exampleGeoms{
+      U,
+      D(0.0),
+      v,  // POINT(24.3, 26.8)
+      geoLit("LINESTRING(2 8, 4 6)"),
+      geoLit("POLYGON((2 4, 4 4, 4 2, 2 2, 2 4))"),
+      lit("BLABLIBLU(1 1, 2 2)"),
+      geoLit("BLABLIBLU(1 1, 2 2)"),
+      geoLit("LINESTRING(-5000 0, 1 2)"),
+  };
+  checkMinX(exampleGeoms, Ids{U, U, D(24.3), D(2), D(2), U, U, U});
+  checkMinY(exampleGeoms, Ids{U, U, D(26.8), D(6), D(2), U, U, U});
+  checkMaxX(exampleGeoms, Ids{U, U, D(24.3), D(4), D(4), U, U, U});
+  checkMaxY(exampleGeoms, Ids{U, U, D(26.8), D(8), D(4), U, U, U});
+
+  auto checkNumGeometries = testUnaryExpression<&makeNumGeometriesExpression>;
+  checkNumGeometries(exampleGeoms, Ids{U, U, I(1), I(1), I(1), U, U, I(1)});
+  const IdOrLiteralOrIriVec exampleMultiGeoms{
+      geoLit("MULTIPOINT(1 2, 3 4, 5 6, 7 8)"), geoLit("MULTIPOINT(1 2)"),
+      geoLit("MULTILINESTRING((1 2, 3 4),(5 6, 7 8, 9 0))"),
+      geoLit("MULTIPOLYGON(((1 2, 3 4, 1 2)),((1 2, 3 4, 1 2.5)),((5 6, 7 8, 9 "
+             "0, 5 6), (7 6, 5 4, 7 6)))"),
+      geoLit("GEOMETRYCOLLECTION(POINT(1 2), LINESTRING(2 8, 4 6))")};
+  checkNumGeometries(exampleMultiGeoms, Ids{I(4), I(1), I(2), I(3), I(2)});
+
+  // Since our helpers test doubles for (near) equality and precise lengths
+  // depend on the method of calculation, which is not what is tested here, we
+  // derive the expected values using the helper.
+  auto expectedLength = [](std::string_view literal) -> double {
+    auto len = ad_utility::GeometryInfo::getMetricLength(
+        absl::StrCat("\"", literal,
+                     "\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"));
+    if (!len.has_value()) {
+      return -1;
+    }
+    return len.value().length();
+  };
+
+  auto checkLength = std::bind_front(testNaryExpression, &makeLengthExpression);
+  auto checkMetricLength = testUnaryExpression<&makeMetricLengthExpression>;
+  const auto kilometer = lit("http://qudt.org/vocab/unit/KiloM",
+                             "^^<http://www.w3.org/2001/XMLSchema#anyURI>");
+
+  static constexpr std::string_view line =
+      "LINESTRING(7.8412948 47.9977308, 7.8450491 47.9946)";
+  const auto expLine = expectedLength(line);
+  static constexpr std::string_view polygon =
+      "POLYGON((7.8412948 47.9977308, 7.8450491 47.9946, 7.852918 "
+      "47.995562, 7.8412948 47.9977308))";
+  const auto expPolygon = expectedLength(polygon);
+  static constexpr std::string_view collection =
+      "GEOMETRYCOLLECTION(LINESTRING(7.8412948 47.9977308, 7.8450491 "
+      "47.9946), LINESTRING(7.8412948 47.9977308, 7.852918 "
+      "47.995562))";
+  const auto expCollection = expectedLength(collection);
+
+  const IdOrLiteralOrIriVec lengthInputs{U,
+                                         D(5),
+                                         v,
+                                         geoLit(line),
+                                         geoLit(polygon),
+                                         geoLit(collection),
+                                         lit("BLABLIBLU()")};
+  checkLength(Ids{U, U, D(0.0), D(expLine / 1000), D(expPolygon / 1000),
+                  D(expCollection / 1000), U},
+              lengthInputs,
+              IdOrLiteralOrIriVec{kilometer, kilometer, kilometer, kilometer,
+                                  kilometer, kilometer, kilometer});
+  checkMetricLength(lengthInputs, Ids{U, U, D(0.0), D(expLine), D(expPolygon),
+                                      D(expCollection), U});
+
+  auto expectedArea = [](std::string_view literal) -> double {
+    auto area = ad_utility::GeometryInfo::getMetricArea(
+        absl::StrCat("\"", literal,
+                     "\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"));
+    if (!area.has_value() || std::isnan(area.value().area())) {
+      return -1;
+    }
+    return area.value().area();
+  };
+
+  // Geometry area functions
+  auto checkArea = std::bind_front(testNaryExpression, &makeAreaExpression);
+  auto checkMetricArea = testUnaryExpression<&makeMetricAreaExpression>;
+  const auto squareKilometer =
+      lit("http://qudt.org/vocab/unit/KiloM2",
+          "^^<http://www.w3.org/2001/XMLSchema#anyURI>");
+
+  checkArea(
+      Ids{U, U, D(0.0), D(0.0), D(expectedArea(polygon) / 1'000'000), D(0.0),
+          U},
+      lengthInputs,
+      IdOrLiteralOrIriVec{squareKilometer, squareKilometer, squareKilometer,
+                          squareKilometer, squareKilometer, squareKilometer,
+                          squareKilometer});
+  checkMetricArea(lengthInputs, Ids{U, U, D(0.0), D(0.0),
+                                    D(expectedArea(polygon)), D(0.0), U});
+
+  auto checkGeometryN =
+      std::bind_front(testNaryExpression, &makeGeometryNExpression);
+  // Non-geometry types
+  checkGeometryN(IdOrLiteralOrIriVec{U, U, U, U}, Ids{D(5), I(3), B(true), U},
+                 Ids{I(1), U, D(5), I(2)});
+  // Extract n-th geometry: Single and invalid geometries.
+  checkGeometryN(
+      IdOrLiteralOrIriVec{
+          U,
+          U,
+          geoLit("POINT(24.3 26.8)"),
+          geoLit("LINESTRING(2 8,4 6)"),
+          geoLit("POLYGON((2 2,4 2,4 4,2 4,2 2))"),
+          U,
+          U,
+          geoLit("LINESTRING(-5000 0,1 2)"),
+      },
+      exampleGeoms, Ids{I(1), I(1), I(1), I(1), I(1), I(1), I(1), I(1)});
+  checkGeometryN(IdOrLiteralOrIriVec{U, U, U, U, U, U, U, U}, exampleGeoms,
+                 Ids{I(0), I(0), I(0), I(0), I(0), I(0), I(0), I(0)});
+  // Extract n-th geometry: Collection types.
+  checkGeometryN(
+      IdOrLiteralOrIriVec{
+          geoLit("POINT(1 2)"),
+          geoLit("POINT(1 2)"),
+          geoLit("LINESTRING(1 2,3 4)"),
+          geoLit("POLYGON((1 2,3 4,1 2))"),
+          geoLit("POINT(1 2)"),
+      },
+      exampleMultiGeoms, Ids{I(1), I(1), I(1), I(1), I(1)});
+  checkGeometryN(
+      IdOrLiteralOrIriVec{
+          geoLit("POINT(3 4)"),
+          U,
+          geoLit("LINESTRING(5 6,7 8,9 0)"),
+          geoLit("POLYGON((1 2,3 4,1 2.5,1 2))"),
+          geoLit("LINESTRING(2 8,4 6)"),
+      },
+      exampleMultiGeoms, Ids{I(2), I(2), I(2), I(2), I(2)});
 }
 
 // ________________________________________________________________________________________
 TEST(SparqlExpression, ifAndCoalesce) {
-  auto checkIf = testNaryExpressionVec<&makeIfExpression>;
-  auto checkCoalesce = testNaryExpressionVec<makeCoalesceExpressionVariadic>;
+  auto checkIf = TestNaryExpressionVec<&makeIfExpression>{};
+  auto checkCoalesce = TestNaryExpressionVec<makeCoalesceExpressionVariadic>{};
 
   const auto T = Id::makeFromBool(true);
   const auto F = Id::makeFromBool(false);
 
-  checkIf(idOrLitOrStringVec({I(0), "eins", I(2), I(3), "vier", "fünf"}),
-          // UNDEF and the empty string are considered to be `false`.
+  checkIf(idOrLitOrStringVec({I(0), "eins", I(2), I(3), U, "fünf"}),
+          // The empty string is considered to be `false`.
           std::tuple{idOrLitOrStringVec({T, F, T, "true", U, ""}),
                      Ids{I(0), I(1), I(2), I(3), I(4), I(5)},
                      idOrLitOrStringVec(
@@ -1195,29 +1616,38 @@ TEST(SparqlExpression, ifAndCoalesce) {
 
 // ________________________________________________________________________________________
 TEST(SparqlExpression, concatExpression) {
-  auto checkConcat = testNaryExpressionVec<makeConcatExpressionVariadic>;
+  auto checkConcat = TestNaryExpressionVec<makeConcatExpressionVariadic>{};
 
   const auto T = Id::makeFromBool(true);
+
+  checkConcat(idOrLitOrStringVec({U, U, U}),
+              std::tuple{Ids{U, I(0), U}, Ids{U, U, I(0)}});
+
+  //  CONCAT function explicitly takes string literals according to the sparql
+  //  standard.
   checkConcat(
-      idOrLitOrStringVec({"0null", "eins", "2zwei", "3drei", "", "5.35.2"}),
-      // UNDEF evaluates to an empty string..
-      std::tuple{Ids{I(0), U, I(2), I(3), U, D(5.3)},
-                 idOrLitOrStringVec({"null", "eins", "zwei", "drei", U, U}),
-                 Ids{U, U, U, U, U, D(5.2)}});
+      idOrLitOrStringVec({"0null0", U, U, U, U}),
+      std::tuple{idOrLitOrStringVec({"0", I(1), "zwei", T, D(5.3)}),
+                 idOrLitOrStringVec({"null", "eins", I(2), "true", ""}),
+                 idOrLitOrStringVec({"0", "EINS", "ZWEI", "TRUE", D(5.2)})});
   // Example with some constants in the middle.
   checkConcat(
-      idOrLitOrStringVec({"0trueeins", "trueeins", "2trueeins", "3trueeins",
-                          "trueeins", "12.3trueeins-2.1"}),
-      // UNDEF and the empty string are considered to be `false`.
-      std::tuple{Ids{I(0), U, I(2), I(3), U, D(12.3)}, T,
-                 IdOrLiteralOrIri{lit("eins")}, Ids{U, U, U, U, U, D(-2.1)}});
+      idOrLitOrStringVec(
+          {"0trueeins", U, "2trueeins", "3trueeins", U, "12.3trueeins-2.1"}),
+      std::tuple{idOrLitOrStringVec({"0", U, "2", "3", "", "12.3"}),
+                 IdOrLiteralOrIri{lit("true")}, IdOrLiteralOrIri{lit("eins")},
+                 idOrLitOrStringVec({"", "", "", "", I(4), "-2.1"})});
 
   // Only constants
-  checkConcat(IdOrLiteralOrIri{lit("trueMe1")},
-              std::tuple{T, IdOrLiteralOrIri{lit("Me")}, I(1)});
+  checkConcat(
+      IdOrLiteralOrIri{lit("trueMe1")},
+      std::tuple{IdOrLiteralOrIri{lit("true")}, IdOrLiteralOrIri{lit("Me")},
+                 IdOrLiteralOrIri{lit("1")}});
   // Constants at the beginning.
-  checkConcat(IdOrLiteralOrIriVec{lit("trueMe1"), lit("trueMe2")},
-              std::tuple{T, IdOrLiteralOrIri{lit("Me")}, Ids{I(1), I(2)}});
+  checkConcat(
+      IdOrLiteralOrIriVec{lit("trueMe1"), lit("trueMe2")},
+      std::tuple{IdOrLiteralOrIri{lit("true")}, IdOrLiteralOrIri{lit("Me")},
+                 idOrLitOrStringVec({"1", "2"})});
 
   checkConcat(IdOrLiteralOrIri{lit("")}, std::tuple{});
   auto coalesceExpr = makeConcatExpressionVariadic(
@@ -1227,11 +1657,78 @@ TEST(SparqlExpression, concatExpression) {
               testing::AllOf(::testing::ContainsRegex("ConcatExpression"),
                              ::testing::HasSubstr("<bim>"),
                              ::testing::HasSubstr("<bam>")));
+  // Only constants with datatypes or language tags.
+  checkConcat(
+      IdOrLiteralOrIri{lit("HelloWorld")},
+      std::tuple{IdOrLiteralOrIri{lit(
+                     "Hello", "^^<http://www.w3.org/2001/XMLSchema#string>")},
+                 IdOrLiteralOrIri{lit(
+                     "World", "^^<http://www.w3.org/2001/XMLSchema#string>")}});
+  checkConcat(IdOrLiteralOrIri{lit("HelloWorld", "@en")},
+              std::tuple{IdOrLiteralOrIri{lit("Hello", "@en")},
+                         IdOrLiteralOrIri{lit("World", "@en")}});
+  checkConcat(
+      IdOrLiteralOrIri{lit("HelloWorld")},
+      std::tuple{IdOrLiteralOrIri{lit(
+                     "Hello", "^^<http://www.w3.org/2001/XMLSchema#string>")},
+                 IdOrLiteralOrIri{lit("World")}});
+  checkConcat(IdOrLiteralOrIri{lit("HelloWorld")},
+              std::tuple{IdOrLiteralOrIri{lit("Hello", "@de")},
+                         IdOrLiteralOrIri{lit("World")}});
+  checkConcat(IdOrLiteralOrIri{lit("HelloWorld")},
+              std::tuple{IdOrLiteralOrIri{lit("Hello", "@de")},
+                         IdOrLiteralOrIri{lit("World", "@en")}});
+  checkConcat(
+      IdOrLiteralOrIri{lit("HelloWorld")},
+      std::tuple{IdOrLiteralOrIri{lit(
+                     "Hello", "^^<http://www.w3.org/2001/XMLSchema#string>")},
+                 IdOrLiteralOrIri{lit("World", "@en")}});
+
+  // Constants at beginning with datatypes or language tags.
+  checkConcat(IdOrLiteralOrIriVec{lit("MeHello", "@en"), lit("MeWorld"),
+                                  lit("MeHallo")},
+              std::tuple{IdOrLiteralOrIri{lit("Me", "@en")},
+                         IdOrLiteralOrIriVec{lit("Hello", "@en"), lit("World"),
+                                             lit("Hallo", "@de")}});
+  checkConcat(
+      IdOrLiteralOrIriVec{lit("MeHello"), lit("MeWorld"), lit("MeHallo")},
+      std::tuple{
+          IdOrLiteralOrIri{
+              lit("Me", "^^<http://www.w3.org/2001/XMLSchema#string>")},
+          IdOrLiteralOrIriVec{
+              lit("Hello", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+              lit("World"), lit("Hallo", "@de")}});
+
+  // Vector at the beginning with datatypes or language tags.
+  checkConcat(
+      IdOrLiteralOrIriVec{lit("HelloWorld"), lit("HiWorld"), lit("HalloWorld")},
+      std::tuple{
+          IdOrLiteralOrIriVec{
+              lit("Hello", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+              lit("Hi"), lit("Hallo", "@de")},
+          IdOrLiteralOrIri{
+              lit("World", "^^<http://www.w3.org/2001/XMLSchema#string>")}});
+  checkConcat(IdOrLiteralOrIriVec{lit("HelloWorld", "@en"), lit("HiWorld"),
+                                  lit("HalloWorld")},
+              std::tuple{IdOrLiteralOrIriVec{lit("Hello", "@en"), lit("Hi"),
+                                             lit("Hallo", "@de")},
+                         IdOrLiteralOrIri{lit("World", "@en")}});
+  checkConcat(
+      IdOrLiteralOrIriVec{lit("HelloWorld!"), lit("HalloWorld!")},
+      std::tuple{IdOrLiteralOrIriVec{lit("Hello", "@en"), lit("Hallo", "@de")},
+                 IdOrLiteralOrIri{lit("World", "@en")},
+                 IdOrLiteralOrIri{lit("!", "@fr")}});
 }
 
 // ______________________________________________________________________________
 TEST(SparqlExpression, ReplaceExpression) {
-  auto checkReplace = testNaryExpressionVec<&makeReplaceExpression>;
+  auto makeReplaceExpressionThreeArgs = [](auto&& arg0, auto&& arg1,
+                                           auto&& arg2) {
+    return makeReplaceExpression(AD_FWD(arg0), AD_FWD(arg1), AD_FWD(arg2),
+                                 nullptr);
+  };
+  auto checkReplace = TestNaryExpressionVec<makeReplaceExpressionThreeArgs>{};
+  auto checkReplaceWithFlags = TestNaryExpressionVec<&makeReplaceExpression>{};
   // A simple replace( no regexes involved).
   checkReplace(
       idOrLitOrStringVec({"null", "Eins", "zwEi", "drEi", U, U}),
@@ -1242,12 +1739,43 @@ TEST(SparqlExpression, ReplaceExpression) {
       idOrLitOrStringVec({"null", "Xs", "zwei", "drei", U, U}),
       std::tuple{idOrLitOrStringVec({"null", "eins", "zwei", "drei", U, U}),
                  IdOrLiteralOrIri{lit("e.[a-z]")}, IdOrLiteralOrIri{lit("X")}});
+  // A regex with replacement with substitutions
+  checkReplace(idOrLitOrStringVec({R"("$1 \\2 A \\bc")", R"("$1 \\2 DE \\f")"}),
+               std::tuple{idOrLitOrStringVec({"Abc", "DEf"}),
+                          IdOrLiteralOrIri{lit("([A-Z]+)")},
+                          IdOrLiteralOrIri{lit(R"("\\$1 \\2 $1 \\")")}});
+
+  // Only simple literals should be replaced.
+  checkReplace(idOrLitOrStringVec({U, U}),
+               std::tuple{idOrLitOrStringVec({"Abc", "DEf"}),
+                          IdOrLiteralOrIri{lit("([A-Z]+)")},
+                          IdOrLiteralOrIri{Id::makeFromBool(true)}});
 
   // Case-insensitive matching using the hack for google regex:
   checkReplace(idOrLitOrStringVec({"null", "xxns", "zwxx", "drxx"}),
                std::tuple{idOrLitOrStringVec({"null", "eIns", "zwEi", "drei"}),
                           IdOrLiteralOrIri{lit("(?i)[ei]")},
                           IdOrLiteralOrIri{lit("x")}});
+
+  // Case-insensitive matching using the flag
+  checkReplaceWithFlags(
+      idOrLitOrStringVec({"null", "xxns", "zwxx", "drxx"}),
+      std::tuple{idOrLitOrStringVec({"null", "eIns", "zwEi", "drei"}),
+                 IdOrLiteralOrIri{lit("[ei]")}, IdOrLiteralOrIri{lit("x")},
+                 IdOrLiteralOrIri{lit("i")}});
+
+  // Matching using the all the flags
+  checkReplaceWithFlags(
+      idOrLitOrStringVec({"null", "xxns", "zwxx", "drxx"}),
+      std::tuple{idOrLitOrStringVec({"null", "eIns", "zwEi", "drei"}),
+                 IdOrLiteralOrIri{lit("[ei]")}, IdOrLiteralOrIri{lit("x")},
+                 IdOrLiteralOrIri{lit("imsU")}});
+  // Empty flag
+  checkReplaceWithFlags(
+      idOrLitOrStringVec({"null", "xIns", "zwEx", "drxx"}),
+      std::tuple{idOrLitOrStringVec({"null", "eIns", "zwEi", "drei"}),
+                 IdOrLiteralOrIri{lit("[ei]")}, IdOrLiteralOrIri{lit("x")},
+                 IdOrLiteralOrIri{lit("")}});
 
   // Multiple matches within the same string
   checkReplace(
@@ -1265,11 +1793,38 @@ TEST(SparqlExpression, ReplaceExpression) {
       IdOrLiteralOrIriVec{U, U, U, U, U, U},
       std::tuple{idOrLitOrStringVec({"null", "Xs", "zwei", "drei", U, U}), U,
                  IdOrLiteralOrIri{lit("X")}});
+
+  checkReplaceWithFlags(
+      IdOrLiteralOrIriVec{U, U, U, U, U, U},
+      std::tuple{idOrLitOrStringVec({"null", "Xs", "zwei", "drei", U, U}), U,
+                 IdOrLiteralOrIri{lit("X")}, IdOrLiteralOrIri{lit("i")}});
+
+  // Undefined flags
+  checkReplaceWithFlags(
+      IdOrLiteralOrIriVec{U, U, U, U, U, U},
+      std::tuple{idOrLitOrStringVec({"null", "Xs", "zwei", "drei", U, U}),
+                 IdOrLiteralOrIri{lit("[ei]")}, IdOrLiteralOrIri{lit("X")}, U});
+
+  using ::testing::HasSubstr;
+  // Invalid flags
+  checkReplaceWithFlags(
+      IdOrLiteralOrIriVec{U},
+      std::tuple{idOrLitOrStringVec({"null"}), IdOrLiteralOrIri{lit("[n]")},
+                 IdOrLiteralOrIri{lit("X")}, IdOrLiteralOrIri{lit("???")}});
+
   // Illegal replacement.
   checkReplace(
       IdOrLiteralOrIriVec{U, U, U, U, U, U},
       std::tuple{idOrLitOrStringVec({"null", "Xs", "zwei", "drei", U, U}),
                  IdOrLiteralOrIri{lit("e")}, Id::makeUndefined()});
+
+  // Datatype or language tag
+  checkReplace(
+      IdOrLiteralOrIriVec{lit("Eins"), lit("zwEi", "@en")},
+      std::tuple{IdOrLiteralOrIriVec{
+                     lit("eins", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+                     lit("zwei", "@en")},
+                 IdOrLiteralOrIri{lit("e")}, IdOrLiteralOrIri{lit("E")}});
 }
 
 // ______________________________________________________________________________
@@ -1406,4 +1961,126 @@ TEST(SingleUseExpression, simpleMembersForTestCoverage) {
   EXPECT_THAT(expression.childrenForTesting(), IsEmpty());
   EXPECT_ANY_THROW(expression.getUnaggregatedVariables());
   EXPECT_ANY_THROW(expression.getCacheKey({}));
+}
+
+// This just tests basic functionality of the `ExistsExpression` class. Since
+// the actual implementation of the `EXISTS` operator is done in the
+// `ExistsJoin` class, most of the testing happens in
+// `test/engine/ExistsJoinTest.cpp`.
+TEST(ExistsExpression, basicFunctionality) {
+  using namespace ::testing;
+  ParsedQuery pq;
+  pq.selectClause().addVisibleVariable(Variable{"?testVar42"});
+  pq.selectClause().setAsterisk();
+  ExistsExpression exists{std::move(pq)};
+  auto var = exists.variable();
+  TestContext context;
+  EXPECT_ANY_THROW(exists.evaluate(&context.context));
+  using namespace testing;
+  EXPECT_THAT(exists.getCacheKey(context.varToColMap),
+              HasSubstr("Uninitialized Exists"));
+  context.varToColMap[var] = makeAlwaysDefinedColumn(437);
+  EXPECT_THAT(exists.evaluate(&context.context), VariantWith<Variable>(var));
+  EXPECT_THAT(exists.getCacheKey(context.varToColMap),
+              HasSubstr("ExistsExpression col# 437"));
+  EXPECT_THAT(exists.containedVariables(),
+              ElementsAre(Pointee(Eq(Variable{"?testVar42"}))));
+}
+
+// _____________________________________________________________________________
+TEST(OrExpression, getLanguageFilterExpression) {
+  using LFD = SparqlExpression::LangFilterData;
+  using namespace ::testing;
+  auto lit = ad_utility::testing::tripleComponentLiteral;
+
+  auto makeSimpleLangFilter = [&](std::string_view language,
+                                  Variable variable) {
+    auto sle = std::make_unique<StringLiteralExpression>(lit(language));
+    auto le = makeLangExpression(
+        std::make_unique<VariableExpression>(std::move(variable)));
+    return std::make_unique<EqualExpression>(
+        std::array<SparqlExpression::Ptr, 2>{std::move(sle), std::move(le)});
+  };
+  // Simple case
+  {
+    auto oe = makeOrExpression(makeSimpleLangFilter("\"en\"", Variable{"?x"}),
+                               makeSimpleLangFilter("\"de\"", Variable{"?x"}));
+    EXPECT_THAT(
+        oe->getLanguageFilterExpression(),
+        Optional(AllOf(AD_FIELD(LFD, variable_, Eq(Variable{"?x"})),
+                       AD_FIELD(LFD, languages_,
+                                UnorderedElementsAre(Eq("en"), Eq("de"))))));
+  }
+  // Simple case with deduplication
+  {
+    auto sle1 = std::make_unique<StringLiteralExpression>(lit("\"en\""));
+    auto le1 = makeLangExpression(
+        std::make_unique<VariableExpression>(Variable{"?x"}));
+    auto sle2 = std::make_unique<StringLiteralExpression>(lit("\"en\""));
+    auto le2 = makeLangExpression(
+        std::make_unique<VariableExpression>(Variable{"?x"}));
+    auto oe = makeOrExpression(makeSimpleLangFilter("\"en\"", Variable{"?x"}),
+                               makeSimpleLangFilter("\"en\"", Variable{"?x"}));
+    EXPECT_THAT(oe->getLanguageFilterExpression(),
+                Optional(AllOf(AD_FIELD(LFD, variable_, Eq(Variable{"?x"})),
+                               AD_FIELD(LFD, languages_,
+                                        UnorderedElementsAre(Eq("en"))))));
+  }
+  // Complicated case with deduplication and IN
+  {
+    auto makeMultiLangFilter =
+        [&](const std::vector<std::string_view>& languages, Variable variable) {
+          std::vector<SparqlExpression::Ptr> children;
+          for (std::string_view language : languages) {
+            children.push_back(
+                std::make_unique<StringLiteralExpression>(lit(language)));
+          }
+          auto le = makeLangExpression(
+              std::make_unique<VariableExpression>(std::move(variable)));
+          return std::make_unique<InExpression>(std::move(le),
+                                                std::move(children));
+        };
+    auto oe = makeOrExpression(
+        makeMultiLangFilter({"\"\"", "\"mul\"", "\"en\""}, Variable{"?x"}),
+        makeOrExpression(
+            makeSimpleLangFilter("\"en\"", Variable{"?x"}),
+            makeOrExpression(
+                makeSimpleLangFilter("\"\"", Variable{"?x"}),
+                makeMultiLangFilter({"\"de\"", "\"en\""}, Variable{"?x"}))));
+    EXPECT_THAT(
+        oe->getLanguageFilterExpression(),
+        Optional(AllOf(AD_FIELD(LFD, variable_, Eq(Variable{"?x"})),
+                       AD_FIELD(LFD, languages_,
+                                UnorderedElementsAre(Eq(""), Eq("mul"),
+                                                     Eq("en"), Eq("de"))))));
+  }
+
+  // Non-matching variables
+  {
+    auto oe = makeOrExpression(makeSimpleLangFilter("\"en\"", Variable{"?x"}),
+                               makeSimpleLangFilter("\"de\"", Variable{"?y"}));
+    EXPECT_EQ(oe->getLanguageFilterExpression(), std::nullopt);
+  }
+
+  // Left side no language filter
+  {
+    auto ie = std::make_unique<IdExpression>(Id::makeFromBool(true));
+    auto oe = makeOrExpression(std::move(ie),
+                               makeSimpleLangFilter("\"de\"", Variable{"?x"}));
+    EXPECT_EQ(oe->getLanguageFilterExpression(), std::nullopt);
+  }
+
+  // Right side no language filter
+  {
+    auto ie = std::make_unique<IdExpression>(Id::makeFromBool(true));
+    auto oe = makeOrExpression(makeSimpleLangFilter("\"de\"", Variable{"?x"}),
+                               std::move(ie));
+    EXPECT_EQ(oe->getLanguageFilterExpression(), std::nullopt);
+  }
+  // Should not apply to AND
+  {
+    auto ae = makeAndExpression(makeSimpleLangFilter("\"en\"", Variable{"?x"}),
+                                makeSimpleLangFilter("\"de\"", Variable{"?x"}));
+    EXPECT_EQ(ae->getLanguageFilterExpression(), std::nullopt);
+  }
 }

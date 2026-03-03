@@ -2,11 +2,13 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold <buchholb> and Zhiwei Zhang <zhang>
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_SIMPLE8BCODE_H
+#define QLEVER_SRC_UTIL_SIMPLE8BCODE_H
+
 #include <assert.h>
 #include <stdint.h>
 
-#include <algorithm>
+#include "backports/algorithm.h"
 
 namespace ad_utility {
 
@@ -40,6 +42,9 @@ static const struct {
     {60, 1, 0, 0x0FFFFFFFFFFFFFFF},    // selector 15
 };
 
+template <typename T>
+CPP_requires(HasGet, requires(T t)(t.get()));
+
 //! Simple8b Compression Scheme.
 //! See: Anh & Moffat: Index compression using 64-bit words.
 //! Changed the following:
@@ -60,7 +65,7 @@ class Simple8bCode {
                        uint64_t* encoded) {
     // TODO<joka921> Hack for the IDs as long as we have no proper textIds.
     auto get = [&plaintext](uint64_t index) {
-      if constexpr (requires(Numeric n) { n.get(); }) {
+      if constexpr (CPP_requires_ref(HasGet, Numeric)) {
         return plaintext[index].get();
       } else {
         return plaintext[index];
@@ -139,7 +144,7 @@ class Simple8bCode {
   // ! i.e. sizeof(Numeric) * (nofElements + 239).
   // ! The overhead is included so that no check for boundaries
   // ! is necessary inside the decoding of a single codeword.
-  template <typename Numeric, typename MakeFromUint64t = std::identity>
+  template <typename Numeric, typename MakeFromUint64t = ql::identity>
   static void decode(uint64_t* const encoded, size_t nofElements,
                      Numeric* decoded,
                      MakeFromUint64t makeFromUint64 = MakeFromUint64t{}) {
@@ -166,3 +171,5 @@ class Simple8bCode {
   }
 };
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_SIMPLE8BCODE_H

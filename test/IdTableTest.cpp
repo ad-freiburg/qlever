@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Authors : 2018      Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 //           2022-     Johannes Kalmbach(kalmbach@cs.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -15,8 +17,10 @@
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "util/BufferedVector.h"
+#include "util/TypeIdentity.h"
 
 using namespace ad_utility::testing;
+using ad_utility::use_type_identity::ti;
 namespace {
 auto V = ad_utility::testing::VocabId;
 }
@@ -164,7 +168,7 @@ TEST(IdTable, rowIterators) {
     ASSERT_FALSE(
         std::is_sorted(std::as_const(row).begin(), std::as_const(row).end()));
 
-    std::ranges::sort(row.begin(), row.end());
+    ql::ranges::sort(row.begin(), row.end());
     ASSERT_EQ(-1, row[0]);
     ASSERT_EQ(0, row[1]);
     ASSERT_EQ(1, row[2]);
@@ -203,8 +207,8 @@ TEST(IdTable, rowIterators) {
     std::sort(std::move(row).begin(), std::move(row).end());
     // The following calls all would not compile:
     // std::sort(row.begin(), row.end());
-    // std::ranges::sort(row);
-    // std::ranges::sort(std::move(row));
+    // ql::ranges::sort(row);
+    // ql::ranges::sort(std::move(row));
     ASSERT_EQ(-1, row[0]);
     ASSERT_EQ(0, row[1]);
     ASSERT_EQ(1, row[2]);
@@ -225,8 +229,8 @@ TEST(IdTable, rowIterators) {
 // the second one (if present) is a `std::vector` with `NumIdTables` entries
 // that represent the additional arguments that are needed to instantiate an
 // `IdTable` (e.g. an allocator or a `BufferedVector`).
-template <size_t NumIdTables>
-void runTestForDifferentTypes(auto testCase, std::string testCaseName) {
+template <size_t NumIdTables, typename T>
+void runTestForDifferentTypes(T testCase, std::string testCaseName) {
   using Buffer = ad_utility::BufferedVector<Id>;
   using BufferedTable = columnBasedIdTable::IdTable<Id, 0, Buffer>;
   using IntTable = columnBasedIdTable::IdTable<int, 0>;
@@ -243,10 +247,10 @@ void runTestForDifferentTypes(auto testCase, std::string testCaseName) {
     }
     allocators.emplace_back(makeAllocator());
   }
-  testCase.template operator()<IdTable>(V, std::move(allocators));
-  testCase.template operator()<BufferedTable>(V, std::move(buffers));
+  testCase(ti<IdTable>, V, std::move(allocators));
+  testCase(ti<BufferedTable>, V, std::move(buffers));
   auto makeInt = [](auto el) { return static_cast<int>(el); };
-  testCase.template operator()<IntTable>(makeInt);
+  testCase(ti<IntTable>, makeInt);
 }
 
 // This helper function has to be used inside the `testCase` lambdas for the
@@ -267,8 +271,9 @@ auto clone(const auto& table, auto... args) {
 TEST(IdTable, push_back_and_assign) {
   // A lambda that is used as the `testCase` argument to the
   // `runTestForDifferentTypes` function (see above for details).
-  auto runTestForIdTable = []<typename Table>(auto make,
-                                              auto... additionalArgs) {
+  auto runTestForIdTable = [](auto t, auto make, auto... additionalArgs) {
+    using Table = typename decltype(t)::type;
+
     constexpr size_t NUM_ROWS = 30;
     constexpr size_t NUM_COLS = 4;
 
@@ -320,8 +325,9 @@ TEST(IdTable, push_back_and_assign) {
 TEST(IdTable, at) {
   // A lambda that is used as the `testCase` argument to the
   // `runTestForDifferentTypes` function (see above for details).
-  auto runTestForIdTable = []<typename Table>(auto make,
-                                              auto... additionalArgs) {
+  auto runTestForIdTable = [](auto t, auto make, auto... additionalArgs) {
+    using Table = typename decltype(t)::type;
+
     constexpr size_t NUM_ROWS = 30;
     constexpr size_t NUM_COLS = 4;
 
@@ -344,8 +350,9 @@ TEST(IdTable, at) {
 TEST(IdTable, insertAtEnd) {
   // A lambda that is used as the `testCase` argument to the
   // `runTestForDifferentTypes` function (see above for details).
-  auto runTestForIdTable = []<typename Table>(auto make,
-                                              auto... additionalArgs) {
+  auto runTestForIdTable = [](auto t, auto make, auto... additionalArgs) {
+    using Table = typename decltype(t)::type;
+
     Table t1{4, std::move(additionalArgs.at(0))...};
     t1.push_back({make(7), make(2), make(4), make(1)});
     t1.push_back({make(0), make(22), make(1), make(4)});
@@ -358,7 +365,7 @@ TEST(IdTable, insertAtEnd) {
 
     Table t2 = clone(init, std::move(additionalArgs.at(2))...);
     // Test inserting at the end
-    t2.insertAtEnd(t1.begin(), t1.end());
+    t2.insertAtEnd(t1);
     for (size_t i = 0; i < init.size(); i++) {
       ASSERT_EQ(init[i], t2[i]) << i;
     }
@@ -369,11 +376,81 @@ TEST(IdTable, insertAtEnd) {
   runTestForDifferentTypes<3>(runTestForIdTable, "idTableTest.insertAtEnd");
 }
 
+TEST(IdTable, insertSubsetAtEnd) {
+  auto runTestForIdTable = [](auto t, auto make, auto... additionalArgs) {
+    using Table = typename decltype(t)::type;
+
+    Table src{3, std::move(additionalArgs.at(0))...};
+    src.push_back({make(10), make(11), make(12)});
+    src.push_back({make(20), make(21), make(22)});
+    src.push_back({make(30), make(31), make(32)});
+
+    Table dst{3, std::move(additionalArgs.at(1))...};
+    dst.push_back({make(1), make(2), make(3)});
+
+    // insert indices 2 and 0 (order-preserving)
+    std::vector<size_t> indices{2, 0};
+    dst.insertSubsetAtEnd(src, indices);
+
+    // expected rows: original dst row, then src row 2, then src row 0
+    ASSERT_EQ(dst.size(), 3u);
+    EXPECT_EQ(dst[0][0], make(1));
+    EXPECT_EQ(dst[0][1], make(2));
+    EXPECT_EQ(dst[1][0], make(30));
+    EXPECT_EQ(dst[2][0], make(10));
+    EXPECT_EQ(dst[1][1], make(31));
+    EXPECT_EQ(dst[2][1], make(11));
+  };
+  runTestForDifferentTypes<2>(runTestForIdTable,
+                              "idTableTest.insertSubsetAtEnd");
+}
+
+// _____________________________________________________________________________
+TEST(IdTable, insertAtEndWithPermutationAndLimit) {
+  // A lambda that is used as the `testCase` argument to the
+  // `runTestForDifferentTypes` function (see above for details).
+  auto runTestForIdTable = [](auto t, auto make, auto... additionalArgs) {
+    using Table = typename decltype(t)::type;
+
+    Table init{4, std::move(additionalArgs.at(0))...};
+    init.push_back({make(7), make(2), make(4), make(1)});
+    init.push_back({make(0), make(22), make(1), make(4)});
+
+    Table t1{3, std::move(additionalArgs.at(1))...};
+    t1.push_back({make(1), make(0), make(6)});
+    t1.push_back({make(3), make(1), make(8)});
+    t1.push_back({make(0), make(6), make(8)});
+    t1.push_back({make(9), make(2), make(6)});
+
+    Table t2 = clone(init, std::move(additionalArgs.at(2))...);
+    std::vector<ColumnIndex> permutation{2, 1, 0, 3};
+    // Test inserting at the end
+    t2.insertAtEnd(t1, 1, 3, permutation, make(1337));
+    for (size_t i = 0; i < init.size(); i++) {
+      ASSERT_EQ(init[i], t2[i]) << i;
+    }
+    ASSERT_EQ(t2.size(), init.size() + 2);
+
+    EXPECT_EQ(t2.at(2, 0), make(8));
+    EXPECT_EQ(t2.at(2, 1), make(1));
+    EXPECT_EQ(t2.at(2, 2), make(3));
+    EXPECT_EQ(t2.at(2, 3), make(1337));
+
+    EXPECT_EQ(t2.at(3, 0), make(8));
+    EXPECT_EQ(t2.at(3, 1), make(6));
+    EXPECT_EQ(t2.at(3, 2), make(0));
+    EXPECT_EQ(t2.at(3, 3), make(1337));
+  };
+  runTestForDifferentTypes<3>(runTestForIdTable,
+                              "IdTable.insertAtEndWithPermutationAndLimit");
+}
+
 TEST(IdTable, reserve_and_resize) {
   // A lambda that is used as the `testCase` argument to the
   // `runTestForDifferentTypes` function (see above for details).
-  auto runTestForIdTable = []<typename Table>(auto make,
-                                              auto... additionalArgs) {
+  auto runTestForIdTable = [](auto t, auto make, auto... additionalArgs) {
+    using Table = typename decltype(t)::type;
+
     constexpr size_t NUM_ROWS = 34;
     constexpr size_t NUM_COLS = 20;
 
@@ -421,8 +498,9 @@ TEST(IdTable, reserve_and_resize) {
 TEST(IdTable, copyAndMove) {
   // A lambda that is used as the `testCase` argument to the
   // `runTestForDifferentTypes` function (see above for details).
-  auto runTestForIdTable = []<typename Table>(auto make,
-                                              auto... additionalArgs) {
+  auto runTestForIdTable = [](auto t, auto make, auto... additionalArgs) {
+    using Table = typename decltype(t)::type;
+
     constexpr size_t NUM_ROWS = 100;
     constexpr size_t NUM_COLS = 4;
 
@@ -570,8 +648,7 @@ TEST(IdTable, sortTest) {
 
   // Now try the actual sort
   test = orig.clone();
-  std::ranges::sort(test, std::less<>{},
-                    [](const auto& row) { return row[0]; });
+  ql::ranges::sort(test, std::less<>{}, [](const auto& row) { return row[0]; });
 
   // The sorted order of the orig tables should be:
   // 3, 2, 0, 4, 5, 1
@@ -646,7 +723,7 @@ TEST(IdTableStaticTest, insert) {
   IdTableStatic<4> t2 = init.clone();
 
   // Test inserting at the end
-  t2.insertAtEnd(t1.begin(), t1.end());
+  t2.insertAtEnd(t1);
   for (size_t i = 0; i < init.size(); i++) {
     for (size_t j = 0; j < init.numColumns(); j++) {
       EXPECT_EQ(init(i, j), t2(i, j)) << i << ", " << j;
@@ -966,8 +1043,10 @@ TEST(IdTable, setColumnSubset) {
   ASSERT_THAT(t.getColumn(0), ::testing::ElementsAre(20, 21, 22));
   ASSERT_THAT(t.getColumn(1), ::testing::ElementsAre(0, 1, 2));
 
-  // Empty column subset is not allowed.
-  ASSERT_ANY_THROW(t.setColumnSubset(std::vector<ColumnIndex>{}));
+  // Empty column subset
+  t.setColumnSubset(std::array<ColumnIndex, 0>{});
+  ASSERT_EQ(0, t.numColumns());
+
   // Duplicate columns are not allowed.
   ASSERT_ANY_THROW(t.setColumnSubset(std::vector<ColumnIndex>{0, 0, 1}));
   // A column index is out of range.
@@ -1100,8 +1179,10 @@ TEST(IdTable, shrinkToFit) {
 TEST(IdTable, staticAsserts) {
   static_assert(std::is_trivially_copyable_v<IdTableStatic<1>::iterator>);
   static_assert(std::is_trivially_copyable_v<IdTableStatic<1>::const_iterator>);
-  static_assert(std::ranges::random_access_range<IdTable>);
-  static_assert(std::ranges::random_access_range<IdTableStatic<1>>);
+  static_assert(ql::ranges::random_access_range<IdTable>);
+  static_assert(ql::ranges::random_access_range<IdTableStatic<1>>);
+
+  static_assert(std::is_copy_constructible_v<IdTableView<1>>);
 }
 
 TEST(IdTable, constructorsAreSfinaeFriendly) {
@@ -1134,6 +1215,20 @@ TEST(IdTable, addEmptyColumn) {
   // The new column is uninitialized, so we can't make any more specific
   // assertions about its content here.
   EXPECT_EQ(table.getColumn(1).size(), 2);
+}
+
+// _____________________________________________________________________________
+TEST(IdTable, moveOrClone) {
+  IdTable table{1, ad_utility::makeUnlimitedAllocator<Id>()};
+  table.push_back({V(1)});
+  table.push_back({V(2)});
+
+  auto t2 = table.moveOrClone();
+  EXPECT_EQ(table, t2);
+  auto t3 = std::move(table).moveOrClone();
+  EXPECT_EQ(t3, t2);
+  // `table` was moved from.
+  EXPECT_TRUE(table.empty());
 }
 
 // Check that we can completely instantiate `IdTable`s with a different value

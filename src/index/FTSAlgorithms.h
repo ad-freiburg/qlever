@@ -1,7 +1,9 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
-#pragma once
+
+#ifndef QLEVER_SRC_INDEX_FTSALGORITHMS_H
+#define QLEVER_SRC_INDEX_FTSALGORITHMS_H
 
 #include <array>
 #include <vector>
@@ -15,3 +17,5 @@ class FTSAlgorithms {
   static IdTable filterByRange(const IdRange<WordVocabIndex>& idRange,
                                const IdTable& idPreFilter);
 };
+
+#endif  // QLEVER_SRC_INDEX_FTSALGORITHMS_H

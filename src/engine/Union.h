@@ -1,7 +1,9 @@
 // Copyright 2018, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
-#pragma once
+
+#ifndef QLEVER_SRC_ENGINE_UNION_H
+#define QLEVER_SRC_ENGINE_UNION_H
 
 #include <array>
 #include <memory>
@@ -9,10 +11,9 @@
 #include <utility>
 #include <vector>
 
-#include "../parser/ParsedQuery.h"
-#include "../util/HashMap.h"
-#include "Operation.h"
-#include "QueryExecutionTree.h"
+#include "engine/Operation.h"
+#include "engine/QueryExecutionTree.h"
+#include "util/HashMap.h"
 
 class Union : public Operation {
  private:
@@ -23,21 +24,26 @@ class Union : public Operation {
    */
   std::vector<std::array<size_t, 2>> _columnOrigins;
   std::array<std::shared_ptr<QueryExecutionTree>, 2> _subtrees;
+  // Stores the indices of the columns that the result of this operation should
+  // be sorted on. If set, the expensive union with merge implementation has to
+  // be used (which is most likely cheaper than sorting afterwards).
+  std::vector<ColumnIndex> targetOrder_;
 
  public:
   Union(QueryExecutionContext* qec,
         const std::shared_ptr<QueryExecutionTree>& t1,
-        const std::shared_ptr<QueryExecutionTree>& t2);
+        const std::shared_ptr<QueryExecutionTree>& t2,
+        std::vector<ColumnIndex> targetOrder = {});
 
  protected:
-  virtual string getCacheKeyImpl() const override;
+  virtual std::string getCacheKeyImpl() const override;
 
  public:
-  virtual string getDescriptor() const override;
+  virtual std::string getDescriptor() const override;
 
   virtual size_t getResultWidth() const override;
 
-  virtual vector<ColumnIndex> resultSortedOn() const override;
+  virtual std::vector<ColumnIndex> resultSortedOn() const override;
 
   virtual bool knownEmptyResult() override;
 
@@ -58,12 +64,38 @@ class Union : public Operation {
       const IdTable& left, const IdTable& right,
       const std::vector<std::array<size_t, 2>>& columnOrigins) const;
 
-  vector<QueryExecutionTree*> getChildren() override {
+  std::vector<QueryExecutionTree*> getChildren() override {
     return {_subtrees[0].get(), _subtrees[1].get()};
   }
 
+  // Create a sorted variant of this operation. This can be more efficient than
+  // stacking a `Sort` operation on top of this one because Union can simply
+  // push the sort down to its children. If one of the children is already
+  // sorted properly then it is way cheaper to sort the other child and then
+  // merge the two sorted results.
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeSortedTree(
+      const std::vector<ColumnIndex>& sortColumns) const override;
+
+  // Provide access the the left child of this union.
+  const std::shared_ptr<QueryExecutionTree>& leftChild() const {
+    return _subtrees[0];
+  }
+
+  // Provide access the the right child of this union.
+  const std::shared_ptr<QueryExecutionTree>& rightChild() const {
+    return _subtrees[1];
+  }
+
+  // Return the original index of the column in the left or right child that the
+  // respective column of this union maps to. If the index does not map to the
+  // respective child, std::nullopt is returned.
+  std::optional<ColumnIndex> getOriginalColumn(bool leftChild,
+                                               ColumnIndex unionColumn) const;
+
  private:
-  ProtoResult computeResult(bool requestLaziness) override;
+  std::unique_ptr<Operation> cloneImpl() const override;
+
+  Result computeResult(bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
@@ -78,10 +110,25 @@ class Union : public Operation {
   IdTable transformToCorrectColumnFormat(
       IdTable idTable, const std::vector<ColumnIndex>& permutation) const;
 
-  // Create a generator that yields the `IdTable` for the left or right child
+  // Create a lazy result that yields the `IdTable` for the left or right child
   // one after another and apply a potential differing permutation to it. Write
   // the merged LocalVocab to the given `LocalVocab` object at the end.
-  Result::Generator computeResultLazily(
+  Result::LazyResult computeResultLazily(
       std::shared_ptr<const Result> result1,
       std::shared_ptr<const Result> result2) const;
+
+  // Similar to `computeResultLazily` but it keeps the order of the results.
+  // This means that instead of just returning the results of the left and right
+  // child one after another, the results are merged in a way that the order of
+  // the results is preserved.
+  Result::LazyResult computeResultKeepOrder(
+      bool requestLaziness, std::shared_ptr<const Result> result1,
+      std::shared_ptr<const Result> result2) const;
+
+  // ___________________________________________________________________________
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(
+      const std::set<Variable>& variables) const override;
 };
+
+#endif  // QLEVER_SRC_ENGINE_UNION_H

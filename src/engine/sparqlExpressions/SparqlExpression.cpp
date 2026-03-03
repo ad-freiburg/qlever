@@ -4,6 +4,8 @@
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
 
+#include "backports/iterator.h"
+
 namespace sparqlExpression {
 
 // _____________________________________________________________________________
@@ -36,8 +38,8 @@ std::vector<Variable> SparqlExpression::getUnaggregatedVariables() const {
   std::vector<Variable> result;
   for (const auto& child : children()) {
     auto childResult = child->getUnaggregatedVariables();
-    result.insert(result.end(), std::make_move_iterator(childResult.begin()),
-                  std::make_move_iterator(childResult.end()));
+    result.insert(result.end(), ql::make_move_iterator(childResult.begin()),
+                  ql::make_move_iterator(childResult.end()));
   }
   return result;
 }
@@ -49,7 +51,7 @@ bool SparqlExpression::containsAggregate() const {
     return true;
   }
 
-  return std::ranges::any_of(
+  return ql::ranges::any_of(
       children(), [](const Ptr& child) { return child->containsAggregate(); });
 }
 
@@ -66,10 +68,10 @@ std::unique_ptr<SparqlExpression> SparqlExpression::replaceChild(
 }
 
 // _____________________________________________________________________________
-const string& SparqlExpression::descriptor() const { return _descriptor; }
+const std::string& SparqlExpression::descriptor() const { return _descriptor; }
 
 // _____________________________________________________________________________
-string& SparqlExpression::descriptor() { return _descriptor; }
+std::string& SparqlExpression::descriptor() { return _descriptor; }
 
 // _____________________________________________________________________________
 std::optional<SparqlExpressionPimpl::VariableAndDistinctness>
@@ -83,12 +85,7 @@ std::optional<::Variable> SparqlExpression::getVariableOrNullopt() const {
 }
 
 // _____________________________________________________________________________
-bool SparqlExpression::containsLangExpression() const {
-  return std::ranges::any_of(children(),
-                             [](const SparqlExpression::Ptr& child) {
-                               return child->containsLangExpression();
-                             });
-}
+bool SparqlExpression::isYearExpression() const { return false; }
 
 // _____________________________________________________________________________
 using LangFilterData = SparqlExpressionPimpl::LangFilterData;
@@ -129,7 +126,7 @@ bool SparqlExpression::isConstantExpression() const { return false; }
 bool SparqlExpression::isStrExpression() const { return false; }
 
 // _____________________________________________________________________________
-std::span<const SparqlExpression::Ptr> SparqlExpression::childrenForTesting()
+ql::span<const SparqlExpression::Ptr> SparqlExpression::childrenForTesting()
     const {
   return children();
 }
@@ -137,23 +134,23 @@ std::span<const SparqlExpression::Ptr> SparqlExpression::childrenForTesting()
 // _____________________________________________________________________________
 std::vector<SparqlExpression::Ptr> SparqlExpression::moveChildrenOut() && {
   auto span = children();
-  return {std::make_move_iterator(span.begin()),
-          std::make_move_iterator(span.end())};
+  return {ql::make_move_iterator(span.begin()),
+          ql::make_move_iterator(span.end())};
 }
 
 // _____________________________________________________________________________
-std::span<SparqlExpression::Ptr> SparqlExpression::children() {
+ql::span<SparqlExpression::Ptr> SparqlExpression::children() {
   return childrenImpl();
 }
 
 // _____________________________________________________________________________
-std::span<const SparqlExpression::Ptr> SparqlExpression::children() const {
+ql::span<const SparqlExpression::Ptr> SparqlExpression::children() const {
   auto children = const_cast<SparqlExpression&>(*this).children();
   return {children.data(), children.size()};
 }
 
 // _____________________________________________________________________________
-std::span<const Variable> SparqlExpression::getContainedVariablesNonRecursive()
+ql::span<const Variable> SparqlExpression::getContainedVariablesNonRecursive()
     const {
   // Default implementation: This expression adds no strings or variables.
   return {};
@@ -180,5 +177,32 @@ bool SparqlExpression::isInsideAggregate() const {
         "constructor of an aggregate expression");
   }
   return isInsideAggregate_;
+}
+
+// ________________________________________________________________
+bool SparqlExpression::isExistsExpression() const { return false; }
+
+//______________________________________________________________________________
+template <typename SparqlExpressionT>
+void getExistsExpressionsImpl(SparqlExpressionT& self,
+                              std::vector<SparqlExpressionT*>& result) {
+  static_assert(ad_utility::isSimilar<SparqlExpressionT, SparqlExpression>);
+  if (self.isExistsExpression()) {
+    result.push_back(&self);
+  }
+  for (auto& child : self.children()) {
+    child->getExistsExpressions(result);
+  }
+}
+
+//______________________________________________________________________________
+void SparqlExpression::getExistsExpressions(
+    std::vector<const SparqlExpression*>& result) const {
+  getExistsExpressionsImpl(*this, result);
+}
+//______________________________________________________________________________
+void SparqlExpression::getExistsExpressions(
+    std::vector<SparqlExpression*>& result) {
+  getExistsExpressionsImpl(*this, result);
 }
 }  // namespace sparqlExpression

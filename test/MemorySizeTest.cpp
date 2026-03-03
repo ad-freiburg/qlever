@@ -65,22 +65,22 @@ struct AllMemoryUnitSizes {
 
 // A hash map pairing up a single memory size unit with the corresponding
 // `AllMemoryUnitSizes` representations.
+using Pair = ad_utility::ConstexprMapPair<std::string_view, AllMemoryUnitSizes>;
 constexpr ad_utility::ConstexprMap<std::string_view, AllMemoryUnitSizes, 5>
     singleMemoryUnitSizes(
-        {std::pair{"B", AllMemoryUnitSizes{1uL, 1e-3, 1e-6, 1e-9, 1e-12}},
-         std::pair{"kB", AllMemoryUnitSizes{1'000uL, 1, 1e-3, 1e-6, 1e-9}},
-         std::pair{"MB", AllMemoryUnitSizes{1'000'000uL, 1e3, 1, 1e-3, 1e-6}},
-         std::pair{"GB",
-                   AllMemoryUnitSizes{1'000'000'000uL, 1e6, 1e3, 1, 1e-3}},
-         std::pair{"TB",
-                   AllMemoryUnitSizes{1'000'000'000'000uL, 1e9, 1e6, 1e3, 1}}});
+        {Pair{"B", AllMemoryUnitSizes{1uL, 1e-3, 1e-6, 1e-9, 1e-12}},
+         Pair{"kB", AllMemoryUnitSizes{1'000uL, 1, 1e-3, 1e-6, 1e-9}},
+         Pair{"MB", AllMemoryUnitSizes{1'000'000uL, 1e3, 1, 1e-3, 1e-6}},
+         Pair{"GB", AllMemoryUnitSizes{1'000'000'000uL, 1e6, 1e3, 1, 1e-3}},
+         Pair{"TB",
+              AllMemoryUnitSizes{1'000'000'000'000uL, 1e9, 1e6, 1e3, 1}}});
 
 /*
 Checks all the getters of the class with the wanted memory sizes.
 */
 void checkAllMemorySizeGetter(
     const ad_utility::MemorySize& m, const AllMemoryUnitSizes& ms,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace{generateLocationTrace(l)};
 
   ASSERT_EQ(m.getBytes(), ms.bytes);
@@ -207,7 +207,7 @@ TEST(MemorySize, AsString) {
     ASSERT_STREQ(stream.str().c_str(), testCase.stringRepresentation_.data());
   };
 
-  std::ranges::for_each(generalAsStringTestCases(), doTest);
+  ql::ranges::for_each(generalAsStringTestCases(), doTest);
 
   // Check, if it always uses the right unit.
   doTest({99'999_B, "99999 B"});
@@ -232,7 +232,7 @@ TEST(MemorySize, Parse) {
   };
 
   // General testing.
-  std::ranges::for_each(generalAsStringTestCases(), doTest);
+  ql::ranges::for_each(generalAsStringTestCases(), doTest);
 
   // Does `Byte` only work with whole, positive numbers?
   doExceptionTest("-46 B");
@@ -240,21 +240,21 @@ TEST(MemorySize, Parse) {
   doExceptionTest("-4.2 B");
 
   // Nothing should work with negative numbers.
-  std::ranges::for_each(generalAsStringTestCases(), doExceptionTest,
-                        [](const MemorySizeAndStringRepresentation& testCase) {
-                          return absl::StrCat("-",
-                                              testCase.stringRepresentation_);
-                        });
+  ql::ranges::for_each(generalAsStringTestCases(), doExceptionTest,
+                       [](const MemorySizeAndStringRepresentation& testCase) {
+                         return absl::StrCat("-",
+                                             testCase.stringRepresentation_);
+                       });
 
   // Byte sizes can only be set with `B`.
-  std::ranges::for_each(std::vector{"42 BYTE", "42 BYTe", "42 BYtE", "42 BYte",
-                                    "42 ByTE", "42 ByTe", "42 BytE", "42 Byte",
-                                    "42 bYTE", "42 bYTe", "42 bYtE", "42 bYte",
-                                    "42 byTE", "42 byTe", "42 bytE", "42 byte"},
-                        doExceptionTest);
+  ql::ranges::for_each(std::vector{"42 BYTE", "42 BYTe", "42 BYtE", "42 BYte",
+                                   "42 ByTE", "42 ByTe", "42 BytE", "42 Byte",
+                                   "42 bYTE", "42 bYTe", "42 bYtE", "42 bYte",
+                                   "42 byTE", "42 byTe", "42 bytE", "42 byte"},
+                       doExceptionTest);
 
   // Is our grammar truly case insensitive?
-  std::ranges::for_each(
+  ql::ranges::for_each(
       std::vector<MemorySizeAndStringRepresentation>{{42_B, "42 B"},
                                                      {42_B, "42 b"},
                                                      {42_kB, "42 KB"},
@@ -277,7 +277,7 @@ TEST(MemorySize, Parse) {
 
   // Does our short hand (memory unit without the `B` at the end) work? And is
   // it case insensitive?
-  std::ranges::for_each(
+  ql::ranges::for_each(
       std::vector<MemorySizeAndStringRepresentation>{{42_kB, "42 K"},
                                                      {42_kB, "42 k"},
                                                      {42_MB, "42 M"},
@@ -289,7 +289,7 @@ TEST(MemorySize, Parse) {
       doTest);
 
   // Check if whitespace between unit and amount is truly optional
-  std::ranges::for_each(
+  ql::ranges::for_each(
       std::vector<MemorySizeAndStringRepresentation>{{42_B, "42B"},
                                                      {42_B, "42b"},
                                                      {42_kB, "42KB"},
@@ -310,7 +310,7 @@ TEST(MemorySize, Parse) {
                                                      {42_TB, "42tb"}},
       doTest);
 
-  std::ranges::for_each(
+  ql::ranges::for_each(
       std::vector<MemorySizeAndStringRepresentation>{{42_kB, "42K"},
                                                      {42_kB, "42k"},
                                                      {42_MB, "42M"},
@@ -322,13 +322,13 @@ TEST(MemorySize, Parse) {
       doTest);
 
   // Test if multiple spaces are fine too
-  std::ranges::for_each(
+  ql::ranges::for_each(
       std::vector<MemorySizeAndStringRepresentation>{{42_kB, "42    K"},
                                                      {42_kB, "42  k"}},
       doTest);
 
   // We only take memory units up to `TB`. Not further.
-  std::ranges::for_each(std::vector{"42 P", "42 PB"}, doExceptionTest);
+  ql::ranges::for_each(std::vector{"42 P", "42 PB"}, doExceptionTest);
 }
 
 TEST(MemorySize, ArithmeticOperators) {

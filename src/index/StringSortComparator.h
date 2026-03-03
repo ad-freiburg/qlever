@@ -1,6 +1,8 @@
 //  Copyright 2019, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_STRINGSORTCOMPARATOR_H
 #define QLEVER_STRINGSORTCOMPARATOR_H
@@ -15,8 +17,11 @@
 
 #include <cstring>
 #include <memory>
-#include <memory_resource>
 
+#include "backports/StartsWithAndEndsWith.h"
+#include "backports/algorithm.h"
+#include "backports/memory_resource.h"
+#include "backports/three_way_comparison.h"
 #include "global/Constants.h"
 #include "util/Exception.h"
 #include "util/StringUtils.h"
@@ -51,8 +56,8 @@ class LocaleManager {
   using U8String = std::basic_string<uint8_t>;
   using U8StringView = std::basic_string_view<uint8_t>;
 
-  template <ad_utility::SimilarToAny<U8String, U8StringView> T>
-  class SortKeyImpl {
+  CPP_template(typename T)(requires ad_utility::SimilarToAny<
+                           T, U8String, U8StringView>) class SortKeyImpl {
    public:
     SortKeyImpl() = default;
     explicit SortKeyImpl(U8StringView sortKey) : sortKey_(sortKey) {}
@@ -66,12 +71,12 @@ class LocaleManager {
       return U8StringView{sortKey_}.compare(U8StringView{rhs.sortKey_});
     }
 
-    auto operator<=>(const SortKeyImpl&) const = default;
+    QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL(SortKeyImpl, sortKey_)
 
     /// Is this sort key a prefix of another sort key. Note: This does not imply
     /// any guarantees on the relation of the underlying strings.
     bool starts_with(const SortKeyImpl& rhs) const noexcept {
-      return get().starts_with(rhs.get());
+      return ql::starts_with(get(), rhs.get());
     }
 
     /// Return the number of bytes in the `SortKey`
@@ -95,7 +100,7 @@ class LocaleManager {
   LocaleManager()
       : LocaleManager(std::string{LOCALE_DEFAULT_LANG},
                       std::string{LOCALE_DEFAULT_COUNTRY},
-                      LOCALE_DEFAULT_IGNORE_PUNCTUATION){};
+                      LOCALE_DEFAULT_IGNORE_PUNCTUATION) {}
 
   /**
    * @param lang The language of the locale, e.g. "en" or "de"
@@ -177,9 +182,12 @@ class LocaleManager {
    * @return A weight string s.t. compare(s, t, level) ==
    * std::strcmp(getSortKey(s, level), getSortKey(t, level)
    */
-  void getSortKey(
-      std::string_view s, const Level level,
-      std::invocable<const uint8_t*, size_t> auto resultFunction) const {
+  // clang-format off
+  CPP_template(typename F)(
+    requires ranges::invocable<F, const uint8_t*, size_t>)
+      // clang-format on
+      void getSortKey(std::string_view s, const Level level,
+                      F resultFunction) const {
     // TODO<joka921> This function is one of the bottlenecks of the first pass
     // of the IndexBuilder One possible improvement is to reuse the memory
     // allocations for the `sortKeyBuffer`.
@@ -313,7 +321,7 @@ class LocaleManager {
    * different steps in icu. */
   std::unique_ptr<icu::Collator> _collator[6];
   UColAttributeValue _ignorePunctuationStatus =
-      UCOL_NON_IGNORABLE;  // how to sort punctuations etc.
+      UCOL_NON_IGNORABLE;  // how to sort punctuation etc.
 
   const icu::Normalizer2* _normalizer =
       nullptr;  // actually locale-independent but useful to be placed here
@@ -619,6 +627,13 @@ class TripleComponentComparator {
     return compare(spA, spB, level) < 0;
   }
 
+  // Same operator, but with switched argument types.
+  bool operator()(const SplitVal& spA, std::string_view b,
+                  const Level level) const {
+    auto spB = extractAndTransformComparable(b, level, false);
+    return compare(spA, spB, level) < 0;
+  }
+
   template <typename A, typename B, typename C>
   bool operator()(const SplitValBase<A, B, C>& a,
                   const SplitValBase<A, B, C>& b, const Level level) const {
@@ -654,7 +669,7 @@ class TripleComponentComparator {
   [[nodiscard]] SplitValNonOwningWithSortKey
   extractAndTransformComparableNonOwning(
       std::string_view a, const Level level, bool isExternal,
-      std::pmr::polymorphic_allocator<char>* allocator) const {
+      ql::pmr::polymorphic_allocator<char>* allocator) const {
     return extractComparable<SplitValNonOwningWithSortKey>(a, level, isExternal,
                                                            allocator);
   }
@@ -760,11 +775,11 @@ class TripleComponentComparator {
   template <class SplitValType>
   [[nodiscard]] SplitValType extractComparable(
       std::string_view a, [[maybe_unused]] const Level level, bool isExternal,
-      std::pmr::polymorphic_allocator<char>* allocator = nullptr) const {
+      ql::pmr::polymorphic_allocator<char>* allocator = nullptr) const {
     std::string_view res = a;
     const char first = a.empty() ? char(0) : a[0];
     std::string_view langtag;
-    if (res.starts_with('"')) {
+    if (ql::starts_with(res, '"')) {
       // only remove the first character in case of literals that always start
       // with a quotation mark. For all other types we need this. <TODO> rework
       // the vocabulary's data type to remove ALL of those hacks
@@ -772,7 +787,7 @@ class TripleComponentComparator {
       // In the case of prefix filters we might also have
       // Literals that do not have the closing quotation mark
       auto endPos = ad_utility::findLiteralEnd(res, "\"");
-      if (endPos != string::npos) {
+      if (endPos != std::string::npos) {
         // this should also be fine if there is no langtag (endPos == size()
         // according to cppreference.com
         langtag = res.substr(endPos + 1);
@@ -791,14 +806,15 @@ class TripleComponentComparator {
       // For the non-owning sort key we allocate all the strings using the
       // `allocator`
       AD_CONTRACT_CHECK(allocator != nullptr);
-      auto add =
-          [allocator]<typename Char>(
-              std::basic_string_view<Char> s) -> std::basic_string_view<Char> {
+      auto add = [allocator](auto s) -> decltype(s) {
+        static_assert(
+            ad_utility::isInstantiation<decltype(s), std::basic_string_view>);
+        using Char = typename decltype(s)::value_type;
         auto alloc =
-            std::pmr::polymorphic_allocator<Char>(allocator->resource());
+            ql::pmr::polymorphic_allocator<Char>(allocator->resource());
         auto ptr = alloc.allocate(s.size());
-        std::ranges::copy(s, ptr);
-        return {ptr, ptr + s.size()};
+        ql::ranges::copy(s, ptr);
+        return {ptr, s.size()};
       };
       LocaleManager::SortKeyView sortKey;
       auto writeSortKey = [&sortKey, &add](const uint8_t* begin, size_t sz) {

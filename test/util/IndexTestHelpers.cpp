@@ -6,23 +6,33 @@
 
 #include "./GTestHelpers.h"
 #include "./TripleComponentTestHelpers.h"
+#include "backports/StartsWithAndEndsWith.h"
+#include "engine/MaterializedViews.h"
+#include "engine/NamedResultCache.h"
 #include "global/SpecialIds.h"
 #include "index/IndexImpl.h"
+#include "index/TextIndexBuilder.h"
+#include "index/vocabulary/VocabularyType.h"
 #include "util/ProgressBar.h"
 
+using qlever::TextScoringMetric;
 namespace ad_utility::testing {
 
 // ______________________________________________________________
-Index makeIndexWithTestSettings() {
+Index makeIndexWithTestSettings(ad_utility::MemorySize parserBufferSize) {
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   index.setNumTriplesPerBatch(2);
   EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
   // Decrease various default batch sizes such that there are multiple batches
   // also for the very small test indices (important for test coverage).
-  BUFFER_SIZE_PARTIAL_TO_GLOBAL_ID_MAPPINGS = 10;
-  BATCH_SIZE_VOCABULARY_MERGE = 2;
+  BUFFER_SIZE_PARTIAL_TO_GLOBAL_ID_MAPPINGS() = 10;
+  BATCH_SIZE_VOCABULARY_MERGE() = 2;
   DEFAULT_PROGRESS_BAR_BATCH_SIZE = 2;
   index.memoryLimitIndexBuilding() = 50_MB;
+  index.parserBufferSize() =
+      parserBufferSize;  // Note that the default value remains unchanged, but
+                         // some tests (i.e. polygon testing in Spatial Joins)
+                         // require a larger buffer size
   return index;
 }
 
@@ -46,7 +56,12 @@ std::vector<std::string> getAllIndexFilenames(
           indexBasename + ".prefixes",
           indexBasename + ".vocabulary.internal",
           indexBasename + ".vocabulary.external",
-          indexBasename + ".vocabulary.external.offsets"};
+          indexBasename + ".vocabulary.external.offsets",
+          indexBasename + ".wordsfile",
+          indexBasename + ".docsfile",
+          indexBasename + ".text.index",
+          indexBasename + ".text.vocabulary",
+          indexBasename + ".text.docsDB"};
 }
 
 namespace {
@@ -55,24 +70,33 @@ namespace {
 // folded into the permutations as additional columns.
 void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
     const Index& index) {
-  DeltaTriplesManager deltaTriplesManager(index.getImpl());
-  auto sharedLocatedTriplesSnapshot = deltaTriplesManager.getCurrentSnapshot();
+  const auto& indexImpl = index.getImpl();
+  const DeltaTriplesManager& deltaTriplesManager{index.deltaTriplesManager()};
+  auto sharedLocatedTriplesSnapshot =
+      deltaTriplesManager.getCurrentLocatedTriplesSharedState();
   const auto& locatedTriplesSnapshot = *sharedLocatedTriplesSnapshot;
   static constexpr size_t col0IdTag = 43;
   auto cancellationDummy = std::make_shared<ad_utility::CancellationHandle<>>();
   auto iriOfHasPattern =
       TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE);
   auto checkSingleElement = [&cancellationDummy, &iriOfHasPattern,
-                             &locatedTriplesSnapshot](
-                                const Index& index, size_t patternIdx, Id id) {
-    auto scanResultHasPattern = index.scan(
-        ScanSpecificationAsTripleComponent{iriOfHasPattern, id, std::nullopt},
-        Permutation::Enum::PSO, {}, cancellationDummy, locatedTriplesSnapshot);
+                             &locatedTriplesSnapshot,
+                             &indexImpl](size_t patternIdx, Id id) {
+    const auto& permutation =
+        indexImpl.getPermutation(Permutation::Enum::PSO).internalPermutation();
+    auto scanResultHasPattern =
+        permutation.scan(permutation.getScanSpecAndBlocks(
+                             ScanSpecificationAsTripleComponent{
+                                 iriOfHasPattern, id, std::nullopt}
+                                 .toScanSpecification(indexImpl),
+                             locatedTriplesSnapshot),
+                         {}, cancellationDummy, locatedTriplesSnapshot);
     // Each ID has at most one pattern, it can have none if it doesn't
     // appear as a subject in the knowledge graph.
     AD_CORRECTNESS_CHECK(scanResultHasPattern.numRows() <= 1);
     if (scanResultHasPattern.numRows() == 0) {
-      EXPECT_EQ(patternIdx, NO_PATTERN) << id << ' ' << NO_PATTERN;
+      EXPECT_EQ(patternIdx, Pattern::NoPattern)
+          << id << ' ' << Pattern::NoPattern;
     } else {
       auto actualPattern = scanResultHasPattern(0, 0).getInt();
       EXPECT_EQ(patternIdx, actualPattern) << id << ' ' << actualPattern;
@@ -80,12 +104,12 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
   };
 
   auto checkConsistencyForCol0IdAndPermutation =
-      [&](Id col0Id, Permutation::Enum permutation, size_t subjectColIdx,
+      [&](Id col0Id, const Permutation& permutation, size_t subjectColIdx,
           size_t objectColIdx) {
-        auto cancellationDummy =
-            std::make_shared<ad_utility::CancellationHandle<>>();
-        auto scanResult = index.scan(
-            ScanSpecification{col0Id, std::nullopt, std::nullopt}, permutation,
+        auto scanResult = permutation.scan(
+            permutation.getScanSpecAndBlocks(
+                ScanSpecification{col0Id, std::nullopt, std::nullopt},
+                locatedTriplesSnapshot),
             std::array{ColumnIndex{ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN},
                        ColumnIndex{ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN}},
             cancellationDummy, locatedTriplesSnapshot);
@@ -93,33 +117,35 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
         for (const auto& row : scanResult) {
           auto patternIdx = row[2].getInt();
           Id subjectId = row[subjectColIdx];
-          checkSingleElement(index, patternIdx, subjectId);
+          checkSingleElement(patternIdx, subjectId);
           Id objectId = objectColIdx == col0IdTag ? col0Id : row[objectColIdx];
           auto patternIdxObject = row[3].getInt();
-          checkSingleElement(index, patternIdxObject, objectId);
+          checkSingleElement(patternIdxObject, objectId);
         }
       };
 
   auto checkConsistencyForPredicate = [&](Id predicateId) {
     using enum Permutation::Enum;
-    checkConsistencyForCol0IdAndPermutation(predicateId, PSO, 0, 1);
-    checkConsistencyForCol0IdAndPermutation(predicateId, POS, 1, 0);
+    checkConsistencyForCol0IdAndPermutation(
+        predicateId, indexImpl.getPermutation(PSO), 0, 1);
+    checkConsistencyForCol0IdAndPermutation(
+        predicateId, indexImpl.getPermutation(POS), 1, 0);
   };
   auto checkConsistencyForObject = [&](Id objectId) {
     using enum Permutation::Enum;
-    checkConsistencyForCol0IdAndPermutation(objectId, OPS, 1, col0IdTag);
-    checkConsistencyForCol0IdAndPermutation(objectId, OSP, 0, col0IdTag);
+    checkConsistencyForCol0IdAndPermutation(
+        objectId, indexImpl.getPermutation(OPS), 1, col0IdTag);
+    checkConsistencyForCol0IdAndPermutation(
+        objectId, indexImpl.getPermutation(OSP), 0, col0IdTag);
   };
 
-  auto cancellationHandle =
-      std::make_shared<ad_utility::CancellationHandle<>>();
   auto predicates = index.getImpl().PSO().getDistinctCol0IdsAndCounts(
-      cancellationHandle, locatedTriplesSnapshot);
+      cancellationDummy, locatedTriplesSnapshot, {});
   for (const auto& predicate : predicates.getColumn(0)) {
     checkConsistencyForPredicate(predicate);
   }
   auto objects = index.getImpl().OSP().getDistinctCol0IdsAndCounts(
-      cancellationHandle, locatedTriplesSnapshot);
+      cancellationDummy, locatedTriplesSnapshot, {});
   for (const auto& object : objects.getColumn(0)) {
     checkConsistencyForObject(object);
   }
@@ -128,95 +154,170 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
 }
 }  // namespace
 
-// ______________________________________________________________
-Index makeTestIndex(const std::string& indexBasename,
-                    std::optional<std::string> turtleInput,
-                    bool loadAllPermutations, bool usePatterns,
-                    [[maybe_unused]] bool usePrefixCompression,
-                    ad_utility::MemorySize blocksizePermutations,
-                    bool createTextIndex) {
+// _____________________________________________________________________________
+Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
   // Ignore the (irrelevant) log output of the index building and loading during
   // these tests.
   static std::ostringstream ignoreLogStream;
   ad_utility::setGlobalLoggingStream(&ignoreLogStream);
+  // Remove previous index files. This is necessary because if we previously
+  // built the same index without patterns or all 6 permutations, we wouldn't
+  // overwrite the patterns or the missing permutations. This would lead to a
+  // false positive when we later check that the patterns or the missing
+  // permutations are not present, because they would actually be present from
+  // the previous index build.
+  namespace fs = std::filesystem;
+  for (const auto& entry : fs::directory_iterator(fs::current_path())) {
+    if (!entry.is_regular_file()) continue;
+
+    std::string name = entry.path().filename().string();
+
+    if (ql::starts_with(name, indexBasename + VOCAB_SUFFIX) ||
+        ql::starts_with(name, indexBasename + ".index") ||
+        ql::starts_with(name, indexBasename + ".internal.index") ||
+        ql::starts_with(name, indexBasename + CONFIGURATION_FILE)) {
+      ad_utility::deleteFile(entry.path());
+    }
+  }
   std::string inputFilename = indexBasename + ".ttl";
-  if (!turtleInput.has_value()) {
-    turtleInput =
+  if (!c.turtleInput.has_value()) {
+    c.turtleInput =
         "<x> <label> \"alpha\" . <x> <label> \"älpha\" . <x> <label> \"A\" . "
         "<x> "
         "<label> \"Beta\". <x> <is-a> <y>. <y> <is-a> <x>. <z> <label> "
-        "\"zz\"@en . <zz> <label> <zz>";
+        "\"zz\"@en . <zz> <label> <zz> .";
   }
 
-  FILE_BUFFER_SIZE = 1000;
-  BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP = 2;
+  BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP() = 2;
   {
     std::fstream f(inputFilename, std::ios_base::out);
-    f << turtleInput.value();
+    f << c.turtleInput.value();
     f.close();
   }
   {
     std::fstream settingsFile(inputFilename + ".settings.json",
                               std::ios_base::out);
     nlohmann::json settingsJson;
-    if (!createTextIndex) {
+    if (!c.createTextIndex) {
       settingsJson["prefixes-external"] = std::vector<std::string>{""};
       settingsJson["languages-internal"] = std::vector<std::string>{""};
     }
     settingsFile << settingsJson.dump();
   }
   {
-    Index index = makeIndexWithTestSettings();
+    Index index = makeIndexWithTestSettings(c.parserBufferSize);
     // This is enough for 2 triples per block. This is deliberately chosen as a
     // small value, s.t. the tiny knowledge graphs from unit tests also contain
     // multiple blocks. Should this value or the semantics of it (how many
     // triples it may store) ever change, then some unit tests might have to be
     // adapted.
-    index.blocksizePermutationsPerColumn() = blocksizePermutations;
+    index.blocksizePermutationsPerColumn() = c.blocksizePermutations;
     index.setOnDiskBase(indexBasename);
-    index.usePatterns() = usePatterns;
+    index.usePatterns() = c.usePatterns;
     index.setSettingsFile(inputFilename + ".settings.json");
-    index.loadAllPermutations() = loadAllPermutations;
-    qlever::InputFileSpecification spec{inputFilename, qlever::Filetype::Turtle,
+    index.loadAllPermutations() = c.loadAllPermutations;
+    qlever::InputFileSpecification spec{inputFilename, c.indexType,
                                         std::nullopt};
+    // randomly choose one of the vocabulary implementations
+    index.getImpl().setVocabularyTypeForIndexBuilding(
+        c.vocabularyType.has_value() ? c.vocabularyType.value()
+                                     : VocabularyType::random());
+    if (c.encodedIriManager.has_value()) {
+      // Extract prefixes without angle brackets from the EncodedIriManager
+      std::vector<std::string> prefixes;
+      for (const auto& prefix : c.encodedIriManager.value().prefixes_) {
+        AD_CORRECTNESS_CHECK(ql::starts_with(prefix, '<') &&
+                             !ql::ends_with(prefix, '>'));
+        prefixes.push_back(prefix.substr(1));
+      }
+      index.getImpl().setPrefixesForEncodedValues(std::move(prefixes));
+    }
     index.createFromFiles({spec});
-    if (createTextIndex) {
-      index.addTextFromContextFile("", true);
+    if (c.createTextIndex) {
+      TextIndexBuilder textIndexBuilder = TextIndexBuilder(
+          ad_utility::makeUnlimitedAllocator<Id>(), index.getOnDiskBase());
+      // First test the case of invalid b and k parameters for BM25, it should
+      // throw
+      AD_EXPECT_THROW_WITH_MESSAGE(
+          textIndexBuilder.buildTextIndexFile(
+              std::nullopt, true, TextScoringMetric::BM25, {2.0f, 0.5f}),
+          ::testing::HasSubstr("Invalid values"));
+      AD_EXPECT_THROW_WITH_MESSAGE(
+          textIndexBuilder.buildTextIndexFile(
+              std::nullopt, true, TextScoringMetric::BM25, {0.5f, -1.0f}),
+          ::testing::HasSubstr("Invalid values"));
+      c.scoringMetric = c.scoringMetric.value_or(TextScoringMetric::EXPLICIT);
+      c.bAndKParam = c.bAndKParam.value_or(std::pair{0.75f, 1.75f});
+
+      // The following tests that garbage values for b and k work if these
+      // parameters are unnecessary because we don't use `BM25`.
+      if (c.scoringMetric.value() != TextScoringMetric::BM25) {
+        c.bAndKParam = std::pair{-3.f, -3.f};
+      }
+      auto buildTextIndex = [&textIndexBuilder, &c](auto wordsAndDocsfile,
+                                                    bool addWordsFromLiterals) {
+        textIndexBuilder.buildTextIndexFile(
+            std::move(wordsAndDocsfile), addWordsFromLiterals,
+            c.scoringMetric.value(), c.bAndKParam.value());
+      };
+      if (c.contentsOfWordsFileAndDocsfile.has_value()) {
+        // Create and write to words- and docsfile to later build a full text
+        // index from them
+        ad_utility::File wordsFile(indexBasename + ".wordsfile", "w");
+        ad_utility::File docsFile(indexBasename + ".docsfile", "w");
+        wordsFile.write(c.contentsOfWordsFileAndDocsfile.value().first.c_str(),
+                        c.contentsOfWordsFileAndDocsfile.value().first.size());
+        docsFile.write(c.contentsOfWordsFileAndDocsfile.value().second.c_str(),
+                       c.contentsOfWordsFileAndDocsfile.value().second.size());
+        wordsFile.close();
+        docsFile.close();
+        textIndexBuilder.setKbName(indexBasename);
+        textIndexBuilder.setTextName(indexBasename);
+        textIndexBuilder.setOnDiskBase(indexBasename);
+        buildTextIndex(
+            std::pair<std::string, std::string>{indexBasename + ".wordsfile",
+                                                indexBasename + ".docsfile"},
+            c.addWordsFromLiterals);
+        textIndexBuilder.buildDocsDB(indexBasename + ".docsfile");
+      } else if (c.addWordsFromLiterals) {
+        buildTextIndex(std::nullopt, true);
+      }
     }
   }
-  if (!usePatterns || !loadAllPermutations) {
+  if (!c.usePatterns || !c.loadAllPermutations) {
     // If we have no patterns, or only two permutations, then check the graceful
     // fallback even if the options were not explicitly specified during the
     // loading of the server.
     Index index{ad_utility::makeUnlimitedAllocator<Id>()};
     index.usePatterns() = true;
     index.loadAllPermutations() = true;
-    EXPECT_NO_THROW(index.createFromOnDiskIndex(indexBasename));
-    EXPECT_EQ(index.loadAllPermutations(), loadAllPermutations);
-    EXPECT_EQ(index.usePatterns(), usePatterns);
+    EXPECT_NO_THROW(index.createFromOnDiskIndex(indexBasename, false));
+    EXPECT_EQ(index.loadAllPermutations(), c.loadAllPermutations);
+    EXPECT_EQ(index.usePatterns(), c.usePatterns);
   }
 
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
-  index.usePatterns() = usePatterns;
-  index.loadAllPermutations() = loadAllPermutations;
-  index.createFromOnDiskIndex(indexBasename);
-  if (createTextIndex) {
+  index.usePatterns() = c.usePatterns;
+  index.loadAllPermutations() = c.loadAllPermutations;
+  index.createFromOnDiskIndex(indexBasename, false);
+  if (c.createTextIndex) {
     index.addTextFromOnDiskIndex();
   }
   ad_utility::setGlobalLoggingStream(&std::cout);
 
-  if (usePatterns && loadAllPermutations) {
+  if (c.usePatterns && c.loadAllPermutations) {
     checkConsistencyBetweenPatternPredicateAndAdditionalColumn(index);
   }
   return index;
 }
 
+// _____________________________________________________________________________
+Index makeTestIndex(const std::string& indexBasename, std::string turtle) {
+  return makeTestIndex(indexBasename, TestIndexConfig{std::move(turtle)});
+}
+
 // ________________________________________________________________________________
-QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
-                              bool loadAllPermutations, bool usePatterns,
-                              bool usePrefixCompression,
-                              ad_utility::MemorySize blocksizePermutations,
-                              bool createTextIndex) {
+QueryExecutionContext* getQec(TestIndexConfig c) {
   // Similar to `absl::Cleanup`. Calls the `callback_` in the destructor, but
   // the callback is stored as a `std::function`, which allows to store
   // different types of callbacks in the same wrapper type.
@@ -246,55 +347,62 @@ QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
     TypeErasedCleanup cleanup_;
     std::unique_ptr<Index> index_;
     std::unique_ptr<QueryResultCache> cache_;
+    std::unique_ptr<NamedResultCache> namedCache_;
+    std::unique_ptr<MaterializedViewsManager> materializedViewsManager_;
     std::unique_ptr<QueryExecutionContext> qec_ =
         std::make_unique<QueryExecutionContext>(
             *index_, cache_.get(), makeAllocator(MemorySize::megabytes(100)),
-            SortPerformanceEstimator{});
+            SortPerformanceEstimator{}, namedCache_.get(),
+            materializedViewsManager_.get());
   };
 
-  using Key = std::tuple<std::optional<string>, bool, bool, bool,
-                         ad_utility::MemorySize>;
-  static ad_utility::HashMap<Key, Context> contextMap;
+  static ad_utility::HashMap<TestIndexConfig, Context> contextMap;
 
-  auto key = Key{turtleInput, loadAllPermutations, usePatterns,
-                 usePrefixCompression, blocksizePermutations};
-
-  if (!contextMap.contains(key)) {
+  if (!contextMap.contains(c)) {
     std::string testIndexBasename =
         "_staticGlobalTestIndex" + std::to_string(contextMap.size());
     contextMap.emplace(
-        key, Context{TypeErasedCleanup{[testIndexBasename]() {
-                       for (const std::string& indexFilename :
-                            getAllIndexFilenames(testIndexBasename)) {
-                         // Don't log when a file can't be deleted,
-                         // because the logging might already be
-                         // destroyed.
-                         ad_utility::deleteFile(indexFilename, false);
-                       }
-                     }},
-                     std::make_unique<Index>(makeTestIndex(
-                         testIndexBasename, turtleInput, loadAllPermutations,
-                         usePatterns, usePrefixCompression,
-                         blocksizePermutations, createTextIndex)),
-                     std::make_unique<QueryResultCache>()});
+        c, Context{TypeErasedCleanup{[testIndexBasename]() {
+                     for (const std::string& indexFilename :
+                          getAllIndexFilenames(testIndexBasename)) {
+                       // Don't log when a file can't be deleted,
+                       // because the logging might already be
+                       // destroyed.
+                       ad_utility::deleteFile(indexFilename, false);
+                     }
+                   }},
+                   std::make_unique<Index>(makeTestIndex(testIndexBasename, c)),
+                   std::make_unique<QueryResultCache>(),
+                   std::make_unique<NamedResultCache>(),
+                   std::make_unique<MaterializedViewsManager>()});
   }
-  auto* qec = contextMap.at(key).qec_.get();
+  auto* qec = contextMap.at(c).qec_.get();
   qec->getIndex().getImpl().setGlobalIndexAndComparatorOnlyForTesting();
   return qec;
+}
+
+// _____________________________________________________________________________
+QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
+                              std::optional<VocabularyType> vocabularyType) {
+  TestIndexConfig config;
+  config.turtleInput = std::move(turtleInput);
+  config.vocabularyType = vocabularyType;
+  return getQec(std::move(config));
 }
 
 // ___________________________________________________________
 std::function<Id(const std::string&)> makeGetId(const Index& index) {
   return [&index](const std::string& el) {
     auto literalOrIri = [&el]() -> TripleComponent {
-      if (el.starts_with('<') || el.starts_with('@')) {
+      if (ql::starts_with(el, '<') || ql::starts_with(el, '@')) {
         return TripleComponent::Iri::fromIriref(el);
       } else {
-        AD_CONTRACT_CHECK(el.starts_with('\"'));
+        AD_CONTRACT_CHECK(ql::starts_with(el, '\"'));
         return TripleComponent::Literal::fromStringRepresentation(el);
       }
     }();
-    auto id = literalOrIri.toValueId(index.getVocab());
+    static const EncodedIriManager encodedIriManager;
+    auto id = literalOrIri.toValueId(index.getVocab(), encodedIriManager);
     AD_CONTRACT_CHECK(id.has_value());
     return id.value();
   };

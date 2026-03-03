@@ -10,8 +10,7 @@
 
 #include "engine/VariableToColumnMap.h"
 #include "engine/sparqlExpressions/PrefilterExpressionIndex.h"
-#include "parser/data/Variable.h"
-#include "util/HashMap.h"
+#include "rdfTypes/Variable.h"
 #include "util/HashSet.h"
 
 namespace sparqlExpression {
@@ -44,7 +43,7 @@ class SparqlExpressionPimpl {
   // COUNT(?x) + ?m returns true if and only if ?m is in `groupedVariables`.
   [[nodiscard]] bool isAggregate(
       const ad_utility::HashSet<Variable>& groupedVariables) const {
-    // TODO<joka921> This can be std::ranges::all_of as soon as libc++ supports
+    // TODO<joka921> This can be ql::ranges::all_of as soon as libc++ supports
     // it, or the combination of clang + libstdc++ + coroutines works.
     auto unaggregatedVariables = getUnaggregatedVariables();
     for (const auto& var : unaggregatedVariables) {
@@ -81,6 +80,13 @@ class SparqlExpressionPimpl {
   // declared.
   [[nodiscard]] std::string getCacheKey(
       const VariableToColumnMap& variableToColumnMap) const;
+
+  // Return true if we statically (without evaluating the expression) can
+  // determine that its result will never contain undefined values / expression
+  // errors.
+  [[nodiscard]] bool isResultAlwaysDefined(
+      const VariableToColumnMap& variableToColumnMap) const;
+
   SparqlExpressionPimpl(std::shared_ptr<SparqlExpression>&& pimpl,
                         std::string descriptor);
   ~SparqlExpressionPimpl();
@@ -94,16 +100,14 @@ class SparqlExpressionPimpl {
   // Return true iff the `Variable` is used inside the expression.
   bool isVariableContained(const Variable&) const;
 
-  // If `this` is an expression of the form `LANG(?variable) = "language"`,
-  // return the variable and the language. Else return `std::nullopt`.
+  // Struct to store a variable and a set of allowed language tags for it.
   struct LangFilterData {
     Variable variable_;
-    std::string language_;
+    ad_utility::HashSet<std::string> languages_;
   };
+  // If `this` is an expression of the form `LANG(?variable) = "language"`,
+  // return the variable and the language. Else return `std::nullopt`.
   std::optional<LangFilterData> getLanguageFilterExpression() const;
-
-  // Return true iff the `LANG()` function is used inside this expression.
-  bool containsLangExpression() const;
 
   // Return the size and cost estimate for this expression if it is used as the
   // expression of a `FILTER` clause given that the input has `inputSize` many
@@ -130,6 +134,10 @@ class SparqlExpressionPimpl {
 
   // Create a `SparqlExpressionPimpl` from a single variable.
   static SparqlExpressionPimpl makeVariableExpression(const Variable& variable);
+
+  // Convenience functions, that delegate to the respective `SparqlExpression`.
+  std::vector<const SparqlExpression*> getExistsExpressions() const;
+  std::vector<SparqlExpression*> getExistsExpressions();
 
  private:
   // TODO<joka921> Why can't this be a unique_ptr.

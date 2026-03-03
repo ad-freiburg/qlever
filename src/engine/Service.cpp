@@ -1,13 +1,15 @@
 // Copyright 2022 - 2023, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Hannah Bast (bast@cs.uni-freiburg.de)
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include "engine/Service.h"
 
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
-#include <absl/strings/str_split.h>
 
+#include "backports/StartsWithAndEndsWith.h"
 #include "engine/CallFixedSize.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/Sort.h"
@@ -21,29 +23,29 @@
 #include "util/StringUtils.h"
 #include "util/http/HttpUtils.h"
 
+namespace {
+// CTRE regex patterns for C++17 compatibility
+constexpr ctll::fixed_string selectPatternRegex = "[ \t\r\n]*SELECT";
+}  // namespace
+
 // ____________________________________________________________________________
 Service::Service(QueryExecutionContext* qec,
                  parsedQuery::Service parsedServiceClause,
-                 GetResultFunction getResultFunction)
+                 SendRequestType getResultFunction)
     : Operation{qec},
       parsedServiceClause_{std::move(parsedServiceClause)},
       getResultFunction_{std::move(getResultFunction)} {}
 
 // ____________________________________________________________________________
 std::string Service::getCacheKeyImpl() const {
-  std::ostringstream os;
-  os << "SERVICE ";
-  if (parsedServiceClause_.silent_) {
-    os << "SILENT ";
+  if (getRuntimeParameter<&RuntimeParameters::cacheServiceResults_>()) {
+    return absl::StrCat(
+        "SERVICE ", parsedServiceClause_.silent_ ? "SILENT " : "",
+        parsedServiceClause_.serviceIri_.toStringRepresentation(), " {\n",
+        parsedServiceClause_.prologue_, "\n",
+        parsedServiceClause_.graphPatternAsString_, "\n}");
   }
-  os << parsedServiceClause_.serviceIri_.toStringRepresentation() << " {\n"
-     << parsedServiceClause_.prologue_ << "\n"
-     << parsedServiceClause_.graphPatternAsString_ << "\n";
-  if (siblingInfo_.has_value()) {
-    os << siblingInfo_->cacheKey_ << "\n";
-  }
-  os << "}\n";
-  return std::move(os).str();
+  return absl::StrCat("SERVICE ", cacheBreaker_);
 }
 
 // ____________________________________________________________________________
@@ -93,16 +95,32 @@ size_t Service::getCostEstimate() {
   return 10 * getSizeEstimateBeforeLimit();
 }
 
-// ____________________________________________________________________________
-ProtoResult Service::computeResult([[maybe_unused]] bool requestLaziness) {
-  // Try to simplify the Service Query using it's sibling Operation.
-  if (auto valuesClause = getSiblingValuesClause(); valuesClause.has_value()) {
-    auto openBracketPos = parsedServiceClause_.graphPatternAsString_.find('{');
-    parsedServiceClause_.graphPatternAsString_ =
-        "{\n" + valuesClause.value() + '\n' +
-        parsedServiceClause_.graphPatternAsString_.substr(openBracketPos + 1);
+// _____________________________________________________________________________
+std::string Service::pushDownValues(std::string_view pattern,
+                                    std::string_view values) {
+  size_t index = pattern.find('{');
+  AD_CORRECTNESS_CHECK(index != std::string::npos);
+  pattern.remove_prefix(index + 1);
+  // If we have a single subquery in the service clause, wrap it inside curly
+  // braces so it remains valid syntax alongside a VALUES clause.
+  if (ctre::starts_with<selectPatternRegex>(pattern)) {
+    return absl::StrCat("{\n", values, "\n{", pattern, "\n}");
   }
+  return absl::StrCat("{\n", values, "\n", pattern);
+}
 
+// _____________________________________________________________________________
+std::string Service::getGraphPattern() const {
+  // Try to simplify the Service Query using it's sibling Operation.
+  const auto& graphPattern = parsedServiceClause_.graphPatternAsString_;
+  if (auto valuesClause = getSiblingValuesClause(); valuesClause.has_value()) {
+    return pushDownValues(graphPattern, valuesClause.value());
+  }
+  return graphPattern;
+}
+
+// _____________________________________________________________________________
+Result Service::computeResult(bool requestLaziness) {
   try {
     return computeResultImpl(requestLaziness);
   } catch (const ad_utility::CancellationException&) {
@@ -120,23 +138,56 @@ ProtoResult Service::computeResult([[maybe_unused]] bool requestLaziness) {
 }
 
 // ____________________________________________________________________________
-ProtoResult Service::computeResultImpl([[maybe_unused]] bool requestLaziness) {
+void Service::throwIfIriNotWhitelisted() {
+  // Check that the service IRI is allowed by the whitelist. If the whitelist
+  // is empty (the default), all IRIs are allowed.
+  const auto& allowedPrefixes =
+      getRuntimeParameter<&RuntimeParameters::serviceAllowedIriPrefixes_>();
+
+  if (!allowedPrefixes.empty()) {
+    auto iri =
+        asStringViewUnsafe(parsedServiceClause_.serviceIri_.getContent());
+
+    bool allowed = ql::ranges::any_of(allowedPrefixes, [&](const auto& prefix) {
+      return ql::starts_with(iri, prefix);
+    });
+    if (!allowed) {
+      throw std::runtime_error(absl::StrCat(
+          "SERVICE request to <", iri,
+          "> is not allowed because IRI does not match any of the allowed IRI "
+          "prefixes. To change the whitelist, set the "
+          "\"service-allowed-iri-prefixes\" runtime parameter"));
+    }
+  }
+}
+
+// ____________________________________________________________________________
+Result Service::computeResultImpl(bool requestLaziness) {
   // Get the URL of the SPARQL endpoint.
+  if (getRuntimeParameter<&RuntimeParameters::syntaxTestMode_>()) {
+    return makeNeutralElementResultForSilentFail();
+  }
+
+  throwIfIriNotWhitelisted();
+
   ad_utility::httpUtils::Url serviceUrl{
       asStringViewUnsafe(parsedServiceClause_.serviceIri_.getContent())};
 
   // Construct the query to be sent to the SPARQL endpoint.
-  std::string variablesForSelectClause = absl::StrJoin(
-      parsedServiceClause_.visibleVariables_, " ", Variable::AbslFormatter);
-  std::string serviceQuery = absl::StrCat(
-      parsedServiceClause_.prologue_, "\nSELECT ", variablesForSelectClause,
-      " WHERE ", parsedServiceClause_.graphPatternAsString_);
-  LOG(INFO) << "Sending SERVICE query to remote endpoint "
-            << "(protocol: " << serviceUrl.protocolAsString()
-            << ", host: " << serviceUrl.host()
-            << ", port: " << serviceUrl.port()
-            << ", target: " << serviceUrl.target() << ")" << std::endl
-            << serviceQuery << std::endl;
+  const auto& variables = parsedServiceClause_.visibleVariables_;
+  std::string variablesForSelectClause =
+      variables.empty()
+          ? "*"
+          : absl::StrJoin(variables, " ", Variable::AbslFormatter);
+  std::string serviceQuery =
+      absl::StrCat(parsedServiceClause_.prologue_, "\nSELECT ",
+                   variablesForSelectClause, " ", getGraphPattern());
+  AD_LOG_INFO << "Sending SERVICE query to remote endpoint "
+              << "(protocol: " << serviceUrl.protocolAsString()
+              << ", host: " << serviceUrl.host()
+              << ", port: " << serviceUrl.port()
+              << ", target: " << serviceUrl.target() << ")" << std::endl
+              << serviceQuery << std::endl;
 
   HttpOrHttpsResponse response = getResultFunction_(
       serviceUrl, cancellationHandle_, boost::beast::http::verb::post,
@@ -144,16 +195,7 @@ ProtoResult Service::computeResultImpl([[maybe_unused]] bool requestLaziness) {
       "application/sparql-results+json");
 
   auto throwErrorWithContext = [this, &response](std::string_view sv) {
-    std::string ctx;
-    ctx.reserve(100);
-    for (const auto& bytes : std::move(response.body_)) {
-      ctx += std::string(reinterpret_cast<const char*>(bytes.data()),
-                         bytes.size());
-      if (ctx.size() >= 100) {
-        break;
-      }
-    }
-    this->throwErrorWithContext(sv, std::string_view(ctx).substr(0, 100));
+    this->throwErrorWithContext(sv, std::move(response).readResponseHead(100));
   };
 
   // Verify status and content-type of the response.
@@ -163,8 +205,8 @@ ProtoResult Service::computeResultImpl([[maybe_unused]] bool requestLaziness) {
         static_cast<int>(response.status_), ", ",
         toStd(boost::beast::http::obsolete_reason(response.status_))));
   }
-  if (!ad_utility::utf8ToLower(response.contentType_)
-           .starts_with("application/sparql-results+json")) {
+  if (!ql::starts_with(ad_utility::utf8ToLower(response.contentType_),
+                       "application/sparql-results+json")) {
     throwErrorWithContext(absl::StrCat(
         "QLever requires the endpoint of a SERVICE to send the result as "
         "'application/sparql-results+json' but the endpoint sent '",
@@ -175,9 +217,9 @@ ProtoResult Service::computeResultImpl([[maybe_unused]] bool requestLaziness) {
   // for the variables sent in the response as they're maybe not read before
   // the bindings.
   std::vector<std::string> expVariableKeys;
-  std::ranges::transform(parsedServiceClause_.visibleVariables_,
-                         std::back_inserter(expVariableKeys),
-                         [](const Variable& v) { return v.name().substr(1); });
+  ql::ranges::transform(parsedServiceClause_.visibleVariables_,
+                        std::back_inserter(expVariableKeys),
+                        [](const Variable& v) { return v.name().substr(1); });
 
   auto body = ad_utility::LazyJsonParser::parse(std::move(response.body_),
                                                 {"results", "bindings"});
@@ -188,9 +230,9 @@ ProtoResult Service::computeResultImpl([[maybe_unused]] bool requestLaziness) {
   auto generator =
       computeResultLazily(expVariableKeys, std::move(body), !requestLaziness);
   return requestLaziness
-             ? ProtoResult{std::move(generator), resultSortedOn()}
-             : ProtoResult{cppcoro::getSingleElement(std::move(generator)),
-                           resultSortedOn()};
+             ? Result{std::move(generator), resultSortedOn()}
+             : Result{ad_utility::getSingleElement(std::move(generator)),
+                      resultSortedOn()};
 }
 
 template <size_t I>
@@ -215,7 +257,8 @@ void Service::writeJsonResult(const std::vector<std::string>& vars,
                                            localVocab)
                 : TripleComponent::UNDEF();
 
-        Id id = std::move(tc).toValueId(getIndex().getVocab(), *localVocab);
+        Id id = std::move(tc).toValueId(getIndex().getVocab(), *localVocab,
+                                        getIndex().encodedIriManager());
         idTable(rowIdx, colIdx) = id;
         if (id.getDatatype() == Datatype::LocalVocabIndex) {
           ++numLocalVocabPerColumn[colIdx];
@@ -237,66 +280,88 @@ void Service::writeJsonResult(const std::vector<std::string>& vars,
   checkCancellation();
 }
 
+namespace {
+// Convert a `Range` to a `CachingInputRange` by moving it into a
+// `CachingTransformInputRange` with a trivial transformation. This enables the
+// usage of the `Range` with the additional interface and caching properties of
+// the `CachingInputRange`.
+CPP_template(typename Range)(
+    requires ad_utility::Rvalue<
+        Range&&>) auto moveToCachingInputRange(Range&& range) {
+  return ad_utility::CachingTransformInputRange(
+      AD_FWD(range), [](auto& input) { return std::move(input); });
+}
+}  // namespace
+
 // ____________________________________________________________________________
-Result::Generator Service::computeResultLazily(
-    const std::vector<std::string> vars,
-    ad_utility::LazyJsonParser::Generator body, bool singleIdTable) {
-  LocalVocab localVocab{};
-  IdTable idTable{getResultWidth(), getExecutionContext()->getAllocator()};
+Result::LazyResult Service::computeResultLazily(
+    std::vector<std::string> vars, ad_utility::LazyJsonParser::Generator body,
+    bool singleIdTable) {
+  using LC = Result::IdTableLoopControl;
+  auto get = [service = this, vars = std::move(vars), singleIdTable,
+              inputRange = moveToCachingInputRange(std::move(body)),
+              localVocab = LocalVocab{},
+              idTable = IdTable{getResultWidth(),
+                                getExecutionContext()->getAllocator()},
+              rowIdx = size_t{0}, varsChecked = false,
+              resultExists = false]() mutable {
+    auto& details = inputRange.underlyingView().base().details();
+    try {
+      while (auto partJsonOpt = inputRange.get()) {
+        const nlohmann::json& partJson = partJsonOpt.value();
+        if (partJson.contains("head")) {
+          AD_CORRECTNESS_CHECK(!varsChecked);
+          service->verifyVariables(partJson["head"], details);
+          varsChecked = true;
+        }
 
-  size_t rowIdx = 0;
-  bool varsChecked{false};
-  bool resultExists{false};
-  try {
-    for (const nlohmann::json& partJson : body) {
-      if (partJson.contains("head")) {
-        AD_CORRECTNESS_CHECK(!varsChecked);
-        verifyVariables(partJson["head"], body.details());
-        varsChecked = true;
+        ad_utility::callFixedSizeVi(service->getResultWidth(), [&](auto width) {
+          return service->writeJsonResult<width>(vars, partJson, &idTable,
+                                                 &localVocab, rowIdx);
+        });
+        resultExists = true;
+        if (!singleIdTable) {
+          Result::IdTableVocabPair pair{std::move(idTable),
+                                        std::move(localVocab)};
+          idTable.clear();
+          localVocab = LocalVocab{};
+          rowIdx = 0;
+          return LC::yieldValue(std::move(pair));
+        }
       }
-
-      CALL_FIXED_SIZE(getResultWidth(), &Service::writeJsonResult, this, vars,
-                      partJson, &idTable, &localVocab, rowIdx);
-      if (!singleIdTable) {
-        Result::IdTableVocabPair pair{std::move(idTable),
-                                      std::move(localVocab)};
-        co_yield pair;
-        // Move back to reuse buffer if not moved out.
-        idTable = std::move(pair.idTable_);
-        idTable.clear();
-        localVocab = LocalVocab{};
-        rowIdx = 0;
-      }
-      resultExists = true;
+    } catch (const ad_utility::LazyJsonParser::Error& e) {
+      service->throwErrorWithContext(
+          absl::StrCat("Parser failed with error: '", e.what(), "'"),
+          details.first100_, details.last100_);
     }
-  } catch (const ad_utility::LazyJsonParser::Error& e) {
-    throwErrorWithContext(
-        absl::StrCat("Parser failed with error: '", e.what(), "'"),
-        body.details().first100_, body.details().last100_);
-  }
 
-  // As the LazyJsonParser only passes parts of the result that match
-  // the expected structure, no result implies an unexpected
-  // structure.
-  if (!resultExists) {
-    throwErrorWithContext(
-        "JSON result does not have the expected structure (results "
-        "section "
-        "missing)",
-        body.details().first100_, body.details().last100_);
-  }
+    // As the LazyJsonParser only passes parts of the result that match
+    // the expected structure, no result implies an unexpected
+    // structure.
+    if (!resultExists) {
+      service->throwErrorWithContext(
+          "JSON result does not have the expected structure (results "
+          "section "
+          "missing)",
+          details.first100_, details.last100_);
+    }
 
-  if (!varsChecked) {
-    throwErrorWithContext(
-        "JSON result does not have the expected structure (head "
-        "section "
-        "missing)",
-        body.details().first100_, body.details().last100_);
-  }
+    if (!varsChecked) {
+      service->throwErrorWithContext(
+          "JSON result does not have the expected structure (head "
+          "section "
+          "missing)",
+          details.first100_, details.last100_);
+    }
 
-  if (singleIdTable) {
-    co_yield {std::move(idTable), std::move(localVocab)};
-  }
+    if (singleIdTable) {
+      return LC::breakWithValue(
+          Result::IdTableVocabPair(std::move(idTable), std::move(localVocab)));
+    }
+    return LC::makeBreak();
+  };
+  return Result::LazyResult{
+      ad_utility::InputRangeFromLoopControlGet{std::move(get)}};
 }
 
 // ____________________________________________________________________________
@@ -374,11 +439,17 @@ TripleComponent Service::bindingToTripleComponent(
       getExecutionContext()->getIndex().getBlankNodeManager();
 
   TripleComponent tc;
-  if (type == "literal") {
+  // NOTE: The type `typed-literal` is not part of the official SPARQL 1.1
+  // standard, but was mentioned in a pre SPARQL 1.1 WG note and used by
+  // Virtuoso until the summer of 2025. It is therefore still produced by
+  // some SPARQL endpoints, and we therefore support parsing it.
+  if (type == "literal" || type == "typed-literal") {
     if (binding.contains("datatype")) {
       tc = TurtleParser<TokenizerCtre>::literalAndDatatypeToTripleComponent(
-          value, TripleComponent::Iri::fromIrirefWithoutBrackets(
-                     binding["datatype"].get<std::string_view>()));
+          value,
+          TripleComponent::Iri::fromIrirefWithoutBrackets(
+              binding["datatype"].get<std::string_view>()),
+          getIndex().encodedIriManager());
     } else if (binding.contains("xml:lang")) {
       tc = TripleComponent::Literal::literalWithNormalizedContent(
           asNormalizedStringViewUnsafe(value),
@@ -405,7 +476,7 @@ TripleComponent Service::bindingToTripleComponent(
 }
 
 // ____________________________________________________________________________
-ProtoResult Service::makeNeutralElementResultForSilentFail() const {
+Result Service::makeNeutralElementResultForSilentFail() const {
   IdTable idTable{getResultWidth(), getExecutionContext()->getAllocator()};
   idTable.emplace_back();
   for (size_t colIdx = 0; colIdx < getResultWidth(); ++colIdx) {
@@ -490,7 +561,7 @@ std::optional<std::string> Service::idToValueForValuesClause(
     default:
       if (xsdType) {
         return absl::StrCat("\"", value, "\"^^<", xsdType, ">");
-      } else if (value.starts_with('<')) {
+      } else if (ql::starts_with(value, '<')) {
         return value;
       } else {
         return RdfEscaping::validRDFLiteralFromNormalized(value);
@@ -518,11 +589,13 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   auto b = std::dynamic_pointer_cast<Service>(right);
 
   // The sibling is only precomputed iff
+  // - SERVICE caching is disabled
   // - `rightOnly` is true and the right operation is a Service
   // - or exactly one of the operations is a Service. If we could estimate
   // the result size of a Service, the Service with the smaller result could
   // be used as a sibling here.
-  if ((rightOnly && !static_cast<bool>(b)) ||
+  if (getRuntimeParameter<&RuntimeParameters::cacheServiceResults_>() ||
+      (rightOnly && !static_cast<bool>(b)) ||
       (!rightOnly && static_cast<bool>(a) == static_cast<bool>(b))) {
     return;
   }
@@ -537,6 +610,12 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   }();
   AD_CORRECTNESS_CHECK(service != nullptr);
 
+  // If this operation is constrained by a `LIMIT` or `OFFSET` we can't apply
+  // the optimization.
+  if (!service->getLimitOffset().isUnconstrained()) {
+    return;
+  }
+
   auto addRuntimeInfo = [&](bool siblingUsed) {
     std::string_view v = siblingUsed ? "yes"sv : "no"sv;
     service->runtimeInfo().addDetail("optimized-with-sibling-result", v);
@@ -548,8 +627,9 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
                              : ComputationMode::FULLY_MATERIALIZED);
 
   if (siblingResult->isFullyMaterialized()) {
-    bool resultIsSmall = siblingResult->idTable().size() <=
-                         RuntimeParameters().get<"service-max-value-rows">();
+    bool resultIsSmall =
+        siblingResult->idTable().size() <=
+        getRuntimeParameter<&RuntimeParameters::serviceMaxValueRows_>();
     if (resultIsSmall) {
       service->siblingInfo_.emplace(
           siblingResult, sibling->getExternallyVisibleVariableColumns(),
@@ -561,27 +641,19 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
     return;
   }
 
-  // Creates a `Result::Generator` from partially materialized result data.
-  auto partialResultGenerator =
-      [](std::vector<Result::IdTableVocabPair> pairs,
-         Result::Generator prevGenerator,
-         Result::Generator::iterator it) -> Result::Generator {
-    for (auto& pair : pairs) {
-      co_yield pair;
-    }
-    for (auto& pair : std::ranges::subrange{it, prevGenerator.end()}) {
-      co_yield pair;
-    }
-  };
-
   // Start materializing the lazy `siblingResult`.
   size_t rows = 0;
   std::vector<Result::IdTableVocabPair> resultPairs;
-  auto generator = std::move(siblingResult->idTables());
+  // We move the results into a `CachingTransformInputRange` because it will
+  // track the last accessed result and continue at the first unaccessed
+  // result with subsequent calls to get(). Therefore, we do not need to
+  // keep and pass an iterator to the sibling result if the max row threshold
+  // is exceeded
+  auto generator = moveToCachingInputRange(siblingResult->idTables());
   const size_t maxValueRows =
-      RuntimeParameters().get<"service-max-value-rows">();
-  for (auto it = generator.begin(); it != generator.end(); ++it) {
-    auto& pair = *it;
+      getRuntimeParameter<&RuntimeParameters::serviceMaxValueRows_>();
+  while (auto pairOpt = generator.get()) {
+    auto& pair = pairOpt.value();
     rows += pair.idTable_.size();
     resultPairs.push_back(std::move(pair));
 
@@ -589,10 +661,15 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
       // Stop precomputation as the size of `siblingResult` exceeds the
       // threshold it is not useful for the service operation. Pass the
       // partially materialized result to the sibling.
+      std::vector<Result::LazyResult> viewCollection;
+      viewCollection.emplace_back(
+          moveToCachingInputRange(std::move(resultPairs)));
+      viewCollection.emplace_back(std::move(generator));
       sibling->precomputedResultBecauseSiblingOfService() =
           std::make_shared<const Result>(
-              partialResultGenerator(std::move(resultPairs),
-                                     std::move(generator), std::move(++it)),
+              Result::LazyResult{
+                  ad_utility::OwningViewNoConst{std::move(viewCollection)} |
+                  ql::views::join},
               siblingResult->sortedBy());
       addRuntimeInfo(false);
       return;
@@ -609,7 +686,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
 
   for (auto& pair : resultPairs) {
     siblingPair.idTable_.insertAtEnd(pair.idTable_);
-    siblingPair.localVocab_.mergeWith(std::span{&pair.localVocab_, 1});
+    siblingPair.localVocab_.mergeWith(pair.localVocab_);
   }
 
   service->siblingInfo_.emplace(
@@ -621,3 +698,13 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
       service->siblingInfo_->precomputedResult_;
   addRuntimeInfo(true);
 }
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Service::cloneImpl() const {
+  auto service = std::make_unique<Service>(
+      _executionContext, parsedServiceClause_, getResultFunction_);
+  service->cacheBreaker_ = cacheBreaker_;
+  return service;
+}
+
+#endif

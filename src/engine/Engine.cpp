@@ -6,6 +6,7 @@
 
 #include "engine/CallFixedSize.h"
 #include "util/ChunkedForLoop.h"
+#include "util/Exception.h"
 
 // The actual implementation of sorting an `IdTable` according to the
 // `sortCols`.
@@ -21,7 +22,9 @@ void Engine::sort(IdTable& idTable, const std::vector<ColumnIndex>& sortCols) {
   // TODO<joka921> Also experiment with sorting algorithms that take the
   // column-based structure of the `IdTable` into account.
   if (sortCols.size() == 1) {
-    CALL_FIXED_SIZE(width, &Engine::sort, &idTable, sortCols.at(0));
+    ad_utility::callFixedSizeVi(width, [&idTable, col = sortCols[0]](auto I) {
+      Engine::sort<I>(&idTable, col);
+    });
   } else if (sortCols.size() == 2) {
     auto comparison = [c0 = sortCols[0], c1 = sortCols[1]](const auto& row1,
                                                            const auto& row2) {
@@ -31,10 +34,10 @@ void Engine::sort(IdTable& idTable, const std::vector<ColumnIndex>& sortCols) {
         return row1[c1] < row2[c1];
       }
     };
-    ad_utility::callFixedSize(idTable.numColumns(),
-                              [&idTable, comparison]<int I>() {
-                                Engine::sort<I>(&idTable, comparison);
-                              });
+    ad_utility::callFixedSizeVi(idTable.numColumns(),
+                                [&idTable, comparison](auto I) {
+                                  Engine::sort<I>(&idTable, comparison);
+                                });
   } else {
     auto comparison = [&sortCols](const auto& row1, const auto& row2) {
       for (auto& col : sortCols) {
@@ -44,10 +47,10 @@ void Engine::sort(IdTable& idTable, const std::vector<ColumnIndex>& sortCols) {
       }
       return false;
     };
-    ad_utility::callFixedSize(idTable.numColumns(),
-                              [&idTable, comparison]<int I>() {
-                                Engine::sort<I>(&idTable, comparison);
-                              });
+    ad_utility::callFixedSizeVi(idTable.numColumns(),
+                                [&idTable, comparison](auto I) {
+                                  Engine::sort<I>(&idTable, comparison);
+                                });
   }
 }
 
@@ -55,7 +58,7 @@ void Engine::sort(IdTable& idTable, const std::vector<ColumnIndex>& sortCols) {
 size_t Engine::countDistinct(IdTableView<0> input,
                              const std::function<void()>& checkCancellation) {
   AD_EXPENSIVE_CHECK(
-      std::ranges::is_sorted(input, std::ranges::lexicographical_compare),
+      ql::ranges::is_sorted(input, ql::ranges::lexicographical_compare),
       "Input to Engine::countDistinct must be sorted");
   if (input.empty()) {
     return 0;

@@ -1,8 +1,13 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#include "./Distinct.h"
+#include "engine/Distinct.h"
+
+#include <absl/strings/str_cat.h>
+#include <absl/strings/str_join.h>
 
 #include "engine/CallFixedSize.h"
 #include "engine/QueryExecutionTree.h"
@@ -17,7 +22,11 @@ size_t Distinct::getResultWidth() const { return subtree_->getResultWidth(); }
 Distinct::Distinct(QueryExecutionContext* qec,
                    std::shared_ptr<QueryExecutionTree> subtree,
                    const std::vector<ColumnIndex>& keepIndices)
-    : Operation{qec}, subtree_{std::move(subtree)}, keepIndices_{keepIndices} {}
+    : Operation{qec}, subtree_{std::move(subtree)}, keepIndices_{keepIndices} {
+  AD_CORRECTNESS_CHECK(subtree_);
+  subtree_ = QueryExecutionTree::createSortedTreeAnyPermutation(
+      std::move(subtree_), keepIndices_);
+}
 
 // _____________________________________________________________________________
 string Distinct::getCacheKeyImpl() const {
@@ -35,57 +44,82 @@ VariableToColumnMap Distinct::computeVariableToColumnMap() const {
 
 // _____________________________________________________________________________
 template <size_t WIDTH>
-Result::Generator Distinct::lazyDistinct(Result::Generator input,
-                                         bool yieldOnce) const {
-  IdTable aggregateTable{subtree_->getResultWidth(), allocator()};
-  LocalVocab aggregateVocab{};
-  std::optional<typename IdTableStatic<WIDTH>::row_type> previousRow =
-      std::nullopt;
-  for (auto& [idTable, localVocab] : input) {
-    IdTable result = distinct<WIDTH>(std::move(idTable), previousRow);
-    if (!result.empty()) {
-      previousRow.emplace(result.asStaticView<WIDTH>().back());
-      if (yieldOnce) {
-        aggregateVocab.mergeWith(std::array{std::move(localVocab)});
-        aggregateTable.insertAtEnd(result);
-      } else {
-        co_yield {std::move(result), std::move(localVocab)};
-      }
-    }
-  }
+Result::LazyResult Distinct::lazyDistinct(Result::LazyResult input,
+                                          bool yieldOnce) const {
+  using namespace ad_utility;
+  auto getDistinctResult =
+      [this,
+       previousRow = std::optional<typename IdTableStatic<WIDTH>::row_type>{
+           std::nullopt}](IdTable&& idTable) mutable {
+        IdTable result = this->distinct<WIDTH>(std::move(idTable), previousRow);
+        if (!result.empty()) {
+          previousRow.emplace(result.asStaticView<WIDTH>().back());
+        }
+        return result;
+      };
+
   if (yieldOnce) {
-    co_yield {std::move(aggregateTable), std::move(aggregateVocab)};
+    return Result::LazyResult{lazySingleValueRange(
+        [getDistinctResult,
+         aggregateTable = IdTable{subtree_->getResultWidth(), allocator()},
+         aggregateVocab = LocalVocab{}, input = std::move(input)]() mutable {
+          for (auto& [idTable, localVocab] : input) {
+            IdTable result = getDistinctResult(std::move(idTable));
+            if (!result.empty()) {
+              aggregateVocab.mergeWith(std::array{std::move(localVocab)});
+              aggregateTable.insertAtEnd(result);
+            }
+          }
+          return Result::IdTableVocabPair{std::move(aggregateTable),
+                                          std::move(aggregateVocab)};
+        })};
   }
+
+  return Result::LazyResult{CachingContinuableTransformInputRange(
+      std::move(input), [getDistinctResult](auto& idTableAndVocab) mutable {
+        IdTable result = getDistinctResult(std::move(idTableAndVocab.idTable_));
+        return result.empty()
+                   ? Result::IdTableLoopControl::makeContinue()
+                   : Result::IdTableLoopControl::yieldValue(
+                         Result::IdTableVocabPair{
+                             std::move(result),
+                             std::move(idTableAndVocab.localVocab_)});
+      })};
 }
 
 // _____________________________________________________________________________
-ProtoResult Distinct::computeResult(bool requestLaziness) {
-  LOG(DEBUG) << "Getting sub-result for distinct result computation..." << endl;
+Result Distinct::computeResult(bool requestLaziness) {
+  AD_LOG_DEBUG << "Getting sub-result for distinct result computation..."
+               << endl;
   std::shared_ptr<const Result> subRes = subtree_->getResult(true);
 
-  LOG(DEBUG) << "Distinct result computation..." << endl;
+  AD_LOG_DEBUG << "Distinct result computation..." << endl;
   size_t width = subtree_->getResultWidth();
   if (subRes->isFullyMaterialized()) {
-    IdTable idTable = CALL_FIXED_SIZE(width, &Distinct::outOfPlaceDistinct,
-                                      this, subRes->idTable());
-    LOG(DEBUG) << "Distinct result computation done." << endl;
+    IdTable idTable =
+        ad_utility::callFixedSizeVi(width, [&, self = this](auto width) {
+          return self->outOfPlaceDistinct<width>(subRes->idTable());
+        });
+    AD_LOG_DEBUG << "Distinct result computation done." << endl;
     return {std::move(idTable), resultSortedOn(),
             subRes->getSharedLocalVocab()};
   }
 
   auto generator =
-      CALL_FIXED_SIZE(width, &Distinct::lazyDistinct, this,
-                      std::move(subRes->idTables()), !requestLaziness);
+      ad_utility::callFixedSizeVi(width, [&, self = this](auto width) {
+        return self->lazyDistinct<width>(subRes->idTables(), !requestLaziness);
+      });
   return requestLaziness
-             ? ProtoResult{std::move(generator), resultSortedOn()}
-             : ProtoResult{cppcoro::getSingleElement(std::move(generator)),
-                           resultSortedOn()};
+             ? Result{std::move(generator), resultSortedOn()}
+             : Result{ad_utility::getSingleElement(std::move(generator)),
+                      resultSortedOn()};
 }
 
 // _____________________________________________________________________________
-bool Distinct::matchesRow(const auto& a, const auto& b) const {
-  return std::ranges::all_of(keepIndices_,
-                             [&a, &b](ColumnIndex i) { return a[i] == b[i]; });
+template <typename T1, typename T2>
+bool Distinct::matchesRow(const T1& a, const T2& b) const {
+  return ql::ranges::all_of(keepIndices_,
+                            [&a, &b](ColumnIndex i) { return a[i] == b[i]; });
 }
 
 // _____________________________________________________________________________
@@ -94,13 +128,13 @@ IdTable Distinct::distinct(
     IdTable dynInput,
     std::optional<typename IdTableStatic<WIDTH>::row_type> previousRow) const {
   AD_CONTRACT_CHECK(keepIndices_.size() <= dynInput.numColumns());
-  LOG(DEBUG) << "Distinct on " << dynInput.size() << " elements.\n";
+  AD_LOG_DEBUG << "Distinct on " << dynInput.size() << " elements.\n";
   IdTableStatic<WIDTH> result = std::move(dynInput).toStatic<WIDTH>();
 
-  // Variant of `std::ranges::unique` that allows to skip the begin rows of
+  // Variant of `ql::ranges::unique` that allows to skip the begin rows of
   // elements found in the previous table.
   auto begin =
-      std::ranges::find_if(result, [this, &previousRow](const auto& row) {
+      ql::ranges::find_if(result, [this, &previousRow](const auto& row) {
         // Without explicit this clang seems to
         // think the this capture is redundant.
         return !previousRow.has_value() ||
@@ -111,12 +145,12 @@ IdTable Distinct::distinct(
   auto dest = result.begin();
   if (begin == dest) {
     // Optimization to avoid redundant move operations.
-    begin = std::ranges::adjacent_find(begin, end,
-                                       [this](const auto& a, const auto& b) {
-                                         // Without explicit this clang seems to
-                                         // think the this capture is redundant.
-                                         return this->matchesRow(a, b);
-                                       });
+    begin = ql::ranges::adjacent_find(begin, end,
+                                      [this](const auto& a, const auto& b) {
+                                        // Without explicit this clang seems to
+                                        // think the this capture is redundant.
+                                        return this->matchesRow(a, b);
+                                      });
     dest = begin;
     if (begin != end) {
       ++begin;
@@ -138,7 +172,7 @@ IdTable Distinct::distinct(
   result.erase(dest, end);
   checkCancellation();
 
-  LOG(DEBUG) << "Distinct done.\n";
+  AD_LOG_DEBUG << "Distinct done.\n";
   return std::move(result).toDynamic();
 }
 
@@ -146,7 +180,7 @@ IdTable Distinct::distinct(
 template <size_t WIDTH>
 IdTable Distinct::outOfPlaceDistinct(const IdTable& dynInput) const {
   AD_CONTRACT_CHECK(keepIndices_.size() <= dynInput.numColumns());
-  LOG(DEBUG) << "Distinct on " << dynInput.size() << " elements.\n";
+  AD_LOG_DEBUG << "Distinct on " << dynInput.size() << " elements.\n";
   auto inputView = dynInput.asStaticView<WIDTH>();
   IdTableStatic<WIDTH> output{dynInput.numColumns(), allocator()};
 
@@ -154,13 +188,13 @@ IdTable Distinct::outOfPlaceDistinct(const IdTable& dynInput) const {
   auto end = inputView.end();
   while (begin < end) {
     int64_t allowedOffset = std::min(end - begin, CHUNK_SIZE);
-    begin = std::ranges::unique_copy(begin, begin + allowedOffset,
-                                     std::back_inserter(output),
-                                     [this](const auto& a, const auto& b) {
-                                       // Without explicit this clang seems to
-                                       // think the this capture is redundant.
-                                       return this->matchesRow(a, b);
-                                     })
+    begin = ql::ranges::unique_copy(begin, begin + allowedOffset,
+                                    std::back_inserter(output),
+                                    [this](const auto& a, const auto& b) {
+                                      // Without explicit this clang seems to
+                                      // think the this capture is redundant.
+                                      return this->matchesRow(a, b);
+                                    })
                 .in;
     checkCancellation();
     // Skip to next unique value
@@ -169,16 +203,22 @@ IdTable Distinct::outOfPlaceDistinct(const IdTable& dynInput) const {
       // This can only be called when dynInput is not empty, so `begin[-1]` is
       // always valid.
       auto lastRow = begin[-1];
-      begin = std::ranges::find_if(begin, begin + allowedOffset,
-                                   [this, &lastRow](const auto& row) {
-                                     // Without explicit this clang seems to
-                                     // think the this capture is redundant.
-                                     return !this->matchesRow(row, lastRow);
-                                   });
+      begin = ql::ranges::find_if(begin, begin + allowedOffset,
+                                  [this, &lastRow](const auto& row) {
+                                    // Without explicit this clang seems to
+                                    // think the this capture is redundant.
+                                    return !this->matchesRow(row, lastRow);
+                                  });
       checkCancellation();
     } while (begin != end && matchesRow(*begin, begin[-1]));
   }
 
-  LOG(DEBUG) << "Distinct done.\n";
+  AD_LOG_DEBUG << "Distinct done.\n";
   return std::move(output).toDynamic();
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Distinct::cloneImpl() const {
+  return std::make_unique<Distinct>(_executionContext, subtree_->clone(),
+                                    keepIndices_);
 }

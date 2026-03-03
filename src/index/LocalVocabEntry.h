@@ -2,13 +2,21 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_INDEX_LOCALVOCABENTRY_H
+#define QLEVER_SRC_INDEX_LOCALVOCABENTRY_H
+
+#include <gtest/gtest_prod.h>
 
 #include <atomic>
 
+#include "backports/algorithm.h"
+#include "backports/keywords.h"
+#include "backports/three_way_comparison.h"
+#include "global/TypedIndex.h"
 #include "global/VocabIndex.h"
 #include "parser/LiteralOrIri.h"
 #include "util/CopyableSynchronization.h"
+#include "util/Exception.h"
 
 // This is the type we use to store literals and IRIs in the `LocalVocab`.
 // It consists of a `LiteralOrIri` and a cache to store the position, where
@@ -18,9 +26,17 @@
 // `LocalVocabEntry`, and all subsequent comparisons are cheap.
 class alignas(16) LocalVocabEntry
     : public ad_utility::triple_component::LiteralOrIri {
- private:
+ public:
   using Base = ad_utility::triple_component::LiteralOrIri;
 
+  // Note: The values here actually are `Id`s, but we cannot store the `Id` type
+  // directly because of cyclic dependencies.
+  static constexpr ad_utility::IndexTag proxyTag = "LveIdProxy";
+  using IdProxy = ad_utility::TypedIndex<uint64_t, proxyTag>;
+
+  FRIEND_TEST(TripleComponent, toValueId);
+
+ private:
   // The cache for the position in the vocabulary. As usual, the `lowerBound` is
   // inclusive, the `upperBound` is not, so if `lowerBound == upperBound`, then
   // the entry is not part of the globalVocabulary, and `lowerBound` points to
@@ -28,8 +44,8 @@ class alignas(16) LocalVocabEntry
   // three separate atomics to avoid mutexes. The downside is, that in parallel
   // code multiple threads might look up the position concurrently, which wastes
   // a bit of resources. However, we don't consider this case to be likely.
-  mutable ad_utility::CopyableAtomic<VocabIndex> lowerBoundInVocab_;
-  mutable ad_utility::CopyableAtomic<VocabIndex> upperBoundInVocab_;
+  mutable ad_utility::CopyableAtomic<IdProxy> lowerBoundInVocab_;
+  mutable ad_utility::CopyableAtomic<IdProxy> upperBoundInVocab_;
   mutable ad_utility::CopyableAtomic<bool> positionInVocabKnown_ = false;
 
  public:
@@ -37,9 +53,23 @@ class alignas(16) LocalVocabEntry
   using Base::Base;
 
   // Deliberately allow implicit conversion from `LiteralOrIri`.
-  explicit(false) LocalVocabEntry(const Base& base) : Base{base} {}
-  explicit(false) LocalVocabEntry(Base&& base) noexcept
-      : Base{std::move(base)} {}
+  QL_EXPLICIT(false) LocalVocabEntry(const Base& base) : Base{base} {}
+  QL_EXPLICIT(false)
+  LocalVocabEntry(Base&& base) noexcept : Base{std::move(base)} {}
+  // Constructor for when the position in the vocab is already known.
+  QL_EXPLICIT(true)
+  LocalVocabEntry(Base&& base, auto lower, auto upper)
+      : Base{std::move(base)},
+        lowerBoundInVocab_(IdProxy::make(lower.getBits())),
+        upperBoundInVocab_(IdProxy::make(upper.getBits())),
+        positionInVocabKnown_(true) {
+    // Check that the given bounds are correct. The extra braces are needed to
+    // keep the macro expansion from interpreting the expression as two separate
+    // parameters.
+    AD_EXPENSIVE_CHECK((positionInVocabExpensiveCase() ==
+                        PositionInVocab{IdProxy::make(lower.getBits()),
+                                        IdProxy::make(upper.getBits())}));
+  }
 
   // Slice to base class `LiteralOrIri`.
   const ad_utility::triple_component::LiteralOrIri& asLiteralOrIri() const {
@@ -53,8 +83,11 @@ class alignas(16) LocalVocabEntry
   // settings there might be a range of words that are considered equal for the
   // purposes of comparing and sorting them.
   struct PositionInVocab {
-    VocabIndex lowerBound_;
-    VocabIndex upperBound_;
+    IdProxy lowerBound_;
+    IdProxy upperBound_;
+
+    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(PositionInVocab, lowerBound_,
+                                                upperBound_);
   };
   PositionInVocab positionInVocab() const {
     // Immediately return if we have previously computed and cached the
@@ -68,20 +101,25 @@ class alignas(16) LocalVocabEntry
 
   // It suffices to hash the base class `LiteralOrIri` as the position in the
   // vocab is redundant for those purposes.
-  template <typename H>
-  friend H AbslHashValue(H h, const std::same_as<LocalVocabEntry> auto& entry) {
-    return AbslHashValue(std::move(h), static_cast<const Base&>(entry));
+  template <typename H, typename V>
+  friend auto AbslHashValue(H h, const V& entry)
+      -> CPP_ret(H)(requires ranges::same_as<V, LocalVocabEntry>) {
+    return H::combine(std::move(h), static_cast<const Base&>(entry));
   }
 
   // Comparison between two entries could in theory also be sped up using the
   // cached `position` if it has previously been computed for both of the
   // entries, but it is currently questionable whether this gains much
   // performance.
-  auto operator<=>(const LocalVocabEntry& rhs) const {
-    return static_cast<const Base&>(*this) <=> static_cast<const Base&>(rhs);
+  auto compareThreeWay(const LocalVocabEntry& rhs) const {
+    return ql::compareThreeWay(static_cast<const Base&>(*this),
+                               static_cast<const Base&>(rhs));
   }
+  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(LocalVocabEntry)
 
  private:
   // The expensive case of looking up the position in vocab.
   PositionInVocab positionInVocabExpensiveCase() const;
 };
+
+#endif  // QLEVER_SRC_INDEX_LOCALVOCABENTRY_H

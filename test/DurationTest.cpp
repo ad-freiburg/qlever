@@ -3,10 +3,7 @@
 //  Author: Hannes Baumann <baumannh@informatik.uni-freiburg.de>
 
 #include <gmock/gmock.h>
-#include <gtest/gtest.h>
 
-#include "absl/strings/str_cat.h"
-#include "absl/strings/str_format.h"
 #include "global/Constants.h"
 #include "util/CtreHelpers.h"
 #include "util/DateYearDuration.h"

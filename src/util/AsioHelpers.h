@@ -10,6 +10,7 @@
 
 #include <boost/asio/experimental/awaitable_operators.hpp>
 
+#include "backports/atomic_flag.h"
 #include "global/Constants.h"
 #include "util/CancellationHandle.h"
 #include "util/Exception.h"
@@ -26,8 +27,9 @@ namespace detail {
 // function is called directly, but the invocation of the handler is posted to
 // the associated executor of the `handler`, or to the `executor` if no such
 // associated executor exists.
-template <typename Executor, std::invocable Function, typename Handler>
-struct CallFunctionAndPassToHandler {
+CPP_template(typename Executor, typename Function,
+             typename Handler)(requires ql::concepts::invocable<
+                               Function>) struct CallFunctionAndPassToHandler {
   Executor executor_;
   Function function_;
   Handler handler_;
@@ -52,9 +54,9 @@ struct CallFunctionAndPassToHandler {
       // exception_ptr and the return value as the second argument.
       if constexpr (isVoid) {
         function_();
-        callHandler(nullptr);
+        callHandler(std::exception_ptr{});
       } else {
-        callHandler(nullptr, function_());
+        callHandler(std::exception_ptr{}, function_());
       }
     } catch (...) {
       // If `function_()` throws, we propagate the exception to the
@@ -71,11 +73,12 @@ struct CallFunctionAndPassToHandler {
 };
 // Explicit deduction guides, we need objects and not references as the template
 // parameters.
-template <typename Executor, typename Function, typename Handler>
-requires std::invocable<std::decay_t<Function>>
-CallFunctionAndPassToHandler(Executor&&, Function&&, Handler&&)
-    -> CallFunctionAndPassToHandler<
-        std::decay_t<Executor>, std::decay_t<Function>, std::decay_t<Handler>>;
+CPP_template(typename Executor, typename Function, typename Handler)(
+    requires ql::concepts::invocable<std::decay_t<Function>>)
+    CallFunctionAndPassToHandler(Executor&&, Function&&, Handler&&)
+        -> CallFunctionAndPassToHandler<std::decay_t<Executor>,
+                                        std::decay_t<Function>,
+                                        std::decay_t<Handler>>;
 }  // namespace detail
 
 // Run the `function` on the `executor` (e.g. a strand for synchronization or
@@ -85,11 +88,14 @@ CallFunctionAndPassToHandler(Executor&&, Function&&, Handler&&)
 // Note: If no executor is associated with the `completionToken`, then the
 // handler will also be run on the `executor` that is passed to this function as
 // there is no other way of running it.
-template <typename Executor, typename CompletionToken, std::invocable Function>
-requires std::is_default_constructible_v<std::invoke_result_t<Function>> ||
-         std::is_void_v<std::invoke_result_t<Function>>
-auto runFunctionOnExecutor(Executor executor, Function function,
-                           CompletionToken& completionToken) {
+CPP_template(typename Executor, typename CompletionToken, typename Function)(
+    requires ql::concepts::invocable<Function> CPP_and(
+        std::is_default_constructible_v<std::invoke_result_t<Function>> ||
+        std::is_void_v<std::invoke_result_t<
+            Function>>)) auto runFunctionOnExecutor(Executor executor,
+                                                    Function function,
+                                                    CompletionToken&
+                                                        completionToken) {
   using Value = std::invoke_result_t<Function>;
   static constexpr bool isVoid = std::is_void_v<Value>;
 
@@ -123,21 +129,21 @@ template <typename T>
 inline net::awaitable<T> interruptible(
     net::awaitable<T> awaitable, ad_utility::SharedCancellationHandle handle,
     std::promise<std::function<void()>> cancelCallback,
-    ad_utility::source_location loc = ad_utility::source_location::current()) {
+    ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
   using namespace net::experimental::awaitable_operators;
   auto timer =
       std::make_shared<net::steady_timer>(co_await net::this_coro::executor);
-  auto running = std::make_shared<std::atomic_flag>(true);
+  auto running = std::make_shared<ql::atomic_flag>(true);
   auto cancelTimer = [timer, running]() mutable {
     auto strand = timer->get_executor();
     running->clear();
     net::dispatch(strand, [timer = std::move(timer)]() { timer->cancel(); });
   };
-  // Provide callback to outer world in order to cancel the timer pre-emptively.
+  // Provide callback to outer world in order to cancel the timer preemptively.
   cancelCallback.set_value(cancelTimer);
 
   auto timerLoop = [](std::shared_ptr<net::steady_timer> timer,
-                      std::shared_ptr<std::atomic_flag> running,
+                      std::shared_ptr<ql::atomic_flag> running,
                       ad_utility::SharedCancellationHandle handle,
                       ad_utility::source_location loc) -> net::awaitable<void> {
     constexpr auto timeout = DESIRED_CANCELLATION_CHECK_INTERVAL / 2;
@@ -171,7 +177,7 @@ inline net::awaitable<T> interruptible(
 template <typename T>
 inline net::awaitable<T> interruptible(
     net::awaitable<T> awaitable, ad_utility::SharedCancellationHandle handle,
-    ad_utility::source_location loc = ad_utility::source_location::current()) {
+    ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
   return interruptible(std::move(awaitable), std::move(handle),
                        std::promise<std::function<void()>>{}, std::move(loc));
 }

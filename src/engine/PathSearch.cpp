@@ -2,20 +2,20 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Herrmann (johannes.r.herrmann(at)gmail.com)
 
-#include "PathSearch.h"
+#include "engine/PathSearch.h"
 
-#include <algorithm>
-#include <functional>
-#include <iterator>
 #include <optional>
-#include <ranges>
 #include <unordered_map>
 #include <variant>
 #include <vector>
 
+#include "backports/algorithm.h"
+#include "backports/functional.h"
+#include "backports/iterator.h"
 #include "engine/CallFixedSize.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/VariableToColumnMap.h"
+#include "util/Algorithm.h"
 #include "util/AllocatorWithLimit.h"
 
 using namespace pathSearch;
@@ -31,7 +31,7 @@ BinSearchWrapper::BinSearchWrapper(const IdTable& table, size_t startCol,
 // _____________________________________________________________________________
 std::vector<Edge> BinSearchWrapper::outgoingEdes(const Id node) const {
   auto startIds = table_.getColumn(startCol_);
-  auto range = std::ranges::equal_range(startIds, node);
+  auto range = ql::ranges::equal_range(startIds, node);
   auto startIndex = std::distance(startIds.begin(), range.begin());
 
   std::vector<Edge> edges;
@@ -47,7 +47,7 @@ std::vector<Edge> BinSearchWrapper::outgoingEdes(const Id node) const {
 std::vector<Id> BinSearchWrapper::getSources() const {
   auto startIds = table_.getColumn(startCol_);
   std::vector<Id> sources;
-  std::ranges::unique_copy(startIds, std::back_inserter(sources));
+  ql::ranges::unique_copy(startIds, std::back_inserter(sources));
 
   return sources;
 }
@@ -165,7 +165,7 @@ std::string PathSearch::getCacheKeyImpl() const {
 };
 
 // _____________________________________________________________________________
-string PathSearch::getDescriptor() const {
+std::string PathSearch::getDescriptor() const {
   std::ostringstream os;
   os << "PathSearch";
   return std::move(os).str();
@@ -203,7 +203,7 @@ bool PathSearch::knownEmptyResult() {
 };
 
 // _____________________________________________________________________________
-vector<ColumnIndex> PathSearch::resultSortedOn() const { return {}; };
+std::vector<ColumnIndex> PathSearch::resultSortedOn() const { return {}; };
 
 // _____________________________________________________________________________
 void PathSearch::bindSourceSide(std::shared_ptr<QueryExecutionTree> sourcesOp,
@@ -270,9 +270,10 @@ Result PathSearch::computeResult([[maybe_unused]] bool requestLaziness) {
     auto searchTime = timer.msecs();
     timer.start();
 
-    CALL_FIXED_SIZE(std::array{getResultWidth()},
-                    &PathSearch::pathsToResultTable, this, idTable, paths,
-                    binSearch);
+    ad_utility::callFixedSizeVi(
+        std::array{getResultWidth()}, [&, self = this](auto width) {
+          return self->pathsToResultTable<width>(idTable, paths, binSearch);
+        });
 
     timer.stop();
     auto fillTime = timer.msecs();
@@ -294,10 +295,10 @@ VariableToColumnMap PathSearch::computeVariableToColumnMap() const {
 };
 
 // _____________________________________________________________________________
-std::pair<std::span<const Id>, std::span<const Id>>
+std::pair<ql::span<const Id>, ql::span<const Id>>
 PathSearch::handleSearchSides() const {
-  std::span<const Id> sourceIds;
-  std::span<const Id> targetIds;
+  ql::span<const Id> sourceIds;
+  ql::span<const Id> targetIds;
 
   if (sourceAndTargetTree_.has_value()) {
     auto resultTable = sourceAndTargetTree_.value()->getResult();
@@ -371,12 +372,12 @@ PathsLimited PathSearch::findPaths(
 
     currentPath.push_back(edge);
 
-    if (targets.empty() || targets.contains(edgeEnd)) {
+    if (targets.empty() || ad_utility::contains(targets, edgeEnd)) {
       result.push_back(currentPath);
     }
 
     for (const auto& outgoingEdge : binSearch.outgoingEdes(edge.end_)) {
-      if (!visited.contains(outgoingEdge.end_.getBits())) {
+      if (!ad_utility::contains(visited, outgoingEdge.end_.getBits())) {
         edgeStack.push_back(outgoingEdge);
       }
     }
@@ -387,7 +388,7 @@ PathsLimited PathSearch::findPaths(
 
 // _____________________________________________________________________________
 PathsLimited PathSearch::allPaths(
-    std::span<const Id> sources, std::span<const Id> targets,
+    ql::span<const Id> sources, ql::span<const Id> targets,
     const BinSearchWrapper& binSearch, bool cartesian,
     std::optional<uint64_t> numPathsPerTarget) const {
   PathsLimited paths{allocator()};
@@ -470,4 +471,19 @@ void PathSearch::pathsToResultTable(IdTable& tableDyn, PathsLimited& paths,
   }
 
   tableDyn = std::move(table).toDynamic();
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> PathSearch::cloneImpl() const {
+  auto copy = std::make_unique<PathSearch>(*this);
+  copy->subtree_ = subtree_->clone();
+  auto cloneIfNonEmpty = [](auto& tree) {
+    if (tree.has_value()) {
+      tree = tree.value()->clone();
+    }
+  };
+  cloneIfNonEmpty(copy->sourceTree_);
+  cloneIfNonEmpty(copy->targetTree_);
+  cloneIfNonEmpty(copy->sourceAndTargetTree_);
+  return copy;
 }

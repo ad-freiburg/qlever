@@ -63,9 +63,12 @@ constexpr auto matchWordAndIndex =
  * @param ids Must have the same size as `words` The tests expect that
  * `vocab[ids[i]] == words[i]` for all i.
  */
-inline void testUpperAndLowerBound(const auto& vocab, auto makeWordLarger,
-                                   auto makeWordSmaller, auto comparator,
-                                   const auto& words,
+template <typename Vocab, typename MakeLarger, typename MakeSmaller,
+          typename Comparator, typename Words>
+inline void testUpperAndLowerBound(const Vocab& vocab,
+                                   MakeLarger makeWordLarger,
+                                   MakeSmaller makeWordSmaller,
+                                   Comparator comparator, const Words& words,
                                    std::vector<uint64_t> ids) {
   ASSERT_FALSE(words.empty());
   ASSERT_EQ(vocab.size(), words.size());
@@ -121,9 +124,13 @@ inline void testUpperAndLowerBound(const auto& vocab, auto makeWordLarger,
  *        `upper_bound` and `lower_bound` functions.
  * @param words The vocabulary is expected to have the same contents as `words`.
  */
-void testUpperAndLowerBoundContiguousIDs(const auto& vocab, auto makeWordLarger,
-                                         auto makeWordSmaller, auto comparator,
-                                         const auto& words) {
+template <typename Vocab, typename MakeLarger, typename MakeSmaller,
+          typename Comparator, typename Words>
+void testUpperAndLowerBoundContiguousIDs(const Vocab& vocab,
+                                         MakeLarger makeWordLarger,
+                                         MakeSmaller makeWordSmaller,
+                                         Comparator comparator,
+                                         const Words& words) {
   std::vector<uint64_t> ids;
   for (size_t i = 0; i < words.size(); ++i) {
     ids.push_back(i);
@@ -135,9 +142,10 @@ void testUpperAndLowerBoundContiguousIDs(const auto& vocab, auto makeWordLarger,
 
 // Same as the previous function, but explicitly state, which IDs are expected
 // in the vocabulary.
-void testUpperAndLowerBoundWithStdLessFromWordsAndIds(auto vocabulary,
-                                                      const auto& words,
-                                                      const auto& ids) {
+template <typename Vocab, typename Words, typename Ids>
+void testUpperAndLowerBoundWithStdLessFromWordsAndIds(Vocab vocabulary,
+                                                      const Words& words,
+                                                      const Ids& ids) {
   auto comparator = std::less<>{};
   auto makeWordSmaller = [](std::string word) {
     word.back()--;
@@ -158,7 +166,8 @@ void testUpperAndLowerBoundWithStdLessFromWordsAndIds(auto vocabulary,
  * @param createVocabulary Function that takes a `std::vector<string>` and
  *           returns a vocabulary.
  */
-void testUpperAndLowerBoundWithStdLess(auto createVocabulary) {
+template <typename F>
+void testUpperAndLowerBoundWithStdLess(F createVocabulary) {
   const std::vector<std::string> words{"alpha", "beta",    "camma",
                                        "delta", "epsilon", "frikadelle"};
 
@@ -177,8 +186,9 @@ void testUpperAndLowerBoundWithStdLess(auto createVocabulary) {
  * @param createVocabulary Function that takes a `std::vector<string>` and
  *           returns a vocabulary.
  */
+template <typename Vocab, typename Words, typename Ids>
 void testUpperAndLowerBoundWithNumericComparatorFromWordsAndIds(
-    auto vocabulary, const auto& words, const auto& ids) {
+    Vocab vocabulary, const Words& words, const Ids& ids) {
   auto comparator = [](const auto& a, const auto& b) {
     return std::stoi(std::string{a}) < std::stoi(std::string{b});
   };
@@ -199,7 +209,8 @@ void testUpperAndLowerBoundWithNumericComparatorFromWordsAndIds(
  * @param createVocabulary Function that takes a `std::vector<string>` and
  *        returns a vocabulary.
  */
-void testUpperAndLowerBoundWithNumericComparator(auto createVocabulary) {
+template <typename F>
+void testUpperAndLowerBoundWithNumericComparator(F createVocabulary) {
   const std::vector<std::string> words{"4", "33", "222", "1111"};
   std::vector<uint64_t> ids;
   for (size_t i = 0; i < words.size(); ++i) {
@@ -212,8 +223,9 @@ void testUpperAndLowerBoundWithNumericComparator(auto createVocabulary) {
 
 // Check that the `operator[]` works as expected for an unordered vocabulary.
 // Checks that vocabulary[ids[i]] == words[i].
-auto testAccessOperatorFromWordsAndIds(auto vocabulary, const auto& words,
-                                       const auto& ids) {
+template <typename Vocab, typename Words, typename Ids>
+auto testAccessOperatorFromWordsAndIds(Vocab vocabulary, const Words& words,
+                                       const Ids& ids) {
   // Not in any particularly order.
   AD_CONTRACT_CHECK(words.size() == ids.size());
   ASSERT_EQ(words.size(), vocabulary.size());
@@ -223,7 +235,8 @@ auto testAccessOperatorFromWordsAndIds(auto vocabulary, const auto& words,
 }
 // Check that the `operator[]` works as expected for an unordered vocabulary,
 // created via `createVocabulary(std::vector<std::string>)`.
-auto testAccessOperatorForUnorderedVocabulary(auto createVocabulary) {
+template <typename F>
+auto testAccessOperatorForUnorderedVocabulary(F createVocabulary) {
   // Not in any particularly order.
   const std::vector<std::string> words{"alpha", "delta", "ALPHA", "beta", "42",
                                        "31",    "0a",    "a0",    "al"};
@@ -237,7 +250,8 @@ auto testAccessOperatorForUnorderedVocabulary(auto createVocabulary) {
 // Check that an empty vocabulary, created via
 // `createVocabulary(std::vector<std::string>{})`, works as expected with the
 // given comparator.
-auto testEmptyVocabularyWithComparator(auto createVocabulary, auto comparator) {
+template <typename F, typename C>
+auto testEmptyVocabularyWithComparator(F createVocabulary, C comparator) {
   auto vocab = createVocabulary(std::vector<std::string>{});
   ASSERT_EQ(0u, vocab.size());
   auto expected = WordAndIndex::end();
@@ -249,7 +263,8 @@ auto testEmptyVocabularyWithComparator(auto createVocabulary, auto comparator) {
 
 // Check that an empty vocabulary, created via
 // `createVocabulary(std::vector<std::string>{})` works as expected.
-auto testEmptyVocabulary(auto createVocabulary) {
+template <typename F>
+auto testEmptyVocabulary(F createVocabulary) {
   testEmptyVocabularyWithComparator(createVocabulary, std::less<>{});
   testEmptyVocabularyWithComparator(createVocabulary, std::greater<>{});
 }

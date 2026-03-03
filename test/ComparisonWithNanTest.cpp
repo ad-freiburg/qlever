@@ -4,9 +4,8 @@
 
 #include <gtest/gtest.h>
 
-#include <algorithm>
-#include <functional>
-
+#include "backports/algorithm.h"
+#include "backports/functional.h"
 #include "util/ComparisonWithNan.h"
 
 namespace {
@@ -25,7 +24,7 @@ auto gt = ad_utility::makeComparatorForNans(std::greater{});
 TEST(ComparisonWithNan, Sorting) {
   std::vector<double> input{NaN, 3.0, -3.0, NaN, negInf, NaN, inf};
   std::vector<double> expected{negInf, -3.0, 3.0, inf, NaN, NaN, NaN};
-  std::ranges::sort(input, lt);
+  ql::ranges::sort(input, lt);
   ASSERT_EQ(input.size(), expected.size());
   for (size_t i = 0; i < input.size(); ++i) {
     auto a = input[i];
@@ -36,7 +35,8 @@ TEST(ComparisonWithNan, Sorting) {
 
 // Test several invariants of the relations `<, <=, ==, !=, >, >=` for two
 // arbitrary inputs `a, b`.
-void testInvariants(auto a, auto b) {
+template <typename T1, typename T2>
+void testInvariants(T1 a, T2 b) {
   // `==` and `!=` are symmetric.
   ASSERT_EQ(eq(a, b), eq(b, a));
   ASSERT_EQ(ne(a, b), ne(b, a));
@@ -50,7 +50,8 @@ void testInvariants(auto a, auto b) {
 }
 
 // Run exhaustive tests for numbers `a, b` where `a < b`.
-void testLess(auto a, auto b) {
+template <typename T1, typename T2>
+void testLess(T1 a, T2 b) {
   ASSERT_TRUE(lt(a, b));
   ASSERT_TRUE(le(a, b));
   ASSERT_FALSE(eq(a, b));
@@ -58,7 +59,8 @@ void testLess(auto a, auto b) {
 }
 
 // Run exhaustive tests for numbers `a, b` where `a == b`.
-void testEqual(auto a, auto b) {
+template <typename T1, typename T2>
+void testEqual(T1 a, T2 b) {
   ASSERT_FALSE(lt(a, b));
   ASSERT_TRUE(le(a, b));
   ASSERT_TRUE(eq(a, b));

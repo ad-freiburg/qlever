@@ -20,6 +20,7 @@
 #include "../benchmark/infrastructure/BenchmarkToJson.h"
 #include "../benchmark/infrastructure/BenchmarkToString.h"
 #include "BenchmarkMetadata.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigManager.h"
 #include "util/Exception.h"
@@ -90,7 +91,7 @@ static void writeBenchmarkClassAndBenchmarkResultsToJsonFile(
 Print the configuration documentation of all registered benchmarks.
 */
 static __attribute__((noreturn)) void printConfigurationOptionsAndExit() {
-  std::ranges::for_each(
+  ql::ranges::for_each(
       BenchmarkRegister::getAllRegisteredBenchmarks(),
       [](const BenchmarkInterface* bench) {
         std::cerr << createCategoryTitle(
@@ -159,7 +160,7 @@ int main(int argc, char** argv) {
   po::notify(vm);
 
   // If write was chosen, then the given file must be a json file.
-  if (vm.count("write") && !writeFileName.ends_with(".json")) {
+  if (vm.count("write") && !ql::ends_with(writeFileName, ".json")) {
     std::cerr << "The file defined via `--write` must be a `.json` file.\n";
     printUsageAndExit();
   }
@@ -211,13 +212,13 @@ int main(int argc, char** argv) {
   // Actually processing the arguments.
   if (vm.count("print")) {
     // Print the results and metadata.
-    std::ranges::for_each(benchmarkClassAndResults,
-                          [](const auto& pair) {
-                            std::cout << benchmarkResultsToString(pair.first,
-                                                                  pair.second)
-                                      << "\n\n";
-                          },
-                          {});
+    ql::ranges::for_each(benchmarkClassAndResults,
+                         [](const auto& pair) {
+                           std::cout << benchmarkResultsToString(pair.first,
+                                                                 pair.second)
+                                     << "\n\n";
+                         },
+                         {});
   }
 
   if (vm.count("write")) {

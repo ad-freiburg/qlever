@@ -3,18 +3,38 @@
 // Author: 2011-2017 Björn Buchhold <buchholb@cs.uni-freiburg.de>
 //         2020-     Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_EXCEPTION_H
+#define QLEVER_SRC_UTIL_EXCEPTION_H
+
+#include <absl/strings/str_cat.h>
+
 #include <exception>
-#include <functional>
 #include <sstream>
 #include <string>
 
-#include "absl/strings/str_cat.h"
-#include "absl/strings/str_join.h"
+#include "backports/concepts.h"
+#include "backports/functional.h"
 #include "util/SourceLocation.h"
 #include "util/TypeTraits.h"
 
-using std::string;
+// Helper macro that is required if "x" itself is another macro.
+// It expands "x" before it turns it into a string.
+// Here's an example how it works:
+//
+// #include <iostream>
+//
+// #define AD_STRINGIFY(x) #x
+// #define TEST(x) std::cout << (x) << std::endl;
+// #define TEST1(x) TEST(#x)
+// #define TEST2(x) TEST(AD_STRINGIFY(x))
+// #define MACRO_THINGY lol
+//
+//
+// int main() {
+//     TEST1(MACRO_THINGY); // -> prints MACRO_THINGY
+//     TEST2(MACRO_THINGY); // -> prints lol
+// }
+#define AD_STRINGIFY(x) #x
 
 // -------------------------------------------
 // Exception class code
@@ -26,7 +46,7 @@ namespace ad_utility {
 // message just in case
 class AbortException : public std::exception {
  private:
-  string what_;
+  std::string what_;
 
  public:
   explicit AbortException(const std::exception& original)
@@ -46,9 +66,9 @@ class Exception : public std::exception {
   ad_utility::source_location location_;
 
  public:
-  explicit Exception(const std::string& message,
-                     ad_utility::source_location location =
-                         ad_utility::source_location::current())
+  explicit Exception(
+      const std::string& message,
+      ad_utility::source_location location = AD_CURRENT_SOURCE_LOC())
       : location_{location} {
     std::stringstream str;
     // TODO<GCC13> Use `std::format`.
@@ -63,9 +83,9 @@ class Exception : public std::exception {
 }  // namespace ad_utility
 
 // Throw exception with additional assert-like info.
-[[noreturn]] inline void AD_THROW(std::string_view message,
-                                  ad_utility::source_location location =
-                                      ad_utility::source_location::current()) {
+[[noreturn]] inline void AD_THROW(
+    std::string_view message,
+    ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) {
   throw ad_utility::Exception{std::string{message}, location};
 }
 
@@ -85,26 +105,34 @@ class Exception : public std::exception {
 #define AD_FAIL() AD_THROW("This code should be unreachable")
 
 namespace ad_utility::detail {
+
+template <typename S>
+CPP_requires(is_str_catable_, requires(S&& s)(absl::StrCat(AD_FWD(s))));
+
+template <typename S>
+CPP_concept CanStrCat = CPP_requires_ref(is_str_catable_, S);
+
 // Helper functions that convert the various arguments to the
 // `AD_CONTRACT_CHECK` etc. macros to strings.
 // The argument must be
 // * A type that can be passed to `absl::StrCat` (e.g. `string`, `string_views`,
 // builtin numeric types) [first overload]
 // * A callbable that takes no arguments and returns a string [second overload]
-template <typename S>
-requires requires(S&& s) { absl::StrCat(AD_FWD(s)); }
-std::string getMessageImpl(S&& s) {
+CPP_template(typename S)(requires CanStrCat<S>) std::string
+    getMessageImpl(S&& s) {
   return absl::StrCat(AD_FWD(s));
 }
-std::string getMessageImpl(
-    ad_utility::InvocableWithConvertibleReturnType<std::string> auto&& f) {
+CPP_template(typename T)(
+    requires ad_utility::InvocableWithConvertibleReturnType<T, std::string>)
+    std::string getMessageImpl(T&& f) {
   return std::invoke(f);
 }
 
 // Helper function used to format the arguments passed to `AD_CONTRACT_CHECK`
 // etc. Return "<concatenation of `getMessageImpl(messages)...`>" followed by
 // a full stop and space if there is at least one message.
-std::string concatMessages(auto&&... messages) {
+template <typename... Args>
+std::string concatMessages(Args&&... messages) {
   if constexpr (sizeof...(messages) == 0) {
     return "";
   } else {
@@ -137,10 +165,9 @@ std::string concatMessages(auto&&... messages) {
 // types) or a callable that produce a `std::string`. The latter case is useful
 // if the error message is expensive to construct because the callables are only
 // invoked if the assertion fails. For examples see `ExceptionTest.cpp`.
-#define AD_CONTRACT_CHECK(condition, ...)                             \
-  AD_CHECK_IMPL(condition, __STRING(condition),                       \
-                ad_utility::source_location::current() __VA_OPT__(, ) \
-                    __VA_ARGS__)
+#define AD_CONTRACT_CHECK(condition, ...)           \
+  AD_CHECK_IMPL(condition, AD_STRINGIFY(condition), \
+                AD_CURRENT_SOURCE_LOC() __VA_OPT__(, ) __VA_ARGS__)
 
 // Custom assert which does not abort but throws an exception. Use this for
 // conditions that can never be violated via a public (member) function. It is
@@ -157,10 +184,10 @@ inline void adCorrectnessCheckImpl(bool condition, std::string_view message,
   AD_CHECK_IMPL(condition, message, location, additionalMessages...);
 }
 }  // namespace ad_utility::detail
-#define AD_CORRECTNESS_CHECK(condition, ...)             \
-  ad_utility::detail::adCorrectnessCheckImpl(            \
-      static_cast<bool>(condition), __STRING(condition), \
-      ad_utility::source_location::current() __VA_OPT__(, ) __VA_ARGS__)
+#define AD_CORRECTNESS_CHECK(condition, ...)                 \
+  ad_utility::detail::adCorrectnessCheckImpl(                \
+      static_cast<bool>(condition), AD_STRINGIFY(condition), \
+      AD_CURRENT_SOURCE_LOC() __VA_OPT__(, ) __VA_ARGS__)
 
 // This check is similar to `AD_CORRECTNESS_CHECK` (see above), but the check is
 // only compiled and executed when either the `NDEBUG` constant is NOT defined
@@ -180,3 +207,5 @@ static constexpr bool areExpensiveChecksEnabled = false;
 }
 #define AD_EXPENSIVE_CHECK(condition, ...) void(0)
 #endif
+
+#endif  // QLEVER_SRC_UTIL_EXCEPTION_H

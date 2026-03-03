@@ -1,10 +1,14 @@
 // Copyright 2014, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
-#pragma once
+
+#ifndef QLEVER_SRC_ENGINE_INDEXSEQUENCE_H
+#define QLEVER_SRC_ENGINE_INDEXSEQUENCE_H
 
 #include <cstdint>
 #include <cstdlib>
+
+#include "backports/type_traits.h"
 
 // Code to generate index sequences used in the optimized, precompiled
 // join methods, for example. For reference:
@@ -75,3 +79,5 @@ static_assert(std::is_same<MakeIndexSequence<2>::type, GenSeqLo<2, 2>>::value,
               "");
 static_assert(std::is_same<GenSeq<2>, GenSeqLo<2, 2>>::value, "");
 static_assert(std::is_same<MakeIndexSequence<2>::type, GenSeq<2>>::value, "");
+
+#endif  // QLEVER_SRC_ENGINE_INDEXSEQUENCE_H

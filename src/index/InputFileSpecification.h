@@ -2,10 +2,13 @@
 // Chair of Algorithms and Data Structures
 // Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_INDEX_INPUTFILESPECIFICATION_H
+#define QLEVER_SRC_INDEX_INPUTFILESPECIFICATION_H
 
 #include <optional>
 #include <string>
+
+#include "backports/three_way_comparison.h"
 namespace qlever {
 
 // An enum to distinguish between `Turtle` and `NQuad` files.
@@ -31,6 +34,11 @@ struct InputFileSpecification {
   // command line).
   bool parseInParallelSetExplicitly_ = false;
 
-  bool operator==(const InputFileSpecification&) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(InputFileSpecification, filename_,
+                                              filetype_, defaultGraph_,
+                                              parseInParallel_,
+                                              parseInParallelSetExplicitly_)
 };
 }  // namespace qlever
+
+#endif  // QLEVER_SRC_INDEX_INPUTFILESPECIFICATION_H

@@ -12,6 +12,7 @@
 #include "util/IdTableHelpers.h"
 #include "util/IdTestHelpers.h"
 #include "util/IndexTestHelpers.h"
+#include "util/OperationTestHelpers.h"
 
 using ad_utility::testing::getQec;
 namespace {
@@ -752,4 +753,38 @@ TEST(PathSearchTest, sourceAndTargetBound) {
   auto resultTable = pathSearch.computeResult(false);
   ASSERT_THAT(resultTable.idTable(),
               ::testing::UnorderedElementsAreArray(expected));
+}
+
+// _____________________________________________________________________________
+TEST(PathSearchTest, clone) {
+  auto sub = makeIdTableFromVector({{0, 1}});
+
+  Vars vars = {Variable{"?start"}, Variable{"?end"}};
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 Var{"?source"},
+                                 Var{"?target"},
+                                 Var{"?start"},
+                                 Var{"?end"},
+                                 Var{"?edgeIndex"},
+                                 Var{"?pathIndex"},
+                                 {}};
+
+  auto qec = getQec();
+  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(sub), vars);
+  PathSearch pathSearch{qec, subtree, std::move(config)};
+
+  auto clone = pathSearch.clone();
+  ASSERT_TRUE(clone);
+  EXPECT_THAT(pathSearch, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), pathSearch.getDescriptor());
+
+  pathSearch.bindSourceSide(subtree, 0);
+  pathSearch.bindTargetSide(subtree, 0);
+  pathSearch.bindSourceAndTargetSide(subtree, 0, 0);
+
+  clone = pathSearch.clone();
+  ASSERT_TRUE(clone);
+  EXPECT_THAT(pathSearch, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), pathSearch.getDescriptor());
 }

@@ -2,10 +2,10 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (January of 2023, schlegea@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_TEST_UTIL_IDTABLEHELPERS_H
+#define QLEVER_TEST_UTIL_IDTABLEHELPERS_H
 
 #include <algorithm>
-#include <concepts>
 #include <cstdio>
 #include <fstream>
 #include <ranges>
@@ -17,10 +17,9 @@
 #include "./AllocatorTestHelpers.h"
 #include "./GTestHelpers.h"
 #include "./IdTestHelpers.h"
+#include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
 #include "engine/Engine.h"
-#include "engine/Join.h"
-#include "engine/OptionalJoin.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/idTable/IdTable.h"
 #include "global/ValueId.h"
@@ -58,6 +57,17 @@ class CopyableIdTable : public TableImpl<N> {
 using IntOrId = std::variant<int64_t, Id>;
 using VectorTable = std::vector<std::vector<IntOrId>>;
 
+// Helper: construct a single-column VectorTable containing the exclusive
+// integer range [a, b). If a >= b, returns an empty table.
+static inline VectorTable makeRangeVectorTable(size_t a, size_t b) {
+  VectorTable vt;
+  if (a >= b) return vt;
+  for (size_t i = a; i < b; ++i) {
+    vt.push_back({IntOrId(static_cast<int64_t>(i))});
+  }
+  return vt;
+}
+
 /*
  * Return an 'IdTable' with the given `content` by applying the
  * `transformation` to each of them. All rows of `content` must have the
@@ -83,6 +93,16 @@ IdTable makeIdTableFromVector(const VectorTable& content,
   return result;
 }
 
+// Create IdTables from a vector of VectorTables, where each VectorTable
+// represents a block
+inline std::vector<IdTable> createLazyIdTables(
+    const std::vector<VectorTable>& blocks) {
+  return ::ranges::to<std::vector>(
+      blocks | ql::views::transform([](const auto& block) {
+        return makeIdTableFromVector(block, ad_utility::testing::IntId);
+      }));
+}
+
 // Similar to `makeIdTableFromVector` (see above), but returns a GMock
 // `matcher`, that matches for equality with the created `IdTable`. In
 // particular, the matcher also deals with `IdTable` not being copyable, which
@@ -101,14 +121,15 @@ static constexpr MatchesIdTableFromVector matchesIdTableFromVector;
 // matcher also deals with `IdTable` not being copyable, which requires a
 // workaround for GMock/GTest.
 struct MatchesIdTable {
-  template <typename... Ts>
-  requires(std::constructible_from<IdTable, Ts && ...>)
-  auto operator()(Ts&&... ts) const {
+  CPP_template(typename... Ts)(
+      requires(ql::concepts::constructible_from<IdTable, Ts&&...>)) auto
+  operator()(Ts&&... ts) const {
     return ::testing::Eq(CopyShield<IdTable>(IdTable{AD_FWD(ts)...}));
   }
 
   // Overload for lvalue-references (`IdTable`s are not copyable)
-  template <ad_utility::SimilarTo<IdTable> T>
+  template <typename T,
+            typename = std::enable_if_t<ad_utility::SimilarTo<T, IdTable>>>
   auto operator()(T& table) const {
     // Note: We could use `Eq(cref(table))` , but the explicit deep copy
     // gets rid of all possibly lifetime and mutability issues.
@@ -135,7 +156,7 @@ void compareIdTableWithExpectedContent(
     const IdTable& table, const IdTable& expectedContent,
     const bool resultMustBeSortedByJoinColumn = false,
     const size_t joinColumn = 0,
-    ad_utility::source_location l = ad_utility::source_location::current());
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC());
 
 /*
  * @brief Sorts an IdTable in place, in the same way, that we sort them during
@@ -260,4 +281,10 @@ std::shared_ptr<QueryExecutionTree> idTableToExecutionTree(
 // Fully consume a given generator and store it in an `IdTable` and store the
 // local vocabs in a vector.
 std::pair<IdTable, std::vector<LocalVocab>> aggregateTables(
-    Result::Generator generator, size_t numColumns);
+    Result::LazyResult generator, size_t numColumns);
+
+// Create an `IdTable` of the given size with width 1, filled with the given
+// value.
+IdTable createIdTableOfSizeWithValue(size_t size, Id value);
+
+#endif  // QLEVER_TEST_UTIL_IDTABLEHELPERS_H

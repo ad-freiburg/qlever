@@ -2,13 +2,23 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_EXECUTEUPDATE_H
+#define QLEVER_SRC_ENGINE_EXECUTEUPDATE_H
 
 #include <gtest/gtest_prod.h>
 
 #include "index/Index.h"
 #include "parser/ParsedQuery.h"
 #include "util/CancellationHandle.h"
+#include "util/TimeTracer.h"
+
+// Metadata of a single update operation: number of inserted and deleted triples
+// before the operation, of the operation, and after the operation.
+struct UpdateMetadata {
+  std::optional<DeltaTriplesCount> countBefore_;
+  std::optional<DeltaTriplesCount> inUpdate_;
+  std::optional<DeltaTriplesCount> countAfter_;
+};
 
 class ExecuteUpdate {
  public:
@@ -18,18 +28,21 @@ class ExecuteUpdate {
 
   // Execute an update. This function is comparable to
   // `ExportQueryExecutionTrees::computeResult` for queries.
-  static void executeUpdate(const Index& index, const ParsedQuery& query,
-                            const QueryExecutionTree& qet,
-                            DeltaTriples& deltaTriples,
-                            const CancellationHandle& cancellationHandle);
+  static UpdateMetadata executeUpdate(
+      const Index& index, const ParsedQuery& query,
+      const QueryExecutionTree& qet, DeltaTriples& deltaTriples,
+      const CancellationHandle& cancellationHandle,
+      ad_utility::timer::TimeTracer& tracer =
+          ad_utility::timer::DEFAULT_TIME_TRACER);
 
  private:
   // Resolve all `TripleComponent`s and `Graph`s in a vector of
   // `SparqlTripleSimpleWithGraph` into `Variable`s or `Id`s.
-  static std::pair<std::vector<TransformedTriple>, LocalVocab>
-  transformTriplesTemplate(const Index::Vocab& vocab,
-                           const VariableToColumnMap& variableColumns,
-                           std::vector<SparqlTripleSimpleWithGraph>&& triples);
+  static std::pair<std::vector<ExecuteUpdate::TransformedTriple>, LocalVocab>
+  transformTriplesTemplate(
+      const EncodedIriManager& encodedIriManager, const Index::Vocab& vocab,
+      const VariableToColumnMap& variableColumns,
+      const std::vector<SparqlTripleSimpleWithGraph>& triples);
   FRIEND_TEST(ExecuteUpdate, transformTriplesTemplate);
 
   // Resolve a single `IdOrVariable` to an `Id` by looking up the value in the
@@ -58,7 +71,25 @@ class ExecuteUpdate {
   // must be a GraphUpdate.
   static std::pair<IdTriplesAndLocalVocab, IdTriplesAndLocalVocab>
   computeGraphUpdateQuads(const Index& index, const ParsedQuery& query,
-                          const QueryExecutionTree& qet,
-                          const CancellationHandle& cancellationHandle);
+                          const Result& result,
+                          const VariableToColumnMap& variableColumns,
+                          const CancellationHandle& cancellationHandle,
+                          UpdateMetadata& metadata,
+                          ad_utility::timer::TimeTracer& tracer =
+                              ad_utility::timer::DEFAULT_TIME_TRACER);
   FRIEND_TEST(ExecuteUpdate, computeGraphUpdateQuads);
+
+  // After the operation the vector is sorted and contains no duplicate
+  // elements.
+  static void sortAndRemoveDuplicates(std::vector<IdTriple<>>& container);
+  FRIEND_TEST(ExecuteUpdate, sortAndRemoveDuplicates);
+
+  // For two sorted vectors `A` and `B` return a new vector
+  // that contains the element of `A\B`.
+  // Precondition: the inputs must be sorted.
+  static std::vector<IdTriple<>> setMinus(const std::vector<IdTriple<>>& a,
+                                          const std::vector<IdTriple<>>& b);
+  FRIEND_TEST(ExecuteUpdate, setMinus);
 };
+
+#endif  // QLEVER_SRC_ENGINE_EXECUTEUPDATE_H

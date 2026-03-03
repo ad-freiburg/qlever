@@ -1,15 +1,27 @@
 //  Copyright 2020, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#include "Bind.h"
+#include "engine/Bind.h"
 
 #include "engine/CallFixedSize.h"
+#include "engine/ExistsJoin.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "util/ChunkedForLoop.h"
 #include "util/Exception.h"
+
+// _____________________________________________________________________________
+Bind::Bind(QueryExecutionContext* qec,
+           std::shared_ptr<QueryExecutionTree> subtree, parsedQuery::Bind b)
+    : Operation(qec), _subtree(std::move(subtree)), _bind(std::move(b)) {
+  _subtree = ExistsJoin::addExistsJoinsToSubtree(
+      _bind._expression, std::move(_subtree), getExecutionContext(),
+      cancellationHandle_);
+}
 
 // BIND adds exactly one new column
 size_t Bind::getResultWidth() const { return _subtree->getResultWidth() + 1; }
@@ -27,6 +39,14 @@ size_t Bind::getCostEstimate() {
   return _subtree->getCostEstimate() + _subtree->getSizeEstimate();
 }
 
+// We delegate the limit to the child operation, so we always support it.
+bool Bind::supportsLimitOffset() const { return true; }
+
+// _____________________________________________________________________________
+void Bind::onLimitOffsetChanged(const LimitOffsetClause& limitOffset) const {
+  _subtree->applyLimit(limitOffset);
+}
+
 float Bind::getMultiplicity(size_t col) {
   // this is the newly added column
   if (col == getResultWidth() - 1) {
@@ -40,10 +60,10 @@ float Bind::getMultiplicity(size_t col) {
 }
 
 // _____________________________________________________________________________
-string Bind::getDescriptor() const { return _bind.getDescriptor(); }
+std::string Bind::getDescriptor() const { return _bind.getDescriptor(); }
 
 // _____________________________________________________________________________
-[[nodiscard]] vector<ColumnIndex> Bind::resultSortedOn() const {
+[[nodiscard]] std::vector<ColumnIndex> Bind::resultSortedOn() const {
   // We always append the result column of the BIND at the end and this column
   // is not sorted, so the sequence of indices of the sorted columns do not
   // change.
@@ -54,7 +74,7 @@ string Bind::getDescriptor() const { return _bind.getDescriptor(); }
 bool Bind::knownEmptyResult() { return _subtree->knownEmptyResult(); }
 
 // _____________________________________________________________________________
-string Bind::getCacheKeyImpl() const {
+std::string Bind::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "BIND ";
   os << _bind._expression.getCacheKey(_subtree->getVariableColumns());
@@ -66,13 +86,16 @@ string Bind::getCacheKeyImpl() const {
 VariableToColumnMap Bind::computeVariableToColumnMap() const {
   auto res = _subtree->getVariableColumns();
   // The new variable is always appended at the end.
-  // TODO<joka921> This currently pessimistically assumes that all (aggregate)
-  // expressions can produce undefined values. This might impact the
-  // performance when the result of this GROUP BY is joined on one or more of
-  // the aggregating columns. Implement an interface in the expressions that
-  // allows to check, whether an expression can never produce an undefined
-  // value.
-  res[_bind._target] = makePossiblyUndefinedColumn(getResultWidth() - 1);
+  auto columnIndex = getResultWidth() - 1;
+  // Determine whether the added column might contain UNDEF values.
+  using enum ColumnIndexAndTypeInfo::UndefStatus;
+  auto statusOfNewColumn = _bind._expression.isResultAlwaysDefined(res)
+                               ? AlwaysDefined
+                               : PossiblyUndefined;
+
+  auto [it, wasNew] =
+      res.insert({_bind._target, {columnIndex, statusOfNewColumn}});
+  AD_CORRECTNESS_CHECK(wasNew);
   return res;
 }
 
@@ -86,60 +109,68 @@ IdTable Bind::cloneSubView(const IdTable& idTable,
                            const std::pair<size_t, size_t>& subrange) {
   IdTable result(idTable.numColumns(), idTable.getAllocator());
   result.resize(subrange.second - subrange.first);
-  std::ranges::copy(idTable.begin() + subrange.first,
-                    idTable.begin() + subrange.second, result.begin());
+  ql::ranges::copy(idTable.begin() + subrange.first,
+                   idTable.begin() + subrange.second, result.begin());
   return result;
 }
 
 // _____________________________________________________________________________
-ProtoResult Bind::computeResult(bool requestLaziness) {
-  LOG(DEBUG) << "Get input to BIND operation..." << std::endl;
+Result Bind::computeResult(bool requestLaziness) {
+  AD_LOG_DEBUG << "Get input to BIND operation..." << std::endl;
   std::shared_ptr<const Result> subRes = _subtree->getResult(requestLaziness);
-  LOG(DEBUG) << "Got input to Bind operation." << std::endl;
+  AD_LOG_DEBUG << "Got input to Bind operation." << std::endl;
 
-  auto applyBind = [this, subRes](IdTable idTable, LocalVocab* localVocab) {
+  auto applyBind = [this](IdTable idTable, LocalVocab* localVocab) {
     return computeExpressionBind(localVocab, std::move(idTable),
                                  _bind._expression.getPimpl());
   };
 
   if (subRes->isFullyMaterialized()) {
     if (requestLaziness && subRes->idTable().size() > CHUNK_SIZE) {
-      return {
-          [](auto applyBind,
-             std::shared_ptr<const Result> result) -> Result::Generator {
-            size_t size = result->idTable().size();
-            for (size_t offset = 0; offset < size; offset += CHUNK_SIZE) {
-              LocalVocab outVocab = result->getCopyOfLocalVocab();
-              IdTable idTable = applyBind(
-                  cloneSubView(result->idTable(),
-                               {offset, std::min(size, offset + CHUNK_SIZE)}),
-                  &outVocab);
-              co_yield {std::move(idTable), std::move(outVocab)};
-            }
-          }(std::move(applyBind), std::move(subRes)),
-          resultSortedOn()};
+      auto chunks = ad_utility::allView(::ranges::views::chunk(
+          ::ranges::views::iota(size_t{0}, subRes->idTable().size()),
+          CHUNK_SIZE));
+      auto f = [applyBind = std::move(applyBind),
+                subRes = std::move(subRes)](const auto& chunk) {
+        // Make a deep copy of the local vocab from `subRes` and then add to it
+        // (in case BIND adds a new word or words).
+        LocalVocab outVocab = subRes->getCopyOfLocalVocab();
+        auto start = chunk.front();
+        auto end = start + ::ranges::size(chunk);
+        IdTable idTable = applyBind(
+            Bind::cloneSubView(subRes->idTable(), {start, end}), &outVocab);
+
+        return Result::IdTableVocabPair{std::move(idTable),
+                                        std::move(outVocab)};
+      };
+      return {Result::LazyResult(ad_utility::CachingTransformInputRange(
+                  std::move(chunks), std::move(f))),
+              resultSortedOn()};
     }
-    // Make a deep copy of the local vocab from `subRes` and then add to it (in
-    // case BIND adds a new word or words).
-    //
     // Make a copy of the local vocab from`subRes`and then add to it (in case
     // BIND adds new words). Note: The copy of the local vocab is shallow
     // via`shared_ptr`s, so the following is also efficient if the BIND adds no
     // new words.
     LocalVocab localVocab = subRes->getCopyOfLocalVocab();
     IdTable result = applyBind(subRes->idTable().clone(), &localVocab);
-    LOG(DEBUG) << "BIND result computation done." << std::endl;
+    AD_LOG_DEBUG << "BIND result computation done." << std::endl;
     return {std::move(result), resultSortedOn(), std::move(localVocab)};
   }
-  auto generator =
-      [](auto applyBind,
-         std::shared_ptr<const Result> result) -> Result::Generator {
-    for (auto& [idTable, localVocab] : result->idTables()) {
-      IdTable resultTable = applyBind(std::move(idTable), &localVocab);
-      co_yield {std::move(resultTable), std::move(localVocab)};
-    }
-  }(std::move(applyBind), std::move(subRes));
-  return {std::move(generator), resultSortedOn()};
+
+  return {
+      Result::LazyResult(ad_utility::CachingTransformInputRange(
+          subRes->idTables(),
+          [applyBind = std::move(applyBind)](auto& idTableAndVocab) mutable {
+            // The `LocalVocab` disallows inserts if it doesn't own its
+            // `primaryWordSet` exclusively. We clone the local vocab to enforce
+            // this invariant in all cases
+            LocalVocab localVocab = idTableAndVocab.localVocab_.clone();
+            IdTable resultTable =
+                applyBind(std::move(idTableAndVocab.idTable_), &localVocab);
+            return Result::IdTableVocabPair(std::move(resultTable),
+                                            std::move(localVocab));
+          })),
+      resultSortedOn()};
 }
 
 // _____________________________________________________________________________
@@ -157,8 +188,8 @@ IdTable Bind::computeExpressionBind(
   idTable.addEmptyColumn();
   auto outputColumn = idTable.getColumn(idTable.numColumns() - 1);
 
-  auto visitor = [&]<sparqlExpression::SingleExpressionResult T>(
-                     T&& singleResult) mutable {
+  auto visitor = CPP_template_lambda_mut(&)(typename T)(T && singleResult)(
+      requires sparqlExpression::SingleExpressionResult<T>) {
     constexpr static bool isVariable = std::is_same_v<T, ::Variable>;
     constexpr static bool isStrongId = std::is_same_v<T, Id>;
 
@@ -176,8 +207,7 @@ IdTable Bind::computeExpressionBind(
       constexpr bool isConstant = sparqlExpression::isConstantResult<T>;
 
       auto resultGenerator = sparqlExpression::detail::makeGenerator(
-          std::forward<T>(singleResult), outputColumn.size(),
-          &evaluationContext);
+          AD_FWD(singleResult), outputColumn.size(), &evaluationContext);
 
       if constexpr (isConstant) {
         auto it = resultGenerator.begin();
@@ -206,4 +236,9 @@ IdTable Bind::computeExpressionBind(
   std::visit(visitor, std::move(expressionResult));
 
   return idTable;
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Bind::cloneImpl() const {
+  return std::make_unique<Bind>(_executionContext, _subtree->clone(), _bind);
 }
