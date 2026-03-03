@@ -275,7 +275,8 @@ CartesianProductJoin::calculateSubResults(bool requestLaziness) {
   AD_CORRECTNESS_CHECK(!ql::ranges::empty(children));
   // Get all child results (possibly with limit, see above).
   for (std::shared_ptr<QueryExecutionTree>& childTree : children_) {
-    if (limitIfPresent.has_value() && childTree->benefitsFromLimitOrOffset()) {
+    if (limitIfPresent.has_value() &&
+        childTree->benefitsFromApplyingLimitOrOffset()) {
       childTree->applyLimitOffset(limitIfPresent.value());
       forbiddenToRecompute_ = true;
     }

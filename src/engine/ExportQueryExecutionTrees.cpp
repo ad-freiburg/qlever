@@ -1209,7 +1209,7 @@ void ExportQueryExecutionTrees::compensateForLimitOffsetClause(
     LimitOffsetClause& limitOffsetClause, const QueryExecutionTree& qet) {
   // See the comment in `QueryPlanner::createExecutionTrees` on why this is safe
   // to do
-  if (qet.benefitsFromLimitOrOffset()) {
+  if (qet.benefitsFromApplyingLimitOrOffset()) {
     limitOffsetClause._offset = 0;
   }
 }
