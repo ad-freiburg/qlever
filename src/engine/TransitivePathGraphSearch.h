@@ -75,7 +75,7 @@ struct GraphSearchExecutionParams {
 template <typename T>
 Set breadthFirstSearch(const GraphSearchProblem<T>& gsp,
                        const GraphSearchExecutionParams& ep,
-                      bool skipStartNodeInitially) {
+                       bool skipStartNodeInitially) {
   Queue queue{ep.allocator_};
   Set connectedNodes{ep.allocator_};
 
