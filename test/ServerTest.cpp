@@ -166,6 +166,7 @@ TEST(ServerTest, getQueryId) {
   auto queryId3 = server.getQueryId(req, "SELECT * WHERE { ?a ?b ?c }");
 }
 
+// _____________________________________________________________________________
 TEST(ServerTest, composeStatsJson) {
   Server server{9999, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
   json expectedJson{{"git-hash-index", "git short hash not set"},
@@ -183,6 +184,7 @@ TEST(ServerTest, composeStatsJson) {
   EXPECT_THAT(server.composeStatsJson(), testing::Eq(expectedJson));
 }
 
+// _____________________________________________________________________________
 TEST(ServerTest, createMessageSender) {
   Server server{9999, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
   auto reqWithExplicitQueryId = makeGetRequest("/");
@@ -220,6 +222,7 @@ TEST(ServerTest, createMessageSender) {
       testing::HasSubstr("Assertion `queryHubLock` failed."));
 }
 
+// _____________________________________________________________________________
 TEST(ServerTest, createResponseMetadata) {
   // Setup the datastructures
   const ad_utility::SharedCancellationHandle handle =
@@ -280,6 +283,7 @@ TEST(ServerTest, createResponseMetadata) {
   EXPECT_THAT(metadata["located-triples"], testing::Eq(locatedTriplesJson));
 }
 
+// _____________________________________________________________________________
 TEST(ServerTest, adjustParsedQueryLimitOffset) {
   using enum ad_utility::MediaType;
   auto makePlannedQuery = [](std::string operation) -> Server::PlannedQuery {
@@ -372,6 +376,7 @@ TEST(ServerTest, configurePinnedResultWithName) {
   EXPECT_FALSE(qec->pinResultWithName().has_value());
 }
 
+// _____________________________________________________________________________
 TEST(ServerTest, checkAccessToken) {
   Server server{4321, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
   EXPECT_TRUE(server.checkAccessToken("accessToken"));
@@ -384,6 +389,7 @@ TEST(ServerTest, checkAccessToken) {
   EXPECT_TRUE(server2.checkAccessToken(std::nullopt));
 }
 
+// _____________________________________________________________________________
 MATCHER_P(ContentTypeIs, contentType,
           absl::StrCat("Content-Type is ", negation ? "not " : "",
                        contentType)) {
@@ -397,6 +403,7 @@ MATCHER_P(ContentTypeIs, contentType,
   return actualContentType == contentType;
 }
 
+// _____________________________________________________________________________
 MATCHER_P(StatusIs, status,
           absl::StrCat("status is ", negation ? "not " : "",
                        testing::PrintToString(status))) {
@@ -407,6 +414,7 @@ MATCHER_P(StatusIs, status,
 
 using namespace serverTestHelpers;
 
+// _____________________________________________________________________________
 TEST(ServerTest, gspHead) {
   auto qec = getQec(TestIndexConfig{"<a> <b> <c> . <a> <b> <d> ."});
   SimulateHttpRequest simulateHttpRequest{qec->getIndex().getOnDiskBase()};
@@ -431,6 +439,7 @@ TEST(ServerTest, gspHead) {
   testHead("application/qlever-results+json");
 }
 
+// _____________________________________________________________________________
 TEST(ServerTest, gspGet) {
   auto qec = getQec(TestIndexConfig{"<a> <b> <c> . <a> <b> <d> ."});
   SimulateHttpRequest simulateHttpRequest{qec->getIndex().getOnDiskBase()};
@@ -456,6 +465,7 @@ TEST(ServerTest, gspGet) {
   testGet("text/turtle", testing::Eq("<a> <b> <c> .\n<a> <b> <d> .\n"));
 }
 
+// _____________________________________________________________________________
 TEST(ServerTest, gspPut) {
   auto qec = getQec(TestIndexConfig{"<a> <b> <c> . <a> <b> <d> ."});
   SimulateHttpRequest simulateHttpRequest{qec->getIndex().getOnDiskBase()};
@@ -479,6 +489,7 @@ TEST(ServerTest, gspPut) {
           StatusIs(http::status::created));
 }
 
+// _____________________________________________________________________________
 TEST(ServerTest, gspDelete) {
   auto qec = getQec(TestIndexConfig{"<a> <b> <c> . <a> <b> <d> ."});
   SimulateHttpRequest simulateHttpRequest{qec->getIndex().getOnDiskBase()};
