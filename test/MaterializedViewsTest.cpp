@@ -939,7 +939,7 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
 
   // SpatialJoin push down
 
-  // TODO<ullingerc> Test more advanced cases: Join, Exists, Minus, Union, ...
+  // TODO<ullingerc> Test more advanced cases: Exists, Minus, Union, ...
 }
 
 // Example queries for testing query rewriting.
