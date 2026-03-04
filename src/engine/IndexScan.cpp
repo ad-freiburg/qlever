@@ -61,7 +61,6 @@ IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
     additionalColumns_.push_back(idx);
     additionalVariables_.push_back(variable);
   }
-  // todo sort additionalVariables_
   std::tie(sizeEstimateIsExact_, sizeEstimate_) = computeSizeEstimate();
 
   // Check the following invariant: All the variables must be at the end of the
@@ -115,7 +114,6 @@ IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
   AD_CONTRACT_CHECK(qec != nullptr);
   AD_CONTRACT_CHECK(permutation_ != nullptr);
   AD_CONTRACT_CHECK(locatedTriplesSharedState_ != nullptr);
-  // todo check sorted additionalVariables_
   determineMultiplicities();
 }
 
@@ -256,7 +254,9 @@ VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
       return;
     }
     // All the columns of an index scan only contain defined values.
-    // TODO this is not true for materialized views
+    // TODO<ullingerc> This is not true for materialized views. We should
+    // remember the definedness of columns from the time of writing the view and
+    // store it in the permutation.
     variableToColumnMap[var] = makeAlwaysDefinedColumn(nextColIdx);
     ++nextColIdx;
   };
@@ -1012,15 +1012,18 @@ VariableToColumnMap IndexScan::computePermutationColumnIndices() const {
 
   auto addVar = [this, &varToColInResult, &map](const Variable& var,
                                                 ColumnIndex col) {
+    // Skip variables that are stripped away as they are not available in the
+    // result.
     if (varsToKeep_.has_value() && !varsToKeep_.value().contains(var)) {
       return;
     }
+
     // Deal with potentially undef columns: inherit undef status from main
     // `VariableToColumnMap`.
     map[var] = {col, varToColInResult.at(var).mightContainUndef_};
   };
 
-  // First three columns.
+  // Add those of the first three columns which are read into variables.
   auto spo = getPermutedTriple();
   for (const auto [index, component] : ::ranges::views::enumerate(spo)) {
     if (component->isVariable()) {
@@ -1028,7 +1031,7 @@ VariableToColumnMap IndexScan::computePermutationColumnIndices() const {
     }
   }
 
-  // Additional columns.
+  // Add all additional columns.
   for (const auto& [index, var] :
        ::ranges::views::zip(additionalColumns_, additionalVariables_)) {
     addVar(var, index);

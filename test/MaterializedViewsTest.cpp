@@ -599,6 +599,27 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
             "The materialized view 'testView5' is saved with format version "
             "0, however this version of QLever expects"));
   }
+
+  // Backward compatibility: View with no saved query.
+  {
+    auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
+    manager.writeViewToDisk("testView6", plan);
+    {
+      // Remove the `query` key from the metadata JSON file.
+      nlohmann::json viewInfo;
+      const std::string metadataFilename =
+          "_materializedViewsTestIndex.view.testView6.viewinfo.json";
+      ad_utility::makeIfstream(metadataFilename) >> viewInfo;
+      viewInfo.erase("query");
+      ad_utility::makeOfstream(metadataFilename)
+          << viewInfo.dump() << std::endl;
+    }
+    // Load the view: It can be loaded correctly, but does not have an original
+    // query set.
+    auto view = manager.getView("testView6");
+    EXPECT_FALSE(view->originalQuery().has_value());
+    EXPECT_FALSE(view->parsedQuery().has_value());
+  }
 }
 
 // _____________________________________________________________________________
@@ -996,6 +1017,62 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
   // SpatialJoin push down
 
   // TODO<ullingerc> Test more advanced cases: Exists, Minus, Union, ...
+
+  // Test the variable to permutation column index map.
+  {
+    // The column `?b3` is the fifth column in the permutation, but the second
+    // in the scan result.
+    auto [qet, qec, parsed] = qlv().parseAndPlanQuery(R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT * {
+        ?s view:bindView-b3 ?b3 .
+      }
+    )");
+    auto indexScan = dynamic_cast<IndexScan&>(*qet->getRootOperation());
+
+    VariableToColumnMap expectedVarToColResult{
+        {V{"?s"}, makeAlwaysDefinedColumn(0)},
+        {V{"?b3"}, makeAlwaysDefinedColumn(1)},
+    };
+    EXPECT_THAT(indexScan.getExternallyVisibleVariableColumns(),
+                ::testing::UnorderedElementsAreArray(expectedVarToColResult));
+
+    VariableToColumnMap expectedVarToColPermutation{
+        {V{"?s"}, makeAlwaysDefinedColumn(0)},
+        {V{"?b3"}, makeAlwaysDefinedColumn(4)},
+    };
+    EXPECT_THAT(
+        indexScan.computePermutationColumnIndices(),
+        ::testing::UnorderedElementsAreArray(expectedVarToColPermutation));
+  }
+  {
+    // The same as above, but including `BIND` rewriting, a fixed subject for
+    // the materialized view scan and different variable names.
+    auto [qet, qec, parsed] = qlv().parseAndPlanQuery(R"(
+      PREFIX math: <http://www.w3.org/2005/xpath-functions/math#>
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT * {
+        <s1> view:bindView-o ?x .
+        BIND(math:cos(?x - 1) + 4 AS ?y)
+      }
+    )");
+    auto indexScan = dynamic_cast<IndexScan&>(*qet->getRootOperation());
+
+    VariableToColumnMap expectedVarToColResult{
+        {V{"?x"}, makeAlwaysDefinedColumn(0)},
+        {V{"?y"}, makeAlwaysDefinedColumn(1)},
+    };
+    EXPECT_THAT(indexScan.getExternallyVisibleVariableColumns(),
+                ::testing::UnorderedElementsAreArray(expectedVarToColResult));
+
+    VariableToColumnMap expectedVarToColPermutation{
+        {V{"?x"}, makeAlwaysDefinedColumn(1)},
+        {V{"?y"}, makeAlwaysDefinedColumn(4)},
+    };
+    EXPECT_THAT(
+        indexScan.computePermutationColumnIndices(),
+        ::testing::UnorderedElementsAreArray(expectedVarToColPermutation));
+  }
 }
 
 // Example queries for testing query rewriting.
