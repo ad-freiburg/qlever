@@ -911,11 +911,6 @@ IndexScan::makeTreeWithStrippedColumns(
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 IndexScan::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
-  // TODO Actual logic here
-  // TODO Add `bind._target` to `varsToKeep_` of new scan tree.
-  AD_LOG_INFO << "IndexScan::makeTreeWithBindColumn called with bind: "
-              << bind.getDescriptor() << std::endl;
-
   // Currently only materialized views can provide precomputed `BIND`s.
   auto view = permutation().materializedView();
   if (!view) {
