@@ -12,6 +12,7 @@
 #include "util/GTestHelpers.h"
 #include "util/HttpRequestHelpers.h"
 #include "util/IndexTestHelpers.h"
+#include "util/RuntimeParametersTestHelpers.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/UrlParser.h"
 #include "util/json.h"
@@ -247,9 +248,15 @@ TEST(ServerTest, createResponseMetadata) {
   ad_utility::timer::TimeTracer tracer2(
       "ServerTest::createResponseMetadata tracer2");
   tracer2.endTrace("ServerTest::createResponseMetadata tracer2");
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      Server::createResponseMetadataForUpdate(
+          index, *deltaTriples.getLocatedTriplesSharedStateReference(),
+          plannedQuery, plannedQuery.queryExecutionTree_, UpdateMetadata{},
+          tracer2),
+      testing::HasSubstr("updateMetadata.countBefore_.has_value()"));
   json metadata = Server::createResponseMetadataForUpdate(
-      index, deltaTriples.getSnapshot(), plannedQuery,
-      plannedQuery.queryExecutionTree_, updateMetadata, tracer2);
+      index, *deltaTriples.getLocatedTriplesSharedStateReference(),
+      plannedQuery, plannedQuery.queryExecutionTree_, updateMetadata, tracer2);
   json deltaTriplesJson{
       {"before", {{"inserted", 0}, {"deleted", 0}, {"total", 0}}},
       {"after", {{"inserted", 1}, {"deleted", 0}, {"total", 1}}},
@@ -299,11 +306,27 @@ TEST(ServerTest, adjustParsedQueryLimitOffset) {
   std::string complexQuery{
       "SELECT * WHERE { ?a ?b ?c . FILTER(LANG(?a) = 'en') . "
       "BIND(RAND() as ?r) . } OFFSET 5"};
-  // The export limit is only set for media type `qleverJson`.
+
+  // Check that the export limit is set for `qlever-results+json`.
   expectExportLimit(qleverJson, 12);
   expectExportLimit(qleverJson, 13, "SELECT * WHERE { <a> <b> ?c }",
                     {{"send", {"13"}}});
   expectExportLimit(qleverJson, 13, complexQuery, {{"send", {"13"}}});
+
+  // Check that the export limit is set for `sparql-results+json` if and
+  // only if the runtime parameter `sparql-results-json-with-time`  is set.
+  {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::sparqlResultsJsonWithTime_>(true);
+    expectExportLimit(sparqlJson, 12);
+  }
+  {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::sparqlResultsJsonWithTime_>(false);
+    expectExportLimit(sparqlJson, std::nullopt);
+  }
+
+  // Check that no export limit is set for other media types.
   expectExportLimit(csv, std::nullopt);
   expectExportLimit(csv, std::nullopt, complexQuery);
   expectExportLimit(tsv, std::nullopt);

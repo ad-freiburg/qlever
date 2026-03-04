@@ -62,6 +62,12 @@ std::string SparqlExpressionPimpl::getCacheKey(
   return _pimpl->getCacheKey(variableToColumnMap);
 }
 
+// ___________________________________________________________________________
+bool SparqlExpressionPimpl::isResultAlwaysDefined(
+    const VariableToColumnMap& variableToColumnMap) const {
+  return _pimpl->isResultAlwaysDefined(variableToColumnMap);
+}
+
 // ____________________________________________________________________________
 const std::string& SparqlExpressionPimpl::getDescriptor() const {
   return _pimpl->descriptor();
@@ -98,11 +104,6 @@ auto SparqlExpressionPimpl::getEstimatesForFilterExpression(
 std::vector<PrefilterExprVariablePair>
 SparqlExpressionPimpl::getPrefilterExpressionForMetadata() const {
   return _pimpl->getPrefilterExpressionForMetadata();
-}
-
-// _____________________________________________________________________________
-bool SparqlExpressionPimpl::containsLangExpression() const {
-  return _pimpl->containsLangExpression();
 }
 
 // _____________________________________________________________________________

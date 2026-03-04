@@ -6,7 +6,7 @@
 
 #include <absl/strings/str_join.h>
 
-#include "../../test/engine/ValuesForTesting.h"
+#include "engine/ExplicitIdTableOperation.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 
@@ -151,6 +151,8 @@ void Describe::recursivelyAddBlankNodes(
 // _____________________________________________________________________________
 IdTable Describe::makeAndExecuteJoinWithFullIndex(
     IdTable input, LocalVocab& localVocab) const {
+  // Counter to provide collision-free unique ids.
+  static std::atomic_long uniqueCounter = 0;
   AD_CORRECTNESS_CHECK(input.numColumns() == 1);
 
   // Create a `Join` operation that joins `input` (with column `?subject`) with
@@ -158,9 +160,13 @@ IdTable Describe::makeAndExecuteJoinWithFullIndex(
   // `?subject` column.
   using V = Variable;
   auto subjectVar = V{"?subject"};
-  auto valuesOp = ad_utility::makeExecutionTree<ValuesForTesting>(
-      getExecutionContext(), std::move(input),
-      std::vector<std::optional<Variable>>{subjectVar});
+  auto valuesOp = ad_utility::makeExecutionTree<ExplicitIdTableOperation>(
+      getExecutionContext(), std::make_shared<IdTable>(std::move(input)),
+      VariableToColumnMap{
+          {subjectVar,
+           ColumnIndexAndTypeInfo{0, ColumnIndexAndTypeInfo::AlwaysDefined}}},
+      std::vector<ColumnIndex>{}, LocalVocab{},
+      absl::StrCat("INTERNAL DESCRIBE ", uniqueCounter++));
   SparqlTripleSimple triple{subjectVar, V{"?predicate"}, V{"?object"}};
   auto activeGraphs = describe_.datasetClauses_.activeDefaultGraphs();
   auto indexScan = ad_utility::makeExecutionTree<IndexScan>(

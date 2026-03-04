@@ -50,6 +50,27 @@
   CPP_PP_IGNORE_CXX2A_COMPAT_BEGIN          \
   template <__VA_ARGS__ CPP_TEMPLATE_NO_DEFAULT_SFINAE_AUX_
 
+// The internal implementation of a `CPP_variadic_template_def` macro
+// that can be used for variadic template functions.
+#define CPP_VARIADIC_TEMPLATE_DEF_SFINAE_AUX_0(...)                       \
+  , std::enable_if_t<CPP_PP_CAT(CPP_TEMPLATE_SFINAE_AUX_3_, __VA_ARGS__), \
+                     int> > CPP_PP_IGNORE_CXX2A_COMPAT_END
+
+#define CPP_VARIADIC_TEMPLATE_DEF_SFINAE_AUX_3_requires
+
+#define CPP_VARIADIC_TEMPLATE_DEF_SFINAE_AUX_WHICH_(FIRST, ...) \
+  CPP_PP_EVAL(CPP_PP_CHECK,                                     \
+              CPP_PP_CAT(CPP_TEMPLATE_SFINAE_PROBE_CONCEPT_, FIRST))
+
+#define CPP_VARIADIC_TEMPLATE_DEF_SFINAE_AUX_(...)                       \
+  CPP_PP_CAT(CPP_VARIADIC_TEMPLATE_DEF_SFINAE_AUX_,                      \
+             CPP_VARIADIC_TEMPLATE_DEF_SFINAE_AUX_WHICH_(__VA_ARGS__, )) \
+  (__VA_ARGS__)
+
+#define CPP_variadic_template_def_SFINAE(...) \
+  CPP_PP_IGNORE_CXX2A_COMPAT_BEGIN            \
+  template <__VA_ARGS__ CPP_VARIADIC_TEMPLATE_DEF_SFINAE_AUX_
+
 // The internal reimplementation of a `CPP_template_2` and `CPP_and_2` macro
 // that can be used for class members when the outer class has already been
 // constrained using `CPP_template`.

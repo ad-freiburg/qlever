@@ -814,7 +814,7 @@ class TripleComponentComparator {
             ql::pmr::polymorphic_allocator<Char>(allocator->resource());
         auto ptr = alloc.allocate(s.size());
         ql::ranges::copy(s, ptr);
-        return {ptr, ptr + s.size()};
+        return {ptr, s.size()};
       };
       LocaleManager::SortKeyView sortKey;
       auto writeSortKey = [&sortKey, &add](const uint8_t* begin, size_t sz) {

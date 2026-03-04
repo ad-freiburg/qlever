@@ -51,8 +51,8 @@ class Literal {
   }
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Literal, content_, beginOfSuffix_)
 
-  const std::string& toStringRepresentation() const;
-  std::string& toStringRepresentation();
+  const std::string& toStringRepresentation() const&;
+  std::string toStringRepresentation() &&;
 
   static Literal fromStringRepresentation(std::string internal);
 

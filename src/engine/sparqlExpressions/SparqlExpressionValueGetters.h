@@ -15,6 +15,7 @@
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "global/Constants.h"
 #include "global/Id.h"
+#include "global/ValueId.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "util/ConstexprSmallString.h"
@@ -371,6 +372,16 @@ struct UnitOfMeasurementValueGetter : Mixin<UnitOfMeasurementValueGetter> {
   static UnitOfMeasurement litOrIriToUnit(const LiteralOrIri& s);
 };
 
+// This value getter retrieves geometries: `GeoPoints` or literals with
+// `geo:wktLiteral` datatype.
+struct GeoPointOrWktValueGetter : Mixin<GeoPointOrWktValueGetter> {
+  using Mixin<GeoPointOrWktValueGetter>::operator();
+  std::optional<ad_utility::GeoPointOrWkt> operator()(
+      ValueId id, const EvaluationContext*) const;
+  std::optional<ad_utility::GeoPointOrWkt> operator()(
+      const LiteralOrIri&, const EvaluationContext*) const;
+};
+
 // `LanguageTagValueGetter` returns an `std::optional<std::string>` object
 // which contains the language tag if previously set w.r.t. given
 // `Id`/`Literal`. This ValueGetter is currently used within
@@ -450,6 +461,16 @@ struct StringOrDateGetter : Mixin<StringOrDateGetter> {
                              const EvaluationContext* context) const {
     return LiteralFromIdGetter{}(litOrIri, context);
   }
+};
+
+// Value getter that returns only integer values (unlike `NumericValueGetter`
+// which returns double or int).
+struct IntValueGetter : Mixin<IntValueGetter> {
+  using Mixin<IntValueGetter>::operator();
+  std::optional<int64_t> operator()(const LiteralOrIri& litOrIri,
+                                    const EvaluationContext*) const;
+
+  std::optional<int64_t> operator()(ValueId id, const EvaluationContext*) const;
 };
 
 }  // namespace sparqlExpression::detail

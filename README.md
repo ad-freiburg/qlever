@@ -68,7 +68,7 @@ overridden) via a command-line option with the same name, see `qlever <command>
 
 This is not recommended but can be useful or necessary in certain (in
 particular, non-interactive) environments. QLever's main binaries are called
-`IndexBuilderMain` (for loading and indexing data) and `ServerMain` (for
+`qlever-index` (for loading and indexing data) and `qlever-server` (for
 querying the data). Each of these has a `--help` option that describes the
 available options.
 

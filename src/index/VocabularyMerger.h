@@ -194,7 +194,7 @@ class VocabularyMerger {
   // we will store pairs of <partialId, globalId>
   std::vector<IdMapWriter> idMaps_;
 
-  const size_t bufferSize_ = BATCH_SIZE_VOCABULARY_MERGE;
+  const size_t bufferSize_ = BATCH_SIZE_VOCABULARY_MERGE();
 
   // Friend declaration for the publicly available function.
   template <typename W, typename C>
@@ -234,10 +234,13 @@ class VocabularyMerger {
     [[nodiscard]] const auto& id() const { return entry_.index_; }
   };
 
-  constexpr static auto sizeOfQueueWord = [](const QueueWord& q) {
-    return ad_utility::MemorySize::bytes(sizeof(QueueWord) +
-                                         q.entry_.iriOrLiteral().size());
+  struct SizeOfQueueWord {
+    ad_utility::MemorySize operator()(const QueueWord& q) const {
+      return ad_utility::MemorySize::bytes(sizeof(QueueWord) +
+                                           q.entry_.iriOrLiteral().size());
+    }
   };
+  constexpr static SizeOfQueueWord sizeOfQueueWord{};
 
   // Write the queue words in the buffer to their corresponding `idMaps`.
   // The `QueueWord`s must be passed in alphabetical order wrt `lessThan` (also
@@ -281,7 +284,7 @@ ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
  * @param els  Must be sorted(at least duplicates must be adjacent) according to
  * the strings and the Ids must be unique to work correctly.
  */
-ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec* els);
+ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els);
 
 /**
  * @brief for each of the IdTriples in <input>: map the three Ids using the

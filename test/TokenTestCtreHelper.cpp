@@ -2,7 +2,7 @@
 //  Structures. Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 #include "TokenTestCtreHelper.h"
 
-#include "../src/parser/TokenizerCtre.h"
+#include "parser/TokenizerCtre.h"
 
 using T = TurtleTokenCtre;
 

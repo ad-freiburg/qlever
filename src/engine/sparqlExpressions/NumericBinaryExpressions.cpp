@@ -339,12 +339,30 @@ CPP_template(typename BinaryPrefilterExpr, typename NaryOperation)(
       bool isNegated) const override {
     const auto& children = this->children();
     AD_CORRECTNESS_CHECK(children.size() == 2);
-    auto leftChild =
-        children[0].get()->getPrefilterExpressionForMetadata(isNegated);
-    auto rightChild =
-        children[1].get()->getPrefilterExpressionForMetadata(isNegated);
+    auto leftChild = children[0]->getPrefilterExpressionForMetadata(isNegated);
+    auto rightChild = children[1]->getPrefilterExpressionForMetadata(isNegated);
     return constructPrefilterExpr::getMergeFunction<BinaryPrefilterExpr>(
         isNegated)(std::move(leftChild), std::move(rightChild));
+  }
+
+  std::optional<SparqlExpression::LangFilterData> getLanguageFilterExpression()
+      const override {
+    if constexpr (!std::is_same_v<BinaryPrefilterExpr,
+                                  prefilterExpressions::OrExpression>) {
+      return std::nullopt;
+    }
+    // Concatenate filters for the case of
+    // `LANG(?abc) = "en" || LANG(?abc) = "mul"` and so on.
+    const auto& children = this->children();
+    AD_CORRECTNESS_CHECK(children.size() == 2);
+    auto leftFilter = children[0]->getLanguageFilterExpression();
+    auto rightFilter = children[1]->getLanguageFilterExpression();
+    if (leftFilter.has_value() && rightFilter.has_value() &&
+        leftFilter->variable_ == rightFilter->variable_) {
+      leftFilter->languages_.merge(rightFilter->languages_);
+      return leftFilter;
+    }
+    return std::nullopt;
   }
 };
 

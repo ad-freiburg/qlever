@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "backports/concepts.h"
+#include "backports/span.h"
 #include "backports/type_traits.h"
 #include "util/Forward.h"
 
@@ -145,6 +146,24 @@ constexpr static bool isArray<std::array<T, N>> = true;
 // `SimilarToArray` is also true for `std::array<...>&`, etc.
 template <typename T>
 CPP_concept SimilarToArray = isArray<std::decay_t<T>>;
+
+// Same as `isArray` above, but for `ql::span`.
+template <typename T>
+constexpr static bool isSpan = false;
+
+template <typename T, size_t N>
+constexpr static bool isSpan<ql::span<T, N>> = true;
+
+// `SimilarToSpan` is also true for `ql::span<...>&`, etc.
+template <typename T>
+CPP_concept SimilarToSpan = isSpan<std::decay_t<T>>;
+
+// `static_assert` tests for `isSpan` and `SimilarToSpan`.
+static_assert(isSpan<ql::span<int>>);
+static_assert(isSpan<ql::span<std::string, 37>>);
+static_assert(!isSpan<std::array<int, 3>>);
+static_assert(!isSpan<ql::span<int>&>);
+static_assert(SimilarToSpan<ql::span<int>&>);
 
 /// Two types are similar, if they are the same when we remove all cv (const or
 /// volatile) qualifiers and all references
@@ -283,7 +302,7 @@ inline auto visitWithVariantsAndParameters =
 template <typename Function, typename Tuple>
 auto applyFunctionToEachElementOfTuple(Function&& f, Tuple&& tuple) {
   auto transformer = [f = std::forward<Function>(f)](auto&&... args) {
-    return std::tuple{f(AD_FWD(args))...};
+    return std::make_tuple(f(AD_FWD(args))...);
   };
   return std::apply(transformer, std::forward<Tuple>(tuple));
 }

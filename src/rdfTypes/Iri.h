@@ -43,8 +43,8 @@ class Iri {
 
   static Iri fromStringRepresentation(std::string s);
 
-  const std::string& toStringRepresentation() const;
-  std::string& toStringRepresentation();
+  const std::string& toStringRepresentation() const&;
+  std::string toStringRepresentation() &&;
 
   // Create a new `Ìri` given an IRI string with brackets.
   static Iri fromIriref(std::string_view stringWithBrackets);

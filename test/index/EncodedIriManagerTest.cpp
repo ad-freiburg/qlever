@@ -126,4 +126,35 @@ TEST(EncodedIriManager, emptyPrefixes) {
   EXPECT_FALSE(em.encode("<http://www.wikidata.org/entity/Q42>").has_value());
 }
 
+// _____________________________________________________________________________
+TEST(EncodedIriManager, splitIntoPrefixIdxAndPayload) {
+  EncodedIriManager em{{"blabb", "blubb"}};
+  auto id = em.encode("<blubb42>");
+  ASSERT_TRUE(id.has_value());
+  auto [prefixIdx, payload] =
+      EncodedIriManager::splitIntoPrefixIdxAndPayload(id.value());
+  EXPECT_EQ(prefixIdx, 1);
+  std::string result;
+  EncodedIriManager::decodeDecimalFrom64Bit(result, payload);
+  EXPECT_EQ(result, "42");
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      EncodedIriManager::splitIntoPrefixIdxAndPayload(Id::makeUndefined()),
+      ::testing::HasSubstr("must be `EncodedVal`"));
+}
+
+// _____________________________________________________________________________
+TEST(EncodedIriManager, toStringWithGivenPrefix) {
+  auto str = EncodedIriManager::toStringWithGivenPrefix(
+      EncodedIriManager::encodeDecimalToNBit("7643"), "<blibb_");
+  EXPECT_EQ(str, "<blibb_7643>");
+}
+
+// _____________________________________________________________________________
+TEST(EncodedIriManager, makeIdFromPrefixIdxAndPayload) {
+  EncodedIriManager em{{"blabb", "blubb"}};
+  auto id = EncodedIriManager::makeIdFromPrefixIdxAndPayload(
+      1, EncodedIriManager::encodeDecimalToNBit("7643"));
+  EXPECT_EQ(em.toString(id), "<blubb7643>");
+}
+
 }  // namespace

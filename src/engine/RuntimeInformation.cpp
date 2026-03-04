@@ -168,12 +168,14 @@ size_t RuntimeInformation::getOperationCostEstimate() const {
 // __________________________________________________________________________
 std::string_view RuntimeInformation::toString(Status status) {
   switch (status) {
-    case fullyMaterialized:
-      return "fully materialized";
-    case lazilyMaterialized:
-      return "lazily materialized";
-    case inProgress:
-      return "in progress";
+    case fullyMaterializedCompleted:
+      return "fully materialized completed";
+    case lazilyMaterializedInProgress:
+      return "lazily materialized in progress";
+    case lazilyMaterializedCompleted:
+      return "lazily materialized completed";
+    case fullyMaterializedInProgress:
+      return "fully materialized in progress";
     case notStarted:
       return "not started";
     case optimizedOut:

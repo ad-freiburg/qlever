@@ -28,9 +28,10 @@ class QueryToSocketDistributor
   /// Strand to synchronize all operations on this class
   net::strand<net::any_io_executor> strand_;
   mutable net::steady_timer infiniteTimer_;
-  /// Vector that stores the actual data, so all websockets can read it at
-  /// their own pace.
-  std::vector<std::shared_ptr<const std::string>> data_{};
+  /// Newest piece of data.
+  std::shared_ptr<const std::string> data_{};
+  /// Version counter for data.
+  size_t currentIndex_ = 0;
   /// Flag to indicate if a query ended and won't receive any more updates.
   ql::atomic_flag finished_;
 
@@ -72,9 +73,10 @@ class QueryToSocketDistributor
   /// Awaitable object to wait for and fetch the next available piece of data
   /// for the websocket. co_returns a nullptr if no more data is available.
   /// Must be awaited on the strand returned by `strand()`, else an exception is
-  /// thrown.
-  net::awaitable<std::shared_ptr<const std::string>> waitForNextDataPiece(
-      size_t index) const;
+  /// thrown. The second value being returned indicates the version number of
+  /// the data returned.
+  net::awaitable<std::pair<std::shared_ptr<const std::string>, size_t>>
+  waitForNextDataPiece(size_t oldIndex) const;
 };
 }  // namespace ad_utility::websocket
 

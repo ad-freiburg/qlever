@@ -31,16 +31,16 @@ NARY_EXPRESSION(
     CentroidExpression, 1,
     FV<ad_utility::WktCentroid, GeometryInfoValueGetter<ad_utility::Centroid>>);
 
-NARY_EXPRESSION(DistExpression, 2,
-                FV<NumericIdWrapper<ad_utility::WktDistGeoPoints, true>,
-                   GeoPointValueGetter>);
+NARY_EXPRESSION(
+    DistExpression, 2,
+    FV<NumericIdWrapper<ad_utility::WktDist, true>, GeoPointOrWktValueGetter>);
 NARY_EXPRESSION(MetricDistExpression, 2,
-                FV<NumericIdWrapper<ad_utility::WktMetricDistGeoPoints, true>,
-                   GeoPointValueGetter>);
+                FV<NumericIdWrapper<ad_utility::WktMetricDist, true>,
+                   GeoPointOrWktValueGetter>);
 NARY_EXPRESSION(
     DistWithUnitExpression, 3,
-    FV<NumericIdWrapper<ad_utility::WktDistGeoPoints, true>,
-       GeoPointValueGetter, GeoPointValueGetter, UnitOfMeasurementValueGetter>);
+    FV<NumericIdWrapper<ad_utility::WktDist, true>, GeoPointOrWktValueGetter,
+       GeoPointOrWktValueGetter, UnitOfMeasurementValueGetter>);
 
 NARY_EXPRESSION(
     AreaExpression, 2,
@@ -65,6 +65,10 @@ NARY_EXPRESSION(
 NARY_EXPRESSION(MetricLengthExpression, 1,
                 FV<ad_utility::WktMetricLength,
                    GeometryInfoValueGetter<ad_utility::MetricLength>>);
+
+NARY_EXPRESSION(
+    GeometryNExpression, 2,
+    FV<ad_utility::WktGeometryN, GeoPointOrWktValueGetter, IntValueGetter>);
 
 template <SpatialJoinType Relation>
 NARY_EXPRESSION(
@@ -157,6 +161,13 @@ SparqlExpression::Ptr makeLengthExpression(SparqlExpression::Ptr child1,
 // _____________________________________________________________________________
 SparqlExpression::Ptr makeMetricLengthExpression(SparqlExpression::Ptr child1) {
   return std::make_unique<MetricLengthExpression>(std::move(child1));
+}
+
+// _____________________________________________________________________________
+SparqlExpression::Ptr makeGeometryNExpression(SparqlExpression::Ptr child1,
+                                              SparqlExpression::Ptr child2) {
+  return std::make_unique<GeometryNExpression>(std::move(child1),
+                                               std::move(child2));
 }
 
 // _____________________________________________________________________________

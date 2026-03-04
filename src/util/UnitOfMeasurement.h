@@ -10,26 +10,45 @@
 #include "global/Constants.h"
 
 enum class UnitOfMeasurement {
+  // Length units
   METERS,
   KILOMETERS,
   MILES,
+  FEET,
+  YARDS,
+  // Area units
   SQUARE_METERS,
   SQUARE_KILOMETERS,
   SQUARE_MILES,
+  SQUARE_FEET,
+  SQUARE_YARDS,
+  ACRE,
+  ARE,
+  HECTARE,
+  // Fallback
   UNKNOWN
 };
 
 constexpr inline std::string_view UNIT_PREFIX = "http://qudt.org/vocab/unit/";
 
 namespace string_constants::detail {
+
+// Length units
 constexpr inline std::string_view unit_meter = "M";
 constexpr inline std::string_view unit_kilometer = "KiloM";
 constexpr inline std::string_view unit_mile = "MI";
-constexpr inline std::string_view unit_square_meter = "M2";
-constexpr inline std::string_view unit_square_kilometer = "KiloM2";
-constexpr inline std::string_view unit_square_mile = "MI2";
+constexpr inline std::string_view unit_feet = "FT";
+constexpr inline std::string_view unit_yards = "YD";
+
+// Area units
+constexpr inline std::string_view unit_acre = "AC";
+constexpr inline std::string_view unit_are = "ARE";
+constexpr inline std::string_view unit_hectare = "HA";
+constexpr inline std::string_view unit_square = "2";
+
 }  // namespace string_constants::detail
 
+// Length units
 constexpr inline std::string_view UNIT_METER_IRI =
     ad_utility::constexprStrCat<UNIT_PREFIX,
                                 string_constants::detail::unit_meter>();
@@ -39,21 +58,51 @@ constexpr inline std::string_view UNIT_KILOMETER_IRI =
 constexpr inline std::string_view UNIT_MILE_IRI =
     ad_utility::constexprStrCat<UNIT_PREFIX,
                                 string_constants::detail::unit_mile>();
+constexpr inline std::string_view UNIT_FEET_IRI =
+    ad_utility::constexprStrCat<UNIT_PREFIX,
+                                string_constants::detail::unit_feet>();
+constexpr inline std::string_view UNIT_YARDS_IRI =
+    ad_utility::constexprStrCat<UNIT_PREFIX,
+                                string_constants::detail::unit_yards>();
+
+// Area units
 constexpr inline std::string_view UNIT_SQUARE_METER_IRI =
-    ad_utility::constexprStrCat<UNIT_PREFIX,
-                                string_constants::detail::unit_square_meter>();
+    ad_utility::constexprStrCat<UNIT_METER_IRI,
+                                string_constants::detail::unit_square>();
 constexpr inline std::string_view UNIT_SQUARE_KILOMETER_IRI =
-    ad_utility::constexprStrCat<
-        UNIT_PREFIX, string_constants::detail::unit_square_kilometer>();
+    ad_utility::constexprStrCat<UNIT_KILOMETER_IRI,
+                                string_constants::detail::unit_square>();
 constexpr inline std::string_view UNIT_SQUARE_MILE_IRI =
+    ad_utility::constexprStrCat<UNIT_MILE_IRI,
+                                string_constants::detail::unit_square>();
+constexpr inline std::string_view UNIT_SQUARE_FEET_IRI =
+    ad_utility::constexprStrCat<UNIT_FEET_IRI,
+                                string_constants::detail::unit_square>();
+constexpr inline std::string_view UNIT_SQUARE_YARDS_IRI =
+    ad_utility::constexprStrCat<UNIT_YARDS_IRI,
+                                string_constants::detail::unit_square>();
+constexpr inline std::string_view UNIT_ACRE_IRI =
     ad_utility::constexprStrCat<UNIT_PREFIX,
-                                string_constants::detail::unit_square_mile>();
+                                string_constants::detail::unit_acre>();
+constexpr inline std::string_view UNIT_ARE_IRI =
+    ad_utility::constexprStrCat<UNIT_PREFIX,
+                                string_constants::detail::unit_are>();
+constexpr inline std::string_view UNIT_HECTARE_IRI =
+    ad_utility::constexprStrCat<UNIT_PREFIX,
+                                string_constants::detail::unit_hectare>();
 
 namespace ad_utility::detail {
 
 static constexpr double kilometerToMile = 0.62137119;
+static constexpr double meterToFeet = 3.28084;
+static constexpr double kilometerToFeet = meterToFeet * 1000;
+static constexpr double meterToYards = 1.093613;
+static constexpr double kilometerToYards = meterToYards * 1000;
 static constexpr double squareMeterToSquareMile =
     (kilometerToMile / 1000) * (kilometerToMile / 1000);
+static constexpr double squareMeterToAcre = 1 / 4046.8564224;
+static constexpr double squareMeterToSquareFeet = meterToFeet * meterToFeet;
+static constexpr double squareMeterToSquareYard = meterToYards * meterToYards;
 
 // Convert kilometers to other supported units. If `unit` is `std::nullopt` it
 // is treated as kilometers.

@@ -1,4 +1,4 @@
-// Copyright 2024, University of Freiburg
+// Copyright 2024 - 2025, University of Freiburg
 // Chair of Algorithms and Data Structures
 // Authors: Johannes Herrmann <johannes.r.herrmann(at)gmail.com>
 //          Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
@@ -63,6 +63,18 @@ struct MagicServiceQuery {
    * @param childGraphPattern
    */
   virtual void addGraph(const GraphPatternOperation& childGraphPattern);
+
+  // Helper that throws if the current configuration values of this
+  // `MagicServiceQuery` is invalid. We need this because `MagicServiceQuery`
+  // objects are incrementally constructed by adding configuration triples.
+  // Using this function the final state of the object can be checked.
+  virtual void validate() const {
+      // Currently most `MagicServiceQuery` implementations do not make use of
+      // this method. Thus it is empty by default.
+  };
+
+  // Helper that returns a readable name for the type of `MagicServiceQuery`.
+  virtual constexpr std::string_view name() const = 0;
 
  protected:
   // Utility functions for variables in the magic service configuration triples

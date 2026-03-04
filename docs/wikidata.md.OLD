@@ -61,7 +61,7 @@ inside the container e.g. by running `chmod -R o+rw ./index`
     docker run -it --rm \
         -v "$(pwd)/wikidata-input/:/input" \
         -v "$(pwd)/index:/index" --entrypoint "bash" qlever
-    qlever@xyz:/app$ bzcat /input/latest-all.ttl.bz2 | IndexBuilderMain -l -i /index/wikidata-full \
+    qlever@xyz:/app$ bzcat /input/latest-all.ttl.bz2 | qlever-index -l -i /index/wikidata-full \
         -F ttl -f - \
         -s /input/wikidata_settings.json
     … wait for about half a day …
@@ -71,7 +71,7 @@ In case you don't want to download and save the `.ttl.bz2` file first the second
 
     qlever@xyz:/app$ wget -O - https://dumps.wikimedia.org/wikidatawiki/entities/latest-all.ttl.bz2 \
                    | bzcat /input/latest-all.ttl.bz2
-                   | IndexBuilderMain -l -i /index/wikidata-full -F ttl -f - \
+                   | qlever-index -l -i /index/wikidata-full -F ttl -f - \
                                       -s /input/wikidata_settings.json
 
 ## Run QLever

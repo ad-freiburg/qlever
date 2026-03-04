@@ -190,7 +190,7 @@ class IteratorForAccessOperator {
 };
 
 /// If `T` is a type that can safely be moved from (e.g. std::vector<int> or
-/// std::vector<int>&&), then return `std::make_move_iterator(iterator)`. Else
+/// std::vector<int>&&), then return `ql::make_move_iterator(iterator)`. Else
 /// (for example if `T` is `std::vector<int>&` or `const std::vector<int>&` the
 /// iterator is returned unchanged. Typically used in generic code where we need
 /// the semantics of "if `std::forward` would move the container, we can also
@@ -198,7 +198,7 @@ class IteratorForAccessOperator {
 template <typename T, typename It>
 auto makeForwardingIterator(It iterator) {
   if constexpr (std::is_rvalue_reference_v<T&&>) {
-    return std::make_move_iterator(iterator);
+    return ql::make_move_iterator(iterator);
   } else {
     return iterator;
   }
@@ -589,6 +589,42 @@ ql::ranges::range_value_t<Range> getSingleElement(Range&& range) {
   AD_CORRECTNESS_CHECK(++it == ql::ranges::end(range));
   return t;
 }
+
+// An output iterator that allows to use call a lambda for every write, similar
+// to `std::back_insert_iterator`, but for arbitrary assignment operations
+// instead of just `push_back`.
+template <typename Func>
+class IteratorForAssigmentOperator {
+  ::ranges::semiregular_box_t<Func> func_;
+
+  class Proxy {
+    Func& func_;
+
+   public:
+    Proxy(Func& func) : func_{func} {}
+
+    CPP_template(typename T)(requires ql::concepts::invocable<Func, T&&>) void
+    operator=(T&& value) const {
+      std::invoke(func_, AD_FWD(value));
+    }
+  };
+
+ public:
+  using iterator_category = std::output_iterator_tag;
+  using difference_type = std::ptrdiff_t;
+  using value_type = void;
+  using pointer = void;
+  using reference = Proxy;
+
+  IteratorForAssigmentOperator(Func func) : func_{std::move(func)} {}
+  Proxy operator*() { return Proxy{func_}; }
+
+  IteratorForAssigmentOperator& operator++() { return *this; }
+  IteratorForAssigmentOperator& operator++(int) { return *this; }
+};
+
+static_assert(
+    std::output_iterator<IteratorForAssigmentOperator<void (*)(int)>, int>);
 }  // namespace ad_utility
 
 // `IteratorRanges` are `borrowed ranges`, as their iterators outlive the actual
