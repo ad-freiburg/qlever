@@ -213,7 +213,7 @@ CPP_template(typename V, typename F)(
     : public ql::ranges::view_interface<CallbackOnEndView<V, F>> {
  private:
   V base_;
-  F callback_;
+  ::ranges::semiregular_box_t<F> callback_;
   // Don't invoke the callback if the view was moved from.
   ad_utility::ResetWhenMoved<bool, true> called_ = false;
 
@@ -284,7 +284,9 @@ CPP_template(typename V, typename F)(
     if constexpr (isNoexcept) {
       maybeInvoke();
     } else {
-      throwIfSafe_([this]() { maybeInvoke(); });
+      if (!called_) {
+        throwIfSafe_([this]() { maybeInvoke(); });
+      }
     }
   }
 

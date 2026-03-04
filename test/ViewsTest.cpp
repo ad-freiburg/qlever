@@ -191,6 +191,26 @@ TEST(Views, CallbackOnEndView) {
   EXPECT_EQ(numCalls, 3);
 }
 
+TEST(Views, CallbackOnEndViewConcepts) {
+  [[maybe_unused]] auto nonthrowing = [](auto&&...) noexcept {};
+  using V =
+      ad_utility::CallbackOnEndView<ql::ranges::ref_view<std::vector<int>>,
+                                    decltype(nonthrowing)>;
+  static_assert(ql::ranges::input_range<V>);
+  static_assert(!ql::ranges::forward_range<V>);
+
+  [[maybe_unused]] auto throwing = [](auto&&...) {};
+  using V2 =
+      ad_utility::CallbackOnEndView<ql::ranges::ref_view<std::vector<int>>,
+                                    decltype(throwing)>;
+  static_assert(ql::ranges::input_range<V2>);
+  static_assert(!ql::ranges::forward_range<V2>);
+
+  // V2 has a potentially throwing destructor, so it doesn't fulfill the `view`
+  // concept.
+  static_assert(!ql::ranges::view<V2>);
+}
+
 #endif
 
 // Add the behavior of `CallbackOnEndView` when the callback is invoked in the
