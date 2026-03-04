@@ -242,6 +242,10 @@ class MaterializedView {
   // If the materialized view contains a top-level `BIND` statement where the
   // expression matches the given cache key, return the column index of the
   // `BIND`'s target variable.
+  //
+  // IMPORTANT: This works only if the caller can guarantee that the variables
+  // in the `BIND` expression have been mapped to exactly the same column
+  // indices as in the view while generating the cache key.
   std::optional<size_t> lookupBindTargetColumn(
       const std::string& bindCacheKey) const;
 };
