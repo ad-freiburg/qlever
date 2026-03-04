@@ -38,11 +38,12 @@ struct SimulateHttpRequest {
     boost::asio::io_context io;
     std::future<ResT> fut = co_spawn(
         io,
-        [&io](auto request, auto indexName) -> boost::asio::awaitable<ResT> {
+        [](auto request, auto indexName) -> boost::asio::awaitable<ResT> {
           // Initialize but do not start a `Server` instance on our test index.
           Server server{4321, 1, ad_utility::MemorySize::megabytes(1),
                         "accessToken"};
           server.initialize(indexName, false);
+          boost::asio::io_context io;
           auto queryHub = std::make_shared<ad_utility::websocket::QueryHub>(io);
           server.queryHub_ = queryHub;
 
@@ -55,7 +56,8 @@ struct SimulateHttpRequest {
         }(request, indexBaseName_),
         boost::asio::use_future);
     io.run();
-    return fut.get();
+    auto res = fut.get();
+    return res;
   }
 
   // Given an HTTP request, apply the `Server::process` method on this request
