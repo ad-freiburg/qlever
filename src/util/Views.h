@@ -223,9 +223,8 @@ CPP_template(typename V, typename F)(
   // would terminate the program because other exceptions are in flight during
   // stack unwinding.
   static constexpr bool isNoexcept = std::is_nothrow_invocable_v<F>;
-  struct Dummy {};
   using ThrowIfSafe =
-      std::conditional_t<isNoexcept, Dummy, ThrowInDestructorIfSafe>;
+      std::conditional_t<isNoexcept, std::monostate, ThrowInDestructorIfSafe>;
   [[no_unique_address]] ThrowIfSafe throwIfSafe_;
 
   // Invoke the `callback` iff it hasn't been invoked yet.
@@ -284,9 +283,7 @@ CPP_template(typename V, typename F)(
     if constexpr (isNoexcept) {
       maybeInvoke();
     } else {
-      if (!called_) {
-        throwIfSafe_([this]() { maybeInvoke(); });
-      }
+      throwIfSafe_([this]() { maybeInvoke(); });
     }
   }
 
