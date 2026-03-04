@@ -282,14 +282,6 @@ BindExpressionAndTargetCol extractBindExpressions(
     const ParsedQuery& parsed, const VariableToColumnMap& varToColMap) {
   BindExpressionAndTargetCol map;
 
-  // The `BIND` cache requires that the query only contains a single
-  // `BasicGraphPattern` plus `BIND`s.
-  auto filtered = graphPatternInvariantFilter(parsed);
-  if (filtered.size() != 1 ||
-      !std::holds_alternative<parsedQuery::BasicGraphPattern>(filtered.at(0))) {
-    return map;
-  }
-
   // Iterate over all `BIND`s in the parsed query and add them to the cache.
   for (const auto& bind :
        ad_utility::filterRangeOfVariantsByType<parsedQuery::Bind>(
