@@ -46,6 +46,19 @@ class UriParserUri {
                       "Failed to parse URI: ", uriString);
   }
 
+  static UriParserUri fromFilename(const std::string& filename) {
+    std::string uriBuffer;
+    uriBuffer.resize(7 + 3 * filename.size());
+    auto parseResult =
+        uriUnixFilenameToUriStringA(filename.c_str(), uriBuffer.data());
+    AD_CONTRACT_CHECK(parseResult == URI_SUCCESS,
+                      "Failed to parse filename as URI: ", filename);
+    // Find the position of the null terminator added by
+    // `uriUnixFilenameToUriStringA`.
+    return UriParserUri{
+        std::string_view{uriBuffer.data(), std::strlen(uriBuffer.c_str())}};
+  }
+
   const UriUriA& get() const { return uri_; }
 
   UriParserUri(const UriParserUri& other) noexcept {
