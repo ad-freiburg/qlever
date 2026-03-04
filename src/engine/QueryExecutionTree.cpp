@@ -149,7 +149,7 @@ bool QueryExecutionTree::isVariableCovered(Variable variable) const {
 
 // _______________________________________________________________________
 void QueryExecutionTree::readFromCache() {
-  if (!qec_) {
+  if (!qec_ || qec_->disableCaching()) {
     return;
   }
   auto& cache = qec_->getQueryTreeCache();

@@ -798,7 +798,7 @@ TEST(Operation, checkMaxCacheSizeIsComputedCorrectly) {
 }
 
 // _____________________________________________________________________________
-TEST(OperationTest, disableCaching) {
+TEST(OperationTest, disableCachingForOperation) {
   auto qec = getQec();
   qec->getQueryTreeCache().clearAll();
   std::vector<IdTable> idTablesVector{};
@@ -832,5 +832,30 @@ TEST(OperationTest, disableCaching) {
   qec->getQueryTreeCache().clearAll();
   EXPECT_FALSE(qec->getQueryTreeCache().cacheContains(cacheKey));
   valuesForTesting.getResult(false);
+  EXPECT_FALSE(qec->getQueryTreeCache().cacheContains(cacheKey));
+}
+
+// _____________________________________________________________________________
+TEST(OperationTest, disableCachingGlobally) {
+  auto qecPtr = getQec();
+  auto qecCopy = *qecPtr;
+  qecCopy.disableCaching_ = true;
+  auto* qec = &qecCopy;
+  qec->getQueryTreeCache().clearAll();
+  std::vector<IdTable> idTablesVector{};
+  idTablesVector.push_back(makeIdTableFromVector({{3, 4}}));
+  idTablesVector.push_back(makeIdTableFromVector({{7, 8}, {9, 123}}));
+  ValuesForTesting valuesForTesting{
+      qec, std::move(idTablesVector), {Variable{"?x"}, Variable{"?y"}}, true};
+
+  EXPECT_THAT(valuesForTesting.getCacheKey(), ::testing::IsEmpty());
+
+  QueryCacheKey cacheKey{valuesForTesting.getCacheKey(),
+                         qec->locatedTriplesState().index_};
+
+  // Initially not contained in the cache (because we cleared the cache).
+  EXPECT_FALSE(qec->getQueryTreeCache().cacheContains(cacheKey));
+  valuesForTesting.getResult(true);
+  // Still not stored in the cache, because caching was disabled.
   EXPECT_FALSE(qec->getQueryTreeCache().cacheContains(cacheKey));
 }

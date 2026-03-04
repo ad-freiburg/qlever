@@ -228,3 +228,38 @@ TEST(LibQlever, loadIndexWithoutPermutations) {
       engine.query(queryNeedingPermutations, ad_utility::MediaType::tsv),
       HasSubstr("permutation to be loaded"));
 }
+
+// _____________________________________________________________________________
+TEST(LibQlever, disableCaching) {
+  std::string filename = "libQleverDisableCaching.ttl";
+  {
+    auto ofs = ad_utility::makeOfstream(filename);
+    ofs << "<s> <p> <o>. <s2> <p2> \"literal\".";
+  }
+
+  IndexBuilderConfig c;
+  c.inputFiles_.push_back({filename, Filetype::Turtle, std::nullopt});
+  c.baseName_ = "testIndexWithoutPermutations";
+  c.memoryLimit_ = std::nullopt;
+
+  // Build the index normally.
+  EXPECT_NO_THROW(Qlever::buildIndex(c));
+
+  EngineConfig ec{c};
+  {
+    // Load the index with `disableCaching` set to true.
+    ec.disableCaching_ = true;
+    Qlever engine{ec};
+    auto plan = engine.parseAndPlanQuery("SELECT ?s WHERE {?x <p> ?o}");
+    auto& qec = std::get<1>(plan);
+    EXPECT_TRUE(qec->disableCaching());
+  }
+  {
+    // Load the index with `disableCaching` set to false.
+    ec.disableCaching_ = false;
+    Qlever engine{ec};
+    auto plan = engine.parseAndPlanQuery("SELECT ?s WHERE {?x <p> ?o}");
+    auto& qec = std::get<1>(plan);
+    EXPECT_FALSE(qec->disableCaching());
+  }
+}

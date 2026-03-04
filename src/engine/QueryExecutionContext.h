@@ -6,6 +6,8 @@
 #ifndef QLEVER_SRC_ENGINE_QUERYEXECUTIONCONTEXT_H
 #define QLEVER_SRC_ENGINE_QUERYEXECUTIONCONTEXT_H
 
+#include <gtest/gtest_prod.h>
+
 #include <chrono>
 #include <memory>
 #include <string>
@@ -106,7 +108,8 @@ class QueryExecutionContext {
       MaterializedViewsManager* materializedViewsManager,
       std::function<void(std::string)> updateCallback =
           [](std::string) { /* No-op by default for testing */ },
-      bool pinSubtrees = false, bool pinResult = false);
+      bool pinSubtrees = false, bool pinResult = false,
+      bool disableCaching = false);
 
   QueryResultCache& getQueryTreeCache() { return *_subtreeCache; }
 
@@ -159,6 +162,12 @@ class QueryExecutionContext {
 
   bool _pinSubtrees;
   bool _pinResult;
+
+  // If true, then caching is disabled for all operations. This means that all
+  // operations that use this `QueryExecutionContext` will neither read from nor
+  // write to the cache. This avoids in particular the overhead of computing
+  // cache keys for operations.
+  bool disableCaching() const { return disableCaching_; }
 
   // If false, then no updates of the runtime information should be sent via the
   // websocket connection for performance reasons.
@@ -233,6 +242,10 @@ class QueryExecutionContext {
   std::optional<PinResultWithName> pinResultWithName_ = std::nullopt;
 
   MaterializedViewsManager* materializedViewsManager_;
+
+  // See the documentation for the getter with the same name above;
+  FRIEND_TEST(OperationTest, disableCachingGlobally);
+  bool disableCaching_ = false;
 
   // The last point in time when a websocket update was sent. This is used for
   // limiting the update frequency when `sendPriority` is `IfDue`.
