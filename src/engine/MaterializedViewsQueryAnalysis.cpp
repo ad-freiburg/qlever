@@ -298,10 +298,10 @@ BindExpressionAndTargetCol extractBindExpressions(
       continue;
     }
 
-    // Store the target variable column index. Note that while expression cache
-    // keys are not stable between compilers this is fine, because we computing
-    // the key while loading a view and thus will use it only within the same
-    // process.
+    // Store the mapping from cache key to target variable column index.
+    // Note that while expression cache keys are not stable between compilers
+    // this is still fine, because we are computing the key while loading a view
+    // and thus will use it only within the same process.
     map.insert({bind._expression.getCacheKey(varToColMap),
                 varToColMap.at(bind._target).columnIndex_});
   }
