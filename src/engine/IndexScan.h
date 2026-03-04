@@ -308,6 +308,11 @@ class IndexScan final : public Operation {
 
   std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
       const parsedQuery::Bind& bind) const override;
+
+  // Returns a `VariableToColumnMap` that maps all visible variables of this
+  // `IndexScan` not to result column indices but to column indices in the
+  // underlying `Permutation`. Used for `makeTreeWithBindColumn`.
+  VariableToColumnMap computePermutationColumnIndices() const;
 };
 
 #endif  // QLEVER_SRC_ENGINE_INDEXSCAN_H

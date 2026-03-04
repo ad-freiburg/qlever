@@ -13,6 +13,7 @@
 
 #include "engine/MaterializedViews.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/VariableToColumnMap.h"
 #include "index/IndexImpl.h"
 #include "parser/ParsedQuery.h"
 #include "util/Exception.h"
@@ -923,7 +924,7 @@ IndexScan::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
 
   // Check if all variables required for the `BIND` expression are covered by
   // this `IndexScan`.
-  const auto& visibleVars = getExternallyVisibleVariableColumns();
+  const auto& visibleVars = computePermutationColumnIndices();
   bool allVarsCovered = ql::ranges::all_of(
       bind._expression.containedVariables(),
       [&visibleVars](const auto* v) { return visibleVars.contains(*v); });
@@ -1002,4 +1003,36 @@ std::vector<ColumnIndex> IndexScan::getSubsetForStrippedColumns() const {
     ++idx;
   }
   return result;
+}
+
+// _____________________________________________________________________________
+VariableToColumnMap IndexScan::computePermutationColumnIndices() const {
+  VariableToColumnMap map;
+  const auto& varToColInResult = getExternallyVisibleVariableColumns();
+
+  auto addVar = [this, &varToColInResult, &map](const Variable& var,
+                                                ColumnIndex col) {
+    if (varsToKeep_.has_value() && !varsToKeep_.value().contains(var)) {
+      return;
+    }
+    // Deal with potentially undef columns: inherit undef status from main
+    // `VariableToColumnMap`.
+    map[var] = {col, varToColInResult.at(var).mightContainUndef_};
+  };
+
+  // First three columns.
+  auto spo = getPermutedTriple();
+  for (const auto [index, component] : ::ranges::views::enumerate(spo)) {
+    if (component->isVariable()) {
+      addVar(component->getVariable(), index);
+    }
+  }
+
+  // Additional columns.
+  for (const auto& [index, var] :
+       ::ranges::views::zip(additionalColumns_, additionalVariables_)) {
+    addVar(var, index);
+  }
+
+  return map;
 }
