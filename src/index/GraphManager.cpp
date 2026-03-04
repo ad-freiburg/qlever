@@ -126,10 +126,9 @@ void to_json(nlohmann::json& j, const GraphManager& graphManager) {
 
 // _____________________________________________________________________________
 void from_json(const nlohmann::json& j, GraphManager& graphManager) {
-  auto graphs = j.at("graphs").get<std::vector<std::string>>() |
-                ql::views::transform([](const std::string& idStr) -> Id {
-                  return Id::fromBits(std::stoull(idStr));
-                });
+  auto graphs = ad_utility::transform(
+      j.at("graphs").get<std::vector<std::string>>(),
+      [](const auto& idStr) -> Id { return Id::fromBits(std::stoull(idStr)); });
   graphManager.graphs_.withWriteLock([&graphs](auto& graphsMember) {
     graphsMember = ad_utility::HashSet<Id>(graphs.begin(), graphs.end());
   });
