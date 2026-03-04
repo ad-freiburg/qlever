@@ -16,6 +16,8 @@
 #include "engine/MaterializedViews.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/Server.h"
+#include "engine/VariableToColumnMap.h"
+#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "index/EncodedIriManager.h"
 #include "parser/MaterializedViewQuery.h"
 #include "parser/SparqlParser.h"
@@ -807,6 +809,35 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
     auto count = res->idTable().at(0, col);
     ASSERT_TRUE(count.getDatatype() == Datatype::Int);
     EXPECT_EQ(count.getInt(), 20 * numFakeSubjects_);
+  }
+}
+
+// _____________________________________________________________________________
+TEST_F(MaterializedViewsTest, BindCache) {
+  qlv().writeMaterializedView("testView1", simpleWriteQuery_);
+  MaterializedViewsManager manager{testIndexBase_};
+  auto view = manager.getView("testView1");
+  EXPECT_TRUE(view->parsedQuery().has_value());
+
+  // `BIND` is contained.
+  {
+    auto expr = sparqlExpression::SparqlExpressionPimpl{
+        std::make_shared<sparqlExpression::IdExpression>(
+            ValueId::makeFromInt(1)),
+        "1"};
+    auto cacheKey = expr.getCacheKey({});
+    EXPECT_THAT(view->lookupBindTargetColumn(cacheKey),
+                ::testing::Optional(::testing::Eq(3)));
+  }
+
+  // `BIND` is not contained.
+  {
+    auto expr = sparqlExpression::SparqlExpressionPimpl{
+        std::make_shared<sparqlExpression::IdExpression>(
+            ValueId::makeFromDouble(5.0)),
+        "5.0"};
+    auto cacheKey = expr.getCacheKey({});
+    EXPECT_FALSE(view->lookupBindTargetColumn(cacheKey).has_value());
   }
 }
 
