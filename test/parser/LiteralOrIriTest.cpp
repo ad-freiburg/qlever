@@ -72,35 +72,27 @@ TEST(IriTest, emptyIri) {
 
 // _____________________________________________________________________________
 TEST(IriTest, fromIrirefConsiderBase) {
-  // Helper lambda that calls `Iri::fromIrirefConsiderBase` with the two base
-  // IRIs and returns the results as a string (including the angle brackets).
-  Iri baseForRelativeIris;
+  // Helper lambda that calls `Iri::fromIrirefConsiderBase` with the base
+  // IRI and returns the results as a string (including the angle brackets).
+  UriParserUri baseUri{"http://example.com/uniprot"};
   Iri baseForAbsoluteIris;
-  auto fromIrirefConsiderBase = [&baseForRelativeIris, &baseForAbsoluteIris](
-                                    std::string_view iriStringWithBrackets) {
-    return Iri::fromIrirefConsiderBase(iriStringWithBrackets,
-                                       baseForRelativeIris, baseForAbsoluteIris)
-        .toStringRepresentation();
-  };
+  auto fromIrirefConsiderBase =
+      [&baseUri](std::string_view iriStringWithBrackets) {
+        return Iri::fromIrirefConsiderBase(iriStringWithBrackets, baseUri.get())
+            .toStringRepresentation();
+      };
 
-  // Check that it works for "real" base IRIs.
-  baseForRelativeIris = Iri::fromIriref("<http://.../uniprot/>");
-  baseForAbsoluteIris = Iri::fromIriref("<http://.../>");
   EXPECT_EQ(fromIrirefConsiderBase("<http://purl.uniprot.org/uniprot/>"),
             "<http://purl.uniprot.org/uniprot/>");
   EXPECT_EQ(fromIrirefConsiderBase("<UPI001AF4585D>"),
-            "<http://.../uniprot/UPI001AF4585D>");
+            "<http://example.com/UPI001AF4585D>");
   EXPECT_EQ(fromIrirefConsiderBase("</prosite/PS51927>"),
-            "<http://.../prosite/PS51927>");
-
-  // Check that with the default base, all IRIs remain unchanged.
-  baseForRelativeIris = Iri{};
-  baseForAbsoluteIris = Iri{};
+            "<http://example.com/prosite/PS51927>");
   EXPECT_EQ(fromIrirefConsiderBase("<http://purl.uniprot.org/uniprot/>"),
-            "<http://purl.uniprot.org/uniprot/>");
-  EXPECT_EQ(fromIrirefConsiderBase("</a>"), "</a>");
-  EXPECT_EQ(fromIrirefConsiderBase("<a>"), "<a>");
-  EXPECT_EQ(fromIrirefConsiderBase("<>"), "<>");
+              "<http://purl.uniprot.org/uniprot/>");
+  EXPECT_EQ(fromIrirefConsiderBase("</a>"), "<http://example.com/a>");
+  EXPECT_EQ(fromIrirefConsiderBase("<a>"), "<http://example.com/a>");
+  EXPECT_EQ(fromIrirefConsiderBase("<>"), "<http://example.com/uniprot>");
 }
 
 // _____________________________________________________________________________

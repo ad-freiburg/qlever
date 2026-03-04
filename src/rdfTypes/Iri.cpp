@@ -5,6 +5,7 @@
 
 #include "rdfTypes/Iri.h"
 
+#include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_cat.h>
 
 #include <utility>
@@ -86,27 +87,39 @@ Iri Iri::getBaseIri(bool domainOnly) const {
 
 // ____________________________________________________________________________
 Iri Iri::fromIrirefConsiderBase(std::string_view iriStringWithBrackets,
-                                const Iri& basePrefixForRelativeIris,
-                                const Iri& basePrefixForAbsoluteIris) {
+                                const UriUriA& baseUri) {
   auto iriSv = iriStringWithBrackets;
   AD_CORRECTNESS_CHECK(iriSv.size() >= 2);
   AD_CORRECTNESS_CHECK(iriSv[0] == '<' && iriSv[iriSv.size() - 1] == '>');
-  if (iriSv.find("://") != std::string_view::npos ||
-      basePrefixForAbsoluteIris.empty()) {
-    // Case 1: IRI with scheme (like `<http://...>`) or `BASE_IRI_FOR_TESTING`
-    // (which is `<@>`, and no valid base IRI has length 3).
-    return fromIriref(iriSv);
-  } else if (iriSv[1] == '/') {
-    // Case 2: Absolute IRI without scheme (like `</prosite/PS51927>`).
-    AD_CORRECTNESS_CHECK(!basePrefixForAbsoluteIris.empty());
-    return fromPrefixAndSuffix(basePrefixForAbsoluteIris,
-                               iriSv.substr(2, iriSv.size() - 3));
-  } else {
-    // Case 3: Relative IRI (like `<UPI001AF4585D>`).
-    AD_CORRECTNESS_CHECK(!basePrefixForRelativeIris.empty());
-    return fromPrefixAndSuffix(basePrefixForRelativeIris,
-                               iriSv.substr(1, iriSv.size() - 2));
-  }
+  UriUriA relativeIri;
+  auto parseResult =
+      uriParseSingleUriExA(&relativeIri, iriSv.data() + 1,
+                           iriSv.data() + (iriSv.size() - 1), nullptr);
+  absl::Cleanup cleanupRelativeIri{
+      [&relativeIri]() { uriFreeUriMembersA(&relativeIri); }};
+  AD_CONTRACT_CHECK(parseResult == URI_SUCCESS);
+  UriUriA resolvedIri;
+  auto resolveResult = uriAddBaseUriExA(&resolvedIri, &relativeIri, &baseUri,
+                                        URI_RESOLVE_STRICTLY);
+  absl::Cleanup cleanupResolvedIri{
+      [&resolvedIri]() { uriFreeUriMembersA(&resolvedIri); }};
+  AD_CONTRACT_CHECK(resolveResult == URI_SUCCESS);
+  return fromUri(resolvedIri);
+}
+
+// ____________________________________________________________________________
+Iri Iri::fromUri(const UriUriA& uri) {
+  int charsRequired;
+  auto printResult = uriToStringCharsRequiredA(&uri, &charsRequired);
+  AD_CORRECTNESS_CHECK(printResult == URI_SUCCESS);
+  std::string targetIri;
+  targetIri.resize(charsRequired + 2);
+  targetIri.at(0) = '<';
+  printResult =
+      uriToStringA(targetIri.data() + 1, &uri, charsRequired + 1, nullptr);
+  AD_CORRECTNESS_CHECK(printResult == URI_SUCCESS);
+  targetIri.back() = '>';
+  return fromStringRepresentation(std::move(targetIri));
 }
 
 // ____________________________________________________________________________
