@@ -16,6 +16,7 @@
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "engine/IndexScan.h"
 #include "engine/MaterializedViews.h"
+#include "engine/MaterializedViewsQueryAnalysis.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/Server.h"
 #include "engine/SpatialJoinConfig.h"
@@ -620,6 +621,15 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
     auto view = manager.getView("testView6");
     EXPECT_FALSE(view->originalQuery().has_value());
     EXPECT_FALSE(view->parsedQuery().has_value());
+  }
+
+  // View with no parsed query is skipped by `QueryPatternCache::analyzeView`.
+  {
+    qlv().writeMaterializedView("testView7", simpleWriteQuery_);
+    auto view = std::make_shared<MaterializedView>(testIndexBase_, "testView7");
+    view->parsedQuery_ = std::nullopt;
+    materializedViewsQueryAnalysis::QueryPatternCache c;
+    EXPECT_FALSE(c.analyzeView(view));
   }
 }
 
