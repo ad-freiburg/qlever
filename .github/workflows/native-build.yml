@@ -27,7 +27,6 @@ jobs:
         build-type: [Release]
         expensive-tests: [true]
         additional-cmake-options: [""]
-        runner: [ubuntu-24.04]
         isPr:
           - ${{github.event_name == 'pull_request'}}  # some checks are only run in the master.
         skipIfPr: [false]
