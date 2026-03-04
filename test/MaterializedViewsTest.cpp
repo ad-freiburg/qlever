@@ -18,6 +18,7 @@
 #include "engine/MaterializedViews.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/Server.h"
+#include "engine/SpatialJoinConfig.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
@@ -1008,15 +1009,55 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
     EXPECT_THAT(actual, matchesIdTable(expected));
   }
 
-  // Function rewrite
+  // A `BIND` is pushed down through a `Join` operation.
+  {
+    constexpr std::string_view bindThroughJoin = R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT ?s ?x ?o ?bind {
+        {
+          # Force the `JOIN` first, then the `BIND`.
+          ?s <p1> ?x .
+          ?s view:bindView-o ?o .
+        }
+        BIND(2 * ?o + 1 AS ?bind)
+      }
+    )";
+    qpExpect(qlv(), bindThroughJoin,
+             h::Join(h::IndexScanFromStrings("?s", "<p1>", "?x"),
+                     bindView(AC{{3, V{"?bind"}}})));
+  }
 
-  // Strip Columns: TODO
-
-  // Join: Pushdown possible , not possible
-
-  // SpatialJoin push down
-
-  // TODO<ullingerc> Test more advanced cases: Exists, Minus, Union, ...
+  // A `BIND` is pushed down through a `SpatialJoin` operation.
+  {
+    constexpr std::string_view bindThroughSpatialJoin = R"(
+      PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT ?s ?o ?s2 ?o2 ?bind {
+        {
+          # Force the `SpatialJoin` first.
+          ?s view:bindView-o ?o .
+          ?s2 view:bindView-o ?o2 .
+          FILTER(geof:metricDistance(?o, ?o2) <= 100)
+        }
+        BIND(2 * ?o2 + 1 AS ?bind)
+      }
+    )";
+    // Matcher for left child of `SpatialJoin`: Scan on view without `BIND` push
+    // down.
+    auto viewScanNoBind =
+        viewScan("bindView", "?s", "?o", "?_ql_materialized_view_o", 2);
+    // Matcher for right child of `SpatialJoin`: Scan on view with `BIND` push
+    // down due to matching variables.
+    auto viewScanWithBind =
+        viewScan("bindView", "?s2", "?o2", "?_ql_materialized_view_o", 3,
+                 AC{{3, V{"?bind"}}});
+    qpExpect(qlv(), bindThroughSpatialJoin,
+             h::spatialJoin(100, -1, V{"?o"}, V{"?o2"}, std::nullopt,
+                            PayloadVariables::all(),
+                            SpatialJoinAlgorithm::LIBSPATIALJOIN,
+                            SpatialJoinType::WITHIN_DIST, viewScanNoBind,
+                            viewScanWithBind));
+  }
 
   // Test the variable to permutation column index map.
   {
