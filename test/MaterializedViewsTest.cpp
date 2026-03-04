@@ -19,6 +19,7 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/Server.h"
 #include "engine/VariableToColumnMap.h"
+#include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "index/EncodedIriManager.h"
 #include "parser/MaterializedViewQuery.h"
@@ -840,6 +841,30 @@ TEST_F(MaterializedViewsTest, BindCache) {
         "5.0"};
     auto cacheKey = expr.getCacheKey({});
     EXPECT_FALSE(view->lookupBindTargetColumn(cacheKey).has_value());
+  }
+
+  // Variable in `BIND` must be mapped to the correct column by the caller.
+  qlv().writeMaterializedView("testView2", R"(
+    SELECT ?s ?p ?o ?g {
+      ?s ?p ?o .
+      BIND(?o AS ?g)
+    }
+  )");
+  auto view2 = manager.getView("testView2");
+  {
+    auto expr = sparqlExpression::SparqlExpressionPimpl{
+        std::make_shared<sparqlExpression::VariableExpression>(V{"?x"}), "?x"};
+
+    // `BIND` is found using correct mapping despite different variable name.
+    VariableToColumnMap correctVarToCol{{V{"?x"}, makeAlwaysDefinedColumn(2)}};
+    auto cacheKey1 = expr.getCacheKey(correctVarToCol);
+    EXPECT_THAT(view2->lookupBindTargetColumn(cacheKey1),
+                ::testing::Optional(::testing::Eq(3)));
+
+    // `BIND` is not found with different column index.
+    VariableToColumnMap wrongVarToCol{{V{"?x"}, makeAlwaysDefinedColumn(1)}};
+    auto cacheKey2 = expr.getCacheKey(wrongVarToCol);
+    EXPECT_FALSE(view2->lookupBindTargetColumn(cacheKey2).has_value());
   }
 }
 
