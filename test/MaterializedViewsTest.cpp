@@ -916,14 +916,28 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
   using AC = std::vector<std::pair<ColumnIndex, Variable>>;
 
   // Simple `BIND` rewrites.
-  qpExpect(qlv(), R"(
+  {
+    constexpr std::string_view simpleBind = R"(
       PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
       SELECT ?bind {
         ?s view:bindView-o ?o .
         BIND(2 * ?o + 1 AS ?bind)
       }
-    )",
-           bindView(AC{{3, V{"?bind"}}}));
+    )";
+    qpExpect(qlv(), simpleBind, bindView(AC{{3, V{"?bind"}}}));
+
+    auto actual = getQueryResultAsIdTable(std::string{simpleBind});
+    auto expected = getQueryResultAsIdTable("SELECT (3 AS ?bind) {}");
+    EXPECT_THAT(actual, matchesIdTable(expected));
+  }
+
+  // Function rewrite
+
+  // Strip Columns: TODO
+
+  // Join: Pushdown possible , not possible
+
+  // SpatialJoin push down
 
   // TODO<ullingerc> Test more advanced cases: Join, Exists, Minus, Union, ...
 }
