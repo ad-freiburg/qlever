@@ -497,6 +497,15 @@ struct IntValueGetter : Mixin<IntValueGetter> {
   std::optional<int64_t> operator()(ValueId id, const EvaluationContext*) const;
 };
 
+// Dummy value getter that always returns true, only used for unit tests.
+struct AlwaysTrueValueGetter : Mixin<AlwaysTrueValueGetter> {
+  using Value = bool;
+  template <typename... Args>
+  Value operator()(Args&&...) const {
+    return true;
+  }
+};
+
 // A struct that converts one of the overloaded `value getters` from
 // `SparqlExpressionValueGetters.h` into a callable that takes an
 // `ExpressionResult` variant, and returns a `TypeErasedInputRange`. This is

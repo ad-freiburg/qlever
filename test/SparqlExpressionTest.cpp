@@ -2101,15 +2101,33 @@ struct BinaryOrForTypeErasure {
   auto operator()(bool a, bool b) const { return Id::makeFromBool(a || b); }
 };
 
-constexpr auto makeTypeErasedOrExpression = [](SparqlExpression::Ptr child1,
-                                               SparqlExpression::Ptr child2) {
-  using namespace sparqlExpression::detail;
-  using Expr = NaryExpressionTypeErased<sparqlExpression::detail::Operation<
-      2, FV<BinaryOrForTypeErasure, IsValidValueGetter>>>;
-  return std::make_unique<Expr>(std::move(child1), std::move(child2));
+struct BinaryAndForTypeErasure {
+  auto operator()(bool a, bool b) const { return Id::makeFromBool(a && b); }
 };
 
+template <typename Func,
+          typename ValueGetter = sparqlExpression::detail::IsValidValueGetter>
+constexpr auto makeTypeErasedExpression =
+    [](SparqlExpression::Ptr child1, SparqlExpression::Ptr child2) {
+      using namespace sparqlExpression::detail;
+      using Expr = NaryExpressionTypeErased<
+          sparqlExpression::detail::Operation<2, FV<Func, ValueGetter>>>;
+      return std::make_unique<Expr>(std::move(child1), std::move(child2));
+    };
+
+auto makeTypeErasedAndExpression =
+    makeTypeErasedExpression<BinaryAndForTypeErasure>;
+auto makeTypeErasedOrExpression =
+    makeTypeErasedExpression<BinaryOrForTypeErasure>;
+// Same function, but different value getter. Used for testing the cache keys.
+auto makeTypeErasedOrAlwaysTrue =
+    makeTypeErasedExpression<BinaryOrForTypeErasure,
+                             sparqlExpression::detail::AlwaysTrueValueGetter>;
+
+// Test the functionality + interface of simple type erased expressions.
 TEST(NaryExpressionTypeErased, basicTests) {
+  auto makeOr = makeTypeErasedOrExpression;
+  auto makeAnd = makeTypeErasedAndExpression;
   auto testOrTe = testBinaryExpressionCommutative<makeTypeErasedOrExpression>;
   // Note: as we use the `IsValidValueGetter` (for simplicity, as it returns a
   // plain `bool`), the only inputs that are counted as `false` are `UNDEF` and
@@ -2117,6 +2135,47 @@ TEST(NaryExpressionTypeErased, basicTests) {
   testOrTe(B(true), B(true), B(true));
   testOrTe(B(true), U, B(true));
   testOrTe(B(false), U, U);
+  // test with a non-constant result.
+  testOrTe(V<Id>({B(false), B(true)}, alloc), U, V<Id>({U, B(true)}, alloc));
+
+  auto c1 = []() {
+    return std::make_unique<IdExpression>(Id::makeFromBool(true));
+  };
+  auto c2 = []() {
+    return std::make_unique<VariableExpression>(Variable{"?x"});
+  };
+
+  auto expr = makeTypeErasedOrExpression(c1(), c2());
+  using namespace ::testing;
+
+  using namespace ad_utility::use_type_identity;
+  auto typeMatcher = [](auto tp) {
+    using Tp = typename decltype(tp)::type;
+    return Pointer(WhenDynamicCastTo<const Tp*>(NotNull()));
+  };
+
+  EXPECT_THAT(expr->children(),
+              ElementsAre(typeMatcher(ti<IdExpression>),
+                          typeMatcher(ti<VariableExpression>)));
+
+  VariableToColumnMap varColMap;
+  varColMap[Variable{"?x"}] = makeAlwaysDefinedColumn(42);
+
+  auto getKey = [&varColMap](const SparqlExpression::Ptr& ptr) {
+    return ptr->getCacheKey(varColMap);
+  };
+
+  // Changing the function and changing the children should all change the
+  // signature
+  std::vector<SparqlExpression::Ptr> exprs;
+  exprs.push_back(makeOr(c1(), c2()));
+  exprs.push_back(makeOr(c1(), c1()));
+  exprs.push_back(makeOr(c2(), c1()));
+  exprs.push_back(makeAnd(c2(), c1()));
+  // Same function, same children, but different `ValueGetter`, should also
+  // change the cache key.
+  exprs.push_back(makeTypeErasedOrAlwaysTrue(c2(), c1()));
+  EXPECT_THAT(exprs, AllUniqueBy(getKey));
 }
 
 }  // anonymous namespace

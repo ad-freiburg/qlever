@@ -149,6 +149,11 @@ template <typename Op>
 // its core implementation function; all other implementation details (the
 // actual function, as well as the value getters used to create the inputs)
 // are type-erased.
+// Note: The `getCacheKey` function of this class itself will not work
+// correctly, as it doesn't account for the "same function, different value
+// getter" case. But when used as an implementation detail of the
+// `NaryExpressionTypeErased` class below, then this works, because the value
+// getters become part of the classes name/typeid.
 template <typename Ret, typename... Args>
 class NaryExpressionTypeErasedImpl : public SparqlExpression {
  public:
