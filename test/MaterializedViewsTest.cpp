@@ -14,6 +14,7 @@
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "engine/IndexScan.h"
 #include "engine/MaterializedViews.h"
+#include "engine/MaterializedViewsQueryAnalysis.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/Server.h"
 #include "engine/VariableToColumnMap.h"
@@ -596,6 +597,36 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
         ::testing::HasSubstr(
             "The materialized view 'testView5' is saved with format version "
             "0, however this version of QLever expects"));
+  }
+
+  // Backward compatibility: View with no saved query.
+  {
+    auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
+    manager.writeViewToDisk("testView6", plan);
+    {
+      // Remove the `query` key from the metadata JSON file.
+      nlohmann::json viewInfo;
+      const std::string metadataFilename =
+          "_materializedViewsTestIndex.view.testView6.viewinfo.json";
+      ad_utility::makeIfstream(metadataFilename) >> viewInfo;
+      viewInfo.erase("query");
+      ad_utility::makeOfstream(metadataFilename)
+          << viewInfo.dump() << std::endl;
+    }
+    // Load the view: It can be loaded correctly, but does not have an original
+    // query set.
+    auto view = manager.getView("testView6");
+    EXPECT_FALSE(view->originalQuery().has_value());
+    EXPECT_FALSE(view->parsedQuery().has_value());
+  }
+
+  // View with no parsed query is skipped by `QueryPatternCache::analyzeView`.
+  {
+    qlv().writeMaterializedView("testView7", simpleWriteQuery_);
+    auto view = std::make_shared<MaterializedView>(testIndexBase_, "testView7");
+    view->parsedQuery_ = std::nullopt;
+    materializedViewsQueryAnalysis::QueryPatternCache c;
+    EXPECT_FALSE(c.analyzeView(view));
   }
 }
 

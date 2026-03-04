@@ -10,6 +10,8 @@
 #ifndef QLEVER_SRC_ENGINE_MATERIALIZEDVIEWS_H_
 #define QLEVER_SRC_ENGINE_MATERIALIZEDVIEWS_H_
 
+#include <gtest/gtest_prod.h>
+
 #include "engine/MaterializedViewsQueryAnalysis.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
@@ -165,6 +167,8 @@ class MaterializedView {
   // Helper to create an empty `LocatedTriplesState` for `IndexScan`s as
   // materialized views do not support updates yet.
   std::shared_ptr<LocatedTriplesState> makeEmptyLocatedTriplesState() const;
+
+  FRIEND_TEST(MaterializedViewsTest, ManualConfigurations);
 
  public:
   // Load a materialized view from disk given the filename components. The
