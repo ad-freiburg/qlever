@@ -506,7 +506,6 @@ struct IntValueGetter : Mixin<IntValueGetter> {
 // deliberately moved the definition of the `operator()` into the `.cpp` file.
 // When adding a new value getter above, an explicit instantiation for this
 // class thus has to be added there.
-
 template <typename ValueGetter>
 struct TypeErasedValueGetter {
   ad_utility::InputRangeTypeErased<typename ValueGetter::Value> operator()(

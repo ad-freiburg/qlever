@@ -20,6 +20,7 @@
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
@@ -32,7 +33,6 @@
 #include "util/GeoSparqlHelpers.h"
 
 namespace {
-
 using ad_utility::source_location;
 // Some useful shortcuts for the tests below.
 using namespace sparqlExpression;
@@ -207,7 +207,11 @@ auto testNaryExpressionImpl = [](auto&& makeExpression, auto const& expected,
   LocalVocab localVocab;
   IdTable table{alloc};
 
-  // Get the size of `operand`: size for a vector, 1 otherwise.
+  // Get the size of `operand`: size for a vector, 1 otherwise. For a
+  // `SetOfIntervals`, this actually returns the *minimal* size of an
+  // `EvaluationContext` that can expand the `SetOfIntervals`. This is used to
+  // implement test cases where all the inputs are `SetOfIntervals` or constant,
+  // and the result is NOT a `SetOfIntervals`.
   auto getResultSize = [](const auto& operand) -> size_t {
     using T = std::decay_t<decltype(operand)>;
     if constexpr (isVectorResult<T>) {
@@ -295,8 +299,6 @@ auto testPlus = testBinaryExpressionCommutative<&makeAddExpression>;
 auto testMultiply = testBinaryExpressionCommutative<&makeMultiplyExpression>;
 auto testMinus = std::bind_front(testNaryExpression, &makeSubtractExpression);
 auto testDivide = std::bind_front(testNaryExpression, &makeDivideExpression);
-
-}  // namespace
 
 // _____________________________________________________________________________________
 TEST(SparqlExpression, logicalOperators) {
@@ -2091,3 +2093,30 @@ TEST(OrExpression, getLanguageFilterExpression) {
     EXPECT_EQ(ae->getLanguageFilterExpression(), std::nullopt);
   }
 }
+
+// We set up a simple type-erased expression to also test the type erased
+// expressions when the remainder of the code uses more strongly typed
+// expressions.
+struct BinaryOrForTypeErasure {
+  auto operator()(bool a, bool b) const { return Id::makeFromBool(a || b); }
+};
+
+constexpr auto makeTypeErasedOrExpression = [](SparqlExpression::Ptr child1,
+                                               SparqlExpression::Ptr child2) {
+  using namespace sparqlExpression::detail;
+  using Expr = NaryExpressionTypeErased<sparqlExpression::detail::Operation<
+      2, FV<BinaryOrForTypeErasure, IsValidValueGetter>>>;
+  return std::make_unique<Expr>(std::move(child1), std::move(child2));
+};
+
+TEST(NaryExpressionTypeErased, basicTests) {
+  auto testOrTe = testBinaryExpressionCommutative<makeTypeErasedOrExpression>;
+  // Note: as we use the `IsValidValueGetter` (for simplicity, as it returns a
+  // plain `bool`), the only inputs that are counted as `false` are `UNDEF` and
+  // `NaN`.
+  testOrTe(B(true), B(true), B(true));
+  testOrTe(B(true), U, B(true));
+  testOrTe(B(false), U, U);
+}
+
+}  // anonymous namespace

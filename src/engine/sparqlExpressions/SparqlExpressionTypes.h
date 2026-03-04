@@ -345,6 +345,9 @@ struct ValueGetterPackImpl<N, std::tuple<ValueGetters...>> {
   static_assert(sizeof...(ValueGetters) == 1 || N == sizeof...(ValueGetters));
   using type = std::conditional_t<
       sizeof...(ValueGetters) != 1, std::tuple<ValueGetters...>,
+      // `mp_repeat_c` repeats the first argument (a tuple of a single
+      // `ValueGetter` in our case) N times, and then concatenates it (into a
+      // tuple of N-times the same `ValueGetter`.
       boost::mp11::mp_repeat_c<std::tuple<ValueGetters...>, N>>;
 };
 }  // namespace valueGetterPack::detail

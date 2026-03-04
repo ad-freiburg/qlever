@@ -276,7 +276,7 @@ struct TypeErasedNaryHelper<Func, std::tuple<VGs...>> {
 };
 
 // Forward declaration, because we implement pattern matching using partial
-// specializtion below.
+// specialization below.
 template <typename NaryOperation>
 class NaryExpressionTypeErased;
 
