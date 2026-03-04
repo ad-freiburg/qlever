@@ -27,6 +27,7 @@
 #include "index/ExternalSortFunctors.h"
 #include "libqlever/Qlever.h"
 #include "parser/MaterializedViewQuery.h"
+#include "parser/SparqlParser.h"
 #include "parser/TripleComponent.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/Exception.h"
@@ -364,9 +365,20 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
                           ColumnIndexAndTypeInfo::PossiblyUndefined}});
   }
 
-  // Restore original query string.
+  // Restore original query string and parse it for query analysis.
   if (viewInfoJson.contains("query")) {
     originalQuery_ = viewInfoJson.at("query").get<std::string>();
+
+    // Parse the query and store the parsed result.
+    // NOTE: We do not need the `EncodedIriManager` because we are only
+    // interested in analyzing the query structure, not in converting its
+    // components to `ValueId`s.
+    EncodedIriManager e;
+    parsedQuery_ = SparqlParser::parseQuery(&e, originalQuery_.value(), {});
+
+    // Compute the `BIND` cache.
+    coveredBinds_ = materializedViewsQueryAnalysis::extractBindExpressions(
+        parsedQuery_.value(), varToColMap_);
   }
 
   // Read permutation, and deactivate the graph post-processing of
@@ -647,4 +659,12 @@ std::shared_ptr<IndexScan> MaterializedViewsManager::makeIndexScan(
   }
   auto view = getView(viewQuery.viewName_.value());
   return view->makeIndexScan(qec, viewQuery);
+}
+
+// _____________________________________________________________________________
+std::optional<size_t> MaterializedView::lookupBindTargetColumn(
+    const std::string& bindCacheKey) const {
+  auto opt = ad_utility::findOptional(coveredBinds_, bindCacheKey);
+  // Convert `boost::optional<const size_t&>` to `std::optional<size_t>`.
+  return opt ? std::optional<size_t>{opt.value()} : std::optional<size_t>{};
 }
