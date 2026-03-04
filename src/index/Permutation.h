@@ -212,7 +212,8 @@ class Permutation {
   // permutation is available, this function throws an exception.
   const Permutation& internalPermutation() const;
 
-  // Set a back-reference to the `MaterializedView` that owns this permutation.
+  // If this permutation is owned by a `MaterializedView`, set a back-reference
+  // to the `MaterializedView`.
   void setMaterializedView(std::weak_ptr<const MaterializedView> view);
 
   // If this permutation is owned by a `MaterializedView`, return a shared
