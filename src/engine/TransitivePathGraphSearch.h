@@ -60,7 +60,7 @@ struct GraphSearchExecutionParams {
   // a CancellationException containing info about the currently running
   // algorithm.
   void checkCancellation(
-      const std::string_view& algorithmName,
+      const std::string_view algorithmName,
       ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) const {
     cancellationHandle_->throwIfCancelled(location, [algorithmName]() {
       return absl::StrCat(
@@ -75,7 +75,7 @@ struct GraphSearchExecutionParams {
 template <typename T>
 Set breadthFirstSearch(const GraphSearchProblem<T>& gsp,
                        const GraphSearchExecutionParams& ep,
-                       bool skipStartNodeInitially) {
+                       bool skipStartNodeInitially = false) {
   Queue queue{ep.allocator_};
   Set connectedNodes{ep.allocator_};
 
@@ -267,7 +267,7 @@ Set runOptimalGraphSearch(const GraphSearchProblem<T>& gsp,
   bool skipStartNodeInitially =
       gsp.minDist_ == 1 && gsp.maxDist_ == std::numeric_limits<size_t>::max();
 
-  if (usesLimits) {
+  if (usesLimits && !skipStartNodeInitially) {
     if (targetHasValue) {
       return depthFirstSearchWithLimit(gsp, ep);
     }
