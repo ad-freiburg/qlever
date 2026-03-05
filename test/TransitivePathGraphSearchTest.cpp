@@ -21,6 +21,7 @@
 #include "util/AllocatorWithLimit.h"
 #include "util/CancellationHandle.h"
 #include "util/Log.h"
+#include "util/GTestHelpers.h"
 
 using namespace qlever::graphSearch;
 using namespace ::testing;
@@ -33,7 +34,7 @@ class GraphSearchTest : public Test {
 
   const ad_utility::AllocatorWithLimit<Id> allocator_ =
       ad_utility::testing::makeAllocator();
-  GraphSearchExecutionParams ep_ = {
+  GraphSearchExecutionParams ep_{
       std::make_shared<ad_utility::CancellationHandle<>>(), allocator_};
 
   std::vector<T> graphs_;
@@ -133,7 +134,7 @@ class GraphSearchTest : public Test {
 };
 
 // If another wrapper for graphs is to be introduced, add it here as well as
-// in GraphSearchTest::initializeGraphsWrappers().
+// in `GraphSearchTest::initializeGraphsWrappers()`.
 using graphSearchTestTypes = Types<HashMapWrapper, BinSearchMap>;
 TYPED_TEST_SUITE(GraphSearchTest, graphSearchTestTypes);
 
@@ -250,6 +251,7 @@ TEST(GraphSearchTestExtraTests, cancellationCheck) {
   // Test that the log message created in
   // `GraphSearchExecutionParams.checkCancellation()` when a cancellation is
   // received will be logged.
+  SKIP_IF_LOGLEVEL_IS_LOWER(WARN);
 
   const ad_utility::AllocatorWithLimit<Id> allocator =
       ad_utility::testing::makeAllocator();
@@ -264,7 +266,7 @@ TEST(GraphSearchTestExtraTests, cancellationCheck) {
   std::stringstream stream;
   ad_utility::setGlobalLoggingStream(&stream);
 
-  // Trigger a CHECK_WINDOW_MISSED cancellation state which will make the
+  // Trigger a `CHECK_WINDOW_MISSED` cancellation state which will make the
   // handle's watchdog write logs containing the algorithmName specified in
   // checkCancellation.
   ep.cancellationHandle_->startWatchDog();

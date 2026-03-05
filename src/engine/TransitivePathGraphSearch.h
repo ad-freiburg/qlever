@@ -60,7 +60,7 @@ struct GraphSearchExecutionParams {
   // a CancellationException containing info about the currently running
   // algorithm.
   void checkCancellation(
-      const std::string_view algorithmName,
+      std::string_view algorithmName,
       ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) const {
     cancellationHandle_->throwIfCancelled(location, [algorithmName]() {
       return absl::StrCat(
@@ -159,9 +159,8 @@ Set depthFirstSearch(const GraphSearchProblem<T>& gsp,
                      const GraphSearchExecutionParams& ep,
                      bool skipStartNodeInitially = false) {
   Set connectedNodes{ep.allocator_};
-  connectedNodes.reserve(1);
 
-  // Saving the value of gsp.targetNode_ removes the .has_value() check each
+  // Saving the value of `gsp.targetNode_` removes the `.has_value()` check each
   // iteration and therefore improves runtime.
   AD_CORRECTNESS_CHECK(gsp.targetNode_.has_value());
   Id targetNode = gsp.targetNode_.value();
@@ -184,6 +183,7 @@ Set depthFirstSearch(const GraphSearchProblem<T>& gsp,
 
     marks.insert(node);
     if (node == targetNode) {
+      connectedNodes.reserve(1);
       connectedNodes.insert(node);
       // Stop the DFS once target found, no further processing necessary.
       break;
@@ -208,9 +208,8 @@ template <typename T>
 Set depthFirstSearchWithLimit(const GraphSearchProblem<T>& gsp,
                               const GraphSearchExecutionParams& ep) {
   Set connectedNodes{ep.allocator_};
-  connectedNodes.reserve(1);
 
-  // Saving the value of gsp.targetNode_ removes the .has_value() check each
+  // Saving the value of `gsp.targetNode_` removes the `.has_value()` check each
   // iteration and therefore improves runtime.
   AD_CORRECTNESS_CHECK(gsp.targetNode_.has_value());
   Id targetNode = gsp.targetNode_.value();
@@ -235,6 +234,7 @@ Set depthFirstSearchWithLimit(const GraphSearchProblem<T>& gsp,
       // constraints.
       marks.insert(node);
       if (node == targetNode) {
+        connectedNodes.reserve(1);
         connectedNodes.insert(node);
         // Stop the DFS once target found, no further processing necessary.
         break;
