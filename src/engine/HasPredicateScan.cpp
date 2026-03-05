@@ -268,9 +268,12 @@ Result HasPredicateScan::computeResult([[maybe_unused]] bool requestLaziness) {
   // The `callback` is invoked with a single-value span of the `idTable` if the
   // result is fully materialized, because it expects a range of `IdTable`s.
   // Because of caching we can potentially get a fully materialized result here.
-  auto runOnResult = [&result](auto callback) {
+  auto idTableView = result->isFullyMaterialized()
+                         ? std::optional{result->idTable()}
+                         : std::nullopt;
+  auto runOnResult = [&result, &idTableView](auto callback) {
     if (result->isFullyMaterialized()) {
-      return std::invoke(callback, ql::span{&result->idTable(), 1});
+      return std::invoke(callback, ql::span{&*idTableView, 1});
     }
     auto idTables = result->idTables();
     return std::invoke(

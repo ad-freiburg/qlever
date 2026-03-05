@@ -72,7 +72,7 @@ class OptionalJoin : public Operation {
   // Joins two result tables on any number of columns, inserting the special
   // value `Id::makeUndefined()` for any entries marked as optional.
   void optionalJoin(
-      const IdTable& left, const IdTable& right,
+      IdTableView<0> left, IdTableView<0> right,
       const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
       IdTable* dynResult,
       Implementation implementation = Implementation::GeneralCase);
@@ -119,7 +119,7 @@ class OptionalJoin : public Operation {
   // Check which of the join columns in `left` and `right` contain UNDEF values
   // and return the appropriate `Implementation`.
   static Implementation computeImplementationFromIdTables(
-      const IdTable& left, const IdTable& right,
+      IdTableView<0> left, IdTableView<0> right,
       const std::vector<std::array<ColumnIndex, 2>>&);
 };
 

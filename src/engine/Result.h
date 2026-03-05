@@ -77,9 +77,11 @@ class Result {
   // is useful when the result is still being constructed (because it is
   // mutable), the latter is useful when the result is read from a cache (e.g.
   // the named query cache), because the shared ownership doesn't require a copy
-  // of the result.
+  // of the result. Additionally, for zero-copy deserialization from a blob, the
+  // result can be stored as an `IdTableView<0>`.
   struct IdTableSharedLocalVocabPair {
-    std::variant<IdTable, std::shared_ptr<const IdTable>> idTableOrPtr_;
+    std::variant<IdTable, std::shared_ptr<const IdTable>, IdTableView<0>>
+        idTableOrPtr_;
     // The local vocabulary of the result.
     LocalVocabPtr localVocab_;
   };
@@ -142,6 +144,9 @@ class Result {
   Result(std::shared_ptr<const IdTable> idTablePtr,
          std::vector<ColumnIndex> sortedBy, LocalVocab&& localVocab);
   Result(IdTableVocabPair pair, std::vector<ColumnIndex> sortedBy);
+  // Constructor for zero-copy deserialization with IdTableView.
+  Result(IdTableView<0> idTableView, std::vector<ColumnIndex> sortedBy,
+         LocalVocab&& localVocab);
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   Result(Generator idTables, std::vector<ColumnIndex> sortedBy);
 #endif
@@ -154,6 +159,8 @@ class Result {
   // Moving of a result table is OK.
   Result(Result&& other) = default;
   Result& operator=(Result&& other) = default;
+
+  using MaterializedTable = IdTableView<0>;
 
   // Wrap the generator stored in `data_` within a new generator that calls
   // `onNewChunk` every time a new `IdTableVocabPair` is yielded by the original
@@ -188,7 +195,7 @@ class Result {
 
   // Const access to the underlying `IdTable`. Throw if this result is not fully
   // materialized.
-  const IdTable& idTable() const;
+  IdTableView<0> idTable() const;
 
   // Access to the underlying `IdTable`s. Throw an `ad_utility::Exception`
   // if the underlying `data_` member holds the wrong variant or if the result
@@ -271,7 +278,7 @@ class Result {
   // those are still correct after performing this operation.
   void applyLimitOffset(
       const LimitOffsetClause& limitOffset,
-      std::function<void(std::chrono::microseconds, const IdTable&)>
+      std::function<void(std::chrono::microseconds, const MaterializedTable&)>
           limitTimeCallback);
 
   // Check if the operation did fulfill its contract and only returns as many

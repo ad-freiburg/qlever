@@ -149,11 +149,11 @@ class SpatialJoinAlgorithms {
       const Box& box, std::optional<Point> midpoint = std::nullopt) const;
 
   // this function gets the string which represents the area from the idtable.
-  std::optional<size_t> getAnyGeometry(const IdTable* idtable, size_t row,
+  std::optional<size_t> getAnyGeometry(IdTableView<0> idtable, size_t row,
                                        size_t col);
 
   // wrapper to access non const private function for testing
-  std::optional<RtreeEntry> onlyForTestingGetRtreeEntry(const IdTable* idTable,
+  std::optional<RtreeEntry> onlyForTestingGetRtreeEntry(IdTableView<0> idTable,
                                                         const size_t row,
                                                         const ColumnIndex col) {
     return getRtreeEntry(idTable, row, col);
@@ -176,7 +176,7 @@ class SpatialJoinAlgorithms {
   // added geometries, which may be used as a prefilter at next call and the
   // number of geometries added. This function is only `public` for testing
   // purposes and should otherwise not be used outside of this class.
-  using IdTableAndJoinColumn = std::pair<const IdTable*, const ColumnIndex>;
+  using IdTableAndJoinColumn = std::pair<IdTableView<0>, const ColumnIndex>;
   struct LibSpatialJoinParseMetadata {
     // Aggregated bounding box of all parsed geometries
     util::geo::I32Box aggBoundingBox_;
@@ -208,12 +208,12 @@ class SpatialJoinAlgorithms {
 
   // Helper function which returns a GeoPoint if the element of the given table
   // represents a GeoPoint
-  static std::optional<GeoPoint> getPoint(const IdTable* restable, size_t row,
+  static std::optional<GeoPoint> getPoint(IdTableView<0> restable, size_t row,
                                           ColumnIndex col);
 
   // Helper function to retrieve and parse a line string from the given cell of
   // an `IdTable` and convert it to an `S2Polyline`.
-  static std::optional<S2Polyline> getPolyline(const IdTable& restable,
+  static std::optional<S2Polyline> getPolyline(IdTableView<0> restable,
                                                size_t row, ColumnIndex col,
                                                const Index& index);
 
@@ -225,8 +225,8 @@ class SpatialJoinAlgorithms {
   // Helper function, which adds a row, which belongs to the result to the
   // result table. As inputs it uses a row of the left and a row of the right
   // child result table.
-  void addResultTableEntry(IdTable* result, const IdTable* resultLeft,
-                           const IdTable* resultRight, size_t rowLeft,
+  void addResultTableEntry(IdTable* result, IdTableView<0> resultLeft,
+                           IdTableView<0> resultRight, size_t rowLeft,
                            size_t rowRight, Id distance) const;
 
   // This helper function calculates the bounding boxes based on a box, where
@@ -254,7 +254,7 @@ class SpatialJoinAlgorithms {
   // this helper function takes an idtable, a row and a column. It then tries
   // to parse a geometry or a geoPoint of that cell in the idtable. If it
   // succeeds, it returns an rtree entry of that geometry/geopoint
-  std::optional<RtreeEntry> getRtreeEntry(const IdTable* idTable,
+  std::optional<RtreeEntry> getRtreeEntry(IdTableView<0> idTable,
                                           const size_t row,
                                           const ColumnIndex col);
 

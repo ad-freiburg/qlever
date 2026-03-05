@@ -54,7 +54,8 @@ auto compareRowsBySortColumns(const std::vector<ColumnIndex>& sortedBy) {
 namespace {
 // _____________________________________________________________________________
 // Check if sort order promised by `sortedBy` is kept within `idTable`.
-void assertSortOrderIsRespected(const IdTable& idTable,
+template <typename IdTableT>
+void assertSortOrderIsRespected(const IdTableT& idTable,
                                 const std::vector<ColumnIndex>& sortedBy) {
   AD_CONTRACT_CHECK(
       ql::ranges::all_of(sortedBy, [&idTable](ColumnIndex colIndex) {
@@ -98,6 +99,18 @@ Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
                LocalVocab&& localVocab)
     : Result{std::move(idTable), std::move(sortedBy),
              SharedLocalVocabWrapper{std::move(localVocab)}} {}
+
+// _____________________________________________________________________________
+Result::Result(IdTableView<0> idTableView, std::vector<ColumnIndex> sortedBy,
+               LocalVocab&& localVocab)
+    : data_{IdTableSharedLocalVocabPair{
+          std::move(idTableView),
+          std::make_shared<const LocalVocab>(std::move(localVocab))}},
+      sortedBy_{std::move(sortedBy)} {
+  AD_CONTRACT_CHECK(std::get<IdTableSharedLocalVocabPair>(data_).localVocab_ !=
+                    nullptr);
+  assertSortOrderIsRespected(this->idTable(), sortedBy_);
+}
 
 // _____________________________________________________________________________
 Result::Result(IdTableVocabPair pair, std::vector<ColumnIndex> sortedBy)
@@ -162,7 +175,7 @@ IdTable makeResizedClone(const IdTable& idTable,
 // _____________________________________________________________________________
 void Result::applyLimitOffset(
     const LimitOffsetClause& limitOffset,
-    std::function<void(std::chrono::microseconds, const IdTable&)>
+    std::function<void(std::chrono::microseconds, const IdTableView<0>&)>
         limitTimeCallback) {
   // Apply the OFFSET clause. If the offset is `0` or the offset is larger
   // than the size of the `IdTable`, then this has no effect and runtime
@@ -176,13 +189,23 @@ void Result::applyLimitOffset(
     auto& tableOrPtr =
         std::get<IdTableSharedLocalVocabPair>(data_).idTableOrPtr_;
     std::visit(
-        [&limitOffset](auto& arg) {
-          if constexpr (ad_utility::isSimilar<decltype(arg), IdTable>) {
+        [&limitOffset, &tableOrPtr](auto& arg) {
+          using T = std::decay_t<decltype(arg)>;
+          if constexpr (ad_utility::isSimilar<T, IdTable>) {
             resizeIdTable(arg, limitOffset);
-          } else {
-            static_assert(ad_utility::isSimilar<decltype(arg), IdTablePtr>);
+          } else if constexpr (ad_utility::isSimilar<T, IdTablePtr>) {
             arg = std::make_shared<const IdTable>(
                 makeResizedClone(*arg, limitOffset));
+          } else {
+            static_assert(ad_utility::isSimilar<T, IdTableView<0>>);
+            // For IdTableView, we need to convert to owned IdTable.
+            // Note: This loses the zero-copy benefit, but LIMIT/OFFSET
+            // requires modification.
+            IdTable clonedTable = arg.clone();
+            IdTablePtr newPtr = std::make_shared<const IdTable>(
+                makeResizedClone(clonedTable, limitOffset));
+            // Replace the variant with the new pointer.
+            tableOrPtr = std::move(newPtr);
           }
         },
         tableOrPtr);
@@ -206,7 +229,8 @@ void Result::applyLimitOffset(
             limitOffset._limit.value() -=
                 limitOffset.actualSize(originalSize - offsetDelta);
           }
-          limitTimeCallback(limitTimer.value(), idTable);
+          // TODO<joka921> This is slightly inefficient.
+          limitTimeCallback(limitTimer.value(), idTable.asStaticView<0>());
           if (limitOffset._offset == 0) {
             return IdTableLoopControl::yieldValue(std::move(pair));
           } else {
@@ -238,7 +262,7 @@ void Result::assertThatLimitWasRespected(const LimitOffsetClause& limitOffset) {
 
 // _____________________________________________________________________________
 void Result::checkDefinedness(const VariableToColumnMap& varColMap) {
-  auto performCheck = [](const auto& map, const IdTable& idTable) {
+  auto performCheck = [](const auto& map, const auto& idTable) {
     return ql::ranges::all_of(map, [&](const auto& varAndCol) {
       const auto& [columnIndex, mightContainUndef] = varAndCol.second;
       if (mightContainUndef == ColumnIndexAndTypeInfo::AlwaysDefined) {
@@ -307,16 +331,18 @@ void Result::runOnNewChunkComputed(
 }
 
 // _____________________________________________________________________________
-const IdTable& Result::idTable() const {
+IdTableView<0> Result::idTable() const {
   AD_CONTRACT_CHECK(isFullyMaterialized());
   return std::visit(
-      [](const auto& arg) -> const IdTable& {
+      [](const auto& arg) -> MaterializedTable {
         using T = std::decay_t<decltype(arg)>;
         if constexpr (std::is_same_v<T, IdTable>) {
-          return arg;
+          return arg.template asStaticView<0>();
+        } else if constexpr (std::is_same_v<T, IdTablePtr>) {
+          return arg->template asStaticView<0>();
         } else {
-          static_assert(std::is_same_v<T, IdTablePtr>);
-          return *arg;
+          static_assert(std::is_same_v<T, IdTableView<0>>);
+          return arg;  // Already a view.
         }
       },
       std::get<IdTableSharedLocalVocabPair>(data_).idTableOrPtr_);

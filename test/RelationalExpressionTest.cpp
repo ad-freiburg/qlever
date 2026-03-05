@@ -493,7 +493,7 @@ auto testNotComparableHelper(T leftValue, U rightValue,
   sparqlExpression::EvaluationContext context{
       *TestContext{}.qec,
       map,
-      table,
+      table.asStaticView<0>(),
       alloc,
       localVocab,
       std::make_shared<ad_utility::CancellationHandle<>>(),

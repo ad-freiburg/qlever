@@ -114,7 +114,8 @@ ExportQueryExecutionTrees::getIdTables(const Result& result) {
 
   return InputRangeTypeErased(CachingTransformInputRange(
       result.idTables(), [](const Result::IdTableVocabPair& pair) {
-        return TableConstRefWithVocab{pair.idTable_, pair.localVocab_};
+        return TableConstRefWithVocab{pair.idTable_.asStaticView<0>(),
+                                      pair.localVocab_};
       }));
 }
 
@@ -336,7 +337,7 @@ ExportQueryExecutionTrees::constructQueryResultBindingsToQLeverJSON(
 nlohmann::json idTableToQLeverJSONRow(
     const QueryExecutionTree& qet,
     const QueryExecutionTree::ColumnIndicesAndTypes& columns,
-    const LocalVocab& localVocab, const size_t rowIndex, const IdTable& data) {
+    const LocalVocab& localVocab, const size_t rowIndex, IdTableView<0> data) {
   // We need the explicit `array` constructor for the special case of zero
   // variables.
   auto row = nlohmann::json::array();

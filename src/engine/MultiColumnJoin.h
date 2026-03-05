@@ -65,7 +65,7 @@ class MultiColumnJoin : public Operation {
    *This method is made public here for unit testing purposes.
    **/
   void computeMultiColumnJoin(
-      const IdTable& left, const IdTable& right,
+      IdTableView<0> left, IdTableView<0> right,
       const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
       IdTable* resultMightBeUnsorted);
 

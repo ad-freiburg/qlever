@@ -113,7 +113,7 @@ size_t Minus::getCostEstimate() {
 }
 
 // _____________________________________________________________________________
-auto Minus::makeUndefRangesChecker(bool left, const IdTable& idTable) const {
+auto Minus::makeUndefRangesChecker(bool left, IdTableView<0> idTable) const {
   const auto& operation = left ? _left : _right;
   bool alwaysDefined = ql::ranges::all_of(
       _matchedColumns, [&operation, left, &idTable](const auto& cols) {
@@ -136,7 +136,7 @@ auto Minus::makeUndefRangesChecker(bool left, const IdTable& idTable) const {
 // _____________________________________________________________________________
 template <typename T>
 IdTable Minus::copyMatchingRows(
-    const IdTable& left, T reference,
+    IdTableView<0> left, T reference,
     const std::vector<T, ad_utility::AllocatorWithLimit<T>>& keepEntry) const {
   IdTable result{getResultWidth(), left.getAllocator()};
   AD_CORRECTNESS_CHECK(result.numColumns() == left.numColumns());
@@ -164,7 +164,7 @@ IdTable Minus::copyMatchingRows(
 }
 // _____________________________________________________________________________
 IdTable Minus::computeMinus(
-    const IdTable& left, const IdTable& right,
+    IdTableView<0> left, IdTableView<0> right,
     const std::vector<std::array<ColumnIndex, 2>>& joinColumns) const {
   if (left.empty()) {
     return IdTable{getResultWidth(), getExecutionContext()->getAllocator()};
@@ -247,7 +247,7 @@ std::optional<Result> Minus::tryIndexNestedLoopJoinIfSuitable() {
   }
 
   auto leftRes = _left->getResult(false);
-  const IdTable& leftTable = leftRes->idTable();
+  const auto& leftTable = leftRes->idTable();
   auto rightRes = qlever::joinHelpers::computeResultSkipChild(sort);
 
   LocalVocab localVocab = leftRes->getCopyOfLocalVocab();

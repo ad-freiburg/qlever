@@ -230,7 +230,7 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
     externalLimitApplied_ = !limitOffset_.isUnconstrained();
     result.applyLimitOffset(
         limitOffset_,
-        [this](std::chrono::microseconds limitTime, const IdTable& idTable) {
+        [this](std::chrono::microseconds limitTime, const auto& idTable) {
           updateRuntimeStats(true, idTable.numRows(), idTable.numColumns(),
                              limitTime);
         });

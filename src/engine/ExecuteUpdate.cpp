@@ -177,7 +177,7 @@ ExecuteUpdate::transformTriplesTemplate(
 }
 
 // _____________________________________________________________________________
-std::optional<Id> ExecuteUpdate::resolveVariable(const IdTable& idTable,
+std::optional<Id> ExecuteUpdate::resolveVariable(IdTableView<0> idTable,
                                                  const uint64_t& rowIdx,
                                                  IdOrVariableIndex idOrVar) {
   auto visitId = [](const Id& id) {
@@ -195,7 +195,7 @@ std::optional<Id> ExecuteUpdate::resolveVariable(const IdTable& idTable,
 // _____________________________________________________________________________
 void ExecuteUpdate::computeAndAddQuadsForResultRow(
     const std::vector<TransformedTriple>& templates,
-    std::vector<IdTriple<>>& result, const IdTable& idTable,
+    std::vector<IdTriple<>>& result, IdTableView<0> idTable,
     const uint64_t rowIdx) {
   for (const auto& [s, p, o, g] : templates) {
     auto subject = resolveVariable(idTable, rowIdx, s);

@@ -923,4 +923,16 @@ using IdTableView =
     columnBasedIdTable::IdTable<Id, COLS, detail::IdVector,
                                 columnBasedIdTable::IsView::True>;
 
+// Free-function `operator==` to allow comparing `IdTableView` with `IdTable`
+// and vice versa. The member `operator==` is only defined for non-view types.
+template <int COLS>
+inline bool operator==(const IdTableView<COLS>& view, const IdTable& table) {
+  return table == view.clone();
+}
+
+template <int COLS>
+inline bool operator==(const IdTable& table, const IdTableView<COLS>& view) {
+  return table == view.clone();
+}
+
 #endif  // QLEVER_SRC_ENGINE_IDTABLE_IDTABLE_H

@@ -114,7 +114,8 @@ Result Filter::computeResult(bool requestLaziness) {
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename Table)(requires ad_utility::SimilarTo<Table, IdTable>)
+CPP_template_def(typename Table)(
+    requires ad_utility::SimilarToAny<Table, IdTable, IdTableView<0>>)
     IdTable Filter::filterIdTable(std::vector<ColumnIndex> sortedBy,
                                   Table&& idTable) const {
   size_t width = idTable.numColumns();
@@ -130,7 +131,7 @@ CPP_template_def(typename Table)(requires ad_utility::SimilarTo<Table, IdTable>)
 
 // _____________________________________________________________________________
 CPP_template_def(int WIDTH, typename Table)(
-    requires ad_utility::SimilarTo<Table, IdTable>) void Filter::
+    requires ad_utility::SimilarToAny<Table, IdTable, IdTableView<0>>) void Filter::
     computeFilterImpl(IdTable& dynamicResultTable, Table&& inputTable,
                       std::vector<ColumnIndex> sortedBy) const {
   LocalVocab dummyLocalVocab{};
@@ -138,7 +139,8 @@ CPP_template_def(int WIDTH, typename Table)(
   IdTableStatic<WIDTH> resultTable =
       std::move(dynamicResultTable).toStatic<static_cast<size_t>(WIDTH)>();
   sparqlExpression::EvaluationContext evaluationContext(
-      *getExecutionContext(), _subtree->getVariableColumns(), inputTable,
+      *getExecutionContext(), _subtree->getVariableColumns(),
+      inputTable.template asStaticView<0>(),
       getExecutionContext()->getAllocator(), dummyLocalVocab,
       cancellationHandle_, deadline_);
 
@@ -178,7 +180,13 @@ CPP_template_def(int WIDTH, typename Table)(
         // The binary filter contains all elements of the input, and we have
         // no previous results, so we can simply copy or move the complete
         // table.
-        dynamicResultTable = AD_FWD(inputTable).moveOrClone();
+        if constexpr (ad_utility::isSimilar<Table, IdTableView<0>>) {
+          // TODO<joka921> figure out why moveOrClone doesn't work for
+          // IdTableView.
+          dynamicResultTable = inputTable.clone();
+        } else {
+          dynamicResultTable = AD_FWD(inputTable).moveOrClone();
+        }
         return;
       }
       checkCancellation();

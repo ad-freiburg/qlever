@@ -18,9 +18,9 @@
 
 // helper struct to improve readability in prepareJoin()
 struct PreparedSpatialJoinParams {
-  const IdTable* const idTableLeft_;
+  IdTableView<0> idTableLeft_;
   std::shared_ptr<const Result> resultLeft_;
-  const IdTable* const idTableRight_;
+  IdTableView<0> idTableRight_;
   std::shared_ptr<const Result> resultRight_;
   ColumnIndex leftJoinCol_;
   ColumnIndex rightJoinCol_;

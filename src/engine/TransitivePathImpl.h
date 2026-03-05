@@ -328,7 +328,7 @@ class TransitivePathImpl : public TransitivePathBase {
    * @param edges Templated datastructure representing the edges of the graph
    * @return Set A set of starting nodes for the transitive hull computation
    */
-  SetWithGraph setupNodes(const IdTable& sub,
+  SetWithGraph setupNodes(const IdTableView<0>& sub,
                           const TransitivePathSide& startSide,
                           const T& edges) const {
     AD_CORRECTNESS_CHECK(minDist_ != 0,
@@ -392,7 +392,7 @@ class TransitivePathImpl : public TransitivePathBase {
     };
 
     auto toView = [columnsWithoutJoinColumns = std::move(
-                       columnsWithoutJoinColumns)](const IdTable& idTable) {
+                       columnsWithoutJoinColumns)](const auto& idTable) {
       return idTable.asColumnSubsetView(columnsWithoutJoinColumns);
     };
 
@@ -401,7 +401,7 @@ class TransitivePathImpl : public TransitivePathBase {
           [toView = std::move(toView),
            columnsToRange = std::move(columnsToRange),
            startSideResult = std::move(startSideResult)]() {
-            const IdTable& idTable = startSideResult->idTable();
+            const auto& idTable = startSideResult->idTable();
             return TableColumnWithVocab{toView(idTable),
                                         columnsToRange(idTable),
                                         startSideResult->getCopyOfLocalVocab()};
@@ -422,7 +422,7 @@ class TransitivePathImpl : public TransitivePathBase {
         }));
   }
 
-  virtual T setupEdgesMap(const IdTable& dynSub,
+  virtual T setupEdgesMap(const IdTableView<0>& dynSub,
                           const TransitivePathSide& startSide,
                           const TransitivePathSide& targetSide) const = 0;
 

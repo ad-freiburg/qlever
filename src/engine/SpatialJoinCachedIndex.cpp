@@ -22,7 +22,7 @@ class SpatialJoinCachedIndexImpl {
   using ShapeIndexToRow = SpatialJoinCachedIndex::ShapeIndexToRow;
 
   // Construct the index, and return the mapping from shape indices to rows.
-  ShapeIndexToRow populate(ColumnIndex col, const IdTable& restable,
+  ShapeIndexToRow populate(ColumnIndex col, IdTableView<0> restable,
                            const Index& index) {
     ShapeIndexToRow shapeIndexToRow;
     AD_CORRECTNESS_CHECK(s2index_.num_shape_ids() == 0);
@@ -46,7 +46,7 @@ class SpatialJoinCachedIndexImpl {
 // ____________________________________________________________________________
 SpatialJoinCachedIndex::SpatialJoinCachedIndex(Variable geometryColumn,
                                                ColumnIndex col,
-                                               const IdTable& restable,
+                                               IdTableView<0> restable,
                                                const Index& index)
     : geometryColumn_{std::move(geometryColumn)},
       pimpl_{std::make_shared<SpatialJoinCachedIndexImpl>()} {

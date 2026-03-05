@@ -61,7 +61,7 @@ class Union : public Operation {
 
   // The method is declared here to make it unit testable
   IdTable computeUnion(
-      const IdTable& left, const IdTable& right,
+      IdTableView<0> left, IdTableView<0> right,
       const std::vector<std::array<size_t, 2>>& columnOrigins) const;
 
   std::vector<QueryExecutionTree*> getChildren() override {

@@ -80,13 +80,13 @@ Result Sort::computeResult(bool requestLaziness) {
 
   // For fully materialized input, we know the size upfront.
   if (input->isFullyMaterialized()) {
-    const IdTable& inputTable = input->idTable();
+    const auto& inputTable = input->idTable();
     if (inputTable.numRows() <= maxNumRowsToBeSortedInMemory) {
       return computeResultInMemory(inputTable.clone(),
                                    input->getCopyOfLocalVocab());
     } else {
       LocalVocab localVocab = input->getCopyOfLocalVocab();
-      std::span<const IdTable> inputTableSpan{&inputTable, 1};
+      ql::span<const IdTableView<0>> inputTableSpan{&inputTable, 1};
       return computeResultExternal({}, std::move(localVocab),
                                    inputTableSpan.begin(), inputTableSpan.end(),
                                    std::move(input), requestLaziness);
@@ -182,7 +182,7 @@ Result Sort::computeResultExternal(std::vector<IdTable> collectedBlocks,
   }
   while (it != end) {
     checkCancellation();
-    if constexpr (ad_utility::isSimilar<std::iter_value_t<Iterator>,
+    if constexpr (ad_utility::isSimilar<ql::iter_value_t<Iterator>,
                                         Result::IdTableVocabPair>) {
       auto& idTableAndLocalVocab = *it;
       sorter->pushBlock(std::move(idTableAndLocalVocab.idTable_));

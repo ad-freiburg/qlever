@@ -105,7 +105,7 @@ std::vector<QueryExecutionTree*> Bind::getChildren() {
 }
 
 // _____________________________________________________________________________
-IdTable Bind::cloneSubView(const IdTable& idTable,
+IdTable Bind::cloneSubView(IdTableView<0> idTable,
                            const std::pair<size_t, size_t>& subrange) {
   IdTable result(idTable.numColumns(), idTable.getAllocator());
   result.resize(subrange.second - subrange.first);
@@ -178,9 +178,9 @@ IdTable Bind::computeExpressionBind(
     LocalVocab* localVocab, IdTable idTable,
     const sparqlExpression::SparqlExpression* expression) const {
   sparqlExpression::EvaluationContext evaluationContext(
-      *getExecutionContext(), _subtree->getVariableColumns(), idTable,
-      getExecutionContext()->getAllocator(), *localVocab, cancellationHandle_,
-      deadline_);
+      *getExecutionContext(), _subtree->getVariableColumns(),
+      idTable.asStaticView<0>(), getExecutionContext()->getAllocator(),
+      *localVocab, cancellationHandle_, deadline_);
 
   sparqlExpression::ExpressionResult expressionResult =
       expression->evaluate(&evaluationContext);

@@ -21,7 +21,7 @@
 using namespace pathSearch;
 
 // _____________________________________________________________________________
-BinSearchWrapper::BinSearchWrapper(const IdTable& table, size_t startCol,
+BinSearchWrapper::BinSearchWrapper(IdTableView<0> table, size_t startCol,
                                    size_t endCol, std::vector<size_t> edgeCols)
     : table_(table),
       startCol_(startCol),
@@ -234,7 +234,7 @@ Result PathSearch::computeResult([[maybe_unused]] bool requestLaziness) {
   IdTable idTable{allocator()};
   idTable.setNumColumns(getResultWidth());
 
-  const IdTable& dynSub = subRes->idTable();
+  const auto& dynSub = subRes->idTable();
   if (!dynSub.empty()) {
     auto timer = ad_utility::Timer(ad_utility::Timer::Started);
 

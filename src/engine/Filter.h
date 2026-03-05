@@ -74,15 +74,15 @@ class Filter : public Operation {
 
   // Perform the actual filter operation of the data provided.
   CPP_template(int WIDTH, typename Table)(
-      requires ad_utility::SimilarTo<
-          Table, IdTable>) void computeFilterImpl(IdTable& dynamicResultTable,
+      requires ad_utility::SimilarToAny<
+          Table, IdTable, IdTableView<0>>) void computeFilterImpl(IdTable& dynamicResultTable,
                                                   Table&& input,
                                                   std::vector<ColumnIndex>
                                                       sortedBy) const;
 
   // Run `computeFilterImpl` on the provided IdTable
   CPP_template(typename Table)(
-      requires ad_utility::SimilarTo<Table, IdTable>) IdTable
+      requires ad_utility::SimilarToAny<Table, IdTable, IdTableView<0>>) IdTable
       filterIdTable(std::vector<ColumnIndex> sortedBy, Table&& idTable) const;
 };
 

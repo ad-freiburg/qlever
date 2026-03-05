@@ -146,7 +146,7 @@ class OptionalJoinRange
   std::shared_ptr<const Result> leftResult_;
   std::shared_ptr<const Result> rightResult_;
   const LocalVocab& leftVocab_;
-  const IdTable& leftTable_;
+  IdTableView<0> leftTable_;
   Result::LazyResult rightTables_;
   Adder matchTracker_;
   size_t resultWidth_;
@@ -157,7 +157,7 @@ class OptionalJoinRange
  public:
   OptionalJoinRange(std::shared_ptr<const Result> leftResult,
                     std::shared_ptr<const Result> rightResult,
-                    const LocalVocab& leftVocab, const IdTable& leftTable,
+                    const LocalVocab& leftVocab, IdTableView<0> leftTable,
                     Result::LazyResult rightTables, Adder matchTracker,
                     size_t resultWidth,
                     ad_utility::JoinColumnMapping joinColumnData,
@@ -280,7 +280,7 @@ class IndexNestedLoopJoin {
                   .asColumnSubsetView(leftColumns)
                   .template asStaticView<JOIN_COLUMNS>();
           auto matchHelper = [&matchTracker, &leftTable,
-                              &rightColumns](const IdTable& idTable) {
+                              &rightColumns](const auto& idTable) {
             matchLeft(matchTracker, leftTable,
                       idTable.asColumnSubsetView(rightColumns)
                           .template asStaticView<JOIN_COLUMNS>());
@@ -312,7 +312,7 @@ class IndexNestedLoopJoin {
          keepJoinColumns](auto JOIN_COLUMNS_PAR) -> Result::LazyResult {
           static constexpr auto JOIN_COLUMNS =
               static_cast<size_t>(JOIN_COLUMNS_PAR);
-          const IdTable& leftTable = leftResult_->idTable();
+          const auto& leftTable = leftResult_->idTable();
           size_t numColsLeft = leftTable.numColumns();
           ad_utility::JoinColumnMapping joinColumnData{
               joinColumns_, numColsLeft, numColsRight, keepJoinColumns};
@@ -321,7 +321,7 @@ class IndexNestedLoopJoin {
                   .template asStaticView<JOIN_COLUMNS>();
           auto matchHelper = [&matchTracker, &leftTableView,
                               rightColumns = joinColumnData.jcsRight()](
-                                 const IdTable& idTable) {
+                                 const auto& idTable) {
             matchLeft(matchTracker, leftTableView,
                       idTable.asColumnSubsetView(rightColumns)
                           .template asStaticView<JOIN_COLUMNS>());

@@ -297,7 +297,7 @@ void Join::computeSizeEstimateAndMultiplicities() {
 
 // ______________________________________________________________________________
 
-void Join::join(const IdTable& a, const IdTable& b, IdTable* result) const {
+void Join::join(IdTableView<0> a, IdTableView<0> b, IdTable* result) const {
   AD_LOG_DEBUG << "Performing join between two tables.\n";
   AD_LOG_DEBUG << "A: width = " << a.numColumns() << ", size = " << a.size()
                << "\n";
@@ -603,7 +603,7 @@ Result Join::computeResultForIndexScanAndIdTable(
        resultWithIdTable = std::move(resultWithIdTable),
        joinColMap = std::move(joinColMap)](
           std::function<void(IdTable&, LocalVocab&)> yieldTable) {
-        const IdTable& idTable = resultWithIdTable->idTable();
+        const auto& idTable = resultWithIdTable->idTable();
         auto rowAdder = makeRowAdder(std::move(yieldTable));
 
         auto permutationIdTable =
