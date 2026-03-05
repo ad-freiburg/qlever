@@ -203,6 +203,19 @@ class Permutation {
 
   const CompressedRelationReader& reader() const { return reader_.value(); }
 
+  // Set up shared block access links to sister/cross-pair permutations.
+  // Must be called after all permutations are loaded.
+  void setSisterPermutation(Permutation* sister) {
+    sisterPermutation_ = sister;
+  }
+  void setCrossPairPermutation(Permutation* crossPair) {
+    crossPairPermutation_ = crossPair;
+  }
+
+  // Wire the reader's shared accesses based on the sister/cross-pair links.
+  // Must be called after setSisterPermutation/setCrossPairPermutation.
+  void wireSharedBlockAccess();
+
   Enum permutation() const { return permutation_; }
 
   // Provide const access to a linked internal permutation. If no internal
@@ -233,6 +246,11 @@ class Permutation {
   std::unique_ptr<Permutation> internalPermutation_ = nullptr;
 
   bool isInternalPermutation_ = false;
+
+  // Pointers to sister and cross-pair permutations for shared block reading.
+  // These are set up after all permutations are loaded.
+  Permutation* sisterPermutation_ = nullptr;
+  Permutation* crossPairPermutation_ = nullptr;
 };
 
 #endif  // QLEVER_SRC_INDEX_PERMUTATION_H

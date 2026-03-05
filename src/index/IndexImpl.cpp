@@ -435,6 +435,7 @@ void IndexImpl::createFromFiles(
     secondSorter.clear();
     createThirdPermutationPair(NumColumnsIndexBuilding,
                                thirdSorter.getSortedBlocks<0>());
+    resolveCrossPairSharing();
     configurationJson_["has-all-permutations"] = true;
   } else {
     // Load all permutations and also load the patterns. In this case the
@@ -449,6 +450,7 @@ void IndexImpl::createFromFiles(
     createInternalPsoAndPosAndSetMetadata();
     createThirdPermutationPair(NumColumnsIndexBuilding + 2,
                                thirdSorterPtr->template getSortedBlocks<0>());
+    resolveCrossPairSharing();
     configurationJson_["has-all-permutations"] = true;
   }
 
@@ -458,6 +460,104 @@ void IndexImpl::createFromFiles(
   addInternalStatisticsToConfiguration(numTriplesInternal,
                                        numPredicatesInternal);
   AD_LOG_INFO << "Index build completed" << std::endl;
+}
+
+// _____________________________________________________________________________
+void IndexImpl::resolveCrossPairSharing() {
+  // Resolve cross-pair sharing: for each (nonCanonical, canonical) pair, find
+  // the matching block in the canonical permutation for each cross-pair dummy
+  // block in the non-canonical permutation.
+  //
+  // Cross-pair partners (non-canonical → canonical):
+  //   SPO → PSO, SOP → OSP, OPS → POS
+  struct PairToResolve {
+    const Permutation& nonCanonical;
+    const Permutation& canonical;
+  };
+  std::array<PairToResolve, 3> pairs{{
+      {*spo_, *pso_},
+      {*sop_, *osp_},
+      {*ops_, *pos_},
+  }};
+
+  // Helper to read block metadata from disk for a permutation.
+  auto readBlockData =
+      [this](const Permutation& perm) -> std::vector<CompressedBlockMetadata> {
+    auto filename = getFilenameForPermutation(perm, false);
+    IndexMetaDataMmapView meta;
+    meta.setup(filename + MMAP_FILE_SUFFIX, ad_utility::ReuseTag(),
+               ad_utility::AccessPattern::Random);
+    ad_utility::File file(filename, "r");
+    meta.readFromFile(&file);
+    file.close();
+    return meta.blockData();
+  };
+
+  for (auto& [nonCanon, canon] : pairs) {
+    auto filename = getFilenameForPermutation(nonCanon, false);
+    // Read the metadata for both permutations.
+    IndexMetaDataMmapView meta;
+    meta.setup(filename + MMAP_FILE_SUFFIX, ad_utility::ReuseTag(),
+               ad_utility::AccessPattern::Random);
+    ad_utility::File file(filename, "r");
+    meta.readFromFile(&file);
+    file.close();
+
+    auto& blocks = meta.blockData();
+    auto canonicalBlocks = readBlockData(canon);
+
+    size_t numResolved = 0;
+    for (auto& block : blocks) {
+      if (!block.sharingInfo_.has_value() ||
+          block.sharingInfo_->type_ !=
+              BlockSharingInfo::Type::CrossPairPermutation) {
+        continue;
+      }
+      AD_CORRECTNESS_CHECK(block.sharingInfo_->sourceBlockIndex_ ==
+                           std::numeric_limits<size_t>::max());
+
+      // The non-canonical block has constant col0 and col1.  In the canonical
+      // permutation, these are swapped: col0_canon = col1_noncanon and
+      // col1_canon = col0_noncanon.
+      auto targetCol0 = block.firstTriple_.col1Id_;
+      auto targetCol1 = block.firstTriple_.col0Id_;
+      auto targetCol2First = block.firstTriple_.col2Id_;
+      auto targetCol2Last = block.lastTriple_.col2Id_;
+      auto targetNumRows = block.numRows_;
+
+      // Find the matching block in the canonical permutation.
+      bool found = false;
+      for (size_t i = 0; i < canonicalBlocks.size(); ++i) {
+        const auto& cb = canonicalBlocks[i];
+        if (cb.firstTriple_.col0Id_ == targetCol0 &&
+            cb.firstTriple_.col1Id_ == targetCol1 &&
+            cb.lastTriple_.col0Id_ == targetCol0 &&
+            cb.lastTriple_.col1Id_ == targetCol1 &&
+            cb.firstTriple_.col2Id_ == targetCol2First &&
+            cb.lastTriple_.col2Id_ == targetCol2Last &&
+            cb.numRows_ == targetNumRows) {
+          block.sharingInfo_->sourceBlockIndex_ = cb.blockIndex_;
+          found = true;
+          ++numResolved;
+          break;
+        }
+      }
+      AD_CONTRACT_CHECK(found,
+                        "Could not find matching canonical block for "
+                        "cross-pair dummy in ",
+                        nonCanon.readableName());
+    }
+
+    if (numResolved > 0) {
+      // Re-write the metadata to disk.
+      ad_utility::File outFile(filename, "r+");
+      meta.appendToFile(&outFile);
+      outFile.close();
+      AD_LOG_INFO << "Resolved " << numResolved
+                  << " cross-pair sharing blocks for "
+                  << nonCanon.readableName() << std::endl;
+    }
+  }
 }
 
 // _____________________________________________________________________________
@@ -866,18 +966,21 @@ CompressedRelationWriter::WriterAndCallback IndexImpl::getWriterAndCallback(
 template <typename T, typename... Callbacks>
 std::tuple<size_t, IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
            IndexImpl::IndexMetaDataMmapDispatcher::WriteType>
-IndexImpl::createPermutationPairImpl(size_t numColumns,
-                                     const std::string& fileName1,
-                                     const std::string& fileName2,
-                                     T&& sortedTriples,
-                                     Permutation::KeyOrder permutation,
-                                     Callbacks&&... perTripleCallbacks) {
+IndexImpl::createPermutationPairImpl(
+    size_t numColumns, const std::string& fileName1,
+    const std::string& fileName2, T&& sortedTriples,
+    Permutation::KeyOrder permutation, bool skipConstantPrefixWriter1,
+    bool skipConstantPrefixWriter2, Callbacks&&... perTripleCallbacks) {
   IndexMetaDataMmapDispatcher::WriteType metaData1;
   auto writerAndCallback1 =
       getWriterAndCallback(metaData1, numColumns, fileName1);
+  writerAndCallback1.writer_->setSkipConstantPrefixBlocks(
+      skipConstantPrefixWriter1);
   IndexMetaDataMmapDispatcher::WriteType metaData2;
   auto writerAndCallback2 =
       getWriterAndCallback(metaData2, numColumns, fileName2);
+  writerAndCallback2.writer_->setSkipConstantPrefixBlocks(
+      skipConstantPrefixWriter2);
 
   std::vector<std::function<void(const IdTableStatic<0>&)>> perBlockCallbacks{
       liftCallback(perTripleCallbacks)...};
@@ -918,13 +1021,16 @@ std::tuple<size_t, IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
            IndexImpl::IndexMetaDataMmapDispatcher::WriteType>
 IndexImpl::createPermutations(size_t numColumns, T&& sortedTriples,
                               const Permutation& p1, const Permutation& p2,
+                              bool skipConstantPrefixWriter1,
+                              bool skipConstantPrefixWriter2,
                               Callbacks&&... perTripleCallbacks) {
   AD_LOG_INFO << "Creating permutations " << p1.readableName() << " and "
               << p2.readableName() << " ..." << std::endl;
   auto metaData = createPermutationPairImpl(
       numColumns, getFilenameForPermutation(p1, false),
       getFilenameForPermutation(p2, false), AD_FWD(sortedTriples),
-      p1.keyOrder(), AD_FWD(perTripleCallbacks)...);
+      p1.keyOrder(), skipConstantPrefixWriter1, skipConstantPrefixWriter2,
+      AD_FWD(perTripleCallbacks)...);
 
   auto& [numDistinctCol0, meta1, meta2] = metaData;
   meta1.calculateStatistics(numDistinctCol0);
@@ -976,13 +1082,13 @@ void IndexImpl::finalizePermutation(
 
 // ________________________________________________________________________
 template <typename SortedTriplesType, typename... CallbackTypes>
-size_t IndexImpl::createPermutationPair(size_t numColumns,
-                                        SortedTriplesType&& sortedTriples,
-                                        const Permutation& p1,
-                                        const Permutation& p2,
-                                        CallbackTypes&&... perTripleCallbacks) {
+size_t IndexImpl::createPermutationPair(
+    size_t numColumns, SortedTriplesType&& sortedTriples, const Permutation& p1,
+    const Permutation& p2, bool skipConstantPrefixWriter1,
+    bool skipConstantPrefixWriter2, CallbackTypes&&... perTripleCallbacks) {
   auto [numDistinctC0, metaData1, metaData2] = createPermutations(
-      numColumns, AD_FWD(sortedTriples), p1, p2, AD_FWD(perTripleCallbacks)...);
+      numColumns, AD_FWD(sortedTriples), p1, p2, skipConstantPrefixWriter1,
+      skipConstantPrefixWriter2, AD_FWD(perTripleCallbacks)...);
   AD_LOG_DEBUG << "Writing meta data for " << p1.readableName() << " and "
                << p2.readableName() << " ..." << std::endl;
   writeMetaData(metaData1, getFilenameForPermutation(p1, false));
@@ -1046,6 +1152,31 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
           << "Only the PSO and POS permutation were loaded, SPARQL queries "
              "with predicate variables will therefore not work"
           << std::endl;
+    }
+  }
+
+  // Set up sister and cross-pair permutation links for shared block reading.
+  // PSO↔POS are always loaded, so always set up their sister links.
+  if (!doNotLoadPermutations_) {
+    pso_->setSisterPermutation(pos_.get());
+    pos_->setSisterPermutation(pso_.get());
+    pso_->wireSharedBlockAccess();
+    pos_->wireSharedBlockAccess();
+  }
+  if (loadAllPermutations_ && !doNotLoadPermutations_) {
+    // Sister pairs: SPO↔SOP, OSP↔OPS.
+    spo_->setSisterPermutation(sop_.get());
+    sop_->setSisterPermutation(spo_.get());
+    osp_->setSisterPermutation(ops_.get());
+    ops_->setSisterPermutation(osp_.get());
+    // Cross-pair links (non-canonical → canonical):
+    // SPO→PSO, SOP→OSP, OPS→POS.
+    spo_->setCrossPairPermutation(pso_.get());
+    sop_->setCrossPairPermutation(osp_.get());
+    ops_->setCrossPairPermutation(pos_.get());
+    // Wire the readers.
+    for (auto perm : {spo_, sop_, osp_, ops_}) {
+      perm->wireSharedBlockAccess();
     }
   }
 
@@ -1780,9 +1911,9 @@ CPP_template_def(typename... NextSorter)(requires(
                                             NextSorter&&... nextSorter) {
   size_t numTriples = 0;
   auto countTriples = [&numTriples](const auto&) mutable { ++numTriples; };
-  size_t numPredicates =
-      createPermutationPair(numColumns, AD_FWD(sortedTriples), *pso_, *pos_,
-                            nextSorter.makePushCallback()..., countTriples);
+  size_t numPredicates = createPermutationPair(
+      numColumns, AD_FWD(sortedTriples), *pso_, *pos_, false, false,
+      nextSorter.makePushCallback()..., countTriples);
   configurationJson_["num-predicates"] =
       NumNormalAndInternal::fromNormal(numPredicates);
   configurationJson_["num-triples"] =
@@ -1824,8 +1955,10 @@ CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
       auto tripleArr = std::array{triple[0], triple[1], triple[2], triple[3]};
       patternCreator.processTriple(tripleArr, ignoreForPatterns);
     };
+    // TODO<cross-pair> Enable cross-pair sharing once block alignment is
+    // resolved: SPO→PSO (true, false), SOP→OSP (false, true).
     size_t numSubjects = createPermutationPair(
-        numColumns, AD_FWD(sortedTriples), *spo_, *sop_,
+        numColumns, AD_FWD(sortedTriples), *spo_, *sop_, false, false,
         nextSorter.makePushCallback()..., pushTripleToPatterns);
     patternCreator.finish();
     configurationJson_["num-subjects"] =
@@ -1836,7 +1969,7 @@ CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
     AD_CORRECTNESS_CHECK(sizeof...(nextSorter) == 1);
     size_t numSubjects =
         createPermutationPair(numColumns, AD_FWD(sortedTriples), *spo_, *sop_,
-                              nextSorter.makePushCallback()...);
+                              false, false, nextSorter.makePushCallback()...);
     configurationJson_["num-subjects"] =
         NumNormalAndInternal::fromNormal(numSubjects);
     writeConfiguration();
@@ -1854,7 +1987,7 @@ CPP_template_def(typename... NextSorter)(
   // have no fourth argument.
   size_t numObjects =
       createPermutationPair(numColumns, AD_FWD(sortedTriples), *osp_, *ops_,
-                            nextSorter.makePushCallback()...);
+                            false, false, nextSorter.makePushCallback()...);
   configurationJson_["num-objects"] =
       NumNormalAndInternal::fromNormal(numObjects);
   configurationJson_["has-all-permutations"] = true;
