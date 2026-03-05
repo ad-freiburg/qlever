@@ -48,8 +48,18 @@ void QueryExecutionContext::signalQueryUpdate(
     const RuntimeInformation& runtimeInformation,
     RuntimeInformation::SendPriority sendPriority) const {
   auto now = std::chrono::steady_clock::now();
+
+  auto enoughTimeSinceLastUpdate = [this, &now]() {
+    // note: the involved numbers are all signed, and `now` is initialized to
+    // `time_point::min()`, so we can't use `now - lastWebsocketUpdate_` (which
+    // would be more intuitive), because it would overflow in the first step.
+    // The current code only overflows if we are near the end of (representable)
+    // time.
+    return (lastWebsocketUpdate_ + websocketUpdateInterval()) <= now;
+  };
+
   if (sendPriority == RuntimeInformation::SendPriority::Always ||
-      (now - lastWebsocketUpdate_) >= websocketUpdateInterval_) {
+      enoughTimeSinceLastUpdate()) {
     lastWebsocketUpdate_ = now;
     updateCallback_(nlohmann::ordered_json(runtimeInformation).dump());
   }

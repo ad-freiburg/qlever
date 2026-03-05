@@ -93,24 +93,6 @@ class Join : public Operation {
   void join(const IdTable& a, const IdTable& b, IdTable* result) const;
 
  public:
-  // Helper function to compute the result of a join operation and conditionally
-  // return a lazy or fully materialized result depending on `requestLaziness`.
-  // This is achieved by running the `action` lambda in a separate thread and
-  // returning a lazy result that reads from the queue of the thread. If
-  // `requestLaziness` is false, the result is fully materialized and returned
-  // directly.
-  // `permutation` indicates a permutation to apply to the result columns before
-  // yielding/returning them. An empty vector means no permutation is applied.
-  // `action` is a lambda that can be used to send partial chunks to a consumer
-  // in addition to returning the remaining result. If laziness is not required
-  // it is a no-op.
-  CPP_template(typename ActionT)(
-      requires ad_utility::InvocableWithExactReturnType<
-          ActionT, Result::IdTableVocabPair,
-          std::function<void(IdTable&, LocalVocab&)>>) Result
-      createResult(bool requestedLaziness, ActionT action,
-                   OptionalPermutation permutation = {}) const;
-
   // Fallback implementation of a join that is used when at least one of the two
   // inputs is not fully materialized. This represents the general case where we
   // don't have any optimization left to try.

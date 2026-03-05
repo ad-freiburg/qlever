@@ -74,7 +74,8 @@ class Permutation {
 
   // everything that has to be done when reading an index from disk
   void loadFromDisk(const std::string& onDiskBase,
-                    bool loadInternalPermutation = false);
+                    bool loadInternalPermutation = false,
+                    bool useGraphPostProcessing = true);
 
   // Set the original metadata for the delta triples. This also sets the
   // metadata for internal permutation if present.
@@ -186,6 +187,10 @@ class Permutation {
 
   // _______________________________________________________
   const MetaData& metaData() const { return meta_; }
+
+  // Returns the number of triples in the permutation excluding updates (located
+  // triples).
+  size_t numTriples() const { return metaData().totalElements(); }
 
   // From the given snapshot, get the located triples for this permutation.
   const LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
