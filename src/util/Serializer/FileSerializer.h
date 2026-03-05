@@ -35,17 +35,24 @@ class FileWriteSerializer {
   void close() { _file.close(); }
 
   [[nodiscard]] SerializationPosition getSerializationPosition() const {
-    return _file.tell();
+    return _file.tell() - fileOffsetOnConstruction_;
+  }
+
+  // Alias for compatibility with alignment serialization framework.
+  [[nodiscard]] size_t getCurrentPosition() const {
+    return static_cast<size_t>(getSerializationPosition());
   }
 
   void setSerializationPosition(SerializationPosition position) {
-    _file.seek(static_cast<off_t>(position), SEEK_SET);
+    _file.seek(static_cast<off_t>(position + fileOffsetOnConstruction_),
+               SEEK_SET);
   }
 
   File&& file() && { return std::move(_file); }
 
  private:
   File _file;
+  size_t fileOffsetOnConstruction_ = _file.tell();
 };
 
 class FileReadSerializer {
@@ -68,13 +75,23 @@ class FileReadSerializer {
   }
 
   void setSerializationPosition(SerializationPosition position) {
-    _file.seek(static_cast<off_t>(position), SEEK_SET);
+    _file.seek(static_cast<off_t>(position) + fileOffsetOnConstruction_,
+               SEEK_SET);
+  }
+
+  void skip(size_t numBytes) {
+    _file.seek(static_cast<off_t>(numBytes), SEEK_CUR);
+  }
+
+  size_t getCurrentPosition() const {
+    return _file.tell() - fileOffsetOnConstruction_;
   }
 
   File&& file() && { return std::move(_file); }
 
  private:
   File _file;
+  size_t fileOffsetOnConstruction_ = _file.tell();
 };
 
 /*

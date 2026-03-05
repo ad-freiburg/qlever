@@ -37,6 +37,9 @@ class ByteBufferWriteSerializer {
   Storage&& data() && { return std::move(_data); }
   void reserve(size_t n) { _data.reserve(n); }
 
+  // Get the current write position (number of bytes written so far).
+  size_t getCurrentPosition() const { return _data.size(); }
+
  private:
   Storage _data;
 };
@@ -63,6 +66,17 @@ class ByteBufferReadSerializer {
       default;
 
   const Storage& data() const noexcept { return _data; }
+
+  // Get the current read position (number of bytes read so far).
+  size_t getCurrentPosition() const {
+    return static_cast<size_t>(_iterator - _data.begin());
+  }
+
+  // Skip the given number of bytes without reading them.
+  void skip(size_t numBytes) {
+    AD_CONTRACT_CHECK(_iterator + numBytes <= _data.end());
+    _iterator += numBytes;
+  }
 
  private:
   Storage _data;

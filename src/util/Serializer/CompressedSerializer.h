@@ -56,6 +56,8 @@ CPP_template(typename UnderlyingSerializer, typename CompressionFunction)(
   // We need to temporarily store a single compressed block before flushing it.
   // Using a member variable for this purpose avoids reallocations.
   UninitializedBuffer compressedBuffer_;
+  // Track the total number of uncompressed bytes written.
+  size_t uncompressedBytesWritten_ = 0;
 
  public:
   // Create from the underlying serializer, the function used for compression,
@@ -87,6 +89,7 @@ CPP_template(typename UnderlyingSerializer, typename CompressionFunction)(
 
   // Main serialization function.
   void serializeBytes(const char* bytePointer, size_t numBytes) {
+    uncompressedBytesWritten_ += numBytes;  // Track total uncompressed bytes.
     while (numBytes > 0) {
       size_t capacity = buffer_.capacity() - buffer_.size();
       size_t bytesToCopy = std::min(capacity, numBytes);
@@ -114,6 +117,9 @@ CPP_template(typename UnderlyingSerializer, typename CompressionFunction)(
     flushBlock();
     return std::move(*underlyingSerializer_);
   }
+
+  // Get the current write position (number of uncompressed bytes written).
+  size_t getCurrentPosition() const { return uncompressedBytesWritten_; }
 
  private:
   // Flush the `buffer_` by compressing it and writing to the
@@ -156,6 +162,8 @@ CPP_template(typename UnderlyingSerializer, typename DecompressionFunction)(
   UninitializedBuffer buffer_;
   UninitializedBuffer compressedBuffer_;
   size_t bufferPos_ = 0;
+  // Track the total number of uncompressed bytes read.
+  size_t uncompressedBytesRead_ = 0;
 
  public:
   // Compress from the underlying serializer, as well as the decompression
@@ -175,6 +183,7 @@ CPP_template(typename UnderlyingSerializer, typename DecompressionFunction)(
   // bytes, then additional blocks are read and decompressed from the underlying
   // buffer.
   void serializeBytes(char* bytePointer, size_t numBytes) {
+    uncompressedBytesRead_ += numBytes;  // Track total uncompressed bytes.
     while (numBytes > 0) {
       // If buffer is empty, read and decompress the next block
       if (bufferPos_ >= buffer_.size()) {
@@ -187,6 +196,23 @@ CPP_template(typename UnderlyingSerializer, typename DecompressionFunction)(
       bytePointer += bytesToCopy;
       bufferPos_ += bytesToCopy;
       numBytes -= bytesToCopy;
+    }
+  }
+
+  // Get the current read position (number of uncompressed bytes read).
+  size_t getCurrentPosition() const { return uncompressedBytesRead_; }
+
+  // Skip the given number of bytes without reading them.
+  void skip(size_t numBytes) {
+    uncompressedBytesRead_ += numBytes;  // Track skipped bytes too.
+    while (numBytes > 0) {
+      if (bufferPos_ >= buffer_.size()) {
+        readNextBlock();
+      }
+      size_t bytesAvailable = buffer_.size() - bufferPos_;
+      size_t bytesToSkip = std::min(bytesAvailable, numBytes);
+      bufferPos_ += bytesToSkip;
+      numBytes -= bytesToSkip;
     }
   }
 
