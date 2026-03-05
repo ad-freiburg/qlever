@@ -14,7 +14,11 @@
 #include "index/CompressedRelationPermutationWriterImpl.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/LocatedTriples.h"
+#include "util/CompressionAlgorithm.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
+#ifdef QLEVER_HAS_LZ4
+#include "util/CompressionUsingLz4/Lz4Wrapper.h"
+#endif
 #include "util/Iterators.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/OverloadCallOperator.h"
@@ -1192,10 +1196,26 @@ CompressedRelationReader::decompressAndPostprocessBlock(
 template <typename Iterator>
 void CompressedRelationReader::decompressColumn(
     const std::vector<char>& compressedBlock, size_t numRowsToRead,
-    Iterator iterator) {
-  auto numBytesActuallyRead = ZstdWrapper::decompressToBuffer(
-      compressedBlock.data(), compressedBlock.size(), iterator,
-      numRowsToRead * sizeof(*iterator));
+    Iterator iterator) const {
+  size_t numBytesActuallyRead = 0;
+  switch (compressionAlgorithm_) {
+    case CompressionAlgorithm::Zstd:
+      numBytesActuallyRead = ZstdWrapper::decompressToBuffer(
+          compressedBlock.data(), compressedBlock.size(), iterator,
+          numRowsToRead * sizeof(*iterator));
+      break;
+    case CompressionAlgorithm::Lz4:
+#ifdef QLEVER_HAS_LZ4
+      numBytesActuallyRead = Lz4Wrapper::decompressToBuffer(
+          compressedBlock.data(), compressedBlock.size(), iterator,
+          numRowsToRead * sizeof(*iterator));
+#else
+      throw std::runtime_error(
+          "This index was built with LZ4 compression, but QLever was compiled "
+          "without LZ4 support. Rebuild QLever with -DQLEVER_USE_LZ4=ON.");
+#endif
+      break;
+  }
   static_assert(sizeof(Id) == sizeof(*iterator));
   AD_CORRECTNESS_CHECK(numRowsToRead * sizeof(Id) == numBytesActuallyRead);
 }
@@ -1218,8 +1238,23 @@ CompressedRelationReader::readAndDecompressBlock(
 // ____________________________________________________________________________
 CompressedBlockMetadata::OffsetAndCompressedSize
 CompressedRelationWriter::compressAndWriteColumn(ql::span<const Id> column) {
-  std::vector<char> compressedBlock = ZstdWrapper::compress(
-      (void*)(column.data()), column.size() * sizeof(column[0]));
+  std::vector<char> compressedBlock;
+  switch (compressionAlgorithm_) {
+    case CompressionAlgorithm::Zstd:
+      compressedBlock = ZstdWrapper::compress(
+          (void*)(column.data()), column.size() * sizeof(column[0]));
+      break;
+    case CompressionAlgorithm::Lz4:
+#ifdef QLEVER_HAS_LZ4
+      compressedBlock = Lz4Wrapper::compress((void*)(column.data()),
+                                             column.size() * sizeof(column[0]));
+#else
+      throw std::runtime_error(
+          "LZ4 compression was requested, but QLever was compiled without LZ4 "
+          "support. Rebuild QLever with -DQLEVER_USE_LZ4=ON.");
+#endif
+      break;
+  }
   auto compressedSize = compressedBlock.size();
   auto file = outfile_.wlock();
   auto offsetInFile = file->tell();

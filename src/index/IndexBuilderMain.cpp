@@ -18,6 +18,7 @@
 #include "global/Constants.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "libqlever/Qlever.h"
+#include "util/CompressionAlgorithm.h"
 #include "util/ProgramOptionsHelpers.h"
 #include "util/ReadableNumberFacet.h"
 #include "util/json.h"
@@ -191,6 +192,7 @@ int main(int argc, char** argv) {
   std::vector<string> defaultGraphs;
   std::vector<bool> parseParallel;
   std::string materializedViewsJson;
+  std::string compressionAlgorithmStr = "zstd";
 
   boost::program_options::options_description boostOptions(
       "Options for qlever-index");
@@ -287,6 +289,10 @@ int main(int argc, char** argv) {
       "create materialized views after index building. Takes a JSON object "
       "mapping view names to SELECT queries for writing the view, for example: "
       R"({"view1": "SELECT ...", "view2": "SELECT ..."})");
+  add("compression-algorithm",
+      po::value(&compressionAlgorithmStr)->default_value("zstd"),
+      "The compression algorithm for the permutation data. Must be one of "
+      "[zstd|lz4]. Default: zstd.");
 
   // Process command line arguments.
   po::variables_map optionsMap;
@@ -319,6 +325,8 @@ int main(int argc, char** argv) {
                                                defaultGraphs, parseParallel);
     config.writeMaterializedViews_ =
         parseMaterializedViewsJson(materializedViewsJson);
+    config.compressionAlgorithm_ =
+        compressionAlgorithmFromString(compressionAlgorithmStr);
     config.validate();
     qlever::Qlever::buildIndex(config);
   } catch (std::exception& e) {

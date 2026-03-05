@@ -16,6 +16,7 @@
 #include "index/ScanSpecification.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"
+#include "util/CompressionAlgorithm.h"
 #include "util/File.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Serializer/SerializeArrayOrTuple.h"
@@ -316,14 +317,19 @@ class CompressedRelationWriter {
   // A dummy value for multiplicities that can only later be determined.
   static constexpr float multiplicityDummy = 42.4242f;
 
+  // The compression algorithm used by this writer.
+  CompressionAlgorithm compressionAlgorithm_ = CompressionAlgorithm::Zstd;
+
  public:
   /// Create using a filename, to which the relation data will be written.
   explicit CompressedRelationWriter(
       size_t numColumns, ad_utility::File f,
-      ad_utility::MemorySize uncompressedBlocksizePerColumn)
+      ad_utility::MemorySize uncompressedBlocksizePerColumn,
+      CompressionAlgorithm compressionAlgorithm = CompressionAlgorithm::Zstd)
       : outfile_{std::move(f)},
         numColumns_{numColumns},
-        uncompressedBlocksizePerColumn_{uncompressedBlocksizePerColumn} {}
+        uncompressedBlocksizePerColumn_{uncompressedBlocksizePerColumn},
+        compressionAlgorithm_{compressionAlgorithm} {}
   // Two helper types used to make the interface of the function
   // `createPermutationPair` below safer and more explicit.
   using MetadataCallback =
@@ -705,12 +711,18 @@ class CompressedRelationReader {
   // used for materialized views where repeated rows are meaningful.
   bool useGraphPostProcessing_;
 
+  // The compression algorithm used by this reader.
+  CompressionAlgorithm compressionAlgorithm_ = CompressionAlgorithm::Zstd;
+
  public:
-  explicit CompressedRelationReader(Allocator allocator, ad_utility::File file,
-                                    bool useGraphPostProcessing = true)
+  explicit CompressedRelationReader(
+      Allocator allocator, ad_utility::File file,
+      bool useGraphPostProcessing = true,
+      CompressionAlgorithm compressionAlgorithm = CompressionAlgorithm::Zstd)
       : allocator_{std::move(allocator)},
         file_{std::move(file)},
-        useGraphPostProcessing_{useGraphPostProcessing} {}
+        useGraphPostProcessing_{useGraphPostProcessing},
+        compressionAlgorithm_{compressionAlgorithm} {}
 
   // Helper function that enables a comparison of a triple with an `Id` in the
   // function `getBlocksForJoin` below.  If the given triple matches `col0Id` of
@@ -882,8 +894,8 @@ class CompressedRelationReader {
   // store the result at the `iterator`. For the `numRowsToRead` argument, see
   // the documentation of `decompressBlock`.
   template <typename Iterator>
-  static void decompressColumn(const std::vector<char>& compressedColumn,
-                               size_t numRowsToRead, Iterator iterator);
+  void decompressColumn(const std::vector<char>& compressedColumn,
+                        size_t numRowsToRead, Iterator iterator) const;
 
   // Read and decompress the parts of the block given by `blockMetaData` (which
   // identifies the block) and `scanConfig` (which specifies the part of that

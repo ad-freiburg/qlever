@@ -23,6 +23,7 @@
 #include "util/BatchedPipeline.h"
 #include "util/CachingMemoryResource.h"
 #include "util/CancellationHandle.h"
+#include "util/CompressionAlgorithm.h"
 #include "util/HashMap.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
@@ -855,7 +856,7 @@ CompressedRelationWriter::WriterAndCallback IndexImpl::getWriterAndCallback(
 
   auto writer = std::make_unique<CompressedRelationWriter>(
       numColumns, ad_utility::File(fileName, "w"),
-      blocksizePermutationPerColumn_);
+      blocksizePermutationPerColumn_, compressionAlgorithm_);
 
   auto callback =
       liftCallback([&metaData](const auto& md) { metaData.add(md); });
@@ -1016,7 +1017,8 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
 
   auto load = [this, &setMetadata](PermutationPtr permutation,
                                    bool loadInternalPermutation = false) {
-    permutation->loadFromDisk(onDiskBase_, loadInternalPermutation);
+    permutation->loadFromDisk(onDiskBase_, loadInternalPermutation, true,
+                              compressionAlgorithm_);
     setMetadata(*permutation);
   };
 
@@ -1171,6 +1173,7 @@ void IndexImpl::writeConfiguration() const {
   configuration["git-hash"] =
       *qlever::version::gitShortHashWithoutLinking.wlock();
   configuration["index-format-version"] = qlever::indexFormatVersion;
+  configuration["compression-algorithm"] = toString(compressionAlgorithm_);
   auto f = ad_utility::makeOfstream(onDiskBase_ + CONFIGURATION_FILE);
   f << configuration;
 }
@@ -1306,6 +1309,16 @@ void IndexImpl::readConfiguration() {
 
   loadDataMember("encoded-iri-prefixes", encodedIriManager_,
                  EncodedIriManager{});
+
+  // Read the compression algorithm. Default to zstd for backward compatibility
+  // with older indices that do not store this field.
+  {
+    std::string compressionAlgorithmStr;
+    loadDataMember("compression-algorithm", compressionAlgorithmStr,
+                   std::string{"zstd"});
+    compressionAlgorithm_ =
+        compressionAlgorithmFromString(compressionAlgorithmStr);
+  }
 
   // Compute unique ID for this index.
   //

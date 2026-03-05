@@ -37,6 +37,7 @@
 #include "parser/RdfParser.h"
 #include "parser/TripleComponent.h"
 #include "util/BufferedVector.h"
+#include "util/CompressionAlgorithm.h"
 #include "util/File.h"
 #include "util/Forward.h"
 #include "util/MemorySize/MemorySize.h"
@@ -204,6 +205,9 @@ class IndexImpl {
 
   // BlankNodeManager, initialized during `readConfiguration`
   std::unique_ptr<ad_utility::BlankNodeManager> blankNodeManager_{nullptr};
+
+  // The compression algorithm used for the permutation data.
+  CompressionAlgorithm compressionAlgorithm_ = CompressionAlgorithm::Zstd;
 
   std::optional<DeltaTriplesManager> deltaTriples_;
 
@@ -469,6 +473,11 @@ class IndexImpl {
 
   const ad_utility::MemorySize& blocksizePermutationPerColumn() const {
     return blocksizePermutationPerColumn_;
+  }
+
+  CompressionAlgorithm& compressionAlgorithm() { return compressionAlgorithm_; }
+  const CompressionAlgorithm& compressionAlgorithm() const {
+    return compressionAlgorithm_;
   }
 
   void setOnDiskBase(const std::string& onDiskBase);

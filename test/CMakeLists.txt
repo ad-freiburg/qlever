@@ -258,6 +258,10 @@ addLinkAndDiscoverTestNoLibs(ParametersTest)
 
 addLinkAndDiscoverTest(ZstdCompressionTest zstd ${cmake_thread_libs_init})
 
+if (QLEVER_USE_LZ4)
+    addLinkAndDiscoverTest(Lz4CompressionTest ${cmake_thread_libs_init})
+endif ()
+
 addLinkAndDiscoverTest(TaskQueueTest)
 
 addLinkAndDiscoverTest(SetOfIntervalsTest sparqlExpressions)

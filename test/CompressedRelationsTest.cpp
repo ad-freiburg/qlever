@@ -8,6 +8,7 @@
 #include "./util/IdTableHelpers.h"
 #include "index/CompressedRelation.h"
 #include "index/IndexImpl.h"
+#include "util/CompressionAlgorithm.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/Serializer/ByteBufferSerializer.h"
@@ -134,7 +135,8 @@ template <typename T>
 std::pair<std::vector<CompressedBlockMetadata>,
           std::vector<CompressedRelationMetadata>>
 compressedRelationTestWriteCompressedRelations(
-    T inputs, std::string filename, ad_utility::MemorySize blocksize) {
+    T inputs, std::string filename, ad_utility::MemorySize blocksize,
+    CompressionAlgorithm compressionAlgorithm = CompressionAlgorithm::Zstd) {
   // First check the invariants of the `inputs`. They must be sorted by the
   // `col0_` and for each of the `inputs` the `col1And2_` must also be sorted.
   AD_CONTRACT_CHECK(ql::ranges::is_sorted(
@@ -169,7 +171,8 @@ compressedRelationTestWriteCompressedRelations(
 
   // First create the on-disk permutation.
   auto writer = std::make_unique<CompressedRelationWriter>(
-      numColumns, ad_utility::File{filename, "w"}, blocksize);
+      numColumns, ad_utility::File{filename, "w"}, blocksize,
+      compressionAlgorithm);
   std::vector<CompressedRelationMetadata> metaData;
   CompressedRelationWriter::WriterAndCallback wc1{
       std::move(writer),
@@ -251,15 +254,16 @@ makeLocatedTriplesFromPartOfInput(float locatedProbab,
 // `filename`. Return the created metadata for blocks and large relations, as
 // well as a `CompressedRelationReader`. These are exactly the datastructures
 // that are required to test the `CompressedRelationReader` class.
-auto writeAndOpenRelations(const std::vector<RelationInput>& inputs,
-                           std::string filename,
-                           ad_utility::MemorySize blocksize) {
+auto writeAndOpenRelations(
+    const std::vector<RelationInput>& inputs, std::string filename,
+    ad_utility::MemorySize blocksize,
+    CompressionAlgorithm compressionAlgorithm = CompressionAlgorithm::Zstd) {
   auto [blocks, metaData] = compressedRelationTestWriteCompressedRelations(
-      inputs, filename, blocksize);
+      inputs, filename, blocksize, compressionAlgorithm);
   auto reader = [&]() {
     return std::make_unique<CompressedRelationReader>(
         ad_utility::makeUnlimitedAllocator<Id>(),
-        ad_utility::File{filename, "r"});
+        ad_utility::File{filename, "r"}, true, compressionAlgorithm);
   };
   return std::tuple{std::move(blocks), std::move(metaData), reader()};
 }
@@ -269,10 +273,10 @@ auto writeAndOpenRelations(const std::vector<RelationInput>& inputs,
 // a unique name for the required temporary files and for the implicit cache
 // of the `CompressedRelationMetaData`. `blocksize` is the size of the blocks
 // in which the permutation will be compressed and stored on disk.
-void testCompressedRelations(const auto& inputsOriginalBeforeCopy,
-                             std::string testCaseName,
-                             ad_utility::MemorySize blocksize,
-                             float locatedTriplesProbability = 0.5) {
+void testCompressedRelations(
+    const auto& inputsOriginalBeforeCopy, std::string testCaseName,
+    ad_utility::MemorySize blocksize, float locatedTriplesProbability = 0.5,
+    CompressionAlgorithm compressionAlgorithm = CompressionAlgorithm::Zstd) {
   using ScanSpecAndBlocks = CompressedRelationReader::ScanSpecAndBlocks;
   auto inputs = inputsOriginalBeforeCopy;
   addGraphColumnIfNecessary(inputs);
@@ -281,8 +285,8 @@ void testCompressedRelations(const auto& inputsOriginalBeforeCopy,
   DeltaTriples deltaTriples{ad_utility::testing::getQec()->getIndex()};
   auto filename = testCaseName + ".dat";
   auto cleanup = makeCleanup(filename);
-  auto [blocksOriginal, metaData, readerPtr] =
-      writeAndOpenRelations(inputsWithoutLocated, filename, blocksize);
+  auto [blocksOriginal, metaData, readerPtr] = writeAndOpenRelations(
+      inputsWithoutLocated, filename, blocksize, compressionAlgorithm);
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
   // deltaTriples.insertTriples(handle, std::move(locatedTriplesInput));
   // auto locatedTriples =
@@ -1403,3 +1407,39 @@ TEST(CompressedBlockMetadata, invariantChecks) {
   blocks.front().lastTriple_ = {V(1), V(2), V(3), V(16)};
   EXPECT_TRUE(CompressedBlockMetadata::checkInvariantsForSortedBlocks(blocks));
 }
+
+// Test the compressed relations with LZ4 compression.
+#ifdef QLEVER_HAS_LZ4
+TEST(CompressedRelationWriter, SmallRelationsLz4NoLocated) {
+  std::vector<RelationInput> inputs;
+  for (int i = 1; i < 200; ++i) {
+    inputs.push_back(
+        RelationInput{i, {{i - 1, i + 1}, {i - 1, i + 2}, {i, i - 1}}});
+  }
+  using ad_utility::memory_literals::operator""_B;
+  testCompressedRelations(inputs, "smallRelationsLz4NoLocated", 237_B, 0.0,
+                          CompressionAlgorithm::Lz4);
+}
+
+TEST(CompressedRelationWriter, SmallRelationsLz4WithLocated) {
+  std::vector<RelationInput> inputs;
+  for (int i = 1; i < 200; ++i) {
+    inputs.push_back(
+        RelationInput{i, {{i - 1, i + 1}, {i - 1, i + 2}, {i, i - 1}}});
+  }
+  using ad_utility::memory_literals::operator""_B;
+  testCompressedRelations(inputs, "smallRelationsLz4WithLocated", 237_B, 0.5,
+                          CompressionAlgorithm::Lz4);
+}
+
+TEST(CompressedRelationWriter, LargeRelationsLz4) {
+  std::vector<RelationInput> inputs;
+  inputs.push_back({42, {}});
+  for (int i = 0; i < 500; ++i) {
+    inputs.back().col1And2_.push_back({i, 2 * i});
+  }
+  using ad_utility::memory_literals::operator""_B;
+  testCompressedRelations(inputs, "largeRelationsLz4", 237_B, 0.0,
+                          CompressionAlgorithm::Lz4);
+}
+#endif  // QLEVER_HAS_LZ4

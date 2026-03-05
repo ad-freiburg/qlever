@@ -22,6 +22,7 @@
 #include "index/InputFileSpecification.h"
 #include "libqlever/QleverTypes.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/CompressionAlgorithm.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/http/MediaTypes.h"
 
@@ -136,6 +137,9 @@ struct IndexBuilderConfig : CommonConfig {
   TextScoringMetric textScoringMetric_ = TextScoringMetric::EXPLICIT;
   float bScoringParam_ = 0.75;
   float kScoringParam_ = 1.75;
+
+  // The compression algorithm to use for the permutation data.
+  CompressionAlgorithm compressionAlgorithm_ = CompressionAlgorithm::Zstd;
 
   // Materialized views to be written after normal index build is complete.
   using WriteMaterializedViews =
