@@ -339,10 +339,8 @@ TriplesToVacuum LocatedTriplesPerBlock::identifyTriplesToVacuum(
       continue;
     }
 
-    ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
     auto idTable = reader.readBlockWithoutLocatedTriples(
-        scanSpec, blockMetadata.at(blockIndex),
-        std::vector<ColumnIndex>{ADDITIONAL_COLUMN_GRAPH_ID});
+        blockMetadata.at(blockIndex), std::vector{ADDITIONAL_COLUMN_GRAPH_ID});
 
     totalStats +=
         processBlockForVacuum(idTable, map_.at(blockIndex), inverseKeys,
