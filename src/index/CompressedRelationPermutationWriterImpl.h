@@ -20,7 +20,8 @@
 struct CompressedRelationWriter::AddBlockOfSmallRelationsToSwitched {
   CompressedRelationWriter& writer_;
 
-  void operator()(IdTable blockOfSmallRelations) const {
+  void operator()(IdTable blockOfSmallRelations,
+                  size_t sourceBufferIndex) const {
     using namespace compressedRelationHelpers;
 
     // We don't use the parallel twinRelationSorter to create the twin
@@ -43,8 +44,12 @@ struct CompressedRelationWriter::AddBlockOfSmallRelationsToSwitched {
     auto firstCol0 = blockOfSmallRelations.at(0, 0);
     auto lastCol0 =
         blockOfSmallRelations.at(blockOfSmallRelations.numRows() - 1, 0);
-    writer_.compressAndWriteBlock(firstCol0, lastCol0,
-                                  std::move(blockOfSmallRelations), false);
+    // Instead of compressing and writing the data for the sister permutation,
+    // we add only the metadata and reference the source block in writer1.
+    writer_.addSharedBlockMetadata(
+        firstCol0, lastCol0, blockOfSmallRelations,
+        BlockSharingInfo{BlockSharingInfo::Type::SisterPermutation,
+                         sourceBufferIndex});
   };
 };
 
@@ -353,9 +358,28 @@ struct CompressedRelationWriter::PermutationWriter {
     blockCallbackManager_.finishBlockCallbackQueue();
     logTimers();
     if constexpr (WritePair) {
-      return PermutationPairResult{numDistinctCol0_,
-                                   std::move(*writer1_).getFinishedBlocks(),
-                                   std::move(*writer2_).getFinishedBlocks()};
+      // Get writer1's blocks with the buffer-to-block mapping so we can
+      // fix up sister sharing references in writer2.
+      auto [blocks1, bufferToBlockMapping] =
+          std::move(*writer1_).getFinishedBlocksWithMapping();
+      auto blocks2 = std::move(*writer2_).getFinishedBlocks();
+
+      // Fix up writer2's sister sharing `sourceBlockIndex_` values:
+      // they currently hold buffer indices from writer1, which need to be
+      // translated to final block indices.
+      for (auto& block : blocks2) {
+        if (block.sharingInfo_.has_value() &&
+            block.sharingInfo_->type_ ==
+                BlockSharingInfo::Type::SisterPermutation) {
+          AD_CORRECTNESS_CHECK(block.sharingInfo_->sourceBlockIndex_ <
+                               bufferToBlockMapping.size());
+          block.sharingInfo_->sourceBlockIndex_ =
+              bufferToBlockMapping[block.sharingInfo_->sourceBlockIndex_];
+        }
+      }
+
+      return PermutationPairResult{numDistinctCol0_, std::move(blocks1),
+                                   std::move(blocks2)};
     } else {
       return PermutationSingleResult{numDistinctCol0_,
                                      std::move(*writer1_).getFinishedBlocks()};

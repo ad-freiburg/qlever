@@ -206,6 +206,19 @@ class Permutation {
 
   const CompressedRelationReader& reader() const { return reader_.value(); }
 
+  // Set up shared block access links to sister/cross-pair permutations.
+  // Must be called after all permutations are loaded.
+  void setSisterPermutation(Permutation* sister) {
+    sisterPermutation_ = sister;
+  }
+  void setCrossPairPermutation(Permutation* crossPair) {
+    crossPairPermutation_ = crossPair;
+  }
+
+  // Wire the reader's shared accesses based on the sister/cross-pair links.
+  // Must be called after setSisterPermutation/setCrossPairPermutation.
+  void wireSharedBlockAccess();
+
   Enum permutation() const { return permutation_; }
 
   // Provide const access to a linked internal permutation. If no internal
@@ -249,6 +262,10 @@ class Permutation {
   // If this permutation is owned by a `MaterializedView`, store a reference
   // back to the view.
   std::weak_ptr<const MaterializedView> materializedView_;
+
+  // Pointer to sister permutation for shared block reading.
+  // This is set up after all permutations are loaded.
+  Permutation* sisterPermutation_ = nullptr;
 };
 
 #endif  // QLEVER_SRC_INDEX_PERMUTATION_H

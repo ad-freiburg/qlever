@@ -232,6 +232,21 @@ BlockMetadataRanges Permutation::getAugmentedMetadataForPermutation(
 }
 
 // ______________________________________________________________________
+void Permutation::wireSharedBlockAccess() {
+  if (!reader_.has_value()) {
+    return;
+  }
+  if (sisterPermutation_ != nullptr && sisterPermutation_->isLoaded()) {
+    reader_->setSisterAccess(&sisterPermutation_->reader(),
+                             &sisterPermutation_->metaData().blockData());
+  }
+  if (crossPairPermutation_ != nullptr && crossPairPermutation_->isLoaded()) {
+    reader_->setCrossPairAccess(&crossPairPermutation_->reader(),
+                                &crossPairPermutation_->metaData().blockData());
+  }
+}
+
+// ______________________________________________________________________
 const Permutation& Permutation::internalPermutation() const {
   AD_CONTRACT_CHECK(internalPermutation_ != nullptr);
   return *internalPermutation_;
