@@ -79,10 +79,6 @@ std::optional<LiteralOrIri> getLiteralOrIriFromTextRecordIndex(
 std::optional<Literal> getLiteralOrNullopt(
     std::optional<LiteralOrIri> litOrIri);
 
-// Checks if a LiteralOrIri is either a plain literal (without datatype)
-// or a literal with the `xsd:string` datatype.
-bool isPlainLiteralOrLiteralWithXsdString(const LiteralOrIri& word);
-
 // Replaces the first character '<' and the last character '>' with double
 // quotes '"' to convert an IRI to a Literal, ensuring only the angle brackets
 // are replaced.
