@@ -566,6 +566,11 @@ class IndexImpl {
       IndexMetaDataMmapDispatcher::WriteType& metaData, size_t numColumns,
       const std::string& fileName) const;
 
+  // After all permutations are built, resolve cross-pair sharing dummy blocks.
+  // Each non-canonical permutation has dummy blocks (with sourceBlockIndex_ =
+  // SIZE_MAX) that need to be resolved against the canonical permutation.
+  void resolveCrossPairSharing();
+
   // TODO<joka921> Get rid of the `numColumns` by including them into the
   // `sortedTriples` argument.
   template <typename T, typename... Callbacks>
@@ -574,6 +579,8 @@ class IndexImpl {
   createPermutationPairImpl(size_t numColumns, const std::string& fileName1,
                             const std::string& fileName2, T&& sortedTriples,
                             Permutation::KeyOrder permutation,
+                            bool skipConstantPrefixWriter1,
+                            bool skipConstantPrefixWriter2,
                             Callbacks&&... perTripleCallbacks);
 
   // Write a single permutation to disk. `numColumns` specifies the number of
@@ -611,6 +618,7 @@ class IndexImpl {
   [[nodiscard]] size_t createPermutationPair(
       size_t numColumns, SortedTriplesType&& sortedTriples,
       const Permutation& p1, const Permutation& p2,
+      bool skipConstantPrefixWriter1, bool skipConstantPrefixWriter2,
       CallbackTypes&&... perTripleCallbacks);
 
   // wrapper for createPermutation that saves a lot of code duplications
@@ -627,6 +635,8 @@ class IndexImpl {
              IndexMetaDataMmapDispatcher::WriteType>
   createPermutations(size_t numColumns, T&& sortedTriples,
                      const Permutation& p1, const Permutation& p2,
+                     bool skipConstantPrefixWriter1,
+                     bool skipConstantPrefixWriter2,
                      Callbacks&&... perTripleCallbacks);
 
  public:
