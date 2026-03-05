@@ -5,10 +5,27 @@
 #include "engine/SpatialJoinCachedIndex.h"
 
 #include <s2/mutable_s2shape_index.h>
+#include <s2/s2earth.h>
 #include <s2/s2polyline.h>
 #include <s2/s2shapeutil_coding.h>
 
 #include "engine/SpatialJoinAlgorithms.h"
+
+static constexpr auto SubsamplePolyline = [](const S2Polyline& original,
+                                             S1Angle tolerance) {
+  std::vector<int> indices;
+  original.SubsampleVertices(tolerance, &indices);
+
+  // Build new polyline from the selected vertices
+  std::vector<S2Point> subsampled_vertices;
+  subsampled_vertices.reserve(indices.size());
+
+  for (int idx : indices) {
+    subsampled_vertices.push_back(original.vertex(idx));
+  }
+
+  return S2Polyline(subsampled_vertices);
+};
 
 // An instance of this type erased class holds the actual data for each
 // `SpatialJoinCachedIndex`. It contains a `MutableS2ShapeIndex` for querying as
@@ -27,9 +44,11 @@ class SpatialJoinCachedIndexImpl {
     ShapeIndexToRow shapeIndexToRow;
     AD_CORRECTNESS_CHECK(s2index_.num_shape_ids() == 0);
     // Populate the index from the given `IdTable`
+    const auto tolerance = S2Earth::MetersToAngle(10);
     for (size_t row = 0; row < restable.size(); row++) {
       auto p = SpatialJoinAlgorithms::getPolyline(restable, row, col, index);
       if (p.has_value()) {
+        p.value() = SubsamplePolyline(p.value(), tolerance);
         auto shapeIndex =
             s2index_.Add(std::make_unique<S2Polyline::OwningShape>(
                 std::make_unique<S2Polyline>(std::move(p.value()))));
