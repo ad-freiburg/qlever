@@ -302,14 +302,13 @@ VacuumStatistics processBlockForVacuum(
 TriplesToVacuum LocatedTriplesPerBlock::identifyTriplesToVacuum(
     const Permutation& perm,
     ad_utility::SharedCancellationHandle cancellationHandle) const {
-  std::vector<size_t> blocksToVacuum;
   size_t minimumBlockSize =
       getRuntimeParameter<&RuntimeParameters::vacuumMinimumBlockSize_>();
-  for (const auto& [blockIndex, locatedTriples] : map_) {
-    if (locatedTriples.size() >= minimumBlockSize) {
-      blocksToVacuum.push_back(blockIndex);
-    }
-  }
+  auto blocksToVacuum = map_ |
+                        ql::views::filter([minimumBlockSize](const auto& e) {
+                          return e.second.size() >= minimumBlockSize;
+                        }) |
+                        ql::views::keys | ::ranges::to<std::vector>();
 
   VacuumStatistics totalStats{0, 0, 0, 0};
   std::vector<IdTriple<0>> allDeletionsToRemove;
@@ -326,7 +325,6 @@ TriplesToVacuum LocatedTriplesPerBlock::identifyTriplesToVacuum(
   const auto& blockMetadata = perm.metaData().blockData();
   AD_CORRECTNESS_CHECK(!blockMetadata.empty());
 
-  AD_LOG_INFO << "Blocks: " << absl::StrJoin(blocksToVacuum, ", ") << std::endl;
   for (size_t blockIndex : blocksToVacuum) {
     AD_CORRECTNESS_CHECK(blockIndex <= blockMetadata.size());
     // This is one past the last block with index triples. This block always
@@ -342,17 +340,9 @@ TriplesToVacuum LocatedTriplesPerBlock::identifyTriplesToVacuum(
     }
 
     ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
-    auto blockMetadataForSingleBlock =
-        [&blockMetadata](
-            size_t blockIndex) -> std::vector<CompressedBlockMetadata> {
-      CompressedBlockMetadata block = blockMetadata.at(blockIndex);
-      AD_CORRECTNESS_CHECK(block.blockIndex_ == blockIndex);
-      return {block};
-    };
-    std::vector<ColumnIndex> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
-    auto idTable = ad_utility::getSingleElement(
-        reader.lazyScan(scanSpec, blockMetadataForSingleBlock(blockIndex),
-                        additionalColumns, cancellationHandle, {}));
+    auto idTable = reader.readBlockWithoutLocatedTriples(
+        scanSpec, blockMetadata.at(blockIndex),
+        std::vector<ColumnIndex>{ADDITIONAL_COLUMN_GRAPH_ID});
 
     totalStats +=
         processBlockForVacuum(idTable, map_.at(blockIndex), inverseKeys,

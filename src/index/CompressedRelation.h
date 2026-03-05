@@ -783,6 +783,9 @@ class CompressedRelationReader {
       const LocatedTriplesPerBlock& locatedTriplesPerBlock,
       const LimitOffsetClause& limitOffset = {}) const;
 
+  IdTable readBlockWithoutLocatedTriples(CompressedBlockMetadata block,
+                                         ColumnIndices additionalColumns) const;
+
   // Get the exact size of the result of the scan, taking the given located
   // triples into account. This requires locating the triples exactly in each
   // of the relevant blocks.

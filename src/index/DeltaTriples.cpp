@@ -104,16 +104,17 @@ nlohmann::json DeltaTriples::vacuum(
   // that only a part of the triples have been vacuumed, which is valid.
   using namespace ad_utility::use_value_identity;
   auto identifyTriplesToVacuum = CPP_template_lambda(this, &cancellationHandle)(
-      bool isInternal)(VI<isInternal>)(requires true) {
-    auto& basePerm = index_.getPermutation(Permutation::PSO);
-    const auto& perm = isInternal ? basePerm.internalPermutation() : basePerm;
+      auto isInternal)(VI<isInternal>)(requires true) {
+    auto perm = Permutation::PSO;
+    auto& basePerm = index_.getPermutation(perm);
+    const auto& actualPerm =
+        isInternal ? basePerm.internalPermutation() : basePerm;
     const auto& ltpb =
-        locatedTriples_->getLocatedTriplesForPermutation<isInternal>(
-            Permutation::PSO);
-    return ltpb.identifyTriplesToVacuum(perm, cancellationHandle);
+        locatedTriples_->getLocatedTriplesForPermutation<isInternal>(perm);
+    return ltpb.identifyTriplesToVacuum(actualPerm, cancellationHandle);
   };
   auto removeIdentifiedTriples =
-      CPP_template_lambda(this, &cancellationHandle)(bool isInternal)(
+      CPP_template_lambda(this, &cancellationHandle)(auto isInternal)(
           VI<isInternal>, const std::vector<IdTriple<0>>& deletionsToRemove,
           const std::vector<IdTriple<0>>& insertionsToRemove)(requires true) {
     auto& state = getState<isInternal>();
