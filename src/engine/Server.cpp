@@ -868,8 +868,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   auto response = ad_utility::httpUtils::createOkResponse(
       std::move(responseGenerator), request, mediaType);
   if (plannedQuery.parsedQuery_.responseMiddleware_.has_value()) {
-    response = plannedQuery.parsedQuery_.responseMiddleware_.value().apply(
-        std::move(response), std::nullopt);
+    response = plannedQuery.parsedQuery_.responseMiddleware_.value().applyQuery(
+        std::move(response));
   }
   try {
     co_await send(std::move(response));
@@ -1162,13 +1162,11 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   AD_CORRECTNESS_CHECK(ql::ranges::all_of(
       updates, [](const ParsedQuery& p) { return p.hasUpdateClause(); }));
 
-  std::vector<ResponseMiddleware> responseMiddlewares;
-  for (auto& update : updates) {
-    if (update.responseMiddleware_.has_value()) {
-      responseMiddlewares.push_back(
-          std::move(update.responseMiddleware_.value()));
-    }
-  }
+  auto responseMiddlewares =
+      updates | ql::views::transform(&ParsedQuery::responseMiddleware_) |
+      ql::views::filter(ad_utility::hasValue) |
+      ql::views::transform(ad_utility::exchange) | ::ranges::to<std::vector>();
+
   std::vector<UpdateMetadata> metadatas;
 
   // If multiple updates are part of a single request, those have to run
@@ -1244,9 +1242,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   // successful update request is implementation defined."
   auto response = ad_utility::httpUtils::createJsonResponse(
       std::move(responseJson), request);
-  auto metadatasOpt = std::optional(std::move(metadatas));
   for (auto& middleware : responseMiddlewares) {
-    response = middleware.apply(std::move(response), metadatasOpt);
+    response = middleware->applyUpdate(std::move(response), metadatas);
   }
   co_await send(std::move(response));
   co_return;

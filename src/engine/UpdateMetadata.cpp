@@ -4,6 +4,9 @@
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
+
 #include "engine/UpdateMetadata.h"
 
 // ____________________________________________________________________________
@@ -11,11 +14,4 @@ void to_json(nlohmann::json& j, const DeltaTriplesCount& count) {
   j = nlohmann::json{{"inserted", count.triplesInserted_},
                      {"deleted", count.triplesDeleted_},
                      {"total", count.triplesInserted_ + count.triplesDeleted_}};
-}
-
-// ____________________________________________________________________________
-DeltaTriplesCount operator-(const DeltaTriplesCount& lhs,
-                            const DeltaTriplesCount& rhs) {
-  return {lhs.triplesInserted_ - rhs.triplesInserted_,
-          lhs.triplesDeleted_ - rhs.triplesDeleted_};
 }

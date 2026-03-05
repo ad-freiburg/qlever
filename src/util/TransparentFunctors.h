@@ -98,6 +98,27 @@ struct DereferenceImpl {
   }
 };
 
+struct HasValueImpl {
+  template <typename X>
+  constexpr decltype(auto) operator()(X&& x) const {
+    return x.has_value();
+  }
+};
+
+struct ValueImpl {
+  template <typename X>
+  constexpr decltype(auto) operator()(X&& x) const {
+    return AD_FWD(x).value();
+  }
+};
+
+struct ExchangeImpl {
+  template <typename X>
+  constexpr decltype(auto) operator()(X&& x) const {
+    return std::exchange(AD_FWD(x), {});
+  }
+};
+
 }  // namespace detail
 
 // Return the first element via perfect forwarding of any type for which
@@ -135,6 +156,15 @@ static constexpr detail::StaticCastImpl<T> staticCast{};
 
 // Transparent functor that dereferences a pointer or smart pointer.
 static constexpr detail::DereferenceImpl dereference;
+
+// Transparent functor for `std::optional::has_value`.
+static constexpr detail::HasValueImpl hasValue;
+
+// Transparent functor for `std::optional::value`.
+static constexpr detail::ValueImpl value;
+
+// Transparent functor for `std::exchange(..., {})`.
+static constexpr detail::ExchangeImpl exchange;
 
 // Transparent functor that takes an arbitrary number of arguments by reference
 // and does nothing. We also use the type `Noop`, hence it is defined here and

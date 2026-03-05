@@ -4,6 +4,9 @@
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
+
 #ifndef QLEVER_SRC_UTIL_HTTP_RESPONSEMIDDLEWARE_H
 #define QLEVER_SRC_UTIL_HTTP_RESPONSEMIDDLEWARE_H
 
@@ -36,6 +39,19 @@ struct ResponseMiddleware {
 
   // Apply the middleware to a response. The current response is passed in and a
   // new one is returned.
+  ResponseT applyQuery(ResponseT response) const {
+    AD_CONTRACT_CHECK(
+        std::holds_alternative<QueryMiddleware>(func_),
+        "Got no `UpdateMetadata` for but middleware expects metadata.");
+    return std::get<QueryMiddleware>(func_)(std::move(response));
+  }
+  ResponseT applyUpdate(ResponseT response,
+                        const std::vector<UpdateMetadata>& metadata) const {
+    AD_CONTRACT_CHECK(
+        std::holds_alternative<UpdateMiddleware>(func_),
+        "Got `UpdateMetadata` for but middleware takes no metadata.");
+    return std::get<UpdateMiddleware>(func_)(std::move(response), metadata);
+  }
   ResponseT apply(
       ResponseT response,
       const std::optional<std::vector<UpdateMetadata>>& metadataOpt) const {

@@ -4,6 +4,9 @@
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
+
 #ifndef QLEVER_SRC_ENGINE_UPDATEMETADATA_H
 #define QLEVER_SRC_ENGINE_UPDATEMETADATA_H
 
@@ -20,7 +23,10 @@ struct DeltaTriplesCount {
   friend void to_json(nlohmann::json& j, const DeltaTriplesCount& count);
 
   friend DeltaTriplesCount operator-(const DeltaTriplesCount& lhs,
-                                     const DeltaTriplesCount& rhs);
+                                     const DeltaTriplesCount& rhs) {
+    return {lhs.triplesInserted_ - rhs.triplesInserted_,
+            lhs.triplesDeleted_ - rhs.triplesDeleted_};
+  }
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(DeltaTriplesCount,
                                               triplesInserted_, triplesDeleted_)
