@@ -20,8 +20,8 @@
 #include "util/AllocatorTestHelpers.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/CancellationHandle.h"
-#include "util/Log.h"
 #include "util/GTestHelpers.h"
+#include "util/Log.h"
 
 using namespace qlever::graphSearch;
 using namespace ::testing;
