@@ -228,7 +228,7 @@ TYPED_TEST(GraphSearchTest, depthFirstSearchWithLimit) {
       TestVal(5, 0, 1, 100, {}), TestVal(5, 4, 5, 1000, {4}),
       TestVal(6, 2, 0, 1, {2}), TestVal(7, 3, 0, 2, {3}),
       TestVal(2, 0, 100, 100, {0}), TestVal(8, 3, 0, 2, {3}),
-      // The following will set the `skipStartNodeInitially` flag and call BFS
+      // The following will set the `skipStartNodeInitially` flag and call DFS
       // without limits.
       TestVal(2, 0, 1, std::numeric_limits<size_t>::max(), {0}),
       TestVal(5, 0, 1, std::numeric_limits<size_t>::max(), {})};
