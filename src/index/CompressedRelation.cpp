@@ -1,8 +1,12 @@
-// Copyright 2021 - 2024, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2021 - 2026 The QLever Authors, in particular:
 //
-// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+// 2021 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2025 Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "index/CompressedRelation.h"
 
@@ -15,9 +19,9 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "index/LocatedTriples.h"
 #include "util/CompressionAlgorithm.h"
-#include "util/CompressionUsingZstd/ZstdWrapper.h"
+#include "util/compression/ZstdWrapper.h"
 #ifdef QLEVER_HAS_LZ4
-#include "util/CompressionUsingLz4/Lz4Wrapper.h"
+#include "util/compression/Lz4Wrapper.h"
 #endif
 #include "util/Iterators.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
@@ -29,6 +33,38 @@
 #include "util/TypeTraits.h"
 
 using namespace std::chrono_literals;
+
+namespace {
+// File-local helpers that encapsulate the `#ifdef` logic for LZ4.
+std::vector<char> lz4Compress(void* data, size_t size) {
+#ifdef QLEVER_HAS_LZ4
+  return Lz4Wrapper::compress(data, size);
+#else
+  (void)data;
+  (void)size;
+  throw std::runtime_error(
+      "LZ4 compression was requested, but QLever was compiled without LZ4 "
+      "support. Rebuild QLever with -DQLEVER_USE_LZ4=ON.");
+#endif
+}
+
+template <typename Iterator>
+size_t lz4DecompressToBuffer(const char* compressedData, size_t compressedSize,
+                             Iterator outputIterator, size_t outputSize) {
+#ifdef QLEVER_HAS_LZ4
+  return Lz4Wrapper::decompressToBuffer(compressedData, compressedSize,
+                                        outputIterator, outputSize);
+#else
+  (void)compressedData;
+  (void)compressedSize;
+  (void)outputIterator;
+  (void)outputSize;
+  throw std::runtime_error(
+      "This index was built with LZ4 compression, but QLever was compiled "
+      "without LZ4 support. Rebuild QLever with -DQLEVER_USE_LZ4=ON.");
+#endif
+}
+}  // namespace
 
 // A small helper function to obtain the begin and end iterator of a range
 template <typename T>
@@ -1198,22 +1234,16 @@ void CompressedRelationReader::decompressColumn(
     const std::vector<char>& compressedBlock, size_t numRowsToRead,
     Iterator iterator) const {
   size_t numBytesActuallyRead = 0;
-  switch (compressionAlgorithm_) {
-    case CompressionAlgorithm::Zstd:
+  switch (compressionAlgorithm_.value()) {
+    case CompressionAlgorithm::Enum::Zstd:
       numBytesActuallyRead = ZstdWrapper::decompressToBuffer(
           compressedBlock.data(), compressedBlock.size(), iterator,
           numRowsToRead * sizeof(*iterator));
       break;
-    case CompressionAlgorithm::Lz4:
-#ifdef QLEVER_HAS_LZ4
-      numBytesActuallyRead = Lz4Wrapper::decompressToBuffer(
-          compressedBlock.data(), compressedBlock.size(), iterator,
-          numRowsToRead * sizeof(*iterator));
-#else
-      throw std::runtime_error(
-          "This index was built with LZ4 compression, but QLever was compiled "
-          "without LZ4 support. Rebuild QLever with -DQLEVER_USE_LZ4=ON.");
-#endif
+    case CompressionAlgorithm::Enum::Lz4:
+      numBytesActuallyRead =
+          lz4DecompressToBuffer(compressedBlock.data(), compressedBlock.size(),
+                                iterator, numRowsToRead * sizeof(*iterator));
       break;
   }
   static_assert(sizeof(Id) == sizeof(*iterator));
@@ -1239,20 +1269,14 @@ CompressedRelationReader::readAndDecompressBlock(
 CompressedBlockMetadata::OffsetAndCompressedSize
 CompressedRelationWriter::compressAndWriteColumn(ql::span<const Id> column) {
   std::vector<char> compressedBlock;
-  switch (compressionAlgorithm_) {
-    case CompressionAlgorithm::Zstd:
+  switch (compressionAlgorithm_.value()) {
+    case CompressionAlgorithm::Enum::Zstd:
       compressedBlock = ZstdWrapper::compress(
           (void*)(column.data()), column.size() * sizeof(column[0]));
       break;
-    case CompressionAlgorithm::Lz4:
-#ifdef QLEVER_HAS_LZ4
-      compressedBlock = Lz4Wrapper::compress((void*)(column.data()),
-                                             column.size() * sizeof(column[0]));
-#else
-      throw std::runtime_error(
-          "LZ4 compression was requested, but QLever was compiled without LZ4 "
-          "support. Rebuild QLever with -DQLEVER_USE_LZ4=ON.");
-#endif
+    case CompressionAlgorithm::Enum::Lz4:
+      compressedBlock = lz4Compress((void*)(column.data()),
+                                    column.size() * sizeof(column[0]));
       break;
   }
   auto compressedSize = compressedBlock.size();

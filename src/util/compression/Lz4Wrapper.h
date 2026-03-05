@@ -1,9 +1,14 @@
-// Copyright 2026, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2026 The QLever Authors, in particular:
+//
+// 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
-#ifndef QLEVER_SRC_UTIL_COMPRESSIONUSINGLZ4_LZ4WRAPPER_H
-#define QLEVER_SRC_UTIL_COMPRESSIONUSINGLZ4_LZ4WRAPPER_H
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
+
+#ifndef QLEVER_SRC_UTIL_COMPRESSION_LZ4WRAPPER_H
+#define QLEVER_SRC_UTIL_COMPRESSION_LZ4WRAPPER_H
 
 #ifdef QLEVER_HAS_LZ4
 
@@ -67,4 +72,4 @@ class Lz4Wrapper {
 
 #endif  // QLEVER_HAS_LZ4
 
-#endif  // QLEVER_SRC_UTIL_COMPRESSIONUSINGLZ4_LZ4WRAPPER_H
+#endif  // QLEVER_SRC_UTIL_COMPRESSION_LZ4WRAPPER_H

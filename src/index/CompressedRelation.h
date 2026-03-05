@@ -1,6 +1,11 @@
-// Copyright 2021 - 2024, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+// Copyright 2021 - 2026 The QLever Authors, in particular:
+//
+// 2021 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_INDEX_COMPRESSEDRELATION_H
 #define QLEVER_SRC_INDEX_COMPRESSEDRELATION_H
@@ -318,14 +323,14 @@ class CompressedRelationWriter {
   static constexpr float multiplicityDummy = 42.4242f;
 
   // The compression algorithm used by this writer.
-  CompressionAlgorithm compressionAlgorithm_ = CompressionAlgorithm::Zstd;
+  CompressionAlgorithm compressionAlgorithm_;
 
  public:
   /// Create using a filename, to which the relation data will be written.
   explicit CompressedRelationWriter(
       size_t numColumns, ad_utility::File f,
       ad_utility::MemorySize uncompressedBlocksizePerColumn,
-      CompressionAlgorithm compressionAlgorithm = CompressionAlgorithm::Zstd)
+      CompressionAlgorithm compressionAlgorithm)
       : outfile_{std::move(f)},
         numColumns_{numColumns},
         uncompressedBlocksizePerColumn_{uncompressedBlocksizePerColumn},
@@ -712,13 +717,12 @@ class CompressedRelationReader {
   bool useGraphPostProcessing_;
 
   // The compression algorithm used by this reader.
-  CompressionAlgorithm compressionAlgorithm_ = CompressionAlgorithm::Zstd;
+  CompressionAlgorithm compressionAlgorithm_;
 
  public:
-  explicit CompressedRelationReader(
-      Allocator allocator, ad_utility::File file,
-      bool useGraphPostProcessing = true,
-      CompressionAlgorithm compressionAlgorithm = CompressionAlgorithm::Zstd)
+  explicit CompressedRelationReader(Allocator allocator, ad_utility::File file,
+                                    bool useGraphPostProcessing,
+                                    CompressionAlgorithm compressionAlgorithm)
       : allocator_{std::move(allocator)},
         file_{std::move(file)},
         useGraphPostProcessing_{useGraphPostProcessing},

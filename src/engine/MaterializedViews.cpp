@@ -254,7 +254,8 @@ IndexMetaDataMmap MaterializedViewWriter::writePermutation(
   std::string spoFilename = getFilenameBase() + ".index.spo";
   auto spoWriter = std::make_unique<CompressedRelationWriter>(
       numCols(), ad_utility::File{spoFilename, "w"},
-      UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN);
+      UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN,
+      CompressionAlgorithm{CompressionAlgorithm::Enum::Zstd});
 
   qlever::KeyOrder spoKeyOrder{0, 1, 2, 3};
   IndexMetaDataMmap spoMetaData;
@@ -372,7 +373,10 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
   // Read permutation, and deactivate the graph post-processing of
   // `CompressedRelationReader`, including row deduplication, which is not the
   // intended behavior for materialized views.
-  permutation_->loadFromDisk(filename, false, false);
+  // Materialized views always use Zstd compression.
+  permutation_->loadFromDisk(
+      filename, false, false,
+      CompressionAlgorithm{CompressionAlgorithm::Enum::Zstd});
   AD_CORRECTNESS_CHECK(permutation_->isLoaded());
 }
 

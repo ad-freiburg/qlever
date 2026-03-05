@@ -237,7 +237,7 @@ if (QLEVER_USE_LZ4)
     FetchContent_Declare(
             lz4
             GIT_REPOSITORY https://github.com/lz4/lz4.git
-            GIT_TAG v1.10.0
+            GIT_TAG ebb370ca83af193212df4dcbadcc5d87bc0de2f0 # v1.10.0
             SOURCE_SUBDIR build/cmake
             EXCLUDE_FROM_ALL
     )
@@ -417,10 +417,9 @@ FetchContent_Declare(
 ################################
 # Apply FetchContent
 ################################
+FetchContent_MakeAvailable(googletest ctre abseil re2 fsst s2 nlohmann-json antlr range-v3 spatialjoin)
 if (QLEVER_USE_LZ4)
-    FetchContent_MakeAvailable(googletest ctre abseil re2 fsst s2 nlohmann-json antlr range-v3 spatialjoin lz4)
-else ()
-    FetchContent_MakeAvailable(googletest ctre abseil re2 fsst s2 nlohmann-json antlr range-v3 spatialjoin)
+    FetchContent_MakeAvailable(lz4)
 endif ()
 # Disable some warnings in RE2 and GTEST
 target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-class-memaccess -Wno-unused-but-set-variable -Wno-unused-function)

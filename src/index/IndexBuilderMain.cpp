@@ -1,10 +1,14 @@
-// Copyright 2014 - 2025 University of Freiburg
-// Chair of Algorithms and Data Structures.
-// Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2014 - 2017]
-//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
-//          Hannah Bast <bast@cs.uni-freiburg.de>
+// Copyright 2014 - 2026 The QLever Authors, in particular:
 //
-// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+// 2014 - 2017 Björn Buchhold <buchhold@cs.uni-freiburg.de>, UFR
+// 2018 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2025 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2025 Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <absl/functional/bind_front.h>
 
@@ -326,7 +330,7 @@ int main(int argc, char** argv) {
     config.writeMaterializedViews_ =
         parseMaterializedViewsJson(materializedViewsJson);
     config.compressionAlgorithm_ =
-        compressionAlgorithmFromString(compressionAlgorithmStr);
+        CompressionAlgorithm::fromString(compressionAlgorithmStr);
     config.validate();
     qlever::Qlever::buildIndex(config);
   } catch (std::exception& e) {

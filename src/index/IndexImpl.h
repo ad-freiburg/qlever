@@ -1,8 +1,12 @@
-// Copyright 2015, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author:
-//   2014-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
-//   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+// Copyright 2015 - 2026 The QLever Authors, in particular:
+//
+// 2014 - 2017 Björn Buchhold <buchhold@informatik.uni-freiburg.de>, UFR
+// 2018 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_INDEX_INDEXIMPL_H
 #define QLEVER_SRC_INDEX_INDEXIMPL_H
@@ -207,7 +211,7 @@ class IndexImpl {
   std::unique_ptr<ad_utility::BlankNodeManager> blankNodeManager_{nullptr};
 
   // The compression algorithm used for the permutation data.
-  CompressionAlgorithm compressionAlgorithm_ = CompressionAlgorithm::Zstd;
+  CompressionAlgorithm compressionAlgorithm_{CompressionAlgorithm::Enum::Zstd};
 
   std::optional<DeltaTriplesManager> deltaTriples_;
 

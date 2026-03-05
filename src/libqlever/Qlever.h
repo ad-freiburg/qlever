@@ -1,6 +1,6 @@
-// Copyright 2025 The QLever Authors, in particular:
+// Copyright 2025 - 2026 The QLever Authors, in particular:
 //
-// 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2025 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
@@ -139,7 +139,7 @@ struct IndexBuilderConfig : CommonConfig {
   float kScoringParam_ = 1.75;
 
   // The compression algorithm to use for the permutation data.
-  CompressionAlgorithm compressionAlgorithm_ = CompressionAlgorithm::Zstd;
+  CompressionAlgorithm compressionAlgorithm_{CompressionAlgorithm::Enum::Zstd};
 
   // Materialized views to be written after normal index build is complete.
   using WriteMaterializedViews =

@@ -1,7 +1,12 @@
-// Copyright 2014 - 2025, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2014-2017]
-//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2014 - 2026 The QLever Authors, in particular:
+//
+// 2014 - 2017 Björn Buchhold <buchhold@cs.uni-freiburg.de>, UFR
+// 2018 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "index/IndexImpl.h"
 
@@ -1173,7 +1178,7 @@ void IndexImpl::writeConfiguration() const {
   configuration["git-hash"] =
       *qlever::version::gitShortHashWithoutLinking.wlock();
   configuration["index-format-version"] = qlever::indexFormatVersion;
-  configuration["compression-algorithm"] = toString(compressionAlgorithm_);
+  configuration["compression-algorithm"] = compressionAlgorithm_;
   auto f = ad_utility::makeOfstream(onDiskBase_ + CONFIGURATION_FILE);
   f << configuration;
 }
@@ -1312,13 +1317,8 @@ void IndexImpl::readConfiguration() {
 
   // Read the compression algorithm. Default to zstd for backward compatibility
   // with older indices that do not store this field.
-  {
-    std::string compressionAlgorithmStr;
-    loadDataMember("compression-algorithm", compressionAlgorithmStr,
-                   std::string{"zstd"});
-    compressionAlgorithm_ =
-        compressionAlgorithmFromString(compressionAlgorithmStr);
-  }
+  loadDataMember("compression-algorithm", compressionAlgorithm_,
+                 CompressionAlgorithm{CompressionAlgorithm::Enum::Zstd});
 
   // Compute unique ID for this index.
   //

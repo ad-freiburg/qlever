@@ -1,6 +1,11 @@
-//  Copyright 2023, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2023 - 2026 The QLever Authors, in particular:
+//
+// 2023 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <gtest/gtest.h>
 
@@ -136,7 +141,7 @@ std::pair<std::vector<CompressedBlockMetadata>,
           std::vector<CompressedRelationMetadata>>
 compressedRelationTestWriteCompressedRelations(
     T inputs, std::string filename, ad_utility::MemorySize blocksize,
-    CompressionAlgorithm compressionAlgorithm = CompressionAlgorithm::Zstd) {
+    CompressionAlgorithm compressionAlgorithm) {
   // First check the invariants of the `inputs`. They must be sorted by the
   // `col0_` and for each of the `inputs` the `col1And2_` must also be sorted.
   AD_CONTRACT_CHECK(ql::ranges::is_sorted(
@@ -254,10 +259,10 @@ makeLocatedTriplesFromPartOfInput(float locatedProbab,
 // `filename`. Return the created metadata for blocks and large relations, as
 // well as a `CompressedRelationReader`. These are exactly the datastructures
 // that are required to test the `CompressedRelationReader` class.
-auto writeAndOpenRelations(
-    const std::vector<RelationInput>& inputs, std::string filename,
-    ad_utility::MemorySize blocksize,
-    CompressionAlgorithm compressionAlgorithm = CompressionAlgorithm::Zstd) {
+auto writeAndOpenRelations(const std::vector<RelationInput>& inputs,
+                           std::string filename,
+                           ad_utility::MemorySize blocksize,
+                           CompressionAlgorithm compressionAlgorithm) {
   auto [blocks, metaData] = compressedRelationTestWriteCompressedRelations(
       inputs, filename, blocksize, compressionAlgorithm);
   auto reader = [&]() {
@@ -273,10 +278,11 @@ auto writeAndOpenRelations(
 // a unique name for the required temporary files and for the implicit cache
 // of the `CompressedRelationMetaData`. `blocksize` is the size of the blocks
 // in which the permutation will be compressed and stored on disk.
-void testCompressedRelations(
-    const auto& inputsOriginalBeforeCopy, std::string testCaseName,
-    ad_utility::MemorySize blocksize, float locatedTriplesProbability = 0.5,
-    CompressionAlgorithm compressionAlgorithm = CompressionAlgorithm::Zstd) {
+void testCompressedRelations(const auto& inputsOriginalBeforeCopy,
+                             std::string testCaseName,
+                             ad_utility::MemorySize blocksize,
+                             float locatedTriplesProbability,
+                             CompressionAlgorithm compressionAlgorithm) {
   using ScanSpecAndBlocks = CompressedRelationReader::ScanSpecAndBlocks;
   auto inputs = inputsOriginalBeforeCopy;
   addGraphColumnIfNecessary(inputs);
@@ -429,24 +435,53 @@ void testCompressedRelations(
 // blocks.
 void testWithDifferentBlockSizes(const std::vector<RelationInput>& inputs,
                                  std::string testCaseName,
-                                 float locatedTriplesProbability = 0.5) {
-  testCompressedRelations(inputs, testCaseName, 19_B,
-                          locatedTriplesProbability);
+                                 float locatedTriplesProbability,
+                                 CompressionAlgorithm compressionAlgorithm) {
+  testCompressedRelations(inputs, testCaseName, 19_B, locatedTriplesProbability,
+                          compressionAlgorithm);
   testCompressedRelations(inputs, testCaseName, 237_B,
-                          locatedTriplesProbability);
+                          locatedTriplesProbability, compressionAlgorithm);
   testCompressedRelations(inputs, testCaseName, 4096_B,
-                          locatedTriplesProbability);
+                          locatedTriplesProbability, compressionAlgorithm);
 }
+
 }  // namespace
 
+// A convenience constant for the default compression algorithm in
+// non-parametrized tests.
+static const CompressionAlgorithm zstd{CompressionAlgorithm::Enum::Zstd};
+
+// A parametrized test fixture over `CompressionAlgorithm` for tests that
+// exercise the compressed relation writer/reader with different block sizes.
+class CompressedRelationsAlgoTest
+    : public ::testing::TestWithParam<CompressionAlgorithm> {};
+
+static auto allCompressionAlgorithms() {
+  std::vector<CompressionAlgorithm> algos{
+      CompressionAlgorithm{CompressionAlgorithm::Enum::Zstd}};
+#ifdef QLEVER_HAS_LZ4
+  algos.push_back(CompressionAlgorithm{CompressionAlgorithm::Enum::Lz4});
+#endif
+  return algos;
+}
+
+static std::string compressionAlgoName(
+    const ::testing::TestParamInfo<CompressionAlgorithm>& info) {
+  return std::string{info.param.toString()};
+}
+
+INSTANTIATE_TEST_SUITE_P(AllAlgos, CompressedRelationsAlgoTest,
+                         ::testing::ValuesIn(allCompressionAlgorithms()),
+                         compressionAlgoName);
+
 // Test for very small relations many of which are stored in the same block.
-TEST(CompressedRelationWriter, SmallRelations) {
+TEST_P(CompressedRelationsAlgoTest, SmallRelations) {
   std::vector<RelationInput> inputs;
   for (int i = 1; i < 200; ++i) {
     inputs.push_back(
         RelationInput{i, {{i - 1, i + 1}, {i - 1, i + 2}, {i, i - 1}}});
   }
-  testWithDifferentBlockSizes(inputs, "smallRelations");
+  testWithDifferentBlockSizes(inputs, "smallRelations", 0.5, GetParam());
 }
 
 // Internal matchers for the following two tests.
@@ -482,7 +517,7 @@ TEST(CompressedRelationWriter, getFirstAndLastTriple) {
 
   auto filename = "getFirstAndLastTriple.dat";
   auto [blocks, metaData, readerPtr] =
-      writeAndOpenRelations(inputs, filename, 40_B);
+      writeAndOpenRelations(inputs, filename, 40_B, zstd);
   auto blockMetadata = getBlockMetadataRangesfromVec(blocks);
 
   // Test that the result of calling `getFirstAndLastTriple` for the index from
@@ -529,7 +564,7 @@ TEST(CompressedRelationWriter, getFirstAndLastTripleWithUpdates) {
 
   auto filename = "getFirstAndLastTriple2.dat";
   auto [blocks, metaData, readerPtr] =
-      writeAndOpenRelations(inputs, filename, 0_B);
+      writeAndOpenRelations(inputs, filename, 0_B, zstd);
 
   // Set up located triples that delete the first triple. This has the
   // consequence that the first triple of the relation `1` actually lies in the
@@ -573,7 +608,7 @@ TEST(CompressedRelationWriter, getFirstAndLastTripleWithUpdates) {
 // Test for larger relations that span over several blocks. There are no
 // duplicates in the `col1`, so a combination of `(col0, col1)` will be stored
 // in a single block.
-TEST(CompressedRelationWriter, LargeRelationsDistinctCol1) {
+TEST_P(CompressedRelationsAlgoTest, LargeRelationsDistinctCol1) {
   std::vector<RelationInput> inputs;
   for (int i = 1; i < 6; ++i) {
     std::vector<RowInput> col1And2;
@@ -582,13 +617,14 @@ TEST(CompressedRelationWriter, LargeRelationsDistinctCol1) {
     }
     inputs.push_back(RelationInput{i * 17, std::move(col1And2)});
   }
-  testWithDifferentBlockSizes(inputs, "largeRelationsDistinctCol1");
+  testWithDifferentBlockSizes(inputs, "largeRelationsDistinctCol1", 0.5,
+                              GetParam());
 }
 
 // Test for larger relations that span over several blocks. There are many
 // duplicates in the `col1`, so a combination of `(col0, col1)` will also be
 // stored in several blocks.
-TEST(CompressedRelationWriter, LargeRelationsDuplicatesCol1) {
+TEST_P(CompressedRelationsAlgoTest, LargeRelationsDuplicatesCol1) {
   std::vector<RelationInput> inputs;
   for (int i = 1; i < 6; ++i) {
     std::vector<RowInput> col1And2;
@@ -597,13 +633,14 @@ TEST(CompressedRelationWriter, LargeRelationsDuplicatesCol1) {
     }
     inputs.push_back(RelationInput{i * 17, std::move(col1And2)});
   }
-  testWithDifferentBlockSizes(inputs, "largeRelationsDuplicatesCol1");
+  testWithDifferentBlockSizes(inputs, "largeRelationsDuplicatesCol1", 0.5,
+                              GetParam());
 }
 
 // Test a permutation that consists of relations of different sizes and
 // characteristics by combining the characteristics of the three test cases
 // above.
-TEST(CompressedRelationWriter, MixedSizes) {
+TEST_P(CompressedRelationsAlgoTest, MixedSizes) {
   std::vector<RelationInput> inputs;
   for (int y = 0; y < 3; ++y) {
     // First some large relations with many duplicates in `col1`.
@@ -630,10 +667,10 @@ TEST(CompressedRelationWriter, MixedSizes) {
       inputs.push_back(RelationInput{i + (y * 300), std::move(col1And2)});
     }
   }
-  testWithDifferentBlockSizes(inputs, "mixedSizes");
+  testWithDifferentBlockSizes(inputs, "mixedSizes", 0.5, GetParam());
 }
 
-TEST(CompressedRelationWriter, AdditionalColumns) {
+TEST_P(CompressedRelationsAlgoTest, AdditionalColumns) {
   std::vector<RelationInput> inputs;
   for (int y = 0; y < 3; ++y) {
     // First some large relations with many duplicates in `col1`.
@@ -669,8 +706,8 @@ TEST(CompressedRelationWriter, AdditionalColumns) {
     }
   }
   // The additional columns don't yet work properly with located triples /
-  // SPARQL UPDATE, so we have to disable the
-  testWithDifferentBlockSizes(inputs, "mixedSizes", 0.0);
+  // SPARQL UPDATE, so we have to disable the located triples probability.
+  testWithDifferentBlockSizes(inputs, "mixedSizes", 0.0, GetParam());
 }
 
 TEST(CompressedRelationWriter, MultiplicityCornerCases) {
@@ -1205,7 +1242,7 @@ TEST(CompressedRelationWriter, graphInfoInBlockMetadata) {
   using namespace ::testing;
   {
     auto [blocks, metadata, reader] =
-        writeAndOpenRelations(inputs, "graphInfo1", 100_MB);
+        writeAndOpenRelations(inputs, "graphInfo1", 100_MB, zstd);
     EXPECT_EQ(blocks.size(), 1);
     EXPECT_FALSE(blocks.at(0).containsDuplicatesWithDifferentGraphs_);
     EXPECT_THAT(blocks.at(0).graphInfo_,
@@ -1219,7 +1256,7 @@ TEST(CompressedRelationWriter, graphInfoInBlockMetadata) {
   }
   {
     auto [blocks, metadata, reader] =
-        writeAndOpenRelations(inputs, "graphInfo1", 100_MB);
+        writeAndOpenRelations(inputs, "graphInfo1", 100_MB, zstd);
     EXPECT_EQ(blocks.size(), 1);
     EXPECT_FALSE(blocks.at(0).containsDuplicatesWithDifferentGraphs_);
     AD_EXPECT_NULLOPT(blocks.at(0).graphInfo_);
@@ -1231,7 +1268,7 @@ TEST(CompressedRelationWriter, graphInfoInBlockMetadata) {
 
   {
     auto [blocks, metadata, reader] =
-        writeAndOpenRelations(inputs, "graphInfo1", 100_MB);
+        writeAndOpenRelations(inputs, "graphInfo1", 100_MB, zstd);
     EXPECT_EQ(blocks.size(), 1);
     EXPECT_TRUE(blocks.at(0).containsDuplicatesWithDifferentGraphs_);
     EXPECT_THAT(blocks.at(0).graphInfo_,
@@ -1256,7 +1293,7 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
   for (auto blocksize : std::array{8_B, 16_B, 32_B, 64_B, 128_B}) {
     using GF = ScanSpecification::GraphFilter;
     auto [blocks, metadata, reader] =
-        writeAndOpenRelations(inputs, "scanWithGraphs", blocksize);
+        writeAndOpenRelations(inputs, "scanWithGraphs", blocksize, zstd);
     ad_utility::HashSet<Id> graphs{V(0)};
     ScanSpecification spec{V(42),
                            std::nullopt,
@@ -1348,7 +1385,7 @@ TEST(ScanSpecAndBlocks, removePrefix) {
                                   {6, 0, 0},
                                   {7, 0, 0}}});
   auto [blocks, metadata, reader] =
-      writeAndOpenRelations(inputs, "removePrefix", 16_B);
+      writeAndOpenRelations(inputs, "removePrefix", 16_B, zstd);
   ScanSpecification spec{std::nullopt, std::nullopt, std::nullopt};
 
   auto getSize = [](auto range) {
@@ -1407,39 +1444,3 @@ TEST(CompressedBlockMetadata, invariantChecks) {
   blocks.front().lastTriple_ = {V(1), V(2), V(3), V(16)};
   EXPECT_TRUE(CompressedBlockMetadata::checkInvariantsForSortedBlocks(blocks));
 }
-
-// Test the compressed relations with LZ4 compression.
-#ifdef QLEVER_HAS_LZ4
-TEST(CompressedRelationWriter, SmallRelationsLz4NoLocated) {
-  std::vector<RelationInput> inputs;
-  for (int i = 1; i < 200; ++i) {
-    inputs.push_back(
-        RelationInput{i, {{i - 1, i + 1}, {i - 1, i + 2}, {i, i - 1}}});
-  }
-  using ad_utility::memory_literals::operator""_B;
-  testCompressedRelations(inputs, "smallRelationsLz4NoLocated", 237_B, 0.0,
-                          CompressionAlgorithm::Lz4);
-}
-
-TEST(CompressedRelationWriter, SmallRelationsLz4WithLocated) {
-  std::vector<RelationInput> inputs;
-  for (int i = 1; i < 200; ++i) {
-    inputs.push_back(
-        RelationInput{i, {{i - 1, i + 1}, {i - 1, i + 2}, {i, i - 1}}});
-  }
-  using ad_utility::memory_literals::operator""_B;
-  testCompressedRelations(inputs, "smallRelationsLz4WithLocated", 237_B, 0.5,
-                          CompressionAlgorithm::Lz4);
-}
-
-TEST(CompressedRelationWriter, LargeRelationsLz4) {
-  std::vector<RelationInput> inputs;
-  inputs.push_back({42, {}});
-  for (int i = 0; i < 500; ++i) {
-    inputs.back().col1And2_.push_back({i, 2 * i});
-  }
-  using ad_utility::memory_literals::operator""_B;
-  testCompressedRelations(inputs, "largeRelationsLz4", 237_B, 0.0,
-                          CompressionAlgorithm::Lz4);
-}
-#endif  // QLEVER_HAS_LZ4
