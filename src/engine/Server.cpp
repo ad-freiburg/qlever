@@ -1165,7 +1165,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   auto responseMiddlewares =
       updates | ql::views::transform(&ParsedQuery::responseMiddleware_) |
       ql::views::filter(ad_utility::hasValue) |
-      ql::views::transform(ad_utility::exchange) | ::ranges::to<std::vector>();
+      ql::views::transform(ad_utility::exchange) |
+      ql::views::transform(ad_utility::value) | ::ranges::to<std::vector>();
 
   std::vector<UpdateMetadata> metadatas;
 
@@ -1243,7 +1244,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   auto response = ad_utility::httpUtils::createJsonResponse(
       std::move(responseJson), request);
   for (auto& middleware : responseMiddlewares) {
-    response = middleware->applyUpdate(std::move(response), metadatas);
+    response = middleware.applyUpdate(std::move(response), metadatas);
   }
   co_await send(std::move(response));
   co_return;

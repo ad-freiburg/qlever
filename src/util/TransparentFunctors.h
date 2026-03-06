@@ -98,6 +98,7 @@ struct DereferenceImpl {
   }
 };
 
+// Implementation of `hasValue` (see below).
 struct HasValueImpl {
   template <typename X>
   constexpr decltype(auto) operator()(X&& x) const {
@@ -105,13 +106,29 @@ struct HasValueImpl {
   }
 };
 
+// Implementation of `value` (see below).
 struct ValueImpl {
   template <typename X>
-  constexpr decltype(auto) operator()(X&& x) const {
-    return AD_FWD(x).value();
+  constexpr decltype(auto) operator()(X& x) const {
+    return x.value();
+  }
+  template <typename X>
+  constexpr auto operator()(X&& x) const
+      requires(!std::is_lvalue_reference_v<X &&>) {
+    return std::move(x).value();
   }
 };
+static_assert(std::is_same_v<decltype(std::declval<ValueImpl>()(
+                                 std::declval<std::optional<std::string>>())),
+                             std::string>);
+static_assert(std::is_same_v<decltype(std::declval<ValueImpl>()(
+                                 std::declval<std::optional<std::string>&>())),
+                             std::string&>);
+static_assert(std::is_same_v<decltype(std::declval<ValueImpl>()(
+                                 std::declval<std::optional<std::string>&&>())),
+                             std::string>);
 
+// Implementation of `exchange` (see below).
 struct ExchangeImpl {
   template <typename X>
   constexpr decltype(auto) operator()(X&& x) const {
