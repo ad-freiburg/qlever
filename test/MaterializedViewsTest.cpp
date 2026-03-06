@@ -16,8 +16,12 @@
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "engine/IndexScan.h"
 #include "engine/MaterializedViews.h"
+#include "engine/MaterializedViewsQueryAnalysis.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/Server.h"
+#include "engine/VariableToColumnMap.h"
+#include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "index/EncodedIriManager.h"
 #include "parser/MaterializedViewQuery.h"
 #include "parser/SparqlParser.h"
@@ -596,6 +600,36 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
             "The materialized view 'testView5' is saved with format version "
             "0, however this version of QLever expects"));
   }
+
+  // Backward compatibility: View with no saved query.
+  {
+    auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
+    manager.writeViewToDisk("testView6", plan);
+    {
+      // Remove the `query` key from the metadata JSON file.
+      nlohmann::json viewInfo;
+      const std::string metadataFilename =
+          "_materializedViewsTestIndex.view.testView6.viewinfo.json";
+      ad_utility::makeIfstream(metadataFilename) >> viewInfo;
+      viewInfo.erase("query");
+      ad_utility::makeOfstream(metadataFilename)
+          << viewInfo.dump() << std::endl;
+    }
+    // Load the view: It can be loaded correctly, but does not have an original
+    // query set.
+    auto view = manager.getView("testView6");
+    EXPECT_FALSE(view->originalQuery().has_value());
+    EXPECT_FALSE(view->parsedQuery().has_value());
+  }
+
+  // View with no parsed query is skipped by `QueryPatternCache::analyzeView`.
+  {
+    qlv().writeMaterializedView("testView7", simpleWriteQuery_);
+    auto view = std::make_shared<MaterializedView>(testIndexBase_, "testView7");
+    view->parsedQuery_ = std::nullopt;
+    materializedViewsQueryAnalysis::QueryPatternCache c;
+    EXPECT_FALSE(c.analyzeView(view));
+  }
 }
 
 // _____________________________________________________________________________
@@ -809,6 +843,59 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
     auto count = res->idTable().at(0, col);
     ASSERT_TRUE(count.getDatatype() == Datatype::Int);
     EXPECT_EQ(count.getInt(), 20 * numFakeSubjects_);
+  }
+}
+
+// _____________________________________________________________________________
+TEST_F(MaterializedViewsTest, BindToColumnMap) {
+  qlv().writeMaterializedView("testView1", simpleWriteQuery_);
+  MaterializedViewsManager manager{testIndexBase_};
+  auto view = manager.getView("testView1");
+  EXPECT_TRUE(view->parsedQuery().has_value());
+
+  // `BIND` is contained.
+  {
+    auto expr = sparqlExpression::SparqlExpressionPimpl{
+        std::make_shared<sparqlExpression::IdExpression>(
+            ValueId::makeFromInt(1)),
+        "1"};
+    auto cacheKey = expr.getCacheKey({});
+    EXPECT_THAT(view->lookupBindTargetColumn(cacheKey),
+                ::testing::Optional(::testing::Eq(3)));
+  }
+
+  // `BIND` is not contained.
+  {
+    auto expr = sparqlExpression::SparqlExpressionPimpl{
+        std::make_shared<sparqlExpression::IdExpression>(
+            ValueId::makeFromDouble(5.0)),
+        "5.0"};
+    auto cacheKey = expr.getCacheKey({});
+    EXPECT_FALSE(view->lookupBindTargetColumn(cacheKey).has_value());
+  }
+
+  // Variable in `BIND` must be mapped to the correct column by the caller.
+  qlv().writeMaterializedView("testView2", R"(
+    SELECT ?s ?p ?o ?g {
+      ?s ?p ?o .
+      BIND(?o AS ?g)
+    }
+  )");
+  auto view2 = manager.getView("testView2");
+  {
+    auto expr = sparqlExpression::SparqlExpressionPimpl{
+        std::make_shared<sparqlExpression::VariableExpression>(V{"?x"}), "?x"};
+
+    // `BIND` is found using correct mapping despite different variable name.
+    VariableToColumnMap correctVarToCol{{V{"?x"}, makeAlwaysDefinedColumn(2)}};
+    auto cacheKey1 = expr.getCacheKey(correctVarToCol);
+    EXPECT_THAT(view2->lookupBindTargetColumn(cacheKey1),
+                ::testing::Optional(::testing::Eq(3)));
+
+    // `BIND` is not found with different column index.
+    VariableToColumnMap wrongVarToCol{{V{"?x"}, makeAlwaysDefinedColumn(1)}};
+    auto cacheKey2 = expr.getCacheKey(wrongVarToCol);
+    EXPECT_FALSE(view2->lookupBindTargetColumn(cacheKey2).has_value());
   }
 }
 
