@@ -13,6 +13,7 @@
 #include "engine/CallFixedSize.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/Sort.h"
+#include "engine/ValueIdHelpers.h"
 #include "engine/VariableToColumnMap.h"
 #include "global/RuntimeParameters.h"
 #include "parser/RdfParser.h"
@@ -540,7 +541,7 @@ std::optional<std::string> Service::idToValueForValuesClause(
     const Index& index, Id id, const LocalVocab& localVocab) {
   using enum Datatype;
   const auto& optionalStringAndXsdType =
-      ExportQueryExecutionTrees::idToStringAndType(index, id, localVocab);
+      ql::valueId::idToStringAndType(index, id, localVocab);
   if (!optionalStringAndXsdType.has_value()) {
     AD_CORRECTNESS_CHECK(id.getDatatype() == Undefined);
     return "UNDEF";
