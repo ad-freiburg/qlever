@@ -43,6 +43,9 @@ class ExportQueryExecutionTrees {
   // `mediaType` and the query type will throw. The result is returned as a
   // `generator` that lazily computes the serialized result in large chunks of
   // bytes.
+  // TODO<ms2144>: maybe update this comment, since we now also support the
+  // ntriples
+  // format for construct queries.
   using ComputeResultReturnType =
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
       cppcoro::generator<std::string>;

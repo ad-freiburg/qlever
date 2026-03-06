@@ -17,7 +17,6 @@
 #include "engine/idTable/IdTable.h"
 #include "index/Index.h"
 #include "util/Exception.h"
-#include "util/HashMap.h"
 #include "util/LruCacheWithStatistics.h"
 
 namespace qlever::constructExport {
@@ -31,16 +30,15 @@ using EvaluatedVariableValues = std::vector<std::optional<EvaluatedTerm>>;
 // Result of batch-evaluating all variables for a batch of rows. Stores the
 // evaluated values per variable column and the number of rows in the batch.
 struct BatchEvaluationResult {
-  // Map from `IdTable` column index to evaluated values for each row in batch.
-  // A hash map is used because the set of evaluated columns may be sparse:
-  // some variables from the WHERE-clause (in the `IdTable`) may not appear in
-  // the CONSTRUCT template and are thus not evaluated.
-  ad_utility::HashMap<size_t, EvaluatedVariableValues> variablesByColumn_;
+  // Evaluated values indexed by variable position (the order in which
+  // variables appear in `PreprocessedConstructTemplate::uniqueVariableColumns_`
+  // and `PrecomputedVariable::columnIndex_`).
+  std::vector<EvaluatedVariableValues> variablesByColumn_;
   size_t numRows_ = 0;
 
-  const std::optional<EvaluatedTerm>& getVariable(size_t columnIndex,
+  const std::optional<EvaluatedTerm>& getVariable(size_t positionIndex,
                                                   size_t rowInBatch) const {
-    return variablesByColumn_.at(columnIndex).at(rowInBatch);
+    return variablesByColumn_[positionIndex][rowInBatch];
   }
 };
 
@@ -63,37 +61,16 @@ struct BatchEvaluationContext {
   size_t numRows() const { return endRow_ - firstRow_; }
 };
 
-// Resolves `Id` values in variable columns to their string representations
-// (IRI, literal, etc.) via `ExportQueryExecutionTrees::idToStringAndType`.
-//
-// The evaluation is column-oriented: for each variable (identified by their
-// `IdTable` column), all rows in the batch are evaluated before moving to the
-// next column.
-//
-// An `IdCache` (LRU cache keyed by `Id`) avoids redundant evaluation of the
-// same `Id` across rows and batches.
-class ConstructBatchEvaluator {
- public:
-  // Evaluates the variables identified by `variableColumnIndices` for all rows
-  // in `evaluationContext`. Each entry in `variableColumnIndices` is an
-  // `IdTable` column index representing a variable in the CONSTRUCT template.
-  static BatchEvaluationResult evaluateBatch(
-      ql::span<const size_t> variableColumnIndices,
-      const BatchEvaluationContext& evaluationContext,
-      const LocalVocab& localVocab, const Index& index, IdCache& idCache);
-
- private:
-  // Evaluate a single variable (identified by its `IdTable` column index)
-  // across all rows in the batch.
-  static EvaluatedVariableValues evaluateVariableByColumn(
-      size_t idTableColumnIdx, const BatchEvaluationContext& ctx,
-      const LocalVocab& localVocab, const Index& index, IdCache& idCache);
-
-  // Convert a single `Id` to its `EvaluatedTerm` string representation.
-  // Returns `std::nullopt` if the `Id` has no string representation.
-  static std::optional<EvaluatedTerm> idToEvaluatedTerm(
-      const Index& index, Id id, const LocalVocab& localVocab);
-};
+// Resolves the variables identified by `variableColumnIndices` for all rows in
+// `evaluationContext`. Each entry in `variableColumnIndices` is an `IdTable`
+// column index representing a variable in the CONSTRUCT template. `Id` values
+// are resolved via `idToStringAndType` using `index` and `localVocab`; an
+// `IdCache` (LRU cache keyed by `Id`) avoids redundant lookups across rows and
+// batches.
+BatchEvaluationResult evaluateBatch(
+    ql::span<const size_t> variableColumnIndices,
+    const BatchEvaluationContext& evaluationContext,
+    const LocalVocab& localVocab, const Index& index, IdCache& idCache);
 
 }  // namespace qlever::constructExport
 

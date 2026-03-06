@@ -9,57 +9,52 @@
 #define QLEVER_SRC_ENGINE_CONSTRUCTTRIPLEGENERATOR_H
 
 #include <functional>
+#include <memory>
+#include <vector>
 
-#include "engine/ConstructQueryEvaluator.h"
 #include "engine/ConstructTypes.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryExportTypes.h"
 #include "global/Constants.h"
+#include "global/Id.h"
 #include "parser/data/ConstructQueryExportContext.h"
 #include "util/CancellationHandle.h"
+#include "util/http/MediaTypes.h"
+#include "util/stream_generator.h"
 
 namespace qlever::constructExport {
 
-// ConstructTripleGenerator: generates StringTriples from
-// query results. It manages the global row offset and transforms result tables
-// and rows into a single continuous range of triples.
+class ConstructRowProcessor;
+
+// Generates triples from CONSTRUCT query results by instantiating triple
+// patterns (from the CONSTRUCT clause) with values from the result table
+// (produced by the WHERE clause).
 class ConstructTripleGenerator {
  public:
   using CancellationHandle = ad_utility::SharedCancellationHandle;
   using StringTriple = QueryExecutionTree::StringTriple;
-  using PreprocessedConstructTemplate =
-      qlever::constructExport::PreprocessedConstructTemplate;
-  using PreprocessedTriple = qlever::constructExport::PreprocessedTriple;
+  using Triples = ad_utility::sparql_types::Triples;
 
-  // _____________________________________________________________________________
-  ConstructTripleGenerator(
-      PreprocessedConstructTemplate preprocessedTemplateTriples,
-      std::shared_ptr<const Result> result,
-      const VariableToColumnMap& variableColumns, const Index& index,
-      CancellationHandle cancellationHandle)
-      : preprocessedTemplateTriples_(
-            std::move(preprocessedTemplateTriples.preprocessedTriples_)),
-        result_(std::move(result)),
-        variableColumns_(variableColumns),
-        index_(index),
-        cancellationHandle_(std::move(cancellationHandle)) {}
+  ConstructTripleGenerator(Triples constructTriples,
+                           std::shared_ptr<const Result> result,
+                           const VariableToColumnMap& variableColumns,
+                           const Index& index,
+                           CancellationHandle cancellationHandle);
 
-  // _____________________________________________________________________________
-  // This generator has to be called for each table contained in the result of
-  // `ExportQueryExecutionTrees::getRowIndices` IN ORDER (because of
-  // rowOffsset).
-  //
-  // For each row of the result table (the table that is created as result of
-  // processing the WHERE-clause of a CONSTRUCT-query) it creates the resulting
-  // triples by instantiating the triple-patterns with the values of the
-  // result-table row (triple-patterns are the triples in the CONSTRUCT-clause
-  // of a CONSTRUCT-query). The following pipeline takes place conceptually:
-  // result-table -> result-table Rows -> Triple Patterns -> StringTriples
-  auto generateStringTriplesForResultTable(const TableWithRange& table);
+  // Generate `StringTriple`s for a single result table.
+  ad_utility::InputRangeTypeErased<StringTriple>
+  generateStringTriplesForResultTable(const TableWithRange& table);
 
-  // _____________________________________________________________________________
-  // Helper function that generates the result of a CONSTRUCT query as a range
-  // of `StringTriple`s.
+  // Generate formatted strings for a single result table.
+  ad_utility::InputRangeTypeErased<std::string> generateFormattedTriples(
+      const TableWithRange& table, ad_utility::MediaType format);
+
+  // Generate formatted strings for all tables in a range.
+  ad_utility::InputRangeTypeErased<std::string> generateAllFormattedTriples(
+      ad_utility::InputRangeTypeErased<TableWithRange> rowIndices,
+      ad_utility::MediaType format);
+
+  // Helper that generates `StringTriple`s for a full CONSTRUCT query.
   static ad_utility::InputRangeTypeErased<StringTriple> generateStringTriples(
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructTriples,
@@ -68,17 +63,18 @@ class ConstructTripleGenerator {
       CancellationHandle cancellationHandle);
 
  private:
-  // triple templates contained in the graph template of the CONSTRUCT-query.
-  std::vector<PreprocessedTriple> preprocessedTemplateTriples_;
-  // wrapper around the result-table obtained from processing the
-  // WHERE-clause of the CONSTRUCT-query.
+  Triples templateTriples_;
   std::shared_ptr<const Result> result_;
-  // map from Variables to the column idx of the `IdTable` (needed for fetching
-  // the value of a `Variable` for a specific row of the `IdTable`).
-  std::reference_wrapper<const VariableToColumnMap> variableColumns_;
   std::reference_wrapper<const Index> index_;
   CancellationHandle cancellationHandle_;
   size_t rowOffset_ = 0;
+
+  // Preprocessed template with triples and unique variable columns.
+  PreprocessedConstructTemplate preprocessedTemplate_;
+
+  // Helper that handles `rowOffset_` and creates a `ConstructRowProcessor`.
+  std::unique_ptr<ConstructRowProcessor> prepareRowProcessor(
+      const TableWithRange& table);
 };
 
 }  // namespace qlever::constructExport

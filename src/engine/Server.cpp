@@ -956,27 +956,29 @@ ad_utility::MediaType Server::chooseBestFittingMediaType(
     const std::vector<ad_utility::MediaType>& candidates,
     const ParsedQuery& parsedQuery) {
   if (!candidates.empty()) {
-    auto it = ql::ranges::find_if(candidates, [&parsedQuery](
-                                                  MediaType mediaType) {
-      if (parsedQuery.hasAskClause()) {
-        std::array supportedMediaTypes{
-            MediaType::sparqlXml, MediaType::sparqlJson, MediaType::qleverJson};
-        return ad_utility::contains(supportedMediaTypes, mediaType);
-      }
-      if (parsedQuery.hasSelectClause()) {
-        std::array supportedMediaTypes{MediaType::octetStream,
-                                       MediaType::csv,
-                                       MediaType::tsv,
-                                       MediaType::qleverJson,
-                                       MediaType::sparqlXml,
-                                       MediaType::sparqlJson,
-                                       MediaType::binaryQleverExport};
-        return ad_utility::contains(supportedMediaTypes, mediaType);
-      }
-      std::array supportedMediaTypes{MediaType::csv, MediaType::tsv,
-                                     MediaType::qleverJson, MediaType::turtle};
-      return ad_utility::contains(supportedMediaTypes, mediaType);
-    });
+    auto it =
+        ql::ranges::find_if(candidates, [&parsedQuery](MediaType mediaType) {
+          if (parsedQuery.hasAskClause()) {
+            std::array supportedMediaTypes{MediaType::sparqlXml,
+                                           MediaType::sparqlJson,
+                                           MediaType::qleverJson};
+            return ad_utility::contains(supportedMediaTypes, mediaType);
+          }
+          if (parsedQuery.hasSelectClause()) {
+            std::array supportedMediaTypes{MediaType::octetStream,
+                                           MediaType::csv,
+                                           MediaType::tsv,
+                                           MediaType::qleverJson,
+                                           MediaType::sparqlXml,
+                                           MediaType::sparqlJson,
+                                           MediaType::binaryQleverExport};
+            return ad_utility::contains(supportedMediaTypes, mediaType);
+          }
+          std::array supportedMediaTypes{
+              MediaType::csv, MediaType::tsv, MediaType::qleverJson,
+              MediaType::turtle, MediaType::ntriples};
+          return ad_utility::contains(supportedMediaTypes, mediaType);
+        });
     if (it != candidates.end()) {
       return *it;
     }

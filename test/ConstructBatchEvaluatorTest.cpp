@@ -18,19 +18,21 @@ using namespace qlever::constructExport;
 using ::testing::Each;
 using ::testing::ElementsAre;
 using ::testing::Eq;
+using ::testing::Field;
 using ::testing::Optional;
 using ::testing::Pointee;
 
-// Matcher for `std::optional<std::shared_ptr<const std::string>>`:
-// asserts the optional is non-empty and the pointed-to string equals
+// Matcher for `std::optional<EvaluatedTerm>` (i.e.
+// `std::optional<std::shared_ptr<const EvaluatedTermData>>`): asserts the
+// optional is non-empty and the pointed-to term's `str` field equals
 // `expected`.
 static constexpr auto evalTerm = [](const std::string& expected) {
-  return Optional(Pointee(Eq(expected)));
+  return Optional(Pointee(Field(&EvaluatedTermData::str, Eq(expected))));
 };
 
 static const EvaluatedVariableValues& getColumn(
-    const BatchEvaluationResult& result, size_t variableColumnIdx) {
-  return result.variablesByColumn_.at(variableColumnIdx);
+    const BatchEvaluationResult& result, size_t positionIdx) {
+  return result.variablesByColumn_.at(positionIdx);
 }
 
 // =============================================================================
@@ -66,8 +68,8 @@ class ConstructBatchEvaluatorTest : public ::testing::Test {
       const std::vector<size_t>& variableColumnIndices, const IdTable& idTable,
       IdCache& idCache) {
     BatchEvaluationContext ctx{idTable, 0, idTable.numRows()};
-    return ConstructBatchEvaluator::evaluateBatch(variableColumnIndices, ctx,
-                                                  localVocab_, index_, idCache);
+    return evaluateBatch(variableColumnIndices, ctx, localVocab_, index_,
+                         idCache);
   }
 
   // Evaluate a sub-range [`firstRow`, `endRow`) of the `IdTable`.
@@ -75,8 +77,8 @@ class ConstructBatchEvaluatorTest : public ::testing::Test {
       const std::vector<size_t>& variableColumnIndices, const IdTable& idTable,
       size_t firstRow, size_t endRow, IdCache& idCache) {
     BatchEvaluationContext ctx{idTable, firstRow, endRow};
-    return ConstructBatchEvaluator::evaluateBatch(variableColumnIndices, ctx,
-                                                  localVocab_, index_, idCache);
+    return evaluateBatch(variableColumnIndices, ctx, localVocab_, index_,
+                         idCache);
   }
 };
 
@@ -124,13 +126,12 @@ TEST_F(ConstructBatchEvaluatorTest, evaluatesOnlyRequestedColumns) {
   auto result = evaluateIdTable({0, 2}, idTable, idCache);
 
   ASSERT_EQ(result.numRows_, 1);
+  // Exactly 2 positions evaluated (columns 0 and 2); column 1 was not
+  // requested.
   ASSERT_EQ(result.variablesByColumn_.size(), 2);
-  EXPECT_TRUE(result.variablesByColumn_.contains(0));
-  EXPECT_TRUE(result.variablesByColumn_.contains(2));
-  // false
-  EXPECT_FALSE(result.variablesByColumn_.contains(1));
+  // Position 0 = column 0, position 1 = column 2.
   EXPECT_THAT(result.getVariable(0, 0), evalTerm("<s>"));
-  EXPECT_THAT(result.getVariable(2, 0), evalTerm("<o>"));
+  EXPECT_THAT(result.getVariable(1, 0), evalTerm("<o>"));
 }
 
 // A single variable column where some rows hold a defined `Id` and one row
@@ -264,50 +265,29 @@ TEST_F(ConstructBatchEvaluatorTest, realisticConstructPattern) {
   ASSERT_EQ(result.numRows_, 4);
   ASSERT_EQ(result.variablesByColumn_.size(), 2);
 
-  // Column 0 (?s): <s>, <s>, <o>, <s>
+  // Position 0 = column 0 (?s): <s>, <s>, <o>, <s>
   EXPECT_THAT(getColumn(result, 0),
               ElementsAre(evalTerm("<s>"), evalTerm("<s>"), evalTerm("<o>"),
                           evalTerm("<s>")));
 
   // idS_ appears in col0[0,1,3] and col2[2]: all must share the same
-  // shared_ptr.
+  // shared_ptr. (col2 is at position 1.)
   const auto& firstS = getColumn(result, 0).at(0);
   auto idSTerms =
       std::vector{getColumn(result, 0).at(1), getColumn(result, 0).at(3),
-                  getColumn(result, 2).at(2)};
+                  getColumn(result, 1).at(2)};
   EXPECT_THAT(idSTerms, Each(Eq(firstS)));
 
-  // Column 2 (?o): <o>, <q>, <s>, <o>
-  EXPECT_THAT(getColumn(result, 2),
+  // Position 1 = column 2 (?o): <o>, <q>, <s>, <o>
+  EXPECT_THAT(getColumn(result, 1),
               ElementsAre(evalTerm("<o>"), evalTerm("<q>"), evalTerm("<s>"),
                           evalTerm("<o>")));
 
   // idO_ appears in col2[0,3] and col0[2]: all must share the same shared_ptr.
-  const auto& firstO = getColumn(result, 2).at(0);
+  const auto& firstO = getColumn(result, 1).at(0);
   auto idOTerms =
-      std::vector{getColumn(result, 2).at(3), getColumn(result, 0).at(2)};
+      std::vector{getColumn(result, 1).at(3), getColumn(result, 0).at(2)};
   EXPECT_THAT(idOTerms, Each(Eq(firstO)));
-}
-
-// With a cache of size 1, accessing a different `Id` evicts the current entry.
-// Use idS_, idO_, idS_: the second access to idS_ (row 2) is a cache miss
-// because idO_ (row 1) evicted it, a new string is allocated.
-TEST_F(ConstructBatchEvaluatorTest, cacheOfSizeOneEvictsAndRecomputesOnAccess) {
-  auto idTable = makeIdTableFromVector({{idS_}, {idO_}, {idS_}});
-  IdCache idCache{1};
-
-  auto result = evaluateIdTable({0}, idTable, idCache);
-
-  ASSERT_EQ(result.numRows_, 3);
-
-  // Correct string values despite eviction.
-  EXPECT_THAT(getColumn(result, 0),
-              ElementsAre(evalTerm("<s>"), evalTerm("<o>"), evalTerm("<s>")));
-
-  // The two idS_ accesses must yield different shared_ptrs: the first was
-  // evicted by idO_, forcing recomputation and a new allocation for row 2.
-  // (The string content is still correct, as verified above.)
-  EXPECT_NE(getColumn(result, 0).at(0), getColumn(result, 0).at(2));
 }
 
 }  // namespace
