@@ -11,7 +11,6 @@
 #define QLEVER_SRC_ENGINE_CONSTRUCTTYPES_H
 
 #include <array>
-#include <memory>
 #include <string>
 #include <variant>
 #include <vector>
