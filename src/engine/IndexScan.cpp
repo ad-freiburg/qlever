@@ -927,6 +927,12 @@ IndexScan::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
     return std::nullopt;
   }
 
+  // Check that the target variable of the `BIND` is not used already by this
+  // `IndexScan`.
+  if (visibleVars.contains(bind._target)) {
+    return std::nullopt;
+  }
+
   // Check the `BIND` cache of the underlying `MaterializedView` for the `BIND`
   // expression's cache key.
   auto targetCol =
