@@ -1003,6 +1003,10 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
   // is 3, for S, P and one additional column.
   auto bindView = std::bind_front(&viewScan, "bindView", "?s", "?o",
                                   "?_ql_materialized_view_o", 3);
+  // Matcher for a view scan with no additional columns.
+  auto viewScanNoBind =
+      viewScan("bindView", "?s", "?o", "?_ql_materialized_view_o", 2);
+
   using AC = std::vector<std::pair<ColumnIndex, Variable>>;
 
   // Simple `BIND` rewrites.
@@ -1054,21 +1058,20 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
         BIND(2 * ?o2 + 1 AS ?bind)
       }
     )";
-    // Matcher for left child of `SpatialJoin`: Scan on view without `BIND` push
-    // down.
-    auto viewScanNoBind =
-        viewScan("bindView", "?s", "?o", "?_ql_materialized_view_o", 2);
-    // Matcher for right child of `SpatialJoin`: Scan on view with `BIND` push
-    // down due to matching variables.
     auto viewScanWithBind =
         viewScan("bindView", "?s2", "?o2", "?_ql_materialized_view_o", 3,
                  AC{{3, V{"?bind"}}});
-    qpExpect(qlv(), bindThroughSpatialJoin,
-             h::spatialJoin(100, -1, V{"?o"}, V{"?o2"}, std::nullopt,
-                            PayloadVariables::all(),
-                            SpatialJoinAlgorithm::LIBSPATIALJOIN,
-                            SpatialJoinType::WITHIN_DIST, viewScanNoBind,
-                            viewScanWithBind));
+    qpExpect(
+        qlv(), bindThroughSpatialJoin,
+        h::spatialJoin(
+            100, -1, V{"?o"}, V{"?o2"}, std::nullopt, PayloadVariables::all(),
+            SpatialJoinAlgorithm::LIBSPATIALJOIN, SpatialJoinType::WITHIN_DIST,
+            // Matcher for left child of `SpatialJoin`: Scan on
+            // view without `BIND` push down.
+            viewScanNoBind,
+            // Matcher for right child of `SpatialJoin`: Scan on
+            // view with `BIND` push down due to matching variables.
+            viewScanWithBind));
   }
 
   // The `2 * ?o + 1` expression.
@@ -1084,6 +1087,7 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
                                V{"?bind"}};
 
   // A `BIND` is pushed down through a `StripColumns` operation.
+  const std::set<Variable> varsToKeep{V{"?o"}};
   {
     auto [qet, qec, parsed] = qlv().parseAndPlanQuery(R"(
       PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
@@ -1093,7 +1097,6 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
     )");
 
     // `StripColumns` with a single column.
-    std::set<Variable> varsToKeep{V{"?o"}};
     auto stripCols =
         ad_utility::makeExecutionTree<StripColumns>(qec.get(), qet, varsToKeep);
     EXPECT_EQ(stripCols->getResultWidth(), 1);
@@ -1108,6 +1111,99 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
                     // only had one.
                     AD_PROPERTY(StripColumns, getResultWidth, ::testing::Eq(2)),
                     h::children(bindView(AC{{3, V{"?bind"}}})))));
+  }
+
+  // A `BIND` cannot be pushed into a regular `IndexScan` (not a materialized
+  // view) or a `StripColumns` operation containing a regular `IndexScan`.
+  {
+    auto [qet, qec, parsed] =
+        qlv().parseAndPlanQuery("SELECT * { ?s <p2> ?o }");
+    EXPECT_FALSE(
+        qet->getRootOperation()->makeTreeWithBindColumn(bind).has_value());
+    auto stripCols =
+        ad_utility::makeExecutionTree<StripColumns>(qec.get(), qet, varsToKeep);
+    EXPECT_FALSE(stripCols->getRootOperation()
+                     ->makeTreeWithBindColumn(bind)
+                     .has_value());
+  }
+
+  // A `BIND` cannot be pushed into a scan on a view if the scan doesn't select
+  // all columns needed for the `BIND`.
+  {
+    auto [qet, qec, parsed] = qlv().parseAndPlanQuery(R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT * {
+        ?s view:bindView-b3 ?b3 .
+      }
+    )");
+    EXPECT_FALSE(
+        qet->getRootOperation()->makeTreeWithBindColumn(bind).has_value());
+  }
+
+  // A `BIND` cannot be pushed into a scan on a view if the scan already selects
+  // values into the `BIND`'s target column.
+  {
+    auto [qet, qec, parsed] = qlv().parseAndPlanQuery(R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT * {
+        SERVICE view:bindView {
+          [
+            view:column-s ?s ;
+            view:column-o ?o ;
+            view:column-b3 ?bind
+          ]
+        }
+      }
+    )");
+    EXPECT_FALSE(
+        qet->getRootOperation()->makeTreeWithBindColumn(bind).has_value());
+  }
+
+  // A `BIND` cannot be pushed into a scan on a view if the scan already selects
+  // the column that contains the `BIND` results into a variable with a
+  // different name.
+  {
+    auto [qet, qec, parsed] = qlv().parseAndPlanQuery(R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT * {
+        SERVICE view:bindView {
+          [
+            view:column-s ?s ;
+            view:column-o ?o ;
+            view:column-b2 ?other_variable
+          ]
+        }
+      }
+    )");
+    EXPECT_FALSE(
+        qet->getRootOperation()->makeTreeWithBindColumn(bind).has_value());
+  }
+
+  // A `BIND` that is not contained in the view cannot be pushed down.
+  {
+    const std::string notContainedBind = R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT * {
+        ?s view:bindView-o ?o .
+        BIND(42 * ?o AS ?bind)
+      }
+    )";
+    qpExpect(qlv(), notContainedBind,
+             h::Bind(viewScanNoBind, "42 * ?o", V{"?bind"}));
+  }
+
+  // The `BIND` is contained in the first three columns of the view.
+  {
+    const std::string firstThreeColBind = R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT * {
+        ?s view:bindView-o ?o .
+        BIND(15 AS ?bind)
+      }
+    )";
+    // TODO<ullingerc> Change this test as soon as we allow this.
+    qpExpect(qlv(), firstThreeColBind,
+             h::Bind(viewScanNoBind, "15", V{"?bind"}));
   }
 
   // Test the variable to permutation column index map.
