@@ -17,7 +17,7 @@ std::vector<std::string> StringMapping::flush(const Index& index) {
   sortedStrings.resize(stringMapping_.size());
   for (const auto& [oldId, newId] : stringMapping_) {
     auto literalOrIri =
-        ExportQueryExecutionTrees::idToLiteralOrIri(index, oldId, dummy, true);
+        ql::valueId::idToLiteralOrIri(index, oldId, dummy, true);
     AD_CORRECTNESS_CHECK(literalOrIri.has_value());
     sortedStrings[newId] =
         std::move(literalOrIri.value()).toStringRepresentation();

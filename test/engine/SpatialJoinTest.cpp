@@ -27,6 +27,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryPlanner.h"
 #include "engine/SpatialJoin.h"
+#include "engine/ValueIdHelpers.h"
 #include "engine/VariableToColumnMap.h"
 #include "global/Constants.h"
 #include "global/Id.h"
@@ -387,22 +388,22 @@ class SpatialJoinVarColParamTest
         ValueId tableEntry = r->at(0, ind);
 
         if (tableEntry.getDatatype() == Datatype::VocabIndex) {
-          std::string value = ExportQueryExecutionTrees::idToStringAndType(
-                                  qec->getIndex(), tableEntry, {})
-                                  .value()
-                                  .first;
+          std::string value =
+              ql::valueId::idToStringAndType(qec->getIndex(), tableEntry, {})
+                  .value()
+                  .first;
           ASSERT_TRUE(value.find(expectedColumns.at(i).second, 0) !=
                       std::string::npos);
         } else if (tableEntry.getDatatype() == Datatype::Int) {
-          std::string value = ExportQueryExecutionTrees::idToStringAndType(
-                                  qec->getIndex(), tableEntry, {})
-                                  .value()
-                                  .first;
+          std::string value =
+              ql::valueId::idToStringAndType(qec->getIndex(), tableEntry, {})
+                  .value()
+                  .first;
           ASSERT_EQ(value, expectedColumns.at(i).second);
         } else if (tableEntry.getDatatype() == Datatype::GeoPoint) {
-          auto [value, type] = ExportQueryExecutionTrees::idToStringAndType(
-                                   qec->getIndex(), tableEntry, {})
-                                   .value();
+          auto [value, type] =
+              ql::valueId::idToStringAndType(qec->getIndex(), tableEntry, {})
+                  .value();
           value = absl::StrCat("\"", value, "\"^^<", type, ">");
           ASSERT_TRUE(value.find(expectedColumns.at(i).second, 0) !=
                       std::string::npos);
@@ -461,9 +462,9 @@ class SpatialJoinVarColParamTest
         std::vector<std::string> columnEntries;
         columnEntries.reserve(r->numRows());
         for (const auto& valueId : col) {
-          auto [value, type] = ExportQueryExecutionTrees::idToStringAndType(
-                                   qec->getIndex(), valueId, {})
-                                   .value();
+          auto [value, type] =
+              ql::valueId::idToStringAndType(qec->getIndex(), valueId, {})
+                  .value();
           if (valueId.getDatatype() == Datatype::GeoPoint) {
             value = absl::StrCat("\"", value, "\"^^<", type, ">");
           }

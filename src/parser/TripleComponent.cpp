@@ -10,6 +10,7 @@
 #include <absl/strings/str_cat.h>
 
 #include "engine/ExportQueryExecutionTrees.h"
+#include "engine/ValueIdHelpers.h"
 #include "global/Constants.h"
 #include "rdfTypes/GeoPoint.h"
 #include "util/GeoSparqlHelpers.h"
@@ -96,10 +97,9 @@ std::string TripleComponent::toRdfLiteral() const {
     return getIri().toStringRepresentation();
   } else {
     EncodedIriManager ev;
-    auto [value, type] =
-        ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(
-            toValueIdIfNotString(&ev).value())
-            .value();
+    auto [value, type] = ql::valueId::idToStringAndTypeForEncodedValue(
+                             toValueIdIfNotString(&ev).value())
+                             .value();
     return absl::StrCat("\"", value, "\"^^<", type, ">");
   }
 }
