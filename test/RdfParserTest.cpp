@@ -414,10 +414,9 @@ TEST(RdfParserTest, base) {
   auto testForGivenParser = [](auto parser) {
     parser.setInputStream("@base <http://www.example.org/path/> .");
     ASSERT_TRUE(parser.base());
-    ASSERT_EQ(parser.baseForRelativeIri().toStringRepresentation(),
+    ASSERT_EQ(TripleComponent::Iri::fromUri(parser.baseIri_.value().get())
+                  .toStringRepresentation(),
               "<http://www.example.org/path/>");
-    ASSERT_EQ(parser.baseForAbsoluteIri().toStringRepresentation(),
-              "<http://www.example.org/>");
     parser.setInputStream("@base \"no iriref\" .");
     ASSERT_THROW(parser.base(), TurtleParser<Tokenizer>::ParseException);
   };
@@ -429,10 +428,9 @@ TEST(RdfParserTest, sparqlBase) {
   auto testForGivenParser = [](auto parser) {
     parser.setInputStream("BASE <http://www.example.org/path/> .");
     ASSERT_TRUE(parser.sparqlBase());
-    ASSERT_EQ(parser.baseForRelativeIri().toStringRepresentation(),
+    ASSERT_EQ(TripleComponent::Iri::fromUri(parser.baseIri_.value().get())
+                  .toStringRepresentation(),
               "<http://www.example.org/path/>");
-    ASSERT_EQ(parser.baseForAbsoluteIri().toStringRepresentation(),
-              "<http://www.example.org/>");
     parser.setInputStream("BASE \"no iriref\" .");
     ASSERT_THROW(parser.sparqlBase(), TurtleParser<Tokenizer>::ParseException);
   };
@@ -1496,7 +1494,7 @@ TEST(RdfParserTest, EncodedIriManagerUsage) {
 
   // Test lambda that reduces boilerplate
   auto testIriAtPosition = [&](auto parserFactory, const std::string& tripleStr,
-                               TripleComponent TurtleTriple::*position,
+                               TripleComponent TurtleTriple::* position,
                                bool shouldEncode,
                                const std::string& expectedValue) {
     auto parser = parserFactory();
@@ -1562,7 +1560,7 @@ TEST(RdfParserTest, EncodedIriManagerPrefixedNames) {
 
   // Meta-matcher that creates matchers for encoded IRIs at any position in a
   // triple
-  auto makeTripleMatcher = [&](TripleComponent TurtleTriple::*memberPtr) {
+  auto makeTripleMatcher = [&](TripleComponent TurtleTriple::* memberPtr) {
     return [&, memberPtr](const std::string& expectedDecodedIri) {
       return ::testing::Field(
           memberPtr,

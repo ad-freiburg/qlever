@@ -6,7 +6,10 @@
 
 #ifndef QLEVER_UTIL_URIPARSERURI_H
 #define QLEVER_UTIL_URIPARSERURI_H
+
 #include <uriparser/Uri.h>
+
+#include <filesystem>
 
 // Wrapper class for the `UriUriA` struct from uriparser. This is needed to
 // ensure that the memory allocated for the members of the struct is properly
@@ -16,6 +19,7 @@
 // using the `UriParserUri` class to parse URIs with uriparser.
 class UriParserUri {
   UriUriA uri_;
+  bool isValid_ = true;
 
   static int rangeEqual(const UriTextRangeA* a, const UriTextRangeA* b) {
     size_t lenA = a->afterLast - a->first;
@@ -44,13 +48,22 @@ class UriParserUri {
         &uri_, uriString.data(), uriString.data() + uriString.size(), nullptr);
     AD_CONTRACT_CHECK(result == URI_SUCCESS,
                       "Failed to parse URI: ", uriString);
+    uriMakeOwnerA(&uri_);
   }
 
   static UriParserUri fromFilename(const std::string& filename) {
+    const char* file = nullptr;
+    bool isAbsolutePath = std::filesystem::path{filename}.is_absolute();
+    std::string absolutePath;
+    if (isAbsolutePath) {
+      file = filename.c_str();
+    } else {
+      absolutePath = std::filesystem::absolute(filename).string();
+      file = absolutePath.c_str();
+    }
     std::string uriBuffer;
-    uriBuffer.resize(7 + 3 * filename.size());
-    auto parseResult =
-        uriUnixFilenameToUriStringA(filename.c_str(), uriBuffer.data());
+    uriBuffer.resize((isAbsolutePath ? 7 : 0) + 3 * filename.size());
+    auto parseResult = uriUnixFilenameToUriStringA(file, uriBuffer.data());
     AD_CONTRACT_CHECK(parseResult == URI_SUCCESS,
                       "Failed to parse filename as URI: ", filename);
     // Find the position of the null terminator added by
@@ -61,23 +74,38 @@ class UriParserUri {
 
   const UriUriA& get() const { return uri_; }
 
-  UriParserUri(const UriParserUri& other) noexcept {
-    uriCopyUriA(&uri_, &other.uri_);
+  UriParserUri(const UriParserUri& other) noexcept : isValid_{other.isValid_} {
+    if (other.isValid_) {
+      uriCopyUriA(&uri_, &other.uri_);
+    }
   }
 
   UriParserUri& operator=(const UriParserUri& other) noexcept {
     if (this != &other) {
-      uriFreeUriMembersA(&uri_);
-      uriCopyUriA(&uri_, &other.uri_);
+      if (isValid_) {
+        uriFreeUriMembersA(&uri_);
+      }
+      if (other.isValid_) {
+        uriCopyUriA(&uri_, &other.uri_);
+      }
+      isValid_ = other.isValid_;
     }
     return *this;
   }
 
-  UriParserUri(UriParserUri&& other) noexcept { std::swap(other.uri_, uri_); }
+  UriParserUri(UriParserUri&& other) noexcept
+      : uri_{other.uri_}, isValid_{other.isValid_} {
+    other.isValid_ = false;
+  }
+
   UriParserUri& operator=(UriParserUri&& other) noexcept {
     if (this != &other) {
-      uriFreeUriMembersA(&uri_);
-      std::swap(other.uri_, uri_);
+      if (isValid_) {
+        uriFreeUriMembersA(&uri_);
+      }
+      uri_ = other.uri_;
+      isValid_ = other.isValid_;
+      other.isValid_ = false;
     }
     return *this;
   }
@@ -95,7 +123,11 @@ class UriParserUri {
            a.absolutePath == b.absolutePath;
   }
 
-  ~UriParserUri() { uriFreeUriMembersA(&uri_); }
+  ~UriParserUri() {
+    if (isValid_) {
+      uriFreeUriMembersA(&uri_);
+    }
+  }
 };
 
 #endif  // QLEVER_UTIL_URIPARSERURI_H
