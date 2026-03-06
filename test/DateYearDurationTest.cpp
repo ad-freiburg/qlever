@@ -526,37 +526,39 @@ TEST(Date, parseErrors) {
 TEST(Date, toEpoch) {
   {
     using namespace std::chrono;
+    auto ns = [](sys_time<nanoseconds> v) {
+      return v.time_since_epoch().count();
+    };
+
     Date date = Date(1970, 1, 1, 0, 0, 0);
     sys_time<std::chrono::nanoseconds> timestamp =
         sys_time<std::chrono::nanoseconds>{nanoseconds{0}};
     auto result = date.toEpoch();
     ASSERT_TRUE(result);
-    ASSERT_EQ(timestamp, result.value());
+    EXPECT_EQ(ns(timestamp), ns(result.value()));
 
     date = Date(1969, 12, 31, 23, 59, 20);
     timestamp = sys_time<nanoseconds>{seconds{-40}};
     ASSERT_TRUE(date.toEpoch());
-    ASSERT_EQ(timestamp, date.toEpoch().value());
+    EXPECT_EQ(ns(timestamp), ns(date.toEpoch().value()));
 
     date = Date(1970, 1, 1, 1, 1, 1);
     timestamp = sys_time<nanoseconds>{seconds{3661}};
     ASSERT_TRUE(date.toEpoch());
-    ASSERT_EQ(timestamp, date.toEpoch().value());
+    EXPECT_EQ(ns(timestamp), ns(date.toEpoch().value()));
 
     date = Date(1970, 1, 1, 0, 0, 20.235);
     auto second = duration<double>{20.235};
     timestamp = sys_time<nanoseconds>{duration_cast<nanoseconds>(second)};
     ASSERT_TRUE(date.toEpoch());
-    ASSERT_NEAR(timestamp.time_since_epoch().count(),
-                date.toEpoch().value().time_since_epoch().count(), 500000);
+    EXPECT_NEAR(ns(timestamp), ns(date.toEpoch().value()), 500000);
 
     date = Date(1999, 2, 1, 8, 15, 13.098);
     second = duration<double>{13.098};
     timestamp = sys_time<nanoseconds>{seconds{917856900}} +
                 duration_cast<nanoseconds>(second);
     ASSERT_TRUE(date.toEpoch());
-    ASSERT_NEAR(timestamp.time_since_epoch().count(),
-                date.toEpoch().value().time_since_epoch().count(), 500000);
+    EXPECT_NEAR(ns(timestamp), ns(date.toEpoch().value()), 500000);
 
     // Test invalid date
     date = Date(1970, 11, 31, 13, 24, 24);
@@ -572,10 +574,10 @@ TEST(Date, toEpoch) {
       Date date2 = Date(1999, 10, 11, 10, 5, 30, i);  // UTC + i
       // Difference in hours is converted to ns to be compared.
       long long expected = static_cast<long long>(i) * 60 * 60 * 1'000'000'000;
-      ASSERT_EQ(expected,
+      EXPECT_EQ(expected,
                 (date1.toEpoch().value() - date2.toEpoch().value()).count());
       date2 = Date(1999, 10, 11, 10, 5, 30, -i);  // UTC - i
-      ASSERT_EQ(-expected,
+      EXPECT_EQ(-expected,
                 (date1.toEpoch().value() - date2.toEpoch().value()).count());
     }
   }
@@ -591,15 +593,15 @@ TEST(Date, Subtraction) {
   Date date3 = Date(1986, 6, 24);
   Date date4 = Date(1986, 6, 22);
 
-  ASSERT_FALSE(date1 - date2);
-  ASSERT_FALSE(date1 - date3);
-  ASSERT_FALSE(date4 - date2);
+  EXPECT_FALSE(date1 - date2);
+  EXPECT_FALSE(date1 - date3);
+  EXPECT_FALSE(date4 - date2);
 
   ASSERT_TRUE((date3 - date4).has_value());
   ASSERT_TRUE((date4 - date3).has_value());
-  ASSERT_EQ(DayTimeDuration(DayTimeDuration::Type::Positive, 2),
+  EXPECT_EQ(DayTimeDuration(DayTimeDuration::Type::Positive, 2),
             (date3 - date4).value());
-  ASSERT_EQ(DayTimeDuration(DayTimeDuration::Type::Negative, 2),
+  EXPECT_EQ(DayTimeDuration(DayTimeDuration::Type::Negative, 2),
             (date4 - date3).value());
 }
 #endif
