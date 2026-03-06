@@ -8,7 +8,9 @@
 #include <absl/container/flat_hash_map.h>
 
 #include <cstdint>
+#include <functional>
 #include <list>
+#include <optional>
 
 #include "backports/concepts.h"
 #include "util/Exception.h"
@@ -33,6 +35,17 @@ class LRUCache {
 
   size_t capacity() const { return capacity_; }
 
+  // Check if `key` is in the cache. If found, move it to the front (most
+  // recently used) and return a reference to the cached value wrapped in
+  // `std::optional`. If not found, return `std::nullopt`. Does not insert or
+  // compute anything.
+  std::optional<std::reference_wrapper<const V>> tryGet(const K& key) {
+    auto it = cache_.find(key);
+    if (it == cache_.end()) return std::nullopt;
+    keys_.splice(keys_.begin(), keys_, it->second.second);
+    return std::cref(it->second.first);
+  }
+
   // Check if `key` is in the cache and return a reference to the value if it is
   // found. Otherwise, compute the value using `computeFunction` and store it in
   // the cache. If the cache is already at maximum capacity, evict the least
@@ -44,16 +57,16 @@ class LRUCache {
     auto it = cache_.find(key);
     if (it != cache_.end()) {
       const auto& [value, listIterator] = it->second;
-      // Move accessed key to front (most recently used).
+      // Move accessed key to front (most recently used)
       keys_.splice(keys_.begin(), keys_, listIterator);
 
       return value;
     }
-    // Evict LRU if cache is full.
+    // Evict LRU if cache is full
     if (cache_.size() >= capacity_) {
       K& lruKey = keys_.back();
       cache_.erase(lruKey);
-      // Reuse allocated memory by moving node and reassigning key.
+      // Reuse allocated memory by moving node and reassigning key
       keys_.splice(keys_.begin(), keys_, std::prev(keys_.end()));
       lruKey = key;
     } else {
