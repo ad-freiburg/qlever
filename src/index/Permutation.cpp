@@ -236,3 +236,14 @@ const Permutation& Permutation::internalPermutation() const {
   AD_CONTRACT_CHECK(internalPermutation_ != nullptr);
   return *internalPermutation_;
 }
+
+// ______________________________________________________________________
+void Permutation::setMaterializedView(
+    std::weak_ptr<const MaterializedView> view) {
+  materializedView_ = std::move(view);
+}
+
+// ______________________________________________________________________
+std::shared_ptr<const MaterializedView> Permutation::materializedView() const {
+  return materializedView_.lock();
+}
