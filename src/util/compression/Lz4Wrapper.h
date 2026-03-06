@@ -19,6 +19,9 @@
 
 #include "util/Exception.h"
 
+// Implement compression using `Lz4`. Currently always uses the
+// `high-compression` mode, which is slow on compression, but has a good
+// compression ratio (decompression is always fast for Lz4).
 class Lz4Wrapper {
  public:
   // Compress the given byte array using LZ4_HC and return the result.

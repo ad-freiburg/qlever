@@ -14,6 +14,7 @@
 #include <absl/strings/str_join.h>
 
 #include <array>
+#include <ostream>
 #include <stdexcept>
 #include <string_view>
 
@@ -41,8 +42,15 @@ namespace ad_utility {
 // type. The latter have the advantage, that you directly get constants of the
 // derived type, and not of the underlying enum. For example usages, see
 // `CompressionAlgorithm.h`  and `VocabularyType.h`.
-CPP_template(typename Derived, typename Enum)(
-    requires std::is_enum_v<Enum>) class EnumWithStrings {
+
+// a generic base class, used to detect instantiations of `EnumWithStrings` at
+// compile time
+struct EnumWithStringsBaseTag {};
+
+CPP_template(typename Derived,
+             typename Enum)(requires std::is_enum_v<Enum>) class EnumWithStrings
+    : public EnumWithStringsBaseTag {
+ public:
  protected:
   Enum value_{};
 
@@ -87,6 +95,10 @@ CPP_template(typename Derived, typename Enum)(
   // Convert the enum to the corresponding string.
   constexpr std::string_view toString() const {
     return descriptions()[static_cast<size_t>(value_)];
+  }
+
+  friend std::ostream& operator<<(std::ostream& stream, const Derived& d) {
+    return stream << d.toString();
   }
 
   // Create from a string. Throws if the string doesn't match any description.

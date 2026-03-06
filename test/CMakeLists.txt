@@ -256,7 +256,7 @@ addLinkAndDiscoverTestNoLibs(SerializerTest)
 
 addLinkAndDiscoverTestNoLibs(ParametersTest)
 
-addLinkAndDiscoverTest(CompressionWrapperTest zstd ${cmake_thread_libs_init})
+addLinkAndDiscoverTestNoLibs(CompressionWrapperTest zstd ${cmake_thread_libs_init})
 
 addLinkAndDiscoverTest(TaskQueueTest)
 

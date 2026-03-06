@@ -196,7 +196,6 @@ int main(int argc, char** argv) {
   std::vector<string> defaultGraphs;
   std::vector<bool> parseParallel;
   std::string materializedViewsJson;
-  std::string compressionAlgorithmStr = "zstd";
 
   boost::program_options::options_description boostOptions(
       "Options for qlever-index");
@@ -294,7 +293,8 @@ int main(int argc, char** argv) {
       "mapping view names to SELECT queries for writing the view, for example: "
       R"({"view1": "SELECT ...", "view2": "SELECT ..."})");
   add("compression-algorithm",
-      po::value(&compressionAlgorithmStr)->default_value("zstd"),
+      po::value(&config.compressionAlgorithm_)
+          ->default_value(CompressionAlgorithm::Zstd),
       "The compression algorithm for the permutation data. Must be one of "
       "[zstd|lz4]. Default: zstd.");
 
@@ -329,8 +329,6 @@ int main(int argc, char** argv) {
                                                defaultGraphs, parseParallel);
     config.writeMaterializedViews_ =
         parseMaterializedViewsJson(materializedViewsJson);
-    config.compressionAlgorithm_ =
-        CompressionAlgorithm::fromString(compressionAlgorithmStr);
     config.validate();
     qlever::Qlever::buildIndex(config);
   } catch (std::exception& e) {

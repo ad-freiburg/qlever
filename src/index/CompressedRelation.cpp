@@ -19,10 +19,6 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "index/LocatedTriples.h"
 #include "util/CompressionAlgorithm.h"
-#include "util/compression/ZstdWrapper.h"
-#ifdef QLEVER_HAS_LZ4
-#include "util/compression/Lz4Wrapper.h"
-#endif
 #include "util/Iterators.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/OverloadCallOperator.h"
@@ -33,38 +29,6 @@
 #include "util/TypeTraits.h"
 
 using namespace std::chrono_literals;
-
-namespace {
-// File-local helpers that encapsulate the `#ifdef` logic for LZ4.
-std::vector<char> lz4Compress(void* data, size_t size) {
-#ifdef QLEVER_HAS_LZ4
-  return Lz4Wrapper::compress(data, size);
-#else
-  (void)data;
-  (void)size;
-  throw std::runtime_error(
-      "LZ4 compression was requested, but QLever was compiled without LZ4 "
-      "support. Rebuild QLever with -DQLEVER_USE_LZ4=ON.");
-#endif
-}
-
-template <typename Iterator>
-size_t lz4DecompressToBuffer(const char* compressedData, size_t compressedSize,
-                             Iterator outputIterator, size_t outputSize) {
-#ifdef QLEVER_HAS_LZ4
-  return Lz4Wrapper::decompressToBuffer(compressedData, compressedSize,
-                                        outputIterator, outputSize);
-#else
-  (void)compressedData;
-  (void)compressedSize;
-  (void)outputIterator;
-  (void)outputSize;
-  throw std::runtime_error(
-      "This index was built with LZ4 compression, but QLever was compiled "
-      "without LZ4 support. Rebuild QLever with -DQLEVER_USE_LZ4=ON.");
-#endif
-}
-}  // namespace
 
 // A small helper function to obtain the begin and end iterator of a range
 template <typename T>
@@ -1233,19 +1197,9 @@ template <typename Iterator>
 void CompressedRelationReader::decompressColumn(
     const std::vector<char>& compressedBlock, size_t numRowsToRead,
     Iterator iterator) const {
-  size_t numBytesActuallyRead = 0;
-  switch (compressionAlgorithm_.value()) {
-    case CompressionAlgorithm::Enum::Zstd:
-      numBytesActuallyRead = ZstdWrapper::decompressToBuffer(
-          compressedBlock.data(), compressedBlock.size(), iterator,
-          numRowsToRead * sizeof(*iterator));
-      break;
-    case CompressionAlgorithm::Enum::Lz4:
-      numBytesActuallyRead =
-          lz4DecompressToBuffer(compressedBlock.data(), compressedBlock.size(),
-                                iterator, numRowsToRead * sizeof(*iterator));
-      break;
-  }
+  size_t numBytesActuallyRead = compressionAlgorithm_.decompressToBuffer(
+      compressedBlock.data(), compressedBlock.size(), iterator,
+      numRowsToRead * sizeof(*iterator));
   static_assert(sizeof(Id) == sizeof(*iterator));
   AD_CORRECTNESS_CHECK(numRowsToRead * sizeof(Id) == numBytesActuallyRead);
 }
@@ -1268,17 +1222,8 @@ CompressedRelationReader::readAndDecompressBlock(
 // ____________________________________________________________________________
 CompressedBlockMetadata::OffsetAndCompressedSize
 CompressedRelationWriter::compressAndWriteColumn(ql::span<const Id> column) {
-  std::vector<char> compressedBlock;
-  switch (compressionAlgorithm_.value()) {
-    case CompressionAlgorithm::Enum::Zstd:
-      compressedBlock = ZstdWrapper::compress(
-          (void*)(column.data()), column.size() * sizeof(column[0]));
-      break;
-    case CompressionAlgorithm::Enum::Lz4:
-      compressedBlock = lz4Compress((void*)(column.data()),
-                                    column.size() * sizeof(column[0]));
-      break;
-  }
+  auto compressedBlock = compressionAlgorithm_.compress(
+      (void*)(column.data()), column.size() * sizeof(column[0]));
   auto compressedSize = compressedBlock.size();
   auto file = outfile_.wlock();
   auto offsetInFile = file->tell();

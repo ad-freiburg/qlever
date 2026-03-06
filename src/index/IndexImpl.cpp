@@ -1315,10 +1315,10 @@ void IndexImpl::readConfiguration() {
   loadDataMember("encoded-iri-prefixes", encodedIriManager_,
                  EncodedIriManager{});
 
-  // Read the compression algorithm. Default to zstd for backward compatibility
-  // with older indices that do not store this field.
+  // Read the compression algorithm. Default to `zstd` for backward
+  // compatibility with older indices that do not store this field.
   loadDataMember("compression-algorithm", compressionAlgorithm_,
-                 CompressionAlgorithm{CompressionAlgorithm::Enum::Zstd});
+                 CompressionAlgorithm::Zstd);
 
   // Compute unique ID for this index.
   //

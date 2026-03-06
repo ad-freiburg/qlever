@@ -12,6 +12,7 @@
 #include "index/TextScoringEnum.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "util/Concepts.h"
+#include "util/EnumWithStrings.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Parameters.h"
 namespace ad_utility {
@@ -64,6 +65,23 @@ void validate(boost::any& v, const std::vector<std::string>& values,
   // Wrap the T inside std::optional
   AD_CONTRACT_CHECK(!v.empty());
   v = std::optional<T>(boost::any_cast<T>(v));
+}
+
+// TODO<joka921> Move this to the `EnumWithStrings` header.
+CPP_template(typename E)(
+    requires std::is_base_of_v<ad_utility::EnumWithStringsBaseTag,
+                               E>) void validate(boost::any& v,
+                                                 const std::vector<std::string>&
+                                                     values,
+                                                 E*, int) {
+  // first parse as a string
+  std::string* dummy = nullptr;
+  using namespace boost::program_options;
+  boost::program_options::validate(v, values, dummy, 0);
+
+  // Wrap the T inside std::optional
+  AD_CONTRACT_CHECK(!v.empty());
+  v = E::fromString(boost::any_cast<std::string>(v));
 }
 
 // This function is required  to use `MemorySize` in `boost::program_options`.
