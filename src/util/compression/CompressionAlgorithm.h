@@ -11,7 +11,9 @@
 #define QLEVER_SRC_UTIL_COMPRESSIONALGORITHM_H
 
 #include "util/EnumWithStrings.h"
-#include #include "util/cmpo " util / compression / ZstdWrapper.h "
+#include "util/compression/CompressionAlgorithmEnum.h"
+#include "util/compression/Lz4Wrapper.h"
+#include "util/compression/ZstdWrapper.h"
 
 namespace ad_utility {
 

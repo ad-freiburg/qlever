@@ -807,11 +807,10 @@ TEST(IndexImpl, createPermutation) {
   EXPECT_TRUE(std::filesystem::exists(onDiskBase + ".internal.index.pso"));
   EXPECT_TRUE(std::filesystem::exists(onDiskBase + ".internal.index.pso.meta"));
 
-  permutation.loadFromDisk(
-      onDiskBase, true, true,
-      CompressionAlgorithm{CompressionAlgorithm::Enum::Zstd});
-  index.deltaTriplesManager().modify<void>(
-      [&permutation](DeltaTriples& deltaTriples) {
+  permutation
+      .loadFromDisk(onDiskBase, true, true, DEFAULT_COMPRESSION_ALGORITHM)
+          index.deltaTriplesManager()
+      .modify<void>([&permutation](DeltaTriples& deltaTriples) {
         permutation.setOriginalMetadataForDeltaTriples(deltaTriples);
       });
 

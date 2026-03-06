@@ -21,10 +21,9 @@ class CompressionWrapperTest
 
 // Build the list of algorithms to test.
 static auto allAlgorithms() {
-  std::vector<CompressionAlgorithm> algos{
-      CompressionAlgorithm{CompressionAlgorithm::Enum::Zstd}};
+  std::vector<CompressionAlgorithm> algos{CompressionAlgorithm::Zstd};
 #ifdef QLEVER_HAS_LZ4
-  algos.push_back(CompressionAlgorithm{CompressionAlgorithm::Enum::Lz4});
+  algos.push_back(CompressionAlgorithm::Lz4);
 #endif
   return algos;
 }

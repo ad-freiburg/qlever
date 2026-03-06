@@ -139,7 +139,7 @@ struct IndexBuilderConfig : CommonConfig {
   float kScoringParam_ = 1.75;
 
   // The compression algorithm to use for the permutation data.
-  CompressionAlgorithm compressionAlgorithm_{CompressionAlgorithm::Enum::Zstd};
+  CompressionAlgorithm compressionAlgorithm_{DEFAULT_COMPRESSION_ALGORITHM};
 
   // Materialized views to be written after normal index build is complete.
   using WriteMaterializedViews =

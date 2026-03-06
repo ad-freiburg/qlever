@@ -211,7 +211,7 @@ class IndexImpl {
   std::unique_ptr<ad_utility::BlankNodeManager> blankNodeManager_{nullptr};
 
   // The compression algorithm used for the permutation data.
-  CompressionAlgorithm compressionAlgorithm_{CompressionAlgorithm::Enum::Zstd};
+  CompressionAlgorithm compressionAlgorithm_{DEFAULT_COMPRESSION_ALGORITHM};
 
   std::optional<DeltaTriplesManager> deltaTriples_;
 
