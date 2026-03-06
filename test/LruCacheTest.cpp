@@ -43,3 +43,47 @@ TEST(LRUCache, testEmptyCapacityForbidden) {
   EXPECT_THROW((ad_utility::util::LRUCache<int, int>{0}),
                ad_utility::Exception);
 }
+
+// _____________________________________________________________________________
+TEST(LRUCache, tryGetReturnsNoneOnMiss) {
+  ad_utility::util::LRUCache<int, int> cache{2};
+  EXPECT_FALSE(cache.tryGet(42));
+}
+
+// _____________________________________________________________________________
+TEST(LRUCache, tryGetReturnsValueOnHit) {
+  ad_utility::util::LRUCache<int, int> cache{2};
+  cache.getOrCompute(7, [](int k) { return k * 10; });
+  auto v = cache.tryGet(7);
+  ASSERT_TRUE(v);
+  EXPECT_EQ(70, *v);
+}
+
+// _____________________________________________________________________________
+// After a `tryGet` hit, the accessed key becomes MRU and must survive the next
+// eviction.
+TEST(LRUCache, tryGetPromotesToMostRecentlyUsed) {
+  ad_utility::util::LRUCache<int, int> cache{2};
+  cache.getOrCompute(1, [](int k) { return k; });
+  cache.getOrCompute(2, [](int k) { return k; });
+  // Key 2 is LRU; promote key 2 via tryGet so key 1 becomes LRU.
+  ASSERT_TRUE(cache.tryGet(2));
+  // Inserting key 3 must evict key 1, not key 2.
+  cache.getOrCompute(3, [](int k) { return k; });
+  EXPECT_TRUE(cache.tryGet(2));   // still present
+  EXPECT_FALSE(cache.tryGet(1));  // evicted
+}
+
+// _____________________________________________________________________________
+// `tryGet` on a missing key must not insert anything; a subsequent
+// `getOrCompute` for the same key must still call the compute function.
+TEST(LRUCache, tryGetDoesNotInsert) {
+  ad_utility::util::LRUCache<int, int> cache{2};
+  EXPECT_FALSE(cache.tryGet(99));
+  int computeCount = 0;
+  cache.getOrCompute(99, [&computeCount](int k) {
+    ++computeCount;
+    return k;
+  });
+  EXPECT_EQ(1, computeCount);
+}

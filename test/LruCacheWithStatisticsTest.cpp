@@ -69,6 +69,55 @@ TEST(LRUCacheWithStatistics, capacityForwardsCorrectly) {
 }
 
 // _____________________________________________________________________________
+TEST(LRUCacheWithStatistics, tryGetHitIncrementsHitCounter) {
+  LRUCacheWithStatistics<int, int> cache{2};
+  using F = std::function<int(int)>;
+  cache.getOrCompute<F>(1, [](int k) { return k * 10; });
+  EXPECT_EQ(cache.stats().hits_, 0);
+  EXPECT_EQ(cache.stats().misses_, 1);
+
+  auto v = cache.tryGet(1);
+  ASSERT_TRUE(v);
+  EXPECT_EQ(10, *v);
+  EXPECT_EQ(cache.stats().hits_, 1);
+  EXPECT_EQ(cache.stats().misses_, 1);
+}
+
+// _____________________________________________________________________________
+// A `tryGet` miss must not increment the miss counter; misses are only counted
+// when `getOrCompute` triggers the compute function.
+TEST(LRUCacheWithStatistics, tryGetMissDoesNotIncrementMissCounter) {
+  LRUCacheWithStatistics<int, int> cache{2};
+  EXPECT_FALSE(cache.tryGet(99));
+  EXPECT_EQ(cache.stats().hits_, 0);
+  EXPECT_EQ(cache.stats().misses_, 0);
+}
+
+// _____________________________________________________________________________
+// Verify correct hit/miss counts when `tryGet` and `getOrCompute` are
+// interleaved.
+TEST(LRUCacheWithStatistics, tryGetInterleavedWithGetOrCompute) {
+  LRUCacheWithStatistics<int, int> cache{2};
+  using F = std::function<int(int)>;
+
+  cache.getOrCompute<F>(1, [](int k) { return k * 10; });  // miss
+  cache.getOrCompute<F>(2, [](int k) { return k * 10; });  // miss
+  EXPECT_EQ(cache.stats().misses_, 2);
+  EXPECT_EQ(cache.stats().hits_, 0);
+
+  ASSERT_TRUE(cache.tryGet(1));  // hit via tryGet
+  EXPECT_EQ(cache.stats().hits_, 1);
+  EXPECT_EQ(cache.stats().misses_, 2);
+
+  cache.getOrCompute<F>(2, [](int) {  // hit via getOrCompute
+    ADD_FAILURE();
+    return 0;
+  });
+  EXPECT_EQ(cache.stats().hits_, 2);
+  EXPECT_EQ(cache.stats().misses_, 2);
+}
+
+// _____________________________________________________________________________
 TEST(LRUCacheWithStatistics, lruEvictionWorksThrough) {
   LRUCacheWithStatistics<int, int> cache{2};
   using F = std::function<int(int)>;
