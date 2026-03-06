@@ -91,9 +91,9 @@ class CompressionAlgorithm
 };
 
 inline const CompressionAlgorithm CompressionAlgorithm::Zstd{
-    detail::CompressionAlgorithmEnum::Zstd};
+    CompressionAlgorithmEnum::Zstd};
 inline const CompressionAlgorithm CompressionAlgorithm::Lz4{
-    detail::CompressionAlgorithmEnum::Lz4};
+    CompressionAlgorithmEnum::Lz4};
 }  // namespace ad_utility
 
 // TODO<joka921> leave this in the ad_utility namespace....
