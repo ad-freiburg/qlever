@@ -179,6 +179,13 @@ void testSorting(std::vector<Date> dates) {
   std::sort(datesCopy.begin(), datesCopy.end(), dateLessComparator);
   ASSERT_EQ(dates, datesCopy);
 }
+
+void testSubtraction(DateYearOrDuration expected,
+                     std::optional<DateYearOrDuration> result) {
+  ASSERT_TRUE(result);
+  EXPECT_TRUE(result.value().isDayTimeDuration());
+  EXPECT_EQ(expected, result.value());
+}
 }  // namespace
 
 TEST(Date, OrderRandomValues) {
@@ -683,54 +690,41 @@ TEST(DateYearOrDuration, Subtraction) {
     // Test for Date Subtraction
     DateYearOrDuration test1 = DateYearOrDuration(Date(2012, 12, 24));
     DateYearOrDuration test2 = DateYearOrDuration(Date(2012, 12, 1));
-
-    DateYearOrDuration result = (test1 - test2).value();
-    ASSERT_EQ(true, result.isDayTimeDuration());
-    ASSERT_EQ(DateYearOrDuration(
-                  DayTimeDuration(DayTimeDuration::Type::Positive, 23)),
-              result);
-    result = (test2 - test1).value();
-    ASSERT_EQ(true, result.isDayTimeDuration());
-    ASSERT_EQ(DateYearOrDuration(
-                  DayTimeDuration(DayTimeDuration::Type::Negative, 23)),
-              result);
+    testSubtraction(DateYearOrDuration(
+                        DayTimeDuration(DayTimeDuration::Type::Positive, 23)),
+                    test1 - test2);
+    testSubtraction(DateYearOrDuration(
+                        DayTimeDuration(DayTimeDuration::Type::Negative, 23)),
+                    test2 - test1);
 
     test1 = DateYearOrDuration(Date(2012, 12, 24));
     test2 = DateYearOrDuration(Date(2010, 12, 24));
-    result = (test1 - test2).value();
-    ASSERT_EQ(true, result.isDayTimeDuration());
-    ASSERT_EQ(DateYearOrDuration(
-                  DayTimeDuration(DayTimeDuration::Type::Positive, 731)),
-              result);
-    result = (test2 - test1).value();
-    ASSERT_EQ(true, result.isDayTimeDuration());
-    ASSERT_EQ(DateYearOrDuration(
-                  DayTimeDuration(DayTimeDuration::Type::Negative, 731)),
-              result);
+    testSubtraction(DateYearOrDuration(
+                        DayTimeDuration(DayTimeDuration::Type::Positive, 731)),
+                    test1 - test2);
+    testSubtraction(DateYearOrDuration(
+                        DayTimeDuration(DayTimeDuration::Type::Negative, 731)),
+                    test2 - test1);
 
     test2 = DateYearOrDuration(Date(1979, 3, 13));
-    result = (test1 - test2).value();
-    ASSERT_EQ(true, result.isDayTimeDuration());
-    ASSERT_EQ(DateYearOrDuration(
-                  DayTimeDuration(DayTimeDuration::Type::Positive, 12340)),
-              result);
+    testSubtraction(DateYearOrDuration(DayTimeDuration(
+                        DayTimeDuration::Type::Positive, 12340)),
+                    test1 - test2);
 
     test1 = DateYearOrDuration(Date(1868, 5, 16));
-    result = (test1 - test2).value();
-    ASSERT_EQ(true, result.isDayTimeDuration());
-    ASSERT_EQ(DateYearOrDuration(
-                  DayTimeDuration(DayTimeDuration::Type::Negative, 40477)),
-              result);
+    testSubtraction(DateYearOrDuration(DayTimeDuration(
+                        DayTimeDuration::Type::Negative, 40477)),
+                    test1 - test2);
   }
   {
     // Test invalid Dates
     DateYearOrDuration date1 = DateYearOrDuration(Date(1970, 11, 31));
     DateYearOrDuration date2 = DateYearOrDuration(Date(2021, 2, 29));
-    ASSERT_FALSE(date1 - date2);
+    EXPECT_FALSE(date1 - date2);
 
     DateYearOrDuration date3 = DateYearOrDuration(Date(1980, 9, 13));
-    ASSERT_FALSE(date1 - date3);
-    ASSERT_FALSE(date2 - date3);
+    EXPECT_FALSE(date1 - date3);
+    EXPECT_FALSE(date2 - date3);
   }
   {
     // Test for DateTime Subtraction
@@ -740,35 +734,29 @@ TEST(DateYearOrDuration, Subtraction) {
     DateYearOrDuration date2 =
         DateYearOrDuration(Date(2012, 12, 20, 15, 15, 59));
     // expected duration of 1d20h50min13sec
-    DateYearOrDuration result = (date1 - date2).value();
-    ASSERT_EQ(DateYearOrDuration(DayTimeDuration(
-                  DayTimeDuration::Type::Positive, 1, 20, 50, 13)),
-              result);
-    result = (date2 - date1).value();
-    ASSERT_EQ(DateYearOrDuration(DayTimeDuration(
-                  DayTimeDuration::Type::Negative, 1, 20, 50, 13)),
-              result);
+    testSubtraction(DateYearOrDuration(DayTimeDuration(
+                        DayTimeDuration::Type::Positive, 1, 20, 50, 13)),
+                    date1 - date2);
+    testSubtraction(DateYearOrDuration(DayTimeDuration(
+                        DayTimeDuration::Type::Negative, 1, 20, 50, 13)),
+                    date2 - date1);
 
     date2 = DateYearOrDuration(Date(2010, 1, 13, 10, 32, 15));
     // expected duration of 1074d1h33min57sec
-    result = (date1 - date2).value();
-    ASSERT_EQ(DateYearOrDuration(DayTimeDuration(
-                  DayTimeDuration::Type::Positive, 1074, 1, 33, 57)),
-              result);
+    testSubtraction(DateYearOrDuration(DayTimeDuration(
+                        DayTimeDuration::Type::Positive, 1074, 1, 33, 57)),
+                    date1 - date2);
 
     // Date - DateTime
     date1 = DateYearOrDuration(Date(2012, 12, 22, 0, 0, 0, 0));
     date2 = DateYearOrDuration(Date(2012, 12, 20, 13, 50, 59));
     // expected duration of 1d10h9min1sec
-    ASSERT_TRUE(date1 - date2);
-    result = (date1 - date2).value();
-    ASSERT_EQ(DateYearOrDuration(DayTimeDuration(
-                  DayTimeDuration::Type::Positive, 1, 10, 9, 1)),
-              result);
-    result = (date2 - date1).value();
-    ASSERT_EQ(DateYearOrDuration(DayTimeDuration(
-                  DayTimeDuration::Type::Negative, 1, 10, 9, 1)),
-              result);
+    testSubtraction(DateYearOrDuration(DayTimeDuration(
+                        DayTimeDuration::Type::Positive, 1, 10, 9, 1)),
+                    date1 - date2);
+    testSubtraction(DateYearOrDuration(DayTimeDuration(
+                        DayTimeDuration::Type::Negative, 1, 10, 9, 1)),
+                    date2 - date1);
   }
   {
     // Test previous bug where days/hours/minutes passed got negative
@@ -776,28 +764,25 @@ TEST(DateYearOrDuration, Subtraction) {
     DateYearOrDuration date1 = DateYearOrDuration(Date(2021, 01, 23, 21, 0, 0));
     DateYearOrDuration date2 = DateYearOrDuration(Date(2021, 01, 23, 23, 0, 0));
     // expected duration of 0d2h0min0sec
-    DateYearOrDuration result = (date1 - date2).value();
-    ASSERT_EQ(DateYearOrDuration(
-                  DayTimeDuration(DayTimeDuration::Type::Negative, 0, 2, 0, 0)),
-              result);
+    testSubtraction(DateYearOrDuration(DayTimeDuration(
+                        DayTimeDuration::Type::Negative, 0, 2, 0, 0)),
+                    date1 - date2);
 
     // hoursPassed < 0
     date1 = DateYearOrDuration(Date(2021, 01, 23, 22, 10, 0));
     date2 = DateYearOrDuration(Date(2021, 01, 23, 22, 30, 0));
     // expected duration of 0d0h20min0sec
-    result = (date1 - date2).value();
-    ASSERT_EQ(DateYearOrDuration(DayTimeDuration(
-                  DayTimeDuration::Type::Negative, 0, 0, 20, 0)),
-              result);
+    testSubtraction(DateYearOrDuration(DayTimeDuration(
+                        DayTimeDuration::Type::Negative, 0, 0, 20, 0)),
+                    date1 - date2);
 
     // minutesPassed < 0
     date1 = DateYearOrDuration(Date(2021, 01, 23, 22, 10, 03));
     date2 = DateYearOrDuration(Date(2021, 01, 23, 22, 10, 43));
     // expected duration of 0d0h0min40sec
-    result = (date1 - date2).value();
-    ASSERT_EQ(DateYearOrDuration(DayTimeDuration(
-                  DayTimeDuration::Type::Negative, 0, 0, 0, 40)),
-              result);
+    testSubtraction(DateYearOrDuration(DayTimeDuration(
+                        DayTimeDuration::Type::Negative, 0, 0, 0, 40)),
+                    date1 - date2);
   }
   {
     // Test durations between UTC and other TimeZones.
@@ -807,45 +792,41 @@ TEST(DateYearOrDuration, Subtraction) {
       DateYearOrDuration date2 =
           DateYearOrDuration(Date(2021, 01, 23, 20, 10, 33, i));
       // expected positive/negative duration of i hours
-      DateYearOrDuration result = (date1 - date2).value();
-      ASSERT_EQ(DateYearOrDuration(DayTimeDuration(
-                    DayTimeDuration::Type::Positive, 0, i, 0, 0)),
-                result);
+      testSubtraction(DateYearOrDuration(DayTimeDuration(
+                          DayTimeDuration::Type::Positive, 0, i, 0, 0)),
+                      date1 - date2);
+
       date2 = DateYearOrDuration(Date(2021, 01, 23, 20, 10, 33, -i));
-      result = (date1 - date2).value();
-      ASSERT_EQ(DateYearOrDuration(DayTimeDuration(
-                    DayTimeDuration::Type::Negative, 0, i, 0, 0)),
-                result);
+      testSubtraction(DateYearOrDuration(DayTimeDuration(
+                          DayTimeDuration::Type::Negative, 0, i, 0, 0)),
+                      date1 - date2);
     }
     // Same time, different TimeZones.
     DateYearOrDuration date1 =
         DateYearOrDuration(Date(1989, 01, 23, 20, 10, 33, 2));
     DateYearOrDuration date2 =
         DateYearOrDuration(Date(1989, 01, 23, 15, 10, 33, -3));
-    DateYearOrDuration result = (date1 - date2).value();
-    ASSERT_EQ(DateYearOrDuration(
-                  DayTimeDuration(DayTimeDuration::Type::Positive, 0, 0, 0, 0)),
-              result);
+    testSubtraction(DateYearOrDuration(DayTimeDuration(
+                        DayTimeDuration::Type::Positive, 0, 0, 0, 0)),
+                    date1 - date2);
 
     // TimeZones causing different days.
     date1 = DateYearOrDuration(Date(1989, 01, 23, 20, 10, 33, -1));
     date2 = DateYearOrDuration(Date(1989, 01, 24, 3, 10, 33, 2));
-    result = (date1 - date2).value();
-    ASSERT_EQ(DateYearOrDuration(
-                  DayTimeDuration(DayTimeDuration::Type::Negative, 0, 4, 0, 0)),
-              result);
+    testSubtraction(DateYearOrDuration(DayTimeDuration(
+                        DayTimeDuration::Type::Negative, 0, 4, 0, 0)),
+                    date1 - date2);
 
     date1 = DateYearOrDuration(Date(1989, 01, 26, 0, 0, 0, -10));
     date2 = DateYearOrDuration(Date(1989, 01, 26, 0, 0, 0, 12));
-    result = (date1 - date2).value();
-    ASSERT_EQ(DateYearOrDuration(DayTimeDuration(
-                  DayTimeDuration::Type::Positive, 0, 22, 0, 0)),
-              result);
+    testSubtraction(DateYearOrDuration(DayTimeDuration(
+                        DayTimeDuration::Type::Positive, 0, 22, 0, 0)),
+                    date1 - date2);
+
     date2 = DateYearOrDuration(Date(1989, 01, 26, 0, 0, 0, 14));
-    result = (date1 - date2).value();
-    ASSERT_EQ(DateYearOrDuration(
-                  DayTimeDuration(DayTimeDuration::Type::Positive, 1, 0, 0, 0)),
-              result);
+    testSubtraction(DateYearOrDuration(DayTimeDuration(
+                        DayTimeDuration::Type::Positive, 1, 0, 0, 0)),
+                    date1 - date2);
   }
 }
 #endif
