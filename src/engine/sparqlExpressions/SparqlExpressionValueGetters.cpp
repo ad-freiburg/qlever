@@ -8,7 +8,7 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/type_traits.h"
-#include "engine/ExportQueryExecutionTrees.h"
+#include "engine/ValueIdHelpers.h"
 #include "global/Constants.h"
 #include "global/ValueId.h"
 #include "parser/NormalizedString.h"
@@ -131,9 +131,8 @@ std::optional<std::string> StringValueGetter::operator()(
     }
   }
   // `true` means that we remove the quotes and angle brackets.
-  auto optionalStringAndType =
-      ExportQueryExecutionTrees::idToStringAndType<true>(
-          context->_qec.getIndex(), id, context->_localVocab);
+  auto optionalStringAndType = ql::valueId::idToStringAndType<true>(
+      context->_qec.getIndex(), id, context->_localVocab);
   if (optionalStringAndType.has_value()) {
     return std::move(optionalStringAndType.value().first);
   } else {
@@ -145,30 +144,30 @@ std::optional<std::string> StringValueGetter::operator()(
 std::optional<ad_utility::triple_component::Literal>
 LiteralValueGetterWithStrFunction::operator()(
     Id id, const EvaluationContext* context) const {
-  return ExportQueryExecutionTrees::idToLiteral(context->_qec.getIndex(), id,
-                                                context->_localVocab);
+  return ql::valueId::idToLiteral(context->_qec.getIndex(), id,
+                                  context->_localVocab);
 }
 
 // ____________________________________________________________________________
 std::optional<ad_utility::triple_component::Literal>
 LiteralValueGetterWithStrFunction::operator()(const LiteralOrIri& s,
                                               const EvaluationContext*) const {
-  return ExportQueryExecutionTrees::handleIriOrLiteral(s, false);
+  return ql::valueId::handleIriOrLiteral(s, false);
 }
 
 // ____________________________________________________________________________
 std::optional<ad_utility::triple_component::Literal>
 LiteralValueGetterWithoutStrFunction::operator()(
     Id id, const EvaluationContext* context) const {
-  return ExportQueryExecutionTrees::idToLiteral(context->_qec.getIndex(), id,
-                                                context->_localVocab, true);
+  return ql::valueId::idToLiteral(context->_qec.getIndex(), id,
+                                  context->_localVocab, true);
 }
 
 // ____________________________________________________________________________
 std::optional<ad_utility::triple_component::Literal>
 LiteralValueGetterWithoutStrFunction::operator()(
     const LiteralOrIri& s, const EvaluationContext*) const {
-  return ExportQueryExecutionTrees::handleIriOrLiteral(s, true);
+  return ql::valueId::handleIriOrLiteral(s, true);
 }
 
 // ____________________________________________________________________________
@@ -231,7 +230,7 @@ Id IsSomethingValueGetter<isSomethingFunction, prefix>::operator()(
                                           context->_qec.getIndex().getVocab(),
                                           id.getVocabIndex()));
     case Datatype::LocalVocabIndex: {
-      auto word = ExportQueryExecutionTrees::idToStringAndType<false>(
+      auto word = ql::valueId::idToStringAndType<false>(
           context->_qec.getIndex(), id, context->_localVocab);
       return Id::makeFromBool(word.has_value() &&
                               ql::starts_with(word.value().first, prefix));
@@ -263,9 +262,8 @@ template struct sparqlExpression::detail::IsSomethingValueGetter<
 // _____________________________________________________________________________
 std::optional<std::string> LiteralFromIdGetter::operator()(
     ValueId id, const EvaluationContext* context) const {
-  auto optionalStringAndType =
-      ExportQueryExecutionTrees::idToStringAndType<true, true>(
-          context->_qec.getIndex(), id, context->_localVocab);
+  auto optionalStringAndType = ql::valueId::idToStringAndType<true, true>(
+      context->_qec.getIndex(), id, context->_localVocab);
   if (optionalStringAndType.has_value()) {
     return std::move(optionalStringAndType.value().first);
   } else {
@@ -343,7 +341,7 @@ OptIri DatatypeValueGetter::operator()(ValueId id,
     case EncodedVal:
     case LocalVocabIndex:
     case VocabIndex:
-      return (*this)(ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
+      return (*this)(ql::valueId::getLiteralOrIriFromVocabIndex(
                          context->_qec.getIndex(), id, context->_localVocab),
                      context);
     case Undefined:
@@ -392,7 +390,7 @@ UnitOfMeasurement UnitOfMeasurementValueGetter::operator()(
   return cache_.getOrCompute(
       id, [&context](const ValueId& value) -> UnitOfMeasurement {
         // Get string content of ValueId
-        auto str = ExportQueryExecutionTrees::idToLiteralOrIri(
+        auto str = ql::valueId::idToLiteralOrIri(
             context->_qec.getIndex(), value, context->_localVocab, true);
         // Use LiteralOrIri overload for actual computation
         if (str.has_value()) {
@@ -432,7 +430,7 @@ std::optional<ad_utility::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
       return id.getGeoPoint();
     case VocabIndex:
     case LocalVocabIndex: {
-      auto lit = ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
+      auto lit = ql::valueId::getLiteralOrIriFromVocabIndex(
           context->_qec.getIndex(), id, context->_localVocab);
       return GeoPointOrWktValueGetter{}(lit, context);
     }
@@ -473,8 +471,8 @@ CPP_template(typename T, typename ValueGetter)(
     case EncodedVal:
     case VocabIndex:
       return valueGetter(
-          ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
-              context->_qec.getIndex(), id, context->_localVocab),
+          ql::valueId::getLiteralOrIriFromVocabIndex(context->_qec.getIndex(),
+                                                     id, context->_localVocab),
           context);
     case TextRecordIndex:
     case WordVocabIndex:
@@ -568,7 +566,7 @@ CPP_template_out_def(typename RequestedInfo)(
       } else {
         // No precomputed geometry info available: we have to fetch and parse
         // the string.
-        auto lit = ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
+        auto lit = ql::valueId::getLiteralOrIriFromVocabIndex(
             context->_qec.getIndex(), id, context->_localVocab);
         return GeometryInfoValueGetter{}(lit, context);
       }
