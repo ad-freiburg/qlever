@@ -321,9 +321,9 @@ TEST(RegexExpression, getPrefixRegex) {
 
 // _____________________________________________________________________________
 TEST(RegexExpression, makeSimilarPrefixExpression) {
+  using namespace ::testing;
   auto hasPrefixAndVariableMatcher = [](std::string variableName,
                                         std::string_view prefix) {
-    using namespace ::testing;
     return Pointee(WhenDynamicCastTo<const PrefixRegexExpression&>(
         AllOf(AD_FIELD(PrefixRegexExpression, prefixRegex_, Eq(prefix)),
               AD_FIELD(PrefixRegexExpression, variable_,
@@ -334,15 +334,17 @@ TEST(RegexExpression, makeSimilarPrefixExpression) {
   EXPECT_THAT(makeSimilarPrefixExpression(makeStrExpression(variable("?x")),
                                           literal("Prefix")),
               hasPrefixAndVariableMatcher("?x", "Prefix"));
-  EXPECT_THROW(makeSimilarPrefixExpression(makeStrExpression(variable("?x")),
-                                           literal("Prefix", "@en")),
-               std::runtime_error);
-  EXPECT_THROW(
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      makeSimilarPrefixExpression(makeStrExpression(variable("?x")),
+                                  literal("Prefix", "@en")),
+      HasSubstr("literals without a language tag or a datatype"),
+      std::runtime_error);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       makeSimilarPrefixExpression(literal("Not a variable"), literal("Prefix")),
-      std::runtime_error);
-  EXPECT_THROW(
+      HasSubstr("STR(?var) or ?var"), std::runtime_error);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       makeSimilarPrefixExpression(variable("?x"), variable("?not_a_constant")),
-      std::runtime_error);
+      HasSubstr("static string literals"), std::runtime_error);
 }
 }  // namespace sparqlExpression
 
