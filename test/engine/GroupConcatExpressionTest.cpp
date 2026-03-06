@@ -112,12 +112,12 @@ TEST(GroupConcatExpression, concatenationWithUndefined) {
 
 // _____________________________________________________________________________
 TEST(GroupConcatExpression, concatenationWithLanguageTags) {
-  expectLiteralsAreConcatenatedTo(false, {lit("\"a\"@en")}, lit("\"a\"@en"));
-  expectLiteralsAreConcatenatedTo(true, {lit("\"a\"@en")}, lit("\"a\"@en"));
+  expectLiteralsAreConcatenatedTo(false, {lit("\"a\"@en")}, lit("\"a\""));
+  expectLiteralsAreConcatenatedTo(true, {lit("\"a\"@en")}, lit("\"a\""));
   expectLiteralsAreConcatenatedTo(true, {lit("\"a\"@en"), lit("\"a\"@en")},
-                                  lit("\"a\"@en"));
+                                  lit("\"a\""));
   expectLiteralsAreConcatenatedTo(false, {lit("\"a\"@en"), lit("\"b\"@en")},
-                                  lit("\"a;b\"@en"));
+                                  lit("\"a;b\""));
   expectLiteralsAreConcatenatedTo(false, {lit("\"a\""), lit("\"b\"@en")},
                                   lit("\"a;b\""));
   expectLiteralsAreConcatenatedTo(true, {lit("\"a\""), lit("\"a\"@en")},

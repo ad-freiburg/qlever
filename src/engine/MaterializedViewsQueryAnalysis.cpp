@@ -282,7 +282,7 @@ BindExpressionAndTargetCol extractBindExpressions(
     const ParsedQuery& parsed, const VariableToColumnMap& varToColMap) {
   BindExpressionAndTargetCol map;
 
-  // Iterate over all `BIND`s in the parsed query and add them to the cache.
+  // Iterate over all `BIND`s in the parsed query and add them to the map.
   for (const auto& bind :
        ad_utility::filterRangeOfVariantsByType<parsedQuery::Bind>(
            parsed._rootGraphPattern._graphPatterns)) {

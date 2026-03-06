@@ -115,7 +115,7 @@ class QueryPatternCache {
 std::vector<parsedQuery::GraphPatternOperation> graphPatternInvariantFilter(
     const ParsedQuery& parsed);
 
-// Hash map for `BIND` cache.
+// Hash map for the `BIND`-to-column map.
 using BindExpressionAndTargetCol = ad_utility::HashMap<std::string, size_t>;
 
 // Extract all `BIND` statements from a `ParsedQuery` and create a hash map
