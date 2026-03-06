@@ -30,6 +30,7 @@
 #include "util/AllocatorTestHelpers.h"
 #include "util/Conversions.h"
 #include "util/GeoSparqlHelpers.h"
+#include "util/IdTestHelpers.h"
 
 namespace {
 
@@ -49,6 +50,7 @@ auto D = ad_utility::testing::DoubleId;
 auto B = ad_utility::testing::BoolId;
 auto I = ad_utility::testing::IntId;
 auto Voc = ad_utility::testing::VocabId;
+auto GP = ad_utility::testing::GeoPointId;
 auto U = Id::makeUndefined();
 
 using Ids = std::vector<Id>;
@@ -387,6 +389,43 @@ TEST(SparqlExpression, logicalOperators) {
     V<Id> resultAnd{{t, f, U, f, f, f, U, f, U}, alloc};
     testOr(resultOr, allValues1, allValues2);
     testAnd(resultAnd, allValues1, allValues2);
+  }
+
+  {
+    auto expression = makeOrExpression(
+        std::make_unique<IdExpression>(ValueId::makeUndefined()),
+        std::make_unique<IdExpression>(ValueId::makeUndefined()));
+    EXPECT_FALSE(expression->isResultAlwaysDefined(testContext().varToColMap));
+  }
+  {
+    auto expression = makeOrExpression(
+        std::make_unique<IdExpression>(ValueId::makeFromInt(42)),
+        std::make_unique<IdExpression>(ValueId::makeUndefined()));
+    EXPECT_TRUE(expression->isResultAlwaysDefined(testContext().varToColMap));
+  }
+  {
+    auto expression = makeOrExpression(
+        std::make_unique<IdExpression>(ValueId::makeUndefined()),
+        std::make_unique<IdExpression>(ValueId::makeFromInt(42)));
+    EXPECT_TRUE(expression->isResultAlwaysDefined(testContext().varToColMap));
+  }
+  {
+    auto expression = makeAndExpression(
+        std::make_unique<IdExpression>(ValueId::makeFromInt(42)),
+        std::make_unique<IdExpression>(ValueId::makeUndefined()));
+    EXPECT_FALSE(expression->isResultAlwaysDefined(testContext().varToColMap));
+  }
+  {
+    auto expression = makeAndExpression(
+        std::make_unique<IdExpression>(ValueId::makeUndefined()),
+        std::make_unique<IdExpression>(ValueId::makeFromInt(42)));
+    EXPECT_FALSE(expression->isResultAlwaysDefined(testContext().varToColMap));
+  }
+  {
+    auto expression = makeAndExpression(
+        std::make_unique<IdExpression>(ValueId::makeFromInt(42)),
+        std::make_unique<IdExpression>(ValueId::makeFromInt(42)));
+    EXPECT_TRUE(expression->isResultAlwaysDefined(testContext().varToColMap));
   }
 }
 
@@ -913,32 +952,54 @@ TEST(SparqlExpression, strIriDtTagged) {
   auto U = Id::makeUndefined();
   auto checkStrIriTag =
       std::bind_front(testNaryExpression, &makeStrIriDtExpression);
-  checkStrIriTag(IdOrLiteralOrIriVec{lit(
-                     "123", "^^<http://www.w3.org/2001/XMLSchema#integer>")},
-                 IdOrLiteralOrIriVec{lit("123")},
-                 IdOrLiteralOrIriVec{
-                     iriref("<http://www.w3.org/2001/XMLSchema#integer>")});
+  Id geoPoint = Id::makeFromGeoPoint(GeoPoint{0, 0});
+  Id date = Id::makeFromDate(DateYearOrDuration::parseXsdDate("2026-02-16"));
+
+  // Test the correct encoding of literals to `ValueId`s.
+  checkStrIriTag(
+      IdOrLiteralOrIriVec{I(123), I(-42), I(-42), B(true), B(false), D(3.14),
+                          D(2.5), D(2.5), date, geoPoint},
+      IdOrLiteralOrIriVec{lit("123"), lit("-42"), lit("-42"), lit("true"),
+                          lit("false"), lit("3.14"), lit("2.5"), lit("2.5"),
+                          lit("2026-02-16"), lit("POINT(0.0 0.0)")},
+      IdOrLiteralOrIriVec{
+          iriref("<http://www.w3.org/2001/XMLSchema#integer>"),
+          iriref("<http://www.w3.org/2001/XMLSchema#integer>"),
+          iriref("<http://www.w3.org/2001/XMLSchema#int>"),
+          iriref("<http://www.w3.org/2001/XMLSchema#boolean>"),
+          iriref("<http://www.w3.org/2001/XMLSchema#boolean>"),
+          iriref("<http://www.w3.org/2001/XMLSchema#double>"),
+          iriref("<http://www.w3.org/2001/XMLSchema#decimal>"),
+          iriref("<http://www.w3.org/2001/XMLSchema#float>"),
+          iriref("<http://www.w3.org/2001/XMLSchema#date>"),
+          iriref("<http://www.opengis.net/ont/geosparql#wktLiteral>")});
+
+  // Unknown datatype: returns a `Literal` with datatype.
   checkStrIriTag(
       IdOrLiteralOrIriVec{lit("iiii", "^^<http://example/romanNumeral>")},
       IdOrLiteralOrIriVec{lit("iiii")},
       IdOrLiteralOrIriVec{iriref("<http://example/romanNumeral>")});
-  checkStrIriTag(IdOrLiteralOrIriVec{U},
-                 IdOrLiteralOrIriVec{iriref("<http://example/romanNumeral>")},
-                 IdOrLiteralOrIriVec{U});
-  checkStrIriTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{lit("iiii")},
-                 IdOrLiteralOrIriVec{U});
-  checkStrIriTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{U},
-                 IdOrLiteralOrIriVec{U});
-  checkStrIriTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{lit("XVII")},
-                 IdOrLiteralOrIriVec{lit("<not/a/iriref>")});
-  checkStrIriTag(IdOrLiteralOrIriVec{U},
-                 IdOrLiteralOrIriVec{lit(
-                     "123", "^^<http://www.w3.org/2001/XMLSchema#integer>")},
-                 IdOrLiteralOrIriVec{
-                     iriref("<http://www.w3.org/2001/XMLSchema#integer>")});
-  checkStrIriTag(IdOrLiteralOrIriVec{U},
-                 IdOrLiteralOrIriVec{lit("chat", "@en")},
-                 IdOrLiteralOrIriVec{iriref("<http://example/romanNumeral>")});
+
+  // Invalid content for the given datatype: falls back to `Literal`.
+  checkStrIriTag(
+      IdOrLiteralOrIriVec{
+          lit("abc", "^^<http://www.w3.org/2001/XMLSchema#integer>"),
+          lit("abc", "^^<http://www.w3.org/2001/XMLSchema#boolean>")},
+      IdOrLiteralOrIriVec{lit("abc"), lit("abc")},
+      IdOrLiteralOrIriVec{
+          iriref("<http://www.w3.org/2001/XMLSchema#integer>"),
+          iriref("<http://www.w3.org/2001/XMLSchema#boolean>")});
+
+  // Undefined cases.
+  checkStrIriTag(
+      IdOrLiteralOrIriVec{U, U, U, U, U, U},
+      IdOrLiteralOrIriVec{
+          iriref("<http://example/romanNumeral>"), lit("iiii"), U, lit("XVII"),
+          lit("123", "^^<http://www.w3.org/2001/XMLSchema#integer>"),
+          lit("chat", "@en")},
+      IdOrLiteralOrIriVec{U, U, U, lit("<not/a/iriref>"),
+                          iriref("<http://www.w3.org/2001/XMLSchema#integer>"),
+                          iriref("<http://example/romanNumeral>")});
 }
 
 // _____________________________________________________________________________________
@@ -1078,6 +1139,10 @@ TEST(SparqlExpression, isSomethingFunctions) {
       testIdOrStrings, Ids{F, F, F, F, F, F, F, T, T, F, F, F, F});
   testUnaryExpression<makeBoundExpression>(
       testIdOrStrings, Ids{T, T, T, T, T, T, T, T, T, T, T, T, F});
+
+  auto expression = makeBoundExpression(
+      std::make_unique<IdExpression>(ValueId::makeUndefined()));
+  EXPECT_TRUE(expression->isResultAlwaysDefined(testContext().varToColMap));
 }
 
 // ____________________________________________________________________________
@@ -1345,6 +1410,8 @@ TEST(SparqlExpression, geoSparqlExpressions) {
   auto checkCentroid = testUnaryExpression<&makeCentroidExpression>;
   auto checkDist = std::bind_front(testNaryExpression, &makeDistExpression);
   auto checkEnvelope = testUnaryExpression<&makeEnvelopeExpression>;
+  auto checkEnvelopeLL = testUnaryExpression<&makeEnvelopeLowerLeftExpression>;
+  auto checkEnvelopeUR = testUnaryExpression<&makeEnvelopeUpperRightExpression>;
   auto checkGeometryType = testUnaryExpression<&makeGeometryTypeExpression>;
 
   auto p = GeoPoint(26.8, 24.3);
@@ -1376,17 +1443,23 @@ TEST(SparqlExpression, geoSparqlExpressions) {
   checkDist(U, v, IdOrLiteralOrIri{lit("NotAPoint")});
   checkDist(U, IdOrLiteralOrIri{lit("NotAPoint")}, v);
 
-  auto polygonCentroid = ValueId::makeFromGeoPoint(GeoPoint(3, 3));
+  auto polygonCentroid = GP({3, 3});
   checkCentroid(IdOrLiteralOrIri{lit(
                     "\"POLYGON((2 4, 4 4, 4 2, 2 2))\"",
                     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")},
                 polygonCentroid);
 
   checkEnvelope(
-      IdOrLiteralOrIriVec{U, D(1.0), ValueId::makeFromGeoPoint({4, 2}),
+      IdOrLiteralOrIriVec{U, D(1.0), GP({4, 2}),
                           geoLit("LINESTRING(2 4, 8 8)")},
       IdOrLiteralOrIriVec{U, U, geoLit("POLYGON((2 4,2 4,2 4,2 4,2 4))"),
                           geoLit("POLYGON((2 4,8 4,8 8,2 8,2 4))")});
+  checkEnvelopeLL(IdOrLiteralOrIriVec{U, D(1.0), GP({4, 2}),
+                                      geoLit("LINESTRING(2 4, 8 8)")},
+                  Ids{U, U, GP({4, 2}), GP({4, 2})});
+  checkEnvelopeUR(IdOrLiteralOrIriVec{U, D(1.0), GP({4, 2}),
+                                      geoLit("LINESTRING(2 4, 8 8)")},
+                  Ids{U, U, GP({4, 2}), GP({8, 8})});
 
   auto sfGeoType = [](std::string_view type) {
     return lit(absl::StrCat("http://www.opengis.net/ont/sf#", type),
@@ -1958,6 +2031,7 @@ TEST(ExistsExpression, basicFunctionality) {
   EXPECT_THAT(exists.getCacheKey(context.varToColMap),
               HasSubstr("Uninitialized Exists"));
   context.varToColMap[var] = makeAlwaysDefinedColumn(437);
+  EXPECT_TRUE(exists.isResultAlwaysDefined(context.varToColMap));
   EXPECT_THAT(exists.evaluate(&context.context), VariantWith<Variable>(var));
   EXPECT_THAT(exists.getCacheKey(context.varToColMap),
               HasSubstr("ExistsExpression col# 437"));

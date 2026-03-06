@@ -82,10 +82,10 @@ TEST(OperationTest, limitAndOffsetAreStacked) {
   EXPECT_EQ(n.getLimitOffset(), LimitOffsetClause(20, 3));
 
   n.applyLimitOffset({std::nullopt, 4});
-  EXPECT_EQ(n.getLimitOffset(), LimitOffsetClause(20, 7));
+  EXPECT_EQ(n.getLimitOffset(), LimitOffsetClause(16, 7));
 
-  n.applyLimitOffset({10, 8});
-  EXPECT_EQ(n.getLimitOffset(), LimitOffsetClause(10, 15));
+  n.applyLimitOffset({6, 7});
+  EXPECT_EQ(n.getLimitOffset(), LimitOffsetClause(6, 14));
 }
 
 // ________________________________________________
@@ -841,7 +841,7 @@ TEST(OperationTest, disableCaching) {
       qec, std::move(idTablesVector), {Variable{"?x"}, Variable{"?y"}}, true};
 
   QueryCacheKey cacheKey{valuesForTesting.getCacheKey(),
-                         qec->locatedTriplesSnapshot().index_};
+                         qec->locatedTriplesState().index_};
 
   // By default, the result of `valuesForTesting` is cached because it is
   // sufficiently small, no matter if it was computed lazily or fully

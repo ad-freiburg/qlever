@@ -28,7 +28,7 @@ concurrency:
 
 jobs:
   upload:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     if: github.event.workflow_run.conclusion == 'success'
     env:
       compiler: clang

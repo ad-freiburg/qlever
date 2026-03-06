@@ -11,6 +11,8 @@
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/StringExpressionsHelper.h"
 #include "engine/sparqlExpressions/VariadicExpression.h"
+#include "index/EncodedIriManager.h"
+#include "parser/RdfParser.h"
 #include "util/StringUtils.h"
 
 namespace sparqlExpression {
@@ -575,10 +577,28 @@ struct StrIriDtTag {
     if (!literal.has_value() || !inputIri.has_value() ||
         !literal.value().isPlain()) {
       return Id::makeUndefined();
-    } else {
-      literal.value().addDatatype(inputIri.value());
-      return LiteralOrIri{std::move(literal.value())};
     }
+    // Try to encode literals with suitable datatype directly as a `ValueId`.
+    try {
+      std::string_view content =
+          asStringViewUnsafe(literal.value().getContent());
+      // We do not need to encode numeric IRIs because the behavior of the
+      // regular one is also valid.
+      EncodedIriManager ev;
+      auto tc =
+          TurtleParser<TokenizerCtre>::literalAndDatatypeToTripleComponent(
+              content, inputIri.value(), ev);
+      auto id = tc.toValueIdIfNotString(&ev);
+      if (id.has_value()) {
+        return id.value();
+      }
+    } catch (const ParseException&) {
+      // Parse failure for the given datatype, return a `LiteralOrIri`.
+      // NOTE: This behavior differs from the parsing at index build time, where
+      // invalid integers throw an exception.
+    }
+    literal.value().addDatatype(inputIri.value());
+    return LiteralOrIri{std::move(literal.value())};
   }
 };
 

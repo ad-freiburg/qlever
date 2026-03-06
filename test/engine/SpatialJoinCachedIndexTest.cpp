@@ -9,6 +9,7 @@
 #include "../util/IndexTestHelpers.h"
 #include "./SpatialJoinTestHelpers.h"
 #include "engine/NamedResultCache.h"
+#include "engine/NamedResultCacheSerializer.h"
 #include "engine/SpatialJoinCachedIndex.h"
 #include "engine/SpatialJoinConfig.h"
 #include "global/ValueId.h"
@@ -18,8 +19,23 @@ namespace {
 
 using namespace SpatialJoinTestHelpers;
 
+void serializeAndDeserializeCache(NamedResultCache& cache,
+                                  QueryExecutionContext* qec) {
+  using namespace ad_utility::serialization;
+  ByteBufferWriteSerializer writer;
+  cache.writeToSerializer(writer);
+  cache.clear();
+  ByteBufferReadSerializer reader{std::move(writer).data()};
+  cache.readFromSerializer(reader, ad_utility::makeUnlimitedAllocator<Id>(),
+                           *qec->getIndex().getBlankNodeManager());
+}
+
 // _____________________________________________________________________________
-TEST(SpatialJoinCachedIndex, Basic) {
+class SpatialJoinCachedIndexTest : public ::testing::TestWithParam<bool> {};
+
+// _____________________________________________________________________________
+TEST_P(SpatialJoinCachedIndexTest, Basic) {
+  bool shouldSerialize = GetParam();
   // Sample data and query
   std::string kb =
       "<s> <p> \"LINESTRING(1.5 2.5, 1.55 2.5)\""
@@ -40,6 +56,11 @@ TEST(SpatialJoinCachedIndex, Basic) {
   qec->pinResultWithName() = {"dummy", Variable{"?o"}};
   auto plan = queryPlannerTestHelpers::parseAndPlan(pinned, qec);
   [[maybe_unused]] auto pinResult = plan.getResult();
+
+  auto& cache = qec->namedResultCache();
+  if (shouldSerialize) {
+    serializeAndDeserializeCache(cache, qec);
+  }
 
   // Retrieve and check the result table and geo index from the named cache
   auto cacheEntry = qec->namedResultCache().get("dummy");
@@ -67,7 +88,8 @@ TEST(SpatialJoinCachedIndex, Basic) {
 }
 
 // _____________________________________________________________________________
-TEST(SpatialJoinCachedIndex, UseOfIndexByS2PointPolylineAlgorithm) {
+TEST_P(SpatialJoinCachedIndexTest, UseOfIndexByS2PointPolylineAlgorithm) {
+  bool shouldSerialize = GetParam();
   // We use real-world examples here for meaningful and better-to-understand
   // results: The examples <s1> to <s4> are rail segments in Freiburg Central
   // Railway Station (osmway:88297213, osmway:300061067, osmway:392142142,
@@ -106,6 +128,11 @@ TEST(SpatialJoinCachedIndex, UseOfIndexByS2PointPolylineAlgorithm) {
   auto plan = queryPlannerTestHelpers::parseAndPlan(pinQuery, qec);
   const auto pinResultCacheKey = plan.getCacheKey();
   [[maybe_unused]] auto pinResult = plan.getResult();
+
+  auto& cache = qec->namedResultCache();
+  if (shouldSerialize) {
+    serializeAndDeserializeCache(cache, qec);
+  }
 
   // Check expected cache size
   const auto cacheEntry = qec->namedResultCache().get("dummy");
@@ -154,5 +181,9 @@ TEST(SpatialJoinCachedIndex, UseOfIndexByS2PointPolylineAlgorithm) {
   EXPECT_THAT(cacheKey, ::testing::HasSubstr("right cache name:dummy"));
   EXPECT_THAT(cacheKey, ::testing::HasSubstr(pinResultCacheKey));
 }
+
+// _____________________________________________________________________________
+INSTANTIATE_TEST_SUITE_P(WithAndWithoutSerialization,
+                         SpatialJoinCachedIndexTest, ::testing::Bool());
 
 }  // namespace

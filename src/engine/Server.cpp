@@ -28,6 +28,7 @@
 #include "engine/SparqlProtocol.h"
 #include "global/RuntimeParameters.h"
 #include "index/IndexImpl.h"
+#include "index/IndexRebuilder.h"
 #include "parser/SparqlParser.h"
 #include "util/AsioHelpers.h"
 #include "util/Exception.h"
@@ -80,7 +81,8 @@ Server::Server(unsigned short port, size_t numThreads,
 // __________________________________________________________________________
 void Server::initialize(const std::string& indexBaseName, bool useText,
                         bool usePatterns, bool loadAllPermutations,
-                        bool persistUpdates) {
+                        bool persistUpdates,
+                        std::vector<std::string> preloadMaterializedViews) {
   AD_LOG_INFO << "Initializing server ..." << std::endl;
 
   index_.usePatterns() = usePatterns;
@@ -93,6 +95,18 @@ void Server::initialize(const std::string& indexBaseName, bool useText,
   }
 
   materializedViewsManager_.setOnDiskBase(indexBaseName);
+
+  // Preload materialized views as requested by the user. This is done in a
+  // try-catch block to prevent an exception during loading of a view from
+  // blocking the server start.
+  for (const auto& viewName : preloadMaterializedViews) {
+    try {
+      materializedViewsManager_.loadView(viewName);
+    } catch (const std::exception& ex) {
+      AD_LOG_ERROR << "Preloading materialized view '" << viewName
+                   << "' failed: " << ex.what() << "." << std::endl;
+    }
+  }
 
   sortPerformanceEstimator_.computeEstimatesExpensively(
       allocator_, index_.numTriples().normalAndInternal_() *
@@ -110,7 +124,8 @@ void Server::initialize(const std::string& indexBaseName, bool useText,
 // _____________________________________________________________________________
 void Server::run(const std::string& indexBaseName, bool useText,
                  bool usePatterns, bool loadAllPermutations,
-                 bool persistUpdates) {
+                 bool persistUpdates,
+                 std::vector<std::string> preloadMaterializedViews) {
   using namespace ad_utility::httpUtils;
 
   // Function that handles a request asynchronously, will be passed as argument
@@ -192,7 +207,7 @@ void Server::run(const std::string& indexBaseName, bool useText,
 
   // Initialize the index
   initialize(indexBaseName, useText, usePatterns, loadAllPermutations,
-             persistUpdates);
+             persistUpdates, std::move(preloadMaterializedViews));
 
   AD_LOG_INFO << "The server is ready, listening for requests on port "
               << std::to_string(httpServer.getPort()) << " ..." << std::endl;
@@ -460,6 +475,22 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       json[nlohmann::json(key)] = std::move(value);
     }
     response = createJsonResponse(json, request);
+  } else if (auto cmd = checkParameter("cmd", "rebuild-index")) {
+    requireValidAccessToken("rebuild-index");
+
+    if (rebuildInProgress_.exchange(true)) {
+      response = createHttpResponseFromString(
+          "Another rebuild is currently in progress!",
+          http::status::too_many_requests, request, MediaType::textPlain);
+    } else {
+      absl::Cleanup cleanup{[this]() { rebuildInProgress_.store(false); }};
+      logCommand(cmd, "rebuilding index");
+      auto fileName =
+          checkParameter("index-name", std::nullopt).value_or("new_index");
+      co_await rebuildIndex(fileName);
+      response =
+          createOkResponse("Done writing", request, MediaType::textPlain);
+    }
   } else if (auto cmd = checkParameter("cmd", "write-materialized-view")) {
     requireValidAccessToken("write-materialized-view");
     logCommand(cmd, "write materialized view");
@@ -1033,42 +1064,49 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   co_return;
 }
 
+// ____________________________________________________________________________
 nlohmann::ordered_json Server::createResponseMetadataForUpdate(
-    const Index& index, SharedLocatedTriplesSnapshot snapshot,
+    const Index& index, const LocatedTriplesState& locatedTriples,
     const PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
     const UpdateMetadata& updateMetadata,
     const ad_utility::timer::TimeTracer& tracer) {
+  AD_CORRECTNESS_CHECK(updateMetadata.countBefore_.has_value());
+  AD_CORRECTNESS_CHECK(updateMetadata.inUpdate_.has_value());
+  AD_CORRECTNESS_CHECK(updateMetadata.countAfter_.has_value());
+  auto warnings = qet.collectWarnings();
+  warnings.emplace(warnings.begin(),
+                   "SPARQL 1.1 Update for QLever is experimental.");
   nlohmann::ordered_json response;
   response["update"] = ad_utility::truncateOperationString(
       plannedQuery.parsedQuery_._originalString);
   response["status"] = "OK";
-  auto warnings = qet.collectWarnings();
-  warnings.emplace(warnings.begin(),
-                   "SPARQL 1.1 Update for QLever is experimental.");
   response["warnings"] = warnings;
-  RuntimeInformationWholeQuery& runtimeInfoWholeOp =
-      qet.getRootOperation()->getRuntimeInfoWholeQuery();
-  RuntimeInformation& runtimeInfo = qet.getRootOperation()->runtimeInfo();
-  response["runtimeInformation"]["meta"] =
-      nlohmann::ordered_json(runtimeInfoWholeOp);
+  response["runtimeInformation"]["meta"] = nlohmann::ordered_json(
+      qet.getRootOperation()->getRuntimeInfoWholeQuery());
   response["runtimeInformation"]["query_execution_tree"] =
-      nlohmann::ordered_json(runtimeInfo);
-  AD_CORRECTNESS_CHECK(updateMetadata.countBefore_.has_value());
-  AD_CORRECTNESS_CHECK(updateMetadata.inUpdate_.has_value());
-  AD_CORRECTNESS_CHECK(updateMetadata.countAfter_.has_value());
-  auto countBefore = updateMetadata.countBefore_.value();
-  auto countAfter = updateMetadata.countAfter_.value();
-  response["delta-triples"]["before"] = nlohmann::json(countBefore);
-  response["delta-triples"]["after"] = nlohmann::json(countAfter);
-  response["delta-triples"]["difference"] =
-      nlohmann::json(countAfter - countBefore);
-  response["delta-triples"]["operation"] =
-      json(updateMetadata.inUpdate_.value());
+      nlohmann::ordered_json(qet.getRootOperation()->runtimeInfo());
+  auto setIfHasValue = [&response, &updateMetadata](
+                           auto field, const std::string& fieldName) {
+    const auto& countOpt = std::invoke(field, updateMetadata);
+    if (countOpt.has_value()) {
+      response["delta-triples"][fieldName] = nlohmann::json(countOpt.value());
+    }
+  };
+  setIfHasValue(&UpdateMetadata::countBefore_, "before");
+  setIfHasValue(&UpdateMetadata::countAfter_, "after");
+  setIfHasValue(&UpdateMetadata::inUpdate_, "operation");
+  if (updateMetadata.countAfter_.has_value() &&
+      updateMetadata.countBefore_.has_value()) {
+    response["delta-triples"]["difference"] =
+        nlohmann::json(updateMetadata.countAfter_.value() -
+                       updateMetadata.countBefore_.value());
+  }
   response["time"] = tracer.getJSONShort()["update"];
   for (auto permutation : Permutation::ALL) {
     response["located-triples"][Permutation::toString(
         permutation)]["blocks-affected"] =
-        snapshot->getLocatedTriplesForPermutation(permutation).numBlocks();
+        locatedTriples.getLocatedTriplesForPermutation<false>(permutation)
+            .numBlocks();
     auto numBlocks = index.getPimpl()
                          .getPermutation(permutation)
                          .metaData()
@@ -1111,11 +1149,11 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::processUpdate(
         std::vector<ParsedQuery>&& updates,
-        const ad_utility::Timer& requestTimer, SharedTimeTracer tracer,
+        const ad_utility::Timer& requestTimer, SharedTimeTracer outerTracer,
         ad_utility::SharedCancellationHandle cancellationHandle,
         QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
         TimeLimit timeLimit, std::optional<PlannedQuery>& plannedUpdate) {
-  tracer->beginTrace("waitingForUpdateThread");
+  outerTracer->beginTrace("waitingForUpdateThread");
   AD_CORRECTNESS_CHECK(ql::ranges::all_of(
       updates, [](const ParsedQuery& p) { return p.hasUpdateClause(); }));
 
@@ -1126,70 +1164,71 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   auto coroutine = computeInNewThread(
       updateThreadPool_,
       [this, &requestTimer, &cancellationHandle, &updates, &qec, &timeLimit,
-       &plannedUpdate, tracer]() {
-        tracer->endTrace("waitingForUpdateThread");
-        json results = json::array();
-        // TODO<qup42> We currently create a new snapshot after each update in
-        // the chain, which is expensive. Instead, the updates could operate
-        // directly on the `DeltaTriples` (we have an exclusive lock on them
-        // anyway).
-        for (ParsedQuery& update : updates) {
-          // Make the snapshot before the query planning. Otherwise, it could
-          // happen that the query planner "knows" that a result is empty, when
-          // actually it is not due to a preceding update in the chain. Also,
-          // this improves the size estimates and hence the query plan.
-          tracer->beginTrace("snapshot");
-          qec.updateLocatedTriplesSnapshot();
-          tracer->endTrace("snapshot");
-          tracer->beginTrace("planning");
-          plannedUpdate = planQuery(std::move(update), requestTimer, timeLimit,
-                                    qec, cancellationHandle);
-          tracer->endTrace("planning");
+       &plannedUpdate, outerTracer]() {
+        outerTracer->endTrace("waitingForUpdateThread");
+        return index_.deltaTriplesManager().modify<json>(
+            [this, &cancellationHandle, &plannedUpdate, &updates, &requestTimer,
+             &timeLimit, &qec](DeltaTriples& deltaTriples) {
+              qec.setLocatedTriplesForEvaluation(
+                  deltaTriples.getLocatedTriplesSharedStateReference());
+              json results = json::array();
+              for (auto&& [i, update] : ranges::views::enumerate(updates)) {
+                auto tracer = ad_utility::timer::TimeTracer("update");
+                // The augmented metadata is invalidated by any update. It is
+                // only updated automatically at the end of modify. Updates with
+                // non-empty graph patterns need the augmented metadata. Update
+                // the augmented metadata before executing those updates.
+                tracer.beginTrace("updateMetadata");
+                if (i != 0 &&
+                    !update._rootGraphPattern._graphPatterns.empty()) {
+                  deltaTriples.updateAugmentedMetadata();
+                }
+                tracer.endTrace("updateMetadata");
+                tracer.beginTrace("planning");
+                plannedUpdate = planQuery(std::move(update), requestTimer,
+                                          timeLimit, qec, cancellationHandle);
+                tracer.endTrace("planning");
+                tracer.beginTrace("execution");
+                // Update the delta triples.
+                // Use `this` explicitly to silence false-positive
+                // errors on captured `this` being unused.
+                auto updateMetadata = this->processUpdateImpl(
+                    plannedUpdate.value(), cancellationHandle, deltaTriples,
+                    tracer);
+                tracer.endTrace("execution");
 
-          // Update the delta triples.
-          tracer->beginTrace("execution");
-          auto updateMetadata =
-              index_.deltaTriplesManager().modify<UpdateMetadata>(
-                  [this, &cancellationHandle, &plannedUpdate,
-                   tracer](auto& deltaTriples) {
-                    // Use `this` explicitly to silence false-positive
-                    // errors on captured `this` being unused.
-                    tracer->beginTrace("processUpdateImpl");
-                    auto res = this->processUpdateImpl(plannedUpdate.value(),
-                                                       cancellationHandle,
-                                                       deltaTriples, *tracer);
-                    tracer->endTrace("processUpdateImpl");
-                    return res;
-                  },
-                  true, true, *tracer);
-          tracer->endTrace("execution");
+                tracer.endTrace("update");
+                results.push_back(createResponseMetadataForUpdate(
+                    index_,
+                    *deltaTriples.getLocatedTriplesSharedStateReference(),
+                    *plannedUpdate, plannedUpdate->queryExecutionTree_,
+                    updateMetadata, tracer));
 
-          tracer->endTrace("update");
-          results.push_back(createResponseMetadataForUpdate(
-              index_, index_.deltaTriplesManager().getCurrentSnapshot(),
-              *plannedUpdate, plannedUpdate->queryExecutionTree_,
-              updateMetadata, *tracer));
-          tracer->reset();
-
-          AD_LOG_INFO << "Done processing update"
-                      << ", total time was " << requestTimer.msecs().count()
-                      << " ms" << std::endl;
-          AD_LOG_DEBUG << "Runtime Info:\n"
-                       << plannedUpdate->queryExecutionTree_.getRootOperation()
-                              ->runtimeInfo()
-                              .toString()
-                       << std::endl;
-        }
-        return results;
+                AD_LOG_INFO << "Done processing update, total time was "
+                            << requestTimer.msecs().count() << " ms"
+                            << std::endl;
+                AD_LOG_DEBUG
+                    << "Runtime Info:\n"
+                    << plannedUpdate->queryExecutionTree_.getRootOperation()
+                           ->runtimeInfo()
+                           .toString()
+                    << std::endl;
+              }
+              return results;
+            },
+            true, true, *outerTracer);
       },
       cancellationHandle);
-  auto responses = co_await std::move(coroutine);
-  tracer->endTrace("update");
+  auto operations = co_await std::move(coroutine);
+  auto response = nlohmann::ordered_json();
+  response["operations"] = operations;
+  outerTracer->endTrace("update");
+  response["time"] = outerTracer->getJSONShort()["update"];
 
   // SPARQL 1.1 Protocol 2.2.4 Successful Responses: "The responses body of a
   // successful update request is implementation defined."
   co_await send(
-      ad_utility::httpUtils::createJsonResponse(std::move(responses), request));
+      ad_utility::httpUtils::createJsonResponse(std::move(response), request));
   co_return;
 }
 
@@ -1393,9 +1432,29 @@ void Server::writeMaterializedView(
       std::make_shared<QueryExecutionTree>(std::move(plan.queryExecutionTree_));
   auto memoryLimit =
       getRuntimeParameter<&RuntimeParameters::materializedViewWriterMemory_>();
-  MaterializedViewWriter::writeViewToDisk(
-      qec->getIndex().getOnDiskBase(), name,
-      {qet, qec, std::move(plan.parsedQuery_)}, memoryLimit);
+  materializedViewsManager_.writeViewToDisk(
+      name, {qet, qec, std::move(plan.parsedQuery_)}, memoryLimit);
+}
+
+// _____________________________________________________________________________
+Awaitable<void> Server::rebuildIndex(const std::string& indexBaseName) {
+  // There is no mechanism to actually cancel the handle.
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  // We don't directly `co_await` because of lifetime issues (bugs) in the
+  // Conan setup.
+  auto coroutine = computeInNewThread(
+      queryThreadPool_,
+      [this, &handle, &indexBaseName] {
+        auto logFileName = indexBaseName + ".rebuild-index-log.txt";
+        auto [currentSnapshot, localVocabCopy, ownedBlocks] =
+            index_.deltaTriplesManager()
+                .getCurrentLocatedTriplesSharedStateWithVocab();
+        qlever::materializeToIndex(index_.getImpl(), indexBaseName,
+                                   currentSnapshot, localVocabCopy, ownedBlocks,
+                                   handle, logFileName);
+      },
+      handle);
+  co_await std::move(coroutine);
 }
 
 // For helper function `Server::onlyForTestingProcess`

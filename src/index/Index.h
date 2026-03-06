@@ -26,7 +26,7 @@
 class IdTable;
 class TextBlockMetaData;
 class IndexImpl;
-struct LocatedTriplesSnapshot;
+struct LocatedTriplesState;
 class DeltaTriplesManager;
 
 class Index {
@@ -48,10 +48,8 @@ class Index {
     QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(NumNormalAndInternal, normal,
                                                 internal)
 
-    static NumNormalAndInternal fromNormalAndTotal(size_t normal,
-                                                   size_t total) {
-      AD_CONTRACT_CHECK(total >= normal);
-      return {normal, total - normal};
+    static NumNormalAndInternal fromNormal(size_t normal) {
+      return {normal, 0};
     }
     NLOHMANN_DEFINE_TYPE_INTRUSIVE(NumNormalAndInternal, normal, internal);
   };
@@ -112,7 +110,6 @@ class Index {
   Vocab& getNonConstVocabForTesting();
 
   using TextVocab = TextVocabulary;
-  [[nodiscard]] const TextVocab& getTextVocab() const;
 
   // Get a (non-owning) pointer to the BlankNodeManager of this Index.
   ad_utility::BlankNodeManager* getBlankNodeManager() const;
@@ -126,10 +123,10 @@ class Index {
   // --------------------------------------------------------------------------
   [[nodiscard]] size_t getCardinality(
       const TripleComponent& comp, Permutation::Enum permutation,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+      const LocatedTriplesState& locatedTriplesState) const;
   [[nodiscard]] size_t getCardinality(
       Id id, Permutation::Enum permutation,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+      const LocatedTriplesState& locatedTriplesState) const;
 
   // TODO<joka921> Once we have an overview over the folding this logic should
   // probably not be in the index class.
@@ -188,6 +185,8 @@ class Index {
 
   bool& loadAllPermutations();
 
+  bool& doNotLoadPermutations();
+
   void setKeepTempFiles(bool keepTempFiles);
 
   ad_utility::MemorySize& memoryLimitIndexBuilding();
@@ -226,7 +225,7 @@ class Index {
   // ___________________________________________________________________________
   std::vector<float> getMultiplicities(
       const TripleComponent& key, const Permutation& permutation,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+      const LocatedTriplesState& locatedTriplesState) const;
 
   // ___________________________________________________________________________
   std::vector<float> getMultiplicities(const Permutation& permutation) const;
@@ -236,7 +235,7 @@ class Index {
   size_t getResultSizeOfScan(
       const ScanSpecification& scanSpecification,
       const Permutation::Enum& permutation,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+      const LocatedTriplesState& locatedTriplesState) const;
 
   // Get access to the implementation. This should be used rarely as it
   // requires including the rather expensive `IndexImpl.h` header

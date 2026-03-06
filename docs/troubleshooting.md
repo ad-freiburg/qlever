@@ -4,7 +4,7 @@ If you have problems, try rebuilding QLever in debug mode (e.g. by changing the
 `cmake` line in the `Dockerfile` to `cmake -DCMAKE_BUILD_TYPE=Debug
 -DLOGLEVEL=DEBUG` or [building natively](docs/native_setup.md)),
 Then rebuild your index with the newly build docker container and
-`IndexBuilderMain` executable.
+`qlever-index` executable.
 The release build assumes machine written words- and docsfiles and omits sanity
 checks for the sake of speed.
 
@@ -38,7 +38,7 @@ In either case incompatible versions are detected during startup.
 
 For these cases, we provide a converter which only modifies the
 meta data without having to rebuild the index. Run `MetaDataConverterMain
-<index-prefix>` in the same way as as running `IndexBuilderMain`.
+<index-prefix>` in the same way as as running `qlever-index`.
 
 This will not automatically overwrite the old index but copy the permutations
 and create new files with the suffix `.converted` (e.g.
