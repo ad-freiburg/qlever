@@ -847,7 +847,7 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
 }
 
 // _____________________________________________________________________________
-TEST_F(MaterializedViewsTest, BindCache) {
+TEST_F(MaterializedViewsTest, BindToColumnMap) {
   qlv().writeMaterializedView("testView1", simpleWriteQuery_);
   MaterializedViewsManager manager{testIndexBase_};
   auto view = manager.getView("testView1");

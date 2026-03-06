@@ -376,7 +376,7 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
     EncodedIriManager e;
     parsedQuery_ = SparqlParser::parseQuery(&e, originalQuery_.value(), {});
 
-    // Compute the `BIND` cache.
+    // Compute the `BIND`-to-column map.
     coveredBinds_ = materializedViewsQueryAnalysis::extractBindExpressions(
         parsedQuery_.value(), varToColMap_);
   }
