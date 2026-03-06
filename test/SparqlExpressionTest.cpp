@@ -30,6 +30,7 @@
 #include "util/AllocatorTestHelpers.h"
 #include "util/Conversions.h"
 #include "util/GeoSparqlHelpers.h"
+#include "util/IdTestHelpers.h"
 
 namespace {
 
@@ -49,6 +50,7 @@ auto D = ad_utility::testing::DoubleId;
 auto B = ad_utility::testing::BoolId;
 auto I = ad_utility::testing::IntId;
 auto Voc = ad_utility::testing::VocabId;
+auto GP = ad_utility::testing::GeoPointId;
 auto U = Id::makeUndefined();
 
 using Ids = std::vector<Id>;
@@ -387,6 +389,43 @@ TEST(SparqlExpression, logicalOperators) {
     V<Id> resultAnd{{t, f, U, f, f, f, U, f, U}, alloc};
     testOr(resultOr, allValues1, allValues2);
     testAnd(resultAnd, allValues1, allValues2);
+  }
+
+  {
+    auto expression = makeOrExpression(
+        std::make_unique<IdExpression>(ValueId::makeUndefined()),
+        std::make_unique<IdExpression>(ValueId::makeUndefined()));
+    EXPECT_FALSE(expression->isResultAlwaysDefined(testContext().varToColMap));
+  }
+  {
+    auto expression = makeOrExpression(
+        std::make_unique<IdExpression>(ValueId::makeFromInt(42)),
+        std::make_unique<IdExpression>(ValueId::makeUndefined()));
+    EXPECT_TRUE(expression->isResultAlwaysDefined(testContext().varToColMap));
+  }
+  {
+    auto expression = makeOrExpression(
+        std::make_unique<IdExpression>(ValueId::makeUndefined()),
+        std::make_unique<IdExpression>(ValueId::makeFromInt(42)));
+    EXPECT_TRUE(expression->isResultAlwaysDefined(testContext().varToColMap));
+  }
+  {
+    auto expression = makeAndExpression(
+        std::make_unique<IdExpression>(ValueId::makeFromInt(42)),
+        std::make_unique<IdExpression>(ValueId::makeUndefined()));
+    EXPECT_FALSE(expression->isResultAlwaysDefined(testContext().varToColMap));
+  }
+  {
+    auto expression = makeAndExpression(
+        std::make_unique<IdExpression>(ValueId::makeUndefined()),
+        std::make_unique<IdExpression>(ValueId::makeFromInt(42)));
+    EXPECT_FALSE(expression->isResultAlwaysDefined(testContext().varToColMap));
+  }
+  {
+    auto expression = makeAndExpression(
+        std::make_unique<IdExpression>(ValueId::makeFromInt(42)),
+        std::make_unique<IdExpression>(ValueId::makeFromInt(42)));
+    EXPECT_TRUE(expression->isResultAlwaysDefined(testContext().varToColMap));
   }
 }
 
@@ -1100,6 +1139,10 @@ TEST(SparqlExpression, isSomethingFunctions) {
       testIdOrStrings, Ids{F, F, F, F, F, F, F, T, T, F, F, F, F});
   testUnaryExpression<makeBoundExpression>(
       testIdOrStrings, Ids{T, T, T, T, T, T, T, T, T, T, T, T, F});
+
+  auto expression = makeBoundExpression(
+      std::make_unique<IdExpression>(ValueId::makeUndefined()));
+  EXPECT_TRUE(expression->isResultAlwaysDefined(testContext().varToColMap));
 }
 
 // ____________________________________________________________________________
@@ -1367,6 +1410,8 @@ TEST(SparqlExpression, geoSparqlExpressions) {
   auto checkCentroid = testUnaryExpression<&makeCentroidExpression>;
   auto checkDist = std::bind_front(testNaryExpression, &makeDistExpression);
   auto checkEnvelope = testUnaryExpression<&makeEnvelopeExpression>;
+  auto checkEnvelopeLL = testUnaryExpression<&makeEnvelopeLowerLeftExpression>;
+  auto checkEnvelopeUR = testUnaryExpression<&makeEnvelopeUpperRightExpression>;
   auto checkGeometryType = testUnaryExpression<&makeGeometryTypeExpression>;
 
   auto p = GeoPoint(26.8, 24.3);
@@ -1398,17 +1443,23 @@ TEST(SparqlExpression, geoSparqlExpressions) {
   checkDist(U, v, IdOrLiteralOrIri{lit("NotAPoint")});
   checkDist(U, IdOrLiteralOrIri{lit("NotAPoint")}, v);
 
-  auto polygonCentroid = ValueId::makeFromGeoPoint(GeoPoint(3, 3));
+  auto polygonCentroid = GP({3, 3});
   checkCentroid(IdOrLiteralOrIri{lit(
                     "\"POLYGON((2 4, 4 4, 4 2, 2 2))\"",
                     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")},
                 polygonCentroid);
 
   checkEnvelope(
-      IdOrLiteralOrIriVec{U, D(1.0), ValueId::makeFromGeoPoint({4, 2}),
+      IdOrLiteralOrIriVec{U, D(1.0), GP({4, 2}),
                           geoLit("LINESTRING(2 4, 8 8)")},
       IdOrLiteralOrIriVec{U, U, geoLit("POLYGON((2 4,2 4,2 4,2 4,2 4))"),
                           geoLit("POLYGON((2 4,8 4,8 8,2 8,2 4))")});
+  checkEnvelopeLL(IdOrLiteralOrIriVec{U, D(1.0), GP({4, 2}),
+                                      geoLit("LINESTRING(2 4, 8 8)")},
+                  Ids{U, U, GP({4, 2}), GP({4, 2})});
+  checkEnvelopeUR(IdOrLiteralOrIriVec{U, D(1.0), GP({4, 2}),
+                                      geoLit("LINESTRING(2 4, 8 8)")},
+                  Ids{U, U, GP({4, 2}), GP({8, 8})});
 
   auto sfGeoType = [](std::string_view type) {
     return lit(absl::StrCat("http://www.opengis.net/ont/sf#", type),
@@ -1980,6 +2031,7 @@ TEST(ExistsExpression, basicFunctionality) {
   EXPECT_THAT(exists.getCacheKey(context.varToColMap),
               HasSubstr("Uninitialized Exists"));
   context.varToColMap[var] = makeAlwaysDefinedColumn(437);
+  EXPECT_TRUE(exists.isResultAlwaysDefined(context.varToColMap));
   EXPECT_THAT(exists.evaluate(&context.context), VariantWith<Variable>(var));
   EXPECT_THAT(exists.getCacheKey(context.varToColMap),
               HasSubstr("ExistsExpression col# 437"));
