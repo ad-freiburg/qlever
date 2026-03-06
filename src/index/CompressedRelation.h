@@ -12,6 +12,7 @@
 
 #include <vector>
 
+#include "../util/compression/CompressionAlgorithm.h"
 #include "backports/algorithm.h"
 #include "backports/three_way_comparison.h"
 #include "backports/type_traits.h"
@@ -21,7 +22,6 @@
 #include "index/ScanSpecification.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"
-#include "util/CompressionAlgorithm.h"
 #include "util/File.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Serializer/SerializeArrayOrTuple.h"

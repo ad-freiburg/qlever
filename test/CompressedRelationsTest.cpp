@@ -9,11 +9,11 @@
 
 #include <gtest/gtest.h>
 
+#include "../src/util/compression/CompressionAlgorithm.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "index/CompressedRelation.h"
 #include "index/IndexImpl.h"
-#include "util/CompressionAlgorithm.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/Serializer/ByteBufferSerializer.h"

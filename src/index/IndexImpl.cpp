@@ -18,6 +18,7 @@
 #include <optional>
 #include <utility>
 
+#include "../util/compression/CompressionAlgorithm.h"
 #include "CompilationInfo.h"
 #include "backports/algorithm.h"
 #include "engine/AddCombinedRowToTable.h"
@@ -28,7 +29,6 @@
 #include "util/BatchedPipeline.h"
 #include "util/CachingMemoryResource.h"
 #include "util/CancellationHandle.h"
-#include "util/CompressionAlgorithm.h"
 #include "util/HashMap.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"

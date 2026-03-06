@@ -18,6 +18,7 @@
 #include <string>
 #include <vector>
 
+#include "../util/compression/CompressionAlgorithm.h"
 #include "backports/algorithm.h"
 #include "engine/Result.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
@@ -41,7 +42,6 @@
 #include "parser/RdfParser.h"
 #include "parser/TripleComponent.h"
 #include "util/BufferedVector.h"
-#include "util/CompressionAlgorithm.h"
 #include "util/File.h"
 #include "util/Forward.h"
 #include "util/MemorySize/MemorySize.h"

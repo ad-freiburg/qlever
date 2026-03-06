@@ -10,6 +10,7 @@
 
 #include "index/CompressedRelation.h"
 
+#include "../util/compression/CompressionAlgorithm.h"
 #include "engine/Engine.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "engine/idTable/IdTable.h"
@@ -18,7 +19,6 @@
 #include "index/CompressedRelationPermutationWriterImpl.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/LocatedTriples.h"
-#include "util/CompressionAlgorithm.h"
 #include "util/Iterators.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/OverloadCallOperator.h"

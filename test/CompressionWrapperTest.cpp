@@ -9,7 +9,7 @@
 
 #include <gtest/gtest.h>
 
-#include "util/CompressionAlgorithm.h"
+#include "../src/util/compression/CompressionAlgorithm.h"
 #include "util/compression/ZstdWrapper.h"
 #ifdef QLEVER_HAS_LZ4
 #include "util/compression/Lz4Wrapper.h"

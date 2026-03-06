@@ -11,13 +11,9 @@
 #define QLEVER_SRC_UTIL_COMPRESSIONALGORITHM_H
 
 #include "util/EnumWithStrings.h"
-#include "util/compression/Lz4Wrapper.h"
-#include "util/compression/ZstdWrapper.h"
+#include #include "util/cmpo " util / compression / ZstdWrapper.h "
 
 namespace ad_utility {
-namespace detail {
-enum struct CompressionAlgorithmEnum : uint8_t { Zstd = 0, Lz4 = 1 };
-}
 
 // Wrapper class for the supported decompression algorithms (Currently
 // `Zstandard` and `LZ4`) On the one hand, this class behaves like an enum with
@@ -27,9 +23,9 @@ enum struct CompressionAlgorithmEnum : uint8_t { Zstd = 0, Lz4 = 1 };
 // current enum value.
 class CompressionAlgorithm
     : public ad_utility::EnumWithStrings<CompressionAlgorithm,
-                                         detail::CompressionAlgorithmEnum> {
+                                         CompressionAlgorithmEnum> {
  public:
-  using Enum = detail::CompressionAlgorithmEnum;
+  using Enum = CompressionAlgorithmEnum;
 
   static const CompressionAlgorithm Zstd;
   static const CompressionAlgorithm Lz4;

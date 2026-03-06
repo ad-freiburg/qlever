@@ -12,6 +12,7 @@
 #include <utility>
 #include <vector>
 
+#include "../util/compression/CompressionAlgorithm.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "engine/NamedResultCacheSerializer.h"
@@ -22,7 +23,6 @@
 #include "index/InputFileSpecification.h"
 #include "libqlever/QleverTypes.h"
 #include "util/AllocatorWithLimit.h"
-#include "util/CompressionAlgorithm.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/http/MediaTypes.h"
 
