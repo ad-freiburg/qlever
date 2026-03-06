@@ -18,8 +18,10 @@
 #include "engine/MaterializedViews.h"
 #include "engine/MaterializedViewsQueryAnalysis.h"
 #include "engine/QueryExecutionContext.h"
+#include "engine/QueryExecutionTree.h"
 #include "engine/Server.h"
 #include "engine/SpatialJoinConfig.h"
+#include "engine/StripColumns.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
@@ -1067,6 +1069,45 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
                             SpatialJoinAlgorithm::LIBSPATIALJOIN,
                             SpatialJoinType::WITHIN_DIST, viewScanNoBind,
                             viewScanWithBind));
+  }
+
+  // A `BIND` is pushed down through a `StripColumns` operation.
+  {
+    auto [qet, qec, parsed] = qlv().parseAndPlanQuery(R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT * {
+        ?s view:bindView-o ?o .
+      }
+    )");
+
+    // `StripColumns` with a single column.
+    std::set<Variable> varsToKeep{V{"?o"}};
+    auto stripCols =
+        ad_utility::makeExecutionTree<StripColumns>(qec.get(), qet, varsToKeep);
+    EXPECT_EQ(stripCols->getResultWidth(), 1);
+
+    // The `2 * ?o + 1` expression.
+    auto bindExpr = sparqlExpression::makeAddExpression(
+        sparqlExpression::makeMultiplyExpression(
+            std::make_unique<sparqlExpression::IdExpression>(
+                ValueId::makeFromInt(2)),
+            std::make_unique<sparqlExpression::VariableExpression>(V{"?o"})),
+        std::make_unique<sparqlExpression::IdExpression>(
+            ValueId::makeFromInt(1)));
+    parsedQuery::Bind bind{sparqlExpression::SparqlExpressionPimpl{
+                               std::move(bindExpr), "2 * ?o + 1"},
+                           V{"?bind"}};
+
+    auto stripWithBind =
+        stripCols->getRootOperation()->makeTreeWithBindColumn(bind);
+    ASSERT_TRUE(stripWithBind.has_value());
+    EXPECT_THAT(*stripWithBind.value(),
+                h::RootOperation<StripColumns>(::testing::AllOf(
+                    // The new `StripColumns` now includes the `BIND` column and
+                    // therefore has two columns, while the old `StripColumns`
+                    // only had one.
+                    AD_PROPERTY(StripColumns, getResultWidth, ::testing::Eq(2)),
+                    h::children(bindView(AC{{3, V{"?bind"}}})))));
   }
 
   // Test the variable to permutation column index map.
