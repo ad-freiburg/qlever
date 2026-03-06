@@ -684,6 +684,20 @@ TEST(DateYearOrDuration, Hashing) {
 }
 
 // _____________________________________________________________________________
+TEST(DateYearOrDuration, isLongYear) {
+  DateYearOrDuration year =
+      DateYearOrDuration(12'000, DateYearOrDuration::Type::Year);
+  EXPECT_TRUE(year.isLongYear());
+  year = DateYearOrDuration(-10'000, DateYearOrDuration::Type::Year);
+  EXPECT_TRUE(year.isLongYear());
+
+  year = DateYearOrDuration(Date(9999, 1, 1));
+  EXPECT_FALSE(year.isLongYear());
+  year = DateYearOrDuration(Date(-9999, 1, 1));
+  EXPECT_FALSE(year.isLongYear());
+}
+
+// _____________________________________________________________________________
 #ifndef REDUCED_FEATURE_SET_FOR_CPP17
 TEST(DateYearOrDuration, Subtraction) {
   {
@@ -827,6 +841,14 @@ TEST(DateYearOrDuration, Subtraction) {
     testSubtraction(DateYearOrDuration(DayTimeDuration(
                         DayTimeDuration::Type::Positive, 1, 0, 0, 0)),
                     date1 - date2);
+  }
+  {
+    // Not supported subtraction.
+    DateYearOrDuration duration1 = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Negative, 0, 4, 0, 0));
+    DateYearOrDuration duration2 = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Negative, 20, 4, 0, 0));
+    EXPECT_FALSE(duration1 - duration2);
   }
 }
 #endif

@@ -311,5 +311,12 @@ TEST(NumericOrDateValueGetterTest, OperatorWithId) {
       Optional(VariantWith<sparqlExpression::detail::NotNumeric>(_));
   t.checkFromValueId(ValueId::makeUndefined(), isNotNumeric);
   t.checkFromValueId(ValueId::makeFromGeoPoint({3, 4}), isNotNumeric);
+
+  // LiteralOrIri
+  t.checkFromLocalAndNormalVocabAndLiteral("\"someType\"^^<someType>",
+                                           isNotNumeric);
+  t.checkFromLocalAndNormalVocabAndLiteral("\"noType\"", isNotNumeric);
+  t.checkFromLocalAndNormalVocabAndLiteral("<https://example.com/test>",
+                                           isNotNumeric);
 }
 };  // namespace

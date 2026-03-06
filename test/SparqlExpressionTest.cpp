@@ -512,6 +512,8 @@ TEST(SparqlExpression, arithmeticOperators) {
                    createDat("-P40239DT23H47M30S", false)},
                   alloc};
   testMinus(minus2000, dat, createDat("2000-01-01T00:00:00Z"));
+  V<Id> undefined{{U, U, U, U}, alloc};
+  testMinus(undefined, dat, createDat("2013-02-30T00:00:00Z"));
 #else
   V<Id> undefined{{U, U, U, U}, alloc};
   testMinus(undefined, dat, createDat("2000-01-01T00:00:00Z"));
