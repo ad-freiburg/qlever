@@ -1071,6 +1071,18 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
                             viewScanWithBind));
   }
 
+  // The `2 * ?o + 1` expression.
+  auto bindExpr = sparqlExpression::makeAddExpression(
+      sparqlExpression::makeMultiplyExpression(
+          std::make_unique<sparqlExpression::IdExpression>(
+              ValueId::makeFromInt(2)),
+          std::make_unique<sparqlExpression::VariableExpression>(V{"?o"})),
+      std::make_unique<sparqlExpression::IdExpression>(
+          ValueId::makeFromInt(1)));
+  const parsedQuery::Bind bind{sparqlExpression::SparqlExpressionPimpl{
+                                   std::move(bindExpr), "2 * ?o + 1"},
+                               V{"?bind"}};
+
   // A `BIND` is pushed down through a `StripColumns` operation.
   {
     auto [qet, qec, parsed] = qlv().parseAndPlanQuery(R"(
@@ -1085,18 +1097,6 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
     auto stripCols =
         ad_utility::makeExecutionTree<StripColumns>(qec.get(), qet, varsToKeep);
     EXPECT_EQ(stripCols->getResultWidth(), 1);
-
-    // The `2 * ?o + 1` expression.
-    auto bindExpr = sparqlExpression::makeAddExpression(
-        sparqlExpression::makeMultiplyExpression(
-            std::make_unique<sparqlExpression::IdExpression>(
-                ValueId::makeFromInt(2)),
-            std::make_unique<sparqlExpression::VariableExpression>(V{"?o"})),
-        std::make_unique<sparqlExpression::IdExpression>(
-            ValueId::makeFromInt(1)));
-    parsedQuery::Bind bind{sparqlExpression::SparqlExpressionPimpl{
-                               std::move(bindExpr), "2 * ?o + 1"},
-                           V{"?bind"}};
 
     auto stripWithBind =
         stripCols->getRootOperation()->makeTreeWithBindColumn(bind);
