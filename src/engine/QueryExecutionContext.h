@@ -100,6 +100,7 @@ class MaterializedViewsManager;
 // Holds references to index and engine, implements caching.
 class QueryExecutionContext {
  public:
+  enum struct DisableCaching { True, False, FromRuntimeParameter };
   QueryExecutionContext(
       const Index& index, QueryResultCache* const cache,
       ad_utility::AllocatorWithLimit<Id> allocator,
@@ -109,7 +110,7 @@ class QueryExecutionContext {
       std::function<void(std::string)> updateCallback =
           [](std::string) { /* No-op by default for testing */ },
       bool pinSubtrees = false, bool pinResult = false,
-      bool disableCaching = false);
+      DisableCaching = DisableCaching::FromRuntimeParameter);
 
   QueryResultCache& getQueryTreeCache() { return *_subtreeCache; }
 

@@ -7,6 +7,7 @@
 #include <gmock/gmock.h>
 
 #include "../util/GTestHelpers.h"
+#include "../util/RuntimeParametersTestHelpers.h"
 #include "libqlever/Qlever.h"
 
 using namespace qlever;
@@ -248,7 +249,7 @@ TEST(LibQlever, disableCaching) {
   EngineConfig ec{c};
   {
     // Load the index with `disableCaching` set to true.
-    ec.disableCaching_ = true;
+    ec.disableCaching_ = QueryExecutionContext::DisableCaching::True;
     Qlever engine{ec};
     auto plan = engine.parseAndPlanQuery("SELECT ?s WHERE {?x <p> ?o}");
     auto& qec = std::get<1>(plan);
@@ -256,10 +257,34 @@ TEST(LibQlever, disableCaching) {
   }
   {
     // Load the index with `disableCaching` set to false.
-    ec.disableCaching_ = false;
+    ec.disableCaching_ = QueryExecutionContext::DisableCaching::False;
     Qlever engine{ec};
-    auto plan = engine.parseAndPlanQuery("SELECT ?s WHERE {?x <p> ?o}");
-    auto& qec = std::get<1>(plan);
-    EXPECT_FALSE(qec->disableCaching());
+    {
+      auto plan = engine.parseAndPlanQuery("SELECT ?s WHERE {?x <p> ?o}");
+      auto& qec = std::get<1>(plan);
+      EXPECT_FALSE(qec->disableCaching());
+    }
+  }
+
+  {
+    // Load the index with `disableCaching` set to `FromRuntimeParameter`
+    // (default value)..
+    ec.disableCaching_ =
+        QueryExecutionContext::DisableCaching::FromRuntimeParameter;
+    Qlever engine{ec};
+    {
+      auto plan = engine.parseAndPlanQuery("SELECT ?s WHERE {?x <p> ?o}");
+      auto& qec = std::get<1>(plan);
+      EXPECT_FALSE(qec->disableCaching());
+    }
+    // Now after the fact disable the caching for new operations via the runtime
+    // parameters:
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::disableCaching_>(true);
+    {
+      auto plan = engine.parseAndPlanQuery("SELECT ?s WHERE {?x <p> ?o}");
+      auto& qec = std::get<1>(plan);
+      EXPECT_TRUE(qec->disableCaching());
+    }
   }
 }

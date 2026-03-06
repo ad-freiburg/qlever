@@ -181,8 +181,10 @@ struct EngineConfig : CommonConfig {
   // IRIs that do not start with any of the given prefixes are rejected.
   std::vector<std::string> serviceAllowedIriPrefixes_;
 
-  // If set to true, caching is disabled for all operations.
-  bool disableCaching_ = false;
+  // If set to true, caching is disabled for all operations. Default is
+  // to for each operation query the corresponding runtime parameter.
+  QueryExecutionContext::DisableCaching disableCaching_ =
+      QueryExecutionContext::DisableCaching::FromRuntimeParameter;
 };
 
 // Class to use QLever as an embedded database, without the HTTP server. See
@@ -197,7 +199,7 @@ class Qlever {
   mutable NamedResultCache namedResultCache_;
   mutable MaterializedViewsManager materializedViewsManager_;
   bool enablePatternTrick_;
-  bool disableCaching_;
+  QueryExecutionContext::DisableCaching disableCaching_;
 
  public:
   // Build an index, using an `IndexBuilderConfig` as explained above.

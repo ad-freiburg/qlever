@@ -701,7 +701,8 @@ void Operation::signalQueryUpdate(
 
 // _____________________________________________________________________________
 std::string Operation::getCacheKey() const {
-  if (_executionContext && _executionContext->disableCaching()) {
+  AD_CORRECTNESS_CHECK(_executionContext);
+  if (_executionContext->disableCaching()) {
     // Cache key computation is costly, so we can save it when caching is
     // disabled.
     return "";
