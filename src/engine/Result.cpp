@@ -12,6 +12,7 @@
 #include "backports/shift.h"
 #include "util/CancellationHandle.h"
 #include "util/Exception.h"
+#include "util/ExceptionHandling.h"
 #include "util/Generators.h"
 #include "util/InputRangeUtils.h"
 #include "util/Log.h"
@@ -283,8 +284,9 @@ void Result::runOnNewChunkComputed(
 
   // The main lambda that when being called processes the next chunk.
   auto get = [inputAsGet = std::move(inputAsGet), sharedFinish,
-              cleanup = absl::Cleanup{[&finish = *sharedFinish]() {
-                finish(GeneratorState::FINISHED);
+              cleanup = absl::Cleanup{[&finish = *sharedFinish]() noexcept {
+                ad_utility::ignoreExceptionIfThrows(
+                    [&finish]() { finish(GeneratorState::FINISHED); });
               }},
               onNewChunk = std::move(
                   onNewChunk)]() mutable -> std::optional<IdTableVocabPair> {
