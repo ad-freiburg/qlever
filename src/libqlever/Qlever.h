@@ -95,7 +95,7 @@ struct IndexBuilderConfig : CommonConfig {
   // Specify how Qlever stores its mapping from IRIs and literals to internal
   // IDs. See `src/index/vocabulary/VocabularyType.h` for the possible options.
   ad_utility::VocabularyType vocabType_{
-      ad_utility::VocabularyType::Enum::OnDiskCompressed};
+      ad_utility::VocabularyType::OnDiskCompressed};
 
   // If set to true, then certain temporary files which are created while
   // building the index are not deleted. This can be useful for debugging.

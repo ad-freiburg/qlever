@@ -27,70 +27,90 @@ namespace ad_utility {
 // conversion, JSON serialization, and related utilities.
 //
 // Derived classes must provide:
-// - `enum struct Enum { ... };`
-// - `static constexpr size_t numValues_`
-// - `static constexpr std::array<Enum, numValues_> all_`
-// - `static constexpr std::array<std::string_view, numValues_> descriptions_`
+// - `static constexpr std::array<std::pair<Enum, std::string_view>, numValues>
+// descriptions_`;
+//   Note: `descriptions[i][0] == Enum{i}` must always hold. this is technically
+//   redundant, but improves the safety, as we can detect invalid usages.
 // - `static constexpr std::string_view typeName()` (for error messages)
 // - `using EnumWithStrings::EnumWithStrings;` (to inherit constructors)
-// Derived classes must define `enum struct Enum` as a public member before
-// inheriting from this base.  Because CRTP instantiates the base class before
-// the derived class body is complete, we cannot resolve `Derived::Enum` inside
-// the class definition.  Instead every method that needs the enum type uses
-// `typename Derived::Enum` only in deferred (non-eagerly-instantiated) context.
-template <typename Derived>
-class EnumWithStrings {
+// - using enum Enum (not required, but makes conversion easier).
+
+//  Note: for convenient definition of constants, in the derived classes you can
+//  either put in a
+// `using enum` statement, or manually define static constants of the derived
+// type. The latter have the advantage, that you directly get constants of the
+// derived type, and not of the underlying enum. For example usages, see
+// `CompressionAlgorithm.h`  and `VocabularyType.h`.
+CPP_template(typename Derived, typename Enum)(
+    requires std::is_enum_v<Enum>) class EnumWithStrings {
  protected:
-  // We store the value as the underlying integer type so that the base class
-  // does not depend on `Derived::Enum` during class-template instantiation.
-  // The concrete enum type is only resolved when member functions are called.
-  int value_{};
+  Enum value_{};
 
  public:
-  // Constructors.
-  EnumWithStrings() = default;
-  // The constructor is a template so that `Derived::Enum` is not resolved
-  // during base class instantiation (when `Derived` is still incomplete).
-  // The `requires` clause prevents this from matching non-enum types (e.g.
-  // `nlohmann::json`), which would break JSON deserialization.
-  template <typename E>
-  requires std::is_enum_v<E>
-  explicit EnumWithStrings(E value) : value_{static_cast<int>(value)} {}
+  constexpr static bool checkIndices() {
+    for (size_t i = 0; i < Derived::descriptions_.size(); ++i) {
+      if (static_cast<size_t>(Derived::descriptions_[i].first) != i) {
+        return false;
+      }
+    }
+    return true;
+  }
 
-  // Return the actual enum value.  Using `auto` defers the return type
-  // deduction to the point of use.
-  auto value() const { return static_cast<typename Derived::Enum>(value_); }
+  // Check properties of the enum type.
+  constexpr static void check() {
+    using D = decltype(Derived::descriptions_);
+    static_assert(ql::ranges::random_access_range<D>);
+    static_assert(ql::concepts::same_as<ql::ranges::range_value_t<D>,
+                                        std::pair<Enum, std::string_view>>);
+    static_assert(checkIndices());
+  }
+
+  // Constructors.
+  EnumWithStrings() noexcept { check(); };
+  // Deliberately implicit, s.t. we can directly construct from the underlying
+  // enum.
+  explicit(false) EnumWithStrings(Enum value) : value_{value} { check(); }
+  explicit(false) operator Enum() const { return value_; }
+
+  // Access to the underlying enum, e.g. for switch-case statements.
+  constexpr Enum value() const { return value_; }
 
   // Return all the possible enum values.
-  static constexpr const auto& all() { return Derived::all_; }
+  static constexpr auto all() {
+    return Derived::descriptions_ | ql::views::keys;
+  }
+  static constexpr auto descriptions() {
+    return Derived::descriptions_ | ql::views::values;
+  }
+  static constexpr size_t numValues() { return Derived::descriptions_.size(); }
 
   // Convert the enum to the corresponding string.
-  std::string_view toString() const {
-    return Derived::descriptions_.at(static_cast<size_t>(value_));
+  constexpr std::string_view toString() const {
+    return descriptions()[static_cast<size_t>(value_)];
   }
 
   // Create from a string. Throws if the string doesn't match any description.
   static Derived fromString(std::string_view description) {
-    auto it = ql::ranges::find(Derived::descriptions_, description);
-    if (it == Derived::descriptions_.end()) {
+    auto descs = descriptions();
+    auto it = ql::ranges::find(descs, description);
+    if (it == descs.end()) {
       throw std::runtime_error{absl::StrCat(
           "\"", description, "\" is not a valid ", Derived::typeName(),
           ". The currently supported values are ", getListOfSupportedValues())};
     }
-    return Derived{Derived::all_.at(
-        static_cast<size_t>(it - Derived::descriptions_.begin()))};
+    return std::get<0>(
+        Derived::descriptions_.at(static_cast<size_t>(it - descs.begin())));
   }
 
   // Return all the possible enum values as a comma-separated single string.
   static std::string getListOfSupportedValues() {
-    return absl::StrJoin(Derived::descriptions_, ", ");
+    return absl::StrJoin(descriptions(), ", ");
   }
 
   // Get a random value, useful for fuzz testing.
   static Derived random() {
-    static thread_local ad_utility::FastRandomIntGenerator<size_t> r;
-    return Derived{
-        static_cast<typename Derived::Enum>(r() % Derived::numValues_)};
+    thread_local ad_utility::FastRandomIntGenerator<size_t> r;
+    return all()[r() % numValues()];
   }
 
   // JSON serialization.
@@ -100,7 +120,16 @@ class EnumWithStrings {
     e = Derived::fromString(static_cast<std::string>(j));
   }
 
-  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(EnumWithStrings, value_)
+  // Hashing
+  CPP_template_2(typename H, typename D)(
+      requires ql::concepts::same_as<D, Derived>) friend H
+      AbslHashValue(H h, const D& derived) {
+    return H::combine(std::move(h), static_cast<Enum>(derived));
+  }
+
+  // Note: We don't need to and also cannot define an equality operator but
+  // equality and other comparisons are handled by the implicit conversion to
+  // the underlying enum.
 };
 
 }  // namespace ad_utility

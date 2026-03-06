@@ -12,17 +12,22 @@
 
 #include "util/EnumWithStrings.h"
 
+namespace detail {
+enum struct CompressionAlgorithmEnum : uint8_t { Zstd = 0, Lz4 = 1 };
+}
 // Wrapper class for the compression algorithm used for permutation data.
 // Inherits string conversion, JSON serialization, etc. from `EnumWithStrings`.
 class CompressionAlgorithm
-    : public ad_utility::EnumWithStrings<CompressionAlgorithm> {
+    : public ad_utility::EnumWithStrings<CompressionAlgorithm,
+                                         detail::CompressionAlgorithmEnum> {
  public:
-  enum struct Enum : uint8_t { Zstd = 0, Lz4 = 1 };
+  using Enum = detail::CompressionAlgorithmEnum;
 
-  static constexpr size_t numValues_ = 2;
-  static constexpr std::array<Enum, numValues_> all_{Enum::Zstd, Enum::Lz4};
-  static constexpr std::array<std::string_view, numValues_> descriptions_{
-      "zstd", "lz4"};
+  static const CompressionAlgorithm Zstd;
+  static const CompressionAlgorithm Lz4;
+
+  static constexpr std::array<std::pair<Enum, std::string_view>, 2>
+      descriptions_{{{Enum::Zstd, "zstd"}, {Enum::Lz4, "lz4"}}};
 
   static constexpr std::string_view typeName() {
     return "compression algorithm";
@@ -30,5 +35,10 @@ class CompressionAlgorithm
 
   using EnumWithStrings::EnumWithStrings;
 };
+
+inline const CompressionAlgorithm CompressionAlgorithm::Zstd{
+    detail::CompressionAlgorithmEnum::Zstd};
+inline const CompressionAlgorithm CompressionAlgorithm::Lz4{
+    detail::CompressionAlgorithmEnum::Lz4};
 
 #endif  // QLEVER_SRC_UTIL_COMPRESSIONALGORITHM_H

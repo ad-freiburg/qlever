@@ -17,31 +17,50 @@ namespace ad_utility {
 // A lightweight enum for the different implementation strategies of the
 // `PolymorphicVocabulary`. Also includes operations for conversion to and from
 // string.
-class VocabularyType : public EnumWithStrings<VocabularyType> {
+namespace detail {
+enum struct VocabularyTypeEnum {
+  InMemoryUncompressed,
+  OnDiskUncompressed,
+  InMemoryCompressed,
+  OnDiskCompressed,
+  OnDiskCompressedGeoSplit
+};
+
+}
+class VocabularyType
+    : public EnumWithStrings<VocabularyType, detail::VocabularyTypeEnum> {
  public:
   // The different vocabulary implementations.
-  enum struct Enum {
-    InMemoryUncompressed,
-    OnDiskUncompressed,
-    InMemoryCompressed,
-    OnDiskCompressed,
-    OnDiskCompressedGeoSplit
-  };
+  using Enum = detail::VocabularyTypeEnum;
 
-  static constexpr size_t numValues_ = 5;
-  static constexpr std::array<Enum, numValues_> all_{
-      Enum::InMemoryUncompressed, Enum::OnDiskUncompressed,
-      Enum::InMemoryCompressed, Enum::OnDiskCompressed,
-      Enum::OnDiskCompressedGeoSplit};
-
-  static constexpr std::array<std::string_view, numValues_> descriptions_{
-      "in-memory-uncompressed", "on-disk-uncompressed", "in-memory-compressed",
-      "on-disk-compressed", "on-disk-compressed-geo-split"};
+  static constexpr std::array<std::pair<Enum, std::string_view>, 5>
+      descriptions_{
+          {{Enum::InMemoryUncompressed, "in-memory-uncompressed"},
+           {Enum::OnDiskUncompressed, "on-disk-uncompressed"},
+           {Enum::InMemoryCompressed, "in-memory-compressed"},
+           {Enum::OnDiskCompressed, "on-disk-compressed"},
+           {Enum::OnDiskCompressedGeoSplit, "on-disk-compressed-geo-split"}}};
+  static const VocabularyType InMemoryUncompressed;
+  static const VocabularyType OnDiskUncompressed;
+  static const VocabularyType InMemoryCompressed;
+  static const VocabularyType OnDiskCompressed;
+  static const VocabularyType OnDiskCompressedGeoSplit;
 
   static constexpr std::string_view typeName() { return "vocabulary type"; }
 
   using EnumWithStrings::EnumWithStrings;
 };
+
+const inline VocabularyType VocabularyType::InMemoryUncompressed{
+    VocabularyType::Enum::InMemoryUncompressed};
+const inline VocabularyType VocabularyType::OnDiskUncompressed{
+    VocabularyType::Enum::OnDiskUncompressed};
+const inline VocabularyType VocabularyType::InMemoryCompressed{
+    VocabularyType::Enum::InMemoryCompressed};
+const inline VocabularyType VocabularyType::OnDiskCompressed{
+    VocabularyType::Enum::OnDiskCompressed};
+const inline VocabularyType VocabularyType::OnDiskCompressedGeoSplit{
+    VocabularyType::Enum::OnDiskCompressedGeoSplit};
 }  // namespace ad_utility
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYTYPE_H
