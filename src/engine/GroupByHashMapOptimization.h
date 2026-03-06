@@ -9,7 +9,6 @@
 #define QLEVER_SRC_ENGINE_GROUPBYHASHMAPOPTIMIZATION_H
 
 #include "engine/sparqlExpressions/AggregateExpression.h"
-#include "engine/sparqlExpressions/GroupConcatHelper.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 
@@ -144,7 +143,6 @@ struct GroupConcatAggregationData {
   bool first_ = true;
   std::string currentValue_;
   std::string_view separator_;
-  std::optional<std::string> langTag_;
 
   // _____________________________________________________________________________
   template <typename T>
