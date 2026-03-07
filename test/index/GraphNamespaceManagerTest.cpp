@@ -46,7 +46,7 @@ TEST(GraphNamespaceManager, storeAndRestoreData) {
     auto nsm = GraphNamespaceManager();
     nsm.setFilenameForPersistentUpdatesAndReadFromDisk(tmpFile.c_str());
     EXPECT_THAT(nsm.prefixWithoutBraces_,
-                testing::StrEq("<http://example.org/g/"));
+                testing::StrEq("http://example.org/g/"));
     EXPECT_EQ(*nsm.allocatedGraphs_.rlock(), 13);
   }
 }
