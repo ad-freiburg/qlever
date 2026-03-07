@@ -7,18 +7,15 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
+#include <absl/cleanup/cleanup.h>
 #include <gtest/gtest.h>
 
 #include "../util/GTestHelpers.h"
-#include "index/GraphManager.h"
-
-// ============================================================================
-// GraphNamespaceManager tests
-// ============================================================================
+#include "index/GraphNamespaceManager.h"
 
 TEST(GraphNamespaceManager, allocateNewGraph) {
   {
-    GraphNamespaceManager nsm("<http://example.org/g/", 0);
+    GraphNamespaceManager nsm("http://example.org/g/", 0);
 
     EXPECT_EQ(nsm.allocateNewGraph().toStringRepresentation(),
               "<http://example.org/g/0>");
@@ -28,32 +25,34 @@ TEST(GraphNamespaceManager, allocateNewGraph) {
               "<http://example.org/g/2>");
   }
   {
-    GraphNamespaceManager nsm("<http://example.org/g/", 12);
+    GraphNamespaceManager nsm("http://example.org/g/", 12);
     EXPECT_EQ(nsm.allocateNewGraph().toStringRepresentation(),
               "<http://example.org/g/12>");
   }
 }
 TEST(GraphNamespaceManager, storeAndRestoreData) {
-  auto tmpFile = std::filesystem::temp_directory_path() / "testDeltaTriples";
+  auto tmpFile =
+      std::filesystem::temp_directory_path() / "testGraphNamespaceManager";
   // Make sure no file like this exists
   std::filesystem::remove(tmpFile);
   absl::Cleanup cleanup{[&tmpFile]() { std::filesystem::remove(tmpFile); }};
 
   {
-    auto nsm = GraphNamespaceManager("<http://example.org/g/", 13);
+    auto nsm = GraphNamespaceManager("http://example.org/g/", 13);
     nsm.setFilenameForPersistentUpdatesAndReadFromDisk(tmpFile.c_str());
     nsm.writeToDisk();
   }
   {
     auto nsm = GraphNamespaceManager();
     nsm.setFilenameForPersistentUpdatesAndReadFromDisk(tmpFile.c_str());
-    EXPECT_THAT(nsm.prefix_, testing::StrEq("<http://example.org/g/"));
-    EXPECT_EQ(nsm.allocatedGraphs_.load(), 13);
+    EXPECT_THAT(nsm.prefixWithoutBraces_,
+                testing::StrEq("<http://example.org/g/"));
+    EXPECT_EQ(*nsm.allocatedGraphs_.rlock(), 13);
   }
 }
 
 TEST(GraphNamespaceManager, json) {
-  GraphNamespaceManager original("<http://example.org/ns/", 42);
+  GraphNamespaceManager original("http://example.org/ns/", 42);
 
   nlohmann::json j;
   to_json(j, original);

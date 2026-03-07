@@ -115,8 +115,7 @@ namespace string_constants::detail {
 constexpr inline std::string_view new_graph_prefix = "graphs/";
 }  // namespace string_constants::detail
 constexpr inline std::string_view QLEVER_NEW_GRAPH_PREFIX =
-    ad_utility::constexprStrCat<string_constants::detail::openAngle,
-                                QLEVER_INTERNAL_PREFIX_URL,
+    ad_utility::constexprStrCat<QLEVER_INTERNAL_PREFIX_URL,
                                 string_constants::detail::new_graph_prefix>();
 
 // The prefix of the SERVICE IRI used for a cached result with a name. Use as

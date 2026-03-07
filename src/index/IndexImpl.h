@@ -25,6 +25,7 @@
 #include "index/DocsDB.h"
 #include "index/EncodedIriManager.h"
 #include "index/ExternalSortFunctors.h"
+#include "index/GraphNamespaceManager.h"
 #include "index/Index.h"
 #include "index/IndexBuilderTypes.h"
 #include "index/IndexMetaData.h"
@@ -123,7 +124,7 @@ class IndexImpl {
   Index::Vocab vocab_;
   Index::TextVocab textVocab_;
   EncodedIriManager encodedIriManager_ =
-      EncodedIriManager({absl::StrCat(QLEVER_INTERNAL_PREFIX_URL, "graphs/")});
+      EncodedIriManager({std::string(QLEVER_NEW_GRAPH_PREFIX)});
   ScoreData scoreData_;
 
   TextMetaData textMeta_;
@@ -208,6 +209,8 @@ class IndexImpl {
 
   std::optional<DeltaTriplesManager> deltaTriples_;
 
+  GraphNamespaceManager graphNamespaceManager_ = GraphNamespaceManager();
+
  public:
   explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator,
                      bool registerSingleton = true);
@@ -280,6 +283,13 @@ class IndexImpl {
   DeltaTriplesManager& deltaTriplesManager() { return deltaTriples_.value(); }
   const DeltaTriplesManager& deltaTriplesManager() const {
     return deltaTriples_.value();
+  }
+
+  GraphNamespaceManager& graphNamespaceManager() {
+    return graphNamespaceManager_;
+  }
+  const GraphNamespaceManager& graphNamespaceManager() const {
+    return graphNamespaceManager_;
   }
 
   const auto& encodedIriManager() const { return encodedIriManager_; }

@@ -10,14 +10,18 @@
 #ifndef QLEVER_SRC_INDEX_GRAPHMANAGER_H
 #define QLEVER_SRC_INDEX_GRAPHMANAGER_H
 
-#include "index/Index.h"
+#include "global/Constants.h"
+#include "gtest/gtest_prod.h"
+#include "rdfTypes/Iri.h"
+#include "util/Synchronized.h"
 #include "util/json.h"
 
 // Manages the allocated (but not necessarily used or existing) graphs from a
 // graph namespace (defined by having the same prefix in the IRI).
 class GraphNamespaceManager {
-  std::string prefix_ = std::string(QLEVER_INTERNAL_GRAPH_IRI);
-  std::atomic<uint64_t> allocatedGraphs_ = std::atomic(0ul);
+  std::string prefixWithoutBraces_ = std::string(QLEVER_NEW_GRAPH_PREFIX);
+  ad_utility::Synchronized<uint64_t> allocatedGraphs_ =
+      ad_utility::Synchronized<uint64_t>(0ul);
   std::optional<std::string> fileNameForPersisting_;
 
   FRIEND_TEST(GraphNamespaceManager, storeAndRestoreData);
@@ -25,14 +29,6 @@ class GraphNamespaceManager {
  public:
   GraphNamespaceManager() = default;
   GraphNamespaceManager(std::string prefix, uint64_t allocatedGraphs);
-  // TODO: ...
-  GraphNamespaceManager& operator=(GraphNamespaceManager&& other) noexcept {
-    prefix_ = std::move(other.prefix_);
-    allocatedGraphs_ = other.allocatedGraphs_.load();
-    return *this;
-  }
-  GraphNamespaceManager(const GraphNamespaceManager& other)
-      : GraphNamespaceManager(other.prefix_, other.allocatedGraphs_.load()) {}
 
   ad_utility::triple_component::Iri allocateNewGraph();
 
@@ -50,8 +46,7 @@ class GraphNamespaceManager {
   void writeToDisk() const;
 
  private:
-  void setPersists(std::optional<std::string> filename);
   void readFromDisk();
 };
 
-#endif  // QLEVER_GRAPHMANAGER_H
+#endif  // QLEVER_SRC_INDEX_GRAPHMANAGER_H

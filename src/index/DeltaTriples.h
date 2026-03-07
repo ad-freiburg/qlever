@@ -15,7 +15,6 @@
 #include "backports/three_way_comparison.h"
 #include "engine/LocalVocab.h"
 #include "global/IdTriple.h"
-#include "index/GraphManager.h"
 #include "index/Index.h"
 #include "index/IndexBuilderTypes.h"
 #include "index/LocatedTriples.h"
@@ -367,7 +366,6 @@ class DeltaTriplesManager {
       currentLocatedTriplesSharedState_;
 
  public:
-  GraphNamespaceManager graphNamespaceManager_;
   using CancellationHandle = DeltaTriples::CancellationHandle;
   using Triples = DeltaTriples::Triples;
 

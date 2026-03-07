@@ -466,11 +466,10 @@ ReturnType DeltaTriplesManager::modify(
           });
     };
     auto writeAndUpdateSnapshot = [&updateSnapshot, &deltaTriples, &tracer,
-                                   writeToDiskAfterRequest, this]() {
+                                   writeToDiskAfterRequest]() {
       if (writeToDiskAfterRequest) {
         tracer.beginTrace("diskWriteback");
         deltaTriples.writeToDisk();
-        graphNamespaceManager_.writeToDisk();
         tracer.endTrace("diskWriteback");
       }
       tracer.beginTrace("snapshotCreation");

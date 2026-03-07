@@ -1071,9 +1071,8 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
   if (persistUpdatesOnDisk) {
     deltaTriples_.value().setFilenameForPersistentUpdatesAndReadFromDisk(
         onDiskBase + ".update-triples");
-    deltaTriples_->graphNamespaceManager_
-        .setFilenameForPersistentUpdatesAndReadFromDisk(
-            onDiskBase + ".graph-namespace-manager");
+    graphNamespaceManager_.setFilenameForPersistentUpdatesAndReadFromDisk(
+        onDiskBase + ".allocated-graphs-state");
   }
 }
 
@@ -1310,7 +1309,7 @@ void IndexImpl::readConfiguration() {
   loadDataMember("encoded-iri-prefixes", encodedIriManager_,
                  EncodedIriManager{});
   loadDataMember(
-      "graphNamespaceManager", deltaTriples_->graphNamespaceManager_,
+      "graphNamespaceManager", graphNamespaceManager_,
       GraphNamespaceManager(std::string(QLEVER_NEW_GRAPH_PREFIX), 0));
 
   // Compute unique ID for this index.
@@ -1787,8 +1786,8 @@ CPP_template_def(typename... NextSorter)(requires(
   size_t numTriples = 0;
   auto countTriples = [&numTriples](const auto&) mutable { ++numTriples; };
   uint64_t nextAvailableIndex = 0;
-  auto it =
-      ql::ranges::find(encodedIriManager_.prefixes_, QLEVER_NEW_GRAPH_PREFIX);
+  auto it = ql::ranges::find(encodedIriManager_.prefixes_,
+                             absl::StrCat("<", QLEVER_NEW_GRAPH_PREFIX));
   AD_CORRECTNESS_CHECK(it != encodedIriManager_.prefixes_.end());
   auto newGraphPrefixId =
       static_cast<size_t>(it - encodedIriManager_.prefixes_.begin());
@@ -1813,10 +1812,9 @@ CPP_template_def(typename... NextSorter)(requires(
       NumNormalAndInternal::fromNormal(numPredicates);
   configurationJson_["num-triples"] =
       NumNormalAndInternal::fromNormal(numTriples);
-  deltaTriples_->graphNamespaceManager_ = GraphNamespaceManager(
+  graphNamespaceManager_ = GraphNamespaceManager(
       std::string(QLEVER_NEW_GRAPH_PREFIX), nextAvailableIndex);
-  configurationJson_["graphNamespaceManager"] =
-      deltaTriples_->graphNamespaceManager_;
+  configurationJson_["graphNamespaceManager"] = graphNamespaceManager_;
   if (doWriteConfiguration) {
     writeConfiguration();
   }
@@ -1929,8 +1927,7 @@ ad_utility::BlankNodeManager* IndexImpl::getBlankNodeManager() const {
 // _____________________________________________________________________________
 void IndexImpl::setPrefixesForEncodedValues(
     std::vector<std::string> prefixesWithoutAngleBrackets) {
-  prefixesWithoutAngleBrackets.push_back(
-      absl::StrCat(QLEVER_INTERNAL_PREFIX_URL, "graphs/"));
+  prefixesWithoutAngleBrackets.push_back(std::string(QLEVER_NEW_GRAPH_PREFIX));
   encodedIriManager_ =
       EncodedIriManager{std::move(prefixesWithoutAngleBrackets)};
 }
