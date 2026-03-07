@@ -38,9 +38,10 @@ TEST(GraphNamespaceManager, storeAndRestoreData) {
   absl::Cleanup cleanup{[&tmpFile]() { std::filesystem::remove(tmpFile); }};
 
   {
-    auto nsm = GraphNamespaceManager("http://example.org/g/", 13);
+    auto allocatedGraphs = 13;
+    auto nsm = GraphNamespaceManager("http://example.org/g/", allocatedGraphs);
     nsm.setFilenameForPersistentUpdatesAndReadFromDisk(tmpFile.c_str());
-    nsm.writeToDisk();
+    nsm.writeToDisk(allocatedGraphs);
   }
   {
     auto nsm = GraphNamespaceManager();

@@ -22,7 +22,7 @@ GraphNamespaceManager::GraphNamespaceManager(std::string prefixWithoutBraces,
 ad_utility::triple_component::Iri GraphNamespaceManager::allocateNewGraph() {
   auto graphId = allocatedGraphs_.withWriteLock([this](auto& allocatedGraphs) {
     auto graphId = allocatedGraphs++;
-    writeToDisk();
+    writeToDisk(allocatedGraphs);
     return graphId;
   });
   return ad_utility::triple_component::Iri::fromIriref(
@@ -37,13 +37,13 @@ void GraphNamespaceManager::setFilenameForPersistentUpdatesAndReadFromDisk(
 }
 
 // _____________________________________________________________________________
-void GraphNamespaceManager::writeToDisk() const {
+void GraphNamespaceManager::writeToDisk(uint64_t allocatedGraphs) const {
   // TODO: compress the serialization
   if (fileNameForPersisting_) {
     ad_utility::serialization::FileWriteSerializer serializer{
         fileNameForPersisting_.value()};
     serializer << prefixWithoutBraces_;
-    serializer << *allocatedGraphs_.rlock();
+    serializer << allocatedGraphs;
   }
 }
 

@@ -7,8 +7,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_INDEX_GRAPHMANAGER_H
-#define QLEVER_SRC_INDEX_GRAPHMANAGER_H
+#ifndef QLEVER_SRC_INDEX_GRAPHNAMESPACEMANAGER_H
+#define QLEVER_SRC_INDEX_GRAPHNAMESPACEMANAGER_H
 
 #include "global/Constants.h"
 #include "gtest/gtest_prod.h"
@@ -43,10 +43,9 @@ class GraphNamespaceManager {
   friend std::ostream& operator<<(
       std::ostream& os, const GraphNamespaceManager& namespaceManager);
 
-  void writeToDisk() const;
-
  private:
+  void writeToDisk(uint64_t allocatedGraphs) const;
   void readFromDisk();
 };
 
-#endif  // QLEVER_SRC_INDEX_GRAPHMANAGER_H
+#endif  // QLEVER_SRC_INDEX_GRAPHNAMESPACEMANAGER_H
