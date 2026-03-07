@@ -2204,15 +2204,15 @@ TEST(ExportQueryExecutionTrees, GetLiteralOrIriFromVocabIndexWithEncodedIris) {
   // Create an EncodedIriManager with test prefixes
   std::vector<std::string> prefixes = {"http://example.org/",
                                        "http://test.com/"};
-  EncodedIriManager encodedIriManager{prefixes};
 
   // Create a test index config with the encoded IRI manager
   using namespace ad_utility::testing;
   TestIndexConfig config;
-  config.encodedIriManager = encodedIriManager;
+  config.encodedIriManager = EncodedIriManager(prefixes);
   auto qec = getQec(std::move(config));
 
   // Test driver lambda to reduce code duplication
+  const auto& encodedIriManager = qec->getIndex().encodedIriManager();
   LocalVocab emptyLocalVocab;
   auto testEncodedIri = [&](const std::string& iri) {
     // Encode the IRI

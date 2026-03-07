@@ -466,10 +466,11 @@ ReturnType DeltaTriplesManager::modify(
           });
     };
     auto writeAndUpdateSnapshot = [&updateSnapshot, &deltaTriples, &tracer,
-                                   writeToDiskAfterRequest]() {
+                                   writeToDiskAfterRequest, this]() {
       if (writeToDiskAfterRequest) {
         tracer.beginTrace("diskWriteback");
         deltaTriples.writeToDisk();
+        graphNamespaceManager_.writeToDisk();
         tracer.endTrace("diskWriteback");
       }
       tracer.beginTrace("snapshotCreation");
@@ -516,11 +517,6 @@ template DeltaTriplesCount DeltaTriplesManager::modify<DeltaTriplesCount>(
     ad_utility::timer::TimeTracer&);
 template nlohmann::json DeltaTriplesManager::modify<nlohmann::json>(
     const std::function<nlohmann::json(DeltaTriples&)>&,
-    bool writeToDiskAfterRequest, bool updateMetadataAfterRequest,
-    ad_utility::timer::TimeTracer&);
-template DeltaTriples::UniqueGraphs
-DeltaTriplesManager::modify<DeltaTriples::UniqueGraphs>(
-    const std::function<DeltaTriples::UniqueGraphs(DeltaTriples&)>&,
     bool writeToDiskAfterRequest, bool updateMetadataAfterRequest,
     ad_utility::timer::TimeTracer&);
 
@@ -595,15 +591,15 @@ void DeltaTriples::writeToDisk() const {
 }
 
 // _____________________________________________________________________________
-DeltaTriples::UniqueGraphs DeltaTriples::readFromDisk() {
+void DeltaTriples::readFromDisk() {
   if (!filenameForPersisting_.has_value()) {
-    return {};
+    return;
   }
   AD_CONTRACT_CHECK(localVocab_.empty());
   auto [vocab, idRanges] = ad_utility::deserializeIds(
       filenameForPersisting_.value(), index_.getBlankNodeManager());
   if (idRanges.empty()) {
-    return {};
+    return;
   }
   AD_CORRECTNESS_CHECK(idRanges.size() == 2);
   auto toTriples = [](const std::vector<Id>& ids) {
@@ -619,31 +615,12 @@ DeltaTriples::UniqueGraphs DeltaTriples::readFromDisk() {
     return triples;
   };
 
-  UniqueGraphs graphs;
-  auto collectGraphs = [&graphs](const std::vector<IdTriple<>>& triples) {
-    for (const auto& triple : triples) {
-      auto graph = triple.ids()[3];
-      AD_CORRECTNESS_CHECK(graph.getDatatype() == Datatype::LocalVocabIndex ||
-                           graph.getDatatype() == Datatype::VocabIndex);
-      if (graph.getDatatype() == Datatype::LocalVocabIndex) {
-        graph = Id::makeFromLocalVocabIndex(
-            graphs.localVocab.getIndexAndAddIfNotContained(
-                *triple.ids()[3].getLocalVocabIndex()));
-      }
-      graphs.graphs.insert(graph);
-    }
-  };
-
   auto cancellationHandle =
       std::make_shared<CancellationHandle::element_type>();
-  auto triplesToInsert = toTriples(idRanges.at(1));
-  collectGraphs(triplesToInsert);
-  insertTriples(cancellationHandle, std::move(triplesToInsert));
+  insertTriples(cancellationHandle, toTriples(idRanges.at(1)));
   deleteTriples(cancellationHandle, toTriples(idRanges.at(0)));
   AD_LOG_INFO << "Done, #inserted triples = " << idRanges.at(1).size()
               << ", #deleted triples = " << idRanges.at(0).size() << std::endl;
-
-  return graphs;
 }
 
 // _____________________________________________________________________________
@@ -652,13 +629,12 @@ void DeltaTriples::setPersists(std::optional<std::string> filename) {
 }
 
 // _____________________________________________________________________________
-DeltaTriples::UniqueGraphs
-DeltaTriplesManager::setFilenameForPersistentUpdatesAndReadFromDisk(
+void DeltaTriplesManager::setFilenameForPersistentUpdatesAndReadFromDisk(
     std::string filename) {
-  return modify<DeltaTriples::UniqueGraphs>(
+  return modify<void>(
       [&filename](DeltaTriples& deltaTriples) {
         deltaTriples.setPersists(std::move(filename));
-        return deltaTriples.readFromDisk();
+        deltaTriples.readFromDisk();
       },
       false);
 }

@@ -15,6 +15,7 @@
 #include "backports/three_way_comparison.h"
 #include "engine/LocalVocab.h"
 #include "global/IdTriple.h"
+#include "index/GraphManager.h"
 #include "index/Index.h"
 #include "index/IndexBuilderTypes.h"
 #include "index/LocatedTriples.h"
@@ -272,11 +273,7 @@ class DeltaTriples {
   void writeToDisk() const;
 
   // Read the delta triples from disk to restore them after a restart.
-  struct UniqueGraphs {
-    ad_utility::HashSet<Id> graphs;
-    LocalVocab localVocab;
-  };
-  UniqueGraphs readFromDisk();
+  void readFromDisk();
 
   // Return a deep copy of the `LocatedTriples` and the corresponding
   // `LocalVocab` which form an unchanging snapshot of the current state of
@@ -370,6 +367,7 @@ class DeltaTriplesManager {
       currentLocatedTriplesSharedState_;
 
  public:
+  GraphNamespaceManager graphNamespaceManager_;
   using CancellationHandle = DeltaTriples::CancellationHandle;
   using Triples = DeltaTriples::Triples;
 
@@ -388,8 +386,7 @@ class DeltaTriplesManager {
                     ad_utility::timer::TimeTracer& tracer =
                         ad_utility::timer::DEFAULT_TIME_TRACER);
 
-  DeltaTriples::UniqueGraphs setFilenameForPersistentUpdatesAndReadFromDisk(
-      std::string filename);
+  void setFilenameForPersistentUpdatesAndReadFromDisk(std::string filename);
 
   // Reset the updates represented by the underlying `DeltaTriples` and then
   // update the current snapshot.

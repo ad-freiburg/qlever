@@ -398,14 +398,14 @@ TEST_F(ValueIdTest, EncodedIriEqualityWithLocalVocabEntry) {
   // Create an EncodedIriManager with some test prefixes
   std::vector<std::string> prefixes = {"http://example.org/",
                                        "http://test.com/"};
-  EncodedIriManager encodedIriManager{prefixes};
 
   // Create a test index config with the encoded IRI manager and call getQec
   // to set up the global index state
   using namespace ad_utility::testing;
   TestIndexConfig config;
-  config.encodedIriManager = encodedIriManager;
-  getQec(config);
+  config.encodedIriManager = EncodedIriManager(prefixes);
+  auto qec = getQec(config);
+  const auto& encodedIriManager = qec->getIndex().encodedIriManager();
 
   // Test case 1: IRI that can be encoded
   std::string encodableIri = "<http://example.org/123>";

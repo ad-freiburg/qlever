@@ -13,25 +13,31 @@
 #include "util/HashSet.h"
 #include "util/json.h"
 
-// The header is quite heavy.
-class QueryExecutionContext;
-
 // Manages the allocated (but not necessarily used or existing) graphs from a
 // graph namespace (defined by having the same prefix in the IRI).
 class GraphNamespaceManager {
   std::string prefix_ = std::string(QLEVER_INTERNAL_GRAPH_IRI);
-  ad_utility::Synchronized<uint64_t> allocatedGraphs_ =
-      ad_utility::Synchronized<uint64_t>(0ul);
+  std::atomic<uint64_t> allocatedGraphs_ = std::atomic(0ul);
+  std::optional<std::string> fileNameForPersisting_;
+
+  FRIEND_TEST(GraphNamespaceManager, storeAndRestoreData);
 
  public:
   GraphNamespaceManager() = default;
   GraphNamespaceManager(std::string prefix, uint64_t allocatedGraphs);
-
-  static GraphNamespaceManager fromGraphManager(
-      std::string prefix, const ad_utility::HashSet<Id>& graphs,
-      const Index::Vocab& vocab);
+  // TODO: ...
+  GraphNamespaceManager& operator=(GraphNamespaceManager&& other) noexcept {
+    prefix_ = std::move(other.prefix_);
+    allocatedGraphs_ = other.allocatedGraphs_.load();
+    return *this;
+  }
+  GraphNamespaceManager(const GraphNamespaceManager& other)
+      : GraphNamespaceManager(other.prefix_, other.allocatedGraphs_.load()) {}
 
   ad_utility::triple_component::Iri allocateNewGraph();
+
+  void setFilenameForPersistentUpdatesAndReadFromDisk(
+      std::optional<std::string> filename);
 
   friend void to_json(nlohmann::json& j,
                       const GraphNamespaceManager& namespaceManager);
@@ -40,38 +46,12 @@ class GraphNamespaceManager {
 
   friend std::ostream& operator<<(
       std::ostream& os, const GraphNamespaceManager& namespaceManager);
-};
 
-// Keeps track of existing graphs in an inexact way. Only the absence of graphs
-// can be queried. Graphs that are determined not absent by GraphManager may or
-// may not actually exist.
-class GraphManager {
-  // A superset of all graphs that are currently in use.
-  ad_utility::Synchronized<ad_utility::HashSet<Id>> graphs_;
-  LocalVocab graphLocalVocab_;
-  std::optional<GraphNamespaceManager> namespaceManager_;
+  void writeToDisk() const;
 
- public:
-  GraphManager() = default;
-  explicit GraphManager(ad_utility::HashSet<Id> graphs);
-
-  static GraphManager fromExistingGraphs(ad_utility::HashSet<Id> graphs);
-
-  friend void to_json(nlohmann::json& j, const GraphManager& graphManager);
-  friend void from_json(const nlohmann::json& j, GraphManager& graphManager);
-
-  void addGraphs(ad_utility::HashSet<Id> graphs);
-  // Returns whether a graph definitely does not exist. If this returns false,
-  // the graph may or may not exist.
-  bool graphDoesntExist(const Id& graph) const;
-  auto getGraphs() const { return graphs_.rlock(); }
-
-  friend std::ostream& operator<<(std::ostream& os,
-                                  const GraphManager& graphManager);
-
-  GraphNamespaceManager& getNamespaceManager();
-  void initializeNamespaceManager(std::string prefix,
-                                  const Index::Vocab& vocab);
+ private:
+  void setPersists(std::optional<std::string> filename);
+  void readFromDisk();
 };
 
 #endif  // QLEVER_GRAPHMANAGER_H

@@ -1069,14 +1069,11 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
     }
   }
   if (persistUpdatesOnDisk) {
-    auto uniqueGraphs =
-        deltaTriples_.value().setFilenameForPersistentUpdatesAndReadFromDisk(
-            onDiskBase + ".update-triples");
-
-    graphManager_.addGraphs(uniqueGraphs.graphs);
-    graphManager_.initializeNamespaceManager(
-        std::string(QLEVER_NEW_GRAPH_PREFIX), vocab_);
-    AD_LOG_INFO << "Initialized GraphManager: " << graphManager_ << std::endl;
+    deltaTriples_.value().setFilenameForPersistentUpdatesAndReadFromDisk(
+        onDiskBase + ".update-triples");
+    deltaTriples_->graphNamespaceManager_
+        .setFilenameForPersistentUpdatesAndReadFromDisk(
+            onDiskBase + ".graph-namespace-manager");
   }
 }
 
@@ -1314,7 +1311,8 @@ void IndexImpl::readConfiguration() {
                  EncodedIriManager{});
   // TODO: as is we don't need it to be an optional. but we can have it as
   // nullopt and then backfill from Server::initialize once
-  loadDataMember("existing-graphs", graphManager_);
+  loadDataMember("graphNamespaceManager",
+                 deltaTriples_->graphNamespaceManager_);
 
   // Compute unique ID for this index.
   //
@@ -1790,9 +1788,31 @@ CPP_template_def(typename... NextSorter)(requires(
   size_t numTriples = 0;
   auto countTriples = [&numTriples](const auto&) mutable { ++numTriples; };
   ad_utility::HashSet<Id> graphs;
-  auto collectDistinctGraphs = [&graphs](const auto& triple) mutable {
-    graphs.insert(triple[3]);
+  uint64_t maxUsedIndex = 0;
+  AD_LOG_INFO << "EncodedIriManager has " << encodedIriManager_.prefixes_.size()
+              << " prefixes which are "
+              << absl::StrJoin(encodedIriManager_.prefixes_, ", ") << std::endl;
+  auto it = ql::ranges::find(
+      encodedIriManager_.prefixes_,
+      absl::StrCat("<", QLEVER_INTERNAL_PREFIX_URL, "graphs/"));
+  AD_CORRECTNESS_CHECK(it != encodedIriManager_.prefixes_.end());
+  auto newGraphPrefixId =
+      static_cast<size_t>(it - encodedIriManager_.prefixes_.begin());
+  auto collectDistinctGraphs = [&maxUsedIndex,
+                                newGraphPrefixId](const auto& triple) mutable {
+    const auto& graph = triple[3];
+    if (graph.getDatatype() != Datatype::EncodedVal) {
+      return;
+    }
+    auto [prefix, payload] =
+        EncodedIriManager::splitIntoPrefixIdxAndPayload(graph);
+    if (prefix != newGraphPrefixId) {
+      return;
+    }
+    maxUsedIndex = std::max(maxUsedIndex, payload + 1);
   };
+  AD_LOG_INFO << "Next usable index for new graphs: " << maxUsedIndex
+              << std::endl;
   size_t numPredicates = createPermutationPair(
       numColumns, AD_FWD(sortedTriples), *pso_, *pos_,
       nextSorter.makePushCallback()..., countTriples, collectDistinctGraphs);
@@ -1800,7 +1820,10 @@ CPP_template_def(typename... NextSorter)(requires(
       NumNormalAndInternal::fromNormal(numPredicates);
   configurationJson_["num-triples"] =
       NumNormalAndInternal::fromNormal(numTriples);
-  graphManager_ = GraphManager::fromExistingGraphs(graphs);
+  deltaTriples_->graphNamespaceManager_ =
+      GraphNamespaceManager(std::string(QLEVER_NEW_GRAPH_PREFIX), maxUsedIndex);
+  configurationJson_["graphNamespaceManager"] =
+      deltaTriples_->graphNamespaceManager_;
   if (doWriteConfiguration) {
     writeConfiguration();
   }
@@ -1814,14 +1837,6 @@ CPP_template_def(typename... NextSorter)(
                                                  NextSorter&&... nextSorter) {
   createPSOAndPOSImpl(numColumns, std::move(sortedTriples), true,
                       AD_FWD(nextSorter)...);
-
-  vocab_.readFromFile(onDiskBase_ + std::string(VOCAB_SUFFIX));
-  graphManager_.initializeNamespaceManager(std::string(QLEVER_NEW_GRAPH_PREFIX),
-                                           vocab_);
-  // Unload the vocabulary again.
-  vocab_.resetToType(vocabularyTypeForIndexBuilding_);
-  configurationJson_["existing-graphs"] = graphManager_;
-  writeConfiguration();
 }
 
 // _____________________________________________________________________________
@@ -1921,6 +1936,8 @@ ad_utility::BlankNodeManager* IndexImpl::getBlankNodeManager() const {
 // _____________________________________________________________________________
 void IndexImpl::setPrefixesForEncodedValues(
     std::vector<std::string> prefixesWithoutAngleBrackets) {
+  prefixesWithoutAngleBrackets.push_back(
+      absl::StrCat(QLEVER_INTERNAL_PREFIX_URL, "graphs/"));
   encodedIriManager_ =
       EncodedIriManager{std::move(prefixesWithoutAngleBrackets)};
 }

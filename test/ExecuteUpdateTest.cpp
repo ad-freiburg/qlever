@@ -45,29 +45,28 @@ MATCHER_P(AlwaysFalse, msg, "") {
 // default dataset defined in `IndexTestHelpers::makeTestIndex`.
 TEST(ExecuteUpdate, executeUpdate) {
   // Perform the given `update` and store result in given `deltaTriples`.
-  auto expectExecuteUpdateHelper = [](const std::string& update,
-                                      QueryExecutionContext& qec,
-                                      Index& index) {
-    const auto sharedHandle =
-        std::make_shared<ad_utility::CancellationHandle<>>();
-    const std::vector<DatasetClause> datasets = {};
-    ad_utility::BlankNodeManager bnm;
-    auto pqs = SparqlParser::parseUpdate(&bnm, encodedIriManager(), update);
-    index.deltaTriplesManager().modify<void>(
-        [&index, &sharedHandle, &pqs, &qec](DeltaTriples& deltaTriples) {
-          qec.setLocatedTriplesForEvaluation(
-              deltaTriples.getLocatedTriplesSharedStateReference());
-          for (auto& pq : pqs) {
-            // Not needed for the first update, but also doesn't break
-            // anything.
-            deltaTriples.updateAugmentedMetadata();
-            QueryPlanner qp{&qec, sharedHandle};
-            const auto qet = qp.createExecutionTree(pq);
-            ExecuteUpdate::executeUpdate(index, pq, qet, deltaTriples,
-                                         index.graphManager(), sharedHandle);
-          }
-        });
-  };
+  auto expectExecuteUpdateHelper =
+      [](const std::string& update, QueryExecutionContext& qec, Index& index) {
+        const auto sharedHandle =
+            std::make_shared<ad_utility::CancellationHandle<>>();
+        const std::vector<DatasetClause> datasets = {};
+        ad_utility::BlankNodeManager bnm;
+        auto pqs = SparqlParser::parseUpdate(&bnm, encodedIriManager(), update);
+        index.deltaTriplesManager().modify<void>(
+            [&index, &sharedHandle, &pqs, &qec](DeltaTriples& deltaTriples) {
+              qec.setLocatedTriplesForEvaluation(
+                  deltaTriples.getLocatedTriplesSharedStateReference());
+              for (auto& pq : pqs) {
+                // Not needed for the first update, but also doesn't break
+                // anything.
+                deltaTriples.updateAugmentedMetadata();
+                QueryPlanner qp{&qec, sharedHandle};
+                const auto qet = qp.createExecutionTree(pq);
+                ExecuteUpdate::executeUpdate(index, pq, qet, deltaTriples,
+                                             sharedHandle);
+              }
+            });
+      };
   ad_utility::testing::TestIndexConfig indexConfig{};
   // Execute the given `update` and check that the delta triples are correct.
   auto expectExecuteUpdate =
@@ -234,11 +233,13 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
     const auto sharedHandle =
         std::make_shared<ad_utility::CancellationHandle<>>();
     const std::vector<DatasetClause> datasets = {};
-    auto& index = const_cast<Index&>(qec->getIndex());
+    auto& index = qec->getIndex();
     DeltaTriples deltaTriples{index};
     ad_utility::BlankNodeManager bnm;
     auto pqs = SparqlParser::parseUpdate(&bnm, encodedIriManager(), update);
-    std::vector<ExecuteUpdate::ComputedUpdates> results;
+    std::vector<std::pair<ExecuteUpdate::IdTriplesAndLocalVocab,
+                          ExecuteUpdate::IdTriplesAndLocalVocab>>
+        results;
     for (auto& pq : pqs) {
       QueryPlanner qp{qec, sharedHandle};
       const auto qet = qp.createExecutionTree(pq);
@@ -247,8 +248,7 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
       results.push_back(ExecuteUpdate::computeGraphUpdateQuads(
           index, pq, *result, qet.getVariableColumns(), sharedHandle,
           metadata));
-      ExecuteUpdate::executeUpdate(index, pq, qet, deltaTriples,
-                                   index.graphManager(), sharedHandle);
+      ExecuteUpdate::executeUpdate(index, pq, qet, deltaTriples, sharedHandle);
     }
     return results;
   };
@@ -265,20 +265,18 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
         ASSERT_THAT(toInsertMatchers, testing::SizeIs(toDeleteMatchers.size()));
         auto graphUpdateQuads = executeComputeGraphUpdateQuads(update);
         ASSERT_THAT(graphUpdateQuads, testing::SizeIs(toInsertMatchers.size()));
-        std::vector<Matcher<ExecuteUpdate::ComputedUpdates>>
+        std::vector<Matcher<std::pair<ExecuteUpdate::IdTriplesAndLocalVocab,
+                                      ExecuteUpdate::IdTriplesAndLocalVocab>>>
             transformedMatchers;
         ql::ranges::transform(
             toInsertMatchers, toDeleteMatchers,
             std::back_inserter(transformedMatchers),
             [](auto insertMatcher, auto deleteMatcher) {
-              return testing::AllOf(
-                  AD_FIELD(ExecuteUpdate::ComputedUpdates, quadsToInsert_,
-                           AD_FIELD(ExecuteUpdate::IdTriplesAndLocalVocab,
-                                    idTriples_, insertMatcher)),
-                  AD_FIELD(ExecuteUpdate::ComputedUpdates, quadsToDelete_,
-                           AD_FIELD(ExecuteUpdate::IdTriplesAndLocalVocab,
-                                    idTriples_, deleteMatcher)),
-                  testing::_);
+              return testing::Pair(
+                  AD_FIELD(ExecuteUpdate::IdTriplesAndLocalVocab, idTriples_,
+                           insertMatcher),
+                  AD_FIELD(ExecuteUpdate::IdTriplesAndLocalVocab, idTriples_,
+                           deleteMatcher));
             });
         EXPECT_THAT(graphUpdateQuads,
                     testing::ElementsAreArray(transformedMatchers));

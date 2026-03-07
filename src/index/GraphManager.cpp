@@ -5,178 +5,73 @@
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #include "GraphManager.h"
-
-#include "../../test/util/RuntimeParametersTestHelpers.h"
-#include "../engine/QueryPlanner.h"
-#include "global/RuntimeParameters.h"
-#include "parser/SparqlParser.h"
-
-// _____________________________________________________________________________
-GraphManager::GraphManager(ad_utility::HashSet<Id> graphs)
-    : graphs_(std::move(graphs)) {}
-
-// _____________________________________________________________________________
-GraphManager GraphManager::fromExistingGraphs(ad_utility::HashSet<Id> graphs) {
-  AD_CORRECTNESS_CHECK(ql::ranges::all_of(graphs, [](const auto& id) {
-    return id.getDatatype() == Datatype::VocabIndex;
-  }));
-  return GraphManager(std::move(graphs));
-}
-
-// _____________________________________________________________________________
-void GraphManager::addGraphs(ad_utility::HashSet<Id> graphs) {
-  // The IDs may be temporary LVIs. Rewrite them to our own LocalVocab
-  auto localGraphs =
-      graphs | ql::views::transform([this](const auto& graph) {
-        if (graph.getDatatype() == Datatype::LocalVocabIndex) {
-          return Id::makeFromLocalVocabIndex(
-              graphLocalVocab_.getIndexAndAddIfNotContained(
-                  *graph.getLocalVocabIndex()));
-        }
-        AD_CORRECTNESS_CHECK(graph.getDatatype() == Datatype::VocabIndex);
-        return graph;
-      });
-  graphs_.wlock()->insert(localGraphs.begin(), localGraphs.end());
-}
-
-// _____________________________________________________________________________
-bool GraphManager::graphDoesntExist(const Id& graph) const {
-  auto graphs = graphs_.rlock();
-  return graphs->find(graph) == graphs->end();
-}
-
-// _____________________________________________________________________________
-GraphNamespaceManager& GraphManager::getNamespaceManager() {
-  AD_CORRECTNESS_CHECK(namespaceManager_.has_value());
-  return namespaceManager_.value();
-}
-
-// _____________________________________________________________________________
-void GraphManager::initializeNamespaceManager(std::string prefix,
-                                              const Index::Vocab& vocab) {
-  graphs_.withReadLock([this, &prefix, &vocab](const auto& graphs) {
-    namespaceManager_ = GraphNamespaceManager::fromGraphManager(
-        std::move(prefix), graphs, vocab);
-  });
-}
-
 // _____________________________________________________________________________
 GraphNamespaceManager::GraphNamespaceManager(std::string prefix,
                                              uint64_t allocatedGraphs)
     : prefix_(std::move(prefix)), allocatedGraphs_(allocatedGraphs) {}
 
 // _____________________________________________________________________________
-GraphNamespaceManager GraphNamespaceManager::fromGraphManager(
-    std::string prefix, const ad_utility::HashSet<Id>& graphs,
-    const Index::Vocab& vocab) {
-  auto alreadyCreatedGraphs =
-      graphs | ql::views::transform([&vocab](const auto& graphId) {
-        if (graphId.getDatatype() == Datatype::VocabIndex) {
-          return vocab[graphId.getVocabIndex()];
-        }
-        AD_CORRECTNESS_CHECK(graphId.getDatatype() ==
-                             Datatype::LocalVocabIndex);
-        AD_CORRECTNESS_CHECK(graphId.getLocalVocabIndex()->isIri());
-        return graphId.getLocalVocabIndex()->toStringRepresentation();
-      }) |
-      ql::views::filter([](const auto& graph) {
-        return graph.starts_with(QLEVER_NEW_GRAPH_PREFIX);
-      }) |
-      ql::views::transform([](const auto& graph) {
-        return graph.substr(QLEVER_NEW_GRAPH_PREFIX.size(),
-                            graph.size() - QLEVER_NEW_GRAPH_PREFIX.size() - 1);
-      }) |
-      ql::views::transform([](const auto& suffix) -> uint64_t {
-        try {
-          return std::stoull(suffix);
-        } catch (const std::invalid_argument&) {
-          AD_LOG_WARN << "Internal graph with invalid suffix " << suffix
-                      << std::endl;
-          // This wastes 1 graph in the case that all graphs have non-numeric
-          // (considered invalid) IDs. This is negligible.
-          return 0;
-        }
-      });
-  auto allocatedGraphs =
-      alreadyCreatedGraphs.begin() == alreadyCreatedGraphs.end()
-          ? 0
-          : ql::ranges::max(alreadyCreatedGraphs) + 1;
-
-  return GraphNamespaceManager(std::move(prefix), allocatedGraphs);
-}
-
-// _____________________________________________________________________________
 ad_utility::triple_component::Iri GraphNamespaceManager::allocateNewGraph() {
-  auto graphId = allocatedGraphs_.withWriteLock(
-      [](auto& allocatedGraphs) { return allocatedGraphs++; });
+  auto graphId = allocatedGraphs_++;
+  writeToDisk();
   return ad_utility::triple_component::Iri::fromIriref(
       prefix_ + std::to_string(graphId) + ">");
 }
 
 // _____________________________________________________________________________
-void to_json(nlohmann::json& j, const GraphManager& graphManager) {
-  auto graphs = graphManager.graphs_.rlock();
-  j["graphs"] = *graphs |
-                ql::views::transform([](const auto& id) -> std::string {
-                  return std::to_string(id.getBits());
-                }) |
-                ::ranges::to<std::vector>();
-  j["namespaces"]["new-graphs"] = graphManager.namespaceManager_.value();
+void GraphNamespaceManager::setFilenameForPersistentUpdatesAndReadFromDisk(
+    std::optional<std::string> filename) {
+  setPersists(std::move(filename));
+  readFromDisk();
 }
 
 // _____________________________________________________________________________
-void from_json(const nlohmann::json& j, GraphManager& graphManager) {
-  auto graphs = ad_utility::transform(
-      j.at("graphs").get<std::vector<std::string>>(),
-      [](const auto& idStr) -> Id { return Id::fromBits(std::stoull(idStr)); });
-  graphManager.graphs_.withWriteLock([&graphs](auto& graphsMember) {
-    graphsMember = ad_utility::HashSet<Id>(graphs.begin(), graphs.end());
-  });
-  graphManager.namespaceManager_ =
-      j.at("namespaces").at("new-graphs").get<GraphNamespaceManager>();
+void GraphNamespaceManager::setPersists(std::optional<std::string> filename) {
+  fileNameForPersisting_ = std::move(filename);
 }
 
 // _____________________________________________________________________________
-std::ostream& operator<<(std::ostream& os, const GraphManager& graphManager) {
-  os << "GraphManager(graphs=[";
-  auto graphs = graphManager.graphs_.rlock();
-  os << absl::StrJoin(*graphs | ql::views::transform([](const auto& id) {
-    std::ostringstream os;
-    os << id;
-    return os.str();
-  }),
-                      ", ");
-  os << "], namespaceManager=";
-  if (graphManager.namespaceManager_.has_value()) {
-    os << graphManager.namespaceManager_.value();
-  } else {
-    os << "<Not Initialized>";
+void GraphNamespaceManager::writeToDisk() const {
+  // TODO: compress the serialization
+  if (fileNameForPersisting_) {
+    ad_utility::serialization::FileWriteSerializer serializer{
+        fileNameForPersisting_.value()};
+    serializer << prefix_;
+    serializer << allocatedGraphs_.load();
   }
-  os << ")";
-  return os;
+}
+
+void GraphNamespaceManager::readFromDisk() {
+  AD_CORRECTNESS_CHECK(fileNameForPersisting_);
+  if (std::filesystem::exists(fileNameForPersisting_.value())) {
+    ad_utility::serialization::FileReadSerializer serializer{
+        fileNameForPersisting_.value()};
+    serializer >> prefix_;
+    uint64_t allocatedGraphs;
+    serializer >> allocatedGraphs;
+    allocatedGraphs_.store(allocatedGraphs);
+  }
 }
 
 // _____________________________________________________________________________
 void to_json(nlohmann::json& j, const GraphNamespaceManager& namespaceManager) {
   j["prefix"] = namespaceManager.prefix_;
-  j["allocatedGraphs"] = *namespaceManager.allocatedGraphs_.rlock();
+  j["allocatedGraphs"] = namespaceManager.allocatedGraphs_.load();
 }
 
 // _____________________________________________________________________________
 void from_json(const nlohmann::json& j,
                GraphNamespaceManager& namespaceManager) {
   j.at("prefix").get_to(namespaceManager.prefix_);
-  namespaceManager.allocatedGraphs_.withWriteLock(
-      [&j](uint64_t& allocatedGraphs) {
-        j.at("allocatedGraphs").get_to(allocatedGraphs);
-      });
+  namespaceManager.allocatedGraphs_.store(
+      j.at("allocatedGraphs").get<uint64_t>());
 }
 
 // _____________________________________________________________________________
 std::ostream& operator<<(std::ostream& os,
                          const GraphNamespaceManager& namespaceManager) {
   os << "GraphNamespaceManager(prefix=\"" << namespaceManager.prefix_
-     << "\", allocatedGraphs=" << *namespaceManager.allocatedGraphs_.rlock()
+     << "\", allocatedGraphs=" << namespaceManager.allocatedGraphs_.load()
      << ")";
   return os;
 }

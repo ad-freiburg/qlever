@@ -9,8 +9,7 @@
 // _____________________________________________________________________________
 UpdateMetadata ExecuteUpdate::executeUpdate(
     const Index& index, const ParsedQuery& query, const QueryExecutionTree& qet,
-    DeltaTriples& deltaTriples, GraphManager& graphManager,
-    const CancellationHandle& cancellationHandle,
+    DeltaTriples& deltaTriples, const CancellationHandle& cancellationHandle,
     ad_utility::timer::TimeTracer& tracer) {
   UpdateMetadata metadata{};
   // Fully materialize the result for now. This makes it easier to execute the
@@ -19,7 +18,7 @@ UpdateMetadata ExecuteUpdate::executeUpdate(
   tracer.beginTrace("evaluateWhere");
   auto result = qet.getResult(false);
   tracer.endTrace("evaluateWhere");
-  auto [toInsert, toDelete, uniqueInsertedGraphs] =
+  auto [toInsert, toDelete] =
       computeGraphUpdateQuads(index, query, *result, qet.getVariableColumns(),
                               cancellationHandle, metadata, tracer);
 
@@ -37,9 +36,6 @@ UpdateMetadata ExecuteUpdate::executeUpdate(
                                std::move(toInsert.idTriples_), tracer);
   }
   tracer.endTrace("insertTriples");
-  tracer.beginTrace("recordGraphs");
-  graphManager.addGraphs(uniqueInsertedGraphs);
-  tracer.endTrace("recordGraphs");
   return metadata;
 }
 
@@ -216,7 +212,9 @@ void ExecuteUpdate::computeAndAddQuadsForResultRow(
 }
 
 // _____________________________________________________________________________
-ExecuteUpdate::ComputedUpdates ExecuteUpdate::computeGraphUpdateQuads(
+std::pair<ExecuteUpdate::IdTriplesAndLocalVocab,
+          ExecuteUpdate::IdTriplesAndLocalVocab>
+ExecuteUpdate::computeGraphUpdateQuads(
     const Index& index, const ParsedQuery& query, const Result& result,
     const VariableToColumnMap& variableColumns,
     const CancellationHandle& cancellationHandle, UpdateMetadata& metadata,
@@ -275,15 +273,11 @@ ExecuteUpdate::ComputedUpdates ExecuteUpdate::computeGraphUpdateQuads(
                                          static_cast<int64_t>(toDelete.size())};
   toDelete = setMinus(toDelete, toInsert);
   tracer.endTrace("deduplication");
-  tracer.beginTrace("uniqueGraphs");
-  auto uniqueInsertedGraphs = uniqueGraphs(toInsert);
-  tracer.endTrace("uniqueGraphs");
   tracer.endTrace("computeIds");
 
   return {
       IdTriplesAndLocalVocab{std::move(toInsert), std::move(localVocabInsert)},
-      IdTriplesAndLocalVocab{std::move(toDelete), std::move(localVocabDelete)},
-      std::move(uniqueInsertedGraphs)};
+      IdTriplesAndLocalVocab{std::move(toDelete), std::move(localVocabDelete)}};
 }
 
 // _____________________________________________________________________________
@@ -301,14 +295,4 @@ std::vector<IdTriple<>> ExecuteUpdate::setMinus(
   reducedToDelete.reserve(a.size());
   ql::ranges::set_difference(a, b, std::back_inserter(reducedToDelete));
   return reducedToDelete;
-}
-
-// _____________________________________________________________________________
-ad_utility::HashSet<Id> ExecuteUpdate::uniqueGraphs(
-    const std::vector<IdTriple<>>& triples) {
-  ad_utility::HashSet<Id> uniqueGraphs;
-  for (const auto& triple : triples) {
-    uniqueGraphs.insert(triple.ids()[3]);
-  }
-  return uniqueGraphs;
 }

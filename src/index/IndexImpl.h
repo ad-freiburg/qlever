@@ -123,8 +123,8 @@ class IndexImpl {
   nlohmann::json configurationJson_;
   Index::Vocab vocab_;
   Index::TextVocab textVocab_;
-  EncodedIriManager encodedIriManager_;
-  GraphManager graphManager_;
+  EncodedIriManager encodedIriManager_ =
+      EncodedIriManager({absl::StrCat(QLEVER_INTERNAL_PREFIX_URL, "graphs/")});
   ScoreData scoreData_;
 
   TextMetaData textMeta_;
@@ -282,9 +282,6 @@ class IndexImpl {
   const DeltaTriplesManager& deltaTriplesManager() const {
     return deltaTriples_.value();
   }
-
-  GraphManager& graphManager() { return graphManager_; }
-  const GraphManager& graphManager() const { return graphManager_; }
 
   const auto& encodedIriManager() const { return encodedIriManager_; }
 

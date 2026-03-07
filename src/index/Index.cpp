@@ -295,11 +295,3 @@ const DeltaTriplesManager& Index::deltaTriplesManager() const {
 DeltaTriplesManager& Index::deltaTriplesManager() {
   return pimpl_->deltaTriplesManager();
 }
-
-// ____________________________________________________________________________
-const GraphManager& Index::graphManager() const {
-  return pimpl_->graphManager();
-}
-
-// ____________________________________________________________________________
-GraphManager& Index::graphManager() { return pimpl_->graphManager(); }

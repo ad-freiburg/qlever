@@ -7,8 +7,6 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include <boost/foreach.hpp>
-
 #include "DeltaTriplesTestHelpers.h"
 #include "engine/ExecuteUpdate.h"
 #include "engine/Load.h"
@@ -319,9 +317,8 @@ TEST_F(LoadTest, Integration) {
       getResultFunctionFactory("<a> <b> <c> . <d> <e> <f>",
                                boost::beast::http::status::ok, "text/turtle"));
   DeltaTriples deltaTriples{qec->getIndex()};
-  ExecuteUpdate::executeUpdate(
-      qec->getIndex(), parsedUpdate[0], executionTree, deltaTriples,
-      const_cast<Index&>(qec->getIndex()).graphManager(), cancellationHandle);
+  ExecuteUpdate::executeUpdate(qec->getIndex(), parsedUpdate[0], executionTree,
+                               deltaTriples, cancellationHandle);
   EXPECT_THAT(deltaTriples, deltaTriplesTestHelpers::NumTriples(2, 0, 2));
 }
 
