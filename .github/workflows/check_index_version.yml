@@ -23,7 +23,7 @@ jobs:
         warnings: [  "-Wall -Wextra -O1 " ]
         build-type: [Release]
 
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
 
 
     steps:

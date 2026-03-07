@@ -153,6 +153,23 @@ class WktEnvelope {
   }
 };
 
+// Get one of the two bounding box corners as `GeoPoint`s.
+template <BoundingBoxCorner RequestedCorner>
+class WktEnvelopeCorner {
+ public:
+  ValueId operator()(const std::optional<BoundingBox>& boundingBox) const {
+    if (!boundingBox.has_value()) {
+      return ValueId::makeUndefined();
+    }
+    if constexpr (RequestedCorner == BoundingBoxCorner::LOWER_LEFT) {
+      return ValueId::makeFromGeoPoint(boundingBox.value().lowerLeft());
+    } else {
+      static_assert(RequestedCorner == BoundingBoxCorner::UPPER_RIGHT);
+      return ValueId::makeFromGeoPoint(boundingBox.value().upperRight());
+    }
+  }
+};
+
 // Get a single coordinate of the bounding box.
 template <BoundingCoordinate RequestedCoordinate>
 class WktBoundingCoordinate {
