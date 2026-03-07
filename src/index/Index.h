@@ -28,7 +28,6 @@ class TextBlockMetaData;
 class IndexImpl;
 struct LocatedTriplesState;
 class DeltaTriplesManager;
-class GraphNamespaceManager;
 
 class Index {
  private:

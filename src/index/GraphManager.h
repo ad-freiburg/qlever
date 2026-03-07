@@ -4,13 +4,13 @@
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
-#ifndef QLEVER_GRAPHMANAGER_H
-#define QLEVER_GRAPHMANAGER_H
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
-#include "global/Id.h"
-#include "index/EncodedIriManager.h"
+#ifndef QLEVER_SRC_INDEX_GRAPHMANAGER_H
+#define QLEVER_SRC_INDEX_GRAPHMANAGER_H
+
 #include "index/Index.h"
-#include "util/HashSet.h"
 #include "util/json.h"
 
 // Manages the allocated (but not necessarily used or existing) graphs from a

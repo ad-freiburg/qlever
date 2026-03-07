@@ -1309,10 +1309,9 @@ void IndexImpl::readConfiguration() {
 
   loadDataMember("encoded-iri-prefixes", encodedIriManager_,
                  EncodedIriManager{});
-  // TODO: as is we don't need it to be an optional. but we can have it as
-  // nullopt and then backfill from Server::initialize once
-  loadDataMember("graphNamespaceManager",
-                 deltaTriples_->graphNamespaceManager_);
+  loadDataMember(
+      "graphNamespaceManager", deltaTriples_->graphNamespaceManager_,
+      GraphNamespaceManager(std::string(QLEVER_NEW_GRAPH_PREFIX), 0));
 
   // Compute unique ID for this index.
   //
@@ -1787,41 +1786,35 @@ CPP_template_def(typename... NextSorter)(requires(
                                             NextSorter&&... nextSorter) {
   size_t numTriples = 0;
   auto countTriples = [&numTriples](const auto&) mutable { ++numTriples; };
-  ad_utility::HashSet<Id> graphs;
-  uint64_t maxUsedIndex = 0;
-  AD_LOG_INFO << "EncodedIriManager has " << encodedIriManager_.prefixes_.size()
-              << " prefixes which are "
-              << absl::StrJoin(encodedIriManager_.prefixes_, ", ") << std::endl;
-  auto it = ql::ranges::find(
-      encodedIriManager_.prefixes_,
-      absl::StrCat("<", QLEVER_INTERNAL_PREFIX_URL, "graphs/"));
+  uint64_t nextAvailableIndex = 0;
+  auto it =
+      ql::ranges::find(encodedIriManager_.prefixes_, QLEVER_NEW_GRAPH_PREFIX);
   AD_CORRECTNESS_CHECK(it != encodedIriManager_.prefixes_.end());
   auto newGraphPrefixId =
       static_cast<size_t>(it - encodedIriManager_.prefixes_.begin());
-  auto collectDistinctGraphs = [&maxUsedIndex,
-                                newGraphPrefixId](const auto& triple) mutable {
-    const auto& graph = triple[3];
-    if (graph.getDatatype() != Datatype::EncodedVal) {
-      return;
-    }
-    auto [prefix, payload] =
-        EncodedIriManager::splitIntoPrefixIdxAndPayload(graph);
-    if (prefix != newGraphPrefixId) {
-      return;
-    }
-    maxUsedIndex = std::max(maxUsedIndex, payload + 1);
-  };
-  AD_LOG_INFO << "Next usable index for new graphs: " << maxUsedIndex
-              << std::endl;
-  size_t numPredicates = createPermutationPair(
-      numColumns, AD_FWD(sortedTriples), *pso_, *pos_,
-      nextSorter.makePushCallback()..., countTriples, collectDistinctGraphs);
+  auto determineNextAvailableInternalGraph =
+      [&nextAvailableIndex, newGraphPrefixId](const auto& triple) mutable {
+        const auto& graph = triple[3];
+        if (graph.getDatatype() != Datatype::EncodedVal) {
+          return;
+        }
+        auto [prefix, payload] =
+            EncodedIriManager::splitIntoPrefixIdxAndPayload(graph);
+        if (prefix != newGraphPrefixId) {
+          return;
+        }
+        nextAvailableIndex = std::max(nextAvailableIndex, payload + 1);
+      };
+  size_t numPredicates =
+      createPermutationPair(numColumns, AD_FWD(sortedTriples), *pso_, *pos_,
+                            nextSorter.makePushCallback()..., countTriples,
+                            determineNextAvailableInternalGraph);
   configurationJson_["num-predicates"] =
       NumNormalAndInternal::fromNormal(numPredicates);
   configurationJson_["num-triples"] =
       NumNormalAndInternal::fromNormal(numTriples);
-  deltaTriples_->graphNamespaceManager_ =
-      GraphNamespaceManager(std::string(QLEVER_NEW_GRAPH_PREFIX), maxUsedIndex);
+  deltaTriples_->graphNamespaceManager_ = GraphNamespaceManager(
+      std::string(QLEVER_NEW_GRAPH_PREFIX), nextAvailableIndex);
   configurationJson_["graphNamespaceManager"] =
       deltaTriples_->graphNamespaceManager_;
   if (doWriteConfiguration) {
