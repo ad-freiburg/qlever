@@ -61,7 +61,7 @@ struct SubtractImpl {
   }
 #ifndef REDUCED_FEATURE_SET_FOR_CPP17
   ValueId operator()(DateYearOrDuration lhs, DateYearOrDuration rhs) const {
-    // Using - operator implementation in DateYearOrDuration.
+    // Using `operator-` implementation in `DateYearOrDuration`.
     auto difference = lhs - rhs;
     if (difference.has_value()) {
       return Id::makeFromDate(difference.value());
@@ -72,8 +72,9 @@ struct SubtractImpl {
 #endif
   template <typename L, typename R>
   ValueId operator()(L, R) const {
-    // For all other operations returning Undefined
-    // It is not allowed to use subtractionn between Date and NumericValue
+    // For all other operations return `Undefined`.
+    // It is not allowed to use subtractionn between a `DateYearOrDuration` and
+    // a `NumericValue`.
     return Id::makeUndefined();
   }
 };

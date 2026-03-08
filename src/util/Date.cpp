@@ -98,7 +98,7 @@ std::optional<Date::Nanoseconds> Date::toEpoch() const {
   using namespace std::chrono;
   auto date = year_month_day{year(getYear()) / getMonth() / getDay()};
   if (date.ok()) {
-    // Build timestamp from date
+    // Build timestamp from `Date`.
     auto second = duration<double>{getSecond()};
     Date::Nanoseconds result =
         sys_days(date) + hours{getHour() - getTimeZoneOffsetToUTCInHours()} +
@@ -107,7 +107,7 @@ std::optional<Date::Nanoseconds> Date::toEpoch() const {
             second);  // Here all times are converted to a UTC time.
     return result;
   } else {
-    // Invalid date does not have Unix Epoch time.
+    // Invalid `Date` does not have Unix Epoch time.
     return std::nullopt;
   }
 }
@@ -115,13 +115,13 @@ std::optional<Date::Nanoseconds> Date::toEpoch() const {
 // _____________________________________________________________________________
 int8_t Date::getTimeZoneOffsetToUTCInHours() const {
   TimeZone tz = getTimeZone();
-  // Handle different types contained in variant TimeZone.
+  // Handle different types contained in variant `TimeZone`.
   return std::visit(
       [](auto& value) {
         using T = std::decay_t<decltype(value)>;
 
         if constexpr (std::is_same_v<T, NoTimeZone>) {
-          return 0;  // Assume UTC time zone
+          return 0;  // Assume UTC time zone.
         } else if constexpr (std::is_same_v<T, TimeZoneZ>) {
           return 0;
         } else if constexpr (std::is_same_v<T, int>) {

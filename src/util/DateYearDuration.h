@@ -213,7 +213,7 @@ class DateYearOrDuration {
       const DateYearOrDuration& dateValue);
 
 #ifndef REDUCED_FEATURE_SET_FOR_CPP17
-  // Subtraction of two DateYearOrDuration Objects.
+  // Subtraction of two `DateYearOrDuration` objects.
   // For undefined subtractions `std::nullopt` is returned.
   [[nodiscard]] std::optional<DateYearOrDuration> operator-(
       const DateYearOrDuration& rhs) const;

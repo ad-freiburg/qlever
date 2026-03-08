@@ -505,7 +505,7 @@ TEST(SparqlExpression, arithmeticOperators) {
   testMultiply(times13, mixed, D(1.3));
 
 #ifndef REDUCED_FEATURE_SET_FOR_CPP17
-  // Test for DateTime - DateTime
+  // Test for `DateTime` - `DateTime`.
   V<Id> minus2000{{createDat("-P32954DT13H48M37S", false),
                    createDat("P3553DT1H1M59S", false),
                    createDat("-P14903DT10H46M47S", false),

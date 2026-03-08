@@ -343,10 +343,10 @@ class Date {
   std::string getFormattedYear() const;
 
 #ifndef REDUCED_FEATURE_SET_FOR_CPP17
-  // Calculates duration between the two Dates using Epoch time.
+  // Calculates `DayTimeDuration` between the two `Dates` using Epoch time.
   std::optional<DayTimeDuration> operator-(const Date& rhs) const;
 
-  // If date is valid, converting it to Unix Epoch timestamp. ToEpoch always
+  // If `Date` is valid, convert it to Unix Epoch timestamp. ToEpoch always
   // returns a UTC timestamp.
   std::optional<Nanoseconds> toEpoch() const;
 #endif

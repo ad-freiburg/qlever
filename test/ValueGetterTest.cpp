@@ -312,7 +312,7 @@ TEST(NumericOrDateValueGetterTest, OperatorWithId) {
   t.checkFromValueId(ValueId::makeUndefined(), isNotNumeric);
   t.checkFromValueId(ValueId::makeFromGeoPoint({3, 4}), isNotNumeric);
 
-  // LiteralOrIri
+  // `LiteralOrIri`.
   t.checkFromLocalAndNormalVocabAndLiteral("\"someType\"^^<someType>",
                                            isNotNumeric);
   t.checkFromLocalAndNormalVocabAndLiteral("\"noType\"", isNotNumeric);

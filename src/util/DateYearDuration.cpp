@@ -347,7 +347,8 @@ std::optional<DateYearOrDuration> DateYearOrDuration::convertToXsdDate(
 std::optional<DateYearOrDuration> DateYearOrDuration::operator-(
     const DateYearOrDuration& rhs) const {
   if (isDate() && rhs.isDate()) {
-    // Date - Date => Duration | getting time between the two Dates
+    // `Date` - `Date` => `DayTimeDuration` ; getting time between the two
+    // `Date`s.
     const Date& ownDate = getDateUnchecked();
     const Date& otherDate = rhs.getDateUnchecked();
 
@@ -359,16 +360,16 @@ std::optional<DateYearOrDuration> DateYearOrDuration::operator-(
     }
   }
 
-  // TODO: The following subtractions should be implemented next:
-  //  DayTimeDuration - DayTimeDuration
-  //  Date - DayTimeDuration
-  //  LargeYear - LargeYear
+  // TODO<yarox-1>: The following subtractions should be implemented next:
+  //  `DayTimeDuration` - `DayTimeDuration`,
+  //  `Date` - `DayTimeDuration`,
+  //  `LargeYear` - `LargeYear`.
 
   // The following will not be implemented (not viable):
-  //  DayTimeDuration - Date
-  //  DayTimeDuration - LargeYear
+  //  `DayTimeDuration` - `Date`,
+  //  `DayTimeDuration` - `LargeYear`.
 
-  // no viable subtraction
+  // No viable subtraction.
   return std::nullopt;
 }
 #endif

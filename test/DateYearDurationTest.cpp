@@ -567,7 +567,7 @@ TEST(Date, toEpoch) {
     ASSERT_TRUE(date.toEpoch());
     EXPECT_NEAR(ns(timestamp), ns(date.toEpoch().value()), 500000);
 
-    // Test invalid date
+    // Test invalid `Date`.
     date = Date(1970, 11, 31, 13, 24, 24);
     ASSERT_FALSE(date.toEpoch());
     date = Date(2021, 2, 29, 9, 1, 23);
@@ -575,10 +575,10 @@ TEST(Date, toEpoch) {
   }
   {
     using namespace std::chrono;
-    // Test different timezones
-    Date date1 = Date(1999, 10, 11, 10, 5, 30);  // UTC
+    // Test different timezones.
+    Date date1 = Date(1999, 10, 11, 10, 5, 30);  // UTC.
     for (int i = 1; i < 24; i++) {
-      Date date2 = Date(1999, 10, 11, 10, 5, 30, i);  // UTC + i
+      Date date2 = Date(1999, 10, 11, 10, 5, 30, i);  // UTC + i.
       // Difference in hours is converted to ns to be compared.
       long long expected = static_cast<long long>(i) * 60 * 60 * 1'000'000'000;
       EXPECT_EQ(expected,
@@ -592,11 +592,11 @@ TEST(Date, toEpoch) {
 
 // _____________________________________________________________________________
 TEST(Date, Subtraction) {
-  // Invalid Dates
+  // Invalid `Date`s.
   Date date1 = Date(1970, 11, 31);
   Date date2 = Date(2021, 2, 29);
 
-  // Valid Dates
+  // Valid `Date`s.
   Date date3 = Date(1986, 6, 24);
   Date date4 = Date(1986, 6, 22);
 
@@ -615,15 +615,15 @@ TEST(Date, Subtraction) {
 
 // _____________________________________________________________________________
 TEST(Date, getTimeZoneOffsetToUTCInHours) {
-  Date date = Date(1970, 1, 1, 0, 0, 0);  // Not TimeZone given
+  Date date = Date(1970, 1, 1, 0, 0, 0);  // No `TimeZone` given.
   ASSERT_EQ(0, date.getTimeZoneOffsetToUTCInHours());
-  date = Date(1989, 2, 3, 14, 4, 5, Date::TimeZoneZ{});  // UTC
+  date = Date(1989, 2, 3, 14, 4, 5, Date::TimeZoneZ{});  // UTC.
   ASSERT_EQ(0, date.getTimeZoneOffsetToUTCInHours());
 
   for (int i = 1; i < 24; i++) {
-    date = Date(1989, 2, 3, 14, 4, 5, i);  // UTC + i
+    date = Date(1989, 2, 3, 14, 4, 5, i);  // UTC + i.
     ASSERT_EQ(i, date.getTimeZoneOffsetToUTCInHours());
-    date = Date(1989, 2, 3, 14, 4, 5, -i);  // UTC - i
+    date = Date(1989, 2, 3, 14, 4, 5, -i);  // UTC - i.
     ASSERT_EQ(-i, date.getTimeZoneOffsetToUTCInHours());
   }
 }
@@ -701,7 +701,7 @@ TEST(DateYearOrDuration, isLongYear) {
 #ifndef REDUCED_FEATURE_SET_FOR_CPP17
 TEST(DateYearOrDuration, Subtraction) {
   {
-    // Test for Date Subtraction
+    // Test for `Date`-subtraction.
     DateYearOrDuration test1 = DateYearOrDuration(Date(2012, 12, 24));
     DateYearOrDuration test2 = DateYearOrDuration(Date(2012, 12, 1));
     testSubtraction(DateYearOrDuration(
@@ -731,7 +731,7 @@ TEST(DateYearOrDuration, Subtraction) {
                     test1 - test2);
   }
   {
-    // Test invalid Dates
+    // Test invalid `Date`s.
     DateYearOrDuration date1 = DateYearOrDuration(Date(1970, 11, 31));
     DateYearOrDuration date2 = DateYearOrDuration(Date(2021, 2, 29));
     EXPECT_FALSE(date1 - date2);
@@ -741,13 +741,12 @@ TEST(DateYearOrDuration, Subtraction) {
     EXPECT_FALSE(date2 - date3);
   }
   {
-    // Test for DateTime Subtraction
-    // DateTime - DateTime
+    // Test for `DateTime`-subtraction.
     DateYearOrDuration date1 =
         DateYearOrDuration(Date(2012, 12, 22, 12, 6, 12));
     DateYearOrDuration date2 =
         DateYearOrDuration(Date(2012, 12, 20, 15, 15, 59));
-    // expected duration of 1d20h50min13sec
+    // Expected `DayTimeDuration` of 1d20h50min13sec.
     testSubtraction(DateYearOrDuration(DayTimeDuration(
                         DayTimeDuration::Type::Positive, 1, 20, 50, 13)),
                     date1 - date2);
@@ -756,15 +755,15 @@ TEST(DateYearOrDuration, Subtraction) {
                     date2 - date1);
 
     date2 = DateYearOrDuration(Date(2010, 1, 13, 10, 32, 15));
-    // expected duration of 1074d1h33min57sec
+    // Expected `DayTimeDuration` of 1074d1h33min57sec.
     testSubtraction(DateYearOrDuration(DayTimeDuration(
                         DayTimeDuration::Type::Positive, 1074, 1, 33, 57)),
                     date1 - date2);
 
-    // Date - DateTime
+    // `Date` - `DateTime`
     date1 = DateYearOrDuration(Date(2012, 12, 22, 0, 0, 0, 0));
     date2 = DateYearOrDuration(Date(2012, 12, 20, 13, 50, 59));
-    // expected duration of 1d10h9min1sec
+    // Expected `DayTimeDuration` of 1d10h9min1sec.
     testSubtraction(DateYearOrDuration(DayTimeDuration(
                         DayTimeDuration::Type::Positive, 1, 10, 9, 1)),
                     date1 - date2);
@@ -773,39 +772,39 @@ TEST(DateYearOrDuration, Subtraction) {
                     date2 - date1);
   }
   {
-    // Test previous bug where days/hours/minutes passed got negative
-    // daysPassed < 0
+    // Test previous bug where days/hours/minutes passed were negative.
+    // Two `Date`s with same day.
     DateYearOrDuration date1 = DateYearOrDuration(Date(2021, 01, 23, 21, 0, 0));
     DateYearOrDuration date2 = DateYearOrDuration(Date(2021, 01, 23, 23, 0, 0));
-    // expected duration of 0d2h0min0sec
+    // Expected `DayTimeDuration` of 0d2h0min0sec.
     testSubtraction(DateYearOrDuration(DayTimeDuration(
                         DayTimeDuration::Type::Negative, 0, 2, 0, 0)),
                     date1 - date2);
 
-    // hoursPassed < 0
+    // Two `Date`s with same day and hour.
     date1 = DateYearOrDuration(Date(2021, 01, 23, 22, 10, 0));
     date2 = DateYearOrDuration(Date(2021, 01, 23, 22, 30, 0));
-    // expected duration of 0d0h20min0sec
+    // Expected `DayTimeDuration` of 0d0h20min0sec.
     testSubtraction(DateYearOrDuration(DayTimeDuration(
                         DayTimeDuration::Type::Negative, 0, 0, 20, 0)),
                     date1 - date2);
 
-    // minutesPassed < 0
+    // Two `Date`s with same day, hour and minute.
     date1 = DateYearOrDuration(Date(2021, 01, 23, 22, 10, 03));
     date2 = DateYearOrDuration(Date(2021, 01, 23, 22, 10, 43));
-    // expected duration of 0d0h0min40sec
+    // Expected `DayTimeDuration` of 0d0h0min40sec.
     testSubtraction(DateYearOrDuration(DayTimeDuration(
                         DayTimeDuration::Type::Negative, 0, 0, 0, 40)),
                     date1 - date2);
   }
   {
-    // Test durations between UTC and other TimeZones.
+    // Test `DayTimeDuration`s between UTC and other `TimeZone`s.
     for (int i = 0; i < 24; i++) {
       DateYearOrDuration date1 =
           DateYearOrDuration(Date(2021, 01, 23, 20, 10, 33));
       DateYearOrDuration date2 =
           DateYearOrDuration(Date(2021, 01, 23, 20, 10, 33, i));
-      // expected positive/negative duration of i hours
+      // Expected positive/negative `DayTimeDuration` of i hours.
       testSubtraction(DateYearOrDuration(DayTimeDuration(
                           DayTimeDuration::Type::Positive, 0, i, 0, 0)),
                       date1 - date2);
@@ -815,7 +814,7 @@ TEST(DateYearOrDuration, Subtraction) {
                           DayTimeDuration::Type::Negative, 0, i, 0, 0)),
                       date1 - date2);
     }
-    // Same time, different TimeZones.
+    // Two `Date`s with same time, but different `TimeZone`s.
     DateYearOrDuration date1 =
         DateYearOrDuration(Date(1989, 01, 23, 20, 10, 33, 2));
     DateYearOrDuration date2 =
@@ -824,7 +823,7 @@ TEST(DateYearOrDuration, Subtraction) {
                         DayTimeDuration::Type::Positive, 0, 0, 0, 0)),
                     date1 - date2);
 
-    // TimeZones causing different days.
+    // `TimeZone`s causing different days.
     date1 = DateYearOrDuration(Date(1989, 01, 23, 20, 10, 33, -1));
     date2 = DateYearOrDuration(Date(1989, 01, 24, 3, 10, 33, 2));
     testSubtraction(DateYearOrDuration(DayTimeDuration(
