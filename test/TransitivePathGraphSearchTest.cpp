@@ -164,12 +164,13 @@ TYPED_TEST(GraphSearchTest, binaryFirstSearchWithLimit) {
     size_t maxDist_;
     std::vector<size_t> expected_;
   };
-  std::array<TestVal, 13> tests = {
+  std::array<TestVal, 14> tests = {
       TestVal(0, 0, 100, {0}), TestVal(1, 0, 100, {0}), TestVal(1, 1, 10, {}),
       TestVal(2, 0, 10, {0}), TestVal(2, 10, 11, {0}), TestVal(3, 0, 1, {1, 0}),
       TestVal(3, 1, 1, {1}), TestVal(4, 0, 100, {0}),
       TestVal(5, 1, 2, {1, 4, 3}), TestVal(5, 10, 100, {1, 2, 3, 4, 5, 6, 7}),
       TestVal(2, 10001, 1000001, {0}),
+      TestVal(8, 2, std::numeric_limits<size_t>::max(), {2, 3}),
       // The following will set the `skipStartNodeInitially` flag and call BFS
       // without limits.
       TestVal(3, 1, std::numeric_limits<size_t>::max(), {0, 1}),

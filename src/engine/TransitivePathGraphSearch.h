@@ -114,38 +114,83 @@ Set breadthFirstSearch(const GraphSearchProblem<T>& gsp,
 template <typename T>
 Set breadthFirstSearchWithLimit(const GraphSearchProblem<T>& gsp,
                                 const GraphSearchExecutionParams& ep) {
-  size_t traversalDepth = 0;
-  size_t nodesUntilNextDepthIncrease = 1;
-  Queue queue{ep.allocator_};
-  Set connectedNodes{ep.allocator_};
+  // Run DFS to find all nodes with distance of exactly `gsp.minDist_`.
+  Set minDistNodes{ep.allocator_};
 
-  queue.push_back(gsp.startNode_);
-  while (!queue.empty() && traversalDepth <= gsp.maxDist_) {
-    ep.checkCancellation("Breadth-first search (with limit)");
+  sparqlExpression::VectorWithMemoryLimit<std::pair<Id, size_t>> stack{
+      ep.allocator_};
+  ad_utility::HashSetWithMemoryLimit<Id> marks{ep.allocator_};
+  stack.emplace_back(gsp.startNode_, 0);
 
-    // Get next node from queue.
-    auto node = queue.front();
-    queue.pop_front();
-    if (traversalDepth >= gsp.minDist_) {
-      connectedNodes.insert(node);
+  while (!stack.empty()) {
+    ep.checkCancellation(
+        "Breadth first search with limit (finding nodes with minimum distance "
+        "using DFS)");
+
+    auto [node, steps] = stack.back();
+    stack.pop_back();
+
+    if (steps == gsp.minDist_) {
+      minDistNodes.insert(node);
+      continue;
     }
-    nodesUntilNextDepthIncrease--;
 
-    // Enqueue all successors of currently handled node.
-    const auto& successors = gsp.edges_.successors(node);
-    for (Id successor : successors) {
-      // Do not re-add already discovered nodes (skip loops).
-      if (!connectedNodes.contains(successor)) {
-        queue.push_back(successor);
+    const auto successors = gsp.edges_.successors(node);
+    for (const Id& successor : successors) {
+      stack.emplace_back(successor, steps + 1);
+    }
+  }
+
+  Set connectedNodes{ep.allocator_};
+  // Run BFS starting at each of the nodes from `minDistNodes`.
+
+  // If the maximum limit is infinity (`std::numeric_limits<size_t>::max()`), we
+  // can just call the unlimited BFS starting at all nodes from `minDistNodes`.
+  if (gsp.maxDist_ == std::numeric_limits<size_t>::max()) {
+    for (const auto& tempStartId : minDistNodes) {
+      auto tempGsp = GraphSearchProblem<T>(
+          gsp.edges_, tempStartId, gsp.targetNode_, gsp.minDist_, gsp.maxDist_);
+      for (const auto& connId : breadthFirstSearch(tempGsp, ep)) {
+        connectedNodes.insert(connId);
       }
     }
+    return connectedNodes;
+  }
 
-    // Another layer has been fully discovered.
-    if (nodesUntilNextDepthIncrease == 0) {
-      traversalDepth++;
-      // At this point, the queue contains exactly all
-      // undiscovered nodes from the next layer.
-      nodesUntilNextDepthIncrease = queue.size();
+  // For a non-infinity max distance, we can run a simple BFS which just checks
+  // for the upper limit.
+  for (const Id& node : minDistNodes) {
+    Queue queue{ep.allocator_};
+    size_t traversalDepth = 0;
+    size_t nodesUntilNextDepthIncrease = 1;
+
+    queue.push_back(node);
+    while (!queue.empty() && traversalDepth <= gsp.maxDist_ - gsp.minDist_) {
+      ep.checkCancellation("Breadth-first search (with limit)");
+
+      // Get next node from queue.
+      auto node = queue.front();
+      queue.pop_front();
+      nodesUntilNextDepthIncrease--;
+
+      connectedNodes.insert(node);
+
+      // Enqueue all successors of currently handled node.
+      const auto& successors = gsp.edges_.successors(node);
+      for (Id successor : successors) {
+        // Do not re-add already discovered nodes (skip loops).
+        if (!connectedNodes.contains(successor)) {
+          queue.push_back(successor);
+        }
+      }
+
+      // Another layer has been fully discovered.
+      if (nodesUntilNextDepthIncrease == 0) {
+        traversalDepth++;
+        // At this point, the queue contains exactly all
+        // undiscovered nodes from the next layer.
+        nodesUntilNextDepthIncrease = queue.size();
+      }
     }
   }
   return connectedNodes;
