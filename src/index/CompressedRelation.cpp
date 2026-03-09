@@ -10,7 +10,6 @@
 
 #include "index/CompressedRelation.h"
 
-#include "../util/compression/CompressionAlgorithm.h"
 #include "engine/Engine.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "engine/idTable/IdTable.h"
@@ -27,6 +26,7 @@
 #include "util/Timer.h"
 #include "util/TransparentFunctors.h"
 #include "util/TypeTraits.h"
+#include "util/compression/CompressionAlgorithm.h"
 
 using namespace std::chrono_literals;
 

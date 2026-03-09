@@ -9,8 +9,8 @@
 
 #include <gtest/gtest.h>
 
-#include "../src/util/compression/CompressionAlgorithm.h"
 #include "util/GTestHelpers.h"
+#include "util/compression/CompressionAlgorithm.h"
 #include "util/compression/ZstdWrapper.h"
 #ifdef QLEVER_HAS_LZ4
 #include "util/compression/Lz4Wrapper.h"
@@ -100,6 +100,7 @@ TEST_P(CompressionWrapperTest, LargeData) {
   ASSERT_EQ(x, decomp);
 }
 
+// _____________________________________________________________________________
 TEST(CompressionAlgorithm, CornerCases) {
   CompressionAlgorithm invalid{static_cast<CompressionAlgorithm::Enum>(-1)};
   AD_EXPECT_THROW_WITH_MESSAGE(invalid.compress(nullptr, 0),

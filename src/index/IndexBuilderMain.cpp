@@ -18,13 +18,13 @@
 #include <iostream>
 #include <string>
 
-#include "../util/compression/CompressionAlgorithm.h"
 #include "CompilationInfo.h"
 #include "global/Constants.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "libqlever/Qlever.h"
 #include "util/ProgramOptionsHelpers.h"
 #include "util/ReadableNumberFacet.h"
+#include "util/compression/CompressionAlgorithm.h"
 #include "util/json.h"
 
 using std::string;

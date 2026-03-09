@@ -15,7 +15,7 @@
 // An enum for the different compression algorithms used inside QLever.
 // For details see `CompressionAlgorithm.h`. This header can be included in
 // places, where we only care about the enum, and not about the other
-// functionality of// `CompressionAlgorithm.h`
+// functionality of `CompressionAlgorithm.h`.
 namespace ad_utility {
 enum struct CompressionAlgorithmEnum : uint8_t { Zstd = 0, Lz4 = 1 };
 }

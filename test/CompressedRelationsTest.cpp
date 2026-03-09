@@ -9,7 +9,6 @@
 
 #include <gtest/gtest.h>
 
-#include "../src/util/compression/CompressionAlgorithm.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "index/CompressedRelation.h"
@@ -18,6 +17,7 @@
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/SourceLocation.h"
+#include "util/compression/CompressionAlgorithm.h"
 
 namespace {
 
@@ -129,56 +129,6 @@ auto addGraphColumnIfNecessary(std::vector<RelationInput>& inputs) {
   }
 }
 }  // namespace
-namespace {
-// Create a safe cleanup object, that automatically tries to delete the file at
-// the given `filename` when it is destroyed. This is used to delete the
-// persistent index files that are created for these tests.
-auto makeCleanup(std::string filename) {
-  return ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(
-      [filename = std::move(filename)] { ad_utility::deleteFile(filename); });
-}
-
-// From the `inputs` delete each triple with probability `locatedProbab` and
-// add it to a vector of `IdTriple`s which can then be used to build a
-// `LocatedTriples` object. Return the remaining triples and the (not-yet)
-// located triples.
-std::tuple<std::vector<RelationInput>, std::vector<IdTriple<>>>
-makeLocatedTriplesFromPartOfInput(float locatedProbab,
-                                  const std::vector<RelationInput>& inputs) {
-  std::vector<IdTriple<>> locatedTriples;
-  std::vector<RelationInput> result;
-  ad_utility::RandomDoubleGenerator randomGenerator(0.0, 1.0);
-  auto gen = [&randomGenerator, &locatedProbab]() {
-    auto r = randomGenerator();
-    return locatedProbab == 1.0f || r < locatedProbab;
-  };
-
-  auto addLocated = [&locatedTriples](Id col0, const auto& otherCols) {
-    locatedTriples.push_back(IdTriple<>{
-        {col0, V(otherCols.at(0)), V(otherCols.at(1)), V(otherCols.at(2))}});
-  };
-
-  for (const auto& input : inputs) {
-    auto col0 = V(input.col0_);
-    result.emplace_back(input.col0_);
-    auto& row = result.back().col1And2_;
-    for (const auto& otherCols : input.col1And2_) {
-      AD_CORRECTNESS_CHECK(otherCols.size() >= 3);
-      auto isLocated = gen();
-      if (isLocated) {
-        addLocated(col0, otherCols);
-      } else {
-        row.push_back(otherCols);
-      }
-    }
-    if (row.empty()) {
-      result.pop_back();
-    }
-  }
-  return {std::move(result), std::move(locatedTriples)};
-}
-
-}  // namespace
 
 // A parametrized test fixture over `CompressionAlgorithm` for tests that
 // exercise the compressed relation writer/reader with different block sizes.
@@ -260,6 +210,54 @@ class CompressedRelationsAlgoTest
     }
 
     return {std::move(blocks), std::move(metaData)};
+  }
+
+  // Create a safe cleanup object, that automatically tries to delete the file
+  // at the given `filename` when it is destroyed. This is used to delete the
+  // persistent index files that are created for these tests.
+  static auto makeCleanup(std::string filename) {
+    return ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(
+        [filename = std::move(filename)] { ad_utility::deleteFile(filename); });
+  }
+
+  // From the `inputs` delete each triple with probability `locatedProbab` and
+  // add it to a vector of `IdTriple`s which can then be used to build a
+  // `LocatedTriples` object. Return the remaining triples and the (not-yet)
+  // located triples.
+  static std::tuple<std::vector<RelationInput>, std::vector<IdTriple<>>>
+  makeLocatedTriplesFromPartOfInput(float locatedProbab,
+                                    const std::vector<RelationInput>& inputs) {
+    std::vector<IdTriple<>> locatedTriples;
+    std::vector<RelationInput> result;
+    ad_utility::RandomDoubleGenerator randomGenerator(0.0, 1.0);
+    auto gen = [&randomGenerator, &locatedProbab]() {
+      auto r = randomGenerator();
+      return locatedProbab == 1.0f || r < locatedProbab;
+    };
+
+    auto addLocated = [&locatedTriples](Id col0, const auto& otherCols) {
+      locatedTriples.push_back(IdTriple<>{
+          {col0, V(otherCols.at(0)), V(otherCols.at(1)), V(otherCols.at(2))}});
+    };
+
+    for (const auto& input : inputs) {
+      auto col0 = V(input.col0_);
+      result.emplace_back(input.col0_);
+      auto& row = result.back().col1And2_;
+      for (const auto& otherCols : input.col1And2_) {
+        AD_CORRECTNESS_CHECK(otherCols.size() >= 3);
+        auto isLocated = gen();
+        if (isLocated) {
+          addLocated(col0, otherCols);
+        } else {
+          row.push_back(otherCols);
+        }
+      }
+      if (row.empty()) {
+        result.pop_back();
+      }
+    }
+    return {std::move(result), std::move(locatedTriples)};
   }
 
   // Write the relations specified by the `inputs` to a compressed permutation

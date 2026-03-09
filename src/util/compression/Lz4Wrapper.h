@@ -27,8 +27,8 @@ class Lz4Wrapper {
   // Compress the given byte array using LZ4_HC and return the result.
   static std::vector<char> compress(const void* src, size_t numBytes) {
     if (numBytes == 0) {
-      // Avoid segfaults (the eager `LZ4_compres_*` functions expect an nonempty
-      // input.
+      // Avoid segfaults (the eager `LZ4_compress_*` functions expect a nonempty
+      // input).
       return {};
     }
     int maxSize = LZ4_compressBound(static_cast<int>(numBytes));

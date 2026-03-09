@@ -18,7 +18,6 @@
 #include <string>
 #include <vector>
 
-#include "../util/compression/CompressionAlgorithm.h"
 #include "backports/algorithm.h"
 #include "engine/Result.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
@@ -45,6 +44,7 @@
 #include "util/File.h"
 #include "util/Forward.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/compression/CompressionAlgorithm.h"
 #include "util/json.h"
 
 template <typename Comparator, size_t I = NumColumnsIndexBuilding>

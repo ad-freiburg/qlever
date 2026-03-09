@@ -373,7 +373,8 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
   // Read permutation, and deactivate the graph post-processing of
   // `CompressedRelationReader`, including row deduplication, which is not the
   // intended behavior for materialized views.
-  // Materialized views always use Zstd compression.
+  // Materialized views always use the default compression (currently Zstd) for
+  // now.
   permutation_->loadFromDisk(filename, false, false,
                              DEFAULT_COMPRESSION_ALGORITHM);
   AD_CORRECTNESS_CHECK(permutation_->isLoaded());

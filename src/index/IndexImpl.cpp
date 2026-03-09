@@ -18,7 +18,6 @@
 #include <optional>
 #include <utility>
 
-#include "../util/compression/CompressionAlgorithm.h"
 #include "CompilationInfo.h"
 #include "backports/algorithm.h"
 #include "engine/AddCombinedRowToTable.h"
@@ -39,6 +38,7 @@
 #include "util/Timer.h"
 #include "util/TypeTraits.h"
 #include "util/Views.h"
+#include "util/compression/CompressionAlgorithm.h"
 
 using std::array;
 using namespace ad_utility::memory_literals;

@@ -7,11 +7,12 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#include <../src/util/compression/CompressionAlgorithm.h>
 #include <gmock/gmock.h>
 
 #include "util/HashMap.h"
+#include "util/compression/CompressionAlgorithm.h"
 
+// _____________________________________________________________________________
 TEST(EnumWithStrings, CompressionAlgorithmEnum) {
   using C = CompressionAlgorithm;
   EXPECT_EQ(C::Lz4, C::fromString("lz4"));

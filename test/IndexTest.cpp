@@ -920,6 +920,7 @@ TEST(IndexImpl, loadConfigFromOldIndex) {
   EXPECT_EQ(stats, jsonFromFile);
 }
 
+// _____________________________________________________________________________
 TEST(IndexImpl, basicGetters) {
   IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
   EXPECT_EQ(index.compressionAlgorithm(), DEFAULT_COMPRESSION_ALGORITHM);

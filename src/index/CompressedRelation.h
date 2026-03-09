@@ -12,7 +12,6 @@
 
 #include <vector>
 
-#include "../util/compression/CompressionAlgorithm.h"
 #include "backports/algorithm.h"
 #include "backports/three_way_comparison.h"
 #include "backports/type_traits.h"
@@ -29,6 +28,7 @@
 #include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/Serializer.h"
 #include "util/TaskQueue.h"
+#include "util/compression/CompressionAlgorithm.h"
 
 // Forward declarations
 class IdTable;

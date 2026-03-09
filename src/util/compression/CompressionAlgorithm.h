@@ -46,15 +46,16 @@ class CompressionAlgorithm
   // below.
   template <typename F, typename... Args>
   decltype(auto) apply(F f, Args&&... args) const {
-    auto doApply = [&]<typename T>() {
-      return f.template operator()<T>(AD_FWD(args)...);
+    auto doApply = [&](auto ti) {
+      return f.template operator()(ti, AD_FWD(args)...);
     };
+    using namespace ad_utility::use_type_identity;
     switch (value()) {
       case Enum::Zstd:
-        return doApply.template operator()<ZstdWrapper>();
+        return doApply(ti<ZstdWrapper>);
       case Enum::Lz4:
 #ifdef QLEVER_HAS_LZ4
-        return doApply.template operator()<Lz4Wrapper>();
+        return doApply(ti<Lz4Wrapper>);
 #else
         throw std::runtime_error(
             "LZ4 compression was requested, but QLever was compiled without "
@@ -69,14 +70,18 @@ class CompressionAlgorithm
 
   // Compress `numBytes` starting at `src` using the current algorithm.
   std::vector<char> compress(const void* src, size_t numBytes) const {
-    return apply([&]<typename T>() { return T::compress(src, numBytes); });
+    return apply([&]([[maybe_unused]] auto ti) {
+      using W = typename decltype(ti)::type;
+      return W::compress(src, numBytes);
+    });
   }
 
   // Decompress to a `std::vector<T>`.
   template <typename T>
   std::vector<T> decompress(void* src, size_t numBytes,
                             size_t knownOriginalSize) const {
-    return apply([&]<typename W>() {
+    return apply([&]([[maybe_unused]] auto ti) {
+      using W = typename decltype(ti)::type;
       return W::template decompress<T>(src, numBytes, knownOriginalSize);
     });
   }
@@ -85,7 +90,8 @@ class CompressionAlgorithm
   template <typename T>
   size_t decompressToBuffer(const char* src, size_t numBytes, T* buffer,
                             size_t bufferCapacity) const {
-    return apply([&]<typename W>() {
+    return apply([&]([[maybe_unused]] auto ti) {
+      using W = typename decltype(ti)::type;
       return W::decompressToBuffer(src, numBytes, buffer, bufferCapacity);
     });
   }
