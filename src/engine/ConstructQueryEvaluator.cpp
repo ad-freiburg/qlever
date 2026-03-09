@@ -6,7 +6,7 @@
 
 #include "engine/ConstructQueryEvaluator.h"
 
-#include "engine/ExportQueryExecutionTrees.h"
+#include "engine/ValueIdHelpers.h"
 #include "util/Algorithm.h"
 #include "util/TypeTraits.h"
 
@@ -154,7 +154,7 @@ StringTriple ConstructQueryEvaluator::evaluatePreprocessedTriple(
 std::optional<std::string> ConstructQueryEvaluator::evaluateId(
     Id id, const Index& index, const LocalVocab& localVocab) {
   auto optionalStringAndType =
-      ExportQueryExecutionTrees::idToStringAndType(index, id, localVocab);
+      ql::exportIds::idToStringAndType(index, id, localVocab);
 
   if (!optionalStringAndType.has_value()) {
     return std::nullopt;
