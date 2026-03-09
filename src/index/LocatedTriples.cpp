@@ -308,7 +308,7 @@ TriplesToVacuum LocatedTriplesPerBlock::identifyTriplesToVacuum(
                         ql::views::filter([minimumBlockSize](const auto& e) {
                           return e.second.size() >= minimumBlockSize;
                         }) |
-                        ql::views::keys | ::ranges::to<std::vector>();
+                        ql::views::keys;
 
   VacuumStatistics totalStats{0, 0, 0, 0};
   std::vector<IdTriple<0>> allDeletionsToRemove;

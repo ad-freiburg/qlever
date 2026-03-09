@@ -786,6 +786,9 @@ class CompressedRelationReader {
       const LocatedTriplesPerBlock& locatedTriplesPerBlock,
       const LimitOffsetClause& limitOffset = {}) const;
 
+  // Retrieve all triples in the given block, ignoring updates. This is used in
+  // `DeltaTriples::vacuum` to determine update triples that have no effect and
+  // thus can be dropped.
   IdTable readBlockWithoutLocatedTriples(CompressedBlockMetadata block,
                                          ColumnIndices additionalColumns) const;
 
