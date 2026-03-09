@@ -107,8 +107,8 @@ CPP_template(typename T, bool moveElements, typename SizeGetter,
     // and advance the iterator. Return true if the range then is exhausted.
     auto push = [this, &sizeOfCurrentBlock, &exhausted](auto& itPair) {
       auto& it = itPair.first;
-      pushSingleElement<moveElements, T, SizeGetter>(buffer_,
-                                                     sizeOfCurrentBlock, *it);
+      detail::pushSingleElement<moveElements, T, SizeGetter>(
+          buffer_, sizeOfCurrentBlock, *it);
       ++it;
       return exhausted(itPair);
     };
