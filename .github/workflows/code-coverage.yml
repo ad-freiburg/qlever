@@ -78,7 +78,7 @@ jobs:
       working-directory: ${{github.workspace}}/build/test
       run: >
         llvm-profdata-16 merge -sparse *.profraw -o default.profdata;
-        llvm-cov-16 export ./QLeverAllUnitTestsMain --dump --format=lcov
+        llvm-cov-16 export ./QLeverAllUnitTestsMain
         --instr-profile ./default.profdata
         --ignore-filename-regex="/third_party/"
         --ignore-filename-regex="/generated/"
@@ -86,8 +86,8 @@ jobs:
         --ignore-filename-regex="/ctre/"
         --ignore-filename-regex="/test/"
         --ignore-filename-regex="/benchmark/"
-        > ./coverage_raw.lcov;
-        python3 ${{github.workspace}}/misc/merge_lcov_branches.py ./coverage_raw.lcov -o ./coverage.lcov
+        > ./coverage.json;
+        python3 ${{github.workspace}}/misc/json_to_lcov.py ./coverage.json -o ./coverage.lcov
 
 # Only upload the coverage directly if this is not a pull request. In this
 # case we are on the master branch and have access to the Codecov token.
