@@ -22,7 +22,7 @@
 #include "parser/LiteralOrIri.h"
 #include "util/ValueIdentity.h"
 
-namespace ql::valueId {
+namespace ql::exportIds {
 
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 using Iri = ad_utility::triple_component::Iri;
@@ -214,6 +214,6 @@ idsToStringAndType(const Index& index, ql::span<const Id> ids,
   return results;
 }
 
-}  // namespace ql::valueId
+}  // namespace ql::exportIds
 
 #endif  // QLEVER_SRC_ENGINE_VALUEIDTOSTRING_H

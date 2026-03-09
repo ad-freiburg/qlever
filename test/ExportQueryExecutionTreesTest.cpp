@@ -1519,14 +1519,15 @@ TEST(ExportQueryExecutionTrees, CornerCases) {
   EXPECT_TRUE(resultNoColumns["results"]["bindings"][0].empty());
   auto qec = ad_utility::testing::getQec(kg);
   AD_EXPECT_THROW_WITH_MESSAGE(
-      ql::valueId::idToStringAndType(qec->getIndex(), Id::max(), LocalVocab{}),
+      ql::exportIds::idToStringAndType(qec->getIndex(), Id::max(),
+                                       LocalVocab{}),
       ::testing::ContainsRegex("should be unreachable"));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      ql::valueId::getLiteralOrIriFromVocabIndex(qec->getIndex(), Id::max(),
-                                                 LocalVocab{}),
+      ql::exportIds::getLiteralOrIriFromVocabIndex(qec->getIndex(), Id::max(),
+                                                   LocalVocab{}),
       ::testing::ContainsRegex("should be unreachable"));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      ql::valueId::idToStringAndTypeForEncodedValue(
+      ql::exportIds::idToStringAndTypeForEncodedValue(
           ad_utility::testing::VocabId(12)),
       ::testing::ContainsRegex("should be unreachable"));
 }
@@ -1934,7 +1935,7 @@ TEST(ExportQueryExecutionTrees, idToLiteralFunctionality) {
           const std::vector<std::tuple<bool, std::optional<std::string>>>&
               cases) {
         for (const auto& [onlyLiteralsWithXsdString, expected] : cases) {
-          auto result = ql::valueId::idToLiteral(
+          auto result = ql::exportIds::idToLiteral(
               qec->getIndex(), id, LocalVocab{}, onlyLiteralsWithXsdString);
           if (expected) {
             EXPECT_THAT(result,
@@ -2018,7 +2019,7 @@ TEST(ExportQueryExecutionTrees, idToLiteralOrIriFunctionality) {
       {ValueId::makeUndefined(), std::nullopt}};
   for (const auto& [valueId, expRes] : expected) {
     ASSERT_EQ(
-        ql::valueId::idToLiteralOrIri(qec->getIndex(), valueId, LocalVocab{}),
+        ql::exportIds::idToLiteralOrIri(qec->getIndex(), valueId, LocalVocab{}),
         expRes);
   }
 }
@@ -2055,13 +2056,13 @@ TEST(ExportQueryExecutionTrees,
   // `idsToStringAndType` requires the input to be sorted by `ValueId`.
   ql::ranges::sort(ids);
 
-  auto batchResults = ql::valueId::idsToStringAndType(
+  auto batchResults = ql::exportIds::idsToStringAndType(
       index, ql::span<const Id>{ids}, localVocab);
 
   ASSERT_EQ(batchResults.size(), ids.size());
   for (size_t i = 0; i < ids.size(); ++i) {
     EXPECT_EQ(batchResults[i],
-              ql::valueId::idToStringAndType(index, ids[i], localVocab))
+              ql::exportIds::idToStringAndType(index, ids[i], localVocab))
         << "Mismatch at index " << i;
   }
 }
@@ -2071,20 +2072,20 @@ TEST(ExportQueryExecutionTrees,
 TEST(ExportQueryExecutionTrees, idsToStringAndTypeEmptyInput) {
   auto qec = ad_utility::testing::getQec("<s> <p> <o>");
   LocalVocab localVocab{};
-  auto result = ql::valueId::idsToStringAndType(
+  auto result = ql::exportIds::idsToStringAndType(
       qec->getIndex(), ql::span<const Id>{}, localVocab);
   EXPECT_TRUE(result.empty());
 }
 
 // _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, getLiteralOrNullopt) {
-  using LiteralOrIri = ql::valueId::LiteralOrIri;
+  using LiteralOrIri = ql::exportIds::LiteralOrIri;
   using Literal = ad_utility::triple_component::Literal;
   using Iri = ad_utility::triple_component::Iri;
 
   auto litOrNulloptTestHelper = [](std::optional<LiteralOrIri> input,
                                    std::optional<std::string> expectedRes) {
-    auto res = ql::valueId::getLiteralOrNullopt(input);
+    auto res = ql::exportIds::getLiteralOrNullopt(input);
     ASSERT_EQ(res.has_value(), expectedRes.has_value());
     if (res.has_value()) {
       ASSERT_EQ(expectedRes.value(), res.value().toStringRepresentation());
@@ -2117,7 +2118,7 @@ TEST(ExportQueryExecutionTrees, IsPlainLiteralOrLiteralWithXsdString) {
   };
 
   auto verify = [](const LiteralOrIri& input, bool expected) {
-    EXPECT_EQ(ql::valueId::isPlainLiteralOrLiteralWithXsdString(input),
+    EXPECT_EQ(ql::exportIds::isPlainLiteralOrLiteralWithXsdString(input),
               expected);
   };
 
@@ -2141,12 +2142,12 @@ TEST(ExportQueryExecutionTrees, IsPlainLiteralOrLiteralWithXsdString) {
 TEST(ExportQueryExecutionTrees, ReplaceAnglesByQuotes) {
   std::string input = "<s>";
   std::string expected = "\"s\"";
-  EXPECT_EQ(ql::valueId::replaceAnglesByQuotes(input), expected);
+  EXPECT_EQ(ql::exportIds::replaceAnglesByQuotes(input), expected);
   input = "s>";
-  EXPECT_THROW(ql::valueId::replaceAnglesByQuotes(input),
+  EXPECT_THROW(ql::exportIds::replaceAnglesByQuotes(input),
                ad_utility::Exception);
   input = "<s";
-  EXPECT_THROW(ql::valueId::replaceAnglesByQuotes(input),
+  EXPECT_THROW(ql::exportIds::replaceAnglesByQuotes(input),
                ad_utility::Exception);
 }
 
@@ -2155,10 +2156,10 @@ TEST(ExportQueryExecutionTrees, blankNodeIrisAreProperlyFormatted) {
   using ad_utility::triple_component::Iri;
   std::string_view input = "_:test";
   EXPECT_THAT(
-      ql::valueId::blankNodeIriToString(Iri::fromStringRepresentation(
+      ql::exportIds::blankNodeIriToString(Iri::fromStringRepresentation(
           absl::StrCat(QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX, input, ">"))),
       ::testing::Optional(::testing::Eq(input)));
-  EXPECT_EQ(ql::valueId::blankNodeIriToString(
+  EXPECT_EQ(ql::exportIds::blankNodeIriToString(
                 Iri::fromStringRepresentation("<some_iri>")),
             std::nullopt);
 }
@@ -2275,7 +2276,7 @@ TEST(ExportQueryExecutionTrees, GetLiteralOrIriFromVocabIndexWithEncodedIris) {
     EXPECT_EQ(encodedId.getDatatype(), Datatype::EncodedVal);
 
     // Test getLiteralOrIriFromVocabIndex with the encoded ID
-    auto result = ql::valueId::getLiteralOrIriFromVocabIndex(
+    auto result = ql::exportIds::getLiteralOrIriFromVocabIndex(
         qec->getIndex(), encodedId, emptyLocalVocab);
 
     // The result should be the original IRI
@@ -2293,7 +2294,7 @@ TEST(ExportQueryExecutionTrees, GetLiteralOrIriFromVocabIndexWithEncodedIris) {
     VocabIndex vocabIndex = VocabIndex::make(0);  // First vocab entry
     Id vocabId = Id::makeFromVocabIndex(vocabIndex);
 
-    auto vocabResult = ql::valueId::getLiteralOrIriFromVocabIndex(
+    auto vocabResult = ql::exportIds::getLiteralOrIriFromVocabIndex(
         qec->getIndex(), vocabId, emptyLocalVocab);
 
     // Should successfully return some IRI or literal from vocabulary

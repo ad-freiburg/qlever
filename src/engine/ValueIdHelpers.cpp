@@ -18,7 +18,7 @@
 #include "index/EncodedIriManager.h"
 #include "util/Exception.h"
 
-namespace ql::valueId {
+namespace ql::exportIds {
 
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 using Iri = ad_utility::triple_component::Iri;
@@ -31,7 +31,7 @@ std::optional<Literal> idToLiteralForEncodedValue(
     return std::nullopt;
   }
   auto optionalStringAndType =
-      ql::valueId::idToStringAndTypeForEncodedValue(id);
+      ql::exportIds::idToStringAndTypeForEncodedValue(id);
   if (!optionalStringAndType) {
     return std::nullopt;
   }
@@ -125,7 +125,7 @@ std::optional<LiteralOrIri> idToLiteralOrIriForEncodedValue(Id id) {
   // behavior. However, this is somewhat fragile and should be kept in mind if
   // this function is used in other contexts.
   auto [literal, type] =
-      ql::valueId::idToStringAndTypeForEncodedValue(id).value_or(
+      ql::exportIds::idToStringAndTypeForEncodedValue(id).value_or(
           std::make_pair(std::string{}, nullptr));
   if (type == nullptr) {
     return std::nullopt;
@@ -163,7 +163,8 @@ std::optional<LiteralOrIri> idToLiteralOrIri(const IndexImpl& index, Id id,
     case VocabIndex:
     case LocalVocabIndex:
     case EncodedVal:
-      return ql::valueId::getLiteralOrIriFromVocabIndex(index, id, localVocab);
+      return ql::exportIds::getLiteralOrIriFromVocabIndex(index, id,
+                                                          localVocab);
     case TextRecordIndex:
       return getLiteralOrIriFromTextRecordIndex(index, id);
     default:
@@ -283,4 +284,4 @@ LiteralOrIri encodedIdToLiteralOrIri(Id id, const IndexImpl& index) {
   return LiteralOrIri::fromStringRepresentation(mgr.toString(id));
 }
 
-}  // namespace ql::valueId
+}  // namespace ql::exportIds

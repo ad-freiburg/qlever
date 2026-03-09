@@ -187,7 +187,7 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
     const auto& ids = triple.ids();
     Id objectId = ids.at(2);
     auto optionalLiteralOrIri =
-        ql::valueId::idToLiteralOrIri(index_, objectId, localVocab_, true);
+        ql::exportIds::idToLiteralOrIri(index_, objectId, localVocab_, true);
     if (!optionalLiteralOrIri.has_value() ||
         !optionalLiteralOrIri.value().isLiteral() ||
         !optionalLiteralOrIri.value().hasLanguageTag()) {
@@ -195,7 +195,7 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
     }
     const auto& predicate =
         predicateCache_.getOrCompute(ids.at(1).getBits(), [this](Id::T bits) {
-          auto optionalPredicate = ql::valueId::idToLiteralOrIri(
+          auto optionalPredicate = ql::exportIds::idToLiteralOrIri(
               index_, Id::fromBits(bits), localVocab_, true);
           AD_CORRECTNESS_CHECK(optionalPredicate.has_value());
           AD_CORRECTNESS_CHECK(optionalPredicate.value().isIri());

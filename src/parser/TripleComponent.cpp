@@ -97,7 +97,7 @@ std::string TripleComponent::toRdfLiteral() const {
     return getIri().toStringRepresentation();
   } else {
     EncodedIriManager ev;
-    auto [value, type] = ql::valueId::idToStringAndTypeForEncodedValue(
+    auto [value, type] = ql::exportIds::idToStringAndTypeForEncodedValue(
                              toValueIdIfNotString(&ev).value())
                              .value();
     return absl::StrCat("\"", value, "\"^^<", type, ">");

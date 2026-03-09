@@ -304,7 +304,7 @@ nlohmann::json idTableToQLeverJSONRow(
       continue;
     }
     const auto& currentId = data(rowIndex, opt->columnIndex_);
-    const auto& optionalStringAndXsdType = ql::valueId::idToStringAndType(
+    const auto& optionalStringAndXsdType = ql::exportId::idToStringAndType(
         qet.getQec()->getIndex(), currentId, localVocab);
     if (!optionalStringAndXsdType.has_value()) {
       row.emplace_back(nullptr);
@@ -501,7 +501,7 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream(
           const auto& val = selectedColumnIndices[j].value();
           Id id = pair.idTable()(i, val.columnIndex_);
           auto optionalStringAndType =
-              ql::valueId::idToStringAndType<format == MediaType::csv>(
+              ql::exportIds::idToStringAndType<format == MediaType::csv>(
                   qet.getQec()->getIndex(), id, pair.localVocab(),
                   escapeFunction);
           if (optionalStringAndType.has_value()) [[likely]] {
@@ -528,7 +528,7 @@ static std::string idToXMLBinding(std::string_view variable, Id id,
   using namespace std::string_view_literals;
   using namespace std::string_literals;
   const auto& optionalValue =
-      ql::valueId::idToStringAndType(index, id, localVocab);
+      ql::exportIds::idToStringAndType(index, id, localVocab);
   if (!optionalValue.has_value()) {
     return ""s;
   }
@@ -678,7 +678,7 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
   auto getBinding = [&](const TableConstRefWithVocab& pair, const uint64_t& i) {
     auto binding = nlohmann::ordered_json::object();
     for (const auto& column : columns) {
-      auto optionalStringAndType = ql::valueId::idToStringAndType(
+      auto optionalStringAndType = ql::exportIds::idToStringAndType(
           qet.getQec()->getIndex(), pair.idTable()(i, column->columnIndex_),
           pair.localVocab());
       if (optionalStringAndType.has_value()) [[likely]] {
