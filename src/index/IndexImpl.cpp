@@ -1802,7 +1802,9 @@ CPP_template_def(typename... NextSorter)(requires(
         if (prefix != newGraphPrefixId) {
           return;
         }
-        nextAvailableIndex = std::max(nextAvailableIndex, payload + 1);
+        nextAvailableIndex =
+            std::max(nextAvailableIndex,
+                     EncodedIriManager::decodeDecimalFrom64Bit(payload) + 1);
       };
   size_t numPredicates =
       createPermutationPair(numColumns, AD_FWD(sortedTriples), *pso_, *pos_,

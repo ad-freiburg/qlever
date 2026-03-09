@@ -912,3 +912,16 @@ TEST(IndexImpl, loadConfigFromOldIndex) {
   in >> jsonFromFile;
   EXPECT_EQ(stats, jsonFromFile);
 }
+
+// _____________________________________________________________________________
+TEST(IndexImpl, graphNamespaceManagerIntegration) {
+  TestIndexConfig c{absl::StrCat("<a> <b> <c> <", QLEVER_NEW_GRAPH_PREFIX,
+                                 "0> . <a> <b> <c> <", QLEVER_NEW_GRAPH_PREFIX,
+                                 "1> .")};
+  c.indexType = qlever::Filetype::NQuad;
+  auto qec = getQec(c);
+  const auto graphManager = qec->getIndex().graphNamespaceManager();
+  EXPECT_EQ(*graphManager.allocatedGraphs_.rlock(), 2);
+  EXPECT_THAT(graphManager.prefixWithoutBraces_,
+              testing::StrEq(QLEVER_NEW_GRAPH_PREFIX));
+}

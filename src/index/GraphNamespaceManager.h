@@ -25,6 +25,7 @@ class GraphNamespaceManager {
   std::optional<std::string> fileNameForPersisting_;
 
   FRIEND_TEST(GraphNamespaceManager, storeAndRestoreData);
+  FRIEND_TEST(IndexImpl, graphNamespaceManagerIntegration);
 
  public:
   GraphNamespaceManager() = default;
