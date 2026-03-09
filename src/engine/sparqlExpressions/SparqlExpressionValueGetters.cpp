@@ -8,9 +8,9 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/type_traits.h"
-#include "engine/ExportIds.h"
 #include "global/Constants.h"
 #include "global/ValueId.h"
+#include "index/ExportIds.h"
 #include "parser/NormalizedString.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/Literal.h"

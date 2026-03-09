@@ -9,9 +9,9 @@
 
 #include <absl/strings/str_cat.h>
 
-#include "engine/ExportIds.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "global/Constants.h"
+#include "index/ExportIds.h"
 #include "rdfTypes/GeoPoint.h"
 #include "util/GeoSparqlHelpers.h"
 
