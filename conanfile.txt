@@ -1,5 +1,6 @@
 [requires]
-boost/1.81.0
+boost/1.90.0
+bzip2/1.0.8
 icu/76.1
 openssl/3.1.1
 zstd/1.5.5
@@ -11,3 +12,6 @@ zstd/1.5.5
 CMakeDeps
 CMakeToolchain
 VirtualRunEnv
+
+[layout]
+cmake_layout

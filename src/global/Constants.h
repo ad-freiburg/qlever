@@ -201,6 +201,11 @@ constexpr inline char RDF_LANGTAG_STRING[] =
 
 constexpr inline std::string_view GEO_WKT_LITERAL =
     "http://www.opengis.net/ont/geosparql#wktLiteral";
+
+constexpr inline std::string_view TENSOR_LITERAL =
+    "https://w3id.org/rdf-tensor/datatypes#NumericDataTensor";
+
+
 namespace string_constants::detail {
 constexpr inline std::string_view geo_literal_prefix = "\"^^<";
 }  // namespace string_constants::detail

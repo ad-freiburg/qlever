@@ -269,6 +269,26 @@ struct GeoPointValueGetter : Mixin<GeoPointValueGetter> {
   }
 };
 
+struct TensorValueGetter : Mixin<TensorValueGetter> {
+  using Mixin<TensorValueGetter>::operator();
+  std::optional<std::string> operator()(ValueId id,
+                                        const EvaluationContext* ctx) const {
+    return std::nullopt;
+    // if (id.getDatatype() == Datatype::DataTensor) {
+    //   return id.getDataTensor();
+    // } else {
+    //   return std::nullopt;
+    // }
+  }
+
+  // TODO<joka921> probably we should return a reference or a view here.
+  // TODO<joka921> use a `NormalizedStringView` inside the expressions.
+  std::optional<> operator()(const LiteralOrIri& s,
+                                        const EvaluationContext* ctx) const {
+    return std::string(asStringViewUnsafe(s.getContent()));
+  }
+};
+
 // If the `id` points to a literal, return the contents of that literal (without
 // the quotation marks). For all other types (IRIs, numbers, etc.) return
 // `std::nullopt`. This is used for expressions that work on strings, but for

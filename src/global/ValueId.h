@@ -39,6 +39,7 @@ enum struct Datatype {
   TextRecordIndex,
   Date,
   GeoPoint,
+  DataTensor,
   WordVocabIndex,
   BlankNodeIndex,
   EncodedVal,
@@ -58,9 +59,10 @@ enum struct Datatype {
 // from different  RDF sources are merged. Same goes for `EncodedVal` which
 // depends on the (configurable!) prefixes for the encoding.
 constexpr bool isDatatypeTrivial(Datatype datatype) {
+  //TODO dakantz: determine if the datatensor is truly trivial?
   using enum Datatype;
   constexpr std::array trivialDatatypes{Undefined, Bool, Int,
-                                        Double,    Date, GeoPoint};
+                                        Double,    Date,  DataTensor, GeoPoint};
   return ad_utility::contains(trivialDatatypes, datatype);
 }
 
@@ -75,6 +77,8 @@ inline QL_CONSTEXPR std::string_view toString(Datatype type) {
       return "Double";
     case Datatype::Int:
       return "Int";
+    case Datatype::DataTensor:
+      return "DataTensor";
     case Datatype::EncodedVal:
       return "EncodedIri";
     case Datatype::VocabIndex:

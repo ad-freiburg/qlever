@@ -171,6 +171,22 @@ SparqlExpression::Ptr makeIsBlankExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeIsGeoPointExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeBoundExpression(SparqlExpression::Ptr child);
 
+// Tensor expressions from TensorExpression.cpp
+SparqlExpression::Ptr makeTensorFromListExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeTensorFromStringExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeTensorFromRdfTermExpression(SparqlExpression::Ptr child);
+
+SparqlExpression::Ptr makeTensorAddExpression(SparqlExpression::Ptr child1,
+                                              SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeTensorSubtractExpression(SparqlExpression::Ptr child1,
+                                                   SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeTensorDotProductExpression(
+    SparqlExpression::Ptr child1, SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeTensorNormExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeTensorCosineSimilarityExpression(SparqlExpression::Ptr child);
+
+
+
 namespace detail {
 template <auto function>
 struct VariadicExpressionFactory {
