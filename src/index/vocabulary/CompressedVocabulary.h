@@ -12,6 +12,7 @@
 #include "index/vocabulary/PrefixCompressor.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/FsstCompressor.h"
+#include "util/Generator.h"
 #include "util/OverloadCallOperator.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeVector.h"
@@ -96,6 +97,17 @@ CPP_template(typename UnderlyingVocabulary,
     }
 
     return PmrVocabBatchLookupData::asResult(std::move(data));
+  }
+
+  // Streaming variant of lookupBatch.
+  VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const {
+    auto gen = [](const CompressedVocabulary* self, VocabLookupInput input)
+        -> cppcoro::generator<VocabBatchLookupResult> {
+      for (auto& batch : input) {
+        co_yield self->lookupBatch(batch);
+      }
+    }(this, std::move(input));
+    return VocabLookupOutput{std::move(gen)};
   }
 
   [[nodiscard]] uint64_t size() const { return underlyingVocabulary_.size(); }

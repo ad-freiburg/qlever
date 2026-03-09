@@ -9,6 +9,7 @@
 #include "index/Vocabulary.h"
 #include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/SplitVocabulary.h"
+#include "util/Generator.h"
 #include "util/Log.h"
 #include "util/TypeTraits.h"
 
@@ -159,6 +160,22 @@ VocabBatchLookupResult SplitVocabulary<SF, SFN, S...>::lookupBatch(
 
   merged->span = ql::span<std::string_view>{merged->views};
   return VocabBatchLookupResult(merged, &merged->span);
+}
+
+// _____________________________________________________________________________
+template <typename SF, typename SFN, typename... S>
+QL_CONCEPT_OR_NOTHING(
+    requires SplitFunctionT<SF>&& SplitFilenameFunctionT<SFN, sizeof...(S)>)
+VocabLookupOutput SplitVocabulary<SF, SFN, S...>::lookupBatchesStreamed(
+    VocabLookupInput input) const {
+  auto gen =
+      [](const SplitVocabulary* self,
+         VocabLookupInput input) -> cppcoro::generator<VocabBatchLookupResult> {
+    for (auto& batch : input) {
+      co_yield self->lookupBatch(batch);
+    }
+  }(this, std::move(input));
+  return VocabLookupOutput{std::move(gen)};
 }
 
 // _____________________________________________________________________________

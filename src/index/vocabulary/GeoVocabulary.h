@@ -76,6 +76,11 @@ class GeoVocabulary {
     return literals_.lookupBatch(indices);
   }
 
+  // Streaming variant of lookupBatch. Delegates to the underlying vocabulary.
+  VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const {
+    return literals_.lookupBatchesStreamed(std::move(input));
+  }
+
   // ___________________________________________________________________________
   [[nodiscard]] uint64_t size() const { return literals_.size(); }
 

@@ -76,6 +76,9 @@ class PolymorphicVocabulary {
   // Look up multiple words by index in a single batch call.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const;
 
+  // Streaming variant of lookupBatch.
+  VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const;
+
   // Return a reference to currently underlying vocabulary, as a variant of the
   // possible types.
   Variant& getUnderlyingVocabulary() { return vocab_; }

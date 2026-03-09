@@ -4,6 +4,8 @@
 
 #include "index/vocabulary/VocabularyInternalExternal.h"
 
+#include "util/Generator.h"
+
 // _____________________________________________________________________________
 std::string VocabularyInternalExternal::operator[](uint64_t i) const {
   auto fromInternal = internalVocab_[i];
@@ -59,6 +61,19 @@ VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
   combined->span = ql::span<std::string_view>{combined->views};
   auto* spanPtr = &combined->span;
   return VocabBatchLookupResult(std::move(combined), spanPtr);
+}
+
+// _____________________________________________________________________________
+VocabLookupOutput VocabularyInternalExternal::lookupBatchesStreamed(
+    VocabLookupInput input) const {
+  auto gen =
+      [](const VocabularyInternalExternal* self,
+         VocabLookupInput input) -> cppcoro::generator<VocabBatchLookupResult> {
+    for (auto& batch : input) {
+      co_yield self->lookupBatch(batch);
+    }
+  }(this, std::move(input));
+  return VocabLookupOutput{std::move(gen)};
 }
 
 // _____________________________________________________________________________

@@ -13,6 +13,7 @@
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/Algorithm.h"
 #include "util/File.h"
+#include "util/Generator.h"
 #include "util/IoUringManager.h"
 #include "util/Iterators.h"
 #include "util/MmapVector.h"
@@ -88,6 +89,10 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   // underlying buffer is kept alive by the shared_ptr. Reads are performed in
   // file-offset order for sequential I/O, with optional io_uring support.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const;
+
+  // Streaming variant of lookupBatch: accepts a lazy stream of batches and
+  // returns a lazy stream of results.
+  VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const;
 
   /// Get the number of words in the vocabulary.
   size_t size() const { return size_; }

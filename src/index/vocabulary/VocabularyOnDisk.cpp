@@ -85,6 +85,19 @@ VocabBatchLookupResult VocabularyOnDisk::lookupBatch(
 }
 
 // _____________________________________________________________________________
+VocabLookupOutput VocabularyOnDisk::lookupBatchesStreamed(
+    VocabLookupInput input) const {
+  auto gen =
+      [](const VocabularyOnDisk* self,
+         VocabLookupInput input) -> cppcoro::generator<VocabBatchLookupResult> {
+    for (auto& batch : input) {
+      co_yield self->lookupBatch(batch);
+    }
+  }(this, std::move(input));
+  return VocabLookupOutput{std::move(gen)};
+}
+
+// _____________________________________________________________________________
 template <typename Iterable>
 void VocabularyOnDisk::buildFromIterable(Iterable&& it,
                                          const std::string& fileName) {

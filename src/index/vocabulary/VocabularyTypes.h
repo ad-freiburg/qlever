@@ -17,11 +17,18 @@
 #include "backports/span.h"
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
+#include "util/Iterators.h"
 
 // The result type for batch vocabulary lookups. It is a shared_ptr to a span
 // of string_views, using the aliasing constructor to keep the underlying data
 // alive.
 using VocabBatchLookupResult = std::shared_ptr<ql::span<std::string_view>>;
+
+// Type-erased input range of batches (each batch is a vector of indices).
+using VocabLookupInput = ad_utility::InputRangeTypeErased<std::vector<size_t>>;
+// Type-erased output range of batch lookup results.
+using VocabLookupOutput =
+    ad_utility::InputRangeTypeErased<VocabBatchLookupResult>;
 
 // Helper struct for batch lookup results. Holds the materialized string data
 // and the views into it. Use `finalize()` after filling `views` to set up the
@@ -45,7 +52,7 @@ struct VocabBatchLookupData {
     self->finalize();
     auto* spanPtr = &self->span;
     return std::shared_ptr<ql::span<std::string_view>>(std::move(self),
-                                                        spanPtr);
+                                                       spanPtr);
   }
 };
 
@@ -67,7 +74,7 @@ struct PmrVocabBatchLookupData {
     self->finalize();
     auto* spanPtr = &self->span;
     return std::shared_ptr<ql::span<std::string_view>>(std::move(self),
-                                                        spanPtr);
+                                                       spanPtr);
   }
 };
 

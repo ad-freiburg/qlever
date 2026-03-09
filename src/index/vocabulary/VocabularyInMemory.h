@@ -13,6 +13,7 @@
 #include "index/vocabulary/VocabularyBinarySearchMixin.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/Exception.h"
+#include "util/Generator.h"
 #include "util/Serializer/Serializer.h"
 
 //! A vocabulary. Wraps a `CompactVectorOfStrings<char>`
@@ -63,6 +64,17 @@ class VocabularyInMemory
       data->views[i] = _words[indices[i]];
     }
     return VocabBatchLookupData::asResult(std::move(data));
+  }
+
+  // Streaming variant of lookupBatch.
+  VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const {
+    auto gen = [](const VocabularyInMemory* self, VocabLookupInput input)
+        -> cppcoro::generator<VocabBatchLookupResult> {
+      for (auto& batch : input) {
+        co_yield self->lookupBatch(batch);
+      }
+    }(this, std::move(input));
+    return VocabLookupOutput{std::move(gen)};
   }
 
   // Conversion function that is used by the Mixin base class.

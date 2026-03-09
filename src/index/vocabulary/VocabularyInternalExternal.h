@@ -55,6 +55,9 @@ class VocabularyInternalExternal {
   // of string_views, where result[i] = vocab[indices[i]].
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const;
 
+  // Streaming variant of lookupBatch.
+  VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const;
+
   /// Return a `WordAndIndex` that points to the first entry that is equal or
   /// greater than `word` wrt. to the `comparator`. Only works correctly if the
   /// `words_` are sorted according to the comparator (exactly like in

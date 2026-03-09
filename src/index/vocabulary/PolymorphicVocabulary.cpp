@@ -42,6 +42,16 @@ VocabBatchLookupResult PolymorphicVocabulary::lookupBatch(
 }
 
 // _____________________________________________________________________________
+VocabLookupOutput PolymorphicVocabulary::lookupBatchesStreamed(
+    VocabLookupInput input) const {
+  return std::visit(
+      [&](const auto& vocab) {
+        return vocab.lookupBatchesStreamed(std::move(input));
+      },
+      vocab_);
+}
+
+// _____________________________________________________________________________
 auto PolymorphicVocabulary::makeDiskWriterPtr(const std::string& filename) const
     -> std::unique_ptr<WordWriterBase> {
   return std::visit(
