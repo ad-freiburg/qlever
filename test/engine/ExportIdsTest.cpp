@@ -1,9 +1,11 @@
-// Copyright 2026 ,University of Freiburg
-// Chair of Algorithms and Data Structures
+// Copyright 2026 The QLever Authors, in particular
 // Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
-//          Robin Textor-Falconi <robintf@cs.uni-freiburg.de>
+//          Robin Textor-Falconi <textorr@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
-// TODO<ms2144>: add modern copyright header
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <gmock/gmock.h>
 
@@ -26,7 +28,7 @@ using ::testing::HasSubstr;
 
 namespace {
 // _____________________________________________________________________________
-TEST(ValueIdHelpers, idToLiteralFunctionality) {
+TEST(ExportIds, idToLiteralFunctionality) {
   std::string kg =
       "<s> <p> \"something\" . <s> <p> 1 . <s> <p> "
       "\"some\"^^<http://www.w3.org/2001/XMLSchema#string> . <s> <p> "
@@ -97,7 +99,7 @@ TEST(ValueIdHelpers, idToLiteralFunctionality) {
 }
 
 // _____________________________________________________________________________
-TEST(ValueIdHelpers, idToLiteralOrIriFunctionality) {
+TEST(ExportIds, idToLiteralOrIriFunctionality) {
   std::string kg =
       "<s> <p> \"something\" . <s> <p> 1 . <s> <p> "
       "\"some\"^^<http://www.w3.org/2001/XMLSchema#string> . <s> <p> "
@@ -133,7 +135,7 @@ TEST(ValueIdHelpers, idToLiteralOrIriFunctionality) {
 }
 
 // _____________________________________________________________________________
-TEST(ValueIdHelpers, getLiteralOrNullopt) {
+TEST(ExportIds, getLiteralOrNullopt) {
   using LiteralOrIri = ql::exportIds::LiteralOrIri;
   using Literal = ad_utility::triple_component::Literal;
   using Iri = ad_utility::triple_component::Iri;
@@ -162,7 +164,7 @@ TEST(ValueIdHelpers, getLiteralOrNullopt) {
 }
 
 // _____________________________________________________________________________
-TEST(ValueIdHelpers, ReplaceAnglesByQuotes) {
+TEST(ExportIds, ReplaceAnglesByQuotes) {
   std::string input = "<s>";
   std::string expected = "\"s\"";
   EXPECT_EQ(ql::exportIds::replaceAnglesByQuotes(input), expected);
@@ -175,7 +177,7 @@ TEST(ValueIdHelpers, ReplaceAnglesByQuotes) {
 }
 
 // _____________________________________________________________________________
-TEST(ValueIdHelpers, blankNodeIrisAreProperlyFormatted) {
+TEST(ExportIds, blankNodeIrisAreProperlyFormatted) {
   using ad_utility::triple_component::Iri;
   std::string_view input = "_:test";
   EXPECT_THAT(
@@ -188,7 +190,7 @@ TEST(ValueIdHelpers, blankNodeIrisAreProperlyFormatted) {
 }
 
 // _____________________________________________________________________________
-TEST(ValueIdHelpers, GetLiteralOrIriFromVocabIndexWithEncodedIris) {
+TEST(ExportIds, GetLiteralOrIriFromVocabIndexWithEncodedIris) {
   // Test the getLiteralOrIriFromVocabIndex function specifically with encoded
   // IRIs
 
