@@ -109,27 +109,8 @@ struct HasValueImpl {
 // Implementation of `value` (see below).
 struct ValueImpl {
   template <typename X>
-  constexpr decltype(auto) operator()(X& x) const {
-    return x.value();
-  }
-  template <typename X>
-  constexpr auto operator()(X&& x) const
-      requires(!std::is_lvalue_reference_v<X &&>) {
-    return std::move(x).value();
-  }
-};
-static_assert(ad_utility::InvocableWithExactReturnType<
-              ValueImpl, std::string, std::optional<std::string>>);
-static_assert(ad_utility::InvocableWithExactReturnType<
-              ValueImpl, std::string&, std::optional<std::string>&>);
-static_assert(ad_utility::InvocableWithExactReturnType<
-              ValueImpl, std::string, std::optional<std::string>&&>);
-
-// Implementation of `exchange` (see below).
-struct ExchangeImpl {
-  template <typename X>
   constexpr decltype(auto) operator()(X&& x) const {
-    return std::exchange(AD_FWD(x), {});
+    return AD_FWD(x).value();
   }
 };
 
@@ -176,9 +157,6 @@ static constexpr detail::HasValueImpl hasValue;
 
 // Transparent functor for `std::optional::value`.
 static constexpr detail::ValueImpl value;
-
-// Transparent functor for `std::exchange(..., {})`.
-static constexpr detail::ExchangeImpl exchange;
 
 // Transparent functor that takes an arbitrary number of arguments by reference
 // and does nothing. We also use the type `Noop`, hence it is defined here and

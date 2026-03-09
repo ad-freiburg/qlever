@@ -45,11 +45,6 @@ TEST(TransparentFunctors, OptionalHandling) {
     EXPECT_THAT(ad_utility::value(sth), testing::StrEq("sth"));
     AD_EXPECT_NULLOPT(null);
     EXPECT_THAT(sth.value(), testing::StrEq("sth"));
-    AD_EXPECT_NULLOPT(ad_utility::exchange(null));
-    EXPECT_THAT(ad_utility::exchange(sth),
-                testing::Optional(testing::StrEq("sth")));
-    AD_EXPECT_NULLOPT(null);
-    AD_EXPECT_NULLOPT(sth);
   }
   {
     std::vector<std::optional<std::string>> s{"foo", std::nullopt, std::nullopt,
@@ -59,12 +54,5 @@ TEST(TransparentFunctors, OptionalHandling) {
                     ::ranges::to<std::vector>();
     EXPECT_THAT(filtered, testing::ElementsAre(testing::StrEq("foo"),
                                                testing::StrEq("bar")));
-    auto moved = s | ql::views::filter(ad_utility::hasValue) |
-                 ql::views::transform(ad_utility::exchange) |
-                 ql::views::transform(ad_utility::value) |
-                 ::ranges::to<std::vector>();
-    EXPECT_THAT(s, testing::Each(testing::Eq(std::nullopt)));
-    EXPECT_THAT(moved, testing::ElementsAre(testing::StrEq("foo"),
-                                            testing::StrEq("bar")));
   }
 }
