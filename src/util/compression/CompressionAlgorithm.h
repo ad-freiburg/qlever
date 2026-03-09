@@ -61,6 +61,7 @@ class CompressionAlgorithm
             "LZ4 support");
 #endif
     }
+    AD_FAIL();
   }
 
  public:

@@ -18,6 +18,7 @@
 #include <stdexcept>
 #include <string_view>
 
+#include "backports/keywords.h"
 #include "backports/three_way_comparison.h"
 #include "util/Random.h"
 #include "util/json.h"
@@ -55,7 +56,7 @@ CPP_template(typename Derived,
   Enum value_{};
 
  public:
-  constexpr static bool checkIndices() {
+  QL_CONSTEVAL static bool checkIndices() {
     for (size_t i = 0; i < Derived::descriptions_.size(); ++i) {
       if (static_cast<size_t>(Derived::descriptions_[i].first) != i) {
         return false;

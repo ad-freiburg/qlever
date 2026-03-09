@@ -26,12 +26,17 @@ class Lz4Wrapper {
  public:
   // Compress the given byte array using LZ4_HC and return the result.
   static std::vector<char> compress(const void* src, size_t numBytes) {
+    if (numBytes == 0) {
+      // Avoid segfaults (the eager `LZ4_compres_*` functions expect an nonempty
+      // input.
+      return {};
+    }
     int maxSize = LZ4_compressBound(static_cast<int>(numBytes));
     std::vector<char> result(maxSize);
     int compressedSize =
         LZ4_compress_HC(static_cast<const char*>(src), result.data(),
                         static_cast<int>(numBytes), maxSize, LZ4HC_CLEVEL_MAX);
-    AD_CONTRACT_CHECK(compressedSize > 0);
+    AD_CORRECTNESS_CHECK(compressedSize > 0);
     result.resize(static_cast<size_t>(compressedSize));
     return result;
   }
@@ -42,6 +47,9 @@ class Lz4Wrapper {
       requires(std::is_trivially_copyable_v<
                T>)) static std::vector<T> decompress(void* src, size_t numBytes,
                                                      size_t knownOriginalSize) {
+    if (knownOriginalSize == 0) {
+      return {};
+    }
     size_t originalBytes = knownOriginalSize * sizeof(T);
     std::vector<T> result(knownOriginalSize);
     int decompressedSize = LZ4_decompress_safe(
