@@ -269,6 +269,43 @@ auto ExportQueryExecutionTrees::constructQueryResultToTriples(
 }
 
 // _____________________________________________________________________________
+template <>
+STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::
+    constructQueryResultToStream<ad_utility::MediaType::turtle>(
+        const QueryExecutionTree& qet,
+        const ad_utility::sparql_types::Triples& constructTriples,
+        LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
+        CancellationHandle cancellationHandle,
+        [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
+  result->logResultSize();
+  [[maybe_unused]] uint64_t resultSize = 0;
+  auto generator = constructQueryResultToTriples(
+      qet, constructTriples, limitAndOffset, result, resultSize,
+      std::move(cancellationHandle));
+  for (const auto& triple : generator) {
+    STREAMABLE_YIELD(triple.subject_);
+    STREAMABLE_YIELD(' ');
+    STREAMABLE_YIELD(triple.predicate_);
+    STREAMABLE_YIELD(' ');
+    // NOTE: It's tempting to STREAMABLE_YIELD an expression using a ternary
+    // operator: STREAMABLE_YIELD triple._object.starts_with('"')
+    //     ? RdfEscaping::validRDFLiteralFromNormalized(triple._object)
+    //     : triple._object;
+    // but this leads to 1. segfaults in GCC (probably a compiler bug) and 2.
+    // to unnecessary copies of `triple._object` in the `else` case because
+    // the ternary always has to create a new prvalue.
+    if (ql::starts_with(triple.object_, '"')) {
+      std::string objectAsValidRdfLiteral =
+          RdfEscaping::validRDFLiteralFromNormalized(triple.object_);
+      STREAMABLE_YIELD(objectAsValidRdfLiteral);
+    } else {
+      STREAMABLE_YIELD(triple.object_);
+    }
+    STREAMABLE_YIELD(" .\n");
+  }
+}
+
+// _____________________________________________________________________________
 InputRangeTypeErased<std::string>
 ExportQueryExecutionTrees::constructQueryResultBindingsToQLeverJSON(
     const QueryExecutionTree& qet,
@@ -304,7 +341,7 @@ nlohmann::json idTableToQLeverJSONRow(
       continue;
     }
     const auto& currentId = data(rowIndex, opt->columnIndex_);
-    const auto& optionalStringAndXsdType = ql::exportId::idToStringAndType(
+    const auto& optionalStringAndXsdType = ql::exportIds::idToStringAndType(
         qet.getQec()->getIndex(), currentId, localVocab);
     if (!optionalStringAndXsdType.has_value()) {
       row.emplace_back(nullptr);
