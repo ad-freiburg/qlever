@@ -157,4 +157,11 @@ TEST(EncodedIriManager, makeIdFromPrefixIdxAndPayload) {
   EXPECT_EQ(em.toString(id), "<blubb7643>");
 }
 
+TEST(EncodedIriManager, decodeDecimalFrom64Bit) {
+  using m = EncodedIriManager;
+  EXPECT_EQ(0, m::decodeDecimalFrom64Bit(m::encodeDecimalToNBit("0")));
+  EXPECT_EQ(123, m::decodeDecimalFrom64Bit(m::encodeDecimalToNBit("123")));
+  EXPECT_EQ(143215,
+            m::decodeDecimalFrom64Bit(m::encodeDecimalToNBit("143215")));
+}
 }  // namespace
