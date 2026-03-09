@@ -47,8 +47,9 @@ EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
     const LocalVocab& localVocab, const Index& index, IdCache& idCache) {
   decltype(auto) col = ctx.idTable_.getColumn(idTableColumnIdx);
 
-  auto evaluateRow = [&](size_t rowIdx) {
-    return idCache.getOrCompute(col[rowIdx], [&](Id id) {
+  const auto& evaluateRow = [&idCache, &col, &index,
+                             &localVocab](size_t rowIdx) {
+    return idCache.getOrCompute(col[rowIdx], [&index, &localVocab](Id id) {
       return idToEvaluatedTerm(index, id, localVocab);
     });
   };
