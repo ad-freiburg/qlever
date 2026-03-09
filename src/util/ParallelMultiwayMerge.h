@@ -188,7 +188,8 @@ CPP_template(typename T, bool moveElements, typename SizeGetter,
     buffer_.reserve(blocksize_);
 
     while (it_ != range_.end()) {
-      pushSingleElement<moveElements, T, SizeGetter>(buffer_, curMem, *it_);
+      detail::pushSingleElement<moveElements, T, SizeGetter>(buffer_, curMem,
+                                                             *it_);
       ++it_;
       if (buffer_.size() >= blocksize_ || curMem >= maxMem_) {
         break;
@@ -214,7 +215,7 @@ CPP_template(typename T, bool moveElements, typename SizeGetter,
 // recursion tree.
 CPP_template(typename T, bool moveElements, typename SizeGetter, typename R,
              typename ComparisonFuncT)(
-    requires RandomAccessRangeOfRanges<R, T> CPP_and
+    requires detail::RandomAccessRangeOfRanges<R, T> CPP_and
         ValueSizeGetter<SizeGetter, T>
             CPP_and InvocableWithExactReturnType<ComparisonFuncT, bool,
                                                  const T&, const T&>)
@@ -233,14 +234,14 @@ CPP_template(typename T, bool moveElements, typename SizeGetter, typename R,
   using ResultT = InputRangeTypeErased<std::vector<T>>;
 
   if (rangeOfRanges.size() == 1) {
-    return ResultT{BatchToVector<T, moveElements, SizeGetter,
-                                 ql::ranges::range_value_t<R>>(
+    return ResultT{detail::BatchToVector<T, moveElements, SizeGetter,
+                                         ql::ranges::range_value_t<R>>(
         maxMemPerNode, blocksize, moveIf(rangeOfRanges.front()))};
   } else if (rangeOfRanges.size() == 2) {
     return ResultT{
-        LazyBinaryMerge<T, moveElements, SizeGetter,
-                        ql::ranges::range_value_t<R>,
-                        ql::ranges::range_value_t<R>, ComparisonFuncT>(
+        detail::LazyBinaryMerge<T, moveElements, SizeGetter,
+                                ql::ranges::range_value_t<R>,
+                                ql::ranges::range_value_t<R>, ComparisonFuncT>(
             maxMemPerNode, blocksize, moveIf(rangeOfRanges[0]),
             moveIf(rangeOfRanges[1]), comparison)};
   } else {
@@ -264,8 +265,9 @@ CPP_template(typename T, bool moveElements, typename SizeGetter, typename R,
     auto mergeRange2 = parallelMerge(splitIt, end);
 
     return ResultT{ad_utility::streams::runStreamAsync(
-        LazyBinaryMerge<T, moveElements, SizeGetter, decltype(mergeRange1),
-                        decltype(mergeRange2), ComparisonFuncT>(
+        detail::LazyBinaryMerge<T, moveElements, SizeGetter,
+                                decltype(mergeRange1), decltype(mergeRange2),
+                                ComparisonFuncT>(
             maxMemPerNode, blocksize, std::move(mergeRange1),
             std::move(mergeRange2), comparison),
         2)};
