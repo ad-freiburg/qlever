@@ -10,6 +10,7 @@
 #include "./ValuesForTesting.h"
 #include "engine/Bind.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/NaryExpression.h"
 
 using namespace sparqlExpression;
 using Vars = std::vector<std::optional<Variable>>;
@@ -173,3 +174,50 @@ TEST(Bind, limitIsPropagated) {
 
   EXPECT_EQ(idTable, makeIdTableFromVector({{1, 42}}, &Id::makeFromInt));
 }
+
+// _____________________________________________________________________________
+class BindUndefStatusTest : public testing::TestWithParam<bool> {};
+
+TEST_P(BindUndefStatusTest, undefStatusForAlwaysDefinedVariable) {
+  auto* qec = ad_utility::testing::getQec();
+  Variable inputVar{"?x"};
+  Variable targetVar{"?y"};
+
+  bool isDefined = GetParam();
+
+  // Create IdTable with either a defined or undefined value.
+  IdTable inputTable = isDefined
+                           ? makeIdTableFromVector({{42}}, &Id::makeFromInt)
+                           : makeIdTableFromVector({{Id::makeUndefined()}});
+
+  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(inputTable), Vars{inputVar});
+
+  // Create BIND(?x AS ?y).
+  auto varExpr = std::make_unique<VariableExpression>(inputVar);
+  SparqlExpressionPimpl pimpl{std::move(varExpr), inputVar.name()};
+  Bind bind{qec, std::move(valuesTree), {std::move(pimpl), targetVar}};
+
+  // Check that the variable to column map has the correct undef status.
+  auto varColMap = bind.getExternallyVisibleVariableColumns();
+
+  using enum ColumnIndexAndTypeInfo::UndefStatus;
+  auto expectedStatus = isDefined ? AlwaysDefined : PossiblyUndefined;
+
+  // Check the input variable ?x.
+  ASSERT_TRUE(varColMap.contains(inputVar));
+  auto& inputColInfo = varColMap.at(inputVar);
+  EXPECT_EQ(inputColInfo.mightContainUndef_, expectedStatus);
+
+  // Check the target variable ?y.
+  ASSERT_TRUE(varColMap.contains(targetVar));
+  auto& targetColInfo = varColMap.at(targetVar);
+  EXPECT_EQ(targetColInfo.mightContainUndef_, expectedStatus);
+}
+
+INSTANTIATE_TEST_SUITE_P(BindUndefStatus, BindUndefStatusTest,
+                         testing::Values(true, false),
+                         [](const testing::TestParamInfo<bool>& info) {
+                           return info.param ? "DefinedVariable"
+                                             : "UndefinedVariable";
+                         });

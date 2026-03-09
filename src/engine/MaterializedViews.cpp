@@ -1,8 +1,11 @@
-// Copyright 2025 The QLever Authors, in particular:
+// Copyright 2025 - 2026 The QLever Authors, in particular:
 //
-// 2025 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+// 2025 - 2026 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "engine/MaterializedViews.h"
 
@@ -14,6 +17,8 @@
 #include <stdexcept>
 
 #include "engine/IndexScan.h"
+#include "engine/Join.h"
+#include "engine/MaterializedViewsQueryAnalysis.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/VariableToColumnMap.h"
@@ -22,6 +27,7 @@
 #include "index/ExternalSortFunctors.h"
 #include "libqlever/Qlever.h"
 #include "parser/MaterializedViewQuery.h"
+#include "parser/SparqlParser.h"
 #include "parser/TripleComponent.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/Exception.h"
@@ -56,14 +62,13 @@ MaterializedViewWriter::MaterializedViewWriter(
 }
 
 // _____________________________________________________________________________
-void MaterializedViewWriter::writeViewToDisk(
-    std::string onDiskBase, std::string name,
-    const qlever::Qlever::QueryPlan& queryPlan,
+void MaterializedViewsManager::writeViewToDisk(
+    std::string name, const qlever::Qlever::QueryPlan& queryPlan,
     ad_utility::MemorySize memoryLimit,
-    ad_utility::AllocatorWithLimit<Id> allocator) {
-  MaterializedViewWriter writer{std::move(onDiskBase), std::move(name),
-                                queryPlan, std::move(memoryLimit),
-                                std::move(allocator)};
+    ad_utility::AllocatorWithLimit<Id> allocator) const {
+  unloadViewIfLoaded(name);
+  MaterializedViewWriter writer{onDiskBase_, std::move(name), queryPlan,
+                                std::move(memoryLimit), std::move(allocator)};
   writer.computeResultAndWritePermutation();
 }
 
@@ -93,7 +98,9 @@ MaterializedViewWriter::getIdTableColumnNamesAndPermutation() const {
   // Column information for the columns selected by the user's query.
   auto existingCols = ::ranges::to<std::vector<ColumnNameAndIndex>>(
       targetVarsAndCols | ql::views::transform([](const auto& opt) {
-        AD_CONTRACT_CHECK(opt.has_value());
+        AD_CONTRACT_CHECK(
+            opt.has_value(),
+            "Please ensure that all variables in your SELECT are bound.");
         return ColumnNameAndIndex{opt.value().variable_,
                                   opt.value().columnIndex_};
       }));
@@ -101,9 +108,10 @@ MaterializedViewWriter::getIdTableColumnNamesAndPermutation() const {
   // Add dummy columns such that the view has at least four columns in total.
   uint8_t numAddEmptyCols = 0;
   if (numCols < 4) {
-    AD_LOG_INFO << "The query to write the materialized view '" << name_
-                << "' selects only " << numCols << " column(s). " << 4 - numCols
-                << " empty column(s) will be appended." << std::endl;
+    AD_LOG_INFO << "The query to write the materialized view \"" << name_
+                << "\" selects only " << numCols << " column(s), "
+                << 4 - numCols << " empty column(s) will be appended"
+                << std::endl;
     numAddEmptyCols = 4 - numCols;
   }
 
@@ -157,8 +165,8 @@ MaterializedViewWriter::getBlocksForAlreadySortedResult(
   // external sorter, but we still need to permute the `IdTable`s to the
   // desired column ordering and construct a range for the
   // `CompressedRelationWriter` from them.
-  AD_LOG_INFO << "Query result rows for materialized view " << name_
-              << " are already sorted." << std::endl;
+  AD_LOG_INFO << "Query result rows for materialized view \"" << name_
+              << "\" are already sorted" << std::endl;
 
   if (result->isFullyMaterialized()) {
     // If we have a fully materialized result, we need to copy it for the
@@ -187,8 +195,8 @@ MaterializedViewWriter::getBlocksForUnsortedResult(
     Sorter& spoSorter, std::shared_ptr<const Result> result) const {
   // Results are not yet sorted by the required columns. Sort results
   // externally.
-  AD_LOG_INFO << "Sorting query result rows for materialized view " << name_
-              << " ..." << std::endl;
+  AD_LOG_INFO << "Sorting query result rows for materialized view \"" << name_
+              << "\" ..." << std::endl;
   size_t totalTriples = 0;
   ad_utility::ProgressBar progressBar{totalTriples, "Triples sorted: "};
 
@@ -245,11 +253,9 @@ MaterializedViewWriter::RangeOfIdTables MaterializedViewWriter::getSortedBlocks(
 IndexMetaDataMmap MaterializedViewWriter::writePermutation(
     RangeOfIdTables sortedBlocksSPO) const {
   std::string spoFilename = getFilenameBase() + ".index.spo";
-  CompressedRelationWriter spoWriter{
-      numCols(),
-      ad_utility::File{spoFilename, "w"},
-      UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN,
-  };
+  auto spoWriter = std::make_unique<CompressedRelationWriter>(
+      numCols(), ad_utility::File{spoFilename, "w"},
+      UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN);
 
   qlever::KeyOrder spoKeyOrder{0, 1, 2, 3};
   IndexMetaDataMmap spoMetaData;
@@ -263,7 +269,7 @@ IndexMetaDataMmap MaterializedViewWriter::writePermutation(
 
   auto [numDistinctPredicates, blockData] =
       CompressedRelationWriter::createPermutation(
-          {spoWriter, spoCallback},
+          {std::move(spoWriter), spoCallback},
           ad_utility::InputRangeTypeErased{std::move(sortedBlocksSPO)},
           spoKeyOrder, {});
 
@@ -297,8 +303,8 @@ void MaterializedViewWriter::writeViewMetadata() const {
 // _____________________________________________________________________________
 void MaterializedViewWriter::computeResultAndWritePermutation() const {
   // Run query and sort the result externally (only if necessary).
-  AD_LOG_INFO << "Computing query result for materialized view '" << name_
-              << "': " << parsedQuery_._originalString.substr(0, 80) << "..."
+  AD_LOG_INFO << "Computing query result for materialized view \"" << name_
+              << "\": " << parsedQuery_._originalString.substr(0, 80) << " ..."
               << std::endl;
   auto result = qet_->getResult(true);
 
@@ -307,14 +313,14 @@ void MaterializedViewWriter::computeResultAndWritePermutation() const {
   RangeOfIdTables sortedBlocksSPO = getSortedBlocks(spoSorter, result);
 
   // Write compressed relation to disk.
-  AD_LOG_INFO << "Writing materialized view " << name_ << " to disk ..."
+  AD_LOG_INFO << "Writing materialized view \"" << name_ << "\" to disk ..."
               << std::endl;
   auto spoMetaData = writePermutation(std::move(sortedBlocksSPO));
   writeViewMetadata();
 
-  AD_LOG_INFO << "Statistics for view " << name_ << ": "
-              << spoMetaData.statistics() << std::endl;
-  AD_LOG_INFO << "Materialized view " << name_ << " written to disk."
+  AD_LOG_INFO << "Statistics for view \"" << name_
+              << "\": " << spoMetaData.statistics() << std::endl;
+  AD_LOG_INFO << "Materialized view \"" << name_ << "\" written to disk"
               << std::endl;
 }
 
@@ -326,7 +332,7 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
   AD_CORRECTNESS_CHECK(onDiskBase_ != "",
                        "The index base filename was not set.");
   throwIfInvalidName(name_);
-  AD_LOG_INFO << "Loading materialized view " << name_ << " from disk..."
+  AD_LOG_INFO << "Loading materialized view \"" << name_ << "\" from disk ..."
               << std::endl;
   auto filename = getFilenameBase(onDiskBase_, name_);
 
@@ -359,13 +365,26 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
                           ColumnIndexAndTypeInfo::PossiblyUndefined}});
   }
 
-  // Restore original query string.
+  // Restore original query string and parse it for query analysis.
   if (viewInfoJson.contains("query")) {
     originalQuery_ = viewInfoJson.at("query").get<std::string>();
+
+    // Parse the query and store the parsed result.
+    // NOTE: We do not need the `EncodedIriManager` because we are only
+    // interested in analyzing the query structure, not in converting its
+    // components to `ValueId`s.
+    EncodedIriManager e;
+    parsedQuery_ = SparqlParser::parseQuery(&e, originalQuery_.value(), {});
+
+    // Compute the `BIND`-to-column map.
+    coveredBinds_ = materializedViewsQueryAnalysis::extractBindExpressions(
+        parsedQuery_.value(), varToColMap_);
   }
 
-  // Read permutation
-  permutation_->loadFromDisk(filename, false);
+  // Read permutation, and deactivate the graph post-processing of
+  // `CompressedRelationReader`, including row deduplication, which is not the
+  // intended behavior for materialized views.
+  permutation_->loadFromDisk(filename, false, false);
   AD_CORRECTNESS_CHECK(permutation_->isLoaded());
 }
 
@@ -376,19 +395,50 @@ std::shared_ptr<const Permutation> MaterializedView::permutation() const {
 }
 
 // _____________________________________________________________________________
+void MaterializedView::connectPermutationBackReference() {
+  AD_CORRECTNESS_CHECK(permutation_ != nullptr);
+  permutation_->setMaterializedView(shared_from_this());
+}
+
+// _____________________________________________________________________________
 void MaterializedViewsManager::loadView(const std::string& name) const {
   auto lock = loadedViews_.wlock();
-  if (lock->contains(name)) {
+  if (lock->views_.contains(name)) {
     return;
   }
-  lock->insert({name, std::make_shared<MaterializedView>(onDiskBase_, name)});
-};
+  auto view = std::make_shared<MaterializedView>(onDiskBase_, name);
+  view->connectPermutationBackReference();
+  lock->views_.insert({name, view});
+  // If we would analyze the view at the time of writing and (de)serialize an
+  // analysis result here, we could not extend query analysis without rewriting
+  // all views. Therefore query analysis is performed when loading views.
+  if (lock->queryPatternCache_.analyzeView(view)) {
+    AD_LOG_INFO << "The materialized view '" << name
+                << "' was added to the query pattern cache." << std::endl;
+  }
+}
+
+// _____________________________________________________________________________
+void MaterializedViewsManager::unloadViewIfLoaded(
+    const std::string& name) const {
+  auto lock = loadedViews_.wlock();
+  if (!lock->views_.contains(name)) {
+    return;
+  }
+  lock->queryPatternCache_.removeView(lock->views_.at(name));
+  lock->views_.erase(name);
+}
 
 // _____________________________________________________________________________
 std::shared_ptr<const MaterializedView> MaterializedViewsManager::getView(
     const std::string& name) const {
   loadView(name);
-  return loadedViews_.rlock()->at(name);
+  return loadedViews_.rlock()->views_.at(name);
+}
+
+// _____________________________________________________________________________
+bool MaterializedViewsManager::isViewLoaded(const std::string& name) const {
+  return loadedViews_.rlock()->views_.contains(name);
 }
 
 // _____________________________________________________________________________
@@ -545,8 +595,9 @@ void MaterializedView::throwIfInvalidName(std::string_view name) {
 
 // _____________________________________________________________________________
 void MaterializedViewsManager::setOnDiskBase(const std::string& onDiskBase) {
-  AD_CORRECTNESS_CHECK(onDiskBase_ == "" && loadedViews_.rlock()->empty(),
-                       "Changing the on disk basename is not allowed.");
+  AD_CORRECTNESS_CHECK(
+      onDiskBase_ == "" && loadedViews_.rlock()->views_.empty(),
+      "Changing the on disk basename is not allowed.");
   onDiskBase_ = onDiskBase;
 }
 
@@ -589,6 +640,15 @@ std::shared_ptr<IndexScan> MaterializedView::makeIndexScan(
 }
 
 // _____________________________________________________________________________
+std::vector<MaterializedViewJoinReplacement>
+MaterializedViewsManager::makeJoinReplacementIndexScans(
+    QueryExecutionContext* qec,
+    const parsedQuery::BasicGraphPattern& triples) const {
+  return loadedViews_.rlock()->queryPatternCache_.makeJoinReplacementIndexScans(
+      qec, triples);
+}
+
+// _____________________________________________________________________________
 std::shared_ptr<IndexScan> MaterializedViewsManager::makeIndexScan(
     QueryExecutionContext* qec,
     const parsedQuery::MaterializedViewQuery& viewQuery) const {
@@ -599,4 +659,12 @@ std::shared_ptr<IndexScan> MaterializedViewsManager::makeIndexScan(
   }
   auto view = getView(viewQuery.viewName_.value());
   return view->makeIndexScan(qec, viewQuery);
+}
+
+// _____________________________________________________________________________
+std::optional<size_t> MaterializedView::lookupBindTargetColumn(
+    const std::string& bindCacheKey) const {
+  auto opt = ad_utility::findOptional(coveredBinds_, bindCacheKey);
+  // Convert `boost::optional<const size_t&>` to `std::optional<size_t>`.
+  return opt ? std::optional<size_t>{opt.value()} : std::optional<size_t>{};
 }

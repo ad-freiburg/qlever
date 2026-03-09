@@ -52,13 +52,11 @@ void GroupConcatAggregationData::addValueImpl(
     const std::optional<ad_utility::triple_component::Literal>& val) {
   if (first_) {
     first_ = false;
-    sparqlExpression::detail::pushLanguageTag(langTag_, val);
   } else {
     currentValue_.append(separator_);
   }
   if (val.has_value()) {
     currentValue_.append(asStringViewUnsafe(val.value().getContent()));
-    sparqlExpression::detail::mergeLanguageTags(langTag_, val.value());
   } else {
     undefined_ = true;
   }
@@ -71,9 +69,9 @@ void GroupConcatAggregationData::addValueImpl(
     return ValueId::makeUndefined();
   }
   using namespace ad_utility::triple_component;
-  auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(
-      sparqlExpression::detail::stringWithOptionalLangTagToLiteral(
-          currentValue_, langTag_));
+  auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(LiteralOrIri{
+      ad_utility::triple_component::Literal::literalWithNormalizedContent(
+          asNormalizedStringViewUnsafe(currentValue_))});
   return ValueId::makeFromLocalVocabIndex(localVocabIndex);
 }
 
@@ -89,7 +87,6 @@ void GroupConcatAggregationData::reset() {
   undefined_ = false;
   first_ = true;
   currentValue_.clear();
-  langTag_.reset();
 }
 
 // _____________________________________________________________________________

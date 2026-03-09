@@ -105,6 +105,19 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
         "version of QLever");
 #endif
   }
+
+  // Build materialized views if requested.
+  if (!config.writeMaterializedViews_.empty()) {
+    std::cout << std::endl;
+    AD_LOG_INFO << "Loading the new index to execute materialized view write "
+                   "queries ..."
+                << std::endl;
+    Qlever engine{EngineConfig{config}};
+    for (auto& [viewName, query] : config.writeMaterializedViews_) {
+      engine.writeMaterializedView(viewName, query);
+    }
+    AD_LOG_INFO << "All materialized views written successfully" << std::endl;
+  }
 }
 
 // ___________________________________________________________________________
@@ -204,9 +217,13 @@ void IndexBuilderConfig::validate() const {
 
 // ___________________________________________________________________________
 void Qlever::writeMaterializedView(std::string name, std::string query) const {
-  MaterializedViewWriter::writeViewToDisk(index_.getOnDiskBase(),
-                                          std::move(name),
-                                          parseAndPlanQuery(std::move(query)));
+  materializedViewsManager_.writeViewToDisk(
+      std::move(name), parseAndPlanQuery(std::move(query)));
+}
+
+// ___________________________________________________________________________
+bool Qlever::isMaterializedViewLoaded(const std::string& name) const {
+  return materializedViewsManager_.isViewLoaded(name);
 }
 
 // ___________________________________________________________________________

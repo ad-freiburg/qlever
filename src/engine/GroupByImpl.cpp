@@ -123,12 +123,12 @@ class LazyGroupByRange
                               currentGroupBlock_);
       groupSplitAcrossTables_ = false;
     } else {
-      // This processes the whole block in batches if possible
-      IdTableStatic<OUT_WIDTH> table =
-          std::move(resultTable_).toStatic<OUT_WIDTH>();
-      parent_->processBlock<OUT_WIDTH>(table, aggregates_, evaluationContext,
-                                       blockStart, blockEnd,
-                                       &currentLocalVocab_, groupByCols_);
+      // This processes the whole block in batches if possible.
+      IdTableStatic<OUT_WIDTH> table{
+          std::move(resultTable_).template toStatic<OUT_WIDTH>()};
+      parent_->template processBlock<OUT_WIDTH>(
+          table, aggregates_, evaluationContext, blockStart, blockEnd,
+          &currentLocalVocab_, groupByCols_);
       resultTable_ = std::move(table).toDynamic();
     }
   }

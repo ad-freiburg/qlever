@@ -82,10 +82,10 @@ TEST(OperationTest, limitAndOffsetAreStacked) {
   EXPECT_EQ(n.getLimitOffset(), LimitOffsetClause(20, 3));
 
   n.applyLimitOffset({std::nullopt, 4});
-  EXPECT_EQ(n.getLimitOffset(), LimitOffsetClause(20, 7));
+  EXPECT_EQ(n.getLimitOffset(), LimitOffsetClause(16, 7));
 
-  n.applyLimitOffset({10, 8});
-  EXPECT_EQ(n.getLimitOffset(), LimitOffsetClause(10, 15));
+  n.applyLimitOffset({6, 7});
+  EXPECT_EQ(n.getLimitOffset(), LimitOffsetClause(6, 14));
 }
 
 // ________________________________________________
@@ -505,6 +505,39 @@ TEST(Operation, ensureFailedStatusIsSetWhenGeneratorThrowsException) {
   EXPECT_THROW(result.idTables().begin(), std::runtime_error);
 
   EXPECT_EQ(operation.runtimeInfo().status_, Status::failed);
+  EXPECT_TRUE(signaledUpdate);
+}
+
+// _____________________________________________________________________________
+TEST(Operation, ensureFailedStatusIsSetWhenGeneratorIsCancelled) {
+  bool signaledUpdate = false;
+  const Index& index = ad_utility::testing::getQec()->getIndex();
+  QueryResultCache cache{};
+  NamedResultCache namedCache{};
+  MaterializedViewsManager materializedViewsManager;
+  QueryExecutionContext context{
+      index,
+      &cache,
+      makeAllocator(ad_utility::MemorySize::megabytes(100)),
+      SortPerformanceEstimator{},
+      &namedCache,
+      &materializedViewsManager,
+      [&](std::string) { signaledUpdate = true; }};
+  CustomGeneratorOperation operation{
+      &context, []() -> Result::Generator {
+        throw CancellationException{"Operation was cancelled"};
+        co_return;
+      }()};
+  ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
+  auto result =
+      operation.runComputation(timer, ComputationMode::LAZY_IF_SUPPORTED);
+
+  EXPECT_EQ(operation.runtimeInfo().status_,
+            Status::lazilyMaterializedInProgress);
+
+  EXPECT_THROW(result.idTables().begin(), ad_utility::CancellationException);
+
+  EXPECT_EQ(operation.runtimeInfo().status_, Status::cancelled);
   EXPECT_TRUE(signaledUpdate);
 }
 

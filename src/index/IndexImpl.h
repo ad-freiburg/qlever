@@ -208,7 +208,8 @@ class IndexImpl {
   std::optional<DeltaTriplesManager> deltaTriples_;
 
  public:
-  explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator);
+  explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator,
+                     bool registerSingleton = true);
 
   // Forbid copying.
   IndexImpl& operator=(const IndexImpl&) = delete;
@@ -269,9 +270,9 @@ class IndexImpl {
   const auto& getVocab() const { return vocab_; };
   auto& getNonConstVocabForTesting() { return vocab_; }
 
-  const auto& getTextVocab() const { return textVocab_; };
-
-  const auto& getScoreData() const { return scoreData_; }
+  const ad_utility::AllocatorWithLimit<Id>& allocator() const {
+    return allocator_;
+  };
 
   ad_utility::BlankNodeManager* getBlankNodeManager() const;
 
@@ -325,6 +326,9 @@ class IndexImpl {
   Index::Vocab::PrefixRanges prefixRanges(std::string_view prefix) const;
 
   const CompactVectorOfStrings<Id>& getPatterns() const;
+
+  CompactVectorOfStrings<Id>& getPatterns();
+
   /**
    * @return The multiplicity of the Entities column (0) of the full
    * has-relation relation after unrolling the patterns.
@@ -439,6 +443,8 @@ class IndexImpl {
 
   bool& usePatterns();
 
+  bool usePatterns() const;
+
   bool& loadAllPermutations();
 
   bool& doNotLoadPermutations();
@@ -458,6 +464,10 @@ class IndexImpl {
   }
 
   ad_utility::MemorySize& blocksizePermutationPerColumn() {
+    return blocksizePermutationPerColumn_;
+  }
+
+  const ad_utility::MemorySize& blocksizePermutationPerColumn() const {
     return blocksizePermutationPerColumn_;
   }
 
@@ -546,6 +556,16 @@ class IndexImpl {
       TripleVec& data, const std::vector<size_t>& actualLinesPerPartial,
       size_t linesPerPartial, Func isQLeverInternalTriple);
 
+  // Helper function to get the filename for a given permutation.
+  std::string getFilenameForPermutation(const Permutation& permutation,
+                                        bool internal) const;
+
+  // Create a `CompressedRelationWriter` and a callback that adds the metadata
+  // of large relations to the `metaData` object.
+  CompressedRelationWriter::WriterAndCallback getWriterAndCallback(
+      IndexMetaDataMmapDispatcher::WriteType& metaData, size_t numColumns,
+      const std::string& fileName) const;
+
   // TODO<joka921> Get rid of the `numColumns` by including them into the
   // `sortedTriples` argument.
   template <typename T, typename... Callbacks>
@@ -556,6 +576,19 @@ class IndexImpl {
                             Permutation::KeyOrder permutation,
                             Callbacks&&... perTripleCallbacks);
 
+  // Write a single permutation to disk. `numColumns` specifies the number of
+  // columns in the relation (usually 4, sometimes 6 with patterns).
+  // `fileName` is the base name of the files to write to (without suffixes).
+  // `sortedTriples` is an input range that provides the triples in the correct
+  // order.
+  // Return the number of triples written and the metadata for the written
+  // permutation.
+  std::tuple<size_t, IndexMetaDataMmapDispatcher::WriteType>
+  createPermutationImpl(
+      size_t numColumns, const std::string& fileName,
+      ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples);
+
+ protected:
   // _______________________________________________________________________
   // Create a pair of permutations. Only works for valid pairs (PSO-POS,
   // OSP-OPS, SPO-SOP).  First creates the permutation and then exchanges the
@@ -569,6 +602,10 @@ class IndexImpl {
   // createPatternsAfterFirst is only valid when  the pair is SPO-SOP because
   // the SPO permutation is also needed for patterns (see usage in
   // IndexImpl::createFromFile function)
+
+  // Write `metaData` to the provided file.
+  void writeMetaData(IndexMetaDataMmapDispatcher::WriteType& metaData,
+                     const std::string& filename) const;
 
   template <typename SortedTriplesType, typename... CallbackTypes>
   [[nodiscard]] size_t createPermutationPair(
@@ -592,6 +629,32 @@ class IndexImpl {
                      const Permutation& p1, const Permutation& p2,
                      Callbacks&&... perTripleCallbacks);
 
+ public:
+  // Write a single permutation to disk. `numColumns` specifies the number of
+  // columns in the relation (usually 4, sometimes 6 with patterns).
+  // This does not write the final metadata. This has to be done by calling
+  // `finalizePermutation` after the multiplicities of the sibling permutations
+  // have been exchanged.
+  // `sortedTriples` is an input range that provides the triples in the correct
+  // order.
+  // `permutation` specifies which permutation to write.
+  // `internal` specifies whether this is an internal permutation and adjusts
+  // the filename of the generated file on disk accordingly.
+  // Return the number of distinct values on the first column of the written
+  // permutation. (Predicates for PSO/POS, Subjects for SPO/SOP, Objects for
+  // OSP/OPS) and the metadata for the written permutation.
+  std::pair<size_t, IndexMetaDataMmapDispatcher::WriteType>
+  createPermutationWithoutMetadata(
+      size_t numColumns,
+      ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
+      const Permutation& permutation, bool internal);
+
+  // Finalize the writing of a permutation by appending the metadata to
+  // the corresponding file on disk.
+  void finalizePermutation(IndexMetaDataMmapDispatcher::WriteType& meta,
+                           const Permutation& permutation, bool internal) const;
+
+ protected:
   void openTextFileHandle();
 
   // Get the metadata for the block from the text index that contains the
@@ -650,6 +713,8 @@ class IndexImpl {
   friend class IndexTest_createFromOnDiskIndexTest_Test;
   friend class CreatePatternsFixture_createPatterns_Test;
   FRIEND_TEST(IndexImpl, recomputeStatistics);
+  FRIEND_TEST(IndexImpl, writePatternsToFile);
+  FRIEND_TEST(IndexImpl, loadConfigFromOldIndex);
 
   bool isLiteral(std::string_view object) const;
 
@@ -813,6 +878,16 @@ class IndexImpl {
 
   void storeTextScoringParamsInConfiguration(TextScoringMetric scoringMetric,
                                              float b, float k);
+
+  // Overwrite the config of this instance of `IndexImpl` with the config of
+  // `other`, adjusting the name to `newName` and the statistics to
+  // `newStats`.
+  void loadConfigFromOldIndex(const std::string& newName,
+                              const IndexImpl& other,
+                              const nlohmann::json& newStats);
+
+  // Write the stored in-memory patterns to a pattern file.
+  void writePatternsToFile() const;
 
   // Helper function to count the number of distinct Ids in a sorted IdTable.
   // `lastId` is used to keep track of the last seen Id between multiple calls

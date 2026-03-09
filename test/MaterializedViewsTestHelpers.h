@@ -12,12 +12,15 @@
 
 #include <fstream>
 
+#include "./QueryPlannerTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "engine/MaterializedViews.h"
 #include "libqlever/Qlever.h"
 #include "util/Exception.h"
 
 namespace materializedViewsTestHelpers {
+
+namespace h = queryPlannerTestHelpers;
 
 static constexpr std::string_view dummyTurtle = R"(
   <s1> <p1> "abc" .
@@ -141,6 +144,72 @@ class MaterializedViewsTestLarge : public MaterializedViewsTest {
     }
     return dummy;
   }
+};
+
+// _____________________________________________________________________________
+struct RewriteTestParams {
+  // Query to write the test view.
+  std::string writeQuery_;
+
+  // Enforce a query planning budget to allow testing the greedy query planner
+  // with toy examples.
+  size_t queryPlanningBudget_;
+};
+
+// _____________________________________________________________________________
+class MaterializedViewsQueryRewriteTest
+    : public ::testing::TestWithParam<RewriteTestParams> {
+ protected:
+  std::stringstream log_;
+
+  // ___________________________________________________________________________
+  void SetUp() override { ad_utility::setGlobalLoggingStream(&log_); }
+
+  // ___________________________________________________________________________
+  void TearDown() override { ad_utility::setGlobalLoggingStream(&std::cout); }
+};
+
+// We make a subclass of `MaterializedViewsQueryRewriteTest` here s.t. we can
+// use different `INSTANTIATE_TEST_SUITE_P` calls for different rewriting tests.
+class MaterializedViewsChainRewriteTest
+    : public MaterializedViewsQueryRewriteTest {};
+
+// _____________________________________________________________________________
+inline void PrintTo(const RewriteTestParams& p, std::ostream* os) {
+  auto& s = *os;
+  s << "write query = '" << p.writeQuery_
+    << "', budget = " << p.queryPlanningBudget_;
+}
+
+// _____________________________________________________________________________
+inline void qpExpect(qlever::Qlever& qlv, const auto& query,
+                     ::testing::Matcher<const QueryExecutionTree&> matcher,
+                     source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+  auto l = generateLocationTrace(sourceLocation);
+  auto [qet, qec, parsed] = qlv.parseAndPlanQuery(std::string{query});
+  EXPECT_THAT(*qet, matcher);
+};
+
+// _____________________________________________________________________________
+inline auto viewScan(
+    std::string viewName, std::string a, std::string b, std::string c,
+    std::optional<size_t> strippedSize = std::nullopt,
+    std::vector<std::pair<ColumnIndex, Variable>> additionalColumns = {}) {
+  return h::IndexScanFromStrings(std::move(a), std::move(b), std::move(c),
+                                 {Permutation::Enum::SPO}, std::monostate{},
+                                 additionalColumns | ql::views::values |
+                                     ::ranges::to<std::vector<Variable>>(),
+                                 additionalColumns | ql::views::keys |
+                                     ::ranges::to<std::vector<ColumnIndex>>(),
+                                 strippedSize, viewName);
+};
+
+// _____________________________________________________________________________
+inline auto viewScanSimple(std::string viewName, std::string a, std::string b,
+                           std::string c) {
+  // Helper because `std::bind_front` does not like argument default values.
+  return viewScan(std::move(viewName), std::move(a), std::move(b),
+                  std::move(c));
 };
 
 }  // namespace materializedViewsTestHelpers
