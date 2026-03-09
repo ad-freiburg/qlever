@@ -1163,10 +1163,11 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       updates, [](const ParsedQuery& p) { return p.hasUpdateClause(); }));
 
   auto responseMiddlewares =
-      updates | ql::views::transform(&ParsedQuery::responseMiddleware_) |
-      ql::views::filter(ad_utility::hasValue) |
-      ql::views::transform(ad_utility::exchange) |
-      ql::views::transform(ad_utility::value) | ::ranges::to<std::vector>();
+      ad_utility::RvalueView(
+          updates | ql::views::transform(&ParsedQuery::responseMiddleware_) |
+          ql::views::filter(ad_utility::hasValue) |
+          ql::views::transform(ad_utility::value)) |
+      ::ranges::to<std::vector>();
 
   std::vector<UpdateMetadata> metadatas;
 

@@ -118,15 +118,12 @@ struct ValueImpl {
     return std::move(x).value();
   }
 };
-static_assert(std::is_same_v<decltype(std::declval<ValueImpl>()(
-                                 std::declval<std::optional<std::string>>())),
-                             std::string>);
-static_assert(std::is_same_v<decltype(std::declval<ValueImpl>()(
-                                 std::declval<std::optional<std::string>&>())),
-                             std::string&>);
-static_assert(std::is_same_v<decltype(std::declval<ValueImpl>()(
-                                 std::declval<std::optional<std::string>&&>())),
-                             std::string>);
+static_assert(ad_utility::InvocableWithExactReturnType<
+              ValueImpl, std::string, std::optional<std::string>>);
+static_assert(ad_utility::InvocableWithExactReturnType<
+              ValueImpl, std::string&, std::optional<std::string>&>);
+static_assert(ad_utility::InvocableWithExactReturnType<
+              ValueImpl, std::string, std::optional<std::string>&&>);
 
 // Implementation of `exchange` (see below).
 struct ExchangeImpl {
