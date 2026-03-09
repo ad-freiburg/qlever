@@ -15,16 +15,18 @@ databases by [a large margin on most queries](https://qlever.dev/evaluation) in 
 
 QLever implements the full SPARQL 1.1 standard, including federated queries,
 named graphs, the Graph Store HTTP Protocol, and updates. On top of its
-outstanding performance, QLever offers a variety of unique features: advanced
-text search capabilities, context-sensitive autocompletion of SPARQL queries,
-live query analysis, very efficient spatial queries, and the interactive
-visualization of very large numbers of geometric objects on a map.
-QLever can also be used as an embedded database, that is, without the standard
-client-server setup but running it in-process inside your own C++ program.
+outstanding performance, QLever offers a variety of unique features:
+materialized views, advanced text-search capabilities, context-sensitive
+autocompletion of SPARQL queries, live query analysis, efficient spatial
+queries, and the interactive visualization of very large numbers of geometric
+objects on a map. QLever can also be used as an embedded database, that is,
+without the standard client-server setup but running in-process inside your
+own C++ code.
 
 [Here are demos of QLever](http://qlever.dev/) on a variety of
 large datasets, including the complete Wikidata, Wikimedia Commons,
-OpenStreetMap, UniProt, PubChem, and DBLP. Those demos also feature QLever's
+OpenStreetMap, UniProt, PubChem, and DBLP. The largest dataset has over one
+trillion triples and runs on a single PC. The demos also feature QLever's
 context-sensitive autocompletion, which makes SPARQL query construction so much
 easier. The datasets are updated regularly. Click on "Index Information" for a
 short description (with dates) and basic statistics.
@@ -50,7 +52,7 @@ discussion](https://github.com/ad-freiburg/qlever/discussions).
 
 # Quickstart and documentation
 
-To get started with QLever you may use our native packages released for [Debian, Ubuntu](https://docs.qlever.dev/quickstart/#debian-and-ubuntu) and [macOS](https://docs.qlever.dev/quickstart/#macos-apple-silicon). Additionally, a platform-independent version of QLever is available as an [image for Docker and Podman](https://hub.docker.com/r/adfreiburg/qlever), which can be used through our Python-based `qlever` command-line interface (CLI). Please refer to our [Quickstart documentation](https://docs.qlever.dev/quickstart/) for details.
+To get started with QLever, use our native packages released for [Debian, Ubuntu](https://docs.qlever.dev/quickstart/#debian-and-ubuntu) and [macOS](https://docs.qlever.dev/quickstart/#macos-apple-silicon). Additionally, a platform-independent version of QLever is available as an [image for Docker and Podman](https://hub.docker.com/r/adfreiburg/qlever). Whether you use the native packages or the Docker/Podman image, everything related to QLever can be controlled via a single command-line tool `qlever`. Please refer to our [Quickstart documentation](https://docs.qlever.dev/quickstart/) for details.
 
 For the official documentation, see [docs.qlever.dev](https://docs.qlever.dev/). Additional
-information can also be found in the [QLever Wiki](https://github.com/ad-freiburg/qlever/wiki).
+information (though potentially outdated) can be found on the [QLever Wiki](https://github.com/ad-freiburg/qlever/wiki).
