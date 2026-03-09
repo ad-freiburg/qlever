@@ -345,6 +345,11 @@ std::shared_ptr<const Result> Operation::getResult(
                 updateRuntimeInformationOnFailure(timer.msecs());
               }
             });
+
+    if (_executionContext->disableCaching()) {
+      return std::make_shared<Result>(runComputation(timer, computationMode));
+    }
+
     auto cacheSetup = [this, &timer, computationMode, &cacheKey, pinResult,
                        isRoot]() {
       return runComputationAndPrepareForCache(timer, computationMode, cacheKey,
@@ -704,6 +709,12 @@ void Operation::signalQueryUpdate(
 
 // _____________________________________________________________________________
 std::string Operation::getCacheKey() const {
+  AD_CORRECTNESS_CHECK(_executionContext);
+  if (_executionContext->disableCaching()) {
+    // Cache key computation is costly, so we can save it when caching is
+    // disabled.
+    return "";
+  }
   auto result = getCacheKeyImpl();
   if (limitOffset_._limit.has_value()) {
     absl::StrAppend(&result, " LIMIT ", limitOffset_._limit.value());
