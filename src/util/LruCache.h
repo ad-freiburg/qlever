@@ -57,16 +57,16 @@ class LRUCache {
     auto it = cache_.find(key);
     if (it != cache_.end()) {
       const auto& [value, listIterator] = it->second;
-      // Move accessed key to front (most recently used)
+      // Move accessed key to front (most recently used).
       keys_.splice(keys_.begin(), keys_, listIterator);
 
       return value;
     }
-    // Evict LRU if cache is full
+    // Evict LRU if cache is full.
     if (cache_.size() >= capacity_) {
       K& lruKey = keys_.back();
       cache_.erase(lruKey);
-      // Reuse allocated memory by moving node and reassigning key
+      // Reuse allocated memory by moving node and reassigning key.
       keys_.splice(keys_.begin(), keys_, std::prev(keys_.end()));
       lruKey = key;
     } else {
