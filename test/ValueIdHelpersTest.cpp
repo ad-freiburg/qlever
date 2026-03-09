@@ -26,7 +26,7 @@ using ::testing::HasSubstr;
 
 namespace {
 // _____________________________________________________________________________
-TEST(ExportQueryExecutionTrees, idToLiteralFunctionality) {
+TEST(ValueIdHelpers, idToLiteralFunctionality) {
   std::string kg =
       "<s> <p> \"something\" . <s> <p> 1 . <s> <p> "
       "\"some\"^^<http://www.w3.org/2001/XMLSchema#string> . <s> <p> "
@@ -97,7 +97,7 @@ TEST(ExportQueryExecutionTrees, idToLiteralFunctionality) {
 }
 
 // _____________________________________________________________________________
-TEST(ExportQueryExecutionTrees, idToLiteralOrIriFunctionality) {
+TEST(ValueIdHelpers, idToLiteralOrIriFunctionality) {
   std::string kg =
       "<s> <p> \"something\" . <s> <p> 1 . <s> <p> "
       "\"some\"^^<http://www.w3.org/2001/XMLSchema#string> . <s> <p> "
@@ -133,7 +133,7 @@ TEST(ExportQueryExecutionTrees, idToLiteralOrIriFunctionality) {
 }
 
 // _____________________________________________________________________________
-TEST(ExportQueryExecutionTrees, getLiteralOrNullopt) {
+TEST(ValueIdHelpers, getLiteralOrNullopt) {
   using LiteralOrIri = ql::exportIds::LiteralOrIri;
   using Literal = ad_utility::triple_component::Literal;
   using Iri = ad_utility::triple_component::Iri;
@@ -162,7 +162,7 @@ TEST(ExportQueryExecutionTrees, getLiteralOrNullopt) {
 }
 
 // _____________________________________________________________________________
-TEST(ExportQueryExecutionTrees, ReplaceAnglesByQuotes) {
+TEST(ValueIdHelpers, ReplaceAnglesByQuotes) {
   std::string input = "<s>";
   std::string expected = "\"s\"";
   EXPECT_EQ(ql::exportIds::replaceAnglesByQuotes(input), expected);
@@ -175,7 +175,7 @@ TEST(ExportQueryExecutionTrees, ReplaceAnglesByQuotes) {
 }
 
 // _____________________________________________________________________________
-TEST(ExportQueryExecutionTrees, blankNodeIrisAreProperlyFormatted) {
+TEST(ValueIdHelpers, blankNodeIrisAreProperlyFormatted) {
   using ad_utility::triple_component::Iri;
   std::string_view input = "_:test";
   EXPECT_THAT(
@@ -188,7 +188,7 @@ TEST(ExportQueryExecutionTrees, blankNodeIrisAreProperlyFormatted) {
 }
 
 // _____________________________________________________________________________
-TEST(ExportQueryExecutionTrees, GetLiteralOrIriFromVocabIndexWithEncodedIris) {
+TEST(ValueIdHelpers, GetLiteralOrIriFromVocabIndexWithEncodedIris) {
   // Test the getLiteralOrIriFromVocabIndex function specifically with encoded
   // IRIs
 
