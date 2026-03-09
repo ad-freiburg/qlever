@@ -8,10 +8,7 @@
 
 #include "engine/ConstructBatchEvaluator.h"
 
-#include <absl/strings/str_cat.h>
-
-#include "engine/ExportQueryExecutionTrees.h"
-#include "global/Constants.h"
+#include "engine/ConstructQueryEvaluator.h"
 #include "util/Exception.h"
 #include "util/Views.h"
 
@@ -39,21 +36,9 @@ BatchEvaluationResult ConstructBatchEvaluator::evaluateBatch(
 // _____________________________________________________________________________
 std::optional<EvaluatedTerm> ConstructBatchEvaluator::idToEvaluatedTerm(
     const Index& index, Id id, const LocalVocab& localVocab) {
-  auto optStringAndType =
-      ExportQueryExecutionTrees::idToStringAndType(index, id, localVocab);
-  if (!optStringAndType.has_value()) return std::nullopt;
-  auto& [str, type] = optStringAndType.value();
-  const char* i = XSD_INT_TYPE;
-  const char* d = XSD_DECIMAL_TYPE;
-  const char* b = XSD_BOOLEAN_TYPE;
-  // Note: If `type` is `XSD_DOUBLE_TYPE`, `str` is always "NaN", "INF" or
-  // "-INF", which doesn't have a short form notation.
-  if (type == nullptr || type == i || type == d ||
-      (type == b && str.length() > 1)) {
-    return std::make_shared<const std::string>(std::move(str));
-  }
-  return std::make_shared<const std::string>(
-      absl::StrCat("\"", str, "\"^^<", type, ">"));
+  auto optStr = ConstructQueryEvaluator::evaluateId(id, index, localVocab);
+  if (!optStr.has_value()) return std::nullopt;
+  return std::make_shared<const std::string>(std::move(optStr.value()));
 }
 
 // _____________________________________________________________________________
