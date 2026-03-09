@@ -77,6 +77,15 @@ class GraphSearchTest : public Test {
       {{0, {1, 2}}, {1, {2}}, {2, {3}}, {3, {}}},
       // Similar to graph 8, but one node longer again.
       {{0, {1, 2}}, {1, {2}}, {2, {3}}, {3, {4}}, {4, {}}},
+      // A very long version of graph 6-9.
+      {{0, {1, 7}},
+       {1, {2}},
+       {2, {3}},
+       {3, {4}},
+       {4, {5}},
+       {5, {6}},
+       {6, {}},
+       {7, {3}}},
   };
 
   // Create a set that contains some Ids with the given size_t values.
@@ -175,7 +184,7 @@ TYPED_TEST(GraphSearchTest, depthFirstSearchWithLimit) {
     size_t maxDist_;
     std::vector<size_t> expected_;
   };
-  std::array<TestVal, 19> tests = {
+  std::array<TestVal, 20> tests = {
       TestVal(0, 0, 0, 10, {0}), TestVal(0, 0, 10, 100, {}),
       TestVal(1, 0, 0, 100, {0}), TestVal(1, 1, 0, 100, {}),
       TestVal(2, 0, 100, 200, {0}), TestVal(3, 1, 0, 0, {}),
@@ -184,7 +193,7 @@ TYPED_TEST(GraphSearchTest, depthFirstSearchWithLimit) {
       TestVal(5, 0, 1, 100, {}), TestVal(5, 4, 5, 1000, {4}),
       TestVal(6, 2, 0, 1, {2}), TestVal(7, 3, 0, 2, {3}),
       TestVal(2, 0, 100, 100, {0}), TestVal(8, 3, 0, 2, {3}),
-      TestVal(9, 4, 0, 3, {4}),
+      TestVal(9, 4, 0, 3, {4}), TestVal(10, 6, 0, 5, {6}),
       // The following will set the `skipStartNodeInitially` flag and call DFS
       // without limits.
       TestVal(2, 0, 1, std::numeric_limits<size_t>::max(), {0}),

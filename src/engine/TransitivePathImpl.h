@@ -260,7 +260,7 @@ class TransitivePathImpl : public TransitivePathBase {
           }
           edges.setGraphId(graphId);
 
-          // Pick the appropriate graph search strategy (BFS/DFS) and run it.
+          // Pick the appropriate graph search strategy and run it.
           GraphSearchProblem<T> gsp(edges, startNode, targetId, minDist_,
                                     maxDist_);
           GraphSearchExecutionParams ep(cancellationHandle_, allocator());

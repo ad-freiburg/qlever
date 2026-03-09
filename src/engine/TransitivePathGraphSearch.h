@@ -147,29 +147,36 @@ Set depthFirstSearchWithLimit(const GraphSearchProblem<T>& gsp,
 
   sparqlExpression::VectorWithMemoryLimit<std::pair<Id, size_t>> stack{
       ep.allocator_.as<std::pair<Id, size_t>>()};
-  ad_utility::HashSetWithMemoryLimit<Id> marks{ep.allocator_};
+  ad_utility::HashMapWithMemoryLimit<Id, size_t> marks{ep.allocator_};
 
   stack.emplace_back(gsp.startNode_, 0);
 
-  // TODO<schaetzr>: Clean this up and make it use the template parameter.
-  // This loop is the same as currently on master, just fitted to take arguments
-  // from gsp and ep.
   while (!stack.empty()) {
-    ep.checkCancellation("DFS with limits");
-    auto [node, steps] = stack.back();
+    ep.checkCancellation("Depth-first search (with limits)");
+
+    auto [node, dist] = stack.back();
     stack.pop_back();
 
-    if (steps <= gsp.maxDist_ && !marks.contains(node)) {
-      if (steps >= gsp.minDist_) {
-        marks.insert(node);
-        if (!gsp.targetNode_.has_value() || node == gsp.targetNode_.value()) {
+    if (gsp.minDist_ <= dist && gsp.maxDist_ >= dist) {
+      marks.emplace(node, dist);
+      if constexpr (searchForTarget) {
+        if (targetNode == node) {
+          // Target found, we can terminate DFS.
+          connectedNodes.reserve(1);
           connectedNodes.insert(node);
+          break;
         }
+      } else {
+        connectedNodes.insert(node);
       }
+    }
 
-      const auto& successors = gsp.edges_.successors(node);
-      for (auto successor : successors) {
-        stack.emplace_back(successor, steps + 1);
+    const auto& successors = gsp.edges_.successors(node);
+    for (const Id& successor : successors) {
+      // We re-check already marked nodes if we visit them at a shorter distance
+      // than before.
+      if (!marks.contains(successor) || marks.at(successor) > dist) {
+        stack.emplace_back(successor, dist + 1);
       }
     }
   }
@@ -177,7 +184,7 @@ Set depthFirstSearchWithLimit(const GraphSearchProblem<T>& gsp,
 }
 
 // Check the given graph search problem and run the appropriate
-// algorithm (BFS/DFS, with or without limits).
+// algorithm.
 // Return a set containing the target node, if it was given and is
 // reachable. Otherwise, return all reachable nodes. If limits were given, only
 // nodes inside that limit are contained.
