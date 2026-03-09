@@ -122,6 +122,18 @@ CPP_template(size_t numIndexColumns, bool includeGraphColumn,
           tieLocatedTriplesIndices<numIndexColumns, includeGraphColumn>>());
 }
 
+// Like `tieLocatedTriple`, but takes a `const LocatedTriple&` value instead of
+// an iterator. Needed for algorithms like `set_intersection` that pass values.
+CPP_template(size_t numIndexColumns, bool includeGraphColumn, typename T)(
+    requires(numIndexColumns >= 1 &&
+             numIndexColumns <= 3)) auto tieLocatedTripleValue(const T& lt) {
+  const auto& ids = lt.triple_.ids();
+  return tieHelper(
+      ids,
+      ad_utility::toIntegerSequenceRef<
+          tieLocatedTriplesIndices<numIndexColumns, includeGraphColumn>>());
+}
+
 // ____________________________________________________________________________
 template <size_t numIndexColumns, bool includeGraphColumn>
 IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
@@ -244,57 +256,55 @@ VacuumStatistics processBlockForVacuum(
     const qlever::KeyOrder::Array& inverseKeys,
     std::vector<IdTriple<0>>& allDeletionsToRemove,
     std::vector<IdTriple<0>>& allInsertionsToRemove) {
-  VacuumStatistics stats{0, 0, 0, 0};
-
-  auto toSpo = [&inverseKeys](const LocatedTriples::iterator& lt) {
-    const auto& ids = lt->triple_.ids();
-    std::array<Id, 4> spo{};
-    for (size_t i = 0; i < 4; ++i) {
-      spo[inverseKeys[i]] = ids[i];
-    }
-    return IdTriple<0>{spo};
+  auto toSpo = [&inverseKeys](auto& ids) {
+    return IdTriple<0>{[&]<size_t... I>(std::index_sequence<I...>) {
+      std::array<Id, 4> spo{};
+      ((spo[inverseKeys[I]] = std::get<I>(ids)), ...);
+      return spo;
+    }(std::make_index_sequence<4>{})};
   };
 
-  auto cmp = [](const auto& lt, const auto& row) {
-    return tieLocatedTriple<3, true>(lt) <=> tieIdTableRow<3, true>(row);
+  auto ltProj = [](const LocatedTriple& lt)
+      -> std::tuple<const Id&, const Id&, const Id&, const Id&> {
+    return tieLocatedTripleValue<3, true>(lt);
+  };
+  auto rowProj = [](const auto& row)
+      -> std::tuple<const Id&, const Id&, const Id&, const Id&> {
+    return tieIdTableRow<3, true>(row);
   };
 
-  auto rowIt = idTable.begin();
-  auto updateIt = locatedTriples.begin();
+  // Intersection: located triples that match an idTable row.
+  std::vector<std::tuple<Id, Id, Id, Id>> insertionsToRemove;
+  ql::ranges::set_intersection(
+      locatedTriples | ql::views::filter(&LocatedTriple::insertOrDelete_) |
+          ql::views::transform(ltProj),
+      idTable | ql::views::transform(rowProj),
+      std::back_inserter(insertionsToRemove));
+  auto insertionsRemovedInBlock = insertionsToRemove.size();
+  ad_utility::appendVector(allInsertionsToRemove,
+                           insertionsToRemove | ql::views::transform(toSpo) |
+                               ::ranges::to<std::vector>());
 
-  while (updateIt != locatedTriples.end() && rowIt != idTable.end()) {
-    if (cmp(updateIt, *rowIt) < 0) {
-      if (updateIt->insertOrDelete_) {
-        stats.numInsertionsKept_++;
-      } else {
-        allDeletionsToRemove.push_back(toSpo(updateIt));
-        stats.numDeletionsRemoved_++;
-      }
-      ++updateIt;
-    } else if (cmp(updateIt, *rowIt) == 0) {
-      if (updateIt->insertOrDelete_) {
-        allInsertionsToRemove.push_back(toSpo(updateIt));
-        stats.numInsertionsRemoved_++;
-      } else {
-        stats.numDeletionsKept_++;
-      }
-      ++updateIt;
-    } else {
-      ++rowIt;
-    }
-  }
+  // Difference: located triples with no matching idTable row.
+  std::vector<std::tuple<Id, Id, Id, Id>> deletionsToRemove;
+  ql::ranges::set_difference(
+      locatedTriples |
+          ql::views::filter(std::not_fn(&LocatedTriple::insertOrDelete_)) |
+          ql::views::transform(ltProj),
+      idTable | ql::views::transform(rowProj),
+      std::back_inserter(deletionsToRemove));
+  auto deletionsRemovedInBlock = deletionsToRemove.size();
+  ad_utility::appendVector(allDeletionsToRemove,
+                           deletionsToRemove | ql::views::transform(toSpo) |
+                               ::ranges::to<std::vector>());
 
-  while (updateIt != locatedTriples.end()) {
-    if (updateIt->insertOrDelete_) {
-      stats.numInsertionsKept_++;
-    } else {
-      allDeletionsToRemove.push_back(toSpo(updateIt));
-      stats.numDeletionsRemoved_++;
-    }
-    ++updateIt;
-  }
+  auto insertionsInBlock =
+      ql::ranges::count_if(locatedTriples, &LocatedTriple::insertOrDelete_);
+  auto deletionsInBlock = locatedTriples.size() - insertionsInBlock;
 
-  return stats;
+  return {deletionsRemovedInBlock, insertionsRemovedInBlock,
+          deletionsInBlock - deletionsRemovedInBlock,
+          insertionsInBlock - insertionsRemovedInBlock};
 }
 }  // namespace
 
