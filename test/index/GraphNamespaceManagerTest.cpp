@@ -13,6 +13,7 @@
 #include "../util/GTestHelpers.h"
 #include "index/GraphNamespaceManager.h"
 
+// _____________________________________________________________________________
 TEST(GraphNamespaceManager, allocateNewGraph) {
   {
     GraphNamespaceManager nsm("http://example.org/g/", 0);
@@ -30,6 +31,8 @@ TEST(GraphNamespaceManager, allocateNewGraph) {
               "<http://example.org/g/12>");
   }
 }
+
+// _____________________________________________________________________________
 TEST(GraphNamespaceManager, storeAndRestoreData) {
   auto tmpFile =
       std::filesystem::temp_directory_path() / "testGraphNamespaceManager";
@@ -52,6 +55,7 @@ TEST(GraphNamespaceManager, storeAndRestoreData) {
   }
 }
 
+// _____________________________________________________________________________
 TEST(GraphNamespaceManager, json) {
   GraphNamespaceManager original("http://example.org/ns/", 42);
 
@@ -63,4 +67,12 @@ TEST(GraphNamespaceManager, json) {
 
   auto iri = restored.allocateNewGraph();
   EXPECT_EQ(iri.toStringRepresentation(), "<http://example.org/ns/42>");
+}
+
+// _____________________________________________________________________________
+TEST(GraphNamespaceManager, toString) {
+  EXPECT_THAT(GraphNamespaceManager("http://example.org/ns/", 42),
+              InsertIntoStream(
+                  testing::StrEq("GraphNamespaceManager(prefix=\"http://"
+                                 "example.org/ns/\", allocatedGraphs=42)")));
 }
