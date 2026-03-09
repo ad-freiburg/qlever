@@ -30,6 +30,8 @@ struct PreparedSpatialJoinParams {
   std::optional<size_t> maxResults_;
   std::optional<SpatialJoinType> joinType_;
   std::optional<std::string> rightCacheName_;
+  std::optional<std::pair<ColumnIndex, ColumnIndex>> boundingBoxColsLeft_;
+  std::optional<std::pair<ColumnIndex, ColumnIndex>> boundingBoxColsRight_;
 };
 
 // This class is implementing a SpatialJoin operation. This operations joins
@@ -155,6 +157,11 @@ class SpatialJoin : public Operation {
 
   std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
       const parsedQuery::Bind& bind) const override;
+
+  // Make a clone of this `SpatialJoin` which uses precomputed bounding boxes of
+  // the geometries from an underlying `MaterializedViews` if possible.
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  cloneWithBoundingBoxColumns(const Variable& uniqueTempVarPrefix) const;
 
  private:
   std::unique_ptr<Operation> cloneImpl() const override;

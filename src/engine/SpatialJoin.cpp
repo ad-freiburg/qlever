@@ -13,6 +13,7 @@
 
 #include <cstdint>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <queue>
 #include <tuple>
@@ -27,6 +28,9 @@
 #include "engine/SpatialJoinConfig.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/IdTable.h"
+#include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "global/Constants.h"
 #include "global/ValueId.h"
 #include "parser/ParsedQuery.h"
@@ -408,6 +412,7 @@ std::vector<ColumnIndex> SpatialJoin::resultSortedOn() const {
 
 // ____________________________________________________________________________
 VariableToColumnMap SpatialJoin::getVarColMapPayloadVars() const {
+  // TODO remove bounding box cols
   AD_CONTRACT_CHECK(childRight_,
                     "Child right must be added before payload variable to "
                     "column map can be computed.");
@@ -460,6 +465,12 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
       childLeft->getVariableColumn(swapSides ? config_.right_ : config_.left_);
   ColumnIndex rightJoinCol =
       childRight->getVariableColumn(swapSides ? config_.left_ : config_.right_);
+
+  // TODO swapsides ,etc.
+  // std::optional<std::pair<ColumnIndex, ColumnIndex>> boundingBoxColsLeft;
+  // if (config_.boundingBoxesLeft_.has_value()) {
+  //   boundingBoxColsLeft = {childLeft->getVariableColumn()}
+  // }
 
   // Payload cols and join col
   auto varsAndColInfo = copySortedByColumnIndex(getVarColMapPayloadVars());
@@ -592,4 +603,64 @@ SpatialJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   auto right = idx == 1 ? child : childRight_;
   return ad_utility::makeExecutionTree<SpatialJoin>(
       _executionContext, config_, std::move(left), std::move(right));
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+SpatialJoin::cloneWithBoundingBoxColumns(
+    const Variable& uniqueTempVarPrefix) const {
+  auto varSuffix = [](const Variable& var, std::string suffix) {
+    return Variable{absl::StrCat(var.name(), suffix)};
+  };
+  auto varExpr = [](const Variable& var) {
+    return std::make_unique<sparqlExpression::VariableExpression>(var);
+  };
+  auto makeBind = [varExpr](auto factory, const Variable& geomVar,
+                            const Variable& targetVar) {
+    return parsedQuery::Bind{sparqlExpression::SparqlExpressionPimpl{
+                                 factory(varExpr(geomVar)), "TODO"},
+                             targetVar};
+  };
+  auto ll = std::bind_front(makeBind,
+                            &sparqlExpression::makeEnvelopeLowerLeftExpression);
+  auto ur = std::bind_front(
+      makeBind, &sparqlExpression::makeEnvelopeUpperRightExpression);
+
+  auto tryPushDown = [ll, ur, varSuffix](
+                         std::shared_ptr<QueryExecutionTree> child,
+                         const Variable& geomVar, const Variable& targetVar)
+      -> std::tuple<std::shared_ptr<QueryExecutionTree>,
+                    std::optional<SpatialJoinBoundingBoxCols>, bool> {
+    if (!child) {
+      return {child, std::nullopt, false};
+    }
+    auto var1 = varSuffix(targetVar, "_ll");
+    auto step1 =
+        child->getRootOperation()->makeTreeWithBindColumn(ll(geomVar, var1));
+    if (!step1.has_value()) {
+      return {child, std::nullopt, false};
+    }
+    auto var2 = varSuffix(targetVar, "_ur");
+    auto step2 = step1.value()->getRootOperation()->makeTreeWithBindColumn(
+        ur(geomVar, var2));
+    if (!step2.has_value()) {
+      return {child, std::nullopt, false};
+    }
+    return {std::move(step2.value()),
+            SpatialJoinBoundingBoxCols{std::move(var1), std::move(var2)}, true};
+  };
+
+  auto newConfig = config_;
+
+  auto [left, leftBBCols, leftIsNew] = tryPushDown(
+      childLeft_, config_.left_, varSuffix(uniqueTempVarPrefix, "_left"));
+  newConfig.boundingBoxesLeft_ = leftBBCols;
+  auto [right, rightBBCols, rightIsNew] = tryPushDown(
+      childRight_, config_.right_, varSuffix(uniqueTempVarPrefix, "_right"));
+  newConfig.boundingBoxesRight_ = rightBBCols;
+  if (!leftIsNew && !rightIsNew) {
+    return std::nullopt;
+  }
+  return ad_utility::makeExecutionTree<SpatialJoin>(
+      _executionContext, newConfig, std::move(left), std::move(right));
 }

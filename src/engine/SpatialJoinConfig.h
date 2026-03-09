@@ -71,6 +71,13 @@ enum class SpatialJoinAlgorithm {
 const SpatialJoinAlgorithm SPATIAL_JOIN_DEFAULT_ALGORITHM =
     SpatialJoinAlgorithm::S2_GEOMETRY;
 
+// Variables in a single child refering to columns containing the corners of the
+// bounding box.
+struct SpatialJoinBoundingBoxCols {
+  Variable lowerLeft_;
+  Variable upperRight_;
+};
+
 // The configuration object that will be provided by the special SERVICE.
 struct SpatialJoinConfiguration {
   // The task defines search parameters
@@ -98,6 +105,12 @@ struct SpatialJoinConfiguration {
   // Cache name for precomputed right child with s2 index (only for
   // s2-point-polyline algorithm)
   std::optional<std::string> rightCacheName_ = std::nullopt;
+
+  // Bounding box columns for both children, to be set during query planning if
+  // the geometries are read from a materialized view that also contains the
+  // bounding boxes.
+  std::optional<SpatialJoinBoundingBoxCols> boundingBoxesLeft_;
+  std::optional<SpatialJoinBoundingBoxCols> boundingBoxesRight_;
 };
 
 // The spatial join operation without a limit on the maximum number of results
