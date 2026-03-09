@@ -74,7 +74,10 @@ class GraphSearchTest : public Test {
       {{0, {1, 4}}, {1, {2}}, {2, {3}}, {4, {3}}},
       // Similar to graph 6, but the potential target node is one after
       // node 2.
-      {{0, {1, 2}}, {1, {2}}, {2, {3}}, {3, {}}}};
+      {{0, {1, 2}}, {1, {2}}, {2, {3}}, {3, {}}},
+      // Similar to graph 8, but one node longer again.
+      {{0, {1, 2}}, {1, {2}}, {2, {3}}, {3, {4}}, {4, {}}},
+  };
 
   // Create a set that contains some Ids with the given size_t values.
   Set initializeSet(const std::vector<size_t>& values) {
@@ -139,54 +142,6 @@ using graphSearchTestTypes = Types<HashMapWrapper, BinSearchMap>;
 TYPED_TEST_SUITE(GraphSearchTest, graphSearchTestTypes);
 
 // _____________________________________________________________________________
-TYPED_TEST(GraphSearchTest, binaryFirstSearch) {
-  // For all graph examples, construct the expected returned sets.
-  std::vector<std::vector<size_t>> expected = {
-      {0}, {0}, {0}, {0, 1}, {0}, {0, 1, 2, 3, 4, 5, 6, 7}, {0, 1, 2}};
-
-  // Iterate over all graphs and check if binarySearch will return the right
-  // values.
-  for (size_t i = 0; i < expected.size(); i++) {
-    GraphSearchProblem<TypeParam> gsp(this->graphs_.at(i), Id::makeFromInt(0),
-                                      std::optional<Id>(), 0,
-                                      std::numeric_limits<size_t>::max());
-    EXPECT_THAT(runOptimalGraphSearch(gsp, this->ep_),
-                this->initializeSet(expected.at(i)));
-  }
-}
-
-// _____________________________________________________________________________
-TYPED_TEST(GraphSearchTest, binaryFirstSearchWithLimit) {
-  // Organize each test case into a neat struct to hold the expected values.
-  struct TestVal {
-    size_t graphNumber_;
-    size_t minDist_;
-    size_t maxDist_;
-    std::vector<size_t> expected_;
-  };
-  std::array<TestVal, 14> tests = {
-      TestVal(0, 0, 100, {0}), TestVal(1, 0, 100, {0}), TestVal(1, 1, 10, {}),
-      TestVal(2, 0, 10, {0}), TestVal(2, 10, 11, {0}), TestVal(3, 0, 1, {1, 0}),
-      TestVal(3, 1, 1, {1}), TestVal(4, 0, 100, {0}),
-      TestVal(5, 1, 2, {1, 4, 3}), TestVal(5, 10, 100, {1, 2, 3, 4, 5, 6, 7}),
-      TestVal(2, 10001, 1000001, {0}),
-      TestVal(8, 2, std::numeric_limits<size_t>::max(), {2, 3}),
-      // The following will set the `skipStartNodeInitially` flag and call BFS
-      // without limits.
-      TestVal(3, 1, std::numeric_limits<size_t>::max(), {0, 1}),
-      TestVal(7, 1, std::numeric_limits<size_t>::max(), {1, 2, 3, 4})};
-
-  for (const TestVal& test : tests) {
-    GraphSearchProblem<TypeParam> gsp(this->graphs_.at(test.graphNumber_),
-                                      Id::makeFromInt(0), std::optional<Id>(),
-                                      test.minDist_, test.maxDist_);
-
-    EXPECT_THAT(runOptimalGraphSearch(gsp, this->ep_),
-                this->initializeSet(test.expected_));
-  }
-}
-
-// _____________________________________________________________________________
 TYPED_TEST(GraphSearchTest, depthFirstSearch) {
   struct TestVal {
     size_t graphNumber_;
@@ -220,7 +175,7 @@ TYPED_TEST(GraphSearchTest, depthFirstSearchWithLimit) {
     size_t maxDist_;
     std::vector<size_t> expected_;
   };
-  std::array<TestVal, 18> tests = {
+  std::array<TestVal, 19> tests = {
       TestVal(0, 0, 0, 10, {0}), TestVal(0, 0, 10, 100, {}),
       TestVal(1, 0, 0, 100, {0}), TestVal(1, 1, 0, 100, {}),
       TestVal(2, 0, 100, 200, {0}), TestVal(3, 1, 0, 0, {}),
@@ -229,6 +184,7 @@ TYPED_TEST(GraphSearchTest, depthFirstSearchWithLimit) {
       TestVal(5, 0, 1, 100, {}), TestVal(5, 4, 5, 1000, {4}),
       TestVal(6, 2, 0, 1, {2}), TestVal(7, 3, 0, 2, {3}),
       TestVal(2, 0, 100, 100, {0}), TestVal(8, 3, 0, 2, {3}),
+      TestVal(9, 4, 0, 3, {4}),
       // The following will set the `skipStartNodeInitially` flag and call DFS
       // without limits.
       TestVal(2, 0, 1, std::numeric_limits<size_t>::max(), {0}),

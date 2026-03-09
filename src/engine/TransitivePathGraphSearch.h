@@ -70,136 +70,10 @@ struct GraphSearchExecutionParams {
   }
 };
 
-// Breadth-first search without any distance constraints.
-// Returns the set of all nodes connected to the startNode as given in `gsp`.
-template <typename T>
-Set breadthFirstSearch(const GraphSearchProblem<T>& gsp,
-                       const GraphSearchExecutionParams& ep,
-                       bool skipStartNodeInitially = false) {
-  Queue queue{ep.allocator_};
-  Set connectedNodes{ep.allocator_};
-
-  if (skipStartNodeInitially) {
-    for (const Id& successor : gsp.edges_.successors(gsp.startNode_)) {
-      queue.push_back(successor);
-    }
-  } else {
-    queue.push_back(gsp.startNode_);
-  }
-
-  while (!queue.empty()) {
-    ep.checkCancellation("Breadth-first search");
-
-    // Get next node from queue.
-    auto node = queue.front();
-    queue.pop_front();
-    connectedNodes.insert(node);
-
-    // Enqueue all successors of currently handled node.
-    const auto& successors = gsp.edges_.successors(node);
-    for (Id successor : successors) {
-      // Do not re-add already discovered nodes (skip loops).
-      if (!connectedNodes.contains(successor)) {
-        queue.push_back(successor);
-      }
-    }
-  }
-  return connectedNodes;
-}
-
-// Breadth-first search respecting the minimum and maximum distance
-// constraints from the `gsp` parameter.
-// Returns the set of all nodes connected to the startNode as given in `gsp`,
-// with respect to the limit.
-template <typename T>
-Set breadthFirstSearchWithLimit(const GraphSearchProblem<T>& gsp,
-                                const GraphSearchExecutionParams& ep) {
-  // Run DFS to find all nodes with distance of exactly `gsp.minDist_`.
-  Set minDistNodes{ep.allocator_};
-
-  sparqlExpression::VectorWithMemoryLimit<std::pair<Id, size_t>> stack{
-      ep.allocator_};
-  ad_utility::HashSetWithMemoryLimit<Id> marks{ep.allocator_};
-  stack.emplace_back(gsp.startNode_, 0);
-
-  while (!stack.empty()) {
-    ep.checkCancellation(
-        "Breadth first search with limit (finding nodes with minimum distance "
-        "using DFS)");
-
-    auto [node, steps] = stack.back();
-    stack.pop_back();
-
-    if (steps == gsp.minDist_) {
-      minDistNodes.insert(node);
-      continue;
-    }
-
-    const auto successors = gsp.edges_.successors(node);
-    for (const Id& successor : successors) {
-      stack.emplace_back(successor, steps + 1);
-    }
-  }
-
-  Set connectedNodes{ep.allocator_};
-  // Run BFS starting at each of the nodes from `minDistNodes`.
-
-  // If the maximum limit is infinity (`std::numeric_limits<size_t>::max()`), we
-  // can just call the unlimited BFS starting at all nodes from `minDistNodes`.
-  if (gsp.maxDist_ == std::numeric_limits<size_t>::max()) {
-    for (const auto& tempStartId : minDistNodes) {
-      auto tempGsp = GraphSearchProblem<T>(
-          gsp.edges_, tempStartId, gsp.targetNode_, gsp.minDist_, gsp.maxDist_);
-      for (const auto& connId : breadthFirstSearch(tempGsp, ep)) {
-        connectedNodes.insert(connId);
-      }
-    }
-    return connectedNodes;
-  }
-
-  // For a non-infinity max distance, we can run a simple BFS which just checks
-  // for the upper limit.
-  for (const Id& node : minDistNodes) {
-    Queue queue{ep.allocator_};
-    size_t traversalDepth = 0;
-    size_t nodesUntilNextDepthIncrease = 1;
-
-    queue.push_back(node);
-    while (!queue.empty() && traversalDepth <= gsp.maxDist_ - gsp.minDist_) {
-      ep.checkCancellation("Breadth-first search (with limit)");
-
-      // Get next node from queue.
-      auto node = queue.front();
-      queue.pop_front();
-      nodesUntilNextDepthIncrease--;
-
-      connectedNodes.insert(node);
-
-      // Enqueue all successors of currently handled node.
-      const auto& successors = gsp.edges_.successors(node);
-      for (Id successor : successors) {
-        // Do not re-add already discovered nodes (skip loops).
-        if (!connectedNodes.contains(successor)) {
-          queue.push_back(successor);
-        }
-      }
-
-      // Another layer has been fully discovered.
-      if (nodesUntilNextDepthIncrease == 0) {
-        traversalDepth++;
-        // At this point, the queue contains exactly all
-        // undiscovered nodes from the next layer.
-        nodesUntilNextDepthIncrease = queue.size();
-      }
-    }
-  }
-  return connectedNodes;
-}
-
 // Depth-first search for a given target node inside the given graph.
 // Returns a set containing the target node, if a path from the start node to
 // it was found in the graph.
-template <typename T>
+template <typename T, bool searchForTarget>
 Set depthFirstSearch(const GraphSearchProblem<T>& gsp,
                      const GraphSearchExecutionParams& ep,
                      bool skipStartNodeInitially = false) {
@@ -207,12 +81,16 @@ Set depthFirstSearch(const GraphSearchProblem<T>& gsp,
 
   // Saving the value of `gsp.targetNode_` removes the `.has_value()` check each
   // iteration and therefore improves runtime.
-  AD_CORRECTNESS_CHECK(gsp.targetNode_.has_value());
-  Id targetNode = gsp.targetNode_.value();
+  Id targetNode;
+  if constexpr (searchForTarget) {
+    AD_CORRECTNESS_CHECK(gsp.targetNode_.has_value());
+    targetNode = gsp.targetNode_.value();
+  }
 
   sparqlExpression::VectorWithMemoryLimit<Id> stack{ep.allocator_};
   ad_utility::HashSetWithMemoryLimit<Id> marks{ep.allocator_};
 
+  // Skip start node, improves performance for "+" operator.
   if (skipStartNodeInitially) {
     for (const Id& successor : gsp.edges_.successors(gsp.startNode_)) {
       stack.emplace_back(successor);
@@ -226,20 +104,25 @@ Set depthFirstSearch(const GraphSearchProblem<T>& gsp,
     Id node = stack.back();
     stack.pop_back();
 
+    if (marks.contains(node)) {
+      continue;
+    }
+
     marks.insert(node);
-    if (node == targetNode) {
-      connectedNodes.reserve(1);
+    if constexpr (searchForTarget) {
+      if (node == targetNode) {
+        connectedNodes.reserve(1);
+        connectedNodes.insert(node);
+        // Stop the search once target found, no further processing necessary.
+        break;
+      }
+    } else {
       connectedNodes.insert(node);
-      // Stop the DFS once target found, no further processing necessary.
-      break;
     }
 
     const auto& successors = gsp.edges_.successors(node);
     for (Id successor : successors) {
-      // Only add unmarked/new nodes.
-      if (!marks.contains(successor)) {
-        stack.emplace_back(successor);
-      }
+      stack.emplace_back(successor);
     }
   }
   return connectedNodes;
@@ -249,15 +132,18 @@ Set depthFirstSearch(const GraphSearchProblem<T>& gsp,
 // respecting minimum and maximum distance constraints.
 // Returns a set containing the target node, if the graph contains a path
 // from the start node to it and which fits inside the distance constraints.
-template <typename T>
+template <typename T, bool searchForTarget>
 Set depthFirstSearchWithLimit(const GraphSearchProblem<T>& gsp,
                               const GraphSearchExecutionParams& ep) {
   Set connectedNodes{ep.allocator_};
 
   // Saving the value of `gsp.targetNode_` removes the `.has_value()` check each
   // iteration and therefore improves runtime.
-  AD_CORRECTNESS_CHECK(gsp.targetNode_.has_value());
-  Id targetNode = gsp.targetNode_.value();
+  Id targetNode;
+  if constexpr (searchForTarget) {
+    AD_CORRECTNESS_CHECK(gsp.targetNode_.has_value());
+    targetNode = gsp.targetNode_.value();
+  }
 
   sparqlExpression::VectorWithMemoryLimit<std::pair<Id, size_t>> stack{
       ep.allocator_.as<std::pair<Id, size_t>>()};
@@ -265,30 +151,24 @@ Set depthFirstSearchWithLimit(const GraphSearchProblem<T>& gsp,
 
   stack.emplace_back(gsp.startNode_, 0);
 
+  // TODO<schaetzr>: Clean this up and make it use the template parameter.
+  // This loop is the same as currently on master, just fitted to take arguments
+  // from gsp and ep.
   while (!stack.empty()) {
-    ep.checkCancellation("Depth-first search (with limit)");
+    ep.checkCancellation("DFS with limits");
     auto [node, steps] = stack.back();
     stack.pop_back();
 
-    if (steps > gsp.maxDist_) {
-      continue;
-    }
-
-    if (steps >= gsp.minDist_) {
-      // Marked nodes are guaranteed to be reachable inside the distance
-      // constraints.
-      marks.insert(node);
-      if (node == targetNode) {
-        connectedNodes.reserve(1);
-        connectedNodes.insert(node);
-        // Stop the DFS once target found, no further processing necessary.
-        break;
+    if (steps <= gsp.maxDist_ && !marks.contains(node)) {
+      if (steps >= gsp.minDist_) {
+        marks.insert(node);
+        if (!gsp.targetNode_.has_value() || node == gsp.targetNode_.value()) {
+          connectedNodes.insert(node);
+        }
       }
-    }
 
-    const auto& successors = gsp.edges_.successors(node);
-    for (Id successor : successors) {
-      if (!marks.contains(successor)) {
+      const auto& successors = gsp.edges_.successors(node);
+      for (auto successor : successors) {
         stack.emplace_back(successor, steps + 1);
       }
     }
@@ -314,14 +194,15 @@ Set runOptimalGraphSearch(const GraphSearchProblem<T>& gsp,
 
   if (usesLimits && !skipStartNodeInitially) {
     if (targetHasValue) {
-      return depthFirstSearchWithLimit(gsp, ep);
+      return depthFirstSearchWithLimit<T, true>(gsp, ep);
+    } else {
+      return depthFirstSearchWithLimit<T, false>(gsp, ep);
     }
-    return breadthFirstSearchWithLimit(gsp, ep);
   }
   if (targetHasValue) {
-    return depthFirstSearch(gsp, ep, skipStartNodeInitially);
+    return depthFirstSearch<T, true>(gsp, ep, skipStartNodeInitially);
   }
-  return breadthFirstSearch(gsp, ep, skipStartNodeInitially);
+  return depthFirstSearch<T, false>(gsp, ep, skipStartNodeInitially);
 }
 };  // namespace qlever::graphSearch
 
