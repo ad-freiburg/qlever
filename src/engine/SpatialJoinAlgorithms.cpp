@@ -21,11 +21,11 @@
 #include <set>
 
 #include "backports/three_way_comparison.h"
+#include "engine/ExportIds.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/NamedResultCache.h"
 #include "engine/SpatialJoin.h"
 #include "engine/SpatialJoinParser.h"
-#include "engine/ValueIdHelpers.h"
 #include "global/RuntimeParameters.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/ChunkedForLoop.h"

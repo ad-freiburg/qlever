@@ -20,7 +20,7 @@
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
 #include "engine/ConstructTripleGenerator.h"
-#include "engine/ValueIdHelpers.h"
+#include "engine/ExportIds.h"
 #include "global/RuntimeParameters.h"
 #include "index/EncodedIriManager.h"
 #include "index/IndexImpl.h"

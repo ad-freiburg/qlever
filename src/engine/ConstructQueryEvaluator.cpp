@@ -6,7 +6,7 @@
 
 #include "engine/ConstructQueryEvaluator.h"
 
-#include "engine/ValueIdHelpers.h"
+#include "engine/ExportIds.h"
 #include "util/Algorithm.h"
 #include "util/TypeTraits.h"
 

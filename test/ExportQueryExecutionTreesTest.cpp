@@ -6,11 +6,11 @@
 
 #include <gmock/gmock.h>
 
+#include "engine/ExportIds.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/IndexScan.h"
 #include "engine/QueryExportTypes.h"
 #include "engine/QueryPlanner.h"
-#include "engine/ValueIdHelpers.h"
 #include "parser/LiteralOrIri.h"
 #include "parser/NormalizedString.h"
 #include "parser/SparqlParser.h"

@@ -5,8 +5,8 @@
 
 #include "engine/StringMapping.h"
 
+#include "engine/ExportIds.h"
 #include "engine/ExportQueryExecutionTrees.h"
-#include "engine/ValueIdHelpers.h"
 #include "index/Index.h"
 
 namespace qlever::binary_export {

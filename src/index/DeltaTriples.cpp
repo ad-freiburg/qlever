@@ -16,8 +16,8 @@
 
 #include "backports/algorithm.h"
 #include "engine/ExecuteUpdate.h"
+#include "engine/ExportIds.h"
 #include "engine/ExportQueryExecutionTrees.h"
-#include "engine/ValueIdHelpers.h"
 #include "index/Index.h"
 #include "index/IndexImpl.h"
 #include "index/LocatedTriples.h"

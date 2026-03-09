@@ -7,8 +7,8 @@
 
 #include <gmock/gmock.h>
 
+#include "engine/ExportIds.h"
 #include "engine/IndexScan.h"
-#include "engine/ValueIdHelpers.h"
 #include "parser/LiteralOrIri.h"
 #include "parser/NormalizedString.h"
 #include "rdfTypes/Literal.h"

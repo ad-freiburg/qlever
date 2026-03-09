@@ -11,9 +11,9 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "engine/CallFixedSize.h"
+#include "engine/ExportIds.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/Sort.h"
-#include "engine/ValueIdHelpers.h"
 #include "engine/VariableToColumnMap.h"
 #include "global/RuntimeParameters.h"
 #include "parser/RdfParser.h"
