@@ -559,6 +559,9 @@ class CompressedRelationReader {
     // disk, and if this fact can be determined by `blockMetadata` alone.
     bool canBlockBeSkipped(const CompressedBlockMetadata& blockMetadata) const;
 
+    // Delete the `graphColumn_` from `block` if `deleteGraphColumn_` is true.
+    void deleteGraphColumnIfNecessary(IdTable& block) const;
+
    private:
     // Return a lambda that returns true if `desiredGraphs_` allows the given
     // `graph` and it is not the default graph.

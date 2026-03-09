@@ -208,11 +208,19 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
           }
           signalQueryUpdate(RuntimeInformation::SendPriority::IfDue);
         },
-        [this](bool failed) {
-          // TODO<RobinTF> Distinguish between failed and cancelled.
-          runtimeInfo().status_ =
-              failed ? RuntimeInformation::failed
-                     : RuntimeInformation::lazilyMaterializedCompleted;
+        [this](Result::GeneratorState state) {
+          runtimeInfo().status_ = [state]() {
+            using enum Result::GeneratorState;
+            switch (state) {
+              case FINISHED:
+                return RuntimeInformation::lazilyMaterializedCompleted;
+              case CANCELLED:
+                return RuntimeInformation::cancelled;
+              default:
+                AD_CORRECTNESS_CHECK(state == FAILED);
+                return RuntimeInformation::failed;
+            }
+          }();
           signalQueryUpdate(RuntimeInformation::SendPriority::Always);
         });
   }
@@ -337,6 +345,11 @@ std::shared_ptr<const Result> Operation::getResult(
                 updateRuntimeInformationOnFailure(timer.msecs());
               }
             });
+
+    if (_executionContext->disableCaching()) {
+      return std::make_shared<Result>(runComputation(timer, computationMode));
+    }
+
     auto cacheSetup = [this, &timer, computationMode, &cacheKey, pinResult,
                        isRoot]() {
       return runComputationAndPrepareForCache(timer, computationMode, cacheKey,
@@ -696,6 +709,12 @@ void Operation::signalQueryUpdate(
 
 // _____________________________________________________________________________
 std::string Operation::getCacheKey() const {
+  AD_CORRECTNESS_CHECK(_executionContext);
+  if (_executionContext->disableCaching()) {
+    // Cache key computation is costly, so we can save it when caching is
+    // disabled.
+    return "";
+  }
   auto result = getCacheKeyImpl();
   if (limitOffset_._limit.has_value()) {
     absl::StrAppend(&result, " LIMIT ", limitOffset_._limit.value());

@@ -150,6 +150,12 @@ struct RuntimeParameters {
   SpaceSeparatedStrings serviceAllowedIriPrefixes_{
       {}, "service-allowed-iri-prefixes"};
 
+  // If set to true, then all queries and operations created afterward will
+  // neither read from nor write to QLever's subtree cache. This can be used to
+  // debug caching issues, and to get rid of the overhead of caching (in
+  // particular the computation of cache keys) when caching is not required.
+  Bool disableCaching_{false, "disable-caching"};
+
   // Only blocks of this size or larger will be considered for vacuuming.
   SizeT vacuumMinimumBlockSize_{10'000, "vacuum-minimum-block-size"};
 

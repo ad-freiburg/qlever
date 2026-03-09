@@ -30,6 +30,7 @@
 #include "util/AllocatorTestHelpers.h"
 #include "util/Conversions.h"
 #include "util/GeoSparqlHelpers.h"
+#include "util/IdTestHelpers.h"
 
 namespace {
 
@@ -49,6 +50,8 @@ auto D = ad_utility::testing::DoubleId;
 auto B = ad_utility::testing::BoolId;
 auto I = ad_utility::testing::IntId;
 auto Voc = ad_utility::testing::VocabId;
+auto Dat = ad_utility::testing::DateId;
+auto GP = ad_utility::testing::GeoPointId;
 auto U = Id::makeUndefined();
 
 using Ids = std::vector<Id>;
@@ -388,6 +391,43 @@ TEST(SparqlExpression, logicalOperators) {
     testOr(resultOr, allValues1, allValues2);
     testAnd(resultAnd, allValues1, allValues2);
   }
+
+  {
+    auto expression = makeOrExpression(
+        std::make_unique<IdExpression>(ValueId::makeUndefined()),
+        std::make_unique<IdExpression>(ValueId::makeUndefined()));
+    EXPECT_FALSE(expression->isResultAlwaysDefined(testContext().varToColMap));
+  }
+  {
+    auto expression = makeOrExpression(
+        std::make_unique<IdExpression>(ValueId::makeFromInt(42)),
+        std::make_unique<IdExpression>(ValueId::makeUndefined()));
+    EXPECT_TRUE(expression->isResultAlwaysDefined(testContext().varToColMap));
+  }
+  {
+    auto expression = makeOrExpression(
+        std::make_unique<IdExpression>(ValueId::makeUndefined()),
+        std::make_unique<IdExpression>(ValueId::makeFromInt(42)));
+    EXPECT_TRUE(expression->isResultAlwaysDefined(testContext().varToColMap));
+  }
+  {
+    auto expression = makeAndExpression(
+        std::make_unique<IdExpression>(ValueId::makeFromInt(42)),
+        std::make_unique<IdExpression>(ValueId::makeUndefined()));
+    EXPECT_FALSE(expression->isResultAlwaysDefined(testContext().varToColMap));
+  }
+  {
+    auto expression = makeAndExpression(
+        std::make_unique<IdExpression>(ValueId::makeUndefined()),
+        std::make_unique<IdExpression>(ValueId::makeFromInt(42)));
+    EXPECT_FALSE(expression->isResultAlwaysDefined(testContext().varToColMap));
+  }
+  {
+    auto expression = makeAndExpression(
+        std::make_unique<IdExpression>(ValueId::makeFromInt(42)),
+        std::make_unique<IdExpression>(ValueId::makeFromInt(42)));
+    EXPECT_TRUE(expression->isResultAlwaysDefined(testContext().varToColMap));
+  }
 }
 
 // _____________________________________________________________________________________
@@ -396,12 +436,23 @@ TEST(SparqlExpression, arithmeticOperators) {
   // `DivideExpression`.
   //
   // TODO: Also test `UnaryMinusExpression`.
+  auto createDat = [](std::string timeString, bool fromDateTime = true) {
+    return Dat((fromDateTime ? DateYearOrDuration::parseXsdDatetime
+                             : DateYearOrDuration::parseXsdDayTimeDuration),
+               timeString);
+  };
+
   V<Id> b{{B(true), B(false), B(false), B(true)}, alloc};
   V<Id> bAsInt{{I(1), I(0), I(0), I(1)}, alloc};
 
   V<Id> d{{D(1.0), D(-2.0), D(naN), D(0.0)}, alloc};
 
   V<std::string> s{{"true", "", "false", ""}, alloc};
+
+  V<Id> dat{
+      {createDat("1909-10-10T10:11:23Z"), createDat("2009-09-23T01:01:59Z"),
+       createDat("1959-03-13T13:13:13Z"), createDat("1889-10-29T00:12:30Z")},
+      alloc};
 
   V<Id> allNan{{D(naN), D(naN), D(naN), D(naN)}, alloc};
 
@@ -411,6 +462,8 @@ TEST(SparqlExpression, arithmeticOperators) {
   V<Id> bPlusD{{D(2.0), D(-2.0), D(naN), D(1.0)}, alloc};
   V<Id> bMinusD{{D(0), D(2.0), D(naN), D(1)}, alloc};
   V<Id> dMinusB{{D(0), D(-2.0), D(naN), D(-1)}, alloc};
+  V<Id> dMinusDat{{U, U, U, U}, alloc};
+  V<Id> datMinusD{{U, U, U, U}, alloc};
   V<Id> bTimesD{{D(1.0), D(-0.0), D(naN), D(0.0)}, alloc};
   // Division by zero is `UNDEF`, to change this behavior a runtime parameter
   // can be set. This is tested explicitly below.
@@ -420,6 +473,8 @@ TEST(SparqlExpression, arithmeticOperators) {
   testPlus(bPlusD, b, d);
   testMinus(bMinusD, b, d);
   testMinus(dMinusB, d, b);
+  testMinus(dMinusDat, d, dat);
+  testMinus(datMinusD, dat, d);
   testMultiply(bTimesD, b, d);
   testDivide(bByD, b, d);
   testDivide(dByB, d, b);
@@ -448,6 +503,26 @@ TEST(SparqlExpression, arithmeticOperators) {
 
   testMultiply(times2, mixed, I(2));
   testMultiply(times13, mixed, D(1.3));
+
+#ifndef REDUCED_FEATURE_SET_FOR_CPP17
+  // Test for `DateTime` - `DateTime`.
+  V<Id> minus2000{{createDat("-P32954DT13H48M37S", false),
+                   createDat("P3553DT1H1M59S", false),
+                   createDat("-P14903DT10H46M47S", false),
+                   createDat("-P40239DT23H47M30S", false)},
+                  alloc};
+  testMinus(minus2000, dat, createDat("2000-01-01T00:00:00Z"));
+  V<Id> undefined{{U, U, U, U}, alloc};
+  testMinus(undefined, dat, createDat("2013-02-30T00:00:00Z"));
+#else
+  V<Id> undefined{{U, U, U, U}, alloc};
+  testMinus(undefined, dat, createDat("2000-01-01T00:00:00Z"));
+#endif
+
+  V<Id> mixed2{{B(true), I(250), D(-113.2), Voc(4)}, alloc};
+  V<Id> mixed2MinusDat{{U, U, U, U}, alloc};
+  testMinus(mixed2MinusDat, dat, mixed2);
+  testMinus(mixed2MinusDat, mixed2, dat);
 
   // For division, all results are doubles, so there is no difference between
   // int and double inputs.
@@ -1100,6 +1175,10 @@ TEST(SparqlExpression, isSomethingFunctions) {
       testIdOrStrings, Ids{F, F, F, F, F, F, F, T, T, F, F, F, F});
   testUnaryExpression<makeBoundExpression>(
       testIdOrStrings, Ids{T, T, T, T, T, T, T, T, T, T, T, T, F});
+
+  auto expression = makeBoundExpression(
+      std::make_unique<IdExpression>(ValueId::makeUndefined()));
+  EXPECT_TRUE(expression->isResultAlwaysDefined(testContext().varToColMap));
 }
 
 // ____________________________________________________________________________
@@ -1367,6 +1446,8 @@ TEST(SparqlExpression, geoSparqlExpressions) {
   auto checkCentroid = testUnaryExpression<&makeCentroidExpression>;
   auto checkDist = std::bind_front(testNaryExpression, &makeDistExpression);
   auto checkEnvelope = testUnaryExpression<&makeEnvelopeExpression>;
+  auto checkEnvelopeLL = testUnaryExpression<&makeEnvelopeLowerLeftExpression>;
+  auto checkEnvelopeUR = testUnaryExpression<&makeEnvelopeUpperRightExpression>;
   auto checkGeometryType = testUnaryExpression<&makeGeometryTypeExpression>;
 
   auto p = GeoPoint(26.8, 24.3);
@@ -1398,17 +1479,23 @@ TEST(SparqlExpression, geoSparqlExpressions) {
   checkDist(U, v, IdOrLiteralOrIri{lit("NotAPoint")});
   checkDist(U, IdOrLiteralOrIri{lit("NotAPoint")}, v);
 
-  auto polygonCentroid = ValueId::makeFromGeoPoint(GeoPoint(3, 3));
+  auto polygonCentroid = GP({3, 3});
   checkCentroid(IdOrLiteralOrIri{lit(
                     "\"POLYGON((2 4, 4 4, 4 2, 2 2))\"",
                     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")},
                 polygonCentroid);
 
   checkEnvelope(
-      IdOrLiteralOrIriVec{U, D(1.0), ValueId::makeFromGeoPoint({4, 2}),
+      IdOrLiteralOrIriVec{U, D(1.0), GP({4, 2}),
                           geoLit("LINESTRING(2 4, 8 8)")},
       IdOrLiteralOrIriVec{U, U, geoLit("POLYGON((2 4,2 4,2 4,2 4,2 4))"),
                           geoLit("POLYGON((2 4,8 4,8 8,2 8,2 4))")});
+  checkEnvelopeLL(IdOrLiteralOrIriVec{U, D(1.0), GP({4, 2}),
+                                      geoLit("LINESTRING(2 4, 8 8)")},
+                  Ids{U, U, GP({4, 2}), GP({4, 2})});
+  checkEnvelopeUR(IdOrLiteralOrIriVec{U, D(1.0), GP({4, 2}),
+                                      geoLit("LINESTRING(2 4, 8 8)")},
+                  Ids{U, U, GP({4, 2}), GP({8, 8})});
 
   auto sfGeoType = [](std::string_view type) {
     return lit(absl::StrCat("http://www.opengis.net/ont/sf#", type),
@@ -1980,6 +2067,7 @@ TEST(ExistsExpression, basicFunctionality) {
   EXPECT_THAT(exists.getCacheKey(context.varToColMap),
               HasSubstr("Uninitialized Exists"));
   context.varToColMap[var] = makeAlwaysDefinedColumn(437);
+  EXPECT_TRUE(exists.isResultAlwaysDefined(context.varToColMap));
   EXPECT_THAT(exists.evaluate(&context.context), VariantWith<Variable>(var));
   EXPECT_THAT(exists.getCacheKey(context.varToColMap),
               HasSubstr("ExistsExpression col# 437"));
