@@ -131,7 +131,7 @@ std::optional<std::string> StringValueGetter::operator()(
     }
   }
   // `true` means that we remove the quotes and angle brackets.
-  auto optionalStringAndType = ql::exportId::idToStringAndType<true>(
+  auto optionalStringAndType = ql::exportIds::idToStringAndType<true>(
       context->_qec.getIndex(), id, context->_localVocab);
   if (optionalStringAndType.has_value()) {
     return std::move(optionalStringAndType.value().first);
@@ -144,8 +144,8 @@ std::optional<std::string> StringValueGetter::operator()(
 std::optional<ad_utility::triple_component::Literal>
 LiteralValueGetterWithStrFunction::operator()(
     Id id, const EvaluationContext* context) const {
-  return ql::exportId::idToLiteral(context->_qec.getIndex(), id,
-                                   context->_localVocab);
+  return ql::exportIds::idToLiteral(context->_qec.getIndex(), id,
+                                    context->_localVocab);
 }
 
 // ____________________________________________________________________________
@@ -430,9 +430,8 @@ std::optional<ad_utility::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
       return id.getGeoPoint();
     case VocabIndex:
     case LocalVocabIndex: {
-      auto lit = ql::exportIds
-          : getLiteralOrIriFromVocabIndex(context->_qec.getIndex(), id,
-                                          context->_localVocab);
+      auto lit = ql::exportIds::getLiteralOrIriFromVocabIndex(
+          context->_qec.getIndex(), id, context->_localVocab);
       return GeoPointOrWktValueGetter{}(lit, context);
     }
     case Bool:
