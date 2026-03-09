@@ -6,9 +6,9 @@
 
 #include "index/CompressedRelation.h"
 
+#include "engine/Engine.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "engine/idTable/IdTable.h"
-#include "engine/idTable/IdTableUtils.h"
 #include "global/RuntimeParameters.h"
 #include "index/CompressedRelationHelpersImpl.h"
 #include "index/CompressedRelationPermutationWriterImpl.h"
@@ -1239,8 +1239,8 @@ static std::pair<bool, std::optional<std::vector<Id>>> getGraphInfo(
     using C = ColumnIndex;
     auto withoutGraphAndAdditionalPayload =
         block.asColumnSubsetView(std::array{C{0}, C{1}, C{2}});
-    size_t numDistinct = idTableUtils::countDistinct(
-        withoutGraphAndAdditionalPayload, ad_utility::noop);
+    size_t numDistinct = Engine::countDistinct(withoutGraphAndAdditionalPayload,
+                                               ad_utility::noop);
     return numDistinct != block.numRows();
   };
 
