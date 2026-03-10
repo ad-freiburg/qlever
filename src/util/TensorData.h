@@ -14,7 +14,6 @@
 
 namespace ad_utility {
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
-constexpr inline char tensorDataTypeIri[] = "<https://w3id.org/rdf-tensor/vocab#DataTensor>";
 class TensorData {
  public:
   enum struct DType { FLOAT = 0, BOOL, INT };

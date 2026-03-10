@@ -15,7 +15,7 @@ std::pair<std::string, std::string> TensorData::toString() const {
   json["data"] = tensorData_;
   json["shape"] = shape_;
   json["type"] = static_cast<int>(dtype_);
-  return {json.dump(), tensorDataTypeIri};
+  return {json.dump(), TENSOR_LITERAL};
 }
 
 LiteralOrIri TensorData::toLiteral() const {

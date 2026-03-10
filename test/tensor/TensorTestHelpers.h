@@ -15,9 +15,9 @@
 namespace tensorTestHelpers {
 
 static constexpr std::string_view dummyTurtle = R"(
-  <s1> <p1> "{\"data\":[1.0,2.0,3.0],\"shape\":[3],\"type\":0}"^^<https://w3id.org/rdf-tensor/vocab#DataTensor> .
-  <s2> <p1> "{\"data\":[1.0,1.0,3.0],\"shape\":[3],\"type\":0}"^^<https://w3id.org/rdf-tensor/vocab#DataTensor> .
-  <s2> <p1> "{\"data\":[1.0,1.0,-2.0],\"shape\":[3],\"type\":0}"^^<https://w3id.org/rdf-tensor/vocab#DataTensor> .
+  <s1> <p1> "{\"data\":[1.0,2.0,3.0],\"shape\":[3],\"type\":0}"^^<https://w3id.org/rdf-tensor/datatypes#DataTensor> .
+  <s2> <p1> "{\"data\":[1.0,1.0,3.0],\"shape\":[3],\"type\":0}"^^<https://w3id.org/rdf-tensor/datatypes#DataTensor> .
+  <s2> <p1> "{\"data\":[1.0,1.0,-2.0],\"shape\":[3],\"type\":0}"^^<https://w3id.org/rdf-tensor/datatypes#DataTensor> .
 )";
 // _____________________________________________________________________________
 inline void makeTestIndex(const std::string& basename, const std::string& kg) {

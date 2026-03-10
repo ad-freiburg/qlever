@@ -280,18 +280,7 @@ struct TensorValueGetter : Mixin<TensorValueGetter> {
   // TODO<joka921> probably we should return a reference or a view here.
   // TODO<joka921> use a `NormalizedStringView` inside the expressions.
   std::optional<ad_utility::TensorData> operator()(
-      const LiteralOrIri& s, const EvaluationContext*) const {
-    if (s.isIri()) {
-      return std::nullopt;
-    }
-    std::string_view type = asStringViewUnsafe(s.getLiteral().getDatatype());
-
-    if (type == ad_utility::tensorDataTypeIri) {
-      return std::nullopt;
-    }
-    return ad_utility::TensorData::parseFromString(
-        asStringViewUnsafe(s.getContent()));
-  }
+      const LiteralOrIri& s, const EvaluationContext*) const ;
 };
 
 // If the `id` points to a literal, return the contents of that literal (without

@@ -435,6 +435,23 @@ std::optional<ad_utility::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
   return std::nullopt;
 };
 
+std::optional<ad_utility::TensorData> TensorValueGetter::operator()(
+    const LiteralOrIri& litOrIri, const EvaluationContext*) const {
+
+  if (litOrIri.isLiteral() && litOrIri.hasDatatype()) {
+    std::string_view type = asStringViewUnsafe(litOrIri.getLiteral().getDatatype());
+    // if(type.end() == '>') { 
+    //   // The datatype still has the ending `>` from the IRI form `^^<datatypeIri>`, so we need to remove it.
+    //   type.remove_suffix(1);
+    // }
+    if (type == TENSOR_LITERAL || type == TENSOR_NUMERIC_LITERAL) {
+      return ad_utility::TensorData::parseFromString(
+          asStringViewUnsafe(litOrIri.getLiteral().getContent()));
+        }
+  }
+  return std::nullopt;
+}
+
 //______________________________________________________________________________
 CPP_template(typename T, typename ValueGetter)(
     requires(concepts::same_as<sparqlExpression::IdOrLiteralOrIri, T> ||

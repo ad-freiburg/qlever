@@ -2,21 +2,34 @@
 #include <gmock/gmock.h>
 #include <unicode/uchar.h>
 
+#include "../parser/SparqlAntlrParserTestHelpers.h"
 #include "../util/GTestHelpers.h"
+#include "../util/TripleComponentTestHelpers.h"
 #include "TensorTestHelpers.h"
+#include "engine/sparqlExpressions/NaryExpression.h"
 #include "util/TensorData.h"
 namespace {
 using namespace ad_utility;
+using namespace sparqlExpression;
 using namespace tensorTestHelpers;
+using namespace sparqlParserHelpers;
+using namespace sparqlParserTestHelpers;
+namespace m = matchers;
+using Parser = SparqlAutomaticParser;
+using namespace std::literals;
+using Var = Variable;
+auto iri = ad_utility::testing::iri;
+
+auto lit = ad_utility::testing::tripleComponentLiteral;
 // _____________________________________________________________________________
-TEST(TensorQuery, TensorDump) {
+TEST(TensorParse, TensorDump) {
   auto tensor = TensorData({1.0f, 2.0f, 3.0f}, {3}, TensorData::DType::FLOAT);
   auto [tensorString, datatypeIri] = tensor.toString();
   EXPECT_THAT(tensorString, R"({"data":[1.0,2.0,3.0],"shape":[3],"type":0})");
-  EXPECT_THAT(datatypeIri, "tensor:DataTensor");
+  EXPECT_THAT(datatypeIri, "https://w3id.org/rdf-tensor/datatypes#DataTensor");
 }
 // _____________________________________________________________________________
-TEST(TensorQuery, TensorConstruction) {
+TEST(TensorParse, TensorConstruction) {
   auto tensor_from_string = TensorData::parseFromString(
       R"({"data":[1.0,2.0,3.0],"shape":[3],"type":0})");
   auto tensor = TensorData({1.0f, 2.0f, 3.0f}, {3}, TensorData::DType::FLOAT);
@@ -26,13 +39,43 @@ TEST(TensorQuery, TensorConstruction) {
   EXPECT_EQ(tensor_from_string.dtype(), tensor.dtype());
 }
 // _____________________________________________________________________________
+TEST(TensorQueryCall, TensorCall) {
+  using namespace m::builtInCall;
+  // test if the makeCosineSimilarityExpression is correctly called and returns
+  // a result without errors.
+
+  auto expectFunctionCall = ExpectCompleteParse<&Parser::functionCall>{};
+  auto expectFunctionCallFails = ExpectParseFails<&Parser::functionCall>{};
+  auto tensorf = absl::StrCat("<", TENSOR_FUNCTION_PREFIX.second);
+  // Tensor functions
+  expectFunctionCall(absl::StrCat(tensorf, "cosineSimilarity>(?x,?y)"),
+                     matchNary(&makeTensorCosineSimilarityExpression,
+                               Variable{"?x"}, Variable{"?y"}));
+  expectFunctionCall(absl::StrCat(tensorf, "dotProduct>(?x,?y)"),
+                     matchNary(&makeTensorDotProductExpression, Variable{"?x"},
+                               Variable{"?y"}));
+  // TODO: also for the other tensor functions!
+}
+// _____________________________________________________________________________
 TEST_F(TensorQueryTest, TensorQueryConstruction) {
-  auto [qet, qec, parsed] = qlv().parseAndPlanQuery(R"(
-      SELECT ?s (cosineSimilarity(?v, ("{\"data\":[1.0,2.0,3.0],\"shape\":[3],\"type\":0}")) AS ?sim) WHERE { 
+  std::string full_query=R"(
+PREFIX dt: <https://w3id.org/rdf-tensor/datatypes#>
+PREFIX dtf: <https://w3id.org/rdf-tensor/functions#>
+PREFIX dta: <https://w3id.org/rdf-tensor/aggregates#>
+      SELECT ?s (dtf:cosineSimilarity(?v, "{\"data\":[1.0,2.0,3.0],\"shape\":[3],\"type\":0}"^^dt:DataTensor) AS ?sim) WHERE { 
       ?s <p1> ?v.
       }
       ORDER BY DESC(?similarity)      
-      )");
+      )";
+  auto query_plan = qlv().parseAndPlanQuery(full_query);
+  auto [qet, qec, parsed] = std::move(query_plan);
   auto res = qet->getResult();
+
+  auto results_query =
+      qlv().query(full_query, ad_utility::MediaType::sparqlJson);
+  std::cout << results_query << std::endl;
+  auto parsed_results = nlohmann::json::parse(results_query);
+
+  EXPECT_TRUE(parsed_results.contains("results"));
 }
 }  // namespace

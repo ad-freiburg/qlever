@@ -270,6 +270,24 @@ ExpressionPtr Visitor::processIriFunctionCall(
       return createBinary(&makePowExpression);
     }
   }
+  // Tensor functions.
+  static const UnaryFuncTable tensorUnaryFuncs{
+      {"tensor", &makeTensorFromStringExpression},
+      {"norm2", &makeTensorNormExpression},
+  };
+  static const BinaryFuncTable tensorBinaryFuncs{
+      {"add", &makeTensorAddExpression},
+      {"subtract", &makeTensorSubtractExpression},
+      {"cosineSimilarity", &makeTensorCosineSimilarityExpression},
+      {"dotProduct", &makeTensorDotProductExpression},
+  };
+  if (checkPrefix(TENSOR_FUNCTION_PREFIX)) {
+    if (ad_utility::contains(tensorUnaryFuncs, functionName)) {
+      return createUnary(tensorUnaryFuncs.at(functionName));
+    }else if (ad_utility::contains(tensorBinaryFuncs, functionName)) {
+      return createBinary(tensorBinaryFuncs.at(functionName));
+    }
+  }
 
   // XSD conversion functions.
   static const UnaryFuncTable convertFuncs{
@@ -2748,20 +2766,6 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     return createUnary(&makeDatatypeExpression);
   } else if (functionName == "langmatches") {
     return createBinary(&makeLangMatchesExpression);
-    // tensor function
-  } else if (functionName == "add") {
-    return createBinary(&makeTensorAddExpression);
-  } else if (functionName == "subtract") {
-    return createBinary(&makeTensorSubtractExpression);
-  } else if (functionName == "cosineSimilarity") {
-    return createBinary(&makeTensorCosineSimilarityExpression);
-  } else if (functionName == "dotProduct") {
-    return createBinary(&makeTensorDotProductExpression);
-  } else if (functionName == "norm2") {
-    return createUnary(&makeTensorNormExpression);
-  } else if (functionName == "tensor") {
-    return createUnary(&makeTensorFromStringExpression);
-    // tensor end
   } else if (functionName == "bound") {
     return makeBoundExpression(
         std::make_unique<VariableExpression>(visit(ctx->var())));

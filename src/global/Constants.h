@@ -124,6 +124,10 @@ constexpr inline std::pair<std::string_view, std::string_view> GEOF_PREFIX = {
     "geof:", "http://www.opengis.net/def/function/geosparql/"};
 constexpr inline std::pair<std::string_view, std::string_view> MATH_PREFIX = {
     "math:", "http://www.w3.org/2005/xpath-functions/math#"};
+constexpr inline std::pair<std::string_view, std::string_view> TENSOR_FUNCTION_PREFIX = {
+    "dtf:", "https://w3id.org/rdf-tensor/functions#"};
+constexpr inline std::pair<std::string_view, std::string_view> TENSOR_AGGREGATE_PREFIX = {
+    "dta:", "https://w3id.org/rdf-tensor/aggregates#"};
 constexpr inline std::pair<std::string_view, std::string_view> XSD_PREFIX = {
     "xsd", "http://www.w3.org/2001/XMLSchema#"};
 constexpr inline std::pair<std::string_view, std::string_view> QL_PREFIX = {
@@ -202,8 +206,10 @@ constexpr inline char RDF_LANGTAG_STRING[] =
 constexpr inline std::string_view GEO_WKT_LITERAL =
     "http://www.opengis.net/ont/geosparql#wktLiteral";
 
-constexpr inline std::string_view TENSOR_LITERAL =
+constexpr inline char TENSOR_NUMERIC_LITERAL[] =
     "https://w3id.org/rdf-tensor/datatypes#NumericDataTensor";
+constexpr inline char TENSOR_LITERAL[] =
+    "https://w3id.org/rdf-tensor/datatypes#DataTensor";
 
 
 namespace string_constants::detail {

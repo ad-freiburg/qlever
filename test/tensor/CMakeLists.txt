@@ -1,3 +1,3 @@
 
-addLinkAndDiscoverTest(QueryParsing qlever engine server)
+addLinkAndDiscoverTest(QueryParsing qlever engine parser sparqlExpressions)
 # addLinkAndDiscoverTestNoLibs(TensorLoading tensor)
