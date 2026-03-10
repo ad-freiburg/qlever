@@ -32,11 +32,13 @@ struct IfImpl {
   }
 };
 
-// This macro implements an expression that evaluates the `IF()` function, but
-// will be extended below by additional member functions.
-NARY_EXPRESSION(IfExpressionImpl, 3,
-                FV<IfImpl, EffectiveBooleanValueGetter, ActualValueGetter,
-                   ActualValueGetter>);
+// This class implements an expression that evaluates the `IF()` function, but
+// will be extended below by additional member functions. It always uses
+// `NaryExpressionStronglyTyped` explicitly because `ActualValueGetter` doesn't
+// have a uniform result type, and therefore cannot be type-erased.
+using IfExpressionImpl = NaryExpressionStronglyTyped<
+    detail::Operation<3, FV<IfImpl, EffectiveBooleanValueGetter,
+                            ActualValueGetter, ActualValueGetter>>>;
 
 // The actual `IfExpression` class that adds an override for
 // `isResultAlwaysDefined`.
