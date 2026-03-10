@@ -77,7 +77,7 @@ class GraphSearchTest : public Test {
       {{0, {1, 2}}, {1, {2}}, {2, {3}}, {3, {}}},
       // Similar to graph 8, but one node longer again.
       {{0, {1, 2}}, {1, {2}}, {2, {3}}, {3, {4}}, {4, {}}},
-      // A very long version of graph 6-9.
+      // A very long version of graphs 6-9.
       {{0, {1, 7}},
        {1, {2}},
        {2, {3}},

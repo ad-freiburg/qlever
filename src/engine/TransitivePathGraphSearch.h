@@ -22,7 +22,6 @@
 namespace qlever::graphSearch {
 using Set = std::unordered_set<Id, absl::Hash<Id>, std::equal_to<Id>,
                                ad_utility::AllocatorWithLimit<Id>>;
-using Queue = std::deque<Id, ad_utility::AllocatorWithLimit<Id>>;
 
 // Helper struct that combines all possible values necessary for the
 // graph search algorithms contained in this namespace. Improves
@@ -162,8 +161,9 @@ Set depthFirstSearchWithLimit(const GraphSearchProblem<T>& gsp,
         continue;
       }
       // Always mark the lowest distance.
-      if (!marks.contains(node) || marks.at(node) > dist) {
-        marks.emplace(node, dist);
+      auto [it, wasInserted] = marks.try_emplace(node, dist);
+      if (!wasInserted && it->second > dist) {
+        it->second = dist;
       }
 
       if constexpr (searchForTarget) {
@@ -182,7 +182,8 @@ Set depthFirstSearchWithLimit(const GraphSearchProblem<T>& gsp,
     for (const Id& successor : successors) {
       // We re-check already marked nodes if we visit them at a shorter distance
       // than before.
-      if (!marks.contains(successor) || marks.at(successor) > dist) {
+      auto it = marks.find(successor);
+      if (it == marks.end() || it->second > dist + 1) {
         stack.emplace_back(successor, dist + 1);
       }
     }
@@ -209,9 +210,8 @@ Set runOptimalGraphSearch(const GraphSearchProblem<T>& gsp,
   if (usesLimits && !skipStartNodeInitially) {
     if (targetHasValue) {
       return depthFirstSearchWithLimit<T, true>(gsp, ep);
-    } else {
-      return depthFirstSearchWithLimit<T, false>(gsp, ep);
     }
+    return depthFirstSearchWithLimit<T, false>(gsp, ep);
   }
   if (targetHasValue) {
     return depthFirstSearch<T, true>(gsp, ep, skipStartNodeInitially);
