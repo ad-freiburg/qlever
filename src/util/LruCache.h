@@ -7,10 +7,10 @@
 
 #include <absl/container/flat_hash_map.h>
 
+#include <boost/optional.hpp>
 #include <cstdint>
 #include <functional>
 #include <list>
-#include <optional>
 
 #include "backports/concepts.h"
 #include "util/Exception.h"
@@ -39,13 +39,14 @@ class LRUCache {
   // recently used) and return a reference to the cached value wrapped in
   // `std::optional`. If not found, return `std::nullopt`. Does not insert or
   // compute anything.
-  std::optional<std::reference_wrapper<const V>> tryGet(const K& key) {
+  template <typename Key>
+  boost::optional<const V&> tryGet(const Key& key) {
     auto it = cache_.find(key);
-    if (it == cache_.end()) return std::nullopt;
+    if (it == cache_.end()) return boost::none;
     const auto& [value, listIterator] = it->second;
     // Move accessed key to front (most recently used).
     keys_.splice(keys_.begin(), keys_, it->second.second);
-    return std::cref(it->second.first);
+    return boost::optional<const V&>(value);
   }
 
   // Check if `key` is in the cache and return a reference to the value if it is
@@ -56,13 +57,9 @@ class LRUCache {
       requires ad_utility::InvocableWithConvertibleReturnType<
           Func, V, const K&>) const V& getOrCompute(Key&& key,
                                                     Func computeFunction) {
-    auto it = cache_.find(key);
-    if (it != cache_.end()) {
-      const auto& [value, listIterator] = it->second;
-      // Move accessed key to front (most recently used).
-      keys_.splice(keys_.begin(), keys_, listIterator);
-
-      return value;
+    auto optValue = tryGet(key);
+    if (optValue) {
+      return optValue.value();
     }
     // Evict LRU if cache is full.
     if (cache_.size() >= capacity_) {

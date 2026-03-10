@@ -47,7 +47,9 @@ TEST(LRUCache, testEmptyCapacityForbidden) {
 // _____________________________________________________________________________
 TEST(LRUCache, tryGetReturnsNoneOnMiss) {
   ad_utility::util::LRUCache<int, int> cache{2};
+  auto prevCapacity = cache.capacity();
   EXPECT_FALSE(cache.tryGet(42));
+  EXPECT_EQ(cache.capacity(), prevCapacity);
 }
 
 // _____________________________________________________________________________
