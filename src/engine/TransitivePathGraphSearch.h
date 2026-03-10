@@ -157,7 +157,10 @@ Set depthFirstSearchWithLimit(const GraphSearchProblem<T>& gsp,
     auto [node, dist] = stack.back();
     stack.pop_back();
 
-    if (gsp.minDist_ <= dist && gsp.maxDist_ >= dist) {
+    if (gsp.minDist_ <= dist) {
+      if (gsp.maxDist_ < dist) {
+        continue;
+      }
       // Always mark the lowest distance.
       if (!marks.contains(node) || marks.at(node) > dist) {
         marks.emplace(node, dist);
