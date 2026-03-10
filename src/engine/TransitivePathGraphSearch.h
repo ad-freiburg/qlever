@@ -158,7 +158,11 @@ Set depthFirstSearchWithLimit(const GraphSearchProblem<T>& gsp,
     stack.pop_back();
 
     if (gsp.minDist_ <= dist && gsp.maxDist_ >= dist) {
-      marks.emplace(node, dist);
+      // Always mark the lowest distance.
+      if (!marks.contains(node) || marks.at(node) > dist) {
+        marks.emplace(node, dist);
+      }
+
       if constexpr (searchForTarget) {
         if (targetNode == node) {
           // Target found, we can terminate DFS.
