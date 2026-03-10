@@ -1,13 +1,9 @@
-// Copyright 2022 - 2026 The QLever Authors, in particular:
-//
-// 2022 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
-// 2022 - 2026 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
-// 2022 - 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
-// 2026        Marvin Stoetzel <stoetzem@informatik.uni-freiburg.de>, UFR
-//
-// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+// Copyright 2022 - 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Robin Textor-Falconi <textorr@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
-
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
