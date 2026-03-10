@@ -437,7 +437,7 @@ class Operation {
   // this function for their `makeTreeWithBindColumn` override. Returns the
   // index of the replaced child and its new `QueryExecutionTree`.
   //
-  // Note: This function is defined in `OperationBindPushDownImpl.h` s.t. it can
+  // NOTE: This function is defined in `OperationBindPushDownImpl.h` s.t. it can
   // be instantiated in the code for operations that use it.
   CPP_template(typename MakeCloneWithNewChildren)(
       requires ad_utility::InvocableWithExactReturnType<
