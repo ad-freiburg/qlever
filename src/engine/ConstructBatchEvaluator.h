@@ -68,7 +68,7 @@ struct BatchEvaluationContext {
 //
 // The evaluation is column-oriented: for each variable (identified by their
 // `IdTable` column), all rows in the batch are evaluated before moving to the
-// next column.
+// next variable.
 //
 // An `IdCache` (LRU cache keyed by `Id`) avoids redundant evaluation of the
 // same `Id` across rows and batches.
