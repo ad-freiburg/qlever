@@ -1,7 +1,8 @@
-// Copyright 2026 The QLever Authors, in particular
-// Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
-//          Robin Textor-Falconi <textorr@cs.uni-freiburg.de>
-//          Hannah Bast <bast@cs.uni-freiburg.de>
+// Copyright 2026, The QLever Authors, in particular
+// Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
+// Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 // You may not use this file except in compliance with the Apache 2.0 License,
