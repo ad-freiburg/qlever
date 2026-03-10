@@ -165,7 +165,7 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
               locatedTriplesAre({{0, {{LT1, LT2, LT3}}},
                                  {1, {{LT4, LT5}}},
                                  {2, {{LT8}}},
-                                 {3, {{LT6, LT7, LT9}}}}));
+                                 {3, {{LT6, LT9, LT7}}}}));
 
   locatedTriplesPerBlock.erase(2, LT8);
   locatedTriplesPerBlock.updateAugmentedMetadata();
@@ -178,7 +178,7 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
   EXPECT_THAT(
       locatedTriplesPerBlock,
       locatedTriplesAre(
-          {{0, {{LT1, LT2, LT3}}}, {1, {{LT4, LT5}}}, {3, {{LT6, LT7, LT9}}}}));
+          {{0, {{LT1, LT2, LT3}}}, {1, {{LT4, LT5}}}, {3, {{LT6, LT9, LT7}}}}));
 
   // Erasing in a block that does not exist, raises an exception.
   EXPECT_THROW(locatedTriplesPerBlock.erase(100, LT9), ad_utility::Exception);
@@ -193,7 +193,7 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
   EXPECT_THAT(
       locatedTriplesPerBlock,
       locatedTriplesAre(
-          {{0, {{LT1, LT2, LT3}}}, {1, {{LT4, LT5}}}, {3, {{LT6, LT7, LT9}}}}));
+          {{0, {{LT1, LT2, LT3}}}, {1, {{LT4, LT5}}}, {3, {{LT6, LT9, LT7}}}}));
 
   locatedTriplesPerBlock.erase(3, LT9);
   locatedTriplesPerBlock.updateAugmentedMetadata();
@@ -203,11 +203,9 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
   EXPECT_THAT(locatedTriplesPerBlock,
               numTriplesBlockwise(
                   {{0, {3, 3}}, {1, {2, 2}}, {2, {0, 0}}, {3, {2, 2}}}));
-  EXPECT_THAT(locatedTriplesPerBlock,
-              locatedTriplesAre({{0, {{LT1, LT2, LT3}}},
-                                 {1, {{LT4, LT5}}},
-                                 {2, {{LT8}}},
-                                 {3, {{LT6, LT7, LT9}}}}));
+  EXPECT_THAT(locatedTriplesPerBlock, locatedTriplesAre({{0, {{LT1, LT2, LT3}}},
+                                                         {1, {{LT4, LT5}}},
+                                                         {3, {{LT6, LT7}}}}));
 
   locatedTriplesPerBlock.clear();
 
