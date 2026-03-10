@@ -1086,6 +1086,18 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
                                    std::move(bindExpr), "2 * ?o + 1"},
                                V{"?bind"}};
 
+  // Trying to push down a `BIND` into a `SpatialJoin` which does not have its
+  // children yet is not possible. But the child `nullptr` should not crash.
+  {
+    SpatialJoinConfiguration config{
+        LibSpatialJoinConfig{SpatialJoinType::INTERSECTS}, V{"?a"}, V{"?b"}};
+    auto plan = qlv().parseAndPlanQuery("SELECT * { ?s ?p ?o }");
+    QueryExecutionContext qec{*std::get<1>(plan)};
+    // `SpatialJoin` has no children.
+    SpatialJoin sj{&qec, config, std::nullopt, std::nullopt};
+    EXPECT_FALSE(sj.makeTreeWithBindColumn(bind).has_value());
+  }
+
   // A `BIND` is pushed down through a `StripColumns` operation.
   const std::set<Variable> varsToKeep{V{"?o"}};
   {
@@ -1192,17 +1204,59 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
              h::Bind(viewScanNoBind, "42 * ?o", V{"?bind"}));
   }
 
-  // The `BIND` is contained in the first three columns of the view.
+  // The `BIND` is the second column of the view.
   {
-    const std::string firstThreeColBind = R"(
+    qlv().writeMaterializedView(
+        "bindView2",
+        "SELECT ?a ?b ?c { <s1> <p2> ?a . BIND(2 * ?a AS ?b) BIND(42 AS ?c) }");
+    qlv().loadMaterializedView("bindView2");
+    const std::string secondColBind = R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT * {
+        ?s view:bindView2-c ?b2 .
+        BIND(2 * ?s AS ?b1)
+      }
+    )";
+    qpExpect(qlv(), secondColBind,
+             viewScan("bindView2", "?s", "?b1", "?b2", 3));
+
+    // Column already selected: Rewrite is not possible.
+    const std::string secondColBindIllegal = R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT * {
+        ?s view:bindView2-b ?b2 .
+        BIND(2 * ?s AS ?b1)
+      }
+    )";
+    qpExpect(qlv(), secondColBindIllegal,
+             h::Bind(viewScan("bindView2", "?s", "?b2",
+                              "?_ql_materialized_view_o", 2),
+                     "2 * ?s", V{"?b1"}));
+  }
+
+  // The `BIND` is the third column of the view.
+  {
+    const std::string thirdColBind = R"(
       PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
       SELECT * {
         ?s view:bindView-o ?o .
         BIND(15 AS ?bind)
       }
     )";
-    qpExpect(qlv(), firstThreeColBind,
-             viewScan("bindView", "?s", "?o", "?bind", 3));
+    qpExpect(qlv(), thirdColBind, viewScan("bindView", "?s", "?o", "?bind", 3));
+
+    // Column already selected: Rewrite is not possible.
+    const std::string thirdColBindIllegal = R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT * {
+        ?s view:bindView-b1 ?x2 .
+        BIND(2 * ?s AS ?x1)
+      }
+    )";
+    qpExpect(qlv(), thirdColBindIllegal,
+             h::Bind(viewScan("bindView", "?s", "?_ql_materialized_view_p",
+                              "?x2", 2),
+                     "2 * ?s", V{"?x1"}));
   }
 
   // Test the variable to permutation column index map.
