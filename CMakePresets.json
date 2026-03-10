@@ -2,15 +2,23 @@
     "version": 8,
     "configurePresets": [
         {
-            "name": "Configure preset using toolchain file",
-            "displayName": "Configure preset using toolchain file",
-            "description": "Sets Ninja generator, build and install directory",
+            "name": "QLever Conda configure preset",
+            "displayName": "QLever Conda configure preset",
+            "description": "Sets Ninja generator, build and install directory using the Qlever conda environment",
             "generator": "Ninja",
-            "binaryDir": "${sourceDir}/out/build/${presetName}",
+            "environment": {
+                "PATH":"/home/kantz/miniconda3/envs/qlever/bin:/usr/bin:${penv.PATH}",
+                "LD_LIBRARY_PATH":"${penv.LD_LIBRARY_PATH}:/home/kantz/miniconda3/envs/qlever/lib",
+                "CMAKE_PREFIX_PATH":"${penv.CMAKE_PREFIX_PATH}:/home/kantz/miniconda3/envs/qlever"
+            },
+            "binaryDir": "/run/user/15642/qlever/build/${presetName}",
+            "cmakeExecutable": "/home/kantz/miniconda3/envs/qlever/bin/cmake",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Debug",
-                "CMAKE_TOOLCHAIN_FILE": "",
-                "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}"
+                "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}",
+                "CMAKE_C_COMPILER":"/home/kantz/miniconda3/envs/qlever/bin/gcc",
+                "CMAKE_CXX_COMPILER":"/home/kantz/miniconda3/envs/qlever/bin/g++",
+                "CMAKE_AR": "/home/kantz/miniconda3/envs/qlever/bin/x86_64-conda-linux-gnu-ar"
             }
         }
     ]

@@ -20,6 +20,7 @@
 #include "rdfTypes/GeometryInfo.h"
 #include "util/ConstexprSmallString.h"
 #include "util/LruCache.h"
+#include "util/TensorData.h"
 #include "util/TypeTraits.h"
 #include "util/UnitOfMeasurement.h"
 
@@ -271,21 +272,25 @@ struct GeoPointValueGetter : Mixin<GeoPointValueGetter> {
 
 struct TensorValueGetter : Mixin<TensorValueGetter> {
   using Mixin<TensorValueGetter>::operator();
-  std::optional<std::string> operator()(ValueId id,
-                                        const EvaluationContext* ctx) const {
+  std::optional<ad_utility::TensorData> operator()(
+      ValueId, const EvaluationContext*) const {
     return std::nullopt;
-    // if (id.getDatatype() == Datatype::DataTensor) {
-    //   return id.getDataTensor();
-    // } else {
-    //   return std::nullopt;
-    // }
   }
 
   // TODO<joka921> probably we should return a reference or a view here.
   // TODO<joka921> use a `NormalizedStringView` inside the expressions.
-  std::optional<> operator()(const LiteralOrIri& s,
-                                        const EvaluationContext* ctx) const {
-    return std::string(asStringViewUnsafe(s.getContent()));
+  std::optional<ad_utility::TensorData> operator()(
+      const LiteralOrIri& s, const EvaluationContext*) const {
+    if (s.isIri()) {
+      return std::nullopt;
+    }
+    std::string_view type = asStringViewUnsafe(s.getLiteral().getDatatype());
+
+    if (type == ad_utility::tensorDataTypeIri) {
+      return std::nullopt;
+    }
+    return ad_utility::TensorData::parseFromString(
+        asStringViewUnsafe(s.getContent()));
   }
 };
 

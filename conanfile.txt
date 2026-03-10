@@ -1,5 +1,5 @@
 [requires]
-boost/1.90.0
+#boost/1.83.0
 bzip2/1.0.8
 icu/76.1
 openssl/3.1.1

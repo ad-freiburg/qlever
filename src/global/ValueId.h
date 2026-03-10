@@ -39,7 +39,6 @@ enum struct Datatype {
   TextRecordIndex,
   Date,
   GeoPoint,
-  DataTensor,
   WordVocabIndex,
   BlankNodeIndex,
   EncodedVal,
@@ -62,7 +61,7 @@ constexpr bool isDatatypeTrivial(Datatype datatype) {
   //TODO dakantz: determine if the datatensor is truly trivial?
   using enum Datatype;
   constexpr std::array trivialDatatypes{Undefined, Bool, Int,
-                                        Double,    Date,  DataTensor, GeoPoint};
+                                        Double,    Date, GeoPoint};
   return ad_utility::contains(trivialDatatypes, datatype);
 }
 
@@ -77,8 +76,6 @@ inline QL_CONSTEXPR std::string_view toString(Datatype type) {
       return "Double";
     case Datatype::Int:
       return "Int";
-    case Datatype::DataTensor:
-      return "DataTensor";
     case Datatype::EncodedVal:
       return "EncodedIri";
     case Datatype::VocabIndex:
@@ -491,6 +488,7 @@ class ValueId {
         ostr << value.toStringAndType().first;
       } else if constexpr (ad_utility::isSimilar<T, GeoPoint>) {
         ostr << value.toStringRepresentation();
+      
       } else if constexpr (ad_utility::isSimilar<T, LocalVocabIndex>) {
         AD_CORRECTNESS_CHECK(value != nullptr);
         ostr << value->toStringRepresentation();

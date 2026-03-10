@@ -10,7 +10,11 @@
 #include "util/Duration.h"
 #include "util/NBitInteger.h"
 #include "util/Serializer/Serializer.h"
+#include "parser/LiteralOrIri.h"
 
+namespace ad_utility {
+using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+constexpr inline char tensorDataTypeIri[] = "<https://w3id.org/rdf-tensor/vocab#DataTensor>";
 class TensorData {
  public:
   enum struct DType { FLOAT = 0, BOOL, INT };
@@ -22,11 +26,6 @@ class TensorData {
   DType dtype_;
 
  public:
-#ifdef QLEVER_CPP_17
-  // We need the default-constructibility for the C++17 version of `bit_cast`.
-  DateYearOrDuration() = default;
-#endif
-
   // Construct a `TensorData` given a `TensorData` object.
   explicit TensorData(std::vector<float> tensorData, std::vector<int64_t> shape,
                       DType dtype)
@@ -38,6 +37,12 @@ class TensorData {
   // pointer to the IRI of the corresponding datatype (currently always
   // `tensor:DataTensor`).
   std::pair<std::string, std::string> toString() const;
+  LiteralOrIri toLiteral() const;
+
+  float operator[](size_t idx) const { return tensorData_[idx]; }
+  size_t size() const { return tensorData_.size(); }
+  const std::vector<int64_t>& shape() const { return shape_; }
+  DType dtype() const { return dtype_; }
 
   static TensorData parseFromString(std::string_view dataString);
   static TensorData parseFromJSON(nlohmann::json json);
@@ -45,12 +50,13 @@ class TensorData {
   static float cosineSimilarity(const TensorData& tensor1,
                                 const TensorData& tensor2);
   static float norm(const TensorData& tensor);
-  static float dotProduct(const TensorData& tensor1, const TensorData& tensor2);
 
+  static float dot(const TensorData& tensor1, const TensorData& tensor2);
   static TensorData add(const TensorData& tensor1, const TensorData& tensor2);
   static TensorData subtract(const TensorData& tensor1,
                              const TensorData& tensor2);
 };
+}  // namespace ad_utility
 #ifdef QLEVER_CPP_17
 static_assert(std::is_default_constructible_v<DateYearOrDuration>);
 #endif
