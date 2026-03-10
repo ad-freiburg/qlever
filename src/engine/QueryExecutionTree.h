@@ -240,21 +240,36 @@ class QueryExecutionTree {
     s << tree.getRootOperation()->getDescriptor();
   }
 
-  bool supportsLimit() const {
+  LimitOffsetSupport supportsLimitOffset() const {
     return getRootOperation()->supportsLimitOffset();
   }
 
-  // Set the value of the `LIMIT` clause that will be applied to the result of
-  // this operation.
-  void applyLimit(const LimitOffsetClause& limitOffsetClause) {
+  // Set the value of the `LIMIT`/`OFFSET` clause that will be applied to the
+  // result of this operation.
+  void applyLimitOffset(const LimitOffsetClause& limitOffsetClause) {
     getRootOperation()->applyLimitOffset(limitOffsetClause);
-    // Setting the limit invalidates the `cacheKey` as well as the
-    // `sizeEstimate`.
+    updateCacheKeyAndSizeEstimate();
+  }
+
+ private:
+  // Directly set the `LIMIT`/`OFFSET` on the root operation without merging
+  // and without calling `onLimitOffsetChanged`. This is the only intended way
+  // to restore a previously set limit/offset that was removed by a
+  // cloning/rewriting operation (e.g. column stripping).
+  void setLimitOffsetDirectlyWithoutTriggeringHooks(
+      const LimitOffsetClause& limitOffsetClause) {
+    getRootOperation()->setLimitOffsetDirectlyWithoutTriggeringHooks(
+        limitOffsetClause);
+    updateCacheKeyAndSizeEstimate();
+  }
+
+  // After any change to the limit/offset of the root operation, the cached
+  // `cacheKey_` and `sizeEstimate_` must be refreshed.
+  void updateCacheKeyAndSizeEstimate() {
     cacheKey_ = getRootOperation()->getCacheKey();
     sizeEstimate_ = getRootOperation()->getSizeEstimate();
   }
 
- private:
   QueryExecutionContext* qec_;  // No ownership
   std::shared_ptr<Operation> rootOperation_ =
       nullptr;  // Owned child. Will be deleted at deconstruction.

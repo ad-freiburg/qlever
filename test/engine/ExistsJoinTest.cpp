@@ -318,6 +318,32 @@ TEST(Exists, testGeneratorIsForwardedForDistinctColumnsFalseCase) {
 }
 
 // _____________________________________________________________________________
+TEST(Exists, originalTreeIsNotOverwrittenOnDistinctColumns) {
+  auto* qec = getQec();
+  auto leftTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, IdTable{2, qec->getAllocator()},
+      std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"}});
+
+  auto rightTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, IdTable{2, qec->getAllocator()},
+      std::vector<std::optional<Variable>>{Variable{"?c"}, Variable{"?d"}});
+
+  ExistsJoin existsJoin{qec, leftTree, rightTree, Variable{"?z"}};
+
+  EXPECT_TRUE(existsJoin.getChildren()
+                  .at(0)
+                  ->getRootOperation()
+                  ->getLimitOffset()
+                  .isUnconstrained());
+  EXPECT_EQ(
+      existsJoin.getChildren().at(1)->getRootOperation()->getLimitOffset(),
+      LimitOffsetClause(1, 0));
+  EXPECT_TRUE(leftTree->getRootOperation()->getLimitOffset().isUnconstrained());
+  EXPECT_TRUE(
+      rightTree->getRootOperation()->getLimitOffset().isUnconstrained());
+}
+
+// _____________________________________________________________________________
 TEST(ExistsJoin, lazyExistsJoin) {
   std::vector<IdTable> expected;
   expected.push_back(makeIdTableFromVector({{U, V(10), T}, {V(1), V(11), F}}));

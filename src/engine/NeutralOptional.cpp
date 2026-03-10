@@ -50,12 +50,15 @@ float NeutralOptional::getMultiplicity(size_t col) {
 bool NeutralOptional::knownEmptyResult() { return false; }
 
 // _____________________________________________________________________________
-bool NeutralOptional::supportsLimitOffset() const { return true; }
+LimitOffsetSupport NeutralOptional::supportsLimitOffset() const {
+  return LimitOffsetSupport::YES;
+}
 
 // _____________________________________________________________________________
 void NeutralOptional::onLimitOffsetChanged(
-    const LimitOffsetClause& limitOffset) const {
-  tree_->applyLimit(limitOffset);
+    const LimitOffsetClause& limitOffset) {
+  tree_ = tree_->clone();
+  tree_->applyLimitOffset(limitOffset);
 }
 
 // _____________________________________________________________________________
