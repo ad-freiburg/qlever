@@ -294,7 +294,7 @@ TEST(CancellationHandle, verifyCheckDoesNotOverrideCancelledState) {
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyCheckAfterDeadlineMissDoesReportProperly) {
-  SKIP_IF_LOGLEVEL_IS_LOWER(WARN);
+  SKIP_IF_LOGLEVEL_IS_LOWER(DEBUG);
   auto& choice = ad_utility::LogstreamChoice::get();
   CancellationHandle<ENABLED> handle;
 
@@ -323,10 +323,7 @@ TEST(CancellationHandle, verifyCheckAfterDeadlineMissDoesReportProperly) {
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary) {
-  if constexpr (LOGLEVEL < WARN) {
-    GTEST_SKIP() << "This test requires log level of at least INFO.";
-  }
-  EXPECT_GE(LOGLEVEL, WARN);
+  SKIP_IF_LOGLEVEL_IS_LOWER(DEBUG);
   auto& choice = ad_utility::LogstreamChoice::get();
   CancellationHandle<ENABLED> handle;
 
@@ -411,10 +408,7 @@ TEST(CancellationHandle, verifyPleaseWatchDogDoesNotAcceptInvalidState) {
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyIsCancelledDoesPleaseWatchDog) {
-  if constexpr (LOGLEVEL < WARN) {
-    GTEST_SKIP() << "This test requires log level of at least INFO.";
-  }
-  EXPECT_GE(LOGLEVEL, WARN);
+  SKIP_IF_LOGLEVEL_IS_LOWER(DEBUG);
   auto& choice = ad_utility::LogstreamChoice::get();
   CancellationHandle<ENABLED> handle;
 
