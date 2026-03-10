@@ -325,6 +325,18 @@ void MaterializedViewWriter::computeResultAndWritePermutation() const {
 }
 
 // _____________________________________________________________________________
+const Variable& MaterializedView::dummyPredicate() {
+  static const Variable var{"?_ql_materialized_view_p"};
+  return var;
+};
+
+// _____________________________________________________________________________
+const Variable& MaterializedView::dummyObject() {
+  static const Variable var{"?_ql_materialized_view_o"};
+  return var;
+};
+
+// _____________________________________________________________________________
 MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
     : onDiskBase_{std::move(onDiskBase)},
       name_{std::move(name)},
@@ -534,8 +546,8 @@ SparqlTripleSimple MaterializedView::makeScanConfig(
   // The placeholders are immediately removed from the result by column
   // stripping. Therefore their names are not a concern when a single query
   // contains multiple instances of `MaterializedViewQuery`.
-  TripleComponent p{Variable{"?_ql_materialized_view_p"}};
-  TripleComponent o{Variable{"?_ql_materialized_view_o"}};
+  TripleComponent p{dummyPredicate()};
+  TripleComponent o{dummyObject()};
   AdditionalScanColumns additionalCols;
 
   // Assemble which columns should be bound to which variables
