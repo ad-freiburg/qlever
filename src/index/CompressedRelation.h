@@ -303,8 +303,7 @@ class CompressedRelationWriter {
   Id currentCol0Id_ = Id::makeUndefined();
   size_t currentRelationPreviousSize_ = 0;
 
-  ad_utility::TaskQueue<false> blockWriteQueue_{numThreadsForWriting() * 2,
-                                                numThreadsForWriting()};
+  ad_utility::TaskQueue<false> blockWriteQueue_ = makeBlockWriteQueue();
   ad_utility::timer::ThreadSafeTimer blockWriteQueueTimer_;
 
   // This callback is invoked for each block of small relations (which share the
@@ -523,8 +522,10 @@ class CompressedRelationWriter {
   compressedRelationTestWriteCompressedRelations(
       T inputs, std::string filename, ad_utility::MemorySize blocksize);
 
-  // Return the number of threads to be used for writing compressed blocks.
-  static uint32_t numThreadsForWriting();
+  // Create a `TaskQueue` for the compression and writing of blocks. The number
+  // of threads is determined by the runtime parameter
+  // "threads-for-permutation-writer".
+  static ad_utility::TaskQueue<false> makeBlockWriteQueue();
 };
 
 using namespace std::string_view_literals;

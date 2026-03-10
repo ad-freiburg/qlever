@@ -1541,9 +1541,12 @@ CompressedRelationMetadata CompressedRelationWriter::finishLargeRelation(
 }
 
 // _____________________________________________________________________________
-uint32_t CompressedRelationWriter::numThreadsForWriting() {
-  return static_cast<uint32_t>(
+ad_utility::TaskQueue<false> CompressedRelationWriter::makeBlockWriteQueue() {
+  auto threadCount = static_cast<uint32_t>(
       getRuntimeParameter<&RuntimeParameters::threadsForPermutationWriter_>());
+  // Allow at least up to 4 tasks in the queue.
+  uint32_t queueSize = std::max<uint32_t>(4, threadCount * 2);
+  return ad_utility::TaskQueue<false>{queueSize, threadCount};
 }
 
 // _____________________________________________________________________________

@@ -157,7 +157,9 @@ struct RuntimeParameters {
   Bool disableCaching_{false, "disable-caching"};
 
   // Configure the amount of threads to compress and write blocks per
-  // permutation.
+  // permutation. Even though this technically influences the logic of regular
+  // index building, the `qlever-index` binary does not expose a configuration
+  // option for this parameter.
   SizeT threadsForPermutationWriter_{10, "threads-for-permutation-writer"};
 
   // ___________________________________________________________________________
