@@ -11,6 +11,7 @@
 #define QLEVER_SRC_ENGINE_OPERATIONBINDPUSHDOWNIMPL_H_
 
 #include "engine/Operation.h"
+#include "engine/QueryExecutionTree.h"
 
 // _____________________________________________________________________________
 CPP_template_def(typename MakeCloneWithNewChildren)(
