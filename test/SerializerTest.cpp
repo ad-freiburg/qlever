@@ -80,13 +80,23 @@ class C {
 };
 
 // D is not serializable
-struct D {};
+struct D {
+  int z = 43;
+};
 
 struct E {
   D d;
   AD_SERIALIZE_FRIEND_FUNCTION(E) {
     // Ill-formed, because `D` has no `serialize()` function.
     serializer | arg.d;
+  }
+};
+struct EFixed {
+  D d;
+  AD_SERIALIZE_FRIEND_FUNCTION(EFixed) {
+    // Well formed, because `d` has no serialization form, but is trivially
+    // copyable, so we can explicitly use the `triviallySerialize` function.
+    triviallySerialize(serializer, arg.d);
   }
 };
 
@@ -145,6 +155,7 @@ TEST(Serializer, Serializability) {
   using testNamespaceA::C;
   using testNamespaceA::D;
   using testNamespaceA::E;
+  using testNamespaceA::EFixed;
   using testNamespaceA::F;
   using testNamespaceA::G;
   static_assert(isReadSerializable<A>);
@@ -186,21 +197,30 @@ TEST(Serializer, Serializability) {
 // A simple example that demonstrates the use of the serializers.
 TEST(Serializer, SimpleExample) {
   using testNamespaceA::A;
+  using testNamespaceA::EFixed;
   std::string filename = "Serializer.SimpleExample.dat";
   {
     A a{42, -5};
+    // Also test the `EFixed` struct which uses the `triviallySerialize`
+    // function.
+    EFixed e{10293};
+
     serialization::FileWriteSerializer writer{filename};
     writer << a;  // `writer | a` or `serialize(writer, a)` are equivalent;
+    writer << e;
   }
   {
     // `a` has been written to the file, the file has been closed, reopen it and
     // read.
     A a{};  // Uninitialized, we will read into it;
+    EFixed e{};
     serialization::FileReadSerializer reader{filename};
     reader >> a;
+    reader >> e;
     // We have successfully restored the values.
     ASSERT_EQ(a.a, 42);
     ASSERT_EQ(a.b, -5);
+    EXPECT_EQ(e.d.z, 10293);
   }
   ad_utility::deleteFile(filename);
 }

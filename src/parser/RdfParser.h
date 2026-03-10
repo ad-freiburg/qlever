@@ -226,6 +226,11 @@ class TurtleParser : public RdfParserBase {
   static inline std::atomic<size_t> numParsers_ = 0;
   size_t blankNodePrefix_ = numParsers_.fetch_add(1);
 
+  // Prefix for user-specified blank node labels. For parallel parsing of the
+  // same file, this should be the same across all sub-parsers, while
+  // blankNodePrefix_ should be unique per parser.
+  size_t fileBlankNodePrefix_ = blankNodePrefix_;
+
   // Used to restrict a worker for the parallel turtle parser to a simpler
   // grammar that can be parsed in parallel. This disallows re-definitions of
   // @base and @prefix as well as usage of multiline literals.
@@ -357,7 +362,15 @@ class TurtleParser : public RdfParserBase {
   // To get consistent blank node labels when testing, we need to manually set
   // the prefix. This function is named `...ForTesting` so you really shouldn't
   // use it in the actual QLever code.
-  void setBlankNodePrefixOnlyForTesting(size_t id) { blankNodePrefix_ = id; }
+  void setBlankNodePrefixOnlyForTesting(size_t id) {
+    blankNodePrefix_ = id;
+    fileBlankNodePrefix_ = id;
+  }
+
+  // Set the file-level blank node prefix. This is used by parallel parsers
+  // to ensure that user-specified blank node labels have the same ID across
+  // all sub-parsers of the same file.
+  void setFileBlankNodePrefix(size_t id) { fileBlankNodePrefix_ = id; }
 
  protected:
   FRIEND_TEST(RdfParserTest, prefixedName);
@@ -462,7 +475,8 @@ CPP_template(typename Parser)(requires ql::concepts::derived_from<
     // TODO<joka921> Make it possible to use an optional here.
     EncodedIriManager encodedIriManager;
     RdfStringParser parser{&encodedIriManager};
-    parser.parseUtf8String(absl::StrCat("<a> <b> ", objectString, "."));
+    parser.setInputStream(objectString);
+    parser.object();
     AD_CONTRACT_CHECK(parser.triples_.size() == 1);
     return std::move(parser.triples_[0].object_);
   }
@@ -487,7 +501,7 @@ CPP_template(typename Parser)(requires ql::concepts::derived_from<
   // testing interface for reusing a parser
   // only specifies the tokenizers input stream.
   // Does not alter the tokenizers state
-  void setInputStream(const std::string& toParse) {
+  void setInputStream(std::string_view toParse) {
     tmpToParse_.clear();
     tmpToParse_.reserve(toParse.size());
     tmpToParse_.insert(tmpToParse_.end(), toParse.begin(), toParse.end());

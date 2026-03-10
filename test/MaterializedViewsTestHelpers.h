@@ -12,11 +12,15 @@
 
 #include <fstream>
 
+#include "./QueryPlannerTestHelpers.h"
 #include "./util/GTestHelpers.h"
+#include "engine/MaterializedViews.h"
 #include "libqlever/Qlever.h"
 #include "util/Exception.h"
 
 namespace materializedViewsTestHelpers {
+
+namespace h = queryPlannerTestHelpers;
 
 static constexpr std::string_view dummyTurtle = R"(
   <s1> <p1> "abc" .
@@ -64,10 +68,12 @@ class MaterializedViewsTest : public ::testing::Test {
   const std::string simpleWriteQuery_ = "SELECT * { ?s ?p ?o . BIND(1 AS ?g) }";
   std::stringstream log_;
 
+  // ___________________________________________________________________________
   virtual std::string getDummyTurtle() const {
     return std::string{dummyTurtle};
   }
 
+  // ___________________________________________________________________________
   void SetUp() override {
     ad_utility::setGlobalLoggingStream(&log_);
     makeTestIndex(testIndexBase_, getDummyTurtle());
@@ -76,18 +82,49 @@ class MaterializedViewsTest : public ::testing::Test {
     qlv_ = std::make_shared<qlever::Qlever>(config);
   }
 
+  // ___________________________________________________________________________
   void TearDown() override {
     qlv_ = nullptr;
     removeTestIndex(testIndexBase_);
     ad_utility::setGlobalLoggingStream(&std::cout);
   }
 
+  // ___________________________________________________________________________
   qlever::Qlever& qlv() {
     AD_CORRECTNESS_CHECK(qlv_ != nullptr);
     return *qlv_;
   }
 
+  // ___________________________________________________________________________
   void clearLog() { log_.str(""); }
+
+  // Helper that evaluates a query on the test index and returns its result as
+  // an `IdTable` with the same column ordering as the columns in the `SELECT`
+  // statement.
+  IdTable getQueryResultAsIdTable(std::string query) {
+    auto [qet, qec, parsed] = qlv().parseAndPlanQuery(std::move(query));
+
+    // Get the visible variables' column indices in the correct order.
+    if (!parsed.hasSelectClause()) {
+      throw std::runtime_error(
+          "Only IdTables for SELECT can be exported so far.");
+    }
+    auto selectColOrdering =
+        qet->selectedVariablesToColumnIndices(parsed.selectClause());
+    auto columns = ::ranges::to<std::vector<ColumnIndex>>(
+        ql::views::transform(selectColOrdering, [](const auto& colIdxAndType) {
+          if (!colIdxAndType.has_value()) {
+            throw std::runtime_error("Binds in SELECT clause not allowed.");
+          }
+          return colIdxAndType.value().columnIndex_;
+        }));
+
+    // Compute the result and permute the `IdTable` as expected.
+    auto res = qet->getResult(false);
+    auto idTable = res->idTable().clone();
+    idTable.setColumnSubset(columns);
+    return idTable;
+  }
 };
 
 // _____________________________________________________________________________
@@ -107,6 +144,72 @@ class MaterializedViewsTestLarge : public MaterializedViewsTest {
     }
     return dummy;
   }
+};
+
+// _____________________________________________________________________________
+struct RewriteTestParams {
+  // Query to write the test view.
+  std::string writeQuery_;
+
+  // Enforce a query planning budget to allow testing the greedy query planner
+  // with toy examples.
+  size_t queryPlanningBudget_;
+};
+
+// _____________________________________________________________________________
+class MaterializedViewsQueryRewriteTest
+    : public ::testing::TestWithParam<RewriteTestParams> {
+ protected:
+  std::stringstream log_;
+
+  // ___________________________________________________________________________
+  void SetUp() override { ad_utility::setGlobalLoggingStream(&log_); }
+
+  // ___________________________________________________________________________
+  void TearDown() override { ad_utility::setGlobalLoggingStream(&std::cout); }
+};
+
+// We make a subclass of `MaterializedViewsQueryRewriteTest` here s.t. we can
+// use different `INSTANTIATE_TEST_SUITE_P` calls for different rewriting tests.
+class MaterializedViewsChainRewriteTest
+    : public MaterializedViewsQueryRewriteTest {};
+
+// _____________________________________________________________________________
+inline void PrintTo(const RewriteTestParams& p, std::ostream* os) {
+  auto& s = *os;
+  s << "write query = '" << p.writeQuery_
+    << "', budget = " << p.queryPlanningBudget_;
+}
+
+// _____________________________________________________________________________
+inline void qpExpect(qlever::Qlever& qlv, const auto& query,
+                     ::testing::Matcher<const QueryExecutionTree&> matcher,
+                     source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+  auto l = generateLocationTrace(sourceLocation);
+  auto [qet, qec, parsed] = qlv.parseAndPlanQuery(std::string{query});
+  EXPECT_THAT(*qet, matcher);
+};
+
+// _____________________________________________________________________________
+inline auto viewScan(
+    std::string viewName, std::string a, std::string b, std::string c,
+    std::optional<size_t> strippedSize = std::nullopt,
+    std::vector<std::pair<ColumnIndex, Variable>> additionalColumns = {}) {
+  return h::IndexScanFromStrings(std::move(a), std::move(b), std::move(c),
+                                 {Permutation::Enum::SPO}, std::monostate{},
+                                 additionalColumns | ql::views::values |
+                                     ::ranges::to<std::vector<Variable>>(),
+                                 additionalColumns | ql::views::keys |
+                                     ::ranges::to<std::vector<ColumnIndex>>(),
+                                 strippedSize, viewName);
+};
+
+// _____________________________________________________________________________
+inline auto viewScanSimple(std::string viewName, std::string a, std::string b,
+                           std::string c) {
+  // Helper because `std::bind_front` does not like argument default values.
+  return viewScan(std::move(viewName), std::move(a), std::move(b),
+                  std::move(c));
 };
 
 }  // namespace materializedViewsTestHelpers

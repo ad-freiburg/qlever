@@ -288,3 +288,33 @@ TEST(PropertyPath, handlePath) {
                 }),
             2);
 }
+
+// _____________________________________________________________________________
+TEST(PropertyPath, Getters) {
+  auto path1 = PropertyPath::fromIri(iri1);
+  EXPECT_TRUE(path1.isIri());
+  EXPECT_FALSE(path1.isSequence());
+  EXPECT_EQ(path1.getIri(), iri1);
+
+  auto path2 = PropertyPath::makeInverse(PropertyPath::fromIri(iri1));
+  EXPECT_FALSE(path2.isIri());
+  EXPECT_FALSE(path2.isSequence());
+
+  auto path3 = PropertyPath::makeAlternative(
+      {PropertyPath::fromIri(iri1), PropertyPath::fromIri(iri2)});
+  EXPECT_FALSE(path3.isIri());
+  EXPECT_FALSE(path3.isSequence());
+
+  auto path4 = PropertyPath::makeSequence(
+      {PropertyPath::fromIri(iri1), PropertyPath::fromIri(iri2)});
+  EXPECT_FALSE(path4.isIri());
+  EXPECT_TRUE(path4.isSequence());
+  auto matchIri = [](ad_utility::triple_component::Iri iri)
+      -> ::testing::Matcher<PropertyPath> {
+    return ::testing::AllOf(
+        ::testing::Property(&PropertyPath::isIri, ::testing::IsTrue()),
+        ::testing::Property(&PropertyPath::getIri, ::testing::Eq(iri)));
+  };
+  EXPECT_THAT(path4.getSequence(),
+              ::testing::ElementsAre(matchIri(iri1), matchIri(iri2)));
+}

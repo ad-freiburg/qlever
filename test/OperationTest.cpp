@@ -8,6 +8,7 @@
 #include <optional>
 
 #include "engine/IndexScan.h"
+#include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "engine/NeutralElementOperation.h"
 #include "engine/ValuesForTesting.h"
@@ -81,10 +82,10 @@ TEST(OperationTest, limitAndOffsetAreStacked) {
   EXPECT_EQ(n.getLimitOffset(), LimitOffsetClause(20, 3));
 
   n.applyLimitOffset({std::nullopt, 4});
-  EXPECT_EQ(n.getLimitOffset(), LimitOffsetClause(20, 7));
+  EXPECT_EQ(n.getLimitOffset(), LimitOffsetClause(16, 7));
 
-  n.applyLimitOffset({10, 8});
-  EXPECT_EQ(n.getLimitOffset(), LimitOffsetClause(10, 15));
+  n.applyLimitOffset({6, 7});
+  EXPECT_EQ(n.getLimitOffset(), LimitOffsetClause(6, 14));
 }
 
 // ________________________________________________
@@ -183,12 +184,14 @@ class OperationTestFixture : public testing::Test {
   }();
   QueryResultCache cache;
   NamedResultCache namedCache;
+  MaterializedViewsManager materializedViewsManager;
   QueryExecutionContext qec{
       index,
       &cache,
       makeAllocator(),
       SortPerformanceEstimator{},
       &namedCache,
+      &materializedViewsManager,
       [&](std::string json) { jsonHistory.emplace_back(std::move(json)); }};
   IdTable table = makeIdTableFromVector({{}, {}, {}});
   ValuesForTesting operation{&qec, std::move(table), {}};
@@ -482,12 +485,14 @@ TEST(Operation, ensureFailedStatusIsSetWhenGeneratorThrowsException) {
   const Index& index = ad_utility::testing::getQec()->getIndex();
   QueryResultCache cache{};
   NamedResultCache namedCache{};
+  MaterializedViewsManager materializedViewsManager;
   QueryExecutionContext context{
       index,
       &cache,
       makeAllocator(ad_utility::MemorySize::megabytes(100)),
       SortPerformanceEstimator{},
       &namedCache,
+      &materializedViewsManager,
       [&](std::string) { signaledUpdate = true; }};
   AlwaysFailOperation operation{&context};
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
@@ -504,6 +509,39 @@ TEST(Operation, ensureFailedStatusIsSetWhenGeneratorThrowsException) {
 }
 
 // _____________________________________________________________________________
+TEST(Operation, ensureFailedStatusIsSetWhenGeneratorIsCancelled) {
+  bool signaledUpdate = false;
+  const Index& index = ad_utility::testing::getQec()->getIndex();
+  QueryResultCache cache{};
+  NamedResultCache namedCache{};
+  MaterializedViewsManager materializedViewsManager;
+  QueryExecutionContext context{
+      index,
+      &cache,
+      makeAllocator(ad_utility::MemorySize::megabytes(100)),
+      SortPerformanceEstimator{},
+      &namedCache,
+      &materializedViewsManager,
+      [&](std::string) { signaledUpdate = true; }};
+  CustomGeneratorOperation operation{
+      &context, []() -> Result::Generator {
+        throw CancellationException{"Operation was cancelled"};
+        co_return;
+      }()};
+  ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
+  auto result =
+      operation.runComputation(timer, ComputationMode::LAZY_IF_SUPPORTED);
+
+  EXPECT_EQ(operation.runtimeInfo().status_,
+            Status::lazilyMaterializedInProgress);
+
+  EXPECT_THROW(result.idTables().begin(), ad_utility::CancellationException);
+
+  EXPECT_EQ(operation.runtimeInfo().status_, Status::cancelled);
+  EXPECT_TRUE(signaledUpdate);
+}
+
+// _____________________________________________________________________________
 TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
 #ifdef _QLEVER_NO_TIMING_TESTS
   GTEST_SKIP_("because _QLEVER_NO_TIMING_TESTS defined");
@@ -513,12 +551,14 @@ TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
   const Index& index = getQec()->getIndex();
   QueryResultCache cache{};
   NamedResultCache namedCache{};
+  MaterializedViewsManager materializedViewsManager;
   QueryExecutionContext context{
       index,
       &cache,
       makeAllocator(ad_utility::MemorySize::megabytes(100)),
       SortPerformanceEstimator{},
       &namedCache,
+      &materializedViewsManager,
       [&](std::string) { ++updateCallCounter; }};
   CustomGeneratorOperation operation{
       &context, [](const IdTable& idTable) -> Result::Generator {
@@ -559,12 +599,14 @@ TEST(Operation, ensureSignalUpdateIsCalledAtTheEndOfPartialConsumption) {
   const Index& index = getQec()->getIndex();
   QueryResultCache cache{};
   NamedResultCache namedCache{};
+  MaterializedViewsManager materializedViewsManager;
   QueryExecutionContext context{
       index,
       &cache,
       makeAllocator(ad_utility::MemorySize::megabytes(100)),
       SortPerformanceEstimator{},
       &namedCache,
+      &materializedViewsManager,
       [&](std::string) { ++updateCallCounter; }};
   CustomGeneratorOperation operation{
       &context, [](const IdTable& idTable) -> Result::Generator {
@@ -789,7 +831,7 @@ TEST(Operation, checkMaxCacheSizeIsComputedCorrectly) {
 }
 
 // _____________________________________________________________________________
-TEST(OperationTest, disableCaching) {
+TEST(OperationTest, disableCachingForOperation) {
   auto qec = getQec();
   qec->getQueryTreeCache().clearAll();
   std::vector<IdTable> idTablesVector{};
@@ -799,7 +841,7 @@ TEST(OperationTest, disableCaching) {
       qec, std::move(idTablesVector), {Variable{"?x"}, Variable{"?y"}}, true};
 
   QueryCacheKey cacheKey{valuesForTesting.getCacheKey(),
-                         qec->locatedTriplesSnapshot().index_};
+                         qec->locatedTriplesState().index_};
 
   // By default, the result of `valuesForTesting` is cached because it is
   // sufficiently small, no matter if it was computed lazily or fully
@@ -823,5 +865,30 @@ TEST(OperationTest, disableCaching) {
   qec->getQueryTreeCache().clearAll();
   EXPECT_FALSE(qec->getQueryTreeCache().cacheContains(cacheKey));
   valuesForTesting.getResult(false);
+  EXPECT_FALSE(qec->getQueryTreeCache().cacheContains(cacheKey));
+}
+
+// _____________________________________________________________________________
+TEST(OperationTest, disableCachingGlobally) {
+  auto qecPtr = getQec();
+  auto qecCopy = *qecPtr;
+  qecCopy.disableCaching_ = true;
+  auto* qec = &qecCopy;
+  qec->getQueryTreeCache().clearAll();
+  std::vector<IdTable> idTablesVector{};
+  idTablesVector.push_back(makeIdTableFromVector({{3, 4}}));
+  idTablesVector.push_back(makeIdTableFromVector({{7, 8}, {9, 123}}));
+  ValuesForTesting valuesForTesting{
+      qec, std::move(idTablesVector), {Variable{"?x"}, Variable{"?y"}}, true};
+
+  EXPECT_THAT(valuesForTesting.getCacheKey(), ::testing::IsEmpty());
+
+  QueryCacheKey cacheKey{valuesForTesting.getCacheKey(),
+                         qec->locatedTriplesState().index_};
+
+  // Initially not contained in the cache (because we cleared the cache).
+  EXPECT_FALSE(qec->getQueryTreeCache().cacheContains(cacheKey));
+  valuesForTesting.getResult(true);
+  // Still not stored in the cache, because caching was disabled.
   EXPECT_FALSE(qec->getQueryTreeCache().cacheContains(cacheKey));
 }

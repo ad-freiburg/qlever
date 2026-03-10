@@ -8,8 +8,10 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <map>
 
 #include "util/Algorithm.h"
+#include "util/HashMap.h"
 #include "util/Random.h"
 
 using namespace ad_utility;
@@ -75,6 +77,54 @@ TEST(Algorithm, ContainsIF) {
 
   ASSERT_FALSE(contains_if(v, [](const auto& el) { return el == 5; }));
   ASSERT_FALSE(contains_if(v, [](const auto& el) { return el < 0; }));
+}
+
+// _____________________________________________________________________________
+TEST(Algorithm, FindOptional) {
+  // Key found in a HashMap returns the mapped value.
+  HashMap<std::string, int> map{{"foo", 42}, {"bar", 7}};
+  {
+    auto result = findOptional(map, std::string{"foo"});
+    ASSERT_TRUE(result.has_value());
+    ASSERT_EQ(result.value(), 42);
+  }
+  {
+    auto result = findOptional(map, std::string{"bar"});
+    ASSERT_TRUE(result.has_value());
+    ASSERT_EQ(result.value(), 7);
+  }
+
+  // Key not found returns boost::none.
+  {
+    auto result = findOptional(map, std::string{"missing"});
+    ASSERT_FALSE(result.has_value());
+  }
+
+  // Empty map always returns boost::none.
+  {
+    HashMap<std::string, int> emptyMap;
+    auto result = findOptional(emptyMap, std::string{"any"});
+    ASSERT_FALSE(result.has_value());
+  }
+
+  // The returned optional holds a reference to the value in the map.
+  {
+    HashMap<std::string, std::string> strMap{{"key", "value"}};
+    auto result = findOptional(strMap, std::string{"key"});
+    ASSERT_TRUE(result.has_value());
+    ASSERT_EQ(&result.value(), &strMap["key"]);
+  }
+
+  // Works with std::map as well.
+  {
+    std::map<int, std::string> stdMap{{1, "one"}, {2, "two"}};
+    auto found = findOptional(stdMap, 2);
+    ASSERT_TRUE(found.has_value());
+    ASSERT_EQ(found.value(), "two");
+
+    auto notFound = findOptional(stdMap, 3);
+    ASSERT_FALSE(notFound.has_value());
+  }
 }
 
 // _____________________________________________________________________________

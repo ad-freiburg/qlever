@@ -65,7 +65,11 @@ struct CompressedBlockMetadataNoBlockIndex {
 
   using GraphInfo = std::optional<std::vector<Id>>;
 
-  std::vector<OffsetAndCompressedSize> offsetsAndCompressedSize_;
+  // For each column, the offset and compressed size of the column in the
+  // underlying file. `std::nullopt` is currently used for the last block which
+  // purely consists of `LocatedTriples`, and thus is not stored at all in the
+  // underlying file.
+  std::optional<std::vector<OffsetAndCompressedSize>> offsetsAndCompressedSize_;
   size_t numRows_;
 
   // Store the first and the last triple of the block. First and last are meant
@@ -129,6 +133,10 @@ struct CompressedBlockMetadataNoBlockIndex {
   // `columnIndex` compared to `firstTriple_` of block `other`.
   bool isConsistentWith(const CompressedBlockMetadataNoBlockIndex& other,
                         size_t columnIndex) const;
+
+  // Get the offset and compressed size for the given column.
+  OffsetAndCompressedSize getOffsetAndCompressedSizeForColumn(
+      ColumnIndex columnIndex) const;
 
   // Two of these are equal if all members are equal.
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(
@@ -197,7 +205,16 @@ AD_SERIALIZE_FUNCTION(CompressedBlockMetadata::OffsetAndCompressedSize) {
 
 // Serialization of the block metadata.
 AD_SERIALIZE_FUNCTION(CompressedBlockMetadata) {
-  serializer | arg.offsetsAndCompressedSize_;
+  if constexpr (ad_utility::serialization::WriteSerializer<S>) {
+    AD_CORRECTNESS_CHECK(arg.offsetsAndCompressedSize_.has_value(),
+                         "When serializing blocks offsets and compressed sizes "
+                         "need to be present.");
+  } else {
+    static_assert(ad_utility::serialization::ReadSerializer<S>);
+    // Insert a dummy to overwrite.
+    arg.offsetsAndCompressedSize_.emplace();
+  }
+  serializer | arg.offsetsAndCompressedSize_.value();
   serializer | arg.numRows_;
   serializer | arg.firstTriple_;
   serializer | arg.lastTriple_;
@@ -313,7 +330,7 @@ class CompressedRelationWriter {
       std::function<void(ql::span<const CompressedRelationMetadata>)>;
 
   struct WriterAndCallback {
-    CompressedRelationWriter& writer_;
+    std::unique_ptr<CompressedRelationWriter> writer_;
     MetadataCallback callback_;
   };
 
@@ -542,6 +559,9 @@ class CompressedRelationReader {
     // disk, and if this fact can be determined by `blockMetadata` alone.
     bool canBlockBeSkipped(const CompressedBlockMetadata& blockMetadata) const;
 
+    // Delete the `graphColumn_` from `block` if `deleteGraphColumn_` is true.
+    void deleteGraphColumnIfNecessary(IdTable& block) const;
+
    private:
     // Return a lambda that returns true if `desiredGraphs_` allows the given
     // `graph` and it is not the default graph.
@@ -680,9 +700,17 @@ class CompressedRelationReader {
   // The file that stores the actual permutations.
   ad_utility::File file_;
 
+  // This setting controls whether filtering on the graph column and
+  // deduplication of rows is performed during scanning. Deactivating this is
+  // used for materialized views where repeated rows are meaningful.
+  bool useGraphPostProcessing_;
+
  public:
-  explicit CompressedRelationReader(Allocator allocator, ad_utility::File file)
-      : allocator_{std::move(allocator)}, file_{std::move(file)} {}
+  explicit CompressedRelationReader(Allocator allocator, ad_utility::File file,
+                                    bool useGraphPostProcessing = true)
+      : allocator_{std::move(allocator)},
+        file_{std::move(file)},
+        useGraphPostProcessing_{useGraphPostProcessing} {}
 
   // Helper function that enables a comparison of a triple with an `Id` in the
   // function `getBlocksForJoin` below.  If the given triple matches `col0Id` of

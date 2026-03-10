@@ -14,6 +14,7 @@
 #include "engine/CountAvailablePredicates.h"
 #include "engine/HasPredicateScan.h"
 #include "engine/IndexScan.h"
+#include "engine/PermutationSelector.h"
 #include "engine/ValuesForTesting.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
@@ -46,15 +47,15 @@ class HasPredicateScanTest : public ::testing::Test {
   // Expect that the result of the `operation` matches the `expectedElements`.
   void runTest(Operation& operation, const VectorTable& expectedElements) {
     auto expected = makeIdTableFromVector(expectedElements);
-    auto res = operation.getResult();
-    EXPECT_THAT(res->idTable(), ::testing::ElementsAreArray(expected));
+    auto res = operation.computeResultOnlyForTesting();
+    EXPECT_THAT(res.idTable(), ::testing::ElementsAreArray(expected));
   }
 
   // Expect that the result of the `operation` matches the `expectedElements`,
   // but without taking the order into account.
   void runTestUnordered(Operation& op, const VectorTable& expectedElements) {
     auto expected = makeIdTableFromVector(expectedElements);
-    EXPECT_THAT(op.getResult()->idTable(),
+    EXPECT_THAT(op.computeResultOnlyForTesting().idTable(),
                 ::testing::UnorderedElementsAreArray(expected));
   }
 };
@@ -65,10 +66,14 @@ class HasPredicateScanTest : public ::testing::Test {
 // queryPlanner.
 // _____________________________________________________________
 TEST_F(HasPredicateScanTest, freeS) {
+  // Free the cache to get a fresh `IndexScan`.
+  qec->getQueryTreeCache().clearAll();
   // ?x ql:has-predicate <p>, expected result : <x> and <y>
   auto scan = HasPredicateScan{
       qec,
       SparqlTriple{Variable{"?x"}, iri(HAS_PREDICATE_PREDICATE), iri("<p>")}};
+  runTest(scan, {{x}, {y}});
+  // Run again to test handling a cached `IndexScan`.
   runTest(scan, {{x}, {y}});
 }
 
@@ -114,10 +119,14 @@ TEST_F(HasPredicateScanTest, clone) {
 
 // _____________________________________________________________
 TEST_F(HasPredicateScanTest, fullScan) {
+  // Free the cache to get a fresh `IndexScan`.
+  qec->getQueryTreeCache().clearAll();
   // ?x ql:has-predicate ?y, expect the full mapping.
   auto scan = HasPredicateScan{
       qec, SparqlTriple{Variable{"?s"}, iri(HAS_PREDICATE_PREDICATE),
                         Variable{"?p"}}};
+  runTest(scan, {{x, p}, {x, p2}, {y, p}, {y, p3}, {z, p3}});
+  // Run again to test handling a cached `IndexScan`.
   runTest(scan, {{x, p}, {x, p2}, {y, p}, {y, p3}, {z, p3}});
 
   // Full scans with the same variable in the subject and object are not
@@ -232,10 +241,8 @@ TEST_F(HasPredicateScanTest, patternTrickAllEntities) {
    *   ?x ?predicate ?o
    * } GROUP BY ?predicate
    */
-  auto triple =
-      SparqlTripleSimple{V{"?x"}, iri(HAS_PATTERN_PREDICATE), V{"?predicate"}};
-  auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
-      qec, Permutation::Enum::PSO, triple);
+  auto indexScan = HasPredicateScan::makePatternScan(
+      qec, TripleComponent{V{"?x"}}, V{"?predicate"});
   auto patternTrick =
       CountAvailablePredicates(qec, indexScan, 0, V{"?predicate"}, V{"?count"});
 
