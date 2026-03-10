@@ -42,6 +42,8 @@ class LRUCache {
   std::optional<std::reference_wrapper<const V>> tryGet(const K& key) {
     auto it = cache_.find(key);
     if (it == cache_.end()) return std::nullopt;
+    const auto& [value, listIterator] = it->second;
+    // Move accessed key to front (most recently used).
     keys_.splice(keys_.begin(), keys_, it->second.second);
     return std::cref(it->second.first);
   }
