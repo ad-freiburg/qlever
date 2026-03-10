@@ -140,7 +140,8 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
                                  ComputationMode computationMode) {
   AD_CONTRACT_CHECK(computationMode != ComputationMode::ONLY_IF_CACHED);
   checkCancellation();
-  runtimeInfo().status_ = RuntimeInformation::Status::inProgress;
+  runtimeInfo().status_ =
+      RuntimeInformation::Status::fullyMaterializedInProgress;
   signalQueryUpdate(RuntimeInformation::SendPriority::Always);
   Result result =
       computeResult(computationMode == ComputationMode::LAZY_IF_SUPPORTED);
@@ -179,7 +180,7 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
         });
   } else {
     auto& rti = runtimeInfo();
-    rti.status_ = RuntimeInformation::lazilyMaterialized;
+    rti.status_ = RuntimeInformation::lazilyMaterializedInProgress;
     rti.totalTime_ = timer.msecs();
     rti.originalTotalTime_ = rti.totalTime_;
     rti.originalOperationTime_ = rti.getOperationTime();
@@ -207,10 +208,19 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
           }
           signalQueryUpdate(RuntimeInformation::SendPriority::IfDue);
         },
-        [this](bool failed) {
-          if (failed) {
-            runtimeInfo().status_ = RuntimeInformation::failed;
-          }
+        [this](Result::GeneratorState state) {
+          runtimeInfo().status_ = [state]() {
+            using enum Result::GeneratorState;
+            switch (state) {
+              case FINISHED:
+                return RuntimeInformation::lazilyMaterializedCompleted;
+              case CANCELLED:
+                return RuntimeInformation::cancelled;
+              default:
+                AD_CORRECTNESS_CHECK(state == FAILED);
+                return RuntimeInformation::failed;
+            }
+          }();
           signalQueryUpdate(RuntimeInformation::SendPriority::Always);
         });
   }
@@ -266,7 +276,7 @@ CacheValue Operation::runComputationAndPrepareForCache(
         [runtimeInfo = getRuntimeInfoPointer(), &cache,
          cacheKey](Result aggregatedResult) {
           auto copy = *runtimeInfo;
-          copy.status_ = RuntimeInformation::Status::fullyMaterialized;
+          copy.status_ = RuntimeInformation::Status::fullyMaterializedCompleted;
           cache.tryInsertIfNotPresent(
               false, cacheKey,
               std::make_shared<CacheValue>(std::move(aggregatedResult),
@@ -304,7 +314,7 @@ std::shared_ptr<const Result> Operation::getResult(
   }
   auto& cache = _executionContext->getQueryTreeCache();
   const QueryCacheKey cacheKey = {
-      getCacheKey(), _executionContext->locatedTriplesSnapshot().index_};
+      getCacheKey(), _executionContext->locatedTriplesState().index_};
   const bool pinFinalResultButNotSubtrees =
       _executionContext->_pinResult && isRoot;
   const bool pinResult =
@@ -335,6 +345,11 @@ std::shared_ptr<const Result> Operation::getResult(
                 updateRuntimeInformationOnFailure(timer.msecs());
               }
             });
+
+    if (_executionContext->disableCaching()) {
+      return std::make_shared<Result>(runComputation(timer, computationMode));
+    }
+
     auto cacheSetup = [this, &timer, computationMode, &cacheKey, pinResult,
                        isRoot]() {
       return runComputationAndPrepareForCache(timer, computationMode, cacheKey,
@@ -473,7 +488,8 @@ void Operation::updateRuntimeInformationOnSuccess(
   _runtimeInfo->numRows_ = numRows;
   _runtimeInfo->cacheStatus_ = cacheStatus;
 
-  _runtimeInfo->status_ = RuntimeInformation::Status::fullyMaterialized;
+  _runtimeInfo->status_ =
+      RuntimeInformation::Status::fullyMaterializedCompleted;
 
   bool wasCached = cacheStatus != ad_utility::CacheStatus::computed;
   // If the result was read from the cache, then we need the additional
@@ -600,7 +616,7 @@ void Operation::createRuntimeInfoFromEstimates(
   _runtimeInfo->multiplicityEstimates_ = multiplicityEstimates;
 
   auto cachedResult = _executionContext->getQueryTreeCache().getIfContained(
-      {getCacheKey(), locatedTriplesSnapshot().index_});
+      {getCacheKey(), locatedTriplesState().index_});
   if (cachedResult.has_value()) {
     const auto& [resultPointer, cacheStatus] = cachedResult.value();
     _runtimeInfo->cacheStatus_ = cacheStatus;
@@ -693,6 +709,12 @@ void Operation::signalQueryUpdate(
 
 // _____________________________________________________________________________
 std::string Operation::getCacheKey() const {
+  AD_CORRECTNESS_CHECK(_executionContext);
+  if (_executionContext->disableCaching()) {
+    // Cache key computation is costly, so we can save it when caching is
+    // disabled.
+    return "";
+  }
   auto result = getCacheKeyImpl();
   if (limitOffset_._limit.has_value()) {
     absl::StrAppend(&result, " LIMIT ", limitOffset_._limit.value());

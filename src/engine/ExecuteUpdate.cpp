@@ -15,16 +15,15 @@ UpdateMetadata ExecuteUpdate::executeUpdate(
   // Fully materialize the result for now. This makes it easier to execute the
   // update. We have to keep the local vocab alive until the triples are
   // inserted using `deleteTriples`/`insertTriples` to keep LocalVocabIds valid.
-  tracer.beginTrace("materializeResult");
+  tracer.beginTrace("evaluateWhere");
   auto result = qet.getResult(false);
-  tracer.endTrace("materializeResult");
+  tracer.endTrace("evaluateWhere");
   auto [toInsert, toDelete] =
       computeGraphUpdateQuads(index, query, *result, qet.getVariableColumns(),
                               cancellationHandle, metadata, tracer);
 
   // "The deletion of the triples happens before the insertion." (SPARQL 1.1
   // Update 3.1.3)
-  ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
   tracer.beginTrace("deleteTriples");
   if (!toDelete.idTriples_.empty()) {
     deltaTriples.deleteTriples(cancellationHandle,
@@ -32,7 +31,6 @@ UpdateMetadata ExecuteUpdate::executeUpdate(
   }
   tracer.endTrace("deleteTriples");
   tracer.beginTrace("insertTriples");
-  timer.start();
   if (!toInsert.idTriples_.empty()) {
     deltaTriples.insertTriples(cancellationHandle,
                                std::move(toInsert.idTriples_), tracer);
@@ -226,8 +224,7 @@ ExecuteUpdate::computeGraphUpdateQuads(
   const auto& graphUpdate = updateClause.op_;
 
   // Start the timer once the where clause has been evaluated.
-  tracer.beginTrace("preparation");
-  ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
+  tracer.beginTrace("computeIds");
   const auto& vocab = index.getVocab();
   const auto& encodedIriManager = index.encodedIriManager();
 
@@ -248,12 +245,12 @@ ExecuteUpdate::computeGraphUpdateQuads(
                                std::move(updateTriples), std::move(localVocab));
       };
 
-  tracer.beginTrace("transforming");
+  tracer.beginTrace("vocabLookup");
   auto [toInsertTemplates, toInsert, localVocabInsert] =
       prepareTemplateAndResultContainer(graphUpdate.toInsert_.triples_);
   auto [toDeleteTemplates, toDelete, localVocabDelete] =
       prepareTemplateAndResultContainer(graphUpdate.toDelete_.triples_);
-  tracer.endTrace("transforming");
+  tracer.endTrace("vocabLookup");
 
   tracer.beginTrace("resultInterpolation");
   uint64_t resultSize = 0;
@@ -276,7 +273,7 @@ ExecuteUpdate::computeGraphUpdateQuads(
                                          static_cast<int64_t>(toDelete.size())};
   toDelete = setMinus(toDelete, toInsert);
   tracer.endTrace("deduplication");
-  tracer.endTrace("preparation");
+  tracer.endTrace("computeIds");
 
   return {
       IdTriplesAndLocalVocab{std::move(toInsert), std::move(localVocabInsert)},

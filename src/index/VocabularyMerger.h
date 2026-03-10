@@ -284,7 +284,7 @@ ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
  * @param els  Must be sorted(at least duplicates must be adjacent) according to
  * the strings and the Ids must be unique to work correctly.
  */
-ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec* els);
+ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els);
 
 /**
  * @brief for each of the IdTriples in <input>: map the three Ids using the

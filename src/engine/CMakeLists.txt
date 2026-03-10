@@ -16,7 +16,10 @@ add_library(engine
         CountConnectedSubgraphs.cpp SpatialJoinAlgorithms.cpp PathSearch.cpp ExecuteUpdate.cpp
         Describe.cpp GraphStoreProtocol.cpp SpatialJoinParser.cpp SpatialJoinCachedIndex.cpp
         QueryExecutionContext.cpp ExistsJoin.cpp SparqlProtocol.cpp ParsedRequestBuilder.cpp
-        NeutralOptional.cpp Load.cpp StripColumns.cpp NamedResultCache.cpp ExplicitIdTableOperation.cpp BinaryExport.cpp StringMapping.cpp)
+        NeutralOptional.cpp Load.cpp StripColumns.cpp NamedResultCache.cpp
+        ExplicitIdTableOperation.cpp StringMapping.cpp MaterializedViews.cpp
+        PermutationSelector.cpp ConstructQueryEvaluator.cpp ConstructTripleGenerator.cpp ConstructTemplatePreprocessor.cpp
+        MaterializedViewsQueryAnalysis.cpp BinaryExport.cpp StringMapping.cpp)
 
 qlever_target_link_libraries(engine util index parser global sparqlExpressions SortPerformanceEstimator Boost::iostreams s2 spatialjoin-dev pb_util pb_util_geo)
 #TODO<joka921> Probably the binary export is currently a C++20-only feature.

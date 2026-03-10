@@ -9,6 +9,7 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/shift.h"
+#include "global/Constants.h"
 #include "rdfTypes/RdfEscaping.h"
 #include "util/Exception.h"
 #include "util/OverloadCallOperator.h"
@@ -124,14 +125,17 @@ void Literal::addLanguageTag(std::string_view languageTag) {
 // __________________________________________
 void Literal::addDatatype(const Iri& datatype) {
   AD_CORRECTNESS_CHECK(!hasDatatype() && !hasLanguageTag());
-  absl::StrAppend(&content_, "^^"sv, datatype.toStringRepresentation());
+  // Trim the default string datatype.
+  if (asStringViewUnsafe(datatype.getContent()) != XSD_STRING) {
+    absl::StrAppend(&content_, "^^"sv, datatype.toStringRepresentation());
+  }
 }
 
 // __________________________________________
-const std::string& Literal::toStringRepresentation() const { return content_; }
+const std::string& Literal::toStringRepresentation() const& { return content_; }
 
 // __________________________________________
-std::string& Literal::toStringRepresentation() { return content_; }
+std::string Literal::toStringRepresentation() && { return std::move(content_); }
 
 // __________________________________________
 Literal Literal::fromStringRepresentation(std::string internal) {
@@ -140,7 +144,15 @@ Literal Literal::fromStringRepresentation(std::string internal) {
   AD_CORRECTNESS_CHECK(ql::starts_with(internal, '"'));
   auto endIdx = internal.rfind('"');
   AD_CORRECTNESS_CHECK(endIdx > 0);
-  return Literal{std::move(internal), endIdx + 1};
+  Literal literal{std::move(internal), endIdx + 1};
+  // Remove redundant `XSD_STRING` datatype. If vocabularies normalize strings
+  // like this in the future, this could get replaced by an assertion if all the
+  // other callers are updated accordingly.
+  if (literal.hasDatatype() &&
+      asStringViewUnsafe(literal.getDatatype()) == XSD_STRING) {
+    literal.removeDatatypeOrLanguageTag();
+  }
+  return literal;
 }
 
 // __________________________________________

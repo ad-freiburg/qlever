@@ -10,23 +10,10 @@
 
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
-#include "engine/BinaryExport.h"
 #include "engine/StringMapping.h"
 #include "global/Id.h"
 
 using namespace qlever::binary_export;
-
-// _____________________________________________________________________________
-TEST(BinaryExport, toExportableIdTrivial) {
-  Id intId = Id::makeFromInt(42);
-  LocalVocab localVocab;
-  StringMapping mapping;
-
-  Id result = toExportableId(intId, localVocab, mapping);
-
-  EXPECT_EQ(result, intId);
-  EXPECT_TRUE(mapping.stringMapping_.empty());
-}
 
 // _____________________________________________________________________________
 TEST(StringMapping, remapId) {
@@ -64,32 +51,43 @@ TEST(StringMapping, remapId) {
   binaryEq(mapping.remapId(id1), toMappedId(0));
   binaryEq(mapping.remapId(id5), toMappedId(0));
 
-  EXPECT_THAT(mapping.stringMapping_,
+  EXPECT_THAT(mapping.stringMappingForTesting(),
               ::testing::UnorderedElementsAre(
                   ::testing::Pair(id1, 0), ::testing::Pair(id2, 1),
                   ::testing::Pair(id3, 2), ::testing::Pair(id4, 3)));
+
+  EXPECT_EQ(mapping.size(), 4);
 }
 
 // _____________________________________________________________________________
-TEST(StringMapping, needsFlush) {
+TEST(StringMapping, flush) {
+  ad_utility::testing::TestIndexConfig config;
+  config.turtleInput =
+      "<a> <b> \"The quick brown fox jumps over the lazy dog\" .";
+  config.createTextIndex = true;
+  auto* qec = ad_utility::testing::getQec(std::move(config));
   StringMapping mapping;
 
-  // Initially should not need flush
-  EXPECT_FALSE(mapping.needsFlush());
+  LocalVocabEntry testWord{
+      ad_utility::triple_component::Literal::fromStringRepresentation(
+          "\"abc\"")};
+  Id id0 = Id::makeFromVocabIndex(VocabIndex::make(1));
+  Id id1 = Id::makeFromVocabIndex(VocabIndex::make(2));
+  Id id2 = Id::makeFromLocalVocabIndex(&testWord);
+  Id id3 = Id::makeFromTextRecordIndex(TextRecordIndex::make(0));
+  Id id4 = Id::makeFromWordVocabIndex(WordVocabIndex::make(0));
 
-  // Add enough rows to trigger flush (needs at least one mapping entry)
-  mapping.stringMapping_[Id::makeFromInt(1)] = 0;
-  for (size_t i = 0; i < 100'000; ++i) {
-    mapping.nextRow();
-  }
+  EXPECT_EQ(mapping.remapId(id0).getDatatype(), Datatype::LocalVocabIndex);
+  EXPECT_EQ(mapping.remapId(id1).getDatatype(), Datatype::LocalVocabIndex);
+  // Ensure repetitions don't mess stuff up.
+  EXPECT_EQ(mapping.remapId(id0).getDatatype(), Datatype::LocalVocabIndex);
+  EXPECT_EQ(mapping.remapId(id2).getDatatype(), Datatype::LocalVocabIndex);
+  EXPECT_EQ(mapping.remapId(id3).getDatatype(), Datatype::LocalVocabIndex);
+  EXPECT_EQ(mapping.remapId(id4).getDatatype(), Datatype::LocalVocabIndex);
+  // Another repetition.
+  EXPECT_EQ(mapping.remapId(id0).getDatatype(), Datatype::LocalVocabIndex);
 
-  EXPECT_TRUE(mapping.needsFlush());
-
-  // Test size-based flush
-  StringMapping mapping2;
-  for (size_t i = 0; i < 10'000; ++i) {
-    mapping2.stringMapping_[Id::makeFromInt(i)] = i;
-  }
-
-  EXPECT_TRUE(mapping2.needsFlush());
+  EXPECT_THAT(
+      mapping.flush(qec->getIndex()),
+      ::testing::ElementsAre("<a>", "<b>", "\"abc\"", "\"\"", "\"brown\""));
 }

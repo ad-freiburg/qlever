@@ -773,6 +773,29 @@ class IdTable {
         });
   }
 
+  // Add the rows with the specified `indices` from the `table` at the end of
+  // this IdTable. The order of the inserted rows is the same as in `indices`.
+  // The `table` must be some kind of `IdTable`.
+  template <typename Table>
+  void insertSubsetAtEnd(const Table& table,
+                         const std::vector<size_t>& indices) {
+    AD_CORRECTNESS_CHECK(table.numColumns() == numColumns());
+    const size_t numInserted = indices.size();
+    if (numInserted == 0) return;
+
+    AD_EXPENSIVE_CHECK(ql::ranges::all_of(
+        indices, [&table](size_t idx) { return idx < table.size(); }));
+    const size_t oldSize = size();
+    resize(numRows() + numInserted);
+    // For each column, copy the requested rows into the reserved tail.
+    for (auto&& [destination, source] :
+         ::ranges::views::zip(ad_utility::allView(getColumns()),
+                              ad_utility::allView(table.getColumns()))) {
+      ql::ranges::transform(indices, destination.begin() + oldSize,
+                            [&source](size_t idx) { return source[idx]; });
+    }
+  }
+
   // Check whether two `IdTables` have the same content. Mostly used for unit
   // testing.
   CPP_template(typename = void)(requires(!isView)) bool operator==(

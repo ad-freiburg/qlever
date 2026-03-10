@@ -6,6 +6,7 @@
 #include "engine/QueryExecutionContext.h"
 
 #include "global/RuntimeParameters.h"
+#include "util/Exception.h"
 
 using namespace std::chrono_literals;
 
@@ -25,8 +26,9 @@ QueryExecutionContext::QueryExecutionContext(
     ad_utility::AllocatorWithLimit<Id> allocator,
     SortPerformanceEstimator sortPerformanceEstimator,
     NamedResultCache* namedResultCache,
+    MaterializedViewsManager* materializedViewsManager,
     std::function<void(std::string)> updateCallback, const bool pinSubtrees,
-    const bool pinResult)
+    const bool pinResult, const DisableCaching disableCaching)
     : _pinSubtrees(pinSubtrees),
       _pinResult(pinResult),
       _index(index),
@@ -34,15 +36,41 @@ QueryExecutionContext::QueryExecutionContext(
       _allocator(std::move(allocator)),
       _sortPerformanceEstimator(sortPerformanceEstimator),
       updateCallback_(std::move(updateCallback)),
-      namedResultCache_(namedResultCache) {}
+      namedResultCache_(namedResultCache),
+      materializedViewsManager_(materializedViewsManager) {
+  disableCaching_ = [disableCaching]() {
+    if (disableCaching == DisableCaching::True) {
+      return true;
+    } else if (disableCaching == DisableCaching::False) {
+      return false;
+    } else {
+      AD_CORRECTNESS_CHECK(disableCaching ==
+                           DisableCaching::FromRuntimeParameter);
+      return getRuntimeParameter<&RuntimeParameters::disableCaching_>();
+    }
+  }();
+  AD_CORRECTNESS_CHECK(cache != nullptr);
+  AD_CORRECTNESS_CHECK(namedResultCache != nullptr);
+  AD_CORRECTNESS_CHECK(materializedViewsManager != nullptr);
+}
 
 // _____________________________________________________________________________
 void QueryExecutionContext::signalQueryUpdate(
     const RuntimeInformation& runtimeInformation,
     RuntimeInformation::SendPriority sendPriority) const {
   auto now = std::chrono::steady_clock::now();
+
+  auto enoughTimeSinceLastUpdate = [this, &now]() {
+    // note: the involved numbers are all signed, and `now` is initialized to
+    // `time_point::min()`, so we can't use `now - lastWebsocketUpdate_` (which
+    // would be more intuitive), because it would overflow in the first step.
+    // The current code only overflows if we are near the end of (representable)
+    // time.
+    return (lastWebsocketUpdate_ + websocketUpdateInterval()) <= now;
+  };
+
   if (sendPriority == RuntimeInformation::SendPriority::Always ||
-      (now - lastWebsocketUpdate_) >= websocketUpdateInterval_) {
+      enoughTimeSinceLastUpdate()) {
     lastWebsocketUpdate_ = now;
     updateCallback_(nlohmann::ordered_json(runtimeInformation).dump());
   }

@@ -13,8 +13,10 @@
 
 #include "backports/atomic_flag.h"
 #include "backports/keywords.h"
+#include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
+#include "util/ResetWhenMoved.h"
 
 namespace ad_utility {
 
@@ -245,7 +247,7 @@ template <class S, bool isSharedLock, bool isConst>
 class LockPtr {
   using value_type = typename S::value_type;
   // either store a Pointer or a Pointer to const
-  using ptr_type = std::conditional_t<isConst, const S* const, S* const>;
+  using ptr_type = std::conditional_t<isConst, const S*, S*>;
 
  private:
   // construction is private and only allowed by the Synchronized class
@@ -253,49 +255,68 @@ class LockPtr {
   friend class Synchronized;
 
   // store a pointer to the parent object and immediately lock it.
-  explicit LockPtr(ptr_type s) : s_(s) {
+  explicit LockPtr(ptr_type synchronizedPtr) : s_(synchronizedPtr) {
+    AD_CORRECTNESS_CHECK(s_ != nullptr);
     static_assert(isConst ||
                   !isSharedLock);  // if we only have a shared lock, we may only
                                    // perform const operations
     if constexpr (isSharedLock) {
-      s_->mutex().lock_shared();
+      s().mutex().lock_shared();
     } else {
-      s_->mutex().lock();
+      s().mutex().lock();
     }
   }
 
  public:
   // destructor releases the lock
   ~LockPtr() {
+    if (!s_) return;
     if constexpr (isSharedLock) {
-      s_->mutex().unlock_shared();
+      s().mutex().unlock_shared();
     } else {
-      s_->mutex().unlock();
+      s().mutex().unlock();
     }
   }
 
   /// Access to underlying data. Non const access is only allowed for exclusive
   /// locks that are not const.
-  template <bool s = isConst>
-  std::enable_if_t<!s, value_type&> operator*() {
-    return s_->data_;
+  template <bool isConstLocal = isConst>
+  std::enable_if_t<!isConstLocal, value_type&> operator*() {
+    return s().data_;
   }
 
   /// Access to underlying data.
-  const value_type& operator*() const { return s_->data_; }
+  const value_type& operator*() const { return s().data_; }
 
   /// Access to underlying data. Non const access is only allowed for exclusive
   /// locks that are not const.
-  template <bool s = isConst>
-  std::enable_if_t<!s, value_type*> operator->() {
-    return &s_->data_;
+  template <bool isConstLocal = isConst>
+  std::enable_if_t<!isConstLocal, value_type*> operator->() {
+    return &s().data_;
   }
 
   /// Access to underlying data.
-  const value_type* operator->() const { return &s_->data_; }
+  const value_type* operator->() const { return &s().data_; }
+
+  LockPtr(const LockPtr&) = delete;
+  LockPtr& operator=(const LockPtr&) = delete;
+  // The combination of `ResetWhenMoved` (the `s_` of a moved-from `LockPtr`
+  // will be `nullptr`), and the logic in the destructor (`only unlock, if the
+  // pointer is not null`), lead to valid move semantics.
+  LockPtr(LockPtr&&) = default;
+  LockPtr& operator=(LockPtr&&) = default;
 
  private:
-  ptr_type s_;
+  // Accessor functions for the `Synchronized` object that is managed.
+  const auto& s() const {
+    AD_CORRECTNESS_CHECK(s_ != nullptr);
+    return *s_;
+  }
+  auto& s() {
+    AD_CORRECTNESS_CHECK(s_ != nullptr);
+    return *s_;
+  }
+  ad_utility::ResetWhenMoved<ptr_type, nullptr> s_;
 };
 
 }  // namespace ad_utility

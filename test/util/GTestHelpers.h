@@ -91,6 +91,19 @@ https://github.com/google/googletest/blob/main/docs/reference/matchers.md#matche
 }
 
 // _____________________________________________________________________________
+// Some tests require a certain log level, e.g. but not only because they
+// capture log output and make assertions about it. This macro can be used to
+// skip such tests if the log level is too low.
+#define SKIP_IF_LOGLEVEL_IS_LOWER(level)                        \
+  if (LOGLEVEL < level) {                                       \
+    GTEST_SKIP() << "This test requires log level of at least " \
+                 << ad_utility::Log::getLevel<level>()          \
+                 << ", but the current log level is "           \
+                 << ad_utility::Log::getLevel<LOGLEVEL>();      \
+  }                                                             \
+  ASSERT_GE(LOGLEVEL, level);
+
+// _____________________________________________________________________________
 
 // Helper matcher that allows to use matchers for strings that represent json
 // objects.
@@ -209,6 +222,24 @@ auto liftMatcherToElementsAreArray(MakeMatcher makeMatcher) {
                               makeMatcher);
         return ::testing::ElementsAreArray(childMatchers);
       };
+}
+
+// Matcher that takes a range of arguments, applies the `func` to them, and
+// asserts, that the results are all unique. Is currently implemented using a
+// linear find, s.t. we don't require hashing support for the projection result,
+// but therefore has a quadratic runtime.
+MATCHER_P(AllUniqueBy, func, "has all unique values under projection") {
+  std::vector<decltype(func(*arg.begin()))> seen;
+  for (const auto& item : arg) {
+    auto val = func(item);
+    if (std::find(seen.begin(), seen.end(), val) != seen.end()) {
+      *result_listener << "duplicate value found: "
+                       << ::testing::PrintToString(val);
+      return false;
+    }
+    seen.push_back(std::move(val));
+  }
+  return true;
 }
 
 #endif  // QLEVER_TEST_UTIL_GTESTHELPERS_H

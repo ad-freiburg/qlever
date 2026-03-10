@@ -9,6 +9,7 @@
 #include <gtest/gtest.h>
 
 #include "backports/span.h"
+#include "util/GTestHelpers.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Random.h"
 #include "util/Serializer/ByteBufferSerializer.h"
@@ -79,13 +80,23 @@ class C {
 };
 
 // D is not serializable
-struct D {};
+struct D {
+  int z = 43;
+};
 
 struct E {
   D d;
   AD_SERIALIZE_FRIEND_FUNCTION(E) {
     // Ill-formed, because `D` has no `serialize()` function.
     serializer | arg.d;
+  }
+};
+struct EFixed {
+  D d;
+  AD_SERIALIZE_FRIEND_FUNCTION(EFixed) {
+    // Well formed, because `d` has no serialization form, but is trivially
+    // copyable, so we can explicitly use the `triviallySerialize` function.
+    triviallySerialize(serializer, arg.d);
   }
 };
 
@@ -144,6 +155,7 @@ TEST(Serializer, Serializability) {
   using testNamespaceA::C;
   using testNamespaceA::D;
   using testNamespaceA::E;
+  using testNamespaceA::EFixed;
   using testNamespaceA::F;
   using testNamespaceA::G;
   static_assert(isReadSerializable<A>);
@@ -185,21 +197,30 @@ TEST(Serializer, Serializability) {
 // A simple example that demonstrates the use of the serializers.
 TEST(Serializer, SimpleExample) {
   using testNamespaceA::A;
+  using testNamespaceA::EFixed;
   std::string filename = "Serializer.SimpleExample.dat";
   {
     A a{42, -5};
+    // Also test the `EFixed` struct which uses the `triviallySerialize`
+    // function.
+    EFixed e{10293};
+
     serialization::FileWriteSerializer writer{filename};
     writer << a;  // `writer | a` or `serialize(writer, a)` are equivalent;
+    writer << e;
   }
   {
     // `a` has been written to the file, the file has been closed, reopen it and
     // read.
     A a{};  // Uninitialized, we will read into it;
+    EFixed e{};
     serialization::FileReadSerializer reader{filename};
     reader >> a;
+    reader >> e;
     // We have successfully restored the values.
     ASSERT_EQ(a.a, 42);
     ASSERT_EQ(a.b, -5);
+    EXPECT_EQ(e.d.z, 10293);
   }
   ad_utility::deleteFile(filename);
 }
@@ -613,6 +634,53 @@ TEST(VectorIncrementalSerializer, SerializeInTheMiddle) {
 }
 
 // _____________________________________________________________________________
+TEST(Serializer, serializeSpan) {
+  std::vector ints{3, 4, 5, 6};
+  std::vector<std::string> strings{"eins", "zwei", "drei", "vier"};
+  auto intSpan = ql::span{ints}.subspan(1, 2);
+  auto stringSpan = ql::span{strings}.subspan(2, 2);
+  ByteBufferWriteSerializer writer;
+  writer | intSpan;
+  writer | stringSpan;
+  writer | stringSpan;
+  writer | stringSpan;
+  writer | stringSpan;
+
+  auto buffer = std::move(writer).data();
+  ByteBufferReadSerializer reader(buffer);
+  {
+    std::vector<int> intResult;
+    intResult.resize(2);
+    // Read into a span of the correct size, trivially serializable
+    // `value_type`.
+    reader | ql::span{intResult};
+    EXPECT_THAT(intResult, ::testing::ElementsAre(4, 5));
+  }
+
+  {
+    std::vector<std::string> stringResult;
+    stringResult.resize(2);
+    // Read into a span of the correct size, nontrivially serializable
+    // `value_type`.
+    reader | ql::span{stringResult};
+    EXPECT_THAT(stringResult, ::testing::ElementsAre("drei", "vier"));
+  }
+
+  std::vector<std::string> stringsWithWrongSize;
+  // Deserialize into a `span` that doesn't have the correct size. This throws
+  // an exception and skips the span.
+  AD_EXPECT_THROW_WITH_MESSAGE(reader | ql::span{stringsWithWrongSize},
+                               ::testing::HasSubstr("must be properly sized"));
+  {
+    // The writing was done via a `span`, but we now read into a `vector`.
+    // This works even if the vector is not resized in advance, because the
+    // vector deserialization will do the resize.
+    EXPECT_NO_THROW(reader | stringsWithWrongSize);
+    EXPECT_THAT(stringsWithWrongSize, ::testing::ElementsAre("drei", "vier"));
+  }
+}
+
+// _____________________________________________________________________________
 TEST(Serializer, serializeOptional) {
   std::optional<std::string> s = "hallo";
   std::optional<std::string> nil = std::nullopt;
@@ -626,6 +694,25 @@ TEST(Serializer, serializeOptional) {
   reader >> nilExpected;
   EXPECT_THAT(sExpected, ::testing::Optional(std::string("hallo")));
   EXPECT_EQ(nilExpected, std::nullopt);
+}
+
+// _____________________________________________________________________________
+TEST(Serializer, serializeEnum) {
+  // Enums are implicitly serializable without any additional code.
+  enum E { a, b, c };
+  enum struct F { d, e, f };
+
+  ByteBufferWriteSerializer writer;
+  writer << b;
+  writer << F::f;
+
+  ByteBufferReadSerializer reader(std::move(writer).data());
+  E e;
+  F f;
+  reader | e;
+  reader | f;
+  EXPECT_EQ(e, E::b);
+  EXPECT_EQ(f, F::f);
 }
 
 // _____________________________________________________________________________

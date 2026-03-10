@@ -376,6 +376,35 @@ TEST(IdTable, insertAtEnd) {
   runTestForDifferentTypes<3>(runTestForIdTable, "idTableTest.insertAtEnd");
 }
 
+TEST(IdTable, insertSubsetAtEnd) {
+  auto runTestForIdTable = [](auto t, auto make, auto... additionalArgs) {
+    using Table = typename decltype(t)::type;
+
+    Table src{3, std::move(additionalArgs.at(0))...};
+    src.push_back({make(10), make(11), make(12)});
+    src.push_back({make(20), make(21), make(22)});
+    src.push_back({make(30), make(31), make(32)});
+
+    Table dst{3, std::move(additionalArgs.at(1))...};
+    dst.push_back({make(1), make(2), make(3)});
+
+    // insert indices 2 and 0 (order-preserving)
+    std::vector<size_t> indices{2, 0};
+    dst.insertSubsetAtEnd(src, indices);
+
+    // expected rows: original dst row, then src row 2, then src row 0
+    ASSERT_EQ(dst.size(), 3u);
+    EXPECT_EQ(dst[0][0], make(1));
+    EXPECT_EQ(dst[0][1], make(2));
+    EXPECT_EQ(dst[1][0], make(30));
+    EXPECT_EQ(dst[2][0], make(10));
+    EXPECT_EQ(dst[1][1], make(31));
+    EXPECT_EQ(dst[2][1], make(11));
+  };
+  runTestForDifferentTypes<2>(runTestForIdTable,
+                              "idTableTest.insertSubsetAtEnd");
+}
+
 // _____________________________________________________________________________
 TEST(IdTable, insertAtEndWithPermutationAndLimit) {
   // A lambda that is used as the `testCase` argument to the

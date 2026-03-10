@@ -59,7 +59,6 @@ int main(int argc, char** argv) {
     std::cerr << "Executing the query failed: " << e.what() << std::endl;
     return 1;
   }
-  std::cout.imbue(std::locale(""));
   std::cout << "Query executed in " << timer.msecs().count() << "ms"
             << std::endl;
   std::cout << std::endl;

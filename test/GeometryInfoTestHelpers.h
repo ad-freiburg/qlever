@@ -356,6 +356,13 @@ inline auto parseResultNear = liftOptionalMatcher<ParseResult>(
       return Pair(Eq(expected.first), parsedWktNear(expected.second));
     });
 
+// ____________________________________________________________________________
+struct ExpectedGeometryN {
+  size_t n_;
+  std::string wkt_;
+  std::optional<ParsedWkt> expected_;
+};
+
 };  // namespace geoInfoTestHelpers
 
 #endif  // QLEVER_TEST_GEOMETRYINFOTESTHELPERS_H

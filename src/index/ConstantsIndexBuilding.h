@@ -62,10 +62,6 @@ constexpr inline std::string_view PARTIAL_VOCAB_WORDS_INFIX =
 constexpr inline std::string_view PARTIAL_VOCAB_IDMAP_INFIX =
     ".partial-vocab.idmap.tmp.";
 
-// ________________________________________________________________
-constexpr inline std::string_view TMP_BASENAME_COMPRESSION =
-    ".tmp.for-prefix-compression";
-
 // _________________________________________________________________
 constexpr inline std::string_view QLEVER_INTERNAL_INDEX_INFIX = ".internal";
 

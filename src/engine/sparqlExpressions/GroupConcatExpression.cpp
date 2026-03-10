@@ -6,8 +6,6 @@
 
 #include <absl/strings/str_cat.h>
 
-#include "engine/sparqlExpressions/GroupConcatHelper.h"
-
 // __________________________________________________________________________
 sparqlExpression::GroupConcatExpression::GroupConcatExpression(
     bool distinct, Ptr&& child, std::string separator)
@@ -26,9 +24,8 @@ sparqlExpression::GroupConcatExpression::evaluate(
           requires SingleExpressionResult<decltype(el)>) {
     bool undefined = false;
     std::string result;
-    std::optional<std::string> langTag;
-    auto groupConcatImpl = [this, &result, context, &undefined,
-                            &langTag](auto generator) {
+    auto groupConcatImpl = [this, &result, context,
+                            &undefined](auto generator) {
       // TODO<joka921> Make this a configurable constant.
       result.reserve(20000);
       bool firstIteration = true;
@@ -37,13 +34,11 @@ sparqlExpression::GroupConcatExpression::evaluate(
             std::move(inp), context);
         if (firstIteration) {
           firstIteration = false;
-          detail::pushLanguageTag(langTag, literal);
         } else {
           result.append(separator_);
         }
         if (literal.has_value()) {
           result.append(asStringViewUnsafe(literal.value().getContent()));
-          detail::mergeLanguageTags(langTag, literal.value());
         } else {
           undefined = true;
           return;
@@ -63,9 +58,9 @@ sparqlExpression::GroupConcatExpression::evaluate(
     if (undefined) {
       return Id::makeUndefined();
     }
-    result.shrink_to_fit();
-    return IdOrLiteralOrIri{
-        detail::stringWithOptionalLangTagToLiteral(result, std::move(langTag))};
+    return IdOrLiteralOrIri{ad_utility::triple_component::LiteralOrIri{
+        ad_utility::triple_component::Literal::literalWithNormalizedContent(
+            asNormalizedStringViewUnsafe(result))}};
   };
 
   auto childRes = child_->evaluate(context);

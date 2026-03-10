@@ -32,6 +32,7 @@
 #include "util/GeoConverters.h"
 #include "util/Log.h"
 #include "util/TypeTraits.h"
+#include "util/Views.h"
 
 // This file contains functions used for parsing and processing WKT geometries
 // using `pb_util`. To avoid unnecessarily compiling expensive modules, this
@@ -46,7 +47,7 @@ using ParsedWkt =
                  MultiPoint<CoordType>, MultiLine<CoordType>,
                  MultiPolygon<CoordType>, Collection<CoordType>>;
 using ParseResult = std::pair<WKTType, std::optional<ParsedWkt>>;
-using DAnyGeometry = util::geo::AnyGeometry<CoordType>;
+using DAnyGeometry = AnyGeometry<CoordType>;
 
 template <typename T>
 CPP_concept WktSingleGeometryType =
@@ -58,6 +59,8 @@ CPP_concept WktCollectionType =
               MultiPolygon<CoordType>, Collection<CoordType>>;
 
 static_assert(!std::is_same_v<Line<CoordType>, MultiPoint<CoordType>>);
+static_assert(!isVector<Line<CoordType>>);
+static_assert(isVector<Collection<CoordType>>);
 
 // Removes the datatype and quotation marks from a given literal
 inline std::string removeDatatype(const std::string_view& wkt) {
@@ -72,7 +75,7 @@ inline std::string addDatatype(const std::string_view wkt) {
   auto dt = ad_utility::triple_component::Iri::fromIrirefWithoutBrackets(
       GEO_WKT_LITERAL);
   lit.addDatatype(dt);
-  return std::move(lit.toStringRepresentation());
+  return std::move(lit).toStringRepresentation();
 }
 
 // Tries to extract the geometry type and parse the geometry given by a WKT
@@ -243,19 +246,16 @@ inline std::optional<std::string_view> wktTypeToIri(uint8_t type) {
 
 // Reverse projection applied by `sj::WKTParser`: convert coordinates from web
 // mercator int32 to normal lat-long double coordinates.
-inline util::geo::DPoint projectInt32WebMercToDoubleLatLng(
-    const util::geo::I32Point& p) {
-  return util::geo::webMercToLatLng<double>(
-      static_cast<double>(p.getX()) / PREC,
-      static_cast<double>(p.getY()) / PREC);
-};
+inline DPoint projectInt32WebMercToDoubleLatLng(const I32Point& p) {
+  return webMercToLatLng<double>(static_cast<double>(p.getX()) / PREC,
+                                 static_cast<double>(p.getY()) / PREC);
+}
 
 // Same as above, but for a bounding box.
-inline util::geo::DBox projectInt32WebMercToDoubleLatLng(
-    const util::geo::I32Box& box) {
+inline DBox projectInt32WebMercToDoubleLatLng(const I32Box& box) {
   return {projectInt32WebMercToDoubleLatLng(box.getLowerLeft()),
           projectInt32WebMercToDoubleLatLng(box.getUpperRight())};
-};
+}
 
 // Counts the number of geometries in a geometry collection.
 inline uint32_t countChildGeometries(const ParsedWkt& geom) {
@@ -339,7 +339,9 @@ struct MetricLengthVisitor {
     static_assert(ad_utility::similarToInstantiation<T, std::vector>);
 
     return ::ranges::accumulate(
-        ::ranges::transform_view(multiGeom, MetricLengthVisitor{}), 0);
+        ::ranges::transform_view(ad_utility::allView(multiGeom),
+                                 MetricLengthVisitor{}),
+        0);
   }
 
   // Compute the length for the custom container type `AnyGeometry` from
@@ -492,6 +494,186 @@ struct UtilGeomToWktVisitor {
 };
 
 static constexpr UtilGeomToWktVisitor utilGeomToWkt;
+
+// Helper to extract the n-th geometry from a parsed `pb_util` geometry. Note
+// that this is 1-indexed and non-collection types return themselves at index 1.
+struct GeometryNVisitor {
+  // Visitor for collection types.
+  CPP_template(typename T)(
+      requires WktCollectionType<T>) std::optional<ParsedWkt>
+  operator()(const T& geom, int64_t n) const {
+    // Index range check.
+    if (n < 1 || n - 1 >= static_cast<int64_t>(geom.size())) {
+      return std::nullopt;
+    }
+    // If the geometry type is a collection (thus holds `AnyGeometry`
+    // containers), strip the `AnyGeometry` container and convert it to a
+    // `ParsedWkt` variant.
+    if constexpr (std::is_same_v<T, DCollection>) {
+      return visitAnyGeometry(
+          [](auto& contained) { return ParsedWkt{std::move(contained)}; },
+          geom.at(n - 1));
+    } else {
+      return geom.at(n - 1);
+    }
+  }
+
+  // Visitor for single geometry types.
+  CPP_template(typename T)(
+      requires WktSingleGeometryType<T>) std::optional<ParsedWkt>
+  operator()(const T& geom, int64_t n) const {
+    // For non collection types, only index 1 is defined and returns the
+    // geometry itself.
+    if (n == 1) {
+      return geom;
+    }
+    return std::nullopt;
+  }
+
+  // Visitor for `ParsedWkt` variant.
+  std::optional<ParsedWkt> operator()(const ParsedWkt& geom, int64_t n) const {
+    return std::visit(
+        [n](const auto& contained) { return GeometryNVisitor{}(contained, n); },
+        geom);
+  }
+
+  // Visitor for `std::optional`.
+  template <typename T>
+  std::optional<ParsedWkt> operator()(const std::optional<T>& geom,
+                                      int64_t n) const {
+    if (!geom.has_value()) {
+      return std::nullopt;
+    }
+    return GeometryNVisitor{}(geom.value(), n);
+  }
+
+  // Visitor for `GeoPointOrWkt`.
+  std::optional<ParsedWkt> operator()(const GeoPointOrWkt& geom,
+                                      int64_t n) const {
+    auto [type, parsed] = parseGeoPointOrWkt(geom);
+    return GeometryNVisitor{}(parsed, n);
+  }
+};
+
+static constexpr GeometryNVisitor getGeometryN;
+
+// Implements the web mercator projection for points. Use together via
+// `ProjectionVisitor<WebMercatorProjection>` for other geometry types.
+struct WebMercatorProjection {
+  DPoint operator()(const DPoint& p) const { return latLngToWebMerc(p); }
+};
+
+// Concept to generically model a projection function (that is, point to point
+// mapping). Used for the `UtilGeomProjectionVisitor` below.
+template <typename T>
+CPP_concept IsProjectionFunction =
+    InvocableWithExactReturnType<T, DPoint, const DPoint&>;
+static_assert(IsProjectionFunction<WebMercatorProjection>);
+
+// Helper for `UtilGeomProjectionVisitor`.
+template <typename T>
+CPP_concept VectorBasedGeometry = isVector<T> || SimilarTo<T, DLine>;
+
+// Helper to translate the coordinates of a given geometry to another projection
+// (the projection is applied to each coordinate pair).
+CPP_template(typename Projection)(
+    requires IsProjectionFunction<Projection>) struct UtilGeomProjectionVisitor
+    : Projection {
+  // Inherit the transformation of points.
+  using Projection::operator();
+
+  // Transform collections (might be called recursively, for example for points
+  // in a `MultiLine`).
+  CPP_template_2(typename T)(requires VectorBasedGeometry<T>) T operator()(
+      T multi) const {
+    ql::ranges::transform(multi, multi.begin(), *this);
+    return multi;
+  };
+
+  // Polygons require special treatment for inner (~ a line) and outer
+  // boundaries (~ a multi line).
+  DPolygon operator()(DPolygon poly) const {
+    return {(*this)(std::move(poly.getOuter())),
+            (*this)(std::move(poly.getInners()))};
+  }
+
+  // Unwrap dynamic `AnyGeometry` container type.
+  DAnyGeometry operator()(DAnyGeometry anyGeom) const {
+    return visitAnyGeometry(
+        [this](auto&& contained) {
+          // TODO<ullingerc> `AnyGeometry` should allow moving out its contained
+          // value. Then this can be:
+          // `static_assert(std::is_rvalue_reference_v<decltype(contained)>);`
+          return DAnyGeometry{(*this)(AD_FWD(contained))};
+        },
+        std::move(anyGeom));
+  }
+
+  // Handle `ParsedWkt` variant.
+  ParsedWkt operator()(ParsedWkt geom) const {
+    return std::visit(
+        [this](auto&& contained) {
+          static_assert(std::is_rvalue_reference_v<decltype(contained)>);
+          return ParsedWkt{(*this)(AD_FWD(contained))};
+        },
+        std::move(geom));
+  }
+
+  // Handle values contained in `std::optional`.
+  CPP_template_2(typename T)(
+      requires(!SimilarTo<T, GeoPointOrWkt>)) std::optional<T>
+  operator()(std::optional<T> opt) const {
+    if (!opt.has_value()) {
+      return std::nullopt;
+    }
+    return (*this)(std::move(opt.value()));
+  }
+
+  // Handle `GeoPointOrWkt` (raw unparsed geometry).
+  ParseResult operator()(std::optional<GeoPointOrWkt> geoPointOrWkt) const {
+    auto [type, parsed] = ParseGeoPointOrWktVisitor{}(geoPointOrWkt);
+    return {type, (*this)(std::move(parsed))};
+  }
+};
+
+// Instantiation for projection to web mercator of the various supported
+// geometry types.
+static constexpr UtilGeomProjectionVisitor<WebMercatorProjection>
+    projectWebMerc;
+
+// Helper for `MetricDistanceVisitor`.
+template <typename T, typename U>
+CPP_concept IsPairOfUtilGeoms =
+    SimilarToAnyTypeIn<T, ParsedWkt> && SimilarToAnyTypeIn<U, ParsedWkt>;
+
+// Visitor to compute the distance in meters given a geometry that has been
+// converted to web mercator projection.
+struct MetricDistanceVisitor {
+  // Handle `ParsedWkt` variant.
+  double operator()(const ParsedWkt& a, const ParsedWkt& b) const {
+    return std::visit(MetricDistanceVisitor{}, a, b);
+  }
+
+  // Delegate the actual distance computation to `pb_util`.
+  CPP_template(typename T, typename U)(requires IsPairOfUtilGeoms<T, U>) double
+  operator()(const T& a, const U& b) const {
+    return webMercMeterDist<T, U>(a, b);
+  }
+
+  // Handle optional geometries that may be contained in a `ParseResult`.
+  std::optional<double> operator()(const ParseResult& a,
+                                   const ParseResult& b) const {
+    if (!a.second.has_value() || !b.second.has_value()) {
+      return std::nullopt;
+    }
+    return MetricDistanceVisitor{}(a.second.value(), b.second.value());
+  }
+};
+
+// Compute the metric distance between any combination of supported geometry
+// types. Note that the coordinate pairs of the geometry must first be projected
+// to web mercator, e.g. using `projectWebMerc` above.
+constexpr MetricDistanceVisitor computeMetricDistance;
 
 }  // namespace ad_utility::detail
 
