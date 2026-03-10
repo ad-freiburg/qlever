@@ -695,5 +695,6 @@ template struct TypeErasedValueGetter<StringOrDateGetter>;
 template struct TypeErasedValueGetter<IntValueGetter>;
 template struct TypeErasedValueGetter<RegexValueGetter>;
 template struct TypeErasedValueGetter<AlwaysTrueValueGetter>;
+template struct TypeErasedValueGetter<NumericOrDateValueGetter>;
 
 }  // namespace sparqlExpression::detail
