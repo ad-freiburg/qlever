@@ -31,8 +31,11 @@ class GraphNamespaceManager {
   GraphNamespaceManager() = default;
   GraphNamespaceManager(std::string prefix, uint64_t allocatedGraphs);
 
+  // Returns a new graph IRI with the prefix that is not used.
   ad_utility::triple_component::Iri allocateNewGraph();
 
+  // Enable persisting the state to disk and read the previously
+  // persisted state from disk.
   void setFilenameForPersistentUpdatesAndReadFromDisk(
       std::optional<std::string> filename);
 
