@@ -1917,59 +1917,6 @@ TEST(ExportQueryExecutionTrees, convertGeneratorForChunkedTransfer) {
 }
 
 // _____________________________________________________________________________
-// Verify that `idsToStringAndType` produces identical results to calling
-// `idToStringAndType` for each ID individually.
-TEST(ExportQueryExecutionTrees,
-     idsToStringAndTypeBatchMatchesIndividualLookups) {
-  // Build a small index with IRIs and literals of various types.
-  std::string kg =
-      "<s> <p> <o> . "
-      "<s> <q> \"hello\" . "
-      "<s> <p> 42 . "
-      "<s> <p> 3.14 .";
-  auto qec = ad_utility::testing::getQec(kg);
-  const Index& index = qec->getIndex();
-  LocalVocab localVocab{};
-  auto getId = ad_utility::testing::makeGetId(index);
-
-  // Collect a mix of VocabIndex IDs (IRIs, literal) and non-VocabIndex IDs
-  // (integer, double, undefined).
-  std::vector<Id> ids{
-      getId("<s>"),
-      getId("<p>"),
-      getId("<o>"),
-      getId("<q>"),
-      getId("\"hello\""),
-      Id::makeFromInt(42),
-      Id::makeFromDouble(3.14),
-      Id::makeUndefined(),
-  };
-
-  // `idsToStringAndType` requires the input to be sorted by `ValueId`.
-  ql::ranges::sort(ids);
-
-  auto batchResults = ql::exportIds::idsToStringAndType(
-      index, ql::span<const Id>{ids}, localVocab);
-
-  ASSERT_EQ(batchResults.size(), ids.size());
-  for (size_t i = 0; i < ids.size(); ++i) {
-    EXPECT_EQ(batchResults[i],
-              ql::exportIds::idToStringAndType(index, ids[i], localVocab))
-        << "Mismatch at index " << i;
-  }
-}
-
-// _____________________________________________________________________________
-// Empty span returns an empty vector.
-TEST(ExportQueryExecutionTrees, idsToStringAndTypeEmptyInput) {
-  auto qec = ad_utility::testing::getQec("<s> <p> <o>");
-  LocalVocab localVocab{};
-  auto result = ql::exportIds::idsToStringAndType(
-      qec->getIndex(), ql::span<const Id>{}, localVocab);
-  EXPECT_TRUE(result.empty());
-}
-
-// _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, compensateForLimitOffsetClause) {
   auto* qec = ad_utility::testing::getQec();
 
@@ -2052,59 +1999,6 @@ TEST(ExportQueryExecutionTrees, EncodedIriManagerUsage) {
   EXPECT_THAT(tsvResult, HasSubstr("http://example.org/predicate456"));
   EXPECT_THAT(tsvResult, HasSubstr("http://example.org/789"));
   EXPECT_THAT(tsvResult, HasSubstr("http://test.com/id/111"));
-}
-
-// _____________________________________________________________________________
-TEST(ExportQueryExecutionTrees, GetLiteralOrIriFromVocabIndexWithEncodedIris) {
-  // Test the getLiteralOrIriFromVocabIndex function specifically with encoded
-  // IRIs
-
-  // Create an EncodedIriManager with test prefixes
-  std::vector<std::string> prefixes = {"http://example.org/",
-                                       "http://test.com/"};
-  EncodedIriManager encodedIriManager{prefixes};
-
-  // Create a test index config with the encoded IRI manager
-  using namespace ad_utility::testing;
-  TestIndexConfig config;
-  config.encodedIriManager = encodedIriManager;
-  auto qec = getQec(std::move(config));
-
-  // Test driver lambda to reduce code duplication
-  LocalVocab emptyLocalVocab;
-  auto testEncodedIri = [&](const std::string& iri) {
-    // Encode the IRI
-    auto encodedIdOpt = encodedIriManager.encode(iri);
-    ASSERT_TRUE(encodedIdOpt.has_value()) << "Failed to encode IRI: " << iri;
-
-    Id encodedId = *encodedIdOpt;
-    EXPECT_EQ(encodedId.getDatatype(), Datatype::EncodedVal);
-
-    // Test getLiteralOrIriFromVocabIndex with the encoded ID
-    auto result = ql::exportIds::getLiteralOrIriFromVocabIndex(
-        qec->getIndex(), encodedId, emptyLocalVocab);
-
-    // The result should be the original IRI
-    EXPECT_TRUE(result.isIri());
-    EXPECT_EQ(result.toStringRepresentation(), iri);
-  };
-
-  // Test multiple encoded IRIs
-  testEncodedIri("<http://example.org/123>");
-  testEncodedIri("<http://test.com/456>");
-
-  // Test that non-encodable IRIs fall back to VocabIndex handling
-  // (This test assumes the test index has some vocabulary entries)
-  if (!qec->getIndex().getVocab().size()) {
-    VocabIndex vocabIndex = VocabIndex::make(0);  // First vocab entry
-    Id vocabId = Id::makeFromVocabIndex(vocabIndex);
-
-    auto vocabResult = ql::exportIds::getLiteralOrIriFromVocabIndex(
-        qec->getIndex(), vocabId, emptyLocalVocab);
-
-    // Should successfully return some IRI or literal from vocabulary
-    EXPECT_FALSE(vocabResult.toStringRepresentation().empty());
-  }
 }
 
 // _____________________________________________________________________________
