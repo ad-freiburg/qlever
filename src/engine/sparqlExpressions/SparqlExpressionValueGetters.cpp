@@ -9,6 +9,7 @@
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/type_traits.h"
 #include "engine/ExportQueryExecutionTrees.h"
+#include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "global/Constants.h"
 #include "global/ValueId.h"
 #include "parser/NormalizedString.h"
@@ -39,6 +40,32 @@ NumericValue NumericValueGetter::operator()(
     case Datatype::TextRecordIndex:
     case Datatype::WordVocabIndex:
     case Datatype::Date:
+    case Datatype::GeoPoint:
+    case Datatype::BlankNodeIndex:
+      return NotNumeric{};
+  }
+  AD_FAIL();
+}
+
+// _____________________________________________________________________________
+NumericOrDateValue NumericOrDateValueGetter::operator()(
+    ValueId id, const sparqlExpression::EvaluationContext*) const {
+  switch (id.getDatatype()) {
+    case Datatype::Double:
+      return id.getDouble();
+    case Datatype::Int:
+      return id.getInt();
+    case Datatype::Bool:
+      return static_cast<int64_t>(id.getBool());
+    case Datatype::Undefined:
+    case Datatype::EncodedVal:
+    case Datatype::VocabIndex:
+    case Datatype::LocalVocabIndex:
+    case Datatype::TextRecordIndex:
+    case Datatype::WordVocabIndex:
+      return NotNumeric{};
+    case Datatype::Date:
+      return id.getDate();
     case Datatype::GeoPoint:
     case Datatype::BlankNodeIndex:
       return NotNumeric{};
@@ -606,3 +633,67 @@ std::optional<int64_t> IntValueGetter::operator()(
   }
   return std::nullopt;
 };
+
+//______________________________________________________________________________
+template <typename ValueGetter>
+ad_utility::InputRangeTypeErased<typename ValueGetter::Value>
+TypeErasedValueGetter<ValueGetter>::operator()(ExpressionResult res,
+                                               EvaluationContext* context,
+                                               size_t size) const {
+  // Generate `numItems` many values from the `input` and apply the
+  // `valueGetter` to each of the values.
+  return std::visit(
+      [&](auto input)
+          -> ad_utility::InputRangeTypeErased<typename ValueGetter::Value> {
+        return ad_utility::InputRangeTypeErased{valueGetterGenerator(
+            size, context, std::move(input), ValueGetter{})};
+      },
+      std::move(res));
+}
+
+// Explicit instantiations of `TypeErasedValueGetter` for all value getter
+// classes.
+namespace sparqlExpression::detail {
+template struct TypeErasedValueGetter<NumericValueGetter>;
+template struct TypeErasedValueGetter<IsValidValueGetter>;
+template struct TypeErasedValueGetter<EffectiveBooleanValueGetter>;
+template struct TypeErasedValueGetter<StringValueGetter>;
+template struct TypeErasedValueGetter<LiteralValueGetterWithStrFunction>;
+template struct TypeErasedValueGetter<LiteralValueGetterWithoutStrFunction>;
+template struct TypeErasedValueGetter<
+    IsValueIdValueGetter<Datatype::BlankNodeIndex>>;
+template struct TypeErasedValueGetter<IsValueIdValueGetter<Datatype::GeoPoint>>;
+template struct TypeErasedValueGetter<IsNumericValueGetter>;
+template struct TypeErasedValueGetter<IsIriValueGetter>;
+template struct TypeErasedValueGetter<IsLiteralValueGetter>;
+template struct TypeErasedValueGetter<DateValueGetter>;
+template struct TypeErasedValueGetter<GeoPointValueGetter>;
+template struct TypeErasedValueGetter<LiteralFromIdGetter>;
+template struct TypeErasedValueGetter<ReplacementStringGetter>;
+template struct TypeErasedValueGetter<ToNumericValueGetter>;
+template struct TypeErasedValueGetter<DatatypeValueGetter>;
+template struct TypeErasedValueGetter<IriValueGetter>;
+template struct TypeErasedValueGetter<UnitOfMeasurementValueGetter>;
+template struct TypeErasedValueGetter<GeoPointOrWktValueGetter>;
+template struct TypeErasedValueGetter<LanguageTagValueGetter>;
+template struct TypeErasedValueGetter<IriOrUriValueGetter>;
+template struct TypeErasedValueGetter<
+    GeometryInfoValueGetter<ad_utility::GeometryInfo>>;
+template struct TypeErasedValueGetter<
+    GeometryInfoValueGetter<ad_utility::GeometryType>>;
+template struct TypeErasedValueGetter<
+    GeometryInfoValueGetter<ad_utility::Centroid>>;
+template struct TypeErasedValueGetter<
+    GeometryInfoValueGetter<ad_utility::BoundingBox>>;
+template struct TypeErasedValueGetter<
+    GeometryInfoValueGetter<ad_utility::NumGeometries>>;
+template struct TypeErasedValueGetter<
+    GeometryInfoValueGetter<ad_utility::MetricLength>>;
+template struct TypeErasedValueGetter<
+    GeometryInfoValueGetter<ad_utility::MetricArea>>;
+template struct TypeErasedValueGetter<StringOrDateGetter>;
+template struct TypeErasedValueGetter<IntValueGetter>;
+template struct TypeErasedValueGetter<RegexValueGetter>;
+template struct TypeErasedValueGetter<AlwaysTrueValueGetter>;
+
+}  // namespace sparqlExpression::detail

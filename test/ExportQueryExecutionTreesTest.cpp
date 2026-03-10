@@ -8,6 +8,7 @@
 
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/IndexScan.h"
+#include "engine/QueryExportTypes.h"
 #include "engine/QueryPlanner.h"
 #include "parser/LiteralOrIri.h"
 #include "parser/NormalizedString.h"
@@ -317,12 +318,9 @@ static const std::string xmlTrailer = "\n</results>\n</sparql>";
 
 // Helper function for easier testing of the `IdTable` generator.
 std::vector<IdTable> convertToVector(
-    ad_utility::InputRangeTypeErased<
-        ExportQueryExecutionTrees::TableConstRefWithVocab>
-        generator) {
+    ad_utility::InputRangeTypeErased<TableConstRefWithVocab> generator) {
   std::vector<IdTable> result;
-  for (const ExportQueryExecutionTrees::TableConstRefWithVocab& pair :
-       generator) {
+  for (const TableConstRefWithVocab& pair : generator) {
     result.push_back(pair.idTable().clone());
   }
   return result;
@@ -335,8 +333,7 @@ auto matchesIdTables(const Tables&... tables) {
 }
 
 std::vector<IdTable> convertToVector(
-    ad_utility::InputRangeTypeErased<ExportQueryExecutionTrees::TableWithRange>
-        generator) {
+    ad_utility::InputRangeTypeErased<TableWithRange> generator) {
   std::vector<IdTable> result;
   for (const auto& [pair, range] : generator) {
     const auto& idTable = pair.idTable();
@@ -1042,6 +1039,7 @@ testIriKg</uri></binding>
   runConstructQueryTestCase(testCaseConstruct);
 }
 
+// ____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, TestWithIriExtendedEscaped) {
   std::string kg =
       "<s> <p>"
@@ -1180,7 +1178,7 @@ TEST(ExportQueryExecutionTrees, UndefinedValues) {
       []() {
         nlohmann::json j;
         j["head"]["vars"].push_back("o");
-        j["results"]["bindings"].push_back(nullptr);
+        j["results"]["bindings"].push_back(nlohmann::json::object());
         return j;
       }(),
       expectedXml};
@@ -1516,6 +1514,8 @@ TEST(ExportQueryExecutionTrees, CornerCases) {
   auto resultNoColumns = runJSONQuery(kg, queryNoVariablesVisible,
                                       ad_utility::MediaType::sparqlJson);
   ASSERT_EQ(resultNoColumns["results"]["bindings"].size(), 1);
+  EXPECT_TRUE(resultNoColumns["results"]["bindings"][0].is_object());
+  EXPECT_TRUE(resultNoColumns["results"]["bindings"][0].empty());
   auto qec = ad_utility::testing::getQec(kg);
   AD_EXPECT_THROW_WITH_MESSAGE(
       ExportQueryExecutionTrees::idToStringAndType(qec->getIndex(), Id::max(),
@@ -1531,6 +1531,7 @@ TEST(ExportQueryExecutionTrees, CornerCases) {
       ::testing::ContainsRegex("should be unreachable"));
 }
 
+// _____________________________________________________________________________
 // Test the correct exporting of ASK queries.
 TEST(ExportQueryExecutionTrees, AskQuery) {
   auto askResultTrue = [](bool lazy) {
@@ -2052,39 +2053,6 @@ TEST(ExportQueryExecutionTrees, getLiteralOrNullopt) {
 }
 
 // _____________________________________________________________________________
-TEST(ExportQueryExecutionTrees, IsPlainLiteralOrLiteralWithXsdString) {
-  using Iri = ad_utility::triple_component::Iri;
-  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
-  using Literal = ad_utility::triple_component::Literal;
-
-  auto toLiteralOrIri = [](std::string_view content, auto descriptor) {
-    return LiteralOrIri{Literal::literalWithNormalizedContent(
-        asNormalizedStringViewUnsafe(content), descriptor)};
-  };
-
-  auto verify = [](const LiteralOrIri& input, bool expected) {
-    EXPECT_EQ(
-        ExportQueryExecutionTrees::isPlainLiteralOrLiteralWithXsdString(input),
-        expected);
-  };
-
-  verify(toLiteralOrIri("Hallo", std::nullopt), true);
-  verify(toLiteralOrIri(
-             "Hallo",
-             Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>")),
-         true);
-  verify(
-      toLiteralOrIri(
-          "Hallo", Iri::fromIriref("<http://www.unknown.com/NoSuchDatatype>")),
-      false);
-
-  EXPECT_THROW(
-      verify(LiteralOrIri{Iri::fromIriref("<http://www.example.com/someIri>")},
-             false),
-      ad_utility::Exception);
-}
-
-// _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, ReplaceAnglesByQuotes) {
   std::string input = "<s>";
   std::string expected = "\"s\"";
@@ -2248,6 +2216,7 @@ TEST(ExportQueryExecutionTrees, GetLiteralOrIriFromVocabIndexWithEncodedIris) {
   }
 }
 
+// _____________________________________________________________________________
 // Test that a `sparql-results+json` export includes a `meta` field if and
 // only if the respective runtime parameter is enabled.
 TEST(ExportQueryExecutionTrees, SparqlJsonWithMetaField) {
