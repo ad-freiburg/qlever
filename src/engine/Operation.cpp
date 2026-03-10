@@ -8,6 +8,7 @@
 #include <absl/container/inlined_vector.h>
 
 #include "engine/NamedResultCache.h"
+#include "engine/OperationBindPushDownImpl.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoinCachedIndex.h"
 #include "engine/VariableToColumnMap.h"
@@ -814,34 +815,6 @@ bool Operation::coversVariables(
            varToCol.at(*v).mightContainUndef_ ==
                ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
   });
-}
-
-// _____________________________________________________________________________
-std::optional<std::pair<size_t, std::shared_ptr<QueryExecutionTree>>>
-Operation::pushDownBindToAnyChild(const parsedQuery::Bind& bind) const {
-  const auto& children = getChildren();
-  if (children.empty()) {
-    return std::nullopt;
-  }
-
-  // Get the variables used in the bind expression (not the target).
-  const auto& bindExpressionVars = bind._expression.containedVariables();
-
-  // For each child that covers all expression variables, check whether the bind
-  // can be pushed down into that child.
-  for (const auto& [idx, child] : ::ranges::views::enumerate(children)) {
-    if (!child->getRootOperation()->coversVariables(bindExpressionVars) ||
-        child->isVariableCovered(bind._target)) {
-      continue;
-    }
-    auto result = child->getRootOperation()->makeTreeWithBindColumn(bind);
-    if (result.has_value()) {
-      return std::pair<size_t, std::shared_ptr<QueryExecutionTree>>{
-          idx, std::move(result.value())};
-    }
-  }
-
-  return std::nullopt;
 }
 
 // _____________________________________________________________________________

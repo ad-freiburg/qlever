@@ -21,6 +21,7 @@
 #include "util/CancellationHandle.h"
 #include "util/CompilerExtensions.h"
 #include "util/CopyableSynchronization.h"
+#include "util/TypeTraits.h"
 
 // forward declaration needed to break dependencies
 class QueryExecutionTree;
@@ -435,8 +436,14 @@ class Operation {
   // the correct behavior for various operations like `Join`, which make use of
   // this function for their `makeTreeWithBindColumn` override. Returns the
   // index of the replaced child and its new `QueryExecutionTree`.
-  std::optional<std::pair<size_t, std::shared_ptr<QueryExecutionTree>>>
-  pushDownBindToAnyChild(const parsedQuery::Bind& bind) const;
+  CPP_template(typename MakeCloneWithNewChildren)(
+      requires ad_utility::InvocableWithExactReturnType<
+          MakeCloneWithNewChildren, std::shared_ptr<QueryExecutionTree>,
+          std::vector<std::shared_ptr<QueryExecutionTree>>>)
+      std::optional<std::shared_ptr<QueryExecutionTree>> pushDownBindToAnyChild(
+          const parsedQuery::Bind& bind,
+          std::vector<std::shared_ptr<QueryExecutionTree>> children,
+          MakeCloneWithNewChildren makeCloneWithNewChildren) const;
 
  private:
   //! Compute the result of the query-subtree rooted at this element..
