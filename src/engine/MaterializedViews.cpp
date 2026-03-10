@@ -325,13 +325,15 @@ void MaterializedViewWriter::computeResultAndWritePermutation() const {
 }
 
 // _____________________________________________________________________________
-Variable MaterializedView::dummyPredicate() {
-  return Variable{"?_ql_materialized_view_p"};
+const Variable& MaterializedView::dummyPredicate() {
+  static const Variable var{"?_ql_materialized_view_p"};
+  return var;
 };
 
 // _____________________________________________________________________________
-Variable MaterializedView::dummyObject() {
-  return Variable{"?_ql_materialized_view_o"};
+const Variable& MaterializedView::dummyObject() {
+  static const Variable var{"?_ql_materialized_view_o"};
+  return var;
 };
 
 // _____________________________________________________________________________

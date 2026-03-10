@@ -256,8 +256,8 @@ class MaterializedView : public std::enable_shared_from_this<MaterializedView> {
       const std::string& bindCacheKey) const;
 
   // Dummy variables for internal use.
-  static Variable dummyPredicate();
-  static Variable dummyObject();
+  static const Variable& dummyPredicate();
+  static const Variable& dummyObject();
 };
 
 // Shorthand for query rewriting helper class.

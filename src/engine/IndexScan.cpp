@@ -2,8 +2,6 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#include "engine/IndexScan.h"
-
 #include <absl/container/inlined_vector.h>
 #include <absl/strings/str_join.h>
 
@@ -11,6 +9,7 @@
 #include <string>
 #include <utility>
 
+#include "engine/IndexScan.h"
 #include "engine/MaterializedViews.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/VariableToColumnMap.h"
@@ -941,9 +940,6 @@ IndexScan::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
     return std::nullopt;
   }
 
-  // The target column can never be the first column, because the first column
-  // from a view is always read into a variable by the existing scan.
-  AD_CORRECTNESS_CHECK(targetCol.value() != 0);
   auto newPredicate = predicate_;
   auto newObject = object_;
 
@@ -966,6 +962,10 @@ IndexScan::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
     newAdditionalVariables.insert(newAdditionalVariables.begin() + index, v);
     return true;
   };
+
+  // The target column can never be the first column, because the first column
+  // from a view is always read into a variable by the existing scan.
+  AD_CORRECTNESS_CHECK(targetCol.value() != 0);
 
   // Insert the new column or replace the dummy.
   if (targetCol.value() == 1) {
