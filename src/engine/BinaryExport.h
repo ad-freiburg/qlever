@@ -32,7 +32,7 @@ ad_utility::streams::stream_generator exportAsQLeverBinary(
 class BinaryExportHelpers {
  public:
   // Return true iff the value can be serialized without a vocab entry.
-  static bool isTrivial(Id id);
+  static bool isTrivial(Id id) { return id.isTrivial(); }
 
   // Read a value of type T from an iterator range.
   template <typename T, typename It, typename End>
@@ -68,13 +68,15 @@ class BinaryExportHelpers {
   static std::vector<std::string> readVectorOfStrings(It& it, const End& end) {
     std::vector<std::string> transmittedStrings;
     IteratorReader<It, End> reader{it, end};
-    ad_utility::serialization::ReadViaCallableSerializer serializer{std::ref(reader)};
+    ad_utility::serialization::ReadViaCallableSerializer serializer{
+        std::ref(reader)};
     serializer >> transmittedStrings;
     it = reader.it;
     return transmittedStrings;
   }
 
-  static std::string writeVectorOfStrings(const std::vector<std::string>& strings) {
+  static std::string writeVectorOfStrings(
+      const std::vector<std::string>& strings) {
     std::string result;
     result.reserve(strings.size() * 100);
     auto write = [&result](const char* src, size_t numBytes) {

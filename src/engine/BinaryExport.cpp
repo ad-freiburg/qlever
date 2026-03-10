@@ -40,25 +40,28 @@ toExportableId(Id originalId, [[maybe_unused]] const LocalVocab& localVocab,
   }
 }
 
-template <typename Serializer, ad_utility::SimilarTo<QueryExecutionTree::ColumnIndicesAndTypes> Columns>
+template <
+    typename Serializer,
+    ad_utility::SimilarTo<QueryExecutionTree::ColumnIndicesAndTypes> Columns>
 void serializeHeader(Serializer&& serializer, Columns&& cols, auto&& prefixes) {
-  static_assert(ad_utility::serialization::Serializer<std::decay_t<Serializer>>);
-  static constexpr bool isReader = ad_utility::serialization::ReadSerializer<Serializer>;
+  static_assert(
+      ad_utility::serialization::Serializer<std::decay_t<Serializer>>);
+  static constexpr bool isReader =
+      ad_utility::serialization::ReadSerializer<Serializer>;
   std::string magicBytes = "QLEVER.EXPORT";
   serializer | magicBytes;
-  if constexpr(isReader) {
+  if constexpr (isReader) {
     AD_CONTRACT_CHECK(magicBytes == "QLEVER.EXPORT");
   }
   uint16_t version = 0;
   serializer | version;
-  if constexpr(isReader) {
+  if constexpr (isReader) {
     // We only support version 0.
     AD_CONTRACT_CHECK(version == 0);
   }
   serializer | prefixes;
   serializer | cols;
 }
-
 
 void writeHeader(auto& serializer, const auto& qet, const auto& columns) {
   const auto& prefixes = qet.getQec()->getIndex().encodedIriManager().prefixes_;
@@ -108,6 +111,7 @@ ad_utility::streams::stream_generator exportAsQLeverBinary(
 
   // Iterate over the result and yield the bindings.
   uint64_t resultSize = 0;
+  uint64_t numRowsInBatch = 0;
   for (const auto& [pair, range] : ExportQueryExecutionTrees::getRowIndices(
            limitAndOffset, *result, resultSize)) {
     for (uint64_t i : range) {
@@ -116,13 +120,14 @@ ad_utility::streams::stream_generator exportAsQLeverBinary(
         co_yield raw(
             toExportableId(id, pair.localVocab_, stringMapping).getBits());
       }
-      if (stringMapping.needsFlush()) {
+      // TODO<joka921> arbitrary constants.
+      if (numRowsInBatch >= 100'000 || stringMapping.size() >= 10'000) {
         co_yield raw(vocabMarker);
         co_yield BinaryExportHelpers::writeVectorOfStrings(
             stringMapping.flush(qet.getQec()->getIndex()));
       }
       cancellationHandle->throwIfCancelled();
-      stringMapping.nextRow();
+      ++numRowsInBatch;
     }
   }
 

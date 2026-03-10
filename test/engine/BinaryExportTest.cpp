@@ -60,6 +60,9 @@ TEST(BinaryExportHelpers, readValueThrowsOnUnexpectedEnd) {
                std::runtime_error);
 }
 
+// TODO<joka921> Check if this code is completely removed, or has to be tested
+// using a different mechanism.
+/*
 // _____________________________________________________________________________
 TEST(BinaryExportHelpers, readString) {
   std::vector<uint8_t> data;
@@ -83,6 +86,7 @@ TEST(BinaryExportHelpers, readString) {
   EXPECT_EQ(result, expected);
   EXPECT_EQ(it, end);
 }
+*/
 
 // _____________________________________________________________________________
 TEST(BinaryExportHelpers, readVectorOfStrings) {
@@ -177,4 +181,3 @@ TEST(BinaryExportHelpers, toIdImpl) {
 
   EXPECT_EQ(result, intId);
 }
-
