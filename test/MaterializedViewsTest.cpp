@@ -1201,9 +1201,8 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
         BIND(15 AS ?bind)
       }
     )";
-    // TODO<ullingerc> Change this test as soon as we allow this.
     qpExpect(qlv(), firstThreeColBind,
-             h::Bind(viewScanNoBind, "15", V{"?bind"}));
+             viewScan("bindView", "?s", "?o", "?bind", 3));
   }
 
   // Test the variable to permutation column index map.

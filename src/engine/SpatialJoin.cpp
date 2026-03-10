@@ -580,8 +580,8 @@ std::unique_ptr<Operation> SpatialJoin::cloneImpl() const {
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 SpatialJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
-  // TODO<ullingerc> how can we avoid redundancy in this code but still not do
-  // the clone and replace?
+  // TODO<ullingerc> how can we avoid redundancy with
+  // `Join::makeTreeWithBindColumn`?
   auto pushDown = pushDownBindToAnyChild(bind);
   if (!pushDown.has_value()) {
     return std::nullopt;

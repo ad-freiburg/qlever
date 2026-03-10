@@ -10,6 +10,7 @@
 #include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoinCachedIndex.h"
+#include "engine/VariableToColumnMap.h"
 #include "global/RuntimeParameters.h"
 #include "parser/GraphPatternOperation.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
@@ -808,8 +809,11 @@ Operation::makeTreeWithStrippedColumns(
 bool Operation::coversVariables(
     const std::vector<const Variable*>& variables) const {
   const auto& varToCol = getExternallyVisibleVariableColumns();
-  return ql::ranges::all_of(
-      variables, [&varToCol](const auto v) { return varToCol.contains(*v); });
+  return ql::ranges::all_of(variables, [&varToCol](const auto v) {
+    return varToCol.contains(*v) &&
+           varToCol.at(*v).mightContainUndef_ ==
+               ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+  });
 }
 
 // _____________________________________________________________________________

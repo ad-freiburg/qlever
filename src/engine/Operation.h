@@ -229,7 +229,8 @@ class Operation {
     return false;
   }
 
-  // Check whether all variables given are covered by this `Operation`.
+  // Check whether all variables given are covered by this `Operation` and are
+  // always defined.
   bool coversVariables(const std::vector<const Variable*>& variables) const;
 
   // See the member variable with the same name below for documentation.
@@ -381,7 +382,9 @@ class Operation {
   // Try to create a version of this operation with an additional column from a
   // `BIND` pushed down into the tree. The default is to disallow push down. All
   // operations where a `BIND` push down is semantically possible should
-  // override this method.
+  // override this method. Pushing a `BIND` down to a materialized view might
+  // produce a cheaper query plan for example. This function is tested in the
+  // `BindRewrite` test case in `MaterializedViewsTest`.
   virtual std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithBindColumn(const parsedQuery::Bind&) const {
     return std::nullopt;
@@ -429,9 +432,9 @@ class Operation {
   // Internal default implementation for `makeTreeWithBindColumn`. This
   // implementation makes the assumption that a `BIND` can be pushed into this
   // `Operation` iff any of its children accepts the `BIND` push down. This is
-  // the correct behavior for various operations, which make use of this
-  // function for their `makeTreeWithBindColumn` override.
-  // Returns the index of the replaced child and its new `QueryExecutionTree`.
+  // the correct behavior for various operations like `Join`, which make use of
+  // this function for their `makeTreeWithBindColumn` override. Returns the
+  // index of the replaced child and its new `QueryExecutionTree`.
   std::optional<std::pair<size_t, std::shared_ptr<QueryExecutionTree>>>
   pushDownBindToAnyChild(const parsedQuery::Bind& bind) const;
 

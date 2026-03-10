@@ -941,10 +941,11 @@ IndexScan::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
     return std::nullopt;
   }
 
-  // TODO<ullingerc> Deal with `BIND` in first three cols.
-  if (targetCol.value() < 3) {
-    return std::nullopt;
-  }
+  // The target column can never be the first column, because the first column
+  // from a view is always read into a variable by the existing scan.
+  AD_CORRECTNESS_CHECK(targetCol.value() != 0);
+  auto newPredicate = predicate_;
+  auto newObject = object_;
 
   // Extend the additional columns of the scan (and keep them sorted as
   // required).
@@ -953,8 +954,8 @@ IndexScan::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   AD_CORRECTNESS_CHECK(additionalColumns_.size() ==
                        additionalVariables_.size());
   auto insertNewCol = [&](size_t colIdx, Variable v) -> bool {
-    auto it = std::lower_bound(newAdditionalColumns.begin(),
-                               newAdditionalColumns.end(), colIdx);
+    AD_CORRECTNESS_CHECK(colIdx >= 3);
+    auto it = ql::ranges::lower_bound(newAdditionalColumns, colIdx);
     std::size_t index = std::distance(newAdditionalColumns.begin(), it);
     bool exists = (it != newAdditionalColumns.end() && *it == colIdx);
     if (exists) {
@@ -965,19 +966,36 @@ IndexScan::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
     newAdditionalVariables.insert(newAdditionalVariables.begin() + index, v);
     return true;
   };
-  if (!insertNewCol(targetCol.value(), bind._target)) {
+
+  // Insert the new column or replace the dummy.
+  if (targetCol.value() == 1) {
+    // Replace predicate.
+    if (newPredicate != MaterializedView::dummyPredicate()) {
+      return std::nullopt;
+    }
+    newPredicate = bind._target;
+  } else if (targetCol.value() == 2) {
+    // Replace object.
+    if (newObject != MaterializedView::dummyObject()) {
+      return std::nullopt;
+    }
+    newObject = bind._target;
+  } else if (!insertNewCol(targetCol.value(), bind._target)) {
     return std::nullopt;
   }
 
   // Add the `BIND` target to the variables to keep during column stripping.
   auto newVariables = varsToKeep_;
   if (newVariables.has_value()) {
+    AD_CORRECTNESS_CHECK(
+        !newVariables.value().contains(MaterializedView::dummyPredicate()) &&
+        !newVariables.value().contains(MaterializedView::dummyObject()));
     newVariables.value().insert(bind._target);
   }
 
   return ad_utility::makeExecutionTree<IndexScan>(
       _executionContext, permutation_, locatedTriplesSharedState_, subject_,
-      predicate_, object_, std::move(newAdditionalColumns),
+      newPredicate, newObject, std::move(newAdditionalColumns),
       std::move(newAdditionalVariables), graphsToFilter_, scanSpecAndBlocks_,
       scanSpecAndBlocksIsPrefiltered_, VarsToKeep{std::move(newVariables)},
       sizeEstimateIsExact_, sizeEstimate_);
@@ -1024,7 +1042,10 @@ VariableToColumnMap IndexScan::computePermutationColumnIndices() const {
     map[var] = {col, varToColInResult.at(var).mightContainUndef_};
   };
 
-  // Add those of the first three columns which are read into variables.
+  // Add those of the first three columns which are read into variables. The
+  // permutation column index is given by `enumerate` (0, 1, 2 for the segments
+  // of the permuted triple). For example, if only the last segment contains a
+  // variable it is still assigned 2 not 0.
   auto spo = getPermutedTriple();
   for (const auto [index, component] : ::ranges::views::enumerate(spo)) {
     if (component->isVariable()) {
