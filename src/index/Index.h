@@ -12,6 +12,7 @@
 
 #include "backports/three_way_comparison.h"
 #include "global/Id.h"
+#include "index/GraphNamespaceManager.h"
 #include "index/InputFileSpecification.h"
 #include "index/Permutation.h"
 #include "index/StringSortComparator.h"
@@ -117,6 +118,10 @@ class Index {
   // Get a reference to the DeltaTriplesManager of this Index.
   DeltaTriplesManager& deltaTriplesManager();
   const DeltaTriplesManager& deltaTriplesManager() const;
+
+  // Get a reference to the GraphNamespaceManager of this Index.
+  GraphNamespaceManager& graphNamespaceManager();
+  const GraphNamespaceManager& graphNamespaceManager() const;
 
   // --------------------------------------------------------------------------
   // RDF RETRIEVAL

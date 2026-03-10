@@ -835,7 +835,7 @@ auto QueryPlanner::seedWithScansAndText(
           "The query contains a predicate variable, but only the PSO "
           "and POS permutations were loaded. Rerun the server without "
           "the option --only-pso-and-pos-permutations and if "
-          "necessary also rebuild the index.");
+          "necessary also rebuild the index");
     }
 
     // Backward compatibility with spatial search predicates

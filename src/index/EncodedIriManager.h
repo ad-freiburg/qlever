@@ -266,6 +266,22 @@ class EncodedIriManagerImpl {
       shift -= NibbleSize;
     }
   }
+
+  // Overload of `decodeDecimalFrom64Bit` that returns the result as a
+  // `uint64_t`.
+  static uint64_t decodeDecimalFrom64Bit(uint64_t encoded) {
+    uint64_t result = 0;
+    size_t shift = NumBitsEncoding - NibbleSize;
+    auto numTrailingZeros = absl::countr_zero(encoded);
+    size_t numTrailingZeroNibbles = numTrailingZeros / NibbleSize;
+    size_t len = NumDigits - numTrailingZeroNibbles;
+    for (size_t i = 0; i < len; ++i) {
+      result *= 10;
+      result += static_cast<char>(((encoded >> shift) & 0xF) - 1);
+      shift -= NibbleSize;
+    }
+    return result;
+  }
 };
 
 // The default encoder for IRIs in QLever: 60 bits are used for the complete
