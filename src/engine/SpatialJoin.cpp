@@ -640,6 +640,11 @@ SpatialJoin::cloneWithBoundingBoxColumns() const {
   // two `SpatialJoin`s share a variable (like `?area intersects ?building` and
   // `?area intersects ?restaurant`).
 
+  // Only the `libspatialjoin` algorithm benefits from bounding box columns.
+  if (config_.algo_ != SpatialJoinAlgorithm::LIBSPATIALJOIN) {
+    return std::nullopt;
+  }
+
   auto makeVariableExpr = [](const Variable& var) {
     return std::make_unique<sparqlExpression::VariableExpression>(var);
   };
