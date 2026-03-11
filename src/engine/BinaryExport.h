@@ -1,10 +1,17 @@
-// Copyright 2025, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
-//          Robin Textor-Falconi <textorr@cs.uni-freiburg.de>
+// Copyright 2025 - 2026 The QLever Authors, in particular:
+//
+// 2025 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2025 - 2026 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
+
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_ENGINE_BINARY_EXPORT_H
 #define QLEVER_SRC_ENGINE_BINARY_EXPORT_H
+
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 #include "engine/StringMapping.h"
 #include "global/Id.h"
@@ -31,9 +38,6 @@ ad_utility::streams::stream_generator exportAsQLeverBinary(
 // Static helper functions for testing
 class BinaryExportHelpers {
  public:
-  // Return true iff the value can be serialized without a vocab entry.
-  static bool isTrivial(Id id) { return id.isTrivial(); }
-
   // Read a value of type T from an iterator range.
   template <typename T, typename It, typename End>
   static T read(It& it, const End& end) {
@@ -113,3 +117,5 @@ Result importBinaryHttpResponse(bool requestLaziness,
 }  // namespace qlever::binary_export
 
 #endif  // QLEVER_SRC_ENGINE_BINARY_EXPORT_H
+
+#endif

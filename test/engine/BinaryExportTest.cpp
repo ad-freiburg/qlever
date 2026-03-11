@@ -18,18 +18,18 @@ using namespace qlever::binary_export;
 // _____________________________________________________________________________
 TEST(BinaryExportHelpers, isTrivial) {
   // Test trivial types
-  EXPECT_TRUE(BinaryExportHelpers::isTrivial(Id::makeUndefined()));
-  EXPECT_TRUE(BinaryExportHelpers::isTrivial(Id::makeFromBool(true)));
-  EXPECT_TRUE(BinaryExportHelpers::isTrivial(Id::makeFromInt(42)));
-  EXPECT_TRUE(BinaryExportHelpers::isTrivial(Id::makeFromDouble(3.14)));
-  EXPECT_TRUE(BinaryExportHelpers::isTrivial(
-      Id::makeFromDate(DateYearOrDuration::parseXsdDate("2000-01-01"))));
+  EXPECT_TRUE(Id::makeUndefined().isTrivial());
+  EXPECT_TRUE(Id::makeFromBool(true).isTrivial());
+  EXPECT_TRUE(Id::makeFromInt(42).isTrivial());
+  EXPECT_TRUE(Id::makeFromDouble(3.14).isTrivial());
+  EXPECT_TRUE(Id::makeFromDate(DateYearOrDuration::parseXsdDate("2000-01-01"))
+                  .isTrivial());
 
   // Test non-trivial types
-  EXPECT_FALSE(BinaryExportHelpers::isTrivial(
-      Id::makeFromVocabIndex(VocabIndex::make(0))));
-  EXPECT_FALSE(BinaryExportHelpers::isTrivial(
-      Id::makeFromLocalVocabIndex(reinterpret_cast<LocalVocabIndex>(0x100))));
+  EXPECT_FALSE(Id::makeFromVocabIndex(VocabIndex::make(0)).isTrivial());
+  EXPECT_FALSE(
+      Id::makeFromLocalVocabIndex(reinterpret_cast<LocalVocabIndex>(0x100))
+          .isTrivial());
 }
 
 // _____________________________________________________________________________

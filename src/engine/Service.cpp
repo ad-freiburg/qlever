@@ -190,10 +190,16 @@ Result Service::computeResultImpl(bool requestLaziness) {
               << ", target: " << serviceUrl.target() << ")" << std::endl
               << serviceQuery << std::endl;
 
-  std::string accept =
+  static constexpr std::string_view acceptWithBinaryExport =
       "application/qlever-export+octet-stream;q=0.9,application/"
       "sparql-results+json;q=0.1";
-  accept = "application/sparql-results+json";
+  static constexpr std::string_view acceptWithoutBinaryExport =
+      "application/sparql-results+json;q=0.1";
+
+  const std::string_view accept =
+      getRuntimeParameter<&RuntimeParameters::binaryServiceEnabled_>()
+          ? acceptWithBinaryExport
+          : acceptWithoutBinaryExport;
   HttpOrHttpsResponse response = getResultFunction_(
       serviceUrl, cancellationHandle_, boost::beast::http::verb::post,
       serviceQuery, "application/sparql-query", accept);
@@ -210,13 +216,11 @@ Result Service::computeResultImpl(bool requestLaziness) {
         toStd(boost::beast::http::obsolete_reason(response.status_))));
   }
 
-  // TODO<joka921> Very experimental... and code duplicaty....
-  if (ql::starts_with(ad_utility::utf8ToLower(response.contentType_),
-                      "application/qlever-export+octet-stream")) {
+  auto contentType = ad_utility::utf8ToLower(response.contentType_);
+  if (ql::starts_with(contentType, "application/qlever-export+octet-stream")) {
     return computeBinaryResult(requestLaziness, std::move(response));
   }
-  if (!ql::starts_with(ad_utility::utf8ToLower(response.contentType_),
-                       "application/sparql-results+json")) {
+  if (!ql::starts_with(contentType, "application/sparql-results+json")) {
     throwErrorWithContext(absl::StrCat(
         "QLever requires the endpoint of a SERVICE to send the result as "
         "'application/sparql-results+json' but the endpoint sent '",

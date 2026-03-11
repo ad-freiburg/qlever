@@ -22,7 +22,6 @@ add_library(engine
         MaterializedViewsQueryAnalysis.cpp BinaryExport.cpp StringMapping.cpp)
 
 qlever_target_link_libraries(engine util index parser global sparqlExpressions SortPerformanceEstimator Boost::iostreams s2 spatialjoin-dev pb_util pb_util_geo)
-#TODO<joka921> Probably the binary export is currently a C++20-only feature.
 
 # When `REDUCED_FEATURE_SET_FOR_CPP17` is set, do not link `engine` against the
 # `http` library (which requires C++20). This works because `http` is only used

@@ -1,8 +1,14 @@
-// Copyright 2025, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
-//          Robin Textor-Falconi <textorr@cs.uni-freiburg.de>
+// Copyright 2025 - 2026 The QLever Authors, in particular:
+//
+// 2025 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2025 - 2026 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
 
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
+
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include "engine/BinaryExport.h"
 
 #include <absl/functional/bind_front.h>
@@ -125,6 +131,7 @@ ad_utility::streams::stream_generator exportAsQLeverBinary(
         co_yield raw(vocabMarker);
         co_yield BinaryExportHelpers::writeVectorOfStrings(
             stringMapping.flush(qet.getQec()->getIndex()));
+        numRowsInBatch = 0;
       }
       cancellationHandle->throwIfCancelled();
       ++numRowsInBatch;
@@ -203,7 +210,7 @@ Id BinaryExportHelpers::toIdImpl(
     }
     return it->second;
   }
-  AD_EXPENSIVE_CHECK(isTrivial(id) ||
+  AD_EXPENSIVE_CHECK(id.isTrivial() ||
                      id.getDatatype() == Datatype::LocalVocabIndex);
   return id;
 }
@@ -295,3 +302,5 @@ Result importBinaryHttpResponse(bool requestLaziness,
   return Result{std::move(result), std::move(resultSortedOn), std::move(vocab)};
 }
 }  // namespace qlever::binary_export
+
+#endif
