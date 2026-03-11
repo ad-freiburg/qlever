@@ -50,7 +50,7 @@ class LRUCache {
     if (it == cache_.end()) return boost::none;
     const auto& [value, listIterator] = it->second;
     // Move accessed key to front (most recently used).
-    keys_.splice(keys_.begin(), keys_, it->second.second);
+    keys_.splice(keys_.begin(), keys_, listIterator);
     return boost::optional<const V&>(value);
   }
 
