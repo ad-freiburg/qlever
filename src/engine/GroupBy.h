@@ -55,12 +55,6 @@ class GroupBy : public Operation {
   const GroupByImpl& getImpl() const;
   GroupByImpl& getImpl();
 
-  // `BIND` push down through a `GROUP BY` is not allowed.
-  std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
-      const parsedQuery::Bind&) const override {
-    return std::nullopt;
-  };
-
  private:
   std::unique_ptr<GroupByImpl> _impl;
 };
