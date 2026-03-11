@@ -57,6 +57,7 @@
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "global/Constants.h"
 #include "global/Id.h"
 #include "global/RuntimeParameters.h"
 #include "global/ValueId.h"
@@ -100,6 +101,8 @@ void mergeSubtreePlanIds(SubtreePlan& target, const SubtreePlan& a,
       a.idsOfIncludedTextLimits_ | b.idsOfIncludedTextLimits_;
   target.containsFilterSubstitute_ =
       a.containsFilterSubstitute_ || b.containsFilterSubstitute_;
+  target.containsBindSubstitute_ =
+      a.containsBindSubstitute_ || b.containsBindSubstitute_;
 }
 
 // Helper function that assigns the node, filter and text limit ids from
@@ -110,6 +113,7 @@ void assignNodesFilterAndTextLimitIds(QueryPlanner::SubtreePlan& target,
   target._idsOfIncludedFilters = source._idsOfIncludedFilters;
   target.idsOfIncludedTextLimits_ = source.idsOfIncludedTextLimits_;
   target.containsFilterSubstitute_ = source.containsFilterSubstitute_;
+  target.containsBindSubstitute_ = source.containsBindSubstitute_;
 }
 }  // namespace
 
@@ -798,13 +802,14 @@ auto QueryPlanner::seedWithScansAndText(
       };
 
       // Either the _idsOfIncludedFilters and idsOfIncludedTextLimits_ of the
-      // plan are all `0`, or the plan is either a MINUS, OPTIONAL, or BIND (for
-      // which we have special handling).
+      // plan are all `0`, or the plan is either a MINUS, OPTIONAL, or BIND or
+      // BIND substitute (for which we have special handling).
       using namespace ad_utility::use_type_identity;
       AD_CORRECTNESS_CHECK(
           (newIdPlan._idsOfIncludedFilters == 0 &&
            newIdPlan.idsOfIncludedTextLimits_ == 0) ||
-              is(ti<Bind>) || is(ti<OptionalJoin>) || is(ti<Minus>),
+              is(ti<Bind>) || newIdPlan.containsBindSubstitute_ ||
+              is(ti<OptionalJoin>) || is(ti<Minus>),
           "Bit map _idsOfIncludedFilters or idsOfIncludedTextLimits_ illegal");
 
       seeds.emplace_back(newIdPlan);
@@ -1361,6 +1366,8 @@ std::string QueryPlanner::getPruningKey(
   os << ' ' << plan.idsOfIncludedTextLimits_;
   os << " s: ";
   os << ' ' << plan.containsFilterSubstitute_;
+  os << " b: ";
+  os << ' ' << plan.containsBindSubstitute_;
 
   return std::move(os).str();
 }
@@ -1496,6 +1503,7 @@ void QueryPlanner::applyTextLimitsIfPossible(vector<SubtreePlan>& row,
       newPlan.idsOfIncludedTextLimits_ |= (size_t(1) << i);
       newPlan._idsOfIncludedNodes = plan._idsOfIncludedNodes;
       newPlan.containsFilterSubstitute_ = plan.containsFilterSubstitute_;
+      newPlan.containsBindSubstitute_ = plan.containsBindSubstitute_;
       newPlan.type = plan.type;
       i++;
       if (replace) {
@@ -1860,6 +1868,7 @@ std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
   uint64_t filterIds = 0;
   uint64_t textLimitIds = 0;
   bool containsFilterSubstitute = false;
+  bool containsBindSubstitute = false;
   ql::ranges::for_each(
       lastDpRowFromComponents |
           ql::views::transform([this](auto& vec) -> decltype(auto) {
@@ -1870,6 +1879,7 @@ std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
         filterIds |= plan._idsOfIncludedFilters;
         textLimitIds |= plan.idsOfIncludedTextLimits_;
         containsFilterSubstitute |= plan.containsFilterSubstitute_;
+        containsBindSubstitute |= plan.containsBindSubstitute_;
         subtrees.push_back(std::move(plan._qet));
       });
   result.at(0).push_back(
@@ -1879,6 +1889,7 @@ std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
   plan._idsOfIncludedFilters = filterIds;
   plan.idsOfIncludedTextLimits_ = textLimitIds;
   plan.containsFilterSubstitute_ = containsFilterSubstitute;
+  plan.containsBindSubstitute_ = containsBindSubstitute;
   applyFiltersIfPossible<FilterMode::ReplaceUnfilteredNoSubstitutes>(
       result.at(0), filtersAndOptSubstitutes);
   applyTextLimitsIfPossible(result.at(0), textLimitVec, true);
@@ -2374,8 +2385,12 @@ auto QueryPlanner::createSpatialJoin(const SubtreePlan& a, const SubtreePlan& b,
       otherSubtreePlan._qet->getVariableAndInfoByColumnIndex(ind).first;
 
   auto newSpatialJoin = spatialJoin->addChild(otherSubtreePlan._qet, var);
-
-  SubtreePlan plan = makeSubtreePlan<SpatialJoin>(std::move(newSpatialJoin));
+  // Try to push down `BIND`s to retrieve bounding box columns from new child.
+  auto optCloneWithBoundingBox = newSpatialJoin->cloneWithBoundingBoxColumns();
+  SubtreePlan plan =
+      optCloneWithBoundingBox.has_value()
+          ? makeSubtreePlan<SpatialJoin>(optCloneWithBoundingBox.value())
+          : makeSubtreePlan<SpatialJoin>(std::move(newSpatialJoin));
   mergeSubtreePlanIds(plan, a, b);
   return plan;
 }
@@ -3010,6 +3025,7 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
       for (auto& plan : vec) {
         plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
         plan.containsFilterSubstitute_ = a.containsFilterSubstitute_;
+        plan.containsBindSubstitute_ = a.containsBindSubstitute_;
       }
       nextCandidates.insert(nextCandidates.end(),
                             ql::make_move_iterator(vec.begin()),
@@ -3177,11 +3193,29 @@ void QueryPlanner::GraphPatternPlanner::visitBind(const parsedQuery::Bind& v) {
   auto lastRow = std::move(candidatePlans_.at(0));
   candidatePlans_.at(0).clear();
   for (const auto& a : lastRow) {
+    if (getRuntimeParameter<
+            &RuntimeParameters::enableMaterializedViewQueryRewrite_>()) {
+      // Consider pushing down the `BIND` into the subtree.
+      auto pushedDownPlan =
+          a._qet->getRootOperation()->makeTreeWithBindColumn(v);
+      if (pushedDownPlan.has_value()) {
+        // We can replace this `BIND` with a plan that contains an additional
+        // scan column with equivalent values, for example from a materialized
+        // view.
+        auto plan = a;
+        plan._qet = pushedDownPlan.value();
+        plan.containsBindSubstitute_ = true;
+        candidatePlans_.back().push_back(std::move(plan));
+        continue;
+      }
+    }
+
     // Add the query plan for the BIND.
     SubtreePlan plan = makeSubtreePlan<Bind>(qec_, a._qet, v);
     plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
     plan.idsOfIncludedTextLimits_ = a.idsOfIncludedTextLimits_;
     plan.containsFilterSubstitute_ = a.containsFilterSubstitute_;
+    plan.containsBindSubstitute_ = a.containsBindSubstitute_;
     candidatePlans_.back().push_back(std::move(plan));
   }
   // Handle the case where the BIND clause is the first clause (which is
@@ -3290,6 +3324,10 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
       }
       auto spatialJoin =
           std::make_shared<SpatialJoin>(qec_, config, std::nullopt, right);
+      // Note that we don't need to try `BIND` push down for bounding boxes
+      // here, as the plan will be processed by `createSpatialJoin` later. The
+      // function will then add the left child and attempt `BIND` push down.
+      // This way we avoid an additional `BIND` push down process.
       auto plan = makeSubtreePlan<SpatialJoin>(std::move(spatialJoin));
       candidatesOut.push_back(std::move(plan));
     };
