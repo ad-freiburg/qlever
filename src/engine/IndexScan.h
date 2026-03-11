@@ -311,7 +311,13 @@ class IndexScan final : public Operation {
 
   // Returns a `VariableToColumnMap` that maps all visible variables of this
   // `IndexScan` not to result column indices but to column indices in the
-  // underlying `Permutation`. Used for `makeTreeWithBindColumn`.
+  // underlying `Permutation`. This differs from the regular
+  // `VariableToColumnMap` if some columns are not read.  Used for
+  // `makeTreeWithBindColumn`.
+  //
+  // Example: We select the first three columns and an additional column at
+  // index 5. Then the regular column index for the additional column is 3 but
+  // the permutation column index is 5.
   VariableToColumnMap computePermutationColumnIndices() const;
 };
 

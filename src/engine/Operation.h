@@ -21,6 +21,7 @@
 #include "util/CancellationHandle.h"
 #include "util/CompilerExtensions.h"
 #include "util/CopyableSynchronization.h"
+#include "util/TypeTraits.h"
 
 // forward declaration needed to break dependencies
 class QueryExecutionTree;
@@ -229,7 +230,8 @@ class Operation {
     return false;
   }
 
-  // Check whether all variables given are covered by this `Operation`.
+  // Check whether all variables given are covered by this `Operation` and are
+  // always defined.
   bool coversVariables(const std::vector<const Variable*>& variables) const;
 
   // See the member variable with the same name below for documentation.
@@ -381,7 +383,9 @@ class Operation {
   // Try to create a version of this operation with an additional column from a
   // `BIND` pushed down into the tree. The default is to disallow push down. All
   // operations where a `BIND` push down is semantically possible should
-  // override this method.
+  // override this method. Pushing a `BIND` down to a materialized view might
+  // produce a cheaper query plan for example. This function is tested in the
+  // `BindRewrite` test case in `MaterializedViewsTest`.
   virtual std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithBindColumn(const parsedQuery::Bind&) const {
     return std::nullopt;
@@ -429,11 +433,20 @@ class Operation {
   // Internal default implementation for `makeTreeWithBindColumn`. This
   // implementation makes the assumption that a `BIND` can be pushed into this
   // `Operation` iff any of its children accepts the `BIND` push down. This is
-  // the correct behavior for various operations, which make use of this
-  // function for their `makeTreeWithBindColumn` override.
-  // Returns the index of the replaced child and its new `QueryExecutionTree`.
-  std::optional<std::pair<size_t, std::shared_ptr<QueryExecutionTree>>>
-  pushDownBindToAnyChild(const parsedQuery::Bind& bind) const;
+  // the correct behavior for various operations like `Join`, which make use of
+  // this function for their `makeTreeWithBindColumn` override. Returns the
+  // index of the replaced child and its new `QueryExecutionTree`.
+  //
+  // NOTE: This function is defined in `OperationBindPushDownImpl.h` s.t. it can
+  // be instantiated in the code for operations that use it.
+  CPP_template(typename MakeCloneWithNewChildren)(
+      requires ad_utility::InvocableWithExactReturnType<
+          MakeCloneWithNewChildren, std::shared_ptr<QueryExecutionTree>,
+          std::vector<std::shared_ptr<QueryExecutionTree>>>)
+      std::optional<std::shared_ptr<QueryExecutionTree>> pushDownBindToAnyChild(
+          const parsedQuery::Bind& bind,
+          std::vector<std::shared_ptr<QueryExecutionTree>> children,
+          MakeCloneWithNewChildren makeCloneWithNewChildren) const;
 
  private:
   //! Compute the result of the query-subtree rooted at this element..
