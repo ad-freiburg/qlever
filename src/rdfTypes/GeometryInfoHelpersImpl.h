@@ -207,6 +207,12 @@ inline Box<CoordType> boundingBoxToUtilBox(const BoundingBox& boundingBox) {
           geoPointToUtilPoint(boundingBox.upperRight())};
 }
 
+// Convert two `GeoPoint`s representing the bounding box corners to a `DBox`.
+inline Box<CoordType> boundingBoxCornersToUtilBox(const GeoPoint& lowerLeft,
+                                                  const GeoPoint& upperRight) {
+  return {geoPointToUtilPoint(lowerLeft), geoPointToUtilPoint(upperRight)};
+}
+
 // Constexpr helper to add the required suffixes to the OGC simple features IRI
 // prefix.
 template <const std::string_view& suffix>

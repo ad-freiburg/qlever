@@ -24,6 +24,7 @@ struct SpatialJoinParseJob {
   size_t line;
   bool side;
   std::string wkt;
+  std::optional<BoundingBox> boundingBox;
 };
 
 // Compare two `SpatialJoinParseJob` objects. The member attribute `wkt` is used
@@ -46,8 +47,11 @@ class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
   // Enqueue a new row from the input table (given the `ValueId` of the
   // geometry: `GeoPoint` or `VocabIndex` or `LocalVocabIndex`, the `rowIndex`
   // in the input table `id` and whether the geometry should be assigned to the
-  // left or right `side` of the spatial join)
-  void addValueIdToQueue(ValueId valueId, size_t rowIndex, bool side);
+  // left or right `side` of the spatial join). If available as part of the
+  // `IdTable`, this function accepts a precomputed bounding box for
+  // prefiltering.
+  void addValueIdToQueue(ValueId valueId, size_t rowIndex, bool side,
+                         std::optional<BoundingBox> boundingBox);
 
   // Accumulate the counters across all threads. They count the number of
   // geometries skipped by bounding box prefilter and the number of parsed (that

@@ -31,6 +31,7 @@
 #include "engine/SpatialJoin.h"
 #include "engine/SpatialJoinParser.h"
 #include "global/RuntimeParameters.h"
+#include "global/ValueId.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/ChunkedForLoop.h"
 #include "util/Exception.h"
@@ -53,8 +54,17 @@ SpatialJoinAlgorithms::SpatialJoinAlgorithms(
 // ____________________________________________________________________________
 bool SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
     const std::optional<util::geo::DBox>& prefilterLatLngBox,
-    const Index& index, VocabIndex vocabIndex) {
+    const Index& index, VocabIndex vocabIndex,
+    const std::optional<ad_utility::BoundingBox>& precomputedBoundingBox) {
   if (prefilterLatLngBox.has_value()) {
+    // Use the `precomputedBoundingBox` for filtering if available.
+    if (precomputedBoundingBox.has_value()) {
+      return !util::geo::intersects(prefilterLatLngBox.value(),
+                                    ad_utility::detail::boundingBoxToUtilBox(
+                                        precomputedBoundingBox.value()));
+    }
+
+    // Otherwise, use the `GeoVocabulary` for filtering.
     auto geoInfo = index.getVocab().getGeoInfo(vocabIndex);
     if (geoInfo.has_value()) {
       // We have a bounding box: Check intersection with prefilter box.
@@ -75,10 +85,9 @@ bool SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
 // ____________________________________________________________________________
 SpatialJoinAlgorithms::LibSpatialJoinParseMetadata
 SpatialJoinAlgorithms::libspatialjoinParse(
-    bool leftOrRightSide, IdTableAndJoinColumn idTableAndCol,
-    sj::Sweeper& sweeper, size_t numThreads,
-    std::optional<util::geo::I32Box> prefilterBox) const {
-  const auto [idTable, column] = idTableAndCol;
+    bool leftOrRightSide, LibSpatialJoinParseInput input, sj::Sweeper& sweeper,
+    size_t numThreads, std::optional<util::geo::I32Box> prefilterBox) const {
+  const auto [idTable, column, boundingBoxes] = input;
 
   // Convert prefilter box to lat lng coordinates for comparing against geometry
   // info from vocabulary.
@@ -88,7 +97,8 @@ SpatialJoinAlgorithms::libspatialjoinParse(
         prefilterBox.value());
   }
   bool usePrefiltering = prefilterLatLngBox.has_value() &&
-                         qec_->getIndex().getVocab().isGeoInfoAvailable();
+                         (boundingBoxes.has_value() ||
+                          qec_->getIndex().getVocab().isGeoInfoAvailable());
 
   // If the prefilter box is too large, the prefiltering overhead (cost of
   // retrieving bounding boxes from disk) is likely larger than its performance
@@ -113,13 +123,32 @@ SpatialJoinAlgorithms::libspatialjoinParse(
       &sweeper, numThreads, usePrefiltering, prefilterLatLngBox,
       qec_->getIndex());
 
-  // Iterate over all rows in `idTable` and add the geometries from `column` to
-  // the parallel WKT parser.
+  // Helper to retrieve precomputed bounding boxes from the `IdTable` if
+  // available.
+  auto getBoundingBox =
+      [&boundingBoxes,
+       idTable](size_t row) -> std::optional<ad_utility::BoundingBox> {
+    if (!boundingBoxes.has_value()) {
+      return std::nullopt;
+    }
+    auto idLowerLeft = idTable->at(row, boundingBoxes.value().first);
+    auto idUpperRight = idTable->at(row, boundingBoxes.value().second);
+    if (idLowerLeft.getDatatype() != Datatype::GeoPoint ||
+        idUpperRight.getDatatype() != Datatype::GeoPoint) {
+      return std::nullopt;
+    }
+    return ad_utility::BoundingBox{idLowerLeft.getGeoPoint(),
+                                   idUpperRight.getGeoPoint()};
+  };
+
+  // Iterate over all rows in `idTable` and add the geometries from `column`
+  // to the parallel WKT parser.
   const auto& geoms = idTable->getColumn(column);
   ad_utility::chunkedForLoop<wktParserChunkSizeForCancellationCheck>(
       0, idTable->size(),
-      [&parser, &geoms, &leftOrRightSide](size_t row) {
-        parser.addValueIdToQueue(geoms[row], row, leftOrRightSide);
+      [&parser, &geoms, &leftOrRightSide, &getBoundingBox](size_t row) {
+        parser.addValueIdToQueue(geoms[row], row, leftOrRightSide,
+                                 getBoundingBox(row));
       },
       [this]() { throwIfCancelled(); });
 
@@ -477,8 +506,8 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
   // smaller one. Compute the bounding box of the smaller table (appropriately
   // inflated for `WITHIN_DIST` joins) and only add those geometries from the
   // larger table that intersect this bounding box.
-  auto runParser = [&](IdTableAndJoinColumn smaller,
-                       IdTableAndJoinColumn larger, bool smallerIsRight) {
+  auto runParser = [&](LibSpatialJoinParseInput smaller,
+                       LibSpatialJoinParseInput larger, bool smallerIsRight) {
     // Parse and add all geometries of the smaller side
     auto [boxSmall, countSmall, droppedSmall, threadsSmall] =
         libspatialjoinParse(smallerIsRight, smaller, sweeper, NUM_THREADS,
@@ -512,8 +541,9 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
     return countSmall > 0 && countLarge > 0;
   };
 
-  IdTableAndJoinColumn leftTableAndCol{idTableLeft, leftJoinCol};
-  IdTableAndJoinColumn rightTableAndCol{idTableRight, rightJoinCol};
+  LibSpatialJoinParseInput leftTableAndCol{idTableLeft, leftJoinCol, bbLeft};
+  LibSpatialJoinParseInput rightTableAndCol{idTableRight, rightJoinCol,
+                                            bbRight};
   bool nonEmptyChildren =
       idTableLeft->size() < idTableRight->size()
           ? runParser(leftTableAndCol, rightTableAndCol, false)

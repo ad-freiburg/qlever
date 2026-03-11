@@ -181,7 +181,11 @@ class SpatialJoinAlgorithms {
   // added geometries, which may be used as a prefilter at next call and the
   // number of geometries added. This function is only `public` for testing
   // purposes and should otherwise not be used outside of this class.
-  using IdTableAndJoinColumn = std::pair<const IdTable*, const ColumnIndex>;
+  struct LibSpatialJoinParseInput {
+    const IdTable* idTable_;
+    ColumnIndex geomsCol_;
+    SpatialJoinBoundingBoxColumns boundingBoxCols_;
+  };
   struct LibSpatialJoinParseMetadata {
     // Aggregated bounding box of all parsed geometries
     util::geo::I32Box aggBoundingBox_;
@@ -194,18 +198,21 @@ class SpatialJoinAlgorithms {
     size_t numThreadsUsed_;
   };
   LibSpatialJoinParseMetadata libspatialjoinParse(
-      bool leftOrRightSide, IdTableAndJoinColumn idTableAndCol,
+      bool leftOrRightSide, LibSpatialJoinParseInput input,
       sj::Sweeper& sweeper, size_t numThreads,
       std::optional<util::geo::I32Box> prefilterBox) const;
 
   // Helper for `libspatialjoinParse` to check the bounding box (only if
   // available from a `GeoVocabulary`) of a given vocabulary entry against the
   // `prefilterLatLngBox`. Returns `true` if the geometry can be discarded just
-  // by the bounding box. Should only be applied if the index is known to be
-  // built on a `GeoVocabulary`.
+  // by the bounding box. If the bounding box is already loaded (for example
+  // from a materialized view), it can prefilter in memory. Otherwise on-disk
+  // `GeometryInfo` will be used. Then this should only be applied if the index
+  // is known to be built on a `GeoVocabulary`.
   static bool prefilterGeoByBoundingBox(
       const std::optional<util::geo::DBox>& prefilterLatLngBox,
-      const Index& index, VocabIndex vocabIndex);
+      const Index& index, VocabIndex vocabIndex,
+      const std::optional<ad_utility::BoundingBox>& precomputedBoundingBox);
 
   // Retrieve the number of threads to be used for `libspatialjoinParse` and
   // `LibspatialjoinAlgorithm`.
