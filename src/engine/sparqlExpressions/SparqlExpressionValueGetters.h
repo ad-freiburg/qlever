@@ -113,6 +113,7 @@ struct NumericValueGetter : Mixin<NumericValueGetter> {
 // expressions.
 struct NumericOrDateValueGetter : Mixin<NumericOrDateValueGetter> {
   using Mixin<NumericOrDateValueGetter>::operator();
+  using Value = NumericOrDateValue;
   // Same as in `NumericValueGetter`.
   // Here a `LiteralOrIri` can never be of type `bool`, `int`, `double` or
   // `DateYearOrDuration`. These types were already folded into `ValueId`s.
