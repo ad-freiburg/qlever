@@ -21,12 +21,12 @@ class TensorData {
  private:
   // only support float tensors with one dimension for now
   std::vector<float> tensorData_;
-  std::vector<int64_t> shape_;
+  std::vector<size_t> shape_;
   DType dtype_;
 
  public:
   // Construct a `TensorData` given a `TensorData` object.
-  explicit TensorData(std::vector<float> tensorData, std::vector<int64_t> shape,
+  explicit TensorData(std::vector<float> tensorData, std::vector<size_t> shape,
                       DType dtype)
       : tensorData_{std::move(tensorData)},
         shape_{std::move(shape)},
@@ -40,7 +40,7 @@ class TensorData {
 
   float operator[](size_t idx) const { return tensorData_[idx]; }
   size_t size() const { return tensorData_.size(); }
-  const std::vector<int64_t>& shape() const { return shape_; }
+  const auto& shape() const { return shape_; }
   DType dtype() const { return dtype_; }
 
   static TensorData parseFromString(std::string_view dataString);

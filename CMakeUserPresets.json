@@ -4,6 +4,7 @@
         "conan": {}
     },
     "include": [
-        "./CMakePresets.json"
+        "./CMakePresets.json",
+        "../../../../run/user/15642/qlever/vscode-build/build/Release/generators/CMakePresets.json"
     ]
 }

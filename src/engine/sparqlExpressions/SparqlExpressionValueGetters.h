@@ -273,9 +273,7 @@ struct GeoPointValueGetter : Mixin<GeoPointValueGetter> {
 struct TensorValueGetter : Mixin<TensorValueGetter> {
   using Mixin<TensorValueGetter>::operator();
   std::optional<ad_utility::TensorData> operator()(
-      ValueId, const EvaluationContext*) const {
-    return std::nullopt;
-  }
+      ValueId id, const EvaluationContext* ctx) const;
 
   // TODO<joka921> probably we should return a reference or a view here.
   // TODO<joka921> use a `NormalizedStringView` inside the expressions.

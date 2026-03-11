@@ -25,18 +25,27 @@ auto lit = ad_utility::testing::tripleComponentLiteral;
 TEST(TensorParse, TensorDump) {
   auto tensor = TensorData({1.0f, 2.0f, 3.0f}, {3}, TensorData::DType::FLOAT);
   auto [tensorString, datatypeIri] = tensor.toString();
-  EXPECT_THAT(tensorString, R"({"data":[1.0,2.0,3.0],"shape":[3],"type":0})");
+  EXPECT_THAT(tensorString, R"({"data":[1.0,2.0,3.0],"shape":[3],"type":"float64"})");
   EXPECT_THAT(datatypeIri, "https://w3id.org/rdf-tensor/datatypes#DataTensor");
 }
 // _____________________________________________________________________________
 TEST(TensorParse, TensorConstruction) {
   auto tensor_from_string = TensorData::parseFromString(
-      R"({"data":[1.0,2.0,3.0],"shape":[3],"type":0})");
+      R"({"data":[1.0,2.0,3.0],"shape":[3],"type":"float64"})");
   auto tensor = TensorData({1.0f, 2.0f, 3.0f}, {3}, TensorData::DType::FLOAT);
   EXPECT_EQ(tensor_from_string[0], tensor[0]);
   EXPECT_EQ(tensor_from_string.size(), tensor.size());
   EXPECT_EQ(tensor_from_string.shape(), tensor.shape());
   EXPECT_EQ(tensor_from_string.dtype(), tensor.dtype());
+
+  // also test that parsing an invalid string throws an error
+  EXPECT_THROW(TensorData::parseFromString("invalid string"), std::runtime_error);
+  EXPECT_THROW(TensorData::parseFromString(R"({"data":[1.0,2.0,3.0],"shape":[3],"type":0})"),
+               std::runtime_error);  // invalid type
+  EXPECT_THROW(TensorData::parseFromString(R"({"data":[1.0,2.0,3.0],"shape":[3]})"),
+               std::runtime_error);  // missing type
+  EXPECT_THROW(TensorData::parseFromString(R"({"data":[1.0,2.0,3.0],"type":"float64"})"),
+               std::runtime_error);  // missing shape
 }
 // _____________________________________________________________________________
 TEST(TensorQueryCall, TensorCall) {
@@ -62,10 +71,10 @@ TEST_F(TensorQueryTest, TensorQueryConstruction) {
 PREFIX dt: <https://w3id.org/rdf-tensor/datatypes#>
 PREFIX dtf: <https://w3id.org/rdf-tensor/functions#>
 PREFIX dta: <https://w3id.org/rdf-tensor/aggregates#>
-      SELECT ?s (dtf:cosineSimilarity(?v, "{\"data\":[1.0,2.0,3.0],\"shape\":[3],\"type\":0}"^^dt:DataTensor) AS ?sim) WHERE { 
+      SELECT ?s (dtf:cosineSimilarity("{\"data\":[1.0,2.0,3.0],\"shape\":[3],\"type\":\"float64\"}"^^dt:DataTensor, ?v) AS ?sim) ?v WHERE  { 
       ?s <p1> ?v.
       }
-      ORDER BY DESC(?similarity)      
+      ORDER BY DESC(?sim)      
       )";
   auto query_plan = qlv().parseAndPlanQuery(full_query);
   auto [qet, qec, parsed] = std::move(query_plan);

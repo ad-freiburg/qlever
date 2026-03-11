@@ -437,17 +437,40 @@ std::optional<ad_utility::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
 
 std::optional<ad_utility::TensorData> TensorValueGetter::operator()(
     const LiteralOrIri& litOrIri, const EvaluationContext*) const {
-
   if (litOrIri.isLiteral() && litOrIri.hasDatatype()) {
-    std::string_view type = asStringViewUnsafe(litOrIri.getLiteral().getDatatype());
-    // if(type.end() == '>') { 
-    //   // The datatype still has the ending `>` from the IRI form `^^<datatypeIri>`, so we need to remove it.
-    //   type.remove_suffix(1);
+    std::string_view type =
+        asStringViewUnsafe(litOrIri.getLiteral().getDatatype());
+    // if(type.end() == '>') {
+    //   // The datatype still has the ending `>` from the IRI form
+    //   `^^<datatypeIri>`, so we need to remove it. type.remove_suffix(1);
     // }
     if (type == TENSOR_LITERAL || type == TENSOR_NUMERIC_LITERAL) {
       return ad_utility::TensorData::parseFromString(
           asStringViewUnsafe(litOrIri.getLiteral().getContent()));
-        }
+    }
+  }
+  return std::nullopt;
+}
+std::optional<ad_utility::TensorData> TensorValueGetter::operator()(
+    ValueId id, const EvaluationContext* context) const {
+  auto optionalStringAndType =
+      ExportQueryExecutionTrees::idToStringAndType<true>(
+          context->_qec.getIndex(), id, context->_localVocab);
+  if (optionalStringAndType.has_value()) {
+    auto type = optionalStringAndType.value().second;
+    if (type == nullptr) {
+      return ad_utility::TensorData::parseFromString(
+          optionalStringAndType.value().first);
+    }
+    auto type_str = std::string(type);
+    // if(type.end() == '>') {
+    //   // The datatype still has the ending `>` from the IRI form
+    //   `^^<datatypeIri>`, so we need to remove it. type.remove_suffix(1);
+    // }
+    if (type_str == TENSOR_LITERAL || type_str == TENSOR_NUMERIC_LITERAL) {
+      return ad_utility::TensorData::parseFromString(
+          optionalStringAndType.value().first);
+    }
   }
   return std::nullopt;
 }
@@ -547,7 +570,7 @@ CPP_template_out_def(typename RequestedInfo)(
     requires ad_utility::RequestedInfoT<RequestedInfo>)
     std::optional<RequestedInfo> GeometryInfoValueGetter<CPP_sfinae_args(
         RequestedInfo)>::operator()(ValueId id,
-                                    const EvaluationContext* context) const {
+                                    const EvaluationContext * context) const {
   using enum Datatype;
   switch (id.getDatatype()) {
     case EncodedVal:
@@ -584,8 +607,8 @@ CPP_template_out_def(typename RequestedInfo)(
 CPP_template_out_def(typename RequestedInfo)(
     requires ad_utility::RequestedInfoT<RequestedInfo>)
     std::optional<RequestedInfo> GeometryInfoValueGetter<CPP_sfinae_args(
-        RequestedInfo)>::operator()(const LiteralOrIri& litOrIri,
-                                    [[maybe_unused]] const EvaluationContext*
+        RequestedInfo)>::operator()(const LiteralOrIri & litOrIri,
+                                    [[maybe_unused]] const EvaluationContext *
                                         context) const {
   // If we receive only a literal, we have no choice but to parse it and compute
   // the geometry info ad hoc.

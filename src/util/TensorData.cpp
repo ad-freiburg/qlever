@@ -6,6 +6,11 @@
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 using namespace ad_utility;
 
+const std::map<TensorData::DType, std::string> dtypeToString = {
+    {TensorData::DType::FLOAT, "float64"},
+    {TensorData::DType::BOOL, "bool"},
+    {TensorData::DType::INT, "int64"},
+};
 std::pair<std::string, std::string> TensorData::toString() const {
   // to the json string representation of the tensor data, we can use
   // nlohmann::json's dump function, which will add the necessary brackets and
@@ -14,7 +19,7 @@ std::pair<std::string, std::string> TensorData::toString() const {
   nlohmann::json json;
   json["data"] = tensorData_;
   json["shape"] = shape_;
-  json["type"] = static_cast<int>(dtype_);
+  json["type"] = dtypeToString.at(dtype_);
   return {json.dump(), TENSOR_LITERAL};
 }
 
@@ -26,14 +31,51 @@ LiteralOrIri TensorData::toLiteral() const {
 TensorData TensorData::parseFromString(std::string_view dataString) {
   // we can use nlohmann::json's parse function to parse the string
   // representation of the tensor data.
+  try {
+    auto json = nlohmann::json::parse(dataString);
+    return parseFromJSON(json);
+  } catch (const nlohmann::json::parse_error& e) {
+    throw std::runtime_error{"Failed to parse tensor data from string: " +
+                             std::string(e.what())};
+  }
   auto json = nlohmann::json::parse(dataString);
   return parseFromJSON(json);
 }
 
 TensorData TensorData::parseFromJSON(nlohmann::json json) {
-  auto data = json["data"].get<std::vector<float>>();
-  auto shape = json["shape"].get<std::vector<int64_t>>();
-  auto dtype = static_cast<DType>(json["type"].get<int>());
+  if (json.find("data") == json.end() || json.find("shape") == json.end() ||
+      json.find("type") == json.end()) {
+    throw std::runtime_error{"Missing required fields in JSON"};
+  }
+  std::vector<float> data;
+  std::vector<size_t> shape;
+  TensorData::DType dtype;
+  try {
+    data = json["data"].get<std::vector<float>>();
+    shape = json["shape"].get<std::vector<size_t>>();
+
+    dtype =
+        std::find_if(dtypeToString.begin(), dtypeToString.end(),
+                     [&json](const auto& pair) {
+                       return pair.second == json["type"].get<std::string>();
+                     })
+            ->first;
+  } catch (const std::exception& e) {
+    throw std::runtime_error{"Unknown type in JSON" + std::string(e.what())};
+  }
+
+  if (dtype == dtypeToString.end()->first) {
+    throw std::runtime_error{"Unknown dtype in JSON: " +
+                             json["type"].get<std::string>()};
+  }
+  if (shape.empty()) {
+    throw std::runtime_error{"Shape cannot be empty"};
+  }
+  if (std::accumulate(shape.begin(), shape.end(), (size_t)1, std::multiplies<>()) !=
+      data.size()) {
+    throw std::runtime_error{
+        "The number of elements in data does not match the shape"};
+  }
 
   return TensorData(std::move(data), std::move(shape), dtype);
 }
