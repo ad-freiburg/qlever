@@ -5,6 +5,8 @@
 #ifndef QLEVER_SRC_INDEX_COMPRESSEDRELATION_H
 #define QLEVER_SRC_INDEX_COMPRESSEDRELATION_H
 
+#include <gtest/gtest_prod.h>
+
 #include <vector>
 
 #include "backports/algorithm.h"
@@ -526,6 +528,8 @@ class CompressedRelationWriter {
   // of threads is determined by the runtime parameter
   // "threads-for-permutation-writer".
   static ad_utility::TaskQueue<false> makeBlockWriteQueue();
+  FRIEND_TEST(CompressedRelationWriter,
+              isInitializedWithCorrectNumberOfThreads);
 };
 
 using namespace std::string_view_literals;

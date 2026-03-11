@@ -31,17 +31,6 @@ TEST(Constants, testDefaultQueryTimeoutIsStriclyPositive) {
       setRuntimeParameter<&RuntimeParameters::defaultQueryTimeout_>(1s));
 }
 
-// _____________________________________________________________________________
-TEST(Constants, testThreadsForPermutationWriterIsStriclyPositive) {
-  auto reset = setRuntimeParameterForTest<
-      &RuntimeParameters::threadsForPermutationWriter_>(1337);
-  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      setRuntimeParameter<&RuntimeParameters::threadsForPermutationWriter_>(0),
-      HasSubstr("threads-for-permutation-writer"), std::runtime_error);
-  EXPECT_NO_THROW(
-      setRuntimeParameter<&RuntimeParameters::threadsForPermutationWriter_>(1));
-}
-
 namespace {
 constexpr std::string_view hi = "hi";
 constexpr std::string_view bye = "-bye";
