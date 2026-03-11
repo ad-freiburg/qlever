@@ -1,8 +1,13 @@
-// Copyright 2024 - 2025, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors: Jonathan Zeller github@Jonathan24680
-//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
-//          Patrick Brosi <brosi@cs.uni-freiburg.de>
+// Copyright 2024 - 2026 The QLever Authors, in particular:
+//
+// 2024 - 2025 Jonathan Zeller github@Jonathan24680, UFR
+// 2024 - 2026 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+// 2025        Patrick Brosi <brosi@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "engine/SpatialJoinAlgorithms.h"
 
@@ -310,7 +315,7 @@ void SpatialJoinAlgorithms::addResultTableEntry(IdTable* result,
 Result SpatialJoinAlgorithms::BaselineAlgorithm() {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, rightSelectedCols, numColumns, maxDist, maxResults,
-              joinType, rightCacheName] = params_;
+              joinType, rightCacheName, bbLeft, bbRight] = params_;
   IdTable result{numColumns, qec_->getAllocator()};
 
   // cartesian product between the two tables, pairs are restricted according to
@@ -423,7 +428,7 @@ sj::SweeperCfg SpatialJoinAlgorithms::libspatialjoinSweeperConfig(
 Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, rightSelectedCols, numColumns, maxDist, maxResults,
-              joinType, rightCacheName] = params_;
+              joinType, rightCacheName, bbLeft, bbRight] = params_;
   // Setup.
   IdTable result{numColumns, qec_->getAllocator()};
   size_t NUM_THREADS = getNumThreads();
@@ -564,7 +569,7 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
 Result SpatialJoinAlgorithms::S2geometryAlgorithm() {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, rightSelectedCols, numColumns, maxDist, maxResults,
-              joinType, rightCacheName] = params_;
+              joinType, rightCacheName, bbLeft, bbRight] = params_;
   IdTable result{numColumns, qec_->getAllocator()};
 
   S2PointIndex<size_t> s2index;
@@ -630,7 +635,7 @@ Result SpatialJoinAlgorithms::S2geometryAlgorithm() {
 Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, rightSelectedCols, numColumns, maxDist, maxResults,
-              joinType, rightCacheName] = params_;
+              joinType, rightCacheName, bbLeft, bbRight] = params_;
   IdTable result{numColumns, qec_->getAllocator()};
 
   AD_CORRECTNESS_CHECK(rightCacheName.has_value());
@@ -693,7 +698,7 @@ std::vector<Box> SpatialJoinAlgorithms::computeQueryBox(
     const Point& startPoint, double additionalDist) const {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, rightSelectedCols, numColumns, maxDist, maxResults,
-              joinType, rightCacheName] = params_;
+              joinType, rightCacheName, bbLeft, bbRight] = params_;
   AD_CORRECTNESS_CHECK(maxDist.has_value(),
                        "Max distance must have a value for this operation");
   // haversine function
@@ -773,7 +778,7 @@ std::vector<Box> SpatialJoinAlgorithms::computeQueryBoxForLargeDistances(
     const Point& startPoint) const {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, rightSelectedCols, numColumns, maxDist, maxResults,
-              joinType, rightCacheName] = params_;
+              joinType, rightCacheName, bbLeft, bbRight] = params_;
   AD_CORRECTNESS_CHECK(maxDist.has_value(),
                        "Max distance must have a value for this operation");
 
@@ -963,7 +968,7 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
 
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, rightSelectedCols, numColumns, maxDist, maxResults,
-              joinType, rightCacheName] = params_;
+              joinType, rightCacheName, bbLeft, bbRight] = params_;
   IdTable result{numColumns, qec_->getAllocator()};
 
   // create r-tree for smaller result table

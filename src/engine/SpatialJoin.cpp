@@ -460,22 +460,20 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
                    config_.joinType_.value() == SpatialJoinType::WITHIN;
   auto childLeft = swapSides ? childRight_ : childLeft_;
   auto childRight = swapSides ? childLeft_ : childRight_;
+  auto joinVarLeft = swapSides ? config_.right_ : config_.left_;
+  auto joinVarRight = swapSides ? config_.left_ : config_.right_;
 
-  // Input tables
+  // Input tables.
   auto [idTableLeft, resultLeft] = getIdTable(childLeft);
   auto [idTableRight, resultRight] = getIdTable(childRight);
 
-  // Input table columns for the join
-  ColumnIndex leftJoinCol =
-      childLeft->getVariableColumn(swapSides ? config_.right_ : config_.left_);
-  ColumnIndex rightJoinCol =
-      childRight->getVariableColumn(swapSides ? config_.left_ : config_.right_);
+  // Input table columns for the join.
+  ColumnIndex leftJoinCol = childLeft->getVariableColumn(joinVarLeft);
+  ColumnIndex rightJoinCol = childRight->getVariableColumn(joinVarRight);
 
-  // TODO swapsides ,etc.
-  // std::optional<std::pair<ColumnIndex, ColumnIndex>> boundingBoxColsLeft;
-  // if (config_.boundingBoxesLeft_.has_value()) {
-  //   boundingBoxColsLeft = {childLeft->getVariableColumn()}
-  // }
+  // Column indices of precomputed bounding boxes, if applicable.
+  auto bbLeft = getBoundingBoxColumnIndices(childLeft, joinVarLeft);
+  auto bbRight = getBoundingBoxColumnIndices(childRight, joinVarRight);
 
   // Payload cols and join col
   auto varsAndColInfo = copySortedByColumnIndex(getVarColMapPayloadVars());
@@ -486,12 +484,20 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
 
   // Size of output table
   size_t numColumns = getResultWidth();
-  return PreparedSpatialJoinParams{idTableLeft,       std::move(resultLeft),
-                                   idTableRight,      std::move(resultRight),
-                                   leftJoinCol,       rightJoinCol,
-                                   rightSelectedCols, numColumns,
-                                   getMaxDist(),      getMaxResults(),
-                                   config_.joinType_, config_.rightCacheName_};
+  return PreparedSpatialJoinParams{idTableLeft,
+                                   std::move(resultLeft),
+                                   idTableRight,
+                                   std::move(resultRight),
+                                   leftJoinCol,
+                                   rightJoinCol,
+                                   rightSelectedCols,
+                                   numColumns,
+                                   getMaxDist(),
+                                   getMaxResults(),
+                                   config_.joinType_,
+                                   config_.rightCacheName_,
+                                   bbLeft,
+                                   bbRight};
 }
 
 // ____________________________________________________________________________
@@ -607,18 +613,33 @@ SpatialJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
 }
 
 // _____________________________________________________________________________
+std::pair<Variable, Variable> SpatialJoin::getBoundingBoxColumnNames(
+    const Variable& joinVar) {
+  auto base = joinVar.name().substr(1);
+  return {Variable{absl::StrCat("?_ql_sj_ll_", base)},
+          Variable{absl::StrCat("?_ql_sj_ur_", base)}};
+}
+
+// _____________________________________________________________________________
+std::optional<std::pair<ColumnIndex, ColumnIndex>>
+SpatialJoin::getBoundingBoxColumnIndices(
+    std::shared_ptr<QueryExecutionTree> child, const Variable& joinVar) const {
+  auto [lowerLeft, upperRight] = getBoundingBoxColumnNames(joinVar);
+  auto colLowerLeft = child->getVariableColumnOrNullopt(lowerLeft);
+  auto colUpperRight = child->getVariableColumnOrNullopt(upperRight);
+  if (!colLowerLeft.has_value() || !colUpperRight.has_value()) {
+    return std::nullopt;
+  }
+  return std::pair<ColumnIndex, ColumnIndex>{colLowerLeft.value(),
+                                             colUpperRight.value()};
+}
+
+// _____________________________________________________________________________
 std::optional<std::shared_ptr<SpatialJoin>>
 SpatialJoin::cloneWithBoundingBoxColumns() const {
-  // TODO what if two spatialjoins have the same variable (like highway-building
-  // and highway-restaurant)?
-  // TODO column stripping
+  // TODO how do we solve column stripping if two spatialjoins have the same
+  // variable (like highway-building and highway-restaurant)?
 
-  auto makeInternalVar = [](const Variable& var) {
-    return Variable{absl::StrCat("?_ql_sj_", var.name().substr(1))};
-  };
-  auto varSuffix = [](const Variable& var, std::string suffix) {
-    return Variable{absl::StrCat(var.name(), suffix)};
-  };
   auto varExpr = [](const Variable& var) {
     return std::make_unique<sparqlExpression::VariableExpression>(var);
   };
@@ -633,38 +654,30 @@ SpatialJoin::cloneWithBoundingBoxColumns() const {
   auto ur = std::bind_front(
       makeBind, &sparqlExpression::makeEnvelopeUpperRightExpression);
 
-  auto tryPushDown = [ll, ur, varSuffix, makeInternalVar](
-                         std::shared_ptr<QueryExecutionTree> child,
-                         const Variable& geomVar)
-      -> std::tuple<std::shared_ptr<QueryExecutionTree>,
-                    std::optional<SpatialJoinBoundingBoxCols>, bool> {
+  auto tryPushDown = [ll, ur](std::shared_ptr<QueryExecutionTree> child,
+                              const Variable& geomVar)
+      -> std::tuple<std::shared_ptr<QueryExecutionTree>, bool> {
     if (!child) {
-      return {child, std::nullopt, false};
+      return {child, false};
     }
-    auto targetVar = makeInternalVar(geomVar);
-    auto var1 = varSuffix(targetVar, "_ll");
+    auto [var1, var2] = getBoundingBoxColumnNames(geomVar);
     auto step1 =
         child->getRootOperation()->makeTreeWithBindColumn(ll(geomVar, var1));
     if (!step1.has_value()) {
-      return {child, std::nullopt, false};
+      return {child, false};
     }
-    auto var2 = varSuffix(targetVar, "_ur");
     auto step2 = step1.value()->getRootOperation()->makeTreeWithBindColumn(
         ur(geomVar, var2));
     if (!step2.has_value()) {
-      return {child, std::nullopt, false};
+      return {child, false};
     }
-    return {std::move(step2.value()),
-            SpatialJoinBoundingBoxCols{std::move(var1), std::move(var2)}, true};
+    return {std::move(step2.value()), true};
   };
 
   auto newConfig = config_;
 
-  auto [left, leftBBCols, leftIsNew] = tryPushDown(childLeft_, config_.left_);
-  newConfig.boundingBoxesLeft_ = leftBBCols;
-  auto [right, rightBBCols, rightIsNew] =
-      tryPushDown(childRight_, config_.right_);
-  newConfig.boundingBoxesRight_ = rightBBCols;
+  auto [left, leftIsNew] = tryPushDown(childLeft_, config_.left_);
+  auto [right, rightIsNew] = tryPushDown(childRight_, config_.right_);
   if (!leftIsNew && !rightIsNew) {
     return std::nullopt;
   }

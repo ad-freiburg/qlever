@@ -21,6 +21,9 @@
 #include "global/Id.h"
 #include "rdfTypes/Variable.h"
 
+using SpatialJoinBoundingBoxColumns =
+    std::optional<std::pair<ColumnIndex, ColumnIndex>>;
+
 // helper struct to improve readability in prepareJoin()
 struct PreparedSpatialJoinParams {
   const IdTable* const idTableLeft_;
@@ -35,8 +38,8 @@ struct PreparedSpatialJoinParams {
   std::optional<size_t> maxResults_;
   std::optional<SpatialJoinType> joinType_;
   std::optional<std::string> rightCacheName_;
-  // std::optional<std::pair<ColumnIndex, ColumnIndex>> boundingBoxColsLeft_;
-  // std::optional<std::pair<ColumnIndex, ColumnIndex>> boundingBoxColsRight_;
+  SpatialJoinBoundingBoxColumns boundingBoxColsLeft_;
+  SpatialJoinBoundingBoxColumns boundingBoxColsRight_;
 };
 
 // This class is implementing a SpatialJoin operation. This operations joins
@@ -162,6 +165,15 @@ class SpatialJoin : public Operation {
 
   std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
       const parsedQuery::Bind& bind) const override;
+
+  // Get the internal variable names of bounding box columns.
+  static std::pair<Variable, Variable> getBoundingBoxColumnNames(
+      const Variable& joinVar);
+
+  // Check if the child provides bounding boxes and if yes, return the column
+  // indices.
+  SpatialJoinBoundingBoxColumns getBoundingBoxColumnIndices(
+      std::shared_ptr<QueryExecutionTree> child, const Variable& joinVar) const;
 
   // Make a clone of this `SpatialJoin` which uses precomputed bounding boxes of
   // the geometries from an underlying `MaterializedViews` if possible.
