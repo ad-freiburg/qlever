@@ -224,6 +224,11 @@ class DayTimeDuration {
   [[nodiscard]] QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(DayTimeDuration);
 
   //____________________________________________________________________________
+  // Subtraction of two `DayTimeDuration` objects.
+  [[nodiscard]] std::optional<DayTimeDuration> operator-(
+      const DayTimeDuration& rhs) const;
+
+  //____________________________________________________________________________
   template <typename H>
   friend H AbslHashValue(H h, const DayTimeDuration& d) {
     return H::combine(std::move(h), d.toBits());

@@ -88,8 +88,8 @@ std::optional<DayTimeDuration> Date::operator-(const Date& rhs) const {
   double second =
       std::chrono::duration_cast<std::chrono::nanoseconds>(difference).count() /
       1'000'000'000;
-  // Only passing seconds to DayTimeDuration. The object itself will convert the
-  // input to days, hours, minutes and seconds.
+  // Only passing seconds to `DayTimeDuration`. The object itself will convert
+  // the input to days, hours, minutes and seconds.
   return DayTimeDuration(durationType, 0, 0, 0, second);
 }
 

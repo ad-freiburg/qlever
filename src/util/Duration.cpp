@@ -73,6 +73,24 @@ std::pair<std::string, const char*> DayTimeDuration::toStringAndType() const {
 }
 
 //______________________________________________________________________________
+std::optional<DayTimeDuration> DayTimeDuration::operator-(
+    const DayTimeDuration& rhs) const {
+  auto totalMilliseconds1 = static_cast<long long>(totalMilliseconds_) -
+                            static_cast<long long>(boundTotalMilliseconds);
+  auto totalMilliseconds2 = static_cast<long long>(rhs.totalMilliseconds_) -
+                            static_cast<long long>(rhs.boundTotalMilliseconds);
+  auto difference = totalMilliseconds1 - totalMilliseconds2;
+
+  DayTimeDuration::Type durationType = difference < 0
+                                           ? DayTimeDuration::Type::Negative
+                                           : DayTimeDuration::Type::Positive;
+  difference = difference < 0 ? -difference : difference;
+  // Only passing seconds to `DayTimeDuration`. The object itself will convert
+  // the input to days, hours, minutes and seconds.
+  return DayTimeDuration(durationType, 0, 0, 0, difference / 1000);
+}
+
+//______________________________________________________________________________
 DayTimeDuration DayTimeDuration::parseXsdDayTimeDuration(
     std::string_view dayTimeDurationStr) {
   // Try to match the given pattern with the provided string. If the matching

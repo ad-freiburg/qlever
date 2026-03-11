@@ -360,8 +360,19 @@ std::optional<DateYearOrDuration> DateYearOrDuration::operator-(
     }
   }
 
+  if (isDayTimeDuration() && rhs.isDayTimeDuration()) {
+    const DayTimeDuration& ownDuration = getDayTimeDurationUnchecked();
+    const DayTimeDuration& otherDuration = rhs.getDayTimeDurationUnchecked();
+
+    std::optional<DayTimeDuration> difference = ownDuration - otherDuration;
+    if (!difference.has_value()) {
+      return std::nullopt;
+    } else {
+      return DateYearOrDuration(difference.value());
+    }
+  }
+
   // TODO<yarox-1>: The following subtractions should be implemented next:
-  //  `DayTimeDuration` - `DayTimeDuration`,
   //  `Date` - `DayTimeDuration`,
   //  `LargeYear` - `LargeYear`.
 
