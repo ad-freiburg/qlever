@@ -417,7 +417,6 @@ std::vector<ColumnIndex> SpatialJoin::resultSortedOn() const {
 
 // ____________________________________________________________________________
 VariableToColumnMap SpatialJoin::getVarColMapPayloadVars() const {
-  // TODO remove bounding box cols
   AD_CONTRACT_CHECK(childRight_,
                     "Child right must be added before payload variable to "
                     "column map can be computed.");
@@ -637,50 +636,70 @@ SpatialJoin::getBoundingBoxColumnIndices(
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<SpatialJoin>>
 SpatialJoin::cloneWithBoundingBoxColumns() const {
-  // TODO how do we solve column stripping if two spatialjoins have the same
-  // variable (like highway-building and highway-restaurant)?
+  // TODO<ullingerc> Find a way to apply column stripping that doesn't break if
+  // two `SpatialJoin`s share a variable (like `?area intersects ?building` and
+  // `?area intersects ?restaurant`).
 
-  auto varExpr = [](const Variable& var) {
+  auto makeVariableExpr = [](const Variable& var) {
     return std::make_unique<sparqlExpression::VariableExpression>(var);
   };
-  auto makeBind = [varExpr](auto factory, const Variable& geomVar,
-                            const Variable& targetVar) {
-    return parsedQuery::Bind{sparqlExpression::SparqlExpressionPimpl{
-                                 factory(varExpr(geomVar)), "TODO"},
-                             targetVar};
+  auto makeBind = [&makeVariableExpr](
+                      auto factory, std::string_view functionDescriptor,
+                      const Variable& geomVar, const Variable& targetVar) {
+    return parsedQuery::Bind{
+        sparqlExpression::SparqlExpressionPimpl{
+            factory(makeVariableExpr(geomVar)),
+            absl::StrCat(functionDescriptor, "(", geomVar.name(), ")")},
+        targetVar};
   };
-  auto ll = std::bind_front(makeBind,
-                            &sparqlExpression::makeEnvelopeLowerLeftExpression);
-  auto ur = std::bind_front(
-      makeBind, &sparqlExpression::makeEnvelopeUpperRightExpression);
 
-  auto tryPushDown = [ll, ur](std::shared_ptr<QueryExecutionTree> child,
-                              const Variable& geomVar)
-      -> std::tuple<std::shared_ptr<QueryExecutionTree>, bool> {
+  // Factory functions to construct `BIND` instances for the bounding box
+  // functions.
+  static constexpr std::string_view LOWER_LEFT_IRI =
+      "<http://qlever.cs.uni-freiburg.de/builtin-functions/envelopeLowerLeft>";
+  static constexpr std::string_view UPPER_RIGHT_IRI =
+      "<http://qlever.cs.uni-freiburg.de/builtin-functions/envelopeUpperRight>";
+  auto bindLowerLeft = std::bind_front(
+      makeBind, &sparqlExpression::makeEnvelopeLowerLeftExpression,
+      LOWER_LEFT_IRI);
+  auto bindUpperRight = std::bind_front(
+      makeBind, &sparqlExpression::makeEnvelopeUpperRightExpression,
+      UPPER_RIGHT_IRI);
+
+  // Try to push down both lower left and upper right `BIND`s into a child.
+  // Return the new child if it was successful and `nullopt` otherwise.
+  auto tryPushDown = [bindLowerLeft, bindUpperRight](
+                         std::shared_ptr<QueryExecutionTree> child,
+                         const Variable& geomVar)
+      -> std::optional<std::shared_ptr<QueryExecutionTree>> {
     if (!child) {
-      return {child, false};
+      return std::nullopt;
     }
-    auto [var1, var2] = getBoundingBoxColumnNames(geomVar);
-    auto step1 =
-        child->getRootOperation()->makeTreeWithBindColumn(ll(geomVar, var1));
-    if (!step1.has_value()) {
-      return {child, false};
+
+    // Try to push down `ql:envelopeLowerLeft`.
+    auto [varLowerLeft, varUpperRight] = getBoundingBoxColumnNames(geomVar);
+    auto pushDownLowerLeft = child->getRootOperation()->makeTreeWithBindColumn(
+        bindLowerLeft(geomVar, varLowerLeft));
+    if (!pushDownLowerLeft.has_value()) {
+      return std::nullopt;
     }
-    auto step2 = step1.value()->getRootOperation()->makeTreeWithBindColumn(
-        ur(geomVar, var2));
-    if (!step2.has_value()) {
-      return {child, false};
-    }
-    return {std::move(step2.value()), true};
+
+    // Try to push down `ql:envelopeUpperRight`.
+    auto pushDownUpperRight =
+        pushDownLowerLeft.value()->getRootOperation()->makeTreeWithBindColumn(
+            bindUpperRight(geomVar, varUpperRight));
+    return pushDownUpperRight;
   };
 
-  auto newConfig = config_;
-
-  auto [left, leftIsNew] = tryPushDown(childLeft_, config_.left_);
-  auto [right, rightIsNew] = tryPushDown(childRight_, config_.right_);
-  if (!leftIsNew && !rightIsNew) {
+  // Try to push down both `BIND`s into each of the children. If at least one of
+  // them accepts the `BIND`s return a new `QueryExecutionTree`.
+  auto left = tryPushDown(childLeft_, config_.left_);
+  auto right = tryPushDown(childRight_, config_.right_);
+  if (!left.has_value() && !right.has_value()) {
     return std::nullopt;
   }
-  return std::make_shared<SpatialJoin>(_executionContext, newConfig,
-                                       std::move(left), std::move(right));
+  return std::make_shared<SpatialJoin>(
+      _executionContext, config_,
+      // Potentially unchanged child retrieved with `value_or`.
+      left.value_or(childLeft_), right.value_or(childRight_));
 }
