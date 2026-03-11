@@ -13,10 +13,10 @@
 #define QLEVER_SRC_INDEX_DELTATRIPLES_H
 
 #include "backports/three_way_comparison.h"
-#include "engine/LocalVocab.h"
 #include "global/IdTriple.h"
 #include "index/Index.h"
 #include "index/IndexBuilderTypes.h"
+#include "index/LocalVocab.h"
 #include "index/LocatedTriples.h"
 #include "index/Permutation.h"
 #include "util/LruCache.h"

@@ -8,10 +8,10 @@
 #include <sstream>
 
 #include "engine/CallFixedSize.h"
-#include "engine/Engine.h"
 #include "engine/QueryExecutionTree.h"
 #include "global/RuntimeParameters.h"
 #include "global/ValueIdComparators.h"
+#include "index/Engine.h"
 #include "util/TransparentFunctors.h"
 
 // _____________________________________________________________________________
