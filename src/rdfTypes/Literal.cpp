@@ -1,6 +1,12 @@
-// Copyright 2023, University of Freiburg,
-//                 Chair of Algorithms and Data Structures.
-// Author: Benedikt Maria Beckermann <benedikt.beckermann@dagstuhl.de>
+// Copyright 2023 - 2026 The QLever Authors, in particular:
+//
+// 2023 Benedikt Maria Beckermann <benedikt.beckermann@dagstuhl.de>
+// 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "rdfTypes/Literal.h"
 
@@ -98,6 +104,16 @@ bool BasicLiteral<isOwning>::isPlain() const {
   return beginOfSuffix_ == content_.size();
 }
 
+// ____________________________________________________________________________
+template <bool isOwning>
+void BasicLiteral<isOwning>::removeDatatypeOrLanguageTag() {
+  if constexpr (isOwning) {
+    content_.erase(beginOfSuffix_);
+  } else {
+    content_ = content_.substr(0, beginOfSuffix_);
+  }
+}
+
 template class BasicLiteral<true>;
 template class BasicLiteral<false>;
 
@@ -184,16 +200,6 @@ void Literal::setSubstr(std::size_t start, std::size_t length) {
   ql::shift_left(contentBegin, contentBegin + start + length, start);
   content_.erase(length + 1, contentLength - length);
   beginOfSuffix_ = beginOfSuffix_ - (contentLength - length);
-}
-
-// ____________________________________________________________________________
-template <bool isOwning>
-void BasicLiteral<isOwning>::removeDatatypeOrLanguageTag() {
-  if constexpr (isOwning) {
-    content_.erase(beginOfSuffix_);
-  } else {
-    content_ = content_.substr(0, beginOfSuffix_);
-  }
 }
 
 // ____________________________________________________________________________
