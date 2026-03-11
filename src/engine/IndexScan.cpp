@@ -13,6 +13,7 @@
 
 #include "engine/MaterializedViews.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/VariableToColumnMap.h"
 #include "index/IndexImpl.h"
 #include "parser/ParsedQuery.h"
 #include "util/Exception.h"
@@ -60,7 +61,6 @@ IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
     additionalColumns_.push_back(idx);
     additionalVariables_.push_back(variable);
   }
-  // todo sort additionalVariables_
   std::tie(sizeEstimateIsExact_, sizeEstimate_) = computeSizeEstimate();
 
   // Check the following invariant: All the variables must be at the end of the
@@ -114,7 +114,6 @@ IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
   AD_CONTRACT_CHECK(qec != nullptr);
   AD_CONTRACT_CHECK(permutation_ != nullptr);
   AD_CONTRACT_CHECK(locatedTriplesSharedState_ != nullptr);
-  // todo check sorted additionalVariables_
   determineMultiplicities();
 }
 
@@ -255,7 +254,9 @@ VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
       return;
     }
     // All the columns of an index scan only contain defined values.
-    // TODO this is not true for materialized views
+    // TODO<ullingerc> This is not true for materialized views. We should
+    // remember the definedness of columns from the time of writing the view and
+    // store it in the permutation.
     variableToColumnMap[var] = makeAlwaysDefinedColumn(nextColIdx);
     ++nextColIdx;
   };
@@ -910,11 +911,6 @@ IndexScan::makeTreeWithStrippedColumns(
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 IndexScan::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
-  // TODO Actual logic here
-  // TODO Add `bind._target` to `varsToKeep_` of new scan tree.
-  AD_LOG_INFO << "IndexScan::makeTreeWithBindColumn called with bind: "
-              << bind.getDescriptor() << std::endl;
-
   // Currently only materialized views can provide precomputed `BIND`s.
   auto view = permutation().materializedView();
   if (!view) {
@@ -923,11 +919,17 @@ IndexScan::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
 
   // Check if all variables required for the `BIND` expression are covered by
   // this `IndexScan`.
-  const auto& visibleVars = getExternallyVisibleVariableColumns();
+  const auto& visibleVars = computePermutationColumnIndices();
   bool allVarsCovered = ql::ranges::all_of(
       bind._expression.containedVariables(),
       [&visibleVars](const auto* v) { return visibleVars.contains(*v); });
   if (!allVarsCovered) {
+    return std::nullopt;
+  }
+
+  // Check that the target variable of the `BIND` is not used already by this
+  // `IndexScan`.
+  if (visibleVars.contains(bind._target)) {
     return std::nullopt;
   }
 
@@ -939,10 +941,8 @@ IndexScan::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
     return std::nullopt;
   }
 
-  // TODO<ullingerc> Deal with `BIND` in first three cols.
-  if (targetCol.value() < 3) {
-    return std::nullopt;
-  }
+  auto newPredicate = predicate_;
+  auto newObject = object_;
 
   // Extend the additional columns of the scan (and keep them sorted as
   // required).
@@ -951,8 +951,8 @@ IndexScan::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   AD_CORRECTNESS_CHECK(additionalColumns_.size() ==
                        additionalVariables_.size());
   auto insertNewCol = [&](size_t colIdx, Variable v) -> bool {
-    auto it = std::lower_bound(newAdditionalColumns.begin(),
-                               newAdditionalColumns.end(), colIdx);
+    AD_CORRECTNESS_CHECK(colIdx >= 3);
+    auto it = ql::ranges::lower_bound(newAdditionalColumns, colIdx);
     std::size_t index = std::distance(newAdditionalColumns.begin(), it);
     bool exists = (it != newAdditionalColumns.end() && *it == colIdx);
     if (exists) {
@@ -963,19 +963,40 @@ IndexScan::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
     newAdditionalVariables.insert(newAdditionalVariables.begin() + index, v);
     return true;
   };
-  if (!insertNewCol(targetCol.value(), bind._target)) {
+
+  // The target column can never be the first column, because the first column
+  // from a view is always read into a variable by the existing scan.
+  AD_CORRECTNESS_CHECK(targetCol.value() != 0);
+
+  // Insert the new column or replace the dummy.
+  if (targetCol.value() == 1) {
+    // Replace predicate.
+    if (newPredicate != MaterializedView::dummyPredicate()) {
+      return std::nullopt;
+    }
+    newPredicate = bind._target;
+  } else if (targetCol.value() == 2) {
+    // Replace object.
+    if (newObject != MaterializedView::dummyObject()) {
+      return std::nullopt;
+    }
+    newObject = bind._target;
+  } else if (!insertNewCol(targetCol.value(), bind._target)) {
     return std::nullopt;
   }
 
   // Add the `BIND` target to the variables to keep during column stripping.
   auto newVariables = varsToKeep_;
   if (newVariables.has_value()) {
+    AD_CORRECTNESS_CHECK(
+        !newVariables.value().contains(MaterializedView::dummyPredicate()) &&
+        !newVariables.value().contains(MaterializedView::dummyObject()));
     newVariables.value().insert(bind._target);
   }
 
   return ad_utility::makeExecutionTree<IndexScan>(
       _executionContext, permutation_, locatedTriplesSharedState_, subject_,
-      predicate_, object_, std::move(newAdditionalColumns),
+      newPredicate, newObject, std::move(newAdditionalColumns),
       std::move(newAdditionalVariables), graphsToFilter_, scanSpecAndBlocks_,
       scanSpecAndBlocksIsPrefiltered_, VarsToKeep{std::move(newVariables)},
       sizeEstimateIsExact_, sizeEstimate_);
@@ -1002,4 +1023,42 @@ std::vector<ColumnIndex> IndexScan::getSubsetForStrippedColumns() const {
     ++idx;
   }
   return result;
+}
+
+// _____________________________________________________________________________
+VariableToColumnMap IndexScan::computePermutationColumnIndices() const {
+  VariableToColumnMap map;
+  const auto& varToColInResult = getExternallyVisibleVariableColumns();
+
+  auto addVar = [this, &varToColInResult, &map](const Variable& var,
+                                                ColumnIndex col) {
+    // Skip variables that are stripped away as they are not available in the
+    // result.
+    if (varsToKeep_.has_value() && !varsToKeep_.value().contains(var)) {
+      return;
+    }
+
+    // Deal with potentially undef columns: inherit undef status from main
+    // `VariableToColumnMap`.
+    map[var] = {col, varToColInResult.at(var).mightContainUndef_};
+  };
+
+  // Add those of the first three columns which are read into variables. The
+  // permutation column index is given by `enumerate` (0, 1, 2 for the segments
+  // of the permuted triple). For example, if only the last segment contains a
+  // variable it is still assigned 2 not 0.
+  auto spo = getPermutedTriple();
+  for (const auto [index, component] : ::ranges::views::enumerate(spo)) {
+    if (component->isVariable()) {
+      addVar(component->getVariable(), index);
+    }
+  }
+
+  // Add all additional columns.
+  for (const auto& [index, var] :
+       ::ranges::views::zip(additionalColumns_, additionalVariables_)) {
+    addVar(var, index);
+  }
+
+  return map;
 }

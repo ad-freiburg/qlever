@@ -8,8 +8,10 @@
 #include <absl/container/inlined_vector.h>
 
 #include "engine/NamedResultCache.h"
+#include "engine/OperationBindPushDownImpl.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoinCachedIndex.h"
+#include "engine/VariableToColumnMap.h"
 #include "global/RuntimeParameters.h"
 #include "parser/GraphPatternOperation.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
@@ -209,11 +211,19 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
           }
           signalQueryUpdate(RuntimeInformation::SendPriority::IfDue);
         },
-        [this](bool failed) {
-          // TODO<RobinTF> Distinguish between failed and cancelled.
-          runtimeInfo().status_ =
-              failed ? RuntimeInformation::failed
-                     : RuntimeInformation::lazilyMaterializedCompleted;
+        [this](Result::GeneratorState state) {
+          runtimeInfo().status_ = [state]() {
+            using enum Result::GeneratorState;
+            switch (state) {
+              case FINISHED:
+                return RuntimeInformation::lazilyMaterializedCompleted;
+              case CANCELLED:
+                return RuntimeInformation::cancelled;
+              default:
+                AD_CORRECTNESS_CHECK(state == FAILED);
+                return RuntimeInformation::failed;
+            }
+          }();
           signalQueryUpdate(RuntimeInformation::SendPriority::Always);
         });
   }
@@ -338,6 +348,11 @@ std::shared_ptr<const Result> Operation::getResult(
                 updateRuntimeInformationOnFailure(timer.msecs());
               }
             });
+
+    if (_executionContext->disableCaching()) {
+      return std::make_shared<Result>(runComputation(timer, computationMode));
+    }
+
     auto cacheSetup = [this, &timer, computationMode, &cacheKey, pinResult,
                        isRoot]() {
       return runComputationAndPrepareForCache(timer, computationMode, cacheKey,
@@ -697,6 +712,12 @@ void Operation::signalQueryUpdate(
 
 // _____________________________________________________________________________
 std::string Operation::getCacheKey() const {
+  AD_CORRECTNESS_CHECK(_executionContext);
+  if (_executionContext->disableCaching()) {
+    // Cache key computation is costly, so we can save it when caching is
+    // disabled.
+    return "";
+  }
   auto result = getCacheKeyImpl();
   if (limitOffset_._limit.has_value()) {
     absl::StrAppend(&result, " LIMIT ", limitOffset_._limit.value());
@@ -789,69 +810,11 @@ Operation::makeTreeWithStrippedColumns(
 bool Operation::coversVariables(
     const std::vector<const Variable*>& variables) const {
   const auto& varToCol = getExternallyVisibleVariableColumns();
-  return ql::ranges::all_of(
-      variables, [&varToCol](const auto v) { return varToCol.contains(*v); });
-}
-
-// _____________________________________________________________________________
-std::optional<std::shared_ptr<QueryExecutionTree>>
-Operation::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
-  const auto& children = getChildren();
-  if (children.empty()) {
-    return std::nullopt;
-  }
-
-  // Get the variables used in the bind expression (not the target).
-  const auto& bindExpressionVars = bind._expression.containedVariables();
-
-  // Invalidate the cached `VariableToColumnMap` so it will be recomputed on the
-  // next access. Must be called when an operation's children change after
-  // construction.
-  auto invalidateCachedVariableColumns = [](Operation& op) {
-    op.variableToColumnMap_ = std::nullopt;
-    op.externallyVisibleVariableToColumnMap_ = std::nullopt;
-    op._resultSortedColumns = std::nullopt;
-  };
-
-  // Try pushing the bind down to a specific child. If successful, clone this
-  // operation and replace the modified child in the clone.
-  auto tryPushDown = [&](size_t idx, const auto& child)
-      -> std::optional<std::shared_ptr<QueryExecutionTree>> {
-    // Recursively push down.
-    auto result = child->getRootOperation()->makeTreeWithBindColumn(bind);
-    if (!result.has_value()) {
-      return std::nullopt;
-    }
-
-    // Clone this operation.
-    auto cloned = cloneImpl();
-
-    // Replace the modified child in-place via move assignment.
-    auto clonedChildren = cloned->getChildren();
-    AD_CORRECTNESS_CHECK(clonedChildren.size() == children.size());
-    *clonedChildren[idx] = std::move(*(result.value()));
-
-    // Since the new child has a different `VariableToColumnMap`, we must
-    // invalidate the `VariableToColumnMap` of this operation too.
-    invalidateCachedVariableColumns(*cloned);
-
-    return std::make_shared<QueryExecutionTree>(getExecutionContext(),
-                                                std::move(cloned));
-  };
-
-  // For each child that covers all expression variables, check whether the bind
-  // can be pushed down into the child.
-  for (const auto& [idx, child] : ::ranges::views::enumerate(children)) {
-    if (!child->getRootOperation()->coversVariables(bindExpressionVars)) {
-      continue;
-    }
-    auto result = tryPushDown(idx, child);
-    if (result) {
-      return result;
-    }
-  }
-
-  return std::nullopt;
+  return ql::ranges::all_of(variables, [&varToCol](const auto v) {
+    return varToCol.contains(*v) &&
+           varToCol.at(*v).mightContainUndef_ ==
+               ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+  });
 }
 
 // _____________________________________________________________________________

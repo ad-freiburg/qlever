@@ -248,8 +248,8 @@ bool QueryPatternCache::analyzeView(ViewPtr view) {
 }
 
 // _____________________________________________________________________________
-std::vector<parsedQuery::GraphPatternOperation>
-QueryPatternCache::graphPatternInvariantFilter(const ParsedQuery& parsed) {
+std::vector<parsedQuery::GraphPatternOperation> graphPatternInvariantFilter(
+    const ParsedQuery& parsed) {
   BasicGraphPatternsInvariantTo invariantCheck{
       getVariablesPresentInFirstBasicGraphPattern(
           parsed._rootGraphPattern._graphPatterns)};
@@ -281,6 +281,8 @@ void QueryPatternCache::removeView(ViewPtr view) {
 BindExpressionAndTargetCol extractBindExpressions(
     const ParsedQuery& parsed, const VariableToColumnMap& varToColMap) {
   BindExpressionAndTargetCol map;
+
+  // Iterate over all `BIND`s in the parsed query and add them to the map.
   for (const auto& bind :
        ad_utility::filterRangeOfVariantsByType<parsedQuery::Bind>(
            parsed._rootGraphPattern._graphPatterns)) {
@@ -296,7 +298,10 @@ BindExpressionAndTargetCol extractBindExpressions(
       continue;
     }
 
-    // Store the target variable column index.
+    // Store the mapping from cache key to target variable column index.
+    // Note that while expression cache keys are not stable between compilers
+    // this is still fine, because we are computing the key while loading a view
+    // and thus will use it only within the same process.
     map.insert({bind._expression.getCacheKey(varToColMap),
                 varToColMap.at(bind._target).columnIndex_});
   }

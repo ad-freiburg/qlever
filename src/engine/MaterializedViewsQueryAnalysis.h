@@ -99,12 +99,6 @@ class QueryPatternCache {
   bool analyzeSimpleChain(ViewPtr view, const SparqlTriple& a,
                           const SparqlTriple& b);
 
-  // Helper that filters the graph patterns of a parsed query using
-  // `BasicGraphPatternInvariantTo`. For details, see the documentation for this
-  // helper.
-  static std::vector<parsedQuery::GraphPatternOperation>
-  graphPatternInvariantFilter(const ParsedQuery& parsed);
-
   // Given potential left and right sides of simple chains, check for available
   // replacement index scans, construct them and insert them into the `result`
   // vector.
@@ -115,7 +109,13 @@ class QueryPatternCache {
       const ChainSideCandidates& chainRight) const;
 };
 
-// Hash map for `BIND` cache.
+// Helper that filters the graph patterns of a parsed query using
+// `BasicGraphPatternInvariantTo`. For details, see the documentation for this
+// helper.
+std::vector<parsedQuery::GraphPatternOperation> graphPatternInvariantFilter(
+    const ParsedQuery& parsed);
+
+// Hash map for the `BIND`-to-column map.
 using BindExpressionAndTargetCol = ad_utility::HashMap<std::string, size_t>;
 
 // Extract all `BIND` statements from a `ParsedQuery` and create a hash map
