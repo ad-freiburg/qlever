@@ -31,8 +31,9 @@ class alignas(16) BasicLiteralOrIri {
  protected:
   using StorageType =
       std::conditional_t<isOwning, std::string, std::string_view>;
-  using LiteralOrIriVariant =
-      std::variant<BasicLiteral<isOwning>, BasicIri<isOwning>>;
+  using IriT = std::conditional_t<isOwning, Iri, IriView>;
+  using LiteralT = std::conditional_t<isOwning, Literal, LiteralView>;
+  using LiteralOrIriVariant = std::variant<IriT, LiteralT>;
   LiteralOrIriVariant data_;
 
  private:
@@ -43,17 +44,24 @@ class alignas(16) BasicLiteralOrIri {
 
  public:
   // Return contained Iri object if available, throw exception otherwise.
-  const BasicIri<isOwning>& getIri() const;
+  const IriT& getIri() const;
+  IriT& getIri() {
+    return const_cast<IriT&>(
+        static_cast<const BasicLiteralOrIri*>(this)->getIri());
+  }
 
   // Return contained Literal object if available, throw exception otherwise.
-  const BasicLiteral<isOwning>& getLiteral() const;
+  const LiteralT& getLiteral() const;
+  LiteralT& getLiteral() {
+    return const_cast<LiteralT&>(
+        static_cast<const BasicLiteralOrIri*>(this)->getLiteral());
+  }
 
   // Create a new BasicLiteralOrIri based on a BasicLiteral object.
-  explicit BasicLiteralOrIri(BasicLiteral<isOwning> literal)
-      : data_{std::move(literal)} {}
+  explicit BasicLiteralOrIri(LiteralT literal) : data_{std::move(literal)} {}
 
   // Create a new BasicLiteralOrIri based on a BasicIri object.
-  explicit BasicLiteralOrIri(BasicIri<isOwning> iri) : data_{std::move(iri)} {}
+  explicit BasicLiteralOrIri(IriT iri) : data_{std::move(iri)} {}
 
   std::conditional_t<isOwning, const std::string&, std::string_view>
   toStringRepresentation() const& {
@@ -63,17 +71,17 @@ class alignas(16) BasicLiteralOrIri {
   static BasicLiteralOrIri fromStringRepresentation(StorageType internal) {
     char tag = internal.front();
     if (tag == literalPrefixChar) {
-      return BasicLiteralOrIri{BasicLiteral<isOwning>::fromStringRepresentation(
-          std::move(internal))};
+      return BasicLiteralOrIri{
+          LiteralT::fromStringRepresentation(std::move(internal))};
     } else {
       return BasicLiteralOrIri{
-          BasicIri<isOwning>::fromStringRepresentation(std::move(internal))};
+          IriT::fromStringRepresentation(std::move(internal))};
     }
   }
 
-  std::string toStringRepresentation() && requires(isOwning) {
+  decltype(auto) toStringRepresentation() && {
     return std::visit(
-        [](auto&& val) -> std::string {
+        [](auto&& val) -> decltype(auto) {
           return std::move(val).toStringRepresentation();
         },
         std::move(data_));
@@ -135,29 +143,15 @@ class alignas(16) BasicLiteralOrIri {
 // Owning LiteralOrIri type (stores its own strings).
 class LiteralOrIri : public BasicLiteralOrIri<true> {
  public:
-  using BasicLiteralOrIri<true>::BasicLiteralOrIri;
-  LiteralOrIri(BasicLiteralOrIri<true>&& base)
-      : BasicLiteralOrIri<true>(std::move(base)) {}
-  LiteralOrIri(const BasicLiteralOrIri<true>& base)
-      : BasicLiteralOrIri<true>(base) {}
-
-  // Constructors from Literal/Iri for backward compatibility.
-  explicit LiteralOrIri(Literal literal)
-      : BasicLiteralOrIri<true>(std::move(literal)) {}
-  explicit LiteralOrIri(Iri iri) : BasicLiteralOrIri<true>(std::move(iri)) {}
-
-  using BasicLiteralOrIri<true>::toStringRepresentation;
-  using BasicLiteralOrIri<true>::getIri;
-  using BasicLiteralOrIri<true>::getLiteral;
+  using Base = BasicLiteralOrIri<true>;
+  using Base::Base;
+  LiteralOrIri(Base&& base) : Base(std::move(base)) {}
+  LiteralOrIri(const Base& base) : Base(base) {}
 
   template <typename H>
   friend H AbslHashValue(H h, const LiteralOrIri& v) {
-    return AbslHashValue(std::move(h),
-                         static_cast<const BasicLiteralOrIri<true>&>(v));
+    return AbslHashValue(std::move(h), static_cast<const Base&>(v));
   }
-
-  Iri& getIri();
-  Literal& getLiteral();
 
   static LiteralOrIri fromStringRepresentation(std::string internal);
 
@@ -182,20 +176,18 @@ class LiteralOrIri : public BasicLiteralOrIri<true> {
 // Non-owning LiteralOrIri view type (stores string_views).
 class LiteralOrIriView : public BasicLiteralOrIri<false> {
  public:
-  using BasicLiteralOrIri<false>::BasicLiteralOrIri;
-  LiteralOrIriView(BasicLiteralOrIri<false>&& base)
-      : BasicLiteralOrIri<false>(std::move(base)) {}
-  LiteralOrIriView(const BasicLiteralOrIri<false>& base)
-      : BasicLiteralOrIri<false>(base) {}
+  using Base = BasicLiteralOrIri<false>;
+  using Base::Base;
+  LiteralOrIriView(Base&& base) : Base(std::move(base)) {}
+  LiteralOrIriView(const Base& base) : Base(base) {}
 
   template <typename H>
   friend H AbslHashValue(H h, const LiteralOrIriView& v) {
-    return AbslHashValue(std::move(h),
-                         static_cast<const BasicLiteralOrIri<false>&>(v));
+    return AbslHashValue(std::move(h), static_cast<const Base&>(v));
   }
 
   static LiteralOrIriView fromStringRepresentation(std::string_view sv) {
-    return BasicLiteralOrIri<false>::fromStringRepresentation(sv);
+    return Base::fromStringRepresentation(sv);
   }
 };
 

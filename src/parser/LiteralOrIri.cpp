@@ -15,18 +15,18 @@ namespace ad_utility::triple_component {
 // __________________________________________
 template <bool isOwning>
 bool BasicLiteralOrIri<isOwning>::isIri() const {
-  return std::holds_alternative<BasicIri<isOwning>>(data_);
+  return std::holds_alternative<IriT>(data_);
 }
 
 // __________________________________________
 template <bool isOwning>
-const BasicIri<isOwning>& BasicLiteralOrIri<isOwning>::getIri() const {
+auto BasicLiteralOrIri<isOwning>::getIri() const -> const IriT& {
   if (!isIri()) {
     AD_THROW(
         "LiteralOrIri object does not contain an Iri object and thus "
         "cannot return it");
   }
-  return std::get<BasicIri<isOwning>>(data_);
+  return std::get<IriT>(data_);
 }
 
 // __________________________________________
@@ -38,16 +38,16 @@ NormalizedStringView BasicLiteralOrIri<isOwning>::getIriContent() const {
 // __________________________________________
 template <bool isOwning>
 bool BasicLiteralOrIri<isOwning>::isLiteral() const {
-  return std::holds_alternative<BasicLiteral<isOwning>>(data_);
+  return std::holds_alternative<LiteralT>(data_);
 }
 
 // __________________________________________
 template <bool isOwning>
-const BasicLiteral<isOwning>& BasicLiteralOrIri<isOwning>::getLiteral() const {
+auto BasicLiteralOrIri<isOwning>::getLiteral() const -> const LiteralT& {
   AD_CONTRACT_CHECK(isLiteral(),
                     "LiteralOrIri object does not contain a Literal object and "
                     "thus cannot return it");
-  return std::get<BasicLiteral<isOwning>>(data_);
+  return std::get<LiteralT>(data_);
 }
 
 // __________________________________________
@@ -115,25 +115,7 @@ template class BasicLiteralOrIri<false>;
 // ____________________________________________________________________________
 
 LiteralOrIri LiteralOrIri::fromStringRepresentation(std::string internal) {
-  return BasicLiteralOrIri<true>::fromStringRepresentation(std::move(internal));
-}
-
-// ____________________________________________________________________________
-Iri& LiteralOrIri::getIri() {
-  if (!isIri()) {
-    AD_CONTRACT_CHECK(isIri(),
-                      "LiteralOrIri object does not contain an Iri object "
-                      "and thus cannot return it");
-  }
-  return static_cast<Iri&>(std::get<BasicIri<true>>(data_));
-}
-
-// ____________________________________________________________________________
-Literal& LiteralOrIri::getLiteral() {
-  AD_CONTRACT_CHECK(isLiteral(),
-                    "LiteralOrIri object does not contain a Literal object "
-                    "and thus cannot return it");
-  return static_cast<Literal&>(std::get<BasicLiteral<true>>(data_));
+  return Base::fromStringRepresentation(std::move(internal));
 }
 
 // ____________________________________________________________________________
