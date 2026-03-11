@@ -10,6 +10,7 @@
 #include <absl/strings/str_join.h>
 
 #include "backports/StartsWithAndEndsWith.h"
+#include "engine/BinaryExport.h"
 #include "engine/CallFixedSize.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/Sort.h"
@@ -189,10 +190,19 @@ Result Service::computeResultImpl(bool requestLaziness) {
               << ", target: " << serviceUrl.target() << ")" << std::endl
               << serviceQuery << std::endl;
 
+  static constexpr std::string_view acceptWithBinaryExport =
+      "application/qlever-export+octet-stream;q=0.9,application/"
+      "sparql-results+json;q=0.1";
+  static constexpr std::string_view acceptWithoutBinaryExport =
+      "application/sparql-results+json;q=0.1";
+
+  const std::string_view accept =
+      getRuntimeParameter<&RuntimeParameters::binaryServiceEnabled_>()
+          ? acceptWithBinaryExport
+          : acceptWithoutBinaryExport;
   HttpOrHttpsResponse response = getResultFunction_(
       serviceUrl, cancellationHandle_, boost::beast::http::verb::post,
-      serviceQuery, "application/sparql-query",
-      "application/sparql-results+json");
+      serviceQuery, "application/sparql-query", accept);
 
   auto throwErrorWithContext = [this, &response](std::string_view sv) {
     this->throwErrorWithContext(sv, std::move(response).readResponseHead(100));
@@ -205,8 +215,12 @@ Result Service::computeResultImpl(bool requestLaziness) {
         static_cast<int>(response.status_), ", ",
         toStd(boost::beast::http::obsolete_reason(response.status_))));
   }
-  if (!ql::starts_with(ad_utility::utf8ToLower(response.contentType_),
-                       "application/sparql-results+json")) {
+
+  auto contentType = ad_utility::utf8ToLower(response.contentType_);
+  if (ql::starts_with(contentType, "application/qlever-export+octet-stream")) {
+    return computeBinaryResult(requestLaziness, std::move(response));
+  }
+  if (!ql::starts_with(contentType, "application/sparql-results+json")) {
     throwErrorWithContext(absl::StrCat(
         "QLever requires the endpoint of a SERVICE to send the result as "
         "'application/sparql-results+json' but the endpoint sent '",
@@ -235,6 +249,15 @@ Result Service::computeResultImpl(bool requestLaziness) {
                       resultSortedOn()};
 }
 
+// _____________________________________________________________________________
+Result Service::computeBinaryResult(bool requestLaziness,
+                                    HttpOrHttpsResponse response) {
+  return qlever::binary_export::importBinaryHttpResponse(
+      requestLaziness, std::move(response), *getExecutionContext(),
+      resultSortedOn());
+}
+
+// _____________________________________________________________________________
 template <size_t I>
 void Service::writeJsonResult(const std::vector<std::string>& vars,
                               const nlohmann::json& partJson,
