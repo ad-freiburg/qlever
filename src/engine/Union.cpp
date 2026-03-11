@@ -393,6 +393,11 @@ std::unique_ptr<Operation> Union::cloneImpl() const {
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 Union::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+  // We can't rewrite if the target variable is already covered.
+  if (getExternallyVisibleVariableColumns().contains(bind._target)) {
+    return std::nullopt;
+  }
+
   // For a `UNION`, the `BIND` must be pushed into all children that cover the
   // expression variables. Otherwise rows from children without the `BIND` would
   // have `UNDEF`s for the target variable.
