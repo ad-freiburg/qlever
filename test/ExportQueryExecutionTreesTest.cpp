@@ -1178,7 +1178,7 @@ TEST(ExportQueryExecutionTrees, UndefinedValues) {
       []() {
         nlohmann::json j;
         j["head"]["vars"].push_back("o");
-        j["results"]["bindings"].push_back(nullptr);
+        j["results"]["bindings"].push_back(nlohmann::json::object());
         return j;
       }(),
       expectedXml};
@@ -1514,6 +1514,8 @@ TEST(ExportQueryExecutionTrees, CornerCases) {
   auto resultNoColumns = runJSONQuery(kg, queryNoVariablesVisible,
                                       ad_utility::MediaType::sparqlJson);
   ASSERT_EQ(resultNoColumns["results"]["bindings"].size(), 1);
+  EXPECT_TRUE(resultNoColumns["results"]["bindings"][0].is_object());
+  EXPECT_TRUE(resultNoColumns["results"]["bindings"][0].empty());
   auto qec = ad_utility::testing::getQec(kg);
   AD_EXPECT_THROW_WITH_MESSAGE(
       ExportQueryExecutionTrees::idToStringAndType(qec->getIndex(), Id::max(),
@@ -2048,39 +2050,6 @@ TEST(ExportQueryExecutionTrees, getLiteralOrNullopt) {
 
   auto iri = LiteralOrIri{Iri::fromIriref("<https://example.com/>")};
   litOrNulloptTestHelper(iri, std::nullopt);
-}
-
-// _____________________________________________________________________________
-TEST(ExportQueryExecutionTrees, IsPlainLiteralOrLiteralWithXsdString) {
-  using Iri = ad_utility::triple_component::Iri;
-  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
-  using Literal = ad_utility::triple_component::Literal;
-
-  auto toLiteralOrIri = [](std::string_view content, auto descriptor) {
-    return LiteralOrIri{Literal::literalWithNormalizedContent(
-        asNormalizedStringViewUnsafe(content), descriptor)};
-  };
-
-  auto verify = [](const LiteralOrIri& input, bool expected) {
-    EXPECT_EQ(
-        ExportQueryExecutionTrees::isPlainLiteralOrLiteralWithXsdString(input),
-        expected);
-  };
-
-  verify(toLiteralOrIri("Hallo", std::nullopt), true);
-  verify(toLiteralOrIri(
-             "Hallo",
-             Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>")),
-         true);
-  verify(
-      toLiteralOrIri(
-          "Hallo", Iri::fromIriref("<http://www.unknown.com/NoSuchDatatype>")),
-      false);
-
-  EXPECT_THROW(
-      verify(LiteralOrIri{Iri::fromIriref("<http://www.example.com/someIri>")},
-             false),
-      ad_utility::Exception);
 }
 
 // _____________________________________________________________________________

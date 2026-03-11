@@ -10,6 +10,7 @@
 
 #include "backports/algorithm.h"
 #include "backports/shift.h"
+#include "global/Constants.h"
 #include "rdfTypes/RdfEscaping.h"
 #include "util/OverloadCallOperator.h"
 
@@ -75,10 +76,20 @@ NormalizedStringView BasicLiteral<isOwning>::getLanguageTag() const {
 template <bool isOwning>
 BasicLiteral<isOwning> BasicLiteral<isOwning>::fromStringRepresentation(
     StorageType internal) {
+  // TODO<joka921> This is a little dangerous as there might be quotes in the
+  // IRI which might lead to unexpected results here.
   AD_CORRECTNESS_CHECK(ql::starts_with(internal, '"'));
   auto endIdx = internal.rfind('"');
   AD_CORRECTNESS_CHECK(endIdx > 0);
-  return BasicLiteral{std::move(internal), endIdx + 1};
+  BasicLiteral literal{std::move(internal), endIdx + 1};
+  // Remove redundant `XSD_STRING` datatype. If vocabularies normalize strings
+  // like this in the future, this could get replaced by an assertion if all the
+  // other callers are updated accordingly.
+  if (literal.hasDatatype() &&
+      asStringViewUnsafe(literal.getDatatype()) == XSD_STRING) {
+    literal.removeDatatypeOrLanguageTag();
+  }
+  return literal;
 }
 
 // __________________________________________
@@ -157,11 +168,14 @@ void Literal::addLanguageTag(std::string_view languageTag) {
 // ____________________________________________________________________________
 void Literal::addDatatype(const Iri& datatype) {
   AD_CORRECTNESS_CHECK(!hasDatatype() && !hasLanguageTag());
+  // Trim the default string datatype.
   using namespace std::string_view_literals;
-  absl::StrAppend(&content_, "^^"sv, datatype.toStringRepresentation());
+  if (asStringViewUnsafe(datatype.getContent()) != XSD_STRING) {
+    absl::StrAppend(&content_, "^^"sv, datatype.toStringRepresentation());
+  }
 }
 
-// ____________________________________________________________________________
+// __________________________________________
 void Literal::setSubstr(std::size_t start, std::size_t length) {
   std::size_t contentLength =
       beginOfSuffix_ - 2;  // Ignore the two quotation marks
@@ -173,7 +187,14 @@ void Literal::setSubstr(std::size_t start, std::size_t length) {
 }
 
 // ____________________________________________________________________________
-void Literal::removeDatatypeOrLanguageTag() { content_.erase(beginOfSuffix_); }
+template <bool isOwning>
+void BasicLiteral<isOwning>::removeDatatypeOrLanguageTag() {
+  if constexpr (isOwning) {
+    content_.erase(beginOfSuffix_);
+  } else {
+    content_ = content_.substr(0, beginOfSuffix_);
+  }
+}
 
 // ____________________________________________________________________________
 void Literal::replaceContent(std::string_view newContent) {

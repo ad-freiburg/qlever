@@ -126,8 +126,8 @@ class ExportQueryExecutionTrees {
 
   // Helper for the `idToLiteralOrIri` function: Retrieves a string literal for
   // a word in the vocabulary.
-  static std::optional<LiteralOrIri> getLiteralOrIriFromWordVocabIndex(
-      const IndexImpl& index, Id id);
+  static LiteralOrIri getLiteralOrIriFromWordVocabIndex(const IndexImpl& index,
+                                                        Id id);
 
   // Helper for the `idToLiteralOrIri` function: Retrieves a string literal for
   // a word in the text index.
@@ -138,10 +138,6 @@ class ExportQueryExecutionTrees {
   // `LiteralOrIri` object.
   static std::optional<Literal> getLiteralOrNullopt(
       std::optional<LiteralOrIri> litOrIri);
-
-  // Checks if a LiteralOrIri is either a plain literal (without datatype)
-  // or a literal with the `xsd:string` datatype.
-  static bool isPlainLiteralOrLiteralWithXsdString(const LiteralOrIri& word);
 
   // Replaces the first character '<' and the last character '>' with double
   // quotes '"' to convert an IRI to a Literal, ensuring only the angle brackets

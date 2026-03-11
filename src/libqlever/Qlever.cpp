@@ -21,7 +21,8 @@ Qlever::Qlever(const EngineConfig& config)
           ad_utility::makeAllocationMemoryLeftThreadsafeObject(
               config.memoryLimit_.value_or(DEFAULT_MEM_FOR_QUERIES))}},
       index_{allocator_},
-      enablePatternTrick_{!config.noPatterns_} {
+      enablePatternTrick_{!config.noPatterns_},
+      disableCaching_{config.disableCaching_} {
   // Set runtime parameters relevant for caching and propagate them to the
   // cache.
   globalRuntimeParameters.wlock()->cacheMaxNumEntries_.setOnUpdateAction(
@@ -105,6 +106,19 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
         "version of QLever");
 #endif
   }
+
+  // Build materialized views if requested.
+  if (!config.writeMaterializedViews_.empty()) {
+    std::cout << std::endl;
+    AD_LOG_INFO << "Loading the new index to execute materialized view write "
+                   "queries ..."
+                << std::endl;
+    Qlever engine{EngineConfig{config}};
+    for (auto& [viewName, query] : config.writeMaterializedViews_) {
+      engine.writeMaterializedView(viewName, query);
+    }
+    AD_LOG_INFO << "All materialized views written successfully" << std::endl;
+  }
 }
 
 // ___________________________________________________________________________
@@ -168,7 +182,8 @@ void Qlever::eraseResultWithName(std::string name) {
 Qlever::QueryPlan Qlever::parseAndPlanQuery(std::string query) const {
   auto qecPtr = std::make_shared<QueryExecutionContext>(
       index_, &cache_, allocator_, sortPerformanceEstimator_,
-      &namedResultCache_, &materializedViewsManager_);
+      &namedResultCache_, &materializedViewsManager_, [](std::string) {}, false,
+      false, disableCaching_);
   // TODO<joka921> support Dataset clauses.
   auto parsedQuery = SparqlParser::parseQuery(
       &index_.getImpl().encodedIriManager(), std::move(query), {});

@@ -76,7 +76,9 @@ class BasicLiteral {
   // Return true if the literal has an assigned language tag.
   bool hasLanguageTag() const;
 
-  // Return true if the literal has an assigned datatype.
+  // Return true if the literal has an assigned datatype. `XSD_STRING` is not
+  // considered a datatype for this function, so literals with the `XSD_STRING`
+  // datatype are considered to have no datatype.
   bool hasDatatype() const;
 
   // Return the value of the literal without quotation marks and without any
@@ -91,7 +93,12 @@ class BasicLiteral {
   // prefix. Throws an exception if the literal has no datatype.
   NormalizedStringView getDatatype() const;
 
+  // Remove the datatype suffix from the Literal.
+  void removeDatatypeOrLanguageTag();
+
   // Returns true if the literal has no language tag or datatype suffix.
+  // `XSD_STRING` is not considered a datatype for this function, so literals
+  // with the `XSD_STRING` datatype are considered plain.
   bool isPlain() const;
 };
 
@@ -123,20 +130,22 @@ class Literal : public BasicLiteral<true> {
       NormalizedStringView normalizedRdfContent,
       std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt);
 
-  // Create a Literal without surrounding quotes.
+  void addLanguageTag(std::string_view languageTag);
+
+  // Add a datatype to the literal. If the literal already has a datatype or a
+  // language tag, this function will throw an error. The `XSD_STRING` datatype
+  // is ignored.
+  void addDatatype(const Iri& datatype);
+
+  // For documentation, see documentation of function
+  // LiteralORIri::literalWithoutQuotes
   static Literal literalWithoutQuotes(
       std::string_view rdfContentWithoutQuotes,
       std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt);
 
-  void addLanguageTag(std::string_view languageTag);
-  void addDatatype(const Iri& datatype);
-
   // Erase everything but the substring in the range ['start', 'start'+'length')
   // from the inner content.
   void setSubstr(std::size_t start, std::size_t length);
-
-  // Remove the datatype suffix from the Literal.
-  void removeDatatypeOrLanguageTag();
 
   // Replace the content of the Literal object with `newContent`.
   void replaceContent(std::string_view newContent);

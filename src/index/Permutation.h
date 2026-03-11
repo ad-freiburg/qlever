@@ -6,6 +6,7 @@
 #define QLEVER_SRC_INDEX_PERMUTATION_H
 
 #include <array>
+#include <memory>
 #include <string>
 
 #include "global/Constants.h"
@@ -23,6 +24,8 @@ class IdTable;
 class LocatedTriplesPerBlock;
 struct LocatedTriplesState;
 class DeltaTriples;
+// Forward declaration for reference to owning `MaterializedView`.
+class MaterializedView;
 
 // Helper class to store static properties of the different permutations to
 // avoid code duplication.
@@ -74,7 +77,8 @@ class Permutation {
 
   // everything that has to be done when reading an index from disk
   void loadFromDisk(const std::string& onDiskBase,
-                    bool loadInternalPermutation = false);
+                    bool loadInternalPermutation = false,
+                    bool useGraphPostProcessing = true);
 
   // Set the original metadata for the delta triples. This also sets the
   // metadata for internal permutation if present.
@@ -187,6 +191,10 @@ class Permutation {
   // _______________________________________________________
   const MetaData& metaData() const { return meta_; }
 
+  // Returns the number of triples in the permutation excluding updates (located
+  // triples).
+  size_t numTriples() const { return metaData().totalElements(); }
+
   // From the given snapshot, get the located triples for this permutation.
   const LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
       const LocatedTriplesState& locatedTriplesState) const;
@@ -203,6 +211,15 @@ class Permutation {
   // Provide const access to a linked internal permutation. If no internal
   // permutation is available, this function throws an exception.
   const Permutation& internalPermutation() const;
+
+  // If this permutation is owned by a `MaterializedView`, set a back-reference
+  // to the `MaterializedView`.
+  void setMaterializedView(std::weak_ptr<const MaterializedView> view);
+
+  // If this permutation is owned by a `MaterializedView`, return a shared
+  // pointer to it. Returns `nullptr` if no view is connected or if the view
+  // has already been destroyed.
+  std::shared_ptr<const MaterializedView> materializedView() const;
 
  private:
   // The base filename of the permutation without the suffix below
@@ -228,6 +245,10 @@ class Permutation {
   std::unique_ptr<Permutation> internalPermutation_ = nullptr;
 
   bool isInternalPermutation_ = false;
+
+  // If this permutation is owned by a `MaterializedView`, store a reference
+  // back to the view.
+  std::weak_ptr<const MaterializedView> materializedView_;
 };
 
 #endif  // QLEVER_SRC_INDEX_PERMUTATION_H
