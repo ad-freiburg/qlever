@@ -1,10 +1,14 @@
-// Copyright 2024 - 2025, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors: Jonathan Zeller github@Jonathan24680
-//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
-//          Patrick Brosi <brosi@cs.uni-freiburg.de>
+// Copyright 2024 - 2026 The QLever Authors, in particular:
 //
-// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+// 2024 - 2025 Jonathan Zeller github@Jonathan24680, UFR
+// 2024 - 2026 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+// 2025        Patrick Brosi <brosi@cs.uni-freiburg.de>, UFR
+// 2025        Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "engine/SpatialJoin.h"
 
@@ -603,9 +607,15 @@ SpatialJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
 }
 
 // _____________________________________________________________________________
-std::optional<std::shared_ptr<QueryExecutionTree>>
-SpatialJoin::cloneWithBoundingBoxColumns(
-    const Variable& uniqueTempVarPrefix) const {
+std::optional<std::shared_ptr<SpatialJoin>>
+SpatialJoin::cloneWithBoundingBoxColumns() const {
+  // TODO what if two spatialjoins have the same variable (like highway-building
+  // and highway-restaurant)?
+  // TODO column stripping
+
+  auto makeInternalVar = [](const Variable& var) {
+    return Variable{absl::StrCat("?_ql_sj_", var.name().substr(1))};
+  };
   auto varSuffix = [](const Variable& var, std::string suffix) {
     return Variable{absl::StrCat(var.name(), suffix)};
   };
@@ -623,14 +633,15 @@ SpatialJoin::cloneWithBoundingBoxColumns(
   auto ur = std::bind_front(
       makeBind, &sparqlExpression::makeEnvelopeUpperRightExpression);
 
-  auto tryPushDown = [ll, ur, varSuffix](
+  auto tryPushDown = [ll, ur, varSuffix, makeInternalVar](
                          std::shared_ptr<QueryExecutionTree> child,
-                         const Variable& geomVar, const Variable& targetVar)
+                         const Variable& geomVar)
       -> std::tuple<std::shared_ptr<QueryExecutionTree>,
                     std::optional<SpatialJoinBoundingBoxCols>, bool> {
     if (!child) {
       return {child, std::nullopt, false};
     }
+    auto targetVar = makeInternalVar(geomVar);
     auto var1 = varSuffix(targetVar, "_ll");
     auto step1 =
         child->getRootOperation()->makeTreeWithBindColumn(ll(geomVar, var1));
@@ -649,15 +660,14 @@ SpatialJoin::cloneWithBoundingBoxColumns(
 
   auto newConfig = config_;
 
-  auto [left, leftBBCols, leftIsNew] = tryPushDown(
-      childLeft_, config_.left_, varSuffix(uniqueTempVarPrefix, "_left"));
+  auto [left, leftBBCols, leftIsNew] = tryPushDown(childLeft_, config_.left_);
   newConfig.boundingBoxesLeft_ = leftBBCols;
-  auto [right, rightBBCols, rightIsNew] = tryPushDown(
-      childRight_, config_.right_, varSuffix(uniqueTempVarPrefix, "_right"));
+  auto [right, rightBBCols, rightIsNew] =
+      tryPushDown(childRight_, config_.right_);
   newConfig.boundingBoxesRight_ = rightBBCols;
   if (!leftIsNew && !rightIsNew) {
     return std::nullopt;
   }
-  return ad_utility::makeExecutionTree<SpatialJoin>(
-      _executionContext, newConfig, std::move(left), std::move(right));
+  return std::make_shared<SpatialJoin>(_executionContext, newConfig,
+                                       std::move(left), std::move(right));
 }

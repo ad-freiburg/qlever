@@ -57,6 +57,7 @@
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "global/Constants.h"
 #include "global/Id.h"
 #include "global/RuntimeParameters.h"
 #include "global/ValueId.h"
@@ -2384,8 +2385,12 @@ auto QueryPlanner::createSpatialJoin(const SubtreePlan& a, const SubtreePlan& b,
       otherSubtreePlan._qet->getVariableAndInfoByColumnIndex(ind).first;
 
   auto newSpatialJoin = spatialJoin->addChild(otherSubtreePlan._qet, var);
-
-  SubtreePlan plan = makeSubtreePlan<SpatialJoin>(std::move(newSpatialJoin));
+  // TODO also add this for visitspatialjoin
+  auto optClone = newSpatialJoin->cloneWithBoundingBoxColumns();
+  SubtreePlan plan =
+      optClone.has_value()
+          ? makeSubtreePlan<SpatialJoin>(optClone.value())
+          : makeSubtreePlan<SpatialJoin>(std::move(newSpatialJoin));
   mergeSubtreePlanIds(plan, a, b);
   return plan;
 }
