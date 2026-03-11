@@ -287,7 +287,7 @@ inline void runParsingAndSweeper(
         numThreadsLeft] =
       sjAlgo.libspatialjoinParse(
           false,
-          // TODO bouding box
+          // TODO bounding box
           {prepared.idTableLeft_, prepared.leftJoinCol_, std::nullopt}, sweeper,
           1, std::nullopt);
   // Due to problems in `Sweeper` when a side is empty, we don't use
