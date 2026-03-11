@@ -1,6 +1,11 @@
-// Copyright 2025, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+// Copyright 2025 - 2026 The QLever Authors, in particular:
+//
+// 2025 - 2026 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <gmock/gmock.h>
 
@@ -292,37 +297,40 @@ TEST(SpatialJoinTest, prefilterGeoByBoundingBox) {
   auto idxInvalid = getValId(nMap, "invalid").getVocabIndex();
 
   EXPECT_FALSE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
-      boundingBoxGermany, index, idxUni));
+      boundingBoxGermany, index, idxUni, std::nullopt));
   EXPECT_TRUE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
-      boundingBoxGermany, index, idxLondon));
+      boundingBoxGermany, index, idxLondon, std::nullopt));
   EXPECT_TRUE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
-      boundingBoxGermany, index, idxNewYork));
+      boundingBoxGermany, index, idxNewYork, std::nullopt));
 
   EXPECT_FALSE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
-      boundingBoxUniAndLondon, index, idxUni));
+      boundingBoxUniAndLondon, index, idxUni, std::nullopt));
   EXPECT_FALSE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
-      boundingBoxUniAndLondon, index, idxLondon));
+      boundingBoxUniAndLondon, index, idxLondon, std::nullopt));
   EXPECT_TRUE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
-      boundingBoxUniAndLondon, index, idxNewYork));
+      boundingBoxUniAndLondon, index, idxNewYork, std::nullopt));
 
   EXPECT_TRUE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
-      boundingBoxOtherPlaces, index, idxUni));
+      boundingBoxOtherPlaces, index, idxUni, std::nullopt));
 
   EXPECT_TRUE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
-      boundingBoxUniAndLondon, index, idxInvalid));
+      boundingBoxUniAndLondon, index, idxInvalid, std::nullopt));
   EXPECT_TRUE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
-      boundingBoxGermany, index, idxInvalid));
+      boundingBoxGermany, index, idxInvalid, std::nullopt));
   EXPECT_TRUE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
-      boundingBoxOtherPlaces, index, idxInvalid));
+      boundingBoxOtherPlaces, index, idxInvalid, std::nullopt));
 
-  EXPECT_FALSE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(std::nullopt,
-                                                                index, idxUni));
   EXPECT_FALSE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
-      std::nullopt, index, idxLondon));
+      std::nullopt, index, idxUni, std::nullopt));
   EXPECT_FALSE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
-      std::nullopt, index, idxNewYork));
+      std::nullopt, index, idxLondon, std::nullopt));
   EXPECT_FALSE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
-      std::nullopt, index, idxInvalid));
+      std::nullopt, index, idxNewYork, std::nullopt));
+  EXPECT_FALSE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
+      std::nullopt, index, idxInvalid, std::nullopt));
 }
+
+// TODO<ullingerc> Tests for automatic push down and prefiltering using
+// `ql:envelopeLowerLeft` and `ql:envelopeUpperRight` by `SpatialJoin`.
 
 }  // namespace

@@ -1,6 +1,11 @@
-// Copyright 2025, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+// Copyright 2025 - 2026 The QLever Authors, in particular:
+//
+// 2025 - 2026 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_TEST_ENGINE_SPATIALJOINPREFILTERTESTHELPERS_H
 #define QLEVER_TEST_ENGINE_SPATIALJOINPREFILTERTESTHELPERS_H
@@ -280,9 +285,11 @@ inline void runParsingAndSweeper(
   // Run first parsing step (left side)
   auto [aggBoundingBoxLeft, numGeomAddedLeft, numGeomDroppedLeft,
         numThreadsLeft] =
-      sjAlgo.libspatialjoinParse(false,
-                                 {prepared.idTableLeft_, prepared.leftJoinCol_},
-                                 sweeper, 1, std::nullopt);
+      sjAlgo.libspatialjoinParse(
+          false,
+          // TODO bouding box
+          {prepared.idTableLeft_, prepared.leftJoinCol_, std::nullopt}, sweeper,
+          1, std::nullopt);
   // Due to problems in `Sweeper` when a side is empty, we don't use
   // `sweeper.setFilterBox(box);` here.
 
@@ -294,8 +301,9 @@ inline void runParsingAndSweeper(
   auto [aggBoundingBoxRight, numGeomAddedRight, numGeomDroppedRight,
         numThreadsRight] =
       sjAlgo.libspatialjoinParse(
-          true, {prepared.idTableRight_, prepared.rightJoinCol_}, sweeper, 1,
-          prefilterBox);
+          // TODO bounding box
+          true, {prepared.idTableRight_, prepared.rightJoinCol_, std::nullopt},
+          sweeper, 1, prefilterBox);
 
   sweeper.flush();
 

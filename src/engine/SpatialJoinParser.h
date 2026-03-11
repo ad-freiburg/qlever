@@ -29,7 +29,8 @@ struct SpatialJoinParseJob {
 
 // Compare two `SpatialJoinParseJob` objects. The member attribute `wkt` is used
 // only as an internal buffer during processing and is otherwise empty,
-// therefore it is not compared here.
+// therefore it is not compared here. The `boundingBox` is used for interal
+// prefiltering and is therefore also not compared here.
 inline bool operator==(const SpatialJoinParseJob& a,
                        const SpatialJoinParseJob& b) {
   return a.line == b.line && a.valueId == b.valueId && a.side == b.side;
