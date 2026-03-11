@@ -84,7 +84,6 @@ ExistsJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   if (!newLeft.has_value()) {
     return std::nullopt;
   }
-
   return ad_utility::makeExecutionTree<ExistsJoin>(getExecutionContext(),
                                                    std::move(newLeft.value()),
                                                    right_, existsVariable_);

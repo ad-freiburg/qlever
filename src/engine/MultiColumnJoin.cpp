@@ -9,6 +9,7 @@
 #include "engine/CallFixedSize.h"
 #include "engine/Engine.h"
 #include "engine/JoinHelpers.h"
+#include "engine/OperationBindPushDownImpl.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 
 using std::endl;
@@ -311,27 +312,12 @@ bool MultiColumnJoin::columnOriginatesFromGraphOrUndef(
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 MultiColumnJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
-  // TODO<ullingerc> Can we avoid this code duplication with `Join`?
-  // Try pushing down the `BIND` into any of the children.
-  auto tryPushDown = [&bind](
-                         std::shared_ptr<QueryExecutionTree>& target,
-                         const std::shared_ptr<QueryExecutionTree>& source) {
-    if (source->getRootOperation()->coversVariables(
-            bind._expression.containedVariables())) {
-      if (auto newTree =
-              source->getRootOperation()->makeTreeWithBindColumn(bind)) {
-        target = std::move(newTree.value());
-        return true;
-      }
-    }
-    return false;
-  };
-
-  auto left = _left;
-  auto right = _right;
-  if (tryPushDown(left, _left) || tryPushDown(right, _right)) {
-    return ad_utility::makeExecutionTree<MultiColumnJoin>(
-        getExecutionContext(), std::move(left), std::move(right));
-  }
-  return std::nullopt;
+  return pushDownBindToAnyChild(
+      bind, {_left, _right},
+      [this](std::vector<std::shared_ptr<QueryExecutionTree>> newChildren) {
+        auto& left = newChildren.at(0);
+        auto& right = newChildren.at(1);
+        return ad_utility::makeExecutionTree<MultiColumnJoin>(
+            getExecutionContext(), std::move(left), std::move(right));
+      });
 };
