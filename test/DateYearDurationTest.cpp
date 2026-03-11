@@ -184,7 +184,7 @@ void testSubtraction(DateYearOrDuration expected,
                      std::optional<DateYearOrDuration> result) {
   ASSERT_TRUE(result);
   EXPECT_TRUE(result.value().isDayTimeDuration());
-  EXPECT_EQ(expected, result.value());
+  EXPECT_EQ(expected.toStringAndType(), result.value().toStringAndType());
 }
 }  // namespace
 
