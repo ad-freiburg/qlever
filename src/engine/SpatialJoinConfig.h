@@ -71,8 +71,8 @@ enum class SpatialJoinAlgorithm {
 const SpatialJoinAlgorithm SPATIAL_JOIN_DEFAULT_ALGORITHM =
     SpatialJoinAlgorithm::S2_GEOMETRY;
 
-// Variables in a single child refering to columns containing the corners of the
-// bounding box.
+// Variables in a single child referring to columns containing the corners of
+// the bounding box.
 struct SpatialJoinBoundingBoxCols {
   Variable lowerLeft_;
   Variable upperRight_;
