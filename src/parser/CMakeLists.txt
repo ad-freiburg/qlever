@@ -16,6 +16,7 @@ add_library(parser
         MagicServiceQuery.cpp
         NamedCachedResult.cpp
         PathQuery.cpp
+        ProxyQuery.cpp
         SpatialQuery.cpp
         PayloadVariables.cpp
         PropertyPath.cpp
