@@ -12,7 +12,7 @@ add_library(engine
         Values.cpp Bind.cpp Minus.cpp RuntimeInformation.cpp CheckUsePatternTrick.cpp
         VariableToColumnMap.cpp ExportQueryExecutionTrees.cpp
         CartesianProductJoin.cpp TextIndexScanForWord.cpp TextIndexScanForEntity.cpp
-        TextLimit.cpp LazyGroupBy.cpp GroupByHashMapOptimization.cpp SpatialJoin.cpp
+        TextLimit.cpp LazyGroupBy.cpp GroupByHashMapOptimization.cpp SpatialJoin.cpp TensorSearch.cpp TensorSearchCachedIndex.cpp TensorSearchImpl.cpp
         CountConnectedSubgraphs.cpp SpatialJoinAlgorithms.cpp PathSearch.cpp ExecuteUpdate.cpp
         Describe.cpp GraphStoreProtocol.cpp SpatialJoinParser.cpp SpatialJoinCachedIndex.cpp
         QueryExecutionContext.cpp ExistsJoin.cpp SparqlProtocol.cpp ParsedRequestBuilder.cpp

@@ -456,7 +456,9 @@ void Operation::storeToNamedResultCache(const Result& result) {
       result.sortedBy(),
       result.localVocab().clone(),
       getCacheKey(),
-      geoIndex()};
+      geoIndex(),
+      std::nullopt
+    };
   _executionContext->namedResultCache().store(
       name, std::move(valueForNamedResultCache));
 

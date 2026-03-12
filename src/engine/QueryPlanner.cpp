@@ -47,6 +47,7 @@
 #include "engine/Service.h"
 #include "engine/Sort.h"
 #include "engine/SpatialJoin.h"
+#include "engine/TensorSearch.h"
 #include "engine/TextIndexScanForEntity.h"
 #include "engine/TextIndexScanForWord.h"
 #include "engine/TextLimit.h"
@@ -66,6 +67,7 @@
 #include "parser/MaterializedViewQuery.h"
 #include "parser/PayloadVariables.h"
 #include "parser/SparqlParserHelpers.h"
+#include "parser/TensorSearchQuery.h"
 #include "rdfTypes/Variable.h"
 #include "util/Exception.h"
 
@@ -862,6 +864,21 @@ auto QueryPlanner::seedWithScansAndText(
             "to confusing semantics. Please upgrade your query to the new "
             "syntax 'SERVICE ",
             SPATIAL_SEARCH_IRI,
+            " { ... }'. For more information, please see the QLever Wiki."));
+      }
+    } else if ((ql::starts_with(input, TENSOR_NEAREST_NEIGHBORS)) &&
+               ql::ends_with(input, '>')) {
+      parsedQuery::TensorSearchQuery config{node.triple_};
+      auto plan = makeSubtreePlan<TensorSearch>(
+          _qec, config.toTensorSearchConfiguration(), std::nullopt,
+          std::nullopt);
+      if (ql::starts_with(input, TENSOR_NEAREST_NEIGHBORS)) {
+        plan._qet->getRootOperation()->addWarning(absl::StrCat(
+            "The special predicate <tensor-nearest-neighbors:...> is "
+            "deprecated due "
+            "to confusing semantics. Please upgrade your query to the new "
+            "syntax 'SERVICE ",
+            TENSOR_SEARCH_IRI,
             " { ... }'. For more information, please see the QLever Wiki."));
       }
       pushPlan(plan);
@@ -3121,6 +3138,8 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     visitDescribe(arg);
   } else if constexpr (std::is_same_v<T, p::SpatialQuery>) {
     visitSpatialSearch(arg);
+  } else if constexpr (std::is_same_v<T, p::TensorSearchQuery>) {
+    visitTensorSearch(arg);
   } else if constexpr (std::is_same_v<T, p::TextSearchQuery>) {
     visitTextSearch(arg);
   } else if constexpr (std::is_same_v<T, p::NamedCachedResult>) {

@@ -1,0 +1,252 @@
+// Copyright 2026, Technical University of Graz, University of Padova
+// Institute for Visual Computing, Department of Information Engineering
+// Authors: Benedikt Kantz <benedikt.kantz@tugraz.at>
+
+#include "parser/TensorSearchQuery.h"
+
+#include "engine/SpatialJoinConfig.h"
+#include "parser/MagicServiceIriConstants.h"
+#include "parser/NormalizedString.h"
+#include "parser/PayloadVariables.h"
+#include "parser/SparqlTriple.h"
+
+namespace parsedQuery {
+
+namespace detail {
+// CTRE named capture group identifiers for C++17 compatibility
+constexpr ctll::fixed_string resultsCaptureGroup = "results";
+}  // namespace detail
+
+// ____________________________________________________________________________
+void TensorSearchQuery::addParameter(const SparqlTriple& triple) {
+  auto simpleTriple = triple.getSimple();
+  TripleComponent predicate = simpleTriple.p_;
+  TripleComponent object = simpleTriple.o_;
+
+  auto predString = extractParameterName(predicate, TENSOR_SEARCH_IRI);
+
+  if (predString == "left") {
+    setVariable("left", object, left_);
+  } else if (predString == "right") {
+    setVariable("right", object, right_);
+  } else if (predString == "bindMaxResults") {
+    setVariable("bindMaxResults", object, maxResultsVariable_);
+  } else if (predString == "numNearestNeighbors") {
+    throwIf(!object.isInt(),
+            "The parameter `<numNearestNeighbors>` expects an integer (the "
+            "maximum "
+            "number of nearest neighbors)");
+    maxResults_ = object.getInt();
+  } else if (predString == "searchK") {
+    if (object.isInt()) {
+      searchK_ = static_cast<size_t>(object.getInt());
+    } else {
+      throw TensorSearchException(
+          "The parameter `<searchK>` expects an integer (the number of nearest "
+          "trees to search for, which may be higher than the number of "
+          "neighbors to return).");
+    }
+  } else if (predString == "nTrees") {
+    if (object.isInt()) {
+      nTrees_ = static_cast<size_t>(object.getInt());
+    } else {
+      throw TensorSearchException(
+          "The parameter `<nTrees>` expects an integer (the number of trees to "
+          "build for the index).");
+    }
+  } else if (predString == "algo") {
+    // This case is already covered in `extractParameterName` below, but we
+    // want to throw a more precise error description
+    throwIf(!object.isIri(),
+            "The parameter `<algo>` needs an IRI that selects the algorithm "
+            "to employ. Currently supported are `<default>` and `<annoy>`");
+    auto type = extractParameterName(object, TENSOR_SEARCH_IRI);
+    if (type == "default") {
+      algo_ = TensorSearchAlgorithm::DEFAULT;
+    } else if (type == "annoy") {
+      algo_ = TensorSearchAlgorithm::ANNOY;
+    } else {
+      throw TensorSearchException{
+          "The IRI given for the parameter `<algo>` does not refer to a "
+          "supported join type. Currently supported are `<default>` and "
+          "`<annoy>`"};
+    }
+  } else if (predString == "distance") {
+    // This case is already covered in `extractParameterName` below, but we
+    // want to throw a more precise error description
+    throwIf(!object.isIri(),
+            "The parameter `<distance>` needs an IRI that selects the distance "
+            "metric to employ. Currently supported are `<angular>`, `<dot>`, "
+            "`<euclidian>`, `<manhattan>`, or  `<hamming>` ");
+    auto dist = extractParameterName(object, SPATIAL_SEARCH_IRI);
+    if (dist == "default") {
+      dist_ = TensorDistanceAlgorithm::DEFAULT;
+    } else if (dist == "angular") {
+      dist_ = TensorDistanceAlgorithm::COSINE_SIMILARITY;
+    } else if (dist == "dot") {
+      dist_ = TensorDistanceAlgorithm::DOT_PRODUCT;
+    } else if (dist == "euclidian") {
+      dist_ = TensorDistanceAlgorithm::EUCLIDEAN_DISTANCE;
+    } else if (dist == "manhattan") {
+      dist_ = TensorDistanceAlgorithm::MANHATTAN_DISTANCE;
+    } else if (dist == "hamming") {
+      dist_ = TensorDistanceAlgorithm::HAMMING_DISTANCE;
+    } else {
+      throw TensorSearchException{
+          "The IRI given for the parameter `<distance>` does not refer to a "
+          "supported distance metric. Currently supported are `<angular>`, `<dot>`, "
+            "`<euclidian>`, `<manhattan>`, or  `<hamming>`"};
+    }
+  } else if (predString == "payload") {
+    if (object.isVariable()) {
+      // Single selected variable
+
+      // If we have already selected all payload variables, we can ignore
+      // another explicitly selected variable.
+      payloadVariables_.addVariable(getVariable("payload", object));
+    } else if (object.isIri() &&
+               extractParameterName(object, SPATIAL_SEARCH_IRI) == "all") {
+      // All variables selected
+      payloadVariables_.setToAll();
+    } else {
+      throw SpatialSearchException(
+          "The argument to the `<payload>` parameter must be either a variable "
+          "to be selected or `<all>`");
+    }
+
+  } else if (predString == "experimentalRightCacheName") {
+    throwIf(!object.isLiteral(),
+            "The argument to the `<experimentalRightCacheName>` parameter must "
+            "be the name of a pinned cache entry as a string literal.");
+    rightCacheName_ = asStringViewUnsafe(object.getLiteral().getContent());
+  } else {
+    throw SpatialSearchException(absl::StrCat(
+        "Unsupported argument ", predString,
+        " in spatial search; supported arguments are: `<left>`, `<right>`, `<numNearestNeighbors>`, `<searchK>`, `<nTrees>`, "
+        "`<algo>`, `<distance>`, `<payload>`, and `<experimentalRightCacheName>`"));
+  }
+}
+
+// ____________________________________________________________________________
+TensorSearchConfiguration TensorSearchQuery::toTensorSearchConfiguration()
+    const {
+  // Default algorithm
+  TensorSearchAlgorithm algo = TENSOR_SEARCH_DEFAULT_ALGORITHM;
+  if (algo_.has_value()) {
+    algo = algo_.value();
+  }
+
+  throwIf(!left_.has_value(), "Missing parameter `<left>` in tensor search.");
+  throwIf(!right_.has_value(),
+          "Missing parameter `<right>` in spatial search.");
+
+  throwIf(
+      rightCacheName_.has_value() && algo != TensorSearchAlgorithm::ANNOY,
+      "The parameter `<experimentalRightCacheName>` is only supported by the "
+      "`<annoy>` algorithm.");
+
+  if (algo == TensorSearchAlgorithm::ANNOY) {
+    throwIf(!rightCacheName_.has_value(),
+            "The parameter `<experimentalRightCacheName>` is mandatory for the "
+            "`<annoy>` algorithm.");
+    throwIf(childGraphPattern_.has_value(),
+            "The parameter `<annoy>` algorithm uses a cached "
+            "query result as its right child. Therefore a group graph pattern "
+            "for the right side may not be specified in the `SERVICE`.");
+  }
+
+  // Only if the number of results is limited, it is mandatory that the right
+  // variable must be selected inside the service. If only the distance is
+  // limited, it may be declared inside or outside of the service.
+  throwIf(
+      !ignoreMissingRightChild_ && maxResults_.has_value() &&
+          !childGraphPattern_.has_value(),
+      "A spatial search with a maximum number of results must have its right "
+      "variable declared inside the service using a graph pattern: SERVICE "
+      "tensorSearch: { [Config Triples] { <Something> <ThatSelects> ?right "
+      "} }.");
+  throwIf(
+      !ignoreMissingRightChild_ && !childGraphPattern_.has_value() &&
+          !payloadVariables_.isAll() && !payloadVariables_.empty(),
+      "The right variable for the spatial search is declared outside the "
+      "SERVICE, but the <payload> parameter was set. Please move the "
+      "declaration of the right variable into the SERVICE if you wish to use "
+      "`<payload>`");
+
+  // Payload variables
+  PayloadVariables pv;
+  if (!childGraphPattern_.has_value()) {
+    pv = PayloadVariables::all();
+  } else {
+    pv = payloadVariables_;
+  }
+
+  return TensorSearchConfiguration{left_.value(),
+                                   right_.value(),
+                                   maxResultsVariable_,
+                                   pv,
+                                   algo,
+                                   dist_.value_or(TENSOR_SEARCH_DEFAULT_DISTANCE),
+                                   maxResults_.value_or((size_t)100),
+                                   searchK_.value_or((ssize_t)-1),
+                                   nTrees_.value_or((ssize_t)-1),
+                                   rightCacheName_};
+}
+
+// ____________________________________________________________________________
+TensorSearchQuery::TensorSearchQuery(const SparqlTriple& triple) {
+  auto predicate = triple.getSimplePredicate();
+  AD_CONTRACT_CHECK(
+      predicate.has_value(),
+      "The config triple for TensorSearch must have a special IRI "
+      "as predicate");
+  std::string_view input = predicate.value();
+
+  // Add variables to configuration object
+  AD_CONTRACT_CHECK(triple.s_.isVariable() && triple.o_.isVariable(),
+                    "Currently, both the subject and the object of the triple "
+                    "that specifies a spatial join have to be variables.");
+  setVariable("left", triple.s_, left_);
+  setVariable("right", triple.o_, right_);
+
+  // Helper to convert a ctre match to an integer
+  auto matchToInt = [](std::string_view match) -> std::optional<size_t> {
+    if (match.size() == 0) {
+      // We need to accept empty matches because the maximum distance argument
+      // to a <nearest-neighbors:...> predicate is optional.
+      return std::nullopt;
+    }
+    size_t res = 0;
+    std::from_chars(match.data(), match.data() + match.size(), res);
+    return res;
+  };
+
+  // Check if one of the regexes matches
+  if (auto match = ctre::match<TENSOR_NEAREST_NEIGHBORS_REGEX>(input)) {
+    maxResults_ = matchToInt(match.get<detail::resultsCaptureGroup>());
+    AD_CORRECTNESS_CHECK(maxResults_.has_value());
+  } else {
+    AD_THROW(absl::StrCat(
+        "Tried to perform tensor search with unknown triple ", input,
+        ". This must be a valid tensor search condition like ",
+        "`<tensor-nearest-neighbors:300>`"));
+  }
+}
+
+// _____________________________________________________________________________
+void TensorSearchQuery::throwIf(bool throwCondition,
+                                std::string_view message) const {
+  if (throwCondition) {
+    throw TensorSearchException{std::string(message)};
+  }
+}
+
+// _____________________________________________________________________________
+void TensorSearchQuery::validate() const {
+  // We convert the spatial query to a spatial join configuration and discard
+  // its result here to detect errors early and report them to the user with
+  // highlighting. It's only a small struct so not much is wasted.
+  [[maybe_unused]] auto&& _ = toTensorSearchConfiguration();
+}
+
+}  // namespace parsedQuery

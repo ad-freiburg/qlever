@@ -6,11 +6,11 @@
 #include "backports/three_way_comparison.h"
 #include "global/Constants.h"
 #include "nlohmann/json.hpp"
+#include "parser/LiteralOrIri.h"
 #include "util/Date.h"
 #include "util/Duration.h"
 #include "util/NBitInteger.h"
 #include "util/Serializer/Serializer.h"
-#include "parser/LiteralOrIri.h"
 
 namespace ad_utility {
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
@@ -37,7 +37,7 @@ class TensorData {
   // `tensor:DataTensor`).
   std::pair<std::string, std::string> toString() const;
   LiteralOrIri toLiteral() const;
-
+  const std::vector<float> tensorData() const { return tensorData_; }
   float operator[](size_t idx) const { return tensorData_[idx]; }
   size_t size() const { return tensorData_.size(); }
   const auto& shape() const { return shape_; }
@@ -45,6 +45,8 @@ class TensorData {
 
   static TensorData parseFromString(std::string_view dataString);
   static TensorData parseFromJSON(nlohmann::json json);
+  static std::optional<TensorData> parseFromPair(
+      std::optional<std::pair<std::string, const char*>> pair);
 
   static float cosineSimilarity(const TensorData& tensor1,
                                 const TensorData& tensor2);

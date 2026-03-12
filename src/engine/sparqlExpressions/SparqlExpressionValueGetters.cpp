@@ -456,23 +456,7 @@ std::optional<ad_utility::TensorData> TensorValueGetter::operator()(
   auto optionalStringAndType =
       ExportQueryExecutionTrees::idToStringAndType<true>(
           context->_qec.getIndex(), id, context->_localVocab);
-  if (optionalStringAndType.has_value()) {
-    auto type = optionalStringAndType.value().second;
-    if (type == nullptr) {
-      return ad_utility::TensorData::parseFromString(
-          optionalStringAndType.value().first);
-    }
-    auto type_str = std::string(type);
-    // if(type.end() == '>') {
-    //   // The datatype still has the ending `>` from the IRI form
-    //   `^^<datatypeIri>`, so we need to remove it. type.remove_suffix(1);
-    // }
-    if (type_str == TENSOR_LITERAL || type_str == TENSOR_NUMERIC_LITERAL) {
-      return ad_utility::TensorData::parseFromString(
-          optionalStringAndType.value().first);
-    }
-  }
-  return std::nullopt;
+  return ad_utility::TensorData::parseFromPair(optionalStringAndType);
 }
 
 //______________________________________________________________________________

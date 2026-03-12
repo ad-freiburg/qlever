@@ -1,4 +1,7 @@
-
+// Copyright 2026, Technical University of Graz, University of Padova
+// Institute for Visual Computing, Department of Information Engineering
+// Authors: Benedikt Kantz <benedikt.kantz@tugraz.at>
+// Adapted from TextIndexScanTestHelpers.h
 #ifndef QLEVER_TEST_TENSORTESTHELPERS_H_
 #define QLEVER_TEST_TENSORTESTHELPERS_H_
 

@@ -45,6 +45,7 @@ RuntimeParameters::RuntimeParameters() {
   add(enablePrefilterOnIndexScans_);
   add(spatialJoinMaxNumThreads_);
   add(spatialJoinPrefilterMaxSize_);
+  add(tensorSearchMaxNumThreads_);
   add(enableDistributiveUnion_);
   add(treatDefaultGraphAsNamedGraph_);
   add(sparqlResultsJsonWithTime_);

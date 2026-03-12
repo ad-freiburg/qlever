@@ -5,6 +5,9 @@
     },
     "include": [
         "./CMakePresets.json",
-        "../../../../run/user/15642/qlever/vscode-build/build/Release/generators/CMakePresets.json"
+        "../../../../run/user/15642/qlever/build/tensors/build/Debug/generators/CMakePresets.json",
+        "../../../../run/user/15642/qlever/build/tensors/build/Release/generators/CMakePresets.json",
+        "build/Release/generators/CMakePresets.json",
+        "build/Debug/generators/CMakePresets.json"
     ]
 }

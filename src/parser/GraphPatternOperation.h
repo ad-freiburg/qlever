@@ -21,6 +21,7 @@
 #include "parser/PathQuery.h"
 #include "parser/SpatialQuery.h"
 #include "parser/TextSearchQuery.h"
+#include "parser/TensorSearchQuery.h"
 #include "parser/TripleComponent.h"
 #include "rdfTypes/Variable.h"
 #include "util/TransparentFunctors.h"
@@ -230,7 +231,7 @@ struct Bind {
 // class actually becomes `using GraphPatternOperation = std::variant<...>`
 using GraphPatternOperationVariant =
     std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern,
-                 Values, Service, PathQuery, SpatialQuery, TextSearchQuery,
+                 Values, Service, PathQuery, SpatialQuery, TextSearchQuery,TensorSearchQuery,
                  Minus, GroupGraphPattern, Describe, Load, NamedCachedResult,
                  MaterializedViewQuery>;
 struct GraphPatternOperation

@@ -12,6 +12,7 @@
 #include "engine/ExplicitIdTableOperation.h"
 #include "engine/LocalVocab.h"
 #include "engine/SpatialJoinCachedIndex.h"
+#include "engine/TensorSearchCachedIndex.h"
 #include "util/Cache.h"
 #include "util/Serializer/Serializer.h"
 #include "util/Synchronized.h"
@@ -36,6 +37,7 @@ class NamedResultCache {
     LocalVocab localVocab_;
     std::string cacheKey_;
     std::optional<SpatialJoinCachedIndex> cachedGeoIndex_;
+    std::optional<TensorSearchCachedIndex> cachedTensorIndex_;
 
     // The following two members (`Allocator` and `BlankNodeManager`) are only
     // used when reading a `Value` from a serializer.

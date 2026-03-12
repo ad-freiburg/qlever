@@ -17,6 +17,7 @@ add_library(parser
         NamedCachedResult.cpp
         PathQuery.cpp
         SpatialQuery.cpp
+        TensorSearchQuery.cpp
         PayloadVariables.cpp
         PropertyPath.cpp
         data/SparqlFilter.cpp

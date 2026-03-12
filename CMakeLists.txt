@@ -197,6 +197,29 @@ else ()
     link_libraries(Bzip2)
 endif ()
 
+################################
+# Annoy (for approximate nearest neighbor search)
+# add flag USE_DENSE_TENSOR_INDEX to enable
+################################
+if (USE_DENSE_TENSOR_INDEX)
+    message(STATUS "Looking for Annoy library for approximate nearest neighbor search on ${CMAKE_MODULE_PATH}")
+    add_compile_definitions(WITH_DENSE_TENSOR_INDEX)
+    add_compile_definitions(ANNOYLIB_MULTITHREADED_BUILD)
+    if (USE_ANNOY_FIXED_DIR)
+        include_directories(${CMAKE_SOURCE_DIR}/../annoy/src)
+        message(STATUS "Using Annoy from fixed directory ${CMAKE_SOURCE_DIR}../annoy")
+    endif ()
+    # find_package(Annoy REQUIRED)
+    # if (TARGET Annoy::Annoy)
+    #     MESSAGE(STATUS "Use Annoy that was installed via conan")
+    #     link_libraries(Annoy::Annoy)
+    # else ()
+    # link_libraries(Annoy)
+    # endif ()
+else ()
+    message(STATUS "Skipping Annoy...")
+endif ()
+
 #################################
 # ICU (for proper collation
 ################################

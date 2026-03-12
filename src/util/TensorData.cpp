@@ -71,13 +71,33 @@ TensorData TensorData::parseFromJSON(nlohmann::json json) {
   if (shape.empty()) {
     throw std::runtime_error{"Shape cannot be empty"};
   }
-  if (std::accumulate(shape.begin(), shape.end(), (size_t)1, std::multiplies<>()) !=
-      data.size()) {
+  if (std::accumulate(shape.begin(), shape.end(), (size_t)1,
+                      std::multiplies<>()) != data.size()) {
     throw std::runtime_error{
         "The number of elements in data does not match the shape"};
   }
 
   return TensorData(std::move(data), std::move(shape), dtype);
+}
+
+std::optional<TensorData> TensorData::parseFromPair(
+    std::optional<std::pair<std::string, const char*>> pair) {
+  if (pair.has_value()) {
+    auto type = pair.value().second;
+    if (type == nullptr) {
+      return ad_utility::TensorData::parseFromString(pair.value().first);
+    }
+    auto type_str = std::string(type);
+    // if(type.end() == '>') {
+    //   // The datatype still has the ending `>` from the IRI form
+    //   `^^<datatypeIri>`, so we need to remove it. type.remove_suffix(1);
+    // }
+    if (type_str == TENSOR_LITERAL || type_str == TENSOR_NUMERIC_LITERAL) {
+      auto tensor = ad_utility::TensorData::parseFromString(pair.value().first);
+    }
+    return parseFromString(pair.value().first);
+  }
+  return std::nullopt;
 }
 
 float TensorData::cosineSimilarity(const TensorData& tensor1,
