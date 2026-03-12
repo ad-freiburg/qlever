@@ -156,7 +156,7 @@ class LiteralOrIri : public BasicLiteralOrIri<true> {
 
   template <typename H>
   friend H AbslHashValue(H h, const LiteralOrIri& v) {
-    return AbslHashValue(std::move(h), static_cast<const Base&>(v));
+    return H::combine(std::move(h), static_cast<const Base&>(v));
   }
 
   static LiteralOrIri fromStringRepresentation(std::string internal);
@@ -189,7 +189,7 @@ class LiteralOrIriView : public BasicLiteralOrIri<false> {
 
   template <typename H>
   friend H AbslHashValue(H h, const LiteralOrIriView& v) {
-    return AbslHashValue(std::move(h), static_cast<const Base&>(v));
+    return H::combine(std::move(h), static_cast<const Base&>(v));
   }
 
   static LiteralOrIriView fromStringRepresentation(std::string_view sv) {

@@ -86,7 +86,7 @@ class Iri : public BasicIri<true> {
 
   template <typename H>
   friend H AbslHashValue(H h, const Iri& iri) {
-    return AbslHashValue(std::move(h), static_cast<const BasicIri<true>&>(iri));
+    return H::combine(std::move(h), static_cast<const BasicIri<true>&>(iri));
   }
 
   static Iri fromStringRepresentation(std::string s);
@@ -124,8 +124,7 @@ class IriView : public BasicIri<false> {
 
   template <typename H>
   friend H AbslHashValue(H h, const IriView& iri) {
-    return AbslHashValue(std::move(h),
-                         static_cast<const BasicIri<false>&>(iri));
+    return H::combine(std::move(h), static_cast<const BasicIri<false>&>(iri));
   }
 
   static IriView fromStringRepresentation(std::string_view sv) {

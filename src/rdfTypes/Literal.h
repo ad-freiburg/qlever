@@ -120,8 +120,8 @@ class Literal : public BasicLiteral<true> {
 
   template <typename H>
   friend H AbslHashValue(H h, const Literal& lit) {
-    return AbslHashValue(std::move(h),
-                         static_cast<const BasicLiteral<true>&>(lit));
+    return H::combine(std::move(h),
+                      static_cast<const BasicLiteral<true>&>(lit));
   }
 
   static Literal fromStringRepresentation(std::string internal);
@@ -171,8 +171,8 @@ class LiteralView : public BasicLiteral<false> {
 
   template <typename H>
   friend H AbslHashValue(H h, const LiteralView& lit) {
-    return AbslHashValue(std::move(h),
-                         static_cast<const BasicLiteral<false>&>(lit));
+    return H::combine(std::move(h),
+                      static_cast<const BasicLiteral<false>&>(lit));
   }
 
   static LiteralView fromStringRepresentation(std::string_view internal) {
