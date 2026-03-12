@@ -1,6 +1,11 @@
-// Copyright 2021 - 2024, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+// Copyright 2021 - 2026 The QLever Authors, in particular:
+//
+// 2021 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_INDEX_COMPRESSEDRELATION_H
 #define QLEVER_SRC_INDEX_COMPRESSEDRELATION_H
@@ -23,6 +28,7 @@
 #include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/Serializer.h"
 #include "util/TaskQueue.h"
+#include "util/compression/CompressionAlgorithm.h"
 
 // Forward declarations
 class IdTable;
@@ -316,14 +322,19 @@ class CompressedRelationWriter {
   // A dummy value for multiplicities that can only later be determined.
   static constexpr float multiplicityDummy = 42.4242f;
 
+  // The compression algorithm used by this writer.
+  CompressionAlgorithm compressionAlgorithm_;
+
  public:
   /// Create using a filename, to which the relation data will be written.
   explicit CompressedRelationWriter(
       size_t numColumns, ad_utility::File f,
-      ad_utility::MemorySize uncompressedBlocksizePerColumn)
+      ad_utility::MemorySize uncompressedBlocksizePerColumn,
+      CompressionAlgorithm compressionAlgorithm)
       : outfile_{std::move(f)},
         numColumns_{numColumns},
-        uncompressedBlocksizePerColumn_{uncompressedBlocksizePerColumn} {}
+        uncompressedBlocksizePerColumn_{uncompressedBlocksizePerColumn},
+        compressionAlgorithm_{compressionAlgorithm} {}
   // Two helper types used to make the interface of the function
   // `createPermutationPair` below safer and more explicit.
   using MetadataCallback =
@@ -705,12 +716,17 @@ class CompressedRelationReader {
   // used for materialized views where repeated rows are meaningful.
   bool useGraphPostProcessing_;
 
+  // The compression algorithm used by this reader.
+  CompressionAlgorithm compressionAlgorithm_;
+
  public:
   explicit CompressedRelationReader(Allocator allocator, ad_utility::File file,
-                                    bool useGraphPostProcessing = true)
+                                    bool useGraphPostProcessing,
+                                    CompressionAlgorithm compressionAlgorithm)
       : allocator_{std::move(allocator)},
         file_{std::move(file)},
-        useGraphPostProcessing_{useGraphPostProcessing} {}
+        useGraphPostProcessing_{useGraphPostProcessing},
+        compressionAlgorithm_{compressionAlgorithm} {}
 
   // Helper function that enables a comparison of a triple with an `Id` in the
   // function `getBlocksForJoin` below.  If the given triple matches `col0Id` of
@@ -882,8 +898,8 @@ class CompressedRelationReader {
   // store the result at the `iterator`. For the `numRowsToRead` argument, see
   // the documentation of `decompressBlock`.
   template <typename Iterator>
-  static void decompressColumn(const std::vector<char>& compressedColumn,
-                               size_t numRowsToRead, Iterator iterator);
+  void decompressColumn(const std::vector<char>& compressedColumn,
+                        size_t numRowsToRead, Iterator iterator) const;
 
   // Read and decompress the parts of the block given by `blockMetaData` (which
   // identifies the block) and `scanConfig` (which specifies the part of that

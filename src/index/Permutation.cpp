@@ -1,6 +1,11 @@
-//  Copyright 2023, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2023 - 2026 The QLever Authors, in particular:
+//
+// 2023 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "index/Permutation.h"
 
@@ -32,13 +37,15 @@ CompressedRelationReader::ScanSpecAndBlocks Permutation::getScanSpecAndBlocks(
 // _____________________________________________________________________
 void Permutation::loadFromDisk(const std::string& onDiskBase,
                                bool loadInternalPermutation,
-                               bool useGraphPostProcessing) {
+                               bool useGraphPostProcessing,
+                               CompressionAlgorithm compressionAlgorithm) {
   onDiskBase_ = onDiskBase;
   if (loadInternalPermutation) {
     internalPermutation_ =
         std::make_unique<Permutation>(permutation_, allocator_);
     internalPermutation_->loadFromDisk(
-        absl::StrCat(onDiskBase, QLEVER_INTERNAL_INDEX_INFIX), false);
+        absl::StrCat(onDiskBase, QLEVER_INTERNAL_INDEX_INFIX), false, true,
+        compressionAlgorithm);
     internalPermutation_->isInternalPermutation_ = true;
   }
   if constexpr (MetaData::isMmapBased_) {
@@ -57,7 +64,8 @@ void Permutation::loadFromDisk(const std::string& onDiskBase,
              e.what());
   }
   meta_.readFromFile(&file);
-  reader_.emplace(allocator_, std::move(file), useGraphPostProcessing);
+  reader_.emplace(allocator_, std::move(file), useGraphPostProcessing,
+                  compressionAlgorithm);
   AD_LOG_INFO << "Registered " << readableName_
               << " permutation: " << meta_.statistics() << std::endl;
   isLoaded_ = true;

@@ -1,8 +1,12 @@
-// Copyright 2021 - 2024, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2021 - 2026 The QLever Authors, in particular:
 //
-// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+// 2021 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2025 Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "index/CompressedRelation.h"
 
@@ -14,7 +18,6 @@
 #include "index/CompressedRelationPermutationWriterImpl.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/LocatedTriples.h"
-#include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/Iterators.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/OverloadCallOperator.h"
@@ -23,6 +26,7 @@
 #include "util/Timer.h"
 #include "util/TransparentFunctors.h"
 #include "util/TypeTraits.h"
+#include "util/compression/CompressionAlgorithm.h"
 
 using namespace std::chrono_literals;
 
@@ -1192,8 +1196,8 @@ CompressedRelationReader::decompressAndPostprocessBlock(
 template <typename Iterator>
 void CompressedRelationReader::decompressColumn(
     const std::vector<char>& compressedBlock, size_t numRowsToRead,
-    Iterator iterator) {
-  auto numBytesActuallyRead = ZstdWrapper::decompressToBuffer(
+    Iterator iterator) const {
+  size_t numBytesActuallyRead = compressionAlgorithm_.decompressToBuffer(
       compressedBlock.data(), compressedBlock.size(), iterator,
       numRowsToRead * sizeof(*iterator));
   static_assert(sizeof(Id) == sizeof(*iterator));
@@ -1218,7 +1222,7 @@ CompressedRelationReader::readAndDecompressBlock(
 // ____________________________________________________________________________
 CompressedBlockMetadata::OffsetAndCompressedSize
 CompressedRelationWriter::compressAndWriteColumn(ql::span<const Id> column) {
-  std::vector<char> compressedBlock = ZstdWrapper::compress(
+  auto compressedBlock = compressionAlgorithm_.compress(
       (void*)(column.data()), column.size() * sizeof(column[0]));
   auto compressedSize = compressedBlock.size();
   auto file = outfile_.wlock();

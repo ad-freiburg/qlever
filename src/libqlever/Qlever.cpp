@@ -1,6 +1,6 @@
-// Copyright 2025 The QLever Authors, in particular:
+// Copyright 2025 - 2026 The QLever Authors, in particular:
 //
-// 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2025 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
@@ -80,6 +80,7 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   index.loadAllPermutations() = !config.onlyPsoAndPos_;
   index.getImpl().setVocabularyTypeForIndexBuilding(config.vocabType_);
   index.getImpl().setPrefixesForEncodedValues(config.prefixesForIdEncodedIris_);
+  index.getImpl().compressionAlgorithm() = config.compressionAlgorithm_;
 
   // Build text index if requested (various options).
   if (!config.onlyAddTextIndex_) {

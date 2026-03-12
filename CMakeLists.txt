@@ -108,7 +108,7 @@ if ("${CMAKE_GENERATOR}" STREQUAL "Ninja")
     if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
         add_compile_options(-fdiagnostics-color=always)
     elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang" OR "${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang")
-        add_compile_options(-fcolor-diagnostics)
+        add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fcolor-diagnostics>)
     endif ()
 endif ()
 
@@ -237,6 +237,24 @@ else ()
     link_libraries(zstd)
 endif ()
 
+### LZ4 (optional)
+option(QLEVER_USE_LZ4 "Enable LZ4 compression support" ON)
+if (QLEVER_USE_LZ4)
+    set(LZ4_BUILD_CLI OFF CACHE BOOL "Disable LZ4 CLI tools" FORCE)
+    set(LZ4_BUILD_LEGACY_LZ4C OFF CACHE BOOL "Disable legacy lz4c" FORCE)
+    FetchContent_Declare(
+            lz4
+            GIT_REPOSITORY https://github.com/lz4/lz4.git
+            GIT_TAG ebb370ca83af193212df4dcbadcc5d87bc0de2f0 # v1.10.0
+            SOURCE_SUBDIR build/cmake
+            EXCLUDE_FROM_ALL
+    )
+    add_compile_definitions(QLEVER_HAS_LZ4)
+    message(STATUS "LZ4 compression support: enabled")
+else ()
+    message(STATUS "LZ4 compression support: disabled")
+endif ()
+
 
 ######################################
 # BOOST
@@ -265,6 +283,9 @@ function(qlever_target_link_libraries target)
     # memorySize is a utility library for defining memory sizes.
     if (NOT ${target} STREQUAL "memorySize")
         target_link_libraries(${target} memorySize)
+    endif ()
+    if (QLEVER_USE_LZ4)
+        target_link_libraries(${target} lz4_static)
     endif ()
 endfunction()
 
@@ -405,6 +426,9 @@ FetchContent_Declare(
 # Apply FetchContent
 ################################
 FetchContent_MakeAvailable(googletest ctre abseil re2 fsst s2 nlohmann-json antlr range-v3 spatialjoin)
+if (QLEVER_USE_LZ4)
+    FetchContent_MakeAvailable(lz4)
+endif ()
 # Disable some warnings in RE2 and GTEST
 target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-class-memaccess -Wno-unused-but-set-variable -Wno-unused-function)
 target_compile_options(re2 PRIVATE -Wno-unused-parameter)
