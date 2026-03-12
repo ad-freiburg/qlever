@@ -4,6 +4,7 @@
 
 #include "engine/NeutralOptional.h"
 
+#include "engine/OperationBindPushDownImpl.h"
 #include "engine/QueryExecutionTree.h"
 
 // _____________________________________________________________________________
@@ -146,4 +147,15 @@ VariableToColumnMap NeutralOptional::computeVariableToColumnMap() const {
     info.mightContainUndef_ = ColumnIndexAndTypeInfo::PossiblyUndefined;
   }
   return variableColumns;
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+NeutralOptional::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+  return pushDownBindToAnyChild(
+      bind, {tree_},
+      [this](std::vector<std::shared_ptr<QueryExecutionTree>> children) {
+        return ad_utility::makeExecutionTree<NeutralOptional>(
+            getExecutionContext(), std::move(children.at(0)));
+      });
 }

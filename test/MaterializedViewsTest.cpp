@@ -1260,7 +1260,8 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
   }
 
   // TODO<ullingerc> Add tests for `Exists`, `Minus`, `MultiColumnJoin`,
-  // `Optional`, and `Union`.
+  // `Optional`, `Union`, `NeutralOptional`, `Bind`, `CartesianProductJoin`,
+  // `Filter`.
 
   // Test the variable to permutation column index map.
   {
