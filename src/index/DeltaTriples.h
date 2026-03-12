@@ -207,6 +207,13 @@ class DeltaTriples {
   // structures.
   void clear();
 
+  // Remove redundant insertions (triples already in the index) and redundant
+  // deletions (triples not in the index). The triples to be removed are taken
+  // from the blocks in PSO that have more than `vacuum-minimum-block-size`
+  // triples. Returns aggregated statistics.
+  nlohmann::json vacuum(
+      ad_utility::SharedCancellationHandle cancellationHandle);
+
   // The number of delta triples added and subtracted.
   int64_t numInserted() const {
     return static_cast<int64_t>(

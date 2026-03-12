@@ -156,6 +156,9 @@ struct RuntimeParameters {
   // particular the computation of cache keys) when caching is not required.
   Bool disableCaching_{false, "disable-caching"};
 
+  // Only blocks of this size or larger will be considered for vacuuming.
+  SizeT vacuumMinimumBlockSize_{10'000, "vacuum-minimum-block-size"};
+
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE
   // CONSTRUCTOR, S.T. THEY CAN ALSO BE ACCESSED VIA THE RUNTIME INTERFACE.
