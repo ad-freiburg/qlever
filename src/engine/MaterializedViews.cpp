@@ -288,14 +288,19 @@ IndexMetaDataMmap MaterializedViewWriter::writePermutation(
 // _____________________________________________________________________________
 void MaterializedViewWriter::writeViewMetadata() const {
   // Export column names to view info JSON file.
+  const auto& varToCol = qet_->getVariableColumns();
   nlohmann::json viewInfo = {
       {"version", MATERIALIZED_VIEWS_VERSION},
-      {"columns", (columnNames_ | ql::views::transform([](const Variable& v) {
-                     return v.name();
-                   }) |
-                   ::ranges::to<std::vector<std::string>>())},
-      {"query", parsedQuery_._originalString},
-  };
+      {"columns",
+       (columnNames_ | ql::views::transform([&varToCol](const Variable& v) {
+          return nlohmann::json{
+              {"name", v.name()},
+              {"always-defined",
+               varToCol.at(v).mightContainUndef_ ==
+                   ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined}};
+        }) |
+        ::ranges::to<std::vector<nlohmann::json>>())},
+      {"query", parsedQuery_._originalString}};
   ad_utility::makeOfstream(getFilenameBase() + ".viewinfo.json")
       << viewInfo.dump() << std::endl;
 }
@@ -356,13 +361,27 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
         ". Please re-write the materialized view.")};
   }
 
-  // Make variable to column map
-  auto columnNames = viewInfoJson.at("columns").get<std::vector<std::string>>();
-  for (const auto& [index, columnName] :
-       ::ranges::views::enumerate(columnNames)) {
-    varToColMap_.insert({Variable{columnName},
-                         {static_cast<ColumnIndex>(index),
-                          ColumnIndexAndTypeInfo::PossiblyUndefined}});
+  // Make variable to column map.
+  for (const auto& [index, columnEntry] :
+       ::ranges::views::enumerate(viewInfoJson.at("columns"))) {
+    std::string columnName;
+    ColumnIndexAndTypeInfo::UndefStatus undefStatus =
+        ColumnIndexAndTypeInfo::PossiblyUndefined;
+
+    // For backward compatibility, also accept columns as strings not
+    // object.
+    if (columnEntry.is_string()) {
+      columnName = columnEntry.get<std::string>();
+    } else {
+      // Restore column name and undef status.
+      columnName = columnEntry.at("name").get<std::string>();
+      undefStatus = columnEntry.at("always-defined").get<bool>()
+                        ? ColumnIndexAndTypeInfo::AlwaysDefined
+                        : ColumnIndexAndTypeInfo::PossiblyUndefined;
+    }
+
+    varToColMap_.insert({Variable{std::move(columnName)},
+                         {static_cast<ColumnIndex>(index), undefStatus}});
   }
 
   // Restore original query string and parse it for query analysis.

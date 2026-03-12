@@ -318,6 +318,8 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
   SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
   MaterializedViewsManager manager{testIndexBase_};
 
+  // TODO<ullingerc> Test undef status.
+
   // Helper to get all column names from a view via its `VariableToColumnMap`.
   auto columnNames = [](const MaterializedView& view) {
     const auto& varToCol = view.variableToColumnMap();
@@ -621,6 +623,9 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
     EXPECT_FALSE(view->originalQuery().has_value());
     EXPECT_FALSE(view->parsedQuery().has_value());
   }
+
+  // TODO<ullingerc> Test columns as strings or as {name,always-defined}
+  // objects.
 
   // View with no parsed query is skipped by `QueryPatternCache::analyzeView`.
   {

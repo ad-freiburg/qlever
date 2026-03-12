@@ -249,6 +249,7 @@ class Permutation {
   // If this permutation is owned by a `MaterializedView`, store a reference
   // back to the view.
   std::weak_ptr<const MaterializedView> materializedView_;
+  // TODO<ullingerc> Undef status for columns.
 };
 
 #endif  // QLEVER_SRC_INDEX_PERMUTATION_H

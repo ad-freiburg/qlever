@@ -251,6 +251,7 @@ VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
       return;
     }
     // All the columns of an index scan only contain defined values.
+    // TODO<ullingerc> Get undef status from permutation.
     variableToColumnMap[var] = makeAlwaysDefinedColumn(nextColIdx);
     ++nextColIdx;
   };
