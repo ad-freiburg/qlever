@@ -3325,6 +3325,46 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
   }
   visitGroupOptionalOrMinus(std::move(candidatesOut));
 }
+void QueryPlanner::GraphPatternPlanner::visitTensorSearch(
+    const parsedQuery::TensorSearchQuery& tensorSearchQuery) {
+  auto config = tensorSearchQuery.toTensorSearchConfiguration();
+
+  // If there is no child graph pattern, we need to construct a neutral element
+  std::vector<SubtreePlan> candidatesIn;
+  if (tensorSearchQuery.childGraphPattern_.has_value()) {
+    candidatesIn =
+        planner_.optimize(&tensorSearchQuery.childGraphPattern_.value());
+  } else {
+    candidatesIn = {makeSubtreePlan<NeutralElementOperation>(qec_)};
+  }
+  std::vector<SubtreePlan> candidatesOut;
+
+  for (auto& sub : candidatesIn) {
+    // This helper function adds a subtree plan to the output candidates, which
+    // either has the child graph pattern as a right child or no child at all.
+    // If it has no child at all, the query planner may look for the right child
+    // of the TensorSearch outside of the SERVICE. This is only allowed for implicit joins.
+    auto addCandidateTensorSearch = [this, &sub, &config,
+                                     &candidatesOut](bool rightVarOutside) {
+      std::optional<std::shared_ptr<QueryExecutionTree>> right = std::nullopt;
+      if (!rightVarOutside) {
+        right = std::move(sub._qet);
+      }
+      auto tensorSearch =
+          std::make_shared<TensorSearch>(qec_, config, std::nullopt, right);
+      auto plan = makeSubtreePlan<TensorSearch>(std::move(tensorSearch));
+      candidatesOut.push_back(std::move(plan));
+    };
+
+    if (tensorSearchQuery.childGraphPattern_.has_value()) {
+      // The version using the child graph pattern
+      addCandidateTensorSearch(false);
+    } else {
+      addCandidateTensorSearch(true);
+    }
+  }
+  visitGroupOptionalOrMinus(std::move(candidatesOut));
+}
 
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitTextSearch(

@@ -66,6 +66,7 @@ bool isVariableContainedInGraphPatternOperation(
       return ad_utility::contains(arg.visibleVariables_, variable);
     } else if constexpr (ad_utility::SameAsAny<T, p::PathQuery, p::SpatialQuery,
                                                p::TextSearchQuery,
+                                               p::TensorSearchQuery,
                                                p::NamedCachedResult,
                                                p::MaterializedViewQuery>) {
       // For `MagicServiceQuery`s disable the pattern trick. This might slow

@@ -26,8 +26,8 @@
 #include "parser/ParsedQuery.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/Exception.h"
-#include "util/TensorData.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/TensorData.h"
 
 // ____________________________________________________________________________
 size_t TensorSearchImpl::getNumThreads() {
@@ -79,30 +79,101 @@ Result TensorSearchImpl::computeTensorSearchResultAnnoy() {
 #ifdef WITH_DENSE_TENSOR_INDEX
   IdTable result{params_.numColumns_, qec_->getAllocator()};
 
-  auto annoyIndex = TensorSearchCachedIndex::fromCacheOrBuild(params_, qec_->getAllocator());
-  for (size_t i = 0; i < params_.idTableLeft_->size(); i++) {
-    auto id = params_.idTableLeft_->at(i, params_.leftJoinCol_);
+  auto annoyIndex = TensorSearchCachedIndex::fromKeyOrBuild(
+      params_.cacheKey_, params_.leftJoinCol_, *params_.idTableLeft_,
+      qec_->getIndex(), params_.config_);
+  for (size_t i = 0; i < params_.idTableRight_->size(); i++) {
+    auto id = params_.idTableRight_->at(i, params_.rightJoinCol_);
 
     auto optionalStringAndType =
         ExportQueryExecutionTrees::idToStringAndType<true>(qec_->getIndex(), id,
                                                            {});
-    auto tensorData = TensorData::parseFromPair(optionalStringAndType);
+    auto tensorData =
+        ad_utility::TensorData::parseFromPair(optionalStringAndType);
     if (!tensorData.has_value()) {
       continue;
     }
     auto results =
-        annoyIndex->findNN(tensorData.value(), params_.config_.maxResults_);
-    for (const auto& [nnId, dist] : results) {
+        annoyIndex.findNN(tensorData.value(), params_.config_.maxResults_);
+    for (const auto& nnId : results) {
       addResultTableEntry(&result, params_.idTableLeft_, params_.idTableRight_,
-                          i, nnId);
+                          nnId, i);
     }
   }
 
-  return Result{std::move(result), std::vector<ColumnIndex>{},
-                Result::getMergedLocalVocab(*params_.resultLeft_, *params_.resultRight_)};
+  return Result{
+      std::move(result), std::vector<ColumnIndex>{},
+      Result::getMergedLocalVocab(*params_.resultLeft_, *params_.resultRight_)};
 #else
   throw ad_utility::Exception(
       "TensorSearchImpl::computeTensorSearchResultAnnoy() called, but qlever "
       "was not compiled with the option to use the dense tensor index.");
 #endif
+}
+Result TensorSearchImpl::computeTensorSearchResultNaive() {
+  IdTable result{params_.numColumns_, qec_->getAllocator()};
+
+  for (size_t i = 0; i < params_.idTableRight_->size(); i++) {
+    auto id = params_.idTableRight_->at(i, params_.rightJoinCol_);
+    auto optionalStringAndType =
+        ExportQueryExecutionTrees::idToStringAndType<true>(qec_->getIndex(), id,
+                                                           {});
+    auto tensorData =
+        ad_utility::TensorData::parseFromPair(optionalStringAndType);
+    if (!tensorData.has_value()) {
+      continue;
+    }
+    std::map<size_t, float> distanceToRowLeft;
+    for (size_t j = 0; j < params_.idTableLeft_->size(); j++) {
+      auto idLeft = params_.idTableLeft_->at(j, params_.leftJoinCol_);
+      auto optionalStringAndTypeLeft =
+          ExportQueryExecutionTrees::idToStringAndType<true>(qec_->getIndex(),
+                                                             idLeft, {});
+      auto tensorDataLeft =
+          ad_utility::TensorData::parseFromPair(optionalStringAndTypeLeft);
+      if (!tensorDataLeft.has_value()) {
+        continue;
+      }
+
+      auto distance =
+          computeDistance(tensorData.value(), tensorDataLeft.value());
+      distanceToRowLeft[j] = distance;
+    }
+    // sort indices by distance and take the closest ones
+    std::vector<std::pair<size_t, float>> sortedDistanceToRowLeft(
+        distanceToRowLeft.begin(), distanceToRowLeft.end());
+    std::sort(sortedDistanceToRowLeft.begin(), sortedDistanceToRowLeft.end(),
+              [](const auto& a, const auto& b) { return a.second < b.second; });
+    for (size_t k = 0; k < std::min((size_t)params_.config_.maxResults_, sortedDistanceToRowLeft.size()); k++) {
+      addResultTableEntry(&result, params_.idTableLeft_, params_.idTableRight_,
+                          sortedDistanceToRowLeft[k].first, i);
+    } 
+  }
+
+
+  return Result{
+      std::move(result), std::vector<ColumnIndex>{},
+      Result::getMergedLocalVocab(*params_.resultLeft_, *params_.resultRight_)};
+}
+float TensorSearchImpl::computeDistance(const ad_utility::TensorData& left,
+                                        const ad_utility::TensorData& right) {
+  switch (params_.config_.dist_) {
+    case TensorDistanceAlgorithm::COSINE_SIMILARITY:
+      return ad_utility::TensorData::cosineSimilarity(left, right);
+    case TensorDistanceAlgorithm::DOT_PRODUCT:
+      return ad_utility::TensorData::dot(left, right);
+    case TensorDistanceAlgorithm::EUCLIDEAN_DISTANCE:
+      return (right.subtract(left)).norm();
+    default:
+      throw ad_utility::Exception(
+          "Unknown distance function in TensorSearchImpl::computeDistance");
+  }
+}
+Result TensorSearchImpl::computeTensorSearchResult() {
+  switch (params_.config_.algo_) {
+    case TensorSearchAlgorithm::ANNOY:
+      return computeTensorSearchResultAnnoy();
+    default:
+      return computeTensorSearchResultNaive();
+  }
 }

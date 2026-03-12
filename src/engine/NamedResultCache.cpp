@@ -15,7 +15,7 @@
 std::shared_ptr<ExplicitIdTableOperation> NamedResultCache::getOperation(
     const Key& name, QueryExecutionContext* qec) {
   const auto& result = get(name);
-  const auto& [table, map, sortedOn, localVocab, cacheKey, geoIndex, tensorIndex, allocator,
+  const auto& [table, map, sortedOn, localVocab, cacheKey, geoIndex, allocator,
                blankNodeManager] = *result;
   auto resultAsOperation = std::make_shared<ExplicitIdTableOperation>(
       qec, table, map, sortedOn, localVocab.clone(), cacheKey);

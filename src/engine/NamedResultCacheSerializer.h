@@ -129,11 +129,12 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
     if (hasGeoIndex) {
       serializer << arg.cachedGeoIndex_.value();
     }
-    bool hasTensorSearchIndex = arg.cachedTensorIndex_.has_value();
-    serializer << hasTensorSearchIndex;
-    if (hasTensorSearchIndex) {
-      serializer << arg.cachedTensorIndex_.value();
-    }
+    // DISABLE NAMED SEREALIZATION - just do it in-memory for now
+    // bool hasTensorSearchIndex = arg.cachedTensorIndex_.has_value();
+    // serializer << hasTensorSearchIndex;
+    // if (hasTensorSearchIndex) {
+    //   serializer << arg.cachedTensorIndex_.value();
+    // }
   } else {
     // Deserialize the LocalVocab and get the ID mapping.
     AD_CORRECTNESS_CHECK(arg.blankNodeManagerForSerialization_.has_value());
@@ -182,13 +183,13 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
     }
 
     // Deserialize `cachedTensorSearchIndex`.
-    bool hasTensorIndex;
-    serializer >> hasTensorIndex;
-    std::optional<TensorSearchCachedIndex> cachedTensorIndex;
-    if (hasTensorIndex) {
-      cachedTensorIndex.emplace(TensorSearchCachedIndex::TagForSerialization{});
-      serializer >> cachedTensorIndex.value();
-    }
+    // bool hasTensorIndex;
+    // serializer >> hasTensorIndex;
+    // std::optional<TensorSearchCachedIndex> cachedTensorIndex;
+    // if (hasTensorIndex) {
+    //   cachedTensorIndex.emplace(TensorSearchCachedIndex::TagForSerialization{});
+    //   serializer >> cachedTensorIndex.value();
+    // }
 
     // Construct the `Value`.
     arg = NamedResultCache::Value{
@@ -198,7 +199,7 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
         std::move(localVocab),
         std::move(cacheKey),
         std::move(cachedGeoIndex),
-        std::move(cachedTensorIndex),
+        // std::move(cachedTensorIndex),
       };
   }
 }

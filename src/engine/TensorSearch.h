@@ -23,6 +23,7 @@ struct PreparedTensorSearchParams {
   ColumnIndex leftJoinCol_;
   ColumnIndex rightJoinCol_;
   std::vector<ColumnIndex> rightSelectedCols_;
+  std::string cacheKey_;
   size_t numColumns_;
   TensorSearchConfiguration config_;
 };
@@ -34,7 +35,8 @@ class TensorSearchImpl {
                            size_t rowRight) const;
   PreparedTensorSearchParams params_;
   QueryExecutionContext* qec_;
-
+  float computDistance(const ad_utility::TensorData& tensorLeft,
+                        const ad_utility::TensorData& tensorRight) const;
   Result computeTensorSearchResultAnnoy();
   Result computeTensorSearchResultNaive();
  public:

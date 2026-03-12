@@ -37,7 +37,7 @@ class NamedResultCache {
     LocalVocab localVocab_;
     std::string cacheKey_;
     std::optional<SpatialJoinCachedIndex> cachedGeoIndex_;
-    std::optional<TensorSearchCachedIndex> cachedTensorIndex_;
+    // std::optional<TensorSearchCachedIndex> cachedTensorIndex_;
 
     // The following two members (`Allocator` and `BlankNodeManager`) are only
     // used when reading a `Value` from a serializer.

@@ -6,48 +6,44 @@
 
 #include <variant>
 
+#include "engine/ExportQueryExecutionTrees.h"
 #include "engine/TensorSearch.h"
 #include "global/Constants.h"
-#include "util/Serializer.h"
+#include "util/Serializer/FileSerializer.h"
 using namespace Annoy;
-using AnnoyIndexVariants =
-    std::variant<AnnoyIndex<float, size_t, Euclidean, Kiss32Random,
-                            AnnoyIndexMultiThreadedBuildPolicy>,
-                 AnnoyIndex<float, size_t, Angular, Kiss32Random,
-                            AnnoyIndexMultiThreadedBuildPolicy>,
-                 AnnoyIndex<float, size_t, Hamming, Kiss32Random,
-                            AnnoyIndexMultiThreadedBuildPolicy>,
-                 AnnoyIndex<float, size_t, Manhattan, Kiss32Random,
-                            AnnoyIndexMultiThreadedBuildPolicy>>;
+// using namespace  ad_utility::serialization;
 using AnnoyIndexToRow = TensorSearchCachedIndex::AnnoyIndexToRow;
 
 std::shared_ptr<AnnoyIndexVariants> fromDistanceAndSize(
     TensorDistanceAlgorithm dist, int f) {
   switch (dist) {
     case TensorDistanceAlgorithm::COSINE_SIMILARITY:
-      return std::make_shared<AnnoyIndex<float, size_t, Angular, Kiss32Random,
-                                         AnnoyIndexMultiThreadedBuildPolicy>>(
-          f);
+      return std::make_shared<AnnoyIndexVariants>(
+          Annoy::AnnoyIndex<size_t, float, Annoy::Angular, Annoy::Kiss32Random,
+                            Annoy::AnnoyIndexMultiThreadedBuildPolicy>(f));
       break;
     case TensorDistanceAlgorithm::DOT_PRODUCT:
-      return std::make_shared<
-          AnnoyIndex<float, size_t, DotProduct, Kiss32Random,
-                     AnnoyIndexMultiThreadedBuildPolicy>>(f);
+      return std::make_shared<AnnoyIndexVariants>(
+          Annoy::AnnoyIndex<size_t, float, Annoy::DotProduct,
+                            Annoy::Kiss32Random,
+                            Annoy::AnnoyIndexMultiThreadedBuildPolicy>(f));
       break;
     case TensorDistanceAlgorithm::EUCLIDEAN_DISTANCE:
-      return std::make_shared<AnnoyIndex<float, size_t, Euclidean, Kiss32Random,
-                                         AnnoyIndexMultiThreadedBuildPolicy>>(
-          f);
+      return std::make_shared<AnnoyIndexVariants>(
+          Annoy::AnnoyIndex<size_t, float, Annoy::Euclidean,
+                            Annoy::Kiss32Random,
+                            Annoy::AnnoyIndexMultiThreadedBuildPolicy>(f));
       break;
     case TensorDistanceAlgorithm::MANHATTAN_DISTANCE:
-      return std::make_shared<AnnoyIndex<float, size_t, Manhattan, Kiss32Random,
-                                         AnnoyIndexMultiThreadedBuildPolicy>>(
-          f);
+      return std::make_shared<AnnoyIndexVariants>(
+          Annoy::AnnoyIndex<size_t, float, Annoy::Manhattan,
+                            Annoy::Kiss32Random,
+                            Annoy::AnnoyIndexMultiThreadedBuildPolicy>(f));
       break;
     case TensorDistanceAlgorithm::HAMMING_DISTANCE:
-      return std::make_shared<AnnoyIndex<float, size_t, Hamming, Kiss32Random,
-                                         AnnoyIndexMultiThreadedBuildPolicy>>(
-          f);
+      return std::make_shared<AnnoyIndexVariants>(
+          Annoy::AnnoyIndex<size_t, float, Annoy::Hamming, Annoy::Kiss32Random,
+                            Annoy::AnnoyIndexMultiThreadedBuildPolicy>(f));
       break;
     default:
       throw std::runtime_error(
@@ -59,9 +55,9 @@ std::shared_ptr<AnnoyIndexVariants> fromDistanceAndSize(
 
 // ____________________________________________________________________________
 TensorSearchCachedIndex::TensorSearchCachedIndex(
-    Variable tensorColumn, ColumnIndex col, const IdTable& restable,
-    const Index& index, TensorSearchConfiguration config_)
-    : tensorColumn_{std::move(tensorColumn)}, config_{config_} {
+    ColumnIndex col, const IdTable& restable, const Index& index,
+    TensorSearchConfiguration config_)
+    : config_{config_} {
   tensorIndexToRow_ = buildIndex(col, restable, index);
 }
 
@@ -70,20 +66,20 @@ AnnoyIndexToRow TensorSearchCachedIndex::buildIndex(ColumnIndex col,
                                                     const Index& index) {
   AnnoyIndexToRow tensorIndexToRow;
   // Populate the index from the given `IdTable`
-  std::optional<ssize_t> firstItemSize
+  std::optional<ssize_t> firstItemSize;
 
-      for (size_t row = 0; row < restable.size(); row++) {
+  for (size_t row = 0; row < restable.size(); row++) {
     auto id = restable.at(row, col);
     auto optionalStringAndType =
         ExportQueryExecutionTrees::idToStringAndType<true>(index, id, {});
-    auto tensor = TensorData::parseFromPair(optionalStringAndType);
+    auto tensor = ad_utility::TensorData::parseFromPair(optionalStringAndType);
     std::optional<std::vector<float>> tensorData;
     if (tensor.has_value()) {
-      tensorData = tensor.tensorData();
+      tensorData = tensor.value().tensorData();
     }
     if (tensorData.has_value()) {
-      ssize_t tensorFirstDimShape = tensorData.value().shape().length() > 0
-                                        ? (ssize_t)tensorData.value().shape()[0]
+      ssize_t tensorFirstDimShape = tensor.value().shape().size() > 0
+                                        ? (ssize_t)tensor.value().shape()[0]
                                         : -1;
       if (firstItemSize.has_value()) {
         if (firstItemSize.value() != tensorFirstDimShape) {
@@ -98,11 +94,9 @@ AnnoyIndexToRow TensorSearchCachedIndex::buildIndex(ColumnIndex col,
       }
 
       std::visit(
-          [&](auto&& idx) {
-            idx.add_item(row, tensorData.value().tensorData().data());
-          },
-          *index_);
-      tensorIndexToRow.emplace(id, row);
+          [&](auto&& idx) { idx.add_item(row, tensorData.value().data()); },
+          *index_.value());
+      tensorIndexToRow.emplace( row, id);
     }
     // By default, the annoy indices are constructed lazily on the first query,
     // which then is slow. The following call avoids this.
@@ -110,92 +104,41 @@ AnnoyIndexToRow TensorSearchCachedIndex::buildIndex(ColumnIndex col,
         [&](auto&& idx) {
           idx.build(config_.nTrees_, TensorSearchImpl::getNumThreads());
         },
-        *index_);
-
-    return tensorIndexToRow;
+        *index_.value());
   }
+  return tensorIndexToRow;
 }
 
 TensorSearchCachedIndex TensorSearchCachedIndex::fromKeyOrBuild(
-    const std::string& key, Variable tensorColumn, ColumnIndex col,
-    const IdTable& restable, const Index& index, TensorSearchConfiguration config) {
-      if 
-      auto serializer=serializer::FileSerializer(key);
-  auto cachedIndex = 
-  if (cachedIndex) {
-    return cachedIndex->cachedTensorIndex_;
-  } else {
-    return TensorSearchCachedIndex(tensorColumn, col, restable, index, config);
+    const std::string& key, ColumnIndex col, const IdTable& restable,
+    const Index& index, TensorSearchConfiguration config) {
+  auto lock = cache_.wlock();
+  if (!lock->contains(key)) {
+    auto newIndex = TensorSearchCachedIndex(col, restable, index, config);
+    lock->insert(key, std::move(newIndex));
   }
+  return (*lock)[key];
 }
 
-const std::vector<AnnoyResult> TensorSearchCachedIndex::findNN(
+std::vector<TensorSearchCachedIndex::AnnoyResult> TensorSearchCachedIndex::findNN(
     const ad_utility::TensorData& query, size_t n) const {
   std::vector<AnnoyResult> result;
   auto firstDimShape =
-      query.shape().length() > 0 ? (ssize_t)query.shape()[0] : -1;
+      query.shape().size() > 0 ? (ssize_t)query.shape()[0] : -1;
   if (firstDimShape != nDims_) {
-    throw std::runtime_error({absl::StrCat(
-        "Query vector has different size than the indexed vectors! Encountered",
-        firstDimShape, "and", nDims_)});
+    throw std::runtime_error(
+        {absl::StrCat("Query vector has different size than the indexed "
+                      "vectors! Encountered",
+                      firstDimShape, "and", nDims_)});
   }
   std::visit(
       [&](auto&& idx) {
-        auto nnIndices = idx.get_nns_by_vector(query.tensorData().data(), n);
+        auto nnIndices = idx.get_nns_by_vector(query.tensorData().data(),n, config_.searchK_);
         for (auto nnIndex : nnIndices) {
-          auto rowIndex = getRow(nnIndex);
-          auto id = restable.at(rowIndex, col);
-          auto optionalStringAndType =
-              ExportQueryExecutionTrees::idToStringAndType<true>(index, id, {});
-          if (optionalStringAndType.has_value()) {
-            auto type = optionalStringAndType.value().second;
-            if (type == nullptr) {
-              result.push_back({id, ad_utility::TensorData::parseFromString(
-                                        optionalStringAndType.value().first)});
-            } else {
-              auto type_str = std::string(type);
-              if (type_str == TENSOR_LITERAL ||
-                  type_str == TENSOR_NUMERIC_LITERAL) {
-                result.push_back(
-                    {id, ad_utility::TensorData::parseFromString(
-                             optionalStringAndType.value().first)});
-              }
-            }
-          }
+          // auto rowIndex = getRow(nnIndex);
+          result.push_back(nnIndex);
         }
       },
-      *index_);
+      *index_.value());
   return result;
-}
-
-// ____________________________________________________________________________
-const Variable& TensorSearchCachedIndex::getTensorColumn() const {
-  return tensorColumn_;
-}
-// ____________________________________________________________________________
-std::string TensorSearchCachedIndex::serializeAnnoyIndex() const {
-  // hmm, annoy saves to files -> just use a temp file
-  if (idx.has_value()) {
-    std::string tempFileName = config_.rightCacheName_.has_value()
-                                   ? *config_.rightCacheName_ + "_temp.ann"
-                                   : "tempAnnoyIndex.ann";
-    std::visit([&](auto&& idx) { idx.save(tempFileName.c_str()); }, *index_);
-    return tempFileName;
-  } else {
-    throw std::runtime_error(
-        "Trying to serialize an uninitialized Annoy Index!");
-  }
-}
-
-// _____________________________________________________________________________
-void TensorSearchCachedIndex::populateFromSerialized(
-    std::string_view serializedShapes) {
-  std::string tempFileName(serializedShapes);
-  return fromDistanceAndSize(config_.dist_, (int)nDims_);
-  std::visit([&](auto&& idx) { idx.load(tempFileName.c_str()); }, *index_);
-}
-
-// _____________________________________________________________________________
-TensorSearchCachedIndex::TensorSearchCachedIndex(TagForSerialization)
-    : tensorColumn_("?dummyCol") {}
 }

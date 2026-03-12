@@ -118,7 +118,7 @@ std::string TensorSearch::getCacheKeyImpl() const {
     os << "JoinColRight:" << childRight_->getVariableColumn(config_.right_);
 
     // Uses libTensorSearch?
-    auto maxResults = getMaxResults();
+    // auto maxResults = getMaxResults();
 
     os << "TensorSearch in distance: " << (int)config_.algo_ << "with algorithm"
        << (int)config_.dist_ << "\n";
@@ -157,7 +157,7 @@ std::string TensorSearch::getDescriptor() const {
   auto right = config_.right_.name();
 
   return absl::StrCat("Nearest Neighbour Tensor Search of ", left, " to ",
-                      right, " of max. ", getMaxResults());
+                      right, " of max. ", getMaxResults().value_or(0));
 }
 
 // ____________________________________________________________________________
@@ -372,6 +372,7 @@ PreparedTensorSearchParams TensorSearch::prepareJoin() const {
                                     leftJoinCol,
                                     rightJoinCol,
                                     rightSelectedCols,
+                                    getCacheKey(),
                                     numColumns,
                                     config_};
 }
