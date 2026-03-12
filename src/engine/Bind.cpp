@@ -8,6 +8,7 @@
 
 #include "engine/CallFixedSize.h"
 #include "engine/ExistsJoin.h"
+#include "engine/OperationBindPushDownImpl.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
@@ -188,7 +189,7 @@ IdTable Bind::computeExpressionBind(
   idTable.addEmptyColumn();
   auto outputColumn = idTable.getColumn(idTable.numColumns() - 1);
 
-  auto visitor = CPP_template_lambda_mut(&)(typename T)(T && singleResult)(
+  auto visitor = CPP_template_lambda_mut (&)(typename T)(T && singleResult)(
       requires sparqlExpression::SingleExpressionResult<T>) {
     constexpr static bool isVariable = std::is_same_v<T, ::Variable>;
     constexpr static bool isStrongId = std::is_same_v<T, Id>;
@@ -241,4 +242,15 @@ IdTable Bind::computeExpressionBind(
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Bind::cloneImpl() const {
   return std::make_unique<Bind>(_executionContext, _subtree->clone(), _bind);
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>> Bind::makeTreeWithBindColumn(
+    const parsedQuery::Bind& bind) const {
+  return pushDownBindToAnyChild(
+      bind, {_subtree},
+      [this](std::vector<std::shared_ptr<QueryExecutionTree>> children) {
+        return ad_utility::makeExecutionTree<Bind>(
+            getExecutionContext(), std::move(children.at(0)), _bind);
+      });
 }

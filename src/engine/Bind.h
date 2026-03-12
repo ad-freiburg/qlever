@@ -35,6 +35,11 @@ class Bind : public Operation {
   void onLimitOffsetChanged(
       const LimitOffsetClause& limitOffset) const override;
 
+  // `BIND` needs to be able to push down other `BIND`s if the query contains
+  // multiple `BIND`s of which only some can be rewritten.
+  virtual std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithBindColumn(const parsedQuery::Bind& bind) const override;
+
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
   uint64_t getSizeEstimateBeforeLimit() override;

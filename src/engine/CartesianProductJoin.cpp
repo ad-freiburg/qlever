@@ -11,6 +11,7 @@
 #include "engine/CartesianProductJoin.h"
 
 #include "engine/CallFixedSize.h"
+#include "engine/OperationBindPushDownImpl.h"
 #include "util/Views.h"
 
 namespace {
@@ -430,4 +431,17 @@ std::unique_ptr<Operation> CartesianProductJoin::cloneImpl() const {
   }
   return std::make_unique<CartesianProductJoin>(_executionContext,
                                                 std::move(copy), chunkSize_);
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+CartesianProductJoin::makeTreeWithBindColumn(
+    const parsedQuery::Bind& bind) const {
+  // Since the variables covered by the children of a `CartesianProductJoin` are
+  // disjoint, we can simply use the generic push down into any child and it
+  // will select the correct one.
+  return pushDownBindToAnyChild(bind, children_, [this](Children children) {
+    return ad_utility::makeExecutionTree<CartesianProductJoin>(
+        getExecutionContext(), std::move(children), chunkSize_);
+  });
 }
