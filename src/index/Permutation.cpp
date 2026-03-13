@@ -70,7 +70,7 @@ void Permutation::loadFromDisk(
   meta_.readFromFile(&file);
   // Materialized views never use graph post-processing, while normal and
   // internal permutations always use it.
-  bool useGraphPostProcessing = permutationType == Type::MATERIALIZED_VIEW;
+  bool useGraphPostProcessing = permutationType != Type::MATERIALIZED_VIEW;
   reader_.emplace(allocator_, std::move(file), useGraphPostProcessing);
   AD_LOG_INFO << "Registered " << readableName_
               << " permutation: " << meta_.statistics() << std::endl;
