@@ -431,6 +431,13 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
     // When all columns are requested, the `IndexScan`'s `VariableToColumnMap`
     // should be equal to that of the `MaterializedView` itself.
     EXPECT_THAT(scanMap, ::testing::UnorderedElementsAreArray(expected));
+
+    // Check that `columnOriginatesFromGraphOrUndef` of `IndexScan` is disabled
+    // for the materialized view.
+    for (const auto& var : expected | ql::views::keys) {
+      EXPECT_FALSE(
+          qet->getRootOperation()->columnOriginatesFromGraphOrUndef(var));
+    }
   }
 }
 
