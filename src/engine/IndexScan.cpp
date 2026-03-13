@@ -246,13 +246,14 @@ VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
     return !varsToKeep_.has_value() || varsToKeep_.value().contains(var);
   };
   auto addCol = [&isContained, &variableToColumnMap,
-                 nextColIdx = ColumnIndex{0}](const Variable& var) mutable {
+                 nextColIdx = ColumnIndex{0},
+                 this](const Variable& var) mutable {
     if (!isContained(var)) {
       return;
     }
     // All the columns of an index scan only contain defined values.
-    // TODO<ullingerc> Get undef status from permutation.
-    variableToColumnMap[var] = makeAlwaysDefinedColumn(nextColIdx);
+    variableToColumnMap[var] = {nextColIdx,
+                                permutation().getColumnUndefStatus(nextColIdx)};
     ++nextColIdx;
   };
 

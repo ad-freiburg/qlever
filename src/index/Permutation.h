@@ -9,6 +9,7 @@
 #include <memory>
 #include <string>
 
+#include "engine/VariableToColumnMap.h"
 #include "global/Constants.h"
 #include "index/CompressedRelation.h"
 #include "index/IndexMetaData.h"
@@ -76,9 +77,10 @@ class Permutation {
                        std::optional<std::string> readableName = std::nullopt);
 
   // everything that has to be done when reading an index from disk
-  void loadFromDisk(const std::string& onDiskBase,
-                    bool loadInternalPermutation = false,
-                    bool useGraphPostProcessing = true);
+  void loadFromDisk(
+      const std::string& onDiskBase, bool loadInternalPermutation = false,
+      bool useGraphPostProcessing = true,
+      std::unordered_set<ColumnIndex> possiblyUndefinedColumns = {});
 
   // Set the original metadata for the delta triples. This also sets the
   // metadata for internal permutation if present.
@@ -221,6 +223,10 @@ class Permutation {
   // has already been destroyed.
   std::shared_ptr<const MaterializedView> materializedView() const;
 
+  // Check whether a column was marked to possibly contain undef values.
+  ColumnIndexAndTypeInfo::UndefStatus getColumnUndefStatus(
+      ColumnIndex col) const;
+
  private:
   // The base filename of the permutation without the suffix below
   std::string onDiskBase_;
@@ -249,7 +255,10 @@ class Permutation {
   // If this permutation is owned by a `MaterializedView`, store a reference
   // back to the view.
   std::weak_ptr<const MaterializedView> materializedView_;
-  // TODO<ullingerc> Undef status for columns.
+
+  // For materialized views unlike the regular index permutations, some columns
+  // may be undefined.
+  std::unordered_set<ColumnIndex> possiblyUndefinedColumns_;
 };
 
 #endif  // QLEVER_SRC_INDEX_PERMUTATION_H

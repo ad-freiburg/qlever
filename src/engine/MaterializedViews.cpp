@@ -15,6 +15,7 @@
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
+#include <unordered_set>
 
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
@@ -295,7 +296,7 @@ void MaterializedViewWriter::writeViewMetadata() const {
        (columnNames_ | ql::views::transform([&varToCol](const Variable& v) {
           return nlohmann::json{
               {"name", v.name()},
-              {"always-defined",
+              {"always_defined",
                varToCol.at(v).mightContainUndef_ ==
                    ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined}};
         }) |
@@ -362,6 +363,7 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
   }
 
   // Make variable to column map.
+  std::unordered_set<ColumnIndex> possiblyUndefinedColumns;
   for (const auto& [index, columnEntry] :
        ::ranges::views::enumerate(viewInfoJson.at("columns"))) {
     std::string columnName;
@@ -374,14 +376,18 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
       columnName = columnEntry.get<std::string>();
     } else {
       // Restore column name and undef status.
+      AD_CORRECTNESS_CHECK(columnEntry.is_object());
       columnName = columnEntry.at("name").get<std::string>();
-      undefStatus = columnEntry.at("always-defined").get<bool>()
+      undefStatus = columnEntry.at("always_defined").get<bool>()
                         ? ColumnIndexAndTypeInfo::AlwaysDefined
                         : ColumnIndexAndTypeInfo::PossiblyUndefined;
     }
 
     varToColMap_.insert({Variable{std::move(columnName)},
                          {static_cast<ColumnIndex>(index), undefStatus}});
+    if (undefStatus == ColumnIndexAndTypeInfo::PossiblyUndefined) {
+      possiblyUndefinedColumns.insert(index);
+    }
   }
 
   // Restore original query string and parse it for query analysis.
@@ -402,8 +408,10 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
 
   // Read permutation, and deactivate the graph post-processing of
   // `CompressedRelationReader`, including row deduplication, which is not the
-  // intended behavior for materialized views.
-  permutation_->loadFromDisk(filename, false, false);
+  // intended behavior for materialized views. Also provide the `Permutation`
+  // with the set of columns potentially containing undef values.
+  permutation_->loadFromDisk(filename, false, false,
+                             std::move(possiblyUndefinedColumns));
   AD_CORRECTNESS_CHECK(permutation_->isLoaded());
 }
 

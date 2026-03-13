@@ -6,6 +6,7 @@
 
 #include <absl/strings/str_cat.h>
 
+#include "engine/VariableToColumnMap.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/DeltaTriples.h"
 #include "util/StringUtils.h"
@@ -30,9 +31,10 @@ CompressedRelationReader::ScanSpecAndBlocks Permutation::getScanSpecAndBlocks(
 }
 
 // _____________________________________________________________________
-void Permutation::loadFromDisk(const std::string& onDiskBase,
-                               bool loadInternalPermutation,
-                               bool useGraphPostProcessing) {
+void Permutation::loadFromDisk(
+    const std::string& onDiskBase, bool loadInternalPermutation,
+    bool useGraphPostProcessing,
+    std::unordered_set<ColumnIndex> possiblyUndefinedColumns) {
   onDiskBase_ = onDiskBase;
   if (loadInternalPermutation) {
     internalPermutation_ =
@@ -45,6 +47,7 @@ void Permutation::loadFromDisk(const std::string& onDiskBase,
     meta_.setup(onDiskBase + ".index" + fileSuffix_ + MMAP_FILE_SUFFIX,
                 ad_utility::ReuseTag(), ad_utility::AccessPattern::Random);
   }
+  possiblyUndefinedColumns_ = std::move(possiblyUndefinedColumns);
   auto filename = std::string(onDiskBase + ".index" + fileSuffix_);
   ad_utility::File file;
   try {
@@ -246,4 +249,12 @@ void Permutation::setMaterializedView(
 // ______________________________________________________________________
 std::shared_ptr<const MaterializedView> Permutation::materializedView() const {
   return materializedView_.lock();
+}
+
+// ______________________________________________________________________
+ColumnIndexAndTypeInfo::UndefStatus Permutation::getColumnUndefStatus(
+    ColumnIndex col) const {
+  return possiblyUndefinedColumns_.contains(col)
+             ? ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined
+             : ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
 }
