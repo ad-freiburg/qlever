@@ -23,6 +23,10 @@
 
 class Permutation;
 
+namespace ad_benchmark {
+class EnsureIntegrationBenchmark;
+}
+
 struct NumAddedAndDeleted {
   size_t numAdded_;
   size_t numDeleted_;
@@ -92,6 +96,9 @@ class SortedLocatedTriplesVector {
   using const_reverse_iterator = storage::const_reverse_iterator;
 
   void zipSort() const;
+  void fullSort() const;
+
+  friend class ad_benchmark::EnsureIntegrationBenchmark;
 
  public:
   SortedLocatedTriplesVector() : triples_(), sortedUntil_(0), dirty_(false) {}

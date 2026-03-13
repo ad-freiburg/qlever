@@ -105,18 +105,23 @@ SortedLocatedTriplesVector SortedLocatedTriplesVector::fromSorted(
 }
 
 // ____________________________________________________________________________
+void SortedLocatedTriplesVector::fullSort() const {
+  ql::ranges::stable_sort(triples_, LocatedTripleCompare{});
+  auto rit =
+      std::unique(triples_.rbegin(), triples_.rend(),
+                  [](const LocatedTriple& lt1, const LocatedTriple& lt2) {
+                    return lt1.triple_ == lt2.triple_;
+                  });
+  triples_.erase(triples_.begin(), rit.base());
+}
+
+// ____________________________________________________________________________
 void SortedLocatedTriplesVector::ensureIntegration() const {
   if (dirty_) {
     if (triples_.size() > 5000) {
       zipSort();
     } else {
-      ql::ranges::stable_sort(triples_, LocatedTripleCompare{});
-      auto rit =
-          std::unique(triples_.rbegin(), triples_.rend(),
-                      [](const LocatedTriple& lt1, const LocatedTriple& lt2) {
-                        return lt1.triple_ == lt2.triple_;
-                      });
-      triples_.erase(triples_.begin(), rit.base());
+      fullSort();
     }
     sortedUntil_ = triples_.size();
     dirty_ = false;

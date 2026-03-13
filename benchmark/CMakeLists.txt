@@ -38,4 +38,6 @@ if (NOT _NO_BENCHMARK)
 
     addAndLinkBenchmark(SortedLocatedTriplesVectorBenchmark index)
 
+    addAndLinkBenchmark(EnsureIntegrationBenchmark index)
+
 endif()
