@@ -670,8 +670,30 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
     EXPECT_FALSE(view->parsedQuery().has_value());
   }
 
-  // TODO<ullingerc> Test columns as strings or as {name,always-defined}
-  // objects.
+  // Backward compatibility: View with columns saved without `UndefStatus`.
+  {
+    auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
+    manager.writeViewToDisk("testView7", plan);
+    {
+      // Store only the column names in the `columns` array of the metadata JSON
+      // file, in particular, no `UndefStatus`.
+      nlohmann::json viewInfo;
+      const std::string metadataFilename =
+          "_materializedViewsTestIndex.view.testView7.viewinfo.json";
+      ad_utility::makeIfstream(metadataFilename) >> viewInfo;
+      viewInfo.erase("columns");
+      viewInfo["columns"] = std::vector<std::string>{"?s", "?p", "?o", "?g"};
+      ad_utility::makeOfstream(metadataFilename)
+          << viewInfo.dump() << std::endl;
+    }
+    // Load the view: The view can be loaded correctly, but all columns are
+    // possibly undefined because the information is missing.
+    auto view = manager.getView("testView7");
+    for (size_t i = 0; i < 4; ++i) {
+      EXPECT_EQ(view->permutation()->getColumnUndefStatus(i),
+                ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined);
+    }
+  }
 
   // View with no parsed query is skipped by `QueryPatternCache::analyzeView`.
   {
