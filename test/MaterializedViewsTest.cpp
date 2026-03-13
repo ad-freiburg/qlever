@@ -30,6 +30,7 @@
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
 #include "rdfTypes/Iri.h"
 #include "rdfTypes/Literal.h"
+#include "util/AllocatorWithLimit.h"
 #include "util/CancellationHandle.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
@@ -385,8 +386,9 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
     EXPECT_EQ(res, "?o\n\"abc\"\n");
   }
 
-  // Test column `UndefStatus` in `VariableToColumnMap`, the `Permutation`
-  // object and when scanning the view.
+  // Test that the column `UndefStatus` is set correctly in the view's
+  // `VariableToColumnMap`. Also test the `UndefStatus` stored in the
+  // `Permutation` object and in an `IndexScan`'s `VariableToColumnMap`.
   {
     // In this view, ?s and ?o are always defined, but ?u is undefined for one
     // of the two rows in the view.
@@ -711,6 +713,23 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
     view->parsedQuery_ = std::nullopt;
     materializedViewsQueryAnalysis::QueryPatternCache c;
     EXPECT_FALSE(c.analyzeView(view));
+  }
+
+  // Test assertions on `Permutation::Type`.
+  {
+    Permutation testPermutation{Permutation::Enum::SPO,
+                                ad_utility::makeUnlimitedAllocator<Id>()};
+    const std::string testView1Filename =
+        "_materializedViewsTestIndex.view.testView1";
+    // A materialized view permutation does not have a corresponding internal
+    // permutation.
+    EXPECT_ANY_THROW(testPermutation.loadFromDisk(
+        testView1Filename, true, Permutation::Type::MATERIALIZED_VIEW));
+    // If a permutation is loaded as `Type::NORMAL`, no reference to an owning
+    // materialized view can be set.
+    EXPECT_NO_THROW(testPermutation.loadFromDisk(testView1Filename, false,
+                                                 Permutation::Type::NORMAL));
+    EXPECT_ANY_THROW(testPermutation.setMaterializedView(view));
   }
 }
 
