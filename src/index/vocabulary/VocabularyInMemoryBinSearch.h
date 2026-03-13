@@ -5,9 +5,11 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORYBINSEARCH_H
 #define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORYBINSEARCH_H
 
+#include <memory>
 #include <string>
 #include <string_view>
 
+#include "backports/span.h"
 #include "global/Pattern.h"
 #include "index/vocabulary/VocabularyBinarySearchMixin.h"
 #include "index/vocabulary/VocabularyTypes.h"
@@ -59,6 +61,12 @@ class VocabularyInMemoryBinSearch
   // Return the word with index `index`. If this index is not part of the
   // vocabulary, return `std::nullopt`.
   std::optional<std::string_view> operator[](uint64_t index) const;
+
+  // Look up multiple indices at once. Returns a shared_ptr to a vector of
+  // optional string_views, one per input index (preserving order). Entries are
+  // `std::nullopt` if the index is not part of the vocabulary.
+  std::shared_ptr<std::vector<std::optional<std::string_view>>> lookupBatch(
+      ql::span<const size_t> indices) const;
 
   // Convert an iterator to a `WordAndIndex`. Required for the mixin.
   WordAndIndex iteratorToWordAndIndex(ql::ranges::iterator_t<Words> it) const;

@@ -4,6 +4,8 @@
 
 #include <gtest/gtest.h>
 
+#include <cstring>
+
 #include "VocabularyTestHelpers.h"
 #include "backports/algorithm.h"
 #include "index/vocabulary/CompressedVocabulary.h"
@@ -24,6 +26,18 @@ struct DummyDecoder {
       c -= 2;
     }
     return result;
+  }
+  // Decompress into a caller-provided buffer. Returns the number of bytes
+  // written.
+  static size_t decompressInto(std::string_view compressed, char* output,
+                               [[maybe_unused]] size_t outputCapacity,
+                               [[maybe_unused]] char* scratch = nullptr,
+                               [[maybe_unused]] size_t scratchCapacity = 0) {
+    std::memcpy(output, compressed.data(), compressed.size());
+    for (size_t i = 0; i < compressed.size(); ++i) {
+      output[i] -= 2;
+    }
+    return compressed.size();
   }
   // This class has no state, but it still needs to be serialized.
   template <typename T>
@@ -170,6 +184,25 @@ TYPED_TEST(CompressedVocabularyF, WriteAndReadWithSerializer) {
 
   // Cleanup files.
   ad_utility::deleteFile(filename);
+}
+
+// _______________________________________________________
+TYPED_TEST(CompressedVocabularyF, LookupBatch) {
+  const std::vector<std::string> words{"alpha", "delta", "beta", "42"};
+  auto createVocab = this->createCompressedVocabulary("lookupBatchFsst");
+  auto vocab = createVocab(words);
+
+  // Batch lookup in non-sequential order.
+  std::array<size_t, 3> indices{2, 0, 3};
+  auto result = vocab.lookupBatch(indices);
+  ASSERT_EQ(result->size(), 3);
+  EXPECT_EQ((*result)[0], "beta");
+  EXPECT_EQ((*result)[1], "alpha");
+  EXPECT_EQ((*result)[2], "42");
+
+  // Empty batch.
+  auto emptyResult = vocab.lookupBatch(ql::span<const size_t>{});
+  EXPECT_EQ(emptyResult->size(), 0);
 }
 
 }  // namespace
