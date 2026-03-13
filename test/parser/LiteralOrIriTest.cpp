@@ -116,6 +116,21 @@ TEST(LiteralTest, LiteralTest) {
   EXPECT_EQ("Hello World", asStringViewUnsafe(literal.getContent()));
   EXPECT_THROW(literal.getLanguageTag(), ad_utility::Exception);
   EXPECT_THROW(literal.getDatatype(), ad_utility::Exception);
+
+  literal.addLanguageTag("en");
+  EXPECT_EQ("en", asStringViewUnsafe(literal.getLanguageTag()));
+  EXPECT_EQ("Hello World", asStringViewUnsafe(literal.getContent()));
+  EXPECT_ANY_THROW(literal.addLanguageTag("en"));
+
+  Iri datatype = Iri::fromIriref("<someIri>");
+  EXPECT_ANY_THROW(literal.addDatatype(datatype));
+  literal.removeDatatypeOrLanguageTag();
+  EXPECT_EQ("Hello World", asStringViewUnsafe(literal.getContent()));
+  EXPECT_FALSE(literal.hasLanguageTag());
+  EXPECT_NO_THROW(literal.addDatatype(datatype));
+  EXPECT_EQ(asStringViewUnsafe(literal.getDatatype()), "someIri");
+  EXPECT_ANY_THROW(literal.addLanguageTag("en"));
+  EXPECT_ANY_THROW(literal.addDatatype(datatype));
 }
 
 // _____________________________________________________________________________
@@ -521,6 +536,10 @@ TEST(NonOwningTest, IriView) {
       std::is_same_v<decltype(v.toStringRepresentation()), std::string_view>);
   EXPECT_EQ(v.toStringRepresentation(), s);
   EXPECT_THAT("http://example.org/foo", asStringViewUnsafe(v.getContent()));
+  // Test that the `IriView` actually references the `s` the was passed in.
+  EXPECT_EQ(v.toStringRepresentation(), s);
+  EXPECT_EQ(v.toStringRepresentation().data(), s.data());
+
   EXPECT_FALSE(v.empty());
   EXPECT_TRUE(IriView{}.empty());
   ad_utility::HashSet<IriView> set{v};
@@ -534,6 +553,7 @@ TEST(NonOwningTest, LiteralView) {
   static_assert(
       std::is_same_v<decltype(v.toStringRepresentation()), std::string_view>);
   EXPECT_EQ(v.toStringRepresentation(), s);
+  EXPECT_EQ(v.toStringRepresentation().data(), s.data());
   EXPECT_TRUE(v.hasLanguageTag());
   EXPECT_FALSE(v.hasDatatype());
   EXPECT_THAT("Hello", asStringViewUnsafe(v.getContent()));
@@ -542,6 +562,8 @@ TEST(NonOwningTest, LiteralView) {
   v.removeDatatypeOrLanguageTag();
   EXPECT_FALSE(v.hasLanguageTag());
   EXPECT_EQ(v.toStringRepresentation(), "\"Hello\"");
+  // We have only stripped a suffix, so the begin pointer stays the same.
+  EXPECT_EQ(v.toStringRepresentation().data(), s.data());
   EXPECT_TRUE(LiteralView::fromStringRepresentation("\"plain\"").isPlain());
 }
 
@@ -554,9 +576,13 @@ TEST(NonOwningTest, LiteralOrIriView) {
   EXPECT_TRUE(iv.isIri());
   EXPECT_FALSE(iv.isLiteral());
   EXPECT_THAT("http://example.org/", asStringViewUnsafe(iv.getIriContent()));
+  EXPECT_EQ(iv.toStringRepresentation(), iriStr);
+  EXPECT_EQ(iv.toStringRepresentation().data(), iriStr.data());
 
   std::string litStr = "\"42\"^^<http://www.w3.org/2001/XMLSchema#integer>";
   LiteralOrIriView lv = LiteralOrIriView::fromStringRepresentation(litStr);
+  EXPECT_EQ(lv.toStringRepresentation(), litStr);
+  EXPECT_EQ(lv.toStringRepresentation().data(), litStr.data());
   EXPECT_FALSE(lv.isIri());
   EXPECT_TRUE(lv.isLiteral());
   EXPECT_FALSE(lv.hasLanguageTag());
@@ -568,5 +594,8 @@ TEST(NonOwningTest, LiteralOrIriView) {
   ad_utility::HashSet<LiteralOrIriView> set{iv, lv};
   EXPECT_THAT(set, ::testing::UnorderedElementsAre(iv, lv));
 }
+
+using LitTypes =
+    ::testing::Types<LiteralOrIri, LiteralOrIriView, Literal, LiteralView>;
 
 }  // namespace

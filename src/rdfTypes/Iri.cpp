@@ -85,12 +85,16 @@ Iri Iri::fromIrirefConsiderBase(std::string_view iriStringWithBrackets,
   AD_CORRECTNESS_CHECK(iriSv[0] == '<' && iriSv[iriSv.size() - 1] == '>');
   if (iriSv.find("://") != std::string_view::npos ||
       basePrefixForAbsoluteIris.empty()) {
+    // Case 1: IRI with scheme (like `<http://...>`) or `BASE_IRI_FOR_TESTING`
+    // (which is `<@>`, and no valid base IRI has length 3).
     return fromIriref(iriSv);
   } else if (iriSv[1] == '/') {
+    // Case 2: Absolute IRI without scheme (like `</prosite/PS51927>`).
     AD_CORRECTNESS_CHECK(!basePrefixForAbsoluteIris.empty());
     return fromPrefixAndSuffix(basePrefixForAbsoluteIris,
                                iriSv.substr(2, iriSv.size() - 3));
   } else {
+    // Case 3: Relative IRI (like `<UPI001AF4585D>`).
     AD_CORRECTNESS_CHECK(!basePrefixForRelativeIris.empty());
     return fromPrefixAndSuffix(basePrefixForRelativeIris,
                                iriSv.substr(1, iriSv.size() - 2));
@@ -101,6 +105,8 @@ Iri Iri::fromIrirefConsiderBase(std::string_view iriStringWithBrackets,
 Iri Iri::getBaseIri(bool domainOnly) const {
   AD_CORRECTNESS_CHECK(ql::starts_with(iri_, '<') && ql::ends_with(iri_, '>'),
                        iri_);
+  // Check if we have a scheme and find the first `/` after that (or the first
+  // `/` at all if there is no scheme).
   size_t pos = iri_.find(schemePattern);
   if (pos == std::string::npos) {
     AD_LOG_WARN << "No scheme found in base IRI: \"" << iri_ << "\""
@@ -110,14 +116,18 @@ Iri Iri::getBaseIri(bool domainOnly) const {
     pos += schemePattern.size();
   }
   pos = iri_.find('/', pos);
+  // Return the IRI with `/` appended in the following two cases: the IRI has
+  // the empty path, or `domainOnly` is false and the final `/` is missing.
   if (pos == std::string::npos ||
       (!domainOnly && iri_[iri_.size() - 2] != '/')) {
     return fromIrirefWithoutBrackets(
         absl::StrCat(std::string_view(iri_).substr(1, iri_.size() - 2), "/"));
   }
+  // If `domainOnly` is true, remove the path part.
   if (domainOnly) {
     return fromIrirefWithoutBrackets(std::string_view(iri_).substr(1, pos));
   }
+  // Otherwise, return the IRI as is.
   return *this;
 }
 

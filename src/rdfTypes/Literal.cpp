@@ -218,7 +218,7 @@ void Literal::replaceContent(std::string_view newContent) {
 }
 
 // ____________________________________________________________________________
-void Literal::concat(const BasicLiteral<true>& other) {
+void Literal::concat(const Literal& other) {
   if (!((hasLanguageTag() && other.hasLanguageTag() &&
          getLanguageTag() == other.getLanguageTag()) ||
         (hasDatatype() && other.hasDatatype() &&

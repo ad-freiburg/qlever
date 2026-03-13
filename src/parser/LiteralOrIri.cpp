@@ -141,7 +141,7 @@ LiteralOrIri LiteralOrIri::literalWithoutQuotes(
 }
 
 // ____________________________________________________________________________
-LiteralOrIri LiteralOrIri::iriref(const std::string& stringWithBrackets) {
+LiteralOrIri LiteralOrIri::iriref(std::string_view stringWithBrackets) {
   return LiteralOrIri{Iri::fromIriref(stringWithBrackets)};
 }
 

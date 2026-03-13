@@ -79,9 +79,11 @@ class BasicIri {
 class Iri : public BasicIri<true> {
  public:
   using BasicIri<true>::BasicIri;
-  Iri(BasicIri<true>&& base) : BasicIri<true>(std::move(base)) {}
-  Iri(const BasicIri<true>& base) : BasicIri<true>(base) {}
 
+ private:
+  Iri(BasicIri<true>&& base) : BasicIri<true>(std::move(base)) {}
+
+ public:
   using BasicIri<true>::toStringRepresentation;
 
   template <typename H>
@@ -119,9 +121,11 @@ class Iri : public BasicIri<true> {
 class IriView : public BasicIri<false> {
  public:
   using BasicIri<false>::BasicIri;
-  IriView(BasicIri<false>&& base) : BasicIri<false>(std::move(base)) {}
-  IriView(const BasicIri<false>& base) : BasicIri<false>(base) {}
 
+ private:
+  IriView(BasicIri<false>&& base) : BasicIri<false>(std::move(base)) {}
+
+ public:
   template <typename H>
   friend H AbslHashValue(H h, const IriView& iri) {
     return H::combine(std::move(h), static_cast<const BasicIri<false>&>(iri));

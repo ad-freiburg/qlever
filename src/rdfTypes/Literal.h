@@ -39,6 +39,9 @@ class BasicLiteral {
 
   // Store the normalized version of the literal, including possible datatypes
   // and descriptors.
+  //  For example `"Hello World"@en`  or `"With"Quote"^^<someDatatype>` (note
+  //  that the quote in the middle is unescaped because this is the normalized
+  //  form that QLever stores.
   StorageType content_;
   // The position after the closing `"`, so either the size of the string, or
   // the position of the `@` or `^^` for literals with language tags or
@@ -113,9 +116,11 @@ class BasicLiteral {
 class Literal : public BasicLiteral<true> {
  public:
   using BasicLiteral<true>::BasicLiteral;
-  Literal(BasicLiteral<true>&& base) : BasicLiteral<true>(std::move(base)) {}
-  Literal(const BasicLiteral<true>& base) : BasicLiteral<true>(base) {}
 
+ private:
+  Literal(BasicLiteral<true>&& base) : BasicLiteral<true>(std::move(base)) {}
+
+ public:
   using BasicLiteral<true>::toStringRepresentation;
 
   template <typename H>
@@ -151,24 +156,34 @@ class Literal : public BasicLiteral<true> {
       std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt);
 
   // Erase everything but the substring in the range ['start', 'start'+'length')
+  // from the inner content. Note that the start position does not count the
+  // leading quotes, so the first character after the quote has index 0.
+  // Throws if either 'start' or 'start' + 'length' is out of bounds.
   // from the inner content.
   void setSubstr(std::size_t start, std::size_t length);
 
   // Replace the content of the Literal object with `newContent`.
+  // It truncates or extends the content based on the length of newContent
+  // Used in UCASE/LCASE functions in StringExpressions.cpp.
   void replaceContent(std::string_view newContent);
 
   // Concatenates the content of the current literal with another literal.
-  void concat(const BasicLiteral<true>& other);
+  // If the language tag or datatype of the literals differ, the existing
+  // language tag or datatype is removed from the current literal. Used in the
+  // CONCAT function in StringExpressions.cpp.
+  void concat(const Literal& other);
 };
 
 // Non-owning Literal view type (stores a `std::string_view`).
 class LiteralView : public BasicLiteral<false> {
  public:
   using BasicLiteral<false>::BasicLiteral;
+
+ private:
   LiteralView(BasicLiteral<false>&& base)
       : BasicLiteral<false>(std::move(base)) {}
-  LiteralView(const BasicLiteral<false>& base) : BasicLiteral<false>(base) {}
 
+ public:
   template <typename H>
   friend H AbslHashValue(H h, const LiteralView& lit) {
     return H::combine(std::move(h),

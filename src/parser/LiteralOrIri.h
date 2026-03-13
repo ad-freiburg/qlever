@@ -85,7 +85,8 @@ class alignas(16) BasicLiteralOrIri {
     }
   }
 
-  decltype(auto) toStringRepresentation() && {
+  std::conditional_t<isOwning, std::string, std::string_view>
+  toStringRepresentation() && {
     return std::visit(
         [](auto&& val) -> decltype(auto) {
           return std::move(val).toStringRepresentation();
@@ -151,9 +152,11 @@ class LiteralOrIri : public BasicLiteralOrIri<true> {
  public:
   using Base = BasicLiteralOrIri<true>;
   using Base::Base;
-  LiteralOrIri(Base&& base) : Base(std::move(base)) {}
-  LiteralOrIri(const Base& base) : Base(base) {}
 
+ private:
+  LiteralOrIri(Base&& base) : Base(std::move(base)) {}
+
+ public:
   template <typename H>
   friend H AbslHashValue(H h, const LiteralOrIri& v) {
     return H::combine(std::move(h), static_cast<const Base&>(v));
@@ -162,6 +165,15 @@ class LiteralOrIri : public BasicLiteralOrIri<true> {
   static LiteralOrIri fromStringRepresentation(std::string internal);
 
   // Create a new Literal with optional datatype or language tag.
+  // The rdfContent is expected to be a valid string according to SPARQL 1.1
+  // Query Language, 19.8 Grammar, Rule [145], and to be surrounded by
+  // quotation marks (", """, ', or '''). If the second argument is set and of
+  // type IRI, it is stored as the datatype of the given literal. If the
+  // second argument is set and of type string, it is interpreted as the
+  // language tag of the given literal. The language tag string can optionally
+  // start with an @ character, which is removed during the automatic
+  // normalization. If no second argument is set, the literal is stored
+  // without any descriptor.
   static LiteralOrIri literalWithQuotes(
       std::string_view rdfContentWithQuotes,
       std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt);
@@ -173,7 +185,7 @@ class LiteralOrIri : public BasicLiteralOrIri<true> {
       std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt);
 
   // Create a new iri given an iri with surrounding brackets.
-  static LiteralOrIri iriref(const std::string& stringWithBrackets);
+  static LiteralOrIri iriref(std::string_view stringWithBrackets);
 
   // Create a new iri given a prefix iri and its suffix.
   static LiteralOrIri prefixedIri(const Iri& prefix, std::string_view suffix);
@@ -184,9 +196,11 @@ class LiteralOrIriView : public BasicLiteralOrIri<false> {
  public:
   using Base = BasicLiteralOrIri<false>;
   using Base::Base;
-  LiteralOrIriView(Base&& base) : Base(std::move(base)) {}
-  LiteralOrIriView(const Base& base) : Base(base) {}
 
+ private:
+  LiteralOrIriView(Base&& base) : Base(std::move(base)) {}
+
+ public:
   template <typename H>
   friend H AbslHashValue(H h, const LiteralOrIriView& v) {
     return H::combine(std::move(h), static_cast<const Base&>(v));
