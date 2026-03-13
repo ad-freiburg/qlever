@@ -405,10 +405,11 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
         parsedQuery_.value(), varToColMap_);
   }
 
-  // Read permutation, and deactivate the graph post-processing of
-  // `CompressedRelationReader`, including row deduplication, which is not the
-  // intended behavior for materialized views. Also provide the `Permutation`
-  // with the set of columns potentially containing undef values.
+  // Read the permutation and set its type to `MATERIALIZED_VIEW`. This
+  // deactivates the graph post-processing of `CompressedRelationReader`,
+  // including row deduplication, which is not the intended behavior for
+  // materialized views. Also provide the `Permutation` with the set of columns
+  // potentially containing undef values.
   permutation_->loadFromDisk(filename, false,
                              Permutation::Type::MATERIALIZED_VIEW,
                              std::move(possiblyUndefinedColumns));
