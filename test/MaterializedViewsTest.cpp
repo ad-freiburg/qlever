@@ -318,8 +318,6 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
   SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
   MaterializedViewsManager manager{testIndexBase_};
 
-  // TODO<ullingerc> Test undef status.
-
   // Helper to get all column names from a view via its `VariableToColumnMap`.
   auto columnNames = [](const MaterializedView& view) {
     const auto& varToCol = view.variableToColumnMap();
@@ -385,6 +383,54 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
         "SELECT * { <p1> view:testView5-o ?o }",
         ad_utility::MediaType::tsv);
     EXPECT_EQ(res, "?o\n\"abc\"\n");
+  }
+
+  // Test column `UndefStatus` in `VariableToColumnMap`, the `Permutation`
+  // object and when scanning the view.
+  {
+    // In this view, ?s and ?o are always defined, but ?u is undefined for one
+    // of the two rows in the view.
+    manager.writeViewToDisk("testView6", qlv().parseAndPlanQuery(R"(
+      SELECT ?s ?o ?u {
+        ?s <p1> ?o .
+        OPTIONAL {
+          ?s <p2> ?u .
+        }
+      }
+    )"));
+    auto view = manager.getView("testView6");
+
+    // `UndefStatus` in `VariableToColumnMap`.
+    auto map = view->variableToColumnMap();
+    VariableToColumnMap expected{{V{"?s"}, makeAlwaysDefinedColumn(0)},
+                                 {V{"?o"}, makeAlwaysDefinedColumn(1)},
+                                 {V{"?u"}, makePossiblyUndefinedColumn(2)}};
+    EXPECT_THAT(map, ::testing::UnorderedElementsAreArray(expected));
+
+    // `UndefStatus` is stored correctly in `Permutation`.
+    auto permutation = view->permutation();
+    EXPECT_EQ(permutation->getColumnUndefStatus(0),
+              ColumnIndexAndTypeInfo::AlwaysDefined);
+    EXPECT_EQ(permutation->getColumnUndefStatus(1),
+              ColumnIndexAndTypeInfo::AlwaysDefined);
+    EXPECT_EQ(permutation->getColumnUndefStatus(2),
+              ColumnIndexAndTypeInfo::PossiblyUndefined);
+
+    // `UndefStatus` in `IndexScan`.
+    auto [qet, qec, parsed] = qlv().parseAndPlanQuery(R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT * {
+        SERVICE view:testView6 {
+          _:config view:column-s ?s ;
+                   view:column-o ?o ;
+                   view:column-u ?u .
+        }
+      }
+    )");
+    auto scanMap = qet->getVariableColumns();
+    // When all columns are requested, the `IndexScan`'s `VariableToColumnMap`
+    // should be equal to that of the `MaterializedView` itself.
+    EXPECT_THAT(scanMap, ::testing::UnorderedElementsAreArray(expected));
   }
 }
 
