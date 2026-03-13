@@ -32,6 +32,7 @@ RuntimeParameters::RuntimeParameters() {
   add(groupByHashMapEnabled_);
   add(groupByDisableIndexScanOptimizations_);
   add(serviceMaxValueRows_);
+  add(serviceMaxRedirects_);
   add(queryPlanningBudget_);
   add(throwOnUnboundVariables_);
   add(cacheMaxSizeLazyResult_);
