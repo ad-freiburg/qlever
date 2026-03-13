@@ -883,9 +883,9 @@ std::unique_ptr<Operation> IndexScan::cloneImpl() const {
 bool IndexScan::columnOriginatesFromGraphOrUndef(
     const Variable& variable) const {
   AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
-  return !permutation().isSpecialPermutation() &&
-         (variable == subject_ || variable == predicate_ ||
-          variable == object_);
+  return permutation().permutationType() == Permutation::Type::NORMAL &&
+         // In RDF only subjects and objects are considered nodes.
+         (variable == subject_ || variable == object_);
 }
 
 // _____________________________________________________________________________

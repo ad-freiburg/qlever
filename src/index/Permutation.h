@@ -64,6 +64,10 @@ class Permutation {
   using CancellationHandle = ad_utility::SharedCancellationHandle;
   using ScanSpecAndBlocks = CompressedRelationReader::ScanSpecAndBlocks;
 
+  // The permutation type. It is required by `IndexScan` for determining the
+  // correct semantics.
+  enum struct Type { NORMAL, INTERNAL, MATERIALIZED_VIEW };
+
   // Convert a permutation to the corresponding string, etc. `PSO` is converted
   // to "PSO".
   static std::string_view toString(Enum permutation);
@@ -80,7 +84,7 @@ class Permutation {
   // everything that has to be done when reading an index from disk
   void loadFromDisk(
       const std::string& onDiskBase, bool loadInternalPermutation = false,
-      bool useGraphPostProcessing = true, bool isSpecialPermutation = false,
+      Type permutationType = Type::NORMAL,
       ad_utility::HashSet<ColumnIndex> possiblyUndefinedColumns = {});
 
   // Set the original metadata for the delta triples. This also sets the
@@ -194,6 +198,9 @@ class Permutation {
   // _______________________________________________________
   const MetaData& metaData() const { return meta_; }
 
+  // _______________________________________________________
+  Type permutationType() const { return permutationType_; }
+
   // Returns the number of triples in the permutation excluding updates (located
   // triples).
   size_t numTriples() const { return metaData().totalElements(); }
@@ -214,10 +221,6 @@ class Permutation {
   // Provide const access to a linked internal permutation. If no internal
   // permutation is available, this function throws an exception.
   const Permutation& internalPermutation() const;
-
-  // Return if this permutation is a special permutation, like a
-  // `MaterializedView`.
-  bool isSpecialPermutation() const { return isSpecialPermutation_; }
 
   // If this permutation is owned by a `MaterializedView`, set a back-reference
   // to the `MaterializedView`.
@@ -255,9 +258,7 @@ class Permutation {
   Enum permutation_;
   std::unique_ptr<Permutation> internalPermutation_ = nullptr;
 
-  bool isInternalPermutation_ = false;
-
-  bool isSpecialPermutation_ = false;
+  Type permutationType_ = Type::NORMAL;
 
   // If this permutation is owned by a `MaterializedView`, store a reference
   // back to the view.

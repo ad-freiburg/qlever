@@ -33,21 +33,22 @@ CompressedRelationReader::ScanSpecAndBlocks Permutation::getScanSpecAndBlocks(
 // _____________________________________________________________________
 void Permutation::loadFromDisk(
     const std::string& onDiskBase, bool loadInternalPermutation,
-    bool useGraphPostProcessing, bool isSpecialPermutation,
+    Type permutationType,
     ad_utility::HashSet<ColumnIndex> possiblyUndefinedColumns) {
   onDiskBase_ = onDiskBase;
+  permutationType_ = permutationType;
   if (loadInternalPermutation) {
+    AD_CONTRACT_CHECK(permutationType == Type::NORMAL);
     internalPermutation_ =
         std::make_unique<Permutation>(permutation_, allocator_);
     internalPermutation_->loadFromDisk(
         absl::StrCat(onDiskBase, QLEVER_INTERNAL_INDEX_INFIX), false);
-    internalPermutation_->isInternalPermutation_ = true;
+    internalPermutation_->permutationType_ = Type::INTERNAL;
   }
   if constexpr (MetaData::isMmapBased_) {
     meta_.setup(onDiskBase + ".index" + fileSuffix_ + MMAP_FILE_SUFFIX,
                 ad_utility::ReuseTag(), ad_utility::AccessPattern::Random);
   }
-  isSpecialPermutation_ = isSpecialPermutation;
   possiblyUndefinedColumns_ = std::move(possiblyUndefinedColumns);
   auto filename = std::string(onDiskBase + ".index" + fileSuffix_);
   ad_utility::File file;
@@ -61,6 +62,9 @@ void Permutation::loadFromDisk(
              e.what());
   }
   meta_.readFromFile(&file);
+  // Materialized views never use graph post-processing, while normal and
+  // internal permutations always use it.
+  bool useGraphPostProcessing = permutationType == Type::MATERIALIZED_VIEW;
   reader_.emplace(allocator_, std::move(file), useGraphPostProcessing);
   AD_LOG_INFO << "Registered " << readableName_
               << " permutation: " << meta_.statistics() << std::endl;
@@ -71,7 +75,7 @@ void Permutation::loadFromDisk(
 void Permutation::setOriginalMetadataForDeltaTriples(
     DeltaTriples& deltaTriples) const {
   deltaTriples.setOriginalMetadata(permutation(), metaData().blockDataShared(),
-                                   isInternalPermutation_);
+                                   permutationType_ == Type::INTERNAL);
   if (internalPermutation_ != nullptr) {
     internalPermutation().setOriginalMetadataForDeltaTriples(deltaTriples);
   }
@@ -220,7 +224,7 @@ CompressedRelationReader::IdTableGeneratorInputRange Permutation::lazyScan(
 // ______________________________________________________________________
 const LocatedTriplesPerBlock& Permutation::getLocatedTriplesForPermutation(
     const LocatedTriplesState& locatedTriplesState) const {
-  return isInternalPermutation_
+  return permutationType_ == Type::INTERNAL
              ? locatedTriplesState.getLocatedTriplesForPermutation<true>(
                    permutation_)
              : locatedTriplesState.getLocatedTriplesForPermutation<false>(
@@ -244,8 +248,8 @@ const Permutation& Permutation::internalPermutation() const {
 // ______________________________________________________________________
 void Permutation::setMaterializedView(
     std::weak_ptr<const MaterializedView> view) {
+  AD_CONTRACT_CHECK(permutationType_ == Type::MATERIALIZED_VIEW);
   materializedView_ = std::move(view);
-  isSpecialPermutation_ = true;
 }
 
 // ______________________________________________________________________
