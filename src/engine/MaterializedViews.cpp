@@ -15,7 +15,6 @@
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
-#include <unordered_set>
 
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
@@ -363,7 +362,7 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
   }
 
   // Make variable to column map.
-  std::unordered_set<ColumnIndex> possiblyUndefinedColumns;
+  ad_utility::HashSet<ColumnIndex> possiblyUndefinedColumns;
   for (const auto& [index, columnEntry] :
        ::ranges::views::enumerate(viewInfoJson.at("columns"))) {
     std::string columnName;

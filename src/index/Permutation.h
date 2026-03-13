@@ -17,6 +17,7 @@
 #include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"
 #include "util/File.h"
+#include "util/HashSet.h"
 #include "util/Log.h"
 
 // Forward declaration of `IdTable`
@@ -80,7 +81,7 @@ class Permutation {
   void loadFromDisk(
       const std::string& onDiskBase, bool loadInternalPermutation = false,
       bool useGraphPostProcessing = true,
-      std::unordered_set<ColumnIndex> possiblyUndefinedColumns = {});
+      ad_utility::HashSet<ColumnIndex> possiblyUndefinedColumns = {});
 
   // Set the original metadata for the delta triples. This also sets the
   // metadata for internal permutation if present.
@@ -258,7 +259,7 @@ class Permutation {
 
   // For materialized views unlike the regular index permutations, some columns
   // may be undefined.
-  std::unordered_set<ColumnIndex> possiblyUndefinedColumns_;
+  ad_utility::HashSet<ColumnIndex> possiblyUndefinedColumns_;
 };
 
 #endif  // QLEVER_SRC_INDEX_PERMUTATION_H

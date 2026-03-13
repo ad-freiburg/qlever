@@ -34,7 +34,7 @@ CompressedRelationReader::ScanSpecAndBlocks Permutation::getScanSpecAndBlocks(
 void Permutation::loadFromDisk(
     const std::string& onDiskBase, bool loadInternalPermutation,
     bool useGraphPostProcessing,
-    std::unordered_set<ColumnIndex> possiblyUndefinedColumns) {
+    ad_utility::HashSet<ColumnIndex> possiblyUndefinedColumns) {
   onDiskBase_ = onDiskBase;
   if (loadInternalPermutation) {
     internalPermutation_ =
