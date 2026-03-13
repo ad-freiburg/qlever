@@ -33,7 +33,7 @@ CompressedRelationReader::ScanSpecAndBlocks Permutation::getScanSpecAndBlocks(
 // _____________________________________________________________________
 void Permutation::loadFromDisk(
     const std::string& onDiskBase, bool loadInternalPermutation,
-    bool useGraphPostProcessing,
+    bool useGraphPostProcessing, bool isSpecialPermutation,
     ad_utility::HashSet<ColumnIndex> possiblyUndefinedColumns) {
   onDiskBase_ = onDiskBase;
   if (loadInternalPermutation) {
@@ -47,6 +47,7 @@ void Permutation::loadFromDisk(
     meta_.setup(onDiskBase + ".index" + fileSuffix_ + MMAP_FILE_SUFFIX,
                 ad_utility::ReuseTag(), ad_utility::AccessPattern::Random);
   }
+  isSpecialPermutation_ = isSpecialPermutation;
   possiblyUndefinedColumns_ = std::move(possiblyUndefinedColumns);
   auto filename = std::string(onDiskBase + ".index" + fileSuffix_);
   ad_utility::File file;
@@ -244,6 +245,7 @@ const Permutation& Permutation::internalPermutation() const {
 void Permutation::setMaterializedView(
     std::weak_ptr<const MaterializedView> view) {
   materializedView_ = std::move(view);
+  isSpecialPermutation_ = true;
 }
 
 // ______________________________________________________________________

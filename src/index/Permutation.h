@@ -80,7 +80,7 @@ class Permutation {
   // everything that has to be done when reading an index from disk
   void loadFromDisk(
       const std::string& onDiskBase, bool loadInternalPermutation = false,
-      bool useGraphPostProcessing = true,
+      bool useGraphPostProcessing = true, bool isSpecialPermutation = false,
       ad_utility::HashSet<ColumnIndex> possiblyUndefinedColumns = {});
 
   // Set the original metadata for the delta triples. This also sets the
@@ -215,6 +215,10 @@ class Permutation {
   // permutation is available, this function throws an exception.
   const Permutation& internalPermutation() const;
 
+  // Return if this permutation is a special permutation, like a
+  // `MaterializedView`.
+  bool isSpecialPermutation() const { return isSpecialPermutation_; }
+
   // If this permutation is owned by a `MaterializedView`, set a back-reference
   // to the `MaterializedView`.
   void setMaterializedView(std::weak_ptr<const MaterializedView> view);
@@ -252,6 +256,8 @@ class Permutation {
   std::unique_ptr<Permutation> internalPermutation_ = nullptr;
 
   bool isInternalPermutation_ = false;
+
+  bool isSpecialPermutation_ = false;
 
   // If this permutation is owned by a `MaterializedView`, store a reference
   // back to the view.
