@@ -249,17 +249,16 @@ HttpOrHttpsResponse sendHttpOrHttpsRequest(
     }
 
     // Follow the redirect and properly resolve relative URLs.
-    boost::url_view relativeUrl;
-    try {
-      relativeUrl = boost::url_view{response.location_};
-    } catch (const boost::urls::system_error& e) {
+    boost::system::result<boost::url_view> relativeUrl =
+        boost::urls::parse_uri_reference(response.location_);
+    if (relativeUrl.has_error()) {
       throw std::runtime_error(absl::StrCat(
           "The HTTP request to '", currentUrl.c_str(),
           "' responded with redirect status code: ", response.status_,
           " but the Location header value '", response.location_,
-          "' could not be parsed: ", e.what()));
+          "' could not be parsed: ", relativeUrl.error().message()));
     }
-    auto result = currentUrl.resolve(relativeUrl);
+    auto result = currentUrl.resolve(relativeUrl.value());
     AD_CORRECTNESS_CHECK(!result.has_error(), "Error while resolving URL:",
                          result.error().message());
     redirectCount++;
