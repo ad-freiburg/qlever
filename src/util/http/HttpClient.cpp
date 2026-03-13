@@ -260,13 +260,8 @@ HttpOrHttpsResponse sendHttpOrHttpsRequest(
           "' could not be parsed: ", e.what()));
     }
     auto result = currentUrl.resolve(relativeUrl);
-    if (result.has_error()) {
-      throw std::runtime_error(
-          absl::StrCat("The HTTP server responded with redirect status code: ",
-                       response.status_, " but the Location header value '",
-                       response.location_,
-                       "' could not be resolved: ", result.error().message()));
-    }
+    AD_CORRECTNESS_CHECK(!result.has_error(), "Error while resolving URL:",
+                         result.error().message());
     redirectCount++;
   }
 
