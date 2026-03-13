@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures
 // Authors: Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 
-#include "ParsedRequestBuilder.h"
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+#include "engine/ParsedRequestBuilder.h"
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "engine/HttpError.h"
@@ -200,3 +201,4 @@ std::optional<std::string> ParsedRequestBuilder::determineAccessToken(
   return tokenFromAuthorizationHeader ? std::move(tokenFromAuthorizationHeader)
                                       : std::move(tokenFromParameter);
 }
+#endif

@@ -40,8 +40,46 @@ NARY_EXPRESSION(DivideExpressionByZeroIsNan, 2,
 using Add = MakeNumericExpression<std::plus<>>;
 NARY_EXPRESSION(AddExpression, 2, FV<Add, NumericValueGetter>);
 
-using Subtract = MakeNumericExpression<std::minus<>>;
-NARY_EXPRESSION(SubtractExpression, 2, FV<Subtract, NumericValueGetter>);
+// _____________________________________________________________________________
+// Subtract.
+struct SubtractImpl {
+  ValueId operator()(NumericOrDateValue lhs, NumericOrDateValue rhs) const {
+    return std::visit(SubtractImpl{}, lhs, rhs);
+  }
+
+  ValueId operator()(int64_t lhs, int64_t rhs) const {
+    return Id::makeFromInt(lhs - rhs);
+  }
+  ValueId operator()(int64_t lhs, double rhs) const {
+    return Id::makeFromDouble(static_cast<double>(lhs) - rhs);
+  }
+  ValueId operator()(double lhs, double rhs) const {
+    return Id::makeFromDouble(lhs - rhs);
+  }
+  ValueId operator()(double lhs, int64_t rhs) const {
+    return Id::makeFromDouble(lhs - static_cast<double>(rhs));
+  }
+#ifndef REDUCED_FEATURE_SET_FOR_CPP17
+  ValueId operator()(DateYearOrDuration lhs, DateYearOrDuration rhs) const {
+    // Using `operator-` implementation in `DateYearOrDuration`.
+    auto difference = lhs - rhs;
+    if (difference.has_value()) {
+      return Id::makeFromDate(difference.value());
+    } else {
+      return Id::makeUndefined();
+    }
+  }
+#endif
+  template <typename L, typename R>
+  ValueId operator()(L, R) const {
+    // For all other operations return `Undefined`.
+    // It is not allowed to use subtractionn between a `DateYearOrDuration` and
+    // a `NumericValue`.
+    return Id::makeUndefined();
+  }
+};
+NARY_EXPRESSION(SubtractExpression, 2,
+                FV<SubtractImpl, NumericOrDateValueGetter>);
 
 // _____________________________________________________________________________
 // Power.
@@ -339,12 +377,48 @@ CPP_template(typename BinaryPrefilterExpr, typename NaryOperation)(
       bool isNegated) const override {
     const auto& children = this->children();
     AD_CORRECTNESS_CHECK(children.size() == 2);
-    auto leftChild =
-        children[0].get()->getPrefilterExpressionForMetadata(isNegated);
-    auto rightChild =
-        children[1].get()->getPrefilterExpressionForMetadata(isNegated);
+    auto leftChild = children[0]->getPrefilterExpressionForMetadata(isNegated);
+    auto rightChild = children[1]->getPrefilterExpressionForMetadata(isNegated);
     return constructPrefilterExpr::getMergeFunction<BinaryPrefilterExpr>(
         isNegated)(std::move(leftChild), std::move(rightChild));
+  }
+
+  std::optional<SparqlExpression::LangFilterData> getLanguageFilterExpression()
+      const override {
+    if constexpr (!std::is_same_v<BinaryPrefilterExpr,
+                                  prefilterExpressions::OrExpression>) {
+      return std::nullopt;
+    }
+    // Concatenate filters for the case of
+    // `LANG(?abc) = "en" || LANG(?abc) = "mul"` and so on.
+    const auto& children = this->children();
+    AD_CORRECTNESS_CHECK(children.size() == 2);
+    auto leftFilter = children[0]->getLanguageFilterExpression();
+    auto rightFilter = children[1]->getLanguageFilterExpression();
+    if (leftFilter.has_value() && rightFilter.has_value() &&
+        leftFilter->variable_ == rightFilter->variable_) {
+      leftFilter->languages_.merge(rightFilter->languages_);
+      return leftFilter;
+    }
+    return std::nullopt;
+  }
+
+  // _____________________________________________________________________________
+  bool isResultAlwaysDefined(const VariableToColumnMap& map) const override {
+    auto isAlwaysDefined = [&map](const auto& child) {
+      return child->isResultAlwaysDefined(map);
+    };
+    if constexpr (std::is_same_v<BinaryPrefilterExpr,
+                                 prefilterExpressions::OrExpression>) {
+      // For an OR expression, it is sufficient that one child is always
+      // defined.
+      return ql::ranges::any_of(this->children(), isAlwaysDefined);
+    } else {
+      static_assert(std::is_same_v<BinaryPrefilterExpr,
+                                   prefilterExpressions::AndExpression>);
+      // For an AND expression, both children must be always defined.
+      return ql::ranges::all_of(this->children(), isAlwaysDefined);
+    }
   }
 };
 

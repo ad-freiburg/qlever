@@ -209,27 +209,6 @@ static constexpr std::string_view GEO_LITERAL_SUFFIX =
                                 GEO_WKT_LITERAL,
                                 string_constants::detail::closeAngle>();
 
-enum class UnitOfMeasurement { METERS, KILOMETERS, MILES, UNKNOWN };
-constexpr inline std::string_view UNIT_PREFIX = "http://qudt.org/vocab/unit/";
-namespace string_constants::detail {
-constexpr inline std::string_view unit_meter = "M";
-}  // namespace string_constants::detail
-constexpr inline std::string_view UNIT_METER_IRI =
-    ad_utility::constexprStrCat<UNIT_PREFIX,
-                                string_constants::detail::unit_meter>();
-namespace string_constants::detail {
-constexpr inline std::string_view unit_kilometer = "KiloM";
-}  // namespace string_constants::detail
-constexpr inline std::string_view UNIT_KILOMETER_IRI =
-    ad_utility::constexprStrCat<UNIT_PREFIX,
-                                string_constants::detail::unit_kilometer>();
-namespace string_constants::detail {
-constexpr inline std::string_view unit_mile = "MI";
-}  // namespace string_constants::detail
-constexpr inline std::string_view UNIT_MILE_IRI =
-    ad_utility::constexprStrCat<UNIT_PREFIX,
-                                string_constants::detail::unit_mile>();
-
 constexpr std::string_view SF_PREFIX = "http://www.opengis.net/ont/sf#";
 
 constexpr inline std::string_view VOCAB_SUFFIX = ".vocabulary";

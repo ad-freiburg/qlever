@@ -1,6 +1,12 @@
-//  Copyright 2023, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2024 - 2026 The QLever Authors, in particular:
+//
+// 2023 - 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2026        Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "engine/CartesianProductJoin.h"
 
@@ -68,21 +74,20 @@ std::string CartesianProductJoin::getCacheKeyImpl() const {
 // ____________________________________________________________________________
 size_t CartesianProductJoin::getResultWidth() const {
   auto view = childView() | ql::views::transform(&Operation::getResultWidth);
-  return std::reduce(view.begin(), view.end(), 0UL, std::plus{});
+  return ::ranges::accumulate(view, 0UL);
 }
 
 // ____________________________________________________________________________
 size_t CartesianProductJoin::getCostEstimate() {
   auto childSizes =
       childView() | ql::views::transform(&Operation::getCostEstimate);
-  return getSizeEstimate() +
-         std::reduce(childSizes.begin(), childSizes.end(), 0UL, std::plus{});
+  return getSizeEstimate() + ::ranges::accumulate(childSizes, 0UL);
 }
 
 // ____________________________________________________________________________
 uint64_t CartesianProductJoin::getSizeEstimateBeforeLimit() {
   auto view = childView() | ql::views::transform(&Operation::getSizeEstimate);
-  return std::reduce(view.begin(), view.end(), 1UL, std::multiplies{});
+  return ::ranges::accumulate(view, 1UL, std::multiplies{});
 }
 
 // ____________________________________________________________________________
@@ -206,7 +211,7 @@ CPP_template_def(typename R)(requires ql::ranges::random_access_range<R>)
 
   auto sizesView = ql::views::transform(idTables, &IdTable::size);
   auto totalResultSize =
-      std::reduce(sizesView.begin(), sizesView.end(), 1UL, std::multiplies{});
+      ::ranges::accumulate(sizesView, 1UL, std::multiplies{});
 
   if (!ql::ranges::empty(idTables) && sizesView.back() != 0) {
     totalResultSize += (totalResultSize / sizesView.back()) * lastTableOffset;
@@ -361,53 +366,58 @@ CPP_template_def(typename R)(requires ql::ranges::range<R>) Result::LazyResult
 // _____________________________________________________________________________
 Result::LazyResult CartesianProductJoin::createLazyConsumer(
     LocalVocab staticMergedVocab,
-    ql::span<const std::shared_ptr<const Result>> subresults,
+    std::vector<std::shared_ptr<const Result>> subresults,
     std::shared_ptr<const Result> lazyResult) const {
   AD_CONTRACT_CHECK(lazyResult);
-  std::vector<std::reference_wrapper<const IdTable>> idTables;
+  std::vector<std::shared_ptr<const IdTable>> idTables;
   idTables.reserve(subresults.size() + 1);
-  for (const auto& result : subresults) {
-    idTables.emplace_back(result->idTable());
+  for (auto& result : subresults) {
+    auto* idTable = &result->idTable();
+    idTables.emplace_back(std::move(result), idTable);
   }
+  // Placeholder, will be replaced with the current `IdTable` from the lazy
+  // result.
+  idTables.emplace_back(std::make_shared<IdTable>(IdTable{0, allocator()}));
+
+  auto generatedTables = lazyResult->idTables();
+
   auto get = [self = this, staticMergedVocab = std::move(staticMergedVocab),
               limit = getLimitOffset().limitOrDefault(),
               offset = getLimitOffset()._offset, idTables = std::move(idTables),
               lastTableOffset = size_t{0}, producedTableSize = size_t{0},
-              idTableOpt = std::optional<Result::IdTableVocabPair>{}](
-                 auto& idTableVocabPair) mutable {
+              lazyResult =
+                  std::move(lazyResult)](auto& idTableVocabPair) mutable {
     // These things have to be done after handling a single input, so we do them
     // at the beginning of each but the last iteration.
-    if (idTableOpt.has_value()) {
-      idTables.pop_back();
-      lastTableOffset += idTableOpt->idTable_.size();
-      limit -= producedTableSize;
-      offset += producedTableSize;
-      producedTableSize = 0;
-    }
+    lastTableOffset += idTables.back()->size();
+    limit -= producedTableSize;
+    offset += producedTableSize;
+    producedTableSize = 0;
 
-    idTableOpt = std::move(idTableVocabPair);
-    auto& [idTable, localVocab] = idTableOpt.value();
-    if (idTable.empty()) {
+    auto& [idTable, localVocab] = idTableVocabPair;
+    // We know that the last id table is mutable (we inserted it ourselves), so
+    // we can replace it without paying the cost of creating and destroying a
+    // shared pointer.
+    const_cast<IdTable&>(*idTables.back()) = std::move(idTable);
+    if (idTables.back()->empty()) {
       return Result::IdTableLoopControl::makeContinue();
     }
 
-    idTables.emplace_back(idTable);
     localVocab.mergeWith(staticMergedVocab);
 
     return Result::IdTableLoopControl::yieldAll(
         ad_utility::InputRangeTypeErased{
             ad_utility::OwningView{self->produceTablesLazily(
                 std::move(localVocab),
-                ql::views::transform(idTables,
-                                     ad_utility::staticCast<const IdTable&>),
-                offset, limit, lastTableOffset)} |
+                ql::views::transform(idTables, ad_utility::dereference), offset,
+                limit, lastTableOffset)} |
             ql::views::transform([&producedTableSize](auto& tableAndVocab) {
               producedTableSize += tableAndVocab.idTable_.size();
               return std::move(tableAndVocab);
             })});
   };
   return Result::LazyResult(ad_utility::CachingContinuableTransformInputRange(
-      lazyResult->idTables(), std::move(get)));
+      std::move(generatedTables), std::move(get)));
 }
 
 // _____________________________________________________________________________

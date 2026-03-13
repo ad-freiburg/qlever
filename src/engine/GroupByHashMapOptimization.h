@@ -9,7 +9,6 @@
 #define QLEVER_SRC_ENGINE_GROUPBYHASHMAPOPTIMIZATION_H
 
 #include "engine/sparqlExpressions/AggregateExpression.h"
-#include "engine/sparqlExpressions/GroupConcatHelper.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 
@@ -25,8 +24,8 @@ static constexpr auto valueAdder = []() {
   auto nonNumericValueAdder = [](sparqlExpression::detail::NotNumeric,
                                  [[maybe_unused]] const double& sum,
                                  bool& error) { error = true; };
-  return ad_utility::OverloadCallOperator(numericValueAdder,
-                                          nonNumericValueAdder);
+  return ad_utility::OverloadCallOperator{numericValueAdder,
+                                          nonNumericValueAdder};
 }();
 
 // Data to perform the AVG aggregation using the HashMap optimization.
@@ -84,7 +83,7 @@ struct ExtremumAggregationData {
       return;
     }
 
-    currentValue_ = sparqlExpression::detail::minMaxLambdaForAllTypes<Comp>(
+    currentValue_ = sparqlExpression::detail::MinMaxLambdaForAllTypes<Comp>{}(
         value, currentValue_, ctx);
   }
 
@@ -123,8 +122,8 @@ struct SumAggregationData {
     auto nonNumericValueAdder = [this](sparqlExpression::detail::NotNumeric) {
       error_ = true;
     };
-    auto sumValueAdder = ad_utility::OverloadCallOperator(
-        doubleValueAdder, intValueAdder, nonNumericValueAdder);
+    auto sumValueAdder = ad_utility::OverloadCallOperator{
+        doubleValueAdder, intValueAdder, nonNumericValueAdder};
 
     std::visit(sumValueAdder, val);
   };
@@ -144,7 +143,6 @@ struct GroupConcatAggregationData {
   bool first_ = true;
   std::string currentValue_;
   std::string_view separator_;
-  std::optional<std::string> langTag_;
 
   // _____________________________________________________________________________
   template <typename T>

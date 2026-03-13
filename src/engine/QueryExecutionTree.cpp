@@ -16,6 +16,7 @@
 #include "engine/Sort.h"
 #include "engine/StripColumns.h"
 #include "global/RuntimeParameters.h"
+#include "util/Algorithm.h"
 
 using std::string;
 
@@ -111,7 +112,7 @@ size_t QueryExecutionTree::getSizeEstimate() {
 
 //_____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
-QueryExecutionTree::setPrefilterGetUpdatedQueryExecutionTree(
+QueryExecutionTree::getUpdatedQueryExecutionTreeWithPrefilterApplied(
     std::vector<Operation::PrefilterVariablePair> prefilterPairs) const {
   AD_CONTRACT_CHECK(rootOperation_);
   VariableToColumnMap varToColMap = getVariableColumns();
@@ -126,7 +127,7 @@ QueryExecutionTree::setPrefilterGetUpdatedQueryExecutionTree(
   if (prefilterPairs.empty()) {
     return std::nullopt;
   } else {
-    return rootOperation_->setPrefilterGetUpdatedQueryExecutionTree(
+    return rootOperation_->getUpdatedQueryExecutionTreeWithPrefilterApplied(
         prefilterPairs);
   }
 }
@@ -148,12 +149,13 @@ bool QueryExecutionTree::isVariableCovered(Variable variable) const {
 
 // _______________________________________________________________________
 void QueryExecutionTree::readFromCache() {
-  if (!qec_) {
+  AD_CORRECTNESS_CHECK(qec_ != nullptr);
+  if (qec_->disableCaching()) {
     return;
   }
   auto& cache = qec_->getQueryTreeCache();
-  auto res = cache.getIfContained(
-      {getCacheKey(), qec_->locatedTriplesSnapshot().index_});
+  auto res =
+      cache.getIfContained({getCacheKey(), qec_->locatedTriplesState().index_});
   if (res.has_value()) {
     cachedResult_ = res->_resultPointer->resultTablePtr();
   }
@@ -186,6 +188,10 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
 
   if (sortedQet.has_value()) {
     AD_CORRECTNESS_CHECK(sortedQet.value() != nullptr);
+    AD_CORRECTNESS_CHECK(qet->getVariableColumns() ==
+                         sortedQet.value()->getVariableColumns());
+    AD_CORRECTNESS_CHECK(
+        sortedQet.value()->getRootOperation()->isSortedBy(sortColumns));
     return std::move(sortedQet).value();
   }
 
@@ -197,17 +203,31 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
 std::shared_ptr<QueryExecutionTree>
 QueryExecutionTree::makeTreeWithStrippedColumns(
     std::shared_ptr<QueryExecutionTree> qet,
-    const std::set<Variable>& variables,
+    const std::set<Variable>& variablesToKeep,
     HideStrippedColumns hideStrippedColumns) {
+  // If all variables of this tree are part of `variablesToKeep`, we can simply
+  // return the original tree, without stripping any columns.
+  if (ql::ranges::all_of(qet->getVariableColumns() | ql::views::keys,
+                         [&variablesToKeep](const Variable& variable) {
+                           return variablesToKeep.contains(variable);
+                         })) {
+    return qet;
+  }
   const auto& rootOperation = qet->getRootOperation();
-  auto optTree = rootOperation->makeTreeWithStrippedColumns(variables);
+  auto optTree = rootOperation->makeTreeWithStrippedColumns(variablesToKeep);
   if (!optTree.has_value()) {
     return ad_utility::makeExecutionTree<StripColumns>(
-        rootOperation->getExecutionContext(), std::move(qet), variables);
+        rootOperation->getExecutionContext(), std::move(qet), variablesToKeep);
   }
 
   auto& resultTree = optTree.value();
   AD_CORRECTNESS_CHECK(resultTree != nullptr);
+  AD_CORRECTNESS_CHECK(
+      resultTree->getRootOperation()->getLimitOffset().isUnconstrained(),
+      "`LIMIT` and `OFFSET` are applied by "
+      "`QueryExecutionTree::makeTreeWithStrippedColumns` not by the individual "
+      "implementations.");
+  resultTree->applyLimit(rootOperation->getLimitOffset());
   // Only store stripped variables if `hideStrippedColumns` is `False`
   if (hideStrippedColumns == HideStrippedColumns::False) {
     // Calculate the variables that will be stripped (present in the input, but
@@ -215,7 +235,7 @@ QueryExecutionTree::makeTreeWithStrippedColumns(
     ad_utility::HashSet<Variable> strippedVariables;
     const auto& originalVariableColumns = qet->getVariableColumns();
     for (const auto& [var, colInfo] : originalVariableColumns) {
-      if (!variables.contains(var)) {
+      if (!ad_utility::contains(variablesToKeep, var)) {
         strippedVariables.insert(var);
       }
     }

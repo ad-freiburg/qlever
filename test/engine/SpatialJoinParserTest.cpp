@@ -39,7 +39,7 @@ TEST(SpatialJoinParser, AddValueIdToQueue) {
   SweeperDistResult resultDists;
   auto cfg = makeSweeperCfg({INTERSECTS}, results, resultDists, -1);
   std::string sweeperPath = qec->getIndex().getOnDiskBase() + ".spatialjoin";
-  sj::Sweeper sweeper{cfg, ".", "", sweeperPath.c_str()};
+  sj::Sweeper sweeper{cfg, ".", sweeperPath};
 
   // Left side without prefilter box
   std::optional<util::geo::DBox> prefilterBox = std::nullopt;

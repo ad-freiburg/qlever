@@ -11,16 +11,17 @@
 ExplicitIdTableOperation::ExplicitIdTableOperation(
     QueryExecutionContext* ctx, std::shared_ptr<const IdTable> table,
     VariableToColumnMap variables, std::vector<ColumnIndex> sortedColumns,
-    LocalVocab localVocab)
+    LocalVocab localVocab, std::string cacheKey)
     : Operation(ctx),
       idTable_(std::move(table)),
       variables_(std::move(variables)),
       sortedColumns_(std::move(sortedColumns)),
-      localVocab_(std::move(localVocab)) {
-  // An explicit IdTable operation is never stored in the cache because it
-  // 1. Doesn't have a valid cache key and
-  // 2. Is mostly used to implement already cached results (the
-  // `shared_ptr<IdTable>` typically originates from a cache).
+      localVocab_(std::move(localVocab)),
+      cacheKey_(std::move(cacheKey)) {
+  // An explicit IdTable operation is never stored in the cache because it is
+  // mostly used to implement already cached results (the `shared_ptr<IdTable>`
+  // typically originates from a cache). However, the results of operations
+  // using an `ExplicitIdTableOperation` may still be cached.
   disableStoringInCache();
 }
 
@@ -35,9 +36,10 @@ std::vector<QueryExecutionTree*> ExplicitIdTableOperation::getChildren() {
   return {};
 }
 
-// We disable the storing in the cache in the destructor, so it is not important
-// to have a valid cache key.
-std::string ExplicitIdTableOperation::getCacheKeyImpl() const { return ""; }
+// _____________________________________________________________________________
+std::string ExplicitIdTableOperation::getCacheKeyImpl() const {
+  return cacheKey_;
+}
 
 // _____________________________________________________________________________
 std::string ExplicitIdTableOperation::getDescriptor() const {
@@ -71,7 +73,7 @@ bool ExplicitIdTableOperation::knownEmptyResult() { return idTable_->empty(); }
 std::unique_ptr<Operation> ExplicitIdTableOperation::cloneImpl() const {
   return std::make_unique<ExplicitIdTableOperation>(
       getExecutionContext(), idTable_, variables_, sortedColumns_,
-      localVocab_.clone());
+      localVocab_.clone(), cacheKey_);
 }
 
 // _____________________________________________________________________________

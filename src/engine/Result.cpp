@@ -10,7 +10,9 @@
 #include <absl/cleanup/cleanup.h>
 
 #include "backports/shift.h"
+#include "util/CancellationHandle.h"
 #include "util/Exception.h"
+#include "util/ExceptionHandling.h"
 #include "util/Generators.h"
 #include "util/InputRangeUtils.h"
 #include "util/Log.h"
@@ -104,9 +106,11 @@ Result::Result(IdTableVocabPair pair, std::vector<ColumnIndex> sortedBy)
     : Result{std::move(pair.idTable_), std::move(sortedBy),
              std::move(pair.localVocab_)} {}
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 // _____________________________________________________________________________
 Result::Result(Generator idTables, std::vector<ColumnIndex> sortedBy)
     : Result{LazyResult{std::move(idTables)}, std::move(sortedBy)} {}
+#endif
 
 // _____________________________________________________________________________
 Result::Result(LazyResult idTables, std::vector<ColumnIndex> sortedBy)
@@ -268,7 +272,7 @@ void Result::checkDefinedness(const VariableToColumnMap& varColMap) {
 void Result::runOnNewChunkComputed(
     std::function<void(const IdTableVocabPair&, std::chrono::microseconds)>
         onNewChunk,
-    std::function<void(bool)> onGeneratorFinished) {
+    std::function<void(GeneratorState)> onGeneratorFinished) {
   AD_CONTRACT_CHECK(!isFullyMaterialized());
   auto inputAsGet = ad_utility::CachingTransformInputRange(
       idTables(), [](auto& input) { return std::move(input); });
@@ -279,24 +283,30 @@ void Result::runOnNewChunkComputed(
       std::move(onGeneratorFinished));
 
   // The main lambda that when being called processes the next chunk.
-  auto get =
-      [inputAsGet = std::move(inputAsGet), sharedFinish,
-       cleanup = absl::Cleanup{[&finish = *sharedFinish]() { finish(false); }},
-       onNewChunk =
-           std::move(onNewChunk)]() mutable -> std::optional<IdTableVocabPair> {
+  auto get = [inputAsGet = std::move(inputAsGet), sharedFinish,
+              cleanup = absl::Cleanup{[&finish = *sharedFinish]() noexcept {
+                ad_utility::ignoreExceptionIfThrows(
+                    [&finish]() { finish(GeneratorState::FINISHED); });
+              }},
+              onNewChunk = std::move(
+                  onNewChunk)]() mutable -> std::optional<IdTableVocabPair> {
     try {
       Timer timer{Timer::Started};
       auto input = inputAsGet.get();
       if (!input.has_value()) {
         std::move(cleanup).Cancel();
-        (*sharedFinish)(false);
+        (*sharedFinish)(GeneratorState::FINISHED);
         return std::nullopt;
       }
       onNewChunk(input.value(), timer.value());
       return input;
+    } catch (const ad_utility::CancellationException&) {
+      std::move(cleanup).Cancel();
+      (*sharedFinish)(GeneratorState::CANCELLED);
+      throw;
     } catch (...) {
       std::move(cleanup).Cancel();
-      (*sharedFinish)(true);
+      (*sharedFinish)(GeneratorState::FAILED);
       throw;
     }
   };

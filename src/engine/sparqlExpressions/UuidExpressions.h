@@ -40,7 +40,7 @@ inline constexpr auto iriUuidKey = [](int64_t randId) {
 // Iri object: <urn:uuid:b9302fb5-642e-4d3b-af19-29a8f6d894c9> (example). With
 // UuidExpressionImpl<fromLiteral,, litUuidKey>, the UUIDs are returned as an
 // Literal object: "73cd4307-8a99-4691-a608-b5bda64fb6c1" (example).
-template <auto FuncConv, auto FuncKey>
+template <const auto& FuncConv, const auto& FuncKey>
 class UuidExpressionImpl : public SparqlExpression {
  private:
   int64_t randId_ = ad_utility::FastRandomIntGenerator<int64_t>{}();
@@ -68,16 +68,21 @@ class UuidExpressionImpl : public SparqlExpression {
     return FuncKey(randId_);
   }
 
+  // The result of `UUID`/`STRUUID` is always a defined value.
+  bool isResultAlwaysDefined(const VariableToColumnMap&) const override {
+    return true;
+  }
+
  private:
   ql::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
 };
 
+using UuidExpression = UuidExpressionImpl<fromIri, iriUuidKey>;
+using StrUuidExpression = UuidExpressionImpl<fromLiteral, litUuidKey>;
 }  //  namespace detail::uuidExpression
 
-using UuidExpression = detail::uuidExpression::UuidExpressionImpl<
-    detail::uuidExpression::fromIri, detail::uuidExpression::iriUuidKey>;
-using StrUuidExpression = detail::uuidExpression::UuidExpressionImpl<
-    detail::uuidExpression::fromLiteral, detail::uuidExpression::litUuidKey>;
+using UuidExpression = detail::uuidExpression::UuidExpression;
+using StrUuidExpression = detail::uuidExpression::StrUuidExpression;
 
 }  // namespace sparqlExpression
 

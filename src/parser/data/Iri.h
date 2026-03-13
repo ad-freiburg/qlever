@@ -8,7 +8,6 @@
 #include <string>
 
 #include "backports/three_way_comparison.h"
-#include "parser/data/ConstructQueryExportContext.h"
 
 // TODO: replace usages of this class with `ad_utility::triple_component::Iri`
 class Iri {
@@ -19,17 +18,10 @@ class Iri {
 
   // ___________________________________________________________________________
   // Used for testing
-  [[nodiscard]] const std::string& iri() const { return _string; }
+  const std::string& iri() const { return _string; }
 
   // ___________________________________________________________________________
-  [[nodiscard]] std::optional<std::string> evaluate(
-      [[maybe_unused]] const ConstructQueryExportContext& context,
-      [[maybe_unused]] PositionInTriple role) const {
-    return _string;
-  }
-
-  // ___________________________________________________________________________
-  [[nodiscard]] std::string toSparql() const { return _string; }
+  std::string toSparql() const { return _string; }
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Iri, _string)
 };

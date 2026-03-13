@@ -44,11 +44,32 @@ TEST(ConstexprUtils, pow) {
 // Note: we cannot call this `operator==` because the operator would only be
 // found by argument-dependent lookup if it was in the `std::` namespace, and
 // adding functions there is by default forbidden.
+
+template <typename T, T... Ts>
+auto toArray(const ValueSequence<T, Ts...>&) {
+  return std::array<T, sizeof...(Ts)>{Ts...};
+}
+
+template <typename T, const T&... Ts>
+auto toArray(const ValueSequenceRef<T, Ts...>&) {
+  return std::array<T, sizeof...(Ts)>{Ts...};
+}
+
 template <typename T, typename U, T... Ts, U... Us>
-bool compare(const ValueSequence<T, Ts...>&, const ValueSequence<U, Us...>&) {
+bool compare(const ValueSequence<T, Ts...>& v1,
+             const ValueSequence<U, Us...>& v2) {
   if constexpr (std::is_same_v<U, T> && sizeof...(Us) == sizeof...(Ts)) {
-    return std::array<T, sizeof...(Ts)>{Ts...} ==
-           std::array<U, sizeof...(Us)>{Us...};
+    return toArray(v1) == toArray(v2);
+  } else {
+    return false;
+  }
+}
+
+template <typename T, typename U, const T&... Ts, const U&... Us>
+bool compare(const ValueSequenceRef<T, Ts...>& v1,
+             const ValueSequenceRef<U, Us...>& v2) {
+  if constexpr (std::is_same_v<U, T> && sizeof...(Us) == sizeof...(Ts)) {
+    return toArray(v1) == toArray(v2);
   } else {
     return false;
   }
@@ -77,6 +98,28 @@ TEST(ConstexprUtils, toIntegerSequence) {
                        (toIntegerSequence<std::array{-12, 4}>())));
   ASSERT_FALSE(compare(ValueSequence<int, -12, 4>{},
                        (toIntegerSequence<std::array{-12}>())));
+}
+
+// Similar tests for `toIntegerSequenceRef`. The template parameters have to be
+// declared upfront, s.t. they are objects that have linkage and therefore can
+// be used as `const&` template parameters.
+static constexpr std::array<int, 0> emptyArray{};
+static constexpr std::array<int, 2> threeTwoArray{3, 2};
+static constexpr std::array<int, 2> twoOneArray{2, 1};
+TEST(ConstexprUtils, toIntegerSequenceRef) {
+  ASSERT_TRUE(
+      compare(ValueSequence<int>{}, (toIntegerSequenceRef<emptyArray>())));
+  ASSERT_TRUE(compare(ValueSequence<int, 3, 2>{},
+                      (toIntegerSequenceRef<threeTwoArray>())));
+}
+
+// _____________________________________________________________________________
+TEST(ConstexprUtils, ValueSequenceRef) {
+  auto comp = std::array{twoOneArray, threeTwoArray};
+  ASSERT_EQ(
+      toArray(
+          ValueSequenceRef<std::array<int, 2>, twoOneArray, threeTwoArray>{}),
+      comp);
 }
 
 TEST(ConstexprUtils, cartesianPowerAsArray) {
@@ -373,6 +416,17 @@ TEST(ConstexprUtils, forEachValueInValueSequence) {
     std::vector<int> values;
     auto collectValues = TestForEachValueInValueSequence{values};
     forEachValueInValueSequence(ValueSequence<int, 1, 2, 3>{}, collectValues);
+    ASSERT_EQ(values.size(), 3);
+    ASSERT_EQ(values[0], 1);
+    ASSERT_EQ(values[1], 2);
+    ASSERT_EQ(values[2], 3);
+  }
+  // Also test the overload for `std::integer_sequence`.
+  {
+    std::vector<int> values;
+    auto collectValues = TestForEachValueInValueSequence{values};
+    forEachValueInValueSequence(std::integer_sequence<int, 1, 2, 3>{},
+                                collectValues);
     ASSERT_EQ(values.size(), 3);
     ASSERT_EQ(values[0], 1);
     ASSERT_EQ(values[1], 2);

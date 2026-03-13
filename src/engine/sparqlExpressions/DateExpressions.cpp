@@ -14,102 +14,106 @@ using Literal = ad_utility::triple_component::Literal;
 // The input is `std::nullopt` if the argument to the expression is not a date.
 
 //______________________________________________________________________________
-inline auto extractYear = [](std::optional<DateYearOrDuration> d) {
-  if (!d.has_value()) {
-    return Id::makeUndefined();
-  } else {
-    return Id::makeFromInt(d->getYear());
+struct ExtractYear {
+  Id operator()(std::optional<DateYearOrDuration> d) const {
+    if (!d.has_value()) {
+      return Id::makeUndefined();
+    } else {
+      return Id::makeFromInt(d->getYear());
+    }
   }
 };
 
 //______________________________________________________________________________
-inline auto extractMonth = [](std::optional<DateYearOrDuration> d) {
-  // TODO<C++23> Use the monadic operations for std::optional
-  if (!d.has_value()) {
-    return Id::makeUndefined();
+struct ExtractMonth {
+  Id operator()(std::optional<DateYearOrDuration> d) const {
+    // TODO<C++23> Use the monadic operations for std::optional
+    if (!d.has_value()) {
+      return Id::makeUndefined();
+    }
+    auto optionalMonth = d.value().getMonth();
+    if (!optionalMonth.has_value()) {
+      return Id::makeUndefined();
+    }
+    return Id::makeFromInt(optionalMonth.value());
   }
-  auto optionalMonth = d.value().getMonth();
-  if (!optionalMonth.has_value()) {
-    return Id::makeUndefined();
-  }
-  return Id::makeFromInt(optionalMonth.value());
 };
 
 //______________________________________________________________________________
-inline auto extractDay = [](std::optional<DateYearOrDuration> d) {
-  // TODO<C++23> Use the monadic operations for `std::optional`.
-  if (!d.has_value()) {
-    return Id::makeUndefined();
+struct ExtractDay {
+  Id operator()(std::optional<DateYearOrDuration> d) const {
+    // TODO<C++23> Use the monadic operations for `std::optional`.
+    if (!d.has_value()) {
+      return Id::makeUndefined();
+    }
+    auto optionalDay = d.value().getDay();
+    if (!optionalDay.has_value()) {
+      return Id::makeUndefined();
+    }
+    return Id::makeFromInt(optionalDay.value());
   }
-  auto optionalDay = d.value().getDay();
-  if (!optionalDay.has_value()) {
-    return Id::makeUndefined();
-  }
-  return Id::makeFromInt(optionalDay.value());
 };
 
 //______________________________________________________________________________
-inline auto extractStrTimezone =
-    [](std::optional<DateYearOrDuration> d) -> IdOrLiteralOrIri {
-  // TODO<C++23> Use the monadic operations for std::optional
-  if (!d.has_value()) {
-    return Id::makeUndefined();
+struct ExtractStrTimezone {
+  IdOrLiteralOrIri operator()(std::optional<DateYearOrDuration> d) const {
+    // TODO<C++23> Use the monadic operations for std::optional
+    if (!d.has_value()) {
+      return Id::makeUndefined();
+    }
+    auto timezoneStr = d.value().getStrTimezone();
+    return LiteralOrIri{Literal::literalWithNormalizedContent(
+        asNormalizedStringViewUnsafe(timezoneStr))};
   }
-  auto timezoneStr = d.value().getStrTimezone();
-  return LiteralOrIri{Literal::literalWithNormalizedContent(
-      asNormalizedStringViewUnsafe(timezoneStr))};
 };
 
 //______________________________________________________________________________
-inline auto extractTimezoneDurationFormat =
-    [](std::optional<DateYearOrDuration> d) {
-      // TODO<C++23> Use the monadic operations for std::optional
-      if (!d.has_value()) {
-        return Id::makeUndefined();
-      }
-      const auto& optDayTimeDuration =
-          DateYearOrDuration::xsdDayTimeDurationFromDate(d.value());
-      return optDayTimeDuration.has_value()
-                 ? Id::makeFromDate(optDayTimeDuration.value())
-                 : Id::makeUndefined();
-    };
+struct ExtractTimezoneDurationFormat {
+  Id operator()(std::optional<DateYearOrDuration> d) const {
+    // TODO<C++23> Use the monadic operations for std::optional
+    if (!d.has_value()) {
+      return Id::makeUndefined();
+    }
+    const auto& optDayTimeDuration =
+        DateYearOrDuration::xsdDayTimeDurationFromDate(d.value());
+    return optDayTimeDuration.has_value()
+               ? Id::makeFromDate(optDayTimeDuration.value())
+               : Id::makeUndefined();
+  }
+};
 
 //______________________________________________________________________________
 template <auto dateMember, auto makeId>
-inline const auto extractTimeComponentImpl =
-    [](std::optional<DateYearOrDuration> d) {
-      if (!d.has_value() || !d->isDate()) {
-        return Id::makeUndefined();
-      }
-      Date date = d.value().getDate();
-      if (!date.hasTime()) {
-        return Id::makeUndefined();
-      }
-      return std::invoke(makeId, std::invoke(dateMember, date));
-    };
+struct ExtractTimeComponentImpl {
+  Id operator()(std::optional<DateYearOrDuration> d) const {
+    if (!d.has_value() || !d->isDate()) {
+      return Id::makeUndefined();
+    }
+    Date date = d.value().getDate();
+    if (!date.hasTime()) {
+      return Id::makeUndefined();
+    }
+    return std::invoke(makeId, std::invoke(dateMember, date));
+  }
+};
 
 //______________________________________________________________________________
-constexpr auto extractHours =
-    extractTimeComponentImpl<&Date::getHour, &Id::makeFromInt>;
-constexpr auto extractMinutes =
-    extractTimeComponentImpl<&Date::getMinute, &Id::makeFromInt>;
-constexpr auto extractSeconds =
-    extractTimeComponentImpl<&Date::getSecond, &Id::makeFromDouble>;
+using ExtractHours = ExtractTimeComponentImpl<&Date::getHour, &Id::makeFromInt>;
+using ExtractMinutes =
+    ExtractTimeComponentImpl<&Date::getMinute, &Id::makeFromInt>;
+using ExtractSeconds =
+    ExtractTimeComponentImpl<&Date::getSecond, &Id::makeFromDouble>;
 
 //______________________________________________________________________________
-NARY_EXPRESSION(MonthExpression, 1,
-                FV<decltype(extractMonth), DateValueGetter>);
-NARY_EXPRESSION(DayExpression, 1, FV<decltype(extractDay), DateValueGetter>);
+NARY_EXPRESSION(MonthExpression, 1, FV<ExtractMonth, DateValueGetter>);
+NARY_EXPRESSION(DayExpression, 1, FV<ExtractDay, DateValueGetter>);
 NARY_EXPRESSION(TimezoneStrExpression, 1,
-                FV<decltype(extractStrTimezone), DateValueGetter>);
+                FV<ExtractStrTimezone, DateValueGetter>);
 NARY_EXPRESSION(TimezoneDurationExpression, 1,
-                FV<decltype(extractTimezoneDurationFormat), DateValueGetter>);
-NARY_EXPRESSION(HoursExpression, 1,
-                FV<decltype(extractHours), DateValueGetter>);
-NARY_EXPRESSION(MinutesExpression, 1,
-                FV<decltype(extractMinutes), DateValueGetter>);
-NARY_EXPRESSION(SecondsExpression, 1,
-                FV<decltype(extractSeconds), DateValueGetter>);
+                FV<ExtractTimezoneDurationFormat, DateValueGetter>);
+NARY_EXPRESSION(HoursExpression, 1, FV<ExtractHours, DateValueGetter>);
+NARY_EXPRESSION(MinutesExpression, 1, FV<ExtractMinutes, DateValueGetter>);
+NARY_EXPRESSION(SecondsExpression, 1, FV<ExtractSeconds, DateValueGetter>);
 
 //______________________________________________________________________________
 // `YearExpression` requires `YearExpressionImpl` to be easily identifiable if
@@ -122,8 +126,8 @@ CPP_class_template(typename NaryOperation)(
   bool isYearExpression() const override { return true; }
 };
 
-using YearExpression = YearExpressionImpl<
-    Operation<1, FV<decltype(extractYear), DateValueGetter>>>;
+using YearExpression =
+    YearExpressionImpl<Operation<1, FV<ExtractYear, DateValueGetter>>>;
 
 }  // namespace detail
 using namespace detail;

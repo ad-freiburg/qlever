@@ -2,7 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
 
-#include "./Tokenizer.h"
+#include "parser/Tokenizer.h"
 
 // _______________________________________________________
 std::pair<bool, std::string> Tokenizer::getNextToken(const RE2& reg) {

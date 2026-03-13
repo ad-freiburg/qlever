@@ -20,7 +20,8 @@
 
 namespace ad_utility {
 // The seed type for random number generators.
-using RandomSeed = ad_utility::TypedIndex<unsigned int, "Seed">;
+inline constexpr IndexTag randomSeedTag = "Seed";
+using RandomSeed = ad_utility::TypedIndex<unsigned int, randomSeedTag>;
 
 /**
  * A simple and fast Pseudo-Random-Number-Generator called Xoroshiro128+,

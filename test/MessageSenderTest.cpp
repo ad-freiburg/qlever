@@ -17,11 +17,13 @@ using ad_utility::websocket::OwningQueryId;
 using ad_utility::websocket::QueryHub;
 using ad_utility::websocket::QueryId;
 using ad_utility::websocket::QueryRegistry;
+using PayloadType = std::pair<std::shared_ptr<const std::string>, size_t>;
 
 using namespace boost::asio::experimental::awaitable_operators;
 using namespace std::string_literals;
 using namespace std::chrono_literals;
 
+using ::testing::Pair;
 using ::testing::Pointee;
 using ::testing::VariantWith;
 
@@ -43,9 +45,7 @@ ASYNC_TEST(MessageSender, destructorCallsSignalEnd) {
     auto result = co_await (distributor->waitForNextDataPiece(0) ||
                             timer.async_wait(net::use_awaitable));
 
-    using PayloadType = std::shared_ptr<const std::string>;
-
-    EXPECT_THAT(result, VariantWith<PayloadType>(PayloadType{}));
+    EXPECT_THAT(result, VariantWith<PayloadType>(PayloadType{nullptr, 0}));
   };
 
   co_await net::co_spawn(distributor->strand(), impl(), net::deferred);
@@ -65,7 +65,6 @@ ASYNC_TEST(MessageSender, callingOperatorBroadcastsPayload) {
     MessageSender updateWrapper{std::move(queryId), queryHub};
 
     updateWrapper("Still");
-    updateWrapper("Dre");
 
     net::steady_timer timer{ioContext, 2s};
 
@@ -73,14 +72,14 @@ ASYNC_TEST(MessageSender, callingOperatorBroadcastsPayload) {
       auto result = co_await (distributor->waitForNextDataPiece(0) ||
                               timer.async_wait(net::use_awaitable));
 
-      using PayloadType = std::shared_ptr<const std::string>;
-
-      EXPECT_THAT(result, VariantWith<PayloadType>(Pointee("Still"s)));
+      EXPECT_THAT(result, VariantWith<PayloadType>(Pair(Pointee("Still"s), 1)));
+      // Push next update.
+      updateWrapper("Dre");
 
       result = co_await (distributor->waitForNextDataPiece(1) ||
                          timer.async_wait(net::use_awaitable));
 
-      EXPECT_THAT(result, VariantWith<PayloadType>(Pointee("Dre"s)));
+      EXPECT_THAT(result, VariantWith<PayloadType>(Pair(Pointee("Dre"s), 2)));
     };
     co_await net::co_spawn(distributor->strand(), impl, net::deferred);
   }

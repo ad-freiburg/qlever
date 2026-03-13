@@ -104,7 +104,7 @@ class MonotonicBuffer {
   std::string_view addString(std::string_view input) {
     auto ptr = charAllocator_->allocate(input.size());
     ql::ranges::copy(input, ptr);
-    return {ptr, ptr + input.size()};
+    return {ptr, input.size()};
   }
 };
 
@@ -115,7 +115,15 @@ struct ItemMapAndBuffer {
   MonotonicBuffer buffer_;
 
   explicit ItemMapAndBuffer(ItemAlloc alloc) : map_{alloc} {}
-  ItemMapAndBuffer(ItemMapAndBuffer&&) noexcept = default;
+  // Note: For older boost versions + compilers, we unfortunately cannot default
+  // copy constructor because
+  // 1. In older boost versions, the move operations of the polymorphic
+  // allocators were not yet marked `noexcept`
+  // 2. We definitely want this move constructor to be `noexcept`.
+  // 3. GCC 8 complains if we explicitly use `noexcept = default` if the default
+  // implementation wouldn't be noexcept.
+  ItemMapAndBuffer(ItemMapAndBuffer&& rhs) noexcept
+      : map_{std::move(rhs.map_)}, buffer_{std::move(rhs.buffer_)} {}
   // We have to delete the move-assignment as it would have the wrong semantics
   // (the monotonic buffer wouldn't be moved, this is one of the oddities of the
   // `ql::pmr` types.
@@ -269,6 +277,10 @@ auto getIdMapLambdas(
       OptionalIds res;
       // get Ids for the actual triple and store them in the result.
       res[0] = map.getId(lt.triple_);
+      // NOTE: If this logic is ever changed, you need to also change the code
+      // in `DeltaTriples::makeInternalTriples`, which adds the same extra
+      // triples for language tags to the internal triples on every update
+      // operation.
       if (!lt.langtag_.empty()) {  // the object of the triple was a literal
                                    // with a language tag
         // get the Id for the corresponding langtag Entity
@@ -295,7 +307,7 @@ auto getIdMapLambdas(
         auto tripleGraphId = res[0].value()[ADDITIONAL_COLUMN_GRAPH_ID];
         res[1].emplace(
             Arr{spoIds[0], langTaggedPredId, spoIds[2], tripleGraphId});
-        // extra triple <object> ql:language-tag <@language>
+        // extra triple <object> ql:langtag <@language>
         res[2].emplace(Arr{spoIds[2],
                            map.getId(TripleComponent{
                                ad_utility::triple_component::Iri::fromIriref(

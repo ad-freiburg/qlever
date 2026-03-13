@@ -107,8 +107,11 @@ class ParameterToProgramOptionFactory {
   auto getProgramOption() {
     // Get the current value of the parameter, it will become the default
     // value of the command-line option.
-    auto defaultValue =
-        std::invoke(ParameterPtr, *globalRuntimeParameters.rlock()).get();
+    const auto& param =
+        std::invoke(ParameterPtr, *globalRuntimeParameters.rlock());
+    auto defaultValue = param.get();
+    // This is needed for types that boost can't convert to string.
+    auto defaultValueAsString = param.toString();
 
     // The underlying type for the parameter.
     using Type = decltype(defaultValue);
@@ -120,7 +123,7 @@ class ParameterToProgramOptionFactory {
     }};
 
     return boost::program_options::value<Type>()
-        ->default_value(defaultValue)
+        ->default_value(defaultValue, defaultValueAsString)
         ->notifier(setParameterToValue);
   }
 };

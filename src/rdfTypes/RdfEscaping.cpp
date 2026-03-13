@@ -23,6 +23,11 @@ namespace RdfEscaping {
 using namespace std::string_literals;
 namespace detail {
 
+// CTRE regex patterns for C++17 compatibility
+constexpr ctll::fixed_string csvSpecialCharsRegex = "[\r\n\",]";
+constexpr ctll::fixed_string tsvSpecialCharsRegex = "[\n\t]";
+constexpr ctll::fixed_string xmlSpecialCharsRegex = "[&\"<>']";
+
 /// Turn a sequence of characters that encode hexadecimal numbers(e.g. "00e4")
 /// into the corresponding UTF-8 string (e.g. "ä").
 std::string hexadecimalCharactersToUtf8(std::string_view hex) {
@@ -174,7 +179,7 @@ static void literalUnescape(std::string_view input, std::string& res) {
 // ____________________________________________________________________________
 static void literalUnescapeWithQuotesRemoved(std::string_view input,
                                              std::string& res) {
-  if (ql::starts_with(input, R"(""")") || input.starts_with(R"(''')")) {
+  if (ql::starts_with(input, R"(""")") || ql::starts_with(input, R"(''')")) {
     AD_CONTRACT_CHECK(ql::ends_with(input, input.substr(0, 3)));
     input.remove_prefix(3);
     input.remove_suffix(3);
@@ -283,7 +288,7 @@ std::string unescapePrefixedIri(std::string_view literal) {
 
 // __________________________________________________________________________
 std::string escapeForCsv(std::string input) {
-  if (!ctre::search<"[\r\n\",]">(input)) [[likely]] {
+  if (!ctre::search<detail::csvSpecialCharsRegex>(input)) [[likely]] {
     return input;
   }
   return absl::StrCat("\"", absl::StrReplaceAll(input, {{"\"", "\"\""}}), "\"");
@@ -291,7 +296,7 @@ std::string escapeForCsv(std::string input) {
 
 // __________________________________________________________________________
 std::string escapeForTsv(std::string input) {
-  if (ctre::search<"[\n\t]">(input)) [[unlikely]] {
+  if (ctre::search<detail::tsvSpecialCharsRegex>(input)) [[unlikely]] {
     absl::StrReplaceAll({{"\t", " "}, {"\n", "\\n"}}, &input);
   }
   return input;
@@ -299,7 +304,7 @@ std::string escapeForTsv(std::string input) {
 
 // __________________________________________________________________________
 std::string escapeForXml(std::string input) {
-  if (ctre::search<"[&\"<>']">(input)) [[unlikely]] {
+  if (ctre::search<detail::xmlSpecialCharsRegex>(input)) [[unlikely]] {
     absl::StrReplaceAll({{"&", "&amp;"},
                          {"<", "&lt;"},
                          {">", "&gt;"},

@@ -435,9 +435,9 @@ bool NQuadParser<T>::statement() {
   }
   this->check(this->template skip<TurtleTokenId::Dot>());
   if (!this->currentTripleIgnoredBecauseOfInvalidLiteral_) {
-    this->triples_.emplace_back(
-        std::move(this->activeSubject_), std::move(this->activePredicate_),
-        std::move(activeObject_), std::move(activeGraphLabel_));
+    this->triples_.push_back(
+        {std::move(this->activeSubject_), std::move(this->activePredicate_),
+         std::move(activeObject_), std::move(activeGraphLabel_)});
   }
   this->currentTripleIgnoredBecauseOfInvalidLiteral_ = false;
   return true;
@@ -769,8 +769,8 @@ bool TurtleParser<T>::parseTerminal() {
 template <class Tokenizer_T>
 void TurtleParser<Tokenizer_T>::emitTriple() {
   if (!currentTripleIgnoredBecauseOfInvalidLiteral_) {
-    triples_.emplace_back(activeSubject_, activePredicate_, lastParseResult_,
-                          defaultGraphIri_);
+    triples_.push_back(
+        {activeSubject_, activePredicate_, lastParseResult_, defaultGraphIri_});
   }
   currentTripleIgnoredBecauseOfInvalidLiteral_ = false;
 }
@@ -813,9 +813,14 @@ bool TurtleParser<T>::blankNodeLabel() {
     // Add a special prefix to ensure that the manually specified blank nodes
     // never interfere with the automatically generated ones. The `substr`
     // removes the leading `_:` which will be added again by the `BlankNode`
-    // constructor.
+    // constructor. We use `fileBlankNodePrefix_` to ensure that blank nodes
+    // with the same label from different files are treated as different, but
+    // blank nodes with the same label from the same file (even when parsed in
+    // parallel) are treated as the same.
     lastParseResult_ =
-        BlankNode{false, lastParseResult_.getString().substr(2)}.toSparql();
+        BlankNode{false, absl::StrCat(fileBlankNodePrefix_, "_",
+                                      lastParseResult_.getString().substr(2))}
+            .toSparql();
   }
   return res;
 }
@@ -1112,6 +1117,10 @@ void RdfParallelParser<T>::parseBatch(size_t parsePosition, Batch batch) {
     parser.prefixMap_ = this->prefixMap_;
     parser.useSimplifiedGrammar();
     parser.setPositionOffset(parsePosition);
+    // Ensure that all sub-parsers use the same file-level blank node prefix
+    // so that user-specified blank node labels (_:foo) have the same ID
+    // across all batches of the same file.
+    parser.setFileBlankNodePrefix(this->fileBlankNodePrefix_);
     parser.setInputStream(std::move(batch));
     // TODO: raise error message if a prefix parsing fails;
     std::vector<TurtleTriple> triples = parser.parseAndReturnAllTriples();

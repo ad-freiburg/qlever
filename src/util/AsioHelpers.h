@@ -10,6 +10,7 @@
 
 #include <boost/asio/experimental/awaitable_operators.hpp>
 
+#include "backports/atomic_flag.h"
 #include "global/Constants.h"
 #include "util/CancellationHandle.h"
 #include "util/Exception.h"
@@ -132,7 +133,7 @@ inline net::awaitable<T> interruptible(
   using namespace net::experimental::awaitable_operators;
   auto timer =
       std::make_shared<net::steady_timer>(co_await net::this_coro::executor);
-  auto running = std::make_shared<std::atomic_flag>(true);
+  auto running = std::make_shared<ql::atomic_flag>(true);
   auto cancelTimer = [timer, running]() mutable {
     auto strand = timer->get_executor();
     running->clear();
@@ -142,7 +143,7 @@ inline net::awaitable<T> interruptible(
   cancelCallback.set_value(cancelTimer);
 
   auto timerLoop = [](std::shared_ptr<net::steady_timer> timer,
-                      std::shared_ptr<std::atomic_flag> running,
+                      std::shared_ptr<ql::atomic_flag> running,
                       ad_utility::SharedCancellationHandle handle,
                       ad_utility::source_location loc) -> net::awaitable<void> {
     constexpr auto timeout = DESIRED_CANCELLATION_CHECK_INTERVAL / 2;

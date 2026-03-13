@@ -131,8 +131,9 @@ Result CountAvailablePredicates::computeResult(
   }();
 
   if (isPatternTrickForAllEntities) {
-    subtree_->getRootOperation()->updateRuntimeInformationWhenOptimizedOut(
-        RuntimeInformation::Status::lazilyMaterialized);
+    subtree_->getRootOperation()->runtimeInfo().status_ =
+        RuntimeInformation::Status::lazilyMaterializedInProgress;
+    signalQueryUpdate(RuntimeInformation::SendPriority::Always);
     // Compute the predicates for all entities
     CountAvailablePredicates::computePatternTrickAllEntities(&idTable,
                                                              patterns);
@@ -144,9 +145,11 @@ Result CountAvailablePredicates::computeResult(
 
     size_t width = subresult->idTable().numColumns();
     size_t patternColumn = subtree_->getVariableColumn(predicateVariable_);
-    CALL_FIXED_SIZE(width, &computePatternTrick, subresult->idTable(), &idTable,
-                    patterns, subjectColumnIndex_, patternColumn,
-                    runtimeInfo());
+    ad_utility::callFixedSizeVi(width, [&](auto width) {
+      return computePatternTrick<width>(subresult->idTable(), &idTable,
+                                        patterns, subjectColumnIndex_,
+                                        patternColumn, runtimeInfo());
+    });
     return {std::move(idTable), resultSortedOn(),
             subresult->getSharedLocalVocab()};
   }
@@ -166,7 +169,7 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
           std::nullopt}
           .toScanSpecification(index);
   const auto& perm = index.getPermutation(Permutation::Enum::PSO);
-  const auto& locatedTriple = locatedTriplesSnapshot();
+  const auto& locatedTriple = locatedTriplesState();
   auto fullHasPattern =
       perm.lazyScan(perm.getScanSpecAndBlocks(scanSpec, locatedTriple),
                     std::nullopt, {}, cancellationHandle_, locatedTriple);

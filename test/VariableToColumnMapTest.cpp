@@ -7,6 +7,7 @@
 #include "engine/VariableToColumnMap.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
+#include "util/Serializer/ByteBufferSerializer.h"
 
 class VariableToColumnMapTest : public ::testing::TestWithParam<bool> {};
 
@@ -155,3 +156,21 @@ INSTANTIATE_TEST_SUITE_P(VariableToColumnMap,            // Instance name
                          VariableToColumnMapTest,        // Test suite name
                          ::testing::Values(true, false)  // Parameters
 );
+
+// _____________________________________________________________________________
+TEST(ColumnIndexAndTypeInfo, serialization) {
+  ColumnIndexAndTypeInfo c1 = makeAlwaysDefinedColumn(42);
+  ColumnIndexAndTypeInfo c2 = makePossiblyUndefinedColumn(46);
+  using namespace ad_utility::serialization;
+  ByteBufferWriteSerializer writer;
+  writer | c1;
+  writer | c2;
+
+  ColumnIndexAndTypeInfo c3;
+  ColumnIndexAndTypeInfo c4;
+  ByteBufferReadSerializer reader{std::move(writer).data()};
+  reader | c3;
+  reader | c4;
+  EXPECT_EQ(c1, c3);
+  EXPECT_EQ(c2, c4);
+}

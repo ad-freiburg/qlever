@@ -11,6 +11,7 @@
 #include <functional>
 
 #include "engine/QueryExecutionTree.h"
+#include "engine/QueryExportTypes.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"
 #include "util/http/MediaTypes.h"
@@ -96,7 +97,7 @@ class ExportQueryExecutionTrees {
   // These semantics are useful for the string expressions in
   // StringExpressions.cpp.
   static std::optional<Literal> idToLiteral(
-      const Index& index, Id id, const LocalVocab& localVocab,
+      const IndexImpl& index, Id id, const LocalVocab& localVocab,
       bool onlyReturnLiteralsWithXsdString = false);
 
   // Same as the previous function, but only handles the datatypes for which the
@@ -116,7 +117,7 @@ class ExportQueryExecutionTrees {
   // The function resolves a given `ValueId` to a `LiteralOrIri` object. Unlike
   // `idToLiteral` no further processing is applied to the string content.
   static std::optional<LiteralOrIri> idToLiteralOrIri(
-      const Index& index, Id id, const LocalVocab& localVocab,
+      const IndexImpl& index, Id id, const LocalVocab& localVocab,
       bool skipEncodedValues = false);
 
   // Helper for the `idToLiteralOrIri` function: Retrieves a string literal from
@@ -125,22 +126,18 @@ class ExportQueryExecutionTrees {
 
   // Helper for the `idToLiteralOrIri` function: Retrieves a string literal for
   // a word in the vocabulary.
-  static std::optional<LiteralOrIri> getLiteralOrIriFromWordVocabIndex(
-      const Index& index, Id id);
+  static LiteralOrIri getLiteralOrIriFromWordVocabIndex(const IndexImpl& index,
+                                                        Id id);
 
   // Helper for the `idToLiteralOrIri` function: Retrieves a string literal for
   // a word in the text index.
   static std::optional<LiteralOrIri> getLiteralOrIriFromTextRecordIndex(
-      const Index& index, Id id);
+      const IndexImpl& index, Id id);
 
   // Helper for the `idToLiteral` function: get only literals from the
   // `LiteralOrIri` object.
   static std::optional<Literal> getLiteralOrNullopt(
       std::optional<LiteralOrIri> litOrIri);
-
-  // Checks if a LiteralOrIri is either a plain literal (without datatype)
-  // or a literal with the `xsd:string` datatype.
-  static bool isPlainLiteralOrLiteralWithXsdString(const LiteralOrIri& word);
 
   // Replaces the first character '<' and the last character '>' with double
   // quotes '"' to convert an IRI to a Literal, ensuring only the angle brackets
@@ -152,7 +149,7 @@ class ExportQueryExecutionTrees {
   // This function should only be called with suitable `Datatype` Id's,
   // otherwise `AD_FAIL()` is called.
   static LiteralOrIri getLiteralOrIriFromVocabIndex(
-      const Index& index, Id id, const LocalVocab& localVocab);
+      const IndexImpl& index, Id id, const LocalVocab& localVocab);
 
   // Convert a `stream_generator` to an "ordinary" `InputRange<string>` that
   // yields exactly the same chunks as the `stream_generator`. Exceptions that
@@ -187,6 +184,7 @@ class ExportQueryExecutionTrees {
   // format.
   static STREAMABLE_GENERATOR_TYPE computeResultAsQLeverJSON(
       const ParsedQuery& query, const QueryExecutionTree& qet,
+      const LimitOffsetClause& limitOffset,
       const ad_utility::Timer& requestTimer,
       CancellationHandle cancellationHandle, STREAMABLE_YIELDER_ARG_DECL);
 
@@ -222,7 +220,7 @@ class ExportQueryExecutionTrees {
   // `StringTriple`s.
   static auto constructQueryResultToTriples(
       const QueryExecutionTree& qet,
-      const ad_utility::sparql_types::Triples& constructTriples,
+      const ad_utility::sparql_types::Triples& constructClauseTriples,
       LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
       uint64_t& resultSize, CancellationHandle cancellationHandle);
 
@@ -241,26 +239,8 @@ class ExportQueryExecutionTrees {
       const QueryExecutionTree& qet,
       const parsedQuery::SelectClause& selectClause,
       LimitOffsetClause limitAndOffset, CancellationHandle cancellationHandle,
-      STREAMABLE_YIELDER_ARG_DECL);
+      const ad_utility::Timer& requestTimer, STREAMABLE_YIELDER_ARG_DECL);
 
-  // Public for testing.
- public:
-  struct TableConstRefWithVocab {
-    std::reference_wrapper<const IdTable> idTable_;
-    std::reference_wrapper<const LocalVocab> localVocab_;
-
-    const IdTable& idTable() const { return idTable_.get(); }
-
-    const LocalVocab& localVocab() const { return localVocab_.get(); }
-  };
-  // Helper type that contains an `IdTable` and a view with related indices to
-  // access the `IdTable` with.
-  struct TableWithRange {
-    TableConstRefWithVocab tableWithVocab_;
-    ql::ranges::iota_view<uint64_t, uint64_t> view_;
-  };
-
- private:
   // Yield all `IdTables` provided by the given `result`.
   static ad_utility::InputRangeTypeErased<TableConstRefWithVocab> getIdTables(
       const Result& result);
@@ -283,7 +263,7 @@ class ExportQueryExecutionTrees {
   // Blocks after the LIMIT are not even requested.
  public:
   static ad_utility::InputRangeTypeErased<TableWithRange> getRowIndices(
-      LimitOffsetClause limitOffset, const Result& result,
+      const LimitOffsetClause& limitOffset, const Result& result,
       uint64_t& resutSizeTotal, uint64_t resultSizeMultiplicator = 1);
 
  private:

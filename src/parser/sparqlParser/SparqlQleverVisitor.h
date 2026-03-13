@@ -10,6 +10,8 @@
 #include <antlr4-runtime.h>
 #include <gtest/gtest_prod.h>
 
+#include <type_traits>
+
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
@@ -324,29 +326,18 @@ class SparqlQleverVisitor {
   parsedQuery::GraphPatternOperation visit(
       Parser::ServiceGraphPatternContext* ctx);
 
-  // Visitor functions for special builtin features that are triggered via
-  // `SERVICE` requests with "magic" IRIs.
-  parsedQuery::GraphPatternOperation visitPathQuery(
-      Parser::ServiceGraphPatternContext* ctx);
-
-  GraphPatternOperation visitSpatialQuery(
-      Parser::ServiceGraphPatternContext* ctx);
-
-  parsedQuery::GraphPatternOperation visitTextSearchQuery(
-      Parser::ServiceGraphPatternContext* ctx);
-
-  GraphPatternOperation visitNamedCachedResult(
-      const TripleComponent::Iri& target,
-      Parser::ServiceGraphPatternContext* ctx);
-
-  // Parse the body of a `MagicServiceQuery`, in particular call
-  // `addBasicGraphPattern` and `addGraph` for the contents of the body, and
-  // throw an exception if an unsupported element is encountered. This function
-  // implements common functionality of `visitNamedCachedResult`,
-  // `visitTextQuery`, ... above.
-  void parseBodyOfMagicServiceQuery(parsedQuery::MagicServiceQuery& target,
-                                    Parser::ServiceGraphPatternContext* ctx,
-                                    std::string_view operationName);
+  // Generic visitor function for all the special builtin features that are
+  // triggered via `SERVICE` requests with "magic" IRIs.
+  //
+  // The type of the `MagicServiceQuery` is given as `T`. If the constructor of
+  // this particular magic service requires arguments (for example the IRI of
+  // the service), they can be given via the `args` parameters. Most magic
+  // services do not need `args`. For them this can be left out.
+  CPP_variadic_template(typename T, typename... Args)(
+      requires std::is_constructible_v<T, Args...>)
+      parsedQuery::GraphPatternOperation
+      visitMagicServiceQuery(Parser::ServiceGraphPatternContext* ctx,
+                             Args&&... args);
 
   parsedQuery::GraphPatternOperation visit(Parser::BindContext* ctx);
 

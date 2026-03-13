@@ -24,6 +24,7 @@
 #include "engine/GroupBy.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
+#include "engine/MaterializedViews.h"
 #include "engine/Minus.h"
 #include "engine/MultiColumnJoin.h"
 #include "engine/NeutralElementOperation.h"
@@ -129,7 +130,9 @@ constexpr auto IndexScan =
        const IndexScan::Graphs& graphs = IndexScan::Graphs::All(),
        const std::vector<Variable>& additionalVariables = {},
        const std::vector<ColumnIndex>& additionalColumns = {},
-       const std::optional<size_t>& strippedSize = std::nullopt) -> QetMatcher {
+       const std::optional<size_t>& strippedSize = std::nullopt,
+       const std::optional<std::string>& materializedView =
+           std::nullopt) -> QetMatcher {
   // TODO<RobinTF> The matcher should be changed so that numVariables can
   // properly account for stripped columns. Also `strippedSize` should be
   // replaced by an explicit listing of the variables that are kept instead of
@@ -141,8 +144,17 @@ constexpr auto IndexScan =
   auto permutationMatcher = allowedPermutations.empty()
                                 ? ::testing::A<Permutation::Enum>()
                                 : AnyOfArray(allowedPermutations);
+  Matcher<Permutation> materializedViewMatcher =
+      materializedView.has_value()
+          ? AD_PROPERTY(Permutation, materializedView,
+                        Pointee(AD_PROPERTY(MaterializedView, name,
+                                            Eq(materializedView))))
+          : AD_PROPERTY(Permutation, materializedView, Eq(nullptr));
   return RootOperation<::IndexScan>(
-      AllOf(AD_PROPERTY(IndexScan, permutation, permutationMatcher),
+      AllOf(AD_PROPERTY(
+                IndexScan, permutation,
+                AllOf(AD_PROPERTY(Permutation, permutation, permutationMatcher),
+                      materializedViewMatcher)),
             AD_PROPERTY(IndexScan, getResultWidth, Eq(numVariables)),
             AD_PROPERTY(IndexScan, subject, Eq(subject)),
             AD_PROPERTY(IndexScan, predicate, Eq(predicate)),
@@ -268,7 +280,9 @@ inline auto IndexScanFromStrings =
            graphs = std::monostate{},
        const std::vector<Variable>& additionalVariables = {},
        const std::vector<ColumnIndex>& additionalColumns = {},
-       const std::optional<size_t>& strippedSize = std::nullopt) -> QetMatcher {
+       const std::optional<size_t>& strippedSize = std::nullopt,
+       const std::optional<std::string>& materializedView =
+           std::nullopt) -> QetMatcher {
   auto strToComp = [](std::string_view s) -> TripleComponent {
     if (ql::starts_with(s, "?")) {
       return ::Variable{std::string{s}};
@@ -292,7 +306,7 @@ inline auto IndexScanFromStrings =
   }
   return IndexScan(strToComp(subject), strToComp(predicate), strToComp(object),
                    allowedPermutations, graphsOut, additionalVariables,
-                   additionalColumns, strippedSize);
+                   additionalColumns, strippedSize, materializedView);
 };
 
 // For the following Join algorithms the order of the children is not
@@ -634,7 +648,12 @@ void expectWithGivenBudget(std::string query, auto matcher,
   }};
   auto trace = generateLocationTrace(
       l, absl::StrCat("expect with budget ", queryPlanningBudget));
-  QueryExecutionContext* qec = optQec.value_or(ad_utility::testing::getQec());
+  // Note: we cannot use `value_or` here, because it eagerly evaluates `getQec`
+  // which overwrites the global singleton index. The index is used to check
+  // invariants which require the correct index to be set.
+  // TODO<joka921>: revert to `value_or` with #2476
+  QueryExecutionContext* qec =
+      optQec.has_value() ? *optQec : ad_utility::testing::getQec();
   auto qet = parseAndPlan<QueryPlannerClass>(std::move(query), qec);
   qet.getRootOperation()->createRuntimeInfoFromEstimates(
       qet.getRootOperation()->getRuntimeInfoPointer());

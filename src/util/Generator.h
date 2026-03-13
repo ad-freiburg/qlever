@@ -5,6 +5,8 @@
 #ifndef CPPCORO_GENERATOR_HPP_INCLUDED
 #define CPPCORO_GENERATOR_HPP_INCLUDED
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
 #include <coroutine>
 #include <exception>
 #include <utility>
@@ -15,7 +17,17 @@
 #include "backports/type_traits.h"
 #include "util/Exception.h"
 
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
 namespace cppcoro {
+
+// This struct is used as the default of the details object for the case that
+// there are no details (see below).
+// It is also used by some generator-free input range abstractions, hence we
+// define it oudside the #ifdef.
+struct NoDetails {};
+
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 // This struct can be `co_await`ed inside a `generator` to obtain a reference to
 // the details object (the value of which is a template parameter to the
 // generator). For an example see `GeneratorTest.cpp`.
@@ -30,10 +42,6 @@ template <typename Details>
 struct SetDetails {
   Details details_;
 };
-
-// This struct is used as the default of the details object for the case that
-// there are no details
-struct NoDetails {};
 
 template <typename T, typename Details = NoDetails>
 class generator;
@@ -341,6 +349,7 @@ T getSingleElement(generator<T, Details> g) {
   AD_CORRECTNESS_CHECK(++it == g.end());
   return t;
 }
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 }  // namespace cppcoro
 
-#endif
+#endif  // CPPCORO_GENERATOR_HPP_INCLUDED

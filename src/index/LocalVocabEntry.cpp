@@ -2,7 +2,7 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include "LocalVocabEntry.h"
+#include "index/LocalVocabEntry.h"
 
 #include "global/VocabIndex.h"
 #include "index/IndexImpl.h"

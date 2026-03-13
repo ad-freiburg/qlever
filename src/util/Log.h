@@ -96,7 +96,7 @@ class Log {
   static std::ostream& getLog() {
     // use the singleton logging stream as target.
     return LogstreamChoice::get().getStream()
-           << getTimeStamp() << " - " << getLevel<LEVEL>();
+           << getTimeStamp() << " - " << getLevel<LEVEL>() << ": ";
   }
 
   static void imbue(const std::locale& locale) { std::cout.imbue(locale); }
@@ -109,14 +109,14 @@ class Log {
   template <LogLevel LEVEL>
   static QL_CONSTEVAL std::string_view getLevel() {
     using P = ConstexprMapPair<LogLevel, std::string_view>;
-    constexpr ConstexprMap map{std::array{
-        P(TRACE, "TRACE: "),
-        P(TIMING, "TIMING: "),
-        P(DEBUG, "DEBUG: "),
-        P(INFO, "INFO: "),
-        P(WARN, "WARN: "),
-        P(ERROR, "ERROR: "),
-        P(FATAL, "FATAL: "),
+    constexpr ConstexprMap map{std::array<P, 7>{
+        P(TRACE, "TRACE"),
+        P(TIMING, "TIMING"),
+        P(DEBUG, "DEBUG"),
+        P(INFO, "INFO"),
+        P(WARN, "WARN"),
+        P(ERROR, "ERROR"),
+        P(FATAL, "FATAL"),
     }};
     return map.at(LEVEL);
   }

@@ -13,7 +13,7 @@ namespace ad_utility::detail::parallel_wkt_parser {
 // _____________________________________________________________________________
 WKTParser::WKTParser(sj::Sweeper* sweeper, size_t numThreads,
                      bool usePrefiltering,
-                     const std::optional<util::geo::DBox>& prefilterLatLngBox,
+                     const std::optional<::util::geo::DBox>& prefilterLatLngBox,
                      const Index& index)
     : sj::WKTParserBase<SpatialJoinParseJob>(sweeper, numThreads),
       _numSkipped(numThreads),
@@ -61,26 +61,27 @@ void WKTParser::processQueue(size_t t) {
         // If we have not filtered out this geometry, read and parse the full
         // string.
         job.wkt = _index.indexToString(job.valueId.getVocabIndex());
-        parseLine(job.wkt.data(), job.wkt.size(), job.line, t, w, job.side);
+        parseLine(job.wkt.data(), job.wkt.size(), job.line, t, w, job.side,
+                  false);
         parseCounter++;
       } else if (dt == Datatype::GeoPoint) {
         const auto& p = job.valueId.getGeoPoint();
-        const util::geo::DPoint utilPoint{p.getLng(), p.getLat()};
+        const ::util::geo::DPoint utilPoint{p.getLng(), p.getLat()};
 
         // If point is not contained in the prefilter box, we can skip it
         // immediately instead of feeding it to the parser.
         if (_prefilterLatLngBox.has_value() &&
-            !util::geo::intersects(_prefilterLatLngBox.value(), utilPoint)) {
+            !::util::geo::intersects(_prefilterLatLngBox.value(), utilPoint)) {
           prefilterCounter++;
           continue;
         }
         // parse point directly
         auto mercPoint = latLngToWebMerc(utilPoint);
 
-        util::geo::I32Point addPoint{
+        ::util::geo::I32Point addPoint{
             static_cast<int32_t>(mercPoint.getX() * PREC),
             static_cast<int32_t>(mercPoint.getY() * PREC)};
-        _bboxes[t] = util::geo::extendBox(
+        _bboxes[t] = ::util::geo::extendBox(
             _sweeper->add(addPoint, std::to_string(job.line), job.side, w),
             _bboxes[t]);
         parseCounter++;
@@ -90,7 +91,8 @@ void WKTParser::processQueue(size_t t) {
         const auto& literalOrIri = *job.valueId.getLocalVocabIndex();
         if (literalOrIri.isLiteral()) {
           job.wkt = asStringViewUnsafe(literalOrIri.getLiteral().getContent());
-          parseLine(job.wkt.data(), job.wkt.size(), job.line, t, w, job.side);
+          parseLine(job.wkt.data(), job.wkt.size(), job.line, t, w, job.side,
+                    false);
           parseCounter++;
         }
       }

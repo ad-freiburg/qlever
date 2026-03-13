@@ -32,6 +32,10 @@ class VectorWithMemoryLimit
   using Allocator = ad_utility::AllocatorWithLimit<T>;
   using Base = std::vector<T, ad_utility::AllocatorWithLimit<T>>;
 
+ private:
+  struct CloneTag {};
+
+ public:
   // The `AllocatorWithMemoryLimit` is not default-constructible (on purpose).
   // Unfortunately, the support for such allocators is not really great in the
   // standard library. In particular, the type trait
@@ -64,13 +68,9 @@ class VectorWithMemoryLimit
   // Disable copy constructor and copy assignment operator (copying is too
   // expensive in the setting where we want to use this class and not
   // necessary).
-  // The copy constructor is not deleted, but private, because it is used
-  // for the explicit clone() function.
- private:
-  VectorWithMemoryLimit(const VectorWithMemoryLimit&) = default;
-
  public:
   VectorWithMemoryLimit& operator=(const VectorWithMemoryLimit&) = delete;
+  VectorWithMemoryLimit(const VectorWithMemoryLimit&) = delete;
   // Moving is fine.
   VectorWithMemoryLimit(VectorWithMemoryLimit&&) noexcept = default;
   VectorWithMemoryLimit& operator=(VectorWithMemoryLimit&&) noexcept = default;
@@ -78,10 +78,20 @@ class VectorWithMemoryLimit
   // Allow copying via an explicit clone() function.
   [[nodiscard]] VectorWithMemoryLimit clone() const {
     // Call the private copy constructor.
-    return VectorWithMemoryLimit(*this);
+    return VectorWithMemoryLimit(CloneTag{}, *this);
   }
+
+ private:
+  // Constructor for copying, used to implement the `clone` function.
+  // We use the explicit tag, s.t. this constructor doesn't match the signature
+  // of a copy constructor, because otherwise type traits like `copyable` or
+  // `constructible_form` would be misled (they might return true for certain
+  // compilers in C++17 if the copy constructor is present but private.
+  VectorWithMemoryLimit(CloneTag, const VectorWithMemoryLimit& other)
+      : Base{static_cast<const Base&>(other)} {}
 };
 static_assert(!ql::concepts::default_initializable<VectorWithMemoryLimit<int>>);
+static_assert(!ql::concepts::copyable<VectorWithMemoryLimit<int>>);
 
 // A class to store the results of expressions that can yield strings or IDs as
 // their result (for example IF and COALESCE). It is also used for expressions
@@ -120,16 +130,17 @@ CPP_concept SingleExpressionResult =
 
 // Copy an expression result.
 CPP_template(typename ResultT)(
-    requires ad_utility::SimilarTo<ResultT,
-                                   ExpressionResult>) inline ExpressionResult
+    requires ad_utility::SimilarTo<ResultT, ExpressionResult>) ExpressionResult
     copyExpressionResult(ResultT&& result) {
   auto copyIfCopyable = [](const auto& x)
       -> CPP_ret(ExpressionResult)(
           requires SingleExpressionResult<std::decay_t<decltype(x)>>) {
     using R = std::decay_t<decltype(x)>;
-    if constexpr (std::is_constructible_v<R, decltype(AD_FWD(x))>) {
-      return AD_FWD(x);
+    if constexpr (ql::concepts::copyable<R>) {
+      return x;
     } else {
+      static_assert(
+          ad_utility::similarToInstantiation<R, VectorWithMemoryLimit>);
       return x.clone();
     }
   };
@@ -324,6 +335,34 @@ std::optional<ExpressionResult> evaluateOnSpecializedFunctionsIfPossible(
   return result;
 }
 
+// Implementation of the `ValueGetterPack` (see below).
+namespace valueGetterPack::detail {
+template <size_t N, typename>
+struct ValueGetterPackImpl;
+
+template <size_t N, typename... ValueGetters>
+struct ValueGetterPackImpl<N, std::tuple<ValueGetters...>> {
+  static_assert(sizeof...(ValueGetters) == 1 || N == sizeof...(ValueGetters));
+  using type = std::conditional_t<
+      sizeof...(ValueGetters) != 1, std::tuple<ValueGetters...>,
+      // `mp_repeat_c` repeats the first argument (a tuple of a single
+      // `ValueGetter` in our case) N times, and then concatenates it (into a
+      // tuple of N-times the same `ValueGetter`.
+      boost::mp11::mp_repeat_c<std::tuple<ValueGetters...>, N>>;
+};
+}  // namespace valueGetterPack::detail
+
+// In the SPARQL expression module, an N-ary operation can either specify `N`
+// different value getters (one for each argument), or a single value getter
+// (the same for each arguments). The following helper function takes the `N` as
+// well as a `std::tuple<ValueGetters...>` where either there have to be `N`
+// value getters in the tuple, or only a single value getter. The result is then
+// always a tuple of `N` value getters, (created by repeating the single value
+// getter n-times if necessary).
+template <size_t N, typename T>
+using ValueGetterPack =
+    typename valueGetterPack::detail::ValueGetterPackImpl<N, T>::type;
+
 // Class for an operation used in a `SparqlExpression`, consisting of the
 // function for computing the operation and the value getters for the operands.
 // The number of operands is fixed.
@@ -354,9 +393,7 @@ struct Operation {
  public:
   constexpr static size_t N = NumOperands;
   using Function = typename FunctionAndValueGettersT::Function;
-  using ValueGetters = std::conditional_t<
-      NV == 1, std::array<std::tuple_element_t<0, OriginalValueGetters>, N>,
-      OriginalValueGetters>;
+  using ValueGetters = ValueGetterPack<N, OriginalValueGetters>;
   Function _function;
   ValueGetters _valueGetters{};
   std::tuple<SpecializedFunctions...> _specializedFunctions{};
@@ -376,6 +413,16 @@ constexpr bool isOperation<Operation<NumOperations, Ts...>> = true;
 CPP_template(typename... Inputs)(requires(SingleExpressionResult<Inputs>&&...))
     size_t getResultSize(const EvaluationContext& context, const Inputs&...) {
   return (... && isConstantResult<Inputs>) ? 1ul : context.size();
+}
+
+// Helper to check if an `ExpressionResult` variant holds a constant.
+// Used by the type erased expression.
+inline bool isConstantExpressionResult(const ExpressionResult& res) {
+  return std::visit(
+      [](const auto& el) {
+        return isConstantResult<std::decay_t<decltype(el)>>;
+      },
+      res);
 }
 
 }  // namespace detail

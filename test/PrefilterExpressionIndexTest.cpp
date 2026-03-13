@@ -1207,8 +1207,10 @@ TEST_F(PrefilterExpressionOnMetadataTest,
       blockRanges));
   ASSERT_TRUE(blockRanges.size() > 1);
   blockRanges.push_back(blockRanges.at(0));
-  EXPECT_ANY_THROW(CompressedRelationReader::ScanSpecAndBlocks(
-      ScanSpecification{VocabId10, DoubleId33, DoubleId33}, blockRanges));
+  if constexpr (ad_utility::areExpensiveChecksEnabled) {
+    EXPECT_ANY_THROW(CompressedRelationReader::ScanSpecAndBlocks(
+        ScanSpecification{VocabId10, DoubleId33, DoubleId33}, blockRanges));
+  }
 }
 
 //______________________________________________________________________________

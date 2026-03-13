@@ -1720,14 +1720,23 @@ TEST_F(GroupByOptimizations, computeGroupByForJoinWithFullScan) {
     GroupBy invalidForOptimizationPimpl{qec, emptyVariables, aliasesCountX,
                                         validJoinWhenGroupingByX};
     auto& invalidForOptimization = invalidForOptimizationPimpl.getImpl();
-    ASSERT_EQ(std::nullopt,
+    EXPECT_EQ(std::nullopt,
               invalidForOptimization.computeGroupByForJoinWithFullScan());
+
+    // The join cannot have a `LIMIT` or `OFFSET` for this optimization.
+    auto join =
+        makeExecutionTree<Join>(qec, xyzScanSortedByX, xyzScanSortedByX, 0, 0);
+    join->applyLimit({1});
+    GroupByImpl joinHasLimitAndOffset{qec, variablesOnlyX, aliasesCountX,
+                                      std::move(join)};
+    EXPECT_EQ(std::nullopt,
+              joinHasLimitAndOffset.computeGroupByForJoinWithFullScan());
 
     // The child of the GROUP BY is not a join, so this is also
     // invalid.
     GroupBy invalidGroupBy2Pimpl{qec, variablesOnlyX, emptyAliases, xScan};
     auto& invalidGroupBy2 = invalidGroupBy2Pimpl.getImpl();
-    ASSERT_EQ(std::nullopt,
+    EXPECT_EQ(std::nullopt,
               invalidGroupBy2.computeGroupByForJoinWithFullScan());
   }
 
@@ -1839,6 +1848,88 @@ TEST_F(GroupByOptimizations, computeGroupByForSingleIndexScan) {
     ASSERT_THAT(optional, optionalHasTable({{I(6)}}));
   }
 }
+
+// _____________________________________________________________________________
+TEST_F(GroupByOptimizations,
+       computeGroupByForSingleIndexScanWithLimitAndOffset) {
+  // LIMIT OR OFFSET should prevent this optimization.
+  {
+    auto clone = xyzScanSortedByX->clone();
+    clone->applyLimit({3});
+    GroupByImpl groupBy{qec, emptyVariables, aliasesCountDistinctX,
+                        std::move(clone)};
+    EXPECT_EQ(groupBy.computeGroupByForSingleIndexScan(), std::nullopt);
+  }
+  {
+    auto clone = xyzScanSortedByX->clone();
+    clone->applyLimit({std::nullopt, 1});
+    GroupByImpl groupBy{qec, emptyVariables, aliasesCountDistinctX,
+                        std::move(clone)};
+    EXPECT_EQ(groupBy.computeGroupByForSingleIndexScan(), std::nullopt);
+  }
+  {
+    auto clone = xyzScanSortedByX->clone();
+    clone->applyLimit({3, 1});
+    GroupByImpl groupBy{qec, emptyVariables, aliasesCountDistinctX,
+                        std::move(clone)};
+    EXPECT_EQ(groupBy.computeGroupByForSingleIndexScan(), std::nullopt);
+  }
+  // `LIMIT` and `OFFSET` should be regarded in the result.
+  {
+    auto clone = xyzScanSortedByX->clone();
+    clone->applyLimit({1, 2});
+    GroupByImpl groupBy{qec, emptyVariables, aliasesCountX, std::move(clone)};
+    auto optional = groupBy.computeGroupByForSingleIndexScan();
+    // The test index currently consists of 5 triples that have the predicate
+    // `<label>`, but `OFFSET` and `LIMIT` should reduce this count.
+    EXPECT_THAT(optional, optionalHasTable({{I(1)}}));
+  }
+  {
+    auto clone = xyzScanSortedByX->clone();
+    clone->applyLimit({100, 2});
+    GroupByImpl groupBy{qec, emptyVariables, aliasesCountX, std::move(clone)};
+    auto optional = groupBy.computeGroupByForSingleIndexScan();
+    // The 15 elements should be reduced by 2.
+    EXPECT_THAT(optional, optionalHasTable({{I(13)}}));
+  }
+  {
+    auto clone = xyzScanSortedByX->clone();
+    clone->applyLimit({std::nullopt, 1000});
+    GroupByImpl groupBy{qec, emptyVariables, aliasesCountX, std::move(clone)};
+    auto optional = groupBy.computeGroupByForSingleIndexScan();
+    // The value should never be reduced below 0.
+    EXPECT_THAT(optional, optionalHasTable({{I(0)}}));
+  }
+
+  // `LIMIT` and `OFFSET` should be regarded in the result.
+  {
+    auto clone = xyScan->clone();
+    clone->applyLimit({1, 2});
+    GroupByImpl groupBy{qec, emptyVariables, aliasesCountX, std::move(clone)};
+    auto optional = groupBy.computeGroupByForSingleIndexScan();
+    // The test index currently consists of 5 triples that have the predicate
+    // `<label>`, but `OFFSET` and `LIMIT` should reduce this count.
+    EXPECT_THAT(optional, optionalHasTable({{I(1)}}));
+  }
+  {
+    auto clone = xyScan->clone();
+    clone->applyLimit({100, 2});
+    GroupByImpl groupBy{qec, emptyVariables, aliasesCountX, std::move(clone)};
+    auto optional = groupBy.computeGroupByForSingleIndexScan();
+    // The test index currently consists of 5 triples that have the predicate
+    // `<label>`, but `OFFSET` and `LIMIT` should reduce this count.
+    EXPECT_THAT(optional, optionalHasTable({{I(3)}}));
+  }
+  {
+    auto clone = xyScan->clone();
+    clone->applyLimit({std::nullopt, 1000});
+    GroupByImpl groupBy{qec, emptyVariables, aliasesCountX, std::move(clone)};
+    auto optional = groupBy.computeGroupByForSingleIndexScan();
+    // The value should never be reduced below 0.
+    EXPECT_THAT(optional, optionalHasTable({{I(0)}}));
+  }
+}
+
 // _____________________________________________________________________________
 TEST_F(GroupByOptimizations, computeGroupByObjectWithCount) {
   // Construct a GROUP BY operation from the given GROUP BY variables, aliases,
@@ -1906,6 +1997,37 @@ TEST_F(GroupByOptimizations, computeGroupByObjectWithCount) {
                                   {getId("\"älpha\""), I(1)},
                                   {getId("\"Beta\""), I(1)},
                                   {getId("\"zz\"@en"), I(1)}}));
+  }
+}
+
+// _____________________________________________________________________________
+TEST_F(GroupByOptimizations, computeGroupByObjectWithCountWithLimitAndOffset) {
+  // Group by subject.
+  auto getId = makeGetId(qec->getIndex());
+  {
+    auto clone = xyScan->clone();
+    clone->applyLimit({1, 3});
+    GroupByImpl groupBy{qec, variablesOnlyX, aliasesCountX, std::move(clone)};
+    EXPECT_THAT(groupBy.computeGroupByObjectWithCount(),
+                optionalHasTable({{getId("<x>"), I(1)}}));
+  }
+
+  // Group by object.
+  {
+    auto clone = yxScan->clone();
+    clone->applyLimit({2, 2});
+    GroupByImpl groupBy{qec, variablesOnlyY, aliasesCountY, std::move(clone)};
+    EXPECT_THAT(groupBy.computeGroupByObjectWithCount(),
+                optionalHasTable(
+                    {{getId("\"älpha\""), I(1)}, {getId("\"Beta\""), I(1)}}));
+  }
+
+  // LIMIT 0 edge case
+  {
+    auto clone = xyScan->clone();
+    clone->applyLimit({0, 1});
+    GroupByImpl groupBy{qec, variablesOnlyX, aliasesCountX, std::move(clone)};
+    EXPECT_THAT(groupBy.computeGroupByObjectWithCount(), optionalHasTable({}));
   }
 }
 
@@ -1989,6 +2111,38 @@ TEST_F(GroupByOptimizations, computeGroupByForFullIndexScan) {
   testWithBothInterfaces(false, true);
 
   // TODO<joka921> Add a test with only one column
+}
+
+// _____________________________________________________________________________
+TEST_F(GroupByOptimizations, computeGroupByForFullIndexScanWithLimitAndOffset) {
+  auto V = VocabId;
+  {
+    auto clone = xyzScanSortedByX->clone();
+    clone->applyLimit({8, 3});
+    GroupByImpl groupBy{qec, variablesOnlyX, aliasesCountX, std::move(clone)};
+
+    auto optional = groupBy.computeGroupByForFullIndexScan();
+    EXPECT_THAT(optional,
+                optionalHasTable({{V(6), I(1)}, {V(7), I(2)}, {V(19), I(5)}}));
+  }
+  {
+    auto clone = xyzScanSortedByX->clone();
+    clone->applyLimit({0, 1});
+    GroupByImpl groupBy{qec, variablesOnlyX, aliasesCountX, std::move(clone)};
+
+    auto optional = groupBy.computeGroupByForFullIndexScan();
+    EXPECT_THAT(optional, optionalHasTable({}));
+  }
+  {
+    auto clone = xyzScanSortedByX->clone();
+    clone->applyLimit({8, 3});
+    GroupByImpl groupBy{qec, variablesOnlyX, aliasesCountNotExisting,
+                        std::move(clone)};
+
+    auto optional = groupBy.computeGroupByForFullIndexScan();
+    EXPECT_THAT(optional,
+                optionalHasTable({{V(6), I(0)}, {V(7), I(0)}, {V(19), I(0)}}));
+  }
 }
 
 namespace {
@@ -2400,6 +2554,56 @@ TEST(GroupBy, strOnGroupedVariableWorks) {
             makeIdTableFromVector(
                 {{Id::makeFromInt(3),
                   Id::makeFromLocalVocabIndex(localVocabIndex2.value())}}));
+}
+
+// _____________________________________________________________________________
+TEST(GroupBy, localVocabIsProperlyCloned) {
+  // Regression test for https://github.com/ad-freiburg/qlever/issues/2445
+  using Lit = ad_utility::triple_component::Literal;
+  auto* qec = getQec();
+  std::vector<IdTable> idTables;
+  idTables.push_back(makeIdTableFromVector({{1}, {2}}, &Id::makeFromInt));
+  idTables.push_back(makeIdTableFromVector({{2}}, &Id::makeFromInt));
+  // This issue occurs only when the vocab contains any actual values.
+  LocalVocab dummy{};
+  dummy.getIndexAndAddIfNotContained(
+      LocalVocabEntry{Lit::fromStringRepresentation("\"dummy\"")});
+  auto subtree = makeExecutionTree<ValuesForTesting>(
+      qec, std::move(idTables),
+      std::vector<std::optional<Variable>>{Variable{"?x"}}, true,
+      std::vector<ColumnIndex>{0}, std::move(dummy));
+
+  Alias alias{SparqlExpressionPimpl{
+                  makeStrExpression(
+                      std::make_unique<VariableExpression>(Variable{"?x"})),
+                  "STR(?x) as ?y"},
+              Variable{"?y"}};
+  GroupBy groupBy{
+      qec, {Variable{"?x"}}, {std::move(alias)}, std::move(subtree)};
+
+  auto result = groupBy.computeResultOnlyForTesting(true);
+  ASSERT_FALSE(result.isFullyMaterialized());
+
+  size_t expectedIndex = 0;
+  std::array<std::string_view, 2> expected{"\"1\"", "\"2\""};
+
+  for (const auto& [idTable, localVocab] : result.idTables()) {
+    ASSERT_EQ(idTable.size(), 1);
+    ASSERT_EQ(idTable.numColumns(), 2);
+    Id id = idTable.at(0, 1);
+    ASSERT_EQ(id.getDatatype(), Datatype::LocalVocabIndex);
+    EXPECT_EQ(id.getLocalVocabIndex()->toStringRepresentation(),
+              expected.at(expectedIndex));
+    // New value + dummy value
+    EXPECT_EQ(localVocab.size(), 2);
+    EXPECT_TRUE(
+        localVocab
+            .getIndexOrNullopt(LocalVocabEntry{Lit::fromStringRepresentation(
+                std::string{expected.at(expectedIndex)})})
+            .has_value());
+    expectedIndex++;
+  }
+  EXPECT_EQ(expectedIndex, expected.size());
 }
 
 namespace {

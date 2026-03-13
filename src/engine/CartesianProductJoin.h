@@ -1,6 +1,12 @@
-//  Copyright 2023, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2024 - 2026 The QLever Authors, in particular:
+//
+// 2023 - 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2026        Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_ENGINE_CARTESIANPRODUCTJOIN_H
 #define QLEVER_SRC_ENGINE_CARTESIANPRODUCTJOIN_H
@@ -132,7 +138,7 @@ class CartesianProductJoin : public Operation {
   // Similar to `produceTablesLazily` but can handle a single lazy result.
   Result::LazyResult createLazyConsumer(
       LocalVocab staticMergedVocab,
-      ql::span<const std::shared_ptr<const Result>> subresults,
+      std::vector<std::shared_ptr<const Result>> subresults,
       std::shared_ptr<const Result> lazyResult) const;
 };
 

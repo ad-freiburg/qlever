@@ -17,6 +17,7 @@
 #include "util/ValueIdentity.h"
 #include "util/Views.h"
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 TEST(Views, BufferedAsyncView) {
   auto testWithVector = [](const auto& inputVector) {
     using T = std::decay_t<decltype(inputVector)>;
@@ -189,6 +190,71 @@ TEST(Views, CallbackOnEndView) {
   // Callback not invoked for the destructor of the moved-from `viewA`.
   EXPECT_EQ(numCalls, 3);
 }
+
+TEST(Views, CallbackOnEndViewConcepts) {
+  [[maybe_unused]] auto nonthrowing = [](auto&&...) noexcept {};
+  using V =
+      ad_utility::CallbackOnEndView<ql::ranges::ref_view<std::vector<int>>,
+                                    decltype(nonthrowing)>;
+  static_assert(ql::ranges::input_range<V>);
+  static_assert(!ql::ranges::forward_range<V>);
+
+  [[maybe_unused]] auto throwing = [](auto&&...) {};
+  using V2 =
+      ad_utility::CallbackOnEndView<ql::ranges::ref_view<std::vector<int>>,
+                                    decltype(throwing)>;
+  static_assert(ql::ranges::input_range<V2>);
+  static_assert(!ql::ranges::forward_range<V2>);
+
+  // V2 has a potentially throwing destructor, so it doesn't fulfill the `view`
+  // concept.
+  static_assert(!ql::ranges::view<V2>);
+}
+
+#endif
+
+// Add the behavior of `CallbackOnEndView` when the callback is invoked in the
+// constructor and might throw.
+template <typename T>
+class CallbackOnEndViewExceptionsInDestructor : public ::testing::Test {};
+
+using IsNoexceptTypes = ::testing::Types<std::integral_constant<bool, true>,
+                                         std::integral_constant<bool, false>>;
+TYPED_TEST_SUITE(CallbackOnEndViewExceptionsInDestructor, IsNoexceptTypes);
+
+TYPED_TEST(CallbackOnEndViewExceptionsInDestructor, CallbackBehavior) {
+  constexpr bool isNoexcept = TypeParam::value;
+  struct TestException : public std::exception {};
+
+  auto callback = []() noexcept(isNoexcept) {
+    if constexpr (!isNoexcept) {
+      throw TestException{};
+    }
+  };
+
+  auto makeView = [&]() {
+    return ad_utility::CallbackOnEndView{ad_utility::integerRange(10u),
+                                         callback};
+  };
+  using V = decltype(makeView());
+
+  ASSERT_EQ(std::is_nothrow_destructible_v<V>, isNoexcept);
+  auto makeAndDestroy = [&]() {
+    auto v = makeView();
+    // Destructor invoked, callback should not throw.
+  };
+  auto makeAndThrowOtherException = [&]() {
+    auto v = makeView();
+    throw std::runtime_error{"ups"};
+  };
+
+  if constexpr (isNoexcept) {
+    EXPECT_NO_THROW(makeAndDestroy());
+  } else {
+    EXPECT_THROW(makeAndDestroy(), TestException);
+  }
+  EXPECT_THROW(makeAndThrowOtherException(), std::runtime_error);
+}
 // _____________________________________________________________________________
 TEST(Views, RvalueView) {
   // Initial value is `true` and when being moved from it will be `false`.
@@ -263,4 +329,24 @@ TEST(Views, ForceInputView) {
   // `begin` has already been called via the `ranges::copy` above, so additional
   // iterations should throw.
   EXPECT_ANY_THROW(view.begin());
+}
+
+// The following test is used to debug cases where certain combinations of
+// ranges and views lead to a result that doesn't fulfill the `range` or `view`
+// concept anymore (which might happen only in C++17 mode, because the rules are
+// a bit different for the concepts in the SFINAE-based implementations of
+// `range-v3`s C++17 mode).
+TEST(Views, combinedConcepts) {
+  auto it = ad_utility::InputRangeTypeErased<std::optional<int>>{};
+  auto v = ad_utility::RvalueView{ad_utility::OwningView{std::move(it)}};
+  using V = decltype(v);
+  // Check that the following two calls compile, and get reasonable compiler
+  // messages if they don't.
+  [[maybe_unused]] auto b = ql::ranges::begin(v);
+  [[maybe_unused]] auto e = ql::ranges::end(v);
+  static_assert(ql::ranges::range<V>);
+  static_assert(ql::ranges::view<V>);
+  static_assert(ql::ranges::input_range<V>);
+  static_assert(!ql::ranges::forward_range<V>);
+  static_assert(ranges::viewable_range<V>);
 }

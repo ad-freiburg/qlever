@@ -5,17 +5,25 @@
 #ifndef QLEVER_CONSTEXPRMAP_H
 #define QLEVER_CONSTEXPRMAP_H
 
-#include <boost/hana/tuple.hpp>
 #include <stdexcept>
+#include <utility>
 
 #include "backports/algorithm.h"
 
 namespace ad_utility {
 
 // The type used to store `key, value` pairs inside the `ConstexprMap` below.
-// We use `boost::hana::pair` because it is `constexpr` in C++17.
+// We cannot use `std::pair` or `std::tuple`, because they are not constexpr in
+// C++17. We also cannot use `boost::hana::pair` as it has a strange bug in
+// C++17 on GCC 8.3 (Wrong behavior in constexpr mode, correct behavior if the
+// `constexpr` keyword is removed.
 template <typename Key, typename Value>
-using ConstexprMapPair = boost::hana::pair<Key, Value>;
+struct ConstexprMapPair {
+  Key key_;
+  Value value_;
+  constexpr ConstexprMapPair(Key key, Value value)
+      : key_{std::move(key)}, value_{std::move(value)} {}
+};
 
 /// A const and constexpr map from `Key`s to `Value`s.
 template <typename Key, typename Value, size_t numEntries>
@@ -23,6 +31,14 @@ class ConstexprMap {
  public:
   using Pair = ConstexprMapPair<Key, Value>;
   using Arr = std::array<Pair, numEntries>;
+
+  // A lambda to obtain the `key_` from a `pair`.
+  // Note: We cannot simply use the pointer-to-member `&Pair::key_`, because
+  // then the `ConstexprMap` for some reason is not `constexpr` anymore on
+  // `GCC 8.3`.
+  static constexpr auto getKey = [](const auto& pair) -> const auto& {
+    return pair.key_;
+  };
 
  private:
   // TODO make const
@@ -32,8 +48,8 @@ class ConstexprMap {
   // Create from an Array of key-value pairs. The keys have to be unique.
   explicit constexpr ConstexprMap(Arr values) : _values{std::move(values)} {
     ql::ranges::sort(_values, compare);
-    if (::ranges::adjacent_find(_values, std::equal_to<>{},
-                                boost::hana::first) != _values.end()) {
+    if (::ranges::adjacent_find(_values, std::equal_to<>{}, &Pair::key_) !=
+        _values.end()) {
       throw std::runtime_error{
           "ConstexprMap requires that all the keys are unique"};
     }
@@ -42,9 +58,8 @@ class ConstexprMap {
   // If `key` is in the map, return an iterator to the corresponding `(Key,
   // Value)` pair. Else return `end()`.
   constexpr typename Arr::const_iterator find(const Key& key) const {
-    auto lb = ql::ranges::lower_bound(_values, key, std::less<>{},
-                                      boost::hana::first);
-    if (lb == _values.end() || boost::hana::first(*lb) != key) {
+    auto lb = ql::ranges::lower_bound(_values, key, std::less<>{}, &Pair::key_);
+    if (lb == _values.end() || lb->key_ != key) {
       return _values.end();
     }
     return lb;
@@ -62,12 +77,12 @@ class ConstexprMap {
     if (it == _values.end()) {
       throw std::out_of_range{"Key was not found in map"};
     }
-    return boost::hana::second(*it);
+    return it->value_;
   }
 
  private:
   static constexpr auto compare = [](const Pair& a, const Pair& b) {
-    return boost::hana::first(a) < boost::hana::first(b);
+    return a.key_ < b.key_;
   };
 };
 

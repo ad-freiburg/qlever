@@ -2,6 +2,7 @@
 // Chair of Algorithms and Data Structures
 // Authors: Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include "engine/GraphStoreProtocol.h"
 
 #include "parser/Tokenizer.h"
@@ -116,3 +117,5 @@ ParsedQuery GraphStoreProtocol::transformDelete(const GraphOrDefault& graph,
   return ad_utility::getSingleElement(SparqlParser::parseUpdate(
       index.getBlankNodeManager(), &index.encodedIriManager(), getUpdate()));
 }
+
+#endif

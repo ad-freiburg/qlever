@@ -11,6 +11,7 @@
 #include <sstream>
 #include <vector>
 
+#include "JoinWithIndexScanHelpers.h"
 #include "backports/functional.h"
 #include "backports/type_traits.h"
 #include "engine/AddCombinedRowToTable.h"
@@ -21,6 +22,7 @@
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "global/RuntimeParameters.h"
+#include "util/Algorithm.h"
 #include "util/Exception.h"
 #include "util/Generators.h"
 #include "util/HashMap.h"
@@ -28,7 +30,7 @@
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 
 using namespace qlever::joinHelpers;
-
+using namespace qlever::joinWithIndexScanHelpers;
 using std::endl;
 using std::string;
 
@@ -385,25 +387,6 @@ void Join::join(const IdTable& a, const IdTable& b, IdTable* result) const {
                << ", size = " << result->size() << "\n";
 }
 
-// _____________________________________________________________________________
-CPP_template_def(typename ActionT)(
-    requires ad_utility::InvocableWithExactReturnType<
-        ActionT, Result::IdTableVocabPair,
-        std::function<void(IdTable&, LocalVocab&)>>)
-    Result Join::createResult(
-        bool requestedLaziness, ActionT action,
-        std::optional<std::vector<ColumnIndex>> permutation) const {
-  if (requestedLaziness) {
-    return {runLazyJoinAndConvertToGenerator(std::move(action),
-                                             std::move(permutation)),
-            resultSortedOn()};
-  } else {
-    auto [idTable, localVocab] = action(ad_utility::noop);
-    applyPermutation(idTable, permutation);
-    return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
-  }
-}
-
 // ______________________________________________________________________________
 Result Join::lazyJoin(std::shared_ptr<const Result> a,
                       std::shared_ptr<const Result> b,
@@ -413,7 +396,7 @@ Result Join::lazyJoin(std::shared_ptr<const Result> a,
   AD_CONTRACT_CHECK(!a->isFullyMaterialized() || !b->isFullyMaterialized());
   ad_utility::JoinColumnMapping joinColMap = getJoinColumnMapping();
   auto resultPermutation = joinColMap.permutationResult();
-  return createResult(
+  return createResultFromAction(
       requestLaziness,
       [this, a = std::move(a), b = std::move(b),
        joinColMap = std::move(joinColMap)](
@@ -431,7 +414,7 @@ Result Join::lazyJoin(std::shared_ptr<const Result> a,
         return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
                                         std::move(localVocab)};
       },
-      std::move(resultPermutation));
+      resultSortedOn(), std::move(resultPermutation));
 }
 
 // ______________________________________________________________________________
@@ -533,9 +516,11 @@ void Join::hashJoinImpl(const IdTable& dynA, ColumnIndex jc1,
 // ______________________________________________________________________________
 void Join::hashJoin(const IdTable& dynA, ColumnIndex jc1, const IdTable& dynB,
                     ColumnIndex jc2, IdTable* dynRes) {
-  CALL_FIXED_SIZE(
+  ad_utility::callFixedSizeVi(
       (std::array{dynA.numColumns(), dynB.numColumns(), dynRes->numColumns()}),
-      &Join::hashJoinImpl, dynA, jc1, dynB, jc2, dynRes);
+      [&](auto l, auto r, auto o) {
+        return Join::hashJoinImpl<l, r, o>(dynA, jc1, dynB, jc2, dynRes);
+      });
 }
 
 // ___________________________________________________________________________
@@ -565,7 +550,7 @@ void Join::addCombinedRowToIdTable(const ROW_A& rowA, const ROW_B& rowB,
 
 // ______________________________________________________________________________________________________
 Result Join::computeResultForTwoIndexScans(bool requestLaziness) const {
-  return createResult(
+  return createResultFromAction(
       requestLaziness,
       [this](std::function<void(IdTable&, LocalVocab&)> yieldTable) {
         auto leftScan =
@@ -585,19 +570,22 @@ Result Join::computeResultForTwoIndexScans(bool requestLaziness) const {
             IndexScan::lazyScanForJoinOfTwoScans(*leftScan, *rightScan);
         runtimeInfo().addDetail("time-for-filtering-blocks", timer.msecs());
 
-        auto leftBlocks = convertGenerator(std::move(leftBlocksInternal));
-        auto rightBlocks = convertGenerator(std::move(rightBlocksInternal));
+        // If requestLaziness, we don't need to serialize json for every update
+        // of the child. If we serialize it whenever the join operation yields a
+        // table that's frequent enough and reduces the overhead.
+        auto leftBlocks =
+            convertGeneratorFromScan(std::move(leftBlocksInternal), *leftScan);
+        auto rightBlocks = convertGeneratorFromScan(
+            std::move(rightBlocksInternal), *rightScan);
 
         ad_utility::zipperJoinForBlocksWithoutUndef(leftBlocks, rightBlocks,
                                                     std::less{}, rowAdder);
-
-        leftScan->updateRuntimeInfoForLazyScan(leftBlocks.details());
-        rightScan->updateRuntimeInfoForLazyScan(rightBlocks.details());
-
+        setScanStatusToLazilyCompleted(*leftScan, *rightScan);
         auto localVocab = std::move(rowAdder.localVocab());
         return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
                                         std::move(localVocab)};
-      });
+      },
+      resultSortedOn(), {});
 }
 
 // ______________________________________________________________________________________________________
@@ -609,7 +597,7 @@ Result Join::computeResultForIndexScanAndIdTable(
                        0);
   ad_utility::JoinColumnMapping joinColMap = getJoinColumnMapping();
   auto resultPermutation = joinColMap.permutationResult();
-  return createResult(
+  return createResultFromAction(
       requestLaziness,
       [this, scan = std::move(scan),
        resultWithIdTable = std::move(resultWithIdTable),
@@ -618,11 +606,12 @@ Result Join::computeResultForIndexScanAndIdTable(
         const IdTable& idTable = resultWithIdTable->idTable();
         auto rowAdder = makeRowAdder(std::move(yieldTable));
 
-        auto permutationIdTable = ad_utility::IdTableAndFirstCol{
-            idTable.asColumnSubsetView(idTableIsRightInput
-                                           ? joinColMap.permutationRight()
-                                           : joinColMap.permutationLeft()),
-            resultWithIdTable->getCopyOfLocalVocab()};
+        auto permutationIdTable =
+            ad_utility::IdTableAndFirstCols<1, IdTableView<0>>{
+                idTable.asColumnSubsetView(idTableIsRightInput
+                                               ? joinColMap.permutationRight()
+                                               : joinColMap.permutationLeft()),
+                resultWithIdTable->getCopyOfLocalVocab()};
 
         ad_utility::Timer timer{
             ad_utility::timer::Timer::InitialStatus::Started};
@@ -633,8 +622,7 @@ Result Join::computeResultForIndexScanAndIdTable(
         std::optional<std::shared_ptr<const Result>> indexScanResult =
             std::nullopt;
         auto rightBlocks = [&scan, idTableHasUndef, &permutationIdTable,
-                            &indexScanResult]()
-            -> std::variant<LazyInputView, GeneratorWithDetails> {
+                            &indexScanResult]() {
           if (idTableHasUndef) {
             indexScanResult =
                 scan->getResult(false, ComputationMode::LAZY_IF_SUPPORTED);
@@ -644,7 +632,8 @@ Result Join::computeResultForIndexScanAndIdTable(
           } else {
             auto rightBlocksInternal =
                 scan->lazyScanForJoinOfColumnWithScan(permutationIdTable.col());
-            return convertGenerator(std::move(rightBlocksInternal));
+            return convertGeneratorFromScan(std::move(rightBlocksInternal),
+                                            *scan);
           }
         }();
 
@@ -657,26 +646,18 @@ Result Join::computeResultForIndexScanAndIdTable(
               left, right, std::less{}, rowAdder);
         };
         auto blockForIdTable = std::array{std::move(permutationIdTable)};
-        std::visit(
-            [&doJoin, &blockForIdTable](auto& blocks) {
-              if constexpr (idTableIsRightInput) {
-                doJoin(blocks, blockForIdTable);
-              } else {
-                doJoin(blockForIdTable, blocks);
-              }
-            },
-            rightBlocks);
-
-        if (std::holds_alternative<GeneratorWithDetails>(rightBlocks)) {
-          scan->updateRuntimeInfoForLazyScan(
-              std::get<GeneratorWithDetails>(rightBlocks).details());
+        if constexpr (idTableIsRightInput) {
+          doJoin(rightBlocks, blockForIdTable);
+        } else {
+          doJoin(blockForIdTable, rightBlocks);
         }
+        setScanStatusToLazilyCompleted(*scan);
 
         auto localVocab = std::move(rowAdder.localVocab());
         return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
                                         std::move(localVocab)};
       },
-      std::move(resultPermutation));
+      resultSortedOn(), std::move(resultPermutation));
 }
 
 // ______________________________________________________________________________________________________
@@ -687,7 +668,7 @@ Result Join::computeResultForIndexScanAndLazyOperation(
 
   ad_utility::JoinColumnMapping joinColMap = getJoinColumnMapping();
   auto resultPermutation = joinColMap.permutationResult();
-  return createResult(
+  return createResultFromAction(
       requestLaziness,
       [this, scan = std::move(scan),
        resultWithIdTable = std::move(resultWithIdTable),
@@ -706,12 +687,13 @@ Result Join::computeResultForIndexScanAndLazyOperation(
             convertGenerator(std::move(indexScanSide),
                              joinColMap.permutationRight()),
             std::less{}, rowAdder);
+        setScanStatusToLazilyCompleted(*scan);
 
         auto localVocab = std::move(rowAdder.localVocab());
         return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
                                         std::move(localVocab)};
       },
-      std::move(resultPermutation));
+      resultSortedOn(), std::move(resultPermutation));
 }
 // _____________________________________________________________________________
 Result Join::computeResultForTwoMaterializedInputs(
@@ -775,7 +757,7 @@ std::optional<std::shared_ptr<QueryExecutionTree>>
 Join::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
   std::set<Variable> newVariables;
   const auto* vars = &variables;
-  if (!variables.contains(_joinVar)) {
+  if (!ad_utility::contains(variables, _joinVar)) {
     newVariables = variables;
     newVariables.insert(_joinVar);
     vars = &newVariables;
@@ -788,5 +770,5 @@ Join::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
   auto rightCol = right->getVariableColumn(_joinVar);
   return ad_utility::makeExecutionTree<Join>(
       getExecutionContext(), std::move(left), std::move(right), leftCol,
-      rightCol, variables.contains(_joinVar));
+      rightCol, ad_utility::contains(variables, _joinVar));
 }

@@ -9,14 +9,17 @@
 
 #include <absl/strings/str_cat.h>
 
-#include <bit>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <exception>
+#include <optional>
 #include <sstream>
 #include <variant>
 
+#include "backports/keywords.h"
 #include "backports/three_way_comparison.h"
+#include "util/Duration.h"
 
 // Exception that is thrown when a value for a component of the `Date`, `Time`
 // or `Datetime` classes below is out of range (e.g. the month 13, or the hour
@@ -175,6 +178,9 @@ class Date {
     QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(TimeZoneZ)
   };
   using TimeZone = std::variant<NoTimeZone, TimeZoneZ, int>;
+#ifndef REDUCED_FEATURE_SET_FOR_CPP17
+  using Nanoseconds = std::chrono::sys_time<std::chrono::nanoseconds>;
+#endif
   /// Construct a `Date` from values for the different components. If any of the
   /// components is out of range, a `DateOutOfRangeException` is thrown.
   constexpr Date(int year, int month, int day, int hour = -1, int minute = 0,
@@ -190,32 +196,37 @@ class Date {
     (void)unusedBits_;
   }
 
+#ifdef QLEVER_CPP_17
+  // We need the default-constructibility for the C++17 version of `bit_cast`.
+  Date() = default;
+#endif
+
   /// Convert the `Date` to a `uint64_t`. This just casts the underlying
   /// representation.
-  [[nodiscard]] constexpr uint64_t toBits() const {
+  [[nodiscard]] QL_CONSTEXPR uint64_t toBits() const {
     return absl::bit_cast<uint64_t>(*this);
   }
 
   /// Convert a `uint64_t` to a `Date`. This is only valid if the `uint64_t` was
   /// obtained via a call to `Date::toBits()`. This just casts the underlying
   /// representation.
-  static constexpr Date fromBits(uint64_t bytes) {
+  static QL_CONSTEXPR Date fromBits(uint64_t bytes) {
     return absl::bit_cast<Date>(bytes);
   }
 
   /// Equality comparison is performed directly on the underlying
   /// representation.
-  [[nodiscard]] constexpr bool operator==(const Date& rhs) const {
+  [[nodiscard]] QL_CONSTEXPR bool operator==(const Date& rhs) const {
     return toBits() == rhs.toBits();
   }
 
   /// Comparison is performed directly on the underlying representation. This is
   /// very efficient but has some caveats concerning the ordering of dates with
   /// different time zone values (see the docstring of this class).
-  [[nodiscard]] constexpr auto compareThreeWay(const Date& rhs) const {
+  [[nodiscard]] auto compareThreeWay(const Date& rhs) const {
     return ql::compareThreeWay(toBits(), rhs.toBits());
   }
-  [[nodiscard]] QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(Date);
+  [[nodiscard]] QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(Date);
 
   template <typename H>
   friend H AbslHashValue(H h, const Date& d) {
@@ -330,6 +341,19 @@ class Date {
   // Acquire the year, but padded up to 4 digits with a leading `-` if negative.
   // For example: 100 -> "0100" and -100 -> "-0100".
   std::string getFormattedYear() const;
+
+#ifndef REDUCED_FEATURE_SET_FOR_CPP17
+  // Calculates `DayTimeDuration` between the two `Dates` using Epoch time.
+  std::optional<DayTimeDuration> operator-(const Date& rhs) const;
+
+  // If `Date` is valid, convert it to Unix Epoch timestamp. ToEpoch always
+  // returns a UTC timestamp.
+  std::optional<Nanoseconds> toEpoch() const;
+#endif
+  int8_t getTimeZoneOffsetToUTCInHours() const;
 };
+#ifdef QLEVER_CPP_17
+static_assert(std::is_default_constructible_v<Date>);
+#endif
 
 #endif  // QLEVER_DATE_H

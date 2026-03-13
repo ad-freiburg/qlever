@@ -21,7 +21,9 @@
 
 #include "backports/type_traits.h"
 #include "engine/ExportQueryExecutionTrees.h"
+#include "engine/NamedResultCache.h"
 #include "engine/SpatialJoinAlgorithms.h"
+#include "engine/SpatialJoinConfig.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Constants.h"
@@ -46,6 +48,37 @@ SpatialJoin::SpatialJoin(
   }
   if (childRight.has_value()) {
     childRight_ = std::move(childRight.value());
+  } else if (config_.algo_ == SpatialJoinAlgorithm::S2_POINT_POLYLINE) {
+    // If the `S2_POINT_POLYLINE` algorithm is used, there will never be a right
+    // child, it is instead fetched directly from the named query cache as an
+    // `ExplicitIdTableOperation`.
+    AD_CORRECTNESS_CHECK(config_.rightCacheName_.has_value());
+
+    auto key = config_.rightCacheName_.value();
+    childRight_ = std::make_shared<QueryExecutionTree>(
+        qec, qec->namedResultCache().getOperation(key, qec));
+
+    // Early check that the query was pinned together with a geometry index
+    const auto& geoIndex = qec->namedResultCache().get(key)->cachedGeoIndex_;
+    if (!geoIndex.has_value()) {
+      throw std::runtime_error{absl::StrCat(
+          "In order to use this spatial join algorithm the result for the "
+          "right side must be precomputed by a query pinned to "
+          "a name together with a geometry index. There is a pinned query with "
+          "the name \"",
+          key,
+          "\". However, no cached geometry index was found for the given "
+          "name.")};
+    }
+
+    auto geoIndexVar = geoIndex.value().getGeometryColumn();
+    if (geoIndexVar != config_.right_) {
+      throw std::runtime_error{
+          absl::StrCat("The geometry index for the pinned query \"", key,
+                       "\" was built on the column \"", geoIndexVar.name(),
+                       "\" but this query requests \"", config_.right_.name(),
+                       "\" as the right join variable.")};
+    }
   }
 }
 
@@ -162,6 +195,12 @@ std::string SpatialJoin::getCacheKeyImpl() const {
     }
     os << "\n";
 
+    // If we use the s2-point-polyline algorithm, we also need to add the cache
+    // entry name to our own cache key.
+    if (config_.rightCacheName_.has_value()) {
+      os << "right cache name:" << config_.rightCacheName_.value() << "\n";
+    }
+
     // Algorithm is not included here because it should not have any impact on
     // the result.
     return std::move(os).str();
@@ -236,6 +275,7 @@ size_t SpatialJoin::getResultWidth() const {
 
 // ____________________________________________________________________________
 size_t SpatialJoin::getCostEstimate() {
+  using enum SpatialJoinAlgorithm;
   if (!childLeft_ || !childRight_) {
     return 1;  // dummy return, as the class does not have its children yet
   }
@@ -244,9 +284,9 @@ size_t SpatialJoin::getCostEstimate() {
     auto n = childLeft_->getSizeEstimate();
     auto m = childRight_->getSizeEstimate();
 
-    if (config_.algo_ == SpatialJoinAlgorithm::BASELINE) {
+    if (config_.algo_ == BASELINE) {
       return n * m;
-    } else if (config_.algo_ == SpatialJoinAlgorithm::LIBSPATIALJOIN) {
+    } else if (config_.algo_ == LIBSPATIALJOIN) {
       // We take the cost estimate to be `4 * (n + m)`, where `n` and `m` are
       // the size of the left and right table, respectively. Reasoning:
       //
@@ -264,8 +304,9 @@ size_t SpatialJoin::getCostEstimate() {
       return numObjects * 4;
     } else {
       AD_CORRECTNESS_CHECK(
-          config_.algo_ == SpatialJoinAlgorithm::S2_GEOMETRY ||
-              config_.algo_ == SpatialJoinAlgorithm::BOUNDING_BOX,
+          ad_utility::contains(
+              std::array{S2_GEOMETRY, BOUNDING_BOX, S2_POINT_POLYLINE},
+              config_.algo_),
           "Unknown SpatialJoin Algorithm.");
 
       // Let n be the size of the left table and m the size of the right table.
@@ -274,7 +315,8 @@ size_t SpatialJoin::getCostEstimate() {
       // for each item do a lookup on the index for the right table in O(log m).
       // Together we have O(n log(m) + m log(m)), because in general we can't
       // draw conclusions about the relation between the sizes of n and m.
-      auto logm = static_cast<size_t>(std::log(static_cast<double>(m)));
+      auto logm = m > 0 ? static_cast<size_t>(std::log(static_cast<double>(m)))
+                        : size_t{1};
       return (n * logm) + (m * logm);
     }
   }();
@@ -432,7 +474,7 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
                                    leftJoinCol,       rightJoinCol,
                                    rightSelectedCols, numColumns,
                                    getMaxDist(),      getMaxResults(),
-                                   config_.joinType_};
+                                   config_.joinType_, config_.rightCacheName_};
 }
 
 // ____________________________________________________________________________
@@ -448,6 +490,8 @@ Result SpatialJoin::computeResult([[maybe_unused]] bool requestLaziness) {
     return algorithms.S2geometryAlgorithm();
   } else if (config_.algo_ == SpatialJoinAlgorithm::LIBSPATIALJOIN) {
     return algorithms.LibspatialjoinAlgorithm();
+  } else if (config_.algo_ == SpatialJoinAlgorithm::S2_POINT_POLYLINE) {
+    return algorithms.S2PointPolylineAlgorithm();
   } else {
     AD_CORRECTNESS_CHECK(config_.algo_ == SpatialJoinAlgorithm::BOUNDING_BOX,
                          "Unknown SpatialJoin Algorithm.");

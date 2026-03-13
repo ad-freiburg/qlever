@@ -1022,5 +1022,63 @@ TEST_P(JoinTestParametrized, columnOriginatesFromGraphOrUndef) {
 }
 
 // _____________________________________________________________________________
+TEST(JoinTest, lazyJoinIndexScanDetails) {
+  // Create a dataset with two predicates with ten triples each.
+  std::string kg;
+  for (size_t i = 0; i < 10; ++i) {
+    kg += absl::StrCat("<s", i, "> <p1> <o", i, "> .\n");
+    kg += absl::StrCat("<s", i, "> <p2> <o", i, "> .\n");
+  }
+
+  // Set a low materialization threshold, so that our index scans will be lazy.
+  auto qec = ad_utility::testing::getQec(kg);
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>(1);
+  qec->getQueryTreeCache().clearAll();
+
+  // Create a join of two index scans on the two predicates.
+  using V = Variable;
+  auto scan1 = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::PSO,
+      SparqlTripleSimple{V{"?s"}, iri("<p1>"), V{"?o1"}});
+  auto scan2 = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::PSO,
+      SparqlTripleSimple{V{"?s"}, iri("<p2>"), V{"?o2"}});
+  auto join =
+      ad_utility::makeExecutionTree<Join>(qec, scan1, scan2, 0, 0, true);
+
+  // Execute the join, which will consume the two index scans lazily.
+  auto result = join->getResult();
+
+  // Check that the join result has 10 rows as expected.
+  ASSERT_TRUE(result->isFullyMaterialized());
+  EXPECT_EQ(result->idTable().size(), 10);
+
+  // Get the detalis of the runtime info of both index scans.
+  const auto& scan1Rti = scan1->getRootOperation()->getRuntimeInfoPointer();
+  const auto& scan2Rti = scan2->getRootOperation()->getRuntimeInfoPointer();
+  ASSERT_NE(scan1Rti, nullptr);
+  ASSERT_NE(scan2Rti, nullptr);
+  const auto& details1 = scan1Rti->details_;
+  const auto& details2 = scan2Rti->details_;
+
+  // Check the details of the first index scan.
+  ASSERT_TRUE(details1.contains("num-blocks-all"));
+  ASSERT_TRUE(details1.contains("num-blocks-read"));
+  ASSERT_TRUE(details1.contains("num-elements-read"));
+  EXPECT_EQ(details1["num-blocks-all"].get<size_t>(), 5);
+  EXPECT_EQ(details1["num-blocks-read"].get<size_t>(), 5);
+  EXPECT_EQ(details1["num-elements-read"].get<size_t>(), 10);
+
+  // Check the details of the second index scan.
+  ASSERT_TRUE(details2.contains("num-blocks-all"));
+  ASSERT_TRUE(details2.contains("num-blocks-read"));
+  ASSERT_TRUE(details2.contains("num-elements-read"));
+  EXPECT_EQ(details2["num-blocks-all"].get<size_t>(), 5);
+  EXPECT_EQ(details2["num-blocks-read"].get<size_t>(), 5);
+  EXPECT_EQ(details2["num-elements-read"].get<size_t>(), 10);
+}
+
+// _____________________________________________________________________________
 INSTANTIATE_TEST_SUITE_P(JoinTestWithAndWithoutKeptJoinColumn,
                          JoinTestParametrized, ::testing::Values(true, false));

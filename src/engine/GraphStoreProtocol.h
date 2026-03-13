@@ -5,6 +5,7 @@
 #ifndef QLEVER_SRC_ENGINE_GRAPHSTOREPROTOCOL_H
 #define QLEVER_SRC_ENGINE_GRAPHSTOREPROTOCOL_H
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include <gtest/gtest_prod.h>
 
 #include "engine/HttpError.h"
@@ -226,5 +227,6 @@ class GraphStoreProtocol {
     }
   }
 };
+#endif
 
 #endif  // QLEVER_SRC_ENGINE_GRAPHSTOREPROTOCOL_H

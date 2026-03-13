@@ -19,6 +19,8 @@ struct RuntimeParameters {
   using MemorySizeParameter =
       ad_utility::detail::parameterShortNames::MemorySizeParameter;
   using SizeT = ad_utility::detail::parameterShortNames::SizeT;
+  using SpaceSeparatedStrings =
+      ad_utility::detail::parameterShortNames::SpaceSeparatedStrings;
 
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS BELOW, ALSO REGISTER THEM IN THE
@@ -62,7 +64,12 @@ struct RuntimeParameters {
   // does cause significant overhead for this case.
   MemorySizeParameter cacheMaxSizeLazyResult_{
       ad_utility::MemorySize::megabytes(5), "cache-max-size-lazy-result"};
+
+  // Control if websockets are enable to post live query updates, and if they
+  // are control the throttle of how many request can be sent at once.
   Bool websocketUpdatesEnabled_{true, "websocket-updates-enabled"};
+  Duration<std::chrono::milliseconds> websocketUpdateInterval_{
+      std::chrono::milliseconds(50), "websocket-update-interval"};
   // When the result of an index scan is smaller than a single block, then
   // its size estimate will be the size of the block divided by this
   // value.
@@ -117,6 +124,38 @@ struct RuntimeParameters {
   // behaviour defined by the SPARQL standard which filters them out.
   Bool treatDefaultGraphAsNamedGraph_{false,
                                       "treat-default-graph-as-named-graph"};
+
+  // If set, each `sparql-results+json` results will include a top-level "meta"
+  // field with information about query execution time and result size.
+  Bool sparqlResultsJsonWithTime_{true, "sparql-results-json-with-time"};
+
+  // Memory limit for sorting rows during the writing of materialized views.
+  MemorySizeParameter materializedViewWriterMemory_{
+      ad_utility::MemorySize::gigabytes(4), "materialized-view-writer-memory"};
+
+  // Memory threshold for switching from in-memory to external sort.
+  // If the input size exceeds this threshold, external sort is used.
+  MemorySizeParameter sortInMemoryThreshold_{
+      ad_utility::MemorySize::gigabytes(5), "sort-in-memory-threshold"};
+
+  Bool prefilteredOptionalJoin_{true, "prefiltered-optional-join"};
+
+  // If set, the query planner checks if suitable materialized views are loaded
+  // to substitute more expensive query plans.
+  Bool enableMaterializedViewQueryRewrite_{
+      true, "enable-materialized-view-query-rewrite"};
+
+  // A list of IRI prefixes that are allowed as `SERVICE` endpoints. If empty
+  // (the default), all IRIs are allowed. If non-empty, `SERVICE` requests to
+  // IRIs that do not start with any of the given prefixes are rejected.
+  SpaceSeparatedStrings serviceAllowedIriPrefixes_{
+      {}, "service-allowed-iri-prefixes"};
+
+  // If set to true, then all queries and operations created afterward will
+  // neither read from nor write to QLever's subtree cache. This can be used to
+  // debug caching issues, and to get rid of the overhead of caching (in
+  // particular the computation of cache keys) when caching is not required.
+  Bool disableCaching_{false, "disable-caching"};
 
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE

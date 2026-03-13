@@ -114,16 +114,97 @@ class JoinColumnMapping {
   }
 };
 
+struct GetColsFromTable {
+  template <size_t numCols, typename Table>
+  decltype(auto) operator()(Table& table) {
+    return [&table]<size_t... I>(std::index_sequence<I...>) {
+      return ::ranges::views::zip(table.getColumn(I)...) |
+             ::ranges::views::transform([](auto&& tuple) {
+               return std::apply(
+                   [](auto&... refs) { return std::array{refs...}; },
+                   AD_FWD(tuple));
+             });
+    }(std::make_index_sequence<numCols>());
+  }
+};
+
 // A class that stores a complete `IdTable`, but when being treated as a range
-// via the `begin/end/operator[]` functions, then it only gives access to the
-// first column. This is very useful for the lazy join implementations
-// (currently used in `Join.cpp`), where we need very efficient access to the
-// join column for comparing rows, but also need to store the complete table to
-// be able to write the other columns of a matching row to the result.
-// This class is templated so we can use it for `IdTable` as well as for
-// `IdTableView`.
+// via the `begin/end/operator[]` functions, then it only gives `const` access
+// to the first `numCols`(via the `GetColsFromTable` struct above). This is very
+// useful for the lazy join implementations (currently used in `Join.cpp` and
+// `OptionalJoin.cpp`), where we need very efficient access to the join column
+// for comparing rows, but also need to store the complete table to be able to
+// write the other columns of a matching row to the result. This class is
+// templated so we can use it for `IdTable` as well as for `IdTableView`.
+// Note: The current implementation always copies the columns when they are
+// accessed (as a `std::array<Id, numCols>`. The reason is, that we want
+// something with a constant size that can be iterated via a runtime for-loop.
+// `std::array` can't store references, and `std::tuple<Id&...>` can't be
+// iterated.
+// TODO<joka921> Implement an iterable tuple of the same types, but actually,
+// for only two or three columns the full arrays (which can be optimized by the
+// compiler) shouldn't be too bad..
+template <size_t numCols, typename Table>
+struct IdTableAndFirstCols {
+ private:
+  Table table_;
+  LocalVocab localVocab_;
+
+ public:
+  // Typedef needed for generic interfaces.
+  using ConstBaseIterator = ql::ranges::iterator_t<
+      decltype(GetColsFromTable{}.template operator()<numCols>(
+          std::declval<const Table&>()))>;
+  using iterator = ConstBaseIterator;
+  using const_iterator = ConstBaseIterator;
+  // Get access to the first column.
+  decltype(auto) cols() const {
+    return GetColsFromTable{}.template operator()<numCols>(table_);
+  }
+  // Construct by taking ownership of the table.
+  IdTableAndFirstCols(Table t, LocalVocab localVocab)
+      : table_{std::move(t)}, localVocab_{std::move(localVocab)} {}
+
+  // The following functions all refer to the same column.
+  const_iterator begin() const { return cols().begin(); }
+  const_iterator end() const { return cols().end(); }
+
+  bool empty() const { return cols().empty(); }
+
+  decltype(auto) operator[](size_t idx) const { return cols()[idx]; }
+  decltype(auto) front() const { return cols().front(); }
+  decltype(auto) back() const { return cols().back(); }
+
+  size_t size() const { return cols().size(); }
+
+  // Note: This function only refers to the exposed `numCols` column, not to all
+  // the columns in the underlying `Table`. This interface is currently used by
+  // the `specialOptionalJoin` function in `JoinAlgorithms.h`.
+  constexpr size_t numColumns() const { return numCols; }
+  decltype(auto) getColumn(size_t columnIndex) const {
+    return table_.getColumn(columnIndex);
+  }
+
+  // This interface is required in `Join.cpp` by the `AddCombinedRowToTable`
+  // class. Calling this function yields the same type, no matter if `Table` is
+  // `IdTable` or `IdTableView`. In addition, it refers to the full underlying
+  // table, not only to the first `numColumns` tables.
+  template <size_t I = 0>
+  IdTableView<I> asStaticView() const {
+    return table_.template asStaticView<I>();
+  }
+
+  const LocalVocab& getLocalVocab() const { return localVocab_; }
+};
+
+// Specialization of `IdTableAndFirstCol` for only a single column where we
+// don't need to copy into an `array`, but directly return single `Id&`.
+
+// Note: this changes the interface (in particular the single rows can't be
+// iterated over), but currently this is used by the `Join` class, which expects
+// this interface.
 template <typename Table>
-struct IdTableAndFirstCol {
+struct IdTableAndFirstCols<1, Table> {
  private:
   Table table_;
   LocalVocab localVocab_;
@@ -135,7 +216,7 @@ struct IdTableAndFirstCol {
       std::decay_t<decltype(std::as_const(table_).getColumn(0).begin())>;
 
   // Construct by taking ownership of the table.
-  IdTableAndFirstCol(Table t, LocalVocab localVocab)
+  IdTableAndFirstCols(Table t, LocalVocab localVocab)
       : table_{std::move(t)}, localVocab_{std::move(localVocab)} {}
 
   // Get access to the first column.
@@ -158,7 +239,8 @@ struct IdTableAndFirstCol {
 
   // This interface is required in `Join.cpp` by the `AddCombinedRowToTable`
   // class. Calling this function yields the same type, no matter if `Table` is
-  // `IdTable` or `IdTableView`.
+  // `IdTable` or `IdTableView`. In addition, it refers to the full underlying
+  // table, not only to the first `numColumns` tables.
   template <size_t I = 0>
   IdTableView<I> asStaticView() const {
     return table_.template asStaticView<I>();
@@ -166,6 +248,15 @@ struct IdTableAndFirstCol {
 
   const LocalVocab& getLocalVocab() const { return localVocab_; }
 };
+
+// Helper function to create an `IdTableAndFirstCols` with explicitly stated
+// `numCols`, but deduce type of the table.
+template <size_t NumCols, typename Table>
+IdTableAndFirstCols<NumCols, std::decay_t<Table>> makeIdTableAndFirstCols(
+    Table&& table, LocalVocab localVocab) {
+  return {AD_FWD(table), std::move(localVocab)};
+}
+
 }  // namespace ad_utility
 
 #endif  // QLEVER_SRC_UTIL_JOINALGORITHMS_JOINCOLUMNMAPPING_H

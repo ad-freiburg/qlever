@@ -392,6 +392,6 @@ class MmapVectorTmp : public MmapVector<T> {
 };
 
 }  // namespace ad_utility
-#include "./MmapVectorImpl.h"
+#include "util/MmapVectorImpl.h"
 
 #endif  // QLEVER_SRC_UTIL_MMAPVECTOR_H
