@@ -30,6 +30,9 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   // The file in which the words are stored.
   mutable ad_utility::File file_;
 
+  // The .offsets file opened for io_uring reads in lookupBatch.
+  mutable ad_utility::File offsetsFile_;
+
   // The IDs and offsets of the words.
   ad_utility::MmapVectorView<Offset> offsets_;
 

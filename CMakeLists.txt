@@ -506,6 +506,9 @@ qlever_target_link_libraries(LibQLeverExample parser engine util index qlever ab
 add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
 qlever_target_link_libraries(VocabularyMergerMain index parser ${CMAKE_THREAD_LIBS_INIT})
 
+add_executable(VocabularyBatchLookupBenchmarkMain src/VocabularyBatchLookupBenchmarkMain.cpp)
+qlever_target_link_libraries(VocabularyBatchLookupBenchmarkMain index parser ${CMAKE_THREAD_LIBS_INIT} Boost::program_options)
+
 add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
 qlever_target_link_libraries(PrintIndexVersionMain util)
 

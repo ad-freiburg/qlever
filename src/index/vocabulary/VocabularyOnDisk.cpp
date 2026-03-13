@@ -38,45 +38,58 @@ VocabBatchLookupResult VocabularyOnDisk::lookupBatch(
     return VocabBatchLookupData::asResult(std::move(data));
   }
 
-  // Step 1: Gather offset and size for each index.
-  std::vector<OffsetAndSize> offsetsAndSizes(n);
-  size_t totalSize = 0;
+  // Phase 1: Read offset pairs via io_uring from the .offsets file.
+  // For each index i, read offsets_[i] and offsets_[i+1] (16 bytes) at file
+  // position i * sizeof(uint64_t).
+  struct OffsetPair {
+    uint64_t offset;
+    uint64_t nextOffset;
+  };
+  std::vector<OffsetPair> offsetPairs(n);
+  std::vector<size_t> offsetSizes(n, sizeof(OffsetPair));
+  std::vector<uint64_t> offsetFileOffsets(n);
+  std::vector<char*> offsetTargets(n);
   for (size_t i = 0; i < n; ++i) {
     AD_CONTRACT_CHECK(indices[i] < size());
-    offsetsAndSizes[i] = getOffsetAndSize(indices[i]);
-    totalSize += offsetsAndSizes[i].size_;
+    offsetFileOffsets[i] = indices[i] * sizeof(uint64_t);
+    offsetTargets[i] = reinterpret_cast<char*>(&offsetPairs[i]);
   }
 
-  // Step 2: Allocate result data with one contiguous buffer.
+  auto manager = ioManagers_->pop().value();
+  auto offsetHandle = manager->addBatch(offsetsFile_.fd(), offsetSizes,
+                                        offsetFileOffsets, offsetTargets);
+  manager->wait(offsetHandle);
+
+  // Compute string sizes and total buffer size.
+  size_t totalSize = 0;
+  for (size_t i = 0; i < n; ++i) {
+    totalSize += offsetPairs[i].nextOffset - offsetPairs[i].offset;
+  }
+
+  // Phase 2: Read string data via io_uring (reusing the same manager).
   auto data = std::make_shared<VocabBatchLookupData>();
   data->buffer.resize(totalSize);
   data->views.resize(n);
 
-  // Step 3: Compute each view's position in the buffer and prepare arrays
-  // for the batch read.
   std::vector<size_t> sizes(n);
   std::vector<uint64_t> fileOffsets(n);
   std::vector<char*> targetPointers(n);
   {
     size_t bufferOffset = 0;
     for (size_t i = 0; i < n; ++i) {
-      sizes[i] = offsetsAndSizes[i].size_;
-      fileOffsets[i] = offsetsAndSizes[i].offset_;
+      sizes[i] = offsetPairs[i].nextOffset - offsetPairs[i].offset;
+      fileOffsets[i] = offsetPairs[i].offset;
       targetPointers[i] = data->buffer.data() + bufferOffset;
       bufferOffset += sizes[i];
     }
   }
 
-  // Step 4: Read data from disk using a pooled BatchIoManager.
-  {
-    auto manager = ioManagers_->pop().value();
-    auto handle =
-        manager->addBatch(file_.fd(), sizes, fileOffsets, targetPointers);
-    manager->wait(handle);
-    ioManagers_->push(std::move(manager));
-  }
+  auto stringHandle =
+      manager->addBatch(file_.fd(), sizes, fileOffsets, targetPointers);
+  manager->wait(stringHandle);
+  ioManagers_->push(std::move(manager));
 
-  // Step 5: Build string_views pointing into the buffer.
+  // Build string_views pointing into the buffer.
   for (size_t i = 0; i < n; ++i) {
     data->views[i] = std::string_view(targetPointers[i], sizes[i]);
   }
@@ -166,6 +179,10 @@ void VocabularyOnDisk::buildFromStringsAndIds(
 void VocabularyOnDisk::open(const std::string& filename) {
   file_.open(filename.c_str(), "r");
   offsets_.open(filename + offsetSuffix_);
+  offsetsFile_.open(std::string(filename) + std::string(offsetSuffix_), "r");
+  // Disable readahead for random lookups on both files.
+  posix_fadvise(file_.fd(), 0, 0, POSIX_FADV_RANDOM);
+  posix_fadvise(offsetsFile_.fd(), 0, 0, POSIX_FADV_RANDOM);
   AD_CORRECTNESS_CHECK(offsets_.size() > 0);
   size_ = offsets_.size() - 1;
 
