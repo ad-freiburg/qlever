@@ -11,7 +11,9 @@
 #include "global/Constants.h"
 #include "index/Vocabulary.h"
 #include "index/vocabulary/VocabularyType.h"
+#include "index/vocabulary/VocabularyTypes.h"
 #include "util/File.h"
+#include "util/Generator.h"
 #include "util/json.h"
 
 namespace po = boost::program_options;
@@ -22,6 +24,7 @@ int main(int argc, char** argv) {
   size_t seed = 42;
   size_t batchSize = 0;
   bool singleLookup = false;
+  bool streamedLookup = false;
 
   po::options_description options("Vocabulary batch lookup benchmark");
   auto add = [&options](auto&&... args) {
@@ -38,6 +41,9 @@ int main(int argc, char** argv) {
       "Size of each batch (0 = one big batch)");
   add("single", po::bool_switch(&singleLookup),
       "Look up each index individually via operator[] instead of batch lookup");
+  add("streamed", po::bool_switch(&streamedLookup),
+      "Use lookupBatchesStreamed (pipelined I/O) instead of per-batch "
+      "lookupBatch");
 
   po::positional_options_description positional;
   positional.add("index-basename", 1);
@@ -96,8 +102,9 @@ int main(int argc, char** argv) {
   vocab.readFromFile(absl::StrCat(indexBasename, VOCAB_SUFFIX));
 
   std::cout << "Vocabulary size: " << vocab.size() << std::endl;
-  std::cout << "Num lookups: " << numLookups
-            << ", mode: " << (singleLookup ? "single" : "batch")
+  std::string mode =
+      singleLookup ? "single" : (streamedLookup ? "streamed" : "batch");
+  std::cout << "Num lookups: " << numLookups << ", mode: " << mode
             << (singleLookup ? "" : absl::StrCat(", batch size: ", batchSize))
             << ", seed: " << seed << std::endl;
 
@@ -121,6 +128,24 @@ int main(int argc, char** argv) {
       totalStringBytes += word.size();
       // Prevent the compiler from optimizing away the lookup.
       asm volatile("" ::"r,m"(word.data()) : "memory");
+    }
+  } else if (streamedLookup) {
+    // Streamed (pipelined) batch lookup.
+    auto makeBatches =
+        [&allIndices, batchSize]() -> cppcoro::generator<std::vector<size_t>> {
+      for (size_t offset = 0; offset < allIndices.size(); offset += batchSize) {
+        size_t currentBatchSize =
+            std::min(batchSize, allIndices.size() - offset);
+        co_yield std::vector<size_t>(
+            allIndices.begin() + offset,
+            allIndices.begin() + offset + currentBatchSize);
+      }
+    };
+    auto results = vocab.lookupBatchesStreamed(VocabLookupInput{makeBatches()});
+    for (auto& result : results) {
+      for (const auto& sv : *result) {
+        totalStringBytes += sv.size();
+      }
     }
   } else {
     // Batch lookup.
