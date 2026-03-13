@@ -6,6 +6,8 @@
 
 #include "index/CompressedRelation.h"
 
+#include <thread>
+
 #include "engine/Engine.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "engine/idTable/IdTable.h"
@@ -16,9 +18,6 @@
 #include "index/LocatedTriples.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/Iterators.h"
-#include "util/OnDestructionDontThrowDuringStackUnwinding.h"
-#include "util/OverloadCallOperator.h"
-#include "util/ProgressBar.h"
 #include "util/ThreadSafeQueue.h"
 #include "util/Timer.h"
 #include "util/TransparentFunctors.h"
@@ -1538,6 +1537,21 @@ CompressedRelationMetadata CompressedRelationWriter::finishLargeRelation(
   // `finishLargeRelation` was called before a new relation was started.
   currentCol0Id_ = Id::makeUndefined();
   return md;
+}
+
+// _____________________________________________________________________________
+ad_utility::TaskQueue<false> CompressedRelationWriter::makeBlockWriteQueue() {
+  auto threadCount = static_cast<uint32_t>(
+      getRuntimeParameter<&RuntimeParameters::threadsForPermutationWriter_>());
+  if (threadCount == 0) {
+    threadCount = std::thread::hardware_concurrency();
+  } else {
+    threadCount =
+        std::min<uint32_t>(threadCount, std::thread::hardware_concurrency());
+  }
+  // Allow at least up to 4 tasks in the queue.
+  uint32_t queueSize = std::max<uint32_t>(4, threadCount * 2);
+  return ad_utility::TaskQueue<false>{queueSize, threadCount};
 }
 
 // _____________________________________________________________________________
