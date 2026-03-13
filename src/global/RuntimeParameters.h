@@ -159,9 +159,8 @@ struct RuntimeParameters {
   // Configure the amount of threads to compress and write blocks per
   // permutation. A value of 0 indicates that the number of threads should be
   // determined automatically based on the number of available hardware threads.
-  // Even though this technically influences the logic of regular index
-  // building, the `qlever-index` binary does not expose a configuration option
-  // for this parameter.
+  // Even though this influences the logic of regular index building,
+  // `qlever-index`doesn't expose a CLI flag to set this parameter.
   SizeT threadsForPermutationWriter_{10, "threads-for-permutation-writer"};
 
   // ___________________________________________________________________________
