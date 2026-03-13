@@ -392,35 +392,37 @@ TEST(HttpClient, Redirects) {
   ad_utility::SharedCancellationHandle handle =
       std::make_shared<ad_utility::CancellationHandle<>>();
 
+  [[maybe_unused]] auto alwaysRedirect = [](std::string_view) { return true; };
+
   // Helper lambda to create a server that redirects to a given location.
-  auto makeRedirectServer = [](status redirectStatus, std::string location) {
-    return TestHttpServer([redirectStatus, location = std::move(location)](
-                              [[maybe_unused]] auto request,
-                              auto&& send) -> boost::asio::awaitable<void> {
-      auto response = []() -> cppcoro::generator<std::string> {
-        co_yield "";
-      }();
-      http::response<http::string_body> resp;
-      resp.result(redirectStatus);
-      resp.set(http::field::content_type, "text/plain");
-      if (!location.empty()) {
-        resp.set(http::field::location, location);
-      }
-      resp.body() = "";
-      resp.prepare_payload();
-      co_await send(std::move(resp));
-    });
+  auto makeRedirectServer = []<typename Func = decltype(alwaysRedirect)>(
+      status redirectStatus, std::string location, Func shouldRedirect = {}) {
+    return TestHttpServer(
+        [redirectStatus, location = std::move(location),
+         shouldRedirect = std::move(shouldRedirect)](
+            auto request, auto&& send) -> boost::asio::awaitable<void> {
+          if (!shouldRedirect(request.target())) {
+            co_return co_await send(createOkResponse(
+                "Success", request, ad_utility::MediaType::textPlain));
+          }
+          http::response<http::string_body> resp;
+          resp.result(redirectStatus);
+          resp.set(http::field::content_type, "text/plain");
+          if (!location.empty()) {
+            resp.set(http::field::location, location);
+          }
+          resp.body() = "";
+          resp.prepare_payload();
+          co_await send(std::move(resp));
+        });
   };
 
   // Helper lambda to create a server that returns OK.
   auto makeOkServer = []() {
     return TestHttpServer(
         [](auto request, auto&& send) -> boost::asio::awaitable<void> {
-          auto response = []() -> cppcoro::generator<std::string> {
-            co_yield "Success";
-          }();
           co_return co_await send(createOkResponse(
-              std::move(response), request, ad_utility::MediaType::textPlain));
+              "Success", request, ad_utility::MediaType::textPlain));
         });
   };
 
@@ -460,6 +462,40 @@ TEST(HttpClient, Redirects) {
         sendHttpOrHttpsRequest(Url{url}, handle, verb::get, "", "", "", 1),
         AllOf(HasSubstr("redirect status code"),
               HasSubstr("no Location header")));
+    server.shutDown();
+  }
+
+  // Test that redirect with invalid `Location` header throws.
+  {
+    auto server =
+        makeRedirectServer(status::permanent_redirect, "Not a valid URL");
+    server.runInOwnThread();
+    std::string url = absl::StrCat("http://localhost:", server.getPort());
+
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        sendHttpOrHttpsRequest(Url{url}, handle, verb::get, "", "", "", 1),
+        AllOf(HasSubstr("redirect status code")));
+    server.shutDown();
+  }
+
+  // Test that relative URLs are properly resolved.
+  {
+    auto server = makeRedirectServer(
+        status::permanent_redirect, "../abc", [](std::string_view target) {
+          if (ql::starts_with(target, "/some/relative")) {
+            return true;
+          }
+          EXPECT_EQ(target, "/some/abc");
+          return false;
+        });
+    server.runInOwnThread();
+    std::string url = absl::StrCat("http://localhost:", server.getPort(),
+                                   "/some/relative/path");
+
+    auto response =
+        sendHttpOrHttpsRequest(Url{url}, handle, verb::get, "", "", "", 1);
+    EXPECT_EQ(response.status_, status::ok);
+    EXPECT_EQ(toString(std::move(response.body_)), "Success");
     server.shutDown();
   }
 

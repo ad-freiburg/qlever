@@ -9,7 +9,7 @@
 
 #include <absl/strings/str_cat.h>
 
-#include <sstream>
+#include <boost/url/url.hpp>
 #include <string>
 
 #include "global/Constants.h"
@@ -120,8 +120,7 @@ HttpOrHttpsResponse HttpClientImpl<StreamType>::sendRequest(
             client->ioContext_);
       };
 
-  // Send the request, receive the response (unlimited body size), and return
-  // the body as a `std::istringstream`.
+  // Send the request, receive the response (unlimited body size).
   wait(http::async_write(*(client->stream_), request, net::use_awaitable));
   beast::flat_buffer buffer;
   auto responseParser =
@@ -132,9 +131,8 @@ HttpOrHttpsResponse HttpClientImpl<StreamType>::sendRequest(
 
   const auto status = responseParser->get().result();
   const std::string contentType =
-      responseParser->get()[boost::beast::http::field::content_type];
-  const std::string location =
-      responseParser->get()[boost::beast::http::field::location];
+      responseParser->get()[http::field::content_type];
+  const std::string location = responseParser->get()[http::field::location];
 
   auto getBody = [](std::unique_ptr<HttpClientImpl<StreamType>> client,
                     std::unique_ptr<http::response_parser<http::buffer_body>>
@@ -168,9 +166,9 @@ HttpOrHttpsResponse HttpClientImpl<StreamType>::sendRequest(
 // ____________________________________________________________________________
 template <typename StreamType>
 http::response<http::string_body>
-HttpClientImpl<StreamType>::sendWebSocketHandshake(
-    const boost::beast::http::verb& method, std::string_view host,
-    std::string_view target) {
+HttpClientImpl<StreamType>::sendWebSocketHandshake(const http::verb& method,
+                                                   std::string_view host,
+                                                   std::string_view target) {
   // Check that we have a stream (created in the constructor).
   AD_CORRECTNESS_CHECK(stream_);
 
@@ -205,10 +203,9 @@ template class HttpClientImpl<ssl::stream<tcp::socket>>;
 // ____________________________________________________________________________
 HttpOrHttpsResponse sendHttpOrHttpsRequest(
     const ad_utility::httpUtils::Url& url,
-    ad_utility::SharedCancellationHandle handle,
-    const boost::beast::http::verb& method, std::string_view requestData,
-    std::string_view contentTypeHeader, std::string_view acceptHeader,
-    size_t maxRedirects) {
+    ad_utility::SharedCancellationHandle handle, const http::verb& method,
+    std::string_view requestData, std::string_view contentTypeHeader,
+    std::string_view acceptHeader, size_t maxRedirects) {
   auto sendRequest = [&](const Url& currentUrl,
                          auto ti) -> HttpOrHttpsResponse {
     using Client = typename decltype(ti)::type;
@@ -222,15 +219,15 @@ HttpOrHttpsResponse sendHttpOrHttpsRequest(
   using namespace ad_utility::use_type_identity;
 
   // Follow redirects up to the limit specified by maxRedirects.
-  Url currentUrl = url;
+  boost::url currentUrl = boost::url{url.asString()};
   size_t redirectCount = 0;
   while (redirectCount <= maxRedirects) {
     HttpOrHttpsResponse response;
-    if (currentUrl.protocol() == Url::Protocol::HTTP) {
-      response = sendRequest(currentUrl, ti<HttpClient>);
+    if (currentUrl.scheme() == "http") {
+      response = sendRequest(Url{currentUrl.c_str()}, ti<HttpClient>);
     } else {
-      AD_CORRECTNESS_CHECK(currentUrl.protocol() == Url::Protocol::HTTPS);
-      response = sendRequest(currentUrl, ti<HttpsClient>);
+      AD_CORRECTNESS_CHECK(currentUrl.scheme() == "https");
+      response = sendRequest(Url{currentUrl.c_str()}, ti<HttpsClient>);
     }
 
     // Check if the response is a redirect (301, 302, 307, 308).
@@ -245,15 +242,31 @@ HttpOrHttpsResponse sendHttpOrHttpsRequest(
     // If it is a redirect, but there is no `Location` header, we cannot
     // proceed and throw an error.
     if (response.location_.empty()) {
-      throw std::runtime_error(
-          absl::StrCat("HTTP request to <", currentUrl.asString(),
-                       "> responded with redirect status code: ",
-                       static_cast<int>(response.status_),
-                       " but no Location header was provided"));
+      throw std::runtime_error(absl::StrCat(
+          "HTTP request to <", currentUrl.c_str(),
+          "> responded with redirect status code: ", response.status_,
+          " but no Location header was provided"));
     }
 
-    // Follow the redirect.
-    currentUrl = Url{response.location_};
+    // Follow the redirect and properly resolve relative URLs.
+    boost::url_view relativeUrl;
+    try {
+      relativeUrl = boost::url_view{response.location_};
+    } catch (const boost::urls::system_error& e) {
+      throw std::runtime_error(absl::StrCat(
+          "The HTTP request to '", currentUrl.c_str(),
+          "' responded with redirect status code: ", response.status_,
+          " but the Location header value '", response.location_,
+          "' could not be parsed: ", e.what()));
+    }
+    auto result = currentUrl.resolve(relativeUrl);
+    if (result.has_error()) {
+      throw std::runtime_error(
+          absl::StrCat("The HTTP server responded with redirect status code: ",
+                       response.status_, " but the Location header value '",
+                       response.location_,
+                       "' could not be resolved: ", result.error().message()));
+    }
     redirectCount++;
   }
 
