@@ -13,6 +13,7 @@
 #include "engine/TensorSearchConfig.h"
 #include "global/Id.h"
 #include "rdfTypes/Variable.h"
+#include "util/TensorData.h"
 
 // helper struct to improve readability in prepareJoin()
 struct PreparedTensorSearchParams {
@@ -35,7 +36,7 @@ class TensorSearchImpl {
                            size_t rowRight) const;
   PreparedTensorSearchParams params_;
   QueryExecutionContext* qec_;
-  float computDistance(const ad_utility::TensorData& tensorLeft,
+  float computeDistance(const ad_utility::TensorData& tensorLeft,
                         const ad_utility::TensorData& tensorRight) const;
   Result computeTensorSearchResultAnnoy();
   Result computeTensorSearchResultNaive();

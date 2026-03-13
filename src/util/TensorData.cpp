@@ -102,6 +102,9 @@ std::optional<TensorData> TensorData::parseFromPair(
 
 float TensorData::cosineSimilarity(const TensorData& tensor1,
                                    const TensorData& tensor2) {
+  if (!isBroadCastable(tensor1, tensor2)) {
+    throw std::runtime_error{"Tensors are not broadcastable for subtraction"};
+  }
   float inner = dot(tensor1, tensor2);
   float norm1 = norm(tensor1);
   float norm2 = norm(tensor2);
@@ -118,6 +121,9 @@ float TensorData::norm(const TensorData& tensor) {
 }
 
 float TensorData::dot(const TensorData& tensor1, const TensorData& tensor2) {
+  if (!isBroadCastable(tensor1, tensor2)) {
+    throw std::runtime_error{"Tensors are not broadcastable for subtraction"};
+  }
   return std::inner_product(tensor1.tensorData_.begin(),
                             tensor1.tensorData_.end(),
                             tensor2.tensorData_.begin(), 0.0f);
@@ -125,6 +131,9 @@ float TensorData::dot(const TensorData& tensor1, const TensorData& tensor2) {
 
 TensorData TensorData::add(const TensorData& tensor1,
                            const TensorData& tensor2) {
+  if (!isBroadCastable(tensor1, tensor2)) {
+    throw std::runtime_error{"Tensors are not broadcastable for subtraction"};
+  }
   std::vector<float> result(tensor1.tensorData_.size());
   std::transform(tensor1.tensorData_.begin(), tensor1.tensorData_.end(),
                  tensor2.tensorData_.begin(), result.begin(),
@@ -134,9 +143,27 @@ TensorData TensorData::add(const TensorData& tensor1,
 
 TensorData TensorData::subtract(const TensorData& tensor1,
                                 const TensorData& tensor2) {
+  if (!isBroadCastable(tensor1, tensor2)) {
+    throw std::runtime_error{"Tensors are not broadcastable for subtraction"};
+  }
   std::vector<float> result(tensor1.tensorData_.size());
   std::transform(tensor1.tensorData_.begin(), tensor1.tensorData_.end(),
                  tensor2.tensorData_.begin(), result.begin(),
                  std::minus<float>());
   return TensorData(std::move(result), tensor1.shape_, tensor1.dtype_);
+}
+
+bool TensorData::isBroadCastable(const TensorData& tensor1,
+                                 const TensorData& tensor2) {
+  // For simplicity, we only support broadcasting for tensors with the same
+  // shape
+  if (tensor1.shape().size() != tensor2.shape().size()) {
+    return false;
+  }
+  for (size_t i = 0; i < tensor1.shape().size(); i++) {
+    if (tensor1.shape()[i] != tensor2.shape()[i]) {
+      return false;
+    }
+  }
+  return true;
 }

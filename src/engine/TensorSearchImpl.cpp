@@ -94,7 +94,7 @@ Result TensorSearchImpl::computeTensorSearchResultAnnoy() {
       continue;
     }
     auto results =
-        annoyIndex.findNN(tensorData.value(), params_.config_.maxResults_);
+        annoyIndex->findNN(tensorData.value(), params_.config_.maxResults_);
     for (const auto& nnId : results) {
       addResultTableEntry(&result, params_.idTableLeft_, params_.idTableRight_,
                           nnId, i);
@@ -156,14 +156,14 @@ Result TensorSearchImpl::computeTensorSearchResultNaive() {
       Result::getMergedLocalVocab(*params_.resultLeft_, *params_.resultRight_)};
 }
 float TensorSearchImpl::computeDistance(const ad_utility::TensorData& left,
-                                        const ad_utility::TensorData& right) {
+                                        const ad_utility::TensorData& right) const {
   switch (params_.config_.dist_) {
     case TensorDistanceAlgorithm::COSINE_SIMILARITY:
       return ad_utility::TensorData::cosineSimilarity(left, right);
     case TensorDistanceAlgorithm::DOT_PRODUCT:
       return ad_utility::TensorData::dot(left, right);
     case TensorDistanceAlgorithm::EUCLIDEAN_DISTANCE:
-      return (right.subtract(left)).norm();
+      return ad_utility::TensorData::norm(ad_utility::TensorData::subtract(left, right));
     default:
       throw ad_utility::Exception(
           "Unknown distance function in TensorSearchImpl::computeDistance");

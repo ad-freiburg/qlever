@@ -42,6 +42,7 @@ class TensorData {
   size_t size() const { return tensorData_.size(); }
   const auto& shape() const { return shape_; }
   DType dtype() const { return dtype_; }
+    static bool isBroadCastable(const TensorData& tensor1, const TensorData& tensor2) ;
 
   static TensorData parseFromString(std::string_view dataString);
   static TensorData parseFromJSON(nlohmann::json json);

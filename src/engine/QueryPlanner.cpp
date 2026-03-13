@@ -3325,8 +3325,9 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
   }
   visitGroupOptionalOrMinus(std::move(candidatesOut));
 }
+// copied from visitSpatialSearch and adapted for tensor search
 void QueryPlanner::GraphPatternPlanner::visitTensorSearch(
-    const parsedQuery::TensorSearchQuery& tensorSearchQuery) {
+    parsedQuery::TensorSearchQuery& tensorSearchQuery) {
   auto config = tensorSearchQuery.toTensorSearchConfiguration();
 
   // If there is no child graph pattern, we need to construct a neutral element

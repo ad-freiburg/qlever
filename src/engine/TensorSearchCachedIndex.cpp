@@ -20,36 +20,36 @@ std::shared_ptr<AnnoyIndexVariants> fromDistanceAndSize(
     case TensorDistanceAlgorithm::COSINE_SIMILARITY:
       return std::make_shared<AnnoyIndexVariants>(
           Annoy::AnnoyIndex<size_t, float, Annoy::Angular, Annoy::Kiss32Random,
-                            Annoy::AnnoyIndexMultiThreadedBuildPolicy>(f));
+                            Annoy::AnnoyIndexMultiThreadedBuildPolicy>{f});
       break;
     case TensorDistanceAlgorithm::DOT_PRODUCT:
       return std::make_shared<AnnoyIndexVariants>(
           Annoy::AnnoyIndex<size_t, float, Annoy::DotProduct,
                             Annoy::Kiss32Random,
-                            Annoy::AnnoyIndexMultiThreadedBuildPolicy>(f));
+                            Annoy::AnnoyIndexMultiThreadedBuildPolicy>{f});
       break;
     case TensorDistanceAlgorithm::EUCLIDEAN_DISTANCE:
       return std::make_shared<AnnoyIndexVariants>(
           Annoy::AnnoyIndex<size_t, float, Annoy::Euclidean,
                             Annoy::Kiss32Random,
-                            Annoy::AnnoyIndexMultiThreadedBuildPolicy>(f));
+                            Annoy::AnnoyIndexMultiThreadedBuildPolicy>{f});
       break;
     case TensorDistanceAlgorithm::MANHATTAN_DISTANCE:
       return std::make_shared<AnnoyIndexVariants>(
           Annoy::AnnoyIndex<size_t, float, Annoy::Manhattan,
                             Annoy::Kiss32Random,
-                            Annoy::AnnoyIndexMultiThreadedBuildPolicy>(f));
+                            Annoy::AnnoyIndexMultiThreadedBuildPolicy>{f});
       break;
-    case TensorDistanceAlgorithm::HAMMING_DISTANCE:
-      return std::make_shared<AnnoyIndexVariants>(
-          Annoy::AnnoyIndex<size_t, float, Annoy::Hamming, Annoy::Kiss32Random,
-                            Annoy::AnnoyIndexMultiThreadedBuildPolicy>(f));
-      break;
+    // case TensorDistanceAlgorithm::HAMMING_DISTANCE:
+    //   return std::make_shared<AnnoyIndexVariants>(
+    //       Annoy::AnnoyIndex<size_t, float, Annoy::Hamming, Annoy::Kiss32Random,
+    //                         Annoy::AnnoyIndexMultiThreadedBuildPolicy>{f});
+    //   break;
     default:
       throw std::runtime_error(
           "Unsupported distance metric for TensorSearchCachedIndex! Supported "
-          "are COSINE_SIMILARITY, DOT_PRODUCT, EUCLIDEAN_DISTANCE, "
-          "MANHATTAN_DISTANCE, and HAMMING_DISTANCE.");
+          "are COSINE_SIMILARITY, DOT_PRODUCT, EUCLIDEAN_DISTANCE, and"
+          "MANHATTAN_DISTANCE.");
   }
 }
 
@@ -109,9 +109,9 @@ AnnoyIndexToRow TensorSearchCachedIndex::buildIndex(ColumnIndex col,
   return tensorIndexToRow;
 }
 
-TensorSearchCachedIndex TensorSearchCachedIndex::fromKeyOrBuild(
+std::shared_ptr<const TensorSearchCachedIndex> TensorSearchCachedIndex::fromKeyOrBuild(
     const std::string& key, ColumnIndex col, const IdTable& restable,
-    const Index& index, TensorSearchConfiguration config) {
+    const Index& index, TensorSearchConfiguration config)   {
   auto lock = cache_.wlock();
   if (!lock->contains(key)) {
     auto newIndex = TensorSearchCachedIndex(col, restable, index, config);
@@ -133,7 +133,9 @@ std::vector<TensorSearchCachedIndex::AnnoyResult> TensorSearchCachedIndex::findN
   }
   std::visit(
       [&](auto&& idx) {
-        auto nnIndices = idx.get_nns_by_vector(query.tensorData().data(),n, config_.searchK_);
+        std::vector<size_t> nnIndices;
+        std::vector<float> nnDistances;
+        idx.get_nns_by_vector(query.tensorData().data(),n, (int)config_.searchK_, &nnIndices, &nnDistances);
         for (auto nnIndex : nnIndices) {
           // auto rowIndex = getRow(nnIndex);
           result.push_back(nnIndex);

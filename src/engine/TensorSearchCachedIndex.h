@@ -24,8 +24,10 @@ using AnnoyIndexVariants =
                             Annoy::AnnoyIndexMultiThreadedBuildPolicy>,
                  Annoy::AnnoyIndex<size_t, float, Annoy::Angular, Annoy::Kiss32Random,
                             Annoy::AnnoyIndexMultiThreadedBuildPolicy>,
-                 Annoy::AnnoyIndex<size_t, float, Annoy::Hamming, Annoy::Kiss32Random,
+                 Annoy::AnnoyIndex<size_t, float, Annoy::DotProduct, Annoy::Kiss32Random,
                             Annoy::AnnoyIndexMultiThreadedBuildPolicy>,
+                //  Annoy::AnnoyIndex<size_t, float, Annoy::Hamming, Annoy::Kiss32Random,
+                //             Annoy::AnnoyIndexMultiThreadedBuildPolicy>,
                  Annoy::AnnoyIndex<size_t, float, Annoy::Manhattan, Annoy::Kiss32Random,
                             Annoy::AnnoyIndexMultiThreadedBuildPolicy>>;
 
@@ -69,7 +71,7 @@ class TensorSearchCachedIndex {
   TensorSearchCachedIndex(ColumnIndex col, const IdTable& restable, const Index& index, TensorSearchConfiguration config_);
   TensorSearchCachedIndex(TensorSearchCachedIndex&&) noexcept = default;
   TensorSearchCachedIndex& operator=(TensorSearchCachedIndex&&) noexcept = default;
-  static TensorSearchCachedIndex fromKeyOrBuild(const std::string& key, ColumnIndex col, const IdTable& restable, const Index& index, TensorSearchConfiguration config);
+  static std::shared_ptr<const TensorSearchCachedIndex> fromKeyOrBuild(const std::string& key, ColumnIndex col, const IdTable& restable, const Index& index, TensorSearchConfiguration config);
 
   std::shared_ptr<const AnnoyIndexVariants> getIndex() const;
 
