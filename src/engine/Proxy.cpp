@@ -150,8 +150,11 @@ std::vector<QueryExecutionTree*> Proxy::getChildren() {
 
 // ____________________________________________________________________________
 std::unique_ptr<Operation> Proxy::cloneImpl() const {
+  auto clonedChild = childOperation_.has_value()
+                         ? std::optional{childOperation_.value()->clone()}
+                         : std::nullopt;
   return std::make_unique<Proxy>(getExecutionContext(), config_,
-                                 childOperation_, sendRequestFunction_);
+                                 std::move(clonedChild), sendRequestFunction_);
 }
 
 // ____________________________________________________________________________
