@@ -9,8 +9,6 @@
 
 #include <uriparser/Uri.h>
 
-#include <filesystem>
-
 // Wrapper class for the `UriUriA` struct from uriparser. This is needed to
 // ensure that the memory allocated for the members of the struct is properly
 // freed when the `UriParserUri` object goes out of scope. The destructor of
@@ -52,27 +50,6 @@ class UriParserUri {
     AD_CONTRACT_CHECK(result == URI_SUCCESS,
                       "Failed to parse URI: ", uriString);
     uriMakeOwnerA(&uri_);
-  }
-
-  static UriParserUri fromFilename(const std::string& filename) {
-    const char* file = nullptr;
-    bool isAbsolutePath = std::filesystem::path{filename}.is_absolute();
-    std::string absolutePath;
-    if (isAbsolutePath) {
-      file = filename.c_str();
-    } else {
-      absolutePath = std::filesystem::absolute(filename).string();
-      file = absolutePath.c_str();
-    }
-    std::string uriBuffer;
-    uriBuffer.resize((isAbsolutePath ? 7 : 0) + 3 * filename.size());
-    auto parseResult = uriUnixFilenameToUriStringA(file, uriBuffer.data());
-    AD_CONTRACT_CHECK(parseResult == URI_SUCCESS,
-                      "Failed to parse filename as URI: ", filename);
-    // Find the position of the null terminator added by
-    // `uriUnixFilenameToUriStringA`.
-    return UriParserUri{
-        std::string_view{uriBuffer.data(), std::strlen(uriBuffer.c_str())}};
   }
 
   // Give const access to the underlying `UriUriA` object.

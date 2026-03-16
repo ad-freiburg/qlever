@@ -557,10 +557,6 @@ class RdfStreamParser : public Parser {
     AD_LOG_DEBUG << "Initialize RDF parsing from uncompressed file or stream "
                  << filename << std::endl;
     initialize(filename, bufferSize);
-    // If `Parser` has member baseIri_, assign filename to it
-    if constexpr (requires { this->baseIri_; }) {
-      this->baseIri_ = UriParserUri::fromFilename(filename);
-    }
   }
 
   bool getLineImpl(TurtleTriple* triple) override;
