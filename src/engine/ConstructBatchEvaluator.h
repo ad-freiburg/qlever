@@ -13,9 +13,9 @@
 #include <vector>
 
 #include "engine/ConstructTypes.h"
-#include "engine/LocalVocab.h"
 #include "engine/idTable/IdTable.h"
 #include "index/Index.h"
+#include "index/LocalVocab.h"
 #include "util/Exception.h"
 #include "util/LruCacheWithStatistics.h"
 
@@ -62,37 +62,24 @@ struct BatchEvaluationContext {
   size_t numRows() const { return endRow_ - firstRow_; }
 };
 
-// Resolves `Id` values in variable columns to their string representations
-// (IRI, literal, etc.) via `ExportQueryExecutionTrees::idToStringAndType`.
-//
-// The evaluation is column-oriented: for each variable (identified by their
-// `IdTable` column), all rows in the batch are evaluated before moving to the
-// next variable.
-//
-// An `IdCache` (LRU cache keyed by `Id`) avoids redundant evaluation of the
-// same `Id` across rows and batches.
-class ConstructBatchEvaluator {
- public:
-  // Evaluates the variables identified by `variableColumnIndices` for all rows
-  // in `evaluationContext`. Each entry in `variableColumnIndices` is an
-  // `IdTable` column index representing a variable in the CONSTRUCT template.
-  static BatchEvaluationResult evaluateBatch(
-      ql::span<const size_t> variableColumnIndices,
-      const BatchEvaluationContext& evaluationContext,
-      const LocalVocab& localVocab, const Index& index, IdCache& idCache);
+// Evaluates the variables identified by `variableColumnIndices` for all rows
+// in `evaluationContext`. Each entry in `variableColumnIndices` is an
+// `IdTable` column index representing a variable in the CONSTRUCT template.
+BatchEvaluationResult evaluateBatch(
+    ql::span<const size_t> variableColumnIndices,
+    const BatchEvaluationContext& evaluationContext,
+    const LocalVocab& localVocab, const Index& index, IdCache& idCache);
 
- private:
-  // Evaluate a single variable (identified by its `IdTable` column index)
-  // across all rows in the batch.
-  static EvaluatedVariableValues evaluateVariableByColumn(
-      size_t idTableColumnIdx, const BatchEvaluationContext& ctx,
-      const LocalVocab& localVocab, const Index& index, IdCache& idCache);
+// Evaluate a single variable (identified by its `IdTable` column index)
+// across all rows in the batch.
+static EvaluatedVariableValues evaluateVariableByColumn(
+    size_t idTableColumnIdx, const BatchEvaluationContext& ctx,
+    const LocalVocab& localVocab, const Index& index, IdCache& idCache);
 
-  // Convert a single `Id` to its `EvaluatedTerm` string representation.
-  // Returns `std::nullopt` if the `Id` has no string representation.
-  static std::optional<EvaluatedTerm> idToEvaluatedTerm(
-      const Index& index, Id id, const LocalVocab& localVocab);
-};
+// Convert a single `Id` to its `EvaluatedTerm` string representation.
+// Returns `std::nullopt` if the `Id` has no string representation.
+static std::optional<EvaluatedTerm> idToEvaluatedTerm(
+    const Index& index, Id id, const LocalVocab& localVocab);
 
 }  // namespace qlever::constructExport
 

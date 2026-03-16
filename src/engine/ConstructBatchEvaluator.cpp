@@ -56,7 +56,7 @@ EvaluatedVariableValues evaluateVariableByColumn(
   for (const auto& [id, rowInBatch] : sortedIndices) {
     auto cached = idCache.tryGet(id);
     if (cached) {
-      result[rowInBatch] = cached->get();
+      result[rowInBatch] = cached.value();
     } else {
       missIds.push_back(id);
       missRows.push_back(rowInBatch);
@@ -78,10 +78,6 @@ EvaluatedVariableValues evaluateVariableByColumn(
   }
   return result;
 }
-
-}  // namespace qlever::constructExport
-
-namespace qlever::constructExport {
 
 // _____________________________________________________________________________
 BatchEvaluationResult evaluateBatch(
