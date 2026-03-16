@@ -9,6 +9,7 @@
 
 #include "engine/MaterializedViewsQueryAnalysis.h"
 
+#include <algorithm>
 #include <optional>
 #include <variant>
 
@@ -38,8 +39,9 @@ QueryPatternCache::makeJoinReplacementIndexScans(
   // `?otherVariable`, stored by `?variable` for finding chains.
   ChainSideCandidates chainRight;
 
-  // Group triples by subject variable for star matching.
-  StarCandidatesBySubject starCandidatesBySubject;
+  // All triples of the form `anything <iri> ?variable` where `<iri>` is covered
+  // by a materialized view, stored by `anything` for finding join stars.
+  StarCandidatesBySubject starCandidates;
 
   for (const auto& [tripleIdx, triple] :
        ::ranges::views::enumerate(triples._triples)) {
@@ -55,7 +57,7 @@ QueryPatternCache::makeJoinReplacementIndexScans(
     if (!predicateInView_.contains(iri.value())) {
       continue;
     }
-    // Check for potential join chain triple.
+    // Check for potential join chain or star triple.
     if (!triple.o_.isVariable()) {
       continue;
     }
@@ -66,11 +68,9 @@ QueryPatternCache::makeJoinReplacementIndexScans(
     if (triple.s_ != triple.o_) {
       // This triple could be the left side of a chain join.
       chainLeft[triple.o_.getVariable()].push_back(tripleIdx);
-    }
-    // This triple could be an arm of a join star.
-    if (triple.s_.isVariable()) {
-      starCandidatesBySubject[triple.s_.getVariable()].push_back(
-          {tripleIdx, iri.value()});
+      // This triple could be an arm of a join star.
+      // TODO<ullingerc> Maybe already enforce distinct predicate/object here?
+      starCandidates[triple.s_].push_back(tripleIdx);
     }
   }
 
@@ -79,7 +79,7 @@ QueryPatternCache::makeJoinReplacementIndexScans(
   makeScansFromChainCandidates(qec, triples, result, chainLeft, chainRight);
 
   // Assemble all stars that can potentially be rewritten.
-  makeScansFromStarCandidates(qec, triples, result, starCandidatesBySubject);
+  makeScansFromStarCandidates(qec, triples, result, starCandidates);
 
   return result;
 }
@@ -131,63 +131,78 @@ void QueryPatternCache::makeScansFromChainCandidates(
 void QueryPatternCache::makeScansFromStarCandidates(
     QueryExecutionContext* qec, const parsedQuery::BasicGraphPattern& triples,
     std::vector<MaterializedViewJoinReplacement>& result,
-    const StarCandidatesBySubject& starCandidatesBySubject) const {
-  if (starViews_.empty()) {
+    const StarCandidatesBySubject& starCandidates) const {
+  if (starCache_.empty()) {
     return;
   }
+  auto getTriples =
+      [&triples](size_t idx) -> std::pair<size_t, const SparqlTriple&> {
+    return {idx, triples._triples.at(idx)};
+  };
 
-  for (const auto& [subjectVar, candidates] : starCandidatesBySubject) {
-    if (candidates.size() < 2) {
+  for (const auto& [subject, members] : starCandidates) {
+    if (members.size() < 2) {
       continue;
     }
 
-    // Build a map from predicate to the triple indices that have it.
-    ad_utility::HashMap<std::string_view, std::vector<size_t>>
-        predicateToTripleIdx;
-    for (const auto& [tripleIdx, predicate] : candidates) {
-      predicateToTripleIdx[predicate].push_back(tripleIdx);
-    }
+    ad_utility::HashSet<ViewPtr> candidateViews;
+    ad_utility::HashMap<std::string_view, size_t> predicateToTripleIdx;
+    ad_utility::HashSet<Variable> objects;
 
-    // Candidate counting: for each star view, count how many of its predicates
-    // appear in this subject group.
-    ad_utility::HashMap<size_t, size_t> candidateCounts;
-    for (const auto& [predicate, _] : predicateToTripleIdx) {
-      auto it = starsByPredicate_.find(predicate);
-      if (it != starsByPredicate_.end()) {
-        for (size_t starIdx : it->second) {
-          candidateCounts[starIdx]++;
-        }
-      }
-    }
-
-    // Check fully matched star views.
-    for (const auto& [starIdx, count] : candidateCounts) {
-      const auto& star = starViews_[starIdx];
-      if (count < star.arms_.size()) {
+    for (const auto& [idx, triple] :
+         ql::views::transform(members, getTriples)) {
+      // Check constraints on object: must be a variable different from the
+      // subject and not appear multiple times.
+      if (!triple.o_.isVariable() || triple.o_ == subject ||
+          !objects.insert(triple.o_.getVariable()).second) {
         continue;
       }
-
-      // All predicates of this star are present. Build the replacement.
-      std::vector<size_t> coveredTriples;
-      std::vector<std::pair<Variable, TripleComponent>> armMatches;
-      bool valid = true;
-
-      for (const auto& arm : star.arms_) {
-        auto it = predicateToTripleIdx.find(arm.predicate_);
-        if (it == predicateToTripleIdx.end()) {
-          valid = false;
-          break;
-        }
-        size_t tripleIdx = it->second.front();
-        const auto& triple = triples._triples.at(tripleIdx);
-        coveredTriples.push_back(tripleIdx);
-        armMatches.push_back({arm.object_, triple.o_});
+      // Each predicate may only appear once.
+      if (!predicateToTripleIdx
+               .insert({triple.getSimplePredicate().value(), idx})
+               .second) {
+        continue;
       }
+      // Remember all views that have this predicate.
+      const auto& it =
+          predicateInView_.find(triple.getSimplePredicate().value());
+      if (it != predicateInView_.end()) {
+        for (auto view : (*it).second) {
+          candidateViews.insert(view);
+        }
+      }
+    }
 
-      if (valid) {
-        result.push_back(
-            {makeScanForStar(qec, star, subjectVar, armMatches),
-             std::move(coveredTriples)});
+    // Check all the possible views if they are actually applicable.
+    for (auto view : candidateViews) {
+      // Does this view provide a join star?
+      auto it = starCache_.find(view);
+      if (it == starCache_.end()) {
+        continue;
+      }
+      // Does the query contain a superset of the star arms of the view?
+      const auto& starInfo = (*it).second;
+      if (ql::ranges::includes(predicateToTripleIdx | ql::views::keys,
+                               starInfo.arms_ | ql::views::keys)) {
+        // If yes, assemble `RequestedColumns`.
+        parsedQuery::MaterializedViewQuery::RequestedColumns cols;
+        std::vector<size_t> coveredTriples;
+
+        // The subject must be read.
+        cols.insert({starInfo.subject_, subject});
+
+        // The variable to variable mapping for all the objects of the star.
+        for (const auto& [predicate, object] : starInfo.arms_) {
+          size_t idx = predicateToTripleIdx.at(predicate);
+          auto queryObject = triples._triples.at(idx).o_;
+          cols.insert({object, queryObject});
+          coveredTriples.push_back(idx);
+        }
+
+        // Construct the `MaterializedViewJoinReplacement`, in particular the
+        // `IndexScan`.
+        result.push_back({makeScanForStar(qec, view, std::move(cols)),
+                          std::move(coveredTriples)});
       }
     }
   }
@@ -211,17 +226,10 @@ std::shared_ptr<IndexScan> QueryPatternCache::makeScanForSingleChain(
 
 // _____________________________________________________________________________
 std::shared_ptr<IndexScan> QueryPatternCache::makeScanForStar(
-    QueryExecutionContext* qec, const StarInfo& cached,
-    TripleComponent subject,
-    const std::vector<std::pair<Variable, TripleComponent>>& armMatches) const {
-  parsedQuery::MaterializedViewQuery::RequestedColumns cols;
-  cols.insert({cached.center_, std::move(subject)});
-  for (const auto& [viewObj, userObj] : armMatches) {
-    cols.insert({viewObj, userObj});
-  }
-  return cached.view_->makeIndexScan(
-      qec, parsedQuery::MaterializedViewQuery{cached.view_->name(),
-                                              std::move(cols)});
+    QueryExecutionContext* qec, ViewPtr view,
+    parsedQuery::MaterializedViewQuery::RequestedColumns cols) const {
+  return view->makeIndexScan(
+      qec, parsedQuery::MaterializedViewQuery{view->name(), std::move(cols)});
 }
 
 // _____________________________________________________________________________
@@ -258,6 +266,8 @@ bool QueryPatternCache::analyzeSimpleChain(ViewPtr view, const SparqlTriple& a,
   }
   auto bObj = b.o_.getVariable();
 
+  // TODO<ullingerc> Check column indices and undef status in view.
+
   // Insert chain to cache.
   ChainedPredicates preds{aPred.value(), bPred.value()};
   auto [it, wasNew] = simpleChainCache_.try_emplace(preds, nullptr);
@@ -275,19 +285,19 @@ bool QueryPatternCache::analyzeJoinStar(
   if (triples.size() < 2) {
     return false;
   }
-  // All triples must have the same variable subject (the center).
+  // All triples must have the same variable subject.
   if (!triples[0].s_.isVariable()) {
     return false;
   }
-  Variable center = triples[0].s_.getVariable();
+  Variable subject = triples[0].s_.getVariable();
 
   std::vector<StarArm> arms;
   ad_utility::HashSet<std::string> predicates;
-  ad_utility::HashSet<Variable> objectVars;
+  ad_utility::HashSet<Variable> objects;
 
   for (const auto& triple : triples) {
     // Same subject variable.
-    if (!triple.s_.isVariable() || triple.s_.getVariable() != center) {
+    if (!triple.s_.isVariable() || triple.s_.getVariable() != subject) {
       return false;
     }
     // Simple IRI predicate.
@@ -295,33 +305,32 @@ bool QueryPatternCache::analyzeJoinStar(
     if (!pred.has_value()) {
       return false;
     }
-    // Distinct predicates.
-    if (!predicates.insert(std::string(pred.value())).second) {
+    // Predicates must be distinct.
+    if (!predicates.insert(std::string{pred.value()}).second) {
       return false;
     }
-    // Variable object, different from center and from other objects.
+    // The object must be a variable.
     if (!triple.o_.isVariable()) {
       return false;
     }
     Variable obj = triple.o_.getVariable();
-    if (obj == center) {
+    if (obj == subject) {
       return false;
     }
-    if (!objectVars.insert(obj).second) {
+    // Object variables must be distinct.
+    if (!objects.insert(obj).second) {
       return false;
     }
-    arms.push_back(StarArm{std::string(pred.value()), obj});
+    arms.push_back({std::string{pred.value()}, obj});
   }
 
-  // Sort arms by predicate for deterministic matching.
-  ql::ranges::sort(arms, {}, &StarArm::predicate_);
+  // Sort arms by predicate for linear-time matching.
+  ql::ranges::sort(arms, {}, &StarArm::first);
 
-  // Insert star into cache and index.
-  size_t idx = starViews_.size();
-  starViews_.push_back(StarInfo{center, std::move(arms), view});
-  for (const auto& arm : starViews_.back().arms_) {
-    starsByPredicate_[arm.predicate_].push_back(idx);
-  }
+  // TODO<ullingerc> Check column indices and undef status in view.
+
+  // Insert star into cache.
+  starCache_.insert({view, StarInfo{subject, std::move(arms)}});
   return true;
 }
 
@@ -425,18 +434,8 @@ void QueryPatternCache::removeView(ViewPtr view) {
     ql::erase_if(views, [&view](ViewPtr pView) { return pView == view; });
   }
 
-  // Remove `view` from star cache. Since `starsByPredicate_` stores indices
-  // into `starViews_`, removing entries invalidates indices, so we rebuild.
-  if (ql::erase_if(starViews_, [&view](const StarInfo& info) {
-        return info.view_ == view;
-      }) > 0) {
-    starsByPredicate_.clear();
-    for (size_t i = 0; i < starViews_.size(); ++i) {
-      for (const auto& arm : starViews_[i].arms_) {
-        starsByPredicate_[arm.predicate_].push_back(i);
-      }
-    }
-  }
+  // Remove `view` from star cache.
+  starCache_.erase(view);
 }
 
 // _____________________________________________________________________________
