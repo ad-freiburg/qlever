@@ -1530,7 +1530,9 @@ void Visitor::visit(Parser::BaseDeclContext* ctx) {
         ctx,
         "The base IRI must be an absolute IRI with a scheme, was: " + rawIri);
   }
-  baseIri_ = UriParserUri{visit(ctx->iriref())};
+  auto iri =
+      TripleComponent::Iri::fromStringRepresentation(visit(ctx->iriref()));
+  baseIri_ = UriParserUri{asStringViewUnsafe(iri.getContent())};
 }
 
 // ____________________________________________________________________________________

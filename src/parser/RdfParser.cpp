@@ -1223,6 +1223,7 @@ void RdfParallelParser<T>::initialize(const std::string& filename,
     }
   }
   this->prefixMap_ = std::move(declarationParser.getPrefixMap());
+  this->baseIri_ = std::move(declarationParser.baseIri_);
   remainingBatchFromInitialization.reserve(remainder.size());
   ql::ranges::copy(remainder,
                    std::back_inserter(remainingBatchFromInitialization));

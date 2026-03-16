@@ -496,6 +496,8 @@ CPP_template(typename Parser)(requires ql::concepts::derived_from<
 
   const auto& getPrefixMap() const { return prefixMap_; }
 
+  const auto& getBaseIri() const { return baseIri_; }
+
   // __________________________________________________________
   void setInputStream(ParallelBuffer::BufferType&& toParse) {
     tmpToParse_ = std::move(toParse);
