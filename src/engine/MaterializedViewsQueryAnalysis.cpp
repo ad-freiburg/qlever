@@ -173,6 +173,11 @@ void QueryPatternCache::makeScansFromStarCandidates(
       }
     }
 
+    // Compute a sorted vector of all the predicates in the query star.
+    auto queryPredicates = predicateToTripleIdx | ql::views::keys |
+                           ::ranges::to<std::vector<std::string_view>>();
+    ql::ranges::sort(queryPredicates);
+
     // Check all the possible views if they are actually applicable.
     for (auto view : candidateViews) {
       // Does this view provide a join star?
@@ -182,7 +187,7 @@ void QueryPatternCache::makeScansFromStarCandidates(
       }
       // Does the query contain a superset of the star arms of the view?
       const auto& starInfo = (*it).second;
-      if (ql::ranges::includes(predicateToTripleIdx | ql::views::keys,
+      if (ql::ranges::includes(queryPredicates,
                                starInfo.arms_ | ql::views::keys)) {
         // If yes, assemble `RequestedColumns`.
         parsedQuery::MaterializedViewQuery::RequestedColumns cols;
