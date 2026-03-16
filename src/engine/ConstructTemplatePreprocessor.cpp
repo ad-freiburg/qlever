@@ -13,6 +13,7 @@
 
 #include "util/Algorithm.h"
 #include "util/HashMap.h"
+#include "util/HashSet.h"
 #include "util/TypeTraits.h"
 
 namespace qlever::constructExport {
@@ -95,24 +96,23 @@ PreprocessedConstructTemplate ConstructTemplatePreprocessor::preprocess(
     const Triples& templateTriples,
     const VariableToColumnMap& variableColumns) {
   PreprocessedConstructTemplate result;
-  // Maps each IdTable column index to its position in
-  // `result.uniqueVariableColumns_` (and in `BatchEvaluationResult`).
-  ad_utility::HashMap<size_t, size_t> columnToPosition;
+  // Tracks which IdTable column indices have already been added to
+  // `result.uniqueVariableColumns_` to avoid duplicates.
+  ad_utility::HashSet<size_t> seenColumns;
 
   for (const auto& triple : templateTriples) {
     auto preprocessedTriple = preprocessTriple(triple, variableColumns);
     if (!preprocessedTriple) continue;
 
-    // Remap each variable's IdTable column index to its position index, which
-    // enables direct vector indexing in `BatchEvaluationResult::getVariable`.
-    for (auto& term : *preprocessedTriple) {
-      if (auto* var = std::get_if<PrecomputedVariable>(&term)) {
-        auto [it, wasNew] = columnToPosition.try_emplace(
-            var->columnIndex_, columnToPosition.size());
-        if (wasNew) {
+    // Collect each unique IdTable column index.
+    // `PrecomputedVariable::columnIndex_` is kept as the original IdTable
+    // column index so that it matches the keys in
+    // `BatchEvaluationResult::variablesByColumn_`.
+    for (const auto& term : *preprocessedTriple) {
+      if (const auto* var = std::get_if<PrecomputedVariable>(&term)) {
+        if (seenColumns.insert(var->columnIndex_).second) {
           result.uniqueVariableColumns_.push_back(var->columnIndex_);
         }
-        var->columnIndex_ = it->second;
       }
     }
     result.preprocessedTriples_.push_back(std::move(*preprocessedTriple));

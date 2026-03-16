@@ -83,10 +83,10 @@ using PreprocessedTriple = std::array<PreprocessedTerm, NUM_TRIPLE_POSITIONS>;
 // evaluated for each row of the result-table.
 struct PreprocessedConstructTemplate {
   std::vector<PreprocessedTriple> preprocessedTriples_;
-  // variable `i` corresponds to column `uniqueVariableColumns[i]` in the
-  // `idTable`. The variable first encountered in the construct template triples
-  // corresponds to variable 0, the second encountered variable corresponds to
-  // variable 1 ...
+  // The set of IdTable column indices that appear in the template triples,
+  // in order of first encounter. Each `PrecomputedVariable::columnIndex_`
+  // is the original IdTable column index and matches the keys in
+  // `BatchEvaluationResult::variablesByColumn_`.
   std::vector<size_t> uniqueVariableColumns_;
 };
 
