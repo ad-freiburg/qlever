@@ -5,7 +5,6 @@
 #include "index/Engine.h"
 
 #include "engine/CallFixedSize.h"
-#include "engine/idTable/IdTableUtils.h"
 #include "util/ChunkedForLoop.h"
 #include "util/Exception.h"
 
@@ -55,10 +54,32 @@ void Engine::sort(IdTable& idTable, const std::vector<ColumnIndex>& sortCols) {
   }
 }
 
-// ___________________________________________________________________________
+// Return the number of distinct rows in `input`. All duplicates must be
+// adjacent (e.g. the table must be sorted). `checkCancellation()` is invoked
+// regularly to support cancellation.
 size_t Engine::countDistinct(IdTableView<0> input,
                              const std::function<void()>& checkCancellation) {
-  return idTableUtils::countDistinct(input, checkCancellation);
+  AD_EXPENSIVE_CHECK(
+      ql::ranges::is_sorted(input, ql::ranges::lexicographical_compare),
+      "Input to Engine::countDistinct must be sorted");
+  if (input.empty()) {
+    return 0;
+  }
+  // Track which adjacent pairs are equal across all columns.
+  std::vector<char, ad_utility::AllocatorWithLimit<char>> counter(
+      input.numRows() - 1, static_cast<char>(true), input.getAllocator());
+
+  for (const auto& col : input.getColumns()) {
+    ad_utility::chunkedForLoop<100'000>(
+        0ULL, input.numRows() - 1,
+        [&counter, &col](size_t i) {
+          counter[i] &= static_cast<char>(col[i] == col[i + 1]);
+        },
+        [&checkCancellation]() { checkCancellation(); });
+  }
+
+  auto numDuplicates = std::accumulate(counter.begin(), counter.end(), 0ULL);
+  return input.numRows() - numDuplicates;
 }
 
 // ___________________________________________________________________________
