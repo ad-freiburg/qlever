@@ -15,10 +15,10 @@
 #include <vector>
 
 #include "backports/span.h"
-#include "engine/LocalVocab.h"
 #include "global/Id.h"
 #include "index/Index.h"
 #include "index/IndexImpl.h"
+#include "index/LocalVocab.h"
 #include "parser/LiteralOrIri.h"
 #include "util/ValueIdentity.h"
 
