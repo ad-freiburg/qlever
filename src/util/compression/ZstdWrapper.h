@@ -1,9 +1,14 @@
-// Copyright 2021, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
+// Copyright 2021 - 2026 The QLever Authors, in particular:
+//
+// 2021 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
-#ifndef QLEVER_SRC_UTIL_COMPRESSIONUSINGZSTD_ZSTDWRAPPER_H
-#define QLEVER_SRC_UTIL_COMPRESSIONUSINGZSTD_ZSTDWRAPPER_H
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
+
+#ifndef QLEVER_SRC_UTIL_COMPRESSION_ZSTDWRAPPER_H
+#define QLEVER_SRC_UTIL_COMPRESSION_ZSTDWRAPPER_H
 
 #include <zstd.h>
 
@@ -53,4 +58,4 @@ class ZstdWrapper {
   }
 };
 
-#endif  // QLEVER_SRC_UTIL_COMPRESSIONUSINGZSTD_ZSTDWRAPPER_H
+#endif  // QLEVER_SRC_UTIL_COMPRESSION_ZSTDWRAPPER_H

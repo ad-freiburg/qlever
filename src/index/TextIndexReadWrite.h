@@ -1,6 +1,11 @@
-// Copyright 2024, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Felix Meisen (fesemeisen@outlook.de)
+// Copyright 2024 - 2026 The QLever Authors, in particular:
+//
+// 2024 Felix Meisen <fesemeisen@outlook.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_INDEX_TEXTINDEXREADWRITE_H
 #define QLEVER_SRC_INDEX_TEXTINDEXREADWRITE_H
@@ -12,10 +17,10 @@
 #include "index/Postings.h"
 #include "index/TextMetaData.h"
 #include "index/TextScoringEnum.h"
-#include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/HashMap.h"
 #include "util/Simple8bCode.h"
 #include "util/TransparentFunctors.h"
+#include "util/compression/ZstdWrapper.h"
 
 namespace textIndexReadWrite::detail {
 

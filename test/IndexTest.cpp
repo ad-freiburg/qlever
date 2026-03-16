@@ -1,8 +1,13 @@
-// Copyright 2015 - 2024, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2015 - 2017]
-//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
-//          Hannah Bast <bast@cs.uni-freiburg.de>
+// Copyright 2015 - 2026 The QLever Authors, in particular:
+//
+// 2015 - 2017 Björn Buchhold <buchhold@cs.uni-freiburg.de>, UFR
+// 2018 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2025 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -802,7 +807,8 @@ TEST(IndexImpl, createPermutation) {
   EXPECT_TRUE(std::filesystem::exists(onDiskBase + ".internal.index.pso"));
   EXPECT_TRUE(std::filesystem::exists(onDiskBase + ".internal.index.pso.meta"));
 
-  permutation.loadFromDisk(onDiskBase, true);
+  permutation.loadFromDisk(onDiskBase, true, true,
+                           DEFAULT_COMPRESSION_ALGORITHM);
   index.deltaTriplesManager().modify<void>(
       [&permutation](DeltaTriples& deltaTriples) {
         permutation.setOriginalMetadataForDeltaTriples(deltaTriples);
@@ -905,10 +911,19 @@ TEST(IndexImpl, loadConfigFromOldIndex) {
   // The version written to disk will also have these fields.
   stats["git-hash"] = *qlever::version::gitShortHashWithoutLinking.wlock();
   stats["index-format-version"] = qlever::indexFormatVersion;
+  stats["compression-algorithm"] = "zstd";
 
   std::string jsonFile = onDiskBase + CONFIGURATION_FILE;
   std::ifstream in{jsonFile};
   nlohmann::json jsonFromFile;
   in >> jsonFromFile;
   EXPECT_EQ(stats, jsonFromFile);
+}
+
+// _____________________________________________________________________________
+TEST(IndexImpl, basicGetters) {
+  IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
+  EXPECT_EQ(index.compressionAlgorithm(), DEFAULT_COMPRESSION_ALGORITHM);
+  EXPECT_EQ(std::as_const(index).compressionAlgorithm(),
+            DEFAULT_COMPRESSION_ALGORITHM);
 }

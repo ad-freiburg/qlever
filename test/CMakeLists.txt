@@ -256,7 +256,7 @@ addLinkAndDiscoverTestNoLibs(SerializerTest)
 
 addLinkAndDiscoverTestNoLibs(ParametersTest)
 
-addLinkAndDiscoverTest(ZstdCompressionTest zstd ${cmake_thread_libs_init})
+addLinkAndDiscoverTestNoLibs(CompressionWrapperTest zstd ${cmake_thread_libs_init})
 
 addLinkAndDiscoverTest(TaskQueueTest)
 
@@ -503,4 +503,6 @@ addLinkAndDiscoverTestNoLibs(ParallelExecutorTest)
 addLinkAndDiscoverTestNoLibs(VariantRangeFilterTest)
 
 addLinkAndDiscoverTest(ConstructTemplatePreprocessorTest engine)
+
+addLinkAndDiscoverTestNoLibs(EnumWithStringsTest)
 

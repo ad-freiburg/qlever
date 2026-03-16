@@ -14,6 +14,7 @@
 
 #include "util/MemorySize/MemorySize.h"
 #include "util/StringUtils.h"
+#include "util/compression/CompressionAlgorithm.h"
 
 // For access to `memorySize` literals.
 using namespace ad_utility::memory_literals;
@@ -324,5 +325,11 @@ constexpr inline size_t MAX_LENGTH_OPERATION_ECHO = 5000;
 
 constexpr inline std::string_view GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX =
     "http-graph-store";
+
+// The default algorithm used to compress data inside QLever.
+// Note: Changing this might be an index-breaking change, please review all
+// usages in this case.
+constexpr inline auto DEFAULT_COMPRESSION_ALGORITHM =
+    ad_utility::CompressionAlgorithmEnum::Zstd;
 
 #endif  // QLEVER_SRC_GLOBAL_CONSTANTS_H

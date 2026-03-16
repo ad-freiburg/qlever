@@ -1,6 +1,6 @@
-// Copyright 2025 The QLever Authors, in particular:
+// Copyright 2025 - 2026 The QLever Authors, in particular:
 //
-// 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2025 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
@@ -23,6 +23,7 @@
 #include "libqlever/QleverTypes.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/compression/CompressionAlgorithm.h"
 #include "util/http/MediaTypes.h"
 
 namespace qlever {
@@ -94,7 +95,7 @@ struct IndexBuilderConfig : CommonConfig {
   // Specify how Qlever stores its mapping from IRIs and literals to internal
   // IDs. See `src/index/vocabulary/VocabularyType.h` for the possible options.
   ad_utility::VocabularyType vocabType_{
-      ad_utility::VocabularyType::Enum::OnDiskCompressed};
+      ad_utility::VocabularyType::OnDiskCompressed};
 
   // If set to true, then certain temporary files which are created while
   // building the index are not deleted. This can be useful for debugging.
@@ -136,6 +137,9 @@ struct IndexBuilderConfig : CommonConfig {
   TextScoringMetric textScoringMetric_ = TextScoringMetric::EXPLICIT;
   float bScoringParam_ = 0.75;
   float kScoringParam_ = 1.75;
+
+  // The compression algorithm to use for the permutation data.
+  CompressionAlgorithm compressionAlgorithm_{DEFAULT_COMPRESSION_ALGORITHM};
 
   // Materialized views to be written after normal index build is complete.
   using WriteMaterializedViews =

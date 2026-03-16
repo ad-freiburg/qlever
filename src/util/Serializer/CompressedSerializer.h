@@ -1,7 +1,7 @@
-// Copyright 2021 - 2025 The QLever Authors, in particular:
+// Copyright 2021 - 2026 The QLever Authors, in particular:
 //
 // 2021 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
-// 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
@@ -16,13 +16,13 @@
 #include <vector>
 
 #include "backports/span.h"
-#include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/ExceptionHandling.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
 #include "util/UninitializedAllocator.h"
+#include "util/compression/ZstdWrapper.h"
 
 namespace ad_utility::serialization {
 

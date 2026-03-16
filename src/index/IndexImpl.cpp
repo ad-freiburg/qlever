@@ -1,7 +1,12 @@
-// Copyright 2014 - 2025, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2014-2017]
-//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2014 - 2026 The QLever Authors, in particular:
+//
+// 2014 - 2017 Björn Buchhold <buchhold@cs.uni-freiburg.de>, UFR
+// 2018 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "index/IndexImpl.h"
 
@@ -33,6 +38,7 @@
 #include "util/Timer.h"
 #include "util/TypeTraits.h"
 #include "util/Views.h"
+#include "util/compression/CompressionAlgorithm.h"
 
 using std::array;
 using namespace ad_utility::memory_literals;
@@ -855,7 +861,7 @@ CompressedRelationWriter::WriterAndCallback IndexImpl::getWriterAndCallback(
 
   auto writer = std::make_unique<CompressedRelationWriter>(
       numColumns, ad_utility::File(fileName, "w"),
-      blocksizePermutationPerColumn_);
+      blocksizePermutationPerColumn_, compressionAlgorithm_);
 
   auto callback =
       liftCallback([&metaData](const auto& md) { metaData.add(md); });
@@ -1016,7 +1022,8 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
 
   auto load = [this, &setMetadata](PermutationPtr permutation,
                                    bool loadInternalPermutation = false) {
-    permutation->loadFromDisk(onDiskBase_, loadInternalPermutation);
+    permutation->loadFromDisk(onDiskBase_, loadInternalPermutation, true,
+                              compressionAlgorithm_);
     setMetadata(*permutation);
   };
 
@@ -1171,6 +1178,7 @@ void IndexImpl::writeConfiguration() const {
   configuration["git-hash"] =
       *qlever::version::gitShortHashWithoutLinking.wlock();
   configuration["index-format-version"] = qlever::indexFormatVersion;
+  configuration["compression-algorithm"] = compressionAlgorithm_;
   auto f = ad_utility::makeOfstream(onDiskBase_ + CONFIGURATION_FILE);
   f << configuration;
 }
@@ -1306,6 +1314,11 @@ void IndexImpl::readConfiguration() {
 
   loadDataMember("encoded-iri-prefixes", encodedIriManager_,
                  EncodedIriManager{});
+
+  // Read the compression algorithm. Default to `zstd` for backward
+  // compatibility with older indices that do not store this field.
+  loadDataMember("compression-algorithm", compressionAlgorithm_,
+                 CompressionAlgorithm::Zstd);
 
   // Compute unique ID for this index.
   //
