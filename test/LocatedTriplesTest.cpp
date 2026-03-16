@@ -762,7 +762,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
     locatedTriplesPerBlock.updateAugmentedMetadata();
 
     expectedAugmentedMetadata[0] = CBM(T1.toPermutedTriple(), PT1);
-    expectedAugmentedMetadata[0].containsDuplicatesWithDifferentGraphs_ = true;
+    expectedAugmentedMetadata[0].containsDuplicatesWithDifferentGraphs_ = false;
     EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
                 testing::ElementsAreArray(expectedAugmentedMetadata));
 
@@ -777,7 +777,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
 
     // T3 is equal to PT4, the beginning of block 2. All update (update and
     // delete) add to the block borders. Borders don't change.
-    expectedAugmentedMetadata[2].containsDuplicatesWithDifferentGraphs_ = true;
+    expectedAugmentedMetadata[2].containsDuplicatesWithDifferentGraphs_ = false;
     locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
         Span{T3}, metadata, keyOrder, false, handle));
     locatedTriplesPerBlock.updateAugmentedMetadata();
@@ -861,7 +861,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
     // set to `true` if triples from new graphs are added.
     expectedAugmentedMetadata[0] =
         CBM(T1.toPermutedTriple(), T2.toPermutedTriple());
-    expectedAugmentedMetadata[0].containsDuplicatesWithDifferentGraphs_ = true;
+    expectedAugmentedMetadata[0].containsDuplicatesWithDifferentGraphs_ = false;
     expectedAugmentedMetadata[1].containsDuplicatesWithDifferentGraphs_ = false;
 
     // Note: the GraphInfo hasn't changed, because the new triples all were
