@@ -66,7 +66,8 @@ class BasicIri {
     return iri_;
   }
 
-  std::string toStringRepresentation() && requires(isOwning) {
+  std::conditional_t<isOwning, std::string, std::string_view>
+  toStringRepresentation() && {
     return std::move(iri_);
   }
 

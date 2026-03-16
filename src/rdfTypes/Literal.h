@@ -77,7 +77,7 @@ class BasicLiteral {
       AbslHashValue(H h, const L& literal) {
     return H::combine(std::move(h), literal.storage_);
   }
-  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(BasicLiteral, content_,
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(BasicLiteral, storage_,
                                               beginOfSuffix_)
 
   std::conditional_t<isOwning, const std::string&, std::string_view>
@@ -85,7 +85,8 @@ class BasicLiteral {
     return storage_;
   }
 
-  std::string toStringRepresentation() && requires(isOwning) {
+  std::conditional_t<isOwning, std::string, std::string_view>
+  toStringRepresentation() && {
     return std::move(storage_);
   }
 
