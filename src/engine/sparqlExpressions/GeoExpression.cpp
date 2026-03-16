@@ -53,6 +53,14 @@ NARY_EXPRESSION(MetricAreaExpression, 1,
 NARY_EXPRESSION(EnvelopeExpression, 1,
                 FV<ad_utility::WktEnvelope,
                    GeometryInfoValueGetter<ad_utility::BoundingBox>>);
+NARY_EXPRESSION(
+    EnvelopeLowerLeftExpression, 1,
+    FV<ad_utility::WktEnvelopeCorner<ad_utility::BoundingBoxCorner::LOWER_LEFT>,
+       GeometryInfoValueGetter<ad_utility::BoundingBox>>);
+NARY_EXPRESSION(EnvelopeUpperRightExpression, 1,
+                FV<ad_utility::WktEnvelopeCorner<
+                       ad_utility::BoundingBoxCorner::UPPER_RIGHT>,
+                   GeometryInfoValueGetter<ad_utility::BoundingBox>>);
 
 NARY_EXPRESSION(GeometryTypeExpression, 1,
                 FV<ad_utility::WktGeometryType,
@@ -189,6 +197,18 @@ SparqlExpression::Ptr makeBoundingCoordinateExpression(
 // _____________________________________________________________________________
 SparqlExpression::Ptr makeNumGeometriesExpression(SparqlExpression::Ptr child) {
   return std::make_unique<NumGeometriesExpression>(std::move(child));
+}
+
+// _____________________________________________________________________________
+SparqlExpression::Ptr makeEnvelopeLowerLeftExpression(
+    SparqlExpression::Ptr child) {
+  return std::make_unique<EnvelopeLowerLeftExpression>(std::move(child));
+}
+
+// _____________________________________________________________________________
+SparqlExpression::Ptr makeEnvelopeUpperRightExpression(
+    SparqlExpression::Ptr child) {
+  return std::make_unique<EnvelopeUpperRightExpression>(std::move(child));
 }
 
 namespace {

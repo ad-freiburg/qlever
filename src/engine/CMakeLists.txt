@@ -21,7 +21,7 @@ add_library(engine
         PermutationSelector.cpp ConstructQueryEvaluator.cpp ConstructTripleGenerator.cpp
         ConstructTemplatePreprocessor.cpp ConstructRowProcessor.cpp
         ConstructTripleInstantiator.cpp ConstructBatchEvaluator.cpp ValueIdHelpers.cpp
-        MaterializedViewsQueryAnalysis.cpp)
+        MaterializedViewsQueryAnalysis.cpp UpdateMetadata.cpp)
 
 qlever_target_link_libraries(engine util index parser global sparqlExpressions SortPerformanceEstimator Boost::iostreams s2 spatialjoin-dev pb_util pb_util_geo)
 

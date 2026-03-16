@@ -12,6 +12,7 @@
 
 #include <array>
 #include <memory>
+#include <string>
 #include <variant>
 #include <vector>
 
@@ -88,8 +89,6 @@ struct PreprocessedConstructTemplate {
   // variable 1 ...
   std::vector<size_t> uniqueVariableColumns_;
 };
-
-// --- Evaluation types ---
 
 // Result of instantiating a single template triple for a specific result table
 // row. Contains the resolved canonical values for subject, predicate, and

@@ -418,20 +418,6 @@ LocatedTriplesSharedState DeltaTriples::getLocatedTriplesSharedStateReference()
 }
 
 // ____________________________________________________________________________
-void to_json(nlohmann::json& j, const DeltaTriplesCount& count) {
-  j = nlohmann::json{{"inserted", count.triplesInserted_},
-                     {"deleted", count.triplesDeleted_},
-                     {"total", count.triplesInserted_ + count.triplesDeleted_}};
-}
-
-// ____________________________________________________________________________
-DeltaTriplesCount operator-(const DeltaTriplesCount& lhs,
-                            const DeltaTriplesCount& rhs) {
-  return {lhs.triplesInserted_ - rhs.triplesInserted_,
-          lhs.triplesDeleted_ - rhs.triplesDeleted_};
-}
-
-// ____________________________________________________________________________
 DeltaTriples::DeltaTriples(const Index& index)
     : DeltaTriples(index.getImpl()) {}
 

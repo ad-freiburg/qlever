@@ -2024,59 +2024,6 @@ TEST(ExportQueryExecutionTrees, idToLiteralOrIriFunctionality) {
 }
 
 // _____________________________________________________________________________
-// Verify that `idsToStringAndType` produces identical results to calling
-// `idToStringAndType` for each ID individually.
-TEST(ExportQueryExecutionTrees,
-     idsToStringAndTypeBatchMatchesIndividualLookups) {
-  // Build a small index with IRIs and literals of various types.
-  std::string kg =
-      "<s> <p> <o> . "
-      "<s> <q> \"hello\" . "
-      "<s> <p> 42 . "
-      "<s> <p> 3.14 .";
-  auto qec = ad_utility::testing::getQec(kg);
-  const Index& index = qec->getIndex();
-  LocalVocab localVocab{};
-  auto getId = ad_utility::testing::makeGetId(index);
-
-  // Collect a mix of VocabIndex IDs (IRIs, literal) and non-VocabIndex IDs
-  // (integer, double, undefined).
-  std::vector<Id> ids{
-      getId("<s>"),
-      getId("<p>"),
-      getId("<o>"),
-      getId("<q>"),
-      getId("\"hello\""),
-      Id::makeFromInt(42),
-      Id::makeFromDouble(3.14),
-      Id::makeUndefined(),
-  };
-
-  // `idsToStringAndType` requires the input to be sorted by `ValueId`.
-  ql::ranges::sort(ids);
-
-  auto batchResults = ql::valueId::idsToStringAndType(
-      index, ql::span<const Id>{ids}, localVocab);
-
-  ASSERT_EQ(batchResults.size(), ids.size());
-  for (size_t i = 0; i < ids.size(); ++i) {
-    EXPECT_EQ(batchResults[i],
-              ql::valueId::idToStringAndType(index, ids[i], localVocab))
-        << "Mismatch at index " << i;
-  }
-}
-
-// _____________________________________________________________________________
-// Empty span returns an empty vector.
-TEST(ExportQueryExecutionTrees, idsToStringAndTypeEmptyInput) {
-  auto qec = ad_utility::testing::getQec("<s> <p> <o>");
-  LocalVocab localVocab{};
-  auto result = ql::valueId::idsToStringAndType(
-      qec->getIndex(), ql::span<const Id>{}, localVocab);
-  EXPECT_TRUE(result.empty());
-}
-
-// _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, getLiteralOrNullopt) {
   using LiteralOrIri = ql::valueId::LiteralOrIri;
   using Literal = ad_utility::triple_component::Literal;

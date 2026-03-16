@@ -72,7 +72,8 @@ class ConstructBatchEvaluatorTest : public ::testing::Test {
                          idCache);
   }
 
-  // Evaluate a sub-range [`firstRow`, `endRow`) of the `IdTable`.
+  // Evaluate a sub-range [`firstRow`, `endRow`) of the `IdTable` in one single
+  // batch.
   BatchEvaluationResult evaluateRowRange(
       const std::vector<size_t>& variableColumnIndices, const IdTable& idTable,
       size_t firstRow, size_t endRow, IdCache& idCache) {
