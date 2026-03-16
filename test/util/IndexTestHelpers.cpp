@@ -224,13 +224,25 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
                                      : VocabularyType::random());
     if (c.encodedIriManager.has_value()) {
       // Extract prefixes without angle brackets from the EncodedIriManager
-      std::vector<std::string> prefixes;
-      for (const auto& prefix : c.encodedIriManager.value().prefixes_) {
-        AD_CORRECTNESS_CHECK(ql::starts_with(prefix, '<') &&
-                             !ql::ends_with(prefix, '>'));
-        prefixes.push_back(prefix.substr(1));
+      // and convert to PrefixWithBitConstraints for the new interface.
+      std::vector<encodedIris::PrefixWithBitConstraints> prefixConfigs;
+      for (const auto& cfg : c.encodedIriManager.value().prefixes_) {
+        AD_CORRECTNESS_CHECK(ql::starts_with(cfg.prefix, '<') &&
+                             !ql::ends_with(cfg.prefix, '>'));
+        if (cfg.isMultiConstraintMode()) {
+          prefixConfigs.emplace_back(cfg.prefix.substr(1),
+                                     cfg.getBitRangeConstraints());
+        } else if (cfg.zeroBitRange.has_value()) {
+          auto [bitStart, bitEnd] = cfg.getBitRange();
+          prefixConfigs.emplace_back(
+              cfg.prefix.substr(1),
+              std::vector<encodedIris::BitRangeConstraint>{
+                  {bitStart, bitEnd, 0}});
+        } else {
+          prefixConfigs.emplace_back(cfg.prefix.substr(1));
+        }
       }
-      index.getImpl().setPrefixesForEncodedValues(std::move(prefixes));
+      index.getImpl().setPrefixesForEncodedValues(prefixConfigs);
     }
     index.createFromFiles({spec});
     if (c.createTextIndex) {
