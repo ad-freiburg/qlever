@@ -54,9 +54,7 @@ void Engine::sort(IdTable& idTable, const std::vector<ColumnIndex>& sortCols) {
   }
 }
 
-// Return the number of distinct rows in `input`. All duplicates must be
-// adjacent (e.g. the table must be sorted). `checkCancellation()` is invoked
-// regularly to support cancellation.
+// ___________________________________________________________________________
 size_t Engine::countDistinct(IdTableView<0> input,
                              const std::function<void()>& checkCancellation) {
   AD_EXPENSIVE_CHECK(
@@ -65,10 +63,13 @@ size_t Engine::countDistinct(IdTableView<0> input,
   if (input.empty()) {
     return 0;
   }
-  // Track which adjacent pairs are equal across all columns.
+  // Store whether the `i`-th entry in the `input` is equal to the `i+1`-th
+  // entry in the columns that have already been checked.
   std::vector<char, ad_utility::AllocatorWithLimit<char>> counter(
       input.numRows() - 1, static_cast<char>(true), input.getAllocator());
 
+  // For each column, set the entries in `counter` to 0 where there's a
+  // mismatch.
   for (const auto& col : input.getColumns()) {
     ad_utility::chunkedForLoop<100'000>(
         0ULL, input.numRows() - 1,
