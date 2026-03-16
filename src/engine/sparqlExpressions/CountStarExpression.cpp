@@ -8,8 +8,8 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "engine/CallFixedSize.h"
-#include "engine/Engine.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "index/Engine.h"
 
 namespace sparqlExpression {
 

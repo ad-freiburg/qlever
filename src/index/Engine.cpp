@@ -2,7 +2,7 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include "engine/Engine.h"
+#include "index/Engine.h"
 
 #include "engine/CallFixedSize.h"
 #include "util/ChunkedForLoop.h"

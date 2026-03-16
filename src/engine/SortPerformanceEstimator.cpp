@@ -10,9 +10,9 @@
 #include <iomanip>
 
 #include "engine/CallFixedSize.h"
-#include "engine/Engine.h"
 #include "engine/idTable/IdTable.h"
 #include "global/RuntimeParameters.h"
+#include "index/Engine.h"
 #include "util/CancellationHandle.h"
 #include "util/Log.h"
 #include "util/Random.h"

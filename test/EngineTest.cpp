@@ -8,8 +8,8 @@
 
 #include <algorithm>
 
-#include "engine/Engine.h"
 #include "engine/idTable/IdTable.h"
+#include "index/Engine.h"
 #include "util/AllocatorTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
