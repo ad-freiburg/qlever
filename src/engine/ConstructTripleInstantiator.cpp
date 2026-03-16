@@ -107,13 +107,13 @@ std::string formatTriple(const EvaluatedTerm& subject,
     return absl::StrCat(s, " ", p, " ", o, " .\n");
 
   } else if (format == csv) {
-    return absl::StrCat(RdfEscaping::escapeForCsv(s), ",",
-                        RdfEscaping::escapeForCsv(p), ",",
-                        RdfEscaping::escapeForCsv(o), "\n");
+    return absl::StrCat(RdfEscaping::escapeForCsv(std::move(s)), ",",
+                        RdfEscaping::escapeForCsv(std::move(p)), ",",
+                        RdfEscaping::escapeForCsv(std::move(o)), "\n");
   } else if (format == tsv) {
-    return absl::StrCat(RdfEscaping::escapeForTsv(s), "\t",
-                        RdfEscaping::escapeForTsv(p), "\t",
-                        RdfEscaping::escapeForTsv(o), "\n");
+    return absl::StrCat(RdfEscaping::escapeForTsv(std::move(s)), "\t",
+                        RdfEscaping::escapeForTsv(std::move(p)), "\t",
+                        RdfEscaping::escapeForTsv(std::move(o)), "\n");
   } else {
     AD_FAIL();  // unreachable
   }
