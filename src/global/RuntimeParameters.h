@@ -150,6 +150,12 @@ struct RuntimeParameters {
   SpaceSeparatedStrings serviceAllowedIriPrefixes_{
       {}, "service-allowed-iri-prefixes"};
 
+  // If set to true, then all queries and operations created afterward will
+  // neither read from nor write to QLever's subtree cache. This can be used to
+  // debug caching issues, and to get rid of the overhead of caching (in
+  // particular the computation of cache keys) when caching is not required.
+  Bool disableCaching_{false, "disable-caching"};
+
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE
   // CONSTRUCTOR, S.T. THEY CAN ALSO BE ACCESSED VIA THE RUNTIME INTERFACE.
