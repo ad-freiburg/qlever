@@ -7,11 +7,11 @@ project(QLever C CXX)
 if (APPLE)
     # Dynamically detect Homebrew prefix
     execute_process(
-            COMMAND brew --prefix
-            OUTPUT_VARIABLE HOMEBREW_PREFIX
-            OUTPUT_STRIP_TRAILING_WHITESPACE
-            RESULT_VARIABLE BREW_RESULT
-            ERROR_QUIET
+        COMMAND brew --prefix
+        OUTPUT_VARIABLE HOMEBREW_PREFIX
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        RESULT_VARIABLE BREW_RESULT
+        ERROR_QUIET
     )
     if (BREW_RESULT EQUAL 0 AND HOMEBREW_PREFIX)
         message(STATUS "Found Homebrew at: ${HOMEBREW_PREFIX}")
@@ -544,7 +544,7 @@ qlever_target_link_libraries(PrintIndexVersionMain util)
 
 if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
     install(TARGETS
-            qlever-index
+        qlever-index
         qlever-server
         RUNTIME DESTINATION bin
     )
