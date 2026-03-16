@@ -8,8 +8,8 @@
 #define QLEVER_SRC_ENGINE_TABLEWITHRANGE_H
 
 #include "backports/algorithm.h"
-#include "engine/LocalVocab.h"
 #include "engine/idTable/IdTable.h"
+#include "index/LocalVocab.h"
 
 // Helper type that provides const ref access to the underlying `IdTable` and
 // `LocalVocab` associated with the `IdTable`.

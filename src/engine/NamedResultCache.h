@@ -10,8 +10,8 @@
 #include <boost/optional.hpp>
 
 #include "engine/ExplicitIdTableOperation.h"
-#include "engine/LocalVocab.h"
 #include "engine/SpatialJoinCachedIndex.h"
+#include "index/LocalVocab.h"
 #include "util/Cache.h"
 #include "util/Serializer/Serializer.h"
 #include "util/Synchronized.h"

@@ -12,9 +12,9 @@
 #include "AllocatorTestHelpers.h"
 #include "IndexTestHelpers.h"
 #include "engine/CallFixedSize.h"
-#include "engine/Engine.h"
 #include "engine/Join.h"
 #include "engine/idTable/IdTable.h"
+#include "index/Engine.h"
 #include "util/Forward.h"
 #include "util/Random.h"
 
