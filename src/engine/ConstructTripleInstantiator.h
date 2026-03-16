@@ -38,7 +38,7 @@ std::vector<EvaluatedTriple> instantiateBatch(
     const PreprocessedConstructTemplate& tmpl,
     const BatchEvaluationResult& batchResult, size_t blankNodeBaseId);
 
-// Render a single term to its string form.
+// Format a single term to its string form.
 // `shortForm=true`  (turtle, csv, tsv, string-triples): integers, decimals
 //   and booleans are emitted without quotes or datatype annotation.
 // `shortForm=false` (N-Triples): all typed literals carry an explicit
@@ -48,7 +48,7 @@ std::vector<EvaluatedTriple> instantiateBatch(
 std::string formatTerm(const EvaluatedTermData& term, bool shortForm);
 
 // Formats a triple (subject, predicate, object) according to the output
-// format.
+// format `format`.
 std::string formatTriple(const EvaluatedTerm& subject,
                          const EvaluatedTerm& predicate,
                          const EvaluatedTerm& object,
