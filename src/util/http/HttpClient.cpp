@@ -230,11 +230,14 @@ HttpOrHttpsResponse sendHttpOrHttpsRequest(
       response = sendRequest(Url{currentUrl.c_str()}, ti<HttpsClient>);
     }
 
-    // Check if the response is a redirect (301, 302, 307, 308).
-    bool isRedirect = (response.status_ == http::status::moved_permanently ||
-                       response.status_ == http::status::found ||
-                       response.status_ == http::status::temporary_redirect ||
-                       response.status_ == http::status::permanent_redirect);
+    // Check if the response is a redirect (301, 302, 307, 308), we don't modify
+    // the request type to GET for status codes 301 and 302, which would be the
+    // behavior of browsers.
+    using enum http::status;
+    bool isRedirect =
+        ad_utility::contains(std::array{moved_permanently, found,
+                                        temporary_redirect, permanent_redirect},
+                             response.status_);
     if (!isRedirect) {
       return response;
     }

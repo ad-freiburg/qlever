@@ -5,8 +5,10 @@
 #include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
+#include <boost/url/url_view.hpp>
 #include <thread>
 
+#include "../cmake-build-release/_deps/abseil-src/absl/strings/charconv.h"
 #include "HttpTestHelpers.h"
 #include "global/RuntimeParameters.h"
 #include "util/GTestHelpers.h"
@@ -392,154 +394,105 @@ TEST(HttpClient, Redirects) {
   ad_utility::SharedCancellationHandle handle =
       std::make_shared<ad_utility::CancellationHandle<>>();
 
-  [[maybe_unused]] auto alwaysRedirect = [](std::string_view) { return true; };
+  std::string lastTarget;
 
-  // Helper lambda to create a server that redirects to a given location.
-  auto makeRedirectServer = []<typename Func = decltype(alwaysRedirect)>(
-      status redirectStatus, std::string location, Func shouldRedirect = {}) {
-    return TestHttpServer(
-        [redirectStatus, location = std::move(location),
-         shouldRedirect = std::move(shouldRedirect)](
-            auto request, auto&& send) -> boost::asio::awaitable<void> {
-          if (!shouldRedirect(request.target())) {
-            co_return co_await send(createOkResponse(
-                "Success", request, ad_utility::MediaType::textPlain));
-          }
-          http::response<http::string_body> resp;
-          resp.result(redirectStatus);
-          resp.set(http::field::content_type, "text/plain");
-          if (!location.empty()) {
-            resp.set(http::field::location, location);
-          }
-          resp.body() = "";
-          resp.prepare_payload();
-          co_await send(std::move(resp));
-        });
-  };
-
-  // Helper lambda to create a server that returns OK.
-  auto makeOkServer = []() {
-    return TestHttpServer(
-        [](auto request, auto&& send) -> boost::asio::awaitable<void> {
+  TestHttpServer server(
+      [&lastTarget](auto request, auto&& send) -> boost::asio::awaitable<void> {
+        boost::url_view url{request.target()};
+        lastTarget = request.target();
+        auto redirectIt = url.params().find("location");
+        if (redirectIt == url.params().end()) {
           co_return co_await send(createOkResponse(
               "Success", request, ad_utility::MediaType::textPlain));
-        });
-  };
+        }
+        http::response<http::string_body> resp;
+        unsigned redirectStatus = 200;
+        auto statusIt = url.params().find("status");
+        if (statusIt != url.params().end()) {
+          std::string statusString = (*statusIt)->value;
+          auto result = std::from_chars(
+              statusString.data(), statusString.data() + statusString.size(),
+              redirectStatus);
+          AD_CORRECTNESS_CHECK(result.ec == std::errc());
+        }
+        resp.result(redirectStatus);
+        resp.set(http::field::content_type, "text/plain");
+        resp.set(http::field::location, (*redirectIt)->value.data());
+        resp.body() = "";
+        resp.prepare_payload();
+        co_await send(std::move(resp));
+      });
+  server.runInOwnThread();
 
   // Test that all four redirect types (301, 302, 307, 308) work.
   for (auto redirectStatus :
        {status::moved_permanently, status::found, status::temporary_redirect,
         status::permanent_redirect}) {
-    // Create final server first.
-    auto okServer = makeOkServer();
-    okServer.runInOwnThread();
-    std::string finalUrl =
-        absl::StrCat("http://localhost:", okServer.getPort());
-
-    // Create `redirectServer` that points to `okServer`.
-    auto redirectServer = makeRedirectServer(redirectStatus, finalUrl);
-    redirectServer.runInOwnThread();
     std::string redirectUrl =
-        absl::StrCat("http://localhost:", redirectServer.getPort());
+        absl::StrCat("http://localhost:", server.getPort(),
+                     "/?status=", redirectStatus, "&location=%2Fok");
 
     // Send request with `maxRedirects = 1'.
     auto response = sendHttpOrHttpsRequest(Url{redirectUrl}, handle, verb::get,
                                            "", "", "", 1);
     EXPECT_EQ(response.status_, status::ok);
     EXPECT_EQ(toString(std::move(response.body_)), "Success");
-
-    redirectServer.shutDown();
-    okServer.shutDown();
   }
 
   // Test that redirect with empty `Location` header throws.
   {
-    auto server = makeRedirectServer(status::permanent_redirect, "");
-    server.runInOwnThread();
-    std::string url = absl::StrCat("http://localhost:", server.getPort());
+    std::string url = absl::StrCat("http://localhost:", server.getPort(),
+                                   "/?status=301&location=");
 
     AD_EXPECT_THROW_WITH_MESSAGE(
         sendHttpOrHttpsRequest(Url{url}, handle, verb::get, "", "", "", 1),
         AllOf(HasSubstr("redirect status code"),
               HasSubstr("no Location header")));
-    server.shutDown();
   }
 
   // Test that redirect with invalid `Location` header throws.
   {
-    auto server =
-        makeRedirectServer(status::permanent_redirect, "Not a valid URL");
-    server.runInOwnThread();
-    std::string url = absl::StrCat("http://localhost:", server.getPort());
+    std::string url =
+        absl::StrCat("http://localhost:", server.getPort(),
+                     "/?status=301&location=Not%20a%20valid%20URL");
 
     AD_EXPECT_THROW_WITH_MESSAGE(
         sendHttpOrHttpsRequest(Url{url}, handle, verb::get, "", "", "", 1),
         AllOf(HasSubstr("redirect status code")));
-    server.shutDown();
   }
 
   // Test that relative URLs are properly resolved.
   {
-    auto server = makeRedirectServer(
-        status::permanent_redirect, "../abc", [](std::string_view target) {
-          if (ql::starts_with(target, "/some/relative")) {
-            return true;
-          }
-          EXPECT_EQ(target, "/some/abc");
-          return false;
-        });
-    server.runInOwnThread();
-    std::string url = absl::StrCat("http://localhost:", server.getPort(),
-                                   "/some/relative/path");
+    std::string url =
+        absl::StrCat("http://localhost:", server.getPort(),
+                     "/some/relative/path?status=301&location=..%2Fabc");
 
     auto response =
         sendHttpOrHttpsRequest(Url{url}, handle, verb::get, "", "", "", 1);
+    EXPECT_EQ(lastTarget, "/some/abc");
     EXPECT_EQ(response.status_, status::ok);
     EXPECT_EQ(toString(std::move(response.body_)), "Success");
-    server.shutDown();
   }
 
   // Test that exceeding max redirects throws, using a chain of two redirects.
   {
-    // Create final server
-    auto finalServer = makeOkServer();
-    finalServer.runInOwnThread();
-    std::string finalUrl =
-        absl::StrCat("http://localhost:", finalServer.getPort());
-
-    // Create second redirect that points to final server
-    auto redirectServer2 =
-        makeRedirectServer(status::permanent_redirect, finalUrl);
-    redirectServer2.runInOwnThread();
-    std::string url2 =
-        absl::StrCat("http://localhost:", redirectServer2.getPort());
-
-    // Create first redirect that points to second redirect
-    auto redirectServer1 = makeRedirectServer(status::permanent_redirect, url2);
-    redirectServer1.runInOwnThread();
-    std::string url1 =
-        absl::StrCat("http://localhost:", redirectServer1.getPort());
+    std::string url = absl::StrCat(
+        "http://localhost:", server.getPort(),
+        "/?status=301&location=%2Fredirect%3Fstatus%3D301%26location%3D%2Fok");
 
     // With maxRedirects=1, this should fail (needs 2 redirects)
     AD_EXPECT_THROW_WITH_MESSAGE(
-        sendHttpOrHttpsRequest(Url{url1}, handle, verb::get, "", "", "", 1),
+        sendHttpOrHttpsRequest(Url{url}, handle, verb::get, "", "", "", 1),
         AllOf(HasSubstr("exceeded"), HasSubstr("redirect limit")));
-
-    redirectServer1.shutDown();
-    redirectServer2.shutDown();
-    finalServer.shutDown();
   }
 
   // Test that `maxRedirects = 0` means no redirects are followed.
   {
-    auto redirectServer =
-        makeRedirectServer(status::permanent_redirect, "http://example.com");
-    redirectServer.runInOwnThread();
-    std::string url =
-        absl::StrCat("http://localhost:", redirectServer.getPort());
+    std::string url = absl::StrCat("http://localhost:", server.getPort(),
+                                   "/?status=301&location=%2F");
     AD_EXPECT_THROW_WITH_MESSAGE(
         sendHttpOrHttpsRequest(Url{url}, handle, verb::get, "", "", "", 0),
         AllOf(HasSubstr("exceeded"), HasSubstr("redirect limit")));
-    redirectServer.shutDown();
   }
+  server.shutDown();
 }
