@@ -30,19 +30,22 @@ namespace ad_utility::triple_component {
 // wrapper classes for the concrete owning and non-owning variants.
 template <bool isOwning = true>
 class BasicIri {
- protected:
+ public:
   using StorageType =
       std::conditional_t<isOwning, std::string, std::string_view>;
-
-  // Store the string value of the IRI including the angle brackets.
-  StorageType iri_;
-
-  // Create a new `BasicIri` object.
-  explicit BasicIri(StorageType iri);
 
   // Pattern used to identify the scheme in an IRI. Note that we do not
   // check the validity of the part before the `://` according to RFC 3987.
   static constexpr std::string_view schemePattern = "://";
+
+ private:
+  // Store the string value of the IRI including the angle brackets.
+  StorageType iri_;
+
+ protected:
+  // Create a new `BasicIri` object.
+  explicit BasicIri(StorageType iri);
+  const StorageType& iri() const { return iri_; }
 
  public:
   // A default constructed IRI is empty.
@@ -81,7 +84,7 @@ class Iri : public BasicIri<true> {
   using BasicIri<true>::BasicIri;
 
  private:
-  Iri(BasicIri<true>&& base) : BasicIri<true>(std::move(base)) {}
+  explicit Iri(BasicIri<true>&& base) : BasicIri<true>(std::move(base)) {}
 
  public:
   using BasicIri<true>::toStringRepresentation;
@@ -123,7 +126,7 @@ class IriView : public BasicIri<false> {
   using BasicIri<false>::BasicIri;
 
  private:
-  IriView(BasicIri<false>&& base) : BasicIri<false>(std::move(base)) {}
+  explicit IriView(BasicIri<false>&& base) : BasicIri<false>(std::move(base)) {}
 
  public:
   template <typename H>
@@ -132,7 +135,7 @@ class IriView : public BasicIri<false> {
   }
 
   static IriView fromStringRepresentation(std::string_view sv) {
-    return BasicIri<false>::fromStringRepresentation(sv);
+    return IriView{BasicIri<false>::fromStringRepresentation(sv)};
   }
 };
 

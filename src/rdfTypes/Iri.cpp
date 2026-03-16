@@ -47,7 +47,7 @@ template class BasicIri<false>;
 // ____________________________________________________________________________
 
 Iri Iri::fromStringRepresentation(std::string s) {
-  return BasicIri<true>::fromStringRepresentation(std::move(s));
+  return Iri{BasicIri<true>::fromStringRepresentation(std::move(s))};
 }
 
 // ____________________________________________________________________________
@@ -103,29 +103,29 @@ Iri Iri::fromIrirefConsiderBase(std::string_view iriStringWithBrackets,
 
 // ____________________________________________________________________________
 Iri Iri::getBaseIri(bool domainOnly) const {
-  AD_CORRECTNESS_CHECK(ql::starts_with(iri_, '<') && ql::ends_with(iri_, '>'),
-                       iri_);
+  AD_CORRECTNESS_CHECK(ql::starts_with(iri(), '<') && ql::ends_with(iri(), '>'),
+                       iri());
   // Check if we have a scheme and find the first `/` after that (or the first
   // `/` at all if there is no scheme).
-  size_t pos = iri_.find(schemePattern);
+  size_t pos = iri().find(schemePattern);
   if (pos == std::string::npos) {
-    AD_LOG_WARN << "No scheme found in base IRI: \"" << iri_ << "\""
+    AD_LOG_WARN << "No scheme found in base IRI: \"" << iri() << "\""
                 << " (but we accept it anyway)" << std::endl;
     pos = 1;
   } else {
     pos += schemePattern.size();
   }
-  pos = iri_.find('/', pos);
+  pos = iri().find('/', pos);
   // Return the IRI with `/` appended in the following two cases: the IRI has
   // the empty path, or `domainOnly` is false and the final `/` is missing.
   if (pos == std::string::npos ||
-      (!domainOnly && iri_[iri_.size() - 2] != '/')) {
+      (!domainOnly && iri()[iri().size() - 2] != '/')) {
     return fromIrirefWithoutBrackets(
-        absl::StrCat(std::string_view(iri_).substr(1, iri_.size() - 2), "/"));
+        absl::StrCat(std::string_view(iri()).substr(1, iri().size() - 2), "/"));
   }
   // If `domainOnly` is true, remove the path part.
   if (domainOnly) {
-    return fromIrirefWithoutBrackets(std::string_view(iri_).substr(1, pos));
+    return fromIrirefWithoutBrackets(std::string_view(iri()).substr(1, pos));
   }
   // Otherwise, return the IRI as is.
   return *this;

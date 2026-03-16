@@ -34,15 +34,16 @@ static constexpr std::string_view literalPrefix{&literalPrefixChar, 1};
 // variants.
 template <bool isOwning = true>
 class alignas(16) BasicLiteralOrIri {
- protected:
+ public:
   using StorageType =
       std::conditional_t<isOwning, std::string, std::string_view>;
   using IriT = std::conditional_t<isOwning, Iri, IriView>;
   using LiteralT = std::conditional_t<isOwning, Literal, LiteralView>;
   using LiteralOrIriVariant = std::variant<IriT, LiteralT>;
-  LiteralOrIriVariant data_;
 
  private:
+  LiteralOrIriVariant data_;
+
   static constexpr auto toStringRepresentationImpl =
       [](auto&& val) -> decltype(auto) {
     return AD_FWD(val).toStringRepresentation();
@@ -89,7 +90,8 @@ class alignas(16) BasicLiteralOrIri {
   toStringRepresentation() && {
     return std::visit(
         [](auto&& val) -> decltype(auto) {
-          return std::move(val).toStringRepresentation();
+          static_assert(std::is_rvalue_reference_v<decltype(val)>);
+          return AD_FWD(val).toStringRepresentation();
         },
         std::move(data_));
   }
@@ -154,7 +156,7 @@ class LiteralOrIri : public BasicLiteralOrIri<true> {
   using Base::Base;
 
  private:
-  LiteralOrIri(Base&& base) : Base(std::move(base)) {}
+  explicit LiteralOrIri(Base&& base) : Base(std::move(base)) {}
 
  public:
   template <typename H>
@@ -198,7 +200,7 @@ class LiteralOrIriView : public BasicLiteralOrIri<false> {
   using Base::Base;
 
  private:
-  LiteralOrIriView(Base&& base) : Base(std::move(base)) {}
+  explicit LiteralOrIriView(Base&& base) : Base(std::move(base)) {}
 
  public:
   template <typename H>
@@ -207,7 +209,7 @@ class LiteralOrIriView : public BasicLiteralOrIri<false> {
   }
 
   static LiteralOrIriView fromStringRepresentation(std::string_view sv) {
-    return Base::fromStringRepresentation(sv);
+    return LiteralOrIriView{Base::fromStringRepresentation(sv)};
   }
 };
 

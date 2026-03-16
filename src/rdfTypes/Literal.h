@@ -33,52 +33,60 @@ namespace ad_utility::triple_component {
 // non-owning variants.
 template <bool isOwning = true>
 class BasicLiteral {
- protected:
+ public:
   using StorageType =
       std::conditional_t<isOwning, std::string, std::string_view>;
 
+ private:
   // Store the normalized version of the literal, including possible datatypes
   // and descriptors.
   //  For example `"Hello World"@en`  or `"With"Quote"^^<someDatatype>` (note
   //  that the quote in the middle is unescaped because this is the normalized
   //  form that QLever stores.
-  StorageType content_;
+  StorageType storage_;
   // The position after the closing `"`, so either the size of the string, or
   // the position of the `@` or `^^` for literals with language tags or
   // datatypes.
   std::size_t beginOfSuffix_;
 
+ protected:
   // Create a new literal without any descriptor.
   explicit BasicLiteral(StorageType content, size_t beginOfSuffix);
+
+  StorageType& storage() { return storage_; }
+  const StorageType& storage() const { return storage_; }
+
+  std::size_t& beginOfSuffix() { return beginOfSuffix_; }
+  std::size_t beginOfSuffix() const { return beginOfSuffix_; }
 
   // Internal helper function. Return either the empty string (for a plain
   // literal), `@langtag` or `^^<datatypeIri>`.
   std::string_view getSuffix() const {
-    std::string_view result = content_;
+    std::string_view result = storage_;
     result.remove_prefix(beginOfSuffix_);
     return result;
   }
 
   NormalizedStringView content() const {
-    return asNormalizedStringViewUnsafe(content_);
+    return asNormalizedStringViewUnsafe(storage_);
   }
 
  public:
   CPP_template(typename H, typename L)(
       requires ql::concepts::same_as<L, BasicLiteral>) friend H
       AbslHashValue(H h, const L& literal) {
-    return H::combine(std::move(h), literal.content_);
+    return H::combine(std::move(h), literal.storage_);
   }
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(BasicLiteral, content_,
                                               beginOfSuffix_)
 
   std::conditional_t<isOwning, const std::string&, std::string_view>
   toStringRepresentation() const& {
-    return content_;
+    return storage_;
   }
 
   std::string toStringRepresentation() && requires(isOwning) {
-    return std::move(content_);
+    return std::move(storage_);
   }
 
   static BasicLiteral fromStringRepresentation(StorageType internal);
@@ -118,7 +126,8 @@ class Literal : public BasicLiteral<true> {
   using BasicLiteral<true>::BasicLiteral;
 
  private:
-  Literal(BasicLiteral<true>&& base) : BasicLiteral<true>(std::move(base)) {}
+  explicit Literal(BasicLiteral<true>&& base)
+      : BasicLiteral<true>(std::move(base)) {}
 
  public:
   using BasicLiteral<true>::toStringRepresentation;
@@ -159,18 +168,17 @@ class Literal : public BasicLiteral<true> {
   // from the inner content. Note that the start position does not count the
   // leading quotes, so the first character after the quote has index 0.
   // Throws if either 'start' or 'start' + 'length' is out of bounds.
-  // from the inner content.
   void setSubstr(std::size_t start, std::size_t length);
 
   // Replace the content of the Literal object with `newContent`.
   // It truncates or extends the content based on the length of newContent
-  // Used in UCASE/LCASE functions in StringExpressions.cpp.
+  // Used in `UCASE`/`LCASE` functions in `StringExpressions.cpp`.
   void replaceContent(std::string_view newContent);
 
   // Concatenates the content of the current literal with another literal.
   // If the language tag or datatype of the literals differ, the existing
   // language tag or datatype is removed from the current literal. Used in the
-  // CONCAT function in StringExpressions.cpp.
+  // `CONCAT` function in `StringExpressions.cpp`.
   void concat(const Literal& other);
 };
 
@@ -180,7 +188,7 @@ class LiteralView : public BasicLiteral<false> {
   using BasicLiteral<false>::BasicLiteral;
 
  private:
-  LiteralView(BasicLiteral<false>&& base)
+  explicit LiteralView(BasicLiteral<false>&& base)
       : BasicLiteral<false>(std::move(base)) {}
 
  public:
@@ -191,7 +199,7 @@ class LiteralView : public BasicLiteral<false> {
   }
 
   static LiteralView fromStringRepresentation(std::string_view internal) {
-    return BasicLiteral<false>::fromStringRepresentation(internal);
+    return LiteralView{BasicLiteral<false>::fromStringRepresentation(internal)};
   }
 };
 

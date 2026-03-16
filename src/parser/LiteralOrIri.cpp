@@ -121,7 +121,7 @@ template class BasicLiteralOrIri<false>;
 // ____________________________________________________________________________
 
 LiteralOrIri LiteralOrIri::fromStringRepresentation(std::string internal) {
-  return Base::fromStringRepresentation(std::move(internal));
+  return LiteralOrIri{Base::fromStringRepresentation(std::move(internal))};
 }
 
 // ____________________________________________________________________________

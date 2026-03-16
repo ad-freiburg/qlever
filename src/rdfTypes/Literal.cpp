@@ -29,13 +29,13 @@ namespace ad_utility::triple_component {
 // __________________________________________
 template <bool isOwning>
 BasicLiteral<isOwning>::BasicLiteral(StorageType content, size_t beginOfSuffix)
-    : content_{std::move(content)}, beginOfSuffix_{beginOfSuffix} {
-  AD_CORRECTNESS_CHECK(ql::starts_with(content_, quote));
+    : storage_{std::move(content)}, beginOfSuffix_{beginOfSuffix} {
+  AD_CORRECTNESS_CHECK(ql::starts_with(storage(), quote));
   AD_CORRECTNESS_CHECK(beginOfSuffix_ >= 2);
-  AD_CORRECTNESS_CHECK(content_[beginOfSuffix_ - 1] == quote);
-  AD_CORRECTNESS_CHECK(beginOfSuffix_ == content_.size() ||
-                       content_[beginOfSuffix] == at ||
-                       content_[beginOfSuffix] == hat);
+  AD_CORRECTNESS_CHECK(storage()[beginOfSuffix_ - 1] == quote);
+  AD_CORRECTNESS_CHECK(beginOfSuffix_ == storage().size() ||
+                       storage()[beginOfSuffix] == at ||
+                       storage()[beginOfSuffix] == hat);
 }
 
 // __________________________________________
@@ -53,7 +53,7 @@ bool BasicLiteral<isOwning>::hasDatatype() const {
 // __________________________________________
 template <bool isOwning>
 NormalizedStringView BasicLiteral<isOwning>::getContent() const {
-  return content().substr(1, beginOfSuffix_ - 2);
+  return content().substr(1, beginOfSuffix() - 2);
 }
 
 // __________________________________________
@@ -64,7 +64,7 @@ NormalizedStringView BasicLiteral<isOwning>::getDatatype() const {
   }
   // We don't return the enclosing <angle brackets>
   NormalizedStringView result = content();
-  result.remove_prefix(beginOfSuffix_ + 3);
+  result.remove_prefix(beginOfSuffix() + 3);
   result.remove_suffix(1);
   return result;
 }
@@ -75,7 +75,7 @@ NormalizedStringView BasicLiteral<isOwning>::getLanguageTag() const {
   if (!hasLanguageTag()) {
     AD_THROW("The literal does not have an explicit language tag.");
   }
-  return content().substr(beginOfSuffix_ + 1);
+  return content().substr(beginOfSuffix() + 1);
 }
 
 // __________________________________________
@@ -101,16 +101,16 @@ BasicLiteral<isOwning> BasicLiteral<isOwning>::fromStringRepresentation(
 // __________________________________________
 template <bool isOwning>
 bool BasicLiteral<isOwning>::isPlain() const {
-  return beginOfSuffix_ == content_.size();
+  return beginOfSuffix() == storage().size();
 }
 
 // ____________________________________________________________________________
 template <bool isOwning>
 void BasicLiteral<isOwning>::removeDatatypeOrLanguageTag() {
   if constexpr (isOwning) {
-    content_.erase(beginOfSuffix_);
+    storage().erase(beginOfSuffix());
   } else {
-    content_ = content_.substr(0, beginOfSuffix_);
+    storage() = storage().substr(0, beginOfSuffix());
   }
 }
 
@@ -122,7 +122,8 @@ template class BasicLiteral<false>;
 // ____________________________________________________________________________
 
 Literal Literal::fromStringRepresentation(std::string internal) {
-  return BasicLiteral<true>::fromStringRepresentation(std::move(internal));
+  return Literal{
+      BasicLiteral<true>::fromStringRepresentation(std::move(internal))};
 }
 
 // ____________________________________________________________________________
@@ -175,9 +176,9 @@ void Literal::addLanguageTag(std::string_view languageTag) {
   AD_CORRECTNESS_CHECK(!hasDatatype() && !hasLanguageTag());
   using namespace std::string_view_literals;
   if (ql::starts_with(languageTag, '@')) {
-    absl::StrAppend(&content_, languageTag);
+    absl::StrAppend(&storage(), languageTag);
   } else {
-    absl::StrAppend(&content_, "@"sv, languageTag);
+    absl::StrAppend(&storage(), "@"sv, languageTag);
   }
 }
 
@@ -187,34 +188,34 @@ void Literal::addDatatype(const Iri& datatype) {
   // Trim the default string datatype.
   using namespace std::string_view_literals;
   if (asStringViewUnsafe(datatype.getContent()) != XSD_STRING) {
-    absl::StrAppend(&content_, "^^"sv, datatype.toStringRepresentation());
+    absl::StrAppend(&storage(), "^^"sv, datatype.toStringRepresentation());
   }
 }
 
 // __________________________________________
 void Literal::setSubstr(std::size_t start, std::size_t length) {
   std::size_t contentLength =
-      beginOfSuffix_ - 2;  // Ignore the two quotation marks
+      beginOfSuffix() - 2;  // Ignore the two quotation marks
   AD_CONTRACT_CHECK(start <= contentLength && start + length <= contentLength);
-  auto contentBegin = content_.begin() + 1;  // Ignore the leading quote
+  auto contentBegin = storage().begin() + 1;  // Ignore the leading quote
   ql::shift_left(contentBegin, contentBegin + start + length, start);
-  content_.erase(length + 1, contentLength - length);
-  beginOfSuffix_ = beginOfSuffix_ - (contentLength - length);
+  storage().erase(length + 1, contentLength - length);
+  beginOfSuffix() = beginOfSuffix() - (contentLength - length);
 }
 
 // ____________________________________________________________________________
 void Literal::replaceContent(std::string_view newContent) {
-  std::size_t originalContentLength = beginOfSuffix_ - 2;
+  std::size_t originalContentLength = beginOfSuffix() - 2;
   std::size_t minLength = std::min(originalContentLength, newContent.size());
-  ql::ranges::copy(newContent.substr(0, minLength), content_.begin() + 1);
+  ql::ranges::copy(newContent.substr(0, minLength), storage().begin() + 1);
   if (newContent.size() <= originalContentLength) {
-    content_.erase(newContent.size() + 1,
-                   originalContentLength - newContent.size());
+    storage().erase(newContent.size() + 1,
+                    originalContentLength - newContent.size());
   } else {
-    content_.insert(beginOfSuffix_ - 1,
-                    newContent.substr(originalContentLength));
+    storage().insert(beginOfSuffix() - 1,
+                     newContent.substr(originalContentLength));
   }
-  beginOfSuffix_ = newContent.size() + 2;
+  beginOfSuffix() = newContent.size() + 2;
 }
 
 // ____________________________________________________________________________
@@ -226,8 +227,8 @@ void Literal::concat(const Literal& other) {
     removeDatatypeOrLanguageTag();
   }
   const auto& otherContent = asStringViewUnsafe(other.getContent());
-  content_.insert(beginOfSuffix_ - 1, otherContent);
-  beginOfSuffix_ += otherContent.size();
+  storage().insert(beginOfSuffix() - 1, otherContent);
+  beginOfSuffix() += otherContent.size();
 }
 
 }  // namespace ad_utility::triple_component
