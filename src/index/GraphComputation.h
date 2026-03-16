@@ -1,5 +1,6 @@
 //  Copyright 2026 The QLever Authors, in particular:
 //
+//  2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 //  2026 Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>, UFR
 //
 //  UFR = University of Freiburg, Chair of Algorithms and Data Structures
@@ -21,18 +22,19 @@
 // Helper function to compute the distinct graphs contained in a block. Returns
 // `nullopt` if there are more than `MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA`
 // distinct graphs, otherwise returns the distinct graphs as a vector. The
-// `initializer` is used to initialize the vector of distinct graphs.
+// `preexistingGraphs` is used to initialize the vector of distinct graphs, so
+// this function can be used to extend existing metadata.
 CPP_template(typename T)(requires ql::ranges::range<T>&&
                              std::same_as<ql::ranges::range_value_t<T>, Id>)
     std::optional<std::vector<Id>> computeDistinctGraphs(
-        T&& idRange, ql::span<const Id> initializer = {}) {
-  AD_CORRECTNESS_CHECK(initializer.size() <=
+        T&& idRange, ql::span<const Id> preexistingGraphs = {}) {
+  AD_CORRECTNESS_CHECK(preexistingGraphs.size() <=
                        MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA);
-  size_t foundGraphs = initializer.size();
+  size_t foundGraphs = preexistingGraphs.size();
   // O(MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA * n), but good for cache
   // efficiency.
   std::array<Id, MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA> graphs;
-  ql::ranges::copy(initializer, graphs.begin());
+  ql::ranges::copy(preexistingGraphs, graphs.begin());
   for (Id graph : idRange) {
     auto actualEnd = graphs.begin() + foundGraphs;
     if (ql::ranges::find(graphs.begin(), actualEnd, graph.getBits(),

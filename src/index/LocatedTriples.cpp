@@ -294,9 +294,11 @@ void updateGraphMetadata(CompressedBlockMetadata& blockMetadata,
 
   if (!hasOnlyOneGraph(graphs)) {
     // We do not know anything about the triples contained in the block, so we
-    // also cannot know if the `locatedTriples` introduces duplicates. We thus
-    // have to be conservative and assume that there are duplicates.
-    blockMetadata.containsDuplicatesWithDifferentGraphs_ = true;
+    // also cannot know if the `locatedTriples` introduces duplicates unless. We
+    // thus have to be conservative and assume that there are duplicates when
+    // data was inserted.
+    blockMetadata.containsDuplicatesWithDifferentGraphs_ |=
+        ql::ranges::any_of(locatedTriples, &LocatedTriple::insertOrDelete_);
   }
 }
 
