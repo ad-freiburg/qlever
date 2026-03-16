@@ -70,22 +70,6 @@ struct LocatedTriplesState {
 // `LocatedTriplesState` can change in some cases.
 using LocatedTriplesSharedState = std::shared_ptr<const LocatedTriplesState>;
 
-// A class for keeping track of the number of triples of the `DeltaTriples`.
-struct DeltaTriplesCount {
-  int64_t triplesInserted_;
-  int64_t triplesDeleted_;
-
-  /// Output as json. The signature of this function is mandated by the json
-  /// library to allow for implicit conversion.
-  friend void to_json(nlohmann::json& j, const DeltaTriplesCount& count);
-
-  friend DeltaTriplesCount operator-(const DeltaTriplesCount& lhs,
-                                     const DeltaTriplesCount& rhs);
-
-  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(DeltaTriplesCount,
-                                              triplesInserted_, triplesDeleted_)
-};
-
 // A class for maintaining triples that are inserted or deleted after index
 // building, we call these delta triples. How it works in principle:
 //
