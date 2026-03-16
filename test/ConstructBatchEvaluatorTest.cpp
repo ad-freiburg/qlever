@@ -127,12 +127,10 @@ TEST_F(ConstructBatchEvaluatorTest, evaluatesOnlyRequestedColumns) {
   auto result = evaluateIdTable({0, 2}, idTable, idCache);
 
   ASSERT_EQ(result.numRows_, 1);
-  // Exactly 2 positions evaluated (columns 0 and 2); column 1 was not
-  // requested.
+  // Exactly 2 columns evaluated (columns 0 and 2); column 1 was not requested.
   ASSERT_EQ(result.variablesByColumn_.size(), 2);
-  // Position 0 = column 0, position 1 = column 2.
   EXPECT_THAT(result.getVariable(0, 0), evalTerm("<s>"));
-  EXPECT_THAT(result.getVariable(1, 0), evalTerm("<o>"));
+  EXPECT_THAT(result.getVariable(2, 0), evalTerm("<o>"));
 }
 
 // A single variable column where some rows hold a defined `Id` and one row
@@ -266,28 +264,28 @@ TEST_F(ConstructBatchEvaluatorTest, realisticConstructPattern) {
   ASSERT_EQ(result.numRows_, 4);
   ASSERT_EQ(result.variablesByColumn_.size(), 2);
 
-  // Position 0 = column 0 (?s): <s>, <s>, <o>, <s>
+  // Column 0 (?s): <s>, <s>, <o>, <s>
   EXPECT_THAT(getColumn(result, 0),
               ElementsAre(evalTerm("<s>"), evalTerm("<s>"), evalTerm("<o>"),
                           evalTerm("<s>")));
 
   // idS_ appears in col0[0,1,3] and col2[2]: all must share the same
-  // shared_ptr. (col2 is at position 1.)
+  // shared_ptr.
   const auto& firstS = getColumn(result, 0).at(0);
   auto idSTerms =
       std::vector{getColumn(result, 0).at(1), getColumn(result, 0).at(3),
-                  getColumn(result, 1).at(2)};
+                  getColumn(result, 2).at(2)};
   EXPECT_THAT(idSTerms, Each(Eq(firstS)));
 
-  // Position 1 = column 2 (?o): <o>, <q>, <s>, <o>
-  EXPECT_THAT(getColumn(result, 1),
+  // Column 2 (?o): <o>, <q>, <s>, <o>
+  EXPECT_THAT(getColumn(result, 2),
               ElementsAre(evalTerm("<o>"), evalTerm("<q>"), evalTerm("<s>"),
                           evalTerm("<o>")));
 
   // idO_ appears in col2[0,3] and col0[2]: all must share the same shared_ptr.
-  const auto& firstO = getColumn(result, 1).at(0);
+  const auto& firstO = getColumn(result, 2).at(0);
   auto idOTerms =
-      std::vector{getColumn(result, 1).at(3), getColumn(result, 0).at(2)};
+      std::vector{getColumn(result, 2).at(3), getColumn(result, 0).at(2)};
   EXPECT_THAT(idOTerms, Each(Eq(firstO)));
 }
 
