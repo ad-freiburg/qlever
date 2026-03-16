@@ -6,8 +6,9 @@
 #ifndef QLEVER_SRC_PARSER_IRI_H
 #define QLEVER_SRC_PARSER_IRI_H
 
-#include <string_view>
 #include <uriparser/Uri.h>
+
+#include <string_view>
 
 #include "backports/concepts.h"
 #include "backports/three_way_comparison.h"

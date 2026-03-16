@@ -89,7 +89,7 @@ TEST(IriTest, fromIrirefConsiderBase) {
   EXPECT_EQ(fromIrirefConsiderBase("</prosite/PS51927>"),
             "<http://example.com/prosite/PS51927>");
   EXPECT_EQ(fromIrirefConsiderBase("<http://purl.uniprot.org/uniprot/>"),
-              "<http://purl.uniprot.org/uniprot/>");
+            "<http://purl.uniprot.org/uniprot/>");
   EXPECT_EQ(fromIrirefConsiderBase("</a>"), "<http://example.com/a>");
   EXPECT_EQ(fromIrirefConsiderBase("<a>"), "<http://example.com/a>");
   EXPECT_EQ(fromIrirefConsiderBase("<>"), "<http://example.com/uniprot>");
