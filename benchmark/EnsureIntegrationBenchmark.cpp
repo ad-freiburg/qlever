@@ -129,21 +129,25 @@ class EnsureIntegrationBenchmark : public BenchmarkInterface {
         std::vector<LocatedTriple> preExisting = generatePreExisting(N);
         std::vector<LocatedTriple> newItems = generateNewItems(M, 1000 + N);
 
-        // zipSort benchmark
-        table.addMeasurement(nIdx, 1, [&]() {
+        {
+          // zipSort benchmark
           SortedLocatedTriplesVector vec = prepareVector(preExisting, newItems);
-          vec.zipSort();
-          vec.sortedUntil_ = vec.triples_.size();
-          vec.dirty_ = false;
-        });
+          table.addMeasurement(nIdx, 1, [&]() {
+            vec.zipSort();
+            vec.sortedUntil_ = vec.triples_.size();
+            vec.dirty_ = false;
+          });
+        }
 
-        // fullSort benchmark
-        table.addMeasurement(nIdx, 2, [&]() {
+        {
+          // fullSort benchmark
           SortedLocatedTriplesVector vec = prepareVector(preExisting, newItems);
-          vec.fullSort();
-          vec.sortedUntil_ = vec.triples_.size();
-          vec.dirty_ = false;
-        });
+          table.addMeasurement(nIdx, 2, [&]() {
+            vec.fullSort();
+            vec.sortedUntil_ = vec.triples_.size();
+            vec.dirty_ = false;
+          });
+        }
       }
     }
 
