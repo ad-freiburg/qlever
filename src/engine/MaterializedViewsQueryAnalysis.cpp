@@ -16,6 +16,7 @@
 #include "backports/algorithm.h"
 #include "engine/IndexScan.h"
 #include "engine/MaterializedViews.h"
+#include "engine/VariableToColumnMap.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/PropertyPath.h"
 #include "parser/SparqlParser.h"
@@ -271,8 +272,6 @@ bool QueryPatternCache::analyzeSimpleChain(ViewPtr view, const SparqlTriple& a,
   }
   auto bObj = b.o_.getVariable();
 
-  // TODO<ullingerc> Check column indices and undef status in view.
-
   // Insert chain to cache.
   ChainedPredicates preds{aPred.value(), bPred.value()};
   auto [it, wasNew] = simpleChainCache_.try_emplace(preds, nullptr);
@@ -331,8 +330,6 @@ bool QueryPatternCache::analyzeJoinStar(
 
   // Sort arms by predicate for linear-time matching.
   ql::ranges::sort(arms, {}, &StarArm::first);
-
-  // TODO<ullingerc> Check column indices and undef status in view.
 
   // Insert star into cache.
   starCache_.insert({view, StarInfo{subject, std::move(arms)}});
