@@ -45,7 +45,7 @@ std::vector<EvaluatedTriple> instantiateBatch(
 //   `"..."^^<type>` annotation.
 // Terms with `type == nullptr` (IRIs, blank nodes, vocab-indexed literals)
 // are returned as-is regardless of `shortForm`.
-std::string renderTerm(const EvaluatedTermData& term, bool shortForm);
+std::string formatTerm(const EvaluatedTermData& term, bool shortForm);
 
 // Formats a triple (subject, predicate, object) according to the output
 // format.

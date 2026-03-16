@@ -66,7 +66,7 @@ std::vector<EvaluatedTriple> instantiateBatch(
 }
 
 // _____________________________________________________________________________
-std::string renderTerm(const EvaluatedTermData& term, bool shortForm) {
+std::string formatTerm(const EvaluatedTermData& term, bool shortForm) {
   if (term.type == nullptr) {
     // IRI, blank node, or vocab-indexed literal: already in final form.
     return term.str;
@@ -92,9 +92,9 @@ std::string formatTriple(const EvaluatedTerm& subject,
   AD_CONTRACT_CHECK(ad_utility::contains(supportedFormats, format));
 
   const bool shortForm = (format != ntriples);
-  std::string s = renderTerm(*subject, shortForm);
-  std::string p = renderTerm(*predicate, shortForm);
-  std::string o = renderTerm(*object, shortForm);
+  std::string s = formatTerm(*subject, shortForm);
+  std::string p = formatTerm(*predicate, shortForm);
+  std::string o = formatTerm(*object, shortForm);
 
   if (format == turtle || format == ntriples) {
     // Only escape literals (strings starting with "). IRIs and blank nodes

@@ -52,9 +52,9 @@ class StringTripleAdapter : public ad_utility::InputRangeFromGet<StringTriple> {
   std::optional<StringTriple> get() override {
     auto triple = processor_->get();
     if (!triple) return std::nullopt;
-    return StringTriple{renderTerm(*triple->subject_, true),
-                        renderTerm(*triple->predicate_, true),
-                        renderTerm(*triple->object_, true)};
+    return StringTriple{formatTerm(*triple->subject_, true),
+                        formatTerm(*triple->predicate_, true),
+                        formatTerm(*triple->object_, true)};
   }
 
  private:
