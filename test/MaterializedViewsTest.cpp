@@ -7,6 +7,8 @@
 #include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
 
+#include <functional>
+
 #include "./MaterializedViewsTestHelpers.h"
 #include "./QueryPlannerTestHelpers.h"
 #include "./ServerTestHelpers.h"
@@ -14,8 +16,12 @@
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "engine/IndexScan.h"
 #include "engine/MaterializedViews.h"
+#include "engine/MaterializedViewsQueryAnalysis.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/Server.h"
+#include "engine/VariableToColumnMap.h"
+#include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "index/EncodedIriManager.h"
 #include "parser/MaterializedViewQuery.h"
 #include "parser/SparqlParser.h"
@@ -38,6 +44,7 @@ using V = Variable;
 
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, Basic) {
+  SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
   // Write a simple view.
   clearLog();
   qlv().writeMaterializedView("testView1", simpleWriteQuery_);
@@ -308,6 +315,7 @@ TEST_F(MaterializedViewsTest, MetadataDependentConfigChecks) {
 
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, ColumnPermutation) {
+  SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
   MaterializedViewsManager manager{testIndexBase_};
 
   // Helper to get all column names from a view via its `VariableToColumnMap`.
@@ -592,10 +600,41 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
             "The materialized view 'testView5' is saved with format version "
             "0, however this version of QLever expects"));
   }
+
+  // Backward compatibility: View with no saved query.
+  {
+    auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
+    manager.writeViewToDisk("testView6", plan);
+    {
+      // Remove the `query` key from the metadata JSON file.
+      nlohmann::json viewInfo;
+      const std::string metadataFilename =
+          "_materializedViewsTestIndex.view.testView6.viewinfo.json";
+      ad_utility::makeIfstream(metadataFilename) >> viewInfo;
+      viewInfo.erase("query");
+      ad_utility::makeOfstream(metadataFilename)
+          << viewInfo.dump() << std::endl;
+    }
+    // Load the view: It can be loaded correctly, but does not have an original
+    // query set.
+    auto view = manager.getView("testView6");
+    EXPECT_FALSE(view->originalQuery().has_value());
+    EXPECT_FALSE(view->parsedQuery().has_value());
+  }
+
+  // View with no parsed query is skipped by `QueryPatternCache::analyzeView`.
+  {
+    qlv().writeMaterializedView("testView7", simpleWriteQuery_);
+    auto view = std::make_shared<MaterializedView>(testIndexBase_, "testView7");
+    view->parsedQuery_ = std::nullopt;
+    materializedViewsQueryAnalysis::QueryPatternCache c;
+    EXPECT_FALSE(c.analyzeView(view));
+  }
 }
 
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, serverIntegration) {
+  SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
   using namespace serverTestHelpers;
   SimulateHttpRequest simulateHttpRequest{testIndexBase_};
 
@@ -808,6 +847,59 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
 }
 
 // _____________________________________________________________________________
+TEST_F(MaterializedViewsTest, BindToColumnMap) {
+  qlv().writeMaterializedView("testView1", simpleWriteQuery_);
+  MaterializedViewsManager manager{testIndexBase_};
+  auto view = manager.getView("testView1");
+  EXPECT_TRUE(view->parsedQuery().has_value());
+
+  // `BIND` is contained.
+  {
+    auto expr = sparqlExpression::SparqlExpressionPimpl{
+        std::make_shared<sparqlExpression::IdExpression>(
+            ValueId::makeFromInt(1)),
+        "1"};
+    auto cacheKey = expr.getCacheKey({});
+    EXPECT_THAT(view->lookupBindTargetColumn(cacheKey),
+                ::testing::Optional(::testing::Eq(3)));
+  }
+
+  // `BIND` is not contained.
+  {
+    auto expr = sparqlExpression::SparqlExpressionPimpl{
+        std::make_shared<sparqlExpression::IdExpression>(
+            ValueId::makeFromDouble(5.0)),
+        "5.0"};
+    auto cacheKey = expr.getCacheKey({});
+    EXPECT_FALSE(view->lookupBindTargetColumn(cacheKey).has_value());
+  }
+
+  // Variable in `BIND` must be mapped to the correct column by the caller.
+  qlv().writeMaterializedView("testView2", R"(
+    SELECT ?s ?p ?o ?g {
+      ?s ?p ?o .
+      BIND(?o AS ?g)
+    }
+  )");
+  auto view2 = manager.getView("testView2");
+  {
+    auto expr = sparqlExpression::SparqlExpressionPimpl{
+        std::make_shared<sparqlExpression::VariableExpression>(V{"?x"}), "?x"};
+
+    // `BIND` is found using correct mapping despite different variable name.
+    VariableToColumnMap correctVarToCol{{V{"?x"}, makeAlwaysDefinedColumn(2)}};
+    auto cacheKey1 = expr.getCacheKey(correctVarToCol);
+    EXPECT_THAT(view2->lookupBindTargetColumn(cacheKey1),
+                ::testing::Optional(::testing::Eq(3)));
+
+    // `BIND` is not found with different column index.
+    VariableToColumnMap wrongVarToCol{{V{"?x"}, makeAlwaysDefinedColumn(1)}};
+    auto cacheKey2 = expr.getCacheKey(wrongVarToCol);
+    EXPECT_FALSE(view2->lookupBindTargetColumn(cacheKey2).has_value());
+  }
+}
+
+// _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, NoDuplicateRemovalOnScan) {
   // Test that rows from materialized views are not implicitly deduplicated when
   // scanning. If the first three columns have duplicates (differing only in an
@@ -856,6 +948,34 @@ TEST_F(MaterializedViewsTest, NoDuplicateRemovalOnScan) {
   )");
   EXPECT_EQ(threeColsResult.numRows(), 2 * numRowsDedup);
   EXPECT_THAT(threeColsResult, matchesIdTable(threeColsExpected));
+
+  // Graph column regression from #2708: Previously the graph column would
+  // overwrite an additional column if it was not selected.
+  {
+    qlv().writeMaterializedView("graphColRegression", R"(
+      SELECT ?a ?b ?c ?d ?e {
+        VALUES (?a ?b ?c ?d ?e) {
+          (1 2 3 4 5)
+          (11 12 13 14 15)
+        }
+      }
+    )");
+    auto res = getQueryResultAsIdTable(R"(
+    PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT ?e {
+        SERVICE view:graphColRegression {
+          [
+            view:column-a 1 ;
+            view:column-e ?e
+          ]
+        }
+      }
+    )");
+    // If we always select the graph column, but do not read it into a dummy
+    // variable, we would get `4` instead of `5` here.
+    auto expected = getQueryResultAsIdTable("SELECT (5 AS ?e) {}");
+    EXPECT_THAT(res, matchesIdTable(expected));
+  }
 }
 
 // Example queries for testing query rewriting.
@@ -870,9 +990,7 @@ constexpr std::string_view simpleChainRenamedPlusBind =
     "SELECT ?a ?b ?c ?x { ?b <p2> ?c . ?a <p1> ?b . BIND(5 AS ?x) }";
 
 // _____________________________________________________________________________
-TEST_P(MaterializedViewsQueryRewriteTest, simpleChain) {
-  namespace h = queryPlannerTestHelpers;
-
+TEST_P(MaterializedViewsChainRewriteTest, simpleChain) {
   RewriteTestParams p = GetParam();
   auto cleanup =
       setRuntimeParameterForTest<&RuntimeParameters::queryPlanningBudget_>(
@@ -906,27 +1024,16 @@ TEST_P(MaterializedViewsQueryRewriteTest, simpleChain) {
   MaterializedViewsManager manager{onDiskBase};
   manager.writeViewToDisk(viewName, qlv.parseAndPlanQuery(p.writeQuery_));
   qlv.loadMaterializedView(viewName);
+  auto chainView = std::bind_front(&viewScanSimple, viewName);
 
   // With the materialized view loaded, an index scan on the view is performed
   // instead of a regular join.
-  auto qpExpect = [](qlever::Qlever& qlv, const auto& query,
-                     ::testing::Matcher<const QueryExecutionTree&> matcher,
-                     source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-    auto l = generateLocationTrace(sourceLocation);
-    auto [qet, qec, parsed] = qlv.parseAndPlanQuery(std::string{query});
-    EXPECT_THAT(*qet, matcher);
-  };
-  auto viewScan = [](std::string a, std::string b, std::string c) {
-    return h::IndexScanFromStrings(std::move(a), std::move(b), std::move(c),
-                                   {Permutation::Enum::SPO});
-  };
-
-  qpExpect(qlv, simpleChain, viewScan("?s", "?m", "?o"));
-  qpExpect(qlv, simpleChainRenamed, viewScan("?a", "?b", "?c"));
+  qpExpect(qlv, simpleChain, chainView("?s", "?m", "?o"));
+  qpExpect(qlv, simpleChainRenamed, chainView("?a", "?b", "?c"));
   qpExpect(qlv, simpleChainFixed,
-           viewScan("<s2>", "?_QLever_internal_variable_qp_0", "?c"));
+           chainView("<s2>", "?_QLever_internal_variable_qp_0", "?c"));
   qpExpect(qlv, simpleChainPlusJoin,
-           h::Join(viewScan("?s", "?_QLever_internal_variable_qp_0", "?o"),
+           h::Join(chainView("?s", "?_QLever_internal_variable_qp_0", "?o"),
                    h::IndexScanFromStrings("?s", "<p3>", "?o2")));
 
   // TODO<ullingerc> Test overlapping view plans.
@@ -934,7 +1041,7 @@ TEST_P(MaterializedViewsQueryRewriteTest, simpleChain) {
 
 // _____________________________________________________________________________
 INSTANTIATE_TEST_SUITE_P(
-    MaterializedViewsTest, MaterializedViewsQueryRewriteTest,
+    MaterializedViewsTest, MaterializedViewsChainRewriteTest,
     ::testing::Values(
         // Default case.
         RewriteTestParams{std::string{simpleChain}, 1500},

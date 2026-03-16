@@ -352,6 +352,19 @@ TEST(RegexExpression, unorderedPrefixRegexUnorderedColumn) {
   test("?mixed", "^x", {F, F, T}, true);
   test("?mixed", "^x", {F, F, F}, false);
 
+  // Unbound input, regression test for
+  // https://github.com/ad-freiburg/qlever/issues/2712 .
+  {
+    auto expr = makeRegexExpression("?doesNotExist", "^", std::nullopt, false);
+    EXPECT_TRUE(isPrefixExpression(expr));
+    TestContext ctx;
+    auto resultAsVariant = expr->evaluate(&ctx.context);
+    EXPECT_THAT(resultAsVariant, ::testing::VariantWith<Id>(U));
+  }
+
+  // Input with UNDEF.
+  test("?everything", "^x", {F, F, U}, false);
+
   // TODO<joka921> Prefix filters on numbers do not yet work.
 }
 
@@ -387,6 +400,32 @@ TEST(RegexExpression, prefixRegexOrderedColumn) {
   test("?vocab", "^äl", {{{0, 2}}});
   test("?vocab", "^c", {});
   test("?mixed", "^x", {{{2, 3}}}, true);
+
+  // Input with UNDEF.
+  {
+    Variable variable{"?everything"};
+    TestContext ctx = TestContext::sortedBy(variable);
+    auto expression =
+        makeRegexExpression(variable.name(), "^x", std::nullopt, false);
+    EXPECT_TRUE(isPrefixExpression(expression));
+    auto resultAsVariant = expression->evaluate(&ctx.context);
+    EXPECT_THAT(resultAsVariant,
+                ::testing::VariantWith<VectorWithMemoryLimit<Id>>(
+                    ::testing::ElementsAre(U, F, F)));
+  }
+  // Empty input.
+  {
+    Variable variable{"?everything"};
+    TestContext ctx = TestContext::sortedBy(variable);
+    ctx.context._endIndex = 0;
+    auto expression =
+        makeRegexExpression(variable.name(), "^x", std::nullopt, false);
+    EXPECT_TRUE(isPrefixExpression(expression));
+    auto resultAsVariant = expression->evaluate(&ctx.context);
+    EXPECT_THAT(resultAsVariant,
+                ::testing::VariantWith<ad_utility::SetOfIntervals>(
+                    ad_utility::SetOfIntervals{}));
+  }
 }
 
 // _____________________________________________________________________________

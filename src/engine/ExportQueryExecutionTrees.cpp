@@ -4,6 +4,8 @@
 //          Robin Textor-Falconi <textorr@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "engine/ExportQueryExecutionTrees.h"
 
@@ -31,8 +33,8 @@
 using ad_utility::InputRangeTypeErased;
 
 namespace {
+
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
-using Literal = ad_utility::triple_component::Literal;
 
 // _____________________________________________________________________________
 // Return true iff the `result` is nonempty.
@@ -265,9 +267,10 @@ auto ExportQueryExecutionTrees::constructQueryResultToTriples(
     const ad_utility::sparql_types::Triples& constructTriples,
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
     uint64_t& resultSize, CancellationHandle cancellationHandle) {
-  return ConstructTripleGenerator::generateStringTriples(
-      qet, constructTriples, limitAndOffset, std::move(result), resultSize,
-      std::move(cancellationHandle));
+  return qlever::constructExport::ConstructTripleGenerator::
+      generateStringTriples(qet, constructTriples, limitAndOffset,
+                            std::move(result), resultSize,
+                            std::move(cancellationHandle));
 }
 
 // _____________________________________________________________________________
@@ -468,14 +471,6 @@ ExportQueryExecutionTrees::idToLiteralForEncodedValue(
 }
 
 // _____________________________________________________________________________
-bool ExportQueryExecutionTrees::isPlainLiteralOrLiteralWithXsdString(
-    const LiteralOrIri& word) {
-  AD_CORRECTNESS_CHECK(word.isLiteral());
-  return !word.hasDatatype() ||
-         asStringViewUnsafe(word.getDatatype()) == XSD_STRING;
-}
-
-// _____________________________________________________________________________
 std::string ExportQueryExecutionTrees::replaceAnglesByQuotes(
     std::string iriString) {
   AD_CORRECTNESS_CHECK(ql::starts_with(iriString, '<'));
@@ -499,13 +494,10 @@ ExportQueryExecutionTrees::handleIriOrLiteral(
   }
   AD_CORRECTNESS_CHECK(word.isLiteral());
   if (onlyReturnLiteralsWithXsdString) {
-    if (isPlainLiteralOrLiteralWithXsdString(word)) {
-      if (word.hasDatatype()) {
-        word.getLiteral().removeDatatypeOrLanguageTag();
-      }
-      return std::move(word.getLiteral());
+    if (word.hasDatatype()) {
+      return std::nullopt;
     }
-    return std::nullopt;
+    return std::move(word.getLiteral());
   }
   // Note: `removeDatatypeOrLanguageTag` also correctly works if the literal has
   // neither a datatype nor a language tag, hence we don't need an `if` here.
@@ -667,8 +659,7 @@ ExportQueryExecutionTrees::idToLiteralOrIriForEncodedValue(Id id) {
 }
 
 // _____________________________________________________________________________
-std::optional<LiteralOrIri>
-ExportQueryExecutionTrees::getLiteralOrIriFromWordVocabIndex(
+LiteralOrIri ExportQueryExecutionTrees::getLiteralOrIriFromWordVocabIndex(
     const IndexImpl& index, Id id) {
   return LiteralOrIri{
       ad_utility::triple_component::Literal::literalWithoutQuotes(
@@ -1056,7 +1047,7 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
   ql::erase(columns, std::nullopt);
 
   auto getBinding = [&](const TableConstRefWithVocab& pair, const uint64_t& i) {
-    nlohmann::ordered_json binding = {};
+    auto binding = nlohmann::ordered_json::object();
     for (const auto& column : columns) {
       auto optionalStringAndType = idToStringAndType(
           qet.getQec()->getIndex(), pair.idTable()(i, column->columnIndex_),
