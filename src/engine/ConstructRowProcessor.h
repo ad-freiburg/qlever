@@ -81,8 +81,8 @@ class ConstructRowProcessor
 
   // Table data.
   TableConstRefWithVocab tableWithVocab_;
-  ql::ranges::iota_view<uint64_t, uint64_t>
-      rowIndices_;  // IdTable row indices to process
+  // IdTable row indices to process.
+  ql::ranges::iota_view<uint64_t, uint64_t> rowIndices_;
   size_t currentRowOffset_;
 
   // LRU cache for avoiding redundant vocabulary lookups across batches.

@@ -12,6 +12,7 @@
 #include <memory>
 #include <vector>
 
+#include "engine/ConstructRowProcessor.h"
 #include "engine/ConstructTypes.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryExportTypes.h"
@@ -23,8 +24,6 @@
 #include "util/stream_generator.h"
 
 namespace qlever::constructExport {
-
-class ConstructRowProcessor;
 
 // Generates triples from CONSTRUCT query results by instantiating triple
 // patterns (from the CONSTRUCT clause) with values from the result table
