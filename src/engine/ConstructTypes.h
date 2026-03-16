@@ -26,11 +26,11 @@ namespace qlever::constructExport {
 // into `ValueId`). `str` is the raw unquoted value (e.g. "42" for an xsd:int,
 // "3.14" for an xsd:decimal). `type` points to the compile-time XSD type string
 // constant (e.g. XSD_INT_TYPE).  Whether to emit the short form ("42") or the
-// fully-qualified form ("\"42\"^^<xsd:integer>") is decided at rendering time
+// fully-qualified form ("\"42\"^^<xsd:integer>") is decided at formatting time
 // by formatTerm.
 // 2)  type == nullptr: an IRI, a blank node, or a vocabulary-indexed literal.
 // `str` already holds the complete, ready-to-emit serialized
-// form (e.g. "<http://example.org/>", "\"hello\"@en"). No further rendering is
+// form (e.g. "<http://example.org/>", "\"hello\"@en"). No further formatting is
 // needed; the value is returned as-is for every format.
 struct EvaluatedTermData {
   std::string str;
@@ -91,9 +91,7 @@ struct PreprocessedConstructTemplate {
 };
 
 // Result of instantiating a single template triple for a specific result table
-// row. Contains the resolved canonical values for subject, predicate, and
-// object. Use formatTerm to obtain a rendered
-// string.
+// row.
 struct EvaluatedTriple {
   EvaluatedTerm subject_;
   EvaluatedTerm predicate_;
