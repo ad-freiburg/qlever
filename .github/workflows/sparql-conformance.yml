@@ -39,13 +39,15 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests
           pip install rdflib
-      - name: Install dependencies
-        uses: ./qlever-code/.github/workflows/install-dependencies-ubuntu
+      - name: Free disk space
+        uses: ./qlever-code/.github/workflows/free-disk-space
       - name: Install compiler
         uses: ./qlever-code/.github/workflows/install-compiler-ubuntu
         with:
           compiler: "clang"
           compiler-version: "16"
+      - name: Install dependencies
+        uses: ./qlever-code/.github/workflows/install-dependencies-ubuntu
       - name: Create build directory
         run: mkdir ${{github.workspace}}/qlever-code/build
       - name: Configure CMake
