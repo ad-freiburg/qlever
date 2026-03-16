@@ -536,8 +536,7 @@ TEST(IndexRebuilder, serverIntegration) {
   Server server{4321, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
   server.initialize(indexName, false);
   auto performRequest = [&threadPool, &server](auto& request) {
-    namespace http = boost::beast::http;
-    using ResT = std::optional<http::response<http::string_body>>;
+    using ResT = ad_utility::httpUtils::ResponseT;
     auto task =
         server.template onlyForTestingProcess<std::decay_t<decltype(request)>,
                                               ResT>(request);
@@ -562,10 +561,8 @@ TEST(IndexRebuilder, serverIntegration) {
   auto response1 = future1.get();
   auto response2 = future2.get();
 
-  ASSERT_TRUE(response1.has_value());
-  ASSERT_TRUE(response2.has_value());
-  EXPECT_EQ(response1.value().base().result(), boost::beast::http::status::ok);
-  EXPECT_EQ(response2.value().base().result(),
+  EXPECT_EQ(response1.base().result(), boost::beast::http::status::ok);
+  EXPECT_EQ(response2.base().result(),
             boost::beast::http::status::too_many_requests);
 
   // We use this config as a proxy for the index rebuilder having finished
@@ -575,8 +572,7 @@ TEST(IndexRebuilder, serverIntegration) {
   auto request3 = ad_utility::testing::makeGetRequest(
       "/?cmd=rebuild-index&access-token=accessToken");
   auto response3 = performRequest(request3).get();
-  ASSERT_TRUE(response3.has_value());
-  EXPECT_EQ(response3.value().base().result(), boost::beast::http::status::ok);
+  EXPECT_EQ(response3.base().result(), boost::beast::http::status::ok);
   // By default QLever should assign a default name for the new index.
   EXPECT_TRUE(std::filesystem::exists("new_index.meta-data.json"));
 
