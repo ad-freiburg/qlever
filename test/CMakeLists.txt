@@ -505,3 +505,5 @@ addLinkAndDiscoverTestNoLibs(VariantRangeFilterTest)
 addLinkAndDiscoverTest(ConstructTemplatePreprocessorTest engine)
 
 addLinkAndDiscoverTest(ConstructBatchEvaluatorTest engine)
+addLinkAndDiscoverTest(ExportIdsTest index engine parser)
+
