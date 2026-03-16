@@ -38,7 +38,8 @@ QueryPatternCache::makeJoinReplacementIndexScans(
   // `?otherVariable`, stored by `?variable` for finding chains.
   ChainSideCandidates chainRight;
 
-  // TODO<ullingerc> Optimizations for stars.
+  // Group triples by subject variable for star matching.
+  StarCandidatesBySubject starCandidatesBySubject;
 
   for (const auto& [tripleIdx, triple] :
        ::ranges::views::enumerate(triples._triples)) {
@@ -66,11 +67,19 @@ QueryPatternCache::makeJoinReplacementIndexScans(
       // This triple could be the left side of a chain join.
       chainLeft[triple.o_.getVariable()].push_back(tripleIdx);
     }
+    // This triple could be an arm of a join star.
+    if (triple.s_.isVariable()) {
+      starCandidatesBySubject[triple.s_.getVariable()].push_back(
+          {tripleIdx, iri.value()});
+    }
   }
 
   // Using the information collected by the pass over all triples, assemble all
   // chains that can potentially be rewritten.
   makeScansFromChainCandidates(qec, triples, result, chainLeft, chainRight);
+
+  // Assemble all stars that can potentially be rewritten.
+  makeScansFromStarCandidates(qec, triples, result, starCandidatesBySubject);
 
   return result;
 }
@@ -119,6 +128,72 @@ void QueryPatternCache::makeScansFromChainCandidates(
 }
 
 // _____________________________________________________________________________
+void QueryPatternCache::makeScansFromStarCandidates(
+    QueryExecutionContext* qec, const parsedQuery::BasicGraphPattern& triples,
+    std::vector<MaterializedViewJoinReplacement>& result,
+    const StarCandidatesBySubject& starCandidatesBySubject) const {
+  if (starViews_.empty()) {
+    return;
+  }
+
+  for (const auto& [subjectVar, candidates] : starCandidatesBySubject) {
+    if (candidates.size() < 2) {
+      continue;
+    }
+
+    // Build a map from predicate to the triple indices that have it.
+    ad_utility::HashMap<std::string_view, std::vector<size_t>>
+        predicateToTripleIdx;
+    for (const auto& [tripleIdx, predicate] : candidates) {
+      predicateToTripleIdx[predicate].push_back(tripleIdx);
+    }
+
+    // Candidate counting: for each star view, count how many of its predicates
+    // appear in this subject group.
+    ad_utility::HashMap<size_t, size_t> candidateCounts;
+    for (const auto& [predicate, _] : predicateToTripleIdx) {
+      auto it = starsByPredicate_.find(predicate);
+      if (it != starsByPredicate_.end()) {
+        for (size_t starIdx : it->second) {
+          candidateCounts[starIdx]++;
+        }
+      }
+    }
+
+    // Check fully matched star views.
+    for (const auto& [starIdx, count] : candidateCounts) {
+      const auto& star = starViews_[starIdx];
+      if (count < star.arms_.size()) {
+        continue;
+      }
+
+      // All predicates of this star are present. Build the replacement.
+      std::vector<size_t> coveredTriples;
+      std::vector<std::pair<Variable, TripleComponent>> armMatches;
+      bool valid = true;
+
+      for (const auto& arm : star.arms_) {
+        auto it = predicateToTripleIdx.find(arm.predicate_);
+        if (it == predicateToTripleIdx.end()) {
+          valid = false;
+          break;
+        }
+        size_t tripleIdx = it->second.front();
+        const auto& triple = triples._triples.at(tripleIdx);
+        coveredTriples.push_back(tripleIdx);
+        armMatches.push_back({arm.object_, triple.o_});
+      }
+
+      if (valid) {
+        result.push_back(
+            {makeScanForStar(qec, star, subjectVar, armMatches),
+             std::move(coveredTriples)});
+      }
+    }
+  }
+}
+
+// _____________________________________________________________________________
 std::shared_ptr<IndexScan> QueryPatternCache::makeScanForSingleChain(
     QueryExecutionContext* qec, ChainInfo cached, TripleComponent subject,
     std::optional<Variable> chain, Variable object) const {
@@ -132,6 +207,21 @@ std::shared_ptr<IndexScan> QueryPatternCache::makeScanForSingleChain(
   }
   return view->makeIndexScan(
       qec, parsedQuery::MaterializedViewQuery{view->name(), std::move(cols)});
+}
+
+// _____________________________________________________________________________
+std::shared_ptr<IndexScan> QueryPatternCache::makeScanForStar(
+    QueryExecutionContext* qec, const StarInfo& cached,
+    TripleComponent subject,
+    const std::vector<std::pair<Variable, TripleComponent>>& armMatches) const {
+  parsedQuery::MaterializedViewQuery::RequestedColumns cols;
+  cols.insert({cached.center_, std::move(subject)});
+  for (const auto& [viewObj, userObj] : armMatches) {
+    cols.insert({viewObj, userObj});
+  }
+  return cached.view_->makeIndexScan(
+      qec, parsedQuery::MaterializedViewQuery{cached.view_->name(),
+                                              std::move(cols)});
 }
 
 // _____________________________________________________________________________
@@ -180,6 +270,62 @@ bool QueryPatternCache::analyzeSimpleChain(ViewPtr view, const SparqlTriple& a,
 }
 
 // _____________________________________________________________________________
+bool QueryPatternCache::analyzeJoinStar(
+    ViewPtr view, const std::vector<SparqlTriple>& triples) {
+  if (triples.size() < 2) {
+    return false;
+  }
+  // All triples must have the same variable subject (the center).
+  if (!triples[0].s_.isVariable()) {
+    return false;
+  }
+  Variable center = triples[0].s_.getVariable();
+
+  std::vector<StarArm> arms;
+  ad_utility::HashSet<std::string> predicates;
+  ad_utility::HashSet<Variable> objectVars;
+
+  for (const auto& triple : triples) {
+    // Same subject variable.
+    if (!triple.s_.isVariable() || triple.s_.getVariable() != center) {
+      return false;
+    }
+    // Simple IRI predicate.
+    auto pred = triple.getSimplePredicate();
+    if (!pred.has_value()) {
+      return false;
+    }
+    // Distinct predicates.
+    if (!predicates.insert(std::string(pred.value())).second) {
+      return false;
+    }
+    // Variable object, different from center and from other objects.
+    if (!triple.o_.isVariable()) {
+      return false;
+    }
+    Variable obj = triple.o_.getVariable();
+    if (obj == center) {
+      return false;
+    }
+    if (!objectVars.insert(obj).second) {
+      return false;
+    }
+    arms.push_back(StarArm{std::string(pred.value()), obj});
+  }
+
+  // Sort arms by predicate for deterministic matching.
+  ql::ranges::sort(arms, {}, &StarArm::predicate_);
+
+  // Insert star into cache and index.
+  size_t idx = starViews_.size();
+  starViews_.push_back(StarInfo{center, std::move(arms), view});
+  for (const auto& arm : starViews_.back().arms_) {
+    starsByPredicate_[arm.predicate_].push_back(idx);
+  }
+  return true;
+}
+
+// _____________________________________________________________________________
 bool QueryPatternCache::analyzeView(ViewPtr view) {
   auto explainIgnore = [&](const std::string& reason) {
     AD_LOG_INFO << "Materialized view '" << view->name()
@@ -223,7 +369,10 @@ bool QueryPatternCache::analyzeView(ViewPtr view) {
         analyzeSimpleChain(view, a, b) || analyzeSimpleChain(view, b, a);
   }
 
-  // TODO<ullingerc> Add support for other patterns, in particular, stars.
+  // Check for a join star of arbitrary size (>= 2 arms).
+  if (!patternFound && triples.size() >= 2) {
+    patternFound = analyzeJoinStar(view, triples);
+  }
 
   // Remember predicates that appear in certain views, only if any pattern is
   // detected.
@@ -274,6 +423,19 @@ void QueryPatternCache::removeView(ViewPtr view) {
   // Remove `view` from predicate cache.
   for (auto& [pred, views] : predicateInView_) {
     ql::erase_if(views, [&view](ViewPtr pView) { return pView == view; });
+  }
+
+  // Remove `view` from star cache. Since `starsByPredicate_` stores indices
+  // into `starViews_`, removing entries invalidates indices, so we rebuild.
+  if (ql::erase_if(starViews_, [&view](const StarInfo& info) {
+        return info.view_ == view;
+      }) > 0) {
+    starsByPredicate_.clear();
+    for (size_t i = 0; i < starViews_.size(); ++i) {
+      for (const auto& arm : starViews_[i].arms_) {
+        starsByPredicate_[arm.predicate_].push_back(i);
+      }
+    }
   }
 }
 

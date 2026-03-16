@@ -42,6 +42,28 @@ using SimpleChainCache =
     ad_utility::StringPairHashMap<std::shared_ptr<std::vector<ChainInfo>>>;
 using ChainSideCandidates = ad_utility::HashMap<Variable, std::vector<size_t>>;
 
+// One arm of a join star: a predicate IRI and the object variable.
+struct StarArm {
+  std::string predicate_;
+  Variable object_;
+};
+
+// A cached join star pattern extracted from a materialized view. The center
+// variable is the shared subject, and each arm has a distinct predicate and
+// object variable.
+struct StarInfo {
+  Variable center_;
+  std::vector<StarArm> arms_;  // Sorted by predicate.
+  ViewPtr view_;
+};
+
+// Maps a subject variable to triples that could participate in a star:
+// each entry is (triple index, predicate IRI string_view).
+using StarCandidateGroup =
+    std::vector<std::pair<size_t, std::string_view>>;
+using StarCandidatesBySubject =
+    ad_utility::HashMap<Variable, StarCandidateGroup>;
+
 // Helper class that represents a possible join replacement and indicates the
 // subset of triples it handles.
 struct MaterializedViewJoinReplacement {
@@ -64,7 +86,12 @@ class QueryPatternCache {
   // kept sorted.
   ad_utility::HashMap<std::string, std::vector<ViewPtr>> predicateInView_;
 
-  // TODO<ullinger> Data structure for join stars.
+  // All star patterns extracted from materialized views.
+  std::vector<StarInfo> starViews_;
+
+  // Index from predicate to indices into `starViews_` for efficient candidate
+  // lookup during query matching.
+  ad_utility::HashMap<std::string, std::vector<size_t>> starsByPredicate_;
 
   // NOTE: When a new data structure for caching is added here, the unloading
   // should also be implemented in the `removeView` method.
@@ -91,6 +118,14 @@ class QueryPatternCache {
       QueryExecutionContext* qec, ChainInfo cached, TripleComponent subject,
       std::optional<Variable> chain, Variable object) const;
 
+  // Construct an `IndexScan` for a star join given the cached star info and the
+  // matched arms from the user's query.
+  std::shared_ptr<IndexScan> makeScanForStar(
+      QueryExecutionContext* qec, const StarInfo& cached,
+      TripleComponent subject,
+      const std::vector<std::pair<Variable, TripleComponent>>& armMatches)
+      const;
+
  private:
   // Helper for `analyzeView`, that checks for a simple chain. It returns `true`
   // iff a simple chain `a->b` is present.
@@ -98,6 +133,12 @@ class QueryPatternCache {
   // with `a` and `b` switched if it returns `false`.
   bool analyzeSimpleChain(ViewPtr view, const SparqlTriple& a,
                           const SparqlTriple& b);
+
+  // Helper for `analyzeView`, that checks for a join star of arbitrary size. A
+  // star requires all triples to share the same subject variable with distinct
+  // simple IRI predicates and distinct variable objects.
+  bool analyzeJoinStar(ViewPtr view,
+                       const std::vector<SparqlTriple>& triples);
 
   // Given potential left and right sides of simple chains, check for available
   // replacement index scans, construct them and insert them into the `result`
@@ -107,6 +148,14 @@ class QueryPatternCache {
       std::vector<MaterializedViewJoinReplacement>& result,
       const ChainSideCandidates& chainLeft,
       const ChainSideCandidates& chainRight) const;
+
+  // Given triples grouped by subject variable, check for available star view
+  // replacement index scans, construct them and insert them into the `result`
+  // vector.
+  void makeScansFromStarCandidates(
+      QueryExecutionContext* qec, const parsedQuery::BasicGraphPattern& triples,
+      std::vector<MaterializedViewJoinReplacement>& result,
+      const StarCandidatesBySubject& starCandidatesBySubject) const;
 };
 
 // Helper that filters the graph patterns of a parsed query using
