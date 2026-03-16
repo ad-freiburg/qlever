@@ -15,7 +15,7 @@ on:
   push:
     branches: [ master ]
   pull_request:
-    branches: [ master ]
+    branches: [ masterX ]
   merge_group:
 
 concurrency:
