@@ -123,7 +123,11 @@ class SortedLocatedTriplesVector {
   size_t size() const;
   bool empty() const;
 
-  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR(SortedLocatedTriplesVector, triples_);
+  bool operator==(const SortedLocatedTriplesVector& other) const {
+    ensureIntegration();
+    other.ensureIntegration();
+    return triples_ == other.triples_;
+  }
 };
 
 using LocatedTriples = SortedLocatedTriplesVector;
