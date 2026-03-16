@@ -147,7 +147,7 @@ TEST(IndexTest, createFromTurtleTest) {
       const auto& [index, qec] = getIndex();
       const auto& locatedTriplesSnapshot = qec.locatedTriplesState();
 
-      auto getId = makeGetId(getQec(kb)->getIndex());
+      auto getId = makeGetId(qec.getIndex());
       Id a = getId("<a>");
       Id b = getId("<b>");
       Id c = getId("<c>");
@@ -238,7 +238,7 @@ TEST(IndexTest, createFromTurtleTest) {
       const IndexImpl& index = qec.getIndex().getImpl();
       const auto& deltaTriples = qec.locatedTriplesState();
 
-      auto getId = makeGetId(getQec(kb)->getIndex());
+      auto getId = makeGetId(qec.getIndex());
       Id zero = getId("<0>");
       Id one = getId("<1>");
       Id two = getId("<2>");
@@ -295,7 +295,7 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
   const IndexImpl& index = qec.getIndex().getImpl();
   const auto& deltaTriples = qec.locatedTriplesState();
 
-  auto getId = makeGetId(getQec(kb)->getIndex());
+  auto getId = makeGetId(qec.getIndex());
   Id b = getId("<b>");
   Id b2 = getId("<b2>");
   Id a = getId("<a>");
@@ -341,7 +341,8 @@ TEST(IndexTest, scanTest) {
           "<a>  <b>  <c2> . \n"
           "<a>  <b2> <c>  . \n"
           "<a2> <b2> <c2> .   ";
-      auto& qec = *makeQecWithOrWithoutCompression(kb, useCompression);
+      auto& qec =
+          *makeQecWithOrWithoutCompression(std::move(kb), useCompression);
       auto& index = qec.getIndex().getImpl();
       IdTable wol(1, makeAllocator());
       IdTable wtl(2, makeAllocator());
@@ -377,10 +378,11 @@ TEST(IndexTest, scanTest) {
           "<b> <is-a> <0> . \n"
           "<c> <is-a> <1> . \n"
           "<c> <is-a> <2> . \n";
-      const auto& qec = *makeQecWithOrWithoutCompression(kb, useCompression);
+      const auto& qec =
+          *makeQecWithOrWithoutCompression(std::move(kb), useCompression);
       const IndexImpl& index = qec.getIndex().getImpl();
 
-      auto getId = makeGetId(ad_utility::testing::getQec(kb)->getIndex());
+      auto getId = makeGetId(qec.getIndex());
       Id a = getId("<a>");
       Id b = getId("<b>");
       Id c = getId("<c>");
