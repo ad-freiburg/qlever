@@ -1,6 +1,12 @@
-//   Copyright 2025, University of Freiburg,
-//   Chair of Algorithms and Data Structures.
-//   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
+// Copyright 2025 - 2026 The QLever Authors, in particular:
+//
+// 2025 Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>, UFR
+// 2026 Marvin Stoetzel <stoetzem@informatik.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <gtest/gtest.h>
 
@@ -47,7 +53,9 @@ TEST(LRUCache, testEmptyCapacityForbidden) {
 // _____________________________________________________________________________
 TEST(LRUCache, tryGetReturnsNoneOnMiss) {
   ad_utility::util::LRUCache<int, int> cache{2};
+  auto prevCapacity = cache.capacity();
   EXPECT_FALSE(cache.tryGet(42));
+  EXPECT_EQ(cache.capacity(), prevCapacity);
 }
 
 // _____________________________________________________________________________
