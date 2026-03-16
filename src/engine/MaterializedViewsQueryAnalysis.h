@@ -79,6 +79,8 @@ class QueryPatternCache {
   ad_utility::HashMap<std::string, std::vector<ViewPtr>> predicateInView_;
 
   // All star patterns extracted from materialized views.
+  // TODO<ullingerc> Could theoretically also live within view like the bind
+  // cache.
   ad_utility::HashMap<ViewPtr, StarInfo> starCache_;
 
   // NOTE: When a new data structure for caching is added here, the unloading
@@ -106,8 +108,8 @@ class QueryPatternCache {
       QueryExecutionContext* qec, ChainInfo cached, TripleComponent subject,
       std::optional<Variable> chain, Variable object) const;
 
-  // Construct an `IndexScan` for a star join given the cached star info and the
-  // matched arms from the user's query.
+  // Construct an `IndexScan` for a star join given the `RequestedColumns`
+  // object for the matched arms from the user's query.
   std::shared_ptr<IndexScan> makeScanForStar(
       QueryExecutionContext* qec, ViewPtr view,
       parsedQuery::MaterializedViewQuery::RequestedColumns columns) const;
@@ -134,9 +136,8 @@ class QueryPatternCache {
       const ChainSideCandidates& chainLeft,
       const ChainSideCandidates& chainRight) const;
 
-  // Given triples grouped by subject variable, check for available star view
-  // replacement index scans, construct them and insert them into the `result`
-  // vector.
+  // Given triples grouped by subject, check for available star join replacement
+  // index scans, construct them and insert them into the `result` vector.
   void makeScansFromStarCandidates(
       QueryExecutionContext* qec, const parsedQuery::BasicGraphPattern& triples,
       std::vector<MaterializedViewJoinReplacement>& result,

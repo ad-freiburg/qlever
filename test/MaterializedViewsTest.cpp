@@ -1054,7 +1054,6 @@ INSTANTIATE_TEST_SUITE_P(
         // query rewriting. Also uses a different sorting.
         RewriteTestParams{std::string{simpleChainRenamedPlusBind}, 1500}));
 
-// _____________________________________________________________________________
 // Example queries for testing star query rewriting.
 constexpr std::string_view simpleStar =
     "SELECT * { ?s <p1> ?o1 . ?s <p2> ?o2 }";
@@ -1063,11 +1062,8 @@ constexpr std::string_view simpleStarRenamed =
 constexpr std::string_view simpleStarPlusJoin =
     "SELECT * { ?s <p1> ?o1 . ?s <p2> ?o2 . ?s <p3> ?o3 }";
 
-class MaterializedViewsStarRewriteTest
-    : public MaterializedViewsQueryRewriteTest {};
-
 // _____________________________________________________________________________
-TEST_P(MaterializedViewsStarRewriteTest, simpleStar) {
+TEST_P(MaterializedViewsStarRewriteTest, starRewrite) {
   RewriteTestParams p = GetParam();
   auto cleanup =
       setRuntimeParameterForTest<&RuntimeParameters::queryPlanningBudget_>(

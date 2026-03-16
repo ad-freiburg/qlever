@@ -169,9 +169,11 @@ class MaterializedViewsQueryRewriteTest
   void TearDown() override { ad_utility::setGlobalLoggingStream(&std::cout); }
 };
 
-// We make a subclass of `MaterializedViewsQueryRewriteTest` here s.t. we can
+// We make a subclasses of `MaterializedViewsQueryRewriteTest` here s.t. we can
 // use different `INSTANTIATE_TEST_SUITE_P` calls for different rewriting tests.
 class MaterializedViewsChainRewriteTest
+    : public MaterializedViewsQueryRewriteTest {};
+class MaterializedViewsStarRewriteTest
     : public MaterializedViewsQueryRewriteTest {};
 
 // _____________________________________________________________________________
