@@ -19,8 +19,10 @@
 // using the `UriParserUri` class to parse URIs with uriparser.
 class UriParserUri {
   UriUriA uri_;
+  // Store if `uri_` object is initialized and can needs to be cleaned up.
   bool isValid_ = true;
 
+  // Compare if two `UriTextRangeA` objects are equal.
   static int rangeEqual(const UriTextRangeA* a, const UriTextRangeA* b) {
     size_t lenA = a->afterLast - a->first;
     size_t lenB = b->afterLast - b->first;
@@ -32,6 +34,7 @@ class UriParserUri {
     return memcmp(a->first, b->first, lenA) == 0;
   }
 
+  // Compare if two `UriPathSegmentA` objects are equal.
   static int pathEqual(const UriPathSegmentA* a, const UriPathSegmentA* b) {
     while (a && b) {
       if (!rangeEqual(&a->text, &b->text)) return 0;
@@ -72,6 +75,7 @@ class UriParserUri {
         std::string_view{uriBuffer.data(), std::strlen(uriBuffer.c_str())}};
   }
 
+  // Give const access to the underlying `UriUriA` object.
   const UriUriA& get() const { return uri_; }
 
   UriParserUri(const UriParserUri& other) noexcept : isValid_{other.isValid_} {
