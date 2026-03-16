@@ -20,7 +20,7 @@
 #include "backports/span.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryExportTypes.h"
-#include "engine/ValueIdHelpers.h"
+#include "index/ExportIds.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"
 #include "util/http/MediaTypes.h"

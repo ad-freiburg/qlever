@@ -8,7 +8,7 @@
 
 #include "engine/ConstructBatchEvaluator.h"
 
-#include "engine/ValueIdHelpers.h"
+#include "index/ExportIds.h"
 #include "util/Views.h"
 
 namespace qlever::constructExport {
