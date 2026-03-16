@@ -27,6 +27,8 @@ namespace materializedViewsQueryAnalysis {
 
 using ViewPtr = std::shared_ptr<const MaterializedView>;
 using graphPatternAnalysis::BasicGraphPatternsInvariantTo;
+using VariableToTripleIndices =
+    ad_utility::HashMap<Variable, std::vector<size_t>>;
 
 // Key and value types of the cache for simple chains, that is queries of the
 // form `?s <p1> ?m . ?m <p2> ?o`.
@@ -40,21 +42,14 @@ struct ChainInfo {
 };
 using SimpleChainCache =
     ad_utility::StringPairHashMap<std::shared_ptr<std::vector<ChainInfo>>>;
-using ChainSideCandidates = ad_utility::HashMap<Variable, std::vector<size_t>>;
 
-// One arm of a join star: a predicate IRI and the object variable.
+// Types required to stored cached join star patterns extracted from views. That
+// is, queries of the form `?s <p1> ?o1 . ?s <p2> ?o2 . ?s <p3> ?o3 ...`.
 using StarArm = std::pair<std::string, Variable>;
-
-// A cached join star pattern extracted from a materialized view.
 struct StarInfo {
   Variable subject_;
   std::vector<StarArm> arms_;
 };
-
-// Maps a subject to triples that could participate in a star:
-// each entry is the triple index and predicate.
-using StarCandidatesBySubject =
-    ad_utility::HashMap<TripleComponent, std::vector<size_t>>;
 
 // Helper class that represents a possible join replacement and indicates the
 // subset of triples it handles.
@@ -133,15 +128,15 @@ class QueryPatternCache {
   void makeScansFromChainCandidates(
       QueryExecutionContext* qec, const parsedQuery::BasicGraphPattern& triples,
       std::vector<MaterializedViewJoinReplacement>& result,
-      const ChainSideCandidates& chainLeft,
-      const ChainSideCandidates& chainRight) const;
+      const VariableToTripleIndices& chainLeft,
+      const VariableToTripleIndices& chainRight) const;
 
   // Given triples grouped by subject, check for available star join replacement
   // index scans, construct them and insert them into the `result` vector.
   void makeScansFromStarCandidates(
       QueryExecutionContext* qec, const parsedQuery::BasicGraphPattern& triples,
       std::vector<MaterializedViewJoinReplacement>& result,
-      const StarCandidatesBySubject& starCandidates) const;
+      const VariableToTripleIndices& starCandidates) const;
 };
 
 // Helper that filters the graph patterns of a parsed query using

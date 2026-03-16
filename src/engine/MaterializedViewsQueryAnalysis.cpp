@@ -33,16 +33,13 @@ QueryPatternCache::makeJoinReplacementIndexScans(
 
   // All triples of the form `anything <iri> ?variable` where `<iri>` is covered
   // by a materialized view, stored by `?variable` for finding chains.
-  ChainSideCandidates chainLeft;
+  VariableToTripleIndices chainLeft;
 
   // All triples of the form `?variable <iri> ?otherVariable` where `<iri>` is
   // covered by a materialized view, where `?variable` is different from
   // `?otherVariable`, stored by `?variable` for finding chains.
-  ChainSideCandidates chainRight;
-
-  // All triples of the form `anything <iri> ?variable` where `<iri>` is covered
-  // by a materialized view, stored by `anything` for finding join stars.
-  StarCandidatesBySubject starCandidates;
+  // The same is required for star join detection.
+  VariableToTripleIndices chainRight;
 
   for (const auto& [tripleIdx, triple] :
        ::ranges::views::enumerate(triples._triples)) {
@@ -69,9 +66,6 @@ QueryPatternCache::makeJoinReplacementIndexScans(
     if (triple.s_ != triple.o_) {
       // This triple could be the left side of a chain join.
       chainLeft[triple.o_.getVariable()].push_back(tripleIdx);
-      // This triple could be an arm of a join star.
-      // TODO<ullingerc> Maybe already enforce distinct predicate/object here?
-      starCandidates[triple.s_].push_back(tripleIdx);
     }
   }
 
@@ -79,8 +73,9 @@ QueryPatternCache::makeJoinReplacementIndexScans(
   // chains that can potentially be rewritten.
   makeScansFromChainCandidates(qec, triples, result, chainLeft, chainRight);
 
-  // Assemble all stars that can potentially be rewritten.
-  makeScansFromStarCandidates(qec, triples, result, starCandidates);
+  // Assemble all stars that can potentially be rewritten. Reuses the analysis
+  // performed for chain joins.
+  makeScansFromStarCandidates(qec, triples, result, chainRight);
 
   return result;
 }
@@ -89,8 +84,8 @@ QueryPatternCache::makeJoinReplacementIndexScans(
 void QueryPatternCache::makeScansFromChainCandidates(
     QueryExecutionContext* qec, const parsedQuery::BasicGraphPattern& triples,
     std::vector<MaterializedViewJoinReplacement>& result,
-    const ChainSideCandidates& chainLeft,
-    const ChainSideCandidates& chainRight) const {
+    const VariableToTripleIndices& chainLeft,
+    const VariableToTripleIndices& chainRight) const {
   for (const auto& [varLeft, triplesLeft] : chainLeft) {
     // No triples for the right side on the same variable have been collected.
     if (!chainRight.contains(varLeft)) {
@@ -139,7 +134,7 @@ void QueryPatternCache::makeScansFromChainCandidates(
 void QueryPatternCache::makeScansFromStarCandidates(
     QueryExecutionContext* qec, const parsedQuery::BasicGraphPattern& triples,
     std::vector<MaterializedViewJoinReplacement>& result,
-    const StarCandidatesBySubject& starCandidates) const {
+    const VariableToTripleIndices& starCandidates) const {
   if (starCache_.empty()) {
     return;
   }
@@ -197,14 +192,6 @@ void QueryPatternCache::makeScansFromStarCandidates(
       const auto& starInfo = (*it).second;
       if (ql::ranges::includes(queryPredicates,
                                starInfo.arms_ | ql::views::keys)) {
-        // If the subject is fixed to a values, the subject column must be the
-        // first column in the view.
-        if (!subject.isVariable() &&
-            view->variableToColumnMap().at(starInfo.subject_).columnIndex_ !=
-                0) {
-          continue;
-        }
-
         parsedQuery::MaterializedViewQuery::RequestedColumns cols;
         std::vector<size_t> coveredTriples;
 
