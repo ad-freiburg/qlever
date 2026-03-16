@@ -22,19 +22,21 @@
 
 namespace qlever::constructExport {
 
-// Evaluated values of one variable across all rows in a batch. The element at
-// index `i` corresponds to the value of the evaluated variable for row `i` of
-// the batch (0-based relative to `BatchEvaluationContext::firstRow_`). An
-// element is `std::nullopt` if the variable was unbound for that row.
+// `EvaluatedVariablesValues` is used to store the evaluation results
+// (`EvaluatedTerm`s) for the values of a single variable across all rows in a
+// batch. The i-th element corresponds to the i-th row in the batch, and is
+// `nullopt` iff the variable was unbound for that row.
 using EvaluatedVariableValues = std::vector<std::optional<EvaluatedTerm>>;
 
 // Result of batch-evaluating all variables for a batch of rows. Stores the
 // evaluated values per variable column and the number of rows in the batch.
 struct BatchEvaluationResult {
-  // Map from `IdTable` column index to evaluated values for each row in batch.
-  // A hash map is used because the set of evaluated columns may be sparse:
-  // some variables from the WHERE-clause (in the `IdTable`) may not appear in
-  // the CONSTRUCT template and are thus not evaluated.
+  // `variablesByColumn_` maps the column index of the result that is being
+  // evaluated to the `EvaluatedVariableValues` for the variable that is stored
+  // in that column. We use a hash map (instead of a dense vector) because the
+  // set of evaluated columns may be sparse: some variables in the WHERE-clause
+  // (in the `IdTable`) may not appear in the CONSTRUCT template and are thus
+  // not evaluated.
   ad_utility::HashMap<size_t, EvaluatedVariableValues> variablesByColumn_;
   size_t numRows_ = 0;
 
