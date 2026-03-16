@@ -25,7 +25,7 @@ std::optional<EvaluatedTerm> stringAndTypeToEvaluatedTerm(
 std::optional<EvaluatedTerm> idToEvaluatedTerm(const Index& index, Id id,
                                                const LocalVocab& localVocab) {
   return stringAndTypeToEvaluatedTerm(
-      ql::valueId::idToStringAndType(index, id, localVocab));
+      ql::exportIds::idToStringAndType(index, id, localVocab));
 }
 
 // _____________________________________________________________________________
@@ -69,7 +69,7 @@ EvaluatedVariableValues evaluateVariableByColumn(
   // `getOrCompute`; duplicate IDs in `missIds` are handled correctly: the
   // second occurrence is already in cache and the lambda is not called.
   auto missResolved =
-      ql::valueId::idsToStringAndType(index, missIds, localVocab);
+      ql::exportIds::idsToStringAndType(index, missIds, localVocab);
   for (size_t i = 0; i < missIds.size(); ++i) {
     result[missRows[i]] =
         idCache.getOrCompute(missIds[i], [&missResolved, i](const Id&) {
