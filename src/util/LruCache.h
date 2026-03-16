@@ -1,4 +1,4 @@
-// Copyright 2025 The QLever Authors, in particular
+// Copyright 2025-2026 The QLever Authors, in particular
 // 2025 Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>, UFR
 // 2026 Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
 //
