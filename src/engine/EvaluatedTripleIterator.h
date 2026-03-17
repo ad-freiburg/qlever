@@ -30,7 +30,7 @@ namespace qlever::constructExport {
 // evaluates all variables in the batch at once (with LRU caching across
 // batches), and `ConstructTripleInstantiator` then instantiates each
 // preprocessed template triple for each row.
-class ConstructRowProcessor
+class EvaluatedTripleIterator
     : public ad_utility::InputRangeFromGet<EvaluatedTriple> {
  public:
   using CancellationHandle = ad_utility::SharedCancellationHandle;
@@ -43,7 +43,7 @@ class ConstructRowProcessor
   // rows worth of distinct IDs per variable, independent of batch size.
   static constexpr size_t CACHE_ENTRIES_PER_VARIABLE = 2048;
 
-  ConstructRowProcessor(
+  EvaluatedTripleIterator(
       const PreprocessedConstructTemplate& preprocessedTemplate,
       const Index& index, CancellationHandle cancellationHandle,
       const TableWithRange& table, size_t currentRowOffset);

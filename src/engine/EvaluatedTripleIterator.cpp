@@ -7,19 +7,19 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#include "engine/ConstructRowProcessor.h"
+#include "engine/EvaluatedTripleIterator.h"
 
 namespace qlever::constructExport {
 
 // _____________________________________________________________________________
-IdCache ConstructRowProcessor::makeIdCache(
+IdCache EvaluatedTripleIterator::makeIdCache(
     const PreprocessedConstructTemplate& tmpl) {
   return IdCache(std::max(tmpl.uniqueVariableColumns_.size(), size_t{1}) *
                  CACHE_ENTRIES_PER_VARIABLE);
 }
 
 // _____________________________________________________________________________
-ConstructRowProcessor::ConstructRowProcessor(
+EvaluatedTripleIterator::EvaluatedTripleIterator(
     const PreprocessedConstructTemplate& preprocessedTemplate,
     const Index& index, CancellationHandle cancellationHandle,
     const TableWithRange& table, size_t currentRowOffset)
@@ -34,7 +34,7 @@ ConstructRowProcessor::ConstructRowProcessor(
 
 // _____________________________________________________________________________
 ad_utility::InputRangeTypeErased<EvaluatedTriple>
-ConstructRowProcessor::makeInnerRange() {
+EvaluatedTripleIterator::makeInnerRange() {
   const size_t numBatches =
       (numRows() + DEFAULT_BATCH_SIZE - 1) / DEFAULT_BATCH_SIZE;
 
@@ -49,12 +49,12 @@ ConstructRowProcessor::makeInnerRange() {
 }
 
 // _____________________________________________________________________________
-std::optional<EvaluatedTriple> ConstructRowProcessor::get() {
+std::optional<EvaluatedTriple> EvaluatedTripleIterator::get() {
   return innerRange_.get();
 }
 
 // _____________________________________________________________________________
-std::vector<EvaluatedTriple> ConstructRowProcessor::computeBatch(
+std::vector<EvaluatedTriple> EvaluatedTripleIterator::computeBatch(
     size_t batchStart) {
   const size_t batchEnd = std::min(batchStart + DEFAULT_BATCH_SIZE, numRows());
 

@@ -12,8 +12,8 @@
 #include <memory>
 #include <vector>
 
-#include "engine/ConstructRowProcessor.h"
 #include "engine/ConstructTypes.h"
+#include "engine/EvaluatedTripleIterator.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryExportTypes.h"
 #include "global/Constants.h"
@@ -40,14 +40,6 @@ class ConstructTripleGenerator {
                            const Index& index,
                            CancellationHandle cancellationHandle);
 
-  // Generate `StringTriple`s for a single result table.
-  ad_utility::InputRangeTypeErased<StringTriple>
-  generateStringTriplesForResultTable(const TableWithRange& table);
-
-  // Generate formatted strings for a single result table.
-  ad_utility::InputRangeTypeErased<std::string> generateFormattedTriples(
-      const TableWithRange& table, ad_utility::MediaType format);
-
   // Generate formatted strings for all tables in a range.
   ad_utility::InputRangeTypeErased<std::string> generateAllFormattedTriples(
       ad_utility::InputRangeTypeErased<TableWithRange> rowIndices,
@@ -71,8 +63,16 @@ class ConstructTripleGenerator {
   // Preprocessed template with triples and unique variable columns.
   PreprocessedConstructTemplate preprocessedTemplate_;
 
-  // Helper that handles `rowOffset_` and creates a `ConstructRowProcessor`.
-  std::unique_ptr<ConstructRowProcessor> prepareRowProcessor(
+  // Generate `StringTriple`s for a single result table.
+  ad_utility::InputRangeTypeErased<StringTriple>
+  generateStringTriplesForResultTable(const TableWithRange& table);
+
+  // Generate formatted strings for a single result table.
+  ad_utility::InputRangeTypeErased<std::string> generateFormattedTriples(
+      const TableWithRange& table, ad_utility::MediaType format);
+
+  // Helper that handles `rowOffset_` and creates a `EvaluatedTripleIterator`.
+  std::unique_ptr<EvaluatedTripleIterator> prepareRowProcessor(
       const TableWithRange& table);
 };
 

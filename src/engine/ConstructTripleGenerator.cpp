@@ -9,8 +9,8 @@
 
 #include "engine/ConstructTripleGenerator.h"
 
-#include "engine/ConstructRowProcessor.h"
 #include "engine/ConstructTemplatePreprocessor.h"
+#include "engine/EvaluatedTripleIterator.h"
 #include "engine/ExportQueryExecutionTrees.h"
 
 namespace qlever::constructExport {
@@ -26,7 +26,7 @@ using CancellationHandle = ad_utility::SharedCancellationHandle;
 class FormattedTripleAdapter
     : public ad_utility::InputRangeFromGet<std::string> {
  public:
-  FormattedTripleAdapter(std::unique_ptr<ConstructRowProcessor> processor,
+  FormattedTripleAdapter(std::unique_ptr<EvaluatedTripleIterator> processor,
                          ad_utility::MediaType format)
       : processor_{std::move(processor)}, format_{format} {}
 
@@ -38,7 +38,7 @@ class FormattedTripleAdapter
   }
 
  private:
-  std::unique_ptr<ConstructRowProcessor> processor_;
+  std::unique_ptr<EvaluatedTripleIterator> processor_;
   ad_utility::MediaType format_;
 };
 
@@ -46,7 +46,8 @@ class FormattedTripleAdapter
 // Adapter that transforms `EvaluatedTriple` to `StringTriple`.
 class StringTripleAdapter : public ad_utility::InputRangeFromGet<StringTriple> {
  public:
-  explicit StringTripleAdapter(std::unique_ptr<ConstructRowProcessor> processor)
+  explicit StringTripleAdapter(
+      std::unique_ptr<EvaluatedTripleIterator> processor)
       : processor_(std::move(processor)) {}
 
   std::optional<StringTriple> get() override {
@@ -58,7 +59,7 @@ class StringTripleAdapter : public ad_utility::InputRangeFromGet<StringTriple> {
   }
 
  private:
-  std::unique_ptr<ConstructRowProcessor> processor_;
+  std::unique_ptr<EvaluatedTripleIterator> processor_;
 };
 
 // _____________________________________________________________________________
@@ -75,12 +76,12 @@ ConstructTripleGenerator::ConstructTripleGenerator(
 }
 
 // _____________________________________________________________________________
-std::unique_ptr<ConstructRowProcessor>
+std::unique_ptr<EvaluatedTripleIterator>
 ConstructTripleGenerator::prepareRowProcessor(const TableWithRange& table) {
   const size_t currentRowOffset = rowOffset_;
   rowOffset_ += table.tableWithVocab_.idTable().numRows();
 
-  return std::make_unique<ConstructRowProcessor>(
+  return std::make_unique<EvaluatedTripleIterator>(
       preprocessedTemplate_, index_.get(), cancellationHandle_, table,
       currentRowOffset);
 }
