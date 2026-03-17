@@ -508,4 +508,4 @@ addLinkAndDiscoverTest(ExportIdsTest index engine parser)
 
 addLinkAndDiscoverTest(ConstructBatchEvaluatorTest engine)
 
-addLinkAndDiscoverTest(ConstructRowProcessorTest engine)
+addLinkAndDiscoverTest(EvaluatedTripleIteratorTest.cpp engine)
