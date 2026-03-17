@@ -445,14 +445,13 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream(
     [[maybe_unused]] const ad_utility::Timer& requestTimer,
     [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
   using enum ad_utility::MediaType;
-  static constexpr std::array supportedFormats{
-      octetStream, csv, tsv, turtle, qleverJson, ntriples};
+  static constexpr std::array supportedFormats{octetStream, csv, tsv, turtle,
+                                               qleverJson};
   static_assert(ad_utility::contains(supportedFormats, format));
 
   // TODO<joka921> Use a proper error message, or check that we get a more
   // reasonable error from upstream.
   AD_CONTRACT_CHECK(format != MediaType::turtle);
-  AD_CONTRACT_CHECK(format != MediaType::ntriples);
   AD_CONTRACT_CHECK(format != MediaType::qleverJson);
 
   // This call triggers the possibly expensive computation of the query result
@@ -755,8 +754,8 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
     [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
   using enum MediaType;
   static constexpr std::array supportedFormats{
-      octetStream,        csv,    tsv,     sparqlXml, sparqlJson, qleverJson,
-      binaryQleverExport, turtle, ntriples};
+      octetStream, csv,        tsv,    sparqlXml,
+      sparqlJson,  qleverJson, turtle, binaryQleverExport};
   static_assert(ad_utility::contains(supportedFormats, format));
 
   if constexpr (format == octetStream || format == binaryQleverExport) {
@@ -871,15 +870,15 @@ ExportQueryExecutionTrees::computeResult(
   using enum MediaType;
 
   static constexpr std::array supportedTypes{
-      csv,        tsv,        octetStream,        turtle,  sparqlXml,
-      sparqlJson, qleverJson, binaryQleverExport, ntriples};
+      csv,       tsv,        octetStream, turtle,
+      sparqlXml, sparqlJson, qleverJson,  binaryQleverExport};
   AD_CORRECTNESS_CHECK(ad_utility::contains(supportedTypes, mediaType));
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   auto inner =
       ad_utility::ConstexprSwitch<csv, tsv, octetStream, turtle, sparqlXml,
-                                  sparqlJson, qleverJson, binaryQleverExport,
-                                  ntriples>{}(compute, mediaType);
+                                  sparqlJson, qleverJson, binaryQleverExport>{}(
+          compute, mediaType);
 
   return [](auto range) -> cppcoro::generator<std::string> {
     for (auto&& item : range) {
