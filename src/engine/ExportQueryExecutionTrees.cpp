@@ -266,10 +266,16 @@ auto ExportQueryExecutionTrees::constructQueryResultToTriples(
     const ad_utility::sparql_types::Triples& constructTriples,
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
     uint64_t& resultSize, CancellationHandle cancellationHandle) {
-  return qlever::constructExport::ConstructTripleGenerator::
-      generateStringTriples(qet, constructTriples, limitAndOffset,
-                            std::move(result), resultSize,
-                            std::move(cancellationHandle));
+  // For each result from the WHERE clause, we produce up to
+  // `constructTriples.size()` triples. We do not account for triples that are
+  // filtered out because one of the components is UNDEF (it would require
+  // materializing the whole result).
+  auto rowIndices = getRowIndices(limitAndOffset, *result, resultSize,
+                                  constructTriples.size());
+  return qlever::constructExport::ConstructTripleGenerator(
+             constructTriples, std::move(result), qet.getVariableColumns(),
+             qet.getQec()->getIndex(), std::move(cancellationHandle))
+      .generateStringTriples(std::move(rowIndices));
 }
 
 // _____________________________________________________________________________
@@ -773,12 +779,11 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
   auto rowIndices = ExportQueryExecutionTrees::getRowIndices(
       limitAndOffset, *result, resultSize, constructTriples.size());
 
-  qlever::constructExport::ConstructTripleGenerator generator(
-      constructTriples, std::move(result), qet.getVariableColumns(),
-      qet.getQec()->getIndex(), std::move(cancellationHandle));
-
   for (const auto& tripleString :
-       generator.generateAllFormattedTriples(std::move(rowIndices), format)) {
+       qlever::constructExport::ConstructTripleGenerator(
+           constructTriples, std::move(result), qet.getVariableColumns(),
+           qet.getQec()->getIndex(), std::move(cancellationHandle))
+           .generateAllFormattedTriples(std::move(rowIndices), format)) {
     STREAMABLE_YIELD(tripleString);
   }
 }

@@ -11,7 +11,6 @@
 
 #include "engine/ConstructTemplatePreprocessor.h"
 #include "engine/EvaluatedTripleIterator.h"
-#include "engine/ExportQueryExecutionTrees.h"
 
 namespace qlever::constructExport {
 
@@ -95,35 +94,6 @@ ConstructTripleGenerator::generateStringTriplesForResultTable(
 }
 
 // _____________________________________________________________________________
-ad_utility::InputRangeTypeErased<QueryExecutionTree::StringTriple>
-ConstructTripleGenerator::generateStringTriples(
-    const QueryExecutionTree& qet,
-    const ad_utility::sparql_types::Triples& constructTriples,
-    const LimitOffsetClause& limitAndOffset,
-    std::shared_ptr<const Result> result, uint64_t& resultSize,
-    CancellationHandle cancellationHandle) {
-  // The `resultSizeMultiplicator`(last argument of `getRowIndices`) is
-  // explained by the following: For each result from the WHERE clause, we
-  // produce up to `constructTriples.size()` triples. We do not account for
-  // triples that are filtered out because one of the components is UNDEF (it
-  // would require materializing the whole result).
-  auto rowIndices = ExportQueryExecutionTrees::getRowIndices(
-      limitAndOffset, *result, resultSize, constructTriples.size());
-
-  ConstructTripleGenerator generator(
-      constructTriples, std::move(result), qet.getVariableColumns(),
-      qet.getQec()->getIndex(), std::move(cancellationHandle));
-
-  auto tableTriples = ql::views::transform(
-      ad_utility::OwningView{std::move(rowIndices)},
-      [generator = std::move(generator)](const TableWithRange& table) mutable {
-        return generator.generateStringTriplesForResultTable(table);
-      });
-
-  return InputRangeTypeErased(ql::views::join(std::move(tableTriples)));
-}
-
-// _____________________________________________________________________________
 ad_utility::InputRangeTypeErased<std::string>
 ConstructTripleGenerator::generateFormattedTriples(
     const TableWithRange& table, ad_utility::MediaType format) {
@@ -136,14 +106,26 @@ ConstructTripleGenerator::generateFormattedTriples(
 ad_utility::InputRangeTypeErased<std::string>
 ConstructTripleGenerator::generateAllFormattedTriples(
     ad_utility::InputRangeTypeErased<TableWithRange> rowIndices,
-    ad_utility::MediaType format) {
-  auto tableTriples =
-      ql::views::transform(ad_utility::OwningView{std::move(rowIndices)},
-                           [this, format](const TableWithRange& table) {
-                             return generateFormattedTriples(table, format);
-                           });
-
+    ad_utility::MediaType format) && {
+  auto tableTriples = ql::views::transform(
+      ad_utility::OwningView{std::move(rowIndices)},
+      [gen = std::move(*this), format](const TableWithRange& table) mutable {
+        return gen.generateFormattedTriples(table, format);
+      });
   return InputRangeTypeErased<std::string>(
+      ql::views::join(std::move(tableTriples)));
+}
+
+// _____________________________________________________________________________
+ad_utility::InputRangeTypeErased<StringTriple>
+ConstructTripleGenerator::generateStringTriples(
+    ad_utility::InputRangeTypeErased<TableWithRange> rowIndices) && {
+  auto tableTriples = ql::views::transform(
+      ad_utility::OwningView{std::move(rowIndices)},
+      [gen = std::move(*this)](const TableWithRange& table) mutable {
+        return gen.generateStringTriplesForResultTable(table);
+      });
+  return InputRangeTypeErased<StringTriple>(
       ql::views::join(std::move(tableTriples)));
 }
 

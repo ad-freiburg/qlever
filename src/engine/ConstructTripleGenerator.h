@@ -40,18 +40,18 @@ class ConstructTripleGenerator {
                            const Index& index,
                            CancellationHandle cancellationHandle);
 
-  // Generate formatted strings for all tables in a range.
+  // Generate formatted strings for all tables in a range. Consumes the
+  // generator; must be called as
+  // `std::move(generator).generateAllFormattedTriples(...)`.
   ad_utility::InputRangeTypeErased<std::string> generateAllFormattedTriples(
       ad_utility::InputRangeTypeErased<TableWithRange> rowIndices,
-      ad_utility::MediaType format);
+      ad_utility::MediaType format) &&;
 
-  // Helper that generates `StringTriple`s for a full CONSTRUCT query.
-  static ad_utility::InputRangeTypeErased<StringTriple> generateStringTriples(
-      const QueryExecutionTree& qet,
-      const ad_utility::sparql_types::Triples& constructTriples,
-      const LimitOffsetClause& limitAndOffset,
-      std::shared_ptr<const Result> result, uint64_t& resultSize,
-      CancellationHandle cancellationHandle);
+  // Generate `StringTriple`s for all tables in a range. Consumes the
+  // generator; must be called as
+  // `std::move(generator).generateStringTriples(...)`.
+  ad_utility::InputRangeTypeErased<StringTriple> generateStringTriples(
+      ad_utility::InputRangeTypeErased<TableWithRange> rowIndices) &&;
 
  private:
   Triples templateTriples_;
