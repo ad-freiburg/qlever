@@ -31,7 +31,7 @@ using EvaluatedVariableValues = std::vector<std::optional<EvaluatedTerm>>;
 // Result of batch-evaluating all variables for a batch of rows. Stores the
 // evaluated values per variable column and the number of rows in the batch.
 struct BatchEvaluationResult {
-  // `variablesByColumn_` maps the column index of the result that is being
+  // `variablesByColumn_` maps a column index of the `Result` that is being
   // evaluated to the `EvaluatedVariableValues` for the variable that is stored
   // in that column. We use a hash map (instead of a dense vector) because the
   // set of evaluated columns may be sparse: some variables in the WHERE-clause
