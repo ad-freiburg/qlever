@@ -100,11 +100,12 @@ std::string formatTriple(const EvaluatedTerm& subject,
     // Only escape literals (strings starting with "). IRIs and blank nodes
     // are used as-is, avoiding an unnecessary string copy.
     if (ql::starts_with(o, "\"")) {
-      return absl::StrCat(s, " ", p, " ",
-                          RdfEscaping::validRDFLiteralFromNormalized(o),
-                          " .\n");
+      return absl::StrCat(
+          std::move(s), " ", std::move(p), " ",
+          RdfEscaping::validRDFLiteralFromNormalized(std::move(o)), " .\n");
     }
-    return absl::StrCat(s, " ", p, " ", o, " .\n");
+    return absl::StrCat(std::move(s), " ", std::move(p), " ", std::move(o),
+                        " .\n");
 
   } else if (format == csv) {
     return absl::StrCat(RdfEscaping::escapeForCsv(std::move(s)), ",",
