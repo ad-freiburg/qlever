@@ -504,8 +504,8 @@ addLinkAndDiscoverTestNoLibs(VariantRangeFilterTest)
 
 addLinkAndDiscoverTest(ConstructTemplatePreprocessorTest engine)
 
-addLinkAndDiscoverTest(ExportIdsTest index engine parser)
+addLinkAndDiscoverTest(ExportIdsTest engine parser)
 
 addLinkAndDiscoverTest(ConstructBatchEvaluatorTest engine)
 
-addLinkAndDiscoverTest(EvaluatedTripleIteratorTest.cpp engine)
+addLinkAndDiscoverTest(EvaluatedTripleIteratorTest engine)
