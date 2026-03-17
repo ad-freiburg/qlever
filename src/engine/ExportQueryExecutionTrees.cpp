@@ -779,11 +779,12 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
   auto rowIndices = ExportQueryExecutionTrees::getRowIndices(
       limitAndOffset, *result, resultSize, constructTriples.size());
 
+  qlever::constructExport::ConstructTripleGenerator generator(
+      constructTriples, std::move(result), qet.getVariableColumns(),
+      qet.getQec()->getIndex(), std::move(cancellationHandle));
   for (const auto& tripleString :
-       qlever::constructExport::ConstructTripleGenerator(
-           constructTriples, std::move(result), qet.getVariableColumns(),
-           qet.getQec()->getIndex(), std::move(cancellationHandle))
-           .generateAllFormattedTriples(std::move(rowIndices), format)) {
+       std::move(generator).generateAllFormattedTriples(std::move(rowIndices),
+                                                        format)) {
     STREAMABLE_YIELD(tripleString);
   }
 }
