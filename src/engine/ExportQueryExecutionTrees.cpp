@@ -782,9 +782,8 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
   qlever::constructExport::ConstructTripleGenerator generator(
       constructTriples, std::move(result), qet.getVariableColumns(),
       qet.getQec()->getIndex(), std::move(cancellationHandle));
-  for (const auto& tripleString :
-       std::move(generator).generateAllFormattedTriples(std::move(rowIndices),
-                                                        format)) {
+  for (const auto& tripleString : std::move(generator).generateFormattedTriples(
+           std::move(rowIndices), format)) {
     STREAMABLE_YIELD(tripleString);
   }
 }

@@ -95,7 +95,7 @@ ConstructTripleGenerator::generateStringTriplesForResultTable(
 
 // _____________________________________________________________________________
 ad_utility::InputRangeTypeErased<std::string>
-ConstructTripleGenerator::generateFormattedTriples(
+ConstructTripleGenerator::generateFormattedTriplesForResultTable(
     const TableWithRange& table, ad_utility::MediaType format) {
   return ad_utility::InputRangeTypeErased<std::string>{
       std::make_unique<FormattedTripleAdapter>(prepareRowProcessor(table),
@@ -104,13 +104,13 @@ ConstructTripleGenerator::generateFormattedTriples(
 
 // _____________________________________________________________________________
 ad_utility::InputRangeTypeErased<std::string>
-ConstructTripleGenerator::generateAllFormattedTriples(
+ConstructTripleGenerator::generateFormattedTriples(
     ad_utility::InputRangeTypeErased<TableWithRange> rowIndices,
     ad_utility::MediaType format) && {
   auto tableTriples = ql::views::transform(
       ad_utility::OwningView{std::move(rowIndices)},
       [gen = std::move(*this), format](const TableWithRange& table) mutable {
-        return gen.generateFormattedTriples(table, format);
+        return gen.generateFormattedTriplesForResultTable(table, format);
       });
   return InputRangeTypeErased<std::string>(
       ql::views::join(std::move(tableTriples)));

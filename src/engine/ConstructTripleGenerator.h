@@ -42,8 +42,8 @@ class ConstructTripleGenerator {
 
   // Generate formatted strings for all tables in a range. Consumes the
   // generator; must be called as
-  // `std::move(generator).generateAllFormattedTriples(...)`.
-  ad_utility::InputRangeTypeErased<std::string> generateAllFormattedTriples(
+  // `std::move(generator).generateFormattedTriplesForResultTable(...)`.
+  ad_utility::InputRangeTypeErased<std::string> generateFormattedTriples(
       ad_utility::InputRangeTypeErased<TableWithRange> rowIndices,
       ad_utility::MediaType format) &&;
 
@@ -68,8 +68,9 @@ class ConstructTripleGenerator {
   generateStringTriplesForResultTable(const TableWithRange& table);
 
   // Generate formatted strings for a single result table.
-  ad_utility::InputRangeTypeErased<std::string> generateFormattedTriples(
-      const TableWithRange& table, ad_utility::MediaType format);
+  ad_utility::InputRangeTypeErased<std::string>
+  generateFormattedTriplesForResultTable(const TableWithRange& table,
+                                         ad_utility::MediaType format);
 
   // Helper that handles `rowOffset_` and creates a `EvaluatedTripleIterator`.
   std::unique_ptr<EvaluatedTripleIterator> prepareRowProcessor(
