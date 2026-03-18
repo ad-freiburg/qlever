@@ -10,6 +10,8 @@
 #ifndef QLEVER_SRC_ENGINE_MATERIALIZEDVIEWS_H_
 #define QLEVER_SRC_ENGINE_MATERIALIZEDVIEWS_H_
 
+#include <gtest/gtest_prod.h>
+
 #include "engine/MaterializedViewsQueryAnalysis.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
@@ -142,7 +144,7 @@ class MaterializedViewWriter {
 
 // This class represents a single loaded `MaterializedView`. It can be used for
 // `IndexScan`s.
-class MaterializedView {
+class MaterializedView : public std::enable_shared_from_this<MaterializedView> {
  private:
   std::string onDiskBase_;
   std::string name_;
@@ -151,6 +153,12 @@ class MaterializedView {
   VariableToColumnMap varToColMap_;
   std::shared_ptr<LocatedTriplesState> locatedTriplesState_;
   std::optional<std::string> originalQuery_;
+  std::optional<ParsedQuery> parsedQuery_;
+
+  // Lookup table for `BIND` statements from the view's query. Maps the cache
+  // keys of the `BIND` expressions (based on the column indices in the view) to
+  // the target column index.
+  materializedViewsQueryAnalysis::BindExpressionAndTargetCol coveredBinds_;
 
   using AdditionalScanColumns = SparqlTripleSimple::AdditionalScanColumns;
 
@@ -158,11 +166,17 @@ class MaterializedView {
   // materialized views do not support updates yet.
   std::shared_ptr<LocatedTriplesState> makeEmptyLocatedTriplesState() const;
 
+  FRIEND_TEST(MaterializedViewsTest, ManualConfigurations);
+
  public:
   // Load a materialized view from disk given the filename components. The
   // constructor will throw an exception if the name is invalid or the view does
   // not exist.
   MaterializedView(std::string onDiskBase, std::string name);
+
+  // Connect the permutation's back-reference to this view. Must be called
+  // after the `MaterializedView` is managed by a `shared_ptr`.
+  void connectPermutationBackReference();
 
   // Get the name of the view.
   const std::string& name() const { return name_; }
@@ -176,6 +190,9 @@ class MaterializedView {
   const std::optional<std::string>& originalQuery() const {
     return originalQuery_;
   }
+
+  // Get a parsed version of the original query, used for query analysis.
+  const std::optional<ParsedQuery>& parsedQuery() const { return parsedQuery_; }
 
   // Return the combined filename from the index' `onDiskBase` and the name of
   // the view. Note that this function does not check for validity or existence.
@@ -227,6 +244,16 @@ class MaterializedView {
   std::shared_ptr<IndexScan> makeIndexScan(
       QueryExecutionContext* qec,
       const parsedQuery::MaterializedViewQuery& viewQuery) const;
+
+  // If the materialized view contains a top-level `BIND` statement where the
+  // expression matches the given cache key, return the column index of the
+  // `BIND`'s target variable.
+  //
+  // IMPORTANT: This works only if the caller can guarantee that the variables
+  // in the `BIND` expression have been mapped to exactly the same column
+  // indices as in the view while generating the cache key.
+  std::optional<size_t> lookupBindTargetColumn(
+      const std::string& bindCacheKey) const;
 };
 
 // Shorthand for query rewriting helper class.
