@@ -347,7 +347,8 @@ void LocatedTriplesPerBlock::updateAugmentedMetadata() {
     // The first `std::nullopt` means that this block contains only
     // `LocatedTriple`s.
     CompressedBlockMetadataNoBlockIndex lastBlockN{
-        std::nullopt, 0, firstTriple, lastTriple, std::nullopt, true};
+        std::nullopt, 0,    firstTriple, lastTriple,
+        std::nullopt, true, std::nullopt};
     lastBlockN.graphInfo_.emplace();
     CompressedBlockMetadata lastBlock{lastBlockN, blockIndex};
     updateGraphMetadata(lastBlock, *blockUpdates);
