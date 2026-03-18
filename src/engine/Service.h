@@ -86,12 +86,6 @@ class Service : public Operation {
   // A SERVICE clause has no children.
   std::vector<QueryExecutionTree*> getChildren() override { return {}; }
 
-  // Convert the given binding to TripleComponent.
-  TripleComponent bindingToTripleComponent(
-      const nlohmann::json& binding,
-      ad_utility::HashMap<std::string, Id>& blankNodeMap,
-      LocalVocab* localVocab) const;
-
   // Create a value for the VALUES-clause used in `getSiblingValuesClause` from
   // id. If the id is of type blank node `std::nullopt` is returned.
   static std::optional<std::string> idToValueForValuesClause(
