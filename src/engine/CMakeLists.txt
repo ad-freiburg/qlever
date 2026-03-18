@@ -19,7 +19,7 @@ add_library(engine
         NeutralOptional.cpp Load.cpp StripColumns.cpp NamedResultCache.cpp
         ExplicitIdTableOperation.cpp StringMapping.cpp MaterializedViews.cpp
         PermutationSelector.cpp ConstructQueryEvaluator.cpp ConstructTripleGenerator.cpp
-        ConstructTemplatePreprocessor.cpp EvaluatedTripleIterator.cpp
+        ConstructTemplatePreprocessor.cpp TableWithRangeEvaluator.cpp
         ConstructTripleInstantiator.cpp ConstructBatchEvaluator.cpp
         MaterializedViewsQueryAnalysis.cpp UpdateMetadata.cpp)
 

@@ -7,19 +7,19 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#include "engine/EvaluatedTripleIterator.h"
+#include "engine/TableWithRangeEvaluator.h"
 
 namespace qlever::constructExport {
 
 // _____________________________________________________________________________
-IdCache EvaluatedTripleIterator::makeIdCache(
+IdCache TableWithRangeEvaluator::makeIdCache(
     const PreprocessedConstructTemplate& tmpl) {
   return IdCache(std::max(tmpl.uniqueVariableColumns_.size(), size_t{1}) *
                  CACHE_ENTRIES_PER_VARIABLE);
 }
 
 // _____________________________________________________________________________
-EvaluatedTripleIterator::EvaluatedTripleIterator(
+TableWithRangeEvaluator::TableWithRangeEvaluator(
     const PreprocessedConstructTemplate& preprocessedTemplate,
     const Index& index, CancellationHandle cancellationHandle,
     const TableWithRange& table, size_t currentRowOffset)
@@ -34,7 +34,7 @@ EvaluatedTripleIterator::EvaluatedTripleIterator(
 
 // _____________________________________________________________________________
 ad_utility::InputRangeTypeErased<EvaluatedTriple>
-EvaluatedTripleIterator::makeInnerRange() {
+TableWithRangeEvaluator::makeInnerRange() {
   const size_t numBatches =
       (numRows() + DEFAULT_BATCH_SIZE - 1) / DEFAULT_BATCH_SIZE;
 
@@ -49,12 +49,12 @@ EvaluatedTripleIterator::makeInnerRange() {
 }
 
 // _____________________________________________________________________________
-std::optional<EvaluatedTriple> EvaluatedTripleIterator::get() {
+std::optional<EvaluatedTriple> TableWithRangeEvaluator::get() {
   return innerRange_.get();
 }
 
 // _____________________________________________________________________________
-std::vector<EvaluatedTriple> EvaluatedTripleIterator::computeBatch(
+std::vector<EvaluatedTriple> TableWithRangeEvaluator::computeBatch(
     size_t batchStart) {
   const size_t batchEnd = std::min(batchStart + DEFAULT_BATCH_SIZE, numRows());
 

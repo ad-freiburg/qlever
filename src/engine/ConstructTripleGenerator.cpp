@@ -10,7 +10,7 @@
 #include "engine/ConstructTripleGenerator.h"
 
 #include "engine/ConstructTemplatePreprocessor.h"
-#include "engine/EvaluatedTripleIterator.h"
+#include "engine/TableWithRangeEvaluator.h"
 
 namespace qlever::constructExport {
 
@@ -25,7 +25,7 @@ using CancellationHandle = ad_utility::SharedCancellationHandle;
 class FormattedTripleAdapter
     : public ad_utility::InputRangeFromGet<std::string> {
  public:
-  FormattedTripleAdapter(std::unique_ptr<EvaluatedTripleIterator> processor,
+  FormattedTripleAdapter(std::unique_ptr<TableWithRangeEvaluator> processor,
                          ad_utility::MediaType format)
       : processor_{std::move(processor)}, format_{format} {}
 
@@ -37,7 +37,7 @@ class FormattedTripleAdapter
   }
 
  private:
-  std::unique_ptr<EvaluatedTripleIterator> processor_;
+  std::unique_ptr<TableWithRangeEvaluator> processor_;
   ad_utility::MediaType format_;
 };
 
@@ -46,7 +46,7 @@ class FormattedTripleAdapter
 class StringTripleAdapter : public ad_utility::InputRangeFromGet<StringTriple> {
  public:
   explicit StringTripleAdapter(
-      std::unique_ptr<EvaluatedTripleIterator> processor)
+      std::unique_ptr<TableWithRangeEvaluator> processor)
       : processor_(std::move(processor)) {}
 
   std::optional<StringTriple> get() override {
@@ -58,7 +58,7 @@ class StringTripleAdapter : public ad_utility::InputRangeFromGet<StringTriple> {
   }
 
  private:
-  std::unique_ptr<EvaluatedTripleIterator> processor_;
+  std::unique_ptr<TableWithRangeEvaluator> processor_;
 };
 
 // _____________________________________________________________________________
@@ -75,12 +75,13 @@ ConstructTripleGenerator::ConstructTripleGenerator(
 }
 
 // _____________________________________________________________________________
-std::unique_ptr<EvaluatedTripleIterator>
-ConstructTripleGenerator::prepareRowProcessor(const TableWithRange& table) {
+std::unique_ptr<TableWithRangeEvaluator>
+ConstructTripleGenerator::prepareTableWithRangeEvaluator(
+    const TableWithRange& table) {
   const size_t currentRowOffset = rowOffset_;
   rowOffset_ += table.tableWithVocab_.idTable().numRows();
 
-  return std::make_unique<EvaluatedTripleIterator>(
+  return std::make_unique<TableWithRangeEvaluator>(
       preprocessedTemplate_, index_.get(), cancellationHandle_, table,
       currentRowOffset);
 }
@@ -90,7 +91,8 @@ ad_utility::InputRangeTypeErased<StringTriple>
 ConstructTripleGenerator::generateStringTriplesForResultTable(
     const TableWithRange& table) {
   return ad_utility::InputRangeTypeErased<StringTriple>{
-      std::make_unique<StringTripleAdapter>(prepareRowProcessor(table))};
+      std::make_unique<StringTripleAdapter>(
+          prepareTableWithRangeEvaluator(table))};
 }
 
 // _____________________________________________________________________________
@@ -98,8 +100,8 @@ ad_utility::InputRangeTypeErased<std::string>
 ConstructTripleGenerator::generateFormattedTriplesForResultTable(
     const TableWithRange& table, ad_utility::MediaType format) {
   return ad_utility::InputRangeTypeErased<std::string>{
-      std::make_unique<FormattedTripleAdapter>(prepareRowProcessor(table),
-                                               format)};
+      std::make_unique<FormattedTripleAdapter>(
+          prepareTableWithRangeEvaluator(table), format)};
 }
 
 // _____________________________________________________________________________

@@ -10,7 +10,7 @@
 
 #include "./util/IdTableHelpers.h"
 #include "./util/IndexTestHelpers.h"
-#include "engine/EvaluatedTripleIterator.h"
+#include "engine/TableWithRangeEvaluator.h"
 #include "util/CancellationHandle.h"
 
 namespace {
@@ -33,8 +33,8 @@ static auto matchTriple(const std::string& s, const std::string& p,
                         Pointee(AD_FIELD(EvaluatedTermData, str, Eq(o)))));
 }
 
-// Drain all triples from a EvaluatedTripleIterator into a vector.
-static std::vector<EvaluatedTriple> collectAll(EvaluatedTripleIterator& proc) {
+// Drain all triples from a TableWithRangeEvaluator into a vector.
+static std::vector<EvaluatedTriple> collectAll(TableWithRangeEvaluator& proc) {
   std::vector<EvaluatedTriple> result;
   while (auto triple = proc.get()) {
     result.push_back(std::move(*triple));
@@ -109,7 +109,7 @@ TEST_F(EvaluatedTripleIteratorTest, emptyTable) {
   auto tmpl = makeTemplate({triple(Const("<s>"), Const("<p>"), Const("<o>"))});
   auto table = makeRange(idTable, 0, 0);
 
-  EvaluatedTripleIterator proc{tmpl, index_, makeHandle(), table, 0};
+  TableWithRangeEvaluator proc{tmpl, index_, makeHandle(), table, 0};
 
   EXPECT_TRUE(collectAll(proc).empty());
 }
@@ -122,7 +122,7 @@ TEST_F(EvaluatedTripleIteratorTest, allConstantsYieldsOneTriplePerRow) {
   auto tmpl = makeTemplate({triple(Const("<s>"), Const("<p>"), Const("<o>"))});
   auto table = makeRange(idTable, 0, 3);
 
-  EvaluatedTripleIterator proc{tmpl, index_, makeHandle(), table, 0};
+  TableWithRangeEvaluator proc{tmpl, index_, makeHandle(), table, 0};
   auto triples = collectAll(proc);
 
   EXPECT_THAT(triples, ElementsAre(matchTriple("<s>", "<p>", "<o>"),
@@ -139,7 +139,7 @@ TEST_F(EvaluatedTripleIteratorTest, variableInSubjectResolved) {
   auto tmpl = makeTemplate({triple(Var(0), Const("<p>"), Const("<o>"))}, {0});
   auto table = makeRange(idTable, 0, 2);
 
-  EvaluatedTripleIterator proc{tmpl, index_, makeHandle(), table, 0};
+  TableWithRangeEvaluator proc{tmpl, index_, makeHandle(), table, 0};
 
   EXPECT_THAT(collectAll(proc), ElementsAre(matchTriple("<s>", "<p>", "<o>"),
                                             matchTriple("<o>", "<p>", "<o>")));
@@ -152,7 +152,7 @@ TEST_F(EvaluatedTripleIteratorTest, undefDropsTriple) {
   auto tmpl = makeTemplate({triple(Var(0), Const("<p>"), Const("<o>"))}, {0});
   auto table = makeRange(idTable, 0, 3);
 
-  EvaluatedTripleIterator proc{tmpl, index_, makeHandle(), table, 0};
+  TableWithRangeEvaluator proc{tmpl, index_, makeHandle(), table, 0};
 
   EXPECT_THAT(collectAll(proc), ElementsAre(matchTriple("<s>", "<p>", "<o>"),
                                             matchTriple("<o>", "<p>", "<o>")));
@@ -167,7 +167,7 @@ TEST_F(EvaluatedTripleIteratorTest, multipleTemplateTriples) {
                            {0});
   auto table = makeRange(idTable, 0, 2);
 
-  EvaluatedTripleIterator proc{tmpl, index_, makeHandle(), table, 0};
+  TableWithRangeEvaluator proc{tmpl, index_, makeHandle(), table, 0};
 
   EXPECT_THAT(collectAll(proc), ElementsAre(matchTriple("<s>", "<p>", "<o1>"),
                                             matchTriple("<s>", "<q>", "<o2>"),
@@ -187,7 +187,7 @@ TEST_F(EvaluatedTripleIteratorTest, blankNodeUsesCorrectRowId) {
   // View starts at row 1 of the IdTable: firstRow = 1, numRows = 2.
   // currentRowOffset = 10.
   auto table = makeRange(idTable, 1, 3);
-  EvaluatedTripleIterator proc{tmpl, index_, makeHandle(), table, 10};
+  TableWithRangeEvaluator proc{tmpl, index_, makeHandle(), table, 10};
 
   // row 0 of batch -> blankNodeRowId = 10 + 1 + 0 = 11
   // row 1 of batch -> blankNodeRowId = 10 + 1 + 1 = 12
@@ -208,7 +208,7 @@ TEST_F(EvaluatedTripleIteratorTest, viewSubrangeReadsCorrectRows) {
       makeTemplate({triple(Var(0), Const("<pred>"), Const("<obj>"))}, {0});
   auto table = makeRange(idTable, 1, 3);
 
-  EvaluatedTripleIterator proc{tmpl, index_, makeHandle(), table, 0};
+  TableWithRangeEvaluator proc{tmpl, index_, makeHandle(), table, 0};
 
   EXPECT_THAT(collectAll(proc),
               ElementsAre(matchTriple("<p>", "<pred>", "<obj>"),
@@ -218,14 +218,14 @@ TEST_F(EvaluatedTripleIteratorTest, viewSubrangeReadsCorrectRows) {
 // More than DEFAULT_BATCH_SIZE rows: the processor correctly crosses the
 // internal batch boundary and yields triples for all rows.
 TEST_F(EvaluatedTripleIteratorTest, acrossBatchBoundary) {
-  constexpr size_t N = EvaluatedTripleIterator::DEFAULT_BATCH_SIZE + 1;
+  constexpr size_t N = TableWithRangeEvaluator::DEFAULT_BATCH_SIZE + 1;
 
   std::vector<std::vector<IntOrId>> rows(N, std::vector<IntOrId>{idS_});
   auto idTable = makeIdTableFromVector(rows);
   auto tmpl = makeTemplate({triple(Var(0), Const("<p>"), Const("<o>"))}, {0});
   auto table = makeRange(idTable, 0, N);
 
-  EvaluatedTripleIterator proc{tmpl, index_, makeHandle(), table, 0};
+  TableWithRangeEvaluator proc{tmpl, index_, makeHandle(), table, 0};
   auto triples = collectAll(proc);
 
   ASSERT_EQ(triples.size(), N);
@@ -237,7 +237,7 @@ TEST_F(EvaluatedTripleIteratorTest, acrossBatchBoundary) {
 // After consuming all triples in batch 0, cancelling the handle causes the
 // next `get()` call (which starts batch 1) to throw.
 TEST_F(EvaluatedTripleIteratorTest, cancellationThrowsBetweenBatches) {
-  constexpr size_t N = EvaluatedTripleIterator::DEFAULT_BATCH_SIZE + 1;
+  constexpr size_t N = TableWithRangeEvaluator::DEFAULT_BATCH_SIZE + 1;
 
   std::vector<std::vector<IntOrId>> rows(N, std::vector<IntOrId>{idS_});
   auto idTable = makeIdTableFromVector(rows);
@@ -245,10 +245,10 @@ TEST_F(EvaluatedTripleIteratorTest, cancellationThrowsBetweenBatches) {
   auto table = makeRange(idTable, 0, N);
 
   auto handle = makeHandle();
-  EvaluatedTripleIterator proc{tmpl, index_, handle, table, 0};
+  TableWithRangeEvaluator proc{tmpl, index_, handle, table, 0};
 
   // Drain all DEFAULT_BATCH_SIZE triples from batch 0.
-  for (size_t i = 0; i < EvaluatedTripleIterator::DEFAULT_BATCH_SIZE; ++i) {
+  for (size_t i = 0; i < TableWithRangeEvaluator::DEFAULT_BATCH_SIZE; ++i) {
     ASSERT_TRUE(proc.get().has_value());
   }
 

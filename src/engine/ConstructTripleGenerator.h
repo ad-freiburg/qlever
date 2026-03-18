@@ -13,9 +13,9 @@
 #include <vector>
 
 #include "engine/ConstructTypes.h"
-#include "engine/EvaluatedTripleIterator.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryExportTypes.h"
+#include "engine/TableWithRangeEvaluator.h"
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "parser/data/ConstructQueryExportContext.h"
@@ -72,8 +72,8 @@ class ConstructTripleGenerator {
   generateFormattedTriplesForResultTable(const TableWithRange& table,
                                          ad_utility::MediaType format);
 
-  // Helper that handles `rowOffset_` and creates a `EvaluatedTripleIterator`.
-  std::unique_ptr<EvaluatedTripleIterator> prepareRowProcessor(
+  // Helper that handles `rowOffset_` and creates a `TableWithRangeEvaluator`.
+  std::unique_ptr<TableWithRangeEvaluator> prepareTableWithRangeEvaluator(
       const TableWithRange& table);
 };
 
