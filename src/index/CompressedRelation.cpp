@@ -223,10 +223,16 @@ CompressedRelationReader::asyncParallelBlockGenerator(
           blockMetadata, scanConfig_.scanColumns_);
 
       lock.unlock();
-      auto decompressedBlockAndMetadata =
-          reader_->decompressAndPostprocessBlock(compressedBlock,
-                                                 blockMetadata.numRows_,
-                                                 scanConfig_, blockMetadata);
+
+      // If this block's data is shared from another permutation, delegate.
+      auto decompressedBlockAndMetadata = [&]() {
+        if (blockMetadata.sharingInfo_.has_value()) {
+          return reader_->readSharedBlock(blockMetadata, scanConfig_);
+        }
+        return reader_->decompressAndPostprocessBlock(
+            compressedBlock, blockMetadata.numRows_, scanConfig_,
+            blockMetadata);
+      }();
       return std::pair{myIndex,
                        std::optional{std::move(decompressedBlockAndMetadata)}};
     };
@@ -1220,8 +1226,7 @@ CompressedRelationReader::readAndDecompressBlock(
 }
 
 // ____________________________________________________________________________
-std::optional<DecompressedBlockAndMetadata>
-CompressedRelationReader::readSharedBlock(
+DecompressedBlockAndMetadata CompressedRelationReader::readSharedBlock(
     const CompressedBlockMetadata& blockMetaData,
     const ScanImplConfig& scanConfig) const {
   AD_CONTRACT_CHECK(blockMetaData.sharingInfo_.has_value());

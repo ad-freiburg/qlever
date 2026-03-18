@@ -1021,7 +1021,7 @@ class CompressedRelationReader {
   // Read a block whose data is shared from another permutation.  Depending on
   // `sharingInfo.type_`, this reads from the sister or cross-pair permutation,
   // decompresses, and applies the necessary column swap / resort.
-  std::optional<DecompressedBlockAndMetadata> readSharedBlock(
+  DecompressedBlockAndMetadata readSharedBlock(
       const CompressedBlockMetadata& blockMetaData,
       const ScanImplConfig& scanConfig) const;
 
