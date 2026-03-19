@@ -37,7 +37,7 @@ constexpr ctll::fixed_string digitsCaptureGroup = "digits";
 // that the order of the encoded values corresponds to the lexical order of the
 // original IRIs. Each decimal digit is encoded as a 4-bit nibble, where digit
 // `i` is encoded as `i+1` and converted to a hexadecimal number. The nibbles
-// are stored left-aligned (not right-aliged) and filled on the right with
+// are stored left-aligned (not right-aligned) and filled on the right with
 // zeroes.
 //
 // For example, here are a few example encodings, with `NumBitsTotal = 40` and
@@ -294,21 +294,6 @@ class EncodedIriManagerImpl {
 // encoding, 8 bits are used for the prefixes (which allows up to 256
 // prefixes). This leaves 52 bits for the digits, so up to 13 digits can be
 // encoded. Additionally the prefix for newly created graphs is always set.
-class EncodedIriManager : public EncodedIriManagerImpl<Id::numDataBits, 8> {
- public:
-  // By default, only the fixed prefixes are used.
-  EncodedIriManager()
-      : EncodedIriManagerImpl({std::string(QLEVER_NEW_GRAPH_PREFIX)}) {}
-
-  // Construct from the list of specified prefixes plus the fixed prefixes. The
-  // prefixes have to be specified without any brackes, so e.g.
-  // "http://example.org/" if IRIs of the form `<http://example.org/1234>`
-  // should be encoded.
-  explicit EncodedIriManager(
-      std::vector<std::string> prefixesWithoutAngleBrackets)
-      : EncodedIriManagerImpl(
-            (prefixesWithoutAngleBrackets.emplace_back(QLEVER_NEW_GRAPH_PREFIX),
-             std::move(prefixesWithoutAngleBrackets))) {}
-};
+using EncodedIriManager = EncodedIriManagerImpl<Id::numDataBits, 8>;
 
 #endif  // QLEVER_SRC_INDEX_ENCODEDVALUES_H

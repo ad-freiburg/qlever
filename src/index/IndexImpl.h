@@ -89,6 +89,22 @@ struct IndexBuilderDataAsFirstPermutationSorter : IndexBuilderDataBase {
   IndexBuilderDataAsFirstPermutationSorter() = default;
 };
 
+// The default encoder for IRIs in the index. It works like
+// `EncodedIriManager` except that there is a set of prefixes that are always
+// active.
+class EncodedIriManagerWithAlwaysOnPrefixes
+    : public EncodedIriManagerImpl<Id::numDataBits, 8> {
+ public:
+  EncodedIriManagerWithAlwaysOnPrefixes()
+      : EncodedIriManagerImpl({std::string(QLEVER_NEW_GRAPH_PREFIX)}) {}
+
+  explicit EncodedIriManagerWithAlwaysOnPrefixes(
+      std::vector<std::string> prefixesWithoutAngleBrackets)
+      : EncodedIriManagerImpl(
+            (prefixesWithoutAngleBrackets.emplace_back(QLEVER_NEW_GRAPH_PREFIX),
+             std::move(prefixesWithoutAngleBrackets))) {}
+};
+
 class IndexImpl {
  public:
   using TextScoringMetric = qlever::TextScoringMetric;
@@ -123,7 +139,7 @@ class IndexImpl {
   nlohmann::json configurationJson_;
   Index::Vocab vocab_;
   Index::TextVocab textVocab_;
-  EncodedIriManager encodedIriManager_;
+  EncodedIriManagerWithAlwaysOnPrefixes encodedIriManager_;
   ScoreData scoreData_;
 
   TextMetaData textMeta_;

@@ -1306,7 +1306,7 @@ void IndexImpl::readConfiguration() {
       std::make_unique<ad_utility::BlankNodeManager>(numBlankNodesTotal);
 
   loadDataMember("encoded-iri-prefixes", encodedIriManager_,
-                 EncodedIriManager{});
+                 EncodedIriManagerWithAlwaysOnPrefixes{});
   loadDataMember(
       "graphNamespaceManager", graphNamespaceManager_,
       GraphNamespaceManager(std::string(QLEVER_NEW_GRAPH_PREFIX), 0));
@@ -1790,21 +1790,24 @@ CPP_template_def(typename... NextSorter)(requires(
   AD_CORRECTNESS_CHECK(it != encodedIriManager_.prefixes_.end());
   auto newGraphPrefixId =
       static_cast<size_t>(it - encodedIriManager_.prefixes_.begin());
-  auto determineNextAvailableInternalGraph =
-      [&nextAvailableIndex, newGraphPrefixId](const auto& triple) mutable {
-        const auto& graph = triple[3];
-        if (graph.getDatatype() != Datatype::EncodedVal) {
-          return;
-        }
-        auto [prefix, payload] =
-            EncodedIriManager::splitIntoPrefixIdxAndPayload(graph);
-        if (prefix != newGraphPrefixId) {
-          return;
-        }
-        nextAvailableIndex =
-            std::max(nextAvailableIndex,
-                     EncodedIriManager::decodeDecimalFrom64Bit(payload) + 1);
-      };
+  auto determineNextAvailableInternalGraph = [&nextAvailableIndex,
+                                              newGraphPrefixId](
+                                                 const auto& triple) mutable {
+    const auto& graph = triple[3];
+    if (graph.getDatatype() != Datatype::EncodedVal) {
+      return;
+    }
+    auto [prefix, payload] =
+        EncodedIriManagerWithAlwaysOnPrefixes::splitIntoPrefixIdxAndPayload(
+            graph);
+    if (prefix != newGraphPrefixId) {
+      return;
+    }
+    nextAvailableIndex = std::max(
+        nextAvailableIndex,
+        EncodedIriManagerWithAlwaysOnPrefixes::decodeDecimalFrom64Bit(payload) +
+            1);
+  };
   size_t numPredicates =
       createPermutationPair(numColumns, AD_FWD(sortedTriples), *pso_, *pos_,
                             nextSorter.makePushCallback()..., countTriples,
@@ -1928,8 +1931,8 @@ ad_utility::BlankNodeManager* IndexImpl::getBlankNodeManager() const {
 // _____________________________________________________________________________
 void IndexImpl::setPrefixesForEncodedValues(
     std::vector<std::string> prefixesWithoutAngleBrackets) {
-  encodedIriManager_ =
-      EncodedIriManager{std::move(prefixesWithoutAngleBrackets)};
+  encodedIriManager_ = EncodedIriManagerWithAlwaysOnPrefixes{
+      std::move(prefixesWithoutAngleBrackets)};
 }
 // _____________________________________________________________________________
 void IndexImpl::writePatternsToFile() const {
