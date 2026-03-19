@@ -9,7 +9,7 @@
 #include "../util/TripleComponentTestHelpers.h"
 #include "TensorTestHelpers.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
-#include "util/TensorData.h"
+#include "rdfTypes/TensorData.h"
 namespace {
 using namespace ad_utility;
 using namespace sparqlExpression;

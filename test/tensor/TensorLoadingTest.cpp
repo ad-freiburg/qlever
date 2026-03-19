@@ -6,20 +6,10 @@
 
 #include "../util/GTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
-#include "util/TensorData.h"
+#include "rdfTypes/TensorData.h"
 namespace {
 using namespace ad_utility;
-using namespace sparqlExpression;
-using namespace tensorTestHelpers;
-using namespace sparqlParserHelpers;
-using namespace sparqlParserTestHelpers;
-namespace m = matchers;
-using Parser = SparqlAutomaticParser;
 using namespace std::literals;
-using Var = Variable;
-auto iri = ad_utility::testing::iri;
-
-auto lit = ad_utility::testing::tripleComponentLiteral;
 // _____________________________________________________________________________
 TEST(TensorParse, TensorDump) {
   auto tensor = TensorData({1.0f, 2.0f, 3.0f}, {3}, TensorData::DType::FLOAT);

@@ -1,10 +1,10 @@
 // Copyright 2026, Technical University of Graz, University of Padova
 // Institute for Visual Computing, Department of Information Engineering
 // Authors: Benedikt Kantz <benedikt.kantz@tugraz.at>
+// Adapted from Spatial Join Logic
 
 #include "parser/TensorSearchQuery.h"
 
-#include "engine/SpatialJoinConfig.h"
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/NormalizedString.h"
 #include "parser/PayloadVariables.h"
@@ -31,9 +31,9 @@ void TensorSearchQuery::addParameter(const SparqlTriple& triple) {
     setVariable("right", object, right_);
   } else if (predString == "bindMaxResults") {
     setVariable("bindMaxResults", object, maxResultsVariable_);
-  } else if (predString == "numNearestNeighbors") {
+  } else if (predString == "numNN") {
     throwIf(!object.isInt(),
-            "The parameter `<numNearestNeighbors>` expects an integer (the "
+            "The parameter `<numNN>` expects an integer (the "
             "maximum "
             "number of nearest neighbors)");
     maxResults_ = object.getInt();
@@ -54,11 +54,11 @@ void TensorSearchQuery::addParameter(const SparqlTriple& triple) {
           "The parameter `<nTrees>` expects an integer (the number of trees to "
           "build for the index).");
     }
-  } else if (predString == "algo") {
+  } else if (predString == "algorithm") {
     // This case is already covered in `extractParameterName` below, but we
     // want to throw a more precise error description
     throwIf(!object.isIri(),
-            "The parameter `<algo>` needs an IRI that selects the algorithm "
+            "The parameter `<algorithm>` needs an IRI that selects the algorithm "
             "to employ. Currently supported are `<default>` and `<annoy>`");
     auto type = extractParameterName(object, TENSOR_SEARCH_IRI);
     if (type == "default") {
@@ -67,8 +67,8 @@ void TensorSearchQuery::addParameter(const SparqlTriple& triple) {
       algo_ = TensorSearchAlgorithm::ANNOY;
     } else {
       throw TensorSearchException{
-          "The IRI given for the parameter `<algo>` does not refer to a "
-          "supported join type. Currently supported are `<default>` and "
+          "The IRI given for the parameter `<algorithm>` does not refer to a "
+          "supported tensor search algorithm. Currently supported are `<default>` and "
           "`<annoy>`"};
     }
   } else if (predString == "distance") {
@@ -76,12 +76,10 @@ void TensorSearchQuery::addParameter(const SparqlTriple& triple) {
     // want to throw a more precise error description
     throwIf(!object.isIri(),
             "The parameter `<distance>` needs an IRI that selects the distance "
-            "metric to employ. Currently supported are `<angular>`, `<dot>`, "
+            "metric to employ. Currently supported are `<angular>`, `<cosine>`, `<dot>`, "
             "`<euclidian>`, `<manhattan>`, or  `<hamming>` ");
-    auto dist = extractParameterName(object, SPATIAL_SEARCH_IRI);
-    if (dist == "default") {
-      dist_ = TensorDistanceAlgorithm::DEFAULT;
-    } else if (dist == "angular") {
+    auto dist = extractParameterName(object, TENSOR_SEARCH_IRI);
+    if (dist == "angular" || dist == "cosine") {
       dist_ = TensorDistanceAlgorithm::COSINE_SIMILARITY;
     } else if (dist == "dot") {
       dist_ = TensorDistanceAlgorithm::DOT_PRODUCT;
@@ -94,7 +92,7 @@ void TensorSearchQuery::addParameter(const SparqlTriple& triple) {
     } else {
       throw TensorSearchException{
           "The IRI given for the parameter `<distance>` does not refer to a "
-          "supported distance metric. Currently supported are `<angular>`, `<dot>`, "
+          "supported distance metric. Currently supported are `<angular>`, `<cosine>`, `<dot>`, "
             "`<euclidian>`, `<manhattan>`, or  `<hamming>`"};
     }
   } else if (predString == "payload") {
@@ -103,13 +101,14 @@ void TensorSearchQuery::addParameter(const SparqlTriple& triple) {
 
       // If we have already selected all payload variables, we can ignore
       // another explicitly selected variable.
+
       payloadVariables_.addVariable(getVariable("payload", object));
     } else if (object.isIri() &&
-               extractParameterName(object, SPATIAL_SEARCH_IRI) == "all") {
+               extractParameterName(object, TENSOR_SEARCH_IRI) == "all") {
       // All variables selected
       payloadVariables_.setToAll();
     } else {
-      throw SpatialSearchException(
+      throw TensorSearchException(
           "The argument to the `<payload>` parameter must be either a variable "
           "to be selected or `<all>`");
     }
@@ -120,9 +119,9 @@ void TensorSearchQuery::addParameter(const SparqlTriple& triple) {
             "be the name of a pinned cache entry as a string literal.");
     rightCacheName_ = asStringViewUnsafe(object.getLiteral().getContent());
   } else {
-    throw SpatialSearchException(absl::StrCat(
+    throw TensorSearchException(absl::StrCat(
         "Unsupported argument ", predString,
-        " in spatial search; supported arguments are: `<left>`, `<right>`, `<numNearestNeighbors>`, `<searchK>`, `<nTrees>`, "
+        " in tensor search; supported arguments are: `<left>`, `<right>`, `<numNearestNeighbors>`, `<searchK>`, `<nTrees>`, "
         "`<algo>`, `<distance>`, `<payload>`, and `<experimentalRightCacheName>`"));
   }
 }
@@ -138,22 +137,22 @@ TensorSearchConfiguration TensorSearchQuery::toTensorSearchConfiguration()
 
   throwIf(!left_.has_value(), "Missing parameter `<left>` in tensor search.");
   throwIf(!right_.has_value(),
-          "Missing parameter `<right>` in spatial search.");
+          "Missing parameter `<right>` in tensor search.");
 
   throwIf(
       rightCacheName_.has_value() && algo != TensorSearchAlgorithm::ANNOY,
       "The parameter `<experimentalRightCacheName>` is only supported by the "
       "`<annoy>` algorithm.");
-
-  if (algo == TensorSearchAlgorithm::ANNOY) {
-    throwIf(!rightCacheName_.has_value(),
-            "The parameter `<experimentalRightCacheName>` is mandatory for the "
-            "`<annoy>` algorithm.");
-    throwIf(childGraphPattern_.has_value(),
-            "The parameter `<annoy>` algorithm uses a cached "
-            "query result as its right child. Therefore a group graph pattern "
-            "for the right side may not be specified in the `SERVICE`.");
-  }
+  // the cache parameter is automatically imputed for annoy
+  // if (algo == TensorSearchAlgorithm::ANNOY) {
+  //   throwIf(!rightCacheName_.has_value(),
+  //           "The parameter `<experimentalRightCacheName>` is mandatory for the "
+  //           "`<annoy>` algorithm.");
+  //   throwIf(childGraphPattern_.has_value(),
+  //           "The parameter `<annoy>` algorithm uses a cached "
+  //           "query result as its right child. Therefore a group graph pattern "
+  //           "for the right side may not be specified in the `SERVICE`.");
+  // }
 
   // Only if the number of results is limited, it is mandatory that the right
   // variable must be selected inside the service. If only the distance is
@@ -161,14 +160,14 @@ TensorSearchConfiguration TensorSearchQuery::toTensorSearchConfiguration()
   throwIf(
       !ignoreMissingRightChild_ && maxResults_.has_value() &&
           !childGraphPattern_.has_value(),
-      "A spatial search with a maximum number of results must have its right "
+      "A tensor search with a maximum number of results must have its right "
       "variable declared inside the service using a graph pattern: SERVICE "
       "tensorSearch: { [Config Triples] { <Something> <ThatSelects> ?right "
       "} }.");
   throwIf(
       !ignoreMissingRightChild_ && !childGraphPattern_.has_value() &&
           !payloadVariables_.isAll() && !payloadVariables_.empty(),
-      "The right variable for the spatial search is declared outside the "
+      "The right variable for the tensor search is declared outside the "
       "SERVICE, but the <payload> parameter was set. Please move the "
       "declaration of the right variable into the SERVICE if you wish to use "
       "`<payload>`");
@@ -187,7 +186,7 @@ TensorSearchConfiguration TensorSearchQuery::toTensorSearchConfiguration()
                                    pv,
                                    algo,
                                    dist_.value_or(TENSOR_SEARCH_DEFAULT_DISTANCE),
-                                   maxResults_.value_or((size_t)100),
+                                   maxResults_.value_or((ssize_t)100),
                                    searchK_.value_or((ssize_t)-1),
                                    nTrees_.value_or((ssize_t)-1),
                                    rightCacheName_};
@@ -205,7 +204,7 @@ TensorSearchQuery::TensorSearchQuery(const SparqlTriple& triple) {
   // Add variables to configuration object
   AD_CONTRACT_CHECK(triple.s_.isVariable() && triple.o_.isVariable(),
                     "Currently, both the subject and the object of the triple "
-                    "that specifies a spatial join have to be variables.");
+                    "that specifies a tensor join have to be variables.");
   setVariable("left", triple.s_, left_);
   setVariable("right", triple.o_, right_);
 
@@ -224,6 +223,7 @@ TensorSearchQuery::TensorSearchQuery(const SparqlTriple& triple) {
   // Check if one of the regexes matches
   if (auto match = ctre::match<TENSOR_NEAREST_NEIGHBORS_REGEX>(input)) {
     maxResults_ = matchToInt(match.get<detail::resultsCaptureGroup>());
+    ignoreMissingRightChild_ = true;
     AD_CORRECTNESS_CHECK(maxResults_.has_value());
   } else {
     AD_THROW(absl::StrCat(
@@ -243,7 +243,7 @@ void TensorSearchQuery::throwIf(bool throwCondition,
 
 // _____________________________________________________________________________
 void TensorSearchQuery::validate() const {
-  // We convert the spatial query to a spatial join configuration and discard
+  // We convert the tensor search query to a tensor search configuration and discard
   // its result here to detect errors early and report them to the user with
   // highlighting. It's only a small struct so not much is wasted.
   [[maybe_unused]] auto&& _ = toTensorSearchConfiguration();

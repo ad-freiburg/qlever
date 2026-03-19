@@ -20,7 +20,7 @@
 #include "rdfTypes/GeometryInfo.h"
 #include "util/ConstexprSmallString.h"
 #include "util/LruCache.h"
-#include "util/TensorData.h"
+#include "rdfTypes/TensorData.h"
 #include "util/TypeTraits.h"
 #include "util/UnitOfMeasurement.h"
 

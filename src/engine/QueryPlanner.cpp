@@ -113,6 +113,73 @@ void assignNodesFilterAndTextLimitIds(QueryPlanner::SubtreePlan& target,
   target.idsOfIncludedTextLimits_ = source.idsOfIncludedTextLimits_;
   target.containsFilterSubstitute_ = source.containsFilterSubstitute_;
 }
+
+
+using JoinColumns = std::vector<std::array<ColumnIndex, 2>>;
+// _____________________________________________________________________________________________________________________
+// Helper that returns `true` for each of the subtree plans `a` and `b` iff
+// the subtree plan is an operation and it is not yet fully constructed
+// (it does not have both children set)
+template <typename JoinType>
+std::pair<bool, bool> checkJoin(const SubtreePlan& a,
+                                                      const SubtreePlan& b) {
+  auto isIncompleteJoin = [](const SubtreePlan& ts) {
+    auto tsCasted = std::dynamic_pointer_cast<const JoinType>(
+        ts._qet->getRootOperation());
+    return tsCasted != nullptr && !tsCasted->isConstructed();
+  };
+  return {isIncompleteJoin(a), isIncompleteJoin(b)};
+}
+
+// _____________________________________________________________________________
+template <typename JoinType>
+auto createJoin(const SubtreePlan& a, const SubtreePlan& b,
+                                     const JoinColumns& jcs)
+    -> std::optional<SubtreePlan> {
+  auto [aIs, bIs] = checkJoin<JoinType>(a, b);
+
+  // Exactly one of the inputs must be a SpatialJoin.
+  if (aIs == bIs) {
+    return std::nullopt;
+  }
+
+  const SubtreePlan& joinSubtreePlan = aIs ? a : b;
+  const SubtreePlan& otherSubtreePlan = aIs ? b : a;
+
+  std::shared_ptr<Operation> op = joinSubtreePlan._qet->getRootOperation();
+  auto join = static_cast<JoinType*>(op.get());
+
+  if (join->isConstructed()) {
+    return std::nullopt;
+  }
+
+  if (jcs.size() > 1) {
+    // If a spatial join operation substitutes a geometric relation filter,
+    // we might have multiple spatial joins for different pairs of variables
+    // that share some variable.
+    if (join->getSubstitutesFilterOp()) {
+      return std::nullopt;
+    }
+    // TODO<ullingerc> Handle this case for a non-substitute spatial join (e.g.
+    // a `SpatialQuery` as `SERVICE qlss:`, explicitly given by the user's
+    // query): If multiple such spatial joins occur on the same pair of
+    // variables, all except for one should be rewritten to a FILTER if they
+    // request a maximum distance search (for nearest neighbor search this is
+    // not possible). This however requires changes to `geof:distance` first.
+    AD_THROW(
+        "Currently, if both sides of a SpatialJoin are variables, then the"
+        "SpatialJoin must be the only connection between these variables");
+  }
+  ColumnIndex ind = aIs ? jcs[0][1] : jcs[0][0];
+  const Variable& var =
+      otherSubtreePlan._qet->getVariableAndInfoByColumnIndex(ind).first;
+
+  auto newJoin = join->addChild(otherSubtreePlan._qet, var);
+
+  SubtreePlan plan = makeSubtreePlan<JoinType>(std::move(newJoin));
+  mergeSubtreePlanIds(plan, a, b);
+  return plan;
+}
 }  // namespace
 
 // _____________________________________________________________________________
@@ -2257,7 +2324,7 @@ std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
   // If both sides are spatial joins that are still missing children, return
   // immediately to prevent a regular join on the variables, which would lead to
   // the spatial join never having children.
-  if (checkSpatialJoin(a, b) == std::pair<bool, bool>{true, true}) {
+  if (checkJoin<SpatialJoin>(a, b) == std::pair<bool, bool>{true, true}) {
     return candidates;
   }
 
@@ -2267,7 +2334,11 @@ std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
   // return immediately instead of creating a normal join below as well.
   // Note, that this if statement should be evaluated first, such that no other
   // join options get considered, when one of the candidates is a SpatialJoin.
-  if (auto opt = createSpatialJoin(a, b, jcs)) {
+  if (auto opt = createJoin<SpatialJoin>(a, b, jcs)) {
+    candidates.push_back(std::move(opt.value()));
+    return candidates;
+  }
+  if (auto opt = createJoin<TensorSearch>(a, b, jcs)) {
     candidates.push_back(std::move(opt.value()));
     return candidates;
   }
@@ -2336,68 +2407,6 @@ std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
 
   return candidates;
 }
-
-// _____________________________________________________________________________
-std::pair<bool, bool> QueryPlanner::checkSpatialJoin(const SubtreePlan& a,
-                                                     const SubtreePlan& b) {
-  auto isIncompleteSpatialJoin = [](const SubtreePlan& sj) {
-    auto sjCasted = std::dynamic_pointer_cast<const SpatialJoin>(
-        sj._qet->getRootOperation());
-    return sjCasted != nullptr && !sjCasted->isConstructed();
-  };
-  return {isIncompleteSpatialJoin(a), isIncompleteSpatialJoin(b)};
-}
-
-// _____________________________________________________________________________
-auto QueryPlanner::createSpatialJoin(const SubtreePlan& a, const SubtreePlan& b,
-                                     const JoinColumns& jcs)
-    -> std::optional<SubtreePlan> {
-  auto [aIs, bIs] = checkSpatialJoin(a, b);
-
-  // Exactly one of the inputs must be a SpatialJoin.
-  if (aIs == bIs) {
-    return std::nullopt;
-  }
-
-  const SubtreePlan& spatialSubtreePlan = aIs ? a : b;
-  const SubtreePlan& otherSubtreePlan = aIs ? b : a;
-
-  std::shared_ptr<Operation> op = spatialSubtreePlan._qet->getRootOperation();
-  auto spatialJoin = static_cast<SpatialJoin*>(op.get());
-
-  if (spatialJoin->isConstructed()) {
-    return std::nullopt;
-  }
-
-  if (jcs.size() > 1) {
-    // If a spatial join operation substitutes a geometric relation filter,
-    // we might have multiple spatial joins for different pairs of variables
-    // that share some variable.
-    if (spatialJoin->getSubstitutesFilterOp()) {
-      return std::nullopt;
-    }
-    // TODO<ullingerc> Handle this case for a non-substitute spatial join (e.g.
-    // a `SpatialQuery` as `SERVICE qlss:`, explicitly given by the user's
-    // query): If multiple such spatial joins occur on the same pair of
-    // variables, all except for one should be rewritten to a FILTER if they
-    // request a maximum distance search (for nearest neighbor search this is
-    // not possible). This however requires changes to `geof:distance` first.
-    AD_THROW(
-        "Currently, if both sides of a SpatialJoin are variables, then the"
-        "SpatialJoin must be the only connection between these variables");
-  }
-  ColumnIndex ind = aIs ? jcs[0][1] : jcs[0][0];
-  const Variable& var =
-      otherSubtreePlan._qet->getVariableAndInfoByColumnIndex(ind).first;
-
-  auto newSpatialJoin = spatialJoin->addChild(otherSubtreePlan._qet, var);
-
-  SubtreePlan plan = makeSubtreePlan<SpatialJoin>(std::move(newSpatialJoin));
-  mergeSubtreePlanIds(plan, a, b);
-  return plan;
-}
-
-// _____________________________________________________________________________________________________________________
 
 namespace {
 // Helper function that maps the indices from the unions' columns to the

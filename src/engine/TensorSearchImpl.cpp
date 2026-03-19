@@ -27,7 +27,7 @@
 #include "util/AllocatorWithLimit.h"
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
-#include "util/TensorData.h"
+#include "rdfTypes/TensorData.h"
 
 // ____________________________________________________________________________
 size_t TensorSearchImpl::getNumThreads() {

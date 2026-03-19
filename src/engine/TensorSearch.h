@@ -13,7 +13,7 @@
 #include "engine/TensorSearchConfig.h"
 #include "global/Id.h"
 #include "rdfTypes/Variable.h"
-#include "util/TensorData.h"
+#include "rdfTypes/TensorData.h"
 
 // helper struct to improve readability in prepareJoin()
 struct PreparedTensorSearchParams {
@@ -69,6 +69,10 @@ class TensorSearch : public Operation {
   size_t getCostEstimate() override;
   uint64_t getSizeEstimateBeforeLimit() override;
 
+  // get the boolean flag if this tensor search operation is used to substitute a filter operation. 
+  // This can be used in the future and ensure compatibility with the existing spatial join implementation
+  bool getSubstitutesFilterOp() const { return substitutesFilterOp_; }
+
   // this function assumes, that the complete cross product is build and
   // returned. If the TensorSearch does not have both children yet, it just
   // returns one as a dummy return. As no column gets joined in the
@@ -114,7 +118,7 @@ class TensorSearch : public Operation {
   TensorSearchAlgorithm getAlgorithm() const { return config_.algo_; }
 
   // retrieve the currently selected spatial join type
-  std::optional<TensorDistanceAlgorithm> getDistanceFunction() const {
+  TensorDistanceAlgorithm getDistanceFunction() const {
     return config_.dist_;
   }
 
@@ -126,7 +130,21 @@ class TensorSearch : public Operation {
   const TensorSearchConfiguration& onlyForTestingGetConfig() const {
     return config_;
   }
-
+  ssize_t onlyForTestingGetSearchK() const {
+    return config_.searchK_;
+  }
+  ssize_t onlyForTestingGetNTrees() const {
+    return config_.nTrees_;
+  }
+  ssize_t onlyForTestingGetMaxResults() const {
+    return config_.maxResults_;
+  }
+  std::optional<Variable> onlyForTestingGetMaxResultsVariable() const {
+    return config_.maxResultsVariable_;
+  }
+  TensorDistanceAlgorithm onlyForTestingGetDistanceFunction() const {
+    return config_.dist_;
+  }
   std::pair<Variable, Variable> onlyForTestingGetVariables() const {
     return std::pair{config_.left_, config_.right_};
   }

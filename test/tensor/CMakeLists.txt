@@ -1,3 +1,4 @@
 
-addLinkAndDiscoverTest(QueryParsing qlever engine parser sparqlExpressions)
-addLinkAndDiscoverTestNoLibs(TensorLoading engine sparqlExpressions)
+addLinkAndDiscoverTest(QueryParsingTensorTest qlever engine parser sparqlExpressions)
+addLinkAndDiscoverTest(QueryPlannerTensorSearchTest qlever engine parser sparqlExpressions)
+addLinkAndDiscoverTestNoLibs(TensorLoadingTest engine sparqlExpressions)

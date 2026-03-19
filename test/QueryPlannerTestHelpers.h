@@ -35,6 +35,7 @@
 #include "engine/QueryPlanner.h"
 #include "engine/Sort.h"
 #include "engine/SpatialJoin.h"
+#include "engine/TensorSearch.h"
 #include "engine/TextIndexScanForEntity.h"
 #include "engine/TextIndexScanForWord.h"
 #include "engine/TextLimit.h"
@@ -432,6 +433,44 @@ struct SpatialJoinMatcher {
 };
 constexpr inline SpatialJoinMatcher spatialJoin;
 constexpr inline SpatialJoinMatcher<true> spatialJoinFilterSubstitute;
+
+// Match a TensorSearch operation, similar to above
+template <bool Substitute = false>
+struct TensorSearchMatcher {
+  template <
+      QL_CONCEPT_OR_TYPENAME(ql::concepts::same_as<QetMatcher>)... ChildArgs>
+  auto operator()(ssize_t maxResults, 
+                  ssize_t searchK, 
+                  ssize_t nTrees, 
+                  TensorSearchAlgorithm algorithm,
+                  TensorDistanceAlgorithm distanceAlgorithm,                  
+                  Variable left,
+                  Variable right, 
+                  std::optional<Variable> distanceVariable,
+                  PayloadVariables payloadVariables,
+                  const ChildArgs&... childMatchers) const {
+    return RootOperation<::TensorSearch>(AllOf(
+        children(childMatchers...),
+        AD_PROPERTY(::TensorSearch, onlyForTestingGetMaxResults,
+                    Eq(maxResults)),
+        AD_PROPERTY(::TensorSearch, onlyForTestingGetSearchK,
+                    Eq(searchK)),
+        AD_PROPERTY(::TensorSearch, onlyForTestingGetNTrees,
+                    Eq(nTrees)),
+        AD_PROPERTY(::TensorSearch, getAlgorithm,
+                    Eq(algorithm)),
+        AD_PROPERTY(::TensorSearch, getDistanceFunction,
+                    Eq(distanceAlgorithm)),
+        AD_PROPERTY(::TensorSearch, onlyForTestingGetVariables,
+                    Eq(std::pair(left, right))),
+        AD_PROPERTY(::TensorSearch, onlyForTestingGetMaxResultsVariable,
+                    Eq(distanceVariable)),
+        AD_PROPERTY(::TensorSearch, onlyForTestingGetPayloadVariables,
+                    Eq(payloadVariables))));
+  }
+};
+constexpr inline TensorSearchMatcher tensorSearch;
+constexpr inline TensorSearchMatcher<true> tensorSearchFilterSubstitute;
 
 // Match a GroupBy operation
 static constexpr auto GroupBy =

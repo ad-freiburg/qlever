@@ -11,7 +11,7 @@
 #include <fstream>
 
 #include "../util/GTestHelpers.h"
-#include "util/TensorData.h"
+#include "rdfTypes/TensorData.h"
 #include "libqlever/Qlever.h"
 #include "util/Exception.h"
 

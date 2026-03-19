@@ -1,8 +1,0 @@
-set(CMAKE_SYSTEM_NAME Linux)
-
-
-set(tools /home/kantz/miniconda3/envs/qlever)
-set(CMAKE_C_COMPILER ${tools}/bin/gcc)
-set(CMAKE_CXX_COMPILER ${tools}/bin/g++)
-
-set(PATH )

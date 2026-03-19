@@ -27,12 +27,6 @@
 #include "util/AllocatorWithLimit.h"
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
-
-// Here we include ANNOY (https://github.com/spotify/annoy/tree/main)
-#ifdef WITH_DENSE_TENSOR_INDEX
-#include "annoylib.h"
-#endif
-
 // ____________________________________________________________________________
 TensorSearch::TensorSearch(
     QueryExecutionContext* qec, TensorSearchConfiguration config,
@@ -51,7 +45,8 @@ TensorSearch::TensorSearch(
 
   // if (config_.algo_ == TensorSearchAlgorithm::ANNOY) {
   //   auto key = getCacheKey();
-  //   // TODO: should be saved to the disk cache, but for now we just keep it in memory
+  //   // TODO: should be saved to the disk cache, but for now we just keep it
+  //   in memory
   // }
 }
 
@@ -172,13 +167,13 @@ size_t TensorSearch::getResultWidth() const {
     if (config_.payloadVariables_.isAll()) {
       sizeRight = childRight_->getResultWidth();
     } else {
-      // We convert to a set here, because we allow multiple occurrences of
-      // variables in payloadVariables_
-      std::vector<Variable> pv = config_.payloadVariables_.getVariables();
-      absl::flat_hash_set<Variable> pvSet{pv.begin(), pv.end()};
-
-      // The payloadVariables_ may contain the right join variable
-      sizeRight = pvSet.size() + (pvSet.contains(config_.right_) ? 0 : 1);
+      // Derive the actual set of columns we will include from the right child
+      // by relying on `getVarColMapPayloadVars()` which filters missing
+      // variables and always includes the join column. This avoids a
+      // mismatch between the configured payload variables and the actual
+      // available columns that can lead to out_of_range accesses later.
+      auto varColMapRightFiltered = getVarColMapPayloadVars();
+      sizeRight = varColMapRightFiltered.size();
     }
     auto widthChildren = childLeft_->getResultWidth() + sizeRight;
 
@@ -263,14 +258,11 @@ float TensorSearch::getMultiplicity(size_t col) {
   if (childLeft_ && childRight_) {
     std::shared_ptr<QueryExecutionTree> child;
     size_t column = col;
-    // if (config_.maxResultsVariable_.has_value() && col == getResultWidth() -
-    // 1) {
-    //   // as each max results value is very likely to be unique (even if only
-    //   after
-    //   // a few decimal places), no multiplicities are assumed
-    //   return 1;
-    // } else
-    if (col < childLeft_->getResultWidth()) {
+    if (config_.maxResultsVariable_.has_value() &&
+        col == getResultWidth() - 1) {
+      // as each max results value is very likely to be unique, no multiplicities are assumed
+      return 1;
+    } else if (col < childLeft_->getResultWidth()) {
       child = childLeft_;
     } else {
       child = childRight_;
@@ -365,16 +357,11 @@ PreparedTensorSearchParams TensorSearch::prepareJoin() const {
 
   // Size of output table
   size_t numColumns = getResultWidth();
-  return PreparedTensorSearchParams{idTableLeft,
-                                    std::move(resultLeft),
-                                    idTableRight,
-                                    std::move(resultRight),
-                                    leftJoinCol,
-                                    rightJoinCol,
-                                    rightSelectedCols,
-                                    getCacheKey(),
-                                    numColumns,
-                                    config_};
+  return PreparedTensorSearchParams{idTableLeft,       std::move(resultLeft),
+                                    idTableRight,      std::move(resultRight),
+                                    leftJoinCol,       rightJoinCol,
+                                    rightSelectedCols, getCacheKey(),
+                                    numColumns,        config_};
 }
 
 // ____________________________________________________________________________

@@ -247,13 +247,13 @@ size_t SpatialJoin::getResultWidth() const {
     if (config_.payloadVariables_.isAll()) {
       sizeRight = childRight_->getResultWidth();
     } else {
-      // We convert to a set here, because we allow multiple occurrences of
-      // variables in payloadVariables_
-      std::vector<Variable> pv = config_.payloadVariables_.getVariables();
-      absl::flat_hash_set<Variable> pvSet{pv.begin(), pv.end()};
-
-      // The payloadVariables_ may contain the right join variable
-      sizeRight = pvSet.size() + (pvSet.contains(config_.right_) ? 0 : 1);
+      // Derive the actual set of columns we will include from the right child
+      // by relying on `getVarColMapPayloadVars()` which filters missing
+      // variables and always includes the join column. This avoids a
+      // mismatch between the configured payload variables and the actual
+      // available columns that can lead to out_of_range accesses later.
+      auto varColMapRightFiltered = getVarColMapPayloadVars();
+      sizeRight = varColMapRightFiltered.size();
     }
     auto widthChildren = childLeft_->getResultWidth() + sizeRight;
 

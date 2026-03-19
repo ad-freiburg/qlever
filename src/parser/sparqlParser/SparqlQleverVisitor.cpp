@@ -1299,6 +1299,8 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
     return visitMagicServiceQuery<parsedQuery::PathQuery>(ctx);
   } else if (serviceIri.toStringRepresentation() == SPATIAL_SEARCH_IRI) {
     return visitMagicServiceQuery<parsedQuery::SpatialQuery>(ctx);
+  } else if (serviceIri.toStringRepresentation() == TENSOR_SEARCH_IRI) {
+    return visitMagicServiceQuery<parsedQuery::TensorSearchQuery>(ctx);
   } else if (serviceIri.toStringRepresentation() == TEXT_SEARCH_IRI) {
     return visitMagicServiceQuery<parsedQuery::TextSearchQuery>(ctx);
   } else if (ql::starts_with(asStringViewUnsafe(serviceIri.getContent()),

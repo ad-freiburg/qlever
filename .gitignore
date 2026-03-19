@@ -49,3 +49,5 @@ sourcelist
 
 /cmake-build*
 /localIndices
+*.ops
+_staticGlobalTestIndex*

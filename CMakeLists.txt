@@ -120,6 +120,9 @@ endif ()
 ###############################################################################
 include(FetchContent)
 
+MESSAGE(STATUS "Using CMake version ${CMAKE_VERSION}")
+MESSAGE(STATUS "PATH: $ENV{PATH}")
+
 ################################
 # GTEST AND GMOCK
 ################################
@@ -199,26 +202,15 @@ endif ()
 
 ################################
 # Annoy (for approximate nearest neighbor search)
-# add flag USE_DENSE_TENSOR_INDEX to enable
 ################################
-if (USE_DENSE_TENSOR_INDEX)
-    message(STATUS "Looking for Annoy library for approximate nearest neighbor search on ${CMAKE_MODULE_PATH}")
-    add_compile_definitions(WITH_DENSE_TENSOR_INDEX)
-    add_compile_definitions(ANNOYLIB_MULTITHREADED_BUILD)
-    if (USE_ANNOY_FIXED_DIR)
-        include_directories(${CMAKE_SOURCE_DIR}/../annoy/src)
-        message(STATUS "Using Annoy from fixed directory ${CMAKE_SOURCE_DIR}../annoy")
-    endif ()
-    # find_package(Annoy REQUIRED)
-    # if (TARGET Annoy::Annoy)
-    #     MESSAGE(STATUS "Use Annoy that was installed via conan")
-    #     link_libraries(Annoy::Annoy)
-    # else ()
-    # link_libraries(Annoy)
-    # endif ()
-else ()
-    message(STATUS "Skipping Annoy...")
-endif ()
+MESSAGE(STATUS "Using Annoy for the dense tensor index")
+FetchContent_Declare(
+        annoy
+        GIT_REPOSITORY https://github.com/spotify/annoy
+        GIT_TAG 379f744667aba6b40ba3db8a07678df173a88f74
+        EXCLUDE_FROM_ALL
+)
+add_compile_definitions(ANNOYLIB_MULTITHREADED_BUILD)
 
 #################################
 # ICU (for proper collation
@@ -436,7 +428,8 @@ FetchContent_Declare(
 ################################
 # Apply FetchContent
 ################################
-FetchContent_MakeAvailable(googletest ctre abseil re2 fsst s2 nlohmann-json antlr range-v3 spatialjoin)
+FetchContent_MakeAvailable(googletest ctre abseil re2 fsst s2 nlohmann-json antlr range-v3 spatialjoin annoy)
+
 # Disable some warnings in RE2 and GTEST
 target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-class-memaccess -Wno-unused-but-set-variable -Wno-unused-function)
 target_compile_options(re2 PRIVATE -Wno-unused-parameter)

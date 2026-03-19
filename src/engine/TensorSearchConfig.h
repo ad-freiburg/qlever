@@ -19,7 +19,6 @@
 // class declaration of the tensor search operation.
 
 enum class TensorDistanceAlgorithm {
-  DEFAULT,
   COSINE_SIMILARITY,
   DOT_PRODUCT,
   EUCLIDEAN_DISTANCE,

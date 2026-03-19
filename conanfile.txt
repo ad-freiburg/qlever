@@ -1,18 +1,13 @@
 [requires]
-boost/1.90.0
-bzip2/1.0.8
-icu/78.2
+boost/1.81.0
+icu/76.1
 openssl/3.1.1
 zstd/1.5.5
-annoy/1.17.3
 # The jemalloc recipe for Conan2 is currently broken, uncomment this line as soon as this is fixed.
 #jemalloc/5.3.0
 
 
 [generators]
-CMakeConfigDeps
+CMakeDeps
 CMakeToolchain
 VirtualRunEnv
-
-[layout]
-cmake_layout

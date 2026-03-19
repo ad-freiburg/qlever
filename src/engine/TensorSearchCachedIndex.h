@@ -14,10 +14,10 @@
 #include "rdfTypes/Variable.h"
 #include "util/Serializer/Serializer.h"
 #include "TensorSearchConfig.h"
-#include "util/TensorData.h"
+#include "rdfTypes/TensorData.h"
 #include "util/Cache.h"
-#include "annoylib.h"
-#include "kissrandom.h"
+#include <annoy/annoylib.h>
+#include <annoy/kissrandom.h>
 
 using AnnoyIndexVariants =
     std::variant<Annoy::AnnoyIndex<size_t, float, Annoy::Euclidean, Annoy::Kiss32Random,

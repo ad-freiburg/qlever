@@ -65,7 +65,7 @@ struct TensorSearchQuery : MagicServiceQuery {
   ~TensorSearchQuery() noexcept override = default;
 
   // Alternative constructor for backward compatibility (allows initializing a
-  // SpatialJoin using a magic predicate)
+  // TensorSearchQuery using a magic predicate)
   explicit TensorSearchQuery(const SparqlTriple& triple);
 
   // See MagicServiceQuery
