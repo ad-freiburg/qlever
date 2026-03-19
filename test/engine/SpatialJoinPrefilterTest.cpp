@@ -13,7 +13,7 @@ using namespace SpatialJoinPrefilterTestHelpers;
 using enum SpatialJoinType;
 
 // Each of the following tests creates a `QueryExecutionContext` on a
-// `GeoVocabulary` which holds various literals carefully selected literals. It
+// `GeoVocabulary` which holds various carefully selected literals. It
 // then performs a spatial join and examines the result as well as the
 // prefiltering during the geometry parsing.
 
@@ -185,8 +185,8 @@ TEST(SpatialJoinTest, BoundingBoxPrefilterDeactivatedTooLargeBox) {
   auto vIdGkAllee = getValId(nMap, "gk-allee");
 
   {
-    auto cleanUp =
-        setRuntimeParameterForTest<"spatial-join-prefilter-max-size">(2'500);
+    auto cleanUp = setRuntimeParameterForTest<
+        &RuntimeParameters::spatialJoinPrefilterMaxSize_>(2'500);
 
     // Intersects with prefiltering, but prefiltering is not used due to too
     // large bounding box
@@ -211,8 +211,8 @@ TEST(SpatialJoinTest, BoundingBoxPrefilterDeactivatedTooLargeBox) {
   EXPECT_LT(bbSize, 10'000);
 
   {
-    auto cleanUp =
-        setRuntimeParameterForTest<"spatial-join-prefilter-max-size">(10'000);
+    auto cleanUp = setRuntimeParameterForTest<
+        &RuntimeParameters::spatialJoinPrefilterMaxSize_>(10'000);
 
     // Using the custom max size of the prefilter box, prefiltering should now
     // be used again.

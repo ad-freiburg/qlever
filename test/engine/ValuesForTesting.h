@@ -1,6 +1,7 @@
 //  Copyright 2023, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//  Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_TEST_ENGINE_VALUESFORTESTING_H
 #define QLEVER_TEST_ENGINE_VALUESFORTESTING_H
@@ -88,18 +89,13 @@ class ValuesForTesting : public Operation {
     if (requestLaziness && !forceFullyMaterialized_) {
       // Not implemented yet
       AD_CORRECTNESS_CHECK(!supportsLimit_);
-      std::vector<IdTable> clones;
-      clones.reserve(tables_.size());
-      for (const IdTable& idTable : tables_) {
-        clones.push_back(idTable.clone());
-      }
-      auto generator = [](auto idTables,
-                          LocalVocab localVocab) -> Result::Generator {
-        for (IdTable& idTable : idTables) {
-          co_yield {std::move(idTable), localVocab.clone()};
-        }
-      }(std::move(clones), localVocab_.clone());
-      return {std::move(generator), resultSortedOn()};
+      auto lazyRange =
+          tables_ | ql::views::transform(
+                        [&localVocab = localVocab_](const IdTable& idTable) {
+                          return Result::IdTableVocabPair{idTable.clone(),
+                                                          localVocab.clone()};
+                        });
+      return {Result::LazyResult{lazyRange}, resultSortedOn()};
     }
     std::optional<IdTable> optionalTable;
     if (tables_.size() > 1) {
@@ -140,7 +136,7 @@ class ValuesForTesting : public Operation {
   std::string getCacheKeyImpl() const override {
     std::stringstream str;
     auto numRowsView = tables_ | ql::views::transform(&IdTable::numRows);
-    auto totalNumRows = std::reduce(numRowsView.begin(), numRowsView.end(), 0);
+    auto totalNumRows = ::ranges::accumulate(numRowsView, 0ULL);
     auto numCols = tables_.empty() ? 0 : tables_.at(0).numColumns();
     str << "Values for testing with " << numCols << " columns and "
         << totalNumRows << " rows. ";

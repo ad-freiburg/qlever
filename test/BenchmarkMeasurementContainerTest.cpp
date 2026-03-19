@@ -32,6 +32,10 @@ static auto createWaitLambda(std::chrono::milliseconds waitDuration) {
 }
 
 TEST(BenchmarkMeasurementContainerTest, ResultEntry) {
+#ifdef _QLEVER_NO_TIMING_TESTS
+  GTEST_SKIP_("because _QLEVER_NO_TIMING_TESTS defined");
+#endif
+
   // There's really no special cases.
   const std::string entryDescriptor{"entry"};
   // The function should just wait 0.01 seconds.
@@ -57,6 +61,9 @@ TEST(BenchmarkMeasurementContainerTest, ResultEntry) {
 }
 
 TEST(BenchmarkMeasurementContainerTest, ResultGroup) {
+#ifdef _QLEVER_NO_TIMING_TESTS
+  GTEST_SKIP_("because _QLEVER_NO_TIMING_TESTS defined");
+#endif
   // The function should just wait 0.01 seconds.
   constexpr auto waitTime = 10ms;
   // There's really no special cases.
@@ -128,6 +135,9 @@ static void checkResultTableRow(const ResultTable& table,
 }
 
 TEST(BenchmarkMeasurementContainerTest, ResultTable) {
+#ifdef _QLEVER_NO_TIMING_TESTS
+  GTEST_SKIP_("because _QLEVER_NO_TIMING_TESTS defined");
+#endif
   // Looks, if the general form is correct.
   auto checkForm = [](const ResultTable& table, const std::string& name,
                       const std::string& descriptorForLog,
@@ -278,8 +288,7 @@ TEST(BenchmarkMeasurementContainerTest, ResultTableEraseRow) {
   auto singleEraseOperationTest =
       [&createTestTable, &checkForm, &testTableColumnNames](
           const size_t numRows, const size_t rowToDelete,
-          ad_utility::source_location l =
-              ad_utility::source_location::current()) {
+          ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
         // For generating better messages, when failing a test.
         auto trace{generateLocationTrace(l, "singleEraseOperationTest")};
         ResultTable table{createTestTable(numRows)};
@@ -336,11 +345,10 @@ TEST(BenchmarkMeasurementContainerTest, ResultGroupDeleteMember) {
   @param memberDeletionPoint The number of dummy members, that are added, before
   we add the member, that will be later deleted.
   */
-  auto singleDeleteTest = [&addDummyMembers](
-                              const size_t numMembers,
-                              const size_t memberDeletionPoint,
-                              ad_utility::source_location l =
-                                  ad_utility::source_location::current()) {
+  auto singleDeleteTest = [&addDummyMembers](const size_t numMembers,
+                                             const size_t memberDeletionPoint,
+                                             ad_utility::source_location l =
+                                                 AD_CURRENT_SOURCE_LOC()) {
     AD_CONTRACT_CHECK(memberDeletionPoint < numMembers);
     // For generating better messages, when failing a test.
     auto trace{generateLocationTrace(l, "singleDeleteTest")};

@@ -85,7 +85,7 @@ SparqlExpression::Ptr makeRegexExpression(
 void testWithExplicitResult(
     const SparqlExpression& expression, const std::vector<Id>& expected,
     const std::optional<size_t>& numInputs = std::nullopt,
-    source_location l = source_location::current()) {
+    source_location l = AD_CURRENT_SOURCE_LOC()) {
   TestContext ctx;
   auto trace = generateLocationTrace(std::move(l), "testWithExplicitResult");
   if (numInputs.has_value()) {
@@ -104,7 +104,7 @@ void testWithExplicitResult(
 void testValuesInVariables(
     const std::vector<std::array<std::string, 3>>& inputValues,
     const std::vector<Id>& expected, bool flagsUsed,
-    source_location l = source_location::current()) {
+    source_location l = AD_CURRENT_SOURCE_LOC()) {
   TestContext ctx;
   auto trace = generateLocationTrace(std::move(l), "testWithExplicitResult");
   ctx.varToColMap.clear();
@@ -137,7 +137,7 @@ void testValuesInVariables(
 auto testNonPrefixRegex = [](std::string variable, std::string regex,
                              const std::vector<Id>& expectedResult,
                              bool childAsStr = false,
-                             source_location l = source_location::current()) {
+                             source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(std::move(l), "testNonPrefixRegex");
   auto expr = makeRegexExpression(std::move(variable), std::move(regex),
                                   std::nullopt, childAsStr);
@@ -233,7 +233,7 @@ TEST(RegexExpression, inputNotVariable) {
 auto testNonPrefixRegexWithFlags =
     [](std::string variable, std::string regex, std::string flags,
        const std::vector<Id>& expectedResult,
-       source_location l = source_location::current()) {
+       source_location l = AD_CURRENT_SOURCE_LOC()) {
       auto trace = generateLocationTrace(l, "testNonPrefixRegexWithFlags");
       auto expr = makeRegexExpression(std::move(variable), std::move(regex),
                                       std::move(flags));
@@ -324,7 +324,7 @@ TEST(RegexExpression, getPrefixRegex) {
 auto testPrefixRegexUnorderedColumn =
     [](std::string variable, std::string regex,
        const std::vector<Id>& expectedResult, bool childAsStr = false,
-       source_location l = source_location::current()) {
+       source_location l = AD_CURRENT_SOURCE_LOC()) {
       auto trace = generateLocationTrace(l, "testUnorderedPrefix");
       auto expr = makeRegexExpression(std::move(variable), std::move(regex),
                                       std::nullopt, childAsStr);
@@ -352,6 +352,19 @@ TEST(RegexExpression, unorderedPrefixRegexUnorderedColumn) {
   test("?mixed", "^x", {F, F, T}, true);
   test("?mixed", "^x", {F, F, F}, false);
 
+  // Unbound input, regression test for
+  // https://github.com/ad-freiburg/qlever/issues/2712 .
+  {
+    auto expr = makeRegexExpression("?doesNotExist", "^", std::nullopt, false);
+    EXPECT_TRUE(isPrefixExpression(expr));
+    TestContext ctx;
+    auto resultAsVariant = expr->evaluate(&ctx.context);
+    EXPECT_THAT(resultAsVariant, ::testing::VariantWith<Id>(U));
+  }
+
+  // Input with UNDEF.
+  test("?everything", "^x", {F, F, U}, false);
+
   // TODO<joka921> Prefix filters on numbers do not yet work.
 }
 
@@ -359,7 +372,7 @@ TEST(RegexExpression, unorderedPrefixRegexUnorderedColumn) {
 auto testPrefixRegexOrderedColumn =
     [](std::string variableAsString, std::string regex,
        ad_utility::SetOfIntervals expected, bool childAsStr = false,
-       source_location l = source_location::current()) {
+       source_location l = AD_CURRENT_SOURCE_LOC()) {
       auto trace = generateLocationTrace(l, "testPrefixRegexOrderedColumn");
       auto variable = Variable{variableAsString};
       TestContext ctx = TestContext::sortedBy(variable);
@@ -387,6 +400,32 @@ TEST(RegexExpression, prefixRegexOrderedColumn) {
   test("?vocab", "^äl", {{{0, 2}}});
   test("?vocab", "^c", {});
   test("?mixed", "^x", {{{2, 3}}}, true);
+
+  // Input with UNDEF.
+  {
+    Variable variable{"?everything"};
+    TestContext ctx = TestContext::sortedBy(variable);
+    auto expression =
+        makeRegexExpression(variable.name(), "^x", std::nullopt, false);
+    EXPECT_TRUE(isPrefixExpression(expression));
+    auto resultAsVariant = expression->evaluate(&ctx.context);
+    EXPECT_THAT(resultAsVariant,
+                ::testing::VariantWith<VectorWithMemoryLimit<Id>>(
+                    ::testing::ElementsAre(U, F, F)));
+  }
+  // Empty input.
+  {
+    Variable variable{"?everything"};
+    TestContext ctx = TestContext::sortedBy(variable);
+    ctx.context._endIndex = 0;
+    auto expression =
+        makeRegexExpression(variable.name(), "^x", std::nullopt, false);
+    EXPECT_TRUE(isPrefixExpression(expression));
+    auto resultAsVariant = expression->evaluate(&ctx.context);
+    EXPECT_THAT(resultAsVariant,
+                ::testing::VariantWith<ad_utility::SetOfIntervals>(
+                    ad_utility::SetOfIntervals{}));
+  }
 }
 
 // _____________________________________________________________________________

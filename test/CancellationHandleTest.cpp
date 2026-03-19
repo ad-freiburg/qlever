@@ -8,6 +8,7 @@
 #include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
+#include "backports/keywords.h"
 #include "util/CancellationHandle.h"
 #include "util/GTestHelpers.h"
 #include "util/jthread.h"
@@ -22,7 +23,7 @@ using ::testing::HasSubstr;
 
 using namespace std::chrono_literals;
 
-ad_utility::source_location location = ad_utility::source_location::current();
+ad_utility::source_location location = AD_CURRENT_SOURCE_LOC();
 const int expectedLocationLine = __LINE__ - 1;
 const auto expectedLocation =
     absl::StrCat("CancellationHandleTest.cpp:", expectedLocationLine);
@@ -293,8 +294,7 @@ TEST(CancellationHandle, verifyCheckDoesNotOverrideCancelledState) {
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyCheckAfterDeadlineMissDoesReportProperly) {
-  // If the log level is not high enough this test will fail
-  static_assert(LOGLEVEL >= WARN);
+  SKIP_IF_LOGLEVEL_IS_LOWER(DEBUG);
   auto& choice = ad_utility::LogstreamChoice::get();
   CancellationHandle<ENABLED> handle;
 
@@ -323,8 +323,7 @@ TEST(CancellationHandle, verifyCheckAfterDeadlineMissDoesReportProperly) {
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary) {
-  // If the log level is not high enough this test will fail
-  static_assert(LOGLEVEL >= WARN);
+  SKIP_IF_LOGLEVEL_IS_LOWER(DEBUG);
   auto& choice = ad_utility::LogstreamChoice::get();
   CancellationHandle<ENABLED> handle;
 
@@ -409,8 +408,7 @@ TEST(CancellationHandle, verifyPleaseWatchDogDoesNotAcceptInvalidState) {
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyIsCancelledDoesPleaseWatchDog) {
-  // If the log level is not high enough this test will fail
-  static_assert(LOGLEVEL >= WARN);
+  SKIP_IF_LOGLEVEL_IS_LOWER(DEBUG);
   auto& choice = ad_utility::LogstreamChoice::get();
   CancellationHandle<ENABLED> handle;
 
@@ -465,7 +463,7 @@ TEST(CancellationHandle, expectDisabledHandleIsAlwaysFalse) {
 }
 
 template <typename T>
-consteval bool isMemberFunction([[maybe_unused]] T funcPtr) {
+QL_CONSTEVAL bool isMemberFunction([[maybe_unused]] T funcPtr) {
   return std::is_member_function_pointer_v<T>;
 }
 

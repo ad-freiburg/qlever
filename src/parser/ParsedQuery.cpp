@@ -3,7 +3,7 @@
 // Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2014 - 2017]
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include "ParsedQuery.h"
+#include "parser/ParsedQuery.h"
 
 #include <absl/strings/str_join.h>
 #include <absl/strings/str_split.h>
@@ -14,10 +14,10 @@
 #include <utility>
 #include <vector>
 
+#include "backports/StartsWithAndEndsWith.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "global/RuntimeParameters.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
-#include "rdfTypes/RdfEscaping.h"
 #include "util/Conversions.h"
 #include "util/TransparentFunctors.h"
 
@@ -240,7 +240,8 @@ void ParsedQuery::addSolutionModifiers(
 
 // _____________________________________________________________________________
 const std::vector<Variable>& ParsedQuery::getVisibleVariables() const {
-  return std::visit(&parsedQuery::ClauseBase::getVisibleVariables, _clause);
+  return std::visit(std::mem_fn(&parsedQuery::ClauseBase::getVisibleVariables),
+                    _clause);
 }
 
 // _____________________________________________________________________________
@@ -254,7 +255,7 @@ void ParsedQuery::registerVariablesVisibleInQueryBody(
 // _____________________________________________________________________________
 void ParsedQuery::registerVariableVisibleInQueryBody(const Variable& variable) {
   auto addVariable = [&variable](auto& clause) {
-    if (!variable.name().starts_with(QLEVER_INTERNAL_VARIABLE_PREFIX)) {
+    if (!ql::starts_with(variable.name(), QLEVER_INTERNAL_VARIABLE_PREFIX)) {
       clause.addVisibleVariable(variable);
     }
   };
@@ -265,8 +266,15 @@ void ParsedQuery::registerVariableVisibleInQueryBody(const Variable& variable) {
 ParsedQuery::GraphPattern::GraphPattern() : _optional(false) {}
 
 // __________________________________________________________________________
-bool ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
-                                                  const std::string& langTag) {
+bool ParsedQuery::GraphPattern::addLanguageFilter(
+    const Variable& variable,
+    const ad_utility::HashSet<std::string>& langTags) {
+  AD_CORRECTNESS_CHECK(!langTags.empty());
+  // Since most literals have an empty language tag we don't create extra
+  // triples for them, so we can't use this optimization.
+  if (langTags.contains("")) {
+    return false;
+  }
   // Find all triples where the object is the `variable` and the predicate is
   // a simple `IRIREF` (neither a variable nor a complex property path).
   // Search in all the basic graph patterns, as filters have the complete
@@ -286,7 +294,8 @@ bool ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
     for (auto& triple : basicPattern->_triples) {
       auto predicate = triple.getSimplePredicate();
       if (triple.o_ == variable && predicate.has_value() &&
-          !predicate.value().starts_with(
+          !ql::starts_with(
+              predicate.value(),
               QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET)) {
         matchingTriples.push_back(&triple);
       }
@@ -307,9 +316,15 @@ bool ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
     AD_CORRECTNESS_CHECK(std::holds_alternative<PropertyPath>(triplePtr->p_));
     auto& predicate = std::get<PropertyPath>(triplePtr->p_);
     AD_CORRECTNESS_CHECK(predicate.isIri());
-    predicate =
-        PropertyPath::fromIri(ad_utility::convertToLanguageTaggedPredicate(
-            predicate.getIri(), langTag));
+    std::vector<PropertyPath> predicates;
+    for (const std::string& langTag : langTags) {
+      predicates.push_back(
+          PropertyPath::fromIri(ad_utility::convertToLanguageTaggedPredicate(
+              predicate.getIri(), langTag)));
+    }
+    predicate = predicates.size() == 1
+                    ? std::move(predicates[0])
+                    : PropertyPath::makeAlternative(std::move(predicates));
   }
 
   // Handle the case, that no suitable triple (see above) was found. In this
@@ -319,30 +334,41 @@ bool ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
     if (!variableFoundInTriple) {
       return false;
     }
-    LOG(DEBUG) << "language filter variable " + variable.name() +
-                      " did not appear as object in any suitable "
-                      "triple. "
-                      "Using literal-to-language predicate instead.\n";
+    AD_CORRECTNESS_CHECK(!_graphPatterns.empty());
+    AD_LOG_DEBUG << "language filter variable " + variable.name() +
+                        " did not appear as object in any suitable "
+                        "triple. "
+                        "Using literal-to-language predicate instead.\n";
 
-    // If necessary create an empty `BasicGraphPattern` at the end to which we
-    // can append a triple.
+    std::vector<BasicGraphPattern> operations;
+    for (const auto& langTag : langTags) {
+      operations.push_back({std::vector{SparqlTriple{
+          variable,
+          PropertyPath::fromIri(ad_utility::triple_component::Iri::fromIriref(
+              LANGUAGE_PREDICATE)),
+          ad_utility::convertLangtagToEntityUri(langTag)}}});
+    }
+
+    // Optimization if there already is a `BasicGraphPattern` we can use.
     // TODO<joka921> It might be beneficial to place this triple not at the
     // end but close to other occurrences of `variable`.
-    if (_graphPatterns.empty() ||
-        !std::holds_alternative<parsedQuery::BasicGraphPattern>(
-            _graphPatterns.back())) {
-      _graphPatterns.emplace_back(parsedQuery::BasicGraphPattern{});
+    if (operations.size() == 1 &&
+        std::holds_alternative<BasicGraphPattern>(_graphPatterns.back())) {
+      std::get<BasicGraphPattern>(_graphPatterns.back())
+          ._triples.push_back(std::move(operations.at(0)._triples.at(0)));
+    } else {
+      auto makeOp = [](GraphPatternOperation basicPattern) {
+        GraphPattern pattern;
+        pattern._graphPatterns.push_back(std::move(basicPattern));
+        return pattern;
+      };
+      GraphPatternOperation operation{std::move(operations.at(0))};
+      for (auto& basicPattern : operations | ql::views::drop(1)) {
+        operation = Union{makeOp(std::move(operation)),
+                          makeOp(std::move(basicPattern))};
+      }
+      _graphPatterns.push_back(std::move(operation));
     }
-    auto& t = std::get<parsedQuery::BasicGraphPattern>(_graphPatterns.back())
-                  ._triples;
-
-    auto langEntity = ad_utility::convertLangtagToEntityUri(langTag);
-    SparqlTriple triple{
-        variable,
-        PropertyPath::fromIri(
-            ad_utility::triple_component::Iri::fromIriref(LANGUAGE_PREDICATE)),
-        langEntity};
-    t.push_back(std::move(triple));
   }
   return true;
 }
@@ -458,9 +484,9 @@ void ParsedQuery::addHavingClause(
         " and also not bound inside the SELECT clause");
     auto newVariable = addInternalAlias(std::move(havingClause.expression_),
                                         internalVariableGenerator);
-    _havingClauses.emplace_back(
-        sparqlExpression::SparqlExpressionPimpl::makeVariableExpression(
-            newVariable));
+    _havingClauses.push_back(
+        {sparqlExpression::SparqlExpressionPimpl::makeVariableExpression(
+            newVariable)});
   }
 }
 
@@ -531,7 +557,7 @@ void ParsedQuery::addOrderByClause(
 
 // _____________________________________________________________________________
 void ParsedQuery::addWarningOrThrow(std::string warning) {
-  if (RuntimeParameters().get<"throw-on-unbound-variables">()) {
+  if (getRuntimeParameter<&RuntimeParameters::throwOnUnboundVariables_>()) {
     throw InvalidSparqlQueryException(std::move(warning));
   } else {
     addWarning(std::move(warning));

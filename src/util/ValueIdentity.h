@@ -5,6 +5,7 @@
 
 #include <tuple>
 
+#include "backports/keywords.h"
 #include "util/Forward.h"
 
 // The use case of the following aliases and constants is as follows:
@@ -26,7 +27,7 @@ namespace use_value_identity {
 template <auto V>
 struct ValueIdentity {
   static constexpr auto value = V;
-  explicit(false) constexpr operator decltype(V)() const { return value; }
+  QL_EXPLICIT(false) constexpr operator decltype(V)() const { return value; }
 };
 
 template <auto V>

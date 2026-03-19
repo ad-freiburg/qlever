@@ -533,6 +533,7 @@ inline SpatialJoinAlgorithms getDummySpatialJoinAlgsForWrapperTesting(
                                    1,
                                    spatialJoin->getMaxDist(),
                                    std::nullopt,
+                                   std::nullopt,
                                    std::nullopt};
 
   return {qec.value(), params, spatialJoin->onlyForTestingGetConfig()};

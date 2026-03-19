@@ -18,6 +18,16 @@
 
 #include "util/Algorithm.h"
 #include "util/ConstexprMap.h"
+
+namespace {
+// CTRE regex pattern for C++17 compatibility (namespace scope)
+constexpr ctll::fixed_string memorySizeRegex =
+    "(?<amount>\\d+(?:\\.\\d+)?)\\s*(?<unit>[kKmMgGtT][bB]?|[bB])";
+
+// CTRE named capture group identifiers for C++17 compatibility
+constexpr ctll::fixed_string amountGroup = "amount";
+constexpr ctll::fixed_string unitGroup = "unit";
+}  // namespace
 #include "util/ConstexprUtils.h"
 
 namespace ad_utility {
@@ -26,10 +36,10 @@ std::string MemorySize::asString() const {
   // Convert number and memory unit name to the string, we want to return.
   auto toString = [](const auto number, std::string_view unitName) {
     using T = std::decay_t<decltype(number)>;
-    if constexpr (std::integral<T>) {
+    if constexpr (ql::concepts::integral<T>) {
       return absl::StrCat(number, " ", unitName);
     } else {
-      static_assert(std::floating_point<T>);
+      static_assert(ql::concepts::floating_point<T>);
       return number * 10 == std::floor(number * 10)
                  ? absl::StrCat(number, " ", unitName)
                  : absl::StrCat(std::round(number * 10) / 10, " ", unitName);
@@ -42,11 +52,12 @@ std::string MemorySize::asString() const {
   // NOTE: the lower bound for `kB` is `100'000` instead of `1'000` because we
   // want exact values below `100'000` bytes (for example, block or page sizes
   // are often larger than 1'000 bytes but below 100'000 bytes).
-  constexpr ad_utility::ConstexprMap<char, size_t, 4> memoryUnitLowerBound(
-      {std::pair<char, size_t>{'k', ad_utility::pow(10, 5)},
-       std::pair<char, size_t>{'M', detail::numBytesPerUnit.at("MB")},
-       std::pair<char, size_t>{'G', detail::numBytesPerUnit.at("GB")},
-       std::pair<char, size_t>{'T', detail::numBytesPerUnit.at("TB")}});
+  using P = ad_utility::ConstexprMapPair<char, size_t>;
+  constexpr static ad_utility::ConstexprMap<char, size_t, 4>
+      memoryUnitLowerBound({P{'k', ad_utility::pow(10, 5)},
+                            P{'M', detail::numBytesPerUnit.at("MB")},
+                            P{'G', detail::numBytesPerUnit.at("GB")},
+                            P{'T', detail::numBytesPerUnit.at("TB")}});
 
   // Go through the units from top to bottom, in terms of size, and choose the
   // first one, that is smaller/equal to `memoryInBytes_`.
@@ -66,15 +77,14 @@ std::string MemorySize::asString() const {
 
 // _____________________________________________________________________________
 MemorySize MemorySize::parse(std::string_view str) {
-  constexpr ctll::fixed_string regex =
-      "(?<amount>\\d+(?:\\.\\d+)?)\\s*(?<unit>[kKmMgGtT][bB]?|[bB])";
-  if (auto matcher = ctre::match<regex>(str)) {
-    auto amountString = matcher.get<"amount">().to_view();
-    // Versions after CTRE v3.8.1 should support to_number()
-    // with double values if the compilers support it.
+  if (auto matcher = ctre::match<memorySizeRegex>(str)) {
+    auto amountString = matcher.get<amountGroup>().to_view();
+    // Even though CTRE supports to_number() with double values, this relies on
+    // `std::from_chars` which is currently not supported by the standard
+    // library used by our macOS build.
     double amount;
     absl::from_chars(amountString.begin(), amountString.end(), amount);
-    auto unitString = matcher.get<"unit">().to_view();
+    auto unitString = matcher.get<unitGroup>().to_view();
     switch (std::tolower(unitString.at(0))) {
       case 'b':
         if (ad_utility::contains(amountString, '.')) {

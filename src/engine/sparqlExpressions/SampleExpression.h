@@ -9,11 +9,13 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 
 namespace sparqlExpression {
-/// The (SAMPLE(?x) as ?sample) expression
+// The (SAMPLE(?x) AS ?sample) expression
 class SampleExpression : public SparqlExpression {
  public:
-  SampleExpression([[maybe_unused]] bool distinct, Ptr&& child)
-      : _child{std::move(child)} {
+  // The first parameter is the `DISTINCT` bool that is always there on the
+  // constructor for all aggregate expressions. For this particular expression
+  // it doesn't make a difference, so it is ignored.
+  SampleExpression(bool, Ptr&& child) : _child{std::move(child)} {
     setIsInsideAggregate();
   }
 

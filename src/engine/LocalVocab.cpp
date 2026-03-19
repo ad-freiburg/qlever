@@ -118,3 +118,26 @@ LocalVocab::LifetimeExtender LocalVocab::getLifetimeExtender() const {
   ql::ranges::copy(otherWordSets_, std::back_inserter(wordSets));
   return LifetimeExtender{std::move(wordSets)};
 }
+
+// _____________________________________________________________________________
+auto LocalVocab::getOwnedLocalBlankNodeBlocks() const
+    -> std::vector<LocalBlankNodeManager::OwnedBlocksEntry> {
+  if (!localBlankNodeManager_) {
+    return {};
+  }
+  return localBlankNodeManager_->getOwnedBlockIndices();
+}
+
+// _____________________________________________________________________________
+void LocalVocab::reserveBlankNodeBlocksFromExplicitIndices(
+    const std::vector<LocalBlankNodeManager::OwnedBlocksEntry>& indices,
+    ad_utility::BlankNodeManager* blankNodeManager) {
+  AD_CONTRACT_CHECK(!localBlankNodeManager_);
+  if (indices.empty()) {
+    return;
+  }
+  localBlankNodeManager_ =
+      std::make_shared<ad_utility::BlankNodeManager::LocalBlankNodeManager>(
+          blankNodeManager);
+  localBlankNodeManager_->allocateBlocksFromExplicitIndices(indices);
+}

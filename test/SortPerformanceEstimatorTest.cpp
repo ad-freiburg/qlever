@@ -39,18 +39,20 @@ TEST(SortPerformanceEstimator, TestManyEstimates) {
             SortPerformanceEstimator::measureSortingTime(i, numColumns,
                                                          allocator);
         Timer::Duration estimate = t.estimatedSortTime(i, numColumns);
-        LOG(INFO) << std::fixed << std::setprecision(3) << "input of size " << i
-                  << "with " << numColumns << " columns took "
-                  << Timer::toSeconds(measurement) << " seconds, estimate was "
-                  << Timer::toSeconds(estimate) << " seconds" << std::endl;
+        AD_LOG_INFO << std::fixed << std::setprecision(3) << "input of size "
+                    << i << "with " << numColumns << " columns took "
+                    << Timer::toSeconds(measurement)
+                    << " seconds, estimate was " << Timer::toSeconds(estimate)
+                    << " seconds" << std::endl;
         ASSERT_GE(2 * measurement, estimate);
         if (!isFirst) {
           EXPECT_LE(0.5 * measurement, estimate);
         } else if (0.5 * measurement > estimate) {
-          LOG(WARN) << "The first measurement with a new column size took "
-                       "twice as long as estimated. This is not unusual (even "
-                       "typical) and hence does not count as a failed test."
-                    << std::endl;
+          AD_LOG_WARN
+              << "The first measurement with a new column size took "
+                 "twice as long as estimated. This is not unusual (even "
+                 "typical) and hence does not count as a failed test."
+              << std::endl;
         }
         isFirst = false;
       } catch (ad_utility::detail::AllocationExceedsLimitException&) {

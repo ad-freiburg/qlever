@@ -32,7 +32,7 @@ using DistancePtrAndExpected = std::pair<Ptr, std::optional<GeoDistanceCall>>;
 // Test helper for `GeoFunctionCall`
 inline void checkGeoFunctionCall(const std::optional<GeoFunctionCall>& a,
                                  const std::optional<GeoFunctionCall>& b,
-                                 Loc loc = Loc::current()) {
+                                 Loc loc = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(loc);
   ASSERT_EQ(a.has_value(), b.has_value());
   if (!a.has_value()) {
@@ -46,7 +46,7 @@ inline void checkGeoFunctionCall(const std::optional<GeoFunctionCall>& a,
 // Test helper for `GeoDistanceCall`
 inline void checkGeoDistanceCall(const std::optional<GeoDistanceCall>& a,
                                  const std::optional<GeoDistanceCall>& b,
-                                 Loc loc = Loc::current()) {
+                                 Loc loc = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(loc);
   checkGeoFunctionCall(a, b);
   if (!a.has_value()) {
@@ -59,7 +59,7 @@ inline void checkGeoDistanceCall(const std::optional<GeoDistanceCall>& a,
 inline void checkGeoDistanceFilter(
     const GeoDistanceFilter& result,
     const std::optional<GeoFunctionCall>& expected, double expectedMeters,
-    Loc loc = Loc::current()) {
+    Loc loc = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(loc);
   ASSERT_EQ(result.has_value(), expected.has_value());
   if (!result.has_value()) {

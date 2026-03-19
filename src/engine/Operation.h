@@ -43,8 +43,9 @@ class Operation {
 
   std::shared_ptr<RuntimeInformation> _runtimeInfo =
       std::make_shared<RuntimeInformation>();
-  /// Pointer to the head of the `RuntimeInformation`.
-  /// Used in `signalQueryUpdate()`, reset in `createRuntimeInfoFromEstimates()`
+
+  // Pointer to the `RuntimeInformation` tree; used in `signalQueryUpdate()`,
+  // and reset in `createRuntimeInfoFromEstimates()`.
   std::shared_ptr<const RuntimeInformation> _rootRuntimeInfo = _runtimeInfo;
   RuntimeInformationWholeQuery _runtimeInfoWholeQuery;
 
@@ -144,21 +145,17 @@ class Operation {
 
   const Index& getIndex() const { return _executionContext->getIndex(); }
 
-  const auto& locatedTriplesSnapshot() const {
-    return _executionContext->locatedTriplesSnapshot();
+  virtual const LocatedTriplesState& locatedTriplesState() const {
+    return _executionContext->locatedTriplesState();
   }
 
   // Get an updated `QueryExecutionTree` that applies as many of the given
-  // `PrefilterExpression`s over `IndexScan` as possible. Returns `nullopt`
-  // if no `PrefilterExpression` is applicable and thus the `QueryExecutionTree`
-  // is not changed.
-  // Note: The default implementation always returns `nullopt` while this
-  // function is currently only overridden for `IndexScan`. In the future also
-  // other operations could pass on the `PrefilterExpressions` to the
-  // `IndexScan` in their subtree.
+  // `prefilters` as possible. If none of them applies, return `std::nullopt`,
+  // signaling that the `QueryExecutionTree` will not be changed. This is the
+  // default implementation.
   virtual std::optional<std::shared_ptr<QueryExecutionTree>>
-  setPrefilterGetUpdatedQueryExecutionTree(
-      [[maybe_unused]] const std::vector<PrefilterVariablePair>& prefilterPairs)
+  getUpdatedQueryExecutionTreeWithPrefilterApplied(
+      [[maybe_unused]] const std::vector<PrefilterVariablePair>& prefilters)
       const {
     return std::nullopt;
   };
@@ -202,6 +199,10 @@ class Operation {
 
   virtual uint64_t getSizeEstimate() final;
 
+  const SharedCancellationHandle& getCancellationHandle() const {
+    return cancellationHandle_;
+  }
+
  private:
   virtual uint64_t getSizeEstimateBeforeLimit() = 0;
 
@@ -241,8 +242,9 @@ class Operation {
     return _runtimeInfoWholeQuery;
   }
 
-  /// Notify the `QueryExecutionContext` of the latest `RuntimeInformation`.
-  void signalQueryUpdate() const;
+  // Notify the `QueryExecutionContext` of the latest `RuntimeInformation` with
+  // the given `sendPriority` (`Always` or `IfDue`).
+  void signalQueryUpdate(RuntimeInformation::SendPriority sendPriority) const;
 
   /**
    * @brief Get the result for the subtree rooted at this element. Use existing
@@ -298,6 +300,10 @@ class Operation {
     // If `supportsLimitOffset()` returns `false`, this function has to be
     // no-op.
   }
+
+  // This function is called when the operation's result is requested to be
+  // cached and pinned to a name.
+  void storeToNamedResultCache(const Result& result);
 
  public:
   // Set the value of the `LIMIT`/`OFFSET` clause that will be applied to the
@@ -385,8 +391,7 @@ class Operation {
   // potentially can take a (too) long time. This function is designed to be
   // as lightweight as possible because of that.
   AD_ALWAYS_INLINE void checkCancellation(
-      ad_utility::source_location location =
-          ad_utility::source_location::current()) const {
+      ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) const {
     cancellationHandle_->throwIfCancelled(location,
                                           [this]() { return getDescriptor(); });
   }
@@ -462,18 +467,14 @@ class Operation {
   // children were evaluated nevertheless. For an example usage of this feature
   // see `GroupBy.cpp`
   virtual void updateRuntimeInformationWhenOptimizedOut(
-      std::vector<std::shared_ptr<RuntimeInformation>> children,
-      RuntimeInformation::Status status =
-          RuntimeInformation::Status::optimizedOut);
+      std::vector<std::shared_ptr<RuntimeInformation>> children);
 
   // Use the already stored runtime info for the children,
   // but set all of them to `optimizedOut`. This can be used, when a complete
   // tree was optimized out. For example when one child of a JOIN operation is
   // empty, the result will be empty, and it is not necessary to evaluate the
   // other child.
-  virtual void updateRuntimeInformationWhenOptimizedOut(
-      RuntimeInformation::Status status =
-          RuntimeInformation::Status::optimizedOut);
+  virtual void updateRuntimeInformationWhenOptimizedOut();
 
   // Return true if all values that the `variable` will be bound to by this
   // expression are guaranteed to be contained in the underlying knowledge
@@ -519,6 +520,7 @@ class Operation {
   FRIEND_TEST(Operation, updateRuntimeStatsWorksCorrectly);
   FRIEND_TEST(Operation, verifyRuntimeInformationIsUpdatedForLazyOperations);
   FRIEND_TEST(Operation, ensureFailedStatusIsSetWhenGeneratorThrowsException);
+  FRIEND_TEST(Operation, ensureFailedStatusIsSetWhenGeneratorIsCancelled);
   FRIEND_TEST(Operation, testSubMillisecondsIncrementsAreStillTracked);
   FRIEND_TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd);
   FRIEND_TEST(Operation,

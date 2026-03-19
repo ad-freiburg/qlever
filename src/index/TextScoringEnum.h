@@ -16,11 +16,13 @@ using InnerMap = ad_utility::HashMap<DocumentIndex, TermFrequency>;
 using InvertedIndex = ad_utility::HashMap<WordIndex, InnerMap>;
 using DocLengthMap = ad_utility::HashMap<DocumentIndex, size_t>;
 
+namespace qlever {
 enum struct TextScoringMetric { EXPLICIT, TFIDF, BM25 };
 
 std::string getTextScoringMetricAsString(TextScoringMetric textScoringMetric);
 
 TextScoringMetric getTextScoringMetricFromString(
     const std::string& textScoringMetricString);
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_TEXTSCORINGENUM_H

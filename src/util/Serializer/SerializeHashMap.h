@@ -5,10 +5,10 @@
 #ifndef QLEVER_SERIALIZEHASHMAP_H
 #define QLEVER_SERIALIZEHASHMAP_H
 
-#include "../../util/HashMap.h"
-#include "../TypeTraits.h"
-#include "./SerializePair.h"
-#include "./Serializer.h"
+#include "util/HashMap.h"
+#include "util/Serializer/SerializePair.h"
+#include "util/Serializer/Serializer.h"
+#include "util/TypeTraits.h"
 
 namespace ad_utility::serialization {
 

@@ -11,7 +11,7 @@ using ad_utility::CachingMemoryResource;
 
 TEST(CachingMemoryResource, allocateAndDeallocate) {
   CachingMemoryResource resource;
-  auto ptr = static_cast<std::pmr::memory_resource*>(&resource);
+  auto ptr = static_cast<ql::pmr::memory_resource*>(&resource);
 
   auto p11 = ptr->allocate(1, 1);
   auto p12a = ptr->allocate(1, 2);
@@ -19,7 +19,7 @@ TEST(CachingMemoryResource, allocateAndDeallocate) {
   auto p168 = ptr->allocate(16, 8);
 
   // Disallow all further allocations.
-  std::pmr::set_default_resource(std::pmr::null_memory_resource());
+  ql::pmr::set_default_resource(ql::pmr::null_memory_resource());
 
   // Deallocating and allocating the same amount again reuses the pointers.
   ptr->deallocate(p11, 1, 1);
@@ -38,18 +38,18 @@ TEST(CachingMemoryResource, allocateAndDeallocate) {
 
   // Reset the default resource to the default resource, such that subsequent
   // unit test running in the same binary won't run into trouble.
-  std::pmr::set_default_resource(nullptr);
+  ql::pmr::set_default_resource(nullptr);
 }
 
 TEST(CachingMemoryResource, equality) {
   CachingMemoryResource r1;
   CachingMemoryResource r2;
 
-  using M = std::pmr::memory_resource*;
+  using M = ql::pmr::memory_resource*;
 
   auto p1 = static_cast<M>(&r1);
   auto p2 = static_cast<M>(&r2);
-  auto p3 = std::pmr::get_default_resource();
+  auto p3 = ql::pmr::get_default_resource();
 
   EXPECT_EQ(p1, p1);
   EXPECT_EQ(p2, p2);

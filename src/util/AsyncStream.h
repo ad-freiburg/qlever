@@ -60,8 +60,8 @@ struct AsyncStreamGenerator
     if (!value) {
       ifTiming([this] {
         t_->stop();
-        LOG(TRACE) << "Waiting time for async stream was "
-                   << t_->msecs().count() << "ms" << std::endl;
+        AD_LOG_TRACE << "Waiting time for async stream was "
+                     << t_->msecs().count() << "ms" << std::endl;
       });
     }
     return value;

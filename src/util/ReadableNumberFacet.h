@@ -5,6 +5,7 @@
 #ifndef QLEVER_SRC_UTIL_READABLENUMBERFACT_H
 #define QLEVER_SRC_UTIL_READABLENUMBERFACT_H
 
+#include <locale>
 #include <string>
 
 namespace ad_utility {

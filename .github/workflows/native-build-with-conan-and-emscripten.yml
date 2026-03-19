@@ -1,0 +1,57 @@
+name: "Native build to WebAssembly using Conan and Emscripten"
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+    runs-on: ubuntu-24.04
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: 'recursive'
+    - name: Install conan package manager
+      run: |
+        sudo apt-get install pipx
+        pipx ensurepath
+        source ~/.bashrc
+        pipx install conan
+      shell: bash
+
+    - name: Set up nodejs v25.
+      uses: actions/setup-node@v6
+      with:
+        node-version: 25
+
+    - name: Get build and host profiles for conan
+      working-directory: ${{github.workspace}}
+      run: |
+        conan profile detect
+
+    - name: Cache for conan
+      uses: actions/cache@v3
+      env:
+        cache-name: cache-conan-with-emscripten-modules-ubuntu-24.04
+      with:
+        path: ~/.conan2
+        key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('conanfile.txt', 'conanprofiles/emscripten.profile')}}
+
+    - name: Install and run conan. Also create a build directory.
+      working-directory:  ${{github.workspace}}
+      run: conan install . -pr:b default -pr:h conanprofiles/emscripten.profile -s build_type=Release -b missing -of build
+
+    - name: Configure CMake
+      working-directory: ${{github.workspace}}/build
+      run: cmake -S .. -B . -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_PARALLEL=true -D_NO_TIMING_TESTS=ON -D_EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER=ON -D_NO_BENCHMARK=ON -D_DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS=ON -GNinja
+
+    - name: Build
+      working-directory: ${{github.workspace}}/build
+
+      run: cmake --build .
+

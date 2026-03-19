@@ -51,11 +51,14 @@ std::ostream& operator<<(std::ostream& stream, const TripleComponent& obj) {
 }
 
 // ____________________________________________________________________________
-std::optional<Id> TripleComponent::toValueIdIfNotString() const {
-  auto visitor = [](const auto& value) -> std::optional<Id> {
+std::optional<Id> TripleComponent::toValueIdIfNotString(
+    const EncodedIriManager* evManager) const {
+  auto visitor = [evManager](const auto& value) -> std::optional<Id> {
     using T = std::decay_t<decltype(value)>;
-    if constexpr (std::is_same_v<T, std::string> || std::is_same_v<T, Iri> ||
-                  std::is_same_v<T, Literal>) {
+    if constexpr (std::is_same_v<T, Iri>) {
+      return evManager->encode(value.toStringRepresentation());
+
+    } else if constexpr (ad_utility::SameAsAny<T, std::string, Literal>) {
       return std::nullopt;
     } else if constexpr (std::is_same_v<T, int64_t>) {
       return Id::makeFromInt(value);
@@ -92,9 +95,10 @@ std::string TripleComponent::toRdfLiteral() const {
   } else if (isIri()) {
     return getIri().toStringRepresentation();
   } else {
+    EncodedIriManager ev;
     auto [value, type] =
         ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(
-            toValueIdIfNotString().value())
+            toValueIdIfNotString(&ev).value())
             .value();
     return absl::StrCat("\"", value, "\"^^<", type, ">");
   }

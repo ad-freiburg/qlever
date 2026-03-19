@@ -32,6 +32,11 @@ class QueryPlanner {
   // Note: The behavior of only taking the innermost graph variable into account
   // for nested `GRAPH` clauses is compliant with SPARQL 1.1.
   std::optional<Variable> activeGraphVariable_;
+  // Store a flag that decides if only named graphs or all graphs including the
+  // default graph are supposed to be bound to the graph variable.
+  parsedQuery::GroupGraphPattern::GraphVariableBehaviour
+      defaultGraphBehaviour_ =
+          parsedQuery::GroupGraphPattern::GraphVariableBehaviour::ALL;
 
  public:
   using JoinColumns = std::vector<std::array<ColumnIndex, 2>>;
@@ -60,15 +65,8 @@ class QueryPlanner {
       Node(size_t id, SparqlTriple t,
            std::optional<Variable> graphVariable = std::nullopt)
           : id_(id), triple_(std::move(t)) {
-        if (triple_.s_.isVariable()) {
-          _variables.insert(triple_.s_.getVariable());
-        }
-        if (auto predicate = triple_.getPredicateVariable()) {
-          _variables.insert(predicate.value());
-        }
-        if (triple_.o_.isVariable()) {
-          _variables.insert(triple_.o_.getVariable());
-        }
+        triple_.forEachVariable(
+            [this](const auto& var) { _variables.insert(var); });
         if (graphVariable.has_value()) {
           _variables.insert(std::move(graphVariable).value());
         }
@@ -403,6 +401,17 @@ class QueryPlanner {
   std::vector<SubtreePlan> applyJoinDistributivelyToUnion(
       const SubtreePlan& a, const SubtreePlan& b, const JoinColumns& jcs) const;
 
+  // Return a pair of join columns (the first from the transitive path
+  // operation, the second from the other operation with which the result of the
+  // transitive path operation is joined). Otherwise return `std::nullopt`, in
+  // which case the full transitive path will be computed, If the Boolean
+  // `leftSideTransitivePath` is true, the column indices of the transitive path
+  // are on the "left side" of the pairs from `jcs`, otherwise they are on the
+  // "right side".
+  static std::optional<std::tuple<size_t, size_t>>
+  getJoinColumnsForTransitivePath(const JoinColumns& jcs,
+                                  bool leftSideTransitivePath);
+
   // Used internally by `createJoinCandidates`. If `a` or `b` is a transitive
   // path operation and the other input can be bound to this transitive path
   // (see `TransitivePath.cpp` for details), then returns that bound transitive
@@ -433,6 +442,19 @@ class QueryPlanner {
   static std::optional<SubtreePlan> createSpatialJoin(const SubtreePlan& a,
                                                       const SubtreePlan& b,
                                                       const JoinColumns& jcs);
+
+  // Helper that generates `IndexScan` query plans on materialized views if they
+  // can be used to avoid joins between some of the `triples`. The resulting
+  // plans for part of the `triples` are given in a vector of query planning
+  // rounds in which they should be added to the planner.
+  //
+  // For example, at index 1 there is a vector of query plans that should be
+  // added in round 1 of the dynamic programming algorithm. For the greedy
+  // algorithm, the `prepareReplacementPlansForGreedyPlanner` helper handles the
+  // necessary steps.
+  using ReplacementPlans = std::vector<std::vector<SubtreePlan>>;
+  ReplacementPlans createMaterializedViewJoinReplacements(
+      const parsedQuery::BasicGraphPattern& triples) const;
 
   vector<SubtreePlan> getOrderByRow(
       const ParsedQuery& pq,
@@ -559,7 +581,8 @@ class QueryPlanner {
    */
   vector<vector<SubtreePlan>> fillDpTab(
       const TripleGraph& graph, std::vector<SparqlFilter> fs,
-      TextLimitMap& textLimits, const vector<vector<SubtreePlan>>& children);
+      TextLimitMap& textLimits, const vector<vector<SubtreePlan>>& children,
+      ReplacementPlans replacementPlans);
 
   // Internal subroutine of `fillDpTab` that  only works on a single connected
   // component of the input. Throws if the subtrees in the `connectedComponent`
@@ -568,7 +591,8 @@ class QueryPlanner {
   runDynamicProgrammingOnConnectedComponent(
       std::vector<SubtreePlan> connectedComponent,
       const FiltersAndOptionalSubstitutes& filters,
-      const TextLimitVec& textLimits, const TripleGraph& tg) const;
+      const TextLimitVec& textLimits, const TripleGraph& tg,
+      ReplacementPlans&& replacementPlans) const;
 
   // Same as `runDynamicProgrammingOnConnectedComponent`, but uses a greedy
   // algorithm that always greedily chooses the smallest result of the possible
@@ -576,7 +600,8 @@ class QueryPlanner {
   std::vector<QueryPlanner::SubtreePlan> runGreedyPlanningOnConnectedComponent(
       std::vector<SubtreePlan> connectedComponent,
       const FiltersAndOptionalSubstitutes& filters,
-      const TextLimitVec& textLimits, const TripleGraph& tg) const;
+      const TextLimitVec& textLimits, const TripleGraph& tg,
+      ReplacementPlans&& replacementPlans) const;
 
   // Return the number of connected subgraphs is the `graph`, or `budget + 1`,
   // if the number of subgraphs is `> budget`. This is used to analyze the
@@ -593,6 +618,11 @@ class QueryPlanner {
   // to the text leaf node.
   SubtreePlan getTextLeafPlan(const TripleGraph::Node& node,
                               TextLimitMap& textLimits) const;
+
+  // Given a `MaterializedViewQuery` construct a `SubtreePlan` for an
+  // `IndexScan` operation on the requested materialized view.
+  SubtreePlan getMaterializedViewIndexScanPlan(
+      const parsedQuery::MaterializedViewQuery& viewQuery) const;
 
   // An internal helper class that encapsulates the functionality to optimize
   // a single graph pattern. It tightly interacts with the outer `QueryPlanner`
@@ -649,6 +679,9 @@ class QueryPlanner {
     void visitPathSearch(parsedQuery::PathQuery& config);
     void visitSpatialSearch(parsedQuery::SpatialQuery& config);
     void visitTextSearch(const parsedQuery::TextSearchQuery& config);
+    void visitNamedCachedResult(const parsedQuery::NamedCachedResult& config);
+    void visitMaterializedViewQuery(
+        const parsedQuery::MaterializedViewQuery& viewQuery);
     void visitUnion(parsedQuery::Union& un);
     void visitSubquery(parsedQuery::Subquery& subquery);
     void visitDescribe(parsedQuery::Describe& describe);
@@ -697,7 +730,36 @@ class QueryPlanner {
   static size_t findSmallestExecutionTree(
       const std::vector<SubtreePlan>& lastRow);
   static size_t findUniqueNodeIds(
-      const std::vector<SubtreePlan>& connectedComponent);
+      const std::vector<SubtreePlan>& connectedComponent,
+      bool allowReplacementPlans = false);
+
+  // Helper for `fillDpTab` that extracts a subset of possible
+  // `ReplacementPlans` that is applicable to a connected component given by the
+  // covered node ids of the component.
+  //
+  // If the greedy query planning mode is active, this function guarantees that
+  // the returned replacement plans are disjunctive with regard to their covered
+  // node ids.
+  //
+  // The function returns the applicable replacement plans and a boolean for
+  // quickly checking whether any were found.
+  //
+  // NOTE: This function is destructive w.r.t. `allReplacementPlans`: the used
+  // replacement plans are moved out.
+  static std::pair<ReplacementPlans, bool> findApplicableReplacementPlans(
+      ReplacementPlans& allReplacementPlans, uint64_t coveredNodeIds,
+      bool useGreedyPlanning);
+
+  // Helper for `fillDpTab` that inserts replacement plans into a connected
+  // component for greedy query planning. The `IndexScan` plans for triples
+  // covered by the replacement plans are filtered out, s.t. the greedy planner
+  // is forced to use the replacement plans.
+  //
+  // NOTE: For this to work correctly the nodes covered by the replacement plans
+  // must be disjunctive.
+  static void prepareReplacementPlansForGreedyPlanner(
+      ReplacementPlans& applicableReplacementPlans,
+      std::vector<SubtreePlan>& connectedComponent);
 
   /// if this Planner is not associated with a queryExecutionContext we are only
   /// in the unit test mode
@@ -705,8 +767,14 @@ class QueryPlanner {
 
   /// Helper function to check if the assigned `cancellationHandle_` has
   /// been cancelled yet and throw an exception if this is the case.
-  void checkCancellation(ad_utility::source_location location =
-                             ad_utility::source_location::current()) const;
+  void checkCancellation(
+      ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) const;
+
+  // Return a filter that filters the active graphs. Outside of `GRAPH` clauses,
+  // the default graphs (implicit, or specified via `FROM`) are active, and
+  // inside a `GRAPH` clause, the named graphs are active (specified via an
+  // explicit IRI in the `GRAPH` clause, or via `FROM NAMED`).
+  qlever::index::GraphFilter<TripleComponent> getActiveGraphs() const;
 };
 
 #endif  // QLEVER_SRC_ENGINE_QUERYPLANNER_H

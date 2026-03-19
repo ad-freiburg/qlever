@@ -10,8 +10,8 @@
 
 #include <cstddef>
 #include <sstream>
-#include <type_traits>
 
+#include "backports/type_traits.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/TypeTraits.h"
 

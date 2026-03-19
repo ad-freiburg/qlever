@@ -4,7 +4,6 @@
 #include "../benchmark/infrastructure/BenchmarkToJson.h"
 
 #include <algorithm>
-#include <concepts>
 #include <iterator>
 #include <utility>
 

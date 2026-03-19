@@ -28,6 +28,11 @@
 // Block size for when using the hash map optimization
 static constexpr size_t GROUP_BY_HASH_MAP_BLOCK_SIZE = 262144;
 
+namespace groupBy::detail {
+template <size_t IN_WIDTH, size_t OUT_WIDTH>
+class LazyGroupByRange;
+}
+
 class GroupByImpl : public Operation {
  public:
   using GroupBlock = std::vector<std::pair<size_t, Id>>;
@@ -116,11 +121,11 @@ class GroupByImpl : public Operation {
   // function returns the starting index of the last block of this `idTable`.
   // The argument `currentGroupBlock` is used to store the values of the group
   // by columns for the current group.
-  CPP_template(int COLS,
-               typename T)(requires ranges::invocable<T, size_t, size_t>) size_t
-      searchBlockBoundaries(const T& onBlockChange,
-                            const IdTableView<COLS>& idTable,
-                            GroupBlock& currentGroupBlock) const;
+  template <int COLS, typename T>
+  QL_CONCEPT_OR_NOTHING(requires ranges::invocable<T, size_t, size_t>)
+  size_t searchBlockBoundaries(const T& onBlockChange,
+                               const IdTableView<COLS>& idTable,
+                               GroupBlock& currentGroupBlock) const;
 
   // Helper function to process a sorted group within a single id table.
   template <size_t OUT_WIDTH>
@@ -144,7 +149,7 @@ class GroupByImpl : public Operation {
   // skipping empty tables unless `singleIdTable` is set which causes the
   // function to yield a single id table with the complete result.
   template <size_t IN_WIDTH, size_t OUT_WIDTH>
-  Result::Generator computeResultLazily(
+  Result::LazyResult computeResultLazily(
       std::shared_ptr<const Result> subresult,
       std::vector<Aggregate> aggregates,
       std::vector<HashMapAliasInformation> aggregateAliases,
@@ -161,6 +166,9 @@ class GroupByImpl : public Operation {
   IdTable doGroupBy(const IdTable& inTable, const vector<size_t>& groupByCols,
                     const vector<Aggregate>& aggregates,
                     LocalVocab* outLocalVocab) const;
+
+  template <size_t IN_WIDTH, size_t OUT_WIDTH>
+  friend class groupBy::detail::LazyGroupByRange;
 
   FRIEND_TEST(GroupByTest, doGroupBy);
 
@@ -439,6 +447,27 @@ class GroupByImpl : public Operation {
       size_t dataIndex, size_t beginIndex, size_t endIndex,
       LocalVocab* localVocab, const Allocator& allocator);
 
+  // Helper function of `evaluateAlias`.
+  // 1. In the Expressions for the aliases of this GROUP BY, replace all
+  //    aggregates and all occurrences of the grouped variables values that have
+  //    been precomputed.
+  // 2. Evaluate the (partially substituted) expressions using the
+  //    `evaluationContext`, to get the final values of the aliases and store
+  //    them in the `result`.
+  // 3. Undo the substitution, s.t. we can reuse the expressions for additional
+  //    blocks of values etc.
+  //
+  // Basically, perform the fallback case if no faster approach can be chosen
+  // instead.
+  template <size_t NUM_GROUP_COLUMNS>
+  static void substituteAndEvaluate(
+      HashMapAliasInformation& alias, IdTable* result,
+      sparqlExpression::EvaluationContext& evaluationContext,
+      const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
+      LocalVocab* localVocab, const Allocator& allocator,
+      std::vector<HashMapAggregateInformation>& info,
+      const std::vector<HashMapGroupedVariableInformation>& substitutions);
+
   // Substitute away any occurrences of the grouped variable and of aggregate
   // results, if necessary, and subsequently evaluate the expression of an
   // alias
@@ -485,11 +514,13 @@ class GroupByImpl : public Operation {
       sparqlExpression::EvaluationContext& evaluationContext,
       IdTable* resultTable, LocalVocab* localVocab, size_t outCol);
 
-  // Substitute the group values for all occurrences of a group variable.
-  static void substituteGroupVariable(
-      const std::vector<ParentAndChildIndex>& occurrences, IdTable* resultTable,
-      size_t beginIndex, size_t count, size_t columnIndex,
-      const Allocator& allocator);
+  // Substitute the group values for all occurrences of a group variable. Return
+  // a vector of the replaced `SparqlExpression`s to potentially put them pack
+  // afterwards.
+  static std::vector<std::unique_ptr<sparqlExpression::SparqlExpression>>
+  substituteGroupVariable(const std::vector<ParentAndChildIndex>& occurrences,
+                          IdTable* resultTable, size_t beginIndex, size_t count,
+                          size_t columnIndex, const Allocator& allocator);
 
   // Substitute the results for all aggregates in `info`. The values of the
   // grouped variable should be at column 0 in `groupValues`. Return a vector of
@@ -600,7 +631,7 @@ class GroupByImpl : public Operation {
 // _____________________________________________________________________________
 namespace groupBy::detail {
 template <typename A>
-concept VectorOfAggregationData =
+CPP_concept VectorOfAggregationData =
     ad_utility::SameAsAnyTypeIn<A, GroupByImpl::AggregationDataVectors>;
 }
 

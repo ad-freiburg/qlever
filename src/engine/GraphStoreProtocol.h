@@ -5,13 +5,16 @@
 #ifndef QLEVER_SRC_ENGINE_GRAPHSTOREPROTOCOL_H
 #define QLEVER_SRC_ENGINE_GRAPHSTOREPROTOCOL_H
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include <gtest/gtest_prod.h>
 
 #include "engine/HttpError.h"
 #include "parser/ParsedQuery.h"
 #include "parser/Quads.h"
 #include "parser/RdfParser.h"
+#include "parser/SparqlParser.h"
 #include "util/http/HttpUtils.h"
+#include "util/http/ResponseMiddleware.h"
 #include "util/http/UrlParser.h"
 
 // Transform SPARQL Graph Store Protocol requests to their equivalent
@@ -66,8 +69,8 @@ class GraphStoreProtocol {
   // empty.
   static void throwIfRequestBodyEmpty(const auto& request) {
     if (request.body().empty()) {
-      throw HttpError(boost::beast::http::status::no_content,
-                      "Request body is empty.");
+      // HTTP requires the response body to be empty for this status code.
+      throw HttpError(boost::beast::http::status::no_content, "");
     }
   }
 
@@ -112,12 +115,100 @@ class GraphStoreProtocol {
     res._originalString = truncatedStringRepresentation("POST", rawRequest);
     return res;
   }
-  FRIEND_TEST(GraphStoreProtocolTest, transformPost);
+  FRIEND_TEST(GraphStoreProtocolTest, transformPostAndTsop);
+  FRIEND_TEST(GraphStoreProtocolTest, EncodedIriManagerUsage);
+
+  // `TSOP` (`POST` backwards) does a `DELETE DATA` of the payload. It is an
+  // extension to the Graph Store Protocol.
+  CPP_template_2(typename RequestT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>) static ParsedQuery
+      transformTsop(const RequestT& rawRequest, const GraphOrDefault& graph,
+                    const Index& index) {
+    throwIfRequestBodyEmpty(rawRequest);
+    auto triples =
+        parseTriples(rawRequest.body(), extractMediatype(rawRequest));
+    Quads::BlankNodeAdder bn{{}, {}, index.getBlankNodeManager()};
+    auto convertedTriples = convertTriples(graph, std::move(triples), bn);
+    updateClause::GraphUpdate up{{}, std::move(convertedTriples)};
+    ParsedQuery res;
+    res._clause = parsedQuery::UpdateClause{std::move(up)};
+    res._originalString = truncatedStringRepresentation("TSOP", rawRequest);
+    return res;
+  }
 
   // Transform a SPARQL Graph Store Protocol GET to an equivalent ParsedQuery
-  // which is an SPARQL Query.
-  static ParsedQuery transformGet(const GraphOrDefault& graph);
+  // which is a SPARQL Query.
+  static ParsedQuery transformGet(const GraphOrDefault& graph,
+                                  const EncodedIriManager* encodedIriManager);
   FRIEND_TEST(GraphStoreProtocolTest, transformGet);
+
+  // Transform a SPARQL Graph Store Protocol HEAD to an equivalent
+  // `ParsedQuery`. The response is the same as for GET but without the body.
+  static ParsedQuery transformHead(const GraphOrDefault& graph,
+                                   const EncodedIriManager* encodedIriManager);
+
+  // Transform a SPARQL Graph Store Protocol PUT to equivalent ParsedQueries
+  // which are SPARQL Updates.
+  CPP_template_2(typename RequestT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>) static std::
+      vector<ParsedQuery> transformPut(const RequestT& rawRequest,
+                                       const GraphOrDefault& graph,
+                                       const Index& index) {
+    std::string stringRepresentation =
+        truncatedStringRepresentation("PUT", rawRequest);
+
+    // The request is transformed in the following equivalent SPARQL:
+    // `DROP SILENT GRAPH <graph> ; INSERT DATA { GRAPH <graph> { ...body... }
+    // }`
+    auto getDrop = [&graph]() -> std::string {
+      if (const auto* iri =
+              std::get_if<ad_utility::triple_component::Iri>(&graph)) {
+        return absl::StrCat("DROP SILENT GRAPH ",
+                            iri->toStringRepresentation());
+      } else {
+        return "DROP SILENT DEFAULT";
+      }
+    };
+
+    ParsedQuery drop = ad_utility::getSingleElement(SparqlParser::parseUpdate(
+        index.getBlankNodeManager(), &index.encodedIriManager(), getDrop()));
+    drop._originalString = stringRepresentation;
+
+    auto triples =
+        parseTriples(rawRequest.body(), extractMediatype(rawRequest));
+    Quads::BlankNodeAdder bn{{}, {}, index.getBlankNodeManager()};
+    auto convertedTriples = convertTriples(graph, std::move(triples), bn);
+    updateClause::GraphUpdate up{std::move(convertedTriples), {}};
+    ParsedQuery insertData;
+    // Interpretation of the very vague GSP 5.3:
+    // - 201 Created if a new graph is created
+    // - 200 Ok or 204 No Content if an existing graph is modified
+    // When the drop (first operation) deletes triples then the graph has
+    // existed before in our model of implicit graph existence.
+    drop.responseMiddleware_ = ResponseMiddleware(
+        [](ResponseMiddleware::ResponseT response,
+           const std::vector<UpdateMetadata>& updateMetadata) {
+          AD_CORRECTNESS_CHECK(updateMetadata.size() == 2);
+          const auto& dropMeta = updateMetadata.at(0);
+          AD_CORRECTNESS_CHECK(dropMeta.inUpdate_.has_value());
+          if (dropMeta.inUpdate_.value().triplesDeleted_ > 0) {
+            response.result(boost::beast::http::status::ok);
+          } else {
+            response.result(boost::beast::http::status::created);
+          }
+          return response;
+        });
+    insertData._clause = parsedQuery::UpdateClause{std::move(up)};
+    insertData._originalString = stringRepresentation;
+    return {std::move(drop), std::move(insertData)};
+  }
+  FRIEND_TEST(GraphStoreProtocolTest, transformPut);
+
+  // Transform a SPARQL Graph Store Protocol DELETE to equivalent ParsedQueries
+  // which are SPARQL Updates.
+  static ParsedQuery transformDelete(const GraphOrDefault& graph,
+                                     const Index& index);
+  FRIEND_TEST(GraphStoreProtocolTest, transformDelete);
 
  public:
   // Every Graph Store Protocol request has equivalent SPARQL Query or Update.
@@ -132,26 +223,30 @@ class GraphStoreProtocol {
     ad_utility::url_parser::ParsedUrl parsedUrl =
         ad_utility::url_parser::parseRequestTarget(rawRequest.target());
     using enum boost::beast::http::verb;
-    auto method = rawRequest.method();
-    if (method == get) {
-      return {transformGet(operation.graph_)};
-    } else if (method == put) {
-      throwNotYetImplementedHTTPMethod("PUT");
-    } else if (method == delete_) {
-      throwNotYetImplementedHTTPMethod("DELETE");
-    } else if (method == post) {
+    std::string_view method = rawRequest.method_string();
+    if (method == "GET") {
+      return {transformGet(operation.graph_, &index.encodedIriManager())};
+    } else if (method == "PUT") {
+      return transformPut(rawRequest, operation.graph_, index);
+    } else if (method == "DELETE") {
+      return {transformDelete(operation.graph_, index)};
+    } else if (method == "POST") {
       return {transformPost(rawRequest, operation.graph_, index)};
-    } else if (method == head) {
-      throwNotYetImplementedHTTPMethod("HEAD");
-    } else if (method == patch) {
+    } else if (method == "TSOP") {
+      // TSOP (`POST` backwards) does the inverse of `POST`. It does a `DELETE
+      // DATA` of the payload.
+      return {transformTsop(rawRequest, operation.graph_, index)};
+    } else if (method == "HEAD") {
+      return {transformHead(operation.graph_, &index.encodedIriManager())};
+    } else if (method == "PATCH") {
       throwNotYetImplementedHTTPMethod("PATCH");
     } else {
       throw std::runtime_error(
-          absl::StrCat("Unsupported HTTP method \"",
-                       std::string_view{rawRequest.method_string()},
+          absl::StrCat("Unsupported HTTP method \"", method,
                        "\" for the SPARQL Graph Store HTTP Protocol."));
     }
   }
 };
+#endif
 
 #endif  // QLEVER_SRC_ENGINE_GRAPHSTOREPROTOCOL_H

@@ -9,6 +9,7 @@
 #include <variant>
 
 #include "backports/concepts.h"
+#include "backports/three_way_comparison.h"
 #include "parser/NormalizedString.h"
 #include "rdfTypes/Iri.h"
 
@@ -44,21 +45,23 @@ class Literal {
 
  public:
   CPP_template(typename H,
-               typename L)(requires std::same_as<L, Literal>) friend H
+               typename L)(requires ql::concepts::same_as<L, Literal>) friend H
       AbslHashValue(H h, const L& literal) {
     return H::combine(std::move(h), literal.content_);
   }
-  bool operator==(const Literal&) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Literal, content_, beginOfSuffix_)
 
-  const std::string& toStringRepresentation() const;
-  std::string& toStringRepresentation();
+  const std::string& toStringRepresentation() const&;
+  std::string toStringRepresentation() &&;
 
   static Literal fromStringRepresentation(std::string internal);
 
   // Return true if the literal has an assigned language tag
   bool hasLanguageTag() const;
 
-  // Return true if the literal has an assigned datatype
+  // Return true if the literal has an assigned datatype. `XSD_STRING` is not
+  // considered a datatype for this function, so literals with the `XSD_STRING`
+  // datatype are considered to have no datatype.
   bool hasDatatype() const;
 
   // Return the value of the literal without quotation marks and  without any
@@ -86,6 +89,10 @@ class Literal {
       std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt);
 
   void addLanguageTag(std::string_view languageTag);
+
+  // Add a datatype to the literal. If the literal already has a datatype or a
+  // language tag, this function will throw an error. The `XSD_STRING` datatype
+  // is ignored.
   void addDatatype(const Iri& datatype);
 
   // For documentation, see documentation of function
@@ -94,7 +101,9 @@ class Literal {
       std::string_view rdfContentWithoutQuotes,
       std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt);
 
-  // Returns true if the literal has no language tag or datatype suffix
+  // Returns true if the literal has no language tag or datatype suffix.
+  // `XSD_STRING` is not considered a datatype for this function, so literals
+  // with the `XSD_STRING` datatype are considered plain.
   bool isPlain() const;
 
   // Erase everything but the substring in the range ['start', 'start'+'length')

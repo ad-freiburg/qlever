@@ -52,7 +52,9 @@ class LiteralExpression : public SparqlExpression {
         return *ptr;
       }
       TripleComponent tc{s};
-      std::optional<Id> id = tc.toValueId(context->_qec.getIndex().getVocab());
+      const auto& index = context->_qec.getIndex();
+      std::optional<Id> id =
+          tc.toValueId(index.getVocab(), index.encodedIriManager());
       IdOrLiteralOrIri result =
           id.has_value()
               ? IdOrLiteralOrIri{id.value()}
@@ -124,6 +126,33 @@ class LiteralExpression : public SparqlExpression {
   // ___________________________________________________________________________
   bool isConstantExpression() const override {
     return !std::is_same_v<T, ::Variable>;
+  }
+
+  // ___________________________________________________________________________
+  bool isResultAlwaysDefined(
+      const VariableToColumnMap& varColMap) const override {
+    if constexpr (std::is_same_v<T, ::Variable>) {
+      // For variables, check if they are in the map and always defined
+      auto it = varColMap.find(_value);
+      if (it == varColMap.end()) {
+        return false;
+      }
+      return it->second.mightContainUndef_ ==
+             ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+    } else if constexpr (std::is_same_v<T, ValueId>) {
+      // ValueId is defined if it's not undefined
+      return !_value.isUndefined();
+    } else if constexpr (std::is_same_v<T, TripleComponent::Literal> ||
+                         std::is_same_v<T, TripleComponent::Iri>) {
+      // Literals and IRIs are always defined
+      return true;
+    } else {
+      static_assert(std::is_same_v<T, VectorWithMemoryLimit<ValueId>>);
+      // We could iterate through the vector, but as this expression is
+      // currently only used as an implementation detail of `GroupBy` and this
+      // interface is never used there, we save the complexity for now.
+      return false;
+    }
   }
 
  protected:

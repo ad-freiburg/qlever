@@ -6,6 +6,8 @@
 #define QLEVER_SRC_ENGINE_IDTABLE_IDTABLECONCEPTS_H
 
 #include "backports/concepts.h"
+#include "engine/LocalVocab.h"
+#include "engine/idTable/IdTable.h"
 
 // Concepts related to `IdTable` wrappers that are being used for join
 // operations.

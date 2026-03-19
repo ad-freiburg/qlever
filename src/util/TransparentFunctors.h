@@ -62,12 +62,12 @@ struct GetImpl {
 template <typename T>
 struct GetIfImpl {
   CPP_template(typename Ptr)(requires std::is_pointer_v<
-                             std::remove_cvref_t<Ptr>>) constexpr decltype(auto)
+                             ql::remove_cvref_t<Ptr>>) constexpr decltype(auto)
   operator()(Ptr& variantPtr) const {
     return std::get_if<T>(variantPtr);
   }
   CPP_template(typename Ptr)(requires CPP_NOT(
-      std::is_pointer_v<std::remove_cvref_t<Ptr>>)) constexpr decltype(auto)
+      std::is_pointer_v<ql::remove_cvref_t<Ptr>>)) constexpr decltype(auto)
   operator()(Ptr& variant) const {
     return std::get_if<T>(&variant);
   }
@@ -95,6 +95,22 @@ struct DereferenceImpl {
   template <typename X>
   constexpr decltype(auto) operator()(X&& x) const {
     return *AD_FWD(x);
+  }
+};
+
+// Implementation of `hasValue` (see below).
+struct HasValueImpl {
+  template <typename X>
+  constexpr decltype(auto) operator()(X&& x) const {
+    return x.has_value();
+  }
+};
+
+// Implementation of `value` (see below).
+struct ValueImpl {
+  template <typename X>
+  constexpr decltype(auto) operator()(X&& x) const {
+    return AD_FWD(x).value();
   }
 };
 
@@ -135,6 +151,12 @@ static constexpr detail::StaticCastImpl<T> staticCast{};
 
 // Transparent functor that dereferences a pointer or smart pointer.
 static constexpr detail::DereferenceImpl dereference;
+
+// Transparent functor for `std::optional::has_value`.
+static constexpr detail::HasValueImpl hasValue;
+
+// Transparent functor for `std::optional::value`.
+static constexpr detail::ValueImpl value;
 
 // Transparent functor that takes an arbitrary number of arguments by reference
 // and does nothing. We also use the type `Noop`, hence it is defined here and

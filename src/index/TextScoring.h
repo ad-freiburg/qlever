@@ -12,6 +12,7 @@
 // building of the text index.
 class ScoreData {
  public:
+  using TextScoringMetric = qlever::TextScoringMetric;
   ScoreData() = default;
 
   explicit ScoreData(LocaleManager localeManager)

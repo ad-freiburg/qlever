@@ -32,11 +32,10 @@ class PrefixRegexExpression : public SparqlExpression {
   PrefixRegexExpression(Ptr child, std::string prefixRegex, Variable variable);
 
  public:
-  PrefixRegexExpression(PrefixRegexExpression&&) noexcept = default;
-  PrefixRegexExpression& operator=(PrefixRegexExpression&&) noexcept = default;
-  PrefixRegexExpression(const PrefixRegexExpression&) noexcept = delete;
-  PrefixRegexExpression& operator=(const PrefixRegexExpression&) noexcept =
-      delete;
+  PrefixRegexExpression(PrefixRegexExpression&&) = default;
+  PrefixRegexExpression& operator=(PrefixRegexExpression&&) = default;
+  PrefixRegexExpression(const PrefixRegexExpression&) = delete;
+  PrefixRegexExpression& operator=(const PrefixRegexExpression&) = delete;
 
   std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
       bool isNegated) const override;
@@ -65,9 +64,9 @@ class PrefixRegexExpression : public SparqlExpression {
 
   // Check if the `CancellationHandle` of `context` has been cancelled and throw
   // an exception if this is the case.
-  static void checkCancellation(const EvaluationContext* context,
-                                ad_utility::source_location location =
-                                    ad_utility::source_location::current());
+  static void checkCancellation(
+      const EvaluationContext* context,
+      ad_utility::source_location location = AD_CURRENT_SOURCE_LOC());
 
   // Check if `regex` is a prefix regex which means that it starts with `^` and
   // contains no other "special" regex characters like `*` or `.`. If this check

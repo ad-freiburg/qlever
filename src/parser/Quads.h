@@ -8,6 +8,7 @@
 
 #include <vector>
 
+#include "backports/three_way_comparison.h"
 #include "engine/LocalVocab.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/SparqlTriple.h"
@@ -25,12 +26,13 @@ struct Quads {
   using GraphBlock = std::tuple<ad_utility::sparql_types::VarOrIri,
                                 ad_utility::sparql_types::Triples>;
 
-  bool operator==(const Quads&) const = default;
-
   // Free triples are outside a `GRAPH ...` clause.
   ad_utility::sparql_types::Triples freeTriples_{};
   // Graph triples are inside a `GRAPH ...` clause.
   std::vector<GraphBlock> graphTriples_{};
+
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Quads, freeTriples_,
+                                              graphTriples_)
 
   // Run the function for all variables in the quads. The function may be called
   // twice for the same variable.

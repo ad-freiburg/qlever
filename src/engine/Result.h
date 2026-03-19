@@ -8,7 +8,6 @@
 #ifndef QLEVER_SRC_ENGINE_RESULT_H
 #define QLEVER_SRC_ENGINE_RESULT_H
 
-#include <ranges>
 #include <variant>
 #include <vector>
 
@@ -27,6 +26,8 @@
 // evaluated.
 class Result {
  public:
+  using IdTablePtr = std::shared_ptr<const IdTable>;
+
   struct IdTableVocabPair {
     IdTable idTable_;
     LocalVocab localVocab_;
@@ -37,12 +38,21 @@ class Result {
         : idTable_{std::move(idTable)}, localVocab_{std::move(localVocab)} {}
   };
 
-  // The current implementation of (most of the) lazy results. Will be replaced
-  // in the future to make QLever compatible with C++17 again.
-  using Generator = cppcoro::generator<IdTableVocabPair>;
+  // Helper enum to indicate the state of a generator after consumption.
+  enum class GeneratorState { FINISHED, CANCELLED, FAILED };
+
   // The lazy result type that is actually stored. It is type-erased and allows
   // explicit conversion from the `Generator` above.
   using LazyResult = ad_utility::InputRangeTypeErased<IdTableVocabPair>;
+
+  // The current implementation of some lazy results that have not (yet) been
+  // ported to C++17 .
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  using Generator = cppcoro::generator<IdTableVocabPair>;
+#else
+  // This typedef avoids some ugly `#ifdef`s in the remaining codebase.
+  using Generator = LazyResult;
+#endif
 
   // A commonly used LoopControl type for CachingContinuableTransformInputRange
   // generators
@@ -65,8 +75,14 @@ class Result {
 
   using LocalVocabPtr = std::shared_ptr<const LocalVocab>;
 
+  // If this `Result` is fully materialized, then the result can either be
+  // stored as a plain `IdTable` or as a `shared_ptr<const IdTable>`. The former
+  // is useful when the result is still being constructed (because it is
+  // mutable), the latter is useful when the result is read from a cache (e.g.
+  // the named query cache), because the shared ownership doesn't require a copy
+  // of the result.
   struct IdTableSharedLocalVocabPair {
-    IdTable idTable_;
+    std::variant<IdTable, std::shared_ptr<const IdTable>> idTableOrPtr_;
     // The local vocabulary of the result.
     LocalVocabPtr localVocab_;
   };
@@ -126,8 +142,12 @@ class Result {
          SharedLocalVocabWrapper localVocab);
   Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
          LocalVocab&& localVocab);
+  Result(std::shared_ptr<const IdTable> idTablePtr,
+         std::vector<ColumnIndex> sortedBy, LocalVocab&& localVocab);
   Result(IdTableVocabPair pair, std::vector<ColumnIndex> sortedBy);
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   Result(Generator idTables, std::vector<ColumnIndex> sortedBy);
+#endif
   Result(LazyResult idTables, std::vector<ColumnIndex> sortedBy);
 
   // Prevent accidental copying of a result table.
@@ -143,16 +163,18 @@ class Result {
   // generator and passed this new `IdTableVocabPair` along with microsecond
   // precision timing information on how long it took to compute this new chunk.
   // `onGeneratorFinished` is guaranteed to be called eventually as long as the
-  // generator is consumed at least partially, with `true` if an exception
-  // occurred during consumption or with `false` when the generator is done
-  // processing or abandoned and destroyed.
+  // generator is consumed at least partially, with `GeneratorState::FAILED` if
+  // an exception occurred during consumption, with `GeneratorState::CANCELLED`
+  // if said exception is a cancellation exception or with
+  // `GeneratorState::FINISHED` when the generator is done processing or
+  // abandoned and destroyed.
   //
   // Throw an `ad_utility::Exception` if the underlying `data_` member holds the
   // wrong variant.
   void runOnNewChunkComputed(
       std::function<void(const IdTableVocabPair&, std::chrono::microseconds)>
           onNewChunk,
-      std::function<void(bool)> onGeneratorFinished);
+      std::function<void(GeneratorState)> onGeneratorFinished);
 
   // Wrap the generator stored in `data_` within a new generator that aggregates
   // the entries yielded by the generator into a cacheable `IdTable`. Once
@@ -169,8 +191,8 @@ class Result {
           fitInCache,
       std::function<void(Result)> storeInCache);
 
-  // Const access to the underlying `IdTable`. Throw an `ad_utility::Exception`
-  // if the underlying `data_` member holds the wrong variant.
+  // Const access to the underlying `IdTable`. Throw if this result is not fully
+  // materialized.
   const IdTable& idTable() const;
 
   // Access to the underlying `IdTable`s. Throw an `ad_utility::Exception`
@@ -215,9 +237,9 @@ class Result {
 
   // Overload for more than two `Results`
   CPP_template(typename R)(
-      requires ql::ranges::forward_range<R> CPP_and
-          std::convertible_to<ql::ranges::range_value_t<R>,
-                              const Result&>) static SharedLocalVocabWrapper
+      requires ql::ranges::forward_range<R> CPP_and ql::concepts::
+          convertible_to<ql::ranges::range_value_t<R>,
+                         const Result&>) static SharedLocalVocabWrapper
       getMergedLocalVocab(R&& subResults) {
     std::vector<const LocalVocab*> vocabs;
     for (const Result& table : subResults) {

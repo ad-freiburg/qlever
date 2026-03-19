@@ -30,6 +30,15 @@ inline auto makeRequest(
   }
   return req;
 }
+// Overload of `makeRequest` where the HTTP method is a string.
+inline auto makeRequest(
+    std::string_view method, const std::string_view target = "/",
+    const ad_utility::HashMap<http::field, std::string>& headers = {},
+    const std::optional<std::string>& body = std::nullopt) {
+  auto request = makeRequest(http::verb::get, target, headers, body);
+  request.method_string(method);
+  return request;
+}
 
 // Constructs a boost::beast GET request with the target path.
 inline auto makeGetRequest(std::string_view target) {

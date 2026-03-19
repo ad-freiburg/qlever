@@ -4,6 +4,8 @@
 
 #include "engine/CountConnectedSubgraphs.h"
 
+#include <bitset>
+
 #include "util/BitUtils.h"
 
 namespace countConnectedSubgraphs {
@@ -56,7 +58,7 @@ static uint64_t subsetIndexToBitmap(size_t i,
   // is efficient enough for now.
   uint64_t subset = 0;
   for (size_t k = 0; k < neighbors.size(); ++k) {
-    if (1 << k & i) {
+    if (1ULL << k & i) {
       subset |= (1ULL << neighbors[k]);
     }
   }

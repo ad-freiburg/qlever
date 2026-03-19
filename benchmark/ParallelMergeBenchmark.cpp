@@ -44,7 +44,7 @@ class IdTableCompressedWriterBenchmark : public BenchmarkInterface {
           result += el;
         }
       }
-      LOG(INFO) << "result was " << result << std::endl;
+      AD_LOG_INFO << "result was " << result << std::endl;
     };
 
     results.addMeasurement("simple merge", run);

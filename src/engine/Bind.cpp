@@ -4,7 +4,7 @@
 //
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#include "Bind.h"
+#include "engine/Bind.h"
 
 #include "engine/CallFixedSize.h"
 #include "engine/ExistsJoin.h"
@@ -86,13 +86,16 @@ std::string Bind::getCacheKeyImpl() const {
 VariableToColumnMap Bind::computeVariableToColumnMap() const {
   auto res = _subtree->getVariableColumns();
   // The new variable is always appended at the end.
-  // TODO<joka921> This currently pessimistically assumes that all (aggregate)
-  // expressions can produce undefined values. This might impact the
-  // performance when the result of this GROUP BY is joined on one or more of
-  // the aggregating columns. Implement an interface in the expressions that
-  // allows to check, whether an expression can never produce an undefined
-  // value.
-  res[_bind._target] = makePossiblyUndefinedColumn(getResultWidth() - 1);
+  auto columnIndex = getResultWidth() - 1;
+  // Determine whether the added column might contain UNDEF values.
+  using enum ColumnIndexAndTypeInfo::UndefStatus;
+  auto statusOfNewColumn = _bind._expression.isResultAlwaysDefined(res)
+                               ? AlwaysDefined
+                               : PossiblyUndefined;
+
+  auto [it, wasNew] =
+      res.insert({_bind._target, {columnIndex, statusOfNewColumn}});
+  AD_CORRECTNESS_CHECK(wasNew);
   return res;
 }
 
@@ -113,9 +116,9 @@ IdTable Bind::cloneSubView(const IdTable& idTable,
 
 // _____________________________________________________________________________
 Result Bind::computeResult(bool requestLaziness) {
-  LOG(DEBUG) << "Get input to BIND operation..." << std::endl;
+  AD_LOG_DEBUG << "Get input to BIND operation..." << std::endl;
   std::shared_ptr<const Result> subRes = _subtree->getResult(requestLaziness);
-  LOG(DEBUG) << "Got input to Bind operation." << std::endl;
+  AD_LOG_DEBUG << "Got input to Bind operation." << std::endl;
 
   auto applyBind = [this](IdTable idTable, LocalVocab* localVocab) {
     return computeExpressionBind(localVocab, std::move(idTable),
@@ -150,7 +153,7 @@ Result Bind::computeResult(bool requestLaziness) {
     // new words.
     LocalVocab localVocab = subRes->getCopyOfLocalVocab();
     IdTable result = applyBind(subRes->idTable().clone(), &localVocab);
-    LOG(DEBUG) << "BIND result computation done." << std::endl;
+    AD_LOG_DEBUG << "BIND result computation done." << std::endl;
     return {std::move(result), resultSortedOn(), std::move(localVocab)};
   }
 

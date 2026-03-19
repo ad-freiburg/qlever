@@ -88,8 +88,7 @@ auto testDocsFileParser = [](const std::string& docsFilePath,
 // tokenizer
 auto testTokenizeAndNormalizeText =
     [](std::string testText, const StringVec& normalizedTextAsVec,
-       ad_utility::source_location loc =
-           ad_utility::source_location::current()) {
+       ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
       auto t = generateLocationTrace(loc);
       size_t i = 0;
       LocaleManager localeManager = getLocaleManager();

@@ -8,12 +8,12 @@
 
 #include <optional>
 #include <string>
-#include <type_traits>
 #include <utility>
 #include <variant>
 #include <vector>
 
 #include "../test/util/ConfigOptionHelpers.h"
+#include "backports/type_traits.h"
 #include "util/ConfigManager/ConfigExceptions.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConstexprUtils.h"

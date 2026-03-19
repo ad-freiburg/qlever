@@ -5,32 +5,54 @@
 [![Format check](https://github.com/ad-freiburg/qlever/actions/workflows/format-check.yml/badge.svg)](https://github.com/ad-freiburg/qlever/actions/workflows/format-check.yml)
 [![Test coverage](https://codecov.io/github/ad-freiburg/qlever/branch/master/graph/badge.svg?token=OHcEh02rW0)](https://codecov.io/github/ad-freiburg/qlever)
 
-QLever (pronounced "Clever") is a SPARQL engine that can efficiently index and query very large knowledge graphs with over 100 billion triples on a single standard PC or server.
-In particular, QLever is fast for queries that involve large intermediate or final results, which are notoriously hard for engines like Blazegraph or Virtuoso.
-QLever also supports search in text associated with the knowledge base, as well as SPARQL autocompletion.
+QLever (pronounced "Clever") is a graph database implementing the
+[RDF](https://www.w3.org/TR/rdf11-concepts/) and
+[SPARQL](https://www.w3.org/TR/sparql11-overview/) standards. QLever can
+efficiently load and query very large datasets, even with hundreds of billions
+of triples, on a single commodity PC or server. QLever outperforms other RDF/SPARQL
+databases by [a large margin on most queries](https://qlever.dev/evaluation) in a
+[resourceful manner](https://github.com/ad-freiburg/qlever/wiki/QLever-performance-evaluation-and-comparison-to-other-SPARQL-engines).
 
-[Here are demos of QLever](http://qlever.cs.uni-freiburg.de) on a variety of large knowledge graphs, including the complete Wikidata, Wikimedia Commons, OpenStreetMap, UniProt, PubChem, and DBLP.
-Those demos also feature QLever's context-sensitive autocompletion, which makes SPARQL query construction so much easier. The knowledge graphs are updated regularly. Click on "Index Information" for a short description (with dates) and basic statistics.
+QLever implements the full SPARQL 1.1 standard, including federated queries,
+named graphs, the Graph Store HTTP Protocol, and updates. On top of its
+outstanding performance, QLever offers a variety of unique features:
+materialized views, advanced text-search capabilities, context-sensitive
+autocompletion of SPARQL queries, live query analysis, efficient spatial
+queries, and the interactive visualization of very large numbers of geometric
+objects on a map. QLever can also be used as an embedded database, that is,
+without the standard client-server setup but running in-process inside your
+own C++ code.
+
+[Here are demos of QLever](http://qlever.dev/) on a variety of
+large datasets, including the complete Wikidata, Wikimedia Commons,
+OpenStreetMap, UniProt, PubChem, and DBLP. The largest dataset has over one
+trillion triples and runs on a single PC. The demos also feature QLever's
+context-sensitive autocompletion, which makes SPARQL query construction so much
+easier. The datasets are updated regularly. Click on "Index Information" for a
+short description (with dates) and basic statistics.
 
 If you use QLever in your research work, please cite one of the following publications:
-our [CIKM'17 paper](https://ad-publications.informatik.uni-freiburg.de/CIKM_qlever_BB_2017.pdf) (combination of SPARQL and text search, with extensive evaluation),
-our [CIKM'22 paper](https://ad-publications.cs.uni-freiburg.de/CIKM_sparql_autocompletion_BKKKS_2022.pdf) (QLever's autocompletion, with extensive evaluation),
-our [2023 book chapter](https://ad-publications.cs.uni-freiburg.de/CHAPTER_knowledge_graphs_BKKK_2023.pdf) (survey of knowledge graphs and basics of QLever, with many example queries).
+our [CIKM'17 paper](https://ad-publications.informatik.uni-freiburg.de/CIKM_qlever_BB_2017.pdf) (QLever's beginning, combination of SPARQL and text search),
+our [CIKM'22 paper](https://ad-publications.cs.uni-freiburg.de/CIKM_sparql_autocompletion_BKKKS_2022.pdf) (QLever's autocompletion, with an extensive evaluation),
+our [2023 book chapter](https://ad-publications.cs.uni-freiburg.de/CHAPTER_knowledge_graphs_BKKK_2023.pdf) (survey of knowledge graphs and basics of QLever, with many example queries),
+our [TGDK'24 article](https://drops.dagstuhl.de/entities/document/10.4230/TGDK.2.2.3) (the dblp knowledge graph and SPARQL endpoint),
+our [SIGSPATIAL'25
+paper](https://ad-publications.cs.uni-freiburg.de/SIGSPATIAL_spatialjoin_BBK_2025.pdf)
+(efficient spatial joins, with a performance evaluation against PostgreSQL+PostGIS),
+our [ISWC'25 GRASP paper](https://ad-publications.cs.uni-freiburg.de/ISWC_grasp_WB_2025.pdf) (zero-shot question answering on RDF graphs),
+and our [ISWC'25 Sparqloscope paper](https://ad-publications.cs.uni-freiburg.de/ISWC_sparqloscope_BKTU_2025.pdf)
+(a comprehensive SPARQL benchmark with a performance comparison of QLever and
+several other RDF databases).
 
-QLever aims at full SPARQL 1.1 support and is almost there. In particular, a first version of SPARQL 1.1 Federated Query (SERVICE) is implemented since [PR #793](https://github.com/ad-freiburg/qlever/pull/793) and a proof of concept for SPARQL 1.1 Update is implemented since [PR #916](https://github.com/ad-freiburg/qlever/pull/916). If you find a bug in QLever or in one of our demos or if you are missing a feature, please [open an issue](https://github.com/ad-freiburg/qlever/issues).
+QLever is open source under the permissive Apache 2.0 license. QLever is in
+active and rapid development. If you find a bug or if you are missing a feature
+or if there is anything else you want to tell us, please [open an
+issue](https://github.com/ad-freiburg/qlever/issues) or [open a
+discussion](https://github.com/ad-freiburg/qlever/discussions).
 
-# Quickstart
+# Quickstart and documentation
 
-Use QLever via the `qlever` script, following the instructions on https://github.com/ad-freiburg/qlever-control .
-The script allows you to control all things QLever does, with all the configuration in one place, the so-called `Qleverfile`.
-The script comes with a number of example `Qleverfile`s (in particular, one for each of the demos mentioned above),
-which makes it very easy to get started and also helps to write your own `Qleverfile` for your own data. If you use
-QLever via docker (which is the default setting), the script pulls the most recent docker image automatically and you
-don't have to download or compile the code.
+To get started with QLever, use our native packages released for [Debian, Ubuntu](https://docs.qlever.dev/quickstart/#debian-and-ubuntu) and [macOS](https://docs.qlever.dev/quickstart/#macos-apple-silicon). Additionally, a platform-independent version of QLever is available as an [image for Docker and Podman](https://hub.docker.com/r/adfreiburg/qlever). Whether you use the native packages or the Docker/Podman image, everything related to QLever can be controlled via a single command-line tool `qlever`. Please refer to our [Quickstart documentation](https://docs.qlever.dev/quickstart/) for details.
 
-If the `qlever` script does not work for you for whatever reason, have a look at the [Dockerfile for Ubuntu 22.04](https://github.com/ad-freiburg/qlever/blob/master/Dockerfile) or the [Dockerfiles for older Ubuntu versions](https://github.com/ad-freiburg/qlever/tree/master/Dockerfiles). The [source code of the qlever script](https://github.com/ad-freiburg/qlever-control/blob/main/qlever) also provides information on how to use QLever (in particular, note the functions `action_start` and `action_index`).
-
-An older (and not quite up-to-date anymore) step-by-step instruction can be found [here](docs/quickstart.md).
-QLever's [advanced features are described here](docs/advanced_features.md).
-For more in-depth information, see the various other `.md` files in [this folder](docs), some of which are outdated though.
-For high-level descriptions how Qlever works and experiences with some concrete datasets, see the [Qlever Wiki](https://github.com/ad-freiburg/qlever/wiki).
+For the official documentation, see [docs.qlever.dev](https://docs.qlever.dev/). Additional
+information (though potentially outdated) can be found on the [QLever Wiki](https://github.com/ad-freiburg/qlever/wiki).

@@ -4,7 +4,7 @@
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 //          Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 
-#include "UrlParser.h"
+#include "util/http/UrlParser.h"
 
 using namespace ad_utility::url_parser;
 

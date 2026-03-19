@@ -61,7 +61,7 @@ TEST(BlankNodeExpression, labelsAreCorrectlyEscaped) {
   auto expectIrisAre = [&context](std::string_view input,
                                   const std::vector<std::string_view>& expected,
                                   ad_utility::source_location loc =
-                                      ad_utility::source_location::current()) {
+                                      AD_CURRENT_SOURCE_LOC()) {
     auto t = generateLocationTrace(loc);
     auto expression =
         makeBlankNodeExpression(std::make_unique<StringLiteralExpression>(
@@ -173,4 +173,13 @@ TEST(BlankNodeExpression, consistentCounterWithUndefined) {
                       LiteralOrIri, toStringRepresentation,
                       StrEq("<http://qlever.cs.uni-freiburg.de/"
                             "builtin-functions/blank-node/_:unT2_2>"))))));
+}
+
+// _____________________________________________________________________________
+TEST(BlankNodeExpression, isResultAlwaysDefined) {
+  EXPECT_FALSE(makeBlankNodeExpression(
+                   std::make_unique<IdExpression>(Id::makeFromInt(42)))
+                   ->isResultAlwaysDefined({}));
+
+  EXPECT_TRUE(makeUniqueBlankNodeExpression()->isResultAlwaysDefined({}));
 }

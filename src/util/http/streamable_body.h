@@ -124,7 +124,7 @@ class streamable_body::writer {
       }};
     } catch (const std::exception& e) {
       ec = {EPIPE, boost::system::generic_category()};
-      LOG(ERROR) << "Failed to generate response:\n" << e.what() << std::endl;
+      AD_LOG_ERROR << "Failed to generate response:\n" << e.what() << std::endl;
       return boost::none;
     }
   }

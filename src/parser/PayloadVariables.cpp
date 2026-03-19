@@ -6,6 +6,8 @@
 
 #include "parser/PayloadVariables.h"
 
+#include "util/Exception.h"
+
 // ____________________________________________________________________________
 PayloadVariables::PayloadVariables(std::vector<Variable> variables)
     : variables_{std::move(variables)} {};

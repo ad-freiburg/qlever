@@ -4,7 +4,7 @@
 
 #include <gtest/gtest.h>
 
-#include "../src/util/LambdaHelpers.h"
+#include "util/LambdaHelpers.h"
 
 TEST(MakeAssignableLambda, SimpleLambda) {
   // Non-capturing lambdas are assignable (they decay to function pointers.)

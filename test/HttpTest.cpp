@@ -5,6 +5,8 @@
 #include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
+#include <boost/url/url_view.hpp>
+#include <charconv>
 #include <thread>
 
 #include "HttpTestHelpers.h"
@@ -269,13 +271,17 @@ TEST(HttpServer, ErrorHandlingInSession) {
   }
 
   // Handling of `std::exception`.
-  s = throwAndCaptureLog(std::runtime_error{"The runtime error for testing"});
-  EXPECT_THAT(s, HasSubstr("The runtime error for testing"));
+  if constexpr (LOGLEVEL >= ERROR) {
+    s = throwAndCaptureLog(std::runtime_error{"The runtime error for testing"});
+    EXPECT_THAT(s, HasSubstr("The runtime error for testing"));
+  }
 
   // Thrown object that is not a `std::exception`.
-  s = throwAndCaptureLog(47);
-  EXPECT_THAT(s,
-              HasSubstr("Weird exception not inheriting from std::exception"));
+  if constexpr (LOGLEVEL >= ERROR) {
+    s = throwAndCaptureLog(47);
+    EXPECT_THAT(
+        s, HasSubstr("Weird exception not inheriting from std::exception"));
+  }
 }
 
 // Test the request body size limit
@@ -338,7 +344,7 @@ TEST(HttpServer, RequestBodySizeLimit) {
   auto expectRequestFails = [&ResponseMetadata, &expectRequestHelper](
                                 const ad_utility::MemorySize& requestBodySize) {
     const ad_utility::MemorySize currentLimit =
-        RuntimeParameters().get<"request-body-limit">();
+        getRuntimeParameter<&RuntimeParameters::requestBodyLimit_>();
     // For large requests we get an exception while writing to the request
     // stream when going over the limit. For small requests we get the response
     // normally. We would need the HttpClient to return the response even
@@ -360,7 +366,7 @@ TEST(HttpServer, RequestBodySizeLimit) {
   constexpr auto testingRequestBodyLimit = 50_kB;
 
   // Set a smaller limit for testing. The default of 100 MB is quite large.
-  RuntimeParameters().set("request-body-limit", 50_kB .asString());
+  setRuntimeParameter<&RuntimeParameters::requestBodyLimit_>(50_kB);
   // Requests with bodies smaller than the request body limit are processed.
   expectRequestSucceeds(3_B);
   // Exactly the limit is allowed.
@@ -369,15 +375,124 @@ TEST(HttpServer, RequestBodySizeLimit) {
   expectRequestFails(testingRequestBodyLimit + 1_B);
 
   // Setting a smaller request-body limit.
-  RuntimeParameters().set("request-body-limit", 1_B .asString());
+  setRuntimeParameter<&RuntimeParameters::requestBodyLimit_>(1_B);
   expectRequestFails(3_B);
   // Only the request body size counts. The empty body is allowed even if the
   // body is limited to 1 byte.
   expectRequestSucceeds(0_B);
 
   // Disable the request body limit, by setting it to 0.
-  RuntimeParameters().set("request-body-limit", 0_B .asString());
+  setRuntimeParameter<&RuntimeParameters::requestBodyLimit_>(0_B);
   // Arbitrarily large requests are now allowed.
   expectRequestSucceeds(10_kB);
   expectRequestSucceeds(5_MB);
+}
+
+// Test HTTP redirect handling in `sendHttpOrHttpsRequest`.
+TEST(HttpClient, Redirects) {
+  using ::testing::AllOf;
+  ad_utility::SharedCancellationHandle handle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+
+  std::string lastTarget;
+
+  TestHttpServer server(
+      [&lastTarget](auto request, auto&& send) -> boost::asio::awaitable<void> {
+        boost::url_view url{request.target()};
+        lastTarget = request.target();
+        auto redirectIt = url.params().find("location");
+        if (redirectIt == url.params().end()) {
+          co_return co_await send(createOkResponse(
+              "Success", request, ad_utility::MediaType::textPlain));
+        }
+        http::response<http::string_body> resp;
+        unsigned redirectStatus = 200;
+        auto statusIt = url.params().find("status");
+        if (statusIt != url.params().end()) {
+          std::string statusString = (*statusIt)->value;
+          auto result = std::from_chars(
+              statusString.data(), statusString.data() + statusString.size(),
+              redirectStatus);
+          AD_CORRECTNESS_CHECK(result.ec == std::errc());
+        }
+        resp.result(redirectStatus);
+        resp.set(http::field::content_type, "text/plain");
+        resp.set(http::field::location, (*redirectIt)->value.data());
+        resp.body() = "";
+        resp.prepare_payload();
+        co_await send(std::move(resp));
+      });
+  server.runInOwnThread();
+
+  // Test that all four redirect types (301, 302, 307, 308) work.
+  for (auto redirectStatus :
+       {status::moved_permanently, status::found, status::temporary_redirect,
+        status::permanent_redirect}) {
+    std::string redirectUrl =
+        absl::StrCat("http://localhost:", server.getPort(),
+                     "/?status=", redirectStatus, "&location=%2Fok");
+
+    // Send request with `maxRedirects = 1'.
+    auto response = sendHttpOrHttpsRequest(Url{redirectUrl}, handle, verb::get,
+                                           "", "", "", 1);
+    EXPECT_EQ(response.status_, status::ok);
+    EXPECT_EQ(toString(std::move(response.body_)), "Success");
+  }
+
+  // Test that redirect with empty `Location` header throws.
+  {
+    std::string url = absl::StrCat("http://localhost:", server.getPort(),
+                                   "/?status=301&location=");
+
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        sendHttpOrHttpsRequest(Url{url}, handle, verb::get, "", "", "", 1),
+        AllOf(HasSubstr("redirect status code"),
+              HasSubstr("no Location header")));
+  }
+
+  // Test that redirect with invalid `Location` header throws.
+  {
+    std::string url =
+        absl::StrCat("http://localhost:", server.getPort(),
+                     "/?status=301&location=Not%20a%20valid%20URL");
+
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        sendHttpOrHttpsRequest(Url{url}, handle, verb::get, "", "", "", 1),
+        AllOf(HasSubstr("redirect status code")));
+  }
+
+  // Test that relative URLs are properly resolved.
+  {
+    std::string url =
+        absl::StrCat("http://localhost:", server.getPort(),
+                     "/some/relative/path?status=301&location=..%2Fabc");
+
+    auto response =
+        sendHttpOrHttpsRequest(Url{url}, handle, verb::get, "", "", "", 1);
+    EXPECT_EQ(lastTarget, "/some/abc");
+    EXPECT_EQ(response.status_, status::ok);
+    EXPECT_EQ(toString(std::move(response.body_)), "Success");
+  }
+
+  // Test that exceeding max redirects throws, using a chain of two redirects.
+  {
+    std::string url = absl::StrCat(
+        "http://localhost:", server.getPort(),
+        "/?status=301&location=%2Fredirect%3Fstatus%3D301%26location%3D%2Fok");
+
+    // With maxRedirects=1, this should fail (needs 2 redirects)
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        sendHttpOrHttpsRequest(Url{url}, handle, verb::get, "", "", "", 1),
+        AllOf(HasSubstr("exceeded"), HasSubstr("redirect limit")));
+  }
+
+  // Test that `maxRedirects = 0` means no redirects are followed.
+  {
+    std::string url = absl::StrCat("http://localhost:", server.getPort(),
+                                   "/?status=301&location=%2F");
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        sendHttpOrHttpsRequest(Url{url}, handle, verb::get, "", "", "", 0),
+        AllOf(HasSubstr("exceeded"), HasSubstr("redirect limit")));
+  }
+  server.shutDown();
 }

@@ -7,8 +7,8 @@
 #define QLEVER_SRC_UTIL_DEFAULTVALUESIZEGETTER_H
 
 #include <string>
-#include <type_traits>
 
+#include "backports/type_traits.h"
 #include "util/Cache.h"
 #include "util/MemorySize/MemorySize.h"
 
