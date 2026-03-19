@@ -94,6 +94,37 @@ std::optional<DayTimeDuration> Date::operator-(const Date& rhs) const {
 }
 
 // _____________________________________________________________________________
+std::optional<Date> Date::operator-(const DayTimeDuration& rhs) const {
+  auto epoch = toEpoch();
+  if (!epoch.has_value()) {
+    return std::nullopt;
+  }
+  Date::Nanoseconds date1 = epoch.value();
+
+  auto totalMilliseconds2 = rhs.getTotalMilliseconds();
+
+  date1 = date1 -
+          std::chrono::nanoseconds(totalMilliseconds2 *
+                                   1'000'000);  // milliseconds to nanoseconds
+
+  // Extract date from epoch timestamp.
+  auto days = std::chrono::floor<std::chrono::days>(date1);
+  std::chrono::year_month_day date = std::chrono::year_month_day{days};
+  int year(date.year());
+  unsigned month(date.month());
+  unsigned day(date.day());
+
+  // Extract time from remaining seconds.
+  auto seconds = std::chrono::floor<std::chrono::seconds>(date1 - days);
+  std::chrono::hh_mm_ss remainder = std::chrono::hh_mm_ss{seconds};
+  int hour = remainder.hours().count();
+  int minute = remainder.minutes().count();
+  double second = remainder.seconds().count();
+
+  return Date(year, month, day, hour, minute, second);
+}
+
+// _____________________________________________________________________________
 std::optional<Date::Nanoseconds> Date::toEpoch() const {
   using namespace std::chrono;
   auto date = year_month_day{year(getYear()) / getMonth() / getDay()};

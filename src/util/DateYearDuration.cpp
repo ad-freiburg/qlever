@@ -361,10 +361,18 @@ std::optional<DateYearOrDuration> DateYearOrDuration::operator-(
   }
 
   if (isDayTimeDuration() && rhs.isDayTimeDuration()) {
+    //  `DayTimeDuration` - `DayTimeDuration` => `Date`.
     const DayTimeDuration& ownDuration = getDayTimeDurationUnchecked();
     const DayTimeDuration& otherDuration = rhs.getDayTimeDurationUnchecked();
+    return DateYearOrDuration(ownDuration - otherDuration);
+  }
 
-    std::optional<DayTimeDuration> difference = ownDuration - otherDuration;
+  if (isDate() && rhs.isDayTimeDuration()) {
+    //  `Date` - `DayTimeDuration` => `Date`.
+    const Date& ownDate = getDateUnchecked();
+    const DayTimeDuration& otherDuration = rhs.getDayTimeDurationUnchecked();
+
+    std::optional<Date> difference = ownDate - otherDuration;
     if (!difference.has_value()) {
       return std::nullopt;
     } else {
@@ -373,7 +381,6 @@ std::optional<DateYearOrDuration> DateYearOrDuration::operator-(
   }
 
   // TODO<yarox-1>: The following subtractions should be implemented next:
-  //  `Date` - `DayTimeDuration`,
   //  `LargeYear` - `LargeYear`.
 
   // The following will not be implemented (not viable):

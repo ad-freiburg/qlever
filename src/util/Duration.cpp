@@ -73,12 +73,9 @@ std::pair<std::string, const char*> DayTimeDuration::toStringAndType() const {
 }
 
 //______________________________________________________________________________
-std::optional<DayTimeDuration> DayTimeDuration::operator-(
-    const DayTimeDuration& rhs) const {
-  auto totalMilliseconds1 = static_cast<long long>(totalMilliseconds_) -
-                            static_cast<long long>(boundTotalMilliseconds);
-  auto totalMilliseconds2 = static_cast<long long>(rhs.totalMilliseconds_) -
-                            static_cast<long long>(rhs.boundTotalMilliseconds);
+DayTimeDuration DayTimeDuration::operator-(const DayTimeDuration& rhs) const {
+  auto totalMilliseconds1 = getTotalMilliseconds();
+  auto totalMilliseconds2 = rhs.getTotalMilliseconds();
   auto difference = totalMilliseconds1 - totalMilliseconds2;
 
   DayTimeDuration::Type durationType = difference < 0

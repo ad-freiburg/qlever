@@ -184,7 +184,7 @@ void testSubtraction(DateYearOrDuration expected,
                      std::optional<DateYearOrDuration> result) {
   ASSERT_TRUE(result);
   EXPECT_TRUE(result.value().isDayTimeDuration());
-  EXPECT_EQ(expected.toStringAndType(), result.value().toStringAndType());
+  EXPECT_EQ(expected, result.value());
 }
 }  // namespace
 
@@ -898,6 +898,31 @@ TEST(DateYearOrDuration, Subtraction) {
     testSubtraction(DateYearOrDuration(DayTimeDuration(
                         DayTimeDuration::Type::Negative, 1, 16, 54, 46)),
                     duration1 - duration2);
+  }
+  {
+    // Test for `Date` - `DayTimeDuration` subtraction.
+    DateYearOrDuration date =
+        DateYearOrDuration(Date(1989, 01, 23, 20, 10, 33));
+    DateYearOrDuration duration = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Positive, 0, 20, 10, 33));
+    std::optional<DateYearOrDuration> result = date - duration;
+    ASSERT_TRUE(result);
+    EXPECT_EQ(DateYearOrDuration(Date(1989, 01, 23, 0, 0, 0)).toStringAndType(),
+              result.value().toStringAndType());
+
+    duration = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Negative, 0, 3, 49, 27));
+    result = date - duration;
+    ASSERT_TRUE(result);
+    EXPECT_EQ(DateYearOrDuration(Date(1989, 01, 24, 0, 0, 0)).toStringAndType(),
+              result.value().toStringAndType());
+
+    duration = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Positive, 30, 20, 10, 33));
+    result = date - duration;
+    ASSERT_TRUE(result);
+    EXPECT_EQ(DateYearOrDuration(Date(1988, 12, 24, 0, 0, 0)).toStringAndType(),
+              result.value().toStringAndType());
   }
 }
 #endif
