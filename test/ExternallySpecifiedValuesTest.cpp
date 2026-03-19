@@ -49,9 +49,7 @@ TEST(ExternallySpecifiedValues, basicMethods) {
   // Check other basic methods inherited from Values
   EXPECT_EQ(externalValuesOp.getSizeEstimate(), 3u);
   EXPECT_EQ(externalValuesOp.getCostEstimate(), 3u);
-  EXPECT_EQ(
-      externalValuesOp.getDescriptor(),
-      "External values with identifier 'test-id' and variables ?x\t?y\t?z");
+  EXPECT_EQ(externalValuesOp.getDescriptor(), "EXTERNAL VALUES 'test-id'");
   EXPECT_TRUE(externalValuesOp.resultSortedOn().empty());
   EXPECT_EQ(externalValuesOp.getResultWidth(), 3u);
 }
@@ -69,7 +67,12 @@ TEST(ExternallySpecifiedValues, knownEmptyResultWithEmptyValues) {
 
 // Check that `computeResult` works correctly
 TEST(ExternallySpecifiedValues, computeResult) {
-  auto testQec = ad_utility::testing::getQec("<x> <x> <x> .");
+  // `ExternallySpecifiedValues` only work with caching disabled.
+  auto testQecOrig = ad_utility::testing::getQec("<x> <x> <x> .");
+  auto testQecCopy = *testQecOrig;
+  testQecCopy.setDisableCachingOnlyForTesting(true);
+  auto* testQec = &testQecCopy;
+
   ValuesComponents values{{TC{12}, TC{iri("<x>")}},
                           {TC::UNDEF{}, TC{iri("<y>")}}};
   ExternallySpecifiedValues valuesOperation(
@@ -145,7 +148,11 @@ TEST(ExternallySpecifiedValues, updateValuesFailsWithDifferentOrder) {
 
 // Test clone functionality
 TEST(ExternallySpecifiedValues, clone) {
-  auto testQec = ad_utility::testing::getQec("<x> <x> <x> .");
+  // `ExternallySpecifiedValues` only work with caching disabled.
+  auto testQecOrig = ad_utility::testing::getQec("<x> <x> <x> .");
+  auto testQecCopy = *testQecOrig;
+  testQecCopy.setDisableCachingOnlyForTesting(true);
+  auto* testQec = &testQecCopy;
   ValuesComponents values{{TC{12}, TC{iri("<x>")}},
                           {TC::UNDEF{}, TC{iri("<y>")}}};
   ExternallySpecifiedValues valuesOperation(

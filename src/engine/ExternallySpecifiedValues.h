@@ -16,6 +16,15 @@ namespace parsedQuery {
 struct ExternalValuesQuery;
 }
 
+// `ExternallySpecifiedValues` is similar to `Values` (implemented using private
+// inheritance) but allows to modify the contents of the VALUES clause after the
+// creation of the operation. It is created via the `ExternalValuesQuery` magic
+// SERVICE. It can be used via `libqlever` to implement repeated queries that
+// only differ in the contents of VALUES clauses without having to repeat the
+// query parsing and planning. For an example usage of this feature end-to-end
+// see `QLeverTest.cpp` Note: `ExternallySpecifiedValues` can currently only be
+// used if caching is disabled (else an exception will be thrown from the
+// `getCacheKey` and `computeResult` member function).
 class ExternallySpecifiedValues : private Values, virtual public Operation {
  private:
   std::string identifier_;
@@ -39,10 +48,12 @@ class ExternallySpecifiedValues : private Values, virtual public Operation {
   ExternallySpecifiedValues(QueryExecutionContext* qec,
                             const parsedQuery::ExternalValuesQuery& query);
 
-  // Get the identifier of this external values operation.
+  // Get the identifier of this external values operation. It is useful in case
+  // there are multiple `ExternallySpecifiedValues` in the same
+  // `QueryExecutionTree`.
   const std::string& getIdentifier() const { return identifier_; }
 
-  // Update the values stored in this operation. Asserts that the variables
+  // Update the values stored in this operation. Assert that the variables
   // in the new values match the existing variables.
   void updateValues(parsedQuery::SparqlValues newValues);
 
@@ -56,9 +67,10 @@ class ExternallySpecifiedValues : private Values, virtual public Operation {
   Result computeResult(bool requestLaziness) override;
   std::string getCacheKeyImpl() const override;
 
-  // ___________________________________________________________________________
+  // Override the method that is used by the `Operation` base class to collect
+  // all `ExternallySpecifiedValues` from a `Query
   void getExternallySpecifiedValues(
-      std::vector<ExternallySpecifiedValues*>& externalValues) {
+      std::vector<ExternallySpecifiedValues*>& externalValues) override {
     externalValues.push_back(this);
   }
 

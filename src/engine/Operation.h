@@ -101,7 +101,7 @@ class Operation {
   using PrefilterVariablePair = sparqlExpression::PrefilterExprVariablePair;
 
   // Default Constructor.
-  Operation() : _executionContext(nullptr) {}
+  // Operation() : _executionContext(nullptr) {}
 
   // Typical Constructor.
   explicit Operation(QueryExecutionContext* executionContext)
