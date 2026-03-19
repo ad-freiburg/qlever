@@ -11,6 +11,7 @@
 #include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
 #include "engine/ExistsJoin.h"
+#include "engine/OperationBindPushDownImpl.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
@@ -250,4 +251,15 @@ size_t Filter::getCostEstimate() {
 std::unique_ptr<Operation> Filter::cloneImpl() const {
   return std::make_unique<Filter>(_executionContext, _subtree->clone(),
                                   _expression);
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Filter::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+  return pushDownBindToAnyChild(
+      bind, {_subtree},
+      [this](std::vector<std::shared_ptr<QueryExecutionTree>> children) {
+        return ad_utility::makeExecutionTree<Filter>(
+            getExecutionContext(), std::move(children.at(0)), _expression);
+      });
 }

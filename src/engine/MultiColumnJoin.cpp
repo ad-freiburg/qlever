@@ -9,6 +9,7 @@
 #include "engine/CallFixedSize.h"
 #include "engine/Engine.h"
 #include "engine/JoinHelpers.h"
+#include "engine/OperationBindPushDownImpl.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 
 using std::endl;
@@ -307,3 +308,16 @@ bool MultiColumnJoin::columnOriginatesFromGraphOrUndef(
   }
   return Operation::columnOriginatesFromGraphOrUndef(variable);
 }
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+MultiColumnJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+  return pushDownBindToAnyChild(
+      bind, {_left, _right},
+      [this](std::vector<std::shared_ptr<QueryExecutionTree>> newChildren) {
+        auto& left = newChildren.at(0);
+        auto& right = newChildren.at(1);
+        return ad_utility::makeExecutionTree<MultiColumnJoin>(
+            getExecutionContext(), std::move(left), std::move(right));
+      });
+};

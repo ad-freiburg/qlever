@@ -55,6 +55,9 @@ class Filter : public Operation {
     return _subtree->getMultiplicity(col);
   }
 
+  virtual std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithBindColumn(const parsedQuery::Bind& bind) const override;
+
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 

@@ -18,6 +18,7 @@
 #include "engine/CallFixedSize.h"
 #include "engine/IndexScan.h"
 #include "engine/JoinHelpers.h"
+#include "engine/OperationBindPushDownImpl.h"
 #include "engine/Service.h"
 #include "global/Constants.h"
 #include "global/Id.h"
@@ -771,4 +772,20 @@ Join::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
   return ad_utility::makeExecutionTree<Join>(
       getExecutionContext(), std::move(left), std::move(right), leftCol,
       rightCol, ad_utility::contains(variables, _joinVar));
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>> Join::makeTreeWithBindColumn(
+    const parsedQuery::Bind& bind) const {
+  return pushDownBindToAnyChild(
+      bind, {_left, _right},
+      [this](std::vector<std::shared_ptr<QueryExecutionTree>> newChildren) {
+        auto& left = newChildren.at(0);
+        auto& right = newChildren.at(1);
+        auto leftCol = left->getVariableColumn(_joinVar);
+        auto rightCol = right->getVariableColumn(_joinVar);
+        return ad_utility::makeExecutionTree<Join>(
+            getExecutionContext(), std::move(left), std::move(right), leftCol,
+            rightCol);
+      });
 }

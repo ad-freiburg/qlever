@@ -12,6 +12,7 @@
 #include "engine/Sort.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "parser/GraphPatternOperation.h"
 #include "util/ChunkedForLoop.h"
 #include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
@@ -73,6 +74,19 @@ size_t ExistsJoin::getResultWidth() const {
 std::vector<ColumnIndex> ExistsJoin::resultSortedOn() const {
   // We add one column to `left_`, but do not change the order of the rows.
   return left_->resultSortedOn();
+}
+
+// ____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+ExistsJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+  // The `BIND` can only be pushed into the left child.
+  auto newLeft = left_->getRootOperation()->makeTreeWithBindColumn(bind);
+  if (!newLeft.has_value()) {
+    return std::nullopt;
+  }
+  return ad_utility::makeExecutionTree<ExistsJoin>(getExecutionContext(),
+                                                   std::move(newLeft.value()),
+                                                   right_, existsVariable_);
 }
 
 // ____________________________________________________________________________

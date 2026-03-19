@@ -110,6 +110,9 @@ class OptionalJoin : public Operation {
   makeTreeWithStrippedColumns(
       const std::set<Variable>& variables) const override;
 
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
+      const parsedQuery::Bind& bind) const override;
+
   void computeSizeEstimateAndMultiplicities();
 
   Result computeResult(bool requestLaziness) override;
