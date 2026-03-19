@@ -1053,3 +1053,71 @@ INSTANTIATE_TEST_SUITE_P(
         // An additional `BIND` is ignored and the view can still be used for
         // query rewriting. Also uses a different sorting.
         RewriteTestParams{std::string{simpleChainRenamedPlusBind}, 1500}));
+
+// Example queries for testing star query rewriting.
+constexpr std::string_view simpleStar =
+    "SELECT * { ?s <p1> ?o1 . ?s <p2> ?o2 }";
+constexpr std::string_view simpleStarRenamed =
+    "SELECT * { ?x <p2> ?b . ?x <p1> ?a }";
+constexpr std::string_view simpleStarPlusJoin =
+    "SELECT * { ?s <p1> ?o1 . ?s <p2> ?o2 . ?s <p3> ?o3 }";
+
+// _____________________________________________________________________________
+TEST_P(MaterializedViewsStarRewriteTest, starRewrite) {
+  RewriteTestParams p = GetParam();
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::queryPlanningBudget_>(
+          p.queryPlanningBudget_);
+
+  // Test dataset: subjects with predicates p1, p2, p3.
+  const std::string starTtl =
+      " <s1> <p1> <o1a> . \n"
+      " <s1> <p2> <o2a> . \n"
+      " <s2> <p1> <o1b> . \n"
+      " <s2> <p2> <o2b> . \n"
+      " <s2> <p3> <o3a> . \n";
+  const std::string onDiskBase = "_materializedViewRewriteStar";
+  const std::string viewName = "testViewStar";
+
+  materializedViewsTestHelpers::makeTestIndex(onDiskBase, starTtl);
+  auto cleanUp = absl::MakeCleanup(
+      [&]() { materializedViewsTestHelpers::removeTestIndex(onDiskBase); });
+  qlever::EngineConfig config;
+  config.baseName_ = onDiskBase;
+  qlever::Qlever qlv{config};
+
+  // Without the materialized view, a regular join is executed.
+  h::expect(std::string{simpleStar},
+            h::Join(h::IndexScanFromStrings("?s", "<p1>", "?o1"),
+                    h::IndexScanFromStrings("?s", "<p2>", "?o2")));
+
+  // Write a star structure to the materialized view.
+  MaterializedViewsManager manager{onDiskBase};
+  manager.writeViewToDisk(viewName, qlv.parseAndPlanQuery(p.writeQuery_));
+  qlv.loadMaterializedView(viewName);
+  auto starView = std::bind_front(&viewScanSimple, viewName);
+
+  // With the materialized view loaded, an index scan on the view is performed
+  // instead of a regular join.
+  qpExpect(qlv, simpleStar, starView("?s", "?o1", "?o2"));
+  qpExpect(qlv, simpleStarRenamed, starView("?x", "?a", "?b"));
+
+  // When the user's query has additional arms beyond the star, the extra
+  // triples are joined normally.
+  qpExpect(qlv, simpleStarPlusJoin,
+           h::Join(starView("?s", "?o1", "?o2"),
+                   h::IndexScanFromStrings("?s", "<p3>", "?o3")));
+
+  // TODO<ullingerc> Test star with three arms and also if an arm is missing,
+  // that the view is not used.
+}
+
+// _____________________________________________________________________________
+INSTANTIATE_TEST_SUITE_P(MaterializedViewsTest,
+                         MaterializedViewsStarRewriteTest,
+                         ::testing::Values(
+                             // Default case.
+                             RewriteTestParams{std::string{simpleStar}, 1500},
+
+                             // Forced greedy planning.
+                             RewriteTestParams{std::string{simpleStar}, 1}));
