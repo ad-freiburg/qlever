@@ -1239,10 +1239,7 @@ DecompressedBlockAndMetadata CompressedRelationReader::readSharedBlock(
     AD_CONTRACT_CHECK(sisterAccess_.has_value());
     access = &sisterAccess_.value();
   } else {
-    AD_CONTRACT_CHECK(sharing.type_ ==
-                      BlockSharingInfo::Type::CrossPairPermutation);
-    AD_CONTRACT_CHECK(crossPairAccess_.has_value());
-    access = &crossPairAccess_.value();
+    AD_CORRECTNESS_CHECK(false, "Cross-pair sharing is not yet implemented.");
   }
 
   AD_CONTRACT_CHECK(sharing.sourceBlockIndex_ < access->blocks->size());

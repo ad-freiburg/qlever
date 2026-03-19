@@ -821,12 +821,6 @@ class CompressedRelationReader {
     sisterAccess_ = SharedPermutationAccess{reader, blocks};
   }
 
-  // Set the access to the cross-pair permutation's reader and blocks.
-  void setCrossPairAccess(const CompressedRelationReader* reader,
-                          const std::vector<CompressedBlockMetadata>* blocks) {
-    crossPairAccess_ = SharedPermutationAccess{reader, blocks};
-  }
-
  private:
   // The allocator used to allocate intermediate buffers.
   mutable Allocator allocator_;
@@ -839,10 +833,9 @@ class CompressedRelationReader {
   // used for materialized views where repeated rows are meaningful.
   bool useGraphPostProcessing_;
 
-  // Access to the sister and cross-pair permutation's reader and blocks for
-  // reading shared blocks.
+  // Access to the sister permutation's reader and blocks for reading shared
+  // blocks.
   std::optional<SharedPermutationAccess> sisterAccess_;
-  std::optional<SharedPermutationAccess> crossPairAccess_;
 
  public:
   // Helper function that enables a comparison of a triple with an `Id` in the

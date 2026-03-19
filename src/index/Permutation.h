@@ -206,17 +206,14 @@ class Permutation {
 
   const CompressedRelationReader& reader() const { return reader_.value(); }
 
-  // Set up shared block access links to sister/cross-pair permutations.
+  // Set up shared block access link to the sister permutation.
   // Must be called after all permutations are loaded.
   void setSisterPermutation(Permutation* sister) {
     sisterPermutation_ = sister;
   }
-  void setCrossPairPermutation(Permutation* crossPair) {
-    crossPairPermutation_ = crossPair;
-  }
 
-  // Wire the reader's shared accesses based on the sister/cross-pair links.
-  // Must be called after setSisterPermutation/setCrossPairPermutation.
+  // Wire the reader's shared accesses based on the sister permutation link.
+  // Must be called after setSisterPermutation.
   void wireSharedBlockAccess();
 
   Enum permutation() const { return permutation_; }

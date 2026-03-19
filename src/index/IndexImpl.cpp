@@ -1169,11 +1169,6 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
     sop_->setSisterPermutation(spo_.get());
     osp_->setSisterPermutation(ops_.get());
     ops_->setSisterPermutation(osp_.get());
-    // Cross-pair links (non-canonical → canonical):
-    // SPO→PSO, SOP→OSP, OPS→POS.
-    spo_->setCrossPairPermutation(pso_.get());
-    sop_->setCrossPairPermutation(osp_.get());
-    ops_->setCrossPairPermutation(pos_.get());
     // Wire the readers.
     for (auto perm : {spo_, sop_, osp_, ops_}) {
       perm->wireSharedBlockAccess();
