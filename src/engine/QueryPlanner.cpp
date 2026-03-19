@@ -26,6 +26,7 @@
 #include "engine/CountConnectedSubgraphs.h"
 #include "engine/Describe.h"
 #include "engine/Distinct.h"
+#include "engine/ExternallySpecifiedValues.h"
 #include "engine/Filter.h"
 #include "engine/GroupBy.h"
 #include "engine/HasPredicateScan.h"
@@ -3123,6 +3124,8 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     visitSpatialSearch(arg);
   } else if constexpr (std::is_same_v<T, p::TextSearchQuery>) {
     visitTextSearch(arg);
+  } else if constexpr (std::is_same_v<T, p::ExternalValuesQuery>) {
+    visitExternalValues(arg);
   } else if constexpr (std::is_same_v<T, p::NamedCachedResult>) {
     visitNamedCachedResult(arg);
   } else if constexpr (std::is_same_v<T, p::MaterializedViewQuery>) {
@@ -3323,6 +3326,16 @@ void QueryPlanner::GraphPatternPlanner::visitTextSearch(
   for (auto config : textSearchQuery.toConfigs(qec_)) {
     candidatePlans_.push_back(std::vector{std::visit(visitor, config)});
   }
+}
+
+// _______________________________________________________________
+void QueryPlanner::GraphPatternPlanner::visitExternalValues(
+    const parsedQuery::ExternalValuesQuery& externalValuesQuery) {
+  auto externalValues =
+      std::make_shared<ExternallySpecifiedValues>(qec_, externalValuesQuery);
+  auto candidate =
+      makeSubtreePlan<ExternallySpecifiedValues>(std::move(externalValues));
+  visitGroupOptionalOrMinus(std::vector{std::move(candidate)});
 }
 
 // _____________________________________________________________________________

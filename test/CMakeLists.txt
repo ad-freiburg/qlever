@@ -504,3 +504,7 @@ addLinkAndDiscoverTestNoLibs(VariantRangeFilterTest)
 
 addLinkAndDiscoverTest(ConstructTemplatePreprocessorTest engine)
 
+addLinkAndDiscoverTest(ExternalValuesQueryTest engine)
+addLinkAndDiscoverTest(ExternalValuesIntegrationTest engine)
+addLinkAndDiscoverTest(ExternallySpecifiedValuesTest engine)
+
