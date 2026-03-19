@@ -17,16 +17,16 @@ class SparqlTriple;
 namespace parsedQuery {
 
 class ExternalValuesException : public std::runtime_error {
-  // Constructors have to be explicitly inherited
+  // Constructors have to be explicitly inherited.
   using std::runtime_error::runtime_error;
 };
 
-// The ExternalValuesQuery object holds information for external values
-// specification via the SERVICE <ql:external-values/> syntax.
-// The identifier and variables are specified as configuration triples:
-//   [] <identifier> "myId"
-//   [] <variables> ?x
-//   [] <variables> ?y
+// The ExternalValuesQuery object holds information for the
+// `ExternallySpecifiedValues`. It is specified via the SERVICE
+// <ql:external-values/> syntax. The `identifier` and `variables` are specified
+// as configuration triples:
+//   [] <identifier> "myId";
+//      <variables> ?x, ?y.
 struct ExternalValuesQuery : MagicServiceQuery {
   std::string identifier_;
   std::vector<Variable> variables_;
