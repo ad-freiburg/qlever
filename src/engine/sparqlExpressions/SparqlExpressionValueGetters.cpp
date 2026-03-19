@@ -445,8 +445,16 @@ std::optional<ad_utility::TensorData> TensorValueGetter::operator()(
     //   `^^<datatypeIri>`, so we need to remove it. type.remove_suffix(1);
     // }
     if (type == TENSOR_LITERAL || type == TENSOR_NUMERIC_LITERAL) {
-      return ad_utility::TensorData::parseFromString(
-          asStringViewUnsafe(litOrIri.getLiteral().getContent()));
+      try {
+        return ad_utility::TensorData::parseFromString(
+            asStringViewUnsafe(litOrIri.getLiteral().getContent()));
+      } catch (const std::exception& e) {
+        AD_LOG_ERROR << "Failed to parse tensor from literal: "
+                     << asStringViewUnsafe(litOrIri.getLiteral().getContent())
+                     << " with datatype " << type
+                     << ". Error message: " << e.what();
+        return std::nullopt;
+      }
     }
   }
   return std::nullopt;
@@ -456,7 +464,17 @@ std::optional<ad_utility::TensorData> TensorValueGetter::operator()(
   auto optionalStringAndType =
       ExportQueryExecutionTrees::idToStringAndType<true>(
           context->_qec.getIndex(), id, context->_localVocab);
-  return ad_utility::TensorData::parseFromPair(optionalStringAndType);
+  try {
+    return ad_utility::TensorData::parseFromPair(optionalStringAndType);
+
+  } catch (const std::exception& e) {
+    AD_LOG_ERROR << "Failed to parse tensor from ValueId " << id << " with string representation "
+                 << (optionalStringAndType.has_value()
+                         ? optionalStringAndType.value().first
+                         : "N/A")
+                 << ". Error message: " << e.what();
+    return std::nullopt;
+  }
 }
 
 //______________________________________________________________________________

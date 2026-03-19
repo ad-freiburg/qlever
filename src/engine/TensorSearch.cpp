@@ -119,7 +119,7 @@ std::string TensorSearch::getCacheKeyImpl() const {
        << (int)config_.dist_ << "\n";
 
     // Uses distance variable?
-    if (config_.maxResultsVariable_.has_value()) {
+    if (config_.distanceVariable_.has_value()) {
       os << "withDistanceVariable \n";
     }
 
@@ -177,7 +177,7 @@ size_t TensorSearch::getResultWidth() const {
     }
     auto widthChildren = childLeft_->getResultWidth() + sizeRight;
 
-    if (config_.maxResultsVariable_.has_value()) {
+    if (config_.distanceVariable_.has_value()) {
       return widthChildren + 1;
     } else {
       return widthChildren;
@@ -204,7 +204,7 @@ size_t TensorSearch::getCostEstimate() {
     auto n = childLeft_->getSizeEstimate();
     auto m = childRight_->getSizeEstimate();
 
-    if (config_.algo_ == DEFAULT) {
+    if (config_.algo_ == NAIVE) {
       // doing a full comparison is expectedly slow
       return n * m;
     } else if (config_.algo_ == ANNOY) {
@@ -258,7 +258,7 @@ float TensorSearch::getMultiplicity(size_t col) {
   if (childLeft_ && childRight_) {
     std::shared_ptr<QueryExecutionTree> child;
     size_t column = col;
-    if (config_.maxResultsVariable_.has_value() &&
+    if (config_.distanceVariable_.has_value() &&
         col == getResultWidth() - 1) {
       // as each max results value is very likely to be unique, no multiplicities are assumed
       return 1;
@@ -417,12 +417,12 @@ VariableToColumnMap TensorSearch::computeVariableToColumnMap() const {
     addColumns(varColMapRightFiltered, sizeLeft);
 
     // Column for the distance
-    if (config_.maxResultsVariable_.has_value()) {
+    if (config_.distanceVariable_.has_value()) {
       AD_CONTRACT_CHECK(
-          !variableToColumnMap.contains(config_.maxResultsVariable_.value()),
-          "The max results variable of a tensor search must not be previously "
+          !variableToColumnMap.contains(config_.distanceVariable_.value()),
+          "The distance variable of a tensor search must not be previously "
           "defined.");
-      variableToColumnMap[config_.maxResultsVariable_.value()] =
+      variableToColumnMap[config_.distanceVariable_.value()] =
           makeUndefCol(ColumnIndex{sizeLeft + sizeRight});
     }
   }

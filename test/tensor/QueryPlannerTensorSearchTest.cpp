@@ -40,7 +40,7 @@ TEST(QueryTensorSearchPlanner, TensorSearchService) {
       "tensorSearch:right ?b . "
       "{ ?a <p> ?b } }}",
       h::tensorSearch(1, -1, -1, TENSOR_SEARCH_DEFAULT_ALGORITHM,
-                      TensorDistanceAlgorithm::COSINE_SIMILARITY, V{"?y"},
+                      TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"},
                       V{"?b"}, std::nullopt, emptyPayload,
                       scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
   h::expect(
@@ -48,13 +48,13 @@ TEST(QueryTensorSearchPlanner, TensorSearchService) {
       "SELECT * WHERE {"
       "?x <p> ?y."
       "SERVICE tensorSearch: {"
-      "_:config tensorSearch:algorithm tensorSearch:default ;"
+      "_:config tensorSearch:algorithm tensorSearch:naive ;"
       "tensorSearch:numNN 1 ; "
       "tensorSearch:left ?y ;"
       "tensorSearch:right ?b ."
       "{ ?a <p> ?b } }}",
-      h::tensorSearch(1, -1, -1, TensorSearchAlgorithm::DEFAULT,
-                      TensorDistanceAlgorithm::COSINE_SIMILARITY, V{"?y"},
+      h::tensorSearch(1, -1, -1, TensorSearchAlgorithm::NAIVE,
+                      TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"},
                       V{"?b"}, std::nullopt, emptyPayload,
                       scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
   h::expect(
@@ -68,7 +68,7 @@ TEST(QueryTensorSearchPlanner, TensorSearchService) {
       "tensorSearch:right ?b ."
       "{ ?a <p> ?b } }}",
       h::tensorSearch(1, -1, -1, TensorSearchAlgorithm::ANNOY,
-                      TensorDistanceAlgorithm::COSINE_SIMILARITY, V{"?y"},
+                      TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"},
                       V{"?b"}, std::nullopt, emptyPayload,
                       scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
   h::expect(
@@ -82,7 +82,7 @@ TEST(QueryTensorSearchPlanner, TensorSearchService) {
       "tensorSearch:right ?b . "
       "{ ?a <p> ?b } }}",
       h::tensorSearch(100, -1, -1, TensorSearchAlgorithm::ANNOY,
-                      TensorDistanceAlgorithm::COSINE_SIMILARITY, V{"?y"},
+                      TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"},
                       V{"?b"}, std::nullopt, emptyPayload,
                       scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
   h::expect(
@@ -96,7 +96,7 @@ TEST(QueryTensorSearchPlanner, TensorSearchService) {
       "tensorSearch:right ?b ."
       "{ ?a <p> ?b } }}",
       h::tensorSearch(100, 20, -1, TensorSearchAlgorithm::ANNOY,
-                      TensorDistanceAlgorithm::COSINE_SIMILARITY, V{"?y"},
+                      TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"},
                       V{"?b"}, std::nullopt, emptyPayload,
                       scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
   h::expect(
@@ -110,7 +110,7 @@ TEST(QueryTensorSearchPlanner, TensorSearchService) {
       "tensorSearch:right ?b ."
       "{ ?a <p> ?b } }}",
       h::tensorSearch(100, -1, 20, TensorSearchAlgorithm::ANNOY,
-                      TensorDistanceAlgorithm::COSINE_SIMILARITY, V{"?y"},
+                      TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"},
                       V{"?b"}, std::nullopt, emptyPayload,
                       scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
   h::expect(
@@ -138,7 +138,7 @@ TEST(QueryTensorSearchPlanner, TensorSearchService) {
       "tensorSearch:right ?b . "
       "{ ?a <p> ?b } }}",
       h::tensorSearch(1, -1, -1, TENSOR_SEARCH_DEFAULT_ALGORITHM,
-                      TensorDistanceAlgorithm::COSINE_SIMILARITY, V{"?y"},
+                      TENSOR_SEARCH_DEFAULT_DISTANCE, V{"?y"},
                       V{"?b"}, std::nullopt, emptyPayload,
                       scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
   h::expect(
@@ -174,7 +174,7 @@ TEST(QueryTensorSearchPlanner, TensorSearchServicePayloadVars) {
       "_:config tensorSearch:distance tensorSearch:dot ;"
       "tensorSearch:numNN 1 ; "
       "tensorSearch:right ?b ;"
-      "tensorSearch:bindMaxResults ?dist ."
+      "tensorSearch:bindDistance ?dist ."
       "_:config tensorSearch:left ?y ."
       "_:config tensorSearch:payload ?a ."
       "{ ?a <p> ?b } }}",
@@ -190,7 +190,7 @@ TEST(QueryTensorSearchPlanner, TensorSearchServicePayloadVars) {
       "_:config tensorSearch:distance tensorSearch:dot ;"
       "tensorSearch:numNN 1 ; "
       "tensorSearch:right ?b ;"
-      "tensorSearch:bindMaxResults ?dist ."
+      "tensorSearch:bindDistance ?dist ."
       "_:config tensorSearch:left ?y ."
       "_:config tensorSearch:payload ?a , ?a2 ."
       "{ ?a <p> ?a2 . ?a2 <p> ?b } }}",
@@ -210,7 +210,7 @@ TEST(QueryTensorSearchPlanner, TensorSearchServicePayloadVars) {
       "_:config tensorSearch:distance tensorSearch:dot ;"
       "tensorSearch:numNN 1 ; "
       "tensorSearch:right ?b ;"
-      "tensorSearch:bindMaxResults ?dist ."
+      "tensorSearch:bindDistance ?dist ."
       "_:config tensorSearch:left ?y ."
       "_:config tensorSearch:payload ?a, ?a, ?b, ?a2 ."
       "{ ?a <p> ?a2 . ?a2 <p> ?b } }}",
@@ -230,7 +230,7 @@ TEST(QueryTensorSearchPlanner, TensorSearchServicePayloadVars) {
       "_:config tensorSearch:distance tensorSearch:dot ;"
       "tensorSearch:numNN 1 ; "
       "tensorSearch:right ?b ;"
-      "tensorSearch:bindMaxResults ?dist ."
+      "tensorSearch:bindDistance ?dist ."
       "_:config tensorSearch:left ?y ."
       "_:config tensorSearch:payload <all> ."
       "{ ?a <p> ?a2 . ?a2 <p> ?b } }}",
@@ -247,7 +247,7 @@ TEST(QueryTensorSearchPlanner, TensorSearchServicePayloadVars) {
       "_:config tensorSearch:distance tensorSearch:dot ;"
       "tensorSearch:numNN 1 ; "
       "tensorSearch:right ?b ;"
-      "tensorSearch:bindMaxResults ?dist ."
+      "tensorSearch:bindDistance ?dist ."
       "_:config tensorSearch:left ?y ."
       "_:config tensorSearch:payload tensorSearch:all ."
       "{ ?a <p> ?a2 . ?a2 <p> ?b } }}",
@@ -266,7 +266,7 @@ TEST(QueryTensorSearchPlanner, TensorSearchServicePayloadVars) {
       "_:config tensorSearch:distance tensorSearch:dot ;"
       "tensorSearch:numNN 1 ; "
       "tensorSearch:right ?b ;"
-      "tensorSearch:bindMaxResults ?dist ."
+      "tensorSearch:bindDistance ?dist ."
       "_:config tensorSearch:left ?y ."
       "_:config tensorSearch:payload <all> ."
       "_:config tensorSearch:payload ?a ."
@@ -293,7 +293,7 @@ TEST(QueryTensorSearchPlanner, TensorSearchMultipleServiceSharedLeft) {
             "    tensorSearch:left ?y ;"
             "    tensorSearch:right ?b ;"
             "    tensorSearch:numNN 5 ;"
-            "    tensorSearch:bindMaxResults ?db ."
+            "    tensorSearch:bindDistance ?db ."
             "  { ?ab <p1> ?b }"
             "}"
             "SERVICE tensorSearch: {"
@@ -302,7 +302,7 @@ TEST(QueryTensorSearchPlanner, TensorSearchMultipleServiceSharedLeft) {
             "    tensorSearch:right ?c ;"
             "    tensorSearch:numNN 3 ;"
             "    tensorSearch:payload ?ac ;"
-            "    tensorSearch:bindMaxResults ?dc ."
+            "    tensorSearch:bindDistance ?dc ."
             "  { ?ac <p2> ?c }"
             " }"
             "}",
@@ -510,11 +510,11 @@ TEST(QueryPlanner, TensorSearchIncorrectConfigValues) {
                 "_:config tensorSearch:right ?b ;"
                 "tensorSearch:left ?y ;"
                 "tensorSearch:numNN 5 ;"
-                "tensorSearch:bindMaxResults 123 ."
+                "tensorSearch:bindDistance 123 ."
                 " { ?a <p> ?b . }"
                 "}}",
                 ::testing::_),
-      ::testing::ContainsRegex("`<bindMaxResults>` has to be a variable"));
+      ::testing::ContainsRegex("`<bindDistance>` has to be a variable"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect("PREFIX tensorSearch: "
                 "<https://qlever.cs.uni-freiburg.de/tensorSearch/>"
@@ -556,12 +556,12 @@ TEST(QueryPlanner, TensorSearchIncorrectConfigValues) {
                 "_:config tensorSearch:right ?b ;"
                 "tensorSearch:left ?y ;"
                 "tensorSearch:numNN 5 ;"
-                "tensorSearch:bindMaxResults ?dist_a ;"
-                "tensorSearch:bindMaxResults ?dist_b ."
+                "tensorSearch:bindDistance ?dist_a ;"
+                "tensorSearch:bindDistance ?dist_b ."
                 " { ?a <p> ?b . }"
                 "}}",
                 ::testing::_),
-      ::testing::ContainsRegex("`<bindMaxResults>` has already been set"));
+      ::testing::ContainsRegex("`<bindDistance>` has already been set"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect("PREFIX tensorSearch: "
                 "<https://qlever.cs.uni-freiburg.de/tensorSearch/>"

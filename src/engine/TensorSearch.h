@@ -33,7 +33,7 @@ class TensorSearchImpl {
  private:
   void addResultTableEntry(IdTable* result, const IdTable* resultLeft,
                            const IdTable* resultRight, size_t rowLeft,
-                           size_t rowRight) const;
+                           size_t rowRight, Id distance) const;
   PreparedTensorSearchParams params_;
   QueryExecutionContext* qec_;
   float computeDistance(const ad_utility::TensorData& tensorLeft,
@@ -139,8 +139,8 @@ class TensorSearch : public Operation {
   ssize_t onlyForTestingGetMaxResults() const {
     return config_.maxResults_;
   }
-  std::optional<Variable> onlyForTestingGetMaxResultsVariable() const {
-    return config_.maxResultsVariable_;
+  std::optional<Variable> onlyForTestingGetDistanceVariable_() const {
+    return config_.distanceVariable_;
   }
   TensorDistanceAlgorithm onlyForTestingGetDistanceFunction() const {
     return config_.dist_;

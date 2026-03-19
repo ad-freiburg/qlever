@@ -463,7 +463,7 @@ struct TensorSearchMatcher {
                     Eq(distanceAlgorithm)),
         AD_PROPERTY(::TensorSearch, onlyForTestingGetVariables,
                     Eq(std::pair(left, right))),
-        AD_PROPERTY(::TensorSearch, onlyForTestingGetMaxResultsVariable,
+        AD_PROPERTY(::TensorSearch, onlyForTestingGetDistanceVariable,
                     Eq(distanceVariable)),
         AD_PROPERTY(::TensorSearch, onlyForTestingGetPayloadVariables,
                     Eq(payloadVariables))));

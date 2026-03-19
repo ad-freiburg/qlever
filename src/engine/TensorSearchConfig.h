@@ -19,17 +19,18 @@
 // class declaration of the tensor search operation.
 
 enum class TensorDistanceAlgorithm {
-  COSINE_SIMILARITY,
   DOT_PRODUCT,
+  COSINE_SIMILARITY,
+  ANGULAR_DISTANCE,
   EUCLIDEAN_DISTANCE,
   MANHATTAN_DISTANCE,
   HAMMING_DISTANCE,
 };
-enum class TensorSearchAlgorithm { DEFAULT, ANNOY };
+enum class TensorSearchAlgorithm { NAIVE, ANNOY };
 const TensorSearchAlgorithm TENSOR_SEARCH_DEFAULT_ALGORITHM =
     TensorSearchAlgorithm::ANNOY;
 const TensorDistanceAlgorithm TENSOR_SEARCH_DEFAULT_DISTANCE =
-    TensorDistanceAlgorithm::COSINE_SIMILARITY;
+    TensorDistanceAlgorithm::DOT_PRODUCT;
 
 // The configuration object that will be provided by the special SERVICE.
 struct TensorSearchConfiguration {
@@ -39,7 +40,7 @@ struct TensorSearchConfiguration {
 
   // If given, the distance will be added to the result and be bound to this
   // variable.
-  std::optional<Variable> maxResultsVariable_ = std::nullopt;
+  std::optional<Variable> distanceVariable_ = std::nullopt;
 
   // If given a vector of variables, the selected variables will be part of the
   // result table - the join column will automatically be part of the result.
@@ -48,7 +49,7 @@ struct TensorSearchConfiguration {
 
   // Choice of algorithm.
   TensorSearchAlgorithm algo_ = TENSOR_SEARCH_DEFAULT_ALGORITHM;
-  TensorDistanceAlgorithm dist_ = TensorDistanceAlgorithm::COSINE_SIMILARITY;
+  TensorDistanceAlgorithm dist_ = TENSOR_SEARCH_DEFAULT_DISTANCE;
 
   ssize_t maxResults_ = 100;
   ssize_t searchK_ = -1;

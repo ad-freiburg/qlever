@@ -24,10 +24,10 @@
 #include "global/RuntimeParameters.h"
 #include "global/ValueId.h"
 #include "parser/ParsedQuery.h"
+#include "rdfTypes/TensorData.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
-#include "rdfTypes/TensorData.h"
 
 // ____________________________________________________________________________
 size_t TensorSearchImpl::getNumThreads() {
@@ -46,8 +46,8 @@ size_t TensorSearchImpl::getNumThreads() {
 void TensorSearchImpl::addResultTableEntry(IdTable* result,
                                            const IdTable* idTableLeft,
                                            const IdTable* idTableRight,
-                                           size_t rowLeft,
-                                           size_t rowRight) const {
+                                           size_t rowLeft, size_t rowRight,
+                                           Id distance) const {
   // this lambda function copies values from copyFrom into the table res only if
   // the column of the value is specified in sourceColumns. If sourceColumns is
   // nullopt, all columns are added. It copies them into the row rowIndRes and
@@ -73,17 +73,27 @@ void TensorSearchImpl::addResultTableEntry(IdTable* result,
   rescol = addColumns(result, idTableLeft, resrow, rescol, rowLeft);
   rescol = addColumns(result, idTableRight, resrow, rescol, rowRight,
                       params_.rightSelectedCols_);
+
+  if (params_.config_.distanceVariable_.has_value()) {
+    result->at(resrow, rescol) = distance;
+    // rescol isn't used after that in this function, but future updates,
+    // which add additional columns, would need to remember to increase
+    // rescol at this place otherwise. If they forget to do this, the
+    // distance column will be overwritten, the variableToColumnMap will
+    // not work and so on
+    // rescol += 1;
+  }
 }
 
 Result TensorSearchImpl::computeTensorSearchResultAnnoy() {
-#ifdef WITH_DENSE_TENSOR_INDEX
+  // #ifdef WITH_DENSE_TENSOR_INDEX
   IdTable result{params_.numColumns_, qec_->getAllocator()};
 
   auto annoyIndex = TensorSearchCachedIndex::fromKeyOrBuild(
-      params_.cacheKey_, params_.leftJoinCol_, *params_.idTableLeft_,
+      params_.cacheKey_, params_.rightJoinCol_, *params_.idTableRight_,
       qec_->getIndex(), params_.config_);
-  for (size_t i = 0; i < params_.idTableRight_->size(); i++) {
-    auto id = params_.idTableRight_->at(i, params_.rightJoinCol_);
+  for (size_t i = 0; i < params_.idTableLeft_->size(); i++) {
+    auto id = params_.idTableLeft_->at(i, params_.leftJoinCol_);
 
     auto optionalStringAndType =
         ExportQueryExecutionTrees::idToStringAndType<true>(qec_->getIndex(), id,
@@ -95,75 +105,84 @@ Result TensorSearchImpl::computeTensorSearchResultAnnoy() {
     }
     auto results =
         annoyIndex->findNN(tensorData.value(), params_.config_.maxResults_);
-    for (const auto& nnId : results) {
+    for (const auto& nn : results) {
       addResultTableEntry(&result, params_.idTableLeft_, params_.idTableRight_,
-                          nnId, i);
+                          i, nn.first, Id::makeFromDouble(nn.second));
     }
   }
 
   return Result{
       std::move(result), std::vector<ColumnIndex>{},
       Result::getMergedLocalVocab(*params_.resultLeft_, *params_.resultRight_)};
-#else
-  throw ad_utility::Exception(
-      "TensorSearchImpl::computeTensorSearchResultAnnoy() called, but qlever "
-      "was not compiled with the option to use the dense tensor index.");
-#endif
+  // #else
+  //   throw ad_utility::Exception(
+  //       "TensorSearchImpl::computeTensorSearchResultAnnoy() called, but
+  //       qlever " "was not compiled with the option to use the dense tensor
+  //       index.");
+  // #endif
 }
 Result TensorSearchImpl::computeTensorSearchResultNaive() {
   IdTable result{params_.numColumns_, qec_->getAllocator()};
 
-  for (size_t i = 0; i < params_.idTableRight_->size(); i++) {
-    auto id = params_.idTableRight_->at(i, params_.rightJoinCol_);
+  for (size_t i = 0; i < params_.idTableLeft_->size(); i++) {
+    auto id = params_.idTableLeft_->at(i, params_.leftJoinCol_);
     auto optionalStringAndType =
         ExportQueryExecutionTrees::idToStringAndType<true>(qec_->getIndex(), id,
                                                            {});
     auto tensorData =
         ad_utility::TensorData::parseFromPair(optionalStringAndType);
-    if (!tensorData.has_value()) {
+    if (!tensorData.has_value() && optionalStringAndType.has_value()) {
+      AD_LOG_WARN << "Could not parse tensor of "
+                  << optionalStringAndType.value().first << " at row " << row
+                  << ". This item will be ignored for indexing.";
       continue;
     }
     std::map<size_t, float> distanceToRowLeft;
-    for (size_t j = 0; j < params_.idTableLeft_->size(); j++) {
-      auto idLeft = params_.idTableLeft_->at(j, params_.leftJoinCol_);
-      auto optionalStringAndTypeLeft =
+    for (size_t j = 0; j < params_.idTableRight_->size(); j++) {
+      auto idRight = params_.idTableRight_->at(j, params_.rightJoinCol_);
+      auto optionalStringAndTypeRight =
           ExportQueryExecutionTrees::idToStringAndType<true>(qec_->getIndex(),
-                                                             idLeft, {});
-      auto tensorDataLeft =
-          ad_utility::TensorData::parseFromPair(optionalStringAndTypeLeft);
-      if (!tensorDataLeft.has_value()) {
+                                                             idRight, {});
+      auto tensorDataRight =
+          ad_utility::TensorData::parseFromPair(optionalStringAndTypeRight);
+      if (!tensorDataRight.has_value()) {
         continue;
       }
 
       auto distance =
-          computeDistance(tensorData.value(), tensorDataLeft.value());
+          computeDistance(tensorData.value(), tensorDataRight.value());
       distanceToRowLeft[j] = distance;
     }
     // sort indices by distance and take the closest ones
     std::vector<std::pair<size_t, float>> sortedDistanceToRowLeft(
         distanceToRowLeft.begin(), distanceToRowLeft.end());
     std::sort(sortedDistanceToRowLeft.begin(), sortedDistanceToRowLeft.end(),
-              [](const auto& a, const auto& b) { return a.second < b.second; });
-    for (size_t k = 0; k < std::min((size_t)params_.config_.maxResults_, sortedDistanceToRowLeft.size()); k++) {
-      addResultTableEntry(&result, params_.idTableLeft_, params_.idTableRight_,
-                          sortedDistanceToRowLeft[k].first, i);
-    } 
+              [](const auto& a, const auto& b) { return a.second > b.second; });
+    for (size_t k = 0; k < std::min((size_t)params_.config_.maxResults_,
+                                    sortedDistanceToRowLeft.size());
+         k++) {
+      addResultTableEntry(
+          &result, params_.idTableLeft_, params_.idTableRight_, i,
+          sortedDistanceToRowLeft[k].first,
+          Id::makeFromDouble(sortedDistanceToRowLeft[k].second));
+    }
   }
-
 
   return Result{
       std::move(result), std::vector<ColumnIndex>{},
       Result::getMergedLocalVocab(*params_.resultLeft_, *params_.resultRight_)};
 }
-float TensorSearchImpl::computeDistance(const ad_utility::TensorData& left,
-                                        const ad_utility::TensorData& right) const {
+float TensorSearchImpl::computeDistance(
+    const ad_utility::TensorData& left,
+    const ad_utility::TensorData& right) const {
   switch (params_.config_.dist_) {
     case TensorDistanceAlgorithm::COSINE_SIMILARITY:
       return ad_utility::TensorData::cosineSimilarity(left, right);
     case TensorDistanceAlgorithm::DOT_PRODUCT:
       return ad_utility::TensorData::dot(left, right);
     case TensorDistanceAlgorithm::EUCLIDEAN_DISTANCE:
-      return ad_utility::TensorData::norm(ad_utility::TensorData::subtract(left, right));
+      return ad_utility::TensorData::norm(
+          ad_utility::TensorData::subtract(left, right));
     default:
       throw ad_utility::Exception(
           "Unknown distance function in TensorSearchImpl::computeDistance");

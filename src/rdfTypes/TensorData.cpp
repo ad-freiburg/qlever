@@ -35,8 +35,7 @@ TensorData TensorData::parseFromString(std::string_view dataString) {
     auto json = nlohmann::json::parse(dataString);
     return parseFromJSON(json);
   } catch (const nlohmann::json::parse_error& e) {
-    throw std::runtime_error{"Failed to parse tensor data from string: " +
-                             std::string(e.what())};
+    throw std::runtime_error{absl::StrCat("Failed to parse tensor data from string: ", dataString, " - ", std::string(e.what()))};
   }
   auto json = nlohmann::json::parse(dataString);
   return parseFromJSON(json);

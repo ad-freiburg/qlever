@@ -29,8 +29,8 @@ void TensorSearchQuery::addParameter(const SparqlTriple& triple) {
     setVariable("left", object, left_);
   } else if (predString == "right") {
     setVariable("right", object, right_);
-  } else if (predString == "bindMaxResults") {
-    setVariable("bindMaxResults", object, maxResultsVariable_);
+  } else if (predString == "bindDistance") {
+    setVariable("bindDistance", object, distanceVariable_);
   } else if (predString == "numNN") {
     throwIf(!object.isInt(),
             "The parameter `<numNN>` expects an integer (the "
@@ -61,8 +61,8 @@ void TensorSearchQuery::addParameter(const SparqlTriple& triple) {
             "The parameter `<algorithm>` needs an IRI that selects the algorithm "
             "to employ. Currently supported are `<default>` and `<annoy>`");
     auto type = extractParameterName(object, TENSOR_SEARCH_IRI);
-    if (type == "default") {
-      algo_ = TensorSearchAlgorithm::DEFAULT;
+    if (type == "naive") {
+      algo_ = TensorSearchAlgorithm::NAIVE;
     } else if (type == "annoy") {
       algo_ = TensorSearchAlgorithm::ANNOY;
     } else {
@@ -77,13 +77,15 @@ void TensorSearchQuery::addParameter(const SparqlTriple& triple) {
     throwIf(!object.isIri(),
             "The parameter `<distance>` needs an IRI that selects the distance "
             "metric to employ. Currently supported are `<angular>`, `<cosine>`, `<dot>`, "
-            "`<euclidian>`, `<manhattan>`, or  `<hamming>` ");
+            "`<euclidean>`, `<manhattan>`, or  `<hamming>` ");
     auto dist = extractParameterName(object, TENSOR_SEARCH_IRI);
-    if (dist == "angular" || dist == "cosine") {
+    if (dist == "angular") {
+      dist_ = TensorDistanceAlgorithm::ANGULAR_DISTANCE;
+    } else if(dist == "cosine") {
       dist_ = TensorDistanceAlgorithm::COSINE_SIMILARITY;
     } else if (dist == "dot") {
       dist_ = TensorDistanceAlgorithm::DOT_PRODUCT;
-    } else if (dist == "euclidian") {
+    } else if (dist == "euclidean") {
       dist_ = TensorDistanceAlgorithm::EUCLIDEAN_DISTANCE;
     } else if (dist == "manhattan") {
       dist_ = TensorDistanceAlgorithm::MANHATTAN_DISTANCE;
@@ -93,7 +95,7 @@ void TensorSearchQuery::addParameter(const SparqlTriple& triple) {
       throw TensorSearchException{
           "The IRI given for the parameter `<distance>` does not refer to a "
           "supported distance metric. Currently supported are `<angular>`, `<cosine>`, `<dot>`, "
-            "`<euclidian>`, `<manhattan>`, or  `<hamming>`"};
+            "`<euclidean>`, `<manhattan>`, or  `<hamming>`"};
     }
   } else if (predString == "payload") {
     if (object.isVariable()) {
@@ -182,7 +184,7 @@ TensorSearchConfiguration TensorSearchQuery::toTensorSearchConfiguration()
 
   return TensorSearchConfiguration{left_.value(),
                                    right_.value(),
-                                   maxResultsVariable_,
+                                   distanceVariable_,
                                    pv,
                                    algo,
                                    dist_.value_or(TENSOR_SEARCH_DEFAULT_DISTANCE),

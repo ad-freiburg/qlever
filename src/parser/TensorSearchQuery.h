@@ -41,7 +41,7 @@ struct TensorSearchQuery : MagicServiceQuery {
   PayloadVariables payloadVariables_;
 
   // Optional further argument: a variable to which the number of results is bound.
-  std::optional<Variable> maxResultsVariable_;
+  std::optional<Variable> distanceVariable_;
 
   // Optional further argument: the join algorithm. If it is not given, the
   // default algorithm is used implicitly.
