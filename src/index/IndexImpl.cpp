@@ -1955,10 +1955,8 @@ CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
       auto tripleArr = std::array{triple[0], triple[1], triple[2], triple[3]};
       patternCreator.processTriple(tripleArr, ignoreForPatterns);
     };
-    // TODO<cross-pair> Enable cross-pair sharing once block alignment is
-    // resolved: SPO→PSO (true, false), SOP→OSP (false, true).
     size_t numSubjects = createPermutationPair(
-        numColumns, AD_FWD(sortedTriples), *spo_, *sop_, false, false,
+        numColumns, AD_FWD(sortedTriples), *spo_, *sop_, true, false,
         nextSorter.makePushCallback()..., pushTripleToPatterns);
     patternCreator.finish();
     configurationJson_["num-subjects"] =
@@ -1969,7 +1967,7 @@ CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
     AD_CORRECTNESS_CHECK(sizeof...(nextSorter) == 1);
     size_t numSubjects =
         createPermutationPair(numColumns, AD_FWD(sortedTriples), *spo_, *sop_,
-                              false, false, nextSorter.makePushCallback()...);
+                              true, false, nextSorter.makePushCallback()...);
     configurationJson_["num-subjects"] =
         NumNormalAndInternal::fromNormal(numSubjects);
     writeConfiguration();
@@ -1987,7 +1985,7 @@ CPP_template_def(typename... NextSorter)(
   // have no fourth argument.
   size_t numObjects =
       createPermutationPair(numColumns, AD_FWD(sortedTriples), *osp_, *ops_,
-                            false, false, nextSorter.makePushCallback()...);
+                            false, true, nextSorter.makePushCallback()...);
   configurationJson_["num-objects"] =
       NumNormalAndInternal::fromNormal(numObjects);
   configurationJson_["has-all-permutations"] = true;

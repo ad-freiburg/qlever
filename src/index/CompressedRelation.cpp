@@ -1374,13 +1374,13 @@ static std::pair<bool, std::optional<std::vector<Id>>> getGraphInfo(
 }
 
 // _____________________________________________________________________________
-void CompressedRelationWriter::compressAndWriteBlock(Id firstCol0Id,
-                                                     Id lastCol0Id,
-                                                     IdTable block,
-                                                     bool invokeCallback) {
+void CompressedRelationWriter::compressAndWriteBlock(
+    Id firstCol0Id, Id lastCol0Id, IdTable block, bool invokeCallback,
+    bool allowCrossPairSharing) {
   auto timer = blockWriteQueueTimer_.startMeasurement();
   blockWriteQueue_.push([this, block = std::move(block), firstCol0Id,
-                         lastCol0Id, invokeCallback]() mutable {
+                         lastCol0Id, invokeCallback,
+                         allowCrossPairSharing]() mutable {
     auto numRows = block.numRows();
     const auto& first = block[0];
     const auto& last = block[numRows - 1];
@@ -1389,11 +1389,12 @@ void CompressedRelationWriter::compressAndWriteBlock(Id firstCol0Id,
 
     // Check if this block has a constant prefix of length >= 2 and should be
     // stored as a cross-pair sharing dummy.  We only do this for large-relation
-    // blocks (invokeCallback=false), because small-relation blocks are shared
-    // with the sister permutation via the sister callback, and creating a
-    // cross-pair dummy would break that reference chain.
-    if (skipConstantPrefixBlocks_ && !invokeCallback && first[0] == last[0] &&
-        first[1] == last[1]) {
+    // blocks (invokeCallback=false) that are part of an aligned (col0, col1)
+    // group (allowCrossPairSharing=true), because small-relation blocks are
+    // shared with the sister permutation via the sister callback, and creating
+    // a cross-pair dummy would break that reference chain.
+    if (skipConstantPrefixBlocks_ && !invokeCallback && allowCrossPairSharing &&
+        first[0] == last[0] && first[1] == last[1]) {
       auto [hasDuplicates, graphInfo] = getGraphInfo(block);
       blockBuffer_.wlock()->emplace_back(CompressedBlockMetadataNoBlockIndex{
           std::nullopt,
@@ -1699,8 +1700,8 @@ CompressedRelationMetadata CompressedRelationWriter::finishLargeRelation(
 }
 
 // _____________________________________________________________________________
-void CompressedRelationWriter::addBlockForLargeRelation(Id col0Id,
-                                                        IdTable relation) {
+void CompressedRelationWriter::addBlockForLargeRelation(
+    Id col0Id, IdTable relation, bool allowCrossPairSharing) {
   AD_CORRECTNESS_CHECK(!relation.empty());
   AD_CORRECTNESS_CHECK(currentCol0Id_ == col0Id ||
                        currentCol0Id_.isUndefined());
@@ -1708,9 +1709,9 @@ void CompressedRelationWriter::addBlockForLargeRelation(Id col0Id,
   currentRelationPreviousSize_ += relation.numRows();
   writeBufferedRelationsToSingleBlock();
   // This is a block of a large relation, so we don't invoke the
-  // `smallBlocksCallback_`. Hence the last argument is `false`.
+  // `smallBlocksCallback_`. Hence the second-to-last argument is `false`.
   compressAndWriteBlock(currentCol0Id_, currentCol0Id_, std::move(relation),
-                        false);
+                        false, allowCrossPairSharing);
 }
 
 // __________________________________________________________________________
@@ -1729,15 +1730,12 @@ CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
     ql::ranges::for_each(block.getColumn(1), std::ref(distinctCol1Counter));
 
     if (!bufferedBlock.has_value()) {
-      // First non-empty block - initialize buffer.
       bufferedBlock = std::move(block);
       continue;
     }
 
     const auto& lastRowFromPrevious = bufferedBlock.value().back();
 
-    // Find how many rows from current block have the same first three columns
-    // as the last row in the buffered block
     const size_t upperBoundEqualTriples =
         ql::ranges::find_if(
             block,
@@ -1747,29 +1745,19 @@ CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
             }) -
         block.begin();
 
-    // If we found rows to merge, add them to the buffered block
     if (upperBoundEqualTriples > 0) {
       bufferedBlock->insertAtEnd(block, 0, upperBoundEqualTriples);
-
-      // Remove the merged rows from the current block
       block.erase(block.begin(), block.begin() + upperBoundEqualTriples);
     }
 
-    // If the `block` is empty after moving the duplicate triples into the
-    // buffer, continue without writing a block, because the next block might
-    // again contain the `lastRowFromPrevious`
     if (block.empty()) {
       continue;
     }
 
-    // At this point we know that the `block` contains at least a single triple
-    // larger than `lastRowFromPrevious`, so we can safely write the
-    // `bufferedBlock`.
     addBlockForLargeRelation(col0Id, std::move(*bufferedBlock));
     bufferedBlock = std::move(block);
   }
 
-  // Write the remaining triples from the buffer.
   if (bufferedBlock.has_value()) {
     AD_CORRECTNESS_CHECK(!bufferedBlock.value().empty());
     addBlockForLargeRelation(col0Id, std::move(bufferedBlock.value()));

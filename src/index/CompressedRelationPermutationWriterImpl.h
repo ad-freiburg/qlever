@@ -123,6 +123,20 @@ struct CompressedRelationWriter::PermutationWriter {
   IdTableStatic<0> relation_{numColumns_, alloc_};
   size_t numBlocksCurrentRel_ = 0;
 
+  // Whether block alignment for cross-pair sharing is active. Only true when
+  // at least one writer in a permutation pair has cross-pair sharing enabled.
+  bool alignBlocks_ = false;
+
+  // Lookahead state for block alignment of large (col0, col1) pairs.
+  // When col1 changes, new triples are buffered in lookaheadBuffer_ until
+  // we can determine if the group is large (>= blocksize_ triples).
+  IdTableStatic<0> lookaheadBuffer_{numColumns_, alloc_};
+  std::optional<Id> lookaheadCol1_;
+  // When a (col0, col1) group is confirmed large, we enter aligned mode
+  // to produce deterministic, exclusive blocks.
+  std::optional<Id> alignedCol1_;
+  bool inAlignedMode_ = false;
+
   using TwinRelationSorter = ad_utility::CompressedExternalIdTableSorter<
       compressedRelationHelpers::ComparatorForConstCol0, 0>;
   IfPair<TwinRelationSorter> twinRelationSorter_;
@@ -159,6 +173,11 @@ struct CompressedRelationWriter::PermutationWriter {
     AD_CORRECTNESS_CHECK(blocksize_ == writer2_->blocksize());
     AD_CORRECTNESS_CHECK(numColumns_ == writer2_->numColumns());
 
+    // Enable block alignment for all permutation pairs. Both canonical and
+    // non-canonical permutations need aligned blocks at col1 boundaries so
+    // that cross-pair sharing can find matching blocks.
+    alignBlocks_ = true;
+
     writer1_->smallBlocksCallback_ =
         AddBlockOfSmallRelationsToSwitched{*writer2_};
   };
@@ -180,7 +199,9 @@ struct CompressedRelationWriter::PermutationWriter {
   };
 
   // Write a block of a large relation with `writer1` and also push the block
-  // into the twin sorter for `writer2`.
+  // into the twin sorter for `writer2`. Cross-pair sharing dummies are only
+  // created when `inAlignedMode_` is true, ensuring that only blocks from
+  // aligned (col0, col1) groups are eligible for cross-pair sharing.
   void addBlockForLargeRelation() {
     using namespace compressedRelationHelpers;
     if (relation_.empty()) {
@@ -194,16 +215,67 @@ struct CompressedRelationWriter::PermutationWriter {
       }
     }
     writer1_->addBlockForLargeRelation(col0IdCurrentRelation_.value(),
-                                       std::move(relation_).toDynamic());
+                                       std::move(relation_).toDynamic(),
+                                       inAlignedMode_);
     relation_.clear();
     relation_.reserve(blocksize_);
     ++numBlocksCurrentRel_;
   };
 
+  // Merge the lookahead buffer back into relation_ when the col1 group
+  // turns out to be small (< blocksize_ triples).
+  void flushLookaheadToRelation() {
+    if (!lookaheadCol1_.has_value()) {
+      return;
+    }
+    for (size_t i = 0; i < lookaheadBuffer_.numRows(); ++i) {
+      relation_.push_back(lookaheadBuffer_[i]);
+    }
+    lookaheadBuffer_.clear();
+    lookaheadCol1_.reset();
+  }
+
+  // Called when lookahead confirms a large (col0, col1) group (>=
+  // blocksize_ triples). Flushes prior mixed content from relation_ and
+  // begins writing aligned blocks for this col1 group.
+  void enterAlignedMode() {
+    // Flush relation_ (prior mixed content) as a partial block.
+    if (!relation_.empty()) {
+      addBlockForLargeRelation();
+    }
+    // Move lookahead buffer into relation_.
+    std::swap(relation_, lookaheadBuffer_);
+    lookaheadBuffer_.clear();
+    alignedCol1_ = lookaheadCol1_;
+    lookaheadCol1_.reset();
+    inAlignedMode_ = true;
+    // Write the first aligned block (relation_ now has blocksize_ rows).
+    addBlockForLargeRelation();
+  }
+
+  // Exit aligned mode by flushing remaining triples as the final
+  // partial block of the aligned (col0, col1) group.
+  void exitAlignedMode() {
+    if (!relation_.empty()) {
+      addBlockForLargeRelation();
+    }
+    inAlignedMode_ = false;
+    alignedCol1_.reset();
+  }
+
   // We have encountered the last occurrence of the current relation (value for
   // column 0). Thus we need to write the remaining buffered rows and metadata.
   // This also resets counters and buffers for writing the next relation.
   void finishRelation() {
+    // Clean up alignment state before finishing the relation.
+    if (alignBlocks_) {
+      if (inAlignedMode_) {
+        exitAlignedMode();
+      }
+      if (lookaheadCol1_.has_value()) {
+        flushLookaheadToRelation();
+      }
+    }
     ++numDistinctCol0_;
     if (numBlocksCurrentRel_ > 0 || static_cast<double>(relation_.numRows()) >
                                         0.8 * static_cast<double>(blocksize_)) {
@@ -333,11 +405,58 @@ struct CompressedRelationWriter::PermutationWriter {
           col0IdCurrentRelation_ = col0Id;
         }
 
+        Id curCol1 = curRemainingCols[c1Idx];
+        distinctCol1Counter_(curCol1);
+
+        // Block alignment for cross-pair sharing is only used when at least
+        // one writer in the pair has cross-pair sharing enabled.
+        if (alignBlocks_) {
+          // Aligned mode: writing exclusive blocks for a large (col0, col1)
+          // pair to enable cross-pair sharing.
+          if (inAlignedMode_) {
+            if (curCol1 == alignedCol1_.value()) {
+              if (isEndOfBlockForLargeRelation(curRemainingCols)) {
+                addBlockForLargeRelation();
+              }
+              relation_.push_back(curRemainingCols);
+              increaseTripleCounter();
+              continue;
+            }
+            // Col1 changed; exit aligned mode and fall through.
+            exitAlignedMode();
+          }
+
+          // Lookahead mode: buffering to detect large (col0, col1) groups.
+          if (lookaheadCol1_.has_value()) {
+            if (curCol1 == lookaheadCol1_.value()) {
+              lookaheadBuffer_.push_back(curRemainingCols);
+              if (lookaheadBuffer_.size() >= blocksize_) {
+                enterAlignedMode();
+              }
+              increaseTripleCounter();
+              continue;
+            }
+            // Col1 changed again; previous group was small.
+            flushLookaheadToRelation();
+          }
+
+          // Start lookahead when col1 differs from what's in relation_ or
+          // when relation_ is empty (start of a new col0 relation or after
+          // exiting aligned mode). This ensures every col1 group gets a
+          // chance to enter aligned mode if it's large enough.
+          if (relation_.empty() || curCol1 != relation_.back()[c1Idx]) {
+            lookaheadCol1_ = curCol1;
+            lookaheadBuffer_.push_back(curRemainingCols);
+            increaseTripleCounter();
+            continue;
+          }
+        }
+
+        // Normal processing path (always used for single permutations,
+        // used for same-col1 triples in pair mode).
         if (isEndOfBlockForLargeRelation(curRemainingCols)) {
           addBlockForLargeRelation();
         }
-
-        distinctCol1Counter_(curRemainingCols[c1Idx]);
         relation_.push_back(curRemainingCols);
 
         increaseTripleCounter();
@@ -347,7 +466,8 @@ struct CompressedRelationWriter::PermutationWriter {
     }
     AD_LOG_INFO << progressBar_.getFinalProgressString() << std::flush;
     inputWaitTimer_.stop();
-    if (!relation_.empty() || numBlocksCurrentRel_ > 0) {
+    if (!relation_.empty() || numBlocksCurrentRel_ > 0 ||
+        lookaheadCol1_.has_value()) {
       finishRelation();
     }
 

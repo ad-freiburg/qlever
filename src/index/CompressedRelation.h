@@ -390,6 +390,8 @@ class CompressedRelationWriter {
   void setSkipConstantPrefixBlocks(bool value) {
     skipConstantPrefixBlocks_ = value;
   }
+  // Return whether cross-pair sharing is enabled for this writer.
+  bool skipConstantPrefixBlocks() const { return skipConstantPrefixBlocks_; }
   /// Create using a filename, to which the relation data will be written.
   explicit CompressedRelationWriter(
       size_t numColumns, ad_utility::File f,
@@ -580,7 +582,8 @@ class CompressedRelationWriter {
   // `smallBlocksCallback_(std::move(block), bufferIndex)` is called AFTER the
   // block has completely been dealt with.
   void compressAndWriteBlock(Id firstCol0Id, Id lastCol0Id, IdTable block,
-                             bool invokeCallback);
+                             bool invokeCallback,
+                             bool allowCrossPairSharing = true);
 
   // Add a block's metadata to `blockBuffer_` without compressing or writing
   // any data.  The block's data is shared from a source permutation.  The
@@ -604,7 +607,8 @@ class CompressedRelationWriter {
   // `finishLargeRelation`.
   // * The previously called function was `addBlockForLargeRelation` with the
   // same `col0Id`.
-  void addBlockForLargeRelation(Id col0Id, IdTable relation);
+  void addBlockForLargeRelation(Id col0Id, IdTable relation,
+                                bool allowCrossPairSharing = true);
 
   // This function must be called after all blocks of a large relation have been
   // added via `addBlockForLargeRelation` before any other function may be
